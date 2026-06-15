@@ -52,20 +52,24 @@ describe('buildOpenAIChatBody', () => {
     expect(body.keep).toBe(2);
   });
 
+  // The system prompt is the large stable prefix `applyPromptCaching` marks.
+  const withSystem = (model: string): VendorCallParams => base({
+    model,
+    messages: [{ role: 'system', content: 'big stable instructions' }, { role: 'user', content: 'hi' }],
+  });
+
   it('injects prompt-cache breakpoints by default for a caching-capable model', () => {
-    const body = buildOpenAIChatBody(base({ model: 'anthropic/claude-sonnet-4.6' }));
-    const msgs = body.messages as Array<{ content: unknown }>;
-    const hasCacheControl = JSON.stringify(msgs).includes('cache_control');
-    expect(hasCacheControl).toBe(true);
+    const body = buildOpenAIChatBody(withSystem('anthropic/claude-sonnet-4.6'));
+    expect(JSON.stringify(body.messages)).toContain('cache_control');
   });
 
   it('does NOT inject cache markers for a non-caching model (no-op)', () => {
-    const body = buildOpenAIChatBody(base({ model: '@cf/qwen/qwen3-30b-a3b-fp8' }));
+    const body = buildOpenAIChatBody(withSystem('@cf/qwen/qwen3-30b-a3b-fp8'));
     expect(JSON.stringify(body.messages)).not.toContain('cache_control');
   });
 
   it('noCache opts out even for a caching-capable model', () => {
-    const body = buildOpenAIChatBody(base({ model: 'anthropic/claude-sonnet-4.6' }), { noCache: true });
+    const body = buildOpenAIChatBody(withSystem('anthropic/claude-sonnet-4.6'), { noCache: true });
     expect(JSON.stringify(body.messages)).not.toContain('cache_control');
   });
 });
