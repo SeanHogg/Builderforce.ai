@@ -11,7 +11,7 @@
  *   3. Implement a `VendorModule` and register it in `vendors/registry.ts`.
  */
 
-export type VendorId = 'openrouter' | 'cerebras' | 'ollama' | 'nvidia' | 'googleai' | 'cloudflare';
+export type VendorId = 'openrouter' | 'cerebras' | 'ollama' | 'nvidia' | 'googleai' | 'cloudflare' | 'anthropic';
 
 /**
  * Tier classification per model — drives pricing, plan gating, and the
@@ -36,6 +36,11 @@ export interface VendorEnv {
   /** Google AI (Gemini) API key — direct call to generativelanguage.googleapis.com.
    *  Powers the gateway's premium fallback at the tail of every cascade. */
   GOOGLE_API_KEY?: string | null;
+  /** Anthropic (Claude) API key — direct call to api.anthropic.com/v1/messages.
+   *  The last-resort reliability floor for cloud CODING runs: when every
+   *  OpenRouter-routed paid coder is unreachable, the coding cascade falls back to
+   *  Claude directly on this key (claude-sonnet-4-6 → claude-opus-4-8). */
+  CLAUDE_API_KEY?: string | null;
   /** Cloudflare Workers AI token — `cfut_*` auth header for `/ai/run/...` calls. */
   CLOUDFLARE_AI_API_TOKEN?: string | null;
   /** Cloudflare account id — embedded in the endpoint URL

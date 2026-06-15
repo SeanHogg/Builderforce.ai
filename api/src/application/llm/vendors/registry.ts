@@ -6,6 +6,7 @@
  * catalog/tier/cascade behavior is derived automatically from the module.
  */
 
+import { anthropicModule } from './anthropic';
 import { cerebrasModule } from './cerebras';
 import { cloudflareModule } from './cloudflare';
 import { googleAiModule } from './googleai';
@@ -39,7 +40,10 @@ import {
  *   - `getCrossVendorFallbacks(...)` → the cross-vendor tail of each chain
  * Drives both Pool composition and Pool ordering with one source of truth.
  */
-const MODULES: ReadonlyArray<VendorModule> = [cerebrasModule, ollamaModule, nvidiaModule, cloudflareModule, openRouterModule, googleAiModule];
+// `anthropicModule` sits last: it is `autoRoute: false` (never part of the FREE/PRO
+// rotation), reachable only via the curated coding fallback chain or an explicit
+// pin, so its position here does not affect auto-pool ordering.
+const MODULES: ReadonlyArray<VendorModule> = [cerebrasModule, ollamaModule, nvidiaModule, cloudflareModule, openRouterModule, googleAiModule, anthropicModule];
 
 const MODULES_BY_ID: Record<VendorId, VendorModule> = {
   openrouter: openRouterModule,
@@ -48,6 +52,7 @@ const MODULES_BY_ID: Record<VendorId, VendorModule> = {
   ollama:     ollamaModule,
   googleai:   googleAiModule,
   cloudflare: cloudflareModule,
+  anthropic:  anthropicModule,
 };
 
 /** Used when a model id isn't in any vendor's catalog (treats as OpenRouter). */

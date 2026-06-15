@@ -1902,10 +1902,11 @@ type EffectivePlanLabel = 'free' | 'pro' | 'teams';
 
 /** Union response for `/llm/v1/models` — see `api/src/presentation/routes/llmRoutes.ts`.
  *  `codingModels` is the curated tool-calling + coding subset the plan can reach —
- *  the list a cloud-agent run should pick from. */
+ *  the list a cloud-agent run should pick from. `premium` is set when a superadmin
+ *  premium override is active (treats a free plan as paid for model selection). */
 export type LlmModelsResponse =
-  | { configured: false; product: string; effectivePlan: EffectivePlanLabel; models: string[]; codingModels?: string[] }
-  | { configured: true;  product: string; effectivePlan: EffectivePlanLabel; object: 'list'; data: LlmModelStatus[]; codingModels?: string[] };
+  | { configured: false; product: string; effectivePlan: EffectivePlanLabel; premium?: boolean; models: string[]; codingModels?: string[] }
+  | { configured: true;  product: string; effectivePlan: EffectivePlanLabel; premium?: boolean; object: 'list'; data: LlmModelStatus[]; codingModels?: string[] };
 
 export const llmApi = {
   usage: (): Promise<LlmUsageStats> =>
