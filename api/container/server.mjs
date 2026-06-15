@@ -174,8 +174,8 @@ async function gitTool(spec, workdir, proc, name, parsed) {
     const cmd = [
       ...preamble,
       resolveBase,
-      // Deepen the shallow clone so a merge-base with the base branch exists.
-      'git fetch --unshallow origin "$BASE" 2>/dev/null || git fetch origin "$BASE"',
+      // Full clone (above) already carries the base branch + a shared merge-base.
+      'git fetch origin "$BASE"',
       'git merge --no-edit "origin/$BASE" || { git merge --abort; echo MERGE_CONFLICT; exit 3; }',
       'git push origin HEAD',
       'echo "Synced with origin/$BASE"',
@@ -233,19 +233,22 @@ async function runLoop(spec) {
     if (spec.repo && spec.repo.cloneUrl) {
       workdir = await mkdtemp(join(tmpdir(), `bf-exec-${spec.executionId}-`));
       const { cloneUrl, headBranch, baseBranch } = spec.repo;
-      // Prefer the ticket's HEAD branch: prior runs accumulate their WIP there, and a
-      // `--depth 1` clone is single-branch — cloning the base branch would silently
-      // hide every earlier pass. Fall back to the base branch on the first run, when
-      // the head branch doesn't exist on the remote yet.
+      // FULL clone (no `--depth`): a shallow clone caused two separate failures —
+      // it hid earlier passes (single-branch), and it has no merge-base with the
+      // base branch, so `git_sync_latest` / `git diff main` / `git merge-base`
+      // couldn't work. A complete clone carries every branch + full history, so the
+      // agent can sync the latest base, diff against it, and never build on stale
+      // code. Prefer the ticket's HEAD branch (prior runs' WIP); fall back to the
+      // base branch on the first run, before the head branch exists on the remote.
       let checkedOut = null;
       let clone = headBranch
-        ? await runShell(`git clone --depth 1 -b "${headBranch}" "${cloneUrl}" .`, workdir, proc)
+        ? await runShell(`git clone -b "${headBranch}" "${cloneUrl}" .`, workdir, proc)
         : { exitCode: 1, output: 'no head branch' };
       if (clone.exitCode === 0) {
         checkedOut = headBranch;
       } else {
         const baseArg = baseBranch ? `-b "${baseBranch}"` : '';
-        clone = await runShell(`git clone --depth 1 ${baseArg} "${cloneUrl}" .`, workdir, proc);
+        clone = await runShell(`git clone ${baseArg} "${cloneUrl}" .`, workdir, proc);
         if (clone.exitCode === 0) checkedOut = baseBranch || '(default)';
       }
       if (clone.exitCode !== 0) {
