@@ -38,13 +38,13 @@ export interface Env {
    *  api/.env + `npm run secrets:from-env`). */
   CLAUDE_API_KEY?: string;
   /** Cloudflare Workers AI auth token — `cfut_*`. Adds Cloudflare-hosted models
-   *  (e.g. `@cf/meta/llama-3-8b-instruct`) to the paid pool. Both this AND
+   *  (e.g. `@cf/qwen/qwen3-30b-a3b-fp8`) to the paid pool. Both this AND
    *  `CLOUDFLARE_ACCOUNT_ID` must be set; either missing → Cloudflare is skipped
    *  by the cascade. Set via `wrangler secret put CLOUDFLARE_AI_API_TOKEN`. */
   CLOUDFLARE_AI_API_TOKEN?: string;
   /** Cloudflare account id (32-char hex). Embedded in the Workers AI URL —
-   *  `https://api.cloudflare.com/client/v4/accounts/<id>/ai/run/<model>`. Not a
-   *  secret per se, but stored alongside the token in Worker bindings.
+   *  `https://api.cloudflare.com/client/v4/accounts/<id>/ai/run/<model>`. Stored as
+   *  a Worker SECRET (not committed config) so the id isn't exposed in the repo.
    *  Set via `wrangler secret put CLOUDFLARE_ACCOUNT_ID`. */
   CLOUDFLARE_ACCOUNT_ID?: string;
 

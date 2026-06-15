@@ -93,11 +93,15 @@ describe('plan-aware coding routing', () => {
   });
 
   it('codingDefaultForPlan upgrades the default for paid plans', () => {
-    // Free default is a free model; pro default is the pool leader (premium first).
+    // Free default is a free model; the Pro default is the pool leader — now the
+    // free-neuron Cloudflare coder (cost-first), NOT a metered model.
     expect(FREE_MODEL_POOL).toContain(codingDefaultForPlan('free'));
     expect(codingDefaultForPlan('pro')).toBe(CODING_MODEL_POOL[0]);
-    // premiumOverride forces premium routing regardless of plan.
-    expect(codingDefaultForPlan('free', true)).toBe(CODING_MODEL_POOL[0]);
+    // premiumOverride forces PREMIUM routing regardless of plan — the pool then
+    // excludes STANDARD models (incl. the STANDARD Cloudflare lead), so the default
+    // is the first PREMIUM coder, which is the same for 'free' and 'pro'.
+    expect(codingDefaultForPlan('free', true)).toBe(codingDefaultForPlan('pro', true));
+    expect(CODING_MODEL_POOL).toContain(codingDefaultForPlan('free', true));
   });
 
   it('pickCloudModel hard-pins a real explicit id, else falls back to the plan default', () => {
@@ -258,17 +262,41 @@ describe('pickCloudModel with learned routing', () => {
   });
 });
 
-describe('Cloudflare paid coder', () => {
-  it('@cf/qwen/qwen3-30b-a3b-fp8 is a tool-capable catalog coder owned by cloudflare', () => {
-    const entry = catalogEntry('@cf/qwen/qwen3-30b-a3b-fp8');
-    expect(entry).not.toBeNull();
-    expect(vendorForModel('@cf/qwen/qwen3-30b-a3b-fp8')).toBe('cloudflare');
-    expect(entry?.capabilities).toContain('tools');
-    expect(CODING_MODEL_POOL).toContain('@cf/qwen/qwen3-30b-a3b-fp8');
+describe('Cloudflare paid coders', () => {
+  // Every Cloudflare coder added to the pool MUST be tool-capable (the coding loop
+  // sends `tools`; a non-FC model 400s on the payload). These ids were verified
+  // function-calling-capable against the live Cloudflare catalog (2026-06-15).
+  const CF_CODERS = [
+    '@cf/qwen/qwen3-30b-a3b-fp8',
+    '@cf/zai-org/glm-4.7-flash',
+    '@cf/meta/llama-3.3-70b-instruct-fp8-fast',
+    '@cf/moonshotai/kimi-k2.7-code',
+  ];
+
+  it('each is a tool-capable catalog coder owned by cloudflare, present in the coding pool', () => {
+    for (const id of CF_CODERS) {
+      const entry = catalogEntry(id);
+      expect(entry, `${id} must be a catalog model`).not.toBeNull();
+      expect(vendorForModel(id)).toBe('cloudflare');
+      expect(entry?.capabilities, `${id} must be tool-capable`).toContain('tools');
+      expect(CODING_MODEL_POOL).toContain(id);
+    }
   });
 
-  it('surfaces in the Pro coding picker (paid, auto-routable) but not the Free one', () => {
-    expect(codingModelsForPlan('pro')).toContain('@cf/qwen/qwen3-30b-a3b-fp8');
-    expect(codingModelsForPlan('free')).not.toContain('@cf/qwen/qwen3-30b-a3b-fp8');
+  it('Cloudflare (free neurons) LEADS the paid coding section — no metered model before the first CF coder', () => {
+    // Anthropic must NOT be first: every Cloudflare coder sorts ahead of the
+    // OpenRouter-routed Anthropic coder so the free daily neuron allowance is spent
+    // before any metered coder.
+    const firstCf = CODING_MODEL_POOL.findIndex((m) => vendorForModel(m) === 'cloudflare');
+    const meteredAnthropic = CODING_MODEL_POOL.indexOf('anthropic/claude-sonnet-4.6');
+    expect(firstCf).toBe(0);                      // a Cloudflare coder is the pool leader
+    expect(firstCf).toBeLessThan(meteredAnthropic); // …ahead of the metered Anthropic coder
+  });
+
+  it('surface in the Pro coding picker (paid, auto-routable) but not the Free one', () => {
+    for (const id of CF_CODERS) {
+      expect(codingModelsForPlan('pro')).toContain(id);
+      expect(codingModelsForPlan('free')).not.toContain(id);
+    }
   });
 });
