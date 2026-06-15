@@ -7,7 +7,7 @@
  * GET   /v1/health             – health check
  */
 import { Hono, type Context } from 'hono';
-import { and, eq, gte, sql } from 'drizzle-orm';
+import { and, desc, eq, gte, sql } from 'drizzle-orm';
 import type { Env, HonoEnv } from '../../env';
 import {
   llmProxyForPlan,
@@ -39,9 +39,10 @@ import {
   type ImageGenerationRequest,
 } from '../../application/llm/ImageProxyService';
 import { buildDatabase } from '../../infrastructure/database/connection';
-import { llmUsageLog, llmFailoverLog, tenants, tenantMembers, agentHosts, tenantApiKeys, users, projects } from '../../infrastructure/database/schema';
+import { llmUsageLog, llmFailoverLog, tenants, tenantMembers, agentHosts, tenantApiKeys, users, projects, tasks, runModelOutcomes } from '../../infrastructure/database/schema';
 import { getRoutingTable, parseScopeToken, scopeToken } from '../../application/llm/routingTable';
 import { actionTypeLabel, type ActionType } from '../../application/llm/actionTypes';
+import { getOrSetCached } from '../../infrastructure/cache/readThroughCache';
 import { originAllowed, deserializeScopes } from '../../application/llm/tenantApiKeyService';
 import { listToolsForTenant, callMcpTool } from '../../application/llm/mcpExtensionService';
 import { listBuiltinTools, callBuiltinTool, BUILTIN_EXTENSION_ID } from '../../application/llm/builtinMcpService';
@@ -1262,6 +1263,53 @@ export function createLlmRoutes(): Hono<HonoEnv> {
         })),
       }));
     return c.json({ scope: scopeToken(scope), updatedAt: table.updatedAt, byAction });
+  });
+
+  // -----------------------------------------------------------------------
+  // GET /v1/recall-seed?limit=50
+  // Learned Model Routing (PRD 13 §6.6): warm a browser's LOCAL SSM recall memory
+  // from the tenant's recently-scored outcomes (task text + winning model + score),
+  // so an interactive run can compute a recall bias on the client GPU. The heavy
+  // embed+kNN stays on the client; this is just the seed feed. Tenant-scoped, cached.
+  // -----------------------------------------------------------------------
+  router.get('/v1/recall-seed', async (c) => {
+    let access: TenantAccess;
+    try {
+      access = await requireTenantAccess(c);
+    } catch (err) {
+      return respondToAccessError(c, err);
+    }
+    const limit = Math.min(Math.max(Number(c.req.query('limit') ?? '50'), 1), 200);
+    const db = buildDatabase(c.env);
+    const seed = await getOrSetCached(
+      c.env,
+      `recallseed:${access.tenantId}:${limit}`,
+      async () => {
+        const rows = await db
+          .select({
+            executionId: runModelOutcomes.executionId,
+            model: runModelOutcomes.resolvedModel,
+            score: runModelOutcomes.score,
+            title: tasks.title,
+            description: tasks.description,
+          })
+          .from(runModelOutcomes)
+          .leftJoin(tasks, eq(runModelOutcomes.taskId, tasks.id))
+          .where(eq(runModelOutcomes.tenantId, access.tenantId))
+          .orderBy(desc(runModelOutcomes.createdAt))
+          .limit(limit);
+        return rows
+          .filter((r) => r.model && r.model !== 'unknown' && r.title)
+          .map((r) => ({
+            id: r.executionId,
+            taskText: `${r.title}\n${r.description ?? ''}`.trim(),
+            model: r.model,
+            score: r.score,
+          }));
+      },
+      { kvTtlSeconds: 120, l1TtlMs: 30_000 },
+    );
+    return c.json({ memories: seed });
   });
 
   // -----------------------------------------------------------------------
