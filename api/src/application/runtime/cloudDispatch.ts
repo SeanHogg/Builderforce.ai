@@ -148,6 +148,30 @@ export function wasReaperRequeued(payload: string | null | undefined): boolean {
   }
 }
 
+/**
+ * Parse a client-computed SSM recall bias off a run payload (Learned Model Routing,
+ * PRD 13 §6.6). An INTERACTIVE launch may attach `{ routingBias: { <model>: weight } }`
+ * — a small nudge map the browser computed on its GPU (embed the task → kNN over this
+ * repo's prior winning models). Headless runs omit it. Coerced defensively: only
+ * string→finite-number entries survive, capped to a sane magnitude so a malformed
+ * client can't dominate the learned score. Returns undefined when absent/empty.
+ */
+export function parseRoutingBias(payload: string | undefined): Record<string, number> | undefined {
+  if (!payload) return undefined;
+  try {
+    const raw = (JSON.parse(payload) as { routingBias?: unknown }).routingBias;
+    if (!raw || typeof raw !== 'object') return undefined;
+    const out: Record<string, number> = {};
+    for (const [model, w] of Object.entries(raw as Record<string, unknown>)) {
+      const n = typeof w === 'number' ? w : Number(w);
+      if (model && Number.isFinite(n) && n !== 0) out[model] = Math.max(-1, Math.min(1, n));
+    }
+    return Object.keys(out).length > 0 ? out : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 export interface FollowUpContext { directive: string; priorExecutionId: number | null }
 
 /**

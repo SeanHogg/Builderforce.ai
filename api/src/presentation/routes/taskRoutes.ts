@@ -138,13 +138,18 @@ async function dispatchTaskFinalize(
  *
  * Best-effort and meant for `waitUntil`: a dispatch failure must never block or
  * fail the status change itself.
+ *
+ * Exported so the execution-completion path (RuntimeService.onLaneEntry, wired at
+ * the composition root) reuses this exact trigger when an AGENT advances a ticket
+ * into the next lane — without it, agent-moved tickets wrote `tasks.status`
+ * directly and never started the next lane's configured agent.
  */
-async function maybeAutoRunOnLaneEntry(
+export async function maybeAutoRunOnLaneEntry(
   env: Env,
   db: Db,
   runtimeService: RuntimeService,
   waitUntil: (p: Promise<unknown>) => void,
-  args: { tenantId: number; projectId: number; taskId: number; status: string; submittedBy: string },
+  args: { tenantId: number; projectId: number; taskId: number; status: string; submittedBy: string; originLaneKey?: string },
 ): Promise<void> {
   try {
     // A terminal (Done) lane finalizes the ticket; never spin up a fresh agent run
@@ -218,6 +223,16 @@ async function maybeAutoRunOnLaneEntry(
     }
     if (!decision.autoRun) return;
 
+    // Same-lane re-entry guard: the execution-completion path
+    // (RuntimeService.onLaneEntry) always lands a completed ticket in `in_review`.
+    // If that lane is staffed (gate overridden to 'auto'), the run it auto-starts
+    // would complete back into `in_review` and re-fire forever. `originLaneKey` is
+    // the lane the JUST-COMPLETED run was dispatched for; skip only when the ticket
+    // is re-entering that SAME lane. Keyed on lane, not agent — a genuine handoff to
+    // a DIFFERENT lane that happens to be staffed by the same agent still runs. A
+    // human drag / manual run passes no `originLaneKey`, so it never blocks a hop.
+    if (args.originLaneKey && args.originLaneKey === args.status) return;
+
     // Idempotency: never stack a second run on a ticket that already has a live
     // one (e.g. a manual run just started, or a re-PATCH to the same lane). This
     // is what lets BOTH the create and PATCH paths call this safely.
@@ -233,8 +248,10 @@ async function maybeAutoRunOnLaneEntry(
 
     // Hand the lane's agent + model to the single surface-aware dispatcher (the
     // `cloudAgentRef` payload key is the existing dispatch contract — the V2 agent
-    // ref the dispatcher resolves + attributes the run to).
-    const payloadObj: { cloudAgentRef?: string; model?: string } = {};
+    // ref the dispatcher resolves + attributes the run to). `laneKey` records which
+    // lane this run serves so a completion that re-enters the SAME lane (a loop) is
+    // suppressed by the same-lane guard above on the next hop.
+    const payloadObj: { cloudAgentRef?: string; model?: string; laneKey?: string } = { laneKey: args.status };
     if (decision.agentRef) payloadObj.cloudAgentRef = decision.agentRef;
     if (decision.model) payloadObj.model = decision.model;
 

@@ -17,7 +17,7 @@ import { resolveArtifacts } from '../../application/artifact/resolveArtifacts';
 import { enqueueExecutionMessage, listExecutionMessages, releasePendingSteers } from '../../application/runtime/executionSteering';
 import { subscribeExecution, unsubscribeExecution, notifyExecutionSubscribers } from '../../application/runtime/executionEvents';
 import {
-  runCloudExecution, prepareCloudRun, gitSecret, recordCloudToolEvent, recordPrdDirective,
+  runCloudExecution, markCloudExecutionRunning, prepareCloudRun, gitSecret, recordCloudToolEvent, recordPrdDirective,
   handleContainerOp, loadContainerRunContext, resolveCloudAgent, agentAllowsHostExecution, DEFAULT_CLOUD_REF,
 } from '../../application/runtime/cloudAgentEngine';
 import { CONTAINER_MAX_STEPS } from '../../application/runtime/cloudAgentTools';
@@ -613,6 +613,13 @@ async function startDispatchedExecution(
             result: `Cloudflare Container kickoff returned ${res.status} — running on the durable executor instead.`,
           });
           await startDurable();
+        } else {
+          // The container accepted the run and now drives the loop via callbacks to
+          // /internal/container-op, which only flips the row at finalize. Without this
+          // the execution would read PENDING for the whole live run. Mark it RUNNING
+          // now — parity with the durable (CloudRunnerDO.start) and Worker
+          // (runCloudExecution) executors, which both transition at kickoff.
+          await markCloudExecutionRunning(runtimeService, execution.id);
         }
       } catch (e) {
         await recordCloudToolEvent(db, {
