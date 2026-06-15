@@ -615,3 +615,70 @@ Type error: An object literal cannot have multiple properties with the same name
 Next.js build worker exited with code: 1 and signal: null
  ELIFECYCLE  Command failed with exit code 1.
 Error: Process completed with exit code 1.
+
+---
+
+### Update — Bob Developer (V2 (Container)) · 2026-06-15T17:03:15.169Z · execution #78
+
+The build step.is failing 
+
+﻿2026-06-15T10:39:33.2825341Z ##[group]Run pnpm run build
+2026-06-15T10:39:33.2825687Z [36;1mpnpm run build[0m
+2026-06-15T10:39:33.2856682Z shell: /usr/bin/bash -e {0}
+2026-06-15T10:39:33.2856948Z env:
+2026-06-15T10:39:33.2857212Z   PNPM_HOME: /home/runner/setup-pnpm/node_modules/.bin
+2026-06-15T10:39:33.2857630Z   NEXT_PUBLIC_WORKER_URL: https://worker.builderforce.ai
+2026-06-15T10:39:33.2857960Z ##[endgroup]
+2026-06-15T10:39:33.6466575Z 
+2026-06-15T10:39:33.6467699Z > builderforce-frontend@2026.05.31 build /home/runner/work/Builderforce.ai/Builderforce.ai/frontend
+2026-06-15T10:39:33.6468693Z > next build
+2026-06-15T10:39:33.6468923Z 
+2026-06-15T10:39:34.2161475Z ⚠ No build cache found. Please configure build caching for faster rebuilds. Read more: https://nextjs.org/docs/messages/no-cache
+2026-06-15T10:39:34.2257928Z Attention: Next.js now collects completely anonymous telemetry regarding usage.
+2026-06-15T10:39:34.2259082Z This information is used to shape Next.js' roadmap and prioritize features.
+2026-06-15T10:39:34.2260564Z You can learn more, including how to opt-out if you'd not like to participate in this anonymous program, by visiting the following URL:
+2026-06-15T10:39:34.2261681Z https://nextjs.org/telemetry
+2026-06-15T10:39:34.2261875Z 
+2026-06-15T10:39:34.2795417Z    ▲ Next.js 15.5.2
+2026-06-15T10:39:34.2795786Z 
+2026-06-15T10:39:34.3893736Z    Creating an optimized production build ...
+2026-06-15T10:40:40.7150382Z  ⚠ Compiled with warnings in 66s
+2026-06-15T10:40:40.7150824Z 
+2026-06-15T10:40:40.7152186Z ./node_modules/@seanhogg/builderforce-studio-embedded/node_modules/@seanhogg/builderforce-studio/node_modules/@huggingface/transformers/dist/transformers.web.js
+2026-06-15T10:40:40.7154288Z Critical dependency: Accessing import.meta directly is unsupported (only property access or destructuring is supported)
+2026-06-15T10:40:40.7155157Z 
+2026-06-15T10:40:40.7155437Z Import trace for requested module:
+2026-06-15T10:40:40.7157378Z ./node_modules/@seanhogg/builderforce-studio-embedded/node_modules/@seanhogg/builderforce-studio/node_modules/@huggingface/transformers/dist/transformers.web.js
+2026-06-15T10:40:40.7159431Z ./node_modules/@seanhogg/builderforce-studio-embedded/node_modules/@seanhogg/builderforce-studio/dist/index.mjs
+2026-06-15T10:40:40.7160785Z ./node_modules/@seanhogg/builderforce-studio-embedded/dist/index.mjs
+2026-06-15T10:40:40.7161552Z ./src/components/IDENew.tsx
+2026-06-15T10:40:40.7162035Z ./src/components/IDE.tsx
+2026-06-15T10:40:40.7162502Z ./src/app/ide/[id]/page.tsx
+2026-06-15T10:40:40.7162760Z 
+2026-06-15T10:40:40.7164074Z ./node_modules/@seanhogg/builderforce-studio-embedded/node_modules/@seanhogg/builderforce-studio/node_modules/@huggingface/transformers/dist/transformers.web.js
+2026-06-15T10:40:40.7166447Z Critical dependency: Accessing import.meta directly is unsupported (only property access or destructuring is supported)
+2026-06-15T10:40:40.7167277Z 
+2026-06-15T10:40:40.7167526Z Import trace for requested module:
+2026-06-15T10:40:40.7169066Z ./node_modules/@seanhogg/builderforce-studio-embedded/node_modules/@seanhogg/builderforce-studio/node_modules/@huggingface/transformers/dist/transformers.web.js
+2026-06-15T10:40:40.7171065Z ./node_modules/@seanhogg/builderforce-studio-embedded/node_modules/@seanhogg/builderforce-studio/dist/index.mjs
+2026-06-15T10:40:40.7172393Z ./node_modules/@seanhogg/builderforce-studio-embedded/dist/index.mjs
+2026-06-15T10:40:40.7173151Z ./src/components/IDENew.tsx
+2026-06-15T10:40:40.7173627Z ./src/components/IDE.tsx
+2026-06-15T10:40:40.7174083Z ./src/app/ide/[id]/page.tsx
+2026-06-15T10:40:40.7174374Z 
+2026-06-15T10:40:40.7365771Z    Linting and checking validity of types ...
+2026-06-15T10:41:08.8056642Z Failed to compile.
+2026-06-15T10:41:08.8057289Z 
+2026-06-15T10:41:08.8058037Z ./src/components/board/TeamMemberAvatarFilter.tsx:168:11
+2026-06-15T10:41:08.8059280Z Type error: An object literal cannot have multiple properties with the same name.
+2026-06-15T10:41:08.8060078Z 
+2026-06-15T10:41:08.8061382Z [0m [90m 166 |[39m           opacity[33m:[39m disableAll [33m?[39m [35m0.5[39m [33m:[39m [35m1[39m[33m,[39m
+2026-06-15T10:41:08.8063817Z  [90m 167 |[39m           transition[33m:[39m [32m'background 0.15s, color 0.15s, border-color 0.15s'[39m[33m,[39m
+2026-06-15T10:41:08.8065560Z [31m[1m>[22m[39m[90m 168 |[39m           padding[33m:[39m [35m0[39m[33m,[39m
+2026-06-15T10:41:08.8066983Z  [90m     |[39m           [31m[1m^[22m[39m
+2026-06-15T10:41:08.8068144Z  [90m 169 |[39m           fontFamily[33m:[39m [32m'inherit'[39m[33m,[39m
+2026-06-15T10:41:08.8069267Z  [90m 170 |[39m           outline[33m:[39m [32m'none'[39m[33m,[39m
+2026-06-15T10:41:08.8070397Z  [90m 171 |[39m           whiteSpace[33m:[39m [32m'nowrap'[39m[33m,[39m[0m
+2026-06-15T10:41:08.9185002Z Next.js build worker exited with code: 1 and signal: null
+2026-06-15T10:41:09.0449586Z  ELIFECYCLE  Command failed with exit code 1.
+2026-06-15T10:41:09.0614927Z ##[error]Process completed with exit code 1.
