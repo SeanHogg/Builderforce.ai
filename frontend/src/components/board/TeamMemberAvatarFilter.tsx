@@ -114,14 +114,17 @@ export function TeamMemberAvatarFilter({
     return result;
   }, [tasks, members, agentHosts, cloudAgents]);
 
-  const allSelected = selectedAssignees.length === 0;
-  const hasSelection = selectedAssignees.length > 0;
+  // Defensive: treat undefined or null as empty array
+  const selectedKeys = selectedAssignees ?? [];
+
+  const allSelected = selectedKeys.length === 0;
+  const hasSelection = selectedKeys.length > 0;
 
   const handleToggle = (e: MouseEvent, key: string) => {
     e.stopPropagation();
-    const next = selectedAssignees.includes(key)
-      ? selectedAssignees.filter((k) => k !== key)
-      : [...selectedAssignees, key];
+    const next = selectedKeys.includes(key)
+      ? selectedKeys.filter((k) => k !== key)
+      : [...selectedKeys, key];
     onSelectAssignees(next);
   };
 
@@ -165,7 +168,6 @@ export function TeamMemberAvatarFilter({
           flexShrink: 0,
           opacity: disableAll ? 0.5 : 1,
           transition: 'background 0.15s, color 0.15s, border-color 0.15s',
-          padding: 0,
           fontFamily: 'inherit',
           outline: 'none',
           whiteSpace: 'nowrap',
@@ -194,7 +196,6 @@ export function TeamMemberAvatarFilter({
             flexShrink: 0,
             fontSize: 14,
             lineHeight: 1,
-            padding: 0,
             fontFamily: 'inherit',
             outline: 'none',
           }}
@@ -220,7 +221,7 @@ export function TeamMemberAvatarFilter({
         }}
       >
         {assignees.map((a) => {
-          const active = selectedAssignees.includes(a.key);
+          const active = selectedKeys.includes(a.key);
           return (
             <Avatar
               key={a.key}
