@@ -32,7 +32,7 @@ import {
   CASCADE_STATUSES,
   fetchWithVendorTimeout,
   parseOpenAIResponse,
-  VendorFatalError,
+  throwClassified4xx,
   VendorRetryableError,
   type AiModelTier,
   type VendorCallParams,
@@ -304,7 +304,11 @@ export const anthropicModule: VendorModule = {
       throw new VendorRetryableError('anthropic', params.model, resp.status, `auth ${resp.status}: ${errText.slice(0, 200)}`);
     }
     // 400/422 (and other 4xx) are surfaced as fatal — the dispatcher advances past
-    // a 400/422 to the next candidate rather than hard-failing the whole cascade.
-    throw new VendorFatalError('anthropic', resp.status, errText);
+    // a 400/422 to the next candidate rather than hard-failing the whole cascade —
+    // UNLESS the 400 is actually a usage-cap / credit-balance limit (Anthropic
+    // returns these as `invalid_request_error` 400s), in which case it's a
+    // capacity condition that another vendor can serve: fail over AND cool the
+    // vendor instead of dying with a misleading 400.
+    throwClassified4xx('anthropic', params.model, resp.status, errText);
   },
 };

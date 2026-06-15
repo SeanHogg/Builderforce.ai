@@ -17,6 +17,7 @@
  */
 
 import type { VendorId } from '../../application/llm/vendors';
+import { CAPACITY_LIMIT_MARKER } from '../../application/llm/vendors';
 
 /**
  * Just the slice of `Env` this module needs. Narrowing it here keeps the
@@ -27,7 +28,7 @@ export interface CooldownEnv {
   AUTH_CACHE_KV?: KVNamespace;
 }
 
-export type CooldownClass = 'transient' | 'auth' | 'embedded' | 'request_error';
+export type CooldownClass = 'transient' | 'auth' | 'embedded' | 'request_error' | 'capacity';
 
 /** Per-classification TTL. Transient errors recover fast; auth errors are sticky.
  *  `request_error` is special — it writes NO cooldown at all (TTL 0), so it never
@@ -36,6 +37,13 @@ const TTL_SECONDS: Record<Exclude<CooldownClass, 'request_error'>, number> = {
   transient: 5 * 60,        // 5 min — 5xx / 408 / 429 / network / vendor timeout
   auth:      30 * 60,       // 30 min — 401 / 403 (usually missing/expired key)
   embedded:  5 * 60,        // 5 min — 200 OK with embedded { error: ... }
+  // 60 min — a usage cap / spend limit / low credit balance ({@link CAPACITY_LIMIT_MARKER}).
+  // A metered account that has hit its monthly cap won't recover for hours-to-days,
+  // so a 5-min transient cool would let the cascade re-reach (and, until the cap
+  // tripped, re-SPEND on) the capped key every minute. A long backoff makes a capped
+  // vendor genuinely stand down. Trips vendor cooldown on the FIRST strike (one
+  // capped key is capped for every model on it) — see maybeTripVendorCooldown.
+  capacity:  60 * 60,
 };
 
 /**
@@ -103,9 +111,10 @@ function isStillActive(now: number, until: number, trialAfter?: number): boolean
  */
 const VENDOR_FAILURE_WINDOW_MS  = 60_000;
 const VENDOR_FAILURE_THRESHOLD  = 3;
-const VENDOR_COOLDOWN_TTL_SEC: Record<'transient' | 'auth', number> = {
+const VENDOR_COOLDOWN_TTL_SEC: Record<'transient' | 'auth' | 'capacity', number> = {
   transient: 5 * 60,        // 5 min — matches per-model transient
   auth:      30 * 60,       // 30 min — bad key won't recover without rotation
+  capacity:  60 * 60,       // 60 min — account hit its usage/spend cap; back off hard
 };
 
 /**
@@ -118,9 +127,16 @@ const VENDOR_COOLDOWN_TTL_SEC: Record<'transient' | 'auth', number> = {
  *     model nor vendor cooldown. Cooling them would (a) wrongly bench a healthy
  *     model and (b) trip vendor cooldown for what is the caller's own bad
  *     payload, starving every other tenant on that vendor for a schema typo.
+ *   - `capacity`: a usage cap / spend limit / low credit balance ({@link
+ *     CAPACITY_LIMIT_MARKER}). The vendor mapped its 400/429 to this because the
+ *     request is fine but the ACCOUNT is out of budget — a long, vendor-wide
+ *     backoff so the gateway stops re-reaching (and re-spending on) a capped key.
  *   - `transient` (5xx/408/429/network): everything else — short per-model cool.
  */
 export function classifyFailure(status: number, hint?: string): CooldownClass {
+  // Capacity is checked FIRST: it rides on a 429 (so the request_error/auth gates
+  // below would misroute it) and its long backoff is the whole point of the class.
+  if (hint && hint.includes(CAPACITY_LIMIT_MARKER)) return 'capacity';
   if (status === 401 || status === 403) return 'auth';
   if (status === 400 || status === 422) return 'request_error';
   if (hint && hint.startsWith('embedded:')) return 'embedded';
@@ -157,7 +173,7 @@ interface CooldownBackend {
   /** Returns vendor cooldown expiry epoch-ms; undefined if not cooled. */
   readVendor(vendor: VendorId): Promise<number | undefined>;
   /** Persists vendor cooldown for `ttlSec`. */
-  writeVendor(vendor: VendorId, until: number, ttlSec: number, cls: 'transient' | 'auth'): Promise<void>;
+  writeVendor(vendor: VendorId, until: number, ttlSec: number, cls: 'transient' | 'auth' | 'capacity'): Promise<void>;
   /** Read recent failure timestamps for sliding-window decisions. */
   readVendorFailures(vendor: VendorId): Promise<number[]>;
   /** Persist filtered + appended failure ring. TTL bounded by `VENDOR_FAILURE_WINDOW_MS`. */
@@ -376,13 +392,18 @@ async function maybeTripVendorCooldown(
   // reaches here (recordFailure returns first). Neither propagates to the vendor.
   if (cls === 'embedded' || cls === 'request_error') return;
 
-  if (cls === 'auth') {
-    const ttl   = VENDOR_COOLDOWN_TTL_SEC.auth;
+  // Auth (bad key) and capacity (account out of budget) both trip the vendor on a
+  // SINGLE strike: the condition is global to the key, so every model on it is
+  // unreachable. Capacity gets the longer backoff so a capped metered key (the
+  // funded Anthropic floor that blew its monthly limit) stands down instead of
+  // being re-reached — and re-billed — by the next run.
+  if (cls === 'auth' || cls === 'capacity') {
+    const ttl   = VENDOR_COOLDOWN_TTL_SEC[cls];
     const until = Date.now() + ttl * 1000;
     console.warn(
-      `[cooldown] vendor ${vendor} cooled for ${ttl}s — auth failure (status=${status}); cascade will skip this vendor`,
+      `[cooldown] vendor ${vendor} cooled for ${ttl}s — ${cls} failure (status=${status}); cascade will skip this vendor`,
     );
-    await backend.writeVendor(vendor, until, ttl, 'auth');
+    await backend.writeVendor(vendor, until, ttl, cls);
     return;
   }
 

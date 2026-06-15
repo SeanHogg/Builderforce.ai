@@ -320,6 +320,61 @@ export const CASCADE_STATUSES: ReadonlySet<number> = new Set<number>([
 export const AUTH_STATUSES: ReadonlySet<number> = new Set<number>([401, 403]);
 
 /**
+ * True when a non-OK 4xx body is a CAPACITY / billing condition — a usage cap,
+ * spend limit, low credit balance, or exhausted quota — rather than a malformed
+ * request. Several upstreams return these as HTTP **400** (not 429): Anthropic
+ * emits `invalid_request_error` "You have reached your specified API usage
+ * limits" / "Your credit balance is too low to access the Anthropic API", and
+ * OpenAI-shaped vendors use `insufficient_quota` / "exceeded your current
+ * quota". These are NOT payload bugs — the *request* is fine and a DIFFERENT
+ * vendor can serve it — so the cascade must fail over (and cool this vendor)
+ * instead of hard-failing the run with a misleading 400. (Fix: a cloud coding
+ * run flooring onto the direct-Anthropic backstop died with a fatal 400 when
+ * that account hit its monthly usage cap, never failing over — execution #73.)
+ */
+/**
+ * Stable marker embedded in the retryable error a capacity/billing limit raises
+ * ({@link throwClassified4xx}). The cooldown store keys off this exact substring
+ * to give a capacity failure a LONG vendor backoff (a usage cap won't recover in
+ * the 5-minute transient window), so the gateway stops re-hammering — and
+ * re-spending on — a metered key that has hit its monthly limit. Shared so the
+ * producer (here) and the classifier (cooldownStore.classifyFailure) can't drift.
+ */
+export const CAPACITY_LIMIT_MARKER = 'capacity/usage limit';
+
+export function isCapacityLimitBody(text: string | undefined | null): boolean {
+  if (!text) return false;
+  return /usage\s+limit|credit\s+balance|insufficient[_\s-]?quota|exceeded\s+your\s+(current\s+)?quota|spend(ing)?\s+limit|billing\s+(hard\s+)?limit|reached\s+your[^.]*\blimit/i.test(
+    text,
+  );
+}
+
+/**
+ * Classify a would-be-FATAL 4xx the shared way and throw: a capacity/billing
+ * limit ({@link isCapacityLimitBody}) becomes a **retryable** error tagged 429
+ * so the cascade fails over to another vendor AND `recordFailure` cools this one
+ * (a usage cap recovers later, exactly like a rate limit); a genuine malformed
+ * request stays fatal. Single source so every vendor agrees on the boundary.
+ * Always throws — return type `never`.
+ */
+export function throwClassified4xx(
+  vendorId: string,
+  model: string,
+  status: number,
+  errText: string,
+): never {
+  if (isCapacityLimitBody(errText)) {
+    throw new VendorRetryableError(
+      vendorId,
+      model,
+      429,
+      `${CAPACITY_LIMIT_MARKER} (upstream ${status}): ${errText.slice(0, 200)}`,
+    );
+  }
+  throw new VendorFatalError(vendorId, status, errText);
+}
+
+/**
  * Per-vendor-call timeout *default*. The caller (SDK) sets the *outer* deadline
  * for the whole request; this is the *inner* deadline for one vendor attempt.
  * When a vendor hangs (e.g. OpenRouter free-tier queueing under load), the
@@ -464,7 +519,8 @@ export async function executeChatCompletion(args: {
     throw new VendorRetryableError(vendorId, model, resp.status, `auth ${resp.status}: ${errText.slice(0, 200)}`);
   }
 
-  throw new VendorFatalError(vendorId, resp.status, errText);
+  // 400/422 → fatal, UNLESS the body is a capacity/billing limit (failover-able).
+  throwClassified4xx(vendorId, model, resp.status, errText);
 }
 
 // ---------------------------------------------------------------------------
@@ -512,7 +568,8 @@ export async function executeChatCompletionStream(args: {
       );
       throw new VendorRetryableError(vendorId, model, resp.status, `auth ${resp.status}`);
     }
-    throw new VendorFatalError(vendorId, resp.status, errText);
+    // 400/422 → fatal, UNLESS the body is a capacity/billing limit (failover-able).
+    throwClassified4xx(vendorId, model, resp.status, errText);
   }
 
   if (!resp.body) {

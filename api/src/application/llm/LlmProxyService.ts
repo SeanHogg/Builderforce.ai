@@ -414,6 +414,25 @@ export function isPaidOverflowModel(model: string | undefined | null): boolean {
  */
 export const FREE_ATTEMPT_BUDGET = 2;
 
+/**
+ * FREE-attempt budget for a CODING run — deliberately the WHOLE free coding pool,
+ * not the 2-attempt general cap.
+ *
+ * A coding run is a long-lived background job (container / durable loop, ~180s
+ * outer budget), so unlike an interactive request it values COST over a few
+ * seconds of latency. The general 2-attempt cap escalates to PAID coders — and
+ * ultimately the funded direct-Anthropic floor on a METERED key — after only two
+ * free coders, which is how a $10 Anthropic cap got drained while ~9 free coders
+ * (minimax / glm / nemotron / qwen-coder / …) sat untried. Budgeting the entire
+ * free coding pool means every free coder is attempted BEFORE any paid coder, so
+ * the metered floor is genuinely last-resort (10+ models tried first), not a
+ * second-attempt default.
+ *
+ * Derived from the pool so it tracks automatically as free coders are added.
+ */
+export const CODING_FREE_ATTEMPT_BUDGET: number =
+  CODING_MODEL_POOL.filter((m) => FREE_MODEL_POOL.includes(m)).length;
+
 /** First N models of the active pool form the round-robin "preferred" group.
  *  Aligned with FREE_ATTEMPT_BUDGET so the round-robin window matches the cap. */
 export const PREFERRED_POOL_SIZE = 2;
@@ -610,6 +629,12 @@ export interface LlmProxyOptions {
    *  cascade never resolves onto a generalist. Set by `llmProxyForPlan({codingOnly})`.
    *  Pairs with `backstopModels: CODING_BACKSTOP_MODELS` for the credited-key floor. */
   codingOnly?: boolean;
+  /** Max FREE-tier seed models the cascade tries before falling through to the
+   *  premium fallback. Defaults to `FREE_ATTEMPT_BUDGET` (2) for latency-sensitive
+   *  general requests; coding runs pass `CODING_FREE_ATTEMPT_BUDGET` (the whole
+   *  free coding pool) so every free coder is exhausted before any paid/metered
+   *  coder. */
+  freeBudget?: number;
 }
 
 export class LlmProxyService {
@@ -622,6 +647,7 @@ export class LlmProxyService {
   private readonly backstopModels: readonly string[];
   private readonly disablePaidOverflow: boolean;
   private readonly codingOnly: boolean;
+  private readonly freeBudget: number;
 
   constructor(env: ProxyEnv, options?: LlmProxyOptions) {
     this.env = env;
@@ -633,6 +659,7 @@ export class LlmProxyService {
     this.backstopModels = options?.backstopModels?.length ? options.backstopModels : [GUARANTEED_BACKSTOP_MODEL];
     this.disablePaidOverflow = options?.disablePaidOverflow ?? false;
     this.codingOnly = options?.codingOnly ?? false;
+    this.freeBudget = options?.freeBudget && options.freeBudget > 0 ? options.freeBudget : FREE_ATTEMPT_BUDGET;
   }
 
   /** The premium fallback chain appended to every cascade — empty when the tenant
@@ -887,7 +914,7 @@ export class LlmProxyService {
     return composeFreeCappedCascade({
       seed,
       premiumFallback: this.premiumFallback,
-      freeBudget: FREE_ATTEMPT_BUDGET,
+      freeBudget: this.freeBudget,
       tierOf: tierForModel,
       isUnavailable: buildCooldownPredicate({
         cooledModels:  cooledSet,
@@ -1461,7 +1488,9 @@ export function llmProxyForPlan(
     ...(vendorCallTimeoutMs ? { vendorCallTimeoutMs } : {}),
     ...(opts?.backstopModels ? { backstopModels: opts.backstopModels } : {}),
     ...(opts?.disablePaidOverflow ? { disablePaidOverflow: true } : {}),
-    ...(opts?.codingOnly ? { codingOnly: true } : {}),
+    // A coding run walks the WHOLE free coding pool before any paid/metered coder
+    // (cost over latency), so the funded direct-Anthropic floor is genuine last-resort.
+    ...(opts?.codingOnly ? { codingOnly: true, freeBudget: CODING_FREE_ATTEMPT_BUDGET } : {}),
   });
 }
 
