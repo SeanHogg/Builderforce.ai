@@ -541,3 +541,77 @@ Error: TypeError: Cannot read properties of undefined (reading 'length')
 
  ELIFECYCLE  Test failed. See above for more details.
 Error: Process completed with exit code 1.
+
+---
+
+### Update — Bob Developer (V2 (Container)) · 2026-06-15T04:15:21.589Z · execution #76
+
+Latest Error:
+Annotations
+1 error and 8 warnings
+Frontend (Node.js 20)
+failed now in 3m 17s
+Search logs
+1s
+2s
+1s
+9s
+38s
+3s
+29s
+15s
+1m 36s
+Run pnpm run build
+
+> builderforce-frontend@2026.05.31 build /home/runner/work/Builderforce.ai/Builderforce.ai/frontend
+> next build
+
+⚠ No build cache found. Please configure build caching for faster rebuilds. Read more: https://nextjs.org/docs/messages/no-cache
+Attention: Next.js now collects completely anonymous telemetry regarding usage.
+This information is used to shape Next.js' roadmap and prioritize features.
+You can learn more, including how to opt-out if you'd not like to participate in this anonymous program, by visiting the following URL:
+https://nextjs.org/telemetry
+
+   ▲ Next.js 15.5.2
+
+   Creating an optimized production build ...
+ ⚠ Compiled with warnings in 67s
+
+./node_modules/@seanhogg/builderforce-studio-embedded/node_modules/@seanhogg/builderforce-studio/node_modules/@huggingface/transformers/dist/transformers.web.js
+Critical dependency: Accessing import.meta directly is unsupported (only property access or destructuring is supported)
+
+Import trace for requested module:
+./node_modules/@seanhogg/builderforce-studio-embedded/node_modules/@seanhogg/builderforce-studio/node_modules/@huggingface/transformers/dist/transformers.web.js
+./node_modules/@seanhogg/builderforce-studio-embedded/node_modules/@seanhogg/builderforce-studio/dist/index.mjs
+./node_modules/@seanhogg/builderforce-studio-embedded/dist/index.mjs
+./src/components/IDENew.tsx
+./src/components/IDE.tsx
+./src/app/ide/[id]/page.tsx
+
+./node_modules/@seanhogg/builderforce-studio-embedded/node_modules/@seanhogg/builderforce-studio/node_modules/@huggingface/transformers/dist/transformers.web.js
+Critical dependency: Accessing import.meta directly is unsupported (only property access or destructuring is supported)
+
+Import trace for requested module:
+./node_modules/@seanhogg/builderforce-studio-embedded/node_modules/@seanhogg/builderforce-studio/node_modules/@huggingface/transformers/dist/transformers.web.js
+./node_modules/@seanhogg/builderforce-studio-embedded/node_modules/@seanhogg/builderforce-studio/dist/index.mjs
+./node_modules/@seanhogg/builderforce-studio-embedded/dist/index.mjs
+./src/components/IDENew.tsx
+./src/components/IDE.tsx
+./src/app/ide/[id]/page.tsx
+
+   Linting and checking validity of types ...
+Failed to compile.
+
+./src/components/board/TeamMemberAvatarFilter.tsx:168:11
+Type error: An object literal cannot have multiple properties with the same name.
+
+  166 |           opacity: disableAll ? 0.5 : 1,
+  167 |           transition: 'background 0.15s, color 0.15s, border-color 0.15s',
+> 168 |           padding: 0,
+      |           ^
+  169 |           fontFamily: 'inherit',
+  170 |           outline: 'none',
+  171 |           whiteSpace: 'nowrap',
+Next.js build worker exited with code: 1 and signal: null
+ ELIFECYCLE  Command failed with exit code 1.
+Error: Process completed with exit code 1.
