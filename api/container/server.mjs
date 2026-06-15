@@ -25,6 +25,13 @@ import { tmpdir } from 'node:os';
 const PORT = Number(process.env.PORT || 8080);
 const MAX_LIST_ENTRIES = 500;
 const COMMAND_TIMEOUT_MS = 10 * 60 * 1000; // a build/test step may legitimately take minutes
+// Liveness heartbeat cadence. The Worker reaps a cloud run whose last activity is
+// older than 90s (RuntimeService.CLOUD_ORPHAN_MS / staleExecutionReaper). A single
+// run_command can run for minutes with no LLM round-trip, so we bump the run's
+// `updated_at` on this timer — well under the 90s ceiling — so the reaper never kills
+// a healthy, busy container mid-build. ~3 beats fit the window, so a dropped beat is
+// covered by the next.
+const HEARTBEAT_MS = 30 * 1000;
 
 /** POST a container-op back to the Worker; returns the parsed JSON body. */
 async function op(spec, body) {
@@ -37,17 +44,21 @@ async function op(spec, body) {
   return res.json();
 }
 
-/** Run a shell command in `cwd`, capturing combined stdout/stderr and the exit code. */
-function runShell(command, cwd) {
+/** Run a shell command in `cwd`, capturing combined stdout/stderr and the exit code.
+ *  `proc` (optional) is a holder whose `.current` is set to the live child so the
+ *  heartbeat loop can SIGKILL an in-flight command when the run is cancelled. */
+function runShell(command, cwd, proc) {
   return new Promise((resolve) => {
     const child = spawn('bash', ['-lc', command], { cwd, env: process.env });
+    if (proc) proc.current = child;
     let out = '';
     const cap = (chunk) => { out += chunk; if (out.length > 60_000) out = out.slice(-60_000); };
     child.stdout.on('data', cap);
     child.stderr.on('data', cap);
     const timer = setTimeout(() => { child.kill('SIGKILL'); }, COMMAND_TIMEOUT_MS);
-    child.on('close', (code) => { clearTimeout(timer); resolve({ exitCode: code ?? -1, output: out }); });
-    child.on('error', (e) => { clearTimeout(timer); resolve({ exitCode: -1, output: `${out}\n${e.message}` }); });
+    const done = (result) => { clearTimeout(timer); if (proc && proc.current === child) proc.current = null; resolve(result); };
+    child.on('close', (code) => done({ exitCode: code ?? -1, output: out }));
+    child.on('error', (e) => done({ exitCode: -1, output: `${out}\n${e.message}` }));
   });
 }
 
@@ -73,7 +84,7 @@ async function listFiles(dir, sub) {
 
 /** Execute one tool call. Repo reads/writes hit local disk (the clone); write also
  *  mirrors to the ticket branch via the Worker; run_command runs in the shell. */
-async function execTool(spec, workdir, writtenPaths, name, parsed) {
+async function execTool(spec, workdir, writtenPaths, name, parsed, proc) {
   if (name === 'list_files') {
     if (!workdir) return { ok: false, error: 'no repository bound to this task' };
     return listFiles(workdir, typeof parsed.path === 'string' ? parsed.path : undefined);
@@ -105,7 +116,7 @@ async function execTool(spec, workdir, writtenPaths, name, parsed) {
     if (!command) return { ok: false, error: 'command is required' };
     if (!workdir) return { ok: false, error: 'no repository checked out — run_command needs a bound repo' };
     const t0 = Date.now();
-    const { exitCode, output } = await runShell(command, workdir);
+    const { exitCode, output } = await runShell(command, workdir, proc);
     await op(spec, { op: 'event', args: { toolName: 'run_command', category: 'tool', detail: { command, exitCode }, result: output.slice(0, 300), durationMs: Date.now() - t0 } }).catch(() => {});
     return { ok: exitCode === 0, exitCode, output: output.slice(0, 20_000) };
   }
@@ -119,6 +130,18 @@ async function runLoop(spec) {
   let finalOutput = '';
   let cancelled = false;
   let crashed = null;
+  // Holds the live child process so the heartbeat can kill it on cancel.
+  const proc = { current: null };
+  // Liveness heartbeat: bump the run's `updated_at` on a timer so a long shell step
+  // (build/test) doesn't look orphaned to the Worker's reaper (90s ceiling). A beat
+  // that reports the run cancelled also SIGKILLs an in-flight command so a cancel
+  // during a multi-minute build takes effect immediately instead of after timeout.
+  const heartbeat = setInterval(() => {
+    op(spec, { op: 'heartbeat' })
+      .then((r) => { if (r && r.cancelled && proc.current) { cancelled = true; proc.current.kill('SIGKILL'); } })
+      .catch(() => { /* a missed beat is covered by the next */ });
+  }, HEARTBEAT_MS);
+  if (typeof heartbeat.unref === 'function') heartbeat.unref();
   try {
     if (spec.repo && spec.repo.cloneUrl) {
       workdir = await mkdtemp(join(tmpdir(), `bf-exec-${spec.executionId}-`));
@@ -129,13 +152,13 @@ async function runLoop(spec) {
       // the head branch doesn't exist on the remote yet.
       let checkedOut = null;
       let clone = headBranch
-        ? await runShell(`git clone --depth 1 -b "${headBranch}" "${cloneUrl}" .`, workdir)
+        ? await runShell(`git clone --depth 1 -b "${headBranch}" "${cloneUrl}" .`, workdir, proc)
         : { exitCode: 1, output: 'no head branch' };
       if (clone.exitCode === 0) {
         checkedOut = headBranch;
       } else {
         const baseArg = baseBranch ? `-b "${baseBranch}"` : '';
-        clone = await runShell(`git clone --depth 1 ${baseArg} "${cloneUrl}" .`, workdir);
+        clone = await runShell(`git clone --depth 1 ${baseArg} "${cloneUrl}" .`, workdir, proc);
         if (clone.exitCode === 0) checkedOut = baseBranch || '(default)';
       }
       if (clone.exitCode !== 0) {
@@ -155,6 +178,9 @@ async function runLoop(spec) {
     const maxSteps = Number(spec.maxSteps) || 20;
 
     for (let step = 0; step < maxSteps; step++) {
+      // A heartbeat may have observed a cancel (and killed an in-flight command)
+      // since the last step — stop before spending another LLM call.
+      if (cancelled) break;
       const turn = await op(spec, { op: 'llm', args: { messages } });
       if (turn.error) { finalOutput = turn.error; break; }
       if (turn.cancelled) { cancelled = true; break; }
@@ -184,7 +210,7 @@ async function runLoop(spec) {
           finished = true;
           result = { ok: true };
         } else {
-          result = await execTool(spec, workdir, writtenPaths, name, parsed);
+          result = await execTool(spec, workdir, writtenPaths, name, parsed, proc);
         }
         messages.push({ role: 'tool', tool_call_id: tc.id ?? '', content: JSON.stringify(result) });
       }
@@ -199,6 +225,7 @@ async function runLoop(spec) {
     // self-heal or fail the run with what actually broke.
     crashed = e instanceof Error ? e.message : String(e);
   } finally {
+    clearInterval(heartbeat); // stop beating before the terminal op
     try {
       if (crashed) {
         await op(spec, { op: 'fail', args: { error: crashed } }).catch(() => {});
