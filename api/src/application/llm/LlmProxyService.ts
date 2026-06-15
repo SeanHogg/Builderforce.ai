@@ -49,6 +49,7 @@ import {
   recordFailure,
 } from '../../infrastructure/auth/cooldownStore';
 import { validateJsonSchema } from './jsonSchemaValidator';
+import type { ActionType } from './actionTypes';
 
 // ---------------------------------------------------------------------------
 // Pool composition (derived from vendor catalogs — single source of truth)
@@ -1476,14 +1477,115 @@ export function codingDefaultForPlan(effectivePlan: EffectivePlan, premiumOverri
  *   • absent / typo'd / off-catalog → the plan's default coding model, soft (so a
  *     cold model can fail over once before the run locks onto what resolved).
  */
+/** Minimal per-model stat shape the learned router ranks on — a structural subset
+ *  of `routingTable.ActionModelStat`, declared here so this pure module never imports
+ *  the routing-table/DB layer (keeps `rankModelsForAction` I/O-free + unit-testable). */
+export interface ActionModelRankStat {
+  model: string;
+  n: number;
+  avgScore: number;
+  avgCostMc: number;
+}
+
+export interface RankModelsOptions {
+  /** Minimum samples a (action_type, model) bucket needs before it can lead. */
+  minSamples?: number;
+  /** Optional client-computed SSM recall nudge (model → +/- weight) applied to the
+   *  learned score BEFORE the sort. Personalization on top of the shared table. */
+  bias?: Record<string, number>;
+}
+
+export const DEFAULT_MIN_SAMPLES = 8;
+
+/**
+ * Learned-routing reorder (PURE — no I/O). Stable-reorders the curated, plan-reachable
+ * coding pool so the empirically-best model for this action type leads:
+ *   • a model is ELIGIBLE to lead only with `n >= minSamples` samples;
+ *   • eligible models sort by `avgScore (+ bias)` desc, ties broken by lower
+ *     `avgCostMc`, then by the curated index (stable);
+ *   • every model below the sample floor keeps the curated order, appended after;
+ *   • when NO model clears the floor, the curated order is returned UNCHANGED
+ *     (cold-start safety — routing degrades to today's static order).
+ * The optional `bias` only nudges ordering AMONG already-eligible models (a nudge on
+ * top of the table, never a way to surface a cold model). Never invents a model: the
+ * output is always a permutation of `reachable`.
+ */
+export function rankModelsForAction(
+  reachable: readonly string[],
+  stats: ReadonlyArray<ActionModelRankStat> | undefined,
+  opts?: RankModelsOptions,
+): string[] {
+  const minSamples = opts?.minSamples ?? DEFAULT_MIN_SAMPLES;
+  const bias = opts?.bias ?? {};
+  const statByModel = new Map<string, ActionModelRankStat>();
+  for (const s of stats ?? []) statByModel.set(s.model, s);
+
+  const curatedIndex = new Map<string, number>();
+  reachable.forEach((m, i) => curatedIndex.set(m, i));
+
+  const eligible: string[] = [];
+  const rest: string[] = [];
+  for (const m of reachable) {
+    const s = statByModel.get(m);
+    if (s && s.n >= minSamples) eligible.push(m);
+    else rest.push(m);
+  }
+  if (eligible.length === 0) return [...reachable]; // cold-start: static order unchanged.
+
+  const scoreOf = (m: string): number => (statByModel.get(m)!.avgScore) + (bias[m] ?? 0);
+  eligible.sort((a, b) => {
+    const d = scoreOf(b) - scoreOf(a);
+    if (d !== 0) return d;
+    const c = statByModel.get(a)!.avgCostMc - statByModel.get(b)!.avgCostMc;
+    if (c !== 0) return c;
+    return (curatedIndex.get(a)! - curatedIndex.get(b)!);
+  });
+  return [...eligible, ...rest];
+}
+
+export interface PickCloudModelOptions {
+  actionType?: ActionType;
+  /** The `byAction[actionType]` slice of the resolved scope's routing blob. */
+  actionStats?: ReadonlyArray<ActionModelRankStat>;
+  /** Client SSM recall nudge (interactive runs only; absent/ignored headless). */
+  bias?: Record<string, number>;
+  minSamples?: number;
+}
+
+export interface PickCloudModelResult {
+  model: string;
+  strict: boolean;
+  /** The learned reorder of the plan-reachable coding pool (soft-seed branch only) —
+   *  surfaced so the caller can explain the choice on the timeline. */
+  ranked?: string[];
+  /** Samples behind the chosen seed (the leading ranked model), 0 when cold/curated. */
+  seedSamples?: number;
+  /** True when the SSM bias map was non-empty and could affect ordering. */
+  biasApplied?: boolean;
+}
+
 export function pickCloudModel(
   explicit: string | undefined,
   effectivePlan: EffectivePlan,
   premiumOverride = false,
-): { model: string; strict: boolean } {
+  opts?: PickCloudModelOptions,
+): PickCloudModelResult {
   const canChooseModel = premiumOverride || effectivePlan !== 'free';
+  // Explicit-pin behaviour (paid plans) — byte-for-byte unchanged.
   if (canChooseModel && isKnownModel(explicit)) return { model: (explicit as string).trim(), strict: true };
-  return { model: codingDefaultForPlan(effectivePlan, premiumOverride), strict: false };
+
+  // Soft-seed branch — the ONLY place learned routing changes anything. Reorder the
+  // plan-reachable coding pool by the learned stats (+ optional bias) and seed the
+  // leader. With no stats this is the curated order, so the seed equals
+  // codingDefaultForPlan(...) — the prior behaviour. The free-plan gate is intact:
+  // an explicit pick was already ignored above, and the reorder stays WITHIN the
+  // plan's reachable coding pool (free tenants only ever reorder free coding models).
+  const reachable = codingModelsForPlan(effectivePlan, premiumOverride);
+  const bias = opts?.bias && Object.keys(opts.bias).length > 0 ? opts.bias : undefined;
+  const ranked = rankModelsForAction(reachable, opts?.actionStats, { minSamples: opts?.minSamples, bias });
+  const seed = ranked[0] ?? CODING_DEFAULT_MODEL;
+  const seedSamples = opts?.actionStats?.find((s) => s.model === seed)?.n ?? 0;
+  return { model: seed, strict: false, ranked, seedSamples, biasApplied: !!bias };
 }
 
 /** Free-tier proxy for IDE-internal callers (chat, dataset gen, agent inference, brain).

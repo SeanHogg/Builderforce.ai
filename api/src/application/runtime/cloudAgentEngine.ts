@@ -36,7 +36,11 @@ import {
   DEFAULT_ENGINE_ID, ENGINE_IDS, resolveEngineById,
   type AgentEngine, type AgentRunInput, type AgentRunResult, type CapabilityProvider, type ToolContext,
 } from '@builderforce/agent-tools';
-import { parseRemediation, parseFollowUp, parseCloudAgentRef, parseModel } from './cloudDispatch';
+import { parseRemediation, parseFollowUp, parseCloudAgentRef, parseModel, parseRoutingBias } from './cloudDispatch';
+import { classifyTaskAction } from '../llm/classifyTask';
+import { ACTION_TYPES, normalizeActionType, learnedRoutingEnabled, type ActionType } from '../llm/actionTypes';
+import { getRoutingTable, MIN_SAMPLES, type RoutingScope } from '../llm/routingTable';
+import type { ActionModelRankStat } from '../llm/LlmProxyService';
 import { handleCloudRunCrash } from './cloudSelfHeal';
 import { cloudCrashReason } from './orphanReasons';
 import { RuntimeService } from './RuntimeService';
@@ -453,15 +457,27 @@ export async function emitModelSelection(
   args: {
     tenantId: number; cloudAgentRef?: string; executionId: number;
     requested: string | undefined;
-    pick: { model: string; strict: boolean };
+    pick: { model: string; strict: boolean; ranked?: string[]; seedSamples?: number; biasApplied?: boolean };
     plan: EffectivePlan; premium: boolean;
+    /** Learned Model Routing: the action type the run was classified as (PRD 13). */
+    actionType?: ActionType;
   },
 ): Promise<void> {
   const seedIsCoder = CODING_MODEL_POOL_SET.has(args.pick.model);
   const planCoders = codingModelsForPlan(args.plan, args.premium);
-  const reason = args.pick.strict
+  // Did the learned reorder actually move the seed off the curated default?
+  const curatedDefault = planCoders[0];
+  const learnedSeed = !args.pick.strict && (args.pick.seedSamples ?? 0) >= MIN_SAMPLES && args.pick.model !== curatedDefault;
+  const learnedNote = args.actionType
+    ? ` Action=${args.actionType}; ${
+        learnedSeed
+          ? `learned routing ranked '${args.pick.model}' #1 from ${args.pick.seedSamples} prior ${args.actionType} run(s)${args.pick.biasApplied ? ', client SSM bias applied' : ''}.`
+          : `learned routing had too few samples (cold-start) — kept the curated default.`
+      }`
+    : '';
+  const reason = (args.pick.strict
     ? `Pinned to '${args.pick.model}' (strict — the gateway dispatches only this model, no silent swap).`
-    : `No usable model on this agent${args.requested ? ` ('${args.requested}' is not a known catalog id)` : ' (dispatched as gateway-default)'} → seeding the ${args.plan} plan's best coding model '${args.pick.model}'${seedIsCoder ? '' : ' (NOT a curated coder)'}. Soft seed: the run locks onto whatever the gateway resolves on turn 1, so a cold/keyless seed can fail over once — possibly onto a non-coder backstop (watch for coding_model_degraded).`;
+    : `No usable model on this agent${args.requested ? ` ('${args.requested}' is not a known catalog id)` : ' (dispatched as gateway-default)'} → seeding the ${args.plan} plan's best coding model '${args.pick.model}'${seedIsCoder ? '' : ' (NOT a curated coder)'}. Soft seed: the run locks onto whatever the gateway resolves on turn 1, so a cold/keyless seed can fail over once — possibly onto a non-coder backstop (watch for coding_model_degraded).`) + learnedNote;
   await recordCloudToolEvent(db, {
     tenantId: args.tenantId,
     cloudAgentRef: args.cloudAgentRef,
@@ -476,9 +492,78 @@ export async function emitModelSelection(
       plan: args.plan,
       premium: args.premium,
       planCoders,
+      actionType: args.actionType ?? null,
+      rankedFrom: args.pick.ranked ?? null,
+      seedSamples: args.pick.seedSamples ?? 0,
+      learnedSeed,
+      biasApplied: args.pick.biasApplied ?? false,
     },
     result: reason,
   });
+}
+
+/** What the learned router needs at run start: the task's action-type label and the
+ *  ranked per-model stats for the finest scope that has enough samples. */
+export interface LearnedRoutingInputs {
+  actionType: ActionType;
+  /** byAction[actionType] of the finest scope with a model clearing MIN_SAMPLES, or
+   *  undefined when every scope is cold (→ router keeps the curated static order). */
+  actionStats?: ReadonlyArray<ActionModelRankStat>;
+}
+
+/** True when a scope's per-action stat list has at least one model at/above the
+ *  sample floor — i.e. it can actually change the seed. */
+function scopeHasSignal(stats: ReadonlyArray<ActionModelRankStat> | undefined): boolean {
+  return !!stats && stats.some((s) => s.n >= MIN_SAMPLES);
+}
+
+/**
+ * Resolve the learned-routing inputs for a run (PRD 13 §6.2/§6.3), best-effort:
+ *   1. Ensure `tasks.action_type` — classify ONCE (free pool) and cache on the task
+ *      if null; every re-run reuses the column. Falls back to 'other' on any error.
+ *   2. Read the finest-scope routing blob (project → tenant → global) and return the
+ *      first that has real signal (a model with `n >= MIN_SAMPLES`) for this action.
+ * Returns `{ actionType: 'other' }` (no stats) when the kill switch is off or anything
+ * throws — so the router simply keeps today's static order. Never blocks a run.
+ */
+export async function resolveLearnedRoutingInputs(
+  env: Env,
+  db: Db,
+  args: { tenantId: number; projectId: number; taskRow: { id: number; title: string; description: string | null } },
+): Promise<LearnedRoutingInputs> {
+  if (!learnedRoutingEnabled(env)) return { actionType: 'other' };
+  try {
+    // 1. Classify-once + cache on the task column.
+    let actionType: ActionType = 'other';
+    const [row] = await db
+      .select({ actionType: tasks.actionType })
+      .from(tasks).where(eq(tasks.id, args.taskRow.id)).limit(1);
+    if (row?.actionType) {
+      actionType = normalizeActionType(row.actionType);
+    } else {
+      const verdict = await classifyTaskAction(env, { title: args.taskRow.title, description: args.taskRow.description });
+      actionType = verdict.actionType;
+      await db.update(tasks)
+        .set({ actionType: verdict.actionType, actionTypeConfidence: verdict.confidence })
+        .where(eq(tasks.id, args.taskRow.id))
+        .catch(() => { /* best-effort: classification is a cache, not a gate */ });
+    }
+
+    // 2. Finest scope with signal → its ranked stats for this action.
+    const scopes: RoutingScope[] = [
+      { kind: 'project', id: args.projectId },
+      { kind: 'tenant', id: args.tenantId },
+      { kind: 'global' },
+    ];
+    for (const scope of scopes) {
+      const table = await getRoutingTable(env, db, scope);
+      const stats = table.byAction[actionType];
+      if (scopeHasSignal(stats)) return { actionType, actionStats: stats };
+    }
+    return { actionType };
+  } catch {
+    return { actionType: 'other' };
+  }
 }
 
 /**
@@ -892,6 +977,11 @@ export interface CloudLoopOpts {
   /** Skip the PR/merge finalize unless the run is actually finished — so the DO
    *  doesn't ship a half-done run between ticks. */
   deferFinalize?: boolean;
+  /** Learned Model Routing (PRD 13 §6.6): a client-computed SSM recall nudge
+   *  (model → weight) from an INTERACTIVE launch. Absent on headless/autonomous
+   *  runs (board lane auto-run, scheduled, CI-fix). Merged as a nudge over the KV
+   *  routing table on the first tick. */
+  routingBias?: Record<string, number>;
 }
 export interface CloudLoopResult {
   ok: boolean;
@@ -1109,8 +1199,20 @@ export async function runCloudToolLoop(
   //   • No (or typo'd) selection → the plan's best coding model as a soft seed,
   //     then lock onto whatever the gateway resolved on the first turn (so a cold
   //     model can fail over once — but only once, at the start).
+  // Learned Model Routing (PRD 13): on the FIRST tick, resolve the task's action
+  // type + the empirically-best models for it (finest scope with signal), so the
+  // soft seed prefers what has historically worked for this kind of task. Resume
+  // ticks skip this — they already locked their pin. Best-effort: the helper returns
+  // no stats under the kill switch / cold-start / any error, so the seed degrades to
+  // the curated default (today's behaviour). The interactive SSM bias (if any) nudges
+  // the order on top of the shared table.
+  const learned = opts?.resume ? { actionType: 'other' as ActionType, actionStats: undefined } : await resolveLearnedRoutingInputs(env, db, { tenantId, projectId, taskRow });
   // The resolved pin rides CloudLoopState so the DO surface keeps every tick on it.
-  const pick = pickCloudModel(model, routing.effectivePlan, routing.premiumOverride);
+  const pick = pickCloudModel(model, routing.effectivePlan, routing.premiumOverride, {
+    actionType: learned.actionType,
+    actionStats: learned.actionStats,
+    bias: opts?.routingBias,
+  });
   // Mutable: a 429 on the pinned model drops the strict pin so the proxy cascades
   // (see the per-turn cascade below); the run then stays unpinned for later turns.
   let strictPin = pick.strict;
@@ -1123,6 +1225,7 @@ export async function runCloudToolLoop(
     await emitModelSelection(db, {
       tenantId, cloudAgentRef, executionId,
       requested: model, pick, plan: routing.effectivePlan, premium: routing.premiumOverride,
+      actionType: learned.actionType,
     });
   }
 
@@ -1382,6 +1485,10 @@ export interface CloudEngineContext {
   agentLabel: string;
   cloudAgentRef?: string;
   isCancelled: () => Promise<boolean>;
+  /** Learned Model Routing (PRD 13 §6.6): the interactive-launch SSM recall nudge
+   *  parsed off the run payload. Absent on headless runs. Threaded to the loop's
+   *  first-tick model seed. */
+  routingBias?: Record<string, number>;
 }
 
 /**
@@ -1401,6 +1508,7 @@ export class CloudToolLoopEngine implements AgentEngine {
       this.rc.env, this.rc.db, this.rc.executionId, this.rc.tenantId, this.rc.taskRow,
       this.rc.cloudAgentRef, this.rc.agentLabel, input.model, input.systemPrompt, input.userContent,
       this.rc.isCancelled, this.rc.projectId,
+      { routingBias: this.rc.routingBias },
     );
     return { ok: r.ok, output: r.output, cancelled: r.cancelled, finished: r.finished, awaitingInput: r.awaitingInput, state: r.state };
   }
@@ -1693,6 +1801,33 @@ export async function prepareCloudRun(
 }
 
 /**
+ * The single PENDING/SUBMITTED → RUNNING transition for EVERY cloud surface
+ * (Worker `runCloudExecution`, durable `CloudRunnerDO`, and the Cloudflare
+ * Container kickoff). Routes through {@link RuntimeService.update} — the one routine
+ * that also moves the ticket to In Progress, records metrics, and writes the audit
+ * event — then announces the new status to live subscribers. Best-effort: a row
+ * that already raced to a terminal/cancelled state makes `markRunning` throw, which
+ * we swallow rather than clobber. Funnelling all three executors through here is
+ * what stops them drifting (the container surface used to skip RUNNING entirely, so
+ * its card sat on "pending" for the whole live run).
+ */
+export async function markCloudExecutionRunning(runtimeService: RuntimeService, executionId: number): Promise<void> {
+  let running: Awaited<ReturnType<RuntimeService['update']>>;
+  try {
+    running = await runtimeService.update(executionId, { status: ExecutionStatus.RUNNING });
+  } catch {
+    return; // already non-pending (cancelled/terminal) — leave it
+  }
+  notifyExecutionSubscribers(executionId, {
+    type: 'status_change',
+    executionId,
+    status: running.status,
+    execution: running.toPlain(),
+    ts: new Date().toISOString(),
+  });
+}
+
+/**
  * Run an execution server-side via the gateway (the interim `durable`-surface
  * executor when the CloudRunnerDO binding is absent). Standard flow:
  * (1) ensure a PRD exists (generate + persist + emit as first change), then
@@ -1725,14 +1860,7 @@ export async function runCloudExecution(
   try {
     // Already cancelled before we even started running → don't transition or spend.
     if (await isCancelled()) return;
-    const running = await runtimeService.update(executionId, { status: ExecutionStatus.RUNNING });
-    notifyExecutionSubscribers(executionId, {
-      type: 'status_change',
-      executionId,
-      status: running.status,
-      execution: running.toPlain(),
-      ts: new Date().toISOString(),
-    });
+    await markCloudExecutionRunning(runtimeService, executionId);
 
     const { systemPrompt, userContent } = await prepareCloudRun(
       env, db, executionId, taskRow, tenantId, projectId, agentLabel, model, artifacts, cloudAgentRef, payload,
@@ -1741,6 +1869,7 @@ export async function runCloudExecution(
     // per-task input. Surface/runtime wiring lives in the engine, not this call site.
     const engine = resolveAgentEngine({
       env, db, executionId, taskRow, tenantId, projectId, agentLabel, cloudAgentRef, isCancelled,
+      routingBias: parseRoutingBias(payload),
     });
     const { ok, output, cancelled, awaitingInput } = await engine.run({ systemPrompt, userContent, model });
 

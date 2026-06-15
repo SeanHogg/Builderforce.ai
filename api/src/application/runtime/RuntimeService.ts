@@ -27,6 +27,19 @@ export interface UpdateExecutionDto {
   errorMessage?: string;
 }
 
+/** Recover the lane an auto-run dispatch was started FOR from its stored payload
+ *  (the auto-run trigger stamps `laneKey`). Tolerates null/malformed payload — a
+ *  manual or host run has no stamp, so the same-lane loop guard simply won't apply. */
+function parseLaneKey(payload: string | null): string | undefined {
+  if (!payload) return undefined;
+  try {
+    const obj = JSON.parse(payload) as { laneKey?: unknown };
+    return typeof obj.laneKey === 'string' ? obj.laneKey : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 /**
  * RuntimeService — the execution engine.
  *
@@ -67,6 +80,25 @@ export class RuntimeService {
      * composition root. Idempotent + once-only by contract.
      */
     private readonly onCloudOrphan?: (e: Execution) => Promise<'requeued' | 'failed'>,
+    /**
+     * Optional autonomous-trigger sink invoked when an execution ADVANCES its
+     * ticket into a new non-terminal lane (e.g. an agent completes → ticket moves
+     * to in_review). Wired at the composition root to the SAME lane auto-run
+     * trigger a human board-drag uses ({@link maybeAutoRunOnLaneEntry}), so the
+     * next lane's configured cloud agent kicks off after an agent finishes — the
+     * agent-moved path previously wrote `tasks.status` directly here and bypassed
+     * the PATCH-route trigger, so the next agent never started. The trigger itself
+     * is idempotent (dedupes on a live execution) and no-ops on a Done lane.
+     * Best-effort by contract.
+     */
+    private readonly onLaneEntry?: (info: {
+      tenantId: number; taskId: number; projectId: number; status: string;
+      /** The lane the just-completed run was dispatched FOR (stamped in its payload
+       *  by the auto-run trigger). Lets the trigger skip a same-lane re-entry loop
+       *  WITHOUT blocking a genuine handoff to a different lane staffed by the same
+       *  agent. Absent for manual / human-drag runs. */
+      originLaneKey?: string;
+    }) => Promise<void>,
   ) {}
 
   async submit(dto: SubmitTaskDto): Promise<Execution> {
@@ -291,6 +323,19 @@ export class RuntimeService {
         }
 
         await this.onTaskStatusSync?.({ tenantId, taskId: Number(execution.taskId), projectId, fromStatus, toStatus, terminal });
+
+        // Autonomous chaining: this agent just advanced the ticket into a NEW
+        // non-terminal lane. Fire the same lane auto-run trigger a human board-drag
+        // uses so that lane's configured agent starts — parity with the PATCH path.
+        // A Done lane finalizes (PR/commit) instead of staffing a fresh agent, and
+        // the RUNNING→in_progress move is the lane the CURRENT run already owns, so
+        // both are excluded here (the trigger also dedupes/no-ops defensively).
+        if (dto.status === ExecutionStatus.COMPLETED && toStatus !== fromStatus && toStatus !== TaskStatus.DONE) {
+          await this.onLaneEntry?.({
+            tenantId, taskId: Number(execution.taskId), projectId, status: toStatus,
+            originLaneKey: parseLaneKey(execution.payload),
+          });
+        }
       }
     } catch {
       // ignore task sync errors to avoid blocking runtime flow

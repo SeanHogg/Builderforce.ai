@@ -16,6 +16,7 @@ import { eq } from 'drizzle-orm';
 import { buildDatabase, type Db } from '../database/connection';
 import { executions } from '../database/schema';
 import { prepareCloudRun, runCloudToolLoop, type CloudLoopState } from '../../application/runtime/cloudAgentEngine';
+import { parseRoutingBias } from '../../application/runtime/cloudDispatch';
 import { releasePendingSteers } from '../../application/runtime/executionSteering';
 import type { ResolvedArtifacts } from '../../domain/shared/types';
 import type { Env } from '../../env';
@@ -136,7 +137,7 @@ export class CloudRunnerDO implements DurableObject {
         cursor.systemPrompt ?? '', cursor.userContent ?? '',
         () => this.isCancelled(cursor.executionId),
         cursor.projectId,
-        { resume: cursor.loop, maxSteps: 1, deferFinalize: true },
+        { resume: cursor.loop, maxSteps: 1, deferFinalize: true, routingBias: parseRoutingBias(cursor.payload) },
       );
 
       if (result.cancelled) { await this.cleanup(cursor.executionId); return; }
