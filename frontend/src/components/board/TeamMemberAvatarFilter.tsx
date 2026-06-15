@@ -198,6 +198,8 @@ export function TeamMemberAvatarFilter({
             lineHeight: 1,
             fontFamily: 'inherit',
             outline: 'none',
+            paddingLeft: 0,
+            paddingRight: 0,
           }}
         >
           ✕
