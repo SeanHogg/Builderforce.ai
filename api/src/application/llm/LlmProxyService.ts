@@ -124,6 +124,16 @@ export const CODING_MODEL_POOL: readonly string[] = [
   'poolside/laguna-m.1:free',                 // flagship coding-agent model
   'qwen/qwen3-coder:free',
   'qwen/qwen3-next-80b-a3b-instruct:free',
+  // DIRECT-ANTHROPIC reliability floor (NVIDIA-of-last-resort). Served by the
+  // `anthropic` vendor on the operator's CLAUDE_API_KEY — a vendor-diverse path
+  // independent of OpenRouter. These are `autoRoute: false`, so they never enter a
+  // plan pool or the user-facing picker (codingModelsForPlan excludes them); they
+  // are listed here ONLY so the cloud loop recognises them as real coders (not a
+  // "degraded onto a non-coder" backstop) and so the capability-reorder sets treat
+  // them as tool/structured-output capable. Routing onto them happens via
+  // CODING_PREMIUM_FALLBACK_MODELS, never auto-selection.
+  'claude-sonnet-4-6',
+  'claude-opus-4-8',
 ];
 
 /**
@@ -274,7 +284,15 @@ export const CHEAPEST_PAID_CODER = 'deepseek/deepseek-v4-flash'; // $0.10/$0.20
 export const CODING_PREMIUM_FALLBACK_MODELS: readonly string[] = [
   CHEAPEST_PAID_CODER,           // $0.10/$0.20 — cheapest reliable paid coder
   'xiaomi/mimo-v2.5',            // $0.14/$0.28 — OpenRouter Programming #1
-  'anthropic/claude-sonnet-4.6', // strongest agentic coder — last, priciest
+  'anthropic/claude-sonnet-4.6', // strongest agentic coder (via OpenRouter)
+  // DIRECT-ANTHROPIC last-resort floor — every entry above is routed through
+  // OpenRouter, so an OpenRouter-wide outage (or an exhausted OpenRouter key/credit)
+  // sinks the whole paid-coder tail at once. When that happens, call Claude DIRECTLY
+  // on CLAUDE_API_KEY (vendor-diverse, independent availability). Sonnet first
+  // (cheaper); Opus only if Sonnet is also unreachable. Unbound CLAUDE_API_KEY →
+  // these no-key-skip at dispatch and the cascade surfaces an honest exhaustion.
+  'claude-sonnet-4-6',
+  'claude-opus-4-8',
 ];
 
 /**
@@ -330,6 +348,13 @@ export const PAID_OVERFLOW_MODELS: ReadonlySet<string> = new Set<string>([
   ...PREMIUM_FALLBACK_MODELS,
   CHEAPEST_PAID_CODER,
   GUARANTEED_BACKSTOP_MODEL,
+  // Direct-Anthropic floor — unlike `anthropic/claude-sonnet-4.6` (a Pro plan-pool
+  // model whose normal use must NOT be metered as overflow), these bare-id direct
+  // models live in NO plan pool: any resolution onto them is Builderforce funding a
+  // call on its own CLAUDE_API_KEY, so they are overflow spend by id on every path
+  // (primary appended-fallback OR credited backstop) and count against the cap.
+  'claude-sonnet-4-6',
+  'claude-opus-4-8',
 ]);
 
 /** True when `model` resolved via the funded overflow path (premium fallback or
@@ -847,6 +872,9 @@ export class LlmProxyService {
       NVIDIA_API_KEY:           this.env.NVIDIA_API_KEY           ?? null,
       OLLAMA_API_KEY:           this.env.OLLAMA_API_KEY           ?? null,
       GOOGLE_API_KEY:           this.env.GOOGLE_API_KEY           ?? null,
+      // Direct-Anthropic floor key. Flows through creditedVendorEnv() too (which
+      // spreads this) so the coding backstop can reach Claude regardless of plan.
+      CLAUDE_API_KEY:           this.env.CLAUDE_API_KEY           ?? null,
       CLOUDFLARE_AI_API_TOKEN:  this.env.CLOUDFLARE_AI_API_TOKEN  ?? null,
       CLOUDFLARE_ACCOUNT_ID:    this.env.CLOUDFLARE_ACCOUNT_ID    ?? null,
     };
@@ -1431,7 +1459,13 @@ export function codingDefaultForPlan(effectivePlan: EffectivePlan, premiumOverri
  * Decide the model a cloud-agent run should use for a turn, shared by every cloud
  * executor (durable loop + container op) so the "explicit pick = hard pin, else
  * plan's best coding model" rule lives in ONE place.
- *   • explicit + real catalog id → hard pin (`strict`), dispatched as-is.
+ *   • PAID plan (Pro/Teams, or a premium override) + explicit real catalog id →
+ *     hard pin (`strict`), dispatched as-is.
+ *   • FREE plan → model selection is NOT offered (the picker is hidden, see
+ *     RunAgentControl) and is ALSO enforced here server-side: any explicit pick
+ *     (a user choice OR an agent's pinned base_model) is IGNORED and the run uses
+ *     the free plan's managed coding default. Builderforce manages which model
+ *     free tenants run on; this is the authoritative gate (the UI hide is cosmetic).
  *   • absent / typo'd / off-catalog → the plan's default coding model, soft (so a
  *     cold model can fail over once before the run locks onto what resolved).
  */
@@ -1440,7 +1474,8 @@ export function pickCloudModel(
   effectivePlan: EffectivePlan,
   premiumOverride = false,
 ): { model: string; strict: boolean } {
-  if (isKnownModel(explicit)) return { model: (explicit as string).trim(), strict: true };
+  const canChooseModel = premiumOverride || effectivePlan !== 'free';
+  if (canChooseModel && isKnownModel(explicit)) return { model: (explicit as string).trim(), strict: true };
   return { model: codingDefaultForPlan(effectivePlan, premiumOverride), strict: false };
 }
 

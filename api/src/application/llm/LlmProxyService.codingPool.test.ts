@@ -88,4 +88,39 @@ describe('plan-aware coding routing', () => {
     // No selection → plan default, soft.
     expect(pickCloudModel(undefined, 'pro')).toEqual({ model: codingDefaultForPlan('pro'), strict: false });
   });
+
+  it('FREE plan cannot pin a model — even a real catalog id is ignored for the managed default', () => {
+    // A free tenant's explicit pick (a user choice OR an agent base_model) must NOT
+    // hard-pin; Builderforce manages which model free runs use. The picker is hidden
+    // in the UI, but this is the authoritative server-side gate.
+    const pinned = pickCloudModel('openai/gpt-4.1', 'free');
+    expect(pinned.strict).toBe(false);
+    expect(pinned.model).toBe(codingDefaultForPlan('free'));
+
+    // A premium override lifts the gate (comped/beta access pins like a paid plan).
+    expect(pickCloudModel('openai/gpt-4.1', 'free', true)).toEqual({ model: 'openai/gpt-4.1', strict: true });
+  });
+});
+
+describe('direct-Anthropic coding floor', () => {
+  it('claude-sonnet-4-6 and claude-opus-4-8 are real catalog ids owned by the anthropic vendor', () => {
+    for (const id of ['claude-sonnet-4-6', 'claude-opus-4-8']) {
+      expect(catalogEntry(id), `${id} must be a catalog model`).not.toBeNull();
+      expect(vendorForModel(id)).toBe('anthropic');
+    }
+  });
+
+  it('is auto-route excluded — never in a plan pool or the user-facing coding picker', () => {
+    for (const plan of ['free', 'pro', 'teams'] as const) {
+      const picker = codingModelsForPlan(plan);
+      expect(picker).not.toContain('claude-sonnet-4-6');
+      expect(picker).not.toContain('claude-opus-4-8');
+    }
+    expect(autoRoutableModelsByTier('PREMIUM', 'ULTRA')).not.toContain('claude-opus-4-8');
+  });
+
+  it('is a recognised coder (not flagged as a non-coder degradation)', () => {
+    expect(CODING_MODEL_POOL).toContain('claude-sonnet-4-6');
+    expect(CODING_MODEL_POOL).toContain('claude-opus-4-8');
+  });
 });
