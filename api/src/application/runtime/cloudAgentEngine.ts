@@ -809,13 +809,26 @@ async function recordCloudLlmTurn(
 }
 
 /**
+ * Bump `executions.updated_at` — the cloud-run liveness heartbeat the orphan reaper
+ * (RuntimeService.CLOUD_ORPHAN_MS / staleExecutionReaper.CLOUD_RUNNING_DEADLINE_MS,
+ * both 90s) measures "last activity" from. The container can spend minutes inside a
+ * single `run_command` (a build/test step) with no LLM round-trip, so it pings this
+ * on a timer independent of LLM steps; without that the reaper would kill a healthy,
+ * busy container mid-build. ONE writer so the `llm` op and the dedicated `heartbeat`
+ * op agree. Best-effort — a missed beat is covered by the next one. */
+async function heartbeatExecution(db: Db, executionId: number): Promise<void> {
+  await db.update(executions).set({ updatedAt: new Date() }).where(eq(executions.id, executionId)).catch(() => { /* best-effort */ });
+}
+
+/**
  * Handle one container-op call from the long-lived Container executor. The container
  * runs the agent loop in its own process and delegates to the Worker for everything
  * that must stay server-side: the gateway LLM step (`llm`), per-file commit to the
  * ticket branch (`write`), arbitrary telemetry (`event`), the PR finalize
- * (`finalize`), and a cheap cancel poll (`status`). Reuses the exact same helpers as
- * the in-Worker loop, so there is ONE implementation of metering, commit, and
- * finalize. Authenticated by the per-run token (already verified by the caller).
+ * (`finalize`), a cheap cancel poll (`status`), and a liveness `heartbeat`. Reuses the
+ * exact same helpers as the in-Worker loop, so there is ONE implementation of
+ * metering, commit, and finalize. Authenticated by the per-run token (already verified
+ * by the caller).
  */
 export async function handleContainerOp(
   env: Env,
@@ -831,6 +844,15 @@ export async function handleContainerOp(
 
   if (op === 'status') {
     return { status: 200, body: { cancelled: await isExecutionCancelled(db, executionId) } };
+  }
+
+  // Liveness heartbeat from the long-lived container, fired on a timer independent of
+  // LLM steps so a multi-minute `run_command` (build/test) keeps the run out of the
+  // orphan reaper. Returns `cancelled` so the container can abort an in-flight command
+  // when the run was cancelled mid-build instead of waiting out the command timeout.
+  if (op === 'heartbeat') {
+    await heartbeatExecution(db, executionId);
+    return { status: 200, body: { ok: true, cancelled: await isExecutionCancelled(db, executionId) } };
   }
 
   if (op === 'event') {
@@ -881,7 +903,7 @@ export async function handleContainerOp(
       requestedModel: pick.model ?? model, fallbackModel: pick.model,
     }, { tGen0, notify: true });
     // Heartbeat: a live container keeps the run out of the orphan reaper.
-    await db.update(executions).set({ updatedAt: new Date() }).where(eq(executions.id, executionId)).catch(() => { /* best-effort */ });
+    await heartbeatExecution(db, executionId);
     if (!turn.ok) return { status: 200, body: { error: turn.error } };
     return { status: 200, body: { content: turn.content, toolCalls: turn.toolCalls, steering, cancelled: await isExecutionCancelled(db, executionId) } };
   }
