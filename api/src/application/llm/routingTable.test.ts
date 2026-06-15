@@ -35,7 +35,7 @@ describe('applyObservation (Welford incremental == full re-aggregate)', () => {
     const costs = [100, 300, 200, 50, 150];
     let table = empty();
     for (let i = 0; i < scores.length; i++) {
-      table = applyObservation(table, { actionType: 'sql', model: 'm', score: scores[i], costMc: costs[i], merged: i % 2 === 0 });
+      table = applyObservation(table, { actionType: 'sql', model: 'm', score: scores[i]!, costMc: costs[i]!, merged: i % 2 === 0 });
     }
     const stat = table.byAction.sql!.find((s) => s.model === 'm')!;
     const mean = (xs: number[]) => xs.reduce((a, b) => a + b, 0) / xs.length;
@@ -53,14 +53,14 @@ describe('applyObservation (Welford incremental == full re-aggregate)', () => {
       table = applyObservation(table, { actionType: 'sql', model: 'model-lo', score: 0.3, costMc: 0, merged: false });
       table = applyObservation(table, { actionType: 'sql', model: 'model-hi', score: 0.9, costMc: 0, merged: true });
     }
-    expect(table.byAction.sql![0].model).toBe('model-hi');
+    expect(table.byAction.sql![0]!.model).toBe('model-hi');
   });
 
   it('does not cross-contaminate action types', () => {
     let table = empty();
     table = applyObservation(table, { actionType: 'sql', model: 'm', score: 1, costMc: 0, merged: true });
     table = applyObservation(table, { actionType: 'docs', model: 'm', score: 0, costMc: 0, merged: false });
-    expect(table.byAction.sql![0].avgScore).toBe(1);
-    expect(table.byAction.docs![0].avgScore).toBe(0);
+    expect(table.byAction.sql![0]!.avgScore).toBe(1);
+    expect(table.byAction.docs![0]!.avgScore).toBe(0);
   });
 });
