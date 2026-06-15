@@ -26,6 +26,18 @@ jobs:
         working-directory: api
         run: npm install
 
+      # Drift guard — same file-based checks CI runs, but here they GATE the deploy.
+      # CI and this Deploy both trigger on push:main and run concurrently, so a
+      # drift-failing CI does NOT stop a deploy. Without this, a schema.ts column/
+      # table with no migration would ship a worker the DB can't serve (the
+      # "column \"action_type\" does not exist" 500). Failing here aborts the deploy
+      # loudly instead of shipping the broken worker.
+      - name: Guard — block deploy on schema/migration drift
+        working-directory: api
+        run: |
+          npm run check:schema
+          npm run check:migrations
+
       - name: Run API migrations
         working-directory: api
         env:

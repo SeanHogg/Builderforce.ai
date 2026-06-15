@@ -1950,7 +1950,20 @@ export const llmApi = {
    *  `project:<id>`. */
   modelAnalytics: (scope: string = 'tenant'): Promise<ModelAnalyticsResponse> =>
     request<ModelAnalyticsResponse>(`/llm/v1/model-analytics?scope=${encodeURIComponent(scope)}`),
+
+  /** Learned Model Routing (§6.6): seed feed for the client's LOCAL SSM recall memory
+   *  — the tenant's recently-scored outcomes (task text + winning model + score). */
+  recallSeed: (limit = 50): Promise<{ memories: RecallSeedMemory[] }> =>
+    request<{ memories: RecallSeedMemory[] }>(`/llm/v1/recall-seed?limit=${limit}`),
 };
+
+/** One scored outcome from `/llm/v1/recall-seed`, used to warm local recall memory. */
+export interface RecallSeedMemory {
+  id: number;
+  taskText: string;
+  model: string;
+  score: number;
+}
 
 // ---------------------------------------------------------------------------
 // Dispatch (send command to agentHost via relay)

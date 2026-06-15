@@ -3391,8 +3391,10 @@ export const runModelOutcomes = pgTable('run_model_outcomes', {
   taskId:           integer('task_id').references(() => tasks.id, { onDelete: 'set null' }),
   /** The terminal cloud run this outcome scores. Unique (the scorer upserts on it
    *  so it is idempotent across the multiple terminal paths). No FK — executions is
-   *  pruned independently and a scored outcome should survive the run row. */
-  executionId:      integer('execution_id').notNull(),
+   *  pruned independently and a scored outcome should survive the run row. The
+   *  `.unique()` backs the scorer's `onConflictDoNothing({ target: executionId })`
+   *  (migration 0197 creates `run_model_outcomes_execution_id_key`). */
+  executionId:      integer('execution_id').notNull().unique(),
   cloudAgentRef:    varchar('cloud_agent_ref', { length: 64 }),
   /** The cached task action-type label at scoring time (defaults to 'other'). */
   actionType:       varchar('action_type', { length: 32 }).notNull().default('other'),

@@ -8,6 +8,8 @@ import {
   codingModelsForPlan,
   codingDefaultForPlan,
   pickCloudModel,
+  rankModelsForAction,
+  type ActionModelRankStat,
 } from './LlmProxyService';
 import { catalogEntry, vendorForModel, autoRoutableModelsByTier, modelsByTier } from './vendors';
 
@@ -86,8 +88,10 @@ describe('plan-aware coding routing', () => {
     expect(garbage.strict).toBe(false);
     expect(garbage.model).toBe(codingDefaultForPlan('free'));
 
-    // No selection → plan default, soft.
-    expect(pickCloudModel(undefined, 'pro')).toEqual({ model: codingDefaultForPlan('pro'), strict: false });
+    // No selection → plan default, soft (extra learned-routing fields are additive).
+    const softPro = pickCloudModel(undefined, 'pro');
+    expect(softPro.strict).toBe(false);
+    expect(softPro.model).toBe(codingDefaultForPlan('pro'));
   });
 
   it('FREE plan cannot pin a model — even a real catalog id is ignored for the managed default', () => {
@@ -132,6 +136,104 @@ describe('direct-Anthropic coding floor', () => {
     expect(cf).toBeGreaterThanOrEqual(0);
     expect(cf).toBeLessThan(sonnetDirect);   // Cloudflare surfaces before direct Claude
     expect(sonnetDirect).toBeLessThan(opusDirect);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Learned Model Routing (PRD 13) — rankModelsForAction + pickCloudModel hook.
+// ---------------------------------------------------------------------------
+describe('rankModelsForAction', () => {
+  const reachable = ['model-a', 'model-b', 'model-c'];
+  const stat = (model: string, n: number, avgScore: number, avgCostMc = 0): ActionModelRankStat => ({ model, n, avgScore, avgCostMc });
+
+  it('empty stats → curated order unchanged (identity)', () => {
+    expect(rankModelsForAction(reachable, undefined)).toEqual(reachable);
+    expect(rankModelsForAction(reachable, [])).toEqual(reachable);
+  });
+
+  it('a model below MIN_SAMPLES never leads (cold-start keeps the curated order)', () => {
+    // model-c has the best score but too few samples → curated order stands.
+    const stats = [stat('model-c', 3, 0.99)];
+    expect(rankModelsForAction(reachable, stats, { minSamples: 8 })).toEqual(reachable);
+  });
+
+  it('the best-scoring eligible model leads; rest keep curated order', () => {
+    const stats = [stat('model-c', 10, 0.9), stat('model-a', 10, 0.5)];
+    const ranked = rankModelsForAction(reachable, stats, { minSamples: 8 });
+    expect(ranked[0]).toBe('model-c');
+    // The two eligible sort by score; the non-eligible 'model-b' trails.
+    expect(ranked).toEqual(['model-c', 'model-a', 'model-b']);
+  });
+
+  it('ties on score break to the lower-cost model', () => {
+    const stats = [stat('model-a', 10, 0.8, 500), stat('model-b', 10, 0.8, 100)];
+    const ranked = rankModelsForAction(reachable, stats, { minSamples: 8 });
+    expect(ranked[0]).toBe('model-b'); // cheaper wins the tie
+  });
+
+  it('a bias map nudges ordering among eligible models before the sort', () => {
+    const stats = [stat('model-a', 10, 0.70), stat('model-b', 10, 0.75)];
+    // Without bias, model-b leads. A +0.1 nudge to model-a flips it.
+    expect(rankModelsForAction(reachable, stats, { minSamples: 8 })[0]).toBe('model-b');
+    expect(rankModelsForAction(reachable, stats, { minSamples: 8, bias: { 'model-a': 0.1 } })[0]).toBe('model-a');
+  });
+
+  it('output is always a permutation of reachable (never invents a model)', () => {
+    const stats = [stat('not-in-pool', 99, 1.0)];
+    expect([...rankModelsForAction(reachable, stats, { minSamples: 8 })].sort()).toEqual([...reachable].sort());
+  });
+});
+
+describe('pickCloudModel with learned routing', () => {
+  it('no stats → soft seed equals the curated plan default (Phase-1 behaviour preserved)', () => {
+    const pick = pickCloudModel(undefined, 'pro');
+    expect(pick.strict).toBe(false);
+    expect(pick.model).toBe(codingDefaultForPlan('pro'));
+  });
+
+  it('seeds the top-scoring reachable model for the action type (soft seed = ranked[0])', () => {
+    const reachable = codingModelsForPlan('pro');
+    const leader = reachable[reachable.length - 1]; // pick a NON-default to prove the reorder
+    const pick = pickCloudModel(undefined, 'pro', false, {
+      actionType: 'sql',
+      actionStats: [{ model: leader, n: 14, avgScore: 0.78, avgCostMc: 0 }],
+      minSamples: 8,
+    });
+    expect(pick.strict).toBe(false);
+    expect(pick.model).toBe(leader);
+    expect(pick.seedSamples).toBe(14);
+  });
+
+  it('below MIN_SAMPLES → curated default (cold-start), even with a high score', () => {
+    const reachable = codingModelsForPlan('pro');
+    const other = reachable[reachable.length - 1];
+    const pick = pickCloudModel(undefined, 'pro', false, {
+      actionType: 'sql',
+      actionStats: [{ model: other, n: 2, avgScore: 0.99, avgCostMc: 0 }],
+      minSamples: 8,
+    });
+    expect(pick.model).toBe(codingDefaultForPlan('pro'));
+  });
+
+  it('explicit Pro pin is honoured byte-for-byte regardless of stats', () => {
+    const pick = pickCloudModel('openai/gpt-4.1', 'pro', false, {
+      actionType: 'sql',
+      actionStats: [{ model: 'openai/gpt-4.1', n: 100, avgScore: 0.1, avgCostMc: 0 }],
+    });
+    expect(pick).toEqual({ model: 'openai/gpt-4.1', strict: true });
+  });
+
+  it('free plan ignores an explicit pick and still reorders only within the free coding pool', () => {
+    const freePool = codingModelsForPlan('free');
+    const leader = freePool[freePool.length - 1];
+    const pick = pickCloudModel('openai/gpt-4.1', 'free', false, {
+      actionType: 'sql',
+      actionStats: [{ model: leader, n: 20, avgScore: 0.9, avgCostMc: 0 }],
+      minSamples: 8,
+    });
+    expect(pick.strict).toBe(false);
+    expect(freePool).toContain(pick.model); // never escapes the free pool
+    expect(pick.model).toBe(leader);
   });
 });
 
