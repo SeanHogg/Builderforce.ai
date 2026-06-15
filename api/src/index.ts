@@ -30,6 +30,7 @@ import { AuthService }     from './application/auth/AuthService';
 import { AgentService }    from './application/agent/AgentService';
 import { RuntimeService }  from './application/runtime/RuntimeService';
 import { recordRunFailureEvent } from './application/runtime/recordRunFailureEvent';
+import { loadCloudRunForSelfHeal, selfHealCloudRun } from './application/runtime/cloudSelfHeal';
 import { syncExecutionTaskLifecycle } from './application/task/taskLifecycle';
 import { recommendTopAssignee } from './application/metrics/assigneeRecommender';
 import { AuditService }    from './application/audit/AuditService';
@@ -38,6 +39,8 @@ import { AgentHostService }     from './application/agentHost/AgentHostService';
 // Routes
 import { createProjectRoutes }     from './presentation/routes/projectRoutes';
 import { createTaskRoutes }        from './presentation/routes/taskRoutes';
+import { setExecutionBoardSink }   from './application/runtime/executionEvents';
+import { makeExecutionBoardSink }  from './application/runtime/executionBoardBroadcast';
 import { createMemberRoutes }      from './presentation/routes/memberRoutes';
 import { createTenantRoutes }      from './presentation/routes/tenantRoutes';
 import { createSegmentRoutes }     from './presentation/routes/segmentRoutes';
@@ -174,10 +177,23 @@ function buildApp(env: Env): Hono<HonoEnv> {
   const agentService    = new AgentService(agentRepo, skillRepo, auditRepo);
   const runtimeService  = new RuntimeService(executionRepo, taskRepo, agentRepo, auditRepo,
     (e) => recordRunFailureEvent(db, e),
-    (info) => syncExecutionTaskLifecycle(env, db, info));
+    (info) => syncExecutionTaskLifecycle(env, db, info),
+    async (e) => {
+      // Read-path self-heal: re-queue a stale cloud run once on the durable executor
+      // before it is failed (shares the cron's logic via cloudSelfHeal).
+      const input = await loadCloudRunForSelfHeal(db, e.id);
+      if (!input) return 'failed';
+      return (await selfHealCloudRun(env, db, input)) === 'requeued' ? 'requeued' : 'failed';
+    });
   const auditService    = new AuditService(auditRepo);
   const agentHostService     = new AgentHostService(agentHostRepo);
   const brainService    = new BrainService(db);
+
+  // Wire execution lifecycle events to the project's live board room so a run's
+  // progress (pending→running→done) pushes to every board/calendar/list viewer,
+  // not just whoever opened the run's drawer. Idempotent per isolate (last writer
+  // wins with an equivalent closure); needs env+db, which the events hub lacks.
+  setExecutionBoardSink(makeExecutionBoardSink(env, db));
 
   // --- Presentation ---
   const app = new Hono<HonoEnv>();

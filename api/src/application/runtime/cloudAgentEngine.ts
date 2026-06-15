@@ -37,6 +37,8 @@ import {
   type AgentEngine, type AgentRunInput, type AgentRunResult, type CapabilityProvider, type ToolContext,
 } from '@builderforce/agent-tools';
 import { parseRemediation, parseFollowUp, parseCloudAgentRef, parseModel } from './cloudDispatch';
+import { handleCloudRunCrash } from './cloudSelfHeal';
+import { cloudCrashReason } from './orphanReasons';
 import { RuntimeService } from './RuntimeService';
 import { ExecutionStatus } from '../../domain/shared/types';
 import type { ResolvedArtifacts } from '../../domain/shared/types';
@@ -830,6 +832,20 @@ export async function handleContainerOp(
       if (updated) notifyExecutionSubscribers(executionId, { type: 'done', executionId, status: updated.status, execution: updated.toPlain(), ts: new Date().toISOString() });
     }
     return { status: 200, body: { ok: fin.ok, output: fin.output } };
+  }
+
+  if (op === 'fail') {
+    // The container caught its own crash mid-loop and is reporting the REAL reason
+    // (vs. finalize, which implies an orderly finish). Recover it like any other
+    // backplane crash: self-heal once on the durable executor, else fail carrying
+    // this reason so the timeline says exactly what broke.
+    const detail = typeof args.error === 'string' && args.error.trim() ? args.error.trim() : 'container run error';
+    const outcome = await handleCloudRunCrash(env, db, executionId, cloudCrashReason(detail));
+    if (outcome === 'ineligible') {
+      const updated = await runtimeService.getExecution(executionId).catch(() => null);
+      if (updated) notifyExecutionSubscribers(executionId, { type: 'done', executionId, status: updated.status, execution: updated.toPlain(), ts: new Date().toISOString() });
+    }
+    return { status: 200, body: { ok: true, recovered: outcome === 'requeued' } };
   }
 
   return { status: 400, body: { error: `unknown op '${op}'` } };

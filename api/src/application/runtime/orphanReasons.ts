@@ -59,6 +59,17 @@ export function cloudOrphanReason(startedAtMs: number | null | undefined, lastAc
   return CLOUD_ORPHAN_REASON;
 }
 
+/**
+ * A cloud backplane (container / DO) caught its own crash and reported the real
+ * error. This is STRICTLY better than the reaper's inferred reasons above — we know
+ * exactly what failed — so prefer it whenever a backplane reports `onError` or the
+ * container `fail` op. `detail` is the underlying error message.
+ */
+export function cloudCrashReason(detail: string): string {
+  const trimmed = (detail || '').trim();
+  return `This cloud run's runtime crashed before reporting completion: ${trimmed || 'unknown error'}. Only the steps above ran. The run is re-queued once on the durable executor automatically; if it still fails, re-run the task — and if a container run keeps crashing here, the image or a tool call is unstable.`;
+}
+
 /** A self-hosted host run that lost its process/connection mid-run. */
 export const HOST_ORPHAN_REASON =
   'Run did not report completion in time and was marked failed (orphaned run — the agent host stopped before writing a terminal status). Re-run the task.';

@@ -9,6 +9,7 @@ import { isAgentHostOnline } from '../../domain/agentHost/onlineStatus';
 import type { Db } from '../../infrastructure/database/connection';
 import { agentHostProjects, agentHosts, projectInsightEvents, projects, sourceControlIntegrations, specs, tasks, tenants, workflows } from '../../infrastructure/database/schema';
 import { buildPlanLimitsGuard } from '../middleware/planLimitsGuard';
+import { projectRoomName } from '../../infrastructure/relay/broadcastRoom';
 
 type SourceControlProvider = 'github' | 'bitbucket';
 
@@ -46,6 +47,20 @@ type ChatCompletionPayload = {
 export function createProjectRoutes(projectService: ProjectService, db: Db): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
   router.use('*', authMiddleware);
+
+  // Live board channel: a single WebSocket per project over which every
+  // project-scoped change is pushed as `{type:"changed"}`, so the board / kanban /
+  // calendar / list and any open task drawer re-fetch in real time when a teammate
+  // OR an agent mutates the project. Mirrors the poker/retro/ceremony rooms: the DO
+  // is a dumb fan-out relay (no domain data flows through it), and the authed REST
+  // routes stay the source of truth. The browser passes its JWT as `?token=` since
+  // it can't set WS headers (authMiddleware already accepts the query param).
+  router.get('/:id/stream', (c) => {
+    if (c.req.header('Upgrade') !== 'websocket') return c.text('Expected WebSocket upgrade', 426);
+    const ns = c.env?.SESSION_ROOM;
+    if (!ns) return c.text('Realtime unavailable', 503);
+    return ns.get(ns.idFromName(projectRoomName(c.req.param('id')))).fetch(c.req.raw);
+  });
 
   const normalizeName = (value: string) => value.trim().toLowerCase().replace(/\s+/g, ' ');
 

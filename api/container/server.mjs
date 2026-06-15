@@ -118,6 +118,7 @@ async function runLoop(spec) {
   const writtenPaths = new Set();
   let finalOutput = '';
   let cancelled = false;
+  let crashed = null;
   try {
     if (spec.repo && spec.repo.cloneUrl) {
       workdir = await mkdtemp(join(tmpdir(), `bf-exec-${spec.executionId}-`));
@@ -175,10 +176,20 @@ async function runLoop(spec) {
       if (finished) break;
     }
   } catch (e) {
-    finalOutput = finalOutput || `Container run error: ${e instanceof Error ? e.message : String(e)}`;
+    // The loop threw. Capture the REAL reason and report it on the dedicated `fail`
+    // channel (NOT finalize, which implies an orderly finish) so the Worker can
+    // self-heal or fail the run with what actually broke.
+    crashed = e instanceof Error ? e.message : String(e);
   } finally {
-    await op(spec, { op: 'finalize', args: { writtenPaths: [...writtenPaths], finalOutput, cancelled } }).catch(() => {});
-    if (workdir) await rm(workdir, { recursive: true, force: true }).catch(() => {});
+    try {
+      if (crashed) {
+        await op(spec, { op: 'fail', args: { error: crashed } }).catch(() => {});
+      } else {
+        await op(spec, { op: 'finalize', args: { writtenPaths: [...writtenPaths], finalOutput, cancelled } }).catch(() => {});
+      }
+    } finally {
+      if (workdir) await rm(workdir, { recursive: true, force: true }).catch(() => {});
+    }
   }
 }
 
