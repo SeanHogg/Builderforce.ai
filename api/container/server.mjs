@@ -122,11 +122,29 @@ async function runLoop(spec) {
   try {
     if (spec.repo && spec.repo.cloneUrl) {
       workdir = await mkdtemp(join(tmpdir(), `bf-exec-${spec.executionId}-`));
-      const branch = spec.repo.baseBranch ? `-b ${spec.repo.baseBranch}` : '';
-      const clone = await runShell(`git clone --depth 1 ${branch} "${spec.repo.cloneUrl}" .`, workdir);
+      const { cloneUrl, headBranch, baseBranch } = spec.repo;
+      // Prefer the ticket's HEAD branch: prior runs accumulate their WIP there, and a
+      // `--depth 1` clone is single-branch — cloning the base branch would silently
+      // hide every earlier pass. Fall back to the base branch on the first run, when
+      // the head branch doesn't exist on the remote yet.
+      let checkedOut = null;
+      let clone = headBranch
+        ? await runShell(`git clone --depth 1 -b "${headBranch}" "${cloneUrl}" .`, workdir)
+        : { exitCode: 1, output: 'no head branch' };
+      if (clone.exitCode === 0) {
+        checkedOut = headBranch;
+      } else {
+        const baseArg = baseBranch ? `-b "${baseBranch}"` : '';
+        clone = await runShell(`git clone --depth 1 ${baseArg} "${cloneUrl}" .`, workdir);
+        if (clone.exitCode === 0) checkedOut = baseBranch || '(default)';
+      }
       if (clone.exitCode !== 0) {
         await op(spec, { op: 'event', args: { toolName: 'runtime.clone', category: 'planning', result: `clone failed: ${clone.output.slice(0, 200)}` } }).catch(() => {});
         workdir = null; // continue without a shell workspace; writes still commit via the Worker
+      } else {
+        // Record the branch actually checked out so triage never has to reverse-engineer
+        // it from `git status` (the gap that made execution #67 waste its budget).
+        await op(spec, { op: 'event', args: { toolName: 'runtime.clone', category: 'planning', detail: { branch: checkedOut, requestedHead: headBranch ?? null, base: baseBranch ?? null }, result: `cloned ${spec.repo.cloneUrl.replace(/\/\/[^@]*@/, '//')} on branch ${checkedOut}` } }).catch(() => {});
       }
     }
 

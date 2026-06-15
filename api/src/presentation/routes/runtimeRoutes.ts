@@ -584,8 +584,13 @@ async function startDispatchedExecution(
         );
         const token = await mintContainerRunToken(env.JWT_SECRET, execution.id);
         const repo = await resolveTicketRepoContext(db, gitSecret(env), tenantId, taskRow.id);
+        // Clone the ticket's HEAD branch (ctx.branch — where prior runs commit their
+        // WIP), not just the base. A container that clones only the base branch starts
+        // every run from a stale default and cannot see earlier passes' work; carrying
+        // headBranch lets the container check it out and fall back to base on run #1
+        // when the branch doesn't exist yet.
         const cloneSpec = repo.ok && repo.ctx.provider.startsWith('github')
-          ? { cloneUrl: `https://x-access-token:${repo.ctx.token}@${repo.ctx.host}/${repo.ctx.owner}/${repo.ctx.repo}.git`, baseBranch: repo.ctx.base }
+          ? { cloneUrl: `https://x-access-token:${repo.ctx.token}@${repo.ctx.host}/${repo.ctx.owner}/${repo.ctx.repo}.git`, baseBranch: repo.ctx.base, headBranch: repo.ctx.branch }
           : null;
         const internalBaseUrl = env.INTERNAL_API_BASE_URL ?? 'https://api.builderforce.ai';
         const res = await stub.fetch('https://agent-container/run', {
