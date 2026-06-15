@@ -254,19 +254,35 @@ export const FREE_VENDOR_CALL_TIMEOUT_MS = 15_000;
 export const GUARANTEED_BACKSTOP_MODEL = 'google/gemini-2.5-flash-lite';
 
 /**
- * Coding-capable backstop chain — the reliability floor for a *coding* run.
+ * Coding-capable premium fallback chain — the coding analogue of
+ * `PREMIUM_FALLBACK_MODELS`. A coding run must NEVER fall through to a general
+ * non-coder (the gemini-flash family loops on search and ships no edits — see
+ * execution #59), so when the curated coding pool is exhausted the cascade
+ * escalates to *paid coders* on the credited key instead of the non-coder gemini
+ * chain. Ordered cheapest-reliable-first so overflow cost ramps gradually, and
+ * vendor-diverse (DeepSeek / Xiaomi / Anthropic) so one upstream outage doesn't
+ * sink the floor. Every id is a paid `CODING_MODEL_POOL` member, so
+ * `LlmProxyService.codingPool.test` trips if a rename drifts this off catalog.
+ */
+export const CODING_PREMIUM_FALLBACK_MODELS: readonly string[] = [
+  'deepseek/deepseek-v4-flash', // $0.10/$0.20 — cheapest reliable paid coder
+  'xiaomi/mimo-v2.5',           // $0.14/$0.28 — OpenRouter Programming #1
+  'anthropic/claude-sonnet-4.6', // strongest agentic coder — last, priciest
+];
+
+/**
+ * Coding-capable backstop chain — the reliability floor for a *coding* run,
+ * dispatched on the credited key after the primary coding cascade fails.
  *
  * `GUARANTEED_BACKSTOP_MODEL` (gemini-2.5-flash-lite) is a cheap general model
- * chosen for low variance, NOT for code. When an autonomous coding agent's soft
- * pin exhausts the coding pool, flooring onto a non-coding model means the run
- * flails and gives up without writing code (observed in execution #59). So a
- * coding proxy floors onto the cheapest reliable *paid coder* instead —
- * `deepseek/deepseek-v4-flash` ($0.10/$0.20, a `CODING_MODEL_POOL` member,
- * reachable on the credited OpenRouter key like the general backstop) — and only
- * then onto `GUARANTEED_BACKSTOP_MODEL` as the absolute last resort, so the
- * "never hard-fail" guarantee is preserved while a coder is strongly preferred.
+ * chosen for low variance, NOT for code. Flooring a coding run onto a non-coder
+ * means the run flails and gives up without writing code (observed in execution
+ * #59), so the coding floor is *coders only* — no general backstop tail. If every
+ * paid coder is also down the run surfaces `cascade_exhausted` rather than
+ * silently degrading onto a non-coder, because an honest failure beats a coding
+ * agent that loops on search and ships nothing.
  */
-export const CODING_BACKSTOP_MODELS: readonly string[] = ['deepseek/deepseek-v4-flash', GUARANTEED_BACKSTOP_MODEL];
+export const CODING_BACKSTOP_MODELS: readonly string[] = CODING_PREMIUM_FALLBACK_MODELS;
 
 /**
  * Premium fallback chain — appended to *every* non-strict candidate chain so a
@@ -297,6 +313,7 @@ export const PREMIUM_FALLBACK_MODELS: readonly string[] = [
  */
 export const PAID_OVERFLOW_MODELS: ReadonlySet<string> = new Set<string>([
   ...PREMIUM_FALLBACK_MODELS,
+  ...CODING_PREMIUM_FALLBACK_MODELS,
   ...CODING_BACKSTOP_MODELS,
   GUARANTEED_BACKSTOP_MODEL,
 ]);
@@ -511,6 +528,12 @@ export interface LlmProxyOptions {
    *  put a hard ceiling on overflow spend (a Free tenant's primary free pool
    *  still runs — only the funded overflow path is closed). */
   disablePaidOverflow?: boolean;
+  /** When true, this proxy is serving a CODING run: the appended premium fallback
+   *  chain is the coding-capable one (`CODING_PREMIUM_FALLBACK_MODELS`, paid
+   *  coders) instead of the general non-coder gemini chain, so an exhausted coding
+   *  cascade never resolves onto a generalist. Set by `llmProxyForPlan({codingOnly})`.
+   *  Pairs with `backstopModels: CODING_BACKSTOP_MODELS` for the credited-key floor. */
+  codingOnly?: boolean;
 }
 
 export class LlmProxyService {
@@ -522,6 +545,7 @@ export class LlmProxyService {
   private readonly vendorCallTimeoutMs: number | undefined;
   private readonly backstopModels: readonly string[];
   private readonly disablePaidOverflow: boolean;
+  private readonly codingOnly: boolean;
 
   constructor(env: ProxyEnv, options?: LlmProxyOptions) {
     this.env = env;
@@ -532,13 +556,17 @@ export class LlmProxyService {
     this.vendorCallTimeoutMs = options?.vendorCallTimeoutMs;
     this.backstopModels = options?.backstopModels?.length ? options.backstopModels : [GUARANTEED_BACKSTOP_MODEL];
     this.disablePaidOverflow = options?.disablePaidOverflow ?? false;
+    this.codingOnly = options?.codingOnly ?? false;
   }
 
   /** The premium fallback chain appended to every cascade — empty when the tenant
    *  has exhausted its paid-overflow cap, so the chain composer won't fall through
-   *  to a funded model. Single source for both the cooldown-prefetch and the chain. */
+   *  to a funded model. A CODING run uses the coding-capable chain (paid coders)
+   *  so it never resolves onto a general non-coder. Single source for both the
+   *  cooldown-prefetch and the chain. */
   private get premiumFallback(): readonly string[] {
-    return this.disablePaidOverflow ? [] : PREMIUM_FALLBACK_MODELS;
+    if (this.disablePaidOverflow) return [];
+    return this.codingOnly ? CODING_PREMIUM_FALLBACK_MODELS : PREMIUM_FALLBACK_MODELS;
   }
 
   // --- Public entry points --------------------------------------------------
@@ -1354,6 +1382,7 @@ export function llmProxyForPlan(
     ...(vendorCallTimeoutMs ? { vendorCallTimeoutMs } : {}),
     ...(opts?.backstopModels ? { backstopModels: opts.backstopModels } : {}),
     ...(opts?.disablePaidOverflow ? { disablePaidOverflow: true } : {}),
+    ...(opts?.codingOnly ? { codingOnly: true } : {}),
   });
 }
 
