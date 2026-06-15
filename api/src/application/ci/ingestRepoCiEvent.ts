@@ -21,7 +21,7 @@ import { resolveDefaultRepoForTask } from '../repos/resolveDefaultRepo';
 import { resolveRepoCredential, isResolveError } from '../repos/resolveRepoCredential';
 import { mergeBranchToBase, cloudAutoMergeRequiresGreen, cloudAutofixOnBuildFailure, MAX_AUTOFIX_ATTEMPTS } from '../repos/mergeBranchToBase';
 import { ticketBranchName } from '../repos/commitFileAsPendingChange';
-import { markPullRequestMergedByTask, findMergedPullRequestBySha, setPullRequestBuildStatus } from '../repos/recordPullRequestRow';
+import { markPullRequestMergedByTask, findMergedPullRequestBySha, findOpenPullRequestByTask, setPullRequestBuildStatus } from '../repos/recordPullRequestRow';
 import { fetchBuildError } from './fetchBuildError';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
@@ -91,6 +91,101 @@ async function autofixAttemptsSoFar(db: Db, taskId: number, tenantId: number): P
   return row?.n ?? 0;
 }
 
+/**
+ * Apply a build OUTCOME (success | failure) to a PR row + telemetry, and decide
+ * whether to dispatch an auto-fix run. Shared by BOTH the pre-merge (ticket-branch)
+ * and post-merge (deploy-branch) paths so a failing build is surfaced — and fed back
+ * to the agent — identically in either phase:
+ *   - persist `build_status` (+ the failure REASON) on the PR row so the ticket's
+ *     Pull Request tab shows WHY the build is red (not just transient telemetry),
+ *   - record a prominent `build.result` event the run's Logs/Timeline read, and
+ *   - on failure (when eligible + under the per-task attempt cap) return an auto-fix
+ *     intent carrying the build error so the agent fixes the REAL failing build.
+ */
+async function applyBuildOutcome(
+  db: Db,
+  env: Env,
+  secret: string,
+  ctx: {
+    phase: 'pre_merge' | 'post_merge';
+    taskId: number;
+    tenantId: number;
+    execId?: number;
+    agentRef: string | null;
+    pr: { id: string; repoId: string | null };
+    evt: RepoCiEvent;
+    /** Post-merge always allows auto-fix; pre-merge only on an authoritative
+     *  workflow_run conclusion (has a runId) so the many per-check events on a PR
+     *  branch don't each burn an auto-fix attempt. */
+    allowAutoFix: boolean;
+  },
+): Promise<IngestResult> {
+  const { phase, taskId, tenantId, execId, agentRef, pr, evt } = ctx;
+  const outcome = evt.outcome as 'success' | 'failure';
+  const phaseLabel = phase === 'pre_merge' ? 'PR-branch build' : 'post-merge build';
+
+  // FAILURE → pull the failing jobs/steps so we can persist + hand them to the agent.
+  let buildError: string | null = null;
+  if (outcome === 'failure') {
+    buildError = `The ${phaseLabel} failed.${evt.targetUrl ? ` See: ${evt.targetUrl}` : ''}`;
+    if (pr.repoId && evt.runId) {
+      const resolved = await resolveRepoCredential(db, secret, tenantId, pr.repoId);
+      if (!isResolveError(resolved)) {
+        const be = await fetchBuildError(env, {
+          provider: resolved.repo.provider, host: resolved.repo.host,
+          owner: resolved.repo.owner, repo: resolved.repo.repo, token: resolved.token,
+          runId: evt.runId, runUrl: evt.targetUrl,
+        });
+        buildError = be.summary;
+      }
+    }
+  }
+
+  // Persist on the PR row so the in-product Pull Request tab renders status + reason.
+  await setPullRequestBuildStatus(db, pr.id, outcome, buildError).catch(() => {});
+
+  await db.insert(toolAuditEvents).values({
+    tenantId, agentHostId: null, cloudAgentRef: agentRef,
+    executionId: execId ?? null, sessionKey: execId ? `exec:${execId}` : `task:${taskId}`,
+    toolName: 'build.result', category: 'ci',
+    args: JSON.stringify({ phase, branch: evt.branch, sha: evt.sha, runId: evt.runId, url: evt.targetUrl }),
+    result: `${phaseLabel} ${outcome}${evt.targetUrl ? ` · ${evt.targetUrl}` : ''}`.slice(0, 300),
+    ts: new Date(),
+  }).catch(() => {});
+
+  if (outcome === 'success') {
+    return { processed: true, taskId, executionId: execId, buildStatus: 'success' };
+  }
+
+  // FAILURE → auto-fix (if eligible, enabled, and under the per-task attempt cap).
+  if (!ctx.allowAutoFix) {
+    return { processed: true, taskId, executionId: execId, buildStatus: 'failure', reason: 'event not auto-fix eligible' };
+  }
+  if (!cloudAutofixOnBuildFailure(env)) {
+    return { processed: true, taskId, executionId: execId, buildStatus: 'failure', reason: 'auto-fix disabled' };
+  }
+  const priorAttempts = await autofixAttemptsSoFar(db, taskId, tenantId);
+  if (priorAttempts >= MAX_AUTOFIX_ATTEMPTS) {
+    await db.insert(toolAuditEvents).values({
+      tenantId, agentHostId: null, cloudAgentRef: agentRef,
+      executionId: execId ?? null, sessionKey: execId ? `exec:${execId}` : `task:${taskId}`,
+      toolName: 'build.needs_human', category: 'ci',
+      args: JSON.stringify({ phase, sha: evt.sha, attempts: priorAttempts }),
+      result: `auto-fix exhausted after ${priorAttempts} attempt(s) — needs human`, ts: new Date(),
+    }).catch(() => {});
+    return { processed: true, taskId, executionId: execId, buildStatus: 'failure', reason: 'auto-fix attempts exhausted' };
+  }
+
+  const attempt = priorAttempts + 1;
+  const payload = JSON.stringify({
+    remediation: { kind: 'build_failure', phase, attempt, maxAttempts: MAX_AUTOFIX_ATTEMPTS, buildError, runUrl: evt.targetUrl },
+  });
+  return {
+    processed: true, taskId, executionId: execId, buildStatus: 'failure',
+    autoFix: { taskId, tenantId, attempt, payload },
+  };
+}
+
 /** Best-effort: never throws (a webhook must always 200 to stop retries). */
 export async function ingestRepoCiEvent(
   db: Db,
@@ -130,6 +225,22 @@ async function ingestPreMergeEvent(db: Db, env: Env, secret: string, evt: RepoCi
     result: result.slice(0, 300), ts: new Date(),
   }).catch(() => { /* telemetry best-effort */ });
 
+  // Stamp the build outcome + REASON on the agent's open PR row (so the ticket shows
+  // WHY CI is red before merge) and, on an authoritative failure, dispatch an auto-fix
+  // run so the agent fixes the build it doesn't yet know it broke. Only runs when the
+  // agent has actually opened a PR for the task; otherwise we keep the bare event above.
+  let buildResult: IngestResult | null = null;
+  if (evt.outcome === 'success' || evt.outcome === 'failure') {
+    const pr = await findOpenPullRequestByTask(db, task.tenantId, taskId);
+    if (pr) {
+      buildResult = await applyBuildOutcome(db, env, secret, {
+        phase: 'pre_merge', taskId, tenantId: task.tenantId, execId,
+        agentRef: task.assignedAgentRef ?? null, pr: { id: pr.id, repoId: pr.repoId },
+        evt, allowAutoFix: evt.runId != null,
+      });
+    }
+  }
+
   // Gated shipping: merge only on green. Default-off — the cloud loop merges
   // immediately unless this flag is set (then the green CI/deploy ships it here).
   let merged = false;
@@ -152,7 +263,9 @@ async function ingestPreMergeEvent(db: Db, env: Env, secret: string, evt: RepoCi
     }
   }
 
-  return { processed: true, taskId, executionId: execId, merged };
+  // Carry the build status + any auto-fix intent (failure) up to the webhook, which
+  // owns the run dispatch — same contract the post-merge path returns.
+  return { processed: true, taskId, executionId: execId, merged, buildStatus: buildResult?.buildStatus, autoFix: buildResult?.autoFix };
 }
 
 /** Path 2 — an event on the deploy branch (post-merge): validate + maybe auto-fix. */
@@ -171,59 +284,14 @@ async function ingestPostMergeEvent(db: Db, env: Env, secret: string, evt: RepoC
     .select({ assignedAgentRef: tasks.assignedAgentRef })
     .from(tasks).where(eq(tasks.id, taskId)).limit(1);
 
-  await setPullRequestBuildStatus(db, pr.id, evt.outcome).catch(() => {});
   const execId = await latestExecutionId(db, taskId, tenantId);
 
-  await db.insert(toolAuditEvents).values({
-    tenantId, agentHostId: null, cloudAgentRef: task?.assignedAgentRef ?? null,
-    executionId: execId ?? null, sessionKey: execId ? `exec:${execId}` : `task:${taskId}`,
-    toolName: 'build.result', category: 'ci',
-    args: JSON.stringify({ branch: evt.branch, sha: evt.sha, runId: evt.runId, url: evt.targetUrl }),
-    result: `post-merge build ${evt.outcome}${evt.targetUrl ? ` · ${evt.targetUrl}` : ''}`.slice(0, 300),
-    ts: new Date(),
-  }).catch(() => {});
-
-  if (evt.outcome === 'success') {
-    return { processed: true, taskId, executionId: execId, buildStatus: 'success' };
-  }
-
-  // FAILURE → auto-fix (if enabled and under the per-task attempt cap).
-  if (!cloudAutofixOnBuildFailure(env)) {
-    return { processed: true, taskId, executionId: execId, buildStatus: 'failure', reason: 'auto-fix disabled' };
-  }
-  const priorAttempts = await autofixAttemptsSoFar(db, taskId, tenantId);
-  if (priorAttempts >= MAX_AUTOFIX_ATTEMPTS) {
-    await db.insert(toolAuditEvents).values({
-      tenantId, agentHostId: null, cloudAgentRef: task?.assignedAgentRef ?? null,
-      executionId: execId ?? null, sessionKey: execId ? `exec:${execId}` : `task:${taskId}`,
-      toolName: 'build.needs_human', category: 'ci',
-      args: JSON.stringify({ sha: evt.sha, attempts: priorAttempts }),
-      result: `auto-fix exhausted after ${priorAttempts} attempt(s) — needs human`, ts: new Date(),
-    }).catch(() => {});
-    return { processed: true, taskId, executionId: execId, buildStatus: 'failure', reason: 'auto-fix attempts exhausted' };
-  }
-
-  // Build the remediation context (failed jobs/steps) for the fix run's prompt.
-  let buildErrorSummary = `The post-merge build failed.${evt.targetUrl ? ` See: ${evt.targetUrl}` : ''}`;
-  if (pr.repoId && evt.runId) {
-    const resolved = await resolveRepoCredential(db, secret, tenantId, pr.repoId);
-    if (!isResolveError(resolved)) {
-      const be = await fetchBuildError(env, {
-        provider: resolved.repo.provider, host: resolved.repo.host,
-        owner: resolved.repo.owner, repo: resolved.repo.repo, token: resolved.token,
-        runId: evt.runId, runUrl: evt.targetUrl,
-      });
-      buildErrorSummary = be.summary;
-    }
-  }
-
-  const attempt = priorAttempts + 1;
-  const payload = JSON.stringify({
-    remediation: { kind: 'build_failure', attempt, maxAttempts: MAX_AUTOFIX_ATTEMPTS, buildError: buildErrorSummary, runUrl: evt.targetUrl },
+  // Post-merge always allows auto-fix (a deploy failure is authoritative even without
+  // a runId — e.g. deployment_status events). Same outcome + reason + intent contract
+  // as the pre-merge path, via the shared helper.
+  return applyBuildOutcome(db, env, secret, {
+    phase: 'post_merge', taskId, tenantId, execId,
+    agentRef: task?.assignedAgentRef ?? null, pr: { id: pr.id, repoId: pr.repoId },
+    evt, allowAutoFix: true,
   });
-
-  return {
-    processed: true, taskId, executionId: execId, buildStatus: 'failure',
-    autoFix: { taskId, tenantId, attempt, payload },
-  };
 }

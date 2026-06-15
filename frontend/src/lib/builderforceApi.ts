@@ -2721,7 +2721,8 @@ export interface PullRequestRow {
   mergedBy: string | null;
   mergedAt: string | null;
   mergeSha: string | null;
-  buildStatus: string | null;  // null | pending | success | failure (post-merge build)
+  buildStatus: string | null;  // null | pending | success | failure (pre-merge PR-branch or post-merge build)
+  buildError: string | null;   // failing jobs/steps summary when buildStatus === 'failure'
 }
 
 /** Live provider-side state for a PR (mirrors api getPullRequestDetail). */

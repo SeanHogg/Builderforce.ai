@@ -101,10 +101,11 @@ export function createGitHubWebhookRoutes(db: Db, runtimeService: RuntimeService
   const router = new Hono<HonoEnv>();
 
   /**
-   * Post-merge build failed → dispatch an auto-fix run for the task (the agent
-   * fixes the build → new approval-gated PR). The loop-guard lives in
-   * `ingestRepoCiEvent` (it only returns an intent under the attempt cap); here we
-   * just start the run and record the `autofix.dispatch` event the guard counts.
+   * A build failed (pre-merge PR branch or post-merge deploy) → dispatch an auto-fix
+   * run for the task (the agent fixes the build → updated/new approval-gated PR). The
+   * loop-guard lives in `ingestRepoCiEvent` (it only returns an intent under the
+   * attempt cap); here we just start the run and record the `autofix.dispatch` event
+   * the guard counts.
    */
   const dispatchAutoFix = (c: Context<HonoEnv>, intent: AutoFixIntent): void => {
     c.executionCtx.waitUntil((async () => {
@@ -159,7 +160,8 @@ export function createGitHubWebhookRoutes(db: Db, runtimeService: RuntimeService
       if (!norm) return c.json({ received: true, processed: false, reason: `event '${event}' not normalized` });
       const secret = c.env.INTEGRATION_ENCRYPTION_SECRET ?? c.env.JWT_SECRET ?? '';
       const res = await ingestRepoCiEvent(db, c.env as Env, secret, norm);
-      // Post-merge build failed and under the attempt cap → kick off a fix run.
+      // A build failed (pre-merge PR branch or post-merge deploy) and is under the
+      // attempt cap → kick off a fix run so the agent fixes the build it broke.
       if (res.autoFix) dispatchAutoFix(c, res.autoFix);
       return c.json({ received: true, ...res, autoFix: res.autoFix ? { dispatched: true, attempt: res.autoFix.attempt } : undefined });
     }

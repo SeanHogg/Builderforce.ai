@@ -1652,7 +1652,11 @@ export async function prepareCloudRun(
 
   const userContent = [
     remediation
-      ? `## Build failure to fix (attempt ${remediation.attempt}/${remediation.maxAttempts})\n\nA previous change for this task was merged but the build then FAILED. Fix the cause below — do not re-do unrelated work.\n\n${remediation.buildError}${remediation.runUrl ? `\n\nCI run: ${remediation.runUrl}` : ''}`
+      ? `## Build failure to fix (attempt ${remediation.attempt}/${remediation.maxAttempts})\n\n${
+          remediation.phase === 'pre_merge'
+            ? 'The CI build on this task’s pull-request branch FAILED — it must be green before the PR can merge. Fix the cause below — do not re-do unrelated work.'
+            : 'A previous change for this task was merged but the build then FAILED. Fix the cause below — do not re-do unrelated work.'
+        }\n\n${remediation.buildError}${remediation.runUrl ? `\n\nCI run: ${remediation.runUrl}` : ''}`
       : null,
     followUp
       ? `## Follow-up directive (act on this first)\n\nThe user reviewed the previous run${followUp.priorExecutionId != null ? ` (execution #${followUp.priorExecutionId})` : ''} and sent this new direction. Treat it as the primary goal for THIS run, building on the work already committed to the task's branch (see the prior-files list below) rather than starting over:\n\n${followUp.directive}`
