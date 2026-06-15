@@ -1908,6 +1908,33 @@ export type LlmModelsResponse =
   | { configured: false; product: string; effectivePlan: EffectivePlanLabel; premium?: boolean; models: string[]; codingModels?: string[] }
   | { configured: true;  product: string; effectivePlan: EffectivePlanLabel; premium?: boolean; object: 'list'; data: LlmModelStatus[]; codingModels?: string[] };
 
+/** Learned Model Routing (PRD 13) — closed action-type taxonomy. MIRRORS
+ *  `api/src/application/llm/actionTypes.ts` (the api is the source of truth). */
+export const ACTION_TYPES = [
+  'sql', 'frontend_ui', 'backend_api', 'refactor', 'bugfix',
+  'tests', 'docs', 'devops_ci', 'data_migration', 'other',
+] as const;
+export type ActionType = (typeof ACTION_TYPES)[number];
+
+/** One model's learned ranking within an action type — from `/llm/v1/model-analytics`. */
+export interface ModelAnalyticsEntry {
+  model: string;
+  samples: number;
+  avgScore: number;
+  mergeRate: number;
+  avgCostMillicents: number;
+}
+export interface ModelAnalyticsAction {
+  actionType: ActionType;
+  label: string;
+  models: ModelAnalyticsEntry[];
+}
+export interface ModelAnalyticsResponse {
+  scope: string;
+  updatedAt: string;
+  byAction: ModelAnalyticsAction[];
+}
+
 export const llmApi = {
   usage: (): Promise<LlmUsageStats> =>
     request<LlmUsageStats>('/llm/v1/usage'),
@@ -1917,6 +1944,12 @@ export const llmApi = {
 
   models: (): Promise<LlmModelsResponse> =>
     request<LlmModelsResponse>('/llm/v1/models'),
+
+  /** Learned Model Routing analytics — the per-action-type model ranking the router
+   *  seeds from. `scope` defaults to the caller's tenant; pass `global` or
+   *  `project:<id>`. */
+  modelAnalytics: (scope: string = 'tenant'): Promise<ModelAnalyticsResponse> =>
+    request<ModelAnalyticsResponse>(`/llm/v1/model-analytics?scope=${encodeURIComponent(scope)}`),
 };
 
 // ---------------------------------------------------------------------------

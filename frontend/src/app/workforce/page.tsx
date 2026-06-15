@@ -11,6 +11,7 @@ import { HumanRequestsView } from '@/components/humanRequests/HumanRequestsView'
 import { ObservabilityContent } from '@/components/ObservabilityContent';
 import { WorkforceMetricsContent } from '@/components/workforce/WorkforceMetricsContent';
 import { LlmUsageContent } from '@/components/LlmUsageContent';
+import { ModelRoutingAnalytics } from '@/components/ModelRoutingAnalytics';
 import { QaContent } from '@/components/QaContent';
 import { ActiveRunsPanel } from '@/components/ActiveRunsPanel';
 import { Tabs } from '@/components/Tabs';
@@ -112,7 +113,10 @@ function WorkforcePageInner() {
           <ObservabilityContent initialView="logs" />
         </>
       ) : tab === 'llm' ? (
-        <LlmUsageContent />
+        <>
+          <LlmUsageContent />
+          <ModelRoutingAnalytics />
+        </>
       ) : tab === 'qa' ? (
         <QaContent />
       ) : (

@@ -38,9 +38,10 @@ import {
 } from '@builderforce/agent-tools';
 import { parseRemediation, parseFollowUp, parseCloudAgentRef, parseModel, parseRoutingBias } from './cloudDispatch';
 import { classifyTaskAction } from '../llm/classifyTask';
-import { ACTION_TYPES, normalizeActionType, learnedRoutingEnabled, type ActionType } from '../llm/actionTypes';
+import { normalizeActionType, learnedRoutingEnabled, type ActionType } from '../llm/actionTypes';
 import { getRoutingTable, MIN_SAMPLES, type RoutingScope } from '../llm/routingTable';
 import type { ActionModelRankStat } from '../llm/LlmProxyService';
+import { scoreRunOutcome } from './scoreRunOutcome';
 import { handleCloudRunCrash } from './cloudSelfHeal';
 import { cloudCrashReason } from './orphanReasons';
 import { RuntimeService } from './RuntimeService';
@@ -916,6 +917,9 @@ export async function handleContainerOp(
       const updated = await runtimeService.getExecution(executionId).catch(() => null);
       if (updated) notifyExecutionSubscribers(executionId, { type: 'done', executionId, status: updated.status, execution: updated.toPlain(), ts: new Date().toISOString() });
     }
+    // Learned Model Routing: container-surface terminal chokepoint (covers the
+    // cancelled finalize too — the row is already CANCELLED). Idempotent/best-effort.
+    await scoreRunOutcome(env, db, { executionId }).catch(() => { /* best-effort */ });
     return { status: 200, body: { ok: fin.ok, output: fin.output } };
   }
 
@@ -929,6 +933,9 @@ export async function handleContainerOp(
     if (outcome === 'ineligible') {
       const updated = await runtimeService.getExecution(executionId).catch(() => null);
       if (updated) notifyExecutionSubscribers(executionId, { type: 'done', executionId, status: updated.status, execution: updated.toPlain(), ts: new Date().toISOString() });
+      // Terminal (no self-heal requeue) — score the failed run. A requeue defers
+      // scoring to the durable surface's terminal chokepoint instead.
+      await scoreRunOutcome(env, db, { executionId }).catch(() => { /* best-effort */ });
     }
     return { status: 200, body: { ok: true, recovered: outcome === 'requeued' } };
   }
@@ -1881,6 +1888,8 @@ export async function runCloudExecution(
         type: 'message', executionId, role: 'assistant',
         text: output || 'Run cancelled.', ts: new Date().toISOString(),
       });
+      // Score the cancelled run (status is already CANCELLED → score 0). Best-effort.
+      await scoreRunOutcome(env, db, { executionId }).catch(() => { /* best-effort */ });
       return;
     }
 
@@ -1915,6 +1924,8 @@ export async function runCloudExecution(
         ? { status: ExecutionStatus.COMPLETED, result: output }
         : { status: ExecutionStatus.FAILED, errorMessage: output },
     );
+    // Learned Model Routing: Worker-surface terminal chokepoint. Best-effort.
+    await scoreRunOutcome(env, db, { executionId }).catch(() => { /* best-effort */ });
   } catch (e) {
     // Don't clobber a cancellation (terminal) with a FAILED transition.
     if (await isCancelled()) return;
@@ -1922,5 +1933,6 @@ export async function runCloudExecution(
       status: ExecutionStatus.FAILED,
       errorMessage: e instanceof Error ? e.message : String(e),
     });
+    await scoreRunOutcome(env, db, { executionId }).catch(() => { /* best-effort */ });
   }
 }
