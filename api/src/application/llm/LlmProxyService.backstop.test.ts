@@ -1,10 +1,19 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   CODING_BACKSTOP_MODELS,
+  CODING_PREMIUM_FALLBACK_MODELS,
   GUARANTEED_BACKSTOP_MODEL,
+  PREMIUM_FALLBACK_MODELS,
   llmProxyForPlan,
   type ProxyEnv,
 } from './LlmProxyService';
+import { vendorForModel } from './vendors';
+
+/** First coder in a chain that this test's env (OpenRouter keys only) can actually
+ *  reach — the chain now LEADS with the Cloudflare coder (free daily allowance),
+ *  which no-key-skips here, so `[0]` is no longer the model the mock can answer. */
+const firstOpenRouterCoder = (chain: readonly string[]): string =>
+  chain.find((m) => vendorForModel(m) === 'openrouter')!;
 
 // ---------------------------------------------------------------------------
 // Guaranteed paid backstop — the reliability floor that fixed hired.video's
@@ -92,7 +101,7 @@ describe('guaranteed paid backstop', () => {
     // Regression for execution #59: a coding run whose coding cascade exhausted was
     // served by gemini-2.5-flash-lite (a non-coding general backstop) and gave up
     // without writing code. A coding proxy must floor onto a coder first.
-    const codingFloor = CODING_BACKSTOP_MODELS[0]; // deepseek/deepseek-v4-flash
+    const codingFloor = firstOpenRouterCoder(CODING_BACKSTOP_MODELS); // deepseek/deepseek-v4-flash (the Cloudflare lead no-key-skips here)
     expect(codingFloor).not.toBe(GUARANTEED_BACKSTOP_MODEL);
     const calls: MockedCall[] = [];
     const fn = vi.fn(async (input: string | URL, init?: RequestInit) => {
@@ -113,7 +122,7 @@ describe('guaranteed paid backstop', () => {
     });
     (globalThis as { fetch: typeof fetch }).fetch = fn as unknown as typeof fetch;
 
-    const proxy = llmProxyForPlan(env, 'free', false, { backstopModels: CODING_BACKSTOP_MODELS });
+    const proxy = llmProxyForPlan(env, 'free', false, { backstopModels: CODING_BACKSTOP_MODELS, codingOnly: true });
     const result = await proxy.complete({ messages: [{ role: 'user', content: 'fix the bug' }] });
 
     expect(result.response.status).toBe(200);
@@ -122,6 +131,40 @@ describe('guaranteed paid backstop', () => {
     // is never even reached because the coder answered first.
     expect(calls.some((c) => c.model === codingFloor && c.authKey === 'or-pro')).toBe(true);
     expect(calls.some((c) => c.model === GUARANTEED_BACKSTOP_MODEL)).toBe(false);
+  });
+
+  it('coding run: the appended fallback chain is coders, NOT the general gemini chain', async () => {
+    // The bug: a coding cascade resolved onto `googleai/gemini-2.5-flash` (a non-coder
+    // in PREMIUM_FALLBACK_MODELS appended inline) and looped on search without writing
+    // code. A codingOnly proxy must append CODING_PREMIUM_FALLBACK_MODELS (paid coders)
+    // instead — so a non-coder is never even in the candidate chain.
+    const codingFallback = firstOpenRouterCoder(CODING_PREMIUM_FALLBACK_MODELS); // first OpenRouter-reachable coder (chain leads with the no-key Cloudflare coder)
+    const calls: MockedCall[] = [];
+    const fn = vi.fn(async (input: string | URL, init?: RequestInit) => {
+      const url = typeof input === 'string' ? input : input.toString();
+      if (url !== OPENROUTER_ENDPOINT) throw new Error(`unmocked fetch: ${url}`);
+      const body = JSON.parse(String(init?.body ?? '{}')) as { model?: string };
+      const authKey = String((init?.headers as Record<string, string> | undefined)?.['Authorization'] ?? '').replace(/^Bearer\s+/, '');
+      const model = body.model ?? '';
+      calls.push({ model, authKey });
+      // A coder in the appended fallback answers on the free key; everything else 429s.
+      if (model === codingFallback) {
+        return new Response(JSON.stringify({
+          choices: [{ message: { role: 'assistant', content: 'patch' } }],
+          usage: { prompt_tokens: 10, completion_tokens: 20, total_tokens: 30 },
+        }), { status: 200, headers: { 'content-type': 'application/json' } });
+      }
+      return new Response(JSON.stringify({ error: { message: 'rate limited' } }), { status: 429, headers: { 'content-type': 'application/json' } });
+    });
+    (globalThis as { fetch: typeof fetch }).fetch = fn as unknown as typeof fetch;
+
+    const proxy = llmProxyForPlan(env, 'free', false, { backstopModels: CODING_BACKSTOP_MODELS, codingOnly: true });
+    const result = await proxy.complete({ messages: [{ role: 'user', content: 'fix the bug' }] });
+
+    expect(result.response.status).toBe(200);
+    expect(result.resolvedModel).toBe(codingFallback);
+    // No general non-coder gemini model from PREMIUM_FALLBACK_MODELS was ever attempted.
+    expect(calls.some((c) => PREMIUM_FALLBACK_MODELS.includes(c.model))).toBe(false);
   });
 
   it('returns the original failure when no credited key is bound (nothing to fall back to)', async () => {

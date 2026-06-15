@@ -18,7 +18,12 @@
  * this class). One instance per execution (`idFromName('exec:<id>')`).
  */
 import { Container } from '@cloudflare/containers';
+import { buildDatabase } from '../database/connection';
+import { handleCloudRunCrash } from '../../application/runtime/cloudSelfHeal';
+import { cloudCrashReason } from '../../application/runtime/orphanReasons';
 import type { Env } from '../../env';
+
+const EXEC_KEY = 'executionId';
 
 export class AgentContainerDO extends Container<Env> {
   /** The container's HTTP server listens here (see api/container/server.mjs). */
@@ -31,11 +36,42 @@ export class AgentContainerDO extends Container<Env> {
   /** The agent loop reaches the gateway + GitHub from inside the container. */
   enableInternet = true;
 
-  override onError(error: unknown): unknown {
-    // Surface container boot/runtime failures in the Worker logs; the dispatch
-    // path treats a failed proxy as "container unavailable" and degrades to the
-    // durable executor so the run still completes in the cloud.
+  /**
+   * Capture the executionId off the `/run` proxy so {@link onError} can attribute a
+   * hard container death (OOM / evicted / unbootable image) to the right run — the
+   * DO id name (`exec:<id>`) is one-way, so we stash it in DO storage. Best-effort;
+   * never blocks the proxied request.
+   */
+  override async fetch(request: Request): Promise<Response> {
+    try {
+      const url = new URL(request.url);
+      if (request.method === 'POST' && url.pathname.endsWith('/run')) {
+        const body = (await request.clone().json().catch(() => null)) as { executionId?: number } | null;
+        if (body && typeof body.executionId === 'number') {
+          await this.ctx.storage.put(EXEC_KEY, body.executionId);
+        }
+      }
+    } catch { /* attribution is best-effort */ }
+    return super.fetch(request);
+  }
+
+  /**
+   * The container boot/runtime crashed. Previously this only logged — so a run died
+   * silently and the reaper had to GUESS ~90s later. Now we report the REAL reason
+   * and recover: self-heal once on the durable executor, else fail the run carrying
+   * the actual error. Falls back to a log when the executionId wasn't captured.
+   */
+  override async onError(error: unknown): Promise<unknown> {
+    const detail = error instanceof Error ? error.message : String(error);
     console.error('[AgentContainerDO] container error', error);
+    try {
+      const executionId = await this.ctx.storage.get<number>(EXEC_KEY);
+      if (typeof executionId === 'number') {
+        await handleCloudRunCrash(this.env, buildDatabase(this.env), executionId, cloudCrashReason(detail));
+      }
+    } catch (e) {
+      console.error('[AgentContainerDO] crash report failed', e);
+    }
     return error;
   }
 }

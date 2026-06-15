@@ -20,13 +20,22 @@ describe('isCodingModelDegraded', () => {
     }
   });
 
-  it('flags a non-coder model the coding cascade fell back to', () => {
-    // The gemini guaranteed backstop is the tail of CODING_BACKSTOP_MODELS and is
-    // NOT a CODING_MODEL_POOL member — that is exactly the degradation we signal.
-    const tailBackstop = CODING_BACKSTOP_MODELS[CODING_BACKSTOP_MODELS.length - 1]!;
-    expect(CODING_MODEL_POOL.includes(tailBackstop)).toBe(false);
-    expect(isCodingModelDegraded(tailBackstop)).toBe(true);
+  it('flags a non-coder model the run was somehow served by', () => {
+    // The coding cascade can no longer resolve onto a non-coder on its own — both
+    // the appended fallback (CODING_PREMIUM_FALLBACK_MODELS) and the backstop
+    // (CODING_BACKSTOP_MODELS) are coders-only. So this signal now only fires for a
+    // non-coder that reached the run by another route (e.g. an explicit non-coder
+    // pin); the general gemini backstop is exactly such a model.
+    expect(isCodingModelDegraded('google/gemini-2.5-flash-lite')).toBe(true);
+    expect(isCodingModelDegraded('googleai/gemini-2.5-flash')).toBe(true);
     expect(isCodingModelDegraded('google/gemini-2.0-flash')).toBe(true);
+  });
+
+  it('does NOT flag any coding-backstop model (the floor is coders-only)', () => {
+    for (const m of CODING_BACKSTOP_MODELS) {
+      expect(CODING_MODEL_POOL.includes(m)).toBe(true);
+      expect(isCodingModelDegraded(m)).toBe(false);
+    }
   });
 
   it('does NOT flag when no resolved model was reported (unknown, not degraded)', () => {

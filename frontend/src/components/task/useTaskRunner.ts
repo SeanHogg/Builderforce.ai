@@ -6,7 +6,9 @@ import {
   isAwaitingApprovalExecution,
   type Task,
 } from '@/lib/builderforceApi';
+import { llmApi } from '@/lib/builderforceApi';
 import { loadAgentPool, type PoolAgent } from '@/lib/agentPool';
+import { computeModelRecallBias, seedModelRecallMemory } from '@/lib/modelRecallBias';
 
 /**
  * The run target a task defaults to — derived from its assignee, so "Run" reflects
@@ -51,6 +53,10 @@ export function useTaskRunner({ task, onRan, onAwaitingApproval }: UseTaskRunner
     loadAgentPool()
       .then((p) => setCloudAgents(p.filter((a) => a.kind === 'workforce')))
       .catch(() => setCloudAgents([]));
+    // Learned Model Routing (§6.6): warm this browser's local SSM recall memory from
+    // the tenant's recently-scored outcomes, so the bias computed at submit time has
+    // history to draw on. No-op when WebGPU/kill switch gate it out. Best-effort.
+    void seedModelRecallMemory(() => llmApi.recallSeed(50).then((r) => r.memories));
   }, []);
 
   const run = useCallback(
@@ -71,10 +77,19 @@ export function useTaskRunner({ task, onRan, onAwaitingApproval }: UseTaskRunner
         // repoId: a real id pins the run to that repo; '' explicitly clears the pin
         // (Auto). Only sent when the caller passed it, so a one-click run leaves any
         // existing pin untouched.
-        const payloadObj: { model?: string; cloudAgentRef?: string; repoId?: string } = {};
+        const payloadObj: { model?: string; cloudAgentRef?: string; repoId?: string; routingBias?: Record<string, number> } = {};
         if (effectiveModel) payloadObj.model = effectiveModel;
         if (cloudRef) payloadObj.cloudAgentRef = cloudRef;
         if (opts?.repoId !== undefined) payloadObj.repoId = opts.repoId;
+        // Learned Model Routing (PRD 13 §6.6): this is an INTERACTIVE launch, so
+        // compute the client-side SSM recall bias on the user's GPU and attach it as
+        // a nudge over the server's routing table. Empty (omitted) when WebGPU/local
+        // memory is absent or the kill switch is off — then routing is table-only,
+        // identical to a headless run. Best-effort: never block the run on it.
+        try {
+          const bias = await computeModelRecallBias(`${task.title}\n${task.description ?? ''}`);
+          if (bias && Object.keys(bias).length > 0) payloadObj.routingBias = bias;
+        } catch { /* recall is optional personalization */ }
         const result = await runtimeApi.submitExecution({
           taskId: task.id,
           agentHostId,

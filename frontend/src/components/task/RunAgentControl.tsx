@@ -49,7 +49,10 @@ export function RunAgentControl({ task, agentHosts, onRan, onAwaitingApproval }:
   const [target, setTarget] = useState<string>(defaultRunTarget(task));
   const [model, setModel] = useState<string>('');
   // Full plan pool + the curated tool-calling/coding subset, from the shared loader.
-  const { models, codingModels } = useLlmModels();
+  // `isPaid` gates the model picker — only paid plans may choose the model; free
+  // plans run Builderforce's managed default (the server enforces this too, in
+  // pickCloudModel, so a free run never honours an explicit pick).
+  const { models, codingModels, isPaid } = useLlmModels();
   // Single shared submit path (also powers the one-click RunTaskButton). It owns
   // the run state + cloud-agent pool; we drive it with the picker's target/model.
   const { run, running, error, cloudAgents } = useTaskRunner({ task, onRan, onAwaitingApproval });
@@ -109,6 +112,21 @@ export function RunAgentControl({ task, agentHosts, onRan, onAwaitingApproval }:
           const isCloud = target.startsWith('cloud:');
           const pickList = isCloud && codingModels.length > 0 ? codingModels : models;
           const defaultLabel = isCloud ? 'builderforce.ai (best coding model)' : DEFAULT_MODEL_LABEL;
+          // Free plans don't choose the model — Builderforce manages it. Show a
+          // static, non-interactive managed-default label instead of the picker
+          // (the server ignores an explicit free-plan pick regardless). Paid plans
+          // get the full dropdown.
+          if (!isPaid) {
+            return (
+              <div
+                style={{ ...selectStyle, flex: '1 1 0', minWidth: 0, border: 'none', borderRight: '1px solid var(--border-subtle)', cursor: 'default', display: 'flex', alignItems: 'center', gap: 6, color: 'var(--text-secondary)' }}
+                title="Model selection is a paid-plan feature — free runs use Builderforce's managed default"
+              >
+                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{defaultLabel}</span>
+                <Link href="/pricing" style={{ fontSize: 10, fontWeight: 700, color: 'var(--coral-bright)', textDecoration: 'none', flexShrink: 0 }}>PRO</Link>
+              </div>
+            );
+          }
           return (
             <Select value={model} onChange={(e) => setModel(e.target.value)} style={{ ...selectStyle, flex: '1 1 0', minWidth: 0, border: 'none', borderRight: '1px solid var(--border-subtle)' }} title="LLM model">
               <option value="">{defaultLabel}</option>

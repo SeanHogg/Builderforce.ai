@@ -36,6 +36,22 @@ export type ExecutionSubscriberEvent =
 
 const executionSubscribers = new Map<number, Set<WebSocket>>();
 
+/**
+ * Optional board-level fan-out. In addition to the per-execution stream (which
+ * only reaches clients holding THAT run's socket), every lifecycle event is also
+ * handed to this sink so the whole project board / kanban / calendar / list and
+ * any open task drawer can refetch live as a run advances pending→running→done.
+ *
+ * It is a registerable hook because this hub is deliberately env/db-free; the
+ * composition root wires a concrete broadcaster (which has the DO namespace + a
+ * taskId→projectId lookup) once per isolate via {@link setExecutionBoardSink}.
+ */
+export type ExecutionBoardSink = (event: ExecutionSubscriberEvent) => void;
+let executionBoardSink: ExecutionBoardSink | null = null;
+export function setExecutionBoardSink(sink: ExecutionBoardSink | null): void {
+  executionBoardSink = sink;
+}
+
 export function subscribeExecution(executionId: number, socket: WebSocket): void {
   const set = executionSubscribers.get(executionId) ?? new Set<WebSocket>();
   set.add(socket);
@@ -50,6 +66,11 @@ export function unsubscribeExecution(executionId: number, socket: WebSocket): vo
 }
 
 export function notifyExecutionSubscribers(executionId: number, event: ExecutionSubscriberEvent): void {
+  // Board-level fan-out runs FIRST and unconditionally — it must fire even when no
+  // one holds this execution's per-run socket, so a card's agent chip advances on
+  // the board for someone who never opened the drawer. Best-effort; never throws.
+  try { executionBoardSink?.(event); } catch { /* best-effort board push */ }
+
   const set = executionSubscribers.get(executionId);
   if (!set || set.size === 0) return;
 

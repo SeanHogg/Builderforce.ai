@@ -25,7 +25,7 @@ import {
   emitModelSelection,
   emitCodingModelDegraded,
 } from './cloudAgentEngine';
-import { CODING_MODEL_POOL, CODING_BACKSTOP_MODELS } from '../llm/LlmProxyService';
+import { CODING_MODEL_POOL } from '../llm/LlmProxyService';
 import { toolAuditEvents, usageSnapshots, llmUsageLog } from '../../infrastructure/database/schema';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
@@ -215,15 +215,20 @@ describe('emitModelSelection → model.select planning event', () => {
 });
 
 describe('emitCodingModelDegraded → coding_model_degraded llm event', () => {
-  it('emits a degradation event when a coding turn fell through to a non-coder backstop', async () => {
+  it('emits a degradation event when a coding turn was served by a non-coder', async () => {
     const { db, rowsFor } = makeFakeDb();
-    const backstop = CODING_BACKSTOP_MODELS[CODING_BACKSTOP_MODELS.length - 1]!;
+    // The coding cascade itself can no longer floor onto a non-coder (the fallback
+    // + backstop are coders-only); this still fires for a non-coder that reaches
+    // the run another way (e.g. an explicit non-coder pin) — the general gemini
+    // backstop being the canonical such model.
+    const nonCoder = 'google/gemini-2.5-flash-lite';
+    expect(CODING_MODEL_POOL.includes(nonCoder)).toBe(false);
 
     await emitCodingModelDegraded(db, {
       tenantId: 1,
       cloudAgentRef: 'agent-x',
       executionId: 42,
-      resolvedModel: backstop,
+      resolvedModel: nonCoder,
       requestedModel: CODING_MODEL_POOL[0],
     });
 
@@ -234,7 +239,7 @@ describe('emitCodingModelDegraded → coding_model_degraded llm event', () => {
       toolName: 'coding_model_degraded',
       category: 'llm',
     });
-    expect(JSON.parse(rows[0]!.args as string)).toMatchObject({ resolvedModel: backstop });
+    expect(JSON.parse(rows[0]!.args as string)).toMatchObject({ resolvedModel: nonCoder });
   });
 
   it('is a no-op when the run was served by a curated coder (nothing to flag)', async () => {

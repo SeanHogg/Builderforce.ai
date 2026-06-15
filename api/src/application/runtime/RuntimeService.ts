@@ -9,7 +9,7 @@ import {
   asExecutionId, asTaskId, asAgentId, asAgentHostId, asTenantId, TaskStatus,
 } from '../../domain/shared/types';
 import { NotFoundError, ForbiddenError } from '../../domain/shared/errors';
-import { CLOUD_ORPHAN_REASON, HOST_ORPHAN_REASON } from './orphanReasons';
+import { cloudOrphanReason, HOST_ORPHAN_REASON } from './orphanReasons';
 
 export interface SubmitTaskDto {
   taskId:      number;
@@ -25,6 +25,19 @@ export interface UpdateExecutionDto {
   status:        ExecutionStatus;
   result?:       string;
   errorMessage?: string;
+}
+
+/** Recover the lane an auto-run dispatch was started FOR from its stored payload
+ *  (the auto-run trigger stamps `laneKey`). Tolerates null/malformed payload — a
+ *  manual or host run has no stamp, so the same-lane loop guard simply won't apply. */
+function parseLaneKey(payload: string | null): string | undefined {
+  if (!payload) return undefined;
+  try {
+    const obj = JSON.parse(payload) as { laneKey?: unknown };
+    return typeof obj.laneKey === 'string' ? obj.laneKey : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 /**
@@ -56,6 +69,35 @@ export class RuntimeService {
     private readonly onTaskStatusSync?: (info: {
       tenantId: number; taskId: number; projectId: number;
       fromStatus: string; toStatus: string; terminal: boolean;
+    }) => Promise<void>,
+    /**
+     * Optional cloud-orphan self-heal. Invoked for a stale CLOUD run BEFORE it is
+     * failed, so a crashed/evicted run is re-queued once on the durable executor
+     * instead of being permanently failed by whichever reader noticed it first
+     * (the read path used to defeat the cron's self-heal by failing first). Returns
+     * `'requeued'` when it recovered the run (left running) or `'failed'` to let the
+     * normal orphan-fail proceed. Wired to {@link ./cloudSelfHeal} with env+db at the
+     * composition root. Idempotent + once-only by contract.
+     */
+    private readonly onCloudOrphan?: (e: Execution) => Promise<'requeued' | 'failed'>,
+    /**
+     * Optional autonomous-trigger sink invoked when an execution ADVANCES its
+     * ticket into a new non-terminal lane (e.g. an agent completes → ticket moves
+     * to in_review). Wired at the composition root to the SAME lane auto-run
+     * trigger a human board-drag uses ({@link maybeAutoRunOnLaneEntry}), so the
+     * next lane's configured cloud agent kicks off after an agent finishes — the
+     * agent-moved path previously wrote `tasks.status` directly here and bypassed
+     * the PATCH-route trigger, so the next agent never started. The trigger itself
+     * is idempotent (dedupes on a live execution) and no-ops on a Done lane.
+     * Best-effort by contract.
+     */
+    private readonly onLaneEntry?: (info: {
+      tenantId: number; taskId: number; projectId: number; status: string;
+      /** The lane the just-completed run was dispatched FOR (stamped in its payload
+       *  by the auto-run trigger). Lets the trigger skip a same-lane re-entry loop
+       *  WITHOUT blocking a genuine handoff to a different lane staffed by the same
+       *  agent. Absent for manual / human-drag runs. */
+      originLaneKey?: string;
     }) => Promise<void>,
   ) {}
 
@@ -117,14 +159,16 @@ export class RuntimeService {
    * process to recover, so once a run exceeds a per-kind ceiling we mark it failed
    * on read.
    *
-   * Cloud ceiling is tight on purpose: Cloudflare stops `waitUntil` work shortly
-   * after the HTTP response returns (observed ~30s), so a serverless cloud run
-   * physically cannot make progress past that. 90s = that wall + margin for the
-   * terminal-status write + clock skew, so a genuinely-dead run surfaces in ~1.5
-   * min instead of the old 8 min. A self-hosted host has a real long-lived process
-   * and legitimately runs much longer, so it keeps a far larger ceiling.
-   * (Durable multi-step cloud execution is the planned fix — see the Consolidated
-   * Gap Register's CloudRunnerDO entry; this is the interim fast-fail.)
+   * Cloud ceiling is tight on purpose: the interim Worker loop runs in `waitUntil`,
+   * which Cloudflare stops shortly after the HTTP response returns (observed ~30s),
+   * so that serverless path cannot make progress past the wall. 90s = that wall +
+   * margin for the terminal-status write + clock skew, so a genuinely-dead run
+   * surfaces in ~1.5 min instead of the old 8 min. A long-lived executor (durable
+   * CloudRunnerDO or a Cloudflare Container) heartbeats `updatedAt` as it works, so
+   * the ceiling is measured from last activity below and only a SILENT long-lived
+   * run is reaped — and {@link orphanReason} then reports it as a crash, not a 30s
+   * timeout. A self-hosted host has a real long-lived process and legitimately runs
+   * much longer, so it keeps a far larger ceiling.
    *
    * Read-path repair (no cron needed): the stream's reconciliation poll calls
    * `getExecution` every few seconds, so an orphan self-heals on next view.
@@ -157,14 +201,30 @@ export class RuntimeService {
     return nowMs - sinceMs > ceiling;
   }
 
-  /** Actionable reason for a reaped run — cloud runs hit the serverless wall and
-   *  need a durable runtime; host runs lost their process/connection. */
+  /** Actionable reason for a reaped run. Cloud runs split by how long they made
+   *  progress: a short-lived one hit the serverless ~30s wall, while one that
+   *  heartbeated past the wall ran on a long-lived executor (durable/container) and
+   *  crashed — so it must NOT be told to "downgrade to a durable runtime". Host runs
+   *  lost their process/connection. */
   private orphanReason(e: Execution): string {
-    return this.isCloudRun(e) ? CLOUD_ORPHAN_REASON : HOST_ORPHAN_REASON;
+    if (!this.isCloudRun(e)) return HOST_ORPHAN_REASON;
+    const startedMs = (e.startedAt ?? e.createdAt)?.getTime();
+    const lastActivityMs = (e.updatedAt ?? e.createdAt)?.getTime();
+    return cloudOrphanReason(startedMs, lastActivityMs);
   }
 
   private async reapIfOrphaned(e: Execution): Promise<Execution> {
     if (!this.isOrphaned(e, Date.now())) return e;
+    // Cloud runs: attempt the once-only durable self-heal BEFORE failing, so a
+    // crashed/evicted run recovers regardless of who detects it first. Idempotent —
+    // a run that already used its retry just falls through to the normal fail.
+    if (this.isCloudRun(e) && this.onCloudOrphan) {
+      try {
+        if ((await this.onCloudOrphan(e)) === 'requeued') {
+          return (await this.executions.findById(asExecutionId(e.id))) ?? e;
+        }
+      } catch { /* fall through to fail */ }
+    }
     try {
       const failed = e.markFailed(this.orphanReason(e));
       const saved = await this.executions.update(failed);
@@ -263,6 +323,19 @@ export class RuntimeService {
         }
 
         await this.onTaskStatusSync?.({ tenantId, taskId: Number(execution.taskId), projectId, fromStatus, toStatus, terminal });
+
+        // Autonomous chaining: this agent just advanced the ticket into a NEW
+        // non-terminal lane. Fire the same lane auto-run trigger a human board-drag
+        // uses so that lane's configured agent starts — parity with the PATCH path.
+        // A Done lane finalizes (PR/commit) instead of staffing a fresh agent, and
+        // the RUNNING→in_progress move is the lane the CURRENT run already owns, so
+        // both are excluded here (the trigger also dedupes/no-ops defensively).
+        if (dto.status === ExecutionStatus.COMPLETED && toStatus !== fromStatus && toStatus !== TaskStatus.DONE) {
+          await this.onLaneEntry?.({
+            tenantId, taskId: Number(execution.taskId), projectId, status: toStatus,
+            originLaneKey: parseLaneKey(execution.payload),
+          });
+        }
       }
     } catch {
       // ignore task sync errors to avoid blocking runtime flow

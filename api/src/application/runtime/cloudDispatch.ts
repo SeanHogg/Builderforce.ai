@@ -68,11 +68,10 @@ export async function probeContainerHealth(stub: { fetch: (input: string, init?:
   }
 }
 
-/** Human-readable name for a cloud agent's type — the canonical taxonomy. Used in
- *  dispatch telemetry so the timeline says exactly which of the three cloud agent
- *  types (and surface) actually ran, not a bare engine string. */
-export function cloudAgentTypeLabel(engine: string, surface: string): string {
-  if (engine !== 'builderforce-v2') return 'V1 Cloud Agent';
+/** Human-readable name for a cloud agent run by surface — the canonical taxonomy.
+ *  Used in dispatch telemetry so the timeline says exactly which cloud surface ran.
+ *  There is ONE engine (the V2 Agent; V1 is deleted), so only the surface varies. */
+export function cloudAgentTypeLabel(surface: string): string {
   return surface === 'container' ? 'V2 Cloud Agent (Node/Container)' : 'V2 Cloud Agent (Durable Object)';
 }
 
@@ -149,6 +148,30 @@ export function wasReaperRequeued(payload: string | null | undefined): boolean {
   }
 }
 
+/**
+ * Parse a client-computed SSM recall bias off a run payload (Learned Model Routing,
+ * PRD 13 §6.6). An INTERACTIVE launch may attach `{ routingBias: { <model>: weight } }`
+ * — a small nudge map the browser computed on its GPU (embed the task → kNN over this
+ * repo's prior winning models). Headless runs omit it. Coerced defensively: only
+ * string→finite-number entries survive, capped to a sane magnitude so a malformed
+ * client can't dominate the learned score. Returns undefined when absent/empty.
+ */
+export function parseRoutingBias(payload: string | undefined): Record<string, number> | undefined {
+  if (!payload) return undefined;
+  try {
+    const raw = (JSON.parse(payload) as { routingBias?: unknown }).routingBias;
+    if (!raw || typeof raw !== 'object') return undefined;
+    const out: Record<string, number> = {};
+    for (const [model, w] of Object.entries(raw as Record<string, unknown>)) {
+      const n = typeof w === 'number' ? w : Number(w);
+      if (model && Number.isFinite(n) && n !== 0) out[model] = Math.max(-1, Math.min(1, n));
+    }
+    return Object.keys(out).length > 0 ? out : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 export interface FollowUpContext { directive: string; priorExecutionId: number | null }
 
 /**
@@ -186,9 +209,11 @@ export function buildFollowUpPayload(priorPayload: string | null | undefined, fo
   return JSON.stringify(obj);
 }
 
-export interface RemediationContext { attempt: number; maxAttempts: number; buildError: string; runUrl: string | null }
+export interface RemediationContext { attempt: number; maxAttempts: number; buildError: string; runUrl: string | null; phase: 'pre_merge' | 'post_merge' }
 
-/** Parse the post-merge build-failure remediation block off an auto-fix run's payload. */
+/** Parse a build-failure remediation block off an auto-fix run's payload. `phase`
+ *  distinguishes a PR-branch (pre-merge) failure from a deploy-branch (post-merge)
+ *  one; absent/garbage → 'post_merge' for back-compat with older payloads. */
 export function parseRemediation(payload: string | undefined): RemediationContext | null {
   if (!payload) return null;
   try {
@@ -199,6 +224,7 @@ export function parseRemediation(payload: string | undefined): RemediationContex
       maxAttempts: typeof r.maxAttempts === 'number' ? r.maxAttempts : 2,
       buildError: r.buildError,
       runUrl: typeof r.runUrl === 'string' ? r.runUrl : null,
+      phase: r.phase === 'pre_merge' ? 'pre_merge' : 'post_merge',
     };
   } catch {
     return null;

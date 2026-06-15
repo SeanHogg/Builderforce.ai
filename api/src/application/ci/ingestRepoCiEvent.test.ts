@@ -100,3 +100,67 @@ describe('ingestRepoCiEvent — post-merge build validation', () => {
     expect(res.autoFix).toBeUndefined();
   });
 });
+
+describe('ingestRepoCiEvent — pre-merge (PR-branch) build validation', () => {
+  const taskRow = { id: 78, projectId: 3, assignedAgentRef: null, tenantId: 5 };
+  const openPr = { id: 'pr78', tenantId: 5, taskId: 78, projectId: 3, repoId: 'repo1', buildStatus: null };
+  const failEvt: RepoCiEvent = { ...baseEvt, branch: 'builderforce/task-78', outcome: 'failure', rawState: 'failure' };
+
+  it('records the failing PR-branch build and returns an auto-fix intent', async () => {
+    const { db, inserts } = makeFakeDb(new Map<TableRef, unknown[]>([
+      [tasks, [taskRow]],
+      [executions, [{ id: 9 }]],
+      [pullRequests, [openPr]],
+      [toolAuditEvents, [{ n: 0 }]],   // no prior auto-fix dispatches
+    ]));
+    const res = await ingestRepoCiEvent(db as never, env, 'secret', failEvt);
+    expect(res.processed).toBe(true);
+    expect(res.taskId).toBe(78);
+    expect(res.buildStatus).toBe('failure');
+    expect(res.autoFix?.attempt).toBe(1);
+    // The pre-merge phase rides the remediation payload so the fix run is framed correctly.
+    expect(JSON.parse(res.autoFix!.payload).remediation.phase).toBe('pre_merge');
+    expect(inserts.some((i) => i.values.toolName === 'build.result')).toBe(true);
+  });
+
+  it('stops auto-fixing the PR-branch build once the per-task cap is reached', async () => {
+    const { db, inserts } = makeFakeDb(new Map<TableRef, unknown[]>([
+      [tasks, [taskRow]],
+      [executions, [{ id: 9 }]],
+      [pullRequests, [openPr]],
+      [toolAuditEvents, [{ n: 2 }]],   // == MAX
+    ]));
+    const res = await ingestRepoCiEvent(db as never, env, 'secret', failEvt);
+    expect(res.buildStatus).toBe('failure');
+    expect(res.autoFix).toBeUndefined();
+    expect(inserts.some((i) => i.values.toolName === 'build.needs_human')).toBe(true);
+  });
+
+  it('records a non-authoritative check failure (no runId) WITHOUT dispatching a fix', async () => {
+    const { db, inserts } = makeFakeDb(new Map<TableRef, unknown[]>([
+      [tasks, [taskRow]],
+      [executions, [{ id: 9 }]],
+      [pullRequests, [openPr]],
+    ]));
+    const res = await ingestRepoCiEvent(db as never, env, 'secret', {
+      eventType: 'check_suite', branch: 'builderforce/task-78', sha: 'x',
+      outcome: 'failure', rawState: 'failure', targetUrl: null, runId: null,
+    });
+    expect(res.buildStatus).toBe('failure');
+    expect(res.autoFix).toBeUndefined();   // not auto-fix eligible — many per-check events
+    expect(inserts.some((i) => i.values.toolName === 'build.result')).toBe(true);
+  });
+
+  it('records a green PR-branch build (clears any prior failure) and dispatches no fix', async () => {
+    const { db, inserts } = makeFakeDb(new Map<TableRef, unknown[]>([
+      [tasks, [taskRow]],
+      [executions, [{ id: 9 }]],
+      [pullRequests, [openPr]],
+    ]));
+    const res = await ingestRepoCiEvent(db as never, env, 'secret', { ...baseEvt, branch: 'builderforce/task-78' });
+    expect(res.processed).toBe(true);
+    expect(res.buildStatus).toBe('success');
+    expect(res.autoFix).toBeUndefined();
+    expect(inserts.some((i) => i.values.toolName === 'build.result')).toBe(true);
+  });
+});

@@ -17,7 +17,7 @@ import { resolveArtifacts } from '../../application/artifact/resolveArtifacts';
 import { enqueueExecutionMessage, listExecutionMessages, releasePendingSteers } from '../../application/runtime/executionSteering';
 import { subscribeExecution, unsubscribeExecution, notifyExecutionSubscribers } from '../../application/runtime/executionEvents';
 import {
-  runCloudExecution, prepareCloudRun, gitSecret, recordCloudToolEvent, recordPrdDirective,
+  runCloudExecution, markCloudExecutionRunning, prepareCloudRun, gitSecret, recordCloudToolEvent, recordPrdDirective,
   handleContainerOp, loadContainerRunContext, resolveCloudAgent, agentAllowsHostExecution, DEFAULT_CLOUD_REF,
 } from '../../application/runtime/cloudAgentEngine';
 import { CONTAINER_MAX_STEPS } from '../../application/runtime/cloudAgentTools';
@@ -124,12 +124,45 @@ function requiresTaskExecutionApproval(task: ExecutionTaskRow): boolean {
   return task.priority === 'high' || task.priority === 'urgent';
 }
 
+/** Run context replayed when a `task.execution` approval is approved. */
+export interface ApprovalReplay {
+  taskId: number;
+  /** The original submit payload (carries the cloud-agent ref + model + repo pin). */
+  payload?: string;
+  /** A per-run pinned host, if the gated run targeted one. */
+  agentHostId?: number | null;
+}
+
+/**
+ * Read the stored run context off a `task.execution` approval so approving it can
+ * replay the original submit AS the same agent + model — the gate discards no run
+ * detail (see {@link evaluateExecutionApprovalGate}). Returns null for approvals
+ * without a parseable taskId (non-task.execution rows).
+ */
+export function parseApprovalReplay(metadata: string | null): ApprovalReplay | null {
+  const taskId = parseApprovalTaskId(metadata);
+  if (taskId == null || !metadata) return null;
+  try {
+    const parsed = JSON.parse(metadata) as { payload?: unknown; agentHostId?: unknown };
+    const payload = typeof parsed.payload === 'string' ? parsed.payload : undefined;
+    const agentHostId =
+      typeof parsed.agentHostId === 'number' && Number.isFinite(parsed.agentHostId)
+        ? parsed.agentHostId
+        : null;
+    return { taskId, payload, agentHostId };
+  } catch {
+    return { taskId };
+  }
+}
+
 async function evaluateExecutionApprovalGate(
   db: Db,
   tenantId: number,
   requestedBy: string,
   task: ExecutionTaskRow,
   requestedAgentHostId: number | null,
+  /** The original submit context, persisted so an approve replays the exact run. */
+  submitContext?: { payload?: string },
 ): Promise<ExecutionApprovalGateResult> {
   if (!requiresTaskExecutionApproval(task)) {
     return { allowed: true };
@@ -180,6 +213,10 @@ async function evaluateExecutionApprovalGate(
     metadata: JSON.stringify({
       taskId: task.id,
       priority: task.priority,
+      // Persist the run context so approving the request replays the exact run
+      // (as the same cloud agent + model + repo pin) — see parseApprovalReplay.
+      payload: submitContext?.payload ?? null,
+      agentHostId: task.assignedAgentHostId ?? requestedAgentHostId,
     }),
     createdAt: now,
     updatedAt: now,
@@ -314,7 +351,7 @@ export async function dispatchCloudRunForTask(
   db: Db,
   runtimeService: RuntimeService,
   waitUntil: (p: Promise<unknown>) => void,
-  params: { taskId: number; tenantId: number; payload?: string; submittedBy?: string },
+  params: { taskId: number; tenantId: number; payload?: string; submittedBy?: string; agentHostId?: number | null },
 ): Promise<number | null> {
   const [taskRow] = await db
     .select({
@@ -328,14 +365,20 @@ export async function dispatchCloudRunForTask(
     .limit(1);
   if (!taskRow) return null;
 
+  // A per-run pinned host (e.g. an approved high-priority on-prem run) overrides
+  // the task's assignee for THIS dispatch so host targeting survives the replay.
+  const effectiveTaskRow = (params.agentHostId != null
+    ? { ...taskRow, assignedAgentHostId: params.agentHostId }
+    : taskRow) as ExecutionTaskRow;
+
   const execution = await runtimeService.submit({
     taskId: params.taskId,
-    agentHostId: taskRow.assignedAgentHostId ?? undefined,
+    agentHostId: effectiveTaskRow.assignedAgentHostId ?? undefined,
     tenantId: params.tenantId,
     submittedBy: params.submittedBy ?? 'system:autofix',
     payload: params.payload,
   });
-  await startDispatchedExecution(env, db, runtimeService, waitUntil, params.tenantId, execution as SubmittedExecution, taskRow as ExecutionTaskRow, params.payload);
+  await startDispatchedExecution(env, db, runtimeService, waitUntil, params.tenantId, execution as SubmittedExecution, effectiveTaskRow, params.payload);
   return execution.id;
 }
 
@@ -407,11 +450,16 @@ async function startDispatchedExecution(
     ]);
   }
 
+  // Fold the agent's own model into the payload up front so EVERY surface — the
+  // on-prem host included — runs AS the agent's model, never silently the gateway
+  // default. (The cloud branch reuses this same effective payload below.)
+  const effectivePayload = withDefaultModel(payload, agent.baseModel);
+
   const message: DispatchMessage = {
     type: 'task.assign',
     executionId: execution.id,
     taskId: taskRow.id,
-    payload,
+    payload: effectivePayload,
     engine: agent.engine,
     agentLabel: agent.label,
     repo: repoRef ? { repoId: repoRef.repoId, defaultBranch: repoRef.defaultBranch } : undefined,
@@ -419,27 +467,27 @@ async function startDispatchedExecution(
     artifacts,
   };
 
-  // The three CLOUD agent types — see agent taxonomy ([[agent-types-taxonomy]]):
-  //   • V1 Cloud Agent                  — engine builderforce-v1.
-  //   • V2 Cloud Agent (Durable Object) — engine builderforce-v2, surface durable.
-  //   • V2 Cloud Agent (Node/Container) — engine builderforce-v2, surface container.
-  // ALL cloud agents execute ONLY in the cloud (all Cloudflare) — a cloud agent is
-  // NEVER dispatched to an On-Prem (hosted) agent. On-Prem hosts run as a host
-  // only when one is explicitly pinned on the task.
+  // ONE agent engine (the V2 Agent) runs on three interchangeable long-lived
+  // surfaces — see agent taxonomy ([[agent-types-taxonomy]]):
+  //   • Durable Object (CloudRunnerDO)         — cloud, on-demand serverless.
+  //   • Container (long-lived Cloudflare)      — cloud, persistent process + shell.
+  //   • On-Prem machine                        — the client's machine, reached via
+  //     the AGENT_HOST_RELAY. It is ALSO a long-lived runtime (equivalent to a
+  //     container) and runs the SAME V2 Agent (Claude-Agent-SDK) the cloud surfaces
+  //     do, so a V2 agent pinned to a host executes ON the machine — no engine fork.
   const surface = resolveCloudSurface(agent.runtimeSurface, pinnedHostId != null);
-  const isV2 = agent.engine === 'builderforce-v2';
-  const typeLabel = cloudAgentTypeLabel(agent.engine, surface);
+  const typeLabel = cloudAgentTypeLabel(surface);
 
-  // Dispatch to an On-Prem host ONLY for an explicitly pinned host run (legacy
-  // AgentHost path). A V2 cloud agent never reaches a host: the 'container' surface
-  // targets a long-lived Cloudflare Container (cloud), not a client machine. We also
-  // enforce the agent's declared `runtime_support` here: an agent marked cloud-only
-  // is never delivered to a pinned host (it falls through to the cloud executor),
-  // closing the "declared metadata not enforced at dispatch" gap. preferred_runtime
-  // (for runtime_support==='both') is resolved on the swimlane path; here a host run
-  // still requires an explicit pin, so it cannot route AWAY from a pinned host.
+  // Dispatch to an On-Prem host when one is explicitly pinned AND the agent's
+  // declared `runtime_support` permits host execution (an agent marked cloud-only
+  // is never delivered to a pinned host — it falls through to the cloud executor).
+  // The engine no longer gates this: the on-prem host runtime runs the V2 Agent
+  // natively, so V2 IS delivered to the machine (the surface is just where the one
+  // engine runs). preferred_runtime (for runtime_support==='both') is resolved on
+  // the swimlane path; here a host run still requires an explicit pin, so it cannot
+  // route AWAY from a pinned host.
   const hostAllowed = agentAllowsHostExecution(agent.runtimeSupport);
-  if (pinnedHostId != null && !isV2 && !hostAllowed) {
+  if (pinnedHostId != null && !hostAllowed) {
     await recordCloudToolEvent(db, {
       tenantId, cloudAgentRef: agent.ref, executionId: execution.id,
       toolName: 'runtime.route', category: 'planning',
@@ -447,7 +495,7 @@ async function startDispatchedExecution(
       result: `Agent "${agent.label ?? agent.ref ?? 'cloud agent'}" is cloud-only (runtime_support=cloud); the pinned On-Prem host was not used — running in the cloud.`,
     }).catch(() => { /* best-effort telemetry */ });
   }
-  const delivered = pinnedHostId != null && !isV2 && hostAllowed
+  const delivered = pinnedHostId != null && hostAllowed
     ? (await Promise.all(hostTargets.map((targetId) => dispatchToAgentHost(env as RuntimeHonoEnv['Bindings'], targetId, message).catch(() => false)))).some(Boolean)
     : false;
 
@@ -463,15 +511,14 @@ async function startDispatchedExecution(
   };
 
   if (!delivered) {
-    // Route a V2 Cloud Agent (Node/Container) to the REAL long-lived Cloudflare
-    // Container (AgentContainerDO) when it's bound; everything else — V1 Cloud
-    // Agent, V2 Cloud Agent (Durable Object), and a container run with no Container
-    // binding — runs on the durable executor (CloudRunnerDO). A V2 run carries its
-    // OWN model so it is never silently executed/attributed as the v1 gateway default.
-    const wantsContainer = isV2 && surface === 'container';
+    // Route a container-surface run to the REAL long-lived Cloudflare Container
+    // (AgentContainerDO) when it's bound; everything else — a durable-surface run,
+    // and a container run with no Container binding — runs on the durable executor
+    // (CloudRunnerDO). The run carries its OWN model so it is never silently
+    // attributed to the gateway default. (One engine: the V2 Agent; V1 is deleted.)
+    const wantsContainer = surface === 'container';
     const hasContainerBinding = wantsContainer && !!env.AGENT_CONTAINER;
     const hasCloudRunner = !!env.CLOUD_RUNNER;
-    const effectivePayload = withDefaultModel(payload, agent.baseModel);
 
     const runWorkerFallback = async () => {
       await runCloudExecution(env, runtimeService, db, execution.id, taskRow, tenantId, taskRow.projectId, agent.label ?? 'BuilderForce Agent', agent.ref, effectivePayload, artifacts);
@@ -537,8 +584,13 @@ async function startDispatchedExecution(
         );
         const token = await mintContainerRunToken(env.JWT_SECRET, execution.id);
         const repo = await resolveTicketRepoContext(db, gitSecret(env), tenantId, taskRow.id);
+        // Clone the ticket's HEAD branch (ctx.branch — where prior runs commit their
+        // WIP), not just the base. A container that clones only the base branch starts
+        // every run from a stale default and cannot see earlier passes' work; carrying
+        // headBranch lets the container check it out and fall back to base on run #1
+        // when the branch doesn't exist yet.
         const cloneSpec = repo.ok && repo.ctx.provider.startsWith('github')
-          ? { cloneUrl: `https://x-access-token:${repo.ctx.token}@${repo.ctx.host}/${repo.ctx.owner}/${repo.ctx.repo}.git`, baseBranch: repo.ctx.base }
+          ? { cloneUrl: `https://x-access-token:${repo.ctx.token}@${repo.ctx.host}/${repo.ctx.owner}/${repo.ctx.repo}.git`, baseBranch: repo.ctx.base, headBranch: repo.ctx.branch }
           : null;
         const internalBaseUrl = env.INTERNAL_API_BASE_URL ?? 'https://api.builderforce.ai';
         const res = await stub.fetch('https://agent-container/run', {
@@ -561,6 +613,13 @@ async function startDispatchedExecution(
             result: `Cloudflare Container kickoff returned ${res.status} — running on the durable executor instead.`,
           });
           await startDurable();
+        } else {
+          // The container accepted the run and now drives the loop via callbacks to
+          // /internal/container-op, which only flips the row at finalize. Without this
+          // the execution would read PENDING for the whole live run. Mark it RUNNING
+          // now — parity with the durable (CloudRunnerDO.start) and Worker
+          // (runCloudExecution) executors, which both transition at kickoff.
+          await markCloudExecutionRunning(runtimeService, execution.id);
         }
       } catch (e) {
         await recordCloudToolEvent(db, {
@@ -720,6 +779,7 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
       c.get('userId'),
       taskRow,
       agentHostIdFromHeader ?? body.agentHostId ?? null,
+      { payload: body.payload },
     );
     if (!gate.allowed) {
       return c.json(
@@ -799,6 +859,7 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
       c.get('userId'),
       taskRow,
       agentHostIdFromHeader ?? body.agentHostId ?? null,
+      { payload: body.payload },
     );
     if (!gate.allowed) {
       return c.json(
@@ -1408,12 +1469,15 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
     // ── Terminal run → start a NEW run carrying the directive ─────────────────
     if (!taskRow) return c.json({ error: 'Task no longer exists' }, 409);
 
-    const gate = await evaluateExecutionApprovalGate(db, tenantId, c.get('userId'), taskRow, plain.agentHostId ?? null);
+    // Build the follow-up payload BEFORE the gate so an approval persists (and
+    // later replays) the run carrying this directive — not the bare prior payload.
+    const followUpPayload = buildFollowUpPayload(plain.payload, { directive: text, priorExecutionId: id });
+
+    const gate = await evaluateExecutionApprovalGate(db, tenantId, c.get('userId'), taskRow, plain.agentHostId ?? null, { payload: followUpPayload });
     if (!gate.allowed) {
       return c.json({ status: 'awaiting_approval', approvalId: gate.approvalId, taskId: taskRow.id, reason: gate.reason }, 202);
     }
 
-    const followUpPayload = buildFollowUpPayload(plain.payload, { directive: text, priorExecutionId: id });
     const newExecution = await runtimeService.submit({
       taskId: taskRow.id,
       agentHostId: plain.agentHostId ?? undefined,

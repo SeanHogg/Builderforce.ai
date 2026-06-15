@@ -40,13 +40,9 @@ const SECRET_KEYS = [
   'NVIDIA_API_KEY',
   'OLLAMA_API_KEY',
   'GOOGLE_API_KEY',
+  'CLAUDE_API_KEY',
   'TOGETHER_API_KEY',
   'FLUX_API_KEY',
-  // Web Push (deploy notifications) — see api/scripts/gen-vapid-keys.mjs
-  'VAPID_PUBLIC_KEY',
-  'VAPID_PRIVATE_KEY',
-  'VAPID_SUBJECT',
-  'DEPLOY_NOTIFY_SECRET',
 ];
 
 for (const key of SECRET_KEYS) {

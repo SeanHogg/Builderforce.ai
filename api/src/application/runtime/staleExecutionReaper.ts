@@ -20,8 +20,9 @@
 
 import { neon } from '@neondatabase/serverless';
 import type { Env } from '../../env';
-import { CLOUD_ORPHAN_REASON } from './orphanReasons';
-import { markReaperRequeued, wasReaperRequeued } from './cloudDispatch';
+import { cloudOrphanReason } from './orphanReasons';
+import { markReaperRequeued } from './cloudDispatch';
+import { isSelfHealEligible, buildDurableStartBody, dispatchDurableStart } from './cloudSelfHeal';
 
 /** A self-hosted host run executing longer than this is treated as hung. */
 export const RUNNING_DEADLINE_MS = 30 * 60_000; // 30 min
@@ -69,6 +70,7 @@ export async function reapStaleExecutions(env: Env, nowMs = Date.now()): Promise
   // decide per-row whether to re-dispatch or fail — see requeueCloudRun.
   const cloudCandidates = (await sql`
     SELECT e.id, e.tenant_id, e.agent_host_id, e.payload, e.error_message,
+           e.started_at AS started_at, e.created_at AS created_at, e.updated_at AS updated_at,
            t.id AS task_id, t.title AS task_title, t.description AS task_description,
            t.project_id AS project_id, e.cloud_agent_ref AS cloud_agent_ref,
            (SELECT count(*) FROM pull_requests pr
@@ -84,22 +86,28 @@ export async function reapStaleExecutions(env: Env, nowMs = Date.now()): Promise
   let requeuedCloud = 0;
   for (const row of cloudCandidates) {
     // Re-dispatch ONCE, idempotently. Skip (and fail) a run that has already been
-    // re-queued by a prior sweep, has an open PR / written paths a re-run could
-    // double, or when no durable runner is bound to retry on.
-    const eligible =
-      !!env.CLOUD_RUNNER &&
-      !wasReaperRequeued(row.payload) &&
-      Number(row.open_pr_count) === 0;
+    // re-queued by a prior sweep, has an open PR a re-run could double, or when no
+    // durable runner is bound to retry on. The eligibility RULE is shared with the
+    // read-path + container-crash self-heal so all detectors agree (cloudSelfHeal).
+    const eligible = isSelfHealEligible({
+      payload: row.payload,
+      openPrCount: Number(row.open_pr_count),
+      hasCloudRunner: !!env.CLOUD_RUNNER,
+    });
 
     if (eligible && (await requeueCloudRun(env, sql, row))) {
       requeuedCloud += 1;
       continue;
     }
 
+    // Surface-aware reason: a run whose last activity outlasted the serverless wall
+    // ran on a long-lived executor (durable/container) and crashed — don't claim a
+    // 30s serverless timeout or tell the user to downgrade to a durable runtime.
+    const reason = cloudOrphanReason(tsToMs(row.started_at ?? row.created_at), tsToMs(row.updated_at ?? row.created_at));
     const [failed] = (await sql`
       UPDATE executions
          SET status = 'failed',
-             error_message = ${CLOUD_ORPHAN_REASON},
+             error_message = ${reason},
              completed_at = now(),
              updated_at = now()
        WHERE id = ${row.id} AND status = 'running'
@@ -151,12 +159,23 @@ interface ReapedRow {
 
 /** A stale cloud run + the task context the durable executor needs to resume it. */
 interface CloudCandidateRow extends ReapedRow {
+  started_at: string | null;
+  created_at: string | null;
+  updated_at: string | null;
   task_id: number;
   task_title: string;
   task_description: string | null;
   project_id: number;
   cloud_agent_ref: string | null;
   open_pr_count: number | string;
+}
+
+/** Parse a timestamp column (ISO string or null) to epoch ms, or null when absent
+ *  / unparseable — so the reason picker falls back to the serverless message. */
+function tsToMs(ts: string | null | undefined): number | null {
+  if (!ts) return null;
+  const ms = Date.parse(ts);
+  return Number.isFinite(ms) ? ms : null;
 }
 
 type SqlTag = ReturnType<typeof neon<false, false>>;
@@ -171,8 +190,7 @@ type SqlTag = ReturnType<typeof neon<false, false>>;
  * any failure returns false so the caller fails the run with CLOUD_ORPHAN_REASON.
  */
 async function requeueCloudRun(env: Env, sql: SqlTag, row: CloudCandidateRow): Promise<boolean> {
-  const cloudRunner = env.CLOUD_RUNNER;
-  if (!cloudRunner) return false;
+  if (!env.CLOUD_RUNNER) return false;
 
   const requeuedPayload = markReaperRequeued(row.payload);
   // Persist the one-retry flag first — its absence is the only thing that makes a
@@ -182,27 +200,19 @@ async function requeueCloudRun(env: Env, sql: SqlTag, row: CloudCandidateRow): P
      WHERE id = ${row.id} AND status = 'running'
   `;
 
-  const agentLabel = row.cloud_agent_ref ? `Cloud agent ${row.cloud_agent_ref}` : 'BuilderForce Agent';
-  try {
-    const stub = cloudRunner.get(cloudRunner.idFromName(`exec:${row.id}`));
-    const res = await stub.fetch('https://cloud-runner/start', {
-      method: 'POST',
-      body: JSON.stringify({
-        executionId: row.id,
-        tenantId: row.tenant_id,
-        projectId: row.project_id,
-        taskId: row.task_id,
-        taskTitle: row.task_title,
-        taskDescription: row.task_description,
-        cloudAgentRef: row.cloud_agent_ref ?? undefined,
-        agentLabel,
-        payload: requeuedPayload,
-      }),
-    });
-    if (!res.ok) return false;
-  } catch {
-    return false;
-  }
+  // Shared dispatch contract + kickoff (cloudSelfHeal) so the durable `/start` body
+  // matches every other self-heal path.
+  const ok = await dispatchDurableStart(env, row.id, buildDurableStartBody({
+    executionId: row.id,
+    tenantId: row.tenant_id,
+    projectId: row.project_id,
+    taskId: row.task_id,
+    taskTitle: row.task_title,
+    taskDescription: row.task_description,
+    cloudAgentRef: row.cloud_agent_ref,
+    payload: requeuedPayload,
+  }));
+  if (!ok) return false;
 
   // Surface the self-heal on the Observability timeline so the gap (a run that
   // looked dead) is explained rather than silently resurrected.

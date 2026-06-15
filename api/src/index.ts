@@ -19,7 +19,6 @@ import { TenantRepository }     from './infrastructure/repositories/TenantReposi
 import { UserRepository }       from './infrastructure/repositories/UserRepository';
 import { AgentRepository }      from './infrastructure/repositories/AgentRepository';
 import { SkillRepository }       from './infrastructure/repositories/SkillRepository';
-import { ExecutionRepository }  from './infrastructure/repositories/ExecutionRepository';
 import { AuditRepository }      from './infrastructure/repositories/AuditRepository';
 
 // Application services
@@ -28,16 +27,16 @@ import { TaskService }     from './application/task/TaskService';
 import { TenantService }   from './application/tenant/TenantService';
 import { AuthService }     from './application/auth/AuthService';
 import { AgentService }    from './application/agent/AgentService';
-import { RuntimeService }  from './application/runtime/RuntimeService';
-import { recordRunFailureEvent } from './application/runtime/recordRunFailureEvent';
-import { syncExecutionTaskLifecycle } from './application/task/taskLifecycle';
+import { buildRuntimeService } from './buildRuntimeService';
 import { recommendTopAssignee } from './application/metrics/assigneeRecommender';
 import { AuditService }    from './application/audit/AuditService';
 import { AgentHostService }     from './application/agentHost/AgentHostService';
 
 // Routes
 import { createProjectRoutes }     from './presentation/routes/projectRoutes';
-import { createTaskRoutes }        from './presentation/routes/taskRoutes';
+import { createTaskRoutes } from './presentation/routes/taskRoutes';
+import { setExecutionBoardSink }   from './application/runtime/executionEvents';
+import { makeExecutionBoardSink }  from './application/runtime/executionBoardBroadcast';
 import { createMemberRoutes }      from './presentation/routes/memberRoutes';
 import { createTenantRoutes }      from './presentation/routes/tenantRoutes';
 import { createSegmentRoutes }     from './presentation/routes/segmentRoutes';
@@ -74,7 +73,6 @@ import { createWorkflowDefinitionRoutes } from './presentation/routes/workflowDe
 import { createWorkflowTriggerRoutes } from './presentation/routes/workflowTriggerRoutes';
 import { createApprovalRoutes }     from './presentation/routes/approvalRoutes';
 import { createApprovalRuleRoutes } from './presentation/routes/approvalRuleRoutes';
-import { createPushSubscriptionRoutes } from './presentation/routes/pushSubscriptionRoutes';
 import { createPendingPromptRoutes } from './presentation/routes/pendingPromptRoutes';
 import { createTelemetryRoutes }    from './presentation/routes/telemetryRoutes';
 import { createQaRoutes }           from './presentation/routes/qaRoutes';
@@ -159,7 +157,6 @@ function buildApp(env: Env): Hono<HonoEnv> {
   const userRepo      = new UserRepository(db);
   const agentRepo     = new AgentRepository(db);
   const skillRepo      = new SkillRepository(db);
-  const executionRepo = new ExecutionRepository(db);
   const auditRepo     = new AuditRepository(db);
   const agentHostRepo      = new AgentHostRepository(db);
 
@@ -173,12 +170,20 @@ function buildApp(env: Env): Hono<HonoEnv> {
   const tenantService   = new TenantService(tenantRepo, paymentProvider);
   const authService     = new AuthService(userRepo, tenantRepo, auditRepo, env.JWT_SECRET);
   const agentService    = new AgentService(agentRepo, skillRepo, auditRepo);
-  const runtimeService  = new RuntimeService(executionRepo, taskRepo, agentRepo, auditRepo,
-    (e) => recordRunFailureEvent(db, e),
-    (info) => syncExecutionTaskLifecycle(env, db, info));
+  // RuntimeService.update is the single canonical execution-status transition;
+  // its full wiring (self-heal, lane sync, autonomous chaining, audit) lives in
+  // buildRuntimeService so the durable CloudRunnerDO shares the EXACT same instance
+  // behavior instead of open-coding raw status writes.
+  const runtimeService  = buildRuntimeService(env, db);
   const auditService    = new AuditService(auditRepo);
   const agentHostService     = new AgentHostService(agentHostRepo);
   const brainService    = new BrainService(db);
+
+  // Wire execution lifecycle events to the project's live board room so a run's
+  // progress (pending→running→done) pushes to every board/calendar/list viewer,
+  // not just whoever opened the run's drawer. Idempotent per isolate (last writer
+  // wins with an equivalent closure); needs env+db, which the events hub lacks.
+  setExecutionBoardSink(makeExecutionBoardSink(env, db));
 
   // --- Presentation ---
   const app = new Hono<HonoEnv>();
@@ -283,10 +288,6 @@ function buildApp(env: Env): Hono<HonoEnv> {
   // token, optional HMAC; no JWT. Mounted with the other public webhook routes.
   app.route('/api/workflow-triggers', createWorkflowTriggerRoutes(db));
 
-  // Web Push: /public-key + /notify-deploy are public/secret-guarded; /subscribe
-  // applies authMiddleware per-route inside the router.
-  app.route('/api/push', createPushSubscriptionRoutes(db));
-
   // Anonymous landing-prompt handoff: POST / is public (pre-auth); /claim applies
   // web-auth per-route so it can associate the row to the now-known user.
   app.route('/api/pending-prompts', createPendingPromptRoutes(db));
@@ -339,7 +340,7 @@ function buildApp(env: Env): Hono<HonoEnv> {
   app.route('/api/specs',    createSpecRoutes(db));
   app.route('/api/workflows', createWorkflowRoutes(db));
   app.route('/api/workflow-definitions', createWorkflowDefinitionRoutes(db));
-  app.route('/api/approvals',       createApprovalRoutes(db));
+  app.route('/api/approvals',       createApprovalRoutes(db, runtimeService));
   app.route('/api/approval-rules',  createApprovalRuleRoutes(db));
   app.route('/api/telemetry',       createTelemetryRoutes(db));
   app.route('/api/qa',              createQaRoutes(db));

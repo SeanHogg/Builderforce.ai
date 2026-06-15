@@ -157,7 +157,11 @@ describe('payload parsers — malformed / wrong-type input is defended', () => {
     // attempt/maxAttempts of the wrong type fall back to their safe defaults.
     expect(
       parseRemediation(JSON.stringify({ remediation: { kind: 'build_failure', buildError: 'boom', attempt: '3', runUrl: 5 } })),
-    ).toEqual({ attempt: 1, maxAttempts: 2, buildError: 'boom', runUrl: null });
+    ).toEqual({ attempt: 1, maxAttempts: 2, buildError: 'boom', runUrl: null, phase: 'post_merge' });
+    // An explicit pre-merge phase is preserved (a PR-branch failure, not a deploy one).
+    expect(
+      parseRemediation(JSON.stringify({ remediation: { kind: 'build_failure', buildError: 'boom', phase: 'pre_merge' } })),
+    ).toEqual({ attempt: 1, maxAttempts: 2, buildError: 'boom', runUrl: null, phase: 'pre_merge' });
   });
 
   it('markReaperRequeued / wasReaperRequeued: a non-JSON payload resets to a clean flagged object', () => {

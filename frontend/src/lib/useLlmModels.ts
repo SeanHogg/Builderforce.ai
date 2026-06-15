@@ -15,9 +15,14 @@ import { llmApi } from './builderforceApi';
 export interface LlmModelLists {
   models: string[];
   codingModels: string[];
+  /** True when the tenant is on a paid plan (Pro/Teams) or has a premium override.
+   *  Drives whether the run-time model picker is offered: only paid plans may
+   *  choose the model (free plans run Builderforce's managed default). The server
+   *  enforces this independently in `pickCloudModel` — this is the UI gate. */
+  isPaid: boolean;
 }
 
-const EMPTY: LlmModelLists = { models: [], codingModels: [] };
+const EMPTY: LlmModelLists = { models: [], codingModels: [], isPaid: false };
 
 let cache: LlmModelLists | null = null;
 let inflight: Promise<LlmModelLists> | null = null;
@@ -28,7 +33,8 @@ function load(): Promise<LlmModelLists> {
     inflight = llmApi.models()
       .then((res) => {
         const models = 'data' in res ? res.data.map((m) => m.model) : res.models;
-        cache = { models: models ?? [], codingModels: res.codingModels ?? [] };
+        const isPaid = res.premium === true || res.effectivePlan !== 'free';
+        cache = { models: models ?? [], codingModels: res.codingModels ?? [], isPaid };
         return cache;
       })
       .catch(() => {

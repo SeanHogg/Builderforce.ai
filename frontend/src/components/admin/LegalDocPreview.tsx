@@ -1,7 +1,7 @@
 'use client';
 
 import { ChatMessageContent } from '@/components/ChatMessageContent';
-import { unwrapLegalMarkdown } from '@/lib/utils';
+import { unwrapMarkdownFence } from '@/lib/utils';
 
 export interface LegalDocPreviewProps {
   /** Document body (Markdown). */
@@ -20,6 +20,6 @@ export interface LegalDocPreviewProps {
  * concern; the rendered output is always identical.
  */
 export function LegalDocPreview({ content, emptyText = '_Nothing to preview yet._' }: LegalDocPreviewProps) {
-  const clean = content?.trim() ? unwrapLegalMarkdown(content) : emptyText;
+  const clean = content?.trim() ? unwrapMarkdownFence(content) : emptyText;
   return <ChatMessageContent content={clean} />;
 }

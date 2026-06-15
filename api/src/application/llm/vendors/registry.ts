@@ -6,6 +6,7 @@
  * catalog/tier/cascade behavior is derived automatically from the module.
  */
 
+import { anthropicModule } from './anthropic';
 import { cerebrasModule } from './cerebras';
 import { cloudflareModule } from './cloudflare';
 import { googleAiModule } from './googleai';
@@ -39,7 +40,10 @@ import {
  *   - `getCrossVendorFallbacks(...)` → the cross-vendor tail of each chain
  * Drives both Pool composition and Pool ordering with one source of truth.
  */
-const MODULES: ReadonlyArray<VendorModule> = [cerebrasModule, ollamaModule, nvidiaModule, cloudflareModule, openRouterModule, googleAiModule];
+// `anthropicModule` sits last: it is `autoRoute: false` (never part of the FREE/PRO
+// rotation), reachable only via the curated coding fallback chain or an explicit
+// pin, so its position here does not affect auto-pool ordering.
+const MODULES: ReadonlyArray<VendorModule> = [cerebrasModule, ollamaModule, nvidiaModule, cloudflareModule, openRouterModule, googleAiModule, anthropicModule];
 
 const MODULES_BY_ID: Record<VendorId, VendorModule> = {
   openrouter: openRouterModule,
@@ -48,6 +52,7 @@ const MODULES_BY_ID: Record<VendorId, VendorModule> = {
   ollama:     ollamaModule,
   googleai:   googleAiModule,
   cloudflare: cloudflareModule,
+  anthropic:  anthropicModule,
 };
 
 /** Used when a model id isn't in any vendor's catalog (treats as OpenRouter). */
@@ -142,6 +147,28 @@ export function getAllVendorIds(): VendorId[] {
 export function modelsByTier(...tiers: AiModelTier[]): string[] {
   const set = new Set(tiers);
   return MODULES.flatMap((mod) =>
+    mod.catalog.filter((m) => set.has(m.tier)).map((m) => m.id),
+  );
+}
+
+/** Whether a vendor's models may be auto-selected into a failover pool. A vendor
+ *  is auto-routable unless it opts out (`autoRoute: false`) — e.g. Ollama, which
+ *  must only run when a caller explicitly pins `ollama/<id>`. */
+export function vendorAutoRoutes(vendor: VendorId): boolean {
+  return MODULES_BY_ID[vendor].autoRoute !== false;
+}
+
+/**
+ * Like {@link modelsByTier}, but EXCLUDES vendors that opt out of auto-routing
+ * (`autoRoute: false`). This is the composer for the gateway's auto-selected
+ * FREE/PRO pools: a non-auto-route vendor (Ollama) stays in the catalog — and so
+ * remains reachable via an explicit `ollama/<id>` pin — but can never be the model
+ * a cascade silently falls onto. Keeping this separate from `modelsByTier` leaves
+ * the "all models of a tier" query (catalog/admin) honest.
+ */
+export function autoRoutableModelsByTier(...tiers: AiModelTier[]): string[] {
+  const set = new Set(tiers);
+  return MODULES.filter((mod) => mod.autoRoute !== false).flatMap((mod) =>
     mod.catalog.filter((m) => set.has(m.tier)).map((m) => m.id),
   );
 }
