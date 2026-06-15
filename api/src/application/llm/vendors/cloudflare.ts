@@ -32,16 +32,27 @@ import {
   type VendorModule,
 } from './types';
 
-// Tier note: these are paid Workers AI checkpoints joining the PRO paid pool
-// (autoRoutableModelsByTier pulls STANDARD/PREMIUM/ULTRA). `qwen3-30b-a3b` is a
-// capable agentic coder and IS tool-capable — the request/response tool translation
-// below (OpenAI tools → Cloudflare `tools`, Cloudflare `result.tool_calls` → OpenAI
-// `tool_calls`) lets it drive the multi-turn coding loop, so it also sits in
-// CODING_MODEL_POOL. `gemma-4-26b` is a general chat model (no `tools` capability).
+// Paid Workers AI checkpoints joining the PRO paid pool (autoRoutableModelsByTier
+// pulls STANDARD/PREMIUM/ULTRA), LED by Cloudflare (PAID_LEAD_VENDOR) so the free
+// daily neuron allowance is drained before any metered vendor. Every `tools`-capable
+// entry is one the OpenAI↔Cloudflare tool translation below (OpenAI `tools` →
+// Cloudflare `tools`, Cloudflare `result.tool_calls` → OpenAI `tool_calls`) lets
+// drive the multi-turn coding loop, so the coders ALSO sit in CODING_MODEL_POOL.
+//
+// EVERY id + `tools` capability here is verified against the LIVE Cloudflare catalog
+// (`wrangler ai models --json` → `function_calling: true`), 2026-06-15 — a stale id
+// 404s on every call and silently floors coding overflow onto the metered Anthropic
+// key (the bug that drained the $10 cap: the old `@cf/meta/llama-3-8b-instruct` was
+// retired). Keep in sync with the live catalog, not from memory.
 const CATALOG: ReadonlyArray<VendorModelEntry> = [
-  { id: '@cf/meta/llama-3-8b-instruct', tier: 'STANDARD', label: 'Llama 3 8B (Cloudflare)',       brand: 'Meta' },
-  { id: '@cf/google/gemma-4-26b-a4b-it', tier: 'STANDARD', label: 'Gemma 4 26B A4B (Cloudflare)', brand: 'Google' },
-  { id: '@cf/qwen/qwen3-30b-a3b-fp8',    tier: 'STANDARD', label: 'Qwen3 30B A3B (Cloudflare)',   brand: 'Qwen', capabilities: ['tools', 'structured_output'] },
+  // General utility (function-calling capable, but not curated coders).
+  { id: '@cf/meta/llama-3.1-8b-instruct-fp8', tier: 'STANDARD', label: 'Llama 3.1 8B FP8 (Cloudflare)',  brand: 'Meta',   capabilities: ['tools'] },
+  { id: '@cf/google/gemma-4-26b-a4b-it',      tier: 'STANDARD', label: 'Gemma 4 26B A4B (Cloudflare)',   brand: 'Google', capabilities: ['tools'] },
+  // Agentic coders — tool-capable, drive the multi-turn coding loop on free neurons.
+  { id: '@cf/qwen/qwen3-30b-a3b-fp8',               tier: 'STANDARD', label: 'Qwen3 30B A3B (Cloudflare)',         brand: 'Qwen',        capabilities: ['tools', 'structured_output'] },
+  { id: '@cf/zai-org/glm-4.7-flash',                tier: 'STANDARD', label: 'GLM 4.7 Flash (Cloudflare)',         brand: 'Z.AI',        capabilities: ['tools', 'structured_output'] },
+  { id: '@cf/meta/llama-3.3-70b-instruct-fp8-fast', tier: 'STANDARD', label: 'Llama 3.3 70B FP8 Fast (Cloudflare)', brand: 'Meta',        capabilities: ['tools', 'structured_output'] },
+  { id: '@cf/moonshotai/kimi-k2.7-code',            tier: 'PREMIUM',  label: 'Kimi K2.7 Code (Cloudflare)',        brand: 'Moonshot AI', capabilities: ['tools', 'structured_output'] },
 ];
 
 const CATALOG_BY_ID = new Map(CATALOG.map((m) => [m.id, m]));

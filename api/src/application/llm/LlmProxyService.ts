@@ -131,13 +131,22 @@ export const PRO_MODEL_POOL: readonly string[] = [...FREE_MODEL_POOL, ...PRO_PAI
 // NIM/Cerebras ids that 404 there. Keep this in sync with the live API, not from
 // memory (`LlmProxyService.codingPool.test` asserts every id is in the catalog).
 export const CODING_MODEL_POOL: readonly string[] = [
-  // PAID — strongest agentic coders, reachable by Pro tenants on the credited key.
+  // PAID, CLOUDFLARE FIRST — every `@cf/*` coder is FREE up to the daily neuron
+  // allowance (Cloudflare = PAID_LEAD_VENDOR), so a paid coding run spends that
+  // free allowance BEFORE any metered coder. This is also why Anthropic is no
+  // longer the lead: the metered coders (OpenRouter-routed Anthropic/OpenAI/etc.)
+  // follow the free Cloudflare neurons. All `@cf/*` ids are verified function-
+  // calling-capable against the live Cloudflare catalog (see cloudflare.ts).
+  '@cf/qwen/qwen3-30b-a3b-fp8',                // Qwen3 30B coder (Cloudflare, free neurons) — Pro coding default
+  '@cf/zai-org/glm-4.7-flash',                 // GLM 4.7 agentic coder (Cloudflare, free neurons)
+  '@cf/meta/llama-3.3-70b-instruct-fp8-fast',  // fast strong general+tools (Cloudflare, free neurons)
+  '@cf/moonshotai/kimi-k2.7-code',             // frontier 1T code model (Cloudflare, premium neurons)
+  // PAID, METERED — strong agentic coders reachable by Pro tenants on the credited key.
   'anthropic/claude-sonnet-4.6',
   'openai/gpt-4.1',
   'xiaomi/mimo-v2.5',                          // Programming #1 on OpenRouter, $0.14/$0.28
   'qwen/qwen3.7-plus',                         // agentic coder + vision, $0.40/$1.60
   'deepseek/deepseek-v4-flash',               // fast cheap coder, $0.10/$0.20
-  '@cf/qwen/qwen3-30b-a3b-fp8',                // Qwen3 30B coder on Cloudflare Workers AI (paid, tool-capable)
   // FREE — strong agentic coders on the OpenRouter free key (the cloud default).
   // Standardized lead: MiniMax M2.7 is the top free SWE-bench agentic coder, so it
   // sits first here and becomes CODING_DEFAULT_MODEL (the first FREE pool entry).
@@ -326,7 +335,12 @@ export const CHEAPEST_PAID_CODER = 'deepseek/deepseek-v4-flash'; // $0.10/$0.20
 export const CODING_PREMIUM_FALLBACK_MODELS: readonly string[] = leadPoolWithVendor([
   CHEAPEST_PAID_CODER,           // $0.10/$0.20 — cheapest reliable paid coder (OpenRouter)
   'xiaomi/mimo-v2.5',            // $0.14/$0.28 — OpenRouter Programming #1
-  '@cf/qwen/qwen3-30b-a3b-fp8',  // Cloudflare Workers AI coder — free up to the daily neuron allowance
+  // Cloudflare Workers AI coders — FREE up to the daily neuron allowance; `leadPoolWithVendor`
+  // floats all of these to the head so the free neurons are spent before any metered coder.
+  '@cf/qwen/qwen3-30b-a3b-fp8',
+  '@cf/zai-org/glm-4.7-flash',
+  '@cf/meta/llama-3.3-70b-instruct-fp8-fast',
+  '@cf/moonshotai/kimi-k2.7-code',
   'anthropic/claude-sonnet-4.6', // strongest agentic coder (via OpenRouter)
   'claude-sonnet-4-6',           // direct-Anthropic last-resort floor (CLAUDE_API_KEY)
   'claude-opus-4-8',
