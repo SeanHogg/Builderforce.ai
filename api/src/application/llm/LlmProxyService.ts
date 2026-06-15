@@ -254,6 +254,13 @@ export const FREE_VENDOR_CALL_TIMEOUT_MS = 15_000;
 export const GUARANTEED_BACKSTOP_MODEL = 'google/gemini-2.5-flash-lite';
 
 /**
+ * Cheapest reliable paid coder — the head of the coding reliability floor and the
+ * ONLY coding model treated as paid-overflow by id (see `PAID_OVERFLOW_MODELS`).
+ * A `CODING_MODEL_POOL` member reachable on the credited OpenRouter key.
+ */
+export const CHEAPEST_PAID_CODER = 'deepseek/deepseek-v4-flash'; // $0.10/$0.20
+
+/**
  * Coding-capable premium fallback chain — the coding analogue of
  * `PREMIUM_FALLBACK_MODELS`. A coding run must NEVER fall through to a general
  * non-coder (the gemini-flash family loops on search and ships no edits — see
@@ -265,8 +272,8 @@ export const GUARANTEED_BACKSTOP_MODEL = 'google/gemini-2.5-flash-lite';
  * `LlmProxyService.codingPool.test` trips if a rename drifts this off catalog.
  */
 export const CODING_PREMIUM_FALLBACK_MODELS: readonly string[] = [
-  'deepseek/deepseek-v4-flash', // $0.10/$0.20 — cheapest reliable paid coder
-  'xiaomi/mimo-v2.5',           // $0.14/$0.28 — OpenRouter Programming #1
+  CHEAPEST_PAID_CODER,           // $0.10/$0.20 — cheapest reliable paid coder
+  'xiaomi/mimo-v2.5',            // $0.14/$0.28 — OpenRouter Programming #1
   'anthropic/claude-sonnet-4.6', // strongest agentic coder — last, priciest
 ];
 
@@ -303,18 +310,25 @@ export const PREMIUM_FALLBACK_MODELS: readonly string[] = [
 
 /**
  * Paid-overflow model set — the models Builderforce funds on its OWN keys when a
- * tenant's primary cascade is exhausted: the premium fallback chain plus every
- * reliability-floor backstop (general + coding). A usage row resolved to one of
- * these is "overflow spend" — metered against a per-tenant daily $ cap so a Free
- * tenant in a tight retry loop can't run up arbitrary spend on our keys (the cap
- * is enforced in the gateway route; see `paid_overflow_daily_cap`). None of these
- * ids appear in any plan's PRIMARY pool (FREE/PRO), so resolving to one
- * unambiguously means the request fell through to the funded overflow path.
+ * tenant's primary cascade is exhausted: the premium fallback chain, the general
+ * reliability backstop, and the cheap coding floor (`CHEAPEST_PAID_CODER`). A
+ * usage row resolved to one of these is "overflow spend" — metered against a
+ * per-tenant daily $ cap so a Free tenant in a tight retry loop can't run up
+ * arbitrary spend on our keys (the cap is enforced in the gateway route; see
+ * `paid_overflow_daily_cap`).
+ *
+ * By-id detection is deliberately conservative here: the *stronger* coding-floor
+ * coders (`xiaomi/mimo-v2.5`, `anthropic/claude-sonnet-4.6`) are Pro plan-pool
+ * models, so flagging them by id would mis-meter a Pro tenant's legitimate plan
+ * usage as overflow. Their genuine overflow case — resolving via the funded
+ * coding *backstop* — is metered directly by `complete()` (which sets
+ * `paidOverflow = true` on any backstop hit), not by this set. Every id that IS
+ * in this set resolves only via the funded path (the gemini fallbacks live in no
+ * plan pool; `CHEAPEST_PAID_CODER` is the historically-funded coding floor).
  */
 export const PAID_OVERFLOW_MODELS: ReadonlySet<string> = new Set<string>([
   ...PREMIUM_FALLBACK_MODELS,
-  ...CODING_PREMIUM_FALLBACK_MODELS,
-  ...CODING_BACKSTOP_MODELS,
+  CHEAPEST_PAID_CODER,
   GUARANTEED_BACKSTOP_MODEL,
 ]);
 
