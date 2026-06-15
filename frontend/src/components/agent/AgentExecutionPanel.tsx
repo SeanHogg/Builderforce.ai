@@ -20,7 +20,7 @@ import {
 import { unifiedDiff } from '@/lib/unifiedDiff';
 import { RunAgentControl } from '../task/RunAgentControl';
 import { ApprovalResolveControl } from '../humanRequests/ApprovalResolveControl';
-import { ChatMessageContent } from '../ChatMessageContent';
+import { ChatMessageBubble } from '../ChatMessageBubble';
 import { EXECUTION_STATUS_COLOR as STATUS_COLOR } from '../board/AgentChip';
 import { ExecutionChip } from './ExecutionChip';
 import { useExecutionStream, type ExecutionFileChange } from './useExecutionStream';
@@ -731,9 +731,12 @@ export function AgentExecutionPanel({ task, agentHosts, onTaskChanged }: { task:
 
           {subTab === 'output' && (
             <>
+              {/* Brain-style conversation: each turn is labeled with WHO is talking
+                  — the agent that ran this execution vs. the user's steers — and the
+                  user's directions interleave between the agent's narration. */}
               <div
                 ref={outputRef}
-                style={{ height: 360, overflow: 'auto', padding: '4px 12px', background: 'var(--bg-base)', border: '1px solid var(--border-subtle)', borderRadius: 8 }}
+                style={{ height: 360, overflow: 'auto', padding: 12, background: 'var(--bg-base)', border: '1px solid var(--border-subtle)', borderRadius: 8, display: 'flex', flexDirection: 'column', gap: 12 }}
               >
                 {thread.length === 0 ? (
                   <div style={{ fontSize: 13, color: 'var(--text-muted)', padding: 8 }}>
@@ -741,16 +744,13 @@ export function AgentExecutionPanel({ task, agentHosts, onTaskChanged }: { task:
                   </div>
                 ) : (
                   thread.map((m, i) => (
-                    m.role === 'assistant' ? (
-                      <div key={i} style={{ fontSize: 13, lineHeight: 1.6, color: 'var(--text-primary)' }}>
-                        <ChatMessageContent content={m.text} />
-                      </div>
-                    ) : (
-                      <div key={i} style={{ margin: '8px 0', padding: '8px 12px', background: 'var(--surface-coral-soft)', borderRadius: 8, fontSize: 13, color: 'var(--text-primary)' }}>
-                        <span style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', color: 'var(--coral-bright)', marginRight: 6 }}>You</span>
-                        {m.text}
-                      </div>
-                    )
+                    <ChatMessageBubble
+                      key={i}
+                      role={m.role}
+                      content={m.text}
+                      label={m.role === 'assistant' ? (runAgentName || 'Agent') : 'You'}
+                      avatar={m.role === 'assistant' ? (runAgentName ? runAgentName.charAt(0).toUpperCase() : '🤖') : undefined}
+                    />
                   ))
                 )}
               </div>
