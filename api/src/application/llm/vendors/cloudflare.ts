@@ -20,6 +20,7 @@ import {
   fetchWithVendorTimeout,
   VendorRetryableError,
   VendorFatalError,
+  throwClassified4xx,
   pickUsage,
   CASCADE_STATUSES,
   AUTH_STATUSES,
@@ -199,7 +200,8 @@ export const cloudflareModule: VendorModule = {
       );
       throw new VendorRetryableError('cloudflare', params.model, resp.status, `auth ${resp.status}: ${errText.slice(0, 200)}`);
     }
-    throw new VendorFatalError('cloudflare', resp.status, errText);
+    // 400/422 → fatal, UNLESS the body is a capacity/billing limit (failover-able).
+    throwClassified4xx('cloudflare', params.model, resp.status, errText);
   },
   // No `callStream` — Cloudflare's `/ai/run/` endpoint doesn't expose SSE
   // streaming on every model. Skip streaming dispatch; `dispatchVendorStream`
