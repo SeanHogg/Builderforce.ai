@@ -35,9 +35,9 @@ export interface TeamMemberAvatarFilterProps {
   /** Cloud agent targets assignable on this board. */
   cloudAgents: CloudAgentTarget[];
   /** Currently selected assignee keys (h:id / c:ref / u:userId). Empty = show all. */
-  selectedKeys: string[];
+  selectedAssignees: string[];
   /** Called when the selection changes. Passes the full set of selected keys. */
-  onChange: (keys: string[]) => void;
+  onSelectAssignees: (keys: string[]) => void;
   /** Optional label override. Defaults to "All". */
   allLabel?: string;
   /** Whether the "All" (clear) option is disabled. Default false. */
@@ -58,8 +58,8 @@ export function TeamMemberAvatarFilter({
   members,
   agentHosts,
   cloudAgents,
-  selectedKeys,
-  onChange,
+  selectedAssignees,
+  onSelectAssignees,
   allLabel = 'All',
   disableAll = false,
 }: TeamMemberAvatarFilterProps) {
@@ -114,20 +114,20 @@ export function TeamMemberAvatarFilter({
     return result;
   }, [tasks, members, agentHosts, cloudAgents]);
 
-  const allSelected = selectedKeys.length === 0;
-  const hasSelection = selectedKeys.length > 0;
+  const allSelected = selectedAssignees.length === 0;
+  const hasSelection = selectedAssignees.length > 0;
 
   const handleToggle = (e: MouseEvent, key: string) => {
     e.stopPropagation();
-    const next = selectedKeys.includes(key)
-      ? selectedKeys.filter((k) => k !== key)
-      : [...selectedKeys, key];
-    onChange(next);
+    const next = selectedAssignees.includes(key)
+      ? selectedAssignees.filter((k) => k !== key)
+      : [...selectedAssignees, key];
+    onSelectAssignees(next);
   };
 
   const handleSelectAll = (e: MouseEvent) => {
     e.stopPropagation();
-    onChange([]);
+    onSelectAssignees([]);
   };
 
   // No assignees to filter by → hide the entire filter row
@@ -177,7 +177,7 @@ export function TeamMemberAvatarFilter({
       {hasSelection && assignees.length > 0 && (
         <button
           type="button"
-          onClick={() => onChange([])}
+          onClick={() => onSelectAssignees([])}
           aria-label="Clear selected assignees"
           title="Clear selected assignees"
           style={{
@@ -220,7 +220,7 @@ export function TeamMemberAvatarFilter({
         }}
       >
         {assignees.map((a) => {
-          const active = selectedKeys.includes(a.key);
+          const active = selectedAssignees.includes(a.key);
           return (
             <Avatar
               key={a.key}
