@@ -325,7 +325,7 @@ export function buildGitCommand(action: GitAction, opts?: { path?: string; baseB
         resolveBase,
         'git config user.email >/dev/null 2>&1 || git config user.email "agent@builderforce.ai"',
         'git config user.name  >/dev/null 2>&1 || git config user.name  "Builderforce Agent"',
-        'git fetch origin "$BASE" --depth=100',
+        'git fetch origin "$BASE"',
         'git merge --no-edit "origin/$BASE" || { git merge --abort; echo MERGE_CONFLICT; exit 3; }',
         'echo "Synced with origin/$BASE"',
       ].join("\n");
