@@ -4,6 +4,7 @@ import {
   llmProxyForPlan,
   type ProxyEnv,
 } from './LlmProxyService';
+import { vendorForModel } from './vendors';
 import { _resetMemoryCooldowns } from '../../infrastructure/auth/cooldownStore';
 
 // ---------------------------------------------------------------------------
@@ -21,7 +22,6 @@ import { _resetMemoryCooldowns } from '../../infrastructure/auth/cooldownStore';
 const OPENROUTER_ENDPOINT = 'https://openrouter.ai/api/v1/chat/completions';
 const ANTHROPIC_ENDPOINT = 'https://api.anthropic.com/v1/messages';
 const CF_ACCOUNT = 'acct-test';
-const CF_CODER = '@cf/qwen/qwen3-30b-a3b-fp8';
 const CF_ENDPOINT_PREFIX = `https://api.cloudflare.com/client/v4/accounts/${CF_ACCOUNT}/ai/run/`;
 
 interface Counters {
@@ -87,7 +87,9 @@ describe('Cloudflare absorbs coding overflow before the metered Anthropic floor'
     });
 
     expect(result.response.status).toBeLessThan(400);
-    expect(result.resolvedModel).toBe(CF_CODER);
+    // Resolves on a Cloudflare coder (the big-window CF coder leads the fallback) —
+    // model-agnostic so a reorder of the CF coding set doesn't break this.
+    expect(vendorForModel(result.resolvedModel)).toBe('cloudflare');
     expect(counters.cloudflare).toBeGreaterThan(0);
     // The metered key must NOT have been billed — Cloudflare led the fallback.
     expect(counters.anthropic).toBe(0);

@@ -137,10 +137,16 @@ export const CODING_MODEL_POOL: readonly string[] = [
   // longer the lead: the metered coders (OpenRouter-routed Anthropic/OpenAI/etc.)
   // follow the free Cloudflare neurons. All `@cf/*` ids are verified function-
   // calling-capable against the live Cloudflare catalog (see cloudflare.ts).
-  '@cf/qwen/qwen3-30b-a3b-fp8',                // Qwen3 30B coder (Cloudflare, free neurons) — Pro coding default
-  '@cf/zai-org/glm-4.7-flash',                 // GLM 4.7 agentic coder (Cloudflare, free neurons)
-  '@cf/meta/llama-3.3-70b-instruct-fp8-fast',  // fast strong general+tools (Cloudflare, free neurons)
-  '@cf/moonshotai/kimi-k2.7-code',             // frontier 1T code model (Cloudflare, premium neurons)
+  //
+  // Ordered BIG-CONTEXT-FIRST, not just by quality: a coding context routinely
+  // exceeds a small window, so a small-window model leading the pool 413s on the
+  // first turn (the 97K-into-32K bug). glm-4.7-flash (128K) leads as the cost-
+  // effective big-window coder; kimi (256K) handles the largest contexts; the 32K
+  // qwen3-30b is LAST (a 413 there cascades up, see CASCADE_STATUSES).
+  '@cf/zai-org/glm-4.7-flash',                 // 128K ctx, STANDARD — big-window coder (Cloudflare) — Pro coding default
+  '@cf/moonshotai/kimi-k2.7-code',             // 256K ctx, PREMIUM — frontier code model for huge contexts (Cloudflare)
+  '@cf/qwen/qwen3-30b-a3b-fp8',                // 32K ctx, STANDARD — small/fast; great first pass for SMALL tasks
+  '@cf/meta/llama-3.3-70b-instruct-fp8-fast',  // 24K ctx, STANDARD — small/fast; great first pass for SMALL tasks
   // PAID, METERED — strong agentic coders reachable by Pro tenants on the credited key.
   'anthropic/claude-sonnet-4.6',
   'openai/gpt-4.1',
@@ -337,10 +343,11 @@ export const CODING_PREMIUM_FALLBACK_MODELS: readonly string[] = leadPoolWithVen
   'xiaomi/mimo-v2.5',            // $0.14/$0.28 — OpenRouter Programming #1
   // Cloudflare Workers AI coders — FREE up to the daily neuron allowance; `leadPoolWithVendor`
   // floats all of these to the head so the free neurons are spent before any metered coder.
-  '@cf/qwen/qwen3-30b-a3b-fp8',
-  '@cf/zai-org/glm-4.7-flash',
-  '@cf/meta/llama-3.3-70b-instruct-fp8-fast',
-  '@cf/moonshotai/kimi-k2.7-code',
+  // Big-window first (a coding context can exceed a small window → 413 → cascade).
+  '@cf/zai-org/glm-4.7-flash',                 // 128K ctx
+  '@cf/moonshotai/kimi-k2.7-code',             // 256K ctx
+  '@cf/qwen/qwen3-30b-a3b-fp8',                // 32K ctx
+  '@cf/meta/llama-3.3-70b-instruct-fp8-fast',  // 24K ctx
   'anthropic/claude-sonnet-4.6', // strongest agentic coder (via OpenRouter)
   'claude-sonnet-4-6',           // direct-Anthropic last-resort floor (CLAUDE_API_KEY)
   'claude-opus-4-8',
@@ -1622,6 +1629,45 @@ export interface PickCloudModelOptions {
   /** Client SSM recall nudge (interactive runs only; absent/ignored headless). */
   bias?: Record<string, number>;
   minSamples?: number;
+  /** Estimated tokens the first turn will send (prompt + tools). When set, models
+   *  whose catalog `contextWindow` can't hold it are dropped from the FIRST-PASS seed
+   *  (they remain in the cascade as failover) so a small-window model isn't SEEDED
+   *  into a context it would 413 on — the 97K-into-32K bug. Composes with the SSM
+   *  learned ranking: fit FIRST, then rank the fitting set. */
+  estimatedTokens?: number;
+}
+
+/** Headroom over the prompt estimate to reserve for the model's OUTPUT tokens +
+ *  estimate error, when checking whether a context window fits. */
+const CONTEXT_FIT_HEADROOM = 1.25;
+
+/**
+ * Rough token estimate for a chat request (~4 chars/token over the serialized
+ * messages + tools). For MODEL-FIT selection only, NOT billing — a cheap heuristic
+ * that errs slightly high (JSON punctuation), which is the safe direction for a fit
+ * check. Pure + unit-testable.
+ */
+export function estimateRequestTokens(messages: unknown, tools?: unknown): number {
+  const chars = JSON.stringify(messages ?? '').length + (tools != null ? JSON.stringify(tools).length : 0);
+  return Math.ceil(chars / 4);
+}
+
+/**
+ * Drop models whose catalog `contextWindow` can't hold `estimatedTokens` (+ output
+ * headroom) — the context-aware FIRST-PASS filter. Unknown-window models pass
+ * (assumed large enough, e.g. OpenRouter ids carry no window in our catalog). NEVER
+ * returns empty: if NOTHING fits (the request is larger than every window) the full
+ * set is returned so the normal cascade + the 413 failover handle the oversized
+ * request honestly instead of this silently picking nothing. Pure + unit-testable.
+ */
+export function modelsFittingContext(models: readonly string[], estimatedTokens?: number): string[] {
+  if (!estimatedTokens || estimatedTokens <= 0) return [...models];
+  const need = Math.ceil(estimatedTokens * CONTEXT_FIT_HEADROOM);
+  const fit = models.filter((m) => {
+    const cw = catalogEntry(m)?.contextWindow;
+    return cw == null || cw >= need;
+  });
+  return fit.length > 0 ? fit : [...models];
 }
 
 export interface PickCloudModelResult {
@@ -1653,9 +1699,13 @@ export function pickCloudModel(
   // an explicit pick was already ignored above, and the reorder stays WITHIN the
   // plan's reachable coding pool (free tenants only ever reorder free coding models).
   const reachable = codingModelsForPlan(effectivePlan, premiumOverride);
+  // Context-aware first pass: keep only models whose window fits this request, THEN
+  // let the SSM learned routing rank the survivors. Small-window models stay in the
+  // pool (great first pass for small tasks) but aren't seeded into an oversized one.
+  const fitting = modelsFittingContext(reachable, opts?.estimatedTokens);
   const bias = opts?.bias && Object.keys(opts.bias).length > 0 ? opts.bias : undefined;
-  const ranked = rankModelsForAction(reachable, opts?.actionStats, { minSamples: opts?.minSamples, bias });
-  const seed = ranked[0] ?? CODING_DEFAULT_MODEL;
+  const ranked = rankModelsForAction(fitting, opts?.actionStats, { minSamples: opts?.minSamples, bias });
+  const seed = ranked[0] ?? reachable[0] ?? CODING_DEFAULT_MODEL;
   const seedSamples = opts?.actionStats?.find((s) => s.model === seed)?.n ?? 0;
   return { model: seed, strict: false, ranked, seedSamples, biasApplied: !!bias };
 }

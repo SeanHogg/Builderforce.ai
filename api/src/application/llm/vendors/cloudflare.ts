@@ -49,10 +49,16 @@ const CATALOG: ReadonlyArray<VendorModelEntry> = [
   { id: '@cf/meta/llama-3.1-8b-instruct-fp8', tier: 'STANDARD', label: 'Llama 3.1 8B FP8 (Cloudflare)',  brand: 'Meta',   capabilities: ['tools'] },
   { id: '@cf/google/gemma-4-26b-a4b-it',      tier: 'STANDARD', label: 'Gemma 4 26B A4B (Cloudflare)',   brand: 'Google', capabilities: ['tools'] },
   // Agentic coders — tool-capable, drive the multi-turn coding loop on free neurons.
-  { id: '@cf/qwen/qwen3-30b-a3b-fp8',               tier: 'STANDARD', label: 'Qwen3 30B A3B (Cloudflare)',         brand: 'Qwen',        capabilities: ['tools', 'structured_output'] },
-  { id: '@cf/zai-org/glm-4.7-flash',                tier: 'STANDARD', label: 'GLM 4.7 Flash (Cloudflare)',         brand: 'Z.AI',        capabilities: ['tools', 'structured_output'] },
-  { id: '@cf/meta/llama-3.3-70b-instruct-fp8-fast', tier: 'STANDARD', label: 'Llama 3.3 70B FP8 Fast (Cloudflare)', brand: 'Meta',        capabilities: ['tools', 'structured_output'] },
-  { id: '@cf/moonshotai/kimi-k2.7-code',            tier: 'PREMIUM',  label: 'Kimi K2.7 Code (Cloudflare)',        brand: 'Moonshot AI', capabilities: ['tools', 'structured_output'] },
+  // `contextWindow` is the LIVE per-model limit (verified via `wrangler ai models`).
+  // ALL are kept — the small-window ones are great first-pass picks for small tasks
+  // (fast, cheap neurons); the model-selection layer is context-aware (see
+  // `pickCloudModel` + SSM learned routing) so a small-window model isn't SEEDED into
+  // a context it can't hold (the 97K-into-32K 413 bug), and a 413 still cascades up
+  // to a bigger window (see CASCADE_STATUSES) as the safety net.
+  { id: '@cf/zai-org/glm-4.7-flash',                tier: 'STANDARD', label: 'GLM 4.7 Flash (Cloudflare)',         brand: 'Z.AI',        contextWindow: 131072, capabilities: ['tools', 'structured_output'] },
+  { id: '@cf/moonshotai/kimi-k2.7-code',            tier: 'PREMIUM',  label: 'Kimi K2.7 Code (Cloudflare)',        brand: 'Moonshot AI', contextWindow: 262144, capabilities: ['tools', 'structured_output'] },
+  { id: '@cf/qwen/qwen3-30b-a3b-fp8',               tier: 'STANDARD', label: 'Qwen3 30B A3B (Cloudflare)',         brand: 'Qwen',        contextWindow: 32768,  capabilities: ['tools', 'structured_output'] },
+  { id: '@cf/meta/llama-3.3-70b-instruct-fp8-fast', tier: 'STANDARD', label: 'Llama 3.3 70B FP8 Fast (Cloudflare)', brand: 'Meta',        contextWindow: 24000,  capabilities: ['tools', 'structured_output'] },
 ];
 
 const CATALOG_BY_ID = new Map(CATALOG.map((m) => [m.id, m]));

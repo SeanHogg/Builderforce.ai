@@ -120,6 +120,11 @@ export interface VendorModelEntry {
   /** Optional shape capabilities for capability-aware routing. Absent = unknown
    *  (the legacy literal-id sets still apply for OpenRouter models). */
   capabilities?: AiCapability[];
+  /** Optional max context window (tokens). Absent = unknown/large. Small-window
+   *  models (e.g. some Cloudflare checkpoints at 24K-32K) must NOT lead a coding
+   *  pool — a coding context routinely exceeds that and the model 413s; ordering by
+   *  this keeps big-window coders first, and a 413 cascades (see CASCADE_STATUSES). */
+  contextWindow?: number;
 }
 
 export interface VendorModule {
@@ -312,9 +317,14 @@ export function isSubrequestCapMessage(msg: string): boolean {
   return msg.includes(SUBREQUEST_CAP_MARKER);
 }
 
-/** Statuses that trigger cascade to the next model. */
+/** Statuses that trigger cascade to the next model.
+ *  413 (payload/context too large) is here so a model whose context window the
+ *  request exceeds (e.g. a 97K coding context hitting a 32K Cloudflare model →
+ *  "exceeded this model context window limit") FAILS OVER to a bigger-window model
+ *  instead of hard-failing the run. The pool is ordered big-window-first, so the
+ *  cascade lands on a model that fits. */
 export const CASCADE_STATUSES: ReadonlySet<number> = new Set<number>([
-  404, 408, 429, 500, 502, 503, 504,
+  404, 408, 413, 429, 500, 502, 503, 504,
 ]);
 
 export const AUTH_STATUSES: ReadonlySet<number> = new Set<number>([401, 403]);
