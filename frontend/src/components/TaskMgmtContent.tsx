@@ -963,8 +963,89 @@ export function TaskMgmtContent({
       )}
 
       {!compact && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-          {/* First row: avatar filter chips */}
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+          <input
+            type="text"
+            placeholder="Search…"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            style={{
+              maxWidth: 200,
+              height: 32,
+              padding: '4px 10px',
+              fontSize: 13,
+              border: '1px solid var(--border-subtle)',
+              borderRadius: 8,
+              background: 'var(--bg-deep)',
+              color: 'var(--text-primary)',
+            }}
+          />
+          <Select
+            value={filterStatus}
+            onChange={(e) => setFilterStatus(e.target.value)}
+            style={{
+              maxWidth: 160,
+              height: 32,
+              padding: '4px 10px',
+              fontSize: 13,
+              border: '1px solid var(--border-subtle)',
+              borderRadius: 8,
+              background: 'var(--bg-deep)',
+              color: 'var(--text-primary)',
+            }}
+          >
+            <option value="">All statuses</option>
+            {statusChoices.map((s) => (
+              <option key={s.value} value={s.value}>
+                {s.label}
+              </option>
+            ))}
+          </Select>
+          {!projectId && (
+            <Select
+              value={filterProject}
+              onChange={(e) => setFilterProject(e.target.value)}
+              style={{
+                maxWidth: 180,
+                height: 32,
+                padding: '4px 10px',
+                fontSize: 13,
+                border: '1px solid var(--border-subtle)',
+                borderRadius: 8,
+                background: 'var(--bg-deep)',
+                color: 'var(--text-primary)',
+              }}
+            >
+              <option value="">All projects</option>
+              {projects.map((p) => (
+                <option key={p.id} value={String(p.id)}>
+                  {p.name}
+                </option>
+              ))}
+            </Select>
+          )}
+          <Select
+            value={filterPriority}
+            onChange={(e) => setFilterPriority(e.target.value)}
+            style={{
+              maxWidth: 140,
+              height: 32,
+              padding: '4px 10px',
+              fontSize: 13,
+              border: '1px solid var(--border-subtle)',
+              borderRadius: 8,
+              background: 'var(--bg-deep)',
+              color: 'var(--text-primary)',
+            }}
+          >
+            <option value="">All priorities</option>
+            {PRIORITIES.map((p) => (
+              <option key={p} value={p}>
+                {p}
+              </option>
+            ))}
+          </Select>
+          {/* Avatar filter: adjacent to the priorities dropdown on the same row */}
           <TeamMemberAvatarFilter
             tasks={tasks}
             agentHosts={agentHostsList}
@@ -973,90 +1054,6 @@ export function TaskMgmtContent({
             selectedAssignees={filterAssignees}
             onSelectAssignees={setFilterAssignees}
           />
-          {/* Second row: existing search, status, project, priority filters */}
-          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-            <input
-              type="text"
-              placeholder="Search…"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              style={{
-                maxWidth: 200,
-                height: 32,
-                padding: '4px 10px',
-                fontSize: 13,
-                border: '1px solid var(--border-subtle)',
-                borderRadius: 8,
-                background: 'var(--bg-deep)',
-                color: 'var(--text-primary)',
-              }}
-            />
-            <Select
-              value={filterStatus}
-              onChange={(e) => setFilterStatus(e.target.value)}
-              style={{
-                maxWidth: 160,
-                height: 32,
-                padding: '4px 10px',
-                fontSize: 13,
-                border: '1px solid var(--border-subtle)',
-                borderRadius: 8,
-                background: 'var(--bg-deep)',
-                color: 'var(--text-primary)',
-              }}
-            >
-              <option value="">All statuses</option>
-              {statusChoices.map((s) => (
-                <option key={s.value} value={s.value}>
-                  {s.label}
-                </option>
-              ))}
-            </Select>
-            {!projectId && (
-              <Select
-                value={filterProject}
-                onChange={(e) => setFilterProject(e.target.value)}
-                style={{
-                  maxWidth: 180,
-                  height: 32,
-                  padding: '4px 10px',
-                  fontSize: 13,
-                  border: '1px solid var(--border-subtle)',
-                  borderRadius: 8,
-                  background: 'var(--bg-deep)',
-                  color: 'var(--text-primary)',
-                }}
-              >
-                <option value="">All projects</option>
-                {projects.map((p) => (
-                  <option key={p.id} value={String(p.id)}>
-                    {p.name}
-                  </option>
-                ))}
-              </Select>
-            )}
-            <Select
-              value={filterPriority}
-              onChange={(e) => setFilterPriority(e.target.value)}
-              style={{
-                maxWidth: 140,
-                height: 32,
-                padding: '4px 10px',
-                fontSize: 13,
-                border: '1px solid var(--border-subtle)',
-                borderRadius: 8,
-                background: 'var(--bg-deep)',
-                color: 'var(--text-primary)',
-              }}
-            >
-              <option value="">All priorities</option>
-              {PRIORITIES.map((p) => (
-                <option key={p} value={p}>
-                  {p}
-                </option>
-              ))}
-            </Select>
-          </div>
         </div>
       )}
 
