@@ -43,7 +43,17 @@ export function PwaUpdateBanner() {
 
     let intervalId: ReturnType<typeof setInterval>;
     let registration: ServiceWorkerRegistration | null = null;
-    const checkForUpdate = () => { void registration?.update(); };
+    // registration.update() rejects on a transient sw.js fetch failure ("An
+    // unknown error occurred when fetching the script"). It fires on every poll
+    // AND on each visibilitychange/focus/online, so an unhandled rejection here
+    // spams the console with "Uncaught (in promise)" on every tab focus. Swallow
+    // it the same way we handle a failed initial register() — a missed update
+    // check is non-fatal; the next tick retries.
+    const checkForUpdate = () => {
+      registration?.update().catch((err) => {
+        console.warn('[SW] Update check failed (will retry):', err);
+      });
+    };
     const onVisible = () => { if (document.visibilityState === 'visible') checkForUpdate(); };
 
     navigator.serviceWorker

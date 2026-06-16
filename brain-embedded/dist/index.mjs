@@ -440,8 +440,26 @@ function useMcpExtensions(options) {
 }
 
 // src/BrainContext.tsx
-import { createContext as createContext3, useCallback as useCallback2, useContext as useContext3, useMemo as useMemo4, useState as useState3 } from "react";
+import { createContext as createContext3, useCallback as useCallback2, useContext as useContext3, useEffect as useEffect3, useMemo as useMemo4, useState as useState3 } from "react";
 import { jsx as jsx3 } from "react/jsx-runtime";
+var OPEN_KEY = "brain.drawer.open";
+var CHAT_KEY = "brain.drawer.activeChatId";
+function readSession(key) {
+  if (typeof window === "undefined") return null;
+  try {
+    return window.sessionStorage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+function writeSession(key, value) {
+  if (typeof window === "undefined") return;
+  try {
+    if (value == null) window.sessionStorage.removeItem(key);
+    else window.sessionStorage.setItem(key, value);
+  } catch {
+  }
+}
 var DEFAULT_CONTEXT = {
   projectId: null,
   viewingProjectId: null,
@@ -454,6 +472,20 @@ function BrainContextProvider({ children }) {
   const [open, setOpen] = useState3(false);
   const [pageContext, setPageContext] = useState3(DEFAULT_CONTEXT);
   const [activeChatId, setActiveChatId] = useState3(null);
+  useEffect3(() => {
+    if (readSession(OPEN_KEY) === "1") setOpen(true);
+    const savedChat = readSession(CHAT_KEY);
+    if (savedChat != null) {
+      const n = Number(savedChat);
+      if (Number.isFinite(n)) setActiveChatId(n);
+    }
+  }, []);
+  useEffect3(() => {
+    writeSession(OPEN_KEY, open ? "1" : "0");
+  }, [open]);
+  useEffect3(() => {
+    writeSession(CHAT_KEY, activeChatId == null ? null : String(activeChatId));
+  }, [activeChatId]);
   const setContext = useCallback2((patch) => {
     setPageContext((prev) => {
       const next = { ...prev, ...patch };
@@ -479,7 +511,7 @@ function useOptionalBrainContext() {
 }
 
 // src/useBrainChats.ts
-import { useCallback as useCallback3, useEffect as useEffect3, useMemo as useMemo5, useRef as useRef2, useState as useState4 } from "react";
+import { useCallback as useCallback3, useEffect as useEffect4, useMemo as useMemo5, useRef as useRef2, useState as useState4 } from "react";
 function useBrainChats(options = {}) {
   const { persistence } = useBrainConfig();
   const { filterProjectId, pinnedProjectId, activeChatId: controlledActiveId, onActiveChatChange } = options;
@@ -516,7 +548,7 @@ function useBrainChats(options = {}) {
       setLoading(false);
     }
   }, [persistence, filterProjectId, pinnedProjectId]);
-  useEffect3(() => {
+  useEffect4(() => {
     reload();
   }, [reload]);
   const select = useCallback3(async (id) => {
@@ -625,7 +657,7 @@ function useBrainChats(options = {}) {
 }
 
 // src/useBrainConversation.ts
-import { useCallback as useCallback4, useEffect as useEffect4, useRef as useRef3, useState as useState5 } from "react";
+import { useCallback as useCallback4, useEffect as useEffect5, useRef as useRef3, useState as useState5 } from "react";
 
 // src/brainTriage.ts
 function isFailedToolResult(result) {
@@ -955,12 +987,12 @@ function useBrainConversation(options) {
   const [uploading, setUploading] = useState5(false);
   const autoRepliedChatIdRef = useRef3(null);
   const [snapshot, setSnapshot] = useState5(() => getRunSnapshot(chatId));
-  useEffect4(() => {
+  useEffect5(() => {
     setSnapshot(getRunSnapshot(chatId));
     if (chatId == null) return;
     return subscribeRun(chatId, () => setSnapshot(getRunSnapshot(chatId)));
   }, [chatId]);
-  useEffect4(() => {
+  useEffect5(() => {
     let cancelled = false;
     if (chatId == null) {
       setMessages([]);
@@ -979,7 +1011,7 @@ function useBrainConversation(options) {
       cancelled = true;
     };
   }, [persistence, chatId]);
-  useEffect4(() => {
+  useEffect5(() => {
     const appended = snapshot.appended;
     if (appended.length === 0) return;
     setMessages((prev) => {
@@ -988,7 +1020,7 @@ function useBrainConversation(options) {
       return fresh.length === 0 ? prev : [...prev, ...fresh];
     });
   }, [snapshot.messagesEpoch, snapshot.appended]);
-  useEffect4(() => {
+  useEffect5(() => {
     const map = {};
     for (const msg of messages) {
       if (!msg.metadata) continue;
@@ -1069,7 +1101,7 @@ ${refs}`;
     },
     [persistence, chatId, localSending, pendingAttachments, messages, ensureChatId, buildRequest]
   );
-  useEffect4(() => {
+  useEffect5(() => {
     if (chatId == null || loadingMessages || localSending || messages.length === 0) return;
     if (isRunning(chatId)) return;
     const last = messages[messages.length - 1];

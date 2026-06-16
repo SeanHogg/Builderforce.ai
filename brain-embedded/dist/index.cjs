@@ -484,6 +484,24 @@ function useMcpExtensions(options) {
 // src/BrainContext.tsx
 var import_react4 = require("react");
 var import_jsx_runtime3 = require("react/jsx-runtime");
+var OPEN_KEY = "brain.drawer.open";
+var CHAT_KEY = "brain.drawer.activeChatId";
+function readSession(key) {
+  if (typeof window === "undefined") return null;
+  try {
+    return window.sessionStorage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+function writeSession(key, value) {
+  if (typeof window === "undefined") return;
+  try {
+    if (value == null) window.sessionStorage.removeItem(key);
+    else window.sessionStorage.setItem(key, value);
+  } catch {
+  }
+}
 var DEFAULT_CONTEXT = {
   projectId: null,
   viewingProjectId: null,
@@ -496,6 +514,20 @@ function BrainContextProvider({ children }) {
   const [open, setOpen] = (0, import_react4.useState)(false);
   const [pageContext, setPageContext] = (0, import_react4.useState)(DEFAULT_CONTEXT);
   const [activeChatId, setActiveChatId] = (0, import_react4.useState)(null);
+  (0, import_react4.useEffect)(() => {
+    if (readSession(OPEN_KEY) === "1") setOpen(true);
+    const savedChat = readSession(CHAT_KEY);
+    if (savedChat != null) {
+      const n = Number(savedChat);
+      if (Number.isFinite(n)) setActiveChatId(n);
+    }
+  }, []);
+  (0, import_react4.useEffect)(() => {
+    writeSession(OPEN_KEY, open ? "1" : "0");
+  }, [open]);
+  (0, import_react4.useEffect)(() => {
+    writeSession(CHAT_KEY, activeChatId == null ? null : String(activeChatId));
+  }, [activeChatId]);
   const setContext = (0, import_react4.useCallback)((patch) => {
     setPageContext((prev) => {
       const next = { ...prev, ...patch };

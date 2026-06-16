@@ -93,18 +93,22 @@ export class TaskService {
     ) => Promise<{ memberKind: 'human' | 'cloud_agent' | 'host_agent'; memberRef: string } | null>,
   ) {}
 
-  /** List tasks scoped to the caller's tenant. Optionally narrow by project. */
-  async listTasks(callerTenantId: number, projectId?: number): Promise<Task[]> {
+  /**
+   * List tasks scoped to the caller's tenant. Optionally narrow by project.
+   * Archived tasks are excluded unless `includeArchived` is set — the board,
+   * backlog and brain's list view should never show items the user archived.
+   */
+  async listTasks(callerTenantId: number, projectId?: number, includeArchived = false): Promise<Task[]> {
     if (projectId !== undefined) {
       const project = await this.projects.findById(asProjectId(projectId));
       if (!project) throw new NotFoundError('Project', projectId);
       if (project.tenantId !== callerTenantId) throw new ForbiddenError('Project belongs to a different workspace');
-      return this.tasks.findAll(asProjectId(projectId));
+      return this.tasks.findAll(asProjectId(projectId), { includeArchived });
     }
     // No project filter: return tasks for ALL projects in this tenant
     const tenantProjects = await this.projects.findByTenant(asTenantId(callerTenantId));
     const projectIds = tenantProjects.map(p => asProjectId(p.id));
-    return this.tasks.findByProjectIds(projectIds);
+    return this.tasks.findByProjectIds(projectIds, { includeArchived });
   }
 
   async getTask(id: number): Promise<Task> {

@@ -843,9 +843,14 @@ export interface TaskSummary {
 }
 
 export const tasksApi = {
-  list: (projectId?: number): Promise<Task[]> => {
-    const q = projectId != null ? `?project_id=${projectId}` : '';
-    return request<{ tasks: Task[] }>(`/api/tasks${q}`).then((r) => r.tasks ?? []);
+  list: (projectId?: number, opts?: { includeArchived?: boolean }): Promise<Task[]> => {
+    const params = new URLSearchParams();
+    if (projectId != null) params.set('project_id', String(projectId));
+    // Archived tasks are hidden by default; opt in only where the archive is the
+    // subject (e.g. the delete-project dialog counts archived tasks to be purged).
+    if (opts?.includeArchived) params.set('include_archived', 'true');
+    const q = params.toString();
+    return request<{ tasks: Task[] }>(`/api/tasks${q ? `?${q}` : ''}`).then((r) => r.tasks ?? []);
   },
 
   get: (id: number): Promise<Task> =>
