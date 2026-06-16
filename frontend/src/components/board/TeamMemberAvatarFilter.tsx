@@ -64,8 +64,6 @@ export function TeamMemberAvatarFilter({
   allLabel = 'All',
   disableAll = false,
 }: TeamMemberAvatarFilterProps) {
-  const scrollRef = useRef<HTMLDivElement>(null);
-
   // Build a uniform list of filterable assignees from tasks + the three pools.
   // Each task contributes to the count of its assignee. Assignees with zero tasks
   // are omitted so the row stays concise.
