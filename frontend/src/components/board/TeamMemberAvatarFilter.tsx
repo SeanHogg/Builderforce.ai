@@ -204,7 +204,6 @@ export function TeamMemberAvatarFilter({
 
       {/* Inline avatar row — fits on the same line as other filters */}
       <div
-        ref={scrollRef}
         style={{
           display: 'inline-flex',
           alignItems: 'center',
