@@ -53,7 +53,7 @@ export function DeleteProjectDialog({ project, onCancel, onConfirm }: DeleteProj
     (async () => {
       try {
         const [tasks, projects] = await Promise.all([
-          tasksApi.list(project.id).catch(() => []),
+          tasksApi.list(project.id, { includeArchived: true }).catch(() => []),
           fetchProjects().catch(() => [] as Project[]),
         ]);
         if (cancelled) return;

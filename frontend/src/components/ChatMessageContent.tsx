@@ -3,7 +3,13 @@
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import type { Components } from 'react-markdown';
+import { useRouter } from 'next/navigation';
 import { MermaidDiagram } from './MermaidDiagram';
+
+/** In-app link: same-origin absolute path (`/tasks`), not protocol-relative (`//host`). */
+function isInternalHref(href: string | undefined): href is string {
+  return !!href && href.startsWith('/') && !href.startsWith('//');
+}
 
 export interface ChatMessageContentProps {
   /** Message body (markdown). */
@@ -33,6 +39,7 @@ export function ChatMessageContent({
   onApplyCode,
   onCreateFile,
 }: ChatMessageContentProps) {
+  const router = useRouter();
   const components: Components = {
     code({ node, className, children, ...props }) {
       const isBlock = className != null;
@@ -96,11 +103,30 @@ export function ChatMessageContent({
     ol: ({ children }) => <ol style={{ margin: '6px 0', paddingLeft: 20 }}>{children}</ol>,
     li: ({ children }) => <li style={{ marginBottom: 2 }}>{children}</li>,
     strong: ({ children }) => <strong style={{ fontWeight: 700, color: 'var(--text-primary)' }}>{children}</strong>,
-    a: ({ href, children }) => (
-      <a href={href} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--coral-bright)', textDecoration: 'none' }}>
-        {children}
-      </a>
-    ),
+    // Internal links (a path the model emits, e.g. "[the backlog](/projects/11)")
+    // navigate CLIENT-SIDE via the router so the SPA — including the persistent
+    // Brain drawer hosting this message — stays mounted. A hard `<a>` / new tab
+    // would remount the app and silently close the Brain mid-conversation. Only
+    // genuinely external links open in a new tab. [brain-stays-open-on-nav]
+    a: ({ href, children }) =>
+      isInternalHref(href) ? (
+        <a
+          href={href}
+          onClick={(e) => {
+            // Honour modifier-clicks (new tab/window) — only intercept a plain click.
+            if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0) return;
+            e.preventDefault();
+            router.push(href);
+          }}
+          style={{ color: 'var(--coral-bright)', textDecoration: 'none' }}
+        >
+          {children}
+        </a>
+      ) : (
+        <a href={href} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--coral-bright)', textDecoration: 'none' }}>
+          {children}
+        </a>
+      ),
     h1: ({ children }) => <h1 style={{ fontSize: '1.1rem', fontWeight: 700, margin: '10px 0 6px', color: 'var(--text-primary)' }}>{children}</h1>,
     h2: ({ children }) => <h2 style={{ fontSize: '1rem', fontWeight: 700, margin: '10px 0 4px', color: 'var(--text-primary)' }}>{children}</h2>,
     h3: ({ children }) => <h3 style={{ fontSize: '0.95rem', fontWeight: 600, margin: '8px 0 4px', color: 'var(--text-primary)' }}>{children}</h3>,

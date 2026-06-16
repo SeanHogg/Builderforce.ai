@@ -1,5 +1,5 @@
 import { eq, inArray, and, sql, asc } from 'drizzle-orm';
-import { ITaskRepository } from '../../domain/task/ITaskRepository';
+import { ITaskRepository, TaskListOptions } from '../../domain/task/ITaskRepository';
 import { Task } from '../../domain/task/Task';
 import {
   TaskId, ProjectId, TaskStatus, TaskPriority, TaskType, AgentType,
@@ -11,20 +11,23 @@ import type { Db } from '../database/connection';
 export class TaskRepository implements ITaskRepository {
   constructor(private readonly db: Db) {}
 
-  async findAll(projectId?: ProjectId): Promise<Task[]> {
+  async findAll(projectId?: ProjectId, opts?: TaskListOptions): Promise<Task[]> {
+    const notArchived = opts?.includeArchived ? undefined : eq(tasksTable.archived, false);
+    const where = projectId !== undefined
+      ? and(eq(tasksTable.projectId, projectId), notArchived)
+      : notArchived;
     const query = this.db.select().from(tasksTable);
-    const rows = projectId !== undefined
-      ? await query.where(eq(tasksTable.projectId, projectId))
-      : await query;
+    const rows = where ? await query.where(where) : await query;
     return rows.map(toDomain);
   }
 
-  async findByProjectIds(ids: ProjectId[]): Promise<Task[]> {
+  async findByProjectIds(ids: ProjectId[], opts?: TaskListOptions): Promise<Task[]> {
     if (ids.length === 0) return [];
+    const notArchived = opts?.includeArchived ? undefined : eq(tasksTable.archived, false);
     const rows = await this.db
       .select()
       .from(tasksTable)
-      .where(inArray(tasksTable.projectId, ids));
+      .where(and(inArray(tasksTable.projectId, ids), notArchived));
     return rows.map(toDomain);
   }
 

@@ -13,8 +13,29 @@
  * this is passive context data, not executable capability.
  */
 
-import { createContext, useCallback, useContext, useMemo, useState } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import type { BrainModality } from './types';
+
+// Persist the drawer's open state + active chat for the tab session, so the
+// Brain survives navigation that remounts this provider — a hard reload, an
+// external-entry deep link, or any in-app link that isn't a client-side
+// router.push. (Client-side nav keeps the provider mounted, so this is a
+// safety net, not the primary path.) sessionStorage = per-tab: a brand-new
+// tab starts with the drawer closed, but it stays put as the user moves around.
+const OPEN_KEY = 'brain.drawer.open';
+const CHAT_KEY = 'brain.drawer.activeChatId';
+
+function readSession(key: string): string | null {
+  if (typeof window === 'undefined') return null;
+  try { return window.sessionStorage.getItem(key); } catch { return null; }
+}
+function writeSession(key: string, value: string | null): void {
+  if (typeof window === 'undefined') return;
+  try {
+    if (value == null) window.sessionStorage.removeItem(key);
+    else window.sessionStorage.setItem(key, value);
+  } catch { /* storage disabled (private mode / quota) — non-fatal */ }
+}
 
 export interface BrainPageContext {
   /**
@@ -66,9 +87,25 @@ const DEFAULT_CONTEXT: BrainPageContext = {
 const BrainContext = createContext<BrainContextValue | null>(null);
 
 export function BrainContextProvider({ children }: { children: React.ReactNode }) {
+  // Start closed on both server and first client render to avoid a hydration
+  // mismatch; rehydrate the persisted open state + active chat on mount, so a
+  // navigation that remounted this provider reopens the drawer on its chat.
   const [open, setOpen] = useState(false);
   const [pageContext, setPageContext] = useState<BrainPageContext>(DEFAULT_CONTEXT);
   const [activeChatId, setActiveChatId] = useState<number | null>(null);
+
+  useEffect(() => {
+    if (readSession(OPEN_KEY) === '1') setOpen(true);
+    const savedChat = readSession(CHAT_KEY);
+    if (savedChat != null) {
+      const n = Number(savedChat);
+      if (Number.isFinite(n)) setActiveChatId(n);
+    }
+    // Mount-only rehydration; subsequent changes are persisted by the effects below.
+  }, []);
+
+  useEffect(() => { writeSession(OPEN_KEY, open ? '1' : '0'); }, [open]);
+  useEffect(() => { writeSession(CHAT_KEY, activeChatId == null ? null : String(activeChatId)); }, [activeChatId]);
 
   const setContext = useCallback((patch: Partial<BrainPageContext>) => {
     setPageContext((prev) => {

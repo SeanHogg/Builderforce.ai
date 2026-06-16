@@ -1,9 +1,19 @@
 import { Task } from './Task';
 import { TaskId, ProjectId } from '../shared/types';
 
+/** List options shared by the task-listing queries. */
+export interface TaskListOptions {
+  /**
+   * Include archived tasks in the result. Defaults to false: archived tasks are
+   * removed from the board/backlog and the brain's list view, and are only
+   * surfaced where the archive itself is the subject (e.g. project deletion).
+   */
+  includeArchived?: boolean;
+}
+
 export interface ITaskRepository {
-  findAll(projectId?: ProjectId): Promise<Task[]>;
-  findByProjectIds(ids: ProjectId[]): Promise<Task[]>;
+  findAll(projectId?: ProjectId, opts?: TaskListOptions): Promise<Task[]>;
+  findByProjectIds(ids: ProjectId[], opts?: TaskListOptions): Promise<Task[]>;
   findById(id: TaskId): Promise<Task | null>;
   /** Direct child tasks of an Epic (parent_task_id = parentId), oldest first. */
   findChildren(parentId: TaskId): Promise<Task[]>;

@@ -286,11 +286,14 @@ export function createTaskRoutes(taskService: TaskService, db: Db, runtimeServic
     return Number.isFinite(n) && n > 0 ? n : undefined;
   };
 
-  // GET /api/tasks?project_id=1
+  // GET /api/tasks?project_id=1&include_archived=true
   router.get('/', async (c) => {
     const projectIdParam = c.req.query('project_id');
     const projectId = projectIdParam ? Number(projectIdParam) : undefined;
-    const tasks = await taskService.listTasks(c.get('tenantId'), projectId);
+    // Archived tasks are hidden by default (board/backlog/brain); opt in only
+    // where the archive itself is the subject (e.g. the delete-project dialog).
+    const includeArchived = c.req.query('include_archived') === 'true';
+    const tasks = await taskService.listTasks(c.get('tenantId'), projectId, includeArchived);
     const plain = tasks.map(t => t.toPlain());
     // Augment each card with its linked-PRD count [1266] — one grouped query (no
     // N+1), and best-effort so it no-ops where task_specs (migration 0098) isn't
