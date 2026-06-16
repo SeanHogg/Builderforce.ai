@@ -115,7 +115,8 @@ export function TeamMemberAvatarFilter({
     return result;
   }, [tasks, members, agentHosts, cloudAgents]);
 
-  const selectedKeys = useMemo(() => selectedAssignees ?? [], [selectedAssignees]);
+  // Defensive: ensure selectedAssignees is always an array even if parent passes undefined/null
+  const selectedKeys: string[] = selectedAssignees ?? [];
 
   const allSelected = selectedKeys.length === 0;
 
