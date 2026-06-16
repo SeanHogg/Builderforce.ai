@@ -599,10 +599,11 @@ export function TaskMgmtContent({
       // and skipped every non-board path (brain-created / API status changes). The
       // server is the single source of truth.
       //
-      // The auto-run row is created synchronously inside that PATCH, so refresh the
-      // live run feed immediately — this surfaces the newly-queued agent (e.g.
-      // "Bob · pending") the instant the card is dropped, instead of waiting for
-      // the next poll tick.
+      // The board "autonomous trigger" (auto-run a ticket entering a lane with a
+      // configured cloud agent) is decided SERVER-SIDE on the task PATCH — see
+      // maybeAutoRunOnLaneEntry / decideLaneAutoRun in the api. The freshly-queued
+      // run arrives over the project realtime socket (broadcastProjectChanged), with
+      // the run-feed poll as the dropped-socket backstop; no client-side trigger.
       refreshRuns();
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Update failed');

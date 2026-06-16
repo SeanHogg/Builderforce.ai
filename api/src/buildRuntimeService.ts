@@ -45,14 +45,11 @@ export function buildRuntimeService(env: Env, db: Db): RuntimeService {
     // Autonomous chaining: when an agent advances its ticket into the next lane,
     // start that lane's configured agent via the SAME trigger a human board-drag
     // uses — so a multi-stage board (BA → Dev → QA …) flows without a human nudging
-    // each handoff. The new agent's heavy loop runs in its own DO/container, so the
-    // detached dispatch here only needs to outlive setup, which onLaneEntry awaits.
+    // each handoff. maybeAutoRunOnLaneEntry awaits the executor kickoff internally
+    // (the new agent's heavy loop then runs in its own DO/container), so awaiting it
+    // here outlives setup without depending on a request `executionCtx`.
     async (info) => {
-      await maybeAutoRunOnLaneEntry(
-        env, db, runtimeService,
-        (p) => { void Promise.resolve(p).catch(() => { /* detached: child loop runs in its own DO/container */ }); },
-        { ...info, submittedBy: 'system:lane-auto' },
-      );
+      await maybeAutoRunOnLaneEntry(env, db, runtimeService, { ...info, submittedBy: 'system:lane-auto' });
     },
   );
   return runtimeService;

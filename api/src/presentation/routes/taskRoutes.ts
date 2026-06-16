@@ -1,10 +1,10 @@
-import { Hono } from 'hono';
+import { Hono, type Context } from 'hono';
 import { and, count, desc, eq, inArray } from 'drizzle-orm';
 import { TaskService } from '../../application/task/TaskService';
 import { TaskPriority, AgentType, TaskStatus, TaskType, ExecutionStatus } from '../../domain/shared/types';
 import type { Env, HonoEnv } from '../../env';
 import { authMiddleware } from '../middleware/authMiddleware';
-import { auditEvents, boards, executions, projects, specs, swimlanes, swimlaneAgentAssignments, taskSpecs, tasks, tenantMembers, users } from '../../infrastructure/database/schema';
+import { auditEvents, boards, projects, specs, swimlanes, swimlaneAgentAssignments, taskSpecs, tasks, tenantMembers, users } from '../../infrastructure/database/schema';
 import { getOrSetCached, getCacheVersion, bumpCacheVersion } from '../../infrastructure/cache/readThroughCache';
 import { addDependency, deleteDependency, listProjectDependencies, isDepType } from '../../application/task/taskDependencies';
 import { invalidateCompletedByAssignee } from './reportRoutes';
@@ -136,8 +136,18 @@ async function dispatchTaskFinalize(
  * hands the lane's agent ref + model to that single dispatcher, the same one the
  * manual run and CI auto-fix use.
  *
- * Best-effort and meant for `waitUntil`: a dispatch failure must never block or
- * fail the status change itself.
+ * Best-effort: a dispatch failure must never block or fail the status change.
+ *
+ * The caller keeps THIS promise alive (the board-drag path wraps the whole call in
+ * one `c.executionCtx.waitUntil(...)` registered while the request is still being
+ * handled; the execution-completion path awaits it). Crucially, the executor
+ * kickoff is AWAITED inside here rather than re-scheduled on the request's
+ * `executionCtx`: this handler runs AFTER the Worker response has already returned,
+ * and registering a fresh `executionCtx.waitUntil()` from a closed request context
+ * throws ("I/O on behalf of a different request") — which this function's
+ * `try/catch` would silently swallow, leaving the execution row created but never
+ * dispatched. That was the reported "drag into a staffed lane never fires the
+ * agent" bug: the run was submitted but its `orchestrate()` kickoff was dropped.
  *
  * Exported so the execution-completion path (RuntimeService.onLaneEntry, wired at
  * the composition root) reuses this exact trigger when an AGENT advances a ticket
@@ -148,7 +158,6 @@ export async function maybeAutoRunOnLaneEntry(
   env: Env,
   db: Db,
   runtimeService: RuntimeService,
-  waitUntil: (p: Promise<unknown>) => void,
   args: { tenantId: number; projectId: number; taskId: number; status: string; submittedBy: string; originLaneKey?: string },
 ): Promise<void> {
   try {
@@ -234,17 +243,19 @@ export async function maybeAutoRunOnLaneEntry(
     if (args.originLaneKey && args.originLaneKey === args.status) return;
 
     // Idempotency: never stack a second run on a ticket that already has a live
-    // one (e.g. a manual run just started, or a re-PATCH to the same lane). This
-    // is what lets BOTH the create and PATCH paths call this safely.
-    const active = await db
-      .select({ id: executions.id })
-      .from(executions)
-      .where(and(
-        eq(executions.taskId, args.taskId),
-        inArray(executions.status, [ExecutionStatus.PENDING, ExecutionStatus.SUBMITTED, ExecutionStatus.RUNNING]),
-      ))
-      .limit(1);
-    if (active.length > 0) return;
+    // one (a manual run just started, or a re-PATCH to the same lane) — this is what
+    // lets every caller invoke the trigger safely. Read through runtimeService (NOT a
+    // raw query) so a stale cloud run abandoned RUNNING by an evicted isolate is
+    // reaped to FAILED on read FIRST. A raw status check would treat that dead row as
+    // "active" and silently block the lane's agent from ever starting again — the
+    // "drag does nothing on a ticket that ran once before" failure mode.
+    const live = (await runtimeService.listByTask(args.taskId)).some(
+      (e) =>
+        e.status === ExecutionStatus.PENDING ||
+        e.status === ExecutionStatus.SUBMITTED ||
+        e.status === ExecutionStatus.RUNNING,
+    );
+    if (live) return;
 
     // Hand the lane's agent + model to the single surface-aware dispatcher (the
     // `cloudAgentRef` payload key is the existing dispatch contract — the V2 agent
@@ -255,12 +266,19 @@ export async function maybeAutoRunOnLaneEntry(
     if (decision.agentRef) payloadObj.cloudAgentRef = decision.agentRef;
     if (decision.model) payloadObj.model = decision.model;
 
-    await dispatchCloudRunForTask(env, db, runtimeService, waitUntil, {
+    // Collect the dispatcher's deferred executor kickoff (`orchestrate()`) and AWAIT
+    // it here instead of letting it re-register on the (already-closed) request
+    // `executionCtx`. We are off the response path, so awaiting the kickoff costs
+    // nothing the user waits on — but it guarantees the run is actually started
+    // rather than created-then-dropped. See this function's header for the why.
+    const deferred: Promise<unknown>[] = [];
+    await dispatchCloudRunForTask(env, db, runtimeService, (p) => { deferred.push(Promise.resolve(p)); }, {
       taskId: args.taskId,
       tenantId: args.tenantId,
       payload: Object.keys(payloadObj).length > 0 ? JSON.stringify(payloadObj) : undefined,
       submittedBy: args.submittedBy,
     });
+    await Promise.allSettled(deferred);
   } catch {
     // Best-effort: the status change already succeeded; an autonomous-run failure
     // must not surface as a failed PATCH/create.
@@ -270,6 +288,24 @@ export async function maybeAutoRunOnLaneEntry(
 export function createTaskRoutes(taskService: TaskService, db: Db, runtimeService: RuntimeService): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
   router.use('*', authMiddleware);
+
+  // The ONE place the board autonomous trigger is wired into the HTTP layer: a
+  // ticket landing in a lane (created into it, or PATCHed into it by a board drag /
+  // the brain / a raw API call) fires the SAME server-side trigger, kept alive past
+  // the response via the request's `executionCtx`. Both the create and PATCH paths
+  // funnel through here so neither can drift; the agent-advance path (a fourth
+  // status-writer) reuses the same `maybeAutoRunOnLaneEntry` from the runtime layer.
+  const fireLaneAutoRun = (c: Context<HonoEnv>, info: { projectId: number; taskId: number; status: string }): void => {
+    c.executionCtx.waitUntil(
+      maybeAutoRunOnLaneEntry(c.env as Env, db, runtimeService, {
+        tenantId:    c.get('tenantId'),
+        projectId:   info.projectId,
+        taskId:      info.taskId,
+        status:      info.status,
+        submittedBy: (c as { get(k: 'userId'): string | undefined }).get('userId') ?? 'system:lane-auto',
+      }),
+    );
+  };
 
   // Bump the project's epic-tree cache version so the next /:id/tree read reloads.
   // Any task write (create/update/decompose/move/delete) can reshape a tree, so
@@ -467,15 +503,7 @@ export function createTaskRoutes(taskService: TaskService, db: Db, runtimeServic
     // Autonomous trigger: a ticket CREATED straight into a lane with a configured
     // cloud agent (e.g. the brain drops a task into an agent-owned lane) must
     // auto-run just like one dragged in. Best-effort, off the response path.
-    c.executionCtx.waitUntil(
-      maybeAutoRunOnLaneEntry(c.env as Env, db, runtimeService, (p) => c.executionCtx.waitUntil(p), {
-        tenantId:    c.get('tenantId'),
-        projectId:   created.projectId,
-        taskId:      created.id,
-        status:      created.status,
-        submittedBy: (c as any).get('userId') ?? 'system:lane-auto',
-      }),
-    );
+    fireLaneAutoRun(c, { projectId: created.projectId, taskId: created.id, status: created.status });
     return c.json(created, 201);
   });
 
@@ -545,15 +573,7 @@ export function createTaskRoutes(taskService: TaskService, db: Db, runtimeServic
       // the server-side source of truth — it fires no matter which client moved
       // the ticket (board drag, status dropdown, the brain, a raw API PATCH), so a
       // brain-created ticket moved to a To Do lane with an agent actually runs.
-      c.executionCtx.waitUntil(
-        maybeAutoRunOnLaneEntry(c.env as Env, db, runtimeService, (p) => c.executionCtx.waitUntil(p), {
-          tenantId:    c.get('tenantId'),
-          projectId:   prevStatus.projectId,
-          taskId:      id,
-          status:      body.status,
-          submittedBy: (c as any).get('userId') ?? 'system:lane-auto',
-        }),
-      );
+      fireLaneAutoRun(c, { projectId: prevStatus.projectId, taskId: id, status: body.status });
     }
 
     // On transition to Done, finalize the ticket → commit + PR (host relay or
