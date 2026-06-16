@@ -1,6 +1,6 @@
 'use client';
 
-import { Fragment, useMemo, useRef, type MouseEvent } from 'react';
+import { useMemo, type MouseEvent } from 'react';
 import { Avatar } from '@/components/Avatar';
 import type { TeamMember } from '@/lib/taskAssignee';
 import type { CloudAgentTarget } from '@/lib/taskAssignee';
