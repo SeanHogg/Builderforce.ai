@@ -1,6 +1,6 @@
 'use client';
 
-import { Fragment, useMemo, useRef, type MouseEvent } from 'react';
+import { useMemo, type MouseEvent } from 'react';
 import { Avatar } from '@/components/Avatar';
 import type { TeamMember } from '@/lib/taskAssignee';
 import type { CloudAgentTarget } from '@/lib/taskAssignee';
@@ -45,13 +45,14 @@ export interface TeamMemberAvatarFilterProps {
 }
 
 /**
- * Row of clickable team member avatars that filter the task board by assignee.
- * Supports multi-select (OR logic), count badges, visual active state, and a
- * clear/reset "All" option. Adapts to small viewports with horizontal scrolling.
- *
+ * Avatar filter row for team members/agents. Renders an "All" chip, optional clear button,
+ * and inline avatars (no overflow, fits in a single row with other filters).
  * Composes with existing search/status/priority filters — it never touches the
  * task query, only filters the `tasks` array passed in, so the parent can chain
  * the avatar filter result on top of the other filters.
+ *
+ * This is a direct inline filter component used in the consolidated filter row,
+ * not the scrollable overflow pattern used elsewhere.
  */
 export function TeamMemberAvatarFilter({
   tasks,
@@ -63,8 +64,6 @@ export function TeamMemberAvatarFilter({
   allLabel = 'All',
   disableAll = false,
 }: TeamMemberAvatarFilterProps) {
-  const scrollRef = useRef<HTMLDivElement>(null);
-
   // Build a uniform list of filterable assignees from tasks + the three pools.
   // Each task contributes to the count of its assignee. Assignees with zero tasks
   // are omitted so the row stays concise.
@@ -114,11 +113,10 @@ export function TeamMemberAvatarFilter({
     return result;
   }, [tasks, members, agentHosts, cloudAgents]);
 
-  // Defensive: treat undefined or null as empty array
-  const selectedKeys = selectedAssignees ?? [];
+  // Defensive: ensure selectedAssignees is always an array even if parent passes undefined/null
+  const selectedKeys: string[] = selectedAssignees ?? [];
 
   const allSelected = selectedKeys.length === 0;
-  const hasSelection = selectedKeys.length > 0;
 
   const handleToggle = (e: MouseEvent, key: string) => {
     e.stopPropagation();
@@ -133,18 +131,15 @@ export function TeamMemberAvatarFilter({
     onSelectAssignees([]);
   };
 
-  // No assignees to filter by → hide the entire filter row
+  const handleClear = () => {
+    onSelectAssignees([]);
+  };
+
+  // No assignees to filter by → return null to not occupy space
   if (assignees.length === 0) return null;
 
   return (
-    <div
-      style={{
-        display: 'flex',
-        alignItems: 'center',
-        gap: 8,
-        maxWidth: '100%',
-      }}
-    >
+    <>
       {/* "All" chip — reset filter */}
       <button
         type="button"
@@ -156,14 +151,14 @@ export function TeamMemberAvatarFilter({
           display: 'inline-flex',
           alignItems: 'center',
           justifyContent: 'center',
-          height: 36,
-          padding: '0 12px',
-          borderRadius: 18,
+          height: 32,
+          padding: '0 10px',
+          borderRadius: 16,
           fontSize: 12,
           fontWeight: 600,
-          border: `2px solid ${allSelected ? 'var(--coral-bright, #f4726e)' : 'var(--border-subtle)'}`,
-          background: allSelected ? 'var(--coral-bright, #f4726e)' : 'var(--bg-elevated)',
-          color: allSelected ? '#fff' : 'var(--text-secondary)',
+          border: `1px solid ${allSelected ? 'var(--coral-bright, #f4726e)' : 'var(--border-subtle)'}`,
+          background: allSelected ? 'var(--coral-bright, #f4726e)' : 'var(--bg-deep)',
+          color: allSelected ? '#fff' : 'var(--text-muted)',
           cursor: disableAll ? 'not-allowed' : 'pointer',
           flexShrink: 0,
           opacity: disableAll ? 0.5 : 1,
@@ -171,15 +166,16 @@ export function TeamMemberAvatarFilter({
           fontFamily: 'inherit',
           outline: 'none',
           whiteSpace: 'nowrap',
+          gap: 4,
         }}
       >
         {allLabel}
       </button>
 
-      {hasSelection && assignees.length > 0 && (
+      {selectedKeys.length > 0 && assignees.length > 0 && (
         <button
           type="button"
-          onClick={() => onSelectAssignees([])}
+          onClick={handleClear}
           aria-label="Clear selected assignees"
           title="Clear selected assignees"
           style={{
@@ -206,23 +202,19 @@ export function TeamMemberAvatarFilter({
         </button>
       )}
 
-      {/* Scrollable avatar row */}
+      {/* Inline avatar row — fits on the same line as other filters */}
       <div
-        ref={scrollRef}
         style={{
-          display: 'flex',
+          display: 'inline-flex',
           alignItems: 'center',
-          gap: 6,
-          overflowX: 'auto',
-          overflowY: 'hidden',
+          gap: 4,
+          overflow: 'hidden', // No overflow on this inline variant
           WebkitOverflowScrolling: 'touch',
-          scrollbarWidth: 'thin',
-          paddingBottom: 2,
           flex: 1,
           minWidth: 0,
         }}
       >
-        {assignees.map((a) => {
+        {assignees.slice(0, 8).map((a) => { // Limit to 8 avatars for horizontal space (or more if needed)
           const active = selectedKeys.includes(a.key);
           return (
             <Avatar
@@ -232,12 +224,28 @@ export function TeamMemberAvatarFilter({
               active={active}
               onClick={(e) => handleToggle(e, a.key)}
               title={`${a.name} — ${a.count} task${a.count !== 1 ? 's' : ''}${active ? ' (filtering)' : ' — click to filter'}`}
-              size={36}
+              size={28} // Smaller avatars to fit inline with dropdowns
             />
           );
         })}
+        {assignees.length > 8 && (
+          <div style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            height: 28,
+            padding: '0 8px',
+            fontSize: 11,
+            color: 'var(--text-muted)',
+            background: 'var(--bg-deep)',
+            borderRadius: 14,
+            flexShrink: 0,
+          }}>
+            +{assignees.length - 8} more
+          </div>
+        )}
       </div>
-    </div>
+    </>
   );
 }
 
