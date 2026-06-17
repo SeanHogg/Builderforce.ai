@@ -64,6 +64,8 @@ export type BuilderForceAgentsManifestRequires = {
   anyBins: string[];
   env: string[];
   config: string[];
+  /** Names of other SKILLs this skill depends on (resolved cross-skill). */
+  skills: string[];
 };
 
 export function resolveBuilderForceAgentsManifestRequires(
@@ -81,6 +83,7 @@ export function resolveBuilderForceAgentsManifestRequires(
     anyBins: normalizeStringList(requiresRaw.anyBins),
     env: normalizeStringList(requiresRaw.env),
     config: normalizeStringList(requiresRaw.config),
+    skills: normalizeStringList(requiresRaw.skills),
   };
 }
 
@@ -94,7 +97,9 @@ export function resolveBuilderForceAgentsManifestInstall<T>(
     .filter((entry): entry is T => Boolean(entry));
 }
 
-export function resolveBuilderForceAgentsManifestOs(metadataObj: Record<string, unknown>): string[] {
+export function resolveBuilderForceAgentsManifestOs(
+  metadataObj: Record<string, unknown>,
+): string[] {
   return normalizeStringList(metadataObj.os);
 }
 

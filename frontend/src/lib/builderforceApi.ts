@@ -661,6 +661,21 @@ export interface AgentManifest {
   content: NamedArtifact[];
 }
 
+/** Psychometric persona catalog + scoring (Pro feature). */
+export const psychometric = {
+  catalog: () => request<import('./psychometric').PsychometricCatalog>(`/api/personas/psychometric/catalog`),
+  score: (answers: Record<string, number>) =>
+    request<{ vector: Record<string, number>; source: string }>(`/api/personas/psychometric/score`, {
+      method: 'POST',
+      body: JSON.stringify({ answers }),
+    }),
+  import: (vector: Record<string, number>) =>
+    request<{ vector: Record<string, number>; source: string }>(`/api/personas/psychometric/import`, {
+      method: 'POST',
+      body: JSON.stringify({ vector }),
+    }),
+};
+
 export const artifactAssignments = {
   list: (scope: AssignmentScope, scopeId: number, artifactType?: ArtifactType) => {
     const q = new URLSearchParams({ scope: String(scope), scopeId: String(scopeId) });
@@ -1325,10 +1340,18 @@ export interface CalendarSyncResult {
  */
 export type LlmProvider = 'anthropic';
 
+/** How a configured provider authenticates: a pasted API key, or a connected
+ *  Claude Pro/Max subscription via OAuth. */
+export type ProviderAuthType = 'api_key' | 'oauth';
+export interface ProviderKeySummary {
+  provider: LlmProvider;
+  authType: ProviderAuthType;
+}
+
 export const providerKeysApi = {
-  /** Which providers the tenant has a key configured for (no secrets returned). */
-  list: (): Promise<{ providers: LlmProvider[] }> =>
-    request<{ providers: LlmProvider[] }>('/llm/provider-keys'),
+  /** Configured providers + how each authenticates (no secrets returned). */
+  list: (): Promise<{ providers: LlmProvider[]; details: ProviderKeySummary[] }> =>
+    request<{ providers: LlmProvider[]; details: ProviderKeySummary[] }>('/llm/provider-keys'),
 
   set: (provider: LlmProvider, apiKey: string): Promise<{ ok: true; provider: LlmProvider }> =>
     request<{ ok: true; provider: LlmProvider }>(`/llm/provider-keys/${provider}`, {
@@ -1338,6 +1361,21 @@ export const providerKeysApi = {
 
   remove: (provider: LlmProvider): Promise<{ ok: true }> =>
     request<{ ok: true }>(`/llm/provider-keys/${provider}`, { method: 'DELETE' }),
+
+  /** Begin connecting a Claude subscription — returns the Claude.ai authorize URL
+   *  the user opens to grant access (PKCE verifier is held server-side). */
+  oauthStart: (): Promise<{ authorizeUrl: string; state: string }> =>
+    request<{ authorizeUrl: string; state: string }>('/llm/provider-keys/anthropic/oauth/start', {
+      method: 'POST',
+    }),
+
+  /** Finish connecting a Claude subscription with the `code#state` the user
+   *  pasted from Claude.ai's consent page. */
+  oauthComplete: (code: string): Promise<{ ok: true; provider: LlmProvider; authType: ProviderAuthType }> =>
+    request<{ ok: true; provider: LlmProvider; authType: ProviderAuthType }>(
+      '/llm/provider-keys/anthropic/oauth/complete',
+      { method: 'POST', body: JSON.stringify({ code }) },
+    ),
 };
 
 // ---------------------------------------------------------------------------

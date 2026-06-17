@@ -14,6 +14,8 @@
  * the concrete adapters in builderforce-coding-dispatch-adapters.ts.
  */
 
+import { createGitRepoSync, type RepoSyncGitOps, type RepoSyncStrategy } from "./repo-sync.js";
+
 export interface DispatchRepoDetail {
   repoId: string;
   provider: string;
@@ -44,15 +46,11 @@ export interface CodingDispatchHttp {
   /** POST the terminal result so the swimlane advances. */
   reportResult(
     dispatchId: string,
-    result: { status: 'completed' | 'failed'; output?: string; error?: string },
+    result: { status: "completed" | "failed"; output?: string; error?: string },
   ): Promise<void>;
 }
 
-export interface CodingDispatchGit {
-  /** Clone `cloneUrl` (an absolute host git-proxy URL) into `dir` at `branch`. */
-  clone(cloneUrl: string, dir: string, branch: string | null): Promise<void>;
-  /** Create and switch to a new working branch in `dir`. */
-  checkoutNewBranch(dir: string, branch: string): Promise<void>;
+export interface CodingDispatchGit extends RepoSyncGitOps {
   /** Stage + commit everything; returns whether anything was committed. */
   commitAll(dir: string, message: string): Promise<{ changed: boolean }>;
   /** Push `branch` from `dir` to `cloneUrl`. */
@@ -68,6 +66,12 @@ export interface CodingDispatchDeps {
   http: CodingDispatchHttp;
   git: CodingDispatchGit;
   agent: CodingDispatchAgent;
+  /**
+   * Strategy that ensures the workspace holds the latest code on the right
+   * branch before the agent runs. Defaults to the git-backed strategy over
+   * `git`; injectable so tests and alternate agents can swap repo-prep policy.
+   */
+  repoSync?: RepoSyncStrategy;
   /** Absolute base URL of Builderforce, e.g. https://api.builderforce.ai. */
   baseUrl: string;
   /** Directory under which per-dispatch clones are created (the agent's workspace). */
@@ -81,9 +85,9 @@ export function codingBranchSlug(text: string): string {
   return (
     text
       .toLowerCase()
-      .replace(/[^a-z0-9]+/g, '-')
-      .replace(/^-+|-+$/g, '')
-      .slice(0, 32) || 'task'
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "")
+      .slice(0, 32) || "task"
   );
 }
 
@@ -94,28 +98,34 @@ export function buildCodingPrompt(detail: DispatchDetail, dir: string): string {
     `  ${dir}`,
     `It is already on a fresh working branch. Implement the task below by editing files in that directory.`,
     `Do NOT run git commit/push — that is handled for you after you finish. Just make the code changes.`,
-    '',
-    'TASK:',
-    (detail.input ?? '').trim() || 'No task description was provided.',
-  ].join('\n');
+    "",
+    "TASK:",
+    (detail.input ?? "").trim() || "No task description was provided.",
+  ].join("\n");
 }
 
 /**
  * Execute one coding dispatch end-to-end. Never throws: every failure path
  * reports a terminal result so the swimlane stage cannot hang.
  */
-export async function runCodingDispatch(deps: CodingDispatchDeps, dispatchId: string): Promise<void> {
+export async function runCodingDispatch(
+  deps: CodingDispatchDeps,
+  dispatchId: string,
+): Promise<void> {
   const { http, git, agent } = deps;
 
   let detail: DispatchDetail | null;
   try {
     detail = await http.fetchDispatchDetail(dispatchId);
   } catch (err) {
-    await http.reportResult(dispatchId, { status: 'failed', error: `fetch detail failed: ${errText(err)}` });
+    await http.reportResult(dispatchId, {
+      status: "failed",
+      error: `fetch detail failed: ${errText(err)}`,
+    });
     return;
   }
   if (!detail) {
-    await http.reportResult(dispatchId, { status: 'failed', error: 'Dispatch detail not found' });
+    await http.reportResult(dispatchId, { status: "failed", error: "Dispatch detail not found" });
     return;
   }
 
@@ -124,27 +134,39 @@ export async function runCodingDispatch(deps: CodingDispatchDeps, dispatchId: st
     const r = await agent.run(`dispatch-${dispatchId}`, buildReasoningPrompt(detail));
     await http.reportResult(
       dispatchId,
-      r.ok ? { status: 'completed', output: r.summary } : { status: 'failed', error: r.summary },
+      r.ok ? { status: "completed", output: r.summary } : { status: "failed", error: r.summary },
     );
     return;
   }
 
   const repo = detail.repo;
   const dir = deps.joinPath(deps.workspaceDir, `dispatch-${dispatchId}`);
-  const cloneUrl = `${deps.baseUrl.replace(/\/$/, '')}${repo.gitProxyPath}`;
+  const cloneUrl = `${deps.baseUrl.replace(/\/$/, "")}${repo.gitProxyPath}`;
   const branch = `agent/${dispatchId.slice(0, 8)}-${codingBranchSlug(detail.input ?? detail.role)}`;
 
-  try {
-    await git.clone(cloneUrl, dir, repo.defaultBranch);
-    await git.checkoutNewBranch(dir, branch);
-  } catch (err) {
-    await http.reportResult(dispatchId, { status: 'failed', error: `clone failed: ${errText(err)}` });
+  // Modular repo preparation: ensure the latest code is checked out on a fresh
+  // working branch. The policy lives in the repo-sync strategy, not inline here.
+  const repoSync = deps.repoSync ?? createGitRepoSync(git);
+  const prep = await repoSync.prepare({
+    dir,
+    repo: { cloneUrl, defaultBranch: repo.defaultBranch },
+    workBranch: branch,
+    mode: "new-branch",
+  });
+  if (!prep.ok) {
+    await http.reportResult(dispatchId, {
+      status: "failed",
+      error: `repo sync failed: ${prep.error}`,
+    });
     return;
   }
 
   const agentResult = await agent.run(`dispatch-${dispatchId}`, buildCodingPrompt(detail, dir));
   if (!agentResult.ok) {
-    await http.reportResult(dispatchId, { status: 'failed', error: agentResult.summary || 'Agent run failed' });
+    await http.reportResult(dispatchId, {
+      status: "failed",
+      error: agentResult.summary || "Agent run failed",
+    });
     return;
   }
 
@@ -152,13 +174,16 @@ export async function runCodingDispatch(deps: CodingDispatchDeps, dispatchId: st
   try {
     committed = await git.commitAll(dir, commitMessage(detail));
   } catch (err) {
-    await http.reportResult(dispatchId, { status: 'failed', error: `commit failed: ${errText(err)}` });
+    await http.reportResult(dispatchId, {
+      status: "failed",
+      error: `commit failed: ${errText(err)}`,
+    });
     return;
   }
 
   if (!committed.changed) {
     await http.reportResult(dispatchId, {
-      status: 'completed',
+      status: "completed",
       output: `${agentResult.summary}\n\nNo file changes were produced; nothing to push.`.trim(),
     });
     return;
@@ -167,7 +192,10 @@ export async function runCodingDispatch(deps: CodingDispatchDeps, dispatchId: st
   try {
     await git.push(dir, cloneUrl, branch);
   } catch (err) {
-    await http.reportResult(dispatchId, { status: 'failed', error: `push failed: ${errText(err)}` });
+    await http.reportResult(dispatchId, {
+      status: "failed",
+      error: `push failed: ${errText(err)}`,
+    });
     return;
   }
 
@@ -187,19 +215,19 @@ export async function runCodingDispatch(deps: CodingDispatchDeps, dispatchId: st
   const output = pr
     ? `${agentResult.summary}\n\nPushed ${branch} and opened PR #${pr.number}: ${pr.url}`.trim()
     : `${agentResult.summary}\n\nPushed ${branch} (no PR opened — open one manually).`.trim();
-  await http.reportResult(dispatchId, { status: 'completed', output });
+  await http.reportResult(dispatchId, { status: "completed", output });
 }
 
 function buildReasoningPrompt(detail: DispatchDetail): string {
   return [
     `You are the "${detail.role}" agent. Complete the following task and return your result.`,
-    '',
-    (detail.input ?? '').trim() || 'No task description was provided.',
-  ].join('\n');
+    "",
+    (detail.input ?? "").trim() || "No task description was provided.",
+  ].join("\n");
 }
 
 function commitMessage(detail: DispatchDetail): string {
-  const first = (detail.input ?? '').trim().split('\n')[0]?.slice(0, 72);
+  const first = (detail.input ?? "").trim().split("\n")[0]?.slice(0, 72);
   return first ? `feat: ${first}` : `chore: agent changes for ${detail.role}`;
 }
 

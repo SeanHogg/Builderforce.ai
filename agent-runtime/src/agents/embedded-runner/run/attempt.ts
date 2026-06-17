@@ -29,7 +29,11 @@ import { isReasoningTagProvider } from "../../../utils/provider-utils.js";
 import { resolveBuilderForceAgentsAgentDir } from "../../agent-paths.js";
 import { resolveSessionAgentIds } from "../../agent-scope.js";
 import { createAnthropicPayloadLogger } from "../../anthropic-payload-log.js";
-import { buildAssignedPersonaPrompt } from "../../assigned-capabilities.js";
+import {
+  buildAssignedPersonaPrompt,
+  resolveActivePsychometricParams,
+} from "../../assigned-capabilities.js";
+import { raiseThinkLevel } from "../../../builderforce/psychometrics.js";
 import { makeBootstrapWarn, resolveBootstrapContextForRun } from "../../bootstrap-files.js";
 import { createBuilderForceAgentsLlmLocalStreamFn } from "../../builderforcellm-local-stream.js";
 import { createCacheTrace } from "../../cache-trace.js";
@@ -284,6 +288,21 @@ export async function runEmbeddedAttempt(
     // gateway `artifacts.sync` handler when Builderforce pushes assignments.
     const personaPrompt = buildAssignedPersonaPrompt();
 
+    // Second half of "execute under the persona": let the active persona's
+    // psychometric profile nudge the run's execution levers. Persona think depth
+    // is a floor on the requested level (deepens, never reduces); persona may turn
+    // reasoning on; persona temperature is a default that an explicit request wins.
+    const psychometricParams = resolveActivePsychometricParams();
+    const effectiveThinkLevel = raiseThinkLevel(params.thinkLevel, psychometricParams.thinkLevel);
+    const effectiveReasoningLevel =
+      psychometricParams.reasoningLevel === "on" && (params.reasoningLevel ?? "off") === "off"
+        ? "on"
+        : (params.reasoningLevel ?? "off");
+    const effectiveStreamParams =
+      psychometricParams.temperature !== undefined
+        ? { temperature: psychometricParams.temperature, ...(params.streamParams ?? {}) }
+        : params.streamParams;
+
     const sessionLabel = params.sessionKey ?? params.sessionId;
     const { bootstrapFiles: hookAdjustedBootstrapFiles, contextFiles } =
       await resolveBootstrapContextForRun({
@@ -451,8 +470,8 @@ export async function runEmbeddedAttempt(
 
     const appendPrompt = buildEmbeddedSystemPrompt({
       workspaceDir: effectiveWorkspace,
-      defaultThinkLevel: params.thinkLevel,
-      reasoningLevel: params.reasoningLevel ?? "off",
+      defaultThinkLevel: effectiveThinkLevel,
+      reasoningLevel: effectiveReasoningLevel,
       extraSystemPrompt: params.extraSystemPrompt,
       ownerNumbers: params.ownerNumbers,
       reasoningTagHint,
@@ -597,7 +616,7 @@ export async function runEmbeddedAttempt(
         authStorage: params.authStorage,
         modelRegistry: params.modelRegistry,
         model: params.model,
-        thinkingLevel: mapThinkingLevel(params.thinkLevel),
+        thinkingLevel: mapThinkingLevel(effectiveThinkLevel),
         // transitional bridge: pi-built coding tools are structurally native AgentTools
         // (same execute shape); coding-tools.ts migrates to native AgentTool next, making this identity.
         tools: builtInTools as unknown as AgentTool[],
@@ -698,7 +717,7 @@ export async function runEmbeddedAttempt(
         params.config,
         params.provider,
         params.modelId,
-        params.streamParams,
+        effectiveStreamParams,
       );
 
       if (cacheTrace) {
@@ -813,7 +832,7 @@ export async function runEmbeddedAttempt(
         runId: params.runId,
         hookRunner: getGlobalHookRunner() ?? undefined,
         verboseLevel: params.verboseLevel,
-        reasoningMode: params.reasoningLevel ?? "off",
+        reasoningMode: effectiveReasoningLevel,
         toolResultFormat: params.toolResultFormat,
         shouldEmitToolResult: params.shouldEmitToolResult,
         shouldEmitToolOutput: params.shouldEmitToolOutput,

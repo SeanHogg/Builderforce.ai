@@ -29,8 +29,12 @@ function detail(over: Partial<DispatchDetail> = {}): DispatchDetail {
 
 function fakeGit() {
   return {
+    hasClone: vi.fn(async () => false),
+    isDirty: vi.fn(async () => false),
     clone: vi.fn(async () => {}),
+    syncToLatest: vi.fn(async () => {}),
     checkoutNewBranch: vi.fn(async () => {}),
+    checkoutOrCreateBranch: vi.fn(async () => {}),
     commitAll: vi.fn(async () => ({ changed: true })),
     push: vi.fn(async () => {}),
   };

@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import { PwaToast, PwaToastDismissButton, PwaToastPrimaryButton, PwaToastText } from './PwaToast';
 
 /** Seconds before an available update auto-applies if the user doesn't act. */
 const AUTORELOAD_SECONDS = 60;
@@ -29,14 +30,21 @@ export function PwaUpdateBanner() {
   useEffect(() => {
     if (typeof window === 'undefined' || !('serviceWorker' in navigator)) return;
 
+    // Promote a waiting SW into the banner and (re)start its countdown. Resetting
+    // secondsLeft here — in a callback, not synchronously in an effect body — keeps
+    // the countdown effect free of setState-in-effect (cascading renders).
+    const promote = (sw: ServiceWorker) => {
+      setWaitingSw(sw);
+      setSecondsLeft(AUTORELOAD_SECONDS);
+    };
     const trackWaiting = (sw: ServiceWorker) => {
       if (sw.state === 'installed' && navigator.serviceWorker.controller) {
-        setWaitingSw(sw);
+        promote(sw);
         return;
       }
       sw.addEventListener('statechange', () => {
         if (sw.state === 'installed' && navigator.serviceWorker.controller) {
-          setWaitingSw(sw);
+          promote(sw);
         }
       });
     };
@@ -96,9 +104,10 @@ export function PwaUpdateBanner() {
   };
 
   // --- Auto-reload countdown ----------------------------------------------
+  // secondsLeft is reset to AUTORELOAD_SECONDS in promote() when the waiting SW
+  // is detected, so this effect only owns the 1 s tick — no setState in its body.
   useEffect(() => {
     if (!waitingSw) return;
-    setSecondsLeft(AUTORELOAD_SECONDS);
     const tick = setInterval(() => {
       setSecondsLeft((s) => {
         if (s <= 1) {
@@ -122,75 +131,10 @@ export function PwaUpdateBanner() {
   };
 
   return (
-    <div
-      role="status"
-      aria-live="polite"
-      style={{
-        position: 'fixed',
-        bottom: 24,
-        left: '50%',
-        transform: 'translateX(-50%)',
-        zIndex: 9999,
-        display: 'flex',
-        alignItems: 'center',
-        gap: 12,
-        padding: '12px 16px 12px 20px',
-        background: 'var(--bg-surface, #1a1a24)',
-        border: '1px solid var(--border-subtle, rgba(255,255,255,0.08))',
-        borderRadius: 14,
-        boxShadow: '0 8px 32px rgba(0,0,0,0.5)',
-        backdropFilter: 'blur(16px)',
-        whiteSpace: 'nowrap',
-        maxWidth: 'calc(100vw - 48px)',
-      }}
-    >
-      <span
-        style={{
-          fontSize: '0.875rem',
-          color: 'var(--text-primary, #e8e8f0)',
-          fontFamily: 'var(--font-body, sans-serif)',
-        }}
-      >
-        A new version is ready — updating in {secondsLeft}s.
-      </span>
-
-      <button
-        type="button"
-        onClick={applyUpdate}
-        style={{
-          padding: '6px 14px',
-          background: 'linear-gradient(135deg, var(--coral-bright, #f4726e), var(--coral-dark, #c94f4b))',
-          color: '#fff',
-          border: 'none',
-          borderRadius: 8,
-          fontFamily: 'var(--font-display, sans-serif)',
-          fontWeight: 700,
-          fontSize: '0.8rem',
-          cursor: 'pointer',
-          letterSpacing: '0.02em',
-          flexShrink: 0,
-        }}
-      >
-        Update now
-      </button>
-
-      <button
-        type="button"
-        onClick={dismiss}
-        aria-label="Dismiss update notification"
-        style={{
-          background: 'none',
-          border: 'none',
-          color: 'var(--text-muted, #6b6b80)',
-          cursor: 'pointer',
-          fontSize: '1rem',
-          lineHeight: 1,
-          padding: '2px 4px',
-          flexShrink: 0,
-        }}
-      >
-        ✕
-      </button>
-    </div>
+    <PwaToast>
+      <PwaToastText>A new version is ready — updating in {secondsLeft}s.</PwaToastText>
+      <PwaToastPrimaryButton onClick={applyUpdate}>Update now</PwaToastPrimaryButton>
+      <PwaToastDismissButton onClick={dismiss} />
+    </PwaToast>
   );
 }

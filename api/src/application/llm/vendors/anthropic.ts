@@ -40,8 +40,18 @@ import {
   type VendorModelEntry,
   type VendorModule,
 } from './types';
+import { ANTHROPIC_OAUTH_BETA, CLAUDE_CODE_SYSTEM_PROMPT } from '../anthropicOAuth';
 
 const ENDPOINT = 'https://api.anthropic.com/v1/messages';
+
+/**
+ * Sentinel the vendor env-resolution encodes a SUBSCRIPTION (OAuth) credential
+ * with, so `call()` — which only receives the resolved `apiKey` string, never the
+ * env — can tell a subscription bearer token apart from an `sk-ant-…` API key and
+ * pick the right auth header. Mirrors the Google OAuth precedent of carrying
+ * structured auth inside the apiKey string. An Anthropic API key never starts with
+ * this, and an OAuth access token (`sk-ant-oat…`) is prefixed by `apiKeyFrom`. */
+const OAUTH_APIKEY_PREFIX = 'oauth:';
 /** Anthropic API version header — pinned (the Messages shape we translate to is
  *  stable across this version). */
 const ANTHROPIC_VERSION = '2023-06-01';
@@ -248,9 +258,18 @@ export const anthropicModule: VendorModule = {
   catalog: CATALOG,
   tierFor: tierForAnthropicModel,
   autoRoute: false, // floor-only: never auto-selected; reached via the coding fallback chain or an explicit pin.
-  apiKeyFrom(env) { return env.CLAUDE_API_KEY ?? null; },
+  // Prefer a connected tenant SUBSCRIPTION (OAuth) over the operator's metered API
+  // key — a tenant's own subscription is free to us, so when present it wins. The
+  // `oauth:` sentinel tells `call()` which auth header to use (it never sees env).
+  apiKeyFrom(env) {
+    if (env.CLAUDE_OAUTH_TOKEN) return `${OAUTH_APIKEY_PREFIX}${env.CLAUDE_OAUTH_TOKEN}`;
+    return env.CLAUDE_API_KEY ?? null;
+  },
   async call(params: VendorCallParams): Promise<VendorCallResult> {
     const req = toAnthropicRequest(params);
+    // Subscription (OAuth) vs API key: decode the sentinel `apiKeyFrom` encoded.
+    const isOAuth = params.apiKey.startsWith(OAUTH_APIKEY_PREFIX);
+    const credential = isOAuth ? params.apiKey.slice(OAUTH_APIKEY_PREFIX.length) : params.apiKey;
     const maxTokens = Math.min(Math.max(1, params.maxTokens ?? DEFAULT_MAX_TOKENS), MAX_OUTPUT_TOKENS);
     // Cache the large STABLE prefix (tools + system instructions/repo context) so a
     // multi-turn coding run pays ~0.1x for it after the first turn instead of full
@@ -259,7 +278,14 @@ export const anthropicModule: VendorModule = {
     // the last tool) caches everything up to and including them. Sub-1024-token
     // prefixes are silently ignored by Anthropic, so this is safe for tiny requests.
     const CACHE = { type: 'ephemeral' as const };
-    const system = req.system ? [{ type: 'text', text: req.system, cache_control: CACHE }] : undefined;
+    // A SUBSCRIPTION (OAuth) token REQUIRES the Claude Code identity as the first
+    // system block — Anthropic 401s an OAuth Messages call without it. Prepend an
+    // (uncached) identity block, keeping the cache breakpoint on the real system
+    // text so the stable prefix is still cached. API-key calls are unchanged.
+    const systemBlocks: Array<Record<string, unknown>> = [];
+    if (isOAuth) systemBlocks.push({ type: 'text', text: CLAUDE_CODE_SYSTEM_PROMPT });
+    if (req.system) systemBlocks.push({ type: 'text', text: req.system, cache_control: CACHE });
+    const system = systemBlocks.length ? systemBlocks : undefined;
     const tools = req.tools && req.tools.length
       ? req.tools.map((t, i) => (i === req.tools!.length - 1 ? { ...t, cache_control: CACHE } : t))
       : undefined;
@@ -289,7 +315,10 @@ export const anthropicModule: VendorModule = {
     const resp = await fetchWithVendorTimeout('anthropic', params.model, ENDPOINT, {
       method: 'POST',
       headers: {
-        'x-api-key': params.apiKey,
+        // Subscription tokens use Bearer + the oauth beta; API keys use x-api-key.
+        ...(isOAuth
+          ? { authorization: `Bearer ${credential}`, 'anthropic-beta': ANTHROPIC_OAUTH_BETA }
+          : { 'x-api-key': credential }),
         'anthropic-version': ANTHROPIC_VERSION,
         'content-type': 'application/json',
       },
@@ -309,7 +338,7 @@ export const anthropicModule: VendorModule = {
     }
     if (AUTH_STATUSES.has(resp.status)) {
       console.error(
-        `[vendors] anthropic/${params.model} auth ${resp.status} — check CLAUDE_API_KEY. Failing over to next model.`,
+        `[vendors] anthropic/${params.model} auth ${resp.status} — ${isOAuth ? 'tenant Claude subscription token rejected (expired/revoked — reconnect)' : 'check CLAUDE_API_KEY'}. Failing over to next model.`,
         errText.slice(0, 200),
       );
       throw new VendorRetryableError('anthropic', params.model, resp.status, `auth ${resp.status}: ${errText.slice(0, 200)}`);

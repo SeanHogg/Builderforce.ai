@@ -1769,6 +1769,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
       outputPrefix: r.outputPrefix ?? null,
       capabilities: r.capabilities ? (JSON.parse(r.capabilities) as string[]) : [],
       tags:       r.tags ? (JSON.parse(r.tags) as string[]) : [],
+      psychometric: r.psychometric ? JSON.parse(r.psychometric) : null,
       source:     r.source ?? 'builtin',
       author:     r.author ?? null,
       active:     r.active,
@@ -1793,6 +1794,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
       outputPrefix?: string | null;
       capabilities?: string[];
       tags?: string[];
+      psychometric?: unknown; // PsychometricProfile object, or null
       source?: string;
       author?: string | null;
       active?: boolean;
@@ -1812,6 +1814,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
         outputPrefix: body.outputPrefix ?? null,
         capabilities: body.capabilities?.length ? JSON.stringify(body.capabilities) : null,
         tags: body.tags?.length ? JSON.stringify(body.tags) : null,
+        psychometric: body.psychometric ? JSON.stringify(body.psychometric) : null,
         source: body.source ?? 'builtin',
         author: body.author ?? null,
         active: body.active ?? true,
@@ -1830,6 +1833,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
         outputPrefix: inserted.outputPrefix ?? null,
         capabilities: inserted.capabilities ? (JSON.parse(inserted.capabilities) as string[]) : [],
         tags:        inserted.tags ? (JSON.parse(inserted.tags) as string[]) : [],
+        psychometric: inserted.psychometric ? JSON.parse(inserted.psychometric) : null,
         source:      inserted.source ?? 'builtin',
         author:      inserted.author ?? null,
         active:      inserted.active,
@@ -1856,6 +1860,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
       outputPrefix?: string | null;
       capabilities?: string[];
       tags?: string[];
+      psychometric?: unknown; // PsychometricProfile object, or null to clear
       source?: string;
       author?: string | null;
       active?: boolean;
@@ -1872,6 +1877,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
     if (body.outputPrefix !== undefined) updates.outputPrefix = body.outputPrefix;
     if (body.capabilities !== undefined) updates.capabilities = body.capabilities?.length ? JSON.stringify(body.capabilities) : null;
     if (body.tags !== undefined) updates.tags = body.tags?.length ? JSON.stringify(body.tags) : null;
+    if (body.psychometric !== undefined) updates.psychometric = body.psychometric ? JSON.stringify(body.psychometric) : null;
     if (body.source !== undefined) updates.source = body.source;
     if (body.author !== undefined) updates.author = body.author;
     if (body.active !== undefined) updates.active = body.active;
@@ -1893,6 +1899,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
         outputPrefix: updated.outputPrefix ?? null,
         capabilities: updated.capabilities ? (JSON.parse(updated.capabilities) as string[]) : [],
         tags:        updated.tags ? (JSON.parse(updated.tags) as string[]) : [],
+        psychometric: updated.psychometric ? JSON.parse(updated.psychometric) : null,
         source:      updated.source ?? 'builtin',
         author:      updated.author ?? null,
         active:      updated.active,

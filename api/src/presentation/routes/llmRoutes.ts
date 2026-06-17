@@ -47,12 +47,23 @@ import { originAllowed, deserializeScopes } from '../../application/llm/tenantAp
 import { listToolsForTenant, callMcpTool } from '../../application/llm/mcpExtensionService';
 import { listBuiltinTools, callBuiltinTool, BUILTIN_EXTENSION_ID } from '../../application/llm/builtinMcpService';
 import {
-  getTenantProviderKey,
   setTenantProviderKey,
+  setTenantProviderOAuth,
+  resolveAnthropicAuth,
+  resolveAnthropicOAuthToken,
   listTenantProviderKeys,
   deleteTenantProviderKey,
   isSupportedProvider,
 } from '../../application/llm/tenantProviderKeyService';
+import {
+  generatePkce,
+  generateState,
+  buildAuthorizeUrl,
+  parsePastedCode,
+  exchangeAnthropicCode,
+  withClaudeCodeSystemPrompt,
+  ANTHROPIC_OAUTH_BETA,
+} from '../../application/llm/anthropicOAuth';
 import { parseAnthropicSseUsage } from '../../application/llm/anthropicSseUsage';
 import {
   anthropicToOpenAiRequest,
@@ -595,16 +606,21 @@ export function createLlmRoutes(): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
 
   // -----------------------------------------------------------------------
-  // BYO provider keys — tenant-managed vendor API keys (currently Anthropic).
-  // GET    /provider-keys            → which providers have a key (no secrets)
-  // PUT    /provider-keys/:provider  → set/replace the key  { apiKey }
-  // DELETE /provider-keys/:provider  → remove the key
+  // BYO provider credentials — tenant-managed Anthropic auth. Two shapes:
+  //   • API key (paste `sk-ant-…`), or
+  //   • Claude Pro/Max SUBSCRIPTION via OAuth (connect your own Claude account).
+  // GET    /provider-keys                       → configured providers + auth type
+  // PUT    /provider-keys/:provider             → set/replace the API key { apiKey }
+  // DELETE /provider-keys/:provider             → remove the credential
+  // POST   /provider-keys/anthropic/oauth/start    → begin subscription connect (PKCE)
+  // POST   /provider-keys/anthropic/oauth/complete → finish connect { code }
   // -----------------------------------------------------------------------
   router.get('/provider-keys', async (c) => {
     let access: TenantAccess;
     try { access = await requireTenantAccess(c); } catch (err) { return respondToAccessError(c, err); }
-    const providers = await listTenantProviderKeys(c.env, access.tenantId);
-    return c.json({ providers });
+    const details = await listTenantProviderKeys(c.env, access.tenantId);
+    // `providers` (id array) kept for backward compatibility; `details` carries auth type.
+    return c.json({ providers: details.map((d) => d.provider), details });
   });
 
   router.put('/provider-keys/:provider', async (c) => {
@@ -617,6 +633,61 @@ export function createLlmRoutes(): Hono<HonoEnv> {
     if (!apiKey) return c.json({ error: 'apiKey is required' }, 400);
     await setTenantProviderKey(c.env, access.tenantId, provider, apiKey, access.userId);
     return c.json({ ok: true, provider });
+  });
+
+  // KV key for a pending PKCE verifier, scoped to tenant+state so concurrent
+  // connect attempts (or tenants) never collide. Short TTL — the consent flow
+  // is interactive but bounded.
+  const oauthPkceKey = (tenantId: number, state: string): string => `anthropic_oauth:${tenantId}:${state}`;
+  const OAUTH_PKCE_TTL_SECONDS = 900; // 15 min to complete the consent + paste.
+
+  // Begin the Claude subscription connect: mint PKCE + state, stash the verifier
+  // server-side (KV), and hand the browser the authorize URL to open. The verifier
+  // never leaves the server — only the S256 challenge travels in the URL.
+  router.post('/provider-keys/anthropic/oauth/start', async (c) => {
+    let access: TenantAccess;
+    try { access = await requireTenantAccess(c); } catch (err) { return respondToAccessError(c, err); }
+    const kv = (c.env as { AUTH_CACHE_KV?: KVNamespace }).AUTH_CACHE_KV;
+    if (!kv) return c.json({ error: 'OAuth connect unavailable (AUTH_CACHE_KV unbound)', code: 'oauth_unconfigured' }, 503);
+
+    const { verifier, challenge } = await generatePkce();
+    const state = generateState();
+    await kv.put(oauthPkceKey(access.tenantId, state), verifier, { expirationTtl: OAUTH_PKCE_TTL_SECONDS });
+    return c.json({ authorizeUrl: buildAuthorizeUrl({ state, challenge }), state });
+  });
+
+  // Finish the connect: take the pasted `code#state`, recover the verifier by
+  // state (CSRF-checked), exchange for subscription tokens, and store them
+  // encrypted. The `state` may ride inside the pasted code or be sent explicitly.
+  router.post('/provider-keys/anthropic/oauth/complete', async (c) => {
+    let access: TenantAccess;
+    try { access = await requireTenantAccess(c); } catch (err) { return respondToAccessError(c, err); }
+    const kv = (c.env as { AUTH_CACHE_KV?: KVNamespace }).AUTH_CACHE_KV;
+    if (!kv) return c.json({ error: 'OAuth connect unavailable (AUTH_CACHE_KV unbound)', code: 'oauth_unconfigured' }, 503);
+
+    const body = await c.req.json<{ code?: string; state?: string }>().catch(() => ({} as { code?: string; state?: string }));
+    const rawCode = body.code?.trim();
+    if (!rawCode) return c.json({ error: 'code is required' }, 400);
+    const parsed = parsePastedCode(rawCode);
+    const state = (parsed.state ?? body.state ?? '').trim();
+    if (!state) return c.json({ error: 'state is required (paste the full code shown by Claude)', code: 'oauth_missing_state' }, 400);
+
+    const pkceKvKey = oauthPkceKey(access.tenantId, state);
+    const verifier = await kv.get(pkceKvKey);
+    if (!verifier) {
+      return c.json({ error: 'Connect session expired or invalid — start again.', code: 'oauth_state_expired' }, 400);
+    }
+
+    let tokens;
+    try {
+      tokens = await exchangeAnthropicCode({ code: parsed.code, state, verifier });
+    } catch (e) {
+      return c.json({ error: e instanceof Error ? e.message : 'OAuth exchange failed', code: 'oauth_exchange_failed' }, 502);
+    }
+    // Single-use verifier — drop it whether or not the store succeeds.
+    await kv.delete(pkceKvKey).catch(() => { /* best effort */ });
+    await setTenantProviderOAuth(c.env, access.tenantId, 'anthropic', tokens, access.userId);
+    return c.json({ ok: true, provider: 'anthropic', authType: 'oauth' });
   });
 
   router.delete('/provider-keys/:provider', async (c) => {
@@ -651,19 +722,36 @@ export function createLlmRoutes(): Hono<HonoEnv> {
     const product = productNameForPlan(access.effectivePlan, access.premiumOverride);
     const idempotencyKey = c.req.header('idempotency-key') ?? null;
 
-    const anthropicKey = await getTenantProviderKey(c.env, access.tenantId, 'anthropic');
+    // Resolve the tenant's Anthropic credential — an API key OR a connected
+    // Claude Pro/Max subscription (OAuth, auto-refreshed). Both pass through to
+    // real Anthropic; they differ only in the auth header and (for OAuth) the
+    // required Claude Code system-prompt injection + oauth beta header.
+    const anthropicAuth = await resolveAnthropicAuth(c.env, access.tenantId);
 
-    // ── BYO Anthropic key → pass through to real Anthropic ──────────────────
-    if (anthropicKey) {
+    // ── BYO Anthropic credential → pass through to real Anthropic ───────────
+    if (anthropicAuth) {
+      const isOAuth = anthropicAuth.mode === 'oauth';
+      // OAuth subscription tokens require the Claude Code identity as the first
+      // system block; an API key passes the caller's body through verbatim.
+      const outboundBody = isOAuth
+        ? JSON.stringify(withClaudeCodeSystemPrompt(parsed as unknown as Record<string, unknown>))
+        : bodyText;
+      // Merge any caller-supplied beta flags with the mandatory oauth beta.
+      const callerBeta = c.req.header('anthropic-beta');
+      const betaHeader = isOAuth
+        ? (callerBeta && !callerBeta.includes(ANTHROPIC_OAUTH_BETA) ? `${callerBeta},${ANTHROPIC_OAUTH_BETA}` : ANTHROPIC_OAUTH_BETA)
+        : callerBeta;
       const upstream = await fetch('https://api.anthropic.com/v1/messages', {
         method: 'POST',
         headers: {
           'content-type': 'application/json',
-          'x-api-key': anthropicKey,
+          ...(isOAuth
+            ? { authorization: `Bearer ${anthropicAuth.accessToken}` }
+            : { 'x-api-key': anthropicAuth.key }),
           'anthropic-version': c.req.header('anthropic-version') ?? '2023-06-01',
-          ...(c.req.header('anthropic-beta') ? { 'anthropic-beta': c.req.header('anthropic-beta') as string } : {}),
+          ...(betaHeader ? { 'anthropic-beta': betaHeader } : {}),
         },
-        body: bodyText,
+        body: outboundBody,
       });
 
       if (!streamed) {
@@ -999,7 +1087,11 @@ export function createLlmRoutes(): Hono<HonoEnv> {
     // $ cap — the primary pool still runs, only the paid fallback/backstop is
     // disabled. Hard ceiling on what a tight retry loop can spend on our keys.
     const disablePaidOverflow = await isPaidOverflowExhausted(c, access);
-    const service = llmProxyForPlan(c.env, access.effectivePlan, access.premiumOverride, { disablePaidOverflow });
+    // If the tenant connected their own Claude subscription, any direct-Claude
+    // resolution in the cascade rides it (Bearer + oauth) instead of our metered
+    // key — and isn't metered as overflow. Null for everyone else (unchanged).
+    const anthropicOAuthToken = await resolveAnthropicOAuthToken(c.env, access.tenantId);
+    const service = llmProxyForPlan(c.env, access.effectivePlan, access.premiumOverride, { disablePaidOverflow, ...(anthropicOAuthToken ? { anthropicOAuthToken } : {}) });
     const result = await service.complete(body, undefined, traceId);
 
     // Clone upstream headers we care about

@@ -63,6 +63,7 @@ import { createArtifactAssignmentRoutes } from './presentation/routes/artifactAs
 import { createProjectAgentRoutes } from './presentation/routes/projectAgentRoutes';
 import { createMarketplaceStatsRoutes } from './presentation/routes/marketplaceStatsRoutes';
 import { createWorkforceRoutes }        from './presentation/routes/workforceRoutes';
+import { createPersonaRoutes }          from './presentation/routes/personaRoutes';
 import { createLlmRoutes }          from './presentation/routes/llmRoutes';
 import { createSemanticCacheRoutes } from './presentation/routes/semanticCacheRoutes';
 import { createAdminRoutes }        from './presentation/routes/adminRoutes';
@@ -312,6 +313,7 @@ function buildApp(env: Env): Hono<HonoEnv> {
   app.route('/api/artifact-assignments', createArtifactAssignmentRoutes(db));
   app.route('/api/project-agents', createProjectAgentRoutes(db));
   app.route('/api/marketplace-stats', createMarketplaceStatsRoutes(db));
+  app.route('/api/personas', createPersonaRoutes());
 
   // Chat persistence (agentHost-auth writes + tenant-JWT reads)
   app.route('/api', createChatRoutes(db));

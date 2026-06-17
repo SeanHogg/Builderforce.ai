@@ -17,6 +17,7 @@ import { PermissionDebuggerProvider } from '@/lib/PermissionDebuggerContext';
 import ThemeProvider from './ThemeProvider';
 import ConditionalAppShell from '@/components/ConditionalAppShell';
 import { PwaUpdateBanner } from '@/components/PwaUpdateBanner';
+import { PwaInstallPrompt } from '@/components/PwaInstallPrompt';
 import { GlobalErrorHandler } from '@/components/GlobalErrorHandler';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 
@@ -162,6 +163,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         </ErrorBoundary>
 
         <PwaUpdateBanner />
+        <PwaInstallPrompt />
       </body>
     </html>
   );
