@@ -13,11 +13,15 @@ import { createHash } from "node:crypto";
 import { randomUUID } from "node:crypto";
 import fs from "node:fs/promises";
 import path from "node:path";
-import { type AgentEngine, DEFAULT_ENGINE_ID, ENGINE_IDS, resolveEngineById } from "@builderforce/agent-tools";
+import {
+  type AgentEngine,
+  DEFAULT_ENGINE_ID,
+  ENGINE_IDS,
+  resolveEngineById,
+} from "@builderforce/agent-tools";
 import { WebSocket } from "ws";
 import { buildAssignedCapabilityAppend } from "../agents/assigned-capabilities.js";
 import { type V2RunnerSinks } from "../agents/claude-agent-sdk-runner.js";
-import { ClaudeSdkAgentEngine } from "./sdk-agent-engine.js";
 import { loadProjectContext, updateProjectContextFields } from "../builderforce/project-context.js";
 import type { IRelayService } from "../builderforce/relay-service.js";
 import { GatewayClient, type GatewayClientOptions } from "../gateway/client.js";
@@ -47,6 +51,8 @@ import { resolveCodingSession } from "./coding-session-broker.js";
 import { buildSteeringInjection } from "./relay-steering.js";
 import { resolveRemoteResult } from "./remote-result-broker.js";
 import { dispatchResultToRemoteAgentNode, type RemoteDispatchOptions } from "./remote-subagent.js";
+import { createGitRepoSync } from "./repo-sync.js";
+import { ClaudeSdkAgentEngine } from "./sdk-agent-engine.js";
 import {
   taskWorkspaceDir,
   buildTaskCloneUrl,
@@ -252,25 +258,27 @@ export class BuilderforceRelayService implements IRelayService {
       /* fall back to baseDir */
     });
     if (repo?.repoId && taskId != null) {
-      const git = makeCodingGit({ apiKey: this.opts.apiKey });
-      if (!(await isCloned(cwd))) {
-        try {
-          const cloneUrl = buildTaskCloneUrl(
-            normalizeBaseUrl(this.opts.baseUrl),
-            this.opts.agentNodeId,
-            repo.repoId,
-          );
-          await git.clone(cloneUrl, cwd, repo.defaultBranch ?? null);
-        } catch (err) {
-          logWarn(`[builderforce] task ${taskId} clone failed: ${String(err)}`);
-        }
-      }
-      // Execute under the ticket branch so every change is pending on it. Idempotent:
-      // creating an existing branch fails harmlessly (the tree is already on it).
-      if (await isCloned(cwd)) {
-        await git.checkoutNewBranch(cwd, taskBranchName(taskId)).catch(() => {
-          /* already on the branch */
-        });
+      // Modular repo preparation through the shared strategy: clone once, then on
+      // reuse refresh to the latest default branch ONLY when the tree is clean —
+      // the ticket workspace accumulates uncommitted WIP across runs, which the
+      // strategy preserves rather than clobbering. Finally land on the ticket
+      // branch (idempotent) so every change stays pending on it.
+      const repoSync = createGitRepoSync(makeCodingGit({ apiKey: this.opts.apiKey }));
+      const cloneUrl = buildTaskCloneUrl(
+        normalizeBaseUrl(this.opts.baseUrl),
+        this.opts.agentNodeId,
+        repo.repoId,
+      );
+      const prep = await repoSync.prepare({
+        dir: cwd,
+        repo: { cloneUrl, defaultBranch: repo.defaultBranch ?? null },
+        workBranch: taskBranchName(taskId),
+        mode: "ticket-branch",
+      });
+      if (!prep.ok) {
+        logWarn(`[builderforce] task ${taskId} repo sync failed: ${prep.error}`);
+      } else if (prep.preservedLocalChanges) {
+        logWarn(`[builderforce] task ${taskId}: preserved uncommitted WIP, skipped refresh`);
       }
     }
     return cwd;

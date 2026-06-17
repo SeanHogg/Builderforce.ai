@@ -3,7 +3,26 @@
  */
 
 import { globalPersonaRegistry } from "./personas.js";
+import type { PsychometricProfile } from "./psychometrics.js";
 import type { AgentRole, PersonaPlugin } from "./types.js";
+
+/**
+ * Parse the JSON psychometric profile carried by a synced persona. Returns
+ * undefined on absent/blank/malformed input — a bad profile must never break
+ * persona registration; the agent simply runs without a personality.
+ */
+function parsePsychometricProfile(raw: string | null | undefined): PsychometricProfile | undefined {
+  if (!raw || typeof raw !== "string") return undefined;
+  try {
+    const parsed = JSON.parse(raw) as PsychometricProfile;
+    if (parsed && typeof parsed === "object" && parsed.vector && typeof parsed.vector === "object") {
+      return parsed;
+    }
+  } catch {
+    // ignore malformed profile
+  }
+  return undefined;
+}
 
 /**
  * Code Creator Agent - Generates new code, features, and implementations
@@ -331,20 +350,24 @@ export function registerPlatformPersonasAsRoles(
     voice: string | null;
     perspective: string | null;
     outputPrefix: string | null;
+    /** JSON PsychometricProfile (Pro feature); null/absent when none. */
+    psychometric?: string | null;
   }>,
 ): void {
   for (const p of personas) {
+    const psychometric = parsePsychometricProfile(p.psychometric);
     const plugin: PersonaPlugin = {
       name: p.slug,
       description: p.description ?? "",
       capabilities: [],
       tools: [],
       persona:
-        p.voice || p.perspective
+        p.voice || p.perspective || psychometric
           ? {
               voice: p.voice ?? "",
               perspective: p.perspective ?? "",
               decisionStyle: "",
+              psychometric,
             }
           : undefined,
       outputFormat: p.outputPrefix

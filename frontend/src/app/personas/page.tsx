@@ -13,6 +13,8 @@ import {
 } from '@/lib/builderforceApi';
 import { BUILTIN_PERSONAS, userPersonasKey, type Persona, type UserPersona } from '@/lib/marketplaceData';
 import ArtifactAssigner from '@/components/ArtifactAssigner';
+import PsychometricEditor from '@/components/PsychometricEditor';
+import type { PsychometricProfile } from '@/lib/psychometric';
 import PageContainer from '@/components/PageContainer';
 import { PersonaAssignmentsContent } from '@/components/PersonaAssignmentsContent';
 import { ViewToggle, type ViewMode } from '@/components/ViewToggle';
@@ -48,6 +50,7 @@ export default function PersonasPage() {
   const [hasAgentHosts, setHasAgentHosts] = useState(true);
   const [installedSlugs, setInstalledSlugs] = useState<Set<string>>(new Set());
   const [createOpen, setCreateOpen] = useState(false);
+  const [createPsychometric, setCreatePsychometric] = useState<PsychometricProfile | undefined>(undefined);
   const [createForm, setCreateForm] = useState({
     name: '',
     description: '',
@@ -149,11 +152,13 @@ export default function PersonasPage() {
       likes: 0,
       downloads: 0,
       createdAt: new Date().toISOString(),
+      psychometric: createPsychometric,
     };
     setUserPersonas((prev) => [...prev, persona]);
     saveUserPersonas(tenantId, [...userPersonas, persona]);
     setCreateOpen(false);
     setCreateForm({ name: '', description: '', voice: '', perspective: '', decisionStyle: '', outputPrefix: '', capabilities: '', tags: '', image: '' });
+    setCreatePsychometric(undefined);
     setTab('my-personas');
   };
 
@@ -501,6 +506,7 @@ export default function PersonasPage() {
                 <label className="label">Cover Image URL</label>
                 <input className="input" placeholder="https://example.com/image.jpg" value={createForm.image} onChange={(e) => setCreateForm((f) => ({ ...f, image: e.target.value }))} />
               </div>
+              <PsychometricEditor value={createPsychometric} onChange={setCreatePsychometric} />
             </div>
             <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 20 }}>
               <button type="button" className="btn btn-secondary" onClick={() => setCreateOpen(false)}>Cancel</button>

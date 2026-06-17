@@ -11,13 +11,13 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { normalizeBaseUrl } from "../utils/normalize-base-url.js";
-import { awaitCodingSession } from "./coding-session-broker.js";
 import type {
   CodingDispatchAgent,
   CodingDispatchGit,
   CodingDispatchHttp,
   DispatchDetail,
 } from "./builderforce-coding-dispatch.js";
+import { awaitCodingSession } from "./coding-session-broker.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -46,12 +46,15 @@ export function makeCodingHttp(opts: {
     },
 
     async openPullRequest(dispatchId, pr): Promise<{ url: string; number: number } | null> {
-      const res = await fetch(`${hostBase}/dispatch/${encodeURIComponent(dispatchId)}/pull-request`, {
-        method: "POST",
-        headers: auth,
-        body: JSON.stringify(pr),
-        signal: AbortSignal.timeout(30_000),
-      });
+      const res = await fetch(
+        `${hostBase}/dispatch/${encodeURIComponent(dispatchId)}/pull-request`,
+        {
+          method: "POST",
+          headers: auth,
+          body: JSON.stringify(pr),
+          signal: AbortSignal.timeout(30_000),
+        },
+      );
       if (!res.ok) return null;
       const body = (await res.json()) as { url?: string; number?: number };
       return typeof body.url === "string" && typeof body.number === "number"
@@ -91,6 +94,20 @@ export function makeCodingGit(opts: { apiKey: string }): CodingDispatchGit {
   };
 
   return {
+    async hasClone(dir): Promise<boolean> {
+      try {
+        await run(["-C", dir, "rev-parse", "--is-inside-work-tree"]);
+        return true;
+      } catch {
+        return false;
+      }
+    },
+
+    async isDirty(dir): Promise<boolean> {
+      const status = await run(["-C", dir, "status", "--porcelain"]);
+      return status.trim().length > 0;
+    },
+
     async clone(cloneUrl, dir, branch): Promise<void> {
       const args = [...authHeaderArgs, "clone", "--depth", "1", "--single-branch"];
       if (branch) args.push("--branch", branch);
@@ -98,8 +115,26 @@ export function makeCodingGit(opts: { apiKey: string }): CodingDispatchGit {
       await run(args);
     },
 
+    async syncToLatest(dir, branch): Promise<void> {
+      // Pull the latest tip of the upstream branch and hard-reset onto it. The
+      // caller only invokes this when the work tree is clean, so discarding local
+      // state here is safe; `clean -fd` removes any stray untracked files.
+      const ref = branch && branch.trim() ? branch : "HEAD";
+      await run(["-C", dir, ...authHeaderArgs, "fetch", "--depth", "1", "origin", ref]);
+      await run(["-C", dir, "reset", "--hard", "FETCH_HEAD"]);
+      await run(["-C", dir, "clean", "-fd"]);
+    },
+
     async checkoutNewBranch(dir, branch): Promise<void> {
       await run(["-C", dir, "checkout", "-b", branch]);
+    },
+
+    async checkoutOrCreateBranch(dir, branch): Promise<void> {
+      try {
+        await run(["-C", dir, "checkout", branch]);
+      } catch {
+        await run(["-C", dir, "checkout", "-b", branch]);
+      }
     },
 
     async commitAll(dir, message): Promise<{ changed: boolean }> {
@@ -130,7 +165,10 @@ export function makeCodingAgent(getGateway: () => GatewayLike | null): CodingDis
           idempotencyKey: `coding-${sessionKey}`,
         });
       } catch (err) {
-        return { ok: false, summary: `chat.send failed: ${err instanceof Error ? err.message : String(err)}` };
+        return {
+          ok: false,
+          summary: `chat.send failed: ${err instanceof Error ? err.message : String(err)}`,
+        };
       }
       const outcome = await done;
       return { ok: outcome.ok, summary: outcome.text };

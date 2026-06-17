@@ -43,6 +43,14 @@ export interface VendorEnv {
    *  OpenRouter-routed paid coder is unreachable, the coding cascade falls back to
    *  Claude directly on this key (claude-sonnet-4-6 → claude-opus-4-8). */
   CLAUDE_API_KEY?: string | null;
+  /** A connected tenant's Claude Pro/Max SUBSCRIPTION access token (OAuth). When
+   *  set, the `anthropic` vendor authenticates with `Authorization: Bearer` + the
+   *  oauth beta header + the Claude Code system prompt instead of `x-api-key`, so
+   *  the cascade's direct-Claude calls ride the tenant's OWN subscription ($0 to
+   *  us) rather than the operator's metered `CLAUDE_API_KEY`. Synthesized per
+   *  request by `LlmProxyService` from `resolveAnthropicOAuthToken`; absent for
+   *  tenants who didn't connect a subscription (behaviour unchanged). */
+  CLAUDE_OAUTH_TOKEN?: string | null;
   /** Cloudflare Workers AI token — `cfut_*` auth header for `/ai/run/...` calls. */
   CLOUDFLARE_AI_API_TOKEN?: string | null;
   /** Cloudflare account id — embedded in the endpoint URL

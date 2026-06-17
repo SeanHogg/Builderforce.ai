@@ -34,6 +34,14 @@ export type BuilderForceAgentsSkillMetadata = {
     anyBins?: string[];
     env?: string[];
     config?: string[];
+    /**
+     * Other SKILLs this skill depends on (by `name`). The skill is only eligible
+     * when every dependency is itself eligible, and eligible dependencies are
+     * auto-included in the run even if a skill filter would exclude them.
+     * Resolved cross-skill at the workspace layer (see skills/dependencies.ts),
+     * not by the per-skill requires evaluator.
+     */
+    skills?: string[];
   };
   install?: SkillInstallSpec[];
 };

@@ -195,6 +195,12 @@ export type ProjectContext = {
 export type AgentPersona = {
   /** How the agent communicates, e.g. "methodical and detail-oriented" */
   voice: string;
+  /**
+   * Optional psychometric profile (Pro feature). A structured trait vector that
+   * changes how the agent reasons and executes, not just its tone. Compiled into
+   * prompt directives + execution params by `compilePsychometricProfile`.
+   */
+  psychometric?: import("./psychometrics.js").PsychometricProfile;
   /** The lens through which the agent evaluates all inputs, e.g. "views code through a security lens" */
   perspective: string;
   /** How the agent makes trade-off decisions, e.g. "conservative: prefer proven patterns" */

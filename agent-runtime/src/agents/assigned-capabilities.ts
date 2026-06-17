@@ -14,6 +14,11 @@
  *     guidance preamble to the SDK prompt (its run path injects nothing otherwise).
  */
 import { buildPersonaSystemBlock, globalPersonaRegistry } from "../builderforce/personas.js";
+import {
+  getRoleProfile,
+  mergeExecParams,
+  type PsychometricExecParams,
+} from "../builderforce/psychometrics.js";
 import { logDebug } from "../logger.js";
 
 export type AssignedArtifactSlugs = {
@@ -60,6 +65,27 @@ export function buildAssignedPersonaPrompt(): string {
   const block = blocks.join("\n\n");
   if (block) logDebug(`[capabilities] injecting ${active.length} active persona(s) into system prompt`);
   return block;
+}
+
+/**
+ * Resolve the execution-param overrides contributed by the psychometric profiles
+ * of the personas currently active on this agent. Empty object when none carry a
+ * profile. These are *defaults* — an explicit per-request thinkLevel/temperature
+ * always wins. This is the second half of "execute under the persona": it lets a
+ * trait vector change how the agent reasons (think depth, sampling), not just its
+ * prompt text.
+ */
+export function resolveActivePsychometricParams(): PsychometricExecParams {
+  const active = globalPersonaRegistry.listActive();
+  const profiles = active.map(getRoleProfile).filter((p): p is NonNullable<typeof p> => Boolean(p));
+  if (profiles.length === 0) return {};
+  const params = mergeExecParams(profiles);
+  if (params.thinkLevel || params.reasoningLevel || params.temperature !== undefined) {
+    logDebug(
+      `[capabilities] psychometric exec params: think=${params.thinkLevel ?? "-"} reasoning=${params.reasoningLevel ?? "-"} temp=${params.temperature ?? "-"}`,
+    );
+  }
+  return params;
 }
 
 /**

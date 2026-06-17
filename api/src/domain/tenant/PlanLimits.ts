@@ -31,6 +31,11 @@ export interface PlanLimits {
   fullTelemetry: boolean;
   /** Whether custom agent roles (.builderforce/agents/) are synced from Builderforce */
   customAgentRoles: boolean;
+  /**
+   * Whether personas can carry a psychometric profile (trait-vector personality
+   * that changes how the agent reasons/executes). Pro feature.
+   */
+  psychometricPersona: boolean;
   /** Whether the shared team approval inbox is available */
   teamApprovalInbox: boolean;
   /** Whether per-seat cost controls are available */
@@ -48,6 +53,7 @@ export const PLAN_LIMITS: Record<TenantPlan, PlanLimits> = {
     fleetMesh: false,
     fullTelemetry: false,
     customAgentRoles: false,
+    psychometricPersona: false,
     teamApprovalInbox: false,
     seatCostControls: false,
   },
@@ -61,6 +67,7 @@ export const PLAN_LIMITS: Record<TenantPlan, PlanLimits> = {
     fleetMesh: true,
     fullTelemetry: true,
     customAgentRoles: true,
+    psychometricPersona: true,
     teamApprovalInbox: false,
     seatCostControls: false,
   },
@@ -74,6 +81,7 @@ export const PLAN_LIMITS: Record<TenantPlan, PlanLimits> = {
     fleetMesh: true,
     fullTelemetry: true,
     customAgentRoles: true,
+    psychometricPersona: true,
     teamApprovalInbox: true,
     seatCostControls: true,
   },

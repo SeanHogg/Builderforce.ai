@@ -656,6 +656,12 @@ export interface LlmProxyOptions {
    *  free coding pool) so every free coder is exhausted before any paid/metered
    *  coder. */
   freeBudget?: number;
+  /** A connected tenant's Claude Pro/Max SUBSCRIPTION access token. When set, the
+   *  `anthropic` vendor authenticates with it (Bearer + oauth) instead of the
+   *  operator key, so any direct-Claude resolution in the cascade rides the
+   *  tenant's own subscription — and is NOT metered as paid-overflow (it's $0 to
+   *  us). Resolved per request from `resolveAnthropicOAuthToken`. */
+  anthropicOAuthToken?: string | null;
 }
 
 export class LlmProxyService {
@@ -669,6 +675,7 @@ export class LlmProxyService {
   private readonly disablePaidOverflow: boolean;
   private readonly codingOnly: boolean;
   private readonly freeBudget: number;
+  private readonly anthropicOAuthToken: string | null;
 
   constructor(env: ProxyEnv, options?: LlmProxyOptions) {
     this.env = env;
@@ -681,6 +688,15 @@ export class LlmProxyService {
     this.disablePaidOverflow = options?.disablePaidOverflow ?? false;
     this.codingOnly = options?.codingOnly ?? false;
     this.freeBudget = options?.freeBudget && options.freeBudget > 0 ? options.freeBudget : FREE_ATTEMPT_BUDGET;
+    this.anthropicOAuthToken = options?.anthropicOAuthToken ?? null;
+  }
+
+  /** True when this result was served by the tenant's connected Claude SUBSCRIPTION
+   *  (the `anthropic` vendor with an OAuth token bound) — so it's free to us and
+   *  must NOT be metered as paid-overflow. The vendor only ever uses OAuth when the
+   *  token is present, so vendor=anthropic + token bound ⇒ subscription-funded. */
+  private isSubscriptionFunded(result: ProxyResult): boolean {
+    return this.anthropicOAuthToken != null && result.resolvedVendor === 'anthropic';
   }
 
   /** The premium fallback chain appended to every cascade — empty when the tenant
@@ -785,7 +801,8 @@ export class LlmProxyService {
       // cap, in which case we don't fund another paid call.
       const backstop = this.disablePaidOverflow ? null : await this.dispatchBackstop(body, requestHeaders);
       if (backstop) {
-        backstop.paidOverflow = true;
+        // Subscription-funded Claude is free to us → never meter it as overflow.
+        backstop.paidOverflow = !this.isSubscriptionFunded(backstop);
         return this.finalize(backstop, tid, startedAt, [...this.backstopModels], 'success');
       }
       return this.finalize(
@@ -801,8 +818,9 @@ export class LlmProxyService {
     const primary = await this.dispatch(candidates, body, requestHeaders, { signal });
     if (primary.response.status < 400) {
       // Mark overflow when the primary cascade itself landed on an appended
-      // premium-fallback model (vs a plan-pool model) so the route meters it.
-      primary.paidOverflow = isPaidOverflowModel(primary.resolvedModel);
+      // premium-fallback model (vs a plan-pool model) so the route meters it —
+      // UNLESS a tenant subscription served it (free to us, see isSubscriptionFunded).
+      primary.paidOverflow = isPaidOverflowModel(primary.resolvedModel) && !this.isSubscriptionFunded(primary);
       return this.finalize(primary, tid, startedAt, candidates);
     }
 
@@ -823,7 +841,7 @@ export class LlmProxyService {
       backstop.failovers = [...primary.failovers, ...backstop.failovers];
       backstop.retries   = primary.retries + backstop.retries;
       backstop.attempts  = [...(primary.attempts ?? []), ...(backstop.attempts ?? [])];
-      backstop.paidOverflow = true;
+      backstop.paidOverflow = !this.isSubscriptionFunded(backstop);
       return this.finalize(backstop, tid, startedAt, [...candidates, ...this.backstopModels], 'success');
     }
     return this.finalize(primary, tid, startedAt, candidates);
@@ -960,6 +978,10 @@ export class LlmProxyService {
       // Direct-Anthropic floor key. Flows through creditedVendorEnv() too (which
       // spreads this) so the coding backstop can reach Claude regardless of plan.
       CLAUDE_API_KEY:           this.env.CLAUDE_API_KEY           ?? null,
+      // A connected tenant's Claude subscription token — when present the anthropic
+      // vendor prefers it over CLAUDE_API_KEY (tenant-funded, $0 to us). Spread into
+      // creditedVendorEnv() too, so a backstop landing on Claude also uses it.
+      CLAUDE_OAUTH_TOKEN:       this.anthropicOAuthToken         ?? null,
       CLOUDFLARE_AI_API_TOKEN:  this.env.CLOUDFLARE_AI_API_TOKEN  ?? null,
       CLOUDFLARE_ACCOUNT_ID:    this.env.CLOUDFLARE_ACCOUNT_ID    ?? null,
     };
@@ -1494,7 +1516,7 @@ export function llmProxyForPlan(
   env: ProxyEnv,
   effectivePlan: EffectivePlan,
   premiumOverride = false,
-  opts?: { backstopModels?: readonly string[]; disablePaidOverflow?: boolean; codingOnly?: boolean },
+  opts?: { backstopModels?: readonly string[]; disablePaidOverflow?: boolean; codingOnly?: boolean; anthropicOAuthToken?: string | null },
 ): LlmProxyService {
   const { productName, modelPool, vendorCallTimeoutMs } = resolveRouting(effectivePlan, premiumOverride);
   // A CODING run restricts its failover cascade to the curated coding pool, so an
@@ -1512,6 +1534,8 @@ export function llmProxyForPlan(
     // A coding run walks the WHOLE free coding pool before any paid/metered coder
     // (cost over latency), so the funded direct-Anthropic floor is genuine last-resort.
     ...(opts?.codingOnly ? { codingOnly: true, freeBudget: CODING_FREE_ATTEMPT_BUDGET } : {}),
+    // A connected tenant subscription token powers any direct-Claude resolution.
+    ...(opts?.anthropicOAuthToken ? { anthropicOAuthToken: opts.anthropicOAuthToken } : {}),
   });
 }
 

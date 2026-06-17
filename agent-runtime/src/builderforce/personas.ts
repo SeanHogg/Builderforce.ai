@@ -17,6 +17,7 @@ import os from "node:os";
 import path from "node:path";
 import { parse as parseYaml } from "yaml";
 import { logDebug } from "../logger.js";
+import { buildPsychometricBlock } from "./psychometrics.js";
 import type { AgentRole, PersonaAssignment, PersonaPlugin, PersonaSource } from "./types.js";
 
 // ---------------------------------------------------------------------------
@@ -327,6 +328,8 @@ export function buildPersonaSystemBlock(role: AgentRole): string {
     lines.push(`Voice: ${role.persona.voice}`);
     lines.push(`Perspective: ${role.persona.perspective}`);
     lines.push(`Decision style: ${role.persona.decisionStyle}`);
+    const psychometricBlock = buildPsychometricBlock(role.persona.psychometric);
+    if (psychometricBlock) lines.push(psychometricBlock);
   }
 
   if (role.outputFormat?.requiredSections?.length) {

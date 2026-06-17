@@ -42,6 +42,8 @@ export interface UserPersona {
   likes: number;
   downloads: number;
   createdAt: string;
+  /** Optional psychometric profile (Pro). Compiled into behaviour at run time. */
+  psychometric?: import('./psychometric').PsychometricProfile;
 }
 
 export const BUILTIN_PERSONAS: Persona[] = [

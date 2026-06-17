@@ -46,6 +46,14 @@ export type RuntimeRequires = {
   anyBins?: string[];
   env?: string[];
   config?: string[];
+  /**
+   * Skill-to-skill dependencies. NOT evaluated here — this evaluator is
+   * per-skill (bins/env/config are self-contained), whereas a skill dependency
+   * needs the full skill set. It is resolved at the workspace layer
+   * (agents/skills/dependencies.ts). Declared on the type so callers can pass a
+   * full requires block through without stripping it.
+   */
+  skills?: string[];
 };
 
 export function evaluateRuntimeRequires(params: {

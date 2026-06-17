@@ -1,0 +1,306 @@
+'use client';
+
+/**
+ * PsychometricEditor — the Pro persona-personality editor.
+ *
+ * Three ways to define an agent's trait vector, all writing the same
+ * {@link PsychometricProfile}:
+ *   • Sliders      — one slider per dimension across the full framework suite
+ *   • Questionnaire — a Likert intake, scored server-side into the vector
+ *   • Import        — paste a human's test results (JSON) to seed the vector
+ *
+ * The component decides its own visibility: when the tenant is not entitled it
+ * renders a locked upsell instead of the editor (shared-component gating, so the
+ * persona modal never needs to know the plan).
+ */
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { psychometric as psychometricApi } from '@/lib/builderforceApi';
+import {
+  NEUTRAL_SCORE,
+  profileHasSignal,
+  type CatalogFramework,
+  type CatalogQuestion,
+  type EnneagramType,
+  type PsychometricProfile,
+} from '@/lib/psychometric';
+
+type Tab = 'sliders' | 'questionnaire' | 'import';
+
+interface Props {
+  value?: PsychometricProfile;
+  onChange: (profile: PsychometricProfile | undefined) => void;
+}
+
+export default function PsychometricEditor({ value, onChange }: Props) {
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [entitled, setEntitled] = useState(false);
+  const [frameworks, setFrameworks] = useState<CatalogFramework[]>([]);
+  const [questions, setQuestions] = useState<CatalogQuestion[]>([]);
+  const [enneagram, setEnneagram] = useState<EnneagramType[]>([]);
+
+  const [tab, setTab] = useState<Tab>('sliders');
+  const [vector, setVector] = useState<Record<string, number>>(value?.vector ?? {});
+  const [enneagramType, setEnneagramType] = useState<number | undefined>(value?.enneagramType);
+  const [mbti, setMbti] = useState(value?.mbti ?? '');
+  const [answers, setAnswers] = useState<Record<string, number>>({});
+  const [importText, setImportText] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [notice, setNotice] = useState('');
+
+  useEffect(() => {
+    let alive = true;
+    psychometricApi
+      .catalog()
+      .then((cat) => {
+        if (!alive) return;
+        setEntitled(cat.entitled);
+        setFrameworks(cat.frameworks);
+        setQuestions(cat.questions);
+        setEnneagram(cat.enneagram);
+      })
+      .catch((e) => alive && setError(e instanceof Error ? e.message : 'Failed to load catalog'))
+      .finally(() => alive && setLoading(false));
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  const emit = useCallback(
+    (next: { vector?: Record<string, number>; enneagramType?: number; mbti?: string; source?: PsychometricProfile['source'] }) => {
+      const merged: PsychometricProfile = {
+        vector: next.vector ?? vector,
+        enneagramType: 'enneagramType' in next ? next.enneagramType : enneagramType,
+        mbti: ('mbti' in next ? next.mbti : mbti) || undefined,
+        source: next.source ?? value?.source ?? 'sliders',
+      };
+      onChange(profileHasSignal(merged) ? merged : undefined);
+    },
+    [vector, enneagramType, mbti, value?.source, onChange],
+  );
+
+  const setDimension = (id: string, score: number) => {
+    const next = { ...vector, [id]: score };
+    setVector(next);
+    emit({ vector: next, source: 'sliders' });
+  };
+
+  const applyQuestionnaire = async () => {
+    setBusy(true);
+    setNotice('');
+    try {
+      const { vector: scored } = await psychometricApi.score(answers);
+      const next = { ...vector, ...scored };
+      setVector(next);
+      emit({ vector: next, source: 'questionnaire' });
+      setTab('sliders');
+      setNotice('Scored — review and fine-tune the sliders.');
+    } catch (e) {
+      setNotice(e instanceof Error ? e.message : 'Scoring failed');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const applyImport = async () => {
+    setBusy(true);
+    setNotice('');
+    try {
+      const parsed = JSON.parse(importText) as Record<string, number>;
+      const { vector: imported } = await psychometricApi.import(parsed);
+      if (Object.keys(imported).length === 0) {
+        setNotice('No recognised dimensions found in the imported data.');
+      } else {
+        const next = { ...vector, ...imported };
+        setVector(next);
+        emit({ vector: next, source: 'imported' });
+        setTab('sliders');
+        setNotice(`Imported ${Object.keys(imported).length} dimension(s).`);
+      }
+    } catch {
+      setNotice('Could not parse the imported JSON.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const signalCount = useMemo(
+    () => Object.values(vector).filter((v) => v !== NEUTRAL_SCORE).length + (enneagramType ? 1 : 0) + (mbti ? 1 : 0),
+    [vector, enneagramType, mbti],
+  );
+
+  if (loading) return <div style={{ color: 'var(--muted)', fontSize: 13 }}>Loading personality model…</div>;
+  if (error) return <div style={{ color: 'var(--error-text)', fontSize: 13 }}>{error}</div>;
+
+  if (!entitled) {
+    return (
+      <div style={{ border: '1px dashed var(--border)', borderRadius: 10, padding: 16, background: 'var(--surface-2)' }}>
+        <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 6 }}>🔒 Personality is a Pro feature</div>
+        <div style={{ fontSize: 12, color: 'var(--muted)', lineHeight: 1.6 }}>
+          Give this agent a real psychological profile — HEXACO traits, decision style, moral foundations, conflict style and
+          more — that changes how it reasons and executes, not just its tone. Upgrade to Pro to unlock the personality editor.
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ border: '1px solid var(--border)', borderRadius: 10, padding: 14 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+        <div style={{ fontWeight: 700, fontSize: 13 }}>Personality</div>
+        <span className="badge badge-gray">{signalCount} trait{signalCount === 1 ? '' : 's'} set</span>
+        <div style={{ marginLeft: 'auto', display: 'flex', gap: 4 }}>
+          {(['sliders', 'questionnaire', 'import'] as Tab[]).map((t) => (
+            <button
+              key={t}
+              type="button"
+              className={`btn btn-sm ${tab === t ? 'btn-primary' : 'btn-secondary'}`}
+              onClick={() => setTab(t)}
+            >
+              {t === 'sliders' ? 'Sliders' : t === 'questionnaire' ? 'Questionnaire' : 'Import'}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {notice && (
+        <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 10 }}>{notice}</div>
+      )}
+
+      {tab === 'sliders' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16, maxHeight: 360, overflowY: 'auto' }}>
+          {frameworks.map((fw) => (
+            <div key={fw.id}>
+              <div style={{ fontSize: 12, fontWeight: 700, textTransform: 'uppercase', color: 'var(--muted)' }}>{fw.name}</div>
+              <div style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 8 }}>{fw.summary}</div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                {fw.dimensions.map((dim) => {
+                  const score = vector[dim.id] ?? NEUTRAL_SCORE;
+                  return (
+                    <div key={dim.id}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, marginBottom: 2 }}>
+                        <span title={dim.description} style={{ fontWeight: 600 }}>{dim.name}</span>
+                        <span style={{ color: 'var(--muted)' }}>{score}</span>
+                      </div>
+                      <input
+                        type="range"
+                        min={0}
+                        max={100}
+                        step={5}
+                        value={score}
+                        onChange={(e) => setDimension(dim.id, Number(e.target.value))}
+                        style={{ width: '100%' }}
+                      />
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, color: 'var(--muted)' }}>
+                        <span>{dim.low}</span>
+                        <span>{dim.high}</span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
+
+          <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+            <div style={{ flex: 1, minWidth: 160 }}>
+              <label className="label">Enneagram core type</label>
+              <select
+                className="input"
+                value={enneagramType ?? ''}
+                onChange={(e) => {
+                  const t = e.target.value ? Number(e.target.value) : undefined;
+                  setEnneagramType(t);
+                  emit({ enneagramType: t });
+                }}
+              >
+                <option value="">None</option>
+                {enneagram.map((en) => (
+                  <option key={en.type} value={en.type}>
+                    {en.type} · {en.name} — {en.motivation}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div style={{ flex: 1, minWidth: 120 }}>
+              <label className="label">MBTI (optional)</label>
+              <input
+                className="input"
+                maxLength={4}
+                placeholder="e.g. INTJ"
+                value={mbti}
+                onChange={(e) => {
+                  const v = e.target.value.toUpperCase();
+                  setMbti(v);
+                  emit({ mbti: v });
+                }}
+              />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {tab === 'questionnaire' && (
+        <div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12, maxHeight: 320, overflowY: 'auto' }}>
+            {questions.map((qn) => (
+              <div key={qn.id}>
+                <div style={{ fontSize: 12, marginBottom: 4 }}>{qn.text}</div>
+                <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                  <span style={{ fontSize: 10, color: 'var(--muted)' }}>Disagree</span>
+                  {[1, 2, 3, 4, 5].map((n) => (
+                    <label key={n} style={{ display: 'flex', alignItems: 'center', gap: 2, fontSize: 12 }}>
+                      <input
+                        type="radio"
+                        name={`q-${qn.id}`}
+                        checked={answers[qn.id] === n}
+                        onChange={() => setAnswers((a) => ({ ...a, [qn.id]: n }))}
+                      />
+                      {n}
+                    </label>
+                  ))}
+                  <span style={{ fontSize: 10, color: 'var(--muted)' }}>Agree</span>
+                </div>
+              </div>
+            ))}
+          </div>
+          <button
+            type="button"
+            className="btn btn-primary btn-sm"
+            style={{ marginTop: 12 }}
+            disabled={busy || Object.keys(answers).length === 0}
+            onClick={applyQuestionnaire}
+          >
+            {busy ? 'Scoring…' : 'Apply scores'}
+          </button>
+        </div>
+      )}
+
+      {tab === 'import' && (
+        <div>
+          <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 8 }}>
+            Paste a JSON object mapping dimension ids to 0–100 scores (e.g. exported from the human this agent represents).
+            Unknown dimensions are ignored.
+          </div>
+          <textarea
+            className="input"
+            rows={6}
+            placeholder={'{\n  "hexaco.conscientiousness": 80,\n  "cognition.need_for_cognition": 90\n}'}
+            value={importText}
+            onChange={(e) => setImportText(e.target.value)}
+            style={{ fontFamily: 'monospace', fontSize: 12 }}
+          />
+          <button
+            type="button"
+            className="btn btn-primary btn-sm"
+            style={{ marginTop: 10 }}
+            disabled={busy || !importText.trim()}
+            onClick={applyImport}
+          >
+            {busy ? 'Importing…' : 'Import'}
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}

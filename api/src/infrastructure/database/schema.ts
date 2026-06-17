@@ -1284,6 +1284,7 @@ export const platformPersonas = pgTable('platform_personas', {
   outputPrefix:   varchar('output_prefix', { length: 50 }),
   capabilities:   text('capabilities'), // JSON array
   tags:           text('tags'),         // JSON array
+  psychometric:   text('psychometric'), // JSON PsychometricProfile (Pro), null = none
   source:         varchar('source', { length: 50 }).notNull().default('builtin'),
   author:         varchar('author', { length: 255 }),
   active:         boolean('active').notNull().default(true),

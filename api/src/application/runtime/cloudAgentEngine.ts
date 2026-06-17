@@ -21,6 +21,7 @@ import { verifyWrittenFiles } from '../repos/verifyWrittenFiles';
 import { scanWrittenForPlaceholders } from '../repos/scanForPlaceholders';
 import { CODING_BACKSTOP_MODELS, CODING_MODEL_POOL, codingModelsForPlan, estimateRequestTokens, llmProxyForPlan, pickCloudModel, type ChatMessage, type EffectivePlan } from '../llm/LlmProxyService';
 import { compactMessages, buildGatewaySummarizer, CLOUD_COMPACT_DEFAULTS } from '../llm/compactMessages';
+import { resolveAnthropicOAuthToken } from '../llm/tenantProviderKeyService';
 import { resolveTenantPlan } from '../../presentation/routes/llmRoutes';
 import { recordUsageRow, clampTokenCount } from '../llm/usageLedger';
 import { ensureTaskPrdRecord, appendTaskPrdRevision } from '../prd/taskPrd';
@@ -912,7 +913,11 @@ export async function handleContainerOp(
       // Context-aware seed: a small-window model isn't picked for a big container turn.
       estimatedTokens: estimateRequestTokens(sendMessages, CONTAINER_AGENT_TOOLS),
     });
-    const result = await llmProxyForPlan(env, ctx.effectivePlan, ctx.premiumOverride, { backstopModels: CODING_BACKSTOP_MODELS, codingOnly: true }).complete({
+    // A connected Claude subscription powers a direct-Claude container turn. One
+    // PK-indexed read per turn, alongside the turn's existing DB writes — cheap and
+    // not a fan-out; null (operator-key floor) when no subscription is connected.
+    const anthropicOAuthToken = await resolveAnthropicOAuthToken(env, tenantId);
+    const result = await llmProxyForPlan(env, ctx.effectivePlan, ctx.premiumOverride, { backstopModels: CODING_BACKSTOP_MODELS, codingOnly: true, ...(anthropicOAuthToken ? { anthropicOAuthToken } : {}) }).complete({
       messages: sendMessages as unknown as ChatMessage[], tools: CONTAINER_AGENT_TOOLS, tool_choice: 'auto',
       ...(pick.model ? { model: pick.model, ...(pick.strict ? { modelStrict: true } : {}) } : {}),
       useCase: 'task_execution',
@@ -1242,10 +1247,15 @@ export async function runCloudToolLoop(
   // models instead of the fixed free pool. Reused across every turn (and persisted
   // so DO ticks don't re-query the plan).
   const routing = opts?.resume?.routing ?? await resolveCloudRouting(env, tenantId);
+  // A connected Claude subscription powers any direct-Claude turn in the cascade
+  // (Bearer + oauth, free to us). Resolved once per loop/tick (NOT per turn) and
+  // re-resolved fresh each DO tick so a rotated token stays valid. Null when the
+  // tenant didn't connect one — cascade keeps its operator-key floor (unchanged).
+  const anthropicOAuthToken = await resolveAnthropicOAuthToken(env, tenantId);
   // `codingOnly` keeps the failover cascade inside the curated coding pool, so an
   // exhausted free run escalates to the paid coding backstop instead of degrading
   // onto a non-coder (gemini-flash-lite) or a tool-unreliable vendor (Ollama).
-  const proxy = llmProxyForPlan(env, routing.effectivePlan, routing.premiumOverride, { backstopModels: CODING_BACKSTOP_MODELS, codingOnly: true });
+  const proxy = llmProxyForPlan(env, routing.effectivePlan, routing.premiumOverride, { backstopModels: CODING_BACKSTOP_MODELS, codingOnly: true, ...(anthropicOAuthToken ? { anthropicOAuthToken } : {}) });
 
   // Per-run model pin. A coding agent must drive the WHOLE task on one model, not
   // hop between pool models per turn (the gateway's round-robin cursor would
