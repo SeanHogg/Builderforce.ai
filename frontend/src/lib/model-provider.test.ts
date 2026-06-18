@@ -37,8 +37,8 @@ describe('MambaModelProvider', () => {
     expect(provider.isReady()).toBe(false);
   });
 
-  it('gracefully handles missing mambacode.js at init()', async () => {
-    // In jsdom there is no navigator.gpu so mambacode.js will throw
+  it('gracefully handles missing @seanhogg/builderforce-memory-engine at init()', async () => {
+    // In jsdom there is no navigator.gpu so @seanhogg/builderforce-memory-engine will throw
     const provider = new MambaModelProvider();
     // Should not throw even if the dynamic import fails
     await expect(provider.init()).resolves.toBeUndefined();

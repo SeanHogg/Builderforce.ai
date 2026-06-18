@@ -10,7 +10,7 @@ export default defineConfig({
   external: [
     'onnxruntime-web',
     '@huggingface/transformers',
-    'mambacode.js',
+    '@seanhogg/builderforce-memory-engine',
     '@seanhogg/builderforce-sdk',
   ],
   outExtension({ format }) {
