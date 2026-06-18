@@ -10,7 +10,7 @@ import {
 
 describe('psychometric catalog', () => {
   it('every catalog dimension id is a known DIM value', () => {
-    const dimValues = new Set(Object.values(DIM));
+    const dimValues = new Set<string>(Object.values(DIM));
     for (const fw of PSYCHOMETRIC_CATALOG) {
       for (const dim of fw.dimensions) {
         expect(dimValues.has(dim.id)).toBe(true);
