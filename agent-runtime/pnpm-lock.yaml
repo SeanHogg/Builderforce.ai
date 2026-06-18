@@ -247,6 +247,13 @@ importers:
       vitest:
         specifier: ^4.0.18
         version: 4.0.18(@opentelemetry/api@1.9.0)(@types/node@25.3.0)(@vitest/browser-playwright@4.0.18)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.2)
+    optionalDependencies:
+      '@seanhogg/builderforce-memory':
+        specifier: ^2026.6.20
+        version: 2026.6.20(@seanhogg/builderforce-memory-engine@2026.6.20)
+      '@seanhogg/builderforce-memory-engine':
+        specifier: ^2026.6.20
+        version: 2026.6.20
 
   extensions/bluebubbles:
     devDependencies:
@@ -2469,6 +2476,16 @@ packages:
 
   '@scure/bip39@2.0.1':
     resolution: {integrity: sha512-PsxdFj/d2AcJcZDX1FXN3dDgitDDTmwf78rKZq1a6c1P1Nan1X/Sxc7667zU3U+AN60g7SxxP0YCVw2H/hBycg==}
+
+  '@seanhogg/builderforce-memory-engine@2026.6.20':
+    resolution: {integrity: sha512-cHUWvainqqy6mweu6jU2Nl+mywKIywkSUefT9P7EcI7bjhWJiNvMS3un1KSGlxgSfZPr1o1PR+2VCiuobILJqg==}
+    engines: {node: '>=18.0.0'}
+
+  '@seanhogg/builderforce-memory@2026.6.20':
+    resolution: {integrity: sha512-IFOm3RZr2slTxBdqFdf93dAO6Wy6lyPZcyg5H/8PNs8UEaFoQwMFNF3W0Xl4/+5glIfiwRfjWcSbyHRC+D2Lqg==}
+    engines: {node: '>=18.0.0'}
+    peerDependencies:
+      '@seanhogg/builderforce-memory-engine': ^2026.6.20
 
   '@selderee/plugin-htmlparser2@0.11.0':
     resolution: {integrity: sha512-P33hHGdldxGabLFjPPpaTxVolMrzrcegejx+0GxjrIb9Zv48D8yAIA/QTDR2dFl7Uz7urX8aX6+5bCZslr+gWQ==}
@@ -7446,6 +7463,14 @@ snapshots:
     dependencies:
       '@noble/hashes': 2.0.1
       '@scure/base': 2.0.0
+
+  '@seanhogg/builderforce-memory-engine@2026.6.20':
+    optional: true
+
+  '@seanhogg/builderforce-memory@2026.6.20(@seanhogg/builderforce-memory-engine@2026.6.20)':
+    dependencies:
+      '@seanhogg/builderforce-memory-engine': 2026.6.20
+    optional: true
 
   '@selderee/plugin-htmlparser2@0.11.0':
     dependencies:
