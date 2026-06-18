@@ -31,6 +31,9 @@ importers:
       '@seanhogg/builderforce-embedded':
         specifier: link:../builderforce-embedded
         version: link:../builderforce-embedded
+      '@seanhogg/builderforce-memory-engine':
+        specifier: ^2026.6.19
+        version: 2026.6.19
       '@seanhogg/builderforce-sdk':
         specifier: link:../sdk
         version: link:../sdk
@@ -76,9 +79,6 @@ importers:
       lib0:
         specifier: ^0.2.94
         version: 0.2.117
-      mambacode.js:
-        specifier: git+https://github.com/SeanHogg/Mamba.git
-        version: '@seanhogg/mambacode.js@git+https://github.com/SeanHogg/Mamba.git#d986cdaf810a4c4365971fb1a05a22b617d52473'
       mermaid:
         specifier: ^11.15.0
         version: 11.15.0
@@ -1143,9 +1143,8 @@ packages:
   '@rtsao/scc@1.1.0':
     resolution: {integrity: sha512-zt6OdqaDoOnJ1ZYsCYGt9YmWzDXl4vQdKTyJev62gFhRGKdx7mcT54V9KIjg+d2wi9EXsPvAPKe7i7WjfVWB8g==}
 
-  '@seanhogg/mambacode.js@git+https://github.com/SeanHogg/Mamba.git#d986cdaf810a4c4365971fb1a05a22b617d52473':
-    resolution: {commit: d986cdaf810a4c4365971fb1a05a22b617d52473, repo: https://github.com/SeanHogg/Mamba.git, type: git}
-    version: 2026.5.31
+  '@seanhogg/builderforce-memory-engine@2026.6.19':
+    resolution: {integrity: sha512-JiYDI2CkQzyXxQLGlMNnpwt6X0/uqpoMkSWQz7jIioRAlm2CbXWKR2xXLNSrg0Yte9GU0OQbaf/oj8olHtHFqw==}
     engines: {node: '>=18.0.0'}
 
   '@sinclair/typebox@0.25.24':
@@ -5980,7 +5979,7 @@ snapshots:
 
   '@rtsao/scc@1.1.0': {}
 
-  '@seanhogg/mambacode.js@git+https://github.com/SeanHogg/Mamba.git#d986cdaf810a4c4365971fb1a05a22b617d52473': {}
+  '@seanhogg/builderforce-memory-engine@2026.6.19': {}
 
   '@sinclair/typebox@0.25.24': {}
 

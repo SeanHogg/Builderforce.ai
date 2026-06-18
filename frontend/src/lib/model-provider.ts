@@ -6,11 +6,11 @@
  * changing agent logic.
  *
  * Supported backends:
- *   - MambaModelProvider  — on-device WebGPU inference via mambacode.js
+ *   - MambaModelProvider  — on-device WebGPU inference via @seanhogg/builderforce-memory-engine
  *   - ExternalLLMProvider — cloud inference via Workers AI / OpenRouter
  */
 
-import type { MambaModel, MambaTrainer, BPETokenizer } from 'mambacode.js';
+import type { MambaModel, MambaTrainer, BPETokenizer } from '@seanhogg/builderforce-memory-engine';
 import { sendAIMessage } from './api';
 
 // ---------------------------------------------------------------------------
@@ -96,7 +96,7 @@ export interface ExternalLLMConfig {
 }
 
 // ---------------------------------------------------------------------------
-// MambaModelProvider — on-device WebGPU inference via mambacode.js
+// MambaModelProvider — on-device WebGPU inference via @seanhogg/builderforce-memory-engine
 // ---------------------------------------------------------------------------
 
 export class MambaModelProvider implements ModelProvider {
@@ -130,7 +130,7 @@ export class MambaModelProvider implements ModelProvider {
 
   /**
    * Initialise the Mamba backend.
-   * Dynamically imports mambacode.js so the bundle is not broken in
+   * Dynamically imports @seanhogg/builderforce-memory-engine so the bundle is not broken in
    * environments where the package is absent or WebGPU is unavailable.
    * Skips silently when the browser has no WebGPU OR the tokenizer
    * asset files aren't deployed — both are expected states today.
@@ -157,8 +157,8 @@ export class MambaModelProvider implements ModelProvider {
     }
 
     try {
-      // Dynamic import — mambacode.js is a pure-ESM browser library.
-      const mamba = await import('mambacode.js');
+      // Dynamic import — @seanhogg/builderforce-memory-engine is a pure-ESM browser library.
+      const mamba = await import('@seanhogg/builderforce-memory-engine');
 
       const { device } = await mamba.initWebGPU();
 
@@ -207,7 +207,7 @@ export class MambaModelProvider implements ModelProvider {
     onToken?: (token: string) => void
   ): Promise<string> {
     const result = await this.generate(input, context);
-    // mambacode.js does not expose a streaming API yet — simulate per-word
+    // @seanhogg/builderforce-memory-engine does not expose a streaming API yet — simulate per-word
     if (onToken) {
       const words = result.split(' ');
       for (const word of words) {
