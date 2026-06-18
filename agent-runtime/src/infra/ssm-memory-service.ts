@@ -1,5 +1,5 @@
 /**
- * SsmMemoryService – loads/manages the @builderforce/memory runtime and SSMAgent
+ * SsmMemoryService – loads/manages the @seanhogg/builderforce-memory runtime and SSMAgent
  * for BuilderForceAgents's local hippocampus memory layer.
  *
  * GPU initialisation is optional: if @webgpu/node is unavailable or the GPU
@@ -114,7 +114,7 @@ async function fetchCheckpointToDisk(url: string, destPath: string): Promise<Buf
 }
 
 // ── Lazy module imports ───────────────────────────────────────────────────────
-// We import @builderforce/memory types dynamically so that a missing package does not prevent
+// We import @seanhogg/builderforce-memory types dynamically so that a missing package does not prevent
 // the rest of the gateway from starting.
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -171,7 +171,7 @@ export class SsmMemoryService {
    *
    * GPU init is attempted first; if it fails (no @webgpu/node or no GPU),
    * the service falls back to memory-only operation (gpuAvailable = false).
-   * Never throws — returns null if the @builderforce/memory package itself is missing.
+   * Never throws — returns null if the @seanhogg/builderforce-memory package itself is missing.
    */
   static async create(opts: SsmMemoryServiceOptions = {}): Promise<SsmMemoryService | null> {
     const checkpointPath = resolveCheckpointPath(opts.checkpointPath);
@@ -191,9 +191,9 @@ export class SsmMemoryService {
     let memoryMod: any;
     try {
       // Dynamic import so a missing package is a runtime no-op
-      memoryMod = await _import("@builderforce/memory");
+      memoryMod = await _import("@seanhogg/builderforce-memory");
     } catch {
-      logDebug("[ssm-memory] @builderforce/memory not available — skipping SSM memory layer");
+      logDebug("[ssm-memory] @seanhogg/builderforce-memory not available — skipping SSM memory layer");
       return null;
     }
 
