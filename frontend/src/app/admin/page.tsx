@@ -2015,7 +2015,7 @@ export default function AdminPage() {
                     </div>
                     {securityDetails && (
                       <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-                        <div className="health-grid" style={{ gridTemplateColumns: 'repeat(4, 1fr)' }}>
+                        <div className="health-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 140px), 1fr))' }}>
                           <div className="health-card" style={{ padding: 12 }}>
                             <div className="health-label">User</div>
                             <div style={{ fontSize: 14 }}>{securityDetails.user.email}</div>
@@ -2351,7 +2351,7 @@ export default function AdminPage() {
 
             {tab === 'newsletter' && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
-                <div className="health-grid" style={{ gridTemplateColumns: 'repeat(3, 1fr)' }}>
+                <div className="health-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 150px), 1fr))' }}>
                   <div className="health-card">
                     <div className="health-label">Subscribers</div>
                     <div className="health-value">{fmtNum(newsletterSubscribers.length)}</div>

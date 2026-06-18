@@ -1,0 +1,153 @@
+{
+  "name": "builderforce-vscode",
+  "displayName": "BuilderForce",
+  "description": "BuilderForce AI coding agent — chat with a codebase-aware agent in your VS Code sidebar.",
+  "version": "2026.6.17",
+  "publisher": "builderforce",
+  "license": "MIT",
+  "author": "Sean Hogg",
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "categories": [
+    "AI",
+    "Chat",
+    "Machine Learning",
+    "Programming Languages"
+  ],
+  "keywords": [
+    "ai",
+    "agent",
+    "chat",
+    "coding assistant",
+    "builderforce",
+    "copilot"
+  ],
+  "icon": "media/icon.png",
+  "galleryBanner": {
+    "color": "#0b1220",
+    "theme": "dark"
+  },
+  "homepage": "https://builderforce.ai",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/SeanHogg/Builderforce.ai.git",
+    "directory": "clients/vscode"
+  },
+  "bugs": {
+    "url": "https://github.com/SeanHogg/Builderforce.ai/issues"
+  },
+  "main": "./out/extension.js",
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "builderforce",
+          "title": "BuilderForce",
+          "icon": "media/sidebar-icon.svg"
+        }
+      ]
+    },
+    "views": {
+      "builderforce": [
+        {
+          "type": "webview",
+          "id": "builderforce.chat",
+          "name": "Chat"
+        }
+      ]
+    },
+    "commands": [
+      {
+        "command": "builderforce.signIn",
+        "title": "BuilderForce: Sign In",
+        "icon": "$(sign-in)"
+      },
+      {
+        "command": "builderforce.signOut",
+        "title": "BuilderForce: Sign Out",
+        "icon": "$(sign-out)"
+      },
+      {
+        "command": "builderforce.newChat",
+        "title": "BuilderForce: New Chat",
+        "icon": "$(add)"
+      },
+      {
+        "command": "builderforce.pickModel",
+        "title": "BuilderForce: Pick Model",
+        "icon": "$(list-selection)"
+      },
+      {
+        "command": "builderforce.openSettings",
+        "title": "BuilderForce: Open Settings",
+        "icon": "$(gear)"
+      }
+    ],
+    "menus": {
+      "view/title": [
+        {
+          "command": "builderforce.newChat",
+          "when": "view == builderforce.chat",
+          "group": "navigation@1"
+        },
+        {
+          "command": "builderforce.pickModel",
+          "when": "view == builderforce.chat",
+          "group": "navigation@2"
+        },
+        {
+          "command": "builderforce.openSettings",
+          "when": "view == builderforce.chat",
+          "group": "navigation@3"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "BuilderForce",
+      "properties": {
+        "builderforce.baseUrl": {
+          "type": "string",
+          "default": "https://api.builderforce.ai",
+          "markdownDescription": "Base URL of the BuilderForce gateway. The OpenAI-compatible endpoint `/llm/v1/chat/completions` is appended automatically. Override for self-hosted deployments."
+        },
+        "builderforce.defaultModel": {
+          "type": "string",
+          "default": "",
+          "description": "Default model id to use. Leave empty to let the gateway pick from the curated coding pool."
+        },
+        "builderforce.permissionMode": {
+          "type": "string",
+          "enum": [
+            "ask",
+            "acceptEdits"
+          ],
+          "default": "ask",
+          "markdownEnumDescriptions": [
+            "Ask before applying each file edit or command (recommended).",
+            "Apply file edits automatically without prompting."
+          ],
+          "description": "How the agent applies changes to your workspace."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "package": "vsce package --no-dependencies",
+    "publish:marketplace": "vsce publish --no-dependencies",
+    "publish:openvsx": "ovsx publish"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.0",
+    "@types/vscode": "^1.90.0",
+    "@vscode/vsce": "^3.2.0",
+    "ovsx": "^0.10.0",
+    "typescript": "^5.5.0"
+  }
+}

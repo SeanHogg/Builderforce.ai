@@ -1,10 +1,11 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuth } from '@/lib/AuthContext';
 import { useOptionalBrainContext } from '@/lib/brain';
 import { ProjectsContent } from '@/components/ProjectsContent';
+import { TabCountBadge } from '@/components/TabCountBadge';
 import PageContainer from '@/components/PageContainer';
 import { TaskMgmtContent } from '@/components/TaskMgmtContent';
 import { PmScopeProvider } from '@/lib/pm/scope';
@@ -32,6 +33,9 @@ export default function ProjectsTasksPage() {
   const searchParams = useSearchParams();
   const { isAuthenticated, hasTenant } = useAuth();
   const brain = useOptionalBrainContext();
+  // Count is owned by ProjectsContent (it fetches the list); it reports up so we
+  // can show it on the Projects tab.
+  const [projectCount, setProjectCount] = useState<number | null>(null);
 
   useEffect(() => {
     if (!isAuthenticated) {
@@ -97,11 +101,12 @@ export default function ProjectsTasksPage() {
               }}
             >
               {label}
+              {id === 'projects' && <TabCountBadge count={projectCount} />}
             </button>
           ))}
         </div>
 
-        {activeTab === 'projects' && <ProjectsContent />}
+        {activeTab === 'projects' && <ProjectsContent onCount={setProjectCount} />}
         {activeTab === 'tasks' && <TaskMgmtContent projectId={scopedProjectId} />}
         {activeTab === 'pm' && (
           <PmScopeProvider projectId={scopedProjectId ?? null}>

@@ -24,6 +24,12 @@ export interface ProjectsContentProps {
   limit?: number;
   /** When set, render a "View all" link to this href (dashboard preview). */
   viewAllHref?: string;
+  /**
+   * Report the live project count to the parent so it can render the count on
+   * the surrounding tab (this component no longer shows its own count line).
+   * Fires on load and on every create/delete.
+   */
+  onCount?: (count: number) => void;
 }
 
 /**
@@ -34,7 +40,7 @@ export interface ProjectsContentProps {
  * group, and data source can't drift between the two surfaces. Auth gating is the
  * parent's job; this component fetches its own data, mirroring {@link TaskMgmtContent}.
  */
-export function ProjectsContent({ limit, viewAllHref }: ProjectsContentProps = {}) {
+export function ProjectsContent({ limit, viewAllHref, onCount }: ProjectsContentProps = {}) {
   const router = useRouter();
   const searchParams = useSearchParams();
 
@@ -70,6 +76,12 @@ export function ProjectsContent({ limit, viewAllHref }: ProjectsContentProps = {
   useEffect(() => {
     if (searchParams.get('create') === '1') setShowForm(true);
   }, [searchParams]);
+
+  // Surface the count to the parent (tab badge) instead of rendering it here.
+  // Keyed on length so it re-fires through create/delete.
+  useEffect(() => {
+    onCount?.(projects.length);
+  }, [projects.length, onCount]);
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -200,10 +212,9 @@ export function ProjectsContent({ limit, viewAllHref }: ProjectsContentProps = {
         </div>
       )}
 
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
-        <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>
-          {projects.length} project{projects.length !== 1 ? 's' : ''}
-        </span>
+      {/* The project count lives on the surrounding tab (see TabCountBadge), so
+          this row only holds the controls, right-aligned. */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', flexWrap: 'wrap', gap: 12 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <ViewToggle value={viewMode} onChange={setViewMode} card table calendar gantt />
           {viewAllHref && (

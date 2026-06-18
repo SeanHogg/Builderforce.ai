@@ -49,7 +49,7 @@ export function RoadmapTimeline() {
       ) : !data.length ? (
         <PmEmpty message="No roadmap items yet. Use “Add item” to create one." />
       ) : (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 240px), 1fr))', gap: 16 }}>
           {ROADMAP_HORIZONS.map(({ key, label }) => {
             const items = data.filter((r) => (rstr(r, 'horizon') || 'now') === key);
             return (

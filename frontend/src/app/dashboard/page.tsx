@@ -10,6 +10,7 @@ import { getMe } from '@/lib/auth';
 import { ChatInput } from '@/components/ChatInput';
 import PageContainer from '@/components/PageContainer';
 import { ProjectsContent } from '@/components/ProjectsContent';
+import { TabCountBadge } from '@/components/TabCountBadge';
 import { WorkforceAgents } from '@/components/workforce/WorkforceAgents';
 import { OnboardingStepper } from '@/components/OnboardingStepper';
 import { agentHosts, tasksApi, approvalsApi, type AgentHost, type Task } from '@/lib/builderforceApi';
@@ -209,15 +210,12 @@ export default function DashboardPage() {
           )}
         </div>
 
-        {/* Stats strip */}
+        {/* Stats strip — 2 columns on mobile (4 are unreadably cramped on a
+            phone), 4 from the small breakpoint up. */}
         {!loading && (
           <div
-            style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(4, 1fr)',
-              gap: 12,
-              marginBottom: 32,
-            }}
+            className="grid grid-cols-2 sm:grid-cols-4 gap-3"
+            style={{ marginBottom: 32 }}
           >
             {[
               {
@@ -314,31 +312,18 @@ export default function DashboardPage() {
                 }}
               >
                 {label}
-                {!loading && count != null && (
-                  <span
-                    style={{
-                      marginLeft: 8,
-                      fontSize: 11,
-                      fontWeight: 600,
-                      padding: '1px 7px',
-                      borderRadius: 999,
-                      background: 'var(--bg-elevated)',
-                      color: 'var(--text-muted)',
-                    }}
-                  >
-                    {count}
-                  </span>
-                )}
+                <TabCountBadge count={loading ? null : count} />
               </button>
             );
           })}
         </div>
 
         {/* Projects tab (preview) — reuses ProjectsContent so the cards, table,
-            button group, and data shape match the /projects page exactly. */}
+            button group, and data shape match the /projects page exactly. The
+            "Projects" tab above is the heading, and its count badge is the
+            project count, so the preview hides both (preview mode). */}
         {activeTab === 'projects' && (
           <section style={{ marginBottom: 40 }}>
-            <h2 style={{ fontSize: 15, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 16 }}>Projects</h2>
             <ProjectsContent limit={6} viewAllHref="/projects" />
           </section>
         )}

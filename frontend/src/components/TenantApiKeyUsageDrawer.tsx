@@ -59,7 +59,7 @@ const cardWrap: React.CSSProperties = {
 
 const summaryGrid: React.CSSProperties = {
   display: 'grid',
-  gridTemplateColumns: 'repeat(3, 1fr)',
+  gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 120px), 1fr))',
   gap: 12,
   marginBottom: 14,
 };

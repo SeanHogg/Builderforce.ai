@@ -191,7 +191,7 @@ export function LlmUsageContent() {
           {/* Totals */}
           <div style={{ ...cardStyle }}>
             <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 14 }}>Usage Summary</div>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 150px), 1fr))', gap: 16 }}>
               {[
                 { label: 'Total requests', value: fmtNum(usage.totalRequests), color: 'var(--coral-bright, #f4726e)' },
                 { label: 'Prompt tokens', value: fmtNum(usage.promptTokens), color: 'var(--cyan-bright, #00e5cc)' },

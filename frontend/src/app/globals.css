@@ -1518,6 +1518,25 @@ textarea.input { resize: vertical; line-height: 1.5; }
 /* Modal content: fully solid (same as slide-out drawer) so the background is not visible through the modal */
 .modal-overlay > div {
   background: var(--panel-drawer-bg) !important;
+  /* Cap the height to the viewport (minus the overlay's 24px padding top+bottom)
+     and scroll internally. Without this a tall modal — e.g. New Persona — centers
+     and clips its top/bottom (including the Save/Cancel actions) off-screen with
+     no way to reach them, which made tall modals unusable on phones. 100dvh tracks
+     the dynamic viewport so mobile browser chrome doesn't hide the bottom. */
+  max-height: calc(100dvh - 48px);
+  overflow-y: auto;
+}
+
+/* On phones, pin tall modals to the top and scroll, and trim the overlay padding
+   so the modal uses the full width / height available. */
+@media (max-width: 767px) {
+  .modal-overlay {
+    padding: 12px;
+    align-items: flex-start;
+  }
+  .modal-overlay > div {
+    max-height: calc(100dvh - 24px);
+  }
 }
 
 /* Admin modal (impersonate) */
@@ -1540,6 +1559,10 @@ textarea.input { resize: vertical; line-height: 1.5; }
   padding: 24px;
   max-width: 420px;
   width: 90%;
+  /* Same viewport cap + internal scroll as the standard modal so it can't clip
+     its actions off-screen on short / mobile viewports. */
+  max-height: calc(100dvh - 48px);
+  overflow-y: auto;
   box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
 }
 
