@@ -2344,6 +2344,19 @@ A cloud agent finishing a ticket advanced its lane via `RuntimeService.update` w
 
 ---
 
+### VS Code extension — v0 publishing surface shipped; agent wiring staged (added 2026-06-17)
+
+The `clients/vscode/` extension package + dual-registry publish pipeline (Marketplace via `vsce` + Open VSX via `ovsx`, `.github/workflows/publish-vscode.yml`) is built, compiles, and packages to a working `.vsix`: sidebar chat webview streaming from `/llm/v1/chat/completions`, SecretStorage sign-in, model picker (cached). It is a deliberately minimal v0 — the deeper PRD 14 vertical slice is staged. **Open residuals (all specced in [specs/builderforce/14-prd-vscode-extension.md](specs/builderforce/14-prd-vscode-extension.md)):**
+- **Device-code login not wired** — v0 `signIn` pastes an API key into SecretStorage; the browser device-code flow needs the `/api/auth/device/{code,token}` endpoints + `device_authorizations` table + a frontend `/activate` verify page (none exist yet). Unblocks one-click browser sign-in. *(T3 · Gateway & Auth + T2 · verify page.)*
+- **`BrainPanel` not reused yet** — the webview is vanilla HTML/JS; reusing the real chat UI requires extracting the Brain UI into `@seanhogg/builderforce-brain-embedded/ui` (new subpath, app couplings made injectable) and repointing the frontend, then deleting the app-resident copies. Unblocks one-source-two-hosts chat (no fork). *(T2 · App UI & Brain.)*
+- **Agent not in-process yet** — v0 is chat-only; running `agentLoop()` against the open folder (sandboxed file tools, re-root on folder change) + the IDE tool bridge is Phase 2. Unblocks actual in-editor coding.
+- **Codebase scan/knowledge summary missing** — `initializeBuilderForceAgentsProject` writes `architecture.md` as a template only; the auto-fill `scanCodebaseAndSummarize` (gitignore-aware bounded walk + 1 summary call + SSM seed, cached by git-HEAD/tree version token) is net-new. Unblocks grounded, low-misfire answers. *(T5 · agent-runtime.)*
+- **Learned routing (PRD 13) not consumed** — IDE runs should classify action type, read the cached `routing:<scope>` table, compute local SSM `routingBias` (Node host), seed via `rankModelsForAction`, and write outcomes back via a new `POST /llm/v1/run-outcome`; needs `run_model_outcomes` extended with `source`/`client_run_id` + nullable `execution_id`. Coordinate the migration with the PRD 13 owner so it lands once. *(T3 + T4.)*
+- **Key-revoke endpoint missing** — `signOut` clears the local key but no server-side `POST /api/auth/keys/revoke` invalidates it gateway-side. Unblocks true sign-out/rotation.
+- **Placeholder gallery icon** — `clients/vscode/media/icon.png` is a generated 128×128 placeholder; replace with the final brand icon before a marketing release.
+
+---
+
 ## License
 
 MIT — see [LICENSE](LICENSE).

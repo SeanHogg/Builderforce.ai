@@ -1,0 +1,47 @@
+name: Publish VS Code Extension
+
+# Tag a release as `vscode-v<version>` (e.g. vscode-v2026.6.17) to package once and
+# publish to both the VS Code Marketplace and Open VSX.
+on:
+  push:
+    tags:
+      - "vscode-v*"
+  workflow_dispatch: {}
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: clients/vscode
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install
+        run: npm install
+
+      - name: Compile
+        run: npm run compile
+
+      - name: Package
+        run: npx vsce package --no-dependencies -o builderforce-vscode.vsix
+
+      - name: Publish to VS Code Marketplace
+        run: npx vsce publish --no-dependencies --packagePath builderforce-vscode.vsix
+        env:
+          VSCE_PAT: ${{ secrets.VSCE_PAT }}
+
+      - name: Publish to Open VSX
+        run: npx ovsx publish builderforce-vscode.vsix -p "$OVSX_PAT"
+        env:
+          OVSX_PAT: ${{ secrets.OVSX_PAT }}
+
+      - name: Upload .vsix artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: builderforce-vscode-vsix
+          path: clients/vscode/builderforce-vscode.vsix
