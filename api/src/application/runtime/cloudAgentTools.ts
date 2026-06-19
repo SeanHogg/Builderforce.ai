@@ -38,11 +38,12 @@ export const cloudToolRegistry = buildCoreToolRegistry();
 /**
  * The durable/Worker surface: provider-API-backed, no shell. It can list/read/search
  * the repo over the git API, write + delete files as pending changes, statically
- * validate config (no shell), and pause for a human. → list_files, search_code,
- * read_file, write_file, delete_file, run_checks, ask_human, finish.
+ * validate config (no shell), pause for a human, and recall/remember durable facts
+ * (Postgres-backed `agent_memory`). → list_files, search_code, read_file, write_file,
+ * delete_file, run_checks, ask_human, memory_recall, memory_remember, finish.
  */
 export const CLOUD_SURFACE_CAPS: ReadonlySet<Capability> = new Set<Capability>([
-  'repo.read', 'repo.search', 'repo.write', 'repo.edit', 'repo.delete', 'static-check', 'human',
+  'repo.read', 'repo.search', 'repo.write', 'repo.edit', 'repo.delete', 'static-check', 'human', 'memory',
 ]);
 
 /**
