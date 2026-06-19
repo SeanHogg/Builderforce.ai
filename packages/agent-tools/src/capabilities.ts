@@ -114,6 +114,19 @@ export interface HumanCapability {
   ask(question: string, context?: string): Promise<HumanAskResult>;
 }
 
+/** Persist / recall cross-run knowledge (capability `memory`). On-prem it is backed by
+ *  the SSM memory store (semantic recall via on-device embeddings, lexical fallback); a
+ *  Worker surface can back it with KV/D1 or a hosted HTTP memory endpoint. The tool
+ *  contract is identical across surfaces — only the backing differs (Dependency
+ *  Inversion), so `memory_recall`/`memory_remember` are defined ONCE. */
+export interface MemoryCapability {
+  /** Store one durable fact under `key`. Re-using a key overwrites it. */
+  remember(key: string, content: string, opts?: { tags?: string[]; importance?: number }): Promise<MemoryRememberResult>;
+  /** Return the entries most relevant to `query` (semantic where backed, else lexical),
+   *  capped to `limit`. */
+  recall(query: string, limit?: number): Promise<MemoryRecallResult>;
+}
+
 /** A surface's bag of capability services. A service is present iff the matching
  *  capability is in {@link capabilities}; the registry guarantees a tool's handler
  *  only runs when every required service is present, so handlers may assert them. */
@@ -126,6 +139,7 @@ export interface CapabilityProvider {
   readonly staticCheck?: StaticCheckCapability;
   readonly human?: HumanCapability;
   readonly web?: WebCapability;
+  readonly memory?: MemoryCapability;
 }
 
 // Surfaces declare their capability set EXPLICITLY (it is the source of truth for
@@ -220,5 +234,16 @@ export interface HumanAskResult {
   /** Inline answer when the surface can resolve synchronously (e.g. standalone Node). */
   answer?: string | null;
   note?: string;
+  error?: string;
+}
+export interface MemoryRememberResult {
+  ok: boolean;
+  key?: string;
+  error?: string;
+}
+export interface MemoryRecallResult {
+  ok: boolean;
+  query?: string;
+  entries?: Array<{ key: string; content: string }>;
   error?: string;
 }

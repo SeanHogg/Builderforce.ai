@@ -38,6 +38,7 @@ import {
 import { cleanToolSchemaForGemini, normalizeToolParameters } from "./coding-tools.schema.js";
 import type { AnyAgentTool } from "./coding-tools.types.js";
 import { buildConvergedFileTools } from "./converged-coding-tools.js";
+import { buildMemoryTools } from "./memory-tools.js";
 import { resolveImageSanitizationLimits } from "./image-sanitization.js";
 import type { ModelAuthMode } from "./model-auth.js";
 import { createEditTool, createReadTool, createWriteTool } from "./native-file-tools.js";
@@ -418,9 +419,13 @@ export function createBuilderForceAgentsCodingTools(options?: {
   const convergedFileTools = useConvergedFileTools
     ? buildConvergedFileTools({ workspaceRoot })
     : [];
+  // Active cross-run memory tools (memory_recall / memory_remember), backed by the SSM
+  // memory service. Self-gating: [] when the memory layer is unavailable.
+  const memoryTools = buildMemoryTools();
   const tools: AnyAgentTool[] = [
     ...base,
     ...convergedFileTools,
+    ...memoryTools,
     ...(sandboxRoot
       ? allowWorkspaceWrites
         ? [
