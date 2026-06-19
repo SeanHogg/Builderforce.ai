@@ -11,6 +11,7 @@
 import { neon } from '@neondatabase/serverless';
 import { and, desc, eq } from 'drizzle-orm';
 import { getOrSetCached } from '../../infrastructure/cache/readThroughCache';
+import { buildCloudMemoryCapability } from './cloudMemory';
 import { resolveTicketRepoContext, commitAgentFile, deleteAgentFile, type TicketRepoContext } from '../repos/commitFileAsPendingChange';
 import { commitPrdAsPendingChange } from '../repos/commitPrdToRepo';
 import { createPullRequest } from '../repos/createPullRequest';
@@ -1188,6 +1189,9 @@ function buildCloudProvider(args: {
         return { paused: true, approvalId, note: 'Question sent to a human. The run is paused until it is answered; you will resume with the answer.' };
       },
     },
+    // Durable cross-run memory (Postgres `agent_memory`, tenant-scoped). The Worker-safe
+    // twin of the on-prem SSM MemoryStore; lexical recall, read-through cached.
+    memory: buildCloudMemoryCapability({ db, env, tenantId }),
   };
 }
 

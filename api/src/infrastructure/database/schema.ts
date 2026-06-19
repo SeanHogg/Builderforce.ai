@@ -2127,6 +2127,23 @@ export const teamMemory = pgTable('team_memory', {
   createdAt: timestamp('created_at').notNull().defaultNow(),
 });
 
+// Cloud agent memory — durable key→fact store backing the shared `memory` capability
+// (memory_recall / memory_remember) for Worker/DO agents, scoped per tenant. The
+// Worker-safe twin of the on-prem SSM MemoryStore: same tool contract, lexical recall
+// (Postgres ILIKE) instead of SSM embeddings. Unique (tenant_id, key) (migration 0200)
+// makes remember() an upsert.
+export const agentMemory = pgTable('agent_memory', {
+  id:         uuid('id').primaryKey().defaultRandom(),
+  tenantId:   integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  key:        varchar('key', { length: 255 }).notNull(),
+  content:    text('content').notNull(),
+  /** JSON array of tag strings, stored as text. */
+  tags:       text('tags').notNull().default('[]'),
+  importance: real('importance').notNull().default(0.5),
+  createdAt:  timestamp('created_at').notNull().defaultNow(),
+  updatedAt:  timestamp('updated_at').notNull().defaultNow(),
+});
+
 // ---------------------------------------------------------------------------
 // Prompt Library — versioned prompt templates with a public gallery
 // (Composite uniqueness/PKs are enforced in migration 0069. These tables use
