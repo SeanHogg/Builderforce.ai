@@ -12,6 +12,8 @@
  */
 
 import type {
+  MemoryRecallResult,
+  MemoryRememberResult,
   RepoDeleteResult,
   RepoEditResult,
   RepoListResult,
@@ -165,6 +167,55 @@ export const editFileTool: ToolDefinition = defineTool({
         ? { ok: true, branch: r.branch, commitUrl: r.commitUrl, replaced: r.replaced }
         : { ok: false, error: r.error },
     };
+  },
+});
+
+export const memoryRecallTool: ToolDefinition = defineTool({
+  name: "memory_recall",
+  description:
+    "Recall durable facts from cross-run memory that are relevant to a query — decisions, fixes, project conventions, user preferences you (or another run) stored earlier. Call this FIRST when a task touches an area you may have worked before, instead of re-reading large files or history. Returns the most relevant stored entries (key + content); 0 results means nothing relevant is stored yet.",
+  parameters: {
+    type: "object",
+    properties: {
+      query: { type: "string", description: "What you want to remember about, e.g. a subsystem, decision, or convention." },
+      limit: { type: "number", description: "Max entries to return (default 5)." },
+    },
+    required: ["query"],
+  },
+  requires: ["memory"],
+  async execute(args, ctx): Promise<ToolResult> {
+    const query = typeof args.query === "string" ? args.query : "";
+    if (!query.trim()) return { data: { ok: false, error: "query is required" } };
+    const limit = typeof args.limit === "number" && Number.isFinite(args.limit) ? args.limit : undefined;
+    const r = (await ctx.caps.memory!.recall(query, limit)) as MemoryRecallResult;
+    return { data: r as unknown as Record<string, unknown> };
+  },
+});
+
+export const memoryRememberTool: ToolDefinition = defineTool({
+  name: "memory_remember",
+  description:
+    "Store ONE durable fact in cross-run memory so a future run can recall it instead of re-deriving it — a decision, a non-obvious fix, a project constraint, or a user preference. Keep content to one tight line. Use a stable, descriptive key (e.g. 'release-checklist', 'auth-flow'); reusing a key overwrites it. Do NOT store things the repo/git already records or facts that only matter to the current turn.",
+  parameters: {
+    type: "object",
+    properties: {
+      key: { type: "string", description: "Stable, descriptive identifier for the fact, e.g. 'deploy-command'." },
+      content: { type: "string", description: "The fact, as one concise line." },
+      tags: { type: "array", items: { type: "string" }, description: "Optional tags for grouping/filtering." },
+      importance: { type: "number", description: "0–1; higher surfaces earlier. Default 0.5." },
+    },
+    required: ["key", "content"],
+  },
+  requires: ["memory"],
+  async execute(args, ctx): Promise<ToolResult> {
+    const key = typeof args.key === "string" ? args.key : "";
+    const content = typeof args.content === "string" ? args.content : "";
+    if (!key.trim() || !content.trim()) return { data: { ok: false, error: "key and content are required" } };
+    const tags = Array.isArray(args.tags) ? args.tags.filter((t): t is string => typeof t === "string") : undefined;
+    const importance =
+      typeof args.importance === "number" && Number.isFinite(args.importance) ? args.importance : undefined;
+    const r = (await ctx.caps.memory!.remember(key, content, { tags, importance })) as MemoryRememberResult;
+    return { data: r as unknown as Record<string, unknown> };
   },
 });
 
@@ -448,6 +499,8 @@ export const CORE_TOOLS: readonly ToolDefinition[] = [
   gitRedoTool,
   webFetchTool,
   webSearchTool,
+  memoryRecallTool,
+  memoryRememberTool,
   askHumanTool,
   finishTool,
 ];
