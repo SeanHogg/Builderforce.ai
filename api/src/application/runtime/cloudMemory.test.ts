@@ -72,9 +72,12 @@ describe('buildCloudMemoryCapability', () => {
       insert: () => ({ values: () => ({ onConflictDoUpdate: async () => { throw new Error('relation "agent_memory" does not exist'); } }) }),
       select: () => ({ from: () => ({ where: () => ({ orderBy: () => ({ limit: async () => { throw new Error('relation "agent_memory" does not exist'); } }) }) }) }),
     } as unknown as Db;
-    const mem = buildCloudMemoryCapability({ db: failing, env, tenantId: 1 });
+    // Use an isolated tenant + unique query so the recall does not hit an L1 entry
+    // populated by an earlier test (the read-through L1 Map is module-global and is
+    // not reset between tests) — a cache hit would mask the failing loader.
+    const mem = buildCloudMemoryCapability({ db: failing, env, tenantId: 99 });
 
     expect((await mem.remember('k', 'v')).ok).toBe(false);
-    expect((await mem.recall('q')).ok).toBe(false);
+    expect((await mem.recall('store-failure-missing-table')).ok).toBe(false);
   });
 });
