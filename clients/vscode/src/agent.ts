@@ -28,6 +28,21 @@ interface RawToolCall {
   args: string;
 }
 
+/** Turn a raw gateway error body into a clean, human-readable message. */
+function prettyGatewayError(status: number, body: string): string {
+  let msg = body.slice(0, 300);
+  try {
+    const parsed = JSON.parse(body) as { error?: string | { message?: string } };
+    if (typeof parsed.error === "string") msg = parsed.error;
+    else if (parsed.error?.message) msg = parsed.error.message;
+  } catch {
+    /* not JSON — keep raw */
+  }
+  if (status === 401 || status === 403) return `${msg} (try signing in again)`;
+  if (status === 429) return msg; // gateway already explains quota/limit
+  return `${msg} (HTTP ${status})`;
+}
+
 function toOpenAiTools() {
   return TOOL_DEFS.map((d) => ({
     type: "function" as const,
@@ -144,7 +159,7 @@ async function streamTurn(
   });
   if (!res.ok || !res.body) {
     const txt = await res.text().catch(() => "");
-    throw new Error(`chat_failed_${res.status}: ${txt.slice(0, 200)}`);
+    throw new Error(prettyGatewayError(res.status, txt));
   }
 
   const reader = res.body.getReader();

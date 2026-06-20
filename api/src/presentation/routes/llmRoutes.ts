@@ -430,8 +430,12 @@ export async function requireTenantAccess(c: Context<HonoEnv>): Promise<TenantAc
           revokedAt:       tenantApiKeys.revokedAt,
           allowedOrigins:  tenantApiKeys.allowedOrigins,
           scopes:          tenantApiKeys.scopes,
+          // A key minted by a superadmin (e.g. the IDE editor key) inherits the
+          // superadmin's unlimited budget — mirrors the JWT path's users.isSuperadmin.
+          creatorIsSuperadmin: users.isSuperadmin,
         })
         .from(tenantApiKeys)
+        .leftJoin(users, eq(users.id, tenantApiKeys.createdByUserId))
         .where(eq(tenantApiKeys.keyHash, keyHash))
         .limit(1);
       if (!r || r.revokedAt) return { ok: false, reason: 'Invalid or revoked tenant API key' };
@@ -443,12 +447,12 @@ export async function requireTenantAccess(c: Context<HonoEnv>): Promise<TenantAc
           if (Array.isArray(parsed)) allowlist = parsed.filter((s) => typeof s === 'string');
         } catch { /* malformed → server-only */ }
       }
-      return { ok: true, payload: { id: r.id, tenantId: r.tenantId, allowedOrigins: allowlist, scopes: deserializeScopes(r.scopes) } };
+      return { ok: true, payload: { id: r.id, tenantId: r.tenantId, allowedOrigins: allowlist, scopes: deserializeScopes(r.scopes), isSuperadmin: r.creatorIsSuperadmin === true } };
     });
 
     if (!resolved.ok) throw new Error(resolved.reason);
-    const { id: keyId, tenantId: keyTenantId, allowedOrigins: allowlist, scopes: keyScopes } =
-      resolved.payload as { id: string; tenantId: number; allowedOrigins: string[] | null; scopes?: string[] | null };
+    const { id: keyId, tenantId: keyTenantId, allowedOrigins: allowlist, scopes: keyScopes, isSuperadmin: keyIsSuperadmin } =
+      resolved.payload as { id: string; tenantId: number; allowedOrigins: string[] | null; scopes?: string[] | null; isSuperadmin?: boolean };
 
     // Origin allowlist enforcement (single source: tenantApiKeyService.originAllowed).
     const origin = c.req.header('Origin') ?? null;
@@ -477,7 +481,7 @@ export async function requireTenantAccess(c: Context<HonoEnv>): Promise<TenantAc
       tenantApiKeyId: keyId,
       tenantApiKeyScopes: keyScopes ?? null,
       role: TenantRole.DEVELOPER,
-      isSuperadmin: false,
+      isSuperadmin: keyIsSuperadmin === true,
       ...(await resolveTenantPlan(c.env, keyTenantId)),
     };
   }
