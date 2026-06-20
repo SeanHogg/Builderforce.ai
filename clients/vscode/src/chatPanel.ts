@@ -1,5 +1,6 @@
 import * as vscode from "vscode";
 import { runAgent } from "./agent";
+import { loadTaskConversation } from "./bfApi";
 import { ChatMessage, SECRET_KEY } from "./gateway";
 import { getGroundingSummary, onGroundingChange } from "./grounding";
 import { getSelectedModel, onModelChange } from "./modelState";
@@ -39,6 +40,7 @@ export class ChatPanel {
 
   private readonly panel: vscode.WebviewPanel;
   private currentAbort?: AbortController;
+  private hydratedTask = false;
   private readonly disposables: vscode.Disposable[] = [];
 
   private constructor(
@@ -73,13 +75,9 @@ export class ChatPanel {
   private onMessage(msg: { type: string; text?: string }): void {
     switch (msg.type) {
       case "ready":
-        this.post({
-          type: "restore",
-          messages: this.session.messages
-            .filter((m) => (m.role === "user" || m.role === "assistant") && m.content)
-            .map((m) => ({ role: m.role, text: m.content })),
-        });
+        this.post({ type: "restore", messages: this.visibleMessages() });
         void this.postState();
+        void this.hydrateTaskHistory();
         break;
       case "submit":
         if (msg.text?.trim()) void this.run(msg.text.trim());
@@ -91,6 +89,35 @@ export class ChatPanel {
       case "signin":
         void vscode.commands.executeCommand("builderforce.signIn");
         break;
+    }
+  }
+
+  /** The user/assistant turns the webview should render (system/tool turns excluded). */
+  private visibleMessages(): { role: string; text: string }[] {
+    return this.session.messages
+      .filter((m) => (m.role === "user" || m.role === "assistant") && m.content)
+      .map((m) => ({ role: m.role, text: m.content as string }));
+  }
+
+  /**
+   * On first open of a task-linked session with no local turns yet, pull the task's
+   * server-side conversation (its latest execution's durable message thread) and seed
+   * it — so the panel shows the real history (and the agent has that prior context)
+   * instead of a blank composer. Best-effort: a task with no prior run, or an offline
+   * runtime, just leaves the empty state. Never clobbers an existing local chat.
+   */
+  private async hydrateTaskHistory(): Promise<void> {
+    if (this.hydratedTask) return;
+    this.hydratedTask = true;
+    if (this.session.taskId == null || this.session.messages.length > 0) return;
+    try {
+      const history = await loadTaskConversation(this.ctx.secrets, this.session.taskId);
+      if (!history.length || this.session.messages.length > 0) return;
+      this.session.messages = history.map((m) => ({ role: m.role, content: m.content }));
+      this.store.save(this.session); // persist + refresh the sidebar list
+      this.post({ type: "restore", messages: this.visibleMessages() });
+    } catch {
+      /* history is best-effort — leave the empty state on failure */
     }
   }
 

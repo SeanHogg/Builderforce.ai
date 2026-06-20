@@ -40,6 +40,15 @@ export class SessionStore {
     return this.list().find((s) => s.id === id);
   }
 
+  /**
+   * The most-recently-updated existing session linked to a task — so reopening a
+   * task reattaches to its session instead of spawning a duplicate blank one.
+   * (`list()` is sorted newest-first, so the first match is the latest.)
+   */
+  findByTask(taskId: number): ChatSession | undefined {
+    return this.list().find((s) => s.taskId === taskId);
+  }
+
   create(opts: NewSessionOptions = {}): ChatSession {
     const now = Date.now();
     const session: ChatSession = {
