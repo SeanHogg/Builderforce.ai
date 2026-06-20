@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
+import { VSCODE_WEBVIEW_SCHEME } from '@/lib/embed/embedTrust';
 
 /**
  * Route protection rules:
@@ -51,7 +52,13 @@ export function middleware(request: NextRequest) {
       .split(',')
       .map((s) => s.trim())
       .filter(Boolean);
-    res.headers.set('Content-Security-Policy', `frame-ancestors 'self' ${allowed.join(' ')}`.trim());
+    // Also allow the BuilderForce VS Code extension (webviews load from a random
+    // `vscode-webview://<guid>` origin) to frame /embed — trust the scheme, since the
+    // embed is useless without the tenant token the extension hands it via postMessage.
+    res.headers.set(
+      'Content-Security-Policy',
+      `frame-ancestors 'self' ${VSCODE_WEBVIEW_SCHEME} ${allowed.join(' ')}`.trim(),
+    );
     res.headers.delete('X-Frame-Options');
     return res;
   }

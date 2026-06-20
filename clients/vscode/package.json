@@ -123,6 +123,16 @@
         "icon": "$(checklist)"
       },
       {
+        "command": "builderforce.openBoard",
+        "title": "BuilderForce: Open Board",
+        "icon": "$(layout)"
+      },
+      {
+        "command": "builderforce.openView",
+        "title": "BuilderForce: Open Page…",
+        "icon": "$(browser)"
+      },
+      {
         "command": "builderforce.rescanCodebase",
         "title": "BuilderForce: Rescan Codebase",
         "icon": "$(sync)"
@@ -176,9 +186,19 @@
           "group": "navigation@1"
         },
         {
-          "command": "builderforce.refreshProjects",
+          "command": "builderforce.openBoard",
           "when": "view == builderforce.project",
           "group": "navigation@2"
+        },
+        {
+          "command": "builderforce.openView",
+          "when": "view == builderforce.project",
+          "group": "navigation@3"
+        },
+        {
+          "command": "builderforce.refreshProjects",
+          "when": "view == builderforce.project",
+          "group": "navigation@4"
         }
       ],
       "view/item/context": [
@@ -245,6 +265,11 @@
           "type": "string",
           "default": "https://api.builderforce.ai",
           "markdownDescription": "Base URL of the BuilderForce gateway. The OpenAI-compatible endpoint `/llm/v1/chat/completions` is appended automatically. Override for self-hosted deployments."
+        },
+        "builderforce.webUrl": {
+          "type": "string",
+          "default": "",
+          "markdownDescription": "Base URL of the BuilderForce web app (where embedded pages like the board live). Leave empty to derive it from `builderforce.baseUrl` (api.* → root domain)."
         },
         "builderforce.defaultModel": {
           "type": "string",
