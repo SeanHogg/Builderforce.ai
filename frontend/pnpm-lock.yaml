@@ -31,9 +31,12 @@ importers:
       '@seanhogg/builderforce-embedded':
         specifier: link:../builderforce-embedded
         version: link:../builderforce-embedded
+      '@seanhogg/builderforce-memory':
+        specifier: ^2026.6.20
+        version: 2026.6.20(@seanhogg/builderforce-memory-engine@2026.6.20)
       '@seanhogg/builderforce-memory-engine':
-        specifier: ^2026.6.19
-        version: 2026.6.19
+        specifier: ^2026.6.20
+        version: 2026.6.20
       '@seanhogg/builderforce-sdk':
         specifier: link:../sdk
         version: link:../sdk
@@ -1143,9 +1146,15 @@ packages:
   '@rtsao/scc@1.1.0':
     resolution: {integrity: sha512-zt6OdqaDoOnJ1ZYsCYGt9YmWzDXl4vQdKTyJev62gFhRGKdx7mcT54V9KIjg+d2wi9EXsPvAPKe7i7WjfVWB8g==}
 
-  '@seanhogg/builderforce-memory-engine@2026.6.19':
-    resolution: {integrity: sha512-JiYDI2CkQzyXxQLGlMNnpwt6X0/uqpoMkSWQz7jIioRAlm2CbXWKR2xXLNSrg0Yte9GU0OQbaf/oj8olHtHFqw==}
+  '@seanhogg/builderforce-memory-engine@2026.6.20':
+    resolution: {integrity: sha512-cHUWvainqqy6mweu6jU2Nl+mywKIywkSUefT9P7EcI7bjhWJiNvMS3un1KSGlxgSfZPr1o1PR+2VCiuobILJqg==}
     engines: {node: '>=18.0.0'}
+
+  '@seanhogg/builderforce-memory@2026.6.20':
+    resolution: {integrity: sha512-IFOm3RZr2slTxBdqFdf93dAO6Wy6lyPZcyg5H/8PNs8UEaFoQwMFNF3W0Xl4/+5glIfiwRfjWcSbyHRC+D2Lqg==}
+    engines: {node: '>=18.0.0'}
+    peerDependencies:
+      '@seanhogg/builderforce-memory-engine': ^2026.6.20
 
   '@sinclair/typebox@0.25.24':
     resolution: {integrity: sha512-XJfwUVUKDHF5ugKwIcxEgc9k8b7HbznCp6eUfWgu710hMPNIO4aw4/zB5RogDQz8nd6gyCDpU9O/m6qYEWY6yQ==}
@@ -5979,7 +5988,11 @@ snapshots:
 
   '@rtsao/scc@1.1.0': {}
 
-  '@seanhogg/builderforce-memory-engine@2026.6.19': {}
+  '@seanhogg/builderforce-memory-engine@2026.6.20': {}
+
+  '@seanhogg/builderforce-memory@2026.6.20(@seanhogg/builderforce-memory-engine@2026.6.20)':
+    dependencies:
+      '@seanhogg/builderforce-memory-engine': 2026.6.20
 
   '@sinclair/typebox@0.25.24': {}
 
