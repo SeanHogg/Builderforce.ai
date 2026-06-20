@@ -51,6 +51,11 @@ export function clearJwt(): void {
   jwt = undefined;
 }
 
+/** The tenant JWT for embedding web pages (handed to the iframe via postMessage). */
+export function getTenantJwt(secrets: vscode.SecretStorage): Promise<string | undefined> {
+  return exchangeJwt(secrets);
+}
+
 async function authed<T>(
   secrets: vscode.SecretStorage,
   path: string,

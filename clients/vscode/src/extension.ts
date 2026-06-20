@@ -3,6 +3,7 @@ import * as vscode from "vscode";
 import { BuilderForceAuthProvider } from "./auth";
 import * as bfApi from "./bfApi";
 import { ChatPanel } from "./chatPanel";
+import { EmbedPanel } from "./embedPanel";
 import { registerChatParticipant } from "./chatParticipant";
 import { registerChatSessions } from "./chatSessions";
 import { scanCodebase } from "./codebaseScan";
@@ -15,6 +16,25 @@ import { ChatSession, SessionStore } from "./sessionStore";
 import { SessionsTreeProvider } from "./sessionsTree";
 
 type TaskNode = { kind: "task"; task: bfApi.BfTask };
+
+/** Embeddable BuilderForce web views opened inside VS Code (reuse the real pages, DRY). */
+const EMBED_VIEWS: { label: string; view: string }[] = [
+  { label: "Board (Kanban)", view: "kanban" },
+  { label: "Backlog", view: "backlog" },
+  { label: "Roadmap", view: "roadmap" },
+  { label: "Sprints", view: "sprints" },
+  { label: "Retrospectives", view: "retros" },
+  { label: "Planning Poker", view: "poker" },
+  { label: "Velocity", view: "velocity" },
+  { label: "PRDs & Specs", view: "prd" },
+  { label: "Ideas", view: "ideas" },
+  { label: "Feature ROI", view: "feature-roi" },
+];
+
+function projectHash(): string | undefined {
+  const p = getSelectedProject();
+  return p ? `projectId=${p.id}` : undefined;
+}
 
 export function activate(context: vscode.ExtensionContext): void {
   initProjectState(context.workspaceState);
@@ -61,6 +81,18 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.commands.registerCommand("builderforce.setTaskStatus", (node: TaskNode) =>
       setTaskStatus(context, projects, node?.task),
     ),
+    // Open the real BuilderForce web pages inside VS Code (embedded — DRY, no rebuild).
+    vscode.commands.registerCommand("builderforce.openBoard", () =>
+      EmbedPanel.open(context, "kanban", { title: "BuilderForce Board", hash: projectHash() }),
+    ),
+    vscode.commands.registerCommand("builderforce.openView", async () => {
+      const pick = await vscode.window.showQuickPick(
+        EMBED_VIEWS.map((v) => ({ label: v.label, view: v.view })),
+        { title: "Open a BuilderForce page in VS Code", placeHolder: "Manage your workforce & tasks without leaving the editor" },
+      );
+      if (!pick) return;
+      EmbedPanel.open(context, pick.view, { title: `BuilderForce: ${pick.label}`, hash: projectHash() });
+    }),
     vscode.commands.registerCommand("builderforce.deleteSession", (item: ChatSession | string) => {
       const id = typeof item === "string" ? item : item?.id;
       if (!id) return;
