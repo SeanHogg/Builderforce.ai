@@ -7,7 +7,7 @@
   "license": "MIT",
   "author": "Sean Hogg",
   "engines": {
-    "vscode": "^1.90.0"
+    "vscode": "^1.95.0"
   },
   "categories": [
     "AI",
@@ -61,6 +61,11 @@
       ]
     },
     "commands": [
+      {
+        "command": "builderforce.openChat",
+        "title": "BuilderForce: Open Chat",
+        "icon": "$(comment-discussion)"
+      },
       {
         "command": "builderforce.signIn",
         "title": "BuilderForce: Sign In",
@@ -116,6 +121,15 @@
         }
       ]
     },
+    "chatParticipants": [
+      {
+        "id": "builderforce.agent",
+        "name": "builderforce",
+        "fullName": "BuilderForce",
+        "description": "Codebase-aware BuilderForce coding agent",
+        "isSticky": true
+      }
+    ],
     "configuration": {
       "title": "BuilderForce",
       "properties": {
@@ -155,7 +169,7 @@
   },
   "devDependencies": {
     "@types/node": "^20.14.0",
-    "@types/vscode": "^1.90.0",
+    "@types/vscode": "^1.95.0",
     "@vscode/vsce": "^3.2.0",
     "ovsx": "^0.10.0",
     "typescript": "^5.5.0"

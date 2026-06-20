@@ -1,6 +1,7 @@
 import * as vscode from "vscode";
 import { BuilderForceAuthProvider } from "./auth";
 import { ChatViewProvider } from "./ChatViewProvider";
+import { registerChatParticipant } from "./chatParticipant";
 import { scanCodebase } from "./codebaseScan";
 import { getModels, SECRET_KEY } from "./gateway";
 
@@ -12,6 +13,13 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.window.registerWebviewViewProvider(ChatViewProvider.viewId, provider, {
       webviewOptions: { retainContextWhenHidden: true },
     }),
+    // Also expose BuilderForce in VS Code's native Chat view as @builderforce.
+    registerChatParticipant(context),
+    // Reveal/focus the chat view wherever it's docked — recovers it if the user
+    // dragged it to the panel/secondary sidebar and the Activity Bar icon vanished.
+    vscode.commands.registerCommand("builderforce.openChat", () =>
+      vscode.commands.executeCommand("builderforce.chat.focus"),
+    ),
     vscode.commands.registerCommand("builderforce.signIn", () => signIn(context, provider)),
     vscode.commands.registerCommand("builderforce.signOut", () => signOut(auth, provider)),
     vscode.commands.registerCommand("builderforce.newChat", () => provider.newChat()),

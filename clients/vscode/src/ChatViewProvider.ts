@@ -1,6 +1,8 @@
 import * as vscode from "vscode";
 import { runAgent } from "./agent";
 import { ChatMessage, SECRET_KEY } from "./gateway";
+import { getGroundingSummary, setGroundingSummary } from "./grounding";
+import { buildSystemMessages } from "./prompt";
 
 /** Renders the sidebar chat webview and drives the agent over the open folder. */
 export class ChatViewProvider implements vscode.WebviewViewProvider {
@@ -11,7 +13,6 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
   private history: ChatMessage[] = [];
   private currentAbort?: AbortController;
   private selectedModel: string | undefined;
-  private codebaseSummary: string | undefined;
 
   constructor(private readonly ctx: vscode.ExtensionContext) {
     this.selectedModel =
@@ -57,7 +58,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
   }
 
   setCodebaseSummary(summary: string | undefined): void {
-    this.codebaseSummary = summary;
+    setGroundingSummary(summary);
     this.post({ type: "scan", grounded: !!summary });
   }
 
@@ -67,7 +68,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
       type: "state",
       signedIn: !!key,
       model: this.selectedModel ?? "(auto)",
-      grounded: !!this.codebaseSummary,
+      grounded: !!getGroundingSummary(),
       hasFolder: !!this.workspaceRoot(),
     });
   }
@@ -88,20 +89,6 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
       vscode.workspace.getConfiguration("builderforce").get<"ask" | "acceptEdits">("permissionMode") ??
       "ask"
     );
-  }
-
-  private systemMessages(root: string | undefined): ChatMessage[] {
-    const base = root
-      ? "You are BuilderForce, an AI coding agent embedded in VS Code, working in the user's open workspace folder. A Project map is provided below: USE IT to locate files and directories directly — do NOT call list_files to discover structure that the map already shows (the map lists every sub-project and the directory tree). Only call list_files/read_file when you need the actual contents of a specific file. Read a file before editing it; use edit_file for existing files and write_file for new ones. Make minimal, correct changes and briefly explain what you did. Be efficient with tool calls."
-      : "You are BuilderForce, an AI assistant embedded in VS Code. No workspace folder is open, so file tools are unavailable — answer conversationally.";
-    const msgs: ChatMessage[] = [{ role: "system", content: base }];
-    if (this.codebaseSummary) {
-      msgs.push({
-        role: "system",
-        content: `The following is the authoritative map of the open workspace. Trust it for locating files:\n\n${this.codebaseSummary}`,
-      });
-    }
-    return msgs;
   }
 
   private async approve(summary: string): Promise<boolean> {
@@ -129,7 +116,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
     this.post({ type: "assistantStart", id });
     this.currentAbort = new AbortController();
 
-    const system = this.systemMessages(root);
+    const system = buildSystemMessages(root, getGroundingSummary());
     const working: ChatMessage[] = [...system, ...this.history];
 
     await runAgent(
