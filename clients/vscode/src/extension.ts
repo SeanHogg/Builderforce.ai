@@ -78,13 +78,18 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.commands.registerCommand("builderforce.startTaskSession", (node: TaskNode) => {
       const t = node?.task;
       if (!t) return;
-      const s = store.create({
-        title: `${t.key ? `${t.key} ` : ""}${t.title}`.slice(0, 60),
-        projectId: getSelectedProject()?.id,
-        taskId: t.id,
-        taskKey: t.key,
-        taskTitle: t.title,
-      });
+      // Reattach to the task's existing session if one exists (no duplicate blank
+      // sessions on re-click); otherwise create one. Either way the panel hydrates
+      // the task's server-side conversation on open (see ChatPanel).
+      const s =
+        store.findByTask(t.id) ??
+        store.create({
+          title: `${t.key ? `${t.key} ` : ""}${t.title}`.slice(0, 60),
+          projectId: getSelectedProject()?.id,
+          taskId: t.id,
+          taskKey: t.key,
+          taskTitle: t.title,
+        });
       ChatPanel.open(context, store, s.id);
     }),
     vscode.commands.registerCommand("builderforce.setTaskStatus", (node: TaskNode) =>

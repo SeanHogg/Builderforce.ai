@@ -18,6 +18,20 @@ export interface BfTask {
   assignedUserId?: string | null;
 }
 
+export interface BfExecution {
+  id: number;
+  taskId?: number;
+  status?: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+/** A prior conversation turn loaded from a task's server-side execution thread. */
+export interface BfConversationMessage {
+  role: "user" | "assistant";
+  content: string;
+}
+
 /**
  * Client for BuilderForce's tenant APIs (projects/tasks/connection). The extension holds
  * a `bfk_*` gateway key, which only reaches `/llm/*`; this exchanges it for a short-lived
@@ -166,6 +180,62 @@ export async function listTasks(
 export function invalidateTasks(projectId?: number): void {
   if (projectId == null) taskCache.clear();
   else taskCache.delete(projectId);
+  // Conversations are keyed by task, not project, so a project-level bust can't
+  // target them precisely — clear all (small, TTL-bounded) so a freshly-run task
+  // re-hydrates its latest transcript on next open.
+  conversationCache.clear();
+}
+
+// Task conversation cache: single-process, short TTL, busted by invalidateTasks.
+// (Same rationale as taskCache: one Node host serving one user — a local TTL map
+// is the correct shape; the cross-isolate getOrSetCached rule governs the backend.)
+const conversationCache = new Map<number, { ts: number; messages: BfConversationMessage[] }>();
+const CONVERSATION_TTL = 30_000;
+
+/**
+ * Load a task's existing conversation from the server — the durable message thread
+ * of its most-recent execution (GET /tasks/:id/executions → GET /executions/:id/trace).
+ * Hydrates a VS Code chat panel so opening a task shows its real history instead of a
+ * blank composer. Degrades to [] when the task has no executions/messages yet or the
+ * runtime endpoints aren't reachable.
+ */
+export async function loadTaskConversation(
+  secrets: vscode.SecretStorage,
+  taskId: number,
+  force = false,
+): Promise<BfConversationMessage[]> {
+  const cached = conversationCache.get(taskId);
+  if (!force && cached && Date.now() - cached.ts < CONVERSATION_TTL) return cached.messages;
+
+  let messages: BfConversationMessage[] = [];
+  try {
+    const executions =
+      (await authed<BfExecution[]>(secrets, `/api/runtime/tasks/${taskId}/executions`)) ?? [];
+    const latest = pickLatestExecution(executions);
+    if (latest) {
+      const trace = await authed<{ trace?: { messages?: Array<{ role?: string; text?: string }> } }>(
+        secrets,
+        `/api/runtime/executions/${latest.id}/trace`,
+      );
+      messages = (trace?.trace?.messages ?? [])
+        .filter((m): m is { role?: string; text: string } => typeof m.text === "string" && m.text.trim() !== "")
+        .map((m) => ({ role: m.role === "assistant" ? "assistant" : "user", content: m.text }));
+    }
+  } catch {
+    messages = [];
+  }
+  conversationCache.set(taskId, { ts: Date.now(), messages });
+  return messages;
+}
+
+/** Newest execution by updated/created time (falls back to id when timestamps are absent). */
+function pickLatestExecution(executions: BfExecution[]): BfExecution | undefined {
+  if (!executions.length) return undefined;
+  const time = (e: BfExecution): number => {
+    const t = Date.parse(e.updatedAt ?? e.createdAt ?? "");
+    return Number.isFinite(t) ? t : e.id;
+  };
+  return [...executions].sort((a, b) => time(b) - time(a))[0];
 }
 
 export async function updateTaskStatus(

@@ -1563,8 +1563,17 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
   // Execution history for a specific task
   router.get('/tasks/:taskId/executions', async (c) => {
     const taskId = Number(c.req.param('taskId'));
+    const tenantId = c.get('tenantId');
+    // Tenant-scope the result: listByTask is keyed only by taskId (a global serial),
+    // so without this filter any authenticated tenant could read another tenant's
+    // executions — including their result text — by guessing a taskId. The single-
+    // execution and /trace endpoints already enforce this; mirror it here.
     const executions = await runtimeService.listByTask(taskId);
-    return c.json(executions.map(e => e.toPlain()));
+    return c.json(
+      executions
+        .map((e) => e.toPlain())
+        .filter((e) => Number(e.tenantId) === Number(tenantId)),
+    );
   });
 
   // GET /api/runtime/tasks/:taskId/cost
