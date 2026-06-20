@@ -41,6 +41,10 @@ export default function EmbedViewPage() {
 
   useEffect(() => {
     if (!frame.ready) return;
+    // First-party (VS Code extension) sessions skip the host-integration gate
+    // entirely — there is no host tenant to enable capabilities; the surface is
+    // authorized by the tenant's own JWT. Don't fetch (or block on) /embed/config.
+    if (frame.firstParty) return;
     let cancelled = false;
     embedApi
       .getConfig()
@@ -49,7 +53,7 @@ export default function EmbedViewPage() {
     return () => {
       cancelled = true;
     };
-  }, [frame.ready]);
+  }, [frame.ready, frame.firstParty]);
 
   const wrap = (children: React.ReactNode) => (
     <div
@@ -81,17 +85,25 @@ export default function EmbedViewPage() {
   const meta = EMBED_VIEWS[view];
 
   if (!frame.ready) return wrap(notice(`Connecting to BuilderForce — ${meta.label}…`));
-  if (configError) return wrap(notice('Could not load embed configuration.', 'error'));
-  if (!config) return wrap(notice('Loading…'));
 
-  // Self-gating: the surface decides its own visibility from the host's enabled
-  // capabilities — no prop-drilled flags. governance views ⇒ 'security' capability.
-  const capability = capabilityForView(view);
-  if (!config.enabled) {
-    return wrap(notice('This integration is not enabled. A workspace administrator can enable it in BuilderForce → Settings → Integration.'));
-  }
-  if (!config.capabilities.includes(capability)) {
-    return wrap(notice(`The "${capability}" capability is not enabled for this workspace.`));
+  // Host-integration gate: only third-party hosts (e.g. BurnRateOS) must enable
+  // the embed + the view's capability. The first-party VS Code extension is the
+  // tenant itself (authed with its own JWT) — it bypasses the gate entirely so
+  // "Open Board / Open Page…" renders the real surface instead of a "not enabled"
+  // notice (which read as a blank page).
+  if (!frame.firstParty) {
+    if (configError) return wrap(notice('Could not load embed configuration.', 'error'));
+    if (!config) return wrap(notice('Loading…'));
+
+    // Self-gating: the surface decides its own visibility from the host's enabled
+    // capabilities — no prop-drilled flags. governance views ⇒ 'security' capability.
+    const capability = capabilityForView(view);
+    if (!config.enabled) {
+      return wrap(notice('This integration is not enabled. A workspace administrator can enable it in BuilderForce → Settings → Integration.'));
+    }
+    if (!config.capabilities.includes(capability)) {
+      return wrap(notice(`The "${capability}" capability is not enabled for this workspace.`));
+    }
   }
 
   if (!meta.available) {

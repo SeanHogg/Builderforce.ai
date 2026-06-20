@@ -267,6 +267,10 @@
         {
           "command": "builderforce.setTaskStatus",
           "when": "false"
+        },
+        {
+          "command": "builderforce.editorChat",
+          "when": "false"
         }
       ]
     },

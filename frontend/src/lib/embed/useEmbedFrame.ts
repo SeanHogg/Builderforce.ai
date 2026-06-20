@@ -8,7 +8,7 @@ import {
   type FrameToHostMessage,
 } from '@seanhogg/builderforce-embedded';
 import { setEmbedAuth } from '../auth';
-import { isTrustedHostOrigin } from './embedTrust';
+import { isTrustedHostOrigin, isVsCodeWebviewOrigin } from './embedTrust';
 
 /**
  * The iframe (BuilderForce) half of the embed protocol — the mirror of
@@ -31,6 +31,14 @@ export interface EmbedFrameState {
   theme: EmbedTheme;
   /** True once auth has been received. */
   ready: boolean;
+  /**
+   * True when the authenticating host is the first-party BuilderForce VS Code
+   * extension (a `vscode-webview://` origin) rather than a third-party host app
+   * (e.g. BurnRateOS). The extension mints the tenant JWT from the tenant's OWN
+   * API key, so it is not subject to the host-integration enablement/consent gate
+   * — that gate exists to protect tenants from EXTERNAL hosts surfacing their data.
+   */
+  firstParty: boolean;
   /** Emit a deep-link to the host (host mirrors it into its own URL). */
   navigate: (path: string) => void;
   /** Surface an error to the host. */
@@ -50,6 +58,7 @@ export function useEmbedFrame(): EmbedFrameState {
     token: null,
     theme: 'light',
     ready: false,
+    firstParty: false,
   });
   const hostOriginRef = useRef<string | null>(null);
 
@@ -89,6 +98,7 @@ export function useEmbedFrame(): EmbedFrameState {
           companyId: msg.companyId,
           theme: msg.theme ?? 'light',
           ready: true,
+          firstParty: isVsCodeWebviewOrigin(event.origin),
         });
       } else if (msg.type === 'navigate') {
         // Host → frame deep link; surfaces subscribe to this event.

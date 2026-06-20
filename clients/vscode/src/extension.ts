@@ -127,6 +127,11 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.commands.registerCommand("builderforce.openChat", () =>
       vscode.commands.executeCommand("builderforce.sessions.focus"),
     ),
+    // Mascot button in the editor title bar (top-right of the active pane) —
+    // opens a fresh BuilderForce chat, mirroring how peer agents surface there.
+    vscode.commands.registerCommand("builderforce.editorChat", () =>
+      vscode.commands.executeCommand("builderforce.newSession"),
+    ),
     vscode.commands.registerCommand("builderforce.signIn", () => signIn(context)),
     vscode.commands.registerCommand("builderforce.signOut", () => signOut(context, auth)),
     vscode.commands.registerCommand("builderforce.pickModel", () => pickModel(context)),
