@@ -179,14 +179,22 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
 </head>
 <body>
 <div id="root">
+  <div id="header">
+    <img id="logo" src="${mediaUri("icon.png")}" alt="" />
+    <span id="title">BuilderForce</span>
+    <span id="beta">beta</span>
+    <div id="header-actions">
+      <button id="copy-output" class="icon-btn" title="Copy the whole conversation (for debugging)">Copy output</button>
+    </div>
+  </div>
   <div id="messages"></div>
   <div id="composer">
     <textarea id="input" rows="2" placeholder="Ask BuilderForce to build or change something…"></textarea>
     <div id="actions">
       <span id="model-chip">(auto)</span>
       <span id="scan-chip" hidden>● grounded</span>
-      <button id="send">Send</button>
-      <button id="stop" hidden>Stop</button>
+      <button id="send" class="primary">Send</button>
+      <button id="stop" class="primary" hidden>Stop</button>
     </div>
   </div>
 </div>
