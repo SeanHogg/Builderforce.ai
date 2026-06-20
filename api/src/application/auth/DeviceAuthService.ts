@@ -72,6 +72,36 @@ export class DeviceAuthService {
     };
   }
 
+  /** Resolve the tenant to mint against: explicit, else the user's first active membership. */
+  private async resolveTenant(userId: string, tenantId?: number): Promise<number | undefined> {
+    if (tenantId) return tenantId;
+    const [membership] = await this.db
+      .select({ tenantId: tenantMembers.tenantId })
+      .from(tenantMembers)
+      .where(and(eq(tenantMembers.userId, userId), eq(tenantMembers.isActive, true)))
+      .limit(1);
+    return membership?.tenantId;
+  }
+
+  /**
+   * Mint a tenant gateway key (bfk_*) for an editor connection. Available to any active
+   * member (not owner-gated, unlike the shared tenant-keys admin page) — it's the user's
+   * own editor credential. Single mint path reused by approve() and the editor-key route.
+   */
+  async mintEditorKey(opts: {
+    userId: string;
+    tenantId?: number;
+  }): Promise<{ ok: true; key: string; tenantId: number } | { ok: false; error: string }> {
+    const tenantId = await this.resolveTenant(opts.userId, opts.tenantId);
+    if (!tenantId) return { ok: false, error: 'no_tenant' };
+    const minted = await mintTenantApiKey(this.db, {
+      tenantId,
+      name: 'VS Code',
+      createdByUserId: opts.userId,
+    });
+    return { ok: true, key: minted.key, tenantId };
+  }
+
   /** Approve a pending device by user_code; mints a tenant gateway key (bfk_*). */
   async approve(opts: {
     userCode: string;
@@ -90,22 +120,8 @@ export class DeviceAuthService {
     if (row.status !== 'pending') return { ok: false, error: 'already_resolved' };
     if (row.expiresAt <= new Date()) return { ok: false, error: 'expired' };
 
-    let tenantId = opts.tenantId;
-    if (!tenantId) {
-      const [membership] = await this.db
-        .select({ tenantId: tenantMembers.tenantId })
-        .from(tenantMembers)
-        .where(and(eq(tenantMembers.userId, opts.userId), eq(tenantMembers.isActive, true)))
-        .limit(1);
-      tenantId = membership?.tenantId;
-    }
-    if (!tenantId) return { ok: false, error: 'no_tenant' };
-
-    const minted = await mintTenantApiKey(this.db, {
-      tenantId,
-      name: 'VS Code',
-      createdByUserId: opts.userId,
-    });
+    const minted = await this.mintEditorKey({ userId: opts.userId, tenantId: opts.tenantId });
+    if (!minted.ok) return { ok: false, error: minted.error };
     const enc = await encryptSecretForStorage(minted.key, opts.envSecret);
 
     await this.db
@@ -113,7 +129,7 @@ export class DeviceAuthService {
       .set({
         status: 'approved',
         userId: opts.userId,
-        tenantId,
+        tenantId: minted.tenantId,
         issuedKeyEnc: enc,
         approvedAt: sql`now()`,
       })
