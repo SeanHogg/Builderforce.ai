@@ -98,6 +98,11 @@
         "title": "BuilderForce: Open Session"
       },
       {
+        "command": "builderforce.renameSession",
+        "title": "BuilderForce: Rename Session",
+        "icon": "$(edit)"
+      },
+      {
         "command": "builderforce.deleteSession",
         "title": "BuilderForce: Delete Session",
         "icon": "$(trash)"
@@ -133,6 +138,11 @@
         "icon": "$(browser)"
       },
       {
+        "command": "builderforce.diagnose",
+        "title": "BuilderForce: Diagnose Connection",
+        "icon": "$(pulse)"
+      },
+      {
         "command": "builderforce.rescanCodebase",
         "title": "BuilderForce: Rescan Codebase",
         "icon": "$(sync)"
@@ -146,9 +156,23 @@
         "command": "builderforce.openSettings",
         "title": "BuilderForce: Open Settings",
         "icon": "$(gear)"
+      },
+      {
+        "command": "builderforce.editorChat",
+        "title": "BuilderForce: Chat",
+        "icon": {
+          "light": "media/icon.png",
+          "dark": "media/icon.png"
+        }
       }
     ],
     "menus": {
+      "editor/title": [
+        {
+          "command": "builderforce.editorChat",
+          "group": "navigation@-1"
+        }
+      ],
       "view/title": [
         {
           "command": "builderforce.newSession",
@@ -203,9 +227,14 @@
       ],
       "view/item/context": [
         {
+          "command": "builderforce.renameSession",
+          "when": "view == builderforce.sessions && viewItem == builderforceSession",
+          "group": "inline@1"
+        },
+        {
           "command": "builderforce.deleteSession",
           "when": "view == builderforce.sessions && viewItem == builderforceSession",
-          "group": "inline"
+          "group": "inline@2"
         },
         {
           "command": "builderforce.startTaskSession",
@@ -225,6 +254,10 @@
         },
         {
           "command": "builderforce.deleteSession",
+          "when": "false"
+        },
+        {
+          "command": "builderforce.renameSession",
           "when": "false"
         },
         {
