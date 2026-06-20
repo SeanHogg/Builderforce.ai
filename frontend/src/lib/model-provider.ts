@@ -12,6 +12,13 @@
 
 import type { MambaModel, MambaTrainer, BPETokenizer } from '@seanhogg/builderforce-memory-engine';
 import { sendAIMessage } from './api';
+import { hasWebGPU, withSemanticResponseCache } from './semantic-cache';
+
+/** A stable text key for a message list — what determines the answer, so semantically
+ *  equal prompts (same context, paraphrased) can share a cached response. */
+function cacheQuery(messages: Array<{ role: string; content: string }>): string {
+  return messages.map((m) => `${m.role}: ${m.content}`).join('\n');
+}
 
 // ---------------------------------------------------------------------------
 // Core interfaces
@@ -140,7 +147,7 @@ export class MambaModelProvider implements ModelProvider {
 
     // WebGPU gate — no point loading tokenizer assets if the device
     // doesn't support WebGPU in the first place.
-    if (typeof navigator === 'undefined' || !('gpu' in navigator)) {
+    if (!hasWebGPU()) {
       this._ready = false;
       return;
     }
@@ -286,11 +293,14 @@ export class ExternalLLMProvider implements ModelProvider {
 
   async generate(input: string, context?: ModelContext): Promise<string> {
     const messages = this.buildMessages(input, context);
-    let result = '';
-    await sendAIMessage(this.config.projectId, messages, (chunk) => {
-      result += chunk;
+    const { response } = await withSemanticResponseCache(cacheQuery(messages), async () => {
+      let result = '';
+      await sendAIMessage(this.config.projectId, messages, (chunk) => {
+        result += chunk;
+      });
+      return result;
     });
-    return result;
+    return response;
   }
 
   async stream(
@@ -299,12 +309,18 @@ export class ExternalLLMProvider implements ModelProvider {
     onToken?: (token: string) => void
   ): Promise<string> {
     const messages = this.buildMessages(input, context);
-    let result = '';
-    await sendAIMessage(this.config.projectId, messages, (chunk) => {
-      result += chunk;
-      onToken?.(chunk);
+    const { response, cached } = await withSemanticResponseCache(cacheQuery(messages), async () => {
+      let result = '';
+      await sendAIMessage(this.config.projectId, messages, (chunk) => {
+        result += chunk;
+        onToken?.(chunk);
+      });
+      return result;
     });
-    return result;
+    // On a cache hit the generator never ran, so nothing streamed — emit the cached
+    // answer as a single chunk so the consumer still receives it.
+    if (cached) onToken?.(response);
+    return response;
   }
 
   // ---------------------------------------------------------------------------
