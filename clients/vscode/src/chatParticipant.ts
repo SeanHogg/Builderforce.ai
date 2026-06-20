@@ -7,12 +7,12 @@ import { buildSystemMessages } from "./prompt";
 const PARTICIPANT_ID = "builderforce.agent";
 
 /**
- * Registers BuilderForce in VS Code's native Chat view as `@builderforce`, reusing the
- * same agent loop + sandboxed file tools as the sidebar webview. Stable Chat Participant
- * API (the dedicated agent-session tab surface remains a proposed API — see Gap Register).
+ * The shared chat request handler — drives the agent loop and streams into a
+ * ChatResponseStream. Used by BOTH the native @builderforce participant and the
+ * dedicated chat-session tab (so there is one implementation).
  */
-export function registerChatParticipant(ctx: vscode.ExtensionContext): vscode.Disposable {
-  const handler: vscode.ChatRequestHandler = async (request, context, stream, token) => {
+export function createBuilderForceHandler(ctx: vscode.ExtensionContext): vscode.ChatRequestHandler {
+  return async (request, context, stream, token) => {
     const key = await ctx.secrets.get(SECRET_KEY);
     if (!key) {
       stream.markdown("You're not signed in to BuilderForce.\n\n");
@@ -76,8 +76,14 @@ export function registerChatParticipant(ctx: vscode.ExtensionContext): vscode.Di
 
     return {};
   };
+}
 
-  const participant = vscode.chat.createChatParticipant(PARTICIPANT_ID, handler);
+/**
+ * Registers BuilderForce in VS Code's native Chat view as `@builderforce` (stable Chat
+ * Participant API). Returns the participant so the dedicated session tab can reuse it.
+ */
+export function registerChatParticipant(ctx: vscode.ExtensionContext): vscode.ChatParticipant {
+  const participant = vscode.chat.createChatParticipant(PARTICIPANT_ID, createBuilderForceHandler(ctx));
   participant.iconPath = vscode.Uri.joinPath(ctx.extensionUri, "media", "icon.png");
   return participant;
 }

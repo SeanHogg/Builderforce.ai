@@ -41,6 +41,9 @@
   "activationEvents": [
     "onStartupFinished"
   ],
+  "enabledApiProposals": [
+    "chatSessionsProvider"
+  ],
   "contributes": {
     "viewsContainers": {
       "activitybar": [
@@ -54,12 +57,21 @@
     "views": {
       "builderforce": [
         {
-          "type": "webview",
-          "id": "builderforce.chat",
-          "name": "Chat"
+          "id": "builderforce.sessions",
+          "name": "Sessions"
+        },
+        {
+          "id": "builderforce.project",
+          "name": "Project & Tasks"
         }
       ]
     },
+    "viewsWelcome": [
+      {
+        "view": "builderforce.sessions",
+        "contents": "Start a conversation with the BuilderForce agent.\n[New Session](command:builderforce.newSession)\n\nThe chat opens as a document in the editor so you can review changes side by side."
+      }
+    ],
     "commands": [
       {
         "command": "builderforce.openChat",
@@ -77,9 +89,38 @@
         "icon": "$(sign-out)"
       },
       {
-        "command": "builderforce.newChat",
-        "title": "BuilderForce: New Chat",
+        "command": "builderforce.newSession",
+        "title": "BuilderForce: New Session",
         "icon": "$(add)"
+      },
+      {
+        "command": "builderforce.openSession",
+        "title": "BuilderForce: Open Session"
+      },
+      {
+        "command": "builderforce.deleteSession",
+        "title": "BuilderForce: Delete Session",
+        "icon": "$(trash)"
+      },
+      {
+        "command": "builderforce.selectProject",
+        "title": "BuilderForce: Select Project",
+        "icon": "$(folder)"
+      },
+      {
+        "command": "builderforce.refreshProjects",
+        "title": "BuilderForce: Refresh Tasks",
+        "icon": "$(sync)"
+      },
+      {
+        "command": "builderforce.startTaskSession",
+        "title": "BuilderForce: Start Session on Task",
+        "icon": "$(comment-discussion)"
+      },
+      {
+        "command": "builderforce.setTaskStatus",
+        "title": "BuilderForce: Set Task Status",
+        "icon": "$(checklist)"
       },
       {
         "command": "builderforce.rescanCodebase",
@@ -100,24 +141,79 @@
     "menus": {
       "view/title": [
         {
-          "command": "builderforce.newChat",
-          "when": "view == builderforce.chat",
+          "command": "builderforce.newSession",
+          "when": "view == builderforce.sessions",
           "group": "navigation@1"
         },
         {
-          "command": "builderforce.pickModel",
-          "when": "view == builderforce.chat",
+          "command": "builderforce.rescanCodebase",
+          "when": "view == builderforce.sessions",
           "group": "navigation@2"
         },
         {
-          "command": "builderforce.rescanCodebase",
-          "when": "view == builderforce.chat",
-          "group": "navigation@3"
+          "command": "builderforce.pickModel",
+          "when": "view == builderforce.sessions",
+          "group": "overflow@1"
+        },
+        {
+          "command": "builderforce.signIn",
+          "when": "view == builderforce.sessions",
+          "group": "overflow@2"
+        },
+        {
+          "command": "builderforce.signOut",
+          "when": "view == builderforce.sessions",
+          "group": "overflow@3"
         },
         {
           "command": "builderforce.openSettings",
-          "when": "view == builderforce.chat",
-          "group": "navigation@4"
+          "when": "view == builderforce.sessions",
+          "group": "overflow@4"
+        },
+        {
+          "command": "builderforce.selectProject",
+          "when": "view == builderforce.project",
+          "group": "navigation@1"
+        },
+        {
+          "command": "builderforce.refreshProjects",
+          "when": "view == builderforce.project",
+          "group": "navigation@2"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "builderforce.deleteSession",
+          "when": "view == builderforce.sessions && viewItem == builderforceSession",
+          "group": "inline"
+        },
+        {
+          "command": "builderforce.startTaskSession",
+          "when": "view == builderforce.project && viewItem == builderforceTask",
+          "group": "inline@1"
+        },
+        {
+          "command": "builderforce.setTaskStatus",
+          "when": "view == builderforce.project && viewItem == builderforceTask",
+          "group": "inline@2"
+        }
+      ],
+      "commandPalette": [
+        {
+          "command": "builderforce.openSession",
+          "when": "false"
+        },
+        {
+          "command": "builderforce.deleteSession",
+          "when": "false"
+        },
+        {
+          "command": "builderforce.startTaskSession",
+          "when": "false"
+        },
+        {
+          "command": "builderforce.setTaskStatus",
+          "when": "false"
         }
       ]
     },
@@ -128,6 +224,18 @@
         "fullName": "BuilderForce",
         "description": "Codebase-aware BuilderForce coding agent",
         "isSticky": true
+      }
+    ],
+    "chatSessions": [
+      {
+        "type": "builderforce",
+        "name": "builderforce",
+        "displayName": "BuilderForce",
+        "icon": "$(comment-discussion)",
+        "welcomeTitle": "BuilderForce Agent",
+        "welcomeMessage": "Codebase-aware coding agent for your open workspace.",
+        "inputPlaceholder": "Ask BuilderForce to build or change something…",
+        "order": 5
       }
     ],
     "configuration": {

@@ -1,54 +1,155 @@
+import * as os from "os";
 import * as vscode from "vscode";
 import { BuilderForceAuthProvider } from "./auth";
-import { ChatViewProvider } from "./ChatViewProvider";
+import * as bfApi from "./bfApi";
+import { ChatPanel } from "./chatPanel";
 import { registerChatParticipant } from "./chatParticipant";
+import { registerChatSessions } from "./chatSessions";
 import { scanCodebase } from "./codebaseScan";
 import { getModels, SECRET_KEY } from "./gateway";
+import { setGroundingSummary } from "./grounding";
+import { setSelectedModel } from "./modelState";
+import { getSelectedProject, initProjectState, setSelectedProject } from "./projectState";
+import { ProjectsTreeProvider } from "./projectsTree";
+import { ChatSession, SessionStore } from "./sessionStore";
+import { SessionsTreeProvider } from "./sessionsTree";
+
+type TaskNode = { kind: "task"; task: bfApi.BfTask };
 
 export function activate(context: vscode.ExtensionContext): void {
-  const provider = new ChatViewProvider(context);
+  initProjectState(context.workspaceState);
+  const store = new SessionStore(context.workspaceState);
+  const tree = new SessionsTreeProvider(store);
+  const projects = new ProjectsTreeProvider(context);
   const auth = BuilderForceAuthProvider.register(context);
 
+  // Native Chat participant (@builderforce) + dedicated session tab (proposed API,
+  // feature-detected — no-ops unless launched with --enable-proposed-api).
+  const participant = registerChatParticipant(context);
+  const sessions = registerChatSessions(context, participant);
+  if (sessions) context.subscriptions.push(sessions);
+
   context.subscriptions.push(
-    vscode.window.registerWebviewViewProvider(ChatViewProvider.viewId, provider, {
-      webviewOptions: { retainContextWhenHidden: true },
+    participant,
+    vscode.window.registerTreeDataProvider("builderforce.sessions", tree),
+    vscode.window.registerTreeDataProvider("builderforce.project", projects),
+    vscode.commands.registerCommand("builderforce.newSession", () => {
+      const sel = getSelectedProject();
+      const s = store.create(sel ? { projectId: sel.id } : {});
+      ChatPanel.open(context, store, s.id);
     }),
-    // Also expose BuilderForce in VS Code's native Chat view as @builderforce.
-    registerChatParticipant(context),
-    // Reveal/focus the chat view wherever it's docked — recovers it if the user
-    // dragged it to the panel/secondary sidebar and the Activity Bar icon vanished.
+    vscode.commands.registerCommand("builderforce.openSession", (id: string) =>
+      ChatPanel.open(context, store, id),
+    ),
+    vscode.commands.registerCommand("builderforce.selectProject", () => selectProject(context, projects)),
+    vscode.commands.registerCommand("builderforce.refreshProjects", () => {
+      bfApi.invalidateTasks();
+      projects.refresh();
+    }),
+    vscode.commands.registerCommand("builderforce.startTaskSession", (node: TaskNode) => {
+      const t = node?.task;
+      if (!t) return;
+      const s = store.create({
+        title: `${t.key ? `${t.key} ` : ""}${t.title}`.slice(0, 60),
+        projectId: getSelectedProject()?.id,
+        taskId: t.id,
+        taskKey: t.key,
+        taskTitle: t.title,
+      });
+      ChatPanel.open(context, store, s.id);
+    }),
+    vscode.commands.registerCommand("builderforce.setTaskStatus", (node: TaskNode) =>
+      setTaskStatus(context, projects, node?.task),
+    ),
+    vscode.commands.registerCommand("builderforce.deleteSession", (item: ChatSession | string) => {
+      const id = typeof item === "string" ? item : item?.id;
+      if (!id) return;
+      ChatPanel.close(id);
+      store.delete(id);
+    }),
+    // Recover/reveal the sidebar list if it was moved or hidden.
     vscode.commands.registerCommand("builderforce.openChat", () =>
-      vscode.commands.executeCommand("builderforce.chat.focus"),
+      vscode.commands.executeCommand("builderforce.sessions.focus"),
     ),
-    vscode.commands.registerCommand("builderforce.signIn", () => signIn(context, provider)),
-    vscode.commands.registerCommand("builderforce.signOut", () => signOut(auth, provider)),
-    vscode.commands.registerCommand("builderforce.newChat", () => provider.newChat()),
-    vscode.commands.registerCommand("builderforce.pickModel", () => pickModel(context, provider)),
-    vscode.commands.registerCommand("builderforce.rescanCodebase", () =>
-      maybeScan(context, provider, true),
-    ),
+    vscode.commands.registerCommand("builderforce.signIn", () => signIn(context)),
+    vscode.commands.registerCommand("builderforce.signOut", () => signOut(context, auth)),
+    vscode.commands.registerCommand("builderforce.pickModel", () => pickModel(context)),
+    vscode.commands.registerCommand("builderforce.rescanCodebase", () => maybeScan(context, true)),
     vscode.commands.registerCommand("builderforce.openSettings", () =>
       vscode.commands.executeCommand("workbench.action.openSettings", "builderforce"),
     ),
-    // Re-ground when the open folder changes.
     vscode.workspace.onDidChangeWorkspaceFolders(() => {
-      provider.setCodebaseSummary(undefined);
-      void maybeScan(context, provider, false);
+      setGroundingSummary(undefined);
+      void maybeScan(context, false);
     }),
   );
 
-  // Best-effort grounding scan on startup (cached by version token; no-op if signed out).
-  void maybeScan(context, provider, false);
+  void maybeScan(context, false);
+
+  // Track this VS Code coder-agent connection (human-in-the-loop) via heartbeat.
+  void heartbeat(context);
+  const hb = setInterval(() => void heartbeat(context), 5 * 60_000);
+  context.subscriptions.push({ dispose: () => clearInterval(hb) });
+}
+
+async function heartbeat(context: vscode.ExtensionContext): Promise<void> {
+  if (!(await context.secrets.get(SECRET_KEY))) return;
+  const version = (context.extension.packageJSON as { version?: string }).version ?? "0.0.0";
+  await bfApi.connect(context.secrets, os.hostname(), version);
+}
+
+async function selectProject(
+  context: vscode.ExtensionContext,
+  projects: ProjectsTreeProvider,
+): Promise<void> {
+  let list: bfApi.BfProject[];
+  try {
+    list = await bfApi.listProjects(context.secrets);
+  } catch {
+    vscode.window.showErrorMessage("BuilderForce: could not load projects (is the backend updated?).");
+    return;
+  }
+  if (!list.length) {
+    vscode.window.showInformationMessage("BuilderForce: no projects found (or sign in first).");
+    return;
+  }
+  const pick = await vscode.window.showQuickPick(
+    list.map((p) => ({ label: p.name, description: p.key ?? "", id: p.id, name: p.name })),
+    { title: "Select a BuilderForce project", placeHolder: "Associate this editor with a project" },
+  );
+  if (!pick) return;
+  setSelectedProject({ id: pick.id, name: pick.name });
+  bfApi.invalidateTasks(pick.id);
+  projects.refresh();
+}
+
+async function setTaskStatus(
+  context: vscode.ExtensionContext,
+  projects: ProjectsTreeProvider,
+  task?: bfApi.BfTask,
+): Promise<void> {
+  if (!task) return;
+  const statuses = ["backlog", "todo", "ready", "in_progress", "in_review", "done", "blocked"];
+  const pick = await vscode.window.showQuickPick(statuses, {
+    title: `Set status for ${task.key ?? task.title}`,
+    placeHolder: task.status,
+  });
+  if (!pick) return;
+  try {
+    await bfApi.updateTaskStatus(context.secrets, task.id, pick);
+    bfApi.invalidateTasks(getSelectedProject()?.id);
+    projects.refresh();
+    vscode.window.showInformationMessage(`BuilderForce: ${task.key ?? "task"} → ${pick}`);
+  } catch (e) {
+    vscode.window.showErrorMessage(`BuilderForce: could not update task (${(e as Error).message}).`);
+  }
 }
 
 export function deactivate(): void {
   /* no-op */
 }
 
-async function signIn(
-  context: vscode.ExtensionContext,
-  provider: ChatViewProvider,
-): Promise<void> {
+async function signIn(context: vscode.ExtensionContext): Promise<void> {
   try {
     await vscode.authentication.getSession(BuilderForceAuthProvider.id, ["gateway"], {
       createIfNone: true,
@@ -59,40 +160,40 @@ async function signIn(
     return;
   }
   vscode.window.showInformationMessage("BuilderForce: signed in.");
-  await provider.refreshState();
-  void maybeScan(context, provider, false);
+  bfApi.clearJwt();
+  await ChatPanel.refreshAll(context);
+  void heartbeat(context);
+  void vscode.commands.executeCommand("builderforce.refreshProjects");
+  void maybeScan(context, false);
 }
 
 async function signOut(
+  context: vscode.ExtensionContext,
   auth: BuilderForceAuthProvider,
-  provider: ChatViewProvider,
 ): Promise<void> {
   await auth.removeSession();
-  provider.setCodebaseSummary(undefined);
+  bfApi.clearJwt();
+  setGroundingSummary(undefined);
+  setSelectedProject(undefined);
   vscode.window.showInformationMessage("BuilderForce: signed out.");
-  await provider.refreshState();
+  await ChatPanel.refreshAll(context);
+  void vscode.commands.executeCommand("builderforce.refreshProjects");
 }
 
-async function pickModel(
-  context: vscode.ExtensionContext,
-  provider: ChatViewProvider,
-): Promise<void> {
+async function pickModel(context: vscode.ExtensionContext): Promise<void> {
   try {
     const models = await getModels(context.secrets, true);
     const auto = "(auto — let the gateway choose)";
     const pick = await vscode.window.showQuickPick([auto, ...models], {
       title: "Select BuilderForce model",
-      placeHolder: "Pick a model for this conversation",
+      placeHolder: "Pick a model for new turns",
     });
     if (pick === undefined) return;
-    provider.setModel(pick === auto ? undefined : pick);
+    setSelectedModel(pick === auto ? undefined : pick);
   } catch (e) {
     const message = (e as { message?: string }).message ?? String(e);
     if (message.includes("not_signed_in")) {
-      const action = await vscode.window.showWarningMessage(
-        "Sign in to BuilderForce first.",
-        "Sign In",
-      );
+      const action = await vscode.window.showWarningMessage("Sign in to BuilderForce first.", "Sign In");
       if (action) void vscode.commands.executeCommand("builderforce.signIn");
     } else {
       vscode.window.showErrorMessage(`BuilderForce: ${message}`);
@@ -105,11 +206,7 @@ async function pickModel(
  * grounding summary is cached by a version token (only re-summarizes on drift or force),
  * and any failure leaves the agent working, just ungrounded.
  */
-async function maybeScan(
-  context: vscode.ExtensionContext,
-  provider: ChatViewProvider,
-  force: boolean,
-): Promise<void> {
+async function maybeScan(context: vscode.ExtensionContext, force: boolean): Promise<void> {
   const root = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
   if (!root) return;
   const key = await context.secrets.get(SECRET_KEY);
@@ -121,8 +218,7 @@ async function maybeScan(
   const work = async (progress?: vscode.Progress<{ message?: string }>) => {
     progress?.report({ message: "Scanning workspace…" });
     try {
-      const summary = await scanCodebase(context.secrets, root, model, force);
-      provider.setCodebaseSummary(summary);
+      setGroundingSummary(await scanCodebase(context.secrets, root, model, force));
     } catch (e) {
       console.error("BuilderForce codebase scan failed:", e);
     }

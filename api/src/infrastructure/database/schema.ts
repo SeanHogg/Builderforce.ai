@@ -3650,3 +3650,23 @@ export const deviceAuthorizations = pgTable('device_authorizations', {
   uqUserCode:   uniqueIndex('uq_device_auth_user_code').on(t.userCode),
   byExpires:    index('idx_device_auth_expires').on(t.expiresAt),
 }));
+
+/**
+ * VS Code "coder agent" connections — the third agent runtime (alongside Cloud and
+ * On-Prem agentHosts), tracked as a human-in-the-loop link: which user has a live VS
+ * Code extension connected for this tenant. See migration 0202.
+ */
+export const vscodeConnections = pgTable('vscode_connections', {
+  id:               serial('id').primaryKey(),
+  tenantId:         integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  userId:           varchar('user_id', { length: 36 }).references(() => users.id, { onDelete: 'set null' }),
+  machineName:      varchar('machine_name', { length: 255 }).notNull().default('vscode'),
+  extensionVersion: varchar('extension_version', { length: 32 }),
+  status:           varchar('status', { length: 16 }).notNull().default('active'),
+  connectedAt:      timestamp('connected_at').notNull().defaultNow(),
+  lastSeenAt:       timestamp('last_seen_at').notNull().defaultNow(),
+  createdAt:        timestamp('created_at').notNull().defaultNow(),
+}, (t) => ({
+  uqUserMachine: uniqueIndex('uq_vscode_conn_user_machine').on(t.tenantId, t.userId, t.machineName),
+  byTenant:      index('idx_vscode_conn_tenant').on(t.tenantId),
+}));

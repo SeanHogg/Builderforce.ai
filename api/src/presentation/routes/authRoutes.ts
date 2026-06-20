@@ -18,6 +18,7 @@ import {
   userLegalAcceptances,
   userMfaRecoveryCodes,
   users,
+  tenantApiKeys,
 } from '../../infrastructure/database/schema';
 import { hashPassword, hashSecret, verifyPassword } from '../../infrastructure/auth/HashService';
 import { decodeJwtPayload, signJwt, signWebJwt, verifyWebJwt } from '../../infrastructure/auth/JwtService';
@@ -582,6 +583,37 @@ export function createAuthRoutes(authService: AuthService, db: Db): Hono<HonoEnv
       case 'expired':
         return c.json({ error: 'expired_token' }, 410);
     }
+  });
+
+  // POST /api/auth/tenant-api-key-token — exchange a tenant API key (bfk_*) for a
+  // tenant-scoped JWT so editor clients (VS Code) can call /api/projects, /api/tasks,
+  // etc. The token is minted as the key's creator (human-in-the-loop identity).
+  router.post('/tenant-api-key-token', async (c) => {
+    const body = await c.req.json<{ apiKey: string }>();
+    if (!body.apiKey) return c.json({ error: 'apiKey is required' }, 400);
+
+    const keyHash = await hashSecret(body.apiKey);
+    const [row] = await db
+      .select({
+        id: tenantApiKeys.id,
+        tenantId: tenantApiKeys.tenantId,
+        revokedAt: tenantApiKeys.revokedAt,
+        createdByUserId: tenantApiKeys.createdByUserId,
+      })
+      .from(tenantApiKeys)
+      .where(eq(tenantApiKeys.keyHash, keyHash))
+      .limit(1);
+
+    if (!row || row.revokedAt) return c.json({ error: 'Invalid or revoked API key' }, 401);
+
+    const expiresIn = 3600;
+    const sub = row.createdByUserId ?? `tenantKey:${row.id}`;
+    const token = await signJwt(
+      { sub, tid: row.tenantId, role: TenantRole.DEVELOPER },
+      c.env.JWT_SECRET,
+      expiresIn,
+    );
+    return c.json({ token, expiresIn, tenantId: row.tenantId, userId: row.createdByUserId ?? null });
   });
 
   // -------------------------------------------------------------------------

@@ -35,6 +35,7 @@ import { AgentHostService }     from './application/agentHost/AgentHostService';
 // Routes
 import { createProjectRoutes }     from './presentation/routes/projectRoutes';
 import { createTaskRoutes } from './presentation/routes/taskRoutes';
+import { createVscodeRoutes } from './presentation/routes/vscodeRoutes';
 import { setExecutionBoardSink }   from './application/runtime/executionEvents';
 import { makeExecutionBoardSink }  from './application/runtime/executionBoardBroadcast';
 import { createMemberRoutes }      from './presentation/routes/memberRoutes';
@@ -321,6 +322,7 @@ function buildApp(env: Env): Hono<HonoEnv> {
   // Protected endpoints (JWT injected by authMiddleware inside each router)
   app.route('/api/projects', createProjectRoutes(projectService, db));
   app.route('/api/tasks',    createTaskRoutes(taskService, db, runtimeService));
+  app.route('/api/vscode',   createVscodeRoutes(db));
   app.route('/api/members',  createMemberRoutes(db));
   app.route('/api/tenants',  createTenantRoutes(tenantService, db));
   app.route('/api/segments', createSegmentRoutes(db));

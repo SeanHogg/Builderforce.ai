@@ -18,7 +18,7 @@ export const BRAND = {
   ogImageWidth: 1200,
   ogImageHeight: 630,
   /** ISO 8601 — update on each content deploy */
-  dateModified: '2026-04-17T00:00:00Z',
+  dateModified: '2026-06-20T00:00:00Z',
 } as const;
 
 /* ════════════════════ STATS ════════════════════ */
@@ -33,6 +33,9 @@ export const STATS = {
   ],
   /** Quotable one-liners for AI citability */
   quotable: {
+    humanInLoopAgentic: 'Builderforce.ai is a human-in-the-loop, fully agentic cloud: you train your own AI agents and put them to work inside your own agent, managing a whole workforce of them from a Kanban board — without ever leaving VS Code.',
+    trainAndUseLoop: 'Train a custom agent, publish it to the Workforce Registry, then hire it and call it from inside your own agent — your trained specialists become tools your main agent delegates to.',
+    neverLeaveVsCode: 'The BuilderForce VS Code extension runs the whole platform in your editor — chat with agents, assign and run tasks, review and validate their work, and approve actions without leaving VS Code.',
     aiExecutiveTeam: 'Builderforce.ai acts as your AI CTO, CIO and Security Officer — building your AI agent workforce, connecting your systems, and governing every action with approvals and an audit trail.',
     freeForever: 'Free plan is $0/month forever, no credit card required.',
     zeroGpuBills: 'All training runs on your local WebGPU device — zero cloud GPU bills.',
@@ -52,6 +55,24 @@ export interface Feature {
 }
 
 export const FEATURES: Feature[] = [
+  {
+    icon: '▦',
+    title: 'Kanban Board & Project Management',
+    shortDesc: 'Plan, assign & track work on a live agent Kanban board.',
+    longDesc: 'A full project-management surface: organize work into projects, then plan, assign, and track every task on a live Kanban board — swimlanes per status or per agent, plus table, calendar, and Gantt views. Humans and AI agents sit on the same board, and work flows from backlog to done in real time.',
+  },
+  {
+    icon: '🔁',
+    title: 'Train Your Own Agents — Then Use Them Inside Your Agent',
+    shortDesc: 'Train custom agents and call them from inside your agent.',
+    longDesc: 'Close the loop: train a custom agent (in-browser WebGPU LoRA + AI evaluation), publish it to the Workforce Registry, then hire it and call it from inside your own agent. Your trained specialists become tools your main agent delegates to — a fully agentic workforce you own and orchestrate.',
+  },
+  {
+    icon: '🧩',
+    title: 'Never Leave VS Code',
+    shortDesc: 'Run your whole workforce from the VS Code extension.',
+    longDesc: 'The BuilderForce VS Code extension brings the entire platform into your editor: chat with agents, assign and run tasks, review and validate their work, and manage your whole agent workforce — all without leaving VS Code. Human-in-the-loop approvals happen right where you code.',
+  },
   {
     icon: '🧠',
     title: 'AI CTO',
@@ -416,11 +437,12 @@ export const COMPARE = {
       'GitHub Copilot, Cursor, Claude Code and Devin drive a single agent. Builderforce.ai orchestrates a self-hosted, model-agnostic agent workforce with governance, audit and persistent memory. See the full comparison.',
     ctaLabel: 'Compare Builderforce.ai vs the field',
     highlightFeatures: [
+      'Train your own agents — then call them inside your agent',
+      'Kanban board + project management for your workforce',
+      'Manage your whole workforce without leaving VS Code',
       'Multi-agent orchestration (7 roles + DAG)',
-      'Self-hosted + MIT + air-gapped',
+      'Human-in-the-loop approval gates + audit trail',
       '30+ model providers incl. local Ollama',
-      'Approval gates + audit trail',
-      'Persistent project memory in .builderforce/',
     ],
   } as CompareTeaser,
 } as const;
@@ -444,7 +466,19 @@ export interface FaqItem {
 export const HOMEPAGE_FAQ: FaqItem[] = [
   {
     question: 'What is Builderforce.ai?',
-    answer: 'Builderforce.ai is an AI platform that acts as your AI CTO, CIO and Security Officer. It builds, trains and deploys a custom AI agent workforce entirely in the browser (dataset generation, WebGPU LoRA training, AI evaluation, and the Workforce Registry), connects to your systems and data, and governs every action with approval gates and an audit trail.',
+    answer: 'Builderforce.ai is a human-in-the-loop, fully agentic cloud that acts as your AI CTO, CIO and Security Officer. You train your own AI agents and put them to work inside your own agent, manage the whole workforce from a Kanban board, and review and approve every action — all without leaving VS Code. It builds, trains and deploys a custom AI agent workforce in the browser (dataset generation, WebGPU LoRA training, AI evaluation, and the Workforce Registry), connects to your systems and data, and governs every action with approval gates and an audit trail.',
+  },
+  {
+    question: 'Can I train my own agents and use them inside my own agent?',
+    answer: 'Yes — that is the core loop. Train a custom agent in the browser with WebGPU LoRA fine-tuning and the AI evaluation engine, publish it to the Workforce Registry, then hire it and call it from inside your own agent. Your trained specialists become tools your main agent delegates to, so you build and orchestrate a fully agentic workforce you own.',
+  },
+  {
+    question: 'Do I have to leave VS Code to manage my agents?',
+    answer: 'No. The BuilderForce VS Code extension brings the whole platform into your editor: chat with agents, assign and run tasks on the Kanban board, review and validate their work, and approve human-in-the-loop actions — all without leaving VS Code.',
+  },
+  {
+    question: 'Does Builderforce have a Kanban board and project management?',
+    answer: 'Yes. Projects organize your work, and the task board tracks it on a live Kanban board with swimlanes per status or per agent, plus table, calendar, and Gantt views. Humans and AI agents share the same board, so you plan, assign, and watch work flow from backlog to done in real time.',
   },
   {
     question: 'Is Builderforce free?',
@@ -650,6 +684,14 @@ export const DEFINED_TERMS: DefinedTermEntry[] = [
     name: 'Human-in-the-loop governance',
     description: 'An operating model in which AI agents pause at approval gates for a person to approve or reject high-impact actions, with every action recorded in an audit trail. Builderforce.ai applies this across its agent workforce so teams keep control and meet compliance requirements.',
   },
+  {
+    name: 'Agent-in-agent delegation',
+    description: 'A pattern where a custom agent you train and publish becomes a callable tool your main agent delegates work to. On Builderforce.ai you train an agent (in-browser WebGPU LoRA + evaluation), publish it to the Workforce Registry, then hire and invoke it from inside your own agent — closing the loop from training to use.',
+  },
+  {
+    name: 'Agent Kanban board',
+    description: 'A live task board where work is planned, assigned, and tracked across both human team members and AI agents. Builderforce.ai supports swimlanes per status or per agent plus table, calendar, and Gantt views, with tasks flowing from backlog to done in real time as agents pick them up.',
+  },
 ];
 
 /* ════════════════════ PRODUCT SURFACES (public capability tour) ════════════════════ */
@@ -688,7 +730,8 @@ export const PRODUCT_SECTIONS: ProductSection[] = [
       { icon: '🏠', title: 'Dashboard', desc: 'Your command center: workspace health, recent runs, and what your AI workforce is doing right now.', href: '/dashboard' },
       { icon: '💡', title: 'Brain Storm', desc: 'Describe what you need in plain language; the Brain turns it into projects, datasets, and agents.', href: '/brainstorm' },
       { icon: '💻', title: 'IDE Workspace', desc: 'Monaco editor, terminal, AI chat, and file explorer in one collaborative project workspace.', href: '/ide' },
-      { icon: '🎓', title: 'Training', desc: 'In-browser WebGPU LoRA fine-tuning up to 2B parameters with a live evaluation engine — zero GPU bills.', href: '/training' },
+      { icon: '🎓', title: 'Training', desc: 'In-browser WebGPU LoRA fine-tuning up to 2B parameters with a live evaluation engine — zero GPU bills. Train a custom agent, then call it from inside your own agent.', href: '/training' },
+      { icon: '🧩', title: 'VS Code Extension', desc: 'Run the whole platform from your editor — chat with agents, assign and run tasks, review and validate their work, and approve actions without leaving VS Code.', href: 'https://marketplace.visualstudio.com/items?itemName=builderforce.builderforce-vscode' },
     ],
   },
   {

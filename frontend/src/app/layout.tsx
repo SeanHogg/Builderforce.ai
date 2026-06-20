@@ -30,10 +30,15 @@ export const metadata: Metadata = {
     template: '%s | Builderforce.ai',
   },
   description:
-    'Build, train, and deploy custom AI agents. WebGPU LoRA fine-tuning in the browser. Generate datasets, evaluate with AI judges, publish to the Workforce Registry. Skills marketplace, personas, and AI-native workflows.',
+    'A human-in-the-loop, fully agentic cloud. Train your own AI agents and use them inside your own agent, manage your whole workforce on a Kanban board, and review and approve every action — without leaving VS Code. WebGPU LoRA fine-tuning, skills marketplace, personas, and the Workforce Registry.',
   keywords: [
     'AI agent training',
     'AI agents',
+    'human-in-the-loop AI',
+    'agentic cloud',
+    'Kanban board',
+    'project management',
+    'VS Code extension',
     'WebGPU',
     'LoRA fine-tuning',
     'AI workforce',
@@ -52,9 +57,9 @@ export const metadata: Metadata = {
     type: 'website',
     url: BASE_URL,
     siteName: 'Builderforce.ai',
-    title: 'Builderforce.ai — AI Agent Training Platform',
+    title: 'Builderforce.ai — Human-in-the-loop, fully agentic cloud',
     description:
-      'Build, train, and deploy custom AI agents. WebGPU LoRA fine-tuning, skills marketplace, personas, and AI-native workflows. Publish to the Workforce Registry.',
+      'Train your own AI agents and use them inside your own agent. Manage your workforce on a Kanban board and review every action — without leaving VS Code. WebGPU LoRA, skills marketplace, personas, Workforce Registry.',
     images: [
       {
         url: '/og-image.png',
@@ -67,9 +72,9 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: 'summary_large_image',
-    title: 'Builderforce.ai — AI Agent Training Platform',
+    title: 'Builderforce.ai — Human-in-the-loop, fully agentic cloud',
     description:
-      'Build, train, and deploy custom AI agents. WebGPU LoRA, skills marketplace, personas. Publish to the Workforce Registry.',
+      'Train your own AI agents and use them inside your agent. Manage your workforce on a Kanban board — without leaving VS Code.',
     images: ['/og-image.png'],
   },
   manifest: '/manifest.json',
