@@ -1,19 +1,21 @@
 import * as vscode from "vscode";
-import { ChatMessage, SECRET_KEY, streamChat } from "./gateway";
+import { runAgent } from "./agent";
+import { ChatMessage, SECRET_KEY } from "./gateway";
 
-/** Renders the sidebar chat webview and drives a single conversation. */
+/** Renders the sidebar chat webview and drives the agent over the open folder. */
 export class ChatViewProvider implements vscode.WebviewViewProvider {
   public static readonly viewId = "builderforce.chat";
 
   private view?: vscode.WebviewView;
-  private messages: ChatMessage[] = [];
+  /** Full running transcript (user/assistant/tool), excluding system messages. */
+  private history: ChatMessage[] = [];
   private currentAbort?: AbortController;
   private selectedModel: string | undefined;
+  private codebaseSummary: string | undefined;
 
   constructor(private readonly ctx: vscode.ExtensionContext) {
     this.selectedModel =
-      vscode.workspace.getConfiguration("builderforce").get<string>("defaultModel") ||
-      undefined;
+      vscode.workspace.getConfiguration("builderforce").get<string>("defaultModel") || undefined;
   }
 
   resolveWebviewView(view: vscode.WebviewView): void {
@@ -41,11 +43,11 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
     });
   }
 
-  // --- invoked by commands ---
+  // --- invoked by commands / extension ---
 
   newChat(): void {
     this.stop();
-    this.messages = [];
+    this.history = [];
     this.post({ type: "cleared" });
   }
 
@@ -54,9 +56,20 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
     this.post({ type: "model", model: model ?? "(auto)" });
   }
 
+  setCodebaseSummary(summary: string | undefined): void {
+    this.codebaseSummary = summary;
+    this.post({ type: "scan", grounded: !!summary });
+  }
+
   async refreshState(): Promise<void> {
     const key = await this.ctx.secrets.get(SECRET_KEY);
-    this.post({ type: "state", signedIn: !!key, model: this.selectedModel ?? "(auto)" });
+    this.post({
+      type: "state",
+      signedIn: !!key,
+      model: this.selectedModel ?? "(auto)",
+      grounded: !!this.codebaseSummary,
+      hasFolder: !!this.workspaceRoot(),
+    });
   }
 
   stop(): void {
@@ -66,42 +79,78 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
 
   // --- internals ---
 
+  private workspaceRoot(): string | undefined {
+    return vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+  }
+
+  private permissionMode(): "ask" | "acceptEdits" {
+    return (
+      vscode.workspace.getConfiguration("builderforce").get<"ask" | "acceptEdits">("permissionMode") ??
+      "ask"
+    );
+  }
+
+  private systemMessages(root: string | undefined): ChatMessage[] {
+    const base = root
+      ? "You are BuilderForce, an AI coding agent embedded in VS Code. You can read and edit files in the user's open workspace folder using the provided tools. Read files before editing them. Prefer edit_file for changes to existing files and write_file for new files. Make minimal, correct changes and briefly explain what you did."
+      : "You are BuilderForce, an AI assistant embedded in VS Code. No workspace folder is open, so file tools are unavailable — answer conversationally.";
+    const msgs: ChatMessage[] = [{ role: "system", content: base }];
+    if (this.codebaseSummary) {
+      msgs.push({ role: "system", content: `Project knowledge (for grounding):\n${this.codebaseSummary}` });
+    }
+    return msgs;
+  }
+
+  private async approve(summary: string): Promise<boolean> {
+    const pick = await vscode.window.showWarningMessage(
+      `BuilderForce wants to ${summary}.`,
+      { modal: true },
+      "Apply",
+      "Skip",
+    );
+    return pick === "Apply";
+  }
+
   private async run(text: string): Promise<void> {
     const key = await this.ctx.secrets.get(SECRET_KEY);
     if (!key) {
       this.post({ type: "needSignIn" });
       return;
     }
-    this.messages.push({ role: "user", content: text });
+    const root = this.workspaceRoot();
+
+    this.history.push({ role: "user", content: text });
     this.post({ type: "user", text });
 
     const id = `a${Date.now()}`;
     this.post({ type: "assistantStart", id });
     this.currentAbort = new AbortController();
-    let acc = "";
-    try {
-      for await (const delta of streamChat(
-        this.ctx.secrets,
-        this.messages,
-        this.selectedModel,
-        this.currentAbort.signal,
-      )) {
-        acc += delta;
-        this.post({ type: "chunk", id, delta });
-      }
-      this.messages.push({ role: "assistant", content: acc });
-      this.post({ type: "assistantDone", id });
-    } catch (e) {
-      const err = e as { name?: string; message?: string };
-      if (err.name === "AbortError") {
-        this.messages.push({ role: "assistant", content: acc });
-        this.post({ type: "assistantDone", id });
-      } else {
-        this.post({ type: "error", id, message: err.message ?? String(e) });
-      }
-    } finally {
-      this.currentAbort = undefined;
-    }
+
+    const system = this.systemMessages(root);
+    const working: ChatMessage[] = [...system, ...this.history];
+
+    await runAgent(
+      working,
+      {
+        secrets: this.ctx.secrets,
+        root,
+        model: this.selectedModel,
+        permissionMode: this.permissionMode(),
+        approve: (summary) => this.approve(summary),
+        signal: this.currentAbort.signal,
+      },
+      {
+        onText: (delta) => this.post({ type: "chunk", id, delta }),
+        onToolStart: (label) => this.post({ type: "tool", phase: "start", label }),
+        onToolResult: (label, ok) => this.post({ type: "tool", phase: "end", label, ok }),
+        onError: (message) => this.post({ type: "error", id, message }),
+      },
+    );
+
+    // Persist the turn's appended messages (assistant + tool) back into history.
+    this.history = working.slice(system.length);
+    this.post({ type: "assistantDone", id });
+    this.currentAbort = undefined;
   }
 
   private post(msg: unknown): void {
@@ -115,6 +164,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
     const csp = [
       `default-src 'none'`,
       `style-src ${webview.cspSource}`,
+      `img-src ${webview.cspSource}`,
       `script-src 'nonce-${nonce}'`,
       `font-src ${webview.cspSource}`,
     ].join("; ");
@@ -131,9 +181,10 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
 <div id="root">
   <div id="messages"></div>
   <div id="composer">
-    <textarea id="input" rows="2" placeholder="Ask BuilderForce…"></textarea>
+    <textarea id="input" rows="2" placeholder="Ask BuilderForce to build or change something…"></textarea>
     <div id="actions">
       <span id="model-chip">(auto)</span>
+      <span id="scan-chip" hidden>● grounded</span>
       <button id="send">Send</button>
       <button id="stop" hidden>Stop</button>
     </div>

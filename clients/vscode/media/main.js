@@ -6,6 +6,7 @@
   const sendBtn = /** @type {HTMLButtonElement} */ (document.getElementById("send"));
   const stopBtn = /** @type {HTMLButtonElement} */ (document.getElementById("stop"));
   const modelChip = /** @type {HTMLElement} */ (document.getElementById("model-chip"));
+  const scanChip = /** @type {HTMLElement} */ (document.getElementById("scan-chip"));
 
   /** @type {Record<string, HTMLElement>} */
   const bubbles = {};
@@ -56,6 +57,20 @@
     return b;
   }
 
+  function addToolRow(label, phase, ok) {
+    clearEmptyState();
+    const row = document.createElement("div");
+    row.className = "tool-row" + (phase === "end" && ok === false ? " failed" : "");
+    const icon = phase === "end" ? (ok === false ? "✗" : "✓") : "⟳";
+    row.textContent = `${icon} ${label}`;
+    messagesEl.appendChild(row);
+    messagesEl.scrollTop = messagesEl.scrollHeight;
+  }
+
+  function setGrounded(on) {
+    scanChip.hidden = !on;
+  }
+
   function setStreaming(on) {
     sendBtn.hidden = on;
     stopBtn.hidden = !on;
@@ -87,10 +102,17 @@
       case "state":
         signedIn = !!m.signedIn;
         modelChip.textContent = m.model || "(auto)";
+        setGrounded(!!m.grounded);
         if (!messagesEl.querySelector(".msg")) renderEmptyState();
         break;
       case "model":
         modelChip.textContent = m.model || "(auto)";
+        break;
+      case "scan":
+        setGrounded(!!m.grounded);
+        break;
+      case "tool":
+        addToolRow(m.label, m.phase, m.ok);
         break;
       case "cleared":
         renderEmptyState();
