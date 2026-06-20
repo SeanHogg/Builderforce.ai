@@ -25,6 +25,12 @@ export class ChatPanel {
     ChatPanel.panels.get(sessionId)?.panel.dispose();
   }
 
+  /** Update an open panel's tab title (after a rename). No-op if not open. */
+  static setTitle(sessionId: string, title: string): void {
+    const panel = ChatPanel.panels.get(sessionId);
+    if (panel) panel.panel.title = title;
+  }
+
   /** Push current signed-in/grounded/model state to every open panel. */
   static async refreshAll(ctx: vscode.ExtensionContext): Promise<void> {
     const signedIn = !!(await ctx.secrets.get(SECRET_KEY));

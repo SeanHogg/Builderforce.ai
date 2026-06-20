@@ -42,6 +42,8 @@ export function activate(context: vscode.ExtensionContext): void {
   const tree = new SessionsTreeProvider(store);
   const projects = new ProjectsTreeProvider(context);
   const auth = BuilderForceAuthProvider.register(context);
+  const output = vscode.window.createOutputChannel("BuilderForce");
+  context.subscriptions.push(output);
 
   // Native Chat participant (@builderforce) + dedicated session tab (proposed API,
   // feature-detected — no-ops unless launched with --enable-proposed-api).
@@ -65,6 +67,13 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.commands.registerCommand("builderforce.refreshProjects", () => {
       bfApi.invalidateTasks();
       projects.refresh();
+    }),
+    vscode.commands.registerCommand("builderforce.diagnose", async () => {
+      output.clear();
+      output.appendLine("BuilderForce connection diagnostics");
+      output.appendLine("");
+      output.appendLine(await bfApi.diagnose(context.secrets));
+      output.show(true);
     }),
     vscode.commands.registerCommand("builderforce.startTaskSession", (node: TaskNode) => {
       const t = node?.task;
@@ -98,6 +107,21 @@ export function activate(context: vscode.ExtensionContext): void {
       if (!id) return;
       ChatPanel.close(id);
       store.delete(id);
+    }),
+    vscode.commands.registerCommand("builderforce.renameSession", async (item: ChatSession | string) => {
+      const id = typeof item === "string" ? item : item?.id;
+      if (!id) return;
+      const current = store.get(id);
+      const title = await vscode.window.showInputBox({
+        title: "Rename session",
+        prompt: "New session name",
+        value: current?.title ?? "",
+        ignoreFocusOut: true,
+      });
+      if (title === undefined) return;
+      const finalTitle = title.trim() || "New session";
+      store.rename(id, finalTitle);
+      ChatPanel.setTitle(id, finalTitle);
     }),
     // Recover/reveal the sidebar list if it was moved or hidden.
     vscode.commands.registerCommand("builderforce.openChat", () =>
@@ -137,8 +161,12 @@ async function selectProject(
   let list: bfApi.BfProject[];
   try {
     list = await bfApi.listProjects(context.secrets);
-  } catch {
-    vscode.window.showErrorMessage("BuilderForce: could not load projects (is the backend updated?).");
+  } catch (e) {
+    const action = await vscode.window.showErrorMessage(
+      `BuilderForce: could not load projects — ${(e as Error).message}`,
+      "Diagnose",
+    );
+    if (action === "Diagnose") void vscode.commands.executeCommand("builderforce.diagnose");
     return;
   }
   if (!list.length) {

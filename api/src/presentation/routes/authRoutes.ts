@@ -605,15 +605,34 @@ export function createAuthRoutes(authService: AuthService, db: Db): Hono<HonoEnv
       .limit(1);
 
     if (!row || row.revokedAt) return c.json({ error: 'Invalid or revoked API key' }, 401);
+    // The token is minted AS the key's creator (human-in-the-loop) and MUST be a real
+    // user: signJwt always stamps a `jti`, and authMiddleware rejects any jti without a
+    // matching persisted authTokens row — so we persist it below (FK → users.id).
+    if (!row.createdByUserId) {
+      return c.json(
+        { error: 'This API key has no associated user. Re-create it from Settings → API Keys or use device sign-in.' },
+        400,
+      );
+    }
 
     const expiresIn = 3600;
-    const sub = row.createdByUserId ?? `tenantKey:${row.id}`;
     const token = await signJwt(
-      { sub, tid: row.tenantId, role: TenantRole.DEVELOPER },
+      { sub: row.createdByUserId, tid: row.tenantId, role: TenantRole.DEVELOPER },
       c.env.JWT_SECRET,
       expiresIn,
     );
-    return c.json({ token, expiresIn, tenantId: row.tenantId, userId: row.createdByUserId ?? null });
+    // Persist so authMiddleware's jti revocation check finds an active token (mirrors
+    // /api/auth/web/login and /tenant-token). Without this, every /api call 401s with
+    // "Token has been revoked or expired".
+    await persistToken(db, token, {
+      userId: row.createdByUserId,
+      tenantId: row.tenantId,
+      tokenType: 'tenant',
+      sessionName: 'VS Code',
+      userAgent: getUserAgent(c),
+      ipAddress: getClientIp(c),
+    });
+    return c.json({ token, expiresIn, tenantId: row.tenantId, userId: row.createdByUserId });
   });
 
   // -------------------------------------------------------------------------

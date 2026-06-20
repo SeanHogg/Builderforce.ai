@@ -67,8 +67,8 @@ export class ProjectsTreeProvider implements vscode.TreeDataProvider<Node> {
       const tasks = await listTasks(this.ctx.secrets, project.id);
       if (tasks.length === 0) nodes.push({ kind: "info", label: "No tasks in this project" });
       else nodes.push(...tasks.map((task) => ({ kind: "task" as const, task })));
-    } catch {
-      nodes.push({ kind: "info", label: "Tasks unavailable — update the BuilderForce backend" });
+    } catch (e) {
+      nodes.push({ kind: "info", label: `Tasks unavailable — ${(e as Error).message}`, command: "builderforce.diagnose" });
     }
     return nodes;
   }
