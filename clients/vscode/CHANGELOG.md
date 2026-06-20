@@ -2,6 +2,21 @@
 
 All notable changes to the BuilderForce VS Code extension are documented here.
 
+## [2026.6.20] — Coding agent, codebase grounding, browser sign-in
+
+- **In-folder agent editing** — the chat now runs an agentic tool-calling loop with
+  sandboxed file tools (`read_file`, `write_file`, `edit_file`, `list_files`,
+  `delete_file`) rooted at the open workspace folder. Mutating edits are gated by
+  `builderforce.permissionMode` (`ask` shows Apply/Skip; `acceptEdits` auto-applies).
+- **Codebase scan + knowledge summary** — first time you open a folder, the extension
+  scans it and writes `.builderforce/architecture.md` + a grounding summary (cached by a
+  file-tree version token; re-run with **Rescan Codebase**). The summary is injected as
+  agent context so it doesn't misfire. A "● grounded" chip shows when active.
+- **Browser device-code sign-in** — `Sign In` now runs the RFC 8628 browser flow against
+  `/api/auth/device/*`, falling back to paste-key when those endpoints aren't reachable.
+  Registered as a proper VS Code authentication provider (shows in the Accounts menu).
+- **Real mascot icon** (agentHost brand mark) for the activity bar + gallery.
+
 ## [2026.6.17] — Initial publishing surface
 
 - Sidebar **Chat** webview (Activity Bar container) with streaming responses from the
