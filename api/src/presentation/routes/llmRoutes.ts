@@ -282,10 +282,13 @@ async function enforceDailyTokenCap(
     // weight. Mirrors computeCostMillicents' tiering, token-side.
     const [usageRow] = await db
       .select({
+        // Cast the fractional multipliers to float8: as bare bound params next to
+        // integer columns Postgres infers them as integer and rejects "0.9"
+        // (invalid input syntax for type integer). Math.floor below re-integers it.
         used: sql<number>`COALESCE(SUM(
           ${llmUsageLog.totalTokens}
-          - (${llmUsageLog.cacheReadTokens} * ${1 - CACHE_READ_MULTIPLIER})
-          + (${llmUsageLog.cacheCreationTokens} * ${CACHE_CREATION_MULTIPLIER - 1})
+          - (${llmUsageLog.cacheReadTokens} * ${1 - CACHE_READ_MULTIPLIER}::float8)
+          + (${llmUsageLog.cacheCreationTokens} * ${CACHE_CREATION_MULTIPLIER - 1}::float8)
         ), 0)`,
       })
       .from(llmUsageLog)
