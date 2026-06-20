@@ -195,19 +195,19 @@ function mockDb(opts: {
   const usageRow = opts.usageRow;
 
   const select = vi.fn(() => ({
-    from:  () => ({
-      where: () => {
-        // `.where()` itself is awaited directly for the daily-token sum
-        // (no `.limit()`), so it must be both thenable AND have a `.limit()`
-        // method for key/tenant lookups that chain `.limit(1)` after it.
-        const node = {
-          limit: () => Promise.resolve(queue.shift() ?? []),
-          then:  (resolve: (v: unknown) => unknown) =>
-            resolve(usageRow !== undefined ? [usageRow] : []),
-        };
-        return node;
-      },
-    }),
+    from: () => {
+      // `.where()` is awaited directly for the daily-token sum (no `.limit()`),
+      // so it must be both thenable AND have a `.limit()` for key/tenant lookups
+      // that chain `.limit(1)`. The bfk_* key lookup also `.leftJoin(users)`s to
+      // carry the creator's superadmin flag, so the chain must support leftJoin.
+      const where = () => ({
+        limit: () => Promise.resolve(queue.shift() ?? []),
+        then:  (resolve: (v: unknown) => unknown) =>
+          resolve(usageRow !== undefined ? [usageRow] : []),
+      });
+      const chain = { leftJoin: () => chain, where };
+      return chain;
+    },
   }));
   const update = vi.fn(() => ({
     set:   () => ({
