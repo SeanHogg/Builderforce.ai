@@ -1,6 +1,7 @@
 import { Hono, type Context } from 'hono';
 import { and, desc, eq, gt, inArray, isNull, ne, sql } from 'drizzle-orm';
 import { AuthService } from '../../application/auth/AuthService';
+import { DeviceAuthService } from '../../application/auth/DeviceAuthService';
 import type { HonoEnv } from '../../env';
 import { webAuthMiddleware } from '../middleware/webAuthMiddleware';
 import { TenantRole, type UserId } from '../../domain/shared/types';
@@ -510,6 +511,65 @@ export function createAuthRoutes(authService: AuthService, db: Db): Hono<HonoEnv
     const body = await c.req.json<{ apiKey: string; tenantId: number }>();
     const result = await authService.login(body.apiKey, body.tenantId);
     return c.json({ token: result.token, expiresIn: result.expiresIn });
+  });
+
+  // -------------------------------------------------------------------------
+  // Device-code (RFC 8628) sign-in for editor clients (VS Code extension)
+  // -------------------------------------------------------------------------
+  const deviceAuth = new DeviceAuthService(db);
+
+  // POST /api/auth/device/code — public; start a device login.
+  router.post('/device/code', async (c) => {
+    const body = await c.req.json<{ client?: string }>().catch(() => ({} as { client?: string }));
+    const appUrl = c.env.APP_URL || 'https://builderforce.ai';
+    const start = await deviceAuth.start(appUrl, body.client);
+    return c.json(start);
+  });
+
+  // POST /api/auth/device/approve — WebJWT; called by the /activate page.
+  router.post('/device/approve', webAuthMiddleware, async (c) => {
+    const userId = c.get('userId') as string;
+    const body = await c.req.json<{
+      userCode?: string;
+      user_code?: string;
+      tenantId?: number;
+      decision?: 'approve' | 'deny';
+    }>();
+    const userCode = (body.userCode ?? body.user_code ?? '').trim();
+    if (!userCode) return c.json({ error: 'user_code is required' }, 400);
+
+    if (body.decision === 'deny') {
+      await deviceAuth.deny(userCode);
+      return c.json({ ok: true, decision: 'deny' });
+    }
+
+    const res = await deviceAuth.approve({
+      userCode,
+      userId,
+      tenantId: body.tenantId,
+      envSecret: c.env.JWT_SECRET,
+    });
+    if (!res.ok) return c.json({ error: res.error }, res.error === 'no_tenant' ? 409 : 400);
+    return c.json({ ok: true, decision: 'approve' });
+  });
+
+  // POST /api/auth/device/token — public; polled by the extension.
+  router.post('/device/token', async (c) => {
+    const body = await c.req.json<{ device_code?: string }>();
+    if (!body.device_code) return c.json({ error: 'device_code is required' }, 400);
+    const res = await deviceAuth.poll(body.device_code, c.env.JWT_SECRET);
+    switch (res.state) {
+      case 'approved':
+        return c.json({ access_key: res.accessKey, tenant_id: res.tenantId, token_type: 'bearer' }, 200);
+      case 'pending':
+        return c.json({ error: 'authorization_pending' }, 428);
+      case 'slow_down':
+        return c.json({ error: 'slow_down' }, 429);
+      case 'denied':
+        return c.json({ error: 'access_denied' }, 403);
+      case 'expired':
+        return c.json({ error: 'expired_token' }, 410);
+    }
   });
 
   // -------------------------------------------------------------------------

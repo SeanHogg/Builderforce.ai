@@ -1,57 +1,66 @@
 import * as vscode from "vscode";
+import { BuilderForceAuthProvider } from "./auth";
 import { ChatViewProvider } from "./ChatViewProvider";
+import { scanCodebase } from "./codebaseScan";
 import { getModels, SECRET_KEY } from "./gateway";
 
 export function activate(context: vscode.ExtensionContext): void {
   const provider = new ChatViewProvider(context);
+  const auth = BuilderForceAuthProvider.register(context);
 
   context.subscriptions.push(
     vscode.window.registerWebviewViewProvider(ChatViewProvider.viewId, provider, {
       webviewOptions: { retainContextWhenHidden: true },
     }),
     vscode.commands.registerCommand("builderforce.signIn", () => signIn(context, provider)),
-    vscode.commands.registerCommand("builderforce.signOut", () => signOut(context, provider)),
+    vscode.commands.registerCommand("builderforce.signOut", () => signOut(auth, provider)),
     vscode.commands.registerCommand("builderforce.newChat", () => provider.newChat()),
     vscode.commands.registerCommand("builderforce.pickModel", () => pickModel(context, provider)),
+    vscode.commands.registerCommand("builderforce.rescanCodebase", () =>
+      maybeScan(context, provider, true),
+    ),
     vscode.commands.registerCommand("builderforce.openSettings", () =>
       vscode.commands.executeCommand("workbench.action.openSettings", "builderforce"),
     ),
+    // Re-ground when the open folder changes.
+    vscode.workspace.onDidChangeWorkspaceFolders(() => {
+      provider.setCodebaseSummary(undefined);
+      void maybeScan(context, provider, false);
+    }),
   );
+
+  // Best-effort grounding scan on startup (cached by version token; no-op if signed out).
+  void maybeScan(context, provider, false);
 }
 
 export function deactivate(): void {
   /* no-op */
 }
 
-/**
- * v0 sign-in: paste an API key into SecretStorage. The browser device-code flow
- * (PRD 14 §6.1/§6.4) replaces this once the `/api/auth/device/*` endpoints are deployed
- * — at which point this command runs the device flow instead, with paste-key kept as the
- * remote/offline fallback.
- */
 async function signIn(
   context: vscode.ExtensionContext,
   provider: ChatViewProvider,
 ): Promise<void> {
-  const key = await vscode.window.showInputBox({
-    title: "Sign in to BuilderForce",
-    prompt:
-      "Paste your BuilderForce API key. (Browser device-code sign-in arrives once the device-auth endpoints are deployed — see PRD 14.)",
-    placeHolder: "clu_…",
-    password: true,
-    ignoreFocusOut: true,
-  });
-  if (!key) return;
-  await context.secrets.store(SECRET_KEY, key.trim());
+  try {
+    await vscode.authentication.getSession(BuilderForceAuthProvider.id, ["gateway"], {
+      createIfNone: true,
+    });
+  } catch (e) {
+    const msg = (e as { message?: string }).message ?? String(e);
+    if (!/cancel/i.test(msg)) vscode.window.showErrorMessage(`BuilderForce: ${msg}`);
+    return;
+  }
   vscode.window.showInformationMessage("BuilderForce: signed in.");
   await provider.refreshState();
+  void maybeScan(context, provider, false);
 }
 
 async function signOut(
-  context: vscode.ExtensionContext,
+  auth: BuilderForceAuthProvider,
   provider: ChatViewProvider,
 ): Promise<void> {
-  await context.secrets.delete(SECRET_KEY);
+  await auth.removeSession();
+  provider.setCodebaseSummary(undefined);
   vscode.window.showInformationMessage("BuilderForce: signed out.");
   await provider.refreshState();
 }
@@ -80,5 +89,44 @@ async function pickModel(
     } else {
       vscode.window.showErrorMessage(`BuilderForce: ${message}`);
     }
+  }
+}
+
+/**
+ * Run the codebase scan if a folder is open and we are signed in. Best-effort: the
+ * grounding summary is cached by a version token (only re-summarizes on drift or force),
+ * and any failure leaves the agent working, just ungrounded.
+ */
+async function maybeScan(
+  context: vscode.ExtensionContext,
+  provider: ChatViewProvider,
+  force: boolean,
+): Promise<void> {
+  const root = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+  if (!root) return;
+  const key = await context.secrets.get(SECRET_KEY);
+  if (!key) return;
+
+  const model =
+    vscode.workspace.getConfiguration("builderforce").get<string>("defaultModel") || undefined;
+
+  const work = async (progress?: vscode.Progress<{ message?: string }>) => {
+    progress?.report({ message: "Scanning workspace…" });
+    try {
+      const summary = await scanCodebase(context.secrets, root, model, force);
+      provider.setCodebaseSummary(summary);
+    } catch (e) {
+      console.error("BuilderForce codebase scan failed:", e);
+    }
+  };
+
+  if (force) {
+    await vscode.window.withProgress(
+      { location: vscode.ProgressLocation.Notification, title: "BuilderForce: rescanning codebase" },
+      work,
+    );
+    vscode.window.showInformationMessage("BuilderForce: codebase knowledge refreshed.");
+  } else {
+    await work();
   }
 }

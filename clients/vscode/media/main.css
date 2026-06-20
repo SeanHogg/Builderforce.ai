@@ -113,6 +113,25 @@ body {
   margin-right: auto;
 }
 
+#scan-chip {
+  font-size: 11px;
+  opacity: 0.85;
+  color: var(--vscode-charts-green, #4ec9b0);
+}
+
+.tool-row {
+  font-family: var(--vscode-editor-font-family, monospace);
+  font-size: 11px;
+  opacity: 0.85;
+  padding: 2px 4px;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+.tool-row.failed {
+  color: var(--vscode-errorForeground, #f88);
+}
+
 button {
   font-family: inherit;
   font-size: 12px;

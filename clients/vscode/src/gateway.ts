@@ -3,9 +3,18 @@ import * as vscode from "vscode";
 /** Single source of truth for the SecretStorage key (DRY). */
 export const SECRET_KEY = "builderforce.apiKey";
 
+export interface ToolCall {
+  id: string;
+  type: "function";
+  function: { name: string; arguments: string };
+}
+
 export interface ChatMessage {
-  role: "system" | "user" | "assistant";
-  content: string;
+  role: "system" | "user" | "assistant" | "tool";
+  /** null is valid for an assistant turn that only emits tool calls. */
+  content: string | null;
+  tool_calls?: ToolCall[];
+  tool_call_id?: string;
 }
 
 /** Gateway base URL from settings, trailing slashes stripped. */
@@ -24,8 +33,7 @@ export function getApiKey(secrets: vscode.SecretStorage): Thenable<string | unde
  * Models cache. Intentional single-process, in-memory TTL cache: the cross-isolate
  * `getOrSetCached` rule governs the Cloudflare backend; a VS Code extension host is a
  * single Node process serving one user, so a local TTL cache is the correct shape here.
- * The model pool is slow-changing; `forceRefresh` (the "Pick Model" command after sign-in
- * changes) busts it.
+ * `forceRefresh` busts it; the model pool is slow-changing.
  */
 let modelsCache: { ts: number; data: string[] } | undefined;
 const MODELS_TTL_MS = 5 * 60_000;
@@ -49,56 +57,29 @@ export async function getModels(
   return data;
 }
 
-/**
- * Stream an OpenAI-compatible chat completion from the gateway. The bearer key never
- * leaves the extension host — the webview proxies through here (D4 in PRD 14).
- */
-export async function* streamChat(
+/** Non-streaming completion (used by the codebase scanner). */
+export async function complete(
   secrets: vscode.SecretStorage,
   messages: ChatMessage[],
   model: string | undefined,
-  signal: AbortSignal,
-): AsyncGenerator<string> {
+  signal?: AbortSignal,
+): Promise<string> {
   const key = await getApiKey(secrets);
   if (!key) throw new Error("not_signed_in");
-
-  const body: Record<string, unknown> = { messages, stream: true };
+  const body: Record<string, unknown> = { messages, stream: false };
   if (model) body.model = model;
-
   const res = await fetch(`${getBaseUrl()}/llm/v1/chat/completions`, {
     method: "POST",
     headers: { "content-type": "application/json", authorization: `Bearer ${key}` },
     body: JSON.stringify(body),
     signal,
   });
-  if (!res.ok || !res.body) {
+  if (!res.ok) {
     const txt = await res.text().catch(() => "");
-    throw new Error(`chat_failed_${res.status}: ${txt.slice(0, 200)}`);
+    throw new Error(`complete_failed_${res.status}: ${txt.slice(0, 200)}`);
   }
-
-  const reader = res.body.getReader();
-  const decoder = new TextDecoder();
-  let buffer = "";
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    buffer += decoder.decode(value, { stream: true });
-    const lines = buffer.split("\n");
-    buffer = lines.pop() ?? "";
-    for (const line of lines) {
-      const t = line.trim();
-      if (!t.startsWith("data:")) continue;
-      const payload = t.slice(5).trim();
-      if (payload === "[DONE]") return;
-      try {
-        const json = JSON.parse(payload) as {
-          choices?: Array<{ delta?: { content?: string } }>;
-        };
-        const delta = json.choices?.[0]?.delta?.content;
-        if (delta) yield delta;
-      } catch {
-        /* keepalive / partial frame — ignore */
-      }
-    }
-  }
+  const json = (await res.json()) as {
+    choices?: Array<{ message?: { content?: string } }>;
+  };
+  return json.choices?.[0]?.message?.content ?? "";
 }

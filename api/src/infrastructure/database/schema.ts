@@ -3624,3 +3624,29 @@ export const studioVoiceovers = pgTable('studio_voiceovers', {
   uniqueCacheKey: uniqueIndex('uq_studio_voiceovers_cache_key').on(t.cacheKey),
   byClone: index('idx_studio_voiceovers_clone').on(t.cloneId),
 }));
+
+/**
+ * Device-code (RFC 8628) sign-in for editor clients (VS Code extension). Bridges the
+ * API-key-only gateway to a one-click browser login: see migration 0201. Short-lived;
+ * the minted tenant key is stored encrypted and delivered exactly once.
+ */
+export const deviceAuthorizations = pgTable('device_authorizations', {
+  id:             serial('id').primaryKey(),
+  deviceCodeHash: varchar('device_code_hash', { length: 128 }).notNull(),
+  userCode:       varchar('user_code', { length: 16 }).notNull(),
+  userId:         varchar('user_id', { length: 36 }).references(() => users.id, { onDelete: 'set null' }),
+  tenantId:       integer('tenant_id').references(() => tenants.id, { onDelete: 'set null' }),
+  status:         varchar('status', { length: 16 }).notNull().default('pending'),
+  issuedKeyEnc:   text('issued_key_enc'),
+  scopes:         varchar('scopes', { length: 256 }).notNull().default('gateway'),
+  client:         varchar('client', { length: 32 }),
+  intervalSecs:   integer('interval_secs').notNull().default(5),
+  expiresAt:      timestamp('expires_at').notNull(),
+  approvedAt:     timestamp('approved_at'),
+  lastPolledAt:   timestamp('last_polled_at'),
+  createdAt:      timestamp('created_at').notNull().defaultNow(),
+}, (t) => ({
+  uqDeviceCode: uniqueIndex('uq_device_auth_device_code').on(t.deviceCodeHash),
+  uqUserCode:   uniqueIndex('uq_device_auth_user_code').on(t.userCode),
+  byExpires:    index('idx_device_auth_expires').on(t.expiresAt),
+}));
