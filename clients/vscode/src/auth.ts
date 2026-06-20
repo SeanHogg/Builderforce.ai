@@ -8,6 +8,19 @@ function sleep(ms: number): Promise<void> {
   return new Promise((r) => setTimeout(r, ms));
 }
 
+/** The web app URL, derived from the gateway base (api.builderforce.ai → builderforce.ai). */
+function appUrl(): string {
+  try {
+    const u = new URL(getBaseUrl());
+    u.hostname = u.hostname.replace(/^api\./, "");
+    u.pathname = "";
+    u.search = "";
+    return u.toString().replace(/\/$/, "");
+  } catch {
+    return "https://builderforce.ai";
+  }
+}
+
 /**
  * Auth provider for BuilderForce. `createSession` runs the browser device-code flow
  * (RFC 8628) against `/api/auth/device/*`; if those endpoints are unavailable (not yet
@@ -71,11 +84,13 @@ export class BuilderForceAuthProvider implements vscode.AuthenticationProvider {
   }
 
   private async pasteKey(): Promise<string> {
+    // Land the user on the API-keys page: it authenticates them (or prompts login),
+    // then lets them create a key and copy it with one click. They paste it back here.
+    await vscode.env.openExternal(vscode.Uri.parse(`${appUrl()}/settings/api-keys`));
     const key = await vscode.window.showInputBox({
       title: "Sign in to BuilderForce",
-      prompt:
-        "Paste your BuilderForce API key. (Browser sign-in is used automatically once the device-auth endpoints are deployed.)",
-      placeHolder: "clu_…",
+      prompt: "In the browser, create an API key and copy it — then paste it here.",
+      placeHolder: "Paste your API key…",
       password: true,
       ignoreFocusOut: true,
     });
