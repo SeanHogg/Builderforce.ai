@@ -553,6 +553,18 @@ export function createAuthRoutes(authService: AuthService, db: Db): Hono<HonoEnv
     return c.json({ ok: true, decision: 'approve' });
   });
 
+  // POST /api/auth/editor-key — WebJWT; mint a personal editor key (copy-button flow).
+  // Not owner-gated: it's the signed-in member's own editor credential.
+  router.post('/editor-key', webAuthMiddleware, async (c) => {
+    const userId = c.get('userId') as string;
+    const body = await c.req
+      .json<{ tenantId?: number }>()
+      .catch(() => ({} as { tenantId?: number }));
+    const res = await deviceAuth.mintEditorKey({ userId, tenantId: body.tenantId });
+    if (!res.ok) return c.json({ error: res.error }, res.error === 'no_tenant' ? 409 : 400);
+    return c.json({ access_key: res.key, tenant_id: res.tenantId, token_type: 'bearer' });
+  });
+
   // POST /api/auth/device/token — public; polled by the extension.
   router.post('/device/token', async (c) => {
     const body = await c.req.json<{ device_code?: string }>();

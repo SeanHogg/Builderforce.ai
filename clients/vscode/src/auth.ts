@@ -84,13 +84,13 @@ export class BuilderForceAuthProvider implements vscode.AuthenticationProvider {
   }
 
   private async pasteKey(): Promise<string> {
-    // Land the user on the API-keys page: it authenticates them (or prompts login),
-    // then lets them create a key and copy it with one click. They paste it back here.
-    await vscode.env.openExternal(vscode.Uri.parse(`${appUrl()}/settings/api-keys`));
+    // Land the user on the "Connect your editor" page: it signs them in (or prompts
+    // login), generates an editor key, and shows it with a Copy button. They paste here.
+    await vscode.env.openExternal(vscode.Uri.parse(`${appUrl()}/activate`));
     const key = await vscode.window.showInputBox({
       title: "Sign in to BuilderForce",
-      prompt: "In the browser, create an API key and copy it — then paste it here.",
-      placeHolder: "Paste your API key…",
+      prompt: "A browser opened with your editor key — copy it there and paste it here.",
+      placeHolder: "Paste your editor key…",
       password: true,
       ignoreFocusOut: true,
     });
