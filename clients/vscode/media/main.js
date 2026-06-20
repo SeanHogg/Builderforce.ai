@@ -174,6 +174,21 @@
         log.length = 0;
         renderEmptyState();
         break;
+      case "restore":
+        messagesEl.innerHTML = "";
+        Object.keys(bubbles).forEach((k) => delete bubbles[k]);
+        log.length = 0;
+        for (const item of m.messages || []) {
+          if (item.role === "user") {
+            addMessage("user", item.text, false);
+            log.push(`USER:\n${item.text}`);
+          } else if (item.role === "assistant") {
+            addMessage("assistant", item.text, true);
+            log.push(`ASSISTANT:\n${item.text}`);
+          }
+        }
+        if (!messagesEl.querySelector(".msg")) renderEmptyState();
+        break;
       case "user":
         addMessage("user", m.text, false);
         log.push(`USER:\n${m.text}`);

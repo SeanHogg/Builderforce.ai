@@ -91,7 +91,7 @@ export function homepageSchema() {
         '@id': `${BRAND.url}/#app`,
         name: BRAND.name,
         description:
-          'AI agent training platform. Build, train, and deploy custom AI agents with WebGPU LoRA fine-tuning in the browser, skills marketplace, personas, and publish to the Workforce Registry.',
+          'A human-in-the-loop, fully agentic cloud. Train your own AI agents and use them inside your own agent, manage your workforce on a Kanban board, and review and approve every action without leaving VS Code. WebGPU LoRA fine-tuning in the browser, skills marketplace, personas, and the Workforce Registry.',
         url: BRAND.url,
         applicationCategory: 'DeveloperApplication',
         operatingSystem: 'Web',

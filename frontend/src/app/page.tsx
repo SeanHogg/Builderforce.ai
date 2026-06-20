@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import JsonLd from '@/components/JsonLd';
 import { homepageSchema } from '@/lib/structured-data';
-import { HOMEPAGE_FAQ, COMPARE } from '@/lib/content';
+import { HOMEPAGE_FAQ, COMPARE, FEATURES } from '@/lib/content';
 import { savePendingPrompt } from '@/lib/brain';
 import { pendingPromptsApi } from '@/lib/builderforceApi';
 import { BLOG_POSTS } from '@/lib/blogData';
@@ -478,7 +478,7 @@ export default function LandingPage() {
         <section className="lp-hero">
           <div className="lp-badge">
             <span className="lp-badge-dot" />
-            AI CTO · CIO · Security Officer
+            Human-in-the-loop · Fully agentic cloud
           </div>
 
           <h1 className="lp-title">Builderforce.ai</h1>
@@ -486,10 +486,11 @@ export default function LandingPage() {
           <p className="lp-tagline">Your AI CTO, CIO &amp; Security Officer</p>
 
           <p className="lp-desc">
-            One AI brain that runs your technology like an executive team —
-            it builds, trains and deploys your AI agent workforce, connects to
-            your systems and data, and governs every action with approvals and
-            an audit trail. Tell it what you need; it gets to work.
+            A human-in-the-loop, fully agentic cloud that runs your technology
+            like an executive team. Train your own AI agents and put them to
+            work inside your own agent, manage the whole workforce from a Kanban
+            board, and review and approve every action — all without ever
+            leaving VS Code.
           </p>
 
           {/* Prompt input (primary action) + agentHost mascot as a right-hand
@@ -538,6 +539,42 @@ export default function LandingPage() {
             <Link href="/marketplace" className="lp-btn-secondary">
               🤖 Browse Agents
             </Link>
+          </div>
+        </section>
+
+        {/* ── Pillars: the human-in-the-loop, fully agentic framing ── */}
+        <section className="lp-features" style={{ paddingTop: 0 }}>
+          <h2 className="section-title">
+            <span className="agentHost-accent">⟩</span> Human in the loop. Fully agentic.
+          </h2>
+          <p style={{ maxWidth: 'none', margin: '0 0 32px', color: 'var(--text-secondary)' }}>
+            Train your own agents, put them to work inside your agent, and stay in
+            control of every step — from one place.
+          </p>
+          <div className="lp-grid" style={{ gridTemplateColumns: 'repeat(auto-fit,minmax(260px,1fr))' }}>
+            {[
+              {
+                icon: '🔁',
+                title: 'Train agents, use them inside your agent',
+                desc: 'Train a custom agent in-browser (WebGPU LoRA + evaluation), publish it to the Workforce Registry, then hire it and call it from inside your own agent. Your specialists become tools your main agent delegates to.',
+              },
+              {
+                icon: '▦',
+                title: 'Manage your workforce on a Kanban board',
+                desc: 'Plan, assign, and track every task on a live Kanban board — humans and AI agents on the same board, with table, calendar, and Gantt views. Work flows from backlog to done in real time.',
+              },
+              {
+                icon: '🧩',
+                title: 'Never leave VS Code',
+                desc: 'The BuilderForce VS Code extension runs the whole platform in your editor: chat with agents, assign and run tasks, review and validate their work, and approve human-in-the-loop actions — without leaving your code.',
+              },
+            ].map((p) => (
+              <div key={p.title} className="lp-card">
+                <span className="lp-card-icon">{p.icon}</span>
+                <h3 className="lp-card-title">{p.title}</h3>
+                <p className="lp-card-desc">{p.desc}</p>
+              </div>
+            ))}
           </div>
         </section>
 
@@ -648,26 +685,14 @@ export default function LandingPage() {
         {/* ── Features ── */}
         <section className="lp-features" id="features">
           <h2 className="section-title">
-            <span className="agentHost-accent">⟩</span> Your AI executive team
+            <span className="agentHost-accent">⟩</span> Everything your AI workforce can do
           </h2>
           <div className="lp-grid">
-            {[
-              { icon: '🧠', title: 'AI CTO', desc: 'Builds, trains and deploys your AI agent workforce — in-browser WebGPU LoRA fine-tuning, evaluation, and one-click publish to the Workforce Registry.' },
-              { icon: '🔗', title: 'AI CIO', desc: 'Connects to your systems — GitHub, Jira, Confluence and more via encrypted credentials — and orchestrates work through the Brain’s tool registry.' },
-              { icon: '🛡️', title: 'AI Security Officer', desc: 'Governs every action: human-in-the-loop approval gates, a full audit trail, per-tenant isolation, and AES-256-GCM encrypted secrets.' },
-              { icon: '🗂️', title: 'AI Dataset Generation', desc: 'Generate instruction-tuning datasets from a single capability prompt using any OpenRouter model. Export as JSONL, stored in R2.' },
-              { icon: '🧠', title: 'In-Browser LoRA Training', desc: 'Fine-tune models up to 2B parameters directly in Chrome with WebGPU. No cloud GPU bills, zero round-trips, total privacy.' },
-              { icon: '🔬', title: 'AI Evaluation Engine', desc: 'Score your model outputs with an independent AI judge. Get structured quality metrics: correctness, reasoning, hallucination rate.' },
-              { icon: '🤖', title: 'Agent Registry', desc: 'Publish your trained agent to the public Workforce Registry with a profile, skills, and eval score. Others can hire it instantly.' },
-              { icon: '💾', title: 'R2 Artifact Storage', desc: 'LoRA adapter weights are serialised from WebGPU buffers and automatically persisted to Cloudflare R2 with signed URLs.' },
-              { icon: '⚡', title: 'Full IDE Workspace', desc: 'Monaco editor, terminal, AI chat, file explorer — everything you need in one collaborative project workspace.' },
-              { icon: '🔐', title: 'Secure Multi-Tenant', desc: 'JWT auth with tenant isolation. Projects, datasets, models, and agents are private and scoped per tenant by default.' },
-              { icon: '🌐', title: 'Cloudflare Edge', desc: 'Zero cold-start Worker API with global distribution. COOP/COEP headers enable SharedArrayBuffer for Transformers.js.' },
-            ].map(f => (
+            {FEATURES.map(f => (
               <div key={f.title} className="lp-card">
                 <span className="lp-card-icon">{f.icon}</span>
                 <h3 className="lp-card-title">{f.title}</h3>
-                <p className="lp-card-desc">{f.desc}</p>
+                <p className="lp-card-desc">{f.longDesc}</p>
               </div>
             ))}
           </div>
