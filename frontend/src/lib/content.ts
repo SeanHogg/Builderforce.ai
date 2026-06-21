@@ -33,7 +33,7 @@ export const STATS = {
   ],
   /** Quotable one-liners for AI citability */
   quotable: {
-    humanInLoopAgentic: 'Builderforce.ai is a human-in-the-loop, fully agentic cloud: you train your own AI agents and put them to work inside your own agent, managing a whole workforce of them from a Kanban board — without ever leaving VS Code.',
+    humanInLoopAgentic: 'Builderforce.ai is a human-in-the-loop, fully agentic cloud: train your own AI agents and put them to work inside your own agent, running a whole workforce from a Kanban board — all without ever leaving VS Code.',
     trainAndUseLoop: 'Train a custom agent, publish it to the Workforce Registry, then hire it and call it from inside your own agent — your trained specialists become tools your main agent delegates to.',
     neverLeaveVsCode: 'The BuilderForce VS Code extension runs the whole platform in your editor — chat with agents, assign and run tasks, review and validate their work, and approve actions without leaving VS Code.',
     aiExecutiveTeam: 'Builderforce.ai acts as your AI CTO, CIO and Security Officer — building your AI agent workforce, connecting your systems, and governing every action with approvals and an audit trail.',
