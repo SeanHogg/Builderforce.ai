@@ -3,51 +3,65 @@
 import { useEffect, useRef } from 'react';
 
 /**
- * WaveBackdrop — a first-person "rushing forward through water" hero, like the
- * view from a jetski: a bright open lane at the centre vanishing point (the path
- * ahead) with spray streaks that fly OUTWARD from it, accelerating + growing as
- * they rush past the camera, and waves splashing up the side edges.
+ * WaveBackdrop — a first-person "flying through a forest" hero: a bright open
+ * lane at the centre (the path / sky ahead) framed by a tree line that streams
+ * OUTWARD from the vanishing point toward the left and right edges, each conifer
+ * growing + dropping as it rushes past the camera (classic driving-down-a-tree-
+ * lined-road perspective). Distant trees fade into atmospheric haze near the
+ * centre and resolve as they approach.
  *
- * Driven by a <canvas> + requestAnimationFrame render loop — the same class of
- * technique sites like contextqa.com use for their always-on hero motion. A JS
- * render loop (unlike a CSS animation) is NOT silenced by the browser's
- * `prefers-reduced-motion` setting, so the scene reliably animates on load for
- * every visitor. It is theme-reactive (reads `data-theme`), DPR-aware, pauses
- * when the tab is hidden, and fully tears down on unmount.
+ * Driven by a <canvas> + requestAnimationFrame render loop (the same always-on
+ * technique sites like contextqa.com use) — a JS render loop is NOT silenced by
+ * the browser's `prefers-reduced-motion` setting, so it reliably animates on
+ * load for everyone. Theme-reactive (reads `data-theme`), DPR-aware, pauses when
+ * the tab is hidden, and tears down on unmount.
+ *
+ * (Name kept as WaveBackdrop so the single import site doesn't churn; it is the
+ * hero backdrop regardless of motif.)
  */
 
 type RGB = [number, number, number];
 interface Palette {
-  glow: RGB;
-  waterFar: RGB;
-  waterNear: RGB;
-  streak: RGB;
-  foam: RGB;
+  skyTop: RGB;
+  skyHorizon: RGB;
+  glow: RGB; // bright centre lane (kept readable behind hero text)
+  ground: RGB;
+  tree: RGB;
+  haze: RGB; // colour distant trees fade toward (atmospheric perspective)
 }
 
 const DARK: Palette = {
-  glow: [190, 230, 255],
-  waterFar: [22, 52, 95],
-  waterNear: [5, 15, 36],
-  streak: [150, 210, 255],
-  foam: [215, 240, 255],
+  skyTop: [8, 16, 38],
+  skyHorizon: [28, 52, 92],
+  glow: [120, 160, 220],
+  ground: [6, 12, 26],
+  tree: [9, 22, 32],
+  haze: [28, 52, 92],
 };
 const LIGHT: Palette = {
+  skyTop: [150, 198, 238],
+  skyHorizon: [206, 231, 250],
   glow: [255, 255, 255],
-  waterFar: [140, 205, 238],
-  waterNear: [26, 114, 184],
-  streak: [255, 255, 255],
-  foam: [255, 255, 255],
+  ground: [120, 150, 120],
+  tree: [26, 64, 50],
+  haze: [206, 231, 250],
 };
 
 const rgba = ([r, g, b]: RGB, a: number) => `rgba(${r},${g},${b},${a})`;
+const mix = (a: RGB, b: RGB, t: number): RGB => [
+  Math.round(a[0] + (b[0] - a[0]) * t),
+  Math.round(a[1] + (b[1] - a[1]) * t),
+  Math.round(a[2] + (b[2] - a[2]) * t),
+];
 
-interface Particle {
-  ang: number; // travel direction (radians, y points down)
-  r: number; // distance from the vanishing point
-  v: number; // current speed (accelerates → perspective rush)
-  size: number; // per-particle width multiplier
-  fade: number; // per-particle opacity multiplier
+interface Tree {
+  side: -1 | 1; // streams to the left or right edge
+  t: number; // 0 (far, at vanishing point) → 1 (near, off-screen)
+  spd: number; // progress per frame
+  endSpread: number; // how far out it ends, as a fraction of half-width
+  startJitter: number; // small horizontal offset at the vanishing point
+  maxH: number; // tree height at t≈1 (px)
+  hue: number; // small per-tree colour variation
 }
 
 export default function WaveBackdrop({ className = '' }: { className?: string }) {
@@ -63,43 +77,76 @@ export default function WaveBackdrop({ className = '' }: { className?: string })
     let width = 0;
     let height = 0;
     let dpr = 1;
-    const COUNT = 100;
-    const particles: Particle[] = [];
+    const COUNT = 46;
+    const trees: Tree[] = [];
 
-    /** A fresh streak: spawned near the vanishing point, aimed into one of two
-     *  downward fans (down-right / down-left) so the upper-centre lane stays open. */
-    const spawn = (p: Particle, seed = false) => {
-      const right = Math.random() < 0.5;
-      // Right fan 5°–85°, left fan 95°–175° (degrees; y points down).
-      const deg = right ? 5 + Math.random() * 80 : 95 + Math.random() * 80;
-      p.ang = (deg * Math.PI) / 180;
-      p.r = seed ? Math.random() * 0.55 : Math.random() * 0.04; // seed: pre-fill the field
-      p.v = 0.0016 + Math.random() * 0.0018;
-      p.size = 0.6 + Math.random() * 1.1;
-      p.fade = 0.5 + Math.random() * 0.5;
+    const spawn = (p: Tree, seed = false) => {
+      p.side = Math.random() < 0.5 ? -1 : 1;
+      p.t = seed ? Math.random() : Math.random() * 0.05;
+      p.spd = 0.0026 + Math.random() * 0.0026;
+      p.endSpread = 0.62 + Math.random() * 0.5; // 0.62–1.12 of half-width
+      p.startJitter = (Math.random() * 2 - 1) * 26;
+      p.maxH = 150 + Math.random() * 170;
+      p.hue = Math.random() * 0.3 - 0.15;
     };
 
     for (let i = 0; i < COUNT; i++) {
-      const p: Particle = { ang: 0, r: 0, v: 0, size: 1, fade: 1 };
+      const p: Tree = { side: 1, t: 0, spd: 0, endSpread: 1, startJitter: 0, maxH: 200, hue: 0 };
       spawn(p, true);
-      particles.push(p);
+      trees.push(p);
     }
 
     const palette = () => (document.documentElement.dataset.theme === 'light' ? LIGHT : DARK);
 
+    // Cache the static sky+ground gradient between frames of the same size/theme.
     let bgKey = '';
-    let bg: CanvasGradient | null = null;
-    const buildBg = (cx: number, cy: number, pal: Palette) => {
+    let sky: CanvasGradient | null = null;
+    let ground: CanvasGradient | null = null;
+    let glow: CanvasGradient | null = null;
+    let horizonY = 0;
+    const buildBg = (pal: Palette) => {
       const key = `${width}x${height}:${document.documentElement.dataset.theme}`;
-      if (key === bgKey && bg) return bg;
-      const maxR = Math.hypot(Math.max(cx, width - cx), Math.max(cy, height - cy));
-      const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, maxR);
-      g.addColorStop(0, rgba(pal.glow, 1));
-      g.addColorStop(0.4, rgba(pal.waterFar, 1));
-      g.addColorStop(1, rgba(pal.waterNear, 1));
-      bg = g;
+      if (key === bgKey && sky && ground && glow) return;
+      horizonY = height * 0.44;
+      const s = ctx.createLinearGradient(0, 0, 0, horizonY);
+      s.addColorStop(0, rgba(pal.skyTop, 1));
+      s.addColorStop(1, rgba(pal.skyHorizon, 1));
+      sky = s;
+      const g = ctx.createLinearGradient(0, horizonY, 0, height);
+      g.addColorStop(0, rgba(pal.skyHorizon, 1));
+      g.addColorStop(1, rgba(pal.ground, 1));
+      ground = g;
+      const gl = ctx.createRadialGradient(width / 2, horizonY, 0, width / 2, horizonY, Math.max(width, height) * 0.5);
+      gl.addColorStop(0, rgba(pal.glow, 0.85));
+      gl.addColorStop(0.5, rgba(pal.glow, 0.12));
+      gl.addColorStop(1, rgba(pal.glow, 0));
+      glow = gl;
       bgKey = key;
-      return g;
+    };
+
+    /** Draw one conifer silhouette: base at (x, baseY), total height h. */
+    const drawTree = (x: number, baseY: number, h: number, color: RGB, alpha: number) => {
+      const w = h * 0.46;
+      const trunkH = h * 0.14;
+      const fy = baseY - trunkH; // foliage base
+      ctx.fillStyle = rgba(color, alpha);
+      // trunk
+      ctx.fillRect(x - h * 0.035, fy, h * 0.07, trunkH);
+      // three stacked tiers
+      ctx.beginPath();
+      ctx.moveTo(x - w / 2, fy);
+      ctx.lineTo(x + w / 2, fy);
+      ctx.lineTo(x, fy - h * 0.46);
+      ctx.closePath();
+      ctx.moveTo(x - w * 0.38, fy - h * 0.28);
+      ctx.lineTo(x + w * 0.38, fy - h * 0.28);
+      ctx.lineTo(x, fy - h * 0.72);
+      ctx.closePath();
+      ctx.moveTo(x - w * 0.26, fy - h * 0.56);
+      ctx.lineTo(x + w * 0.26, fy - h * 0.56);
+      ctx.lineTo(x, fy - h);
+      ctx.closePath();
+      ctx.fill();
     };
 
     const resize = () => {
@@ -109,7 +156,7 @@ export default function WaveBackdrop({ className = '' }: { className?: string })
       canvas.width = Math.max(1, Math.round(width * dpr));
       canvas.height = Math.max(1, Math.round(height * dpr));
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-      bgKey = ''; // force gradient rebuild at the new size
+      bgKey = '';
     };
     resize();
     const ro = new ResizeObserver(resize);
@@ -118,73 +165,46 @@ export default function WaveBackdrop({ className = '' }: { className?: string })
     let raf = 0;
     let last = 0;
     let running = true;
+    const order: Tree[] = [];
 
     const frame = (t: number) => {
       if (!running) return;
-      const dt = last ? Math.min((t - last) / 16.67, 3) : 1; // frames elapsed (~clamped)
+      const dt = last ? Math.min((t - last) / 16.67, 3) : 1;
       last = t;
       const pal = palette();
-      const cx = width * 0.5;
-      const cy = height * 0.39;
+      buildBg(pal);
+      const cx = width / 2;
 
-      // Water + bright centre lane
+      // Sky, ground, bright centre glow
       ctx.globalCompositeOperation = 'source-over';
-      ctx.fillStyle = buildBg(cx, cy, pal);
+      ctx.fillStyle = sky!;
+      ctx.fillRect(0, 0, width, horizonY);
+      ctx.fillStyle = ground!;
+      ctx.fillRect(0, horizonY, width, height - horizonY);
+      ctx.fillStyle = glow!;
       ctx.fillRect(0, 0, width, height);
 
-      // Streaks rushing outward, drawn additively so crossings glow like spray
-      ctx.globalCompositeOperation = 'lighter';
-      ctx.lineCap = 'round';
-      const reach = Math.hypot(width, height) * 0.62;
-      for (const p of particles) {
-        p.v *= 1 + 0.018 * dt; // accelerate toward the camera
-        p.r += p.v * dt;
-        const rad = p.r * reach;
-        const cos = Math.cos(p.ang);
-        const sin = Math.sin(p.ang);
-        const x = cx + cos * rad;
-        const y = cy + sin * rad;
-        if (x < -60 || x > width + 60 || y > height + 60 || p.r > 1.25) {
-          spawn(p);
-          continue;
-        }
-        // Tail a little behind for a motion-streak look
-        const rad2 = Math.max(0, rad - (12 + rad * 0.16));
-        const x2 = cx + cos * rad2;
-        const y2 = cy + sin * rad2;
-        // Fade in near the centre, fade out near the edges
-        const a = Math.min(p.r * 6, 1) * (1 - Math.max(0, p.r - 0.85) / 0.4) * p.fade;
-        const w = (0.6 + p.r * 5) * p.size;
-        // Body
-        ctx.strokeStyle = rgba(pal.streak, 0.5 * a);
-        ctx.lineWidth = w * 1.8;
-        ctx.beginPath();
-        ctx.moveTo(x2, y2);
-        ctx.lineTo(x, y);
-        ctx.stroke();
-        // Bright foam core
-        ctx.strokeStyle = rgba(pal.foam, a);
-        ctx.lineWidth = w * 0.7;
-        ctx.beginPath();
-        ctx.moveTo(x2, y2);
-        ctx.lineTo(x, y);
-        ctx.stroke();
+      // Advance, then draw far → near so nearer trees overlap correctly
+      for (const p of trees) {
+        p.t += p.spd * dt;
+        if (p.t >= 1) spawn(p);
       }
+      order.length = 0;
+      for (const p of trees) order.push(p);
+      order.sort((a, b) => a.t - b.t);
 
-      // Waves splashing up the side edges (bobbing alpha)
-      const sway = 0.28 + 0.22 * Math.sin(t / 520);
-      const swayR = 0.28 + 0.22 * Math.sin(t / 520 + 1.4);
-      const edge = Math.min(width * 0.16, 190);
-      const lg = ctx.createLinearGradient(0, 0, edge, 0);
-      lg.addColorStop(0, rgba(pal.foam, sway));
-      lg.addColorStop(1, rgba(pal.foam, 0));
-      ctx.fillStyle = lg;
-      ctx.fillRect(0, 0, edge, height);
-      const rg = ctx.createLinearGradient(width, 0, width - edge, 0);
-      rg.addColorStop(0, rgba(pal.foam, swayR));
-      rg.addColorStop(1, rgba(pal.foam, 0));
-      ctx.fillStyle = rg;
-      ctx.fillRect(width - edge, 0, edge, height);
+      const halfW = width / 2;
+      for (const p of order) {
+        const e = Math.pow(p.t, 1.7); // accelerate outward (perspective)
+        const x = cx + p.side * (p.startJitter * (1 - p.t) + halfW * p.endSpread * e);
+        const baseY = horizonY + Math.pow(p.t, 1.8) * (height - horizonY) * 1.05;
+        const h = 6 + p.maxH * Math.pow(p.t, 1.25);
+        const alpha = Math.min(p.t * 7, 1) * 0.96;
+        // Atmospheric perspective: distant (small t) trees fade toward haze.
+        const col = mix(pal.haze, pal.tree, Math.min(1, p.t * 1.6));
+        const shade = mix(col, [0, 0, 0], Math.max(0, p.hue));
+        drawTree(x, baseY, h, p.hue < 0 ? mix(col, [255, 255, 255], -p.hue * 0.5) : shade, alpha);
+      }
 
       raf = requestAnimationFrame(frame);
     };
