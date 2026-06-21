@@ -2,12 +2,13 @@ import * as os from "os";
 import * as vscode from "vscode";
 import { BuilderForceAuthProvider } from "./auth";
 import * as bfApi from "./bfApi";
+import { BoardPanel } from "./boardPanel";
 import { ChatPanel } from "./chatPanel";
 import { EmbedPanel } from "./embedPanel";
 import { registerChatParticipant } from "./chatParticipant";
 import { registerChatSessions } from "./chatSessions";
 import { scanCodebase } from "./codebaseScan";
-import { getModels, SECRET_KEY } from "./gateway";
+import { getModels, getWebBaseUrl, SECRET_KEY } from "./gateway";
 import { setGroundingSummary } from "./grounding";
 import { setSelectedModel } from "./modelState";
 import { getSelectedProject, initProjectState, setSelectedProject } from "./projectState";
@@ -16,6 +17,28 @@ import { ChatSession, SessionStore } from "./sessionStore";
 import { SessionsTreeProvider } from "./sessionsTree";
 
 type TaskNode = { kind: "task"; task: bfApi.BfTask };
+
+/** Persisted (per-machine) id of the workspace the editor is acting as. */
+const SELECTED_TENANT_KEY = "builderforce.selectedTenantId";
+
+/** The Project & Tasks tree view — held so its header can show the active workspace.
+ *  Typed to just what we use (description + disposal) to avoid TreeView<T> variance. */
+let projectView: (vscode.Disposable & { description?: string }) | undefined;
+
+/** Show the active workspace (tenant) name next to the Project & Tasks view title. */
+async function refreshWorkspaceHeader(context: vscode.ExtensionContext): Promise<void> {
+  if (!projectView) return;
+  if (!(await context.secrets.get(SECRET_KEY))) {
+    projectView.description = undefined;
+    return;
+  }
+  try {
+    const ws = await bfApi.getCurrentWorkspace(context.secrets);
+    projectView.description = ws?.name;
+  } catch {
+    projectView.description = undefined;
+  }
+}
 
 /** Embeddable BuilderForce web views opened inside VS Code (reuse the real pages, DRY). */
 const EMBED_VIEWS: { label: string; view: string }[] = [
@@ -41,6 +64,12 @@ export function activate(context: vscode.ExtensionContext): void {
   const store = new SessionStore(context.workspaceState);
   const tree = new SessionsTreeProvider(store);
   const projects = new ProjectsTreeProvider(context);
+  projectView = vscode.window.createTreeView("builderforce.project", { treeDataProvider: projects });
+  context.subscriptions.push(projectView);
+  // Restore the workspace the editor was last acting as (re-scopes the tenant JWT).
+  const savedTenant = context.globalState.get<number>(SELECTED_TENANT_KEY);
+  if (typeof savedTenant === "number") bfApi.setSelectedWorkspace(savedTenant);
+  void refreshWorkspaceHeader(context);
   const auth = BuilderForceAuthProvider.register(context);
   const output = vscode.window.createOutputChannel("BuilderForce");
   context.subscriptions.push(output);
@@ -54,7 +83,6 @@ export function activate(context: vscode.ExtensionContext): void {
   context.subscriptions.push(
     participant,
     vscode.window.registerTreeDataProvider("builderforce.sessions", tree),
-    vscode.window.registerTreeDataProvider("builderforce.project", projects),
     vscode.commands.registerCommand("builderforce.newSession", () => {
       const sel = getSelectedProject();
       const s = store.create(sel ? { projectId: sel.id } : {});
@@ -64,10 +92,15 @@ export function activate(context: vscode.ExtensionContext): void {
       ChatPanel.open(context, store, id),
     ),
     vscode.commands.registerCommand("builderforce.selectProject", () => selectProject(context, projects)),
+    vscode.commands.registerCommand("builderforce.createProject", () => createProject(context, projects)),
+    vscode.commands.registerCommand("builderforce.createWorkspace", () => manageWorkspace(context, projects)),
     vscode.commands.registerCommand("builderforce.refreshProjects", () => {
       bfApi.invalidateTasks();
       projects.refresh();
+      void refreshWorkspaceHeader(context);
     }),
+    vscode.commands.registerCommand("builderforce.hideDoneTasks", () => projects.setHideDone(true)),
+    vscode.commands.registerCommand("builderforce.showDoneTasks", () => projects.setHideDone(false)),
     vscode.commands.registerCommand("builderforce.diagnose", async () => {
       output.clear();
       output.appendLine("BuilderForce connection diagnostics");
@@ -95,16 +128,26 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.commands.registerCommand("builderforce.setTaskStatus", (node: TaskNode) =>
       setTaskStatus(context, projects, node?.task),
     ),
-    // Open the real BuilderForce web pages inside VS Code (embedded — DRY, no rebuild).
-    vscode.commands.registerCommand("builderforce.openBoard", () =>
-      EmbedPanel.open(context, "kanban", { title: "BuilderForce Board", hash: projectHash() }),
-    ),
+    // The Board renders NATIVELY in a webview from bfApi data (not the embedded web
+    // page) — reliable inside a VS Code webview where the /embed iframe is not.
+    vscode.commands.registerCommand("builderforce.openBoard", async () => {
+      let project = getSelectedProject();
+      if (!project) {
+        await selectProject(context, projects);
+        project = getSelectedProject();
+      }
+      if (project) BoardPanel.open(context, project.id, project.name);
+    }),
     vscode.commands.registerCommand("builderforce.openView", async () => {
       const pick = await vscode.window.showQuickPick(
         EMBED_VIEWS.map((v) => ({ label: v.label, view: v.view })),
         { title: "Open a BuilderForce page in VS Code", placeHolder: "Manage your workforce & tasks without leaving the editor" },
       );
       if (!pick) return;
+      if (pick.view === "kanban") {
+        void vscode.commands.executeCommand("builderforce.openBoard");
+        return;
+      }
       EmbedPanel.open(context, pick.view, { title: `BuilderForce: ${pick.label}`, hash: projectHash() });
     }),
     vscode.commands.registerCommand("builderforce.deleteSession", (item: ChatSession | string) => {
@@ -168,6 +211,14 @@ async function selectProject(
   context: vscode.ExtensionContext,
   projects: ProjectsTreeProvider,
 ): Promise<void> {
+  if (!(await context.secrets.get(SECRET_KEY))) {
+    const action = await vscode.window.showInformationMessage(
+      "Sign in to your BuilderForce workspace first.",
+      "Sign In",
+    );
+    if (action === "Sign In") void vscode.commands.executeCommand("builderforce.signIn");
+    return;
+  }
   let list: bfApi.BfProject[];
   try {
     list = await bfApi.listProjects(context.secrets);
@@ -179,18 +230,168 @@ async function selectProject(
     if (action === "Diagnose") void vscode.commands.executeCommand("builderforce.diagnose");
     return;
   }
+  // No projects yet → go straight to creation (the user needs one to manage tasks).
   if (!list.length) {
-    vscode.window.showInformationMessage("BuilderForce: no projects found (or sign in first).");
+    await createProject(context, projects);
     return;
   }
+  const CREATE = "$(add) Create new project…";
   const pick = await vscode.window.showQuickPick(
-    list.map((p) => ({ label: p.name, description: p.key ?? "", id: p.id, name: p.name })),
+    [
+      { label: CREATE, id: -1, name: "" },
+      ...list.map((p) => ({ label: p.name, description: p.key ?? "", id: p.id, name: p.name })),
+    ],
     { title: "Select a BuilderForce project", placeHolder: "Associate this editor with a project" },
   );
   if (!pick) return;
+  if (pick.id === -1) {
+    await createProject(context, projects);
+    return;
+  }
   setSelectedProject({ id: pick.id, name: pick.name });
   bfApi.invalidateTasks(pick.id);
   projects.refresh();
+}
+
+/** Create a project in the current workspace and select it (the onboarding step a
+ *  user needs before they can manage tasks). Routes plan-limit / errors to a clear
+ *  message; an upgrade is a web-app action. */
+async function createProject(
+  context: vscode.ExtensionContext,
+  projects: ProjectsTreeProvider,
+): Promise<void> {
+  if (!(await context.secrets.get(SECRET_KEY))) {
+    const action = await vscode.window.showInformationMessage(
+      "Sign in to your BuilderForce workspace first.",
+      "Sign In",
+    );
+    if (action === "Sign In") void vscode.commands.executeCommand("builderforce.signIn");
+    return;
+  }
+  const name = await vscode.window.showInputBox({
+    title: "Create BuilderForce project",
+    prompt: "Name your project",
+    placeHolder: "e.g. Mobile App, Website Redesign",
+    ignoreFocusOut: true,
+    validateInput: (v) => (v.trim() ? undefined : "A project name is required"),
+  });
+  if (!name?.trim()) return;
+  try {
+    const project = await bfApi.createProject(context.secrets, name.trim());
+    setSelectedProject({ id: project.id, name: project.name });
+    bfApi.invalidateTasks(project.id);
+    projects.refresh();
+    vscode.window.showInformationMessage(`BuilderForce: created project “${project.name}”.`);
+  } catch (e) {
+    const message = (e as Error).message;
+    // 402 = plan project limit reached → upgrading is a web-app action.
+    if (/HTTP 402/.test(message)) {
+      const action = await vscode.window.showErrorMessage(
+        "BuilderForce: your plan's project limit is reached. Upgrade your workspace to add more.",
+        "Open BuilderForce",
+      );
+      if (action) void vscode.env.openExternal(vscode.Uri.parse(`${getWebBaseUrl()}/settings`));
+      return;
+    }
+    vscode.window.showErrorMessage(`BuilderForce: could not create project (${message}).`);
+  }
+}
+
+/**
+ * In-editor workspace (tenant) picker: list the user's workspaces, switch between them,
+ * or create one — all via the userId-scoped /api/vscode/tenants endpoints. Degrades to
+ * the web onboarding deep-link if those aren't deployed yet (older API).
+ */
+async function manageWorkspace(
+  context: vscode.ExtensionContext,
+  projects: ProjectsTreeProvider,
+): Promise<void> {
+  if (!(await context.secrets.get(SECRET_KEY))) {
+    const action = await vscode.window.showInformationMessage(
+      "Sign in first, or create a workspace on the web.",
+      "Sign In",
+      "Open BuilderForce",
+    );
+    if (action === "Sign In") void vscode.commands.executeCommand("builderforce.signIn");
+    else if (action === "Open BuilderForce") void openWorkspaceWeb();
+    return;
+  }
+
+  let workspaces: bfApi.BfWorkspace[];
+  try {
+    workspaces = await bfApi.listWorkspaces(context.secrets);
+  } catch {
+    // Endpoint not deployed / unreachable → fall back to the web onboarding.
+    void openWorkspaceWeb();
+    return;
+  }
+
+  const current = context.globalState.get<number>(SELECTED_TENANT_KEY);
+  const CREATE = -1;
+  const pick = await vscode.window.showQuickPick(
+    [
+      { label: "$(add) Create new workspace…", id: CREATE, description: "" },
+      ...workspaces.map((w) => ({
+        label: `${w.id === current ? "$(check) " : ""}${w.name}`,
+        description: w.role ?? "",
+        id: w.id,
+      })),
+    ],
+    { title: "BuilderForce workspace", placeHolder: "Switch to or create a workspace" },
+  );
+  if (!pick) return;
+  if (pick.id === CREATE) {
+    await createWorkspaceFlow(context, projects);
+    return;
+  }
+  await applyWorkspace(context, projects, pick.id);
+}
+
+/** Prompt for a name, create the workspace, and switch to it. */
+async function createWorkspaceFlow(
+  context: vscode.ExtensionContext,
+  projects: ProjectsTreeProvider,
+): Promise<void> {
+  const name = await vscode.window.showInputBox({
+    title: "Create BuilderForce workspace",
+    prompt: "Name your workspace (organisation / team)",
+    placeHolder: "e.g. Acme Inc, My Team",
+    ignoreFocusOut: true,
+    validateInput: (v) => (v.trim() ? undefined : "A workspace name is required"),
+  });
+  if (!name?.trim()) return;
+  try {
+    const ws = await bfApi.createWorkspace(context.secrets, name.trim());
+    await applyWorkspace(context, projects, ws.id);
+    vscode.window.showInformationMessage(`BuilderForce: created workspace “${ws.name}”.`);
+  } catch (e) {
+    const message = (e as Error).message;
+    if (/HTTP 404/.test(message)) {
+      void openWorkspaceWeb();
+      return;
+    }
+    vscode.window.showErrorMessage(`BuilderForce: could not create workspace (${message}).`);
+  }
+}
+
+/** Make `tenantId` the active workspace: re-scope the token, reset project/task state
+ *  (projects are per-workspace), and refresh the views. */
+async function applyWorkspace(
+  context: vscode.ExtensionContext,
+  projects: ProjectsTreeProvider,
+  tenantId: number,
+): Promise<void> {
+  bfApi.setSelectedWorkspace(tenantId);
+  await context.globalState.update(SELECTED_TENANT_KEY, tenantId);
+  bfApi.invalidateTasks();
+  setSelectedProject(undefined); // projects belong to a workspace — pick one in the new one
+  projects.refresh();
+  void refreshWorkspaceHeader(context);
+}
+
+/** Workspace onboarding on the web (fallback when the in-editor endpoints are absent). */
+function openWorkspaceWeb(): Thenable<boolean> {
+  return vscode.env.openExternal(vscode.Uri.parse(`${getWebBaseUrl()}/tenants`));
 }
 
 async function setTaskStatus(
@@ -243,6 +444,8 @@ async function signOut(
 ): Promise<void> {
   await auth.removeSession();
   bfApi.clearJwt();
+  bfApi.setSelectedWorkspace(undefined);
+  await context.globalState.update(SELECTED_TENANT_KEY, undefined);
   setGroundingSummary(undefined);
   setSelectedProject(undefined);
   vscode.window.showInformationMessage("BuilderForce: signed out.");

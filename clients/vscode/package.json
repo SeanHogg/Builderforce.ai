@@ -2,7 +2,7 @@
   "name": "builderforce-vscode",
   "displayName": "BuilderForce",
   "description": "BuilderForce AI coding agent — chat with a codebase-aware agent in your VS Code sidebar.",
-  "version": "2026.6.20",
+  "version": "2026.6.30",
   "publisher": "builderforce",
   "license": "MIT",
   "author": "Sean Hogg",
@@ -113,9 +113,29 @@
         "icon": "$(folder)"
       },
       {
+        "command": "builderforce.createProject",
+        "title": "BuilderForce: New Project",
+        "icon": "$(new-folder)"
+      },
+      {
+        "command": "builderforce.createWorkspace",
+        "title": "BuilderForce: Create / Switch Workspace",
+        "icon": "$(organization)"
+      },
+      {
         "command": "builderforce.refreshProjects",
         "title": "BuilderForce: Refresh Tasks",
         "icon": "$(sync)"
+      },
+      {
+        "command": "builderforce.hideDoneTasks",
+        "title": "BuilderForce: Hide Done Tasks",
+        "icon": "$(eye)"
+      },
+      {
+        "command": "builderforce.showDoneTasks",
+        "title": "BuilderForce: Show Done Tasks",
+        "icon": "$(eye-closed)"
       },
       {
         "command": "builderforce.startTaskSession",
@@ -205,9 +225,19 @@
           "group": "overflow@4"
         },
         {
+          "command": "builderforce.createProject",
+          "when": "view == builderforce.project",
+          "group": "navigation@0"
+        },
+        {
           "command": "builderforce.selectProject",
           "when": "view == builderforce.project",
           "group": "navigation@1"
+        },
+        {
+          "command": "builderforce.createWorkspace",
+          "when": "view == builderforce.project",
+          "group": "1_workspace@1"
         },
         {
           "command": "builderforce.openBoard",
@@ -223,6 +253,16 @@
           "command": "builderforce.refreshProjects",
           "when": "view == builderforce.project",
           "group": "navigation@4"
+        },
+        {
+          "command": "builderforce.hideDoneTasks",
+          "when": "view == builderforce.project && !builderforce.hideDoneTasks",
+          "group": "navigation@5"
+        },
+        {
+          "command": "builderforce.showDoneTasks",
+          "when": "view == builderforce.project && builderforce.hideDoneTasks",
+          "group": "navigation@5"
         }
       ],
       "view/item/context": [

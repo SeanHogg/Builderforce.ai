@@ -30,6 +30,25 @@ export function getApiKey(secrets: vscode.SecretStorage): Thenable<string | unde
 }
 
 /**
+ * The BuilderForce web app base URL (where workspace onboarding + embed pages live).
+ * Derived from the gateway base (api.builderforce.ai → builderforce.ai), overridable
+ * via `builderforce.webUrl`. Single source of truth for web deep-links.
+ */
+export function getWebBaseUrl(): string {
+  const override = vscode.workspace.getConfiguration("builderforce").get<string>("webUrl");
+  if (override) return override.replace(/\/+$/, "");
+  try {
+    const u = new URL(getBaseUrl());
+    u.hostname = u.hostname.replace(/^api\./, "");
+    u.pathname = "";
+    u.search = "";
+    return u.toString().replace(/\/+$/, "");
+  } catch {
+    return "https://builderforce.ai";
+  }
+}
+
+/**
  * Models cache. Intentional single-process, in-memory TTL cache: the cross-isolate
  * `getOrSetCached` rule governs the Cloudflare backend; a VS Code extension host is a
  * single Node process serving one user, so a local TTL cache is the correct shape here.

@@ -1,4 +1,5 @@
 import { Hono } from 'hono';
+import type { Context } from 'hono';
 import { and, desc, eq, gt, inArray, isNull, sql } from 'drizzle-orm';
 import { TenantService } from '../../application/tenant/TenantService';
 import { TenantRole, TenantBillingCycle, TenantPlan } from '../../domain/shared/types';
@@ -115,6 +116,15 @@ async function acceptPendingInvitations(
   }
 }
 
+/**
+ * Tenant reads on the tenant-JWT path are SELF-SCOPED: a caller may only read the
+ * workspace its token is scoped to. Returns a 403 Response to short-circuit otherwise.
+ * Prevents enumerating another tenant's metadata (name/plan/billing) by guessing its id.
+ */
+function forbidCrossTenant(c: Context<HonoEnv>, id: number): Response | undefined {
+  return id === (c.get('tenantId') as number) ? undefined : c.json({ error: 'Forbidden' }, 403);
+}
+
 export function createTenantRoutes(tenantService: TenantService, db: Db): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
 
@@ -168,9 +178,11 @@ export function createTenantRoutes(tenantService: TenantService, db: Db): Hono<H
     return c.json({ tenants: tenants.map(t => t.toPlain()) });
   });
 
-  // GET /api/tenants/:id
+  // GET /api/tenants/:id — self-scoped (a caller can only read its own workspace).
   router.get('/:id', async (c) => {
     const id = Number(c.req.param('id'));
+    const denied = forbidCrossTenant(c, id);
+    if (denied) return denied;
     const tenant = await tenantService.getTenant(id);
     return c.json(tenant.toPlain());
   });
@@ -178,8 +190,8 @@ export function createTenantRoutes(tenantService: TenantService, db: Db): Hono<H
   // GET /api/tenants/:id/default-agentHost
   router.get('/:id/default-agentHost', async (c) => {
     const id = Number(c.req.param('id'));
-    const callerTenantId = c.get('tenantId') as number;
-    if (id !== callerTenantId) return c.json({ error: 'Forbidden' }, 403);
+    const denied = forbidCrossTenant(c, id);
+    if (denied) return denied;
     const tenant = await tenantService.getTenant(id);
     return c.json({ defaultAgentHostId: tenant.defaultAgentHostId });
   });

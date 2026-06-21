@@ -22,6 +22,7 @@ import {
 } from '../../infrastructure/database/schema';
 import { hashPassword, hashSecret, verifyPassword } from '../../infrastructure/auth/HashService';
 import { decodeJwtPayload, signJwt, signWebJwt, verifyWebJwt } from '../../infrastructure/auth/JwtService';
+import { mintTenantSessionToken } from '../../infrastructure/auth/tenantSessionToken';
 import type { Db } from '../../infrastructure/database/connection';
 import {
   buildOtpAuthUrl,
@@ -615,20 +616,12 @@ export function createAuthRoutes(authService: AuthService, db: Db): Hono<HonoEnv
       );
     }
 
-    const expiresIn = 3600;
-    const token = await signJwt(
-      { sub: row.createdByUserId, tid: row.tenantId, role: TenantRole.DEVELOPER },
-      c.env.JWT_SECRET,
-      expiresIn,
-    );
-    // Persist so authMiddleware's jti revocation check finds an active token (mirrors
-    // /api/auth/web/login and /tenant-token). Without this, every /api call 401s with
-    // "Token has been revoked or expired".
-    await persistToken(db, token, {
+    // Mint + persist via the shared editor-token minter (also used by the VS Code
+    // workspace switch). Persisting is required so authMiddleware's jti-revocation
+    // check finds an active token — otherwise every /api call 401s.
+    const { token, expiresIn } = await mintTenantSessionToken(db, c.env.JWT_SECRET, {
       userId: row.createdByUserId,
       tenantId: row.tenantId,
-      tokenType: 'tenant',
-      sessionName: 'VS Code',
       userAgent: getUserAgent(c),
       ipAddress: getClientIp(c),
     });

@@ -18,6 +18,14 @@ export interface BfTask {
   assignedUserId?: string | null;
 }
 
+/** The terminal task status. Single source of truth for "done" across surfaces
+ *  (the board column + the sidebar hide-done filter). */
+export const DONE_STATUS = "done";
+export const isDoneStatus = (status?: string): boolean => status === DONE_STATUS;
+/** Default for the hide-done view filter (board + sidebar): show only active work,
+ *  hiding done by default. An explicit user toggle overrides + persists. */
+export const DEFAULT_HIDE_DONE = true;
+
 export interface BfExecution {
   id: number;
   taskId?: number;
@@ -39,10 +47,28 @@ export interface BfConversationMessage {
  * All calls degrade gracefully (return empty / false) when the backend lacks these
  * endpoints (i.e. not yet deployed).
  */
-let jwt: { token: string; exp: number } | undefined;
+// The editor key is bound to ONE tenant; its exchange yields the "base" JWT. To act on
+// another of the user's workspaces we re-scope that base JWT to the selected tenant via
+// /api/vscode/tenants/:id/token. Both tokens are cached with their tenant + expiry.
+let baseJwt: { token: string; exp: number; tenantId: number } | undefined;
+let scopedJwt: { token: string; exp: number; tenantId: number } | undefined;
+let selectedTenantId: number | undefined;
+let rescopeUnsupported = false; // set once the switch endpoint 404s (not deployed) — stop retrying
 
-async function exchangeJwt(secrets: vscode.SecretStorage, force = false): Promise<string | undefined> {
-  if (!force && jwt && Date.now() < jwt.exp - 60_000) return jwt.token;
+/** Set the active workspace (tenant) to act as. `undefined` = the key's own tenant. */
+export function setSelectedWorkspace(tenantId: number | undefined): void {
+  if (tenantId === selectedTenantId) return;
+  selectedTenantId = tenantId;
+  scopedJwt = undefined; // re-derive on next call
+  workspaceCache = undefined;
+}
+
+/** Exchange the stored editor key for its OWN tenant JWT (the key's bound workspace). */
+async function exchangeBaseJwt(
+  secrets: vscode.SecretStorage,
+  force: boolean,
+): Promise<{ token: string; tenantId: number } | undefined> {
+  if (!force && baseJwt && Date.now() < baseJwt.exp - 60_000) return baseJwt;
   const key = await getApiKey(secrets);
   if (!key) return undefined;
   try {
@@ -52,17 +78,88 @@ async function exchangeJwt(secrets: vscode.SecretStorage, force = false): Promis
       body: JSON.stringify({ apiKey: key }),
     });
     if (!res.ok) return undefined;
-    const body = (await res.json()) as { token?: string; expiresIn?: number };
-    if (!body.token) return undefined;
-    jwt = { token: body.token, exp: Date.now() + (body.expiresIn ?? 3600) * 1000 };
-    return jwt.token;
+    const body = (await res.json()) as { token?: string; expiresIn?: number; tenantId?: number };
+    if (!body.token || typeof body.tenantId !== "number") return undefined;
+    baseJwt = { token: body.token, exp: Date.now() + (body.expiresIn ?? 3600) * 1000, tenantId: body.tenantId };
+    return baseJwt;
   } catch {
     return undefined;
   }
 }
 
+async function exchangeJwt(secrets: vscode.SecretStorage, force = false): Promise<string | undefined> {
+  const base = await exchangeBaseJwt(secrets, force);
+  if (!base) return undefined;
+  const target = selectedTenantId ?? base.tenantId;
+  if (target === base.tenantId || rescopeUnsupported) return base.token;
+  if (!force && scopedJwt && scopedJwt.tenantId === target && Date.now() < scopedJwt.exp - 60_000) {
+    return scopedJwt.token;
+  }
+  // Re-scope to another of the user's workspaces. Degrades to the base token: 404 =
+  // endpoint not deployed (latch off), 403 = no longer a member (drop the selection).
+  try {
+    const res = await fetch(`${getBaseUrl()}/api/vscode/tenants/${target}/token`, {
+      method: "POST",
+      headers: { authorization: `Bearer ${base.token}`, "content-type": "application/json" },
+    });
+    if (res.status === 404) {
+      rescopeUnsupported = true;
+      return base.token;
+    }
+    if (res.status === 403) {
+      selectedTenantId = base.tenantId;
+      return base.token;
+    }
+    if (!res.ok) return base.token;
+    const body = (await res.json()) as { token?: string; expiresIn?: number };
+    if (!body.token) return base.token;
+    scopedJwt = { token: body.token, exp: Date.now() + (body.expiresIn ?? 3600) * 1000, tenantId: target };
+    return scopedJwt.token;
+  } catch {
+    return base.token;
+  }
+}
+
 export function clearJwt(): void {
-  jwt = undefined;
+  baseJwt = undefined;
+  scopedJwt = undefined;
+  rescopeUnsupported = false;
+  workspaceCache = undefined;
+}
+
+// The active workspace's {id, name}, cached until the workspace changes / sign-out.
+let workspaceCache: { id: number; name: string } | undefined;
+
+/**
+ * The workspace (tenant) the editor is currently acting as — for the sidebar header.
+ * Resolves the active tenant id (selected or the key's own), then its name from the
+ * user's workspace list (new endpoint) or `GET /api/tenants/:id` (works on older APIs).
+ * Returns undefined when signed out or the name can't be resolved.
+ */
+export async function getCurrentWorkspace(
+  secrets: vscode.SecretStorage,
+): Promise<{ id: number; name: string } | undefined> {
+  const token = await exchangeJwt(secrets);
+  if (!token || !baseJwt) return undefined;
+  const id = selectedTenantId ?? baseJwt.tenantId;
+  if (workspaceCache && workspaceCache.id === id) return workspaceCache;
+
+  let name: string | undefined;
+  try {
+    name = (await listWorkspaces(secrets)).find((w) => w.id === id)?.name;
+  } catch {
+    /* /api/vscode/tenants not deployed — fall back below */
+  }
+  if (!name) {
+    try {
+      name = (await authed<{ name?: string }>(secrets, `/api/tenants/${id}`))?.name;
+    } catch {
+      /* ignore — header just stays empty */
+    }
+  }
+  if (!name) return undefined;
+  workspaceCache = { id, name };
+  return workspaceCache;
 }
 
 /** The tenant JWT for embedding web pages (handed to the iframe via postMessage). */
@@ -158,6 +255,52 @@ export async function diagnose(secrets: vscode.SecretStorage): Promise<string> {
 export async function listProjects(secrets: vscode.SecretStorage): Promise<BfProject[]> {
   const r = await authed<{ projects: BfProject[] }>(secrets, "/api/projects");
   return r?.projects ?? [];
+}
+
+/** A workspace (tenant) the signed-in user belongs to. */
+export interface BfWorkspace {
+  id: number;
+  name: string;
+  role?: string;
+}
+
+/**
+ * The user's workspaces (GET /api/vscode/tenants). Throws if the endpoint isn't
+ * deployed (404) — the caller falls back to the web onboarding deep-link.
+ */
+export async function listWorkspaces(secrets: vscode.SecretStorage): Promise<BfWorkspace[]> {
+  const r = await authed<{ tenants: BfWorkspace[] }>(secrets, "/api/vscode/tenants");
+  return r?.tenants ?? [];
+}
+
+/** Create a workspace (tenant); the caller becomes its owner. */
+export async function createWorkspace(
+  secrets: vscode.SecretStorage,
+  name: string,
+): Promise<BfWorkspace> {
+  const t = await authed<BfWorkspace>(secrets, "/api/vscode/tenants", {
+    method: "POST",
+    body: JSON.stringify({ name }),
+  });
+  if (!t) throw new Error("not signed in");
+  return t;
+}
+
+/**
+ * Create a project in the signed-in workspace (tenant) — POST /api/projects, which
+ * accepts the extension's tenant JWT. Surfaces the plan-limit (402) message verbatim
+ * so the caller can prompt an upgrade. The created project is returned for selection.
+ */
+export async function createProject(
+  secrets: vscode.SecretStorage,
+  name: string,
+): Promise<BfProject> {
+  const project = await authed<BfProject>(secrets, "/api/projects", {
+    method: "POST",
+    body: JSON.stringify({ name }),
+  });
+  if (!project) throw new Error("not signed in");
+  return project;
 }
 
 // Tasks cache: single-process, short TTL, busted by refresh / status change.
