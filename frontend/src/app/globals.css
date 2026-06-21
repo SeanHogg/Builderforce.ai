@@ -904,33 +904,46 @@ html[data-theme='light'] .nebula {
   text-decoration: underline;
 }
 
-/* ── Full (marketing) footer: mascot + SEO summary + site links ── */
+/* ── Full (marketing) footer: brand block + grouped link columns ──
+   Desktop: a full-width row — brand on the left, link columns on the right.
+   Tablet/mobile: the grid collapses to stacked rows. */
 .global-footer-full {
   max-width: 1200px;
   margin: 0 auto;
-  padding: 32px 16px 8px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 16px;
-  text-align: center;
+  padding: 48px 24px 28px;
+  display: grid;
+  grid-template-columns: minmax(0, 1.8fr) minmax(0, 2.2fr);
+  gap: 48px;
+  align-items: start;
 }
 
-.global-footer-mascot-link {
+/* Brand column — mascot wordmark + SEO summary + credit. */
+.global-footer-brand {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  max-width: 420px;
+}
+.global-footer-brand-mark {
   display: inline-flex;
-  vertical-align: middle;
-  margin-right: 8px;
+  align-items: center;
+  gap: 10px;
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 1rem;
+  color: var(--text);
+  text-decoration: none;
 }
 .global-footer-mascot {
-  width: 24px;
+  width: 32px;
   height: auto;
   animation: float 4s ease-in-out infinite;
-  filter: drop-shadow(0 0 10px var(--logo-glow));
+  filter: drop-shadow(0 0 12px var(--logo-glow));
   transition: filter 0.3s ease;
 }
-.global-footer-mascot:hover {
+.global-footer-brand-mark:hover .global-footer-mascot {
   animation-play-state: paused;
-  filter: drop-shadow(0 0 30px var(--logo-glow-hover));
+  filter: drop-shadow(0 0 28px var(--logo-glow-hover));
 }
 @media (prefers-reduced-motion: reduce) {
   .global-footer-mascot {
@@ -939,36 +952,10 @@ html[data-theme='light'] .nebula {
 }
 
 .global-footer-summary {
-  max-width: 640px;
   margin: 0;
   font-size: 0.86rem;
-  line-height: 1.55;
+  line-height: 1.6;
   color: var(--muted);
-}
-
-.global-footer-nav {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  gap: 2px;
-  list-style: none;
-  padding: 0;
-  margin: 0;
-}
-.global-footer-nav a {
-  display: inline-block;
-  font-size: 0.82rem;
-  color: var(--text-muted);
-  text-decoration: none;
-  padding: 4px 10px;
-  border-radius: 6px;
-  transition:
-    color 0.2s ease,
-    background 0.2s ease;
-}
-.global-footer-nav a:hover {
-  color: var(--accent);
-  background: var(--surface-coral-soft);
 }
 
 .global-footer-credit {
@@ -982,6 +969,58 @@ html[data-theme='light'] .nebula {
 }
 .global-footer-credit a:hover {
   text-decoration: underline;
+}
+
+/* Link columns. */
+.global-footer-cols {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 24px;
+}
+.global-footer-col h3 {
+  margin: 0 0 12px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text);
+}
+.global-footer-col ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+.global-footer-col a {
+  font-size: 0.84rem;
+  color: var(--text-muted);
+  text-decoration: none;
+  transition: color 0.2s ease;
+}
+.global-footer-col a:hover {
+  color: var(--accent);
+}
+
+/* Tablet: drop the brand beside the columns; let columns take the full width. */
+@media (max-width: 860px) {
+  .global-footer-full {
+    grid-template-columns: 1fr;
+    gap: 32px;
+    padding: 40px 20px 24px;
+  }
+  .global-footer-brand {
+    max-width: none;
+  }
+}
+
+/* Mobile: collapse the link columns to stacked rows. */
+@media (max-width: 520px) {
+  .global-footer-cols {
+    grid-template-columns: 1fr;
+    gap: 28px;
+  }
 }
 
 /* Stack the version + legal strip on small screens so it never squishes. */

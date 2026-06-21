@@ -1,21 +1,54 @@
 'use client';
 
+import { useEffect } from 'react';
 import Link from 'next/link';
 import { getRouteMarketing } from '@/lib/routeMarketing';
 import { PRODUCT_SECTIONS } from '@/lib/content';
+import { routeMarketingSchema } from '@/lib/structured-data';
+import JsonLd from './JsonLd';
+import RelatedArticles from './blog/RelatedArticles';
 
 /**
- * Marketing teaser rendered (inside PublicShell) when a logged-out visitor hits
- * an authenticated route — a feature-specific hero + login/CTA, plus a compact
- * "what you get" pitch. Replaces the old blank gate / login redirect so no
- * authed deep link is ever a dead end.
+ * Marketing page rendered (inside MarketingShell) when a logged-out visitor or
+ * crawler hits an authenticated route — a feature-specific hero, "how it works"
+ * highlights, the product map, a per-feature FAQ, associated blog articles, and
+ * JSON-LD. Replaces the old one-line gate so every authed deep link is a real,
+ * indexable marketing page rather than a dead end.
+ *
+ * All per-route copy lives in lib/routeMarketing.ts (single source of truth);
+ * this component only renders it and decides its own section visibility.
  */
 export default function RouteMarketing({ pathname }: { pathname: string }) {
   const m = getRouteMarketing(pathname);
   const loginHref = `/login?next=${encodeURIComponent(pathname)}`;
+  const metaDesc = m.seoDescription ?? m.description;
+
+  // Client-set <title>/description so each feature route has a unique, crawlable
+  // head (these routes render client-side, so there is no server metadata
+  // export). Modern crawlers execute JS and read both this and the JSON-LD below.
+  useEffect(() => {
+    const prevTitle = document.title;
+    document.title = `${m.title} — Builderforce.ai`;
+    const tag = document.querySelector('meta[name="description"]');
+    const prevDesc = tag?.getAttribute('content') ?? null;
+    if (tag) tag.setAttribute('content', metaDesc);
+    return () => {
+      document.title = prevTitle;
+      if (tag && prevDesc !== null) tag.setAttribute('content', prevDesc);
+    };
+  }, [m.title, metaDesc]);
 
   return (
     <div className="route-mkt">
+      <JsonLd
+        data={routeMarketingSchema({
+          path: pathname,
+          title: m.title,
+          description: metaDesc,
+          faq: m.faq,
+        })}
+      />
+
       <section className="rm-hero">
         <div className="rm-icon" aria-hidden="true">{m.icon}</div>
         <h1 className="rm-title">{m.title}</h1>
@@ -29,6 +62,20 @@ export default function RouteMarketing({ pathname }: { pathname: string }) {
           <Link href="/product" className="rm-btn-ghost">Explore the product →</Link>
         </div>
       </section>
+
+      {m.highlights && m.highlights.length > 0 && (
+        <section className="rm-highlights">
+          <div className="rm-inside-head">How {m.title} works</div>
+          <div className="rm-hl-grid">
+            {m.highlights.map((h) => (
+              <div key={h.title} className="rm-hl-card">
+                <div className="rm-hl-title">{h.title}</div>
+                <div className="rm-hl-desc">{h.desc}</div>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
 
       <section className="rm-inside">
         <div className="rm-inside-head">What you get with Builderforce.ai</div>
@@ -55,6 +102,10 @@ export default function RouteMarketing({ pathname }: { pathname: string }) {
             ))}
           </div>
         </section>
+      )}
+
+      {m.relatedSurface && (
+        <RelatedArticles surface={m.relatedSurface} heading="Related reading" />
       )}
 
       <style>{`
@@ -101,6 +152,15 @@ export default function RouteMarketing({ pathname }: { pathname: string }) {
         .rm-btn-secondary:hover { border-color: var(--border-accent); }
         .rm-btn-ghost { color: var(--coral-bright); font-weight: 600; font-size: 0.88rem; text-decoration: none; padding: 13px 8px; }
         .rm-btn-ghost:hover { text-decoration: underline; }
+
+        .rm-highlights { margin-top: 40px; }
+        .rm-hl-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 14px; }
+        .rm-hl-card {
+          padding: 22px 20px; border-radius: 16px;
+          border: 1px solid var(--border-subtle); background: var(--surface-card);
+        }
+        .rm-hl-title { font-family: var(--font-display); font-weight: 600; font-size: 1.02rem; color: var(--text-primary); margin-bottom: 6px; }
+        .rm-hl-desc { font-size: 0.88rem; color: var(--text-secondary); line-height: 1.6; }
 
         .rm-inside { margin-top: 40px; }
         .rm-inside-head {
