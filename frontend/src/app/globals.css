@@ -872,11 +872,12 @@ html[data-theme='light'] .nebula {
   max-width: 1200px;
   margin: 0 auto;
   min-height: 44px;
-  padding: 0 14px;
+  padding: 0 24px;
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  justify-content: space-between;
-  gap: 12px;
+  justify-content: flex-end;
+  gap: 12px 18px;
   color: var(--muted);
   font-size: 12px;
 }
@@ -1015,11 +1016,18 @@ html[data-theme='light'] .nebula {
   }
 }
 
-/* Mobile: collapse the link columns to stacked rows. */
+/* Mobile: keep the three link columns side by side (don't stack to rows);
+   just tighten the gap and type so they fit the narrow viewport. */
 @media (max-width: 520px) {
   .global-footer-cols {
-    grid-template-columns: 1fr;
-    gap: 28px;
+    gap: 12px;
+  }
+  .global-footer-col h3 {
+    font-size: 0.66rem;
+    letter-spacing: 0.04em;
+  }
+  .global-footer-col a {
+    font-size: 0.78rem;
   }
 }
 
