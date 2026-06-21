@@ -41,13 +41,13 @@ const teamsCacheKey = (tenantId: number): string => `teams:tenant:${tenantId}`;
 /** Cached "teams attached to this project" (read by the Board-config Teams tab).
  *  Reflects team_projects rows + each team's name/description, so it is
  *  invalidated by attach/detach AND by a team rename/delete. */
-const teamsByProjectCacheKey = (projectId: number): string => `teams:proj:${projectId}`;
+const teamsByProjectCacheKey = (tenantId: number, projectId: number): string => `teams:proj:${tenantId}:${projectId}`;
 
 /** Cached "assignable workforce for this project" — the union of every attached
  *  team's members (read by the task assignee picker to scope its options). It
  *  reflects team_projects AND team_members, so it is invalidated by attach/detach,
  *  member add/remove, and team delete. */
-const teamsWorkforceCacheKey = (projectId: number): string => `teams:proj-workforce:${projectId}`;
+const teamsWorkforceCacheKey = (tenantId: number, projectId: number): string => `teams:proj-workforce:${tenantId}:${projectId}`;
 
 export function createTeamRoutes(db: Db): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
@@ -58,21 +58,21 @@ export function createTeamRoutes(db: Db): Hono<HonoEnv> {
     invalidateCached(c.env as Env, teamsCacheKey(tenantId));
 
   // Both project-scoped reads (attached-teams + assignable-workforce) for one project.
-  const invalidateProjectCaches = (c: { env: unknown }, projectId: number) =>
+  const invalidateProjectCaches = (c: { env: unknown }, tenantId: number, projectId: number) =>
     Promise.all([
-      invalidateCached(c.env as Env, teamsByProjectCacheKey(projectId)),
-      invalidateCached(c.env as Env, teamsWorkforceCacheKey(projectId)),
+      invalidateCached(c.env as Env, teamsByProjectCacheKey(tenantId, projectId)),
+      invalidateCached(c.env as Env, teamsWorkforceCacheKey(tenantId, projectId)),
     ]);
 
   // A team's name + membership feed the by-project reads, so a rename/delete or a
   // member change must clear the caches for every project the team is attached to.
   // Cheap indexed lookup, run only on those (infrequent) write paths.
-  const invalidateProjectsForTeam = async (c: { env: unknown }, teamId: number) => {
+  const invalidateProjectsForTeam = async (c: { env: unknown }, tenantId: number, teamId: number) => {
     const rows = await db
       .select({ projectId: teamProjects.projectId })
       .from(teamProjects)
       .where(eq(teamProjects.teamId, teamId));
-    await Promise.all(rows.map((r) => invalidateProjectCaches(c, r.projectId)));
+    await Promise.all(rows.map((r) => invalidateProjectCaches(c, tenantId, r.projectId)));
   };
 
   // GET /api/teams — list with member + project counts (single grouped query,
@@ -125,7 +125,7 @@ export function createTeamRoutes(db: Db): Hono<HonoEnv> {
     const projectId = Number(c.req.param('projectId'));
     const rows = await getOrSetCached(
       c.env as Env,
-      teamsByProjectCacheKey(projectId),
+      teamsByProjectCacheKey(tenantId, projectId),
       async () =>
         db
           .select({ id: teams.id, name: teams.name, description: teams.description })
@@ -145,12 +145,13 @@ export function createTeamRoutes(db: Db): Hono<HonoEnv> {
   // without teams keep today's behaviour. Cached; invalidated on attach/detach +
   // member add/remove + team delete.
   router.get('/by-project/:projectId/workforce', async (c) => {
+    const tenantId = c.get('tenantId') as number;
     const projectId = Number(c.req.param('projectId'));
     const payload = await getOrSetCached(
       c.env as Env,
-      teamsWorkforceCacheKey(projectId),
+      teamsWorkforceCacheKey(tenantId, projectId),
       async () => {
-        const members = await loadProjectTeamMembers(db, projectId);
+        const members = await loadProjectTeamMembers(db, projectId, tenantId);
         return {
           scopedToTeams: members.length > 0,
           workforce: members.map((m) => ({ kind: m.memberKind, ref: m.memberRef, name: m.memberName })),
@@ -223,7 +224,7 @@ export function createTeamRoutes(db: Db): Hono<HonoEnv> {
     if (!updated) return c.json({ error: 'Team not found' }, 404);
 
     // Rename changes what the by-project read returns for every attached project.
-    await invalidateProjectsForTeam(c, id);
+    await invalidateProjectsForTeam(c, c.get('tenantId') as number, id);
     await invalidate(c, tenantId);
     return c.json(updated);
   });
@@ -234,7 +235,7 @@ export function createTeamRoutes(db: Db): Hono<HonoEnv> {
     const id = Number(c.req.param('id'));
 
     // Capture the attached projects BEFORE the cascade removes the links.
-    await invalidateProjectsForTeam(c, id);
+    await invalidateProjectsForTeam(c, c.get('tenantId') as number, id);
 
     const [deleted] = await db
       .delete(teams)
@@ -272,7 +273,7 @@ export function createTeamRoutes(db: Db): Hono<HonoEnv> {
       .returning();
 
     // Membership feeds the per-project assignable-workforce read.
-    await invalidateProjectsForTeam(c, id);
+    await invalidateProjectsForTeam(c, c.get('tenantId') as number, id);
     await invalidate(c, tenantId);
     return c.json(member, 201);
   });
@@ -289,7 +290,7 @@ export function createTeamRoutes(db: Db): Hono<HonoEnv> {
       .delete(teamMembers)
       .where(and(eq(teamMembers.id, memberId), eq(teamMembers.teamId, id)));
 
-    await invalidateProjectsForTeam(c, id);
+    await invalidateProjectsForTeam(c, c.get('tenantId') as number, id);
     await invalidate(c, tenantId);
     return c.json({ deleted: true });
   });
@@ -318,7 +319,7 @@ export function createTeamRoutes(db: Db): Hono<HonoEnv> {
       .onConflictDoNothing()
       .returning();
 
-    await invalidateProjectCaches(c, projectId);
+    await invalidateProjectCaches(c, c.get('tenantId') as number, projectId);
     await invalidate(c, tenantId);
     return c.json(link ?? { error: 'Project already attached' }, link ? 201 : 409);
   });
@@ -335,7 +336,7 @@ export function createTeamRoutes(db: Db): Hono<HonoEnv> {
       .delete(teamProjects)
       .where(and(eq(teamProjects.teamId, id), eq(teamProjects.projectId, projectId)));
 
-    await invalidateProjectCaches(c, projectId);
+    await invalidateProjectCaches(c, c.get('tenantId') as number, projectId);
     await invalidate(c, tenantId);
     return c.json({ deleted: true });
   });

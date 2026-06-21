@@ -17,7 +17,7 @@ import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import { getOrSetCached } from '../../infrastructure/cache/readThroughCache';
 import {
-  memberProfiles, projects, tasks, teamMembers, teamProjects, tenantMembers, users,
+  memberProfiles, projects, tasks, teams, teamMembers, teamProjects, tenantMembers, users,
 } from '../../infrastructure/database/schema';
 import { readWorkforceMetricsVersion } from './workforceMetrics';
 import { TaskStatus } from '../../domain/shared/types';
@@ -115,19 +115,22 @@ export function rankCandidates(
  * candidate pool and the assignee-picker scoping endpoint (teamRoutes), so the
  * two never drift.
  */
-export async function loadProjectTeamMembers(db: Db, projectId: number): Promise<Candidate[]> {
+export async function loadProjectTeamMembers(db: Db, projectId: number, tenantId: number): Promise<Candidate[]> {
+  // Tenant-scoped via teams.tenantId — team_members/team_projects carry no tenant_id,
+  // so without this join a guessed projectId would leak another tenant's team roster.
   const teamRows = await db
     .selectDistinct({ memberKind: teamMembers.memberKind, memberRef: teamMembers.memberRef, memberName: teamMembers.memberName })
     .from(teamMembers)
     .innerJoin(teamProjects, eq(teamProjects.teamId, teamMembers.teamId))
-    .where(eq(teamProjects.projectId, projectId));
+    .innerJoin(teams, eq(teams.id, teamProjects.teamId))
+    .where(and(eq(teamProjects.projectId, projectId), eq(teams.tenantId, tenantId)));
   return teamRows as Candidate[];
 }
 
 /** Resolve the candidate pool for a project: members of the teams attached to it,
  *  or — when the project has no teams — every active tenant human. */
 async function loadCandidates(db: Db, tenantId: number, projectId: number): Promise<Candidate[]> {
-  const teamRows = await loadProjectTeamMembers(db, projectId);
+  const teamRows = await loadProjectTeamMembers(db, projectId, tenantId);
   if (teamRows.length) return teamRows;
 
   // Fallback: the whole active human roster (a project with no team assigned).
