@@ -249,39 +249,15 @@ function safeParse(raw: string): Record<string, unknown> {
 }
 
 // ---------------------------------------------------------------------------
-// Credential decryption (mirrors integrationRoutes AES-256-GCM scheme)
+// Credential decryption — delegates to the canonical per-tenant AES-256-GCM
+// helper so boardsync/repo consumers honor the SAME versioned key scheme the
+// integrations CRUD writes (v2 per-tenant, with legacy v1 global-key fallback).
+// Re-exported here for the existing import paths; pass the owning tenantId so a
+// v2 row decrypts (a legacy v1 row decrypts with or without it).
 // ---------------------------------------------------------------------------
 
-async function deriveKey(passphrase: string): Promise<CryptoKey> {
-  const enc = new TextEncoder();
-  const keyMaterial = await crypto.subtle.importKey('raw', enc.encode(passphrase), 'PBKDF2', false, ['deriveKey']);
-  return crypto.subtle.deriveKey(
-    { name: 'PBKDF2', salt: enc.encode('builderforce-integrations'), iterations: 100_000, hash: 'SHA-256' },
-    keyMaterial,
-    { name: 'AES-GCM', length: 256 },
-    false,
-    ['encrypt', 'decrypt'],
-  );
-}
-
-export async function decryptCredentials(
-  encB64: string,
-  ivHex: string,
-  secret: string,
-): Promise<Record<string, unknown> | null> {
-  try {
-    const key = await deriveKey(secret);
-    const iv = new Uint8Array(ivHex.match(/.{2}/g)!.map((h) => parseInt(h, 16)));
-    const dec = await crypto.subtle.decrypt(
-      { name: 'AES-GCM', iv },
-      key,
-      Uint8Array.from(atob(encB64), (c) => c.charCodeAt(0)),
-    );
-    return JSON.parse(new TextDecoder().decode(dec)) as Record<string, unknown>;
-  } catch {
-    return null;
-  }
-}
+export { decryptCredentials } from '../integrations/credentialCrypto';
+import { decryptCredentials } from '../integrations/credentialCrypto';
 
 /** Load + decrypt a board connection's provider credentials. Tenant-scoped. */
 export async function loadConnectionCredentials(
@@ -297,7 +273,7 @@ export async function loadConnectionCredentials(
     .where(and(eq(integrationCredentials.id, credentialId), eq(integrationCredentials.tenantId, tenantId)))
     .limit(1);
   if (!row) return null;
-  const creds = await decryptCredentials(row.credentialsEnc, row.iv, secret);
+  const creds = await decryptCredentials(row.credentialsEnc, row.iv, secret, tenantId);
   if (!creds) return null;
   return { credentials: creds, baseUrl: row.baseUrl };
 }

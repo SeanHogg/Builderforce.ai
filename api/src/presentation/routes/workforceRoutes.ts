@@ -20,10 +20,32 @@ import { neon } from '@neondatabase/serverless';
 import { DEFAULT_ENGINE_ID } from '@builderforce/agent-tools';
 import { authMiddleware } from '../middleware/authMiddleware';
 import { getOrSetCached, invalidateCached } from '../../infrastructure/cache/readThroughCache';
+import { runtimeHiredAgentsCacheKey } from './runtimeRoutes';
 import type { Env, HonoEnv } from '../../env';
 
 /** Cache key for a tenant's purchased (marketplace-acquired) agents. */
 const purchasedCacheKey = (tenantId: number): string => `wf:purchased:${tenantId}`;
+
+/** Cache key for the PUBLIC marketplace agent listing (no tenant scope — it is the
+ *  same world-readable registry for everyone). Read-heavy + open to the world →
+ *  served through getOrSetCached; invalidated on any write that changes a row that
+ *  could appear in it (create/update/hire/delete), including an eval-score change. */
+export const PUBLIC_LIST_CACHE_KEY = 'wf:public:agents';
+const PUBLIC_LIST_CACHE_TTL_SECONDS = 120;
+
+/**
+ * The PUBLIC projection of a marketplace agent. Marketing promises agents listed
+ * "with evaluation scores", so a single non-sensitive `evalScore` (the agent's
+ * 0..1 evaluation/quality score from training — `ide_agents.eval_score`) ships
+ * here. The owner-only perf rollup (successRate / latency / per-tenant feedback)
+ * NEVER appears on a public route — only this one aggregate quality number.
+ */
+function mapPublicAgentRow(row: Record<string, unknown>): Record<string, unknown> {
+  const mapped = mapAgentRow(row) as Record<string, unknown>;
+  const raw = mapped.eval_score;
+  const score = typeof raw === 'number' ? raw : raw == null ? null : Number(raw);
+  return { ...mapped, evalScore: score != null && Number.isFinite(score) ? score : null };
+}
 
 /** Cache key for an agent's owner-only performance + feedback rollup (gap [1247]).
  *  Keyed on agent_id (not tenant) — the rollup spans every tenant that hired it.
@@ -209,7 +231,14 @@ export function createWorkforceRoutes(): Hono<HonoEnv> {
           UPDATE ide_agents SET hire_count = hire_count + 1, updated_at = NOW() WHERE id = ${id} RETURNING *
         `
       : await sql(c.env)`SELECT * FROM ide_agents WHERE id = ${id}`;
-    await invalidateCached(c.env as Env, purchasedCacheKey(tenantId));
+    // hire_count drives the public listing's ordering, so a real hire must
+    // invalidate it alongside the buyer's purchased list and the runtime's
+    // hired-agents registry (the new agent is now a callable role).
+    await Promise.all([
+      invalidateCached(c.env as Env, purchasedCacheKey(tenantId)),
+      invalidateCached(c.env as Env, runtimeHiredAgentsCacheKey(tenantId)),
+      changed.length > 0 ? invalidateCached(c.env as Env, PUBLIC_LIST_CACHE_KEY) : Promise.resolve(),
+    ]);
     return c.json(mapAgentRow(row));
   });
 
@@ -227,7 +256,10 @@ export function createWorkforceRoutes(): Hono<HonoEnv> {
       WHERE tenant_id = ${tenantId} AND agent_id = ${id} AND unhired_at IS NULL
       RETURNING agent_id
     `;
-    await invalidateCached(c.env as Env, purchasedCacheKey(tenantId));
+    await Promise.all([
+      invalidateCached(c.env as Env, purchasedCacheKey(tenantId)),
+      invalidateCached(c.env as Env, runtimeHiredAgentsCacheKey(tenantId)),
+    ]);
     return c.json({ unhired: removed.length > 0 });
   });
 
@@ -277,6 +309,8 @@ export function createWorkforceRoutes(): Hono<HonoEnv> {
          ${body.published ?? false})
       RETURNING *
     `;
+    // A newly-created active/published agent can appear in the public listing.
+    await invalidateCached(c.env as Env, PUBLIC_LIST_CACHE_KEY);
     return c.json(mapAgentRow(row), 201);
   });
 
@@ -337,6 +371,9 @@ export function createWorkforceRoutes(): Hono<HonoEnv> {
       WHERE id = ${id} AND tenant_id = ${tenantId}
       RETURNING *
     `;
+    // Name/title/bio/skills/status/published — and the agent's eval score, if a
+    // training-publish flow patches it — all surface in the public listing.
+    await invalidateCached(c.env as Env, PUBLIC_LIST_CACHE_KEY);
     return c.json(mapAgentRow(row));
   });
 
@@ -382,6 +419,7 @@ export function createWorkforceRoutes(): Hono<HonoEnv> {
         WHERE tenant_id = ${tenantId} AND scope = 'agent' AND scope_id = ${bridgeId}
       `;
     }
+    await invalidateCached(c.env as Env, PUBLIC_LIST_CACHE_KEY);
     return c.json({ deleted: true });
   });
 
@@ -475,19 +513,26 @@ export function createWorkforceRoutes(): Hono<HonoEnv> {
   });
 
   // ----- Public: browse published agents ---------------------------------
-  // GET /api/workforce/agents — list active published agents
+  // GET /api/workforce/agents — list active published agents (with evalScore).
+  // Read-heavy + world-readable → served through the read-through cache; the
+  // listing is invalidated by every write below that can change a listed row.
   router.get('/agents', async (c) => {
-    const rows = await sql(c.env)`
-      SELECT *
-      FROM ide_agents
-      WHERE status = 'active'
-      ORDER BY hire_count DESC, created_at DESC
-      LIMIT 200
-    `;
-    return c.json(rows.map(mapAgentRow));
+    const rows = await getOrSetCached(
+      c.env as Env,
+      PUBLIC_LIST_CACHE_KEY,
+      () => sql(c.env)`
+        SELECT *
+        FROM ide_agents
+        WHERE status = 'active'
+        ORDER BY hire_count DESC, created_at DESC
+        LIMIT 200
+      ` as unknown as Promise<Record<string, unknown>[]>,
+      { kvTtlSeconds: PUBLIC_LIST_CACHE_TTL_SECONDS },
+    );
+    return c.json(rows.map(mapPublicAgentRow));
   });
 
-  // GET /api/workforce/agents/:id — public agent detail
+  // GET /api/workforce/agents/:id — public agent detail (with evalScore).
   router.get('/agents/:id', async (c) => {
     const [row] = await sql(c.env)`
       SELECT *
@@ -495,7 +540,7 @@ export function createWorkforceRoutes(): Hono<HonoEnv> {
       WHERE id = ${c.req.param('id')} AND status = 'active'
     `;
     if (!row) return c.json({ error: 'Agent not found' }, 404);
-    return c.json(mapAgentRow(row));
+    return c.json(mapPublicAgentRow(row));
   });
 
   return router;

@@ -34,6 +34,33 @@ export interface BfExecution {
   updatedAt?: string;
 }
 
+/**
+ * The outcome of dispatching a platform run (POST /api/runtime/executions). Either a
+ * real execution was started (`execution`), or a priority/policy gate intercepted it and
+ * a human approval is now pending (`awaitingApproval`). Mutually exclusive.
+ */
+export interface BfSubmitResult {
+  execution?: BfExecution;
+  awaitingApproval?: { approvalId: string; taskId: number; reason?: string };
+}
+
+/** A pending (or resolved) human-in-the-loop request from the tenant approvals queue.
+ *  Mirrors the `approvals` row shape returned by GET/PATCH /api/approvals. */
+export interface BfApproval {
+  id: string;
+  kind?: "approval" | "question" | "feedback" | string;
+  actionType?: string;
+  description?: string;
+  status?: "pending" | "approved" | "rejected" | "answered" | "expired" | string;
+  reviewNote?: string | null;
+  responseText?: string | null;
+  executionId?: number | null;
+  agentHostId?: number | null;
+  cloudAgentRef?: string | null;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
 /** A prior conversation turn loaded from a task's server-side execution thread. */
 export interface BfConversationMessage {
   role: "user" | "assistant";
@@ -388,6 +415,138 @@ export async function updateTaskStatus(
 ): Promise<void> {
   // Partial merge on the server — only status changes (and triggers lane automation).
   await authed(secrets, `/api/tasks/${id}`, { method: "PATCH", body: JSON.stringify({ status }) });
+}
+
+/**
+ * Like `authed`, but returns the raw status + parsed body instead of throwing on
+ * non-2xx — used by dispatch where 202 (approval gate) and 402 (plan limit) are
+ * meaningful, expected outcomes the caller must branch on, not failures. Reuses the
+ * same JWT exchange + 401-retry as `authed` (DRY). Throws only on "not signed in".
+ */
+async function authedRaw<T>(
+  secrets: vscode.SecretStorage,
+  path: string,
+  init?: RequestInit,
+): Promise<{ status: number; body: T | undefined; text: string }> {
+  let token = await exchangeJwt(secrets);
+  if (!token) throw new Error("not_signed_in");
+  const call = (t: string) =>
+    fetch(`${getBaseUrl()}${path}`, {
+      ...init,
+      headers: { ...(init?.headers ?? {}), authorization: `Bearer ${t}`, "content-type": "application/json" },
+    });
+  let res = await call(token);
+  if (res.status === 401) {
+    token = await exchangeJwt(secrets, true);
+    if (!token) throw new Error("not_signed_in");
+    res = await call(token);
+  }
+  const text = await res.text().catch(() => "");
+  let body: T | undefined;
+  try {
+    body = text ? (JSON.parse(text) as T) : undefined;
+  } catch {
+    body = undefined;
+  }
+  return { status: res.status, body, text };
+}
+
+/**
+ * Dispatch a PLATFORM run for a task — the SAME endpoint the web app's
+ * `runtimeApi.submitExecution` hits (POST /api/runtime/executions). This is DISTINCT
+ * from the local in-editor agent loop: it asks the platform to run the task on its
+ * assigned AgentHost / cloud agent. The run is then observable via loadTaskConversation
+ * / the execution trace.
+ *
+ * Returns either the started execution (HTTP 201) or, when a priority/policy gate fires,
+ * an `awaitingApproval` descriptor (HTTP 202). Throws on 402 (plan limit) with a
+ * `HTTP 402` message so the caller can route to an upgrade, and on other 4xx/5xx.
+ */
+export async function submitExecution(
+  secrets: vscode.SecretStorage,
+  taskId: number,
+  opts?: { agentHostId?: number | null; sessionId?: string; payload?: string },
+): Promise<BfSubmitResult> {
+  const { status, body, text } = await authedRaw<
+    BfExecution & { status?: string; approvalId?: string; reason?: string }
+  >(secrets, "/api/runtime/executions", {
+    method: "POST",
+    body: JSON.stringify({ taskId, ...opts }),
+  });
+
+  if (status === 202 && body?.approvalId) {
+    return { awaitingApproval: { approvalId: body.approvalId, taskId, reason: body.reason } };
+  }
+  if (status === 201 || status === 200) {
+    return { execution: body as BfExecution };
+  }
+  // Surface the verbatim status so the command layer can branch (402 → upgrade).
+  throw new Error(`/api/runtime/executions → HTTP ${status} ${text.slice(0, 200)}`);
+}
+
+/** Read a single platform execution's current status (GET /api/runtime/executions/:id). */
+export async function getExecution(
+  secrets: vscode.SecretStorage,
+  id: number,
+): Promise<BfExecution | undefined> {
+  try {
+    return await authed<BfExecution>(secrets, `/api/runtime/executions/${id}`);
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * List human-in-the-loop approvals for the active tenant — the SAME endpoint the web
+ * HumanRequestsView uses (GET /api/approvals). Defaults to `pending`. Optionally narrows
+ * to one on-prem agent host. Degrades to [] when the endpoint isn't deployed.
+ */
+export async function listHumanRequests(
+  secrets: vscode.SecretStorage,
+  opts?: { status?: string; agentHostId?: number },
+): Promise<BfApproval[]> {
+  const status = opts?.status ?? "pending";
+  const params = new URLSearchParams();
+  if (status) params.set("status", status);
+  if (opts?.agentHostId != null) params.set("agentHostId", String(opts.agentHostId));
+  const qs = params.toString();
+  try {
+    const r = await authed<{ approvals: BfApproval[] }>(
+      secrets,
+      `/api/approvals${qs ? `?${qs}` : ""}`,
+    );
+    return r?.approvals ?? [];
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Resolve a human-in-the-loop request — the SAME endpoint the web ApprovalResolveControl
+ * uses (PATCH /api/approvals/:id). `decision` maps to the backend status:
+ *   - "approve" → "approved", "reject" → "rejected" (kind: approval)
+ *   - "answer"  → "answered" (kind: question/feedback; requires `note` as responseText)
+ * `note` is the review note for approve/reject, or the answer text for "answer".
+ * Returns the updated approval (may carry `startedExecutionId` when an approval started a run).
+ */
+export async function resolveHumanRequest(
+  secrets: vscode.SecretStorage,
+  id: string,
+  decision: "approve" | "reject" | "answer",
+  note?: string,
+): Promise<BfApproval & { startedExecutionId?: number | null }> {
+  const status = decision === "approve" ? "approved" : decision === "reject" ? "rejected" : "answered";
+  const payload: { status: string; reviewNote?: string; responseText?: string } = { status };
+  if (decision === "answer") payload.responseText = note ?? "";
+  else if (note) payload.reviewNote = note;
+
+  const r = await authed<BfApproval & { startedExecutionId?: number | null }>(
+    secrets,
+    `/api/approvals/${encodeURIComponent(id)}`,
+    { method: "PATCH", body: JSON.stringify(payload) },
+  );
+  if (!r) throw new Error("not signed in");
+  return r;
 }
 
 export async function connect(

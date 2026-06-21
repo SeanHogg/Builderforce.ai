@@ -128,6 +128,15 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.commands.registerCommand("builderforce.setTaskStatus", (node: TaskNode) =>
       setTaskStatus(context, projects, node?.task),
     ),
+    // Dispatch a PLATFORM run for the task (its assigned AgentHost / cloud agent) —
+    // distinct from the local in-editor agent loop. Surfaces the run via a task session.
+    vscode.commands.registerCommand("builderforce.runTask", (node: TaskNode) =>
+      runTask(context, store, projects, node?.task),
+    ),
+    // Review the tenant's pending human-in-the-loop approvals and resolve them.
+    vscode.commands.registerCommand("builderforce.humanRequests", () =>
+      reviewHumanRequests(context, projects),
+    ),
     // The Board renders NATIVELY in a webview from bfApi data (not the embedded web
     // page) — reliable inside a VS Code webview where the /embed iframe is not.
     vscode.commands.registerCommand("builderforce.openBoard", async () => {
@@ -413,6 +422,183 @@ async function setTaskStatus(
     vscode.window.showInformationMessage(`BuilderForce: ${task.key ?? "task"} → ${pick}`);
   } catch (e) {
     vscode.window.showErrorMessage(`BuilderForce: could not update task (${(e as Error).message}).`);
+  }
+}
+
+/**
+ * Dispatch a PLATFORM execution run for `task` to its assigned AgentHost / cloud agent
+ * (POST /api/runtime/executions — the same path the web app uses). This is NOT the local
+ * in-editor agent: it hands the task to the platform runtime. After a successful dispatch
+ * we open (or reattach) the task's chat session, which polls the execution trace so the
+ * user can watch the run's progress in the editor.
+ *
+ * Branches the three meaningful outcomes:
+ *   - started      → confirm + open the task session (trace polling lives there)
+ *   - awaiting_approval (202) → tell the user a human approval is now pending + offer to review
+ *   - 402 plan limit → upgrade deep-link (mirrors createProject)
+ */
+async function runTask(
+  context: vscode.ExtensionContext,
+  store: SessionStore,
+  projects: ProjectsTreeProvider,
+  task?: bfApi.BfTask,
+): Promise<void> {
+  if (!task) return;
+  if (!(await context.secrets.get(SECRET_KEY))) {
+    const action = await vscode.window.showInformationMessage(
+      "Sign in to your BuilderForce workspace first.",
+      "Sign In",
+    );
+    if (action === "Sign In") void vscode.commands.executeCommand("builderforce.signIn");
+    return;
+  }
+
+  const label = task.key ?? task.title;
+  try {
+    const result = await vscode.window.withProgress(
+      { location: vscode.ProgressLocation.Notification, title: `BuilderForce: dispatching ${label}…` },
+      () => bfApi.submitExecution(context.secrets, task.id),
+    );
+
+    if (result.awaitingApproval) {
+      const reason = result.awaitingApproval.reason ?? "A manager approval is required before this run can start.";
+      const action = await vscode.window.showWarningMessage(
+        `BuilderForce: ${label} is awaiting approval. ${reason}`,
+        "Review Approvals",
+      );
+      if (action === "Review Approvals") void vscode.commands.executeCommand("builderforce.humanRequests");
+      return;
+    }
+
+    // Run started — refresh task state (status may have flipped to in_progress) and open
+    // the task session so its trace polling surfaces the platform run's progress.
+    bfApi.invalidateTasks(getSelectedProject()?.id);
+    projects.refresh();
+    const s =
+      store.findByTask(task.id) ??
+      store.create({
+        title: `${task.key ? `${task.key} ` : ""}${task.title}`.slice(0, 60),
+        projectId: getSelectedProject()?.id,
+        taskId: task.id,
+        taskKey: task.key,
+        taskTitle: task.title,
+      });
+    ChatPanel.open(context, store, s.id);
+    vscode.window.showInformationMessage(`BuilderForce: dispatched ${label} to the platform runtime.`);
+  } catch (e) {
+    const message = (e as Error).message;
+    if (/HTTP 402/.test(message)) {
+      const action = await vscode.window.showErrorMessage(
+        "BuilderForce: your plan's run limit is reached. Upgrade your workspace to dispatch more runs.",
+        "Open BuilderForce",
+      );
+      if (action) void vscode.env.openExternal(vscode.Uri.parse(`${getWebBaseUrl()}/settings`));
+      return;
+    }
+    if (/not_signed_in/.test(message)) {
+      const action = await vscode.window.showWarningMessage("Sign in to BuilderForce first.", "Sign In");
+      if (action) void vscode.commands.executeCommand("builderforce.signIn");
+      return;
+    }
+    vscode.window.showErrorMessage(`BuilderForce: could not dispatch ${label} (${message}).`);
+  }
+}
+
+/**
+ * Review the tenant's pending human-in-the-loop approvals (GET /api/approvals) and
+ * resolve one (PATCH /api/approvals/:id — the same endpoints the web HumanRequestsView /
+ * ApprovalResolveControl use). A quick-pick lists each pending request; selecting one
+ * offers Approve/Reject (for approval kinds) or an answer box (for question/feedback),
+ * then refreshes the list + the task tree (an approval may have started a run).
+ */
+async function reviewHumanRequests(
+  context: vscode.ExtensionContext,
+  projects: ProjectsTreeProvider,
+): Promise<void> {
+  if (!(await context.secrets.get(SECRET_KEY))) {
+    const action = await vscode.window.showInformationMessage(
+      "Sign in to your BuilderForce workspace first.",
+      "Sign In",
+    );
+    if (action === "Sign In") void vscode.commands.executeCommand("builderforce.signIn");
+    return;
+  }
+
+  let pending: bfApi.BfApproval[];
+  try {
+    pending = await bfApi.listHumanRequests(context.secrets, { status: "pending" });
+  } catch (e) {
+    vscode.window.showErrorMessage(`BuilderForce: could not load approvals (${(e as Error).message}).`);
+    return;
+  }
+  if (!pending.length) {
+    vscode.window.showInformationMessage("BuilderForce: no pending approvals.");
+    return;
+  }
+
+  const isAnswerable = (a: bfApi.BfApproval): boolean => a.kind === "question" || a.kind === "feedback";
+  const pick = await vscode.window.showQuickPick(
+    pending.map((a) => ({
+      label: `$(${isAnswerable(a) ? "comment" : "shield"}) ${a.description?.slice(0, 70) || a.actionType || a.kind || "Approval"}`,
+      description: a.kind ?? "",
+      detail: a.executionId ? `execution #${a.executionId}` : a.agentHostId ? `host #${a.agentHostId}` : undefined,
+      approval: a,
+    })),
+    { title: "BuilderForce: pending approvals", placeHolder: "Select a request to resolve" },
+  );
+  if (!pick) return;
+  const approval = pick.approval;
+
+  let decision: "approve" | "reject" | "answer";
+  let note: string | undefined;
+  if (isAnswerable(approval)) {
+    const answer = await vscode.window.showInputBox({
+      title: `Answer: ${approval.description?.slice(0, 80) ?? "request"}`,
+      prompt: "Your answer is delivered to the run and resumes it.",
+      ignoreFocusOut: true,
+      validateInput: (v) => (v.trim() ? undefined : "An answer is required"),
+    });
+    if (answer === undefined) return;
+    decision = "answer";
+    note = answer.trim();
+  } else {
+    const choice = await vscode.window.showQuickPick(
+      [
+        { label: "$(check) Approve", value: "approve" as const },
+        { label: "$(x) Reject", value: "reject" as const },
+      ],
+      { title: approval.description?.slice(0, 80) ?? "Resolve approval", placeHolder: "Approve or reject this request" },
+    );
+    if (!choice) return;
+    decision = choice.value;
+    note = await vscode.window.showInputBox({
+      title: `${decision === "approve" ? "Approve" : "Reject"} — optional note`,
+      prompt: "Optional review note (press Enter to skip)",
+      ignoreFocusOut: true,
+    });
+    if (note === undefined) return; // cancelled
+    note = note.trim() || undefined;
+  }
+
+  try {
+    const updated = await bfApi.resolveHumanRequest(context.secrets, approval.id, decision, note);
+    // An approval may have auto-started a run — refresh the board/task tree to reflect it.
+    bfApi.invalidateTasks(getSelectedProject()?.id);
+    projects.refresh();
+    const verb = decision === "answer" ? "answered" : decision === "approve" ? "approved" : "rejected";
+    const started = updated.startedExecutionId ? ` Run #${updated.startedExecutionId} started.` : "";
+    vscode.window.showInformationMessage(`BuilderForce: request ${verb}.${started}`);
+    // Loop back so several can be cleared in one sitting if more remain.
+    const remaining = await bfApi.listHumanRequests(context.secrets, { status: "pending" });
+    if (remaining.length) {
+      const action = await vscode.window.showInformationMessage(
+        `BuilderForce: ${remaining.length} approval(s) still pending.`,
+        "Review Next",
+      );
+      if (action === "Review Next") void reviewHumanRequests(context, projects);
+    }
+  } catch (e) {
+    vscode.window.showErrorMessage(`BuilderForce: could not resolve approval (${(e as Error).message}).`);
   }
 }
 

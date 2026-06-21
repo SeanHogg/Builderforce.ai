@@ -314,7 +314,7 @@ function buildApp(env: Env): Hono<HonoEnv> {
   app.route('/api/artifact-assignments', createArtifactAssignmentRoutes(db));
   app.route('/api/project-agents', createProjectAgentRoutes(db));
   app.route('/api/marketplace-stats', createMarketplaceStatsRoutes(db));
-  app.route('/api/personas', createPersonaRoutes());
+  app.route('/api/personas', createPersonaRoutes(db));
 
   // Chat persistence (agentHost-auth writes + tenant-JWT reads)
   app.route('/api', createChatRoutes(db));

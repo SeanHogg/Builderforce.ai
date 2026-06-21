@@ -16,6 +16,7 @@
 import { GatewayClient } from "../gateway/client.js";
 import { logDebug, logWarn } from "../logger.js";
 import { normalizeBaseUrl } from "../utils/normalize-base-url.js";
+import { isOfflineMode } from "./env-file.js";
 
 export type CronJobRecord = {
   id: string;
@@ -92,6 +93,11 @@ export class CronPollerService {
   }
 
   async start(): Promise<void> {
+    // Offline / air-gapped: never poll the control plane.
+    if (isOfflineMode()) {
+      logDebug("[cron-poller] offline mode — skipping control-plane polling");
+      return;
+    }
     this.gatewayClient.start();
     await this.fetchAndSchedule();
     // Re-sync every 5 minutes to pick up newly created or deleted jobs.
@@ -162,7 +168,8 @@ export class CronPollerService {
     try {
       // A per-project-agent schedule runs in that agent's own session and carries
       // its id so the run is attributed to (and can be routed as) that agent.
-      const sessionKey = job.projectAgentId != null ? `project-agent-${job.projectAgentId}` : "main";
+      const sessionKey =
+        job.projectAgentId != null ? `project-agent-${job.projectAgentId}` : "main";
       const agentLine = job.projectAgentId != null ? `\nProject agent: #${job.projectAgentId}` : "";
       await this.gatewayClient.request("chat.send", {
         sessionKey,

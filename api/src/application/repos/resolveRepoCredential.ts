@@ -66,7 +66,7 @@ export async function resolveRepoCredential(
     .where(and(eq(integrationCredentials.id, repo.credentialId), eq(integrationCredentials.tenantId, tenantId)));
   if (!cred) return { error: 'Credential not found', status: 404 };
 
-  const creds = await decryptCredentials(cred.credentialsEnc, cred.iv, secret);
+  const creds = await decryptCredentials(cred.credentialsEnc, cred.iv, secret, tenantId);
   const token =
     (creds?.accessToken as string | undefined) ??
     (creds?.apiToken as string | undefined) ??

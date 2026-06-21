@@ -13,6 +13,7 @@ import { googleAiModule } from './googleai';
 import { nvidiaModule } from './nvidia';
 import { ollamaModule } from './ollama';
 import { openRouterModule } from './openrouter';
+import { openAICompatibleModules, openAICompatibleModulesById } from './openaiCompatibleVendors';
 import {
   VendorRetryableError,
   VendorFatalError,
@@ -43,9 +44,21 @@ import {
 // `anthropicModule` sits last: it is `autoRoute: false` (never part of the FREE/PRO
 // rotation), reachable only via the curated coding fallback chain or an explicit
 // pin, so its position here does not affect auto-pool ordering.
-const MODULES: ReadonlyArray<VendorModule> = [cerebrasModule, ollamaModule, nvidiaModule, cloudflareModule, openRouterModule, googleAiModule, anthropicModule];
+// The OpenAI-compatible commercial vendors (openai/groq/deepseek/…) sit at the
+// TAIL: every one is `autoRoute: false`, so their position never affects the
+// auto-selected FREE/PRO pool ordering above — they only matter when a caller
+// pins `<vendor>/<id>` explicitly. Appending them here brings the live, wired
+// vendor count to 30+ (the "30+ model providers" marketing claim) without
+// touching the tuned free/paid cascade. See openaiCompatibleVendors.ts.
+const MODULES: ReadonlyArray<VendorModule> = [
+  cerebrasModule, ollamaModule, nvidiaModule, cloudflareModule, openRouterModule, googleAiModule, anthropicModule,
+  ...openAICompatibleModules,
+];
 
 const MODULES_BY_ID: Record<VendorId, VendorModule> = {
+  // Factory-built OpenAI-compatible commercial vendors first (spread, keyed by id);
+  // the bespoke modules below are distinct ids, so nothing is overwritten.
+  ...(openAICompatibleModulesById as Record<VendorId, VendorModule>),
   openrouter: openRouterModule,
   cerebras:   cerebrasModule,
   nvidia:     nvidiaModule,
@@ -80,6 +93,21 @@ const VENDOR_PREFIXES: ReadonlyArray<{ prefix: string; vendor: VendorId }> = [
   // `cloudflare/@cf/...` for symmetry with the other vendors — callers who
   // prefer the explicit form can use it; bare `@cf/...` resolves via catalog.
   { prefix: 'cloudflare/', vendor: 'cloudflare' },
+  // Explicit `direct/<vendor>/<model-id>` routing for every factory-built
+  // OpenAI-compatible commercial vendor (`direct/openai/gpt-4o`,
+  // `direct/groq/llama-3.3-70b-versatile`, `direct/deepseek/deepseek-chat`, …).
+  //
+  // The `direct/` namespace is REQUIRED to avoid a collision: a bare provider
+  // prefix like `openai/` or `mistral/` would hijack OpenRouter's `<org>/<slug>`
+  // model id namespace (`openai/gpt-oss-120b:free`, `mistralai/...`) and silently
+  // re-route an OpenRouter model to the direct vendor. `direct/<vendor>/...` can
+  // never collide with an OpenRouter slug. These vendors are autoRoute:false, so a
+  // prefix pin is the ONLY way to reach them — exactly what the dataset wizard /
+  // model picker passes through.
+  //
+  // Derived from the module list so the prefix set can never drift from the
+  // registered vendors.
+  ...openAICompatibleModules.map((m) => ({ prefix: `direct/${m.id}/`, vendor: m.id })),
 ];
 
 /**

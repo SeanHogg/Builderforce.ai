@@ -36,6 +36,14 @@ import type { CloudAgentPanelTab } from './CloudAgentSlideOutPanel';
 
 const runtimePillStyle: React.CSSProperties = { padding: '2px 8px', borderRadius: 6, background: 'var(--surface-coral-soft)', color: 'var(--accent)' };
 const pricePillStyle: React.CSSProperties = { padding: '2px 8px', borderRadius: 6, background: 'var(--bg-elevated)', color: 'var(--text-strong)' };
+const evalPillStyle: React.CSSProperties = { padding: '2px 8px', borderRadius: 6, background: 'rgba(34,197,94,0.12)', color: '#16a34a', border: '1px solid rgba(34,197,94,0.3)' };
+
+/** Public eval score (0-1) for an agent, preferring the camelCase contract field
+ *  and falling back to the snake_case row column. null when not yet scored. */
+function agentEvalScore(agent: PublishedAgent): number | null {
+  const raw = agent.evalScore ?? agent.eval_score;
+  return typeof raw === 'number' && Number.isFinite(raw) ? raw : null;
+}
 
 export function AgentCard({
   agent,
@@ -71,6 +79,7 @@ export function AgentCard({
   const { tenant } = useAuth();
   const owner = isAgentOwner(agent, tenant?.id);
   const subtitle = agent.title && agent.title !== agent.name ? agent.title : 'Workforce agent';
+  const evalScore = agentEvalScore(agent);
 
   return (
     <WorkforceCard
@@ -90,6 +99,9 @@ export function AgentCard({
               {owner && agent.runtime_support === 'both' && agent.preferred_runtime ? ` · prefers ${agent.preferred_runtime}` : ''}
             </span>
             <span style={pricePillStyle}>{formatAgentPrice(agent)}</span>
+            {evalScore != null && (
+              <span style={evalPillStyle} title="AI evaluation score (0-1)">Eval {evalScore.toFixed(2)}</span>
+            )}
           </div>
           {/* Assigned configuration + Copy manifest — on every agent card (an empty
               section is the "nothing configured" signal), consistent with the list

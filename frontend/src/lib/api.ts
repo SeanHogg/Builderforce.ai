@@ -308,12 +308,14 @@ export async function generateDataset(
   projectId: number | string,
   capabilityPrompt: string,
   name: string,
-  onChunk?: (chunk: string) => void
+  onChunk?: (chunk: string) => void,
+  /** Optional generation model id (e.g. an OpenRouter model). Routed by the gateway; omit for the default pool. */
+  model?: string
 ): Promise<Dataset> {
   const res = await apiRequestStream(`${IDE}/datasets/generate`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ projectId, capabilityPrompt, name }),
+    body: JSON.stringify({ projectId, capabilityPrompt, name, ...(model ? { model } : {}) }),
   });
   if (!res.ok) throw new Error('Failed to generate dataset');
   if (onChunk && res.headers.get('content-type')?.includes('text/event-stream')) {

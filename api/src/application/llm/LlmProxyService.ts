@@ -31,6 +31,7 @@ import {
   tierForModel,
   vendorForModel,
   vendorKeyBound,
+  passthroughVendorKeys,
   MAX_VENDOR_CALL_TIMEOUT_MS,
   WorkerSubrequestExhaustedError,
   RequestAbortedError,
@@ -984,6 +985,14 @@ export class LlmProxyService {
       CLAUDE_OAUTH_TOKEN:       this.anthropicOAuthToken         ?? null,
       CLOUDFLARE_AI_API_TOKEN:  this.env.CLOUDFLARE_AI_API_TOKEN  ?? null,
       CLOUDFLARE_ACCOUNT_ID:    this.env.CLOUDFLARE_ACCOUNT_ID    ?? null,
+      // OpenAI-compatible commercial vendor keys (openai / groq / deepseek / …).
+      // Passed straight through so an explicit `<vendor>/<id>` pin (e.g. from the
+      // dataset wizard or model picker) reaches the vendor via the SAME dispatch
+      // machinery. Each is autoRoute:false, so an unbound key just means that
+      // vendor is skipped — it never affects the default FREE/PRO cascade. The
+      // list is derived from `OPENAI_COMPATIBLE_VENDOR_KEYS` so it can't drift
+      // from the registered vendors.
+      ...passthroughVendorKeys(this.env),
     };
   }
 

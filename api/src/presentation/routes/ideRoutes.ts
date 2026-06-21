@@ -4,8 +4,10 @@
  */
 import { Hono } from 'hono';
 import { neon } from '@neondatabase/serverless';
-import type { HonoEnv } from '../../env';
+import type { Env, HonoEnv } from '../../env';
 import { authMiddleware } from '../middleware/authMiddleware';
+import { invalidateCached } from '../../infrastructure/cache/readThroughCache';
+import { PUBLIC_LIST_CACHE_KEY } from './workforceRoutes';
 import {
   ideProxy,
   type ChatCompletionRequest,
@@ -619,6 +621,10 @@ export function createIdeRoutes(): Hono<HonoEnv> {
         ${packageVersion}, ${mambaStateJson}::jsonb, ${inferenceMode})
     `;
     const [row] = await getSql(c)`SELECT * FROM ide_agents WHERE id = ${id}`;
+    // Publishing a trained agent (status 'active', carries its eval_score) makes it
+    // appear in the public workforce registry — drop the cached listing so the new
+    // agent and its evaluation score show up immediately.
+    await invalidateCached(c.env as Env, PUBLIC_LIST_CACHE_KEY);
     return c.json(row, 201);
   });
 

@@ -3,7 +3,9 @@
  *
  * Manages third-party integration credentials (GitHub, Jira, Bitbucket,
  * Confluence, Freshservice).  Credentials are encrypted at rest using
- * AES-256-GCM with a tenant-derived key.
+ * AES-256-GCM with a PER-TENANT derived key (the base secret is folded with the
+ * tenant id into the PBKDF2 salt; new rows are written as `v2:` ciphertext, legacy
+ * global-key rows still decrypt — see application/integrations/credentialCrypto).
  *
  * POST   /api/integrations           Create credential     (MANAGER+)
  * GET    /api/integrations           List credentials      (MANAGER+)
@@ -176,7 +178,7 @@ export function createIntegrationRoutes(db: Db, encryptionSecret: string): Hono<
       projectId = proj.id;
     }
 
-    const { enc, iv } = await encryptCredentials(body.credentials, encryptionSecret);
+    const { enc, iv } = await encryptCredentials(body.credentials, encryptionSecret, tenantId);
 
     const [row] = await db
       .insert(integrationCredentials)
@@ -249,7 +251,7 @@ export function createIntegrationRoutes(db: Db, encryptionSecret: string): Hono<
     if (!row) return c.json({ error: 'Integration not found' }, 404);
 
     // Decrypt and mask for display
-    const creds = await decryptCredentials(row.credentialsEnc, row.iv, encryptionSecret);
+    const creds = await decryptCredentials(row.credentialsEnc, row.iv, encryptionSecret, tenantId);
     const maskedCreds: Record<string, string> = {};
     if (creds) {
       for (const [k, v] of Object.entries(creds)) {
@@ -282,7 +284,7 @@ export function createIntegrationRoutes(db: Db, encryptionSecret: string): Hono<
     let iv = existing.iv;
     const rotated = !!body.credentials;
     if (body.credentials) {
-      const encrypted = await encryptCredentials(body.credentials, encryptionSecret);
+      const encrypted = await encryptCredentials(body.credentials, encryptionSecret, tenantId);
       credentialsEnc = encrypted.enc;
       iv = encrypted.iv;
     }
@@ -342,7 +344,7 @@ export function createIntegrationRoutes(db: Db, encryptionSecret: string): Hono<
       .where(and(eq(integrationCredentials.id, id), eq(integrationCredentials.tenantId, tenantId)));
     if (!row) return c.json({ error: 'Integration not found' }, 404);
 
-    const creds = await decryptCredentials(row.credentialsEnc, row.iv, encryptionSecret);
+    const creds = await decryptCredentials(row.credentialsEnc, row.iv, encryptionSecret, tenantId);
     if (!creds) return c.json({ error: 'Failed to decrypt credentials' }, 500);
 
     let result: { ok: boolean; message: string };

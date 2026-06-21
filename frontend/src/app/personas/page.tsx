@@ -8,8 +8,10 @@ import {
   artifactAssignments,
   marketplaceStats,
   agentHosts,
+  personasApi,
   type ArtifactAssignment,
   type ArtifactStats,
+  type PublicPersona,
 } from '@/lib/builderforceApi';
 import { BUILTIN_PERSONAS, userPersonasKey, type Persona, type UserPersona } from '@/lib/marketplaceData';
 import ArtifactAssigner from '@/components/ArtifactAssigner';
@@ -33,6 +35,25 @@ function saveUserPersonas(tenantId: string, personas: UserPersona[]) {
   localStorage.setItem(userPersonasKey(tenantId), JSON.stringify(personas));
 }
 
+/** Map a server-published persona into the marketplace display shape (`Persona`). */
+function publicToPersona(p: PublicPersona): Persona {
+  return {
+    name: p.slug || p.name,
+    description: p.description ?? '',
+    voice: p.voice ?? '—',
+    perspective: p.perspective ?? '—',
+    decisionStyle: p.decisionStyle ?? '—',
+    outputPrefix: p.outputPrefix ?? '',
+    capabilities: p.capabilities ?? [],
+    source: 'user-global',
+    tags: p.tags ?? [],
+    author: p.author ?? 'Community',
+    image: p.image,
+    likes: p.likes,
+    downloads: p.downloads,
+  };
+}
+
 export default function PersonasPage() {
   const { tenant } = useAuth();
   const tenantId = tenant?.id ?? '';
@@ -46,6 +67,10 @@ export default function PersonasPage() {
   const [error, setError] = useState('');
   const [assigned, setAssigned] = useState<ArtifactAssignment[]>([]);
   const [userPersonas, setUserPersonas] = useState<UserPersona[]>([]);
+  // Public personas from the server registry (GET /api/personas/public). Empty on
+  // an older backend; the builtins are always shown so the tab is never blank.
+  const [publicPersonas, setPublicPersonas] = useState<Persona[]>([]);
+  const [publishingId, setPublishingId] = useState<string | null>(null);
   const [stats, setStats] = useState<Record<string, ArtifactStats>>({});
   const [hasAgentHosts, setHasAgentHosts] = useState(true);
   const [installedSlugs, setInstalledSlugs] = useState<Set<string>>(new Set());
@@ -67,14 +92,20 @@ export default function PersonasPage() {
     setLoading(true);
     setError('');
     try {
-      const [all, agentHostList] = await Promise.all([
+      const [all, agentHostList, pub] = await Promise.all([
         tenantNum ? artifactAssignments.list('tenant', tenantNum, 'persona').catch(() => []) : [],
         agentHosts.list().catch(() => []),
+        // Public registry is best-effort: [] on 404/older backend so builtins still render.
+        personasApi.listPublic().catch(() => [] as PublicPersona[]),
       ]);
       setAssigned(all);
       setHasAgentHosts(agentHostList.length > 0);
       setInstalledSlugs(new Set(all.map((a) => a.artifactSlug)));
-      const slugs = BUILTIN_PERSONAS.map((p) => p.name);
+      // Server personas first, then builtins not already present (dedup by slug/name).
+      const serverPersonas = pub.map(publicToPersona);
+      const serverSlugs = new Set(serverPersonas.map((p) => p.name));
+      setPublicPersonas(serverPersonas);
+      const slugs = [...serverSlugs, ...BUILTIN_PERSONAS.map((p) => p.name).filter((n) => !serverSlugs.has(n))];
       if (slugs.length > 0) {
         const s = await marketplaceStats.getStats('persona', slugs).catch(() => ({}));
         setStats(s);
@@ -169,13 +200,45 @@ export default function PersonasPage() {
     saveUserPersonas(tenantId, next);
   };
 
-  const toggleShare = (id: string) => {
-    const next = userPersonas.map((p) => (p.id === id ? { ...p, shared: !p.shared } : p));
-    setUserPersonas(next);
-    saveUserPersonas(tenantId, next);
+  /** Publish a local draft persona to the public server registry (POST /api/personas),
+   *  then refresh so it appears in the Marketplace tab. Also flips the local `shared`
+   *  flag so the draft layer reflects the published state. Degrades gracefully:
+   *  errors surface in the page banner and leave the draft intact. */
+  const publishPersona = async (p: UserPersona) => {
+    setPublishingId(p.id);
+    setError('');
+    try {
+      await personasApi.publish({
+        name: p.name,
+        slug: p.slug,
+        description: p.description,
+        voice: p.voice,
+        perspective: p.perspective,
+        decisionStyle: p.decisionStyle,
+        outputPrefix: p.outputPrefix,
+        capabilities: p.capabilities,
+        tags: p.tags,
+        image: p.image,
+      });
+      const next = userPersonas.map((u) => (u.id === p.id ? { ...u, shared: true } : u));
+      setUserPersonas(next);
+      saveUserPersonas(tenantId, next);
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Publish failed');
+    } finally {
+      setPublishingId(null);
+    }
   };
 
-  const filteredMarketplace = BUILTIN_PERSONAS.filter(
+  // Marketplace listing = server registry personas + builtins not already published.
+  const serverSlugs = new Set(publicPersonas.map((p) => p.name));
+  const marketplacePersonas: Persona[] = [
+    ...publicPersonas,
+    ...BUILTIN_PERSONAS.filter((p) => !serverSlugs.has(p.name)),
+  ];
+
+  const filteredMarketplace = marketplacePersonas.filter(
     (p) =>
       !search ||
       p.name.toLowerCase().includes(search.toLowerCase()) ||
@@ -218,7 +281,7 @@ export default function PersonasPage() {
           Assigned ({assigned.length})
         </button>
         <button type="button" className={`btn ${tab === 'marketplace' ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setTab('marketplace')}>
-          Marketplace ({BUILTIN_PERSONAS.length})
+          Marketplace ({marketplacePersonas.length})
         </button>
         <button type="button" className={`btn ${tab === 'my-personas' ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setTab('my-personas')}>
           My Personas ({userPersonas.length})
@@ -270,9 +333,9 @@ export default function PersonasPage() {
                     </div>
                   </div>
                   {p.description && <div style={{ fontSize: 12, color: 'var(--muted)', lineHeight: 1.5, margin: '8px 0' }}>{p.description}</div>}
-                  <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
-                    <button type="button" className={`btn btn-sm ${p.shared ? 'btn-secondary' : 'btn-primary'}`} onClick={() => toggleShare(p.id)}>
-                      {p.shared ? 'Unshare' : 'Share to Marketplace'}
+                  <div style={{ display: 'flex', gap: 6, marginTop: 8, flexWrap: 'wrap' }}>
+                    <button type="button" className="btn btn-primary btn-sm" disabled={publishingId === p.id} onClick={() => publishPersona(p)}>
+                      {publishingId === p.id ? 'Publishing…' : p.shared ? 'Re-publish' : 'Publish to Registry'}
                     </button>
                     <button type="button" className="btn btn-danger btn-sm" onClick={() => deleteUserPersona(p.id)}>Delete</button>
                     <ArtifactAssigner artifactType="persona" artifactSlug={p.slug} artifactName={p.name} />
@@ -307,7 +370,7 @@ export default function PersonasPage() {
                     </td>
                     <td style={tdStyle}>
                       <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
-                        <button type="button" className={`btn btn-sm ${p.shared ? 'btn-secondary' : 'btn-primary'}`} onClick={() => toggleShare(p.id)}>{p.shared ? 'Unshare' : 'Share'}</button>
+                        <button type="button" className="btn btn-primary btn-sm" disabled={publishingId === p.id} onClick={() => publishPersona(p)}>{publishingId === p.id ? 'Publishing…' : p.shared ? 'Re-publish' : 'Publish'}</button>
                         <button type="button" className="btn btn-danger btn-sm" onClick={() => deleteUserPersona(p.id)}>Delete</button>
                         <ArtifactAssigner artifactType="persona" artifactSlug={p.slug} artifactName={p.name} />
                       </div>
