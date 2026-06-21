@@ -107,7 +107,7 @@ builderforce onboard --install-daemon</code></pre>
       <section>
         <h2>Built By 👤</h2>
         <p>
-          <a href="https://myvideoresu.me/resumes/seanhogg" target="_blank" rel="noopener">Sean Hogg</a> — Developer,
+          <a href="https://hired.video/resumes/seanhogg" target="_blank" rel="noopener">Sean Hogg</a> — Developer,
           architect, and maintainer of BuilderForce Agents and Builderforce.ai.{' '}
           <a href="https://github.com/SeanHogg" target="_blank" rel="noopener">GitHub</a> ·{' '}
           <a href="/agents/contact">Contact</a>

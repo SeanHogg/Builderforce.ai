@@ -12,7 +12,7 @@ export const BRAND = {
   legalName: 'Builderforce',
   tagline: 'Your AI CTO, CIO & Security Officer',
   url: 'https://builderforce.ai',
-  founder: { name: 'Sean Hogg', url: 'https://myvideoresu.me/resumes/seanhogg' },
+  founder: { name: 'Sean Hogg', url: 'https://hired.video/resumes/seanhogg' },
   year: 2026,
   ogImage: '/og-image.png',
   ogImageWidth: 1200,
