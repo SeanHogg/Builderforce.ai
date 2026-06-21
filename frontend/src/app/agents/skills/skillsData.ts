@@ -38,9 +38,46 @@ export const BUILTIN_SKILLS: Skill[] = [
 const REGISTRY_URL = process.env.NEXT_PUBLIC_AUTH_API_URL || 'https://api.builderforce.ai';
 
 /**
+ * Shape of a row from `GET /marketplace/skills` (snake_case, author split
+ * across user columns). Mapped to the camelCase `Skill` the UI consumes.
+ */
+interface RegistrySkillRow {
+  id?: string | number;
+  slug?: string;
+  name?: string;
+  description?: string;
+  category?: string;
+  tags?: string[];
+  likes?: number;
+  downloads?: number;
+  icon_url?: string;
+  created_at?: string;
+  author_display_name?: string;
+  author_username?: string;
+}
+
+function mapRegistrySkill(r: RegistrySkillRow): Skill {
+  return {
+    // Route on the slug so the listing link resolves to the detail page.
+    id: r.slug ?? String(r.id ?? ''),
+    name: r.name ?? r.slug ?? 'Untitled skill',
+    author: r.author_display_name || r.author_username || 'Community',
+    description: r.description ?? '',
+    category: r.category,
+    likes: r.likes,
+    downloads: r.downloads,
+    tags: r.tags,
+    image: r.icon_url,
+    createdAt: r.created_at,
+  };
+}
+
+/**
  * Fetch the skills catalog from the marketplace registry, falling back to the
  * built-in set when the registry is unavailable or empty. Shared by the list
- * and detail pages so both resolve the same slugs.
+ * and detail pages so both resolve the same slugs. Registry rows are mapped
+ * from snake_case to the camelCase `Skill` shape (so `Newest` sort, author,
+ * and icon render correctly).
  */
 export async function fetchSkills(): Promise<Skill[]> {
   try {
@@ -50,8 +87,8 @@ export async function fetchSkills(): Promise<Skill[]> {
     });
     if (!res.ok) return BUILTIN_SKILLS;
     const body = await res.json();
-    const remote = body.skills as Skill[] | undefined;
-    return remote && remote.length > 0 ? remote : BUILTIN_SKILLS;
+    const remote = body.skills as RegistrySkillRow[] | undefined;
+    return remote && remote.length > 0 ? remote.map(mapRegistrySkill) : BUILTIN_SKILLS;
   } catch {
     return BUILTIN_SKILLS;
   }

@@ -17,13 +17,23 @@ export interface Skill {
   downloads?: number;
   tags?: string[];
   image?: string;
+  /** ISO timestamp of when the skill was published, if the registry supplies it. */
+  createdAt?: string;
 }
 
 type SortKey = 'trending' | 'newest' | 'popular' | 'downloads';
 
+/** Parse a skill's publish date to an epoch ms, or null when absent/invalid. */
+function publishedAt(s: Skill): number | null {
+  if (!s.createdAt) return null;
+  const t = Date.parse(s.createdAt);
+  return Number.isNaN(t) ? null : t;
+}
+
 function score(s: Skill, sort: SortKey): number {
   if (sort === 'popular') return s.likes ?? 0;
   if (sort === 'downloads') return s.downloads ?? 0;
+  if (sort === 'newest') return publishedAt(s) ?? 0;
   // trending = likes + downloads/4 (default)
   return (s.likes ?? 0) + (s.downloads ?? 0) / 4;
 }
@@ -38,6 +48,10 @@ export default function SkillsBrowser({ skills }: { skills: Skill[] }) {
     () => Array.from(new Set(skills.map((s) => s.category).filter((c): c is string => Boolean(c)))).sort(),
     [skills]
   );
+
+  // Only offer "Newest" when the catalog actually carries publish dates —
+  // otherwise the option would silently behave like "Trending" (a dead sort).
+  const hasDates = useMemo(() => skills.some((s) => publishedAt(s) !== null), [skills]);
 
   const visible = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -91,7 +105,7 @@ export default function SkillsBrowser({ skills }: { skills: Skill[] }) {
           <label htmlFor="cc-sort">Sort</label>
           <Select id="cc-sort" value={sort} onChange={(e) => setSort(e.target.value as SortKey)}>
             <option value="trending">Trending</option>
-            <option value="newest">Newest</option>
+            {hasDates && <option value="newest">Newest</option>}
             <option value="popular">Most Popular</option>
             <option value="downloads">Most Downloaded</option>
           </Select>

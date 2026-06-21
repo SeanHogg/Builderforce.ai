@@ -67,18 +67,6 @@ export const tenantRoleEnum = pgEnum('tenant_role', [
   'owner', 'manager', 'developer', 'viewer',
 ]);
 
-export const tenantPlanEnum = pgEnum('tenant_plan', [
-  'free', 'pro', 'teams',
-]);
-
-export const tenantBillingCycleEnum = pgEnum('tenant_billing_cycle', [
-  'monthly', 'yearly',
-]);
-
-export const tenantBillingStatusEnum = pgEnum('tenant_billing_status', [
-  'none', 'pending', 'active', 'trialing', 'past_due', 'cancelled',
-]);
-
 // Segment tier (see README "Segment tier"): the isolation level between tenant
 // and entity for tenants that are themselves multi-tenant.
 export const segmentStatusEnum = pgEnum('segment_status', [
@@ -593,9 +581,14 @@ export const tenants = pgTable('tenants', {
   slug:                   varchar('slug', { length: 255 }).notNull().unique(),
   status:                 tenantStatusEnum('status').notNull().default('active'),
   defaultAgentHostId:          integer('default_agent_host_id'),
-  plan:                   tenantPlanEnum('plan').notNull().default('free'),
-  billingCycle:           tenantBillingCycleEnum('billing_cycle'),
-  billingStatus:          tenantBillingStatusEnum('billing_status').notNull().default('none'),
+  // plan / billingCycle / billingStatus are plain VARCHAR(16) columns in the DB
+  // (added in migration 0008), NOT Postgres enums. They are typed as string
+  // unions here, not pgEnum, so the schema matches reality — declaring them as
+  // pgEnum previously implied a `tenant_*` enum type that was never created,
+  // which broke migration 0204 (ALTER TYPE on a non-existent type).
+  plan:                   varchar('plan', { length: 16 }).notNull().default('free').$type<'free' | 'pro' | 'teams'>(),
+  billingCycle:           varchar('billing_cycle', { length: 16 }).$type<'monthly' | 'yearly'>(),
+  billingStatus:          varchar('billing_status', { length: 16 }).notNull().default('none').$type<'none' | 'pending' | 'active' | 'trialing' | 'past_due' | 'cancelled'>(),
   billingEmail:           varchar('billing_email', { length: 255 }),
   billingPaymentBrand:    varchar('billing_payment_brand', { length: 50 }),
   billingPaymentLast4:    varchar('billing_payment_last4', { length: 4 }),

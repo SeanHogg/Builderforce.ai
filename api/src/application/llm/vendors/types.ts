@@ -235,6 +235,18 @@ export interface VendorModule {
    * removing it from the catalog, so explicit `ollama/<id>` pins still resolve.
    */
   autoRoute?: boolean;
+  /**
+   * Per-vendor JSON-Schema dialect compatibility. When set, the gateway strips
+   * `stripKeywords` from a consumer-supplied `response_format.json_schema.schema`
+   * before forwarding to this vendor — because the vendor's strict-mode validator
+   * rejects those draft-07 keywords with a 400 (e.g. Cerebras rejects
+   * `maxLength`/`format`/`pattern`/…). Absent = permissive vendor (strip nothing).
+   *
+   * This replaces the old hardcoded `STRICT_VENDORS`/`STRIPPED_KEYWORDS` literals
+   * in `jsonSchemaSanitize.ts` — a stricter future vendor declares its own set
+   * here instead of editing the sanitizer (see jsonSchemaSanitize.ts).
+   */
+  schemaDialect?: { stripKeywords: readonly string[] };
 }
 
 export type ResponseParser = (raw: unknown) => {

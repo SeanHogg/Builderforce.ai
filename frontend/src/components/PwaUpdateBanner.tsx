@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { PwaToast, PwaToastDismissButton, PwaToastPrimaryButton, PwaToastText } from './PwaToast';
+import { usePwaToastSlot } from './pwaToastStack';
 
 /** Seconds before an available update auto-applies if the user doesn't act. */
 const AUTORELOAD_SECONDS = 60;
@@ -123,6 +124,10 @@ export function PwaUpdateBanner() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [waitingSw]);
 
+  // Register in the shared bottom-center stack while the banner is live so the
+  // install prompt offsets above it instead of overlapping (slot 0 = bottom).
+  const slot = usePwaToastSlot('update', waitingSw != null);
+
   if (!waitingSw) return null;
 
   const dismiss = () => {
@@ -131,7 +136,7 @@ export function PwaUpdateBanner() {
   };
 
   return (
-    <PwaToast>
+    <PwaToast slot={slot}>
       <PwaToastText>A new version is ready — updating in {secondsLeft}s.</PwaToastText>
       <PwaToastPrimaryButton onClick={applyUpdate}>Update now</PwaToastPrimaryButton>
       <PwaToastDismissButton onClick={dismiss} />
