@@ -246,3 +246,54 @@ describe('ImageProxyService — FREE cap enforcement', () => {
     expect(fluxCalls).toBe(1);
   });
 });
+
+// ---------------------------------------------------------------------------
+// Funded paid-overflow classification + cap (migration 0130, image side)
+// ---------------------------------------------------------------------------
+
+describe('ImageProxyService — paid-overflow classification & cap', () => {
+  it('marks paidOverflow=false when a FREE (Together) model serves the request', async () => {
+    installFetchRouter({
+      [TOGETHER_ENDPOINT]: () => new Response(JSON.stringify({
+        created: 1, data: [{ url: 'https://together/img.png' }],
+      }), { status: 200 }),
+    });
+    const result = await new ImageProxyService(env).generate({ prompt: 'a duck' });
+    expect(result.resolvedVendor).toBe('together');
+    expect(result.paidOverflow).toBe(false);
+  });
+
+  it('marks paidOverflow=true when the funded premium fallback (FluxAPI) serves it', async () => {
+    installFetchRouter({
+      [TOGETHER_ENDPOINT]: () => new Response('{"error":"throttle"}', { status: 429 }),
+      [FLUXAPI_ENDPOINT]:  () => new Response(JSON.stringify({ data: { url: 'https://flux/r.jpg' } }), { status: 200 }),
+    });
+    const result = await new ImageProxyService(env).generate({ prompt: 'a duck' });
+    expect(result.resolvedModel).toBe('fluxapi/flux-kontext-pro');
+    expect(result.paidOverflow).toBe(true);
+  });
+
+  it('disablePaidOverflow drops the funded fallback — a saturated free pool exhausts instead of billing us', async () => {
+    let fluxCalls = 0;
+    installFetchRouter({
+      [TOGETHER_ENDPOINT]: () => new Response('{"error":"429"}', { status: 429 }),
+      [FLUXAPI_ENDPOINT]:  () => { fluxCalls++; return new Response(JSON.stringify({ data: { url: 'x' } }), { status: 200 }); },
+    });
+    const proxy = new ImageProxyService(env, { disablePaidOverflow: true });
+    const result = await proxy.generate({ prompt: 'a duck' });
+    expect(fluxCalls).toBe(0);               // funded fallback never attempted
+    expect(result.body.data).toEqual([]);    // cascade exhausted on free-only
+    expect(result.paidOverflow).toBe(false);
+  });
+
+  it('imageProxyForPlan threads disablePaidOverflow into the cascade', async () => {
+    let fluxCalls = 0;
+    installFetchRouter({
+      [TOGETHER_ENDPOINT]: () => new Response('{"error":"429"}', { status: 429 }),
+      [FLUXAPI_ENDPOINT]:  () => { fluxCalls++; return new Response(JSON.stringify({ data: { url: 'x' } }), { status: 200 }); },
+    });
+    const proxy = imageProxyForPlan(env, 'free', false, { disablePaidOverflow: true });
+    await proxy.generate({ prompt: 'a duck' });
+    expect(fluxCalls).toBe(0);
+  });
+});

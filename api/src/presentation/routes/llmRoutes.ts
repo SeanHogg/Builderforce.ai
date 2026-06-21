@@ -1690,7 +1690,12 @@ export function createLlmRoutes(): Hono<HonoEnv> {
     const idempotencyKey = c.req.header('Idempotency-Key') ?? null;
 
     const productName = imageProductNameForPlan(access.effectivePlan, access.premiumOverride);
-    const service = imageProxyForPlan(c.env, access.effectivePlan, access.premiumOverride);
+    // Same per-tenant funded-overflow ceiling as the chat path (migration 0130):
+    // once a tenant exhausts its daily paid-overflow cap, drop the always-on
+    // premium FluxAPI fallback so the free pool still serves but our funded key
+    // stops. Reuses the shared `isPaidOverflowExhausted` gate.
+    const disablePaidOverflow = await isPaidOverflowExhausted(c, access);
+    const service = imageProxyForPlan(c.env, access.effectivePlan, access.premiumOverride, { disablePaidOverflow });
     const result = await service.generate(body);
 
     // Image accounting: charge a flat per-image token estimate against the
@@ -1711,6 +1716,7 @@ export function createLlmRoutes(): Hono<HonoEnv> {
       usage: { promptTokens: 0, completionTokens: 0, totalTokens: billedTokens },
       metadata: callerMetadata, idempotencyKey, useCase: callerUseCase,
       tenantApiKeyId: access.tenantApiKeyId, attribution: { agentHostId: access.agentHostId },
+      paidOverflow: result.paidOverflow,
     });
 
     if (cascadeExhausted) {
