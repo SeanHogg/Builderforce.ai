@@ -73,6 +73,68 @@ function parseModelJson(content: string): { spec?: string; steps?: QaStep[] } | 
   }
 }
 
+/**
+ * Static validation of a model-authored spec before it is ever written to disk
+ * and executed in CI [1067]. A poisoned/hallucinated spec (or a compromised QA
+ * token) could otherwise run arbitrary code in the runner. We do NOT trust the
+ * generator prompt alone — we reject any spec that:
+ *   - imports anything other than '@playwright/test'
+ *   - references Node/host capabilities (fs, child_process, process, require,
+ *     dynamic import(), eval, Function constructor, fetch/XHR/WebSocket, env)
+ *   - is implausibly large (a spec that drives a browser is small).
+ * A rejected spec causes the generator to fall back to the deterministic
+ * template, so the pipeline still produces a safe runnable test.
+ *
+ * This is an allowlist on *imports* plus a denylist on *escape hatches* — a
+ * pragmatic AST-free guard that's cheap to run in a Worker. It does not attempt
+ * to prove the spec only drives the browser, but it removes every known vector
+ * for arbitrary code execution / data exfiltration from the CI runner.
+ */
+const FORBIDDEN_SPEC_PATTERNS: ReadonlyArray<{ re: RegExp; reason: string }> = [
+  { re: /\brequire\s*\(/, reason: 'require()' },
+  { re: /\bimport\s*\(/, reason: 'dynamic import()' },
+  { re: /\beval\s*\(/, reason: 'eval()' },
+  { re: /\bnew\s+Function\b/, reason: 'Function constructor' },
+  { re: /\bprocess\b/, reason: 'process access' },
+  { re: /\bchild_process\b/, reason: 'child_process' },
+  { re: /\bnode:[a-z]/i, reason: 'node: builtin import' },
+  { re: /\bfrom\s+['"]fs['"]/, reason: 'fs import' },
+  { re: /\bglobalThis\b/, reason: 'globalThis' },
+  { re: /\b(fetch|XMLHttpRequest|WebSocket|EventSource)\s*\(/, reason: 'raw network call' },
+  { re: /\bpage\.request\b/, reason: 'page.request (raw HTTP)' },
+  { re: /\brequest\.(get|post|put|delete|patch|fetch)\b/, reason: 'APIRequestContext (raw HTTP)' },
+  { re: /\bpage\.evaluate\w*\s*\(/, reason: 'page.evaluate (arbitrary in-page JS)' },
+  { re: /\baddInitScript\b/, reason: 'addInitScript (arbitrary in-page JS)' },
+  { re: /\bexposeFunction\b/, reason: 'exposeFunction' },
+];
+
+/** Only these top-level imports are allowed in a generated spec. */
+const SPEC_IMPORT_RE = /\bimport\b[\s\S]*?\bfrom\s+['"]([^'"]+)['"]/g;
+const SPEC_MAX_LEN = 16_000;
+
+export interface SpecValidation {
+  ok: boolean;
+  reason?: string;
+}
+
+export function validateSpec(spec: string): SpecValidation {
+  if (typeof spec !== 'string' || spec.length === 0) return { ok: false, reason: 'empty' };
+  if (spec.length > SPEC_MAX_LEN) return { ok: false, reason: `spec too large (${spec.length} > ${SPEC_MAX_LEN})` };
+  if (!spec.includes('@playwright/test')) return { ok: false, reason: 'missing @playwright/test import' };
+
+  // Allowlist imports: only '@playwright/test' may be imported.
+  let m: RegExpExecArray | null;
+  SPEC_IMPORT_RE.lastIndex = 0;
+  while ((m = SPEC_IMPORT_RE.exec(spec)) !== null) {
+    if (m[1] !== '@playwright/test') return { ok: false, reason: `disallowed import '${m[1]}'` };
+  }
+
+  for (const { re, reason } of FORBIDDEN_SPEC_PATTERNS) {
+    if (re.test(spec)) return { ok: false, reason };
+  }
+  return { ok: true };
+}
+
 /** Deterministic template — always produces a valid, runnable smoke spec. */
 export function fallbackSpec(input: GenerateInput): string {
   const title = input.name.replace(/'/g, "\\'");
@@ -154,10 +216,16 @@ export class QaGeneratorService {
       const raw = await result.response.json().catch(() => null);
       const content = extractContent(raw);
       const parsed = content ? parseModelJson(content) : null;
-      const spec = typeof parsed?.spec === 'string' && parsed.spec.includes('@playwright/test')
-        ? parsed.spec
-        : fallbackSpec(input);
-      const steps = Array.isArray(parsed?.steps) && parsed.steps.length > 0 ? parsed.steps : input.steps;
+      // Validate the model output against the import allowlist + escape-hatch
+      // denylist before accepting it [1067]. Any failure → deterministic
+      // fallback, so a poisoned/hallucinated spec never reaches the CI runner.
+      const candidate = typeof parsed?.spec === 'string' ? parsed.spec : '';
+      const validation = validateSpec(candidate);
+      const spec = validation.ok ? candidate : fallbackSpec(input);
+      // Only trust the model's steps if its spec was trusted.
+      const steps = validation.ok && Array.isArray(parsed?.steps) && parsed.steps.length > 0
+        ? parsed.steps
+        : input.steps;
       return { spec, steps, model: result.resolvedModel ?? null };
     } catch {
       return { spec: fallbackSpec(input), steps: input.steps, model: null };

@@ -18,6 +18,7 @@
  */
 
 import {
+  askHumanTool,
   deleteFileTool,
   editFileTool,
   listFilesTool,
@@ -28,10 +29,11 @@ import { registryToAgentTools } from "../builderforce/agent-loop/tool-adapter.js
 import type { AnyAgentTool } from "./coding-tools.types.js";
 import { buildNodeCapabilityProvider } from "./node-capability-provider.js";
 
-/** Shared file-subset definitions converged on-prem this pass (read/exec/process/search
- *  stay native — see the module note). One source of truth: the cloud loop runs these
- *  exact objects. */
-const CONVERGED_FILE_TOOLS = [writeFileTool, editFileTool, deleteFileTool, listFilesTool] as const;
+/** Shared definitions converged on-prem this pass (read/exec/process/search stay native —
+ *  see the module note). One source of truth: the cloud loop runs these exact objects.
+ *  `ask_human` (cap `human`) lets the on-prem coding agent pause for a human through the
+ *  SAME shared tool the cloud loop uses — on-prem human-in-the-loop parity. */
+const CONVERGED_FILE_TOOLS = [writeFileTool, editFileTool, deleteFileTool, listFilesTool, askHumanTool] as const;
 
 /** The registry is workspace-INDEPENDENT (the tool defs are static), so it is built once
  *  at module load — only the disk provider is per-session (it closes over `workspaceRoot`). */
@@ -45,15 +47,23 @@ const NATIVE_NAME_ALIASES: Readonly<Record<string, string>> = {
 };
 
 /** Tool names the converged set OWNS on-prem — the native loop must drop its own copies of
- *  these so there is exactly one definition (no duplicate/shadowed tool). */
+ *  these so there is exactly one definition (no duplicate/shadowed tool). `ask_human` is
+ *  additive (the coding base loop offers no human-in-the-loop tool), so it is NOT here. */
 export const CONVERGED_TOOL_NAMES: ReadonlySet<string> = new Set(["write", "edit"]);
 
 /**
- * Build the converged file tools for a non-sandboxed on-prem session, backed by a disk
+ * Build the converged tools for a non-sandboxed on-prem session, backed by a disk
  * capability provider scoped to `workspaceRoot`. Returns native `AgentTool`s ready to be
- * folded into the coding-tools pipeline.
+ * folded into the coding-tools pipeline. `requestHuman` overrides the human-in-the-loop
+ * backend (DI seam for tests); production uses the default approval gate.
  */
-export function buildConvergedFileTools(params: { workspaceRoot: string }): AnyAgentTool[] {
-  const provider = buildNodeCapabilityProvider({ workspaceRoot: params.workspaceRoot });
+export function buildConvergedFileTools(params: {
+  workspaceRoot: string;
+  requestHuman?: Parameters<typeof buildNodeCapabilityProvider>[0]["requestHuman"];
+}): AnyAgentTool[] {
+  const provider = buildNodeCapabilityProvider({
+    workspaceRoot: params.workspaceRoot,
+    requestHuman: params.requestHuman,
+  });
   return registryToAgentTools(CONVERGED_REGISTRY, provider, params.workspaceRoot, NATIVE_NAME_ALIASES);
 }

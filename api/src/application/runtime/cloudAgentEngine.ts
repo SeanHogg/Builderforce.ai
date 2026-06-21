@@ -372,7 +372,13 @@ export async function recordCloudToolEvent(
   args: {
     tenantId: number;
     cloudAgentRef?: string;
-    executionId: number;
+    /** The execution this event belongs to, or `null` for a task-scoped event
+     *  (e.g. a Done-transition `pr_opened` with no live execution). When null,
+     *  pass `sessionKey` (e.g. `task:<id>`) so the row still has a correlation key. */
+    executionId: number | null;
+    /** Override the default `exec:<id>` correlation key. Required when
+     *  `executionId` is null so the row isn't keyed `exec:null`. */
+    sessionKey?: string;
     toolName: string;
     category: string;
     toolCallId?: string;
@@ -387,7 +393,7 @@ export async function recordCloudToolEvent(
       agentHostId:  null,
       cloudAgentRef: args.cloudAgentRef ?? null,
       executionId:  args.executionId,
-      sessionKey:   `exec:${args.executionId}`,
+      sessionKey:   args.sessionKey ?? (args.executionId != null ? `exec:${args.executionId}` : null),
       toolCallId:   args.toolCallId ?? null,
       toolName:     args.toolName,
       category:     args.category,

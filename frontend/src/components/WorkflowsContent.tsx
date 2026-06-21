@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
+import { useBrainDataRefresh } from '@/lib/brain/useBrainDataRefresh';
 import {
   workflows,
   workflowDefinitions,
@@ -236,6 +237,9 @@ export function WorkflowsContent({ projectId }: WorkflowsContentProps) {
 
   useEffect(() => { load(); }, [load]);
   useEffect(() => { fetchProjects().then(setProjectList).catch(() => {}); }, []);
+  // Refetch when the Brain creates/updates/removes a workflow definition so this
+  // list reflects the change live instead of going stale until a manual reload.
+  useBrainDataRefresh(['workflows'], load);
 
   const visibleDefs = projectId != null ? defs.filter((d) => d.projectId === projectId) : defs;
 

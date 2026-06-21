@@ -45,6 +45,7 @@ import {
   dashboardApi, llmApi, providerKeysApi, auditApi, dispatchApi,
   agentHostConfigApi, agentHostProjectsApi, chatSessionsApi, usageApi,
 } from '@/lib/builderforceApi';
+import type { Task } from '@/lib/builderforceApi';
 import type { BrainAction } from '@/lib/brain';
 import { dispatchBrainDataChanged } from './brainDataEvent';
 
@@ -234,6 +235,45 @@ async function listTaskAssignees(): Promise<TaskAssignee[]> {
   ];
 }
 
+/** Slim task projection sent to the model by tasks.list — the at-a-glance fields
+ *  only, omitting the multi-KB `description` body (fetch it via tasks.get). */
+export interface SlimTask {
+  id: number;
+  projectId: number;
+  key: string;
+  title: string;
+  status: string;
+  priority: Task['priority'];
+  taskType: Task['taskType'];
+  parentTaskId: number | null;
+  sprintId: string | null;
+  assignedUserId: string | null;
+  assignedAgentRef: string | null;
+  assignedAgentHostId: number | null;
+  githubPrUrl: string | null;
+  archived: boolean;
+}
+
+/** Project a full Task down to its {@link SlimTask} list shape. */
+export function toSlimTask(t: Task): SlimTask {
+  return {
+    id: t.id,
+    projectId: t.projectId,
+    key: t.key,
+    title: t.title,
+    status: t.status,
+    priority: t.priority,
+    taskType: t.taskType,
+    parentTaskId: t.parentTaskId,
+    sprintId: t.sprintId,
+    assignedUserId: t.assignedUserId,
+    assignedAgentRef: t.assignedAgentRef,
+    assignedAgentHostId: t.assignedAgentHostId,
+    githubPrUrl: t.githubPrUrl,
+    archived: t.archived,
+  };
+}
+
 // ---------------------------------------------------------------------------
 // The manifest. One entry per capability; run() wraps the existing client.
 // ---------------------------------------------------------------------------
@@ -262,7 +302,13 @@ export function buildPlatformCapabilities(ctx: PlatformActionContext): PlatformC
     { domain: 'project_files', method: 'delete', mutates: true, description: 'Delete a project file.', parameters: obj({ projectId: N, path: S }, ['projectId', 'path']), run: (a) => deleteFile(f(a, 'projectId'), f(a, 'path')) },
 
     // ---- Tasks (kanban) --------------------------------------------------
-    { domain: 'tasks', method: 'list', mutates: false, description: 'List tasks, optionally filtered by project.', parameters: obj({ projectId: N }), run: (a) => tasksApi.list(f(a, 'projectId')) },
+    // SLIM projection: the model only needs the at-a-glance fields to reason
+    // about a backlog (id/key/title/status/priority/type/assignee/PR/archived).
+    // The full Task body — notably the multi-KB `description` — is fetched on
+    // demand via tasks.get, so a large active backlog no longer blows the
+    // context window / token budget on a single list call (a real list result
+    // was ~145k chars when every task's full body was returned verbatim).
+    { domain: 'tasks', method: 'list', mutates: false, description: 'List tasks, optionally filtered by project. Returns a SLIM projection (id, key, title, status, priority, taskType, parentTaskId, assignee, PR link, archived) — call tasks.get for a single task’s full description/body.', parameters: obj({ projectId: N }), run: async (a) => (await tasksApi.list(f(a, 'projectId'))).map(toSlimTask) },
     { domain: 'tasks', method: 'get', mutates: false, description: 'Get a task by id.', parameters: obj({ id: N }, ['id']), run: (a) => tasksApi.get(f(a, 'id')) },
     { domain: 'tasks', method: 'create', mutates: true, description: 'Create a task on a project board. Set taskType="epic" to create a planning Epic (a container for other tasks), or pass parentTaskId to nest the new task under an existing Epic. Assign it by passing exactly one of: assignedUserId (a human member), assignedAgentRef (a cloud agent, e.g. one named "Bob") or assignedAgentHostId (a self-hosted agent host). Resolve ANY assignee name — person OR agent — with tasks.assignees, which returns the whole team and tells you which id field to set (humans and agents are one team).', parameters: obj({ projectId: N, title: S, description: S, priority: { type: 'string', enum: ['low', 'medium', 'high', 'urgent'] }, dueDate: S, taskType: { type: 'string', enum: ['task', 'epic'] }, parentTaskId: N, assignedUserId: S, assignedAgentRef: S, assignedAgentHostId: N }, ['projectId', 'title']), run: (a) => tasksApi.create(a as Parameters<typeof tasksApi.create>[0]) },
     updateCap({ domain: 'tasks', method: 'update', description: "Update a task. Link it under an Epic with parentTaskId (or null to detach), reclassify with taskType ('task'|'epic'), schedule into a sprint with sprintId, or (re)assign via exactly one of assignedUserId (human member; null unassigns), assignedAgentRef (cloud agent, e.g. one named 'Bob') or assignedAgentHostId (agent host) — resolve ANY assignee name, person OR agent, with tasks.assignees, which returns the whole team and the id field to set (humans and agents are one team). Also supports title, description, status/lane, priority, dueDate, archived.", parameters: obj({ id: N, title: S, description: S, status: S, priority: S, dueDate: S, archived: B, taskType: { type: 'string', enum: ['task', 'epic'] }, parentTaskId: { type: ['number', 'null'] }, sprintId: { type: ['string', 'null'] }, assignedUserId: { type: ['string', 'null'] }, assignedAgentRef: { type: ['string', 'null'] }, assignedAgentHostId: { type: ['number', 'null'] } }, ['id']) }, (a, patch) => tasksApi.update(f(a, 'id'), patch as Parameters<typeof tasksApi.update>[1])),

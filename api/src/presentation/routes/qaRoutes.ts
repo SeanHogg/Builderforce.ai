@@ -173,7 +173,7 @@ export function createQaRoutes(db: Db): Hono<HonoEnv> {
   router.post('/flows/aggregate', requireRole(TenantRole.DEVELOPER), async (c) => {
     const tenantId  = c.get('tenantId') as number;
     const segmentId = c.get('segmentId') as string | undefined;
-    const body = await c.req.json().catch(() => ({})) as { sinceDays?: number; minRoutes?: number; maxFlows?: number; projectId?: number };
+    const body = await c.req.json().catch(() => ({})) as { sinceDays?: number; minRoutes?: number; maxFlows?: number; projectId?: number; maxEvents?: number };
     const result = await new QaFlowService(db).aggregate(tenantId, segmentId, body);
     return c.json(result);
   });

@@ -6,6 +6,11 @@ import { defineConfig } from 'vitest/config';
 // bundling) needs an explicit resolve alias here too. Points at the package source
 // (vitest transforms TS on the fly).
 export default defineConfig({
+  test: {
+    // Reset the module-global L1 read-through cache before every test so
+    // cache-backed tests are order-independent (see test/setup.ts).
+    setupFiles: ['./test/setup.ts'],
+  },
   resolve: {
     alias: {
       '@builderforce/agent-tools': fileURLToPath(

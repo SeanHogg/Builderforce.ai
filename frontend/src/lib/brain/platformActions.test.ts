@@ -6,12 +6,23 @@ vi.mock('@/lib/api', async (importOriginal) => {
   const mod = await importOriginal<typeof import('@/lib/api')>();
   return { ...mod, createProject: vi.fn().mockResolvedValue({ id: 42, name: 'Acme' }) };
 });
+// A full Task row (the list endpoint returns these); the brain tasks.list slims it.
+const FULL_TASK = {
+  id: 1, projectId: 9, key: 'ACME-1', title: 'Fix login error',
+  description: 'x'.repeat(5000), // the multi-KB body the slim projection drops
+  status: 'todo', priority: 'high', taskType: 'task', parentTaskId: null,
+  sprintId: null, assignedAgentType: null, assignedAgentHostId: null,
+  assignedAgentRef: null, assignedUserId: null, gitBranch: null, explicitRepoId: null,
+  githubPrUrl: null, githubPrNumber: null, startDate: null, dueDate: null,
+  persona: null, archived: false,
+};
+
 vi.mock('@/lib/builderforceApi', async (importOriginal) => {
   const mod = await importOriginal<typeof import('@/lib/builderforceApi')>();
-  return { ...mod, tasksApi: { ...mod.tasksApi, list: vi.fn().mockResolvedValue([{ id: 1 }]) } };
+  return { ...mod, tasksApi: { ...mod.tasksApi, list: vi.fn().mockResolvedValue([FULL_TASK]) } };
 });
 
-import { buildPlatformActions, buildPlatformCapabilities, focusDomainsForPath, type PlatformActionContext } from './platformActions';
+import { buildPlatformActions, buildPlatformCapabilities, focusDomainsForPath, toSlimTask, type PlatformActionContext } from './platformActions';
 import * as api from '@/lib/api';
 import { tasksApi, integrationsApi } from '@/lib/builderforceApi';
 
@@ -144,11 +155,14 @@ describe('dispatcher', () => {
     expect(onlyTasks.capabilities.every((c) => c.domain === 'tasks')).toBe(true);
   });
 
-  it('call_platform_capability dispatches to the wrapped client method', async () => {
+  it('call_platform_capability dispatches to the wrapped client method (slimmed)', async () => {
     const call = actionByName('call_platform_capability')!;
-    const res = await call.run({ domain: 'tasks', method: 'list', args: {} });
+    const res = (await call.run({ domain: 'tasks', method: 'list', args: {} })) as Array<Record<string, unknown>>;
     expect(tasksApi.list).toHaveBeenCalledTimes(1);
-    expect(res).toEqual([{ id: 1 }]);
+    // tasks.list returns the SLIM projection — id/key/title present, no `description`.
+    expect(res).toHaveLength(1);
+    expect(res[0]).toMatchObject({ id: 1, key: 'ACME-1', title: 'Fix login error', status: 'todo', archived: false });
+    expect(res[0]).not.toHaveProperty('description');
   });
 
   it('returns a recoverable error for an unknown capability', async () => {
@@ -217,6 +231,19 @@ describe('update actions whitelist the patch body (no blind-forward)', () => {
     } finally {
       spy.mockRestore();
     }
+  });
+});
+
+describe('toSlimTask', () => {
+  it('keeps the at-a-glance fields and drops the heavy body', () => {
+    const slim = toSlimTask(FULL_TASK as never);
+    expect(slim).toEqual({
+      id: 1, projectId: 9, key: 'ACME-1', title: 'Fix login error', status: 'todo',
+      priority: 'high', taskType: 'task', parentTaskId: null, sprintId: null,
+      assignedUserId: null, assignedAgentRef: null, assignedAgentHostId: null,
+      githubPrUrl: null, archived: false,
+    });
+    expect(slim).not.toHaveProperty('description');
   });
 });
 

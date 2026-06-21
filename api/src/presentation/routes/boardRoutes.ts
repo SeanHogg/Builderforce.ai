@@ -56,6 +56,7 @@ import {
   type AgentKind,
 } from '../../application/swimlane/resolveAssignedAgent';
 import { buildDefaultLaneRows, findOrCreateBoard } from '../../application/swimlane/findOrCreateBoard';
+import { reassignOrphanedTasksOnLaneDelete } from '../../application/swimlane/reassignOrphanedTasks';
 import {
   AgentHostStageDispatcher,
   type AgentHostRelayNamespace,
@@ -329,10 +330,30 @@ export function createBoardRoutes(db: Db): Hono<HonoEnv> {
     const tenantId = c.get('tenantId') as number;
     const boardId = c.req.param('boardId');
     const laneId = c.req.param('laneId');
+
+    // Referential integrity: tasks couple to their lane by `task.status === lane.key`
+    // with no FK, so deleting a lane orphans every task sitting in it (it keeps the
+    // now-dead status string). Reassign those tasks onto a surviving lane FIRST so
+    // none is left holding a status no lane defines. Best-effort + reported, never
+    // fatal to the delete.
+    const [lane] = await db
+      .select({ key: swimlanes.key })
+      .from(swimlanes)
+      .where(and(eq(swimlanes.id, laneId), eq(swimlanes.boardId, boardId), eq(swimlanes.tenantId, tenantId)));
+    let reassigned: { movedTo: string | null; movedCount: number } = { movedTo: null, movedCount: 0 };
+    if (lane) {
+      reassigned = await reassignOrphanedTasksOnLaneDelete(db, {
+        tenantId,
+        boardId,
+        deletedLaneId: laneId,
+        deletedLaneKey: lane.key,
+      }).catch(() => ({ movedTo: null, movedCount: 0 }));
+    }
+
     await db
       .delete(swimlanes)
       .where(and(eq(swimlanes.id, laneId), eq(swimlanes.boardId, boardId), eq(swimlanes.tenantId, tenantId)));
-    return c.body(null, 204);
+    return c.json({ ok: true, reassignedTasks: reassigned.movedCount, reassignedTo: reassigned.movedTo });
   });
 
   // ── Agent assignments (nested under a lane) ────────────────────────────────

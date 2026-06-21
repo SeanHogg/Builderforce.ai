@@ -32,6 +32,7 @@ import { isAbsolute, join, relative, resolve as resolvePath, sep } from "node:pa
 import type {
   Capability,
   CapabilityProvider,
+  HumanAskResult,
   RepoDeleteResult,
   RepoEditResult,
   RepoListResult,
@@ -40,20 +41,30 @@ import type {
   RepoWriteResult,
 } from "@builderforce/agent-tools";
 import { IGNORED_DIRS, runCodebaseSearch } from "../builderforce/shared-tools/node-code-tools.js";
+import { requestHumanInput, type HumanInputRequest, type HumanInputResult } from "../infra/approval-gate.js";
 
 /** Directories never walked by `list_files` — the SAME ignore set the on-prem searcher
  *  uses (DRY: one source in node-code-tools), as a Set for O(1) membership. */
 const LIST_IGNORED_DIRS = new Set(IGNORED_DIRS);
 const LIST_MAX_FILES = 5_000;
 
-/** The capability set an on-prem disk surface backs for the converged file tools. No
- *  `shell`/`process`/`human`/`web` here — those stay on the native tools this pass. */
+/** The file-only capability set an on-prem disk surface backs (repo read/search/write/
+ *  edit/delete). Kept as its own export for callers that want JUST the file tools. */
 export const NODE_FILE_SURFACE_CAPS: ReadonlySet<Capability> = new Set<Capability>([
   "repo.read",
   "repo.search",
   "repo.write",
   "repo.edit",
   "repo.delete",
+]);
+
+/** The full on-prem disk surface: the file caps PLUS `human` (the shared `ask_human`
+ *  tool's requirement), so an on-prem coding agent can pause for a human through the
+ *  SAME shared `ToolDefinition` the cloud loop runs — closing on-prem human-in-the-loop
+ *  parity. `shell`/`process`/`web` still stay on the native tools this pass. */
+export const NODE_SURFACE_CAPS: ReadonlySet<Capability> = new Set<Capability>([
+  ...NODE_FILE_SURFACE_CAPS,
+  "human",
 ]);
 
 /** Resolve `relPath` inside `root`, rejecting an escape (absolute outside root, or `..`
@@ -145,19 +156,60 @@ function applyEdit(
 export interface NodeProviderOptions {
   /** Absolute working-tree root; every file op is scoped inside it. */
   workspaceRoot: string;
+  /** Override for the human-in-the-loop backend (DI seam for tests). Defaults to the
+   *  process-wide {@link requestHumanInput} approval gate, which blocks until a human
+   *  answers in the Builderforce portal (or auto-answers in standalone mode). */
+  requestHuman?: (req: HumanInputRequest) => Promise<HumanInputResult>;
 }
 
 /**
- * Build the on-prem disk-backed {@link CapabilityProvider} for the converged file tools.
- * Read/list/search the working tree, write/edit/delete files in place — every path
- * guarded inside {@link NodeProviderOptions.workspaceRoot}.
+ * Build the on-prem disk-backed {@link CapabilityProvider}. Read/list/search the working
+ * tree, write/edit/delete files in place — every path guarded inside
+ * {@link NodeProviderOptions.workspaceRoot} — and escalate to a human via the shared
+ * `human` capability (so the on-prem coding agent can run the SAME shared `ask_human`
+ * tool as the cloud loop).
  */
 export function buildNodeCapabilityProvider(options: NodeProviderOptions): CapabilityProvider {
   const root = resolvePath(options.workspaceRoot);
   const escaped = (path: string) => `'${path}' is outside the workspace`;
+  const askHuman = options.requestHuman ?? requestHumanInput;
 
   return {
-    capabilities: NODE_FILE_SURFACE_CAPS,
+    capabilities: NODE_SURFACE_CAPS,
+    human: {
+      async ask(question, context): Promise<HumanAskResult> {
+        // On-prem the gate BLOCKS in-process until a human answers (or it auto-answers
+        // in standalone mode), so the run never has to pause/resume — we return the
+        // answer inline (`paused: false`). The shared `ask_human` tool maps this to a
+        // direct answer for the model, identical contract to the cloud pause path.
+        try {
+          const r = await askHuman({
+            kind: "question",
+            actionType: "clarify.requirements",
+            description: context ? `${question}\n\nContext: ${context}` : question,
+          });
+          if (r.decision === "timeout") {
+            return {
+              paused: false,
+              answer: null,
+              note: "No human responded in time. Do not assume an answer — retry, choose a safe default and say you did, or stop and explain you are blocked.",
+            };
+          }
+          if (r.decision === "rejected") {
+            return { paused: false, answer: null, note: "A human declined to answer. Adapt or stop." };
+          }
+          return {
+            paused: false,
+            answer: r.responseText ?? null,
+            note: r.responseText
+              ? "A human responded; use their answer to continue."
+              : "No human is available (standalone mode); proceed using your best judgment.",
+          };
+        } catch (err) {
+          return { paused: false, answer: null, error: err instanceof Error ? err.message : String(err) };
+        }
+      },
+    },
     repoRead: {
       async listFiles(sub): Promise<RepoListResult> {
         const scope = sub ? resolveInside(root, sub) : root;

@@ -17,7 +17,7 @@ import {
   type VendorModule,
   type VendorStreamResult,
 } from './types';
-import { sanitizeExtraBodyForVendor } from '../jsonSchemaSanitize';
+import { CEREBRAS_STRICT_KEYWORDS, sanitizeExtraBodyForVendor } from '../jsonSchemaSanitize';
 
 const ENDPOINT = 'https://openrouter.ai/api/v1/chat/completions';
 
@@ -122,6 +122,9 @@ const HEADERS = { 'HTTP-Referer': 'https://builderforce.ai' };
 export const openRouterModule: VendorModule = {
   id: 'openrouter',
   catalog: CATALOG,
+  // OpenRouter routes many `:free` ids to Cerebras as upstream, so it inherits
+  // Cerebras's strict-mode strip set (metadata-driven — see jsonSchemaSanitize.ts).
+  schemaDialect: { stripKeywords: CEREBRAS_STRICT_KEYWORDS },
   tierFor: tierForOpenRouterModel,
   apiKeyFrom(env) { return env.OPENROUTER_API_KEY ?? null; },
   async call(params: VendorCallParams): Promise<VendorCallResult> {

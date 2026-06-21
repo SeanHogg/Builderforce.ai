@@ -33,12 +33,20 @@ function emit(): void {
   for (const l of listeners) l();
 }
 
+/**
+ * Pure: given the set of currently-live toast ids, the slot index (0 = bottom-most)
+ * for `id`, or -1 when `id` is not live. Lower-priority toasts sit nearer the
+ * viewport edge (slot 0). Exported for unit testing the stacking order.
+ */
+export function computeSlot(liveIds: Iterable<PwaToastId>, id: PwaToastId): number {
+  const ordered = [...liveIds].sort((a, b) => PRIORITY[a] - PRIORITY[b]);
+  return ordered.indexOf(id);
+}
+
 /** Slot index (0 = bottom-most) for a live toast, or -1 when not registered. */
 function slotOf(id: PwaToastId): number {
   if (!active.has(id)) return -1;
-  // Order live toasts by priority and return this id's position in that order.
-  const ordered = [...active].sort((a, b) => PRIORITY[a] - PRIORITY[b]);
-  return ordered.indexOf(id);
+  return computeSlot(active, id);
 }
 
 /**

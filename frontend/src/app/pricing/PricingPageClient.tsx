@@ -89,19 +89,31 @@ const PLAN_ACCENT: Record<Plan, string> = {
  * higher tier, or nothing for the Free base tier. Decides its own visibility so
  * the column header and the table footer stay in sync from one definition.
  */
-function PlanCta({ plan, effectivePlan, onUpgrade }: {
+function PlanCta({ plan, effectivePlan, onUpgrade, isAnon }: {
   plan: Plan;
   effectivePlan: Plan;
   onUpgrade: (target: 'pro' | 'teams') => void;
+  isAnon?: boolean;
 }) {
-  if (plan === effectivePlan) {
+  // An anonymous visitor has no subscription, so never label a column as their
+  // "Current plan"; the free column links them to sign-up instead.
+  if (!isAnon && plan === effectivePlan) {
     return <span style={{ fontSize: 12, color: PLAN_ACCENT[plan], fontWeight: 600 }}>Current plan</span>;
   }
-  if (plan === 'free') return null; // Free is the base tier — downgrade lives in the Current Plan card.
+  if (plan === 'free') {
+    if (isAnon) {
+      return (
+        <a href="/register" style={{ fontSize: 12, color: PLAN_ACCENT.free, fontWeight: 600, textDecoration: 'none' }}>
+          Get started
+        </a>
+      );
+    }
+    return null; // Free is the base tier — downgrade lives in the Current Plan card.
+  }
   return (
     <button type="button" onClick={() => onUpgrade(plan)}
       style={{ padding: '7px 16px', fontSize: 12, fontWeight: 600, background: PLAN_ACCENT[plan], color: '#fff', border: 'none', borderRadius: 7, cursor: 'pointer' }}>
-      Upgrade to {plan === 'teams' ? 'Teams' : 'Pro'}
+      {isAnon ? 'Get' : 'Upgrade to'} {plan === 'teams' ? 'Teams' : 'Pro'}
     </button>
   );
 }
@@ -162,6 +174,9 @@ export default function PricingPageClient() {
 
   const isManualProvider = !sub || sub.paymentProvider === 'manual';
   const effectivePlan = sub?.effectivePlan ?? 'free';
+  // Anonymous marketing visitor (no tenant) gets sales-tone copy; a signed-in
+  // tenant gets the billing-console framing ("manage your subscription").
+  const isAnon = tenantId == null;
 
   const proMonthly  = sub?.pricing.pro.monthly ?? 29;
   const proYearly   = sub?.pricing.pro.yearly ?? 290;
@@ -248,9 +263,13 @@ export default function PricingPageClient() {
     <JsonLd data={pricingSchema()} />
     <PageContainer width="readable">
       <div style={{ marginBottom: 28 }}>
-        <h1 style={{ fontSize: 22, fontWeight: 700, color: 'var(--text-primary)', margin: 0 }}>Pricing & Billing</h1>
+        <h1 style={{ fontSize: 22, fontWeight: 700, color: 'var(--text-primary)', margin: 0 }}>
+          {isAnon ? 'Simple, transparent pricing' : 'Pricing & Billing'}
+        </h1>
         <p style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 6, marginBottom: 0 }}>
-          Manage your subscription and billing details.
+          {isAnon
+            ? 'Start free, upgrade when your agent workforce grows. No credit card to get started.'
+            : 'Manage your subscription and billing details.'}
         </p>
       </div>
 
@@ -261,6 +280,25 @@ export default function PricingPageClient() {
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
 
+          {/* Anonymous visitor: a sales-tone "get started" banner instead of the
+              billing-console "Current Plan" card (they have no subscription). */}
+          {isAnon ? (
+            <div style={{ ...cardStyle, display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 4 }}>
+                  Get started with the Free plan
+                </div>
+                <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>
+                  $0/month forever — 1 AgentHost, 5 projects, WebGPU LoRA training. Upgrade any time.
+                </div>
+              </div>
+              <a href="/register"
+                style={{ padding: '9px 18px', fontSize: 13, fontWeight: 700, background: 'var(--coral-bright, #f4726e)', color: '#fff', border: 'none', borderRadius: 8, textDecoration: 'none' }}>
+                Create free account
+              </a>
+            </div>
+          ) : (
+          <>
           {/* Current plan */}
           <div style={{ ...cardStyle, display: 'flex', alignItems: 'flex-start', gap: 16, flexWrap: 'wrap' }}>
             <div style={{ flex: 1, minWidth: 0 }}>
@@ -318,6 +356,8 @@ export default function PricingPageClient() {
               </button>
             )}
           </div>
+          </>
+          )}
 
           {/* Upgrade form — the one place we use a modal (clicking any upgrade CTA). */}
           {upgradeTarget && effectivePlan !== upgradeTarget && (
@@ -433,15 +473,15 @@ export default function PricingPageClient() {
                     <th style={{ textAlign: 'left', padding: '8px 12px', color: 'var(--text-muted)', fontWeight: 600, borderBottom: '1px solid var(--border-subtle)' }}>Feature</th>
                     <th style={{ textAlign: 'center', padding: '8px 12px', fontWeight: 700, color: 'var(--text-secondary)', borderBottom: '1px solid var(--border-subtle)', minWidth: 90 }}>
                       Free<br /><span style={{ fontWeight: 400, fontSize: 11 }}>$0</span>
-                      <div style={{ marginTop: 8 }}><PlanCta plan="free" effectivePlan={effectivePlan} onUpgrade={openUpgrade} /></div>
+                      <div style={{ marginTop: 8 }}><PlanCta plan="free" effectivePlan={effectivePlan} onUpgrade={openUpgrade} isAnon={isAnon} /></div>
                     </th>
                     <th style={{ textAlign: 'center', padding: '8px 12px', fontWeight: 700, color: 'var(--coral-bright, #f4726e)', borderBottom: '1px solid var(--border-subtle)', minWidth: 90 }}>
                       Pro<br /><span style={{ fontWeight: 400, fontSize: 11 }}>${proMonthly}/mo</span>
-                      <div style={{ marginTop: 8 }}><PlanCta plan="pro" effectivePlan={effectivePlan} onUpgrade={openUpgrade} /></div>
+                      <div style={{ marginTop: 8 }}><PlanCta plan="pro" effectivePlan={effectivePlan} onUpgrade={openUpgrade} isAnon={isAnon} /></div>
                     </th>
                     <th style={{ textAlign: 'center', padding: '8px 12px', fontWeight: 700, color: '#60a5fa', borderBottom: '1px solid var(--border-subtle)', minWidth: 110 }}>
                       Teams<br /><span style={{ fontWeight: 400, fontSize: 11 }}>${teamMonthly}/seat/mo</span>
-                      <div style={{ marginTop: 8 }}><PlanCta plan="teams" effectivePlan={effectivePlan} onUpgrade={openUpgrade} /></div>
+                      <div style={{ marginTop: 8 }}><PlanCta plan="teams" effectivePlan={effectivePlan} onUpgrade={openUpgrade} isAnon={isAnon} /></div>
                     </th>
                   </tr>
                 </thead>
@@ -459,13 +499,13 @@ export default function PricingPageClient() {
                   <tr>
                     <td style={{ padding: '14px 12px' }} />
                     <td style={{ textAlign: 'center', padding: '14px 12px' }}>
-                      <PlanCta plan="free" effectivePlan={effectivePlan} onUpgrade={openUpgrade} />
+                      <PlanCta plan="free" effectivePlan={effectivePlan} onUpgrade={openUpgrade} isAnon={isAnon} />
                     </td>
                     <td style={{ textAlign: 'center', padding: '14px 12px' }}>
-                      <PlanCta plan="pro" effectivePlan={effectivePlan} onUpgrade={openUpgrade} />
+                      <PlanCta plan="pro" effectivePlan={effectivePlan} onUpgrade={openUpgrade} isAnon={isAnon} />
                     </td>
                     <td style={{ textAlign: 'center', padding: '14px 12px' }}>
-                      <PlanCta plan="teams" effectivePlan={effectivePlan} onUpgrade={openUpgrade} />
+                      <PlanCta plan="teams" effectivePlan={effectivePlan} onUpgrade={openUpgrade} isAnon={isAnon} />
                     </td>
                   </tr>
                 </tfoot>

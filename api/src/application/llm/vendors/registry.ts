@@ -14,6 +14,7 @@ import { nvidiaModule } from './nvidia';
 import { ollamaModule } from './ollama';
 import { openRouterModule } from './openrouter';
 import { openAICompatibleModules, openAICompatibleModulesById } from './openaiCompatibleVendors';
+import { registerSchemaDialectResolver } from '../jsonSchemaSanitize';
 import {
   VendorRetryableError,
   VendorFatalError,
@@ -67,6 +68,15 @@ const MODULES_BY_ID: Record<VendorId, VendorModule> = {
   cloudflare: cloudflareModule,
   anthropic:  anthropicModule,
 };
+
+/** Wire the JSON-Schema sanitizer to read each vendor's `schemaDialect` from
+ *  the registry (metadata-driven strip sets, no hardcoded vendor-id list).
+ *  Done at module-init to avoid a circular import (the sanitizer is imported by
+ *  the vendor modules themselves). Unknown ids resolve to no strip set. */
+registerSchemaDialectResolver((vendorId: string): readonly string[] => {
+  const mod = (MODULES_BY_ID as Record<string, VendorModule | undefined>)[vendorId];
+  return mod?.schemaDialect?.stripKeywords ?? [];
+});
 
 /** Used when a model id isn't in any vendor's catalog (treats as OpenRouter). */
 const DEFAULT_VENDOR: VendorId = 'openrouter';

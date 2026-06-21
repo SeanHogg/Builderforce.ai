@@ -16,6 +16,7 @@ import { ensureTaskPrdRecord, linkSpecToTask } from '../../application/prd/taskP
 import { recordStatusTransition } from '../../application/task/taskLifecycle';
 import { RuntimeService } from '../../application/runtime/RuntimeService';
 import { dispatchCloudRunForTask } from './runtimeRoutes';
+import { recordCloudToolEvent } from '../../application/runtime/cloudAgentEngine';
 import { decideLaneAutoRun, type LaneAgentLike } from '../../application/swimlane/laneAutoRun';
 import { resolveArtifacts } from '../../application/artifact/resolveArtifacts';
 import { broadcastProjectChanged } from '../../infrastructure/relay/broadcastRoom';
@@ -112,11 +113,30 @@ async function dispatchTaskFinalize(
 
   // Cloud agent: open the PR from the already-pushed ticket branch. Skip when the
   // agent never committed (no branch) or a PR already exists (inline finalize).
+  // The duplicate-PR race (this human-drag vs. a concurrent inline run-end
+  // finalize) is closed inside openTaskPullRequest by an atomic claim (0140); the
+  // `!githubPrUrl` check below is just a cheap pre-filter, not the guard.
   if (task.assignedAgentRef && task.gitBranch && !task.githubPrUrl) {
     const e = env as unknown as { INTEGRATION_ENCRYPTION_SECRET?: string; JWT_SECRET?: string };
     const secret = e.INTEGRATION_ENCRYPTION_SECRET ?? e.JWT_SECRET ?? '';
     try {
-      await openTaskPullRequest(db, secret, tenantId, taskId, { branch: task.gitBranch, title }, env);
+      const res = await openTaskPullRequest(db, secret, tenantId, taskId, { branch: task.gitBranch, title }, env);
+      // Uniform PR observability: emit a TASK-scoped `pr_opened` event (no live
+      // execution on the Done-transition path) so a manually-completed cloud
+      // ticket shows the same timeline event as an execution-finalized one. Keyed
+      // to the agent ref so it surfaces in that agent's tool-audit timeline.
+      if (res.ok) {
+        await recordCloudToolEvent(db, {
+          tenantId,
+          cloudAgentRef: task.assignedAgentRef,
+          executionId: null,
+          sessionKey: `task:${taskId}`,
+          toolName: 'pr_opened',
+          category: 'tool',
+          detail: { taskId, branch: task.gitBranch, source: 'done-finalize' },
+          result: `opened PR #${res.number}${res.merged ? ' (auto-merged)' : ' — awaiting review'}`.slice(0, 300),
+        });
+      }
     } catch { /* best-effort — PR can be opened manually from the pushed branch */ }
   }
 }

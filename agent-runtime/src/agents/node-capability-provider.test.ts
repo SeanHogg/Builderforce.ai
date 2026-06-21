@@ -2,7 +2,7 @@ import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { buildNodeCapabilityProvider, NODE_FILE_SURFACE_CAPS } from "./node-capability-provider.js";
+import { buildNodeCapabilityProvider, NODE_FILE_SURFACE_CAPS, NODE_SURFACE_CAPS } from "./node-capability-provider.js";
 
 describe("buildNodeCapabilityProvider", () => {
   let root: string;
@@ -14,18 +14,51 @@ describe("buildNodeCapabilityProvider", () => {
     await rm(root, { recursive: true, force: true });
   });
 
-  it("advertises the file-surface capabilities", () => {
+  it("advertises the file + human capabilities", () => {
     const provider = buildNodeCapabilityProvider({ workspaceRoot: root });
-    expect(provider.capabilities).toBe(NODE_FILE_SURFACE_CAPS);
+    expect(provider.capabilities).toBe(NODE_SURFACE_CAPS);
     expect([...provider.capabilities].toSorted()).toEqual([
+      "human",
       "repo.delete",
       "repo.edit",
       "repo.read",
       "repo.search",
       "repo.write",
     ]);
+    // The file-only subset is still exported (and is a strict subset of the full set).
+    for (const cap of NODE_FILE_SURFACE_CAPS) expect(provider.capabilities.has(cap)).toBe(true);
     expect(provider.repoRead).toBeDefined();
     expect(provider.repoWrite).toBeDefined();
+    expect(provider.human).toBeDefined();
+  });
+
+  it("backs the human capability inline (paused:false), returning the human's answer", async () => {
+    const seen: Array<{ kind?: string; description: string }> = [];
+    const provider = buildNodeCapabilityProvider({
+      workspaceRoot: root,
+      requestHuman: async (req) => {
+        seen.push({ kind: req.kind, description: req.description });
+        return { decision: "answered", responseText: "use XLSX" };
+      },
+    });
+    const r = await provider.human!.ask("CSV or XLSX?", "the spec is ambiguous");
+    expect(r.paused).toBe(false);
+    expect(r.answer).toBe("use XLSX");
+    // question + context are folded into the description the human sees.
+    expect(seen[0].kind).toBe("question");
+    expect(seen[0].description).toContain("CSV or XLSX?");
+    expect(seen[0].description).toContain("the spec is ambiguous");
+  });
+
+  it("maps a human timeout to a no-answer note (never a fabricated approval)", async () => {
+    const provider = buildNodeCapabilityProvider({
+      workspaceRoot: root,
+      requestHuman: async () => ({ decision: "timeout" }),
+    });
+    const r = await provider.human!.ask("proceed?");
+    expect(r.paused).toBe(false);
+    expect(r.answer).toBeNull();
+    expect(r.note).toMatch(/No human responded/);
   });
 
   it("writes a new file (created) then overwrites it (modified) on disk", async () => {

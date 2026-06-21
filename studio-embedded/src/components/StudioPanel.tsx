@@ -32,7 +32,12 @@ import { CoherenceControls } from './CoherenceControls';
 import { VideoPreview } from './VideoPreview';
 import { ProgressFeedback } from './ProgressFeedback';
 import { DebugCopyButton } from './DebugCopyButton';
-import { QualityTierPicker, resolveEffectiveChain, EffectiveChainBadge } from './QualityTierPicker';
+import {
+  QualityTierPicker,
+  resolveEffectiveChain,
+  EffectiveChainBadge,
+  CustomRefinementPicker,
+} from './QualityTierPicker';
 import { StoryboardEditor } from './StoryboardEditor';
 import { useEngineStatus } from './useEngineStatus';
 
@@ -49,8 +54,13 @@ export interface VideoVersionParams {
   /** Resolved primary model (tier.primary in simple mode, or the explicit
    *  Advanced override). NOT the stale picker default. */
   model: DiffusionModelId;
-  /** Resolved refinement model for the two-pass tier, else null. */
+  /** Resolved refinement model for the two-pass tier OR the Advanced custom
+   *  draft→refine pair, else null. */
   refinementModel: DiffusionModelId | null;
+  /** True when this version's chain came from the Advanced model override (so
+   *  `refinementModel` is a CUSTOM pair, not a tier-derived one). Optional for
+   *  legacy sidecars that predate the custom-chain control. */
+  advanced?: boolean;
   width: number;
   height: number;
   frames: number;
@@ -170,6 +180,11 @@ export function StudioPanel({
   // user picks "Refined" without knowing it means lcm-tiny-sd → dreamshaper.
   const [quality, setQuality] = useState<QualityMode>('fast');
   const [model, setModel] = useState<DiffusionModelId>(defaultModel);
+  // Advanced-only custom refinement override. null = single pass. When set (and
+  // Advanced is open) it builds an arbitrary draft → refine pair on top of the
+  // Advanced `model`, generalising the fixed "Refined" tier. Resolved through
+  // resolveEffectiveChain so the engine, badge, and saved params all agree.
+  const [refinementOverride, setRefinementOverride] = useState<DiffusionModelId | null>(null);
   // Whether to expose the Advanced controls (model picker, sliders, coherence
   // mode, camera motion). Collapsed by default to deliver the "user just enters
   // a prompt" experience.
@@ -217,14 +232,16 @@ export function StudioPanel({
   const [interpolationBackend, setInterpolationBackend] =
     useState<InterpolationBackend>('latent-slerp');
 
-  // Changing quality OR resolution invalidates the cached engine — the engine
-  // is bound to both at create time. Dispose the old engine (releases
-  // multi-GB ORT sessions + GPUDevice) so the next generate re-creates with
-  // the new params. Weights stay in IndexedDB so re-init is fast.
+  // Changing the resolved model chain OR resolution invalidates the cached
+  // engine — the engine is bound to (primary, refinement, resolution) at create
+  // time. Dispose the old engine (releases multi-GB ORT sessions + GPUDevice) so
+  // the next generate re-creates with the new params. Weights stay in IndexedDB
+  // so re-init is fast. `model`/`showAdvanced`/`refinementOverride` are inputs to
+  // resolveEffectiveChain, so a change to any of them must rebuild the engine.
   useEffect(() => {
     disposeEngineAndOutputs();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [quality, resolution]);
+  }, [quality, resolution, model, showAdvanced, refinementOverride]);
 
   const [isGenerating, setIsGenerating] = useState(false);
   const [progressLabel, setProgressLabel] = useState('');
@@ -315,7 +332,12 @@ export function StudioPanel({
   // Source of truth for tier → model id lives in QualityTierPicker.
   const ensureEngine = useCallback(async (): Promise<VideoEngine> => {
     if (engineRef.current) return engineRef.current;
-    const chain = resolveEffectiveChain({ showAdvanced, advancedModel: model, quality });
+    const chain = resolveEffectiveChain({
+      showAdvanced,
+      advancedModel: model,
+      quality,
+      customRefinement: refinementOverride,
+    });
     const engine = await VideoEngine.create({
       apiKey: token,
       baseUrl,
@@ -329,7 +351,7 @@ export function StudioPanel({
     if (!engine) throw new Error('Engine refused to start on this device.');
     engineRef.current = engine;
     return engine;
-  }, [token, baseUrl, quality, showAdvanced, model, initialMambaState, resolution, handleProgress]);
+  }, [token, baseUrl, quality, showAdvanced, model, refinementOverride, initialMambaState, resolution, handleProgress]);
 
   // Single post-generation sink (DRY across single-clip + storyboard paths):
   // publish the video, reconcile previewFrames onto the canonical final set,
@@ -352,12 +374,18 @@ export function StudioPanel({
         try {
           // Record the RESOLVED model pair (not the stale picker default) via
           // the same chain resolver the engine used.
-          const chain = resolveEffectiveChain({ showAdvanced, advancedModel: model, quality });
+          const chain = resolveEffectiveChain({
+            showAdvanced,
+            advancedModel: model,
+            quality,
+            customRefinement: refinementOverride,
+          });
           const params: VideoVersionParams = {
             prompt,
             quality,
             model: chain.primary,
             refinementModel: chain.refinement,
+            advanced: showAdvanced,
             width: resolution,
             height: resolution,
             frames,
@@ -393,7 +421,7 @@ export function StudioPanel({
       );
     },
     [
-      onVideoGenerated, onSaveVersion, quality, showAdvanced, model, resolution, prompt,
+      onVideoGenerated, onSaveVersion, quality, showAdvanced, model, refinementOverride, resolution, prompt,
       frames, fps, interpolationFactor, interpolationBackend, coherenceMode, coherenceStrength,
       motionAmount, imgToImgStrength, anchorRefreshInterval, cameraDx, cameraDy, currentVersionId,
       storyboard, validate,
@@ -680,7 +708,12 @@ export function StudioPanel({
   const device = status.device;
   // The model chain that will actually run — shared by the debug snapshot and
   // (internally) the EffectiveChainBadge, so every readout agrees.
-  const effectiveChain = resolveEffectiveChain({ showAdvanced, advancedModel: model, quality });
+  const effectiveChain = resolveEffectiveChain({
+    showAdvanced,
+    advancedModel: model,
+    quality,
+    customRefinement: refinementOverride,
+  });
 
   return (
     <div className="bfs-root">
@@ -752,7 +785,12 @@ export function StudioPanel({
           />
           {/* Single authoritative readout of the model chain that will actually
               run, flagging when Advanced has overridden the Quality tier. */}
-          <EffectiveChainBadge showAdvanced={showAdvanced} advancedModel={model} quality={quality} />
+          <EffectiveChainBadge
+            showAdvanced={showAdvanced}
+            advancedModel={model}
+            quality={quality}
+            customRefinement={refinementOverride}
+          />
 
           {/* Cinematic mode — routes the prompt through the Director / Shot-
               Planner (planScene) into a multi-shot storyboard with per-shot
@@ -823,8 +861,21 @@ export function StudioPanel({
               <ModelPicker value={model} onChange={setModel} disabled={isGenerating} />
               <p className="bfs-hint">
                 Overrides the Quality preset above. When this is set, the engine
-                uses this model directly (no refinement pass).
+                uses this model directly — add a refinement model below for a
+                custom two-pass chain.
               </p>
+            </div>
+
+            {/* Custom two-pass override — build an arbitrary draft → refine pair
+                on top of the Advanced model, generalising the fixed "Refined"
+                tier (lcm-tiny-sd → lcm-dreamshaper-v7). "None" = single pass. */}
+            <div style={{ marginTop: 12 }}>
+              <CustomRefinementPicker
+                primary={model}
+                value={refinementOverride}
+                onChange={setRefinementOverride}
+                disabled={isGenerating}
+              />
             </div>
 
             <div className="bfs-field" style={{ marginTop: 12 }}>
