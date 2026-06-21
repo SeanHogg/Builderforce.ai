@@ -17,6 +17,7 @@ import type { Env } from '../../env';
 import { boards, swimlanes, tasks, taskStatusTransitions } from '../../infrastructure/database/schema';
 import { getOrSetCached, invalidateCached } from '../../infrastructure/cache/readThroughCache';
 import { bumpWorkforceMetricsVersion } from '../metrics/workforceMetrics';
+import { releaseWorkItemWebhook } from '../seams/workItemWebhook';
 import { TaskStatus } from '../../domain/shared/types';
 
 /** Lane keys that mean "done". Mirrors reportRoutes.DONE_CLASS_STATUSES; also
@@ -117,6 +118,14 @@ export async function recordStatusTransition(env: Env, db: Db, input: RecordTran
 
   // Invalidate the workforce scorecard / DORA caches for this tenant.
   await bumpWorkforceMetricsVersion(env, tenantId).catch(() => {});
+
+  // A work item FIRST reaching a released/done lane fans out `workitem.released`
+  // to any segment webhook subscriptions (the Investor board / Changelog feed,
+  // spec 05 §4.3). Segment-gated + best-effort: a no-op for single-mode tenants
+  // (no segment) or when nothing subscribed; never blocks the metrics path.
+  if (nowDone && !wasDone) {
+    await releaseWorkItemWebhook(db, { tenantId, taskId }).catch(() => {});
+  }
 }
 
 /**

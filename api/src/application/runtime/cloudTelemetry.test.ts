@@ -87,6 +87,34 @@ describe('recordCloudToolEvent → tool_audit_events', () => {
     expect(rows[0]!.ts).toBeInstanceOf(Date);
   });
 
+  it('supports a TASK-scoped event (executionId null + sessionKey override) for the Done-finalize pr_opened path', async () => {
+    const { db, rowsFor } = makeFakeDb();
+
+    // ROADMAP #26: the Done-transition finalize has no live execution, so it emits
+    // a task-scoped pr_opened event keyed `task:<id>` to the agent's timeline.
+    await recordCloudToolEvent(db, {
+      tenantId: 1,
+      cloudAgentRef: 'agent-x',
+      executionId: null,
+      sessionKey: 'task:42',
+      toolName: 'pr_opened',
+      category: 'tool',
+      detail: { taskId: 42, branch: 'builderforce/task-42', source: 'done-finalize' },
+      result: 'opened PR #5 — awaiting review',
+    });
+
+    const rows = rowsFor(toolAuditEvents);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({
+      tenantId: 1,
+      agentHostId: null,
+      cloudAgentRef: 'agent-x',   // surfaces in THIS agent's tool-audit timeline
+      executionId: null,          // no live execution on the Done-transition path
+      sessionKey: 'task:42',      // task-scoped correlation key (not exec:null)
+      toolName: 'pr_opened',
+    });
+  });
+
   it('is best-effort: a DB failure never throws (telemetry must not break the run)', async () => {
     const db = {
       insert: () => ({ values: async () => { throw new Error('db down'); } }),

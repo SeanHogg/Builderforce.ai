@@ -13,7 +13,8 @@
     "type-check": "tsc --noEmit",
     "check:schema": "node scripts/check-schema-drift.mjs",
     "check:migrations": "node scripts/check-migrations.mjs",
-    "test": "npm run check:schema && npm run check:migrations && vitest run"
+    "check:tracks": "node scripts/check-track-manifest.mjs --check",
+    "test": "npm run check:schema && npm run check:migrations && npm run check:tracks && vitest run"
   },
   "dependencies": {
     "@cloudflare/containers": "^0.3.7",

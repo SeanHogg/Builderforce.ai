@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
+import { useBrainDataRefresh } from '@/lib/brain/useBrainDataRefresh';
 import {
   agentHosts,
   tenantDefaultAgentHost,
@@ -185,6 +186,11 @@ export function WorkforceAgents({ tenantId }: { tenantId?: number }) {
   }, [tenant, tenantToken]);
 
   useEffect(() => { loadHosts(); loadCloud(); loadPurchased(); loadPeople(); loadManifests(); }, [loadHosts, loadCloud, loadPurchased, loadPeople, loadManifests]);
+
+  // Refetch the agent rosters when the Brain creates/updates/deletes a cloud
+  // agent or hires a marketplace agent, so the grid stays live (no manual reload).
+  const reloadAgents = useCallback(() => { void loadCloud(); void loadPurchased(); }, [loadCloud, loadPurchased]);
+  useBrainDataRefresh(['cloud_agents', 'agents_published'], reloadAgents);
 
   useEffect(() => {
     if (tenantId == null) return;

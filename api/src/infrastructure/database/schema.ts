@@ -3268,6 +3268,9 @@ export const customerFeedback = pgTable('customer_feedback', {
   sentiment:   varchar('sentiment', { length: 32 }),
   contact:     varchar('contact', { length: 320 }),
   status:      varchar('status', { length: 16 }).notNull().default('new'), // new|triaged|dismissed
+  // When triaged into the backlog, the task it spawned/linked (migration 0161).
+  triagedTaskId: integer('triaged_task_id').references(() => tasks.id, { onDelete: 'set null' }),
+  triagedAt:   timestamp('triaged_at'),
   createdAt:   timestamp('created_at').notNull().defaultNow(),
   // UNIQUE (segment_id, external_ref) enforced in migration 0071.
 });

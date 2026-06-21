@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 import { addAnthropicSystemCacheControl, applyExtraParamsToAgent } from "./extra-params.js";
 
 const EPHEMERAL = { type: "ephemeral" };
+const EPHEMERAL_1H = { type: "ephemeral", ttl: "1h" };
 
 // ---------------------------------------------------------------------------
 // addAnthropicSystemCacheControl — the pure payload transform. pi-ai caches only
@@ -41,6 +42,29 @@ describe("addAnthropicSystemCacheControl", () => {
     ]);
   });
 
+  it("uses the 1-hour retention marker when longTtl is set", () => {
+    const stringPayload = {
+      messages: [
+        { role: "system", content: "You are an agent." },
+        { role: "user", content: "hi" },
+      ],
+    };
+    addAnthropicSystemCacheControl(stringPayload, true);
+    expect(stringPayload.messages[0]).toEqual({
+      role: "system",
+      content: [{ type: "text", text: "You are an agent.", cache_control: EPHEMERAL_1H }],
+    });
+
+    const arrayPayload = {
+      messages: [{ role: "system", content: [{ type: "text", text: "a" }, { type: "text", text: "b" }] }],
+    };
+    addAnthropicSystemCacheControl(arrayPayload, true);
+    expect(arrayPayload.messages[0].content).toEqual([
+      { type: "text", text: "a" },
+      { type: "text", text: "b", cache_control: EPHEMERAL_1H },
+    ]);
+  });
+
   it("is idempotent — leaves an already-marked system block untouched", () => {
     const marked = { type: "text", text: "a", cache_control: EPHEMERAL };
     const payload = { messages: [{ role: "system", content: [marked] }] };
@@ -68,7 +92,11 @@ describe("addAnthropicSystemCacheControl", () => {
 // ---------------------------------------------------------------------------
 
 describe("applyExtraParamsToAgent — openrouter/anthropic system caching", () => {
-  const drive = (provider: string, modelId: string): Record<string, unknown> => {
+  const drive = (
+    provider: string,
+    modelId: string,
+    extraParamsOverride?: Record<string, unknown>,
+  ): Record<string, unknown> => {
     const payload: Record<string, unknown> = {
       messages: [
         { role: "system", content: "sys" },
@@ -82,7 +110,7 @@ describe("applyExtraParamsToAgent — openrouter/anthropic system caching", () =
       return {} as ReturnType<StreamFn>;
     };
     const agent = { streamFn: baseStreamFn };
-    applyExtraParamsToAgent(agent, undefined, provider, modelId);
+    applyExtraParamsToAgent(agent, undefined, provider, modelId, extraParamsOverride);
 
     const model = {
       api: "openai-completions",
@@ -104,5 +132,19 @@ describe("applyExtraParamsToAgent — openrouter/anthropic system caching", () =
   it("leaves the system prompt untouched for non-Anthropic openrouter models", () => {
     const payload = drive("openrouter", "openai/gpt-4.1");
     expect((payload.messages as Array<{ content: unknown }>)[0]!.content).toBe("sys");
+  });
+
+  it("flips to the 1h retention marker when cacheControlTtl:'1h' is requested", () => {
+    const payload = drive("openrouter", "anthropic/claude-sonnet-4.6", { cacheControlTtl: "1h" });
+    expect((payload.messages as Array<{ content: unknown }>)[0]!.content).toEqual([
+      { type: "text", text: "sys", cache_control: EPHEMERAL_1H },
+    ]);
+  });
+
+  it("flips to the 1h retention marker when cacheRetention:'long' is requested", () => {
+    const payload = drive("openrouter", "anthropic/claude-sonnet-4.6", { cacheRetention: "long" });
+    expect((payload.messages as Array<{ content: unknown }>)[0]!.content).toEqual([
+      { type: "text", text: "sys", cache_control: EPHEMERAL_1H },
+    ]);
   });
 });
