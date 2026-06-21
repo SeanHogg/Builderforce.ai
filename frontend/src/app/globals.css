@@ -1843,9 +1843,29 @@ textarea.input { resize: vertical; line-height: 1.5; }
 }
 .mbn-item:hover { color: var(--text); }
 .mbn-item.active { color: var(--accent, #4d9eff); }
-.mbn-accent { color: var(--coral-bright); font-weight: 700; }
 .mbn-icon { font-size: 1.25rem; line-height: 1; }
 .mbn-label { font-size: 10px; line-height: 1; }
+
+/* Sign In (logged-out) gets a raised, filled CTA pill so it's unmistakably the
+   primary action — not just blue text like the .active state. The gradient +
+   ring + glow read as a button in BOTH light and dark mode (the ring uses the
+   bar background so it carves the badge out of whatever surface it sits on). */
+.mbn-accent { color: var(--accent); font-weight: 700; }
+.mbn-accent:hover { color: var(--accent); }
+.mbn-accent .mbn-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  margin-top: -6px;
+  border-radius: 999px;
+  background: linear-gradient(135deg, var(--coral-bright), var(--coral-mid));
+  color: #fff;
+  box-shadow: 0 3px 10px color-mix(in srgb, var(--coral-bright) 45%, transparent);
+  border: 2px solid color-mix(in srgb, var(--bg) 88%, transparent);
+}
+.mbn-accent .mbn-label { font-weight: 700; }
 
 @media (max-width: 767px) {
   /* Marketplace chip lives in the bottom bar / drawer on mobile */

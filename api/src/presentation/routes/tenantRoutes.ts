@@ -8,7 +8,8 @@ import { authMiddleware, requireRole } from '../middleware/authMiddleware';
 import { getOrSetCached, invalidateCached } from '../../infrastructure/cache/readThroughCache';
 import { invalidateJwtMembershipCache } from '../../infrastructure/auth/keyResolutionCache';
 import { isAgentHostOnline } from '../../domain/agentHost/onlineStatus';
-import { buildPlanLimitsGuard } from '../middleware/planLimitsGuard';
+import { buildPlanLimitsGuard, seatCapacityForTenant } from '../middleware/planLimitsGuard';
+import { canAddSeat } from '../../domain/tenant/PlanLimits';
 import { trialDaysRemaining } from '../../domain/tenant/effectivePlan';
 import { webAuthMiddleware } from '../middleware/webAuthMiddleware';
 import type { Db } from '../../infrastructure/database/connection';
@@ -92,6 +93,11 @@ async function acceptPendingInvitations(
     .from(tenantInvitations)
     .where(and(eq(tenantInvitations.email, normalized), eq(tenantInvitations.status, 'pending')));
 
+  // Per-tenant live seat tally, fetched lazily on first use and incremented as we
+  // seat invites within this run, so a batch of invites for the same tenant can't
+  // collectively overshoot the cap.
+  const seatState = new Map<number, { plan: TenantPlan; seated: number }>();
+
   for (const invite of pending) {
     // The invitee can't authorize their own membership — replay the add under
     // the manager who sent the invite (guaranteed a manager/owner at invite time).
@@ -101,7 +107,23 @@ async function acceptPendingInvitations(
       // throw "already a member" and leave the row stuck pending).
       const alreadyMember = await assertTenantMember(db, invite.tenantId, userId);
       if (!alreadyMember) {
+        // Re-check seat capacity at ACCEPT time (members-only — this pending row
+        // is about to be consumed). The invite-time guard already counted pending
+        // seats, but a plan DOWNGRADE after the invites were queued can still
+        // over-subscribe. If the plan can't seat it, leave the invite pending
+        // (visible in the manager's invitations list, auto-retries once a seat
+        // frees up or they upgrade) instead of silently auto-accepting past the cap.
+        let state = seatState.get(invite.tenantId);
+        if (!state) {
+          const cap = await seatCapacityForTenant(db, invite.tenantId);
+          state = { plan: cap.plan, seated: cap.members };
+          seatState.set(invite.tenantId, state);
+        }
+        if (!canAddSeat(state.plan, state.seated)) {
+          continue; // over cap — leave pending, do not seat
+        }
         await tenantService.addMember(invite.tenantId, invite.invitedByUserId, userId, invite.role as TenantRole);
+        state.seated += 1;
       }
       await db
         .update(tenantInvitations)
@@ -110,9 +132,8 @@ async function acceptPendingInvitations(
       await invalidateTaskAssignees(env, invite.tenantId);
       await invalidateInvitations(env, invite.tenantId);
     } catch {
-      // A plan-seat-limit or transient error on one tenant must not block the
-      // user's login or the other tenants' invites — leave the row pending so
-      // it retries on the next visit.
+      // A transient error on one tenant must not block the user's login or the
+      // other tenants' invites — leave the row pending so it retries next visit.
     }
   }
 }

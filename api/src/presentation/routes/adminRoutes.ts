@@ -1267,6 +1267,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
         t.external_subscription_id AS "externalSubscriptionId",
         t.token_daily_limit_override AS "tokenDailyLimitOverride",
         t.paid_overflow_daily_cap AS "paidOverflowDailyCap",
+        t.image_credits_daily_limit AS "imageCreditsDailyLimit",
         t.premium_override AS "premiumOverride",
         CASE WHEN t.plan = 'pro' AND t.billing_status = 'active' THEN true ELSE false END AS "isPaid",
         CASE WHEN t.plan = 'pro' AND t.billing_status = 'active' THEN 'pro' ELSE 'free' END AS "effectivePlan",
@@ -1276,7 +1277,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
       FROM tenants t
       LEFT JOIN tenant_members tm ON tm.tenant_id = t.id AND tm.is_active = true
       LEFT JOIN agent_hosts ci ON ci.tenant_id = t.id
-      GROUP BY t.id, t.name, t.slug, t.status, t.plan, t.billing_status, t.billing_email, t.billing_updated_at, t.external_customer_id, t.external_subscription_id, t.token_daily_limit_override, t.paid_overflow_daily_cap, t.premium_override, t.created_at
+      GROUP BY t.id, t.name, t.slug, t.status, t.plan, t.billing_status, t.billing_email, t.billing_updated_at, t.external_customer_id, t.external_subscription_id, t.token_daily_limit_override, t.paid_overflow_daily_cap, t.image_credits_daily_limit, t.premium_override, t.created_at
       ORDER BY t.created_at DESC
       LIMIT 500
     `);
@@ -1368,6 +1369,48 @@ export function createAdminRoutes(): Hono<HonoEnv> {
     }).catch(() => {});
 
     return c.json({ id: updated.id, paidOverflowDailyCap: updated.paidOverflowDailyCap });
+  });
+
+  // -------------------------------------------------------------------------
+  // PATCH /api/admin/tenants/:id/image-credits-limit
+  // Body: { imageCreditsDailyLimit: number | null }  (credits = returned images)
+  //   null → clear override (plan default: free 10 / pro 1000 / teams 5000)
+  //   -1   → unlimited (gate skipped)
+  //   >= 0 → explicit images/day ceiling
+  // Metered independently of the text token cap (migration 0131).
+  // -------------------------------------------------------------------------
+  router.patch('/tenants/:id/image-credits-limit', async (c) => {
+    const tenantId = Number(c.req.param('id'));
+    if (!tenantId) return c.json({ error: 'Invalid tenant id' }, 400);
+
+    const body = await c.req.json<{ imageCreditsDailyLimit?: number | null }>();
+    const value = body.imageCreditsDailyLimit;
+    if (value !== null && value !== undefined) {
+      if (!Number.isInteger(value) || value < -1) {
+        return c.json({
+          error: 'imageCreditsDailyLimit must be null, -1 (unlimited), or a non-negative integer',
+        }, 400);
+      }
+    }
+    const next = value === undefined ? null : value;
+
+    const db = buildDatabase(c.env);
+    const [before] = await db.select({ prev: tenants.imageCreditsDailyLimit }).from(tenants).where(eq(tenants.id, tenantId));
+    const [updated] = await db
+      .update(tenants)
+      .set({ imageCreditsDailyLimit: next, updatedAt: new Date() })
+      .where(eq(tenants.id, tenantId))
+      .returning({ id: tenants.id, imageCreditsDailyLimit: tenants.imageCreditsDailyLimit });
+
+    if (!updated) return c.json({ error: 'Tenant not found' }, 404);
+
+    await writeAudit(db, 'IMAGE_CREDITS_LIMIT_CHANGED', c.get('userId') as string, {
+      tenantId,
+      metadata: { from: before?.prev ?? null, to: updated.imageCreditsDailyLimit },
+      ipAddress: c.req.header('CF-Connecting-IP') ?? c.req.header('X-Forwarded-For') ?? null,
+    }).catch(() => {});
+
+    return c.json({ id: updated.id, imageCreditsDailyLimit: updated.imageCreditsDailyLimit });
   });
 
   // -------------------------------------------------------------------------

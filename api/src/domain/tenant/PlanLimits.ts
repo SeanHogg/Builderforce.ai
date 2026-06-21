@@ -14,8 +14,13 @@ export interface PlanLimits {
   maxProjects: number;
   /** Maximum number of active seats (team members); -1 = unlimited */
   maxSeats: number;
-  /** Token budget per calendar day (input + output combined) */
+  /** Token budget per calendar day (input + output combined). CHAT/text only —
+   *  image generation is metered separately against {@link imageCreditsDailyLimit}
+   *  so heavy image use can't starve the text budget (and vice-versa). */
   tokenDailyLimit: number;
+  /** Image-generation credits per calendar day (1 credit = 1 returned image);
+   *  -1 = unlimited. Independent of the text token budget. */
+  imageCreditsDailyLimit: number;
   /**
    * Upper bound on a single request's `max_tokens` (output cap). Guards against
    * a misconfigured client requesting a huge generation that bills a full
@@ -48,6 +53,7 @@ export const PLAN_LIMITS: Record<TenantPlan, PlanLimits> = {
     maxProjects: 5,
     maxSeats: 1,
     tokenDailyLimit: 10_000,
+    imageCreditsDailyLimit: 10,
     maxTokensPerRequest: 4_096,
     approvalWorkflows: false,
     fleetMesh: false,
@@ -62,6 +68,7 @@ export const PLAN_LIMITS: Record<TenantPlan, PlanLimits> = {
     maxProjects: -1,
     maxSeats: 1,
     tokenDailyLimit: 1_000_000,
+    imageCreditsDailyLimit: 1_000,
     maxTokensPerRequest: 16_384,
     approvalWorkflows: true,
     fleetMesh: true,
@@ -76,6 +83,7 @@ export const PLAN_LIMITS: Record<TenantPlan, PlanLimits> = {
     maxProjects: -1,
     maxSeats: -1,
     tokenDailyLimit: 5_000_000,
+    imageCreditsDailyLimit: 5_000,
     maxTokensPerRequest: 64_000,
     approvalWorkflows: true,
     fleetMesh: true,
@@ -108,4 +116,21 @@ export function canAddSeat(plan: TenantPlan, currentSeatCount: number): boolean 
 export function canAddProject(plan: TenantPlan, currentProjectCount: number): boolean {
   const { maxProjects } = getLimits(plan);
   return maxProjects === -1 || currentProjectCount < maxProjects;
+}
+
+/**
+ * Resolve a tenant's effective daily image-credit limit from its per-tenant
+ * override + plan default. Single source of truth so the gateway gate and any
+ * display agree (mirrors `resolvePaidOverflowCapMillicents`):
+ *   • override === -1   → -1 (unlimited)
+ *   • override >= 0     → that explicit value
+ *   • override null     → the plan default
+ */
+export function resolveImageCreditsDailyLimit(
+  override: number | null | undefined,
+  plan: TenantPlan,
+): number {
+  if (override === -1) return -1;
+  if (override != null && override >= 0) return override;
+  return getLimits(plan).imageCreditsDailyLimit;
 }

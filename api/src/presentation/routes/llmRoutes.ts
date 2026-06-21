@@ -7,7 +7,7 @@
  * GET   /v1/health             – health check
  */
 import { Hono, type Context } from 'hono';
-import { and, desc, eq, gte, sql } from 'drizzle-orm';
+import { and, desc, eq, gte, inArray, notInArray, sql } from 'drizzle-orm';
 import type { Env, HonoEnv } from '../../env';
 import {
   llmProxyForPlan,
@@ -22,6 +22,7 @@ import {
   type LlmUsage,
 } from '../../application/llm/LlmProxyService';
 import { CACHE_READ_MULTIPLIER, CACHE_CREATION_MULTIPLIER, resolvePaidOverflowCapMillicents } from '../../application/llm/usageLedger';
+import { USAGE_KIND } from '../../application/llm/usageSource';
 import { logTrace, backfillTraceUsage } from '../../application/llm/traceLogger';
 import { recordUsageRow, type UsageAttribution, type RecordUsageRow } from '../../application/llm/usageLedger';
 import { pickUsage } from '../../application/llm/vendors';
@@ -36,6 +37,8 @@ import {
   imageProductNameForPlan,
   FREE_IMAGE_MODEL_POOL,
   PAID_IMAGE_MODEL_POOL,
+  IMAGE_TOKEN_COST,
+  IMAGE_PRODUCT_NAMES,
   type ImageGenerationRequest,
 } from '../../application/llm/ImageProxyService';
 import { buildDatabase } from '../../infrastructure/database/connection';
@@ -77,7 +80,7 @@ import type { FailoverEvent } from '../../application/llm/LlmProxyService';
 import { verifyJwt, signJwt } from '../../infrastructure/auth/JwtService';
 import { hashSecret } from '../../infrastructure/auth/HashService';
 import { TenantRole, TenantPlan, TenantBillingStatus } from '../../domain/shared/types';
-import { getLimits } from '../../domain/tenant/PlanLimits';
+import { getLimits, resolveImageCreditsDailyLimit } from '../../domain/tenant/PlanLimits';
 import { resolveEffectivePlan } from '../../domain/tenant/effectivePlan';
 
 // ---------------------------------------------------------------------------
@@ -185,6 +188,12 @@ type TenantAccess = {
    * DEFAULT_PAID_OVERFLOW_CAP_MILLICENTS.
    */
   paidOverflowDailyCap: number | null;
+  /**
+   * Per-tenant daily image-generation credit override (1 credit = 1 returned
+   * image), or null to use the plan default. -1 = unlimited. Metered separately
+   * from the text token budget (migration 0131). See resolveImageCreditsDailyLimit.
+   */
+  imageCreditsDailyLimit: number | null;
   /** Superadmin grant of premium routing — when true the LLM proxy uses the
    *  premium model pool (top PREMIUM-tier models) and the extended per-vendor
    *  timeout regardless of plan/billingStatus. Comped / beta access. */
@@ -210,7 +219,7 @@ function toTenantPlan(ep: TenantAccess['effectivePlan']): TenantPlan {
 export async function resolveTenantPlan(
   env: Env,
   tenantId: number,
-): Promise<Pick<TenantAccess, 'plan' | 'billingStatus' | 'effectivePlan' | 'tokenDailyLimitOverride' | 'paidOverflowDailyCap' | 'premiumOverride'>> {
+): Promise<Pick<TenantAccess, 'plan' | 'billingStatus' | 'effectivePlan' | 'tokenDailyLimitOverride' | 'paidOverflowDailyCap' | 'imageCreditsDailyLimit' | 'premiumOverride'>> {
   const db = buildDatabase(env);
   const [tenantRow] = await db
     .select({
@@ -220,6 +229,7 @@ export async function resolveTenantPlan(
       trialEndsAt: tenants.trialEndsAt,
       tokenDailyLimitOverride: tenants.tokenDailyLimitOverride,
       paidOverflowDailyCap: tenants.paidOverflowDailyCap,
+      imageCreditsDailyLimit: tenants.imageCreditsDailyLimit,
       premiumOverride: tenants.premiumOverride,
     })
     .from(tenants)
@@ -244,6 +254,7 @@ export async function resolveTenantPlan(
     effectivePlan,
     tokenDailyLimitOverride: tenantRow.tokenDailyLimitOverride ?? null,
     paidOverflowDailyCap: tenantRow.paidOverflowDailyCap ?? null,
+    imageCreditsDailyLimit: tenantRow.imageCreditsDailyLimit ?? null,
     premiumOverride: tenantRow.premiumOverride === true,
   };
 }
@@ -299,7 +310,14 @@ async function enforceDailyTokenCap(
         ), 0)`,
       })
       .from(llmUsageLog)
-      .where(and(eq(llmUsageLog.tenantId, access.tenantId), gte(llmUsageLog.createdAt, utcDayStart())));
+      .where(and(
+        eq(llmUsageLog.tenantId, access.tenantId),
+        gte(llmUsageLog.createdAt, utcDayStart()),
+        // Image generation is metered against its OWN daily credit budget
+        // (migration 0131) — exclude image rows so they never consume the chat
+        // token cap (and vice-versa).
+        notInArray(llmUsageLog.llmProduct, [...IMAGE_PRODUCT_NAMES]),
+      ));
     usageToday = Math.max(0, Math.floor(Number(usageRow?.used ?? 0)));
 
     // Per-agentHost cap (optional, set per-agentHost in portal)
@@ -368,6 +386,53 @@ async function isPaidOverflowExhausted(
     return Math.max(0, Number(row?.spent ?? 0)) >= cap;
   } catch {
     return false; // fail open — never let the cap query break a request
+  }
+}
+
+/**
+ * Image-generation daily credit gate (migration 0131). Returns a blocking JSON
+ * Response when the tenant has spent its full image-credit budget for the UTC
+ * day, else null. Credits = returned images; counted from today's image-product
+ * usage rows (`total_tokens / IMAGE_TOKEN_COST`). Independent of the chat token
+ * cap — heavy image use no longer starves the text budget, and vice-versa.
+ * Best-effort: a query error fails OPEN (availability over a perfectly precise
+ * cap), matching `isPaidOverflowExhausted`.
+ */
+async function enforceImageCreditCap(
+  c: Context<HonoEnv>,
+  access: TenantAccess,
+): Promise<Response | null> {
+  if (access.isSuperadmin) return null;
+  const limit = resolveImageCreditsDailyLimit(access.imageCreditsDailyLimit, toTenantPlan(access.effectivePlan));
+  if (limit < 0) return null; // unlimited
+  try {
+    const db = buildDatabase(c.env);
+    const [row] = await db
+      .select({ tokens: sql<number>`COALESCE(SUM(${llmUsageLog.totalTokens}), 0)` })
+      .from(llmUsageLog)
+      .where(and(
+        eq(llmUsageLog.tenantId, access.tenantId),
+        inArray(llmUsageLog.llmProduct, [...IMAGE_PRODUCT_NAMES]),
+        gte(llmUsageLog.createdAt, utcDayStart()),
+      ));
+    const usedCredits = Math.floor(Number(row?.tokens ?? 0) / IMAGE_TOKEN_COST);
+    if (usedCredits >= limit) {
+      const upgradeHint = access.effectivePlan === 'free'
+        ? ' Upgrade to Pro at builderforce.ai/pricing for a higher image budget.'
+        : '';
+      return c.json({
+        error: `Daily image generation limit reached (${limit} image${limit === 1 ? '' : 's'} / day).${upgradeHint}`,
+        code: 'image_credit_limit_exceeded',
+        plan: access.effectivePlan,
+        dailyLimit: limit,
+        usedToday: usedCredits,
+        terminal: true,
+        retryAfter: secondsUntilNextUtcMidnight(),
+      }, 429, { 'Retry-After': String(secondsUntilNextUtcMidnight()) });
+    }
+    return null;
+  } catch {
+    return null; // fail open
   }
 }
 
@@ -1526,6 +1591,23 @@ export function createLlmRoutes(): Hono<HonoEnv> {
       LIMIT 25
     `);
 
+    // Source split (cloud / on-prem / web) — the gateway's `/v1/usage` can now
+    // break consumption down by who produced it, not just per-model/per-user.
+    // Uses the SAME classifier the dashboard does (shared USAGE_KIND, 0096 cols).
+    const bySource = await db.execute(sql`
+      SELECT
+        ${USAGE_KIND}                  AS source,
+        COUNT(*)::int                  AS requests,
+        SUM(prompt_tokens)::bigint     AS prompt_tokens,
+        SUM(completion_tokens)::bigint AS completion_tokens,
+        SUM(total_tokens)::bigint      AS total_tokens
+      FROM llm_usage_log
+      WHERE tenant_id = ${access.tenantId}
+        AND created_at >= NOW() - (${days} || ' days')::interval
+      GROUP BY ${USAGE_KIND}
+      ORDER BY total_tokens DESC NULLS LAST
+    `);
+
     const [totals] = (await db.execute(sql`
       SELECT
         COUNT(*)::int                  AS requests,
@@ -1583,6 +1665,7 @@ export function createLlmRoutes(): Hono<HonoEnv> {
       byModel: byModel.rows,
       byDay: byDay.rows,
       byUser: byUser.rows,
+      bySource: bySource.rows,
     });
   });
 
@@ -1682,6 +1765,12 @@ export function createLlmRoutes(): Hono<HonoEnv> {
       }, 503);
     }
 
+    // Independent image-credit budget (migration 0131) — gate BEFORE dispatch so
+    // an over-budget tenant doesn't incur a vendor call. Separate from the chat
+    // token cap.
+    const imageCapBlocked = await enforceImageCreditCap(c, access);
+    if (imageCapBlocked) return imageCapBlocked;
+
     // Capture SDK transport metadata for usage logging — stripped before vendor dispatch
     // by `stripStandardFields` in ImageProxyService.
     const bodyAny = body as Record<string, unknown>;
@@ -1698,12 +1787,11 @@ export function createLlmRoutes(): Hono<HonoEnv> {
     const service = imageProxyForPlan(c.env, access.effectivePlan, access.premiumOverride, { disablePaidOverflow });
     const result = await service.generate(body);
 
-    // Image accounting: charge a flat per-image token estimate against the
-    // tenant's daily token budget. Keeps image-gen subject to the same
-    // `plan_token_limit_exceeded` gate as chat without needing a separate
-    // image-only ledger. ~1000 tokens per generated image is a deliberate
-    // overestimate vs the actual compute cost — favours conservative caps.
-    const IMAGE_TOKEN_COST = 1000;
+    // Image accounting: still charge a flat per-image token estimate onto the
+    // usage row (retained for cost rollups), but image generation is now gated by
+    // its OWN daily credit budget (enforceImageCreditCap above), NOT the chat
+    // token cap — the two budgets are independent (migration 0131). IMAGE_TOKEN_COST
+    // is shared with the credit-count query so charge and count agree.
     const imagesReturned = Math.max(result.body.data.length, 0);
     const billedTokens = imagesReturned > 0 ? imagesReturned * IMAGE_TOKEN_COST : 0;
     const cascadeExhausted = result.body.data.length === 0;
