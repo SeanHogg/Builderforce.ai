@@ -54,6 +54,10 @@ const mix = (a: RGB, b: RGB, t: number): RGB => [
   Math.round(a[2] + (b[2] - a[2]) * t),
 ];
 
+// Real tree sprites (committed under /public/hero). The canvas draws these; the
+// procedural triangle tree below is only a fallback until a sprite has decoded.
+const SPRITE_SRCS = ['/hero/tree-pine.svg', '/hero/tree-fir.svg', '/hero/tree-round.svg'];
+
 interface Tree {
   side: -1 | 1; // streams to the left or right edge
   t: number; // 0 (far, at vanishing point) → 1 (near, off-screen)
@@ -61,7 +65,8 @@ interface Tree {
   endSpread: number; // how far out it ends, as a fraction of half-width
   startJitter: number; // small horizontal offset at the vanishing point
   maxH: number; // tree height at t≈1 (px)
-  hue: number; // small per-tree colour variation
+  hue: number; // small per-tree colour variation (fallback only)
+  sprite: number; // index into SPRITE_SRCS
 }
 
 export default function WaveBackdrop({ className = '' }: { className?: string }) {
@@ -80,6 +85,14 @@ export default function WaveBackdrop({ className = '' }: { className?: string })
     const COUNT = 46;
     const trees: Tree[] = [];
 
+    // Preload the tree sprites (browser-only — safe inside this effect).
+    const sprites = SPRITE_SRCS.map((src) => {
+      const im = new Image();
+      im.src = src;
+      return im;
+    });
+    const ready = (im: HTMLImageElement) => im.complete && im.naturalWidth > 0;
+
     const spawn = (p: Tree, seed = false) => {
       p.side = Math.random() < 0.5 ? -1 : 1;
       p.t = seed ? Math.random() : Math.random() * 0.05;
@@ -88,10 +101,11 @@ export default function WaveBackdrop({ className = '' }: { className?: string })
       p.startJitter = (Math.random() * 2 - 1) * 26;
       p.maxH = 150 + Math.random() * 170;
       p.hue = Math.random() * 0.3 - 0.15;
+      p.sprite = Math.floor(Math.random() * sprites.length);
     };
 
     for (let i = 0; i < COUNT; i++) {
-      const p: Tree = { side: 1, t: 0, spd: 0, endSpread: 1, startJitter: 0, maxH: 200, hue: 0 };
+      const p: Tree = { side: 1, t: 0, spd: 0, endSpread: 1, startJitter: 0, maxH: 200, hue: 0, sprite: 0 };
       spawn(p, true);
       trees.push(p);
     }
@@ -199,11 +213,19 @@ export default function WaveBackdrop({ className = '' }: { className?: string })
         const x = cx + p.side * (p.startJitter * (1 - p.t) + halfW * p.endSpread * e);
         const baseY = horizonY + Math.pow(p.t, 1.8) * (height - horizonY) * 1.05;
         const h = 6 + p.maxH * Math.pow(p.t, 1.25);
-        const alpha = Math.min(p.t * 7, 1) * 0.96;
-        // Atmospheric perspective: distant (small t) trees fade toward haze.
-        const col = mix(pal.haze, pal.tree, Math.min(1, p.t * 1.6));
-        const shade = mix(col, [0, 0, 0], Math.max(0, p.hue));
-        drawTree(x, baseY, h, p.hue < 0 ? mix(col, [255, 255, 255], -p.hue * 0.5) : shade, alpha);
+        // Distant trees are fainter (atmospheric perspective), nearer ones solid.
+        const alpha = Math.min(p.t * 7, 1) * (0.4 + 0.6 * Math.min(1, p.t * 1.5));
+        const im = sprites[p.sprite];
+        if (ready(im)) {
+          const w = h * (im.naturalWidth / im.naturalHeight);
+          ctx.globalAlpha = alpha;
+          ctx.drawImage(im, x - w / 2, baseY - h, w, h);
+          ctx.globalAlpha = 1;
+        } else {
+          // Fallback until the sprite decodes: procedural silhouette, themed.
+          const col = mix(pal.haze, pal.tree, Math.min(1, p.t * 1.6));
+          drawTree(x, baseY, h, col, alpha);
+        }
       }
 
       raf = requestAnimationFrame(frame);

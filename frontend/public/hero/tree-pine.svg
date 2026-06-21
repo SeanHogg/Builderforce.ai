@@ -1,0 +1,39 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 150 270" width="150" height="270">
+  <defs>
+    <linearGradient id="pbody" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#52a878"/>
+      <stop offset="0.5" stop-color="#2a6b4f"/>
+      <stop offset="1" stop-color="#123a2a"/>
+    </linearGradient>
+    <linearGradient id="plite" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#e6fff1" stop-opacity="0.28"/>
+      <stop offset="0.55" stop-color="#e6fff1" stop-opacity="0"/>
+    </linearGradient>
+    <linearGradient id="ptrunk" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#5a3d24"/>
+      <stop offset="1" stop-color="#2c1c10"/>
+    </linearGradient>
+    <filter id="ptex" x="-10%" y="-10%" width="120%" height="120%">
+      <feTurbulence type="fractalNoise" baseFrequency="0.5 0.85" numOctaves="4" seed="3" stitchTiles="stitch" result="n"/>
+      <feColorMatrix in="n" type="matrix" values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0.7 0.7 0.7 0 -0.4"/>
+    </filter>
+    <mask id="pmask">
+      <g fill="#fff">
+        <path d="M75,16 L115,86 L105,95 L95,86 L85,95 L75,86 L65,95 L55,86 L45,95 L35,86 Z"/>
+        <path d="M75,62 L131,160 L117,170 L103,160 L89,170 L75,160 L61,170 L47,160 L33,170 L19,160 Z"/>
+        <path d="M75,120 L145,242 L127.5,253 L110,242 L92.5,253 L75,242 L57.5,253 L40,242 L22.5,253 L5,242 Z"/>
+      </g>
+    </mask>
+  </defs>
+
+  <rect x="67" y="234" width="16" height="36" rx="2" fill="url(#ptrunk)"/>
+
+  <g fill="url(#pbody)">
+    <path d="M75,16 L115,86 L105,95 L95,86 L85,95 L75,86 L65,95 L55,86 L45,95 L35,86 Z"/>
+    <path d="M75,62 L131,160 L117,170 L103,160 L89,170 L75,160 L61,170 L47,160 L33,170 L19,160 Z"/>
+    <path d="M75,120 L145,242 L127.5,253 L110,242 L92.5,253 L75,242 L57.5,253 L40,242 L22.5,253 L5,242 Z"/>
+  </g>
+
+  <rect x="0" y="0" width="150" height="270" filter="url(#ptex)" mask="url(#pmask)" opacity="0.5"/>
+  <rect x="0" y="0" width="150" height="270" fill="url(#plite)" mask="url(#pmask)"/>
+</svg>
