@@ -147,6 +147,48 @@ export const FEATURES: Feature[] = [
   },
 ];
 
+/* ════════════════════ AGENT CAPABILITIES (BuilderForce Agents marketing surface) ════════════════════ */
+
+/**
+ * Single source of truth for the agent-runtime capability copy shown on the
+ * public `/agents` page. Kept here (not hardcoded in the page) so a new
+ * capability appears everywhere at once — same DRY contract as `FEATURES`.
+ *
+ * This is pure data: the SVG glyph is referenced by a stable `iconKey` and
+ * resolved to JSX in the rendering surface (content.ts stays JSX-free). Any
+ * inline-code spans in a description are written as `backtick` text and styled
+ * by the renderer.
+ */
+export interface AgentCapability {
+  /** Where the card links to (FeatureCard derives external/docs/internal from this). */
+  href: string;
+  title: string;
+  /** Plain text; `backtick`-wrapped tokens are rendered as inline <code>. */
+  description: string;
+  /** Stable glyph key resolved to an SVG by the rendering surface. */
+  iconKey: string;
+}
+
+export const AGENT_CAPABILITIES: AgentCapability[] = [
+  { href: '/docs/getting-started', iconKey: 'cpu', title: 'Agent & Sub-agent Manager', description: 'BuilderForce Agents runs and coordinates independent coding agents and sub-agents. Delegate work autonomously across your entire workflow.' },
+  { href: '/', iconKey: 'mesh', title: 'Mesh Orchestration', description: 'Builderforce.ai is the project management and mesh orchestrator — coordinating agents, tasks, and outcomes across your entire team.' },
+  { href: '/docs/getting-started', iconKey: 'trending', title: 'Business Outcome Focus', description: 'Transition from writing code to managing business outcomes. Let the agents handle execution while you focus on strategy.' },
+  { href: '/docs/agents-overview', iconKey: 'pulse', title: 'Self-Healing Runtime', description: 'Agents detect failures, fix themselves, and adapt over time. Persistent memory means context survives restarts — no re-explaining your codebase.' },
+  { href: '/workforce?tab=approvals', iconKey: 'users', title: 'Human-in-the-Loop Control', description: 'Approval gates block agent execution until a manager approves in the Builderforce.ai portal. Workflow visibility, auditability, and human sign-off — enforced, not optional.' },
+  { href: '/docs/agents-link', iconKey: 'bolt', title: 'AgentHost-to-AgentHost Mesh', description: 'Distribute work across a fleet of AgentHosts. Use `remote:auto[caps]` to route tasks to the best-matched peer. All dispatch is HMAC-signed and Bearer-authenticated.' },
+  { href: '/docs/browser', iconKey: 'globe', title: 'Full Automation', description: 'Agents can browse the web, control your browser, run shell commands, and interact with any tool or service on your behalf.' },
+  { href: '/docs/bash', iconKey: 'terminal', title: 'Full System Access', description: 'Read and write files, run shell commands, execute scripts. Full access or sandboxed — your choice.' },
+  { href: '/agents/skills', iconKey: 'gear', title: 'Skills & Plugins', description: 'Extend with community skills or build your own. Skills assigned in the Builderforce.ai portal are loaded automatically at startup.' },
+  { href: '/docs/deep-understanding', iconKey: 'layers', title: 'Deep Codebase Understanding', description: 'AST parsing, semantic maps, dependency graphs and git history give agents real comprehension of your project.' },
+  { href: '/agents/workflow-builder', iconKey: 'flow', title: 'Agentic Workflow Builder', description: 'Drag-and-drop, IPAAS-style canvas for composing your own LLM logic — memory, knowledge-base and training nodes — wired to your agents and run on your agentHosts.' },
+  { href: '/docs/agents-workflows', iconKey: 'activity', title: 'Multi-Agent Workflows', description: 'Built-in patterns for planning, feature dev, bug fixes, refactors and adversarial reviews keep work moving.' },
+  { href: '/security', iconKey: 'shield', title: 'Security & RBAC', description: 'Role-based access control, device trust, and complete audit trails. HMAC-signed inter-AgentHost dispatch with Bearer authentication.' },
+  { href: '/workforce?tab=logs', iconKey: 'bars', title: 'Workflow Telemetry', description: 'Every task and workflow emits structured JSONL spans locally and forwards to the Builderforce.ai portal timeline in real time.' },
+  { href: '/docs/agents-workflows', iconKey: 'swimlane', title: 'Autonomous Swimlane Execution', description: 'Assign any agent — Cloud or On-Premise — to a kanban swimlane. Tickets are dispatched automatically and the board advances on its own as agents finish, stopping only at the approval gates you choose.' },
+  { href: '/docs/getting-started', iconKey: 'git', title: 'Agents That Ship Code', description: 'A Cloud agent clones the bound repo through a secure server-side git proxy (your Git token never leaves the server), writes the change, pushes a branch and opens a pull request — headless, no browser open. On-Premise agents do the same on your own machine.' },
+  { href: 'https://github.com/seanhogg/agents', iconKey: 'globe', title: 'Self-Hosted & Open Source', description: 'Run on your infrastructure under the MIT license — no vendor lock-in or subscription ceilings.' },
+];
+
 /* ════════════════════ PRICING ════════════════════ */
 
 export interface PricingPlan {

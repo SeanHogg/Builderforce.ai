@@ -347,7 +347,7 @@ function buildApp(env: Env): Hono<HonoEnv> {
   app.route('/api/approvals',       createApprovalRoutes(db, runtimeService));
   app.route('/api/approval-rules',  createApprovalRuleRoutes(db));
   app.route('/api/telemetry',       createTelemetryRoutes(db));
-  app.route('/api/qa',              createQaRoutes(db));
+  app.route('/api/qa',              createQaRoutes(db, taskService));
   app.route('/api/repo-analysis',   createRepoAnalysisRoutes(db, taskService));
   app.route('/api/studio/voice-clones', createStudioVoiceCloneRoutes(db));
 

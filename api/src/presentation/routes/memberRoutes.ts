@@ -32,6 +32,7 @@ import {
   type MemberScorecard,
 } from '../../application/metrics/workforceMetrics';
 import { recommendAssignee } from '../../application/metrics/assigneeRecommender';
+import { getTenantEngagement } from '../../application/metrics/engagement';
 import type { Env, HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 
@@ -228,6 +229,16 @@ export function createMemberRoutes(db: Db): Hono<HonoEnv> {
       computeDora(db, tenantId, days),
     );
     return c.json(dora);
+  });
+
+  // ── GET /api/members/engagement?days=30 — unified engagement (MANAGER+) ────
+  // Folds external dev activity + platform usage + VS Code presence + delivery
+  // into one engagement score per human member (incl. the task-less). Cached.
+  router.get('/engagement', requireRole(TenantRole.MANAGER), async (c) => {
+    const tenantId = c.get('tenantId') as number;
+    const days = clampDays(parseInt(c.req.query('days') ?? '30', 10), 30, 365);
+    const members = await getTenantEngagement(c.env as Env, db, tenantId, days);
+    return c.json({ windowDays: days, members });
   });
 
   // ── POST /api/members/deployments — record a deploy (DORA stream) ──────────

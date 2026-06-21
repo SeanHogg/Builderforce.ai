@@ -23,6 +23,7 @@ import type { Env } from '../../env';
 import { cloudOrphanReason } from './orphanReasons';
 import { markReaperRequeued } from './cloudDispatch';
 import { isSelfHealEligible, buildDurableStartBody, dispatchDurableStart } from './cloudSelfHeal';
+import { runParkAgeTimeoutSweep, type ParkAgeTimeoutResult } from '../maintenance/parkAgeTimeout';
 
 /** A self-hosted host run executing longer than this is treated as hung. */
 export const RUNNING_DEADLINE_MS = 30 * 60_000; // 30 min
@@ -39,6 +40,9 @@ export interface ReapResult {
   /** Orphaned cloud runs re-queued ONCE on the durable executor (CloudRunnerDO)
    *  instead of being failed — self-healing for a run that died before completing. */
   requeuedCloud: number;
+  /** Tickets parked on a never-settling run_workflow that were surfaced to
+   *  needs_attention by the park-age timeout (best-effort sibling sweep). */
+  parkAge: ParkAgeTimeoutResult;
 }
 
 export async function reapStaleExecutions(env: Env, nowMs = Date.now()): Promise<ReapResult> {
@@ -146,7 +150,18 @@ export async function reapStaleExecutions(env: Env, nowMs = Date.now()): Promise
     }
   }));
 
-  return { failedRunning: running.length + cloudRunning.length, failedQueued: queued.length, requeuedCloud };
+  // Same family of "reap a stuck state on the frequent tick": surface any ticket
+  // parked on a run_workflow whose spawned workflow never settled past the
+  // park-age cap. Best-effort + isolated so a failure here never breaks the
+  // execution reaper above (and vice versa).
+  let parkAge: ParkAgeTimeoutResult = { stale: 0, unparked: 0 };
+  try {
+    parkAge = await runParkAgeTimeoutSweep(env, nowMs);
+  } catch (err) {
+    console.error('[cron:park-age] sweep failed', err);
+  }
+
+  return { failedRunning: running.length + cloudRunning.length, failedQueued: queued.length, requeuedCloud, parkAge };
 }
 
 interface ReapedRow {

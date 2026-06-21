@@ -140,3 +140,82 @@ export function createCredential(
 export function deleteCredential(id: string): Promise<{ deleted: boolean }> {
   return apiRequest(`/api/qa/credentials/${id}`, { method: 'DELETE' });
 }
+
+// --- Agentic Tester (heatmap-driven exploration) -----------------------------
+
+export interface QaHeatZone {
+  route: string;
+  selector: string | null;
+  kind: string;
+  label: string | null;
+  heat: number;
+  score: number;
+}
+
+export interface QaExploration {
+  id: string;
+  projectId: number | null;
+  status: string;
+  trigger: string;
+  heatBudget: number;
+  zonesPlanned: number;
+  zonesExplored: number | null;
+  findingsCount: number;
+  model: string | null;
+  targetUrl: string | null;
+  summary: string | null;
+  errorMessage: string | null;
+  startedAt: string | null;
+  finishedAt: string | null;
+  createdAt: string;
+}
+
+export interface QaFinding {
+  id: string;
+  explorationId: string;
+  projectId: number | null;
+  type: string;
+  severity: string;
+  route: string | null;
+  selector: string | null;
+  message: string;
+  detail: string | null;
+  heat: number;
+  status: string;
+  taskId: number | null;
+  createdAt: string;
+}
+
+export function fetchHeatmap(opts?: { sinceDays?: number; limit?: number }): Promise<{ zones: QaHeatZone[] }> {
+  const qs = new URLSearchParams();
+  if (opts?.sinceDays != null) qs.set('sinceDays', String(opts.sinceDays));
+  if (opts?.limit != null) qs.set('limit', String(opts.limit));
+  const suffix = qs.toString() ? `?${qs.toString()}` : '';
+  return apiRequest(`/api/qa/heatmap${suffix}`);
+}
+
+export function fetchExplorations(projectId: number | null): Promise<{ explorations: QaExploration[] }> {
+  return apiRequest(`/api/qa/explorations${pq(projectId)}`);
+}
+
+export function fetchExploration(id: string): Promise<{ exploration: QaExploration & { plan: unknown[]; heatZones: QaHeatZone[] }; findings: QaFinding[] }> {
+  return apiRequest(`/api/qa/explorations/${id}`);
+}
+
+export function startExploration(
+  data: { projectId?: number | null; heatBudget?: number; sinceDays?: number },
+): Promise<{ exploration: QaExploration; plannedSteps: number }> {
+  return apiRequest('/api/qa/explorations', {
+    method: 'POST',
+    headers: JSON_HEADERS,
+    body: JSON.stringify({
+      projectId: data.projectId ?? undefined,
+      heatBudget: data.heatBudget,
+      sinceDays: data.sinceDays,
+    }),
+  });
+}
+
+export function createTaskFromFinding(findingId: string): Promise<{ task: { id: number; title: string }; finding: QaFinding }> {
+  return apiRequest(`/api/qa/findings/${findingId}/task`, { method: 'POST' });
+}

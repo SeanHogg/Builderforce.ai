@@ -123,27 +123,6 @@ export default function TopBar({ onMenuClick }: { onMenuClick?: () => void }) {
         )}
       </div>
       <div className="topbar-right">
-        {!isAuthenticated && (
-          // Hidden on mobile (the drawer + bottom bar carry these); shown ≥768px.
-          <span className="topbar-auth-cta">
-            <Link href="/login" className="tenant-chip" style={{ textDecoration: 'none' }}>
-              Sign In
-            </Link>
-            <Link
-              href="/register"
-              className="tenant-chip"
-              style={{
-                textDecoration: 'none',
-                color: '#fff',
-                border: 'none',
-                background: 'linear-gradient(135deg, var(--coral-bright), var(--coral-dark))',
-              }}
-            >
-              Get Started →
-            </Link>
-          </span>
-        )}
-
         {isAuthenticated && tenant && (
           <Link href="/tenants" className="tenant-chip" style={{ textDecoration: 'none' }} title={`${tenant.name || tenant.id} (workspace)`}>
             {tenant.name || tenant.id}

@@ -38,7 +38,6 @@ export class DrizzleCoordinatorStore implements CoordinatorStore {
     return {
       id: b.id,
       tenantId: b.tenantId,
-      autonomous: b.autonomous,
       maxConcurrentTickets: b.maxConcurrentTickets,
       needsAttentionLane: b.needsAttentionLane,
     };

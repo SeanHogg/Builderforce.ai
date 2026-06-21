@@ -6,7 +6,6 @@ import { usePathname } from 'next/navigation';
 import { useAuth } from '@/lib/AuthContext';
 import { getStoredTenant } from '@/lib/auth';
 import { isNavItemActive, type NavMatch } from '@/lib/nav';
-import { PRODUCT_SECTIONS } from '@/lib/content';
 import MascotIcon from './MascotIcon';
 import SidebarLegalMenu from './legal/SidebarLegalMenu';
 
@@ -57,27 +56,6 @@ const systemNav: NavItem[] = [
 
 const adminNavItem: NavItem = { href: '/admin', label: 'Platform Admin', icon: '⚙', highlight: true };
 const apiKeysNavItem: NavItem = { href: '/settings/api-keys', label: 'API Keys', icon: '🔑' };
-
-/* ── Public (logged-out) marketing navigation ── */
-
-const publicNav: NavItem[] = [
-  { href: '/', label: 'Home', icon: '🏠', exactMatch: true },
-  { href: '/product', label: 'Product', icon: '✨' },
-  { href: '/marketplace', label: 'Workforce', icon: <MascotIcon size={20} /> },
-  { href: '/agents', label: 'BuilderForce Agents', icon: '🤖' },
-  { href: '/models', label: 'Models', icon: '🧠' },
-  { href: '/blog', label: 'Blog', icon: '📝' },
-  { href: '/pricing', label: 'Pricing', icon: '💳' },
-];
-
-// "What's inside" — the product capability groups, so logged-out visitors can
-// see what the platform consists of right from the menu. Each links into the
-// matching section of the /product tour.
-const productNav: NavItem[] = PRODUCT_SECTIONS.map((s) => ({
-  href: `/product#${s.id}`,
-  label: s.title,
-  icon: s.icon,
-}));
 
 /** Renders the API Keys nav entry only for tenant owners. */
 function OwnerApiKeysNavItem({ collapsed, pathname, onNavigate }: NavSectionWiring) {
@@ -139,10 +117,10 @@ interface SidebarProps {
 }
 
 /**
- * The single primary navigation, auth-aware. Logged-out visitors get the public
- * marketing nav plus a "what's inside" product map and Sign in / Get started
- * CTAs; authenticated users get the full app workspace nav (admin/owner
- * sections self-gate). Visibility is decided here — no prop-drilled flags.
+ * The authenticated workspace navigation (admin/owner sections self-gate). This
+ * rail is shown only to signed-in users; logged-out visitors get the horizontal
+ * marketing header instead (MarketingHeader, via MarketingShell). Visibility is
+ * decided here — no prop-drilled flags.
  *
  * Desktop: a docked rail (collapsible via the footer chevron). Mobile: an
  * off-canvas drawer opened from the TopBar hamburger, with a backdrop and an X
@@ -151,7 +129,6 @@ interface SidebarProps {
 export default function Sidebar({ collapsed, onToggleCollapsed, mobileOpen = false, onMobileClose }: SidebarProps) {
   const pathname = usePathname();
   const path = pathname || '';
-  const { isAuthenticated } = useAuth();
 
   return (
     <>
@@ -198,56 +175,24 @@ export default function Sidebar({ collapsed, onToggleCollapsed, mobileOpen = fal
         </div>
 
         <div className="nav-main">
-          {isAuthenticated ? (
-            <>
-              <div className="nav-section-label">MAIN</div>
-              <NavSection items={mainNav} collapsed={collapsed} pathname={path} onNavigate={onMobileClose} />
-              <div className="nav-section-label">MESH</div>
-              <NavSection items={meshNav} collapsed={collapsed} pathname={path} onNavigate={onMobileClose} />
-              <div className="nav-section-label">EXTENSIONS</div>
-              <NavSection items={extensionsNav} collapsed={collapsed} pathname={path} onNavigate={onMobileClose} />
-              <div className="nav-section-label">SYSTEM</div>
-              <NavSection items={systemNav} collapsed={collapsed} pathname={path} onNavigate={onMobileClose} />
-              <OwnerApiKeysNavItem collapsed={collapsed} pathname={path} onNavigate={onMobileClose} />
-              <PlatformAdminNavSection collapsed={collapsed} pathname={path} onNavigate={onMobileClose} />
-            </>
-          ) : (
-            <>
-              <NavSection items={publicNav} collapsed={collapsed} pathname={path} onNavigate={onMobileClose} />
-              <div className="nav-section-label">What&apos;s inside</div>
-              <NavSection items={productNav} collapsed={collapsed} pathname={path} onNavigate={onMobileClose} />
-            </>
-          )}
+          <div className="nav-section-label">MAIN</div>
+          <NavSection items={mainNav} collapsed={collapsed} pathname={path} onNavigate={onMobileClose} />
+          <div className="nav-section-label">MESH</div>
+          <NavSection items={meshNav} collapsed={collapsed} pathname={path} onNavigate={onMobileClose} />
+          <div className="nav-section-label">EXTENSIONS</div>
+          <NavSection items={extensionsNav} collapsed={collapsed} pathname={path} onNavigate={onMobileClose} />
+          <div className="nav-section-label">SYSTEM</div>
+          <NavSection items={systemNav} collapsed={collapsed} pathname={path} onNavigate={onMobileClose} />
+          <OwnerApiKeysNavItem collapsed={collapsed} pathname={path} onNavigate={onMobileClose} />
+          <PlatformAdminNavSection collapsed={collapsed} pathname={path} onNavigate={onMobileClose} />
         </div>
 
-        {/* Footer renders when it has content: the Sign in / Get started CTAs
-            (logged out) and/or the legal menu (hidden on the collapsed rail).
-            Skipping the empty case avoids a stray divider on the icon rail. */}
-        {(!isAuthenticated || !collapsed) && (
+        {/* Footer: the legal menu (hidden on the collapsed rail). Skipping the
+            empty case avoids a stray divider on the icon rail. */}
+        {!collapsed && (
           <div className="nav-footer">
-            {!isAuthenticated && (
-              <div className="nav-section" style={{ marginBottom: 0 }}>
-                <Link href="/login" className="nav-item" onClick={onMobileClose}>
-                  <span style={{ fontSize: '1.1rem', flexShrink: 0 }}>🔑</span>
-                  <span className="nav-item-label">Sign In</span>
-                </Link>
-                <Link
-                  href="/register"
-                  className="nav-item"
-                  onClick={onMobileClose}
-                  style={{
-                    color: '#fff',
-                    background: 'linear-gradient(135deg, var(--coral-bright), var(--coral-dark))',
-                    marginTop: 4,
-                  }}
-                >
-                  <span style={{ fontSize: '1.1rem', flexShrink: 0 }}>🚀</span>
-                  <span className="nav-item-label">Get Started</span>
-                </Link>
-              </div>
-            )}
             {/* Version + Terms/Privacy — relocated here from the old global footer
-                (which overlapped page content); sits under the Get Started CTA. */}
+                (which overlapped page content). */}
             <SidebarLegalMenu collapsed={collapsed} />
           </div>
         )}

@@ -17,17 +17,14 @@ const PASSWORD_HEURISTIC = 'input[type="password"], input[name*="pass" i], #pass
 const SUBMIT_HEURISTIC =
   'button[type="submit"], input[type="submit"], button:has-text("Sign in"), button:has-text("Log in"), button:has-text("Login")';
 
-export interface StorageState {
-  cookies: unknown[];
-  origins: unknown[];
-}
-
 /**
  * Logs in as one persona and returns the storageState (cookies + localStorage)
- * for re-use by the test specs. Throws if the login clearly failed (still on the
- * login URL with the password field present after submit).
+ * for re-use by the test specs / the explorer's browser context. Throws if the
+ * login clearly failed (still on the login URL with the password field present
+ * after submit). The return type is Playwright's own storageState shape so it
+ * drops straight into `browser.newContext({ storageState })`.
  */
-export async function loginPersona(baseUrl: string, secret: CredentialSecret): Promise<StorageState> {
+export async function loginPersona(baseUrl: string, secret: CredentialSecret) {
   const loginPath = secret.loginUrl ?? '/login';
   const loginUrl = new URL(loginPath, baseUrl).toString();
   const sel = secret.loginSelectors ?? {};
@@ -75,7 +72,7 @@ export async function loginPersona(baseUrl: string, secret: CredentialSecret): P
       throw new Error(`login appears to have failed for ${secret.username} (still on ${loginPath})`);
     }
 
-    return (await context.storageState()) as StorageState;
+    return await context.storageState();
   } finally {
     await browser.close();
   }

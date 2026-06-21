@@ -95,7 +95,6 @@ export async function findOrCreateBoard(
       projectId: input.projectId,
       name: input.name.trim(),
       // Autonomy is implicit (driven by lane agents + gate); no board toggle.
-      autonomous: true,
       maxConcurrentTickets: input.maxConcurrentTickets ?? 5,
       needsAttentionLane: input.needsAttentionLane ?? 'needs-attention',
       createdAt: now,

@@ -1287,6 +1287,19 @@ export interface AssigneeRecommendation {
   reasons: string[];
 }
 
+export type EngagementLevel = 'inactive' | 'low' | 'moderate' | 'high' | 'very_high';
+
+export interface MemberEngagement {
+  userId: string;
+  displayName: string;
+  role: string;
+  score: number;
+  level: EngagementLevel;
+  breakdown: { activityPts: number; platformPts: number; toolingPts: number; deliveryPts: number };
+  signals: { activityEvents: number; platformActions: number; vscodeActive: boolean; completedTasks: number };
+  lastVscodeSeenAt: string | null;
+}
+
 export const membersApi = {
   /** Every member profile for the tenant (planner-facing). */
   profiles: (): Promise<{ profiles: MemberProfile[] }> =>
@@ -1308,6 +1321,11 @@ export const membersApi = {
   /** The four DORA metrics for the tenant over a window (MANAGER+). */
   dora: (days = 30): Promise<DoraRollup> =>
     request<DoraRollup>(`/api/members/dora?days=${days}`),
+
+  /** Unified engagement (external activity + platform usage + VS Code + delivery)
+   *  per human member over a window (MANAGER+). */
+  engagement: (days = 30): Promise<{ windowDays: number; members: MemberEngagement[] }> =>
+    request<{ windowDays: number; members: MemberEngagement[] }>(`/api/members/engagement?days=${days}`),
 
   /** Ranked assignee recommendations for a project (planner consumption). */
   recommend: (projectId: number, skills: string[] = []): Promise<{ recommendations: AssigneeRecommendation[] }> =>
@@ -2633,6 +2651,92 @@ export const analyticsApi = {
   },
   syncAgents: () =>
     request<{ created: number; updated: number; total: number }>('/api/analytics/sync-agents', { method: 'POST' }),
+
+  /** Owner-facing cross-project activity rollup for the whole tenant. */
+  tenantRollup: (days = 30): Promise<TenantActivityRollup> =>
+    request<TenantActivityRollup>(`/api/analytics/tenant-rollup?days=${days}`),
+};
+
+// ---------------------------------------------------------------------------
+// Tenant activity rollup (cross-project) + contributor consolidation (merge)
+// ---------------------------------------------------------------------------
+
+export interface TenantActivityRollup {
+  windowDays: number;
+  range: { from: string; to: string };
+  totalEvents: number;
+  activeContributors: number;
+  totals: { linesAdded: number; linesRemoved: number };
+  byType: Record<string, number>;
+  byProvider: Array<{ provider: string; count: number }>;
+  byRepository: Array<{ repository: string; count: number }>;
+  topContributors: Array<{ contributorId: number; displayName: string; count: number }>;
+  daily: Array<{ date: string; count: number }>;
+}
+
+export interface ContributorRow {
+  id: number;
+  displayName: string;
+  email: string | null;
+  avatarUrl: string | null;
+  jobTitle: string | null;
+  roleType: string;
+  kind: 'human' | 'agent';
+  userId: string | null;
+  mergedIntoId: number | null;
+  isActive: boolean;
+}
+
+export interface DuplicateGroup {
+  reason: 'email' | 'identity_email' | 'name';
+  key: string;
+  contributors: Array<{ id: number; displayName: string; email: string | null; userId: string | null }>;
+}
+
+export interface MergePreview {
+  source: { id: number; displayName: string; userId: string | null };
+  target: { id: number; displayName: string; userId: string | null };
+  movedActivityCount: number;
+  movedIdentityCount: number;
+  dedupedIdentityCount: number;
+  movedTeamCount: number;
+  dedupedTeamCount: number;
+  willInheritUserLink: boolean;
+}
+
+export interface MergeRecord {
+  id: string;
+  targetContributorId: number | null;
+  sourceContributorId: number | null;
+  movedActivityCount: number;
+  movedIdentityCount: number;
+  status: 'merged' | 'reverted';
+  mergedByUserId: string | null;
+  mergedAt: string;
+  revertedAt: string | null;
+}
+
+export const contributorsApi = {
+  list: (includeMerged = false): Promise<{ contributors: ContributorRow[] }> =>
+    request<{ contributors: ContributorRow[] }>(`/api/contributors${includeMerged ? '?includeMerged=true' : ''}`),
+
+  duplicates: (): Promise<{ groups: DuplicateGroup[] }> =>
+    request<{ groups: DuplicateGroup[] }>('/api/contributors/duplicates'),
+
+  mergePreview: (sourceId: number, targetId: number): Promise<MergePreview> =>
+    request<MergePreview>('/api/contributors/merge/preview', { method: 'POST', body: JSON.stringify({ sourceId, targetId }) }),
+
+  merge: (sourceId: number, targetId: number): Promise<{ mergeId: string; movedActivityCount: number; movedIdentityCount: number }> =>
+    request('/api/contributors/merge', { method: 'POST', body: JSON.stringify({ sourceId, targetId }) }),
+
+  merges: (): Promise<{ merges: MergeRecord[] }> =>
+    request<{ merges: MergeRecord[] }>('/api/contributors/merges'),
+
+  revertMerge: (mergeId: string): Promise<{ reverted: true; sourceId: number; targetId: number }> =>
+    request(`/api/contributors/merges/${mergeId}/revert`, { method: 'POST' }),
+
+  linkUser: (contributorId: number, userId: string | null): Promise<ContributorRow> =>
+    request<ContributorRow>(`/api/contributors/${contributorId}/link-user`, { method: 'PATCH', body: JSON.stringify({ userId }) }),
 };
 
 // ---------------------------------------------------------------------------

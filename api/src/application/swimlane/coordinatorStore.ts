@@ -11,7 +11,6 @@
 export interface BoardLite {
   id: string;
   tenantId: number;
-  autonomous: boolean;
   maxConcurrentTickets: number;
   needsAttentionLane: string;
 }

@@ -1906,6 +1906,10 @@ export const contributors = pgTable('contributors', {
   kind:          varchar('kind', { length: 16 }).notNull().default('human'),
   /** For agent contributors: the agent host instance whose telemetry rolls up here. */
   agentHostId:        integer('agent_host_id').references(() => agentHosts.id, { onDelete: 'set null' }),
+  /** Tombstone pointer: when this profile was merged into another, the survivor's
+   *  id (and is_active is set false). Kept — not deleted — so the merge is
+   *  auditable and reversible. NULL = a live, un-merged contributor. (0205) */
+  mergedIntoId:  integer('merged_into_id').references((): AnyPgColumn => contributors.id, { onDelete: 'set null' }),
   isActive:      boolean('is_active').notNull().default(true),
   createdAt:     timestamp('created_at').notNull().defaultNow(),
   updatedAt:     timestamp('updated_at').notNull().defaultNow(),
@@ -1973,6 +1977,10 @@ export const activityEvents = pgTable('activity_events', {
   cycleTimeHours: integer('cycle_time_hours'),
   occurredAt:     timestamp('occurred_at').notNull(),
   createdAt:      timestamp('created_at').notNull().defaultNow(),
+  /** Reversibility marker: when a contributor was merged away, its events are
+   *  re-pointed to the survivor and stamped with the loser's id here, so an
+   *  un-merge can move exactly those rows back set-based. NULL = never moved. (0205) */
+  mergedFromContributorId: integer('merged_from_contributor_id'),
 }, (t) => [
   unique('uq_activity_provider_external').on(t.tenantId, t.provider, t.eventType, t.externalId),
 ]);
@@ -2005,6 +2013,29 @@ export const contributorDailyMetrics = pgTable('contributor_daily_metrics', {
 }, (t) => [
   unique('uq_contributor_daily').on(t.tenantId, t.contributorId, t.date),
 ]);
+
+/**
+ * Audit + undo log for contributor consolidation (0205). One row per merge of a
+ * `source` (loser, tombstoned) contributor into a `target` (survivor). The bulk
+ * reassignment (activity_events) is reversed via activity_events.merged_from_
+ * contributor_id; the small things without a column marker (moved/deduped
+ * identities, team memberships, the survivor's prior user link) live in
+ * undoPayload so a revert can restore them exactly.
+ */
+export const contributorMerges = pgTable('contributor_merges', {
+  id:                   uuid('id').primaryKey().defaultRandom(),
+  tenantId:             integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  segmentId:            uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),
+  targetContributorId:  integer('target_contributor_id').references(() => contributors.id, { onDelete: 'set null' }),
+  sourceContributorId:  integer('source_contributor_id').references(() => contributors.id, { onDelete: 'set null' }),
+  movedActivityCount:   integer('moved_activity_count').notNull().default(0),
+  movedIdentityCount:   integer('moved_identity_count').notNull().default(0),
+  undoPayload:          jsonb('undo_payload'),
+  status:               varchar('status', { length: 16 }).notNull().default('merged'), // 'merged' | 'reverted'
+  mergedByUserId:       varchar('merged_by_user_id', { length: 36 }),
+  mergedAt:             timestamp('merged_at').notNull().defaultNow(),
+  revertedAt:           timestamp('reverted_at'),
+});
 
 // ---------------------------------------------------------------------------
 // 6e — Team hierarchy
@@ -3079,6 +3110,73 @@ export const qaCredentials = pgTable('qa_credentials', {
   updatedAt:     timestamp('updated_at').notNull().defaultNow(),
 });
 
+// ---------------------------------------------------------------------------
+// Agentic Tester (migration 0206) — the autonomous, heatmap-driven half of
+// Agentic QA. qa_explorations is one exploratory tester session (driven by
+// interaction heat from qa_journey_events); qa_findings are the runtime errors
+// it captured, each rankable by zone heat and optionally linked to the board
+// task opened to fix it.
+// ---------------------------------------------------------------------------
+
+export const qaExplorations = pgTable('qa_explorations', {
+  id:            uuid('id').primaryKey().defaultRandom(),
+  tenantId:      integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  segmentId:     uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),
+  projectId:     integer('project_id').references(() => projects.id, { onDelete: 'cascade' }),
+  targetId:      uuid('target_id').references(() => qaTargets.id, { onDelete: 'set null' }),
+  credentialId:  uuid('credential_id').references(() => qaCredentials.id, { onDelete: 'set null' }),
+  // 'queued' | 'running' | 'passed' | 'failed' | 'error'
+  status:        varchar('status', { length: 16 }).notNull().default('queued'),
+  trigger:       varchar('trigger', { length: 16 }).notNull().default('manual'),
+  // Max number of hot zones the agent exercises this run.
+  heatBudget:    integer('heat_budget').notNull().default(20),
+  // Heat window in days feeding the ranking.
+  sinceDays:     integer('since_days').notNull().default(30),
+  plan:          text('plan'),         // JSON QaStep[] — the heat-derived plan
+  heatZones:     text('heat_zones'),   // JSON snapshot of ranked zones
+  model:         varchar('model', { length: 255 }),   // planner LLM (null = deterministic)
+  zonesPlanned:  integer('zones_planned').notNull().default(0),
+  zonesExplored: integer('zones_explored'),
+  findingsCount: integer('findings_count').notNull().default(0),
+  runKey:        varchar('run_key', { length: 64 }),
+  browser:       varchar('browser', { length: 32 }),
+  targetUrl:     varchar('target_url', { length: 512 }),
+  commitSha:     varchar('commit_sha', { length: 64 }),
+  summary:       text('summary'),
+  errorMessage:  text('error_message'),
+  createdBy:     varchar('created_by', { length: 36 }),
+  startedAt:     timestamp('started_at'),
+  finishedAt:    timestamp('finished_at'),
+  createdAt:     timestamp('created_at').notNull().defaultNow(),
+  updatedAt:     timestamp('updated_at').notNull().defaultNow(),
+});
+
+export const qaFindings = pgTable('qa_findings', {
+  id:            uuid('id').primaryKey().defaultRandom(),
+  explorationId: uuid('exploration_id').notNull().references(() => qaExplorations.id, { onDelete: 'cascade' }),
+  tenantId:      integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  segmentId:     uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),
+  projectId:     integer('project_id').references(() => projects.id, { onDelete: 'cascade' }),
+  // 'console' | 'pageerror' | 'network' | 'assertion' | 'crash' | 'navigation'
+  type:          varchar('type', { length: 24 }).notNull(),
+  // 'low' | 'medium' | 'high' | 'critical'
+  severity:      varchar('severity', { length: 16 }).notNull().default('medium'),
+  route:         varchar('route', { length: 512 }),
+  selector:      text('selector'),
+  message:       text('message').notNull(),
+  detail:        text('detail'),       // stack / failed-response body / extra JSON
+  // Interaction frequency of the zone this surfaced in (why it matters).
+  heat:          integer('heat').notNull().default(0),
+  screenshotKey: varchar('screenshot_key', { length: 512 }),
+  // 'open' | 'triaged' | 'task_created' | 'ignored' | 'resolved'
+  status:        varchar('status', { length: 16 }).notNull().default('open'),
+  taskId:        integer('task_id').references(() => tasks.id, { onDelete: 'set null' }),
+  fingerprint:   varchar('fingerprint', { length: 64 }),
+  createdAt:     timestamp('created_at').notNull().defaultNow(),
+  // Unique (exploration_id, fingerprint) enforced by migration 0206 (see qa_flows
+  // note — kept off the pgTable literal for the schema-drift parser).
+});
+
 // ===========================================================================
 // Cloud Agent Boards (migrations 0064–0067)
 //
@@ -3100,10 +3198,8 @@ export const boards = pgTable('boards', {
   // board rather than tripping this constraint.
   projectId:            integer('project_id').notNull().unique().references(() => projects.id, { onDelete: 'cascade' }),
   name:                 varchar('name', { length: 255 }).notNull(),
-  /** @deprecated Inert since migration 0084 — autonomy is now driven by lane
-   *  agents + action rules (lane.gate 'auto' vs 'human'), not a board toggle.
-   *  Kept (defaulted true) until all readers are gone; see Gap Register. */
-  autonomous:           boolean('autonomous').notNull().default(true),
+  // The board-level Autonomous toggle was dropped in migration 0207 (inert
+  // since 0084 — autonomy is driven by lane agents + per-lane gate 'auto'/'human').
   maxConcurrentTickets: integer('max_concurrent_tickets').notNull().default(5),
   needsAttentionLane:   varchar('needs_attention_lane', { length: 120 }).notNull().default('needs-attention'),
   /** Standup turn-timer behaviour for this board's ceremonies (migration 0119):
