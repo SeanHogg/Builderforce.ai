@@ -67,41 +67,50 @@ function genTexture(k: PlanetKind): HTMLCanvasElement {
   g.fillStyle = rgba(k.base, 1);
   g.fillRect(0, 0, tw, th);
 
-  const blob = (x: number, y: number, r: number, col: RGB, a: number) => {
+  // Soft (optionally elongated) blob, wrapped in x so the texture tiles seamlessly.
+  const blobE = (x: number, y: number, rx: number, ry: number, col: RGB, a: number) => {
     for (const ox of [-tw, 0, tw]) {
-      const gr = g.createRadialGradient(x + ox, y, 0, x + ox, y, r);
+      g.save();
+      g.translate(x + ox, y);
+      g.scale(1, ry / Math.max(1, rx));
+      const gr = g.createRadialGradient(0, 0, 0, 0, 0, rx);
       gr.addColorStop(0, rgba(col, a));
       gr.addColorStop(1, rgba(col, 0));
       g.fillStyle = gr;
       g.beginPath();
-      g.arc(x + ox, y, r, 0, Math.PI * 2);
+      g.arc(0, 0, rx, 0, Math.PI * 2);
       g.fill();
+      g.restore();
     }
   };
 
   if (k.bands) {
-    const nb = 10;
-    for (let i = 0; i < nb; i++) {
-      const yy = (i / nb) * th;
-      const shade = i % 2 ? mix(k.base, k.light, 0.55) : mix(k.base, [0, 0, 0], 0.28);
-      g.fillStyle = rgba(shade, 0.7);
-      g.fillRect(0, yy, tw, (th / nb) * 1.06);
+    // Turbulent latitudinal bands — rows of horizontally-smeared soft blobs at
+    // LOW contrast, so it reads like a gas giant (Jupiter), not a beach ball.
+    const rows = 13;
+    for (let i = 0; i < rows; i++) {
+      const yy = ((i + 0.5) / rows) * th;
+      const tone = i % 2 ? mix(k.base, k.light, 0.32) : mix(k.base, [0, 0, 0], 0.22);
+      for (let j = 0; j < 5; j++) {
+        const bx = (j / 5) * tw + Math.random() * 50;
+        const wy = yy + Math.sin(j * 1.7 + i) * (th / rows) * 0.18;
+        blobE(bx, wy, 34 + Math.random() * 40, 4 + Math.random() * 4, tone, 0.3);
+      }
     }
-    blob(tw * 0.62, th * 0.6, 16, mix(k.light, [255, 255, 255], 0.3), 0.8); // storm spot
-    blob(tw * 0.2, th * 0.4, 10, mix(k.base, [0, 0, 0], 0.3), 0.6);
+    blobE(tw * 0.62, th * 0.58, 24, 13, mix(k.light, [255, 255, 255], 0.25), 0.55); // great spot
   } else {
-    const dark = mix(k.base, [0, 0, 0], 0.45);
+    const dark = mix(k.base, [0, 0, 0], 0.42);
     for (let i = 0; i < 16; i++) {
       const bx = Math.random() * tw;
       const by = 14 + Math.random() * (th - 28);
-      const r = 8 + Math.random() * 22;
-      blob(bx, by, r, Math.random() < 0.55 ? k.light : dark, 0.5 + Math.random() * 0.3);
+      const r = 9 + Math.random() * 22;
+      blobE(bx, by, r, r * (0.7 + Math.random() * 0.5), Math.random() < 0.55 ? k.light : dark, 0.42 + Math.random() * 0.25);
     }
   }
-  // fine speckle for texture
-  for (let i = 0; i < 240; i++) {
-    g.fillStyle = rgba(Math.random() < 0.5 ? k.light : [0, 0, 0], 0.05);
-    g.fillRect(Math.random() * tw, Math.random() * th, 2, 2);
+  // fine speckle for texture (kept within bounds so the wrap stays seamless)
+  for (let i = 0; i < 200; i++) {
+    g.fillStyle = rgba(Math.random() < 0.5 ? k.light : [0, 0, 0], 0.04);
+    g.fillRect(4 + Math.random() * (tw - 8), Math.random() * th, 2, 2);
   }
   return c;
 }
@@ -265,10 +274,10 @@ export default function WaveBackdrop({ className = '' }: { className?: string })
       ctx.fillStyle = hl;
       ctx.fillRect(-r, -r, r * 2, r * 2);
       ctx.globalCompositeOperation = 'source-over';
-      const term = ctx.createRadialGradient(r * 0.45, r * 0.45, r * 0.2, 0, 0, r * 1.25);
+      const term = ctx.createRadialGradient(r * 0.4, r * 0.4, r * 0.15, 0, 0, r * 1.3);
       term.addColorStop(0, rgba([0, 0, 0], 0));
-      term.addColorStop(0.6, rgba([2, 4, 12], 0.25 * fade));
-      term.addColorStop(1, rgba([2, 4, 12], 0.82 * fade));
+      term.addColorStop(0.55, rgba([3, 6, 16], 0.18 * fade));
+      term.addColorStop(1, rgba([3, 6, 16], 0.66 * fade));
       ctx.fillStyle = term;
       ctx.fillRect(-r, -r, r * 2, r * 2);
       ctx.restore();

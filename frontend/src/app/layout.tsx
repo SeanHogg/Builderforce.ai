@@ -57,25 +57,19 @@ export const metadata: Metadata = {
     type: 'website',
     url: BASE_URL,
     siteName: 'Builderforce.ai',
-    title: 'Builderforce.ai — Human-in-the-loop, fully agentic cloud',
+    title: 'Builderforce.ai — Your AI CTO, CIO & Security Officer',
+    // Front-loaded for chat/link unfurls, which truncate after ~1–2 lines on mobile.
     description:
-      'Train your own AI agents and use them inside your own agent. Manage your workforce on a Kanban board and review every action — without leaving VS Code. WebGPU LoRA, skills marketplace, personas, Workforce Registry.',
-    images: [
-      {
-        url: '/og-image.png',
-        width: 1200,
-        height: 630,
-        alt: 'Builderforce.ai — AI Agent Training Platform',
-      },
-    ],
+      'Train your own AI agents, run a whole AI workforce on a Kanban board, and approve every action — without leaving VS Code.',
+    // og:image is supplied by the app-level opengraph-image route (shared branded
+    // template), so every link preview stays on-brand and never drifts to a stale PNG.
     locale: 'en_US',
   },
   twitter: {
     card: 'summary_large_image',
-    title: 'Builderforce.ai — Human-in-the-loop, fully agentic cloud',
+    title: 'Builderforce.ai — Your AI CTO, CIO & Security Officer',
     description:
-      'Train your own AI agents and use them inside your agent. Manage your workforce on a Kanban board — without leaving VS Code.',
-    images: ['/og-image.png'],
+      'Train your own AI agents and run an AI workforce on a Kanban board — approve every action without leaving VS Code.',
   },
   manifest: '/manifest.json',
   applicationName: 'Builderforce.ai',

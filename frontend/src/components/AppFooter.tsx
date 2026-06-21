@@ -30,17 +30,18 @@ export default function AppFooter({ variant = 'legal' }: { variant?: 'legal' | '
       <footer className="global-footer">
         {variant === 'full' && (
           <div className="global-footer-full">
-            <Link href="/" aria-label={`${BRAND.name} home`}>
-              <Image
-                src="/agentHost.png"
-                alt={`${BRAND.name} — ${BRAND.tagline}`}
-                width={72}
-                height={72}
-                className="global-footer-mascot"
-              />
-            </Link>
-
-            <p className="global-footer-summary">{STATS.quotable.humanInLoopAgentic}</p>
+            <p className="global-footer-summary">
+              <Link href="/" aria-label={`${BRAND.name} home`} className="global-footer-mascot-link">
+                <Image
+                  src="/agentHost.png"
+                  alt={`${BRAND.name} — ${BRAND.tagline}`}
+                  width={28}
+                  height={28}
+                  className="global-footer-mascot"
+                />
+              </Link>
+              {STATS.quotable.humanInLoopAgentic}
+            </p>
 
             <nav aria-label="Footer">
               <ul className="global-footer-nav">
