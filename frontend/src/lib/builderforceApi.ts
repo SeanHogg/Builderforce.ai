@@ -3083,3 +3083,108 @@ export const pendingPromptsApi = {
     }
   },
 };
+
+// ---------------------------------------------------------------------------
+// Personas marketplace (server-backed public registry)
+//
+// The persona marketplace listing now comes from the API rather than only the
+// hardcoded builtins/localStorage. All methods degrade gracefully on an older
+// backend that 404s the new routes (browse returns []), so the page keeps
+// working with its localStorage "My Personas" draft layer as a fallback.
+// ---------------------------------------------------------------------------
+
+/** A persona published to the public registry. Mirrors the marketplace persona shape. */
+export interface PublicPersona {
+  id: string;
+  slug: string;
+  name: string;
+  description: string;
+  voice?: string;
+  perspective?: string;
+  decisionStyle?: string;
+  outputPrefix?: string;
+  capabilities?: string[];
+  tags?: string[];
+  author?: string;
+  image?: string;
+  likes?: number;
+  downloads?: number;
+  createdAt?: string;
+}
+
+export interface PublishPersonaInput {
+  name: string;
+  slug?: string;
+  description?: string;
+  voice?: string;
+  perspective?: string;
+  decisionStyle?: string;
+  outputPrefix?: string;
+  capabilities?: string[];
+  tags?: string[];
+  image?: string;
+}
+
+/** True when an error came from a 404 (older backend without the personas routes). */
+function isNotFound(e: unknown): boolean {
+  return e instanceof Error && /\b404\b|not found/i.test(e.message);
+}
+
+export const personasApi = {
+  /**
+   * Browse the public persona registry. Supports free-text `q`, `category`, and
+   * `sort`. Returns [] (not a throw) when the backend doesn't yet serve the
+   * route, so callers can fall back to builtins without special-casing.
+   */
+  listPublic: async (params?: { q?: string; category?: string; sort?: string }): Promise<PublicPersona[]> => {
+    const qs = new URLSearchParams();
+    if (params?.q) qs.set('q', params.q);
+    if (params?.category) qs.set('category', params.category);
+    if (params?.sort) qs.set('sort', params.sort);
+    const query = qs.toString();
+    try {
+      const res = await fetch(`${AUTH_API_URL}/api/personas/public${query ? `?${query}` : ''}`);
+      if (res.status === 404) return [];
+      if (!res.ok) {
+        const body = (await res.json().catch(() => ({}))) as { error?: string };
+        throw new Error(body.error || res.statusText || `Request failed (${res.status})`);
+      }
+      const data = (await res.json()) as { personas?: PublicPersona[] } | PublicPersona[];
+      return Array.isArray(data) ? data : data.personas ?? [];
+    } catch (e) {
+      if (isNotFound(e)) return [];
+      throw e;
+    }
+  },
+
+  /** Fetch a single public persona by slug. Returns null when missing / unsupported. */
+  getBySlug: async (slug: string): Promise<PublicPersona | null> => {
+    try {
+      const res = await fetch(`${AUTH_API_URL}/api/personas/${encodeURIComponent(slug)}`);
+      if (res.status === 404) return null;
+      if (!res.ok) {
+        const body = (await res.json().catch(() => ({}))) as { error?: string };
+        throw new Error(body.error || res.statusText || `Request failed (${res.status})`);
+      }
+      const data = (await res.json()) as { persona?: PublicPersona } | PublicPersona;
+      return (data as { persona?: PublicPersona }).persona ?? (data as PublicPersona);
+    } catch (e) {
+      if (isNotFound(e)) return null;
+      throw e;
+    }
+  },
+
+  /** Publish a persona to the public registry (authenticated). */
+  publish: (input: PublishPersonaInput): Promise<PublicPersona> =>
+    request<{ persona: PublicPersona } | PublicPersona>('/api/personas', {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }).then((r) => (r as { persona?: PublicPersona }).persona ?? (r as PublicPersona)),
+
+  /** Install a published persona into the current tenant (authenticated). */
+  install: (id: string): Promise<{ ok: boolean }> =>
+    request<{ ok: boolean }>(`/api/personas/${encodeURIComponent(id)}/install`, {
+      method: 'POST',
+      body: JSON.stringify({}),
+    }),
+};

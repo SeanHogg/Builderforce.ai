@@ -214,6 +214,9 @@ export interface PublishedAgent {
   status: 'active' | 'inactive';
   hire_count: number;
   eval_score?: number;
+  /** Public eval score (0-1) from the AI evaluation engine; null when not yet scored.
+   *  Surfaced on the marketplace/registry card. Backend sends camelCase `evalScore`. */
+  evalScore?: number | null;
   created_at: string;
   updated_at: string;
   // Workforce cloud agents (migration 0075). snake_case to match the raw row.

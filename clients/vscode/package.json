@@ -2,7 +2,7 @@
   "name": "builderforce-vscode",
   "displayName": "BuilderForce",
   "description": "BuilderForce AI coding agent — chat with a codebase-aware agent in your VS Code sidebar.",
-  "version": "2026.6.30",
+  "version": "2026.6.31",
   "publisher": "builderforce",
   "license": "MIT",
   "author": "Sean Hogg",
@@ -148,6 +148,16 @@
         "icon": "$(checklist)"
       },
       {
+        "command": "builderforce.runTask",
+        "title": "BuilderForce: Run Task on Platform",
+        "icon": "$(play)"
+      },
+      {
+        "command": "builderforce.humanRequests",
+        "title": "BuilderForce: Review Approvals",
+        "icon": "$(verified)"
+      },
+      {
         "command": "builderforce.openBoard",
         "title": "BuilderForce: Open Board",
         "icon": "$(layout)"
@@ -250,19 +260,24 @@
           "group": "navigation@3"
         },
         {
-          "command": "builderforce.refreshProjects",
+          "command": "builderforce.humanRequests",
           "when": "view == builderforce.project",
           "group": "navigation@4"
         },
         {
+          "command": "builderforce.refreshProjects",
+          "when": "view == builderforce.project",
+          "group": "navigation@5"
+        },
+        {
           "command": "builderforce.hideDoneTasks",
           "when": "view == builderforce.project && !builderforce.hideDoneTasks",
-          "group": "navigation@5"
+          "group": "navigation@6"
         },
         {
           "command": "builderforce.showDoneTasks",
           "when": "view == builderforce.project && builderforce.hideDoneTasks",
-          "group": "navigation@5"
+          "group": "navigation@6"
         }
       ],
       "view/item/context": [
@@ -277,14 +292,19 @@
           "group": "inline@2"
         },
         {
-          "command": "builderforce.startTaskSession",
+          "command": "builderforce.runTask",
           "when": "view == builderforce.project && viewItem == builderforceTask",
           "group": "inline@1"
         },
         {
-          "command": "builderforce.setTaskStatus",
+          "command": "builderforce.startTaskSession",
           "when": "view == builderforce.project && viewItem == builderforceTask",
           "group": "inline@2"
+        },
+        {
+          "command": "builderforce.setTaskStatus",
+          "when": "view == builderforce.project && viewItem == builderforceTask",
+          "group": "inline@3"
         }
       ],
       "commandPalette": [
@@ -306,6 +326,10 @@
         },
         {
           "command": "builderforce.setTaskStatus",
+          "when": "false"
+        },
+        {
+          "command": "builderforce.runTask",
           "when": "false"
         },
         {

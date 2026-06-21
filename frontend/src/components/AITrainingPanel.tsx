@@ -59,6 +59,8 @@ export function AITrainingPanel({ projectId, onLog, onJobCompleted }: AITraining
   const [datasets, setDatasets] = useState<Dataset[]>([]);
   const [jobs, setJobs] = useState<TrainingJob[]>([]);
   const [selectedDatasetId, setSelectedDatasetId] = useState<string>('');
+  /** Optional generation model — e.g. an OpenRouter model id; empty = gateway default pool. */
+  const [genModel, setGenModel] = useState<string>('');
   const [logs, setLogs] = useState<string[]>([]);
   const [lossHistory, setLossHistory] = useState<TrainingStep[]>([]);
   const [isGenerating, setIsGenerating] = useState(false);
@@ -99,7 +101,8 @@ export function AITrainingPanel({ projectId, onLog, onJobCompleted }: AITraining
         projectId,
         config.capabilityPrompt,
         `Dataset for ${config.capabilityPrompt}`,
-        (chunk) => appendLog(`  ${chunk}`)
+        (chunk) => appendLog(`  ${chunk}`),
+        genModel.trim() || undefined
       );
       appendLog(`✅ Dataset ready: ${dataset.example_count} examples (${dataset.id})`);
       setDatasets(prev => [dataset, ...prev]);
@@ -109,7 +112,7 @@ export function AITrainingPanel({ projectId, onLog, onJobCompleted }: AITraining
     } finally {
       setIsGenerating(false);
     }
-  }, [config.capabilityPrompt, projectId, appendLog]);
+  }, [config.capabilityPrompt, projectId, appendLog, genModel]);
 
   const handleStartTraining = useCallback(async () => {
     if (!config.baseModel) return;
@@ -133,14 +136,15 @@ export function AITrainingPanel({ projectId, onLog, onJobCompleted }: AITraining
       appendLog(`📋 Job created: ${job.id}`);
 
       if (webgpuAvailable && canUseWebGPU) {
-        // In-browser WebGPU training
-        appendLog('🎮 Starting in-browser WebGPU LoRA training…');
+        // In-browser WebGPU training — REAL Mamba SSM gradient descent.
+        appendLog('🎮 Starting in-browser WebGPU training (real on-device gradient descent)…');
         const trainer = new WebGPUTrainer({
           modelId: config.baseModel,
           workerUrl: getApiBaseUrl(),
           projectId,
           jobId: job.id,
           datasetId: selectedDatasetId || undefined,
+          mambaConfig: mambaProviderConfig,
           onLog: appendLog,
           onStep: (step) => {
             setLossHistory(prev => [...prev, step]);
@@ -191,27 +195,16 @@ export function AITrainingPanel({ projectId, onLog, onJobCompleted }: AITraining
         );
         trainerRef.current = null;
       } else {
-        // Cloud GPU offload for large models
-        appendLog(`☁️  Model >2B params — using cloud GPU offload (orchestrated via Cloudflare Workers)`);
-        appendLog(`📡 Job ${job.id} queued for cloud training…`);
-
-        // Simulate cloud offload polling
-        for (let epoch = 1; epoch <= config.epochs; epoch++) {
-          await new Promise(resolve => setTimeout(resolve, 1200));
-          const loss = 2.5 * Math.exp(-epoch * 0.4) + (Math.random() - 0.5) * 0.1;
-          appendLog(`  ☁️  Cloud epoch ${epoch}/${config.epochs} — loss: ${loss.toFixed(4)}`);
-          setLossHistory(prev => [...prev, { epoch, step: epoch, loss, learningRate: config.learningRate }]);
-          setJobs(prev => prev.map(j =>
-            j.id === job.id ? { ...j, current_epoch: epoch, current_loss: loss, status: 'running' } : j
-          ));
-        }
-
-        appendLog('✅ Cloud training complete!');
-        setJobs(prev => {
-          const completedJob = { ...prev.find(j => j.id === job.id)!, status: 'completed' as const };
-          onJobCompleted?.(completedJob);
-          return prev.map(j => j.id === job.id ? completedJob : j);
-        });
+        // In-browser WebGPU training only runs for models within the WebGPU
+        // parameter budget. There is no real cloud-offload training pipeline
+        // wired here yet — so rather than fabricate a loss curve, fail honestly.
+        const reason = !webgpuAvailable
+          ? 'WebGPU is not available in this browser (requires Chrome/Edge 113+).'
+          : `Model "${selectedModel?.name ?? config.baseModel}" exceeds the in-browser WebGPU budget (>2B params) and no cloud-offload training pipeline is wired.`;
+        appendLog(`❌ Cannot start training: ${reason}`);
+        setJobs(prev => prev.map(j =>
+          j.id === job.id ? { ...j, status: 'failed', error_message: reason } : j
+        ));
         setIsTraining(false);
       }
     } catch (e) {
@@ -538,6 +531,14 @@ export function AITrainingPanel({ projectId, onLog, onJobCompleted }: AITraining
                     </option>
                   ))}
                 </Select>
+                <input
+                  type="text"
+                  value={genModel}
+                  onChange={e => setGenModel(e.target.value)}
+                  placeholder="Generation model (optional) — e.g. openai/gpt-4o-mini (OpenRouter), omit for default"
+                  className="w-full mt-1 bg-gray-800 text-gray-100 text-xs rounded px-2 py-1.5 border border-gray-700 focus:border-blue-500 outline-none"
+                  title="Any model id routed by the Builderforce gateway, including OpenRouter models. Leave blank to use the default pool."
+                />
               </div>
             )}
 

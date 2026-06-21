@@ -304,7 +304,7 @@ export class AnalysisRunnerDO implements DurableObject {
       .where(and(eq(integrationCredentials.id, credentialId), eq(integrationCredentials.tenantId, tenantId)));
     if (!row) return { token: '', username: null };
     const secret = this.env.INTEGRATION_ENCRYPTION_SECRET ?? this.env.JWT_SECRET ?? '';
-    const creds = await decryptCredentials(row.credentialsEnc, row.iv, secret);
+    const creds = await decryptCredentials(row.credentialsEnc, row.iv, secret, tenantId);
     const token = String(creds?.accessToken ?? creds?.apiToken ?? creds?.token ?? '');
     const username = creds?.username ? String(creds.username) : creds?.email ? String(creds.email) : null;
     return { token, username };

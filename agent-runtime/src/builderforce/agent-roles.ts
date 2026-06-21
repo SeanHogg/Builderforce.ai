@@ -380,6 +380,50 @@ export function registerPlatformPersonasAsRoles(
   }
 }
 
+/** One hired/purchased agent, as returned by GET /api/runtime/hired-agents. */
+export type HiredAgentRole = {
+  id: string;
+  name: string;
+  roleKey: string;
+  systemPrompt: string;
+  skills: string[];
+  model?: string;
+};
+
+/**
+ * Register the tenant's hired agents as callable orchestrate roles.
+ *
+ * Each hired agent becomes a persona plugin resolvable by both its `roleKey` and
+ * its `id` (so an orchestrate step can address it either way). Skills are surfaced
+ * as the role's capabilities/tools so downstream wiring sees them. Built-in roles
+ * still take precedence (a hired agent cannot shadow a built-in role name).
+ *
+ * Registered under the `builderforce-assigned` source so a re-sync replaces a
+ * prior snapshot in place (read-through cache semantics live in the caller).
+ */
+export function registerHiredAgentsAsRoles(agents: HiredAgentRole[]): void {
+  for (const a of agents) {
+    const basePlugin: Omit<PersonaPlugin, "name"> = {
+      description: `Hired agent: ${a.name}`,
+      capabilities: a.skills,
+      tools: a.skills,
+      systemPrompt: a.systemPrompt,
+      model: a.model,
+      source: "builderforce-assigned",
+      active: true,
+    };
+    // Aliases: roleKey (preferred) + id. Register both so either resolves; skip a
+    // duplicate when id === roleKey.
+    const aliases = a.roleKey === a.id ? [a.roleKey] : [a.roleKey, a.id];
+    for (const alias of aliases) {
+      if (!alias || !alias.trim()) {
+        continue;
+      }
+      globalPersonaRegistry.register({ ...basePlugin, name: alias });
+    }
+  }
+}
+
 /**
  * Find an agent role by name.
  *

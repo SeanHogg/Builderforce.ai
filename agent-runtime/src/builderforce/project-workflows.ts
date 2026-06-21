@@ -21,6 +21,10 @@ export type PersistedTask = {
   completedAt?: string;
   dependencies: string[];
   dependents: string[];
+  /** Number of dispatch attempts so far (1 = first try; >1 = retried). */
+  attempts?: number;
+  /** Last error message observed across attempts (retained even after a later retry succeeds). */
+  lastError?: string;
 };
 
 export type PersistedWorkflow = {

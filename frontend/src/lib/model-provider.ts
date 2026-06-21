@@ -249,6 +249,21 @@ export class MambaModelProvider implements ModelProvider {
     });
   }
 
+  /**
+   * Serialise the REAL trained model weights to an ArrayBuffer (MBJS binary
+   * format) so they can be persisted (e.g. uploaded to R2 as a training
+   * artifact). These are the actual gradient-updated parameters produced by
+   * the real MambaTrainer — not a placeholder.
+   *
+   * @param opts.fp16 emit a v3 (half-precision) checkpoint (~half the bytes).
+   */
+  async exportTrainedWeights(opts?: { fp16?: boolean }): Promise<ArrayBuffer> {
+    if (!this._ready || !this.model) {
+      throw new Error('[MambaModelProvider] Provider not ready — call init() first');
+    }
+    return this.model.exportWeights(opts);
+  }
+
   dispose(): void {
     this.model = null;
     this.tokenizer = null;

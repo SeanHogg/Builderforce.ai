@@ -40,13 +40,20 @@ Guidelines:
  * @param capabilityPrompt - Describes the target capability (e.g. "Python debugging")
  * @param exampleCount - Number of examples to generate (default: 50)
  * @param env - Worker environment bindings
+ * @param authToken - Gateway bearer token (workspace JWT or clk_* key)
+ * @param model - Optional caller-chosen model id. Passed through to the gateway so
+ *   the dataset wizard can target ANY provider — incl. any OpenRouter model id
+ *   (bare → OpenRouter) or an explicit `<vendor>/<id>` pin
+ *   (`groq/llama-3.3-70b-versatile`, `deepseek/deepseek-chat`). Omitted → the
+ *   gateway uses the plan's default pool.
  * @returns Parsed dataset with instruction-tuning examples
  */
 export async function generateDatasetWithAI(
   capabilityPrompt: string,
   exampleCount: number,
   env: DatasetEnv,
-  authToken: string
+  authToken: string,
+  model?: string
 ): Promise<GeneratedDataset> {
   const userPrompt = `Generate ${exampleCount} diverse instruction-tuning examples for the following AI capability:
 
@@ -71,6 +78,7 @@ Return ONLY a valid JSON array of examples.`;
     authToken,
     messages,
     maxTokens: 4096,
+    ...(model ? { model } : {}),
   });
   if (!responseText) {
     throw new Error('Gateway returned an empty dataset generation response');

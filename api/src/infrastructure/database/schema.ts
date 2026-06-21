@@ -3670,3 +3670,35 @@ export const vscodeConnections = pgTable('vscode_connections', {
   uqUserMachine: uniqueIndex('uq_vscode_conn_user_machine').on(t.tenantId, t.userId, t.machineName),
   byTenant:      index('idx_vscode_conn_tenant').on(t.tenantId),
 }));
+
+/**
+ * Server-backed personas marketplace (migration 0203). Mirrors the prompt library
+ * (promptLibraryEntries): tenant-scoped persona rows with a PUBLIC visibility tier
+ * so a tenant can publish a persona others browse + install. The `persona` JSON is
+ * the persona body the editor uses ({ voice, perspective, decisionStyle,
+ * outputPrefix, capabilities[], systemDirectives? }). Distinct from
+ * `platformPersonas` (admin-managed builtins) — this is user-published content.
+ * Public `slug` is globally unique (partial unique index, see 0203).
+ */
+export const marketplacePersonas = pgTable('marketplace_personas', {
+  id:           uuid('id').primaryKey().defaultRandom(),
+  tenantId:     integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  createdBy:    varchar('created_by', { length: 36 }).references(() => users.id, { onDelete: 'set null' }),
+  name:         varchar('name', { length: 255 }).notNull(),
+  slug:         varchar('slug', { length: 255 }).notNull(),
+  description:  text('description'),
+  category:     varchar('category', { length: 100 }),
+  /** JSON array of tag strings, stored as text (mirrors promptLibraryEntries.tags). */
+  tags:         text('tags').notNull().default('[]'),
+  /** Persona body: { voice, perspective, decisionStyle, outputPrefix, capabilities[], systemDirectives? }. */
+  persona:      jsonb('persona').notNull().default(sql`'{}'::jsonb`),
+  /** 'private' | 'tenant' | 'public' */
+  visibility:   varchar('visibility', { length: 16 }).notNull().default('private'),
+  authorName:   varchar('author_name', { length: 255 }),
+  installCount: integer('install_count').notNull().default(0),
+  likeCount:    integer('like_count').notNull().default(0),
+  createdAt:    timestamp('created_at').notNull().defaultNow(),
+  updatedAt:    timestamp('updated_at').notNull().defaultNow(),
+}, (t) => ({
+  byTenant:   index('idx_marketplace_personas_tenant').on(t.tenantId),
+}));

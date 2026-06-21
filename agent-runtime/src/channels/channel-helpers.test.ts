@@ -3,6 +3,9 @@ import type { MsgContext } from "../auto-reply/templating.js";
 import { resolveConversationLabel } from "./conversation-label.js";
 import {
   formatChannelSelectionLine,
+  getImplementedChannelCount,
+  isImplementedChannelId,
+  listImplementedChannelIds,
   listChatChannels,
   normalizeChatChannelId,
 } from "./registry.js";
@@ -33,6 +36,44 @@ describe("channel registry helpers", () => {
   it("does not include MS Teams by default", () => {
     const channels = listChatChannels();
     expect(channels.some((channel) => channel.id === "msteams")).toBe(false);
+  });
+
+  it("ships at least 15 real channel integrations", () => {
+    const ids = listImplementedChannelIds();
+    // Every implemented id must be unique.
+    expect(new Set(ids).size).toBe(ids.length);
+    expect(getImplementedChannelCount()).toBe(ids.length);
+    expect(getImplementedChannelCount()).toBeGreaterThanOrEqual(15);
+    // Core channels (incl. irc + googlechat, which are fully implemented) and a
+    // representative set of bundled-extension channels must all be present.
+    for (const id of [
+      "telegram",
+      "whatsapp",
+      "discord",
+      "irc",
+      "googlechat",
+      "slack",
+      "signal",
+      "imessage",
+      "matrix",
+      "mattermost",
+      "msteams",
+      "line",
+      "twitch",
+    ]) {
+      expect(ids).toContain(id);
+    }
+  });
+
+  it("recognizes implemented channels via id + alias", () => {
+    expect(isImplementedChannelId("irc")).toBe(true);
+    expect(isImplementedChannelId("googlechat")).toBe(true);
+    expect(isImplementedChannelId("matrix")).toBe(true);
+    expect(isImplementedChannelId("teams")).toBe(true); // msteams alias
+    expect(isImplementedChannelId("bb")).toBe(true); // bluebubbles alias
+    expect(isImplementedChannelId("gchat")).toBe(true); // googlechat alias
+    expect(isImplementedChannelId("nope")).toBe(false);
+    expect(isImplementedChannelId("")).toBe(false);
   });
 
   it("formats selection lines with docs labels + website extras", () => {

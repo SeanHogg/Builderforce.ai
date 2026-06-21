@@ -49,6 +49,72 @@ export interface Env {
   CLOUDFLARE_ACCOUNT_ID?: string;
 
   // ---------------------------------------------------------------------------
+  // OpenAI-compatible commercial LLM vendors (the "30+ providers" surface).
+  // Each is an optional Bearer-key secret; when bound, that provider's models
+  // are reachable via an explicit `<vendor>/<model-id>` pin through the same
+  // gateway dispatch/fallback/cooldown machinery. Unbound → the vendor is simply
+  // skipped. Set via `wrangler secret put <NAME>` (or api/.env + secrets:from-env).
+  // ---------------------------------------------------------------------------
+  /** OpenAI — api.openai.com/v1. */
+  OPENAI_API_KEY?: string;
+  /** Groq — api.groq.com/openai/v1. */
+  GROQ_API_KEY?: string;
+  /** DeepSeek — api.deepseek.com/v1. */
+  DEEPSEEK_API_KEY?: string;
+  /** Mistral — api.mistral.ai/v1. */
+  MISTRAL_API_KEY?: string;
+  /** Fireworks AI — api.fireworks.ai/inference/v1. */
+  FIREWORKS_API_KEY?: string;
+  /** DeepInfra — api.deepinfra.com/v1/openai. */
+  DEEPINFRA_API_KEY?: string;
+  /** xAI (Grok) — api.x.ai/v1. */
+  XAI_API_KEY?: string;
+  /** Perplexity — api.perplexity.ai. */
+  PERPLEXITY_API_KEY?: string;
+  /** Moonshot AI (Kimi) — api.moonshot.cn/v1. */
+  MOONSHOT_API_KEY?: string;
+  /** Hyperbolic — api.hyperbolic.xyz/v1. */
+  HYPERBOLIC_API_KEY?: string;
+  /** Novita AI — api.novita.ai/v3/openai. */
+  NOVITA_API_KEY?: string;
+  /** SambaNova Cloud — api.sambanova.ai/v1. */
+  SAMBANOVA_API_KEY?: string;
+  /** Lepton AI — api.lepton.ai/v1. */
+  LEPTON_API_KEY?: string;
+  /** Anyscale Endpoints — api.endpoints.anyscale.com/v1. */
+  ANYSCALE_API_KEY?: string;
+  /** OctoAI — text.octoai.run/v1. */
+  OCTOAI_API_KEY?: string;
+  /** Featherless AI — api.featherless.ai/v1. */
+  FEATHERLESS_API_KEY?: string;
+  /** Inference.net — api.inference.net/v1. */
+  INFERENCENET_API_KEY?: string;
+  /** Targon — api.targon.com/v1. */
+  TARGON_API_KEY?: string;
+  /** Avian.io — api.avian.io/v1. */
+  AVIAN_API_KEY?: string;
+  /** Nebius AI Studio — api.studio.nebius.com/v1. */
+  NEBIUS_API_KEY?: string;
+  /** Baseten — inference.baseten.co/v1. */
+  BASETEN_API_KEY?: string;
+  /** Lambda Inference — api.lambda.ai/v1. */
+  LAMBDA_API_KEY?: string;
+  /** Kluster.ai — api.kluster.ai/v1. */
+  KLUSTERAI_API_KEY?: string;
+  /** Parasail — api.parasail.io/v1. */
+  PARASAIL_API_KEY?: string;
+  /** nScale — inference.api.nscale.com/v1. */
+  NSCALE_API_KEY?: string;
+  /** Chutes AI — llm.chutes.ai/v1. */
+  CHUTES_API_KEY?: string;
+  /** AI21 (Jamba) — api.ai21.com/studio/v1. */
+  AI21_API_KEY?: string;
+  /** SiliconFlow — api.siliconflow.com/v1. */
+  SILICONFLOW_API_KEY?: string;
+  /** MiniMax — api.minimax.io/v1. */
+  MINIMAX_API_KEY?: string;
+
+  // ---------------------------------------------------------------------------
   // Image generation (`POST /v1/images/generations`)
   // ---------------------------------------------------------------------------
 

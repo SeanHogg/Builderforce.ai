@@ -49,6 +49,44 @@ type RuntimeHonoEnv = HonoEnv & {
   };
 };
 
+/** ide_agents.base_model sentinel meaning "no explicit model — use the default"
+ *  (mirrors cloudAgentEngine.AGENT_DEFAULT_MODEL_SENTINEL). */
+const AGENT_DEFAULT_MODEL_SENTINEL = 'builderforce-default';
+
+/** Read-through cache key for a tenant's hired-agents runtime registry. Invalidated
+ *  from the workforce hire/unhire routes. Exported so those routes stay DRY. */
+export const runtimeHiredAgentsCacheKey = (tenantId: number): string => `rt:hired-agents:${tenantId}`;
+
+/** A stable role handle for a hired agent — a slug of its name, falling back to its
+ *  id so the runtime always has a usable, collision-resistant role key. */
+function hiredAgentRoleKey(name: string | null | undefined, id: string): string {
+  const slug = (name ?? '').toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 64);
+  return slug || id;
+}
+
+/** Project a hired `ide_agents` row to the runtime's callable-role contract. */
+function projectHiredAgent(r: { id: string; name: string | null; bio: string | null; skills: unknown; base_model: string | null }): {
+  id: string; name: string; roleKey: string; systemPrompt: string; skills: string[]; model?: string;
+} {
+  const skills = Array.isArray(r.skills)
+    ? (r.skills as unknown[]).map(String)
+    : typeof r.skills === 'string'
+      ? (() => { try { const v = JSON.parse(r.skills as string); return Array.isArray(v) ? v.map(String) : []; } catch { return []; } })()
+      : [];
+  const rawModel = typeof r.base_model === 'string' ? r.base_model.trim() : '';
+  const model = rawModel && rawModel !== AGENT_DEFAULT_MODEL_SENTINEL ? rawModel : undefined;
+  return {
+    id: r.id,
+    name: r.name ?? r.id,
+    roleKey: hiredAgentRoleKey(r.name, r.id),
+    // No dedicated system_prompt column on ide_agents — `bio` holds the agent's
+    // behavior/instructions text, so it is the best available projection.
+    systemPrompt: r.bio ?? '',
+    skills,
+    ...(model ? { model } : {}),
+  };
+}
+
 type DispatchMessage = {
   type: 'task.assign' | 'task.broadcast';
   executionId: number;
@@ -1080,6 +1118,42 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
       };
     });
     return c.json({ active, runningCloudRefs: [...new Set(active.filter((a) => a.kind === 'cloud').map((a) => a.cloudAgentRef))] });
+  });
+
+  // GET /api/runtime/hired-agents
+  // The on-prem runtime fetches the tenant's HIRED agents to register them as
+  // callable roles (agent-in-agent). Joins agent_purchases (active hires) to the
+  // raw-SQL `ide_agents` workforce records and projects each agent's runnable
+  // config. Authenticated by the same authMiddleware as every other runtime
+  // endpoint — a tenant JWT OR an `agentHost:` runtime JWT, both of which resolve
+  // c.get('tenantId'); the query is tenant-scoped on that.
+  //
+  // Contract (DO NOT change — another team codes against it):
+  //   { agents: Array<{ id, name, roleKey, systemPrompt, skills: string[], model? }> }
+  //
+  // `ide_agents` has no dedicated system_prompt column, so `systemPrompt` projects
+  // from the agent's `bio` (its behavior/instructions text). `roleKey` is a stable
+  // slug derived from the name (falling back to the id) so the runtime has a stable
+  // role handle. `model` is the agent's base_model unless it's the
+  // "use the default" sentinel, in which case it is omitted. Read-through cached;
+  // invalidated on hire/unhire (see workforceRoutes).
+  router.get('/hired-agents', async (c) => {
+    const tenantId = c.get('tenantId') as number;
+    const rows = await getOrSetCached(
+      c.env as Env,
+      runtimeHiredAgentsCacheKey(tenantId),
+      () => neon(c.env.NEON_DATABASE_URL)`
+        SELECT a.id, a.name, a.bio, a.skills, a.base_model
+        FROM ide_agents a
+        JOIN agent_purchases p ON p.agent_id = a.id
+        WHERE p.tenant_id = ${tenantId} AND p.unhired_at IS NULL AND a.status = 'active'
+        ORDER BY p.created_at DESC
+        LIMIT 200
+      ` as unknown as Promise<Array<{ id: string; name: string; bio: string | null; skills: unknown; base_model: string | null }>>,
+    );
+
+    const agents = rows.map((r) => projectHiredAgent(r));
+    return c.json({ agents });
   });
 
   // Full execution timeline for one session (newest first)

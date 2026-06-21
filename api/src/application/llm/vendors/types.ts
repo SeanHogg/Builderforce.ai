@@ -13,7 +13,19 @@
 
 import { applyPromptCaching } from '../promptCaching';
 
-export type VendorId = 'openrouter' | 'cerebras' | 'ollama' | 'nvidia' | 'googleai' | 'cloudflare' | 'anthropic';
+export type VendorId =
+  // ── Bespoke wire-format vendors (hand-rolled modules)
+  | 'openrouter' | 'cerebras' | 'ollama' | 'nvidia' | 'googleai' | 'cloudflare' | 'anthropic'
+  // ── OpenAI-compatible commercial vendors (createOpenAICompatibleVendor factory).
+  //    Each exposes a standard `/chat/completions` endpoint + Bearer auth, so they
+  //    ride the shared transport. Reachable via an explicit `<vendor>/<id>` pin
+  //    (autoRoute:false — they don't pollute the auto-selected FREE/PRO pools) and
+  //    participate in the same dispatch/cooldown/fallback machinery as the rest.
+  | 'openai' | 'groq' | 'deepseek' | 'mistral' | 'together' | 'fireworks'
+  | 'deepinfra' | 'xai' | 'perplexity' | 'moonshot' | 'hyperbolic' | 'novita'
+  | 'sambanova' | 'lepton' | 'anyscale' | 'octoai' | 'featherless' | 'inferencenet'
+  | 'targon' | 'avian' | 'nebius' | 'baseten' | 'lambda' | 'klusterai'
+  | 'parasail' | 'nscale' | 'chutes' | 'ai21' | 'siliconflow' | 'minimax';
 
 /**
  * Tier classification per model — drives pricing, plan gating, and the
@@ -58,6 +70,74 @@ export interface VendorEnv {
    *  to live alongside one in the Worker secrets; we accept it under the env
    *  name the operator gave us. */
   CLOUDFLARE_ACCOUNT_ID?: string | null;
+
+  // ──────────────────────────────────────────────────────────────────────────
+  // OpenAI-compatible commercial vendor keys. Each powers one
+  // `createOpenAICompatibleVendor(...)` module; absent → that vendor is simply
+  // skipped by the cascade (key-bound check). Set via `wrangler secret put`.
+  // The index signature lets the shared factory read `env[apiKeyEnv]` by name
+  // without a cast while these named fields keep the documented surface honest.
+  // ──────────────────────────────────────────────────────────────────────────
+  /** OpenAI — api.openai.com/v1 (GPT-4o, o-series, etc.). */
+  OPENAI_API_KEY?: string | null;
+  /** Groq — api.groq.com/openai/v1 (LPU-accelerated Llama/Qwen/Kimi). */
+  GROQ_API_KEY?: string | null;
+  /** DeepSeek — api.deepseek.com/v1 (deepseek-chat / deepseek-reasoner). */
+  DEEPSEEK_API_KEY?: string | null;
+  /** Mistral La Plateforme — api.mistral.ai/v1. */
+  MISTRAL_API_KEY?: string | null;
+  /** Together AI — api.together.xyz/v1. */
+  TOGETHER_API_KEY?: string | null;
+  /** Fireworks AI — api.fireworks.ai/inference/v1. */
+  FIREWORKS_API_KEY?: string | null;
+  /** DeepInfra — api.deepinfra.com/v1/openai. */
+  DEEPINFRA_API_KEY?: string | null;
+  /** xAI (Grok) — api.x.ai/v1. */
+  XAI_API_KEY?: string | null;
+  /** Perplexity — api.perplexity.ai. */
+  PERPLEXITY_API_KEY?: string | null;
+  /** Moonshot AI (Kimi) — api.moonshot.cn/v1. */
+  MOONSHOT_API_KEY?: string | null;
+  /** Hyperbolic — api.hyperbolic.xyz/v1. */
+  HYPERBOLIC_API_KEY?: string | null;
+  /** Novita AI — api.novita.ai/v3/openai. */
+  NOVITA_API_KEY?: string | null;
+  /** SambaNova Cloud — api.sambanova.ai/v1. */
+  SAMBANOVA_API_KEY?: string | null;
+  /** Lepton AI — *.lepton.run / api.lepton.ai. */
+  LEPTON_API_KEY?: string | null;
+  /** Anyscale Endpoints — api.endpoints.anyscale.com/v1. */
+  ANYSCALE_API_KEY?: string | null;
+  /** OctoAI — text.octoai.run/v1. */
+  OCTOAI_API_KEY?: string | null;
+  /** Featherless AI — api.featherless.ai/v1. */
+  FEATHERLESS_API_KEY?: string | null;
+  /** Inference.net — api.inference.net/v1. */
+  INFERENCENET_API_KEY?: string | null;
+  /** Targon (Manifold) — api.targon.com/v1. */
+  TARGON_API_KEY?: string | null;
+  /** Avian.io — api.avian.io/v1. */
+  AVIAN_API_KEY?: string | null;
+  /** Nebius AI Studio — api.studio.nebius.com/v1. */
+  NEBIUS_API_KEY?: string | null;
+  /** Baseten — inference.baseten.co/v1. */
+  BASETEN_API_KEY?: string | null;
+  /** Lambda Inference — api.lambda.ai/v1. */
+  LAMBDA_API_KEY?: string | null;
+  /** Kluster.ai — api.kluster.ai/v1. */
+  KLUSTERAI_API_KEY?: string | null;
+  /** Parasail — api.parasail.io/v1. */
+  PARASAIL_API_KEY?: string | null;
+  /** nScale — inference.api.nscale.com/v1. */
+  NSCALE_API_KEY?: string | null;
+  /** Chutes AI — llm.chutes.ai/v1. */
+  CHUTES_API_KEY?: string | null;
+  /** AI21 (Jamba) — api.ai21.com/studio/v1. */
+  AI21_API_KEY?: string | null;
+  /** SiliconFlow — api.siliconflow.com/v1. */
+  SILICONFLOW_API_KEY?: string | null;
+  /** MiniMax — api.minimax.io/v1. */
+  MINIMAX_API_KEY?: string | null;
 }
 
 export interface VendorCallParams {

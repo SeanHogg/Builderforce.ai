@@ -12,8 +12,10 @@
 
 import { randomUUID } from "node:crypto";
 import { readSharedEnvVar } from "../../infra/env-file.js";
+import { loadHiredAgentsCached } from "../../infra/hired-agents-sync.js";
 import { fetchFleetEntries } from "../../infra/remote-subagent.js";
 import { pushSpec } from "../../infra/spec-sync.js";
+import { findAgentRole } from "../agent-roles.js";
 import {
   createAdversarialReviewWorkflow,
   createBugFixWorkflow,
@@ -48,9 +50,51 @@ export interface OrchestrateOpts {
   customSteps?: Array<{ role: string; task: string; dependsOn?: string[] }>;
 }
 
+/**
+ * Refresh hired-agent roles (read-through cache) so a hired agent's roleKey/id
+ * resolves at orchestration start. Cheap when warm; degrades silently to built-ins
+ * only when the API key/agentNode is absent or the endpoint is unreachable.
+ */
+async function refreshHiredAgentRoles(): Promise<void> {
+  const apiKey = readSharedEnvVar("BUILDERFORCE_API_KEY");
+  const agentNodeId = readSharedEnvVar("BUILDERFORCE_AGENT_NODE_ID");
+  const baseUrl = readSharedEnvVar("BUILDERFORCE_URL") ?? "https://api.builderforce.ai";
+  if (!apiKey || !agentNodeId) {
+    return;
+  }
+  try {
+    await loadHiredAgentsCached({ baseUrl, agentNodeId, apiKey });
+  } catch {
+    // Never block orchestration on hired-agent discovery.
+  }
+}
+
+/**
+ * Validate a step's role against the registry (built-ins + personas + hired
+ * agents). Prefixed targets (`remote:` / `node:`) are dispatch directives, not
+ * registry roles, so they pass through. Returns an error message for an unknown
+ * role, or null when valid.
+ */
+function validateRole(role: string): string | null {
+  if (role.startsWith("remote:") || role.startsWith("node:")) {
+    return null;
+  }
+  if (findAgentRole(role)) {
+    return null;
+  }
+  return (
+    `Unknown agent role: "${role}". Use a built-in role ` +
+    `(code-creator, code-reviewer, test-generator, bug-analyzer, refactor-agent, ` +
+    `documentation-agent, architecture-advisor) or a hired-agent roleKey/id.`
+  );
+}
+
 export async function runOrchestrate(opts: OrchestrateOpts, context: OrchestrationContext): Promise<Record<string, unknown>> {
   const { workflow, description, customSteps } = opts;
   try {
+    // Pull hired agents into the role registry before resolving any role.
+    await refreshHiredAgentRoles();
+
     let steps: WorkflowStep[];
     if (workflow === "custom") {
       if (!customSteps || customSteps.length === 0) {
@@ -64,6 +108,15 @@ export async function runOrchestrate(opts: OrchestrateOpts, context: Orchestrati
         return { error: `Unknown workflow type: ${workflow}. Use '${known}'.` };
       }
       steps = factory(description);
+    }
+
+    // Validate every step's role against the registry (built-in OR hired). Returns
+    // a clear error for an unknown role rather than failing deep in dispatch.
+    for (const step of steps) {
+      const roleError = validateRole(step.role);
+      if (roleError) {
+        return { error: roleError };
+      }
     }
 
     const wf = globalOrchestrator.createWorkflow(steps);

@@ -1,16 +1,30 @@
 /**
  * Persona routes — /api/personas/*
  *
- * Serves the psychometric-persona catalog and scoring used by the Pro persona
- * editor (sliders / questionnaire / import). The catalog is a static in-memory
- * constant (no DB round-trip, so no cache needed); scoring + import are pure
- * functions. The behavioural compile happens later, in agent-runtime.
+ * Two concerns:
+ *   1. The psychometric-persona catalog + scoring used by the Pro persona editor
+ *      (sliders / questionnaire / import). Static in-memory constant + pure
+ *      functions; the behavioural compile happens later, in agent-runtime.
+ *   2. The server-backed personas MARKETPLACE (migration 0203) — mirrors the
+ *      prompt library: a tenant publishes a persona others browse + install.
  *
- * Pro gate: scoring and import require a paid plan — equivalent to
+ * PUBLIC (no auth):
+ *   GET  /api/personas/public        Browse public personas (q/category/sort, cached)
+ *   GET  /api/personas/:slug         Public persona detail
+ *
+ * AUTH (tenant JWT):
+ *   GET  /api/personas/psychometric/catalog            Framework catalog (Pro-aware)
+ *   POST /api/personas/psychometric/score|import       (Pro)
+ *   GET  /api/personas/mine          This tenant's personas (any visibility)
+ *   POST /api/personas               Publish / create a persona (tenant-scoped)
+ *   POST /api/personas/:id/install   Record an install/use (bumps install_count)
+ *
+ * Pro gate: psychometric scoring/import require a paid plan — equivalent to
  * PlanLimits.psychometricPersona (false only on FREE). Mirrors the
  * `premiumOverride || effectivePlan !== 'free'` convention used in llmRoutes.
  */
 import { Hono } from 'hono';
+import { and, desc, eq, ilike, ne, or, sql as dsql } from 'drizzle-orm';
 import { authMiddleware } from '../middleware/authMiddleware';
 import { resolveTenantPlan } from './llmRoutes';
 import {
@@ -20,10 +34,118 @@ import {
   scoreQuestionnaire,
   sanitizeVector,
 } from '../../application/persona/psychometricCatalog';
-import type { HonoEnv } from '../../env';
+import { marketplacePersonas } from '../../infrastructure/database/schema';
+import { getOrSetCached, getCacheVersion, bumpCacheVersion } from '../../infrastructure/cache/readThroughCache';
+import type { Db } from '../../infrastructure/database/connection';
+import type { Env, HonoEnv } from '../../env';
 
-export function createPersonaRoutes(): Hono<HonoEnv> {
+/** Version key for the public personas keyspace — bumped on any publish so the
+ *  searchable (q/category/sort) cached browse results all age out at once. */
+const PERSONA_PUBLIC_VERSION_KEY = 'personas:public';
+const PERSONA_PUBLIC_CACHE_TTL_SECONDS = 120;
+
+function slugify(s: string): string {
+  return s.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 80) || 'persona';
+}
+
+function safeTags(v: unknown): string[] {
+  if (Array.isArray(v)) return v as string[];
+  if (typeof v === 'string') { try { const p = JSON.parse(v); return Array.isArray(p) ? p : []; } catch { return []; } }
+  return [];
+}
+
+/**
+ * Normalize a persona body to the shape the editor uses + agent-runtime compiles:
+ * { voice, perspective, decisionStyle, outputPrefix, capabilities[], systemDirectives }.
+ * Drops unknown keys so a published persona is a predictable contract.
+ */
+function sanitizePersonaBody(v: unknown): Record<string, unknown> {
+  const o = (v && typeof v === 'object') ? v as Record<string, unknown> : {};
+  const str = (k: string): string => (typeof o[k] === 'string' ? (o[k] as string) : '');
+  return {
+    voice: str('voice'),
+    perspective: str('perspective'),
+    decisionStyle: str('decisionStyle'),
+    outputPrefix: str('outputPrefix'),
+    capabilities: Array.isArray(o.capabilities) ? (o.capabilities as unknown[]).map(String).filter(Boolean) : [],
+    systemDirectives: str('systemDirectives'),
+  };
+}
+
+/** A public slug globally unique among PUBLIC rows (partial unique index in 0203). */
+async function publicSafeSlug(db: Db, base: string, excludeId: string | null): Promise<string> {
+  const conds = [eq(marketplacePersonas.slug, base), eq(marketplacePersonas.visibility, 'public')];
+  if (excludeId) conds.push(ne(marketplacePersonas.id, excludeId));
+  const [clash] = await db.select({ id: marketplacePersonas.id }).from(marketplacePersonas).where(and(...conds));
+  if (!clash) return base;
+  return `${base}-${(excludeId ?? `${Date.now()}`).replace(/-/g, '').slice(0, 6)}`;
+}
+
+type PersonaRow = typeof marketplacePersonas.$inferSelect;
+function publicView(r: PersonaRow) {
+  return {
+    id: r.id,
+    slug: r.slug,
+    name: r.name,
+    description: r.description,
+    category: r.category,
+    tags: safeTags(r.tags),
+    persona: r.persona,
+    authorName: r.authorName,
+    installCount: r.installCount,
+    likeCount: r.likeCount,
+    updatedAt: r.updatedAt,
+  };
+}
+
+export function createPersonaRoutes(db: Db): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
+
+  // ───────────────────────────── PUBLIC ──────────────────────────────────────
+  // Defined BEFORE authMiddleware so they stay open to the world.
+
+  // GET /api/personas/public — browse published personas (q / category / sort).
+  // Read-heavy + world-readable over a SEARCHABLE keyspace → cached with a version
+  // token folded into the key, so a publish bumps the token and orphans every
+  // cached query variant at once (rather than enumerating each q/category combo).
+  router.get('/public', async (c) => {
+    const q = c.req.query('q')?.trim();
+    const category = c.req.query('category')?.trim();
+    const sort = c.req.query('sort') ?? 'popular';
+    const limit = Math.min(Number(c.req.query('limit') ?? '60'), 100);
+    const offset = Math.max(Number(c.req.query('offset') ?? '0'), 0);
+
+    const version = await getCacheVersion(c.env as Env, PERSONA_PUBLIC_VERSION_KEY);
+    const cacheKey = `personas:public:v:${version}:q=${q ?? ''}:c=${category ?? ''}:s=${sort}:l=${limit}:o=${offset}`;
+
+    const personas = await getOrSetCached(
+      c.env as Env,
+      cacheKey,
+      async () => {
+        const conds = [eq(marketplacePersonas.visibility, 'public')];
+        if (q) {
+          const like = `%${q}%`;
+          conds.push(or(ilike(marketplacePersonas.name, like), ilike(marketplacePersonas.description, like))!);
+        }
+        if (category) conds.push(eq(marketplacePersonas.category, category));
+        const order =
+          sort === 'recent' ? desc(marketplacePersonas.createdAt)
+          : sort === 'liked' ? desc(marketplacePersonas.likeCount)
+          : desc(marketplacePersonas.installCount);
+        const rows = await db
+          .select()
+          .from(marketplacePersonas)
+          .where(and(...conds))
+          .orderBy(order, desc(marketplacePersonas.likeCount))
+          .limit(limit)
+          .offset(offset);
+        return rows.map(publicView);
+      },
+      { kvTtlSeconds: PERSONA_PUBLIC_CACHE_TTL_SECONDS },
+    );
+
+    return c.json({ personas });
+  });
 
   /** True when the tenant's plan includes the psychometric-persona Pro feature. */
   async function tenantHasPsychometric(env: HonoEnv['Bindings'], tenantId: number): Promise<boolean> {
@@ -76,6 +198,94 @@ export function createPersonaRoutes(): Hono<HonoEnv> {
     const body = await c.req.json<{ vector?: unknown }>().catch(() => ({ vector: undefined }));
     const vector = sanitizeVector(body.vector);
     return c.json({ vector, source: 'imported' });
+  });
+
+  // ───────────────────────── MARKETPLACE (AUTH) ──────────────────────────────
+
+  // GET /api/personas/mine — this tenant's personas (any visibility). Registered
+  // before the public `/:slug` so "mine" isn't swallowed by the slug route.
+  router.get('/mine', authMiddleware, async (c) => {
+    const tenantId = c.get('tenantId') as number;
+    const rows = await db
+      .select()
+      .from(marketplacePersonas)
+      .where(eq(marketplacePersonas.tenantId, tenantId))
+      .orderBy(desc(marketplacePersonas.updatedAt));
+    return c.json({ personas: rows.map((r) => ({ ...publicView(r), visibility: r.visibility })) });
+  });
+
+  // POST /api/personas — publish / create a persona (tenant-scoped). Invalidates
+  // the public browse cache (via a version bump) when the row is public.
+  router.post('/', authMiddleware, async (c) => {
+    const tenantId = c.get('tenantId') as number;
+    const userId = c.get('userId') as string | undefined;
+    type PersonaCreateBody = {
+      name?: string;
+      description?: string;
+      category?: string;
+      tags?: string[];
+      visibility?: 'private' | 'tenant' | 'public';
+      authorName?: string;
+      persona?: unknown;
+    };
+    const body = await c.req.json<PersonaCreateBody>().catch((): PersonaCreateBody => ({}));
+
+    if (!body.name?.trim()) return c.json({ error: 'name is required' }, 400);
+    const visibility = body.visibility ?? 'private';
+    let slug = slugify(body.name);
+    if (visibility === 'public') slug = await publicSafeSlug(db, slug, null);
+
+    const [row] = await db
+      .insert(marketplacePersonas)
+      .values({
+        tenantId,
+        createdBy: userId ?? null,
+        name: body.name.trim(),
+        slug,
+        description: body.description ?? null,
+        category: body.category ?? null,
+        tags: JSON.stringify(body.tags ?? []),
+        persona: sanitizePersonaBody(body.persona),
+        visibility,
+        authorName: body.authorName ?? null,
+      })
+      .returning();
+    if (!row) return c.json({ error: 'Failed to create persona' }, 500);
+
+    if (visibility === 'public') await bumpCacheVersion(c.env as Env, PERSONA_PUBLIC_VERSION_KEY);
+    return c.json({ ...publicView(row), visibility: row.visibility }, 201);
+  });
+
+  // POST /api/personas/:id/install — record an install/use of a persona. Anyone
+  // may install a PUBLIC persona; a tenant may install its own (any visibility).
+  router.post('/:id/install', authMiddleware, async (c) => {
+    const tenantId = c.get('tenantId') as number;
+    const id = c.req.param('id');
+    const [row] = await db
+      .select({ id: marketplacePersonas.id, visibility: marketplacePersonas.visibility, tenantId: marketplacePersonas.tenantId })
+      .from(marketplacePersonas)
+      .where(eq(marketplacePersonas.id, id));
+    if (!row || (row.visibility !== 'public' && row.tenantId !== tenantId)) {
+      return c.json({ error: 'Persona not found' }, 404);
+    }
+    const [updated] = await db
+      .update(marketplacePersonas)
+      .set({ installCount: dsql`${marketplacePersonas.installCount} + 1` })
+      .where(eq(marketplacePersonas.id, id))
+      .returning();
+    return c.json({ installed: true, installCount: updated?.installCount ?? null });
+  });
+
+  // GET /api/personas/:slug — public persona detail. Registered LAST so the
+  // literal routes above (/public, /mine, /psychometric/*) take precedence.
+  router.get('/:slug', async (c) => {
+    const slug = c.req.param('slug');
+    const [row] = await db
+      .select()
+      .from(marketplacePersonas)
+      .where(and(eq(marketplacePersonas.slug, slug), eq(marketplacePersonas.visibility, 'public')));
+    if (!row) return c.json({ error: 'Persona not found' }, 404);
+    return c.json(publicView(row));
   });
 
   return router;

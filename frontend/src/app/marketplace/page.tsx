@@ -649,6 +649,7 @@ export default function MarketplacePage() {
                   <th style={thStyle}>Tags</th>
                   <th style={thStyle}>Price</th>
                   <th style={thStyle}>Hires</th>
+                  <th style={thStyle}>Eval</th>
                   <th style={{ ...thStyle, textAlign: 'right' }}>Actions</th>
                 </tr>
               </thead>
@@ -665,6 +666,7 @@ export default function MarketplacePage() {
                     <td style={tdMutedStyle}><SkillTags skills={agent.skills} max={4} variant="inline" /></td>
                     <td style={tdMutedStyle}>{formatAgentPrice(agent)}</td>
                     <td style={tdMutedStyle}>{agent.hire_count != null ? `${agent.hire_count}×` : '—'}</td>
+                    <td style={tdMutedStyle}>{(() => { const e = agent.evalScore ?? agent.eval_score; return typeof e === 'number' && Number.isFinite(e) ? e.toFixed(2) : '—'; })()}</td>
                     <td style={{ ...tdStyle, textAlign: 'right' }}>
                       {owner ? (
                         <div style={{ display: 'inline-flex' }}>

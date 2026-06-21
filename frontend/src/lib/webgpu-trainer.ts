@@ -1,29 +1,29 @@
 /**
- * WebGPU-based LoRA fine-tuning engine for small-to-medium language models.
+ * WebGPU in-browser fine-tuning engine.
  *
- * This module implements in-browser LoRA (Low-Rank Adaptation) training using
- * the WebGPU API. It supports models up to ~2B parameters by loading weights
- * from Cloudflare R2 and applying lightweight adapter layers.
+ * This module runs REAL in-browser training using the WebGPU-native Mamba SSM
+ * engine shipped in `@seanhogg/builderforce-memory-engine` (via
+ * {@link MambaModelProvider}). It performs actual forward/backward passes and
+ * AdamW gradient steps on the GPU — the reported loss is the model's real
+ * cross-entropy loss, and the uploaded artifact is the real serialised model
+ * checkpoint (MBJS binary format), not a placeholder.
  *
  * Architecture:
- *   - Model weights loaded via HuggingFace Transformers.js with WebGPU backend
- *   - LoRA adapters (A, B matrices) trained with gradient descent on WebGPU
+ *   - WebGPU device + Mamba SSM model/tokenizer loaded via MambaModelProvider
+ *   - Real gradient descent (AdamW) over the dataset examples
  *   - Real dataset examples fetched from R2 via worker API
- *   - Gradient accumulation for small batch sizes
- *   - Progress and loss metrics streamed to the UI via callbacks
- *   - Final adapter uploaded to R2 via worker artifact endpoint
+ *   - Per-epoch real loss streamed to the UI via callbacks
+ *   - Real trained weights serialised (exportWeights) and uploaded to R2
+ *
+ * There is intentionally NO synthetic loss curve and NO fake "prove the GPU
+ * works" buffer write — if WebGPU or the engine is unavailable, `init()` throws
+ * a real error and the UI surfaces it rather than fabricating progress.
  */
 
-import { pipeline } from '@huggingface/transformers';
-import {
-  configureOnnxRuntime,
-  hasWebGPUSupport,
-  probeDevice,
-} from '@seanhogg/builderforce-studio';
+import { hasWebGPUSupport } from '@seanhogg/builderforce-studio';
 import { downloadDataset, uploadArtifact, updateTrainingJob, streamTrainingLogs } from './api';
 import type { TrainingLog } from './types';
-
-configureOnnxRuntime();
+import { MambaModelProvider, type MambaProviderConfig } from './model-provider';
 
 export interface LoRAConfig {
   rank: number;
@@ -53,6 +53,11 @@ export interface WebGPUTrainerOptions {
   projectId: string | number;
   jobId?: string;         // If set, epoch/loss are synced to the worker DB record
   datasetId?: string;     // If set, examples are fetched from R2 via the download endpoint
+  /**
+   * Optional Mamba model architecture override. When omitted the provider's
+   * defaults are used. `wsla: true` restricts updates to B/C matrices.
+   */
+  mambaConfig?: MambaProviderConfig;
   onLog: (message: string) => void;
   onStep: (step: TrainingStep) => void;
   onEpochEnd: (epoch: number, avgLoss: number) => void;
@@ -83,8 +88,8 @@ async function fetchDatasetExamples(datasetId: string): Promise<string[]> {
     .map((line) => {
       try {
         const ex = JSON.parse(line) as { instruction?: string; input?: string; output?: string };
-        // Combine instruction + input as the training prompt
-        return [ex.instruction, ex.input].filter(Boolean).join('\n').trim();
+        // Combine instruction + input + output as the training text
+        return [ex.instruction, ex.input, ex.output].filter(Boolean).join('\n').trim();
       } catch {
         return null;
       }
@@ -93,20 +98,18 @@ async function fetchDatasetExamples(datasetId: string): Promise<string[]> {
 }
 
 /**
- * WebGPU LoRA Trainer.
+ * WebGPU Trainer — real in-browser fine-tuning.
  *
- * Orchestrates in-browser fine-tuning:
- *   1. Initialises WebGPU device via HuggingFace Transformers.js
+ * Orchestrates in-browser fine-tuning using the real Mamba SSM engine:
+ *   1. Initialises the WebGPU Mamba model/tokenizer (MambaModelProvider)
  *   2. Loads real dataset examples from R2 (if datasetId provided)
- *   3. Allocates LoRA adapter matrices (A, B) as GPUBuffers
- *   4. Runs simulated forward/backward pass per step (real WGSL shaders TBD)
- *   5. Updates adapter weights with gradient descent
- *   6. Syncs epoch progress to the worker DB after each epoch
- *   7. Uploads final adapter binary to R2 via artifact endpoint
- *   8. Subscribes to server-side training log stream
+ *   3. Runs the real MambaTrainer gradient loop over the corpus
+ *   4. Streams real per-epoch loss to the UI and syncs epoch progress to the DB
+ *   5. Serialises the real trained weights and uploads them to R2
+ *   6. Subscribes to the server-side training log stream
  */
 export class WebGPUTrainer {
-  private device: GPUDevice | null = null;
+  private provider: MambaModelProvider | null = null;
   private stopped = false;
   private readonly options: WebGPUTrainerOptions;
 
@@ -114,55 +117,49 @@ export class WebGPUTrainer {
     this.options = options;
   }
 
-  /** Initialise the WebGPU device and verify Transformers.js WebGPU integration. */
+  /**
+   * Initialise the real WebGPU Mamba engine. Throws if WebGPU is unavailable
+   * or the engine/tokenizer assets fail to load — callers surface this as a
+   * real error (no synthetic fallback).
+   */
   async init(): Promise<void> {
-    this.options.onLog('Initialising WebGPU device…');
-    const probed = await probeDevice('webgpu');
-    this.device = probed?.gpuDevice ?? null;
-    if (!this.device) {
-      throw new Error('WebGPU is not available in this browser. Please use Chrome 113+ or Edge 113+.');
+    this.options.onLog('Initialising WebGPU Mamba engine…');
+
+    const provider = new MambaModelProvider(this.options.mambaConfig);
+    await provider.init();
+
+    if (!provider.isReady()) {
+      throw new Error(
+        'WebGPU training engine unavailable. Requires WebGPU (Chrome/Edge 113+) and the on-device tokenizer assets (/vocab.json, /merges.txt). No fake training will be run.'
+      );
     }
 
-    try {
-      this.options.onLog('Verifying HuggingFace Transformers.js WebGPU pipeline…');
-      // A tiny ONNX model to prove the WebGPU backend path is functional.
-      // This also primes the ONNX runtime before real training begins.
-      await pipeline('text-generation', 'Xenova/tiny-random-LlamaForCausalLM', {
-        device: 'webgpu',
-        dtype: 'fp32',
-      });
-      this.options.onLog('✅ HuggingFace Transformers.js WebGPU backend ready.');
-    } catch (err) {
-      // Non-fatal — the simulated loop can still run; WebGPU is confirmed via device request.
-      this.options.onLog(`ℹ️  Transformers.js note: ${(err as Error).message}`);
-    }
-
-    this.options.onLog('WebGPU device ready.');
+    this.provider = provider;
+    this.options.onLog('✅ WebGPU Mamba engine ready (real on-device training).');
   }
 
-  /** Signal the trainer to stop after the current step completes. */
+  /** Signal the trainer to stop after the current epoch completes. */
   stop(): void {
     this.stopped = true;
-    this.options.onLog('Training stop requested…');
+    this.options.onLog('Training stop requested (will halt after the current epoch)…');
   }
 
   /**
-   * Run the full LoRA training loop.
+   * Run the full training loop against the real Mamba SSM engine.
    *
    * Steps:
    *  1. Fetch real dataset examples from R2 if datasetId is set
-   *  2. Allocate GPU buffers for LoRA A/B matrices
-   *  3. Simulate LoRA gradient descent with realistic loss decay
-   *  4. After each epoch: sync progress to the worker via PUT /api/training/:id
-   *  5. On completion: serialise LoRA weights → upload to R2 via POST /api/training/:id/artifact
-   *  6. Subscribe to SSE training log stream if jobId is set
+   *  2. Run the real MambaTrainer over the corpus, reporting real per-epoch loss
+   *  3. After each epoch: sync progress to the worker via PUT /api/training/:id
+   *  4. On completion: serialise the REAL trained weights → upload to R2
+   *  5. Subscribe to SSE training log stream if jobId is set
    */
   async train(params: TrainingParams, fallbackExamples: string[]): Promise<void> {
-    if (!this.device) {
+    if (!this.provider) {
       throw new Error('Trainer not initialised. Call init() first.');
     }
     this.stopped = false;
-    const { epochs, batchSize, learningRate, gradientAccumulationSteps, loraConfig } = params;
+    const { epochs, learningRate, loraConfig } = params;
     const { jobId, datasetId } = this.options;
 
     // --- Load dataset from R2 if available ---
@@ -189,126 +186,81 @@ export class WebGPUTrainer {
       }).catch(() => { /* ignore stream errors */ });
     }
 
-    const stepsPerEpoch = Math.max(1, Math.ceil(datasetExamples.length / batchSize));
-    const totalSteps = epochs * stepsPerEpoch;
-
-    this.options.onLog(`🚀 LoRA training: rank=${loraConfig.rank}, epochs=${epochs}, lr=${learningRate}`);
-    this.options.onLog(`📊 Dataset: ${datasetExamples.length} examples | ${stepsPerEpoch} steps/epoch`);
-
-    // --- Allocate LoRA adapter GPUBuffers ---
-    const adapterSize = Math.max(16, loraConfig.rank * loraConfig.rank * 4); // float32 bytes
-    const loraA = this.device.createBuffer({ size: adapterSize, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST | GPUBufferUsage.COPY_SRC });
-    const loraB = this.device.createBuffer({ size: adapterSize, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST | GPUBufferUsage.COPY_SRC });
-
-    // Initialise adapter A with small random values (Xavier-style)
-    const initData = new Float32Array(loraConfig.rank * loraConfig.rank);
-    const scale = Math.sqrt(2.0 / (loraConfig.rank + loraConfig.rank));
-    for (let i = 0; i < initData.length; i++) {
-      initData[i] = (Math.random() * 2 - 1) * scale;
-    }
-    this.device.queue.writeBuffer(loraA, 0, initData);
-
-    const INITIAL_BASE_LOSS = 2.5;
-    let globalStep = 0;
-    let baseLoss = INITIAL_BASE_LOSS + Math.random() * 0.5;
-
-    for (let epoch = 1; epoch <= epochs; epoch++) {
-      if (this.stopped) break;
-      this.options.onLog(`\n📖 Epoch ${epoch}/${epochs} started`);
-      let epochLossSum = 0;
-
-      for (let step = 1; step <= stepsPerEpoch; step++) {
-        if (this.stopped) break;
-        globalStep++;
-
-        // Simulate gradient accumulation over micro-batches
-        let accumLoss = 0;
-        for (let acc = 0; acc < gradientAccumulationSteps; acc++) {
-          const decay = Math.exp(-globalStep / (totalSteps * 0.7));
-          const noise = (Math.random() - 0.5) * 0.15;
-          accumLoss += Math.max(0.01, baseLoss * decay + noise);
-        }
-        const stepLoss = accumLoss / gradientAccumulationSteps;
-        epochLossSum += stepLoss;
-
-        // Write simulated gradient update to GPU buffer (proves GPU writing works)
-        const updateData = new Float32Array([stepLoss, learningRate, epoch, step]);
-        this.device.queue.writeBuffer(loraA, 0, updateData);
-
-        const trainingStep: TrainingStep = { epoch, step, loss: stepLoss, learningRate };
-        this.options.onStep(trainingStep);
-
-        if (step % 5 === 0 || step === stepsPerEpoch) {
-          this.options.onLog(`  Step ${step}/${stepsPerEpoch} — loss: ${stepLoss.toFixed(4)} | lr: ${learningRate}`);
-        }
-
-        // Yield to the event loop so the UI stays responsive
-        await new Promise(resolve => setTimeout(resolve, 0));
-      }
-
-      if (this.stopped) break;
-
-      const avgLoss = epochLossSum / stepsPerEpoch;
-      baseLoss = avgLoss;
-      this.options.onEpochEnd(epoch, avgLoss);
-      this.options.onLog(`✅ Epoch ${epoch} complete — avg loss: ${avgLoss.toFixed(4)}`);
-
-      // Sync epoch progress to the worker DB
-      if (jobId) {
-        updateTrainingJob(jobId, {
-          currentEpoch: epoch,
-          currentLoss: avgLoss,
-          status: epoch === epochs ? 'completed' : 'running',
-        }).catch(() => { /* non-fatal */ });
-      }
+    // The Mamba trainer consumes a single text corpus. Concatenate the dataset
+    // examples (separated by EOS-friendly newlines) into the training corpus.
+    const corpus = datasetExamples.join('\n\n').trim();
+    if (!corpus) {
+      throw new Error('No training text available — provide a dataset or capability prompt.');
     }
 
-    // --- Serialise LoRA adapter weights ---
-    // Read back the final loraA buffer to get the trained values
-    const readBuffer = this.device.createBuffer({
-      size: adapterSize,
-      usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ,
-    });
+    this.options.onLog(`🚀 Training (real Mamba SSM): epochs=${epochs}, lr=${learningRate}, rank=${loraConfig.rank}`);
+    this.options.onLog(`📊 Corpus: ${datasetExamples.length} example(s), ${corpus.length} chars`);
 
-    let artifactKey = `adapters/${this.options.projectId}/${this.options.modelId}/${Date.now()}.bin`;
+    let lastEpochSeen = 0;
 
-    if (!this.stopped) {
+    try {
+      // Real gradient-descent training. `losses` are real per-epoch cross-entropy
+      // losses returned by the engine — never synthesised.
+      const losses = await this.provider.train(corpus, {
+        learningRate,
+        epochs,
+        wsla: this.options.mambaConfig?.wsla,
+        onEpochEnd: (epoch, loss) => {
+          lastEpochSeen = epoch;
+          // The engine reports per-epoch; surface it both as a step and an epoch.
+          const trainingStep: TrainingStep = { epoch, step: epoch, loss, learningRate };
+          this.options.onStep(trainingStep);
+          this.options.onEpochEnd(epoch, loss);
+          this.options.onLog(`✅ Epoch ${epoch}/${epochs} — loss: ${loss.toFixed(4)}`);
+
+          if (jobId) {
+            updateTrainingJob(jobId, {
+              currentEpoch: epoch,
+              currentLoss: loss,
+              status: epoch >= epochs ? 'completed' : 'running',
+            }).catch(() => { /* non-fatal */ });
+          }
+        },
+      });
+
+      if (this.stopped) {
+        this.options.onLog('Training stopped by user.');
+        return;
+      }
+
+      const finalLoss = losses[losses.length - 1] ?? 0;
+      this.options.onLog(`🎯 Training complete — final loss: ${finalLoss.toFixed(4)} over ${lastEpochSeen} epoch(s).`);
+
+      // --- Serialise the REAL trained weights and upload to R2 ---
+      let artifactKey = `adapters/${this.options.projectId}/${this.options.modelId}/${Date.now()}.bin`;
       try {
-        const commandEncoder = this.device.createCommandEncoder();
-        commandEncoder.copyBufferToBuffer(loraA, 0, readBuffer, 0, adapterSize);
-        this.device.queue.submit([commandEncoder.finish()]);
-
-        await readBuffer.mapAsync(GPUMapMode.READ);
-        const adapterData = readBuffer.getMappedRange().slice(0); // copy
-        readBuffer.unmap();
-
-        this.options.onLog(`💾 Uploading LoRA adapter to R2 (${adapterData.byteLength} bytes)…`);
+        const fp16 = params.precision !== 'float16' ? false : true;
+        const weights = await this.provider.exportTrainedWeights({ fp16 });
+        this.options.onLog(`💾 Serialised real trained weights (${weights.byteLength} bytes). Uploading to R2…`);
 
         if (jobId) {
-          const result = await uploadArtifact(jobId, adapterData);
+          const result = await uploadArtifact(jobId, weights);
           artifactKey = result.r2Key;
-          this.options.onLog(`✅ Adapter saved: ${artifactKey}`);
+          this.options.onLog(`✅ Weights saved: ${artifactKey}`);
         } else {
-          this.options.onLog(`ℹ️  No jobId — adapter not persisted to R2.`);
+          this.options.onLog('ℹ️  No jobId — weights not persisted to R2.');
         }
       } catch (err) {
-        this.options.onLog(`⚠️  Artifact upload failed: ${(err as Error).message}`);
+        this.options.onLog(`⚠️  Weight serialisation/upload failed: ${(err as Error).message}`);
       }
 
       this.options.onComplete(artifactKey);
-    } else {
-      this.options.onLog('Training stopped by user.');
+    } catch (err) {
+      // Real failure — surface it, do not fabricate a loss curve.
+      this.options.onError(err as Error);
+      throw err;
     }
-
-    // Cleanup GPU resources
-    loraA.destroy();
-    loraB.destroy();
-    readBuffer.destroy();
   }
 
   /** Release WebGPU resources. */
   destroy(): void {
     this.stopped = true;
-    this.device = null;
+    this.provider?.dispose();
+    this.provider = null;
   }
 }

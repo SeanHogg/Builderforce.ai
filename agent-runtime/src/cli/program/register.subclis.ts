@@ -154,6 +154,15 @@ const entries: SubCliEntry[] = [
     },
   },
   {
+    name: "workflow",
+    description: "Trigger Builderforce workflows from the CLI / CI",
+    hasSubcommands: true,
+    register: async (program) => {
+      const mod = await import("../workflow-cli.js");
+      mod.registerWorkflowCli(program);
+    },
+  },
+  {
     name: "dns",
     description: "DNS helpers for wide-area discovery (Tailscale + CoreDNS)",
     hasSubcommands: true,

@@ -90,6 +90,9 @@ export class BoardPanel {
       case "open":
         if (typeof m.taskId === "number") this.openTask(m.taskId);
         break;
+      case "run":
+        if (typeof m.taskId === "number") await this.runTask(m.taskId);
+        break;
     }
   }
 
@@ -121,6 +124,16 @@ export class BoardPanel {
   private openTask(taskId: number): void {
     const task = this.lastTasks.find((t) => t.id === taskId);
     if (task) void vscode.commands.executeCommand("builderforce.startTaskSession", { kind: "task", task });
+  }
+
+  /** Dispatch a PLATFORM run for a card — delegates to the shared runTask command (DRY:
+   *  same dispatch/approval/plan-limit handling as the tree's inline Run action), then
+   *  re-pulls so a status change from the run surfaces on the board. */
+  private async runTask(taskId: number): Promise<void> {
+    const task = this.lastTasks.find((t) => t.id === taskId);
+    if (!task) return;
+    await vscode.commands.executeCommand("builderforce.runTask", { kind: "task", task });
+    await this.refresh(true);
   }
 
   private lastTasks: BfTask[] = [];
@@ -166,7 +179,10 @@ export class BoardPanel {
   .card:hover { border-color: var(--vscode-focusBorder); }
   .card .key { font-size: 11px; color: var(--vscode-descriptionForeground); }
   .card .title { font-size: 13px; margin-top: 2px; }
-  .card .meta { margin-top: 6px; display: flex; gap: 6px; flex-wrap: wrap; }
+  .card .meta { margin-top: 6px; display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+  .card .run { margin-left: auto; font-size: 10px; padding: 1px 8px; border-radius: 8px; border: 0;
+    color: var(--vscode-button-foreground); background: var(--vscode-button-background); cursor: pointer; }
+  .card .run:hover { background: var(--vscode-button-hoverBackground, var(--vscode-button-background)); }
   .chip { font-size: 10px; padding: 1px 6px; border-radius: 8px; border: 1px solid var(--vscode-panel-border); color: var(--vscode-descriptionForeground); }
   .chip.p-high, .chip.p-urgent { color: #f87171; border-color: #f8717155; }
   #overlay { position: fixed; inset: 0; display: none; align-items: center; justify-content: center; flex-direction: column; gap: 12px;
@@ -269,9 +285,11 @@ export class BoardPanel {
     el.innerHTML =
       (t.key ? '<div class="key">' + esc(t.key) + '</div>' : '') +
       '<div class="title">' + esc(t.title) + '</div>' +
-      ((pr || as) ? '<div class="meta">' + pr + as + '</div>' : '');
+      '<div class="meta">' + pr + as + '<button class="run" title="Dispatch this task to the platform runtime">Run</button></div>';
     el.addEventListener('dragstart', (e) => e.dataTransfer.setData('text/plain', String(t.id)));
     el.addEventListener('click', () => vscode.postMessage({ type: 'open', taskId: t.id }));
+    // Run dispatches a PLATFORM run; stop the click so it doesn't also open the session.
+    el.querySelector('.run').addEventListener('click', (e) => { e.stopPropagation(); vscode.postMessage({ type: 'run', taskId: t.id }); });
     return el;
   }
 
