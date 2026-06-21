@@ -916,11 +916,16 @@ html[data-theme='light'] .nebula {
   text-align: center;
 }
 
+.global-footer-mascot-link {
+  display: inline-flex;
+  vertical-align: middle;
+  margin-right: 8px;
+}
 .global-footer-mascot {
-  width: clamp(56px, 8vw, 72px);
+  width: 24px;
   height: auto;
   animation: float 4s ease-in-out infinite;
-  filter: drop-shadow(0 0 18px var(--logo-glow));
+  filter: drop-shadow(0 0 10px var(--logo-glow));
   transition: filter 0.3s ease;
 }
 .global-footer-mascot:hover {
