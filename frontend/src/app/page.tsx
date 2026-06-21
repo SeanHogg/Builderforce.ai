@@ -1,7 +1,6 @@
 'use client';
 
 import Link from 'next/link';
-import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import JsonLd from '@/components/JsonLd';
@@ -111,25 +110,6 @@ export default function LandingPage() {
           align-items: center;
           width: 100%;
           max-width: 640px;
-        }
-
-        /* AgentHost mascot — centred under the prompt, gently floating. */
-        .lp-hero-mascot {
-          display: block;
-          width: clamp(160px, 20vw, 240px);
-          height: auto;
-          margin: 28px auto 4px;
-          animation: float 4s ease-in-out infinite;
-          filter: drop-shadow(0 0 28px var(--logo-glow));
-          transition: filter 0.3s ease;
-        }
-        .lp-hero-mascot:hover {
-          animation-play-state: paused;
-          filter: drop-shadow(0 0 44px var(--logo-glow-hover));
-        }
-        @keyframes float {
-          0%, 100% { transform: translateY(0); }
-          50%       { transform: translateY(-10px); }
         }
 
         /* Badge */
@@ -506,16 +486,6 @@ export default function LandingPage() {
               </div>
             </div>
           </div>
-
-          {/* AgentHost mascot — centred under the prompt. */}
-          <Image
-            src="/agentHost.png"
-            alt="Builderforce AI"
-            width={240}
-            height={240}
-            priority
-            className="lp-hero-mascot"
-          />
 
           <p className="lp-tagline">See clarity through the storm</p>
           <p className="lp-tagline lp-tagline-sub">Your AI CTO, CIO &amp; Security Officer</p>
