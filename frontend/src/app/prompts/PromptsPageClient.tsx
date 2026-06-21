@@ -2,7 +2,7 @@
 
 import { Select } from '@/components/Select';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useBrainDataRefresh } from '@/lib/brain/useBrainDataRefresh';
 import {
   promptLibraryApi,
@@ -14,7 +14,6 @@ import {
 import { getStoredUser } from '@/lib/auth';
 import { ViewToggle, type ViewMode } from '@/components/ViewToggle';
 import { tableWrapStyle, tableStyle, theadRowStyle, thStyle, trStyle, tdStyle, tdMutedStyle } from '@/components/dataTableStyles';
-import { BUILTIN_PROMPTS, filterBuiltinPrompts, isBuiltinId } from '@/lib/builtinPrompts';
 
 const card: React.CSSProperties = {
   background: 'var(--bg-base)',
@@ -67,30 +66,7 @@ export default function PromptsPage() {
   }, [tab, q, sort]);
   useBrainDataRefresh(['prompts'], reloadPrompts);
 
-  // Public gallery = curated built-in prompts merged with tenant-published rows.
-  // Built-ins are content shipped in the repo (see lib/builtinPrompts); live
-  // public prompts win on slug collision. Mirrors the Models page pattern of
-  // built-in records + live catalog. Only applies to the public tab.
-  const displayed = useMemo<PromptSummary[]>(() => {
-    if (tab === 'mine') return prompts;
-    const liveSlugs = new Set(prompts.map((p) => p.slug));
-    const builtins = filterBuiltinPrompts(q).filter((b) => !liveSlugs.has(b.slug));
-    const merged: PromptSummary[] = [...builtins, ...prompts];
-    if (sort === 'recent') {
-      return [...merged].sort((a, b) => (b.updatedAt > a.updatedAt ? 1 : -1));
-    }
-    if (sort === 'featured') {
-      return [...merged].sort((a, b) => Number(b.isFeatured) - Number(a.isFeatured) || b.usageCount - a.usageCount);
-    }
-    return [...merged].sort((a, b) => b.usageCount - a.usageCount || b.starCount - a.starCount);
-  }, [tab, prompts, q, sort]);
-
   const openDetail = async (p: PromptSummary) => {
-    // Built-ins live client-side — no fetch, just show the curated view.
-    if (isBuiltinId(p.id)) {
-      const hit = BUILTIN_PROMPTS.find((b) => b.id === p.id);
-      if (hit) { setSelected(hit); return; }
-    }
     try {
       const view = await promptLibraryApi.getPublic(p.slug);
       setSelected(view);
@@ -103,13 +79,6 @@ export default function PromptsPage() {
   };
 
   const applyPrompt = async (p: PromptPublicView) => {
-    // Built-ins have no server row to record a "use" against — copy only.
-    if (isBuiltinId((p as PromptSummary).id)) {
-      await navigator.clipboard.writeText(p.body).catch(() => {});
-      setToast('Prompt copied to clipboard');
-      setTimeout(() => setToast(null), 2500);
-      return;
-    }
     try {
       const fresh = await promptLibraryApi.usePublic(p.slug);
       await navigator.clipboard.writeText(fresh.body).catch(() => {});
@@ -181,35 +150,25 @@ export default function PromptsPage() {
 
       {!loading && !error && viewMode === 'card' && (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 14 }}>
-          {displayed.map((p) => {
-            const builtin = isBuiltinId(p.id);
-            return (
-              <button key={p.id} onClick={() => openDetail(p)} style={{ ...card, textAlign: 'left', cursor: 'pointer' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, marginBottom: 6 }}>
-                  <span style={{ fontWeight: 700, fontSize: 15 }}>{p.title}</span>
-                  {!builtin && p.isFeatured && <span title="Featured">⭐</span>}
-                </div>
-                {p.description && <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: '0 0 10px', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{p.description}</p>}
-                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 10 }}>
-                  {builtin && <span className="badge" style={{ background: 'rgba(34,197,94,0.12)', color: '#16a34a', border: '1px solid rgba(34,197,94,0.35)' }}>Built-in</span>}
-                  {p.category && <span className="badge badge-gray">{p.category}</span>}
-                  {p.tags.slice(0, 3).map((t) => <span key={t} className="badge badge-gray">#{t}</span>)}
-                </div>
-                <div style={{ display: 'flex', gap: 14, fontSize: 12, color: 'var(--text-muted)' }}>
-                  {builtin ? (
-                    <span>Starter template{p.authorName ? ` · by ${p.authorName}` : ''}</span>
-                  ) : (
-                    <>
-                      <span>▶ {p.usageCount.toLocaleString()} uses</span>
-                      <span>★ {p.starCount}</span>
-                      {p.authorName && <span>by {p.authorName}</span>}
-                    </>
-                  )}
-                </div>
-              </button>
-            );
-          })}
-          {displayed.length === 0 && (
+          {prompts.map((p) => (
+            <button key={p.id} onClick={() => openDetail(p)} style={{ ...card, textAlign: 'left', cursor: 'pointer' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, marginBottom: 6 }}>
+                <span style={{ fontWeight: 700, fontSize: 15 }}>{p.title}</span>
+                {p.isFeatured && <span title="Featured">⭐</span>}
+              </div>
+              {p.description && <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: '0 0 10px', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{p.description}</p>}
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 10 }}>
+                {p.category && <span className="badge badge-gray">{p.category}</span>}
+                {p.tags.slice(0, 3).map((t) => <span key={t} className="badge badge-gray">#{t}</span>)}
+              </div>
+              <div style={{ display: 'flex', gap: 14, fontSize: 12, color: 'var(--text-muted)' }}>
+                <span>▶ {p.usageCount.toLocaleString()} uses</span>
+                <span>★ {p.starCount}</span>
+                {p.authorName && <span>by {p.authorName}</span>}
+              </div>
+            </button>
+          ))}
+          {prompts.length === 0 && (
             <div style={{ ...card, gridColumn: '1 / -1', color: 'var(--text-muted)' }}>
               {tab === 'mine' ? 'You have no prompts yet. Click “+ New prompt” to create one.' : 'No public prompts found.'}
             </div>
@@ -218,7 +177,7 @@ export default function PromptsPage() {
       )}
 
       {!loading && !error && viewMode === 'table' && (
-        displayed.length === 0 ? (
+        prompts.length === 0 ? (
           <div style={{ ...card, color: 'var(--text-muted)' }}>
             {tab === 'mine' ? 'You have no prompts yet. Click “+ New prompt” to create one.' : 'No public prompts found.'}
           </div>
@@ -236,28 +195,23 @@ export default function PromptsPage() {
                 </tr>
               </thead>
               <tbody>
-                {displayed.map((p) => {
-                  const builtin = isBuiltinId(p.id);
-                  return (
-                    <tr key={p.id} style={trStyle}>
-                      <td style={{ ...tdStyle, fontWeight: 600 }}>
-                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                          {p.title}
-                          {builtin
-                            ? <span className="badge" style={{ background: 'rgba(34,197,94,0.12)', color: '#16a34a', border: '1px solid rgba(34,197,94,0.35)' }}>Built-in</span>
-                            : p.isFeatured && <span title="Featured">⭐</span>}
-                        </span>
-                      </td>
-                      <td style={tdMutedStyle}>{p.category ?? '—'}</td>
-                      <td style={tdMutedStyle}>{builtin ? '—' : p.usageCount.toLocaleString()}</td>
-                      <td style={tdMutedStyle}>{builtin ? '—' : p.starCount}</td>
-                      <td style={tdMutedStyle}>{p.authorName ?? '—'}</td>
-                      <td style={tdStyle}>
-                        <button type="button" className="btn btn-secondary btn-sm" onClick={() => openDetail(p)}>View</button>
-                      </td>
-                    </tr>
-                  );
-                })}
+                {prompts.map((p) => (
+                  <tr key={p.id} style={trStyle}>
+                    <td style={{ ...tdStyle, fontWeight: 600 }}>
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                        {p.title}
+                        {p.isFeatured && <span title="Featured">⭐</span>}
+                      </span>
+                    </td>
+                    <td style={tdMutedStyle}>{p.category ?? '—'}</td>
+                    <td style={tdMutedStyle}>{p.usageCount.toLocaleString()}</td>
+                    <td style={tdMutedStyle}>{p.starCount}</td>
+                    <td style={tdMutedStyle}>{p.authorName ?? '—'}</td>
+                    <td style={tdStyle}>
+                      <button type="button" className="btn btn-secondary btn-sm" onClick={() => openDetail(p)}>View</button>
+                    </td>
+                  </tr>
+                ))}
               </tbody>
             </table>
           </div>
@@ -268,7 +222,6 @@ export default function PromptsPage() {
         <PromptDetail
           prompt={selected}
           isAuthed={isAuthed}
-          builtin={isBuiltinId((selected as PromptSummary).id)}
           onClose={() => setSelected(null)}
           onUse={() => applyPrompt(selected)}
         />
@@ -283,7 +236,7 @@ export default function PromptsPage() {
   );
 }
 
-function PromptDetail({ prompt, isAuthed, builtin, onClose, onUse }: { prompt: PromptPublicView; isAuthed: boolean; builtin: boolean; onClose: () => void; onUse: () => void }) {
+function PromptDetail({ prompt, isAuthed, onClose, onUse }: { prompt: PromptPublicView; isAuthed: boolean; onClose: () => void; onUse: () => void }) {
   const [starred, setStarred] = useState(false);
   const id = (prompt as PromptPublicView & { id: string }).id;
 
@@ -310,7 +263,7 @@ function PromptDetail({ prompt, isAuthed, builtin, onClose, onUse }: { prompt: P
 
         <div style={{ display: 'flex', gap: 10, marginBottom: 16 }}>
           <button type="button" className="btn btn-primary" onClick={onUse}>Use this prompt (copy)</button>
-          {isAuthed && id && !builtin && <button type="button" className="btn btn-secondary" onClick={toggleStar}>{starred ? '★ Starred' : '☆ Star'}</button>}
+          {isAuthed && id && <button type="button" className="btn btn-secondary" onClick={toggleStar}>{starred ? '★ Starred' : '☆ Star'}</button>}
         </div>
 
         <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 6 }}>PROMPT (v{prompt.currentVersion})</div>
@@ -331,15 +284,9 @@ function PromptDetail({ prompt, isAuthed, builtin, onClose, onUse }: { prompt: P
         )}
 
         <div style={{ display: 'flex', gap: 16, fontSize: 12, color: 'var(--text-muted)', marginTop: 16 }}>
-          {builtin ? (
-            <span>Starter template{prompt.authorName ? ` · by ${prompt.authorName}` : ''}</span>
-          ) : (
-            <>
-              <span>▶ {prompt.usageCount.toLocaleString()} uses</span>
-              <span>★ {prompt.starCount}</span>
-              {prompt.authorName && <span>by {prompt.authorName}</span>}
-            </>
-          )}
+          <span>▶ {prompt.usageCount.toLocaleString()} uses</span>
+          <span>★ {prompt.starCount}</span>
+          {prompt.authorName && <span>by {prompt.authorName}</span>}
         </div>
       </div>
     </div>

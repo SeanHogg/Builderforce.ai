@@ -450,8 +450,9 @@ export default function LandingPage() {
         <main>
         {/* ── Hero ── */}
         <section className="lp-hero">
-          {/* Emerging water + waves behind the hero — "see clarity through the
-              storm". Pure backdrop; content sits above via .lp-hero-content. */}
+          {/* A flight through the solar system behind the hero — a journey
+              forward into what you'll build. Pure backdrop; content sits above
+              via .lp-hero-content. */}
           <WaveBackdrop className="lp-hero-wave" />
           <div className="lp-hero-content">
           <div className="lp-badge">
@@ -490,7 +491,7 @@ export default function LandingPage() {
             </div>
           </div>
 
-          <p className="lp-tagline">See clarity through the storm</p>
+          <p className="lp-tagline">See the future, clearly</p>
           <p className="lp-tagline lp-tagline-sub">Your AI CTO, CIO &amp; Security Officer</p>
 
           <p className="lp-desc">

@@ -258,12 +258,21 @@ export default function WaveBackdrop({ className = '' }: { className?: string })
       ctx.clip();
       ctx.globalAlpha = fade;
       const step = Math.max(2, r / 80);
+      // Draw the sphere as vertical texture slices. Destination columns are
+      // snapped to integer pixels and overlapped by 1px so no sub-pixel seam
+      // can let the dark space background bleed through between columns — that
+      // gap was the faint vertical "black line" on the planet's terminator. The
+      // source x is clamped to the texture's last column so a slice at the
+      // longitude wrap never samples past the edge into nothing.
       for (let xs = -r; xs < r; xs += step) {
         const f = Math.max(-1, Math.min(1, xs / r));
         const lon = Math.asin(f) + p.rot; // limb foreshortening via asin
         const u = (((lon / (Math.PI * 2)) % 1) + 1) % 1;
+        const sx = Math.min(u * tw, tw - 1);
         const ch = Math.sqrt(Math.max(0, r * r - xs * xs));
-        ctx.drawImage(tex, u * tw, 0, 1, th, xs, -ch, step + 1, ch * 2);
+        const dx = Math.floor(xs);
+        const dw = Math.ceil(step) + 1;
+        ctx.drawImage(tex, sx, 0, 1, th, dx, -ch, dw, ch * 2);
       }
       ctx.globalAlpha = 1;
       // Specular highlight (upper-left) + terminator shadow (lower-right) for 3-D
