@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import { Fragment } from 'react';
 import Link from 'next/link';
 import JsonLd from '@/components/JsonLd';
+import RelatedArticles from '@/components/blog/RelatedArticles';
 import { compareSchema } from '@/lib/structured-data';
 import { pageMetadata } from '@/lib/seo';
 import {
@@ -199,6 +200,8 @@ export default function ComparePage() {
               </details>
             ))}
           </section>
+
+          <RelatedArticles surface="compare" heading="Read the head-to-heads" />
 
           <section className="cmp-cta">
             <div className="cmp-cta-box">

@@ -6,6 +6,7 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { getPostBySlug } from '@/lib/blogData';
 import JsonLd from '@/components/JsonLd';
+import RelatedArticles from '@/components/blog/RelatedArticles';
 import { blogPostSchema } from '@/lib/structured-data';
 
 export default function BlogPostClient({ params }: { params: Promise<{ slug: string }> }) {
@@ -253,6 +254,8 @@ export default function BlogPostClient({ params }: { params: Promise<{ slug: str
             </>
           )}
         </main>
+
+        {post && <RelatedArticles relatedToSlug={post.slug} heading="Related articles" />}
 
         {/* Footer is the canonical <AppFooter variant="full"> rendered by PublicShell. */}
       </div>

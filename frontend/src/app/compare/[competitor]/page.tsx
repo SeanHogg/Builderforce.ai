@@ -3,6 +3,7 @@ import { Fragment } from 'react';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import JsonLd from '@/components/JsonLd';
+import RelatedArticles from '@/components/blog/RelatedArticles';
 import { pageMetadata } from '@/lib/seo';
 import { competitorCompareSchema } from '@/lib/structured-data';
 import {
@@ -137,6 +138,8 @@ export default async function CompetitorComparePage({
             </Fragment>
           ))}
         </section>
+
+        <RelatedArticles surface={`compare:${key}`} heading="Related reading" />
 
         {/* Footer is the canonical <AppFooter variant="full"> rendered by PublicShell. */}
       </main>
