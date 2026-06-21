@@ -44,6 +44,14 @@ export interface AdminTenant {
    *   >= 0 → use this value
    */
   tokenDailyLimitOverride: number | null;
+  /**
+   * Per-tenant daily ceiling on FUNDED paid-overflow spend (millicents, 1/100000 USD).
+   *   null → plan default (free = $0.50/day; pro/teams = unlimited)
+   *   -1   → unlimited (gate skipped)
+   *   >= 0 → explicit millicents/day ceiling
+   * See migration 0130 + the gateway overflow gate.
+   */
+  paidOverflowDailyCap: number | null;
   /** Superadmin grant of premium routing — when true the LLM proxy uses the
    *  premium model pool (top PREMIUM-tier models) and the extended per-vendor
    *  timeout regardless of plan/billingStatus. */
@@ -507,6 +515,25 @@ export const adminApi = {
       {
         method: 'PATCH',
         body: JSON.stringify({ tokenDailyLimitOverride }),
+      },
+    );
+  },
+
+  /**
+   * Set / clear the per-tenant funded paid-overflow daily cap (millicents).
+   *   null → revert to plan default (free $0.50/day; pro/teams unlimited)
+   *   -1   → unlimited
+   *   >= 0 → explicit millicents/day ceiling
+   */
+  async setTenantPaidOverflowCap(
+    tenantId: number,
+    paidOverflowDailyCap: number | null,
+  ): Promise<{ id: number; paidOverflowDailyCap: number | null }> {
+    return adminRequest<{ id: number; paidOverflowDailyCap: number | null }>(
+      `/api/admin/tenants/${tenantId}/paid-overflow-cap`,
+      {
+        method: 'PATCH',
+        body: JSON.stringify({ paidOverflowDailyCap }),
       },
     );
   },

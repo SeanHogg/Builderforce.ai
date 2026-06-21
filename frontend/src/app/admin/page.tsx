@@ -43,6 +43,7 @@ import { TenantApiKeysAdminTab } from '@/components/admin/TenantApiKeysAdminTab'
 import { LegalEditorDrawer, type LegalEditorContext } from '@/components/admin/LegalEditorDrawer';
 import { LegalDocPreview } from '@/components/admin/LegalDocPreview';
 import { TenantTokenLimitOverrideEditor } from '@/components/admin/TenantTokenLimitOverrideEditor';
+import { TenantPaidOverflowCapEditor } from '@/components/admin/TenantPaidOverflowCapEditor';
 import { TenantPremiumOverrideEditor } from '@/components/admin/TenantPremiumOverrideEditor';
 
 type AdminTab =
@@ -1246,6 +1247,11 @@ export default function AdminPage() {
                                     value={t.tokenDailyLimitOverride ?? null}
                                     onChange={(next) => setTenants((prev) => prev.map((x) => x.id === t.id ? { ...x, tokenDailyLimitOverride: next } : x))}
                                   />
+                                  <TenantPaidOverflowCapEditor
+                                    tenantId={t.id}
+                                    value={t.paidOverflowDailyCap ?? null}
+                                    onChange={(next) => setTenants((prev) => prev.map((x) => x.id === t.id ? { ...x, paidOverflowDailyCap: next } : x))}
+                                  />
                                   <TenantPremiumOverrideEditor
                                     tenantId={t.id}
                                     value={t.premiumOverride === true}
@@ -1375,6 +1381,11 @@ export default function AdminPage() {
                                 tenantId={t.id}
                                 value={t.tokenDailyLimitOverride ?? null}
                                 onChange={(next) => setTenants((prev) => prev.map((x) => x.id === t.id ? { ...x, tokenDailyLimitOverride: next } : x))}
+                              />
+                              <TenantPaidOverflowCapEditor
+                                tenantId={t.id}
+                                value={t.paidOverflowDailyCap ?? null}
+                                onChange={(next) => setTenants((prev) => prev.map((x) => x.id === t.id ? { ...x, paidOverflowDailyCap: next } : x))}
                               />
                               <TenantPremiumOverrideEditor
                                 tenantId={t.id}

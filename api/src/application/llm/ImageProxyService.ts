@@ -62,6 +62,19 @@ export const PREMIUM_IMAGE_FALLBACK_MODELS: readonly string[] = [
 ];
 
 /**
+ * True when a resolved image model is a FUNDED-overflow model — i.e. the
+ * always-on premium fallback we append to every cascade and pay for on our own
+ * FluxAPI key. Mirrors `isPaidOverflowModel` on the chat side so an image row
+ * is flagged `llm_usage_log.paid_overflow` and counts against the tenant's
+ * per-tenant `paid_overflow_daily_cap` (migration 0130). A model in the
+ * tenant's own plan pool (Pro's paid FluxAPI tiers) is NOT overflow — only the
+ * always-appended fallback is.
+ */
+export function isImagePaidOverflowModel(model: string | undefined | null): boolean {
+  return !!model && PREMIUM_IMAGE_FALLBACK_MODELS.includes(model);
+}
+
+/**
  * Maximum number of FREE-tier image attempts before falling through to the
  * premium fallback. Mirrors `FREE_ATTEMPT_BUDGET` in LlmProxyService — same
  * "successful response or premium fallback, never cascade-exhausted" guarantee.
@@ -100,6 +113,10 @@ export interface ImageProxyResult {
   /** How many failovers happened before success (length of failovers[]). */
   retries: number;
   failovers: ImageFailoverEvent[];
+  /** True when the request resolved onto a FUNDED premium-fallback model
+   *  ({@link isImagePaidOverflowModel}); the route stamps this on the usage
+   *  row so it counts against the tenant's paid-overflow daily cap. */
+  paidOverflow: boolean;
 }
 
 export type ImageProductName = 'builderforceImage' | 'builderforceImagePro';
@@ -123,17 +140,24 @@ export function _resetImageCursor(): void { imageRequestCursor.value = 0; }
 export interface ImageProxyOptions {
   modelPool?: readonly string[];
   productName?: ImageProductName;
+  /** When true, drop the always-on premium fallback so a tenant that has hit
+   *  its paid-overflow daily cap stops resolving onto our funded FluxAPI key
+   *  (the free pool still serves). Mirrors `disablePaidOverflow` on the chat
+   *  proxy. */
+  disablePaidOverflow?: boolean;
 }
 
 export class ImageProxyService {
   private readonly env: ImageProxyEnv;
   private readonly modelPool: readonly string[];
   private readonly productName: ImageProductName;
+  private readonly disablePaidOverflow: boolean;
 
   constructor(env: ImageProxyEnv, options?: ImageProxyOptions) {
     this.env = env;
     this.modelPool = options?.modelPool ?? FREE_IMAGE_MODEL_POOL;
     this.productName = options?.productName ?? 'builderforceImage';
+    this.disablePaidOverflow = options?.disablePaidOverflow ?? false;
   }
 
   /** Forward an image generation request through the configured pool. */
@@ -175,6 +199,7 @@ export class ImageProxyService {
         resolvedVendor: result.vendorUsed,
         retries: result.attempts.length,
         failovers: attemptsToFailovers(result.attempts),
+        paidOverflow: isImagePaidOverflowModel(result.modelUsed),
       };
     } catch (err) {
       const errAttempts = err instanceof ImageCascadeExhaustedError ? err.attempts : [];
@@ -203,7 +228,7 @@ export class ImageProxyService {
     const keyBound = (m: string) => imageVendorKeyBound(env, vendorForImageModel(m));
     return composeFreeCappedCascade({
       seed,
-      premiumFallback: PREMIUM_IMAGE_FALLBACK_MODELS,
+      premiumFallback: this.disablePaidOverflow ? [] : PREMIUM_IMAGE_FALLBACK_MODELS,
       freeBudget: FREE_IMAGE_ATTEMPT_BUDGET,
       tierOf: tierForImageModel,
       isUnavailable: (m) => !keyBound(m) || cooled.has(imageCooldownKey(m)),
@@ -241,6 +266,9 @@ export class ImageProxyService {
       resolvedVendor: vendorForImageModel(candidates[candidates.length - 1] ?? ''),
       retries: attempts.length,
       failovers,
+      // A cascade-exhausted run produced no billable image, so it is never
+      // counted as funded-overflow spend.
+      paidOverflow: false,
     };
   }
 }
@@ -267,10 +295,12 @@ export function imageProxyForPlan(
   env: ImageProxyEnv,
   effectivePlan: EffectivePlan,
   premiumOverride = false,
+  opts?: { disablePaidOverflow?: boolean },
 ): ImageProxyService {
   return new ImageProxyService(env, {
     modelPool: imageModelPoolForPlan(effectivePlan, premiumOverride),
     productName: imageProductNameForPlan(effectivePlan, premiumOverride),
+    ...(opts?.disablePaidOverflow ? { disablePaidOverflow: true } : {}),
   });
 }
 

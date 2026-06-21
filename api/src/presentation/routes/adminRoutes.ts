@@ -1266,6 +1266,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
         t.external_customer_id AS "externalCustomerId",
         t.external_subscription_id AS "externalSubscriptionId",
         t.token_daily_limit_override AS "tokenDailyLimitOverride",
+        t.paid_overflow_daily_cap AS "paidOverflowDailyCap",
         t.premium_override AS "premiumOverride",
         CASE WHEN t.plan = 'pro' AND t.billing_status = 'active' THEN true ELSE false END AS "isPaid",
         CASE WHEN t.plan = 'pro' AND t.billing_status = 'active' THEN 'pro' ELSE 'free' END AS "effectivePlan",
@@ -1275,7 +1276,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
       FROM tenants t
       LEFT JOIN tenant_members tm ON tm.tenant_id = t.id AND tm.is_active = true
       LEFT JOIN agent_hosts ci ON ci.tenant_id = t.id
-      GROUP BY t.id, t.name, t.slug, t.status, t.plan, t.billing_status, t.billing_email, t.billing_updated_at, t.external_customer_id, t.external_subscription_id, t.token_daily_limit_override, t.premium_override, t.created_at
+      GROUP BY t.id, t.name, t.slug, t.status, t.plan, t.billing_status, t.billing_email, t.billing_updated_at, t.external_customer_id, t.external_subscription_id, t.token_daily_limit_override, t.paid_overflow_daily_cap, t.premium_override, t.created_at
       ORDER BY t.created_at DESC
       LIMIT 500
     `);
@@ -1323,6 +1324,50 @@ export function createAdminRoutes(): Hono<HonoEnv> {
     }).catch(() => {});
 
     return c.json({ id: updated.id, tokenDailyLimitOverride: updated.tokenDailyLimitOverride });
+  });
+
+  // -------------------------------------------------------------------------
+  // PATCH /api/admin/tenants/:id/paid-overflow-cap
+  // Body: { paidOverflowDailyCap: number | null }  (value in MILLICENTS, 1/100000 USD)
+  //   null → clear override (free → $0.50/day default; pro/teams → unlimited)
+  //   -1   → unlimited (funded-overflow gate skipped)
+  //   >= 0 → use this daily $ ceiling (millicents) on funded-overflow spend
+  // The funded-overflow path = the always-on premium-fallback + reliability
+  // backstop chain that runs on Builderforce's own keys (migration 0130).
+  // -------------------------------------------------------------------------
+  router.patch('/tenants/:id/paid-overflow-cap', async (c) => {
+    const tenantId = Number(c.req.param('id'));
+    if (!tenantId) return c.json({ error: 'Invalid tenant id' }, 400);
+
+    const body = await c.req.json<{ paidOverflowDailyCap?: number | null }>();
+    const value = body.paidOverflowDailyCap;
+    if (value !== null && value !== undefined) {
+      if (!Number.isInteger(value) || value < -1) {
+        return c.json({
+          error: 'paidOverflowDailyCap must be null, -1 (unlimited), or a non-negative integer (millicents)',
+        }, 400);
+      }
+    }
+    const next = value === undefined ? null : value;
+
+    const db = buildDatabase(c.env);
+    const [before] = await db.select({ prev: tenants.paidOverflowDailyCap }).from(tenants).where(eq(tenants.id, tenantId));
+    const [updated] = await db
+      .update(tenants)
+      .set({ paidOverflowDailyCap: next, updatedAt: new Date() })
+      .where(eq(tenants.id, tenantId))
+      .returning({ id: tenants.id, paidOverflowDailyCap: tenants.paidOverflowDailyCap });
+
+    if (!updated) return c.json({ error: 'Tenant not found' }, 404);
+
+    // Forensic trail: who changed a tenant's funded-overflow ceiling, and when.
+    await writeAudit(db, 'PAID_OVERFLOW_CAP_CHANGED', c.get('userId') as string, {
+      tenantId,
+      metadata: { from: before?.prev ?? null, to: updated.paidOverflowDailyCap },
+      ipAddress: c.req.header('CF-Connecting-IP') ?? c.req.header('X-Forwarded-For') ?? null,
+    }).catch(() => {});
+
+    return c.json({ id: updated.id, paidOverflowDailyCap: updated.paidOverflowDailyCap });
   });
 
   // -------------------------------------------------------------------------
