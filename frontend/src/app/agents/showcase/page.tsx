@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import Link from 'next/link';
 import showcaseData from '@/data/agents/showcase.json';
 import ShowcaseGrid from './ShowcaseGrid';
 
@@ -38,7 +39,7 @@ export default function ShowcasePage() {
         <p>Share your BuilderForce Agents creation with the community.</p>
         <div className="cc-cta-buttons">
           <a className="cc-btn primary" href="https://twitter.com/intent/tweet?text=Check%20out%20what%20I%20built%20with%20%40builderforce%21" target="_blank" rel="noopener">Share on X</a>
-          <a className="cc-btn" href="/agents/skills">Browse Skills</a>
+          <Link className="cc-btn" href="/agents/skills">Browse Skills</Link>
           <a className="cc-btn" href="https://discord.gg/9gUsc2sNG6" target="_blank" rel="noopener">Join Discord</a>
         </div>
       </section>

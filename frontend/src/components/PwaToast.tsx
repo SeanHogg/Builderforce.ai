@@ -1,17 +1,25 @@
 'use client';
 
 import type { CSSProperties, ReactNode } from 'react';
+import { PWA_TOAST_ROW_HEIGHT } from './pwaToastStack';
 
 /**
  * Shared presentational shell for the bottom-center PWA toasts
  * (update-available + install-app). Owns the fixed positioning, blur, border,
  * shadow, and the coral primary-action button so the two banners stay visually
  * identical without duplicating the chrome.
+ *
+ * `slot` is the toast's index in the shared bottom-center stack (0 = bottom-most
+ * row). When two toasts are live at once they pass different slots so they
+ * stack vertically instead of overlapping at the same `bottom`. A lone toast
+ * passes slot 0 (or omits it) and sits in the normal position.
  */
+
+const BOTTOM_BASE = 24;
 
 const SHELL_STYLE: CSSProperties = {
   position: 'fixed',
-  bottom: 24,
+  bottom: BOTTOM_BASE,
   left: '50%',
   transform: 'translateX(-50%)',
   zIndex: 9999,
@@ -58,9 +66,23 @@ const DISMISS_BUTTON_STYLE: CSSProperties = {
   flexShrink: 0,
 };
 
-export function PwaToast({ children, nowrap = true }: { children: ReactNode; nowrap?: boolean }) {
+export function PwaToast({
+  children,
+  nowrap = true,
+  slot = 0,
+}: {
+  children: ReactNode;
+  nowrap?: boolean;
+  /** Index in the shared bottom-center stack (0 = bottom-most). Offsets `bottom`. */
+  slot?: number;
+}) {
+  const bottom = BOTTOM_BASE + Math.max(0, slot) * PWA_TOAST_ROW_HEIGHT;
   return (
-    <div role="status" aria-live="polite" style={{ ...SHELL_STYLE, whiteSpace: nowrap ? 'nowrap' : 'normal' }}>
+    <div
+      role="status"
+      aria-live="polite"
+      style={{ ...SHELL_STYLE, bottom, whiteSpace: nowrap ? 'nowrap' : 'normal' }}
+    >
       {children}
     </div>
   );
