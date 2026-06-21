@@ -169,30 +169,6 @@ export default function LandingPage() {
           50%       { transform: scale(0.75); opacity: 0.55; }
         }
 
-        /* Title */
-        .lp-title {
-          font-family: var(--font-display);
-          font-size: clamp(2.6rem, 7.5vw, 5rem);
-          font-weight: 700;
-          letter-spacing: -0.035em;
-          line-height: 1.05;
-          margin-bottom: 20px;
-          background: linear-gradient(
-            135deg,
-            var(--hero-title-start) 0%,
-            var(--coral-bright)     46%,
-            var(--hero-title-end)   100%
-          );
-          background-size: 200% 200%;
-          -webkit-background-clip: text;
-          -webkit-text-fill-color: transparent;
-          background-clip: text;
-          animation: gradientShift 7s ease infinite, fadeInUp 0.9s ease-out both;
-        }
-        @keyframes gradientShift {
-          0%, 100% { background-position: 0% 50%; }
-          50%       { background-position: 100% 50%; }
-        }
         @keyframes fadeInUp {
           from { opacity: 0; transform: translateY(22px); }
           to   { opacity: 1; transform: translateY(0); }
@@ -506,21 +482,9 @@ export default function LandingPage() {
             Human-in-the-loop · Fully agentic cloud
           </div>
 
-          <h1 className="lp-title">Builderforce.ai</h1>
-
-          <p className="lp-tagline">See clarity through the storm</p>
-          <p className="lp-tagline lp-tagline-sub">Your AI CTO, CIO &amp; Security Officer</p>
-
-          <p className="lp-desc">
-            A human-in-the-loop, fully agentic cloud that runs your technology
-            like an executive team. Train your own AI agents and put them to
-            work inside your own agent, manage the whole workforce from a Kanban
-            board, and review and approve every action — all without ever
-            leaving VS Code.
-          </p>
-
-          {/* Prompt input (primary action) + agentHost mascot as a right-hand
-              column on tablet/desktop; the mascot is hidden on mobile. */}
+          {/* The agentic prompt is the hero's primary action — it sits at the
+              top (where the wordmark used to be), with the agentHost mascot as a
+              right-hand column on tablet/desktop (hidden on mobile). */}
           <div className="lp-prompt-row">
             <div className="lp-prompt-col">
               <form onSubmit={handlePromptSubmit} className="lp-prompt">
@@ -557,6 +521,17 @@ export default function LandingPage() {
               className="lp-hero-mascot"
             />
           </div>
+
+          <p className="lp-tagline">See clarity through the storm</p>
+          <p className="lp-tagline lp-tagline-sub">Your AI CTO, CIO &amp; Security Officer</p>
+
+          <p className="lp-desc">
+            A human-in-the-loop, fully agentic cloud that runs your technology
+            like an executive team. Train your own AI agents and put them to
+            work inside your own agent, manage the whole workforce from a Kanban
+            board, and review and approve every action — all without ever
+            leaving VS Code.
+          </p>
 
           <div className="lp-actions">
             <Link href="/register" className="lp-btn-secondary">
