@@ -9,7 +9,7 @@ export const metadata: Metadata = {
 
 const links = [
   { label: 'github.com/SeanHogg', href: 'https://github.com/SeanHogg' },
-  { label: 'Resume / Portfolio', href: 'https://myvideoresu.me/resumes/seanhogg' },
+  { label: 'Resume / Portfolio', href: 'https://hired.video/resumes/seanhogg' },
   { label: 'GitHub Discussions', href: 'https://github.com/seanhogg/agents/discussions' },
   { label: '@CrawfishMellow', href: 'https://instagram.com/CrawfishMellow' },
 ];
