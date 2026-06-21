@@ -146,6 +146,19 @@ export async function bumpCacheVersion(env: Env, versionKey: string): Promise<vo
   await invalidateCached(env, `ver:${versionKey}`);
 }
 
+/**
+ * TEST-ONLY: clear the module-global L1 `Map` so cache-backed tests are
+ * order-independent. The L1 layer persists for the life of the isolate, which in
+ * a single Vitest worker means one populated key (e.g. `am:recall:1:0:5:q`) can
+ * leak an `ok:true` hit into a later test that expected its loader to run. Call
+ * this from a shared `beforeEach` (see `api/test/setup.ts`, wired via vitest
+ * `setupFiles`) instead of hand-picking collision-free keys per test. No-op for
+ * the L2 KV layer — that is per-test bound (usually absent) and never shared.
+ */
+export function __clearL1CacheForTests(): void {
+  l1.clear();
+}
+
 /** Invalidate both cache layers for `key`. Call from every mutation that
  *  changes the cached data so the next read re-loads. */
 export async function invalidateCached(env: Env, key: string): Promise<void> {

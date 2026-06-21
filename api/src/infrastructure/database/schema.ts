@@ -799,6 +799,12 @@ export const tasks = pgTable('tasks', {
   githubIssueUrl:    varchar('github_issue_url', { length: 500 }),
   githubPrUrl:       varchar('github_pr_url', { length: 500 }),
   githubPrNumber:    integer('github_pr_number'),
+  /** Atomic single-PR claim (0140): set the instant a finalize path begins opening
+   *  a PR (before the external create), so a concurrent inline run-end finalize and
+   *  a human Done-drag can't both open a PR for the same branch. Cleared (back to
+   *  null) if the create fails, so a retry can re-claim. Distinct from githubPrUrl,
+   *  which is only known AFTER the create returns. */
+  prOpeningAt:       timestamp('pr_opening_at'),
   assignedAgentHostId:    integer('assigned_agent_host_id').references(() => agentHosts.id, { onDelete: 'set null' }),
   /** ide_agents.id of the cloud agent working this ticket — the agent self-assigns
    *  when it starts a run (agents are first-class assignees). No FK (raw-SQL table). */

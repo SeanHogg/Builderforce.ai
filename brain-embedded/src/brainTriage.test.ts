@@ -12,6 +12,18 @@ describe('isFailedToolResult', () => {
     expect(isFailedToolResult(null)).toBe(false);
     expect(isFailedToolResult('done')).toBe(false);
   });
+  it('does not flag legit data that merely contains the word "error"', () => {
+    // A task whose title/description mentions "error" is a success, not a failure.
+    expect(isFailedToolResult({ ok: true, tasks: [{ id: 1, title: 'Fix login error' }] })).toBe(false);
+    expect(isFailedToolResult([{ title: 'Investigate failed deploy' }])).toBe(false);
+    expect(isFailedToolResult('No errors found')).toBe(false);
+    // An object with a non-string `error` field (e.g. a count) is not a failure.
+    expect(isFailedToolResult({ ok: true, errorCount: 0 })).toBe(false);
+  });
+  it('still flags a stringified error envelope', () => {
+    expect(isFailedToolResult('{"ok":false,"reason":"x"}')).toBe(true);
+    expect(isFailedToolResult('{"error":"boom"}')).toBe(true);
+  });
 });
 
 describe('buildBrainTriageReport', () => {

@@ -29,12 +29,23 @@ describe("buildConvergedFileTools", () => {
     await rm(root, { recursive: true, force: true });
   });
 
-  it("exposes write_file/edit_file under the NATIVE names write/edit, plus additive delete_file/list_files", () => {
+  it("exposes write_file/edit_file under the NATIVE names write/edit, plus additive delete_file/list_files/ask_human", () => {
     const tools = buildConvergedFileTools({ workspaceRoot: root });
     const names = tools.map((t) => t.name).toSorted();
-    expect(names).toEqual(["delete_file", "edit", "list_files", "write"]);
+    expect(names).toEqual(["ask_human", "delete_file", "edit", "list_files", "write"]);
     // The model-facing names that REPLACE native tools (so the loop drops its own copies).
     expect([...CONVERGED_TOOL_NAMES].toSorted()).toEqual(["edit", "write"]);
+  });
+
+  it("offers ask_human (cap human) which returns a human's answer inline", async () => {
+    const tools = buildConvergedFileTools({
+      workspaceRoot: root,
+      requestHuman: async () => ({ decision: "answered", responseText: "ship it" }),
+    });
+    const res = await runTool(tools, "ask_human", { question: "Proceed with the migration?" });
+    expect(res.ok).toBe(true);
+    expect(res.paused).toBe(false);
+    expect(res.answer).toBe("ship it");
   });
 
   it("drives a write -> read(list) -> edit -> delete round-trip on disk via the shared defs", async () => {

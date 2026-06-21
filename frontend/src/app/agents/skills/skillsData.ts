@@ -41,7 +41,7 @@ const REGISTRY_URL = process.env.NEXT_PUBLIC_AUTH_API_URL || 'https://api.builde
  * Shape of a row from `GET /marketplace/skills` (snake_case, author split
  * across user columns). Mapped to the camelCase `Skill` the UI consumes.
  */
-interface RegistrySkillRow {
+export interface RegistrySkillRow {
   id?: string | number;
   slug?: string;
   name?: string;
@@ -56,7 +56,7 @@ interface RegistrySkillRow {
   author_username?: string;
 }
 
-function mapRegistrySkill(r: RegistrySkillRow): Skill {
+export function mapRegistrySkill(r: RegistrySkillRow): Skill {
   return {
     // Route on the slug so the listing link resolves to the detail page.
     id: r.slug ?? String(r.id ?? ''),

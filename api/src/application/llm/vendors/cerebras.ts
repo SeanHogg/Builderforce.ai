@@ -17,7 +17,7 @@
 
 import { createOpenAICompatibleVendor } from './openaiCompatible';
 import type { VendorModelEntry } from './types';
-import { sanitizeExtraBodyForVendor } from '../jsonSchemaSanitize';
+import { CEREBRAS_STRICT_KEYWORDS, sanitizeExtraBodyForVendor } from '../jsonSchemaSanitize';
 
 const CATALOG: ReadonlyArray<VendorModelEntry> = [
   { id: 'llama3.1-8b',                      tier: 'FREE', label: 'Llama 3.1 8B (Cerebras · Fast)',   brand: 'Cerebras' },
@@ -32,5 +32,9 @@ export const cerebrasModule = createOpenAICompatibleVendor({
   defaultTier: 'FREE',
   autoRoute: true,
   maxTokensField: 'max_completion_tokens',
+  // Declares the strict-mode strip set so the sanitizer is metadata-driven
+  // (no hardcoded vendor-id list). `transformExtra` reads it back via the
+  // registry-wired resolver.
+  schemaDialect: { stripKeywords: CEREBRAS_STRICT_KEYWORDS },
   transformExtra: (extra) => sanitizeExtraBodyForVendor('cerebras', extra),
 });

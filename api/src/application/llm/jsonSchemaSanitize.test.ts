@@ -1,9 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import {
+  CEREBRAS_STRICT_KEYWORDS,
   sanitizeExtraBodyForVendor,
+  schemaStripKeywordsForVendor,
   stripUnsupportedSchemaKeywords,
   vendorNeedsSchemaStrip,
 } from './jsonSchemaSanitize';
+// Importing the registry triggers `registerSchemaDialectResolver(...)` at
+// module-init, which wires the vendor → strip-set map the sanitizer reads.
+// Without this import the resolver defaults to "strip nothing" (permissive).
+import './vendors/registry';
 
 // The shape of these tests mirrors the real production failure
 // (`llm-2cc6ba1b-...`, 2026-05-26): Cerebras returns 400 with
@@ -24,6 +30,29 @@ describe('vendorNeedsSchemaStrip', () => {
     expect(vendorNeedsSchemaStrip('nvidia')).toBe(false);
     expect(vendorNeedsSchemaStrip('ollama')).toBe(false);
     expect(vendorNeedsSchemaStrip('cloudflare')).toBe(false);
+  });
+
+  it('passes through for an unknown / unregistered vendor id', () => {
+    expect(vendorNeedsSchemaStrip('totally-not-a-vendor')).toBe(false);
+  });
+});
+
+describe('schemaStripKeywordsForVendor (metadata-driven)', () => {
+  it('returns the cerebras strict set for cerebras', () => {
+    const set = schemaStripKeywordsForVendor('cerebras');
+    for (const kw of CEREBRAS_STRICT_KEYWORDS) expect(set.has(kw)).toBe(true);
+    expect(set.size).toBe(CEREBRAS_STRICT_KEYWORDS.length);
+  });
+
+  it('openrouter inherits the cerebras set (it routes :free to cerebras)', () => {
+    expect([...schemaStripKeywordsForVendor('openrouter')].sort()).toEqual(
+      [...CEREBRAS_STRICT_KEYWORDS].sort(),
+    );
+  });
+
+  it('returns an empty set for permissive vendors', () => {
+    expect(schemaStripKeywordsForVendor('googleai').size).toBe(0);
+    expect(schemaStripKeywordsForVendor('nvidia').size).toBe(0);
   });
 });
 

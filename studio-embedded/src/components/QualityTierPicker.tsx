@@ -18,7 +18,7 @@
  * resolves to. DRY: every "what does each tier mean" decision lives here.
  */
 
-import type { DiffusionModelId, QualityMode } from '@seanhogg/builderforce-studio';
+import { MODEL_REGISTRY, type DiffusionModelId, type QualityMode } from '@seanhogg/builderforce-studio';
 
 interface QualityTierDef {
   id: QualityMode;
@@ -74,18 +74,31 @@ export interface EffectiveChain {
 
 /**
  * Single source of truth for "which model(s) run this generation". When Advanced
- * is open the explicit model picker wins (single pass, no refinement); otherwise
- * the Quality tier resolves to its (primary, refinement) pair. Both the engine
- * factory, the saved-version params, the resolved-chain badge, and the debug
- * snapshot resolve through this one function so they can never disagree.
+ * is open the explicit model picker wins; otherwise the Quality tier resolves to
+ * its (primary, refinement) pair. Both the engine factory, the saved-version
+ * params, the resolved-chain badge, and the debug snapshot resolve through this
+ * one function so they can never disagree.
+ *
+ * `customRefinement` (Advanced only) lets a power user build an ARBITRARY
+ * draft/refine pair — e.g. "draft with sd-turbo (composition) → refine with
+ * lcm-dreamshaper (LCM detail)" — instead of being limited to the single
+ * hardcoded `Refined` chain. It is ignored unless Advanced is open. Setting it
+ * equal to the primary model is treated as "no refinement" (a model refining
+ * itself is a pointless second pass), so the picker can't accidentally double a
+ * single-model run.
  */
 export function resolveEffectiveChain(opts: {
   showAdvanced: boolean;
   advancedModel: DiffusionModelId;
   quality: QualityMode;
+  customRefinement?: DiffusionModelId | null;
 }): EffectiveChain {
   if (opts.showAdvanced) {
-    return { primary: opts.advancedModel, refinement: null, overridesQuality: true };
+    const refinement =
+      opts.customRefinement && opts.customRefinement !== opts.advancedModel
+        ? opts.customRefinement
+        : null;
+    return { primary: opts.advancedModel, refinement, overridesQuality: true };
   }
   const tier = resolveQualityTier(opts.quality);
   return { primary: tier.primary, refinement: tier.refinement ?? null, overridesQuality: false };
@@ -109,6 +122,7 @@ export function EffectiveChainBadge(props: {
   showAdvanced: boolean;
   advancedModel: DiffusionModelId;
   quality: QualityMode;
+  customRefinement?: DiffusionModelId | null;
 }) {
   const chain = resolveEffectiveChain(props);
   return (
@@ -128,10 +142,63 @@ export function EffectiveChainBadge(props: {
         <>
           {' '}
           — Advanced model override is active, so the <strong>Quality</strong> tier above is
-          ignored (no refinement pass). Close Advanced or clear the model to use the tier.
+          ignored.{' '}
+          {chain.refinement
+            ? 'A custom two-pass chain is set (draft → refine).'
+            : 'Add a refinement model below for a custom two-pass chain, or close Advanced to use the tier.'}
         </>
       ) : null}
     </p>
+  );
+}
+
+interface CustomRefinementPickerProps {
+  /** The current draft/primary model (the Advanced model picker value). */
+  primary: DiffusionModelId;
+  /** Selected refinement model, or null for a single pass. */
+  value: DiffusionModelId | null;
+  onChange: (next: DiffusionModelId | null) => void;
+  disabled?: boolean;
+}
+
+/**
+ * Advanced-only custom refinement pair. Lets a power user pick ANY second-pass
+ * model on top of the Advanced primary — the generalisation of the single
+ * hardcoded `Refined` tier (lcm-tiny-sd → lcm-dreamshaper-v7). "None" = single
+ * pass. Listing the primary itself is filtered out (a model refining itself is a
+ * wasted pass; `resolveEffectiveChain` also coerces that case to no-refinement).
+ */
+export function CustomRefinementPicker({
+  primary,
+  value,
+  onChange,
+  disabled,
+}: CustomRefinementPickerProps) {
+  const options = (Object.keys(MODEL_REGISTRY) as DiffusionModelId[]).filter(
+    (id) => id !== primary,
+  );
+  return (
+    <div className="bfs-field">
+      <label className="bfs-label">Refinement model (custom two-pass)</label>
+      <select
+        className="bfs-select"
+        value={value ?? ''}
+        onChange={(e) => onChange((e.target.value || null) as DiffusionModelId | null)}
+        disabled={disabled}
+      >
+        <option value="">None (single pass)</option>
+        {options.map((id) => (
+          <option key={id} value={id}>
+            {id}
+          </option>
+        ))}
+      </select>
+      <p className="bfs-hint">
+        Optional second pass: the primary model lays in composition, this model refines each frame
+        via img2img. Picks any draft/refine pair (e.g. sd-turbo → lcm-dreamshaper), generalising the
+        fixed Refined tier.
+      </p>
+    </div>
   );
 }
 

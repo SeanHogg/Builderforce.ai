@@ -65,6 +65,8 @@ export interface OpenAICompatibleVendorOptions {
   autoRoute?: boolean;
   /** Omit the streaming surface (a vendor without SSE support). Default: streaming on. */
   noStream?: boolean;
+  /** Per-vendor JSON-Schema strict-mode strip set (see `VendorModule.schemaDialect`). */
+  schemaDialect?: { stripKeywords: readonly string[] };
 }
 
 /**
@@ -80,6 +82,7 @@ export function createOpenAICompatibleVendor(opts: OpenAICompatibleVendorOptions
     transformExtra,
     autoRoute = false,
     noStream = false,
+    schemaDialect,
   } = opts;
 
   const catalogById = new Map(catalog.map((m) => [m.id, m]));
@@ -96,6 +99,7 @@ export function createOpenAICompatibleVendor(opts: OpenAICompatibleVendorOptions
     id,
     catalog,
     autoRoute,
+    ...(schemaDialect ? { schemaDialect } : {}),
     tierFor(modelId: string): AiModelTier {
       return catalogById.get(modelId)?.tier ?? defaultTier;
     },
