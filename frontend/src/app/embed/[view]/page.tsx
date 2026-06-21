@@ -6,6 +6,7 @@ import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 import { isEmbedView, EMBED_VIEWS, capabilityForView, type EmbedCapability } from '@seanhogg/builderforce-embedded';
 import { useEmbedFrame } from '../../../lib/embed/useEmbedFrame';
+import { useEmbedProjectId } from '../../../lib/embed/useEmbedProjectId';
 import { embedApi } from '../../../lib/builderforceApi';
 import { TaskMgmtContent } from '../../../components/TaskMgmtContent';
 import { BrainPanel } from '../../../components/brain/BrainPanel';
@@ -36,8 +37,31 @@ export default function EmbedViewPage() {
   const params = useParams<{ view: string }>();
   const view = params?.view ?? '';
   const frame = useEmbedFrame();
+  // Accept the project both as `?project=<id>` (query) AND `#projectId=<id>` (the
+  // VS Code extension deep-link hash form), so a project-scoped "Open Page…" from
+  // the extension actually scopes the PM surfaces instead of falling to portfolio.
+  const embedProjectId = useEmbedProjectId();
   const [config, setConfig] = useState<{ enabled: boolean; capabilities: EmbedCapability[] } | null>(null);
   const [configError, setConfigError] = useState(false);
+
+  // Drive the APP theme from the host-provided embed theme so resurfaced
+  // components (TaskMgmtContent, BrainPanel, …) — which read `var(--*)` tokens
+  // keyed off `document.documentElement[data-theme]` (set by the root anti-FOUC
+  // script from localStorage) — honour the host's light/dark instead of the
+  // default. The wrapper div's own `data-theme` only themes the embed chrome;
+  // this themes the document root the app's CSS variables actually read.
+  useEffect(() => {
+    if (typeof document === 'undefined') return;
+    const root = document.documentElement;
+    const prev = root.dataset.theme;
+    root.dataset.theme = frame.theme;
+    root.style.colorScheme = frame.theme;
+    return () => {
+      // Restore on unmount so leaving the embed surface doesn't strand the
+      // host-imposed theme on a same-tab navigation.
+      if (prev) root.dataset.theme = prev;
+    };
+  }, [frame.theme]);
 
   useEffect(() => {
     if (!frame.ready) return;
@@ -117,11 +141,11 @@ export default function EmbedViewPage() {
     );
   }
 
-  return wrap(renderSurface(view));
+  return wrap(renderSurface(view, embedProjectId));
 }
 
 /** Resurface the existing app component for a wired view (DRY — reuse, don't rebuild). */
-function renderSurface(view: string): React.ReactNode {
+function renderSurface(view: string, projectId: number | null): React.ReactNode {
   switch (view) {
     case 'kanban':
     case 'backlog':
@@ -135,19 +159,19 @@ function renderSurface(view: string): React.ReactNode {
       return <EmbedPrdSurface />;
     case 'roadmap':
       // PM visualizers (Timeline / Gantt / Map + Epics + ROI). Portfolio scope by
-      // default; reads ?project=<id> when the host deep-links one.
+      // default; honours ?project=<id> OR #projectId=<id> when the host deep-links one.
       return (
-        <PmScopeProvider>
+        <PmScopeProvider projectId={projectId}>
           <PmVisualizersContent />
         </PmScopeProvider>
       );
     // Standalone PM visualizers — host can embed one surface on its own.
     case 'dependency-graph':
-      return <PmScopeProvider><DependencyGraph /></PmScopeProvider>;
+      return <PmScopeProvider projectId={projectId}><DependencyGraph /></PmScopeProvider>;
     case 'rice-matrix':
-      return <PmScopeProvider><RiceMatrix /></PmScopeProvider>;
+      return <PmScopeProvider projectId={projectId}><RiceMatrix /></PmScopeProvider>;
     case 'roi-dashboard':
-      return <PmScopeProvider><RoiDashboard /></PmScopeProvider>;
+      return <PmScopeProvider projectId={projectId}><RoiDashboard /></PmScopeProvider>;
     case 'soc2':
       // SOC 2 Control Tracker — bespoke (readiness scoreboard + baseline seed).
       return <Soc2Content />;

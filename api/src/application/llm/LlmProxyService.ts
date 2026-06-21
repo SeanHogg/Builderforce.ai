@@ -438,6 +438,29 @@ export function isPaidOverflowModel(model: string | undefined | null): boolean {
 export const FREE_ATTEMPT_BUDGET = 2;
 
 /**
+ * Pro/Teams free-tier breadth: paying tenants try MORE free models before the
+ * cascade escalates to their paid premium pool. The 2-attempt cap above is
+ * tuned for latency-sensitive Free-plan traffic (reach the guaranteed paid
+ * backstop fast); a Pro tenant who is *already paying* benefits more from extra
+ * free-tier coverage (a wider shot at a $0 model) than from a few hundred ms of
+ * latency. Still bounded so the cascade can't walk the whole 40-model free pool.
+ */
+export const PRO_FREE_ATTEMPT_BUDGET = 5;
+
+/**
+ * Plan-aware general FREE-attempt budget (NON-coding). Free → the latency-tuned
+ * 2; Pro/Teams → the wider {@link PRO_FREE_ATTEMPT_BUDGET}. Single source so the
+ * proxy factory doesn't hardcode the constant — closes the "Pro plan's free-tier
+ * section is also capped at 2 attempts, no Pro-specific carve-out" gap.
+ *
+ * Coding runs are unaffected: they pass `CODING_FREE_ATTEMPT_BUDGET` (the whole
+ * free coding pool) explicitly and never consult this.
+ */
+export function freeAttemptBudgetForPlan(effectivePlan: EffectivePlan): number {
+  return effectivePlan === 'free' ? FREE_ATTEMPT_BUDGET : PRO_FREE_ATTEMPT_BUDGET;
+}
+
+/**
  * FREE-attempt budget for a CODING run — deliberately the WHOLE free coding pool,
  * not the 2-attempt general cap.
  *
@@ -1546,7 +1569,11 @@ export function llmProxyForPlan(
     ...(opts?.disablePaidOverflow ? { disablePaidOverflow: true } : {}),
     // A coding run walks the WHOLE free coding pool before any paid/metered coder
     // (cost over latency), so the funded direct-Anthropic floor is genuine last-resort.
-    ...(opts?.codingOnly ? { codingOnly: true, freeBudget: CODING_FREE_ATTEMPT_BUDGET } : {}),
+    // A general (non-coding) run uses the PLAN-AWARE free budget: Free → 2 (latency),
+    // Pro/Teams → wider free-tier breadth before escalating to their paid pool.
+    ...(opts?.codingOnly
+      ? { codingOnly: true, freeBudget: CODING_FREE_ATTEMPT_BUDGET }
+      : { freeBudget: freeAttemptBudgetForPlan(effectivePlan) }),
     // A connected tenant subscription token powers any direct-Claude resolution.
     ...(opts?.anthropicOAuthToken ? { anthropicOAuthToken: opts.anthropicOAuthToken } : {}),
   });

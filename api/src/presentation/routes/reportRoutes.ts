@@ -32,6 +32,7 @@ import {
   projects,
   users,
   agentHosts,
+  customerFeedback,
 } from '../../infrastructure/database/schema';
 import { TenantRole, TaskStatus } from '../../domain/shared/types';
 import { getOrSetCached, invalidateCached } from '../../infrastructure/cache/readThroughCache';
@@ -733,6 +734,87 @@ export function createReportRoutes(db: Db): Hono<HonoEnv> {
     }
 
     return c.json({ updated: body.length });
+  });
+
+  // ── Voice-of-Customer inbox (ingested customer_feedback triage) ───────────
+  // GET  /api/reports/feedback        list the segment's feedback (?status=new|triaged|dismissed)
+  // PATCH /api/reports/feedback/:id   triage: flip status, optionally link a backlog task
+  const FEEDBACK_STATUSES = new Set(['new', 'triaged', 'dismissed']);
+
+  router.get('/feedback', async (c) => {
+    const tenantId = c.get('tenantId') as number;
+    const segmentId = c.get('segmentId') as string;
+    const statusFilter = c.req.query('status');
+    const conds = [eq(customerFeedback.tenantId, tenantId), eq(customerFeedback.segmentId, segmentId)];
+    if (statusFilter && FEEDBACK_STATUSES.has(statusFilter)) {
+      conds.push(eq(customerFeedback.status, statusFilter));
+    }
+    const rows = await db
+      .select({
+        id: customerFeedback.id,
+        externalRef: customerFeedback.externalRef,
+        widgetId: customerFeedback.widgetId,
+        text: customerFeedback.text,
+        sentiment: customerFeedback.sentiment,
+        contact: customerFeedback.contact,
+        status: customerFeedback.status,
+        triagedTaskId: customerFeedback.triagedTaskId,
+        triagedAt: customerFeedback.triagedAt,
+        createdAt: customerFeedback.createdAt,
+      })
+      .from(customerFeedback)
+      .where(and(...conds))
+      .orderBy(desc(customerFeedback.createdAt))
+      .limit(200);
+    return c.json({ feedback: rows });
+  });
+
+  router.patch('/feedback/:id', requireRole(TenantRole.MANAGER), async (c) => {
+    const tenantId = c.get('tenantId') as number;
+    const segmentId = c.get('segmentId') as string;
+    const id = c.req.param('id');
+    const body = await c.req.json<{ status?: string; taskId?: number }>().catch(() => ({}) as { status?: string; taskId?: number });
+    const status = body.status;
+    if (!status || !FEEDBACK_STATUSES.has(status)) {
+      return c.json({ error: `status must be one of: ${[...FEEDBACK_STATUSES].join(', ')}` }, 400);
+    }
+
+    // When triaging into the backlog, optionally link the task it became. The
+    // link is validated to the same segment so a triage can't point at another
+    // end-client's task. (Spawning the task itself is a task-domain concern; the
+    // caller passes the created/linked taskId here.)
+    let triagedTaskId: number | null = null;
+    if (status === 'triaged' && typeof body.taskId === 'number') {
+      const [task] = await db
+        .select({ id: tasks.id })
+        .from(tasks)
+        .where(and(eq(tasks.id, body.taskId), eq(tasks.segmentId, segmentId)))
+        .limit(1);
+      if (!task) return c.json({ error: 'taskId not found in this segment' }, 400);
+      triagedTaskId = task.id;
+    }
+
+    const patch: Record<string, unknown> = { status };
+    if (status === 'triaged') {
+      patch.triagedAt = new Date();
+      patch.triagedTaskId = triagedTaskId;
+    } else {
+      // Re-opening or dismissing clears any triage linkage.
+      patch.triagedAt = null;
+      patch.triagedTaskId = null;
+    }
+
+    const [updated] = await db
+      .update(customerFeedback)
+      .set(patch)
+      .where(and(
+        eq(customerFeedback.id, id),
+        eq(customerFeedback.tenantId, tenantId),
+        eq(customerFeedback.segmentId, segmentId),
+      ))
+      .returning({ id: customerFeedback.id, status: customerFeedback.status, triagedTaskId: customerFeedback.triagedTaskId });
+    if (!updated) return c.json({ error: 'feedback not found' }, 404);
+    return c.json(updated);
   });
 
   return router;

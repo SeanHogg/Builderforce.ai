@@ -231,6 +231,22 @@ function createAnthropicBetaHeadersWrapper(
 }
 
 const ANTHROPIC_EPHEMERAL_CACHE = { type: "ephemeral" } as const;
+const ANTHROPIC_EPHEMERAL_CACHE_1H = { type: "ephemeral", ttl: "1h" } as const;
+
+/**
+ * Resolve whether the OpenRouter/Anthropic system-cache breakpoint should use the
+ * 1-hour retention (`{ type:'ephemeral', ttl:'1h' }`) instead of the default 5-min
+ * ephemeral. Mirrors {@link resolveCacheRetention}'s mapping but is provider-agnostic
+ * (OpenRouter routes Anthropic models via the openai-completions API, so the `ttl`
+ * must be baked into the body's `cache_control` marker, not passed as a stream option).
+ *
+ * Honours `cacheRetention: 'long'` (new) or `cacheControlTtl: '1h'` (legacy) — the SAME
+ * hint the direct-Anthropic path reads — so a `_builderforce.cacheTtl:'1h'` /
+ * per-useCase profile flips the marker on BOTH surfaces. Anything else → 5-min.
+ */
+function wantsLongCacheTtl(extraParams: Record<string, unknown> | undefined): boolean {
+  return extraParams?.cacheRetention === "long" || extraParams?.cacheControlTtl === "1h";
+}
 
 /**
  * Add an Anthropic prompt-cache breakpoint to the system prompt of an
@@ -246,12 +262,17 @@ const ANTHROPIC_EPHEMERAL_CACHE = { type: "ephemeral" } as const;
  * total at two breakpoints (system here + history from the SDK), within
  * Anthropic's cap of four.
  *
+ * `longTtl` opts into the 1-hour retention marker (`ttl:'1h'`, ~2x write cost) so a
+ * bursty high-prefix tenant keeps the prefix warm across idle gaps >5 min — the
+ * OpenRouter twin of the direct-Anthropic `cacheRetention:'long'` path.
+ *
  * @internal Exported for testing
  */
-export function addAnthropicSystemCacheControl(payload: unknown): void {
+export function addAnthropicSystemCacheControl(payload: unknown, longTtl = false): void {
   if (!payload || typeof payload !== "object") {
     return;
   }
+  const marker = longTtl ? ANTHROPIC_EPHEMERAL_CACHE_1H : ANTHROPIC_EPHEMERAL_CACHE;
   const messages = (payload as { messages?: unknown }).messages;
   if (!Array.isArray(messages)) {
     return;
@@ -268,7 +289,7 @@ export function addAnthropicSystemCacheControl(payload: unknown): void {
     if (content.length === 0) {
       return;
     }
-    system.content = [{ type: "text", text: content, cache_control: ANTHROPIC_EPHEMERAL_CACHE }];
+    system.content = [{ type: "text", text: content, cache_control: marker }];
     return;
   }
   if (!Array.isArray(content)) {
@@ -281,7 +302,7 @@ export function addAnthropicSystemCacheControl(payload: unknown): void {
   for (let i = content.length - 1; i >= 0; i--) {
     const part = content[i];
     if (part && typeof part === "object" && (part as { type?: unknown }).type === "text") {
-      (part as Record<string, unknown>).cache_control = ANTHROPIC_EPHEMERAL_CACHE;
+      (part as Record<string, unknown>).cache_control = marker;
       return;
     }
   }
@@ -294,10 +315,14 @@ export function addAnthropicSystemCacheControl(payload: unknown): void {
  * OpenRouter providers either auto-cache (OpenAI/Grok) or would reject the
  * marker. Injects via the `onPayload` seam — the same mechanism the store /
  * tool_stream wrappers use to mutate the exact body sent upstream.
+ *
+ * `longTtl` flips the breakpoint to the 1-hour retention marker (the OpenRouter
+ * surface of the `cacheTtl:'1h'` opt-in).
  */
 function createOpenRouterAnthropicSystemCacheWrapper(
   baseStreamFn: StreamFn | undefined,
   modelId: string,
+  longTtl: boolean,
 ): StreamFn {
   const underlying = baseStreamFn ?? nativeStreamSimple;
   const isAnthropic = modelId.trim().toLowerCase().startsWith("anthropic/");
@@ -309,7 +334,7 @@ function createOpenRouterAnthropicSystemCacheWrapper(
     return underlying(model, context, {
       ...options,
       onPayload: (payload) => {
-        addAnthropicSystemCacheControl(payload);
+        addAnthropicSystemCacheControl(payload, longTtl);
         originalOnPayload?.(payload);
       },
     });
@@ -410,7 +435,14 @@ export function applyExtraParamsToAgent(
     agent.streamFn = createOpenRouterHeadersWrapper(agent.streamFn);
     // pi-ai caches only the last message for openrouter/anthropic; also cache
     // the system prompt — the biggest stable prefix — via the onPayload seam.
-    agent.streamFn = createOpenRouterAnthropicSystemCacheWrapper(agent.streamFn, modelId);
+    // A `cacheTtl:'1h'` / `cacheRetention:'long'` hint flips the breakpoint to the
+    // 1-hour retention marker so a high-prefix tenant keeps the prefix warm across
+    // multi-minute idle gaps (the OpenRouter twin of the direct-Anthropic long path).
+    agent.streamFn = createOpenRouterAnthropicSystemCacheWrapper(
+      agent.streamFn,
+      modelId,
+      wantsLongCacheTtl(merged),
+    );
   }
 
   // Enable Z.AI tool_stream for real-time tool call streaming.

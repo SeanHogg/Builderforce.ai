@@ -30,6 +30,25 @@ export function assertsUnrunVerification(summary: string): boolean {
   return check.test(s) && pass.test(s);
 }
 
+/**
+ * True when a code-bound run is about to `finish` having produced NO real code
+ * deliverable — `writtenPaths` is empty or holds only the seeded `PRD.md` (the PRD
+ * is committed during prep, so a PR with PRD.md but no code is the "wrote a plan,
+ * shipped a scaffold/nothing" premature-finish footgun from execution #20).
+ *
+ * This is the cheap, deterministic half of the pre-finish completeness self-review
+ * (ROADMAP #38): it does NOT judge requirement coverage, only that *something* was
+ * built. Used to block `finish` ONCE and re-prompt the agent to self-review the PRD
+ * requirements before accepting an empty finish — so a genuine "nothing to change"
+ * run can still finish on the second attempt, while a premature one is forced to
+ * reconsider. Pure → unit-testable in isolation.
+ */
+export function hasNoCodeDeliverable(writtenPaths: ReadonlySet<string>): boolean {
+  let codeFiles = 0;
+  for (const p of writtenPaths) if (p !== 'PRD.md') codeFiles += 1;
+  return codeFiles === 0;
+}
+
 /** The one registry the cloud engine drives (schemas + dispatch). Seeded from the
  *  shared core tools — adding a tool there makes it available to every surface that
  *  backs its capability, with no array edit here. */

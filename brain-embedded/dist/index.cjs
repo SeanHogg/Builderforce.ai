@@ -708,9 +708,12 @@ function isFailedToolResult(result) {
     const r = result;
     if (r.ok === false) return true;
     if (typeof r.error === "string" && r.error) return true;
+    return false;
   }
-  const s = (typeof result === "string" ? result : JSON.stringify(result)).toLowerCase();
-  return s.includes('"ok":false') || /\b(error|failed|exception)\b/.test(s);
+  if (typeof result === "string") {
+    return /"ok"\s*:\s*false/.test(result) || /"error"\s*:\s*"[^"]/.test(result);
+  }
+  return false;
 }
 function cap(s, n = 2e3) {
   const str = typeof s === "string" ? s : JSON.stringify(s ?? "");

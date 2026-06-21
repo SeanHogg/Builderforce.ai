@@ -509,7 +509,22 @@ interface BrainTraceEvent {
     /** True when this step represents a failure (thrown, or `{ ok: false }`). */
     isError?: boolean;
 }
-/** Heuristic: did a tool result represent a failure? Mirrors the host/cloud rule. */
+/**
+ * Did a tool result represent a failure?
+ *
+ * Tool results in this codebase signal failure by SHAPE, not prose: the platform
+ * actions return `{ ok: false }` or `{ error: "<message>" }` (the tenant guard,
+ * the dispatcher's unknown-capability, a thrown handler). We inspect that shape
+ * instead of regex-scanning the whole stringified payload — the old
+ * `\b(error|failed|exception)\b` scan misfired on any legit data that merely
+ * CONTAINED the word "error" (e.g. a task titled "Fix login error", an audit
+ * row, a search result), mis-marking a successful run as ERROR in the report.
+ *
+ * For a STRING result we only flag an embedded `{ ok: false }` / `"error":`
+ * envelope (a stringified error object), never a free-text occurrence of the
+ * word — a plain-string success like `"done"` or `"No errors found"` is not a
+ * failure.
+ */
 declare function isFailedToolResult(result: unknown): boolean;
 interface BuildBrainTriageOptions {
     /** ISO capture time (caller supplies it so the module stays clock-free). */

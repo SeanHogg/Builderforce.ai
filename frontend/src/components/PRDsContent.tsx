@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
+import { useBrainDataRefresh } from '@/lib/brain/useBrainDataRefresh';
 import { specsApi, type Spec } from '@/lib/builderforceApi';
 import { ChatMessageContent } from './ChatMessageContent';
 import { ConfirmDialog } from './ConfirmDialog';
@@ -49,6 +50,10 @@ export function PRDsContent({ projectId, projectName }: PRDsContentProps) {
   useEffect(() => {
     loadSpecs();
   }, [loadSpecs]);
+
+  // Refetch when the Brain creates/updates/deletes a spec/PRD so this list stays
+  // live instead of going stale until a manual reload.
+  useBrainDataRefresh(['specs'], loadSpecs);
 
   const handleSaveEdit = async () => {
     if (!selectedSpec) return;

@@ -29,6 +29,7 @@ function makeFakeDb(opts: {
 }) {
   const inserts: Array<{ table: TableRef; values: Record<string, unknown> }> = [];
   const updates: Array<{ table: TableRef; values: Record<string, unknown> }> = [];
+  const deletes: Array<{ table: TableRef }> = [];
 
   function selectChain(rows: unknown[]) {
     const chain: Record<string, unknown> = {};
@@ -84,9 +85,19 @@ function makeFakeDb(opts: {
         },
       };
     },
+    delete(table: TableRef) {
+      // delete(table).where(..) — awaitable; records the delete so the
+      // re-dispatch placeholder-cleanup path can be asserted.
+      return {
+        where() {
+          deletes.push({ table });
+          return { then: (resolve: (v: unknown) => unknown) => resolve(undefined), catch: () => Promise.resolve() };
+        },
+      };
+    },
   };
 
-  return { db: db as never, inserts, updates };
+  return { db: db as never, inserts, updates, deletes };
 }
 
 const TENANT = 1;
@@ -157,7 +168,7 @@ describe('RepoService.dispatchPrCreation', () => {
       isDefault: true,
       matchHints: null,
     };
-    const { db, inserts } = makeFakeDb({
+    const { db, inserts, deletes } = makeFakeDb({
       selectByTable: new Map<TableRef, unknown[]>([
         [tasks, [{ id: 5, projectId: 10, title: 'Add feature', description: 'unrelated', status: 'ready', specId: null, source: 'JIRA-1', assignedAgentHostId: 7 }]],
         [projectRepositories, [repoRow]],
@@ -189,6 +200,10 @@ describe('RepoService.dispatchPrCreation', () => {
     expect(prInsert?.values.status).toBe('open');
     expect(prInsert?.values.tenantId).toBe(TENANT);
     expect(branchInsert?.values.name).toBe('task/jira-1-add-feature');
+
+    // ROADMAP #74: a re-dispatch first clears any stale null-number placeholder
+    // pull_requests row for this (task, branch) so orphans never accumulate.
+    expect(deletes.find((d) => d.table === pullRequests)).toBeTruthy();
   });
 
   it('returns dispatch_failed when the agentHost does not acknowledge (but still records the PR)', async () => {

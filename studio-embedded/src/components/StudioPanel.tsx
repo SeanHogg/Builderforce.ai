@@ -652,6 +652,12 @@ export function StudioPanel({
       const p = entry.params;
       setPrompt(p.prompt);
       setModel(p.model);
+      // Restore the Advanced disclosure + custom refinement pair so an
+      // Advanced-chain version reloads with the exact (primary, refinement) pair
+      // it ran. For tier-derived versions (`advanced` falsy) the refinement came
+      // from the tier, so the override stays null and the tier drives the chain.
+      setShowAdvanced(p.advanced ?? false);
+      setRefinementOverride(p.advanced ? (p.refinementModel ?? null) : null);
       // Fields added after the first release — guard for legacy sidecars that
       // predate them (`?? default`), so loading an old version doesn't crash.
       if (p.quality) setQuality(p.quality);

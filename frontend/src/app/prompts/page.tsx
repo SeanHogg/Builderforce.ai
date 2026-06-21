@@ -2,7 +2,8 @@
 
 import { Select } from '@/components/Select';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
+import { useBrainDataRefresh } from '@/lib/brain/useBrainDataRefresh';
 import {
   promptLibraryApi,
   type PromptSummary,
@@ -57,6 +58,14 @@ export default function PromptsPage() {
 
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { tab === 'public' ? loadPublic(q) : loadMine(); }, [tab, sort]);
+
+  // Refetch when the Brain creates/updates/deletes a prompt so this list stays
+  // live instead of going stale until a manual reload (reloads the active tab).
+  const reloadPrompts = useCallback(() => {
+    tab === 'public' ? loadPublic(q) : loadMine();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tab, q, sort]);
+  useBrainDataRefresh(['prompts'], reloadPrompts);
 
   const openDetail = async (p: PromptSummary) => {
     try {

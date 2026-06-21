@@ -37,14 +37,15 @@ export type OpenTaskPrResult =
  * later/loser caller gets false and must NOT call the provider. The claim is
  * released by {@link releaseTaskPrClaim} if the subsequent create fails.
  */
-export async function claimTaskPrOpen(db: Db, tenantId: number, taskId: number): Promise<boolean> {
+export async function claimTaskPrOpen(db: Db, taskId: number): Promise<boolean> {
+  // tasks is tenant-scoped via project/segment, not a tenant_id column; the caller
+  // has already resolved this taskId for the tenant (resolveDefaultRepoForTask).
   const now = new Date();
   const claimed = await db
     .update(tasks)
     .set({ prOpeningAt: now })
     .where(and(
       eq(tasks.id, taskId),
-      eq(tasks.tenantId, tenantId),
       isNull(tasks.prOpeningAt),
       isNull(tasks.githubPrUrl),
     ))
@@ -54,11 +55,11 @@ export async function claimTaskPrOpen(db: Db, tenantId: number, taskId: number):
 
 /** Release a claim taken by {@link claimTaskPrOpen} when the PR-create failed, so a
  *  retry can re-claim. No-op once `github_pr_url` is set (success is permanent). */
-async function releaseTaskPrClaim(db: Db, tenantId: number, taskId: number): Promise<void> {
+export async function releaseTaskPrClaim(db: Db, taskId: number): Promise<void> {
   await db
     .update(tasks)
     .set({ prOpeningAt: null })
-    .where(and(eq(tasks.id, taskId), eq(tasks.tenantId, tenantId), isNull(tasks.githubPrUrl)))
+    .where(and(eq(tasks.id, taskId), isNull(tasks.githubPrUrl)))
     .catch(() => { /* best-effort — a stale claim only blocks an auto-retry, never data */ });
 }
 
@@ -90,7 +91,7 @@ export async function openTaskPullRequest(
   // concurrent finalize paths (inline run-end + human Done-drag) can't both open a
   // PR. The read-time `!githubPrUrl` guard in callers is now backed by this write.
   // A lost claim is NOT an error: the invariant held, another path is opening it.
-  const claimed = await claimTaskPrOpen(db, tenantId, taskId);
+  const claimed = await claimTaskPrOpen(db, taskId);
   if (!claimed) {
     return { ok: false, status: 409, error: 'PR already being opened for this task', claimLost: true };
   }
@@ -108,7 +109,7 @@ export async function openTaskPullRequest(
   });
   if (!pr.ok) {
     // Release the claim so a manual/automatic retry can re-attempt the create.
-    await releaseTaskPrClaim(db, tenantId, taskId);
+    await releaseTaskPrClaim(db, taskId);
     return { ok: false, status: pr.code === 'unsupported' ? 501 : 502, error: pr.reason };
   }
 

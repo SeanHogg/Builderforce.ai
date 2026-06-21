@@ -11,7 +11,7 @@
  * Every query is tenant-scoped. JSON payload columns (matchHints) are stored as
  * text → JSON.stringify on write.
  */
-import { and, eq } from 'drizzle-orm';
+import { and, eq, isNull } from 'drizzle-orm';
 import {
   projectRepositories,
   repoBranches,
@@ -204,6 +204,22 @@ export class RepoService {
       createdBy: `agentHost:${agentHostId}`,
       createdAt: now,
     });
+
+    // Re-dispatch hygiene (ROADMAP #74): a prior dispatch for THIS (task, branch)
+    // whose host callback never arrived left a placeholder row with number=null.
+    // Drop those stale placeholders before recording the new one so a never-acked
+    // dispatch can't accumulate orphan numberless rows. Only null-number rows are
+    // removed — a real PR (number set) is never touched, and the GET already prefers
+    // number-bearing rows, so this is belt-and-suspenders for the re-dispatch path.
+    await this.db
+      .delete(pullRequests)
+      .where(and(
+        eq(pullRequests.tenantId, tenantId),
+        eq(pullRequests.taskId, taskRow.id),
+        eq(pullRequests.branchName, message.branchName),
+        isNull(pullRequests.number),
+      ))
+      .catch(() => { /* best-effort cleanup — never block the new dispatch record */ });
 
     // Record the pull request as 'open' (the agentHost later calls recordPrResult).
     const [prRow] = await this.db

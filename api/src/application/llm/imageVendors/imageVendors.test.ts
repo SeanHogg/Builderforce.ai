@@ -1,6 +1,13 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { VendorFatalError, VendorRetryableError } from '../vendors/types';
-import { extractFluxImageUrl, fluxApiModule, sizeToAspectRatio } from './fluxapi';
+import {
+  classifyFluxTaskResponse,
+  extractFluxImageUrl,
+  extractFluxTaskId,
+  fluxApiModule,
+  pollFluxTask,
+  sizeToAspectRatio,
+} from './fluxapi';
 import { togetherImageModule } from './together';
 
 // ---------------------------------------------------------------------------
@@ -70,6 +77,82 @@ describe('fluxapi: extractFluxImageUrl', () => {
   });
 });
 
+describe('fluxapi: extractFluxTaskId', () => {
+  it.each([
+    [{ data: { taskId: 'abc-123' } }, 'abc-123'],
+    [{ data: { task_id: 'def-456' } }, 'def-456'],
+    [{ data: { id: 'ghi-789' } }, 'ghi-789'],
+    [{ data: { id: 42 } }, '42'],
+  ])('extracts the task id from %o', (raw, expected) => {
+    expect(extractFluxTaskId(raw)).toBe(expected);
+  });
+
+  it('returns null for the sync (url-present) and empty envelopes', () => {
+    expect(extractFluxTaskId({ data: { url: 'https://x/img.jpg' } })).toBeNull();
+    expect(extractFluxTaskId({ data: {} })).toBeNull();
+    expect(extractFluxTaskId(null)).toBeNull();
+  });
+});
+
+describe('fluxapi: classifyFluxTaskResponse', () => {
+  it('returns ready when a url is present', () => {
+    expect(classifyFluxTaskResponse({ data: { url: 'https://x/i.jpg' } })).toEqual({ kind: 'ready', url: 'https://x/i.jpg' });
+  });
+  it('returns pending while processing', () => {
+    expect(classifyFluxTaskResponse({ data: { status: 'processing' } })).toEqual({ kind: 'pending' });
+  });
+  it('returns failed on an explicit failure status', () => {
+    const s = classifyFluxTaskResponse({ data: { status: 'failed' }, message: 'nsfw' });
+    expect(s.kind).toBe('failed');
+  });
+});
+
+describe('fluxapi: pollFluxTask', () => {
+  const noSleep = async () => {};
+
+  it('returns the image once a poll yields a url', async () => {
+    const responses: unknown[] = [
+      { data: { status: 'processing' } },
+      { data: { url: 'https://flux/final.jpg' } },
+    ];
+    let t = 0;
+    const result = await pollFluxTask({
+      model: 'flux-kontext-pro',
+      taskId: 'abc',
+      fetchJson: async () => responses.shift(),
+      sleep: noSleep,
+      nowMs: () => (t += 1000),
+      maxPollMs: 60_000,
+    });
+    expect(result.data).toEqual([{ url: 'https://flux/final.jpg' }]);
+  });
+
+  it('throws a retryable 504 when the budget elapses before ready', async () => {
+    let t = 0;
+    await expect(pollFluxTask({
+      model: 'flux-kontext-pro',
+      taskId: 'abc',
+      fetchJson: async () => ({ data: { status: 'processing' } }),
+      sleep: noSleep,
+      // Each call advances the clock past the 2s budget immediately.
+      nowMs: () => (t += 5000),
+      maxPollMs: 2_000,
+    })).rejects.toMatchObject({ status: 504 });
+  });
+
+  it('throws retryable when the task reports a terminal failure', async () => {
+    let t = 0;
+    await expect(pollFluxTask({
+      model: 'flux-kontext-pro',
+      taskId: 'abc',
+      fetchJson: async () => ({ data: { status: 'failed' }, message: 'safety' }),
+      sleep: noSleep,
+      nowMs: () => (t += 100),
+      maxPollMs: 60_000,
+    })).rejects.toBeInstanceOf(VendorRetryableError);
+  });
+});
+
 describe('fluxapi: generate()', () => {
   it('normalises sync response into OpenAI-shaped { data: [{ url }] }', async () => {
     mockFetchOnce(200, { data: { url: 'https://flux/result.jpg' } });
@@ -98,11 +181,36 @@ describe('fluxapi: generate()', () => {
     })).rejects.toBeInstanceOf(VendorFatalError);
   });
 
-  it('throws VendorRetryableError on async-poll response (no url present)', async () => {
-    mockFetchOnce(200, { code: 200, data: { taskId: 'abc-123' }, message: 'pending' });
+  it('throws VendorRetryableError on a 200 with neither url nor task id', async () => {
+    mockFetchOnce(200, { code: 200, data: {}, message: 'pending' });
     await expect(fluxApiModule.generate({
       apiKey: 'test-key', model: 'flux-kontext-pro', prompt: 'a duck',
     })).rejects.toBeInstanceOf(VendorRetryableError);
+  });
+
+  it('async-poll: resolves a taskId by polling the task endpoint until a url appears', async () => {
+    // POST returns a taskId; first GET still pending; second GET ready with a url.
+    let call = 0;
+    const fn = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => {
+      call += 1;
+      const body = call === 1
+        ? { code: 200, data: { taskId: 'abc-123' }, message: 'queued' }   // POST
+        : call === 2
+          ? { code: 200, data: { status: 'processing' }, message: 'pending' } // GET #1
+          : { code: 200, data: { url: 'https://flux/async.jpg' }, message: 'ok' }; // GET #2
+      return new Response(JSON.stringify(body), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    });
+    (globalThis as { fetch: typeof fetch }).fetch = fn as unknown as typeof fetch;
+
+    const result = await fluxApiModule.generate({
+      apiKey: 'test-key', model: 'flux-kontext-pro', prompt: 'a duck',
+      // Tiny timeout so the poll backoff stays fast; the second GET is ready.
+      timeoutMs: 5_000,
+    });
+    expect(result.data).toEqual([{ url: 'https://flux/async.jpg' }]);
+    // POST + 2 GETs.
+    expect(fn).toHaveBeenCalledTimes(3);
+    expect(String(fn.mock.calls[1]![0])).toContain('/flux/kontext/task/abc-123');
   });
 
   it('sends Authorization: Bearer + JSON body with mapped aspectRatio', async () => {

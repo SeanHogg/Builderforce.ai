@@ -6,21 +6,31 @@ vi.mock('@/lib/api', async (importOriginal) => {
   const mod = await importOriginal<typeof import('@/lib/api')>();
   return { ...mod, createProject: vi.fn().mockResolvedValue({ id: 42, name: 'Acme' }) };
 });
-// A full Task row (the list endpoint returns these); the brain tasks.list slims it.
+vi.mock('@/lib/builderforceApi', async (importOriginal) => {
+  const mod = await importOriginal<typeof import('@/lib/builderforceApi')>();
+  // A full Task row (the list endpoint returns these); the brain tasks.list slims
+  // it. Defined inside the factory because vi.mock is hoisted above module scope.
+  const fullTask = {
+    id: 1, projectId: 9, key: 'ACME-1', title: 'Fix login error',
+    description: 'x'.repeat(5000), // the multi-KB body the slim projection drops
+    status: 'todo', priority: 'high', taskType: 'task', parentTaskId: null,
+    sprintId: null, assignedAgentType: null, assignedAgentHostId: null,
+    assignedAgentRef: null, assignedUserId: null, gitBranch: null, explicitRepoId: null,
+    githubPrUrl: null, githubPrNumber: null, startDate: null, dueDate: null,
+    persona: null, archived: false,
+  };
+  return { ...mod, tasksApi: { ...mod.tasksApi, list: vi.fn().mockResolvedValue([fullTask]) } };
+});
+
+// Standalone copy for the pure toSlimTask test (not used by the hoisted mock).
 const FULL_TASK = {
   id: 1, projectId: 9, key: 'ACME-1', title: 'Fix login error',
-  description: 'x'.repeat(5000), // the multi-KB body the slim projection drops
-  status: 'todo', priority: 'high', taskType: 'task', parentTaskId: null,
-  sprintId: null, assignedAgentType: null, assignedAgentHostId: null,
+  description: 'x'.repeat(5000), status: 'todo', priority: 'high', taskType: 'task',
+  parentTaskId: null, sprintId: null, assignedAgentType: null, assignedAgentHostId: null,
   assignedAgentRef: null, assignedUserId: null, gitBranch: null, explicitRepoId: null,
   githubPrUrl: null, githubPrNumber: null, startDate: null, dueDate: null,
   persona: null, archived: false,
 };
-
-vi.mock('@/lib/builderforceApi', async (importOriginal) => {
-  const mod = await importOriginal<typeof import('@/lib/builderforceApi')>();
-  return { ...mod, tasksApi: { ...mod.tasksApi, list: vi.fn().mockResolvedValue([FULL_TASK]) } };
-});
 
 import { buildPlatformActions, buildPlatformCapabilities, focusDomainsForPath, toSlimTask, type PlatformActionContext } from './platformActions';
 import * as api from '@/lib/api';

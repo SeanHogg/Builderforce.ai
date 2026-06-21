@@ -1,7 +1,8 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
+import { useBrainDataRefresh } from '@/lib/brain/useBrainDataRefresh';
 import { useRouter, useSearchParams } from 'next/navigation';
 import type { Project } from '@/lib/types';
 import type { AgentHost } from '@/lib/builderforceApi';
@@ -72,6 +73,13 @@ export function ProjectsContent({ limit, viewAllHref, onCount }: ProjectsContent
       setAgentHostList(agentHostsData);
     }).finally(() => setIsLoading(false));
   }, []);
+
+  // Refetch the project list when the Brain creates/updates/deletes a project,
+  // so this list stays live instead of going stale until a manual reload.
+  const reloadProjects = useCallback(() => {
+    fetchProjects().then(setProjects).catch(() => {});
+  }, []);
+  useBrainDataRefresh(['projects'], reloadProjects);
 
   useEffect(() => {
     if (searchParams.get('create') === '1') setShowForm(true);

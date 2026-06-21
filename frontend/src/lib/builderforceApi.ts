@@ -2357,6 +2357,78 @@ export const embedApi = {
 };
 
 // ---------------------------------------------------------------------------
+// Host BI bridge (/api/bi/*) — burn-rate pull + self-serve host-BI config +
+// validation-engagements overlay (spec 05 §4.1/§4.2).
+// ---------------------------------------------------------------------------
+
+export interface BurnRateResult {
+  available: boolean;
+  monthlyBurn?: number;
+  runwayMonths?: number;
+  source?: 'host';
+  reason?: 'not_configured' | 'no_company' | 'unreachable' | 'bad_response';
+}
+
+export interface ValidationEngagement {
+  id: string;
+  name?: string;
+  kind?: string;
+  status?: string;
+  responses?: number;
+}
+
+export interface ValidationEngagementsResult {
+  available: boolean;
+  engagements?: ValidationEngagement[];
+  source?: 'host';
+  reason?: 'not_configured' | 'no_company' | 'unreachable' | 'bad_response';
+}
+
+export const biApi = {
+  /** Pull the segment's burn/runway from the host BI endpoint. */
+  getBurnRate: () => request<BurnRateResult>('/api/bi/burn-rate'),
+  /** List the host's validation engagements (feedback widgets/cohorts) for this segment. */
+  getValidationEngagements: () => request<ValidationEngagementsResult>('/api/bi/validation-engagements'),
+  /** Read the stored host-BI config (token never returned — only `hasToken`). */
+  getConfig: () => request<{ baseUrl: string | null; hasToken: boolean }>('/api/bi/config'),
+  /** Set/rotate the host BI base URL + token (manager+). Omit token to keep the existing one. */
+  setConfig: (body: { baseUrl: string; token?: string }) =>
+    request<{ baseUrl: string; hasToken: boolean }>('/api/bi/config', { method: 'PUT', body: JSON.stringify(body) }),
+  /** Clear the host BI config (disconnect, manager+). */
+  clearConfig: () => request<{ ok: boolean }>('/api/bi/config', { method: 'DELETE' }),
+};
+
+// ---------------------------------------------------------------------------
+// Voice-of-Customer inbox (/api/reports/feedback) — ingested customer_feedback
+// triage (spec 05 §4.2). new → triaged (optionally linking a backlog task).
+// ---------------------------------------------------------------------------
+
+export interface CustomerFeedbackRow {
+  id: string;
+  externalRef: string;
+  widgetId: string | null;
+  text: string;
+  sentiment: string | null;
+  contact: string | null;
+  status: 'new' | 'triaged' | 'dismissed';
+  triagedTaskId: number | null;
+  triagedAt: string | null;
+  createdAt: string;
+}
+
+export const feedbackApi = {
+  /** List the segment's ingested feedback, optionally filtered by status. */
+  list: (status?: 'new' | 'triaged' | 'dismissed') =>
+    request<{ feedback: CustomerFeedbackRow[] }>(`/api/reports/feedback${status ? `?status=${status}` : ''}`),
+  /** Triage one feedback row: flip status, optionally link the spawned backlog task (manager+). */
+  triage: (id: string, body: { status: 'new' | 'triaged' | 'dismissed'; taskId?: number }) =>
+    request<{ id: string; status: string; triagedTaskId: number | null }>(`/api/reports/feedback/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(body),
+    }),
+};
+
+// ---------------------------------------------------------------------------
 // Governance & Security (/api/governance/*) — SOC 2 Control Tracker (doc 07 SEC-1)
 // ---------------------------------------------------------------------------
 

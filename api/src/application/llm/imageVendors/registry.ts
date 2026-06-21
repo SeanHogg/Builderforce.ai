@@ -86,11 +86,28 @@ export function getImageModule(id: ImageVendorId): ImageVendorModule {
   return MODULES_BY_ID[id];
 }
 
-/** All catalog model ids of a given tier, in registry order. */
+/** All catalog model ids of a given tier, in registry order (bare ids). */
 export function imageModelsByTier(...tiers: ImageModelTier[]): string[] {
   const set = new Set(tiers);
   return MODULES.flatMap((mod) =>
     mod.catalog.filter((m) => set.has(m.tier)).map((m) => m.id),
+  );
+}
+
+/**
+ * Same as {@link imageModelsByTier} but each id is VENDOR-PREFIXED
+ * (`<vendor>/<modelId>`). Used to compose the proxy's pools so the dispatcher
+ * always resolves a model to its OWNING vendor by prefix — never by an
+ * ambiguous bare-id catalog lookup. This makes the registry safe to grow with
+ * an id that collides across vendors (e.g. the same `flux-schnell` on two
+ * vendors): the prefix disambiguates instead of `INDEX.get(id)` picking one
+ * arbitrarily. `parseImageVendorPrefix` / `resolveImageVendorAndModel` already
+ * strip the prefix back to the vendor-native id before dispatch.
+ */
+export function imageModelsByTierPrefixed(...tiers: ImageModelTier[]): string[] {
+  const set = new Set(tiers);
+  return MODULES.flatMap((mod) =>
+    mod.catalog.filter((m) => set.has(m.tier)).map((m) => `${mod.id}/${m.id}`),
   );
 }
 

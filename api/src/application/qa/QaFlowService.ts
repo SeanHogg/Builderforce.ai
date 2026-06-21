@@ -12,7 +12,7 @@
  * spawning duplicates.
  */
 
-import { and, asc, eq, gte, gt, or, sql } from 'drizzle-orm';
+import { and, asc, eq, gte, gt, or, sql, type SQL } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import { qaFlows, qaJourneyEvents } from '../../infrastructure/database/schema';
 import { inferPersonaRole, type QaStep, shortHash, toSlug } from './qaTypes';
@@ -107,14 +107,14 @@ export class QaFlowService {
       if (remaining <= 0) break;
       const take = Math.min(pageSize, remaining);
 
-      const keyset = cursorSession === null
+      const keyset: SQL | undefined = cursorSession === null
         ? undefined
         : or(
             gt(qaJourneyEvents.sessionId, cursorSession),
             and(eq(qaJourneyEvents.sessionId, cursorSession), gt(qaJourneyEvents.seq, cursorSeq)),
           );
 
-      const page = await this.db
+      const page: JourneyRow[] = await this.db
         .select({
           sessionId: qaJourneyEvents.sessionId,
           seq:       qaJourneyEvents.seq,
@@ -132,11 +132,11 @@ export class QaFlowService {
       if (page.length === 0) break;
       for (const r of page) {
         const list = bySession.get(r.sessionId) ?? [];
-        list.push(r);
+        list.push(r as JourneyRow);
         bySession.set(r.sessionId, list);
       }
       eventsScanned += page.length;
-      const last = page[page.length - 1];
+      const last = page[page.length - 1] as JourneyRow;
       cursorSession = last.sessionId;
       cursorSeq = last.seq;
 

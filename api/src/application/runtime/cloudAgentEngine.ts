@@ -17,6 +17,7 @@ import { commitPrdAsPendingChange } from '../repos/commitPrdToRepo';
 import { createPullRequest } from '../repos/createPullRequest';
 import { mergeBranchToBase, cloudAutoMergeRequiresGreen, cloudAutoMergeEnabled } from '../repos/mergeBranchToBase';
 import { recordPullRequestRow, markPullRequestMergedById } from '../repos/recordPullRequestRow';
+import { claimTaskPrOpen, releaseTaskPrClaim } from '../repos/openTaskPullRequest';
 import { readRepoFile, listRepoFiles, searchRepoCode, listBranchDiff } from '../repos/readRepoContents';
 import { verifyWrittenFiles } from '../repos/verifyWrittenFiles';
 import { scanWrittenForPlaceholders } from '../repos/scanForPlaceholders';
@@ -33,7 +34,7 @@ import { notifyApprovalRequested } from '../approval/approvalNotifier';
 import {
   CLOUD_AGENT_TOOLS, CONTAINER_AGENT_TOOLS, CLOUD_SURFACE_CAPS, cloudToolRegistry,
   MAX_CLOUD_TOOL_STEPS, MAX_PLACEHOLDER_FINISH_BLOCKS,
-  CONTAINER_MAX_STEPS, assertsUnrunVerification, type RawToolCall,
+  CONTAINER_MAX_STEPS, assertsUnrunVerification, hasNoCodeDeliverable, type RawToolCall,
 } from './cloudAgentTools';
 import {
   DEFAULT_ENGINE_ID, ENGINE_IDS, resolveEngineById,
@@ -1037,6 +1038,9 @@ export interface CloudLoopState {
   /** Why repo resolution missed on the first tick (empty when it resolved). Persisted
    *  alongside `repoCtx` so the finalize tick can report the same reason. */
   repoMiss?: string;
+  /** ROADMAP #38: set once the empty-deliverable finish gate has fired, so the
+   *  durable surface doesn't re-arm (and re-block) the same self-review every tick. */
+  noDeliverableBlocked?: boolean;
 }
 export interface CloudLoopOpts {
   /** Resume from this persisted state instead of starting fresh. */
@@ -1324,6 +1328,12 @@ export async function runCloudToolLoop(
   // contain placeholder/stub code, so the agent is forced to ship a real
   // implementation (or delete the dead file) — see MAX_PLACEHOLDER_FINISH_BLOCKS.
   let placeholderBlocks = 0;
+  // Pre-finish completeness self-review (ROADMAP #38): block a finish that produced
+  // NO code deliverable exactly ONCE, re-prompting the agent to verify it met the
+  // PRD requirements. A genuine "nothing to change" run finishes on the retry; a
+  // premature one ("wrote a plan, shipped nothing") is forced to reconsider. Carried
+  // across DO ticks via resume state so the block isn't re-armed every tick.
+  let noDeliverableBlocked = opts?.resume?.noDeliverableBlocked ?? false;
 
   // Hard cancel: a background watcher polls the (cross-isolate) execution status
   // and aborts the in-flight gateway fetch the instant it sees CANCELLED, so a
@@ -1471,10 +1481,25 @@ export async function runCloudToolLoop(
 
       if (control?.kind === 'finish') {
         const summary = control.summary;
-        // Two finish gates, in order. Either yields a block message that forces the
+        // Three finish gates, in order. Either yields a block message that forces the
         // agent to call finish again once it has corrected the run; null = ship.
         let finishBlock: string | null = null;
-        if (summary && !finishBlockedOnce && assertsUnrunVerification(summary)) {
+        if (repoCtx && !noDeliverableBlocked && hasNoCodeDeliverable(writtenPaths)) {
+          // (0) Completeness self-review (ROADMAP #38): a code-bound run is finishing
+          // with NO code deliverable (only the seeded PRD, or nothing). Block ONCE and
+          // make the agent self-review the requirements — implement what's missing, or
+          // explicitly confirm no code change was required — before an empty finish is
+          // honored. A legitimate no-op run finishes on the retry.
+          noDeliverableBlocked = true;
+          finishBlock =
+            'Before finishing: you have not committed any code changes for this task — only the PRD (or nothing) is on the branch. Re-read the task requirements and verify EACH is actually implemented. If work remains, use search_code/read_file to find the right place and write_file to implement it, then finish. If — and only if — this task genuinely requires no code change, call finish again and state explicitly why no change was needed.';
+          await recordCloudToolEvent(db, {
+            tenantId, cloudAgentRef, executionId,
+            toolName: 'finish.blocked', category: 'tool',
+            detail: { reason: 'no_deliverable' },
+            result: 'Blocked finish: no code deliverable — self-review required',
+          });
+        } else if (summary && !finishBlockedOnce && assertsUnrunVerification(summary)) {
           // (1) Honesty: the summary claims a check passed, but nothing was (or
           // could be) run. Block once and force an honest restatement.
           finishBlockedOnce = true;
@@ -1548,7 +1573,7 @@ export async function runCloudToolLoop(
       cancelled: false,
       finished: false,
       awaitingInput,
-      state: { messages, writtenPaths: [...writtenPaths], step, pinnedModel: activeModel, routing, repoCtx, repoMiss },
+      state: { messages, writtenPaths: [...writtenPaths], step, pinnedModel: activeModel, routing, repoCtx, repoMiss, noDeliverableBlocked },
     };
   }
 
@@ -1564,7 +1589,7 @@ export async function runCloudToolLoop(
       output: '',
       cancelled,
       finished: false,
-      state: { messages, writtenPaths: [...writtenPaths], step, pinnedModel: activeModel, routing, repoCtx, repoMiss },
+      state: { messages, writtenPaths: [...writtenPaths], step, pinnedModel: activeModel, routing, repoCtx, repoMiss, noDeliverableBlocked },
     };
   }
 
@@ -1670,7 +1695,14 @@ export async function finalizeCloudRun(
   // When files were produced but no PR ends up open, capture WHY so the run's
   // summary / timeline explains it instead of silently showing no Pull Request tab.
   let noPrReason = '';
-  if (repoCtx && writtenPaths.size > 0 && !cancelled) {
+  // Atomic single-PR claim (0140): take it BEFORE the external create so this inline
+  // run-end finalize can't open a duplicate PR alongside a concurrent human Done-drag
+  // (which finalizes via openTaskPullRequest, taking the same claim). Lost claim =>
+  // another path is opening the PR; skip the create here and treat it as "PR exists".
+  const claimedInlinePr = repoCtx && writtenPaths.size > 0 && !cancelled
+    ? await claimTaskPrOpen(db, taskRow.id).catch(() => false)
+    : false;
+  if (repoCtx && writtenPaths.size > 0 && !cancelled && claimedInlinePr) {
     const pr = await createPullRequest({
       provider: repoCtx.provider, host: repoCtx.host, owner: repoCtx.owner, repo: repoCtx.repo,
       token: repoCtx.token, head: repoCtx.branch, base: repoCtx.base,
@@ -1678,7 +1710,8 @@ export async function finalizeCloudRun(
       body: `Changes for task #${taskRow.id}, by ${agentLabel}. Files: ${[...writtenPaths].join(', ')}.\n\n> ⚠ **Not verified in-agent.** This serverless executor has no shell and ran no build, type-check, lint, or tests. CI on this PR is the source of truth — do not merge on the agent's summary alone.`,
     }).catch(() => ({ ok: false as const, code: 'provider_error' as const, reason: 'pr failed' }));
     prOpened = pr.ok;
-    if (!pr.ok) noPrReason = pr.reason;
+    // Release the claim on a failed create so a later finalize can re-attempt.
+    if (!pr.ok) { noPrReason = pr.reason; await releaseTaskPrClaim(db, taskRow.id).catch(() => {}); }
 
     const autoMerge = cloudAutoMergeEnabled(env);
 

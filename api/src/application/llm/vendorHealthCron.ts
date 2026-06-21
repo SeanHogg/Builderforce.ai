@@ -23,19 +23,26 @@ import {
   type VendorProbeResult,
 } from './vendorHealthProbe';
 import { getAllVendorIds, type VendorEnv, type VendorId } from './vendors';
+import {
+  probeAllImageVendors,
+  type ImageVendorProbeResult,
+} from './imageVendors/imageVendorHealthProbe';
+import type { ImageVendorEnv } from './imageVendors';
 
-export interface CronEnv extends VendorEnv, EmailEnv {
+export interface CronEnv extends VendorEnv, ImageVendorEnv, EmailEnv {
   NEON_DATABASE_URL: string;
 }
 
-/** Fetch the most recent prior status per vendor. Returns `null` for vendors with no history yet. */
-async function loadPreviousStatusByVendor(db: ReturnType<typeof buildDatabase>): Promise<Map<VendorId, string>> {
+/** Fetch the most recent prior status per vendor. Returns `null` for vendors with
+ *  no history yet. Keyed by the raw `vendor` string column so both chat ids
+ *  (`openrouter`) and image labels (`image:together`) resolve from one map. */
+async function loadPreviousStatusByVendor(db: ReturnType<typeof buildDatabase>): Promise<Map<string, string>> {
   const rows = (await db.execute(sql`
     SELECT DISTINCT ON (vendor) vendor, status
     FROM llm_health_probes
     ORDER BY vendor, created_at DESC
   `)).rows as Array<{ vendor: string; status: string }>;
-  return new Map(rows.map((r) => [r.vendor as VendorId, r.status]));
+  return new Map(rows.map((r) => [r.vendor, r.status]));
 }
 
 /** Comma-separated explicit override; falls back to all DB superadmins. */
@@ -59,19 +66,25 @@ async function resolveAlertRecipients(
  * value. `LLM_HEALTH_ALERT_RECIPIENTS` (CSV) overrides the DB-derived list.
  */
 export async function runVendorHealthCron(env: CronEnv & { LLM_HEALTH_ALERT_RECIPIENTS?: string }): Promise<{
-  results: VendorProbeResult[];
+  results: Array<VendorProbeResult | ImageVendorProbeResult>;
   changes: LlmHealthChangeRow[];
   emailed: number;
 }> {
   const db = buildDatabase(env as unknown as Parameters<typeof buildDatabase>[0]);
 
-  const [previousByVendor, results] = await Promise.all([
+  const [previousByVendor, chatResults, imageResults] = await Promise.all([
     loadPreviousStatusByVendor(db),
     Promise.all(getAllVendorIds().map((v) => probeVendor(env, v))),
+    probeAllImageVendors(env),
   ]);
 
+  // Image probe results are structurally `VendorProbeResult` (their `vendor` is
+  // an `image:<id>` label, a plain string at the DB layer) — unify both surfaces
+  // into one sweep so persist + change-detection + alerting cover image vendors.
+  const results: Array<VendorProbeResult | ImageVendorProbeResult> = [...chatResults, ...imageResults];
+
   for (const r of results) {
-    await persistProbe(db, r, 'cron');
+    await persistProbe(db, r as VendorProbeResult, 'cron');
   }
 
   const changes: LlmHealthChangeRow[] = [];

@@ -16,7 +16,7 @@
 import {
   ImageCascadeExhaustedError,
   dispatchImageVendor,
-  imageModelsByTier,
+  imageModelsByTierPrefixed,
   imageVendorKeyBound,
   tierForImageModel,
   vendorForImageModel,
@@ -40,11 +40,13 @@ const imageCooldownKey = (m: string): string => `${imageCooldownVendor(vendorFor
 // Pool composition — derived from the image vendor catalog
 // ---------------------------------------------------------------------------
 
-/** Free-tier image model ids (Together). */
-export const FREE_IMAGE_MODEL_POOL: readonly string[] = imageModelsByTier('FREE');
+/** Free-tier image model ids (Together) — VENDOR-PREFIXED so the dispatcher
+ *  resolves the owning vendor by prefix, never by an ambiguous bare-id lookup
+ *  (id-clash safe as the registry grows). */
+export const FREE_IMAGE_MODEL_POOL: readonly string[] = imageModelsByTierPrefixed('FREE');
 
-/** Paid-tier image model ids (FluxAPI). */
-export const PAID_IMAGE_MODEL_POOL: readonly string[] = imageModelsByTier('STANDARD', 'PREMIUM', 'ULTRA');
+/** Paid-tier image model ids (FluxAPI) — vendor-prefixed (see above). */
+export const PAID_IMAGE_MODEL_POOL: readonly string[] = imageModelsByTierPrefixed('STANDARD', 'PREMIUM', 'ULTRA');
 
 /** Pro tries free first (cost-optimised), falls over to paid. */
 export const PRO_IMAGE_MODEL_POOL: readonly string[] = [...FREE_IMAGE_MODEL_POOL, ...PAID_IMAGE_MODEL_POOL];

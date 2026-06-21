@@ -84,6 +84,18 @@ describe('plan → image product/pool wiring', () => {
     const proxy = imageProxyForPlan(env, 'free');
     expect(proxy).toBeInstanceOf(ImageProxyService);
   });
+
+  it('pool ids are VENDOR-PREFIXED so the dispatcher resolves by prefix (id-clash safe)', () => {
+    // Every pool entry must carry an explicit `<vendor>/<id>` prefix — a bare id
+    // would force an ambiguous catalog lookup that breaks the moment two vendors
+    // register the same model id.
+    for (const m of imageModelPoolForPlan('free')) {
+      expect(m).toMatch(/^(together|fluxapi)\//);
+    }
+    for (const m of imageModelPoolForPlan('pro')) {
+      expect(m).toMatch(/^(together|fluxapi)\//);
+    }
+  });
 });
 
 // ---------------------------------------------------------------------------
