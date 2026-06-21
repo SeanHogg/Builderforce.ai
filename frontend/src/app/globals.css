@@ -2123,7 +2123,8 @@ textarea.input { resize: vertical; line-height: 1.5; }
     border-left: none !important;
   }
 
-  .brand-name { font-size: 14px; }
+  /* Mobile: hide the "Builderforce.ai" wordmark; keep the mascot + BETA badge */
+  .brand-name { display: none; }
 }
 
 /* On desktop: hide the mobile-only sidebar items (Marketplace is in topbar) */
