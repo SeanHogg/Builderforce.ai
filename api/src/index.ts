@@ -322,7 +322,7 @@ function buildApp(env: Env): Hono<HonoEnv> {
   // Protected endpoints (JWT injected by authMiddleware inside each router)
   app.route('/api/projects', createProjectRoutes(projectService, db));
   app.route('/api/tasks',    createTaskRoutes(taskService, db, runtimeService));
-  app.route('/api/vscode',   createVscodeRoutes(db));
+  app.route('/api/vscode',   createVscodeRoutes(db, tenantService));
   app.route('/api/members',  createMemberRoutes(db));
   app.route('/api/tenants',  createTenantRoutes(tenantService, db));
   app.route('/api/segments', createSegmentRoutes(db));

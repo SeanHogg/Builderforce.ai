@@ -1,24 +1,8 @@
 import * as vscode from "vscode";
 import { getTenantJwt } from "./bfApi";
-import { getBaseUrl } from "./gateway";
+import { getWebBaseUrl } from "./gateway";
 
 const BFEMBED_SOURCE = "builderforce-embed/v1";
-
-/** The web app URL (derived from the gateway base: api.builderforce.ai → builderforce.ai),
- *  overridable via `builderforce.webUrl`. The embed pages live here. */
-function webBaseUrl(): string {
-  const override = vscode.workspace.getConfiguration("builderforce").get<string>("webUrl");
-  if (override) return override.replace(/\/+$/, "");
-  try {
-    const u = new URL(getBaseUrl());
-    u.hostname = u.hostname.replace(/^api\./, "");
-    u.pathname = "";
-    u.search = "";
-    return u.toString().replace(/\/+$/, "");
-  } catch {
-    return "https://builderforce.ai";
-  }
-}
 
 /**
  * The real in-app route that best matches an embed view — used by the "Open in
@@ -71,7 +55,7 @@ export class EmbedPanel {
 
   private readonly panel: vscode.WebviewPanel;
   private readonly disposables: vscode.Disposable[] = [];
-  private readonly webUrl = webBaseUrl();
+  private readonly webUrl = getWebBaseUrl();
 
   private constructor(
     private readonly ctx: vscode.ExtensionContext,
@@ -123,33 +107,39 @@ export class EmbedPanel {
     this.panel.webview.html = this.html(this.panel.webview, src, embedOrigin);
   }
 
+  /** Log to the output channel AND mirror into the webview's copyable log. */
+  private note(line: string): void {
+    log(`${this.view}: ${line}`);
+    this.panel.webview.postMessage({ type: "log", line });
+  }
+
   private async onMessage(m: { type: string }): Promise<void> {
     switch (m.type) {
       case "authNeeded": {
-        log(`${this.view}: iframe ready → exchanging tenant token`);
+        this.note("iframe ready → exchanging tenant token");
         const token = await getTenantJwt(this.ctx.secrets);
         if (!token) {
-          log(`${this.view}: no tenant token (not signed in / exchange failed)`);
+          this.note("no tenant token (not signed in / exchange failed)");
           this.panel.webview.postMessage({ type: "noauth" });
           return;
         }
         const theme =
           vscode.window.activeColorTheme.kind === vscode.ColorThemeKind.Light ? "light" : "dark";
-        log(`${this.view}: token acquired → handing to frame`);
+        this.note(`token acquired (${token.length} chars) → handing to frame`);
         this.panel.webview.postMessage({ type: "auth", token, theme });
         break;
       }
       case "rendered":
-        log(`${this.view}: frame painted content`);
+        this.note("frame painted content");
         break;
       case "timeout":
-        log(`${this.view}: frame did not render within the timeout (likely a stale cache or blocked load)`);
+        this.note("frame did not render within 15s (likely a stale cache or blocked load)");
         break;
       case "frameError":
-        log(`${this.view}: frame reported an error`);
+        this.note("frame reported an error");
         break;
       case "reload":
-        log(`${this.view}: reload requested`);
+        this.note("reload requested");
         this.render();
         break;
       case "openExternal":
@@ -195,10 +185,22 @@ export class EmbedPanel {
   .spinner { width: 18px; height: 18px; margin: 0 auto 12px; border: 2px solid var(--vscode-descriptionForeground);
     border-top-color: transparent; border-radius: 50%; animation: spin 0.8s linear infinite; }
   @keyframes spin { to { transform: rotate(360deg); } }
+  #copylog {
+    position: fixed; top: 6px; right: 6px; z-index: 10; opacity: 0.65;
+    font-size: 11px; padding: 2px 8px;
+    color: var(--vscode-button-secondaryForeground); background: var(--vscode-button-secondaryBackground);
+  }
+  #copylog:hover { opacity: 1; }
 </style>
 </head>
 <body>
-<iframe id="f" src="${src}" allow="clipboard-read; clipboard-write"></iframe>
+<button id="copylog" title="Copy the embed handshake log for troubleshooting">Copy log</button>
+<!-- credentialless: load the cross-origin page in an ephemeral, no-cookie, fresh-storage
+     partition. VS Code webviews run under COEP, which blocks a cross-origin frame that
+     lacks Cross-Origin-Resource-Policy; a credentialless frame is allowed without it.
+     It also sidesteps a stuck service worker (separate storage partition). Auth is handed
+     in via postMessage (not cookies), so dropping credentials costs nothing here. -->
+<iframe id="f" credentialless src="${src}" allow="clipboard-read; clipboard-write"></iframe>
 
 <div id="loading" class="overlay show">
   <div class="card">
@@ -230,6 +232,43 @@ export class EmbedPanel {
   const loadingTitle = document.getElementById('loading-title');
   const loadingSub = document.getElementById('loading-sub');
   const errorSub = document.getElementById('error-sub');
+  const copyBtn = document.getElementById('copylog');
+
+  // Copyable troubleshooting log (client + extension-mirrored events).
+  const logLines = [];
+  function pushLog(line) {
+    logLines.push(new Date().toISOString().slice(11, 23) + '  ' + line);
+  }
+  pushLog('embed webview init');
+  pushLog('frame src: ' + iframe.src);
+  pushLog('origin (expected frame): ' + EMBED_ORIGIN);
+  pushLog('iframe credentialless: ' + ('credentialless' in iframe ? iframe.credentialless : 'unsupported-attr'));
+  // Distinguishes "document never loaded" (frame blocked by COEP/CSP) from "loaded but JS
+  // never ran" (subresource blocked / SW hang / hydration error) when no 'ready' arrives.
+  iframe.addEventListener('load', () => pushLog('iframe DOM load event fired (document reached the frame)'));
+  iframe.addEventListener('error', () => pushLog('iframe DOM error event'));
+  // Parent-side signals the cross-origin frame can't report itself.
+  document.addEventListener('securitypolicyviolation', (e) => {
+    pushLog('CSP violation: ' + e.violatedDirective + ' blocked ' + (e.blockedURI || '(inline)'));
+  });
+  window.addEventListener('error', (e) => {
+    pushLog('window error: ' + (e.message || '') + (e.filename ? (' @ ' + e.filename) : ''));
+  });
+  window.addEventListener('unhandledrejection', (e) => {
+    pushLog('unhandledrejection: ' + (e && e.reason ? (e.reason.message || String(e.reason)) : ''));
+  });
+  function safeData(d) { try { return JSON.stringify(d).slice(0, 200); } catch (_) { return String(d); } }
+  copyBtn.addEventListener('click', async () => {
+    const text = logLines.join('\\n') || '(empty)';
+    try {
+      await navigator.clipboard.writeText(text);
+      const prev = copyBtn.textContent;
+      copyBtn.textContent = '✓ Copied';
+      setTimeout(() => { copyBtn.textContent = prev; }, 1200);
+    } catch (err) {
+      pushLog('clipboard write failed: ' + (err && err.message ? err.message : err));
+    }
+  });
 
   let painted = false;
   function showLoading(title, sub) {
@@ -248,39 +287,55 @@ export class EmbedPanel {
   // If the frame never paints (stale/blocked/handshake-dead), surface recovery actions
   // instead of a silent blank panel.
   const timeout = setTimeout(() => {
-    if (!painted) { vscode.postMessage({ type: 'timeout' }); showError(); }
+    if (!painted) { pushLog('TIMEOUT: no frame paint after 15s'); vscode.postMessage({ type: 'timeout' }); showError(); }
   }, 15000);
 
-  document.getElementById('reload').addEventListener('click', () => { painted = false; vscode.postMessage({ type: 'reload' }); });
-  document.getElementById('open-ext').addEventListener('click', () => vscode.postMessage({ type: 'openExternal' }));
-  document.getElementById('diagnose').addEventListener('click', () => vscode.postMessage({ type: 'diagnose' }));
+  document.getElementById('reload').addEventListener('click', () => { painted = false; pushLog('reload clicked'); vscode.postMessage({ type: 'reload' }); });
+  document.getElementById('open-ext').addEventListener('click', () => { pushLog('open-in-browser clicked'); vscode.postMessage({ type: 'openExternal' }); });
+  document.getElementById('diagnose').addEventListener('click', () => { pushLog('diagnose clicked'); vscode.postMessage({ type: 'diagnose' }); });
+
+  // The real origin the frame posts from — captured from its first tagged message so
+  // auth is targeted correctly even if a credentialless frame reports an unexpected
+  // origin. We match frame messages by their source tag, NOT origin, so an origin
+  // quirk can never silently drop ready (it would just never authorize, staying blank).
+  let frameOrigin = EMBED_ORIGIN;
 
   window.addEventListener('message', (e) => {
-    // Messages from the embedded page (cross-origin frame).
-    if (e.origin === EMBED_ORIGIN && e.data && e.data.source === SRC) {
-      const t = e.data.type;
-      if (t === 'ready') {
+    const d = e.data;
+
+    // Messages from the embedded page (tagged with the embed protocol source).
+    if (d && d.source === SRC && typeof d.type === 'string') {
+      if (e.origin && e.origin !== 'null') frameOrigin = e.origin;
+      pushLog('frame msg: origin=' + e.origin + ' type=' + d.type);
+      if (d.type === 'ready') {
         vscode.postMessage({ type: 'authNeeded' });
         showLoading('Authorizing…', 'Signing in to your workspace.');
-      } else if (t === 'resize' && typeof e.data.height === 'number' && e.data.height > 40) {
-        // The page rendered real content — clear the overlay and stop the failsafe.
+      } else if (d.type === 'resize' && typeof d.height === 'number' && d.height > 40) {
         if (!painted) { painted = true; clearTimeout(timeout); vscode.postMessage({ type: 'rendered' }); }
         hideOverlays();
-      } else if (t === 'error') {
+      } else if (d.type === 'error') {
+        pushLog('frame → error: ' + (d.message || '(no message)'));
         vscode.postMessage({ type: 'frameError' });
-        showError(e.data.message ? ('BuilderForce: ' + e.data.message) : undefined);
+        showError(d.message ? ('BuilderForce: ' + d.message) : undefined);
       }
       return;
     }
-    // Messages from the extension host.
-    const msg = e.data;
-    if (msg && msg.type === 'auth') {
+
+    // Messages from the extension host (no source tag).
+    if (d && d.type === 'auth') {
+      pushLog('extension → auth (forwarding token to frame @ ' + frameOrigin + ')');
       iframe.contentWindow && iframe.contentWindow.postMessage(
-        { source: SRC, type: 'auth', token: msg.token, theme: msg.theme }, EMBED_ORIGIN);
-    } else if (msg && msg.type === 'noauth') {
+        { source: SRC, type: 'auth', token: d.token, theme: d.theme }, frameOrigin);
+    } else if (d && d.type === 'noauth') {
+      pushLog('extension → noauth (no tenant token)');
       clearTimeout(timeout);
       errorSub.textContent = 'Sign in to BuilderForce to view this page.';
       showError();
+    } else if (d && d.type === 'log') {
+      pushLog('ext: ' + d.line);
+    } else if (d && typeof d === 'object') {
+      // Anything else inbound — capture it so we never silently ignore a signal.
+      pushLog('other msg: origin=' + e.origin + ' ' + safeData(d));
     }
   });
 </script>

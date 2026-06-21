@@ -1,7 +1,9 @@
 import * as vscode from "vscode";
-import { BfTask, listTasks } from "./bfApi";
+import { BfTask, DEFAULT_HIDE_DONE, isDoneStatus, listTasks } from "./bfApi";
 import { SECRET_KEY } from "./gateway";
 import { getSelectedProject, onProjectChange } from "./projectState";
+
+const HIDE_DONE_KEY = "builderforce.hideDoneTasks";
 
 type Node =
   | { kind: "project"; name: string }
@@ -18,12 +20,25 @@ export class ProjectsTreeProvider implements vscode.TreeDataProvider<Node> {
   private readonly _onDidChangeTreeData = new vscode.EventEmitter<void>();
   readonly onDidChangeTreeData = this._onDidChangeTreeData.event;
 
+  private hideDone: boolean;
+
   constructor(private readonly ctx: vscode.ExtensionContext) {
+    this.hideDone = ctx.globalState.get<boolean>(HIDE_DONE_KEY, DEFAULT_HIDE_DONE);
+    // Seed the menu's when-clause context so the right toggle icon shows on load.
+    void vscode.commands.executeCommand("setContext", HIDE_DONE_KEY, this.hideDone);
     onProjectChange(() => this.refresh());
   }
 
   refresh(): void {
     this._onDidChangeTreeData.fire();
+  }
+
+  /** Toggle showing/hiding done tasks (persisted; drives the view-title icon). */
+  setHideDone(hide: boolean): void {
+    this.hideDone = hide;
+    void this.ctx.globalState.update(HIDE_DONE_KEY, hide);
+    void vscode.commands.executeCommand("setContext", HIDE_DONE_KEY, hide);
+    this.refresh();
   }
 
   getTreeItem(node: Node): vscode.TreeItem {
@@ -57,16 +72,23 @@ export class ProjectsTreeProvider implements vscode.TreeDataProvider<Node> {
   async getChildren(element?: Node): Promise<Node[]> {
     if (element) return [];
     const signedIn = !!(await this.ctx.secrets.get(SECRET_KEY));
-    if (!signedIn) return [{ kind: "info", label: "Sign in to load projects", command: "builderforce.signIn" }];
+    if (!signedIn) {
+      return [
+        { kind: "info", label: "Sign in to your workspace", command: "builderforce.signIn" },
+        { kind: "info", label: "Create a workspace…", command: "builderforce.createWorkspace" },
+      ];
+    }
 
     const project = getSelectedProject();
-    if (!project) return [{ kind: "info", label: "Select a project…", command: "builderforce.selectProject" }];
+    if (!project) return [{ kind: "info", label: "Select or create a project…", command: "builderforce.selectProject" }];
 
     const nodes: Node[] = [{ kind: "project", name: project.name }];
     try {
       const tasks = await listTasks(this.ctx.secrets, project.id);
+      const visible = this.hideDone ? tasks.filter((t) => !isDoneStatus(t.status)) : tasks;
       if (tasks.length === 0) nodes.push({ kind: "info", label: "No tasks in this project" });
-      else nodes.push(...tasks.map((task) => ({ kind: "task" as const, task })));
+      else if (visible.length === 0) nodes.push({ kind: "info", label: "All tasks are done (hidden)" });
+      else nodes.push(...visible.map((task) => ({ kind: "task" as const, task })));
     } catch (e) {
       nodes.push({ kind: "info", label: `Tasks unavailable — ${(e as Error).message}`, command: "builderforce.diagnose" });
     }
