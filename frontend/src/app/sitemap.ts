@@ -21,6 +21,20 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     { url: `${BASE}/agents`, lastModified: now, changeFrequency: 'weekly', priority: 0.6 },
     { url: `${BASE}/login`, lastModified: now, changeFrequency: 'monthly', priority: 0.4 },
     { url: `${BASE}/register`, lastModified: now, changeFrequency: 'monthly', priority: 0.5 },
+    // Feature routes — render a rich marketing page (RouteMarketing) to logged-out
+    // visitors and crawlers, so they're indexable entry points to the product.
+    { url: `${BASE}/brainstorm`, lastModified: now, changeFrequency: 'monthly', priority: 0.6 },
+    { url: `${BASE}/ide`, lastModified: now, changeFrequency: 'monthly', priority: 0.6 },
+    { url: `${BASE}/training`, lastModified: now, changeFrequency: 'monthly', priority: 0.6 },
+    { url: `${BASE}/workflows`, lastModified: now, changeFrequency: 'monthly', priority: 0.6 },
+    { url: `${BASE}/projects`, lastModified: now, changeFrequency: 'monthly', priority: 0.6 },
+    { url: `${BASE}/workforce`, lastModified: now, changeFrequency: 'monthly', priority: 0.6 },
+    { url: `${BASE}/skills`, lastModified: now, changeFrequency: 'monthly', priority: 0.6 },
+    { url: `${BASE}/personas`, lastModified: now, changeFrequency: 'monthly', priority: 0.6 },
+    { url: `${BASE}/security`, lastModified: now, changeFrequency: 'monthly', priority: 0.5 },
+    { url: `${BASE}/dashboard`, lastModified: now, changeFrequency: 'monthly', priority: 0.5 },
+    { url: `${BASE}/contributors`, lastModified: now, changeFrequency: 'monthly', priority: 0.5 },
+    { url: `${BASE}/content-manager`, lastModified: now, changeFrequency: 'monthly', priority: 0.5 },
   ];
 
   const blogPages: MetadataRoute.Sitemap = BLOG_POSTS.map((post) => ({

@@ -1,11 +1,26 @@
+import type { Metadata } from 'next';
 import Image from 'next/image';
 import Link from 'next/link';
 import type { ReactNode } from 'react';
 import QuickStart from '@/components/QuickStart';
+import JsonLd from '@/components/JsonLd';
+import RelatedArticles from '@/components/blog/RelatedArticles';
 import FeatureCard from './FeatureCard';
 import NewsletterForm from './NewsletterForm';
 import { CAPABILITY_ICONS } from './capabilityIcons';
-import { AGENT_CAPABILITIES } from '@/lib/content';
+import { AGENT_CAPABILITIES, AGENTS_FAQ } from '@/lib/content';
+import { pageMetadata } from '@/lib/seo';
+import { routeMarketingSchema } from '@/lib/structured-data';
+
+export const runtime = 'edge';
+
+export const metadata: Metadata = pageMetadata({
+  title: 'BuilderForce Agents — Self-Hosted, Open-Source AI Agent Runtime',
+  description:
+    'BuilderForce Agents is the MIT-licensed, self-hosted agent runtime behind Builderforce.ai — autonomous coding agents and sub-agents with deep codebase understanding, a skills system, multi-agent workflows, an AgentHost mesh, and human-in-the-loop approval gates.',
+  path: '/agents',
+  ogTitle: 'BuilderForce Agents — Self-Hosted AI Agent Runtime',
+});
 
 /**
  * Render a capability description (a plain string in the `content.ts` source of
@@ -24,6 +39,14 @@ function renderDescription(text: string): ReactNode {
 export default function AgentsHome() {
   return (
     <>
+      <JsonLd
+        data={routeMarketingSchema({
+          path: '/agents',
+          title: 'BuilderForce Agents',
+          description: metadata.description as string,
+          faq: AGENTS_FAQ,
+        })}
+      />
       <div className="cc-stars" aria-hidden />
       <div className="cc-nebula" aria-hidden />
       <div className="cc-page">
@@ -138,10 +161,44 @@ export default function AgentsHome() {
           </Link>
         </nav>
 
+        <section className="cc-faq">
+          <h2 className="cc-faq-head">Frequently asked questions</h2>
+          {AGENTS_FAQ.map((q) => (
+            <details key={q.question} className="cc-faq-item">
+              <summary className="cc-faq-q">{q.question}</summary>
+              <p className="cc-faq-a">{q.answer}</p>
+            </details>
+          ))}
+        </section>
+
+        <RelatedArticles surface="agents" heading="Related reading" />
+
         <NewsletterForm />
       </div>
 
       <style>{`
+        .cc-faq {
+          position: relative; z-index: 1;
+          max-width: 760px; margin: 64px auto 0; padding: 0 24px; width: 100%;
+        }
+        .cc-faq-head {
+          font-family: var(--font-display); font-weight: 700; font-size: 1.5rem;
+          color: var(--text-primary); text-align: center; margin: 0 0 20px;
+        }
+        .cc-faq-item {
+          border: 1px solid var(--border-subtle); border-radius: 14px;
+          background: var(--surface-card); padding: 4px 18px; margin-bottom: 10px;
+        }
+        .cc-faq-q {
+          cursor: pointer; list-style: none; padding: 14px 0;
+          font-family: var(--font-display); font-weight: 600; font-size: 0.98rem;
+          color: var(--text-primary); display: flex; justify-content: space-between; align-items: center; gap: 12px;
+        }
+        .cc-faq-q::-webkit-details-marker { display: none; }
+        .cc-faq-q::after { content: '+'; color: var(--coral-bright); font-size: 1.3rem; line-height: 1; flex-shrink: 0; }
+        .cc-faq-item[open] .cc-faq-q::after { content: '–'; }
+        .cc-faq-a { margin: 0 0 14px; font-size: 0.9rem; color: var(--text-secondary); line-height: 1.6; }
+
         .cc-stars,
         .cc-nebula {
           position: fixed;

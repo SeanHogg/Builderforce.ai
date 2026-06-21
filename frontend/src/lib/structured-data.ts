@@ -535,6 +535,44 @@ export function breadcrumbSchema(items: { name: string; url: string }[]) {
   return { '@context': 'https://schema.org', '@graph': [breadcrumbs(...items)] };
 }
 
+/**
+ * JSON-LD for a logged-out feature route teaser (RouteMarketing): the
+ * Builderforce SoftwareApplication scoped to that feature, an optional FAQPage,
+ * and a breadcrumb. Gives the per-feature marketing pages (/brainstorm,
+ * /training, /ide, …) real structured data for SEO/GEO even though they render
+ * client-side. `path` is the route (e.g. '/brainstorm').
+ */
+export function routeMarketingSchema(opts: {
+  path: string;
+  title: string;
+  description: string;
+  faq?: FaqItem[];
+}) {
+  const url = `${BRAND.url}${opts.path}`;
+  const graph: object[] = [
+    organization,
+    {
+      '@type': 'SoftwareApplication',
+      name: `${BRAND.name} — ${opts.title}`,
+      description: opts.description,
+      url,
+      applicationCategory: 'DeveloperApplication',
+      operatingSystem: 'Web, Self-hosted',
+      author: { '@id': `${BRAND.url}/#organization` },
+      dateModified: BRAND.dateModified,
+      offers: { '@type': 'Offer', price: '0', priceCurrency: 'USD' },
+    },
+  ];
+  if (opts.faq && opts.faq.length) graph.push(faqSchema(opts.faq));
+  graph.push(
+    breadcrumbs(
+      { name: 'Home', url: BRAND.url },
+      { name: opts.title, url },
+    ),
+  );
+  return { '@context': 'https://schema.org', '@graph': graph };
+}
+
 /** Individual published marketplace skill detail (`/marketplace/[slug]`). */
 export function marketplaceSkillSchema(skill: {
   name: string;

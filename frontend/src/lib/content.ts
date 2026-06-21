@@ -678,6 +678,26 @@ export const BLOG_FAQ: FaqItem[] = [
   },
 ];
 
+/** BuilderForce Agents (/agents) FAQ — rich-snippet + GEO coverage for the agent-runtime surface. */
+export const AGENTS_FAQ: FaqItem[] = [
+  {
+    question: 'What is BuilderForce Agents?',
+    answer: 'BuilderForce Agents is the self-hosted agent runtime behind Builderforce.ai. It runs and coordinates independent coding agents and sub-agents on your own infrastructure under the MIT license, with deep codebase understanding, a skills system, multi-agent workflows, and human-in-the-loop approval gates — orchestrated from the Builderforce.ai portal.',
+  },
+  {
+    question: 'Is BuilderForce Agents open source and self-hosted?',
+    answer: 'Yes. It is MIT-licensed and runs on your own infrastructure — no vendor lock-in or subscription ceiling. You can run it fully air-gapped, and with local models via Ollama no code or prompt has to leave your network.',
+  },
+  {
+    question: 'How do agents coordinate across machines?',
+    answer: 'Agents form an AgentHost-to-AgentHost mesh. Work is distributed across a fleet of hosts and routed to the best-matched peer with remote:auto[caps] dispatch; every dispatch is HMAC-signed and Bearer-authenticated, and the portal shows a live telemetry timeline of every action.',
+  },
+  {
+    question: 'Can agents ship code on their own?',
+    answer: 'Yes. A Cloud agent clones the bound repo through a secure server-side git proxy (your Git token never leaves the server), writes the change, pushes a branch, and opens a pull request — headless, no browser open. On-Premise agents do the same on your own machine, and approval gates can require human sign-off before any high-impact step.',
+  },
+];
+
 /** Projects / Tasks domain FAQ — rich-snippet + GEO coverage for the work-management surface. */
 export const PROJECTS_TASKS_FAQ: FaqItem[] = [
   {
@@ -841,16 +861,40 @@ export interface NavLink {
   label: string;
 }
 
-export const FOOTER_LINKS: NavLink[] = [
-  { href: '/', label: 'Home' },
-  { href: '/product', label: 'Product' },
-  { href: '/compare', label: 'Compare' },
-  { href: '/marketplace', label: 'Workforce Registry' },
-  { href: '/agents', label: 'BuilderForce Agents' },
-  { href: '/blog', label: 'Blog' },
-  { href: '/pricing', label: 'Pricing' },
-  { href: '/login', label: 'Sign In' },
-  { href: '/register', label: 'Get Started' },
+export interface FooterColumn {
+  title: string;
+  links: NavLink[];
+}
+
+/**
+ * Grouped footer navigation, rendered as columns on desktop and collapsed to
+ * stacked sections on mobile. `Home` is reached via the footer brand mark, so it
+ * is intentionally omitted from the columns.
+ */
+export const FOOTER_COLUMNS: FooterColumn[] = [
+  {
+    title: 'Product',
+    links: [
+      { href: '/product', label: 'Product' },
+      { href: '/compare', label: 'Compare' },
+      { href: '/pricing', label: 'Pricing' },
+    ],
+  },
+  {
+    title: 'Platform',
+    links: [
+      { href: '/marketplace', label: 'Workforce Registry' },
+      { href: '/agents', label: 'BuilderForce Agents' },
+      { href: '/blog', label: 'Blog' },
+    ],
+  },
+  {
+    title: 'Get started',
+    links: [
+      { href: '/login', label: 'Sign In' },
+      { href: '/register', label: 'Get Started' },
+    ],
+  },
 ];
 
 /* ════════════════════ PROGRAMMATIC SEO — COMPETITOR LEAF PAGES ════════════════════ */
@@ -1107,4 +1151,21 @@ export const RELATED_ARTICLES: Record<string, string[]> = {
   'compare:cursor': ['builderforce-vs-cursor-windsurf', 'best-ai-coding-agents-compared'],
   'compare:claudeCode': ['builderforce-vs-claude-code', 'best-ai-coding-agents-compared'],
   'compare:devin': ['builderforce-vs-devin', 'best-ai-coding-agents-compared'],
+
+  // Feature routes — associated blog content shown on each logged-out feature
+  // teaser (RouteMarketing). Keyed by the route path minus its leading slash.
+  brainstorm: ['product-ideation-with-builderforce', 'specs-and-planning-with-ai', 'getting-started-with-ai-agents'],
+  ide: ['in-browser-ide-and-collaboration', 'product-ideation-with-builderforce', 'getting-started-with-ai-agents'],
+  training: ['webgpu-lora-explained', 'ai-dataset-generation-best-practices', 'getting-started-with-ai-agents'],
+  workflows: ['multi-agent-orchestration', 'autonomous-swimlane-execution', 'specs-and-planning-with-ai'],
+  projects: ['autonomous-swimlane-execution', 'task-execution-and-observability', 'product-ideation-with-builderforce'],
+  workforce: ['fleet-management-and-agent-routing', 'autonomous-swimlane-execution', 'multi-agent-orchestration'],
+  skills: ['skills-assignment-and-the-marketplace', 'builderforce-agents-and-agent-integration', 'best-ai-coding-agents-compared'],
+  personas: ['builderforce-agents-and-agent-integration', 'multi-agent-orchestration', 'skills-assignment-and-the-marketplace'],
+  'content-manager': ['skills-assignment-and-the-marketplace', 'product-ideation-with-builderforce'],
+  security: ['security-and-multi-tenant-architecture', 'approval-gates-and-human-oversight'],
+  contributors: ['task-execution-and-observability', 'multi-agent-orchestration'],
+  dashboard: ['introduction-and-overview', 'task-execution-and-observability', 'autonomous-swimlane-execution'],
+  agents: ['builderforce-agents-and-agent-integration', 'fleet-management-and-agent-routing', 'multi-agent-orchestration'],
+  prompts: ['specs-and-planning-with-ai', 'product-ideation-with-builderforce', 'getting-started-with-ai-agents'],
 };
