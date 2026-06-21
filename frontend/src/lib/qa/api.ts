@@ -219,3 +219,39 @@ export function startExploration(
 export function createTaskFromFinding(findingId: string): Promise<{ task: { id: number; title: string }; finding: QaFinding }> {
   return apiRequest(`/api/qa/findings/${findingId}/task`, { method: 'POST' });
 }
+
+// --- Schedules (run the Agentic Tester on a cadence) -------------------------
+
+export interface QaSchedule {
+  id: string;
+  projectId: number;
+  targetId: string | null;
+  credentialId: string | null;
+  cron: string;
+  timezone: string;
+  enabled: boolean;
+  heatBudget: number;
+  sinceDays: number;
+  nextRunAt: string | null;
+  lastRunAt: string | null;
+  lastStatus: string | null;
+}
+
+export function fetchSchedules(projectId: number): Promise<{ schedules: QaSchedule[] }> {
+  return apiRequest(`/api/qa/projects/${projectId}/schedules`);
+}
+
+export function createSchedule(
+  projectId: number,
+  data: { cron: string; timezone?: string; heatBudget?: number; credentialId?: string },
+): Promise<{ schedule: QaSchedule }> {
+  return apiRequest(`/api/qa/projects/${projectId}/schedules`, { method: 'POST', headers: JSON_HEADERS, body: JSON.stringify(data) });
+}
+
+export function updateSchedule(id: string, data: { enabled?: boolean; cron?: string }): Promise<{ schedule: QaSchedule }> {
+  return apiRequest(`/api/qa/schedules/${id}`, { method: 'PATCH', headers: JSON_HEADERS, body: JSON.stringify(data) });
+}
+
+export function deleteSchedule(id: string): Promise<{ deleted: boolean }> {
+  return apiRequest(`/api/qa/schedules/${id}`, { method: 'DELETE' });
+}

@@ -38,6 +38,7 @@ export const STATS = {
     neverLeaveVsCode: 'The BuilderForce VS Code extension runs the whole platform in your editor — chat with agents, assign and run tasks, review and validate their work, and approve actions without leaving VS Code.',
     aiExecutiveTeam: 'Builderforce.ai acts as your AI CTO, CIO and Security Officer — building your AI agent workforce, connecting your systems, and governing every action with approvals and an audit trail.',
     freeForever: 'Free plan is $0/month forever, no credit card required.',
+    agenticTester: 'The Agentic Tester is an autonomous QA agent: point it at your app, give it logins, and it drives a real browser through your highest-traffic flows on a schedule — filing the bugs it finds straight onto your board.',
     zeroGpuBills: 'All training runs on your local WebGPU device — zero cloud GPU bills.',
     browserNative: 'Fine-tune models up to 2 billion parameters directly in Chrome with WebGPU.',
     datasetSpeed: 'Generate an instruction-tuning dataset in under 30 seconds from a single capability prompt.',
@@ -72,6 +73,12 @@ export const FEATURES: Feature[] = [
     title: 'Never Leave VS Code',
     shortDesc: 'Run your whole workforce from the VS Code extension.',
     longDesc: 'The BuilderForce VS Code extension brings the entire platform into your editor: chat with agents, assign and run tasks, review and validate their work, and manage your whole agent workforce — all without leaving VS Code. Human-in-the-loop approvals happen right where you code.',
+  },
+  {
+    icon: '🧪',
+    title: 'Agentic Tester — Autonomous QA',
+    shortDesc: 'An AI agent that browser-tests your app on a schedule.',
+    longDesc: 'The Agentic Tester is a hireable QA agent. Point it at your project\'s URL, save the logins it should use, and it drives a real browser through your highest-traffic flows — ranking what to test from real usage heatmaps, logging in as each persona, and capturing console errors, failed requests, and crashes. Run it on demand or schedule it as part of a workflow; every bug it finds lands straight on your Kanban board.',
   },
   {
     icon: '🧠',

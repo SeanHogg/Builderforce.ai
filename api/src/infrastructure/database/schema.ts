@@ -3177,6 +3177,35 @@ export const qaFindings = pgTable('qa_findings', {
   // note — kept off the pgTable literal for the schema-drift parser).
 });
 
+// ---------------------------------------------------------------------------
+// QA schedules — makes the Agentic Tester a SCHEDULED platform agent. The
+// frequent cron sweep (runQaExplorationSweep) enqueues an exploration for every
+// enabled schedule whose next_run_at has elapsed, then re-arms next_run_at from
+// the cron expr. This is the "run the QA agent as part of a workflow" surface —
+// no GitHub Action involved; the platform drives the cadence.
+// ---------------------------------------------------------------------------
+
+export const qaSchedules = pgTable('qa_schedules', {
+  id:           uuid('id').primaryKey().defaultRandom(),
+  tenantId:     integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  segmentId:    uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),
+  projectId:    integer('project_id').notNull().references(() => projects.id, { onDelete: 'cascade' }),
+  // Which target + persona the scheduled run uses (null target = project default).
+  targetId:     uuid('target_id').references(() => qaTargets.id, { onDelete: 'set null' }),
+  credentialId: uuid('credential_id').references(() => qaCredentials.id, { onDelete: 'set null' }),
+  cron:         varchar('cron', { length: 120 }).notNull(),
+  timezone:     varchar('timezone', { length: 64 }).notNull().default('UTC'),
+  enabled:      boolean('enabled').notNull().default(true),
+  heatBudget:   integer('heat_budget').notNull().default(20),
+  sinceDays:    integer('since_days').notNull().default(30),
+  nextRunAt:    timestamp('next_run_at'),
+  lastRunAt:    timestamp('last_run_at'),
+  lastStatus:   varchar('last_status', { length: 24 }),
+  createdBy:    varchar('created_by', { length: 36 }),
+  createdAt:    timestamp('created_at').notNull().defaultNow(),
+  updatedAt:    timestamp('updated_at').notNull().defaultNow(),
+});
+
 // ===========================================================================
 // Cloud Agent Boards (migrations 0064–0067)
 //

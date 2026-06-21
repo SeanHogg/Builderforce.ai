@@ -18,9 +18,11 @@ import type { Project } from '@/lib/types';
 import {
   aggregateFlows,
   createCredential,
+  createSchedule,
   createTarget,
   createTaskFromFinding,
   deleteCredential,
+  deleteSchedule,
   deleteTarget,
   fetchCredentials,
   fetchExploration,
@@ -28,17 +30,20 @@ import {
   fetchFlows,
   fetchHeatmap,
   fetchRuns,
+  fetchSchedules,
   fetchTargets,
   fetchTests,
   generateTest,
   seedCrawl,
   startExploration,
+  updateSchedule,
   type QaCredential,
   type QaExploration,
   type QaFinding,
   type QaFlow,
   type QaHeatZone,
   type QaRun,
+  type QaSchedule,
   type QaTarget,
   type QaTest,
 } from '@/lib/qa/api';
@@ -95,6 +100,7 @@ export function QaContent() {
   const [credentials, setCredentials] = useState<QaCredential[]>([]);
   const [heatZones, setHeatZones] = useState<QaHeatZone[]>([]);
   const [explorations, setExplorations] = useState<QaExploration[]>([]);
+  const [schedules, setSchedules] = useState<QaSchedule[]>([]);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -115,12 +121,17 @@ export function QaContent() {
       setHeatZones(hm.zones ?? []);
       setExplorations(ex.explorations ?? []);
       if (projectId != null) {
-        const [tg, cr] = await Promise.all([fetchTargets(projectId), fetchCredentials(projectId)]);
+        const [tg, cr, sc] = await Promise.all([
+          fetchTargets(projectId), fetchCredentials(projectId),
+          fetchSchedules(projectId).catch(() => ({ schedules: [] })),
+        ]);
         setTargets(tg.targets ?? []);
         setCredentials(cr.credentials ?? []);
+        setSchedules(sc.schedules ?? []);
       } else {
         setTargets([]);
         setCredentials([]);
+        setSchedules([]);
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to load QA data');
@@ -163,11 +174,12 @@ export function QaContent() {
         </div>
       )}
 
-      {/* Targets + Credentials only apply to a selected project */}
+      {/* Targets + Credentials + Schedule only apply to a selected project */}
       {projectId != null && (
         <>
           <TargetsSection projectId={projectId} targets={targets} busy={busy} onRun={run} />
           <CredentialsSection projectId={projectId} credentials={credentials} busy={busy} onRun={run} />
+          <SchedulesSection projectId={projectId} schedules={schedules} credentials={credentials} busy={busy} onRun={run} />
         </>
       )}
 
@@ -495,6 +507,64 @@ function CredentialsSection({ projectId, credentials, busy, onRun }: {
               <Td><code style={{ fontSize: 11 }}>{c.username}</code></Td>
               <Td><code style={{ fontSize: 11 }}>{c.loginUrl ?? '/login'}</code></Td>
               <Td><button type="button" style={btnStyle(busy != null)} disabled={busy != null} onClick={() => onRun(`cred-del-${c.id}`, () => deleteCredential(c.id))}>Delete</button></Td>
+            </tr>
+          ))}
+        </Table>
+      )}
+    </Section>
+  );
+}
+
+// ── Schedule (run the Agentic Tester on a cadence) ───────────────────────────
+
+const CRON_PRESETS: { label: string; cron: string }[] = [
+  { label: 'Every hour', cron: '0 * * * *' },
+  { label: 'Daily 08:00', cron: '0 8 * * *' },
+  { label: 'Weekdays 08:00', cron: '0 8 * * 1-5' },
+  { label: 'Weekly (Mon 08:00)', cron: '0 8 * * 1' },
+];
+
+function SchedulesSection({ projectId, schedules, credentials, busy, onRun }: {
+  projectId: number; schedules: QaSchedule[]; credentials: QaCredential[]; busy: string | null;
+  onRun: (key: string, fn: () => Promise<unknown>) => Promise<void>;
+}) {
+  const [cron, setCron] = useState('0 8 * * *');
+  const [credentialId, setCredentialId] = useState('');
+
+  return (
+    <Section title={`Schedule (${schedules.length})`}>
+      <p style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 10 }}>
+        Run the Agentic Tester automatically — the platform enqueues a heatmap-driven exploration on this cadence (no CI needed).
+      </p>
+      <div style={{ display: 'flex', gap: 8, marginBottom: 12, flexWrap: 'wrap' }}>
+        <Select style={inputStyle} value={cron} onChange={(e) => setCron(e.target.value)}>
+          {CRON_PRESETS.map((p) => <option key={p.cron} value={p.cron}>{p.label}</option>)}
+        </Select>
+        <Select style={inputStyle} value={credentialId} onChange={(e) => setCredentialId(e.target.value)}>
+          <option value="">Default persona</option>
+          {credentials.map((c) => <option key={c.id} value={c.id}>{c.label}</option>)}
+        </Select>
+        <button type="button" style={btnStyle(busy != null)} disabled={busy != null}
+          onClick={() => onRun('sched-add', () => createSchedule(projectId, { cron, credentialId: credentialId || undefined }))}>
+          Schedule
+        </button>
+      </div>
+      {schedules.length === 0 ? (
+        <Empty>Not scheduled. Add a cadence to run QA automatically.</Empty>
+      ) : (
+        <Table head={['Cadence', 'Enabled', 'Next run', 'Last', '']}>
+          {schedules.map((s) => (
+            <tr key={s.id}>
+              <Td><code style={{ fontSize: 11 }}>{s.cron}</code> <span style={{ color: 'var(--text-muted)' }}>{s.timezone}</span></Td>
+              <Td>
+                <button type="button" style={btnStyle(busy != null)} disabled={busy != null}
+                  onClick={() => onRun(`sched-tog-${s.id}`, () => updateSchedule(s.id, { enabled: !s.enabled }))}>
+                  {s.enabled ? 'On' : 'Off'}
+                </button>
+              </Td>
+              <Td>{s.nextRunAt ? new Date(s.nextRunAt).toLocaleString() : '—'}</Td>
+              <Td>{s.lastStatus ?? '—'}</Td>
+              <Td><button type="button" style={btnStyle(busy != null)} disabled={busy != null} onClick={() => onRun(`sched-del-${s.id}`, () => deleteSchedule(s.id))}>Delete</button></Td>
             </tr>
           ))}
         </Table>
