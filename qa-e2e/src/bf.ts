@@ -156,3 +156,78 @@ export interface RunReport {
 export async function postRun(session: BfSession, report: RunReport): Promise<void> {
   await postJson('/api/qa/runs', report, session.tenantToken);
 }
+
+// ── Agentic Tester (heatmap-driven exploration) ──────────────────────────────
+// The harness claims a queued exploration, drives a browser through its
+// heat-derived plan, posts captured findings, and reports the outcome. Plan
+// steps are QaStep-shaped; each carries the heat of the zone it targets.
+
+export interface ExplorePlanStep {
+  action: 'goto' | 'click' | 'fill' | 'expect' | 'press' | 'waitFor';
+  selector?: string;
+  route?: string;
+  value?: string;
+  assertion?: string;
+  label?: string;
+  heat?: number;
+}
+
+export interface ExplorationBundle {
+  exploration: { id: string; status: string; projectId: number | null; heatBudget: number } | null;
+  target?: { id: string; name: string; baseUrl: string } | null;
+  credential?: { id: string; label: string; role: string | null; username: string; loginUrl: string | null } | null;
+  plan?: ExplorePlanStep[];
+}
+
+export type ExploreFindingType = 'console' | 'pageerror' | 'network' | 'assertion' | 'crash' | 'navigation';
+
+export interface ExploreFinding {
+  type: ExploreFindingType;
+  severity?: 'low' | 'medium' | 'high' | 'critical';
+  route?: string | null;
+  selector?: string | null;
+  message: string;
+  detail?: string | null;
+  heat?: number;
+  screenshotKey?: string | null;
+}
+
+export interface ExplorationOutcome {
+  status: 'running' | 'passed' | 'failed' | 'error';
+  zonesExplored?: number;
+  browser?: string;
+  targetUrl?: string;
+  commitSha?: string;
+  runKey?: string;
+  summary?: string;
+  errorMessage?: string;
+}
+
+/** Claim a queued exploration (explicit id or oldest queued). Returns a bundle
+ *  with `exploration: null` when there's nothing to run. */
+export async function claimExploration(
+  session: BfSession,
+  opts: { explorationId?: string | null; projectId?: number | null } = {},
+): Promise<ExplorationBundle> {
+  return postJson<ExplorationBundle>('/api/qa/explorations/claim', {
+    explorationId: opts.explorationId ?? undefined,
+    projectId: opts.projectId ?? undefined,
+  }, session.tenantToken);
+}
+
+export async function postFindings(session: BfSession, explorationId: string, findings: ExploreFinding[]): Promise<void> {
+  if (findings.length === 0) return;
+  await postJson(`/api/qa/explorations/${explorationId}/findings`, { findings }, session.tenantToken);
+}
+
+export async function patchExploration(session: BfSession, explorationId: string, outcome: ExplorationOutcome): Promise<void> {
+  const res = await fetch(`${apiUrl()}/api/qa/explorations/${explorationId}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.tenantToken}` },
+    body: JSON.stringify(outcome),
+  });
+  if (!res.ok) {
+    const txt = await res.text().catch(() => '');
+    throw new Error(`PATCH exploration failed (${res.status}): ${txt.slice(0, 300)}`);
+  }
+}

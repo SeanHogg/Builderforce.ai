@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { membersApi, type DoraRollup, type MemberScorecard } from '@/lib/builderforceApi';
 import { MemberProfileEditor } from './MemberProfileEditor';
+import { EngagementSection } from './EngagementSection';
 
 /**
  * Performance tab — workforce effectiveness/engagement scorecards (humans AND
@@ -134,6 +135,9 @@ export function WorkforceMetricsContent() {
           </table>
         </div>
       </div>
+
+      {/* Unified engagement — all signals folded into one score per member. */}
+      <EngagementSection days={days} />
 
       {editing && (
         <MemberProfileEditor

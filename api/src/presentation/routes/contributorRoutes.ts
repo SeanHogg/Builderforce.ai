@@ -28,8 +28,16 @@ import {
   contributorDailyMetrics,
 } from '../../infrastructure/database/schema';
 import { TenantRole } from '../../domain/shared/types';
-import type { HonoEnv } from '../../env';
+import type { Env, HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
+import { contributorMerges, tenantMembers } from '../../infrastructure/database/schema';
+import {
+  MergeError,
+  previewMerge,
+  mergeContributors,
+  unmergeContributors,
+  suggestDuplicates,
+} from '../../application/contributors/mergeService';
 
 // ---------------------------------------------------------------------------
 // Metrics aggregation helper
@@ -193,13 +201,90 @@ export function createContributorRoutes(db: Db): Hono<HonoEnv> {
   router.use('*', authMiddleware);
   router.use('*', requireRole(TenantRole.MANAGER));
 
+  // ── Consolidation (merge duplicate profiles) ──────────────────────────────
+  // Registered before GET /:id so the static paths aren't swallowed by the
+  // dynamic id route.
+
+  // GET /api/contributors/duplicates — likely-duplicate groups to consolidate.
+  router.get('/duplicates', async (c) => {
+    const tenantId = c.get('tenantId') as number;
+    const groups = await suggestDuplicates(db, tenantId);
+    return c.json({ groups });
+  });
+
+  // GET /api/contributors/merges — merge history (audit + undo).
+  router.get('/merges', async (c) => {
+    const tenantId = c.get('tenantId') as number;
+    const rows = await db
+      .select({
+        id: contributorMerges.id,
+        targetContributorId: contributorMerges.targetContributorId,
+        sourceContributorId: contributorMerges.sourceContributorId,
+        movedActivityCount: contributorMerges.movedActivityCount,
+        movedIdentityCount: contributorMerges.movedIdentityCount,
+        status: contributorMerges.status,
+        mergedByUserId: contributorMerges.mergedByUserId,
+        mergedAt: contributorMerges.mergedAt,
+        revertedAt: contributorMerges.revertedAt,
+      })
+      .from(contributorMerges)
+      .where(eq(contributorMerges.tenantId, tenantId))
+      .orderBy(desc(contributorMerges.mergedAt))
+      .limit(100);
+    return c.json({ merges: rows });
+  });
+
+  // POST /api/contributors/merge/preview — counts + conflicts for a proposed merge.
+  router.post('/merge/preview', async (c) => {
+    const tenantId = c.get('tenantId') as number;
+    const { sourceId, targetId } = await c.req.json<{ sourceId: number; targetId: number }>();
+    if (!sourceId || !targetId) return c.json({ error: 'sourceId and targetId are required' }, 400);
+    try {
+      return c.json(await previewMerge(db, tenantId, sourceId, targetId));
+    } catch (e) {
+      if (e instanceof MergeError) return c.json({ error: e.message }, e.status);
+      throw e;
+    }
+  });
+
+  // POST /api/contributors/merge — consolidate source INTO target (tenant-wide).
+  router.post('/merge', async (c) => {
+    const tenantId = c.get('tenantId') as number;
+    const userId = c.get('userId') as string | undefined;
+    const { sourceId, targetId } = await c.req.json<{ sourceId: number; targetId: number }>();
+    if (!sourceId || !targetId) return c.json({ error: 'sourceId and targetId are required' }, 400);
+    try {
+      const result = await mergeContributors(db, c.env as Env, { tenantId, sourceId, targetId, mergedByUserId: userId ?? null });
+      return c.json(result, 201);
+    } catch (e) {
+      if (e instanceof MergeError) return c.json({ error: e.message }, e.status);
+      throw e;
+    }
+  });
+
+  // POST /api/contributors/merges/:mergeId/revert — undo a prior merge.
+  router.post('/merges/:mergeId/revert', async (c) => {
+    const tenantId = c.get('tenantId') as number;
+    const mergeId = c.req.param('mergeId');
+    try {
+      return c.json(await unmergeContributors(db, c.env as Env, { tenantId, mergeId }));
+    } catch (e) {
+      if (e instanceof MergeError) return c.json({ error: e.message }, e.status);
+      throw e;
+    }
+  });
+
   // ── GET /api/contributors ─────────────────────────────────────────────────
   router.get('/', async (c) => {
     const tenantId = c.get('tenantId') as number;
+    // Hide merged-away (tombstoned) profiles by default; ?includeMerged=true shows them.
+    const includeMerged = c.req.query('includeMerged') === 'true';
+    const conds = [eq(contributors.tenantId, tenantId)];
+    if (!includeMerged) conds.push(sql`${contributors.mergedIntoId} is null`);
     const rows = await db
       .select()
       .from(contributors)
-      .where(eq(contributors.tenantId, tenantId))
+      .where(and(...conds))
       .orderBy(asc(contributors.displayName));
     return c.json({ contributors: rows });
   });
@@ -354,6 +439,38 @@ export function createContributorRoutes(db: Db): Hono<HonoEnv> {
       ));
 
     return c.json({ deleted: true });
+  });
+
+  // ── PATCH /api/contributors/:id/link-user ────────────────────────────────
+  // Bind (or unbind, userId: null) this contributor to a Builderforce user, so
+  // external activity (this profile) and platform/VS Code engagement (that user)
+  // attach to one person. Validates the user is a member of the tenant.
+  router.patch('/:id/link-user', async (c) => {
+    const tenantId = c.get('tenantId') as number;
+    const id = Number(c.req.param('id'));
+    const { userId } = await c.req.json<{ userId: string | null }>();
+
+    const [existing] = await db
+      .select({ id: contributors.id })
+      .from(contributors)
+      .where(and(eq(contributors.id, id), eq(contributors.tenantId, tenantId)));
+    if (!existing) return c.json({ error: 'Contributor not found' }, 404);
+
+    if (userId) {
+      const [member] = await db
+        .select({ userId: tenantMembers.userId })
+        .from(tenantMembers)
+        .where(and(eq(tenantMembers.tenantId, tenantId), eq(tenantMembers.userId, userId)));
+      if (!member) return c.json({ error: 'User is not a member of this workspace' }, 400);
+    }
+
+    const [updated] = await db
+      .update(contributors)
+      .set({ userId: userId ?? null, updatedAt: new Date() })
+      .where(and(eq(contributors.id, id), eq(contributors.tenantId, tenantId)))
+      .returning();
+
+    return c.json(updated);
   });
 
   // ── GET /api/contributors/:id/activity ────────────────────────────────────

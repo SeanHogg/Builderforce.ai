@@ -4,6 +4,7 @@ import { usePathname } from 'next/navigation';
 import AppShell from './AppShell';
 import AppFooter from './AppFooter';
 import PublicShell from './PublicShell';
+import MarketingShell from './MarketingShell';
 import OnboardingGate from './OnboardingGate';
 import RouteMarketing from './RouteMarketing';
 import { BrainActionsProvider, BrainContextProvider, BrainProvider, brainConfig } from '@/lib/brain';
@@ -67,9 +68,16 @@ function useShellContent(children: React.ReactNode): React.ReactNode {
   if (kind === 'none') return <>{children}</>;
   if (kind === 'footer') return <FooterOnlyShell>{children}</FooterOnlyShell>;
 
-  // Marketing + public browse → auth-aware PublicShell (renders for logged-out
-  // visitors; the app's OnboardingGate would otherwise blank the page pre-auth).
-  if (kind === 'public') return <PublicShell>{children}</PublicShell>;
+  // Auth is the chrome switch: logged-out visitors get the marketing top-header
+  // nav (MarketingShell); authenticated users keep the left Sidebar. This holds
+  // for BOTH marketing/public-browse routes and logged-out hits on app routes.
+
+  // Marketing + public browse.
+  if (kind === 'public') {
+    return isAuthenticated
+      ? <PublicShell>{children}</PublicShell>
+      : <MarketingShell>{children}</MarketingShell>;
+  }
 
   // Default: authenticated app route. Logged out → a per-route marketing teaser
   // + login/CTA instead of a blank gate or redirect, so no authed deep link is
@@ -77,9 +85,9 @@ function useShellContent(children: React.ReactNode): React.ReactNode {
   // fire). Signed in → AppShell behind the onboarding/terms gate.
   if (!isAuthenticated) {
     return (
-      <PublicShell>
+      <MarketingShell>
         <RouteMarketing pathname={pathname} />
-      </PublicShell>
+      </MarketingShell>
     );
   }
   return (

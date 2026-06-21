@@ -12,6 +12,7 @@ import { pendingPromptsApi } from '@/lib/builderforceApi';
 import { BLOG_POSTS } from '@/lib/blogData';
 import { ArticleCardGrid } from '@/components/blog/ArticleCard';
 import QuickStart from '@/components/QuickStart';
+import WaveBackdrop from '@/components/WaveBackdrop';
 
 const HERO_PROMPT_EXAMPLES = [
   'Audit my repo for security issues',
@@ -67,12 +68,32 @@ export default function LandingPage() {
 
         /* ════════════════════ HERO ════════════════════ */
         .lp-hero {
+          position: relative;
+          overflow: hidden;
           display: flex;
           flex-direction: column;
           align-items: center;
+          justify-content: center;
           text-align: center;
-          padding: 40px 24px 64px;
+          min-height: 84vh;
+          padding: 56px 24px 170px;
           gap: 0;
+          isolation: isolate; /* own stacking context so the wave sits behind content only */
+        }
+        /* Hero content rides above the emerging-water backdrop. */
+        .lp-hero-content {
+          position: relative;
+          z-index: 1;
+          width: 100%;
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+        }
+        .lp-tagline-sub {
+          color: var(--text-secondary);
+          letter-spacing: 0.14em;
+          margin-top: -10px;
+          opacity: 0.85;
         }
 
         /* Prompt + mascot row. The prompt is the left column; the agentHost mascot
@@ -476,6 +497,10 @@ export default function LandingPage() {
         <main>
         {/* ── Hero ── */}
         <section className="lp-hero">
+          {/* Emerging water + waves behind the hero — "see clarity through the
+              storm". Pure backdrop; content sits above via .lp-hero-content. */}
+          <WaveBackdrop className="lp-hero-wave" />
+          <div className="lp-hero-content">
           <div className="lp-badge">
             <span className="lp-badge-dot" />
             Human-in-the-loop · Fully agentic cloud
@@ -483,7 +508,8 @@ export default function LandingPage() {
 
           <h1 className="lp-title">Builderforce.ai</h1>
 
-          <p className="lp-tagline">Your AI CTO, CIO &amp; Security Officer</p>
+          <p className="lp-tagline">See clarity through the storm</p>
+          <p className="lp-tagline lp-tagline-sub">Your AI CTO, CIO &amp; Security Officer</p>
 
           <p className="lp-desc">
             A human-in-the-loop, fully agentic cloud that runs your technology
@@ -539,6 +565,7 @@ export default function LandingPage() {
             <Link href="/marketplace" className="lp-btn-secondary">
               🤖 Browse Agents
             </Link>
+          </div>
           </div>
         </section>
 

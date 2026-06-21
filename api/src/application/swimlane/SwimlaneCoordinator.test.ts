@@ -146,7 +146,7 @@ class InMemoryStore implements CoordinatorStore {
   // test helpers
   seedBoard(b: Partial<BoardLite> & { id: string; tenantId: number }): BoardLite {
     const board: BoardLite = {
-      autonomous: false, maxConcurrentTickets: 5, needsAttentionLane: 'needs-attention', ...b,
+      maxConcurrentTickets: 5, needsAttentionLane: 'needs-attention', ...b,
     };
     this.boards.set(board.id, board);
     return board;
@@ -185,7 +185,7 @@ describe('SwimlaneCoordinator — execution loop', () => {
   });
 
   it('autonomous board: a ticket runs lane 0, advances on success, and reaches done at the terminal lane', async () => {
-    store.seedBoard({ id: 'b1', tenantId: TENANT, autonomous: true });
+    store.seedBoard({ id: 'b1', tenantId: TENANT });
     store.seedLane({ id: 'l0', boardId: 'b1', position: 0 });
     store.seedLane({ id: 'l1', boardId: 'b1', position: 1, isTerminal: true });
     store.seedAssignment('l0', { id: 'a0', role: 'implementer', runtime: 'browser' });
@@ -215,7 +215,7 @@ describe('SwimlaneCoordinator — execution loop', () => {
   });
 
   it('NO silent advance: a failed stage routes to needs_attention and stays on the same lane', async () => {
-    store.seedBoard({ id: 'b1', tenantId: TENANT, autonomous: true });
+    store.seedBoard({ id: 'b1', tenantId: TENANT });
     store.seedLane({ id: 'l0', boardId: 'b1', position: 0 });
     store.seedLane({ id: 'l1', boardId: 'b1', position: 1, isTerminal: true });
     store.seedAssignment('l0', { id: 'a0', role: 'implementer', runtime: 'browser' });
@@ -232,7 +232,7 @@ describe('SwimlaneCoordinator — execution loop', () => {
   });
 
   it("failure_policy='skip': a failed stage advances past the lane instead of parking [1316]", async () => {
-    store.seedBoard({ id: 'b1', tenantId: TENANT, autonomous: true });
+    store.seedBoard({ id: 'b1', tenantId: TENANT });
     store.seedLane({ id: 'l0', boardId: 'b1', position: 0, failurePolicy: 'skip' });
     store.seedLane({ id: 'l1', boardId: 'b1', position: 1, isTerminal: true });
     store.seedAssignment('l0', { id: 'a0', role: 'implementer', runtime: 'browser' });
@@ -251,7 +251,7 @@ describe('SwimlaneCoordinator — execution loop', () => {
   });
 
   it("failure_policy='retry': re-runs the lane up to N times, then parks [1316]", async () => {
-    store.seedBoard({ id: 'b1', tenantId: TENANT, autonomous: true });
+    store.seedBoard({ id: 'b1', tenantId: TENANT });
     store.seedLane({ id: 'l0', boardId: 'b1', position: 0, failurePolicy: 'retry' });
     store.seedLane({ id: 'l1', boardId: 'b1', position: 1, isTerminal: true });
     store.seedAssignment('l0', { id: 'a0', role: 'implementer', runtime: 'browser' });
@@ -274,7 +274,7 @@ describe('SwimlaneCoordinator — execution loop', () => {
   });
 
   it('sequential lane: only the first agent dispatches; the second unblocks when the first completes', async () => {
-    store.seedBoard({ id: 'b1', tenantId: TENANT, autonomous: true });
+    store.seedBoard({ id: 'b1', tenantId: TENANT });
     store.seedLane({ id: 'l0', boardId: 'b1', position: 0, isTerminal: true, executionMode: 'sequential' });
     store.seedAssignment('l0', { id: 'a0', role: 'first', runtime: 'browser', position: 0 });
     store.seedAssignment('l0', { id: 'a1', role: 'second', runtime: 'browser', position: 1 });
@@ -299,7 +299,7 @@ describe('SwimlaneCoordinator — execution loop', () => {
   });
 
   it('parallel lane: both agents dispatch at once; stage completes only when both finish', async () => {
-    store.seedBoard({ id: 'b1', tenantId: TENANT, autonomous: true });
+    store.seedBoard({ id: 'b1', tenantId: TENANT });
     store.seedLane({ id: 'l0', boardId: 'b1', position: 0, isTerminal: true, executionMode: 'parallel' });
     store.seedAssignment('l0', { id: 'a0', role: 'x', runtime: 'browser', position: 0 });
     store.seedAssignment('l0', { id: 'a1', role: 'y', runtime: 'browser', position: 1 });
@@ -338,7 +338,7 @@ describe('SwimlaneCoordinator — execution loop', () => {
   });
 
   it('agentHost runtime: a cloud dispatch is pushed via the injected dispatcher and marked running', async () => {
-    store.seedBoard({ id: 'b1', tenantId: TENANT, autonomous: true });
+    store.seedBoard({ id: 'b1', tenantId: TENANT });
     store.seedLane({ id: 'l0', boardId: 'b1', position: 0, isTerminal: true });
     store.seedAssignment('l0', { id: 'a0', role: 'impl', runtime: 'cloud' });
 
@@ -355,7 +355,7 @@ describe('SwimlaneCoordinator — execution loop', () => {
   });
 
   it('agentHost runtime with no dispatcher: the dispatch fails and the ticket goes to needs_attention', async () => {
-    store.seedBoard({ id: 'b1', tenantId: TENANT, autonomous: true });
+    store.seedBoard({ id: 'b1', tenantId: TENANT });
     store.seedLane({ id: 'l0', boardId: 'b1', position: 0, isTerminal: true });
     store.seedAssignment('l0', { id: 'a0', role: 'impl', runtime: 'cloud' });
 
@@ -365,7 +365,7 @@ describe('SwimlaneCoordinator — execution loop', () => {
   });
 
   it('enforces maxConcurrentTickets', async () => {
-    store.seedBoard({ id: 'b1', tenantId: TENANT, autonomous: true, maxConcurrentTickets: 1 });
+    store.seedBoard({ id: 'b1', tenantId: TENANT, maxConcurrentTickets: 1 });
     store.seedLane({ id: 'l0', boardId: 'b1', position: 0, isTerminal: true });
     store.seedAssignment('l0', { id: 'a0', role: 'impl', runtime: 'browser' });
 

@@ -81,13 +81,6 @@ Column 'users.id' is declared in schema.ts but never created/added by any migrat
 Column 'users.password_hash' is declared in schema.ts but never created/added by any migration.
 Column 'users.updated_at' is declared in schema.ts but never created/added by any migration.
 Column 'users.username' is declared in schema.ts but never created/added by any migration.
-Table 'audit_events' is declared in schema.ts but never created by any migration.
-Table 'managed_agent_host_requests' is declared in schema.ts but never created by any migration.
-Table 'marketplace_skill_likes' is declared in schema.ts but never created by any migration.
-Table 'skills' is declared in schema.ts but never created by any migration.
-Table 'tenant_members' is declared in schema.ts but never created by any migration.
-Table 'tenant_skill_assignments' is declared in schema.ts but never created by any migration.
-Table 'agent_host_skill_assignments' is declared in schema.ts but never created by any migration.
 Column 'tenants.status' is declared in schema.ts but never created/added by any migration.
 Column 'projects.status' is declared in schema.ts but never created/added by any migration.
 Column 'tasks.priority' is declared in schema.ts but never created/added by any migration.

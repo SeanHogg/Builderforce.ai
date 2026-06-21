@@ -21,6 +21,9 @@ export interface QaStep {
   assertion?: string;
   /** Accessible label / trimmed text, for prompt readability + run-step labelling. */
   label?: string;
+  /** Interaction heat of the zone this step targets (Agentic Tester plans only) —
+   *  carried through so a finding surfaced here inherits the zone's importance. */
+  heat?: number;
 }
 
 /** A flow as stored in qa_flows (steps serialized to JSON in the column). */
@@ -109,4 +112,103 @@ export interface QaCredentialPublic {
   username: string;
   loginUrl: string | null;
   status: string;
+}
+
+// ───────────────────────────────────────────────────────────────────────────
+// Agentic Tester (migration 0206) — heatmap-driven exploratory testing.
+// ───────────────────────────────────────────────────────────────────────────
+
+/** A "hot zone": a route or interaction target ranked by how often real users
+ *  touched it (interaction heat from qa_journey_events). The agentic tester
+ *  prioritises exercising these — the busier a control, the more a regression
+ *  there hurts. `heat` is the raw interaction count; `score` folds in recency. */
+export interface QaHeatZone {
+  route: string;
+  /** Stable selector for an element-level zone; null for a route-level zone. */
+  selector: string | null;
+  /** 'click' | 'input' | 'submit' | 'nav' | 'pageview' — the dominant interaction. */
+  kind: string;
+  label: string | null;
+  /** Raw number of captured interactions on this zone in the window. */
+  heat: number;
+  /** Recency-weighted rank score (heat decayed by age of last interaction). */
+  score: number;
+}
+
+/** Finding types the harness captures while exploring. */
+export type QaFindingType = 'console' | 'pageerror' | 'network' | 'assertion' | 'crash' | 'navigation';
+export type QaFindingSeverity = 'low' | 'medium' | 'high' | 'critical';
+
+/** One captured runtime error the harness posts back for an exploration. */
+export interface QaFindingReport {
+  type: QaFindingType;
+  severity?: QaFindingSeverity;
+  route?: string | null;
+  selector?: string | null;
+  message: string;
+  detail?: string | null;
+  /** Heat of the zone this surfaced in (carried from the plan step). */
+  heat?: number;
+  screenshotKey?: string | null;
+}
+
+/** Rolled-up outcome the harness PATCHes when an exploration finishes. */
+export interface QaExplorationOutcome {
+  status: 'running' | 'passed' | 'failed' | 'error';
+  zonesExplored?: number;
+  browser?: string;
+  targetUrl?: string;
+  commitSha?: string;
+  runKey?: string;
+  summary?: string;
+  errorMessage?: string;
+}
+
+/** Map a finding type + zone heat into a default severity. Network/page errors on
+ *  a hot zone are worse than a console warning on a cold one. The harness may
+ *  override, but this gives a sensible server-side default + keeps the UI honest. */
+export function defaultFindingSeverity(type: QaFindingType, heat: number): QaFindingSeverity {
+  if (type === 'crash') return 'critical';
+  if (type === 'pageerror' || type === 'navigation') return heat >= 20 ? 'critical' : 'high';
+  if (type === 'network') return heat >= 20 ? 'high' : 'medium';
+  if (type === 'assertion') return heat >= 20 ? 'high' : 'medium';
+  return heat >= 50 ? 'medium' : 'low'; // console
+}
+
+/** Deterministic dedupe fingerprint for a finding within one exploration. */
+export function findingFingerprint(f: { type: string; route?: string | null; selector?: string | null; message: string }): string {
+  return shortHash(`${f.type}|${f.route ?? ''}|${f.selector ?? ''}|${f.message.slice(0, 200)}`);
+}
+
+/**
+ * Turn ranked heat zones into an ordered exploration plan (QaStep[]) the harness
+ * executes. Deterministic: visit each hot route, then exercise each hot element
+ * (click / fill a synthetic value), asserting the page stays healthy after each.
+ * The LLM planner (when a key is configured) only re-orders / prunes this — the
+ * deterministic core guarantees a runnable plan with no model dependency.
+ */
+export function buildExplorationPlan(zones: readonly QaHeatZone[], budget: number): QaStep[] {
+  const steps: QaStep[] = [];
+  const visitedRoutes = new Set<string>();
+  let exercised = 0;
+  for (const z of zones) {
+    if (exercised >= budget) break;
+    if (z.route && !visitedRoutes.has(z.route)) {
+      steps.push({ action: 'goto', route: z.route, heat: z.heat });
+      steps.push({ action: 'expect', route: z.route, assertion: `route ${z.route} renders without an error boundary`, heat: z.heat });
+      visitedRoutes.add(z.route);
+    }
+    if (z.selector) {
+      if (z.kind === 'input') {
+        steps.push({ action: 'fill', selector: z.selector, value: 'qa-probe', label: z.label ?? undefined, heat: z.heat });
+      } else {
+        steps.push({ action: 'click', selector: z.selector, label: z.label ?? undefined, heat: z.heat });
+      }
+      steps.push({ action: 'expect', selector: z.selector, assertion: `interacting with ${z.label ?? z.selector} does not break the page`, label: z.label ?? undefined, heat: z.heat });
+      exercised++;
+    } else if (z.route) {
+      exercised++;
+    }
+  }
+  return steps;
 }

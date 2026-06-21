@@ -1,0 +1,11 @@
+-- Migration: drop the inert `boards.autonomous` column.
+--
+-- The board-level Autonomous toggle has been inert since migration 0084:
+-- autonomy is now driven by lane agents + per-lane gate ('auto' vs 'human'),
+-- not a board-wide boolean. The last code readers (DrizzleCoordinatorStore,
+-- the CoordinatorStore port, findOrCreateBoard's seed insert) have been
+-- removed, so the column is dead. Drop it.
+--
+-- Idempotent: some target DBs created `boards` via legacy drizzle-kit push and
+-- may already lack the column.
+ALTER TABLE IF EXISTS boards DROP COLUMN IF EXISTS autonomous;

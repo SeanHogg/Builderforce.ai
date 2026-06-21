@@ -23,8 +23,9 @@ import {
   agentHosts,
 } from '../../infrastructure/database/schema';
 import { TenantRole } from '../../domain/shared/types';
-import type { HonoEnv } from '../../env';
+import type { Env, HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
+import { getTenantActivityRollup } from '../../application/analytics/tenantActivity';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -183,6 +184,16 @@ export function createAnalyticsRoutes(db: Db): Hono<HonoEnv> {
       contributors: perContributor,
       calendar,
     });
+  });
+
+  // ── GET /api/analytics/tenant-rollup ──────────────────────────────────────
+  // Owner-facing cross-project activity rollup: volume by type/provider/repo, the
+  // daily trend, and top contributors — rolled up to the whole tenant. Cached.
+  router.get('/tenant-rollup', async (c) => {
+    const tenantId = c.get('tenantId') as number;
+    const days = Math.min(365, Math.max(1, Number(c.req.query('days') ?? '30') || 30));
+    const rollup = await getTenantActivityRollup(c.env as Env, db, tenantId, days);
+    return c.json(rollup);
   });
 
   // ── POST /api/analytics/sync-agents ───────────────────────────────────────

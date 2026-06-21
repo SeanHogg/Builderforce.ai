@@ -19,17 +19,25 @@ import {
   aggregateFlows,
   createCredential,
   createTarget,
+  createTaskFromFinding,
   deleteCredential,
   deleteTarget,
   fetchCredentials,
+  fetchExploration,
+  fetchExplorations,
   fetchFlows,
+  fetchHeatmap,
   fetchRuns,
   fetchTargets,
   fetchTests,
   generateTest,
   seedCrawl,
+  startExploration,
   type QaCredential,
+  type QaExploration,
+  type QaFinding,
   type QaFlow,
+  type QaHeatZone,
   type QaRun,
   type QaTarget,
   type QaTest,
@@ -46,6 +54,10 @@ const SELF_TEST_ROUTES = [
 const STATUS_COLOR: Record<string, string> = {
   passed: '#3fb950', failed: '#f85149', error: '#f85149', skipped: '#8b949e',
   running: '#d29922', queued: '#8b949e',
+};
+
+const SEVERITY_COLOR: Record<string, string> = {
+  critical: '#f85149', high: '#f85149', medium: '#d29922', low: '#8b949e',
 };
 
 function Section({ title, action, children }: { title: string; action?: React.ReactNode; children: React.ReactNode }) {
@@ -81,6 +93,8 @@ export function QaContent() {
   const [runs, setRuns] = useState<QaRun[]>([]);
   const [targets, setTargets] = useState<QaTarget[]>([]);
   const [credentials, setCredentials] = useState<QaCredential[]>([]);
+  const [heatZones, setHeatZones] = useState<QaHeatZone[]>([]);
+  const [explorations, setExplorations] = useState<QaExploration[]>([]);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -90,10 +104,16 @@ export function QaContent() {
 
   const reload = useCallback(async () => {
     try {
-      const [f, t, r] = await Promise.all([fetchFlows(projectId), fetchTests(projectId), fetchRuns(projectId)]);
+      const [f, t, r, hm, ex] = await Promise.all([
+        fetchFlows(projectId), fetchTests(projectId), fetchRuns(projectId),
+        fetchHeatmap({ limit: 40 }).catch(() => ({ zones: [] })),
+        fetchExplorations(projectId).catch(() => ({ explorations: [] })),
+      ]);
       setFlows(f.flows ?? []);
       setTests(t.tests ?? []);
       setRuns(r.runs ?? []);
+      setHeatZones(hm.zones ?? []);
+      setExplorations(ex.explorations ?? []);
       if (projectId != null) {
         const [tg, cr] = await Promise.all([fetchTargets(projectId), fetchCredentials(projectId)]);
         setTargets(tg.targets ?? []);
@@ -150,6 +170,14 @@ export function QaContent() {
           <CredentialsSection projectId={projectId} credentials={credentials} busy={busy} onRun={run} />
         </>
       )}
+
+      <AgenticTesterSection
+        projectId={projectId}
+        heatZones={heatZones}
+        explorations={explorations}
+        busy={busy}
+        onRun={run}
+      />
 
       <Section
         title={`Flows (${flows.length})`}
@@ -226,6 +254,158 @@ export function QaContent() {
           </Table>
         )}
       </Section>
+    </div>
+  );
+}
+
+// ── Agentic Tester (heatmap-driven exploration) ───────────────────────────────
+
+function AgenticTesterSection({ projectId, heatZones, explorations, busy, onRun }: {
+  projectId: number | null;
+  heatZones: QaHeatZone[];
+  explorations: QaExploration[];
+  busy: string | null;
+  onRun: (key: string, fn: () => Promise<unknown>) => Promise<void>;
+}) {
+  const [budget, setBudget] = useState(20);
+  const [openId, setOpenId] = useState<string | null>(null);
+
+  return (
+    <Section
+      title="Agentic Tester"
+      action={
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          <label style={{ fontSize: 11, color: 'var(--text-muted)' }}>Zones</label>
+          <input
+            type="number" min={1} max={100} value={budget}
+            onChange={(e) => setBudget(Math.max(1, Math.min(100, Number(e.target.value) || 1)))}
+            style={{ ...inputStyle, minWidth: 64, width: 64 }}
+          />
+          <button
+            type="button"
+            style={btnStyle(busy != null || heatZones.length === 0)}
+            disabled={busy != null || heatZones.length === 0}
+            onClick={() => onRun('explore-start', () => startExploration({ projectId, heatBudget: budget }))}
+          >
+            {busy === 'explore-start' ? 'Queuing…' : 'Run agentic tester'}
+          </button>
+        </div>
+      }
+    >
+      <p style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 12 }}>
+        Decides what to exercise from interaction <strong>heat</strong> (the busiest routes &amp; controls),
+        drives a real browser through them in a container, and feeds captured runtime errors back as findings —
+        each can spawn a board task to fix it.
+      </p>
+
+      {/* Heatmap — the hottest zones the next run will prioritise. */}
+      {heatZones.length === 0 ? (
+        <Empty>No heatmap data yet. Capture usage in the app (interactions) before running the tester.</Empty>
+      ) : (
+        <>
+          <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 6 }}>Hottest zones ({heatZones.length})</div>
+          <Table head={['Route', 'Element', 'Kind', 'Heat']}>
+            {heatZones.slice(0, 8).map((z, i) => (
+              <tr key={`${z.route}-${z.selector ?? i}`}>
+                <Td><code style={{ fontSize: 11 }}>{z.route}</code></Td>
+                <Td>{z.label ?? (z.selector ? <code style={{ fontSize: 10 }}>{z.selector.slice(0, 48)}</code> : '— (page)')}</Td>
+                <Td>{z.kind}</Td>
+                <Td><HeatBar heat={z.heat} max={heatZones[0]?.heat ?? 1} /></Td>
+              </tr>
+            ))}
+          </Table>
+        </>
+      )}
+
+      {/* Explorations — the runs and their findings. */}
+      <div style={{ fontSize: 11, color: 'var(--text-muted)', margin: '18px 0 6px' }}>Explorations ({explorations.length})</div>
+      {explorations.length === 0 ? (
+        <Empty>No explorations yet. Queue one above; a container harness drains the queue and reports findings here.</Empty>
+      ) : (
+        <Table head={['When', 'Status', 'Zones', 'Findings', 'Summary', '']}>
+          {explorations.map((ex) => (
+            <tr key={ex.id}>
+              <Td>{new Date(ex.createdAt).toLocaleString()}</Td>
+              <Td><span style={{ color: STATUS_COLOR[ex.status] ?? 'var(--text-secondary)', fontWeight: 700 }}>{ex.status}</span></Td>
+              <Td>{ex.zonesExplored != null ? `${ex.zonesExplored}/${ex.zonesPlanned}` : ex.zonesPlanned}</Td>
+              <Td>{ex.findingsCount}</Td>
+              <Td style={{ maxWidth: 280 }}>{ex.summary ?? ex.errorMessage ?? '—'}</Td>
+              <Td>
+                <button type="button" style={btnStyle(busy != null)} disabled={busy != null}
+                  onClick={() => setOpenId(openId === ex.id ? null : ex.id)}>
+                  {openId === ex.id ? 'Hide' : 'Findings'}
+                </button>
+              </Td>
+            </tr>
+          ))}
+        </Table>
+      )}
+
+      {openId && <FindingsPanel explorationId={openId} busy={busy} onRun={onRun} />}
+    </Section>
+  );
+}
+
+function HeatBar({ heat, max }: { heat: number; max: number }) {
+  const pct = max > 0 ? Math.round((heat / max) * 100) : 0;
+  return (
+    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+      <span style={{ display: 'inline-block', width: 60, height: 6, borderRadius: 3, background: 'var(--border-subtle)' }}>
+        <span style={{ display: 'block', width: `${pct}%`, height: 6, borderRadius: 3, background: '#d29922' }} />
+      </span>
+      <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{heat}</span>
+    </span>
+  );
+}
+
+function FindingsPanel({ explorationId, busy, onRun }: {
+  explorationId: string;
+  busy: string | null;
+  onRun: (key: string, fn: () => Promise<unknown>) => Promise<void>;
+}) {
+  const [findings, setFindings] = useState<QaFinding[] | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    try {
+      const res = await fetchExploration(explorationId);
+      setFindings(res.findings ?? []);
+    } catch (e) {
+      setLoadError(e instanceof Error ? e.message : 'Failed to load findings');
+    }
+  }, [explorationId]);
+
+  useEffect(() => { void load(); }, [load]);
+
+  if (loadError) return <Empty>{loadError}</Empty>;
+  if (findings == null) return <Empty>Loading findings…</Empty>;
+  if (findings.length === 0) return <Empty>No runtime errors captured in this exploration. 🎉</Empty>;
+
+  return (
+    <div style={{ marginTop: 12, padding: 12, borderRadius: 8, border: '1px solid var(--border-subtle)', background: 'var(--bg-deep, #0d1117)' }}>
+      <Table head={['Severity', 'Type', 'Route', 'Heat', 'Message', '']}>
+        {findings.map((f) => (
+          <tr key={f.id}>
+            <Td><span style={{ color: SEVERITY_COLOR[f.severity] ?? 'var(--text-secondary)', fontWeight: 700 }}>{f.severity}</span></Td>
+            <Td>{f.type}</Td>
+            <Td><code style={{ fontSize: 10 }}>{f.route ?? '—'}</code></Td>
+            <Td>{f.heat}</Td>
+            <Td style={{ maxWidth: 360 }}><code style={{ fontSize: 11 }}>{f.message.slice(0, 200)}</code></Td>
+            <Td>
+              {f.taskId ? (
+                <span style={{ fontSize: 11, color: '#3fb950' }}>Task #{f.taskId}</span>
+              ) : f.projectId == null ? (
+                <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>self-test</span>
+              ) : (
+                <button type="button" style={btnStyle(busy != null)} disabled={busy != null}
+                  onClick={() => onRun(`finding-task-${f.id}`, async () => { await createTaskFromFinding(f.id); await load(); })}>
+                  {busy === `finding-task-${f.id}` ? 'Creating…' : 'Create task'}
+                </button>
+              )}
+            </Td>
+          </tr>
+        ))}
+      </Table>
     </div>
   );
 }
@@ -344,6 +524,6 @@ function Table({ head, children }: { head: string[]; children: React.ReactNode }
   );
 }
 
-function Td({ children }: { children: React.ReactNode }) {
-  return <td style={{ padding: '8px', color: 'var(--text-secondary)', borderBottom: '1px solid var(--border-subtle)', verticalAlign: 'top' }}>{children}</td>;
+function Td({ children, style }: { children: React.ReactNode; style?: React.CSSProperties }) {
+  return <td style={{ padding: '8px', color: 'var(--text-secondary)', borderBottom: '1px solid var(--border-subtle)', verticalAlign: 'top', ...style }}>{children}</td>;
 }
