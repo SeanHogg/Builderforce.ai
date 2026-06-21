@@ -25,6 +25,8 @@ export type {
   ChatCompletionResponse,
   FailoverEvent,
   // Models / usage
+  AiCapability,
+  ModelInfo,
   ModelsListResponse,
   UsageByModel,
   UsageByDay,
@@ -44,4 +46,5 @@ export type {
 export { ChatCompletionStream } from './application/ChatCompletionsApi';
 export { EmbeddingsApi } from './application/EmbeddingsApi';
 export { ImagesApi } from './application/ImagesApi';
+export { ModelsApi } from './application/ModelsApi';
 export { BuilderforceApiError } from './infrastructure/httpClient';

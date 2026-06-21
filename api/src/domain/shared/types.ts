@@ -91,6 +91,8 @@ export enum TenantBillingStatus {
   NONE = 'none',
   PENDING = 'pending',
   ACTIVE = 'active',
+  /** Inside the introductory 14-day Pro trial (see Tenant.create / effectivePlan). */
+  TRIALING = 'trialing',
   PAST_DUE = 'past_due',
   CANCELLED = 'cancelled',
 }

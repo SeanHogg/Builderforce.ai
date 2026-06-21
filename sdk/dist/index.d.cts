@@ -256,18 +256,46 @@ interface ChatCompletionResponse {
     };
     [key: string]: unknown;
 }
+/**
+ * Shape capability a model supports — what kinds of request it can serve.
+ *   `vision` — accepts image content blocks (`image_url`); reads images and
+ *              page-rasterized PDFs.
+ *   `ocr`    — tuned for text extraction from images / documents.
+ *   `tools`  — honours `tools` / `tool_choice` round-trips.
+ *   `structured_output` — reliably emits valid JSON / honours `json_schema`.
+ *
+ * Consumers that need to read images or PDFs (e.g. hired.video) should pick a
+ * model whose `capabilities` include `vision` or `ocr`. See
+ * `models.listImageCapable()` / `models.listOcr()`.
+ */
+type AiCapability = 'tools' | 'structured_output' | 'vision' | 'ocr';
+/** One model in the tenant-plan pool, with availability + capability metadata. */
+interface ModelInfo {
+    model: string;
+    vendor: string;
+    /** In the top "preferred" sub-pool the gateway round-robins across first. */
+    preferred: boolean;
+    /** Servable right now — key bound and not on per-model / per-vendor cooldown. */
+    available: boolean;
+    /** Epoch ms when the per-model cooldown lifts. Absent when not cooling. */
+    cooldownUntil?: number;
+    /** Epoch ms when the per-vendor cooldown lifts. Set when an upstream is wholesale-cooled. */
+    vendorCooledUntil?: number;
+    /** Whether the vendor's API key is bound. False → model is unservable. */
+    keyBound?: boolean;
+    /** Shape capabilities this model supports — drives image/PDF (`vision`/`ocr`),
+     *  tool-calling (`tools`), and structured-output (`structured_output`) routing.
+     *  Absent on older gateways that don't yet emit it. */
+    capabilities?: AiCapability[];
+}
 interface ModelsListResponse {
     configured?: boolean;
     object?: 'list';
     product?: string;
     effectivePlan?: string;
-    data?: Array<{
-        model: string;
-        vendor: string;
-        preferred: boolean;
-        available: boolean;
-        cooldownUntil?: number;
-    }>;
+    /** Per-model pool status (present on the `configured: true` branch). */
+    data?: ModelInfo[];
+    /** Bare model-id pool (present on the `configured: false` branch). */
     models?: string[];
     [key: string]: unknown;
 }
@@ -544,7 +572,37 @@ declare class ImagesApi {
 declare class ModelsApi {
     private readonly http;
     constructor(http: HttpClient);
+    /** Raw `/llm/v1/models` response — pool status, capabilities, plan, cooldowns. */
     list(): Promise<ModelsListResponse>;
+    /**
+     * Models in the tenant's plan pool, as structured entries. Empty when the
+     * gateway is unconfigured for this tenant (no `data` branch — nothing servable).
+     */
+    listInfo(): Promise<ModelInfo[]>;
+    /**
+     * Models whose `capabilities` include `capability`. By default only
+     * currently-servable models are returned (`available: true`); pass
+     * `{ includeUnavailable: true }` to include cooled / key-unbound ones too.
+     */
+    listByCapability(capability: AiCapability, opts?: {
+        includeUnavailable?: boolean;
+    }): Promise<ModelInfo[]>;
+    /**
+     * Models that can read images and (page-rasterized) PDFs — i.e. those with the
+     * `vision` OR `ocr` capability. This is the set a consumer that needs to ingest
+     * images / documents (e.g. hired.video) should pick from.
+     */
+    listImageCapable(opts?: {
+        includeUnavailable?: boolean;
+    }): Promise<ModelInfo[]>;
+    /** Models tuned for text extraction from images / documents (`ocr` capability). */
+    listOcr(opts?: {
+        includeUnavailable?: boolean;
+    }): Promise<ModelInfo[]>;
+    /** Models that accept image content blocks (`vision` capability). */
+    listVision(opts?: {
+        includeUnavailable?: boolean;
+    }): Promise<ModelInfo[]>;
 }
 
 declare class UsageApi {
@@ -572,4 +630,4 @@ declare class BuilderforceClient {
     constructor(options: BuilderforceClientOptions);
 }
 
-export { BuilderforceApiError, BuilderforceClient, type BuilderforceClientOptions, type ChatCompletionChunk, type ChatCompletionCreateParams, type ChatCompletionResponse, ChatCompletionStream, type ChatMessage, type ChatRole, type ContentPart, type EmbeddingObject, EmbeddingsApi, type EmbeddingsCreateParams, type EmbeddingsResponse, type FailoverEvent, type FunctionDefinition, type ImageGenerationCreateParams, type ImageGenerationDataEntry, type ImageGenerationResponse, type ImageUrlContentPart, ImagesApi, type JsonSchemaSpec, type ModelsListResponse, type PerCallOptions, type ResponseFormat, type TextContentPart, type ToolCall, type ToolCallDelta, type ToolCallFunction, type ToolChoice, type ToolSpec, type UsageByDay, type UsageByModel, type UsageByUser, type UsageGetParams, type UsageResponse };
+export { type AiCapability, BuilderforceApiError, BuilderforceClient, type BuilderforceClientOptions, type ChatCompletionChunk, type ChatCompletionCreateParams, type ChatCompletionResponse, ChatCompletionStream, type ChatMessage, type ChatRole, type ContentPart, type EmbeddingObject, EmbeddingsApi, type EmbeddingsCreateParams, type EmbeddingsResponse, type FailoverEvent, type FunctionDefinition, type ImageGenerationCreateParams, type ImageGenerationDataEntry, type ImageGenerationResponse, type ImageUrlContentPart, ImagesApi, type JsonSchemaSpec, type ModelInfo, ModelsApi, type ModelsListResponse, type PerCallOptions, type ResponseFormat, type TextContentPart, type ToolCall, type ToolCallDelta, type ToolCallFunction, type ToolChoice, type ToolSpec, type UsageByDay, type UsageByModel, type UsageByUser, type UsageGetParams, type UsageResponse };

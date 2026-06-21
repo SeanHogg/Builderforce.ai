@@ -1920,6 +1920,9 @@ export interface LlmUsageStats {
 /** Mirrors `api/src/application/llm/vendors/types.ts:VendorId`. */
 export type VendorId = 'openrouter' | 'cerebras' | 'ollama' | 'nvidia';
 
+/** Mirrors `api/src/application/llm/vendors/types.ts:AiCapability`. */
+export type AiCapability = 'tools' | 'structured_output' | 'vision' | 'ocr';
+
 /** Per-model status returned by `/llm/v1/health` and `/llm/v1/models` (configured branch). */
 export interface LlmModelStatus {
   model: string;
@@ -1932,6 +1935,9 @@ export interface LlmModelStatus {
   /** Whether the vendor's API key is bound in this environment. False → model is unservable. */
   keyBound?: boolean;
   vendor: VendorId;
+  /** Shape capabilities — `vision`/`ocr` flag image & PDF reading; `tools`/`structured_output`
+   *  flag tool-calling & json_schema support. Drives capability-aware model pickers. */
+  capabilities?: AiCapability[];
 }
 
 export interface LlmHealthResponse {

@@ -425,6 +425,36 @@ const usage  = await client.usage.get({ days: 30 });
 
 `usage` returns aggregate spend by model, day, and user; plus `mine` (the calling user's slice) and `totals`. Pass `?detail=true&page=1&limit=100` for row-level pagination — every recorded call with its `useCase`, `metadata`, `idempotencyKey`, and token counts. Use this to reconcile your own usage table against the gateway's ledger.
 
+### Capability discovery — which models read images / PDFs
+
+Each entry in `models.list().data` carries a `capabilities` array — `vision` (accepts `image_url` content blocks; reads images and page-rasterized PDFs), `ocr` (tuned for text extraction), `tools` (tool-calling), and `structured_output` (`json_schema`). Convenience helpers filter the pool so you never hard-code model ids:
+
+```ts
+// Models that can read images and PDFs (vision OR ocr) — the set to pick from
+// when a user uploads a screenshot, scan, or document.
+const imageModels = await client.models.listImageCapable();
+//  → [{ model: 'google/gemini-2.5-pro', capabilities: ['tools','structured_output','vision'], available: true, ... }, ...]
+
+const ocrModels    = await client.models.listOcr();      // ocr capability only
+const visionModels = await client.models.listVision();   // vision capability only
+const toolModels   = await client.models.listByCapability('tools');
+
+// Send an image to the first available image-capable model:
+const res = await client.chat.completions.create({
+  model: imageModels[0]?.model,
+  messages: [{
+    role: 'user',
+    content: [
+      { type: 'text', text: 'Extract the invoice total from this image.' },
+      { type: 'image_url', image_url: { url: 'data:image/png;base64,...' } },
+    ],
+  }],
+  useCase: 'invoice_ocr', // a useCase containing "ocr" also nudges the gateway's own routing toward OCR models
+});
+```
+
+All capability helpers return only currently-servable models by default (`available: true`); pass `{ includeUnavailable: true }` to include cooled / key-unbound ones. They return `[]` when the gateway is unconfigured for the tenant (nothing servable). You don't strictly need to pre-select — when `model` is unset, the gateway already promotes vision/ocr models to the front of the chain for requests that carry image content (or an `ocr` `useCase`) — but listing them lets you show the user a picker or pin a specific one.
+
 ## Routing — `model` is a hint, gateway has final say
 
 The gateway owns model selection. When you pass a `model`, the gateway treats it as a **hint** — it puts that id at the head of its candidate chain so it's tried first, but it retains the right to substitute on cooldown, vendor outage, or plan-tier mismatch. **Always read `_builderforce.resolvedModel` if you need to know what actually ran.** Pair it with `_builderforce.resolvedVendor` (the upstream that owns the resolved model — `'openrouter'`, `'cerebras'`, `'nvidia'`, `'ollama'`, `'googleai'`, …) for per-vendor cost / latency aggregation without parsing the model-id prefix.

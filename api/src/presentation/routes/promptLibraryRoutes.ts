@@ -29,8 +29,21 @@ import {
   promptLibraryVersions,
   promptLibraryStars,
 } from '../../infrastructure/database/schema';
-import type { HonoEnv } from '../../env';
+import { getOrSetCached, getCacheVersion, bumpCacheVersion } from '../../infrastructure/cache/readThroughCache';
+import type { Env, HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
+
+/** Version token for the public prompts-gallery keyspace. The gallery is
+ *  searchable + paginated (q/category/tag/sort/limit/offset) → an unbounded
+ *  keyspace, so we fold this token into each cache key and bump it on any
+ *  publish/update/delete (mirrors personaRoutes.ts / 'personas:public'). */
+const PROMPTS_PUBLIC_VERSION_KEY = 'prompts:public';
+const PROMPTS_PUBLIC_CACHE_TTL_SECONDS = 120;
+
+/** Orphan every cached public-gallery variant by bumping the version token. */
+async function invalidatePromptsPublic(env: Env): Promise<void> {
+  await bumpCacheVersion(env, PROMPTS_PUBLIC_VERSION_KEY);
+}
 
 function slugify(s: string): string {
   return (
@@ -70,46 +83,61 @@ export function createPromptLibraryRoutes(db: Db): Hono<HonoEnv> {
     const limit = Math.min(Number(c.req.query('limit') ?? '60'), 100);
     const offset = Math.max(Number(c.req.query('offset') ?? '0'), 0);
 
-    const conds = [eq(promptLibraryEntries.visibility, 'public')];
-    if (q) {
-      const like = `%${q}%`;
-      conds.push(
-        or(
-          ilike(promptLibraryEntries.title, like),
-          ilike(promptLibraryEntries.description, like),
-        )!,
-      );
-    }
-    if (category) conds.push(eq(promptLibraryEntries.category, category));
-    if (tag) conds.push(ilike(promptLibraryEntries.tags, `%"${tag}"%`));
+    // World-readable + read-heavy over a searchable/paginated (unbounded)
+    // keyspace → read-through cache keyed by a version token bumped on any
+    // prompt publish/update/delete (see invalidatePromptsPublic). [perf]
+    const version = await getCacheVersion(c.env as Env, PROMPTS_PUBLIC_VERSION_KEY);
+    const cacheKey = `prompts:public:v:${version}:q=${q ?? ''}:c=${category ?? ''}:t=${tag ?? ''}:s=${sort}:l=${limit}:o=${offset}`;
 
-    const order =
-      sort === 'recent' ? desc(promptLibraryEntries.createdAt)
-      : sort === 'featured' ? desc(promptLibraryEntries.isFeatured)
-      : desc(promptLibraryEntries.usageCount);
+    const prompts = await getOrSetCached(
+      c.env as Env,
+      cacheKey,
+      async () => {
+        const conds = [eq(promptLibraryEntries.visibility, 'public')];
+        if (q) {
+          const like = `%${q}%`;
+          conds.push(
+            or(
+              ilike(promptLibraryEntries.title, like),
+              ilike(promptLibraryEntries.description, like),
+            )!,
+          );
+        }
+        if (category) conds.push(eq(promptLibraryEntries.category, category));
+        if (tag) conds.push(ilike(promptLibraryEntries.tags, `%"${tag}"%`));
 
-    const rows = await db
-      .select({
-        id: promptLibraryEntries.id,
-        slug: promptLibraryEntries.slug,
-        title: promptLibraryEntries.title,
-        description: promptLibraryEntries.description,
-        category: promptLibraryEntries.category,
-        tags: promptLibraryEntries.tags,
-        authorName: promptLibraryEntries.authorName,
-        currentVersion: promptLibraryEntries.currentVersion,
-        usageCount: promptLibraryEntries.usageCount,
-        starCount: promptLibraryEntries.starCount,
-        isFeatured: promptLibraryEntries.isFeatured,
-        updatedAt: promptLibraryEntries.updatedAt,
-      })
-      .from(promptLibraryEntries)
-      .where(and(...conds))
-      .orderBy(order, desc(promptLibraryEntries.starCount))
-      .limit(limit)
-      .offset(offset);
+        const order =
+          sort === 'recent' ? desc(promptLibraryEntries.createdAt)
+          : sort === 'featured' ? desc(promptLibraryEntries.isFeatured)
+          : desc(promptLibraryEntries.usageCount);
 
-    return c.json({ prompts: rows.map((r) => ({ ...r, tags: safeTags(r.tags) })) });
+        const rows = await db
+          .select({
+            id: promptLibraryEntries.id,
+            slug: promptLibraryEntries.slug,
+            title: promptLibraryEntries.title,
+            description: promptLibraryEntries.description,
+            category: promptLibraryEntries.category,
+            tags: promptLibraryEntries.tags,
+            authorName: promptLibraryEntries.authorName,
+            currentVersion: promptLibraryEntries.currentVersion,
+            usageCount: promptLibraryEntries.usageCount,
+            starCount: promptLibraryEntries.starCount,
+            isFeatured: promptLibraryEntries.isFeatured,
+            updatedAt: promptLibraryEntries.updatedAt,
+          })
+          .from(promptLibraryEntries)
+          .where(and(...conds))
+          .orderBy(order, desc(promptLibraryEntries.starCount))
+          .limit(limit)
+          .offset(offset);
+
+        return rows.map((r) => ({ ...r, tags: safeTags(r.tags) }));
+      },
+      { kvTtlSeconds: PROMPTS_PUBLIC_CACHE_TTL_SECONDS },
+    );
+
+    return c.json({ prompts });
   });
 
   // GET /api/prompts/public/:slug
@@ -224,6 +252,8 @@ export function createPromptLibraryRoutes(db: Db): Hono<HonoEnv> {
       createdBy: userId ?? null,
     });
 
+    // A public prompt enters the gallery keyspace → orphan cached variants.
+    if (visibility === 'public') await invalidatePromptsPublic(c.env as Env);
     return c.json({ ...entry, tags: safeTags(entry.tags) }, 201);
   });
 
@@ -288,6 +318,9 @@ export function createPromptLibraryRoutes(db: Db): Hono<HonoEnv> {
       .returning();
     if (!updated) return c.json({ error: 'Update failed' }, 500);
 
+    // Metadata edits / publish-unpublish change gallery rows + ordering → bump.
+    // (Always bump: the row may have been public before this edit unpublished it.)
+    await invalidatePromptsPublic(c.env as Env);
     return c.json({ ...updated, tags: safeTags(updated.tags) });
   });
 
@@ -328,6 +361,9 @@ export function createPromptLibraryRoutes(db: Db): Hono<HonoEnv> {
       .returning();
     if (!updated) return c.json({ error: 'Version bump failed' }, 500);
 
+    // A new version touches updatedAt (affects 'recent' ordering) for a possibly
+    // public prompt → bump so the gallery re-loads.
+    await invalidatePromptsPublic(c.env as Env);
     return c.json({ ...updated, tags: safeTags(updated.tags), version: nextVersion }, 201);
   });
 
@@ -338,6 +374,8 @@ export function createPromptLibraryRoutes(db: Db): Hono<HonoEnv> {
     await db
       .delete(promptLibraryEntries)
       .where(and(eq(promptLibraryEntries.id, id), eq(promptLibraryEntries.tenantId, tenantId)));
+    // A deleted prompt may have been public → orphan cached gallery variants.
+    await invalidatePromptsPublic(c.env as Env);
     return c.json({ deleted: true });
   });
 

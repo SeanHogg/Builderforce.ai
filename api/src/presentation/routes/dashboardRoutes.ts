@@ -21,7 +21,8 @@ import {
 } from '../../infrastructure/database/schema';
 import { agentHostOnlineCondition } from '../../infrastructure/database/agentHostOnline';
 import { getLimits } from '../../domain/tenant/PlanLimits';
-import { TenantPlan, TenantRole } from '../../domain/shared/types';
+import { resolveEffectivePlan } from '../../domain/tenant/effectivePlan';
+import { TenantPlan, TenantRole, TenantBillingStatus } from '../../domain/shared/types';
 import type { Env, HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 import { getOrSetCached } from '../../infrastructure/cache/readThroughCache';
@@ -189,15 +190,18 @@ export function createDashboardRoutes(db: Db): Hono<HonoEnv> {
 
       // Tenant plan info
       db
-        .select({ plan: tenants.plan, billingStatus: tenants.billingStatus })
+        .select({ plan: tenants.plan, billingStatus: tenants.billingStatus, trialEndsAt: tenants.trialEndsAt })
         .from(tenants)
         .where(eq(tenants.id, tenantId))
         .limit(1),
     ]);
 
-    const rawPlan = (tenantRow[0]?.plan ?? 'free') as TenantPlan;
     const billingStatus = tenantRow[0]?.billingStatus ?? 'none';
-    const effectivePlan: TenantPlan = billingStatus === 'active' ? rawPlan : TenantPlan.FREE;
+    const effectivePlan: TenantPlan = resolveEffectivePlan({
+      plan: (tenantRow[0]?.plan ?? 'free') as TenantPlan,
+      billingStatus: billingStatus as TenantBillingStatus,
+      trialEndsAt: tenantRow[0]?.trialEndsAt ?? null,
+    });
     const limits = getLimits(effectivePlan);
 
     const tokenUsedToday = Number(tokenUsageResult[0]?.total ?? 0);

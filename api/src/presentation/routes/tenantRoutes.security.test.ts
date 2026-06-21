@@ -22,6 +22,10 @@ function makeTenantService() {
     getTenant: vi.fn(async (id: number) => ({
       toPlain: () => ({ id, name: 'Acme', plan: 'pro' }),
       defaultAgentHostId: 7,
+      // GET /:id now enriches the response with trial state (see tenantRoutes.ts).
+      billingStatus: 'trialing',
+      trialEndsAt: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000),
+      effectivePlan: () => 'pro',
     })),
   };
 }

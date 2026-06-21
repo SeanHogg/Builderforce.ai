@@ -15,11 +15,24 @@ import type { Db } from '../../infrastructure/database/connection';
 import * as schema from '../../infrastructure/database/schema';
 import { signWebJwt, verifyWebJwt } from '../../infrastructure/auth/JwtService';
 import { invalidateCapabilityCache } from '../../application/artifact/capabilityContext';
-import { getOrSetCached, invalidateCached } from '../../infrastructure/cache/readThroughCache';
+import { getOrSetCached, invalidateCached, getCacheVersion, bumpCacheVersion } from '../../infrastructure/cache/readThroughCache';
 import type { Env, HonoEnv } from '../../env';
 
 /** Read-through cache key for a single published skill's SEO/SSR payload. */
 const skillSeoCacheKey = (slug: string): string => `mp:skill:seo:${slug}`;
+
+/** Version token for the public skills-list keyspace. The list is searchable +
+ *  paginated (q/category/page/limit) → an unbounded keyspace, so we fold this
+ *  token into each cache key and bump it on any publish/update/delete; every
+ *  cached query variant orphans at once (mirrors personaRoutes.ts / 'personas:public'). */
+const SKILLS_LIST_VERSION_KEY = 'marketplace:skills:list';
+const SKILLS_LIST_CACHE_TTL_SECONDS = 120;
+
+/** Drop every cached skills-list variant by bumping the version token. Called
+ *  from every skill write (create / update / publish toggle). */
+async function invalidateSkillsList(env: Env): Promise<void> {
+  await bumpCacheVersion(env, SKILLS_LIST_VERSION_KEY);
+}
 
 // ---------------------------------------------------------------------------
 // Password hashing (PBKDF2 via Web Crypto – works in CF Workers)
@@ -335,6 +348,33 @@ export function createMarketplaceRoutes(db: Db): Hono<HonoEnv> {
     const limitNum = Math.min(100, Math.max(1, Number(limit)));
     const offset   = (pageNum - 1) * limitNum;
 
+    // World-readable + read-heavy over a searchable/paginated (unbounded) keyspace
+    // → served through the read-through cache, keyed by a version token that any
+    // skill write bumps (see invalidateSkillsList). [perf]
+    const version = await getCacheVersion(c.env as Env, SKILLS_LIST_VERSION_KEY);
+    const cacheKey = `mp:skills:list:v:${version}:c=${category ?? ''}:q=${q ?? ''}:p=${pageNum}:l=${limitNum}`;
+
+    const payload = await getOrSetCached(
+      c.env as Env,
+      cacheKey,
+      () => loadSkillsList({ category, q, limitNum, offset, pageNum }),
+      { kvTtlSeconds: SKILLS_LIST_CACHE_TTL_SECONDS },
+    );
+
+    return c.json(payload);
+  });
+
+  /** The live skills-list query, factored out so the route body just wraps it in
+   *  the read-through cache. */
+  async function loadSkillsList(args: {
+    category?: string;
+    q?: string;
+    limitNum: number;
+    offset: number;
+    pageNum: number;
+  }): Promise<{ skills: unknown[]; total: number; page: number; limit: number }> {
+    const { category, q, limitNum, offset, pageNum } = args;
+
     // Build base conditions
     const conditions = [eq(schema.marketplaceSkills.published, true)];
     if (category) {
@@ -409,8 +449,8 @@ export function createMarketplaceRoutes(db: Db): Hono<HonoEnv> {
       .where(and(...conditions));
     const count = countRow?.count ?? 0;
 
-    return c.json({ skills: rows, total: Number(count), page: pageNum, limit: limitNum });
-  });
+    return { skills: rows, total: Number(count), page: pageNum, limit: limitNum };
+  }
 
   /**
    * GET /marketplace/skills/:slug
@@ -486,6 +526,8 @@ export function createMarketplaceRoutes(db: Db): Hono<HonoEnv> {
           priceUnit:    body.price_unit ?? null,
         })
         .returning();
+      // A new published skill enters the list keyspace → orphan cached variants.
+      await invalidateSkillsList(c.env as Env);
       return c.json({ skill }, 201);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
@@ -539,6 +581,9 @@ export function createMarketplaceRoutes(db: Db): Hono<HonoEnv> {
     // Invalidate the public SEO/SSR read-through cache so the detail page + its
     // metadata reflect the edit (and publish/unpublish) on next render. [1333]
     await invalidateCached(c.env as Env, skillSeoCacheKey(slug));
+    // Edits / publish-unpublish change the list rows + ordering → bump the
+    // version token so every cached list variant re-loads.
+    await invalidateSkillsList(c.env as Env);
     return c.json({ skill: updated });
   });
 

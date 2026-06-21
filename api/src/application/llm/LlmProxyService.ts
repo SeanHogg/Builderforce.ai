@@ -36,6 +36,7 @@ import {
   WorkerSubrequestExhaustedError,
   RequestAbortedError,
   VendorFatalError,
+  type AiCapability,
   type DispatchAttempt,
   type VendorEnv,
   type VendorId,
@@ -898,8 +899,10 @@ export class LlmProxyService {
     return this.dispatch([model], body, requestHeaders);
   }
 
-  /** Per-model status with cooldown + key-bound info — used by /v1/models. */
-  async status(): Promise<Array<{ model: string; preferred: boolean; available: boolean; cooldownUntil?: number; vendor: VendorId; vendorCooledUntil?: number; keyBound: boolean }>> {
+  /** Per-model status with cooldown + key-bound info — used by /v1/models.
+   *  `capabilities` lets SDK consumers discover image/PDF-reading models
+   *  (`vision` / `ocr`) and tool/structured-output support without hard-coding ids. */
+  async status(): Promise<Array<{ model: string; preferred: boolean; available: boolean; cooldownUntil?: number; vendor: VendorId; vendorCooledUntil?: number; keyBound: boolean; capabilities: AiCapability[] }>> {
     const env = this.vendorEnv();
     const poolVendors = Array.from(new Set(this.modelPool.map((m) => vendorForModel(m))));
     const [cooledMap, vendorCooledMap] = await Promise.all([
@@ -921,6 +924,7 @@ export class LlmProxyService {
         preferred: i < this.preferredPoolSize,
         keyBound,
         available: keyBound && vendorUntil === undefined && until === undefined,
+        capabilities: capabilitiesForModel(model),
         ...(until       !== undefined && until       > 0 ? { cooldownUntil:       until       } : {}),
         ...(vendorUntil !== undefined && vendorUntil > 0 ? { vendorCooledUntil:   vendorUntil } : {}),
       };
@@ -1898,6 +1902,25 @@ const OCR_MODELS: ReadonlySet<string> = new Set([
   'baidu/qianfan-ocr-fast:free',
 ]);
 
+/**
+ * Canonical capability set for a model — the single source of truth shared by
+ * the shape-router (`reorderPoolByShape`) and the public `/v1/models` surface
+ * (so SDK consumers like hired.video can discover which models read images /
+ * PDFs without hard-coding ids). Merges the model's catalog-declared
+ * `capabilities` with the legacy literal id sets above, which still carry the
+ * capability facts for OpenRouter-routed models whose catalog entries predate
+ * the `capabilities` field. Output order is stable: tools, structured_output,
+ * vision, ocr.
+ */
+export function capabilitiesForModel(model: string): AiCapability[] {
+  const set = new Set<AiCapability>(catalogEntry(model)?.capabilities ?? []);
+  if (TOOL_CAPABLE_MODELS.has(model)) set.add('tools');
+  if (STRUCTURED_OUTPUT_MODELS.has(model)) set.add('structured_output');
+  if (VISION_MODELS.has(model)) set.add('vision');
+  if (OCR_MODELS.has(model)) set.add('ocr');
+  return (['tools', 'structured_output', 'vision', 'ocr'] as const).filter((c) => set.has(c));
+}
+
 interface ShapeFlags {
   hasTools: boolean;
   hasStructuredOutput: boolean;
@@ -1948,15 +1971,16 @@ export function reorderPoolByShape(
   }
 
   // A model has a capability if it's in the legacy literal id-set (OpenRouter-
-  // centric) OR its catalog entry declares it — so non-OpenRouter models (e.g.
-  // NVIDIA NIM vision models) are promoted too, not silently excluded [1429].
-  const caps = (model: string): readonly string[] => catalogEntry(model)?.capabilities ?? [];
+  // centric) OR its catalog entry declares it — `capabilitiesForModel` merges
+  // both, so non-OpenRouter models (e.g. NVIDIA NIM vision models) are promoted
+  // too, not silently excluded [1429].
   const score = (model: string): number => {
+    const mc = capabilitiesForModel(model);
     let s = 0;
-    if (shape.hasOcr              && (OCR_MODELS.has(model)               || caps(model).includes('ocr')))               s += 8;
-    if (shape.hasVision           && (VISION_MODELS.has(model)            || caps(model).includes('vision')))            s += 4;
-    if (shape.hasTools            && (TOOL_CAPABLE_MODELS.has(model)      || caps(model).includes('tools')))             s += 2;
-    if (shape.hasStructuredOutput && (STRUCTURED_OUTPUT_MODELS.has(model) || caps(model).includes('structured_output'))) s += 1;
+    if (shape.hasOcr              && mc.includes('ocr'))               s += 8;
+    if (shape.hasVision           && mc.includes('vision'))            s += 4;
+    if (shape.hasTools            && mc.includes('tools'))             s += 2;
+    if (shape.hasStructuredOutput && mc.includes('structured_output')) s += 1;
     return s;
   };
 

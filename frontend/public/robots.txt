@@ -13,6 +13,8 @@ Allow: /compare
 Allow: /compare/
 Allow: /integrations
 Allow: /integrations/
+Allow: /models
+Allow: /prompts
 Allow: /agents
 Allow: /agents/
 Allow: /login
