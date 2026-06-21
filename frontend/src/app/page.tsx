@@ -96,31 +96,29 @@ export default function LandingPage() {
           opacity: 0.85;
         }
 
-        /* Prompt + mascot row. The prompt is the left column; the agentHost mascot
-           sits in a right column on tablet/desktop and is hidden on mobile. */
+        /* Prompt row — the prompt sits centred (the mascot now lives below it,
+           centred on the page, rather than in a right-hand column). */
         .lp-prompt-row {
           display: flex;
           flex-direction: column;
           align-items: center;
           justify-content: center;
-          gap: 32px;
           width: 100%;
         }
         .lp-prompt-col {
           display: flex;
           flex-direction: column;
           align-items: center;
-          flex: 1 1 auto;
           width: 100%;
           max-width: 640px;
         }
 
-        /* AgentHost mascot — hidden on mobile, shown as the right column ≥820px */
+        /* AgentHost mascot — centred under the prompt, gently floating. */
         .lp-hero-mascot {
-          display: none;
-          width: clamp(180px, 22vw, 260px);
+          display: block;
+          width: clamp(160px, 20vw, 240px);
           height: auto;
-          flex: 0 0 auto;
+          margin: 28px auto 4px;
           animation: float 4s ease-in-out infinite;
           filter: drop-shadow(0 0 28px var(--logo-glow));
           transition: filter 0.3s ease;
@@ -128,10 +126,6 @@ export default function LandingPage() {
         .lp-hero-mascot:hover {
           animation-play-state: paused;
           filter: drop-shadow(0 0 44px var(--logo-glow-hover));
-        }
-        @media (min-width: 820px) {
-          .lp-prompt-row { flex-direction: row; align-items: center; gap: 48px; }
-          .lp-hero-mascot { display: block; }
         }
         @keyframes float {
           0%, 100% { transform: translateY(0); }
@@ -511,16 +505,17 @@ export default function LandingPage() {
                 ))}
               </div>
             </div>
-
-            <Image
-              src="/agentHost.png"
-              alt="Builderforce AI"
-              width={240}
-              height={240}
-              priority
-              className="lp-hero-mascot"
-            />
           </div>
+
+          {/* AgentHost mascot — centred under the prompt. */}
+          <Image
+            src="/agentHost.png"
+            alt="Builderforce AI"
+            width={240}
+            height={240}
+            priority
+            className="lp-hero-mascot"
+          />
 
           <p className="lp-tagline">See clarity through the storm</p>
           <p className="lp-tagline lp-tagline-sub">Your AI CTO, CIO &amp; Security Officer</p>
