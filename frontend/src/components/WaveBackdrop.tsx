@@ -278,15 +278,18 @@ export default function WaveBackdrop({ className = '' }: { className?: string })
       const cx = width / 2;
       const halfW = width / 2;
       const MIST_DEPTH = 0.34; // trees below this depth sit BEHIND the mist
+      // Forward motion on a horizon plane: trees emerge tiny at the horizon
+      // centre and sweep OUTWARD + UPWARD to the top-left / top-right corners,
+      // growing as they approach. Positioned by centre along that path.
       const drawTreeAt = (p: Tree) => {
-        const e = Math.pow(p.t, 1.7); // accelerate outward
-        const x = cx + p.side * (p.startJitter * (1 - p.t) + halfW * p.endSpread * e + halfW * 0.18 * e);
-        const baseY = horizonY + Math.pow(p.t, 1.7) * (height - horizonY) * 0.96;
-        const h = 12 + p.maxH * Math.pow(p.t, 1.3);
+        const e = Math.pow(p.t, 1.7); // accelerate as it nears
+        const cxp = cx + p.side * (p.startJitter * (1 - p.t) + halfW * (0.25 + p.endSpread) * e);
+        const cyp = horizonY - Math.pow(p.t, 1.55) * (horizonY + height * 0.35); // rise toward (above) the top
+        const h = 14 + p.maxH * Math.pow(p.t, 1.4);
         const fadeIn = Math.min(p.t * 6, 1); // soft emerge from the mist
-        const fadeOut = p.t > 0.92 ? Math.max(0, (1 - p.t) / 0.08) : 1;
-        if (x < -h || x > width + h) return;
-        tree(ctx, p.sprite, x, baseY, h, fadeIn * fadeOut, pal);
+        const fadeOut = p.t > 0.9 ? Math.max(0, (1 - p.t) / 0.1) : 1;
+        if (cxp < -h || cxp > width + h || cyp < -h) return;
+        tree(ctx, p.sprite, cxp, cyp + h * 0.5, h, fadeIn * fadeOut, pal);
       };
 
       // Distant (just-emerging) trees first — they will be veiled by the mist.
