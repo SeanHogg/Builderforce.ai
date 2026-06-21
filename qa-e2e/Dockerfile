@@ -1,15 +1,19 @@
-# Agentic Tester — containerised heatmap-driven browser exploration.
+# Agentic Tester — containerised browser-exploration RUNNER (the execution
+# surface of the QA agent, not the product itself).
 #
-# Runs the explorer (npm run explore): claim a queued exploration, drive a real
-# Chromium through its heat-derived plan, capture runtime errors, and feed them
-# back to the API. The Playwright base image ships the browser + system deps, so
-# the container is self-contained — give it the BF_* env and run it anywhere.
+# The PRODUCT side — configuring a project's target + personas, ranking what to
+# test from usage heatmaps, and SCHEDULING runs — lives in the platform
+# (Observability ▸ Agentic QA + the qa_schedules cron sweep). This image is just
+# a stateless worker that drains the queue: claim one exploration, drive Chromium
+# through its heat-derived plan, capture runtime errors, post findings, exit.
 #
-#   docker build -t builderforce/agentic-tester ./qa-e2e
+# AUTH: in production the platform injects a short-lived tenant-scoped token via
+# BF_AGENT_TOKEN — NO human email/password. BF_QA_EMAIL/PASSWORD is only a
+# local-dev convenience.
+#
 #   docker run --rm \
 #     -e BF_API_URL=https://api.builderforce.ai \
-#     -e BF_BASE_URL=https://builderforce.ai \
-#     -e BF_QA_EMAIL=... -e BF_QA_PASSWORD=... -e BF_QA_TENANT_ID=... \
+#     -e BF_AGENT_TOKEN=<platform-minted tenant token> \
 #     -e BF_PROJECT_ID=...        # optional: claim a project's queued run \
 #     -e BF_EXPLORATION_ID=...    # optional: claim a specific run \
 #     builderforce/agentic-tester
@@ -26,8 +30,8 @@ RUN npm install --no-audit --no-fund
 COPY tsconfig.json ./
 COPY src ./src
 
-# The explorer is a long-lived one-shot: it claims one exploration, runs it, and
-# exits. A scheduler (CI cron, k8s Job, builderforce orchestrator) runs it on a
-# cadence; each invocation drains one queued exploration.
+# One-shot worker: claims one exploration, runs it, exits. The platform's
+# qa_schedules sweep enqueues the work; this container is dispatched to drain it
+# (managed Cloudflare Container surface — see ROADMAP — or any container host).
 ENV CI=1
 CMD ["npm", "run", "explore"]

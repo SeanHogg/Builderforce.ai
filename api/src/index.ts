@@ -127,6 +127,7 @@ import { reapStaleExecutions } from './application/runtime/staleExecutionReaper'
 import { runWebhookRetrySweep } from './application/seams/webhookService';
 import { runBoardSyncSweep } from './application/boardsync/runBoardSyncSweep';
 import { runParkedWorkflowSweep } from './application/swimlane/resumeParkedWorkflows';
+import { runQaExplorationSweep } from './application/qa/runQaExplorationSweep';
 import { handleInboundEmail } from './application/workflow/inboundEmail';
 
 // Middleware
@@ -475,6 +476,14 @@ export default {
       ctx.waitUntil(
         runParkedWorkflowSweep(env).catch((err) => {
           console.error('[cron:wf-gate] failed', err);
+        }),
+      );
+      // Agentic Tester scheduler — enqueue a heatmap-derived exploration for
+      // every due qa_schedules row (the platform-native "run QA on a schedule"
+      // surface; a runner claims the queued exploration).
+      ctx.waitUntil(
+        runQaExplorationSweep(env).catch((err) => {
+          console.error('[cron:qa-sweep] failed', err);
         }),
       );
     }

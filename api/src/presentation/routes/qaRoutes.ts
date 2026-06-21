@@ -47,9 +47,11 @@ import {
   qaJourneyEvents,
   qaRunSteps,
   qaRuns,
+  qaSchedules,
   qaTargets,
   qaTests,
 } from '../../infrastructure/database/schema';
+import { isValidCron, nextCronTime } from '../../domain/workflowSchedule';
 import { QaFlowService } from '../../application/qa/QaFlowService';
 import { QaGeneratorService } from '../../application/qa/QaGeneratorService';
 import { QaHeatmapService, QA_HEAT_VERSION_KEY } from '../../application/qa/QaHeatmapService';
@@ -971,6 +973,83 @@ export function createQaRoutes(db: Db, taskService: TaskService): Hono<HonoEnv> 
       .where(eq(qaFindings.id, finding.id));
 
     return c.json({ task: plain, finding: { ...finding, status: 'task_created', taskId } }, 201);
+  });
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // Schedules — run the Agentic Tester on a cadence (platform-driven, no CI).
+  // The */5 cron sweep (runQaExplorationSweep) enqueues an exploration per due
+  // schedule. Configured per project in Observability ▸ Agentic QA.
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  router.get('/projects/:projectId/schedules', async (c) => {
+    const tenantId = c.get('tenantId') as number;
+    const projectId = Number(c.req.param('projectId'));
+    const rows = await db
+      .select()
+      .from(qaSchedules)
+      .where(and(eq(qaSchedules.tenantId, tenantId), eq(qaSchedules.projectId, projectId)))
+      .orderBy(desc(qaSchedules.updatedAt));
+    return c.json({ schedules: rows });
+  });
+
+  router.post('/projects/:projectId/schedules', requireRole(TenantRole.DEVELOPER), async (c) => {
+    const tenantId  = c.get('tenantId') as number;
+    const segmentId = c.get('segmentId') as string | undefined;
+    const userId    = c.get('userId') as string | undefined;
+    const projectId = Number(c.req.param('projectId'));
+    const body = await c.req.json().catch(() => ({})) as {
+      cron?: string; timezone?: string; targetId?: string; credentialId?: string; heatBudget?: number; sinceDays?: number; enabled?: boolean;
+    };
+    if (!body.cron || !isValidCron(body.cron)) return c.json({ error: 'A valid cron expression is required' }, 400);
+    const timezone = body.timezone ?? 'UTC';
+    const [schedule] = await db
+      .insert(qaSchedules)
+      .values({
+        tenantId, segmentId, projectId,
+        targetId: body.targetId ?? null, credentialId: body.credentialId ?? null,
+        cron: body.cron, timezone,
+        enabled: body.enabled ?? true,
+        heatBudget: Math.min(Math.max(1, body.heatBudget ?? 20), 100),
+        sinceDays: Math.min(Math.max(1, body.sinceDays ?? 30), 180),
+        nextRunAt: nextCronTime(body.cron, new Date(), timezone),
+        createdBy: userId ?? null, updatedAt: new Date(),
+      })
+      .returning();
+    return c.json({ schedule }, 201);
+  });
+
+  router.patch('/schedules/:id', requireRole(TenantRole.DEVELOPER), async (c) => {
+    const tenantId = c.get('tenantId') as number;
+    const body = await c.req.json().catch(() => ({})) as {
+      cron?: string; timezone?: string; enabled?: boolean; targetId?: string | null; credentialId?: string | null; heatBudget?: number; sinceDays?: number;
+    };
+    if (body.cron !== undefined && !isValidCron(body.cron)) return c.json({ error: 'Invalid cron expression' }, 400);
+    const patch: Record<string, unknown> = { updatedAt: new Date() };
+    for (const k of ['cron', 'timezone', 'enabled', 'targetId', 'credentialId', 'heatBudget', 'sinceDays'] as const) {
+      if (body[k] !== undefined) patch[k] = body[k];
+    }
+    // Re-arm next_run_at when the cadence changes or the schedule is (re)enabled.
+    if (body.cron !== undefined || body.enabled === true) {
+      const [existing] = await db.select().from(qaSchedules)
+        .where(and(eq(qaSchedules.id, c.req.param('id')), eq(qaSchedules.tenantId, tenantId))).limit(1);
+      if (existing) patch.nextRunAt = nextCronTime(body.cron ?? existing.cron, new Date(), body.timezone ?? existing.timezone);
+    }
+    const [schedule] = await db
+      .update(qaSchedules).set(patch)
+      .where(and(eq(qaSchedules.id, c.req.param('id')), eq(qaSchedules.tenantId, tenantId)))
+      .returning();
+    if (!schedule) return c.json({ error: 'Schedule not found' }, 404);
+    return c.json({ schedule });
+  });
+
+  router.delete('/schedules/:id', requireRole(TenantRole.DEVELOPER), async (c) => {
+    const tenantId = c.get('tenantId') as number;
+    const [schedule] = await db
+      .delete(qaSchedules)
+      .where(and(eq(qaSchedules.id, c.req.param('id')), eq(qaSchedules.tenantId, tenantId)))
+      .returning();
+    if (!schedule) return c.json({ error: 'Schedule not found' }, 404);
+    return c.json({ deleted: true });
   });
 
   return router;
