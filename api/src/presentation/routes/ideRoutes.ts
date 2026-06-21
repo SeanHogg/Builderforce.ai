@@ -94,11 +94,31 @@ export function createIdeRoutes(): Hono<HonoEnv> {
   const r2 = (c: { env: HonoEnv['Bindings'] }) => storage(c.env);
   const getSql = (c: { env: HonoEnv['Bindings'] }) => sql(c.env);
 
+  /**
+   * Ownership gate for every project-scoped IDE resource. Files, sites, datasets,
+   * training jobs and agents are tenant-owned ONLY via projects.tenant_id, so a
+   * request-supplied projectId (or a resource's project_id) MUST be checked — else a
+   * caller could read/overwrite another tenant's source, datasets, models or sites by
+   * guessing an id. Returns false when the project is missing or another tenant's.
+   */
+  const projectInTenant = async (c: { env: HonoEnv['Bindings']; get: (k: 'tenantId') => unknown }, projectId: number): Promise<boolean> => {
+    if (!Number.isInteger(projectId) || projectId < 1) return false;
+    const [row] = await getSql(c)`SELECT 1 FROM projects WHERE id = ${projectId} AND tenant_id = ${c.get('tenantId') as number} LIMIT 1`;
+    return !!row;
+  };
+
+  /** Ownership gate for a training job (and its logs), via its project's tenant. */
+  const trainingJobInTenant = async (c: { env: HonoEnv['Bindings']; get: (k: 'tenantId') => unknown }, jobId: string): Promise<boolean> => {
+    const [job] = await getSql(c)`SELECT project_id FROM ide_training_jobs WHERE id = ${jobId} LIMIT 1`;
+    return !!job && projectInTenant(c, Number(job.project_id));
+  };
+
   // ---------- Project files (R2) — projectId accepts integer or public UUID ----------
   router.get('/projects/:projectId/files', async (c) => {
     const projectId = await resolveProjectId(c.env, c.req.param('projectId'));
     const bucket = r2(c);
     if (!bucket) return c.json({ error: 'Storage not configured' }, 503);
+    if (!(await projectInTenant(c, projectId))) return c.json({ error: 'Project not found' }, 404);
     const prefix = `${IDE_PREFIX}projects/${String(projectId)}/`;
     let objects = (await bucket.list({ prefix })).objects ?? [];
 
@@ -129,6 +149,7 @@ export function createIdeRoutes(): Hono<HonoEnv> {
     const path = c.req.param('*') || '';
     const bucket = r2(c);
     if (!bucket) return c.json({ error: 'Storage not configured' }, 503);
+    if (!(await projectInTenant(c, projectId))) return c.json({ error: 'Project not found' }, 404);
     const key = `${IDE_PREFIX}projects/${String(projectId)}/${path}`;
     const obj = await bucket.get(key);
     if (!obj) return c.text('', 200);
@@ -140,6 +161,7 @@ export function createIdeRoutes(): Hono<HonoEnv> {
     const path = c.req.param('*') || '';
     const bucket = r2(c);
     if (!bucket) return c.json({ error: 'Storage not configured' }, 503);
+    if (!(await projectInTenant(c, projectId))) return c.json({ error: 'Project not found' }, 404);
     const key = `${IDE_PREFIX}projects/${String(projectId)}/${path}`;
     await bucket.put(key, await c.req.text());
     return c.json({ success: true });
@@ -150,6 +172,7 @@ export function createIdeRoutes(): Hono<HonoEnv> {
     const path = c.req.param('*') || '';
     const bucket = r2(c);
     if (!bucket) return c.json({ error: 'Storage not configured' }, 503);
+    if (!(await projectInTenant(c, projectId))) return c.json({ error: 'Project not found' }, 404);
     const key = `${IDE_PREFIX}projects/${String(projectId)}/${path}`;
     await bucket.delete(key);
     return c.json({ success: true });
@@ -160,6 +183,7 @@ export function createIdeRoutes(): Hono<HonoEnv> {
   // GET /projects/:projectId/site — current published-site record (or null).
   router.get('/projects/:projectId/site', async (c) => {
     const projectId = await resolveProjectId(c.env, c.req.param('projectId'));
+    if (!(await projectInTenant(c, projectId))) return c.json({ error: 'Project not found' }, 404);
     const [row] = await getSql(c)`
       SELECT subdomain, mode, status, version_token, asset_count, total_bytes, published_at
       FROM project_sites WHERE project_id = ${projectId} LIMIT 1`;
@@ -280,6 +304,7 @@ export function createIdeRoutes(): Hono<HonoEnv> {
     const raw = c.req.query('projectId');
     if (!raw) return c.json({ error: 'projectId query parameter is required' }, 400);
     const projectId = parseProjectIdInt(raw);
+    if (!(await projectInTenant(c, projectId))) return c.json({ error: 'Project not found' }, 404);
     const rows = await getSql(c)`
       SELECT * FROM ide_datasets WHERE project_id = ${projectId} ORDER BY created_at DESC
     `;
@@ -288,13 +313,13 @@ export function createIdeRoutes(): Hono<HonoEnv> {
 
   router.get('/datasets/:id', async (c) => {
     const [row] = await getSql(c)`SELECT * FROM ide_datasets WHERE id = ${c.req.param('id')}`;
-    if (!row) return c.json({ error: 'Dataset not found' }, 404);
+    if (!row || !(await projectInTenant(c, Number(row.project_id)))) return c.json({ error: 'Dataset not found' }, 404);
     return c.json(row);
   });
 
   router.get('/datasets/:id/download', async (c) => {
-    const [row] = await getSql(c)`SELECT r2_key, status FROM ide_datasets WHERE id = ${c.req.param('id')}`;
-    if (!row) return c.json({ error: 'Dataset not found' }, 404);
+    const [row] = await getSql(c)`SELECT r2_key, status, project_id FROM ide_datasets WHERE id = ${c.req.param('id')}`;
+    if (!row || !(await projectInTenant(c, Number(row.project_id)))) return c.json({ error: 'Dataset not found' }, 404);
     if (row.status !== 'ready') return c.json({ error: 'Dataset is not ready' }, 409);
     const bucket = r2(c);
     if (!bucket) return c.json({ error: 'Storage not configured' }, 503);
@@ -317,6 +342,7 @@ export function createIdeRoutes(): Hono<HonoEnv> {
       return c.json({ error: 'projectId, capabilityPrompt, and name are required' }, 400);
     }
     const projectId = typeof body.projectId === 'number' ? body.projectId : parseProjectIdInt(String(body.projectId));
+    if (!(await projectInTenant(c, projectId))) return c.json({ error: 'Project not found' }, 404);
     const id = generateId();
     const exampleCount = Math.min(body.exampleCount ?? 50, 200);
     await getSql(c)`
@@ -396,6 +422,7 @@ export function createIdeRoutes(): Hono<HonoEnv> {
     }>();
     if (body.projectId == null || !body.baseModel) return c.json({ error: 'projectId and baseModel are required' }, 400);
     const projectId = typeof body.projectId === 'number' ? body.projectId : parseProjectIdInt(String(body.projectId));
+    if (!(await projectInTenant(c, projectId))) return c.json({ error: 'Project not found' }, 404);
     const id = generateId();
     await getSql(c)`
       INSERT INTO ide_training_jobs (id, project_id, dataset_id, base_model, lora_rank, epochs, batch_size, learning_rate)
@@ -409,7 +436,7 @@ export function createIdeRoutes(): Hono<HonoEnv> {
 
   router.get('/training/:id', async (c) => {
     const [row] = await getSql(c)`SELECT * FROM ide_training_jobs WHERE id = ${c.req.param('id')}`;
-    if (!row) return c.json({ error: 'Training job not found' }, 404);
+    if (!row || !(await projectInTenant(c, Number(row.project_id)))) return c.json({ error: 'Training job not found' }, 404);
     return c.json(row);
   });
 
@@ -422,6 +449,7 @@ export function createIdeRoutes(): Hono<HonoEnv> {
       errorMessage?: string;
     }>();
     const id = c.req.param('id');
+    if (!(await trainingJobInTenant(c, id))) return c.json({ error: 'Training job not found' }, 404);
     const [row] = await getSql(c)`
       UPDATE ide_training_jobs
       SET status = COALESCE(${body.status ?? null}, status),
@@ -438,6 +466,7 @@ export function createIdeRoutes(): Hono<HonoEnv> {
   });
 
   router.get('/training/:id/logs', async (c) => {
+    if (!(await trainingJobInTenant(c, c.req.param('id')))) return c.json({ error: 'Training job not found' }, 404);
     const rows = await getSql(c)`
       SELECT * FROM ide_training_logs WHERE job_id = ${c.req.param('id')} ORDER BY created_at ASC
     `;
@@ -448,6 +477,7 @@ export function createIdeRoutes(): Hono<HonoEnv> {
     const body = await c.req.json<{ epoch?: number; step?: number; loss?: number; message: string }>();
     if (!body.message) return c.json({ error: 'message is required' }, 400);
     const jobId = c.req.param('id');
+    if (!(await trainingJobInTenant(c, jobId))) return c.json({ error: 'Training job not found' }, 404);
     const [row] = await getSql(c)`
       INSERT INTO ide_training_logs (id, job_id, epoch, step, loss, message)
       VALUES (${generateId()}, ${jobId}, ${body.epoch ?? null}, ${body.step ?? null}, ${body.loss ?? null}, ${body.message})
@@ -458,6 +488,7 @@ export function createIdeRoutes(): Hono<HonoEnv> {
 
   router.get('/training/:id/logs/stream', async (c) => {
     const jobId = c.req.param('id');
+    if (!(await trainingJobInTenant(c, jobId))) return c.json({ error: 'Training job not found' }, 404);
     const stream = new ReadableStream({
       async start(controller) {
         const encoder = new TextEncoder();
@@ -490,7 +521,7 @@ export function createIdeRoutes(): Hono<HonoEnv> {
   router.post('/training/:id/artifact', async (c) => {
     const jobId = c.req.param('id');
     const [job] = await getSql(c)`SELECT project_id FROM ide_training_jobs WHERE id = ${jobId}`;
-    if (!job) return c.json({ error: 'Training job not found' }, 404);
+    if (!job || !(await projectInTenant(c, Number(job.project_id)))) return c.json({ error: 'Training job not found' }, 404);
     const projectId = Number(job.project_id);
     const body = await c.req.arrayBuffer();
     if (!body || body.byteLength === 0) return c.json({ error: 'Empty artifact body' }, 400);
@@ -509,7 +540,7 @@ export function createIdeRoutes(): Hono<HonoEnv> {
   router.post('/training/:id/evaluate', async (c) => {
     const jobId = c.req.param('id');
     const [job] = await getSql(c)`SELECT * FROM ide_training_jobs WHERE id = ${jobId}`;
-    if (!job) return c.json({ error: 'Training job not found' }, 404);
+    if (!job || !(await projectInTenant(c, Number(job.project_id)))) return c.json({ error: 'Training job not found' }, 404);
     let examples: { instruction: string; input: string; output: string }[] = [];
     if (job.dataset_id) {
       const [ds] = await getSql(c)`SELECT r2_key FROM ide_datasets WHERE id = ${job.dataset_id}`;
@@ -637,6 +668,10 @@ export function createIdeRoutes(): Hono<HonoEnv> {
 
   router.put('/agents/:id/mamba-state', async (c) => {
     const agentId = c.req.param('id');
+    // Owner-only write: an agent's brain state may only be overwritten by the tenant
+    // whose project owns it (reads stay marketplace-public for hiring/inference).
+    const [owner] = await getSql(c)`SELECT project_id FROM ide_agents WHERE id = ${agentId} LIMIT 1`;
+    if (!owner || !(await projectInTenant(c, Number(owner.project_id)))) return c.json({ error: 'Agent not found' }, 404);
     const snapshot = await c.req.json();
     const required = ['data', 'dim', 'order', 'channels', 'step'];
     for (const key of required) {

@@ -408,6 +408,7 @@ export function createTaskRoutes(taskService: TaskService, db: Db, runtimeServic
   // GET /api/tasks/:id
   router.get('/:id', async (c) => {
     const id = Number(c.req.param('id'));
+    if (!(await loadTenantTask(id, c.get('tenantId')))) return c.json({ error: 'Task not found' }, 404);
     const task = await taskService.getTask(id);
     return c.json(task.toPlain());
   });
@@ -418,9 +419,10 @@ export function createTaskRoutes(taskService: TaskService, db: Db, runtimeServic
   router.get('/:id/tree', async (c) => {
     const id = Number(c.req.param('id'));
     const env = c.env as Env;
-    // Cheap PK read of the project so the cache key/version resolve without
-    // loading the whole tree on a hit; the full tree is built only on a miss.
-    const [row] = await db.select({ projectId: tasks.projectId }).from(tasks).where(eq(tasks.id, id)).limit(1);
+    // Tenant-scoped PK read of the project so the cache key/version resolve without
+    // loading the whole tree on a hit; the full tree is built only on a miss. The
+    // join to projects.tenantId also prevents reading another tenant's Epic by id.
+    const row = await loadTenantTask(id, c.get('tenantId'));
     if (!row) return c.json({ error: 'not found' }, 404);
     const ver = await getCacheVersion(env, `task-tree-version:project:${row.projectId}`);
     const payload = await getOrSetCached(
@@ -458,6 +460,7 @@ export function createTaskRoutes(taskService: TaskService, db: Db, runtimeServic
   // does this automatically when an agent is assigned; this is the manual trigger.
   router.post('/:id/decompose', async (c) => {
     const id = Number(c.req.param('id'));
+    if (!(await loadTenantTask(id, c.get('tenantId')))) return c.json({ error: 'Task not found' }, 404);
     const body = await c.req.json<{
       children: Array<{
         title: string;
@@ -510,6 +513,7 @@ export function createTaskRoutes(taskService: TaskService, db: Db, runtimeServic
   // PATCH /api/tasks/:id
   router.patch('/:id', async (c) => {
     const id = Number(c.req.param('id'));
+    if (!(await loadTenantTask(id, c.get('tenantId')))) return c.json({ error: 'Task not found' }, 404);
     const body = await c.req.json<{
       title?: string;
       description?: string | null;
@@ -640,7 +644,8 @@ export function createTaskRoutes(taskService: TaskService, db: Db, runtimeServic
   // DELETE /api/tasks/:id
   router.delete('/:id', async (c) => {
     const id = Number(c.req.param('id'));
-    const [before] = await db.select({ projectId: tasks.projectId }).from(tasks).where(eq(tasks.id, id)).limit(1);
+    const before = await loadTenantTask(id, c.get('tenantId'));
+    if (!before) return c.json({ error: 'Task not found' }, 404);
     await taskService.deleteTask(id);
     await bumpTreeVersion(c.env as Env, before?.projectId);
     // Drop the card from every client viewing this project's live board.

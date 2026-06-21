@@ -23,6 +23,7 @@ import {
 import { CONTAINER_MAX_STEPS } from '../../application/runtime/cloudAgentTools';
 import { ExecutionStatus } from '../../domain/shared/types';
 import type { ResolvedArtifacts } from '../../domain/shared/types';
+import type { Execution } from '../../domain/execution/Execution';
 import type { Env, HonoEnv } from '../../env';
 import { authMiddleware } from '../middleware/authMiddleware';
 import type { Db } from '../../infrastructure/database/connection';
@@ -706,6 +707,26 @@ async function getDispatchTargets(db: Db, tenantId: number, assignedAgentHostId?
   return rows.map((row) => row.id);
 }
 
+/**
+ * Load an execution ONLY if it belongs to the caller's tenant — the ownership guard for
+ * every by-id execution read/mutate, so one tenant can't read/cancel/mutate another's
+ * runs by guessing an execution/task id. Returns null (→ 404) on not-found or mismatch.
+ */
+async function loadOwnedExecution(
+  c: Context<RuntimeHonoEnv>,
+  runtimeService: RuntimeService,
+  id: number,
+): Promise<Execution | null> {
+  if (!Number.isFinite(id)) return null;
+  let execution: Execution;
+  try {
+    execution = await runtimeService.getExecution(id);
+  } catch {
+    return null;
+  }
+  return execution.toPlain().tenantId === c.get('tenantId') ? execution : null;
+}
+
 export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hono<RuntimeHonoEnv> {
   const router = new Hono<RuntimeHonoEnv>();
 
@@ -809,12 +830,14 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
 
   router.get('/tasks/:id/state', async (c) => {
     const id = Number(c.req.param('id'));
-    const execution = await runtimeService.getExecution(id);
-    return c.json(execution.toPlain());
+    const owned = await loadOwnedExecution(c, runtimeService, id);
+    if (!owned) return c.json({ error: 'Execution not found' }, 404);
+    return c.json(owned.toPlain());
   });
 
   router.post('/tasks/:id/cancel', async (c) => {
     const id = Number(c.req.param('id'));
+    if (!(await loadOwnedExecution(c, runtimeService, id))) return c.json({ error: 'Execution not found' }, 404);
     const execution = await runtimeService.cancel(id, c.get('userId'));
     return c.json(execution.toPlain());
   });
@@ -1073,8 +1096,9 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
   // Get a single execution by ID
   router.get('/executions/:id', async (c) => {
     const id = Number(c.req.param('id'));
-    const execution = await runtimeService.getExecution(id);
-    return c.json(execution.toPlain());
+    const owned = await loadOwnedExecution(c, runtimeService, id);
+    if (!owned) return c.json({ error: 'Execution not found' }, 404);
+    return c.json(owned.toPlain());
   });
 
   // Legacy telemetry / trace endpoints (used by some older integrations)
@@ -1340,22 +1364,21 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
     const { 0: client, 1: server } = new WebSocketPair();
     server.accept();
 
-    try {
-      const execution = await runtimeService.getExecution(id);
-      const plain = execution.toPlain();
-
-      server.send(JSON.stringify({
-        type: 'status_change',
-        executionId: id,
-        status: plain.status,
-        execution: plain,
-        ts: new Date().toISOString(),
-      }));
-    } catch {
+    // Tenant-scope BEFORE streaming so a guessed execution id can't tap another
+    // tenant's run status/result over the socket.
+    const owned = await loadOwnedExecution(c, runtimeService, id);
+    if (!owned) {
       server.send(JSON.stringify({ type: 'error', message: 'execution_not_found' }));
       server.close(1011, 'server_error');
       return new Response(null, { status: 101, webSocket: client });
     }
+    server.send(JSON.stringify({
+      type: 'status_change',
+      executionId: id,
+      status: owned.toPlain().status,
+      execution: owned.toPlain(),
+      ts: new Date().toISOString(),
+    }));
 
     subscribeExecution(id, server);
 
@@ -1373,6 +1396,7 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
   // cancel was cosmetic and the agent kept burning tokens to completion.
   router.post('/executions/:id/cancel', async (c) => {
     const id = Number(c.req.param('id'));
+    if (!(await loadOwnedExecution(c, runtimeService, id))) return c.json({ error: 'Execution not found' }, 404);
     const execution = await runtimeService.cancel(id, c.get('userId'));
     const plain = execution.toPlain() as { agentHostId?: number | null };
 
@@ -1500,6 +1524,7 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
   // Agent callback: update execution state (running / completed / failed)
   router.patch('/executions/:id/state', async (c) => {
     const id = Number(c.req.param('id'));
+    if (!(await loadOwnedExecution(c, runtimeService, id))) return c.json({ error: 'Execution not found' }, 404);
     const body = await c.req.json<{
       status:        ExecutionStatus;
       result?:       string;
