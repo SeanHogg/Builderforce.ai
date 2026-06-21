@@ -298,18 +298,48 @@ export interface ChatCompletionResponse {
 // Models
 // ─────────────────────────────────────────────────────────────────────────────
 
+/**
+ * Shape capability a model supports — what kinds of request it can serve.
+ *   `vision` — accepts image content blocks (`image_url`); reads images and
+ *              page-rasterized PDFs.
+ *   `ocr`    — tuned for text extraction from images / documents.
+ *   `tools`  — honours `tools` / `tool_choice` round-trips.
+ *   `structured_output` — reliably emits valid JSON / honours `json_schema`.
+ *
+ * Consumers that need to read images or PDFs (e.g. hired.video) should pick a
+ * model whose `capabilities` include `vision` or `ocr`. See
+ * `models.listImageCapable()` / `models.listOcr()`.
+ */
+export type AiCapability = 'tools' | 'structured_output' | 'vision' | 'ocr';
+
+/** One model in the tenant-plan pool, with availability + capability metadata. */
+export interface ModelInfo {
+  model: string;
+  vendor: string;
+  /** In the top "preferred" sub-pool the gateway round-robins across first. */
+  preferred: boolean;
+  /** Servable right now — key bound and not on per-model / per-vendor cooldown. */
+  available: boolean;
+  /** Epoch ms when the per-model cooldown lifts. Absent when not cooling. */
+  cooldownUntil?: number;
+  /** Epoch ms when the per-vendor cooldown lifts. Set when an upstream is wholesale-cooled. */
+  vendorCooledUntil?: number;
+  /** Whether the vendor's API key is bound. False → model is unservable. */
+  keyBound?: boolean;
+  /** Shape capabilities this model supports — drives image/PDF (`vision`/`ocr`),
+   *  tool-calling (`tools`), and structured-output (`structured_output`) routing.
+   *  Absent on older gateways that don't yet emit it. */
+  capabilities?: AiCapability[];
+}
+
 export interface ModelsListResponse {
   configured?: boolean;
   object?: 'list';
   product?: string;
   effectivePlan?: string;
-  data?: Array<{
-    model: string;
-    vendor: string;
-    preferred: boolean;
-    available: boolean;
-    cooldownUntil?: number;
-  }>;
+  /** Per-model pool status (present on the `configured: true` branch). */
+  data?: ModelInfo[];
+  /** Bare model-id pool (present on the `configured: false` branch). */
   models?: string[];
   [key: string]: unknown;
 }

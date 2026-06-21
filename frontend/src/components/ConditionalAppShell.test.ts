@@ -22,6 +22,10 @@ describe('classifyShell — app-shell deny-list model [1557]', () => {
     expect(classifyShell('/compare')).toBe('public'); // added so the inversion doesn't give marketing the app shell
     expect(classifyShell('/marketplace')).toBe('public');
     expect(classifyShell('/agents/overview')).toBe('public');
+    // Programmatic-SEO integrations surface must render its real content for
+    // logged-out visitors + crawlers (robots-Allowed + in sitemap), not a teaser.
+    expect(classifyShell('/integrations')).toBe('public');
+    expect(classifyShell('/integrations/github')).toBe('public');
   });
 
   it('renders known authenticated routes in the app shell', () => {

@@ -76,7 +76,7 @@ export const tenantBillingCycleEnum = pgEnum('tenant_billing_cycle', [
 ]);
 
 export const tenantBillingStatusEnum = pgEnum('tenant_billing_status', [
-  'none', 'pending', 'active', 'past_due', 'cancelled',
+  'none', 'pending', 'active', 'trialing', 'past_due', 'cancelled',
 ]);
 
 // Segment tier (see README "Segment tier"): the isolation level between tenant
@@ -603,6 +603,14 @@ export const tenants = pgTable('tenants', {
   externalCustomerId:     varchar('external_customer_id', { length: 255 }),
   externalSubscriptionId: varchar('external_subscription_id', { length: 255 }),
   seatCount:              integer('seat_count'),
+  /**
+   * When the introductory Pro trial ends (migration 0204). Set on tenant creation
+   * to created_at + 14 days alongside billing_status='trialing' + plan='pro'. While
+   * billing_status='trialing' AND trial_ends_at > now() the tenant gets Pro limits
+   * (see domain/tenant/effectivePlan.ts); once it passes it falls back to Free.
+   * NULL for tenants created before 0204 / never trialing.
+   */
+  trialEndsAt:            timestamp('trial_ends_at', { withTimezone: true }),
   /**
    * Superadmin override for the daily token budget.
    *   NULL  → use the plan default (see PlanLimits.tokenDailyLimit).

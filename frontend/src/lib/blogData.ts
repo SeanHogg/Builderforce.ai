@@ -18,6 +18,13 @@ import datasetBestPractices from '@/content/blog/ai-dataset-generation-best-prac
 import introductionAndOverview from '@/content/blog/introduction-and-overview.md';
 import builderforceIntegration from '@/content/blog/builderforce-agents-and-agent-integration.md';
 import productIdeation from '@/content/blog/product-ideation-with-builderforce.md';
+import approvalGates from '@/content/blog/approval-gates-and-human-oversight.md';
+import fleetManagement from '@/content/blog/fleet-management-and-agent-routing.md';
+import inBrowserIde from '@/content/blog/in-browser-ide-and-collaboration.md';
+import securityMultiTenant from '@/content/blog/security-and-multi-tenant-architecture.md';
+import skillsAssignment from '@/content/blog/skills-assignment-and-the-marketplace.md';
+import specsAndPlanning from '@/content/blog/specs-and-planning-with-ai.md';
+import taskExecution from '@/content/blog/task-execution-and-observability.md';
 
 export interface BlogPost {
   slug: string;
@@ -85,8 +92,18 @@ export const BLOG_POSTS: BlogPost[] = [
   buildPost('multi-agent-orchestration', multiAgent),
   buildPost('ai-dataset-generation-best-practices', datasetBestPractices),
   buildPost('introduction-and-overview', introductionAndOverview),
-  buildPost('builderforce-and-agent-integration', builderforceIntegration),
+  // Slug aligned to its filename (was 'builderforce-and-agent-integration', a
+  // divergence from the source file). The old slug was only referenced here, so
+  // no published URL breaks — the sitemap and routes derive from this array.
+  buildPost('builderforce-agents-and-agent-integration', builderforceIntegration),
   buildPost('product-ideation-with-builderforce', productIdeation),
+  buildPost('approval-gates-and-human-oversight', approvalGates),
+  buildPost('fleet-management-and-agent-routing', fleetManagement),
+  buildPost('in-browser-ide-and-collaboration', inBrowserIde),
+  buildPost('security-and-multi-tenant-architecture', securityMultiTenant),
+  buildPost('skills-assignment-and-the-marketplace', skillsAssignment),
+  buildPost('specs-and-planning-with-ai', specsAndPlanning),
+  buildPost('task-execution-and-observability', taskExecution),
 ].sort((a, b) => (a.date < b.date ? 1 : -1));
 
 export function getPostBySlug(slug: string): BlogPost | undefined {

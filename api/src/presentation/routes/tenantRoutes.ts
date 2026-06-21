@@ -9,6 +9,7 @@ import { getOrSetCached, invalidateCached } from '../../infrastructure/cache/rea
 import { invalidateJwtMembershipCache } from '../../infrastructure/auth/keyResolutionCache';
 import { isAgentHostOnline } from '../../domain/agentHost/onlineStatus';
 import { buildPlanLimitsGuard } from '../middleware/planLimitsGuard';
+import { trialDaysRemaining } from '../../domain/tenant/effectivePlan';
 import { webAuthMiddleware } from '../middleware/webAuthMiddleware';
 import type { Db } from '../../infrastructure/database/connection';
 import {
@@ -179,12 +180,18 @@ export function createTenantRoutes(tenantService: TenantService, db: Db): Hono<H
   });
 
   // GET /api/tenants/:id — self-scoped (a caller can only read its own workspace).
+  // Surfaces the trial state (effectivePlan + days left) so the UI can render
+  // "Pro trial — N days left" without re-deriving the entitlement rules.
   router.get('/:id', async (c) => {
     const id = Number(c.req.param('id'));
     const denied = forbidCrossTenant(c, id);
     if (denied) return denied;
     const tenant = await tenantService.getTenant(id);
-    return c.json(tenant.toPlain());
+    return c.json({
+      ...tenant.toPlain(),
+      effectivePlan: tenant.effectivePlan(),
+      trialDaysRemaining: trialDaysRemaining(tenant.billingStatus, tenant.trialEndsAt),
+    });
   });
 
   // GET /api/tenants/:id/default-agentHost

@@ -10,7 +10,7 @@ export const metadata: Metadata = {
 const links = [
   { label: 'github.com/SeanHogg', href: 'https://github.com/SeanHogg' },
   { label: 'Resume / Portfolio', href: 'https://myvideoresu.me/resumes/seanhogg' },
-  { label: 'GitHub Discussions', href: 'https://github.com/SeanHogg/BuilderForce Agents/discussions' },
+  { label: 'GitHub Discussions', href: 'https://github.com/seanhogg/agents/discussions' },
   { label: '@CrawfishMellow', href: 'https://instagram.com/CrawfishMellow' },
 ];
 
@@ -38,7 +38,7 @@ export default function ContactPage() {
         <h2>Other ways to engage</h2>
         <ul>
           <li>
-            <a href="https://github.com/SeanHogg/BuilderForce Agents" target="_blank" rel="noopener">BuilderForce Agents on GitHub</a>
+            <a href="https://github.com/seanhogg/agents" target="_blank" rel="noopener">BuilderForce Agents on GitHub</a>
             {' '}— file issues, open PRs, follow releases
           </li>
           <li>

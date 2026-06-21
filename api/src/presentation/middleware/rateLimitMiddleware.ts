@@ -20,7 +20,8 @@
 import type { MiddlewareHandler } from 'hono';
 import { eq } from 'drizzle-orm';
 import type { HonoEnv } from '../../env';
-import { TenantPlan } from '../../domain/shared/types';
+import { TenantPlan, TenantBillingStatus } from '../../domain/shared/types';
+import { resolveEffectivePlan } from '../../domain/tenant/effectivePlan';
 import { tenants } from '../../infrastructure/database/schema';
 import { buildDatabase } from '../../infrastructure/database/connection';
 import { verifyJwt } from '../../infrastructure/auth/JwtService';
@@ -69,14 +70,16 @@ export const rateLimitMiddleware: MiddlewareHandler<RateLimitHonoEnv> = async (c
   try {
     const db = buildDatabase(env);
     const [row] = await db
-      .select({ plan: tenants.plan, billingStatus: tenants.billingStatus })
+      .select({ plan: tenants.plan, billingStatus: tenants.billingStatus, trialEndsAt: tenants.trialEndsAt })
       .from(tenants)
       .where(eq(tenants.id, tenantId))
       .limit(1);
     if (row) {
-      const effectivePlan: TenantPlan = row.billingStatus === 'active'
-        ? (row.plan as TenantPlan)
-        : TenantPlan.FREE;
+      const effectivePlan = resolveEffectivePlan({
+        plan: (row.plan as TenantPlan) ?? TenantPlan.FREE,
+        billingStatus: (row.billingStatus as TenantBillingStatus) ?? TenantBillingStatus.NONE,
+        trialEndsAt: row.trialEndsAt ?? null,
+      });
       rpm = RPM_LIMITS[effectivePlan];
     }
   } catch {

@@ -76,8 +76,9 @@ import { resolveKeyCached, jwtMembershipHash } from '../../infrastructure/auth/k
 import type { FailoverEvent } from '../../application/llm/LlmProxyService';
 import { verifyJwt, signJwt } from '../../infrastructure/auth/JwtService';
 import { hashSecret } from '../../infrastructure/auth/HashService';
-import { TenantRole, TenantPlan } from '../../domain/shared/types';
+import { TenantRole, TenantPlan, TenantBillingStatus } from '../../domain/shared/types';
 import { getLimits } from '../../domain/tenant/PlanLimits';
+import { resolveEffectivePlan } from '../../domain/tenant/effectivePlan';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -169,7 +170,7 @@ type TenantAccess = {
   tenantApiKeyScopes: string[] | null;
   role: TenantRole;
   plan: 'free' | 'pro' | 'teams';
-  billingStatus: 'none' | 'pending' | 'active' | 'past_due' | 'cancelled';
+  billingStatus: 'none' | 'pending' | 'active' | 'trialing' | 'past_due' | 'cancelled';
   effectivePlan: 'free' | 'pro' | 'teams';
   /**
    * Superadmin override for the plan-level daily token cap.
@@ -216,6 +217,7 @@ export async function resolveTenantPlan(
       id: tenants.id,
       plan: tenants.plan,
       billingStatus: tenants.billingStatus,
+      trialEndsAt: tenants.trialEndsAt,
       tokenDailyLimitOverride: tenants.tokenDailyLimitOverride,
       paidOverflowDailyCap: tenants.paidOverflowDailyCap,
       premiumOverride: tenants.premiumOverride,
@@ -228,8 +230,13 @@ export async function resolveTenantPlan(
 
   const plan = (tenantRow.plan ?? 'free') as TenantAccess['plan'];
   const billingStatus = (tenantRow.billingStatus ?? 'none') as TenantAccess['billingStatus'];
-  const effectivePlan: TenantAccess['effectivePlan'] =
-    billingStatus === 'active' && (plan === 'pro' || plan === 'teams') ? plan : 'free';
+  // One shared resolver: 'active' (paid) OR an unexpired trial → the tenant's
+  // plan; everything else → free. Keeps the gateway aligned with the plan guard.
+  const effectivePlan = resolveEffectivePlan({
+    plan: plan as TenantPlan,
+    billingStatus: billingStatus as TenantBillingStatus,
+    trialEndsAt: tenantRow.trialEndsAt ?? null,
+  }) as TenantAccess['effectivePlan'];
 
   return {
     plan,

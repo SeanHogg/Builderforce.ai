@@ -146,12 +146,19 @@ export default function PricingPageClient() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { fetchSub(); }, [tenantId]);
 
-  // Deep link: /pricing?upgrade=pro|teams pre-opens the upgrade form.
+  // Deep link: /pricing?upgrade=pro|teams pre-opens the upgrade form for a
+  // signed-in tenant; an anonymous visitor is sent to register first (the
+  // checkout is tenant-scoped, so there's nothing to open without a tenant).
   const searchParams = useSearchParams();
   useEffect(() => {
     const target = searchParams?.get('upgrade');
-    if (target === 'pro' || target === 'teams') setUpgradeTarget(target);
-  }, [searchParams]);
+    if (target !== 'pro' && target !== 'teams') return;
+    if (tenantId == null) {
+      window.location.href = `/register?next=${encodeURIComponent(`/pricing?upgrade=${target}`)}`;
+      return;
+    }
+    setUpgradeTarget(target);
+  }, [searchParams, tenantId]);
 
   const isManualProvider = !sub || sub.paymentProvider === 'manual';
   const effectivePlan = sub?.effectivePlan ?? 'free';
@@ -165,7 +172,17 @@ export default function PricingPageClient() {
     ? (billingCycle === 'yearly' ? teamYearly * seats : teamMonthly * seats)
     : (billingCycle === 'yearly' ? proYearly : proMonthly);
 
-  const openUpgrade = (target: 'pro' | 'teams') => { setUpgradeTarget(target); setUpgradeError(null); };
+  // Single entry point for every upgrade CTA (Current Plan card + comparison
+  // table). With no tenant the checkout can't run, so route to register rather
+  // than opening a modal whose submit would silently return.
+  const openUpgrade = (target: 'pro' | 'teams') => {
+    if (tenantId == null) {
+      window.location.href = `/register?next=${encodeURIComponent(`/pricing?upgrade=${target}`)}`;
+      return;
+    }
+    setUpgradeTarget(target);
+    setUpgradeError(null);
+  };
 
   const handleUpgrade = async (e: React.FormEvent) => {
     e.preventDefault();

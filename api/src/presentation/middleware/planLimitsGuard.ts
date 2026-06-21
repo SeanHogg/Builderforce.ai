@@ -19,7 +19,8 @@ import {
   projects,
 } from '../../infrastructure/database/schema';
 import { canAddAgentHost, canAddProject, canAddSeat, getLimits } from '../../domain/tenant/PlanLimits';
-import { TenantPlan } from '../../domain/shared/types';
+import { resolveEffectivePlan } from '../../domain/tenant/effectivePlan';
+import { TenantPlan, TenantBillingStatus } from '../../domain/shared/types';
 
 interface LimitError {
   error: string;
@@ -29,15 +30,19 @@ interface LimitError {
 
 async function getTenantPlan(db: Db, tenantId: number): Promise<TenantPlan> {
   const [row] = await db
-    .select({ plan: tenants.plan, billingStatus: tenants.billingStatus })
+    .select({ plan: tenants.plan, billingStatus: tenants.billingStatus, trialEndsAt: tenants.trialEndsAt })
     .from(tenants)
     .where(eq(tenants.id, tenantId))
     .limit(1);
 
   if (!row) return TenantPlan.FREE;
-  // Only active billing counts
-  if (row.billingStatus !== 'active') return TenantPlan.FREE;
-  return (row.plan as TenantPlan) ?? TenantPlan.FREE;
+  // The single shared resolver: 'active' (paid) OR an unexpired trial → the
+  // tenant's plan; everything else → free. Never re-derive this inline.
+  return resolveEffectivePlan({
+    plan: (row.plan as TenantPlan) ?? TenantPlan.FREE,
+    billingStatus: (row.billingStatus as TenantBillingStatus) ?? TenantBillingStatus.NONE,
+    trialEndsAt: row.trialEndsAt ?? null,
+  });
 }
 
 export function buildPlanLimitsGuard(db: Db) {

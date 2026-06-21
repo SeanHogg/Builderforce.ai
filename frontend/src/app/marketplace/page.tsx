@@ -385,6 +385,12 @@ export default function MarketplacePage() {
   );
 
   const handleHire = useCallback(async (agentId: string) => {
+    // Hiring requires an account — route anonymous users to sign in (mirrors the
+    // Publish tab gate) instead of firing an auth-only POST that 401s silently.
+    if (!isAuthenticated) {
+      window.location.href = '/login?next=/marketplace';
+      return;
+    }
     setHiringId(agentId);
     try {
       const updated = await hireAgent(agentId);
@@ -395,7 +401,7 @@ export default function MarketplacePage() {
     } finally {
       setHiringId(null);
     }
-  }, []);
+  }, [isAuthenticated]);
 
   const handleUnhire = useCallback(async (agentId: string) => {
     setUnhiringId(agentId);
