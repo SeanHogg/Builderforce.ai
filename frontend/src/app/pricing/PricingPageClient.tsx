@@ -8,6 +8,7 @@ import { useAuth } from '@/lib/AuthContext';
 import { AUTH_API_URL, getStoredTenantToken } from '@/lib/auth';
 import JsonLd from '@/components/JsonLd';
 import PageContainer from '@/components/PageContainer';
+import RelatedArticles from '@/components/blog/RelatedArticles';
 import { pricingSchema } from '@/lib/structured-data';
 
 type Plan = 'free' | 'pro' | 'teams';
@@ -518,6 +519,7 @@ export default function PricingPageClient() {
 
         </div>
       )}
+      {isAnon && <RelatedArticles surface="pricing" heading="Before you decide" />}
     </PageContainer>
     </>
   );

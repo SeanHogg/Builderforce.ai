@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import JsonLd from '@/components/JsonLd';
+import RelatedArticles from '@/components/blog/RelatedArticles';
 import { productSchema } from '@/lib/structured-data';
 import { pageMetadata } from '@/lib/seo';
 import {
@@ -153,6 +154,8 @@ export default function ProductPage() {
               </div>
             </div>
           </section>
+
+          <RelatedArticles surface="product" heading="Go deeper" />
         </main>
         {/* Footer is the canonical <AppFooter variant="full"> rendered by PublicShell. */}
       </div>

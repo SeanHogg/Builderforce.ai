@@ -18,7 +18,7 @@ export const BRAND = {
   ogImageWidth: 1200,
   ogImageHeight: 630,
   /** ISO 8601 — update on each content deploy */
-  dateModified: '2026-06-20T00:00:00Z',
+  dateModified: '2026-06-21T00:00:00Z',
 } as const;
 
 /* ════════════════════ STATS ════════════════════ */
@@ -523,6 +523,14 @@ export const HOMEPAGE_FAQ: FaqItem[] = [
     answer: 'Yes. Projects organize your work, and the task board tracks it on a live Kanban board with swimlanes per status or per agent, plus table, calendar, and Gantt views. Humans and AI agents share the same board, so you plan, assign, and watch work flow from backlog to done in real time.',
   },
   {
+    question: 'Can the Kanban board run itself with AI agents?',
+    answer: 'Yes — that is Autonomous Swimlane Execution. Assign an agent (Cloud or On-Premise) to a board lane and tickets in that lane are dispatched to it automatically; the board advances from lane to lane as agents finish, pausing only at the approval gates you choose. You manage outcomes on a board instead of issuing prompts one at a time.',
+  },
+  {
+    question: 'How does Builderforce keep LLM token costs down?',
+    answer: 'A cross-surface semantic cache reuses a prior answer when a new prompt means the same thing as one already answered, so the frontier model is never billed twice for the same work. It runs in two tiers — a free on-device layer using SSM embeddings (in the browser and in each agent) and a shared tenant-scoped gateway layer — and is combined with model routing that exhausts cheaper models before reaching premium ones.',
+  },
+  {
     question: 'Is Builderforce free?',
     answer: 'Yes — the Free tier is $0/month forever with no credit card required. It includes WebGPU training, dataset generation, AI evaluation, and public Workforce browsing. The Pro plan ($29/seat/month) unlocks private agents, unlimited training, and priority support.',
   },
@@ -658,7 +666,11 @@ export const REGISTER_FAQ: FaqItem[] = [
 export const BLOG_FAQ: FaqItem[] = [
   {
     question: 'What topics does the Builderforce blog cover?',
-    answer: 'The blog covers AI agent training, WebGPU LoRA fine-tuning, dataset generation, multi-agent orchestration, BuilderForce Agents integration, and product development best practices.',
+    answer: 'The blog covers AI agent training, WebGPU LoRA fine-tuning, dataset generation, multi-agent orchestration, autonomous Kanban (swimlane) execution, cross-surface semantic caching for token savings, BuilderForce Agents integration, and product development best practices.',
+  },
+  {
+    question: 'Does the blog compare Builderforce.ai to other AI coding tools?',
+    answer: 'Yes. The blog includes head-to-head comparisons of Builderforce.ai versus GitHub Copilot, Cursor and Windsurf, Claude Code, and Devin, plus a criteria-first roundup of the best AI coding agents in 2026. Each comparison explains where single-agent tools stop and where a self-hosted, model-agnostic, multi-agent workforce begins.',
   },
   {
     question: 'Who writes the articles?',
@@ -733,6 +745,14 @@ export const DEFINED_TERMS: DefinedTermEntry[] = [
   {
     name: 'Agent Kanban board',
     description: 'A live task board where work is planned, assigned, and tracked across both human team members and AI agents. Builderforce.ai supports swimlanes per status or per agent plus table, calendar, and Gantt views, with tasks flowing from backlog to done in real time as agents pick them up.',
+  },
+  {
+    name: 'Autonomous Swimlane Execution',
+    description: 'A self-driving Kanban model where an AI agent (Cloud or On-Premise) is assigned to a board lane. Tickets in that lane are dispatched to the agent automatically and the board advances from lane to lane as work finishes, pausing only at the approval gates you configure — so you manage outcomes on a board instead of issuing prompts one at a time.',
+  },
+  {
+    name: 'Cross-surface semantic cache',
+    description: 'An embedding-keyed cache that reuses a prior answer when a new prompt is a paraphrase of one already answered, so the frontier model is never billed twice for the same work. Builderforce.ai runs it in two tiers — a free on-device layer (SSM embeddings, in the browser and in each agent) and a shared tenant-scoped gateway layer — so a cache hit in the web app saves tokens for agents too.',
   },
 ];
 
@@ -1052,3 +1072,39 @@ export const SEO_INTEGRATIONS: IntegrationSeo[] = [
 export const INTEGRATION_SLUG_MAP: Record<string, IntegrationSeo> = Object.fromEntries(
   SEO_INTEGRATIONS.map((it) => [it.slug, it]),
 );
+
+/* ════════════════════ RELATED ARTICLES (associated blog content per surface) ════════════════════ */
+
+/**
+ * Single source of truth mapping a marketing surface to the blog posts that
+ * back it as "associated content". Keys are stable surface ids (the page path
+ * minus its leading slash, or a `compare:<competitorKey>` key for the per-rival
+ * leaf pages). Values are ordered blog slugs resolved against `BLOG_POSTS`.
+ *
+ * The reusable <RelatedArticles> component reads this via `getPostsBySlugs`, so
+ * adding a post to a page is a one-line data edit — no per-page JSX. Keep slugs
+ * in sync with src/content/blog/*.md (a missing slug is silently skipped).
+ */
+export const RELATED_ARTICLES: Record<string, string[]> = {
+  product: [
+    'autonomous-swimlane-execution',
+    'semantic-response-cache',
+    'task-execution-and-observability',
+  ],
+  compare: [
+    'best-ai-coding-agents-compared',
+    'builderforce-vs-github-copilot',
+    'builderforce-vs-cursor-windsurf',
+  ],
+  pricing: [
+    'semantic-response-cache',
+    'best-ai-coding-agents-compared',
+    'getting-started-with-ai-agents',
+  ],
+  // Per-competitor leaf pages — keyed by the COMPETITORS column key. Each points
+  // at its dedicated head-to-head post first, then the roundup for context.
+  'compare:copilot': ['builderforce-vs-github-copilot', 'best-ai-coding-agents-compared'],
+  'compare:cursor': ['builderforce-vs-cursor-windsurf', 'best-ai-coding-agents-compared'],
+  'compare:claudeCode': ['builderforce-vs-claude-code', 'best-ai-coding-agents-compared'],
+  'compare:devin': ['builderforce-vs-devin', 'best-ai-coding-agents-compared'],
+};

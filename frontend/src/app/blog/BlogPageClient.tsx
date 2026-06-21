@@ -1,11 +1,26 @@
 'use client';
 
+import { useState } from 'react';
 import { BLOG_POSTS } from '@/lib/blogData';
 import JsonLd from '@/components/JsonLd';
 import { blogIndexSchema } from '@/lib/structured-data';
 import { ArticleCardGrid } from '@/components/blog/ArticleCard';
 
+/** Articles per page on the /blog index. */
+const PAGE_SIZE = 9;
+
 export default function BlogPageClient() {
+  const totalPages = Math.max(1, Math.ceil(BLOG_POSTS.length / PAGE_SIZE));
+  const [page, setPage] = useState(1);
+  const current = Math.min(page, totalPages);
+  const start = (current - 1) * PAGE_SIZE;
+  const visible = BLOG_POSTS.slice(start, start + PAGE_SIZE);
+
+  const goTo = (p: number) => {
+    setPage(p);
+    if (typeof window !== 'undefined') window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
   return (
     <>
       <style>{`
@@ -75,6 +90,43 @@ export default function BlogPageClient() {
         }
         /* Card + grid styles live in components/blog/ArticleCard.tsx */
 
+        /* ── PAGINATION ── */
+        .blog-pagination {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          gap: 8px;
+          flex-wrap: wrap;
+          margin-top: 48px;
+        }
+        .blog-page-btn {
+          min-width: 40px;
+          height: 40px;
+          padding: 0 12px;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          border-radius: 10px;
+          border: 1px solid var(--border-subtle);
+          background: var(--surface-card);
+          color: var(--text-secondary);
+          font-family: var(--font-display);
+          font-size: 0.9rem;
+          font-weight: 600;
+          cursor: pointer;
+          transition: border-color 0.2s ease, color 0.2s ease, background 0.2s ease;
+        }
+        .blog-page-btn:hover:not(:disabled) {
+          border-color: var(--border-accent);
+          color: var(--text-primary);
+        }
+        .blog-page-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+        .blog-page-btn.is-active {
+          background: linear-gradient(135deg, var(--coral-bright), var(--coral-dark));
+          border-color: transparent;
+          color: #fff;
+        }
+
         @media (max-width: 640px) {
           .blog-hero { padding: 40px 20px 24px; }
           .blog-main { padding: 8px 16px 48px; }
@@ -89,14 +141,50 @@ export default function BlogPageClient() {
           <div className="blog-hero-badge">📝 Latest Articles</div>
           <h1 className="blog-hero-title">Builderforce Blog</h1>
           <p className="blog-hero-desc">
-            Deep dives, tutorials, and best practices for building and deploying
-            AI agents — from WebGPU LoRA training to multi-agent orchestration.
+            Deep dives, tutorials, and honest tool comparisons for building and
+            deploying AI agents — from autonomous Kanban execution and semantic
+            caching to how we stack up against Copilot, Cursor, Claude Code and Devin.
           </p>
         </div>
 
         {/* ── Post grid ── */}
         <main className="blog-main">
-          <ArticleCardGrid posts={BLOG_POSTS} />
+          <ArticleCardGrid posts={visible} />
+
+          {totalPages > 1 && (
+            <nav className="blog-pagination" aria-label="Blog pagination">
+              <button
+                type="button"
+                className="blog-page-btn"
+                onClick={() => goTo(current - 1)}
+                disabled={current === 1}
+                aria-label="Previous page"
+              >
+                ←
+              </button>
+              {Array.from({ length: totalPages }, (_, i) => i + 1).map((p) => (
+                <button
+                  key={p}
+                  type="button"
+                  className={`blog-page-btn${p === current ? ' is-active' : ''}`}
+                  onClick={() => goTo(p)}
+                  aria-current={p === current ? 'page' : undefined}
+                  aria-label={`Page ${p}`}
+                >
+                  {p}
+                </button>
+              ))}
+              <button
+                type="button"
+                className="blog-page-btn"
+                onClick={() => goTo(current + 1)}
+                disabled={current === totalPages}
+                aria-label="Next page"
+              >
+                →
+              </button>
+            </nav>
+          )}
         </main>
 
         {/* Footer is the canonical <AppFooter variant="full"> rendered by PublicShell. */}

@@ -25,6 +25,13 @@ import securityMultiTenant from '@/content/blog/security-and-multi-tenant-archit
 import skillsAssignment from '@/content/blog/skills-assignment-and-the-marketplace.md';
 import specsAndPlanning from '@/content/blog/specs-and-planning-with-ai.md';
 import taskExecution from '@/content/blog/task-execution-and-observability.md';
+import autonomousSwimlanes from '@/content/blog/autonomous-swimlane-execution.md';
+import semanticCache from '@/content/blog/semantic-response-cache.md';
+import bestAiCodingAgents from '@/content/blog/best-ai-coding-agents-compared.md';
+import vsCopilot from '@/content/blog/builderforce-vs-github-copilot.md';
+import vsCursor from '@/content/blog/builderforce-vs-cursor-windsurf.md';
+import vsClaudeCode from '@/content/blog/builderforce-vs-claude-code.md';
+import vsDevin from '@/content/blog/builderforce-vs-devin.md';
 
 export interface BlogPost {
   slug: string;
@@ -104,8 +111,42 @@ export const BLOG_POSTS: BlogPost[] = [
   buildPost('skills-assignment-and-the-marketplace', skillsAssignment),
   buildPost('specs-and-planning-with-ai', specsAndPlanning),
   buildPost('task-execution-and-observability', taskExecution),
+  buildPost('autonomous-swimlane-execution', autonomousSwimlanes),
+  buildPost('semantic-response-cache', semanticCache),
+  buildPost('best-ai-coding-agents-compared', bestAiCodingAgents),
+  buildPost('builderforce-vs-github-copilot', vsCopilot),
+  buildPost('builderforce-vs-cursor-windsurf', vsCursor),
+  buildPost('builderforce-vs-claude-code', vsClaudeCode),
+  buildPost('builderforce-vs-devin', vsDevin),
 ].sort((a, b) => (a.date < b.date ? 1 : -1));
 
 export function getPostBySlug(slug: string): BlogPost | undefined {
   return BLOG_POSTS.find((p) => p.slug === slug);
+}
+
+/**
+ * Resolve an explicit, ordered list of slugs to their posts (missing slugs are
+ * skipped). Used to attach curated "related reading" to marketing surfaces via
+ * the RELATED_ARTICLES map in content.ts — single source of truth for which
+ * articles back which page.
+ */
+export function getPostsBySlugs(slugs: string[]): BlogPost[] {
+  return slugs.map((s) => getPostBySlug(s)).filter((p): p is BlogPost => Boolean(p));
+}
+
+/**
+ * Find posts related to a given post by shared tags, newest-first, excluding the
+ * post itself. Powers the "Related articles" block at the foot of each blog post
+ * without hand-maintaining a per-post list.
+ */
+export function getRelatedByTags(slug: string, limit = 3): BlogPost[] {
+  const post = getPostBySlug(slug);
+  if (!post) return [];
+  const tags = new Set(post.tags);
+  return BLOG_POSTS.filter((p) => p.slug !== slug)
+    .map((p) => ({ post: p, overlap: p.tags.filter((t) => tags.has(t)).length }))
+    .filter((x) => x.overlap > 0)
+    .sort((a, b) => (b.overlap - a.overlap) || (a.post.date < b.post.date ? 1 : -1))
+    .slice(0, limit)
+    .map((x) => x.post);
 }
