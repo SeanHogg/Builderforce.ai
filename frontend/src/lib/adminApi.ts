@@ -52,6 +52,14 @@ export interface AdminTenant {
    * See migration 0130 + the gateway overflow gate.
    */
   paidOverflowDailyCap: number | null;
+  /**
+   * Per-tenant daily image-generation credit override (1 credit = 1 image).
+   *   null → plan default (free 10 / pro 1000 / teams 5000)
+   *   -1   → unlimited
+   *   >= 0 → explicit images/day
+   * Metered independently of the text token budget (migration 0131).
+   */
+  imageCreditsDailyLimit: number | null;
   /** Superadmin grant of premium routing — when true the LLM proxy uses the
    *  premium model pool (top PREMIUM-tier models) and the extended per-vendor
    *  timeout regardless of plan/billingStatus. */
@@ -534,6 +542,23 @@ export const adminApi = {
       {
         method: 'PATCH',
         body: JSON.stringify({ paidOverflowDailyCap }),
+      },
+    );
+  },
+
+  /**
+   * Set / clear the per-tenant daily image-generation credit limit.
+   *   null → revert to plan default · -1 → unlimited · >= 0 → explicit images/day
+   */
+  async setTenantImageCreditsLimit(
+    tenantId: number,
+    imageCreditsDailyLimit: number | null,
+  ): Promise<{ id: number; imageCreditsDailyLimit: number | null }> {
+    return adminRequest<{ id: number; imageCreditsDailyLimit: number | null }>(
+      `/api/admin/tenants/${tenantId}/image-credits-limit`,
+      {
+        method: 'PATCH',
+        body: JSON.stringify({ imageCreditsDailyLimit }),
       },
     );
   },

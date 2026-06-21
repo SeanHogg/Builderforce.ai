@@ -44,6 +44,7 @@ import { LegalEditorDrawer, type LegalEditorContext } from '@/components/admin/L
 import { LegalDocPreview } from '@/components/admin/LegalDocPreview';
 import { TenantTokenLimitOverrideEditor } from '@/components/admin/TenantTokenLimitOverrideEditor';
 import { TenantPaidOverflowCapEditor } from '@/components/admin/TenantPaidOverflowCapEditor';
+import { TenantImageCreditsEditor } from '@/components/admin/TenantImageCreditsEditor';
 import { TenantPremiumOverrideEditor } from '@/components/admin/TenantPremiumOverrideEditor';
 
 type AdminTab =
@@ -1252,6 +1253,11 @@ export default function AdminPage() {
                                     value={t.paidOverflowDailyCap ?? null}
                                     onChange={(next) => setTenants((prev) => prev.map((x) => x.id === t.id ? { ...x, paidOverflowDailyCap: next } : x))}
                                   />
+                                  <TenantImageCreditsEditor
+                                    tenantId={t.id}
+                                    value={t.imageCreditsDailyLimit ?? null}
+                                    onChange={(next) => setTenants((prev) => prev.map((x) => x.id === t.id ? { ...x, imageCreditsDailyLimit: next } : x))}
+                                  />
                                   <TenantPremiumOverrideEditor
                                     tenantId={t.id}
                                     value={t.premiumOverride === true}
@@ -1386,6 +1392,11 @@ export default function AdminPage() {
                                 tenantId={t.id}
                                 value={t.paidOverflowDailyCap ?? null}
                                 onChange={(next) => setTenants((prev) => prev.map((x) => x.id === t.id ? { ...x, paidOverflowDailyCap: next } : x))}
+                              />
+                              <TenantImageCreditsEditor
+                                tenantId={t.id}
+                                value={t.imageCreditsDailyLimit ?? null}
+                                onChange={(next) => setTenants((prev) => prev.map((x) => x.id === t.id ? { ...x, imageCreditsDailyLimit: next } : x))}
                               />
                               <TenantPremiumOverrideEditor
                                 tenantId={t.id}

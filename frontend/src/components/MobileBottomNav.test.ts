@@ -4,11 +4,14 @@ import { itemsFor } from './MobileBottomNav';
 const hrefs = (items: ReturnType<typeof itemsFor>) => items.map((i) => i.href);
 
 describe('MobileBottomNav itemsFor (role-aware) [1335]', () => {
-  it('logged-out bar always has 5 items ending in Sign In', () => {
+  it('logged-out bar always has 5 items ending in an accented Sign In', () => {
     const items = itemsFor(false, false);
     expect(items).toHaveLength(5);
     expect(items[0]?.href).toBe('/');
     expect(items[4]?.href).toBe('/login');
+    // Sign In is the only accented (CTA-styled) item — drives .mbn-accent.
+    expect(items[4]?.accent).toBe(true);
+    expect(items.filter((i) => i.accent)).toHaveLength(1);
   });
 
   it('superadmin gets Admin in the last slot regardless of role', () => {

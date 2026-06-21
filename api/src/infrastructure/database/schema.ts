@@ -630,6 +630,11 @@ export const tenants = pgTable('tenants', {
    * UTC day (the tenant's primary pool still runs); resets at UTC midnight.
    */
   paidOverflowDailyCap:   integer('paid_overflow_daily_cap'),
+  /** Per-tenant daily image-generation credit override (1 credit = 1 returned
+   *  image). NULL → plan default; -1 → unlimited; >= 0 → explicit. Metered
+   *  independently of `tokenDailyLimit` so image and text budgets don't starve
+   *  each other (migration 0131). See `resolveImageCreditsDailyLimit`. */
+  imageCreditsDailyLimit: integer('image_credits_daily_limit'),
   // Segment tier / identity federation (migration 0054).
   kind:                   tenantKindEnum('kind').notNull().default('direct'),
   idpIssuer:              varchar('idp_issuer', { length: 500 }),

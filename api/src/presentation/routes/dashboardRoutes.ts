@@ -26,13 +26,7 @@ import { TenantPlan, TenantRole, TenantBillingStatus } from '../../domain/shared
 import type { Env, HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 import { getOrSetCached } from '../../infrastructure/cache/readThroughCache';
-/** SQL CASE that classifies a usage row by who produced it (0096 columns). */
-const USAGE_KIND = sql<'cloud' | 'on-prem' | 'web'>`
-  case
-    when ${llmUsageLog.agentHostId} is not null then 'on-prem'
-    when ${llmUsageLog.cloudAgentRef} is not null or ${llmUsageLog.executionId} is not null then 'cloud'
-    else 'web'
-  end`;
+import { USAGE_KIND } from '../../application/llm/usageSource';
 
 /** Millicents (1/100000 USD) → USD. */
 function mcToUsd(millicents: unknown): number {
