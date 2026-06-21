@@ -89,11 +89,14 @@ export default function LandingPage() {
           align-items: center;
         }
         .lp-tagline-sub {
-          color: var(--text-secondary);
+          color: rgba(214, 224, 244, 0.85);
           letter-spacing: 0.14em;
           margin-top: -10px;
-          opacity: 0.85;
         }
+        /* The hero rides over a dark deep-space backdrop in BOTH themes, so its
+           text is forced light here for contrast (page text colour follows the
+           theme and would be invisible on black in light mode). */
+        .lp-hero-content .lp-desc { color: rgba(222, 230, 246, 0.92); }
 
         /* Prompt row — the prompt sits centred (the mascot now lives below it,
            centred on the page, rather than in a right-hand column). */
