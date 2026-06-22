@@ -224,7 +224,7 @@ export function createIdeRoutes(): Hono<HonoEnv> {
     const projectId = await resolveProjectId(c.env, c.req.param('projectId'));
     if (!(await projectInTenant(c, projectId))) return c.json({ error: 'Project not found' }, 404);
     const tenantId = c.get('tenantId') as number;
-    const body = await c.req.json<{ repoId?: string; ref?: string }>().catch(() => ({}));
+    const body = await c.req.json<{ repoId?: string; ref?: string }>().catch(() => ({} as { repoId?: string; ref?: string }));
     if (!body.repoId) return c.json({ error: 'repoId is required' }, 400);
     const result = await importRepoToWorkspace(c.env as Env, tenantId, projectId, body.repoId, body.ref);
     if (!result.ok) return c.json({ error: result.error }, result.status as 400);
@@ -237,7 +237,7 @@ export function createIdeRoutes(): Hono<HonoEnv> {
     const projectId = await resolveProjectId(c.env, c.req.param('projectId'));
     if (!(await projectInTenant(c, projectId))) return c.json({ error: 'Project not found' }, 404);
     const tenantId = c.get('tenantId') as number;
-    const body = await c.req.json<{ repoId?: string; message?: string; branch?: string }>().catch(() => ({}));
+    const body = await c.req.json<{ repoId?: string; message?: string; branch?: string }>().catch(() => ({} as { repoId?: string; message?: string; branch?: string }));
     if (!body.repoId) return c.json({ error: 'repoId is required' }, 400);
     const result = await commitWorkspaceToRepo(c.env as Env, tenantId, projectId, body.repoId, { message: body.message, branch: body.branch });
     if (!result.ok) return c.json({ error: result.error }, result.status as 400);
@@ -250,7 +250,7 @@ export function createIdeRoutes(): Hono<HonoEnv> {
     const projectId = await resolveProjectId(c.env, c.req.param('projectId'));
     if (!(await projectInTenant(c, projectId))) return c.json({ error: 'Project not found' }, 404);
     const tenantId = c.get('tenantId') as number;
-    const body = await c.req.json<{ provider?: string; name?: string; private?: boolean; credentialId?: string }>().catch(() => ({}));
+    const body = await c.req.json<{ provider?: string; name?: string; private?: boolean; credentialId?: string }>().catch(() => ({} as { provider?: string; name?: string; private?: boolean; credentialId?: string }));
     if (!body.name?.trim()) return c.json({ error: 'name is required' }, 400);
     if (!body.credentialId) return c.json({ error: 'credentialId is required' }, 400);
     const result = await createRemoteRepo(c.env as Env, tenantId, projectId, {

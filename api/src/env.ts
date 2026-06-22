@@ -197,6 +197,14 @@ export interface Env {
    *  a `[[containers]]` block in wrangler.toml; binding name `AGENT_CONTAINER`. */
   AGENT_CONTAINER?: DurableObjectNamespace;
 
+  /** Cloudflare Container runtime for the Agentic Tester (browser exploration) —
+   *  the Playwright runner image (qa-e2e/Dockerfile). The scheduled QA sweep
+   *  dispatches `POST /run` to it per queued exploration. One instance per
+   *  exploration (`idFromName('qa-exec:<id>')`). Optional: when unset the sweep
+   *  only enqueues (a runner must drain the queue externally). Backed by
+   *  QaRunnerContainerDO via a `[[containers]]` block; binding `QA_RUNNER_CONTAINER`. */
+  QA_RUNNER_CONTAINER?: DurableObjectNamespace;
+
   /** Internal base URL the Container calls back into for each LLM step / repo
    *  telemetry / PR finalize (the container-op endpoint). Defaults to the public
    *  API origin; override for local/dev. e.g. "https://api.builderforce.ai". */

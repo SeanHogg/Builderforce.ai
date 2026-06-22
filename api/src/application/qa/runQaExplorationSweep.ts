@@ -16,6 +16,7 @@ import { buildDatabase, type Db } from '../../infrastructure/database/connection
 import { qaExplorations, qaSchedules, qaTargets } from '../../infrastructure/database/schema';
 import { QaHeatmapService } from './QaHeatmapService';
 import { buildExplorationPlan } from './qaTypes';
+import { dispatchQaRunner } from './dispatchQaRunner';
 import { nextCronTime } from '../../domain/workflowSchedule';
 import type { Env } from '../../env';
 
@@ -72,7 +73,7 @@ export async function runQaExplorationSweep(env: Env): Promise<{ enqueued: numbe
           lastStatus = 'no_heat';
         } else {
           const plan = buildExplorationPlan(zones, s.heatBudget);
-          await db.insert(qaExplorations).values({
+          const [exploration] = await db.insert(qaExplorations).values({
             tenantId: s.tenantId, segmentId: s.segmentId ?? undefined, projectId: s.projectId,
             targetId: target.id, credentialId: s.credentialId,
             status: 'queued', trigger: 'schedule',
@@ -80,8 +81,16 @@ export async function runQaExplorationSweep(env: Env): Promise<{ enqueued: numbe
             plan: JSON.stringify(plan), heatZones: JSON.stringify(zones), model: null,
             zonesPlanned: zones.length, targetUrl: target.baseUrl,
             createdBy: `schedule:${s.id}`, updatedAt: now,
-          });
+          }).returning({ id: qaExplorations.id });
           enqueued++;
+          // Dispatch the managed runner container to drain it now. No-op when the
+          // QA_RUNNER_CONTAINER binding isn't provisioned (the row stays queued for
+          // an external runner). Best-effort: a dispatch failure must not wedge the
+          // sweep — the reaper / next claim still picks the queued row up.
+          if (exploration) {
+            const dispatched = await dispatchQaRunner(env, { explorationId: exploration.id, tenantId: s.tenantId, projectId: s.projectId }).catch(() => false);
+            if (!dispatched) lastStatus = 'enqueued_undispatched';
+          }
         }
       }
     } catch (err) {

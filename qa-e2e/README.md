@@ -1,11 +1,11 @@
-# @builderforce/qa-e2e — Agentic QA harness
+# @builderforce/qa-e2e — Agentic Tester runner
 
-Runs the **authenticated** browser smoke suite for the Builderforce web app and
-reports results back to the API. It is the execution surface of the Agentic QA
-pipeline:
+The **execution surface** (browser runner) for the Agentic Tester agent. The
+product — config, scheduling, results — lives in the platform; this image is the
+managed Cloudflare Container the platform dispatches to drain the queue:
 
 ```
-capture (frontend)  →  aggregate + generate (api: /api/qa/*)  →  THIS HARNESS (CI)  →  results (api → Observability ▸ Agentic QA)
+capture (frontend) → heatmap + schedule (api: /api/qa/*) → dispatch (QaRunnerContainerDO) → THIS RUNNER → findings (api → Observability ▸ Agentic QA)
 ```
 
 ## Two modes
@@ -62,8 +62,19 @@ must be a dedicated, **non-MFA** Builderforce user — never a real customer
 account. In project mode, the site logins are the project's **Credentials**
 (personas), managed in-app, not env vars.
 
-## CI
+## How it's run in production (no CI)
 
-`.github/workflows/qa.yml` runs this on a schedule and on demand. Provide
-`BF_QA_EMAIL`, `BF_QA_PASSWORD` (and optionally `BF_BASE_URL`, `BF_API_URL`,
-`BF_QA_TENANT_ID`) as repository secrets.
+This is **not** a GitHub Action. The platform owns the lifecycle:
+
+- **Schedule** — a per-project `qa_schedules` row (configured in Observability ▸
+  Agentic QA) is swept by the API's `*/5` cron (`runQaExplorationSweep`), which
+  enqueues a `qa_explorations` row.
+- **Dispatch** — the sweep (and the "Run" button) call `dispatchQaRunner`, which
+  mints a short-lived tenant token and proxies `POST /run` to
+  `QaRunnerContainerDO` — a managed Cloudflare Container backed by this image
+  (`server.ts`). No human credentials, no CI runner.
+- **Drain** — the container claims the exploration, drives the browser, and posts
+  findings back to `/api/qa/*`.
+
+`npm run explore` (the one-shot CLI) remains for **local/manual** drains; set
+`BF_AGENT_TOKEN` (or operator `BF_QA_EMAIL`/`BF_QA_PASSWORD`) in `.env`.

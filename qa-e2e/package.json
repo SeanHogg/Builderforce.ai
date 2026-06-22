@@ -10,6 +10,7 @@
     "report": "tsx src/report.ts",
     "ci": "tsx src/pull-tests.ts && (playwright test; true) && tsx src/report.ts",
     "explore": "tsx src/explore.ts",
+    "serve": "tsx src/server.ts",
     "type-check": "tsc --noEmit"
   },
   "devDependencies": {

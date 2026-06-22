@@ -55,6 +55,7 @@ import { isValidCron, nextCronTime } from '../../domain/workflowSchedule';
 import { QaFlowService } from '../../application/qa/QaFlowService';
 import { QaGeneratorService } from '../../application/qa/QaGeneratorService';
 import { QaHeatmapService, QA_HEAT_VERSION_KEY } from '../../application/qa/QaHeatmapService';
+import { dispatchQaRunner } from '../../application/qa/dispatchQaRunner';
 import {
   buildExplorationPlan,
   defaultFindingSeverity,
@@ -755,7 +756,14 @@ export function createQaRoutes(db: Db, taskService: TaskService): Hono<HonoEnv> 
       updatedAt: new Date(),
     }).returning();
 
-    return c.json({ exploration, plannedSteps: plan.length }, 201);
+    // Dispatch the managed runner now so "Run" drains immediately. No-op (row
+    // stays queued for an external runner) when the container binding is absent.
+    let dispatched = false;
+    if (exploration) {
+      dispatched = await dispatchQaRunner(c.env as Env, { explorationId: exploration.id, tenantId, projectId }).catch(() => false);
+    }
+
+    return c.json({ exploration, plannedSteps: plan.length, dispatched }, 201);
   });
 
   // ── GET /explorations ───────────────────────────────────────────────────────
