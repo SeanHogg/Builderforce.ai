@@ -14,7 +14,7 @@
 export type ProjectModality = 'designer' | 'video' | 'llm';
 
 /** Right-panel tab ids the IDE can surface. Each modality picks the relevant subset. */
-export type RightTab = 'files' | 'train' | 'publish' | 'state';
+export type RightTab = 'files' | 'agent' | 'train' | 'publish' | 'state';
 
 export interface ModalityDef {
   id: ProjectModality;
@@ -42,6 +42,7 @@ export interface ModalityDef {
 /** Labels for the right-panel tabs — single source so the IDE doesn't inline them. */
 export const RIGHT_TAB_LABELS: Record<RightTab, string> = {
   files: '📁 Files',
+  agent: '🤖 Agent',
   train: '🧠 Train',
   publish: '🚀 Publish',
   state: '🔬 State',
@@ -61,7 +62,7 @@ export const MODALITIES: ModalityDef[] = [
     ].join('\n'),
     brainPlaceholder: 'Ask AI to build, explain, or refactor…',
     brainEmptyState: 'Open a file for context, or ask me to generate an app or create files.',
-    rightTabs: ['files', 'train', 'publish', 'state'],
+    rightTabs: ['files', 'agent', 'train', 'publish', 'state'],
     showRunButton: true,
   },
   {

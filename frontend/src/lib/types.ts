@@ -38,6 +38,8 @@ export interface Project {
   template?: string | null;
   /** Active IDE modality for this project: 'designer' | 'video' | 'llm'. Defaults to 'designer'. */
   modality?: string | null;
+  /** Where the project was born — 'ide' | 'imported' | 'external'. Drives the origin badge. */
+  origin?: string | null;
   key?: string;
   tenantId?: number;
   status?: string;

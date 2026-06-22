@@ -66,6 +66,7 @@ import { createMarketplaceStatsRoutes } from './presentation/routes/marketplaceS
 import { createWorkforceRoutes }        from './presentation/routes/workforceRoutes';
 import { createPersonaRoutes }          from './presentation/routes/personaRoutes';
 import { createLlmRoutes }          from './presentation/routes/llmRoutes';
+import { createTenantModelRoutes }  from './presentation/routes/tenantModelRoutes';
 import { createSemanticCacheRoutes } from './presentation/routes/semanticCacheRoutes';
 import { createAdminRoutes }        from './presentation/routes/adminRoutes';
 import { createChatRoutes }         from './presentation/routes/chatRoutes';
@@ -257,6 +258,10 @@ function buildApp(env: Env): Hono<HonoEnv> {
 
   // builderforceLLM — OpenAI-compatible multi-vendor LLM proxy (tenant or agentHost API key auth)
   app.route('/llm', createLlmRoutes());
+
+  // Tenant "LLM" objects — named, reusable model configs selectable anywhere by
+  // the ref `tenant_model:<slug>` (cloud agents, on-prem hosts, the Designer Brain).
+  app.route('/api/llm/models', createTenantModelRoutes(db));
 
   // Shared (L2) semantic response cache — the web app and the agent runtime both
   // query it so a paraphrased answer from one surface is reusable by the other.

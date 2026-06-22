@@ -1,6 +1,7 @@
 'use client';
 
 import { SourceControlContent } from './sourcecontrol/SourceControlContent';
+import { RepoSyncControl } from './ide/RepoSyncControl';
 
 /**
  * IDE settings slide-out (opened from the header cog). Today it hosts the
@@ -86,6 +87,7 @@ export function IdeSettingsPanel({ open, onClose, projectId, onImported }: IdeSe
           </button>
         </div>
         <div style={{ flex: 1, overflowY: 'auto', minHeight: 0, padding: 16 }}>
+          <RepoSyncControl projectId={projectId} onChanged={onImported} />
           <div style={{ fontSize: '0.78rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-muted)', marginBottom: 10 }}>
             Source control
           </div>

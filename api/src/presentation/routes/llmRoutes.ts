@@ -42,6 +42,7 @@ import {
   type ImageGenerationRequest,
 } from '../../application/llm/ImageProxyService';
 import { buildDatabase } from '../../infrastructure/database/connection';
+import { resolveTenantModel, TENANT_MODEL_REF_PREFIX } from '../../application/llm/tenantModelService';
 import { llmUsageLog, llmFailoverLog, tenants, tenantMembers, agentHosts, tenantApiKeys, users, projects, tasks, runModelOutcomes } from '../../infrastructure/database/schema';
 import { getRoutingTable, parseScopeToken, scopeToken } from '../../application/llm/routingTable';
 import { actionTypeLabel, type ActionType } from '../../application/llm/actionTypes';
@@ -1046,10 +1047,36 @@ export function createLlmRoutes(): Hono<HonoEnv> {
       return c.json({ error: 'messages array is required' }, 400);
     }
 
+    // ── Tenant "LLM" expansion (migration 0211) ────────────────────────────
+    // A `tenant_model:<slug>` model ref expands into its configured base model +
+    // system directives + sampling params. This is the gateway-side half of the
+    // shared resolver, so the Designer Brain, on-prem hosts, and any external
+    // /v1/chat/completions caller all honour a tenant's named model the same way
+    // (the cloud agent loop resolves the same ref via runCloudToolLoop).
+    const bodyAny = body as Record<string, unknown>;
+    if (typeof bodyAny.model === 'string' && bodyAny.model.startsWith(TENANT_MODEL_REF_PREFIX)) {
+      const tm = await resolveTenantModel(c.env as Env, buildDatabase(c.env), access.tenantId, bodyAny.model);
+      // null base → let the plan default resolve; unknown ref → drop the bad id too.
+      bodyAny.model = tm?.baseModel ?? undefined;
+      if (tm?.directives) {
+        const msgs = body.messages as Array<{ role?: string; content?: unknown }>;
+        const sysIdx = msgs.findIndex((m) => m.role === 'system');
+        if (sysIdx >= 0) {
+          const prev = typeof msgs[sysIdx].content === 'string' ? (msgs[sysIdx].content as string) : '';
+          msgs[sysIdx] = { ...msgs[sysIdx], content: `${tm.directives}\n\n${prev}`.trim() };
+        } else {
+          msgs.unshift({ role: 'system', content: tm.directives });
+        }
+      }
+      if (tm) {
+        if (typeof tm.params.temperature === 'number' && bodyAny.temperature == null) bodyAny.temperature = tm.params.temperature;
+        if (typeof tm.params.top_p === 'number' && bodyAny.top_p == null) bodyAny.top_p = tm.params.top_p;
+      }
+    }
+
     // Capture SDK transport metadata for usage logging — the body's `metadata`
     // and `useCase` are consumed here and stripped before vendor dispatch
     // (see STANDARD_BODY_FIELDS).
-    const bodyAny = body as Record<string, unknown>;
     const callerMetadata = (bodyAny.metadata as Record<string, unknown> | undefined) ?? null;
     const callerUseCase  = typeof bodyAny.useCase === 'string' ? bodyAny.useCase : null;
     const idempotencyKey = c.req.header('Idempotency-Key') ?? null;

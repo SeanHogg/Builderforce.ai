@@ -70,6 +70,7 @@ export class ProjectRepository implements IProjectRepository {
         githubRepoName:  plain.githubRepoName ?? undefined,
         governance:     plain.governance ?? undefined,
         modality:        plain.modality ?? undefined,
+        origin:          plain.origin ?? undefined,
       })
       .returning();
     if (!inserted) throw new Error('Insert returned no rows');
@@ -135,6 +136,7 @@ function toDomain(row: Row): Project {
     githubRepoName:  row.githubRepoName ?? null,
     governance:      row.governance ?? null,
     modality:        row.modality ?? 'designer',
+    origin:          row.origin ?? null,
     createdAt:       row.createdAt,
     updatedAt:       row.updatedAt,
   });

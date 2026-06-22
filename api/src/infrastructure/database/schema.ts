@@ -754,6 +754,10 @@ export const projects = pgTable('projects', {
   githubRepoName:  varchar('github_repo_name', { length: 255 }),
   governance:      text('governance'),
   modality:        text('modality').notNull().default('designer'),
+  /** Where the project was born — drives the IDE/Designer badge.
+   *  'ide' (created in the Designer) | 'imported' (created by importing a repo) |
+   *  'external' (anything else). NULL on legacy rows = treated as external. */
+  origin:          text('origin'),
   createdAt:       timestamp('created_at').notNull().defaultNow(),
   updatedAt:       timestamp('updated_at').notNull().defaultNow(),
 });
@@ -3492,6 +3496,11 @@ export const projectRepositories = pgTable('project_repositories', {
   isDefault:     boolean('is_default').notNull().default(false),
   matchHints:    text('match_hints'),   // JSON {labels?, pathGlobs?, keywords?}
   credentialId:  uuid('credential_id').references(() => integrationCredentials.id, { onDelete: 'set null' }),
+  // Designer import baseline (migration 0211): the ref + head sha + time the R2
+  // workspace was last imported from, so commit-back can diff against it.
+  lastSyncedRef: text('last_synced_ref'),
+  lastSyncedSha: text('last_synced_sha'),
+  lastSyncedAt:  timestamp('last_synced_at'),
   createdAt:     timestamp('created_at').notNull().defaultNow(),
   updatedAt:     timestamp('updated_at').notNull().defaultNow(),
   // UNIQUE (project_id, provider, owner, repo) enforced in migration 0067.
@@ -3841,4 +3850,36 @@ export const marketplacePersonas = pgTable('marketplace_personas', {
   updatedAt:    timestamp('updated_at').notNull().defaultNow(),
 }, (t) => ({
   byTenant:   index('idx_marketplace_personas_tenant').on(t.tenantId),
+}));
+
+/**
+ * tenant_models — the tenant "LLM" object (migration 0211). A reusable, named
+ * bundle of { base model + system prompt + params (+ optional persona / BYO key /
+ * future trained model) } that any cloud agent, on-prem host, or the Designer can
+ * select by ref `tenant_model:<slug>`. `providerKey` names the provider whose BYO
+ * key to route through (tenant_llm_provider_keys is keyed by (tenant_id, provider),
+ * no surrogate id). `trainedModelRef` is the seam for a future SSM artifact base.
+ */
+export const tenantModels = pgTable('tenant_models', {
+  id:              uuid('id').primaryKey().defaultRandom(),
+  tenantId:        integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  name:            varchar('name', { length: 255 }).notNull(),
+  slug:            varchar('slug', { length: 255 }).notNull(),
+  /** A model id from the curated pool; NULL = run on the tenant/plan default base. */
+  baseModel:       text('base_model'),
+  systemPrompt:    text('system_prompt'),
+  /** { temperature?, reasoning?, top_p?, ... } applied at run time. */
+  params:          jsonb('params').notNull().default(sql`'{}'::jsonb`),
+  personaId:       uuid('persona_id').references(() => marketplacePersonas.id, { onDelete: 'set null' }),
+  /** Provider name whose BYO key to route through (e.g. 'anthropic'); NULL = managed. */
+  providerKey:     text('provider_key'),
+  /** Future: a trained SSM model artifact used as the base. */
+  trainedModelRef: text('trained_model_ref'),
+  visibility:      varchar('visibility', { length: 16 }).notNull().default('tenant'),
+  createdBy:       varchar('created_by', { length: 36 }).references(() => users.id, { onDelete: 'set null' }),
+  createdAt:       timestamp('created_at').notNull().defaultNow(),
+  updatedAt:       timestamp('updated_at').notNull().defaultNow(),
+}, (t) => ({
+  byTenant: index('idx_tenant_models_tenant').on(t.tenantId),
+  uqSlug:   uniqueIndex('uq_tenant_models_slug').on(t.tenantId, t.slug),
 }));

@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import type { Project } from '@/lib/types';
+import { ProjectOriginBadge } from './ProjectOriginBadge';
 import type { ProjectPanelTab } from './ProjectDetailsPanel';
 import { DeleteProjectDialog } from './DeleteProjectDialog';
 import { ArchitectureAnalysisButton } from './ArchitectureAnalysisButton';
@@ -103,21 +104,24 @@ export function ProjectCard({
               {project.key}
             </div>
           )}
-          {project.status != null && project.status !== '' && (
-            <span
-              style={{
-                fontSize: 11,
-                color: 'var(--text-secondary)',
-                background: 'var(--surface-interactive)',
-                padding: '2px 6px',
-                borderRadius: 6,
-                textTransform: 'capitalize',
-                display: 'inline-block',
-              }}
-            >
-              {project.status.replace(/_/g, ' ')}
-            </span>
-          )}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+            {project.status != null && project.status !== '' && (
+              <span
+                style={{
+                  fontSize: 11,
+                  color: 'var(--text-secondary)',
+                  background: 'var(--surface-interactive)',
+                  padding: '2px 6px',
+                  borderRadius: 6,
+                  textTransform: 'capitalize',
+                  display: 'inline-block',
+                }}
+              >
+                {project.status.replace(/_/g, ' ')}
+              </span>
+            )}
+            <ProjectOriginBadge origin={project.origin} />
+          </div>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
           {showDetailsButton && (

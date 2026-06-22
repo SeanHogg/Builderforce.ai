@@ -21,6 +21,7 @@ export interface CreateProjectDto {
   githubRepoUrl?: string | null;
   governance?:    string | null;
   modality?:      string | null;
+  origin?:        string | null;
 }
 
 export interface UpdateProjectDto {
@@ -111,6 +112,7 @@ export class ProjectService {
       githubRepoName,
       governance: dto.governance ?? null,
       modality: dto.modality ?? 'designer',
+      origin: dto.origin ?? null,
     });
 
     return this.projects.save(project);

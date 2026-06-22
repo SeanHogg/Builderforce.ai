@@ -85,7 +85,7 @@ export default function IDEDashboardPage() {
     setCreating(true);
     setError(null);
     try {
-      const project = await createProject({ name: newName.trim(), modality: createType });
+      const project = await createProject({ name: newName.trim(), modality: createType, origin: 'ide' });
       persistLastProjectId(String(project.id));
       router.push(`/ide/${project.publicId ?? project.id}`);
     } catch (err) {
@@ -135,11 +135,20 @@ export default function IDEDashboardPage() {
   return (
     <div style={{ flex: 1, color: 'var(--text-primary)' }}>
       <main style={{ maxWidth: 1200, margin: '0 auto', padding: '40px 24px' }}>
-        <div style={{ marginBottom: 8 }}>
-          <h1 style={{ fontSize: '1.6rem', fontWeight: 700, margin: 0 }}>IDE</h1>
-          <p style={{ color: 'var(--text-secondary)', marginTop: 6, fontSize: 14 }}>
-            Start a new IDE project or open an existing one.
-          </p>
+        <div style={{ marginBottom: 8, display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+          <div>
+            <h1 style={{ fontSize: '1.6rem', fontWeight: 700, margin: 0 }}>IDE</h1>
+            <p style={{ color: 'var(--text-secondary)', marginTop: 6, fontSize: 14 }}>
+              Start a new IDE project or open an existing one.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => router.push('/llms')}
+            style={{ padding: '8px 14px', fontSize: 13, fontWeight: 600, background: 'var(--bg-elevated)', color: 'var(--text-primary)', border: '1px solid var(--border-subtle)', borderRadius: 8, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}
+          >
+            🧠 Manage LLMs
+          </button>
         </div>
 
         {error && (

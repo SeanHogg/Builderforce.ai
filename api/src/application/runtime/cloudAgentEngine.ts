@@ -45,6 +45,7 @@ import { classifyTaskAction } from '../llm/classifyTask';
 import { normalizeActionType, learnedRoutingEnabled, type ActionType } from '../llm/actionTypes';
 import { getRoutingTable, MIN_SAMPLES, type RoutingScope } from '../llm/routingTable';
 import type { ActionModelRankStat } from '../llm/LlmProxyService';
+import { resolveTenantModel } from '../llm/tenantModelService';
 import { scoreRunOutcome } from './scoreRunOutcome';
 import { handleCloudRunCrash } from './cloudSelfHeal';
 import { cloudCrashReason } from './orphanReasons';
@@ -1239,6 +1240,17 @@ export async function runCloudToolLoop(
   }
   const writtenPaths = new Set<string>(opts?.resume?.writtenPaths ?? []);
 
+  // Tenant "LLM" (migration 0211): if `model` is a `tenant_model:<slug>` ref, expand
+  // it to its configured base model + system directives so THIS run honours the
+  // tenant's model config on every surface (Worker/DO/Container all funnel here).
+  // `baseModel: null` means "run on the plan default" → effectiveModel = undefined.
+  // Unknown/non-tenant refs resolve to null and pass through unchanged.
+  const tenantModel = await resolveTenantModel(env, db, tenantId, model);
+  const effectiveModel = tenantModel ? (tenantModel.baseModel ?? undefined) : model;
+  const effectiveSystemPrompt = tenantModel?.directives
+    ? `${tenantModel.directives}\n\n${systemPrompt}`
+    : systemPrompt;
+
   // The PRD (committed to the ticket branch during prep) is part of this task's
   // single PR. Seed it into writtenPaths on the first tick so the finalize opens a
   // PR — and lists PRD.md — even if the agent ends up writing zero code files. Done
@@ -1250,7 +1262,7 @@ export async function runCloudToolLoop(
 
   // Resume from persisted state (DO surface) or start fresh (Worker surface).
   const messages: Array<Record<string, unknown>> = opts?.resume?.messages ?? [
-    { role: 'system', content: systemPrompt },
+    { role: 'system', content: effectiveSystemPrompt },
     { role: 'user', content: userContent },
   ];
   const startStep = opts?.resume?.step ?? 0;
@@ -1289,7 +1301,7 @@ export async function runCloudToolLoop(
   // the order on top of the shared table.
   const learned = opts?.resume ? { actionType: 'other' as ActionType, actionStats: undefined } : await resolveLearnedRoutingInputs(env, db, { tenantId, projectId, taskRow });
   // The resolved pin rides CloudLoopState so the DO surface keeps every tick on it.
-  const pick = pickCloudModel(model, routing.effectivePlan, routing.premiumOverride, {
+  const pick = pickCloudModel(effectiveModel, routing.effectivePlan, routing.premiumOverride, {
     actionType: learned.actionType,
     actionStats: learned.actionStats,
     bias: opts?.routingBias,

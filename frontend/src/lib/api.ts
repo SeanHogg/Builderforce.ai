@@ -96,6 +96,8 @@ export async function createProject(data: {
   template?: string;
   /** IDE project type — 'designer' | 'video' | 'llm'. Defaults server-side to 'designer'. */
   modality?: string;
+  /** Where the project was born — 'ide' tags it for the Designer badge. */
+  origin?: string;
 }): Promise<Project> {
   const res = await projectsRequest<Project>('/api/projects', {
     method: 'POST',
@@ -180,6 +182,46 @@ export async function deleteFile(
     method: 'DELETE',
   });
 }
+
+// ---------------------------------------------------------------------------
+// IDE ↔ repo bridge — import a repo into the R2 workspace, commit edits back,
+// create a clean repo, and read sync status. Siblings of /files under the IDE base.
+// ---------------------------------------------------------------------------
+
+/** Project-scoped IDE base (mirrors filesBase, minus the /files segment). */
+function ideProjectBase(projectId: number | string): string {
+  return isWorkerForProjects() ? `/api/projects/${projectId}` : `${IDE}/projects/${projectId}`;
+}
+
+export interface RepoSyncStatus {
+  linked: boolean;
+  repoId?: string;
+  owner?: string;
+  repo?: string;
+  provider?: string;
+  lastSyncedRef?: string | null;
+  lastSyncedAt?: string | null;
+}
+
+export const ideRepoApi = {
+  status: (projectId: number | string): Promise<RepoSyncStatus> =>
+    projectsRequest<RepoSyncStatus>(`${ideProjectBase(projectId)}/repo-status`),
+
+  import: (projectId: number | string, repoId: string, ref?: string): Promise<{ ok: boolean; imported: number; ref: string; truncated: boolean }> =>
+    projectsRequest(`${ideProjectBase(projectId)}/import`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ repoId, ref }),
+    }),
+
+  commit: (projectId: number | string, repoId: string, message?: string, branch?: string): Promise<{ ok: boolean; branch: string; committed: number; deleted: number; prNumber: number | null; prUrl: string | null }> =>
+    projectsRequest(`${ideProjectBase(projectId)}/commit`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ repoId, message, branch }),
+    }),
+
+  createRepo: (projectId: number | string, body: { name: string; provider?: string; private?: boolean; credentialId: string }): Promise<{ ok: boolean; repoId: string; owner: string; repo: string; committed: number }> =>
+    projectsRequest(`${ideProjectBase(projectId)}/create-repo`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+    }),
+};
 
 // ---------------------------------------------------------------------------
 // IDE: Subdomain hosting (publish a Designer build to <sub>.apps.builderforce.ai)
