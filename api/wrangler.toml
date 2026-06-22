@@ -8,17 +8,25 @@ pattern = "api.builderforce.ai"
 custom_domain = true
 
 # Wildcard subdomain hosting for published IDE (Designer) projects. Every
-# `<sub>.apps.builderforce.ai` request lands on this worker; the host-hosting
+# `<sub>.builderforce.ai` request lands on this worker; the host-hosting
 # middleware in src/index.ts serves it from R2 (`sites/<sub>/...`) as a public
 # website. A zone route (not custom_domain) so one pattern covers all subdomains.
 #
-# REQUIRES a matching proxied DNS record so the hostnames resolve to the edge —
-# add a wildcard once (Cloudflare dashboard → DNS, or the API call below):
-#   Type AAAA  Name *.apps  Content 100::  Proxied (orange cloud)
-#   (the 100:: discard-prefix placeholder is the standard pattern for a
-#    Worker-only route with no real origin; the route intercepts before origin)
+# Single-label apex (`*.builderforce.ai`, NOT `*.apps.builderforce.ai`) so the
+# FREE Universal SSL cert covers it — a second-level wildcard would need paid ACM.
+# The trade-off: this apex is SHARED with platform hostnames, so the route is
+# greedy. Two safeguards: (1) more-specific routes win — `api.builderforce.ai`
+# (custom_domain above) and any www/app frontend binding keep their traffic;
+# (2) `subdomainFromHost` (siteHosting.ts) refuses RESERVED_SUBDOMAINS, so a
+# reserved label that DOES hit this worker falls through to normal routing.
+#
+# REQUIRES a matching proxied wildcard DNS record so unclaimed labels resolve to
+# the edge — add once (Cloudflare dashboard → DNS, or the API call below):
+#   Type AAAA  Name *  Content 100::  Proxied (orange cloud)
+#   (specific records for api/www/etc. take DNS precedence over the wildcard;
+#    100:: is the standard discard placeholder for a Worker-only route.)
 [[routes]]
-pattern = "*.apps.builderforce.ai/*"
+pattern = "*.builderforce.ai/*"
 zone_name = "builderforce.ai"
 
 [vars]

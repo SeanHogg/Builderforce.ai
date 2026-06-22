@@ -86,7 +86,9 @@ export function SitePublishPanel({ projectId, projectName, onBuild }: SitePublis
   }, [subdomain, onBuild, projectId]);
 
   const busy = phase === 'building' || phase === 'uploading';
-  const apex = 'apps.builderforce.ai';
+  // Mirrors HOSTING_APEX (api/src/application/ide/siteHosting.ts) — display only;
+  // the live URLs come from the server (site.url / pathUrl).
+  const apex = 'builderforce.ai';
 
   return (
     <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 14, color: 'var(--text-primary)', fontSize: 14 }}>

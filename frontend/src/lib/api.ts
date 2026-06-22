@@ -224,7 +224,7 @@ export const ideRepoApi = {
 };
 
 // ---------------------------------------------------------------------------
-// IDE: Subdomain hosting (publish a Designer build to <sub>.apps.builderforce.ai)
+// IDE: Subdomain hosting (publish a Designer build to <sub>.builderforce.ai)
 // ---------------------------------------------------------------------------
 
 export interface SiteInfo {

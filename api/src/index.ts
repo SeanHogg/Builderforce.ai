@@ -195,10 +195,11 @@ function buildApp(env: Env): Hono<HonoEnv> {
 
   app.use('*', corsMiddleware);
 
-  // Published-site hosting: a request whose Host is a `<sub>.apps.builderforce.ai`
+  // Published-site hosting: a request whose Host is a `<sub>.builderforce.ai`
   // hosting subdomain (delivered by the worker's wildcard route) is served
   // straight from R2 as a public website — it never touches the API routers or
-  // auth. Non-hosting hosts (api.builderforce.ai) fall through to next().
+  // auth. Reserved/platform hosts (api.builderforce.ai, www, …) return null from
+  // subdomainFromHost and fall through to next() and normal routing.
   app.use('*', async (c, next) => {
     const res = await tryServeHostedSite(c.env, c.req.header('host'), c.req.path);
     if (res) return res;
@@ -280,8 +281,8 @@ function buildApp(env: Env): Hono<HonoEnv> {
   app.route('/api/brain-files', createBrainFilesRoutes());
 
   // Published IDE (Designer) sites — public static hosting from R2. Served at
-  // <sub>.apps.builderforce.ai once the wildcard route is wired; the path form
-  // /api/sites/<sub>/... works today. No JWT (these are public websites).
+  // <sub>.builderforce.ai via the wildcard route; the path form
+  // /api/sites/<sub>/... is the always-on fallback. No JWT (these are public websites).
   app.route('/api/sites', createSitesRoutes());
 
   // Public Developer API (Bearer <developer_api_key> for read-only; tenant JWT for key management)
