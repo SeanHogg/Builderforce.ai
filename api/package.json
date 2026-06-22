@@ -8,8 +8,8 @@
     "deploy": "node scripts/migrate.mjs && npm run deploy:worker",
     "deploy:worker": "wrangler deploy",
     "secrets:from-env": "node scripts/set-secrets-from-env.mjs",
-    "db:generate": "npx drizzle-kit generate",
-    "db:push": "npx drizzle-kit push",
+    "db:generate": "npx drizzle-kit@0.30.6 generate",
+    "db:push": "npx drizzle-kit@0.30.6 push",
     "type-check": "tsc --noEmit",
     "check:schema": "node scripts/check-schema-drift.mjs",
     "check:migrations": "node scripts/check-migrations.mjs",
@@ -25,7 +25,6 @@
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20260305.0",
-    "drizzle-kit": "^0.30.0",
     "typescript": "^5.7.3",
     "vitest": "^4.0.18",
     "wrangler": "^4.69.0"
