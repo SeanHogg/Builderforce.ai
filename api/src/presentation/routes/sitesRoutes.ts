@@ -3,7 +3,7 @@
  *
  * Serves built assets from R2 (`sites/<subdomain>/...`) with SPA fallback. No
  * auth — these are public websites. Two addressing modes:
- *   - Host-based (production): `<sub>.apps.builderforce.ai/<path>` — the worker's
+ *   - Host-based (production): `<sub>.builderforce.ai/<path>` — the worker's
  *     wildcard route delivers these; `serveHostedSite` is invoked by the
  *     host-hosting middleware in index.ts (see `tryServeHostedSite`).
  *   - Path-based (works without the wildcard route): `/api/sites/<sub>/<path>` —
@@ -66,7 +66,7 @@ export async function serveHostedSite(
 
 /**
  * Host-based hosting hook for the top-level middleware. Returns a served
- * response when the request Host is a `<sub>.apps.builderforce.ai` hosting
+ * response when the request Host is a `<sub>.builderforce.ai` hosting
  * subdomain, or null to let normal API routing continue.
  */
 export async function tryServeHostedSite(

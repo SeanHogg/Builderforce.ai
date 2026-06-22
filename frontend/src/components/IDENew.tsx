@@ -455,8 +455,14 @@ export function IDE({ project, initialFiles, onProjectUpdate, onOpenProjectDetai
     terminalWriter?.('\x1b[36mnpm install…\x1b[0m\r\n');
     const installCode = await ensureInstalled(mount, (d) => terminalWriter?.(d));
     if (installCode !== 0) throw new Error(`npm install failed (exit ${installCode}).`);
+    // Force a RELATIVE asset base (`--base=./`). Vite defaults to `base: '/'`,
+    // which emits root-absolute asset URLs (`/assets/...`). Those only resolve
+    // when the site is served from the domain root, so they 404 under the path
+    // form `/api/sites/<sub>/` (the "preview" + pre-TLS fallback). Relative URLs
+    // resolve correctly BOTH at `<sub>.apps.builderforce.ai/` and under the path
+    // prefix. The flag overrides whatever the project's vite config sets.
     terminalWriter?.('\r\n\x1b[36mnpm run build…\x1b[0m\r\n');
-    const buildCode = await runCommandAndWait('npm', ['run', 'build'], (d) => terminalWriter?.(d));
+    const buildCode = await runCommandAndWait('npm', ['run', 'build', '--', '--base=./'], (d) => terminalWriter?.(d));
     if (buildCode !== 0) throw new Error(`Build failed (exit ${buildCode}). Check the build output above.`);
 
     const assets = await readDirRecursive('dist');

@@ -3,8 +3,12 @@
  * endpoint and the public sites server.
  *
  * Built assets live in R2 under `sites/<subdomain>/...` and are served at
- * `<subdomain>.apps.builderforce.ai` (or, until the wildcard route is wired, via
- * the path fallback `/api/sites/<subdomain>/...`). The subdomain→site lookup is
+ * `<subdomain>.builderforce.ai` (or, until the wildcard route is wired, via the
+ * path fallback `/api/sites/<subdomain>/...`). We host on the SINGLE-LABEL apex
+ * wildcard `*.builderforce.ai` (not `*.apps.builderforce.ai`) because Cloudflare's
+ * free Universal SSL cert covers `*.builderforce.ai` but NOT a second-level
+ * wildcard — so the apex is shared with platform hostnames (api/www/…), which is
+ * why `subdomainFromHost` MUST refuse reserved labels. The subdomain→site lookup is
  * the hot path (every asset request resolves it), so it's served through the
  * canonical read-through cache and invalidated on publish via `version_token`.
  */
@@ -15,8 +19,13 @@ import { getOrSetCached, invalidateCached } from '../../infrastructure/cache/rea
 /** R2 key prefix all hosted sites live under. */
 export const SITES_PREFIX = 'sites/';
 
-/** Apex the wildcard hosting domain hangs off. `<sub>.apps.builderforce.ai`. */
-export const HOSTING_APEX = 'apps.builderforce.ai';
+/**
+ * Apex the wildcard hosting domain hangs off. `<sub>.builderforce.ai`.
+ * Single-label so the free Universal SSL `*.builderforce.ai` cert applies; the
+ * apex is therefore shared with platform hostnames and protected by
+ * `RESERVED_SUBDOMAINS` on both the publish (claim) and serve (route) sides.
+ */
+export const HOSTING_APEX = 'builderforce.ai';
 
 /**
  * Labels that can never be a user site — they collide with platform hostnames
@@ -53,13 +62,21 @@ export function normalizeSubdomain(raw: string): string | null {
   return slug;
 }
 
-/** Derive a hosting subdomain from a request Host header, or null if not the apex. */
+/**
+ * Derive a hosting subdomain from a request Host header, or null when the host
+ * isn't a single-label `<sub>.builderforce.ai` site host. Returns null for the
+ * apex itself, for multi-label hosts, and — crucially — for RESERVED labels:
+ * since the apex is shared with platform hostnames (`api.builderforce.ai` is THIS
+ * worker, plus www/app/etc.), a reserved label must fall through to normal
+ * routing rather than be looked up (and 404'd) as a user site.
+ */
 export function subdomainFromHost(host: string | undefined): string | null {
   if (!host) return null;
   const h = (host.split(':')[0] ?? '').toLowerCase();
   if (!h.endsWith(`.${HOSTING_APEX}`)) return null;
   const label = h.slice(0, h.length - HOSTING_APEX.length - 1);
-  return label && !label.includes('.') ? label : null;
+  if (!label || label.includes('.') || RESERVED_SUBDOMAINS.has(label)) return null;
+  return label;
 }
 
 /** The resolved, cacheable shape the asset server needs. JSON-serializable. */

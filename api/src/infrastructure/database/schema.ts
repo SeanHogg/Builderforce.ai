@@ -764,7 +764,7 @@ export const projects = pgTable('projects', {
 
 /**
  * Subdomain hosting for IDE (Designer) projects — a published app served at
- * {subdomain}.apps.builderforce.ai. One row per project (project_id unique);
+ * {subdomain}.builderforce.ai. One row per project (project_id unique);
  * re-publishing overwrites the R2 assets and bumps `versionToken` (the cache-bust
  * token the subdomain→site lookup is keyed by). See migration 0121.
  */
