@@ -32,13 +32,32 @@ const COI_HEADERS: Record<string, string> = {
   'Cross-Origin-Opener-Policy': 'same-origin',
   'Cross-Origin-Embedder-Policy': 'credentialless',
 };
-function withCoi(res: NextResponse): NextResponse {
-  for (const [k, v] of Object.entries(COI_HEADERS)) res.headers.set(k, v);
+// The WebContainer connect handshake tab is the INVERSE of COI: it must NOT be
+// cross-origin isolated, or COOP:same-origin severs the postMessage/opener
+// bridge back to the IDE (setupConnect → "This page must have an opener. You
+// must serve it with appropriate headers"). next.config + public/_headers also
+// declare this, but @cloudflare/next-on-pages doesn't reliably apply either to a
+// dynamically-rendered route — and /webcontainer/connect/[id] is SSR — so set it
+// here, exactly as we do for the SSR /ide route. Keep all three in sync.
+const NO_ISOLATION_HEADERS: Record<string, string> = {
+  'Cross-Origin-Opener-Policy': 'unsafe-none',
+  'Cross-Origin-Embedder-Policy': 'unsafe-none',
+};
+function withHeaders(res: NextResponse, headers: Record<string, string>): NextResponse {
+  for (const [k, v] of Object.entries(headers)) res.headers.set(k, v);
   return res;
 }
 
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
+
+  // WebContainer connect handshake tab — public, and must be served WITHOUT
+  // cross-origin isolation (see NO_ISOLATION_HEADERS). Handle first so it never
+  // hits the isolation or auth logic below.
+  if (pathname === '/webcontainer/connect' || pathname.startsWith('/webcontainer/connect/')) {
+    return withHeaders(NextResponse.next(), NO_ISOLATION_HEADERS);
+  }
+
   const needsCoi = pathname === '/ide' || pathname.startsWith('/ide/');
 
   // Embedded surfaces (/embed/*) are framed cross-origin by host apps (e.g.
@@ -120,10 +139,10 @@ export function middleware(request: NextRequest) {
     // Logged out → DON'T redirect to login. Let the request through so the app
     // renders a per-route marketing teaser + login/CTA (ConditionalAppShell +
     // RouteMarketing), instead of bouncing the visitor or showing a blank gate.
-    if (!webToken) return needsCoi ? withCoi(NextResponse.next()) : NextResponse.next();
+    if (!webToken) return needsCoi ? withHeaders(NextResponse.next(), COI_HEADERS) : NextResponse.next();
     // Signed in but no workspace selected → tenant picker.
     if (!tenantToken) return toTenants();
-    return needsCoi ? withCoi(NextResponse.next()) : NextResponse.next();
+    return needsCoi ? withHeaders(NextResponse.next(), COI_HEADERS) : NextResponse.next();
   }
 
   return NextResponse.next();
@@ -131,6 +150,8 @@ export function middleware(request: NextRequest) {
 
 export const config = {
   matcher: [
+    '/webcontainer/connect',
+    '/webcontainer/connect/:path*',
     '/embed/:path*',
     '/logs/:path*',
     '/timeline/:path*',

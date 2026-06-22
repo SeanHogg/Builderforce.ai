@@ -65,18 +65,24 @@ const nextConfig = {
   async headers() {
     return [
       // WebContainer connect route: must NOT be cross-origin isolated so the
-      // preview tab can complete the connect handshake with the IDE.
+      // preview tab can complete the connect handshake with the IDE. BOTH COOP
+      // and COEP must be relaxed — COOP:same-origin (inherited from the catch-all
+      // below) severs the opener/postMessage bridge setupConnect needs. The
+      // catch-all's negative-lookahead also excludes this path so it can't re-add
+      // same-origin (Next applies every matching rule).
       // @see https://github.com/stackblitz/webcontainer-core/issues/1725
       {
         source: '/webcontainer/connect/:path*',
         headers: [
+          { key: 'Cross-Origin-Opener-Policy', value: 'unsafe-none' },
           { key: 'Cross-Origin-Embedder-Policy', value: 'unsafe-none' },
         ],
       },
       {
         // Pages + assets: COOP required for popups; COEP=credentialless allows
         // cross-origin fonts/images while still enabling SharedArrayBuffer (WebGPU).
-        source: '/((?!api/).*)',
+        // Excludes /webcontainer/connect (served non-isolated, rule above).
+        source: '/((?!api/|webcontainer/connect).*)',
         headers: [
           { key: 'Cross-Origin-Opener-Policy', value: 'same-origin' },
           { key: 'Cross-Origin-Embedder-Policy', value: 'credentialless' },

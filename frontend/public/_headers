@@ -21,10 +21,13 @@
   Cross-Origin-Embedder-Policy: credentialless
 
 # The WebContainer connect handshake tab must NOT be cross-origin isolated, or
-# the preview can't complete its postMessage handshake with the IDE.
+# the preview can't complete its postMessage handshake with the IDE. BOTH COOP
+# and COEP must be relaxed — COOP:same-origin (from /* above) severs the opener
+# bridge setupConnect needs, not just COEP.
 # @see https://github.com/stackblitz/webcontainer-core/issues/1725
-# (later rule wins for a repeated header, so this overrides COEP above)
+# (later rule wins for a repeated header, so these override /* above)
 /webcontainer/connect/*
+  Cross-Origin-Opener-Policy: unsafe-none
   Cross-Origin-Embedder-Policy: unsafe-none
 
 # The service worker script must always be revalidated against the network so a
