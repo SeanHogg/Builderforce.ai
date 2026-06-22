@@ -13,6 +13,7 @@ import {
   type ProjectRepository,
 } from '@/lib/builderforceApi';
 import { useLlmModels } from '@/lib/useLlmModels';
+import { ModelSelect } from '@/components/llm/ModelSelect';
 import { useTaskRunner, defaultRunTarget } from './useTaskRunner';
 
 /**
@@ -52,7 +53,7 @@ export function RunAgentControl({ task, agentHosts, onRan, onAwaitingApproval }:
   // `isPaid` gates the model picker — only paid plans may choose the model; free
   // plans run Builderforce's managed default (the server enforces this too, in
   // pickCloudModel, so a free run never honours an explicit pick).
-  const { models, codingModels, isPaid } = useLlmModels();
+  const { isPaid } = useLlmModels();
   // Single shared submit path (also powers the one-click RunTaskButton). It owns
   // the run state + cloud-agent pool; we drive it with the picker's target/model.
   const { run, running, error, cloudAgents } = useTaskRunner({ task, onRan, onAwaitingApproval });
@@ -110,7 +111,6 @@ export function RunAgentControl({ task, agentHosts, onRan, onAwaitingApproval }:
           // picker to the curated tool-calling + coding list (the gateway pins one
           // for the whole run). A self-hosted/auto run keeps the full pool.
           const isCloud = target.startsWith('cloud:');
-          const pickList = isCloud && codingModels.length > 0 ? codingModels : models;
           const defaultLabel = isCloud ? 'builderforce.ai (best coding model)' : DEFAULT_MODEL_LABEL;
           // Free plans don't choose the model — Builderforce manages it. Show a
           // static, non-interactive managed-default label instead of the picker
@@ -128,10 +128,14 @@ export function RunAgentControl({ task, agentHosts, onRan, onAwaitingApproval }:
             );
           }
           return (
-            <Select value={model} onChange={(e) => setModel(e.target.value)} style={{ ...selectStyle, flex: '1 1 0', minWidth: 0, border: 'none', borderRight: '1px solid var(--border-subtle)' }} title="LLM model">
-              <option value="">{defaultLabel}</option>
-              {pickList.map((m) => <option key={m} value={m}>{m}</option>)}
-            </Select>
+            <ModelSelect
+              value={model}
+              onChange={setModel}
+              variant={isCloud ? 'coding' : 'all'}
+              defaultLabel={defaultLabel}
+              style={{ ...selectStyle, flex: '1 1 0', minWidth: 0, border: 'none', borderRight: '1px solid var(--border-subtle)' }}
+              title="LLM model"
+            />
           );
         })()}
         {/* Repo picker — only when the project has >1 repo (otherwise there's

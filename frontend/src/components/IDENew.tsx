@@ -13,6 +13,7 @@ import { PreviewFrame } from './PreviewFrame';
 import { ProjectsSlideOutPanel } from './ProjectsSlideOutPanel';
 import { BrainPanel } from './brain/BrainPanel';
 import { IdeSettingsPanel } from './IdeSettingsPanel';
+import { IdeAgentPanel } from './ide/IdeAgentPanel';
 import { useWebContainer } from '@/hooks/useWebContainer';
 import { useCollaboration } from '@/hooks/useCollaboration';
 import { useVideoVersions } from '@/hooks/useVideoVersions';
@@ -1312,6 +1313,9 @@ export function IDE({ project, initialFiles, onProjectUpdate, onOpenProjectDetai
                 onFileDelete={async (path) => { await handleFileDelete(path); refreshFiles(); }}
                 showHeader={false}
               />
+            </div>
+            <div style={{ position: 'absolute', inset: 0, visibility: rightTab === 'agent' ? 'visible' : 'hidden', pointerEvents: rightTab === 'agent' ? 'auto' : 'none' }}>
+              {rightTab === 'agent' && <IdeAgentPanel projectId={project.id} />}
             </div>
             <div style={{ position: 'absolute', inset: 0, visibility: rightTab === 'train' ? 'visible' : 'hidden', pointerEvents: rightTab === 'train' ? 'auto' : 'none' }}>
               <AITrainingPanel

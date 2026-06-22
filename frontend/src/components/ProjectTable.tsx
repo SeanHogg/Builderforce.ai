@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import type { Project } from '@/lib/types';
+import { ProjectOriginBadge } from './ProjectOriginBadge';
 import type { ProjectPanelTab } from './ProjectDetailsPanel';
 import { DeleteProjectDialog } from './DeleteProjectDialog';
 import { ArchitectureAnalysisButton } from './ArchitectureAnalysisButton';
@@ -70,7 +71,12 @@ export function ProjectTable({
         <tbody>
           {projects.map((project) => (
             <tr key={project.id} style={{ borderBottom: '1px solid var(--border-subtle)' }}>
-              <td style={{ ...cellStyle, fontWeight: 500, color: 'var(--text-primary)' }}>{project.name}</td>
+              <td style={{ ...cellStyle, fontWeight: 500, color: 'var(--text-primary)' }}>
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+                  {project.name}
+                  <ProjectOriginBadge origin={project.origin} />
+                </span>
+              </td>
               <td style={{ ...cellStyle, color: 'var(--text-secondary)', maxWidth: 280, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                 {project.description ?? '—'}
               </td>

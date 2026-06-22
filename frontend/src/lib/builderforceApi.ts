@@ -2032,6 +2032,49 @@ export interface RecallSeedMemory {
   score: number;
 }
 
+/** A tenant "LLM" — a named, reusable model config (migration 0211). */
+export interface TenantModel {
+  id: string;
+  slug: string;
+  /** The ref any surface selects it by: `tenant_model:<slug>`. */
+  ref: string;
+  name: string;
+  baseModel: string | null;
+  systemPrompt: string | null;
+  params: Record<string, unknown>;
+  personaId: string | null;
+  providerKey: string | null;
+  trainedModelRef: string | null;
+  visibility: 'private' | 'tenant';
+  updatedAt: string;
+}
+
+export interface TenantModelInput {
+  name: string;
+  baseModel?: string | null;
+  systemPrompt?: string | null;
+  params?: Record<string, unknown> | null;
+  personaId?: string | null;
+  providerKey?: string | null;
+  trainedModelRef?: string | null;
+  visibility?: 'private' | 'tenant';
+}
+
+/** CRUD for the tenant's named model configs ("LLMs"). */
+export const tenantModelApi = {
+  list: (): Promise<{ models: TenantModel[] }> =>
+    request<{ models: TenantModel[] }>('/api/llm/models'),
+
+  create: (body: TenantModelInput): Promise<TenantModel> =>
+    request<TenantModel>('/api/llm/models', { method: 'POST', body: JSON.stringify(body) }),
+
+  update: (id: string, body: Partial<TenantModelInput>): Promise<TenantModel> =>
+    request<TenantModel>(`/api/llm/models/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
+
+  remove: (id: string): Promise<{ deleted: boolean }> =>
+    request<{ deleted: boolean }>(`/api/llm/models/${id}`, { method: 'DELETE' }),
+};
+
 // ---------------------------------------------------------------------------
 // Dispatch (send command to agentHost via relay)
 // ---------------------------------------------------------------------------

@@ -6,7 +6,13 @@ import { Hono } from 'hono';
 import { neon } from '@neondatabase/serverless';
 import type { Env, HonoEnv } from '../../env';
 import { authMiddleware } from '../middleware/authMiddleware';
-import { invalidateCached } from '../../infrastructure/cache/readThroughCache';
+import { invalidateCached, getOrSetCached } from '../../infrastructure/cache/readThroughCache';
+import {
+  importRepoToWorkspace,
+  commitWorkspaceToRepo,
+  createRemoteRepo,
+  getRepoStatus,
+} from '../../application/ide/repoBridge';
 import { PUBLIC_LIST_CACHE_KEY } from './workforceRoutes';
 import {
   ideProxy,
@@ -132,9 +138,21 @@ export function createIdeRoutes(): Hono<HonoEnv> {
     // the project lookup or any writes — only a freshly-/un-seeded project does.
     const rel = objects.map(o => ({ path: o.key!.replace(prefix, ''), size: o.size }));
     if (templateLooksUnseeded(rel)) {
-      const project = await fetchSeedableProject(c.env, projectId);
-      if (project && (await ensureProjectTemplate(bucket, project, rel)) > 0) {
-        objects = (await bucket.list({ prefix })).objects ?? [];
+      // Prefer importing a linked repo's files (open an existing repo-mapped project
+      // in the IDE like VS Code); fall back to template-seeding when no repo is
+      // linked. Same lazy self-heal gate, so healthy workspaces pay nothing.
+      const tenantId = c.get('tenantId') as number;
+      const repoStatus = await getRepoStatus(c.env as Env, tenantId, projectId).catch(() => ({ linked: false as const }));
+      if (repoStatus.linked && repoStatus.repoId) {
+        const imported = await importRepoToWorkspace(c.env as Env, tenantId, projectId, repoStatus.repoId).catch(() => null);
+        if (imported?.ok && imported.imported > 0) {
+          objects = (await bucket.list({ prefix })).objects ?? [];
+        }
+      } else {
+        const project = await fetchSeedableProject(c.env, projectId);
+        if (project && (await ensureProjectTemplate(bucket, project, rel)) > 0) {
+          objects = (await bucket.list({ prefix })).objects ?? [];
+        }
       }
     }
 
@@ -178,6 +196,69 @@ export function createIdeRoutes(): Hono<HonoEnv> {
     const key = `${IDE_PREFIX}projects/${String(projectId)}/${path}`;
     await bucket.delete(key);
     return c.json({ success: true });
+  });
+
+  // ---------- Designer ↔ repo bridge (import / commit / create / status) ----------
+  // R2 is the working store; these sync it with a linked git repo using the shared
+  // cloud-native repo helpers (no on-prem host). All tenant-scoped via projectInTenant.
+
+  const repoStatusKey = (projectId: number) => `ide:repo-status:${projectId}`;
+
+  // GET status — the linked default repo + import baseline (cached; invalidated on
+  // any import/commit/create below).
+  router.get('/projects/:projectId/repo-status', async (c) => {
+    const projectId = await resolveProjectId(c.env, c.req.param('projectId'));
+    if (!(await projectInTenant(c, projectId))) return c.json({ error: 'Project not found' }, 404);
+    const tenantId = c.get('tenantId') as number;
+    const status = await getOrSetCached(
+      c.env as Env,
+      repoStatusKey(projectId),
+      () => getRepoStatus(c.env as Env, tenantId, projectId),
+      { kvTtlSeconds: 30 },
+    );
+    return c.json(status);
+  });
+
+  // POST import — pull a repo's files into the R2 workspace so it opens in the IDE.
+  router.post('/projects/:projectId/import', async (c) => {
+    const projectId = await resolveProjectId(c.env, c.req.param('projectId'));
+    if (!(await projectInTenant(c, projectId))) return c.json({ error: 'Project not found' }, 404);
+    const tenantId = c.get('tenantId') as number;
+    const body = await c.req.json<{ repoId?: string; ref?: string }>().catch(() => ({}));
+    if (!body.repoId) return c.json({ error: 'repoId is required' }, 400);
+    const result = await importRepoToWorkspace(c.env as Env, tenantId, projectId, body.repoId, body.ref);
+    if (!result.ok) return c.json({ error: result.error }, result.status as 400);
+    await invalidateCached(c.env as Env, repoStatusKey(projectId));
+    return c.json(result);
+  });
+
+  // POST commit — push R2 workspace edits back to the repo as a branch + PR.
+  router.post('/projects/:projectId/commit', async (c) => {
+    const projectId = await resolveProjectId(c.env, c.req.param('projectId'));
+    if (!(await projectInTenant(c, projectId))) return c.json({ error: 'Project not found' }, 404);
+    const tenantId = c.get('tenantId') as number;
+    const body = await c.req.json<{ repoId?: string; message?: string; branch?: string }>().catch(() => ({}));
+    if (!body.repoId) return c.json({ error: 'repoId is required' }, 400);
+    const result = await commitWorkspaceToRepo(c.env as Env, tenantId, projectId, body.repoId, { message: body.message, branch: body.branch });
+    if (!result.ok) return c.json({ error: result.error }, result.status as 400);
+    await invalidateCached(c.env as Env, repoStatusKey(projectId));
+    return c.json(result);
+  });
+
+  // POST create-repo — make a clean remote repo, bind it, push the workspace.
+  router.post('/projects/:projectId/create-repo', async (c) => {
+    const projectId = await resolveProjectId(c.env, c.req.param('projectId'));
+    if (!(await projectInTenant(c, projectId))) return c.json({ error: 'Project not found' }, 404);
+    const tenantId = c.get('tenantId') as number;
+    const body = await c.req.json<{ provider?: string; name?: string; private?: boolean; credentialId?: string }>().catch(() => ({}));
+    if (!body.name?.trim()) return c.json({ error: 'name is required' }, 400);
+    if (!body.credentialId) return c.json({ error: 'credentialId is required' }, 400);
+    const result = await createRemoteRepo(c.env as Env, tenantId, projectId, {
+      provider: body.provider, name: body.name, private: body.private, credentialId: body.credentialId,
+    });
+    if (!result.ok) return c.json({ error: result.error }, result.status as 400);
+    await invalidateCached(c.env as Env, repoStatusKey(projectId));
+    return c.json(result);
   });
 
   // ---------- Site hosting (publish a Designer project to a subdomain) ----------

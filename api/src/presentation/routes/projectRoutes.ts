@@ -427,6 +427,8 @@ export function createProjectRoutes(projectService: ProjectService, db: Db): Hon
       governance?: string | null;
       /** IDE project type: 'designer' | 'video' | 'llm'. Defaults to 'designer'. */
       modality?: string | null;
+      /** Where the project was born — 'ide' tags it for the Designer badge. */
+      origin?: string | null;
     }>();
     const tenantId = c.get('tenantId');
     const name = body.name?.trim();
@@ -457,6 +459,7 @@ export function createProjectRoutes(projectService: ProjectService, db: Db): Hon
       githubRepoUrl: assignment.value.githubRepoUrl,
       governance: body.governance ?? null,
       modality: body.modality ?? null,
+      origin: body.origin ?? null,
       tenantId,
     });
     await ensureProjectTemplate(c.env.UPLOADS, project);

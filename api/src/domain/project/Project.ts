@@ -24,6 +24,8 @@ export interface ProjectProps {
   governance:      string | null;
   /** IDE: active modality for this project ('designer' | 'video' | 'llm'). */
   modality:        string | null;
+  /** Where the project was born — 'ide' | 'imported' | 'external' (drives the badge). */
+  origin:          string | null;
   createdAt:       Date;
   updatedAt:       Date;
 }
@@ -91,6 +93,7 @@ export class Project {
   get githubRepoName(): string | null { return this.props.githubRepoName; }
   get governance(): string | null { return this.props.governance; }
   get modality(): string | null { return this.props.modality; }
+  get origin(): string | null { return this.props.origin; }
   get createdAt(): Date { return this.props.createdAt; }
   get updatedAt(): Date { return this.props.updatedAt; }
 
