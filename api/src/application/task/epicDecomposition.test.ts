@@ -79,6 +79,7 @@ function makeProject(): Project {
     githubRepoName: null,
     governance: null,
     modality: null,
+    origin: null,
     createdAt: new Date(),
     updatedAt: new Date(),
   });

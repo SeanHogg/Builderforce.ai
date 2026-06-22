@@ -56,6 +56,7 @@ export type RepoBridgeResult<T> = { ok: true } & T | { ok: false; status: number
 /** List every workspace file path + content from R2. */
 async function listWorkspace(env: Env, projectId: number): Promise<Array<{ path: string; content: string }>> {
   const bucket = env.UPLOADS;
+  if (!bucket) return [];
   const prefix = workspacePrefix(projectId);
   const out: Array<{ path: string; content: string }> = [];
   let cursor: string | undefined;
@@ -100,6 +101,7 @@ export async function importRepoToWorkspace(
     .slice(0, MAX_IMPORT_FILES);
 
   const bucket = env.UPLOADS;
+  if (!bucket) return { ok: false, status: 503, error: 'Storage not configured' };
   const prefix = workspacePrefix(projectId);
   let imported = 0;
   for (const f of files) {
@@ -326,8 +328,8 @@ export async function getRepoStatus(
     .select()
     .from(projectRepositories)
     .where(and(eq(projectRepositories.projectId, projectId), eq(projectRepositories.tenantId, tenantId)));
-  if (repos.length === 0) return { linked: false };
   const def = repos.find((r) => r.isDefault) ?? repos[0];
+  if (!def) return { linked: false };
   return {
     linked: true,
     repoId: def.id,

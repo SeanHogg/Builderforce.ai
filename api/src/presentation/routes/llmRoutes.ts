@@ -1061,9 +1061,10 @@ export function createLlmRoutes(): Hono<HonoEnv> {
       if (tm?.directives) {
         const msgs = body.messages as Array<{ role?: string; content?: unknown }>;
         const sysIdx = msgs.findIndex((m) => m.role === 'system');
-        if (sysIdx >= 0) {
-          const prev = typeof msgs[sysIdx].content === 'string' ? (msgs[sysIdx].content as string) : '';
-          msgs[sysIdx] = { ...msgs[sysIdx], content: `${tm.directives}\n\n${prev}`.trim() };
+        const sysMsg = sysIdx >= 0 ? msgs[sysIdx] : undefined;
+        if (sysMsg) {
+          const prev = typeof sysMsg.content === 'string' ? sysMsg.content : '';
+          msgs[sysIdx] = { ...sysMsg, content: `${tm.directives}\n\n${prev}`.trim() };
         } else {
           msgs.unshift({ role: 'system', content: tm.directives });
         }

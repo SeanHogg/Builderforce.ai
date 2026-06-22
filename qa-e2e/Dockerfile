@@ -30,8 +30,11 @@ RUN npm install --no-audit --no-fund
 COPY tsconfig.json ./
 COPY src ./src
 
-# One-shot worker: claims one exploration, runs it, exits. The platform's
-# qa_schedules sweep enqueues the work; this container is dispatched to drain it
-# (managed Cloudflare Container surface — see ROADMAP — or any container host).
+# Long-lived server behind QaRunnerContainerDO: the Worker dispatches `POST /run`
+# (with a per-run BF_AGENT_TOKEN) for each queued exploration; the server drives
+# it and self-reports findings to the API. `npm run explore` is still available
+# as a one-shot CLI for local/manual drains.
 ENV CI=1
-CMD ["npm", "run", "explore"]
+ENV PORT=8080
+EXPOSE 8080
+CMD ["npm", "run", "serve"]

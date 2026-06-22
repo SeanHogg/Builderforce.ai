@@ -66,6 +66,10 @@ class_name = "CloudRunnerDO"
 name = "AGENT_CONTAINER"
 class_name = "AgentContainerDO"
 
+[[durable_objects.bindings]]
+name = "QA_RUNNER_CONTAINER"
+class_name = "QaRunnerContainerDO"
+
 # Long-lived Cloudflare Container for "V2 Cloud Agent (Node/Container)" runs — a
 # persistent Node process with a real shell (build/test/lint). The image lives in
 # api/container; build context is that dir. Requires a Workers Paid plan with
@@ -75,6 +79,15 @@ class_name = "AgentContainerDO"
 image = "./container/Dockerfile"
 max_instances = 5
 name = "builderforce-agent-container"
+
+# Agentic Tester runner — the Playwright browser-exploration image (qa-e2e). The
+# scheduled QA sweep dispatches `POST /run` per queued exploration. Image build
+# context is the sibling qa-e2e dir. Same Containers-enabled Paid-plan requirement.
+[[containers]]
+class_name = "QaRunnerContainerDO"
+image = "../qa-e2e/Dockerfile"
+max_instances = 3
+name = "builderforce-qa-runner"
 
 [[r2_buckets]]
 binding = "UPLOADS"
@@ -129,6 +142,12 @@ tag = "v7"
 # `changed` fan-out, keyed `ceremony:<projectId>`). Memory-only like SessionRoomDO,
 # but free-plan Durable Objects must still be SQLite-backed.
 new_sqlite_classes = ["CeremonyRoomDO"]
+
+[[migrations]]
+tag = "v8"
+# QaRunnerContainerDO backs the Agentic Tester Cloudflare Container (the Playwright
+# browser-exploration runner). Container-control DOs are SQLite-backed.
+new_sqlite_classes = ["QaRunnerContainerDO"]
 
 # Cron triggers — see scheduled() in src/index.ts
 #   "0 9 * * *"   09:00 UTC daily: probe every LLM vendor; email superadmins on status change.

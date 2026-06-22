@@ -144,6 +144,7 @@ export { CeremonyRoomDO } from './infrastructure/relay/CeremonyRoomDO';
 export { AnalysisRunnerDO } from './infrastructure/relay/AnalysisRunnerDO';
 export { CloudRunnerDO } from './infrastructure/relay/CloudRunnerDO';
 export { AgentContainerDO } from './infrastructure/relay/AgentContainerDO';
+export { QaRunnerContainerDO } from './infrastructure/relay/QaRunnerContainerDO';
 export { TenantRateLimiterDO } from './infrastructure/ratelimit/TenantRateLimiterDO';
 
 // ---------------------------------------------------------------------------
