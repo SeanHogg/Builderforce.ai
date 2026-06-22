@@ -1,0 +1,14 @@
+{
+  "name": "builderforce-qa-runner",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Cloudflare Container runner for the Agentic Tester (heatmap-driven browser exploration).",
+  "main": "server.mjs",
+  "scripts": {
+    "start": "node server.mjs"
+  },
+  "dependencies": {
+    "playwright": "1.58.2"
+  }
+}

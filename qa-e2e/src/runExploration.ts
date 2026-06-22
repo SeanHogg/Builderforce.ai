@@ -1,9 +1,11 @@
 /**
  * runExploration — the Agentic Tester's core run: claim a heatmap-derived
  * exploration, drive a real browser through its plan, and feed captured runtime
- * errors back to the API. Reused by:
- *   - explore.ts  — the one-shot CLI (`npm run explore`)
- *   - server.ts   — the container HTTP server the platform dispatches to
+ * errors back to the API. Used by the local CLI (explore.ts).
+ *
+ * NOTE: the PRODUCTION runner is the self-contained api/qa-container/server.mjs
+ * (a no-build-step Node ESM port the Cloudflare Container can run directly). This
+ * TS path is the local-dev mirror — keep the capture rules in sync.
  *
  * Auth is env-driven (BF_AGENT_TOKEN in production; operator login locally) —
  * see bf.ts. The caller sets BF_API_URL / BF_AGENT_TOKEN / BF_EXPLORATION_ID
@@ -67,7 +69,9 @@ export async function runExploration(): Promise<void> {
     return;
   }
 
-  const browser = await chromium.launch();
+  // --no-sandbox so this works when run as root in a container (parity with
+  // api/qa-container/server.mjs); --disable-dev-shm-usage avoids small-/dev/shm crashes.
+  const browser = await chromium.launch({ args: ['--no-sandbox', '--disable-dev-shm-usage'] });
   try {
     // Establish the session: persona login (project mode) or injected QA tokens.
     let storageState: Awaited<ReturnType<typeof loginPersona>> | ReturnType<typeof selfTestState>;

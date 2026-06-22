@@ -71,10 +71,14 @@ This is **not** a GitHub Action. The platform owns the lifecycle:
   enqueues a `qa_explorations` row.
 - **Dispatch** — the sweep (and the "Run" button) call `dispatchQaRunner`, which
   mints a short-lived tenant token and proxies `POST /run` to
-  `QaRunnerContainerDO` — a managed Cloudflare Container backed by this image
-  (`server.ts`). No human credentials, no CI runner.
+  `QaRunnerContainerDO` — a managed Cloudflare Container. Its image is the
+  self-contained **`api/qa-container/`** (a no-build-step Node port of this
+  explorer, wired in `api/wrangler.toml` exactly like `api/container`). No human
+  credentials, no CI runner.
 - **Drain** — the container claims the exploration, drives the browser, and posts
   findings back to `/api/qa/*`.
 
-`npm run explore` (the one-shot CLI) remains for **local/manual** drains; set
-`BF_AGENT_TOKEN` (or operator `BF_QA_EMAIL`/`BF_QA_PASSWORD`) in `.env`.
+This package is the **local-dev mirror**: `npm run explore` runs the same
+exploration on your machine (set `BF_AGENT_TOKEN`, or operator
+`BF_QA_EMAIL`/`BF_QA_PASSWORD`, in `.env`). Keep its capture logic in sync with
+`api/qa-container/server.mjs`.
