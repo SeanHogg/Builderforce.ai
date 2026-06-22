@@ -247,7 +247,15 @@ export function IDE({ project, initialFiles, onProjectUpdate, onOpenProjectDetai
 
   const handleEditorChange = useCallback(async (value: string) => {
     if (!activeFile) return;
+    // Always reflect the keystroke locally (never lose typing).
     setFileContents(prev => ({ ...prev, [activeFile]: value }));
+    // But NEVER PERSIST structurally-invalid content to disk/container — the same
+    // guard apply_code_to_active_file uses. This is the editor onChange path that
+    // previously had no guard, so a cross-wired/agent write of the wrong file's
+    // content (e.g. HTML landing in the package.json model) was saved straight to
+    // disk and broke Run with "Invalid package.json" [1315]. A human mid-typing an
+    // invalid JSON state just defers the save until it parses again.
+    if (!validateFileContentForPath(activeFile, value).ok) return;
     // Live reload: when a dev server is running, push the edit straight into the
     // container FS so Vite HMR refreshes the preview without a full re-run.
     if (previewUrl) writeFileToContainer(activeFile, value).catch(() => { /* best-effort */ });
