@@ -22,6 +22,7 @@ import {
   IDE_PREFIX,
   ensureProjectTemplate,
   templateLooksUnseeded,
+  templateNeedsBackfill,
   type SeedableProject,
 } from '../../application/project/projectTemplate';
 import {
@@ -132,21 +133,30 @@ export function createIdeRoutes(): Hono<HonoEnv> {
 
     // Lazy self-heal: projects created before template seeding (or via the
     // scaffold/upsert paths that historically didn't seed) open with their
-    // template files missing or empty. When the workspace looks unseeded, seed
-    // the vanilla starter so it opens runnable. The cheap in-memory
-    // `templateLooksUnseeded` gate runs first, so healthy projects never incur
-    // the project lookup or any writes — only a freshly-/un-seeded project does.
+    // template files missing or empty. Seed the vanilla starter so it opens
+    // runnable. The cheap in-memory `templateNeedsBackfill` gate runs first, so
+    // healthy projects never incur the project lookup or any writes — only a
+    // freshly-, un-, or PARTIALLY-seeded project does.
     const rel = objects.map(o => ({ path: o.key!.replace(prefix, ''), size: o.size }));
-    if (templateLooksUnseeded(rel)) {
+    // Heal when ANY required scaffold file is missing or empty — not only when
+    // the whole workspace is unseeded. The all-empty gate let partial-empty
+    // projects (e.g. package.json has content but src/main.jsx is a 0-byte
+    // placeholder) slip through, so those files opened BLANK in the editor. The
+    // check is a cheap in-memory scan of the already-listed objects, so healthy
+    // workspaces still pay nothing (no project lookup, no writes).
+    if (templateNeedsBackfill(rel)) {
       // Prefer importing a linked repo's files (open an existing repo-mapped project
-      // in the IDE like VS Code); fall back to template-seeding when no repo is
-      // linked. Same lazy self-heal gate, so healthy workspaces pay nothing.
+      // in the IDE like VS Code) — but only for a brand-new/fully-empty workspace,
+      // so we never clobber a repo project's real files. Otherwise template-seed
+      // the missing/empty vanilla files (never overwriting ones that have content).
       const tenantId = c.get('tenantId') as number;
       const repoStatus = await getRepoStatus(c.env as Env, tenantId, projectId).catch(() => ({ linked: false as const }));
       if (repoStatus.linked && repoStatus.repoId) {
-        const imported = await importRepoToWorkspace(c.env as Env, tenantId, projectId, repoStatus.repoId).catch(() => null);
-        if (imported?.ok && imported.imported > 0) {
-          objects = (await bucket.list({ prefix })).objects ?? [];
+        if (templateLooksUnseeded(rel)) {
+          const imported = await importRepoToWorkspace(c.env as Env, tenantId, projectId, repoStatus.repoId).catch(() => null);
+          if (imported?.ok && imported.imported > 0) {
+            objects = (await bucket.list({ prefix })).objects ?? [];
+          }
         }
       } else {
         const project = await fetchSeedableProject(c.env, projectId);

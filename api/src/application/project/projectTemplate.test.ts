@@ -3,6 +3,7 @@ import {
   VANILLA_TEMPLATE,
   projectWantsVanilla,
   templateLooksUnseeded,
+  templateNeedsBackfill,
   ensureProjectTemplate,
   type SeedableProject,
   type TemplateObject,
@@ -59,6 +60,39 @@ describe('templateLooksUnseeded', () => {
   });
 });
 
+describe('templateNeedsBackfill', () => {
+  it('is true when there are no objects at all', () => {
+    expect(templateNeedsBackfill([])).toBe(true);
+  });
+
+  it('is true for a PARTIALLY-empty project (the blank-editor bug)', () => {
+    // package.json has content, but the source files are 0-byte placeholders.
+    // templateLooksUnseeded would call this "in use" and skip healing — leaving
+    // the empty files blank. templateNeedsBackfill must catch it.
+    const objects: TemplateObject[] = [
+      { path: 'package.json', size: 200 },
+      { path: 'index.html', size: 0 },
+      { path: 'src/main.jsx', size: 0 },
+      { path: 'src/index.css', size: 0 },
+      { path: 'vite.config.js', size: 0 },
+    ];
+    expect(templateLooksUnseeded(objects)).toBe(false); // old gate misses it
+    expect(templateNeedsBackfill(objects)).toBe(true); // new gate catches it
+  });
+
+  it('is true when a required file is entirely missing', () => {
+    const objects: TemplateObject[] = Object.keys(VANILLA_TEMPLATE)
+      .filter((p) => p !== 'vite.config.js')
+      .map((path) => ({ path, size: 100 }));
+    expect(templateNeedsBackfill(objects)).toBe(true);
+  });
+
+  it('is false once every required file has content (healthy project pays nothing)', () => {
+    const objects: TemplateObject[] = Object.keys(VANILLA_TEMPLATE).map((path) => ({ path, size: 100 }));
+    expect(templateNeedsBackfill(objects)).toBe(false);
+  });
+});
+
 /** Minimal in-memory R2 stand-in covering the surface ensureProjectTemplate uses. */
 function fakeStorage(initial: Record<string, string> = {}) {
   const store = new Map<string, string>(Object.entries(initial));
@@ -97,11 +131,24 @@ describe('ensureProjectTemplate', () => {
     expect(r2.store.get(prefix + 'vite.config.js')).toContain('defineConfig');
   });
 
-  it('never overwrites a project that is in use', async () => {
+  it('backfills missing files but NEVER overwrites a file that has content', async () => {
+    // Partial-empty project: package.json is user-edited (has content), the rest
+    // are missing. Must heal the 4 missing files WITHOUT touching package.json.
     const r2 = fakeStorage({ [prefix + 'package.json']: '{ "name": "user-edited" }' });
     const written = await ensureProjectTemplate(r2 as unknown as R2Bucket, base);
+    expect(written).toBe(Object.keys(VANILLA_TEMPLATE).length - 1); // all but package.json
+    expect(r2.store.get(prefix + 'package.json')).toBe('{ "name": "user-edited" }'); // untouched
+    expect(r2.store.get(prefix + 'src/main.jsx')).toContain('Hello World');
+    expect(r2.store.get(prefix + 'vite.config.js')).toContain('defineConfig');
+  });
+
+  it('does nothing once every required file already has content', async () => {
+    const seeded = Object.fromEntries(
+      Object.entries(VANILLA_TEMPLATE).map(([path, content]) => [prefix + path, content]),
+    );
+    const r2 = fakeStorage(seeded);
+    const written = await ensureProjectTemplate(r2 as unknown as R2Bucket, base);
     expect(written).toBe(0);
-    expect(r2.store.get(prefix + 'package.json')).toBe('{ "name": "user-edited" }');
   });
 
   it('does nothing for a project that does not want the vanilla template', async () => {

@@ -106,13 +106,29 @@ export function projectWantsVanilla(project: SeedableProject): boolean {
 }
 
 /**
- * The project's IDE workspace looks unseeded when NO template file is present
- * with content — i.e. it is freshly-created (no objects) or legacy (the template
- * paths exist but are empty). If even one template file has content we treat the
- * project as in-use and never touch it.
+ * The project's IDE workspace looks FULLY unseeded when NO template file is
+ * present with content — i.e. it is freshly-created (no objects) or legacy (the
+ * template paths exist but are empty). Used to decide whether to import a linked
+ * repo's files (only worthwhile for a brand-new/empty workspace).
  */
 export function templateLooksUnseeded(objects: TemplateObject[]): boolean {
   return !objects.some((o) => o.size > 0 && o.path in VANILLA_TEMPLATE);
+}
+
+/**
+ * Whether ANY required template file is missing or empty (0-byte). This is the
+ * gate for vanilla backfill: a partially-seeded project (e.g. `package.json` has
+ * content but `src/main.jsx`/`vite.config.js` are empty placeholders) must still
+ * get its empty/missing files healed, or those files open BLANK in the editor.
+ * `templateLooksUnseeded` (all-empty) is the strict subset that misses exactly
+ * this partial case — which is why backfill keys off this, not that.
+ */
+export function templateNeedsBackfill(objects: TemplateObject[]): boolean {
+  const sizeByPath = new Map(objects.map((o) => [o.path, o.size]));
+  return Object.keys(VANILLA_TEMPLATE).some((path) => {
+    const size = sizeByPath.get(path);
+    return size === undefined || size === 0;
+  });
 }
 
 /** Write the template files that are missing or empty. Returns count written. */
@@ -152,6 +168,10 @@ export async function ensureProjectTemplate(
     const listed = await storage.list({ prefix });
     existing = (listed.objects ?? []).map((o) => ({ path: o.key.replace(prefix, ''), size: o.size }));
   }
-  if (!templateLooksUnseeded(existing)) return 0;
+  // Backfill whenever a required file is missing or empty — NOT only when the
+  // whole workspace is unseeded. This heals partial-empty projects (the blank-
+  // editor bug) while `writeMissingTemplateFiles` still never clobbers a file
+  // that already has content.
+  if (!templateNeedsBackfill(existing)) return 0;
   return writeMissingTemplateFiles(storage, project.id, existing);
 }
