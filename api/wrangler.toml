@@ -80,12 +80,13 @@ image = "./container/Dockerfile"
 max_instances = 5
 name = "builderforce-agent-container"
 
-# Agentic Tester runner — the Playwright browser-exploration image (qa-e2e). The
-# scheduled QA sweep dispatches `POST /run` per queued exploration. Image build
-# context is the sibling qa-e2e dir. Same Containers-enabled Paid-plan requirement.
+# Agentic Tester runner — the Playwright browser-exploration container. The
+# scheduled QA sweep dispatches `POST /run` per queued exploration. Self-contained
+# under api/qa-container (mirrors api/container). Same Containers-enabled Paid-plan
+# requirement; `max_instances` caps concurrent browser runs.
 [[containers]]
 class_name = "QaRunnerContainerDO"
-image = "../qa-e2e/Dockerfile"
+image = "./qa-container/Dockerfile"
 max_instances = 3
 name = "builderforce-qa-runner"
 

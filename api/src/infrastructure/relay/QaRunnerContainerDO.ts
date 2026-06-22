@@ -1,7 +1,7 @@
 /**
  * QaRunnerContainerDO — the managed Cloudflare Container that runs the Agentic
  * Tester (browser exploration). Mirrors {@link AgentContainerDO} but backs the
- * Playwright runner image (qa-e2e/Dockerfile) instead of the code-agent image.
+ * Playwright runner image (api/qa-container) instead of the code-agent image.
  *
  * The platform's scheduled sweep (runQaExplorationSweep) enqueues a
  * `qa_explorations` row, mints a short-lived tenant-scoped token, and proxies
