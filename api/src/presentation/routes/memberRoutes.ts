@@ -32,7 +32,7 @@ import {
   type MemberScorecard,
 } from '../../application/metrics/workforceMetrics';
 import { recommendAssignee } from '../../application/metrics/assigneeRecommender';
-import { getTenantEngagement } from '../../application/metrics/engagement';
+import { getTenantEngagement, persistTenantEngagement } from '../../application/metrics/engagement';
 import type { Env, HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 
@@ -238,6 +238,9 @@ export function createMemberRoutes(db: Db): Hono<HonoEnv> {
     const tenantId = c.get('tenantId') as number;
     const days = clampDays(parseInt(c.req.query('days') ?? '30', 10), 30, 365);
     const members = await getTenantEngagement(c.env as Env, db, tenantId, days);
+    // Snapshot into member_metrics_period (best-effort) so the composite score has
+    // trend history, mirroring the scorecard snapshot on the members read.
+    c.executionCtx.waitUntil(persistTenantEngagement(db, tenantId, days, members).catch(() => {}));
     return c.json({ windowDays: days, members });
   });
 

@@ -15,7 +15,7 @@ import { and, desc, eq, gte, sql } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import { getOrSetCached, invalidateCached } from '../../infrastructure/cache/readThroughCache';
-import { activityEvents, contributors } from '../../infrastructure/database/schema';
+import { activityEvents, contributors, projects } from '../../infrastructure/database/schema';
 
 const HOUR_MS = 3_600_000;
 const TOP_N = 15;
@@ -45,6 +45,7 @@ export interface TenantActivityRollup {
   byType: Record<string, number>;
   byProvider: Array<{ provider: string; count: number }>;
   byRepository: Array<{ repository: string; count: number }>;
+  byProject: Array<{ projectId: number; projectName: string; count: number }>;
   topContributors: Array<{ contributorId: number; displayName: string; count: number }>;
   daily: Array<{ date: string; count: number }>;
 }
@@ -53,13 +54,18 @@ export async function computeTenantActivityRollup(db: Db, tenantId: number, days
   const since = new Date(Date.now() - days * 24 * HOUR_MS);
   const scope = and(eq(activityEvents.tenantId, tenantId), gte(activityEvents.occurredAt, since));
 
-  const [byTypeRows, byProviderRows, byRepoRows, dailyRows, topRows, totalsRow] = await Promise.all([
+  const [byTypeRows, byProviderRows, byRepoRows, byProjectRows, dailyRows, topRows, totalsRow] = await Promise.all([
     db.select({ k: activityEvents.eventType, c: sql<number>`count(*)::int` }).from(activityEvents).where(scope).groupBy(activityEvents.eventType),
     db.select({ k: activityEvents.provider, c: sql<number>`count(*)::int` }).from(activityEvents).where(scope).groupBy(activityEvents.provider).orderBy(desc(sql`count(*)`)),
     db.select({ k: activityEvents.repositoryFullName, c: sql<number>`count(*)::int` })
       .from(activityEvents)
       .where(and(scope, sql`${activityEvents.repositoryFullName} is not null`))
       .groupBy(activityEvents.repositoryFullName).orderBy(desc(sql`count(*)`)).limit(TOP_N),
+    db.select({ projectId: projects.id, projectName: projects.name, c: sql<number>`count(*)::int` })
+      .from(activityEvents)
+      .innerJoin(projects, eq(projects.id, activityEvents.projectId))
+      .where(scope)
+      .groupBy(projects.id, projects.name).orderBy(desc(sql`count(*)`)).limit(TOP_N),
     db.select({ d: sql<string>`to_char(date_trunc('day', ${activityEvents.occurredAt}), 'YYYY-MM-DD')`, c: sql<number>`count(*)::int` })
       .from(activityEvents).where(scope).groupBy(sql`date_trunc('day', ${activityEvents.occurredAt})`).orderBy(sql`date_trunc('day', ${activityEvents.occurredAt})`),
     db.select({ contributorId: contributors.id, displayName: contributors.displayName, c: sql<number>`count(*)::int` })
@@ -86,6 +92,7 @@ export async function computeTenantActivityRollup(db: Db, tenantId: number, days
     byType,
     byProvider: byProviderRows.map((r) => ({ provider: r.k, count: Number(r.c) })),
     byRepository: byRepoRows.map((r) => ({ repository: r.k ?? '—', count: Number(r.c) })),
+    byProject: byProjectRows.map((r) => ({ projectId: r.projectId, projectName: r.projectName, count: Number(r.c) })),
     topContributors: topRows.map((r) => ({ contributorId: r.contributorId, displayName: r.displayName, count: Number(r.c) })),
     daily: dailyRows.map((r) => ({ date: r.d, count: Number(r.c) })),
   };

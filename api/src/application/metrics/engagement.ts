@@ -24,6 +24,7 @@ import {
   activityEvents,
   auditEvents,
   contributors,
+  memberMetricsPeriod,
   projects,
   tasks,
   tenantMembers,
@@ -158,4 +159,43 @@ export async function computeTenantEngagement(db: Db, tenantId: number, days: nu
 export async function getTenantEngagement(env: Env, db: Db, tenantId: number, days: number): Promise<MemberEngagement[]> {
   const version = await readWorkforceMetricsVersion(env, tenantId);
   return getOrSetCached(env, `engagement:tenant:${tenantId}:v:${version}:days:${days}`, () => computeTenantEngagement(db, tenantId, days), { kvTtlSeconds: 300 });
+}
+
+/**
+ * Snapshot the composite engagement score into member_metrics_period so it has
+ * trend history (parity with the board scorecard's {@link ./workforceMetrics}
+ * snapshot). Keyed per (member, period) like the scorecard; we write ONLY
+ * engagement_score (+ name/computed_at) via upsert so a co-windowed board
+ * snapshot's other columns aren't clobbered. memberRef = the user id.
+ */
+export async function persistTenantEngagement(
+  db: Db, tenantId: number, days: number, members: MemberEngagement[],
+): Promise<void> {
+  if (members.length === 0) return;
+  const periodEnd = new Date();
+  const periodStart = new Date(periodEnd.getTime() - days * 24 * HOUR_MS);
+  for (const m of members) {
+    await db
+      .insert(memberMetricsPeriod)
+      .values({
+        tenantId,
+        memberKind: 'human',
+        memberRef: m.userId,
+        memberName: m.displayName,
+        periodStart,
+        periodEnd,
+        engagementScore: m.score,
+        computedAt: new Date(),
+      })
+      .onConflictDoUpdate({
+        target: [
+          memberMetricsPeriod.tenantId,
+          memberMetricsPeriod.memberKind,
+          memberMetricsPeriod.memberRef,
+          memberMetricsPeriod.periodStart,
+          memberMetricsPeriod.periodEnd,
+        ],
+        set: { memberName: m.displayName, engagementScore: m.score, computedAt: new Date() },
+      });
+  }
 }
