@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { subscribeRun, getRunStoreSize, resetBrainRunStore } from './brainRunStore';
+import { subscribeRun, getRunStoreSize, resetBrainRunStore, windowed } from './brainRunStore';
+import type { ChatCompletionMessage } from './streamChatCompletion';
 
 // These tests pin the memory-eviction contract. They assume MAX_CELLS = 50
 // (see brainRunStore.ts); update the literals if that cap changes.
@@ -35,5 +36,38 @@ describe('brainRunStore cell eviction', () => {
     // One more new cell forces a single eviction — the oldest idle (chat 2).
     subscribeRun(CAP + 1, () => {})();
     expect(getRunStoreSize()).toBe(CAP);
+  });
+});
+
+describe('windowed history (must begin with a user turn)', () => {
+  const msg = (role: ChatCompletionMessage['role'], content = 'x'): ChatCompletionMessage => ({ role, content });
+
+  it('keeps a normal short conversation intact', () => {
+    const convo = [msg('user'), msg('assistant'), msg('user'), msg('assistant')];
+    expect(windowed(convo)).toEqual(convo);
+  });
+
+  it('drops a leading orphaned tool result', () => {
+    const convo = [msg('tool'), msg('user'), msg('assistant')];
+    expect(windowed(convo)[0].role).toBe('user');
+  });
+
+  it('drops a leading assistant turn so the payload starts at a user turn (the googleai 400)', () => {
+    // After a long tool-loop slid the user turn out of the last-N slice, the
+    // window would otherwise start on an assistant tool-call turn — which Gemini
+    // rejects with INVALID_ARGUMENT.
+    const convo = [msg('assistant'), msg('tool'), msg('user'), msg('assistant'), msg('tool')];
+    expect(windowed(convo)[0].role).toBe('user');
+  });
+
+  it('anchors to the last user turn when the window has none (tool loop > window)', () => {
+    // 90 assistant/tool messages after a single user turn: the last-80 slice has
+    // no user turn, so we fall back to the most recent user turn in the full
+    // transcript rather than emit a user-less (invalid) request.
+    const convo: ChatCompletionMessage[] = [msg('user', 'go')];
+    for (let i = 0; i < 90; i++) convo.push(msg(i % 2 === 0 ? 'assistant' : 'tool'));
+    const w = windowed(convo);
+    expect(w[0].role).toBe('user');
+    expect(w[0].content).toBe('go');
   });
 });

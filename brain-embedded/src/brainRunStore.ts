@@ -239,13 +239,26 @@ function parseArgs(raw: string): unknown {
 
 /**
  * Trim the in-memory transcript to the history window before sending it to the
- * model. Slicing can orphan a leading `tool` message whose owning assistant
- * `tool_calls` turn fell off the front — the gateway rejects a tool result that
- * doesn't follow its call — so drop any such leading tool messages.
+ * model. Slicing the last N can leave the window starting on an `assistant`
+ * tool-call turn or an orphaned `tool` result (whose owning call fell off the
+ * front). That payload is invalid for strict vendors: Gemini rejects a request
+ * whose conversation does not begin with a user turn — surfaced as the cascade
+ * `[googleai] 400 INVALID_ARGUMENT` after a long tool-loop crossed the window
+ * boundary (it succeeded for ~20 steps, then 400'd once the triggering user
+ * turn slid out of the last-N slice). So anchor the window at a user turn.
+ *
+ * If the last-N slice contains no user turn (a tool loop longer than the
+ * window), fall back to the most recent user turn in the FULL transcript and
+ * keep everything after it — correctness over the size cap, and bounded by the
+ * run's max iterations anyway.
  */
-function windowed(convo: ChatCompletionMessage[]): ChatCompletionMessage[] {
+export function windowed(convo: ChatCompletionMessage[]): ChatCompletionMessage[] {
   let w = convo.slice(-HISTORY_WINDOW);
-  while (w.length > 0 && w[0].role === 'tool') w = w.slice(1);
+  while (w.length > 0 && w[0].role !== 'user') w = w.slice(1);
+  if (w.length === 0) {
+    const lastUser = convo.map((m) => m.role).lastIndexOf('user');
+    w = lastUser >= 0 ? convo.slice(lastUser) : convo.slice();
+  }
   return w;
 }
 
@@ -384,7 +397,9 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
         tool_calls: result.toolCalls.map((tc) => ({
           id: tc.id,
           type: 'function' as const,
-          function: { name: tc.name, arguments: tc.args },
+          // An empty `arguments` string is not valid JSON; strict vendors (Gemini)
+          // reject it. Normalize a no-arg call to an empty object.
+          function: { name: tc.name, arguments: tc.args && tc.args.trim() ? tc.args : '{}' },
         })),
       });
       // Commit this turn's visible narration as its OWN permanent message block
