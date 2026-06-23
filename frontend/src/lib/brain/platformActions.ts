@@ -47,6 +47,7 @@ import {
 } from '@/lib/builderforceApi';
 import type { Task } from '@/lib/builderforceApi';
 import type { BrainAction } from '@/lib/brain';
+import { coerceFileContent } from '@/lib/fileContentGuard';
 import { dispatchBrainDataChanged } from './brainDataEvent';
 
 // ---------------------------------------------------------------------------
@@ -298,7 +299,7 @@ export function buildPlatformCapabilities(ctx: PlatformActionContext): PlatformC
     // ---- Project files ---------------------------------------------------
     { domain: 'project_files', method: 'list', mutates: false, description: 'List files in a project.', parameters: obj({ projectId: N }, ['projectId']), run: (a) => fetchFiles(f(a, 'projectId')) },
     { domain: 'project_files', method: 'read', mutates: false, description: 'Read a file’s content.', parameters: obj({ projectId: N, path: S }, ['projectId', 'path']), run: (a) => fetchFileContent(f(a, 'projectId'), f(a, 'path')) },
-    { domain: 'project_files', method: 'save', mutates: true, description: 'Create or overwrite a project file.', parameters: obj({ projectId: N, path: S, content: S }, ['projectId', 'path', 'content']), run: (a) => saveFile(f(a, 'projectId'), f(a, 'path'), f(a, 'content')) },
+    { domain: 'project_files', method: 'save', mutates: true, description: 'Create or overwrite a project file.', parameters: obj({ projectId: N, path: S, content: S }, ['projectId', 'path', 'content']), run: (a) => saveFile(f(a, 'projectId'), f(a, 'path'), coerceFileContent(f(a, 'content'))) },
     { domain: 'project_files', method: 'delete', mutates: true, description: 'Delete a project file.', parameters: obj({ projectId: N, path: S }, ['projectId', 'path']), run: (a) => deleteFile(f(a, 'projectId'), f(a, 'path')) },
 
     // ---- Tasks (kanban) --------------------------------------------------

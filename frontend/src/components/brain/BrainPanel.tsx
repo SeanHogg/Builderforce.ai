@@ -29,6 +29,7 @@ import type { BrainChat, BrainMessage } from '@/lib/builderforceApi';
 import { agentAssignmentsApi, type AgentAssignment } from '@/lib/builderforceApi';
 import { loadAgentPool, type PoolAgent } from '@/lib/agentPool';
 import { MODALITIES, getModality } from '@/lib/modality';
+import { isBrainAutoApprove, setBrainAutoApprove } from '@/lib/brain/autoApprove';
 
 function formatTime(ts: string) {
   const d = new Date(ts);
@@ -106,16 +107,14 @@ export function BrainPanel({
   const [autoApprove, setAutoApprove] = useState(false);
   const autoApproveRef = useRef(false);
   useEffect(() => {
-    try {
-      const on = localStorage.getItem('brain.autoApprove') === '1';
-      autoApproveRef.current = on;
-      setAutoApprove(on);
-    } catch { /* ignore */ }
+    const on = isBrainAutoApprove();
+    autoApproveRef.current = on;
+    setAutoApprove(on);
   }, []);
   const setAutoApproveMode = useCallback((on: boolean) => {
     autoApproveRef.current = on;
     setAutoApprove(on);
-    try { localStorage.setItem('brain.autoApprove', on ? '1' : '0'); } catch { /* ignore */ }
+    setBrainAutoApprove(on);
   }, []);
   const needsConfirm = useCallback(
     (req: { name: string; args: unknown }) => isMutating(req.name, req.args) && !autoApproveRef.current,

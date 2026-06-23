@@ -19,7 +19,8 @@ import { useCollaboration } from '@/hooks/useCollaboration';
 import { useVideoVersions } from '@/hooks/useVideoVersions';
 import type { Project, FileEntry, TrainingJob } from '@/lib/types';
 import { saveFile, fetchFileContent, deleteFile, fetchFiles, updateProject } from '@/lib/api';
-import { validateFileContentForPath } from '@/lib/fileContentGuard';
+import { validateFileContentForPath, coerceFileContent } from '@/lib/fileContentGuard';
+import { isBrainAutoApprove } from '@/lib/brain/autoApprove';
 import { useRegisterBrainActions, useBrainContext, savePrd, saveTasks, type BrainAction } from '@/lib/brain';
 import { PrdReviewModal, TasksReviewModal } from './ArtifactReviewModals';
 import { MODALITIES, DEFAULT_MODALITY, getModality, RIGHT_TAB_LABELS, type ProjectModality, type RightTab } from '@/lib/modality';
@@ -650,8 +651,8 @@ export function IDE({ project, initialFiles, onProjectUpdate, onOpenProjectDetai
 
   // Latest IDE state for action handlers, so the registered action array stays
   // stable (no re-registration churn) while `run()` reads current values.
-  const liveRef = useRef({ activeFile, modality, applyCodeToActiveFile, createProjectFile });
-  liveRef.current = { activeFile, modality, applyCodeToActiveFile, createProjectFile };
+  const liveRef = useRef({ activeFile, modality, applyCodeToActiveFile, createProjectFile, projectIdNum });
+  liveRef.current = { activeFile, modality, applyCodeToActiveFile, createProjectFile, projectIdNum };
 
   const brainActions = useMemo<BrainAction[]>(() => [
     {
@@ -665,9 +666,11 @@ export function IDE({ project, initialFiles, onProjectUpdate, onOpenProjectDetai
         },
         required: ['path', 'content'],
       },
-      run: async ({ path, content }: { path: string; content: string }) => {
+      run: async ({ path, content }: { path: string; content: unknown }) => {
         if (!path) return { error: 'A file path is required.' };
-        const res = liveRef.current.createProjectFile(path, content ?? '');
+        // Models often emit a structured body (e.g. package.json) as an object —
+        // coerce to text so the write never crashes on `.trim()` of a non-string.
+        const res = liveRef.current.createProjectFile(path, coerceFileContent(content));
         return res.ok ? { created: path } : { error: res.reason };
       },
     },
@@ -679,8 +682,8 @@ export function IDE({ project, initialFiles, onProjectUpdate, onOpenProjectDetai
         properties: { code: { type: 'string', description: 'New full contents for the open file' } },
         required: ['code'],
       },
-      run: async ({ code }: { code: string }) => {
-        const res = liveRef.current.applyCodeToActiveFile(code ?? '');
+      run: async ({ code }: { code: unknown }) => {
+        const res = liveRef.current.applyCodeToActiveFile(coerceFileContent(code));
         return res.ok ? { applied: liveRef.current.activeFile } : { error: res.reason };
       },
     },
@@ -708,6 +711,16 @@ export function IDE({ project, initialFiles, onProjectUpdate, onOpenProjectDetai
       },
       run: async ({ prd }: { prd: string }) => {
         if (!prd?.trim()) return { error: 'PRD content is empty.' };
+        // Auto-approve skips the review modal — the user already opted out of
+        // per-action prompts, so save straight through.
+        if (isBrainAutoApprove()) {
+          try {
+            await savePrd(liveRef.current.projectIdNum, prd.trim());
+            return { saved: true };
+          } catch (e) {
+            return { error: e instanceof Error ? e.message : 'Failed to save PRD' };
+          }
+        }
         // Surface for review; resolve once the user saves or cancels.
         const saved = await new Promise<boolean>((resolve) => {
           setReviewError(null);
@@ -738,6 +751,16 @@ export function IDE({ project, initialFiles, onProjectUpdate, onOpenProjectDetai
         if (list.length === 0) return { error: 'No tasks provided.' };
         const titles = list.map(t => t.title);
         const descriptions = list.map(t => t.description ?? '');
+        // Auto-approve skips the review modal — the user already opted out of
+        // per-action prompts, so add the tasks straight through.
+        if (isBrainAutoApprove()) {
+          try {
+            await saveTasks(liveRef.current.projectIdNum, { titles, descriptions });
+            return { added: list.length };
+          } catch (e) {
+            return { error: e instanceof Error ? e.message : 'Failed to add tasks' };
+          }
+        }
         // Surface for review; resolve once the user adds or cancels.
         const saved = await new Promise<boolean>((resolve) => {
           setReviewError(null);
