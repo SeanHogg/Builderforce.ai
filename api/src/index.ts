@@ -83,6 +83,7 @@ import { createRepoAnalysisRoutes } from './presentation/routes/repoAnalysisRout
 import { createStudioVoiceCloneRoutes } from './presentation/routes/studioVoiceCloneRoutes';
 import { createIntegrationRoutes }  from './presentation/routes/integrationRoutes';
 import { createContributorRoutes }  from './presentation/routes/contributorRoutes';
+import { runRepoActivitySweep }      from './application/contributors/runRepoActivitySweep';
 import { createDevTeamRoutes }      from './presentation/routes/devTeamRoutes';
 import { createTeamRoutes }         from './presentation/routes/teamRoutes';
 import { createReportRoutes }       from './presentation/routes/reportRoutes';
@@ -491,6 +492,15 @@ export default {
       ctx.waitUntil(
         runQaExplorationSweep(env).catch((err) => {
           console.error('[cron:qa-sweep] failed', err);
+        }),
+      );
+      // Engineering-activity producer — poll each connected repo's commits / PRs /
+      // reviews into activity_events (backfills history on first sync, then
+      // incremental), so the consolidation + rollup surfaces are fed with zero
+      // per-repo webhook setup.
+      ctx.waitUntil(
+        runRepoActivitySweep(env).catch((err) => {
+          console.error('[cron:repo-activity] failed', err);
         }),
       );
     }

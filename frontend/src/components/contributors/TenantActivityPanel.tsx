@@ -104,6 +104,16 @@ export function TenantActivityPanel() {
                   </div>
                 ))}
             </div>
+            <div style={cardStyle}>
+              <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 8 }}>By project</div>
+              {data.byProject.length === 0 ? <span style={{ color: 'var(--text-muted)', fontSize: 13 }}>No project-attributed activity yet.</span> :
+                data.byProject.slice(0, 8).map((p) => (
+                  <div key={p.projectId} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, padding: '2px 0', gap: 8 }}>
+                    <span style={{ color: 'var(--text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.projectName}</span>
+                    <span style={{ fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>{p.count.toLocaleString()}</span>
+                  </div>
+                ))}
+            </div>
           </div>
         </>
       )}

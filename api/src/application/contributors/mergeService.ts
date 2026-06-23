@@ -322,11 +322,19 @@ export async function unmergeContributors(
         .where(and(inArray(contributorIdentities.id, undo.movedIdentityIds), eq(contributorIdentities.contributorId, targetId))),
     );
   }
-  // 3. Recreate the deduped identities on the source (onConflictDoNothing — a
-  //    post-merge re-add of the same identity wins, which is fine).
+  // 3. Recreate the deduped identities on the source. Reconcile post-merge
+  //    collisions: if the survivor re-acquired this identity after the merge, the
+  //    unique (tenant, provider, external_id) key conflicts — reassign ownership
+  //    back to the source, which is its exact pre-merge state (the source owned it
+  //    before; dedupe only deleted the duplicate). Deterministic, not best-effort.
   for (const i of undo.dedupedIdentities) {
     ops.push(
-      db.insert(contributorIdentities).values({ ...i, contributorId: sourceId }).onConflictDoNothing(),
+      db.insert(contributorIdentities)
+        .values({ ...i, contributorId: sourceId })
+        .onConflictDoUpdate({
+          target: [contributorIdentities.tenantId, contributorIdentities.provider, contributorIdentities.externalId],
+          set: { contributorId: sourceId },
+        }),
     );
   }
   // 4. Move moved team memberships back.

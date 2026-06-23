@@ -2713,6 +2713,7 @@ export interface TenantActivityRollup {
   byType: Record<string, number>;
   byProvider: Array<{ provider: string; count: number }>;
   byRepository: Array<{ repository: string; count: number }>;
+  byProject: Array<{ projectId: number; projectName: string; count: number }>;
   topContributors: Array<{ contributorId: number; displayName: string; count: number }>;
   daily: Array<{ date: string; count: number }>;
 }

@@ -1964,6 +1964,10 @@ export const activityEvents = pgTable('activity_events', {
   segmentId: uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),  // DB NOT NULL via trigger (0056); optional in TS so single-mode writes need no change
   contributorId:  integer('contributor_id').references(() => contributors.id, { onDelete: 'set null' }),
   credentialId:   uuid('credential_id').references(() => integrationCredentials.id, { onDelete: 'set null' }),
+  /** Project this activity is attributed to, resolved at ingest from the connected
+   *  repo (project_repositories, else projects.source_control_repo_full_name).
+   *  NULL = repo not linked to a project yet. (0212) */
+  projectId:      integer('project_id').references(() => projects.id, { onDelete: 'set null' }),
   provider:       integrationProviderEnum('provider').notNull(),
   eventType:      activityEventTypeEnum('event_type').notNull(),
   externalId:     varchar('external_id', { length: 255 }),  // commit SHA, PR number, issue ID
@@ -3501,6 +3505,9 @@ export const projectRepositories = pgTable('project_repositories', {
   lastSyncedRef: text('last_synced_ref'),
   lastSyncedSha: text('last_synced_sha'),
   lastSyncedAt:  timestamp('last_synced_at'),
+  /** Activity-poller watermark (0212): last time runRepoActivitySweep pulled this
+   *  repo's commits/PRs/reviews into activity_events. NULL = never → backfill. */
+  lastActivitySyncedAt: timestamp('last_activity_synced_at'),
   createdAt:     timestamp('created_at').notNull().defaultNow(),
   updatedAt:     timestamp('updated_at').notNull().defaultNow(),
   // UNIQUE (project_id, provider, owner, repo) enforced in migration 0067.
