@@ -8,6 +8,7 @@ import { getStoredTenant } from '@/lib/auth';
 import { isNavItemActive, type NavMatch } from '@/lib/nav';
 import MascotIcon from './MascotIcon';
 import SidebarLegalMenu from './legal/SidebarLegalMenu';
+import UsageMeter from './UsageMeter';
 
 interface NavItem extends NavMatch {
   label: string;
@@ -38,6 +39,17 @@ const meshNav: NavItem[] = [
   // Chats and Approvals are consolidated into /workforce as tabs.
   { href: '/workforce', label: 'Workforce', icon: <MascotIcon size={20} /> },
   { href: '/ceremonies', label: 'Ceremonies', icon: '🎯' },
+  { href: '/pmo', label: 'Portfolio (PMO)', icon: '📊' },
+];
+
+// Role-insight lenses. Pages self-gate via <RoleGate> (disable + "Requires <Role>"
+// hint, never hidden), so every entry stays visible as an honest capability signal.
+const insightsNav: NavItem[] = [
+  { href: '/insights/engineering', label: 'AI Effectiveness', icon: '🤖', activePaths: ['/insights/engineering'] },
+  { href: '/insights/dora', label: 'DORA', icon: '🚀', activePaths: ['/insights/dora'] },
+  { href: '/insights/finance', label: 'FinOps', icon: '💰', activePaths: ['/insights/finance'] },
+  { href: '/insights/funnel', label: 'Innovation Funnel', icon: '💡', activePaths: ['/insights/funnel'] },
+  { href: '/insights/compliance', label: 'Compliance', icon: '🛡', activePaths: ['/insights/compliance'] },
 ];
 
 const extensionsNav: NavItem[] = [
@@ -179,6 +191,8 @@ export default function Sidebar({ collapsed, onToggleCollapsed, mobileOpen = fal
           <NavSection items={mainNav} collapsed={collapsed} pathname={path} onNavigate={onMobileClose} />
           <div className="nav-section-label">MESH</div>
           <NavSection items={meshNav} collapsed={collapsed} pathname={path} onNavigate={onMobileClose} />
+          <div className="nav-section-label">INSIGHTS</div>
+          <NavSection items={insightsNav} collapsed={collapsed} pathname={path} onNavigate={onMobileClose} />
           <div className="nav-section-label">EXTENSIONS</div>
           <NavSection items={extensionsNav} collapsed={collapsed} pathname={path} onNavigate={onMobileClose} />
           <div className="nav-section-label">SYSTEM</div>
@@ -191,6 +205,8 @@ export default function Sidebar({ collapsed, onToggleCollapsed, mobileOpen = fal
             empty case avoids a stray divider on the icon rail. */}
         {!collapsed && (
           <div className="nav-footer">
+            {/* Consumption meter (self-gates to signed-in tenants). */}
+            <UsageMeter />
             {/* Version + Terms/Privacy — relocated here from the old global footer
                 (which overlapped page content). */}
             <SidebarLegalMenu collapsed={collapsed} />

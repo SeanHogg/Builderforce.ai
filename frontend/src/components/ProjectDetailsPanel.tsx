@@ -16,6 +16,7 @@ import { SourceControlContent } from './sourcecontrol/SourceControlContent';
 import { IntegrationCredentialsManager } from './integrations/IntegrationCredentialsManager';
 import { BoardConnectionsManager } from './integrations/BoardConnectionsManager';
 import { AgentAssignmentPanel } from './AgentAssignmentPanel';
+import { ProjectInitiativeLink } from './pm/ProjectInitiativeLink';
 
 export type ProjectPanelTab =
   | 'details'
@@ -497,6 +498,9 @@ export function ProjectDetailsPanel({
                     <span style={{ color: 'var(--text-muted)' }}>Template</span>
                     <span>{project.template ?? '—'}</span>
                   </div>
+                </div>
+                <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid var(--border-subtle)' }}>
+                  <ProjectInitiativeLink projectId={project.id} />
                 </div>
               </div>
 

@@ -127,6 +127,17 @@ export class TenantService {
     return this.tenants.update(updated);
   }
 
+  async changeMemberRole(
+    tenantId: number,
+    actorUserId: string,
+    targetUserId: string,
+    role: TenantRole,
+  ): Promise<Tenant> {
+    const tenant = await this.getTenant(tenantId);
+    const updated = tenant.changeMemberRole(actorUserId, targetUserId, role);
+    return this.tenants.update(updated);
+  }
+
   async deleteTenant(id: number): Promise<void> {
     await this.getTenant(id);
     await this.tenants.delete(asTenantId(id));

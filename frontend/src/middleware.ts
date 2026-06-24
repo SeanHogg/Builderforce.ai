@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import { VSCODE_WEBVIEW_SCHEME } from '@/lib/embed/embedTrust';
+import { LOCALES, DEFAULT_LOCALE, LOCALE_COOKIE, type Locale } from '@/i18n/config';
 
 /**
  * Route protection rules:
@@ -45,6 +46,35 @@ const NO_ISOLATION_HEADERS: Record<string, string> = {
 };
 function withHeaders(res: NextResponse, headers: Record<string, string>): NextResponse {
   for (const [k, v] of Object.entries(headers)) res.headers.set(k, v);
+  return res;
+}
+
+// First-visit locale detection: pick the best `Accept-Language` match from our
+// supported set, defaulting to English. Only quality-ordered tags are honoured.
+function detectLocale(acceptLanguage: string | null): Locale {
+  if (!acceptLanguage) return DEFAULT_LOCALE;
+  const tags = acceptLanguage
+    .split(',')
+    .map((part) => {
+      const [tag, q] = part.trim().split(';q=');
+      return { base: tag.split('-')[0].toLowerCase(), q: q ? parseFloat(q) : 1 };
+    })
+    .sort((a, b) => b.q - a.q);
+  for (const { base } of tags) {
+    if ((LOCALES as readonly string[]).includes(base)) return base as Locale;
+  }
+  return DEFAULT_LOCALE;
+}
+
+// Persist a detected locale on the response when the visitor has no preference
+// cookie yet. The explicit LanguageSwitcher overwrites this client-side.
+function ensureLocaleCookie(request: NextRequest, res: NextResponse): NextResponse {
+  if (request.cookies.get(LOCALE_COOKIE)) return res;
+  res.cookies.set(LOCALE_COOKIE, detectLocale(request.headers.get('accept-language')), {
+    path: '/',
+    maxAge: 60 * 60 * 24 * 365,
+    sameSite: 'lax',
+  });
   return res;
 }
 
@@ -139,13 +169,13 @@ export function middleware(request: NextRequest) {
     // Logged out → DON'T redirect to login. Let the request through so the app
     // renders a per-route marketing teaser + login/CTA (ConditionalAppShell +
     // RouteMarketing), instead of bouncing the visitor or showing a blank gate.
-    if (!webToken) return needsCoi ? withHeaders(NextResponse.next(), COI_HEADERS) : NextResponse.next();
+    if (!webToken) return ensureLocaleCookie(request, needsCoi ? withHeaders(NextResponse.next(), COI_HEADERS) : NextResponse.next());
     // Signed in but no workspace selected → tenant picker.
     if (!tenantToken) return toTenants();
-    return needsCoi ? withHeaders(NextResponse.next(), COI_HEADERS) : NextResponse.next();
+    return ensureLocaleCookie(request, needsCoi ? withHeaders(NextResponse.next(), COI_HEADERS) : NextResponse.next());
   }
 
-  return NextResponse.next();
+  return ensureLocaleCookie(request, NextResponse.next());
 }
 
 export const config = {

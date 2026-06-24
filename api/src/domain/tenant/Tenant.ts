@@ -165,6 +165,41 @@ export class Tenant {
   }
 
   /**
+   * Change an existing active member's role. Owners and managers may manage
+   * roles, but only an owner may grant or alter the OWNER role, and the last
+   * remaining owner can never be demoted (the workspace must always have one).
+   */
+  changeMemberRole(actorUserId: string, targetUserId: string, role: TenantRole): Tenant {
+    if (!this.canManageMembers(actorUserId)) {
+      throw new ForbiddenError('Only owners and managers can change member roles');
+    }
+    const actor  = this.getMember(actorUserId);
+    const target = this.getMember(targetUserId);
+    if (!target) throw new ValidationError(`User '${targetUserId}' is not an active member`);
+
+    // Granting OWNER, or touching an existing owner's role, is owner-only.
+    if ((role === TenantRole.OWNER || target.role === TenantRole.OWNER) && actor?.role !== TenantRole.OWNER) {
+      throw new ForbiddenError('Only an owner can assign or change the owner role');
+    }
+    // The workspace must always retain at least one owner.
+    if (target.role === TenantRole.OWNER && role !== TenantRole.OWNER) {
+      const owners = this.props.members.filter(m => m.isActive && m.role === TenantRole.OWNER);
+      if (owners.length <= 1) {
+        throw new ValidationError('Cannot demote the last owner — promote another member to owner first');
+      }
+    }
+    if (target.role === role) return this;
+
+    return new Tenant({
+      ...this.props,
+      members: this.props.members.map(m =>
+        m.userId === targetUserId && m.isActive ? { ...m, role } : m,
+      ),
+      updatedAt: new Date(),
+    });
+  }
+
+  /**
    * Rename the workspace. Only owners and managers may do so.
    * The slug is intentionally left unchanged so existing URLs / references stay stable.
    */

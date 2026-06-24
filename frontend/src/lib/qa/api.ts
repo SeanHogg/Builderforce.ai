@@ -220,6 +220,57 @@ export function createTaskFromFinding(findingId: string): Promise<{ task: { id: 
   return apiRequest(`/api/qa/findings/${findingId}/task`, { method: 'POST' });
 }
 
+// --- Finding auto-routing policy (per project) -------------------------------
+
+export interface QaRoutingSettings {
+  enabled: boolean;
+  /** 'low' | 'medium' | 'high' | 'critical' — min severity that auto-routes. */
+  minSeverity: string;
+  /** Explicit board lane to route into; null = auto-detect the staffed fix lane. */
+  targetLaneKey: string | null;
+  /** Max findings auto-routed per exploration batch. */
+  maxPerBatch: number;
+}
+
+export function fetchRouting(projectId: number): Promise<{ settings: QaRoutingSettings }> {
+  return apiRequest(`/api/qa/projects/${projectId}/routing`);
+}
+
+export function updateRouting(projectId: number, data: QaRoutingSettings): Promise<{ settings: QaRoutingSettings }> {
+  return apiRequest(`/api/qa/projects/${projectId}/routing`, { method: 'PUT', headers: JSON_HEADERS, body: JSON.stringify(data) });
+}
+
+// --- Quality trend (escaped defects + producing model/agent) -----------------
+
+export interface QaModelQuality {
+  key: string;
+  runs: number;
+  avgScore: number;
+  mergedRate: number;
+  ciGreenRate: number;
+  degradedRate: number;
+  defects: number;
+  escapedDefects: number;
+}
+
+export interface QaQualityTrend {
+  windowDays: number;
+  range: { from: string; to: string };
+  qualityScore: number | null;
+  findings: { total: number; open: number; bySeverity: Record<string, number>; byType: Record<string, number>; autoRouted: number; escapedUnattributed: number };
+  ci: { builds: number; failures: number; failureRate: number };
+  byModel: QaModelQuality[];
+  byAgent: QaModelQuality[];
+  daily: Array<{ date: string; findings: number; ciFailures: number; avgScore: number | null }>;
+}
+
+export function fetchQualityTrend(projectId: number | null, days = 30): Promise<{ trend: QaQualityTrend }> {
+  const qs = new URLSearchParams();
+  if (projectId != null) qs.set('projectId', String(projectId));
+  qs.set('days', String(days));
+  return apiRequest(`/api/qa/quality?${qs.toString()}`);
+}
+
 // --- Schedules (run the Agentic Tester on a cadence) -------------------------
 
 export interface QaSchedule {

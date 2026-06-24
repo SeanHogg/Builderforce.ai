@@ -71,6 +71,7 @@ export class ProjectRepository implements IProjectRepository {
         governance:     plain.governance ?? undefined,
         modality:        plain.modality ?? undefined,
         origin:          plain.origin ?? undefined,
+        initiativeId:    plain.initiativeId ?? undefined,
       })
       .returning();
     if (!inserted) throw new Error('Insert returned no rows');
@@ -97,6 +98,10 @@ export class ProjectRepository implements IProjectRepository {
         githubRepoName:  plain.githubRepoName ?? undefined,
         governance:     plain.governance ?? undefined,
         modality:        plain.modality ?? undefined,
+        // Written directly (not `?? undefined`): null must persist so a project
+        // can be UNassigned from its initiative. Drizzle still skips `undefined`,
+        // so omitting initiativeId from the update DTO leaves the link unchanged.
+        initiativeId:    plain.initiativeId,
         updatedAt:       plain.updatedAt,
       })
       .where(eq(projectsTable.id, plain.id))
@@ -137,6 +142,7 @@ function toDomain(row: Row): Project {
     governance:      row.governance ?? null,
     modality:        row.modality ?? 'designer',
     origin:          row.origin ?? null,
+    initiativeId:    row.initiativeId ?? null,
     createdAt:       row.createdAt,
     updatedAt:       row.updatedAt,
   });

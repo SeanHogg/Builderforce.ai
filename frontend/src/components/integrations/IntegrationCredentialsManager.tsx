@@ -37,15 +37,28 @@ interface ProviderMeta {
   secrets: SecretField[];
   /** Whether a base URL is needed: 'required', 'optional', or false. */
   baseUrl: 'required' | 'optional' | false;
+  /**
+   * Present when this provider can be connected as a synced board. Drives the
+   * BoardConnectionsManager picker + external-board-id hint so that surface
+   * derives from this single source instead of its own provider list.
+   */
+  board?: { externalId: 'required' | 'optional'; hint: string };
 }
 
 export const PROVIDER_META: Record<IntegrationProvider, ProviderMeta> = {
-  github: { label: 'GitHub', baseUrl: false, secrets: [{ key: 'accessToken', label: 'Personal access token', placeholder: 'ghp_…' }] },
+  github: { label: 'GitHub', baseUrl: false, secrets: [{ key: 'accessToken', label: 'Personal access token', placeholder: 'ghp_…' }], board: { externalId: 'required', hint: 'Repository — owner/repo (e.g. octocat/hello-world)' } },
   gitlab: { label: 'GitLab', baseUrl: 'optional', secrets: [{ key: 'accessToken', label: 'Personal access token', placeholder: 'glpat-…' }] },
   bitbucket: { label: 'Bitbucket', baseUrl: false, secrets: [{ key: 'accessToken', label: 'Access token' }] },
-  jira: { label: 'Jira', baseUrl: 'required', secrets: [{ key: 'email', label: 'Account email', type: 'text' }, { key: 'apiToken', label: 'API token' }] },
+  jira: { label: 'Jira', baseUrl: 'required', secrets: [{ key: 'email', label: 'Account email', type: 'text' }, { key: 'apiToken', label: 'API token' }], board: { externalId: 'optional', hint: 'Project key (e.g. ENG) — blank syncs all' } },
   confluence: { label: 'Confluence', baseUrl: 'required', secrets: [{ key: 'email', label: 'Account email', type: 'text' }, { key: 'apiToken', label: 'API token' }] },
-  freshservice: { label: 'Freshservice', baseUrl: 'required', secrets: [{ key: 'apiKey', label: 'API key' }] },
+  freshservice: { label: 'Freshservice', baseUrl: 'required', secrets: [{ key: 'apiKey', label: 'API key' }], board: { externalId: 'optional', hint: 'Workspace ID (optional) — blank syncs all tickets' } },
+  servicenow: { label: 'ServiceNow', baseUrl: 'required', secrets: [{ key: 'username', label: 'Username', type: 'text' }, { key: 'password', label: 'Password' }], board: { externalId: 'optional', hint: 'Table name (default: incident)' } },
+  linear: { label: 'Linear', baseUrl: false, secrets: [{ key: 'apiKey', label: 'API key', placeholder: 'lin_api_…' }], board: { externalId: 'optional', hint: 'Team ID (optional) — blank syncs all teams' } },
+  sentry: { label: 'Sentry', baseUrl: 'optional', secrets: [{ key: 'token', label: 'Auth token', placeholder: 'sntrys_…' }], board: { externalId: 'required', hint: 'organization-slug/project-slug' } },
+  pagerduty: { label: 'PagerDuty', baseUrl: false, secrets: [{ key: 'apiToken', label: 'API token' }, { key: 'fromEmail', label: 'From email (for write-back)', type: 'text', placeholder: 'you@company.com' }], board: { externalId: 'optional', hint: 'Service ID (optional) — blank syncs all services' } },
+  monday: { label: 'monday.com', baseUrl: false, secrets: [{ key: 'token', label: 'API token' }], board: { externalId: 'required', hint: 'Board ID (numeric)' } },
+  asana: { label: 'Asana', baseUrl: false, secrets: [{ key: 'accessToken', label: 'Personal access token' }], board: { externalId: 'required', hint: 'Project GID' } },
+  clickup: { label: 'ClickUp', baseUrl: false, secrets: [{ key: 'token', label: 'API token', placeholder: 'pk_…' }], board: { externalId: 'required', hint: 'List ID' } },
 };
 
 const cardStyle: React.CSSProperties = {

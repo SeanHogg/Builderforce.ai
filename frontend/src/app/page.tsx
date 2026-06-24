@@ -492,14 +492,15 @@ export default function LandingPage() {
           </div>
 
           <p className="lp-tagline">See the future, clearly</p>
-          <p className="lp-tagline lp-tagline-sub">Your AI CTO, CIO &amp; Security Officer</p>
+          <p className="lp-tagline lp-tagline-sub">The innovation platform for the agentic era</p>
 
           <p className="lp-desc">
-            A human-in-the-loop, fully agentic cloud that runs your technology
-            like an executive team. Train your own AI agents and put them to
-            work inside your own agent, manage the whole workforce from a Kanban
-            board, and review and approve every action — all without ever
-            leaving VS Code.
+            The end-to-end system of record for agentic work. Plan, build, ship,
+            and measure with one workforce of humans and AI agents on a single
+            board — where every unit of work is instrumented, costed, and
+            attributed from idea to production. Train your own agents, govern
+            every action with roles, approvals and a full audit trail, and give
+            every role its operating picture — all without ever leaving VS Code.
           </p>
 
           <div className="lp-actions">
@@ -543,6 +544,35 @@ export default function LandingPage() {
               <div key={p.title} className="lp-card">
                 <span className="lp-card-icon">{p.icon}</span>
                 <h3 className="lp-card-title">{p.title}</h3>
+                <p className="lp-card-desc">{p.desc}</p>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        {/* ── Enterprise framing: one instrumented system → every role's operating picture ── */}
+        <section className="lp-features" style={{ paddingTop: 0 }}>
+          <h2 className="section-title">
+            <span className="agentHost-accent">⟩</span> One system of record. Every role&apos;s operating picture.
+          </h2>
+          <p style={{ maxWidth: 'none', margin: '0 0 32px', color: 'var(--text-secondary)' }}>
+            Because every action — human or agent — is instrumented, costed, and attributed,
+            the whole organization works from one source of truth. No six-tool stack, no
+            spreadsheets reconciling who did what at what cost. Enterprise-grade visibility,
+            priced as a platform.
+          </p>
+          <div className="lp-grid" style={{ gridTemplateColumns: 'repeat(auto-fit,minmax(240px,1fr))' }}>
+            {[
+              { icon: '🧭', role: 'CEO', desc: 'Innovation throughput, idea-to-ship conversion, and the ROI of the whole AI investment — one executive picture.' },
+              { icon: '⚙️', role: 'CTO / Engineering', desc: 'DORA four-keys, agent-vs-human productivity, and which AI approach actually merges — from real delivery data.' },
+              { icon: '💰', role: 'CFO / Finance', desc: 'Every token and task costed and attributed ticket → project → initiative, with budgets and cost-per-outcome.' },
+              { icon: '🗂️', role: 'PMO', desc: 'Portfolio rollup, capacity, and delivery forecast across every initiative — with real cost and real outcomes attached.' },
+              { icon: '🛡️', role: 'Security / CISO', desc: 'An immutable, per-action audit trail of everything every agent touched — built for evidence, not screenshots.' },
+              { icon: '👥', role: 'Managers & Teams', desc: 'Throughput, cycle time, rework, and engagement for the blended human-plus-agent workforce on one board.' },
+            ].map((p) => (
+              <div key={p.role} className="lp-card">
+                <span className="lp-card-icon">{p.icon}</span>
+                <h3 className="lp-card-title">{p.role}</h3>
                 <p className="lp-card-desc">{p.desc}</p>
               </div>
             ))}

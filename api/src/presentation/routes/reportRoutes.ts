@@ -33,7 +33,9 @@ import {
   users,
   agentHosts,
   customerFeedback,
+  portfolios,
 } from '../../infrastructure/database/schema';
+import { computePortfolioRollup } from '../../application/pmo/portfolioRollup';
 import { TenantRole, TaskStatus } from '../../domain/shared/types';
 import { getOrSetCached, invalidateCached } from '../../infrastructure/cache/readThroughCache';
 import type { Env, HonoEnv } from '../../env';
@@ -558,6 +560,85 @@ async function generateCompletedByAssigneeReport(db: Db, tenantId: number, days:
   };
 }
 
+/**
+ * Portfolio rollup report (PMO exec summary) — one row per portfolio with its
+ * delivery / spend / DORA / OKR / dependency-health rollup. Reuses the canonical
+ * computePortfolioRollup so the scheduled report and the live /pmo lens never
+ * drift. Sequential over portfolios (few per tenant; MANAGER-gated, infrequent).
+ */
+async function generatePortfolioReport(db: Db, tenantId: number, segmentId: string) {
+  const pfRows = await db
+    .select({ id: portfolios.id, name: portfolios.name, status: portfolios.status })
+    .from(portfolios)
+    .where(and(eq(portfolios.tenantId, tenantId), eq(portfolios.segmentId, segmentId)));
+
+  const now = Date.now();
+  const items: Array<Record<string, unknown>> = [];
+  for (const pf of pfRows) {
+    const r = await computePortfolioRollup(db, tenantId, segmentId, { kind: 'portfolio', id: pf.id }, { now });
+    if (!r) continue;
+    items.push({
+      portfolioId: pf.id,
+      name: pf.name,
+      status: pf.status,
+      initiativeCount: r.initiativeCount,
+      projectCount: r.projectCount,
+      completedTasks: r.delivery.completedCount,
+      openTasks: r.delivery.openCount,
+      agentLlmCostUsd: r.spend.agentLlmCostUsd,
+      okrProgressPct: Math.round(r.okr.avgProgress * 100),
+      deploymentsWindow: r.dora.totalDeployments,
+      changeFailureRatePct: r.dora.changeFailureRatePct,
+      criticalPathLength: r.criticalPath.length,
+      blockedInitiatives: r.byInitiative.filter((i) => i.isBlocked).length,
+    });
+  }
+
+  const totalCost = items.reduce((s, i) => s + (i.agentLlmCostUsd as number), 0);
+  const avgOkr = items.length
+    ? Math.round(items.reduce((s, i) => s + (i.okrProgressPct as number), 0) / items.length)
+    : 0;
+  return {
+    reportType: 'portfolio_rollup',
+    generatedAt: new Date().toISOString(),
+    summary: {
+      portfolios: items.length,
+      totalAgentLlmCostUsd: totalCost,
+      avgOkrProgressPct: avgOkr,
+    },
+    portfolios: items,
+  };
+}
+
+/**
+ * Dispatch a schedulable report_type → its generator, returning an email-ready
+ * { subject, report }. Reuses the on-demand generators above (single source of
+ * generation logic — the scheduled dispatcher and the GET endpoints never drift).
+ * Returns null for report types without a generator (e.g. project_status), so the
+ * sweep can skip them cleanly.
+ */
+const REPORT_DAY_MS = 24 * 60 * 60 * 1000;
+export async function buildScheduledReport(
+  db: Db,
+  reportType: string,
+  tenantId: number,
+  segmentId: string,
+  now: Date,
+): Promise<{ subject: string; report: Record<string, unknown> } | null> {
+  switch (reportType) {
+    case 'standup':
+      return { subject: '[Builderforce] Daily standup report', report: await generateStandupReport(db, tenantId, now) };
+    case 'code_review':
+      return { subject: '[Builderforce] Code review report', report: await generateCodeReviewReport(db, tenantId, new Date(now.getTime() - 14 * REPORT_DAY_MS), now) };
+    case 'executive_summary':
+      return { subject: '[Builderforce] Executive summary', report: await generateExecutiveReport(db, tenantId, new Date(now.getTime() - 30 * REPORT_DAY_MS), now) };
+    case 'portfolio_rollup':
+      return { subject: '[Builderforce] Portfolio (PMO) rollup', report: await generatePortfolioReport(db, tenantId, segmentId) };
+    default:
+      return null;
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Routes
 // ---------------------------------------------------------------------------
@@ -587,6 +668,14 @@ export function createReportRoutes(db: Db): Hono<HonoEnv> {
     const to   = c.req.query('to')   ? new Date(c.req.query('to')!)   : new Date();
     const from = c.req.query('from') ? new Date(c.req.query('from')!) : new Date(to.getTime() - 30 * 24 * 60 * 60 * 1000);
     return c.json(await generateExecutiveReport(db, tenantId, from, to));
+  });
+
+  // ── GET /api/reports/portfolio ────────────────────────────────────────────
+  // PMO portfolio rollup exec summary (schedulable as report_type 'portfolio_rollup').
+  router.get('/portfolio', requireRole(TenantRole.MANAGER), async (c) => {
+    const tenantId = c.get('tenantId') as number;
+    const segmentId = c.get('segmentId') as string;
+    return c.json(await generatePortfolioReport(db, tenantId, segmentId));
   });
 
   // ── GET /api/reports/completed-by-assignee ───────────────────────────────

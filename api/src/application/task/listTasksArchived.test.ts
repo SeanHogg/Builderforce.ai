@@ -63,6 +63,7 @@ function makeProject(): Project {
     governance: null,
     modality: null,
     origin: null,
+    initiativeId: null,
     createdAt: new Date(),
     updatedAt: new Date(),
   });

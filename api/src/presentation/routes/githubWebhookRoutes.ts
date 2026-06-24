@@ -39,7 +39,7 @@ import { verifyHmacSignature } from '../../application/workflow/verifySignature'
 import { ingestRepoCiEvent, AUTOFIX_DISPATCH_EVENT, type RepoCiEvent, type AutoFixIntent } from '../../application/ci/ingestRepoCiEvent';
 import { dispatchCloudRunForTask } from './runtimeRoutes';
 import type { RuntimeService } from '../../application/runtime/RuntimeService';
-import { ingestActivityEvents, resolveRepoLink, type IngestEvent } from '../../application/contributors/activityIngest';
+import { ingestForRepo, type IngestEvent } from '../../application/contributors/activityIngest';
 
 /** Labels that trigger auto-dispatch. Lower-cased for comparison. */
 const DISPATCH_LABELS = new Set(['coderclaw', 'ai-task', 'host', 'ai']);
@@ -178,17 +178,9 @@ export function issueEvents(p: Record<string, unknown>): IngestEvent[] {
   }];
 }
 
-/** Ingest normalized GitHub events for the tenant that owns the repo. Returns the
- *  ingest counts, or null when the repo isn't linked to any project/tenant. */
-async function ingestGithubActivity(
-  env: Env, db: Db, repoFullName: string, events: IngestEvent[],
-): Promise<{ tenantId: number; inserted: number; skipped: number } | null> {
-  if (events.length === 0) return null;
-  const link = await resolveRepoLink(db, repoFullName);
-  if (!link) return null;
-  const res = await ingestActivityEvents(env, db, { tenantId: link.tenantId, provider: 'github', events });
-  return { tenantId: link.tenantId, ...res };
-}
+/** Ingest normalized GitHub events for the tenant that owns the repo. */
+const ingestGithubActivity = (env: Env, db: Db, repoFullName: string, events: IngestEvent[]) =>
+  ingestForRepo(env, db, 'github', repoFullName, events);
 
 /** Map a provider conclusion/state to our normalized outcome. */
 function toOutcome(s: string | null | undefined): RepoCiEvent['outcome'] {

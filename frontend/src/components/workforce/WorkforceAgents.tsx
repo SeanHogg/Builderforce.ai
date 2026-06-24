@@ -21,11 +21,14 @@ import {
 import {
   listTenantMembers,
   removeTenantMember,
+  updateMemberRole,
   listInvitations,
   revokeInvitation,
   type TenantMember,
   type PendingInvitation,
 } from '@/lib/auth';
+import { RoleGate } from '@/components/RoleGate';
+import { ROLE_LABEL, type TenantRole } from '@/lib/rbac';
 import type { PublishedAgent } from '@/lib/types';
 import { AgentHostSlideOutPanel } from '@/components/AgentHostSlideOutPanel';
 import { FleetMeshContent } from '@/components/FleetMeshContent';
@@ -40,7 +43,7 @@ import { CloudAgentSlideOutPanel, type CloudAgentPanelTab } from './CloudAgentSl
 import { ConfiguredQuickstartPopover } from './ConfiguredQuickstartPopover';
 import { AgentCard } from './AgentCard';
 import { AgentManifestInline } from './AgentManifestSection';
-import { MemberCard, PendingInviteCard } from './MemberCard';
+import { MemberCard, PendingInviteCard, RoleSelect } from './MemberCard';
 import { AgentOwnerActions } from './AgentOwnerActions';
 import { AgentTypePill } from '@/components/AgentTypePill';
 import { StatusBadge } from '@/components/StatusBadge';
@@ -118,6 +121,7 @@ export function WorkforceAgents({ tenantId }: { tenantId?: number }) {
   const [removingMemberId, setRemovingMemberId] = useState<string | null>(null);
   const [confirmRemove, setConfirmRemove] = useState<TenantMember | null>(null);
   const [revokingInviteId, setRevokingInviteId] = useState<string | null>(null);
+  const [changingRoleId, setChangingRoleId] = useState<string | null>(null);
 
   const [error, setError] = useState('');
   const [planError, setPlanError] = useState<PlanLimitError | null>(null);
@@ -318,6 +322,20 @@ export function WorkforceAgents({ tenantId }: { tenantId?: number }) {
     }
   };
 
+  const handleChangeRole = async (member: TenantMember, role: string) => {
+    if (!tenant || !tenantToken || role === member.role) return;
+    setChangingRoleId(member.id);
+    try {
+      await updateMemberRole(tenantToken, String(tenant.id), member.id, role);
+      setMembers((prev) => prev.map((m) => (m.id === member.id ? { ...m, role } : m)));
+    } catch (e) {
+      if (isPlanLimitError(e)) setPlanError(e);
+      else setError(e instanceof Error ? e.message : 'Failed to change role');
+    } finally {
+      setChangingRoleId(null);
+    }
+  };
+
   const handleRevokeInvite = async (invite: PendingInvitation) => {
     if (!tenant || !tenantToken) return;
     setRevokingInviteId(invite.id);
@@ -351,10 +369,14 @@ export function WorkforceAgents({ tenantId }: { tenantId?: number }) {
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
         {!loading && !isEmpty && <ViewToggle value={viewMode} onChange={setViewMode} />}
         {tenant && tenantToken && (
-          <button type="button" onClick={() => setInviteOpen(true)} style={inviteBtn}>Invite</button>
+          <RoleGate capability="members.invite">
+            <button type="button" onClick={() => setInviteOpen(true)} style={inviteBtn}>Invite</button>
+          </RoleGate>
         )}
         <div style={{ position: 'relative', display: 'inline-flex' }}>
+          <RoleGate capability="agents.create">
           <button type="button" onClick={() => openCreate('cloud')} style={splitMain}>+ Agent</button>
+          </RoleGate>
           <button
             type="button"
             onClick={() => setQuickstartOpen((o) => !o)}
@@ -393,12 +415,16 @@ export function WorkforceAgents({ tenantId }: { tenantId?: number }) {
           <div className="empty-state-title">No one here yet</div>
           <div className="empty-state-sub">Invite a teammate, or create a cloud agent / register a remote (self-hosted) agent to start building your workforce.</div>
           <div style={{ display: 'flex', gap: 10, marginTop: 14 }}>
-            <button type="button" onClick={() => setInviteOpen(true)} style={{ ...inviteBtn, padding: '10px 18px', fontSize: 14, borderRadius: 10 }}>
-              Invite a teammate
-            </button>
-            <button type="button" onClick={() => openCreate('cloud')} style={{ ...btnPrimary, padding: '10px 18px', fontSize: 14, borderRadius: 10 }}>
-              Add agent
-            </button>
+            <RoleGate capability="members.invite">
+              <button type="button" onClick={() => setInviteOpen(true)} style={{ ...inviteBtn, padding: '10px 18px', fontSize: 14, borderRadius: 10 }}>
+                Invite a teammate
+              </button>
+            </RoleGate>
+            <RoleGate capability="agents.create">
+              <button type="button" onClick={() => openCreate('cloud')} style={{ ...btnPrimary, padding: '10px 18px', fontSize: 14, borderRadius: 10 }}>
+                Add agent
+              </button>
+            </RoleGate>
           </div>
         </div>
       ) : viewMode === 'card' ? (
@@ -409,7 +435,9 @@ export function WorkforceAgents({ tenantId }: { tenantId?: number }) {
               key={`member-${m.id}`}
               member={m}
               onRemove={setConfirmRemove}
+              onChangeRole={handleChangeRole}
               removing={removingMemberId === m.id}
+              changingRole={changingRoleId === m.id}
             />
           ))}
           {pendingInvites.map((inv) => (
@@ -502,9 +530,11 @@ export function WorkforceAgents({ tenantId }: { tenantId?: number }) {
                   <td style={tdStyle}>{m.displayName ?? m.username ?? m.email}</td>
                   <td style={tdStyle}><AgentTypePill kind="human" /></td>
                   <td style={tdMutedStyle}>{m.email}</td>
+                  <td style={tdMutedStyle}>{ROLE_LABEL[m.role as TenantRole] ?? m.role}</td>
                   <td style={tdMutedStyle}>—</td>
-                  <td style={tdMutedStyle}>—</td>
-                  <td style={tdMutedStyle}>—</td>
+                  <td style={tdStyle}>
+                    <RoleSelect value={m.role} onChange={(role) => handleChangeRole(m, role)} busy={changingRoleId === m.id} compact />
+                  </td>
                   <td style={tdStyle}>
                     <button type="button" style={btnSubtle} disabled={removingMemberId === m.id} onClick={() => setConfirmRemove(m)}>
                       {removingMemberId === m.id ? 'Removing…' : 'Remove'}

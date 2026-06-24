@@ -300,3 +300,51 @@ export async function sendLlmHealthAlertEmail(
 
   await provider.send({ to, subject, html });
 }
+
+// ---------------------------------------------------------------------------
+// Scheduled report digest — sent by the report-schedule dispatcher (runDueReports)
+// for each due report_schedules row. Renders the report's summary/kpis object as
+// a key/value table; values are server-generated but escaped defensively.
+// ---------------------------------------------------------------------------
+
+/** camelCase / snake_case key → spaced Title-ish label for the digest table. */
+function humanizeKey(key: string): string {
+  const spaced = key.replace(/([a-z0-9])([A-Z])/g, '$1 $2').replace(/_/g, ' ');
+  return spaced.charAt(0).toUpperCase() + spaced.slice(1);
+}
+
+export async function sendReportEmail(
+  env: EmailEnv,
+  to: string,
+  subject: string,
+  report: Record<string, unknown>,
+): Promise<void> {
+  const provider = getEmailProvider(env);
+  if (!provider) return;
+
+  const kv = (report.summary ?? report.kpis ?? {}) as Record<string, unknown>;
+  const rows = Object.entries(kv)
+    .filter(([, v]) => v == null || typeof v !== 'object')
+    .map(([k, v]) =>
+      `<tr>
+        <td style="padding:6px 12px;border-bottom:1px solid #e2e8f0">${escapeHtml(humanizeKey(k))}</td>
+        <td style="padding:6px 12px;border-bottom:1px solid #e2e8f0;text-align:right"><strong>${escapeHtml(String(v ?? '—'))}</strong></td>
+      </tr>`)
+    .join('');
+
+  const body = `
+      <p>Your scheduled <strong>${escapeHtml(String(report.reportType ?? 'report'))}</strong> report is ready.</p>
+      ${rows
+        ? `<table style="border-collapse:collapse;width:100%;margin-top:8px">${rows}</table>`
+        : '<p style="color:#64748b">No data for this period.</p>'}
+      <p style="text-align:center; margin: 24px 0 8px;">
+        <a href="https://builderforce.ai/pmo" class="button">Open in Builderforce</a>
+      </p>`;
+
+  const html = render(HEADER + body + FOOTER, {
+    Subject: subject,
+    Year: String(new Date().getFullYear()),
+  });
+
+  await provider.send({ to, subject, html });
+}

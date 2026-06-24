@@ -25,7 +25,7 @@ const NO_CHROME_PREFIXES = ['/embed', '/webcontainer', '/auth/'];
 // no-chrome / footer-only) defaults to the authenticated app shell, so a new
 // authed page gets correct chrome without being added to a list [1557]. Keep
 // this list current as marketing/public routes are added.
-const PUBLIC_SHELL_PREFIXES = ['/product', '/blog', '/agents', '/pricing', '/compare', '/marketplace', '/prompts', '/models', '/integrations'];
+const PUBLIC_SHELL_PREFIXES = ['/product', '/blog', '/agents', '/pricing', '/compare', '/marketplace', '/prompts', '/models', '/integrations', '/diagnostics', '/tools'];
 
 export type ShellKind = 'none' | 'footer' | 'public' | 'app';
 

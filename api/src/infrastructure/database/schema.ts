@@ -353,6 +353,33 @@ export const llmUsageLog = pgTable('llm_usage_log', {
   createdAt:        timestamp('created_at').notNull().defaultNow(),
 });
 
+/**
+ * Data-ingestion ledger (migration 0218) — the append-only record of data
+ * PROCESSED through system integrations (repo content imports, etc.). The
+ * non-token half of the consumption meter: where llm_usage_log meters AI tokens,
+ * this meters bytes ingested, so free-vs-paid can cap the real cost driver
+ * (linking/processing lots of repo data) WITHOUT capping what a user can see.
+ * Summed month-to-date against the plan's ingestion allowance (PlanLimits) by the
+ * shared accountant in application/ingestion/ingestionLedger.ts.
+ */
+export const ingestionUsageLog = pgTable('ingestion_usage_log', {
+  id:            serial('id').primaryKey(),
+  tenantId:      integer('tenant_id').references(() => tenants.id, { onDelete: 'set null' }),
+  /** Project the ingestion is attributed to (null for tenant-level sources). */
+  projectId:     integer('project_id').references(() => projects.id, { onDelete: 'set null' }),
+  /** What was ingested: 'repo_import' today; room for 'integration_sync' etc. */
+  source:        varchar('source', { length: 32 }).notNull().default('repo_import'),
+  /** Integration provider (github/gitlab/…), when applicable. */
+  provider:      varchar('provider', { length: 32 }),
+  /** Bytes of content actually pulled/processed — the metered quantity. */
+  bytesIngested: bigint('bytes_ingested', { mode: 'number' }).notNull().default(0),
+  /** Discrete items processed (files, records) — informational alongside bytes. */
+  itemsIngested: integer('items_ingested').notNull().default(0),
+  /** Caller-supplied trace-back ({ repoId, ref, truncated, … }); stringified. */
+  metadata:      text('metadata'),
+  createdAt:     timestamp('created_at').notNull().defaultNow(),
+});
+
 export const llmFailoverLog = pgTable('llm_failover_log', {
   id:        serial('id').primaryKey(),
   model:     varchar('model', { length: 200 }).notNull(),
@@ -758,6 +785,10 @@ export const projects = pgTable('projects', {
    *  'ide' (created in the Designer) | 'imported' (created by importing a repo) |
    *  'external' (anything else). NULL on legacy rows = treated as external. */
   origin:          text('origin'),
+  // PMO rollup link (0213): the initiative this project belongs to, or NULL when
+  // unassigned. The join that lets cost/DORA/outcome collectors roll up to the
+  // initiative → portfolio tier. Forward ref to `initiatives` (defined below).
+  initiativeId:    uuid('initiative_id').references((): AnyPgColumn => initiatives.id, { onDelete: 'set null' }),
   createdAt:       timestamp('created_at').notNull().defaultNow(),
   updatedAt:       timestamp('updated_at').notNull().defaultNow(),
 });
@@ -1832,6 +1863,8 @@ export const magicLinkTokens = pgTable('magic_link_tokens', {
 export const integrationProviderEnum = pgEnum('integration_provider', [
   'github', 'gitlab', 'bitbucket', 'jira', 'confluence', 'freshservice', 'rally', 'freshworks',
   'google_calendar',
+  // 0221 — single-pane / migration connectors
+  'servicenow', 'linear', 'sentry', 'pagerduty', 'monday', 'asana', 'clickup',
 ]);
 
 export const integrationSyncStatusEnum = pgEnum('integration_sync_status', [
@@ -2123,7 +2156,7 @@ export const teamProjects = pgTable('team_projects', {
 // ---------------------------------------------------------------------------
 
 export const reportTypeEnum = pgEnum('report_type', [
-  'standup', 'code_review', 'project_status', 'executive_summary',
+  'standup', 'code_review', 'project_status', 'executive_summary', 'portfolio_rollup',
 ]);
 
 export const reportScheduleEnum = pgEnum('report_schedule', [
@@ -2599,6 +2632,82 @@ export const roadmapItems = pgTable('roadmap_items', {
   notes:      text('notes'),
   createdAt:  timestamp('created_at').notNull().defaultNow(),
   updatedAt:  timestamp('updated_at').notNull().defaultNow(),
+});
+
+// ── PMO tier (0213): Portfolio / Initiative / OKR above the project tier ──────
+// The rollup objects the collector substrate was missing. uuid PKs + tenant/
+// segment scope match the planning trackers, so the generic segment-tracker CRUD
+// (segmentTrackerRoutes) drives their management with no bespoke router; the live
+// rollup (pmoRoutes/portfolioRollup) aggregates cost/DORA/outcomes/delivery over
+// the projects linked under each tier.
+export const portfolios = pgTable('portfolios', {
+  id:          uuid('id').primaryKey().defaultRandom(),
+  tenantId:    integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  segmentId:   uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),
+  name:        varchar('name', { length: 255 }).notNull(),
+  description: text('description'),
+  status:      varchar('status', { length: 20 }).notNull().default('active'), // active | archived
+  ownerUserId: varchar('owner_user_id', { length: 36 }).references(() => users.id, { onDelete: 'set null' }),
+  targetDate:  timestamp('target_date'),
+  createdAt:   timestamp('created_at').notNull().defaultNow(),
+  updatedAt:   timestamp('updated_at').notNull().defaultNow(),
+});
+
+export const initiatives = pgTable('initiatives', {
+  id:          uuid('id').primaryKey().defaultRandom(),
+  tenantId:    integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  segmentId:   uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),
+  portfolioId: uuid('portfolio_id').references(() => portfolios.id, { onDelete: 'set null' }),
+  name:        varchar('name', { length: 255 }).notNull(),
+  description: text('description'),
+  status:      varchar('status', { length: 20 }).notNull().default('proposed'), // proposed | active | completed | archived
+  ownerUserId: varchar('owner_user_id', { length: 36 }).references(() => users.id, { onDelete: 'set null' }),
+  targetDate:  timestamp('target_date'),
+  createdAt:   timestamp('created_at').notNull().defaultNow(),
+  updatedAt:   timestamp('updated_at').notNull().defaultNow(),
+});
+
+export const objectives = pgTable('objectives', {
+  id:           uuid('id').primaryKey().defaultRandom(),
+  tenantId:     integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  segmentId:    uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),
+  portfolioId:  uuid('portfolio_id').references(() => portfolios.id, { onDelete: 'set null' }),
+  initiativeId: uuid('initiative_id').references(() => initiatives.id, { onDelete: 'set null' }),
+  title:        varchar('title', { length: 255 }).notNull(),
+  description:  text('description'),
+  period:       varchar('period', { length: 20 }), // e.g. '2026-Q2'
+  status:       varchar('status', { length: 20 }).notNull().default('active'), // active | achieved | missed | archived
+  ownerUserId:  varchar('owner_user_id', { length: 36 }).references(() => users.id, { onDelete: 'set null' }),
+  createdAt:    timestamp('created_at').notNull().defaultNow(),
+  updatedAt:    timestamp('updated_at').notNull().defaultNow(),
+});
+
+export const keyResults = pgTable('key_results', {
+  id:           uuid('id').primaryKey().defaultRandom(),
+  tenantId:     integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  segmentId:    uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),
+  objectiveId:  uuid('objective_id').notNull().references(() => objectives.id, { onDelete: 'cascade' }),
+  title:        varchar('title', { length: 255 }).notNull(),
+  metricType:   varchar('metric_type', { length: 20 }).notNull().default('number'), // number | percent | currency | boolean
+  startValue:   real('start_value').notNull().default(0),
+  targetValue:  real('target_value').notNull().default(100),
+  currentValue: real('current_value').notNull().default(0),
+  unit:         varchar('unit', { length: 20 }),
+  status:       varchar('status', { length: 20 }).notNull().default('on_track'), // on_track | at_risk | off_track | done
+  createdAt:    timestamp('created_at').notNull().defaultNow(),
+  updatedAt:    timestamp('updated_at').notNull().defaultNow(),
+});
+
+// Initiative dependency edges (0216): from_initiative BLOCKS to_initiative. The
+// rollup uses these to flag blocked initiatives + compute the critical path
+// (longest incomplete chain); the route rejects self-loops and cycle-closing edges.
+export const pmoDependencies = pgTable('pmo_dependencies', {
+  id:               uuid('id').primaryKey().defaultRandom(),
+  tenantId:         integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  segmentId:        uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),
+  fromInitiativeId: uuid('from_initiative_id').notNull().references(() => initiatives.id, { onDelete: 'cascade' }),
+  toInitiativeId:   uuid('to_initiative_id').notNull().references(() => initiatives.id, { onDelete: 'cascade' }),
+  createdAt:        timestamp('created_at').notNull().defaultNow(),
 });
 
 export const productReleases = pgTable('product_releases', {
@@ -3179,10 +3288,37 @@ export const qaFindings = pgTable('qa_findings', {
   // 'open' | 'triaged' | 'task_created' | 'ignored' | 'resolved'
   status:        varchar('status', { length: 16 }).notNull().default('open'),
   taskId:        integer('task_id').references(() => tasks.id, { onDelete: 'set null' }),
+  // True when the platform auto-routed this finding to a fix agent (vs a manual
+  // "Create task"). See qa_routing_settings + QaFindingRouter (migration 0214).
+  autoRouted:    boolean('auto_routed').notNull().default(false),
   fingerprint:   varchar('fingerprint', { length: 64 }),
   createdAt:     timestamp('created_at').notNull().defaultNow(),
   // Unique (exploration_id, fingerprint) enforced by migration 0206 (see qa_flows
   // note — kept off the pgTable literal for the schema-drift parser).
+});
+
+// ---------------------------------------------------------------------------
+// QA routing settings (migration 0214) — per-project policy deciding whether the
+// Agentic Tester's findings auto-route into a board fix-agent run. Opt-in:
+// auto-routing dispatches paid agent runs, so it stays off until a project enables
+// it. One row per project; read by QaFindingRouter on the findings-ingestion path.
+// ---------------------------------------------------------------------------
+export const qaRoutingSettings = pgTable('qa_routing_settings', {
+  id:            uuid('id').primaryKey().defaultRandom(),
+  tenantId:      integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  segmentId:     uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),
+  projectId:     integer('project_id').notNull().unique().references(() => projects.id, { onDelete: 'cascade' }),
+  enabled:       boolean('enabled').notNull().default(false),
+  // Minimum finding severity that triggers a route ('low'|'medium'|'high'|'critical').
+  minSeverity:   varchar('min_severity', { length: 16 }).notNull().default('high'),
+  // Explicit board lane key to route into; null = auto-detect the first staffed,
+  // non-human-gated, non-terminal lane (the natural fix lane).
+  targetLaneKey: varchar('target_lane_key', { length: 120 }),
+  // Max findings auto-routed per exploration batch (storm guard).
+  maxPerBatch:   integer('max_per_batch').notNull().default(5),
+  createdBy:     varchar('created_by', { length: 36 }),
+  createdAt:     timestamp('created_at').notNull().defaultNow(),
+  updatedAt:     timestamp('updated_at').notNull().defaultNow(),
 });
 
 // ---------------------------------------------------------------------------
@@ -3889,4 +4025,73 @@ export const tenantModels = pgTable('tenant_models', {
 }, (t) => ({
   byTenant: index('idx_tenant_models_tenant').on(t.tenantId),
   uqSlug:   uniqueIndex('uq_tenant_models_slug').on(t.tenantId, t.slug),
+}));
+
+// ── Insight-lens object tiers (migration 0220) ───────────────────────────────
+// The only NEW storage the role-insight lenses need; everything else they read
+// (run_model_outcomes, deployment_events, llm_usage_log, tool_audit_events) is
+// already collected. Both tenant + segment scoped, uuid PKs, so the generic
+// segmentTrackerRoutes factory drives their CRUD.
+
+/** FinOps ceiling (LENS #3 / CFO): a monthly spend limit per scope, compared
+ *  against the already-attributed llm_usage_log actuals in financeInsights. */
+export const budgets = pgTable('budgets', {
+  id:           uuid('id').primaryKey().defaultRandom(),
+  tenantId:     integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  segmentId:    uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),
+  scopeKind:    varchar('scope_kind', { length: 16 }).notNull().default('tenant'), // tenant | project | initiative
+  projectId:    integer('project_id').references(() => projects.id, { onDelete: 'cascade' }),
+  initiativeId: uuid('initiative_id').references(() => initiatives.id, { onDelete: 'cascade' }),
+  periodMonth:  varchar('period_month', { length: 7 }).notNull(), // 'YYYY-MM'
+  limitUsd:     real('limit_usd').notNull().default(0),
+  notes:        text('notes'),
+  createdAt:    timestamp('created_at').notNull().defaultNow(),
+  updatedAt:    timestamp('updated_at').notNull().defaultNow(),
+}, (t) => ({
+  byScope: index('idx_budgets_scope').on(t.tenantId, t.segmentId, t.periodMonth),
+}));
+
+/** Innovation-funnel pipeline (LENS #5 / CEO): a tracked idea moving through
+ *  idea→validated→in_build→shipped→measured (killed = off-ramp). stage_entered_at
+ *  is trigger-maintained so the generic tracker PATCH needn't set it. */
+export const innovationIdeas = pgTable('innovation_ideas', {
+  id:              uuid('id').primaryKey().defaultRandom(),
+  tenantId:        integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  segmentId:       uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),
+  initiativeId:    uuid('initiative_id').references(() => initiatives.id, { onDelete: 'set null' }),
+  title:           varchar('title', { length: 255 }).notNull(),
+  description:     text('description'),
+  stage:           varchar('stage', { length: 16 }).notNull().default('idea'),
+  linkedProjectId: integer('linked_project_id').references(() => projects.id, { onDelete: 'set null' }),
+  impact:          real('impact'),
+  effort:          real('effort'),
+  confidence:      real('confidence'),
+  outcome:         text('outcome'),
+  outcomeValue:    real('outcome_value'),
+  killedReason:    text('killed_reason'),
+  stageEnteredAt:  timestamp('stage_entered_at').notNull().defaultNow(),
+  notes:           text('notes'),
+  createdAt:       timestamp('created_at').notNull().defaultNow(),
+  updatedAt:       timestamp('updated_at').notNull().defaultNow(),
+}, (t) => ({
+  byScope: index('idx_innovation_ideas_scope').on(t.tenantId, t.segmentId, t.stage),
+}));
+
+/**
+ * Diagnostics & Tools — saved runs of a free tool (calculator/questionnaire).
+ * Definitions are code (application/tools); this stores kept results. See
+ * migration 0217.
+ */
+export const toolRuns = pgTable('tool_runs', {
+  id:         uuid('id').primaryKey().defaultRandom(),
+  tenantId:   integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  segmentId:  uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),
+  toolId:     varchar('tool_id', { length: 64 }).notNull(),
+  kind:       varchar('kind', { length: 16 }).notNull().default('self'), // self | data
+  input:      jsonb('input').notNull().default(sql`'{}'::jsonb`),
+  result:     jsonb('result').notNull().default(sql`'{}'::jsonb`),
+  createdBy:  varchar('created_by', { length: 36 }),
+  createdAt:  timestamp('created_at').notNull().defaultNow(),
+}, (t) => ({
+  byTenantTool: index('idx_tool_runs_tenant_tool').on(t.tenantId, t.toolId, t.createdAt),
 }));

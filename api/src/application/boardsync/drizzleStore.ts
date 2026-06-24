@@ -202,9 +202,26 @@ export function createDrizzleStore(db: Db): BoardSyncStore {
     },
 
     async listPendingOutbox(connectionId: string, now: Date, limit: number): Promise<OutboxRow[]> {
+      // Resolve each row's target externalId from its link (connection+task) in one
+      // join — drainOutbox needs it to address the provider, and a missing link
+      // makes the drain dead-letter the row (rather than guessing).
       const rows = await db
-        .select()
+        .select({
+          id: boardSyncOutbox.id,
+          connectionId: boardSyncOutbox.connectionId,
+          taskId: boardSyncOutbox.taskId,
+          changeSet: boardSyncOutbox.changeSet,
+          attempts: boardSyncOutbox.attempts,
+          externalId: externalTicketLinks.externalId,
+        })
         .from(boardSyncOutbox)
+        .leftJoin(
+          externalTicketLinks,
+          and(
+            eq(externalTicketLinks.connectionId, boardSyncOutbox.connectionId),
+            eq(externalTicketLinks.taskId, boardSyncOutbox.taskId),
+          ),
+        )
         .where(
           and(
             eq(boardSyncOutbox.connectionId, connectionId),
@@ -216,7 +233,7 @@ export function createDrizzleStore(db: Db): BoardSyncStore {
       return rows.map((r) => ({
         id: r.id,
         connectionId: r.connectionId,
-        externalId: null,
+        externalId: r.externalId ?? null,
         taskId: r.taskId,
         changeSet: (r.changeSet ? safeParse(r.changeSet) : {}) as ChangeSet,
         attempts: r.attempts,

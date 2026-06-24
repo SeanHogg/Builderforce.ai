@@ -14,15 +14,15 @@
  * Each repo is independent so one bad credential / unreachable host can't stall the
  * rest; bounded per tick so the sweep stays within the subrequest budget.
  */
-import { and, asc, eq, isNull, lt, or, sql } from 'drizzle-orm';
+import { and, asc, eq, inArray, isNull, lt, or, sql } from 'drizzle-orm';
 import { buildDatabase } from '../../infrastructure/database/connection';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import { projectRepositories } from '../../infrastructure/database/schema';
 import { resolveRepoCredential, isResolveError } from '../repos/resolveRepoCredential';
 import { makeRepoFetch } from '../repos/sources/RepoSource';
-import { GithubActivitySource } from './githubActivitySource';
-import { ingestActivityEvents } from './activityIngest';
+import { createActivitySource, POLLABLE_PROVIDERS } from './activitySourceFactory';
+import { ingestActivityEvents, type ActivityProvider } from './activityIngest';
 
 export interface RepoActivitySweepResult {
   due: number;
@@ -46,21 +46,24 @@ const BACKFILL_DAYS = 90;
 export async function syncRepoActivity(
   db: Db, env: Env, secret: string, repo: typeof projectRepositories.$inferSelect, now: Date,
 ): Promise<number | null> {
-  if (repo.provider !== 'github' || !repo.credentialId) return null;
+  if (!repo.credentialId) return null;
 
   const resolved = await resolveRepoCredential(db, secret, repo.tenantId, repo.id);
   if (isResolveError(resolved)) return null;
 
-  const since = repo.lastActivitySyncedAt ?? new Date(now.getTime() - BACKFILL_DAYS * 24 * 3_600_000);
-  const repoFullName = `${repo.owner}/${repo.repo}`;
-  const source = new GithubActivitySource(
+  const source = createActivitySource(
+    repo.provider,
     { owner: repo.owner, repo: repo.repo, host: repo.host, token: resolved.token },
     makeRepoFetch(),
   );
+  if (!source) return null;   // provider not pollable
+
+  const since = repo.lastActivitySyncedAt ?? new Date(now.getTime() - BACKFILL_DAYS * 24 * 3_600_000);
+  const repoFullName = `${repo.owner}/${repo.repo}`;
 
   const events = await source.fetchSince(since, repoFullName, repo.repo);
   const { inserted } = events.length
-    ? await ingestActivityEvents(env, db, { tenantId: repo.tenantId, provider: 'github', events })
+    ? await ingestActivityEvents(env, db, { tenantId: repo.tenantId, provider: repo.provider as ActivityProvider, events })
     : { inserted: 0 };
 
   // Advance the watermark even when nothing new — so we don't re-scan the window.
@@ -78,13 +81,13 @@ export async function runRepoActivitySweep(env: Env): Promise<RepoActivitySweepR
   const now = new Date();
   const cutoff = new Date(now.getTime() - SYNC_INTERVAL_SEC * 1000);
 
-  // Due = github + has a credential + (never synced OR interval elapsed). Oldest
-  // watermark first so the sweep is fair across repos under the per-tick cap.
+  // Due = pollable provider + has a credential + (never synced OR interval
+  // elapsed). Oldest watermark first so the sweep is fair under the per-tick cap.
   const due = await db
     .select()
     .from(projectRepositories)
     .where(and(
-      eq(projectRepositories.provider, 'github'),
+      inArray(projectRepositories.provider, [...POLLABLE_PROVIDERS]),
       sql`${projectRepositories.credentialId} is not null`,
       or(isNull(projectRepositories.lastActivitySyncedAt), lt(projectRepositories.lastActivitySyncedAt, cutoff)),
     ))

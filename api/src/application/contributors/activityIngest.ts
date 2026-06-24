@@ -110,6 +110,16 @@ export async function resolveProjectForRepo(
   return proj?.id ?? null;
 }
 
+/**
+ * A provider-agnostic activity fetcher (the poll producer's per-provider backend).
+ * GitHub / GitLab / Bitbucket each implement this over their REST API; the sweep
+ * dispatches by provider. See ./githubActivitySource etc.
+ */
+export interface ActivitySource {
+  /** All activity events for this repo since `since`, stamped with the repo names. */
+  fetchSince(since: Date, repoFullName: string, repoName: string): Promise<IngestEvent[]>;
+}
+
 export interface RepoLink { tenantId: number; projectId: number | null; }
 
 /**
@@ -371,4 +381,19 @@ export async function ingestActivityEvents(
   }
 
   return { inserted, skipped };
+}
+
+/**
+ * Resolve a repo (by full name) to its tenant and ingest a batch of its events —
+ * the shared entry point for every provider webhook (no tenant context in the
+ * payload). Returns the counts + tenant, or null when the repo isn't linked.
+ */
+export async function ingestForRepo(
+  env: Env, db: Db, provider: ActivityProvider, repoFullName: string, events: IngestEvent[],
+): Promise<{ tenantId: number; inserted: number; skipped: number } | null> {
+  if (events.length === 0) return null;
+  const link = await resolveRepoLink(db, repoFullName);
+  if (!link) return null;
+  const res = await ingestActivityEvents(env, db, { tenantId: link.tenantId, provider, events });
+  return { tenantId: link.tenantId, ...res };
 }

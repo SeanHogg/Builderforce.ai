@@ -1,11 +1,14 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useTranslations } from 'next-intl';
 import Link from 'next/link';
 import { mySessionsApi, myAdminAccessApi, type MySession, type MyAdminAccessSession } from '@/lib/builderforceApi';
 import { EmbedIntegrationSettings } from '@/components/settings/EmbedIntegrationSettings';
+import LanguageSwitcher from '@/components/LanguageSwitcher';
 import PageContainer from '@/components/PageContainer';
 import { IntegrationCredentialsManager } from '@/components/integrations/IntegrationCredentialsManager';
+import { RoleGate } from '@/components/RoleGate';
 import {
   getStoredUser,
   getStoredTenant,
@@ -16,23 +19,24 @@ import {
 } from '@/lib/auth';
 
 /**
- * Self-gating nav link to the API Keys page. Renders nothing when the
- * current tenant role can't manage keys, so callers don't need a canX prop.
+ * Self-gating nav link to the API Keys page. Per product rule we don't hide the
+ * link from non-owners — RoleGate shows it disabled with a "Requires Owner role"
+ * hint so everyone can see the capability exists and who to ask.
  */
 function ApiKeysSettingsLink() {
-  const tenant = getStoredTenant();
-  if (tenant?.role !== 'owner') return null;
   return (
-    <Link
-      href="/settings/api-keys"
-      style={{
-        padding: '6px 12px', fontSize: 12, fontWeight: 600,
-        background: 'var(--bg-elevated)', color: 'var(--text-secondary)',
-        border: '1px solid var(--border-subtle)', borderRadius: 8, textDecoration: 'none',
-      }}
-    >
-      API keys →
-    </Link>
+    <RoleGate capability="apiKeys.manage">
+      <Link
+        href="/settings/api-keys"
+        style={{
+          padding: '6px 12px', fontSize: 12, fontWeight: 600,
+          background: 'var(--bg-elevated)', color: 'var(--text-secondary)',
+          border: '1px solid var(--border-subtle)', borderRadius: 8, textDecoration: 'none',
+        }}
+      >
+        API keys →
+      </Link>
+    </RoleGate>
   );
 }
 
@@ -58,6 +62,7 @@ const OAUTH_PROVIDERS = [
 ];
 
 export default function SettingsPage() {
+  const t = useTranslations('settings');
   const user = getStoredUser();
   const tenant = getStoredTenant();
 
@@ -152,11 +157,20 @@ export default function SettingsPage() {
 
   return (
     <PageContainer width="readable" style={{ padding: '32px 40px' }}>
-      <h1 style={{ fontSize: 22, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 24 }}>Settings</h1>
+      <h1 style={{ fontSize: 22, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 24 }}>{t('title')}</h1>
+
+      {/* Language */}
+      <div style={{ ...cardStyle, marginBottom: 20 }}>
+        <div style={sectionTitle}>{t('language')}</div>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap' }}>
+          <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>{t('languageDescription')}</span>
+          <LanguageSwitcher />
+        </div>
+      </div>
 
       {/* Profile */}
       <div style={{ ...cardStyle, marginBottom: 20 }}>
-        <div style={sectionTitle}>Profile</div>
+        <div style={sectionTitle}>{t('profile')}</div>
         <div style={{ display: 'grid', gap: 10 }}>
           {[
             { label: 'Email', value: user?.email },
@@ -174,7 +188,7 @@ export default function SettingsPage() {
       {/* Workspace */}
       {tenant && (
         <div style={{ ...cardStyle, marginBottom: 20 }}>
-          <div style={sectionTitle}>Workspace</div>
+          <div style={sectionTitle}>{t('workspace')}</div>
           <div style={{ display: 'grid', gap: 10 }}>
             {[
               { label: 'Name', value: tenant.name },

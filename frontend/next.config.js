@@ -1,5 +1,9 @@
 /** @type {import('next').NextConfig} */
+const createNextIntlPlugin = require('next-intl/plugin');
 const { version } = require('./package.json');
+
+// next-intl: points the plugin at the per-request locale/message resolver.
+const withNextIntl = createNextIntlPlugin('./src/i18n/request.ts');
 
 const nextConfig = {
   env: {
@@ -92,4 +96,4 @@ const nextConfig = {
   },
 }
 
-module.exports = nextConfig
+module.exports = withNextIntl(nextConfig)
