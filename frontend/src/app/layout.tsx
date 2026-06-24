@@ -23,6 +23,15 @@ import { PwaInstallPrompt } from '@/components/PwaInstallPrompt';
 import { GlobalErrorHandler } from '@/components/GlobalErrorHandler';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 
+// Deploy target is Cloudflare Pages via @cloudflare/next-on-pages, which requires
+// every non-static route to run on the Edge Runtime. The cookie-based i18n
+// (getLocale/getMessages here + cookies() in i18n/request.ts) makes every route
+// dynamic, so they ALL need edge. Setting it on the root layout is a route
+// segment config that inherits to every child route — one declaration instead of
+// 40+ per-page exports. If a page pulls in a Node-only API, `next build` fails
+// here, which is the signal to fix that page (the deploy can't use Node anyway).
+export const runtime = 'edge';
+
 const BASE_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://builderforce.ai';
 
 export const metadata: Metadata = {
