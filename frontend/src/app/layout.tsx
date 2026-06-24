@@ -1,8 +1,7 @@
 import type { Metadata } from 'next';
 import Script from 'next/script';
 import { JetBrains_Mono } from 'next/font/google';
-import { NextIntlClientProvider } from 'next-intl';
-import { getLocale, getMessages } from 'next-intl/server';
+import { LocaleProvider } from './LocaleProvider';
 import './globals.css';
 import { AuthProvider } from '@/lib/AuthContext';
 import { CartProvider } from '@/lib/CartContext';
@@ -22,15 +21,6 @@ import { PwaUpdateBanner } from '@/components/PwaUpdateBanner';
 import { PwaInstallPrompt } from '@/components/PwaInstallPrompt';
 import { GlobalErrorHandler } from '@/components/GlobalErrorHandler';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
-
-// Deploy target is Cloudflare Pages via @cloudflare/next-on-pages, which requires
-// every non-static route to run on the Edge Runtime. The cookie-based i18n
-// (getLocale/getMessages here + cookies() in i18n/request.ts) makes every route
-// dynamic, so they ALL need edge. Setting it on the root layout is a route
-// segment config that inherits to every child route — one declaration instead of
-// 40+ per-page exports. If a page pulls in a Node-only API, `next build` fails
-// here, which is the signal to fix that page (the deploy can't use Node anyway).
-export const runtime = 'edge';
 
 const BASE_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://builderforce.ai';
 
@@ -106,12 +96,13 @@ export const viewport = {
   ],
 };
 
-export default async function RootLayout({ children }: { children: React.ReactNode }) {
-  // Active locale + its catalog (only this one language is sent to the client).
-  const locale = await getLocale();
-  const messages = await getMessages();
+export default function RootLayout({ children }: { children: React.ReactNode }) {
+  // Static-rendered shell in the default locale; the client LocaleProvider swaps
+  // to the user's cookie locale after hydration (see LocaleProvider). This keeps
+  // marketing/public pages statically prerendered (SEO) instead of forcing every
+  // route dynamic via a server-side cookie read.
   return (
-    <html lang={locale} data-theme="dark" suppressHydrationWarning className={jetbrainsMono.variable}>
+    <html lang="en" data-theme="dark" suppressHydrationWarning className={jetbrainsMono.variable}>
       <head>
         {/* Google Tag Manager — uses next/script so Next.js can manage loading strategy */}
         <Script
@@ -159,8 +150,9 @@ export default async function RootLayout({ children }: { children: React.ReactNo
         {/* Client island: syncs icon labels after JS hydrates */}
         <ThemeProvider />
 
-        {/* Only the active locale's catalog is passed down — never all five. */}
-        <NextIntlClientProvider locale={locale} messages={messages}>
+        {/* Default-locale messages render statically; LocaleProvider swaps to the
+            user's cookie locale on the client after hydration. */}
+        <LocaleProvider>
           <ErrorBoundary homePath="/dashboard" homeLabel="Go to Dashboard">
             <AuthProvider>
               <CartProvider>
@@ -179,7 +171,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
 
           <PwaUpdateBanner />
           <PwaInstallPrompt />
-        </NextIntlClientProvider>
+        </LocaleProvider>
       </body>
     </html>
   );
