@@ -138,6 +138,21 @@ export default function ToolRunnerClient({ toolId }: { toolId: string }) {
         </div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+          <div style={{ ...card, padding: '12px 16px' }}>
+            <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-strong)', marginBottom: 8 }}>{t('scaleHint')}</div>
+            <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap' }}>
+              {def.scale.map((sc) => (
+                <div key={sc.value} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--text-secondary)' }}>
+                  <span style={{
+                    display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 22, height: 22,
+                    borderRadius: 6, fontWeight: 700, fontSize: 11, background: 'var(--bg-elevated)',
+                    border: '1px solid var(--border-subtle)', color: 'var(--text-strong)',
+                  }}>{sc.value}</span>
+                  {sc.label}
+                </div>
+              ))}
+            </div>
+          </div>
           {def.sections.map((s) => (
             <section key={s.key} style={card}>
               <h2 style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-strong)', margin: '0 0 2px' }}>{s.name}</h2>
