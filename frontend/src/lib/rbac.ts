@@ -1,0 +1,103 @@
+'use client';
+
+import { useAuth } from './AuthContext';
+
+/**
+ * Frontend mirror of the API's tenant RBAC model
+ * (api/src/domain/shared/types.ts → TenantRole / ROLE_ORDER / hasMinRole).
+ *
+ * This is the SINGLE source of truth the whole UI consults to decide who can do
+ * what. Consumers never recompute a `canX` boolean — they either call
+ * {@link usePermission} or wrap the action in <RoleGate capability="…">, which
+ * decides its own state (and, per product rule, DISABLES + indicates the role
+ * needed rather than hiding the feature). Keep the capability map in lockstep
+ * with the server-side requireRole() gates — the server is the real authority;
+ * this layer is the honest UX signal.
+ */
+
+export type TenantRole = 'owner' | 'manager' | 'developer' | 'viewer';
+
+// Higher index = more authority. Mirrors ROLE_ORDER on the API.
+export const ROLE_ORDER: TenantRole[] = ['viewer', 'developer', 'manager', 'owner'];
+
+export const ROLE_LABEL: Record<TenantRole, string> = {
+  owner: 'Owner',
+  manager: 'Manager',
+  developer: 'Developer',
+  viewer: 'Viewer',
+};
+
+export const ROLE_DESCRIPTION: Record<TenantRole, string> = {
+  owner: 'Full control, including billing, API keys, and deleting the workspace.',
+  manager: 'Invite people, manage roles & integrations, and see every insight lens.',
+  developer: 'Build and run agents, work the board, and see delivery insights.',
+  viewer: 'Read-only access to boards, work, and the workforce.',
+};
+
+/** Roles a manager/owner may assign through the Members UI (owner is owner-only). */
+export const ASSIGNABLE_ROLES: TenantRole[] = ['viewer', 'developer', 'manager', 'owner'];
+
+export function hasMinRole(actual: TenantRole | string | undefined | null, required: TenantRole): boolean {
+  if (!actual) return false;
+  const i = ROLE_ORDER.indexOf(actual as TenantRole);
+  return i >= 0 && i >= ROLE_ORDER.indexOf(required);
+}
+
+/**
+ * Capability → minimum role. Adding a capability here makes it gateable from
+ * anywhere via <RoleGate> / usePermission with zero per-consumer logic.
+ */
+export const CAPABILITIES = {
+  // Workspace & people
+  'members.invite':       'manager',
+  'members.manageRoles':  'manager',
+  'members.remove':       'manager',
+  'workspace.rename':     'manager',
+  'workspace.delete':     'owner',
+  'apiKeys.manage':       'owner',
+  'billing.manage':       'manager',
+  'integrations.manage':  'manager',
+
+  // Workforce
+  'agents.create':        'manager',
+  'agents.manage':        'manager',
+
+  // Enterprise insight lenses (the role-based dashboards from the platform
+  // assessment). Gating them now means the lens surfaces light up for the right
+  // audience the moment each is built — and show "Requires … role" until then.
+  'insights.delivery':    'developer', // IC / Tech Lead / EM delivery + personal DORA
+  'insights.engineering': 'manager',   // CTO: DORA + AI-effectiveness
+  'insights.finance':     'manager',   // CFO: FinOps / cost / budgets
+  'insights.portfolio':   'manager',   // PMO / CEO: portfolio rollup + innovation funnel
+  'insights.compliance':  'manager',   // CISO: audit / evidence packs
+
+  // Diagnostics & Tools — the data-driven ("from your data") mode of any tool.
+  'tools.runDataDriven':  'manager',   // run/save telemetry-derived tool results
+} as const satisfies Record<string, TenantRole>;
+
+export type Capability = keyof typeof CAPABILITIES;
+
+export function requiredRoleFor(cap: Capability): TenantRole {
+  return CAPABILITIES[cap];
+}
+
+export interface PermissionResult {
+  allowed: boolean;
+  role: TenantRole | undefined;
+  required: TenantRole;
+  requiredLabel: string;
+}
+
+/** The current user's role in the active workspace (undefined when unknown). */
+export function useRole(): TenantRole | undefined {
+  const { tenant } = useAuth();
+  const role = tenant?.role as TenantRole | undefined;
+  return role && ROLE_ORDER.includes(role) ? role : undefined;
+}
+
+/** Resolve a single capability against the current workspace role. */
+export function usePermission(cap: Capability): PermissionResult {
+  const role = useRole();
+  const required = CAPABILITIES[cap];
+  return { allowed: hasMinRole(role, required), role, required, requiredLabel: ROLE_LABEL[required] };
+}

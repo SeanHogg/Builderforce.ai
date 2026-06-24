@@ -412,6 +412,9 @@ export interface TenantMember {
   displayName: string | null;
   mfaEnabled: boolean;
   mfaEnabledAt: string | null;
+  /** Workspace role: owner | manager | developer | viewer. */
+  role: string;
+  joinedAt: string | null;
   activeSessions: number;
   activeTokens: number;
 }
@@ -449,6 +452,26 @@ export async function removeTenantMember(
   if (!res.ok) {
     const body = await res.json().catch(() => ({})) as { error?: string };
     throw new Error(body.error ?? 'Failed to remove member');
+  }
+}
+
+/** Change an existing member's workspace role. Requires manager (owner to touch owners). */
+export async function updateMemberRole(
+  tenantToken: string,
+  tenantId: string,
+  userId: string,
+  role: string,
+): Promise<void> {
+  const { planLimitErrorFromResponse } = await import('./planLimitError');
+  const res = await fetch(`${AUTH_API_URL}/api/tenants/${tenantId}/members/${userId}/role`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${tenantToken}` },
+    body: JSON.stringify({ role }),
+  });
+  if (res.status === 402) throw await planLimitErrorFromResponse(res);
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({})) as { error?: string };
+    throw new Error(body.error ?? 'Failed to change role');
   }
 }
 

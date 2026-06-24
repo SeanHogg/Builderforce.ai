@@ -1085,6 +1085,17 @@ html[data-theme='light'] .nebula {
   flex-direction: column;
 }
 
+/* Sidebar consumption meter (UsageMeter) — sits above the legal menu. */
+.usage-meter {
+  margin-bottom: 10px;
+}
+.usage-meter .usage-meter-link {
+  text-decoration: none;
+}
+.usage-meter .usage-meter-link:hover {
+  text-decoration: underline;
+}
+
 /* Version + Terms/Privacy block in the sidebar footer (relocated from the old
    global page footer). Sits under the Sign in / Get started CTAs. */
 .nav-legal {

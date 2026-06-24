@@ -46,6 +46,9 @@ import { createGovernanceRoutes }  from './presentation/routes/governanceRoutes'
 import { createProductRoutes }     from './presentation/routes/productRoutes';
 import { createAgileRoutes }       from './presentation/routes/agileRoutes';
 import { createRoiRoutes }         from './presentation/routes/roiRoutes';
+import { createPmoRoutes }         from './presentation/routes/pmoRoutes';
+import { createInsightsRoutes }    from './presentation/routes/insightsRoutes';
+import { createInnovationRoutes }  from './presentation/routes/innovationRoutes';
 import { createSeamRoutes }        from './presentation/routes/seamRoutes';
 import { createBiRoutes }          from './presentation/routes/biRoutes';
 import { createTenantApiKeyRoutes } from './presentation/routes/tenantApiKeyRoutes';
@@ -56,6 +59,8 @@ import { createAgentRoutes, createSkillRoutes } from './presentation/routes/agen
 import { createRuntimeRoutes }     from './presentation/routes/runtimeRoutes';
 import { createAuditRoutes }       from './presentation/routes/auditRoutes';
 import { createMarketplaceRoutes } from './presentation/routes/marketplaceRoutes';
+import { createToolRoutes } from './presentation/routes/toolRoutes';
+import { ToolService } from './application/tools/ToolService';
 import { createAgentHostRoutes }        from './presentation/routes/agentHostRoutes';
 import { AgentHostRepository }          from './infrastructure/repositories/AgentHostRepository';
 import { IAgentHostRepository }         from './domain/agentHost/IAgentHostRepository';
@@ -86,7 +91,7 @@ import { createContributorRoutes }  from './presentation/routes/contributorRoute
 import { runRepoActivitySweep }      from './application/contributors/runRepoActivitySweep';
 import { createDevTeamRoutes }      from './presentation/routes/devTeamRoutes';
 import { createTeamRoutes }         from './presentation/routes/teamRoutes';
-import { createReportRoutes }       from './presentation/routes/reportRoutes';
+import { createReportRoutes, buildScheduledReport } from './presentation/routes/reportRoutes';
 import { createAnalyticsRoutes }    from './presentation/routes/analyticsRoutes';
 import { createPromptLibraryRoutes } from './presentation/routes/promptLibraryRoutes';
 import { createBrainRoutes }       from './presentation/routes/brainRoutes';
@@ -99,8 +104,11 @@ import { buildPaymentProvider }    from './infrastructure/payment';
 import { createWebhookRoutes }     from './presentation/routes/webhookRoutes';
 import { createManagedAgentHostRoutes }     from './presentation/routes/managedAgentHostRoutes';
 import { createGitHubWebhookRoutes }   from './presentation/routes/githubWebhookRoutes';
+import { createGitLabWebhookRoutes }   from './presentation/routes/gitlabWebhookRoutes';
+import { createBitbucketWebhookRoutes } from './presentation/routes/bitbucketWebhookRoutes';
 import { createCostForecastRoutes }    from './presentation/routes/costForecastRoutes';
 import { createDashboardRoutes }       from './presentation/routes/dashboardRoutes';
+import { createConsumptionRoutes }     from './presentation/routes/consumptionRoutes';
 import { createTeamMemoryRoutes }      from './presentation/routes/teamMemoryRoutes';
 import { createPublicApiRoutes }       from './presentation/routes/publicApiRoutes';
 import { createStudioRoutes }          from './presentation/routes/studioWeightRoutes';
@@ -130,6 +138,7 @@ import { runWebhookRetrySweep } from './application/seams/webhookService';
 import { runBoardSyncSweep } from './application/boardsync/runBoardSyncSweep';
 import { runParkedWorkflowSweep } from './application/swimlane/resumeParkedWorkflows';
 import { runQaExplorationSweep } from './application/qa/runQaExplorationSweep';
+import { runDueReports } from './application/reports/runDueReports';
 import { handleInboundEmail } from './application/workflow/inboundEmail';
 
 // Middleware
@@ -174,6 +183,7 @@ function buildApp(env: Env): Hono<HonoEnv> {
   const taskService     = new TaskService(taskRepo, projectRepo, undefined,
     (projectId) => recommendTopAssignee(env, db, projectId));
   const tenantService   = new TenantService(tenantRepo, paymentProvider);
+  const toolService     = new ToolService(db);
   const authService     = new AuthService(userRepo, tenantRepo, auditRepo, env.JWT_SECRET);
   const agentService    = new AgentService(agentRepo, skillRepo, auditRepo);
   // RuntimeService.update is the single canonical execution-status transition;
@@ -276,6 +286,10 @@ function buildApp(env: Env): Hono<HonoEnv> {
   // Public workforce registry (browse published agents without login)
   app.route('/api/workforce', createWorkforceRoutes());
 
+  // Diagnostics & Tools — list/get/compute are public (free preview);
+  // save/runs apply auth + manager role inside the router.
+  app.route('/api/tools', createToolRoutes(toolService));
+
   // Signed vision attachments — public, but each object is gated by a short-lived
   // HMAC (?exp&sig minted at /api/brain/uploads/sign). Lets an upstream LLM
   // provider fetch an oversize image without the tenant JWT. No JWT here.
@@ -294,6 +308,11 @@ function buildApp(env: Env): Hono<HonoEnv> {
 
   // GitHub webhook — raw body required for HMAC verification, no JWT
   app.route('/api/webhooks', createGitHubWebhookRoutes(db, runtimeService));
+
+  // GitLab + Bitbucket activity webhooks — ingest commits/MRs/PRs/issues into
+  // activity_events (token / HMAC verified), the live twins of the cron poller.
+  app.route('/api/webhooks', createGitLabWebhookRoutes(db));
+  app.route('/api/webhooks', createBitbucketWebhookRoutes(db));
 
   // Public workflow trigger entrypoints (webhook) — addressed by per-trigger
   // token, optional HMAC; no JWT. Mounted with the other public webhook routes.
@@ -340,6 +359,9 @@ function buildApp(env: Env): Hono<HonoEnv> {
   app.route('/api/product',  createProductRoutes(db));
   app.route('/api/agile',    createAgileRoutes(db));
   app.route('/api/roi',      createRoiRoutes(db));
+  app.route('/api/pmo',      createPmoRoutes(db));
+  app.route('/api/insights',   createInsightsRoutes(db));
+  app.route('/api/innovation', createInnovationRoutes(db));
   app.route('/api/bi',       createBiRoutes(db));
   // Cross-domain (channel-3) seams — server-to-server, scoped tenant API keys.
   app.route('/v1',           createSeamRoutes(db));
@@ -356,7 +378,7 @@ function buildApp(env: Env): Hono<HonoEnv> {
   app.route('/api/approvals',       createApprovalRoutes(db, runtimeService));
   app.route('/api/approval-rules',  createApprovalRuleRoutes(db));
   app.route('/api/telemetry',       createTelemetryRoutes(db));
-  app.route('/api/qa',              createQaRoutes(db, taskService));
+  app.route('/api/qa',              createQaRoutes(db, taskService, runtimeService));
   app.route('/api/repo-analysis',   createRepoAnalysisRoutes(db, taskService));
   app.route('/api/studio/voice-clones', createStudioVoiceCloneRoutes(db));
 
@@ -371,6 +393,7 @@ function buildApp(env: Env): Hono<HonoEnv> {
   app.route('/api/managed-claws',          createManagedAgentHostRoutes(db)); // @deprecated back-compat alias
   app.route('/api/cost-forecast',   createCostForecastRoutes(db));
   app.route('/api/dashboard',       createDashboardRoutes(db));
+  app.route('/api/consumption',     createConsumptionRoutes(db));
   app.route('/api/brain',     createBrainRoutes(brainService, db));
   // Order matters: the team-memory mesh lives at the static /api/teams/memory and
   // MUST be registered before the Workforce Teams CRUD, whose GET /:id would
@@ -501,6 +524,17 @@ export default {
       ctx.waitUntil(
         runRepoActivitySweep(env).catch((err) => {
           console.error('[cron:repo-activity] failed', err);
+        }),
+      );
+      // Scheduled report digests — generate + email every due report_schedules row
+      // (standup / code-review / executive / portfolio rollup), advancing each
+      // row's next_run_at. buildScheduledReport is injected so the sweep stays a
+      // pure application-layer consumer (no presentation import).
+      ctx.waitUntil(
+        runDueReports(env, (db, s, now) =>
+          buildScheduledReport(db, s.reportType, s.tenantId, s.segmentId ?? '', now),
+        ).catch((err) => {
+          console.error('[cron:reports] failed', err);
         }),
       );
     }

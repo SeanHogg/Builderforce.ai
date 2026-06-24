@@ -25,6 +25,7 @@ interface SimpleLink {
 
 const RESOURCE_LINKS: SimpleLink[] = [
   { href: '/blog', label: 'Blog' },
+  { href: '/tools', label: 'Diagnostics & Tools' },
   { href: '/prompts', label: 'Prompt Library' },
   { href: '/compare', label: 'Compare' },
   { href: '/integrations', label: 'Integrations' },

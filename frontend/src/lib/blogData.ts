@@ -32,6 +32,8 @@ import vsCopilot from '@/content/blog/builderforce-vs-github-copilot.md';
 import vsCursor from '@/content/blog/builderforce-vs-cursor-windsurf.md';
 import vsClaudeCode from '@/content/blog/builderforce-vs-claude-code.md';
 import vsDevin from '@/content/blog/builderforce-vs-devin.md';
+import systemOfRecord from '@/content/blog/system-of-record-for-agentic-work.md';
+import everyRolePicture from '@/content/blog/every-role-operating-picture.md';
 
 export interface BlogPost {
   slug: string;
@@ -118,6 +120,8 @@ export const BLOG_POSTS: BlogPost[] = [
   buildPost('builderforce-vs-cursor-windsurf', vsCursor),
   buildPost('builderforce-vs-claude-code', vsClaudeCode),
   buildPost('builderforce-vs-devin', vsDevin),
+  buildPost('system-of-record-for-agentic-work', systemOfRecord),
+  buildPost('every-role-operating-picture', everyRolePicture),
 ].sort((a, b) => (a.date < b.date ? 1 : -1));
 
 export function getPostBySlug(slug: string): BlogPost | undefined {

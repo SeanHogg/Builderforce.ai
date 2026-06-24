@@ -182,8 +182,11 @@ type TenantRow = {
 function mockDb(opts: {
   keyRow?:    TenantApiKeyRow;
   tenantRow?: TenantRow;
-  /** Reply for the daily-token sum query (awaited directly on `.where()`). */
-  usageRow?:  { used: bigint | number | null };
+  /** Reply for the token-sum query (awaited directly on `.where()`). `used` feeds
+   *  the single-window sum (sumTenantTextTokens); `day`/`month` feed the combined
+   *  day+month scan (sumTenantTextTokensDayAndMonth) used when a monthly cap is
+   *  active. */
+  usageRow?:  { used?: bigint | number | null; day?: number; month?: number };
 }) {
   // Drizzle-style chainable selects: each terminal `.limit(1)` resolves
   // with `[row]`. Two distinct lookups happen in the bfk_* path: the key
@@ -451,6 +454,74 @@ describe('POST /v1/chat/completions strict-pin gate', () => {
     expect(res.status).toBe(403);
     const body = await res.json() as { code?: string };
     expect(body.code).toBe('strict_pin_not_allowed');
+  });
+});
+
+describe('POST /v1/chat/completions monthly token cap', () => {
+  beforeEach(() => {
+    mocks.hashSecret.mockReset();
+    mocks.verifyJwt.mockReset();
+    mocks.signJwt.mockReset();
+    mocks.buildDatabase.mockReset();
+  });
+
+  function plainRequest(token = 'bfk_plain') {
+    return new Request('http://test.local/v1/chat/completions', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model: 'cerebras/llama-3.3-70b', messages: [{ role: 'user', content: 'hi' }] }),
+    });
+  }
+
+  it('blocks a free tenant whose month-to-date usage hit the 50K allowance', async () => {
+    mocks.hashSecret.mockResolvedValue('hash_of_bfk_test');
+    const db = mockDb({
+      keyRow:    { id: 'kid', tenantId: 1, revokedAt: null, allowedOrigins: null },
+      tenantRow: { id: 1, plan: 'free', billingStatus: 'none', tokenDailyLimitOverride: null },
+      // Under the daily cap (10K) but over the monthly allowance (50K).
+      usageRow:  { day: 100, month: 60_000 },
+    });
+    mocks.buildDatabase.mockReturnValue(db);
+
+    const res = await buildApp().request(plainRequest(), {}, baseEnv as Record<string, unknown>, fakeExecutionCtx);
+
+    expect(res.status).toBe(429);
+    const body = await res.json() as { code?: string; monthlyLimit?: number; usedThisMonth?: number };
+    expect(body.code).toBe('plan_monthly_token_limit_exceeded');
+    expect(body.monthlyLimit).toBe(50_000);
+    expect(body.usedThisMonth).toBe(60_000);
+    expect(res.headers.get('Retry-After')).toBeTruthy();
+  });
+
+  it('lets a free tenant under both caps through to the vendor-key check', async () => {
+    mocks.hashSecret.mockResolvedValue('hash_of_bfk_test');
+    const db = mockDb({
+      keyRow:    { id: 'kid', tenantId: 1, revokedAt: null, allowedOrigins: null },
+      tenantRow: { id: 1, plan: 'free', billingStatus: 'none', tokenDailyLimitOverride: null },
+      usageRow:  { day: 100, month: 100 },
+    });
+    mocks.buildDatabase.mockReturnValue(db);
+
+    const res = await buildApp().request(plainRequest(), {}, baseEnv as Record<string, unknown>, fakeExecutionCtx);
+
+    // Past both caps → stops at the missing-OPENROUTER_API_KEY check (503).
+    expect(res.status).not.toBe(429);
+    expect(res.status).toBe(503);
+  });
+
+  it('does not apply a monthly cap to teams (unlimited allowance)', async () => {
+    mocks.hashSecret.mockResolvedValue('hash_of_bfk_test');
+    const db = mockDb({
+      keyRow:    { id: 'kid', tenantId: 1, revokedAt: null, allowedOrigins: null },
+      tenantRow: { id: 1, plan: 'teams', billingStatus: 'active', tokenDailyLimitOverride: null },
+      // Huge usage — teams monthly is -1 (unlimited), so this must NOT block.
+      usageRow:  { day: 100, month: 99_000_000 },
+    });
+    mocks.buildDatabase.mockReturnValue(db);
+
+    const res = await buildApp().request(plainRequest(), {}, baseEnv as Record<string, unknown>, fakeExecutionCtx);
+
+    expect(res.status).not.toBe(429);
   });
 });
 

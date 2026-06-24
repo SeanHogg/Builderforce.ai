@@ -45,6 +45,7 @@ import {
   qaFindings,
   qaFlows,
   qaJourneyEvents,
+  qaRoutingSettings,
   qaRunSteps,
   qaRuns,
   qaSchedules,
@@ -55,6 +56,14 @@ import { isValidCron, nextCronTime } from '../../domain/workflowSchedule';
 import { QaFlowService } from '../../application/qa/QaFlowService';
 import { QaGeneratorService } from '../../application/qa/QaGeneratorService';
 import { QaHeatmapService, QA_HEAT_VERSION_KEY } from '../../application/qa/QaHeatmapService';
+import {
+  QaFindingRouter,
+  meetsSeverityThreshold,
+  severityRank,
+  type QaFindingLike,
+} from '../../application/qa/QaFindingRouter';
+import { getProjectQualityTrend, QA_QUALITY_VERSION_KEY } from '../../application/qa/QaQualityService';
+import { maybeAutoRunOnLaneEntry } from './taskRoutes';
 import { dispatchQaRunner } from '../../application/qa/dispatchQaRunner';
 import {
   buildExplorationPlan,
@@ -74,8 +83,9 @@ import {
 import { decryptSecretFromStorage, encryptSecretForStorage } from '../../infrastructure/auth/MfaService';
 import { bumpCacheVersion } from '../../infrastructure/cache/readThroughCache';
 import { writeAdminAudit } from '../../infrastructure/audit/adminAudit';
-import { TaskPriority, TaskType, TenantRole } from '../../domain/shared/types';
+import { TenantRole } from '../../domain/shared/types';
 import type { TaskService } from '../../application/task/TaskService';
+import type { RuntimeService } from '../../application/runtime/RuntimeService';
 import type { Env, HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 
@@ -122,8 +132,9 @@ function toPublicCredential(row: CredentialRow): QaCredentialPublic {
   };
 }
 
-export function createQaRoutes(db: Db, taskService: TaskService): Hono<HonoEnv> {
+export function createQaRoutes(db: Db, taskService: TaskService, runtimeService: RuntimeService): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
+  const findingRouter = new QaFindingRouter(db, taskService);
 
   // Every QA endpoint requires an authenticated tenant.
   router.use('*', authMiddleware);
@@ -675,13 +686,42 @@ export function createQaRoutes(db: Db, taskService: TaskService): Hono<HonoEnv> 
     }
   }
 
-  /** Severity → board priority for the feedback task. */
-  function priorityForSeverity(sev: string): TaskPriority {
-    switch (sev) {
-      case 'critical': return TaskPriority.URGENT;
-      case 'high':     return TaskPriority.HIGH;
-      case 'low':      return TaskPriority.LOW;
-      default:         return TaskPriority.MEDIUM;
+  /**
+   * Auto-route a batch of freshly-captured findings to a fix agent when the
+   * project opts in. For each finding at/above the policy's min-severity (capped at
+   * `maxPerBatch`, worst-first): open the board task, move it into the project's
+   * auto-fix lane, and fire the SAME lane auto-run trigger a board drag uses. Pure
+   * best-effort — off the harness response path and never throwing — so a routing
+   * failure never blocks finding ingestion. No-op when routing is disabled, the
+   * project has no staffed fix lane, or no finding clears the threshold.
+   */
+  async function autoRouteFindings(env: Env, tenantId: number, projectId: number, candidates: QaFindingLike[]): Promise<void> {
+    const [policy] = await db.select().from(qaRoutingSettings).where(eq(qaRoutingSettings.projectId, projectId)).limit(1);
+    if (!policy || !policy.enabled) return;
+
+    const laneKey = await findingRouter.resolveAutoFixLaneKey(projectId, policy.targetLaneKey);
+    if (!laneKey) return; // no staffed fix lane → leave findings in the backlog for manual triage
+
+    const queue = candidates
+      .filter((f) => !f.taskId && meetsSeverityThreshold(f.severity, policy.minSeverity))
+      .sort((a, b) => severityRank(b.severity) - severityRank(a.severity))
+      .slice(0, Math.max(1, policy.maxPerBatch));
+
+    for (const finding of queue) {
+      try {
+        const { taskId, deduped } = await findingRouter.createTaskFromFinding(finding, tenantId, { autoRouted: true });
+        // A reused open task already has its own run/lane state — don't re-dispatch
+        // or yank it back into the fix lane; the finding is just linked to it.
+        if (deduped) continue;
+        // Move the ticket into the fix lane (the lane key IS the task status) and
+        // fire the canonical lane auto-run trigger — same path as a board drag.
+        await taskService.updateTask(taskId, { status: laneKey });
+        await maybeAutoRunOnLaneEntry(env, db, runtimeService, {
+          tenantId, projectId, taskId, status: laneKey, submittedBy: 'system:qa-autoroute',
+        });
+      } catch {
+        // One finding's routing failure must not abort the rest of the batch.
+      }
     }
   }
 
@@ -899,15 +939,36 @@ export function createQaRoutes(db: Db, taskService: TaskService): Hono<HonoEnv> 
         };
       });
 
+    let inserted: QaFindingLike[] = [];
     if (rows.length > 0) {
-      // Dedupe within the run — re-posting the same error is a no-op.
-      await db.insert(qaFindings).values(rows).onConflictDoNothing({ target: [qaFindings.explorationId, qaFindings.fingerprint] });
+      // Dedupe within the run — re-posting the same error is a no-op. `returning`
+      // gives us only the rows that were actually inserted (not the deduped ones),
+      // which is exactly the set eligible for auto-routing.
+      inserted = await db
+        .insert(qaFindings)
+        .values(rows)
+        .onConflictDoNothing({ target: [qaFindings.explorationId, qaFindings.fingerprint] })
+        .returning({
+          id: qaFindings.id, explorationId: qaFindings.explorationId, projectId: qaFindings.projectId,
+          type: qaFindings.type, severity: qaFindings.severity, route: qaFindings.route,
+          selector: qaFindings.selector, message: qaFindings.message, detail: qaFindings.detail,
+          heat: qaFindings.heat, taskId: qaFindings.taskId, fingerprint: qaFindings.fingerprint,
+        });
+      // A new finding moves the quality trend — invalidate the cached rollup.
+      void bumpCacheVersion(c.env as Env, QA_QUALITY_VERSION_KEY(tenantId)).catch(() => {});
     }
 
     // Refresh the rolled-up count from the source of truth.
     const all = await db.select({ id: qaFindings.id }).from(qaFindings).where(eq(qaFindings.explorationId, exploration.id));
     await db.update(qaExplorations).set({ findingsCount: all.length, updatedAt: new Date() })
       .where(eq(qaExplorations.id, exploration.id));
+
+    // Opt-in autonomous remediation: route qualifying findings to a fix agent off
+    // the harness response path (best-effort; no-op unless the project enabled it).
+    if (inserted.length > 0 && exploration.projectId != null) {
+      const projectId = exploration.projectId;
+      c.executionCtx.waitUntil(autoRouteFindings(c.env as Env, tenantId, projectId, inserted));
+    }
 
     return c.json({ inserted: rows.length, findingsCount: all.length }, 201);
   });
@@ -946,41 +1007,16 @@ export function createQaRoutes(db: Db, taskService: TaskService): Hono<HonoEnv> 
       .where(and(eq(qaFindings.id, c.req.param('id')), eq(qaFindings.tenantId, tenantId))).limit(1);
     if (!finding) return c.json({ error: 'Finding not found' }, 404);
     if (finding.taskId) return c.json({ error: 'A task already exists for this finding', taskId: finding.taskId }, 409);
-
-    const projectId = finding.projectId;
-    if (projectId == null) {
+    if (finding.projectId == null) {
       return c.json({ error: 'This finding has no project — self-test findings cannot create board tasks.' }, 400);
     }
 
-    const where = finding.route ? ` on ${finding.route}` : '';
-    const onEl = finding.selector ? ` (element: ${finding.selector})` : '';
-    const title = `[QA ${finding.type}] ${finding.message.slice(0, 120)}`;
-    const description =
-      `Captured by the Agentic Tester${where}${onEl}.\n\n` +
-      `**Type:** ${finding.type}  •  **Severity:** ${finding.severity}  •  **Zone heat:** ${finding.heat}\n` +
-      (finding.route ? `**Route:** ${finding.route}\n` : '') +
-      (finding.selector ? `**Selector:** \`${finding.selector}\`\n` : '') +
-      `\n**Error:**\n\`\`\`\n${finding.message}\n\`\`\`\n` +
-      (finding.detail ? `\n**Detail:**\n\`\`\`\n${finding.detail.slice(0, 4000)}\n\`\`\`\n` : '') +
-      `\nSurfaced from exploration \`${finding.explorationId}\`.`;
-
-    let task;
     try {
-      task = await taskService.createTask({
-        projectId, title, description,
-        priority: priorityForSeverity(finding.severity),
-        taskType: TaskType.TASK,
-      }, tenantId);
+      const { taskId, plain, deduped } = await findingRouter.createTaskFromFinding(finding, tenantId);
+      return c.json({ task: plain, deduped, finding: { ...finding, status: 'task_created', taskId } }, 201);
     } catch (err) {
       return c.json({ error: err instanceof Error ? err.message : 'Failed to create task' }, 400);
     }
-    const plain = task.toPlain();
-    const taskId = Number(plain.id);
-
-    await db.update(qaFindings).set({ status: 'task_created', taskId })
-      .where(eq(qaFindings.id, finding.id));
-
-    return c.json({ task: plain, finding: { ...finding, status: 'task_created', taskId } }, 201);
   });
 
   // ═══════════════════════════════════════════════════════════════════════════
@@ -1058,6 +1094,66 @@ export function createQaRoutes(db: Db, taskService: TaskService): Hono<HonoEnv> 
       .returning();
     if (!schedule) return c.json({ error: 'Schedule not found' }, 404);
     return c.json({ deleted: true });
+  });
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // Routing settings (migration 0214) — per-project policy for auto-routing the
+  // Agentic Tester's findings to a fix agent. Off by default (auto-routing spends
+  // on agent runs). The findings-ingestion path reads this to decide.
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  /** The defaults a project that has never configured routing reads as. */
+  const ROUTING_DEFAULTS = { enabled: false, minSeverity: 'high', targetLaneKey: null as string | null, maxPerBatch: 5 };
+
+  router.get('/projects/:projectId/routing', async (c) => {
+    const tenantId = c.get('tenantId') as number;
+    const projectId = Number(c.req.param('projectId'));
+    const [row] = await db.select().from(qaRoutingSettings)
+      .where(and(eq(qaRoutingSettings.tenantId, tenantId), eq(qaRoutingSettings.projectId, projectId))).limit(1);
+    return c.json({
+      settings: row
+        ? { enabled: row.enabled, minSeverity: row.minSeverity, targetLaneKey: row.targetLaneKey, maxPerBatch: row.maxPerBatch }
+        : ROUTING_DEFAULTS,
+    });
+  });
+
+  router.put('/projects/:projectId/routing', requireRole(TenantRole.DEVELOPER), async (c) => {
+    const tenantId  = c.get('tenantId') as number;
+    const segmentId = c.get('segmentId') as string | undefined;
+    const userId    = c.get('userId') as string | undefined;
+    const projectId = Number(c.req.param('projectId'));
+    const body = await c.req.json().catch(() => ({})) as {
+      enabled?: boolean; minSeverity?: string; targetLaneKey?: string | null; maxPerBatch?: number;
+    };
+    const minSeverity = body.minSeverity && ['low', 'medium', 'high', 'critical'].includes(body.minSeverity)
+      ? body.minSeverity : ROUTING_DEFAULTS.minSeverity;
+    const targetLaneKey = body.targetLaneKey ? String(body.targetLaneKey).slice(0, 120) : null;
+    const maxPerBatch = Math.min(Math.max(1, Math.trunc(body.maxPerBatch ?? ROUTING_DEFAULTS.maxPerBatch)), 50);
+    const now = new Date();
+    const [row] = await db
+      .insert(qaRoutingSettings)
+      .values({ tenantId, segmentId, projectId, enabled: body.enabled ?? false, minSeverity, targetLaneKey, maxPerBatch, createdBy: userId ?? null, updatedAt: now })
+      .onConflictDoUpdate({
+        target: qaRoutingSettings.projectId,
+        set: { enabled: body.enabled ?? false, minSeverity, targetLaneKey, maxPerBatch, updatedAt: now },
+      })
+      .returning();
+    if (!row) return c.json({ error: 'Failed to save routing settings' }, 500);
+    return c.json({ settings: { enabled: row.enabled, minSeverity: row.minSeverity, targetLaneKey: row.targetLaneKey, maxPerBatch: row.maxPerBatch } });
+  });
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // Quality trend (migration 0214) — the QA / Tech-Lead lens. Escaped defects
+  // (findings) + caught defects (CI build failures) + which model/agent produced
+  // the work (run_model_outcomes), rolled up per project + window. Cached.
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  router.get('/quality', async (c) => {
+    const tenantId  = c.get('tenantId') as number;
+    const projectId = c.req.query('projectId') ? Number(c.req.query('projectId')) : null;
+    const days = Math.min(Math.max(1, Number(c.req.query('days') ?? '30')), 180);
+    const trend = await getProjectQualityTrend(c.env as Env, db, tenantId, projectId, days);
+    return c.json({ trend });
   });
 
   return router;

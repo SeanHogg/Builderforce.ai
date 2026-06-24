@@ -8,20 +8,34 @@ import {
   integrationsApi,
   type BoardConnection,
   type IntegrationCredential,
+  type IntegrationProvider,
 } from '@/lib/builderforceApi';
+import { PROVIDER_META } from './IntegrationCredentialsManager';
 
 /**
- * Manage external project-management board connections (Jira / GitHub issues)
- * for a project. Creating a connection immediately kicks off an initial sync.
+ * Manage external board connections (project-management, ITSM, and incident
+ * systems) for a project. Creating a connection immediately kicks off an
+ * initial sync — that first full pull IS the data migration into Builderforce.
  * Shared between the project Integrations tab and the Task-Mgmt board-config
  * COG panel ("assign external boards to this board").
  *
- * NOTE: recurring polling is not yet driven by a scheduled job — see the
- * Consolidated Gap Register ("No scheduled poller drives external board sync").
- * The "Sync now" button + the on-create sync are the manual trigger.
+ * The connectable providers + their external-board-id hints are derived from
+ * PROVIDER_META (the single source) — every provider whose meta carries a
+ * `board` capability shows up here, so this surface never re-declares a list.
+ *
+ * Recurring polling is driven by the Worker cron sweep (runBoardSyncSweep, every
+ * 5 min) which polls each due connection and drains its reverse-sync outbox; the
+ * "Sync now" button + the on-create sync are the manual triggers on top of that.
  */
 
-const PM_PROVIDERS = ['jira', 'github'] as const;
+/** [id, meta] for every provider that can be connected as a synced board. */
+const BOARD_PROVIDERS = (Object.entries(PROVIDER_META) as [IntegrationProvider, (typeof PROVIDER_META)[IntegrationProvider]][])
+  .filter(([, m]) => m.board);
+
+/** Default picker selection — Jira if available, else the first board provider. */
+const DEFAULT_BOARD_PROVIDER: string = BOARD_PROVIDERS.some(([id]) => id === 'jira')
+  ? 'jira'
+  : (BOARD_PROVIDERS[0]?.[0] ?? 'jira');
 
 const cardStyle: React.CSSProperties = {
   background: 'var(--bg-base)', border: '1px solid var(--border-subtle)', borderRadius: 12, padding: 20,
@@ -49,10 +63,12 @@ export function BoardConnectionsManager({ projectId, heading = 'External boards'
   const [syncing, setSyncing] = useState<string | null>(null);
   const [syncMsg, setSyncMsg] = useState<Record<string, { text: string; error: boolean }>>({});
 
-  const [provider, setProvider] = useState<string>('jira');
+  const [provider, setProvider] = useState<string>(DEFAULT_BOARD_PROVIDER);
   const [credentialId, setCredentialId] = useState('');
   const [externalBoardId, setExternalBoardId] = useState('');
   const [pollIntervalSec, setPollIntervalSec] = useState(300);
+
+  const providerMeta = PROVIDER_META[provider as IntegrationProvider];
 
   const load = useCallback(() => {
     setLoading(true);
@@ -67,12 +83,12 @@ export function BoardConnectionsManager({ projectId, heading = 'External boards'
 
   useEffect(() => { load(); }, [load]);
 
-  const resetForm = () => { setProvider('jira'); setCredentialId(''); setExternalBoardId(''); setPollIntervalSec(300); };
+  const resetForm = () => { setProvider(DEFAULT_BOARD_PROVIDER); setCredentialId(''); setExternalBoardId(''); setPollIntervalSec(300); };
 
   const add = async () => {
     setError(null);
-    if (provider === 'github' && !externalBoardId.trim()) {
-      setError('GitHub boards need a repository in "owner/repo" form (e.g. octocat/hello-world).');
+    if (providerMeta?.board?.externalId === 'required' && !externalBoardId.trim()) {
+      setError(`${providerMeta.label} boards need a value: ${providerMeta.board.hint}`);
       return;
     }
     setSaving(true);
@@ -112,13 +128,15 @@ export function BoardConnectionsManager({ projectId, heading = 'External boards'
   const remove = async (id: string) => { if (confirm('Delete this board connection?')) { await boardConnectionsApi.remove(id); load(); } };
 
   const credName = (id: string | null) => creds.find((c) => c.id === id)?.name;
-  const pmCreds = creds.filter((c) => (PM_PROVIDERS as readonly string[]).includes(c.provider));
+  // Keys that can back the selected board connection (provider must match).
+  const pmCreds = creds.filter((c) => c.provider === provider);
 
   return (
     <div style={cardStyle}>
       {heading && <div style={{ fontWeight: 600, marginBottom: 6, fontSize: 14 }}>{heading}</div>}
       <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
-        Connect an external Jira or GitHub board to sync tickets into this project.
+        Connect an external work, ITSM, or incident board (Jira, Linear, ServiceNow, Sentry and more)
+        to sync tickets into this project. The first sync imports existing items.
       </div>
 
       {loading ? (
@@ -166,8 +184,8 @@ export function BoardConnectionsManager({ projectId, heading = 'External boards'
 
       {adding ? (
         <div style={{ marginTop: 14, display: 'flex', flexDirection: 'column', gap: 10, padding: 14, background: 'var(--bg-deep)', borderRadius: 10 }}>
-          <Select value={provider} onChange={(e) => setProvider(e.target.value)} style={inputStyle}>
-            {PM_PROVIDERS.map((p) => <option key={p} value={p}>{p}</option>)}
+          <Select value={provider} onChange={(e) => { setProvider(e.target.value); setCredentialId(''); }} style={inputStyle}>
+            {BOARD_PROVIDERS.map(([id, m]) => <option key={id} value={id}>{m.label}</option>)}
           </Select>
           <Select value={credentialId} onChange={(e) => setCredentialId(e.target.value)} style={inputStyle}>
             <option value="">— Select access key —</option>
@@ -175,7 +193,7 @@ export function BoardConnectionsManager({ projectId, heading = 'External boards'
           </Select>
           <input
             style={inputStyle}
-            placeholder={provider === 'github' ? 'Repository — owner/repo (e.g. octocat/hello-world)' : 'External board id (e.g. Jira board/project key)'}
+            placeholder={providerMeta?.board?.hint ?? 'External board id'}
             value={externalBoardId}
             onChange={(e) => setExternalBoardId(e.target.value)}
           />

@@ -798,6 +798,26 @@ export function createTenantRoutes(tenantService: TenantService, db: Db): Hono<H
     return c.json(tenant.toPlain());
   });
 
+  // PATCH /api/tenants/:id/members/:userId/role — change an existing member's role.
+  router.patch('/:id/members/:userId/role', requireRole(TenantRole.MANAGER), async (c) => {
+    const id           = Number(c.req.param('id'));
+    const callerTenantId = c.get('tenantId') as number;
+    if (id !== callerTenantId) return c.json({ error: 'Forbidden' }, 403);
+
+    const targetUserId = c.req.param('userId');
+    const actorUserId  = c.get('userId') as string;
+    const body = await c.req.json<{ role: TenantRole }>();
+    if (!body.role || !Object.values(TenantRole).includes(body.role)) {
+      return c.json({ error: 'role must be one of: ' + Object.values(TenantRole).join(', ') }, 400);
+    }
+
+    const tenant = await tenantService.changeMemberRole(id, actorUserId, targetUserId, body.role);
+    await invalidateTaskAssignees(c.env as Env, id);
+    // The role rides in the member's next JWT mint; clear the cached membership now.
+    await invalidateJwtMembershipCache(c.env as Env, id, targetUserId).catch(() => {});
+    return c.json(tenant.toPlain());
+  });
+
   // GET /api/tenants/:id/security/users
   router.get('/:id/security/users', requireRole(TenantRole.MANAGER), async (c) => {
     const tenantId = Number(c.req.param('id'));
@@ -812,6 +832,8 @@ export function createTenantRoutes(tenantService: TenantService, db: Db): Hono<H
         displayName: users.displayName,
         mfaEnabled: users.mfaEnabled,
         mfaEnabledAt: users.mfaEnabledAt,
+        role: tenantMembers.role,
+        joinedAt: tenantMembers.joinedAt,
       })
       .from(tenantMembers)
       .innerJoin(users, eq(users.id, tenantMembers.userId))
@@ -855,6 +877,8 @@ export function createTenantRoutes(tenantService: TenantService, db: Db): Hono<H
         displayName: row.displayName,
         mfaEnabled: row.mfaEnabled,
         mfaEnabledAt: row.mfaEnabledAt,
+        role: row.role,
+        joinedAt: row.joinedAt,
         activeSessions: sessionsByUser.get(row.userId) ?? 0,
         activeTokens: tokensByUser.get(row.userId) ?? 0,
       })),

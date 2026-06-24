@@ -76,6 +76,48 @@ async function request<T>(path: string, opts: RequestInit = {}): Promise<T> {
 }
 
 // ---------------------------------------------------------------------------
+// Diagnostics & Tools (generic engine)
+// ---------------------------------------------------------------------------
+
+import type { ToolSummary, ToolDefinition, ToolResult, SavedToolRun } from './tools';
+
+export const toolsApi = {
+  /** Public — list all free tools. */
+  list: (): Promise<ToolSummary[]> =>
+    webRequest<{ tools: ToolSummary[] }>('/api/tools').then((r) => r.tools),
+
+  /** Public — a tool's full definition (inputs / questions). */
+  get: (id: string): Promise<ToolDefinition> =>
+    webRequest<{ tool: ToolDefinition }>(`/api/tools/${encodeURIComponent(id)}`).then((r) => r.tool),
+
+  /** Public — free compute (no account). */
+  compute: (id: string, input: Record<string, number>): Promise<ToolResult> =>
+    webRequest<{ result: ToolResult }>(`/api/tools/${encodeURIComponent(id)}/compute`, {
+      method: 'POST', body: JSON.stringify({ input }),
+    }).then((r) => r.result),
+
+  /** Save a self-assessment / calculator run to the workspace (manager+). */
+  save: (id: string, input: Record<string, number>): Promise<SavedToolRun> =>
+    request<{ run: SavedToolRun }>(`/api/tools/${encodeURIComponent(id)}/save`, {
+      method: 'POST', body: JSON.stringify({ input, kind: 'self' }),
+    }).then((r) => r.run),
+
+  /** Data-driven ("from your data") result, telemetry-derived (manager+). */
+  dataDriven: (id: string, days = 90): Promise<{ result: ToolResult; days: number }> =>
+    request<{ result: ToolResult; days: number }>(`/api/tools/${encodeURIComponent(id)}/data-driven?days=${days}`),
+
+  /** Save a data-driven snapshot (recomputed server-side; manager+). */
+  saveData: (id: string, days = 90): Promise<SavedToolRun> =>
+    request<{ run: SavedToolRun }>(`/api/tools/${encodeURIComponent(id)}/save`, {
+      method: 'POST', body: JSON.stringify({ input: { days }, kind: 'data' }),
+    }).then((r) => r.run),
+
+  /** Saved run history for a tool (manager+). */
+  runs: (id: string): Promise<SavedToolRun[]> =>
+    request<{ runs: SavedToolRun[] }>(`/api/tools/${encodeURIComponent(id)}/runs`).then((r) => r.runs),
+};
+
+// ---------------------------------------------------------------------------
 // Projects — key availability check
 // ---------------------------------------------------------------------------
 
@@ -1219,6 +1261,39 @@ export const dashboardApi = {
   /** Token + estimated-cost usage split by source (cloud / on-prem / web). */
   usage: (window: 'today' | 'week' | 'month' = 'week'): Promise<DashboardUsage> =>
     request<DashboardUsage>(`/api/dashboard/usage?window=${window}`),
+};
+
+// ---------------------------------------------------------------------------
+// Consumption meter — month-to-date usage vs the plan allowance, one entry per
+// metered resource (AI tokens, data ingestion, …). All-roles (no MANAGER gate);
+// powers the sidebar UsageMeter widget.
+// ---------------------------------------------------------------------------
+
+export type MeterKey = 'ai_tokens' | 'ingestion';
+export type MeterUnit = 'tokens' | 'bytes';
+
+export interface MeterSnapshot {
+  key: MeterKey;
+  unit: MeterUnit;
+  used: number;
+  /** Monthly allowance; -1 = unlimited. */
+  limit: number;
+  unlimited: boolean;
+  /** Amount left this month; -1 when unlimited. */
+  remaining: number;
+  /** 0–100, clamped; 0 when unlimited. */
+  percentUsed: number;
+}
+
+export interface ConsumptionSnapshot {
+  period: { start: string; resetsAt: string };
+  plan: { effective: 'free' | 'pro' | 'teams'; billingStatus: string };
+  meters: MeterSnapshot[];
+}
+
+export const consumptionApi = {
+  /** Month-to-date usage vs the plan allowance for every metered resource. */
+  get: (): Promise<ConsumptionSnapshot> => request<ConsumptionSnapshot>('/api/consumption'),
 };
 
 // ---------------------------------------------------------------------------
@@ -2551,6 +2626,113 @@ export const roiApi = {
     request<RoiRollup>(`/api/roi/rollup${projectId != null ? `?project=${projectId}` : ''}`),
 };
 
+// ── PMO tier (portfolio / initiative / OKR above projects; /api/pmo/*) ─────────
+// The enterprise rollup objects. Management CRUD rides the segment-tracker
+// clients; the live rollup + structure tree are bespoke composed reads. Mirrors
+// the API shapes in api/src/application/pmo/portfolioRollup.ts.
+export type PmoScopeKind = 'portfolio' | 'initiative' | 'workspace';
+
+export interface Portfolio {
+  id: string; name: string; description: string | null; status: string;
+  ownerUserId: string | null; targetDate: string | null;
+}
+export interface Initiative {
+  id: string; name: string; description: string | null; status: string;
+  portfolioId: string | null; ownerUserId: string | null; targetDate: string | null;
+}
+export interface Objective {
+  id: string; title: string; description: string | null; period: string | null;
+  status: string; portfolioId: string | null; initiativeId: string | null; ownerUserId: string | null;
+}
+export interface KeyResult {
+  id: string; objectiveId: string; title: string; metricType: string;
+  startValue: number; targetValue: number; currentValue: number; unit: string | null; status: string;
+}
+
+export interface PmoTree {
+  portfolios: Array<{ id: string; name: string; description: string | null; status: string; targetDate: string | null }>;
+  initiatives: Array<{ id: string; name: string; description: string | null; status: string; portfolioId: string | null; targetDate: string | null; projectCount: number }>;
+  projects: Array<{ id: number; name: string; key: string; status: string; initiativeId: string | null }>;
+  dependencies: Array<{ id: string; fromInitiativeId: string; toInitiativeId: string }>;
+}
+
+export interface InitiativeRef { initiativeId: string; name: string; status: string }
+
+export interface KeyResultProgress {
+  id: string; title: string; metricType: string;
+  startValue: number; targetValue: number; currentValue: number; unit: string | null; progress: number;
+}
+export interface ObjectiveProgress {
+  id: string; title: string; period: string | null; status: string;
+  initiativeId: string | null; progress: number; keyResults: KeyResultProgress[];
+}
+export interface PmoRollup {
+  scope: { kind: PmoScopeKind; id: string; name: string };
+  projectCount: number;
+  initiativeCount: number;
+  delivery: { totalTasks: number; completedCount: number; openCount: number; avgCycleTimeHours: number; throughputPerWeek: number };
+  spend: { agentLlmCostUsd: number };
+  dora: {
+    windowDays: number; deploymentFrequencyPerDay: number; totalDeployments: number;
+    leadTimeHours: number | null; changeFailureRatePct: number | null; mttrHours: number | null;
+  };
+  outcomes: { runs: number; avgScore: number; mergedRatePct: number | null };
+  okr: { objectives: ObjectiveProgress[]; avgProgress: number };
+  byInitiative: Array<{ initiativeId: string; name: string; status: string; projectCount: number; completedCount: number; agentLlmCostUsd: number; avgProgress: number; isBlocked: boolean; blockedBy: string[] }>;
+  criticalPath: InitiativeRef[];
+  cycleDetected: boolean;
+  blockedBy: InitiativeRef[];
+  blocks: InitiativeRef[];
+}
+
+const portfolioTracker = segmentTrackerClient('/api/pmo/portfolios');
+const initiativeTracker = segmentTrackerClient('/api/pmo/initiatives');
+const objectiveTracker = segmentTrackerClient('/api/pmo/objectives');
+const keyResultTracker = segmentTrackerClient('/api/pmo/key-results');
+
+export const pmoApi = {
+  /** Flat structure lists (portfolios, initiatives, projects-with-link). */
+  tree: (): Promise<PmoTree> => request<PmoTree>('/api/pmo/tree'),
+  /** Composed rollup (cost/DORA/outcomes/OKR/deps) for a portfolio, initiative,
+   *  or the org-level workspace (workspace ignores `id`). */
+  rollup: (kind: PmoScopeKind, id?: string): Promise<PmoRollup> =>
+    request<PmoRollup>(`/api/pmo/rollup?kind=${kind}${kind !== 'workspace' && id ? `&id=${encodeURIComponent(id)}` : ''}`),
+  /** Link (or, with initiativeId=null, unlink) a project to an initiative. */
+  linkProject: (projectId: number, initiativeId: string | null): Promise<{ id: number; initiativeId: string | null }> =>
+    request(`/api/pmo/projects/${projectId}/link`, { method: 'PATCH', body: JSON.stringify({ initiativeId }) }),
+  /** Add an initiative dependency edge (fromInitiative BLOCKS toInitiative). */
+  addDependency: (fromInitiativeId: string, toInitiativeId: string): Promise<{ id?: string; fromInitiativeId: string; toInitiativeId: string }> =>
+    request('/api/pmo/dependencies', { method: 'POST', body: JSON.stringify({ fromInitiativeId, toInitiativeId }) }),
+  /** Remove an initiative dependency edge by id. */
+  removeDependency: (id: string): Promise<{ deleted: string }> =>
+    request(`/api/pmo/dependencies/${id}`, { method: 'DELETE' }),
+
+  portfolios: {
+    list: () => portfolioTracker.list() as unknown as Promise<Portfolio[]>,
+    create: (body: Partial<Omit<Portfolio, 'id'>>) => portfolioTracker.create(body) as unknown as Promise<Portfolio>,
+    update: (id: string, body: Partial<Omit<Portfolio, 'id'>>) => portfolioTracker.update(id, body) as unknown as Promise<Portfolio>,
+    remove: (id: string) => portfolioTracker.remove(id),
+  },
+  initiatives: {
+    list: () => initiativeTracker.list() as unknown as Promise<Initiative[]>,
+    create: (body: Partial<Omit<Initiative, 'id'>>) => initiativeTracker.create(body) as unknown as Promise<Initiative>,
+    update: (id: string, body: Partial<Omit<Initiative, 'id'>>) => initiativeTracker.update(id, body) as unknown as Promise<Initiative>,
+    remove: (id: string) => initiativeTracker.remove(id),
+  },
+  objectives: {
+    list: () => objectiveTracker.list() as unknown as Promise<Objective[]>,
+    create: (body: Partial<Omit<Objective, 'id'>>) => objectiveTracker.create(body) as unknown as Promise<Objective>,
+    update: (id: string, body: Partial<Omit<Objective, 'id'>>) => objectiveTracker.update(id, body) as unknown as Promise<Objective>,
+    remove: (id: string) => objectiveTracker.remove(id),
+  },
+  keyResults: {
+    list: () => keyResultTracker.list() as unknown as Promise<KeyResult[]>,
+    create: (body: Partial<Omit<KeyResult, 'id'>>) => keyResultTracker.create(body) as unknown as Promise<KeyResult>,
+    update: (id: string, body: Partial<Omit<KeyResult, 'id'>>) => keyResultTracker.update(id, body) as unknown as Promise<KeyResult>,
+    remove: (id: string) => keyResultTracker.remove(id),
+  },
+};
+
 // Sprints (agile tracker; /api/agile/sprints). A planning ceremony creates/uses a
 // sprint and schedules tasks into it via tasksApi.update({ sprintId }).
 export interface Sprint {
@@ -2875,7 +3057,8 @@ export const promptLibraryApi = {
 // ---------------------------------------------------------------------------
 
 export type IntegrationProvider =
-  | 'github' | 'gitlab' | 'bitbucket' | 'jira' | 'confluence' | 'freshservice';
+  | 'github' | 'gitlab' | 'bitbucket' | 'jira' | 'confluence' | 'freshservice'
+  | 'servicenow' | 'linear' | 'sentry' | 'pagerduty' | 'monday' | 'asana' | 'clickup';
 
 export interface IntegrationCredential {
   id: string;
@@ -3413,4 +3596,94 @@ export const personasApi = {
       method: 'POST',
       body: JSON.stringify({}),
     }),
+};
+
+// ── Role-insight lenses (/api/insights/* and /api/innovation/*) ───────────────
+// Read-only rollups that make the insights.* RBAC gates live. Shapes mirror the
+// API read-models in api/src/application/insights/*. See insightsRoutes.ts.
+
+export interface EffectivenessBucket {
+  key: string; actionType?: string; model?: string;
+  runs: number; avgScore: number; mergedRatePct: number; ciGreenRatePct: number;
+  degradedRatePct: number; avgSteps: number; costUsd: number;
+}
+export interface EngineeringInsights {
+  windowDays: number;
+  totals: { runs: number; avgScore: number; mergedRatePct: number; ciGreenRatePct: number; degradedRatePct: number; costUsd: number };
+  byModel: EffectivenessBucket[];
+  byActionType: EffectivenessBucket[];
+  byApproach: EffectivenessBucket[];
+}
+
+export interface DoraInsights {
+  windowDays: number;
+  deploymentFrequencyPerDay: number;
+  totalDeployments: number;
+  leadTimeHours: number | null;
+  changeFailureRatePct: number | null;
+  mttrHours: number | null;
+}
+
+export type BudgetState = 'no_budget' | 'on_track' | 'forecast_over' | 'over';
+export interface FinanceBudgetLine {
+  id: string; scopeKind: string; projectId: number | null; initiativeId: string | null;
+  scopeName: string; limitUsd: number; actualUsd: number; forecastUsd: number; status: BudgetState;
+}
+export interface FinanceInsights {
+  periodMonth: string;
+  totals: { spendUsd: number; forecastUsd: number; paidOverflowUsd: number; cacheReadTokens: number; cacheCreationTokens: number; costPerMergedPrUsd: number | null; mergedRuns: number };
+  daily: Array<{ date: string; usd: number }>;
+  byProject: Array<{ projectId: number; projectName: string; usd: number }>;
+  budgets: FinanceBudgetLine[];
+}
+
+export type ToolRisk = 'sensitive' | 'normal';
+export interface ComplianceSummary {
+  windowDays: number; totalEvents: number; sensitiveEvents: number; distinctExecutions: number; distinctAgents: number;
+  byTool: Array<{ toolName: string; risk: ToolRisk; count: number }>;
+  byCategory: Array<{ category: string; count: number }>;
+  byAgent: Array<{ agent: string; kind: 'host' | 'cloud'; count: number }>;
+}
+
+export type FunnelStage = 'idea' | 'validated' | 'in_build' | 'shipped' | 'measured';
+export interface FunnelMetrics {
+  totalIdeas: number; activeIdeas: number; killedCount: number;
+  ideaToShipPct: number | null; avgIdeaToShipDays: number | null;
+  stages: Array<{ stage: FunnelStage; current: number; reached: number; conversionFromPrevPct: number | null; avgDaysInStage: number | null }>;
+}
+
+export interface Budget extends TrackerRow {
+  scopeKind: string; projectId: number | null; initiativeId: string | null; periodMonth: string; limitUsd: number; notes: string | null;
+}
+export interface InnovationIdea extends TrackerRow {
+  initiativeId: string | null; title: string; description: string | null; stage: FunnelStage | 'killed';
+  linkedProjectId: number | null; impact: number | null; effort: number | null; confidence: number | null;
+  outcome: string | null; outcomeValue: number | null; killedReason: string | null;
+}
+
+const budgetTracker = segmentTrackerClient('/api/insights/budgets');
+const ideaTracker = segmentTrackerClient('/api/innovation/ideas');
+
+export const insightsApi = {
+  engineering: (days = 30): Promise<EngineeringInsights> => request<EngineeringInsights>(`/api/insights/engineering?days=${days}`),
+  dora: (days = 30): Promise<DoraInsights> => request<DoraInsights>(`/api/insights/dora?days=${days}`),
+  finance: (period?: string): Promise<FinanceInsights> => request<FinanceInsights>(`/api/insights/finance${period ? `?period=${period}` : ''}`),
+  compliance: (days = 30): Promise<ComplianceSummary> => request<ComplianceSummary>(`/api/insights/compliance?days=${days}`),
+  budgets: {
+    list: () => budgetTracker.list() as unknown as Promise<Budget[]>,
+    create: (body: Partial<Omit<Budget, 'id'>>) => budgetTracker.create(body) as unknown as Promise<Budget>,
+    update: (id: string, body: Partial<Omit<Budget, 'id'>>) => budgetTracker.update(id, body) as unknown as Promise<Budget>,
+    remove: (id: string) => budgetTracker.remove(id),
+  },
+};
+
+export const innovationApi = {
+  funnel: (initiativeId?: string): Promise<FunnelMetrics> =>
+    request<FunnelMetrics>(`/api/innovation/funnel${initiativeId ? `?initiative=${encodeURIComponent(initiativeId)}` : ''}`),
+  ideas: {
+    list: () => ideaTracker.list() as unknown as Promise<InnovationIdea[]>,
+    create: (body: Partial<Omit<InnovationIdea, 'id'>>) => ideaTracker.create(body) as unknown as Promise<InnovationIdea>,
+    update: (id: string, body: Partial<Omit<InnovationIdea, 'id'>>) => ideaTracker.update(id, body) as unknown as Promise<InnovationIdea>,
+    remove: (id: string) => ideaTracker.remove(id),
+  },
 };

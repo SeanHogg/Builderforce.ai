@@ -273,6 +273,14 @@ export interface Env {
    *  Set via: wrangler secret put GITHUB_WEBHOOK_SECRET */
   GITHUB_WEBHOOK_SECRET?: string;
 
+  /** Secret token configured on the GitLab project/group webhook (sent as the
+   *  `X-Gitlab-Token` header). Set via: wrangler secret put GITLAB_WEBHOOK_SECRET */
+  GITLAB_WEBHOOK_SECRET?: string;
+
+  /** Secret for the Bitbucket repo webhook HMAC (`X-Hub-Signature: sha256=…`).
+   *  Set via: wrangler secret put BITBUCKET_WEBHOOK_SECRET */
+  BITBUCKET_WEBHOOK_SECRET?: string;
+
   /** Shared secret for internal cron endpoints (e.g. GET /api/approvals/escalate).
    *  Set via: wrangler secret put CRON_SECRET */
   CRON_SECRET?: string;

@@ -84,6 +84,25 @@ export function StatusPill({ value }: { value: string }) {
   );
 }
 
+/**
+ * A horizontal progress bar for a [0,1] fraction (OKR key results, initiative
+ * roll-up). Colour bands match the KR health convention (red→amber→green).
+ */
+export function ProgressBar({ value, label }: { value: number; label?: string }) {
+  const pct = Math.max(0, Math.min(1, Number.isFinite(value) ? value : 0)) * 100;
+  const color = pct >= 70 ? '#16a34a' : pct >= 40 ? '#d97706' : '#dc2626';
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+      <div style={{ flex: 1, height: 8, borderRadius: 999, background: 'var(--border-subtle)', overflow: 'hidden' }}>
+        <div style={{ width: `${pct}%`, height: '100%', background: color, transition: 'width 0.3s ease' }} />
+      </div>
+      <span style={{ fontSize: '0.74rem', fontWeight: 600, color: 'var(--text-secondary)', minWidth: 36, textAlign: 'right' }}>
+        {label ?? `${Math.round(pct)}%`}
+      </span>
+    </div>
+  );
+}
+
 /** A KPI stat card (used by the ROI dashboard). */
 export function StatCard({ label, value, sub }: { label: string; value: string; sub?: string }) {
   return (

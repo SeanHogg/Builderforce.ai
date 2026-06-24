@@ -20,9 +20,40 @@ export interface NormalizedWebhookTicket {
   originatedLocally: boolean;
 }
 
+/** Compute HMAC-SHA256(secret, body) as a lowercase hex string. */
+async function hmacSha256Hex(secret: string, body: string): Promise<string> {
+  const key = await crypto.subtle.importKey(
+    'raw',
+    new TextEncoder().encode(secret),
+    { name: 'HMAC', hash: 'SHA-256' },
+    false,
+    ['sign'],
+  );
+  const mac = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(body));
+  return Array.from(new Uint8Array(mac))
+    .map((b) => b.toString(16).padStart(2, '0'))
+    .join('');
+}
+
+/** Compute HMAC-SHA256(secret, body) as a base64url string (no padding) — JWT HS256 form. */
+async function hmacSha256Base64Url(secret: string, body: string): Promise<string> {
+  const key = await crypto.subtle.importKey(
+    'raw',
+    new TextEncoder().encode(secret),
+    { name: 'HMAC', hash: 'SHA-256' },
+    false,
+    ['sign'],
+  );
+  const mac = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(body));
+  let bin = '';
+  for (const b of new Uint8Array(mac)) bin += String.fromCharCode(b);
+  return btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+
 /**
  * Verify an HMAC-SHA256 webhook signature of the form "sha256=<hex>".
- * Returns false on any malformed input rather than throwing.
+ * Returns false on any malformed input rather than throwing. Used by the
+ * GitHub/Jira-style scheme and as the generic fallback.
  */
 export async function verifyWebhookSignature(
   rawBody: string,
@@ -33,24 +64,75 @@ export async function verifyWebhookSignature(
     if (!signatureHeader.startsWith('sha256=')) return false;
     const expected = signatureHeader.slice('sha256='.length);
     if (!expected) return false;
-    const key = await crypto.subtle.importKey(
-      'raw',
-      new TextEncoder().encode(secret),
-      { name: 'HMAC', hash: 'SHA-256' },
-      false,
-      ['sign'],
-    );
-    const mac = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(rawBody));
-    const hex = Array.from(new Uint8Array(mac))
-      .map((b) => b.toString(16).padStart(2, '0'))
-      .join('');
-    return timingSafeEqualHex(hex, expected);
+    return timingSafeEqualHex(await hmacSha256Hex(secret, rawBody), expected);
   } catch {
     return false;
   }
 }
 
-/** Constant-time-ish hex string compare (avoids early-exit on length-equal inputs). */
+/** Reads a request header by name (case-insensitive at the Hono layer). */
+export type HeaderGetter = (name: string) => string | undefined | null;
+
+/**
+ * Provider-aware webhook signature verification. Each provider signs differently;
+ * trust is the per-connection `webhook_secret` in every case:
+ *   - github / jira  → `X-Hub-Signature-256: sha256=<hex>` over the raw body
+ *   - linear         → `Linear-Signature: <hex>` (HMAC-SHA256, no prefix)
+ *   - sentry         → `Sentry-Hook-Signature: <hex>` (HMAC-SHA256)
+ *   - pagerduty      → `X-PagerDuty-Signature: v1=<hex>[,v1=<hex>…]` (any match wins)
+ *   - monday         → HS256 JWT in `Authorization` signed with the secret
+ *   - other          → generic `sha256=<hex>` fallback
+ * Returns false on any malformed input rather than throwing.
+ */
+export async function verifyProviderWebhookSignature(
+  provider: string,
+  rawBody: string,
+  getHeader: HeaderGetter,
+  secret: string,
+): Promise<boolean> {
+  try {
+    switch (provider) {
+      case 'github':
+      case 'jira': {
+        const sig = getHeader('X-Hub-Signature-256') ?? getHeader('X-Board-Signature-256') ?? getHeader('X-Signature-256') ?? '';
+        return verifyWebhookSignature(rawBody, sig, secret);
+      }
+      case 'linear': {
+        const sig = (getHeader('Linear-Signature') ?? '').trim();
+        return sig.length > 0 && timingSafeEqualHex(await hmacSha256Hex(secret, rawBody), sig);
+      }
+      case 'sentry': {
+        const sig = (getHeader('Sentry-Hook-Signature') ?? '').trim();
+        return sig.length > 0 && timingSafeEqualHex(await hmacSha256Hex(secret, rawBody), sig);
+      }
+      case 'pagerduty': {
+        const header = getHeader('X-PagerDuty-Signature') ?? '';
+        const expected = await hmacSha256Hex(secret, rawBody);
+        const sigs = header.split(',').map((s) => s.trim()).filter((s) => s.startsWith('v1=')).map((s) => s.slice(3));
+        return sigs.some((s) => timingSafeEqualHex(expected, s));
+      }
+      case 'monday':
+        return verifyMondayJwt(getHeader('Authorization') ?? '', secret);
+      default: {
+        const sig = getHeader('X-Board-Signature-256') ?? getHeader('X-Signature-256') ?? '';
+        return verifyWebhookSignature(rawBody, sig, secret);
+      }
+    }
+  } catch {
+    return false;
+  }
+}
+
+/** Verify a monday.com HS256 JWT (header.payload.signature) signed with the secret. */
+async function verifyMondayJwt(authHeader: string, secret: string): Promise<boolean> {
+  const token = authHeader.replace(/^Bearer\s+/i, '').trim();
+  const [h, p, sig] = token.split('.');
+  if (!h || !p || !sig) return false;
+  const expected = await hmacSha256Base64Url(secret, `${h}.${p}`);
+  return timingSafeEqualHex(expected, sig);
+}
+
+/** Constant-time-ish equal-length string compare (avoids early-exit). */
 function timingSafeEqualHex(a: string, b: string): boolean {
   if (a.length !== b.length) return false;
   let diff = 0;
@@ -97,6 +179,14 @@ export function normalizeWebhookPayload(provider: string, payload: unknown): Nor
       return normalizeGitHub(payload as GitHubIssueWebhook);
     case 'jira':
       return normalizeJira(payload as JiraWebhook);
+    case 'linear':
+      return normalizeLinear(payload as LinearWebhook);
+    case 'sentry':
+      return normalizeSentry(payload as SentryWebhook);
+    case 'pagerduty':
+      return normalizePagerDuty(payload as PagerDutyWebhook);
+    case 'monday':
+      return normalizeMonday(payload as MondayWebhook);
     default:
       return null;
   }
@@ -144,4 +234,128 @@ function normalizeJira(p: JiraWebhook): NormalizedWebhookTicket | null {
     fields,
     originatedLocally: false,
   };
+}
+
+/** Small helper — build the field bag + ticket from already-extracted parts. */
+function makeTicket(parts: {
+  externalId: string;
+  externalUrl: string | null;
+  externalVersion: string | null;
+  title: string;
+  body: string | null;
+  state: string;
+  originatedLocally?: boolean;
+}): NormalizedWebhookTicket {
+  return {
+    externalId: parts.externalId,
+    externalUrl: parts.externalUrl,
+    externalVersion: parts.externalVersion,
+    title: parts.title,
+    body: parts.body,
+    state: parts.state,
+    fields: { title: parts.title, body: parts.body ?? '', state: parts.state },
+    originatedLocally: parts.originatedLocally ?? false,
+  };
+}
+
+interface LinearWebhook {
+  type?: string;
+  data?: {
+    id?: string;
+    identifier?: string;
+    title?: string;
+    description?: string | null;
+    url?: string;
+    updatedAt?: string;
+    state?: { name?: string };
+  };
+}
+
+function normalizeLinear(p: LinearWebhook): NormalizedWebhookTicket | null {
+  if (p.type && p.type !== 'Issue') return null;
+  const d = p.data;
+  if (!d?.id) return null;
+  return makeTicket({
+    externalId: d.id,
+    externalUrl: d.url ?? null,
+    externalVersion: d.updatedAt ?? null,
+    title: d.title ?? '',
+    body: d.description ?? null,
+    state: d.state?.name ?? 'unknown',
+  });
+}
+
+interface SentryWebhook {
+  data?: { issue?: SentryIssueBody };
+  issue?: SentryIssueBody;
+}
+interface SentryIssueBody {
+  id?: string;
+  title?: string;
+  culprit?: string | null;
+  permalink?: string;
+  status?: string;
+  lastSeen?: string;
+}
+
+function normalizeSentry(p: SentryWebhook): NormalizedWebhookTicket | null {
+  const issue = p.data?.issue ?? p.issue;
+  if (!issue?.id) return null;
+  return makeTicket({
+    externalId: issue.id,
+    externalUrl: issue.permalink ?? null,
+    externalVersion: issue.lastSeen ?? null,
+    title: issue.title ?? '',
+    body: issue.culprit ?? null,
+    state: issue.status ?? 'unresolved',
+  });
+}
+
+interface PagerDutyWebhook {
+  event?: {
+    data?: {
+      id?: string;
+      title?: string;
+      summary?: string;
+      status?: string;
+      html_url?: string;
+      created_at?: string;
+    };
+  };
+}
+
+function normalizePagerDuty(p: PagerDutyWebhook): NormalizedWebhookTicket | null {
+  const d = p.event?.data;
+  if (!d?.id) return null;
+  const title = d.title ?? d.summary ?? '';
+  return makeTicket({
+    externalId: d.id,
+    externalUrl: d.html_url ?? null,
+    externalVersion: d.created_at ?? null,
+    title,
+    body: title,
+    state: d.status ?? 'triggered',
+  });
+}
+
+interface MondayWebhook {
+  event?: {
+    pulseId?: number | string;
+    pulseName?: string;
+    triggerTime?: string;
+    value?: { label?: { text?: string } };
+  };
+}
+
+function normalizeMonday(p: MondayWebhook): NormalizedWebhookTicket | null {
+  const e = p.event;
+  if (!e?.pulseId) return null;
+  return makeTicket({
+    externalId: String(e.pulseId),
+    externalUrl: null,
+    externalVersion: e.triggerTime ?? null,
+    title: e.pulseName ?? '',
+    body: null,
+    state: e.value?.label?.text ?? 'active',
+  });
 }

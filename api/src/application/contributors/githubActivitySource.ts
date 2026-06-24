@@ -13,7 +13,7 @@
  * the next incremental run continues from the advanced watermark.
  */
 import type { FetchLike } from '../repos/sources/repoSourceBase';
-import type { IngestEvent } from './activityIngest';
+import type { ActivitySource, IngestEvent } from './activityIngest';
 
 /** Max pages (×100) of each list to pull in one sync — bounds a first backfill. */
 const BACKFILL_PAGES = 5;
@@ -123,7 +123,7 @@ export function mapReview(r: GhReview, repoFullName: string, repoName: string): 
 
 // ── REST fetch (commits + pulls + reviews since the watermark) ────────────────
 
-export class GithubActivitySource {
+export class GithubActivitySource implements ActivitySource {
   private readonly base: string;
   private readonly slug: string;
   constructor(private readonly cfg: GithubRepoCoords, private readonly fetchFn: FetchLike) {

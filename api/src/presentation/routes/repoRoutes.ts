@@ -31,6 +31,7 @@ import type { AgentHostRelayDO } from '../../infrastructure/relay/AgentHostRelay
 import { RepoService, type AgentHostDispatcher } from '../../application/repos/RepoService';
 import { resolveRepoCredential, isResolveError } from '../../application/repos/resolveRepoCredential';
 import { importRepoContents } from '../../application/repos/importRepoContents';
+import { enforceIngestionCap, recordIngestion } from '../../application/ingestion/ingestionLedger';
 import { githubStatusMessage } from '../../application/integrations/githubTestError';
 import { mergePullRequest, normalizeMergeMethod } from '../../application/repos/mergePullRequest';
 import { markPullRequestMergedById } from '../../application/repos/recordPullRequestRow';
@@ -351,6 +352,20 @@ export function createRepoRoutes(db: Db): Hono<RepoHonoEnv> {
     const resolved = await resolveRepoCredential(db, secret, tenantId, id);
     if (isResolveError(resolved)) return c.json({ error: resolved.error }, resolved.status);
 
+    // Ingestion gate — pause NEW repo pulls once the tenant is over its monthly
+    // data-ingestion allowance (consumption meter). Graceful backpressure: repos
+    // already imported stay fully usable; only fresh pulls stop until the month
+    // resets or they upgrade. 402 carries the plan-limit body the client renders.
+    const gate = await enforceIngestionCap(db, tenantId);
+    if (!gate.allowed) {
+      return c.json({
+        error: `Monthly data-ingestion allowance reached (${gate.limit.toLocaleString()} bytes). Already-imported repositories stay available; upgrade or wait for the monthly reset to import more.`,
+        code: 'ingestion_limit_exceeded',
+        upgradeRequired: true,
+        currentPlan: gate.effectivePlan,
+      }, 402);
+    }
+
     const ref = (c.req.query('ref') || resolved.repo.defaultBranch || 'main').trim();
     const result = await importRepoContents({
       provider: resolved.repo.provider,
@@ -361,6 +376,19 @@ export function createRepoRoutes(db: Db): Hono<RepoHonoEnv> {
       ref,
     });
     if (!result.ok) return c.json({ error: result.error ?? 'Failed to read repository' }, 502);
+
+    // Meter the bytes actually pulled (post-cap), attributed to the repo's project.
+    const bytesIngested = result.files.reduce((sum, f) => sum + f.content.length, 0);
+    c.executionCtx.waitUntil(recordIngestion(db, {
+      tenantId,
+      projectId: resolved.repo.projectId ?? null,
+      source: 'repo_import',
+      provider: resolved.repo.provider,
+      bytesIngested,
+      itemsIngested: result.files.length,
+      metadata: { repoId: id, ref, truncated: result.truncated },
+    }));
+
     return c.json(result);
   });
 

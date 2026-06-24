@@ -28,6 +28,6 @@ CREATE INDEX IF NOT EXISTS idx_activity_events_project_occurred
 ALTER TABLE project_repositories
   ADD COLUMN IF NOT EXISTS last_activity_synced_at TIMESTAMP;
 
--- Sweep read assist: due repos (github, with a credential) by watermark.
+-- Sweep read assist: due repos (any pollable provider, with a credential) by watermark.
 CREATE INDEX IF NOT EXISTS idx_project_repos_activity_sync
   ON project_repositories(provider, last_activity_synced_at) WHERE credential_id IS NOT NULL;

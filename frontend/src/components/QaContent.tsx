@@ -29,6 +29,8 @@ import {
   fetchExplorations,
   fetchFlows,
   fetchHeatmap,
+  fetchQualityTrend,
+  fetchRouting,
   fetchRuns,
   fetchSchedules,
   fetchTargets,
@@ -36,12 +38,16 @@ import {
   generateTest,
   seedCrawl,
   startExploration,
+  updateRouting,
   updateSchedule,
   type QaCredential,
   type QaExploration,
   type QaFinding,
   type QaFlow,
   type QaHeatZone,
+  type QaModelQuality,
+  type QaQualityTrend,
+  type QaRoutingSettings,
   type QaRun,
   type QaSchedule,
   type QaTarget,
@@ -101,6 +107,8 @@ export function QaContent() {
   const [heatZones, setHeatZones] = useState<QaHeatZone[]>([]);
   const [explorations, setExplorations] = useState<QaExploration[]>([]);
   const [schedules, setSchedules] = useState<QaSchedule[]>([]);
+  const [routing, setRouting] = useState<QaRoutingSettings | null>(null);
+  const [quality, setQuality] = useState<QaQualityTrend | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -110,28 +118,33 @@ export function QaContent() {
 
   const reload = useCallback(async () => {
     try {
-      const [f, t, r, hm, ex] = await Promise.all([
+      const [f, t, r, hm, ex, q] = await Promise.all([
         fetchFlows(projectId), fetchTests(projectId), fetchRuns(projectId),
         fetchHeatmap({ limit: 40 }).catch(() => ({ zones: [] })),
         fetchExplorations(projectId).catch(() => ({ explorations: [] })),
+        fetchQualityTrend(projectId).catch(() => ({ trend: null })),
       ]);
       setFlows(f.flows ?? []);
       setTests(t.tests ?? []);
       setRuns(r.runs ?? []);
       setHeatZones(hm.zones ?? []);
       setExplorations(ex.explorations ?? []);
+      setQuality(q.trend ?? null);
       if (projectId != null) {
-        const [tg, cr, sc] = await Promise.all([
+        const [tg, cr, sc, ro] = await Promise.all([
           fetchTargets(projectId), fetchCredentials(projectId),
           fetchSchedules(projectId).catch(() => ({ schedules: [] })),
+          fetchRouting(projectId).catch(() => ({ settings: null })),
         ]);
         setTargets(tg.targets ?? []);
         setCredentials(cr.credentials ?? []);
         setSchedules(sc.schedules ?? []);
+        setRouting(ro.settings ?? null);
       } else {
         setTargets([]);
         setCredentials([]);
         setSchedules([]);
+        setRouting(null);
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to load QA data');
@@ -174,12 +187,15 @@ export function QaContent() {
         </div>
       )}
 
-      {/* Targets + Credentials + Schedule only apply to a selected project */}
+      <QualityTrendSection trend={quality} />
+
+      {/* Targets + Credentials + Schedule + Auto-routing only apply to a selected project */}
       {projectId != null && (
         <>
           <TargetsSection projectId={projectId} targets={targets} busy={busy} onRun={run} />
           <CredentialsSection projectId={projectId} credentials={credentials} busy={busy} onRun={run} />
           <SchedulesSection projectId={projectId} schedules={schedules} credentials={credentials} busy={busy} onRun={run} />
+          <RoutingSection projectId={projectId} settings={routing} busy={busy} onRun={run} />
         </>
       )}
 
@@ -569,6 +585,153 @@ function SchedulesSection({ projectId, schedules, credentials, busy, onRun }: {
           ))}
         </Table>
       )}
+    </Section>
+  );
+}
+
+// ── Quality trend (escaped defects + producing model/agent) ──────────────────
+
+const SEVERITY_ORDER = ['critical', 'high', 'medium', 'low'];
+
+function pct(n: number): string {
+  return `${Math.round(n * 100)}%`;
+}
+
+function QualityTrendSection({ trend }: { trend: QaQualityTrend | null }) {
+  if (!trend) {
+    return (
+      <Section title="Quality trend">
+        <Empty>No quality data yet. It builds from Agentic Tester findings, CI build outcomes, and cloud-agent run scores.</Empty>
+      </Section>
+    );
+  }
+  const peakFindings = Math.max(1, ...trend.daily.map((d) => d.findings + d.ciFailures));
+  return (
+    <Section title={`Quality trend · last ${trend.windowDays}d`}>
+      {/* Headline metrics */}
+      <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 16 }}>
+        <Metric label="Quality score" value={trend.qualityScore != null ? pct(trend.qualityScore) : '—'}
+          hint="mean cloud-agent run outcome" color={trend.qualityScore != null && trend.qualityScore < 0.5 ? '#f85149' : '#3fb950'} />
+        <Metric label="Escaped defects" value={String(trend.findings.total)} hint={`${trend.findings.open} open`}
+          color={trend.findings.open > 0 ? '#d29922' : 'var(--text-primary)'} />
+        <Metric label="CI failure rate" value={trend.ci.builds > 0 ? pct(trend.ci.failureRate) : '—'}
+          hint={`${trend.ci.failures}/${trend.ci.builds} builds`} color={trend.ci.failureRate > 0.2 ? '#f85149' : 'var(--text-primary)'} />
+        <Metric label="Auto-routed" value={String(trend.findings.autoRouted)} hint="findings → fix agent" />
+      </div>
+
+      {/* Severity breakdown */}
+      {trend.findings.total > 0 && (
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 16 }}>
+          {SEVERITY_ORDER.filter((s) => trend.findings.bySeverity[s]).map((s) => (
+            <span key={s} style={{ fontSize: 11, padding: '3px 8px', borderRadius: 6, border: '1px solid var(--border-subtle)', color: SEVERITY_COLOR[s] ?? 'var(--text-secondary)', fontWeight: 700 }}>
+              {s}: {trend.findings.bySeverity[s]}
+            </span>
+          ))}
+        </div>
+      )}
+
+      {/* Daily defect series (findings + CI failures, stacked bars) */}
+      {trend.daily.length > 0 && (
+        <div style={{ marginBottom: 18 }}>
+          <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 6 }}>Defects per day (findings ▮ + CI failures ▮)</div>
+          <div style={{ display: 'flex', alignItems: 'flex-end', gap: 3, height: 64 }}>
+            {trend.daily.map((d) => (
+              <div key={d.date} title={`${d.date}: ${d.findings} findings, ${d.ciFailures} CI failures`}
+                style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', minWidth: 4 }}>
+                <span style={{ display: 'block', height: `${(d.ciFailures / peakFindings) * 100}%`, background: '#f85149', borderRadius: '2px 2px 0 0' }} />
+                <span style={{ display: 'block', height: `${(d.findings / peakFindings) * 100}%`, background: '#d29922' }} />
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Which model / agent produced the defects */}
+      <ProducerTable title="By model" rows={trend.byModel} />
+      <ProducerTable title="By agent" rows={trend.byAgent} />
+      {(trend.byModel.length > 0 || trend.byAgent.length > 0) && (
+        <p style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 8 }}>
+          Caught = build-time defects (CI-failing runs). Escaped = runtime findings attributed to the most recent
+          deploy before each finding{trend.findings.escapedUnattributed > 0 ? ` (${trend.findings.escapedUnattributed} unattributed)` : ''}.
+        </p>
+      )}
+    </Section>
+  );
+}
+
+function Metric({ label, value, hint, color }: { label: string; value: string; hint?: string; color?: string }) {
+  return (
+    <div style={{ padding: '10px 14px', borderRadius: 8, border: '1px solid var(--border-subtle)', background: 'var(--bg-deep, #0d1117)', minWidth: 130 }}>
+      <div style={{ fontSize: 10, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: 0.4 }}>{label}</div>
+      <div style={{ fontSize: 22, fontWeight: 700, color: color ?? 'var(--text-primary)', lineHeight: 1.3 }}>{value}</div>
+      {hint && <div style={{ fontSize: 10, color: 'var(--text-muted)' }}>{hint}</div>}
+    </div>
+  );
+}
+
+function ProducerTable({ title, rows }: { title: string; rows: QaModelQuality[] }) {
+  if (rows.length === 0) return null;
+  return (
+    <div style={{ marginTop: 8 }}>
+      <div style={{ fontSize: 11, color: 'var(--text-muted)', margin: '10px 0 4px' }}>{title} — worst quality first</div>
+      <Table head={['Producer', 'Runs', 'Avg score', 'Merged', 'CI green', 'Caught', 'Escaped']}>
+        {rows.map((r) => (
+          <tr key={r.key}>
+            <Td><code style={{ fontSize: 11 }}>{r.key}</code></Td>
+            <Td>{r.runs}</Td>
+            <Td><span style={{ color: r.avgScore < 0.5 ? '#f85149' : 'var(--text-secondary)', fontWeight: 700 }}>{pct(r.avgScore)}</span></Td>
+            <Td>{pct(r.mergedRate)}</Td>
+            <Td><span style={{ color: r.ciGreenRate < 0.6 ? '#d29922' : 'var(--text-secondary)' }}>{pct(r.ciGreenRate)}</span></Td>
+            <Td><span style={{ color: r.defects > 0 ? '#d29922' : 'var(--text-secondary)', fontWeight: 700 }}>{r.defects}</span></Td>
+            <Td><span style={{ color: r.escapedDefects > 0 ? '#f85149' : 'var(--text-secondary)', fontWeight: 700 }}>{r.escapedDefects}</span></Td>
+          </tr>
+        ))}
+      </Table>
+    </div>
+  );
+}
+
+// ── Auto-routing policy (findings → fix agent) ───────────────────────────────
+
+function RoutingSection({ projectId, settings, busy, onRun }: {
+  projectId: number; settings: QaRoutingSettings | null; busy: string | null;
+  onRun: (key: string, fn: () => Promise<unknown>) => Promise<void>;
+}) {
+  const current: QaRoutingSettings = settings ?? { enabled: false, minSeverity: 'high', targetLaneKey: null, maxPerBatch: 5 };
+  const [draft, setDraft] = useState<QaRoutingSettings>(current);
+
+  // Keep the editor in sync when the loaded settings change (project switch / reload).
+  useEffect(() => { setDraft(current); }, [settings, projectId]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const dirty = JSON.stringify(draft) !== JSON.stringify(current);
+
+  return (
+    <Section title="Auto-route findings to a fix agent">
+      <p style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 10 }}>
+        When enabled, a captured finding at/above the chosen severity automatically opens a board task and routes it
+        into the project&apos;s staffed fix lane — firing the agent without waiting for manual triage. Off by default
+        (auto-routing dispatches paid agent runs).
+      </p>
+      <div style={{ display: 'flex', gap: 10, marginBottom: 12, flexWrap: 'wrap', alignItems: 'center' }}>
+        <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--text-secondary)' }}>
+          <input type="checkbox" checked={draft.enabled} onChange={(e) => setDraft({ ...draft, enabled: e.target.checked })} />
+          Enabled
+        </label>
+        <label style={{ fontSize: 11, color: 'var(--text-muted)' }}>Min severity</label>
+        <Select style={inputStyle} value={draft.minSeverity} onChange={(e) => setDraft({ ...draft, minSeverity: e.target.value })}>
+          {SEVERITY_ORDER.map((s) => <option key={s} value={s}>{s}</option>)}
+        </Select>
+        <label style={{ fontSize: 11, color: 'var(--text-muted)' }}>Lane</label>
+        <input style={inputStyle} placeholder="auto-detect" value={draft.targetLaneKey ?? ''}
+          onChange={(e) => setDraft({ ...draft, targetLaneKey: e.target.value || null })} />
+        <label style={{ fontSize: 11, color: 'var(--text-muted)' }}>Max / run</label>
+        <input type="number" min={1} max={50} value={draft.maxPerBatch} style={{ ...inputStyle, minWidth: 64, width: 64 }}
+          onChange={(e) => setDraft({ ...draft, maxPerBatch: Math.max(1, Math.min(50, Number(e.target.value) || 1)) })} />
+        <button type="button" style={btnStyle(busy != null || !dirty)} disabled={busy != null || !dirty}
+          onClick={() => onRun('routing-save', () => updateRouting(projectId, draft))}>
+          {busy === 'routing-save' ? 'Saving…' : 'Save'}
+        </button>
+      </div>
     </Section>
   );
 }

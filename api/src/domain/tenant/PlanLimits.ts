@@ -18,6 +18,21 @@ export interface PlanLimits {
    *  image generation is metered separately against {@link imageCreditsDailyLimit}
    *  so heavy image use can't starve the text budget (and vice-versa). */
   tokenDailyLimit: number;
+  /**
+   * Monthly AI-token allowance surfaced by the sidebar consumption meter
+   * (`GET /api/consumption`). This is the "50K free / mo"-style number every
+   * member sees; -1 = unlimited. The daily limit ({@link tokenDailyLimit}) is the
+   * burst guard; this is the headline monthly quota the meter fills against.
+   */
+  tokenMonthlyLimit: number;
+  /**
+   * Monthly data-ingestion allowance in BYTES, surfaced by the consumption meter
+   * as its second meter ("Data ingestion"); -1 = unlimited. Meters data PROCESSED
+   * through system integrations (repo content imports) — the real cost driver of
+   * "link 100 repos" — so free-vs-paid caps processing volume, NOT object count
+   * or visibility. Filled against the ingestion ledger (ingestion_usage_log).
+   */
+  ingestionMonthlyBytes: number;
   /** Image-generation credits per calendar day (1 credit = 1 returned image);
    *  -1 = unlimited. Independent of the text token budget. */
   imageCreditsDailyLimit: number;
@@ -53,6 +68,8 @@ export const PLAN_LIMITS: Record<TenantPlan, PlanLimits> = {
     maxProjects: 5,
     maxSeats: 1,
     tokenDailyLimit: 10_000,
+    tokenMonthlyLimit: 50_000,
+    ingestionMonthlyBytes: 50_000_000, // 50 MB/mo — a handful of repo imports
     imageCreditsDailyLimit: 10,
     maxTokensPerRequest: 4_096,
     approvalWorkflows: false,
@@ -68,6 +85,8 @@ export const PLAN_LIMITS: Record<TenantPlan, PlanLimits> = {
     maxProjects: -1,
     maxSeats: 1,
     tokenDailyLimit: 1_000_000,
+    tokenMonthlyLimit: 5_000_000,
+    ingestionMonthlyBytes: 5_000_000_000, // 5 GB/mo
     imageCreditsDailyLimit: 1_000,
     maxTokensPerRequest: 16_384,
     approvalWorkflows: true,
@@ -83,6 +102,8 @@ export const PLAN_LIMITS: Record<TenantPlan, PlanLimits> = {
     maxProjects: -1,
     maxSeats: -1,
     tokenDailyLimit: 5_000_000,
+    tokenMonthlyLimit: -1,
+    ingestionMonthlyBytes: -1, // unlimited
     imageCreditsDailyLimit: 5_000,
     maxTokensPerRequest: 64_000,
     approvalWorkflows: true,
@@ -116,6 +137,59 @@ export function canAddSeat(plan: TenantPlan, currentSeatCount: number): boolean 
 export function canAddProject(plan: TenantPlan, currentProjectCount: number): boolean {
   const { maxProjects } = getLimits(plan);
   return maxProjects === -1 || currentProjectCount < maxProjects;
+}
+
+/**
+ * Resolve a tenant's effective text-token limits (daily + monthly) from its
+ * superadmin override + plan defaults. THE single resolver — the gateway gate
+ * (llmRoutes) and the consumption meter (consumptionRoutes) both call this, so
+ * the cap shown equals the cap enforced. `-1` = unlimited (gate skipped).
+ *
+ * The override is a *daily* grant (`tokenDailyLimitOverride`); we deliberately
+ * let it govern monthly too so the two never contradict:
+ *   • override === -1 (or superadmin) → both unlimited.
+ *   • override >= 0  → that explicit daily value, and monthly unlimited (an
+ *     explicit per-tenant grant must not be undercut by the plan's monthly cap).
+ *   • override null  → plan defaults for both (free monthly = the 50K meter cap;
+ *     teams monthly = -1 unlimited).
+ */
+export interface ResolvedTokenLimits {
+  /** Daily cap; -1 = unlimited. */
+  dailyLimit: number;
+  /** Monthly cap; -1 = unlimited. */
+  monthlyLimit: number;
+}
+
+export function resolveTokenLimits(input: {
+  effectivePlan: TenantPlan;
+  tokenDailyLimitOverride: number | null;
+  isSuperadmin?: boolean;
+}): ResolvedTokenLimits {
+  if (input.tokenDailyLimitOverride === -1 || input.isSuperadmin) {
+    return { dailyLimit: -1, monthlyLimit: -1 };
+  }
+  const override = input.tokenDailyLimitOverride;
+  if (override !== null && override >= 0) {
+    return { dailyLimit: override, monthlyLimit: -1 };
+  }
+  const limits = getLimits(input.effectivePlan);
+  return { dailyLimit: limits.tokenDailyLimit, monthlyLimit: limits.tokenMonthlyLimit };
+}
+
+/**
+ * Resolve a tenant's effective monthly data-ingestion allowance (bytes); -1 =
+ * unlimited. Mirrors {@link resolveTokenLimits} so the meter display and the
+ * ingestion gate agree. A superadmin-unlimited tenant (override -1 / superadmin)
+ * is unlimited across every meter; a positive *token* override does NOT lift the
+ * ingestion cap (different axis), so only plan default applies otherwise.
+ */
+export function resolveIngestionMonthlyBytes(input: {
+  effectivePlan: TenantPlan;
+  tokenDailyLimitOverride: number | null;
+  isSuperadmin?: boolean;
+}): number {
+  if (input.tokenDailyLimitOverride === -1 || input.isSuperadmin) return -1;
+  return getLimits(input.effectivePlan).ingestionMonthlyBytes;
 }
 
 /**

@@ -21,7 +21,7 @@ import {
   type ChatCompletionRequest,
   type LlmUsage,
 } from '../../application/llm/LlmProxyService';
-import { CACHE_READ_MULTIPLIER, CACHE_CREATION_MULTIPLIER, resolvePaidOverflowCapMillicents } from '../../application/llm/usageLedger';
+import { resolvePaidOverflowCapMillicents } from '../../application/llm/usageLedger';
 import { USAGE_KIND } from '../../application/llm/usageSource';
 import { logTrace, backfillTraceUsage } from '../../application/llm/traceLogger';
 import { recordUsageRow, type UsageAttribution, type RecordUsageRow } from '../../application/llm/usageLedger';
@@ -81,8 +81,15 @@ import type { FailoverEvent } from '../../application/llm/LlmProxyService';
 import { verifyJwt, signJwt } from '../../infrastructure/auth/JwtService';
 import { hashSecret } from '../../infrastructure/auth/HashService';
 import { TenantRole, TenantPlan, TenantBillingStatus } from '../../domain/shared/types';
-import { getLimits, resolveImageCreditsDailyLimit } from '../../domain/tenant/PlanLimits';
+import { getLimits, resolveImageCreditsDailyLimit, resolveTokenLimits } from '../../domain/tenant/PlanLimits';
 import { resolveEffectivePlan } from '../../domain/tenant/effectivePlan';
+import {
+  utcDayStart,
+  utcMonthStart,
+  secondsUntilNextUtcMonth,
+  sumTenantTextTokens,
+  sumTenantTextTokensDayAndMonth,
+} from '../../application/llm/tokenUsage';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -260,102 +267,111 @@ export async function resolveTenantPlan(
   };
 }
 
-/** Start of the current UTC day — the per-day reset boundary for both the daily
- *  token cap and the paid-overflow cap. */
-function utcDayStart(): Date {
-  const d = new Date();
-  d.setUTCHours(0, 0, 0, 0);
-  return d;
+/** What a passing {@link enforceTokenCaps} returns for the response headers/body. */
+interface TokenCapUsage {
+  usageToday: number;
+  planDailyLimit: number;
+  usageMonth: number;
+  planMonthlyLimit: number;
 }
 
 /**
- * Enforce the per-tenant daily token cap (plan-level + optional per-agentHost),
- * shared by `/v1/chat/completions` and the our-models branch of `/v1/messages`
- * so neither surface can bill on our pool without the gate. Returns the 429
- * `Response` to send (cap exceeded), or `{ usageToday, planDailyLimit }` for the
- * response headers when the request may proceed.
+ * Enforce the per-tenant token caps — daily (plan + optional per-agentHost) AND
+ * monthly (the plan allowance the sidebar meter fills against). Shared by
+ * `/v1/chat/completions` and the our-models branch of `/v1/messages` so neither
+ * surface can bill on our pool without the gate. Returns the 429 `Response` to
+ * send (a cap exceeded), or the usage numbers for the response headers when the
+ * request may proceed.
  *
- * The "used today" total is **cache-discounted**: cache_read tokens count at
- * ~0.1x and cache_creation at ~1.25x (mirroring the cost weighting), so a tenant
- * with a large cached prefix gets the discount in their budget — not just logged.
+ * Limits come from the single resolver {@link resolveTokenLimits} and usage from
+ * the single accountant {@link sumTenantTextTokens} / {@link sumTenantTextTokensDayAndMonth},
+ * so the cap enforced here is exactly the one the consumption meter displays.
+ * Both totals are **cache-discounted** (cache_read ~0.1x, cache_creation ~1.25x).
  */
-async function enforceDailyTokenCap(
+async function enforceTokenCaps(
   c: Context<HonoEnv>,
   access: TenantAccess,
-): Promise<{ blocked: Response } | { usageToday: number; planDailyLimit: number }> {
-  const planLimitDefault = getLimits(toTenantPlan(access.effectivePlan)).tokenDailyLimit;
-  const override = access.tokenDailyLimitOverride;
-  const planUnlimited = override === -1 || access.isSuperadmin;
-  const planDailyLimit = planUnlimited
-    ? 0 // 0 disables the plan gate below; real "unlimited" is encoded by planUnlimited
-    : (override !== null && override >= 0 ? override : planLimitDefault);
-  const needsTenantUsageQuery =
-    planDailyLimit > 0 || (access.agentHostId !== null && access.agentHostTokenDailyLimit !== null);
+): Promise<{ blocked: Response } | TokenCapUsage> {
+  const { dailyLimit, monthlyLimit } = resolveTokenLimits({
+    effectivePlan: toTenantPlan(access.effectivePlan),
+    tokenDailyLimitOverride: access.tokenDailyLimitOverride,
+    isSuperadmin: access.isSuperadmin,
+  });
+  // `-1` = unlimited (gate skipped). The host cap is independent of the plan cap.
+  const planDailyLimit = dailyLimit > 0 ? dailyLimit : 0;
+  const planMonthlyLimit = monthlyLimit > 0 ? monthlyLimit : 0;
+  const hasHostCap = access.agentHostId !== null && access.agentHostTokenDailyLimit !== null;
+  const needsDaily = planDailyLimit > 0 || hasHostCap;
 
   let usageToday = 0;
-  if (needsTenantUsageQuery) {
+  let usageMonth = 0;
+  if (planMonthlyLimit > 0) {
+    // One scan covers both windows (month outer, day a FILTER) — cheaper than two.
     const db = buildDatabase(c.env);
-    // Cache-discounted effective-token sum: totalTokens counts cached input at
-    // 1x, so subtract the cache-read discount (0.9x of cache_read) and add the
-    // cache-creation surcharge (0.25x of cache_creation) to land on the billed
-    // weight. Mirrors computeCostMillicents' tiering, token-side.
-    const [usageRow] = await db
-      .select({
-        // Cast the fractional multipliers to float8: as bare bound params next to
-        // integer columns Postgres infers them as integer and rejects "0.9"
-        // (invalid input syntax for type integer). Math.floor below re-integers it.
-        used: sql<number>`COALESCE(SUM(
-          ${llmUsageLog.totalTokens}
-          - (${llmUsageLog.cacheReadTokens} * ${1 - CACHE_READ_MULTIPLIER}::float8)
-          + (${llmUsageLog.cacheCreationTokens} * ${CACHE_CREATION_MULTIPLIER - 1}::float8)
-        ), 0)`,
-      })
-      .from(llmUsageLog)
-      .where(and(
-        eq(llmUsageLog.tenantId, access.tenantId),
-        gte(llmUsageLog.createdAt, utcDayStart()),
-        // Image generation is metered against its OWN daily credit budget
-        // (migration 0131) — exclude image rows so they never consume the chat
-        // token cap (and vice-versa).
-        notInArray(llmUsageLog.llmProduct, [...IMAGE_PRODUCT_NAMES]),
-      ));
-    usageToday = Math.max(0, Math.floor(Number(usageRow?.used ?? 0)));
-
-    // Per-agentHost cap (optional, set per-agentHost in portal)
-    if (access.agentHostId !== null && access.agentHostTokenDailyLimit !== null
-        && usageToday >= access.agentHostTokenDailyLimit) {
-      return {
-        blocked: c.json({
-          error: `Per-agentHost daily token limit reached (${access.agentHostTokenDailyLimit.toLocaleString()} tokens). Increase the limit in the Builderforce portal under AgentHosts → Settings.`,
-          code: 'agent_host_token_limit_exceeded',
-          terminal: true,
-          retryAfter: secondsUntilNextUtcMidnight(),
-        }, 429),
-      };
-    }
-
-    // Plan-level cap (always enforced)
-    if (planDailyLimit > 0 && usageToday >= planDailyLimit) {
-      const upgradeHint = access.effectivePlan === 'free'
-        ? ' Upgrade to Pro at builderforce.ai/pricing.'
-        : access.effectivePlan === 'pro'
-        ? ' Upgrade to Teams for a 5× higher daily budget.'
-        : '';
-      return {
-        blocked: c.json({
-          error: `Plan daily token limit reached (${planDailyLimit.toLocaleString()} tokens).${upgradeHint}`,
-          code: 'plan_token_limit_exceeded',
-          plan: access.effectivePlan,
-          dailyLimit: planDailyLimit,
-          usedToday: usageToday,
-          terminal: true,
-          retryAfter: secondsUntilNextUtcMidnight(),
-        }, 429, { 'Retry-After': String(secondsUntilNextUtcMidnight()) }),
-      };
-    }
+    const usage = await sumTenantTextTokensDayAndMonth(db, access.tenantId, utcDayStart(), utcMonthStart());
+    usageToday = usage.day;
+    usageMonth = usage.month;
+  } else if (needsDaily) {
+    const db = buildDatabase(c.env);
+    usageToday = await sumTenantTextTokens(db, access.tenantId, utcDayStart());
   }
 
-  return { usageToday, planDailyLimit };
+  // Per-agentHost daily cap (optional, set per-agentHost in portal)
+  if (hasHostCap && usageToday >= (access.agentHostTokenDailyLimit as number)) {
+    return {
+      blocked: c.json({
+        error: `Per-agentHost daily token limit reached (${(access.agentHostTokenDailyLimit as number).toLocaleString()} tokens). Increase the limit in the Builderforce portal under AgentHosts → Settings.`,
+        code: 'agent_host_token_limit_exceeded',
+        terminal: true,
+        retryAfter: secondsUntilNextUtcMidnight(),
+      }, 429),
+    };
+  }
+
+  // Plan daily cap
+  if (planDailyLimit > 0 && usageToday >= planDailyLimit) {
+    const upgradeHint = access.effectivePlan === 'free'
+      ? ' Upgrade to Pro at builderforce.ai/pricing.'
+      : access.effectivePlan === 'pro'
+      ? ' Upgrade to Teams for a 5× higher daily budget.'
+      : '';
+    return {
+      blocked: c.json({
+        error: `Plan daily token limit reached (${planDailyLimit.toLocaleString()} tokens).${upgradeHint}`,
+        code: 'plan_token_limit_exceeded',
+        plan: access.effectivePlan,
+        dailyLimit: planDailyLimit,
+        usedToday: usageToday,
+        terminal: true,
+        retryAfter: secondsUntilNextUtcMidnight(),
+      }, 429, { 'Retry-After': String(secondsUntilNextUtcMidnight()) }),
+    };
+  }
+
+  // Plan monthly cap — the consumption-meter allowance. Graceful backpressure:
+  // the tenant's already-processed data stays fully queryable; only NEW gateway
+  // spend on our pool is paused until the month resets (or they upgrade).
+  if (planMonthlyLimit > 0 && usageMonth >= planMonthlyLimit) {
+    const upgradeHint = access.effectivePlan === 'free'
+      ? ' Upgrade to Pro at builderforce.ai/pricing for a higher monthly allowance.'
+      : access.effectivePlan === 'pro'
+      ? ' Upgrade to Teams for an unlimited monthly allowance.'
+      : '';
+    const retryAfter = secondsUntilNextUtcMonth();
+    return {
+      blocked: c.json({
+        error: `Plan monthly token allowance reached (${planMonthlyLimit.toLocaleString()} tokens).${upgradeHint}`,
+        code: 'plan_monthly_token_limit_exceeded',
+        plan: access.effectivePlan,
+        monthlyLimit: planMonthlyLimit,
+        usedThisMonth: usageMonth,
+        terminal: true,
+        retryAfter,
+      }, 429, { 'Retry-After': String(retryAfter) }),
+    };
+  }
+
+  return { usageToday, planDailyLimit, usageMonth, planMonthlyLimit };
 }
 
 /**
@@ -885,9 +901,9 @@ export function createLlmRoutes(): Hono<HonoEnv> {
     if (!requiredKey) return c.json({ error: 'LLM proxy not configured', code: 'proxy_unconfigured' }, 503);
 
     // Our-models path bills US (not the tenant's Anthropic key), so apply the
-    // SAME daily-token cap as /v1/chat/completions — and close the funded
-    // overflow path once the tenant's overflow $ cap is hit.
-    const capResult = await enforceDailyTokenCap(c, access);
+    // SAME daily + monthly token caps as /v1/chat/completions — and close the
+    // funded overflow path once the tenant's overflow $ cap is hit.
+    const capResult = await enforceTokenCaps(c, access);
     if ('blocked' in capResult) return capResult.blocked;
     const disablePaidOverflow = await isPaidOverflowExhausted(c, access);
 
@@ -1110,13 +1126,13 @@ export function createLlmRoutes(): Hono<HonoEnv> {
       body.modelStrict = true;
     }
 
-    // ── Daily token usage + limit checks ────────────────────────────────────
-    // Shared cache-discounted gate (per tenant, per UTC day) — also enforced on
-    // /v1/messages' our-models branch. Returns the 429 to send, or the usage
-    // numbers reused below for the X-Builderforce-Daily-Tokens-* headers.
-    const capResult = await enforceDailyTokenCap(c, access);
+    // ── Token usage + limit checks (daily + monthly) ────────────────────────
+    // Shared cache-discounted gate (per tenant) — also enforced on /v1/messages'
+    // our-models branch. Returns the 429 to send, or the usage numbers reused
+    // below for the X-Builderforce-*-Tokens-* headers.
+    const capResult = await enforceTokenCaps(c, access);
     if ('blocked' in capResult) return capResult.blocked;
-    const { usageToday, planDailyLimit } = capResult;
+    const { usageToday, planDailyLimit, usageMonth, planMonthlyLimit } = capResult;
 
     // ── Idempotency-Key replay (10-min window) ──────────────────────────────
     // First choice: REPLAY the cached original response body (200) so a cron
@@ -1212,12 +1228,17 @@ export function createLlmRoutes(): Hono<HonoEnv> {
     upstreamHeaders.set('x-builderforce-product', llmProduct);
     upstreamHeaders.set('x-builderforce-effective-plan', access.effectivePlan);
     if (access.premiumOverride) upstreamHeaders.set('x-builderforce-premium', 'true');
-    // Daily-token-limit headers — let callers pre-emptively throttle before
-    // they hit the 429 plan_token_limit_exceeded gate.
+    // Token-limit headers — let callers pre-emptively throttle before they hit
+    // the 429 plan_token_(monthly_)limit_exceeded gates.
     if (planDailyLimit > 0) {
       upstreamHeaders.set('x-builderforce-daily-tokens-used', String(usageToday));
       upstreamHeaders.set('x-builderforce-daily-tokens-limit', String(planDailyLimit));
       upstreamHeaders.set('x-builderforce-daily-tokens-remaining', String(Math.max(planDailyLimit - usageToday, 0)));
+    }
+    if (planMonthlyLimit > 0) {
+      upstreamHeaders.set('x-builderforce-monthly-tokens-used', String(usageMonth));
+      upstreamHeaders.set('x-builderforce-monthly-tokens-limit', String(planMonthlyLimit));
+      upstreamHeaders.set('x-builderforce-monthly-tokens-remaining', String(Math.max(planMonthlyLimit - usageMonth, 0)));
     }
 
     // ── Streaming ────────────────────────────────────────────────────────────
@@ -1325,6 +1346,13 @@ export function createLlmRoutes(): Hono<HonoEnv> {
             used:      usageToday,
             limit:     planDailyLimit,
             remaining: Math.max(planDailyLimit - usageToday, 0),
+          },
+        } : {}),
+        ...(planMonthlyLimit > 0 ? {
+          monthlyTokens: {
+            used:      usageMonth,
+            limit:     planMonthlyLimit,
+            remaining: Math.max(planMonthlyLimit - usageMonth, 0),
           },
         } : {}),
       },

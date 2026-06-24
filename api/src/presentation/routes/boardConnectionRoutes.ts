@@ -22,12 +22,16 @@ import type { Db } from '../../infrastructure/database/connection';
 import { SyncEngine, type StoredConnection } from '../../application/boardsync/SyncEngine';
 import { createDrizzleStore, loadConnectionCredentials } from '../../application/boardsync/drizzleStore';
 import { createBoardProvider } from '../../application/boardsync/providers';
-
-const VALID_PROVIDERS = ['github', 'jira'];
+import { BOARD_PROVIDERS, BOARD_PROVIDER_IDS } from '../../application/boardsync/providerCatalog';
 
 export function createBoardConnectionRoutes(db: Db): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
   router.use('*', authMiddleware);
+
+  // GET /api/board-connections/providers — the connectable-board catalog.
+  // Static in-process constant (no DB / no external IO), so no cache layer is
+  // needed; the frontend renders its provider picker from this single source.
+  router.get('/providers', (c) => c.json({ providers: BOARD_PROVIDERS }));
 
   // POST /api/board-connections
   router.post('/', async (c) => {
@@ -46,8 +50,8 @@ export function createBoardConnectionRoutes(db: Db): Hono<HonoEnv> {
     if (!body.projectId || !body.provider) {
       return c.json({ error: 'projectId and provider are required' }, 400);
     }
-    if (!VALID_PROVIDERS.includes(body.provider)) {
-      return c.json({ error: `provider must be one of: ${VALID_PROVIDERS.join(', ')}` }, 400);
+    if (!BOARD_PROVIDER_IDS.includes(body.provider)) {
+      return c.json({ error: `provider must be one of: ${BOARD_PROVIDER_IDS.join(', ')}` }, 400);
     }
 
     // Ensure the project belongs to the tenant.

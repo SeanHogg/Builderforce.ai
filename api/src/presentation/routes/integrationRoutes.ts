@@ -25,6 +25,18 @@ import type { Db } from '../../infrastructure/database/connection';
 import { githubStatusMessage } from '../../application/integrations/githubTestError';
 import { encryptCredentials, decryptCredentials } from '../../application/integrations/credentialCrypto';
 
+/**
+ * Credential providers accepted by this endpoint. Mirrors integrationProviderEnum
+ * in schema.ts (sans google_calendar/rally/freshworks, which are managed by their
+ * own flows). Board-sync providers are a subset of this list.
+ */
+const CREDENTIAL_PROVIDERS = [
+  'github', 'gitlab', 'bitbucket', 'jira', 'confluence',
+  'freshservice', 'servicenow', 'linear', 'sentry', 'pagerduty',
+  'monday', 'asana', 'clickup',
+] as const;
+type CredentialProvider = (typeof CREDENTIAL_PROVIDERS)[number];
+
 /** Mask a credential value for display (show last 4 chars). */
 function maskToken(token: string): string {
   if (token.length <= 4) return '****';
@@ -133,6 +145,96 @@ async function testFreshservice(
     : { ok: false, message: `Freshservice API returned ${res.status}` };
 }
 
+async function testLinear(creds: Record<string, unknown>): Promise<{ ok: boolean; message: string }> {
+  const apiKey = creds.apiKey as string;
+  if (!apiKey) return { ok: false, message: 'apiKey is required' };
+  const res = await fetch('https://api.linear.app/graphql', {
+    method: 'POST',
+    headers: { Authorization: apiKey, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ query: '{ viewer { id } }' }),
+  });
+  if (!res.ok) return { ok: false, message: `Linear API returned ${res.status}` };
+  const json = (await res.json()) as { errors?: unknown[] };
+  return json.errors?.length ? { ok: false, message: 'Linear rejected the API key' } : { ok: true, message: 'Connected' };
+}
+
+async function testSentry(
+  creds: Record<string, unknown>,
+  baseUrl: string | null,
+): Promise<{ ok: boolean; message: string }> {
+  const token = creds.token as string;
+  if (!token) return { ok: false, message: 'token is required' };
+  const root = (baseUrl?.replace(/\/$/, '') || 'https://sentry.io');
+  const res = await fetch(`${root}/api/0/organizations/`, {
+    headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' },
+  });
+  return res.ok
+    ? { ok: true, message: 'Connected' }
+    : { ok: false, message: `Sentry API returned ${res.status}` };
+}
+
+async function testPagerDuty(creds: Record<string, unknown>): Promise<{ ok: boolean; message: string }> {
+  const apiToken = creds.apiToken as string;
+  if (!apiToken) return { ok: false, message: 'apiToken is required' };
+  const res = await fetch('https://api.pagerduty.com/users?limit=1', {
+    headers: { Authorization: `Token token=${apiToken}`, Accept: 'application/vnd.pagerduty+json;version=2' },
+  });
+  return res.ok
+    ? { ok: true, message: 'Connected' }
+    : { ok: false, message: `PagerDuty API returned ${res.status}` };
+}
+
+async function testServiceNow(
+  creds: Record<string, unknown>,
+  baseUrl: string | null,
+): Promise<{ ok: boolean; message: string }> {
+  const username = creds.username as string;
+  const password = creds.password as string;
+  if (!username || !password || !baseUrl) return { ok: false, message: 'username, password, and baseUrl are required' };
+  const url = `${baseUrl.replace(/\/$/, '')}/api/now/table/sys_user?sysparm_limit=1`;
+  const res = await fetch(url, {
+    headers: { Authorization: `Basic ${btoa(`${username}:${password}`)}`, Accept: 'application/json' },
+  });
+  return res.ok
+    ? { ok: true, message: 'Connected' }
+    : { ok: false, message: `ServiceNow API returned ${res.status}` };
+}
+
+async function testMonday(creds: Record<string, unknown>): Promise<{ ok: boolean; message: string }> {
+  const token = creds.token as string;
+  if (!token) return { ok: false, message: 'token is required' };
+  const res = await fetch('https://api.monday.com/v2', {
+    method: 'POST',
+    headers: { Authorization: token, 'Content-Type': 'application/json', 'API-Version': '2024-01' },
+    body: JSON.stringify({ query: '{ me { id } }' }),
+  });
+  if (!res.ok) return { ok: false, message: `monday API returned ${res.status}` };
+  const json = (await res.json()) as { errors?: unknown[] };
+  return json.errors?.length ? { ok: false, message: 'monday rejected the token' } : { ok: true, message: 'Connected' };
+}
+
+async function testAsana(creds: Record<string, unknown>): Promise<{ ok: boolean; message: string }> {
+  const token = creds.accessToken as string;
+  if (!token) return { ok: false, message: 'accessToken is required' };
+  const res = await fetch('https://app.asana.com/api/1.0/users/me', {
+    headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' },
+  });
+  return res.ok
+    ? { ok: true, message: 'Connected' }
+    : { ok: false, message: `Asana API returned ${res.status}` };
+}
+
+async function testClickUp(creds: Record<string, unknown>): Promise<{ ok: boolean; message: string }> {
+  const token = creds.token as string;
+  if (!token) return { ok: false, message: 'token is required' };
+  const res = await fetch('https://api.clickup.com/api/v2/user', {
+    headers: { Authorization: token, Accept: 'application/json' },
+  });
+  return res.ok
+    ? { ok: true, message: 'Connected' }
+    : { ok: false, message: `ClickUp API returned ${res.status}` };
+}
+
 // ---------------------------------------------------------------------------
 // Routes
 // ---------------------------------------------------------------------------
@@ -161,9 +263,8 @@ export function createIntegrationRoutes(db: Db, encryptionSecret: string): Hono<
       return c.json({ error: 'provider, name, and credentials are required' }, 400);
     }
 
-    const validProviders = ['github', 'gitlab', 'bitbucket', 'jira', 'confluence', 'freshservice'];
-    if (!validProviders.includes(body.provider)) {
-      return c.json({ error: `provider must be one of: ${validProviders.join(', ')}` }, 400);
+    if (!CREDENTIAL_PROVIDERS.includes(body.provider as CredentialProvider)) {
+      return c.json({ error: `provider must be one of: ${CREDENTIAL_PROVIDERS.join(', ')}` }, 400);
     }
 
     // Optional project scope — NULL means workspace-global. When set, the
@@ -185,7 +286,7 @@ export function createIntegrationRoutes(db: Db, encryptionSecret: string): Hono<
       .values({
         tenantId,
         projectId,
-        provider:       body.provider as 'github' | 'gitlab' | 'bitbucket' | 'jira' | 'confluence' | 'freshservice',
+        provider:       body.provider as CredentialProvider,
         name:           body.name.trim(),
         baseUrl:        body.baseUrl ?? null,
         credentialsEnc: enc,
@@ -366,6 +467,27 @@ export function createIntegrationRoutes(db: Db, encryptionSecret: string): Hono<
         break;
       case 'freshservice':
         result = await testFreshservice(creds, row.baseUrl);
+        break;
+      case 'linear':
+        result = await testLinear(creds);
+        break;
+      case 'sentry':
+        result = await testSentry(creds, row.baseUrl);
+        break;
+      case 'pagerduty':
+        result = await testPagerDuty(creds);
+        break;
+      case 'servicenow':
+        result = await testServiceNow(creds, row.baseUrl);
+        break;
+      case 'monday':
+        result = await testMonday(creds);
+        break;
+      case 'asana':
+        result = await testAsana(creds);
+        break;
+      case 'clickup':
+        result = await testClickUp(creds);
         break;
       default:
         result = { ok: false, message: `Connectivity test not available for provider: ${row.provider}` };

@@ -1,6 +1,8 @@
 import type { Metadata } from 'next';
 import Script from 'next/script';
 import { JetBrains_Mono } from 'next/font/google';
+import { NextIntlClientProvider } from 'next-intl';
+import { getLocale, getMessages } from 'next-intl/server';
 import './globals.css';
 import { AuthProvider } from '@/lib/AuthContext';
 import { CartProvider } from '@/lib/CartContext';
@@ -95,9 +97,12 @@ export const viewport = {
   ],
 };
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
+  // Active locale + its catalog (only this one language is sent to the client).
+  const locale = await getLocale();
+  const messages = await getMessages();
   return (
-    <html lang="en" data-theme="dark" suppressHydrationWarning className={jetbrainsMono.variable}>
+    <html lang={locale} data-theme="dark" suppressHydrationWarning className={jetbrainsMono.variable}>
       <head>
         {/* Google Tag Manager — uses next/script so Next.js can manage loading strategy */}
         <Script
@@ -145,24 +150,27 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         {/* Client island: syncs icon labels after JS hydrates */}
         <ThemeProvider />
 
-        <ErrorBoundary homePath="/dashboard" homeLabel="Go to Dashboard">
-          <AuthProvider>
-            <CartProvider>
-              <EmulationProvider>
-                <RolePreviewProvider>
-                  <PermissionDebuggerProvider>
-                    <ConditionalAppShell>{children}</ConditionalAppShell>
-                  </PermissionDebuggerProvider>
-                </RolePreviewProvider>
-              </EmulationProvider>
-            </CartProvider>
-          </AuthProvider>
+        {/* Only the active locale's catalog is passed down — never all five. */}
+        <NextIntlClientProvider locale={locale} messages={messages}>
+          <ErrorBoundary homePath="/dashboard" homeLabel="Go to Dashboard">
+            <AuthProvider>
+              <CartProvider>
+                <EmulationProvider>
+                  <RolePreviewProvider>
+                    <PermissionDebuggerProvider>
+                      <ConditionalAppShell>{children}</ConditionalAppShell>
+                    </PermissionDebuggerProvider>
+                  </RolePreviewProvider>
+                </EmulationProvider>
+              </CartProvider>
+            </AuthProvider>
 
-          <GlobalErrorHandler />
-        </ErrorBoundary>
+            <GlobalErrorHandler />
+          </ErrorBoundary>
 
-        <PwaUpdateBanner />
-        <PwaInstallPrompt />
+          <PwaUpdateBanner />
+          <PwaInstallPrompt />
+        </NextIntlClientProvider>
       </body>
     </html>
   );

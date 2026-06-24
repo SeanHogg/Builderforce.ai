@@ -10,7 +10,7 @@
 export const BRAND = {
   name: 'Builderforce.ai',
   legalName: 'Builderforce',
-  tagline: 'Your AI CTO, CIO & Security Officer',
+  tagline: 'The innovation platform for the agentic era',
   url: 'https://builderforce.ai',
   founder: { name: 'Sean Hogg', url: 'https://hired.video/resumes/seanhogg' },
   year: 2026,
@@ -18,7 +18,7 @@ export const BRAND = {
   ogImageWidth: 1200,
   ogImageHeight: 630,
   /** ISO 8601 — update on each content deploy */
-  dateModified: '2026-06-21T00:00:00Z',
+  dateModified: '2026-06-23T00:00:00Z',
 } as const;
 
 /* ════════════════════ STATS ════════════════════ */
@@ -33,6 +33,9 @@ export const STATS = {
   ],
   /** Quotable one-liners for AI citability */
   quotable: {
+    systemOfRecord: 'Builderforce.ai is the system of record for the agentic enterprise: every unit of work — human or agent — is instrumented, costed, and attributed from idea to ship to learn, on one board governed by roles, approvals, and a full audit trail.',
+    enterpriseInnovation: 'Builderforce.ai is an end-to-end innovation platform for the agentic era — plan, build, ship, and measure with a workforce of humans and AI agents on a single instrumented system, priced as a platform rather than per-seat enterprise software.',
+    roleBasedInsight: 'Because every action is instrumented and costed, every role gets its own operating picture from the same data: delivery and DORA for engineering, cost and FinOps for finance, portfolio and innovation funnel for the PMO and CEO, and an immutable audit trail for security.',
     humanInLoopAgentic: 'Builderforce.ai is a human-in-the-loop, fully agentic cloud: train your own AI agents and put them to work inside your own agent, running a whole workforce from a Kanban board — all without ever leaving VS Code.',
     trainAndUseLoop: 'Train a custom agent, publish it to the Workforce Registry, then hire it and call it from inside your own agent — your trained specialists become tools your main agent delegates to.',
     neverLeaveVsCode: 'The BuilderForce VS Code extension runs the whole platform in your editor — chat with agents, assign and run tasks, review and validate their work, and approve actions without leaving VS Code.',
@@ -455,7 +458,7 @@ export const COMPARE = {
       'GitHub Copilot finishes your line. Cursor rewrites your function. Builderforce.ai plans the feature, coordinates a team of specialist agents to build, review and test it, governs every action with approvals and an audit trail, and remembers what your project decided last sprint. Self-hosted, MIT-licensed, and model-agnostic.',
   },
   intro:
-    'Most AI coding tools are powerful autocomplete engines that stop at the file boundary. Builderforce.ai operates one level up: it builds, trains and deploys an AI agent workforce, connects to your systems, and governs every action like an AI CTO, CIO and Security Officer. The tables below compare Builderforce.ai against the tools teams evaluate most often, focused on the capabilities that separate shipping a feature from finishing a line.',
+    'Most AI coding tools are powerful autocomplete engines that stop at the file boundary. Builderforce.ai operates one level up: it is the system of record for agentic work — building, training and deploying an AI agent workforce, connecting to your systems, instrumenting and costing every action, and governing it with roles, approvals and an audit trail. The tables below compare Builderforce.ai against the tools teams evaluate most often, focused on the capabilities that separate running an innovation organization from finishing a line.',
   pillars: [
     {
       icon: '🛡️',
@@ -515,7 +518,11 @@ export interface FaqItem {
 export const HOMEPAGE_FAQ: FaqItem[] = [
   {
     question: 'What is Builderforce.ai?',
-    answer: 'Builderforce.ai is a human-in-the-loop, fully agentic cloud that acts as your AI CTO, CIO and Security Officer. You train your own AI agents and put them to work inside your own agent, manage the whole workforce from a Kanban board, and review and approve every action — all without leaving VS Code. It builds, trains and deploys a custom AI agent workforce in the browser (dataset generation, WebGPU LoRA training, AI evaluation, and the Workforce Registry), connects to your systems and data, and governs every action with approval gates and an audit trail.',
+    answer: 'Builderforce.ai is the innovation platform for the agentic era — a single system of record where every unit of work, done by a human or an AI agent, is instrumented, costed, and attributed from idea to ship to learn. You plan, build, ship, and measure with one workforce of humans and agents on a Kanban board, train your own agents in the browser (dataset generation, WebGPU LoRA training, AI evaluation, and the Workforce Registry), connect to your systems and data, and govern every action with roles, approval gates, and a full audit trail — all without leaving VS Code.',
+  },
+  {
+    question: 'Is Builderforce.ai an enterprise platform?',
+    answer: 'Yes — it is built to operate like an enterprise system of record, without enterprise pricing. Because every action (human or agent) is instrumented and costed, the whole organization works from one source of truth instead of stitching together a board, a code host, an observability tool, a FinOps tool, and spreadsheets. Each role gets its own operating picture from the same data: delivery and DORA for engineering, cost and budgets for finance, portfolio rollup and the innovation funnel for the PMO and CEO, and an immutable audit trail for security. Access is governed by workspace roles (owner, manager, developer, viewer), so people see what their role allows.',
   },
   {
     question: 'Can I train my own agents and use them inside my own agent?',
@@ -781,6 +788,26 @@ export const DEFINED_TERMS: DefinedTermEntry[] = [
     name: 'Cross-surface semantic cache',
     description: 'An embedding-keyed cache that reuses a prior answer when a new prompt is a paraphrase of one already answered, so the frontier model is never billed twice for the same work. Builderforce.ai runs it in two tiers — a free on-device layer (SSM embeddings, in the browser and in each agent) and a shared tenant-scoped gateway layer — so a cache hit in the web app saves tokens for agents too.',
   },
+  {
+    name: 'System of record for agentic work',
+    description: 'A single platform where every unit of work — performed by a human or an AI agent — is captured, costed, and attributed across its whole lifecycle from idea to ship to learn. Builderforce.ai instruments every task transition, agent run, LLM call, and deployment, so the same data answers what was built, by whom (human or agent), at what cost, and whether it worked — without stitching together a board, a code host, an observability tool, and a spreadsheet.',
+  },
+  {
+    name: 'AI FinOps',
+    description: 'The financial-operations discipline of attributing, budgeting, and forecasting the cost of AI work. On Builderforce.ai every token and task is priced at write time and rolled up ticket → project → initiative → tenant, so finance can see cost-per-outcome (such as cost per merged pull request), set budgets, and forecast spend instead of reconciling vendor invoices after the fact.',
+  },
+  {
+    name: 'Innovation funnel',
+    description: 'The end-to-end pipeline an idea travels on Builderforce.ai — idea → validated → in-build → shipped → measured — with conversion and time-to-value tracked at each stage. It gives executives a throughput-and-ROI view of innovation the way a sales funnel gives a revenue view of pipeline.',
+  },
+  {
+    name: 'Role-based insight lens',
+    description: 'A view onto the same instrumented work tailored to a role: delivery and DORA metrics for engineering, cost and FinOps for finance, portfolio rollup and the innovation funnel for the PMO and CEO, and an immutable audit trail for security. Because the data is collected once and attributed, each lens is a projection of one source of truth rather than a separate report.',
+  },
+  {
+    name: 'Agentic Maturity Index',
+    description: 'A CMMI/COBIT-style maturity model that rates how a technology organization runs across six practices — software delivery, release & operations (DORA), quality assurance, project management, agentic AI operations, and governance & security — on a 1–5 scale (Initial → Optimizing). Builderforce.ai scores it two ways: a free, logged-out self-assessment, and a data-driven diagnostic that derives each practice level objectively from real telemetry (cycle time, DORA, rework, run outcomes), then outputs a prioritized plan to mature and innovate.',
+  },
 ];
 
 /* ════════════════════ PRODUCT SURFACES (public capability tour) ════════════════════ */
@@ -856,6 +883,7 @@ export const PRODUCT_SECTIONS: ProductSection[] = [
       { icon: '✅', title: 'Approvals', desc: 'Human-in-the-loop approval gates on every sensitive action your agents take.', href: '/workforce?tab=approvals' },
       { icon: '🔒', title: 'Security', desc: 'Per-tenant isolation and AES-256-GCM encrypted credentials for every integration.', href: '/security' },
       { icon: '📊', title: 'Observability', desc: 'Full telemetry and an audit trail of every agent action, token, and tool call.', href: '/workforce?tab=logs' },
+      { icon: '📈', title: 'Maturity Diagnostic', desc: 'Rate every practice (Dev, QA, DevOps, PMO, governance) on a CMMI/COBIT-style 1–5 scale — free to self-assess, or scored objectively from your real delivery data with a prioritized plan to mature and innovate.', href: '/diagnostics' },
       { icon: '🏢', title: 'Tenants & Workspaces', desc: 'Multi-tenant workspaces with per-seat roles, members, and cost controls.', href: '/tenants' },
     ],
   },
@@ -892,6 +920,7 @@ export const FOOTER_COLUMNS: FooterColumn[] = [
     links: [
       { href: '/marketplace', label: 'Workforce Registry' },
       { href: '/agents', label: 'BuilderForce Agents' },
+      { href: '/tools', label: 'Diagnostics & Tools' },
       { href: '/blog', label: 'Blog' },
     ],
   },
@@ -1138,9 +1167,9 @@ export const INTEGRATION_SLUG_MAP: Record<string, IntegrationSeo> = Object.fromE
  */
 export const RELATED_ARTICLES: Record<string, string[]> = {
   product: [
+    'system-of-record-for-agentic-work',
+    'every-role-operating-picture',
     'autonomous-swimlane-execution',
-    'semantic-response-cache',
-    'task-execution-and-observability',
   ],
   compare: [
     'best-ai-coding-agents-compared',
@@ -1148,9 +1177,9 @@ export const RELATED_ARTICLES: Record<string, string[]> = {
     'builderforce-vs-cursor-windsurf',
   ],
   pricing: [
+    'system-of-record-for-agentic-work',
     'semantic-response-cache',
     'best-ai-coding-agents-compared',
-    'getting-started-with-ai-agents',
   ],
   // Per-competitor leaf pages — keyed by the COMPETITORS column key. Each points
   // at its dedicated head-to-head post first, then the roundup for context.
@@ -1170,9 +1199,10 @@ export const RELATED_ARTICLES: Record<string, string[]> = {
   skills: ['skills-assignment-and-the-marketplace', 'builderforce-agents-and-agent-integration', 'best-ai-coding-agents-compared'],
   personas: ['builderforce-agents-and-agent-integration', 'multi-agent-orchestration', 'skills-assignment-and-the-marketplace'],
   'content-manager': ['skills-assignment-and-the-marketplace', 'product-ideation-with-builderforce'],
-  security: ['security-and-multi-tenant-architecture', 'approval-gates-and-human-oversight'],
-  contributors: ['task-execution-and-observability', 'multi-agent-orchestration'],
-  dashboard: ['introduction-and-overview', 'task-execution-and-observability', 'autonomous-swimlane-execution'],
+  security: ['every-role-operating-picture', 'security-and-multi-tenant-architecture', 'approval-gates-and-human-oversight'],
+  contributors: ['every-role-operating-picture', 'task-execution-and-observability', 'multi-agent-orchestration'],
+  dashboard: ['system-of-record-for-agentic-work', 'every-role-operating-picture', 'introduction-and-overview'],
   agents: ['builderforce-agents-and-agent-integration', 'fleet-management-and-agent-routing', 'multi-agent-orchestration'],
   prompts: ['specs-and-planning-with-ai', 'product-ideation-with-builderforce', 'getting-started-with-ai-agents'],
+  diagnostics: ['system-of-record-for-agentic-work', 'every-role-operating-picture', 'task-execution-and-observability'],
 };
