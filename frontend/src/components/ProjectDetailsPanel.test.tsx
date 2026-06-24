@@ -22,6 +22,10 @@ describe('ProjectDetailsPanel', () => {
     vi.useFakeTimers();
     vi.resetAllMocks();
     vi.spyOn(builderforceApi, 'checkProjectKeyAvailable').mockImplementation(async (key) => ({ available: true, key }));
+    // The panel embeds the PMO initiative picker, which loads the PMO tree on mount
+    // via pmoApi.tree(); give the automocked call a resolved (empty) tree so
+    // usePmData's loader resolves instead of crashing on `undefined.then`.
+    vi.spyOn(builderforceApi.pmoApi, 'tree').mockResolvedValue({ portfolios: [], initiatives: [], projects: [], dependencies: [] });
   });
 
   afterEach(() => {

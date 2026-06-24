@@ -40,3 +40,35 @@ vi.mock('next-intl', async (importOriginal) => {
     NextIntlClientProvider: ({ children }: { children: unknown }) => children,
   };
 });
+
+/**
+ * Global auth context default for the test environment.
+ *
+ * `useAuth()` throws "must be used within an AuthProvider" with no provider in the
+ * tree — so any component embedding a {@link RoleGate}/`usePermission` (e.g. the PMO
+ * initiative picker inside the project details panel) fails a test that renders it
+ * without wrapping AuthProvider. Mirroring the existing per-file precedent
+ * (FloatingBrain.test.tsx), default `useAuth` here to an owner-scoped workspace so
+ * the REAL rbac logic runs and capability gates resolve `allowed` (controls stay
+ * interactive, not disabled). Preserves every other export (AuthProvider, etc.);
+ * a test needing different auth still overrides with its own per-file `vi.mock`.
+ */
+vi.mock('@/lib/AuthContext', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/lib/AuthContext')>();
+  return {
+    ...actual,
+    useAuth: () => ({
+      user: null,
+      tenant: { role: 'owner' },
+      webToken: null,
+      tenantToken: null,
+      isAuthenticated: true,
+      hasTenant: true,
+      login: async () => {},
+      register: async () => {},
+      selectTenant: async () => {},
+      fetchTenants: async () => [],
+      logout: () => {},
+    }),
+  };
+});
