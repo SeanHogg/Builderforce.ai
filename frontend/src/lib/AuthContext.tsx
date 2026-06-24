@@ -142,3 +142,12 @@ export function useAuth(): AuthContextValue {
   if (!ctx) throw new Error('useAuth must be used within an AuthProvider');
   return ctx;
 }
+
+/**
+ * Non-throwing variant: returns null when there is no AuthProvider above. For
+ * shared components (e.g. RoleGate) that may render outside the provider (tests,
+ * isolated previews) and must degrade gracefully instead of crashing the tree.
+ */
+export function useOptionalAuth(): AuthContextValue | null {
+  return useContext(AuthContext);
+}

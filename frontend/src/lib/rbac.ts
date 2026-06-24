@@ -1,6 +1,6 @@
 'use client';
 
-import { useAuth } from './AuthContext';
+import { useOptionalAuth } from './AuthContext';
 
 /**
  * Frontend mirror of the API's tenant RBAC model
@@ -88,10 +88,11 @@ export interface PermissionResult {
   requiredLabel: string;
 }
 
-/** The current user's role in the active workspace (undefined when unknown). */
+/** The current user's role in the active workspace (undefined when unknown or
+ *  when rendered outside an AuthProvider — so RoleGate never crashes the tree). */
 export function useRole(): TenantRole | undefined {
-  const { tenant } = useAuth();
-  const role = tenant?.role as TenantRole | undefined;
+  const auth = useOptionalAuth();
+  const role = auth?.tenant?.role as TenantRole | undefined;
   return role && ROLE_ORDER.includes(role) ? role : undefined;
 }
 
