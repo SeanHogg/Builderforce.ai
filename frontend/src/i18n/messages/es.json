@@ -49,6 +49,11 @@
     "snapshotSaved": "Instantánea guardada ✓",
     "history": "Historial"
   },
+  "notFound": {
+    "title": "Página no encontrada",
+    "message": "La página que buscas no existe o se ha movido.",
+    "home": "Volver al inicio"
+  },
   "common": {
     "language": "Idioma"
   },
