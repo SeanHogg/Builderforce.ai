@@ -49,6 +49,11 @@
     "snapshotSaved": "Snapshot saved ✓",
     "history": "History"
   },
+  "notFound": {
+    "title": "Page not found",
+    "message": "The page you’re looking for doesn’t exist or has moved.",
+    "home": "Back to home"
+  },
   "common": {
     "language": "Language"
   },

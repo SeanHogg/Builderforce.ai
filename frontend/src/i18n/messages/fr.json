@@ -49,6 +49,11 @@
     "snapshotSaved": "Instantané enregistré ✓",
     "history": "Historique"
   },
+  "notFound": {
+    "title": "Page introuvable",
+    "message": "La page que vous recherchez n’existe pas ou a été déplacée.",
+    "home": "Retour à l’accueil"
+  },
   "common": {
     "language": "Langue"
   },

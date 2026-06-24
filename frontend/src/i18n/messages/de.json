@@ -49,6 +49,11 @@
     "snapshotSaved": "Snapshot gespeichert ✓",
     "history": "Verlauf"
   },
+  "notFound": {
+    "title": "Seite nicht gefunden",
+    "message": "Die gesuchte Seite existiert nicht oder wurde verschoben.",
+    "home": "Zurück zur Startseite"
+  },
   "common": {
     "language": "Sprache"
   },
