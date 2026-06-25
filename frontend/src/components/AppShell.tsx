@@ -2,6 +2,7 @@
 
 import { usePathname } from 'next/navigation';
 import Sidebar from './Sidebar';
+import SectionTabs from './SectionTabs';
 import TopBar from './TopBar';
 import MobileBottomNav from './MobileBottomNav';
 import EmulationBar from './EmulationBar';
@@ -17,6 +18,14 @@ function isProjectIdPage(pathname: string | null): boolean {
 
 function isIdePage(pathname: string | null): boolean {
   return pathname != null && pathname.startsWith('/ide/');
+}
+
+/** Deep full-screen routes (the IDE editor + a single project) render edge-to-edge
+ *  with no section tab bar. The IDE launcher + Voice Studio still show tabs. */
+function isFullScreenRoute(pathname: string | null): boolean {
+  if (pathname == null) return false;
+  if (isProjectIdPage(pathname)) return true;
+  return /^\/ide\/(?!dashboard$|voice$)[^/]+/.test(pathname);
 }
 
 export default function AppShell({ children }: { children: React.ReactNode }) {
@@ -39,7 +48,10 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       >
         <TopBar onMenuClick={openNav} />
         <Sidebar collapsed={navCollapsed} onToggleCollapsed={toggleNav} mobileOpen={navOpen} onMobileClose={closeNav} />
-        <main className="content" style={{ width: '100%', paddingLeft: 0 }}>{children}</main>
+        <main className="content" style={{ width: '100%', paddingLeft: 0 }}>
+          {!isFullScreenRoute(pathname) && <SectionTabs />}
+          {children}
+        </main>
       </div>
       <MobileBottomNav />
     </div>

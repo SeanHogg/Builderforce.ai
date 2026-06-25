@@ -1,4 +1,26 @@
 {
+  "nav": {
+    "menu": "菜单",
+    "expandSidebar": "展开侧边栏",
+    "collapseSidebar": "收起侧边栏",
+    "closeMenu": "关闭菜单",
+    "group": {
+      "dashboard": "仪表板", "brainstorm": "头脑风暴", "projects": "项目", "ide": "IDE",
+      "workflows": "工作流", "workforce": "团队", "insights": "洞察", "library": "资源库",
+      "settings": "设置", "admin": "管理"
+    },
+    "tab": {
+      "projects": "项目", "tasks": "任务", "planning": "规划", "portfolio": "项目组合", "ceremonies": "仪式",
+      "workspace": "工作区", "voice": "语音工作室",
+      "aiEffectiveness": "AI 效能", "dora": "DORA", "finops": "FinOps", "funnel": "创新漏斗", "compliance": "合规",
+      "content": "内容", "skills": "技能", "personas": "人设", "prompts": "提示词",
+      "settings": "通用", "security": "安全", "billing": "账单", "tenant": "工作区", "apiKeys": "API 密钥"
+    }
+  },
+  "ceremonies": {
+    "noProjects": "暂无项目",
+    "selectProject": "选择一个项目以开始仪式。"
+  },
   "tools": {
     "outOf5": "满分 5.0",
     "breakdown": "明细",

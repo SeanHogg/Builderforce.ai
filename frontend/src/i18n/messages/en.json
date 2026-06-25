@@ -1,4 +1,26 @@
 {
+  "nav": {
+    "menu": "Menu",
+    "expandSidebar": "Expand sidebar",
+    "collapseSidebar": "Collapse sidebar",
+    "closeMenu": "Close menu",
+    "group": {
+      "dashboard": "Dashboard", "brainstorm": "Brain Storm", "projects": "Projects", "ide": "IDE",
+      "workflows": "Workflows", "workforce": "Workforce", "insights": "Insights", "library": "Library",
+      "settings": "Settings", "admin": "Admin"
+    },
+    "tab": {
+      "projects": "Projects", "tasks": "Tasks", "planning": "Planning", "portfolio": "Portfolio", "ceremonies": "Ceremonies",
+      "workspace": "Workspace", "voice": "Voice Studio",
+      "aiEffectiveness": "AI Effectiveness", "dora": "DORA", "finops": "FinOps", "funnel": "Innovation Funnel", "compliance": "Compliance",
+      "content": "Content", "skills": "Skills", "personas": "Personas", "prompts": "Prompts",
+      "settings": "General", "security": "Security", "billing": "Billing", "tenant": "Workspaces", "apiKeys": "API Keys"
+    }
+  },
+  "ceremonies": {
+    "noProjects": "No projects",
+    "selectProject": "Select a project to start a ceremony."
+  },
   "tools": {
     "outOf5": "out of 5.0",
     "breakdown": "Breakdown",
