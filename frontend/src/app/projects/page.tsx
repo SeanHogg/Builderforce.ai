@@ -5,37 +5,36 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuth } from '@/lib/AuthContext';
 import { useOptionalBrainContext } from '@/lib/brain';
 import { ProjectsContent } from '@/components/ProjectsContent';
-import { TabCountBadge } from '@/components/TabCountBadge';
 import PageContainer from '@/components/PageContainer';
 import { TaskMgmtContent } from '@/components/TaskMgmtContent';
 import { PmScopeProvider } from '@/lib/pm/scope';
 import { PmVisualizersContent } from '@/components/pm/PmVisualizersContent';
+import { PmoContent } from '@/components/pm/PmoContent';
+import { CeremoniesContent } from '@/components/ceremony/CeremoniesContent';
+import { RoleGate } from '@/components/RoleGate';
 
-type Tab = 'projects' | 'tasks' | 'pm';
-
-const TABS: { id: Tab; label: string }[] = [
-  { id: 'projects', label: 'Projects' },
-  { id: 'tasks', label: 'Tasks' },
-  { id: 'pm', label: 'Planning' },
-];
+type Tab = 'projects' | 'tasks' | 'pm' | 'portfolio' | 'ceremonies';
 
 /**
- * Projects / Tasks — one domain page with two tabs:
- *  - Projects: the project list (reusable {@link ProjectsContent}).
- *  - Tasks: the task board/list (reusable {@link TaskMgmtContent}).
- *
- * `?tab=tasks` opens the Tasks tab; `?project=<id>` scopes the Tasks board to one
- * project (set by the Task board button on a project). The legacy `/tasks` route
- * redirects here preserving those params.
+ * Projects — the single destination for all project work. Its sub-views are
+ * tabs (rendered by the shared <SectionTabs> bar in the app shell, driven by
+ * lib/navGroups), so none of them is a separate menu item:
+ *   - Projects   : the project list.
+ *   - Tasks      : the task board/list (`?project=<id>` scopes it).
+ *   - Planning   : PM visualizers (gantt/calendar) for the scoped project.
+ *   - Portfolio  : the PMO / initiative / OKR cockpit (was /pmo).
+ *   - Ceremonies : the standup/planning round-table (was /ceremonies).
+ * The active tab is read from `?tab=` (single source of truth). Legacy /pmo and
+ * /ceremonies redirect here.
  */
 export default function ProjectsTasksPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { isAuthenticated, hasTenant } = useAuth();
   const brain = useOptionalBrainContext();
-  // Count is owned by ProjectsContent (it fetches the list); it reports up so we
-  // can show it on the Projects tab.
-  const [projectCount, setProjectCount] = useState<number | null>(null);
+  // ProjectsContent fetches the list and reports the count up; we don't render it
+  // here anymore (the tab bar moved to the shell), so only the setter is kept.
+  const [, setProjectCount] = useState<number | null>(null);
 
   useEffect(() => {
     if (!isAuthenticated) {
@@ -45,14 +44,17 @@ export default function ProjectsTasksPage() {
     }
   }, [isAuthenticated, hasTenant, router]);
 
-  // Active tab is derived from the URL (single source of truth) — no mirrored state.
   const tabParam = searchParams.get('tab');
-  const activeTab: Tab = tabParam === 'tasks' ? 'tasks' : tabParam === 'pm' ? 'pm' : 'projects';
+  const activeTab: Tab =
+    tabParam === 'tasks' ? 'tasks'
+    : tabParam === 'pm' ? 'pm'
+    : tabParam === 'portfolio' ? 'portfolio'
+    : tabParam === 'ceremonies' ? 'ceremonies'
+    : 'projects';
   const projectParam = Number(searchParams.get('project'));
   const scopedProjectId = Number.isFinite(projectParam) && projectParam > 0 ? projectParam : undefined;
 
-  // Publish the scoped project to the Brain so "create a task" here defaults to
-  // it. Clear on unmount/navigation so the Brain doesn't keep a stale project.
+  // Publish the scoped project to the Brain so "create a task" here defaults to it.
   const setBrainContext = brain?.setContext;
   useEffect(() => {
     if (!setBrainContext) return;
@@ -62,57 +64,21 @@ export default function ProjectsTasksPage() {
 
   if (!isAuthenticated || !hasTenant) return null;
 
-  const selectTab = (tab: Tab) => {
-    const params = new URLSearchParams(searchParams.toString());
-    if (tab === 'projects') params.delete('tab');
-    else params.set('tab', tab);
-    const qs = params.toString();
-    router.replace(`/projects${qs ? `?${qs}` : ''}`, { scroll: false });
-  };
-
   return (
     <PageContainer style={{ padding: '20px 16px' }}>
-        <h1 style={{ fontSize: '1.5rem', fontWeight: 700, marginBottom: 16 }}>Projects / Tasks</h1>
-
-        {/* Tabs */}
-        <div
-          style={{
-            display: 'flex',
-            gap: 2,
-            borderBottom: '1px solid var(--border-subtle)',
-            marginBottom: 24,
-          }}
-        >
-          {TABS.map(({ id, label }) => (
-            <button
-              key={id}
-              type="button"
-              onClick={() => selectTab(id)}
-              style={{
-                padding: '12px 18px',
-                fontSize: 14,
-                fontWeight: 600,
-                color: activeTab === id ? 'var(--coral-bright)' : 'var(--text-secondary)',
-                background: 'none',
-                border: 'none',
-                borderBottom: activeTab === id ? '2px solid var(--coral-bright)' : '2px solid transparent',
-                cursor: 'pointer',
-                marginBottom: -1,
-              }}
-            >
-              {label}
-              {id === 'projects' && <TabCountBadge count={projectCount} />}
-            </button>
-          ))}
-        </div>
-
-        {activeTab === 'projects' && <ProjectsContent onCount={setProjectCount} />}
-        {activeTab === 'tasks' && <TaskMgmtContent projectId={scopedProjectId} />}
-        {activeTab === 'pm' && (
-          <PmScopeProvider projectId={scopedProjectId ?? null}>
-            <PmVisualizersContent />
-          </PmScopeProvider>
-        )}
+      {activeTab === 'projects' && <ProjectsContent onCount={setProjectCount} />}
+      {activeTab === 'tasks' && <TaskMgmtContent projectId={scopedProjectId} />}
+      {activeTab === 'pm' && (
+        <PmScopeProvider projectId={scopedProjectId ?? null}>
+          <PmVisualizersContent />
+        </PmScopeProvider>
+      )}
+      {activeTab === 'portfolio' && (
+        <RoleGate capability="insights.portfolio" variant="block">
+          <PmoContent />
+        </RoleGate>
+      )}
+      {activeTab === 'ceremonies' && <CeremoniesContent />}
     </PageContainer>
   );
 }
