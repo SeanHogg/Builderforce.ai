@@ -12,6 +12,8 @@ import { PmVisualizersContent } from '@/components/pm/PmVisualizersContent';
 import { PmoContent } from '@/components/pm/PmoContent';
 import { CeremoniesContent } from '@/components/ceremony/CeremoniesContent';
 import { RoleGate } from '@/components/RoleGate';
+import { usePublishNavCount } from '@/lib/navCounts';
+import { PROJECTS_COUNT_KEY } from '@/lib/navGroups';
 
 type Tab = 'projects' | 'tasks' | 'pm' | 'portfolio' | 'ceremonies';
 
@@ -32,9 +34,11 @@ export default function ProjectsTasksPage() {
   const searchParams = useSearchParams();
   const { isAuthenticated, hasTenant } = useAuth();
   const brain = useOptionalBrainContext();
-  // ProjectsContent fetches the list and reports the count up; we don't render it
-  // here anymore (the tab bar moved to the shell), so only the setter is kept.
-  const [, setProjectCount] = useState<number | null>(null);
+  // ProjectsContent fetches the list and reports the count up; we publish it to
+  // the shared nav-counts store so the shell <SectionTabs> bar shows the badge on
+  // the Projects tab (the tab bar lives in the app shell, not this page).
+  const [projectCount, setProjectCount] = useState<number | null>(null);
+  usePublishNavCount(PROJECTS_COUNT_KEY, projectCount);
 
   useEffect(() => {
     if (!isAuthenticated) {

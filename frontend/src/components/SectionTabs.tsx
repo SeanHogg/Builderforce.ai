@@ -6,6 +6,8 @@ import { usePathname, useSearchParams } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import { getStoredTenant } from '@/lib/auth';
 import { findActiveGroup, activeRouteTabId, tabHref, type NavTab } from '@/lib/navGroups';
+import { useNavCounts } from '@/lib/navCounts';
+import { TabCountBadge } from '@/components/TabCountBadge';
 
 /**
  * The one tab bar for the whole app. It self-decides from the route which
@@ -36,6 +38,7 @@ export default function SectionTabs() {
   const t = useTranslations('nav');
   const pathname = usePathname() || '';
   const searchParams = useSearchParams();
+  const counts = useNavCounts();
 
   const group = findActiveGroup(pathname);
   if (!group || !group.tabs || group.tabs.length === 0) return null;
@@ -64,6 +67,7 @@ export default function SectionTabs() {
             >
               <span aria-hidden="true" style={{ fontSize: 15 }}>{tab.icon}</span>
               <span>{t(tab.labelKey)}</span>
+              {tab.countKey && <TabCountBadge count={counts[tab.countKey]} />}
             </Link>
           );
         })}
