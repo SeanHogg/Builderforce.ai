@@ -18,6 +18,10 @@
 
 import { isNavItemActive } from './nav';
 
+/** Count-badge key for the Projects tab (published by the Projects page, read by
+ *  <SectionTabs>). Lives here so the config + publisher share one constant. */
+export const PROJECTS_COUNT_KEY = 'projects';
+
 export interface NavTab {
   /** For kind:'query' this is the `?tab=` value (default tab uses '' / omitted). */
   id: string;
@@ -28,6 +32,8 @@ export interface NavTab {
   activePaths?: string[];
   /** Hidden from non-owners (e.g. API keys). */
   ownerOnly?: boolean;
+  /** When set, the tab shows a count badge from the navCounts store under this key. */
+  countKey?: string;
 }
 
 export interface NavGroup {
@@ -56,7 +62,7 @@ export const NAV_GROUPS: NavGroup[] = [
     match: ['/projects', '/tasks', '/pmo', '/ceremonies'],
     tabKind: 'query', basePath: '/projects',
     tabs: [
-      { id: '', labelKey: 'tab.projects', icon: '▦' },
+      { id: '', labelKey: 'tab.projects', icon: '▦', countKey: PROJECTS_COUNT_KEY },
       { id: 'tasks', labelKey: 'tab.tasks', icon: '✓' },
       { id: 'pm', labelKey: 'tab.planning', icon: '🗺' },
       { id: 'portfolio', labelKey: 'tab.portfolio', icon: '📊' },

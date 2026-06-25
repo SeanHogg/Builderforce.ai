@@ -11,6 +11,7 @@ import QaTelemetry from './QaTelemetry';
 import { useEmulation } from '@/lib/EmulationContext';
 import { useSidebarCollapse } from '@/lib/useSidebarCollapse';
 import { useMobileNav } from '@/lib/useMobileNav';
+import { NavCountsProvider } from '@/lib/navCounts';
 
 function isProjectIdPage(pathname: string | null): boolean {
   return pathname != null && /^\/projects\/[^/]+$/.test(pathname);
@@ -48,10 +49,12 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       >
         <TopBar onMenuClick={openNav} />
         <Sidebar collapsed={navCollapsed} onToggleCollapsed={toggleNav} mobileOpen={navOpen} onMobileClose={closeNav} />
-        <main className="content" style={{ width: '100%', paddingLeft: 0 }}>
-          {!isFullScreenRoute(pathname) && <SectionTabs />}
-          {children}
-        </main>
+        <NavCountsProvider>
+          <main className="content" style={{ width: '100%', paddingLeft: 0 }}>
+            {!isFullScreenRoute(pathname) && <SectionTabs />}
+            {children}
+          </main>
+        </NavCountsProvider>
       </div>
       <MobileBottomNav />
     </div>
