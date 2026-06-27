@@ -5,16 +5,39 @@
     "collapseSidebar": "收起侧边栏",
     "closeMenu": "关闭菜单",
     "group": {
-      "dashboard": "仪表板", "brainstorm": "头脑风暴", "projects": "项目", "ide": "IDE",
-      "workflows": "工作流", "workforce": "团队", "insights": "洞察", "library": "资源库",
-      "settings": "设置", "admin": "管理"
+      "dashboard": "仪表板",
+      "brainstorm": "头脑风暴",
+      "projects": "项目",
+      "ide": "IDE",
+      "workflows": "工作流",
+      "workforce": "团队",
+      "insights": "洞察",
+      "library": "资源库",
+      "settings": "设置",
+      "admin": "管理"
     },
     "tab": {
-      "projects": "项目", "tasks": "任务", "planning": "规划", "portfolio": "项目组合", "ceremonies": "仪式",
-      "workspace": "工作区", "voice": "语音工作室",
-      "aiEffectiveness": "AI 效能", "dora": "DORA", "finops": "FinOps", "funnel": "创新漏斗", "compliance": "合规",
-      "content": "内容", "skills": "技能", "personas": "人设", "prompts": "提示词",
-      "settings": "通用", "security": "安全", "billing": "账单", "tenant": "工作区", "apiKeys": "API 密钥"
+      "projects": "项目",
+      "tasks": "任务",
+      "planning": "规划",
+      "portfolio": "项目组合",
+      "ceremonies": "仪式",
+      "workspace": "工作区",
+      "voice": "语音工作室",
+      "aiEffectiveness": "AI 效能",
+      "dora": "DORA",
+      "finops": "FinOps",
+      "funnel": "创新漏斗",
+      "compliance": "合规",
+      "content": "内容",
+      "skills": "技能",
+      "personas": "人设",
+      "prompts": "提示词",
+      "settings": "通用",
+      "security": "安全",
+      "billing": "账单",
+      "tenant": "工作区",
+      "apiKeys": "API 密钥"
     }
   },
   "ceremonies": {
@@ -336,5 +359,40 @@
         "killed": "已终止"
       }
     }
+  },
+  "cloudAgentForm": {
+    "name": "名称",
+    "namePlaceholder": "例如：发布说明撰写者",
+    "title": "标题",
+    "titlePlaceholder": "简短标语",
+    "description": "描述",
+    "descriptionPlaceholder": "这个智能体做什么？",
+    "tags": "标签（逗号分隔）",
+    "tagsPlaceholder": "code-review, release-notes, summarization",
+    "tagsHelp": "用于市场搜索和 SEO 发现的关键词。这些是标签，而非智能体的技能——请在“能力”选项卡中分配技能。",
+    "runtimeSupport": "运行时支持",
+    "runtime": {
+      "cloud": "仅云端",
+      "host": "仅远程（自托管）",
+      "both": "云端 + 远程"
+    },
+    "bestExperience": "最佳运行环境",
+    "bestCloud": "云端",
+    "bestHost": "远程（agentHost）",
+    "engine": "智能体运行时引擎",
+    "engineLabel": {
+      "builderforce-v2": "BuilderForce-V2（Anthropic — Claude Agent SDK）",
+      "builderforce-v3": "BuilderForce-V3（V2 + 边缘系统情感层）"
+    },
+    "engineHelp": "V2 运行 Claude Agent SDK；模型通过网关使用你租户的 Anthropic 密钥进行路由。V3 在 V2 之上增加边缘系统情感层——智能体会评估任务并在相应的情感状态下执行（例如在高风险工作中提高谨慎度）。",
+    "surface": "运行时载体",
+    "surfaceLabel": {
+      "durable": "持久（云端、按需无服务器）",
+      "container": "长时运行的 Cloudflare 容器（用于超长任务）"
+    },
+    "surfaceHelp": "两者都在云端（全部 Cloudflare）运行完整任务。持久型按需在 Durable Object 上逐步执行——默认选项。长时运行的 Cloudflare 容器会为超长、连续的任务保持进程运行（在容器基础设施启用前会回退到持久型）。",
+    "baseModel": "基础模型（可选）",
+    "baseModelDefault": "builderforce.ai 默认（最佳编码模型）",
+    "baseModelHelp": "该智能体运行所用的工具调用 + 编码模型——选择你的某个 LLM 或模型池中的模型。一次运行会为整个任务固定一个模型；保留默认则使用套餐的最佳编码模型。"
   }
 }

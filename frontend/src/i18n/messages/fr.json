@@ -5,16 +5,39 @@
     "collapseSidebar": "Réduire la barre latérale",
     "closeMenu": "Fermer le menu",
     "group": {
-      "dashboard": "Tableau de bord", "brainstorm": "Brainstorming", "projects": "Projets", "ide": "IDE",
-      "workflows": "Flux de travail", "workforce": "Équipe", "insights": "Analyses", "library": "Bibliothèque",
-      "settings": "Paramètres", "admin": "Administration"
+      "dashboard": "Tableau de bord",
+      "brainstorm": "Brainstorming",
+      "projects": "Projets",
+      "ide": "IDE",
+      "workflows": "Flux de travail",
+      "workforce": "Équipe",
+      "insights": "Analyses",
+      "library": "Bibliothèque",
+      "settings": "Paramètres",
+      "admin": "Administration"
     },
     "tab": {
-      "projects": "Projets", "tasks": "Tâches", "planning": "Planification", "portfolio": "Portefeuille", "ceremonies": "Cérémonies",
-      "workspace": "Espace de travail", "voice": "Studio vocal",
-      "aiEffectiveness": "Efficacité de l’IA", "dora": "DORA", "finops": "FinOps", "funnel": "Entonnoir d’innovation", "compliance": "Conformité",
-      "content": "Contenu", "skills": "Compétences", "personas": "Personas", "prompts": "Prompts",
-      "settings": "Général", "security": "Sécurité", "billing": "Facturation", "tenant": "Espaces de travail", "apiKeys": "Clés API"
+      "projects": "Projets",
+      "tasks": "Tâches",
+      "planning": "Planification",
+      "portfolio": "Portefeuille",
+      "ceremonies": "Cérémonies",
+      "workspace": "Espace de travail",
+      "voice": "Studio vocal",
+      "aiEffectiveness": "Efficacité de l’IA",
+      "dora": "DORA",
+      "finops": "FinOps",
+      "funnel": "Entonnoir d’innovation",
+      "compliance": "Conformité",
+      "content": "Contenu",
+      "skills": "Compétences",
+      "personas": "Personas",
+      "prompts": "Prompts",
+      "settings": "Général",
+      "security": "Sécurité",
+      "billing": "Facturation",
+      "tenant": "Espaces de travail",
+      "apiKeys": "Clés API"
     }
   },
   "ceremonies": {
@@ -336,5 +359,40 @@
         "killed": "Abandonnée"
       }
     }
+  },
+  "cloudAgentForm": {
+    "name": "Nom",
+    "namePlaceholder": "p. ex. Rédacteur de notes de version",
+    "title": "Titre",
+    "titlePlaceholder": "Slogan court",
+    "description": "Description",
+    "descriptionPlaceholder": "Que fait cet agent ?",
+    "tags": "Étiquettes (séparées par des virgules)",
+    "tagsPlaceholder": "code-review, release-notes, summarization",
+    "tagsHelp": "Mots-clés pour la recherche dans la marketplace et le référencement SEO. Ce sont des étiquettes, pas les compétences de l'agent — attribuez les compétences dans l'onglet Capacités.",
+    "runtimeSupport": "Prise en charge d'exécution",
+    "runtime": {
+      "cloud": "Cloud uniquement",
+      "host": "Distant (auto-hébergé) uniquement",
+      "both": "Cloud + Distant"
+    },
+    "bestExperience": "Meilleure expérience sur",
+    "bestCloud": "Cloud",
+    "bestHost": "Distant (agentHost)",
+    "engine": "Moteur d'exécution de l'agent",
+    "engineLabel": {
+      "builderforce-v2": "BuilderForce-V2 (Anthropic — Claude Agent SDK)",
+      "builderforce-v3": "BuilderForce-V3 (V2 + couche affective limbique)"
+    },
+    "engineHelp": "V2 exécute le Claude Agent SDK ; les modèles sont routés via la passerelle avec la clé Anthropic de votre locataire. V3 ajoute la couche affective limbique au-dessus de V2 — l'agent évalue la tâche et s'exécute dans un état affectif adapté (p. ex. une prudence accrue pour les travaux risqués).",
+    "surface": "Surface d'exécution",
+    "surfaceLabel": {
+      "durable": "Durable (cloud, sans serveur à la demande)",
+      "container": "Conteneur Cloudflare longue durée (pour les exécutions très longues)"
+    },
+    "surfaceHelp": "Les deux exécutent la tâche complète dans le cloud (tout Cloudflare). Durable s'exécute à la demande sur un Durable Object (par étape) — l'option par défaut. Le conteneur Cloudflare longue durée maintient un processus actif pour des tâches très longues et continues (revient à Durable tant que l'infrastructure de conteneurs n'est pas activée).",
+    "baseModel": "Modèle de base (facultatif)",
+    "baseModelDefault": "Par défaut builderforce.ai (meilleur modèle de codage)",
+    "baseModelHelp": "Le modèle d'appel d'outils et de codage sur lequel cet agent s'exécute — choisissez l'un de vos LLM ou un modèle du pool. Une exécution fixe un modèle pour toute la tâche ; laissez par défaut pour utiliser le meilleur modèle de codage de votre forfait."
   }
 }
