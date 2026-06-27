@@ -277,6 +277,7 @@ export function TaskMgmtContent({
   // Keep the project list mirrored from the global scope (single source) when no
   // explicit list was supplied — avoids a duplicate fetchProjects round-trip.
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (!projectsProp && globalScope) setProjects(globalScope.projects);
   }, [projectsProp, globalScope]);
 
