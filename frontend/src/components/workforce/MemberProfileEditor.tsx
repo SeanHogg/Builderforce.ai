@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { Select } from '@/components/Select';
 import { membersApi, type MemberKind, type MemberProfile } from '@/lib/builderforceApi';
 
 /**
@@ -132,16 +133,16 @@ export function MemberProfileEditor({ kind, refId, name, onClose, onSaved }: {
             <div style={row}>
               <div>
                 <label style={label}>Availability</label>
-                <select style={field} value={p.availabilityStatus ?? 'available'} onChange={(e) => set('availabilityStatus', e.target.value as MemberProfile['availabilityStatus'])}>
+                <Select style={field} value={p.availabilityStatus ?? 'available'} onChange={(e) => set('availabilityStatus', e.target.value as MemberProfile['availabilityStatus'])}>
                   {AVAILABILITY.map((a) => <option key={a} value={a}>{a}</option>)}
-                </select>
+                </Select>
               </div>
               <div>
                 <label style={label}>Experience</label>
-                <select style={field} value={p.experienceLevel ?? ''} onChange={(e) => set('experienceLevel', (e.target.value || null) as MemberProfile['experienceLevel'])}>
+                <Select style={field} value={p.experienceLevel ?? ''} onChange={(e) => set('experienceLevel', (e.target.value || null) as MemberProfile['experienceLevel'])}>
                   <option value="">—</option>
                   {EXPERIENCE.map((x) => <option key={x} value={x}>{x}</option>)}
-                </select>
+                </Select>
               </div>
             </div>
 

@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, type ReactNode } from 'react';
+import { Select } from '@/components/Select';
 import { useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import { useAuth } from '@/lib/AuthContext';
@@ -57,11 +58,11 @@ const selectStyle: React.CSSProperties = {
 export function DaysWindowSelect({ value, onChange }: { value: number; onChange: (n: number) => void }) {
   const t = useTranslations('insights');
   return (
-    <select style={selectStyle} value={value} onChange={(e) => onChange(Number(e.target.value))} aria-label={t('window')}>
+    <Select style={selectStyle} value={value} onChange={(e) => onChange(Number(e.target.value))} aria-label={t('window')}>
       <option value={7}>{t('days', { n: 7 })}</option>
       <option value={30}>{t('days', { n: 30 })}</option>
       <option value={90}>{t('days', { n: 90 })}</option>
-    </select>
+    </Select>
   );
 }
 

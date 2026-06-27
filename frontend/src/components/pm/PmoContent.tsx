@@ -1,6 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
+import { Select } from '@/components/Select';
 import { useTranslations } from 'next-intl';
 import { pmoApi, type PmoTree, type PmoScopeKind } from '@/lib/builderforceApi';
 import { usePmData } from '@/lib/pm/usePmData';
@@ -73,19 +74,19 @@ export function PmoContent() {
 
         {showScopePicker && (
           <div style={{ display: 'flex', gap: 8, marginLeft: 'auto', flexWrap: 'wrap' }}>
-            <select
+            <Select
               style={selectStyle}
               value={effectivePortfolioId}
               onChange={(e) => { setPortfolioSel(e.target.value); setInitiativeId(''); }}
             >
               <option value={WORKSPACE}>{t('scope.workspace')}</option>
               {tree.portfolios.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-            </select>
+            </Select>
             {effectivePortfolioId !== WORKSPACE && (
-              <select style={selectStyle} value={initiativeId} onChange={(e) => setInitiativeId(e.target.value)}>
+              <Select style={selectStyle} value={initiativeId} onChange={(e) => setInitiativeId(e.target.value)}>
                 <option value="">{t('scope.wholePortfolio')}</option>
                 {initiativesInPortfolio.map((i) => <option key={i.id} value={i.id}>{i.name}</option>)}
-              </select>
+              </Select>
             )}
           </div>
         )}

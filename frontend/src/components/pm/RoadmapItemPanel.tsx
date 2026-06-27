@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { Select } from '@/components/Select';
 import type { TrackerRow } from '@/lib/builderforceApi';
 import { SlideOutPanel } from '@/components/SlideOutPanel';
 import { roadmapClient, ROADMAP_HORIZONS, ROADMAP_STATUSES, rstr } from '@/lib/pm/roadmap';
@@ -68,15 +69,15 @@ export function RoadmapItemPanel({ open, item, projectId, onClose, onSaved }: Ro
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
           <div>
             <label style={labelStyle} htmlFor="rm-horizon">Horizon</label>
-            <select id="rm-horizon" value={horizon} onChange={(e) => setHorizon(e.target.value)} style={fieldStyle}>
+            <Select id="rm-horizon" value={horizon} onChange={(e) => setHorizon(e.target.value)} style={fieldStyle}>
               {ROADMAP_HORIZONS.map((h) => <option key={h.key} value={h.key}>{h.label}</option>)}
-            </select>
+            </Select>
           </div>
           <div>
             <label style={labelStyle} htmlFor="rm-status">Status</label>
-            <select id="rm-status" value={status} onChange={(e) => setStatus(e.target.value)} style={fieldStyle}>
+            <Select id="rm-status" value={status} onChange={(e) => setStatus(e.target.value)} style={fieldStyle}>
               {ROADMAP_STATUSES.map((s) => <option key={s} value={s}>{s.replace(/_/g, ' ')}</option>)}
-            </select>
+            </Select>
           </div>
         </div>
         <div>

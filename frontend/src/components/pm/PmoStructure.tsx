@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { Select } from '@/components/Select';
 import { useTranslations } from 'next-intl';
 import { pmoApi, type PmoTree } from '@/lib/builderforceApi';
 import { PmCard, PmError, StatusPill } from './pmShared';
@@ -83,7 +84,7 @@ export function PmoStructure({ tree, onChange }: { tree: PmoTree; onChange: () =
           ))}
         </div>
         {unlinkedProjects.length > 0 && (
-          <select
+          <Select
             disabled={busy}
             defaultValue=""
             onChange={(e) => { const pid = Number(e.target.value); if (pid) run(() => pmoApi.linkProject(pid, init.id)); }}
@@ -91,7 +92,7 @@ export function PmoStructure({ tree, onChange }: { tree: PmoTree; onChange: () =
           >
             <option value="">{t('structure.linkProject')}</option>
             {unlinkedProjects.map((p) => <option key={p.id} value={p.id}>{p.key} · {p.name}</option>)}
-          </select>
+          </Select>
         )}
 
         {/* Dependencies (blocked by) */}
@@ -106,7 +107,7 @@ export function PmoStructure({ tree, onChange }: { tree: PmoTree; onChange: () =
             </div>
           ))}
           {candidates.length > 0 && (
-            <select
+            <Select
               disabled={busy}
               defaultValue=""
               onChange={(e) => { const fromId = e.target.value; if (fromId) run(() => pmoApi.addDependency(fromId, init.id)); }}
@@ -114,7 +115,7 @@ export function PmoStructure({ tree, onChange }: { tree: PmoTree; onChange: () =
             >
               <option value="">{t('structure.addDependency')}</option>
               {candidates.map((i) => <option key={i.id} value={i.id}>{i.name}</option>)}
-            </select>
+            </Select>
           )}
         </div>
       </div>

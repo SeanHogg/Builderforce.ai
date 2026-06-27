@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
+import { Select } from '@/components/Select';
 import {
   reposApi,
   type MergeMethod,
@@ -186,14 +187,14 @@ export function PullRequestPanel({ taskId, onMerged }: { taskId: number; onMerge
       {/* Approve & merge — enabled anytime (warns on red checks per product policy) */}
       {!isMerged && (
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-          <select
+          <Select
             value={method}
             onChange={(e) => setMethod(e.target.value as MergeMethod)}
             disabled={merging}
             style={{ fontSize: 12, padding: '6px 8px', borderRadius: 6, border: '1px solid var(--border-subtle)', background: 'var(--bg-base)', color: 'var(--text-primary)' }}
           >
             {MERGE_METHODS.map((m) => <option key={m} value={m}>{m}</option>)}
-          </select>
+          </Select>
           <button
             type="button"
             onClick={merge}

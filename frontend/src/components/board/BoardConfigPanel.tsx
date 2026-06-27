@@ -538,14 +538,14 @@ function SettingsTab({ board, onSaved }: { board: Board; onSaved: () => void }) 
         <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 8 }}>Standup turn timer</div>
         <label style={{ fontSize: 13, color: 'var(--text-secondary)', display: 'block' }}>
           Mode
-          <select
+          <Select
             style={{ ...inputStyle, width: '100%', marginTop: 4 }}
             value={turnMode}
             onChange={(e) => setTurnMode(e.target.value as 'facilitator' | 'timeboxed')}
           >
             <option value="facilitator">Facilitator advances (manual “Next”)</option>
             <option value="timeboxed">Timeboxed (auto-advance per speaker)</option>
-          </select>
+          </Select>
         </label>
         {turnMode === 'timeboxed' && (
           <label style={{ fontSize: 13, color: 'var(--text-secondary)', display: 'block', marginTop: 10 }}>

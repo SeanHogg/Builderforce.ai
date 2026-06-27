@@ -41,8 +41,37 @@
     }
   },
   "ceremonies": {
-    "noProjects": "Sin proyectos",
     "selectProject": "Selecciona un proyecto para iniciar una ceremonia."
+  },
+  "projectScope": {
+    "workspace": "Espacio de trabajo",
+    "allProjects": "Todos los proyectos",
+    "projectLabel": "Proyecto",
+    "switchWorkspace": "Cambiar de espacio de trabajo…",
+    "noProjects": "Aún no hay proyectos",
+    "selectAria": "Seleccionar alcance del proyecto"
+  },
+  "pm": {
+    "epics": "Épicas",
+    "roadmap": "Hoja de ruta",
+    "roi": "ROI",
+    "tree": "Árbol",
+    "flow": "Flujo",
+    "timeline": "Cronología",
+    "gantt": "Gantt",
+    "map": "Mapa",
+    "riceMatrix": "Matriz RICE",
+    "dependencyMap": "Mapa de dependencias",
+    "colEpicTask": "Épica / Tarea",
+    "colStatus": "Estado",
+    "colPriority": "Prioridad",
+    "colSprint": "Sprint",
+    "scheduled": "programado",
+    "loadingEpics": "Cargando épicas…",
+    "noTasksProject": "Aún no hay tareas en este proyecto.",
+    "noEpicsAnywhere": "Aún no hay tareas en tus proyectos.",
+    "unparented": "Sin asignar ({count})",
+    "allProjectsCaption": "Mostrando las épicas de todos los proyectos. Elige un proyecto en la barra superior para centrarte en uno."
   },
   "tools": {
     "outOf5": "de 5,0",

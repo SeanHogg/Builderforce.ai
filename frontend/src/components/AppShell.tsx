@@ -12,6 +12,7 @@ import { useEmulation } from '@/lib/EmulationContext';
 import { useSidebarCollapse } from '@/lib/useSidebarCollapse';
 import { useMobileNav } from '@/lib/useMobileNav';
 import { NavCountsProvider } from '@/lib/navCounts';
+import { ProjectScopeProvider } from '@/lib/ProjectScopeContext';
 
 function isProjectIdPage(pathname: string | null): boolean {
   return pathname != null && /^\/projects\/[^/]+$/.test(pathname);
@@ -39,24 +40,26 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const { open: navOpen, openNav, closeNav } = useMobileNav();
 
   return (
-    <div className="app-frame">
-      <EmulationBar />
-      <PermissionDebuggerPanel />
-      <QaTelemetry />
-      <div
-        className={`shell ${navCollapsed ? 'nav-collapsed' : ''}${emulation ? ' emulation-active' : ''}`}
-        style={{ position: 'relative' }}
-      >
-        <TopBar onMenuClick={openNav} />
-        <Sidebar collapsed={navCollapsed} onToggleCollapsed={toggleNav} mobileOpen={navOpen} onMobileClose={closeNav} />
-        <NavCountsProvider>
-          <main className="content" style={{ width: '100%', paddingLeft: 0 }}>
-            {!isFullScreenRoute(pathname) && <SectionTabs />}
-            {children}
-          </main>
-        </NavCountsProvider>
+    <ProjectScopeProvider>
+      <div className="app-frame">
+        <EmulationBar />
+        <PermissionDebuggerPanel />
+        <QaTelemetry />
+        <div
+          className={`shell ${navCollapsed ? 'nav-collapsed' : ''}${emulation ? ' emulation-active' : ''}`}
+          style={{ position: 'relative' }}
+        >
+          <TopBar onMenuClick={openNav} />
+          <Sidebar collapsed={navCollapsed} onToggleCollapsed={toggleNav} mobileOpen={navOpen} onMobileClose={closeNav} />
+          <NavCountsProvider>
+            <main className="content" style={{ width: '100%', paddingLeft: 0 }}>
+              {!isFullScreenRoute(pathname) && <SectionTabs />}
+              {children}
+            </main>
+          </NavCountsProvider>
+        </div>
+        <MobileBottomNav />
       </div>
-      <MobileBottomNav />
-    </div>
+    </ProjectScopeProvider>
   );
 }

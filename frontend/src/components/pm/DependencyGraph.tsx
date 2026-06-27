@@ -16,6 +16,7 @@ import { tasksApi, type Task, type DependencyEdge, type DepType } from '@/lib/bu
 import { usePmScope } from '@/lib/pm/scope';
 import { usePmData } from '@/lib/pm/usePmData';
 import { PmEmpty, PmError, PmSelectProject } from './pmShared';
+import { Select } from '@/components/Select';
 
 /**
  * Task dependency / epic-flow graph for one project. Nodes are tasks; solid edges
@@ -198,18 +199,18 @@ export function DependencyGraph() {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-        <select aria-label="Predecessor task" value={predId} onChange={(e) => setPredId(e.target.value)} style={selectStyle}>
+        <Select aria-label="Predecessor task" value={predId} onChange={(e) => setPredId(e.target.value)} style={selectStyle}>
           <option value="">Predecessor (blocks)…</option>
           {tasks.map((t) => <option key={t.id} value={t.id}>{t.key} · {t.title}</option>)}
-        </select>
+        </Select>
         <span style={{ color: 'var(--text-muted)' }}>→</span>
-        <select aria-label="Successor task" value={succId} onChange={(e) => setSuccId(e.target.value)} style={selectStyle}>
+        <Select aria-label="Successor task" value={succId} onChange={(e) => setSuccId(e.target.value)} style={selectStyle}>
           <option value="">Successor (blocked by)…</option>
           {tasks.map((t) => <option key={t.id} value={t.id}>{t.key} · {t.title}</option>)}
-        </select>
-        <select aria-label="Dependency type" value={depType} onChange={(e) => setDepType(e.target.value as DepType)} style={selectStyle}>
+        </Select>
+        <Select aria-label="Dependency type" value={depType} onChange={(e) => setDepType(e.target.value as DepType)} style={selectStyle}>
           {DEP_TYPE_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-        </select>
+        </Select>
         <button
           type="button"
           onClick={addEdge}

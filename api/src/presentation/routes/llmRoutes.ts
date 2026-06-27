@@ -43,6 +43,7 @@ import {
 } from '../../application/llm/ImageProxyService';
 import { buildDatabase } from '../../infrastructure/database/connection';
 import { resolveTenantModel, TENANT_MODEL_REF_PREFIX } from '../../application/llm/tenantModelService';
+import { resolveWorkforceModel, WORKFORCE_MODEL_REF_PREFIX } from '../../application/agent/agentPrompt';
 import { llmUsageLog, llmFailoverLog, tenants, tenantMembers, agentHosts, tenantApiKeys, users, projects, tasks, runModelOutcomes } from '../../infrastructure/database/schema';
 import { getRoutingTable, parseScopeToken, scopeToken } from '../../application/llm/routingTable';
 import { actionTypeLabel, type ActionType } from '../../application/llm/actionTypes';
@@ -1088,6 +1089,28 @@ export function createLlmRoutes(): Hono<HonoEnv> {
       if (tm) {
         if (typeof tm.params.temperature === 'number' && bodyAny.temperature == null) bodyAny.temperature = tm.params.temperature;
         if (typeof tm.params.top_p === 'number' && bodyAny.top_p == null) bodyAny.top_p = tm.params.top_p;
+      }
+    }
+
+    // ── Workforce model expansion ──────────────────────────────────────────
+    // A `builderforce/workforce-<id>` model ref lets the stock OpenAI SDKs call a
+    // user's PUBLISHED model by id: expand it into the agent's base model + its
+    // persona/memory system directives (same builder the dedicated /api/ide/agents
+    // chat + validate paths use), then dispatch normally. Unknown id → drop the
+    // ref so the plan default resolves rather than erroring.
+    if (typeof bodyAny.model === 'string' && bodyAny.model.startsWith(WORKFORCE_MODEL_REF_PREFIX)) {
+      const wf = await resolveWorkforceModel(c.env as Env, bodyAny.model);
+      bodyAny.model = wf?.baseModel ?? undefined;
+      if (wf?.directives) {
+        const msgs = body.messages as Array<{ role?: string; content?: unknown }>;
+        const sysIdx = msgs.findIndex((m) => m.role === 'system');
+        const sysMsg = sysIdx >= 0 ? msgs[sysIdx] : undefined;
+        if (sysMsg) {
+          const prev = typeof sysMsg.content === 'string' ? sysMsg.content : '';
+          msgs[sysIdx] = { ...sysMsg, content: `${wf.directives}\n\n${prev}`.trim() };
+        } else {
+          msgs.unshift({ role: 'system', content: wf.directives });
+        }
       }
     }
 
