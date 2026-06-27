@@ -26,6 +26,7 @@
  * behavioural semantics (vector -> directives + params). The two sides are
  * coupled solely by the dimension-id strings in {@link DIM}. Keep them in sync.
  */
+import { PSYCH_DIM } from "@builderforce/agent-tools";
 import type { ThinkLevel, ReasoningLevel } from "../auto-reply/thinking.js";
 import type { AgentRole } from "./types.js";
 
@@ -34,56 +35,12 @@ import type { AgentRole } from "./types.js";
 // ---------------------------------------------------------------------------
 
 /**
- * Canonical dimension ids. Every score in a profile vector is keyed by one of
- * these. Scores are 0..100; an absent dimension is treated as neutral (50).
- *
- * MUST stay in sync with the catalog in `api/.../psychometricCatalog.ts`.
+ * Canonical dimension ids — re-exported from the single shared map
+ * (`@builderforce/agent-tools` PSYCH_DIM), the same one the api catalog and the
+ * limbic setpoint derivation read. Every score in a profile vector is keyed by
+ * one of these; scores are 0..100, an absent dimension is neutral (50).
  */
-export const DIM = {
-  // HEXACO spine
-  honesty: "hexaco.honesty",
-  emotionality: "hexaco.emotionality",
-  extraversion: "hexaco.extraversion",
-  agreeableness: "hexaco.agreeableness",
-  conscientiousness: "hexaco.conscientiousness",
-  openness: "hexaco.openness",
-  // Regulatory focus (0 = prevention, 100 = promotion)
-  regulatoryFocus: "regfocus.orientation",
-  // Cognition / dual-process (0 = intuitive/System-1, 100 = deliberate/System-2)
-  needForCognition: "cognition.need_for_cognition",
-  reflection: "cognition.reflection",
-  // Decision style (GDMS) + maximizing
-  decisionRational: "decision.rational",
-  decisionIntuitive: "decision.intuitive",
-  decisionDependent: "decision.dependent",
-  decisionSpontaneous: "decision.spontaneous",
-  maximizing: "decision.maximizing",
-  // Moral Foundations
-  moralCare: "moral.care",
-  moralFairness: "moral.fairness",
-  moralLoyalty: "moral.loyalty",
-  moralAuthority: "moral.authority",
-  moralSanctity: "moral.sanctity",
-  moralLiberty: "moral.liberty",
-  // Thomas-Kilmann conflict axes (mode is derived from the two)
-  conflictAssertiveness: "conflict.assertiveness",
-  conflictCooperativeness: "conflict.cooperativeness",
-  // Schwartz basic values
-  valSelfDirection: "values.self_direction",
-  valStimulation: "values.stimulation",
-  valHedonism: "values.hedonism",
-  valAchievement: "values.achievement",
-  valPower: "values.power",
-  valSecurity: "values.security",
-  valConformity: "values.conformity",
-  valTradition: "values.tradition",
-  valBenevolence: "values.benevolence",
-  valUniversalism: "values.universalism",
-  // Dispositional
-  grit: "disp.grit",
-  locusInternal: "disp.locus_internal",
-  riskTolerance: "disp.risk_tolerance",
-} as const;
+export const DIM = PSYCH_DIM;
 
 export type DimensionId = (typeof DIM)[keyof typeof DIM];
 

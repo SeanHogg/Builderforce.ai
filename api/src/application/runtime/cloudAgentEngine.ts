@@ -27,7 +27,7 @@ import { resolveAnthropicOAuthToken } from '../llm/tenantProviderKeyService';
 import { resolveTenantPlan } from '../../presentation/routes/llmRoutes';
 import { recordUsageRow, clampTokenCount } from '../llm/usageLedger';
 import { ensureTaskPrdRecord, appendTaskPrdRevision } from '../prd/taskPrd';
-import { loadCapabilityContext } from '../artifact/capabilityContext';
+import { loadCapabilityContext, loadPersonaSetpoints } from '../artifact/capabilityContext';
 import { pullPendingSteering, releasePendingSteers } from './executionSteering';
 import { notifyExecutionSubscribers } from './executionEvents';
 import { notifyApprovalRequested } from '../approval/approvalNotifier';
@@ -39,7 +39,7 @@ import {
 import {
   DEFAULT_ENGINE_ID, ENGINE_IDS, resolveEngineById,
   appraiseTask, buildLimbicBlock, compileLimbicState, neutralState,
-  type AgentEngine, type AgentRunInput, type AgentRunResult, type CapabilityProvider, type ToolContext,
+  type AgentEngine, type AgentRunInput, type AgentRunResult, type CapabilityProvider, type ToolContext, type LimbicState,
 } from '@builderforce/agent-tools';
 import { parseRemediation, parseFollowUp, parseCloudAgentRef, parseModel, parseRoutingBias } from './cloudDispatch';
 import { classifyTaskAction } from '../llm/classifyTask';
@@ -1629,6 +1629,9 @@ export interface CloudEngineContext {
    *  parsed off the run payload. Absent on headless runs. Threaded to the loop's
    *  first-tick model seed. */
   routingBias?: Record<string, number>;
+  /** Resolved assigned artifacts (skills/personas/content). Used by V3 to derive
+   *  limbic setpoints from the assigned personas' psychometric profiles. */
+  artifacts?: ResolvedArtifacts;
 }
 
 /**
@@ -1670,10 +1673,14 @@ export class CloudLimbicEngine implements AgentEngine {
   constructor(private readonly rc: CloudEngineContext) {}
 
   async run(input: AgentRunInput): Promise<AgentRunResult> {
+    // Personality = setpoints: derive the resting affect from the assigned
+    // personas' psychometric profiles, then appraise the task around it.
+    const setpoints = await loadPersonaSetpoints(this.rc.env, this.rc.db, this.rc.artifacts?.personas ?? []);
     const systemPrompt = await augmentSystemPromptWithLimbic(
       this.rc.db,
       { tenantId: this.rc.tenantId, cloudAgentRef: this.rc.cloudAgentRef, executionId: this.rc.executionId, taskRow: this.rc.taskRow },
       input.systemPrompt,
+      setpoints,
     );
     // Delegate to the unchanged V2 loop with the limbic-augmented prompt.
     return new CloudToolLoopEngine(this.rc).run({ ...input, systemPrompt });
@@ -1692,8 +1699,9 @@ export async function augmentSystemPromptWithLimbic(
   db: Db,
   args: { tenantId: number; cloudAgentRef?: string; executionId: number; taskRow: { id: number; title: string; description: string | null } },
   systemPrompt: string,
+  setpoints?: LimbicState,
 ): Promise<string> {
-  const state = appraiseTask(`${args.taskRow.title}\n${args.taskRow.description ?? ''}`, neutralState());
+  const state = appraiseTask(`${args.taskRow.title}\n${args.taskRow.description ?? ''}`, setpoints ?? neutralState());
   const block = buildLimbicBlock(state);
   if (!block) return systemPrompt;
   const { directives, params } = compileLimbicState(state);
@@ -2079,7 +2087,7 @@ export async function runCloudExecution(
     const engineId = (await resolveCloudAgent(env, tenantId, cloudAgentRef)).engine;
     const engine = resolveAgentEngine({
       env, db, executionId, taskRow, tenantId, projectId, agentLabel, cloudAgentRef, isCancelled,
-      routingBias: parseRoutingBias(payload),
+      routingBias: parseRoutingBias(payload), artifacts,
     }, engineId);
     const { ok, output, cancelled, awaitingInput } = await engine.run({ systemPrompt, userContent, model });
 

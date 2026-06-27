@@ -16,6 +16,7 @@ import { eq } from 'drizzle-orm';
 import { buildDatabase, type Db } from '../database/connection';
 import { executions } from '../database/schema';
 import { prepareCloudRun, runCloudToolLoop, markCloudExecutionRunning, resolveCloudAgent, augmentSystemPromptWithLimbic, type CloudLoopState } from '../../application/runtime/cloudAgentEngine';
+import { loadPersonaSetpoints } from '../../application/artifact/capabilityContext';
 import { ENGINE_IDS } from '@builderforce/agent-tools';
 import { parseRoutingBias } from '../../application/runtime/cloudDispatch';
 import { scoreRunOutcome } from '../../application/runtime/scoreRunOutcome';
@@ -130,13 +131,18 @@ export class CloudRunnerDO implements DurableObject {
         // so it persists in the cursor for every loop tick. V2 agents are
         // untouched — the engine id gates it (unknown/legacy ids → V2).
         const engineId = (await resolveCloudAgent(this.env, cursor.tenantId, cursor.cloudAgentRef)).engine;
-        cursor.systemPrompt = engineId === ENGINE_IDS.v3
-          ? await augmentSystemPromptWithLimbic(
-              this.db,
-              { tenantId: cursor.tenantId, cloudAgentRef: cursor.cloudAgentRef, executionId: cursor.executionId, taskRow: { id: cursor.taskId, title: cursor.taskTitle, description: cursor.taskDescription } },
-              systemPrompt,
-            )
-          : systemPrompt;
+        if (engineId === ENGINE_IDS.v3) {
+          // Personality = setpoints (from assigned personas' psychometric profiles).
+          const setpoints = await loadPersonaSetpoints(this.env, this.db, cursor.artifacts?.personas ?? []);
+          cursor.systemPrompt = await augmentSystemPromptWithLimbic(
+            this.db,
+            { tenantId: cursor.tenantId, cloudAgentRef: cursor.cloudAgentRef, executionId: cursor.executionId, taskRow: { id: cursor.taskId, title: cursor.taskTitle, description: cursor.taskDescription } },
+            systemPrompt,
+            setpoints,
+          );
+        } else {
+          cursor.systemPrompt = systemPrompt;
+        }
         cursor.userContent = userContent;
         cursor.stage = 'loop';
         await this.persistAndArm(cursor);

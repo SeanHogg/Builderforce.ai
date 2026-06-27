@@ -8,8 +8,11 @@ import { LIMBIC_DIM_NAMES, neutralState } from "../builderforce/limbic.js";
 import {
   LimbicSystemService,
   hashedEmbedding,
+  mapAgentEventToLimbic,
+  projectEmbedding,
   resolveLimbicCheckpointPath,
 } from "./limbic-system-service.js";
+import { emitAgentEvent } from "./agent-events.js";
 
 const PERSONA = "limbic-test-persona";
 
@@ -44,6 +47,17 @@ describe("checkpoint path + embedding helpers", () => {
   it("resolves the default checkpoint path", () => {
     expect(resolveLimbicCheckpointPath()).toMatch(/limbic\.bin$/);
     expect(resolveLimbicCheckpointPath("/x/y.bin")).toBe("/x/y.bin");
+  });
+
+  it("projectEmbedding pools/normalises to the target width", () => {
+    const same = projectEmbedding(Float32Array.from([3, 4]), 2);
+    expect(Math.hypot(same[0]!, same[1]!)).toBeCloseTo(1, 5);
+    const pooled = projectEmbedding(Float32Array.from({ length: 256 }, (_, i) => i), 32);
+    expect(pooled.length).toBe(32);
+    let n = 0;
+    for (const x of pooled) n += x * x;
+    expect(Math.sqrt(n)).toBeCloseTo(1, 5);
+    expect(projectEmbedding([], 8).every((x) => x === 0)).toBe(true);
   });
 
   it("hashedEmbedding is deterministic, unit-norm, and sized", () => {
@@ -136,6 +150,44 @@ describe("full execution simulation (heuristic regions, no GPU required)", () =>
     expect(directives.join(" ")).toMatch(/negative|caution|arousal/i);
     expect(["high", "xhigh"]).toContain(params.thinkLevel);
     expect(params.reasoningLevel).toBe("on");
+  });
+
+  it("maps raw agent-bus events to limbic events", () => {
+    const base = { runId: "r1", seq: 1, ts: 0 };
+    expect(mapAgentEventToLimbic({ ...base, stream: "tool", data: { phase: "result", name: "write", isError: true } })?.kind).toBe("error");
+    expect(mapAgentEventToLimbic({ ...base, stream: "tool", data: { phase: "result", name: "read", isError: false } })?.kind).toBe("progress");
+    expect(mapAgentEventToLimbic({ ...base, stream: "lifecycle", data: { phase: "error", error: "boom" } })?.kind).toBe("blocked");
+    expect(mapAgentEventToLimbic({ ...base, stream: "lifecycle", data: { phase: "end" } })?.kind).toBe("success");
+    expect(mapAgentEventToLimbic({ ...base, stream: "lifecycle", data: { phase: "start" } })).toBeNull();
+    expect(mapAgentEventToLimbic({ ...base, stream: "tool", data: { phase: "update" } })).toBeNull();
+  });
+
+  it("persists and restores affect per session", async () => {
+    const svc = await makeService();
+    await svc.appraise({ kind: "error", intensity: 1 });
+    const moody = svc.snapshot();
+    expect(moody.valence).toBeLessThan(0);
+    svc.saveSessionState("task:42");
+
+    // Drift to a different state, then restore the session snapshot.
+    svc.setState(neutralState());
+    expect(svc.snapshot().valence).toBe(neutralState().valence);
+    expect(svc.restoreSessionState("task:42")).toBe(true);
+    expect(svc.snapshot().valence).toBeCloseTo(moody.valence, 6);
+    // Unknown session → no-op.
+    expect(svc.restoreSessionState("task:nope")).toBe(false);
+  });
+
+  it("appraises live from the agent event bus when attached", async () => {
+    const svc = await makeService();
+    const unsub = svc.attachToEventStream();
+    const before = svc.snapshot().valence;
+    emitAgentEvent({ runId: "rx", stream: "tool", data: { phase: "result", name: "build", isError: true } });
+    // The handler appraises asynchronously (fire-and-forget) — flush microtasks.
+    await new Promise((r) => setTimeout(r, 0));
+    await new Promise((r) => setTimeout(r, 0));
+    expect(svc.snapshot().valence).toBeLessThan(before);
+    unsub();
   });
 
   it("simulates a full agent run: progress → error → recovery → success", async () => {
