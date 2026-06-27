@@ -50,15 +50,17 @@ describe('ProjectDetailsPanel', () => {
       />
     );
 
-    // click edit icon in overview card
-    const editBtn = getByLabelText('Edit project');
+    // click edit icon in overview card. The panel is localized via next-intl;
+    // the test mock makes `t('key')` a passthrough returning `projectDetails.<key>`,
+    // so we query by those keys rather than translated English copy.
+    const editBtn = getByLabelText('projectDetails.editAria');
     fireEvent.click(editBtn);
 
     // inputs should appear
-    const nameInput = getByLabelText('Name');
-    const keyInput = getByLabelText('Project key');
-    const statusSelect = getByLabelText('Status');
-    const descArea = getByLabelText('Description');
+    const nameInput = getByLabelText('projectDetails.nameLabel');
+    const keyInput = getByLabelText('projectDetails.keyLabel');
+    const statusSelect = getByLabelText('projectDetails.statusLabel');
+    const descArea = getByLabelText('projectDetails.descriptionLabel');
 
     fireEvent.change(nameInput, { target: { value: 'New name' } });
     fireEvent.change(keyInput, { target: { value: 'newkey' } });
@@ -71,7 +73,7 @@ describe('ProjectDetailsPanel', () => {
     });
 
     // submit form
-    const saveBtn = getByText('Save');
+    const saveBtn = getByText('projectDetails.save');
     fireEvent.click(saveBtn);
 
     await act(async () => {
@@ -87,6 +89,6 @@ describe('ProjectDetailsPanel', () => {
     }));
 
     // after save editing mode should exit
-    expect(queryByText('Save')).toBeNull();
+    expect(queryByText('projectDetails.save')).toBeNull();
   });
 });

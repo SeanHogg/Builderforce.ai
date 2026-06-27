@@ -11,7 +11,7 @@
  * branching scattered across components.
  */
 
-export type ProjectModality = 'designer' | 'video' | 'llm';
+export type ProjectModality = 'designer' | 'video' | 'llm' | 'voice';
 
 /** Right-panel tab ids the IDE can surface. Each modality picks the relevant subset. */
 export type RightTab = 'files' | 'agent' | 'train' | 'publish' | 'state';
@@ -91,6 +91,21 @@ export const MODALITIES: ModalityDef[] = [
     brainPlaceholder: 'Ask about building or training your model…',
     brainEmptyState: 'Design your dataset and training run here — then fine-tune in the Train tab and ship from Publish.',
     rightTabs: ['files', 'train', 'publish', 'state'],
+    showRunButton: false,
+  },
+  {
+    id: 'voice',
+    label: 'Voice',
+    icon: '🎙',
+    tagline: 'Clone and design a custom voice, then synthesize speech from it.',
+    brainSystemPrompt: [
+      "You are a voice director inside Builderforce.ai's Voice Studio.",
+      'The user enrolls a reference sample to clone a voice (SSM/WebGPU acoustic model) and then synthesizes speech from typed text.',
+      'Help them write natural, well-punctuated lines to synthesize, and advise on pacing, emphasis, and tone.',
+    ].join('\n'),
+    brainPlaceholder: 'Describe the voice or the lines to synthesize…',
+    brainEmptyState: 'Enrol a reference sample on the left to clone a voice, then synthesize speech from text.',
+    rightTabs: ['files', 'state'],
     showRunButton: false,
   },
 ];
