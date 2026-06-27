@@ -11,6 +11,7 @@
 import { and, eq, gte, sql } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import { memberMetricsPeriod, deploymentEvents, runModelOutcomes } from '../../infrastructure/database/schema';
+import { computeProjectDeliveryMetrics } from '../metrics/workforceMetrics';
 import { getTool } from './toolDefinitions';
 import type { QuestionnaireTool, ToolResult, ToolMetric, ToolRecommendation } from './toolTypes';
 
@@ -136,14 +137,25 @@ const agenticMaturityProvider: ToolDataProvider = async (db, tenantId, days, pro
   const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
   const forProject = projectId != null;
 
-  // member_metrics_period has no project_id column, so delivery + project-management
-  // (member-derived) cannot be attributed to a single project — skip them when scoped.
+  // member_metrics_period is a per-member tenant snapshot (no project grain), so
+  // when scoped to a project compute delivery live from its tasks (reusing the
+  // shared scorer); at tenant grain read the snapshot aggregate.
   const memberAggP = forProject
-    ? Promise.resolve([{ completed: 0, redo: 0, reopen: 0, avgCycle: null, avgHygiene: null }])
+    ? computeProjectDeliveryMetrics(db, tenantId, projectId!, days).then((p) => [{
+        completed: p.completed,
+        redo: 0,
+        reopen: 0,
+        // reworkRate is already (redo+reopen)/completed; carry it through so the
+        // back-computed reworkRate below reproduces it exactly.
+        rework: p.reworkRate,
+        avgCycle: p.avgCycleTimeHours,
+        avgHygiene: p.boardHygieneScore,
+      }])
     : db.select({
         completed: sql<number>`coalesce(sum(${memberMetricsPeriod.completedCount}), 0)::int`,
         redo: sql<number>`coalesce(sum(${memberMetricsPeriod.redoCount}), 0)::int`,
         reopen: sql<number>`coalesce(sum(${memberMetricsPeriod.reopenCount}), 0)::int`,
+        rework: sql<number | null>`null::double precision`,
         avgCycle: sql<number | null>`avg(${memberMetricsPeriod.avgCycleTimeHours})`,
         avgHygiene: sql<number | null>`avg(${memberMetricsPeriod.boardHygieneScore})`,
       }).from(memberMetricsPeriod).where(and(eq(memberMetricsPeriod.tenantId, tenantId), gte(memberMetricsPeriod.periodEnd, since)));
@@ -176,7 +188,11 @@ const agenticMaturityProvider: ToolDataProvider = async (db, tenantId, days, pro
   const m = memberAgg[0]!, d = deployAgg[0]!, o = outcomeAgg[0]!;
   const weeks = Math.max(days / 7, 0.1);
   const completed = Number(m.completed) || 0;
-  const reworkRate = completed > 0 ? (Number(m.redo) + Number(m.reopen)) / completed : null;
+  // Project path supplies reworkRate directly; tenant path back-computes it from
+  // the snapshot's redo/reopen sums.
+  const reworkRate = m.rework != null
+    ? Number(m.rework)
+    : completed > 0 ? (Number(m.redo) + Number(m.reopen)) / completed : null;
   const runs = Number(o.runs) || 0;
   const deployTotal = Number(d.total) || 0;
 

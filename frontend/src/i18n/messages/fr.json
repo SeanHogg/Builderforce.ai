@@ -491,5 +491,51 @@
     "runOther": "Lancer un diagnostic",
     "runOtherDesc": "Lancez n'importe quel diagnostic sur ce projet pour l'ajouter à la note.",
     "run": "Lancer"
+  },
+  "projectDetails": {
+    "tabs": {
+      "details": "Détails du projet",
+      "integrations": "Intégrations",
+      "taskMgmt": "Gestion des tâches",
+      "prds": "PRD",
+      "diagnostics": "Diagnostics",
+      "capabilities": "Agent / Capacités",
+      "brainChat": "Chat Brain",
+      "workspace": "Espace de travail"
+    },
+    "status": {
+      "active": "Actif",
+      "completed": "Terminé",
+      "archived": "Archivé",
+      "on_hold": "En attente"
+    },
+    "dialogAria": "Détails du projet",
+    "deleteAria": "Supprimer le projet",
+    "closeAria": "Fermer le panneau",
+    "editAria": "Modifier le projet",
+    "overview": "Aperçu",
+    "nameLabel": "Nom",
+    "keyLabel": "Clé du projet",
+    "statusLabel": "Statut",
+    "descriptionLabel": "Description",
+    "checking": "Vérification de la disponibilité…",
+    "keyAvailable": "La clé est disponible",
+    "keyTaken": "La clé est déjà utilisée",
+    "saving": "Enregistrement…",
+    "save": "Enregistrer",
+    "cancel": "Annuler",
+    "saveFailed": "Échec de l'enregistrement",
+    "noDescription": "Aucune description de projet pour le moment.",
+    "tasks": "Tâches",
+    "template": "Modèle",
+    "workspaceActions": "Actions de l'espace de travail",
+    "createTask": "Créer une tâche",
+    "planWithBrain": "Planifier avec Brain",
+    "draftPrd": "Rédiger un PRD",
+    "brainHint": "Utilisez Brain pour générer des PRD et des actions de tâches exécutables pour ce projet.",
+    "integrationKeys": "Clés d'intégration du projet",
+    "workspaceTitle": "Espace de travail",
+    "workspaceDesc": "Espace de travail et système de fichiers de ce projet. Ouvrez l'IDE pour modifier les fichiers.",
+    "openInIde": "Ouvrir dans l'IDE"
   }
 }
