@@ -147,7 +147,11 @@
     "computingData": "Lecture de vos données…",
     "saveSnapshot": "Enregistrer l’instantané",
     "snapshotSaved": "Instantané enregistré ✓",
-    "history": "Historique"
+    "history": "Historique",
+    "savedProject": "Enregistré dans ce projet.",
+    "scoringProject": "Évaluation de ce projet — cette exécution sera enregistrée dans la note du projet.",
+    "rollupTitle": "Note de votre espace de travail",
+    "rollupDesc": "Note de diagnostic moyenne de vos projets."
   },
   "notFound": {
     "title": "Page introuvable",
@@ -471,5 +475,21 @@
     "latencyLabel": "Latence",
     "modeLabel": "Mode d’inférence",
     "callTitle": "Comment appeler votre modèle"
+  },
+  "projectDiagnostics": {
+    "title": "Diagnostics du projet",
+    "intro": "Exécutez des diagnostics sur ce projet. Chaque exécution est suivie et contribue à la note du projet, qui est consolidée dans votre espace de travail.",
+    "loading": "Chargement…",
+    "loadError": "Impossible de charger les diagnostics",
+    "noRuns": "Aucun diagnostic n'a encore été exécuté sur ce projet.",
+    "architectureTitle": "Analyse d'architecture",
+    "architectureDesc": "Analysez les dépôts du projet et notez le respect des principes de conception. Le résultat est suivi comme un diagnostic du projet.",
+    "runArchitecture": "Lancer l'analyse d'architecture",
+    "architectureRunning": "Démarrage…",
+    "architectureStarted": "Analyse d'architecture lancée — sa note apparaîtra ici une fois terminée.",
+    "architectureError": "Impossible de lancer l'analyse d'architecture",
+    "runOther": "Lancer un diagnostic",
+    "runOtherDesc": "Lancez n'importe quel diagnostic sur ce projet pour l'ajouter à la note.",
+    "run": "Lancer"
   }
 }

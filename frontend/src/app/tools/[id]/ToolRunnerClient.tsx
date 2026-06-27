@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
+import { useSearchParams } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import { Select } from '@/components/Select';
 import { toolsApi } from '@/lib/builderforceApi';
@@ -27,6 +28,9 @@ const btnSubtle: React.CSSProperties = {
 
 export default function ToolRunnerClient({ toolId }: { toolId: string }) {
   const t = useTranslations('tools');
+  const searchParams = useSearchParams();
+  const projectIdParam = searchParams.get('projectId');
+  const projectId = projectIdParam != null && /^\d+$/.test(projectIdParam) ? Number(projectIdParam) : null;
   const [def, setDef] = useState<ToolDefinition | null>(null);
   const [input, setInput] = useState<Record<string, number>>({});
   const [result, setResult] = useState<ToolResult | null>(null);
@@ -62,8 +66,8 @@ export default function ToolRunnerClient({ toolId }: { toolId: string }) {
   const save = async () => {
     setSaveState('saving');
     try {
-      await toolsApi.save(toolId, input);
-      setSaveState('saved'); setSaveMsg(t('saved'));
+      await toolsApi.save(toolId, input, projectId);
+      setSaveState('saved'); setSaveMsg(projectId != null ? t('savedProject') : t('saved'));
     } catch (e) {
       setSaveState('error'); setSaveMsg(e instanceof Error ? e.message : t('saveFailed'));
     }
@@ -87,6 +91,9 @@ export default function ToolRunnerClient({ toolId }: { toolId: string }) {
           {t('freeNoLogin')}
         </p>
         <p style={{ fontSize: 14, color: 'var(--text-secondary)', maxWidth: 680 }}>{def.about}</p>
+        {projectId != null && (
+          <p style={{ fontSize: 13, fontWeight: 600, color: 'var(--accent)', margin: '6px 0 0' }}>{t('scoringProject')}</p>
+        )}
       </header>
 
       {/* Mode toggle — only for tools that also have a "from your data" provider */}
@@ -109,7 +116,7 @@ export default function ToolRunnerClient({ toolId }: { toolId: string }) {
       )}
 
       {mode === 'data' && def.hasDataDriven ? (
-        <DataDrivenPanel toolId={toolId} />
+        <DataDrivenPanel toolId={toolId} projectId={projectId} />
       ) : (
       <>
       {/* Inputs */}

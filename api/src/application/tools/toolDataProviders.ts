@@ -14,7 +14,10 @@ import { memberMetricsPeriod, deploymentEvents, runModelOutcomes } from '../../i
 import { getTool } from './toolDefinitions';
 import type { QuestionnaireTool, ToolResult, ToolMetric, ToolRecommendation } from './toolTypes';
 
-export type ToolDataProvider = (db: Db, tenantId: number, days: number) => Promise<ToolResult>;
+/** A data provider derives a tool's result from real telemetry. When `projectId`
+ *  is supplied the result is scoped to that project (sections that cannot be
+ *  attributed to a project fall back to "insufficient data"). */
+export type ToolDataProvider = (db: Db, tenantId: number, days: number, projectId?: number | null) => Promise<ToolResult>;
 
 const LEVEL_NAMES = ['Initial', 'Managed', 'Defined', 'Quantitatively Managed', 'Optimizing'];
 
@@ -129,30 +132,45 @@ function norm01(v: number | null | undefined): number | null {
   return v > 1 ? Math.min(1, v / 100) : Math.max(0, v);
 }
 
-const agenticMaturityProvider: ToolDataProvider = async (db, tenantId, days) => {
+const agenticMaturityProvider: ToolDataProvider = async (db, tenantId, days, projectId) => {
   const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+  const forProject = projectId != null;
+
+  // member_metrics_period has no project_id column, so delivery + project-management
+  // (member-derived) cannot be attributed to a single project — skip them when scoped.
+  const memberAggP = forProject
+    ? Promise.resolve([{ completed: 0, redo: 0, reopen: 0, avgCycle: null, avgHygiene: null }])
+    : db.select({
+        completed: sql<number>`coalesce(sum(${memberMetricsPeriod.completedCount}), 0)::int`,
+        redo: sql<number>`coalesce(sum(${memberMetricsPeriod.redoCount}), 0)::int`,
+        reopen: sql<number>`coalesce(sum(${memberMetricsPeriod.reopenCount}), 0)::int`,
+        avgCycle: sql<number | null>`avg(${memberMetricsPeriod.avgCycleTimeHours})`,
+        avgHygiene: sql<number | null>`avg(${memberMetricsPeriod.boardHygieneScore})`,
+      }).from(memberMetricsPeriod).where(and(eq(memberMetricsPeriod.tenantId, tenantId), gte(memberMetricsPeriod.periodEnd, since)));
 
   const [memberAgg, deployAgg, outcomeAgg] = await Promise.all([
-    db.select({
-      completed: sql<number>`coalesce(sum(${memberMetricsPeriod.completedCount}), 0)::int`,
-      redo: sql<number>`coalesce(sum(${memberMetricsPeriod.redoCount}), 0)::int`,
-      reopen: sql<number>`coalesce(sum(${memberMetricsPeriod.reopenCount}), 0)::int`,
-      avgCycle: sql<number | null>`avg(${memberMetricsPeriod.avgCycleTimeHours})`,
-      avgHygiene: sql<number | null>`avg(${memberMetricsPeriod.boardHygieneScore})`,
-    }).from(memberMetricsPeriod).where(and(eq(memberMetricsPeriod.tenantId, tenantId), gte(memberMetricsPeriod.periodEnd, since))),
+    memberAggP,
 
     db.select({
       total: sql<number>`count(*)::int`,
       failures: sql<number>`count(*) filter (where ${deploymentEvents.isFailure})::int`,
       avgMttrHours: sql<number | null>`avg(extract(epoch from (${deploymentEvents.restoredAt} - ${deploymentEvents.deployedAt})) / 3600.0) filter (where ${deploymentEvents.restoredAt} is not null)`,
-    }).from(deploymentEvents).where(and(eq(deploymentEvents.tenantId, tenantId), gte(deploymentEvents.deployedAt, since))),
+    }).from(deploymentEvents).where(and(
+      eq(deploymentEvents.tenantId, tenantId),
+      gte(deploymentEvents.deployedAt, since),
+      ...(forProject ? [eq(deploymentEvents.projectId, projectId!)] : []),
+    )),
 
     db.select({
       runs: sql<number>`count(*)::int`,
       avgScore: sql<number | null>`avg(${runModelOutcomes.score})`,
       ciGreen: sql<number>`count(*) filter (where ${runModelOutcomes.ciGreen})::int`,
       merged: sql<number>`count(*) filter (where ${runModelOutcomes.merged})::int`,
-    }).from(runModelOutcomes).where(and(eq(runModelOutcomes.tenantId, tenantId), gte(runModelOutcomes.createdAt, since))),
+    }).from(runModelOutcomes).where(and(
+      eq(runModelOutcomes.tenantId, tenantId),
+      gte(runModelOutcomes.createdAt, since),
+      ...(forProject ? [eq(runModelOutcomes.projectId, projectId!)] : []),
+    )),
   ]);
 
   const m = memberAgg[0]!, d = deployAgg[0]!, o = outcomeAgg[0]!;

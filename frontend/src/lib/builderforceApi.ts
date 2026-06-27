@@ -79,7 +79,9 @@ async function request<T>(path: string, opts: RequestInit = {}): Promise<T> {
 // Diagnostics & Tools (generic engine)
 // ---------------------------------------------------------------------------
 
-import type { ToolSummary, ToolDefinition, ToolResult, SavedToolRun } from './tools';
+import type {
+  ToolSummary, ToolDefinition, ToolResult, SavedToolRun, ProjectScore, TenantDiagnosticsRollup,
+} from './tools';
 
 export const toolsApi = {
   /** Public — list all free tools. */
@@ -96,25 +98,40 @@ export const toolsApi = {
       method: 'POST', body: JSON.stringify({ input }),
     }).then((r) => r.result),
 
-  /** Save a self-assessment / calculator run to the workspace (manager+). */
-  save: (id: string, input: Record<string, number>): Promise<SavedToolRun> =>
+  /** Save a self-assessment / calculator run (manager+). Pass projectId to score
+   *  the run against a project (feeds its diagnostic rating). */
+  save: (id: string, input: Record<string, number>, projectId?: number | null): Promise<SavedToolRun> =>
     request<{ run: SavedToolRun }>(`/api/tools/${encodeURIComponent(id)}/save`, {
-      method: 'POST', body: JSON.stringify({ input, kind: 'self' }),
+      method: 'POST', body: JSON.stringify({ input, kind: 'self', projectId: projectId ?? null }),
     }).then((r) => r.run),
 
-  /** Data-driven ("from your data") result, telemetry-derived (manager+). */
-  dataDriven: (id: string, days = 90): Promise<{ result: ToolResult; days: number }> =>
-    request<{ result: ToolResult; days: number }>(`/api/tools/${encodeURIComponent(id)}/data-driven?days=${days}`),
+  /** Data-driven ("from your data") result, telemetry-derived (manager+). Optional
+   *  projectId scopes it to one project. */
+  dataDriven: (id: string, days = 90, projectId?: number | null): Promise<{ result: ToolResult; days: number }> => {
+    const q = new URLSearchParams({ days: String(days) });
+    if (projectId != null) q.set('projectId', String(projectId));
+    return request<{ result: ToolResult; days: number }>(`/api/tools/${encodeURIComponent(id)}/data-driven?${q.toString()}`);
+  },
 
   /** Save a data-driven snapshot (recomputed server-side; manager+). */
-  saveData: (id: string, days = 90): Promise<SavedToolRun> =>
+  saveData: (id: string, days = 90, projectId?: number | null): Promise<SavedToolRun> =>
     request<{ run: SavedToolRun }>(`/api/tools/${encodeURIComponent(id)}/save`, {
-      method: 'POST', body: JSON.stringify({ input: { days }, kind: 'data' }),
+      method: 'POST', body: JSON.stringify({ input: { days }, kind: 'data', projectId: projectId ?? null }),
     }).then((r) => r.run),
 
-  /** Saved run history for a tool (manager+). */
-  runs: (id: string): Promise<SavedToolRun[]> =>
-    request<{ runs: SavedToolRun[] }>(`/api/tools/${encodeURIComponent(id)}/runs`).then((r) => r.runs),
+  /** Saved run history for a tool (manager+). Optional projectId filter. */
+  runs: (id: string, projectId?: number | null): Promise<SavedToolRun[]> => {
+    const q = projectId != null ? `?projectId=${projectId}` : '';
+    return request<{ runs: SavedToolRun[] }>(`/api/tools/${encodeURIComponent(id)}/runs${q}`).then((r) => r.runs);
+  },
+
+  /** A project's diagnostic rating + per-diagnostic latest scores (manager+). */
+  projectScore: (projectId: number): Promise<ProjectScore> =>
+    request<ProjectScore>(`/api/tools/projects/${projectId}/score`),
+
+  /** Project diagnostic ratings rolled up to the workspace (manager+). */
+  rollup: (): Promise<TenantDiagnosticsRollup> =>
+    request<TenantDiagnosticsRollup>('/api/tools/rollup'),
 };
 
 // ---------------------------------------------------------------------------
@@ -1674,7 +1691,6 @@ export const cronApi = {
 export type AgentAssignmentScope =
   | 'project'
   | 'workflow'
-  | 'architecture'
   | 'security'
   | 'swimlane'
   | 'brain'

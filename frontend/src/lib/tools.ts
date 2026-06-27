@@ -61,10 +61,43 @@ export interface SavedToolRun {
   id: string;
   toolId: string;
   kind: string;
+  projectId: number | null;
   input: Record<string, number>;
   result: ToolResult;
   createdBy: string | null;
   createdAt: string;
+}
+
+/** One diagnostic's latest score for a project. */
+export interface ProjectDiagnostic {
+  toolId: string;
+  name: string;
+  score: number | null;
+  scoreLabel: string | null;
+  headline: string;
+  kind: string;
+  createdAt: string;
+}
+
+/** A project's diagnostic rating: an aggregate result + per-diagnostic latest scores. */
+export interface ProjectScore {
+  result: ToolResult;
+  diagnostics: ProjectDiagnostic[];
+}
+
+export interface TenantProjectScore {
+  projectId: number;
+  name: string;
+  score: number | null;
+  scoreLabel: string | null;
+  diagnosticCount: number;
+  lastRunAt: string;
+}
+
+/** Project diagnostic ratings rolled up to the workspace. */
+export interface TenantDiagnosticsRollup {
+  result: ToolResult;
+  projects: TenantProjectScore[];
 }
 
 /** Default input map for a definition (calculator defaults; questionnaires start empty). */

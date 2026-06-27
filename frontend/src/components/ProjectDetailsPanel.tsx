@@ -15,7 +15,7 @@ import { DeleteProjectDialog } from './DeleteProjectDialog';
 import { SourceControlContent } from './sourcecontrol/SourceControlContent';
 import { IntegrationCredentialsManager } from './integrations/IntegrationCredentialsManager';
 import { BoardConnectionsManager } from './integrations/BoardConnectionsManager';
-import { AgentAssignmentPanel } from './AgentAssignmentPanel';
+import { ProjectDiagnosticsTab } from './ProjectDiagnosticsTab';
 import { ProjectInitiativeLink } from './pm/ProjectInitiativeLink';
 
 export type ProjectPanelTab =
@@ -23,6 +23,7 @@ export type ProjectPanelTab =
   | 'integrations'
   | 'taskMgmt'
   | 'prds'
+  | 'diagnostics'
   | 'capabilities'
   | 'brainChat'
   | 'workspace';
@@ -46,6 +47,7 @@ const TABS: { id: ProjectPanelTab; label: string }[] = [
   { id: 'integrations', label: 'Integrations' },
   { id: 'taskMgmt', label: 'Task Mgmt' },
   { id: 'prds', label: 'PRDs' },
+  { id: 'diagnostics', label: 'Diagnostics' },
   { id: 'capabilities', label: 'Agent / Capabilities' },
   { id: 'brainChat', label: 'Brain Chat' },
   { id: 'workspace', label: 'Workspace' },
@@ -579,17 +581,11 @@ export function ProjectDetailsPanel({
           )}
 
           {activeTab === 'prds' && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-              <div style={cardStyle}>
-                <AgentAssignmentPanel
-                  scope="architecture"
-                  scopeId={project.id}
-                  title="Architecture analysis agent"
-                  emptyHint="No agent assigned to run this project's architecture analysis. Assign one to have it perform the analysis; otherwise the default model is used."
-                />
-              </div>
-              <PRDsContent projectId={project.id} projectName={project.name} />
-            </div>
+            <PRDsContent projectId={project.id} projectName={project.name} />
+          )}
+
+          {activeTab === 'diagnostics' && (
+            <ProjectDiagnosticsTab projectId={project.id} />
           )}
 
           {activeTab === 'brainChat' && (

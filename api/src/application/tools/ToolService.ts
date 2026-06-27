@@ -1,24 +1,85 @@
-import { and, eq, desc } from 'drizzle-orm';
+import { and, eq, desc, isNotNull } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import { getOrSetCached, invalidateCached } from '../../infrastructure/cache/readThroughCache';
-import { toolRuns } from '../../infrastructure/database/schema';
+import { toolRuns, projects } from '../../infrastructure/database/schema';
 import { TOOLS, getTool } from './toolDefinitions';
 import { TOOL_DATA_PROVIDERS, hasDataProvider } from './toolDataProviders';
 import { toSummary, toDefinition, type ToolSummary, type ToolDefinition, type ToolResult } from './toolTypes';
+
+/** The architecture analysis ("Architect") is itself a diagnostic: when a run
+ *  completes it records a project-scoped tool_run under this id, scored from the
+ *  design-principles artifact. It has no self-assessment / compute form. */
+export const ARCHITECTURE_DIAGNOSTIC_ID = 'architecture-analysis';
+const EXTERNAL_DIAGNOSTIC_NAMES: Record<string, string> = {
+  [ARCHITECTURE_DIAGNOSTIC_ID]: 'Architecture Analysis',
+};
+
+const LEVEL_NAMES = ['Initial', 'Managed', 'Defined', 'Quantitatively Managed', 'Optimizing'];
+const clampLevel = (n: number): number => Math.max(1, Math.min(5, Math.round(n)));
+const levelName = (n: number): string => LEVEL_NAMES[clampLevel(n) - 1]!;
+
+/** Display name for any diagnostic id — a registered tool, or a special
+ *  externally-scored diagnostic like the architecture analysis. */
+export function diagnosticName(toolId: string): string {
+  return getTool(toolId)?.name ?? EXTERNAL_DIAGNOSTIC_NAMES[toolId] ?? toolId;
+}
 
 export interface SavedToolRun {
   id: string;
   toolId: string;
   kind: string;
+  projectId: number | null;
   input: Record<string, number>;
   result: ToolResult;
   createdBy: string | null;
   createdAt: string;
 }
 
-const runsKey = (tenantId: number, toolId: string) => `tools:runs:tenant:${tenantId}:${toolId}`;
-const dataKey = (tenantId: number, toolId: string, days: number) => `tools:data:tenant:${tenantId}:${toolId}:days:${days}`;
+/** One diagnostic's latest score for a project. */
+export interface ProjectDiagnostic {
+  toolId: string;
+  name: string;
+  score: number | null;
+  scoreLabel: string | null;
+  headline: string;
+  kind: string;
+  createdAt: string;
+}
+
+export interface ProjectScore {
+  /** Aggregate result, ready for the generic ToolResultView (meter + breakdown). */
+  result: ToolResult;
+  diagnostics: ProjectDiagnostic[];
+}
+
+export interface TenantProjectScore {
+  projectId: number;
+  name: string;
+  score: number | null;
+  scoreLabel: string | null;
+  diagnosticCount: number;
+  lastRunAt: string;
+}
+
+export interface TenantDiagnosticsRollup {
+  result: ToolResult;
+  projects: TenantProjectScore[];
+}
+
+const runsKey = (tenantId: number, toolId: string, projectId?: number | null) =>
+  `tools:runs:tenant:${tenantId}:${toolId}:project:${projectId ?? 'none'}`;
+const dataKey = (tenantId: number, toolId: string, days: number, projectId?: number | null) =>
+  `tools:data:tenant:${tenantId}:${toolId}:days:${days}:project:${projectId ?? 'none'}`;
+const projectScoreKey = (tenantId: number, projectId: number) => `tools:projectscore:tenant:${tenantId}:project:${projectId}`;
+const rollupKey = (tenantId: number) => `tools:rollup:tenant:${tenantId}`;
+
+/** Mean of the non-null scores, rounded to one decimal, or null if none. */
+function meanScore(scores: Array<number | null | undefined>): number | null {
+  const nums = scores.filter((s): s is number => typeof s === 'number');
+  if (nums.length === 0) return null;
+  return Math.round((nums.reduce((a, b) => a + b, 0) / nums.length) * 10) / 10;
+}
 
 export class ToolService {
   constructor(private readonly db: Db) {}
@@ -51,54 +112,197 @@ export class ToolService {
     return hasDataProvider(id);
   }
 
-  /** Data-driven result from this workspace's telemetry, cached. Null if no provider. */
-  async getDataDriven(env: Env, tenantId: number, id: string, days: number): Promise<ToolResult | null> {
+  /** Data-driven result from this workspace's telemetry, cached. Null if no provider.
+   *  When projectId is set the result is scoped to that project. */
+  async getDataDriven(env: Env, tenantId: number, id: string, days: number, projectId?: number | null): Promise<ToolResult | null> {
     const provider = TOOL_DATA_PROVIDERS[id];
     if (!provider) return null;
-    return getOrSetCached(env, dataKey(tenantId, id, days), () => provider(this.db, tenantId, days), { kvTtlSeconds: 300 });
+    return getOrSetCached(env, dataKey(tenantId, id, days, projectId), () => provider(this.db, tenantId, days, projectId ?? null), { kvTtlSeconds: 300 });
   }
 
   /**
    * Persist a run — recomputed server-side so the saved result is authoritative.
    * kind 'self' recomputes from `input` (answers/values); 'data' recomputes from
-   * telemetry (input carries { days }).
+   * telemetry (input carries { days }). When `projectId` is set the run is scored
+   * against that project and feeds its diagnostic rating.
    */
-  async saveRun(env: Env, args: { tenantId: number; toolId: string; kind: 'self' | 'data'; input: Record<string, number>; createdBy?: string | null }): Promise<SavedToolRun | null> {
+  async saveRun(env: Env, args: { tenantId: number; toolId: string; kind: 'self' | 'data'; input: Record<string, number>; projectId?: number | null; createdBy?: string | null }): Promise<SavedToolRun | null> {
     let result: ToolResult | null;
     if (args.kind === 'data') {
       const days = Math.min(Math.max(Number(args.input.days ?? 90), 7), 365);
-      result = await this.getDataDriven(env, args.tenantId, args.toolId, days);
+      result = await this.getDataDriven(env, args.tenantId, args.toolId, days, args.projectId ?? null);
       args = { ...args, input: { days } };
     } else {
       result = this.compute(args.toolId, args.input);
     }
     if (!result) return null;
+    return this.persist(env, { ...args, result });
+  }
 
+  /**
+   * Record a pre-computed run produced outside the tool engine (e.g. the
+   * architecture analysis derives its score from the design-principles artifact).
+   * The result is trusted as-is — there is no compute/score fn for these ids.
+   */
+  async recordExternalRun(env: Env, args: { tenantId: number; toolId: string; projectId?: number | null; result: ToolResult; input?: Record<string, number>; createdBy?: string | null }): Promise<SavedToolRun> {
+    return this.persist(env, { ...args, kind: 'data', input: args.input ?? {} });
+  }
+
+  private async persist(env: Env, args: { tenantId: number; toolId: string; kind: 'self' | 'data'; input: Record<string, number>; result: ToolResult; projectId?: number | null; createdBy?: string | null }): Promise<SavedToolRun> {
     const [row] = await this.db
       .insert(toolRuns)
       .values({
         tenantId: args.tenantId,
         toolId: args.toolId,
         kind: args.kind,
+        projectId: args.projectId ?? null,
         input: args.input as object,
-        result: result as object,
+        result: args.result as object,
         createdBy: args.createdBy ?? null,
       })
       .returning();
-    await invalidateCached(env, runsKey(args.tenantId, args.toolId));
+    await Promise.all([
+      invalidateCached(env, runsKey(args.tenantId, args.toolId, args.projectId ?? null)),
+      args.projectId != null ? invalidateCached(env, projectScoreKey(args.tenantId, args.projectId)) : Promise.resolve(),
+      args.projectId != null ? invalidateCached(env, rollupKey(args.tenantId)) : Promise.resolve(),
+    ]);
     return this.rowToDto(row!);
   }
 
-  /** Saved run history for a tool, cached + invalidated on save. */
-  async listRuns(env: Env, tenantId: number, toolId: string): Promise<SavedToolRun[]> {
-    return getOrSetCached(env, runsKey(tenantId, toolId), async () => {
+  /** Saved run history for a tool, cached + invalidated on save. Optionally
+   *  scoped to a single project. */
+  async listRuns(env: Env, tenantId: number, toolId: string, projectId?: number | null): Promise<SavedToolRun[]> {
+    return getOrSetCached(env, runsKey(tenantId, toolId, projectId), async () => {
       const rows = await this.db
         .select()
         .from(toolRuns)
-        .where(and(eq(toolRuns.tenantId, tenantId), eq(toolRuns.toolId, toolId)))
+        .where(and(
+          eq(toolRuns.tenantId, tenantId),
+          eq(toolRuns.toolId, toolId),
+          ...(projectId != null ? [eq(toolRuns.projectId, projectId)] : []),
+        ))
         .orderBy(desc(toolRuns.createdAt))
         .limit(50);
       return rows.map((r) => this.rowToDto(r));
+    }, { kvTtlSeconds: 300 });
+  }
+
+  /**
+   * A project's diagnostic rating: the latest run of each diagnostic scored
+   * against the project, plus an aggregate overall (mean of the per-diagnostic
+   * scores). This is the "score/rating" a project earns from its diagnostics.
+   */
+  async getProjectScore(env: Env, tenantId: number, projectId: number): Promise<ProjectScore> {
+    return getOrSetCached(env, projectScoreKey(tenantId, projectId), async () => {
+      const rows = await this.db
+        .select()
+        .from(toolRuns)
+        .where(and(eq(toolRuns.tenantId, tenantId), eq(toolRuns.projectId, projectId)))
+        .orderBy(desc(toolRuns.createdAt))
+        .limit(200);
+
+      // Latest run per diagnostic (rows are newest-first).
+      const latest = new Map<string, typeof toolRuns.$inferSelect>();
+      for (const r of rows) if (!latest.has(r.toolId)) latest.set(r.toolId, r);
+
+      const diagnostics: ProjectDiagnostic[] = [...latest.values()].map((r) => {
+        const result = r.result as ToolResult;
+        return {
+          toolId: r.toolId,
+          name: diagnosticName(r.toolId),
+          score: result.score ?? null,
+          scoreLabel: result.scoreLabel ?? null,
+          headline: result.headline ?? '',
+          kind: r.kind,
+          createdAt: r.createdAt.toISOString(),
+        };
+      });
+      diagnostics.sort((a, b) => a.name.localeCompare(b.name));
+
+      const overall = meanScore(diagnostics.map((d) => d.score));
+      const result: ToolResult = {
+        headline: overall != null ? `${levelName(overall)} — ${overall.toFixed(1)} / 5` : 'Not scored yet',
+        summary: overall != null
+          ? 'Average rating across the diagnostics run against this project.'
+          : 'Run a diagnostic against this project to give it a rating.',
+        score: overall,
+        scoreLabel: overall != null ? levelName(overall) : null,
+        metrics: diagnostics.map((d) => ({
+          label: d.name,
+          value: d.score != null ? `${d.score.toFixed(1)} — ${d.scoreLabel ?? levelName(d.score)}` : d.headline || 'Not scored',
+          tier: d.score != null ? clampLevel(d.score) : undefined,
+        })),
+        recommendations: [],
+      };
+      return { result, diagnostics };
+    }, { kvTtlSeconds: 300 });
+  }
+
+  /**
+   * Tenant rollup: each project's diagnostic rating, plus an overall (mean of the
+   * project ratings) — the project scores rolled up to the workspace.
+   */
+  async getTenantRollup(env: Env, tenantId: number): Promise<TenantDiagnosticsRollup> {
+    return getOrSetCached(env, rollupKey(tenantId), async () => {
+      const rows = await this.db
+        .select({
+          projectId: toolRuns.projectId,
+          toolId: toolRuns.toolId,
+          result: toolRuns.result,
+          createdAt: toolRuns.createdAt,
+        })
+        .from(toolRuns)
+        .where(and(eq(toolRuns.tenantId, tenantId), isNotNull(toolRuns.projectId)))
+        .orderBy(desc(toolRuns.createdAt))
+        .limit(2000);
+
+      // For each project, keep the latest run per diagnostic.
+      const byProject = new Map<number, { latest: Map<string, ToolResult>; lastRunAt: Date }>();
+      for (const r of rows) {
+        if (r.projectId == null) continue;
+        let entry = byProject.get(r.projectId);
+        if (!entry) { entry = { latest: new Map(), lastRunAt: r.createdAt }; byProject.set(r.projectId, entry); }
+        if (!entry.latest.has(r.toolId)) entry.latest.set(r.toolId, r.result as ToolResult);
+        if (r.createdAt > entry.lastRunAt) entry.lastRunAt = r.createdAt;
+      }
+
+      const projectIds = [...byProject.keys()];
+      const names = projectIds.length
+        ? await this.db.select({ id: projects.id, name: projects.name }).from(projects).where(eq(projects.tenantId, tenantId))
+        : [];
+      const nameById = new Map(names.map((p) => [p.id, p.name]));
+
+      const projectScores: TenantProjectScore[] = projectIds.map((pid) => {
+        const entry = byProject.get(pid)!;
+        const score = meanScore([...entry.latest.values()].map((r) => r.score ?? null));
+        return {
+          projectId: pid,
+          name: nameById.get(pid) ?? `#${pid}`,
+          score,
+          scoreLabel: score != null ? levelName(score) : null,
+          diagnosticCount: entry.latest.size,
+          lastRunAt: entry.lastRunAt.toISOString(),
+        };
+      });
+      projectScores.sort((a, b) => (b.score ?? -1) - (a.score ?? -1) || a.name.localeCompare(b.name));
+
+      const overall = meanScore(projectScores.map((p) => p.score));
+      const result: ToolResult = {
+        headline: overall != null ? `${levelName(overall)} — ${overall.toFixed(1)} / 5` : 'No project diagnostics yet',
+        summary: overall != null
+          ? `Average diagnostic rating across ${projectScores.filter((p) => p.score != null).length} scored project(s).`
+          : 'Run a diagnostic against a project to start scoring your workspace.',
+        score: overall,
+        scoreLabel: overall != null ? levelName(overall) : null,
+        metrics: projectScores.map((p) => ({
+          label: p.name,
+          value: p.score != null ? `${p.score.toFixed(1)} — ${p.scoreLabel}` : 'Not scored',
+          hint: `${p.diagnosticCount} diagnostic${p.diagnosticCount === 1 ? '' : 's'}`,
+          tier: p.score != null ? clampLevel(p.score) : undefined,
+        })),
+        recommendations: [],
+      };
+      return { result, projects: projectScores };
     }, { kvTtlSeconds: 300 });
   }
 
@@ -107,6 +311,7 @@ export class ToolService {
       id: row.id,
       toolId: row.toolId,
       kind: row.kind,
+      projectId: row.projectId ?? null,
       input: (row.input ?? {}) as Record<string, number>,
       result: row.result as ToolResult,
       createdBy: row.createdBy ?? null,

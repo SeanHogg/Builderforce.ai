@@ -4098,6 +4098,9 @@ export const toolRuns = pgTable('tool_runs', {
   id:         uuid('id').primaryKey().defaultRandom(),
   tenantId:   integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
   segmentId:  uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),
+  // When set, the run was scored AGAINST this project; it contributes to the
+  // project's diagnostic rating (which rolls up to the tenant). Null = workspace.
+  projectId:  integer('project_id').references(() => projects.id, { onDelete: 'cascade' }),
   toolId:     varchar('tool_id', { length: 64 }).notNull(),
   kind:       varchar('kind', { length: 16 }).notNull().default('self'), // self | data
   input:      jsonb('input').notNull().default(sql`'{}'::jsonb`),
@@ -4106,4 +4109,5 @@ export const toolRuns = pgTable('tool_runs', {
   createdAt:  timestamp('created_at').notNull().defaultNow(),
 }, (t) => ({
   byTenantTool: index('idx_tool_runs_tenant_tool').on(t.tenantId, t.toolId, t.createdAt),
+  byProject: index('idx_tool_runs_project').on(t.tenantId, t.projectId, t.toolId, t.createdAt),
 }));
