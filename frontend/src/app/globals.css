@@ -2815,7 +2815,7 @@ textarea.input { resize: vertical; line-height: 1.5; }
   .mh-hamburger { display: inline-flex; }
 }
 
-/* Wave hero backdrop */
+/* Brain hero backdrop (Evermind neural scene; .wb-* names kept for the single import site) */
 .wb-scene {
   position: absolute;
   inset: 0;

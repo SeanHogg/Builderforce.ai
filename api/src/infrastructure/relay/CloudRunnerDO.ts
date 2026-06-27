@@ -15,9 +15,9 @@
 import { eq } from 'drizzle-orm';
 import { buildDatabase, type Db } from '../database/connection';
 import { executions } from '../database/schema';
-import { prepareCloudRun, runCloudToolLoop, markCloudExecutionRunning, resolveCloudAgent, augmentSystemPromptWithLimbic, type CloudLoopState } from '../../application/runtime/cloudAgentEngine';
+import { prepareCloudRun, runCloudToolLoop, markCloudExecutionRunning, resolveCloudAgent, initialCloudLimbicState, evolveCloudLimbicState, recordLimbicState, type CloudLoopState } from '../../application/runtime/cloudAgentEngine';
 import { loadPersonaSetpoints } from '../../application/artifact/capabilityContext';
-import { ENGINE_IDS } from '@builderforce/agent-tools';
+import { ENGINE_IDS, buildLimbicBlock, type LimbicState } from '@builderforce/agent-tools';
 import { parseRoutingBias } from '../../application/runtime/cloudDispatch';
 import { scoreRunOutcome } from '../../application/runtime/scoreRunOutcome';
 import { releasePendingSteers } from '../../application/runtime/executionSteering';
@@ -49,6 +49,12 @@ interface Cursor extends StartBody {
   systemPrompt?: string;
   userContent?: string;
   loop?: CloudLoopState;
+  /** V3 (limbic) only — the evolving affective state injected per tick via the
+   *  loop's dynamicSystem seam, plus the personality setpoints it relaxes toward.
+   *  Plain JSON (Record<string,number>) so it survives DO cursor persistence. */
+  limbic?: boolean;
+  limbicState?: LimbicState;
+  limbicSetpoints?: LimbicState;
 }
 
 const CURSOR_KEY = 'cursor';
@@ -127,29 +133,35 @@ export class CloudRunnerDO implements DurableObject {
           { id: cursor.taskId, title: cursor.taskTitle, description: cursor.taskDescription },
           cursor.tenantId, cursor.projectId, cursor.agentLabel, cursor.model, cursor.artifacts, cursor.cloudAgentRef, cursor.payload,
         );
-        // V3 (limbic) agents get the affective block appended once, here in prep,
-        // so it persists in the cursor for every loop tick. V2 agents are
-        // untouched — the engine id gates it (unknown/legacy ids → V2).
+        cursor.systemPrompt = systemPrompt;
+        cursor.userContent = userContent;
+        // V3 (limbic) agents: seed the affective state from the personality
+        // setpoints + the task. It's injected per-tick via the loop's dynamicSystem
+        // seam (NOT baked into systemPrompt) and EVOLVES across ticks below. V2
+        // agents skip this entirely (engine id gate; unknown/legacy → V2).
         const engineId = (await resolveCloudAgent(this.env, cursor.tenantId, cursor.cloudAgentRef)).engine;
         if (engineId === ENGINE_IDS.v3) {
-          // Personality = setpoints (from assigned personas' psychometric profiles).
-          const setpoints = await loadPersonaSetpoints(this.env, this.db, cursor.artifacts?.personas ?? []);
-          cursor.systemPrompt = await augmentSystemPromptWithLimbic(
-            this.db,
-            { tenantId: cursor.tenantId, cloudAgentRef: cursor.cloudAgentRef, executionId: cursor.executionId, taskRow: { id: cursor.taskId, title: cursor.taskTitle, description: cursor.taskDescription } },
-            systemPrompt,
-            setpoints,
+          cursor.limbic = true;
+          cursor.limbicSetpoints = await loadPersonaSetpoints(this.env, this.db, cursor.artifacts?.personas ?? []);
+          cursor.limbicState = initialCloudLimbicState(
+            { title: cursor.taskTitle, description: cursor.taskDescription },
+            cursor.limbicSetpoints,
           );
-        } else {
-          cursor.systemPrompt = systemPrompt;
+          await recordLimbicState(
+            this.db,
+            { tenantId: cursor.tenantId, cloudAgentRef: cursor.cloudAgentRef, executionId: cursor.executionId },
+            cursor.limbicState,
+          );
         }
-        cursor.userContent = userContent;
         cursor.stage = 'loop';
         await this.persistAndArm(cursor);
         return;
       }
 
-      // One LLM step per tick; resume from the saved conversation state.
+      // One LLM step per tick; resume from the saved conversation state. For V3,
+      // inject THIS tick's evolving affect as a per-step directive (the loop seam),
+      // leaving the persisted conversation untouched.
+      const dynamicSystem = cursor.limbic && cursor.limbicState ? buildLimbicBlock(cursor.limbicState) : undefined;
       const result = await runCloudToolLoop(
         this.env, this.db, cursor.executionId, cursor.tenantId,
         { id: cursor.taskId, title: cursor.taskTitle, description: cursor.taskDescription },
@@ -157,8 +169,14 @@ export class CloudRunnerDO implements DurableObject {
         cursor.systemPrompt ?? '', cursor.userContent ?? '',
         () => this.isCancelled(cursor.executionId),
         cursor.projectId,
-        { resume: cursor.loop, maxSteps: 1, deferFinalize: true, routingBias: parseRoutingBias(cursor.payload) },
+        { resume: cursor.loop, maxSteps: 1, deferFinalize: true, routingBias: parseRoutingBias(cursor.payload), ...(dynamicSystem ? { dynamicSystem } : {}) },
       );
+
+      // V3: evolve affect from this tick's outcome (amygdala) toward setpoints
+      // (hypothalamus) so the next tick's directive reflects how the run is going.
+      if (cursor.limbic && cursor.limbicState) {
+        cursor.limbicState = evolveCloudLimbicState(cursor.limbicState, cursor.limbicSetpoints, result);
+      }
 
       if (result.cancelled) { await this.cleanup(cursor.executionId); return; }
 

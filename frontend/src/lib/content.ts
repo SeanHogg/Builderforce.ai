@@ -18,7 +18,7 @@ export const BRAND = {
   ogImageWidth: 1200,
   ogImageHeight: 630,
   /** ISO 8601 — update on each content deploy */
-  dateModified: '2026-06-23T00:00:00Z',
+  dateModified: '2026-06-27T00:00:00Z',
 } as const;
 
 /* ════════════════════ STATS ════════════════════ */
@@ -33,6 +33,7 @@ export const STATS = {
   ],
   /** Quotable one-liners for AI citability */
   quotable: {
+    evermind: 'Evermind is Builderforce.ai\'s self-updating model and the brain of the platform, governed by Write-Through Cognition: new knowledge is written straight through so an update replaces what came before — reads are always current, there is never a reconciliation step, and it runs in the browser, on-device, or inside every agent.',
     systemOfRecord: 'Builderforce.ai is the system of record for the agentic enterprise: every unit of work — human or agent — is instrumented, costed, and attributed from idea to ship to learn, on one board governed by roles, approvals, and a full audit trail.',
     enterpriseInnovation: 'Builderforce.ai is an end-to-end innovation platform for the agentic era — plan, build, ship, and measure with a workforce of humans and AI agents on a single instrumented system, priced as a platform rather than per-seat enterprise software.',
     roleBasedInsight: 'Because every action is instrumented and costed, every role gets its own operating picture from the same data: delivery and DORA for engineering, cost and FinOps for finance, portfolio and innovation funnel for the PMO and CEO, and an immutable audit trail for security.',
@@ -49,6 +50,60 @@ export const STATS = {
   },
 } as const;
 
+/* ════════════════════ EVERMIND (the platform's brain) ════════════════════ */
+
+export interface EvermindPillar {
+  /** Emoji icon. */
+  icon: string;
+  title: string;
+  desc: string;
+}
+
+/**
+ * Evermind — Builderforce's self-updating model and the "brain" of the
+ * platform (visualised by the homepage neural backdrop). Single source of truth
+ * for Evermind marketing copy so it stays consistent across every surface.
+ */
+export const EVERMIND = {
+  name: 'Evermind',
+  eyebrow: 'Meet Evermind',
+  tagline: 'A model that learns as it works — and never goes stale',
+  blurb:
+    'Evermind is the brain of Builderforce: a self-updating model governed by Write-Through Cognition. Frozen frontier models go out of date the moment they ship — every update needs a bolt-on retrain, fine-tune, or RAG patch. Evermind writes new knowledge straight through into the model, so an update simply replaces what was there. Reads always reflect the latest truth, there is never a reconciliation step, and it runs anywhere — in the browser, on-device, or inside every agent.',
+  /** Quotable one-liner for AI citability / meta descriptions. */
+  quotable:
+    'Evermind is Builderforce.ai\'s self-updating model, governed by Write-Through Cognition: new knowledge is written straight through so an update replaces what came before — reads are always current, there is never a reconciliation step, and it runs in the browser, on-device, or inside every agent.',
+  /** The key aspects the homepage brain animation represents. */
+  pillars: [
+    {
+      icon: '🧠',
+      title: 'Write-Through Cognition',
+      desc: 'Knowledge is write-through: an update means replace, not append. Reads always reflect the latest truth and there is never a stale-then-reconcile step — the same invalidate-on-write rule the platform uses for caching, applied to the model\'s memory.',
+    },
+    {
+      icon: '⚡',
+      title: 'Shared-expert hybrid generator',
+      desc: 'A dense always-on backbone carries continuous online learning, while lazily-loaded routed SSM experts page in on demand. You get specialist depth without a giant frozen blob — and it runs on WebGPU with zero runtime dependencies.',
+    },
+    {
+      icon: '🔁',
+      title: 'Write-through memory',
+      desc: 'Every fact upserts by a stable key and invalidates its old recall, so the model never accumulates contradictory copies of the same truth. The knowledge loop corrects in place instead of drifting.',
+    },
+    {
+      icon: '❤️',
+      title: 'Limbic dynamics',
+      desc: 'A trainable affective layer modulates how the model responds in the moment — personality as setpoints, limbic state as dynamics — so agents behave consistently with the persona you give them.',
+    },
+  ] as EvermindPillar[],
+  /** Why Evermind beats a frozen frontier model — not on scale, on these axes. */
+  edges: [
+    { label: 'Currency', desc: 'Never stale — knowledge updates land in the model the moment they happen, with no retrain cycle.' },
+    { label: 'Footprint', desc: 'Runs in any runtime — in the browser, on-device, or embedded in every agent via WebGPU.' },
+    { label: 'Ownership', desc: 'Yours end to end — open packages, your data, no third-party model dependency.' },
+  ],
+} as const;
+
 /* ════════════════════ FEATURES ════════════════════ */
 
 export interface Feature {
@@ -59,6 +114,12 @@ export interface Feature {
 }
 
 export const FEATURES: Feature[] = [
+  {
+    icon: '🧠',
+    title: 'Evermind — The Self-Updating Model',
+    shortDesc: 'A model that learns as it works and never goes stale.',
+    longDesc: 'Evermind is the brain of the platform — a self-updating model governed by Write-Through Cognition: new knowledge is written straight through, so an update replaces what came before with no reconciliation step. A shared-expert hybrid generator (dense backbone + routed SSM experts) learns online and runs on WebGPU, so it wins on currency, footprint, and ownership rather than raw scale — in the browser, on-device, or inside every agent.',
+  },
   {
     icon: '▦',
     title: 'Kanban Board & Project Management',
@@ -517,6 +578,10 @@ export interface FaqItem {
 /** Homepage FAQ — 10 Q&As for rich snippet coverage */
 export const HOMEPAGE_FAQ: FaqItem[] = [
   {
+    question: 'What is Evermind?',
+    answer: 'Evermind is the brain of Builderforce.ai — a self-updating model governed by Write-Through Cognition. Instead of freezing knowledge at training time like a conventional frontier model, Evermind writes new knowledge straight through into the model, so an update replaces what came before with no reconciliation step and reads always reflect the latest truth. It is built from a shared-expert hybrid generator (a dense backbone that learns online plus routed SSM experts that page in on demand), a write-through knowledge memory that upserts by stable key, and a trainable limbic layer for dynamics. It runs on WebGPU in the browser, on-device, or inside every agent, and is designed to win on currency, footprint, and ownership rather than raw scale.',
+  },
+  {
     question: 'What is Builderforce.ai?',
     answer: 'Builderforce.ai is the innovation platform for the agentic era — a single system of record where every unit of work, done by a human or an AI agent, is instrumented, costed, and attributed from idea to ship to learn. You plan, build, ship, and measure with one workforce of humans and agents on a Kanban board, train your own agents in the browser (dataset generation, WebGPU LoRA training, AI evaluation, and the Workforce Registry), connect to your systems and data, and govern every action with roles, approval gates, and a full audit trail — all without leaving VS Code.',
   },
@@ -744,6 +809,14 @@ export interface DefinedTermEntry {
 }
 
 export const DEFINED_TERMS: DefinedTermEntry[] = [
+  {
+    name: 'Evermind',
+    description: 'Builderforce.ai\'s self-updating model and the brain of the platform. It is governed by Write-Through Cognition, built from a shared-expert hybrid SSM generator (a dense always-on backbone plus lazily-loaded routed experts), a write-through knowledge memory, and a trainable limbic layer for dynamics. It runs on WebGPU in the browser, on-device, or inside every agent, and is designed to beat frozen frontier models on currency, footprint, and ownership rather than raw scale.',
+  },
+  {
+    name: 'Write-Through Cognition',
+    description: 'The governing principle of Evermind: knowledge is written straight through into the model, so an update replaces what came before instead of being appended alongside it. Reads always reflect the latest truth and there is never a stale-then-reconcile step — the same invalidate-on-write rule used for caching, applied to a model\'s knowledge tier so it can never drift out of date.',
+  },
   {
     name: 'WebGPU LoRA Fine-Tuning',
     description: 'A browser-native approach to fine-tuning AI models using Low-Rank Adaptation (LoRA) powered by the WebGPU API. Enables training models up to 2 billion parameters directly in Chrome without cloud GPUs.',
