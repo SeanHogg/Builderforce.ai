@@ -35,6 +35,7 @@ const RESOURCE_LINKS: SimpleLink[] = [
 const FLAT_LINKS: SimpleLink[] = [
   { href: '/marketplace', label: 'Workforce' },
   { href: '/agents', label: 'Agents' },
+  { href: '/evermind', label: 'Evermind' },
   { href: '/models', label: 'Models' },
   { href: '/pricing', label: 'Pricing' },
 ];
