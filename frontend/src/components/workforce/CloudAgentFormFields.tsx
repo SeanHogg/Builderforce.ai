@@ -130,7 +130,7 @@ export function CloudAgentFormFields({
           <label style={labelStyle}>{t('surface')}</label>
           <Select style={inputStyle} value={form.runtimeSurface} onChange={(e) => onChange({ runtimeSurface: e.target.value as AgentRuntimeSurface })}>
             {RUNTIME_SURFACE_KEYS.map((rs) => (
-              <option key={rs} value={rs}>{t(`surface.${rs}`)}</option>
+              <option key={rs} value={rs}>{t(`surfaceLabel.${rs}`)}</option>
             ))}
           </Select>
           <p style={{ fontSize: 11, color: 'var(--muted)', margin: '6px 0 0' }}>{t('surfaceHelp')}</p>
