@@ -56,8 +56,8 @@ export function TenantProjectSwitcher() {
   if (!scope) {
     return (
       <Link href="/tenants" className="tenant-chip" style={{ textDecoration: 'none' }} title={`${tenantName} (${t('workspace')})`}>
-        {tenantName}
-        <span style={{ opacity: 0.6, fontWeight: 400, marginLeft: 4 }}>({t('workspace')})</span>
+        <span className="tenant-chip__project">{tenantName}</span>
+        <span className="tenant-chip__workspace" style={{ opacity: 0.6, fontWeight: 400, marginLeft: 4 }}>({t('workspace')})</span>
         <Chevron />
       </Link>
     );
@@ -92,9 +92,9 @@ export function TenantProjectSwitcher() {
         title={`${tenantName} · ${projectLabel}`}
         style={{ cursor: 'pointer', border: 'none', font: 'inherit' }}
       >
-        <span>{tenantName}</span>
-        <span aria-hidden="true" style={{ opacity: 0.5, margin: '0 4px' }}>▸</span>
-        <span style={{ fontWeight: 600 }}>{projectLabel}</span>
+        <span className="tenant-chip__workspace">{tenantName}</span>
+        <span className="tenant-chip__sep" aria-hidden="true" style={{ opacity: 0.5, margin: '0 4px' }}>▸</span>
+        <span className="tenant-chip__project" style={{ fontWeight: 600 }}>{projectLabel}</span>
         <Chevron />
       </button>
 
