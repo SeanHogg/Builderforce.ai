@@ -27,9 +27,12 @@
  * heuristic teacher and the always-available fallback.
  *
  * The only cross-system contract is the psychometric *dimension-id strings*
- * ({@link PSYCH_DIM}) — identical to `agent-runtime` psychometrics `DIM` and the
- * `api` psychometricCatalog `DIM`.
+ * ({@link PSYCH_DIM}) — the single shared map, also consumed by `agent-runtime`
+ * psychometrics `DIM` and the `api` psychometricCatalog `DIM`.
  */
+
+// The setpoint derivation reads dimension ids from the single shared PSYCH_DIM map.
+import { PSYCH_DIM } from "./psychometric-dims.js";
 
 // ── Minimal shared types (kept structurally identical to the runtime's) ─────────
 
@@ -52,18 +55,6 @@ export interface LimbicPsychProfile {
   mbti?: string;
 }
 
-/** The psychometric dimension-id strings the setpoint derivation reads. MUST match
- *  the `DIM` maps in agent-runtime psychometrics.ts and api psychometricCatalog.ts. */
-const PSYCH_DIM = {
-  openness: "hexaco.openness",
-  emotionality: "hexaco.emotionality",
-  conscientiousness: "hexaco.conscientiousness",
-  extraversion: "hexaco.extraversion",
-  regulatoryFocus: "regfocus.orientation",
-  riskTolerance: "disp.risk_tolerance",
-  grit: "disp.grit",
-  valStimulation: "values.stimulation",
-} as const;
 
 // ── Affective state model ───────────────────────────────────────────────────────
 

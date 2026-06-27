@@ -18,6 +18,13 @@ import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import { getOrSetCached, invalidateCached } from '../../infrastructure/cache/readThroughCache';
 import { getBuiltinSkillBody } from './builtinSkills';
+import {
+  deriveLimbicSetpoints,
+  neutralState,
+  LIMBIC_DIM_NAMES,
+  type LimbicState,
+  type LimbicPsychProfile,
+} from '@builderforce/agent-tools';
 
 /** Per-skill readme is capped so a few large skills can't blow the context budget. */
 const SKILL_BODY_MAX_CHARS = 4_000;
@@ -30,6 +37,8 @@ type PersonaBody = {
   perspective: string | null;
   decisionStyle: string | null;
   outputPrefix: string | null;
+  /** JSON-serialized PsychometricProfile (Pro). Drives limbic setpoints. */
+  psychometric: string | null;
 } | null;
 
 export interface CapabilityContext {
@@ -78,12 +87,54 @@ async function loadPersonaBody(env: Env, db: Db, slug: string): Promise<PersonaB
         perspective: platformPersonas.perspective,
         decisionStyle: platformPersonas.decisionStyle,
         outputPrefix: platformPersonas.outputPrefix,
+        psychometric: platformPersonas.psychometric,
       })
       .from(platformPersonas)
       .where(eq(platformPersonas.slug, slug))
       .limit(1);
     return row ?? null;
   });
+}
+
+function parsePsychometric(raw: string | null): LimbicPsychProfile | undefined {
+  if (!raw) return undefined;
+  try {
+    const p = JSON.parse(raw) as LimbicPsychProfile;
+    return p && typeof p === 'object' && p.vector ? p : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Derive the limbic homeostatic setpoints from the assigned personas' psychometric
+ * profiles ("personality = setpoints"), averaged across any that carry one. Returns
+ * `undefined` when no assigned persona has a profile, so the caller starts from the
+ * neutral resting state. Reuses the per-slug persona cache (no extra query when the
+ * persona body was already loaded for the prompt block). The cloud counterpart of
+ * the on-prem `LimbicSystemService.refreshSetpoints`.
+ */
+export async function loadPersonaSetpoints(
+  env: Env,
+  db: Db,
+  slugs: string[],
+): Promise<LimbicState | undefined> {
+  if (slugs.length === 0) return undefined;
+  const profiles: LimbicPsychProfile[] = [];
+  for (const slug of slugs) {
+    const body = await loadPersonaBody(env, db, slug);
+    const prof = parsePsychometric(body?.psychometric ?? null);
+    if (prof) profiles.push(prof);
+  }
+  if (profiles.length === 0) return undefined;
+  const acc = neutralState();
+  for (const name of LIMBIC_DIM_NAMES) acc[name] = 0;
+  for (const prof of profiles) {
+    const sp = deriveLimbicSetpoints(prof);
+    for (const name of LIMBIC_DIM_NAMES) acc[name] += sp[name];
+  }
+  for (const name of LIMBIC_DIM_NAMES) acc[name] /= profiles.length;
+  return acc;
 }
 
 /** Invalidate the cached body for one artifact. Call from every mutation that edits

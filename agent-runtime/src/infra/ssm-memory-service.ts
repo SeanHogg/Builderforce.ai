@@ -407,6 +407,21 @@ export class SsmMemoryService {
   }
 
   /**
+   * Pooled, L2-normalised SSM embedding of `text` (the hippocampus representation
+   * the limbic model learns from). Returns null when the GPU/embedder is
+   * unavailable so callers fall back to a hashed embedding. Never throws.
+   */
+  async embed(text: string): Promise<Float32Array | null> {
+    if (!this.gpuAvailable) return null;
+    try {
+      const v = (await this.runtime.embed(text)) as ArrayLike<number> | null | undefined;
+      return v ? Float32Array.from(v as ArrayLike<number>) : null;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
    * Fine-tunes the SSM on `text` (WSLA adaptation), then persists the adapted
    * weights to the on-disk checkpoint every `saveEveryLearns` calls so the
    * learning loop survives process restarts. No-op when GPU is unavailable.

@@ -23,6 +23,8 @@ import fs from "node:fs/promises";
 import path from "node:path";
 
 import { logDebug } from "../logger.js";
+import { onAgentEvent, type AgentEventPayload } from "./agent-events.js";
+import { getSsmMemoryService } from "./ssm-memory-service.js";
 import { globalPersonaRegistry } from "../builderforce/personas.js";
 import { getRoleProfile } from "../builderforce/psychometrics.js";
 import {
@@ -66,6 +68,8 @@ const DEFAULT_CHECKPOINT_PATH = path.join(".builderforce", "limbic.bin");
 const DEFAULT_INPUT_DIM = 32;
 const DEFAULT_TRAIN_EVERY = 16;
 const DEFAULT_TRAIN_EPOCHS = 12;
+/** Cap on retained per-session affect snapshots (LRU eviction beyond this). */
+const MAX_SESSION_STATES = 256;
 
 /** Exported for testability. */
 export function resolveLimbicCheckpointPath(explicit?: string): string {
@@ -98,6 +102,10 @@ export class LimbicSystemService {
   private readonly modelBlend: number;
   private readonly buffer: TrainingSample[] = [];
   private observedSinceTrain = 0;
+  /** Unsubscribe handle for the agent event-bus subscription, if attached. */
+  private eventUnsub: (() => void) | undefined;
+  /** Per-session affect snapshots (bounded LRU) for cross-turn restore. */
+  private readonly sessionStates = new Map<string, LimbicState>();
 
   private constructor(
     session: LimbicSession | null,
@@ -327,14 +335,86 @@ export class LimbicSystemService {
   // ── Embedding ─────────────────────────────────────────────────────────────
 
   /**
-   * Produce the experience embedding the model consumes. Uses the hippocampus
-   * SSM embedding when available and dimension-compatible; otherwise a
-   * deterministic hashed character-trigram embedding of the event text. Always
-   * returns a unit-norm Float32Array of length `inputDim`.
+   * Produce the experience embedding the model consumes. Prefers the hippocampus
+   * SSM embedding (the same representation memory uses, so the limbic model
+   * learns from a real semantic vector), projected to `inputDim`; falls back to a
+   * deterministic hashed character-trigram embedding when the GPU/embedder is
+   * unavailable. Always returns a unit-norm Float32Array of length `inputDim`.
    */
   async embedEvent(event: LimbicEvent): Promise<Float32Array> {
     const text = `${event.kind}:${event.text ?? ""}:${(event.intensity ?? 0.5).toFixed(2)}`;
+    const ssm = getSsmMemoryService();
+    if (ssm) {
+      const v = await ssm.embed(text);
+      if (v && v.length > 0) return projectEmbedding(v, this.inputDim);
+    }
     return hashedEmbedding(text, this.inputDim);
+  }
+
+  // ── Live event-stream appraisal (amygdala on the agent event bus) ───────────
+
+  /**
+   * Subscribe to the agent event bus so affect responds to real run events
+   * (tool errors/successes, run completion) — the live counterpart to the
+   * explicit {@link appraise} call. Idempotent; returns an unsubscribe. Best-effort
+   * per event (never blocks or throws into the bus).
+   */
+  attachToEventStream(): () => void {
+    if (this.eventUnsub) return this.eventUnsub;
+    this.eventUnsub = onAgentEvent((evt) => {
+      const ev = mapAgentEventToLimbic(evt);
+      if (!ev) return;
+      void this.appraise(ev)
+        .then(() => {
+          // Persist the session's mood at run completion so the next turn resumes
+          // from it (restored at prompt-build time via restoreSessionState).
+          const phase = (evt.data ?? {})["phase"];
+          if (evt.sessionKey && (phase === "end" || phase === "error")) {
+            this.saveSessionState(evt.sessionKey);
+          }
+        })
+        .catch(() => { /* affect is best-effort */ });
+    });
+    logDebug("[limbic] attached to agent event stream");
+    return this.eventUnsub;
+  }
+
+  /** Stop event-stream appraisal and persist any pending adaptation. */
+  async stop(): Promise<void> {
+    if (this.eventUnsub) {
+      this.eventUnsub();
+      this.eventUnsub = undefined;
+    }
+    await this.train().catch(() => undefined);
+  }
+
+  // ── Session-scoped state (gap: was process-wide + ephemeral only) ───────────
+
+  /**
+   * Snapshot the live affective state keyed to a session, so a later turn /
+   * handoff can restore the agent's mood instead of resetting to neutral.
+   * Bounded LRU (the map can't grow unboundedly across many sessions).
+   */
+  saveSessionState(sessionKey: string): void {
+    if (!sessionKey) return;
+    this.sessionStates.delete(sessionKey);
+    this.sessionStates.set(sessionKey, this.snapshot());
+    while (this.sessionStates.size > MAX_SESSION_STATES) {
+      const oldest = this.sessionStates.keys().next().value;
+      if (oldest === undefined) break;
+      this.sessionStates.delete(oldest);
+    }
+  }
+
+  /**
+   * Restore a previously-snapshotted session state into the live state. Returns
+   * true if a snapshot existed. No-op (returns false) for an unknown session.
+   */
+  restoreSessionState(sessionKey: string): boolean {
+    const s = sessionKey ? this.sessionStates.get(sessionKey) : undefined;
+    if (!s) return false;
+    this.setState(s);
+    return true;
   }
 }
 
@@ -355,6 +435,62 @@ function arrayToDelta(arr: ArrayLike<number>): LimbicDelta {
   const d: LimbicDelta = {};
   for (let i = 0; i < LIMBIC_DIM_NAMES.length; i++) d[LIMBIC_DIM_NAMES[i]!] = arr[i] ?? 0;
   return d;
+}
+
+/**
+ * Map a raw agent-bus event to a limbic event (amygdala input), or null to
+ * ignore it. Pure + exported for testing. Tool errors / run failures are
+ * negative-arousing; tool successes are mild progress; run completion is success.
+ */
+export function mapAgentEventToLimbic(evt: AgentEventPayload): LimbicEvent | null {
+  const data = evt.data ?? {};
+  const phase = typeof data["phase"] === "string" ? (data["phase"] as string) : undefined;
+  if (evt.stream === "tool" && phase === "result") {
+    const name = typeof data["name"] === "string" ? (data["name"] as string) : "tool";
+    if (data["isError"] === true) {
+      return { kind: "error", intensity: 0.7, text: `${name} failed` };
+    }
+    return { kind: "progress", intensity: 0.3, text: name };
+  }
+  if (evt.stream === "lifecycle" && phase === "error") {
+    const text = typeof data["error"] === "string" ? (data["error"] as string) : "run error";
+    return { kind: "blocked", intensity: 0.8, text };
+  }
+  if (evt.stream === "lifecycle" && phase === "end") {
+    return { kind: "success", intensity: 0.6, text: "run complete" };
+  }
+  if (evt.stream === "error") {
+    return { kind: "error", intensity: 0.8, text: typeof data["error"] === "string" ? (data["error"] as string) : "error" };
+  }
+  return null;
+}
+
+/**
+ * Project an arbitrary-length embedding down to `dim` via contiguous average
+ * pooling, then L2-normalise. Deterministic; used to fit the hippocampus SSM
+ * embedding to the limbic model's input width.
+ */
+export function projectEmbedding(src: ArrayLike<number>, dim: number): Float32Array {
+  const out = new Float32Array(dim);
+  const n = src.length;
+  if (n === 0) return out;
+  if (n === dim) {
+    for (let i = 0; i < dim; i++) out[i] = src[i] ?? 0;
+  } else {
+    // Average-pool source into `dim` contiguous buckets.
+    for (let i = 0; i < dim; i++) {
+      const lo = Math.floor((i * n) / dim);
+      const hi = Math.max(lo + 1, Math.floor(((i + 1) * n) / dim));
+      let sum = 0;
+      for (let j = lo; j < hi; j++) sum += src[j] ?? 0;
+      out[i] = sum / (hi - lo);
+    }
+  }
+  let norm = 0;
+  for (let i = 0; i < dim; i++) norm += out[i]! * out[i]!;
+  norm = Math.sqrt(norm) || 1;
+  for (let i = 0; i < dim; i++) out[i] = out[i]! / norm;
+  return out;
 }
 
 /** Deterministic hashed trigram embedding → unit-norm Float32Array(dim). */
@@ -393,5 +529,7 @@ export async function initLimbicSystemService(
   opts: LimbicSystemServiceOptions = {},
 ): Promise<LimbicSystemService> {
   _service = await LimbicSystemService.create(opts);
+  // Make affect respond to live run events (tool errors/successes, completion).
+  _service.attachToEventStream();
   return _service;
 }

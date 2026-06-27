@@ -1,51 +1,16 @@
 /**
  * Psychometric persona catalog (Pro feature) — the source of truth the UI renders.
  *
- * This is the `api`-side half of the cross-package contract documented in
- * agent-runtime's `psychometrics.ts`. It owns the human-facing catalog (framework
- * names, dimension labels, the questionnaire bank) and server-side scoring. The
- * agent-runtime owns the behavioural compiler. The two sides are coupled ONLY by
- * the dimension-id strings below — keep them identical to agent-runtime `DIM`.
+ * This is the `api`-side half of the system. It owns the human-facing catalog
+ * (framework names, dimension labels, the questionnaire bank) and server-side
+ * scoring; agent-runtime owns the behavioural compiler. The dimension-id strings
+ * both sides key on now come from ONE shared map (`@builderforce/agent-tools`
+ * PSYCH_DIM), re-exported here as `DIM` so existing api consumers are unchanged.
  */
+import { PSYCH_DIM } from '@builderforce/agent-tools';
 
-// Dimension ids — MUST match agent-runtime `DIM` in builderforce/psychometrics.ts.
-export const DIM = {
-  honesty: 'hexaco.honesty',
-  emotionality: 'hexaco.emotionality',
-  extraversion: 'hexaco.extraversion',
-  agreeableness: 'hexaco.agreeableness',
-  conscientiousness: 'hexaco.conscientiousness',
-  openness: 'hexaco.openness',
-  regulatoryFocus: 'regfocus.orientation',
-  needForCognition: 'cognition.need_for_cognition',
-  reflection: 'cognition.reflection',
-  decisionRational: 'decision.rational',
-  decisionIntuitive: 'decision.intuitive',
-  decisionDependent: 'decision.dependent',
-  decisionSpontaneous: 'decision.spontaneous',
-  maximizing: 'decision.maximizing',
-  moralCare: 'moral.care',
-  moralFairness: 'moral.fairness',
-  moralLoyalty: 'moral.loyalty',
-  moralAuthority: 'moral.authority',
-  moralSanctity: 'moral.sanctity',
-  moralLiberty: 'moral.liberty',
-  conflictAssertiveness: 'conflict.assertiveness',
-  conflictCooperativeness: 'conflict.cooperativeness',
-  valSelfDirection: 'values.self_direction',
-  valStimulation: 'values.stimulation',
-  valHedonism: 'values.hedonism',
-  valAchievement: 'values.achievement',
-  valPower: 'values.power',
-  valSecurity: 'values.security',
-  valConformity: 'values.conformity',
-  valTradition: 'values.tradition',
-  valBenevolence: 'values.benevolence',
-  valUniversalism: 'values.universalism',
-  grit: 'disp.grit',
-  locusInternal: 'disp.locus_internal',
-  riskTolerance: 'disp.risk_tolerance',
-} as const;
+// Dimension ids — the single shared map (was duplicated here + in agent-runtime).
+export const DIM = PSYCH_DIM;
 
 export type CatalogDimension = {
   id: string;

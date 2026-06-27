@@ -12,6 +12,7 @@ import type { AgentTool } from "../../../builderforce/model/agent-types.js";
 import type { ImageContent } from "../../../builderforce/model/types.js";
 import { resolveChannelCapabilities } from "../../../config/channel-capabilities.js";
 import { getMachineDisplayName } from "../../../infra/machine-name.js";
+import { getLimbicSystemService } from "../../../infra/limbic-system-service.js";
 import { MAX_IMAGE_BYTES } from "../../../media/constants.js";
 import { getGlobalHookRunner } from "../../../plugins/hook-runner-global.js";
 import {
@@ -288,7 +289,13 @@ export async function runEmbeddedAttempt(
     // at parity with skills/content. Process-wide registry state, populated by the
     // gateway `artifacts.sync` handler when Builderforce pushes assignments. The
     // limbic block (the agent's *current affective state*) is appended: the static
-    // personality and the dynamic mood are injected together.
+    // personality and the dynamic mood are injected together. Restore this
+    // session's persisted affect first so mood carries across the session's turns.
+    const limbicSvc = getLimbicSystemService();
+    if (limbicSvc) {
+      limbicSvc.refreshSetpoints(); // personality setpoints from the active personas
+      if (params.sessionKey) limbicSvc.restoreSessionState(params.sessionKey);
+    }
     const limbicPrompt = buildActiveLimbicPrompt();
     const personaPrompt = [buildAssignedPersonaPrompt(), limbicPrompt].filter(Boolean).join("\n\n");
 

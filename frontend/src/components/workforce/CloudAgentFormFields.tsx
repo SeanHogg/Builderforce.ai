@@ -1,5 +1,7 @@
 'use client';
 
+import { useTranslations } from 'next-intl';
+
 import { Select } from '@/components/Select';
 
 import type { AgentRuntimeSupport, AgentEngine, AgentRuntimeSurface } from '@/lib/api';
@@ -38,21 +40,21 @@ export const EMPTY_CLOUD_AGENT_FORM: CloudAgentFormState = {
   engine: 'builderforce-v2', runtimeSurface: 'durable',
 };
 
+/**
+ * Plain-string runtime-support labels, consumed OUTSIDE the form by AgentCard /
+ * AgentManifestSection (which are not yet localized). The form itself renders
+ * these via `useTranslations('cloudAgentForm')` (`runtime.*`). Engine + surface
+ * labels are form-only and live solely in the catalogs.
+ */
 export const RUNTIME_LABELS: Record<AgentRuntimeSupport, string> = {
   cloud: 'Cloud only',
   host: 'Remote (self-hosted) only',
   both: 'Cloud + Remote',
 };
 
-export const ENGINE_LABELS: Record<AgentEngine, string> = {
-  'builderforce-v2': 'BuilderForce-V2 (Anthropic — Claude Agent SDK)',
-  'builderforce-v3': 'BuilderForce-V3 (V2 + Limbic affective layer)',
-};
-
-export const RUNTIME_SURFACE_LABELS: Record<AgentRuntimeSurface, string> = {
-  durable: 'Durable (cloud, on-demand serverless)',
-  container: 'Long-lived Cloudflare Container (for very long runs)',
-};
+const RUNTIME_SUPPORT_KEYS: AgentRuntimeSupport[] = ['cloud', 'host', 'both'];
+const ENGINE_KEYS: AgentEngine[] = ['builderforce-v2', 'builderforce-v3'];
+const RUNTIME_SURFACE_KEYS: AgentRuntimeSurface[] = ['durable', 'container'];
 
 export const btnPrimary: React.CSSProperties = { padding: '8px 16px', fontSize: 13, fontWeight: 600, background: 'var(--accent)', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer' };
 export const btnSubtle: React.CSSProperties = { padding: '6px 12px', fontSize: 12, fontWeight: 600, background: 'var(--bg-elevated)', color: 'var(--text-strong)', border: '1px solid var(--border)', borderRadius: 8, cursor: 'pointer' };
@@ -74,84 +76,77 @@ export function CloudAgentFormFields({
   onChange: (patch: Partial<CloudAgentFormState>) => void;
   autoFocus?: boolean;
 }) {
+  const t = useTranslations('cloudAgentForm');
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
       <div>
-        <label style={labelStyle}>Name</label>
-        <input style={inputStyle} value={form.name} onChange={(e) => onChange({ name: e.target.value })} placeholder="e.g. Release Notes Writer" autoFocus={autoFocus} />
+        <label style={labelStyle}>{t('name')}</label>
+        <input style={inputStyle} value={form.name} onChange={(e) => onChange({ name: e.target.value })} placeholder={t('namePlaceholder')} autoFocus={autoFocus} />
       </div>
       <div>
-        <label style={labelStyle}>Title</label>
-        <input style={inputStyle} value={form.title} onChange={(e) => onChange({ title: e.target.value })} placeholder="Short tagline" />
+        <label style={labelStyle}>{t('title')}</label>
+        <input style={inputStyle} value={form.title} onChange={(e) => onChange({ title: e.target.value })} placeholder={t('titlePlaceholder')} />
       </div>
       <div>
-        <label style={labelStyle}>Description</label>
-        <textarea style={{ ...inputStyle, minHeight: 70, resize: 'vertical' }} value={form.bio} onChange={(e) => onChange({ bio: e.target.value })} placeholder="What does this agent do?" />
+        <label style={labelStyle}>{t('description')}</label>
+        <textarea style={{ ...inputStyle, minHeight: 70, resize: 'vertical' }} value={form.bio} onChange={(e) => onChange({ bio: e.target.value })} placeholder={t('descriptionPlaceholder')} />
       </div>
       <div>
-        <label style={labelStyle}>Tags / Labels (comma-separated)</label>
-        <input style={inputStyle} value={form.skills} onChange={(e) => onChange({ skills: e.target.value })} placeholder="code-review, release-notes, summarization" />
-        <p style={{ fontSize: 11, color: 'var(--muted)', margin: '6px 0 0' }}>
-          Keywords used for marketplace search and SEO discovery. These are tags, not the agent’s Skills — assign Skills on the Capabilities tab.
-        </p>
+        <label style={labelStyle}>{t('tags')}</label>
+        <input style={inputStyle} value={form.skills} onChange={(e) => onChange({ skills: e.target.value })} placeholder={t('tagsPlaceholder')} />
+        <p style={{ fontSize: 11, color: 'var(--muted)', margin: '6px 0 0' }}>{t('tagsHelp')}</p>
       </div>
       <div>
-        <label style={labelStyle}>Runtime support</label>
+        <label style={labelStyle}>{t('runtimeSupport')}</label>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-          {(Object.keys(RUNTIME_LABELS) as AgentRuntimeSupport[]).map((rs) => (
+          {RUNTIME_SUPPORT_KEYS.map((rs) => (
             <label key={rs} style={{ fontSize: 13, color: 'var(--text-strong)', display: 'flex', alignItems: 'center', gap: 8 }}>
               <input type="radio" name="runtimeSupport" checked={form.runtimeSupport === rs} onChange={() => onChange({ runtimeSupport: rs })} />
-              {RUNTIME_LABELS[rs]}
+              {t(`runtime.${rs}`)}
             </label>
           ))}
         </div>
       </div>
       {form.runtimeSupport === 'both' && (
         <div>
-          <label style={labelStyle}>Best experience on</label>
+          <label style={labelStyle}>{t('bestExperience')}</label>
           <Select style={inputStyle} value={form.preferredRuntime} onChange={(e) => onChange({ preferredRuntime: e.target.value as 'cloud' | 'host' })}>
-            <option value="cloud">Cloud</option>
-            <option value="host">Remote (agentHost)</option>
+            <option value="cloud">{t('bestCloud')}</option>
+            <option value="host">{t('bestHost')}</option>
           </Select>
         </div>
       )}
       <div>
-        <label style={labelStyle}>Agent runtime engine</label>
+        <label style={labelStyle}>{t('engine')}</label>
         <Select style={inputStyle} value={form.engine} onChange={(e) => onChange({ engine: e.target.value as AgentEngine })}>
-          {(Object.keys(ENGINE_LABELS) as AgentEngine[]).map((eng) => (
-            <option key={eng} value={eng}>{ENGINE_LABELS[eng]}</option>
+          {ENGINE_KEYS.map((eng) => (
+            <option key={eng} value={eng}>{t(`engineLabel.${eng}`)}</option>
           ))}
         </Select>
-        <p style={{ fontSize: 11, color: 'var(--muted)', margin: '6px 0 0' }}>
-          V2 runs the Claude Agent SDK; models route through the gateway with your tenant’s Anthropic key. V3 adds the limbic affective layer on top of V2 — the agent appraises the task and executes under a fitting affective state (e.g. heightened caution on risky work).
-        </p>
+        <p style={{ fontSize: 11, color: 'var(--muted)', margin: '6px 0 0' }}>{t('engineHelp')}</p>
       </div>
       {(form.engine === 'builderforce-v2' || form.engine === 'builderforce-v3') && (
         <div>
-          <label style={labelStyle}>Runtime surface</label>
+          <label style={labelStyle}>{t('surface')}</label>
           <Select style={inputStyle} value={form.runtimeSurface} onChange={(e) => onChange({ runtimeSurface: e.target.value as AgentRuntimeSurface })}>
-            {(Object.keys(RUNTIME_SURFACE_LABELS) as AgentRuntimeSurface[]).map((rs) => (
-              <option key={rs} value={rs}>{RUNTIME_SURFACE_LABELS[rs]}</option>
+            {RUNTIME_SURFACE_KEYS.map((rs) => (
+              <option key={rs} value={rs}>{t(`surface.${rs}`)}</option>
             ))}
           </Select>
-          <p style={{ fontSize: 11, color: 'var(--muted)', margin: '6px 0 0' }}>
-            Both run the full task in the cloud (all Cloudflare). Durable executes on-demand on a Durable Object (per step) — the default. Long-lived Cloudflare Container keeps a process running for very long, continuous tasks (falls back to Durable until Container infra is enabled).
-          </p>
+          <p style={{ fontSize: 11, color: 'var(--muted)', margin: '6px 0 0' }}>{t('surfaceHelp')}</p>
         </div>
       )}
       <div>
-        <label style={labelStyle}>Base model (optional)</label>
+        <label style={labelStyle}>{t('baseModel')}</label>
         <ModelSelect
           variant="coding"
           value={form.baseModel}
           onChange={(v) => onChange({ baseModel: v })}
-          defaultLabel="builderforce.ai default (best coding model)"
+          defaultLabel={t('baseModelDefault')}
           preserveValue={form.baseModel}
           style={inputStyle}
         />
-        <p style={{ fontSize: 11, color: 'var(--muted)', margin: '6px 0 0' }}>
-          The tool-calling + coding model this agent runs on — pick one of your LLMs or a model from the pool. A run pins one model for the whole task; leave default to use the plan’s best coding model.
-        </p>
+        <p style={{ fontSize: 11, color: 'var(--muted)', margin: '6px 0 0' }}>{t('baseModelHelp')}</p>
       </div>
     </div>
   );
