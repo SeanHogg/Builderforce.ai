@@ -2835,3 +2835,13 @@ textarea.input { resize: vertical; line-height: 1.5; }
   height: 150px;
   background: linear-gradient(to bottom, transparent, var(--bg));
 }
+
+/* Blog post body images / diagrams — keep SVGs and screenshots responsive within
+   the article column (the .bpost-* classes carry no width of their own). */
+.bpost-content img {
+  max-width: 100%;
+  height: auto;
+  display: block;
+  margin: 28px auto;
+  border-radius: 12px;
+}

@@ -35,7 +35,8 @@ const RESOURCE_LINKS: SimpleLink[] = [
 const FLAT_LINKS: SimpleLink[] = [
   { href: '/marketplace', label: 'Workforce' },
   { href: '/agents', label: 'Agents' },
-  { href: '/evermind', label: 'Evermind' },
+  // Evermind intentionally NOT a top-level flat link — it lives under the Product
+  // mega-menu and in the footer; keeping it out of the bar reduces nav clutter.
   { href: '/models', label: 'Models' },
   { href: '/pricing', label: 'Pricing' },
 ];

@@ -7,6 +7,7 @@ import remarkGfm from 'remark-gfm';
 import { getPostBySlug } from '@/lib/blogData';
 import JsonLd from '@/components/JsonLd';
 import RelatedArticles from '@/components/blog/RelatedArticles';
+import BlogCover from '@/components/blog/BlogCover';
 import { blogPostSchema } from '@/lib/structured-data';
 
 export default function BlogPostClient({ params }: { params: Promise<{ slug: string }> }) {
@@ -236,6 +237,8 @@ export default function BlogPostClient({ params }: { params: Promise<{ slug: str
 
               <h1 className="bpost-title">{post.title}</h1>
               <p className="bpost-description">{post.description}</p>
+
+              <BlogCover title={post.title} tags={post.tags} slug={post.slug} />
 
               <div className="bpost-content">
                 <ReactMarkdown remarkPlugins={[remarkGfm]}>
