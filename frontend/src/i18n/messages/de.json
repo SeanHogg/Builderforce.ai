@@ -394,5 +394,28 @@
     "baseModel": "Basismodell (optional)",
     "baseModelDefault": "builderforce.ai-Standard (bestes Coding-Modell)",
     "baseModelHelp": "Das Tool-Calling- und Coding-Modell, auf dem dieser Agent läuft – wähle eines deiner LLMs oder ein Modell aus dem Pool. Ein Lauf legt ein Modell für die gesamte Aufgabe fest; lass den Standard, um das beste Coding-Modell deines Tarifs zu verwenden."
+  },
+  "modelApiSamples": {
+    "copy": "Kopieren",
+    "copied": "Kopiert!",
+    "intro": "Rufe dein Modell über HTTP auf. Es spricht den OpenAI-Standard, daher funktionieren die offiziellen SDKs, indem du sie auf das Gateway verweist – plus ein dedizierter Endpunkt für dein veröffentlichtes Modell.",
+    "langTablist": "Code-Sprache",
+    "openaiTitle": "OpenAI-kompatibles Gateway",
+    "openaiDesc": "Verweise ein beliebiges OpenAI-SDK auf die Gateway-Basis-URL und übergib deine Modell-ID.",
+    "workforceTitle": "Workforce-Modell-Endpunkt",
+    "workforceDesc": "Rufe dein veröffentlichtes Modell direkt auf – gleiches OpenAI-Chat-Format, adressiert über die Modell-ID."
+  },
+  "agentPublish": {
+    "validateTitle": "Per API validieren",
+    "validateDesc": "Führe einen Live-Testaufruf gegen dein Modell aus. Die Veröffentlichung wird freigeschaltet, sobald es antwortet.",
+    "validateBtn": "Per API validieren",
+    "validating": "Wird validiert…",
+    "validatePassed": "Validierung bestanden",
+    "validateFailed": "Validierung fehlgeschlagen",
+    "validateGate": "Validiere dein Modell vor der Veröffentlichung per API.",
+    "sampleLabel": "Beispielantwort",
+    "latencyLabel": "Latenz",
+    "modeLabel": "Inferenzmodus",
+    "callTitle": "So rufst du dein Modell auf"
   }
 }

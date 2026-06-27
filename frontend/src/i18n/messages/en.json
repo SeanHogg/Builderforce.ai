@@ -394,5 +394,28 @@
     "baseModel": "Base model (optional)",
     "baseModelDefault": "builderforce.ai default (best coding model)",
     "baseModelHelp": "The tool-calling + coding model this agent runs on — pick one of your LLMs or a model from the pool. A run pins one model for the whole task; leave default to use the plan's best coding model."
+  },
+  "modelApiSamples": {
+    "copy": "Copy",
+    "copied": "Copied!",
+    "intro": "Call your model over HTTP. It speaks the OpenAI standard, so the official SDKs work by pointing them at the gateway — plus a dedicated endpoint for your published model.",
+    "langTablist": "Code language",
+    "openaiTitle": "OpenAI-compatible gateway",
+    "openaiDesc": "Point any OpenAI SDK at the gateway base URL and pass your model id.",
+    "workforceTitle": "Workforce model endpoint",
+    "workforceDesc": "Call your published model directly — same OpenAI chat shape, addressed by model id."
+  },
+  "agentPublish": {
+    "validateTitle": "Validate via API",
+    "validateDesc": "Run a live test call against your model. Publishing unlocks once it responds.",
+    "validateBtn": "Validate via API",
+    "validating": "Validating…",
+    "validatePassed": "Validation passed",
+    "validateFailed": "Validation failed",
+    "validateGate": "Validate your model via API before publishing.",
+    "sampleLabel": "Sample response",
+    "latencyLabel": "Latency",
+    "modeLabel": "Inference mode",
+    "callTitle": "How to call your model"
   }
 }

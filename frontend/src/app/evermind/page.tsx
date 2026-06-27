@@ -3,6 +3,7 @@ import Link from 'next/link';
 import JsonLd from '@/components/JsonLd';
 import RelatedArticles from '@/components/blog/RelatedArticles';
 import BrainBackdrop from '@/components/BrainBackdrop';
+import ModelApiSamples from '@/components/ModelApiSamples';
 import { evermindSchema } from '@/lib/structured-data';
 import { pageMetadata } from '@/lib/seo';
 import { EVERMIND, EVERMIND_FAQ } from '@/lib/content';

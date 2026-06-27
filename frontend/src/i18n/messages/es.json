@@ -394,5 +394,28 @@
     "baseModel": "Modelo base (opcional)",
     "baseModelDefault": "Predeterminado de builderforce.ai (mejor modelo de programación)",
     "baseModelHelp": "El modelo de llamada a herramientas y programación con el que se ejecuta este agente: elige uno de tus LLM o un modelo del grupo. Una ejecución fija un modelo para toda la tarea; deja el predeterminado para usar el mejor modelo de programación de tu plan."
+  },
+  "modelApiSamples": {
+    "copy": "Copiar",
+    "copied": "¡Copiado!",
+    "intro": "Llama a tu modelo por HTTP. Habla el estándar de OpenAI, así que los SDK oficiales funcionan apuntándolos al gateway, además de un endpoint dedicado para tu modelo publicado.",
+    "langTablist": "Lenguaje de código",
+    "openaiTitle": "Gateway compatible con OpenAI",
+    "openaiDesc": "Apunta cualquier SDK de OpenAI a la URL base del gateway y pasa el id de tu modelo.",
+    "workforceTitle": "Endpoint del modelo Workforce",
+    "workforceDesc": "Llama a tu modelo publicado directamente: el mismo formato de chat de OpenAI, direccionado por id de modelo."
+  },
+  "agentPublish": {
+    "validateTitle": "Validar vía API",
+    "validateDesc": "Ejecuta una llamada de prueba en vivo contra tu modelo. La publicación se habilita cuando responde.",
+    "validateBtn": "Validar vía API",
+    "validating": "Validando…",
+    "validatePassed": "Validación superada",
+    "validateFailed": "Validación fallida",
+    "validateGate": "Valida tu modelo vía API antes de publicar.",
+    "sampleLabel": "Respuesta de ejemplo",
+    "latencyLabel": "Latencia",
+    "modeLabel": "Modo de inferencia",
+    "callTitle": "Cómo llamar a tu modelo"
   }
 }
