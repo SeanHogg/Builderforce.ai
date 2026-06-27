@@ -38,6 +38,7 @@ import {
 } from './cloudAgentTools';
 import {
   DEFAULT_ENGINE_ID, ENGINE_IDS, resolveEngineById,
+  appraiseTask, buildLimbicBlock, compileLimbicState, neutralState,
   type AgentEngine, type AgentRunInput, type AgentRunResult, type CapabilityProvider, type ToolContext,
 } from '@builderforce/agent-tools';
 import { parseRemediation, parseFollowUp, parseCloudAgentRef, parseModel, parseRoutingBias } from './cloudDispatch';
@@ -1654,17 +1655,73 @@ export class CloudToolLoopEngine implements AgentEngine {
 }
 
 /**
+ * V3 — the cloud limbic engine. Composes {@link CloudToolLoopEngine} (V2) WITHOUT
+ * modifying it: it derives a task-appropriate affective state via the shared,
+ * Worker-safe limbic compiler (`@builderforce/agent-tools`), prepends the
+ * affective directive block to the system prompt, then delegates to the V2 loop.
+ * Cloudflare Workers can't run `@webgpu/node`, so the cloud limbic is the
+ * deterministic heuristic regions only — GPU *training* of the affect model
+ * stays on-prem (the on-prem service trains and would publish a checkpoint the
+ * compiler's setpoints could later be primed from). Selecting V3 leaves every
+ * V2 agent byte-for-byte unchanged.
+ */
+export class CloudLimbicEngine implements AgentEngine {
+  readonly id = ENGINE_IDS.v3;
+  constructor(private readonly rc: CloudEngineContext) {}
+
+  async run(input: AgentRunInput): Promise<AgentRunResult> {
+    const systemPrompt = await augmentSystemPromptWithLimbic(
+      this.rc.db,
+      { tenantId: this.rc.tenantId, cloudAgentRef: this.rc.cloudAgentRef, executionId: this.rc.executionId, taskRow: this.rc.taskRow },
+      input.systemPrompt,
+    );
+    // Delegate to the unchanged V2 loop with the limbic-augmented prompt.
+    return new CloudToolLoopEngine(this.rc).run({ ...input, systemPrompt });
+  }
+}
+
+/**
+ * Append the limbic affective block to a cloud run's system prompt. Shared by the
+ * V3 engine (interim gateway executor) and the durable {@link CloudRunnerDO} prep
+ * stage so both cloud surfaces apply the affect layer identically (DRY). Derives
+ * a task-appropriate state via the Worker-safe shared compiler, records it on the
+ * Observability timeline (best-effort), and returns the augmented prompt. Returns
+ * the prompt unchanged when the state is at rest (no directives).
+ */
+export async function augmentSystemPromptWithLimbic(
+  db: Db,
+  args: { tenantId: number; cloudAgentRef?: string; executionId: number; taskRow: { id: number; title: string; description: string | null } },
+  systemPrompt: string,
+): Promise<string> {
+  const state = appraiseTask(`${args.taskRow.title}\n${args.taskRow.description ?? ''}`, neutralState());
+  const block = buildLimbicBlock(state);
+  if (!block) return systemPrompt;
+  const { directives, params } = compileLimbicState(state);
+  await recordCloudToolEvent(db, {
+    tenantId: args.tenantId,
+    cloudAgentRef: args.cloudAgentRef,
+    executionId: args.executionId,
+    toolName: 'limbic.appraise',
+    category: 'context',
+    detail: { state, params },
+    result: `affective state: ${directives.length} directive(s)`,
+  }).catch(() => { /* never block the run on telemetry */ });
+  return `${systemPrompt}\n\n${block}`;
+}
+
+/**
  * The single composition root for cloud engine selection. An id-keyed registry of
  * engine factories resolved via the shared {@link resolveEngineById} — the SAME
- * pattern the on-prem relay `resolveEngine` uses — so adding a V3 is one registry
- * entry on BOTH surfaces, never a new branch. Today the only entry is
- * {@link CloudToolLoopEngine} (`builderforce-v2`); any legacy/unknown id falls back to
- * `DEFAULT_ENGINE_ID`. (Surface routing — durable DO / container / worker — is a
- * separate decision made in `runtimeRoutes.ts`, not an engine choice.)
+ * pattern the on-prem relay `resolveEngine` uses — so adding an engine is one
+ * registry entry on BOTH surfaces, never a new branch. `builderforce-v2` is the
+ * default tool loop; `builderforce-v3` adds the limbic layer on top of it; any
+ * legacy/unknown id falls back to `DEFAULT_ENGINE_ID`. (Surface routing —
+ * durable DO / container / worker — is a separate decision in `runtimeRoutes.ts`.)
  */
 export function resolveAgentEngine(rc: CloudEngineContext, engineId?: string): AgentEngine {
   const registry: Record<string, (c: CloudEngineContext) => AgentEngine> = {
     [ENGINE_IDS.v2]: (c) => new CloudToolLoopEngine(c),
+    [ENGINE_IDS.v3]: (c) => new CloudLimbicEngine(c),
   };
   return resolveEngineById(registry, engineId)(rc);
 }
@@ -2016,10 +2073,14 @@ export async function runCloudExecution(
     );
     // Resolve the engine behind the shared seam (DI), then drive it with just the
     // per-task input. Surface/runtime wiring lives in the engine, not this call site.
+    // The agent's `engine` column selects the implementation: V2 (default) or V3
+    // (limbic). Unknown/legacy ids fall back to the default — so V2 agents are
+    // unaffected and only rows explicitly set to `builderforce-v3` get the layer.
+    const engineId = (await resolveCloudAgent(env, tenantId, cloudAgentRef)).engine;
     const engine = resolveAgentEngine({
       env, db, executionId, taskRow, tenantId, projectId, agentLabel, cloudAgentRef, isCancelled,
       routingBias: parseRoutingBias(payload),
-    });
+    }, engineId);
     const { ok, output, cancelled, awaitingInput } = await engine.run({ systemPrompt, userContent, model });
 
     // Run was cancelled mid-loop: the row is already CANCELLED (a terminal

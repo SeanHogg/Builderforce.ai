@@ -12,3 +12,4 @@ export * from "./tool.js";
 export * from "./registry.js";
 export * from "./engine.js";
 export * from "./core-tools.js";
+export * from "./limbic.js";

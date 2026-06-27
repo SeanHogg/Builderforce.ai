@@ -3,6 +3,7 @@ import { DIM, type PsychometricProfile } from "./psychometrics.js";
 import {
   LIMBIC_DIM_NAMES,
   appraiseAmygdala,
+  appraiseTask,
   applyDelta,
   arrayToState,
   basalGangliaExploreBias,
@@ -197,6 +198,33 @@ describe("compileLimbicState (dynamics → behaviour)", () => {
   it("buildLimbicBlock renders directives and is empty at rest", () => {
     expect(buildLimbicBlock(neutralState())).toBe("");
     expect(buildLimbicBlock({ ...neutralState(), valence: -0.8 })).toMatch(/affective state/i);
+  });
+});
+
+describe("appraiseTask (initial affect from task text — cloud V3 / VS Code)", () => {
+  it("risky/destructive work raises caution and arousal", () => {
+    const s = appraiseTask("Delete the production database and wipe all rows");
+    expect(s.driveCaution).toBeGreaterThan(neutralState().driveCaution);
+    expect(s.arousal).toBeGreaterThan(neutralState().arousal);
+    // and that compiles to a caution directive
+    expect(compileLimbicState(s).directives.join(" ")).toMatch(/caution/i);
+  });
+
+  it("large/complex work raises curiosity and exploration", () => {
+    const s = appraiseTask("Refactor the entire architecture across the whole codebase");
+    expect(s.driveCuriosity).toBeGreaterThan(neutralState().driveCuriosity);
+    expect(s.exploration).toBeGreaterThan(neutralState().exploration);
+  });
+
+  it("a mundane task stays at rest (no directives)", () => {
+    const s = appraiseTask("Fix a typo in the README heading");
+    expect(compileLimbicState(s).directives).toEqual([]);
+  });
+
+  it("is deterministic and respects an explicit base state", () => {
+    expect(appraiseTask("delete prod")).toEqual(appraiseTask("delete prod"));
+    const base = { ...neutralState(), valence: -0.5 };
+    expect(appraiseTask("fix typo", base).valence).toBeCloseTo(-0.5, 6);
   });
 });
 

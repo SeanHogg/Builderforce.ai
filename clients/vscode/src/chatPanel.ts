@@ -1,7 +1,7 @@
 import * as vscode from "vscode";
 import { runAgent } from "./agent";
 import { loadTaskConversation } from "./bfApi";
-import { ChatMessage, SECRET_KEY } from "./gateway";
+import { ChatMessage, SECRET_KEY, fetchLimbicBlock } from "./gateway";
 import { getGroundingSummary, onGroundingChange } from "./grounding";
 import { getSelectedModel, onModelChange } from "./modelState";
 import { buildSystemMessages } from "./prompt";
@@ -153,7 +153,11 @@ export class ChatPanel {
     const taskContext = this.session.taskKey
       ? `You are collaborating with the human on BuilderForce task ${this.session.taskKey}: ${this.session.taskTitle ?? ""}. Keep your work scoped to this task.`
       : undefined;
-    const system = buildSystemMessages(root, getGroundingSummary(), taskContext);
+    // Limbic affective layer: the gateway appraises the request and returns a
+    // directive block, so the built-in agent executes under the same affect as
+    // the cloud (V3) / on-prem agents. Best-effort (empty when at rest/offline).
+    const limbicBlock = await fetchLimbicBlock(this.ctx.secrets, `${this.session.taskTitle ?? ""}\n${text}`);
+    const system = buildSystemMessages(root, getGroundingSummary(), taskContext, limbicBlock);
     const working: ChatMessage[] = [...system, ...this.session.messages];
 
     await runAgent(

@@ -5,6 +5,7 @@ export function buildSystemMessages(
   root: string | undefined,
   summary: string | undefined,
   extraContext?: string,
+  limbicBlock?: string,
 ): ChatMessage[] {
   const base = root
     ? "You are BuilderForce, an AI coding agent embedded in VS Code, working in the user's open workspace folder. A Project map is provided below: USE IT to locate files and directories directly — do NOT call list_files to discover structure that the map already shows (the map lists every sub-project and the directory tree). Only call list_files/read_file when you need the actual contents of a specific file. Read a file before editing it; use edit_file for existing files and write_file for new ones. Make minimal, correct changes and briefly explain what you did. Be efficient with tool calls."
@@ -18,6 +19,9 @@ export function buildSystemMessages(
   }
   if (extraContext) {
     msgs.push({ role: "system", content: extraContext });
+  }
+  if (limbicBlock) {
+    msgs.push({ role: "system", content: limbicBlock });
   }
   return msgs;
 }

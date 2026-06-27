@@ -46,6 +46,7 @@ export const RUNTIME_LABELS: Record<AgentRuntimeSupport, string> = {
 
 export const ENGINE_LABELS: Record<AgentEngine, string> = {
   'builderforce-v2': 'BuilderForce-V2 (Anthropic — Claude Agent SDK)',
+  'builderforce-v3': 'BuilderForce-V3 (V2 + Limbic affective layer)',
 };
 
 export const RUNTIME_SURFACE_LABELS: Record<AgentRuntimeSurface, string> = {
@@ -122,10 +123,10 @@ export function CloudAgentFormFields({
           ))}
         </Select>
         <p style={{ fontSize: 11, color: 'var(--muted)', margin: '6px 0 0' }}>
-          V1 runs the pi-coding-agent loop. V2 runs the Claude Agent SDK; models route through the gateway with your tenant’s Anthropic key.
+          V2 runs the Claude Agent SDK; models route through the gateway with your tenant’s Anthropic key. V3 adds the limbic affective layer on top of V2 — the agent appraises the task and executes under a fitting affective state (e.g. heightened caution on risky work).
         </p>
       </div>
-      {form.engine === 'builderforce-v2' && (
+      {(form.engine === 'builderforce-v2' || form.engine === 'builderforce-v3') && (
         <div>
           <label style={labelStyle}>Runtime surface</label>
           <Select style={inputStyle} value={form.runtimeSurface} onChange={(e) => onChange({ runtimeSurface: e.target.value as AgentRuntimeSurface })}>
@@ -169,7 +170,8 @@ export function cloudAgentFormToInput(form: CloudAgentFormState) {
     runtimeSupport: form.runtimeSupport,
     preferredRuntime: form.runtimeSupport === 'both' ? form.preferredRuntime : null,
     engine: form.engine,
-    // Only V2 has a surface choice; V1 always uses the embedded runner.
-    runtimeSurface: form.engine === 'builderforce-v2' ? form.runtimeSurface : undefined,
+    // V2 and V3 (which wraps V2) both run on a cloud surface; legacy/other engines don't.
+    runtimeSurface:
+      form.engine === 'builderforce-v2' || form.engine === 'builderforce-v3' ? form.runtimeSurface : undefined,
   };
 }

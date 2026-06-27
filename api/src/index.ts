@@ -69,6 +69,7 @@ import { createArtifactAssignmentRoutes } from './presentation/routes/artifactAs
 import { createProjectAgentRoutes } from './presentation/routes/projectAgentRoutes';
 import { createMarketplaceStatsRoutes } from './presentation/routes/marketplaceStatsRoutes';
 import { createWorkforceRoutes }        from './presentation/routes/workforceRoutes';
+import { createLimbicRoutes }           from './presentation/routes/limbicRoutes';
 import { createPersonaRoutes }          from './presentation/routes/personaRoutes';
 import { createLlmRoutes }          from './presentation/routes/llmRoutes';
 import { createTenantModelRoutes }  from './presentation/routes/tenantModelRoutes';
@@ -285,6 +286,10 @@ function buildApp(env: Env): Hono<HonoEnv> {
 
   // Public workforce registry (browse published agents without login)
   app.route('/api/workforce', createWorkforceRoutes());
+
+  // Limbic affective layer — serves the shared compiler's directive block to
+  // clients that can't bundle it (the VS Code built-in agent).
+  app.route('/api/limbic', createLimbicRoutes());
 
   // Diagnostics & Tools — list/get/compute are public (free preview);
   // save/runs apply auth + manager role inside the router.

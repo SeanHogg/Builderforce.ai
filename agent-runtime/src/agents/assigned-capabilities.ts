@@ -136,6 +136,12 @@ export async function buildAssignedCapabilityAppend(root?: string): Promise<stri
   const persona = buildAssignedPersonaPrompt();
   if (persona) sections.push("## Persona (mandatory)\n" + persona);
 
+  // The dynamic affective state rides alongside the (static) persona on the V2
+  // SDK path too, so the SDK-driven coding agent executes under the same limbic
+  // layer as the embedded runner.
+  const limbic = buildActiveLimbicPrompt();
+  if (limbic) sections.push("## Affective state\n" + limbic);
+
   const { skills, content } = await readAssignedArtifactSlugs(root);
   if (skills.length > 0) {
     sections.push(

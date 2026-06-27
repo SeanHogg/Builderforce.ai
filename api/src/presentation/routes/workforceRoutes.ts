@@ -56,9 +56,11 @@ const PERF_CACHE_TTL_SECONDS = 60;
 
 const RUNTIME_SUPPORT = ['cloud', 'host', 'both'] as const;
 const PRICING_MODELS = ['flat_fee', 'consumption'] as const;
-// V1 RETIRED (2026-06-13): `builderforce-v2` is the only creatable engine. A legacy
-// `builderforce-v1` in a request body is not in this set → falls to DEFAULT_ENGINE_ID (v2).
-const AGENT_ENGINES = ['builderforce-v2'] as const;
+// V1 RETIRED (2026-06-13). Creatable engines: `builderforce-v2` (Claude Agent SDK
+// tool loop) and `builderforce-v3` (V2 + the limbic affective layer composed on
+// top). A legacy/unknown id in a request body is not in this set → falls to
+// DEFAULT_ENGINE_ID (v2).
+const AGENT_ENGINES = ['builderforce-v2', 'builderforce-v3'] as const;
 /** The two V2 cloud-agent execution surfaces (see migration 0105 / cloudDispatch). */
 const RUNTIME_SURFACES = ['durable', 'container'] as const;
 

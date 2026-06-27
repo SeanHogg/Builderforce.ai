@@ -1,6 +1,6 @@
 import * as vscode from "vscode";
 import { runAgent } from "./agent";
-import { ChatMessage, SECRET_KEY } from "./gateway";
+import { ChatMessage, SECRET_KEY, fetchLimbicBlock } from "./gateway";
 import { getGroundingSummary } from "./grounding";
 import { buildSystemMessages } from "./prompt";
 
@@ -25,7 +25,10 @@ export function createBuilderForceHandler(ctx: vscode.ExtensionContext): vscode.
     const model = cfg.get<string>("defaultModel") || undefined;
     const permissionMode = cfg.get<"ask" | "acceptEdits">("permissionMode") ?? "ask";
 
-    const messages: ChatMessage[] = [...buildSystemMessages(root, getGroundingSummary())];
+    // Limbic affective layer (gateway-injected) — parity with the webview chat
+    // and the cloud (V3) / on-prem agents. Best-effort; '' at rest or offline.
+    const limbicBlock = await fetchLimbicBlock(ctx.secrets, request.prompt);
+    const messages: ChatMessage[] = [...buildSystemMessages(root, getGroundingSummary(), undefined, limbicBlock)];
     // Reconstruct prior turns from the native chat history.
     for (const turn of context.history) {
       if (turn instanceof vscode.ChatRequestTurn) {

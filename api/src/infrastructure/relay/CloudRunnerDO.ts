@@ -15,7 +15,8 @@
 import { eq } from 'drizzle-orm';
 import { buildDatabase, type Db } from '../database/connection';
 import { executions } from '../database/schema';
-import { prepareCloudRun, runCloudToolLoop, markCloudExecutionRunning, type CloudLoopState } from '../../application/runtime/cloudAgentEngine';
+import { prepareCloudRun, runCloudToolLoop, markCloudExecutionRunning, resolveCloudAgent, augmentSystemPromptWithLimbic, type CloudLoopState } from '../../application/runtime/cloudAgentEngine';
+import { ENGINE_IDS } from '@builderforce/agent-tools';
 import { parseRoutingBias } from '../../application/runtime/cloudDispatch';
 import { scoreRunOutcome } from '../../application/runtime/scoreRunOutcome';
 import { releasePendingSteers } from '../../application/runtime/executionSteering';
@@ -125,7 +126,17 @@ export class CloudRunnerDO implements DurableObject {
           { id: cursor.taskId, title: cursor.taskTitle, description: cursor.taskDescription },
           cursor.tenantId, cursor.projectId, cursor.agentLabel, cursor.model, cursor.artifacts, cursor.cloudAgentRef, cursor.payload,
         );
-        cursor.systemPrompt = systemPrompt;
+        // V3 (limbic) agents get the affective block appended once, here in prep,
+        // so it persists in the cursor for every loop tick. V2 agents are
+        // untouched — the engine id gates it (unknown/legacy ids → V2).
+        const engineId = (await resolveCloudAgent(this.env, cursor.tenantId, cursor.cloudAgentRef)).engine;
+        cursor.systemPrompt = engineId === ENGINE_IDS.v3
+          ? await augmentSystemPromptWithLimbic(
+              this.db,
+              { tenantId: cursor.tenantId, cloudAgentRef: cursor.cloudAgentRef, executionId: cursor.executionId, taskRow: { id: cursor.taskId, title: cursor.taskTitle, description: cursor.taskDescription } },
+              systemPrompt,
+            )
+          : systemPrompt;
         cursor.userContent = userContent;
         cursor.stage = 'loop';
         await this.persistAndArm(cursor);
