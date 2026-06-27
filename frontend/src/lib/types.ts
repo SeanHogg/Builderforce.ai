@@ -68,6 +68,39 @@ export interface FileEntry {
   type: 'file' | 'directory';
 }
 
+/**
+ * An IDE project (0224) — the buildable artifact you open in the IDE. A
+ * first-class child of a Project: many can hang off one container Project
+ * (`containerProjectId`, optional + reassignable). Backed by a hidden storage
+ * project; you open it at `/ide/{storageProjectPublicId}`.
+ */
+export interface IdeProject {
+  id: number;
+  publicId: string;
+  name: string;
+  /** 'designer' | 'video' | 'llm' | 'voice'. */
+  modality: string;
+  status: string;
+  /** The parent Project this build is grouped under, or null when ungrouped. */
+  containerProjectId: number | null;
+  containerName: string | null;
+  /** The backing storage project (where files/datasets/site live; opens the IDE). */
+  storageProjectId: number;
+  storageProjectPublicId: string;
+  storageProjectKey: string;
+  /** Assigned workflow (LLM modality), or null. */
+  workflowDefinitionId: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** A candidate parent Project for the assign/reassign picker. */
+export interface IdeContainerOption {
+  id: number;
+  name: string;
+  key: string;
+}
+
 export interface AIMessage {
   id: string;
   role: 'user' | 'assistant';

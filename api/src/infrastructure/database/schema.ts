@@ -785,6 +785,10 @@ export const projects = pgTable('projects', {
    *  'ide' (created in the Designer) | 'imported' (created by importing a repo) |
    *  'external' (anything else). NULL on legacy rows = treated as external. */
   origin:          text('origin'),
+  // TRUE when this projects row exists purely as the storage backing of an
+  // ide_project (0224) — hidden from the board/PMO project list. Backfilled
+  // (pre-existing) projects stay FALSE and continue to appear normally.
+  isIdeStorage:    boolean('is_ide_storage').notNull().default(false),
   // PMO rollup link (0213): the initiative this project belongs to, or NULL when
   // unassigned. The join that lets cost/DORA/outcome collectors roll up to the
   // initiative → portfolio tier. Forward ref to `initiatives` (defined below).
@@ -1539,8 +1543,39 @@ export const workflowDefinitions = pgTable('workflow_definitions', {
   runTargetCloudAgentRef: varchar('run_target_cloud_agent_ref', { length: 64 }),
   // Execution scope (0083): 'project' = runs under the bound project; 'global' = tenant-wide.
   executionScope:       varchar('execution_scope', { length: 16 }).notNull().default('project'),
+  // Fork lineage (0224): a global/shared workflow that gets modified for a project
+  // is forked into a custom copy — this points at the template it was forked from.
+  parentDefinitionId:   uuid('parent_definition_id').references((): AnyPgColumn => workflowDefinitions.id, { onDelete: 'set null' }),
   createdAt:   timestamp('created_at').notNull().defaultNow(),
   updatedAt:   timestamp('updated_at').notNull().defaultNow(),
+});
+
+/**
+ * IDE projects (0224) — the buildable artifact you open in the IDE (a Designer
+ * app, an LLM, a Video, a Voice). A first-class child of a Project: many IDE
+ * projects can hang off one container Project (`containerProjectId`, optional),
+ * and each one is BACKED by a `projects` row (`storageProjectId`) that physically
+ * holds its R2 files / datasets / training / site / repo workspace — so the
+ * existing IDE storage routes are reused unchanged. `modality` mirrors the storage
+ * project's modality so the modality-driven IDE page renders the right panels.
+ */
+export const ideProjects = pgTable('ide_projects', {
+  id:                  serial('id').primaryKey(),
+  publicId:            uuid('public_id').notNull().defaultRandom(),
+  tenantId:            integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  segmentId:           uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),
+  /** The user-facing "Project" container this build is grouped under; NULL = ungrouped. */
+  containerProjectId:  integer('container_project_id').references(() => projects.id, { onDelete: 'set null' }),
+  /** The backing projects row holding this build's files/datasets/training/site/repo. */
+  storageProjectId:    integer('storage_project_id').notNull().unique().references(() => projects.id, { onDelete: 'cascade' }),
+  name:                varchar('name', { length: 255 }).notNull(),
+  /** 'designer' | 'video' | 'llm' | 'voice'. */
+  modality:            text('modality').notNull().default('designer'),
+  status:              text('status').notNull().default('active'),
+  /** LLM modality requires a workflow; the assigned (possibly forked-custom) definition. */
+  workflowDefinitionId: uuid('workflow_definition_id').references((): AnyPgColumn => workflowDefinitions.id, { onDelete: 'set null' }),
+  createdAt:           timestamp('created_at').notNull().defaultNow(),
+  updatedAt:           timestamp('updated_at').notNull().defaultNow(),
 });
 
 // ---------------------------------------------------------------------------
@@ -3871,6 +3906,8 @@ export const studioVoiceClones = pgTable('studio_voice_clones', {
   segmentId:     uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),
   /** The enrolling user (owner). */
   userId:        varchar('user_id', { length: 36 }).references(() => users.id, { onDelete: 'set null' }),
+  /** The voice-modality IDE project this clone was enrolled under (0224); NULL = tenant-wide/legacy. */
+  ideProjectId:  integer('ide_project_id').references(() => ideProjects.id, { onDelete: 'set null' }),
   name:          varchar('name', { length: 255 }).notNull(),
   description:   text('description'),
   /** Synthesis backend honored at synth time (PRD §8 — never hardcode the engine). */

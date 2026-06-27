@@ -1,4 +1,4 @@
-import { eq, inArray } from 'drizzle-orm';
+import { and, eq, inArray } from 'drizzle-orm';
 import { IProjectRepository } from '../../domain/project/IProjectRepository';
 import { Project, ProjectProps } from '../../domain/project/Project';
 import { ProjectId, ProjectStatus, TenantId, asProjectId, asTenantId } from '../../domain/shared/types';
@@ -15,10 +15,12 @@ export class ProjectRepository implements IProjectRepository {
   constructor(private readonly db: Db) {}
 
   async findByTenant(tenantId: TenantId): Promise<Project[]> {
+    // Exclude rows that exist purely as an ide_project's storage backing (0224) —
+    // those are managed from the IDE dashboard, not the board/PMO project list.
     const rows = await this.db
       .select()
       .from(projectsTable)
-      .where(eq(projectsTable.tenantId, tenantId));
+      .where(and(eq(projectsTable.tenantId, tenantId), eq(projectsTable.isIdeStorage, false)));
     return rows.map(toDomain);
   }
 

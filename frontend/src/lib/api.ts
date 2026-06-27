@@ -17,6 +17,8 @@ import {
 import { planLimitErrorFromResponse } from './planLimitError';
 import type {
   Project,
+  IdeProject,
+  IdeContainerOption,
   FileEntry,
   Dataset,
   TrainingJob,
@@ -132,6 +134,59 @@ export async function updateProject(
 
 export async function deleteProject(id: number | string): Promise<void> {
   await projectsRequest(`/api/projects/${id}`, { method: 'DELETE' });
+}
+
+// ---------------------------------------------------------------------------
+// IDE projects (0224) — the first-class child entity of a Project. Always the
+// auth API (/api/ide-projects); the worker has no ide_projects routes.
+// ---------------------------------------------------------------------------
+
+export async function listIdeProjects(): Promise<IdeProject[]> {
+  return apiRequest<IdeProject[]>('/api/ide-projects');
+}
+
+export async function fetchIdeProject(id: number | string): Promise<IdeProject> {
+  return apiRequest<IdeProject>(`/api/ide-projects/${id}`);
+}
+
+export async function listIdeContainers(): Promise<IdeContainerOption[]> {
+  return apiRequest<IdeContainerOption[]>('/api/ide-projects/containers');
+}
+
+export async function createIdeProject(data: {
+  name: string;
+  /** 'designer' | 'video' | 'llm' | 'voice'. Defaults server-side to 'designer'. */
+  modality?: string;
+  /** Optional parent Project to group this build under. */
+  containerProjectId?: number | null;
+  template?: string | null;
+}): Promise<IdeProject> {
+  return apiRequest<IdeProject>('/api/ide-projects', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+}
+
+export async function updateIdeProject(
+  id: number | string,
+  data: {
+    name?: string;
+    /** Reassign the parent Project; null to ungroup. */
+    containerProjectId?: number | null;
+    workflowDefinitionId?: string | null;
+    status?: string;
+  },
+): Promise<IdeProject> {
+  return apiRequest<IdeProject>(`/api/ide-projects/${id}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+}
+
+export async function deleteIdeProject(id: number | string): Promise<void> {
+  await apiRequest<void>(`/api/ide-projects/${id}`, { method: 'DELETE' });
 }
 
 // ---------------------------------------------------------------------------

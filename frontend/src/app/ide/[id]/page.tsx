@@ -11,6 +11,10 @@ import type { Project, FileEntry } from '@/lib/types';
 import { ProjectDetailsPanel } from '@/components/ProjectDetailsPanel';
 
 const IDE = dynamic(() => import('@/components/IDE').then((m) => m.IDE), { ssr: false });
+// Voice is a modality (0224): opening a Voice IDE project shows the Voice studio
+// rather than the code editor. Loaded lazily so the heavy voice/WebGPU bundle
+// only ships when a voice project is actually opened.
+const VoiceClonePanel = dynamic(() => import('@/components/VoiceClonePanel').then((m) => m.VoiceClonePanel), { ssr: false });
 
 /**
  * IDE page — opens a project in the IDE. Use ?chat= to open with a specific project chat active
@@ -140,6 +144,15 @@ export default function IDEPage() {
             Dashboard
           </button>
         </div>
+      </div>
+    );
+  }
+
+  // Voice modality (0224): a Voice IDE project opens the Voice studio.
+  if (project!.modality === 'voice') {
+    return (
+      <div style={{ flex: 1, color: 'var(--text-primary)', minHeight: '100vh', background: 'var(--bg-deep)' }}>
+        <VoiceClonePanel />
       </div>
     );
   }
