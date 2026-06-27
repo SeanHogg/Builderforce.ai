@@ -395,6 +395,15 @@ The biggest cost lever in the stack is an **embedding-keyed semantic cache** tha
 
 The same portable [`SemanticCache`](https://github.com/SeanHogg/builderforce-memory) from `@builderforce/memory` powers both surfaces — the embedder (on-device SSM) and the L2 backend are injected, so there is no browser/Node fork. On-device embeddings make L1 free; the gateway L2 turns one tenant's cache hits into platform-wide savings.
 
+### Hybrid retrieval & answer evaluation
+
+Builderforce.ai implements the full **seven-layer agent stack** — and the two layers most stacks leave conventional-thin (RAG retrieval and evaluation) are built out:
+
+- **Hybrid RAG.** Retrieval fuses **dense** (SSM / OpenAI embeddings, cosine) and **sparse** (Okapi **BM25** keyword) signals with **Reciprocal Rank Fusion**, then reranks with **MMR** for relevance *and* diversity — over documents chunked with a recursive splitter + overlap. Dense search alone misses exact tokens (identifiers, error codes, rare names); the hybrid path catches them. It degrades gracefully (no embedding → BM25-only; no overlap → dense-only). Lives zero-dependency in `@seanhogg/builderforce-memory/retrieval` (`chunkText`, `bm25Search`, `reciprocalRankFusion`, `maximalMarginalRelevance`, `hybridRetrieve`, `MemoryStore.recallHybrid`) and powers the LanceDB long-term-memory extension.
+- **Semantic evaluation + drift.** Every cloud run is scored for **faithfulness**, **answer relevance**, and **hallucination rate** — inline and zero-cost (lexical), with an **LLM-as-judge** upgrade on demand at `POST /api/eval` (billed through the metered gateway). Scores persist on the run record; a **drift monitor** (mean-shift z-score + Population Stability Index) compares baseline vs recent windows per *(action-type × model)* and raises an alert when quality regresses — daily on cron and on demand at `GET /api/eval/drift`. A wrong answer no longer hides behind a green dashboard.
+
+See the write-up: [The AI Agent Tech Stack, Built](https://builderforce.ai/blog/agent-tech-stack-all-seven-layers).
+
 ---
 
 ## Architecture
