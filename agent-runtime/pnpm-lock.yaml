@@ -249,11 +249,11 @@ importers:
         version: 4.0.18(@opentelemetry/api@1.9.0)(@types/node@25.3.0)(@vitest/browser-playwright@4.0.18)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.2)
     optionalDependencies:
       '@seanhogg/builderforce-memory':
-        specifier: ^2026.6.20
-        version: 2026.6.20(@seanhogg/builderforce-memory-engine@2026.6.20)
+        specifier: ^2026.6.27
+        version: 2026.6.27(@seanhogg/builderforce-memory-engine@2026.6.27)
       '@seanhogg/builderforce-memory-engine':
-        specifier: ^2026.6.20
-        version: 2026.6.20
+        specifier: ^2026.6.27
+        version: 2026.6.27
 
   extensions/bluebubbles:
     devDependencies:
@@ -2477,15 +2477,15 @@ packages:
   '@scure/bip39@2.0.1':
     resolution: {integrity: sha512-PsxdFj/d2AcJcZDX1FXN3dDgitDDTmwf78rKZq1a6c1P1Nan1X/Sxc7667zU3U+AN60g7SxxP0YCVw2H/hBycg==}
 
-  '@seanhogg/builderforce-memory-engine@2026.6.20':
-    resolution: {integrity: sha512-cHUWvainqqy6mweu6jU2Nl+mywKIywkSUefT9P7EcI7bjhWJiNvMS3un1KSGlxgSfZPr1o1PR+2VCiuobILJqg==}
+  '@seanhogg/builderforce-memory-engine@2026.6.27':
+    resolution: {integrity: sha512-MkNmxnVkg5jHJ1Ik6PjnNySfeGpKFJyBK+ZOGRCBYC0hTBhETqFbXlkY9mt0qTOBal4X7IRG1aV25hctuQlQUA==}
     engines: {node: '>=18.0.0'}
 
-  '@seanhogg/builderforce-memory@2026.6.20':
-    resolution: {integrity: sha512-IFOm3RZr2slTxBdqFdf93dAO6Wy6lyPZcyg5H/8PNs8UEaFoQwMFNF3W0Xl4/+5glIfiwRfjWcSbyHRC+D2Lqg==}
+  '@seanhogg/builderforce-memory@2026.6.27':
+    resolution: {integrity: sha512-mOocgq37UvvpO77Me0JmJBodx96aieeTz7cQRfsFCoU0KyBlVgLV52EqlYEDwe2/B5gnEcrreCK7HB7/rIrxHw==}
     engines: {node: '>=18.0.0'}
     peerDependencies:
-      '@seanhogg/builderforce-memory-engine': ^2026.6.20
+      '@seanhogg/builderforce-memory-engine': ^2026.6.27
 
   '@selderee/plugin-htmlparser2@0.11.0':
     resolution: {integrity: sha512-P33hHGdldxGabLFjPPpaTxVolMrzrcegejx+0GxjrIb9Zv48D8yAIA/QTDR2dFl7Uz7urX8aX6+5bCZslr+gWQ==}
@@ -7464,12 +7464,12 @@ snapshots:
       '@noble/hashes': 2.0.1
       '@scure/base': 2.0.0
 
-  '@seanhogg/builderforce-memory-engine@2026.6.20':
+  '@seanhogg/builderforce-memory-engine@2026.6.27':
     optional: true
 
-  '@seanhogg/builderforce-memory@2026.6.20(@seanhogg/builderforce-memory-engine@2026.6.20)':
+  '@seanhogg/builderforce-memory@2026.6.27(@seanhogg/builderforce-memory-engine@2026.6.27)':
     dependencies:
-      '@seanhogg/builderforce-memory-engine': 2026.6.20
+      '@seanhogg/builderforce-memory-engine': 2026.6.27
     optional: true
 
   '@selderee/plugin-htmlparser2@0.11.0':

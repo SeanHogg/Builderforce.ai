@@ -125,6 +125,8 @@ type SSMAgent = any;
 type MemoryStore = any;
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type SemanticCache = any;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type Cognition = any;
 
 // ── SsmMemoryService ──────────────────────────────────────────────────────────
 
@@ -132,6 +134,13 @@ export class SsmMemoryService {
   readonly runtime: SSMRuntime;
   readonly agent: SSMAgent;
   readonly memory: MemoryStore;
+  /**
+   * Write-Through Cognition (Evermind). Routes belief writes through an
+   * evidence-gated, replace-on-write pipeline (supersede/augment/confirm/reject)
+   * keyed by a STABLE subject key, so re-learned facts replace the incumbent
+   * instead of accumulating. `null` only when the package predates the export.
+   */
+  readonly cognition: Cognition | null;
   /**
    * Embedding-keyed read-through cache for cortex completions: L1 = on-device
    * SSM embeddings (free), L2 = the BuilderForce.ai gateway (shared with the web
@@ -156,6 +165,7 @@ export class SsmMemoryService {
     gpuAvailable: boolean,
     checkpointPath: string,
     saveEveryLearns: number,
+    cognition: Cognition | null,
   ) {
     this.runtime = runtime;
     this.agent = agent;
@@ -164,6 +174,7 @@ export class SsmMemoryService {
     this.gpuAvailable = gpuAvailable;
     this.checkpointPath = checkpointPath;
     this.saveEveryLearns = saveEveryLearns;
+    this.cognition = cognition;
   }
 
   /**
@@ -198,7 +209,7 @@ export class SsmMemoryService {
     }
 
     // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-explicit-any
-    const { SSMRuntime, MemoryStore, SSMAgent, SemanticCache, FetchSemanticCacheBackend } =
+    const { SSMRuntime, MemoryStore, SSMAgent, SemanticCache, FetchSemanticCacheBackend, EvermindCognition } =
       memoryMod as Record<string, any>;
 
     // IDBFactory — always available via fake-indexeddb
@@ -301,6 +312,14 @@ export class SsmMemoryService {
     // IndexedDB is in-memory (fake-indexeddb) and would not survive a restart.
     const memory = new MemoryStore({ idbFactory });
 
+    // Write-Through Cognition (Evermind) over the same store. Belief writes go
+    // through this so a re-learned fact replaces its incumbent under a stable
+    // subject key instead of accumulating. Guarded for older package builds.
+    const cognition =
+      typeof EvermindCognition === "function"
+        ? new EvermindCognition({ store: memory, runtime })
+        : null;
+
     // Agent
     const agent = new SSMAgent({ runtime, memory, persistHistory: true });
     try {
@@ -340,6 +359,7 @@ export class SsmMemoryService {
       gpuAvailable,
       checkpointPath,
       saveEveryLearns,
+      cognition,
     );
 
     // First-run seeding: persist the freshly-initialised weights so that the next
@@ -364,6 +384,34 @@ export class SsmMemoryService {
     opts?: { ttlMs?: number; tags?: string[]; importance?: number },
   ): Promise<void> {
     await this.memory.remember(key, content, opts);
+  }
+
+  /**
+   * Write-through belief commit (Evermind Write-Through Cognition).
+   *
+   * Unlike {@link remember} (a raw keyed put, used for the append-style activity
+   * event log), this routes a *belief* through the cognition pipeline: a fact
+   * about the same `key` (subject) supersedes its incumbent instead of being
+   * stored blindly, with optional evidence-gating. Falls back to a plain keyed
+   * remember when the cognition layer is unavailable (older package). Returns the
+   * verdict (`augment | confirm | supersede | reject`) for the caller to surface.
+   */
+  async commitFact(
+    key: string,
+    content: string,
+    opts?: { tags?: string[]; importance?: number },
+  ): Promise<{ verdict: string }> {
+    if (!this.cognition) {
+      await this.memory.remember(key, content, opts);
+      return { verdict: "augment" };
+    }
+    const r = await this.cognition.commit({
+      subjectKey: key,
+      content,
+      tags: opts?.tags,
+      importance: opts?.importance,
+    });
+    return { verdict: String(r.verdict) };
   }
 
   /**

@@ -394,17 +394,22 @@
     }
   },
   "scripts": {
-    "vscode:prepublish": "npm run compile",
-    "compile": "tsc -p ./",
-    "watch": "tsc -watch -p ./",
+    "vscode:prepublish": "node esbuild.mjs --production && tsc -p ./",
+    "compile": "node esbuild.mjs && tsc -p ./",
+    "watch": "node esbuild.mjs --watch",
+    "typecheck": "tsc -p ./",
     "package": "vsce package --no-dependencies",
     "publish:marketplace": "vsce publish --no-dependencies",
     "publish:openvsx": "ovsx publish"
+  },
+  "dependencies": {
+    "@seanhogg/builderforce-memory": "^2026.6.27"
   },
   "devDependencies": {
     "@types/node": "^20.14.0",
     "@types/vscode": "^1.95.0",
     "@vscode/vsce": "^3.2.0",
+    "esbuild": "^0.24.0",
     "ovsx": "^0.10.0",
     "typescript": "^5.5.0"
   }
