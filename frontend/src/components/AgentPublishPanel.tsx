@@ -3,8 +3,10 @@
 import { Select } from '@/components/Select';
 
 import { useState, useCallback, useRef, useEffect } from 'react';
+import { useTranslations } from 'next-intl';
 import type { TrainingJob, AgentProfile, AgentPackage, MambaStateSnapshot } from '@/lib/types';
-import { publishAgent } from '@/lib/api';
+import { publishAgent, validateAgent, type ValidateAgentResult } from '@/lib/api';
+import ModelApiSamples from '@/components/ModelApiSamples';
 import { MambaEngine } from '@/lib/mamba-engine';
 
 const INSTALL_COMMAND = 'iwr -useb https://builderforce.ai/install.ps1 | iex';
@@ -61,6 +63,8 @@ export function AgentPublishPanel({ projectId, completedJobs }: AgentPublishPane
   const [isPublishing, setIsPublishing] = useState(false);
   const [publishedId, setPublishedId] = useState<string | null>(null);
   const [publishError, setPublishError] = useState<string | null>(null);
+  const [isValidating, setIsValidating] = useState(false);
+  const [validation, setValidation] = useState<ValidateAgentResult | null>(null);
   const [copiedInstall, setCopiedInstall] = useState(false);
   const [includeMamba, setIncludeMamba] = useState(false);
   const [mambaSnapshot, setMambaSnapshot] = useState<MambaStateSnapshot | null>(null);
@@ -132,6 +136,35 @@ export function AgentPublishPanel({ projectId, completedJobs }: AgentPublishPane
     a.click();
     URL.revokeObjectURL(url);
   }, [profile.resumeMarkdown, profile.name]);
+
+  const tp = useTranslations('agentPublish');
+
+  // Editing the profile or switching the source job invalidates a prior pass —
+  // the user must re-validate the actual candidate before the publish gate opens.
+  useEffect(() => {
+    setValidation(null);
+  }, [profile.name, profile.title, profile.bio, profile.skills, selectedJobId]);
+
+  const handleValidate = useCallback(async () => {
+    if (!isProfileValid) return;
+    setIsValidating(true);
+    try {
+      const result = await validateAgent({
+        name: profile.name,
+        title: profile.title,
+        bio: profile.bio,
+        skills: profile.skills,
+        base_model: selectedJob?.base_model ?? '',
+        r2_artifact_key: selectedJob?.r2_artifact_key,
+        mamba_state: includeMamba ? mambaSnapshot ?? undefined : undefined,
+      });
+      setValidation(result);
+    } catch (e) {
+      setValidation({ ok: false, error: e instanceof Error ? e.message : 'Validation failed' });
+    } finally {
+      setIsValidating(false);
+    }
+  }, [isProfileValid, profile, selectedJob, includeMamba, mambaSnapshot]);
 
   const handlePublish = useCallback(async () => {
     if (!isProfileValid) return;
@@ -398,6 +431,12 @@ export function AgentPublishPanel({ projectId, completedJobs }: AgentPublishPane
                   </p>
                 </div>
 
+                {/* How to call the just-published model (OpenAI standard + dedicated endpoint). */}
+                <div>
+                  <div className="text-xs text-gray-400 mb-1">{tp('callTitle')}</div>
+                  <ModelApiSamples agentId={publishedId} modelRef={`builderforce/workforce-${publishedId}`} />
+                </div>
+
                 <a
                   href="/workforce"
                   target="_blank"
@@ -442,14 +481,46 @@ export function AgentPublishPanel({ projectId, completedJobs }: AgentPublishPane
                     )}
                   </div>
                 )}
+                {/* Validate-via-API gate — call the candidate model before publishing. */}
+                {isProfileValid && (
+                  <div className="bg-gray-800 rounded p-2 space-y-2">
+                    <div className="text-xs text-gray-300 font-medium">{tp('validateTitle')}</div>
+                    <div className="text-xs text-gray-500">{tp('validateDesc')}</div>
+                    <button
+                      onClick={handleValidate}
+                      disabled={isValidating}
+                      className="w-full bg-blue-700 hover:bg-blue-600 disabled:opacity-50 text-white px-3 py-2 rounded text-xs font-semibold"
+                    >
+                      {isValidating ? `⏳ ${tp('validating')}` : `🧪 ${tp('validateBtn')}`}
+                    </button>
+                    {validation?.ok && (
+                      <div className="bg-green-900/30 border border-green-700 rounded p-2 text-xs text-green-300 space-y-1">
+                        <div className="font-semibold">✅ {tp('validatePassed')}</div>
+                        <div className="text-green-400/90">
+                          {tp('modeLabel')}: {validation.inference_mode} · {tp('latencyLabel')}: {validation.latency_ms}ms
+                        </div>
+                        <div className="text-gray-400">{tp('sampleLabel')}:</div>
+                        <div className="text-gray-300 italic line-clamp-3">“{validation.sample}”</div>
+                      </div>
+                    )}
+                    {validation && !validation.ok && (
+                      <div className="bg-red-900/30 border border-red-700 rounded p-2 text-xs text-red-300">
+                        ❌ {tp('validateFailed')}: {validation.error}
+                      </div>
+                    )}
+                  </div>
+                )}
                 {publishError && (
                   <div className="bg-red-900/30 border border-red-700 rounded p-2 text-xs text-red-300">
                     ❌ {publishError}
                   </div>
                 )}
+                {isProfileValid && !validation?.ok && (
+                  <div className="text-xs text-gray-500">{tp('validateGate')}</div>
+                )}
                 <button
                   onClick={handlePublish}
-                  disabled={isPublishing || !isProfileValid}
+                  disabled={isPublishing || !isProfileValid || !validation?.ok}
                   className="w-full bg-purple-700 hover:bg-purple-600 disabled:opacity-50 text-white px-3 py-2 rounded text-xs font-semibold"
                 >
                   {isPublishing ? '⏳ Publishing…' : '🌐 Publish to Workforce'}

@@ -534,6 +534,38 @@ export async function publishAgent(data: {
   });
 }
 
+/** Result of a pre-publish validation call against a candidate model. */
+export interface ValidateAgentResult {
+  ok: boolean;
+  inference_mode?: 'base' | 'lora' | 'hybrid';
+  latency_ms?: number;
+  model_ref?: string;
+  sample?: string;
+  error?: string;
+}
+
+/**
+ * Validates a freshly-trained candidate model by CALLING it via API before it can
+ * be published — runs one test inference against the candidate descriptor and
+ * returns the sample output. The publish UI gates "Publish" on `ok === true`.
+ */
+export async function validateAgent(data: {
+  name: string;
+  title?: string;
+  bio?: string;
+  skills?: string[];
+  base_model: string;
+  r2_artifact_key?: string;
+  mamba_state?: unknown;
+  prompt?: string;
+}): Promise<ValidateAgentResult> {
+  return apiRequest<ValidateAgentResult>(`${IDE}/agents/validate`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+}
+
 export async function listAgents(): Promise<PublishedAgent[]> {
   // Public workforce registry — works for anonymous visitors on /marketplace.
   // Management endpoints (hire, update, etc.) still live under /api/ide/agents.

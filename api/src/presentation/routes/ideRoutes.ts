@@ -881,5 +881,63 @@ export function createIdeRoutes(): Hono<HonoEnv> {
     }
   });
 
+  // ── Pre-publish validation ───────────────────────────────────────────────
+  // A user validates a freshly-trained model by CALLING it via API before it can
+  // be published to the Workforce Registry. Runs one non-streaming test inference
+  // against the CANDIDATE descriptor (no agent row required yet) and returns the
+  // sample output + latency + resolved inference mode. The publish UI gates the
+  // "Publish" button on a successful response here. Uses the SAME persona/memory
+  // prompt builder as the live chat endpoint, so a green validate predicts live
+  // behaviour rather than testing a different code path.
+  router.post('/agents/validate', async (c) => {
+    const body = await c.req.json<{
+      name: string;
+      title?: string;
+      bio?: string;
+      skills?: string[] | string;
+      base_model: string;
+      r2_artifact_key?: string | null;
+      mamba_state?: unknown;
+      prompt?: string;
+    }>();
+    if (!c.env.OPENROUTER_API_KEY?.trim()) return c.json({ ok: false, error: 'LLM not configured' }, 503);
+    if (!body.name?.trim() || !body.base_model?.trim()) {
+      return c.json({ ok: false, error: 'name and base_model are required' }, 400);
+    }
+
+    const descriptor: AgentDescriptor = {
+      name: body.name,
+      title: body.title ?? '',
+      bio: body.bio ?? '',
+      skills: body.skills ?? [],
+      r2_artifact_key: body.r2_artifact_key ?? null,
+      mamba_state: body.mamba_state,
+    };
+    const inferenceMode = resolveInferenceMode(descriptor);
+    const prompt = body.prompt?.trim() || 'In one sentence, introduce yourself and your single strongest skill.';
+    const messages = applyAgentSystem([{ role: 'user', content: prompt }], buildAgentSystemPrompt(descriptor));
+
+    const startMs = Date.now();
+    try {
+      const result = await ideProxy(c.env).complete({ messages, stream: false });
+      const latencyMs = Date.now() - startMs;
+      const json = (await result.response.json()) as { choices?: Array<{ message?: { content?: string } }> };
+      const sample = json.choices?.[0]?.message?.content?.trim() ?? '';
+      // The validation RAN; an empty/failed model response is a validation result
+      // (ok:false), not a transport error — return 200 so the client reads it
+      // uniformly and the publish gate stays closed.
+      if (!sample) return c.json({ ok: false, error: 'Model returned an empty response', latency_ms: latencyMs });
+      return c.json({
+        ok: true,
+        inference_mode: inferenceMode,
+        latency_ms: latencyMs,
+        model_ref: 'builderforce/workforce-candidate',
+        sample,
+      });
+    } catch (err) {
+      return c.json({ ok: false, error: err instanceof Error ? err.message : String(err) });
+    }
+  });
+
   return router;
 }

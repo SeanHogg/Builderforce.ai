@@ -394,5 +394,28 @@
     "baseModel": "Modèle de base (facultatif)",
     "baseModelDefault": "Par défaut builderforce.ai (meilleur modèle de codage)",
     "baseModelHelp": "Le modèle d'appel d'outils et de codage sur lequel cet agent s'exécute — choisissez l'un de vos LLM ou un modèle du pool. Une exécution fixe un modèle pour toute la tâche ; laissez par défaut pour utiliser le meilleur modèle de codage de votre forfait."
+  },
+  "modelApiSamples": {
+    "copy": "Copier",
+    "copied": "Copié !",
+    "intro": "Appelez votre modèle via HTTP. Il parle le standard OpenAI : les SDK officiels fonctionnent en les pointant vers la passerelle — plus un endpoint dédié pour votre modèle publié.",
+    "langTablist": "Langage de code",
+    "openaiTitle": "Passerelle compatible OpenAI",
+    "openaiDesc": "Pointez n’importe quel SDK OpenAI vers l’URL de base de la passerelle et indiquez l’id de votre modèle.",
+    "workforceTitle": "Endpoint du modèle Workforce",
+    "workforceDesc": "Appelez votre modèle publié directement — même format de chat OpenAI, adressé par id de modèle."
+  },
+  "agentPublish": {
+    "validateTitle": "Valider via l’API",
+    "validateDesc": "Lancez un appel de test en direct sur votre modèle. La publication se débloque dès qu’il répond.",
+    "validateBtn": "Valider via l’API",
+    "validating": "Validation…",
+    "validatePassed": "Validation réussie",
+    "validateFailed": "Échec de la validation",
+    "validateGate": "Validez votre modèle via l’API avant de publier.",
+    "sampleLabel": "Réponse d’exemple",
+    "latencyLabel": "Latence",
+    "modeLabel": "Mode d’inférence",
+    "callTitle": "Comment appeler votre modèle"
   }
 }
