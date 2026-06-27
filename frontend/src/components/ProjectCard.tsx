@@ -5,7 +5,7 @@ import type { Project } from '@/lib/types';
 import { ProjectOriginBadge } from './ProjectOriginBadge';
 import type { ProjectPanelTab } from './ProjectDetailsPanel';
 import { DeleteProjectDialog } from './DeleteProjectDialog';
-import { ArchitectureAnalysisButton } from './ArchitectureAnalysisButton';
+import { RunDiagnosticsButton } from './RunDiagnosticsButton';
 
 export interface ProjectCardProps {
   project: Project;
@@ -258,10 +258,9 @@ export function ProjectCard({
         )}
         <div style={{ flex: 1, minWidth: 0 }} />
         {onDetailsClick && (
-          <ArchitectureAnalysisButton
+          <RunDiagnosticsButton
             project={project}
-            onView={(p) => onDetailsClick(p, 'prds')}
-            onConfigureRepo={(p) => onDetailsClick(p, 'integrations')}
+            onOpen={(p) => onDetailsClick(p, 'diagnostics')}
           />
         )}
         <button

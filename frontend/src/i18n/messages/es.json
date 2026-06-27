@@ -481,16 +481,22 @@
     "intro": "Ejecuta diagnósticos en este proyecto. Cada ejecución se registra y contribuye a la calificación del proyecto, que se consolida en tu espacio de trabajo.",
     "loading": "Cargando…",
     "loadError": "No se pudieron cargar los diagnósticos",
-    "noRuns": "Todavía no se ha ejecutado ningún diagnóstico en este proyecto.",
     "architectureTitle": "Análisis de arquitectura",
     "architectureDesc": "Analiza los repositorios del proyecto y puntúa el cumplimiento de los principios de diseño. El resultado se registra como un diagnóstico del proyecto.",
-    "runArchitecture": "Ejecutar análisis de arquitectura",
     "architectureRunning": "Iniciando…",
     "architectureStarted": "Análisis de arquitectura iniciado: su puntuación aparecerá aquí cuando finalice.",
     "architectureError": "No se pudo iniciar el análisis de arquitectura",
     "runOther": "Ejecutar un diagnóstico",
     "runOtherDesc": "Ejecuta cualquier diagnóstico en este proyecto para añadirlo a la calificación.",
-    "run": "Ejecutar"
+    "run": "Ejecutar",
+    "runDiagnostics": "Ejecutar diagnósticos",
+    "viewResults": "Ver resultados",
+    "results": "Resultados",
+    "combinedResults": "Resultados combinados",
+    "closeResults": "Cerrar resultados",
+    "noResults": "Aún no hay resultados.",
+    "overall": "Calificación general",
+    "architectureNeedsRepo": "Primero asocia un repositorio a este proyecto."
   },
   "projectDetails": {
     "tabs": {

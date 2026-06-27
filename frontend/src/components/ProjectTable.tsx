@@ -6,7 +6,7 @@ import type { Project } from '@/lib/types';
 import { ProjectOriginBadge } from './ProjectOriginBadge';
 import type { ProjectPanelTab } from './ProjectDetailsPanel';
 import { DeleteProjectDialog } from './DeleteProjectDialog';
-import { ArchitectureAnalysisButton } from './ArchitectureAnalysisButton';
+import { RunDiagnosticsButton } from './RunDiagnosticsButton';
 import { tableWrapStyle, tableStyle } from './dataTableStyles';
 
 export interface ProjectTableProps {
@@ -149,10 +149,9 @@ export function ProjectTable({
                     <span style={{ fontSize: 18 }} aria-hidden>💻</span>
                   </button>
                   {onDetailsClick && (
-                    <ArchitectureAnalysisButton
+                    <RunDiagnosticsButton
                       project={project}
-                      onView={(p) => onDetailsClick(p, 'prds')}
-                      onConfigureRepo={(p) => onDetailsClick(p, 'integrations')}
+                      onOpen={(p) => onDetailsClick(p, 'diagnostics')}
                     />
                   )}
                   {onDelete && (

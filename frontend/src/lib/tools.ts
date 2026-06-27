@@ -68,7 +68,7 @@ export interface SavedToolRun {
   createdAt: string;
 }
 
-/** One diagnostic's latest score for a project. */
+/** One diagnostic's latest result for a project. */
 export interface ProjectDiagnostic {
   toolId: string;
   name: string;
@@ -77,6 +77,8 @@ export interface ProjectDiagnostic {
   headline: string;
   kind: string;
   createdAt: string;
+  /** The full latest run result, for the per-diagnostic results view. */
+  result: ToolResult;
 }
 
 /** A project's diagnostic rating: an aggregate result + per-diagnostic latest scores. */

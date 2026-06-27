@@ -36,7 +36,7 @@ export interface SavedToolRun {
   createdAt: string;
 }
 
-/** One diagnostic's latest score for a project. */
+/** One diagnostic's latest result for a project. */
 export interface ProjectDiagnostic {
   toolId: string;
   name: string;
@@ -45,6 +45,8 @@ export interface ProjectDiagnostic {
   headline: string;
   kind: string;
   createdAt: string;
+  /** The full latest run result, for the per-diagnostic results view. */
+  result: ToolResult;
 }
 
 export interface ProjectScore {
@@ -215,6 +217,7 @@ export class ToolService {
           headline: result.headline ?? '',
           kind: r.kind,
           createdAt: r.createdAt.toISOString(),
+          result,
         };
       });
       diagnostics.sort((a, b) => a.name.localeCompare(b.name));
