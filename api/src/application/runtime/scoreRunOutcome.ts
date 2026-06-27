@@ -20,6 +20,7 @@ import { approvals, executions, llmUsageLog, pullRequests, tasks, toolAuditEvent
 import { normalizeActionType } from '../llm/actionTypes';
 import { applyOutcomeToRoutingTable } from '../llm/routingTable';
 import { resolveTenantPlan } from '../../presentation/routes/llmRoutes';
+import { lexicalEval } from '../eval/semanticEval';
 
 // ── D3 score weights + efficiency normalization (named so they're tunable without a
 //    schema change — see the Gap Register note on score calibration). ────────────
@@ -165,7 +166,7 @@ const TERMINAL = new Set<string>(['completed', 'failed', 'cancelled']);
 export async function scoreRunOutcome(env: Env, db: Db, args: { executionId: number }): Promise<void> {
   try {
     const [exec] = await db
-      .select({ status: executions.status, taskId: executions.taskId, tenantId: executions.tenantId, cloudAgentRef: executions.cloudAgentRef })
+      .select({ status: executions.status, taskId: executions.taskId, tenantId: executions.tenantId, cloudAgentRef: executions.cloudAgentRef, result: executions.result })
       .from(executions)
       .where(eq(executions.id, args.executionId))
       .limit(1);
@@ -173,12 +174,22 @@ export async function scoreRunOutcome(env: Env, db: Db, args: { executionId: num
     const terminalStatus = exec.status as TerminalStatus;
 
     const [task] = await db
-      .select({ projectId: tasks.projectId, actionType: tasks.actionType })
+      .select({ projectId: tasks.projectId, actionType: tasks.actionType, title: tasks.title, description: tasks.description })
       .from(tasks)
       .where(eq(tasks.id, exec.taskId))
       .limit(1);
     const projectId = task?.projectId ?? null;
     const actionType = normalizeActionType(task?.actionType);
+
+    // ── Semantic eval (Layer 6) — inline, zero-cost lexical scoring of the run's
+    // deliverable against the task it was asked to do. Drift monitoring reads these
+    // over time; the /api/eval surface upgrades to an LLM-as-judge with full context.
+    const evalScores = (() => {
+      const question = [task?.title, task?.description].filter(Boolean).join('\n').trim();
+      const answer = (exec.result ?? '').trim();
+      if (!question || !answer) return null;
+      return lexicalEval({ question, answer });
+    })();
 
     const [{ model, steps, costMc }, pr, degraded, approved, plan] = await Promise.all([
       resolveRunModel(db, args.executionId),
@@ -215,6 +226,10 @@ export async function scoreRunOutcome(env: Env, db: Db, args: { executionId: num
       steps,
       costUsdMillicents: costMc,
       terminalStatus,
+      faithfulness: evalScores?.faithfulness ?? null,
+      answerRelevance: evalScores?.answerRelevance ?? null,
+      hallucinationRate: evalScores?.hallucinationRate ?? null,
+      evalMethod: evalScores?.method ?? null,
     };
 
     // Insert-once: a newly inserted row folds into the routing blobs; an existing one
@@ -229,7 +244,18 @@ export async function scoreRunOutcome(env: Env, db: Db, args: { executionId: num
     if (inserted.length === 0) {
       await db
         .update(runModelOutcomes)
-        .set({ score, merged: pr.merged, ciGreen: pr.ciGreen, degraded, steps, costUsdMillicents: costMc, resolvedModel, plan })
+        .set({
+          score, merged: pr.merged, ciGreen: pr.ciGreen, degraded, steps, costUsdMillicents: costMc, resolvedModel, plan,
+          // Re-evaluate on re-score too (the deliverable text may have settled).
+          ...(evalScores
+            ? {
+                faithfulness: evalScores.faithfulness,
+                answerRelevance: evalScores.answerRelevance,
+                hallucinationRate: evalScores.hallucinationRate,
+                evalMethod: evalScores.method,
+              }
+            : {}),
+        })
         .where(eq(runModelOutcomes.executionId, args.executionId))
         .catch(() => { /* best-effort */ });
       return;

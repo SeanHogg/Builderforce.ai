@@ -110,6 +110,7 @@ import { createBitbucketWebhookRoutes } from './presentation/routes/bitbucketWeb
 import { createCostForecastRoutes }    from './presentation/routes/costForecastRoutes';
 import { createDashboardRoutes }       from './presentation/routes/dashboardRoutes';
 import { createConsumptionRoutes }     from './presentation/routes/consumptionRoutes';
+import { createEvalRoutes }            from './presentation/routes/evalRoutes';
 import { createTeamMemoryRoutes }      from './presentation/routes/teamMemoryRoutes';
 import { createPublicApiRoutes }       from './presentation/routes/publicApiRoutes';
 import { createStudioRoutes }          from './presentation/routes/studioWeightRoutes';
@@ -132,6 +133,7 @@ import {
 } from './openapi/schema';
 import { runVendorHealthCron } from './application/llm/vendorHealthCron';
 import { runRetentionPurge } from './application/maintenance/retentionPurge';
+import { runEvalDriftSweep } from './application/eval/runEvalDriftSweep';
 import { runDueTriggers } from './application/workflow/runDueTriggers';
 import { processPendingCloudWorkflows } from './application/workflow/cloudExecutor';
 import { reapStaleExecutions } from './application/runtime/staleExecutionReaper';
@@ -399,6 +401,7 @@ function buildApp(env: Env): Hono<HonoEnv> {
   app.route('/api/cost-forecast',   createCostForecastRoutes(db));
   app.route('/api/dashboard',       createDashboardRoutes(db));
   app.route('/api/consumption',     createConsumptionRoutes(db));
+  app.route('/api/eval',            createEvalRoutes(db));
   app.route('/api/brain',     createBrainRoutes(brainService, db));
   // Order matters: the team-memory mesh lives at the static /api/teams/memory and
   // MUST be registered before the Workforce Teams CRUD, whose GET /:id would
@@ -473,6 +476,13 @@ export default {
       ctx.waitUntil(
         runRetentionPurge(env).catch((err) => {
           console.error('[cron:retention] failed', err);
+        }),
+      );
+      // Daily semantic-eval drift sweep — flag per-(action_type, model) quality
+      // regressions over the persisted faithfulness/relevance scores (Layer 6).
+      ctx.waitUntil(
+        runEvalDriftSweep(env).catch((err) => {
+          console.error('[cron:eval-drift] failed', err);
         }),
       );
     }

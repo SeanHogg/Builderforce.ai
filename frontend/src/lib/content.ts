@@ -182,6 +182,12 @@ export const FEATURES: Feature[] = [
     longDesc: 'Fine-tune models up to 2B parameters directly in Chrome with WebGPU. No cloud GPU bills, zero round-trips, total privacy.',
   },
   {
+    icon: '🎯',
+    title: 'Grounded RAG & Answer Evaluation',
+    shortDesc: 'Hybrid retrieval, plus faithfulness & drift scoring.',
+    longDesc: 'The full retrieval-and-evaluation stack, built in. Memory uses hybrid retrieval — dense embeddings and BM25 keyword search fused with Reciprocal Rank Fusion and reranked with MMR for relevance and diversity, over chunked documents. Every run is then scored for faithfulness, answer relevance, and hallucination rate, and a drift monitor flags when a model\'s quality regresses over time — so a wrong answer never hides behind a green dashboard.',
+  },
+  {
     icon: '🔬',
     title: 'AI Evaluation Engine',
     shortDesc: 'Score outputs with an AI judge.',
@@ -457,6 +463,8 @@ export const COMPETITIVE_COMPARISON: CompetitiveCategory[] = [
       { feature: 'Self-healing / error recovery', note: 'Auto-detect + rerun', values: { builderforce: '✅', copilot: '❌', cursor: '❌', claudeCode: '❌', devin: '⚠️ Retry only', openhands: '⚠️ Retry only', aider: '❌', continueDev: '❌' } },
       { feature: 'Scheduled automation (cron)', note: 'Builderforce-synced', values: { builderforce: '✅', copilot: '❌', cursor: '❌', claudeCode: '❌', devin: '❌', openhands: '❌', aider: '❌', continueDev: '❌' } },
       { feature: 'CI/CD pipeline integration', note: 'CLI + webhook triggers', values: { builderforce: '✅', copilot: '⚠️ PR suggest', cursor: '❌', claudeCode: '⚠️ CLI only', devin: '⚠️ API', openhands: '⚠️ API', aider: '⚠️ CLI', continueDev: '❌' } },
+      { feature: 'Semantic answer evaluation', note: 'faithfulness / relevance / hallucination', values: { builderforce: '✅', copilot: '❌', cursor: '❌', claudeCode: '❌', devin: '❌', openhands: '❌', aider: '❌', continueDev: '❌' } },
+      { feature: 'Quality-drift monitoring', note: 'per-model regression alerts', values: { builderforce: '✅', copilot: '❌', cursor: '❌', claudeCode: '❌', devin: '❌', openhands: '❌', aider: '❌', continueDev: '❌' } },
     ],
   },
   {
@@ -465,6 +473,7 @@ export const COMPETITIVE_COMPARISON: CompetitiveCategory[] = [
     blurb: 'How deeply the tool reads your repo and how cleanly it stages changes for review.',
     rows: [
       { feature: 'Codebase semantic search', values: { builderforce: '✅', copilot: '⚠️', cursor: '✅', claudeCode: '⚠️ Basic RAG', devin: '✅', openhands: '⚠️ Basic', aider: '⚠️ Git-aware', continueDev: '✅' } },
+      { feature: 'Hybrid retrieval (dense + BM25 + rerank)', note: 'RRF fusion + MMR diversity', values: { builderforce: '✅', copilot: '❌', cursor: '⚠️ Vector only', claudeCode: '⚠️ Vector only', devin: '⚠️ Vector only', openhands: '⚠️ Vector only', aider: '⚠️ Git-aware', continueDev: '⚠️ Vector only' } },
       { feature: 'Deep AST + git-history analysis', values: { builderforce: '✅', copilot: '❌', cursor: '⚠️ Basic RAG', claudeCode: '⚠️ Basic RAG', devin: '⚠️ Basic RAG', openhands: '⚠️ Basic RAG', aider: '⚠️ Git-aware', continueDev: '⚠️ Basic RAG' } },
       { feature: 'Staged diff / accept-reject', note: '/diff, /accept, /reject', values: { builderforce: '✅', copilot: '❌', cursor: '✅ Composer', claudeCode: '❌', devin: '❌', openhands: '❌', aider: '✅ Git diff', continueDev: '✅ ⌘K diff' } },
       { feature: 'Bundled skills', note: '53 built-in + marketplace', values: { builderforce: '✅', copilot: '❌', cursor: '❌', claudeCode: '❌', devin: '❌', openhands: '❌', aider: '❌', continueDev: '❌' } },
@@ -1282,15 +1291,15 @@ export const INTEGRATION_SLUG_MAP: Record<string, IntegrationSeo> = Object.fromE
  */
 export const RELATED_ARTICLES: Record<string, string[]> = {
   product: [
+    'agent-tech-stack-all-seven-layers',
     'evermind-self-updating-model',
     'system-of-record-for-agentic-work',
-    'every-role-operating-picture',
   ],
   // Evermind technology page / feature teaser.
   evermind: [
     'evermind-self-updating-model',
+    'agent-tech-stack-all-seven-layers',
     'semantic-response-cache',
-    'webgpu-lora-explained',
   ],
   compare: [
     'best-ai-coding-agents-compared',
