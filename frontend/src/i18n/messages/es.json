@@ -147,7 +147,11 @@
     "computingData": "Leyendo tus datos…",
     "saveSnapshot": "Guardar instantánea",
     "snapshotSaved": "Instantánea guardada ✓",
-    "history": "Historial"
+    "history": "Historial",
+    "savedProject": "Guardado en este proyecto.",
+    "scoringProject": "Puntuando este proyecto: esta ejecución se guardará en la calificación del proyecto.",
+    "rollupTitle": "Calificación de tu espacio de trabajo",
+    "rollupDesc": "Calificación de diagnóstico promedio de tus proyectos."
   },
   "notFound": {
     "title": "Página no encontrada",
@@ -471,5 +475,21 @@
     "latencyLabel": "Latencia",
     "modeLabel": "Modo de inferencia",
     "callTitle": "Cómo llamar a tu modelo"
+  },
+  "projectDiagnostics": {
+    "title": "Diagnósticos del proyecto",
+    "intro": "Ejecuta diagnósticos en este proyecto. Cada ejecución se registra y contribuye a la calificación del proyecto, que se consolida en tu espacio de trabajo.",
+    "loading": "Cargando…",
+    "loadError": "No se pudieron cargar los diagnósticos",
+    "noRuns": "Todavía no se ha ejecutado ningún diagnóstico en este proyecto.",
+    "architectureTitle": "Análisis de arquitectura",
+    "architectureDesc": "Analiza los repositorios del proyecto y puntúa el cumplimiento de los principios de diseño. El resultado se registra como un diagnóstico del proyecto.",
+    "runArchitecture": "Ejecutar análisis de arquitectura",
+    "architectureRunning": "Iniciando…",
+    "architectureStarted": "Análisis de arquitectura iniciado: su puntuación aparecerá aquí cuando finalice.",
+    "architectureError": "No se pudo iniciar el análisis de arquitectura",
+    "runOther": "Ejecutar un diagnóstico",
+    "runOtherDesc": "Ejecuta cualquier diagnóstico en este proyecto para añadirlo a la calificación.",
+    "run": "Ejecutar"
   }
 }

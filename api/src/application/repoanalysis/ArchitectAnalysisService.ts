@@ -37,12 +37,7 @@ export class ArtifactGenerationError extends Error {
 }
 
 export class ArchitectAnalysisService {
-  /**
-   * @param preferredModel  When an agent is assigned to architecture analysis
-   *   for this project, its resolved model (the agent's `base_model`) so the run
-   *   executes AS that agent; omitted → the gateway's default cascade.
-   */
-  constructor(private readonly env: Env, private readonly preferredModel?: string) {}
+  constructor(private readonly env: Env) {}
 
   // ── public generators ─────────────────────────────────────────────────────
 
@@ -292,8 +287,6 @@ export class ArchitectAnalysisService {
         max_tokens: MAX_TOKENS[kind],
         response_format: { type: 'json_object' },
         useCase: `repo_analysis_${kind}`,
-        // Run as the assigned architecture agent when one is set (else default cascade).
-        ...(this.preferredModel ? { model: this.preferredModel } : {}),
       });
     } catch (err) {
       throw new ArtifactGenerationError(kind, `gateway call failed: ${err instanceof Error ? err.message : String(err)}`);

@@ -20,7 +20,7 @@ const btnSubtle: React.CSSProperties = {
  * with a "Requires Manager role" hint rather than hiding it, and only fetches
  * the workspace's data when the caller is actually entitled.
  */
-export function DataDrivenPanel({ toolId }: { toolId: string }) {
+export function DataDrivenPanel({ toolId, projectId }: { toolId: string; projectId?: number | null }) {
   const t = useTranslations('tools');
   const { allowed } = usePermission('tools.runDataDriven');
   const [result, setResult] = useState<ToolResult | null>(null);
@@ -33,18 +33,18 @@ export function DataDrivenPanel({ toolId }: { toolId: string }) {
     if (!allowed) return;
     setLoading(true);
     Promise.all([
-      toolsApi.dataDriven(toolId, 90).then((r) => r.result).catch(() => null),
-      toolsApi.runs(toolId).catch(() => [] as SavedToolRun[]),
+      toolsApi.dataDriven(toolId, 90, projectId).then((r) => r.result).catch(() => null),
+      toolsApi.runs(toolId, projectId).catch(() => [] as SavedToolRun[]),
     ])
       .then(([res, h]) => { setResult(res); setHistory(h); })
       .catch((e) => setError(e instanceof Error ? e.message : 'Failed to load'))
       .finally(() => setLoading(false));
-  }, [allowed, toolId]);
+  }, [allowed, toolId, projectId]);
 
   const saveSnapshot = async () => {
     setSnap('saving');
     try {
-      const run = await toolsApi.saveData(toolId, 90);
+      const run = await toolsApi.saveData(toolId, 90, projectId);
       setHistory((h) => [run, ...h]);
       setSnap('saved');
     } catch {

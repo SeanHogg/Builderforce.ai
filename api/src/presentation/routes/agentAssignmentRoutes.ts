@@ -3,8 +3,8 @@
  *
  * The single surface for the canonical agent-assignment model: assign a
  * tenant-registered agent (agentKind+agentRef) to any platform aspect (project,
- * workflow, architecture, security, swimlane, brain, global) and list those
- * assignments. All reads go through AgentAssignmentService's read-through cache.
+ * workflow, security, swimlane, brain, global) and list those assignments. All
+ * reads go through AgentAssignmentService's read-through cache.
  *
  *   GET    /api/agent-assignments?scope=&scopeId=   list assignments for a scope
  *   POST   /api/agent-assignments                   assign (idempotent upsert)
@@ -24,7 +24,6 @@ import type { Db } from '../../infrastructure/database/connection';
 const SCOPES: AssignmentScope[] = [
   'project',
   'workflow',
-  'architecture',
   'security',
   'swimlane',
   'brain',

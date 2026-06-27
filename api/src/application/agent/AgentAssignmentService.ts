@@ -1,8 +1,8 @@
 /**
  * AgentAssignmentService — the single read/write path for the canonical
  * agent-assignment model (schema.agentAssignments). Every surface that needs to
- * know "which agents are assigned here" (project, workflow, architecture,
- * security, swimlane, brain) goes through this, so the lookup + caching live in
+ * know "which agents are assigned here" (project, workflow, security, swimlane,
+ * brain) goes through this, so the lookup + caching live in
  * ONE place (DRY) rather than each surface re-querying.
  *
  * Reads are served through the canonical read-through cache (L1 Map + L2 KV) and
@@ -19,7 +19,6 @@ import type { Db } from '../../infrastructure/database/connection';
 export type AssignmentScope =
   | 'project'
   | 'workflow'
-  | 'architecture'
   | 'security'
   | 'swimlane'
   | 'brain'

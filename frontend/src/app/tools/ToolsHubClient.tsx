@@ -4,7 +4,9 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useTranslations } from 'next-intl';
 import { toolsApi } from '@/lib/builderforceApi';
-import type { ToolSummary, ToolCategory } from '@/lib/tools';
+import { ToolResultView } from '@/components/tools/ToolResultView';
+import { getStoredTenantToken } from '@/lib/auth';
+import type { ToolSummary, ToolCategory, TenantDiagnosticsRollup } from '@/lib/tools';
 
 const wrap: React.CSSProperties = { maxWidth: 980, margin: '0 auto', padding: '32px 20px' };
 const cardLink: React.CSSProperties = {
@@ -20,12 +22,17 @@ export default function ToolsHubClient() {
   const [tools, setTools] = useState<ToolSummary[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [loaded, setLoaded] = useState(false);
+  const [rollup, setRollup] = useState<TenantDiagnosticsRollup | null>(null);
 
   useEffect(() => {
     toolsApi.list()
       .then(setTools)
       .catch((e: Error) => setError(e.message))
       .finally(() => setLoaded(true));
+    // Workspace rating (project diagnostics rolled up) — best-effort, manager+ only.
+    if (getStoredTenantToken()) {
+      toolsApi.rollup().then(setRollup).catch(() => setRollup(null));
+    }
   }, []);
 
   const categoryLabel = (c: ToolCategory) => t(`category.${c}`);
@@ -41,6 +48,17 @@ export default function ToolsHubClient() {
         <h1 style={{ fontSize: 30, fontWeight: 800, color: 'var(--text-strong)', margin: '8px 0' }}>{t('hubTitle')}</h1>
         <p style={{ fontSize: 15, color: 'var(--text-secondary)', maxWidth: 680 }}>{t('hubIntro')}</p>
       </header>
+
+      {/* Workspace rating — project diagnostics rolled up to the tenant. */}
+      {rollup && rollup.projects.length > 0 && (
+        <section style={{ marginBottom: 24 }}>
+          <h2 style={{ fontSize: 13, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.6, color: 'var(--muted)', margin: '0 0 4px' }}>
+            {t('rollupTitle')}
+          </h2>
+          <p style={{ fontSize: 13, color: 'var(--text-secondary)', margin: '0 0 12px' }}>{t('rollupDesc')}</p>
+          <ToolResultView result={rollup.result} />
+        </section>
+      )}
 
       {/* Featured: the full maturity diagnostic */}
       <Link href="/tools/agentic-maturity" style={{ ...cardLink, marginBottom: 24, background: 'var(--bg-elevated)', borderColor: 'var(--accent)' }}>
