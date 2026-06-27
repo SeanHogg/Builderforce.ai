@@ -5,13 +5,13 @@ import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import JsonLd from '@/components/JsonLd';
 import { homepageSchema } from '@/lib/structured-data';
-import { HOMEPAGE_FAQ, COMPARE, FEATURES } from '@/lib/content';
+import { HOMEPAGE_FAQ, COMPARE, FEATURES, EVERMIND } from '@/lib/content';
 import { savePendingPrompt } from '@/lib/brain';
 import { pendingPromptsApi } from '@/lib/builderforceApi';
 import { BLOG_POSTS } from '@/lib/blogData';
 import { ArticleCardGrid } from '@/components/blog/ArticleCard';
 import QuickStart from '@/components/QuickStart';
-import WaveBackdrop from '@/components/WaveBackdrop';
+import BrainBackdrop from '@/components/BrainBackdrop';
 
 const HERO_PROMPT_EXAMPLES = [
   'Audit my repo for security issues',
@@ -79,7 +79,7 @@ export default function LandingPage() {
           gap: 0;
           isolation: isolate; /* own stacking context so the wave sits behind content only */
         }
-        /* Hero content rides above the emerging-water backdrop. */
+        /* Hero content rides above the Evermind brain backdrop. */
         .lp-hero-content {
           position: relative;
           z-index: 1;
@@ -354,6 +354,51 @@ export default function LandingPage() {
           line-height: 1.3;
         }
 
+        /* ════════ EVERMIND ════════ */
+        .lp-evermind-eyebrow {
+          display: inline-block;
+          font-family: var(--font-display);
+          font-size: 0.72rem;
+          font-weight: 600;
+          letter-spacing: 0.18em;
+          text-transform: uppercase;
+          color: var(--cyan-bright);
+          margin-bottom: 10px;
+        }
+        .lp-evermind-edges {
+          display: grid;
+          grid-template-columns: repeat(3, 1fr);
+          gap: 14px;
+          margin-top: 22px;
+        }
+        @media (max-width: 640px) {
+          .lp-evermind-edges { grid-template-columns: 1fr; }
+        }
+        .lp-evermind-edge {
+          display: flex;
+          flex-direction: column;
+          gap: 4px;
+          padding: 16px 18px;
+          border-radius: 14px;
+          border: 1px solid var(--border-subtle);
+          background: var(--surface-card);
+          backdrop-filter: blur(12px);
+        }
+        .lp-evermind-edge-label {
+          font-family: var(--font-display);
+          font-weight: 700;
+          font-size: 0.9rem;
+          background: linear-gradient(135deg, var(--coral-bright), var(--cyan-bright));
+          -webkit-background-clip: text;
+          -webkit-text-fill-color: transparent;
+          background-clip: text;
+        }
+        .lp-evermind-edge-desc {
+          font-size: 0.82rem;
+          color: var(--text-secondary);
+          line-height: 1.55;
+        }
+
         /* ════════ FEATURES ════════ */
         .lp-features {
           max-width: 1200px;
@@ -450,10 +495,10 @@ export default function LandingPage() {
         <main>
         {/* ── Hero ── */}
         <section className="lp-hero">
-          {/* A flight through the solar system behind the hero — a journey
-              forward into what you'll build. Pure backdrop; content sits above
-              via .lp-hero-content. */}
-          <WaveBackdrop className="lp-hero-wave" />
+          {/* Evermind — the platform's brain — behind the hero: information
+              packets travel the synapses, hubs stand for the key aspects of the
+              platform. Pure backdrop; content sits above via .lp-hero-content. */}
+          <BrainBackdrop className="lp-hero-wave" />
           <div className="lp-hero-content">
           <div className="lp-badge">
             <span className="lp-badge-dot" />
@@ -511,6 +556,36 @@ export default function LandingPage() {
               🤖 Browse Agents
             </Link>
           </div>
+          </div>
+        </section>
+
+        {/* ── Evermind: the brain behind the platform (what the hero animation depicts) ── */}
+        <section className="lp-features" style={{ paddingTop: 0 }}>
+          <div className="lp-evermind">
+            <span className="lp-evermind-eyebrow">{EVERMIND.eyebrow}</span>
+            <h2 className="section-title" style={{ marginBottom: 8 }}>
+              <span className="agentHost-accent">⟩</span> {EVERMIND.name} — {EVERMIND.tagline}
+            </h2>
+            <p style={{ maxWidth: '780px', margin: '0 0 28px', color: 'var(--text-secondary)' }}>
+              {EVERMIND.blurb}
+            </p>
+            <div className="lp-grid" style={{ gridTemplateColumns: 'repeat(auto-fit,minmax(240px,1fr))' }}>
+              {EVERMIND.pillars.map((p) => (
+                <div key={p.title} className="lp-card">
+                  <span className="lp-card-icon">{p.icon}</span>
+                  <h3 className="lp-card-title">{p.title}</h3>
+                  <p className="lp-card-desc">{p.desc}</p>
+                </div>
+              ))}
+            </div>
+            <div className="lp-evermind-edges">
+              {EVERMIND.edges.map((e) => (
+                <div key={e.label} className="lp-evermind-edge">
+                  <span className="lp-evermind-edge-label">{e.label}</span>
+                  <span className="lp-evermind-edge-desc">{e.desc}</span>
+                </div>
+              ))}
+            </div>
           </div>
         </section>
 

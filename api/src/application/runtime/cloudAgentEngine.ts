@@ -39,7 +39,8 @@ import {
 import {
   DEFAULT_ENGINE_ID, ENGINE_IDS, resolveEngineById,
   appraiseTask, buildLimbicBlock, compileLimbicState, neutralState,
-  type AgentEngine, type AgentRunInput, type AgentRunResult, type CapabilityProvider, type ToolContext, type LimbicState,
+  applyDelta, appraiseAmygdala, homeostasis,
+  type AgentEngine, type AgentRunInput, type AgentRunResult, type CapabilityProvider, type ToolContext, type LimbicState, type LimbicEvent,
 } from '@builderforce/agent-tools';
 import { parseRemediation, parseFollowUp, parseCloudAgentRef, parseModel, parseRoutingBias } from './cloudDispatch';
 import { classifyTaskAction } from '../llm/classifyTask';
@@ -1057,6 +1058,18 @@ export interface CloudLoopOpts {
    *  runs (board lane auto-run, scheduled, CI-fix). Merged as a nudge over the KV
    *  routing table on the first tick. */
   routingBias?: Record<string, number>;
+  /**
+   * Per-step dynamic system directive injected into THIS turn's LLM request only
+   * — never persisted into the conversation state the loop owns. The decoupling
+   * seam (Open/Closed + Dependency-Inversion) that lets any engine version layer
+   * behaviour on the V2 loop without the loop knowing about it: the V3 limbic
+   * engine recomputes its affective block from evolving state each tick and
+   * passes it here, so affect can change across DO ticks even though the loop
+   * resumes from saved messages. V2 passes nothing → request === saved messages
+   * (byte-identical behaviour). Recomputed by the caller each tick, so it is
+   * serialization-safe (a string, not a closure, survives DO cursor persistence).
+   */
+  dynamicSystem?: string;
 }
 export interface CloudLoopResult {
   ok: boolean;
@@ -1410,6 +1423,14 @@ export async function runCloudToolLoop(
       });
     }
 
+    // Per-step dynamic directive seam: prepend an ephemeral system directive
+    // (e.g. the V3 limbic affect block) to THIS request only — `messages` (the
+    // persisted conversation the loop owns) is left untouched, so the directive
+    // can change every tick without mutating saved state. None → unchanged.
+    const requestMessages = opts?.dynamicSystem
+      ? [{ role: 'system', content: opts.dynamicSystem }, ...messages]
+      : messages;
+
     const tGen0 = Date.now();
     let result!: Awaited<ReturnType<typeof proxy.complete>>;
     // Per-turn model cascade: a strict pin (or locked model) that the gateway
@@ -1421,7 +1442,7 @@ export async function runCloudToolLoop(
       try {
         result = await proxy.complete(
           {
-            messages: messages as unknown as ChatMessage[],
+            messages: requestMessages as unknown as ChatMessage[],
             tools: CLOUD_AGENT_TOOLS,
             tool_choice: 'auto',
             ...(activeModel ? { model: activeModel, ...(strictPin ? { modelStrict: true } : {}) } : {}),
@@ -1658,53 +1679,81 @@ export class CloudToolLoopEngine implements AgentEngine {
 }
 
 /**
- * V3 — the cloud limbic engine. Composes {@link CloudToolLoopEngine} (V2) WITHOUT
- * modifying it: it derives a task-appropriate affective state via the shared,
- * Worker-safe limbic compiler (`@builderforce/agent-tools`), prepends the
- * affective directive block to the system prompt, then delegates to the V2 loop.
- * Cloudflare Workers can't run `@webgpu/node`, so the cloud limbic is the
- * deterministic heuristic regions only — GPU *training* of the affect model
- * stays on-prem (the on-prem service trains and would publish a checkpoint the
- * compiler's setpoints could later be primed from). Selecting V3 leaves every
- * V2 agent byte-for-byte unchanged.
+ * V3 — the cloud limbic engine. Composes the V2 loop WITHOUT modifying it: it
+ * derives a task-appropriate affective state via the shared, Worker-safe limbic
+ * compiler (`@builderforce/agent-tools`) and injects the affect block through the
+ * loop's per-step {@link CloudLoopOpts.dynamicSystem} seam — NOT by mutating the
+ * persisted prompt/conversation. That decoupling is what lets affect evolve
+ * across DO ticks (see {@link CloudRunnerDO}) and lets *any* future engine layer
+ * per-step behaviour the same way. Cloudflare Workers can't run `@webgpu/node`,
+ * so the cloud limbic is the deterministic heuristic regions only — GPU
+ * *training* stays on-prem. Selecting V3 leaves every V2 agent byte-for-byte
+ * unchanged (V2 passes no `dynamicSystem`).
  */
 export class CloudLimbicEngine implements AgentEngine {
   readonly id = ENGINE_IDS.v3;
   constructor(private readonly rc: CloudEngineContext) {}
 
   async run(input: AgentRunInput): Promise<AgentRunResult> {
-    // Personality = setpoints: derive the resting affect from the assigned
-    // personas' psychometric profiles, then appraise the task around it.
+    // Personality = setpoints (from the assigned personas' psychometric profiles);
+    // dynamics = the task-appraised affect around those setpoints.
     const setpoints = await loadPersonaSetpoints(this.rc.env, this.rc.db, this.rc.artifacts?.personas ?? []);
-    const systemPrompt = await augmentSystemPromptWithLimbic(
-      this.rc.db,
-      { tenantId: this.rc.tenantId, cloudAgentRef: this.rc.cloudAgentRef, executionId: this.rc.executionId, taskRow: this.rc.taskRow },
-      input.systemPrompt,
-      setpoints,
+    const state = initialCloudLimbicState(this.rc.taskRow, setpoints);
+    await recordLimbicState(this.rc.db, { tenantId: this.rc.tenantId, cloudAgentRef: this.rc.cloudAgentRef, executionId: this.rc.executionId }, state);
+    const directive = buildLimbicBlock(state);
+    // Drive the SAME unmodified V2 loop, injecting affect via the per-step seam.
+    const r = await runCloudToolLoop(
+      this.rc.env, this.rc.db, this.rc.executionId, this.rc.tenantId, this.rc.taskRow,
+      this.rc.cloudAgentRef, this.rc.agentLabel, input.model, input.systemPrompt, input.userContent,
+      this.rc.isCancelled, this.rc.projectId,
+      { routingBias: this.rc.routingBias, ...(directive ? { dynamicSystem: directive } : {}) },
     );
-    // Delegate to the unchanged V2 loop with the limbic-augmented prompt.
-    return new CloudToolLoopEngine(this.rc).run({ ...input, systemPrompt });
+    return { ok: r.ok, output: r.output, cancelled: r.cancelled, finished: r.finished, awaitingInput: r.awaitingInput, state: r.state };
   }
 }
 
-/**
- * Append the limbic affective block to a cloud run's system prompt. Shared by the
- * V3 engine (interim gateway executor) and the durable {@link CloudRunnerDO} prep
- * stage so both cloud surfaces apply the affect layer identically (DRY). Derives
- * a task-appropriate state via the Worker-safe shared compiler, records it on the
- * Observability timeline (best-effort), and returns the augmented prompt. Returns
- * the prompt unchanged when the state is at rest (no directives).
- */
-export async function augmentSystemPromptWithLimbic(
-  db: Db,
-  args: { tenantId: number; cloudAgentRef?: string; executionId: number; taskRow: { id: number; title: string; description: string | null } },
-  systemPrompt: string,
+/** The affective state a cloud run starts in: the assigned personas' resting
+ *  setpoints, appraised against the task text. Pure + Worker-safe. */
+export function initialCloudLimbicState(
+  taskRow: { title: string; description: string | null },
   setpoints?: LimbicState,
-): Promise<string> {
-  const state = appraiseTask(`${args.taskRow.title}\n${args.taskRow.description ?? ''}`, setpoints ?? neutralState());
-  const block = buildLimbicBlock(state);
-  if (!block) return systemPrompt;
+): LimbicState {
+  return appraiseTask(`${taskRow.title}\n${taskRow.description ?? ''}`, setpoints ?? neutralState());
+}
+
+/** Map a finished tick's coarse outcome to an amygdala event. */
+function cloudTickEvent(result: { ok: boolean; finished: boolean; cancelled: boolean }): LimbicEvent | null {
+  if (result.cancelled) return { kind: 'idle', intensity: 0.4 };
+  if (!result.ok) return { kind: 'error', intensity: 0.7 };
+  if (result.finished) return { kind: 'success', intensity: 0.6 };
+  return { kind: 'progress', intensity: 0.3 };
+}
+
+/**
+ * Advance the cloud affect one DO tick: appraise the tick's outcome (amygdala),
+ * then relax toward the personality setpoints (hypothalamus). Pure — the DO
+ * persists the returned state in its cursor and feeds it back as the next tick's
+ * `dynamicSystem` directive. This is the cross-tick evolution the seam enables.
+ */
+export function evolveCloudLimbicState(
+  prev: LimbicState,
+  setpoints: LimbicState | undefined,
+  result: { ok: boolean; finished: boolean; cancelled: boolean },
+): LimbicState {
+  const ev = cloudTickEvent(result);
+  const after = ev ? applyDelta(prev, appraiseAmygdala(ev)) : prev;
+  return homeostasis(after, setpoints ?? neutralState(), { rate: 0.1 });
+}
+
+/** Record the affective state on the Observability timeline (best-effort). No-op
+ *  when the state is at rest (no directives). */
+export async function recordLimbicState(
+  db: Db,
+  args: { tenantId: number; cloudAgentRef?: string; executionId: number },
+  state: LimbicState,
+): Promise<void> {
   const { directives, params } = compileLimbicState(state);
+  if (directives.length === 0) return;
   await recordCloudToolEvent(db, {
     tenantId: args.tenantId,
     cloudAgentRef: args.cloudAgentRef,
@@ -1714,7 +1763,6 @@ export async function augmentSystemPromptWithLimbic(
     detail: { state, params },
     result: `affective state: ${directives.length} directive(s)`,
   }).catch(() => { /* never block the run on telemetry */ });
-  return `${systemPrompt}\n\n${block}`;
 }
 
 /**
