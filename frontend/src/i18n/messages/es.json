@@ -491,5 +491,51 @@
     "runOther": "Ejecutar un diagnóstico",
     "runOtherDesc": "Ejecuta cualquier diagnóstico en este proyecto para añadirlo a la calificación.",
     "run": "Ejecutar"
+  },
+  "projectDetails": {
+    "tabs": {
+      "details": "Detalles del proyecto",
+      "integrations": "Integraciones",
+      "taskMgmt": "Gestión de tareas",
+      "prds": "PRD",
+      "diagnostics": "Diagnósticos",
+      "capabilities": "Agente / Capacidades",
+      "brainChat": "Chat de Brain",
+      "workspace": "Espacio de trabajo"
+    },
+    "status": {
+      "active": "Activo",
+      "completed": "Completado",
+      "archived": "Archivado",
+      "on_hold": "En espera"
+    },
+    "dialogAria": "Detalles del proyecto",
+    "deleteAria": "Eliminar proyecto",
+    "closeAria": "Cerrar panel",
+    "editAria": "Editar proyecto",
+    "overview": "Resumen",
+    "nameLabel": "Nombre",
+    "keyLabel": "Clave del proyecto",
+    "statusLabel": "Estado",
+    "descriptionLabel": "Descripción",
+    "checking": "Comprobando disponibilidad…",
+    "keyAvailable": "La clave está disponible",
+    "keyTaken": "La clave ya está en uso",
+    "saving": "Guardando…",
+    "save": "Guardar",
+    "cancel": "Cancelar",
+    "saveFailed": "Error al guardar",
+    "noDescription": "Aún no hay descripción del proyecto.",
+    "tasks": "Tareas",
+    "template": "Plantilla",
+    "workspaceActions": "Acciones del espacio de trabajo",
+    "createTask": "Crear tarea",
+    "planWithBrain": "Planificar con Brain",
+    "draftPrd": "Redactar PRD",
+    "brainHint": "Usa Brain para generar PRD y acciones de tareas ejecutables para este proyecto.",
+    "integrationKeys": "Claves de integración del proyecto",
+    "workspaceTitle": "Espacio de trabajo",
+    "workspaceDesc": "Espacio de trabajo y sistema de archivos de este proyecto. Abre el IDE para editar archivos.",
+    "openInIde": "Abrir en el IDE"
   }
 }

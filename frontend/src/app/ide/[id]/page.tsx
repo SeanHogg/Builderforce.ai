@@ -181,7 +181,6 @@ export default function IDEPage() {
           open={projectDetailsOpen}
           onClose={() => setProjectDetailsOpen(false)}
           onProjectUpdate={setProject}
-          projectHref={`/ide/${project.publicId ?? project.id}`}
           onDelete={async (p) => {
             try {
               await deleteProject(p.id);

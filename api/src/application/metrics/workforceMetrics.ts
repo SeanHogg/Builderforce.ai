@@ -232,6 +232,77 @@ export async function computeMemberMetrics(db: Db, tenantId: number, days: numbe
   return scoreMembers(rows, firstMove);
 }
 
+// ── project-scoped delivery (for the project diagnostics rating) ───────────────
+
+/** Project-level delivery signals — the project analogue of the member
+ *  scorecard's delivery columns, aggregated across the project's members. */
+export interface ProjectDeliveryMetrics {
+  completed: number;
+  avgCycleTimeHours: number | null;
+  /** (redo + reopen) / completed across the project's completed tasks. */
+  reworkRate: number | null;
+  /** Mean board hygiene (0..100) across the project's human members. */
+  boardHygieneScore: number | null;
+}
+
+/**
+ * Delivery metrics for ONE project, derived live from its tasks. member_metrics_period
+ * is a per-member tenant snapshot (no project grain), so the project diagnostics
+ * rating computes delivery here instead — reusing {@link scoreMembers} so the
+ * cycle-time / rework / hygiene formulas live in one place (DRY). Bounded by
+ * MAX_METRIC_ROWS and called only behind the data-driven cache.
+ */
+export async function computeProjectDeliveryMetrics(db: Db, tenantId: number, projectId: number, days: number): Promise<ProjectDeliveryMetrics> {
+  const since = new Date(Date.now() - days * 24 * HOUR_MS);
+
+  const rows = (await db
+    .select({
+      taskId: tasks.id,
+      assignedUserId: tasks.assignedUserId,
+      assignedUserName: users.displayName,
+      assignedAgentHostId: tasks.assignedAgentHostId,
+      assignedHostName: agentHosts.name,
+      assignedAgentRef: tasks.assignedAgentRef,
+      createdAt: tasks.createdAt,
+      completedAt: tasks.completedAt,
+      lastWorkedAt: tasks.lastWorkedAt,
+      redoCount: tasks.redoCount,
+      reopenCount: tasks.reopenCount,
+    })
+    .from(tasks)
+    .innerJoin(projects, eq(projects.id, tasks.projectId))
+    .leftJoin(users, eq(users.id, tasks.assignedUserId))
+    .leftJoin(agentHosts, eq(agentHosts.id, tasks.assignedAgentHostId))
+    .where(and(
+      eq(projects.tenantId, tenantId),
+      eq(tasks.projectId, projectId),
+      eq(tasks.archived, false),
+      gte(tasks.updatedAt, since),
+    ))
+    .orderBy(desc(tasks.updatedAt))
+    .limit(MAX_METRIC_ROWS)) as MemberTaskRow[];
+
+  // Reuse the member scorer (pickup latency isn't needed here → empty firstMove),
+  // then roll the per-member cards up to the project.
+  const cards = scoreMembers(rows, new Map());
+  let completed = 0, redo = 0, reopen = 0, cycleWeighted = 0, cycleWeight = 0;
+  const hygienes: number[] = [];
+  for (const c of cards) {
+    completed += c.completedCount;
+    redo += c.redoCount;
+    reopen += c.reopenCount;
+    if (c.avgCycleTimeHours != null && c.completedCount > 0) { cycleWeighted += c.avgCycleTimeHours * c.completedCount; cycleWeight += c.completedCount; }
+    if (c.boardHygieneScore != null) hygienes.push(c.boardHygieneScore);
+  }
+
+  return {
+    completed,
+    avgCycleTimeHours: cycleWeight > 0 ? cycleWeighted / cycleWeight : null,
+    reworkRate: completed > 0 ? (redo + reopen) / completed : null,
+    boardHygieneScore: hygienes.length ? hygienes.reduce((a, b) => a + b, 0) / hygienes.length : null,
+  };
+}
+
 // ── DORA ─────────────────────────────────────────────────────────────────────
 
 export interface DoraRollup {

@@ -4,6 +4,7 @@ import { Select } from '@/components/Select';
 
 import { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
+import { useTranslations } from 'next-intl';
 import type { Project } from '@/lib/types';
 import { updateProject } from '@/lib/api';
 import { checkProjectKeyAvailable } from '@/lib/builderforceApi';
@@ -38,20 +39,21 @@ export interface ProjectDetailsPanelProps {
   onProjectUpdate?: (project: Project) => void;
   /** Called when the user deletes the project. Component will prompt for confirmation. */
   onDelete?: (project: Project) => void;
-  /** Optional: project base path for links (e.g. /ide/123). */
-  projectHref?: string;
 }
 
-const TABS: { id: ProjectPanelTab; label: string }[] = [
-  { id: 'details', label: 'Project details' },
-  { id: 'integrations', label: 'Integrations' },
-  { id: 'taskMgmt', label: 'Task Mgmt' },
-  { id: 'prds', label: 'PRDs' },
-  { id: 'diagnostics', label: 'Diagnostics' },
-  { id: 'capabilities', label: 'Agent / Capabilities' },
-  { id: 'brainChat', label: 'Brain Chat' },
-  { id: 'workspace', label: 'Workspace' },
+/** Tab id → i18n key; labels resolved through `projectDetails.tabs.*` at render. */
+const TAB_DEFS: { id: ProjectPanelTab; key: string }[] = [
+  { id: 'details', key: 'tabs.details' },
+  { id: 'integrations', key: 'tabs.integrations' },
+  { id: 'taskMgmt', key: 'tabs.taskMgmt' },
+  { id: 'prds', key: 'tabs.prds' },
+  { id: 'diagnostics', key: 'tabs.diagnostics' },
+  { id: 'capabilities', key: 'tabs.capabilities' },
+  { id: 'brainChat', key: 'tabs.brainChat' },
+  { id: 'workspace', key: 'tabs.workspace' },
 ];
+
+const PROJECT_STATUSES = ['active', 'completed', 'archived', 'on_hold'] as const;
 
 const panelOverlayStyle: React.CSSProperties = {
   position: 'fixed',
@@ -87,8 +89,8 @@ export function ProjectDetailsPanel({
   initialTab = 'details',
   onProjectUpdate,
   onDelete,
-  projectHref,
 }: ProjectDetailsPanelProps) {
+  const t = useTranslations('projectDetails');
   const [activeTab, setActiveTab] = useState<ProjectPanelTab>(initialTab);
   const [editingProject, setEditingProject] = useState(false);
   const [editName, setEditName] = useState(project.name);
@@ -100,6 +102,10 @@ export function ProjectDetailsPanel({
   const [keyStatus, setKeyStatus] = useState<'idle' | 'checking' | 'available' | 'taken'>('idle');
   const keyCheckTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [showConfirm, setShowConfirm] = useState(false);
+
+  /** Localized status label; falls back to the raw value for unknown statuses. */
+  const statusLabel = (s: string) =>
+    (PROJECT_STATUSES as readonly string[]).includes(s) ? t(`status.${s}`) : s.replace('_', ' ');
 
   useEffect(() => {
     if (open) setActiveTab(initialTab);
@@ -120,7 +126,6 @@ export function ProjectDetailsPanel({
 
   if (!open) return null;
 
-  const href = projectHref ?? `/ide/${project.publicId ?? project.id}`;
   const taskCount = project.taskCount ?? 0;
 
   const handleSaveProject = async (e: React.FormEvent) => {
@@ -138,7 +143,7 @@ export function ProjectDetailsPanel({
       onProjectUpdate?.(updated);
       setEditingProject(false);
     } catch (err) {
-      setSaveError(err instanceof Error ? err.message : 'Save failed');
+      setSaveError(err instanceof Error ? err.message : t('saveFailed'));
     } finally {
       setSaving(false);
     }
@@ -168,7 +173,7 @@ export function ProjectDetailsPanel({
   return (
     <>
       <div className="project-panel-overlay" role="presentation" style={panelOverlayStyle} onClick={onClose} aria-hidden />
-      <div className="project-panel-drawer" style={panelDrawerStyle} role="dialog" aria-label="Project details">
+      <div className="project-panel-drawer" style={panelDrawerStyle} role="dialog" aria-label={t('dialogAria')}>
         {/* Header */}
         <div
           style={{
@@ -201,7 +206,7 @@ export function ProjectDetailsPanel({
                   color: 'var(--text-secondary)',
                 }}
               >
-                {project.status.replace('_', ' ')}
+                {statusLabel(project.status)}
               </span>
             )}
             {onDelete && (
@@ -209,7 +214,7 @@ export function ProjectDetailsPanel({
                 <button
                   type="button"
                   onClick={() => setShowConfirm(true)}
-                  aria-label="Delete project"
+                  aria-label={t('deleteAria')}
                   style={{
                     width: 36,
                     height: 36,
@@ -256,7 +261,7 @@ export function ProjectDetailsPanel({
                 color: 'var(--text-secondary)',
                 cursor: 'pointer',
               }}
-              aria-label="Close panel"
+              aria-label={t('closeAria')}
             >
               <svg viewBox="0 0 24 24" style={{ width: 18, height: 18, stroke: 'currentColor', fill: 'none', strokeWidth: 2 }}>
                 <line x1="18" y1="6" x2="6" y2="18" />
@@ -277,7 +282,7 @@ export function ProjectDetailsPanel({
             flexShrink: 0,
           }}
         >
-          {TABS.map(({ id, label }) => (
+          {TAB_DEFS.map(({ id, key }) => (
             <button
               key={id}
               type="button"
@@ -295,7 +300,7 @@ export function ProjectDetailsPanel({
                 marginBottom: -1,
               }}
             >
-              {label}
+              {t(key)}
             </button>
           ))}
         </div>
@@ -310,7 +315,7 @@ export function ProjectDetailsPanel({
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 16 }}>
               <div style={cardStyle}>
                 <div style={{ position: 'relative' }}>
-                <div style={{ fontWeight: 600, marginBottom: 10, fontSize: 14 }}>Overview</div>
+                <div style={{ fontWeight: 600, marginBottom: 10, fontSize: 14 }}>{t('overview')}</div>
                 {!editingProject && (
                   <button
                     type="button"
@@ -321,7 +326,7 @@ export function ProjectDetailsPanel({
                       setEditKey(project.key ?? '');
                       setEditStatus(project.status ?? 'active');
                     }}
-                    aria-label="Edit project"
+                    aria-label={t('editAria')}
                     style={{
                       position: 'absolute',
                       top: 4,
@@ -348,7 +353,7 @@ export function ProjectDetailsPanel({
               {editingProject ? (
                 <form onSubmit={handleSaveProject} style={{ marginBottom: 14 }}>
                   <div style={{ marginBottom: 10 }}>
-                    <label htmlFor="edit-name" style={{ display: 'block', fontSize: 12, color: 'var(--text-muted)', marginBottom: 4 }}>Name</label>
+                    <label htmlFor="edit-name" style={{ display: 'block', fontSize: 12, color: 'var(--text-muted)', marginBottom: 4 }}>{t('nameLabel')}</label>
                     <input
                       id="edit-name"
                       value={editName}
@@ -365,7 +370,7 @@ export function ProjectDetailsPanel({
                     />
                   </div>
                   <div style={{ marginBottom: 10 }}>
-                    <label htmlFor="edit-key" style={{ display: 'block', fontSize: 12, color: 'var(--text-muted)', marginBottom: 4 }}>Project key</label>
+                    <label htmlFor="edit-key" style={{ display: 'block', fontSize: 12, color: 'var(--text-muted)', marginBottom: 4 }}>{t('keyLabel')}</label>
                     <input
                       id="edit-key"
                       value={editKey}
@@ -381,17 +386,17 @@ export function ProjectDetailsPanel({
                       }}
                     />
                     {keyStatus === 'checking' && (
-                      <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>Checking availability…</div>
+                      <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>{t('checking')}</div>
                     )}
                     {keyStatus === 'available' && (
-                      <div style={{ fontSize: 11, color: 'var(--success, #4c4)', marginTop: 4 }}>Key is available</div>
+                      <div style={{ fontSize: 11, color: 'var(--success, #4c4)', marginTop: 4 }}>{t('keyAvailable')}</div>
                     )}
                     {keyStatus === 'taken' && (
-                      <div style={{ fontSize: 11, color: 'var(--error-text, #e55)', marginTop: 4 }}>Key is already taken</div>
+                      <div style={{ fontSize: 11, color: 'var(--error-text, #e55)', marginTop: 4 }}>{t('keyTaken')}</div>
                     )}
                   </div>
                   <div style={{ marginBottom: 10 }}>
-                    <label htmlFor="edit-status" style={{ display: 'block', fontSize: 12, color: 'var(--text-muted)', marginBottom: 4 }}>Status</label>
+                    <label htmlFor="edit-status" style={{ display: 'block', fontSize: 12, color: 'var(--text-muted)', marginBottom: 4 }}>{t('statusLabel')}</label>
                     <Select
                       id="edit-status"
                       value={editStatus}
@@ -406,14 +411,13 @@ export function ProjectDetailsPanel({
                         color: 'var(--text-primary)',
                       }}
                     >
-                      <option value="active">Active</option>
-                      <option value="completed">Completed</option>
-                      <option value="archived">Archived</option>
-                      <option value="on_hold">On hold</option>
+                      {PROJECT_STATUSES.map((s) => (
+                        <option key={s} value={s}>{t(`status.${s}`)}</option>
+                      ))}
                     </Select>
                   </div>
                   <div style={{ marginBottom: 14 }}>
-                    <label htmlFor="edit-description" style={{ display: 'block', fontSize: 12, color: 'var(--text-muted)', marginBottom: 4 }}>Description</label>
+                    <label htmlFor="edit-description" style={{ display: 'block', fontSize: 12, color: 'var(--text-muted)', marginBottom: 4 }}>{t('descriptionLabel')}</label>
                     <textarea
                       id="edit-description"
                       value={editDescription}
@@ -452,7 +456,7 @@ export function ProjectDetailsPanel({
                         opacity: (saving || keyStatus === 'taken' || keyStatus === 'checking') ? 0.6 : 1,
                       }}
                     >
-                      {saving ? 'Saving…' : 'Save'}
+                      {saving ? t('saving') : t('save')}
                     </button>
                     <button
                       type="button"
@@ -467,7 +471,7 @@ export function ProjectDetailsPanel({
                         cursor: 'pointer',
                       }}
                     >
-                      Cancel
+                      {t('cancel')}
                     </button>
                   </div>
                 </form>
@@ -475,7 +479,7 @@ export function ProjectDetailsPanel({
                 <>
                   <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 6 }}>{project.name}</div>
                   <div style={{ fontSize: 13, lineHeight: 1.6, color: 'var(--text-secondary)', marginBottom: 14 }}>
-                    {project.description || 'No project description yet.'}
+                    {project.description || t('noDescription')}
                   </div>
                 </>
               )}
@@ -483,21 +487,21 @@ export function ProjectDetailsPanel({
                   {!editingProject && (
                     <>
                       <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12 }}>
-                        <span style={{ color: 'var(--text-muted)' }}>Project key</span>
+                        <span style={{ color: 'var(--text-muted)' }}>{t('keyLabel')}</span>
                         <span>{project.key ?? `#${project.id}`}</span>
                       </div>
                       <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12 }}>
-                        <span style={{ color: 'var(--text-muted)' }}>Status</span>
-                        <span>{project.status ?? 'active'}</span>
+                        <span style={{ color: 'var(--text-muted)' }}>{t('statusLabel')}</span>
+                        <span>{statusLabel(project.status ?? 'active')}</span>
                       </div>
                     </>
                   )}
                   <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12 }}>
-                    <span style={{ color: 'var(--text-muted)' }}>Tasks</span>
+                    <span style={{ color: 'var(--text-muted)' }}>{t('tasks')}</span>
                     <span>{taskCount}</span>
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12 }}>
-                    <span style={{ color: 'var(--text-muted)' }}>Template</span>
+                    <span style={{ color: 'var(--text-muted)' }}>{t('template')}</span>
                     <span>{project.template ?? '—'}</span>
                   </div>
                 </div>
@@ -507,7 +511,7 @@ export function ProjectDetailsPanel({
               </div>
 
               <div style={cardStyle}>
-                <div style={{ fontWeight: 600, marginBottom: 10, fontSize: 14 }}>Workspace actions</div>
+                <div style={{ fontWeight: 600, marginBottom: 10, fontSize: 14 }}>{t('workspaceActions')}</div>
                 <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                   <button
                     type="button"
@@ -523,7 +527,7 @@ export function ProjectDetailsPanel({
                       cursor: 'pointer',
                     }}
                   >
-                    Create task
+                    {t('createTask')}
                   </button>
                   <button
                     type="button"
@@ -539,7 +543,7 @@ export function ProjectDetailsPanel({
                       cursor: 'pointer',
                     }}
                   >
-                    Plan with Brain
+                    {t('planWithBrain')}
                   </button>
                   <button
                     type="button"
@@ -555,11 +559,11 @@ export function ProjectDetailsPanel({
                       cursor: 'pointer',
                     }}
                   >
-                    Draft PRD
+                    {t('draftPrd')}
                   </button>
                 </div> {/* end workspace actions button row */}
                 <div style={{ marginTop: 12, fontSize: 12, color: 'var(--text-muted)' }}>
-                  Use Brain to generate PRDs and executable task actions for this project.
+                  {t('brainHint')}
                 </div>
               </div>
             </div>
@@ -567,7 +571,7 @@ export function ProjectDetailsPanel({
 
           {activeTab === 'integrations' && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-              <IntegrationCredentialsManager projectId={project.id} heading="Project integration keys" />
+              <IntegrationCredentialsManager projectId={project.id} heading={t('integrationKeys')} />
               <SourceControlContent projectId={project.id} />
               <BoardConnectionsManager projectId={project.id} />
             </div>
@@ -596,12 +600,12 @@ export function ProjectDetailsPanel({
 
           {activeTab === 'workspace' && (
             <div style={cardStyle}>
-              <div style={{ fontWeight: 600, marginBottom: 10 }}>Workspace</div>
+              <div style={{ fontWeight: 600, marginBottom: 10 }}>{t('workspaceTitle')}</div>
               <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>
-                Workspace and file system for this project. Open the IDE to edit files.
+                {t('workspaceDesc')}
               </p>
               <Link href={`/ide/${project.publicId ?? project.id}`} style={{ fontSize: 13, color: 'var(--coral-bright)', marginTop: 8, display: 'inline-block' }}>
-                Open in IDE →
+                {t('openInIde')} →
               </Link>
             </div>
           )}

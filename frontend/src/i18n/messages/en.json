@@ -491,5 +491,51 @@
     "runOther": "Run a diagnostic",
     "runOtherDesc": "Run any diagnostic against this project to add it to the rating.",
     "run": "Run"
+  },
+  "projectDetails": {
+    "tabs": {
+      "details": "Project details",
+      "integrations": "Integrations",
+      "taskMgmt": "Task Mgmt",
+      "prds": "PRDs",
+      "diagnostics": "Diagnostics",
+      "capabilities": "Agent / Capabilities",
+      "brainChat": "Brain Chat",
+      "workspace": "Workspace"
+    },
+    "status": {
+      "active": "Active",
+      "completed": "Completed",
+      "archived": "Archived",
+      "on_hold": "On hold"
+    },
+    "dialogAria": "Project details",
+    "deleteAria": "Delete project",
+    "closeAria": "Close panel",
+    "editAria": "Edit project",
+    "overview": "Overview",
+    "nameLabel": "Name",
+    "keyLabel": "Project key",
+    "statusLabel": "Status",
+    "descriptionLabel": "Description",
+    "checking": "Checking availability…",
+    "keyAvailable": "Key is available",
+    "keyTaken": "Key is already taken",
+    "saving": "Saving…",
+    "save": "Save",
+    "cancel": "Cancel",
+    "saveFailed": "Save failed",
+    "noDescription": "No project description yet.",
+    "tasks": "Tasks",
+    "template": "Template",
+    "workspaceActions": "Workspace actions",
+    "createTask": "Create task",
+    "planWithBrain": "Plan with Brain",
+    "draftPrd": "Draft PRD",
+    "brainHint": "Use Brain to generate PRDs and executable task actions for this project.",
+    "integrationKeys": "Project integration keys",
+    "workspaceTitle": "Workspace",
+    "workspaceDesc": "Workspace and file system for this project. Open the IDE to edit files.",
+    "openInIde": "Open in IDE"
   }
 }

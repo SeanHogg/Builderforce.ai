@@ -491,5 +491,51 @@
     "runOther": "Diagnose ausführen",
     "runOtherDesc": "Führen Sie eine beliebige Diagnose für dieses Projekt aus, um sie zur Bewertung hinzuzufügen.",
     "run": "Ausführen"
+  },
+  "projectDetails": {
+    "tabs": {
+      "details": "Projektdetails",
+      "integrations": "Integrationen",
+      "taskMgmt": "Aufgabenverwaltung",
+      "prds": "PRDs",
+      "diagnostics": "Diagnosen",
+      "capabilities": "Agent / Fähigkeiten",
+      "brainChat": "Brain-Chat",
+      "workspace": "Arbeitsbereich"
+    },
+    "status": {
+      "active": "Aktiv",
+      "completed": "Abgeschlossen",
+      "archived": "Archiviert",
+      "on_hold": "Pausiert"
+    },
+    "dialogAria": "Projektdetails",
+    "deleteAria": "Projekt löschen",
+    "closeAria": "Panel schließen",
+    "editAria": "Projekt bearbeiten",
+    "overview": "Übersicht",
+    "nameLabel": "Name",
+    "keyLabel": "Projektschlüssel",
+    "statusLabel": "Status",
+    "descriptionLabel": "Beschreibung",
+    "checking": "Verfügbarkeit wird geprüft…",
+    "keyAvailable": "Schlüssel ist verfügbar",
+    "keyTaken": "Schlüssel ist bereits vergeben",
+    "saving": "Wird gespeichert…",
+    "save": "Speichern",
+    "cancel": "Abbrechen",
+    "saveFailed": "Speichern fehlgeschlagen",
+    "noDescription": "Noch keine Projektbeschreibung.",
+    "tasks": "Aufgaben",
+    "template": "Vorlage",
+    "workspaceActions": "Arbeitsbereich-Aktionen",
+    "createTask": "Aufgabe erstellen",
+    "planWithBrain": "Mit Brain planen",
+    "draftPrd": "PRD entwerfen",
+    "brainHint": "Nutzen Sie Brain, um PRDs und ausführbare Aufgabenaktionen für dieses Projekt zu erstellen.",
+    "integrationKeys": "Projekt-Integrationsschlüssel",
+    "workspaceTitle": "Arbeitsbereich",
+    "workspaceDesc": "Arbeitsbereich und Dateisystem für dieses Projekt. Öffnen Sie die IDE, um Dateien zu bearbeiten.",
+    "openInIde": "In IDE öffnen"
   }
 }
