@@ -3721,6 +3721,18 @@ export const runModelOutcomes = pgTable('run_model_outcomes', {
   steps:            integer('steps').notNull().default(0),
   costUsdMillicents: integer('cost_usd_millicents').notNull().default(0),
   terminalStatus:   varchar('terminal_status', { length: 16 }).notNull(), // completed|failed|cancelled
+  // ── Semantic evaluation (Layer 6 — eval, migration 0222) ──────────────────
+  // Quality scores for the run's deliverable, 0..1. Nullable: populated by the
+  // evaluator on terminal (lexical, inline, zero-cost) or upgraded by the
+  // LLM-as-judge /api/eval surface. evalMethod records which backend produced them.
+  /** Answer grounded in its context (1 = fully grounded). */
+  faithfulness:     real('faithfulness'),
+  /** Deliverable addresses the task asked (1 = fully on-topic). */
+  answerRelevance:  real('answer_relevance'),
+  /** Share of the answer NOT grounded in context (0 = none). */
+  hallucinationRate: real('hallucination_rate'),
+  /** 'lexical' | 'llm' — which evaluation backend scored this run. */
+  evalMethod:       varchar('eval_method', { length: 8 }),
   createdAt:        timestamp('created_at').notNull().defaultNow(),
 });
 
