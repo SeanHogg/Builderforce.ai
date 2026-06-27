@@ -40,7 +40,11 @@ export function buildMemoryCapabilityProvider(svc: SsmMemoryService): Capability
     memory: {
       async remember(key, content, opts): Promise<MemoryRememberResult> {
         try {
-          await svc.remember(key, content, opts);
+          // Route belief writes through Evermind Write-Through Cognition: a fact
+          // about the same subject (key) supersedes its incumbent instead of
+          // accumulating. Activity-event logging (KnowledgeLoop) still uses the
+          // raw keyed remember — events accumulate, beliefs replace.
+          await svc.commitFact(key, content, opts);
           return { ok: true, key };
         } catch (e) {
           return { ok: false, error: errMessage(e) };

@@ -1,6 +1,7 @@
 import * as vscode from "vscode";
 import { ChatMessage, getApiKey, getBaseUrl } from "./gateway";
-import { describeTool, TOOL_DEFS } from "./fileTools";
+import { describeTool, TOOL_DEFS, type ToolDef } from "./fileTools";
+import { cognitionToolDefs, recallSystemMessage } from "./cognition";
 
 export interface AgentEvents {
   onText: (delta: string) => void;
@@ -43,8 +44,8 @@ function prettyGatewayError(status: number, body: string): string {
   return `${msg} (HTTP ${status})`;
 }
 
-function toOpenAiTools() {
-  return TOOL_DEFS.map((d) => ({
+function toOpenAiTools(defs: ToolDef[]) {
+  return defs.map((d) => ({
     type: "function" as const,
     function: { name: d.name, description: d.description, parameters: d.parameters },
   }));
@@ -60,7 +61,23 @@ export async function runAgent(
   deps: AgentDeps,
   events: AgentEvents,
 ): Promise<void> {
-  const tools = deps.root ? toOpenAiTools() : undefined;
+  // File tools + Evermind's write-through `remember_fact` tool (workspace only).
+  const toolDefs: ToolDef[] = deps.root ? [...TOOL_DEFS, ...cognitionToolDefs()] : [];
+  const tools = deps.root ? toOpenAiTools(toolDefs) : undefined;
+
+  // Evermind recall: inject facts relevant to the latest user message as a
+  // system block, before the first turn. Self-updating memory the agent reads
+  // each request (write side is the `remember_fact` tool above). Best-effort.
+  if (deps.root) {
+    const lastUser = [...messages].reverse().find((m) => m.role === "user");
+    if (lastUser?.content) {
+      const recalled = await recallSystemMessage(deps.root, String(lastUser.content));
+      if (recalled) {
+        const firstNonSystem = messages.findIndex((m) => m.role !== "system");
+        messages.splice(firstNonSystem < 0 ? messages.length : firstNonSystem, 0, recalled);
+      }
+    }
+  }
 
   for (let i = 0; i < MAX_ITERATIONS; i++) {
     if (deps.signal.aborted) return;
@@ -92,7 +109,7 @@ export async function runAgent(
     });
 
     for (const tc of turn.toolCalls) {
-      const def = TOOL_DEFS.find((d) => d.name === tc.name);
+      const def = toolDefs.find((d) => d.name === tc.name);
       const toolCallId = tc.id || tc.name;
       if (!def || !deps.root) {
         messages.push({ role: "tool", tool_call_id: toolCallId, content: `Unknown tool: ${tc.name}` });

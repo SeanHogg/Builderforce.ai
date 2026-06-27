@@ -1,9 +1,10 @@
 {
   "compilerOptions": {
-    "module": "commonjs",
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "noEmit": true,
     "target": "ES2022",
     "lib": ["ES2022", "DOM", "DOM.Iterable"],
-    "outDir": "out",
     "rootDir": "src",
     "sourceMap": true,
     "strict": true,

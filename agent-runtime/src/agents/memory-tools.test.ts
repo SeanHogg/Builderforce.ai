@@ -3,10 +3,13 @@ import { describe, expect, it, vi } from "vitest";
 import { buildMemoryCapabilityProvider } from "./memory-tools.js";
 import type { SsmMemoryService } from "../infra/ssm-memory-service.js";
 
-/** A fake SSM service exposing just the two methods the memory provider uses. */
-function fakeSvc(over: Partial<Pick<SsmMemoryService, "remember" | "recallSimilar">> = {}) {
+/** A fake SSM service exposing just the methods the memory provider uses. */
+function fakeSvc(
+  over: Partial<Pick<SsmMemoryService, "remember" | "commitFact" | "recallSimilar">> = {},
+) {
   return {
     remember: vi.fn(async () => undefined),
+    commitFact: vi.fn(async () => ({ verdict: "augment" })),
     recallSimilar: vi.fn(async () => [{ key: "k", content: "v" }]),
     ...over,
   } as unknown as SsmMemoryService;
@@ -21,14 +24,14 @@ describe("memory capability provider", () => {
     expect(provider.memory).toBeDefined();
   });
 
-  it("remember delegates to the service and returns {ok, key}", async () => {
+  it("remember commits the belief through cognition and returns {ok, key}", async () => {
     const svc = fakeSvc();
     const r = await buildMemoryCapabilityProvider(svc).memory!.remember("deploy", "pnpm build", {
       tags: ["ops"],
       importance: 0.9,
     });
     expect(r).toEqual({ ok: true, key: "deploy" });
-    expect(svc.remember).toHaveBeenCalledWith("deploy", "pnpm build", { tags: ["ops"], importance: 0.9 });
+    expect(svc.commitFact).toHaveBeenCalledWith("deploy", "pnpm build", { tags: ["ops"], importance: 0.9 });
   });
 
   it("recall delegates to recallSimilar and maps entries", async () => {
@@ -40,7 +43,7 @@ describe("memory capability provider", () => {
 
   it("surfaces a backend error as {ok:false,error} instead of throwing", async () => {
     const svc = fakeSvc({
-      remember: vi.fn(async () => {
+      commitFact: vi.fn(async () => {
         throw new Error("store down");
       }),
     });
@@ -59,7 +62,7 @@ describe("memory tools (shared definitions, executed via the Node provider)", ()
 
     const ok = await memoryRememberTool.execute({ key: "auth-flow", content: "JWT in cookie" }, ctx);
     expect(ok.data).toEqual({ ok: true, key: "auth-flow" });
-    expect(svc.remember).toHaveBeenCalledWith("auth-flow", "JWT in cookie", { tags: undefined, importance: undefined });
+    expect(svc.commitFact).toHaveBeenCalledWith("auth-flow", "JWT in cookie", { tags: undefined, importance: undefined });
   });
 
   it("memory_recall requires a query and returns entries", async () => {
