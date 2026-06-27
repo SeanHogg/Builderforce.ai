@@ -560,7 +560,7 @@ export default function LandingPage() {
         </section>
 
         {/* ── Evermind: the brain behind the platform (what the hero animation depicts) ── */}
-        <section className="lp-features" style={{ paddingTop: 0 }}>
+        <section className="lp-features" id="evermind" style={{ paddingTop: 0, scrollMarginTop: '90px' }}>
           <div className="lp-evermind">
             <span className="lp-evermind-eyebrow">{EVERMIND.eyebrow}</span>
             <h2 className="section-title" style={{ marginBottom: 8 }}>
@@ -782,7 +782,7 @@ export default function LandingPage() {
             </h2>
             <div className="lp-grid" style={{gap:'18px',marginTop:'24px'}}>
               {[
-                { name:'Free', price:'$0', perks:['WebGPU training','Workforce browse','Community support'] },
+                { name:'Free', price:'$0', perks:['Evermind model (on-device)','WebGPU training','Workforce browse'] },
                 { name:'Pro', price:'$29/seat', perks:['Unlimited agents','Private models','Priority support'] },
               ].map(p=>(
                 <div key={p.name} className="lp-card">

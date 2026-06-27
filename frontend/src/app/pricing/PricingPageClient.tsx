@@ -39,6 +39,7 @@ const cardStyle: React.CSSProperties = {
 };
 
 const PLAN_FEATURES: { label: string; free: boolean; pro: boolean; teams: boolean }[] = [
+  { label: 'Evermind self-updating model (on-device)', free: true,  pro: true,  teams: true  },
   { label: '1 AgentHost',                           free: true,  pro: false, teams: false },
   { label: 'Up to 3 AgentHosts',                    free: false, pro: true,  teams: false },
   { label: 'Unlimited AgentHosts',                  free: false, pro: false, teams: true  },

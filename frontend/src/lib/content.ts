@@ -283,6 +283,7 @@ export const PRICING_PLANS: PricingPlan[] = [
     period: '/month',
     description: 'Everything you need to start building AI agents — free forever, no credit card required.',
     features: [
+      'Evermind self-updating model (on-device)',
       'WebGPU LoRA training',
       'Dataset generation wizard',
       'AI evaluation engine',
@@ -916,6 +917,7 @@ export const PRODUCT_SECTIONS: ProductSection[] = [
     title: 'Build & Train',
     blurb: 'Go from an idea to a trained, evaluated AI agent — all in the browser.',
     surfaces: [
+      { icon: '🧠', title: 'Evermind', desc: 'The brain of the platform — a self-updating model governed by Write-Through Cognition. New knowledge replaces what came before with no reconciliation step, and it runs on WebGPU in the browser, on-device, or inside every agent.', href: '/#evermind' },
       { icon: '🏠', title: 'Dashboard', desc: 'Your command center: workspace health, recent runs, and what your AI workforce is doing right now.', href: '/dashboard' },
       { icon: '💡', title: 'Brain Storm', desc: 'Describe what you need in plain language; the Brain turns it into projects, datasets, and agents.', href: '/brainstorm' },
       { icon: '💻', title: 'IDE Workspace', desc: 'Monaco editor, terminal, AI chat, and file explorer in one collaborative project workspace.', href: '/ide' },
@@ -1240,9 +1242,15 @@ export const INTEGRATION_SLUG_MAP: Record<string, IntegrationSeo> = Object.fromE
  */
 export const RELATED_ARTICLES: Record<string, string[]> = {
   product: [
+    'evermind-self-updating-model',
     'system-of-record-for-agentic-work',
     'every-role-operating-picture',
-    'autonomous-swimlane-execution',
+  ],
+  // Evermind technology page / feature teaser.
+  evermind: [
+    'evermind-self-updating-model',
+    'semantic-response-cache',
+    'webgpu-lora-explained',
   ],
   compare: [
     'best-ai-coding-agents-compared',
@@ -1250,9 +1258,9 @@ export const RELATED_ARTICLES: Record<string, string[]> = {
     'builderforce-vs-cursor-windsurf',
   ],
   pricing: [
+    'evermind-self-updating-model',
     'system-of-record-for-agentic-work',
     'semantic-response-cache',
-    'best-ai-coding-agents-compared',
   ],
   // Per-competitor leaf pages — keyed by the COMPETITORS column key. Each points
   // at its dedicated head-to-head post first, then the roundup for context.
@@ -1265,7 +1273,7 @@ export const RELATED_ARTICLES: Record<string, string[]> = {
   // teaser (RouteMarketing). Keyed by the route path minus its leading slash.
   brainstorm: ['product-ideation-with-builderforce', 'specs-and-planning-with-ai', 'getting-started-with-ai-agents'],
   ide: ['in-browser-ide-and-collaboration', 'product-ideation-with-builderforce', 'getting-started-with-ai-agents'],
-  training: ['webgpu-lora-explained', 'ai-dataset-generation-best-practices', 'getting-started-with-ai-agents'],
+  training: ['webgpu-lora-explained', 'evermind-self-updating-model', 'ai-dataset-generation-best-practices'],
   workflows: ['multi-agent-orchestration', 'autonomous-swimlane-execution', 'specs-and-planning-with-ai'],
   projects: ['autonomous-swimlane-execution', 'task-execution-and-observability', 'product-ideation-with-builderforce'],
   workforce: ['fleet-management-and-agent-routing', 'autonomous-swimlane-execution', 'multi-agent-orchestration'],
