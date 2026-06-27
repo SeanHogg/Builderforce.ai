@@ -13,6 +13,8 @@ import {
   REGISTER_FAQ,
   BLOG_FAQ,
   COMPARE_FAQ,
+  EVERMIND,
+  EVERMIND_FAQ,
   COMPARE,
   COMPETITIVE_COMPARISON,
   DEFINED_TERMS,
@@ -291,6 +293,57 @@ export function productSchema() {
       breadcrumbs(
         { name: 'Home', url: BRAND.url },
         { name: 'Product', url: `${BRAND.url}/product` },
+      ),
+    ],
+  };
+}
+
+/** Evermind page: the Builderforce.ai LLM as a SoftwareApplication + ItemList of its layers + FAQ + DefinedTerms + BreadcrumbList */
+export function evermindSchema() {
+  const url = `${BRAND.url}/evermind`;
+  return {
+    '@context': 'https://schema.org',
+    '@graph': [
+      organization,
+      {
+        '@type': 'SoftwareApplication',
+        '@id': `${BRAND.url}/#evermind`,
+        name: `${EVERMIND.name} — the ${BRAND.name} LLM`,
+        alternateName: [EVERMIND.name, `${BRAND.name} LLM`, 'Builderforce LLM'],
+        description: EVERMIND.seo.description,
+        url,
+        applicationCategory: 'DeveloperApplication',
+        operatingSystem: 'Web (WebGPU)',
+        author: { '@id': `${BRAND.url}/#organization` },
+        dateModified: BRAND.dateModified,
+        featureList: EVERMIND.pillars.map((p) => p.title),
+      },
+      {
+        '@type': 'ItemList',
+        name: 'Evermind architecture',
+        itemListElement: EVERMIND.pillars.map((p, i) => ({
+          '@type': 'ListItem',
+          position: i + 1,
+          name: p.title,
+          description: p.desc,
+          url,
+        })),
+      },
+      faqSchema(EVERMIND_FAQ),
+      {
+        '@type': 'DefinedTermSet',
+        name: 'Evermind concepts',
+        url,
+        hasDefinedTerm: DEFINED_TERMS.filter((t) => t.name === 'Evermind' || t.name === 'Write-Through Cognition').map((term) => ({
+          '@type': 'DefinedTerm',
+          name: term.name,
+          description: term.description,
+          inDefinedTermSet: `${url}#concepts`,
+        })),
+      },
+      breadcrumbs(
+        { name: 'Home', url: BRAND.url },
+        { name: 'Evermind', url },
       ),
     ],
   };

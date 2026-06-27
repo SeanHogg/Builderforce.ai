@@ -53,4 +53,4 @@ It's the same substrate behind in-browser LoRA training, persistent agent memory
 
 If you're evaluating AI platforms, ask the question that actually predicts whether they'll still be right next month: *when the truth changes, does the model replace what it knew — or just pile the new fact on top?* On Builderforce.ai, it replaces it.
 
-[Start building for free →](/register) · [Tour the platform →](/product) · [See pricing →](/pricing)
+[Explore Evermind →](/evermind) · [Start building for free →](/register) · [Tour the platform →](/product)

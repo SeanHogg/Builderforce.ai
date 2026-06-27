@@ -68,6 +68,13 @@ export const EVERMIND = {
   name: 'Evermind',
   eyebrow: 'Meet Evermind',
   tagline: 'A model that learns as it works — and never goes stale',
+  /** Per-page SEO/GEO copy for the dedicated /evermind landing page. */
+  seo: {
+    title: 'Evermind — The Builderforce.ai LLM, a Self-Updating Model',
+    description:
+      'Evermind is the Builderforce.ai LLM: a self-updating model governed by Write-Through Cognition. Unlike frozen frontier models, new knowledge is written straight through so an update replaces what came before — no retrain, no reconciliation step. Runs on WebGPU in the browser, on-device, or inside every agent.',
+    ogTitle: 'Evermind — The Self-Updating Builderforce.ai LLM',
+  },
   blurb:
     'Evermind is the brain of Builderforce: a self-updating model governed by Write-Through Cognition. Frozen frontier models go out of date the moment they ship — every update needs a bolt-on retrain, fine-tune, or RAG patch. Evermind writes new knowledge straight through into the model, so an update simply replaces what was there. Reads always reflect the latest truth, there is never a reconciliation step, and it runs anywhere — in the browser, on-device, or inside every agent.',
   /** Quotable one-liner for AI citability / meta descriptions. */
@@ -648,6 +655,38 @@ export const HOMEPAGE_FAQ: FaqItem[] = [
   },
 ];
 
+/** Evermind page FAQ — GEO-targeted Q&As for "Builderforce LLM / self-updating model" intent. */
+export const EVERMIND_FAQ: FaqItem[] = [
+  {
+    question: 'What is Evermind?',
+    answer: 'Evermind is the Builderforce.ai LLM — the self-updating model at the brain of the platform. It is governed by Write-Through Cognition: new knowledge is written straight through into the model, so an update replaces what came before with no reconciliation step, and reads always reflect the latest truth. Evermind is built from a shared-expert hybrid SSM generator (a dense always-on backbone plus lazily-loaded routed experts), a write-through knowledge memory, and a trainable limbic layer for dynamics, and it runs on WebGPU in the browser, on-device, or inside every agent.',
+  },
+  {
+    question: 'What is the Builderforce.ai LLM?',
+    answer: 'The Builderforce.ai LLM is Evermind. Rather than relying on a frozen third-party frontier model, Builderforce.ai runs its own self-updating model that learns as it works. Frontier LLMs can still be routed to when you want them, but Evermind is the native model that gives the platform currency (never stale), a small footprint (runs on-device), and full ownership (your data, open packages, no third-party model dependency).',
+  },
+  {
+    question: 'What is Write-Through Cognition?',
+    answer: 'Write-Through Cognition is the governing principle of Evermind. Knowledge is written straight through into the model, so an update is an upsert by a stable key plus an invalidation of the old recall — an update means replace, not append. Reads always reflect the latest truth and there is never a stale-then-reconcile step. It is the same invalidate-on-write rule used for caching, applied to a model\'s knowledge tier so it can never quietly drift out of date.',
+  },
+  {
+    question: 'How is Evermind different from a frozen LLM like GPT or Claude?',
+    answer: 'Frozen frontier models fix their knowledge at training time; updating them means a bolt-on retrain, fine-tune, RAG pipeline, or hand-edit — each a separate reconciliation step. Evermind writes new knowledge directly into the model, so it never accumulates contradictory copies of the same fact and never needs a reconcile pass. It is designed to win not on raw parameter count but on three axes a frozen model structurally trades away: currency, footprint, and ownership.',
+  },
+  {
+    question: 'Does Evermind run on-device or in the browser?',
+    answer: 'Yes. Evermind runs on WebGPU, so it executes in the browser, on-device, or embedded inside every agent, with zero runtime dependencies. The same model and its write-through memory travel wherever the agent runs, which is what lets agents carry correct knowledge across sessions without a cloud round-trip.',
+  },
+  {
+    question: 'Can I use Evermind inside my own agents?',
+    answer: 'Yes. Evermind is the model behind the platform\'s agents, and its write-through memory and recall are available to the agents you run — so a corrected fact stays corrected across sessions. You can also train custom specialist models in the browser (WebGPU LoRA) and publish them to the Workforce Registry to call from inside your own agent.',
+  },
+  {
+    question: 'How does Evermind stay up to date without retraining?',
+    answer: 'Through its shared-expert hybrid generator and write-through memory. A dense always-on backbone carries continuous online learning while routed experts page in on demand, and every new fact upserts by a stable key and invalidates its prior recall. New knowledge lands in the model the moment it happens, so there is no retrain cycle and no knowledge cutoff you do not control.',
+  },
+];
+
 /** Pricing page FAQ */
 export const PRICING_FAQ: FaqItem[] = [
   {
@@ -917,7 +956,7 @@ export const PRODUCT_SECTIONS: ProductSection[] = [
     title: 'Build & Train',
     blurb: 'Go from an idea to a trained, evaluated AI agent — all in the browser.',
     surfaces: [
-      { icon: '🧠', title: 'Evermind', desc: 'The brain of the platform — a self-updating model governed by Write-Through Cognition. New knowledge replaces what came before with no reconciliation step, and it runs on WebGPU in the browser, on-device, or inside every agent.', href: '/#evermind' },
+      { icon: '🧠', title: 'Evermind', desc: 'The brain of the platform — a self-updating model governed by Write-Through Cognition. New knowledge replaces what came before with no reconciliation step, and it runs on WebGPU in the browser, on-device, or inside every agent.', href: '/evermind' },
       { icon: '🏠', title: 'Dashboard', desc: 'Your command center: workspace health, recent runs, and what your AI workforce is doing right now.', href: '/dashboard' },
       { icon: '💡', title: 'Brain Storm', desc: 'Describe what you need in plain language; the Brain turns it into projects, datasets, and agents.', href: '/brainstorm' },
       { icon: '💻', title: 'IDE Workspace', desc: 'Monaco editor, terminal, AI chat, and file explorer in one collaborative project workspace.', href: '/ide' },
@@ -993,6 +1032,7 @@ export const FOOTER_COLUMNS: FooterColumn[] = [
   {
     title: 'Platform',
     links: [
+      { href: '/evermind', label: 'Evermind LLM' },
       { href: '/marketplace', label: 'Workforce Registry' },
       { href: '/agents', label: 'BuilderForce Agents' },
       { href: '/tools', label: 'Diagnostics & Tools' },

@@ -586,6 +586,9 @@ export default function LandingPage() {
                 </div>
               ))}
             </div>
+            <div className="lp-actions" style={{ marginTop: 24 }}>
+              <Link href="/evermind" className="lp-btn-primary">🧠 Explore Evermind →</Link>
+            </div>
           </div>
         </section>
 
