@@ -481,16 +481,22 @@
     "intro": "Führen Sie Diagnosen für dieses Projekt aus. Jeder Lauf wird erfasst und fließt in die Projektbewertung ein, die in Ihrem Arbeitsbereich zusammengefasst wird.",
     "loading": "Wird geladen…",
     "loadError": "Diagnosen konnten nicht geladen werden",
-    "noRuns": "Für dieses Projekt wurden noch keine Diagnosen ausgeführt.",
     "architectureTitle": "Architekturanalyse",
     "architectureDesc": "Analysieren Sie die Repositorys des Projekts und bewerten Sie die Einhaltung der Entwurfsprinzipien. Das Ergebnis wird als Projektdiagnose erfasst.",
-    "runArchitecture": "Architekturanalyse ausführen",
     "architectureRunning": "Wird gestartet…",
     "architectureStarted": "Architekturanalyse gestartet – die Bewertung erscheint hier nach Abschluss.",
     "architectureError": "Architekturanalyse konnte nicht gestartet werden",
     "runOther": "Diagnose ausführen",
     "runOtherDesc": "Führen Sie eine beliebige Diagnose für dieses Projekt aus, um sie zur Bewertung hinzuzufügen.",
-    "run": "Ausführen"
+    "run": "Ausführen",
+    "runDiagnostics": "Diagnosen ausführen",
+    "viewResults": "Ergebnisse anzeigen",
+    "results": "Ergebnisse",
+    "combinedResults": "Kombinierte Ergebnisse",
+    "closeResults": "Ergebnisse schließen",
+    "noResults": "Noch keine Ergebnisse.",
+    "overall": "Gesamtbewertung",
+    "architectureNeedsRepo": "Verknüpfen Sie zuerst ein Repository mit diesem Projekt."
   },
   "projectDetails": {
     "tabs": {

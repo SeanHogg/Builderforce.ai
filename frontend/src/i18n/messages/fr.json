@@ -481,16 +481,22 @@
     "intro": "Exécutez des diagnostics sur ce projet. Chaque exécution est suivie et contribue à la note du projet, qui est consolidée dans votre espace de travail.",
     "loading": "Chargement…",
     "loadError": "Impossible de charger les diagnostics",
-    "noRuns": "Aucun diagnostic n'a encore été exécuté sur ce projet.",
     "architectureTitle": "Analyse d'architecture",
     "architectureDesc": "Analysez les dépôts du projet et notez le respect des principes de conception. Le résultat est suivi comme un diagnostic du projet.",
-    "runArchitecture": "Lancer l'analyse d'architecture",
     "architectureRunning": "Démarrage…",
     "architectureStarted": "Analyse d'architecture lancée — sa note apparaîtra ici une fois terminée.",
     "architectureError": "Impossible de lancer l'analyse d'architecture",
     "runOther": "Lancer un diagnostic",
     "runOtherDesc": "Lancez n'importe quel diagnostic sur ce projet pour l'ajouter à la note.",
-    "run": "Lancer"
+    "run": "Lancer",
+    "runDiagnostics": "Lancer les diagnostics",
+    "viewResults": "Voir les résultats",
+    "results": "Résultats",
+    "combinedResults": "Résultats combinés",
+    "closeResults": "Fermer les résultats",
+    "noResults": "Aucun résultat pour le moment.",
+    "overall": "Note globale",
+    "architectureNeedsRepo": "Associez d'abord un dépôt à ce projet."
   },
   "projectDetails": {
     "tabs": {

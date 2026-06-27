@@ -481,16 +481,22 @@
     "intro": "针对此项目运行诊断。每次运行都会被记录，并计入项目评分，进而汇总到您的工作区。",
     "loading": "加载中…",
     "loadError": "无法加载诊断",
-    "noRuns": "尚未针对此项目运行任何诊断。",
     "architectureTitle": "架构分析",
     "architectureDesc": "分析项目的代码仓库并对设计原则的遵循情况评分。结果将作为项目诊断进行跟踪。",
-    "runArchitecture": "运行架构分析",
     "architectureRunning": "正在启动…",
     "architectureStarted": "架构分析已启动 — 完成后其评分将显示在此处。",
     "architectureError": "无法启动架构分析",
     "runOther": "运行诊断",
     "runOtherDesc": "针对此项目运行任意诊断以纳入评分。",
-    "run": "运行"
+    "run": "运行",
+    "runDiagnostics": "运行诊断",
+    "viewResults": "查看结果",
+    "results": "结果",
+    "combinedResults": "综合结果",
+    "closeResults": "关闭结果",
+    "noResults": "尚无结果。",
+    "overall": "总体评分",
+    "architectureNeedsRepo": "请先为此项目关联一个代码仓库。"
   },
   "projectDetails": {
     "tabs": {

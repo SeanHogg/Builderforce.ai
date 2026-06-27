@@ -481,16 +481,22 @@
     "intro": "Run diagnostics against this project. Each run is tracked and contributes to the project's rating, which rolls up to your workspace.",
     "loading": "Loading…",
     "loadError": "Couldn't load diagnostics",
-    "noRuns": "No diagnostics have been run against this project yet.",
     "architectureTitle": "Architecture analysis",
     "architectureDesc": "Analyze the project's repositories and score design-principle adherence. The result is tracked as a project diagnostic.",
-    "runArchitecture": "Run architecture analysis",
     "architectureRunning": "Starting…",
     "architectureStarted": "Architecture analysis started — its score will appear here when it completes.",
     "architectureError": "Couldn't start architecture analysis",
     "runOther": "Run a diagnostic",
     "runOtherDesc": "Run any diagnostic against this project to add it to the rating.",
-    "run": "Run"
+    "run": "Run",
+    "runDiagnostics": "Run Diagnostics",
+    "viewResults": "View results",
+    "results": "Results",
+    "combinedResults": "Combined results",
+    "closeResults": "Close results",
+    "noResults": "No results yet.",
+    "overall": "Overall rating",
+    "architectureNeedsRepo": "Map a repository to this project first."
   },
   "projectDetails": {
     "tabs": {
