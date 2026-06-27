@@ -849,6 +849,22 @@ html[data-theme='light'] .nebula {
   color: var(--text);
   cursor: pointer;
   text-decoration: none;
+  /* Never wrap to a second line in the fixed-height topbar; the project label
+     truncates instead when space is tight (see .tenant-chip__project). */
+  white-space: nowrap;
+  min-width: 0;
+}
+
+/* The chevron + separator stay their natural size; only the labels shrink. */
+.tenant-chip > svg {
+  flex-shrink: 0;
+}
+
+.tenant-chip__project {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
 }
 
 .tenant-chip:hover {
@@ -2215,6 +2231,20 @@ textarea.input { resize: vertical; line-height: 1.5; }
 
   /* Mobile: hide the "Builderforce.ai" wordmark; keep the mascot + BETA badge */
   .brand-name { display: none; }
+
+  /* Tighten the topbar so all the right-side actions fit on one row instead of
+     wrapping / clipping off the right edge on a phone. */
+  .topbar { gap: 6px; padding: 0 8px; }
+  .topbar-left { flex-shrink: 0; }
+  .topbar-right { gap: 2px; min-width: 0; }
+
+  /* The tenant→project chip drops the redundant workspace name + separator on
+     mobile (the workspace is one tap away in the chip's menu, and the brand
+     mascot already anchors context) and shows just the project scope, capped so
+     a long project name truncates instead of pushing the actions off-screen. */
+  .tenant-chip__workspace,
+  .tenant-chip__sep { display: none; }
+  .tenant-chip { max-width: 46vw; padding: 4px 8px; }
 }
 
 /* On desktop: hide the mobile-only sidebar items (Marketplace is in topbar) */

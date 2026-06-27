@@ -7,6 +7,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import type { Project } from '@/lib/types';
 import type { AgentHost } from '@/lib/builderforceApi';
 import { fetchProjects, createProject, deleteProject } from '@/lib/api';
+import { useOptionalProjectScope } from '@/lib/ProjectScopeContext';
 import { agentHosts } from '@/lib/builderforceApi';
 import { ProjectDetailsPanel, type ProjectPanelTab } from '@/components/ProjectDetailsPanel';
 import { ProjectCard } from '@/components/ProjectCard';
@@ -44,6 +45,10 @@ export interface ProjectsContentProps {
 export function ProjectsContent({ limit, viewAllHref, onCount }: ProjectsContentProps = {}) {
   const router = useRouter();
   const searchParams = useSearchParams();
+  // Global project scope (present in the app shell): when a single project is
+  // selected in the TopBar, the list narrows to just that project so this
+  // surface shows the same scope as every other page.
+  const scope = useOptionalProjectScope();
 
   const [projects, setProjects] = useState<Project[]>([]);
   const [agentHostList, setAgentHostList] = useState<AgentHost[]>([]);
@@ -59,7 +64,10 @@ export function ProjectsContent({ limit, viewAllHref, onCount }: ProjectsContent
   const [selectedAgentHost, setSelectedAgentHost] = useState<AgentHost | null>(null);
   const [planError, setPlanError] = useState<PlanLimitError | null>(null);
 
-  const visibleProjects = limit != null ? projects.slice(0, limit) : projects;
+  // Narrow to the globally-selected project (if any), then apply the preview cap.
+  const scopedProjectId = scope?.currentProjectId ?? null;
+  const scopedProjects = scopedProjectId != null ? projects.filter((p) => p.id === scopedProjectId) : projects;
+  const visibleProjects = limit != null ? scopedProjects.slice(0, limit) : scopedProjects;
 
   useEffect(() => {
     Promise.all([
@@ -86,10 +94,11 @@ export function ProjectsContent({ limit, viewAllHref, onCount }: ProjectsContent
   }, [searchParams]);
 
   // Surface the count to the parent (tab badge) instead of rendering it here.
-  // Keyed on length so it re-fires through create/delete.
+  // Reports the SCOPED count so the badge matches what is shown; re-fires on
+  // create/delete and when the global project scope changes.
   useEffect(() => {
-    onCount?.(projects.length);
-  }, [projects.length, onCount]);
+    onCount?.(scopedProjects.length);
+  }, [scopedProjects.length, onCount]);
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -103,6 +112,7 @@ export function ProjectsContent({ limit, viewAllHref, onCount }: ProjectsContent
         template: 'vanilla',
       });
       setProjects((prev) => [project, ...prev]);
+      scope?.reload();
       setNewProjectName('');
       setNewProjectDesc('');
       setShowForm(false);
@@ -126,6 +136,22 @@ export function ProjectsContent({ limit, viewAllHref, onCount }: ProjectsContent
     setDetailsInitialTab(tab);
     setDetailsProject(project);
   };
+
+  // Single delete path shared by the card / table / details-panel actions:
+  // remove locally, close the panel if it was open, clear the global scope if it
+  // pointed at the deleted project, and refresh the shared project list.
+  const removeProject = useCallback(async (p: Project) => {
+    try {
+      await deleteProject(p.id);
+      setProjects((prev) => prev.filter((x) => x.id !== p.id));
+      setDetailsProject((cur) => (cur && cur.id === p.id ? null : cur));
+      if (scope?.currentProjectId === p.id) scope.setProject(null);
+      scope?.reload();
+    } catch (err) {
+      console.error(err);
+      alert('Failed to delete project');
+    }
+  }, [scope]);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
@@ -299,15 +325,7 @@ export function ProjectsContent({ limit, viewAllHref, onCount }: ProjectsContent
                 const agentHost = agentHostList.find((c) => c.id === ac.id);
                 if (agentHost) setSelectedAgentHost(agentHost);
               }}
-              onDelete={async (p) => {
-                try {
-                  await deleteProject(p.id);
-                  setProjects((prev) => prev.filter((x) => x.id !== p.id));
-                } catch (err) {
-                  console.error(err);
-                  alert('Failed to delete project');
-                }
-              }}
+              onDelete={removeProject}
             />
           ))}
         </div>
@@ -324,16 +342,7 @@ export function ProjectsContent({ limit, viewAllHref, onCount }: ProjectsContent
             const agentHost = agentHostList.find((c) => c.id === ac.id);
             if (agentHost) setSelectedAgentHost(agentHost);
           }}
-          onDelete={async (p) => {
-            try {
-              await deleteProject(p.id);
-              setProjects((prev) => prev.filter((x) => x.id !== p.id));
-              if (detailsProject && detailsProject.id === p.id) setDetailsProject(null);
-            } catch (err) {
-              console.error(err);
-              alert('Failed to delete project');
-            }
-          }}
+          onDelete={removeProject}
         />
       )}
 
@@ -347,16 +356,7 @@ export function ProjectsContent({ limit, viewAllHref, onCount }: ProjectsContent
             setProjects((prev) => prev.map((p) => (p.id === updated.id ? { ...updated, assignedAgentHost: p.assignedAgentHost } : p)));
             setDetailsProject((p) => (p && p.id === updated.id ? updated : p));
           }}
-          onDelete={async (p) => {
-            try {
-              await deleteProject(p.id);
-              setProjects((prev) => prev.filter((x) => x.id !== p.id));
-              setDetailsProject(null);
-            } catch (err) {
-              console.error(err);
-              alert('Failed to delete project');
-            }
-          }}
+          onDelete={removeProject}
         />
       )}
 

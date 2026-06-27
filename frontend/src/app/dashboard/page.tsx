@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import type { Project, Tenant } from '@/lib/types';
 import { fetchProjects } from '@/lib/api';
 import { useAuth } from '@/lib/AuthContext';
+import { useProjectScope } from '@/lib/ProjectScopeContext';
 import { getMe } from '@/lib/auth';
 import { ChatInput } from '@/components/ChatInput';
 import PageContainer from '@/components/PageContainer';
@@ -13,7 +14,7 @@ import { ProjectsContent } from '@/components/ProjectsContent';
 import { TabCountBadge } from '@/components/TabCountBadge';
 import { WorkforceAgents } from '@/components/workforce/WorkforceAgents';
 import { OnboardingStepper } from '@/components/OnboardingStepper';
-import { agentHosts, tasksApi, approvalsApi, type AgentHost, type Task } from '@/lib/builderforceApi';
+import { agentHosts, tasksApi, approvalsApi, type AgentHost } from '@/lib/builderforceApi';
 
 const ONBOARDING_DISMISSED_KEY = 'bf_onboarding_dismissed';
 
@@ -24,6 +25,7 @@ const ONBOARDING_DISMISSED_KEY = 'bf_onboarding_dismissed';
 export default function DashboardPage() {
   const router = useRouter();
   const { isAuthenticated, hasTenant, webToken, tenantToken, tenant, selectTenant } = useAuth();
+  const { currentProjectId } = useProjectScope();
   const tenantId = tenant?.id != null ? Number(tenant.id) : undefined;
 
   const [projects, setProjects] = useState<Project[]>([]);
@@ -99,22 +101,32 @@ export default function DashboardPage() {
       fetchProjects().catch(() => [] as Project[]),
       agentHosts.list().catch(() => [] as AgentHost[]),
       approvalsApi.list({ status: 'pending' }).catch(() => []),
-      tasksApi.list().catch(() => [] as Task[]),
     ])
-      .then(([projs, agentHostsData, approvalsData, tasksData]) => {
+      .then(([projs, agentHostsData, approvalsData]) => {
         setProjects(Array.isArray(projs) ? projs : []);
         setAgentHostList(Array.isArray(agentHostsData) ? agentHostsData : []);
         setPendingApprovalsCount(Array.isArray(approvalsData) ? approvalsData.length : 0);
-        if (Array.isArray(tasksData)) {
-          setTaskStats({
-            total: tasksData.length,
-            inProgress: tasksData.filter((t) => t.status === 'in_progress').length,
-            done: tasksData.filter((t) => t.status === 'done').length,
-          });
-        }
       })
       .finally(() => setLoading(false));
   }, [isAuthenticated, hasTenant]);
+
+  // Task stats follow the global project scope: when a project is selected the
+  // dashboard reflects just that project's tasks (re-fetched on scope change).
+  useEffect(() => {
+    if (!isAuthenticated || !hasTenant) return;
+    let alive = true;
+    tasksApi.list(currentProjectId ?? undefined)
+      .then((tasksData) => {
+        if (!alive || !Array.isArray(tasksData)) return;
+        setTaskStats({
+          total: tasksData.length,
+          inProgress: tasksData.filter((t) => t.status === 'in_progress').length,
+          done: tasksData.filter((t) => t.status === 'done').length,
+        });
+      })
+      .catch(() => { if (alive) setTaskStats(null); });
+    return () => { alive = false; };
+  }, [isAuthenticated, hasTenant, currentProjectId]);
 
   // The dashboard prompt opens Brain Storm and auto-executes there: Brain creates
   // a chat on demand and streams a reply, then the user can promote it to a
@@ -127,6 +139,9 @@ export default function DashboardPage() {
   };
 
   const connectedAgentHosts = agentHostList.filter((c) => c.online);
+  // Project stats follow the global scope: a selected project narrows the count
+  // and the grid (the grid filter lives in ProjectsContent) to just that project.
+  const scopedProjects = currentProjectId != null ? projects.filter((p) => p.id === currentProjectId) : projects;
 
   if (!isAuthenticated) return null;
 
@@ -220,8 +235,8 @@ export default function DashboardPage() {
             {[
               {
                 label: 'Projects',
-                value: projects.length,
-                sub: `${projects.filter((p) => (p as { status?: string }).status === 'active').length} active`,
+                value: scopedProjects.length,
+                sub: `${scopedProjects.filter((p) => (p as { status?: string }).status === 'active').length} active`,
                 href: '/projects',
                 color: 'var(--coral-bright, #f4726e)',
               },
@@ -286,7 +301,7 @@ export default function DashboardPage() {
           }}
         >
           {([
-            { key: 'projects', label: 'Projects', count: projects.length },
+            { key: 'projects', label: 'Projects', count: scopedProjects.length },
             // Workforce content is the shared <WorkforceAgents> component, which
             // owns its own data (cloud agents + remote hosts). The dashboard
             // doesn't fetch that combined total, so no count badge here rather
