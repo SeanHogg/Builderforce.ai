@@ -30,8 +30,9 @@ import { resolveBuilderForceAgentsAgentDir } from "../../agent-paths.js";
 import { resolveSessionAgentIds } from "../../agent-scope.js";
 import { createAnthropicPayloadLogger } from "../../anthropic-payload-log.js";
 import {
+  buildActiveLimbicPrompt,
   buildAssignedPersonaPrompt,
-  resolveActivePsychometricParams,
+  resolveCognitiveExecParams,
 } from "../../assigned-capabilities.js";
 import { raiseThinkLevel } from "../../../builderforce/psychometrics.js";
 import { makeBootstrapWarn, resolveBootstrapContextForRun } from "../../bootstrap-files.js";
@@ -285,14 +286,18 @@ export async function runEmbeddedAttempt(
 
     // Inject the agent's assigned (active) personas into the main system prompt —
     // at parity with skills/content. Process-wide registry state, populated by the
-    // gateway `artifacts.sync` handler when Builderforce pushes assignments.
-    const personaPrompt = buildAssignedPersonaPrompt();
+    // gateway `artifacts.sync` handler when Builderforce pushes assignments. The
+    // limbic block (the agent's *current affective state*) is appended: the static
+    // personality and the dynamic mood are injected together.
+    const limbicPrompt = buildActiveLimbicPrompt();
+    const personaPrompt = [buildAssignedPersonaPrompt(), limbicPrompt].filter(Boolean).join("\n\n");
 
     // Second half of "execute under the persona": let the active persona's
-    // psychometric profile nudge the run's execution levers. Persona think depth
-    // is a floor on the requested level (deepens, never reduces); persona may turn
-    // reasoning on; persona temperature is a default that an explicit request wins.
-    const psychometricParams = resolveActivePsychometricParams();
+    // psychometric profile (static setpoints) AND the live limbic state (dynamics)
+    // nudge the run's execution levers. Think depth is a floor on the requested
+    // level (deepens, never reduces); reasoning may turn on; temperature is a
+    // default that an explicit request wins.
+    const psychometricParams = resolveCognitiveExecParams();
     const effectiveThinkLevel = raiseThinkLevel(params.thinkLevel, psychometricParams.thinkLevel);
     const effectiveReasoningLevel =
       psychometricParams.reasoningLevel === "on" && (params.reasoningLevel ?? "off") === "off"

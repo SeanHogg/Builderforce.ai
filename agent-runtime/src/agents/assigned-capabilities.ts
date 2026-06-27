@@ -19,6 +19,8 @@ import {
   mergeExecParams,
   type PsychometricExecParams,
 } from "../builderforce/psychometrics.js";
+import { buildLimbicBlock, mergeLimbicWithPsychometric } from "../builderforce/limbic.js";
+import { getLimbicSystemService } from "../infra/limbic-system-service.js";
 import { logDebug } from "../logger.js";
 
 export type AssignedArtifactSlugs = {
@@ -86,6 +88,41 @@ export function resolveActivePsychometricParams(): PsychometricExecParams {
     );
   }
   return params;
+}
+
+/**
+ * Build the system-prompt block describing the agent's *current affective state*
+ * (the dynamic limbic layer). Returns '' when no limbic system is running or the
+ * state is at rest. Injected alongside the persona block.
+ */
+export function buildActiveLimbicPrompt(): string {
+  const svc = getLimbicSystemService();
+  if (!svc) return "";
+  const block = buildLimbicBlock(svc.snapshot());
+  if (block) logDebug("[capabilities] injecting limbic affective state into system prompt");
+  return block;
+}
+
+/**
+ * Resolve the combined cognitive execution params: the personas' static
+ * psychometric params with the live limbic dynamics composed on top
+ * ("personality = setpoints, limbic = dynamics"). Falls back to the
+ * psychometric-only params when no limbic system is running, so this is a safe
+ * drop-in for {@link resolveActivePsychometricParams}. Still a *default* —
+ * an explicit per-request thinkLevel/temperature always wins downstream.
+ */
+export function resolveCognitiveExecParams(): PsychometricExecParams {
+  const psych = resolveActivePsychometricParams();
+  const svc = getLimbicSystemService();
+  if (!svc) return psych;
+  const limbic = svc.compile().params;
+  const merged = mergeLimbicWithPsychometric(psych, limbic);
+  if (merged.thinkLevel || merged.reasoningLevel || merged.temperature !== undefined) {
+    logDebug(
+      `[capabilities] cognitive exec params (personality+limbic): think=${merged.thinkLevel ?? "-"} reasoning=${merged.reasoningLevel ?? "-"} temp=${merged.temperature ?? "-"}`,
+    );
+  }
+  return merged;
 }
 
 /**

@@ -56,6 +56,31 @@ export interface IAgentMemoryService {
   train?(opts: { model: string; dataset: string; epochs: number }): Promise<string>;
 }
 
+// ── Limbic system (dynamic affective/motivational layer) ──────────────────────
+
+import type { CompiledLimbic, LimbicEvent, LimbicState } from "./limbic.js";
+
+/**
+ * The agent's limbic system — the dynamic counterpart to the static psychometric
+ * personality. Tracks a live affective state and drives it through the brain
+ * regions (amygdala/hypothalamus/thalamus/basal-ganglia) in response to
+ * experience. Optional: absent → the agent runs at a flat neutral affect.
+ */
+export interface ILimbicSystem {
+  /** Amygdala: appraise an event and update the live affective state. */
+  appraise(event: LimbicEvent): Promise<LimbicState>;
+  /** Current affective state (a copy). */
+  snapshot(): LimbicState;
+  /** Hypothalamus: relax drives toward personality setpoints; optional fatigue. */
+  tick(opts?: { fatigue?: number }): LimbicState;
+  /** Thalamus: current attention-gate gain in [0,1]. */
+  attention(): number;
+  /** Compile the current state into prompt directives + execution levers. */
+  compile(): CompiledLimbic;
+  /** Optional: train the affective model on observed experiences and persist. */
+  train?(): Promise<number[] | null>;
+}
+
 // ── LLM platform calls (builder `llm` nodes) ──────────────────────────────────
 
 export interface LlmCompletionRequest {
