@@ -3,10 +3,9 @@
 import type { CSSProperties, ReactNode } from 'react';
 
 /**
- * Shared chrome for the PM visualizers — empty/error/loading states, the
- * "pick a project" notice (project-only views shown in portfolio scope), a
- * status pill, and a section card. Centralised so every visualizer reads the
- * same and we never re-inline these blocks.
+ * Shared chrome for the PM visualizers — empty/error/loading states, a status
+ * pill, and a section card. Centralised so every visualizer reads the same and
+ * we never re-inline these blocks.
  */
 
 const noticeStyle: CSSProperties = {
@@ -25,17 +24,6 @@ export function PmEmpty({ message }: { message: string }) {
 
 export function PmError({ message }: { message: string }) {
   return <div style={{ ...noticeStyle, color: 'var(--danger, #dc2626)' }}>{message}</div>;
-}
-
-/** Shown when a project-scoped view (epics/dependencies) is opened in portfolio scope. */
-export function PmSelectProject({ what }: { what: string }) {
-  return (
-    <PmEmpty message={`Select a project to view ${what}. ${capitalize(what)} are scoped to one project.`} />
-  );
-}
-
-function capitalize(s: string): string {
-  return s.charAt(0).toUpperCase() + s.slice(1);
 }
 
 /** A titled section card matching the dashboard surfaces. */

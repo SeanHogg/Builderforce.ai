@@ -3,7 +3,6 @@
 import { useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { ViewToggle } from '@/components/ViewToggle';
-import { usePmScope } from '@/lib/pm/scope';
 import { EpicTreeView } from './EpicTreeView';
 import { DependencyGraph } from './DependencyGraph';
 import { RoadmapTimeline } from './RoadmapTimeline';
@@ -24,7 +23,6 @@ type RoadmapView = 'timeline' | 'gantt' | 'map';
 
 export function PmVisualizersContent() {
   const t = useTranslations('pm');
-  usePmScope();
   const [section, setSection] = useState<Section>('roadmap');
   const [epicView, setEpicView] = useState<EpicView>('tree');
   const [roadmapView, setRoadmapView] = useState<RoadmapView>('timeline');
