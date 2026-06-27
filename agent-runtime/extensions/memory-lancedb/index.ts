@@ -9,6 +9,13 @@
 import { randomUUID } from "node:crypto";
 import type * as LanceDB from "@lancedb/lancedb";
 import type { BuilderForceAgentsPluginApi } from "@seanhogg/builderforce-agents/plugin-sdk";
+// Hybrid retrieval primitives — the canonical, zero-dep RAG layer lives in the
+// memory package; the `/retrieval` subpath avoids pulling the WebGPU engine.
+import {
+  chunkText,
+  hybridRetrieve,
+  type RetrievalCandidate,
+} from "@seanhogg/builderforce-memory/retrieval";
 import { Type } from "@sinclair/typebox";
 import OpenAI from "openai";
 import {
@@ -137,6 +144,64 @@ class MemoryDB {
     });
 
     return mapped.filter((r) => r.score >= minScore);
+  }
+
+  /**
+   * Hybrid recall: dense (LanceDB vector) + sparse (BM25) fused via Reciprocal
+   * Rank Fusion, then MMR-reranked for diversity. Pulls a wider vector candidate
+   * pool than `limit`, lets BM25 rescue exact-token matches the dense pass ranked
+   * low, and returns a deduplicated, diversified top-`limit`. Falls back to plain
+   * vector search if the candidate pool is empty.
+   */
+  async searchHybrid(
+    queryText: string,
+    queryVector: number[],
+    limit = 5,
+    minScore = 0.1,
+  ): Promise<MemorySearchResult[]> {
+    // Over-fetch on the dense side so fusion + rerank have material to work with.
+    const pool = await this.search(queryVector, Math.max(limit * 4, 20), 0);
+    if (pool.length === 0) return [];
+
+    const candidates: RetrievalCandidate[] = pool.map((r) => ({
+      id: r.entry.id,
+      text: r.entry.text,
+      vector: Float32Array.from(r.entry.vector),
+    }));
+
+    const hits = hybridRetrieve(
+      { text: queryText, vector: Float32Array.from(queryVector) },
+      candidates,
+      { topK: limit },
+    );
+
+    const byId = new Map(pool.map((r) => [r.entry.id, r]));
+    return hits
+      .map((h) => byId.get(h.id))
+      .filter((r): r is MemorySearchResult => !!r && r.score >= minScore);
+  }
+
+  /**
+   * Stores `text` as one or more chunks. Short inputs (≤ chunkSize) store as a
+   * single entry; longer documents are split with overlap so retrieval returns
+   * precise passages rather than a whole document. Returns the stored entries.
+   */
+  async storeText(
+    base: Omit<MemoryEntry, "id" | "createdAt" | "text" | "vector">,
+    text: string,
+    embed: (t: string) => Promise<number[]>,
+    chunkSize = 1000,
+  ): Promise<MemoryEntry[]> {
+    const chunks =
+      text.length <= chunkSize
+        ? [{ text }]
+        : chunkText(text, { chunkSize, chunkOverlap: Math.round(chunkSize * 0.2) });
+    const stored: MemoryEntry[] = [];
+    for (const chunk of chunks) {
+      const vector = await embed(chunk.text);
+      stored.push(await this.store({ ...base, text: chunk.text, vector }));
+    }
+    return stored;
   }
 
   async delete(id: string): Promise<boolean> {
@@ -317,7 +382,7 @@ const memoryPlugin = {
           const { query, limit = 5 } = params as { query: string; limit?: number };
 
           const vector = await embeddings.embed(query);
-          const results = await db.search(vector, limit, 0.1);
+          const results = await db.searchHybrid(query, vector, limit, 0.1);
 
           if (results.length === 0) {
             return {
@@ -398,16 +463,25 @@ const memoryPlugin = {
             };
           }
 
-          const entry = await db.store({
+          // Chunk long inputs (documents) so retrieval returns precise passages;
+          // short facts store as a single entry.
+          const entries = await db.storeText(
+            { importance, category },
             text,
-            vector,
-            importance,
-            category,
-          });
+            (t) => embeddings.embed(t),
+          );
 
           return {
-            content: [{ type: "text", text: `Stored: "${text.slice(0, 100)}..."` }],
-            details: { action: "created", id: entry.id },
+            content: [
+              {
+                type: "text",
+                text:
+                  entries.length > 1
+                    ? `Stored ${entries.length} chunks of "${text.slice(0, 80)}..."`
+                    : `Stored: "${text.slice(0, 100)}..."`,
+              },
+            ],
+            details: { action: "created", ids: entries.map((e) => e.id) },
           };
         },
       },
@@ -508,7 +582,7 @@ const memoryPlugin = {
           .option("--limit <n>", "Max results", "5")
           .action(async (query, opts) => {
             const vector = await embeddings.embed(query);
-            const results = await db.search(vector, parseInt(opts.limit), 0.3);
+            const results = await db.searchHybrid(query, vector, parseInt(opts.limit), 0.3);
             // Strip vectors for output
             const output = results.map((r) => ({
               id: r.entry.id,
@@ -544,7 +618,7 @@ const memoryPlugin = {
 
         try {
           const vector = await embeddings.embed(event.prompt);
-          const results = await db.search(vector, 3, 0.3);
+          const results = await db.searchHybrid(event.prompt, vector, 3, 0.3);
 
           if (results.length === 0) {
             return;
