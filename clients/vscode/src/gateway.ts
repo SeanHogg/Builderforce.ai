@@ -102,3 +102,30 @@ export async function complete(
   };
   return json.choices?.[0]?.message?.content ?? "";
 }
+
+/**
+ * Fetch the limbic affective-state directive block for a task/request from the
+ * gateway (`/api/limbic/block`). The block makes the built-in agent execute
+ * under the same affective layer as the cloud (V3) and on-prem agents. Logic
+ * lives once in the shared compiler server-side — this is pure transport.
+ * Best-effort: returns '' on any error so the agent always works offline.
+ */
+export async function fetchLimbicBlock(
+  secrets: vscode.SecretStorage,
+  text: string,
+): Promise<string> {
+  try {
+    const key = await getApiKey(secrets);
+    if (!key) return "";
+    const res = await fetch(`${getBaseUrl()}/api/limbic/block`, {
+      method: "POST",
+      headers: { "content-type": "application/json", authorization: `Bearer ${key}` },
+      body: JSON.stringify({ text }),
+    });
+    if (!res.ok) return "";
+    const json = (await res.json()) as { block?: string };
+    return typeof json.block === "string" ? json.block : "";
+  } catch {
+    return "";
+  }
+}

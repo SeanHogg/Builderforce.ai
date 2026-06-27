@@ -572,7 +572,7 @@ export type AgentPricingModel = 'flat_fee' | 'consumption';
  * Agent runtime engine. **V1 is RETIRED (2026-06-13)** — `builderforce-v2` (the Claude
  * Agent SDK runner, gateway-routed) is the only engine. The `builderforce-v1` pi loop is gone.
  */
-export type AgentEngine = 'builderforce-v2';
+export type AgentEngine = 'builderforce-v2' | 'builderforce-v3';
 /**
  * Execution surface for a V2 cloud agent — the two types the user picks at
  * creation. Both run the full task IN THE CLOUD (all Cloudflare, no local/hybrid

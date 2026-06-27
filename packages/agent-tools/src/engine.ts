@@ -64,6 +64,9 @@ export const ENGINE_IDS = {
   /** RETIRED — legacy pi loop. Kept only to recognize/back-fill old rows; no runner. */
   v1: "builderforce-v1",
   v2: "builderforce-v2",
+  /** V3 — the V2 loop with the limbic affective layer composed on top (additive;
+   *  V2 behaviour is unchanged). Selectable per agent via `ide_agents.engine`. */
+  v3: "builderforce-v3",
 } as const;
 
 export type EngineId = (typeof ENGINE_IDS)[keyof typeof ENGINE_IDS];
