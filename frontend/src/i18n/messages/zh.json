@@ -71,7 +71,32 @@
     "noTasksProject": "此项目暂无任务。",
     "noEpicsAnywhere": "您的项目中暂无任务。",
     "unparented": "未归类（{count}）",
-    "allProjectsCaption": "显示所有项目的史诗。在顶部栏选择某个项目以聚焦查看。"
+    "allProjectsCaption": "显示所有项目的史诗。在顶部栏选择某个项目以聚焦查看。",
+    "depCycle": "⚠ 循环",
+    "depLoading": "正在加载依赖关系图…",
+    "depPredecessor": "前置任务（阻塞）…",
+    "depSuccessor": "后续任务（被阻塞）…",
+    "depAddButton": "添加依赖",
+    "depPickBoth": "请同时选择前置任务和后续任务。",
+    "depRemoveConfirm": "移除此依赖关系？",
+    "depLegend": "实线箭头 = 阻塞依赖 · 虚线 = 史诗分解 · 红色 = 循环（点击实线边可移除）。",
+    "depAllProjectsCaption": "显示所有项目的依赖关系（只读）。在顶部栏选择某个项目以进行编辑。",
+    "ariaPredecessor": "前置任务",
+    "ariaSuccessor": "后续任务",
+    "ariaDepType": "依赖类型",
+    "depTypeFinishToStart": "完成 → 开始",
+    "depTypeStartToStart": "开始 → 开始",
+    "depTypeFinishToFinish": "完成 → 完成",
+    "depTypeStartToFinish": "开始 → 完成"
+  },
+  "ide": {
+    "all": "全部",
+    "filteredTo": "已筛选至 {name}",
+    "clearProjectFilter": "清除项目筛选",
+    "loadingProjects": "正在加载项目…",
+    "noProjectsFilter": "没有符合此筛选条件的项目。请在上方新建一个。",
+    "noProjectsYet": "暂无项目。请在上方选择一种类型来创建第一个项目。",
+    "deleteFailed": "删除项目失败"
   },
   "tools": {
     "outOf5": "满分 5.0",

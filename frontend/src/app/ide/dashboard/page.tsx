@@ -1,10 +1,12 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
+import { useTranslations } from 'next-intl';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuth } from '@/lib/AuthContext';
+import { useProjectScope } from '@/lib/ProjectScopeContext';
 import { persistLastProjectId } from '@/lib/auth';
-import { fetchProjects, createProject, deleteProject } from '@/lib/api';
+import { createProject, deleteProject } from '@/lib/api';
 import { isPlanLimitError, type PlanLimitError } from '@/lib/planLimitError';
 import { MODALITIES, getModality, DEFAULT_MODALITY, type ProjectModality } from '@/lib/modality';
 import type { Project } from '@/lib/types';
@@ -21,23 +23,23 @@ import { UpgradeModal } from '@/components/UpgradeModal';
  * typed by its `modality`; "create a Video project" just creates a project with
  * `modality: 'video'`.
  *
- * Query params:
- *   ?project=<id> — scope the list to a single project (used by the Projects-page
- *                   IDE icon, which deep-links here filtered to that project).
- *   ?type=<modality> — scope the list to one IDE type.
- *
- * Opening a project card loads it into the editor at /ide/<id>.
+ * Project scope comes from the global TopBar tenant→project selector
+ * (useProjectScope) — the single project picker for the app. A `?project=<id>`
+ * deep-link (e.g. the Projects-page IDE icon) is adopted into it on navigation.
+ * `?type=<modality>` scopes the list to one IDE type. Opening a project card
+ * loads it into the editor at /ide/<id>.
  */
 export default function IDEDashboardPage() {
+  const t = useTranslations('ide');
   const router = useRouter();
   const searchParams = useSearchParams();
   const { isAuthenticated, hasTenant } = useAuth();
+  // The project list + active scope are owned by the global ProjectScope (single
+  // source — no duplicate fetch here); create/delete refresh it via reload().
+  const { projects, loading: isLoading, currentProjectId, currentProject, setProject, reload } = useProjectScope();
 
-  const projectParam = searchParams.get('project');
   const typeParam = searchParams.get('type') as ProjectModality | null;
 
-  const [projects, setProjects] = useState<Project[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<ViewMode>('card');
 
@@ -55,16 +57,6 @@ export default function IDEDashboardPage() {
     }
   }, [isAuthenticated, hasTenant, router]);
 
-  useEffect(() => {
-    if (!isAuthenticated || !hasTenant) return;
-    let cancelled = false;
-    fetchProjects()
-      .then((list) => { if (!cancelled) setProjects(list); })
-      .catch(() => { if (!cancelled) setError('Failed to load projects. Check your connection and try again.'); })
-      .finally(() => { if (!cancelled) setIsLoading(false); });
-    return () => { cancelled = true; };
-  }, [isAuthenticated, hasTenant]);
-
   const openProject = (p: Project) => {
     persistLastProjectId(String(p.id));
     router.push(`/ide/${p.publicId ?? p.id}`);
@@ -73,9 +65,10 @@ export default function IDEDashboardPage() {
   const handleDelete = async (proj: Project) => {
     try {
       await deleteProject(proj.id);
-      setProjects((prev) => prev.filter((x) => x.id !== proj.id));
+      if (currentProjectId === proj.id) setProject(null);
+      reload();
     } catch {
-      alert('Failed to delete project');
+      alert(t('deleteFailed'));
     }
   };
 
@@ -100,19 +93,16 @@ export default function IDEDashboardPage() {
     }
   };
 
-  // The single project this view is scoped to, if any (matches numeric id or publicId).
-  const scopedProject = useMemo(
-    () => (projectParam ? projects.find((p) => String(p.id) === projectParam || p.publicId === projectParam) ?? null : null),
-    [projectParam, projects],
-  );
+  // The single project this view is scoped to (the global selection), if any.
+  const scopedProject = currentProject;
 
   // Apply the active filters (project scope wins, then type).
   const filtered = useMemo(() => {
     let list = projects;
-    if (projectParam) list = list.filter((p) => String(p.id) === projectParam || p.publicId === projectParam);
+    if (currentProjectId != null) list = list.filter((p) => p.id === currentProjectId);
     if (typeParam) list = list.filter((p) => (p.modality ?? DEFAULT_MODALITY) === typeParam);
     return list;
-  }, [projects, projectParam, typeParam]);
+  }, [projects, currentProjectId, typeParam]);
 
   // Group the filtered set under each modality, in registry order.
   const grouped = useMemo(
@@ -123,9 +113,10 @@ export default function IDEDashboardPage() {
     [filtered],
   );
 
-  const clearFilter = (key: 'project' | 'type') => {
+  // Clear the IDE-type filter (project scope is cleared via the global selector).
+  const clearTypeFilter = () => {
     const next = new URLSearchParams(searchParams.toString());
-    next.delete(key);
+    next.delete('type');
     const qs = next.toString();
     router.replace(qs ? `/ide/dashboard?${qs}` : '/ide/dashboard');
   };
@@ -229,7 +220,7 @@ export default function IDEDashboardPage() {
             <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
               {/* Type filter */}
               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                <FilterChip label="All" active={!typeParam} onClick={() => clearFilter('type')} />
+                <FilterChip label={t('all')} active={!typeParam} onClick={clearTypeFilter} />
                 {MODALITIES.map((m) => (
                   <FilterChip
                     key={m.id}
@@ -248,7 +239,7 @@ export default function IDEDashboardPage() {
           </div>
 
           {/* Active project-scope chip */}
-          {projectParam && (
+          {currentProjectId != null && (
             <div style={{ marginBottom: 16 }}>
               <span
                 style={{
@@ -263,11 +254,11 @@ export default function IDEDashboardPage() {
                   color: 'var(--text-secondary)',
                 }}
               >
-                Filtered to {scopedProject ? scopedProject.name : `project ${projectParam}`}
+                {t('filteredTo', { name: scopedProject ? scopedProject.name : `#${currentProjectId}` })}
                 <button
                   type="button"
-                  onClick={() => clearFilter('project')}
-                  aria-label="Clear project filter"
+                  onClick={() => setProject(null)}
+                  aria-label={t('clearProjectFilter')}
                   style={{ background: 'none', border: 'none', color: 'var(--coral-bright)', cursor: 'pointer', fontWeight: 700, fontSize: 14, lineHeight: 1, padding: 0 }}
                 >
                   ✕
@@ -277,7 +268,7 @@ export default function IDEDashboardPage() {
           )}
 
           {isLoading ? (
-            <div style={{ color: 'var(--text-muted)', padding: 24 }}>Loading projects…</div>
+            <div style={{ color: 'var(--text-muted)', padding: 24 }}>{t('loadingProjects')}</div>
           ) : grouped.length === 0 ? (
             <div
               style={{
@@ -290,9 +281,9 @@ export default function IDEDashboardPage() {
             >
               <div style={{ fontSize: 56, marginBottom: 16 }}>🚀</div>
               <p style={{ color: 'var(--text-secondary)' }}>
-                {projectParam || typeParam
-                  ? 'No projects match this filter. Create a new one above.'
-                  : 'No projects yet. Pick a type above to create your first one.'}
+                {currentProjectId != null || typeParam
+                  ? t('noProjectsFilter')
+                  : t('noProjectsYet')}
               </p>
             </div>
           ) : (

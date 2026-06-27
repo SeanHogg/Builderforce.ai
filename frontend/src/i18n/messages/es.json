@@ -71,7 +71,32 @@
     "noTasksProject": "Aún no hay tareas en este proyecto.",
     "noEpicsAnywhere": "Aún no hay tareas en tus proyectos.",
     "unparented": "Sin asignar ({count})",
-    "allProjectsCaption": "Mostrando las épicas de todos los proyectos. Elige un proyecto en la barra superior para centrarte en uno."
+    "allProjectsCaption": "Mostrando las épicas de todos los proyectos. Elige un proyecto en la barra superior para centrarte en uno.",
+    "depCycle": "⚠ ciclo",
+    "depLoading": "Cargando el grafo de dependencias…",
+    "depPredecessor": "Predecesora (bloquea)…",
+    "depSuccessor": "Sucesora (bloqueada por)…",
+    "depAddButton": "Añadir dependencia",
+    "depPickBoth": "Elige tanto una predecesora como una sucesora.",
+    "depRemoveConfirm": "¿Eliminar esta dependencia?",
+    "depLegend": "Flechas sólidas = dependencia bloqueante · discontinuas = descomposición de épica · rojo = ciclo (haz clic en una arista sólida para eliminarla).",
+    "depAllProjectsCaption": "Mostrando las dependencias de todos los proyectos (solo lectura). Elige un proyecto en la barra superior para editarlas.",
+    "ariaPredecessor": "Tarea predecesora",
+    "ariaSuccessor": "Tarea sucesora",
+    "ariaDepType": "Tipo de dependencia",
+    "depTypeFinishToStart": "Fin → Inicio",
+    "depTypeStartToStart": "Inicio → Inicio",
+    "depTypeFinishToFinish": "Fin → Fin",
+    "depTypeStartToFinish": "Inicio → Fin"
+  },
+  "ide": {
+    "all": "Todos",
+    "filteredTo": "Filtrado a {name}",
+    "clearProjectFilter": "Quitar filtro de proyecto",
+    "loadingProjects": "Cargando proyectos…",
+    "noProjectsFilter": "Ningún proyecto coincide con este filtro. Crea uno nuevo arriba.",
+    "noProjectsYet": "Aún no hay proyectos. Elige un tipo arriba para crear el primero.",
+    "deleteFailed": "No se pudo eliminar el proyecto"
   },
   "tools": {
     "outOf5": "de 5,0",

@@ -81,12 +81,16 @@ export function ProjectScopeProvider({ children }: { children: React.ReactNode }
 
   // Load the project list whenever the active tenant changes.
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     reload();
   }, [reload, tenantId]);
 
   // Seed the current project when the tenant changes: a `?project=` deep-link in
   // the URL wins, otherwise the per-tenant persisted choice, otherwise null.
   useEffect(() => {
+    // Sync from external sources (URL deep-link / persisted choice) on tenant
+    // change — an intentional state sync, not a derived-state cascade.
+    /* eslint-disable react-hooks/set-state-in-effect */
     const fromUrl = readUrlProject();
     if (fromUrl != null) {
       setCurrentProjectId(fromUrl);
@@ -98,7 +102,26 @@ export function ProjectScopeProvider({ children }: { children: React.ReactNode }
     } catch {
       setCurrentProjectId(null);
     }
+    /* eslint-enable react-hooks/set-state-in-effect */
   }, [tenantId]);
+
+  // Adopt an explicit `?project=` deep-link when navigating between pages
+  // (e.g. a "View workflows" / "Open IDE" button on a project). We only ever
+  // ADOPT a param that is present — a plain navigation to a page without it
+  // keeps the current selection rather than resetting to all-projects. Keyed on
+  // pathname so it fires on cross-page navigation; same-page changes are driven
+  // by setProject (router.replace below), which does not change the pathname.
+  useEffect(() => {
+    const fromUrl = readUrlProject();
+    if (fromUrl == null) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setCurrentProjectId(fromUrl);
+    try {
+      localStorage.setItem(storageKey(tenantId), String(fromUrl));
+    } catch {
+      /* storage unavailable — context state still holds the choice */
+    }
+  }, [pathname, tenantId]);
 
   const setProject = useCallback(
     (id: number | null) => {
@@ -126,6 +149,7 @@ export function ProjectScopeProvider({ children }: { children: React.ReactNode }
   // once the list has loaded, so we never scope to a non-existent project.
   useEffect(() => {
     if (currentProjectId != null && projects.length > 0 && !projects.some((p) => p.id === currentProjectId)) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setProject(null);
     }
   }, [projects, currentProjectId, setProject]);

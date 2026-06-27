@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
+import { useTranslations } from 'next-intl';
 import {
   ReactFlow,
   Background,
@@ -14,16 +15,21 @@ import {
 import '@xyflow/react/dist/style.css';
 import { tasksApi, type Task, type DependencyEdge, type DepType } from '@/lib/builderforceApi';
 import { usePmScope } from '@/lib/pm/scope';
+import { useOptionalProjectScope } from '@/lib/ProjectScopeContext';
 import { usePmData } from '@/lib/pm/usePmData';
-import { PmEmpty, PmError, PmSelectProject } from './pmShared';
+import { PmEmpty, PmError } from './pmShared';
 import { Select } from '@/components/Select';
 
 /**
- * Task dependency / epic-flow graph for one project. Nodes are tasks; solid edges
- * are precedence dependencies (predecessor → successor); dashed edges are epic →
- * child decomposition. Edges that participate in a cycle are flagged red
- * defensively (the API blocks new cycles, but legacy/data drift can still occur).
- * Add an edge via the inline form; click an edge to delete it.
+ * Task dependency / epic-flow graph. Nodes are tasks; solid edges are precedence
+ * dependencies (predecessor → successor); dashed edges are epic → child
+ * decomposition. Edges that participate in a cycle are flagged red defensively
+ * (the API blocks new cycles, but legacy/data drift can still occur).
+ *
+ * Scope follows the global project selector: a project view is the full editor
+ * (add an edge via the inline form; click an edge to delete it); the all-projects
+ * (portfolio) view rolls every project's graph up read-only under a per-project
+ * heading — so the Flow view is never a dead-end when no single project is picked.
  */
 
 const STATUS_COLOR: Record<string, string> = {
@@ -35,13 +41,13 @@ const COL_W = 230;
 const ROW_H = 90;
 
 /** Dependency relation types + their short edge badge (FS is the default, unlabelled). */
-const DEP_TYPE_OPTIONS: Array<{ value: DepType; label: string; code: string }> = [
-  { value: 'finish_to_start', label: 'Finish → Start', code: 'FS' },
-  { value: 'start_to_start', label: 'Start → Start', code: 'SS' },
-  { value: 'finish_to_finish', label: 'Finish → Finish', code: 'FF' },
-  { value: 'start_to_finish', label: 'Start → Finish', code: 'SF' },
+const DEP_TYPE_META: Array<{ value: DepType; code: string; labelKey: string }> = [
+  { value: 'finish_to_start', code: 'FS', labelKey: 'depTypeFinishToStart' },
+  { value: 'start_to_start', code: 'SS', labelKey: 'depTypeStartToStart' },
+  { value: 'finish_to_finish', code: 'FF', labelKey: 'depTypeFinishToFinish' },
+  { value: 'start_to_finish', code: 'SF', labelKey: 'depTypeStartToFinish' },
 ];
-const DEP_TYPE_CODE: Record<string, string> = Object.fromEntries(DEP_TYPE_OPTIONS.map((o) => [o.value, o.code]));
+const DEP_TYPE_CODE: Record<string, string> = Object.fromEntries(DEP_TYPE_META.map((o) => [o.value, o.code]));
 
 /** Longest-path layering over precedence edges; cycle nodes fall back to layer 0. */
 function layout(tasks: Task[], deps: DependencyEdge[]): Map<number, { x: number; y: number }> {
@@ -95,10 +101,11 @@ function cycleEdgeKeys(deps: DependencyEdge[]): Set<string> {
   return bad;
 }
 
-export function DependencyGraph() {
-  const { projectId } = usePmScope();
-  const tasksQ = usePmData<Task[]>(() => (projectId == null ? Promise.resolve([]) : tasksApi.list(projectId)), [projectId]);
-  const depsQ = usePmData<DependencyEdge[]>(() => (projectId == null ? Promise.resolve([]) : tasksApi.dependencies(projectId)), [projectId]);
+/** The dependency graph for ONE project. `readOnly` hides the editor (rollup use). */
+function OneProjectDependencyGraph({ projectId, readOnly }: { projectId: number; readOnly?: boolean }) {
+  const t = useTranslations('pm');
+  const tasksQ = usePmData<Task[]>(() => tasksApi.list(projectId), [projectId]);
+  const depsQ = usePmData<DependencyEdge[]>(() => tasksApi.dependencies(projectId), [projectId]);
 
   const [nodes, setNodes, onNodesChange] = useNodesState<Node>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
@@ -139,7 +146,7 @@ export function DependencyGraph() {
         animated: !onCycle,
         markerEnd: { type: MarkerType.ArrowClosed },
         style: { stroke: onCycle ? '#dc2626' : 'var(--coral-bright, #f97316)', strokeWidth: 2 },
-        label: onCycle ? '⚠ cycle' : d.depType !== 'finish_to_start' ? DEP_TYPE_CODE[d.depType] : undefined,
+        label: onCycle ? t('depCycle') : d.depType !== 'finish_to_start' ? DEP_TYPE_CODE[d.depType] : undefined,
         data: { edgeId: d.id },
       };
     });
@@ -154,16 +161,15 @@ export function DependencyGraph() {
         markerEnd: { type: MarkerType.Arrow },
       }));
     return { flowNodes, edges: [...epicEdges, ...depEdges] };
-  }, [tasks, deps]);
+  }, [tasks, deps, t]);
 
   useEffect(() => {
     if (built) { setNodes(built.flowNodes); setEdges(built.edges); }
   }, [built, setNodes, setEdges]);
 
-  if (projectId == null) return <PmSelectProject what="dependencies" />;
   if (tasksQ.error || depsQ.error) return <PmError message={tasksQ.error ?? depsQ.error ?? 'error'} />;
-  if (!tasks || !deps) return <PmEmpty message="Loading dependency graph…" />;
-  if (!tasks.length) return <PmEmpty message="No tasks in this project yet." />;
+  if (!tasks || !deps) return <PmEmpty message={t('depLoading')} />;
+  if (!tasks.length) return <PmEmpty message={t('noTasksProject')} />;
 
   const reload = () => { tasksQ.reload(); depsQ.reload(); };
 
@@ -171,7 +177,7 @@ export function DependencyGraph() {
     setFormError(null);
     const pred = Number(predId);
     const succ = Number(succId);
-    if (!pred || !succ) { setFormError('Pick both a predecessor and a successor.'); return; }
+    if (!pred || !succ) { setFormError(t('depPickBoth')); return; }
     setBusy(true);
     try {
       await tasksApi.addDependency(succ, pred, depType);
@@ -185,9 +191,10 @@ export function DependencyGraph() {
   };
 
   const onEdgeClick = async (_: unknown, edge: Edge) => {
+    if (readOnly) return;
     const edgeId = (edge.data as { edgeId?: number } | undefined)?.edgeId;
     if (edgeId == null) return; // epic edges aren't deletable here
-    if (!window.confirm('Remove this dependency?')) return;
+    if (!window.confirm(t('depRemoveConfirm'))) return;
     try { await tasksApi.removeDependency(edgeId); reload(); } catch { /* surfaced on next load */ }
   };
 
@@ -198,30 +205,32 @@ export function DependencyGraph() {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-        <Select aria-label="Predecessor task" value={predId} onChange={(e) => setPredId(e.target.value)} style={selectStyle}>
-          <option value="">Predecessor (blocks)…</option>
-          {tasks.map((t) => <option key={t.id} value={t.id}>{t.key} · {t.title}</option>)}
-        </Select>
-        <span style={{ color: 'var(--text-muted)' }}>→</span>
-        <Select aria-label="Successor task" value={succId} onChange={(e) => setSuccId(e.target.value)} style={selectStyle}>
-          <option value="">Successor (blocked by)…</option>
-          {tasks.map((t) => <option key={t.id} value={t.id}>{t.key} · {t.title}</option>)}
-        </Select>
-        <Select aria-label="Dependency type" value={depType} onChange={(e) => setDepType(e.target.value as DepType)} style={selectStyle}>
-          {DEP_TYPE_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-        </Select>
-        <button
-          type="button"
-          onClick={addEdge}
-          disabled={busy}
-          style={{ padding: '6px 14px', borderRadius: 6, border: 'none', background: 'var(--coral-bright)', color: '#fff', fontWeight: 600, cursor: busy ? 'default' : 'pointer', opacity: busy ? 0.6 : 1 }}
-        >
-          Add dependency
-        </button>
-        {formError && <span style={{ color: 'var(--danger, #dc2626)', fontSize: 13 }}>{formError}</span>}
-      </div>
-      <div style={{ height: 520, border: '1px solid var(--border-subtle)', borderRadius: 12, overflow: 'hidden' }}>
+      {!readOnly && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+          <Select aria-label={t('ariaPredecessor')} value={predId} onChange={(e) => setPredId(e.target.value)} style={selectStyle}>
+            <option value="">{t('depPredecessor')}</option>
+            {tasks.map((tk) => <option key={tk.id} value={tk.id}>{tk.key} · {tk.title}</option>)}
+          </Select>
+          <span style={{ color: 'var(--text-muted)' }}>→</span>
+          <Select aria-label={t('ariaSuccessor')} value={succId} onChange={(e) => setSuccId(e.target.value)} style={selectStyle}>
+            <option value="">{t('depSuccessor')}</option>
+            {tasks.map((tk) => <option key={tk.id} value={tk.id}>{tk.key} · {tk.title}</option>)}
+          </Select>
+          <Select aria-label={t('ariaDepType')} value={depType} onChange={(e) => setDepType(e.target.value as DepType)} style={selectStyle}>
+            {DEP_TYPE_META.map((o) => <option key={o.value} value={o.value}>{t(o.labelKey)}</option>)}
+          </Select>
+          <button
+            type="button"
+            onClick={addEdge}
+            disabled={busy}
+            style={{ padding: '6px 14px', borderRadius: 6, border: 'none', background: 'var(--coral-bright)', color: '#fff', fontWeight: 600, cursor: busy ? 'default' : 'pointer', opacity: busy ? 0.6 : 1 }}
+          >
+            {t('depAddButton')}
+          </button>
+          {formError && <span style={{ color: 'var(--danger, #dc2626)', fontSize: 13 }}>{formError}</span>}
+        </div>
+      )}
+      <div style={{ height: readOnly ? 360 : 520, border: '1px solid var(--border-subtle)', borderRadius: 12, overflow: 'hidden' }}>
         <ReactFlow
           nodes={nodes}
           edges={edges}
@@ -235,9 +244,36 @@ export function DependencyGraph() {
           <Controls />
         </ReactFlow>
       </div>
-      <div style={{ fontSize: '0.74rem', color: 'var(--text-muted)' }}>
-        Solid arrows = blocking dependency · dashed = epic decomposition · red = cycle (click a solid edge to remove).
-      </div>
+      {!readOnly && (
+        <div style={{ fontSize: '0.74rem', color: 'var(--text-muted)' }}>
+          {t('depLegend')}
+        </div>
+      )}
+    </div>
+  );
+}
+
+export function DependencyGraph() {
+  const t = useTranslations('pm');
+  const { projectId } = usePmScope();
+  // Optional: present in the app shell, absent in embed (which scopes explicitly).
+  const scope = useOptionalProjectScope();
+
+  if (projectId != null) return <OneProjectDependencyGraph projectId={projectId} />;
+
+  // All-projects rollup: a read-only graph per project under its heading.
+  const projects = scope?.projects ?? [];
+  if (projects.length === 0) return <PmEmpty message={t('noEpicsAnywhere')} />;
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
+      <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>{t('depAllProjectsCaption')}</div>
+      {projects.map((p) => (
+        <div key={p.id} style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <h3 style={{ fontSize: '0.95rem', fontWeight: 700, margin: 0 }}>{p.name}</h3>
+          <OneProjectDependencyGraph projectId={p.id} readOnly />
+        </div>
+      ))}
     </div>
   );
 }

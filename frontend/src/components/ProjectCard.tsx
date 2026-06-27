@@ -268,7 +268,7 @@ export function ProjectCard({
           type="button"
           onClick={(e) => {
             e.stopPropagation();
-            window.location.href = `/workflows?projectId=${project.id}`;
+            window.location.href = `/workflows?project=${project.id}`;
           }}
           style={{
             fontSize: 12,

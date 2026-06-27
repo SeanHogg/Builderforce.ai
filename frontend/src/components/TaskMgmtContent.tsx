@@ -19,6 +19,7 @@ import {
 } from '@/lib/builderforceApi';
 import type { Project } from '@/lib/types';
 import { fetchProjects } from '@/lib/api';
+import { useOptionalProjectScope } from '@/lib/ProjectScopeContext';
 import { getProjectWorkforce } from '@/lib/teams';
 import { useBrainDataRefresh } from '@/lib/brain/useBrainDataRefresh';
 import {
@@ -157,8 +158,12 @@ export function TaskMgmtContent({
   projects: projectsProp,
   compact = false,
 }: TaskMgmtContentProps) {
+  // Global project scope (present in the app shell, absent in embed/standalone).
+  // When present it is the single project picker — the board's own project filter
+  // is hidden and the TopBar tenant→project selector drives scope instead.
+  const globalScope = useOptionalProjectScope();
   const [tasks, setTasks] = useState<Task[]>([]);
-  const [projects, setProjects] = useState<Project[]>(projectsProp ?? []);
+  const [projects, setProjects] = useState<Project[]>(projectsProp ?? globalScope?.projects ?? []);
   const [agentHostsList, setAgentHostsList] = useState<AgentHost[]>([]);
   const [cloudAgentsList, setCloudAgentsList] = useState<CloudAgentTarget[]>([]);
   const [membersList, setMembersList] = useState<TeamMember[]>([]);
@@ -251,12 +256,14 @@ export function TaskMgmtContent({
       setAgentHostsList(teamSet ? agentHostsData.filter((h) => teamSet.has(`host_agent:${h.id}`)) : agentHostsData);
       setCloudAgentsList(teamSet ? runTargets.cloudAgents.filter((a) => teamSet.has(`cloud_agent:${a.ref}`)) : runTargets.cloudAgents);
       setMembersList(teamSet ? membersData.filter((m) => teamSet.has(`human:${m.id}`)) : membersData);
-      // Always resolve the full project list (unless the parent supplied one):
-      // it backs both the project filter and the "Move to board" destinations,
-      // which are needed even in the scoped (single-project) view.
+      // Always resolve the full project list (unless the parent supplied one or
+      // the global scope already holds it): it backs both the project filter and
+      // the "Move to board" destinations, needed even in the scoped view. When a
+      // global ProjectScope is present we reuse its list (kept in sync by an
+      // effect below) instead of re-fetching it here.
       if (projectsProp) {
         setProjects(projectsProp);
-      } else {
+      } else if (!globalScope) {
         const projs = await fetchProjects().catch(() => []);
         setProjects(projs);
       }
@@ -265,7 +272,13 @@ export function TaskMgmtContent({
     } finally {
       setLoading(false);
     }
-  }, [projectId, projectsProp]);
+  }, [projectId, projectsProp, globalScope]);
+
+  // Keep the project list mirrored from the global scope (single source) when no
+  // explicit list was supplied — avoids a duplicate fetchProjects round-trip.
+  useEffect(() => {
+    if (!projectsProp && globalScope) setProjects(globalScope.projects);
+  }, [projectsProp, globalScope]);
 
   useEffect(() => {
     load();
@@ -998,7 +1011,7 @@ export function TaskMgmtContent({
               </option>
             ))}
           </Select>
-          {!projectId && (
+          {!projectId && !globalScope && (
             <Select
               value={filterProject}
               onChange={(e) => setFilterProject(e.target.value)}

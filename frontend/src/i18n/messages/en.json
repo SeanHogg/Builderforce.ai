@@ -71,7 +71,32 @@
     "noTasksProject": "No tasks in this project yet.",
     "noEpicsAnywhere": "No tasks across your projects yet.",
     "unparented": "Unparented ({count})",
-    "allProjectsCaption": "Showing every project’s epics. Pick a project in the top bar to focus on one."
+    "allProjectsCaption": "Showing every project’s epics. Pick a project in the top bar to focus on one.",
+    "depCycle": "⚠ cycle",
+    "depLoading": "Loading dependency graph…",
+    "depPredecessor": "Predecessor (blocks)…",
+    "depSuccessor": "Successor (blocked by)…",
+    "depAddButton": "Add dependency",
+    "depPickBoth": "Pick both a predecessor and a successor.",
+    "depRemoveConfirm": "Remove this dependency?",
+    "depLegend": "Solid arrows = blocking dependency · dashed = epic decomposition · red = cycle (click a solid edge to remove).",
+    "depAllProjectsCaption": "Showing dependencies across all projects (read-only). Pick a project in the top bar to edit them.",
+    "ariaPredecessor": "Predecessor task",
+    "ariaSuccessor": "Successor task",
+    "ariaDepType": "Dependency type",
+    "depTypeFinishToStart": "Finish → Start",
+    "depTypeStartToStart": "Start → Start",
+    "depTypeFinishToFinish": "Finish → Finish",
+    "depTypeStartToFinish": "Start → Finish"
+  },
+  "ide": {
+    "all": "All",
+    "filteredTo": "Filtered to {name}",
+    "clearProjectFilter": "Clear project filter",
+    "loadingProjects": "Loading projects…",
+    "noProjectsFilter": "No projects match this filter. Create a new one above.",
+    "noProjectsYet": "No projects yet. Pick a type above to create your first one.",
+    "deleteFailed": "Failed to delete project"
   },
   "tools": {
     "outOf5": "out of 5.0",

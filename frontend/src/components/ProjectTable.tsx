@@ -133,7 +133,7 @@ export function ProjectTable({
                   </button>
                   <button
                     type="button"
-                    onClick={() => router.push(`/workflows?projectId=${project.id}`)}
+                    onClick={() => router.push(`/workflows?project=${project.id}`)}
                     aria-label="View workflows"
                     title={`Workflows${project.workflowCount != null ? ` (${project.workflowCount})` : ''}`}
                     style={iconButtonStyle}
