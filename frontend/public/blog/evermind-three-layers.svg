@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 860 330" font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, sans-serif">
+  <rect width="860" height="330" fill="#0E1525"/>
+  <text x="430" y="40" fill="#FFFFFF" font-size="22" font-weight="700" text-anchor="middle">Three layers, one brain</text>
+
+  <!-- Generator -->
+  <rect x="40" y="78" width="250" height="170" rx="14" fill="#15203A" stroke="#FF6B5C"/>
+  <text x="165" y="108" fill="#fff" font-size="15" font-weight="700" text-anchor="middle">Generator</text>
+  <text x="165" y="130" fill="#ffb3aa" font-size="12" text-anchor="middle">shared-expert hybrid SSM</text>
+  <text x="165" y="160" fill="#9fb0cd" font-size="12" text-anchor="middle">dense always-on backbone</text>
+  <text x="165" y="180" fill="#9fb0cd" font-size="12" text-anchor="middle">+ routed experts page in</text>
+  <text x="165" y="208" fill="#7fd6b3" font-size="11" text-anchor="middle">continuous online learning</text>
+  <text x="165" y="226" fill="#7fd6b3" font-size="11" text-anchor="middle">— no frozen blob</text>
+
+  <!-- Memory -->
+  <rect x="305" y="78" width="250" height="170" rx="14" fill="#15203A" stroke="#3FE0A5"/>
+  <text x="430" y="108" fill="#fff" font-size="15" font-weight="700" text-anchor="middle">Write-through memory</text>
+  <text x="430" y="130" fill="#9ff0cf" font-size="12" text-anchor="middle">corrects in place</text>
+  <text x="430" y="160" fill="#9fb0cd" font-size="12" text-anchor="middle">upsert by stable key</text>
+  <text x="430" y="180" fill="#9fb0cd" font-size="12" text-anchor="middle">+ invalidate old recall</text>
+  <text x="430" y="208" fill="#7fd6b3" font-size="11" text-anchor="middle">never two copies of</text>
+  <text x="430" y="226" fill="#7fd6b3" font-size="11" text-anchor="middle">the same truth</text>
+
+  <!-- Limbic -->
+  <rect x="570" y="78" width="250" height="170" rx="14" fill="#15203A" stroke="#c084fc"/>
+  <text x="695" y="108" fill="#fff" font-size="15" font-weight="700" text-anchor="middle">Limbic dynamics</text>
+  <text x="695" y="130" fill="#d8b4fe" font-size="12" text-anchor="middle">trainable affect layer</text>
+  <text x="695" y="160" fill="#9fb0cd" font-size="12" text-anchor="middle">personality = setpoints</text>
+  <text x="695" y="180" fill="#9fb0cd" font-size="12" text-anchor="middle">limbic state = dynamics</text>
+  <text x="695" y="208" fill="#d8b4fe" font-size="11" text-anchor="middle">consistent persona</text>
+  <text x="695" y="226" fill="#d8b4fe" font-size="11" text-anchor="middle">behaviour</text>
+
+  <text x="430" y="296" fill="#52617d" font-size="12" text-anchor="middle">The same three layers the homepage neural animation lights up as information travels through it.</text>
+</svg>

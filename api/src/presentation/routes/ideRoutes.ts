@@ -681,6 +681,43 @@ export function createIdeRoutes(): Hono<HonoEnv> {
     return c.json(rows);
   });
 
+  // ── Shared agent-inference helpers (used by both the published-agent chat
+  //    endpoint and the pre-publish validate endpoint so the persona/memory
+  //    prompt is built identically in both paths — single source of truth). ──
+  type AgentDescriptor = {
+    name: string;
+    title: string;
+    bio: string;
+    skills: string[] | string | null;
+    r2_artifact_key?: string | null;
+    mamba_state?: unknown;
+  };
+  type ChatMessage = { role: 'system' | 'user' | 'assistant'; content: string };
+
+  const resolveInferenceMode = (d: AgentDescriptor): 'base' | 'lora' | 'hybrid' => {
+    const hasLora = !!d.r2_artifact_key;
+    const hasMamba = !!d.mamba_state;
+    return hasLora && hasMamba ? 'hybrid' : hasLora ? 'lora' : 'base';
+  };
+
+  const buildAgentSystemPrompt = (d: AgentDescriptor): string => {
+    const skills = Array.isArray(d.skills) ? d.skills.join(', ') : (d.skills ?? '');
+    let system = `You are ${d.name}, ${d.title}. ${d.bio}\n\nSkills: ${skills}`;
+    if (d.mamba_state) {
+      const snap = d.mamba_state as { step?: number; data?: number[] };
+      const signal = snap.data ? snap.data.slice(0, 4).map((v) => v.toFixed(3)).join(',') : '';
+      system += `\n\n[Memory: step=${snap.step ?? 0} signal=${signal} context="persistent agent state"]`;
+    }
+    return system;
+  };
+
+  /** Prepends/merges the agent persona system prompt into a message list. */
+  const applyAgentSystem = (messages: ChatMessage[], system: string): ChatMessage[] => {
+    const existing = messages.find((m) => m.role === 'system');
+    if (existing) return messages.map((m) => (m.role === 'system' ? { ...m, content: system + '\n\n' + m.content } : m));
+    return [{ role: 'system', content: system }, ...messages];
+  };
+
   router.post('/agents', async (c) => {
     const body = await c.req.json<{
       project_id: string | number;
@@ -799,28 +836,18 @@ export function createIdeRoutes(): Hono<HonoEnv> {
     const [agent] = await getSql(c)`SELECT * FROM ide_agents WHERE id = ${agentId}`;
     if (!agent) return c.json({ error: 'Agent not found' }, 404);
 
-    const inferenceMode = (agent.inference_mode as string) ?? 'base';
-    let messages = body.messages.map((m) => ({ role: m.role as 'system' | 'user' | 'assistant', content: m.content }));
-
-    // Inject Mamba state as memory context into system prompt (v1-style: no WebGPU needed)
-    if (agent.mamba_state) {
-      const snap = agent.mamba_state as { step?: number; data?: number[] };
-      const signal = snap.data ? snap.data.slice(0, 4).map((v: number) => v.toFixed(3)).join(',') : '';
-      const memoryLine = `[Memory: step=${snap.step ?? 0} signal=${signal} context="persistent agent state"]`;
-      const agentSystem = `You are ${agent.name as string}, ${agent.title as string}. ${agent.bio as string}\n\nSkills: ${Array.isArray(agent.skills) ? (agent.skills as string[]).join(', ') : agent.skills}\n\n${memoryLine}`;
-      const existing = messages.find((m) => m.role === 'system');
-      if (existing) {
-        messages = messages.map((m) => m.role === 'system' ? { ...m, content: agentSystem + '\n\n' + m.content } : m);
-      } else {
-        messages = [{ role: 'system', content: agentSystem }, ...messages];
-      }
-    } else {
-      const agentSystem = `You are ${agent.name as string}, ${agent.title as string}. ${agent.bio as string}\n\nSkills: ${Array.isArray(agent.skills) ? (agent.skills as string[]).join(', ') : agent.skills}`;
-      const existing = messages.find((m) => m.role === 'system');
-      if (!existing) {
-        messages = [{ role: 'system', content: agentSystem }, ...messages];
-      }
-    }
+    const descriptor: AgentDescriptor = {
+      name: agent.name as string,
+      title: agent.title as string,
+      bio: agent.bio as string,
+      skills: agent.skills as string[] | string | null,
+      r2_artifact_key: agent.r2_artifact_key as string | null,
+      mamba_state: agent.mamba_state,
+    };
+    const inferenceMode = (agent.inference_mode as string) ?? resolveInferenceMode(descriptor);
+    const baseMessages = body.messages.map((m) => ({ role: m.role as 'system' | 'user' | 'assistant', content: m.content }));
+    // Persona + Mamba-memory system prompt is built by the shared helper (same as validate).
+    const messages = applyAgentSystem(baseMessages, buildAgentSystemPrompt(descriptor));
 
     const logId = generateId();
     const startMs = Date.now();

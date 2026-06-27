@@ -72,7 +72,7 @@ The other five layers already meet-or-exceed the reference (multi-vendor gateway
 
 - **Inline eval** ships with the scorer — zero added cost, active immediately on every cloud run.
 - **LLM-judge route** routes through the metered gateway; judge spend is billed/capped per tenant like any completion.
-- **LanceDB hybrid path** activates in prod once `@seanhogg/builderforce-memory` is published with the `./retrieval` subpath export (npm-publish step; builds + resolves in-workspace today).
+- **LanceDB hybrid path** is live: all three memory packages published to npm at **`2026.6.28`** (tag `v2026.6.28` → `release.yml`, green) with the `./retrieval` subpath export; agent-runtime resolves it and `pnpm tsgo` typechecks clean.
 
 ## 6. Risks & open residuals
 

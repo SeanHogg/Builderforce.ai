@@ -249,11 +249,11 @@ importers:
         version: 4.0.18(@opentelemetry/api@1.9.0)(@types/node@25.3.0)(@vitest/browser-playwright@4.0.18)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.2)
     optionalDependencies:
       '@seanhogg/builderforce-memory':
-        specifier: ^2026.6.27
-        version: 2026.6.27(@seanhogg/builderforce-memory-engine@2026.6.27)
+        specifier: ^2026.6.28
+        version: 2026.6.28(@seanhogg/builderforce-memory-engine@2026.6.28)
       '@seanhogg/builderforce-memory-engine':
-        specifier: ^2026.6.27
-        version: 2026.6.27
+        specifier: ^2026.6.28
+        version: 2026.6.28
 
   extensions/bluebubbles:
     devDependencies:
@@ -414,6 +414,9 @@ importers:
       '@lancedb/lancedb':
         specifier: ^0.26.2
         version: 0.26.2(apache-arrow@18.1.0)
+      '@seanhogg/builderforce-memory':
+        specifier: ^2026.6.28
+        version: 2026.6.28(@seanhogg/builderforce-memory-engine@2026.6.28)
       '@sinclair/typebox':
         specifier: 0.34.48
         version: 0.34.48
@@ -2477,15 +2480,15 @@ packages:
   '@scure/bip39@2.0.1':
     resolution: {integrity: sha512-PsxdFj/d2AcJcZDX1FXN3dDgitDDTmwf78rKZq1a6c1P1Nan1X/Sxc7667zU3U+AN60g7SxxP0YCVw2H/hBycg==}
 
-  '@seanhogg/builderforce-memory-engine@2026.6.27':
-    resolution: {integrity: sha512-MkNmxnVkg5jHJ1Ik6PjnNySfeGpKFJyBK+ZOGRCBYC0hTBhETqFbXlkY9mt0qTOBal4X7IRG1aV25hctuQlQUA==}
+  '@seanhogg/builderforce-memory-engine@2026.6.28':
+    resolution: {integrity: sha512-3/Y21asvxjB2e0t+fup+lzIbKN7qgP2QUnA1y/nyzg+m6S+ISMCDvaa6SmbN4jDoAX+pZT0UbinkHc2SGo77og==}
     engines: {node: '>=18.0.0'}
 
-  '@seanhogg/builderforce-memory@2026.6.27':
-    resolution: {integrity: sha512-mOocgq37UvvpO77Me0JmJBodx96aieeTz7cQRfsFCoU0KyBlVgLV52EqlYEDwe2/B5gnEcrreCK7HB7/rIrxHw==}
+  '@seanhogg/builderforce-memory@2026.6.28':
+    resolution: {integrity: sha512-zHJZfsR0NVgeM4nqVC0b2h1TExKzz1nCsKTu4WOtpdc2zP/arZVnBfNm3CU40SqKcDRd1ctH6idbc73ZswbfUA==}
     engines: {node: '>=18.0.0'}
     peerDependencies:
-      '@seanhogg/builderforce-memory-engine': ^2026.6.27
+      '@seanhogg/builderforce-memory-engine': ^2026.6.28
 
   '@selderee/plugin-htmlparser2@0.11.0':
     resolution: {integrity: sha512-P33hHGdldxGabLFjPPpaTxVolMrzrcegejx+0GxjrIb9Zv48D8yAIA/QTDR2dFl7Uz7urX8aX6+5bCZslr+gWQ==}
@@ -7464,13 +7467,11 @@ snapshots:
       '@noble/hashes': 2.0.1
       '@scure/base': 2.0.0
 
-  '@seanhogg/builderforce-memory-engine@2026.6.27':
-    optional: true
+  '@seanhogg/builderforce-memory-engine@2026.6.28': {}
 
-  '@seanhogg/builderforce-memory@2026.6.27(@seanhogg/builderforce-memory-engine@2026.6.27)':
+  '@seanhogg/builderforce-memory@2026.6.28(@seanhogg/builderforce-memory-engine@2026.6.28)':
     dependencies:
-      '@seanhogg/builderforce-memory-engine': 2026.6.27
-    optional: true
+      '@seanhogg/builderforce-memory-engine': 2026.6.28
 
   '@selderee/plugin-htmlparser2@0.11.0':
     dependencies:

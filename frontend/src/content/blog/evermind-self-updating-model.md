@@ -20,18 +20,13 @@ Picture a knowledge store that *appends*. Every new fact lands next to the old o
 
 Write-Through Cognition kills the cycle at the source. It is the same rule the platform already uses for caching — *invalidate on write, keep data current until new data is created* — applied to a model's knowledge tier. An update is an **upsert by a stable key plus an invalidation of the old recall**, never an append. The model can't accumulate two copies of the same truth, so there is nothing to reconcile.
 
-```
-Conventional model          Evermind (write-through)
-──────────────────          ────────────────────────
-train → freeze              learn → write through
-new fact → append           new fact → upsert-by-key + invalidate
-read → stale + fresh        read → always latest
-                → reconcile (manual)        (no reconcile step)
-```
+![Conventional append-then-reconcile vs Evermind's upsert-by-key + invalidate](/blog/evermind-write-through.svg)
 
 ## Three layers, one brain
 
 Evermind isn't a single monolith. It's three cooperating layers — the same three the homepage's neural animation lights up as information travels through it:
+
+![Evermind's three layers: shared-expert hybrid generator, write-through memory, and limbic dynamics](/blog/evermind-three-layers.svg)
 
 - **The generator — a shared-expert hybrid SSM.** A dense, always-on backbone carries continuous online learning (and solves the attribution problem that makes online learning hard), while lazily-loaded routed experts page in on demand. You get specialist depth without shipping one giant frozen blob.
 - **Write-through memory.** Every fact upserts by a stable key and invalidates its prior recall. The knowledge loop *corrects in place* instead of drifting.

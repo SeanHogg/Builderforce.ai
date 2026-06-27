@@ -1,0 +1,42 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 860 380" font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, sans-serif">
+  <defs>
+    <marker id="ewa" markerWidth="10" markerHeight="10" refX="7" refY="3" orient="auto"><path d="M0,0 L7,3 L0,6 Z" fill="#8FA0BD"/></marker>
+  </defs>
+  <rect width="860" height="380" fill="#0E1525"/>
+  <text x="430" y="40" fill="#FFFFFF" font-size="22" font-weight="700" text-anchor="middle">Write-Through Cognition — update means replace, not append</text>
+
+  <!-- Conventional column -->
+  <text x="215" y="78" fill="#ff9d92" font-size="15" font-weight="700" text-anchor="middle">Conventional model</text>
+  <g>
+    <rect x="60" y="92" width="310" height="46" rx="9" fill="#15203A" stroke="#3a2330"/>
+    <text x="78" y="120" fill="#DCE6F7" font-size="13">train → freeze</text>
+    <rect x="60" y="146" width="310" height="46" rx="9" fill="#15203A" stroke="#3a2330"/>
+    <text x="78" y="174" fill="#DCE6F7" font-size="13">new fact → append (sits beside the old)</text>
+    <rect x="60" y="200" width="310" height="46" rx="9" fill="#15203A" stroke="#3a2330"/>
+    <text x="78" y="228" fill="#DCE6F7" font-size="13">read → stale + fresh, side by side</text>
+    <rect x="60" y="254" width="310" height="56" rx="9" fill="#2a1822" stroke="#E8472F"/>
+    <text x="78" y="280" fill="#ffb3aa" font-size="13" font-weight="700">⟳ reconcile (manual / pipeline)</text>
+    <text x="78" y="299" fill="#cf8c84" font-size="11">the drift-then-fix cycle</text>
+  </g>
+  <line x1="60" y1="138" x2="215" y2="146" stroke="#5a3a44" stroke-width="1.5" marker-end="url(#ewa)"/>
+  <line x1="215" y1="192" x2="215" y2="200" stroke="#5a3a44" stroke-width="1.5" marker-end="url(#ewa)"/>
+  <line x1="215" y1="246" x2="215" y2="254" stroke="#5a3a44" stroke-width="1.5" marker-end="url(#ewa)"/>
+
+  <!-- Evermind column -->
+  <text x="645" y="78" fill="#7fd6b3" font-size="15" font-weight="700" text-anchor="middle">Evermind — write-through</text>
+  <g>
+    <rect x="490" y="92" width="310" height="46" rx="9" fill="#15203A" stroke="#1f8f63"/>
+    <text x="508" y="120" fill="#DCE6F7" font-size="13">learn → write through</text>
+    <rect x="490" y="146" width="310" height="46" rx="9" fill="#15203A" stroke="#1f8f63"/>
+    <text x="508" y="174" fill="#DCE6F7" font-size="13">new fact → upsert-by-key + invalidate</text>
+    <rect x="490" y="200" width="310" height="46" rx="9" fill="#15203A" stroke="#1f8f63"/>
+    <text x="508" y="228" fill="#DCE6F7" font-size="13">read → always latest</text>
+    <rect x="490" y="254" width="310" height="56" rx="9" fill="#13261d" stroke="#3FE0A5"/>
+    <text x="508" y="285" fill="#9ff0cf" font-size="13" font-weight="700">✓ no reconcile step — nothing to merge</text>
+  </g>
+  <line x1="645" y1="138" x2="645" y2="146" stroke="#1f8f63" stroke-width="1.5" marker-end="url(#ewa)"/>
+  <line x1="645" y1="192" x2="645" y2="200" stroke="#1f8f63" stroke-width="1.5" marker-end="url(#ewa)"/>
+  <line x1="645" y1="246" x2="645" y2="254" stroke="#1f8f63" stroke-width="1.5" marker-end="url(#ewa)"/>
+
+  <text x="430" y="352" fill="#52617d" font-size="12" text-anchor="middle">Same rule the platform uses for caching — invalidate on write — applied to the model's knowledge tier.</text>
+</svg>
