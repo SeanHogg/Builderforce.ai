@@ -15,6 +15,7 @@ import type {
   AgentTransportDispatchResult,
   IAgentTransport,
   IAgentMemoryService,
+  ILimbicSystem,
   ILlmService,
   IMcpService,
   ITelemetryService,
@@ -126,6 +127,7 @@ export type OrchestratorConfig = {
   relayService?: IRelayService;
   llmService?: ILlmService | null;
   mcpService?: IMcpService | null;
+  limbicSystem?: ILimbicSystem | null;
 };
 
 /**
@@ -147,6 +149,8 @@ export class AgentOrchestrator {
   private llmService: ILlmService | null = null;
   /** Domain port: MCP / SaaS integration invocation (builder `mcp` nodes). */
   private mcpService: IMcpService | null = null;
+  /** Domain port: the agent's limbic system (dynamic affective layer). */
+  private limbicSystem: ILimbicSystem | null = null;
   /** Unified local/remote transport for task dispatch and agentNode discovery.
    *  Always wired by the gateway (local-only when no API key, composite when
    *  BUILDERFORCE_API_KEY is present). */
@@ -213,6 +217,14 @@ export class AgentOrchestrator {
     if (config.mcpService !== undefined) {
       this.mcpService = config.mcpService;
     }
+    if (config.limbicSystem !== undefined) {
+      this.limbicSystem = config.limbicSystem;
+    }
+  }
+
+  /** The configured limbic system, if any. Null when no affective layer is wired. */
+  getLimbicSystem(): ILimbicSystem | null {
+    return this.limbicSystem;
   }
 
   // ── Single-port shims (kept for backward compatibility) ──────────────────────

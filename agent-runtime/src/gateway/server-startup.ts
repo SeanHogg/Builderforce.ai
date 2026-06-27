@@ -33,6 +33,7 @@ import { loadHiredAgentsCached } from "../infra/hired-agents-sync.js";
 import { KnowledgeLoopService, setKnowledgeLoopService } from "../infra/knowledge-loop.js";
 import { LocalAgentTransport } from "../infra/local-agent-transport.js";
 import {
+  LimbicSystemAdapter,
   LocalResultBrokerAdapter,
   SsmMemoryAdapter,
   WorkflowTelemetryAdapter,
@@ -42,6 +43,7 @@ import { pushProjectContextToBuilderforce } from "../infra/project-context-push.
 import { checkAndWarnQuota } from "../infra/quota-monitor.js";
 import { fetchAndLoadSkills } from "../infra/skill-registry.js";
 import { initSsmMemoryService } from "../infra/ssm-memory-service.js";
+import { initLimbicSystemService } from "../infra/limbic-system-service.js";
 import { WorkflowPollerService } from "../infra/workflow-poller.js";
 import type { loadBuilderForceAgentsPlugins } from "../plugins/loader.js";
 import { type PluginServicesHandle, startPluginServices } from "../plugins/services.js";
@@ -262,6 +264,19 @@ function startMemoryBackend(
     })
     .catch((err) => {
       params.log.warn(`[ssm-memory] startup failed: ${String(err)}`);
+    });
+
+  // Limbic system — the dynamic affective layer riding on the hippocampus +
+  // personality. Always starts (heuristic regions even without GPU/model).
+  void initLimbicSystemService({
+    checkpointPath: `${params.defaultWorkspaceDir}/.builderforce/limbic.bin`,
+  })
+    .then((svc) => {
+      params.log.warn(`[limbic] affective layer started (model=${svc.modelAvailable}, gpu=${svc.gpuAvailable})`);
+      globalOrchestrator.configure({ limbicSystem: new LimbicSystemAdapter() });
+    })
+    .catch((err) => {
+      params.log.warn(`[limbic] startup failed: ${String(err)}`);
     });
 }
 
