@@ -30,7 +30,7 @@ export function renderBrandOg({ title, eyebrow }: { title: string; eyebrow?: str
               width: 46,
               height: 46,
               borderRadius: 13,
-              background: 'linear-gradient(135deg, #ff6b5e, #e23b2e)',
+              background: 'linear-gradient(135deg, #22d3ee, #2563eb 55%, #7c3aed)',
               display: 'flex',
             }}
           />
@@ -43,7 +43,7 @@ export function renderBrandOg({ title, eyebrow }: { title: string; eyebrow?: str
               style={{
                 fontSize: 26,
                 fontWeight: 600,
-                color: '#ff8a7e',
+                color: '#5eb8ff',
                 letterSpacing: 3,
                 textTransform: 'uppercase',
                 marginBottom: 18,
