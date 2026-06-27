@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Select } from '@/components/Select';
 import { useAuth } from '@/lib/AuthContext';
 import {
   listTeams,
@@ -446,7 +447,7 @@ function TeamDetailPanel({
       <div>
         <h3 style={sectionTitle}>Members ({detail.members.length})</h3>
         <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
-          <select
+          <Select
             style={{ ...inputStyle, flex: 1 }}
             value={memberPick}
             onChange={(e) => setMemberPick(e.target.value)}
@@ -460,7 +461,7 @@ function TeamDetailPanel({
                 {w.name} — {KIND_LABEL[w.kind]}
               </option>
             ))}
-          </select>
+          </Select>
           <button
             type="button"
             style={{ ...btnPrimary, opacity: !memberPick || busy ? 0.6 : 1 }}
@@ -496,7 +497,7 @@ function TeamDetailPanel({
       <div>
         <h3 style={sectionTitle}>Projects ({detail.projects.length})</h3>
         <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
-          <select
+          <Select
             style={{ ...inputStyle, flex: 1 }}
             value={projectPick}
             onChange={(e) => setProjectPick(e.target.value)}
@@ -508,7 +509,7 @@ function TeamDetailPanel({
             {availableProjects.map((p) => (
               <option key={p.id} value={p.id}>{p.name}{p.key ? ` (${p.key})` : ''}</option>
             ))}
-          </select>
+          </Select>
           <button
             type="button"
             style={{ ...btnPrimary, opacity: !projectPick || busy ? 0.6 : 1 }}

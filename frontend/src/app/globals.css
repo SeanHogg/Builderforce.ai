@@ -1285,8 +1285,33 @@ html[data-theme='light'] .nebula {
   min-height: 0;
   overflow-y: auto;
   overflow-x: hidden;
-  padding: 12px;
+  /* Exposed as vars so the full-bleed section-tab bar can cancel them out and
+     run flush/edge-to-edge without hardcoding (and drifting from) these values. */
+  --content-pad-x: 12px;
+  --content-pad-y: 12px;
+  padding: var(--content-pad-y) var(--content-pad-x);
   background: transparent;
+}
+
+/* The one section tab bar (SectionTabs.tsx). Breaks out of .content's padding so
+   it sits flush against the top bar and spans the full content width; the inline
+   scrollbar is hidden (it stays scrollable on narrow screens via touch/trackpad). */
+.section-tabs {
+  display: flex;
+  gap: 2px;
+  margin: calc(var(--content-pad-y) * -1) calc(var(--content-pad-x) * -1) 0;
+  padding: 0 16px;
+  border-bottom: 1px solid var(--border-subtle);
+  background: var(--bg-base);
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none; /* Firefox */
+}
+.section-tabs::-webkit-scrollbar { display: none; } /* Chrome/Safari/Edge */
+.section-tabs__inner {
+  display: flex;
+  gap: 2px;
+  width: 100%;
 }
 
 /* Canonical authenticated-page padding (set by PageContainer). Generous on
@@ -2165,7 +2190,9 @@ textarea.input { resize: vertical; line-height: 1.5; }
 
   /* Tighter content padding + clearance for the bottom bar */
   .content {
-    padding: 8px 6px calc(64px + env(safe-area-inset-bottom, 0px));
+    --content-pad-x: 6px;
+    --content-pad-y: 8px;
+    padding: var(--content-pad-y) var(--content-pad-x) calc(64px + env(safe-area-inset-bottom, 0px));
   }
 
   .page-inner { padding: 12px 8px; max-width: 100%; margin: 0; }

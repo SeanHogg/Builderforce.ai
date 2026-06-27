@@ -41,8 +41,37 @@
     }
   },
   "ceremonies": {
-    "noProjects": "暂无项目",
     "selectProject": "选择一个项目以开始仪式。"
+  },
+  "projectScope": {
+    "workspace": "工作区",
+    "allProjects": "全部项目",
+    "projectLabel": "项目",
+    "switchWorkspace": "切换工作区…",
+    "noProjects": "暂无项目",
+    "selectAria": "选择项目范围"
+  },
+  "pm": {
+    "epics": "史诗",
+    "roadmap": "路线图",
+    "roi": "投资回报",
+    "tree": "树形",
+    "flow": "流程图",
+    "timeline": "时间线",
+    "gantt": "甘特图",
+    "map": "地图",
+    "riceMatrix": "RICE 矩阵",
+    "dependencyMap": "依赖关系图",
+    "colEpicTask": "史诗 / 任务",
+    "colStatus": "状态",
+    "colPriority": "优先级",
+    "colSprint": "冲刺",
+    "scheduled": "已排期",
+    "loadingEpics": "正在加载史诗…",
+    "noTasksProject": "此项目暂无任务。",
+    "noEpicsAnywhere": "您的项目中暂无任务。",
+    "unparented": "未归类（{count}）",
+    "allProjectsCaption": "显示所有项目的史诗。在顶部栏选择某个项目以聚焦查看。"
   },
   "tools": {
     "outOf5": "满分 5.0",

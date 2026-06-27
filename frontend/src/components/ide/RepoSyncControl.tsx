@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { Select } from '@/components/Select';
 import { ideRepoApi, type RepoSyncStatus } from '@/lib/api';
 import { integrationsApi, type IntegrationCredential } from '@/lib/builderforceApi';
 
@@ -113,10 +114,10 @@ export function RepoSyncControl({ projectId, onChanged }: { projectId: number; o
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8, padding: 12, background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', borderRadius: 10 }}>
               <input style={input} placeholder="repository name" value={repoName} onChange={(e) => setRepoName(e.target.value)} />
               {creds.length > 0 ? (
-                <select style={input} value={credId} onChange={(e) => setCredId(e.target.value)}>
+                <Select style={input} value={credId} onChange={(e) => setCredId(e.target.value)}>
                   <option value="">Select a GitHub credential…</option>
                   {creds.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-                </select>
+                </Select>
               ) : (
                 <div style={{ fontSize: 12, color: 'var(--amber, #f59e0b)' }}>
                   No GitHub credential found. Add one under Integrations first.

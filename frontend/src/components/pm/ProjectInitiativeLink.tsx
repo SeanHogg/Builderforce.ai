@@ -1,6 +1,7 @@
 'use client';
 
 import { useTranslations } from 'next-intl';
+import { Select } from '@/components/Select';
 import { pmoApi, type PmoTree } from '@/lib/builderforceApi';
 import { usePmData } from '@/lib/pm/usePmData';
 import { RoleGate } from '@/components/RoleGate';
@@ -28,7 +29,7 @@ export function ProjectInitiativeLink({ projectId }: { projectId: number }) {
     <div>
       <label style={{ display: 'block', fontSize: 12, color: 'var(--text-muted)', marginBottom: 4 }}>{t('projectLink.title')}</label>
       <RoleGate capability="insights.portfolio" variant="block" silent>
-        <select
+        <Select
           value={current}
           disabled={!data}
           onChange={async (e) => {
@@ -39,7 +40,7 @@ export function ProjectInitiativeLink({ projectId }: { projectId: number }) {
         >
           <option value="">{t('projectLink.none')}</option>
           {initiatives.map((i) => <option key={i.id} value={i.id}>{i.name}</option>)}
-        </select>
+        </Select>
       </RoleGate>
       <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 6 }}>
         {data ? t('projectLink.hint') : t('projectLink.loading')}

@@ -10,6 +10,7 @@ import { useRolePreview, type PreviewRole } from '@/lib/RolePreviewContext';
 import { useEmulation } from '@/lib/EmulationContext';
 import { useCart } from '@/lib/CartContext';
 import ShoppingCart from './ShoppingCart';
+import { TenantProjectSwitcher } from './TenantProjectSwitcher';
 
 const PREVIEW_ROLES: PreviewRole[] = ['owner', 'manager', 'developer', 'viewer'];
 
@@ -68,7 +69,7 @@ function CartButton() {
 }
 
 export default function TopBar({ onMenuClick }: { onMenuClick?: () => void }) {
-  const { tenant, logout, user, isAuthenticated } = useAuth();
+  const { logout, user, isAuthenticated } = useAuth();
   const { previewRole, startPreview, exitPreview } = useRolePreview();
   const { emulation } = useEmulation();
 
@@ -123,15 +124,7 @@ export default function TopBar({ onMenuClick }: { onMenuClick?: () => void }) {
         )}
       </div>
       <div className="topbar-right">
-        {isAuthenticated && tenant && (
-          <Link href="/tenants" className="tenant-chip" style={{ textDecoration: 'none' }} title={`${tenant.name || tenant.id} (workspace)`}>
-            {tenant.name || tenant.id}
-            <span style={{ opacity: 0.6, fontWeight: 400, marginLeft: 4 }}>(workspace)</span>
-            <svg viewBox="0 0 24 24" style={{ width: 12, height: 12, stroke: 'currentColor', fill: 'none', strokeWidth: 2 }}>
-              <polyline points="6 9 12 15 18 9" />
-            </svg>
-          </Link>
-        )}
+        <TenantProjectSwitcher />
 
         {/* Role preview — superadmin only, not during emulation */}
         {isAuthenticated && user?.isSuperadmin && !emulation && (

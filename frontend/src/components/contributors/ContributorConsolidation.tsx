@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
+import { Select } from '@/components/Select';
 import {
   contributorsApi, tasksApi,
   type ContributorRow, type DuplicateGroup, type MergePreview, type MergeRecord,
@@ -130,15 +131,15 @@ export function ContributorConsolidation() {
       <div style={cardStyle}>
         <h3 style={{ fontSize: 14, fontWeight: 600, margin: '0 0 12px' }}>Merge two profiles</h3>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-          <select value={sourceId} onChange={(e) => setSourceId(e.target.value ? Number(e.target.value) : '')} style={selectStyle}>
+          <Select value={sourceId} onChange={(e) => setSourceId(e.target.value ? Number(e.target.value) : '')} style={selectStyle}>
             <option value="">Merge this…</option>
             {(contributors ?? []).map((c) => <option key={c.id} value={c.id}>{c.displayName}</option>)}
-          </select>
+          </Select>
           <span style={{ color: 'var(--text-muted)' }}>→ into →</span>
-          <select value={targetId} onChange={(e) => setTargetId(e.target.value ? Number(e.target.value) : '')} style={selectStyle}>
+          <Select value={targetId} onChange={(e) => setTargetId(e.target.value ? Number(e.target.value) : '')} style={selectStyle}>
             <option value="">…keep this</option>
             {(contributors ?? []).filter((c) => c.id !== sourceId).map((c) => <option key={c.id} value={c.id}>{c.displayName}</option>)}
-          </select>
+          </Select>
           <button
             disabled={busy || !sourceId || !targetId}
             onClick={() => sourceId && targetId && doPreview(sourceId, targetId)}
@@ -157,7 +158,7 @@ export function ContributorConsolidation() {
           {(contributors ?? []).map((c) => (
             <div key={c.id} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
               <span style={{ flex: '0 0 200px', fontSize: 13, fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.displayName}</span>
-              <select
+              <Select
                 value={c.userId ?? ''}
                 disabled={busy}
                 onChange={(e) => doLink(c.id, e.target.value || null)}
@@ -165,7 +166,7 @@ export function ContributorConsolidation() {
               >
                 <option value="">— not linked —</option>
                 {users.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
-              </select>
+              </Select>
             </div>
           ))}
         </div>

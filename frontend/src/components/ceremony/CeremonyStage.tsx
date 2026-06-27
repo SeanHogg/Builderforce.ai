@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Select } from '@/components/Select';
 import {
   tasksApi, sprintsApi, runtimeApi, ceremonySessionsApi, membersApi,
   type Task, type Sprint, type Execution, type CeremonySession, type CeremonySessionDetail, type CeremonyParticipant, type MemberProfile,
@@ -439,7 +440,7 @@ export function CeremonyStage({
                   Sprint
                 </span>
                 {sprints.length > 0 ? (
-                  <select
+                  <Select
                     value={activeSprintId}
                     onChange={(e) => setActiveSprintId(e.target.value)}
                     style={{ fontSize: 13, padding: '4px 8px', borderRadius: 6, background: 'var(--bg-base)', color: 'var(--text-primary)', border: '1px solid var(--border-subtle)' }}
@@ -447,7 +448,7 @@ export function CeremonyStage({
                     {sprints.map((s) => (
                       <option key={s.id} value={s.id}>{s.name} ({s.status})</option>
                     ))}
-                  </select>
+                  </Select>
                 ) : (
                   <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>No sprint yet</span>
                 )}

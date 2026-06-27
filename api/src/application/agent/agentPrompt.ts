@@ -1,0 +1,103 @@
+/**
+ * Shared agent persona/memory prompt builder + workforce-model resolver.
+ *
+ * One source of truth for turning a trained Workforce agent into an inference call,
+ * used by THREE paths so they behave identically:
+ *   • the dedicated chat endpoint   POST /api/ide/agents/:id/chat   (ideRoutes)
+ *   • the pre-publish validate call  POST /api/ide/agents/validate   (ideRoutes)
+ *   • the OpenAI-standard gateway    POST /v1/chat/completions       (llmRoutes)
+ *
+ * The OpenAI-standard path lets callers address a published model by the id
+ * `builderforce/workforce-<id>` — the gateway expands it (like a `tenant_model:`
+ * ref) into the agent's base model + persona/memory system directives, so the
+ * stock OpenAI SDKs call a user's model verbatim.
+ */
+
+import { neon } from '@neondatabase/serverless';
+import type { Env } from '../../env';
+import { getOrSetCached } from '../../infrastructure/cache/readThroughCache';
+
+/** OpenAI-standard model id prefix for a published Workforce model. */
+export const WORKFORCE_MODEL_REF_PREFIX = 'builderforce/workforce-';
+
+export type AgentDescriptor = {
+  name: string;
+  title: string;
+  bio: string;
+  skills: string[] | string | null;
+  r2_artifact_key?: string | null;
+  mamba_state?: unknown;
+};
+
+export type AgentChatMessage = { role: 'system' | 'user' | 'assistant'; content: string };
+
+export function resolveInferenceMode(d: AgentDescriptor): 'base' | 'lora' | 'hybrid' {
+  const hasLora = !!d.r2_artifact_key;
+  const hasMamba = !!d.mamba_state;
+  return hasLora && hasMamba ? 'hybrid' : hasLora ? 'lora' : 'base';
+}
+
+/** Builds the persona (+ Mamba memory) system prompt for an agent. */
+export function buildAgentSystemPrompt(d: AgentDescriptor): string {
+  const skills = Array.isArray(d.skills) ? d.skills.join(', ') : (d.skills ?? '');
+  let system = `You are ${d.name}, ${d.title}. ${d.bio}\n\nSkills: ${skills}`;
+  if (d.mamba_state) {
+    const snap = d.mamba_state as { step?: number; data?: number[] };
+    const signal = snap.data ? snap.data.slice(0, 4).map((v) => v.toFixed(3)).join(',') : '';
+    system += `\n\n[Memory: step=${snap.step ?? 0} signal=${signal} context="persistent agent state"]`;
+  }
+  return system;
+}
+
+/** Prepends/merges the persona system prompt into a message list. */
+export function applyAgentSystem(messages: AgentChatMessage[], system: string): AgentChatMessage[] {
+  const existing = messages.find((m) => m.role === 'system');
+  if (existing) return messages.map((m) => (m.role === 'system' ? { ...m, content: system + '\n\n' + m.content } : m));
+  return [{ role: 'system', content: system }, ...messages];
+}
+
+export interface ResolvedWorkforceModel {
+  /** The agent's base model — what actually dispatches to a vendor. */
+  baseModel: string | null;
+  /** Persona + memory system directives to prepend to the request. */
+  directives: string;
+  inferenceMode: 'base' | 'lora' | 'hybrid';
+}
+
+/**
+ * Expands a `builderforce/workforce-<id>` model ref into the agent's base model +
+ * persona directives. Returns null for a non-workforce ref or an unknown id.
+ * Read-through cached (agents change rarely post-publish).
+ */
+export async function resolveWorkforceModel(env: Env, ref: string | undefined | null): Promise<ResolvedWorkforceModel | null> {
+  if (!ref || !ref.startsWith(WORKFORCE_MODEL_REF_PREFIX)) return null;
+  const agentId = ref.slice(WORKFORCE_MODEL_REF_PREFIX.length).trim();
+  if (!agentId) return null;
+
+  return getOrSetCached(
+    env,
+    `workforce_model:resolve:${agentId}`,
+    async (): Promise<ResolvedWorkforceModel | null> => {
+      const rows = await neon(env.NEON_DATABASE_URL)`
+        SELECT name, title, bio, skills, base_model, r2_artifact_key, mamba_state, inference_mode
+        FROM ide_agents WHERE id = ${agentId} LIMIT 1
+      `;
+      const a = rows[0] as Record<string, unknown> | undefined;
+      if (!a) return null;
+      const descriptor: AgentDescriptor = {
+        name: String(a.name ?? ''),
+        title: String(a.title ?? ''),
+        bio: String(a.bio ?? ''),
+        skills: (a.skills as string[] | string | null) ?? null,
+        r2_artifact_key: (a.r2_artifact_key as string | null) ?? null,
+        mamba_state: a.mamba_state,
+      };
+      return {
+        baseModel: (a.base_model as string | null) ?? null,
+        directives: buildAgentSystemPrompt(descriptor),
+        inferenceMode: (a.inference_mode as 'base' | 'lora' | 'hybrid') ?? resolveInferenceMode(descriptor),
+      };
+    },
+    { kvTtlSeconds: 300, l1TtlMs: 60_000 },
+  );
+}

@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { tenantModelApi, type TenantModel, type TenantModelInput } from '@/lib/builderforceApi';
 import { invalidateLlmModels } from '@/lib/useLlmModels';
 import { ModelSelect } from '@/components/llm/ModelSelect';
+import { Select } from '@/components/Select';
 
 /**
  * My LLMs — CRUD over the tenant's named model configs (migration 0211).
@@ -148,10 +149,10 @@ export function MyLlmsPanel() {
             </div>
             <div style={{ flex: '1 1 160px' }}>
               <label style={labelStyle}>Visibility</label>
-              <select style={inputStyle} value={draft.visibility} onChange={(e) => setDraft({ ...draft, visibility: e.target.value as 'private' | 'tenant' })}>
+              <Select style={inputStyle} value={draft.visibility} onChange={(e) => setDraft({ ...draft, visibility: e.target.value as 'private' | 'tenant' })}>
                 <option value="tenant">Whole workspace</option>
                 <option value="private">Private (just me)</option>
-              </select>
+              </Select>
             </div>
           </div>
           <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>

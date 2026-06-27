@@ -14,6 +14,7 @@
  * persona modal never needs to know the plan).
  */
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Select } from '@/components/Select';
 import { psychometric as psychometricApi } from '@/lib/builderforceApi';
 import {
   NEUTRAL_SCORE,
@@ -205,7 +206,7 @@ export default function PsychometricEditor({ value, onChange }: Props) {
           <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
             <div style={{ flex: 1, minWidth: 160 }}>
               <label className="label">Enneagram core type</label>
-              <select
+              <Select
                 className="input"
                 value={enneagramType ?? ''}
                 onChange={(e) => {
@@ -220,7 +221,7 @@ export default function PsychometricEditor({ value, onChange }: Props) {
                     {en.type} · {en.name} — {en.motivation}
                   </option>
                 ))}
-              </select>
+              </Select>
             </div>
             <div style={{ flex: 1, minWidth: 120 }}>
               <label className="label">MBTI (optional)</label>

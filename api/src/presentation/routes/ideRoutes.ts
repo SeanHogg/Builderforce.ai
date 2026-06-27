@@ -8,6 +8,12 @@ import type { Env, HonoEnv } from '../../env';
 import { authMiddleware } from '../middleware/authMiddleware';
 import { invalidateCached, getOrSetCached } from '../../infrastructure/cache/readThroughCache';
 import {
+  type AgentDescriptor,
+  resolveInferenceMode,
+  buildAgentSystemPrompt,
+  applyAgentSystem,
+} from '../../application/agent/agentPrompt';
+import {
   importRepoToWorkspace,
   commitWorkspaceToRepo,
   createRemoteRepo,
@@ -680,43 +686,6 @@ export function createIdeRoutes(): Hono<HonoEnv> {
     const rows = await getSql(c)`SELECT * FROM ide_agents WHERE status = 'active' ORDER BY hire_count DESC, created_at DESC`;
     return c.json(rows);
   });
-
-  // ── Shared agent-inference helpers (used by both the published-agent chat
-  //    endpoint and the pre-publish validate endpoint so the persona/memory
-  //    prompt is built identically in both paths — single source of truth). ──
-  type AgentDescriptor = {
-    name: string;
-    title: string;
-    bio: string;
-    skills: string[] | string | null;
-    r2_artifact_key?: string | null;
-    mamba_state?: unknown;
-  };
-  type ChatMessage = { role: 'system' | 'user' | 'assistant'; content: string };
-
-  const resolveInferenceMode = (d: AgentDescriptor): 'base' | 'lora' | 'hybrid' => {
-    const hasLora = !!d.r2_artifact_key;
-    const hasMamba = !!d.mamba_state;
-    return hasLora && hasMamba ? 'hybrid' : hasLora ? 'lora' : 'base';
-  };
-
-  const buildAgentSystemPrompt = (d: AgentDescriptor): string => {
-    const skills = Array.isArray(d.skills) ? d.skills.join(', ') : (d.skills ?? '');
-    let system = `You are ${d.name}, ${d.title}. ${d.bio}\n\nSkills: ${skills}`;
-    if (d.mamba_state) {
-      const snap = d.mamba_state as { step?: number; data?: number[] };
-      const signal = snap.data ? snap.data.slice(0, 4).map((v) => v.toFixed(3)).join(',') : '';
-      system += `\n\n[Memory: step=${snap.step ?? 0} signal=${signal} context="persistent agent state"]`;
-    }
-    return system;
-  };
-
-  /** Prepends/merges the agent persona system prompt into a message list. */
-  const applyAgentSystem = (messages: ChatMessage[], system: string): ChatMessage[] => {
-    const existing = messages.find((m) => m.role === 'system');
-    if (existing) return messages.map((m) => (m.role === 'system' ? { ...m, content: system + '\n\n' + m.content } : m));
-    return [{ role: 'system', content: system }, ...messages];
-  };
 
   router.post('/agents', async (c) => {
     const body = await c.req.json<{

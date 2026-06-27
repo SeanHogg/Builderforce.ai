@@ -18,12 +18,6 @@ import { TabCountBadge } from '@/components/TabCountBadge';
  * from non-owners, matching the prior sidebar behavior.
  */
 
-const barStyle: CSSProperties = {
-  display: 'flex', gap: 2, padding: '0 16px', borderBottom: '1px solid var(--border-subtle)',
-  background: 'var(--bg-base)', overflowX: 'auto', WebkitOverflowScrolling: 'touch',
-};
-const innerStyle: CSSProperties = { display: 'flex', gap: 2, maxWidth: 1200, margin: '0 auto', width: '100%' };
-
 function tabStyle(active: boolean): CSSProperties {
   return {
     display: 'inline-flex', alignItems: 'center', gap: 7, padding: '12px 14px', fontSize: 13,
@@ -54,8 +48,8 @@ export default function SectionTabs() {
   const isActive = (tab: NavTab) => tab.id === activeId;
 
   return (
-    <nav style={barStyle} aria-label={t(group.labelKey)}>
-      <div style={innerStyle}>
+    <nav className="section-tabs" aria-label={t(group.labelKey)}>
+      <div className="section-tabs__inner">
         {tabs.map((tab) => {
           const active = isActive(tab);
           return (

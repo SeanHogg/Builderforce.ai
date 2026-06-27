@@ -41,8 +41,37 @@
     }
   },
   "ceremonies": {
-    "noProjects": "No projects",
     "selectProject": "Select a project to start a ceremony."
+  },
+  "projectScope": {
+    "workspace": "Workspace",
+    "allProjects": "All projects",
+    "projectLabel": "Project",
+    "switchWorkspace": "Switch workspace…",
+    "noProjects": "No projects yet",
+    "selectAria": "Select project scope"
+  },
+  "pm": {
+    "epics": "Epics",
+    "roadmap": "Roadmap",
+    "roi": "ROI",
+    "tree": "Tree",
+    "flow": "Flow",
+    "timeline": "Timeline",
+    "gantt": "Gantt",
+    "map": "Map",
+    "riceMatrix": "RICE matrix",
+    "dependencyMap": "Dependency map",
+    "colEpicTask": "Epic / Task",
+    "colStatus": "Status",
+    "colPriority": "Priority",
+    "colSprint": "Sprint",
+    "scheduled": "scheduled",
+    "loadingEpics": "Loading epics…",
+    "noTasksProject": "No tasks in this project yet.",
+    "noEpicsAnywhere": "No tasks across your projects yet.",
+    "unparented": "Unparented ({count})",
+    "allProjectsCaption": "Showing every project’s epics. Pick a project in the top bar to focus on one."
   },
   "tools": {
     "outOf5": "out of 5.0",

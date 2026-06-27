@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
+import { Select } from '@/components/Select';
 import { tasksApi, agentHosts as agentHostsApi, type Task, type AgentHost } from '@/lib/builderforceApi';
 import { RunAgentControl } from '@/components/task/RunAgentControl';
 import { AgentExecutionPanel } from '@/components/agent/AgentExecutionPanel';
@@ -76,13 +77,13 @@ export function IdeAgentPanel({ projectId }: { projectId: number }) {
 
         {/* Existing task selector */}
         {tasks.length > 0 && (
-          <select
+          <Select
             value={selectedId ?? ''}
             onChange={(e) => setSelectedId(e.target.value ? Number(e.target.value) : null)}
             style={{ padding: '8px 10px', fontSize: 13, borderRadius: 8, border: '1px solid var(--border-subtle)', background: 'var(--bg-deep)', color: 'var(--text-primary)' }}
           >
             {tasks.map((t) => <option key={t.id} value={t.id}>{t.title}</option>)}
-          </select>
+          </Select>
         )}
 
         {selected && (

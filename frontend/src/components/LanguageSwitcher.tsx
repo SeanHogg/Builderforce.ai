@@ -4,6 +4,7 @@ import { useLocale } from 'next-intl';
 import { useRouter } from 'next/navigation';
 import { useTransition } from 'react';
 import { LOCALES, LOCALE_LABELS, LOCALE_COOKIE, type Locale } from '@/i18n/config';
+import { Select } from '@/components/Select';
 
 /**
  * Cookie-based locale switcher. Writes the `NEXT_LOCALE` preference and calls
@@ -23,7 +24,7 @@ export default function LanguageSwitcher() {
   };
 
   return (
-    <select
+    <Select
       value={locale}
       onChange={(e) => onChange(e.target.value as Locale)}
       disabled={pending}
@@ -44,6 +45,6 @@ export default function LanguageSwitcher() {
           {LOCALE_LABELS[l]}
         </option>
       ))}
-    </select>
+    </Select>
   );
 }

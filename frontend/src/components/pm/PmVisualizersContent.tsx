@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { useTranslations } from 'next-intl';
 import { ViewToggle } from '@/components/ViewToggle';
 import { usePmScope } from '@/lib/pm/scope';
 import { EpicTreeView } from './EpicTreeView';
@@ -22,7 +23,8 @@ type EpicView = 'tree' | 'flow';
 type RoadmapView = 'timeline' | 'gantt' | 'map';
 
 export function PmVisualizersContent() {
-  const { isPortfolio } = usePmScope();
+  const t = useTranslations('pm');
+  usePmScope();
   const [section, setSection] = useState<Section>('roadmap');
   const [epicView, setEpicView] = useState<EpicView>('tree');
   const [roadmapView, setRoadmapView] = useState<RoadmapView>('timeline');
@@ -34,9 +36,9 @@ export function PmVisualizersContent() {
           value={section}
           onChange={setSection}
           options={[
-            { value: 'epics', label: 'Epics' },
-            { value: 'roadmap', label: 'Roadmap' },
-            { value: 'roi', label: 'ROI' },
+            { value: 'epics', label: t('epics') },
+            { value: 'roadmap', label: t('roadmap') },
+            { value: 'roi', label: t('roi') },
           ]}
         />
         {section === 'epics' && (
@@ -44,8 +46,8 @@ export function PmVisualizersContent() {
             value={epicView}
             onChange={setEpicView}
             options={[
-              { value: 'tree', label: 'Tree' },
-              { value: 'flow', label: 'Flow' },
+              { value: 'tree', label: t('tree') },
+              { value: 'flow', label: t('flow') },
             ]}
           />
         )}
@@ -54,9 +56,9 @@ export function PmVisualizersContent() {
             value={roadmapView}
             onChange={setRoadmapView}
             options={[
-              { value: 'timeline', label: 'Timeline' },
-              { value: 'gantt', label: 'Gantt' },
-              { value: 'map', label: 'Map' },
+              { value: 'timeline', label: t('timeline') },
+              { value: 'gantt', label: t('gantt') },
+              { value: 'map', label: t('map') },
             ]}
           />
         )}
@@ -70,10 +72,10 @@ export function PmVisualizersContent() {
           {roadmapView === 'gantt' && <RoadmapGantt />}
           {roadmapView === 'map' && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-              <PmCard title="RICE matrix">
+              <PmCard title={t('riceMatrix')}>
                 <RiceMatrix />
               </PmCard>
-              <PmCard title="Dependency map">
+              <PmCard title={t('dependencyMap')}>
                 <DependencyGraph />
               </PmCard>
             </div>
@@ -82,12 +84,6 @@ export function PmVisualizersContent() {
       )}
 
       {section === 'roi' && <RoiDashboard />}
-
-      {isPortfolio && section === 'epics' && (
-        <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>
-          Viewing the portfolio — epics and dependencies are per-project. Open a project to see them.
-        </div>
-      )}
     </div>
   );
 }

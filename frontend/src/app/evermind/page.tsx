@@ -119,6 +119,19 @@ export default function EvermindPage() {
         .ev-cta-box { text-align: center; padding: 52px 40px; border-radius: 22px; border: 1px solid var(--border-accent); background: var(--surface-card); backdrop-filter: blur(16px); }
         .ev-cta-title { font-family: var(--font-display); font-weight: 700; font-size: clamp(1.5rem, 3.4vw, 2.1rem); color: var(--text-primary); margin: 0 0 12px; }
         .ev-cta-desc { font-size: 0.97rem; color: var(--text-secondary); max-width: 480px; margin: 0 auto 28px; line-height: 1.65; }
+
+        .ev-figure { width: 100%; height: auto; display: block; border-radius: 16px; border: 1px solid var(--border-subtle); margin: 18px 0 6px; background: #0e1525; }
+        .ev-figcap { font-size: 0.8rem; color: var(--text-muted); margin: 0 0 4px; text-align: center; }
+        .ev-steps { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; counter-reset: ev-step; }
+        @media (max-width: 760px) { .ev-steps { grid-template-columns: 1fr 1fr; } }
+        @media (max-width: 460px) { .ev-steps { grid-template-columns: 1fr; } }
+        .ev-step { position: relative; padding: 22px 18px 18px; border-radius: 16px; border: 1px solid var(--border-subtle); background: var(--surface-card); }
+        .ev-step::before { counter-increment: ev-step; content: counter(ev-step); display: inline-flex; align-items: center; justify-content: center;
+          width: 28px; height: 28px; border-radius: 999px; font-family: var(--font-display); font-weight: 700; font-size: 0.85rem; color: #fff;
+          background: linear-gradient(135deg, var(--coral-bright), var(--coral-dark)); margin-bottom: 12px; }
+        .ev-step-title { font-family: var(--font-display); font-weight: 600; font-size: 0.95rem; color: var(--text-primary); margin: 0 0 6px; }
+        .ev-step-desc { font-size: 0.82rem; color: var(--text-secondary); line-height: 1.55; margin: 0; }
+        .ev-api { border: 1px solid var(--border-subtle); border-radius: 18px; padding: 24px; background: var(--surface-card); }
       `}</style>
 
       <div className="ev">
@@ -149,6 +162,16 @@ export default function EvermindPage() {
             <div className="ev-law">
               <p className="ev-law-quote">{EVERMIND.quotable}</p>
             </div>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              className="ev-figure"
+              src="/blog/evermind-write-through.svg"
+              alt="Conventional append-then-reconcile knowledge vs Evermind's upsert-by-key and invalidate"
+              loading="lazy"
+              width={860}
+              height={380}
+            />
+            <p className="ev-figcap">Conventional models append and reconcile; Evermind upserts by key and invalidates — there is no reconcile step.</p>
           </section>
 
           {/* ── Architecture (the key aspects the brain animation depicts) ── */}
@@ -167,6 +190,15 @@ export default function EvermindPage() {
                 </div>
               ))}
             </div>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              className="ev-figure"
+              src="/blog/evermind-three-layers.svg"
+              alt="Evermind's three layers: shared-expert hybrid generator, write-through memory, and limbic dynamics"
+              loading="lazy"
+              width={860}
+              height={330}
+            />
           </section>
 
           {/* ── Evermind vs a frozen model ── */}
@@ -208,6 +240,45 @@ export default function EvermindPage() {
                   <span className="ev-edge-desc">{e.desc}</span>
                 </div>
               ))}
+            </div>
+          </section>
+
+          {/* ── Lifecycle: train → validate → publish → call ── */}
+          <section className="ev-section">
+            <h2 className="ev-h2"><span className="ev-accent">⟩</span> From training to a callable model — in minutes</h2>
+            <p className="ev-lead">
+              Train a model in the browser, prove it works with a live API call, publish it to your Workforce
+              Registry, then call it from anywhere. No GPU bill, no deploy step, no waiting.
+            </p>
+            <div className="ev-steps">
+              <div className="ev-step">
+                <h3 className="ev-step-title">Train</h3>
+                <p className="ev-step-desc">Fine-tune in-browser on WebGPU — LoRA adapters plus a persistent memory snapshot. Nothing leaves your machine.</p>
+              </div>
+              <div className="ev-step">
+                <h3 className="ev-step-title">Validate via API</h3>
+                <p className="ev-step-desc">Before publishing, run a live test call against the candidate model. Publishing unlocks only once it actually responds.</p>
+              </div>
+              <div className="ev-step">
+                <h3 className="ev-step-title">Publish</h3>
+                <p className="ev-step-desc">One click registers the model in your Workforce Registry, where your team and your own agents can hire it.</p>
+              </div>
+              <div className="ev-step">
+                <h3 className="ev-step-title">Call</h3>
+                <p className="ev-step-desc">Invoke it over HTTP with the OpenAI standard or the dedicated model endpoint — from code, CI, or another agent.</p>
+              </div>
+            </div>
+          </section>
+
+          {/* ── Call it over the API ── */}
+          <section className="ev-section">
+            <h2 className="ev-h2"><span className="ev-accent">⟩</span> Call your model over the API</h2>
+            <p className="ev-lead">
+              Your published model speaks the OpenAI standard, so the official SDKs work by pointing them at the
+              gateway — and there&apos;s a dedicated endpoint for calling your model by id. Same chat shape either way.
+            </p>
+            <div className="ev-api">
+              <ModelApiSamples />
             </div>
           </section>
 

@@ -8,6 +8,7 @@ import { ProjectsContent } from '@/components/ProjectsContent';
 import PageContainer from '@/components/PageContainer';
 import { TaskMgmtContent } from '@/components/TaskMgmtContent';
 import { PmScopeProvider } from '@/lib/pm/scope';
+import { useProjectScope } from '@/lib/ProjectScopeContext';
 import { PmVisualizersContent } from '@/components/pm/PmVisualizersContent';
 import { PmoContent } from '@/components/pm/PmoContent';
 import { CeremoniesContent } from '@/components/ceremony/CeremoniesContent';
@@ -33,6 +34,7 @@ export default function ProjectsTasksPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { isAuthenticated, hasTenant } = useAuth();
+  const { currentProjectId } = useProjectScope();
   const brain = useOptionalBrainContext();
   // ProjectsContent fetches the list and reports the count up; we publish it to
   // the shared nav-counts store so the shell <SectionTabs> bar shows the badge on
@@ -55,8 +57,10 @@ export default function ProjectsTasksPage() {
     : tabParam === 'portfolio' ? 'portfolio'
     : tabParam === 'ceremonies' ? 'ceremonies'
     : 'projects';
-  const projectParam = Number(searchParams.get('project'));
-  const scopedProjectId = Number.isFinite(projectParam) && projectParam > 0 ? projectParam : undefined;
+  // Project scope comes from the global TopBar tenant→project selector
+  // (useProjectScope), so the Planning/Tasks tabs no longer need their own
+  // picker and switching projects there carries across every tab.
+  const scopedProjectId = currentProjectId ?? undefined;
 
   // Publish the scoped project to the Brain so "create a task" here defaults to it.
   const setBrainContext = brain?.setContext;
