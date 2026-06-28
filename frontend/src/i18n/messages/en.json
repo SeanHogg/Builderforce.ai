@@ -1979,5 +1979,30 @@
       "skills": "skills",
       "models": "models"
     }
+  },
+  "compile": {
+    "title": "Define a need",
+    "subtitle": "Describe what you want an agent to do — in plain language. The platform compiles your need into an agent spec, resolves where it runs, and can run it on the spot.",
+    "needLabel": "Your need",
+    "needPlaceholder": "e.g. An agent that triages billing tickets and answers refund questions from our help-center docs.",
+    "surfaceLabel": "Deploy to",
+    "compileBtn": "Compile",
+    "compiling": "Compiling…",
+    "runBtn": "Compile & run",
+    "running": "Running…",
+    "specHeading": "Compiled agent spec",
+    "specModel": "Model",
+    "autoRouted": "Auto-routed",
+    "specPersona": "Persona directives",
+    "specMemory": "Grounded memory",
+    "specPolicy": "Policy gates",
+    "specSteps": "Steps",
+    "planHeading": "Deploy plan",
+    "planSurface": "Surface",
+    "planEngine": "Engine",
+    "planTransport": "Transport",
+    "outputHeading": "Agent response",
+    "outputEmpty": "(no response)",
+    "errorGeneric": "Something went wrong. Please try again."
   }
 }

@@ -109,6 +109,7 @@ import { createBrainRoutes }       from './presentation/routes/brainRoutes';
 import { createBrainFilesRoutes }  from './presentation/routes/brainFilesRoutes';
 import { createSitesRoutes, tryServeHostedSite } from './presentation/routes/sitesRoutes';
 import { createIdeRoutes }         from './presentation/routes/ideRoutes';
+import { createCompileRoutes }     from './presentation/routes/compileRoutes';
 import { createIdeProjectRoutes }  from './presentation/routes/ideProjectRoutes';
 import { createIdeAiRoutes }       from './presentation/routes/ideAiRoutes';
 import { BrainService }            from './application/brain/BrainService';
@@ -442,6 +443,7 @@ function buildApp(env: Env): Hono<HonoEnv> {
   app.route('/api/teams/memory', createTeamMemoryRoutes(db));
   app.route('/api/teams',        createTeamRoutes(db));
   app.route('/api/ide',       createIdeRoutes());
+  app.route('/api/compile',   createCompileRoutes());
   app.route('/api/ide-projects', createIdeProjectRoutes(projectService, db));
   app.route('/api/ai',        createIdeAiRoutes(projectService));
   app.route('/api/studio/models', createEvermindModelRoutes(db));

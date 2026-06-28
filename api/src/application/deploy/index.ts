@@ -17,7 +17,6 @@
  */
 import {
   DEFAULT_ENGINE_ID,
-  ENGINE_IDS,
   lowerAgentSpec,
   type AgentRunInput,
   type AgentSpec,
@@ -79,9 +78,8 @@ export function deploy(spec: AgentSpec, surface: AgentSurface, opts: DeployOptio
     );
   }
   const lowered = lowerAgentSpec(spec);
-  const engineId = opts.engineId ?? (spec.policy?.gates?.length ? DEFAULT_ENGINE_ID : DEFAULT_ENGINE_ID);
-  // (V3/limbic is selectable via opts.engineId; default stays the consolidated V2.)
-  void ENGINE_IDS;
+  // V3/limbic is selectable via opts.engineId; the default stays the consolidated V2.
+  const engineId = opts.engineId ?? DEFAULT_ENGINE_ID;
   return {
     surface,
     engineId,

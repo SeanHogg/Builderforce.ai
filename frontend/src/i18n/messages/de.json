@@ -1979,5 +1979,30 @@
       "skills": "Skills",
       "models": "Modelle"
     }
+  },
+  "compile": {
+    "title": "Definiere einen Bedarf",
+    "subtitle": "Beschreibe in einfacher Sprache, was ein Agent tun soll. Die Plattform kompiliert deinen Bedarf in eine Agentenspezifikation, bestimmt, wo er läuft, und kann ihn sofort ausführen.",
+    "needLabel": "Dein Bedarf",
+    "needPlaceholder": "z. B. Ein Agent, der Rechnungs-Tickets triagiert und Rückerstattungsfragen aus unseren Help-Center-Dokumenten beantwortet.",
+    "surfaceLabel": "Bereitstellen auf",
+    "compileBtn": "Kompilieren",
+    "compiling": "Kompiliere…",
+    "runBtn": "Kompilieren & ausführen",
+    "running": "Wird ausgeführt…",
+    "specHeading": "Kompilierte Agentenspezifikation",
+    "specModel": "Modell",
+    "autoRouted": "Automatisch geroutet",
+    "specPersona": "Persönlichkeitsdirektiven",
+    "specMemory": "Fundierter Speicher",
+    "specPolicy": "Richtlinien-Gates",
+    "specSteps": "Schritte",
+    "planHeading": "Bereitstellungsplan",
+    "planSurface": "Oberfläche",
+    "planEngine": "Engine",
+    "planTransport": "Transport",
+    "outputHeading": "Agentenantwort",
+    "outputEmpty": "(keine Antwort)",
+    "errorGeneric": "Etwas ist schiefgelaufen. Bitte erneut versuchen."
   }
 }

@@ -1979,5 +1979,30 @@
       "skills": "compétences",
       "models": "modèles"
     }
+  },
+  "compile": {
+    "title": "Définissez un besoin",
+    "subtitle": "Décrivez ce que vous voulez qu'un agent fasse, en langage naturel. La plateforme compile votre besoin en une spécification d'agent, détermine où il s'exécute et peut le lancer immédiatement.",
+    "needLabel": "Votre besoin",
+    "needPlaceholder": "ex. Un agent qui trie les tickets de facturation et répond aux questions de remboursement à partir des documents de notre centre d'aide.",
+    "surfaceLabel": "Déployer sur",
+    "compileBtn": "Compiler",
+    "compiling": "Compilation…",
+    "runBtn": "Compiler et exécuter",
+    "running": "Exécution…",
+    "specHeading": "Spécification d'agent compilée",
+    "specModel": "Modèle",
+    "autoRouted": "Routage automatique",
+    "specPersona": "Directives de personnalité",
+    "specMemory": "Mémoire ancrée",
+    "specPolicy": "Garde-fous de politique",
+    "specSteps": "Étapes",
+    "planHeading": "Plan de déploiement",
+    "planSurface": "Surface",
+    "planEngine": "Moteur",
+    "planTransport": "Transport",
+    "outputHeading": "Réponse de l'agent",
+    "outputEmpty": "(aucune réponse)",
+    "errorGeneric": "Une erreur s'est produite. Veuillez réessayer."
   }
 }

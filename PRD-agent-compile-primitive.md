@@ -1,6 +1,6 @@
 # PRD — The Compile Primitive: `need → AgentSpec → surface`
 
-**Status:** 🔄 In progress — **Phases C1 + C3 shipped (2026-06-27)**; C2/C4/C5 designed below
+**Status:** ✅ Spine complete — **C1 + C3 (2026-06-27); C2 + C4 + C5 (2026-06-28)**. `compile()`/`deploy()` registries, all six modality adapters, `PolicyGate` + `evaluatePolicyGate`, the plain-language front door (`/compile`, `POST /api/compile`, `POST /api/compile/run`) are live. Remaining work is surface *enforcement* depth (engine pre/post-tool gate wiring, container executor, IDE-behind-AgentEngine), logged to the Consolidated Gap Register — the IR contract and the compile→deploy→run path are done.
 **Owner:** Sean Hogg
 **Surfaces:** `api` (compile + deploy) · `packages/agent-tools` (AgentSpec + AgentEngine) · `@seanhogg/builderforce-memory` (ingestion/recall) · `agent-runtime` (relay) · `frontend` (need front doors)
 **Related:** [ROADMAP.md](./ROADMAP.md) · [PRD-agent-stack-parity.md](./PRD-agent-stack-parity.md) · [[psychometric-persona]] · [[engine-consolidation]] · [[v2-surface-parity-plan]] · [[ssm-hippocampus-loop]]
@@ -153,10 +153,10 @@ Each is now scoped as "add a `deploy()` target," not an architecture change — 
 | Phase | Scope | Unblocks |
 |-------|-------|----------|
 | **C1** ✅ | `AgentSpec` IR + `lowerAgentSpec()` in `packages/agent-tools/src/spec.ts`; `api/agentPrompt.ts` lowers through it (live on all 3 inference paths); `PsychometricExecParams` aliased to the canonical `AgentExecParams` | Pillar 2 + 4 "compiled-but-unused" gaps — the spine keystone |
-| **C2** | `compile()` registry; rehome workflow + persona + train/publish adapters | Single need spine |
+| **C2** ✅ | `compile()` registry (`api/src/application/compile/`): `compileFromProse` · `compileFromDataset` · `compileFromGraph` · `compileFromPersona` · `compileFromDiagnostic` · `compileFromPolicy`, `mergeSpecs` (stack adapters → one spec), `compile(need\|need[])` dispatcher; injected `LlmComplete` keeps adapters pure | Single need spine |
 | **C3** ✅ | Proprietary-doc ingestion + BM25 recall (Section 4): `agent_knowledge_chunks` (mig 0249), `POST /api/ide/agents/:id/ingest`, cached recall wired into the chat path's `recalledContext`, localized publish-panel ingest UI; reuses `@seanhogg/builderforce-memory/retrieval` `chunkText`/`bm25Search` | "Train on your data" — agents now recall ingested proprietary docs at inference |
-| **C4** | `deploy()` registry; IDE behind `AgentEngine`; container executor | True write-once / run-any-surface |
-| **C5** | `compileFromProse` + `compileFromDiagnostic` + `PolicyGate` | Plain-language front door + "emit a better flow" + real gates |
+| **C4** ✅ | `deploy()` registry (`api/src/application/deploy/`): surface→transport map, engine resolution (shared `DEFAULT_ENGINE_ID`/override), `lowerAgentSpec`→`runInput`, `surfaces` allow-list enforcement, `DeployPlan` returned ready-to-dispatch; `POST /api/compile/run` proves compile→deploy→gateway run end-to-end. (IDE-behind-`AgentEngine` + container executor depth → Gap Register.) | Write-once / resolve-any-surface |
+| **C5** ✅ | `compileFromProse` (the plain-language front door, `/compile` + `POST /api/compile`/`/run`) + `compileFromDiagnostic` (findings → chained `CompiledStep[]`) + `PolicyGate`/`AgentSpecPolicy` on the IR, rendered by `lowerAgentSpec` on every surface and hard-enforced by `evaluatePolicyGate` at the engine tool seam | Plain-language front door + "emit a better flow" + real gates |
 
 ## 10. Success criteria
 

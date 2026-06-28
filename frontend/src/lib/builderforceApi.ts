@@ -135,6 +135,57 @@ export const toolsApi = {
 };
 
 // ---------------------------------------------------------------------------
+// Compile primitive — define a need (any modality) → AgentSpec → deploy plan
+// ---------------------------------------------------------------------------
+
+/** A modality need accepted by `POST /api/compile` (mirrors the api `Need` union). */
+export type CompileNeed =
+  | { modality: 'prose'; text: string }
+  | { modality: 'dataset'; identity: { name: string; title?: string; bio?: string; skills?: string[] | string | null }; modelRef?: string | null; recalledContext?: string }
+  | { modality: 'process-chart'; definition: unknown }
+  | { modality: 'persona'; directives?: string[]; execParams?: Record<string, unknown> }
+  | { modality: 'diagnostic'; findings: unknown; subject?: string }
+  | { modality: 'policy'; gates: Array<{ id: string; tool?: string; effect: string; directive?: string; reason?: string }> };
+
+export type CompileSurface = 'ide' | 'desktop' | 'cloud-durable' | 'cloud-container' | 'workflow-node';
+
+export interface CompiledAgentSpec {
+  id?: string;
+  identity: { name: string; title?: string; bio?: string; skills?: string[] | string | null };
+  model?: { ref: string | null; autoRoute?: boolean };
+  persona?: { directives?: string[]; execParams?: Record<string, unknown> };
+  memory?: { recalledContext?: string };
+  policy?: { gates: Array<{ id: string; tool?: string; effect: string; directive?: string; reason?: string }> };
+  steps?: unknown[];
+  surfaces?: CompileSurface[];
+}
+
+export interface DeployPlan {
+  surface: CompileSurface;
+  engineId: string;
+  transport: string;
+  runInput: { systemPrompt: string; model?: string };
+  execParams: Record<string, unknown>;
+  cloudDispatchable: boolean;
+}
+
+export const compileApi = {
+  /** Compile one or more needs → AgentSpec (+ optional deploy plan when `deploy` set). */
+  compile: (needs: CompileNeed | CompileNeed[], deploy?: CompileSurface): Promise<{ spec: CompiledAgentSpec; plan?: DeployPlan }> =>
+    request<{ spec: CompiledAgentSpec; plan?: DeployPlan }>('/api/compile', {
+      method: 'POST',
+      body: JSON.stringify(Array.isArray(needs) ? { needs, deploy } : { need: needs, deploy }),
+    }),
+
+  /** Compile → deploy(cloud-durable) → run a real first turn through the gateway. */
+  run: (needs: CompileNeed | CompileNeed[], sample?: string): Promise<{ spec: CompiledAgentSpec; plan: DeployPlan; output?: string; error?: string }> =>
+    request<{ spec: CompiledAgentSpec; plan: DeployPlan; output?: string; error?: string }>('/api/compile/run', {
+      method: 'POST',
+      body: JSON.stringify(Array.isArray(needs) ? { needs, sample } : { need: needs, sample }),
+    }),
+};
+
+// ---------------------------------------------------------------------------
 // Decks — board / CFO deck generation + template library
 // ---------------------------------------------------------------------------
 

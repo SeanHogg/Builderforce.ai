@@ -1979,5 +1979,30 @@
       "skills": "habilidades",
       "models": "modelos"
     }
+  },
+  "compile": {
+    "title": "Define una necesidad",
+    "subtitle": "Describe lo que quieres que haga un agente, en lenguaje natural. La plataforma compila tu necesidad en una especificación de agente, resuelve dónde se ejecuta y puede ejecutarla al instante.",
+    "needLabel": "Tu necesidad",
+    "needPlaceholder": "p. ej. Un agente que clasifica tickets de facturación y responde preguntas de reembolso desde los documentos de nuestro centro de ayuda.",
+    "surfaceLabel": "Desplegar en",
+    "compileBtn": "Compilar",
+    "compiling": "Compilando…",
+    "runBtn": "Compilar y ejecutar",
+    "running": "Ejecutando…",
+    "specHeading": "Especificación del agente compilada",
+    "specModel": "Modelo",
+    "autoRouted": "Enrutado automáticamente",
+    "specPersona": "Directivas de personalidad",
+    "specMemory": "Memoria fundamentada",
+    "specPolicy": "Controles de política",
+    "specSteps": "Pasos",
+    "planHeading": "Plan de despliegue",
+    "planSurface": "Superficie",
+    "planEngine": "Motor",
+    "planTransport": "Transporte",
+    "outputHeading": "Respuesta del agente",
+    "outputEmpty": "(sin respuesta)",
+    "errorGeneric": "Algo salió mal. Inténtalo de nuevo."
   }
 }
