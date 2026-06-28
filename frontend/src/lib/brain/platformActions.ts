@@ -170,7 +170,7 @@ const STATIC_ROUTES: Record<string, string> = {
   timeline: '/workforce?tab=logs',
   logs: '/workforce?tab=logs',
   chats: '/workforce?tab=chats',
-  contributors: '/workforce?tab=contributors',
+  contributors: '/workforce?tab=performance',
   content_manager: '/content-manager',
   agent_worker: '/agent-worker',
   training: '/training',

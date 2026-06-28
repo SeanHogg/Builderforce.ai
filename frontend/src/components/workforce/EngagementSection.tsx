@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { membersApi, type MemberEngagement, type EngagementLevel } from '@/lib/builderforceApi';
+import { ENGAGEMENT_LEVEL_COLOR } from './workforceFormat';
 
 /**
  * Unified engagement — one score per human member that folds EVERY signal we
@@ -16,13 +17,7 @@ const cardStyle: React.CSSProperties = {
 const th: React.CSSProperties = { textAlign: 'right', padding: '8px 10px', fontSize: 11, color: 'var(--muted)', fontWeight: 600, whiteSpace: 'nowrap' };
 const td: React.CSSProperties = { textAlign: 'right', padding: '8px 10px', fontSize: 13, whiteSpace: 'nowrap' };
 
-const LEVEL_COLOR: Record<EngagementLevel, string> = {
-  inactive: 'var(--muted)',
-  low: 'var(--danger, #e5484d)',
-  moderate: 'var(--warning, #f5a623)',
-  high: 'var(--accent, #6366f1)',
-  very_high: 'var(--success, #30a46c)',
-};
+const LEVEL_COLOR = ENGAGEMENT_LEVEL_COLOR;
 const LEVEL_LABEL: Record<EngagementLevel, string> = {
   inactive: 'Inactive', low: 'Low', moderate: 'Moderate', high: 'High', very_high: 'Very high',
 };

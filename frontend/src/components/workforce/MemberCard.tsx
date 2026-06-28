@@ -6,6 +6,8 @@ import { Select } from '@/components/Select';
 import { RoleGate } from '@/components/RoleGate';
 import { useRole, ROLE_LABEL, ASSIGNABLE_ROLES, type TenantRole } from '@/lib/rbac';
 import { WorkforceCard, InitialAvatar } from './WorkforceCard';
+import { MemberStatsStrip } from './MemberStatsStrip';
+import { useWorkforceMetrics } from './WorkforceMetricsContext';
 
 const roleBadgeStyle: CSSProperties = {
   fontSize: 10, fontWeight: 700, padding: '3px 8px', borderRadius: 6,
@@ -88,6 +90,11 @@ export function MemberCard({
 }) {
   const name = member.displayName ?? member.username ?? member.email;
   const roleLabel = ROLE_LABEL[member.role as TenantRole] ?? member.role;
+  // Surface the same Performance + Contributors signals as their dedicated tabs,
+  // looked up from the shared directory fetch (humans key both lookups on user id).
+  const { scorecardFor, engagementFor } = useWorkforceMetrics();
+  const scorecard = scorecardFor('human', member.id);
+  const engagement = engagementFor(member.id);
   return (
     <WorkforceCard
       avatar={<InitialAvatar label={member.displayName ?? member.email} />}
@@ -101,8 +108,11 @@ export function MemberCard({
         </>
       }
       body={
-        <div style={{ fontSize: 12, color: 'var(--muted)', flex: 1 }}>
-          {member.activeSessions} active session{member.activeSessions === 1 ? '' : 's'}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, flex: 1 }}>
+          <MemberStatsStrip scorecard={scorecard} engagement={engagement} />
+          <div style={{ fontSize: 12, color: 'var(--muted)' }}>
+            {member.activeSessions} active session{member.activeSessions === 1 ? '' : 's'}
+          </div>
         </div>
       }
       footer={

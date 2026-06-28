@@ -325,14 +325,14 @@ export function createKnowledgeRoutes(db: Db): Hono<HonoEnv> {
         .where(eq(knowledgeDocuments.tenantId, tenantId));
       const tagMap = await tagsFor(docs.map((d) => d.id));
 
-      const counts = { total: docs.length, sop: 0, process: 0, doc: 0, published: 0, draft: 0, archived: 0, requiresAck: 0 };
+      const counts: Record<string, number> = { total: docs.length, sop: 0, process: 0, doc: 0, published: 0, draft: 0, archived: 0, requiresAck: 0 };
       const staleMs = STALE_DAYS * 24 * 60 * 60 * 1000;
       const nowMs = Date.now();
       let stale = 0;
       const liteDocs = docs.map((d) => {
         counts[d.docType] = (counts[d.docType] ?? 0) + 1;
         counts[d.status] = (counts[d.status] ?? 0) + 1;
-        if (d.requiresAck) counts.requiresAck += 1;
+        if (d.requiresAck) counts.requiresAck = (counts.requiresAck ?? 0) + 1;
         const updated = d.updatedAt instanceof Date ? d.updatedAt.getTime() : new Date(d.updatedAt).getTime();
         if (d.status === 'published' && nowMs - updated > staleMs) stale += 1;
         return { title: d.title, summary: d.summary, tags: tagMap.get(d.id) ?? [] };

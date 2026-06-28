@@ -1775,7 +1775,12 @@ textarea.input { resize: vertical; line-height: 1.5; }
 .bs-shell {
   display: grid;
   grid-template-columns: 280px 1fr;
-  height: clamp(500px, calc(100dvh - 190px), 900px);
+  /* Fill the content cell exactly (it has a definite height from the shell's
+     `1fr` row), so the panel reaches the footer instead of capping short and
+     leaving a whitespace gap below it. Internal regions (.bs-chat-list,
+     .bs-messages) own their scroll. */
+  height: 100%;
+  min-height: 0;
   border: 1px solid var(--border);
   border-radius: 12px;
   overflow: hidden;
@@ -1862,8 +1867,15 @@ textarea.input { resize: vertical; line-height: 1.5; }
 }
 
 .bs-bubble-user {
-  background: var(--accent);
-  color: var(--text-on-accent);
+  /* A subtle accent-tinted surface with primary text — NOT a saturated accent
+     fill. The message body (ChatMessageContent) hardcodes --text-primary on
+     headings/bold and accent on code, so a solid accent background renders that
+     content dark-on-blue and unreadable in light mode. Tint + --text-primary
+     keeps a pasted markdown message legible in both themes; the row-reverse
+     layout and accent avatar still mark it as the user's turn. */
+  background: var(--accent-subtle);
+  color: var(--text-primary);
+  border: 1px solid var(--border-accent);
 }
 
 .bs-bubble-ai {

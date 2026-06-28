@@ -19,6 +19,8 @@ import { computeDora } from '../metrics/workforceMetrics';
 import { computeQualityInsights } from '../insights/qualityInsights';
 import { computePeopleInsights } from '../insights/peopleInsights';
 import { computeRdFinancials } from '../insights/rdFinancialsInsights';
+import { errorEvents, executions, llmUsageLog } from '../../infrastructure/database/schema';
+import { dailyCountSeries, dailySumSeries, seriesTotal, type MetricPoint } from './dailySeries';
 
 export interface MetricDef {
   /** Human label for the widget header / query answer. */
@@ -29,6 +31,13 @@ export interface MetricDef {
   description: string;
   /** Compute the scalar for this metric over the tenant + window. */
   compute(db: Db, tenantId: number, days: number): Promise<number | null>;
+  /**
+   * Optional date-windowed daily series — drives a widget's sparkline / line /
+   * bar trend. Omit for point-in-time metrics (the widget renders scalar-only).
+   * Built on the shared {@link dailyCountSeries}/{@link dailySumSeries} helpers
+   * so there is no per-metric `GROUP BY` boilerplate.
+   */
+  series?(db: Db, tenantId: number, days: number): Promise<MetricPoint[]>;
 }
 
 /** Current calendar month 'YYYY-MM' (UTC) — finance lens is month-keyed. */

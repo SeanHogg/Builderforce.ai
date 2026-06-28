@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import ReactMarkdown from 'react-markdown';
@@ -10,6 +10,8 @@ import PageContainer from '@/components/PageContainer';
 import { usePermission } from '@/lib/rbac';
 import { useAuth } from '@/lib/AuthContext';
 import { useDocCollaboration } from '@/hooks/useDocCollaboration';
+import { CanvasBoard } from '@/components/canvas/CanvasBoard';
+import { parseCanvas, serializeCanvas } from '@/components/canvas/canvasModel';
 import {
   knowledgeApi,
   type KnowledgeDocDetail,
@@ -149,6 +151,11 @@ export default function KnowledgeDocClient({ docId }: { docId: string }) {
     setter(v);
   };
 
+  // A canvas document stores its board (JSON) inside `content`. When detected we
+  // swap the Markdown editor for the reusable <CanvasBoard>; edits serialise back
+  // through the same content path (autosave + realtime collab unchanged).
+  const canvasModel = useMemo(() => parseCanvas(content), [content]);
+
   if (error) {
     return (
       <PageContainer width="readable">
@@ -255,6 +262,18 @@ export default function KnowledgeDocClient({ docId }: { docId: string }) {
         />
       )}
 
+      {/* Canvas documents render the reusable board; Markdown docs the editor. */}
+      {canvasModel ? (
+        <div style={{ margin: '18px 0 8px' }}>
+          <CanvasBoard
+            value={canvasModel}
+            readOnly={!canEdit}
+            onChange={(next) => onContentChange(serializeCanvas(next))}
+            height={560}
+          />
+        </div>
+      ) : (
+        <>
       {/* Content edit/preview */}
       <div style={{ display: 'flex', gap: 8, margin: '18px 0 8px' }}>
         {canEdit && (
@@ -306,6 +325,8 @@ export default function KnowledgeDocClient({ docId }: { docId: string }) {
             <span style={{ color: 'var(--text-muted, #9ca3af)' }}>{t('emptyContent')}</span>
           )}
         </article>
+      )}
+        </>
       )}
 
       {/* Publish / delete (editors) */}

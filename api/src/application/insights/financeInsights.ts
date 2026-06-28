@@ -89,6 +89,13 @@ function monthRange(periodMonth: string): { start: Date; end: Date } {
   return { start: new Date(Date.UTC(y, m - 1, 1)), end: new Date(Date.UTC(y, m, 1)) };
 }
 
+/**
+ * @param segmentId  A segment UUID to scope the budget rollup to, or an empty
+ *   string for a whole-tenant rollup across every segment. Empty is the
+ *   established sentinel used by the tenant-wide callers (recommendations, deck
+ *   export, dashboard metrics); it MUST NOT be passed through to the `segment_id`
+ *   uuid filter — Postgres rejects `''::uuid` at bind time even for zero rows.
+ */
 export async function computeFinanceInsights(
   db: Db,
   tenantId: number,
@@ -183,7 +190,13 @@ export async function computeFinanceInsights(
     .from(budgets)
     .leftJoin(projects, eq(projects.id, budgets.projectId))
     .leftJoin(initiatives, eq(initiatives.id, budgets.initiativeId))
-    .where(and(eq(budgets.tenantId, tenantId), eq(budgets.segmentId, segmentId), eq(budgets.periodMonth, periodMonth)));
+    .where(and(
+      eq(budgets.tenantId, tenantId),
+      // Empty segmentId = whole-tenant rollup: omit the uuid filter entirely
+      // (binding '' as a uuid throws); a real segment id scopes the rollup.
+      ...(segmentId ? [eq(budgets.segmentId, segmentId)] : []),
+      eq(budgets.periodMonth, periodMonth),
+    ));
   const budgetLines: BudgetLine[] = budgetRows.map((b) => {
     const actualUsd =
       b.scopeKind === 'project' && b.projectId != null
