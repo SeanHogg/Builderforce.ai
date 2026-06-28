@@ -13,9 +13,9 @@ import { TabCountBadge } from '@/components/TabCountBadge';
  * The one tab bar for the whole app. It self-decides from the route which
  * primary destination is active and renders that destination's sub-views as
  * tabs (so sub-views are tabs, never their own menu item). Renders nothing for
- * destinations with no sub-tabs (Dashboard, Brain Storm, Workflows) or that own
- * a richer in-page bar (Workforce). Owner-only tabs (e.g. API Keys) are hidden
- * from non-owners, matching the prior sidebar behavior.
+ * destinations with no sub-tabs (Dashboard, Brain Storm, Workflows). Owner-only
+ * tabs (e.g. API Keys) are hidden from non-owners, matching the prior sidebar
+ * behavior.
  */
 
 function tabStyle(active: boolean): CSSProperties {

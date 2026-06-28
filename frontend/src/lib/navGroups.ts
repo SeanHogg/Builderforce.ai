@@ -75,9 +75,22 @@ export const NAV_GROUPS: NavGroup[] = [
   // sub-tabs here — Voice opens as a Voice IDE project, not a separate menu item.
   { id: 'ide', labelKey: 'group.ide', icon: '💻', href: '/ide/dashboard', match: ['/ide'] },
   { id: 'workflows', labelKey: 'group.workflows', icon: '🔀', href: '/workflows', match: ['/workflows'] },
-  // Workforce keeps its own rich in-page tab bar (counts, sub-labels) — it is
-  // already a single destination, so no shell tabs are declared for it.
-  { id: 'workforce', labelKey: 'group.workforce', icon: '👥', href: '/workforce', match: ['/workforce'] },
+  {
+    id: 'workforce', labelKey: 'group.workforce', icon: '👥', href: '/workforce',
+    match: ['/workforce'],
+    tabKind: 'query', basePath: '/workforce',
+    tabs: [
+      { id: '', labelKey: 'tab.workforce', icon: '👥' },
+      { id: 'teams', labelKey: 'tab.teams', icon: '🧑‍🤝‍🧑' },
+      { id: 'performance', labelKey: 'tab.performance', icon: '📊' },
+      { id: 'chats', labelKey: 'tab.chats', icon: '💬' },
+      { id: 'approvals', labelKey: 'tab.approvals', icon: '✅' },
+      { id: 'contributors', labelKey: 'tab.contributors', icon: '🌱' },
+      { id: 'logs', labelKey: 'tab.logs', icon: '📜' },
+      { id: 'llm', labelKey: 'tab.llm', icon: '🧠' },
+      { id: 'qa', labelKey: 'tab.qa', icon: '🧪' },
+    ],
+  },
   {
     id: 'insights', labelKey: 'group.insights', icon: '📈', href: '/insights/engineering',
     // Surveys, custom Dashboards and DevFinOps are analytics/measurement surfaces,
