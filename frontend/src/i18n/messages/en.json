@@ -55,7 +55,16 @@
       "delivery": "Delivery",
       "surveys": "Surveys",
       "dashboards": "Dashboards",
-      "devfinops": "DevFinOps"
+      "devfinops": "DevFinOps",
+      "workforce": "Workforce",
+      "teams": "Teams",
+      "performance": "Performance",
+      "chats": "Chats",
+      "approvals": "Approvals & Q&A",
+      "contributors": "Contributors",
+      "logs": "Logs",
+      "llm": "LLM Usage",
+      "qa": "Agentic QA"
     }
   },
   "alerts": {
@@ -1215,6 +1224,20 @@
     }
   },
   "workforce": {
+    "page": {
+      "title": "Workforce",
+      "sub": {
+        "workforce": "Your people and agents in one place — invite teammates, create cloud agents, and register remote agents. Publish agents to the marketplace to earn revenue.",
+        "teams": "Group your workforce — agents and humans — into teams, and attach a team to the projects it works on.",
+        "performance": "Effectiveness & engagement scorecards for every member — human and agent — plus DORA metrics. Click a member to set their capability & availability profile (what the sprint planner uses to assign work).",
+        "chats": "Browse chat sessions across every agentHost in this workspace.",
+        "approvals": "Resolve approvals, questions, and feedback your agents escalate for a human — sign off on actions or answer what they need to proceed.",
+        "contributors": "See who — human and agent — is contributing across your workspace, and how.",
+        "logs": "Agent logs, execution timelines, and diagnostics across your workspace.",
+        "llm": "LLM usage metrics, model health, and spend across your workspace.",
+        "qa": "Per-project QA automation — flows, generated tests, and CI runs."
+      }
+    },
     "discipline": "Discipline",
     "allDisciplines": "All disciplines",
     "unassigned": "Unassigned",
