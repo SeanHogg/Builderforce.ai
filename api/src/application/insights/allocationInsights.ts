@@ -46,6 +46,17 @@ const MAX_METRIC_ROWS = 5_000;
 /** Cap per-task effort hours so a single long-lived/stale task can't dominate the
  *  mix (30 days). Effort here is a signal-derived estimate, not a timesheet. */
 const MAX_TASK_HOURS = 24 * 30;
+/** Working hours that make up one full-time-equivalent month — the unit the
+ *  cost-report donut/history present (≈ a 40h week × 4 weeks). Effort-hours / this
+ *  = FTE-months, the capitalization-report grain (mirrors Jellyfish "FTE-months"). */
+export const WORKING_HOURS_PER_FTE_MONTH = 160;
+/** Max epics returned in the capitalization browser (bounded result set). */
+const MAX_EPICS = 400;
+
+/** Effort-hours → FTE-months (the capitalization-report unit). */
+export function fteMonthsFromHours(hours: number): number {
+  return hours / WORKING_HOURS_PER_FTE_MONTH;
+}
 
 export interface AllocationTaskRow extends MemberIdentityFields {
   taskId: number;
@@ -55,9 +66,44 @@ export interface AllocationTaskRow extends MemberIdentityFields {
   actionType: string | null;
   allocationCategory: string | null;
   costClass: string | null;
+  costClassSource: string | null;
+  taskType: string | null;
+  parentTaskId: number | null;
+  projectId: number;
+  projectName: string | null;
   createdAt: Date;
   completedAt: Date | null;
   updatedAt: Date;
+}
+
+/**
+ * Capitalization status for the cost report (Jellyfish "Capitalized / Not
+ * Capitalized / Uncategorized"). Distinct from {@link effectiveCostClass}, which
+ * is GAAP-conservative and never returns "unknown": a third *uncategorized* slice
+ * is surfaced when the work carries NO classification signal at all (no own
+ * cost_class, no lineage inheritance, no allocation override, and no derivable
+ * category) — i.e. work a finance reviewer must still triage.
+ */
+export type CapitalizationStatus = 'capitalized' | 'not_capitalized' | 'uncategorized';
+export const CAPITALIZATION_STATUSES: CapitalizationStatus[] = ['capitalized', 'not_capitalized', 'uncategorized'];
+
+export function capitalizationStatus(r: AllocationTaskRow, lineage?: Map<number, 'capex' | 'opex'>): CapitalizationStatus {
+  if (r.costClass === 'capex') return 'capitalized';
+  if (r.costClass === 'opex') return 'not_capitalized';
+  const inherited = lineage?.get(r.taskId);
+  if (inherited) return inherited === 'capex' ? 'capitalized' : 'not_capitalized';
+  // No own/lineage classification: genuinely untriaged when nothing yields a
+  // category either (no override AND signals derive only to the catch-all "other").
+  if (!r.allocationCategory && deriveAllocationCategory(r) === 'other') return 'uncategorized';
+  return defaultCostClassFor(effectiveCategory(r)) === 'capex' ? 'capitalized' : 'not_capitalized';
+}
+
+/** Where an item's capitalization status came from — for the epic browser. */
+export type CapitalizationSource = 'manual' | 'inherited' | 'derived';
+export function capitalizationSource(r: AllocationTaskRow, lineage?: Map<number, 'capex' | 'opex'>): CapitalizationSource {
+  if (r.costClass === 'capex' || r.costClass === 'opex') return 'manual';
+  if (lineage?.get(r.taskId)) return 'inherited';
+  return 'derived';
 }
 
 /** Estimated active effort-hours for a task: cycle time for completed work, else
@@ -113,6 +159,31 @@ export interface MemberAllocation {
   categorySpread: number;
 }
 
+/** One slice of the capitalization donut (effort + cost for a status). */
+export interface StatusBucket {
+  hours: number;
+  fteMonths: number;
+  costUsd: number;
+  taskCount: number;
+}
+function emptyStatusBucket(): StatusBucket {
+  return { hours: 0, fteMonths: 0, costUsd: 0, taskCount: 0 };
+}
+
+/** An epic in the capitalization browser (Jellyfish "Work Capitalization" tab). */
+export interface EpicCapitalization {
+  epicId: number;
+  title: string;
+  status: CapitalizationStatus;
+  source: CapitalizationSource;
+  hours: number;
+  fteMonths: number;
+  costUsd: number;
+  /** Tasks rolled into this epic (the epic itself + its child tasks in window). */
+  taskCount: number;
+  projectName: string | null;
+}
+
 export interface AllocationInsights {
   windowDays: number;
   totals: {
@@ -123,9 +194,14 @@ export interface AllocationInsights {
     opexUsd: number;
     /** capex / (capex + opex) × 100 — the capitalizable share of spend (EMP-18). */
     capitalizablePct: number;
+    /** Capitalized / Not Capitalized / Uncategorized split by effort + cost — the
+     *  cost-report donut (FTE | Cost toggle). */
+    byStatus: Record<CapitalizationStatus, StatusBucket>;
   };
   byCategory: CategoryAllocation[];
   byMember: MemberAllocation[];
+  /** Epics with their capitalization status + effort/cost — the browser table. */
+  epics: EpicCapitalization[];
 }
 
 /** Per-(category) goal targets for the active scope/period — category → target %. */
@@ -156,6 +232,25 @@ export function summarizeAllocation(
     kind: string; ref: string; name: string; total: number; cats: Map<AllocationCategory, number>;
   }>();
 
+  // Capitalization-status split (cost-report donut) + epic rollup (browser). The
+  // epic set is every taskType='epic' row; a non-epic task rolls into its epic
+  // parent (parentTaskId) when that parent is in window.
+  const byStatus: Record<CapitalizationStatus, StatusBucket> = {
+    capitalized: emptyStatusBucket(), not_capitalized: emptyStatusBucket(), uncategorized: emptyStatusBucket(),
+  };
+  const epicAgg = new Map<number, EpicCapitalization>();
+  for (const r of rows) {
+    if (r.taskType !== 'epic') continue;
+    epicAgg.set(r.taskId, {
+      epicId: r.taskId,
+      title: r.title ?? `#${r.taskId}`,
+      status: capitalizationStatus(r, lineage),
+      source: capitalizationSource(r, lineage),
+      hours: 0, fteMonths: 0, costUsd: 0, taskCount: 0,
+      projectName: r.projectName ?? null,
+    });
+  }
+
   let totalHours = 0, totalCost = 0, capex = 0, opex = 0;
 
   for (const r of rows) {
@@ -169,6 +264,16 @@ export function summarizeAllocation(
     bucket.taskCount += 1;
     bucket.costUsd += costUsd;
     if (klass === 'capex') bucket.capexUsd += costUsd; else bucket.opexUsd += costUsd;
+
+    const sb = byStatus[capitalizationStatus(r, lineage)];
+    sb.hours += hrs; sb.costUsd += costUsd; sb.taskCount += 1;
+
+    const epicId = r.taskType === 'epic' ? r.taskId
+      : (r.parentTaskId != null && epicAgg.has(r.parentTaskId) ? r.parentTaskId : null);
+    if (epicId != null) {
+      const e = epicAgg.get(epicId)!;
+      e.hours += hrs; e.costUsd += costUsd; e.taskCount += 1;
+    }
 
     totalHours += hrs;
     totalCost += costUsd;
@@ -206,6 +311,13 @@ export function summarizeAllocation(
     }))
     .sort((a, b) => b.totalHours - a.totalHours);
 
+  for (const s of CAPITALIZATION_STATUSES) byStatus[s].fteMonths = fteMonthsFromHours(byStatus[s].hours);
+
+  const epics = [...epicAgg.values()]
+    .map((e) => ({ ...e, fteMonths: fteMonthsFromHours(e.hours) }))
+    .sort((a, b) => b.hours - a.hours)
+    .slice(0, MAX_EPICS);
+
   return {
     windowDays,
     totals: {
@@ -215,9 +327,11 @@ export function summarizeAllocation(
       capexUsd: capex,
       opexUsd: opex,
       capitalizablePct: capex + opex > 0 ? (capex / (capex + opex)) * 100 : 0,
+      byStatus,
     },
     byCategory,
     byMember,
+    epics,
   };
 }
 
@@ -262,6 +376,11 @@ export async function computeAllocationInsights(
       actionType: tasks.actionType,
       allocationCategory: tasks.allocationCategory,
       costClass: tasks.costClass,
+      costClassSource: tasks.costClassSource,
+      taskType: tasks.taskType,
+      parentTaskId: tasks.parentTaskId,
+      projectId: tasks.projectId,
+      projectName: projects.name,
       assignedUserId: tasks.assignedUserId,
       assignedUserName: users.displayName,
       assignedAgentHostId: tasks.assignedAgentHostId,
@@ -303,4 +422,164 @@ export async function computeAllocationInsights(
 
   const lineage = opts.lineage ? await loadTaskCostClassMap(db, tenantId) : undefined;
   return summarizeAllocation(scoped, costByTask, days, now, goals, lineage);
+}
+
+// ── Historical months (cost-report time series) ──────────────────────────────
+
+/** One month in the capitalization history (Jellyfish "Historical Months"). */
+export interface AllocationHistoryMonth {
+  month: string;                 // 'YYYY-MM'
+  status: 'ready' | 'in_progress';
+  capitalizedFteMonths: number;
+  totalFteMonths: number;
+  capitalizedUsd: number;
+  notCapitalizedUsd: number;
+  uncategorizedUsd: number;
+  totalUsd: number;
+  taskCount: number;
+}
+export interface AllocationHistory {
+  months: AllocationHistoryMonth[];   // newest first
+  dataAsOf: string;                    // ISO timestamp of the snapshot
+}
+
+/** UTC 'YYYY-MM' for a date. */
+function monthKey(d: Date): string {
+  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
+}
+
+/** The last `months` calendar-month keys, oldest → newest, ending at `now`. */
+function recentMonthKeys(now: number, months: number): string[] {
+  const out: string[] = [];
+  const d = new Date(now);
+  let y = d.getUTCFullYear(), m = d.getUTCMonth(); // 0-based
+  for (let i = 0; i < months; i++) {
+    out.unshift(`${y}-${String(m + 1).padStart(2, '0')}`);
+    if (--m < 0) { m = 11; y -= 1; }
+  }
+  return out;
+}
+
+/**
+ * Pure: bucket task effort + cost into the month each task last moved
+ * (completedAt, else updatedAt) and split by {@link capitalizationStatus}. Cost is
+ * the task's total LLM spend over the range, attributed to that same month — a
+ * faithful, single-fetch approximation for the report's monthly trend.
+ */
+export function summarizeAllocationHistory(
+  rows: AllocationTaskRow[],
+  costByTask: Map<number, number>,
+  months: number,
+  now: number,
+  lineage?: Map<number, 'capex' | 'opex'>,
+): AllocationHistory {
+  const keys = recentMonthKeys(now, months);
+  const allowed = new Set(keys);
+  const current = monthKey(new Date(now));
+  const blank = (): AllocationHistoryMonth => ({
+    month: '', status: 'ready',
+    capitalizedFteMonths: 0, totalFteMonths: 0,
+    capitalizedUsd: 0, notCapitalizedUsd: 0, uncategorizedUsd: 0, totalUsd: 0, taskCount: 0,
+  });
+  const byMonth = new Map<string, AllocationHistoryMonth>(keys.map((k) => [k, { ...blank(), month: k, status: k === current ? 'in_progress' : 'ready' }]));
+
+  for (const r of rows) {
+    const when = r.completedAt ?? r.updatedAt;
+    const key = monthKey(new Date(when));
+    if (!allowed.has(key)) continue;
+    const bucket = byMonth.get(key)!;
+    const hrs = taskEffortHours(r, now);
+    const costUsd = (costByTask.get(r.taskId) ?? 0) / MILLICENTS_PER_USD;
+    const status = capitalizationStatus(r, lineage);
+    const fte = fteMonthsFromHours(hrs);
+    bucket.totalFteMonths += fte;
+    bucket.totalUsd += costUsd;
+    bucket.taskCount += 1;
+    if (status === 'capitalized') { bucket.capitalizedFteMonths += fte; bucket.capitalizedUsd += costUsd; }
+    else if (status === 'not_capitalized') bucket.notCapitalizedUsd += costUsd;
+    else bucket.uncategorizedUsd += costUsd;
+  }
+
+  return { months: keys.map((k) => byMonth.get(k)!).reverse(), dataAsOf: new Date(now).toISOString() };
+}
+
+/**
+ * Fetch + roll up the capitalization history for a tenant over `months` calendar
+ * months. Mirrors {@link computeAllocationInsights}' scoping; lineage honours the
+ * planning-spine inheritance so figures agree with the live donut.
+ */
+export async function computeAllocationHistory(
+  db: Db,
+  tenantId: number,
+  months: number,
+  now: number,
+  scope: AllocationScope = {},
+  opts: { lineage?: boolean } = {},
+): Promise<AllocationHistory> {
+  // Window back to the first day of the oldest month in range.
+  const keys = recentMonthKeys(now, months);
+  const oldest = keys[0]!;
+  const since = new Date(Date.UTC(Number(oldest.slice(0, 4)), Number(oldest.slice(5, 7)) - 1, 1));
+
+  const where = [
+    eq(projects.tenantId, tenantId),
+    eq(tasks.archived, false),
+    gte(tasks.updatedAt, since),
+  ];
+  if (scope.projectId != null) where.push(eq(tasks.projectId, scope.projectId));
+
+  const rows = (await db
+    .select({
+      taskId: tasks.id,
+      title: tasks.title,
+      description: tasks.description,
+      source: tasks.source,
+      actionType: tasks.actionType,
+      allocationCategory: tasks.allocationCategory,
+      costClass: tasks.costClass,
+      costClassSource: tasks.costClassSource,
+      taskType: tasks.taskType,
+      parentTaskId: tasks.parentTaskId,
+      projectId: tasks.projectId,
+      projectName: projects.name,
+      assignedUserId: tasks.assignedUserId,
+      assignedUserName: users.displayName,
+      assignedAgentHostId: tasks.assignedAgentHostId,
+      assignedHostName: agentHosts.name,
+      assignedAgentRef: tasks.assignedAgentRef,
+      createdAt: tasks.createdAt,
+      completedAt: tasks.completedAt,
+      updatedAt: tasks.updatedAt,
+    })
+    .from(tasks)
+    .innerJoin(projects, eq(projects.id, tasks.projectId))
+    .leftJoin(users, eq(users.id, tasks.assignedUserId))
+    .leftJoin(agentHosts, eq(agentHosts.id, tasks.assignedAgentHostId))
+    .where(and(...where))
+    .orderBy(tasks.updatedAt)
+    .limit(MAX_METRIC_ROWS)) as AllocationTaskRow[];
+
+  const scoped = scope.memberKeys
+    ? rows.filter((r) => { const id = identityOf(r); return id != null && scope.memberKeys!.has(`${id.kind}:${id.ref}`); })
+    : rows;
+
+  const taskIds = scoped.map((r) => r.taskId);
+  const costByTask = new Map<number, number>();
+  if (taskIds.length) {
+    const costRows = await db
+      .select({ taskId: llmUsageLog.taskId, cost: llmUsageLog.costUsdMillicents })
+      .from(llmUsageLog)
+      .where(and(
+        eq(llmUsageLog.tenantId, tenantId),
+        isNotNull(llmUsageLog.taskId),
+        inArray(llmUsageLog.taskId, taskIds),
+        gte(llmUsageLog.createdAt, since),
+      ));
+    for (const cr of costRows) {
+      if (cr.taskId != null) costByTask.set(cr.taskId, (costByTask.get(cr.taskId) ?? 0) + (cr.cost ?? 0));
+    }
+  }
+
+  const lineage = opts.lineage ? await loadTaskCostClassMap(db, tenantId) : undefined;
+  return summarizeAllocationHistory(scoped, costByTask, months, now, lineage);
 }

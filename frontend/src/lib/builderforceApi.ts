@@ -1391,6 +1391,9 @@ export interface MeterSnapshot {
   remaining: number;
   /** 0–100, clamped; 0 when unlimited. */
   percentUsed: number;
+  /** Month-to-date daily series (one entry per elapsed UTC day) for a sparkline;
+   *  omitted for meters without a daily trend. */
+  trend?: number[];
 }
 
 export interface ConsumptionSnapshot {
@@ -4043,12 +4046,31 @@ export interface MemberAllocation {
   totalHours: number; categorySpread: number;
   byCategory: Array<{ category: AllocationCategory; label: string; hours: number; pct: number }>;
 }
+/** Cost-report capitalization status (Jellyfish "Capitalized / Not Capitalized / Uncategorized"). */
+export type CapitalizationStatus = 'capitalized' | 'not_capitalized' | 'uncategorized';
+export type CapitalizationSource = 'manual' | 'inherited' | 'derived';
+export interface StatusBucket { hours: number; fteMonths: number; costUsd: number; taskCount: number }
+export interface EpicCapitalization {
+  epicId: number; title: string; status: CapitalizationStatus; source: CapitalizationSource;
+  hours: number; fteMonths: number; costUsd: number; taskCount: number; projectName: string | null;
+}
 export interface AllocationInsights {
   windowDays: number;
-  totals: { hours: number; taskCount: number; costUsd: number; capexUsd: number; opexUsd: number; capitalizablePct: number };
+  totals: {
+    hours: number; taskCount: number; costUsd: number; capexUsd: number; opexUsd: number;
+    capitalizablePct: number;
+    byStatus: Record<CapitalizationStatus, StatusBucket>;
+  };
   byCategory: CategoryAllocation[];
   byMember: MemberAllocation[];
+  epics: EpicCapitalization[];
 }
+export interface AllocationHistoryMonth {
+  month: string; status: 'ready' | 'in_progress';
+  capitalizedFteMonths: number; totalFteMonths: number;
+  capitalizedUsd: number; notCapitalizedUsd: number; uncategorizedUsd: number; totalUsd: number; taskCount: number;
+}
+export interface AllocationHistory { months: AllocationHistoryMonth[]; dataAsOf: string }
 export interface AllocationGoal extends TrackerRow {
   scopeKind: string; teamId: number | null; projectId: number | null;
   periodMonth: string; category: AllocationCategory; targetPct: number; notes: string | null;
@@ -4060,11 +4082,44 @@ export interface BurnPoint { date: string; scope: number; completed: number; rem
 export interface DeliveryInsights {
   scope: DeliverableScope; scopeId: string; name: string;
   totalTasks: number; completedTasks: number; openTasks: number; completionPct: number;
-  throughputPerWeek: number;
+  throughputPerWeek: number; activeContributors: number;
   forecastDate: string | null; forecastDateOptimistic: string | null; forecastDatePessimistic: string | null;
   targetDate: string | null; status: DeliveryStatus;
   baselineDate: string | null; baselineScope: number; addedScope: number; addedScopePct: number;
   series: BurnPoint[];
+  /** Forward completion ramp from today → forecast date (drawn dashed). */
+  projection: BurnPoint[];
+}
+
+/** Scenario planner — what-if completion modelling for a deliverable. */
+export interface ScenarioParams { developers: number; attentionPct: number; scopeDelta: number }
+export interface ScenarioResult {
+  developers: number; attentionPct: number; scopeDelta: number;
+  adjustedOpenTasks: number;
+  perDeveloperPerWeek: number;
+  projectedThroughputPerWeek: number;
+  projectedWeeks: number | null;
+  projectedDate: string | null;
+  targetDate: string | null;
+  status: DeliveryStatus;
+  deltaDaysVsTarget: number | null;
+  effortPersonWeeks: number | null;
+}
+export interface ScenarioResponse {
+  baseline: {
+    openTasks: number; throughputPerWeek: number; activeContributors: number;
+    targetDate: string | null; forecastDate: string | null; status: DeliveryStatus;
+  };
+  scenario: ScenarioResult;
+}
+
+/** Life cycle explorer — time per SDLC phase + the end-to-end lifecycle trend. */
+export type LifecyclePhase = 'refinement' | 'work' | 'review' | 'deploy';
+export interface LifecyclePhaseStat { phase: LifecyclePhase; avgHours: number; medianHours: number; taskCount: number }
+export interface LifecycleTrendPoint { period: string; avgLifecycleHours: number; taskCount: number }
+export interface LifecycleInsights {
+  windowDays: number; sampleSize: number; totalAvgHours: number;
+  byPhase: LifecyclePhaseStat[]; trend: LifecycleTrendPoint[];
 }
 
 export interface ProductRelease extends TrackerRow {
@@ -4111,6 +4166,7 @@ export const releasesApi = {
 };
 
 export interface AllocationQuery { days?: number; period?: string; projectId?: number; teamId?: number }
+export interface AllocationHistoryQuery { months?: number; projectId?: number; teamId?: number }
 
 export const insightsApi = {
   engineering: (days = 30): Promise<EngineeringInsights> => request<EngineeringInsights>(`/api/insights/engineering?days=${days}`),
@@ -4127,8 +4183,27 @@ export const insightsApi = {
     const qs = p.toString();
     return request<AllocationInsights>(`/api/insights/allocation${qs ? `?${qs}` : ''}`);
   },
+  allocationHistory: (q: AllocationHistoryQuery = {}): Promise<AllocationHistory> => {
+    const p = new URLSearchParams();
+    if (q.months) p.set('months', String(q.months));
+    if (q.projectId) p.set('projectId', String(q.projectId));
+    if (q.teamId) p.set('teamId', String(q.teamId));
+    const qs = p.toString();
+    return request<AllocationHistory>(`/api/insights/allocation/history${qs ? `?${qs}` : ''}`);
+  },
   delivery: (scope: DeliverableScope, id: string): Promise<DeliveryInsights> =>
     request<DeliveryInsights>(`/api/insights/delivery?scope=${scope}&id=${encodeURIComponent(id)}`),
+  /** What-if completion modelling for a deliverable under team/focus/scope changes. */
+  deliveryScenario: (scope: DeliverableScope, id: string, params: ScenarioParams): Promise<ScenarioResponse> => {
+    const p = new URLSearchParams({
+      scope, id, developers: String(params.developers),
+      attentionPct: String(params.attentionPct), scopeDelta: String(params.scopeDelta),
+    });
+    return request<ScenarioResponse>(`/api/insights/delivery/scenario?${p.toString()}`);
+  },
+  /** Time per SDLC phase + end-to-end lifecycle trend (Life Cycle Explorer). */
+  lifecycle: (days = 30): Promise<LifecycleInsights> =>
+    request<LifecycleInsights>(`/api/insights/delivery/lifecycle?days=${days}`),
   deliverableUpdates: {
     list: (scope: DeliverableScope, id: string): Promise<DeliverableUpdate[]> =>
       request<DeliverableUpdate[]>(`/api/insights/deliverable-updates?scope=${scope}&id=${encodeURIComponent(id)}`),

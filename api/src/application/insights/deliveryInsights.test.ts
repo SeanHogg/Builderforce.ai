@@ -77,4 +77,30 @@ describe('summarizeDelivery', () => {
     expect(r.addedScope).toBe(2);
     expect(r.addedScopePct).toBeCloseTo(100);
   });
+
+  it('projects the completed line forward to the forecast date', () => {
+    const rows = [task(20, 20), task(18, 14), task(12, 7), task(6, 1), task(5, null), task(4, null), task(3, null), task(2, null)];
+    const r = summarizeDelivery(rows, opts());
+    expect(r.projection.length).toBeGreaterThanOrEqual(2);
+    const first = r.projection[0]!, last = r.projection[r.projection.length - 1]!;
+    expect(first.completed).toBe(r.completedTasks);   // starts at today's actual
+    expect(last.completed).toBe(r.totalTasks);        // ends fully delivered
+    expect(last.remaining).toBe(0);
+    expect(last.date).toBe(r.forecastDate);           // lands exactly on the forecast
+    // completed is non-decreasing across the projection
+    for (let i = 1; i < r.projection.length; i++) expect(r.projection[i]!.completed).toBeGreaterThanOrEqual(r.projection[i - 1]!.completed);
+  });
+
+  it('emits no projection without a throughput signal', () => {
+    const r = summarizeDelivery([task(5, null), task(4, null)], opts());
+    expect(r.projection).toEqual([]);
+  });
+
+  it('counts distinct active contributors among recently-completed work', () => {
+    const owned = (createdDaysAgo: number, completedDaysAgo: number | null, who: string | null): DeliveryTaskRow =>
+      ({ createdAt: at(createdDaysAgo), completedAt: completedDaysAgo == null ? null : at(completedDaysAgo), assignedUserId: who });
+    const rows = [owned(20, 5, 'u1'), owned(18, 3, 'u2'), owned(15, 2, 'u1'), owned(10, 1, null), owned(8, null, 'u3')];
+    const r = summarizeDelivery(rows, opts());
+    expect(r.activeContributors).toBe(2); // u1 + u2 completed in-window; u3 not completed, null ignored
+  });
 });

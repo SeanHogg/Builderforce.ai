@@ -21,21 +21,33 @@ import { and, eq, sql } from 'drizzle-orm';
 import { authMiddleware, requireRole } from '../middleware/authMiddleware';
 import { TenantRole } from '../../domain/shared/types';
 import { scope } from './segmentTrackerRoutes';
-import { getOrSetCached } from '../../infrastructure/cache/readThroughCache';
-import { computeDevexInsights } from '../../application/insights/devexInsights';
+import { getOrSetCached, getCacheVersion, bumpCacheVersion } from '../../infrastructure/cache/readThroughCache';
+import {
+  computeDevexInsights, computeDevexBenchmark, type BenchmarkPercentile,
+} from '../../application/insights/devexInsights';
 import {
   devexSurveyTemplates, devexCampaigns, devexResponses,
-  normalizeQuestions, validateAnswers, respondentHash,
+  normalizeQuestions, validateAnswers, respondentHash, normalizeSegments,
 } from '../../application/devex/devexSurveys';
+import { deriveSegments } from '../../application/devex/deriveSegments';
 import type { Env, HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 
 const SHORT_TTL = { kvTtlSeconds: 60, l1TtlMs: 15_000 };
+// The cross-tenant benchmark is the same for everyone and expensive to compute,
+// so it caches globally for far longer than a tenant's own rollup.
+const BENCHMARK_TTL = { kvTtlSeconds: 21_600, l1TtlMs: 300_000 }; // 6h / 5m
 
 /** Clamp a `?days=` window to a sane range (default 90 — surveys are infrequent). */
 function parseDays(raw: string | undefined, def = 90): number {
   const n = Number(raw);
   return Number.isFinite(n) && n >= 1 && n <= 365 ? Math.floor(n) : def;
+}
+
+/** Clamp a `?percentile=` to the offered benchmark anchors (default 75th). */
+function parsePercentile(raw: string | undefined): BenchmarkPercentile {
+  const n = Number(raw);
+  return n === 50 || n === 90 ? n : 75;
 }
 
 function parseIntId(raw: string | undefined): number | null {
@@ -51,9 +63,22 @@ export function createDevexRoutes(db: Db): Hono<HonoEnv> {
   router.get('/insights', requireRole(TenantRole.MANAGER), async (c) => {
     const { tenantId } = scope(c);
     const days = parseDays(c.req.query('days'));
+    const percentile = parsePercentile(c.req.query('percentile'));
     const env = c.env as Env;
-    const key = `devex:insights:t:${tenantId}:d:${days}`;
-    return c.json(await getOrSetCached(env, key, () => computeDevexInsights(db, tenantId, days), SHORT_TTL));
+
+    // Cross-tenant benchmark: global, expensive — cache once per percentile and
+    // share across tenants. (No per-tenant data crosses the boundary; it is the
+    // percentile of every cohort tenant's averages.)
+    const benchmark = await getOrSetCached(
+      env, `devex:benchmark:p:${percentile}`,
+      () => computeDevexBenchmark(db, percentile), BENCHMARK_TTL,
+    );
+
+    // Tenant rollup: version-token key so a new response invalidates every
+    // (days × percentile) variant at once via bumpCacheVersion on respond.
+    const ver = await getCacheVersion(env, `devex:t:${tenantId}`);
+    const key = `devex:insights:t:${tenantId}:v:${ver}:d:${days}:p:${percentile}`;
+    return c.json(await getOrSetCached(env, key, () => computeDevexInsights(db, tenantId, days, benchmark), SHORT_TTL));
   });
 
   // ---- Templates ----------------------------------------------------------
@@ -123,6 +148,7 @@ export function createDevexRoutes(db: Db): Hono<HonoEnv> {
         periodMonth: devexCampaigns.periodMonth,
         status: devexCampaigns.status,
         anonymous: devexCampaigns.anonymous,
+        recipientCount: devexCampaigns.recipientCount,
         openedAt: devexCampaigns.openedAt,
         closedAt: devexCampaigns.closedAt,
         createdAt: devexCampaigns.createdAt,
@@ -142,6 +168,7 @@ export function createDevexRoutes(db: Db): Hono<HonoEnv> {
     if (!title) return c.json({ error: 'title is required' }, 400);
     const templateId = parseIntId(typeof body.templateId === 'number' ? String(body.templateId) : (body.templateId as string | undefined));
     const periodMonth = typeof body.periodMonth === 'string' && /^\d{4}-\d{2}$/.test(body.periodMonth) ? body.periodMonth : null;
+    const recipientCount = Number.isInteger(body.recipientCount) && (body.recipientCount as number) >= 0 ? (body.recipientCount as number) : null;
     const [row] = await db.insert(devexCampaigns).values({
       tenantId,
       segmentId: segmentId ?? null,
@@ -150,6 +177,7 @@ export function createDevexRoutes(db: Db): Hono<HonoEnv> {
       periodMonth,
       status: 'open',
       anonymous: body.anonymous === undefined ? true : Boolean(body.anonymous),
+      recipientCount,
     }).returning();
     return c.json(row, 201);
   });
@@ -167,6 +195,8 @@ export function createDevexRoutes(db: Db): Hono<HonoEnv> {
       patch.closedAt = body.status === 'closed' ? new Date() : null;
     }
     if (body.anonymous !== undefined) patch.anonymous = Boolean(body.anonymous);
+    if (Number.isInteger(body.recipientCount) && (body.recipientCount as number) >= 0) patch.recipientCount = body.recipientCount;
+    else if (body.recipientCount === null) patch.recipientCount = null;
     if (Object.keys(patch).length === 0) return c.json({ error: 'nothing to update' }, 400);
     const [row] = await db.update(devexCampaigns).set(patch)
       .where(and(eq(devexCampaigns.id, id), eq(devexCampaigns.tenantId, tenantId)))
@@ -198,17 +228,26 @@ export function createDevexRoutes(db: Db): Hono<HonoEnv> {
       questions = normalizeQuestions(tpl?.questions ?? []);
     }
 
-    const body = await c.req.json<{ answers?: unknown }>();
+    const body = await c.req.json<{ answers?: unknown; segments?: unknown }>();
     const { clean, errors } = validateAnswers(questions, body.answers);
     if (errors.length) return c.json({ error: 'invalid answers', details: errors }, 400);
+    // Demographic tags for the segment heatmap / participation-by-segment — kept
+    // on the response, never joined to the user, so anonymity holds. Derived from
+    // the submitter's org profile (team / role / discipline / timezone); any tags
+    // sent explicitly on the request take precedence.
+    const segments = normalizeSegments({ ...(await deriveSegments(db, tenantId, userId)), ...normalizeSegments(body.segments) });
 
     // Anonymous → store a stable respondent_hash, NOT the user id. Identified →
     // store the user id (and no hash). The hash also dedups one submission per
     // respondent per campaign.
     const hash = respondentHash(userId, id);
     const values = campaign.anonymous
-      ? { tenantId, campaignId: id, respondentHash: hash, userId: null, answers: clean }
-      : { tenantId, campaignId: id, respondentHash: hash, userId, answers: clean };
+      ? { tenantId, campaignId: id, respondentHash: hash, userId: null, answers: clean, segments }
+      : { tenantId, campaignId: id, respondentHash: hash, userId, answers: clean, segments };
+
+    // A new/updated response changes the rollup — bump the tenant's cache version
+    // so every cached insights variant (days × percentile) re-loads next read.
+    const invalidate = () => bumpCacheVersion(c.env as Env, `devex:t:${tenantId}`);
 
     // One submission per respondent: if a row with this (campaign, hash) exists,
     // overwrite its answers rather than inserting a duplicate.
@@ -217,12 +256,14 @@ export function createDevexRoutes(db: Db): Hono<HonoEnv> {
       .limit(1);
     if (existing) {
       const [row] = await db.update(devexResponses)
-        .set({ answers: clean, userId: values.userId, submittedAt: new Date() })
+        .set({ answers: clean, segments, userId: values.userId, submittedAt: new Date() })
         .where(eq(devexResponses.id, existing.id))
         .returning();
+      await invalidate();
       return c.json(row);
     }
     const [row] = await db.insert(devexResponses).values(values).returning();
+    await invalidate();
     return c.json(row, 201);
   });
 

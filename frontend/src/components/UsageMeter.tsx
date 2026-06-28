@@ -1,10 +1,10 @@
 'use client';
 
-import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useTranslations } from 'next-intl';
-import { useAuth } from '@/lib/AuthContext';
-import { consumptionApi, type ConsumptionSnapshot, type MeterSnapshot } from '@/lib/builderforceApi';
+import { type MeterSnapshot } from '@/lib/builderforceApi';
+import { useConsumption } from '@/lib/useConsumption';
+import { Sparkline } from '@/components/charts/Sparkline';
 
 /**
  * Sidebar consumption meter — the "USAGE" section, one card PER metered resource
@@ -106,35 +106,22 @@ function MeterCard({ meter, isFree }: { meter: MeterSnapshot; isFree: boolean })
           {isFree ? t('seePlans') : t('manage')} →
         </Link>
       </div>
+
+      {meter.trend && meter.trend.length > 1 && meter.trend.some((v) => v > 0) && (
+        <div style={{ marginTop: 8 }}>
+          <Sparkline values={meter.trend} width={220} height={26} color={barColor(percentUsed)} ariaLabel={t('trendAria')} />
+        </div>
+      )}
     </div>
   );
 }
 
 export default function UsageMeter() {
   const t = useTranslations('usageMeter');
-  const { hasTenant } = useAuth();
-  const [snapshot, setSnapshot] = useState<ConsumptionSnapshot | null>(null);
-
-  useEffect(() => {
-    // No synchronous clear: render already returns null while !hasTenant, so a
-    // stale value can never paint. Only the async resolution touches state.
-    if (!hasTenant) return;
-    let active = true;
-    consumptionApi
-      .get()
-      .then((s) => {
-        if (active) setSnapshot(s);
-      })
-      .catch(() => {
-        if (active) setSnapshot(null);
-      });
-    return () => {
-      active = false;
-    };
-  }, [hasTenant]);
+  const snapshot = useConsumption();
 
   // Self-gate: nothing to show until we have a tenant session and data.
-  if (!hasTenant || !snapshot || snapshot.meters.length === 0) return null;
+  if (!snapshot || snapshot.meters.length === 0) return null;
 
   const isFree = snapshot.plan.effective === 'free';
 

@@ -1,9 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import {
   summarizeAllocation,
+  summarizeAllocationHistory,
   taskEffortHours,
   effectiveCategory,
   effectiveCostClass,
+  capitalizationStatus,
+  fteMonthsFromHours,
+  WORKING_HOURS_PER_FTE_MONTH,
   type AllocationTaskRow,
 } from './allocationInsights';
 import {
@@ -23,7 +27,8 @@ const noAssignee = {
 function row(over: Partial<AllocationTaskRow>): AllocationTaskRow {
   return {
     taskId: 1, title: null, description: null, source: null,
-    actionType: null, allocationCategory: null, costClass: null,
+    actionType: null, allocationCategory: null, costClass: null, costClassSource: null,
+    taskType: 'task', parentTaskId: null, projectId: 1, projectName: 'Proj',
     createdAt: new Date(NOW - 10 * H), completedAt: null, updatedAt: new Date(NOW),
     ...noAssignee, ...over,
   };
@@ -138,5 +143,81 @@ describe('summarizeAllocation', () => {
     expect(r.totals.hours).toBe(0);
     expect(r.totals.capitalizablePct).toBe(0);
     expect(r.byCategory.every((b) => b.pct === 0)).toBe(true);
+    expect(r.totals.byStatus.capitalized.fteMonths).toBe(0);
+    expect(r.epics).toHaveLength(0);
+  });
+
+  it('splits effort + cost into capitalization-status buckets (FTE/cost donut)', () => {
+    const r = summarizeAllocation(rows, cost, 30, NOW);
+    // innovation (6h) → capitalized; ktlo (6h) → not_capitalized; nothing uncategorized here.
+    expect(r.totals.byStatus.capitalized.hours).toBeCloseTo(6);
+    expect(r.totals.byStatus.capitalized.fteMonths).toBeCloseTo(fteMonthsFromHours(6));
+    expect(r.totals.byStatus.capitalized.costUsd).toBeCloseTo(1);
+    expect(r.totals.byStatus.not_capitalized.hours).toBeCloseTo(6);
+    expect(r.totals.byStatus.not_capitalized.costUsd).toBeCloseTo(2);
+    expect(r.totals.byStatus.uncategorized.hours).toBeCloseTo(0);
+  });
+});
+
+describe('capitalizationStatus', () => {
+  it('honours an explicit cost_class, then lineage, then category default', () => {
+    expect(capitalizationStatus(row({ costClass: 'capex' }))).toBe('capitalized');
+    expect(capitalizationStatus(row({ costClass: 'opex' }))).toBe('not_capitalized');
+    expect(capitalizationStatus(row({ taskId: 9 }), new Map([[9, 'capex']]))).toBe('capitalized');
+    expect(capitalizationStatus(row({ actionType: 'frontend_ui' }))).toBe('capitalized'); // innovation default
+    expect(capitalizationStatus(row({ actionType: 'bugfix' }))).toBe('not_capitalized'); // ktlo default
+  });
+  it('marks genuinely unclassified work as uncategorized', () => {
+    // No own class, no lineage, no override, signals derive only to "other".
+    expect(capitalizationStatus(row({ actionType: 'other' }))).toBe('uncategorized');
+  });
+});
+
+describe('epic rollup', () => {
+  it('rolls child-task effort/cost into the parent epic', () => {
+    const rows: AllocationTaskRow[] = [
+      row({ taskId: 10, taskType: 'epic', actionType: 'frontend_ui', title: 'Big Epic', createdAt: new Date(NOW - 1 * H), completedAt: new Date(NOW) }),
+      row({ taskId: 11, parentTaskId: 10, actionType: 'frontend_ui', createdAt: new Date(NOW - 4 * H), completedAt: new Date(NOW) }),
+      row({ taskId: 12, parentTaskId: 10, actionType: 'frontend_ui', createdAt: new Date(NOW - 2 * H), completedAt: new Date(NOW) }),
+    ];
+    const cost = new Map<number, number>([[11, 100_000]]);
+    const r = summarizeAllocation(rows, cost, 30, NOW);
+    expect(r.epics).toHaveLength(1);
+    const epic = r.epics[0]!;
+    expect(epic.epicId).toBe(10);
+    expect(epic.title).toBe('Big Epic');
+    expect(epic.status).toBe('capitalized');
+    expect(epic.taskCount).toBe(3); // epic + 2 children
+    expect(epic.hours).toBeCloseTo(1 + 4 + 2);
+    expect(epic.costUsd).toBeCloseTo(1);
+  });
+});
+
+describe('summarizeAllocationHistory', () => {
+  it('buckets effort + cost by month and splits capitalized', () => {
+    const may = Date.UTC(2026, 4, 15);   // 2026-05
+    const jun = Date.UTC(2026, 5, 15);   // 2026-06 (current)
+    const rows: AllocationTaskRow[] = [
+      row({ taskId: 1, actionType: 'frontend_ui', createdAt: new Date(may - 4 * H), completedAt: new Date(may) }),
+      row({ taskId: 2, actionType: 'bugfix', createdAt: new Date(jun - 2 * H), completedAt: new Date(jun) }),
+    ];
+    const cost = new Map<number, number>([[1, 100_000], [2, 200_000]]);
+    const h = summarizeAllocationHistory(rows, cost, 3, NOW);
+    expect(h.months).toHaveLength(3);
+    const current = h.months.find((m) => m.month === '2026-06')!;
+    const prev = h.months.find((m) => m.month === '2026-05')!;
+    expect(current.status).toBe('in_progress');
+    expect(prev.status).toBe('ready');
+    expect(prev.capitalizedFteMonths).toBeCloseTo(fteMonthsFromHours(4));
+    expect(prev.capitalizedUsd).toBeCloseTo(1);
+    expect(current.notCapitalizedUsd).toBeCloseTo(2);
+    expect(current.capitalizedFteMonths).toBeCloseTo(0);
+  });
+});
+
+describe('fteMonthsFromHours', () => {
+  it('converts effort-hours to FTE-months', () => {
+    expect(fteMonthsFromHours(WORKING_HOURS_PER_FTE_MONTH)).toBe(1);
+    expect(fteMonthsFromHours(WORKING_HOURS_PER_FTE_MONTH * 2)).toBe(2);
   });
 });
