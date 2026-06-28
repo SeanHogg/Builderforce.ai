@@ -20,6 +20,7 @@ import { getOrSetCached, invalidateCached } from '../../infrastructure/cache/rea
 import {
   agentHosts,
   deploymentEvents,
+  memberProfiles,
   projects,
   tasks,
   taskStatusTransitions,
@@ -58,13 +59,17 @@ export async function bumpWorkforceMetricsVersion(env: Env, tenantId: number): P
 // ── member identity (mirrors reportRoutes.groupCompletedByAssignee precedence) ─
 export type MemberKind = 'human' | 'cloud_agent' | 'host_agent';
 
-export interface MemberTaskRow {
-  taskId: number;
+/** The polymorphic assignee columns shared by every task-grain rollup. */
+export interface MemberIdentityFields {
   assignedUserId: string | null;
   assignedUserName: string | null;
   assignedAgentHostId: number | null;
   assignedHostName: string | null;
   assignedAgentRef: string | null;
+}
+
+export interface MemberTaskRow extends MemberIdentityFields {
+  taskId: number;
   createdAt: Date;
   completedAt: Date | null;
   lastWorkedAt: Date | null;
@@ -72,11 +77,12 @@ export interface MemberTaskRow {
   reopenCount: number;
 }
 
-interface Identity { kind: MemberKind; ref: string; name: string; }
+export interface Identity { kind: MemberKind; ref: string; name: string; }
 
 /** Resolve the single owner of a task (human > agent host > cloud agent). Returns
- *  null for an unassigned task (excluded from member scorecards). */
-function identityOf(r: MemberTaskRow): Identity | null {
+ *  null for an unassigned task (excluded from member scorecards). Exported so every
+ *  task-grain rollup (scorecards, allocation) resolves identity identically (DRY). */
+export function identityOf(r: MemberIdentityFields): Identity | null {
   if (r.assignedUserId) return { kind: 'human', ref: r.assignedUserId, name: r.assignedUserName || r.assignedUserId };
   if (r.assignedAgentHostId != null) return { kind: 'host_agent', ref: String(r.assignedAgentHostId), name: r.assignedHostName || `Agent host #${r.assignedAgentHostId}` };
   if (r.assignedAgentRef) return { kind: 'cloud_agent', ref: r.assignedAgentRef, name: r.assignedAgentRef };
@@ -90,6 +96,11 @@ export interface MemberScorecard {
   memberKind: MemberKind;
   memberRef: string;
   memberName: string;
+  /** Builder-discipline axis (engineering | product | design | qa | devops |
+   *  data | other) from member_profiles; null = unassigned. Attached in
+   *  {@link computeMemberMetrics} (kept out of {@link scoreMembers} so scoring
+   *  stays a pure, DB-free function). */
+  discipline: string | null;
   assignedCount: number;
   completedCount: number;
   redoCount: number;
@@ -164,6 +175,7 @@ export function scoreMembers(rows: MemberTaskRow[], firstMoveByTask: Map<number,
       memberKind: id.kind,
       memberRef: id.ref,
       memberName: id.name,
+      discipline: null, // attached from member_profiles in computeMemberMetrics
       assignedCount: mrows.length,
       completedCount: completed.length,
       redoCount: redo,
@@ -179,6 +191,43 @@ export function scoreMembers(rows: MemberTaskRow[], firstMoveByTask: Map<number,
 
   // Most effective first; stable name tiebreak.
   return out.sort((a, b) => (b.effectivenessScore ?? 0) - (a.effectivenessScore ?? 0) || a.memberName.localeCompare(b.memberName));
+}
+
+// ── builder-discipline rollup (the Jellyfish "beyond engineers" lens) ──────────
+
+export interface DisciplineRollup {
+  discipline: string;
+  memberCount: number;
+  completedCount: number;
+  avgEffectiveness: number | null;
+}
+
+/**
+ * Pure: group scorecards by their builder discipline so delivery is attributable
+ * to PM / design / QA / etc., not just human-vs-agent. Null disciplines fall into
+ * an 'unassigned' bucket. Sorted by completed work desc (stable discipline name
+ * tiebreak). Separated for unit testing (no DB).
+ */
+export function rollupByDiscipline(cards: MemberScorecard[]): DisciplineRollup[] {
+  const byDisc = new Map<string, { count: number; completed: number; effs: number[] }>();
+  for (const c of cards) {
+    const key = c.discipline ?? 'unassigned';
+    const b = byDisc.get(key) ?? { count: 0, completed: 0, effs: [] };
+    b.count += 1;
+    b.completed += c.completedCount;
+    if (c.effectivenessScore != null) b.effs.push(c.effectivenessScore);
+    byDisc.set(key, b);
+  }
+  const out: DisciplineRollup[] = [];
+  for (const [discipline, b] of byDisc) {
+    out.push({
+      discipline,
+      memberCount: b.count,
+      completedCount: b.completed,
+      avgEffectiveness: avg(b.effs),
+    });
+  }
+  return out.sort((a, b) => b.completedCount - a.completedCount || a.discipline.localeCompare(b.discipline));
 }
 
 /**
@@ -229,7 +278,24 @@ export async function computeMemberMetrics(db: Db, tenantId: number, days: numbe
     }
   }
 
-  return scoreMembers(rows, firstMove);
+  const cards = scoreMembers(rows, firstMove);
+
+  // Attach the builder discipline from member_profiles (one query, tenant-scoped),
+  // matched by the polymorphic (memberKind, memberRef) identity. Kept out of the
+  // pure scorer so scoreMembers stays DB-free.
+  const profileRows = await db
+    .select({ memberKind: memberProfiles.memberKind, memberRef: memberProfiles.memberRef, discipline: memberProfiles.discipline })
+    .from(memberProfiles)
+    .where(eq(memberProfiles.tenantId, tenantId));
+  const disciplineByMember = new Map<string, string>();
+  for (const p of profileRows) {
+    if (p.discipline) disciplineByMember.set(`${p.memberKind}:${p.memberRef}`, p.discipline);
+  }
+  for (const c of cards) {
+    c.discipline = disciplineByMember.get(`${c.memberKind}:${c.memberRef}`) ?? null;
+  }
+
+  return cards;
 }
 
 // ── project-scoped delivery (for the project diagnostics rating) ───────────────

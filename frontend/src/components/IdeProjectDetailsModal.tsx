@@ -35,7 +35,51 @@ export function IdeProjectDetailsModal({
   const [containers, setContainers] = useState<IdeContainerOption[]>([]);
   const [workflows, setWorkflows] = useState<WorkflowDefinitionSummary[]>([]);
   const [saving, setSaving] = useState(false);
+  const [busy, setBusy] = useState<'fork' | 'run' | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  const selectedWorkflow = workflows.find((w) => w.id === workflowDefinitionId) ?? null;
+  // A shared/global definition can be customized (forked) for this project; an
+  // already project-scoped one is the custom copy and just runs.
+  const canCustomize = !!selectedWorkflow && selectedWorkflow.executionScope !== 'project';
+
+  // Fork the assigned shared workflow into a project-scoped custom copy and
+  // re-point this project at it — the "modify → custom workflow" path.
+  const customize = async () => {
+    if (!selectedWorkflow || busy) return;
+    setBusy('fork');
+    setError(null);
+    try {
+      const fork = await workflowDefinitions.fork(selectedWorkflow.id, { projectId: containerProjectId });
+      setWorkflows((prev) => [fork as WorkflowDefinitionSummary, ...prev]);
+      setWorkflowDefinitionId(fork.id);
+      setNotice(t('workflowForked'));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : t('saveFailed'));
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  // Run the assigned workflow using its own saved run target.
+  const run = async () => {
+    if (!selectedWorkflow || busy) return;
+    setBusy('run');
+    setError(null);
+    try {
+      await workflowDefinitions.run(selectedWorkflow.id, {
+        runtime: selectedWorkflow.runTargetRuntime ?? 'host',
+        agentHostId: selectedWorkflow.runTargetAgentHostId ?? null,
+        cloudAgentRef: selectedWorkflow.runTargetCloudAgentRef ?? null,
+      });
+      setNotice(t('workflowRunStarted'));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : t('saveFailed'));
+    } finally {
+      setBusy(null);
+    }
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -123,15 +167,28 @@ export function IdeProjectDetailsModal({
               <label className="block text-sm mb-1" style={{ color: 'var(--text-secondary)' }}>{t('workflowLabel')}</label>
               <select
                 value={workflowDefinitionId ?? ''}
-                onChange={(e) => setWorkflowDefinitionId(e.target.value || null)}
+                onChange={(e) => { setWorkflowDefinitionId(e.target.value || null); setNotice(null); }}
                 style={inputStyle}
               >
                 <option value="">{t('noWorkflow')}</option>
                 {workflows.map((w) => (
-                  <option key={w.id} value={w.id}>{w.name}</option>
+                  <option key={w.id} value={w.id}>{w.name}{w.executionScope === 'project' ? ` · ${t('customTag')}` : ''}</option>
                 ))}
               </select>
               <p style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 6 }}>{t('workflowHint')}</p>
+              {selectedWorkflow && (
+                <div style={{ display: 'flex', gap: 8, marginTop: 8, flexWrap: 'wrap' }}>
+                  {canCustomize && (
+                    <button type="button" onClick={customize} disabled={busy !== null} style={secondaryBtn}>
+                      {busy === 'fork' ? t('working') : t('customizeWorkflow')}
+                    </button>
+                  )}
+                  <button type="button" onClick={run} disabled={busy !== null} style={secondaryBtn}>
+                    {busy === 'run' ? t('working') : t('runWorkflow')}
+                  </button>
+                </div>
+              )}
+              {notice && <p style={{ fontSize: 12, color: 'var(--success-text, var(--coral-bright))', marginTop: 8 }}>{notice}</p>}
             </div>
           )}
 
@@ -167,4 +224,15 @@ const inputStyle: React.CSSProperties = {
   borderRadius: 10,
   padding: '10px 14px',
   outline: 'none',
+};
+
+const secondaryBtn: React.CSSProperties = {
+  fontSize: 12,
+  fontWeight: 600,
+  padding: '6px 12px',
+  borderRadius: 8,
+  border: '1px solid var(--border-subtle)',
+  background: 'transparent',
+  color: 'var(--coral-bright)',
+  cursor: 'pointer',
 };

@@ -804,7 +804,11 @@ function parseArgs(raw) {
 }
 function windowed(convo) {
   let w = convo.slice(-HISTORY_WINDOW);
-  while (w.length > 0 && w[0].role === "tool") w = w.slice(1);
+  while (w.length > 0 && w[0].role !== "user") w = w.slice(1);
+  if (w.length === 0) {
+    const lastUser = convo.map((m) => m.role).lastIndexOf("user");
+    w = lastUser >= 0 ? convo.slice(lastUser) : convo.slice();
+  }
   return w;
 }
 function subscribeRun(chatId, listener) {
@@ -904,7 +908,9 @@ async function runLoop(chatId, c, req) {
         tool_calls: result.toolCalls.map((tc) => ({
           id: tc.id,
           type: "function",
-          function: { name: tc.name, arguments: tc.args }
+          // An empty `arguments` string is not valid JSON; strict vendors (Gemini)
+          // reject it. Normalize a no-arg call to an empty object.
+          function: { name: tc.name, arguments: tc.args && tc.args.trim() ? tc.args : "{}" }
         }))
       });
       const narration = result.text.trim();

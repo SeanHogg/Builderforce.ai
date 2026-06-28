@@ -76,6 +76,17 @@ export function createIdeProjectRoutes(projectService: ProjectService, db: Db): 
     return row ? row.id : null;
   };
 
+  /** Tenant-ownership gate for an assignable workflow definition (prevents
+   *  referencing another tenant's workflow by id). Returns true when it belongs. */
+  const ownsWorkflow = async (tenantId: number, wfId: string): Promise<boolean> => {
+    const [row] = await db
+      .select({ id: workflowDefinitions.id })
+      .from(workflowDefinitions)
+      .where(and(eq(workflowDefinitions.id, wfId), eq(workflowDefinitions.tenantId, tenantId)))
+      .limit(1);
+    return !!row;
+  };
+
   // GET /api/ide-projects — list the tenant's IDE projects (grouped client-side by container).
   router.get('/', async (c) => {
     const tenantId = c.get('tenantId') as number;
@@ -89,14 +100,37 @@ export function createIdeProjectRoutes(projectService: ProjectService, db: Db): 
   });
 
   // GET /api/ide-projects/containers — candidate parent Projects for the assign/reassign picker.
+  // Read-through cached with a short TTL: the parent set changes only when a real
+  // project is created/deleted (in projectRoutes, out of this router's reach), so a
+  // brief staleness window on a non-critical picker is acceptable rather than
+  // cross-wiring invalidation into the project CRUD path.
   router.get('/containers', async (c) => {
     const tenantId = c.get('tenantId') as number;
-    const rows = await db
-      .select({ id: projects.id, name: projects.name, key: projects.key })
-      .from(projects)
-      .where(and(eq(projects.tenantId, tenantId), eq(projects.isIdeStorage, false)))
-      .orderBy(desc(projects.updatedAt));
+    const rows = await getOrSetCached(
+      c.env as Env,
+      `ide-projects:containers:${tenantId}`,
+      () => db
+        .select({ id: projects.id, name: projects.name, key: projects.key })
+        .from(projects)
+        .where(and(eq(projects.tenantId, tenantId), eq(projects.isIdeStorage, false)))
+        .orderBy(desc(projects.updatedAt)),
+      { kvTtlSeconds: 30 },
+    );
     return c.json(rows);
+  });
+
+  // GET /api/ide-projects/by-storage/:storageProjectId — resolve the IDE project
+  // backing a given storage project (used when the IDE is opened by storage id,
+  // e.g. the Voice studio needs its ide_project id to scope clones).
+  router.get('/by-storage/:storageProjectId', async (c) => {
+    const tenantId = c.get('tenantId') as number;
+    const sid = Number(c.req.param('storageProjectId'));
+    if (!Number.isInteger(sid)) return c.json({ error: 'Invalid storage project id' }, 400);
+    const [row] = await viewSelect()
+      .where(and(eq(ideProjects.tenantId, tenantId), eq(ideProjects.storageProjectId, sid)))
+      .limit(1);
+    if (!row) return c.json({ error: 'IDE project not found' }, 404);
+    return c.json(row);
   });
 
   // GET /api/ide-projects/:id — single IDE project (int id or public UUID).
@@ -114,6 +148,7 @@ export function createIdeProjectRoutes(projectService: ProjectService, db: Db): 
       modality?: string;
       containerProjectId?: number | null;
       template?: string | null;
+      workflowDefinitionId?: string | null;
     }>();
     const name = body.name?.trim();
     if (!name) return c.json({ error: 'name is required' }, 400);
@@ -123,6 +158,17 @@ export function createIdeProjectRoutes(projectService: ProjectService, db: Db): 
     if (body.containerProjectId != null) {
       containerProjectId = await validContainer(tenantId, body.containerProjectId);
       if (containerProjectId === null) return c.json({ error: 'Invalid container project' }, 400);
+    }
+
+    // LLM projects run a workflow — one must be assigned at creation. Other
+    // modalities ignore it. Validate tenant ownership when supplied.
+    let workflowDefinitionId: string | null = null;
+    if (body.workflowDefinitionId) {
+      if (!(await ownsWorkflow(tenantId, body.workflowDefinitionId))) return c.json({ error: 'Invalid workflow' }, 400);
+      workflowDefinitionId = body.workflowDefinitionId;
+    }
+    if (modality === 'llm' && !workflowDefinitionId) {
+      return c.json({ error: 'An LLM project requires a workflow' }, 400);
     }
 
     // Backing storage project — reuses the proven project create + template seed.
@@ -158,6 +204,7 @@ export function createIdeProjectRoutes(projectService: ProjectService, db: Db): 
         storageProjectId: storage.id,
         name,
         modality,
+        workflowDefinitionId,
       })
       .returning({ id: ideProjects.id });
     await invalidateCached(c.env as Env, listCacheKey(tenantId));
@@ -199,14 +246,7 @@ export function createIdeProjectRoutes(projectService: ProjectService, db: Db): 
       if (body.workflowDefinitionId === null) {
         set.workflowDefinitionId = null;
       } else {
-        // Tenant-ownership gate: a workflow can only be assigned if it belongs to
-        // this tenant (prevents referencing another tenant's definition by id).
-        const [wf] = await db
-          .select({ id: workflowDefinitions.id })
-          .from(workflowDefinitions)
-          .where(and(eq(workflowDefinitions.id, body.workflowDefinitionId), eq(workflowDefinitions.tenantId, tenantId)))
-          .limit(1);
-        if (!wf) return c.json({ error: 'Invalid workflow' }, 400);
+        if (!(await ownsWorkflow(tenantId, body.workflowDefinitionId))) return c.json({ error: 'Invalid workflow' }, 400);
         set.workflowDefinitionId = body.workflowDefinitionId;
       }
     }

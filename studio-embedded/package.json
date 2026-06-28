@@ -49,7 +49,8 @@
     "type-check": "tsc --noEmit",
     "test": "vitest run --passWithNoTests",
     "prepare": "npm run build",
-    "prepublishOnly": "npm run build"
+    "prepublishOnly": "npm run build",
+    "typecheck:native": "tsgo --noEmit"
   },
   "engines": {
     "node": ">=18"
@@ -71,7 +72,8 @@
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "tsup": "^8.5.0",
-    "typescript": "^5.9.3",
-    "vitest": "^4.0.3"
+    "typescript": "^6.0.3",
+    "vitest": "^4.0.3",
+    "@typescript/native-preview": "7.0.0-dev.20260627.2"
   }
 }

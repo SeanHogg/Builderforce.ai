@@ -576,6 +576,7 @@ export class PagerDutyBoardProvider implements BoardProvider {
 // ---------------------------------------------------------------------------
 
 const FRESHSERVICE_STATUS: Record<number, string> = { 2: 'open', 3: 'pending', 4: 'resolved', 5: 'closed' };
+const FRESHSERVICE_PRIORITY: Record<number, string> = { 1: 'low', 2: 'normal', 3: 'high', 4: 'urgent' };
 
 interface FreshserviceTicketRaw {
   id: number;
@@ -583,6 +584,11 @@ interface FreshserviceTicketRaw {
   description_text?: string | null;
   description?: string | null;
   status?: number;
+  priority?: number;
+  /** Ticket type ('Incident' | 'Service Request' | 'Problem' | …). */
+  type?: string | null;
+  /** Requester (distinct-customer key for support-tix-per-customer). */
+  requester_id?: number | null;
   updated_at: string;
 }
 
@@ -615,6 +621,11 @@ export class FreshserviceBoardProvider implements BoardProvider {
           title:           t.subject,
           body:            t.description_text ?? t.description ?? null,
           state:           FRESHSERVICE_STATUS[t.status ?? 2] ?? 'open',
+          extra:           {
+            priority: FRESHSERVICE_PRIORITY[t.priority ?? 2] ?? 'normal',
+            ticketType: t.type ?? null,
+            requester: t.requester_id != null ? String(t.requester_id) : null,
+          },
         }),
       );
       next = maxVersion(next, t.updated_at);
@@ -649,7 +660,20 @@ interface ServiceNowRecordRaw {
   short_description?: string;
   description?: string | null;
   state?: string;
+  priority?: string;
+  /** Caller/customer — with sysparm_display_value=true this is a display name. */
+  caller_id?: string;
+  category?: string;
   sys_updated_on?: string;
+}
+
+/** ServiceNow numeric priority (display value "1 - Critical" etc.) → our vocabulary. */
+function serviceNowPriority(raw: string | undefined): string {
+  const s = (raw ?? '').toLowerCase();
+  if (s.includes('critical') || s.startsWith('1')) return 'urgent';
+  if (s.includes('high') || s.startsWith('2')) return 'high';
+  if (s.includes('low') || s.startsWith('4') || s.startsWith('5')) return 'low';
+  return 'normal';
 }
 
 export class ServiceNowBoardProvider implements BoardProvider {
@@ -690,7 +714,12 @@ export class ServiceNowBoardProvider implements BoardProvider {
           title:           r.short_description ?? r.number ?? r.sys_id,
           body:            r.description ?? null,
           state:           r.state ?? 'new',
-          extra:           { number: r.number ?? null },
+          extra:           {
+            number: r.number ?? null,
+            priority: serviceNowPriority(r.priority),
+            requester: r.caller_id ?? null,
+            category: r.category ?? null,
+          },
         }),
       );
       next = maxVersion(next, r.sys_updated_on ?? null);

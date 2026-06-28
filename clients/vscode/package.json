@@ -63,6 +63,10 @@
         {
           "id": "builderforce.project",
           "name": "Project & Tasks"
+        },
+        {
+          "id": "builderforce.insights",
+          "name": "Insights"
         }
       ]
     },
@@ -70,6 +74,10 @@
       {
         "view": "builderforce.sessions",
         "contents": "Start a conversation with the BuilderForce agent.\n[New Session](command:builderforce.newSession)\n\nThe chat opens as a document in the editor so you can review changes side by side."
+      },
+      {
+        "view": "builderforce.insights",
+        "contents": "Sign in to see live builder-level insights (token spend, budget, top model, cost per merged PR).\n[Sign In](command:builderforce.signIn)"
       }
     ],
     "commands": [
@@ -77,6 +85,11 @@
         "command": "builderforce.openChat",
         "title": "BuilderForce: Open Chat",
         "icon": "$(comment-discussion)"
+      },
+      {
+        "command": "builderforce.refreshInsights",
+        "title": "BuilderForce: Refresh Insights",
+        "icon": "$(sync)"
       },
       {
         "command": "builderforce.signIn",
@@ -204,6 +217,11 @@
         }
       ],
       "view/title": [
+        {
+          "command": "builderforce.refreshInsights",
+          "when": "view == builderforce.insights",
+          "group": "navigation@1"
+        },
         {
           "command": "builderforce.newSession",
           "when": "view == builderforce.sessions",
@@ -400,7 +418,8 @@
     "typecheck": "tsc -p ./",
     "package": "vsce package --no-dependencies",
     "publish:marketplace": "vsce publish --no-dependencies",
-    "publish:openvsx": "ovsx publish"
+    "publish:openvsx": "ovsx publish",
+    "typecheck:native": "tsgo --noEmit"
   },
   "dependencies": {
     "@seanhogg/builderforce-memory": "^2026.6.28"
@@ -411,6 +430,7 @@
     "@vscode/vsce": "^3.2.0",
     "esbuild": "^0.24.0",
     "ovsx": "^0.10.0",
-    "typescript": "^5.5.0"
+    "typescript": "^6.0.3",
+    "@typescript/native-preview": "7.0.0-dev.20260627.2"
   }
 }

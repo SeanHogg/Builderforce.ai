@@ -528,6 +528,7 @@ function DebugCopyButton(props) {
 }
 
 // src/components/QualityTierPicker.tsx
+import { MODEL_REGISTRY as MODEL_REGISTRY2 } from "@seanhogg/builderforce-studio";
 import { Fragment as Fragment2, jsx as jsx6, jsxs as jsxs5 } from "react/jsx-runtime";
 var QUALITY_TIERS = [
   {
@@ -556,7 +557,8 @@ function resolveQualityTier(tier) {
 }
 function resolveEffectiveChain(opts) {
   if (opts.showAdvanced) {
-    return { primary: opts.advancedModel, refinement: null, overridesQuality: true };
+    const refinement = opts.customRefinement && opts.customRefinement !== opts.advancedModel ? opts.customRefinement : null;
+    return { primary: opts.advancedModel, refinement, overridesQuality: true };
   }
   const tier = resolveQualityTier(opts.quality);
   return { primary: tier.primary, refinement: tier.refinement ?? null, overridesQuality: false };
@@ -585,11 +587,40 @@ function EffectiveChainBadge(props) {
           " ",
           "\u2014 Advanced model override is active, so the ",
           /* @__PURE__ */ jsx6("strong", { children: "Quality" }),
-          " tier above is ignored (no refinement pass). Close Advanced or clear the model to use the tier."
+          " tier above is ignored.",
+          " ",
+          chain.refinement ? "A custom two-pass chain is set (draft \u2192 refine)." : "Add a refinement model below for a custom two-pass chain, or close Advanced to use the tier."
         ] }) : null
       ]
     }
   );
+}
+function CustomRefinementPicker({
+  primary,
+  value,
+  onChange,
+  disabled
+}) {
+  const options = Object.keys(MODEL_REGISTRY2).filter(
+    (id) => id !== primary
+  );
+  return /* @__PURE__ */ jsxs5("div", { className: "bfs-field", children: [
+    /* @__PURE__ */ jsx6("label", { className: "bfs-label", children: "Refinement model (custom two-pass)" }),
+    /* @__PURE__ */ jsxs5(
+      "select",
+      {
+        className: "bfs-select",
+        value: value ?? "",
+        onChange: (e) => onChange(e.target.value || null),
+        disabled,
+        children: [
+          /* @__PURE__ */ jsx6("option", { value: "", children: "None (single pass)" }),
+          options.map((id) => /* @__PURE__ */ jsx6("option", { value: id, children: id }, id))
+        ]
+      }
+    ),
+    /* @__PURE__ */ jsx6("p", { className: "bfs-hint", children: "Optional second pass: the primary model lays in composition, this model refines each frame via img2img. Picks any draft/refine pair (e.g. sd-turbo \u2192 lcm-dreamshaper), generalising the fixed Refined tier." })
+  ] });
 }
 function QualityTierPicker({ value, onChange, disabled }) {
   const current = QUALITY_TIERS.find((t) => t.id === value) ?? QUALITY_TIERS[0];
@@ -977,6 +1008,7 @@ function StudioPanel({
   const [prompt, setPrompt] = useState4("");
   const [quality, setQuality] = useState4("fast");
   const [model, setModel] = useState4(defaultModel);
+  const [refinementOverride, setRefinementOverride] = useState4(null);
   const [showAdvanced, setShowAdvanced] = useState4(false);
   const [resolution, setResolution] = useState4(DEFAULT_RESOLUTION);
   const [coherenceMode, setCoherenceMode] = useState4(defaultCoherence);
@@ -996,7 +1028,7 @@ function StudioPanel({
   const [interpolationBackend, setInterpolationBackend] = useState4("latent-slerp");
   useEffect3(() => {
     disposeEngineAndOutputs();
-  }, [quality, resolution]);
+  }, [quality, resolution, model, showAdvanced, refinementOverride]);
   const [isGenerating, setIsGenerating] = useState4(false);
   const [progressLabel, setProgressLabel] = useState4("");
   const [framesDone, setFramesDone] = useState4(0);
@@ -1067,7 +1099,12 @@ function StudioPanel({
   }, []);
   const ensureEngine = useCallback2(async () => {
     if (engineRef.current) return engineRef.current;
-    const chain = resolveEffectiveChain({ showAdvanced, advancedModel: model, quality });
+    const chain = resolveEffectiveChain({
+      showAdvanced,
+      advancedModel: model,
+      quality,
+      customRefinement: refinementOverride
+    });
     const engine = await VideoEngine.create({
       apiKey: token,
       baseUrl,
@@ -1081,7 +1118,7 @@ function StudioPanel({
     if (!engine) throw new Error("Engine refused to start on this device.");
     engineRef.current = engine;
     return engine;
-  }, [token, baseUrl, quality, showAdvanced, model, initialMambaState, resolution, handleProgress]);
+  }, [token, baseUrl, quality, showAdvanced, model, refinementOverride, initialMambaState, resolution, handleProgress]);
   const finishGeneration = useCallback2(
     async (generated, wasCinematic) => {
       const url = URL.createObjectURL(generated.blob);
@@ -1091,12 +1128,18 @@ function StudioPanel({
       onVideoGenerated?.(generated.blob, generated.mambaState);
       if (onSaveVersion) {
         try {
-          const chain = resolveEffectiveChain({ showAdvanced, advancedModel: model, quality });
+          const chain = resolveEffectiveChain({
+            showAdvanced,
+            advancedModel: model,
+            quality,
+            customRefinement: refinementOverride
+          });
           const params = {
             prompt,
             quality,
             model: chain.primary,
             refinementModel: chain.refinement,
+            advanced: showAdvanced,
             width: resolution,
             height: resolution,
             frames,
@@ -1135,6 +1178,7 @@ function StudioPanel({
       quality,
       showAdvanced,
       model,
+      refinementOverride,
       resolution,
       prompt,
       frames,
@@ -1350,6 +1394,8 @@ function StudioPanel({
       const p = entry.params;
       setPrompt(p.prompt);
       setModel(p.model);
+      setShowAdvanced(p.advanced ?? false);
+      setRefinementOverride(p.advanced ? p.refinementModel ?? null : null);
       if (p.quality) setQuality(p.quality);
       setInterpolationFactor(p.interpolationFactor ?? 1);
       setInterpolationBackend(p.interpolationBackend ?? "latent-slerp");
@@ -1390,7 +1436,12 @@ function StudioPanel({
     ] });
   }
   const device = status.device;
-  const effectiveChain = resolveEffectiveChain({ showAdvanced, advancedModel: model, quality });
+  const effectiveChain = resolveEffectiveChain({
+    showAdvanced,
+    advancedModel: model,
+    quality,
+    customRefinement: refinementOverride
+  });
   return /* @__PURE__ */ jsxs7("div", { className: "bfs-root", children: [
     !hideHeader && /* @__PURE__ */ jsx8("header", { className: "bfs-header", children: /* @__PURE__ */ jsxs7("div", { children: [
       /* @__PURE__ */ jsx8("h1", { className: "bfs-title", children: "AI Video Studio" }),
@@ -1451,7 +1502,15 @@ function StudioPanel({
             disabled: isGenerating || showAdvanced
           }
         ),
-        /* @__PURE__ */ jsx8(EffectiveChainBadge, { showAdvanced, advancedModel: model, quality }),
+        /* @__PURE__ */ jsx8(
+          EffectiveChainBadge,
+          {
+            showAdvanced,
+            advancedModel: model,
+            quality,
+            customRefinement: refinementOverride
+          }
+        ),
         /* @__PURE__ */ jsxs7(
           "label",
           {
@@ -1514,8 +1573,17 @@ function StudioPanel({
               ),
               /* @__PURE__ */ jsxs7("div", { style: { marginTop: 12 }, children: [
                 /* @__PURE__ */ jsx8(ModelPicker, { value: model, onChange: setModel, disabled: isGenerating }),
-                /* @__PURE__ */ jsx8("p", { className: "bfs-hint", children: "Overrides the Quality preset above. When this is set, the engine uses this model directly (no refinement pass)." })
+                /* @__PURE__ */ jsx8("p", { className: "bfs-hint", children: "Overrides the Quality preset above. When this is set, the engine uses this model directly \u2014 add a refinement model below for a custom two-pass chain." })
               ] }),
+              /* @__PURE__ */ jsx8("div", { style: { marginTop: 12 }, children: /* @__PURE__ */ jsx8(
+                CustomRefinementPicker,
+                {
+                  primary: model,
+                  value: refinementOverride,
+                  onChange: setRefinementOverride,
+                  disabled: isGenerating
+                }
+              ) }),
               /* @__PURE__ */ jsxs7("div", { className: "bfs-field", style: { marginTop: 12 }, children: [
                 /* @__PURE__ */ jsx8("label", { className: "bfs-label", children: "Resolution" }),
                 /* @__PURE__ */ jsx8("div", { className: "bfs-radio-row", children: RESOLUTION_PRESETS.map((px) => {
@@ -1837,7 +1905,7 @@ import {
   probeDevice as probeDevice2,
   hasWebGPUSupport,
   configureOnnxRuntime,
-  MODEL_REGISTRY as MODEL_REGISTRY2,
+  MODEL_REGISTRY as MODEL_REGISTRY3,
   planScene as planScene2,
   CAMERA_MOVES as CAMERA_MOVES2
 } from "@seanhogg/builderforce-studio";
@@ -1845,7 +1913,7 @@ export {
   CAMERA_MOVES2 as CAMERA_MOVES,
   CoherenceControls,
   DebugCopyButton,
-  MODEL_REGISTRY2 as MODEL_REGISTRY,
+  MODEL_REGISTRY3 as MODEL_REGISTRY,
   ModelPicker,
   ProgressFeedback,
   QUALITY_TIERS,

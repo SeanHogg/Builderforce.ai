@@ -35,6 +35,7 @@ export const STATS = {
   quotable: {
     evermind: 'Evermind is Builderforce.ai\'s self-updating model and the brain of the platform, governed by Write-Through Cognition: new knowledge is written straight through so an update replaces what came before — reads are always current, there is never a reconciliation step, and it runs in the browser, on-device, or inside every agent.',
     systemOfRecord: 'Builderforce.ai is the system of record for the agentic enterprise: every unit of work — human or agent — is instrumented, costed, and attributed from idea to ship to learn, on one board governed by roles, approvals, and a full audit trail.',
+    defineANeed: 'Builderforce.ai lets any human define a need in any modality — plain language, a dataset, a process chart, or a persona — and compiles it into an agent that runs in the IDE, on the desktop, or in the cloud: one AgentSpec spine, compiled from many inputs and deployed to many surfaces.',
     enterpriseInnovation: 'Builderforce.ai is an end-to-end innovation platform for the agentic era — plan, build, ship, and measure with a workforce of humans and AI agents on a single instrumented system, priced as a platform rather than per-seat enterprise software.',
     roleBasedInsight: 'Because every action is instrumented and costed, every role gets its own operating picture from the same data: delivery and DORA for engineering, cost and FinOps for finance, portfolio and innovation funnel for the PMO and CEO, and an immutable audit trail for security.',
     humanInLoopAgentic: 'Builderforce.ai is a human-in-the-loop, fully agentic cloud: train your own AI agents and put them to work inside your own agent, running a whole workforce from a Kanban board — all without ever leaving VS Code.',
@@ -1291,6 +1292,7 @@ export const INTEGRATION_SLUG_MAP: Record<string, IntegrationSeo> = Object.fromE
  */
 export const RELATED_ARTICLES: Record<string, string[]> = {
   product: [
+    'define-a-need-the-agentic-system-solves-it',
     'agent-tech-stack-all-seven-layers',
     'evermind-self-updating-model',
     'system-of-record-for-agentic-work',
@@ -1323,7 +1325,7 @@ export const RELATED_ARTICLES: Record<string, string[]> = {
   brainstorm: ['product-ideation-with-builderforce', 'specs-and-planning-with-ai', 'getting-started-with-ai-agents'],
   ide: ['in-browser-ide-and-collaboration', 'product-ideation-with-builderforce', 'getting-started-with-ai-agents'],
   training: ['webgpu-lora-explained', 'evermind-self-updating-model', 'ai-dataset-generation-best-practices'],
-  workflows: ['multi-agent-orchestration', 'autonomous-swimlane-execution', 'specs-and-planning-with-ai'],
+  workflows: ['define-a-need-the-agentic-system-solves-it', 'multi-agent-orchestration', 'autonomous-swimlane-execution'],
   projects: ['autonomous-swimlane-execution', 'task-execution-and-observability', 'product-ideation-with-builderforce'],
   workforce: ['fleet-management-and-agent-routing', 'autonomous-swimlane-execution', 'multi-agent-orchestration'],
   skills: ['skills-assignment-and-the-marketplace', 'builderforce-agents-and-agent-integration', 'best-ai-coding-agents-compared'],

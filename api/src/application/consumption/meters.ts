@@ -14,13 +14,14 @@ import { eq } from 'drizzle-orm';
 import { tenants } from '../../infrastructure/database/schema';
 import type { Db } from '../../infrastructure/database/connection';
 import { resolveEffectivePlan } from '../../domain/tenant/effectivePlan';
-import { resolveTokenLimits, resolveIngestionMonthlyBytes } from '../../domain/tenant/PlanLimits';
+import { resolveTokenLimits, resolveIngestionMonthlyBytes, resolveErrorEventsMonthly } from '../../domain/tenant/PlanLimits';
 import { TenantPlan, TenantBillingStatus } from '../../domain/shared/types';
 import { sumTenantTextTokens } from '../llm/tokenUsage';
 import { sumTenantIngestionBytes } from '../ingestion/ingestionLedger';
+import { sumTenantErrorEvents } from '../quality/errorEventsLedger';
 
-export type MeterKey = 'ai_tokens' | 'ingestion';
-export type MeterUnit = 'tokens' | 'bytes';
+export type MeterKey = 'ai_tokens' | 'ingestion' | 'error_events';
+export type MeterUnit = 'tokens' | 'bytes' | 'events';
 
 export interface MeterSnapshot {
   key: MeterKey;
@@ -65,9 +66,10 @@ export async function buildConsumptionSnapshot(
   monthStart: Date,
   monthEnd: Date,
 ): Promise<ConsumptionSnapshot> {
-  const [tokensUsed, ingestionUsed, tenantRows] = await Promise.all([
+  const [tokensUsed, ingestionUsed, errorEventsUsed, tenantRows] = await Promise.all([
     sumTenantTextTokens(db, tenantId, monthStart),
     sumTenantIngestionBytes(db, tenantId, monthStart),
+    sumTenantErrorEvents(db, tenantId, monthStart),
     db
       .select({
         plan: tenants.plan,
@@ -91,6 +93,7 @@ export async function buildConsumptionSnapshot(
 
   const { monthlyLimit: tokenLimit } = resolveTokenLimits({ effectivePlan, tokenDailyLimitOverride: override });
   const ingestionLimit = resolveIngestionMonthlyBytes({ effectivePlan, tokenDailyLimitOverride: override });
+  const errorEventsLimit = resolveErrorEventsMonthly({ effectivePlan, tokenDailyLimitOverride: override });
 
   return {
     period: { start: monthStart.toISOString(), resetsAt: monthEnd.toISOString() },
@@ -98,6 +101,7 @@ export async function buildConsumptionSnapshot(
     meters: [
       makeMeter('ai_tokens', 'tokens', tokensUsed, tokenLimit),
       makeMeter('ingestion', 'bytes', ingestionUsed, ingestionLimit),
+      makeMeter('error_events', 'events', errorEventsUsed, errorEventsLimit),
     ],
   };
 }

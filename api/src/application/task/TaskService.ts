@@ -51,6 +51,8 @@ export interface UpdateTaskDto {
   parentTaskId?: number | null;
   /** Schedule into / out of a sprint (planning "drag onto sprint"). null = unscheduled. */
   sprintId?: string | null;
+  /** Link to / unlink from a product release (the delivery deliverable). null = unlinked. */
+  releaseId?: string | null;
   assignedAgentType?: AgentType | null;
   assignedAgentHostId?: number | null;
   /** Cloud agent (ide_agents.id) assigned to this task. Mutually exclusive with host. */

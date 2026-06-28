@@ -142,7 +142,7 @@ export function ProjectDiagnosticsTab({ projectId }: { projectId: number }) {
                     {archState === 'running' ? t('architectureRunning') : t('run')} →
                   </button>
                 ) : (
-                  <Link href={`/tools/${row.id}?projectId=${projectId}`} style={primaryBtn}>{t('run')} →</Link>
+                  <Link href={`/tools/${row.id}?project=${projectId}`} style={primaryBtn}>{t('run')} →</Link>
                 )}
               </div>
             );

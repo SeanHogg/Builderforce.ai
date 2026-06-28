@@ -9,6 +9,7 @@ import { registerChatParticipant } from "./chatParticipant";
 import { registerChatSessions } from "./chatSessions";
 import { scanCodebase } from "./codebaseScan";
 import { getModels, getWebBaseUrl, SECRET_KEY } from "./gateway";
+import { InsightsController } from "./insights";
 import { setGroundingSummary } from "./grounding";
 import { setSelectedModel } from "./modelState";
 import { getSelectedProject, initProjectState, setSelectedProject } from "./projectState";
@@ -24,6 +25,9 @@ const SELECTED_TENANT_KEY = "builderforce.selectedTenantId";
 /** The Project & Tasks tree view — held so its header can show the active workspace.
  *  Typed to just what we use (description + disposal) to avoid TreeView<T> variance. */
 let projectView: (vscode.Disposable & { description?: string }) | undefined;
+
+/** Live builder-insights surface (status bar + tree); restarted on auth change. */
+let insights: InsightsController | undefined;
 
 /** Show the active workspace (tenant) name next to the Project & Tasks view title. */
 async function refreshWorkspaceHeader(context: vscode.ExtensionContext): Promise<void> {
@@ -80,9 +84,15 @@ export function activate(context: vscode.ExtensionContext): void {
   const sessions = registerChatSessions(context, participant);
   if (sessions) context.subscriptions.push(sessions);
 
+  // Live builder-insights surface — status bar + tree fed by the gateway SSE
+  // stream. Self-starts; auto-reconnects; hides itself when signed out.
+  insights = new InsightsController(context);
+  context.subscriptions.push(insights);
+
   context.subscriptions.push(
     participant,
     vscode.window.registerTreeDataProvider("builderforce.sessions", tree),
+    vscode.commands.registerCommand("builderforce.refreshInsights", () => insights?.refresh()),
     vscode.commands.registerCommand("builderforce.newSession", () => {
       const sel = getSelectedProject();
       const s = store.create(sel ? { projectId: sel.id } : {});
@@ -622,6 +632,7 @@ async function signIn(context: vscode.ExtensionContext): Promise<void> {
   void heartbeat(context);
   void vscode.commands.executeCommand("builderforce.refreshProjects");
   void maybeScan(context, false);
+  void insights?.start();
 }
 
 async function signOut(
@@ -637,6 +648,7 @@ async function signOut(
   vscode.window.showInformationMessage("BuilderForce: signed out.");
   await ChatPanel.refreshAll(context);
   void vscode.commands.executeCommand("builderforce.refreshProjects");
+  void insights?.start();
 }
 
 async function pickModel(context: vscode.ExtensionContext): Promise<void> {

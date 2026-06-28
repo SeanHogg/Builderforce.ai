@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useTranslations } from 'next-intl';
 import { Select } from '@/components/Select';
 import { membersApi, type MemberKind, type MemberProfile } from '@/lib/builderforceApi';
 
@@ -28,6 +29,7 @@ const row: React.CSSProperties = { display: 'grid', gridTemplateColumns: '1fr 1f
 
 const AVAILABILITY: MemberProfile['availabilityStatus'][] = ['available', 'busy', 'focus', 'on_call', 'ooo'];
 const EXPERIENCE: NonNullable<MemberProfile['experienceLevel']>[] = ['junior', 'mid', 'senior', 'staff', 'principal'];
+const DISCIPLINES: NonNullable<MemberProfile['discipline']>[] = ['engineering', 'product', 'design', 'qa', 'devops', 'data', 'other'];
 
 /** [{tag}] | string[] → "a, b, c" for the tag inputs, and back. */
 function tagsToText(v: unknown): string {
@@ -44,6 +46,7 @@ function textToStrings(s: string): string[] {
 export function MemberProfileEditor({ kind, refId, name, onClose, onSaved }: {
   kind: MemberKind; refId: string; name: string; onClose: () => void; onSaved?: () => void;
 }) {
+  const t = useTranslations('workforce');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -144,6 +147,17 @@ export function MemberProfileEditor({ kind, refId, name, onClose, onSaved }: {
                   {EXPERIENCE.map((x) => <option key={x} value={x}>{x}</option>)}
                 </Select>
               </div>
+            </div>
+
+            <div style={row}>
+              <div>
+                <label style={label}>{t('discipline')}</label>
+                <Select style={field} value={p.discipline ?? ''} onChange={(e) => set('discipline', (e.target.value || null) as MemberProfile['discipline'])}>
+                  <option value="">—</option>
+                  {DISCIPLINES.map((x) => <option key={x} value={x}>{t(`disciplineOptions.${x}`)}</option>)}
+                </Select>
+              </div>
+              <div />
             </div>
 
             <div style={row}>

@@ -250,7 +250,7 @@ export function WorkflowsContent({ projectId }: WorkflowsContentProps) {
     : null;
 
   const openDef = (d: WorkflowDefinitionSummary) => router.push(`/workflows/builder?id=${d.id}`);
-  const newWorkflow = () => router.push(projectId != null ? `/workflows/builder?projectId=${projectId}` : '/workflows/builder');
+  const newWorkflow = () => router.push(projectId != null ? `/workflows/builder?project=${projectId}` : '/workflows/builder');
 
   const viewRuns = useCallback(async (d: WorkflowDefinitionSummary) => {
     setRunsForDef(d);

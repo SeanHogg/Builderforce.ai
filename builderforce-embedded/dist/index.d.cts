@@ -1,4 +1,4 @@
-import * as react_jsx_runtime from 'react/jsx-runtime';
+import * as react from 'react';
 import { CSSProperties } from 'react';
 
 /**
@@ -333,7 +333,7 @@ interface BuilderForceEmbedProps {
  * JWT handoff, auto-resize, and deep-link sync. Hosts never build bespoke
  * per-view embeds; they render <BuilderForceEmbed view="…" />.
  */
-declare function BuilderForceEmbed({ view, token, baseUrl, accountId, companyId, path, theme, className, style, minHeight, onNavigate, onError, onReady, }: BuilderForceEmbedProps): react_jsx_runtime.JSX.Element;
+declare function BuilderForceEmbed({ view, token, baseUrl, accountId, companyId, path, theme, className, style, minHeight, onNavigate, onError, onReady, }: BuilderForceEmbedProps): react.JSX.Element;
 
 /**
  * Pure dispatch for inbound frame→host messages. Extracted from the component so

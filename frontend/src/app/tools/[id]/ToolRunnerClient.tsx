@@ -10,6 +10,7 @@ import { ToolResultView } from '@/components/tools/ToolResultView';
 import { DataDrivenPanel } from '@/components/tools/DataDrivenPanel';
 import { defaultInput, questionnaireComplete, type ToolDefinition, type ToolResult } from '@/lib/tools';
 import { getStoredUser, getStoredTenantToken } from '@/lib/auth';
+import { useOptionalProjectScope } from '@/lib/ProjectScopeContext';
 
 const wrap: React.CSSProperties = { maxWidth: 820, margin: '0 auto', padding: '32px 20px' };
 const card: React.CSSProperties = { background: 'var(--bg-base)', border: '1px solid var(--border-subtle)', borderRadius: 12, padding: 18 };
@@ -29,8 +30,16 @@ const btnSubtle: React.CSSProperties = {
 export default function ToolRunnerClient({ toolId }: { toolId: string }) {
   const t = useTranslations('tools');
   const searchParams = useSearchParams();
-  const projectIdParam = searchParams.get('projectId');
-  const projectId = projectIdParam != null && /^\d+$/.test(projectIdParam) ? Number(projectIdParam) : null;
+  // Attribute the run to a project: the global TopBar scope param `?project=` wins,
+  // the legacy `?projectId=` is still honoured for old links, and when neither is
+  // present we fall back to the global project scope (one picker for the whole
+  // app — see ProjectScopeContext). `useOptionalProjectScope` is null outside the
+  // app shell (the public tool runner), where the run is simply tenant-attributed.
+  const scope = useOptionalProjectScope();
+  const projectIdParam = searchParams.get('project') ?? searchParams.get('projectId');
+  const projectId = projectIdParam != null && /^\d+$/.test(projectIdParam)
+    ? Number(projectIdParam)
+    : (scope?.currentProjectId ?? null);
   const [def, setDef] = useState<ToolDefinition | null>(null);
   const [input, setInput] = useState<Record<string, number>>({});
   const [result, setResult] = useState<ToolResult | null>(null);

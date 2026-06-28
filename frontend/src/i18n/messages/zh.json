@@ -14,7 +14,12 @@
       "insights": "洞察",
       "library": "资源库",
       "settings": "设置",
-      "admin": "管理"
+      "admin": "管理",
+      "knowledge": "知识库",
+      "quality": "质量",
+      "surveys": "调研",
+      "dashboards": "仪表板",
+      "finops": "DevFinOps"
     },
     "tab": {
       "projects": "项目",
@@ -29,6 +34,7 @@
       "finops": "FinOps",
       "funnel": "创新漏斗",
       "compliance": "合规",
+      "alerts": "告警",
       "content": "内容",
       "skills": "技能",
       "personas": "人设",
@@ -37,7 +43,92 @@
       "security": "安全",
       "billing": "账单",
       "tenant": "工作区",
-      "apiKeys": "API 密钥"
+      "apiKeys": "API 密钥",
+      "sops": "作业程序",
+      "processes": "流程",
+      "docs": "文档",
+      "training": "培训",
+      "errors": "错误",
+      "sources": "数据源",
+      "aiImpact": "AI 影响",
+      "recommendations": "建议",
+      "space": "SPACE",
+      "benchmarking": "基准对标",
+      "devex": "DevEx",
+      "bottlenecks": "瓶颈"
+    },
+    "tab.allocation": "分配",
+    "tab.delivery": "交付"
+  },
+  "alerts": {
+    "title": "告警",
+    "subtitle": "为平台指标定义阈值告警。每日扫描会评估每条规则，并在触发时通过 Slack 和电子邮件通知您的团队。",
+    "loading": "加载中…",
+    "days": "{n} 天",
+    "common": {
+      "delete": "删除"
+    },
+    "create": {
+      "title": "新建告警规则",
+      "submit": "创建告警"
+    },
+    "field": {
+      "name": "名称",
+      "namePlaceholder": "例如：每月支出守护",
+      "metric": "指标",
+      "comparator": "条件",
+      "threshold": "阈值",
+      "windowDays": "窗口（天）",
+      "scope": "范围",
+      "notifySlack": "通知 Slack",
+      "notifyEmail": "通知邮件"
+    },
+    "metric": {
+      "token_spend_usd": "Token 支出（美元）",
+      "token_spend_pct_of_cap": "Token 用量（占上限百分比）",
+      "cost_per_merged_pr_usd": "每个合并 PR 的成本（美元）",
+      "dora_change_failure_rate": "变更失败率（%）",
+      "dora_lead_time_hours": "前置时间（小时）",
+      "ai_effectiveness_score": "AI 有效性评分",
+      "eval_drift": "评估漂移（分组）"
+    },
+    "comparator": {
+      "gt": "高于",
+      "lt": "低于",
+      "gte": "大于等于",
+      "lte": "小于等于"
+    },
+    "scope": {
+      "tenant": "工作区",
+      "project": "项目",
+      "team": "团队"
+    },
+    "rules": {
+      "title": "告警规则",
+      "empty": "暂无告警规则。请在上方创建。",
+      "condition": "条件",
+      "status": "状态",
+      "actions": "操作",
+      "enabled": "已启用",
+      "disabled": "已停用",
+      "test": "测试"
+    },
+    "eventStatus": {
+      "triggered": "已触发",
+      "acknowledged": "已确认",
+      "resolved": "已解决"
+    },
+    "events": {
+      "title": "最近触发",
+      "empty": "尚无告警触发。",
+      "when": "时间",
+      "message": "消息",
+      "acknowledge": "确认"
+    },
+    "test": {
+      "observed": "观测值：{value}",
+      "na": "此范围无法计算",
+      "failed": "测试失败"
     }
   },
   "ceremonies": {
@@ -87,7 +178,8 @@
     "depTypeFinishToStart": "完成 → 开始",
     "depTypeStartToStart": "开始 → 开始",
     "depTypeFinishToFinish": "完成 → 完成",
-    "depTypeStartToFinish": "开始 → 完成"
+    "depTypeStartToFinish": "开始 → 完成",
+    "spine": "规划主线"
   },
   "ide": {
     "all": "全部",
@@ -131,7 +223,17 @@
     "colActions": "操作",
     "workflowLabel": "工作流",
     "noWorkflow": "无工作流",
-    "workflowHint": "LLM 项目会运行一个工作流。可指定共享工作流，或在“工作流”中创建自定义工作流。"
+    "workflowHint": "LLM 项目会运行一个工作流。可指定共享工作流，或在“工作流”中创建自定义工作流。",
+    "workflowRequired": "工作流（必填）",
+    "selectWorkflow": "选择一个工作流…",
+    "customTag": "自定义",
+    "customizeWorkflow": "自定义",
+    "runWorkflow": "运行工作流",
+    "working": "处理中…",
+    "workflowForked": "已为此项目复刻为自定义工作流。",
+    "workflowRunStarted": "工作流已开始运行。",
+    "noWorkflowsYet": "你还没有工作流。",
+    "goToWorkflows": "前往“工作流”创建 →"
   },
   "tools": {
     "outOf5": "满分 5.0",
@@ -196,11 +298,24 @@
   "common": {
     "language": "语言"
   },
+  "llmUsage": {
+    "byUser": "按用户 · 最近 7 天",
+    "byTeam": "按团队 · 最近 7 天",
+    "byRepo": "按仓库 · 最近 7 天",
+    "user": "用户",
+    "team": "团队",
+    "repository": "仓库",
+    "rollsUpTo": "合计占账户总额 {total}",
+    "noUser": "此时间段内没有按用户的支出。",
+    "noTeam": "此时间段内没有按团队的支出。",
+    "noRepo": "此时间段内没有按仓库的支出。"
+  },
   "usageMeter": {
     "title": "用量",
     "meter": {
       "ai_tokens": "AI 令牌",
-      "ingestion": "数据摄取"
+      "ingestion": "数据摄取",
+      "error_events": "错误事件"
     },
     "unlimited": "无限制",
     "freePerMo": "每月免费 {amount}",
@@ -223,7 +338,8 @@
     "tabs": {
       "rollup": "汇总",
       "structure": "结构",
-      "okrs": "OKR"
+      "okrs": "OKR",
+      "cost": "资本/运营支出"
     },
     "scope": {
       "wholePortfolio": "整个项目组合",
@@ -323,7 +439,24 @@
       "addKr": "添加 KR",
       "current": "当前值",
       "update": "更新",
-      "deleteObjective": "删除目标"
+      "deleteObjective": "删除目标",
+      "startDate": "开始日期",
+      "endDate": "结束日期",
+      "costClass": "类别",
+      "capex": "资本支出",
+      "opex": "运营支出",
+      "unset": "清除",
+      "noDates": "无日期",
+      "deliveredBy": "交付方式",
+      "noLinks": "尚无关联工作。",
+      "addLink": "关联",
+      "removeLink": "移除关联",
+      "pickItem": "关联一个举措、史诗或任务…",
+      "linkKind": {
+        "initiative": "举措",
+        "epic": "史诗",
+        "task": "任务"
+      }
     },
     "projectLink": {
       "title": "PMO 举措",
@@ -451,6 +584,245 @@
         "measured": "已度量",
         "killed": "已终止"
       }
+    },
+    "alloc": {
+      "title": "投资分配",
+      "subtitle": "工程时间与支出的真实去向——按投资类别划分，包含可资本化成本与目标差异。",
+      "period": "周期",
+      "totalHours": "已跟踪工时",
+      "totalHoursSub": "{n} 个任务",
+      "capitalizable": "可资本化",
+      "capitalizableSub": "支出占比（资本性支出）",
+      "capex": "资本性支出",
+      "capexSub": "可资本化成本",
+      "opex": "运营性支出",
+      "opexSub": "费用化成本",
+      "mix": "投资构成",
+      "noData": "此时间范围内尚无已跟踪工时。",
+      "target": "目标 {n}%",
+      "noGoal": "无目标",
+      "goals": "分配目标",
+      "category": "类别",
+      "targetPct": "目标 %",
+      "setGoal": "设置目标",
+      "noGoals": "此周期未设置目标。",
+      "byMember": "按成员",
+      "member": "成员",
+      "hours": "工时",
+      "topCategory": "主要类别",
+      "spread": "类别数",
+      "noMembers": "此时间范围内无已分配工作。",
+      "cat": {
+        "innovation": "创新",
+        "ktlo": "维持运营",
+        "support": "支持",
+        "tech_debt": "技术债",
+        "other": "其他"
+      }
+    },
+    "deliv": {
+      "title": "交付",
+      "subtitle": "跟踪交付物至完成——燃起图、预测以及跨举措、项目和发布的范围蔓延。",
+      "deliverable": "交付物",
+      "noDeliverables": "暂无交付物——请创建举措、项目或发布。",
+      "noSeries": "历史数据不足，无法绘图。",
+      "chartAria": "范围与已完成工作随时间变化的燃起图",
+      "kind": {
+        "initiative": "举措",
+        "project": "项目",
+        "release": "发布"
+      },
+      "progress": "进度",
+      "progressSub": "已完成 {done} / {total}",
+      "status": "状态",
+      "statusLabel": {
+        "on_track": "正常",
+        "at_risk": "有风险",
+        "late": "延期",
+        "done": "完成",
+        "no_signal": "无信号"
+      },
+      "target": "目标 {d}",
+      "noTarget": "无目标日期",
+      "forecast": "预测完成",
+      "forecastBand": "{o} – {p}",
+      "forecastNone": "需要吞吐量才能预测",
+      "scopeCreep": "范围蔓延",
+      "scopeCreepSub": "基线 {base} 之后新增 +{added}",
+      "burnup": "燃起 / 燃尽",
+      "legendScope": "范围",
+      "legendDone": "已完成",
+      "detail": "详情",
+      "throughput": "吞吐量",
+      "week": "周",
+      "open": "未完成",
+      "baseline": "基线",
+      "baselineScope": "基线范围"
+    },
+    "aiImpact": {
+      "title": "AI 影响",
+      "subtitle": "采用趋势、工具间的正面评测，以及你的 AI 生产力得分。",
+      "wow": "对比上一周期",
+      "productivityScore": "AI 生产力得分",
+      "throughput": "吞吐量",
+      "throughputSub": "已合并 PR 数量",
+      "quality": "质量",
+      "qualitySub": "结合 CI 通过率的综合得分",
+      "efficiency": "效率",
+      "efficiencySub": "每个已合并 PR 成本的倒数",
+      "prevScore": "上期得分",
+      "prevSub": "上一个等长周期",
+      "comparisonTitle": "多工具评测",
+      "model": "模型",
+      "runs": "运行次数",
+      "avgScore": "平均得分",
+      "mergeRate": "合并率",
+      "ciGreen": "CI 通过",
+      "avgSteps": "平均步骤数",
+      "costPerMergedPr": "每个已合并 PR 成本",
+      "tokens": "Token",
+      "noRuns": "此周期内没有已评分的运行。",
+      "shareTrendTitle": "模型占比趋势",
+      "currentShare": "当前占比",
+      "shareDelta": "占比变化（首周→末周）",
+      "noUsage": "此周期内无使用记录。",
+      "weeklyTitle": "每周采用与使用情况",
+      "weekStart": "本周起始",
+      "activeUsers": "活跃用户",
+      "cost": "成本"
+    },
+    "devex": {
+      "title": "DevEx 调研与洞察",
+      "subtitle": "开发者体验脉冲评分、eNPS，以及 AI DevEx 分析视角。",
+      "responseRate": "回复率",
+      "responseRateSub": "每个活动的回复数",
+      "responses": "回复数",
+      "enps": "eNPS",
+      "enpsSub": "% 推荐者 − % 贬损者",
+      "aiScore": "AI 工具得分",
+      "aiScoreSub": "AI 工具相关问题的情绪倾向（0–100）",
+      "aiPositive": "AI 工具正面评价",
+      "aiPositiveSub": "{n} 个已回答数据点",
+      "byDimension": "按维度评分",
+      "dimension": "维度",
+      "avgScore": "平均得分（0–100）",
+      "datapoints": "数据点",
+      "noData": "此周期内尚无调研回复。",
+      "trend": "跨活动趋势",
+      "period": "周期",
+      "noTrend": "尚无带周期标记的活动。",
+      "dim": {
+        "flow": "心流",
+        "tooling": "工具",
+        "ai_tools": "AI 工具",
+        "deep_work": "深度工作",
+        "build_test": "构建与测试",
+        "docs": "文档",
+        "sentiment": "情绪"
+      }
+    },
+    "benchmarking": {
+      "title": "行业基准对标",
+      "subtitle": "看看你的交付指标在行业群体中的排名——按行业与团队规模给出百分位与评级。",
+      "industry": "行业",
+      "sizeBand": "团队规模",
+      "tableTitle": "你的指标 vs 群体",
+      "footnote": "百分位是基于预置的行业群体分布（p10–p90）插值得出。对于越低越好的指标（前置时间、变更失败率、MTTR、成本），数值越小排名越高。",
+      "industries": {
+        "software_saas": "Software / SaaS"
+      },
+      "sizeBands": {
+        "small": "小型（1–20）",
+        "mid": "中型（21–200）",
+        "large": "大型（200+）"
+      },
+      "rating": {
+        "elite": "卓越",
+        "high": "高",
+        "medium": "中",
+        "low": "低"
+      },
+      "col": {
+        "metric": "指标",
+        "value": "你的数值",
+        "percentile": "百分位",
+        "rating": "评级",
+        "median": "群体中位数",
+        "elite": "卓越（p90）"
+      },
+      "metrics": {
+        "deploy_freq_per_week": "部署频率",
+        "lead_time_hours": "前置时间",
+        "change_failure_rate_pct": "变更失败率",
+        "mttr_hours": "恢复时间",
+        "ai_merge_rate_pct": "AI 合并率",
+        "cost_per_merged_pr_usd": "每个已合并 PR 成本",
+        "ai_adoption_pct": "AI 采用率"
+      }
+    },
+    "recs": {
+      "title": "建议",
+      "subtitle": "从你的各个洞察视角综合得出的 AI 驱动的规范性行动与异常。",
+      "empty": "目前没有建议——一切都在阈值范围内。",
+      "action": "行动",
+      "dismiss": "忽略",
+      "dismissing": "忽略中…",
+      "severity": {
+        "critical": "严重",
+        "warning": "警告",
+        "info": "信息"
+      },
+      "category": {
+        "cost": "成本",
+        "quality": "质量",
+        "allocation": "分配",
+        "delivery": "交付"
+      }
+    },
+    "space": {
+      "title": "SPACE 指标",
+      "subtitle": "对 DORA 形成补充的五维开发者生产力框架。",
+      "noSignal": "此周期内无信号",
+      "figure": "数值",
+      "value": "值",
+      "dim": {
+        "satisfaction": "满意度",
+        "performance": "绩效",
+        "activity": "活跃度",
+        "communication": "沟通",
+        "efficiency": "效率与心流"
+      },
+      "sub": {
+        "satisfaction": "成员投入度代理指标",
+        "performance": "部署成功率",
+        "activity": "产出吞吐量",
+        "communication": "协作广度 × 心流",
+        "efficiency": "低返工 + 快速周期"
+      }
+    },
+    "bottleneck": {
+      "title": "标题",
+      "subtitle": "精准定位工作停滞之处——各阶段耗时、最慢阶段、返工循环，以及当前卡住的进行中工作。",
+      "slowest": "最慢阶段",
+      "noData": "暂无数据",
+      "reworkRate": "返工率",
+      "reworkSub": "{n} 个任务被返工",
+      "reopens": "重新打开",
+      "redos": "{n} 次重做",
+      "stuck": "卡住的在制工作",
+      "stuckSub": "闲置 > {n} 小时",
+      "sample": "抽样任务数",
+      "byStageTitle": "各阶段耗时",
+      "noStages": "此时间窗口内暂无阶段历史记录。",
+      "stage": "阶段",
+      "avgHrs": "平均",
+      "medianHrs": "中位数",
+      "tasks": "任务",
+      "agingTitle": "滞留的在制工作——立即推进",
+      "noAging": "没有卡住的工作——所有进行中的工作都很新。",
+      "key": "编号",
+      "status": "状态",
+      "age": "滞留时长"
     }
   },
   "cloudAgentForm": {
@@ -578,5 +950,422 @@
     "workspaceTitle": "工作区",
     "workspaceDesc": "此项目的工作区和文件系统。打开 IDE 以编辑文件。",
     "openInIde": "在 IDE 中打开"
+  },
+  "spine": {
+    "loading": "正在加载规划主线…",
+    "empty": "暂无可规划内容。为目标、举措、史诗或任务添加日期即可在时间线上查看。",
+    "totalInvestment": "总投资",
+    "capex": "资本支出",
+    "opex": "运营支出",
+    "anomalies": "{count} 个分类异常",
+    "estimateNote": "$ = LLM 花费 + 估算人工",
+    "item": "条目",
+    "expand": "展开",
+    "collapse": "折叠",
+    "undated": "无日期",
+    "unclassified": "未分类",
+    "anomalyTip": "此条目的资本/运营支出分类与其上级冲突——请进行核对。",
+    "descendantAnomalyTip": "某个子条目的分类与其上级冲突。",
+    "kind": {
+      "portfolio": "投资组合",
+      "objective": "目标",
+      "initiative": "举措",
+      "epic": "史诗",
+      "task": "任务"
+    }
+  },
+  "reconcile": {
+    "loading": "正在加载工作项…",
+    "title": "资本/运营支出核对",
+    "classifyAgent": "用智能体分类",
+    "summaryAnomalies": "{count} 个异常",
+    "summaryUnverified": "{count} 个未核实",
+    "capex": "资本支出",
+    "opex": "运营支出",
+    "attentionOnly": "仅显示需关注项",
+    "hint": "除非被覆盖，每个条目都从其目标或举措继承分类。请核实或重新归类；智能体会预先分类新工作（新增能力 → 资本支出，修复或维护 → 运营支出）。",
+    "allClear": "所有内容均已分类并核实。",
+    "unclassified": "未分类",
+    "verified": "已核实",
+    "suggests": "建议 {class}",
+    "clearTip": "清除覆盖（继承上级）",
+    "anomalyTip": "声明为 {declared} 但继承为 {inherited}",
+    "kind": {
+      "portfolio": "投资组合",
+      "objective": "目标",
+      "initiative": "举措",
+      "epic": "史诗",
+      "task": "任务"
+    },
+    "source": {
+      "manual": "手动",
+      "inherited": "继承",
+      "agent": "智能体"
+    }
+  },
+  "workforce": {
+    "discipline": "职能",
+    "allDisciplines": "所有职能",
+    "unassigned": "未分配",
+    "disciplineOptions": {
+      "engineering": "工程",
+      "product": "产品",
+      "design": "设计",
+      "qa": "测试",
+      "devops": "运维",
+      "data": "数据",
+      "other": "其他"
+    }
+  },
+  "knowledge": {
+    "headingSops": "标准作业程序",
+    "headingProcesses": "流程与工作流",
+    "headingDocs": "知识库",
+    "subtitleSops": "记录并标准化团队的工作方式——可审计、可培训。",
+    "subtitleProcesses": "梳理团队中可重复的工作流与交接。",
+    "subtitleDocs": "全团队都能查找并信赖的共享参考文档。",
+    "newDocument": "新建文档",
+    "searchPlaceholder": "搜索文档……",
+    "allTags": "全部标签",
+    "loading": "加载中……",
+    "empty": "暂无文档。",
+    "status_draft": "草稿",
+    "status_published": "已发布",
+    "status_archived": "已归档",
+    "requiresAckBadge": "需要确认阅读",
+    "createTitle": "新建文档",
+    "fieldTitle": "标题",
+    "fieldSummary": "简要说明",
+    "requiresAckLabel": "要求团队阅读并确认",
+    "cancel": "取消",
+    "create": "创建",
+    "creating": "创建中……",
+    "trainingTitle": "培训与合规",
+    "trainingSubtitle": "您被指派的阅读任务以及团队范围的审计记录。",
+    "myTraining": "我的培训",
+    "noTraining": "您没有被指派的培训。",
+    "due": "截止",
+    "state_completed": "已完成",
+    "state_overdue": "已逾期",
+    "state_pending": "待处理",
+    "state_acknowledged": "已确认",
+    "state_not_required": "无需",
+    "complianceAudit": "合规审计",
+    "overallCompliance": "总体合规率",
+    "required": "应阅读",
+    "acknowledged": "已确认",
+    "overdue": "逾期",
+    "noComplianceDocs": "当前没有需要确认阅读的文档。",
+    "document": "文档",
+    "percentComplete": "完成百分比",
+    "pending": "待处理",
+    "backToList": "返回知识库",
+    "saving": "保存中……",
+    "saved": "已保存",
+    "type_sop": "作业程序",
+    "type_process": "流程",
+    "type_doc": "文档",
+    "removeTag": "移除标签",
+    "addTag": "添加标签……",
+    "youAcknowledged": "您已确认此版本",
+    "ackRequiredPrompt": "您必须阅读并确认此文档。",
+    "ackPrompt": "请确认您已阅读此文档。",
+    "acknowledging": "确认中……",
+    "acknowledge": "我已阅读",
+    "aiAssist": "AI 辅助",
+    "aiHint": "描述要撰写的内容或如何改进文档。AI 将生成可审计的 Markdown。",
+    "aiPromptPlaceholder": "例如：为新工程师撰写入职作业程序，涵盖权限、工具和第一周目标。",
+    "generating": "生成中……",
+    "generate": "生成",
+    "aiReplace": "替换文档",
+    "aiInsert": "追加到文档",
+    "edit": "编辑",
+    "preview": "预览",
+    "contentPlaceholder": "使用 Markdown 编写……",
+    "emptyContent": "此文档为空。",
+    "changeNotePlaceholder": "此版本有何变更？（可选）",
+    "publishing": "发布中……",
+    "publishNewVersion": "发布新版本",
+    "publish": "发布",
+    "deleteDoc": "删除",
+    "deleteConfirm": "永久删除此文档？此操作无法撤销。",
+    "versionHistory": "版本历史",
+    "noVersions": "尚无已发布版本。",
+    "trainingAndAudit": "培训与阅读审计",
+    "assignTraining": "指派为培训",
+    "noMembers": "未找到团队成员。",
+    "dueDate": "截止日期",
+    "assigning": "指派中……",
+    "assign": "指派",
+    "readStatus": "阅读状态",
+    "noReadersRequired": "此文档暂无应阅读人员。",
+    "liveCollab": "实时协作",
+    "editingNow": "正在编辑",
+    "share": "共享",
+    "owner": "所有者",
+    "roleEditor": "编辑者",
+    "roleViewer": "查看者",
+    "invite": "邀请",
+    "inviting": "邀请中……",
+    "selectMember": "选择成员……",
+    "noCollaborators": "尚未邀请任何人。",
+    "remove": "移除",
+    "accessViewerNote": "您已被邀请查看此页面。",
+    "accessReadOnlyNote": "您对此页面拥有只读访问权限。"
+  },
+  "quality": {
+    "title": "产品质量",
+    "subtitle": "汇总产品中的每一个错误——采集、归类，并随时可修复。",
+    "loading": "加载中…",
+    "empty": "暂无错误。连接一个数据源即可开始采集。",
+    "summary": {
+      "groups": "错误分组",
+      "unresolved": "未解决",
+      "events": "事件总数",
+      "users": "受影响用户"
+    },
+    "filter": {
+      "status": "状态",
+      "allStatuses": "全部状态",
+      "level": "级别",
+      "allLevels": "全部级别"
+    },
+    "status": {
+      "unresolved": "未解决",
+      "fixing": "修复中",
+      "resolved": "已解决",
+      "ignored": "已忽略"
+    },
+    "level": {
+      "fatal": "致命",
+      "error": "错误",
+      "warning": "警告",
+      "info": "信息"
+    },
+    "col": {
+      "error": "错误",
+      "level": "级别",
+      "status": "状态",
+      "events": "事件",
+      "users": "用户",
+      "lastSeen": "最近出现"
+    },
+    "card": {
+      "meta": "{events} 个事件 · {users} 个用户"
+    },
+    "detail": {
+      "events": "事件",
+      "users": "受影响用户",
+      "environment": "环境",
+      "trend": "最近 14 天",
+      "noTrend": "近期无事件",
+      "where": "位置",
+      "stack": "堆栈跟踪",
+      "close": "关闭",
+      "fix": "用智能体修复",
+      "fixLinked": "修复任务 #{taskId}",
+      "fixStarted": "已派发修复——已创建任务 #{taskId}。",
+      "resolve": "标为已解决",
+      "ignore": "忽略",
+      "reopen": "重新打开"
+    },
+    "sources": {
+      "title": "质量数据源",
+      "subtitle": "连接错误的来源。",
+      "intro": "从你自己的 SDK、OpenTelemetry、Sentry、PostHog 或 LogRocket 采集错误。我们会将每个来源转换为统一的标准格式。",
+      "empty": "尚未连接任何数据源。",
+      "enabled": "已启用",
+      "paused": "已暂停",
+      "lastEvent": "最近事件",
+      "pause": "暂停",
+      "resume": "恢复",
+      "delete": "删除",
+      "add": "连接数据源",
+      "project": "项目",
+      "selectProject": "— 选择项目 —",
+      "type": "来源类型",
+      "namePlaceholder": "名称（如：Web 应用 — 生产环境）",
+      "secretPlaceholder": "Webhook 签名密钥（可选）",
+      "create": "创建数据源",
+      "creating": "创建中…",
+      "cancel": "取消",
+      "needProject": "请为此数据源选择一个项目。",
+      "needName": "请为数据源命名。",
+      "confirmDelete": "删除此数据源？已采集的错误将保留。",
+      "created": "数据源已创建",
+      "keyOnce": "请立即复制采集密钥——它仅显示一次。",
+      "ingestKey": "采集密钥",
+      "sdkSnippet": "浏览器 SDK",
+      "curlSnippet": "服务器 / curl",
+      "otlpEndpoint": "OTLP 端点",
+      "webhookUrl": "Webhook URL"
+    }
+  },
+  "surveys": {
+    "title": "DevEx 调研",
+    "subtitle": "编写脉冲调研、发起活动并收集开发者体验反馈。",
+    "saving": "保存中…",
+    "yes": "是",
+    "no": "否",
+    "author": {
+      "title": "新建调研模板",
+      "namePlaceholder": "模板名称（例如：每月 DevEx 脉冲）",
+      "descPlaceholder": "描述（可选）",
+      "promptPlaceholder": "问题提示",
+      "type": "类型",
+      "dimension": "维度",
+      "addQuestion": "+ 添加问题",
+      "removeQuestion": "移除",
+      "create": "创建模板"
+    },
+    "qtype": {
+      "rating": "评分（1–5）",
+      "nps": "NPS（0–10）",
+      "boolean": "是 / 否",
+      "text": "自由文本"
+    },
+    "dim": {
+      "flow": "心流",
+      "tooling": "工具",
+      "ai_tools": "AI 工具",
+      "deep_work": "深度工作",
+      "build_test": "构建与测试",
+      "docs": "文档",
+      "sentiment": "情绪"
+    },
+    "templates": {
+      "title": "模板",
+      "empty": "尚无模板——在上方创建一个。",
+      "name": "名称",
+      "questions": "问题",
+      "active": "启用",
+      "delete": "删除"
+    },
+    "launch": {
+      "title": "发起活动",
+      "titlePlaceholder": "活动标题（例如：六月 DevEx 脉冲）",
+      "template": "模板",
+      "noTemplate": "无模板",
+      "anonymous": "匿名",
+      "create": "发起活动"
+    },
+    "campaigns": {
+      "title": "活动",
+      "empty": "尚无活动。",
+      "name": "活动",
+      "period": "周期",
+      "status": "状态",
+      "responses": "回复数",
+      "respond": "回复",
+      "close": "关闭",
+      "anon": "匿名"
+    },
+    "respond": {
+      "title": "你的回复",
+      "noQuestions": "此活动没有问题。",
+      "submit": "提交",
+      "cancel": "取消",
+      "thanks": "谢谢——你的回复已记录。"
+    },
+    "err": {
+      "nameRequired": "必须填写模板名称。",
+      "questionRequired": "请至少添加一个带提示的问题。",
+      "titleRequired": "必须填写活动标题。"
+    }
+  },
+  "dashboards": {
+    "title": "自定义仪表板",
+    "subtitle": "基于现有指标用小组件搭建已保存的仪表板，并以自然语言提问。",
+    "empty": "未选择仪表板。创建一个即可开始。",
+    "ask": {
+      "heading": "提一个问题",
+      "placeholder": "例如：我们本月花了多少？",
+      "button": "提问",
+      "asking": "提问中…",
+      "matched": "匹配到的指标"
+    },
+    "create": {
+      "placeholder": "新仪表板名称",
+      "button": "创建仪表板"
+    },
+    "delete": {
+      "button": "删除"
+    },
+    "widget": {
+      "add": "添加小组件",
+      "remove": "移除小组件",
+      "empty": "尚无小组件——在上方添加一个。"
+    }
+  },
+  "finops": {
+    "title": "DevFinOps",
+    "subtitle": "研发税收抵免估算、SOC 1 控制覆盖率，以及可供审计的周期报告——均源自你的投入、成本与审计轨迹。",
+    "loading": "加载中…",
+    "saving": "保存中…",
+    "tab": {
+      "rd": "研发税收抵免",
+      "soc": "SOC 1 控制",
+      "audit": "审计报告"
+    },
+    "rd": {
+      "configTitle": "合格研究定义",
+      "configHint": "选择哪些投资类别（以及可选的行动类型）计为合格研究，并设置混合人工费率。用于 Form 6765 式的 QRE 估算。",
+      "qualifiedCategories": "合格类别（以逗号分隔）",
+      "qualifiedActionTypes": "合格行动类型（可选）",
+      "blendedRate": "混合人工费率（USD/小时）",
+      "save": "保存并重新计算",
+      "qualifiedHours": "合格工时",
+      "qualifiedLabor": "合格人工",
+      "qualifiedAiSpend": "合格 AI/云支出",
+      "qualifiedBase": "合格基数",
+      "form6765": "Form 6765 基数估算",
+      "byCategory": "按类别",
+      "category": "类别",
+      "hours": "工时",
+      "labor": "人工",
+      "aiSpend": "AI 支出",
+      "qualified": "合格"
+    },
+    "soc": {
+      "coverage": "控制覆盖率",
+      "implemented": "已实施",
+      "partial": "部分实施",
+      "gap": "缺口",
+      "implementedOfTotal": "{a} / {b} 已实施",
+      "seededNote": "正在显示预置的默认控制集。更改状态或负责人即可建立你自己的登记表。",
+      "ref": "编号",
+      "objective": "控制目标",
+      "category": "类别",
+      "status": {
+        "implemented": "已实施",
+        "partial": "部分实施",
+        "gap": "缺口"
+      },
+      "owner": "负责人",
+      "statusCol": "状态"
+    },
+    "audit": {
+      "period": "周期",
+      "exportCsv": "导出 CSV",
+      "exportJson": "导出 JSON",
+      "finance": "财务",
+      "spend": "支出",
+      "forecast": "预测",
+      "capex": "资本化（capex）",
+      "opex": "费用化（opex）",
+      "rd": "研发合格研究",
+      "controls": "SOC 1 控制与证据",
+      "evidenceEvents": "审计事件",
+      "sensitive": "{n} 项敏感"
+    }
+  },
+  "decks": {
+    "download": "下载演示文稿",
+    "generating": "生成中…",
+    "pickTemplate": "选择演示文稿模板",
+    "pickQuarter": "选择季度",
+    "boardDeck": "研发董事会演示文稿",
+    "cfoDeck": "CFO / DevFinOps 演示文稿",
+    "error": "无法生成演示文稿"
   }
 }

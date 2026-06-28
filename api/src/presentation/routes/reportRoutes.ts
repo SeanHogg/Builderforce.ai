@@ -36,6 +36,7 @@ import {
   portfolios,
 } from '../../infrastructure/database/schema';
 import { computePortfolioRollup } from '../../application/pmo/portfolioRollup';
+import { buildExecutiveSummary } from '../../application/reports/executiveSummary';
 import { TenantRole, TaskStatus } from '../../domain/shared/types';
 import { getOrSetCached, invalidateCached } from '../../infrastructure/cache/readThroughCache';
 import type { Env, HonoEnv } from '../../env';
@@ -179,66 +180,9 @@ async function generateCodeReviewReport(db: Db, tenantId: number, from: Date, to
   };
 }
 
-async function generateExecutiveReport(db: Db, tenantId: number, from: Date, to: Date) {
-  const metrics = await db.select()
-    .from(contributorDailyMetrics)
-    .where(and(
-      eq(contributorDailyMetrics.tenantId, tenantId),
-      gte(contributorDailyMetrics.date, from),
-      lte(contributorDailyMetrics.date, to),
-    ));
-
-  const totalContributors = new Set(metrics.map((m) => m.contributorId)).size;
-  const activeDays = metrics.filter((m) => m.isActiveDay).length;
-  const totalCommits = metrics.reduce((s, m) => s + m.commits, 0);
-  const totalPrsMerged = metrics.reduce((s, m) => s + m.prsMerged, 0);
-  const totalIssues = metrics.reduce((s, m) => s + m.issuesResolved, 0);
-  const totalLinesAdded = metrics.reduce((s, m) => s + m.linesAdded, 0);
-  const avgScore = metrics.length > 0
-    ? Math.round(metrics.reduce((s, m) => s + m.activityScore, 0) / metrics.length)
-    : 0;
-
-  // Top contributors by activity score
-  const byContributor = new Map<number, number>();
-  for (const m of metrics) {
-    byContributor.set(m.contributorId, (byContributor.get(m.contributorId) ?? 0) + m.activityScore);
-  }
-  const topIds = Array.from(byContributor.entries())
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, 5)
-    .map(([id]) => id);
-
-  const topContributors = topIds.length > 0 ? await db
-    .select({ id: contributors.id, displayName: contributors.displayName })
-    .from(contributors)
-    .where(and(
-      eq(contributors.tenantId, tenantId),
-    )) : [];
-
-  return {
-    reportType:  'executive_summary',
-    from:        from.toISOString(),
-    to:          to.toISOString(),
-    generatedAt: new Date().toISOString(),
-    kpis: {
-      totalContributors,
-      activeDays,
-      totalCommits,
-      totalPrsMerged,
-      totalIssuesResolved: totalIssues,
-      totalLinesAdded,
-      avgActivityScore: avgScore,
-    },
-    topContributors: topContributors
-      .filter((c) => topIds.includes(c.id))
-      .map((c) => ({ ...c, score: byContributor.get(c.id) ?? 0 })),
-    observations: [
-      totalPrsMerged > 0 ? `${totalPrsMerged} PRs merged in the period.` : null,
-      totalCommits > 0 ? `${totalCommits} commits across ${totalContributors} contributor(s).` : null,
-      avgScore > 0 ? `Average activity score: ${avgScore}.` : null,
-    ].filter(Boolean),
-  };
-}
+// Executive summary now lives in application/reports/executiveSummary.ts so the
+// deck generator can reuse it. Alias keeps the existing call sites unchanged.
+const generateExecutiveReport = buildExecutiveSummary;
 
 async function generateTeamComparisonReport(db: Db, tenantId: number, from: Date, to: Date) {
   // Load all teams for the tenant
@@ -631,7 +575,7 @@ export async function buildScheduledReport(
     case 'code_review':
       return { subject: '[Builderforce] Code review report', report: await generateCodeReviewReport(db, tenantId, new Date(now.getTime() - 14 * REPORT_DAY_MS), now) };
     case 'executive_summary':
-      return { subject: '[Builderforce] Executive summary', report: await generateExecutiveReport(db, tenantId, new Date(now.getTime() - 30 * REPORT_DAY_MS), now) };
+      return { subject: '[Builderforce] Executive summary', report: await generateExecutiveReport(db, tenantId, new Date(now.getTime() - 30 * REPORT_DAY_MS), now) as unknown as Record<string, unknown> };
     case 'portfolio_rollup':
       return { subject: '[Builderforce] Portfolio (PMO) rollup', report: await generatePortfolioReport(db, tenantId, segmentId) };
     default:

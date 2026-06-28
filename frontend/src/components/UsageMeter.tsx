@@ -44,6 +44,7 @@ function barColor(percent: number): string {
 const METER_ICON: Record<MeterSnapshot['key'], string> = {
   ai_tokens: '⚡',
   ingestion: '🗄',
+  error_events: '🐞',
 };
 
 function MeterCard({ meter, isFree }: { meter: MeterSnapshot; isFree: boolean }) {

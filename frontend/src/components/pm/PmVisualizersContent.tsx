@@ -9,6 +9,7 @@ import { RoadmapTimeline } from './RoadmapTimeline';
 import { RoadmapGantt } from './RoadmapGantt';
 import { RiceMatrix } from './RiceMatrix';
 import { RoiDashboard } from './RoiDashboard';
+import { PlanningSpineGantt } from './PlanningSpineGantt';
 import { PmCard } from './pmShared';
 
 /**
@@ -17,13 +18,13 @@ import { PmCard } from './pmShared';
  * sub-view toggle. Scope (project vs portfolio) comes from {@link usePmScope}, so
  * nothing here prop-drills a project id. Must be rendered inside a PmScopeProvider.
  */
-type Section = 'epics' | 'roadmap' | 'roi';
+type Section = 'spine' | 'epics' | 'roadmap' | 'roi';
 type EpicView = 'tree' | 'flow';
 type RoadmapView = 'timeline' | 'gantt' | 'map';
 
 export function PmVisualizersContent() {
   const t = useTranslations('pm');
-  const [section, setSection] = useState<Section>('roadmap');
+  const [section, setSection] = useState<Section>('spine');
   const [epicView, setEpicView] = useState<EpicView>('tree');
   const [roadmapView, setRoadmapView] = useState<RoadmapView>('timeline');
 
@@ -34,6 +35,7 @@ export function PmVisualizersContent() {
           value={section}
           onChange={setSection}
           options={[
+            { value: 'spine', label: t('spine') },
             { value: 'epics', label: t('epics') },
             { value: 'roadmap', label: t('roadmap') },
             { value: 'roi', label: t('roi') },
@@ -61,6 +63,8 @@ export function PmVisualizersContent() {
           />
         )}
       </div>
+
+      {section === 'spine' && <PlanningSpineGantt />}
 
       {section === 'epics' && (epicView === 'tree' ? <EpicTreeView /> : <DependencyGraph />)}
 

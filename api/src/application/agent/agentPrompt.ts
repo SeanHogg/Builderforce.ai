@@ -14,6 +14,12 @@
  */
 
 import { neon } from '@neondatabase/serverless';
+import {
+  agentMemorySignal,
+  lowerAgentSpec,
+  type AgentExecParams,
+  type AgentSpec,
+} from '@builderforce/agent-tools';
 import type { Env } from '../../env';
 import { getOrSetCached } from '../../infrastructure/cache/readThroughCache';
 
@@ -27,7 +33,32 @@ export type AgentDescriptor = {
   skills: string[] | string | null;
   r2_artifact_key?: string | null;
   mamba_state?: unknown;
+  /**
+   * Compiled persona directives (system-prompt lines). Optional — when a caller
+   * has a psychometric/persona profile for the agent it passes the compiled
+   * directives here and they render through the shared lowering.
+   */
+  personaDirectives?: string[];
+  /** Compiled persona execution levers (think/reasoning/temperature). */
+  execParams?: AgentExecParams;
+  /** Grounded context recalled from the agent's memory (hybrid retrieval). */
+  recalledContext?: string;
 };
+
+/** Build the canonical {@link AgentSpec} for an agent descriptor. */
+function specFromDescriptor(d: AgentDescriptor): AgentSpec {
+  return {
+    identity: { name: d.name, title: d.title, bio: d.bio, skills: d.skills },
+    persona:
+      d.personaDirectives?.length || d.execParams
+        ? { directives: d.personaDirectives, execParams: d.execParams }
+        : undefined,
+    memory: {
+      recalledContext: d.recalledContext,
+      stateSignal: agentMemorySignal(d.mamba_state),
+    },
+  };
+}
 
 export type AgentChatMessage = { role: 'system' | 'user' | 'assistant'; content: string };
 
@@ -37,16 +68,23 @@ export function resolveInferenceMode(d: AgentDescriptor): 'base' | 'lora' | 'hyb
   return hasLora && hasMamba ? 'hybrid' : hasLora ? 'lora' : 'base';
 }
 
-/** Builds the persona (+ Mamba memory) system prompt for an agent. */
+/**
+ * Builds the persona (+ persona directives + recalled/Mamba memory) system prompt
+ * for an agent, via the shared {@link lowerAgentSpec} so every surface assembles
+ * it identically (see `PRD-agent-compile-primitive.md`).
+ */
 export function buildAgentSystemPrompt(d: AgentDescriptor): string {
-  const skills = Array.isArray(d.skills) ? d.skills.join(', ') : (d.skills ?? '');
-  let system = `You are ${d.name}, ${d.title}. ${d.bio}\n\nSkills: ${skills}`;
-  if (d.mamba_state) {
-    const snap = d.mamba_state as { step?: number; data?: number[] };
-    const signal = snap.data ? snap.data.slice(0, 4).map((v) => v.toFixed(3)).join(',') : '';
-    system += `\n\n[Memory: step=${snap.step ?? 0} signal=${signal} context="persistent agent state"]`;
-  }
-  return system;
+  return lowerAgentSpec(specFromDescriptor(d)).systemPrompt;
+}
+
+/**
+ * Lower a descriptor to the full inference shape — system prompt **and** the
+ * persona execution levers (think/reasoning/temperature) an engine should apply.
+ * `buildAgentSystemPrompt` is the system-prompt-only convenience over this.
+ */
+export function buildAgentInference(d: AgentDescriptor): { systemPrompt: string; execParams: AgentExecParams } {
+  const lowered = lowerAgentSpec(specFromDescriptor(d));
+  return { systemPrompt: lowered.systemPrompt, execParams: lowered.execParams };
 }
 
 /** Prepends/merges the persona system prompt into a message list. */

@@ -30,10 +30,12 @@ import {
 import {
   initiatives,
   keyResults,
+  objectiveLinks,
   objectives,
   pmoDependencies,
   portfolios,
   projects,
+  tasks,
 } from '../../infrastructure/database/schema';
 import {
   computePortfolioRollup,
@@ -41,6 +43,11 @@ import {
   wouldCreateCycle,
   type PmoScopeKind,
 } from '../../application/pmo/portfolioRollup';
+import {
+  classifyCostClass,
+  loadPlanningSpine,
+  type CostClass,
+} from '../../application/pmo/planningSpine';
 import type { Env, HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 
@@ -163,6 +170,119 @@ export function createPmoRoutes(db: Db): Hono<HonoEnv> {
     return c.json({ deleted: rows[0].id });
   });
 
+  // ── Planning spine: the unified, dated, cost-bearing hierarchy ──────────────
+  // One read powers the nested Gantt, the $-at-any-level rollup, AND the
+  // CAPEX/OPEX reconciliation stage (each node carries cost, effective class,
+  // anomaly flag and an agent suggestion).
+  router.get('/spine', async (c) => {
+    const { tenantId, segmentId } = scope(c);
+    const env = c.env as Env;
+    const ver = await getCacheVersion(env, pmoVersionKey(tenantId));
+    const key = `pmo:spine:t:${tenantId}:s:${segmentId}:v:${ver}`;
+    const spine = await getOrSetCached(
+      env, key,
+      () => loadPlanningSpine(db, tenantId, segmentId),
+      { kvTtlSeconds: 60, l1TtlMs: 15_000 }, // live LLM spend rides the hot path — short TTL keeps it fresh
+    );
+    return c.json(spine);
+  });
+
+  // ── CAPEX/OPEX classification: set the class on any level, or run the agent ──
+  const COST_KINDS = new Set(['portfolio', 'objective', 'initiative', 'epic', 'task']);
+  const isCostClassValue = (v: unknown): v is CostClass | null => v === 'capex' || v === 'opex' || v === null;
+
+  router.patch('/cost-class', requireRole(TenantRole.MANAGER), async (c) => {
+    const { tenantId, segmentId } = scope(c);
+    const body = await c.req.json<{ kind?: string; id?: string; costClass?: CostClass | null; source?: string }>();
+    const kind = body.kind;
+    if (!kind || !COST_KINDS.has(kind)) return c.json({ error: 'kind must be portfolio|objective|initiative|epic|task' }, 400);
+    if (body.id == null) return c.json({ error: 'id is required' }, 400);
+    if (!isCostClassValue(body.costClass ?? null)) return c.json({ error: 'costClass must be capex|opex|null' }, 400);
+    const costClass = body.costClass ?? null;
+    // A human PM verifying/recategorising is 'manual' (and verifies the row); an
+    // agent-applied class is 'agent' (still needs PM verification).
+    const src = body.source === 'agent' ? 'agent' : 'manual';
+
+    if (kind === 'task' || kind === 'epic') {
+      const id = Number(body.id);
+      if (!Number.isFinite(id)) return c.json({ error: 'invalid task id' }, 400);
+      const rows = await db.update(tasks)
+        .set({ costClass, costClassSource: src, costClassVerified: src === 'manual', updatedAt: new Date() })
+        .where(and(eq(tasks.id, id), eq(tasks.segmentId, segmentId)))
+        .returning({ id: tasks.id });
+      if (!rows[0]) return c.json({ error: 'not found' }, 404);
+    } else {
+      const table = kind === 'portfolio' ? portfolios : kind === 'objective' ? objectives : initiatives;
+      const rows = await db.update(table)
+        .set({ costClass, costClassSource: src, updatedAt: new Date() })
+        .where(and(eq(table.id, body.id), eq(table.tenantId, tenantId), eq(table.segmentId, segmentId)))
+        .returning({ id: table.id });
+      if (!rows[0]) return c.json({ error: 'not found' }, 404);
+    }
+    await bumpCacheVersion(c.env as Env, pmoVersionKey(tenantId));
+    return c.json({ ok: true });
+  });
+
+  // Agent classifier: suggest (and optionally apply) CAPEX/OPEX for tasks/epics
+  // that have no manual/verified class yet. Never overwrites a PM decision.
+  router.post('/cost-class/classify', requireRole(TenantRole.MANAGER), async (c) => {
+    const { tenantId, segmentId } = scope(c);
+    const body = await c.req.json<{ apply?: boolean }>().catch(() => ({ apply: true }));
+    const apply = body.apply !== false;
+    const taskRows = await db
+      .select({ id: tasks.id, title: tasks.title, description: tasks.description, taskType: tasks.taskType, actionType: tasks.actionType, source: tasks.source, allocationCategory: tasks.allocationCategory, costClass: tasks.costClass, costClassSource: tasks.costClassSource, costClassVerified: tasks.costClassVerified })
+      .from(tasks).where(eq(tasks.segmentId, segmentId));
+    const targets = taskRows.filter((t) => !t.costClassVerified && t.costClassSource !== 'manual');
+    const suggestions = targets.map((t) => ({ id: t.id, title: t.title, suggestion: classifyCostClass(t) }));
+    if (apply && suggestions.length) {
+      // One UPDATE per class bucket keeps it to two statements (neon-http: no interactive tx).
+      for (const cls of ['capex', 'opex'] as CostClass[]) {
+        const ids = suggestions.filter((s) => s.suggestion.costClass === cls).map((s) => s.id);
+        if (ids.length) {
+          await db.update(tasks)
+            .set({ costClass: cls, costClassSource: 'agent', updatedAt: new Date() })
+            .where(and(inArray(tasks.id, ids), eq(tasks.segmentId, segmentId)));
+        }
+      }
+      await bumpCacheVersion(c.env as Env, pmoVersionKey(tenantId));
+    }
+    return c.json({ classified: suggestions.length, applied: apply, suggestions });
+  });
+
+  // ── Objective ↔ work-item links (an OKR owns initiatives / epics / tasks) ───
+  router.post('/objectives/:id/links', requireRole(TenantRole.MANAGER), async (c) => {
+    const { tenantId, segmentId } = scope(c);
+    const objectiveId = c.req.param('id');
+    const body = await c.req.json<{ linkKind?: string; initiativeId?: string; taskId?: number }>();
+    const linkKind = body.linkKind;
+    if (linkKind !== 'initiative' && linkKind !== 'epic' && linkKind !== 'task') {
+      return c.json({ error: 'linkKind must be initiative|epic|task' }, 400);
+    }
+    const [obj] = await db.select({ id: objectives.id }).from(objectives)
+      .where(and(eq(objectives.id, objectiveId), eq(objectives.tenantId, tenantId), eq(objectives.segmentId, segmentId)));
+    if (!obj) return c.json({ error: 'objective not found' }, 404);
+
+    const values = linkKind === 'initiative'
+      ? { tenantId, segmentId, objectiveId, linkKind, initiativeId: body.initiativeId ?? null, taskId: null }
+      : { tenantId, segmentId, objectiveId, linkKind, initiativeId: null, taskId: body.taskId ?? null };
+    if (linkKind === 'initiative' && !values.initiativeId) return c.json({ error: 'initiativeId is required' }, 400);
+    if (linkKind !== 'initiative' && values.taskId == null) return c.json({ error: 'taskId is required' }, 400);
+
+    const rows = await db.insert(objectiveLinks).values(values).returning();
+    await bumpCacheVersion(c.env as Env, pmoVersionKey(tenantId));
+    return c.json(rows[0], 201);
+  });
+
+  router.delete('/objectives/:id/links/:linkId', requireRole(TenantRole.MANAGER), async (c) => {
+    const { tenantId, segmentId } = scope(c);
+    const rows = await db.delete(objectiveLinks)
+      .where(and(eq(objectiveLinks.id, c.req.param('linkId')), eq(objectiveLinks.objectiveId, c.req.param('id')), eq(objectiveLinks.tenantId, tenantId), eq(objectiveLinks.segmentId, segmentId)))
+      .returning({ id: objectiveLinks.id });
+    if (!rows[0]) return c.json({ error: 'not found' }, 404);
+    await bumpCacheVersion(c.env as Env, pmoVersionKey(tenantId));
+    return c.json({ deleted: rows[0].id });
+  });
+
   // ── CRUD for the four PMO entities (generic tracker factory) ────────────────
   const bumpVersionKeys = (tenantId: number) => [pmoVersionKey(tenantId)];
   mountTrackers(router, db, [
@@ -170,7 +290,7 @@ export function createPmoRoutes(db: Db): Hono<HonoEnv> {
       path: '/portfolios',
       table: portfolios,
       opts: {
-        fields: ['name', 'description', 'status', 'ownerUserId', 'targetDate'],
+        fields: ['name', 'description', 'status', 'ownerUserId', 'targetDate', 'costClass', 'costClassSource'],
         required: ['name'],
         cacheNs: 'pmo-portfolios',
         bumpVersionKeys,
@@ -180,7 +300,7 @@ export function createPmoRoutes(db: Db): Hono<HonoEnv> {
       path: '/initiatives',
       table: initiatives,
       opts: {
-        fields: ['name', 'description', 'status', 'portfolioId', 'ownerUserId', 'targetDate'],
+        fields: ['name', 'description', 'status', 'portfolioId', 'ownerUserId', 'startDate', 'targetDate', 'costClass', 'costClassSource'],
         required: ['name'],
         cacheNs: 'pmo-initiatives',
         bumpVersionKeys,
@@ -190,7 +310,7 @@ export function createPmoRoutes(db: Db): Hono<HonoEnv> {
       path: '/objectives',
       table: objectives,
       opts: {
-        fields: ['title', 'description', 'period', 'status', 'portfolioId', 'initiativeId', 'ownerUserId'],
+        fields: ['title', 'description', 'period', 'status', 'portfolioId', 'initiativeId', 'ownerUserId', 'startDate', 'endDate', 'costClass', 'costClassSource'],
         required: ['title'],
         cacheNs: 'pmo-objectives',
         bumpVersionKeys,

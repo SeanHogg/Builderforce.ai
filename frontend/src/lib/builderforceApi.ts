@@ -135,6 +135,77 @@ export const toolsApi = {
 };
 
 // ---------------------------------------------------------------------------
+// Decks — board / CFO deck generation + template library
+// ---------------------------------------------------------------------------
+
+export interface DeckTemplateSummary {
+  id: string;
+  name: string;
+  description: string | null;
+  archetype: 'board' | 'cfo_devfinops' | 'custom' | 'generative';
+  isBuiltin: boolean;
+  /** True when this template has an uploaded .pptx that can be filled in place. */
+  fillable: boolean;
+}
+
+export interface GenerateDeckResponse {
+  deckId: string;
+  filename: string;
+  warnings: string[];
+  downloadUrl: string;
+}
+
+/** Trigger a browser download of a Blob (the .pptx). */
+function saveBlob(blob: Blob, filename: string): void {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+export const decksApi = {
+  /** List built-in + tenant deck templates. */
+  listTemplates: (): Promise<DeckTemplateSummary[]> =>
+    request<{ templates: DeckTemplateSummary[] }>('/api/decks/templates').then((r) => r.templates),
+
+  /** Generate a deck (Brain path) — returns the id + warnings, no binary. */
+  generate: (args: { mode?: 'generative' | 'fill'; templateId?: string; quarter?: string; prompt?: string }): Promise<GenerateDeckResponse> =>
+    request<GenerateDeckResponse>('/api/decks/generate', { method: 'POST', body: JSON.stringify(args) }),
+
+  /** Promote an already-uploaded .pptx (brain upload key) into a tenant template. */
+  promoteTemplate: (args: { name: string; description?: string; sourceKey: string }): Promise<{ id: string; tokens: string[] }> =>
+    request<{ id: string; tokens: string[] }>('/api/decks/templates', { method: 'POST', body: JSON.stringify(args) }),
+
+  deleteTemplate: (id: string): Promise<void> =>
+    request<void>(`/api/decks/templates/${encodeURIComponent(id)}`, { method: 'DELETE' }).then(() => undefined),
+
+  /** Generate & download a deck synchronously (the PMO button path). */
+  async download(args: { templateId?: string; quarter?: string; mode?: 'generative' | 'fill' }): Promise<void> {
+    const q = new URLSearchParams();
+    if (args.templateId) q.set('template', args.templateId);
+    if (args.quarter) q.set('quarter', args.quarter);
+    if (args.mode) q.set('mode', args.mode);
+    const res = await fetch(`${AUTH_API_URL}/api/decks/download?${q.toString()}`, { headers: authHeaders() });
+    if (!res.ok) await throwApiError(res, 'GET', '/api/decks/download');
+    const blob = await res.blob();
+    const cd = res.headers.get('content-disposition') ?? '';
+    const m = /filename="?([^"]+)"?/.exec(cd);
+    saveBlob(blob, m?.[1] ?? `deck-${args.quarter ?? 'latest'}.pptx`);
+  },
+
+  /** Download a previously generated deck by id. */
+  async downloadById(deckId: string, filename = 'deck.pptx'): Promise<void> {
+    const res = await fetch(`${AUTH_API_URL}/api/decks/${encodeURIComponent(deckId)}/download`, { headers: authHeaders() });
+    if (!res.ok) await throwApiError(res, 'GET', `/api/decks/${deckId}/download`);
+    saveBlob(await res.blob(), filename);
+  },
+};
+
+// ---------------------------------------------------------------------------
 // Projects — key availability check
 // ---------------------------------------------------------------------------
 
@@ -614,6 +685,16 @@ export const workflowDefinitions = {
     request<{ workflowId: string; taskCount: number }>(`/api/workflow-definitions/${id}/run`, {
       method: 'POST',
       body: JSON.stringify(target),
+    }),
+  /**
+   * Fork a (typically shared/global) definition into a custom, project-scoped
+   * copy — the "modify a shared workflow → custom workflow" path. The source
+   * template is left untouched; the fork records its `parentDefinitionId`.
+   */
+  fork: (id: string, body?: { name?: string; projectId?: number | null }) =>
+    request<WorkflowDefinitionDetail>(`/api/workflow-definitions/${id}/fork`, {
+      method: 'POST',
+      body: JSON.stringify(body ?? {}),
     }),
   /** Export a definition as YAML text (for download / hand-editing). */
   exportYaml: async (id: string): Promise<string> => {
@@ -1272,6 +1353,12 @@ export interface DashboardUsage {
   /** Per-project spend (0103) — cost attributed to each project, rolling up to
    *  the account total in `totals.estimatedCostUsd`. */
   perProject: Array<{ projectId: number | null; projectName: string; totalTokens: number; requests: number; estimatedCostUsd: number }>;
+  /** Per-individual-user spend — attributed to the human / SDK caller. */
+  perUser: Array<{ userId: string | null; userName: string; totalTokens: number; requests: number; estimatedCostUsd: number }>;
+  /** Per-team spend — usage mapped to a team via team membership. */
+  perTeam: Array<{ teamId: number; teamName: string; totalTokens: number; requests: number; estimatedCostUsd: number }>;
+  /** Per-repo spend — attributed to the explicit repo of the originating task. */
+  perRepo: Array<{ repoId: string; repoLabel: string; totalTokens: number; requests: number; estimatedCostUsd: number }>;
 }
 
 export const dashboardApi = {
@@ -1286,8 +1373,8 @@ export const dashboardApi = {
 // powers the sidebar UsageMeter widget.
 // ---------------------------------------------------------------------------
 
-export type MeterKey = 'ai_tokens' | 'ingestion';
-export type MeterUnit = 'tokens' | 'bytes';
+export type MeterKey = 'ai_tokens' | 'ingestion' | 'error_events';
+export type MeterUnit = 'tokens' | 'bytes' | 'events';
 
 export interface MeterSnapshot {
   key: MeterKey;
@@ -1332,6 +1419,7 @@ export interface MemberProfile {
   maxConcurrentWip: number | null;
   rampFactor: number | null;
   experienceLevel: 'junior' | 'mid' | 'senior' | 'staff' | 'principal' | null;
+  discipline: 'engineering' | 'product' | 'design' | 'qa' | 'devops' | 'data' | 'other' | null;
   skills: unknown;
   focusAreas: unknown;
   preferredTaskTypes: unknown;
@@ -1346,6 +1434,7 @@ export interface MemberScorecard {
   memberKind: MemberKind;
   memberRef: string;
   memberName: string;
+  discipline: string | null;
   assignedCount: number;
   completedCount: number;
   redoCount: number;
@@ -1356,6 +1445,13 @@ export interface MemberScorecard {
   boardHygieneScore: number | null;
   engagementScore: number | null;
   effectivenessScore: number | null;
+}
+
+export interface DisciplineRollup {
+  discipline: string;
+  memberCount: number;
+  completedCount: number;
+  avgEffectiveness: number | null;
 }
 
 export interface DoraRollup {
@@ -1406,9 +1502,13 @@ export const membersApi = {
       body: JSON.stringify(body),
     }),
 
-  /** Effectiveness/engagement scorecards for every member over a window (MANAGER+). */
-  metrics: (days = 7): Promise<{ windowDays: number; members: MemberScorecard[] }> =>
-    request<{ windowDays: number; members: MemberScorecard[] }>(`/api/members/metrics?days=${days}`),
+  /** Effectiveness/engagement scorecards for every member over a window (MANAGER+).
+   *  Optional `discipline` filters to one builder discipline; `byDiscipline` is the
+   *  full (unfiltered) rollup by discipline. */
+  metrics: (days = 7, discipline?: string): Promise<{ windowDays: number; members: MemberScorecard[]; byDiscipline: DisciplineRollup[] }> =>
+    request<{ windowDays: number; members: MemberScorecard[]; byDiscipline: DisciplineRollup[] }>(
+      `/api/members/metrics?days=${days}${discipline ? `&discipline=${encodeURIComponent(discipline)}` : ''}`,
+    ),
 
   /** The four DORA metrics for the tenant over a window (MANAGER+). */
   dora: (days = 30): Promise<DoraRollup> =>
@@ -2648,17 +2748,39 @@ export const roiApi = {
 // the API shapes in api/src/application/pmo/portfolioRollup.ts.
 export type PmoScopeKind = 'portfolio' | 'initiative' | 'workspace';
 
+// ── Planning spine (0225): the unified dated, cost-bearing hierarchy ──────────
+export type CostClass = 'capex' | 'opex';
+export type SpineNodeKind = 'portfolio' | 'objective' | 'initiative' | 'epic' | 'task';
+
+export interface CostClassSuggestion { costClass: CostClass; confidence: number; rationale: string }
+export interface SpineCost { llmUsd: number; humanUsd: number; totalUsd: number; capexUsd: number; opexUsd: number }
+export interface SpineNode {
+  key: string; id: string; kind: SpineNodeKind; parentKey: string | null;
+  title: string; status: string; startDate: string | null; endDate: string | null; depth: number;
+  declaredCostClass: CostClass | null; costClassSource: string;
+  inheritedCostClass: CostClass | null; effectiveCostClass: CostClass | null;
+  costClassVerified: boolean; anomaly: boolean; hasDescendantAnomaly: boolean;
+  suggestion: CostClassSuggestion | null; cost: SpineCost; childCount: number;
+}
+export interface SpineResult {
+  nodes: SpineNode[]; totals: SpineCost; anomalyCount: number; unverifiedCount: number;
+}
+
 export interface Portfolio {
   id: string; name: string; description: string | null; status: string;
   ownerUserId: string | null; targetDate: string | null;
 }
 export interface Initiative {
   id: string; name: string; description: string | null; status: string;
-  portfolioId: string | null; ownerUserId: string | null; targetDate: string | null;
+  portfolioId: string | null; ownerUserId: string | null;
+  startDate: string | null; targetDate: string | null;
+  costClass: CostClass | null; costClassSource: string;
 }
 export interface Objective {
   id: string; title: string; description: string | null; period: string | null;
   status: string; portfolioId: string | null; initiativeId: string | null; ownerUserId: string | null;
+  startDate: string | null; endDate: string | null;
+  costClass: CostClass | null; costClassSource: string;
 }
 export interface KeyResult {
   id: string; objectiveId: string; title: string; metricType: string;
@@ -2678,9 +2800,11 @@ export interface KeyResultProgress {
   id: string; title: string; metricType: string;
   startValue: number; targetValue: number; currentValue: number; unit: string | null; progress: number;
 }
+export interface ObjectiveLinkRef { id: string; kind: 'initiative' | 'epic' | 'task'; refId: string; label: string }
 export interface ObjectiveProgress {
   id: string; title: string; period: string | null; status: string;
-  initiativeId: string | null; progress: number; keyResults: KeyResultProgress[];
+  initiativeId: string | null; startDate: string | null; endDate: string | null; costClass: CostClass | null;
+  progress: number; keyResults: KeyResultProgress[]; links: ObjectiveLinkRef[];
 }
 export interface PmoRollup {
   scope: { kind: PmoScopeKind; id: string; name: string };
@@ -2723,6 +2847,18 @@ export const pmoApi = {
   removeDependency: (id: string): Promise<{ deleted: string }> =>
     request(`/api/pmo/dependencies/${id}`, { method: 'DELETE' }),
 
+  /** The unified planning spine: every level dated + cost-rolled, with effective
+   *  CAPEX/OPEX, anomalies and agent suggestions. Powers the Gantt + reconcile. */
+  spine: (): Promise<SpineResult> => request<SpineResult>('/api/pmo/spine'),
+  /** Set (or clear, with null) the CAPEX/OPEX class on any level. A PM 'manual'
+   *  set also verifies the row; pass source:'agent' for an applied suggestion. */
+  setCostClass: (kind: SpineNodeKind, id: string, costClass: CostClass | null, source?: 'manual' | 'agent'): Promise<{ ok: true }> =>
+    request('/api/pmo/cost-class', { method: 'PATCH', body: JSON.stringify({ kind, id, costClass, source }) }),
+  /** Run the agent classifier over unclassified/unverified tasks. apply=false to
+   *  preview suggestions without writing. */
+  classifyCostClasses: (apply = true): Promise<{ classified: number; applied: boolean; suggestions: Array<{ id: number; title: string; suggestion: CostClassSuggestion }> }> =>
+    request('/api/pmo/cost-class/classify', { method: 'POST', body: JSON.stringify({ apply }) }),
+
   portfolios: {
     list: () => portfolioTracker.list() as unknown as Promise<Portfolio[]>,
     create: (body: Partial<Omit<Portfolio, 'id'>>) => portfolioTracker.create(body) as unknown as Promise<Portfolio>,
@@ -2740,6 +2876,11 @@ export const pmoApi = {
     create: (body: Partial<Omit<Objective, 'id'>>) => objectiveTracker.create(body) as unknown as Promise<Objective>,
     update: (id: string, body: Partial<Omit<Objective, 'id'>>) => objectiveTracker.update(id, body) as unknown as Promise<Objective>,
     remove: (id: string) => objectiveTracker.remove(id),
+    /** Link an initiative / epic / task to an objective (the OKR lineage edge). */
+    addLink: (objectiveId: string, link: { linkKind: 'initiative' | 'epic' | 'task'; initiativeId?: string; taskId?: number }): Promise<{ id: string }> =>
+      request(`/api/pmo/objectives/${objectiveId}/links`, { method: 'POST', body: JSON.stringify(link) }),
+    removeLink: (objectiveId: string, linkId: string): Promise<{ deleted: string }> =>
+      request(`/api/pmo/objectives/${objectiveId}/links/${linkId}`, { method: 'DELETE' }),
   },
   keyResults: {
     list: () => keyResultTracker.list() as unknown as Promise<KeyResult[]>,
@@ -2759,6 +2900,8 @@ export interface Sprint {
   startDate: string | null;
   endDate: string | null;
   capacity: number | null;
+  /** Nullable project scope: null = portfolio-wide cadence, non-null = one project. */
+  projectId: number | null;
 }
 
 // ── Ceremony sessions (standup / planning tracking; /api/agile/ceremonies) ──
@@ -2811,7 +2954,8 @@ export const ceremonySessionsApi = {
 
 const sprintTracker = segmentTrackerClient('/api/agile/sprints');
 export const sprintsApi = {
-  list: () => sprintTracker.list() as unknown as Promise<Sprint[]>,
+  /** Pass a projectId for that project's sprints; omit for the portfolio view. */
+  list: (projectId?: number) => sprintTracker.list(projectId) as unknown as Promise<Sprint[]>,
   create: (body: {
     name: string;
     goal?: string;
@@ -2819,6 +2963,7 @@ export const sprintsApi = {
     startDate?: string;
     endDate?: string;
     capacity?: number;
+    projectId?: number | null;
   }) => sprintTracker.create(body) as unknown as Promise<Sprint>,
   update: (id: string, body: Partial<Omit<Sprint, 'id'>>) =>
     sprintTracker.update(id, body) as unknown as Promise<Sprint>,
@@ -3323,6 +3468,125 @@ export const boardConnectionsApi = {
 };
 
 // ---------------------------------------------------------------------------
+// Product Quality / error observability — /api/quality/*
+// ---------------------------------------------------------------------------
+
+export interface QualitySourceCatalogEntry {
+  id: string;
+  label: string;
+  transport: 'key' | 'otlp' | 'webhook';
+  supportsWebhook: boolean;
+  hint: string;
+}
+
+export interface QualitySource {
+  id: string;
+  source: string;
+  name: string;
+  projectId: number;
+  enabled: boolean;
+  status: string;
+  lastEventAt: string | null;
+  createdAt: string;
+  hasWebhookSecret: boolean;
+}
+
+export interface CreateQualitySourceResult {
+  source: { id: string; source: string; name: string; projectId: number };
+  /** Plaintext ingest key — shown ONCE, never retrievable again. */
+  ingestKey: string;
+  webhookUrl: string;
+  otlpEndpoint: string;
+  eventsEndpoint: string;
+}
+
+export interface ErrorGroup {
+  id: string;
+  projectId: number;
+  sourceId: string | null;
+  fingerprint: string;
+  title: string;
+  type: string | null;
+  level: string;
+  status: string;
+  eventCount: number;
+  userCount: number;
+  firstSeen: string;
+  lastSeen: string;
+  environment: string | null;
+  release: string | null;
+  taskId: number | null;
+}
+
+export interface ErrorGroupEvent {
+  ts: string;
+  userKey: string | null;
+  release: string | null;
+  environment: string | null;
+  payload: Record<string, unknown> | null;
+}
+
+export interface ErrorGroupDetail {
+  group: ErrorGroup & { samplePayload: Record<string, unknown> | null; culprit: string | null };
+  recentEvents: ErrorGroupEvent[];
+  trend: { day: string; count: number }[];
+  affectedUsers: number;
+}
+
+export interface QualityGroupFilter {
+  projectId?: number | null;
+  status?: string;
+  level?: string;
+  sourceId?: string;
+  limit?: number;
+  /** Keyset cursor from a previous page's `nextCursor`. */
+  cursor?: string | null;
+}
+
+export interface ErrorGroupPage {
+  groups: ErrorGroup[];
+  /** Pass back as `cursor` for the next page; null when exhausted. */
+  nextCursor: string | null;
+}
+
+export const qualityApi = {
+  sourceCatalog: (): Promise<QualitySourceCatalogEntry[]> =>
+    request<{ sources: QualitySourceCatalogEntry[] }>('/api/quality/source-catalog').then((r) => r.sources ?? []),
+
+  sources: {
+    list: (): Promise<QualitySource[]> =>
+      request<{ sources: QualitySource[] }>('/api/quality/sources').then((r) => r.sources ?? []),
+    create: (body: { projectId: number; source: string; name: string; webhookSecret?: string | null }): Promise<CreateQualitySourceResult> =>
+      request('/api/quality/sources', { method: 'POST', body: JSON.stringify(body) }),
+    update: (id: string, body: { name?: string; enabled?: boolean; status?: string }): Promise<{ ok: true }> =>
+      request(`/api/quality/sources/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
+    remove: (id: string): Promise<void> =>
+      request<void>(`/api/quality/sources/${id}`, { method: 'DELETE' }),
+  },
+
+  groups: {
+    list: (filter: QualityGroupFilter = {}): Promise<ErrorGroupPage> => {
+      const q = new URLSearchParams();
+      if (filter.projectId != null) q.set('projectId', String(filter.projectId));
+      if (filter.status) q.set('status', filter.status);
+      if (filter.level) q.set('level', filter.level);
+      if (filter.sourceId) q.set('sourceId', filter.sourceId);
+      if (filter.limit) q.set('limit', String(filter.limit));
+      if (filter.cursor) q.set('cursor', filter.cursor);
+      const qs = q.toString();
+      return request<ErrorGroupPage>(`/api/quality/groups${qs ? `?${qs}` : ''}`)
+        .then((r) => ({ groups: r.groups ?? [], nextCursor: r.nextCursor ?? null }));
+    },
+    get: (id: string): Promise<ErrorGroupDetail> =>
+      request(`/api/quality/groups/${id}`),
+    setStatus: (id: string, status: 'unresolved' | 'resolved' | 'ignored'): Promise<{ ok: true }> =>
+      request(`/api/quality/groups/${id}`, { method: 'PATCH', body: JSON.stringify({ status }) }),
+    fix: (id: string): Promise<{ taskId: number; executionId: number | null }> =>
+      request(`/api/quality/groups/${id}/fix`, { method: 'POST' }),
+  },
+};
+
+// ---------------------------------------------------------------------------
 // Cloud-agent boards / swimlanes / agent assignments — /api/boards/*
 // ---------------------------------------------------------------------------
 
@@ -3640,6 +3904,20 @@ export interface DoraInsights {
   mttrHours: number | null;
 }
 
+export interface BottleneckStageStat { stage: string; avgHours: number; medianHours: number; taskCount: number }
+export interface BottleneckSlowestStage { stage: string; avgHours: number }
+export interface BottleneckRework { reworkedTasks: number; totalReopens: number; totalRedos: number; reworkRate: number }
+export interface BottleneckAgingTask { taskId: number; key: string; title: string; status: string; ageHours: number }
+export interface BottleneckAgingWip { thresholdHours: number; stuckCount: number; oldest: BottleneckAgingTask[] }
+export interface BottleneckInsights {
+  windowDays: number;
+  sampleSize: number;
+  byStage: BottleneckStageStat[];
+  slowestStage: BottleneckSlowestStage | null;
+  rework: BottleneckRework;
+  agingWip: BottleneckAgingWip;
+}
+
 export type BudgetState = 'no_budget' | 'on_track' | 'forecast_over' | 'over';
 export interface FinanceBudgetLine {
   id: string; scopeKind: string; projectId: number | null; initiativeId: string | null;
@@ -3668,6 +3946,46 @@ export interface FunnelMetrics {
   stages: Array<{ stage: FunnelStage; current: number; reached: number; conversionFromPrevPct: number | null; avgDaysInStage: number | null }>;
 }
 
+export type AllocationCategory = 'innovation' | 'ktlo' | 'support' | 'tech_debt' | 'other';
+export interface CategoryAllocation {
+  category: AllocationCategory; label: string;
+  hours: number; pct: number; taskCount: number;
+  costUsd: number; capexUsd: number; opexUsd: number;
+  targetPct?: number; variancePct?: number;
+}
+export interface MemberAllocation {
+  memberKind: string; memberRef: string; memberName: string;
+  totalHours: number; categorySpread: number;
+  byCategory: Array<{ category: AllocationCategory; label: string; hours: number; pct: number }>;
+}
+export interface AllocationInsights {
+  windowDays: number;
+  totals: { hours: number; taskCount: number; costUsd: number; capexUsd: number; opexUsd: number; capitalizablePct: number };
+  byCategory: CategoryAllocation[];
+  byMember: MemberAllocation[];
+}
+export interface AllocationGoal extends TrackerRow {
+  scopeKind: string; teamId: number | null; projectId: number | null;
+  periodMonth: string; category: AllocationCategory; targetPct: number; notes: string | null;
+}
+
+export type DeliverableScope = 'initiative' | 'project' | 'release' | 'sprint';
+export type DeliveryStatus = 'on_track' | 'at_risk' | 'late' | 'no_signal' | 'done';
+export interface BurnPoint { date: string; scope: number; completed: number; remaining: number }
+export interface DeliveryInsights {
+  scope: DeliverableScope; scopeId: string; name: string;
+  totalTasks: number; completedTasks: number; openTasks: number; completionPct: number;
+  throughputPerWeek: number;
+  forecastDate: string | null; forecastDateOptimistic: string | null; forecastDatePessimistic: string | null;
+  targetDate: string | null; status: DeliveryStatus;
+  baselineDate: string | null; baselineScope: number; addedScope: number; addedScopePct: number;
+  series: BurnPoint[];
+}
+
+export interface ProductRelease extends TrackerRow {
+  name: string; version: string | null; releaseDate: string | null; status: string; notes: string | null;
+}
+
 export interface Budget extends TrackerRow {
   scopeKind: string; projectId: number | null; initiativeId: string | null; periodMonth: string; limitUsd: number; notes: string | null;
 }
@@ -3679,18 +3997,152 @@ export interface InnovationIdea extends TrackerRow {
 
 const budgetTracker = segmentTrackerClient('/api/insights/budgets');
 const ideaTracker = segmentTrackerClient('/api/innovation/ideas');
+const allocationGoalTracker = segmentTrackerClient('/api/insights/allocation-goals');
+const releaseTracker = segmentTrackerClient('/api/product/release-planning');
+
+/** Product releases (the delivery deliverable). Reuses the product tracker. */
+export const releasesApi = {
+  list: () => releaseTracker.list() as unknown as Promise<ProductRelease[]>,
+};
+
+export interface AllocationQuery { days?: number; period?: string; projectId?: number; teamId?: number }
 
 export const insightsApi = {
   engineering: (days = 30): Promise<EngineeringInsights> => request<EngineeringInsights>(`/api/insights/engineering?days=${days}`),
   dora: (days = 30): Promise<DoraInsights> => request<DoraInsights>(`/api/insights/dora?days=${days}`),
+  bottlenecks: (days = 30): Promise<BottleneckInsights> => request<BottleneckInsights>(`/api/insights/bottlenecks?days=${days}`),
   finance: (period?: string): Promise<FinanceInsights> => request<FinanceInsights>(`/api/insights/finance${period ? `?period=${period}` : ''}`),
   compliance: (days = 30): Promise<ComplianceSummary> => request<ComplianceSummary>(`/api/insights/compliance?days=${days}`),
+  allocation: (q: AllocationQuery = {}): Promise<AllocationInsights> => {
+    const p = new URLSearchParams();
+    if (q.days) p.set('days', String(q.days));
+    if (q.period) p.set('period', q.period);
+    if (q.projectId) p.set('projectId', String(q.projectId));
+    if (q.teamId) p.set('teamId', String(q.teamId));
+    const qs = p.toString();
+    return request<AllocationInsights>(`/api/insights/allocation${qs ? `?${qs}` : ''}`);
+  },
+  delivery: (scope: DeliverableScope, id: string): Promise<DeliveryInsights> =>
+    request<DeliveryInsights>(`/api/insights/delivery?scope=${scope}&id=${encodeURIComponent(id)}`),
   budgets: {
     list: () => budgetTracker.list() as unknown as Promise<Budget[]>,
     create: (body: Partial<Omit<Budget, 'id'>>) => budgetTracker.create(body) as unknown as Promise<Budget>,
     update: (id: string, body: Partial<Omit<Budget, 'id'>>) => budgetTracker.update(id, body) as unknown as Promise<Budget>,
     remove: (id: string) => budgetTracker.remove(id),
   },
+  allocationGoals: {
+    list: () => allocationGoalTracker.list() as unknown as Promise<AllocationGoal[]>,
+    create: (body: Partial<Omit<AllocationGoal, 'id'>>) => allocationGoalTracker.create(body) as unknown as Promise<AllocationGoal>,
+    update: (id: string, body: Partial<Omit<AllocationGoal, 'id'>>) => allocationGoalTracker.update(id, body) as unknown as Promise<AllocationGoal>,
+    remove: (id: string) => allocationGoalTracker.remove(id),
+  },
+};
+
+// ---------------------------------------------------------------------------
+// Alerts — threshold alert rules on platform metrics + their firings.
+// ---------------------------------------------------------------------------
+
+/** Metric keys a rule may target (mirrors the API AlertMetric union). */
+export type AlertMetric =
+  | 'token_spend_usd'
+  | 'token_spend_pct_of_cap'
+  | 'cost_per_merged_pr_usd'
+  | 'dora_change_failure_rate'
+  | 'dora_lead_time_hours'
+  | 'ai_effectiveness_score'
+  | 'eval_drift';
+
+export type AlertComparator = 'gt' | 'lt' | 'gte' | 'lte';
+export type AlertScopeKind = 'tenant' | 'project' | 'team';
+export type AlertEventStatus = 'triggered' | 'acknowledged' | 'resolved';
+
+export interface Alert {
+  id: string;
+  tenantId: number;
+  name: string;
+  metric: AlertMetric;
+  comparator: AlertComparator;
+  threshold: number;
+  windowDays: number;
+  scopeKind: AlertScopeKind;
+  projectId: number | null;
+  teamId: number | null;
+  notifySlack: boolean;
+  notifyEmail: boolean;
+  enabled: boolean;
+  cooldownHours: number;
+  lastTriggeredAt: string | null;
+  lastEvaluatedAt: string | null;
+  createdBy: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AlertEvent {
+  id: string;
+  alertId: string | null;
+  tenantId: number;
+  metric: AlertMetric | null;
+  observedValue: number | null;
+  threshold: number | null;
+  comparator: AlertComparator | null;
+  message: string;
+  status: AlertEventStatus;
+  notifiedSlack: boolean;
+  notifiedEmail: boolean;
+  acknowledgedBy: string | null;
+  acknowledgedAt: string | null;
+  createdAt: string;
+}
+
+/** Writable fields when creating/updating an alert rule. */
+export type AlertInput = Partial<
+  Pick<
+    Alert,
+    | 'name' | 'metric' | 'comparator' | 'threshold' | 'windowDays' | 'scopeKind'
+    | 'projectId' | 'teamId' | 'notifySlack' | 'notifyEmail' | 'enabled' | 'cooldownHours'
+  >
+>;
+
+export interface AlertTestResult {
+  metric: AlertMetric;
+  observedValue: number | null;
+  threshold: number;
+  comparator: AlertComparator;
+}
+
+export const alertsApi = {
+  /** List the workspace's alert rules. */
+  list: (): Promise<{ alerts: Alert[] }> => request<{ alerts: Alert[] }>('/api/alerts'),
+
+  /** Create a threshold alert rule. */
+  create: (body: AlertInput): Promise<Alert> =>
+    request<Alert>('/api/alerts', { method: 'POST', body: JSON.stringify(body) }),
+
+  /** Update an alert rule (partial). */
+  update: (id: string, body: AlertInput): Promise<Alert> =>
+    request<Alert>(`/api/alerts/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
+
+  /** Delete an alert rule. */
+  remove: (id: string): Promise<{ deleted: string }> =>
+    request<{ deleted: string }>(`/api/alerts/${id}`, { method: 'DELETE' }),
+
+  /** Recent alert firings, optionally filtered by status. */
+  listEvents: (opts: { limit?: number; status?: AlertEventStatus } = {}): Promise<{ events: AlertEvent[] }> => {
+    const p = new URLSearchParams();
+    if (opts.limit) p.set('limit', String(opts.limit));
+    if (opts.status) p.set('status', opts.status);
+    const qs = p.toString();
+    return request<{ events: AlertEvent[] }>(`/api/alerts/events${qs ? `?${qs}` : ''}`);
+  },
+
+  /** Acknowledge a firing. */
+  ackEvent: (id: string): Promise<AlertEvent> =>
+    request<AlertEvent>(`/api/alerts/events/${id}/ack`, { method: 'POST' }),
+
+  /** Evaluate a rule once now and return the observed value (no notify). */
+  testRule: (id: string): Promise<AlertTestResult> =>
+    request<AlertTestResult>(`/api/alerts/${id}/test`, { method: 'POST' }),
 };
 
 export const innovationApi = {

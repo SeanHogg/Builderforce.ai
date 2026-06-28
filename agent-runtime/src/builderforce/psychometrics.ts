@@ -26,8 +26,8 @@
  * behavioural semantics (vector -> directives + params). The two sides are
  * coupled solely by the dimension-id strings in {@link DIM}. Keep them in sync.
  */
-import { PSYCH_DIM } from "@builderforce/agent-tools";
-import type { ThinkLevel, ReasoningLevel } from "../auto-reply/thinking.js";
+import { PSYCH_DIM, type AgentExecParams } from "@builderforce/agent-tools";
+import type { ThinkLevel } from "../auto-reply/thinking.js";
 import type { AgentRole } from "./types.js";
 
 // ---------------------------------------------------------------------------
@@ -59,13 +59,13 @@ export type PsychometricProfile = {
   notes?: string;
 };
 
-/** Execution levers a profile can nudge. All optional — only set when signalled. */
-export type PsychometricExecParams = {
-  thinkLevel?: ThinkLevel;
-  reasoningLevel?: ReasoningLevel;
-  /** Sampling temperature, clamped to [0.1, 1.0]. */
-  temperature?: number;
-};
+/**
+ * Execution levers a profile can nudge. All optional — only set when signalled.
+ * Aliased to the canonical {@link AgentExecParams} from `@builderforce/agent-tools`
+ * so the trait compiler, the limbic compiler, and the {@link AgentSpec} lowering
+ * all speak one exec-param type (no per-package redefinition).
+ */
+export type PsychometricExecParams = AgentExecParams;
 
 export type CompiledPsychometrics = {
   directives: string[];

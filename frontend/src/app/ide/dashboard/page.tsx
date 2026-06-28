@@ -12,6 +12,7 @@ import {
   deleteIdeProject,
   listIdeContainers,
 } from '@/lib/api';
+import { workflowDefinitions, type WorkflowDefinitionSummary } from '@/lib/builderforceApi';
 import { isPlanLimitError, type PlanLimitError } from '@/lib/planLimitError';
 import { MODALITIES, getModality, type ProjectModality } from '@/lib/modality';
 import type { IdeProject, IdeContainerOption } from '@/lib/types';
@@ -48,7 +49,10 @@ export default function IDEDashboardPage() {
   const [createType, setCreateType] = useState<ProjectModality | null>(null);
   const [newName, setNewName] = useState('');
   const [newParent, setNewParent] = useState<number | null>(null);
+  const [newWorkflow, setNewWorkflow] = useState<string | null>(null);
   const [containers, setContainers] = useState<IdeContainerOption[]>([]);
+  const [workflows, setWorkflows] = useState<WorkflowDefinitionSummary[]>([]);
+  const [workflowsLoaded, setWorkflowsLoaded] = useState(false);
   const [creating, setCreating] = useState(false);
   const [planError, setPlanError] = useState<PlanLimitError | null>(null);
 
@@ -82,6 +86,15 @@ export default function IDEDashboardPage() {
     if (!createType) return;
     setNewParent(currentProjectId ?? null);
     listIdeContainers().then(setContainers).catch(() => setContainers([]));
+    // LLM projects must run a workflow — load the tenant's definitions to pick from.
+    if (createType === 'llm') {
+      setNewWorkflow(null);
+      setWorkflowsLoaded(false);
+      workflowDefinitions.list()
+        .then(setWorkflows)
+        .catch(() => setWorkflows([]))
+        .finally(() => setWorkflowsLoaded(true));
+    }
   }, [createType, currentProjectId]);
 
   const openIde = (p: IdeProject) => {
@@ -99,9 +112,11 @@ export default function IDEDashboardPage() {
     }
   };
 
+  const llmNeedsWorkflow = createType === 'llm' && !newWorkflow;
+
   const submitCreate = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!createType || !newName.trim() || creating) return;
+    if (!createType || !newName.trim() || creating || llmNeedsWorkflow) return;
     setCreating(true);
     setError(null);
     try {
@@ -109,6 +124,7 @@ export default function IDEDashboardPage() {
         name: newName.trim(),
         modality: createType,
         containerProjectId: newParent,
+        ...(createType === 'llm' ? { workflowDefinitionId: newWorkflow } : {}),
       });
       persistLastProjectId(String(created.storageProjectId));
       router.push(`/ide/${created.storageProjectPublicId}`);
@@ -319,12 +335,29 @@ export default function IDEDashboardPage() {
                   {containers.map((c) => (<option key={c.id} value={c.id}>{c.name}</option>))}
                 </select>
               </div>
+              {createType === 'llm' && (
+                <div>
+                  <label className="block text-sm mb-1" style={{ color: 'var(--text-secondary)' }}>{t('workflowRequired')}</label>
+                  {workflowsLoaded && workflows.length === 0 ? (
+                    <div style={{ fontSize: 13, color: 'var(--text-secondary)', background: 'var(--bg-deep)', border: '1px solid var(--border-subtle)', borderRadius: 10, padding: '10px 14px' }}>
+                      {t('noWorkflowsYet')}{' '}
+                      <a href="/workflows" style={{ color: 'var(--coral-bright)', fontWeight: 600 }}>{t('goToWorkflows')}</a>
+                    </div>
+                  ) : (
+                    <select value={newWorkflow ?? ''} onChange={(e) => setNewWorkflow(e.target.value || null)} required style={inputStyle}>
+                      <option value="">{t('selectWorkflow')}</option>
+                      {workflows.map((w) => (<option key={w.id} value={w.id}>{w.name}</option>))}
+                    </select>
+                  )}
+                  <p style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 6 }}>{t('workflowHint')}</p>
+                </div>
+              )}
               <div className="flex gap-3 justify-end">
                 <button type="button" onClick={() => setCreateType(null)} style={{ fontSize: '0.875rem', color: 'var(--text-secondary)', background: 'none', border: 'none', cursor: 'pointer' }}>{t('cancel')}</button>
                 <button
                   type="submit"
-                  disabled={creating || !newName.trim()}
-                  style={{ padding: '8px 18px', fontSize: '0.875rem', fontWeight: 600, background: 'linear-gradient(135deg, var(--coral-bright), var(--coral-dark))', color: '#fff', border: 'none', borderRadius: 10, cursor: creating || !newName.trim() ? 'not-allowed' : 'pointer', opacity: creating || !newName.trim() ? 0.7 : 1 }}
+                  disabled={creating || !newName.trim() || llmNeedsWorkflow}
+                  style={{ padding: '8px 18px', fontSize: '0.875rem', fontWeight: 600, background: 'linear-gradient(135deg, var(--coral-bright), var(--coral-dark))', color: '#fff', border: 'none', borderRadius: 10, cursor: creating || !newName.trim() || llmNeedsWorkflow ? 'not-allowed' : 'pointer', opacity: creating || !newName.trim() || llmNeedsWorkflow ? 0.7 : 1 }}
                 >
                   {creating ? t('creating') : t('createOpen')}
                 </button>

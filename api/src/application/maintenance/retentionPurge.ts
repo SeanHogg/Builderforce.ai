@@ -11,7 +11,7 @@
 import { lt } from 'drizzle-orm';
 import { buildDatabase } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
-import { llmTraces, llmFailoverLog, llmHealthProbes, qaJourneyEvents } from '../../infrastructure/database/schema';
+import { llmTraces, llmFailoverLog, llmHealthProbes, qaJourneyEvents, errorEvents } from '../../infrastructure/database/schema';
 
 /** Days of history kept per table before older rows are purged. */
 const RETENTION_DAYS = {
@@ -19,6 +19,10 @@ const RETENTION_DAYS = {
   llmFailoverLog: 30,
   llmHealthProbes: 180,
   qaJourneyEvents: 90,
+  // Raw Quality error events — group aggregates (error_groups) are kept forever;
+  // only the raw stream is swept. 90d is safely > the consumption meter's
+  // month-to-date window, so error-event billing is never affected by the purge.
+  errorEvents: 90,
 } as const;
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -36,6 +40,7 @@ export async function runRetentionPurge(env: Env, now: number = Date.now()): Pro
     { name: 'llm_failover_log',  run: () => db.delete(llmFailoverLog).where(lt(llmFailoverLog.createdAt, cutoff(now, RETENTION_DAYS.llmFailoverLog))) },
     { name: 'llm_health_probes', run: () => db.delete(llmHealthProbes).where(lt(llmHealthProbes.createdAt, cutoff(now, RETENTION_DAYS.llmHealthProbes))) },
     { name: 'qa_journey_events', run: () => db.delete(qaJourneyEvents).where(lt(qaJourneyEvents.ts, cutoff(now, RETENTION_DAYS.qaJourneyEvents))) },
+    { name: 'error_events',      run: () => db.delete(errorEvents).where(lt(errorEvents.createdAt, cutoff(now, RETENTION_DAYS.errorEvents))) },
   ];
   for (const t of targets) {
     try {

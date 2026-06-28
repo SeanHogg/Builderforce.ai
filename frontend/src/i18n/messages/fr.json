@@ -14,7 +14,12 @@
       "insights": "Analyses",
       "library": "Bibliothèque",
       "settings": "Paramètres",
-      "admin": "Administration"
+      "admin": "Administration",
+      "knowledge": "Connaissances",
+      "quality": "Qualité",
+      "surveys": "Enquêtes",
+      "dashboards": "Tableaux de bord",
+      "finops": "DevFinOps"
     },
     "tab": {
       "projects": "Projets",
@@ -29,6 +34,7 @@
       "finops": "FinOps",
       "funnel": "Entonnoir d’innovation",
       "compliance": "Conformité",
+      "alerts": "Alertes",
       "content": "Contenu",
       "skills": "Compétences",
       "personas": "Personas",
@@ -37,7 +43,92 @@
       "security": "Sécurité",
       "billing": "Facturation",
       "tenant": "Espaces de travail",
-      "apiKeys": "Clés API"
+      "apiKeys": "Clés API",
+      "sops": "Procédures",
+      "processes": "Processus",
+      "docs": "Documents",
+      "training": "Formation",
+      "errors": "Erreurs",
+      "sources": "Sources",
+      "aiImpact": "Impact de l’IA",
+      "recommendations": "Recommandations",
+      "space": "SPACE",
+      "benchmarking": "Analyse comparative",
+      "devex": "DevEx",
+      "bottlenecks": "Goulots"
+    },
+    "tab.allocation": "Répartition",
+    "tab.delivery": "Livraison"
+  },
+  "alerts": {
+    "title": "Alertes",
+    "subtitle": "Définissez des alertes de seuil sur les métriques de la plateforme. Un balayage quotidien évalue chaque règle et notifie votre équipe via Slack et e-mail lorsqu'elle se déclenche.",
+    "loading": "Chargement…",
+    "days": "{n} jours",
+    "common": {
+      "delete": "Supprimer"
+    },
+    "create": {
+      "title": "Nouvelle règle d'alerte",
+      "submit": "Créer l'alerte"
+    },
+    "field": {
+      "name": "Nom",
+      "namePlaceholder": "p. ex. Garde-fou de dépenses mensuelles",
+      "metric": "Métrique",
+      "comparator": "Condition",
+      "threshold": "Seuil",
+      "windowDays": "Fenêtre (jours)",
+      "scope": "Portée",
+      "notifySlack": "Notifier Slack",
+      "notifyEmail": "Notifier par e-mail"
+    },
+    "metric": {
+      "token_spend_usd": "Dépense en jetons (USD)",
+      "token_spend_pct_of_cap": "Utilisation des jetons (% du plafond)",
+      "cost_per_merged_pr_usd": "Coût par PR fusionnée (USD)",
+      "dora_change_failure_rate": "Taux d'échec des changements (%)",
+      "dora_lead_time_hours": "Délai de livraison (heures)",
+      "ai_effectiveness_score": "Score d'efficacité de l'IA",
+      "eval_drift": "Dérive d'évaluation (groupes)"
+    },
+    "comparator": {
+      "gt": "Au-dessus de",
+      "lt": "En dessous de",
+      "gte": "Supérieur ou égal à",
+      "lte": "Inférieur ou égal à"
+    },
+    "scope": {
+      "tenant": "Espace de travail",
+      "project": "Projet",
+      "team": "Équipe"
+    },
+    "rules": {
+      "title": "Règles d'alerte",
+      "empty": "Aucune règle d'alerte pour l'instant. Créez-en une ci-dessus.",
+      "condition": "Condition",
+      "status": "Statut",
+      "actions": "Actions",
+      "enabled": "Activée",
+      "disabled": "Désactivée",
+      "test": "Tester"
+    },
+    "eventStatus": {
+      "triggered": "Déclenchée",
+      "acknowledged": "Acquittée",
+      "resolved": "Résolue"
+    },
+    "events": {
+      "title": "Déclenchements récents",
+      "empty": "Aucune alerte ne s'est encore déclenchée.",
+      "when": "Quand",
+      "message": "Message",
+      "acknowledge": "Acquitter"
+    },
+    "test": {
+      "observed": "Observé : {value}",
+      "na": "Non calculable pour cette portée",
+      "failed": "Échec du test"
     }
   },
   "ceremonies": {
@@ -87,7 +178,8 @@
     "depTypeFinishToStart": "Fin → Début",
     "depTypeStartToStart": "Début → Début",
     "depTypeFinishToFinish": "Fin → Fin",
-    "depTypeStartToFinish": "Début → Fin"
+    "depTypeStartToFinish": "Début → Fin",
+    "spine": "Colonne de planification"
   },
   "ide": {
     "all": "Tous",
@@ -131,7 +223,17 @@
     "colActions": "Actions",
     "workflowLabel": "Workflow",
     "noWorkflow": "Aucun workflow",
-    "workflowHint": "Les projets LLM exécutent un workflow. Attribuez-en un partagé ou créez-en un personnalisé dans Workflows."
+    "workflowHint": "Les projets LLM exécutent un workflow. Attribuez-en un partagé ou créez-en un personnalisé dans Workflows.",
+    "workflowRequired": "Workflow (obligatoire)",
+    "selectWorkflow": "Sélectionnez un workflow…",
+    "customTag": "personnalisé",
+    "customizeWorkflow": "Personnaliser",
+    "runWorkflow": "Exécuter le workflow",
+    "working": "Traitement…",
+    "workflowForked": "Dupliqué en workflow personnalisé pour ce projet.",
+    "workflowRunStarted": "Exécution du workflow lancée.",
+    "noWorkflowsYet": "Vous n’avez pas encore de workflow.",
+    "goToWorkflows": "Créez-en un dans Workflows →"
   },
   "tools": {
     "outOf5": "sur 5,0",
@@ -196,11 +298,24 @@
   "common": {
     "language": "Langue"
   },
+  "llmUsage": {
+    "byUser": "Par utilisateur · 7 derniers jours",
+    "byTeam": "Par équipe · 7 derniers jours",
+    "byRepo": "Par dépôt · 7 derniers jours",
+    "user": "Utilisateur",
+    "team": "Équipe",
+    "repository": "Dépôt",
+    "rollsUpTo": "représente {total} du total du compte",
+    "noUser": "Aucune dépense par utilisateur sur cette période.",
+    "noTeam": "Aucune dépense par équipe sur cette période.",
+    "noRepo": "Aucune dépense par dépôt sur cette période."
+  },
   "usageMeter": {
     "title": "Utilisation",
     "meter": {
       "ai_tokens": "Jetons IA",
-      "ingestion": "Ingestion de données"
+      "ingestion": "Ingestion de données",
+      "error_events": "Événements d’erreur"
     },
     "unlimited": "Illimité",
     "freePerMo": "{amount} gratuit / mois",
@@ -223,7 +338,8 @@
     "tabs": {
       "rollup": "Synthèse",
       "structure": "Structure",
-      "okrs": "OKR"
+      "okrs": "OKR",
+      "cost": "CAPEX/OPEX"
     },
     "scope": {
       "wholePortfolio": "Tout le portefeuille",
@@ -323,7 +439,24 @@
       "addKr": "Ajouter un KR",
       "current": "actuel",
       "update": "Mettre à jour",
-      "deleteObjective": "Supprimer l’objectif"
+      "deleteObjective": "Supprimer l’objectif",
+      "startDate": "Date de début",
+      "endDate": "Date de fin",
+      "costClass": "Classe",
+      "capex": "CAPEX",
+      "opex": "OPEX",
+      "unset": "Effacer",
+      "noDates": "Aucune date",
+      "deliveredBy": "Réalisé par",
+      "noLinks": "Aucun travail lié pour l'instant.",
+      "addLink": "Lier",
+      "removeLink": "Retirer le lien",
+      "pickItem": "Lier une initiative, un epic ou une tâche…",
+      "linkKind": {
+        "initiative": "Initiative",
+        "epic": "Epic",
+        "task": "Tâche"
+      }
     },
     "projectLink": {
       "title": "Initiative PMO",
@@ -451,6 +584,245 @@
         "measured": "Mesurée",
         "killed": "Abandonnée"
       }
+    },
+    "alloc": {
+      "title": "Répartition des investissements",
+      "subtitle": "Où vont réellement le temps et les dépenses d'ingénierie — par catégorie d'investissement, avec coût capitalisable et écart par rapport aux objectifs.",
+      "period": "Période",
+      "totalHours": "Effort suivi",
+      "totalHoursSub": "{n} tâches",
+      "capitalizable": "Capitalisable",
+      "capitalizableSub": "Part des dépenses (CapEx)",
+      "capex": "CapEx",
+      "capexSub": "Coût capitalisable",
+      "opex": "OpEx",
+      "opexSub": "Coût passé en charges",
+      "mix": "Répartition des investissements",
+      "noData": "Aucun effort suivi sur cette période pour l'instant.",
+      "target": "objectif {n}%",
+      "noGoal": "Aucun objectif",
+      "goals": "Objectifs de répartition",
+      "category": "Catégorie",
+      "targetPct": "Objectif %",
+      "setGoal": "Définir l'objectif",
+      "noGoals": "Aucun objectif défini pour cette période.",
+      "byMember": "Par membre",
+      "member": "Membre",
+      "hours": "Heures",
+      "topCategory": "Catégorie principale",
+      "spread": "Catégories",
+      "noMembers": "Aucun travail assigné sur cette période.",
+      "cat": {
+        "innovation": "Innovation",
+        "ktlo": "Maintien en condition opérationnelle",
+        "support": "Support",
+        "tech_debt": "Dette technique",
+        "other": "Autre"
+      }
+    },
+    "deliv": {
+      "title": "Livraison",
+      "subtitle": "Suivez un livrable jusqu'à son achèvement : burnup, prévision et dérive du périmètre sur les initiatives, projets et versions.",
+      "deliverable": "Livrable",
+      "noDeliverables": "Aucun livrable pour le moment — créez une initiative, un projet ou une version.",
+      "noSeries": "Historique insuffisant pour tracer un graphique.",
+      "chartAria": "Graphique burnup du périmètre par rapport au travail réalisé dans le temps",
+      "kind": {
+        "initiative": "Initiative",
+        "project": "Projet",
+        "release": "Version"
+      },
+      "progress": "Progression",
+      "progressSub": "{done} sur {total} terminés",
+      "status": "Statut",
+      "statusLabel": {
+        "on_track": "Dans les temps",
+        "at_risk": "À risque",
+        "late": "En retard",
+        "done": "Terminé",
+        "no_signal": "Aucun signal"
+      },
+      "target": "cible {d}",
+      "noTarget": "pas de date cible",
+      "forecast": "Achèvement prévu",
+      "forecastBand": "{o} – {p}",
+      "forecastNone": "débit requis pour prévoir",
+      "scopeCreep": "Dérive du périmètre",
+      "scopeCreepSub": "+{added} après la base de {base}",
+      "burnup": "Burnup / burndown",
+      "legendScope": "Périmètre",
+      "legendDone": "Terminé",
+      "detail": "Détails",
+      "throughput": "Débit",
+      "week": "sem",
+      "open": "Ouvertes",
+      "baseline": "Référence",
+      "baselineScope": "Périmètre de référence"
+    },
+    "aiImpact": {
+      "title": "Impact de l’IA",
+      "subtitle": "Tendances d’adoption, évaluation comparative des outils et votre score de productivité avec l’IA.",
+      "wow": "vs. période précédente",
+      "productivityScore": "Score de productivité IA",
+      "throughput": "Débit",
+      "throughputSub": "Volume de PR fusionnées",
+      "quality": "Qualité",
+      "qualitySub": "Score combiné avec CI au vert",
+      "efficiency": "Efficacité",
+      "efficiencySub": "Inverse du coût par PR fusionnée",
+      "prevScore": "Score précédent",
+      "prevSub": "Période équivalente précédente",
+      "comparisonTitle": "Évaluation multi-outils",
+      "model": "Modèle",
+      "runs": "Exécutions",
+      "avgScore": "Score moyen",
+      "mergeRate": "Taux de fusion",
+      "ciGreen": "CI au vert",
+      "avgSteps": "Étapes moy.",
+      "costPerMergedPr": "Coût / PR fusionnée",
+      "tokens": "Tokens",
+      "noRuns": "Aucune exécution notée sur cette période.",
+      "shareTrendTitle": "Tendance de part par modèle",
+      "currentShare": "Part actuelle",
+      "shareDelta": "Δ part (première→dernière semaine)",
+      "noUsage": "Aucune utilisation sur cette période.",
+      "weeklyTitle": "Adoption et usage hebdomadaires",
+      "weekStart": "Semaine du",
+      "activeUsers": "Utilisateurs actifs",
+      "cost": "Coût"
+    },
+    "devex": {
+      "title": "Enquêtes et analyses DevEx",
+      "subtitle": "Scores de pulse de l’expérience développeur, eNPS et la coupe d’analyse DevEx avec l’IA.",
+      "responseRate": "Taux de réponse",
+      "responseRateSub": "Réponses par campagne",
+      "responses": "Réponses",
+      "enps": "eNPS",
+      "enpsSub": "% promoteurs − % détracteurs",
+      "aiScore": "Score des outils IA",
+      "aiScoreSub": "Sentiment sur les questions outils IA (0–100)",
+      "aiPositive": "Outils IA positifs",
+      "aiPositiveSub": "{n} points de données répondus",
+      "byDimension": "Scores par dimension",
+      "dimension": "Dimension",
+      "avgScore": "Score moyen (0–100)",
+      "datapoints": "Points de données",
+      "noData": "Aucune réponse d’enquête sur cette période pour l’instant.",
+      "trend": "Tendance entre campagnes",
+      "period": "Période",
+      "noTrend": "Aucune campagne étiquetée par période pour l’instant.",
+      "dim": {
+        "flow": "Flux",
+        "tooling": "Outillage",
+        "ai_tools": "Outils IA",
+        "deep_work": "Travail en profondeur",
+        "build_test": "Build et tests",
+        "docs": "Documentation",
+        "sentiment": "Sentiment"
+      }
+    },
+    "benchmarking": {
+      "title": "Analyse comparative sectorielle",
+      "subtitle": "Voyez où se situent vos métriques de livraison face à une cohorte sectorielle — percentile et notation selon votre secteur et la taille de votre équipe.",
+      "industry": "Secteur",
+      "sizeBand": "Taille d’équipe",
+      "tableTitle": "Vos métriques vs cohorte",
+      "footnote": "Les percentiles sont interpolés à partir de distributions de cohortes sectorielles préchargées (p10–p90). Pour les métriques où plus bas est meilleur (lead time, taux d’échec des changements, MTTR, coût), une valeur plus faible se classe plus haut.",
+      "industries": {
+        "software_saas": "Software / SaaS"
+      },
+      "sizeBands": {
+        "small": "Petite (1–20)",
+        "mid": "Moyenne (21–200)",
+        "large": "Grande (200+)"
+      },
+      "rating": {
+        "elite": "Élite",
+        "high": "Élevé",
+        "medium": "Moyen",
+        "low": "Faible"
+      },
+      "col": {
+        "metric": "Métrique",
+        "value": "Votre valeur",
+        "percentile": "Percentile",
+        "rating": "Notation",
+        "median": "Médiane de la cohorte",
+        "elite": "Élite (p90)"
+      },
+      "metrics": {
+        "deploy_freq_per_week": "Fréquence de déploiement",
+        "lead_time_hours": "Lead time",
+        "change_failure_rate_pct": "Taux d’échec des changements",
+        "mttr_hours": "Temps de restauration",
+        "ai_merge_rate_pct": "Taux de fusion IA",
+        "cost_per_merged_pr_usd": "Coût par PR fusionnée",
+        "ai_adoption_pct": "Adoption de l’IA"
+      }
+    },
+    "recs": {
+      "title": "Recommandations",
+      "subtitle": "Actions prescriptives et anomalies pilotées par l’IA, synthétisées à partir de vos différentes perspectives d’analyse.",
+      "empty": "Aucune recommandation pour l’instant — tout est dans les seuils.",
+      "action": "Action",
+      "dismiss": "Ignorer",
+      "dismissing": "Suppression…",
+      "severity": {
+        "critical": "Critique",
+        "warning": "Avertissement",
+        "info": "Information"
+      },
+      "category": {
+        "cost": "Coût",
+        "quality": "Qualité",
+        "allocation": "Répartition",
+        "delivery": "Livraison"
+      }
+    },
+    "space": {
+      "title": "Métriques SPACE",
+      "subtitle": "Le cadre de productivité développeur à cinq dimensions qui complète DORA.",
+      "noSignal": "Aucun signal sur cette période",
+      "figure": "Chiffre",
+      "value": "Valeur",
+      "dim": {
+        "satisfaction": "Satisfaction",
+        "performance": "Performance",
+        "activity": "Activité",
+        "communication": "Communication",
+        "efficiency": "Efficacité et flux"
+      },
+      "sub": {
+        "satisfaction": "Indicateur d’implication des membres",
+        "performance": "Taux de réussite des déploiements",
+        "activity": "Débit de production",
+        "communication": "Étendue de collaboration × flux",
+        "efficiency": "Peu de reprises + cycle rapide"
+      }
+    },
+    "bottleneck": {
+      "title": "Titre",
+      "subtitle": "Identifiez précisément où le travail bloque : temps par étape, étape la plus lente, boucles de reprise et travail en cours actuellement bloqué.",
+      "slowest": "Étape la plus lente",
+      "noData": "pas encore de données",
+      "reworkRate": "Taux de reprise",
+      "reworkSub": "{n} tâches reprises",
+      "reopens": "Réouvertures",
+      "redos": "{n} refaites",
+      "stuck": "Travail bloqué",
+      "stuckSub": "inactif > {n} h",
+      "sample": "Tâches échantillonnées",
+      "byStageTitle": "Temps par étape",
+      "noStages": "Pas encore d'historique d'étapes sur cette période.",
+      "stage": "Étape",
+      "avgHrs": "Moy.",
+      "medianHrs": "Médiane",
+      "tasks": "Tâches",
+      "agingTitle": "Travail stagnant — à débloquer maintenant",
+      "noAging": "Rien de bloqué — tout le travail en cours est récent.",
+      "key": "Clé",
+      "status": "Statut",
+      "age": "Ancienneté"
     }
   },
   "cloudAgentForm": {
@@ -578,5 +950,422 @@
     "workspaceTitle": "Espace de travail",
     "workspaceDesc": "Espace de travail et système de fichiers de ce projet. Ouvrez l'IDE pour modifier les fichiers.",
     "openInIde": "Ouvrir dans l'IDE"
+  },
+  "spine": {
+    "loading": "Chargement de la colonne de planification…",
+    "empty": "Rien à planifier pour l’instant. Ajoutez des dates aux objectifs, initiatives, epics ou tâches pour afficher la chronologie.",
+    "totalInvestment": "Investissement total",
+    "capex": "CAPEX",
+    "opex": "OPEX",
+    "anomalies": "{count} anomalies de classification",
+    "estimateNote": "$ = dépenses LLM + main-d’œuvre estimée",
+    "item": "Élément",
+    "expand": "Développer",
+    "collapse": "Réduire",
+    "undated": "sans dates",
+    "unclassified": "Non classé",
+    "anomalyTip": "La classe CAPEX/OPEX de cet élément contredit celle de son parent — à réconcilier.",
+    "descendantAnomalyTip": "La classe d’un élément enfant contredit celle de son parent.",
+    "kind": {
+      "portfolio": "Portefeuille",
+      "objective": "Objectif",
+      "initiative": "Initiative",
+      "epic": "Epic",
+      "task": "Tâche"
+    }
+  },
+  "reconcile": {
+    "loading": "Chargement des éléments de travail…",
+    "title": "Réconciliation CAPEX / OPEX",
+    "classifyAgent": "Classer avec l’agent",
+    "summaryAnomalies": "{count} anomalies",
+    "summaryUnverified": "{count} non vérifiés",
+    "capex": "CAPEX",
+    "opex": "OPEX",
+    "attentionOnly": "À traiter uniquement",
+    "hint": "Chaque élément hérite de sa classe de son objectif ou de son initiative sauf substitution. Vérifiez ou recatégorisez ; l’agent préclasse le nouveau travail (ajout de capacité → CAPEX, correction ou maintenance → OPEX).",
+    "allClear": "Tout est classé et vérifié.",
+    "unclassified": "Non classé",
+    "verified": "Vérifié",
+    "suggests": "suggère {class}",
+    "clearTip": "Effacer la substitution (hériter du parent)",
+    "anomalyTip": "Déclaré {declared} mais hérite {inherited}",
+    "kind": {
+      "portfolio": "Portefeuille",
+      "objective": "Objectif",
+      "initiative": "Initiative",
+      "epic": "Epic",
+      "task": "Tâche"
+    },
+    "source": {
+      "manual": "manuel",
+      "inherited": "hérité",
+      "agent": "agent"
+    }
+  },
+  "workforce": {
+    "discipline": "Discipline",
+    "allDisciplines": "Toutes les disciplines",
+    "unassigned": "Non attribué",
+    "disciplineOptions": {
+      "engineering": "Ingénierie",
+      "product": "Produit",
+      "design": "Design",
+      "qa": "QA",
+      "devops": "DevOps",
+      "data": "Données",
+      "other": "Autre"
+    }
+  },
+  "knowledge": {
+    "headingSops": "Procédures opératoires standard",
+    "headingProcesses": "Processus et flux",
+    "headingDocs": "Base de connaissances",
+    "subtitleSops": "Documentez et standardisez le travail de votre équipe — prêt pour l'audit et la formation.",
+    "subtitleProcesses": "Cartographiez les flux de travail répétables et les transmissions au sein de votre équipe.",
+    "subtitleDocs": "Une documentation de référence partagée que toute votre équipe peut trouver et à laquelle se fier.",
+    "newDocument": "Nouveau document",
+    "searchPlaceholder": "Rechercher des documents…",
+    "allTags": "Toutes les étiquettes",
+    "loading": "Chargement…",
+    "empty": "Aucun document pour l'instant.",
+    "status_draft": "Brouillon",
+    "status_published": "Publié",
+    "status_archived": "Archivé",
+    "requiresAckBadge": "Confirmation requise",
+    "createTitle": "Nouveau document",
+    "fieldTitle": "Titre",
+    "fieldSummary": "Bref résumé",
+    "requiresAckLabel": "Exiger que l'équipe lise et confirme",
+    "cancel": "Annuler",
+    "create": "Créer",
+    "creating": "Création…",
+    "trainingTitle": "Formation et conformité",
+    "trainingSubtitle": "Vos lectures assignées et la piste d'audit de toute l'équipe.",
+    "myTraining": "Ma formation",
+    "noTraining": "Aucune formation ne vous est assignée.",
+    "due": "Échéance",
+    "state_completed": "Terminé",
+    "state_overdue": "En retard",
+    "state_pending": "En attente",
+    "state_acknowledged": "Confirmé",
+    "state_not_required": "Non requis",
+    "complianceAudit": "Audit de conformité",
+    "overallCompliance": "Conformité globale",
+    "required": "Requis",
+    "acknowledged": "Confirmé",
+    "overdue": "En retard",
+    "noComplianceDocs": "Aucun document ne requiert actuellement de confirmation.",
+    "document": "Document",
+    "percentComplete": "% achevé",
+    "pending": "En attente",
+    "backToList": "Retour aux connaissances",
+    "saving": "Enregistrement…",
+    "saved": "Enregistré",
+    "type_sop": "POS",
+    "type_process": "Processus",
+    "type_doc": "Document",
+    "removeTag": "Retirer l'étiquette",
+    "addTag": "Ajouter une étiquette…",
+    "youAcknowledged": "Vous avez confirmé cette version",
+    "ackRequiredPrompt": "Vous devez lire et confirmer ce document.",
+    "ackPrompt": "Confirmez que vous avez lu ce document.",
+    "acknowledging": "Confirmation…",
+    "acknowledge": "J'ai lu ceci",
+    "aiAssist": "Assistant IA",
+    "aiHint": "Décrivez ce qu'il faut écrire ou comment améliorer le document. L'IA rédige du Markdown prêt pour l'audit.",
+    "aiPromptPlaceholder": "ex. Rédigez une POS d'intégration pour les nouveaux ingénieurs couvrant les accès, les outils et les objectifs de la première semaine.",
+    "generating": "Génération…",
+    "generate": "Générer",
+    "aiReplace": "Remplacer le document",
+    "aiInsert": "Ajouter au document",
+    "edit": "Modifier",
+    "preview": "Aperçu",
+    "contentPlaceholder": "Rédigez en Markdown…",
+    "emptyContent": "Ce document est vide.",
+    "changeNotePlaceholder": "Qu'est-ce qui a changé dans cette version ? (facultatif)",
+    "publishing": "Publication…",
+    "publishNewVersion": "Publier une nouvelle version",
+    "publish": "Publier",
+    "deleteDoc": "Supprimer",
+    "deleteConfirm": "Supprimer définitivement ce document ? Cette action est irréversible.",
+    "versionHistory": "Historique des versions",
+    "noVersions": "Aucune version publiée pour l'instant.",
+    "trainingAndAudit": "Formation et audit de lecture",
+    "assignTraining": "Assigner comme formation",
+    "noMembers": "Aucun membre d'équipe trouvé.",
+    "dueDate": "Date d'échéance",
+    "assigning": "Attribution…",
+    "assign": "Assigner",
+    "readStatus": "Statut de lecture",
+    "noReadersRequired": "Aucun lecteur n'est encore requis pour ce document.",
+    "liveCollab": "Collaboration en temps réel",
+    "editingNow": "en cours de modification",
+    "share": "Partager",
+    "owner": "Propriétaire",
+    "roleEditor": "Éditeur",
+    "roleViewer": "Lecteur",
+    "invite": "Inviter",
+    "inviting": "Invitation…",
+    "selectMember": "Sélectionner un membre…",
+    "noCollaborators": "Personne n'a encore été invité.",
+    "remove": "Retirer",
+    "accessViewerNote": "Vous avez été invité à consulter cette page.",
+    "accessReadOnlyNote": "Vous avez un accès en lecture seule à cette page."
+  },
+  "quality": {
+    "title": "Qualité produit",
+    "subtitle": "Chaque erreur de votre produit : ingérée, regroupée et prête à corriger.",
+    "loading": "Chargement…",
+    "empty": "Aucune erreur pour l’instant. Connectez une source pour commencer l’ingestion.",
+    "summary": {
+      "groups": "Groupes d’erreurs",
+      "unresolved": "Non résolues",
+      "events": "Événements au total",
+      "users": "Utilisateurs touchés"
+    },
+    "filter": {
+      "status": "Statut",
+      "allStatuses": "Tous les statuts",
+      "level": "Niveau",
+      "allLevels": "Tous les niveaux"
+    },
+    "status": {
+      "unresolved": "Non résolue",
+      "fixing": "Correction",
+      "resolved": "Résolue",
+      "ignored": "Ignorée"
+    },
+    "level": {
+      "fatal": "Fatale",
+      "error": "Erreur",
+      "warning": "Avertissement",
+      "info": "Info"
+    },
+    "col": {
+      "error": "Erreur",
+      "level": "Niveau",
+      "status": "Statut",
+      "events": "Événements",
+      "users": "Utilisateurs",
+      "lastSeen": "Vue le"
+    },
+    "card": {
+      "meta": "{events} événements · {users} utilisateurs"
+    },
+    "detail": {
+      "events": "Événements",
+      "users": "Utilisateurs touchés",
+      "environment": "Environnement",
+      "trend": "14 derniers jours",
+      "noTrend": "Aucun événement récent",
+      "where": "Où",
+      "stack": "Trace de pile",
+      "close": "Fermer",
+      "fix": "Corriger avec un agent",
+      "fixLinked": "Tâche de correction #{taskId}",
+      "fixStarted": "Correction lancée — tâche #{taskId} créée.",
+      "resolve": "Résoudre",
+      "ignore": "Ignorer",
+      "reopen": "Rouvrir"
+    },
+    "sources": {
+      "title": "Sources de qualité",
+      "subtitle": "Connectez l’origine de vos erreurs.",
+      "intro": "Ingérez des erreurs depuis votre propre SDK, OpenTelemetry, Sentry, PostHog ou LogRocket. Nous traduisons chaque source en un format canonique unique.",
+      "empty": "Aucune source connectée pour l’instant.",
+      "enabled": "activée",
+      "paused": "en pause",
+      "lastEvent": "dernier événement",
+      "pause": "Suspendre",
+      "resume": "Reprendre",
+      "delete": "Supprimer",
+      "add": "Connecter une source",
+      "project": "Projet",
+      "selectProject": "— Sélectionner un projet —",
+      "type": "Type de source",
+      "namePlaceholder": "Nom (ex. App web — production)",
+      "secretPlaceholder": "Secret de signature du webhook (facultatif)",
+      "create": "Créer la source",
+      "creating": "Création…",
+      "cancel": "Annuler",
+      "needProject": "Choisissez un projet pour cette source.",
+      "needName": "Donnez un nom à la source.",
+      "confirmDelete": "Supprimer cette source ? Les erreurs ingérées sont conservées.",
+      "created": "Source créée",
+      "keyOnce": "Copiez la clé d’ingestion maintenant — elle n’est affichée qu’une fois.",
+      "ingestKey": "Clé d’ingestion",
+      "sdkSnippet": "SDK navigateur",
+      "curlSnippet": "Serveur / curl",
+      "otlpEndpoint": "Point de terminaison OTLP",
+      "webhookUrl": "URL du webhook"
+    }
+  },
+  "surveys": {
+    "title": "Enquêtes DevEx",
+    "subtitle": "Rédigez des enquêtes de pulse, lancez des campagnes et recueillez des retours sur l’expérience développeur.",
+    "saving": "Enregistrement…",
+    "yes": "Oui",
+    "no": "Non",
+    "author": {
+      "title": "Nouveau modèle d’enquête",
+      "namePlaceholder": "Nom du modèle (p. ex. Pulse DevEx mensuel)",
+      "descPlaceholder": "Description (facultatif)",
+      "promptPlaceholder": "Énoncé de la question",
+      "type": "Type",
+      "dimension": "Dimension",
+      "addQuestion": "+ Ajouter une question",
+      "removeQuestion": "Supprimer",
+      "create": "Créer le modèle"
+    },
+    "qtype": {
+      "rating": "Note (1–5)",
+      "nps": "NPS (0–10)",
+      "boolean": "Oui / Non",
+      "text": "Texte libre"
+    },
+    "dim": {
+      "flow": "Flux",
+      "tooling": "Outillage",
+      "ai_tools": "Outils IA",
+      "deep_work": "Travail en profondeur",
+      "build_test": "Build et tests",
+      "docs": "Documentation",
+      "sentiment": "Sentiment"
+    },
+    "templates": {
+      "title": "Modèles",
+      "empty": "Aucun modèle pour l’instant — créez-en un ci-dessus.",
+      "name": "Nom",
+      "questions": "Questions",
+      "active": "Actif",
+      "delete": "Supprimer"
+    },
+    "launch": {
+      "title": "Lancer une campagne",
+      "titlePlaceholder": "Titre de la campagne (p. ex. Pulse DevEx de juin)",
+      "template": "Modèle",
+      "noTemplate": "Aucun modèle",
+      "anonymous": "Anonyme",
+      "create": "Lancer la campagne"
+    },
+    "campaigns": {
+      "title": "Campagnes",
+      "empty": "Aucune campagne pour l’instant.",
+      "name": "Campagne",
+      "period": "Période",
+      "status": "Statut",
+      "responses": "Réponses",
+      "respond": "Répondre",
+      "close": "Clôturer",
+      "anon": "anonyme"
+    },
+    "respond": {
+      "title": "Vos réponses",
+      "noQuestions": "Cette campagne n’a aucune question.",
+      "submit": "Envoyer",
+      "cancel": "Annuler",
+      "thanks": "Merci — votre réponse a été enregistrée."
+    },
+    "err": {
+      "nameRequired": "Un nom de modèle est requis.",
+      "questionRequired": "Ajoutez au moins une question avec un énoncé.",
+      "titleRequired": "Un titre de campagne est requis."
+    }
+  },
+  "dashboards": {
+    "title": "Tableaux de bord personnalisés",
+    "subtitle": "Composez des tableaux de bord enregistrés à partir de widgets sur vos métriques existantes, et posez des questions en langage naturel.",
+    "empty": "Aucun tableau de bord sélectionné. Créez-en un pour commencer.",
+    "ask": {
+      "heading": "Posez une question",
+      "placeholder": "p. ex. Combien dépensons-nous ce mois-ci ?",
+      "button": "Demander",
+      "asking": "Interrogation…",
+      "matched": "Métrique correspondante"
+    },
+    "create": {
+      "placeholder": "Nom du nouveau tableau de bord",
+      "button": "Créer le tableau de bord"
+    },
+    "delete": {
+      "button": "Supprimer"
+    },
+    "widget": {
+      "add": "Ajouter un widget",
+      "remove": "Supprimer le widget",
+      "empty": "Aucun widget pour l’instant — ajoutez-en un ci-dessus."
+    }
+  },
+  "finops": {
+    "title": "DevFinOps",
+    "subtitle": "Estimations de crédit d’impôt R&D, couverture des contrôles SOC 1 et rapports de période prêts pour l’audit — dérivés de votre effort, de votre coût et de votre piste d’audit.",
+    "loading": "Chargement…",
+    "saving": "Enregistrement…",
+    "tab": {
+      "rd": "Crédit d’impôt R&D",
+      "soc": "Contrôles SOC 1",
+      "audit": "Rapport d’audit"
+    },
+    "rd": {
+      "configTitle": "Définition de la Recherche Qualifiée",
+      "configHint": "Choisissez quelles catégories d’investissement (et éventuellement types d’action) comptent comme Recherche Qualifiée, et fixez un taux de main-d’œuvre combiné. Utilisé pour une estimation de QRE de type Form 6765.",
+      "qualifiedCategories": "Catégories qualifiées (séparées par des virgules)",
+      "qualifiedActionTypes": "Types d’action qualifiés (facultatif)",
+      "blendedRate": "Taux de main-d’œuvre combiné (USD/heure)",
+      "save": "Enregistrer et recalculer",
+      "qualifiedHours": "Heures qualifiées",
+      "qualifiedLabor": "Main-d’œuvre qualifiée",
+      "qualifiedAiSpend": "Dépense IA/cloud qualifiée",
+      "qualifiedBase": "Base qualifiée",
+      "form6765": "Estimation de base Form 6765",
+      "byCategory": "Par catégorie",
+      "category": "Catégorie",
+      "hours": "Heures",
+      "labor": "Main-d’œuvre",
+      "aiSpend": "Dépense IA",
+      "qualified": "Qualifié"
+    },
+    "soc": {
+      "coverage": "Couverture des contrôles",
+      "implemented": "Implémenté",
+      "partial": "Partiel",
+      "gap": "Lacune",
+      "implementedOfTotal": "{a} sur {b} implémentés",
+      "seededNote": "Affichage de l’ensemble de contrôles par défaut. Modifiez un statut ou un responsable pour démarrer votre propre registre.",
+      "ref": "Réf.",
+      "objective": "Objectif du contrôle",
+      "category": "Catégorie",
+      "status": {
+        "implemented": "Implémenté",
+        "partial": "Partiel",
+        "gap": "Lacune"
+      },
+      "owner": "Responsable",
+      "statusCol": "Statut"
+    },
+    "audit": {
+      "period": "Période",
+      "exportCsv": "Exporter CSV",
+      "exportJson": "Exporter JSON",
+      "finance": "Finance",
+      "spend": "Dépense",
+      "forecast": "Prévision",
+      "capex": "Capitalisé (capex)",
+      "opex": "Charge (opex)",
+      "rd": "Recherche Qualifiée R&D",
+      "controls": "Contrôles et preuves SOC 1",
+      "evidenceEvents": "Événements d’audit",
+      "sensitive": "{n} sensibles"
+    }
+  },
+  "decks": {
+    "download": "Télécharger le deck",
+    "generating": "Génération…",
+    "pickTemplate": "Choisir un modèle de deck",
+    "pickQuarter": "Choisir un trimestre",
+    "boardDeck": "Deck R&D pour le conseil",
+    "cfoDeck": "Deck CFO / DevFinOps",
+    "error": "Impossible de générer le deck"
   }
 }

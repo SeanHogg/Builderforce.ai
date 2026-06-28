@@ -2,8 +2,10 @@ import { describe, expect, it } from 'vitest';
 import {
   scoreMembers,
   rollupDora,
+  rollupByDiscipline,
   memberMetricsCacheKey,
   doraCacheKey,
+  type MemberScorecard,
   type MemberTaskRow,
   type DeployRow,
 } from './workforceMetrics';
@@ -106,6 +108,44 @@ describe('rollupDora', () => {
     expect(dora.leadTimeHours).toBeNull();
     expect(dora.changeFailureRatePct).toBeNull();
     expect(dora.mttrHours).toBeNull();
+  });
+});
+
+describe('rollupByDiscipline', () => {
+  function card(over: Partial<MemberScorecard>): MemberScorecard {
+    return {
+      memberKind: 'human', memberRef: 'u', memberName: 'U', discipline: null,
+      assignedCount: 0, completedCount: 0, redoCount: 0, reopenCount: 0,
+      avgCycleTimeHours: null, avgPickupLatencyHours: null, avgIdleAfterDoneHours: null,
+      boardHygieneScore: null, engagementScore: null, effectivenessScore: null,
+      ...over,
+    };
+  }
+
+  it('groups by discipline, buckets null as unassigned, and averages effectiveness', () => {
+    const cards = [
+      card({ memberRef: 'a', discipline: 'product', completedCount: 3, effectivenessScore: 80 }),
+      card({ memberRef: 'b', discipline: 'product', completedCount: 2, effectivenessScore: 60 }),
+      card({ memberRef: 'c', discipline: 'qa', completedCount: 1, effectivenessScore: 90 }),
+      card({ memberRef: 'd', discipline: null, completedCount: 4, effectivenessScore: null }),
+    ];
+    const roll = rollupByDiscipline(cards);
+    const product = roll.find((r) => r.discipline === 'product')!;
+    expect(product.memberCount).toBe(2);
+    expect(product.completedCount).toBe(5);
+    expect(product.avgEffectiveness).toBeCloseTo(70, 5);
+    const unassigned = roll.find((r) => r.discipline === 'unassigned')!;
+    expect(unassigned.memberCount).toBe(1);
+    expect(unassigned.completedCount).toBe(4);
+    expect(unassigned.avgEffectiveness).toBeNull(); // no scored members
+  });
+
+  it('sorts by completed work desc', () => {
+    const roll = rollupByDiscipline([
+      card({ discipline: 'design', completedCount: 1 }),
+      card({ discipline: 'engineering', completedCount: 9 }),
+    ]);
+    expect(roll[0]!.discipline).toBe('engineering');
   });
 });
 

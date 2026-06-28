@@ -6,12 +6,16 @@
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
-  "files": ["dist", "src"],
+  "files": [
+    "dist",
+    "src"
+  ],
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "typecheck:native": "tsgo --noEmit"
   },
   "peerDependencies": {
     "@mlc-ai/web-llm": "^0.2.0"
@@ -25,7 +29,8 @@
   "devDependencies": {
     "@mlc-ai/web-llm": "^0.2.0",
     "@webdit/convert": "*",
-    "typescript": "^5.4.0",
-    "vitest": "^2.1.0"
+    "typescript": "^6.0.3",
+    "vitest": "^2.1.0",
+    "@typescript/native-preview": "7.0.0-dev.20260627.2"
   }
 }

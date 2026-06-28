@@ -4,6 +4,10 @@ declare module '*.md' {
   export default content;
 }
 
+// Side-effect CSS imports (handled by the bundler at build time). TypeScript 6.0
+// errors (TS2882) on side-effect imports lacking a module declaration; TS 5.x did not.
+declare module '*.css';
+
 // @seanhogg/builderforce-memory-engine (formerly mambacode.js) ships its own
 // TypeScript declarations, so no `declare module` shim is needed here.
 
