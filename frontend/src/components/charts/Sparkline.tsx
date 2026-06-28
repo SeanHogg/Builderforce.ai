@@ -38,7 +38,16 @@ export function Sparkline({
   const areaPath = `M ${x(0)},${height} L ${values.map((v, i) => `${x(i)},${y(v)}`).join(' L ')} L ${x(n - 1)},${height} Z`;
 
   return (
-    <svg width={width} height={height} viewBox={`0 0 ${width} ${height}`} role="img" aria-label={ariaLabel} style={{ display: 'block' }}>
+    <svg
+      width={width}
+      height={height}
+      viewBox={`0 0 ${width} ${height}`}
+      role="img"
+      aria-label={ariaLabel}
+      // Cap to the container so a fixed intrinsic width can't overflow a narrow
+      // slot (e.g. the sidebar usage meter); height scales to keep the ratio.
+      style={{ display: 'block', maxWidth: '100%', height: 'auto' }}
+    >
       {area && <path d={areaPath} fill={color} opacity={0.14} />}
       <polyline points={line} fill="none" stroke={color} strokeWidth={1.5} strokeLinejoin="round" strokeLinecap="round" />
     </svg>
