@@ -141,6 +141,27 @@
   "ceremonies": {
     "selectProject": "选择一个项目以开始仪式。"
   },
+  "projectCard": {
+    "details": "详情",
+    "taskBoard": "任务看板",
+    "openIde": "在 IDE 中打开",
+    "deleteProject": "删除项目",
+    "agentLabel": "智能体：",
+    "tasks": "{count, plural, other {# 个任务}}",
+    "workflows": "{count, plural, other {# 个工作流}}",
+    "viewWorkflows": "查看工作流",
+    "health": "健康度",
+    "done": "已完成",
+    "remaining": "剩余",
+    "tier": {
+      "healthy": "健康",
+      "watch": "关注",
+      "at_risk": "有风险",
+      "critical": "严重"
+    },
+    "healthAria": "项目健康度 {score}/100 — {tier}",
+    "doneAria": "已完成 {pct}% — {total} 个任务中已完成 {completed} 个"
+  },
   "projectScope": {
     "workspace": "工作区",
     "allProjects": "全部项目",

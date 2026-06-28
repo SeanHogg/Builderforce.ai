@@ -141,6 +141,27 @@
   "ceremonies": {
     "selectProject": "Selecciona un proyecto para iniciar una ceremonia."
   },
+  "projectCard": {
+    "details": "Detalles",
+    "taskBoard": "Tablero de tareas",
+    "openIde": "Abrir en el IDE",
+    "deleteProject": "Eliminar proyecto",
+    "agentLabel": "Agente:",
+    "tasks": "{count, plural, one {# tarea} other {# tareas}}",
+    "workflows": "{count, plural, one {# flujo de trabajo} other {# flujos de trabajo}}",
+    "viewWorkflows": "Ver flujos de trabajo",
+    "health": "Salud",
+    "done": "Hecho",
+    "remaining": "Restante",
+    "tier": {
+      "healthy": "Saludable",
+      "watch": "Vigilar",
+      "at_risk": "En riesgo",
+      "critical": "Crítico"
+    },
+    "healthAria": "Salud del proyecto {score} de 100 — {tier}",
+    "doneAria": "{pct}% completado — {completed} de {total} tareas completadas"
+  },
   "projectScope": {
     "workspace": "Espacio de trabajo",
     "allProjects": "Todos los proyectos",

@@ -1,7 +1,11 @@
 'use client';
 
 import { useState } from 'react';
+import { useTranslations } from 'next-intl';
 import type { Project } from '@/lib/types';
+import { computeProjectHealth } from '@/lib/projectHealth';
+import { GaugeChart } from '@/components/charts/GaugeChart';
+import { DonutChart } from '@/components/charts/DonutChart';
 import { ProjectOriginBadge } from './ProjectOriginBadge';
 import type { ProjectPanelTab } from './ProjectDetailsPanel';
 import { DeleteProjectDialog } from './DeleteProjectDialog';
@@ -45,6 +49,8 @@ export function ProjectCard({
   showDeleteButton = !!onDelete,
   onOpenIde,
 }: ProjectCardProps) {
+  const t = useTranslations('projectCard');
+  const health = computeProjectHealth(project);
   const openIde = onOpenIde ?? ((p: Project) => { window.location.href = `/ide/${p.publicId ?? p.id}`; });
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (onCardClick && e.key === 'Enter') {
@@ -131,7 +137,7 @@ export function ProjectCard({
                 e.stopPropagation();
                 onDetailsClick?.(project);
               }}
-              aria-label="Details"
+              aria-label={t('details')}
               style={iconButtonStyle}
             >
               <svg viewBox="0 0 24 24" style={{ width: 18, height: 18, stroke: 'currentColor', fill: 'none', strokeWidth: 2 }}>
@@ -148,8 +154,8 @@ export function ProjectCard({
               e.stopPropagation();
               window.location.href = `/projects?tab=tasks&project=${project.id}`;
             }}
-            aria-label="Task board"
-            title="Task board"
+            aria-label={t('taskBoard')}
+            title={t('taskBoard')}
             style={iconButtonStyle}
           >
             <svg viewBox="0 0 24 24" style={{ width: 18, height: 18, stroke: 'currentColor', fill: 'none', strokeWidth: 2 }}>
@@ -165,7 +171,7 @@ export function ProjectCard({
               e.stopPropagation();
               openIde(project);
             }}
-            aria-label="Open in IDE"
+            aria-label={t('openIde')}
             style={iconButtonStyle}
           >
             <span style={{ fontSize: 18 }} aria-hidden>💻</span>
@@ -175,7 +181,7 @@ export function ProjectCard({
               <button
                 type="button"
                 onClick={handleDeleteClick}
-                aria-label="Delete project"
+                aria-label={t('deleteProject')}
                 style={iconButtonStyle}
               >
                 <svg
@@ -220,7 +226,7 @@ export function ProjectCard({
       )}
       {project.assignedAgentHost && (
         <div style={{ marginBottom: 4 }}>
-          <span style={{ fontSize: 11, color: 'var(--text-muted)', marginRight: 4 }}>Agent:</span>
+          <span style={{ fontSize: 11, color: 'var(--text-muted)', marginRight: 4 }}>{t('agentLabel')}</span>
           <button
             type="button"
             onClick={(e) => {
@@ -242,17 +248,52 @@ export function ProjectCard({
           </button>
         </div>
       )}
+
+      {/* Health speedometer + % done ring — the at-a-glance "is this project on
+          track and how far along" visual. Both derive from the shared
+          computeProjectHealth helper so card/table can't drift. */}
+      {health.hasData && (
+        <div
+          style={{
+            display: 'flex', alignItems: 'center', justifyContent: 'space-around', gap: 12,
+            padding: '10px 8px', margin: '2px 0 4px',
+            background: 'var(--bg-base)', border: '1px solid var(--border-subtle)', borderRadius: 10,
+          }}
+        >
+          <GaugeChart
+            value={health.healthScore}
+            color={health.color}
+            size={104}
+            centerValue={String(health.healthScore)}
+            centerLabel={t('health')}
+            ariaLabel={t('healthAria', { score: health.healthScore, tier: t(`tier.${health.tier}`) })}
+          />
+          <DonutChart
+            size={84}
+            thickness={12}
+            legend={false}
+            centerValue={`${health.progressPct}%`}
+            centerLabel={t('done')}
+            ariaLabel={t('doneAria', { pct: health.progressPct, completed: health.completed, total: health.total })}
+            segments={[
+              { key: 'done', label: t('done'), value: health.completed, color: 'var(--accent)' },
+              { key: 'remaining', label: t('remaining'), value: Math.max(0, health.total - health.completed), color: 'var(--border-subtle)' },
+            ]}
+          />
+        </div>
+      )}
+
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 'auto', flexWrap: 'wrap' }}>
         {project.taskCount != null && (
           <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
-            {project.taskCount} task{project.taskCount !== 1 ? 's' : ''}
+            {t('tasks', { count: project.taskCount })}
           </span>
         )}
         {project.workflowCount != null && (
           <>
             <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>·</span>
             <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
-              {project.workflowCount} workflow{project.workflowCount !== 1 ? 's' : ''}
+              {t('workflows', { count: project.workflowCount })}
             </span>
           </>
         )}
@@ -280,7 +321,7 @@ export function ProjectCard({
             cursor: 'pointer',
           }}
         >
-          View workflows
+          {t('viewWorkflows')}
         </button>
       </div>
       <p style={{ fontSize: 12, color: 'var(--text-muted)' }}>{createdDate(project)}</p>
