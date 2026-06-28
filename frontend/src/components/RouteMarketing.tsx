@@ -77,6 +77,19 @@ export default function RouteMarketing({ pathname }: { pathname: string }) {
         </section>
       )}
 
+      {m.figures && m.figures.length > 0 && (
+        <section className="rm-figures">
+          <div className="rm-inside-head">See how it works</div>
+          {m.figures.map((f) => (
+            <figure key={f.src} className="rm-figure">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img className="rm-figure-img" src={f.src} alt={f.alt} loading="lazy" width={1600} height={900} />
+              <figcaption className="rm-figure-cap">{f.caption}</figcaption>
+            </figure>
+          ))}
+        </section>
+      )}
+
       <section className="rm-inside">
         <div className="rm-inside-head">What you get with Builderforce.ai</div>
         <div className="rm-grid">
@@ -161,6 +174,14 @@ export default function RouteMarketing({ pathname }: { pathname: string }) {
         }
         .rm-hl-title { font-family: var(--font-display); font-weight: 600; font-size: 1.02rem; color: var(--text-primary); margin-bottom: 6px; }
         .rm-hl-desc { font-size: 0.88rem; color: var(--text-secondary); line-height: 1.6; }
+
+        .rm-figures { margin-top: 40px; display: flex; flex-direction: column; gap: 26px; }
+        .rm-figure { margin: 0; }
+        .rm-figure-img {
+          width: 100%; height: auto; display: block; border-radius: 16px;
+          border: 1px solid var(--border-subtle); background: #0e1525;
+        }
+        .rm-figure-cap { font-size: 0.84rem; color: var(--text-muted); line-height: 1.5; text-align: center; margin-top: 10px; }
 
         .rm-inside { margin-top: 40px; }
         .rm-inside-head {

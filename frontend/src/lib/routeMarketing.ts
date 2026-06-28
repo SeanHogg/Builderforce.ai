@@ -18,12 +18,23 @@ export interface RouteHighlight {
   desc: string;
 }
 
+/** A ground-visual figure (SVG in /public) rendered on the marketing teaser to
+ *  make the case visually. The shared RouteMarketing component self-gates on
+ *  presence, so adding figures to a route is a one-line data edit. */
+export interface RouteFigure {
+  src: string;
+  alt: string;
+  caption: string;
+}
+
 export interface RouteMarketing {
   icon: string;
   title: string;
   description: string;
   /** "How it works" / benefit points rendered under the hero. */
   highlights?: RouteHighlight[];
+  /** Ground-visual figures rendered under the highlights to make the case. */
+  figures?: RouteFigure[];
   /** FAQ rendered on the teaser AND emitted as FAQPage JSON-LD for SEO/GEO. */
   faq?: FaqItem[];
   /** RELATED_ARTICLES surface key → associated blog posts shown on the teaser. */
@@ -73,15 +84,22 @@ const DETAILS: Record<string, Omit<RouteMarketing, 'icon' | 'title' | 'descripti
   '/ide': {
     relatedSurface: 'ide',
     seoDescription:
-      'The Builderforce.ai in-browser IDE runs a full Node.js runtime via WebContainers with a Monaco editor, terminal, AI chat, and real-time collaboration — pair-program with agents without a local setup.',
+      'The Builderforce.ai in-browser IDE is multi-modal: one project builds across Designer (apps & agents), LLM (custom models), Voice (voice cloning), and Video (diffusion) — all on WebGPU, on your own GPU, with a Monaco editor, terminal, AI chat, and real-time collaboration. No local setup, no cloud GPU bill.',
     highlights: [
+      { title: 'One project, every modality', desc: 'A single project builds across Designer (apps & agents), LLM (custom models), Voice (voice cloning), and Video (diffusion clips) — switch modality without leaving the IDE.' },
       { title: 'A full IDE in the browser', desc: 'Monaco editor, a real xterm.js terminal on a WebContainer Node.js runtime, file explorer, and live preview — run npm install and dev servers with no local setup.' },
-      { title: 'Pair-program with agents', desc: 'A streaming AI chat with full project file context can apply changes and create files directly, so humans and agents co-author in the same workspace.' },
-      { title: 'Real-time collaboration', desc: 'Multi-file collaborative editing via Yjs CRDT and a shared terminal mean your team and your agents work the same project live.' },
+      { title: 'Runs on your own GPU', desc: 'Training, voice synthesis, and video generation run client-side on WebGPU — zero cloud GPU bill, and your data never leaves the device.' },
+      { title: 'Pair-program with agents', desc: 'A streaming AI chat with full project file context can apply changes and create files directly, so humans and agents co-author the same workspace in real time.' },
+    ],
+    figures: [
+      { src: '/ide/ide-modalities.svg', alt: 'One project building across four modalities — Designer, LLM, Voice, and Video — all in the in-browser IDE on WebGPU', caption: 'One project, many modalities — Designer, LLM, Voice, and Video, all in the same in-browser IDE.' },
+      { src: '/ide/ide-build-loop.svg', alt: 'The same build loop across modalities: describe, generate, run on your GPU, validate, publish, call anywhere', caption: 'The same spine for every modality — describe, generate, run, validate, publish, then call from any agent.' },
+      { src: '/ide/ide-owned-gpu.svg', alt: 'The cloud-GPU way versus the Builderforce way — in-browser on your own GPU, zero GPU bill, your data stays local', caption: 'Every modality runs in your browser on your own GPU — no servers, no GPU bill, your data stays put.' },
     ],
     faq: [
-      { question: 'Is the Builderforce.ai IDE really running in my browser?', answer: 'Yes. It uses WebContainers to run a full Node.js runtime client-side, with a Monaco editor and a real xterm.js terminal. You can run npm install, start a Vite dev server, and use an interactive shell without installing anything locally.' },
-      { question: 'Can AI agents edit code in the IDE?', answer: 'Yes. The IDE\'s AI chat panel has full project file context and can apply code changes and create files directly. It is built for human-AI co-authorship — you and your agents work in the same files in real time.' },
+      { question: 'What modalities can the Builderforce.ai IDE build?', answer: 'One project builds across four modalities from the same IDE: Designer (generate and run apps and agents with a live dev server), LLM (design datasets and train a custom model, then chat with it), Voice (clone a voice from a reference sample and synthesize speech), and Video (generate short clips client-side via diffusion). You switch modality in the project without leaving the editor.' },
+      { question: 'Is the Builderforce.ai IDE really running in my browser?', answer: 'Yes. It uses WebContainers to run a full Node.js runtime client-side, with a Monaco editor and a real xterm.js terminal. Training, voice synthesis, and video generation run on your own GPU via WebGPU — so you can build in any modality with no local setup and no cloud GPU bill.' },
+      { question: 'Can AI agents edit code in the IDE?', answer: 'Yes. The IDE\'s AI chat panel has full project file context and can apply code changes and create files directly. It is built for human-AI co-authorship — you and your agents work in the same files in real time, across every modality.' },
       { question: 'Does it support real-time collaboration?', answer: 'Yes. Multi-file editing is collaborative via Yjs CRDT and the terminal is shared across collaborators, so a team — and its agents — can work on one project simultaneously.' },
     ],
   },
