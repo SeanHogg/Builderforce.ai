@@ -62,7 +62,7 @@ export function createDashboardsRoutes(db: Db): Hono<HonoEnv> {
     const metrics = listMetricKeys()
       .map((key) => {
         const def = METRIC_REGISTRY[key];
-        return def ? { key, label: def.label, unit: def.unit, description: def.description } : null;
+        return def ? { key, label: def.label, unit: def.unit, description: def.description, goodWhenUp: def.goodWhenUp ?? null } : null;
       })
       .filter((m): m is NonNullable<typeof m> => m !== null);
     return c.json({ metrics });
@@ -273,7 +273,7 @@ export function createDashboardsRoutes(db: Db): Hono<HonoEnv> {
         const series = def.series
           ? await getOrSetCached(env, `${key}:series`, () => def.series!(db, tenantId, days), SHORT_TTL)
           : null;
-        return { widgetId: w.id, widgetKey: null, metricKey: w.metricKey, title: w.title ?? def.label, viz: w.viz, value, unit: def.unit, label: def.label, days, series };
+        return { widgetId: w.id, widgetKey: null, metricKey: w.metricKey, title: w.title ?? def.label, viz: w.viz, value, unit: def.unit, label: def.label, days, series, goodWhenUp: def.goodWhenUp ?? null };
       }),
     );
 

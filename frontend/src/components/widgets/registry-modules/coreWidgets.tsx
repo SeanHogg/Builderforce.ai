@@ -40,6 +40,7 @@ import {
 } from '@/lib/builderforceApi';
 import type { Project } from '@/lib/types';
 import { useSharedSource } from '@/lib/widgets/sharedSource';
+import { WidgetStat as Stat, WidgetMuted as Muted } from '@/components/widgets/widgetBody';
 import type { WidgetCardProps, WidgetDef, WidgetDrill } from '@/lib/widgets/types';
 import { DonutChart } from '@/components/charts/DonutChart';
 import { BarChart } from '@/components/charts/BarChart';
@@ -83,19 +84,6 @@ function useLlmBySource() {
 }
 
 // ── Small presentational bodies (the WidgetCard owns the frame/title/pin) ──────
-
-function Stat({ value, sub }: { value: string; sub?: string }) {
-  return (
-    <div>
-      <div style={{ fontSize: '1.9rem', fontWeight: 700, color: 'var(--text-primary)' }}>{value}</div>
-      {sub && <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: 2 }}>{sub}</div>}
-    </div>
-  );
-}
-
-function Muted({ children }: { children: React.ReactNode }) {
-  return <span style={{ fontSize: '0.84rem', color: 'var(--text-muted)' }}>{children}</span>;
-}
 
 /** Wrap an overview card body: handles loading / error so each widget needn't repeat it. */
 function useOverviewBody() {

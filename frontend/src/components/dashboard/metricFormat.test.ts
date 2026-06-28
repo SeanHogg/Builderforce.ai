@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { formatMetricValue, seriesDelta, formatRecency } from './metricFormat';
+import { formatMetricValue, seriesDelta, formatRecency, deltaTone } from './metricFormat';
 
 // ---------------------------------------------------------------------------
 // Pure Dashboard-library helpers — value formatting, trend-delta derivation,
@@ -35,6 +35,21 @@ describe('seriesDelta', () => {
   it('returns null without enough signal', () => {
     expect(seriesDelta([1, 2])).toBeNull();
     expect(seriesDelta([0, 0, 0, 0])).toBeNull();
+  });
+});
+
+describe('deltaTone', () => {
+  it('colours by polarity: rising matches goodWhenUp → good, else bad', () => {
+    expect(deltaTone('up', true)).toBe('good'); // merge rate up = good
+    expect(deltaTone('down', true)).toBe('bad'); // merge rate down = bad
+    expect(deltaTone('up', false)).toBe('bad'); // errors up = bad
+    expect(deltaTone('down', false)).toBe('good'); // errors down = good
+  });
+
+  it('is neutral for flat trends or metrics with no polarity', () => {
+    expect(deltaTone('flat', true)).toBe('neutral');
+    expect(deltaTone('up', null)).toBe('neutral');
+    expect(deltaTone('down', undefined)).toBe('neutral');
   });
 });
 

@@ -1871,7 +1871,11 @@
       "finance": "Finanzas",
       "engineering": "Ingeniería",
       "overview": "Panel",
-      "llmUsage": "Uso de LLM"
+      "llmUsage": "Uso de LLM",
+      "skills": "Habilidades",
+      "personas": "Perfiles",
+      "prompts": "Prompts",
+      "models": "Modelos"
     },
     "title": {
       "aiProductivity": "Puntuación de productividad de IA",
@@ -1921,10 +1925,18 @@
       "llmTokens": "Uso de tokens",
       "llmRequests": "Solicitudes LLM",
       "llmByModel": "Tokens por modelo",
-      "llmBySource": "Coste por origen"
+      "llmBySource": "Coste por origen",
+      "catalogSkillsTopInstalls": "Habilidades más instaladas",
+      "catalogSkillsByCategory": "Habilidades por categoría",
+      "catalogPersonasTopInstalls": "Perfiles más instalados",
+      "catalogPromptsMostUsed": "Prompts más usados",
+      "catalogPromptsTopRated": "Prompts mejor valorados",
+      "catalogModelsByProvider": "Modelos por proveedor"
     },
     "loading": "Cargando…",
     "overview": {
+      "activeOfTotal": "{active} activos",
+      "registeredCount": "{total} registrados",
       "online": "en línea",
       "done": "Hecho",
       "inProgress": "En curso",
@@ -1948,6 +1960,16 @@
       "noSpend": "Sin gasto",
       "estCost": "Coste est.",
       "bySource": "Coste por origen"
+    },
+    "catalog": {
+      "noInstalls": "Sin instalaciones aún",
+      "noUsage": "Sin uso aún",
+      "noRatings": "Sin valoraciones aún",
+      "noData": "Sin datos aún",
+      "uncategorized": "Sin categoría",
+      "unknownProvider": "Desconocido",
+      "skills": "habilidades",
+      "models": "modelos"
     }
   }
 }

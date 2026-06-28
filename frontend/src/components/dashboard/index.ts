@@ -16,8 +16,10 @@ export {
   formatMetricValue,
   formatRecency,
   seriesDelta,
+  deltaTone,
   type SeriesDelta,
   type DeltaDirection,
+  type DeltaTone,
 } from './metricFormat';
 
 // Visualization primitives (re-exported — the Dashboard library is their home surface)

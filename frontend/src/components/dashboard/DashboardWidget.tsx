@@ -8,7 +8,7 @@ import { GaugeChart } from '@/components/charts/GaugeChart';
 import { colorAt } from '@/components/charts/chartColors';
 import type { WidgetValue } from '@/lib/dashboardsApi';
 import { InsightStat, type InsightDelta } from './InsightStat';
-import { formatMetricValue, seriesDelta } from './metricFormat';
+import { formatMetricValue, seriesDelta, deltaTone } from './metricFormat';
 
 /**
  * DashboardWidget — renders ONE resolved {@link WidgetValue} as its chosen
@@ -53,10 +53,10 @@ export function DashboardWidget({ v }: { v: WidgetValue }) {
     return <InsightStat label={title} value="—" sub={t('unavailable')} />;
   }
 
-  // Trend delta chip (shared derivation) — used by the stat card.
+  // Trend delta chip (shared derivation) — coloured by the metric's polarity.
   const d = seriesDelta(values);
   const delta: InsightDelta | null = d
-    ? { label: `${d.pct > 0 ? '+' : ''}${d.pct}%`, direction: d.direction, tone: 'neutral' }
+    ? { label: `${d.pct > 0 ? '+' : ''}${d.pct}%`, direction: d.direction, tone: deltaTone(d.direction, v.goodWhenUp) }
     : null;
 
   switch (v.viz) {

@@ -45,6 +45,8 @@ export interface MetricCatalogEntry {
   label: string;
   unit: string;
   description: string;
+  /** Trend polarity: true=rising is good, false=rising is bad, null=neutral. */
+  goodWhenUp?: boolean | null;
 }
 
 export interface WidgetValue {
@@ -60,6 +62,8 @@ export interface WidgetValue {
   days: number;
   /** Date-windowed daily trend (sparkline/line/bar source); null for point-in-time metrics. */
   series?: MetricPoint[] | null;
+  /** Trend polarity: true=rising is good, false=rising is bad, null/undefined=neutral. */
+  goodWhenUp?: boolean | null;
   error?: string;
 }
 

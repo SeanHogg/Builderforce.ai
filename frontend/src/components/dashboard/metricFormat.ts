@@ -55,6 +55,19 @@ export function seriesDelta(values: number[]): SeriesDelta | null {
   return { pct: rounded, direction };
 }
 
+export type DeltaTone = 'good' | 'bad' | 'neutral';
+
+/**
+ * Colour a trend delta by the metric's polarity. `goodWhenUp` true → rising is
+ * good (merge rate); false → rising is bad (errors, spend); null/undefined →
+ * neutral (no inherent direction). A flat trend is always neutral.
+ */
+export function deltaTone(direction: DeltaDirection, goodWhenUp?: boolean | null): DeltaTone {
+  if (direction === 'flat' || goodWhenUp == null) return 'neutral';
+  const rising = direction === 'up';
+  return rising === goodWhenUp ? 'good' : 'bad';
+}
+
 /** Minimal subset of the next-intl translator the recency formatter needs. */
 type Translate = (key: string, values?: Record<string, string | number>) => string;
 
