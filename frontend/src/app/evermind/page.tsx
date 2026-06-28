@@ -165,11 +165,11 @@ export default function EvermindPage() {
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               className="ev-figure"
-              src="/blog/evermind-write-through.svg"
+              src="/blog/aw-write-through.svg"
               alt="Conventional append-then-reconcile knowledge vs Evermind's upsert-by-key and invalidate"
               loading="lazy"
-              width={860}
-              height={380}
+              width={1600}
+              height={900}
             />
             <p className="ev-figcap">Conventional models append and reconcile; Evermind upserts by key and invalidates — there is no reconcile step.</p>
           </section>
@@ -193,12 +193,13 @@ export default function EvermindPage() {
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               className="ev-figure"
-              src="/blog/evermind-three-layers.svg"
-              alt="Evermind's three layers: shared-expert hybrid generator, write-through memory, and limbic dynamics"
+              src="/blog/aw-architecture.svg"
+              alt="Evermind's three layers: a frontier-LLM cortex, the self-updating Evermind hippocampus, and a trainable limbic layer"
               loading="lazy"
-              width={860}
-              height={330}
+              width={1600}
+              height={900}
             />
+            <p className="ev-figcap">One brain: a frontier-LLM cortex for reasoning, the Evermind hippocampus for write-through memory, and a limbic layer for dynamics.</p>
           </section>
 
           {/* ── Evermind vs a frozen model ── */}
@@ -208,6 +209,16 @@ export default function EvermindPage() {
               Evermind isn&apos;t built to out-parameter the biggest models. It wins on the axes their
               architecture structurally trades away.
             </p>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              className="ev-figure"
+              src="/blog/aw-frozen-vs-evermind.svg"
+              alt="A frozen frontier model versus Evermind across five axes: knowledge updates, reconciliation, currency, footprint, and ownership"
+              loading="lazy"
+              width={1600}
+              height={900}
+            />
+            <p className="ev-figcap">The whole argument in one frame — a frozen model needs a bolt-on for every update; Evermind inverts all five axes.</p>
             <div className="ev-table-wrap">
               <table className="ev-table">
                 <thead>
@@ -241,6 +252,16 @@ export default function EvermindPage() {
                 </div>
               ))}
             </div>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              className="ev-figure"
+              src="/blog/aw-three-edges.svg"
+              alt="Currency, footprint, and ownership — the three edges that decide an enterprise rollout"
+              loading="lazy"
+              width={1600}
+              height={900}
+            />
+            <p className="ev-figcap">Scale is a vendor&apos;s moat. Currency, footprint, and ownership are yours.</p>
           </section>
 
           {/* ── Lifecycle: train → validate → publish → call ── */}
@@ -291,6 +312,41 @@ export default function EvermindPage() {
                 <p>{faq.answer}</p>
               </details>
             ))}
+          </section>
+
+          {/* ── The adoption case: workforce + owned stack ── */}
+          <section className="ev-section">
+            <h2 className="ev-h2"><span className="ev-accent">⟩</span> What adopting Evermind looks like</h2>
+            <p className="ev-lead">
+              Adopting an agentic workforce isn&apos;t a rip-and-replace. Humans and AI agents sit on the same
+              board, assigned and tracked the same way — and every agent runs on a model you own, that never
+              goes stale.
+            </p>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              className="ev-figure"
+              src="/blog/aw-workforce.svg"
+              alt="Humans and AI agents on one Kanban board, orchestrated by Builderforce.ai — the same board, a bigger team"
+              loading="lazy"
+              width={1600}
+              height={900}
+            />
+            <p className="ev-figcap">The same board, a bigger team — orchestrated, metered, and governed by Builderforce.ai.</p>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              className="ev-figure"
+              src="/blog/aw-platform-stack.svg"
+              alt="One owned stack: Evermind at the base, the agent runtime, Builderforce.ai orchestration, and the surfaces your team already uses"
+              loading="lazy"
+              width={1600}
+              height={900}
+            />
+            <p className="ev-figcap">One owned stack, from the brain to the editor — Evermind, the agent runtime, orchestration, and your surfaces.</p>
+            <div className="ev-actions" style={{ marginTop: 22 }}>
+              <Link href="/blog/transitioning-to-an-agentic-workforce" className="ev-btn-secondary">
+                Read: Transitioning to an Agentic Workforce →
+              </Link>
+            </div>
           </section>
 
           {/* ── CTA ── */}
