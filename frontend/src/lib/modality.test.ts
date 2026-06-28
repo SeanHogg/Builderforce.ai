@@ -2,9 +2,9 @@ import { describe, it, expect } from 'vitest';
 import { MODALITIES, DEFAULT_MODALITY, getModality } from './modality';
 
 describe('project modalities', () => {
-  it('exposes designer, video, and llm', () => {
+  it('exposes designer, video, llm, and voice', () => {
     const ids = MODALITIES.map((m) => m.id).sort();
-    expect(ids).toEqual(['designer', 'llm', 'video']);
+    expect(ids).toEqual(['designer', 'llm', 'video', 'voice']);
   });
 
   // Regression: the LLM modality shipped (gate flipped + LlmStudioPanel wired).

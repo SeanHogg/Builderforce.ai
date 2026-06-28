@@ -112,7 +112,7 @@ export const NAV_GROUPS: NavGroup[] = [
     tabKind: 'query', basePath: '/quality',
     tabs: [
       { id: '', labelKey: 'tab.errors', icon: '🐞' },
-      { id: 'sources', labelKey: 'tab.sources', icon: '🔌' },
+      { id: 'collectors', labelKey: 'tab.collectors', icon: '🔌' },
     ],
   },
   {

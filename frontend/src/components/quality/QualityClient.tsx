@@ -7,7 +7,7 @@ import { useAuth } from '@/lib/AuthContext';
 import PageContainer from '@/components/PageContainer';
 import { RoleGate } from '@/components/RoleGate';
 import { QualityDashboard } from './QualityDashboard';
-import { QualitySourcesManager } from './QualitySourcesManager';
+import { QualityCollectorsManager } from './QualityCollectorsManager';
 
 /**
  * Quality surface shell — owns the auth guard, header, and tab routing (the shell
@@ -27,20 +27,20 @@ export default function QualityClient() {
 
   if (!isAuthenticated || !hasTenant) return null;
 
-  const isSources = tab === 'sources';
+  const isSetup = tab === 'collectors';
 
   return (
     <PageContainer>
       <div style={{ marginBottom: 18 }}>
         <h1 style={{ fontSize: '1.5rem', fontWeight: 700, margin: 0 }}>
-          {isSources ? t('sources.title') : t('title')}
+          {isSetup ? t('setup.title') : t('title')}
         </h1>
         <p style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', marginTop: 4 }}>
-          {isSources ? t('sources.subtitle') : t('subtitle')}
+          {isSetup ? t('setup.subtitle') : t('subtitle')}
         </p>
       </div>
       <RoleGate capability="quality.view" variant="block">
-        {isSources ? <QualitySourcesManager /> : <QualityDashboard />}
+        {isSetup ? <QualityCollectorsManager /> : <QualityDashboard />}
       </RoleGate>
     </PageContainer>
   );
