@@ -104,6 +104,31 @@ export interface AgentSpecPolicy {
 }
 
 /**
+ * Defensively coerce an untrusted value (a parsed run payload, a dispatch frame)
+ * into well-formed {@link PolicyGate}s — dropping anything without a string `id` and
+ * a known `effect`. Shared so every surface that reads gates off the wire (the cloud
+ * payload parser, the on-prem relay) validates them identically.
+ */
+export function coercePolicyGates(raw: unknown): PolicyGate[] {
+  if (!Array.isArray(raw)) return [];
+  const out: PolicyGate[] = [];
+  for (const g of raw) {
+    if (!g || typeof g !== "object") continue;
+    const { id, tool, effect, directive, reason } = g as Record<string, unknown>;
+    if (typeof id !== "string") continue;
+    if (effect !== "inject-directive" && effect !== "require-approval" && effect !== "block") continue;
+    out.push({
+      id,
+      effect,
+      ...(typeof tool === "string" ? { tool } : {}),
+      ...(typeof directive === "string" ? { directive } : {}),
+      ...(typeof reason === "string" ? { reason } : {}),
+    });
+  }
+  return out;
+}
+
+/**
  * The canonical agent intermediate representation. Every modality compiles *into*
  * this; every surface deploys *from* it. Only the prompt-bearing fields are
  * consumed by {@link lowerAgentSpec}; `steps`/`surfaces` are carried for the
@@ -176,6 +201,18 @@ function policyGateDirective(g: PolicyGate): string {
   }
 }
 
+/**
+ * Render governance gates as binding system-prompt lines (the "Governance" block).
+ * Shared so every surface that injects gates into a prompt — the canonical
+ * {@link lowerAgentSpec} AND the on-prem SDK runner (which builds its own prompt) —
+ * renders them identically. Returns '' when there are no gates.
+ */
+export function renderPolicyDirectives(gates: readonly PolicyGate[] | undefined): string {
+  const lines = (gates ?? []).map(policyGateDirective).filter(Boolean);
+  if (lines.length === 0) return "";
+  return ["Governance (these gates are binding):", ...lines.map((g) => `- ${g}`)].join("\n");
+}
+
 /** The decision a policy evaluation yields at the engine's tool-call seam. */
 export type PolicyDecision =
   | { action: "allow" }
@@ -238,10 +275,8 @@ export function lowerAgentSpec(spec: AgentSpec): LoweredAgent {
   // --- Governance gates --------------------------------------------------
   // Rendered into the prompt so policy reaches EVERY surface identically; hard
   // pause/refusal enforcement is `evaluatePolicyGate` at the engine's tool seam.
-  const gateLines = (spec.policy?.gates ?? []).map(policyGateDirective).filter(Boolean);
-  if (gateLines.length > 0) {
-    sections.push(["Governance (these gates are binding):", ...gateLines.map((g) => `- ${g}`)].join("\n"));
-  }
+  const governance = renderPolicyDirectives(spec.policy?.gates);
+  if (governance) sections.push(governance);
 
   return {
     systemPrompt: sections.join("\n\n"),

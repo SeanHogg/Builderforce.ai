@@ -2,6 +2,7 @@ import * as vscode from "vscode";
 import { ChatMessage, getApiKey, getBaseUrl } from "./gateway";
 import { describeTool, TOOL_DEFS, type ToolDef } from "./fileTools";
 import { cognitionToolDefs, recallSystemMessage } from "./cognition";
+import { evaluatePolicyGate, renderPolicyDirectives, type PolicyGate } from "./policy";
 
 export interface AgentEvents {
   onText: (delta: string) => void;
@@ -19,6 +20,10 @@ export interface AgentDeps {
   /** Returns true if the user approves a mutating tool call. */
   approve: (summary: string) => Promise<boolean>;
   signal: AbortSignal;
+  /** Compiled governance gates (compile-primitive policy modality). Enforced at the
+   *  tool seam exactly as the cloud loop enforces them, so a gate authored on the
+   *  agent's spec governs the IDE run identically. */
+  policyGates?: PolicyGate[];
 }
 
 const MAX_ITERATIONS = 12;
@@ -64,6 +69,13 @@ export async function runAgent(
   // File tools + Evermind's write-through `remember_fact` tool (workspace only).
   const toolDefs: ToolDef[] = deps.root ? [...TOOL_DEFS, ...cognitionToolDefs()] : [];
   const tools = deps.root ? toOpenAiTools(toolDefs) : undefined;
+
+  // Governance: render the gate directives into a leading system block so the model
+  // is bound by the same policy on every surface; hard enforcement is at the tool
+  // seam below. `policyAsked` tracks require-approval gates already approved this run.
+  const governance = renderPolicyDirectives(deps.policyGates);
+  if (governance) messages.unshift({ role: "system", content: governance });
+  const policyAsked = new Set<string>();
 
   // Evermind recall: inject facts relevant to the latest user message as a
   // system block, before the first turn. Self-updating memory the agent reads
@@ -126,6 +138,25 @@ export async function runAgent(
 
       const label = describeTool(def.name, args);
       events.onToolStart(label);
+
+      // Governance gate (compile-primitive policy modality), enforced BEFORE the tool
+      // runs — the IDE mirror of the cloud loop's tool-seam check. `block` refuses;
+      // `require-approval` asks the human (reusing the approve prompt) the first time.
+      const gate = evaluatePolicyGate(deps.policyGates, def.name);
+      if (gate.action === "block") {
+        events.onToolResult(`${label} — blocked by policy`, false);
+        messages.push({ role: "tool", tool_call_id: toolCallId, content: `Blocked by governance policy: ${gate.reason}. Do not retry — take another approach.` });
+        continue;
+      }
+      if (gate.action === "require-approval" && !policyAsked.has(gate.gateId)) {
+        const approved = await deps.approve(`Governance: approve "${def.name}"? ${gate.reason}`);
+        policyAsked.add(gate.gateId);
+        if (!approved) {
+          events.onToolResult(`${label} (approval declined)`, false);
+          messages.push({ role: "tool", tool_call_id: toolCallId, content: `Human declined approval for "${def.name}" (governance gate ${gate.gateId}).` });
+          continue;
+        }
+      }
 
       if (def.mutating && deps.permissionMode === "ask") {
         const approved = await deps.approve(label);

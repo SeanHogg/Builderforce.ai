@@ -20,6 +20,8 @@
  * change, no dispatch-site edits.
  */
 
+import type { PolicyGate } from "@builderforce/agent-tools";
+
 /** Everything an engine needs to run one dispatched task. Surface-agnostic. */
 export interface EngineDispatch {
   title: string;
@@ -36,6 +38,9 @@ export interface EngineDispatch {
   repo?: { repoId: string; defaultBranch: string | null };
   /** Human label of the executing agent (for change traceability). */
   agentLabel?: string;
+  /** Compiled governance gates (compile-primitive policy modality), enforced by the
+   *  engine at its tool seam — the on-prem mirror of the cloud `payload.policyGates`. */
+  policyGates?: PolicyGate[];
 }
 
 /** One relay task runtime. Sole implementation today: the Claude Agent SDK

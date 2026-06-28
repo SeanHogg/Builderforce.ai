@@ -443,7 +443,7 @@ function buildApp(env: Env): Hono<HonoEnv> {
   app.route('/api/teams/memory', createTeamMemoryRoutes(db));
   app.route('/api/teams',        createTeamRoutes(db));
   app.route('/api/ide',       createIdeRoutes());
-  app.route('/api/compile',   createCompileRoutes());
+  app.route('/api/compile',   createCompileRoutes(db, runtimeService));
   app.route('/api/ide-projects', createIdeProjectRoutes(projectService, db));
   app.route('/api/ai',        createIdeAiRoutes(projectService));
   app.route('/api/studio/models', createEvermindModelRoutes(db));

@@ -1111,7 +1111,12 @@ export function createLlmRoutes(): Hono<HonoEnv> {
     // chat + validate paths use), then dispatch normally. Unknown id → drop the
     // ref so the plan default resolves rather than erroring.
     if (typeof bodyAny.model === 'string' && bodyAny.model.startsWith(WORKFORCE_MODEL_REF_PREFIX)) {
-      const wf = await resolveWorkforceModel(c.env as Env, bodyAny.model);
+      // The caller's latest user message grounds the agent's recall (Phase C3), so a
+      // stock OpenAI-SDK call to a workforce model id gets the agent's own docs too.
+      const msgsForRecall = body.messages as Array<{ role?: string; content?: unknown }>;
+      const latestUser = [...msgsForRecall].reverse().find((m) => m.role === 'user');
+      const recallQuery = typeof latestUser?.content === 'string' ? latestUser.content : undefined;
+      const wf = await resolveWorkforceModel(c.env as Env, bodyAny.model, recallQuery);
       bodyAny.model = wf?.baseModel ?? undefined;
       if (wf?.directives) {
         const msgs = body.messages as Array<{ role?: string; content?: unknown }>;

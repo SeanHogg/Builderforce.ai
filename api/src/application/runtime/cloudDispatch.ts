@@ -11,6 +11,7 @@
  * Single source of truth for the routing decision so dispatch (runtime) and the
  * test agree on which surface a run targets.
  */
+import { coercePolicyGates, type PolicyGate } from '@builderforce/agent-tools';
 import { ExecutionStatus } from '../../domain/shared/types';
 
 export type CloudSurface = 'durable' | 'container';
@@ -169,6 +170,22 @@ export function parseRoutingBias(payload: string | undefined): Record<string, nu
     return Object.keys(out).length > 0 ? out : undefined;
   } catch {
     return undefined;
+  }
+}
+
+/**
+ * Parse the compiled governance gates off a run's payload (compile-primitive policy
+ * modality). A run started by `deploy()`-and-dispatch carries `{ policyGates: [...] }`;
+ * the cloud loop enforces them at its tool seam via `evaluatePolicyGate`. Coerced
+ * defensively (only well-formed `{id, effect}` gates survive) so a malformed payload
+ * can't crash the loop. Returns `[]` when absent — the loop then gates nothing.
+ */
+export function parsePolicyGates(payload: string | undefined): PolicyGate[] {
+  if (!payload) return [];
+  try {
+    return coercePolicyGates((JSON.parse(payload) as { policyGates?: unknown }).policyGates);
+  } catch {
+    return [];
   }
 }
 

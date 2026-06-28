@@ -1,32 +1,28 @@
 /**
- * Shared test fixture: a REAL packaged `.evermind` model + tokenizer laid into a
- * mock R2 store, built using ONLY the published engine API (no `train`, which is
- * post-2026.6.28). An untrained EvermindLM still generates a string — enough to
- * exercise the load → generate → response path end to end.
+ * Shared test fixture: a REAL trained, packaged `.evermind` model + tokenizer laid
+ * into a mock R2 store. Exercises the published engine end to end — including
+ * `BPETokenizer.train` (shipped in @seanhogg/builderforce-memory-engine 2026.6.31)
+ * — so the serving path (load → generate → response) is tested against a genuinely
+ * trained artifact, not a hand-built stub.
  */
-import { BPETokenizer, EvermindLM, EvermindModelPackage } from '@seanhogg/builderforce-memory-engine';
+import { BPETokenizer, EvermindLM, EvermindLMTrainer, EvermindModelPackage } from '@seanhogg/builderforce-memory-engine';
 import type { ArtifactStore } from '../evermindRuntime';
 
-/** Minimal char-level tokenizer over the test corpus, via the published API. */
-function buildTokenizer(): { tok: BPETokenizer; json: string } {
-  const tok = new BPETokenizer();
-  const vocab: Record<string, number> = {};
-  let id = 0;
-  for (const t of ['<unk>', '<|im_start|>', '<|im_end|>', '<|endoftext|>']) vocab[t] = id++;
-  for (const ch of new Set('alpha beta gamma delta '.split(''))) vocab[ch] = id++;
-  tok.loadFromObjects(vocab, []);
-  return { tok, json: JSON.stringify({ vocab, merges: [] }) };
-}
-
-/** Build a mock {@link ArtifactStore} serving a valid `.evermind` + tokenizer at `ref`. */
+/** Build a mock {@link ArtifactStore} serving a trained `.evermind` + tokenizer at `ref`. */
 export function buildEvermindFixtureStore(ref: string): ArtifactStore & { calls: string[] } {
-  const { tok, json } = buildTokenizer();
+  const corpus = 'alpha beta gamma. beta gamma delta. gamma delta alpha. delta alpha beta.';
+  const tok = new BPETokenizer();
+  tok.train(corpus, { numMerges: 30 });
+  const seqs = corpus.split(/(?<=\.)\s+/).map((s) => tok.encode(s.trim())).filter((s) => s.length >= 2);
   const lm = new EvermindLM({ vocabSize: tok.vocabSize, dModel: 12, numLayers: 1, hiddenDim: 16, seed: 7 });
+  new EvermindLMTrainer(lm, { lr: 0.03, epochs: 8 }).fit(seqs);
+
   const blob = EvermindModelPackage.fromLM(lm, { name: 't', version: '1.0.0', card: { description: 'test' } }).toBlob();
+  const tokenizerJson = JSON.stringify({ vocab: Object.fromEntries(tok.vocab), merges: [...tok.merges.keys()] });
 
   const map = new Map<string, Uint8Array | string>([
     [`${ref}/model.evermind`, new Uint8Array(blob)],
-    [`${ref}/tokenizer.json`, json],
+    [`${ref}/tokenizer.json`, tokenizerJson],
   ]);
   const calls: string[] = [];
   return {
@@ -36,7 +32,7 @@ export function buildEvermindFixtureStore(ref: string): ArtifactStore & { calls:
       const v = map.get(key);
       if (v == null) return null;
       return {
-        async arrayBuffer() { return typeof v === 'string' ? new TextEncoder().encode(v).buffer : (v.buffer as ArrayBuffer); },
+        async arrayBuffer() { return (typeof v === 'string' ? new TextEncoder().encode(v).buffer : v.buffer) as ArrayBuffer; },
         async text() { return typeof v === 'string' ? v : new TextDecoder().decode(v); },
       };
     },

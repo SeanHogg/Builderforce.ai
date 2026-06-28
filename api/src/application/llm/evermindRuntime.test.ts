@@ -52,8 +52,8 @@ describe('buildEvermindCompletion', () => {
       1_700_000_000_000,
     );
     expect(out.object).toBe('chat.completion');
-    expect((out.choices as Array<{ message: { content: string } }>)[0].message.content).toBe('hello');
-    expect((out.choices as Array<{ finish_reason: string }>)[0].finish_reason).toBe('stop');
+    expect((out.choices as Array<{ message: { content: string } }>)[0]!.message.content).toBe('hello');
+    expect((out.choices as Array<{ finish_reason: string }>)[0]!.finish_reason).toBe('stop');
     expect(out.model).toBe('evermind/evermind-models/1/x');
   });
 });

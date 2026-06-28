@@ -22,6 +22,7 @@ import {
 } from '@builderforce/agent-tools';
 import type { Env } from '../../env';
 import { getOrSetCached } from '../../infrastructure/cache/readThroughCache';
+import { recallAgentKnowledge } from './agentKnowledge';
 
 /** OpenAI-standard model id prefix for a published Workforce model. */
 export const WORKFORCE_MODEL_REF_PREFIX = 'builderforce/workforce-';
@@ -102,20 +103,16 @@ export interface ResolvedWorkforceModel {
   inferenceMode: 'base' | 'lora' | 'hybrid';
 }
 
-/**
- * Expands a `builderforce/workforce-<id>` model ref into the agent's base model +
- * persona directives. Returns null for a non-workforce ref or an unknown id.
- * Read-through cached (agents change rarely post-publish).
- */
-export async function resolveWorkforceModel(env: Env, ref: string | undefined | null): Promise<ResolvedWorkforceModel | null> {
-  if (!ref || !ref.startsWith(WORKFORCE_MODEL_REF_PREFIX)) return null;
-  const agentId = ref.slice(WORKFORCE_MODEL_REF_PREFIX.length).trim();
-  if (!agentId) return null;
+/** The published agent's base config — query-INDEPENDENT, so it is read-through
+ *  cached by id (agents change rarely post-publish). Grounded recall is layered on
+ *  per request (query-dependent) by {@link resolveWorkforceModel}. */
+type WorkforceAgentBase = { baseModel: string | null; descriptor: AgentDescriptor; inferenceMode: 'base' | 'lora' | 'hybrid' };
 
+async function loadWorkforceAgentBase(env: Env, agentId: string): Promise<WorkforceAgentBase | null> {
   return getOrSetCached(
     env,
     `workforce_model:resolve:${agentId}`,
-    async (): Promise<ResolvedWorkforceModel | null> => {
+    async (): Promise<WorkforceAgentBase | null> => {
       const rows = await neon(env.NEON_DATABASE_URL)`
         SELECT name, title, bio, skills, base_model, r2_artifact_key, mamba_state, inference_mode
         FROM ide_agents WHERE id = ${agentId} LIMIT 1
@@ -132,10 +129,45 @@ export async function resolveWorkforceModel(env: Env, ref: string | undefined | 
       };
       return {
         baseModel: (a.base_model as string | null) ?? null,
-        directives: buildAgentSystemPrompt(descriptor),
+        descriptor,
         inferenceMode: (a.inference_mode as 'base' | 'lora' | 'hybrid') ?? resolveInferenceMode(descriptor),
       };
     },
     { kvTtlSeconds: 300, l1TtlMs: 60_000 },
   );
+}
+
+/**
+ * Expands a `builderforce/workforce-<id>` model ref into the agent's base model +
+ * persona/memory directives. Returns null for a non-workforce ref or an unknown id.
+ *
+ * When a `query` is supplied (the caller's latest user message), the agent's ingested
+ * proprietary knowledge is recalled (Phase C3, BM25 over `agent_knowledge_chunks`)
+ * and folded into the directives through the SAME `lowerAgentSpec` lowering every
+ * other surface uses — so a stock OpenAI-SDK caller addressing the model by id gets
+ * the agent grounded on its own docs, exactly like the dedicated chat path. The agent
+ * base is cached by id; recall is layered per request (chunk load is itself cached,
+ * selection is pure) so the keyspace stays bounded.
+ */
+export async function resolveWorkforceModel(
+  env: Env,
+  ref: string | undefined | null,
+  query?: string,
+): Promise<ResolvedWorkforceModel | null> {
+  if (!ref || !ref.startsWith(WORKFORCE_MODEL_REF_PREFIX)) return null;
+  const agentId = ref.slice(WORKFORCE_MODEL_REF_PREFIX.length).trim();
+  if (!agentId) return null;
+
+  const base = await loadWorkforceAgentBase(env, agentId);
+  if (!base) return null;
+
+  const recalledContext = query?.trim()
+    ? await recallAgentKnowledge(env, neon(env.NEON_DATABASE_URL), agentId, query)
+    : '';
+
+  return {
+    baseModel: base.baseModel,
+    directives: buildAgentSystemPrompt({ ...base.descriptor, recalledContext: recalledContext || undefined }),
+    inferenceMode: base.inferenceMode,
+  };
 }

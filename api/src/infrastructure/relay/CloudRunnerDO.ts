@@ -18,7 +18,7 @@ import { executions } from '../database/schema';
 import { prepareCloudRun, runCloudToolLoop, markCloudExecutionRunning, resolveCloudAgent, initialCloudLimbicState, evolveCloudLimbicState, recordLimbicState, type CloudLoopState } from '../../application/runtime/cloudAgentEngine';
 import { loadPersonaSetpoints } from '../../application/artifact/capabilityContext';
 import { ENGINE_IDS, buildLimbicBlock, type LimbicState } from '@builderforce/agent-tools';
-import { parseRoutingBias } from '../../application/runtime/cloudDispatch';
+import { parseRoutingBias, parsePolicyGates } from '../../application/runtime/cloudDispatch';
 import { scoreRunOutcome } from '../../application/runtime/scoreRunOutcome';
 import { releasePendingSteers } from '../../application/runtime/executionSteering';
 import { buildRuntimeService } from '../../buildRuntimeService';
@@ -169,7 +169,7 @@ export class CloudRunnerDO implements DurableObject {
         cursor.systemPrompt ?? '', cursor.userContent ?? '',
         () => this.isCancelled(cursor.executionId),
         cursor.projectId,
-        { resume: cursor.loop, maxSteps: 1, deferFinalize: true, routingBias: parseRoutingBias(cursor.payload), ...(dynamicSystem ? { dynamicSystem } : {}) },
+        { resume: cursor.loop, maxSteps: 1, deferFinalize: true, routingBias: parseRoutingBias(cursor.payload), policyGates: parsePolicyGates(cursor.payload), ...(dynamicSystem ? { dynamicSystem } : {}) },
       );
 
       // V3: evolve affect from this tick's outcome (amygdala) toward setpoints

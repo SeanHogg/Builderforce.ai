@@ -50,5 +50,5 @@
     <path d="M520 254 Q610 285 751 312" marker-end="url(#gv-arrow)"/>
   </g>
 
-  <text x="440" y="290" fill="#FFD9D2" font-size="12.5" text-anchor="middle">one shared evaluatePolicyGate() decision — the single tool-seam check every engine consults</text>
+  <text x="440" y="290" fill="#FFD9D2" font-size="12.5" text-anchor="middle">one shared evaluatePolicyGate() — enforced at every engine's tool seam: block / require-approval / allow</text>
 </svg>

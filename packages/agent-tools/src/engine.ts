@@ -26,6 +26,13 @@ export interface AgentRunInput {
   readonly signal?: AbortSignal;
   /** Opaque resume state from a prior partial run (durable tick / paused-on-human). */
   readonly resume?: unknown;
+  /**
+   * Governance gates compiled onto the agent's spec, enforced by the engine at its
+   * tool-call seam ({@link import("./spec.js").evaluatePolicyGate}). Carried on the
+   * run input — not the engine's construction — because gates are a property of the
+   * agent (the spec), so the SAME gate enforces identically on every engine/surface.
+   */
+  readonly policy?: { readonly gates: readonly import("./spec.js").PolicyGate[] };
 }
 
 /** Outbound: the result of a run (or a partial run that must resume). */

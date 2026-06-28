@@ -20,8 +20,13 @@ import { Hono } from 'hono';
 import type { AgentSurface } from '@builderforce/agent-tools';
 import { authMiddleware } from '../middleware/authMiddleware';
 import type { HonoEnv } from '../../env';
+import type { Db } from '../../infrastructure/database/connection';
+import type { Env } from '../../env';
+import type { RuntimeService } from '../../application/runtime/RuntimeService';
 import { compile, type LlmComplete, type Need } from '../../application/compile';
 import { deploy, DEPLOY_SURFACES } from '../../application/deploy';
+import { deployAndDispatch, type CloudRunDispatcher } from '../../application/deploy/dispatch';
+import { dispatchCloudRunForTask } from './runtimeRoutes';
 import { ideProxy } from '../../application/llm/LlmProxyService';
 import { MODALITIES } from '../../application/compile';
 
@@ -63,13 +68,14 @@ function readSurface(v: unknown): AgentSurface | null {
   return typeof v === 'string' && (DEPLOY_SURFACES as readonly string[]).includes(v) ? (v as AgentSurface) : null;
 }
 
-export function createCompileRoutes(): Hono<HonoEnv> {
+export function createCompileRoutes(db: Db, runtimeService: RuntimeService): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
   router.use('*', authMiddleware);
 
-  // Compile one or more needs → AgentSpec (+ optional deploy plan).
+  // Compile one or more needs → AgentSpec (+ optional deploy plan; + live dispatch
+  // when a deploy surface is given and the run can be started server-side).
   router.post('/', async (c) => {
-    type Body = { need?: unknown; needs?: unknown; deploy?: unknown; engineId?: string };
+    type Body = { need?: unknown; needs?: unknown; deploy?: unknown; engineId?: string; taskId?: number; cloudAgentRef?: string; projectId?: number };
     const body = await c.req.json<Body>().catch((): Body => ({}));
     const needs = readNeeds(body);
     if ('error' in needs) return c.json(needs, 400);
@@ -87,12 +93,26 @@ export function createCompileRoutes(): Hono<HonoEnv> {
     }
     if (!surface) return c.json({ spec });
 
-    try {
-      const plan = deploy(spec, surface, body.engineId ? { engineId: body.engineId } : {});
-      return c.json({ spec, plan });
-    } catch (err) {
-      return c.json({ error: err instanceof Error ? err.message : 'deploy failed' }, 400);
-    }
+    // A cloud dispatcher that starts a run against a board task, carrying the spec's
+    // governance gates in the payload so the cloud loop enforces them.
+    const dispatchCloudRun: CloudRunDispatcher = (params) =>
+      dispatchCloudRunForTask(c.env as Env, db, runtimeService, (p) => c.executionCtx.waitUntil(p), {
+        ...params,
+        submittedBy: `user:${c.get('userId') ?? 'compile'}`,
+      });
+
+    const dispatched = await deployAndDispatch(spec, surface, {
+      db,
+      tenantId: c.get('tenantId') as number,
+      projectId: body.projectId ?? null,
+      cloudAgentRef: body.cloudAgentRef ?? null,
+      taskId: body.taskId,
+      dispatchCloudRun,
+      deployOptions: body.engineId ? { engineId: body.engineId } : {},
+    });
+    if (!dispatched.ok) return c.json({ spec, error: dispatched.error }, 400);
+    const { ok: _ok, plan, ...rest } = dispatched;
+    return c.json({ spec, plan, dispatch: rest });
   });
 
   // Compile → deploy(cloud-durable) → run a real first turn through the gateway.
@@ -107,6 +127,22 @@ export function createCompileRoutes(): Hono<HonoEnv> {
       spec = await compile(needs, { llm: gatewayExtractor(c.env) });
     } catch (err) {
       return c.json({ error: err instanceof Error ? err.message : 'compile failed' }, 502);
+    }
+
+    const tenantId = c.get('tenantId') as number;
+
+    // A step-bearing spec (a process chart / a diagnostic's improvement flow) is a
+    // RUNNABLE workflow — instantiate it for real on the workflow surface, rather than
+    // chatting a single turn. The existing claim/relay + cloud-workflow cron advance it.
+    if ((spec.steps?.length ?? 0) > 0) {
+      const dispatched = await deployAndDispatch(spec, 'workflow-node', { db, tenantId });
+      if (!dispatched.ok) return c.json({ spec, error: dispatched.error }, 400);
+      const plan = deploy(spec, 'workflow-node', body.engineId ? { engineId: body.engineId } : {});
+      return c.json({
+        spec,
+        plan,
+        ...(dispatched.kind === 'workflow' ? { workflow: { workflowId: dispatched.workflowId, taskCount: dispatched.taskCount } } : {}),
+      });
     }
 
     const surface: AgentSurface = (spec.surfaces?.find((s) => s === 'cloud-durable') ?? spec.surfaces?.[0] ?? 'cloud-durable') as AgentSurface;

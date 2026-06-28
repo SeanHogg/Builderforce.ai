@@ -58,6 +58,7 @@ export class ClaudeSdkAgentEngine implements AgentEngine {
         anthropicBaseUrl: this.deps.anthropicBaseUrl,
         gatewayAuthKey: this.deps.gatewayAuthKey,
         appendSystemPrompt: input.systemPrompt,
+        ...(input.policy?.gates ? { policyGates: [...input.policy.gates] } : {}),
         abortController: this.deps.abortController,
       },
       this.deps.sinks,

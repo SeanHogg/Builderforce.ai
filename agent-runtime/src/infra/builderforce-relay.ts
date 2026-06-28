@@ -15,6 +15,8 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import {
   type AgentEngine,
+  type PolicyGate,
+  coercePolicyGates,
   DEFAULT_ENGINE_ID,
   ENGINE_IDS,
   resolveEngineById,
@@ -427,6 +429,7 @@ export class BuilderforceRelayService implements IRelayService {
         userContent: prompt,
         model: payload.model,
         signal: abortController.signal,
+        ...(payload.policyGates?.length ? { policy: { gates: payload.policyGates } } : {}),
       });
       result = { ok: run.ok, text: run.output };
     } finally {
@@ -1018,14 +1021,18 @@ export class BuilderforceRelayService implements IRelayService {
         // agent record, model from the run payload).
         const engine = typeof msg.engine === "string" ? msg.engine : DEFAULT_ENGINE_ID;
         let model: string | undefined;
+        let policyGates: PolicyGate[] = [];
         try {
           const p =
             typeof msg.payload === "string"
-              ? (JSON.parse(msg.payload) as { model?: unknown })
+              ? (JSON.parse(msg.payload) as { model?: unknown; policyGates?: unknown })
               : null;
           if (p && typeof p.model === "string" && p.model.trim()) model = p.model.trim();
+          // Governance gates ride the same payload string the cloud surfaces read, so
+          // a self-hosted run enforces the SAME compiled policy (parsed identically).
+          if (p) policyGates = coercePolicyGates(p.policyGates);
         } catch {
-          /* payload not JSON — use the engine default model */
+          /* payload not JSON — use the engine default model + no gates */
         }
 
         // Repo coords (for cloning into the ticket workspace) + executing agent
@@ -1057,6 +1064,7 @@ export class BuilderforceRelayService implements IRelayService {
           model,
           repo,
           agentLabel,
+          ...(policyGates.length ? { policyGates } : {}),
         });
         void this.syncAssignmentContext(type);
         break;

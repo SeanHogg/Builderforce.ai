@@ -37,12 +37,12 @@ import {
   CONTAINER_MAX_STEPS, assertsUnrunVerification, hasNoCodeDeliverable, type RawToolCall,
 } from './cloudAgentTools';
 import {
-  DEFAULT_ENGINE_ID, ENGINE_IDS, resolveEngineById,
+  DEFAULT_ENGINE_ID, ENGINE_IDS, resolveEngineById, evaluatePolicyGate,
   appraiseTask, buildLimbicBlock, compileLimbicState, neutralState,
   applyDelta, appraiseAmygdala, homeostasis,
-  type AgentEngine, type AgentRunInput, type AgentRunResult, type CapabilityProvider, type ToolContext, type LimbicState, type LimbicEvent,
+  type AgentEngine, type AgentRunInput, type AgentRunResult, type CapabilityProvider, type ToolContext, type ToolControl, type LimbicState, type LimbicEvent, type PolicyGate,
 } from '@builderforce/agent-tools';
-import { parseRemediation, parseFollowUp, parseCloudAgentRef, parseModel, parseRoutingBias } from './cloudDispatch';
+import { parseRemediation, parseFollowUp, parseCloudAgentRef, parseModel, parseRoutingBias, parsePolicyGates } from './cloudDispatch';
 import { classifyTaskAction } from '../llm/classifyTask';
 import { deriveAllocationCategory } from '../llm/allocationCategories';
 import { normalizeActionType, learnedRoutingEnabled, type ActionType } from '../llm/actionTypes';
@@ -1052,6 +1052,14 @@ export interface CloudLoopState {
   /** ROADMAP #38: set once the empty-deliverable finish gate has fired, so the
    *  durable surface doesn't re-arm (and re-block) the same self-review every tick. */
   noDeliverableBlocked?: boolean;
+  /** Compiled governance gates for this run (compile-primitive policy modality).
+   *  Persisted on the first tick so every durable tick enforces the SAME gates
+   *  without re-reading the payload (which a later tick may not carry). */
+  policyGates?: PolicyGate[];
+  /** Gate ids whose `require-approval` has already been asked + answered (the run
+   *  parked on the human question and resumed). Persisted so a re-reached approval
+   *  gate proceeds instead of re-parking forever. */
+  policyAskedGates?: string[];
 }
 export interface CloudLoopOpts {
   /** Resume from this persisted state instead of starting fresh. */
@@ -1078,6 +1086,10 @@ export interface CloudLoopOpts {
    * serialization-safe (a string, not a closure, survives DO cursor persistence).
    */
   dynamicSystem?: string;
+  /** Compiled governance gates to enforce at the tool seam (compile-primitive policy
+   *  modality). The first tick seeds {@link CloudLoopState.policyGates} from this;
+   *  later ticks resume from state. */
+  policyGates?: PolicyGate[];
 }
 export interface CloudLoopResult {
   ok: boolean;
@@ -1369,6 +1381,14 @@ export async function runCloudToolLoop(
   // across DO ticks via resume state so the block isn't re-armed every tick.
   let noDeliverableBlocked = opts?.resume?.noDeliverableBlocked ?? false;
 
+  // Governance gates (compile-primitive policy modality). Resolved ONCE: a resumed
+  // run reuses the gates persisted on its first tick (the payload may not survive
+  // to later ticks); a fresh run seeds them from the dispatch payload. `askedGates`
+  // tracks which require-approval gates have already been asked + answered, so a
+  // re-reached gate proceeds rather than re-parking the run forever.
+  const policyGates: PolicyGate[] = opts?.resume?.policyGates ?? opts?.policyGates ?? [];
+  const policyAskedGates = new Set<string>(opts?.resume?.policyAskedGates ?? []);
+
   // Hard cancel: a background watcher polls the (cross-isolate) execution status
   // and aborts the in-flight gateway fetch the instant it sees CANCELLED, so a
   // cancel mid-completion stops token spend immediately instead of running the
@@ -1511,15 +1531,46 @@ export async function runCloudToolLoop(
       try { parsed = tc.function?.arguments ? (JSON.parse(tc.function.arguments) as Record<string, unknown>) : {}; } catch { /* leave empty */ }
       const tStart = Date.now();
 
-      // Dispatch through the ONE capability-gated registry. Each tool reaches the
-      // repo / static-check / human ONLY via the injected provider (so the same
-      // definition runs on-prem against a disk/shell provider). `finish` and
-      // `ask_human` come back as CONTROL signals the loop interprets below — the
-      // finish honesty/anti-stub gates and the pause/park are loop policy, not a
-      // tool's concern, so they stay here.
-      const dispatched = await cloudToolRegistry.dispatch(name, parsed, toolCtx);
-      let toolResult: Record<string, unknown> = dispatched.data;
-      const control = dispatched.control;
+      // Governance gate (compile-primitive policy modality): enforce BEFORE dispatch,
+      // so a gate authored on the spec applies identically on every surface (this loop
+      // runs on both the durable + Worker cloud surfaces). `block` refuses the tool —
+      // the agent sees the refusal and must take another path; `require-approval` parks
+      // the run on a human question (reusing the ask_human pause/resume path) the FIRST
+      // time it is reached, then proceeds once the human has answered (the run resumes).
+      const gate = evaluatePolicyGate(policyGates, name);
+      let toolResult: Record<string, unknown>;
+      let control: ToolControl | undefined;
+      if (gate.action === 'block') {
+        toolResult = { ok: false, error: `Blocked by governance policy: ${gate.reason}. Do not retry this tool — accomplish the task another way, or finish and explain why it cannot proceed.` };
+        await recordCloudToolEvent(db, {
+          tenantId, cloudAgentRef, executionId,
+          toolName: 'policy.blocked', category: 'tool', toolCallId: tc.id,
+          detail: { tool: name, gateId: gate.gateId, reason: gate.reason },
+          result: `Blocked ${name}: ${gate.reason}`,
+        });
+      } else if (gate.action === 'require-approval' && !policyAskedGates.has(gate.gateId)) {
+        // First encounter — ask a human and park. The answer resumes the run; the gate
+        // id is recorded (in resume state) so the re-reached gate proceeds (below).
+        const question = `Approve the agent's use of "${name}"? ${gate.reason}`;
+        const approvalId = await createCloudQuestion(env, db, {
+          tenantId, cloudAgentRef, executionId, agentLabel,
+          question,
+          context: `Governance gate "${gate.gateId}" requires human approval before this tool may run.`,
+        });
+        policyAskedGates.add(gate.gateId);
+        awaitingInput = { approvalId, question };
+        toolResult = { ok: false, error: `Paused for human approval of "${name}" (governance gate ${gate.gateId}).` };
+      } else {
+        // allow — or a require-approval gate already asked + answered. Dispatch through
+        // the ONE capability-gated registry. Each tool reaches the repo / static-check /
+        // human ONLY via the injected provider (so the same definition runs on-prem
+        // against a disk/shell provider). `finish` and `ask_human` come back as CONTROL
+        // signals the loop interprets below — the finish honesty/anti-stub gates and the
+        // pause/park are loop policy, not a tool's concern, so they stay here.
+        const dispatched = await cloudToolRegistry.dispatch(name, parsed, toolCtx);
+        toolResult = dispatched.data;
+        control = dispatched.control;
+      }
 
       if (control?.kind === 'finish') {
         const summary = control.summary;
@@ -1615,7 +1666,7 @@ export async function runCloudToolLoop(
       cancelled: false,
       finished: false,
       awaitingInput,
-      state: { messages, writtenPaths: [...writtenPaths], step, pinnedModel: activeModel, routing, repoCtx, repoMiss, noDeliverableBlocked },
+      state: { messages, writtenPaths: [...writtenPaths], step, pinnedModel: activeModel, routing, repoCtx, repoMiss, noDeliverableBlocked, policyGates, policyAskedGates: [...policyAskedGates] },
     };
   }
 
@@ -1631,7 +1682,7 @@ export async function runCloudToolLoop(
       output: '',
       cancelled,
       finished: false,
-      state: { messages, writtenPaths: [...writtenPaths], step, pinnedModel: activeModel, routing, repoCtx, repoMiss, noDeliverableBlocked },
+      state: { messages, writtenPaths: [...writtenPaths], step, pinnedModel: activeModel, routing, repoCtx, repoMiss, noDeliverableBlocked, policyGates, policyAskedGates: [...policyAskedGates] },
     };
   }
 
@@ -1680,7 +1731,7 @@ export class CloudToolLoopEngine implements AgentEngine {
       this.rc.env, this.rc.db, this.rc.executionId, this.rc.tenantId, this.rc.taskRow,
       this.rc.cloudAgentRef, this.rc.agentLabel, input.model, input.systemPrompt, input.userContent,
       this.rc.isCancelled, this.rc.projectId,
-      { routingBias: this.rc.routingBias },
+      { routingBias: this.rc.routingBias, ...(input.policy?.gates ? { policyGates: [...input.policy.gates] } : {}) },
     );
     return { ok: r.ok, output: r.output, cancelled: r.cancelled, finished: r.finished, awaitingInput: r.awaitingInput, state: r.state };
   }
@@ -1714,7 +1765,7 @@ export class CloudLimbicEngine implements AgentEngine {
       this.rc.env, this.rc.db, this.rc.executionId, this.rc.tenantId, this.rc.taskRow,
       this.rc.cloudAgentRef, this.rc.agentLabel, input.model, input.systemPrompt, input.userContent,
       this.rc.isCancelled, this.rc.projectId,
-      { routingBias: this.rc.routingBias, ...(directive ? { dynamicSystem: directive } : {}) },
+      { routingBias: this.rc.routingBias, ...(directive ? { dynamicSystem: directive } : {}), ...(input.policy?.gates ? { policyGates: [...input.policy.gates] } : {}) },
     );
     return { ok: r.ok, output: r.output, cancelled: r.cancelled, finished: r.finished, awaitingInput: r.awaitingInput, state: r.state };
   }
@@ -2145,7 +2196,11 @@ export async function runCloudExecution(
       env, db, executionId, taskRow, tenantId, projectId, agentLabel, cloudAgentRef, isCancelled,
       routingBias: parseRoutingBias(payload), artifacts,
     }, engineId);
-    const { ok, output, cancelled, awaitingInput } = await engine.run({ systemPrompt, userContent, model });
+    const policyGates = parsePolicyGates(payload);
+    const { ok, output, cancelled, awaitingInput } = await engine.run({
+      systemPrompt, userContent, model,
+      ...(policyGates.length ? { policy: { gates: policyGates } } : {}),
+    });
 
     // Run was cancelled mid-loop: the row is already CANCELLED (a terminal
     // state). Don't attempt a COMPLETED/FAILED transition (it would throw) —

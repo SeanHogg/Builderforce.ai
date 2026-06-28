@@ -14,6 +14,7 @@ import { workflows, workflowTasks } from '../../infrastructure/database/schema';
 import {
   compileDefinition,
   validateDefinition,
+  type CompiledStep,
   type WorkflowDefinition,
 } from '../../domain/workflowGraph';
 import type { Db } from '../../infrastructure/database/connection';
@@ -87,6 +88,21 @@ export async function instantiateWorkflowRun(
   if (invalid) return { ok: false, error: invalid };
 
   const steps = compileDefinition(params.definition);
+  return persistCompiledRun(db, steps, params);
+}
+
+/**
+ * Persist a run from ALREADY-COMPILED steps — the shared tail of
+ * {@link instantiateWorkflowRun} (which compiles a definition first) AND the entry
+ * point for the compile primitive's `deploy()` of a step-bearing `AgentSpec`, whose
+ * steps are already `CompiledStep[]`. Inserts the `workflows` row + one
+ * `workflow_tasks` row per step. Run-target precondition is the caller's to validate.
+ */
+export async function persistCompiledRun(
+  db: Db,
+  steps: CompiledStep[],
+  params: Omit<InstantiateRunParams, 'definition'>,
+): Promise<InstantiateRunResult> {
   const nodeToTaskId = new Map(steps.map((s) => [s.nodeId, crypto.randomUUID()]));
 
   const workflowId = crypto.randomUUID();
