@@ -6,6 +6,8 @@ import { insightsApi, type FinanceInsights, type FinanceBudgetLine, type BudgetS
 import { usePmData } from '@/lib/pm/usePmData';
 import { PmCard, PmEmpty, PmError, StatCard, ProgressBar } from '@/components/pm/pmShared';
 import { tableWrapStyle, tableStyle, theadRowStyle, thStyle, trStyle, tdStyle, tdMutedStyle } from '@/components/dataTableStyles';
+import { TrendChart } from '@/components/charts/TrendChart';
+import { BarChart } from '@/components/charts/BarChart';
 import { KpiGrid } from './LensShell';
 import { usd } from './format';
 
@@ -59,6 +61,20 @@ export function FinanceLens() {
         <StatCard label={t('fin.cacheRead')} value={data.totals.cacheReadTokens.toLocaleString()} sub={t('fin.cacheReadSub')} />
       </KpiGrid>
 
+      <PmCard title={t('fin.spendOverTime')}>
+        {data.daily.length === 0 || data.daily.every((d) => d.usd === 0) ? (
+          <span style={{ fontSize: '0.84rem', color: 'var(--text-muted)' }}>{t('fin.noSpend')}</span>
+        ) : (
+          <TrendChart
+            labels={data.daily.map((d) => d.date.slice(5))}
+            series={[{ key: 'spend', label: t('fin.spend'), values: data.daily.map((d) => d.usd) }]}
+            area
+            formatValue={(v) => usd(v)}
+            ariaLabel={t('fin.spendOverTime')}
+          />
+        )}
+      </PmCard>
+
       <PmCard
         title={t('fin.budgets')}
         action={
@@ -107,6 +123,14 @@ export function FinanceLens() {
         {data.byProject.length === 0 ? (
           <span style={{ fontSize: '0.84rem', color: 'var(--text-muted)' }}>{t('fin.noSpend')}</span>
         ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+            <BarChart
+              data={data.byProject.map((p) => ({ key: String(p.projectId), label: p.projectName, value: p.usd }))}
+              formatValue={(v) => usd(v)}
+              maxRows={8}
+              labelWidth={140}
+              ariaLabel={t('fin.byProject')}
+            />
           <div style={tableWrapStyle}>
             <table style={tableStyle}>
               <thead><tr style={theadRowStyle}><th style={thStyle}>{t('fin.project')}</th><th style={thStyle}>{t('fin.spend')}</th></tr></thead>
@@ -119,6 +143,7 @@ export function FinanceLens() {
                 ))}
               </tbody>
             </table>
+          </div>
           </div>
         )}
       </PmCard>

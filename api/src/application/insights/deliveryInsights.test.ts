@@ -96,6 +96,41 @@ describe('summarizeDelivery', () => {
     expect(r.projection).toEqual([]);
   });
 
+  it('rolls up story points (defined / done / cancelled) excluding cancelled work', () => {
+    const tk = (createdDaysAgo: number, completedDaysAgo: number | null, pts: number | null, status?: string): DeliveryTaskRow =>
+      ({ createdAt: at(createdDaysAgo), completedAt: completedDaysAgo == null ? null : at(completedDaysAgo), storyPoints: pts, status });
+    const rows = [tk(20, 5, 3), tk(18, 2, 5), tk(15, null, 8), tk(10, 1, 2, 'cancelled')];
+    const r = summarizeDelivery(rows, opts());
+    expect(r.hasPoints).toBe(true);
+    expect(r.totalPoints).toBe(16);      // 3 + 5 + 8 (cancelled 2 excluded)
+    expect(r.donePoints).toBe(8);        // 3 + 5 completed
+    expect(r.cancelledPoints).toBe(2);
+    const last = r.scopeEffort[r.scopeEffort.length - 1]!;
+    expect(last.definedPoints).toBe(16);
+    expect(last.completedPoints).toBe(8);
+  });
+
+  it('falls back to no-points when nothing is estimated', () => {
+    const r = summarizeDelivery([task(20, 5), task(18, null)], opts());
+    expect(r.hasPoints).toBe(false);
+    expect(r.totalPoints).toBe(0);
+  });
+
+  it('derives a development FTE line from logged effort', () => {
+    // One bucket-day with 8h logged ≈ 1 FTE-day; over a weekly bucket FTE is diluted.
+    const rows = [task(20, 5), task(18, 2), task(15, null)];
+    const effortEntries = [
+      { date: at(3).toISOString().slice(0, 10), minutes: 480 },
+      { date: at(2).toISOString().slice(0, 10), minutes: 240 },
+    ];
+    const r = summarizeDelivery(rows, opts({ effortEntries }));
+    expect(r.hasEffort).toBe(true);
+    expect(r.scopeEffort.some((p) => p.fte > 0)).toBe(true);
+    const noEffort = summarizeDelivery(rows, opts());
+    expect(noEffort.hasEffort).toBe(false);
+    expect(noEffort.scopeEffort.every((p) => p.fte === 0)).toBe(true);
+  });
+
   it('counts distinct active contributors among recently-completed work', () => {
     const owned = (createdDaysAgo: number, completedDaysAgo: number | null, who: string | null): DeliveryTaskRow =>
       ({ createdAt: at(createdDaysAgo), completedAt: completedDaysAgo == null ? null : at(completedDaysAgo), assignedUserId: who });

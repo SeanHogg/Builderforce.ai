@@ -321,7 +321,14 @@
     "percentUsed": "{percent}% genutzt",
     "usedAmount": "{amount} genutzt",
     "seePlans": "Tarife ansehen",
-    "manage": "Verwalten"
+    "manage": "Verwalten",
+    "trendAria": "Täglicher Nutzungsverlauf"
+  },
+  "aiUsageCard": {
+    "title": "KI-Nutzung diesen Monat",
+    "tokensThisMonth": "Tokens diesen Monat",
+    "percentOfPlan": "{percent}% des Tarifs",
+    "trendAria": "Täglicher Verlauf der KI-Token-Nutzung"
   },
   "settings": {
     "title": "Einstellungen",
@@ -531,6 +538,7 @@
       "subtitle": "KI-Ausgaben, Budget vs. Ist, Monatsendprognose und Kosten je gemergtem PR über das zugeordnete Hauptbuch.",
       "period": "Monat",
       "spend": "Ausgaben",
+      "spendOverTime": "Ausgaben im Zeitverlauf",
       "forecast": "Prognose",
       "forecastSub": "voraussichtl. Monatsende",
       "costPerPr": "Kosten / gemergter PR",

@@ -25,17 +25,13 @@ import { requireRole } from '../middleware/authMiddleware';
 import { TenantRole } from '../../domain/shared/types';
 import { scope } from './segmentTrackerRoutes';
 import { ceremonySessions, ceremonyParticipants, boards } from '../../infrastructure/database/schema';
+import { relayToRoom } from './realtimeRelay';
 
 export function createCeremonyRoutes(db: Db): Hono<HonoEnv> {
   const r = new Hono<HonoEnv>();
 
   // Live channel: clients hold this WebSocket for presence + relayed updates.
-  r.get('/rooms/:id/ws', (c) => {
-    if (c.req.header('Upgrade') !== 'websocket') return c.text('Expected WebSocket', 426);
-    const ns = c.env?.CEREMONY_ROOM;
-    if (!ns) return c.text('Realtime unavailable', 503);
-    return ns.get(ns.idFromName(`ceremony:${c.req.param('id')}`)).fetch(c.req.raw);
-  });
+  r.get('/rooms/:id/ws', (c) => relayToRoom(c, c.env?.CEREMONY_ROOM, `ceremony:${c.req.param('id')}`));
 
   // ── Sessions ───────────────────────────────────────────────────────────────
 
