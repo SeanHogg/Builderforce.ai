@@ -1135,29 +1135,36 @@ export function IDE({ project, initialFiles, onProjectUpdate, onOpenProjectDetai
         />
       )}
 
-      {/* Main content. In Designer the coding agent lives in the left panel
+      {/* Main content. In Designer and Voice the agent lives in the left panel
           (the shared <BrainPanel> wired to this project's brain actions); other
           modalities use the global floating Brain drawer. Either way the IDE
-          registers the same actions, so the agent can create/apply files. */}
+          registers the same actions, so the agent can create/apply files or set
+          the narration lines. */}
       <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
-        {/* Designer left panel — LLM context + agent chat (reused Brain UI) */}
-        {modality === 'designer' && (
+        {/* Docked left panel (Designer + Voice) — context strip + agent chat */}
+        {hasDockedBrain && (
           <div style={{
             width: 340, minWidth: 340, flexShrink: 0,
             borderRight: '1px solid var(--border-subtle)',
             display: 'flex', flexDirection: 'column', overflow: 'hidden',
             background: 'var(--bg-base)',
           }}>
-            {/* LLM context strip — what the agent currently "sees" */}
+            {/* Context strip — what the agent currently "sees" / drives */}
             <div style={{
               flexShrink: 0, padding: '6px 12px', display: 'flex', alignItems: 'center', gap: 6,
               borderBottom: '1px solid var(--border-subtle)', background: 'var(--bg-surface)',
               fontSize: '0.72rem', color: 'var(--text-muted)', whiteSpace: 'nowrap', overflow: 'hidden',
             }}>
-              <span title="Coding agent" style={{ fontSize: '0.9rem' }}>🤖</span>
-              <span style={{ fontWeight: 600, color: 'var(--text-secondary)' }}>Context:</span>
+              <span title={modality === 'voice' ? 'Voice director' : 'Coding agent'} style={{ fontSize: '0.9rem' }}>
+                {modality === 'voice' ? '🎙' : '🤖'}
+              </span>
+              <span style={{ fontWeight: 600, color: 'var(--text-secondary)' }}>
+                {modality === 'voice' ? 'Voice:' : 'Context:'}
+              </span>
               <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                {activeFile ? activeFile : 'whole project'}
+                {modality === 'voice'
+                  ? (voice.clones.find((c) => c.id === voice.selectedCloneId)?.name ?? 'none selected')
+                  : (activeFile ? activeFile : 'whole project')}
               </span>
             </div>
             <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
@@ -1186,6 +1193,13 @@ export function IDE({ project, initialFiles, onProjectUpdate, onOpenProjectDetai
                 onLoadVersion={videoVersions.onLoadVersion}
               />
             </div>
+          ) : modality === 'voice' ? (
+            <VoiceOutput
+              result={voice.result}
+              audioUrl={voice.audioUrl}
+              busy={voice.busy}
+              unavailable={voice.unavailable}
+            />
           ) : modality === 'llm' ? (
             activeFile ? (
               <CodePane
@@ -1336,6 +1350,9 @@ export function IDE({ project, initialFiles, onProjectUpdate, onOpenProjectDetai
             ))}
           </div>
           <div style={{ flex: 1, overflow: 'hidden', position: 'relative' }}>
+            <div style={{ position: 'absolute', inset: 0, visibility: rightTab === 'voice' ? 'visible' : 'hidden', pointerEvents: rightTab === 'voice' ? 'auto' : 'none' }}>
+              {modality === 'voice' && <VoiceConfigPanel voice={voice} />}
+            </div>
             <div style={{ position: 'absolute', inset: 0, visibility: rightTab === 'files' ? 'visible' : 'hidden', pointerEvents: rightTab === 'files' ? 'auto' : 'none' }}>
               <FileExplorer
                 files={files}
