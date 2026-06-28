@@ -9,19 +9,48 @@ export type ChatRole = 'system' | 'user' | 'assistant' | 'tool';
  * upstream — e.g. all `openrouter` means a saturated shared key, not a
  * model-specific issue.
  */
+/**
+ * Coarse failure class for one failover attempt. Branch on this instead of
+ * regex-sniffing the error message. `'schema'` means the upstream rejected the
+ * `response_format.json_schema` as too complex for its constrained-decoding
+ * engine (see `FailoverEvent.reason === 'schema_too_complex'`); `'content_filter'`
+ * means a safety system blocked the generation. Open string union for
+ * forward-compat — a newer gateway may add classes an older SDK doesn't list.
+ */
+export type FailoverKind =
+  | 'rate_limit'
+  | 'timeout'
+  | 'auth'
+  | 'server_error'
+  | 'client_error'
+  | 'schema'
+  | 'content_filter'
+  | 'network'
+  | 'skipped'
+  | (string & {});
+
 export interface FailoverEvent {
   model: string;
-  /** `'openrouter' | 'cerebras' | 'nvidia' | 'ollama'` */
+  /** `'openrouter' | 'cerebras' | 'nvidia' | 'ollama' | 'googleai' | …` */
   vendor: string;
-  /** HTTP status code, or 0 for embedded errors / network failures. */
+  /** Gateway-normalized status, or 0 for embedded errors / network failures.
+   *  For a schema rejection this is `422` (the request-error class); the REAL
+   *  upstream status is in `upstreamStatus`. */
   code: number;
   /** Wall-clock time the gateway spent on this attempt, ms. Present on newer
    *  gateway versions; absent on older ones. */
   durationMs?: number;
-  /** Coarse failure class — `'rate_limit' | 'timeout' | 'auth' | 'server_error'
-   *  | 'client_error' | 'network' | 'skipped'`. The full upstream error text is
-   *  NOT exposed to callers; quote `traceId` to support for that. */
-  kind?: string;
+  /** Coarse failure class — see {@link FailoverKind}. The full upstream error
+   *  text is NOT exposed to callers; quote `traceId` to support for that. */
+  kind?: FailoverKind;
+  /** Stable machine-readable cause slug when one applies — e.g.
+   *  `'schema_too_complex'`. Branch on this for structured handling instead of
+   *  parsing `message`. Absent for unclassified failures. */
+  reason?: string;
+  /** The REAL upstream HTTP status before the gateway normalized it into `code`
+   *  — e.g. a Gemini schema 400 surfaces as `code: 422` with `upstreamStatus: 400`.
+   *  Absent when `code` already IS the upstream status. */
+  upstreamStatus?: number;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -188,9 +217,15 @@ export interface ChatCompletionCreateParams extends PerCallOptions {
    *  gateway-side schema validation with retry across the failover chain. */
   response_format?: ResponseFormat;
   /**
-   * Opaque telemetry slug. The gateway treats this as a free-form string —
-   * persisted to `llm_usage_log.use_case` and echoed back in `_builderforce.useCase`
-   * for confirmation, but **never used for routing**. The taxonomy is yours.
+   * Telemetry slug — persisted to `llm_usage_log.use_case` and echoed back in
+   * `_builderforce.useCase`. The taxonomy is yours, BUT a few well-known patterns
+   * also *influence routing* (the gateway substring-matches them):
+   *   - `…ocr…` → prefers OCR/vision-capable models.
+   *   - quality-critical work (`resume`, `cover_letter`, `tailor`, `proposal`,
+   *     `cv`, …) → leads with the best models your PLAN unlocks (premium writers
+   *     on paid plans). Failover + the funded reliability backstop still apply.
+   * Slugs that don't match any pattern are pure telemetry. Routing is always
+   * gateway-owned; this only nudges model selection.
    */
   useCase?: string;
   /** Free-form key/value pairs persisted to `llm_usage_log.metadata` for billing
@@ -273,6 +308,15 @@ export interface ChatCompletionResponse {
     effectivePlan?: string;
     /** Number of vendor retries the gateway performed for json_schema conformance. */
     schemaRetries?: number;
+    /**
+     * `true` when the gateway AUTO-DOWNGRADED a too-complex `response_format.json_schema`
+     * to loose `json_object` and re-ran the cascade so you still got a structured
+     * result instead of a terminal `schema_too_complex` error. The strict-schema
+     * guarantee was relaxed — **validate the returned JSON yourself** (it parses,
+     * but wasn't constrained-decoded against your schema). Pre-empt the round-trip
+     * with `deriveResponseFormat` when you know the schema is large.
+     */
+    schemaDowngraded?: boolean;
     /** Echo of `request.useCase` (opaque telemetry slug). */
     useCase?: string;
     /** Echo of `request.metadata` for caller-side billing trace-back. */

@@ -602,6 +602,11 @@ export interface ProxyResult {
   /** Number of times the gateway re-dispatched on non-conforming JSON output
    *  (only applies when `body.response_format.type` is `json_object`/`json_schema`). */
   schemaRetries?: number;
+  /** True when the gateway AUTO-DOWNGRADED a too-complex `response_format.json_schema`
+   *  to loose `json_object` and re-ran the cascade so the caller still got a
+   *  structured result instead of a terminal `schema_too_complex`. The strict
+   *  schema guarantee was relaxed — the caller should validate the JSON itself. */
+  schemaDowngraded?: boolean;
   // --- Diagnostic tracing (stamped by complete() via finalize) -------------
   /** Authoritative gateway trace id (`llm-<uuid>`) echoed to the consumer and
    *  used by the superadmin trace lookup. */
@@ -613,7 +618,8 @@ export interface ProxyResult {
   /** The model chain the gateway actually walked for this request. */
   candidateChain?: string[];
   /** success | cascade_exhausted | all_cooldown | subrequest_exhausted |
-   *  strict_unavailable | schema_nonconforming | request_error. */
+   *  strict_unavailable | schema_nonconforming | request_error |
+   *  schema_too_complex (every candidate rejected the json_schema as too complex). */
   outcome?: string;
   /** Rolled-up failure class across attempts — rate_limit | timeout | auth |
    *  server_error | mixed | none. */
@@ -634,6 +640,10 @@ export interface ProxyEnv extends VendorEnv {
   /** Optional KV namespace for persistent cooldown + key-resolution caching.
    *  When unset, both fall back to in-memory per-isolate state. */
   AUTH_CACHE_KV?: KVNamespace;
+  /** R2 bucket holding published `.evermind` model artifacts. Threaded into the
+   *  vendor dispatch so the `evermind` vendor can load + run a tenant's own model.
+   *  Absent in environments without R2 (the evermind vendor then errors cleanly). */
+  UPLOADS?: R2Bucket;
 }
 
 // ---------------------------------------------------------------------------
@@ -791,12 +801,25 @@ export class LlmProxyService {
     //    models (tools / structured / vision) to the head within that order.
     const reorderedPool = reorderPoolByShape(body, this.modelPool);
 
+    // 1b) Quality-critical useCase (resume tailoring, cover letters, …): re-rank
+    //     the shape-sorted pool so the best models the PLAN unlocks lead (premium
+    //     writers for paid; a no-op within a free pool). For a strict json_schema
+    //     it still keeps a low-ceiling model (Gemini) last within its tier, so the
+    //     two routing rules compose. The capability order from the shape sort is
+    //     preserved as the within-tier tiebreak.
+    const useCase = (body as { useCase?: unknown }).useCase;
+    const routedPool: readonly string[] = isQualityCriticalUseCase(typeof useCase === 'string' ? useCase : undefined)
+      ? reorderPoolForQuality(reorderedPool, {
+          strictSchema: (body as { response_format?: { type?: string } }).response_format?.type === 'json_schema',
+        })
+      : reorderedPool;
+
     // 2) Caller hint goes at the head; rest of the pool follows.
     //    `callerModel` was extracted at the top of this function for the
     //    strict-pin branch; reuse it here for the chained path.
     const seed: readonly string[] = (typeof callerModel === 'string' && callerModel.length > 0)
-      ? [callerModel, ...reorderedPool.filter((m) => m !== callerModel)]
-      : reorderedPool;
+      ? [callerModel, ...routedPool.filter((m) => m !== callerModel)]
+      : routedPool;
 
     // 3) Pre-fetch cooldown state for the leading seed slice + premium fallback
     //    (KV-backed when bound, in-memory fallback otherwise). The seed is
@@ -848,7 +871,7 @@ export class LlmProxyService {
       );
     }
 
-    const primary = await this.dispatch(candidates, body, requestHeaders, { signal });
+    let primary = await this.dispatch(candidates, body, requestHeaders, { signal });
     if (primary.response.status < 400) {
       // Mark overflow when the primary cascade itself landed on an appended
       // premium-fallback model (vs a plan-pool model) so the route meters it —
@@ -857,26 +880,58 @@ export class LlmProxyService {
       return this.finalize(primary, tid, startedAt, candidates);
     }
 
-    // Every candidate rejected the request as malformed (400/422) — or rejected
-    // the json_schema as too complex for its constrained-decoding engine. The
-    // backstop would reject it too (it's the caller's payload/schema, not the
-    // model), so skip it and surface the terminal 4xx straight away with its
-    // diagnostic intact rather than burning a funded paid call on a doomed retry.
-    if (primary.outcome === 'request_error' || primary.outcome === 'schema_too_complex') {
+    // A genuine malformed request (400/422) can't be fixed by failover OR by
+    // relaxing the schema — surface it straight away.
+    if (primary.outcome === 'request_error') {
       return this.finalize(primary, tid, startedAt, candidates);
+    }
+
+    // AUTO-DOWNGRADE: every candidate rejected the `response_format.json_schema`
+    // as too complex for its constrained-decoding engine. Rather than hard-fail a
+    // feature that just needs a structured answer (hired.video's resume-tailor),
+    // relax the request to loose `json_object` mode — no schema, so no
+    // constrained-decoding ceiling — and re-run the cascade. The model still
+    // returns JSON (the schema is carried into the prompt as guidance); the caller
+    // validates it client-side. This is what turns a terminal schema rejection
+    // into a delivered result. The downgraded body also feeds the backstop below,
+    // so even a saturated pool floors onto a funded model in json_object mode.
+    let effectiveBody = body;
+    if (primary.outcome === 'schema_too_complex') {
+      const downgraded = downgradeResponseFormat(body);
+      if (!downgraded) {
+        // No strict json_schema to relax (shouldn't happen for this outcome) —
+        // surface the terminal error honestly.
+        return this.finalize(primary, tid, startedAt, candidates);
+      }
+      effectiveBody = downgraded;
+      const retry = await this.dispatch(candidates, downgraded, requestHeaders, { signal });
+      // Carry the schema-rejection trace in front of the retry's own attempts so
+      // the diagnostic record shows BOTH the rejection and the recovery.
+      retry.failovers = [...primary.failovers, ...retry.failovers];
+      retry.attempts  = [...(primary.attempts ?? []), ...(retry.attempts ?? [])];
+      retry.schemaDowngraded = true;
+      if (retry.response.status < 400) {
+        retry.paidOverflow = isPaidOverflowModel(retry.resolvedModel) && !this.isSubscriptionFunded(retry);
+        return this.finalize(retry, tid, startedAt, candidates, 'success');
+      }
+      // Downgraded cascade still failed for a NON-schema reason (saturation, etc.)
+      // — fall through to the funded backstop with the downgraded body.
+      primary = retry;
     }
 
     // Primary cascade failed (saturated free pool, cascade-exhausted 429, etc.).
     // Fire the guaranteed paid backstop on the credited key before giving up so
     // the caller gets a real answer instead of `AI_UNAVAILABLE`. On success,
     // splice the primary cascade's diagnostics in front of the backstop's so the
-    // trace still records everything that was tried.
-    const backstop = this.disablePaidOverflow ? null : await this.dispatchBackstop(body, requestHeaders);
+    // trace still records everything that was tried. Uses `effectiveBody` so a
+    // schema-downgraded request floors onto the backstop in json_object mode too.
+    const backstop = this.disablePaidOverflow ? null : await this.dispatchBackstop(effectiveBody, requestHeaders);
     if (backstop) {
       backstop.failovers = [...primary.failovers, ...backstop.failovers];
       backstop.retries   = primary.retries + backstop.retries;
       backstop.attempts  = [...(primary.attempts ?? []), ...(backstop.attempts ?? [])];
       backstop.paidOverflow = !this.isSubscriptionFunded(backstop);
+      if (effectiveBody !== body) backstop.schemaDowngraded = true;
       return this.finalize(backstop, tid, startedAt, [...candidates, ...this.backstopModels], 'success');
     }
     return this.finalize(primary, tid, startedAt, candidates);
@@ -1103,6 +1158,9 @@ export class LlmProxyService {
       title: this.productName,
       ...(effectiveTimeoutMs ? { timeoutMs: effectiveTimeoutMs } : {}),
       ...(overrides?.signal ? { signal: overrides.signal } : {}),
+      // Thread the R2 artifact store so the `evermind` vendor can load a
+      // published model. Harmless for every other (HTTP) vendor — they ignore it.
+      ...(this.env.UPLOADS ? { uploads: this.env.UPLOADS } : {}),
     };
 
     if (sanitizedBody.stream) {
@@ -1483,6 +1541,38 @@ export class LlmProxyService {
  *  "caller's fault, not the model's" status set. */
 export function isRequestErrorStatus(status: number): boolean {
   return status === 400 || status === 422;
+}
+
+/**
+ * Relax a too-complex `response_format.json_schema` to loose `json_object` so a
+ * re-dispatch escapes the vendor's constrained-decoding ceiling while still
+ * returning JSON — the gateway's auto-recovery for `schema_too_complex` (so a
+ * structured feature like resume-tailoring returns a result instead of a terminal
+ * 422). Returns a shallow-cloned body, or `null` when there's no strict
+ * json_schema to downgrade (a genuine malformed request, or already loose mode).
+ *
+ * The original schema is appended to `messages` as a SYSTEM hint so the model
+ * still targets the expected shape now that the constrained decoder is gone —
+ * the caller validates the JSON client-side. Pure + unit-testable.
+ */
+export function downgradeResponseFormat(body: ChatCompletionRequest): ChatCompletionRequest | null {
+  const rf = (body as { response_format?: { type?: string; json_schema?: { schema?: unknown } } }).response_format;
+  if (!rf || rf.type !== 'json_schema') return null;
+  const clone: ChatCompletionRequest = { ...body, response_format: { type: 'json_object' } };
+  const schema = rf.json_schema?.schema;
+  if (schema && typeof schema === 'object' && Array.isArray(clone.messages)) {
+    clone.messages = [
+      ...clone.messages,
+      {
+        role: 'system',
+        content:
+          'Respond with a SINGLE JSON object that conforms to this JSON Schema. ' +
+          'Output only the JSON — no markdown, no code fences, no prose:\n' +
+          JSON.stringify(schema),
+      },
+    ];
+  }
+  return clone;
 }
 
 /** Synthesize the single `DispatchAttempt` for a `VendorFatalError` (400/422) that
@@ -1981,11 +2071,32 @@ export function capabilitiesForModel(model: string): AiCapability[] {
   return (['tools', 'structured_output', 'vision', 'ocr'] as const).filter((c) => set.has(c));
 }
 
+/**
+ * Models whose constrained-decoding engine has a LOW schema-complexity ceiling —
+ * the Gemini family is the canonical case ("too many states for serving"). For a
+ * STRICT `json_schema` request these are de-prioritized in the cascade so a
+ * higher-ceiling model (OpenAI / Anthropic / Cerebras) leads and the request
+ * doesn't hit `schema_too_complex` in the first place — preventing the failure
+ * rather than recovering from it via the auto-downgrade. Matched by family name
+ * so it catches both `googleai/gemini-*` (direct) and `google/gemini-*`
+ * (OpenRouter-routed), which share the Gemini decoder regardless of vendor.
+ *
+ * Deliberately narrow (Gemini only) — the authoritative per-vendor ceilings
+ * belong in the model catalog (see the ROADMAP "advertise strict-schema
+ * capability" item); this is the known-bad case wired into routing now.
+ */
+export function isLowSchemaCeilingModel(model: string): boolean {
+  return /gemini/i.test(model);
+}
+
 interface ShapeFlags {
   hasTools: boolean;
   hasStructuredOutput: boolean;
   hasVision: boolean;
   hasOcr: boolean;
+  /** A STRICT `json_schema` request (constrained decoding) — distinct from loose
+   *  `json_object`. Drives the low-schema-ceiling de-prioritization below. */
+  hasStrictSchema: boolean;
 }
 
 function inferShape(body: ChatCompletionRequest): ShapeFlags {
@@ -1994,6 +2105,9 @@ function inferShape(body: ChatCompletionRequest): ShapeFlags {
 
   const rf = b.response_format as { type?: string } | undefined;
   const hasStructuredOutput = rf?.type === 'json_object' || rf?.type === 'json_schema';
+  // Only `json_schema` engages constrained decoding (and its complexity ceiling);
+  // `json_object` is loose and never trips `schema_too_complex`.
+  const hasStrictSchema = rf?.type === 'json_schema';
 
   const hasVision = Array.isArray(body.messages) && body.messages.some((m) => {
     const content = (m as unknown as { content?: unknown }).content;
@@ -2008,7 +2122,7 @@ function inferShape(body: ChatCompletionRequest): ShapeFlags {
   const useCase = typeof b.useCase === 'string' ? b.useCase : '';
   const hasOcr = /ocr/i.test(useCase);
 
-  return { hasTools, hasStructuredOutput, hasVision, hasOcr };
+  return { hasTools, hasStructuredOutput, hasVision, hasOcr, hasStrictSchema };
 }
 
 /**
@@ -2044,10 +2158,63 @@ export function reorderPoolByShape(
     return s;
   };
 
-  // Stable sort by descending score; preserves original pool order within ties.
+  // Schema-ceiling tiebreaker: for a STRICT json_schema, a low-ceiling model
+  // (Gemini) is de-prioritized WITHIN its capability bucket — it stays a valid
+  // candidate (and the auto-downgrade still covers it) but a higher-ceiling
+  // structured model leads, so a complex schema doesn't hit `too many states`.
+  const lowCeilingPenalty = (model: string): number =>
+    shape.hasStrictSchema && isLowSchemaCeilingModel(model) ? 1 : 0;
+
+  // Stable sort: capability score desc, then low-ceiling last within ties,
+  // then original pool order.
   return [...pool]
-    .map((m, i) => ({ m, i, s: score(m) }))
-    .sort((a, b) => (b.s - a.s) || (a.i - b.i))
+    .map((m, i) => ({ m, i, s: score(m), p: lowCeilingPenalty(m) }))
+    .sort((a, b) => (b.s - a.s) || (a.p - b.p) || (a.i - b.i))
+    .map((x) => x.m);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Quality-critical routing — "select the best models for this request" when the
+// generated text IS the product (resume tailoring, cover letters, …). Leads with
+// the highest-tier models the tenant's PLAN unlocks (premium writers for paid; a
+// no-op within a free pool, whose premium floor is the funded backstop). Plan-
+// respecting + catalog-driven, so it never hardcodes ids or funds premium for a
+// free tenant — that boundary stays the plan's job.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * `useCase` slugs that mark OUTPUT-QUALITY-CRITICAL traffic. Substring/regex match
+ * on the free-form `useCase` tag (same mechanism as the OCR signal), so tenant
+ * slugs like `resume_tailoring`, `cover_letter_gen`, or `proposal_draft` light up
+ * without an enum. Single source so the detector can't drift across call sites.
+ */
+export function isQualityCriticalUseCase(useCase: string | undefined | null): boolean {
+  if (!useCase) return false;
+  return /resume|cover[_\s-]?letter|tailor|proposal|cv\b|headline|profile[_\s-]?summary/i.test(useCase);
+}
+
+/** Tier → quality rank (higher = better model). Drives {@link reorderPoolForQuality}. */
+const QUALITY_TIER_RANK: Record<string, number> = { ULTRA: 3, PREMIUM: 2, STANDARD: 1, FREE: 0 };
+
+/**
+ * Stable-reorder a pool so the HIGHEST-tier models lead (ULTRA → PREMIUM →
+ * STANDARD → FREE), used for {@link isQualityCriticalUseCase} traffic. Within-tier
+ * order is preserved from the input (so the capability ordering from
+ * `reorderPoolByShape` survives as the tiebreak). When `strictSchema` is set, a
+ * low-schema-ceiling model (Gemini) sorts LAST within its tier — so a quality
+ * premium request still prefers a high-ceiling premium writer (Claude/GPT) over
+ * gemini-pro. Plan-respecting by construction: a Free pool is all FREE tier, so
+ * this is a no-op there. Catalog-driven via `tierForModel`. Pure + unit-testable.
+ */
+export function reorderPoolForQuality(
+  pool: readonly string[],
+  opts?: { strictSchema?: boolean },
+): readonly string[] {
+  const penalty = (m: string): number =>
+    opts?.strictSchema && isLowSchemaCeilingModel(m) ? 1 : 0;
+  return [...pool]
+    .map((m, i) => ({ m, i, r: QUALITY_TIER_RANK[tierForModel(m)] ?? 0, p: penalty(m) }))
+    .sort((a, b) => (b.r - a.r) || (a.p - b.p) || (a.i - b.i))
     .map((x) => x.m);
 }
 

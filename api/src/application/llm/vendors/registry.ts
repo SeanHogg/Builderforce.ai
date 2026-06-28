@@ -9,6 +9,7 @@
 import { anthropicModule } from './anthropic';
 import { cerebrasModule } from './cerebras';
 import { cloudflareModule } from './cloudflare';
+import { evermindModule } from './evermind';
 import { googleAiModule } from './googleai';
 import { nvidiaModule } from './nvidia';
 import { ollamaModule } from './ollama';
@@ -55,6 +56,9 @@ import {
 // touching the tuned free/paid cascade. See openaiCompatibleVendors.ts.
 const MODULES: ReadonlyArray<VendorModule> = [
   cerebrasModule, ollamaModule, nvidiaModule, cloudflareModule, openRouterModule, googleAiModule, anthropicModule,
+  // `evermind` is autoRoute:false (explicit `evermind/<ref>` pin only), so its
+  // position never affects the auto-selected FREE/PRO pool ordering.
+  evermindModule,
   ...openAICompatibleModules,
 ];
 
@@ -69,6 +73,7 @@ const MODULES_BY_ID: Record<VendorId, VendorModule> = {
   googleai:   googleAiModule,
   cloudflare: cloudflareModule,
   anthropic:  anthropicModule,
+  evermind:   evermindModule,
 };
 
 /** Wire the JSON-Schema sanitizer to read each vendor's `schemaDialect` from
@@ -100,6 +105,10 @@ const VENDOR_PREFIXES: ReadonlyArray<{ prefix: string; vendor: VendorId }> = [
   { prefix: 'nim/',        vendor: 'nvidia' },
   { prefix: 'ollama/',     vendor: 'ollama' },
   { prefix: 'googleai/',   vendor: 'googleai' },
+  // Our own model: `evermind/<r2-ref>` routes to the in-Worker EvermindLM. The
+  // ref may itself contain `/` (it's an R2 key prefix) — parseVendorPrefix takes
+  // everything after `evermind/` as the model id, which is exactly the ref.
+  { prefix: 'evermind/',   vendor: 'evermind' },
   // Cloudflare model ids natively start with `@cf/...` so they're
   // self-identifying without a `cloudflare/` URL-style prefix. We still accept
   // `cloudflare/@cf/...` for symmetry with the other vendors — callers who

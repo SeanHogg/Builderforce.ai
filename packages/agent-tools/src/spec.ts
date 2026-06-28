@@ -78,6 +78,32 @@ export interface AgentSpecMemory {
 }
 
 /**
+ * A governance gate compiled onto the spec (the `policy` modality). Because a gate
+ * lives *on the spec* — not inside one front door — it reaches every surface for
+ * free: a gate authored once applies in the IDE exactly as it does on a cloud tick
+ * or a workflow node, because every surface lowers through {@link lowerAgentSpec}.
+ *
+ * - `inject-directive` — prepend a governing instruction to the system prompt
+ *   (live on every surface today, via the lowering below).
+ * - `require-approval` — the engine must pause for human approval before invoking
+ *   `tool` (or any tool when `tool` is omitted). Evaluated by {@link evaluatePolicyGate}.
+ * - `block` — the engine must refuse `tool` outright.
+ */
+export interface PolicyGate {
+  id: string;
+  /** Tool this gate governs; omit (or `"*"`) to govern every tool call. */
+  tool?: string;
+  effect: "inject-directive" | "require-approval" | "block";
+  /** The instruction injected (inject-directive) or the human-readable reason. */
+  directive?: string;
+  reason?: string;
+}
+
+export interface AgentSpecPolicy {
+  gates: PolicyGate[];
+}
+
+/**
  * The canonical agent intermediate representation. Every modality compiles *into*
  * this; every surface deploys *from* it. Only the prompt-bearing fields are
  * consumed by {@link lowerAgentSpec}; `steps`/`surfaces` are carried for the
@@ -90,6 +116,8 @@ export interface AgentSpec {
   model?: AgentSpecModel;
   persona?: AgentSpecPersona;
   memory?: AgentSpecMemory;
+  /** Governance gates that apply on every surface the spec deploys to. */
+  policy?: AgentSpecPolicy;
   /** Ordered steps when the need is a process/workflow (CompiledStep-shaped). */
   steps?: readonly unknown[];
   /** Surfaces this spec may deploy to. */
@@ -135,6 +163,45 @@ function joinSkills(skills: AgentSpecIdentity["skills"]): string {
   return skills ?? "";
 }
 
+/** Render one {@link PolicyGate} as a binding system-prompt line. */
+function policyGateDirective(g: PolicyGate): string {
+  const scope = !g.tool || g.tool === "*" ? "any tool" : `the \`${g.tool}\` tool`;
+  switch (g.effect) {
+    case "inject-directive":
+      return (g.directive ?? "").trim();
+    case "require-approval":
+      return `Before using ${scope}, pause and request explicit human approval${g.reason ? ` (${g.reason})` : ""}.`;
+    case "block":
+      return `Never use ${scope}${g.reason ? ` — ${g.reason}` : ""}. Refuse and explain instead.`;
+  }
+}
+
+/** The decision a policy evaluation yields at the engine's tool-call seam. */
+export type PolicyDecision =
+  | { action: "allow" }
+  | { action: "require-approval"; gateId: string; reason: string }
+  | { action: "block"; gateId: string; reason: string };
+
+/**
+ * Hard-enforce the policy gates for a pending tool call. Pure and surface-agnostic
+ * so every engine (cloud tick, on-prem loop, workflow node) enforces governance the
+ * same way: call this before invoking a tool and honour the decision. `block` wins
+ * over `require-approval` when both match. Gates with no `tool` (or `"*"`) match all.
+ */
+export function evaluatePolicyGate(
+  gates: readonly PolicyGate[] | undefined,
+  toolName: string,
+): PolicyDecision {
+  const matches = (gates ?? []).filter((g) => !g.tool || g.tool === "*" || g.tool === toolName);
+  const blocked = matches.find((g) => g.effect === "block");
+  if (blocked) return { action: "block", gateId: blocked.id, reason: blocked.reason ?? "blocked by policy" };
+  const approval = matches.find((g) => g.effect === "require-approval");
+  if (approval) {
+    return { action: "require-approval", gateId: approval.id, reason: approval.reason ?? "approval required by policy" };
+  }
+  return { action: "allow" };
+}
+
 /**
  * THE canonical lowering: an {@link AgentSpec} → system prompt + model + exec
  * params. Every surface lowers through this so identity, personality, and recalled
@@ -166,6 +233,14 @@ export function lowerAgentSpec(spec: AgentSpec): LoweredAgent {
   const sig = spec.memory?.stateSignal;
   if (sig) {
     sections.push(`[Memory: step=${sig.step} signal=${sig.signal} context="persistent agent state"]`);
+  }
+
+  // --- Governance gates --------------------------------------------------
+  // Rendered into the prompt so policy reaches EVERY surface identically; hard
+  // pause/refusal enforcement is `evaluatePolicyGate` at the engine's tool seam.
+  const gateLines = (spec.policy?.gates ?? []).map(policyGateDirective).filter(Boolean);
+  if (gateLines.length > 0) {
+    sections.push(["Governance (these gates are binding):", ...gateLines.map((g) => `- ${g}`)].join("\n"));
   }
 
   return {

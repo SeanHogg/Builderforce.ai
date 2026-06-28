@@ -1096,6 +1096,14 @@ export function createLlmRoutes(): Hono<HonoEnv> {
       }
     }
 
+    // A resolved `evermind/<ref>` base is OUR OWN model (served in-Worker from R2,
+    // see vendors/evermind.ts). Hard-pin it so the gateway serves Evermind itself
+    // rather than silently cascading to an external frontier vendor on a hiccup —
+    // calling a tenant's published Evermind must never bill or leak to OpenAI/Claude.
+    if (typeof bodyAny.model === 'string' && bodyAny.model.startsWith('evermind/')) {
+      bodyAny.modelStrict = true;
+    }
+
     // ── Workforce model expansion ──────────────────────────────────────────
     // A `builderforce/workforce-<id>` model ref lets the stock OpenAI SDKs call a
     // user's PUBLISHED model by id: expand it into the agent's base model + its
@@ -1365,6 +1373,7 @@ export function createLlmRoutes(): Hono<HonoEnv> {
         effectivePlan: access.effectivePlan,
         ...(access.premiumOverride ? { premium: true } : {}),
         ...(result.schemaRetries != null ? { schemaRetries: result.schemaRetries } : {}),
+        ...(result.schemaDowngraded ? { schemaDowngraded: true } : {}),
         ...(callerUseCase     ? { useCase:    callerUseCase  } : {}),
         ...(callerMetadata    ? { metadata:   callerMetadata as Record<string, string> } : {}),
         ...(c.req.header('x-request-id') ? { requestId: c.req.header('x-request-id') } : {}),

@@ -16,6 +16,10 @@ import { applyPromptCaching } from '../promptCaching';
 export type VendorId =
   // ── Bespoke wire-format vendors (hand-rolled modules)
   | 'openrouter' | 'cerebras' | 'ollama' | 'nvidia' | 'googleai' | 'cloudflare' | 'anthropic'
+  // ── Our OWN model: serves a published `.evermind` artifact from R2 via the
+  //    builderforce-memory runtime (on-CPU, in-Worker). Reached only via an
+  //    explicit `evermind/<ref>` pin (autoRoute:false). See vendors/evermind.ts.
+  | 'evermind'
   // ── OpenAI-compatible commercial vendors (createOpenAICompatibleVendor factory).
   //    Each exposes a standard `/chat/completions` endpoint + Bearer auth, so they
   //    ride the shared transport. Reachable via an explicit `<vendor>/<id>` pin
@@ -168,6 +172,10 @@ export interface VendorCallParams {
    *  (RequestAbortedError) instead of failing over and spending more tokens.
    *  Undefined for normal traffic — behavior is unchanged. */
   signal?: AbortSignal;
+  /** R2 artifact store, threaded through dispatch for the `evermind` vendor so
+   *  it can load a published `.evermind` model. Undefined for all HTTP vendors
+   *  (they reach their backend over the network, not R2). */
+  uploads?: import('../evermindRuntime').ArtifactStore;
 }
 
 export interface VendorUsage {

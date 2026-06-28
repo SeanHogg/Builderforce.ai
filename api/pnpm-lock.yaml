@@ -17,6 +17,9 @@ importers:
       '@seanhogg/builderforce-memory':
         specifier: ^2026.6.28
         version: 2026.6.28(@seanhogg/builderforce-memory-engine@2026.6.28)
+      '@seanhogg/builderforce-memory-engine':
+        specifier: ^2026.6.28
+        version: 2026.6.28
       drizzle-orm:
         specifier: ^0.36.4
         version: 0.36.4(@cloudflare/workers-types@4.20260313.1)(@neondatabase/serverless@0.10.4)(@types/pg@8.11.6)

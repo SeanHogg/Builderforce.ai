@@ -24,6 +24,7 @@ export type {
   ChatCompletionChunk,
   ChatCompletionResponse,
   FailoverEvent,
+  FailoverKind,
   // Models / usage
   AiCapability,
   ModelInfo,
@@ -48,3 +49,18 @@ export { EmbeddingsApi } from './application/EmbeddingsApi';
 export { ImagesApi } from './application/ImagesApi';
 export { ModelsApi } from './application/ModelsApi';
 export { BuilderforceApiError } from './infrastructure/httpClient';
+
+// Error classification — branch on the gateway's own failure taxonomy instead of
+// hand-rolling HTTP-status guesses (see classifyError).
+export { classifyError } from './application/classifyError';
+export type { ErrorKind, ErrorClassification } from './application/classifyError';
+
+// Response-format derivation — pick strict json_schema vs loose json_object by
+// schema complexity / vendor capability, pre-empting `schema_too_complex`.
+export {
+  deriveResponseFormat,
+  canUseStrictSchema,
+  estimateSchemaComplexity,
+  DEFAULT_SCHEMA_COMPLEXITY_CEILING,
+} from './application/deriveResponseFormat';
+export type { DeriveResponseFormatOptions, SchemaComplexity } from './application/deriveResponseFormat';

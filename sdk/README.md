@@ -173,6 +173,25 @@ const strict = await client.chat.completions.create({
 const retries = strict._builderforce?.schemaRetries ?? 0;
 ```
 
+### Avoiding `schema_too_complex` — `deriveResponseFormat`
+
+A strict `json_schema` gives the best conformance, but some vendors' constrained-decoding engines reject a schema that's too complex (Gemini's *"too many states for serving"*). When **every** candidate model rejects it, the gateway returns a terminal `422 schema_too_complex` (see [Errors](#errors)) rather than burning the whole cascade and mislabelling it `429`. The cleaner fix is to not send a strict schema a vendor can't honour — `deriveResponseFormat` is the pre-flight guard: it emits strict `json_schema` when the schema is within a complexity ceiling, and falls back to loose `json_object` when it isn't.
+
+```ts
+import { deriveResponseFormat } from '@seanhogg/builderforce-sdk';
+
+// `schema` is a plain JSON-Schema object. Using Zod? Convert first:
+//   import { zodToJsonSchema } from 'zod-to-json-schema';
+//   const schema = zodToJsonSchema(MyZodSchema);
+const response_format = deriveResponseFormat(schema, { name: 'JobExtract' });
+// → { type: 'json_schema', json_schema: { name, schema, strict: true } }  when simple enough
+// → { type: 'json_object' }                                                when too complex
+
+const res = await client.chat.completions.create({ response_format, messages });
+```
+
+Routing is gateway-owned, so omit `vendor` and the conservative cross-vendor ceiling applies (the schema is accepted whichever vendor serves it). Pass `{ vendor: 'googleai' }` to check against that vendor's specific ceiling when you've pinned a `model`, or `{ maxComplexity }` to override. `canUseStrictSchema(schema, opts)` and `estimateSchemaComplexity(schema)` are exported too if you want to branch or log the downgrade yourself.
+
 ## Vision — image + text in one message
 
 ```ts
@@ -339,6 +358,7 @@ try {
 | 409 | `idempotent_replay` | `Idempotency-Key` was used within the last 10 min — treat as no-op |
 | 429 | `plan_token_limit_exceeded` | Tenant hit daily plan budget. **`error.terminal === true`** — don't retry on a different model. |
 | 429 | `claw_token_limit_exceeded` | Per-claw daily cap exceeded (`clk_*` keys only). **`error.terminal === true`** — same caveat. |
+| 422 | `schema_too_complex` | Every candidate model rejected `response_format.json_schema` as too complex for its constrained-decoding engine. **`error.terminal === true`** — a different model won't help; simplify the schema or use `json_object` (see [`deriveResponseFormat`](#avoiding-schema_too_complex--deriveresponseformat)). |
 | 403 | `origin_not_authorized` | Browser request from an origin not in the key's allowlist (or key has no allowlist — server-only) |
 | 403 | `strict_pin_not_allowed` | `modelStrict: true` requested on a free tenant without a superadmin daily-limit override — upgrade or drop `modelStrict`. |
 | 503 | `model_unavailable` | `modelStrict: true` and the requested model is on cooldown / unconfigured. `error.details = { requestedModel, reason }`. |
@@ -404,17 +424,54 @@ For lighter triage you don't need to quote the trace ID at all — the failover 
 
 ```ts
 for (const f of res._builderforce?.failovers ?? []) {
-  console.log(f.vendor, f.model, f.code, f.kind, `${f.durationMs}ms`);
-  // e.g.  openrouter  qwen/qwen3-coder:free  429  rate_limit  1034ms
+  console.log(f.vendor, f.model, f.code, f.kind, f.reason, f.upstreamStatus, `${f.durationMs}ms`);
+  // e.g.  openrouter  qwen/qwen3-coder:free  429  rate_limit  -  -  1034ms
+  // e.g.  googleai    gemini-2.5-flash       422  schema      schema_too_complex  400  210ms
 }
 ```
 
 | Field | Meaning |
 |---|---|
 | `durationMs` | Wall-clock time the gateway spent on that attempt. A `25000`-ish value with `kind: 'timeout'` means the vendor hung. |
-| `kind` | `'rate_limit' \| 'timeout' \| 'auth' \| 'server_error' \| 'client_error' \| 'network' \| 'skipped'`. Roll these up to spot single-vendor saturation vs a broad outage. |
+| `kind` | `'rate_limit' \| 'timeout' \| 'auth' \| 'server_error' \| 'client_error' \| 'schema' \| 'content_filter' \| 'network' \| 'skipped'`. Roll these up to spot single-vendor saturation vs a broad outage. Open union — newer gateways may add classes. |
+| `reason` | Stable machine-readable cause slug when one applies (e.g. `'schema_too_complex'`). **Branch on this, not on the message string.** |
+| `upstreamStatus` | The REAL upstream HTTP status before the gateway normalized it into `code` — e.g. a Gemini schema 400 surfaces as `code: 422` with `upstreamStatus: 400`. |
 
 The **full upstream error text** for each attempt is deliberately *not* included in `failovers` — it can contain raw provider payloads. It's recorded against the trace and is only visible server-side; quote the trace ID to see it.
+
+### `classifyError` — one authoritative classifier
+
+Rather than each consumer hand-rolling a `429/408/401/5xx → kind` switch (which drifts), the SDK ships a first-party classifier keyed off the gateway's **own** failure taxonomy (`error.code` + `error.terminal` + the failover breakdown):
+
+```ts
+import { classifyError } from '@seanhogg/builderforce-sdk';
+
+try {
+  return await client.chat.completions.create({ model: attempt.model, messages });
+} catch (err) {
+  const c = classifyError(err);          // works on ANY caught value (incl. network / AbortError)
+  if (c.terminal) throw err;             // schema_too_complex, token_cap, auth, invalid_request → stop the chain
+  if (c.retryable) {                     // rate_limit, timeout, service_unavailable, network → safe to retry
+    if (c.retryAfter) await sleep(c.retryAfter * 1000);
+    continue;                            // try the next model in your profile
+  }
+  throw err;
+}
+```
+
+`classifyError(err)` returns `{ kind, terminal, retryable, retryAfter?, status?, code?, message }`. `kind` is one of `rate_limit | token_cap | schema_too_complex | invalid_request | auth | model_unavailable | timeout | service_unavailable | content_filter | network | aborted | unknown`. It subsumes the *Don't retry terminal errors* pattern above — `terminal` already folds in token-cap exhaustion, schema rejections, auth, and malformed requests.
+
+## Billing & retry semantics
+
+So you can reconcile your own tenant-key spend against a user-side ledger without ambiguity:
+
+- **You are billed for the *winning* attempt only.** A successful response's `usage` (and the metered `llm_usage_log` row) reflects the tokens of the single model that actually returned the answer — **not** the sum of the cascade. The model is `_builderforce.resolvedModel`.
+- **Failed-but-retried upstream attempts are *not* billed.** Every model the gateway tried and that failed over (each entry in `_builderforce.failovers`) cost you nothing — a 429/timeout/`schema` attempt produces no usage row. `retries` / `failovers.length` are diagnostic, not billable.
+- **No hidden gateway-internal retry tokens.** `json_schema` conformance retries (`_builderforce.schemaRetries`) move to a *different* model on the chain; you're still billed only for the one whose output was accepted, not for each rejected draft.
+- **Reliability-floor / overflow calls are flagged.** When a saturated pool falls through to a model Builderforce funds on its own keys, the row is marked `paid_overflow` (and counts against your daily overflow cap) — it's still one winning attempt, just metered against a different budget line. A call served by a tenant-connected Claude subscription is **not** metered as overflow ($0 to us).
+- **Streaming:** the usage row is written from the final SSE chunk's `usage` once the stream completes; same "winning attempt only" rule.
+
+Reconcile with `client.usage.get({ days, detail: true })` (row-level) — each row carries `useCase`, `metadata`, `idempotencyKey`, the resolved model, and token counts, so a join against your own table is exact.
 
 ## Models and usage
 
