@@ -14,7 +14,11 @@ function stateColor(state: string): React.CSSProperties {
   return { background: 'var(--warning-bg, #3d320f)', color: 'var(--warning-text, #fbbf24)' };
 }
 
-export default function KnowledgeTraining() {
+/**
+ * "My training" — the current user's assigned reading. Surfaced as a section of
+ * the unified Knowledge home (it used to be its own tab).
+ */
+export function MyTrainingSection() {
   const t = useTranslations('knowledge');
   const [mine, setMine] = useState<TrainingItem[]>([]);
   const [loadedMine, setLoadedMine] = useState(false);
@@ -27,59 +31,62 @@ export default function KnowledgeTraining() {
       .finally(() => setLoadedMine(true));
   }, []);
 
+  // Nothing assigned and nothing to show → render nothing (keeps the home tidy).
+  if (loadedMine && mine.length === 0) return null;
+
   return (
-    <div style={{ display: 'grid', gap: 28 }}>
-      <section>
-        <h1 style={{ margin: 0, fontSize: 24 }}>{t('trainingTitle')}</h1>
-        <p style={{ margin: '6px 0 0', color: 'var(--text-muted, #9ca3af)' }}>{t('trainingSubtitle')}</p>
-      </section>
-
-      <section>
-        <h2 style={{ fontSize: 16, margin: '0 0 12px' }}>{t('myTraining')}</h2>
-        {!loadedMine && <div style={{ color: 'var(--text-muted, #9ca3af)' }}>{t('loading')}</div>}
-        {loadedMine && mine.length === 0 && (
-          <div style={{ color: 'var(--text-muted, #9ca3af)' }}>{t('noTraining')}</div>
-        )}
-        <div style={{ display: 'grid', gap: 8 }}>
-          {mine.map((item) => (
-            <Link
-              key={item.id}
-              href={`/knowledge/${item.documentId}`}
-              style={{
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center',
-                gap: 12,
-                padding: '12px 16px',
-                borderRadius: 10,
-                border: '1px solid var(--border, #333)',
-                background: 'var(--surface, #1a1a1a)',
-                textDecoration: 'none',
-                color: 'inherit',
-              }}
-            >
-              <div>
-                <div style={{ fontWeight: 600 }}>{item.title}</div>
-                {item.dueAt && (
-                  <div style={{ fontSize: 12, color: 'var(--text-muted, #9ca3af)' }}>
-                    {t('due')}: {new Date(item.dueAt).toLocaleDateString()}
-                  </div>
-                )}
-              </div>
-              <span style={{ ...badge, ...stateColor(item.state) }}>{t(`state_${item.state}`)}</span>
-            </Link>
-          ))}
-        </div>
-      </section>
-
-      <RoleGate capability="knowledge.assignTraining" variant="block">
-        <ComplianceAudit t={t} />
-      </RoleGate>
-    </div>
+    <section>
+      <h2 style={{ fontSize: 16, margin: '0 0 12px' }}>{t('myTraining')}</h2>
+      {!loadedMine && <div style={{ color: 'var(--text-muted, #9ca3af)' }}>{t('loading')}</div>}
+      <div style={{ display: 'grid', gap: 8 }}>
+        {mine.map((item) => (
+          <Link
+            key={item.id}
+            href={`/knowledge/${item.documentId}`}
+            style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              gap: 12,
+              padding: '12px 16px',
+              borderRadius: 10,
+              border: '1px solid var(--border, #333)',
+              background: 'var(--surface, #1a1a1a)',
+              textDecoration: 'none',
+              color: 'inherit',
+            }}
+          >
+            <div>
+              <div style={{ fontWeight: 600 }}>{item.title}</div>
+              {item.dueAt && (
+                <div style={{ fontSize: 12, color: 'var(--text-muted, #9ca3af)' }}>
+                  {t('due')}: {new Date(item.dueAt).toLocaleDateString()}
+                </div>
+              )}
+            </div>
+            <span style={{ ...badge, ...stateColor(item.state) }}>{t(`state_${item.state}`)}</span>
+          </Link>
+        ))}
+      </div>
+    </section>
   );
 }
 
-function ComplianceAudit({ t }: { t: ReturnType<typeof useTranslations> }) {
+/**
+ * Manager-only tenant-wide compliance audit: who has read & acknowledged the
+ * documents that require it, with overdue tracking. Self-gates via RoleGate so
+ * the consumer just drops it on the page.
+ */
+export function ComplianceAuditSection() {
+  return (
+    <RoleGate capability="knowledge.assignTraining" variant="block">
+      <ComplianceAudit />
+    </RoleGate>
+  );
+}
+
+function ComplianceAudit() {
+  const t = useTranslations('knowledge');
   const [data, setData] = useState<TenantCompliance | null>(null);
   const [loaded, setLoaded] = useState(false);
 
@@ -155,7 +162,7 @@ function ComplianceAudit({ t }: { t: ReturnType<typeof useTranslations> }) {
   );
 }
 
-function Stat({ label, value, danger }: { label: string; value: string; danger?: boolean }) {
+export function Stat({ label, value, danger }: { label: string; value: string; danger?: boolean }) {
   return (
     <div
       style={{

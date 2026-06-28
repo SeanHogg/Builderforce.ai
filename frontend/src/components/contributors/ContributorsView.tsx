@@ -10,7 +10,6 @@ import {
 import { ViewToggle, type ViewMode } from '@/components/ViewToggle';
 import { tableWrapStyle, tableStyle, theadRowStyle, thStyle, trStyle, tdStyle, tdMutedStyle } from '@/components/dataTableStyles';
 import { TenantActivityPanel } from './TenantActivityPanel';
-import { ContributorConsolidation } from './ContributorConsolidation';
 
 const cardStyle: React.CSSProperties = {
   background: 'var(--bg-base)',
@@ -122,7 +121,9 @@ function KindBadge({ kind }: { kind: 'human' | 'agent' }) {
  * Contributors → whole-team activity calendar (humans via git/PR activity, AI
  * agents via BuilderForce telemetry). Self-contained content surface: owns its
  * own data fetch, sync action, and leaderboard; the host page supplies the
- * heading chrome. Rendered standalone and as the Contributors tab of Workforce.
+ * heading chrome. Rendered standalone and as the activity half of the
+ * Performance tab. Profile consolidation now lives on the Workforce directory
+ * (checkbox-select members → merge), so this surface is activity-only.
  */
 export function ContributorsView() {
   const [data, setData] = useState<ActivityCalendar | null>(null);
@@ -131,7 +132,6 @@ export function ContributorsView() {
   const [syncing, setSyncing] = useState(false);
   const [selected, setSelected] = useState<number | null>(null); // null = whole team
   const [viewMode, setViewMode] = useState<ViewMode>('card');
-  const [mode, setMode] = useState<'activity' | 'consolidate'>('activity');
 
   const load = () => {
     setLoading(true);
@@ -171,46 +171,26 @@ export function ContributorsView() {
 
   return (
     <>
-      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12, marginBottom: 20 }}>
-        <div style={{ display: 'flex', gap: 6 }}>
-          {(['activity', 'consolidate'] as const).map((m) => (
-            <button
-              key={m}
-              onClick={() => setMode(m)}
-              style={{
-                fontSize: 13, padding: '6px 14px', borderRadius: 8, cursor: 'pointer',
-                border: '1px solid var(--border-subtle)',
-                background: mode === m ? 'var(--accent, #2563eb)' : 'var(--bg-base)',
-                color: mode === m ? '#fff' : 'var(--text-secondary)',
-              }}
-            >
-              {m === 'activity' ? 'Activity' : 'Consolidate'}
-            </button>
-          ))}
-        </div>
-        {mode === 'activity' && (
-          <button
-            onClick={syncAgents}
-            disabled={syncing}
-            style={{
-              flexShrink: 0,
-              fontSize: 13, padding: '8px 14px', borderRadius: 8, cursor: syncing ? 'default' : 'pointer',
-              background: 'var(--accent, #2563eb)', color: '#fff', border: 'none', opacity: syncing ? 0.6 : 1,
-            }}
-          >
-            {syncing ? 'Syncing…' : 'Sync AI agents'}
-          </button>
-        )}
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'flex-end', gap: 12, marginBottom: 20 }}>
+        <button
+          onClick={syncAgents}
+          disabled={syncing}
+          style={{
+            flexShrink: 0,
+            fontSize: 13, padding: '8px 14px', borderRadius: 8, cursor: syncing ? 'default' : 'pointer',
+            background: 'var(--accent, #2563eb)', color: '#fff', border: 'none', opacity: syncing ? 0.6 : 1,
+          }}
+        >
+          {syncing ? 'Syncing…' : 'Sync AI agents'}
+        </button>
       </div>
 
-      {mode === 'consolidate' && <ContributorConsolidation />}
+      <TenantActivityPanel />
 
-      {mode === 'activity' && <TenantActivityPanel />}
+      {loading && <div style={cardStyle}>Loading activity…</div>}
+      {error && <div style={{ ...cardStyle, borderColor: 'var(--danger, #e5484d)', color: 'var(--danger, #e5484d)' }}>{error}</div>}
 
-      {mode === 'activity' && loading && <div style={cardStyle}>Loading activity…</div>}
-      {mode === 'activity' && error && <div style={{ ...cardStyle, borderColor: 'var(--danger, #e5484d)', color: 'var(--danger, #e5484d)' }}>{error}</div>}
-
-      {mode === 'activity' && data && !loading && (
+      {data && !loading && (
         <>
           {/* Summary stats */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 12, marginBottom: 20 }}>

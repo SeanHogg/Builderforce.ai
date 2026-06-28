@@ -6,11 +6,10 @@ import { useTranslations } from 'next-intl';
 import { useAuth } from '@/lib/AuthContext';
 import { WorkforceAgents } from '@/components/workforce/WorkforceAgents';
 import { TeamsView } from '@/components/teams/TeamsView';
-import { ContributorsView } from '@/components/contributors/ContributorsView';
 import { ChatsView } from '@/components/chats/ChatsView';
 import { HumanRequestsView } from '@/components/humanRequests/HumanRequestsView';
 import { ObservabilityContent } from '@/components/ObservabilityContent';
-import { WorkforceMetricsContent } from '@/components/workforce/WorkforceMetricsContent';
+import { PerformanceView } from '@/components/workforce/PerformanceView';
 import { LlmUsageContent } from '@/components/LlmUsageContent';
 import { ModelRoutingAnalytics } from '@/components/ModelRoutingAnalytics';
 import { QaContent } from '@/components/QaContent';
@@ -20,10 +19,10 @@ import PageContainer from '@/components/PageContainer';
 // Workforce sub-views are declared as query tabs in navGroups; the shell
 // <SectionTabs> bar renders the tab bar. Here we just read `?tab=` to pick the
 // body and the per-tab sub-label, mirroring the /quality surface.
-type WorkforceTab = 'workforce' | 'teams' | 'performance' | 'chats' | 'approvals' | 'contributors' | 'logs' | 'llm' | 'qa';
+type WorkforceTab = 'workforce' | 'teams' | 'performance' | 'chats' | 'approvals' | 'logs' | 'llm' | 'qa';
 
 const TAB_IDS: ReadonlyArray<WorkforceTab> = [
-  'workforce', 'teams', 'performance', 'chats', 'approvals', 'contributors', 'logs', 'llm', 'qa',
+  'workforce', 'teams', 'performance', 'chats', 'approvals', 'logs', 'llm', 'qa',
 ];
 
 function WorkforcePageInner() {
@@ -32,7 +31,9 @@ function WorkforcePageInner() {
   const tenantId = tenant?.id != null ? Number(tenant.id) : undefined;
 
   const requested = useSearchParams().get('tab');
-  const tab: WorkforceTab = TAB_IDS.includes(requested as WorkforceTab) ? (requested as WorkforceTab) : 'workforce';
+  // Contributors merged into Performance; keep old ?tab=contributors links working.
+  const normalized = requested === 'contributors' ? 'performance' : requested;
+  const tab: WorkforceTab = TAB_IDS.includes(normalized as WorkforceTab) ? (normalized as WorkforceTab) : 'workforce';
 
   return (
     <PageContainer>
@@ -46,13 +47,11 @@ function WorkforcePageInner() {
       {tab === 'teams' ? (
         <TeamsView />
       ) : tab === 'performance' ? (
-        <WorkforceMetricsContent />
+        <PerformanceView />
       ) : tab === 'chats' ? (
         <ChatsView />
       ) : tab === 'approvals' ? (
         <HumanRequestsView />
-      ) : tab === 'contributors' ? (
-        <ContributorsView />
       ) : tab === 'logs' ? (
         <>
           {/* Live fleet view — what's running right now (self-hides when idle). */}

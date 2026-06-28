@@ -28,7 +28,7 @@ import {
   type PendingInvitation,
 } from '@/lib/auth';
 import { RoleGate } from '@/components/RoleGate';
-import { ROLE_LABEL, type TenantRole } from '@/lib/rbac';
+import { ROLE_LABEL, usePermission, type TenantRole } from '@/lib/rbac';
 import type { PublishedAgent } from '@/lib/types';
 import { AgentHostSlideOutPanel } from '@/components/AgentHostSlideOutPanel';
 import { FleetMeshContent } from '@/components/FleetMeshContent';
@@ -44,6 +44,8 @@ import { ConfiguredQuickstartPopover } from './ConfiguredQuickstartPopover';
 import { AgentCard } from './AgentCard';
 import { AgentManifestInline } from './AgentManifestSection';
 import { MemberCard, PendingInviteCard, RoleSelect } from './MemberCard';
+import { WorkforceMetricsProvider } from './WorkforceMetricsContext';
+import { MemberConsolidationPanel } from '@/components/contributors/MemberConsolidationPanel';
 import { AgentOwnerActions } from './AgentOwnerActions';
 import { AgentTypePill } from '@/components/AgentTypePill';
 import { StatusBadge } from '@/components/StatusBadge';
@@ -96,6 +98,20 @@ export function WorkforceAgents({ tenantId }: { tenantId?: number }) {
   // Card | List view mode (session-only) — same shared toggle as every other
   // collection page. Defaults to the card grid.
   const [viewMode, setViewMode] = useState<ViewMode>('card');
+
+  // --- Consolidate people (relocated from the Contributors tab) ------------
+  // Managers can checkbox-select human members in list view and merge their
+  // duplicate activity profiles in one pass.
+  const canConsolidate = usePermission('members.manageRoles').allowed;
+  const [selectedMemberIds, setSelectedMemberIds] = useState<Set<string>>(new Set());
+  const [consolidateOpen, setConsolidateOpen] = useState(false);
+  const toggleMemberSelected = useCallback((id: string) => {
+    setSelectedMemberIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  }, []);
 
   // --- Remote agentHosts ---------------------------------------------------
   const [hosts, setHosts] = useState<AgentHost[]>([]);
@@ -358,16 +374,24 @@ export function WorkforceAgents({ tenantId }: { tenantId?: number }) {
     (a) => !ownedIds.has(a.id) && !isAgentOwner(a, tenant?.id),
   );
 
+  const selectedMembers = members.filter((m) => selectedMemberIds.has(m.id));
+
   const loading = loadingHosts || loadingCloud || loadingPeople;
   const isEmpty = hosts.length === 0 && cloudAgents.length === 0 && visiblePurchased.length === 0
     && members.length === 0 && pendingInvites.length === 0;
 
   return (
+   <WorkforceMetricsProvider>
     <section>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
         <h2 style={{ fontSize: 18, fontWeight: 600, color: 'var(--text-strong)', margin: 0 }}>Workforce</h2>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
         {!loading && !isEmpty && <ViewToggle value={viewMode} onChange={setViewMode} />}
+        {canConsolidate && viewMode === 'table' && (
+          <button type="button" onClick={() => setConsolidateOpen(true)} style={inviteBtn}>
+            {selectedMembers.length > 0 ? `Consolidate (${selectedMembers.length})` : 'Consolidate'}
+          </button>
+        )}
         {tenant && tenantToken && (
           <RoleGate capability="members.invite">
             <button type="button" onClick={() => setInviteOpen(true)} style={inviteBtn}>Invite</button>
@@ -514,6 +538,7 @@ export function WorkforceAgents({ tenantId }: { tenantId?: number }) {
           <table style={tableStyle}>
             <thead>
               <tr style={theadRowStyle}>
+                {canConsolidate && <th style={{ ...thStyle, width: 36 }} aria-label="Select to consolidate" />}
                 <th style={thStyle}>Name</th>
                 <th style={thStyle}>Type</th>
                 <th style={thStyle}>Status</th>
@@ -527,6 +552,16 @@ export function WorkforceAgents({ tenantId }: { tenantId?: number }) {
               {/* People — human members */}
               {members.map((m) => (
                 <tr key={`member-${m.id}`} style={trStyle}>
+                  {canConsolidate && (
+                    <td style={tdStyle}>
+                      <input
+                        type="checkbox"
+                        checked={selectedMemberIds.has(m.id)}
+                        onChange={() => toggleMemberSelected(m.id)}
+                        aria-label={`Select ${m.displayName ?? m.email} to consolidate`}
+                      />
+                    </td>
+                  )}
                   <td style={tdStyle}>{m.displayName ?? m.username ?? m.email}</td>
                   <td style={tdStyle}><AgentTypePill kind="human" /></td>
                   <td style={tdMutedStyle}>{m.email}</td>
@@ -546,6 +581,7 @@ export function WorkforceAgents({ tenantId }: { tenantId?: number }) {
               {/* People — pending invites */}
               {pendingInvites.map((inv) => (
                 <tr key={`invite-${inv.id}`} style={trStyle}>
+                  {canConsolidate && <td style={tdStyle} />}
                   <td style={tdStyle}>{inv.email}</td>
                   <td style={tdStyle}><AgentTypePill kind="pending" /></td>
                   <td style={tdMutedStyle}>Invited as {inv.role}</td>
@@ -570,6 +606,7 @@ export function WorkforceAgents({ tenantId }: { tenantId?: number }) {
                     style={{ ...trStyle, cursor: 'pointer' }}
                     onClick={() => setSelectedHost(host)}
                   >
+                    {canConsolidate && <td style={tdStyle} />}
                     <td style={tdStyle}>
                       {host.name}
                       {isDefault && (
@@ -591,6 +628,7 @@ export function WorkforceAgents({ tenantId }: { tenantId?: number }) {
               {/* Cloud agents */}
               {cloudAgents.map((a) => (
                 <tr key={`cloud-${a.id}`} style={trStyle}>
+                  {canConsolidate && <td style={tdStyle} />}
                   <td style={tdStyle}>{a.name}</td>
                   <td style={tdStyle}><AgentTypePill kind="cloud" /></td>
                   <td style={tdMutedStyle}>{a.published ? 'Published' : 'Draft'}</td>
@@ -613,6 +651,7 @@ export function WorkforceAgents({ tenantId }: { tenantId?: number }) {
                   of the owner action set. */}
               {visiblePurchased.map((a) => (
                 <tr key={`purchased-${a.id}`} style={trStyle}>
+                  {canConsolidate && <td style={tdStyle} />}
                   <td style={tdStyle}>{a.name}</td>
                   <td style={tdStyle}><AgentTypePill kind="marketplace" /></td>
                   <td style={tdMutedStyle}>—</td>
@@ -784,7 +823,16 @@ export function WorkforceAgents({ tenantId }: { tenantId?: number }) {
         </div>
       )}
 
+      {/* Consolidate selected people — relocated home of contributor merge */}
+      <MemberConsolidationPanel
+        open={consolidateOpen}
+        onClose={() => setConsolidateOpen(false)}
+        members={selectedMembers}
+        onMerged={() => { setSelectedMemberIds(new Set()); void loadPeople(); }}
+      />
+
       <UpgradeModal error={planError} onClose={() => setPlanError(null)} />
     </section>
+   </WorkforceMetricsProvider>
   );
 }

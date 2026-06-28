@@ -5,6 +5,7 @@ import { useTranslations } from 'next-intl';
 import { membersApi, type DisciplineRollup, type DoraRollup, type MemberScorecard } from '@/lib/builderforceApi';
 import { MemberProfileEditor } from './MemberProfileEditor';
 import { EngagementSection } from './EngagementSection';
+import { fmtHrs, fmtScore, scoreColor, MEMBER_KIND_LABEL } from './workforceFormat';
 
 const DISCIPLINE_OPTIONS = ['engineering', 'product', 'design', 'qa', 'devops', 'data', 'other'] as const;
 
@@ -19,25 +20,7 @@ const cardStyle: React.CSSProperties = {
   background: 'var(--bg-base)', border: '1px solid var(--border-subtle)', borderRadius: 12, padding: 16,
 };
 
-function fmtHrs(n: number | null): string {
-  if (n == null) return '—';
-  if (n < 1) return `${Math.round(n * 60)}m`;
-  if (n < 48) return `${n.toFixed(1)}h`;
-  return `${(n / 24).toFixed(1)}d`;
-}
-function fmtScore(n: number | null): string {
-  return n == null ? '—' : String(Math.round(n));
-}
-function scoreColor(n: number | null): string {
-  if (n == null) return 'var(--muted)';
-  if (n >= 75) return 'var(--success, #30a46c)';
-  if (n >= 50) return 'var(--warning, #f5a623)';
-  return 'var(--danger, #e5484d)';
-}
-
-const KIND_LABEL: Record<MemberScorecard['memberKind'], string> = {
-  human: 'Human', cloud_agent: 'Cloud agent', host_agent: 'Host agent',
-};
+const KIND_LABEL = MEMBER_KIND_LABEL;
 
 function DoraTile({ label, value, hint }: { label: string; value: string; hint?: string }) {
   return (

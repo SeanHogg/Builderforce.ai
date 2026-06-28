@@ -85,7 +85,6 @@ export const NAV_GROUPS: NavGroup[] = [
       { id: 'performance', labelKey: 'tab.performance', icon: '📊' },
       { id: 'chats', labelKey: 'tab.chats', icon: '💬' },
       { id: 'approvals', labelKey: 'tab.approvals', icon: '✅' },
-      { id: 'contributors', labelKey: 'tab.contributors', icon: '🌱' },
       { id: 'logs', labelKey: 'tab.logs', icon: '📜' },
       { id: 'llm', labelKey: 'tab.llm', icon: '🧠' },
       { id: 'qa', labelKey: 'tab.qa', icon: '🧪' },
@@ -132,23 +131,17 @@ export const NAV_GROUPS: NavGroup[] = [
       { id: 'collectors', labelKey: 'tab.collectors', icon: '🔌' },
     ],
   },
+  // Knowledge is now ONE destination. SOPs / Processes / Documents / Training are
+  // no longer separate tabs — they are a single template-driven library with the
+  // training + compliance lens surfaced on the home. The former "Library" group is
+  // folded in here: its reusable assets (Skills / Personas / Prompts) become tabs of
+  // Knowledge, and "Content" is replaced by knowledge documents themselves.
   {
     id: 'knowledge', labelKey: 'group.knowledge', icon: '📖', href: '/knowledge',
-    match: ['/knowledge'],
-    tabKind: 'query', basePath: '/knowledge',
-    tabs: [
-      { id: '', labelKey: 'tab.sops', icon: '📋' },
-      { id: 'processes', labelKey: 'tab.processes', icon: '🔁' },
-      { id: 'docs', labelKey: 'tab.docs', icon: '📄' },
-      { id: 'training', labelKey: 'tab.training', icon: '🎓' },
-    ],
-  },
-  {
-    id: 'library', labelKey: 'group.library', icon: '🧩', href: '/content-manager',
-    match: ['/content-manager', '/skills', '/personas', '/prompts'],
+    match: ['/knowledge', '/content-manager', '/skills', '/personas', '/prompts'],
     tabKind: 'route',
     tabs: [
-      { id: '/content-manager', labelKey: 'tab.content', icon: '✎' },
+      { id: '/knowledge', labelKey: 'tab.knowledge', icon: '📖' },
       { id: '/skills', labelKey: 'tab.skills', icon: '⭐' },
       { id: '/personas', labelKey: 'tab.personas', icon: '👤' },
       { id: '/prompts', labelKey: 'tab.prompts', icon: '📚' },
