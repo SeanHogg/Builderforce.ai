@@ -55,7 +55,16 @@
       "delivery": "Entrega",
       "surveys": "Encuestas",
       "dashboards": "Paneles",
-      "devfinops": "DevFinOps"
+      "devfinops": "DevFinOps",
+      "workforce": "Plantilla",
+      "teams": "Equipos",
+      "performance": "Rendimiento",
+      "chats": "Chats",
+      "approvals": "Aprobaciones y P&R",
+      "contributors": "Colaboradores",
+      "logs": "Registros",
+      "llm": "Uso de LLM",
+      "qa": "QA agéntica"
     }
   },
   "alerts": {
@@ -1215,6 +1224,20 @@
     }
   },
   "workforce": {
+    "page": {
+      "title": "Plantilla",
+      "sub": {
+        "workforce": "Tus personas y agentes en un solo lugar: invita a compañeros, crea agentes en la nube y registra agentes remotos. Publica agentes en el marketplace para generar ingresos.",
+        "teams": "Agrupa tu plantilla —agentes y personas— en equipos, y asigna un equipo a los proyectos en los que trabaja.",
+        "performance": "Cuadros de mando de eficacia e implicación para cada miembro —persona y agente— además de métricas DORA. Haz clic en un miembro para definir su perfil de capacidad y disponibilidad (lo que usa el planificador de sprints para asignar trabajo).",
+        "chats": "Explora las sesiones de chat de cada agentHost de este espacio de trabajo.",
+        "approvals": "Resuelve aprobaciones, preguntas y comentarios que tus agentes escalan a una persona: aprueba acciones o responde lo que necesitan para continuar.",
+        "contributors": "Mira quién —persona y agente— está contribuyendo en tu espacio de trabajo, y cómo.",
+        "logs": "Registros de agentes, líneas de tiempo de ejecución y diagnósticos de tu espacio de trabajo.",
+        "llm": "Métricas de uso de LLM, salud de los modelos y gasto de tu espacio de trabajo.",
+        "qa": "Automatización de QA por proyecto: flujos, pruebas generadas y ejecuciones de CI."
+      }
+    },
     "discipline": "Disciplina",
     "allDisciplines": "Todas las disciplinas",
     "unassigned": "Sin asignar",

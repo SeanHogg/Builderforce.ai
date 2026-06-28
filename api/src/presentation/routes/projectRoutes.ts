@@ -1,5 +1,5 @@
 import { Hono, type Context } from 'hono';
-import { and, count, eq, inArray, max, min } from 'drizzle-orm';
+import { and, count, eq, inArray, max, min, sql } from 'drizzle-orm';
 import { ProjectService } from '../../application/project/ProjectService';
 import { ensureProjectTemplate } from '../../application/project/projectTemplate';
 import type { HonoEnv } from '../../env';
@@ -260,10 +260,21 @@ export function createProjectRoutes(projectService: ProjectService, db: Db): Hon
     }
 
     const projectIds = plainProjects.map((project) => project.id);
+    // One grouped aggregate over the project's tasks → total + the status/timeliness
+    // breakdown that drives the card's health speedometer and % done ring. Postgres
+    // FILTER keeps this a SINGLE query (no N+1, no extra round-trips vs. the prior
+    // plain count). `done` spans the canonical + common imported-board "completed"
+    // statuses; `overdue` = past-due work not yet resolved.
+    const DONE_SQL = sql`${tasks.status} in ('done', 'completed', 'closed', 'merged', 'resolved')`;
+    const TERMINAL_SQL = sql`${tasks.status} in ('done', 'completed', 'closed', 'merged', 'resolved', 'cancelled')`;
     const taskCounts = await db
       .select({
         projectId: tasks.projectId,
         taskCount: count(),
+        doneCount: sql<number>`count(*) filter (where ${DONE_SQL})`,
+        blockedCount: sql<number>`count(*) filter (where ${tasks.status} = 'blocked')`,
+        cancelledCount: sql<number>`count(*) filter (where ${tasks.status} = 'cancelled')`,
+        overdueCount: sql<number>`count(*) filter (where ${tasks.dueDate} < now() and not (${TERMINAL_SQL}))`,
       })
       .from(tasks)
       .where(
@@ -274,8 +285,15 @@ export function createProjectRoutes(projectService: ProjectService, db: Db): Hon
       )
       .groupBy(tasks.projectId);
 
-    const taskCountByProject = new Map<number, number>(
-      taskCounts.map((row) => [row.projectId, Number(row.taskCount)]),
+    interface TaskBreakdown { total: number; done: number; blocked: number; cancelled: number; overdue: number }
+    const taskBreakdownByProject = new Map<number, TaskBreakdown>(
+      taskCounts.map((row) => [row.projectId, {
+        total: Number(row.taskCount),
+        done: Number(row.doneCount),
+        blocked: Number(row.blockedCount),
+        cancelled: Number(row.cancelledCount),
+        overdue: Number(row.overdueCount),
+      }]),
     );
 
     // Project timelines are derived from their tasks: a project has no date column
@@ -348,15 +366,24 @@ export function createProjectRoutes(projectService: ProjectService, db: Db): Hon
     );
 
     return c.json({
-      projects: plainProjects.map((project) => ({
+      projects: plainProjects.map((project) => {
+        const b = taskBreakdownByProject.get(project.id);
+        return {
         ...project,
-        taskCount: taskCountByProject.get(project.id) ?? 0,
+        taskCount: b?.total ?? 0,
+        // Status/timeliness breakdown for the health speedometer + % done ring
+        // (frontend derives the score via the shared computeProjectHealth helper).
+        completedTaskCount: b?.done ?? 0,
+        openTaskCount: b ? Math.max(0, b.total - b.done - b.cancelled) : 0,
+        blockedTaskCount: b?.blocked ?? 0,
+        overdueTaskCount: b?.overdue ?? 0,
         workflowCount: workflowCountByProject.get(project.id) ?? 0,
         hasArchitecturePrd: hasArchByProject.has(project.id),
         assignedAgentHost: assignedAgentHostByProject.get(project.id) ?? null,
         startDate: dateRangeByProject.get(project.id)?.startDate ?? null,
         dueDate: dateRangeByProject.get(project.id)?.dueDate ?? null,
-      })),
+        };
+      }),
     });
   });
 

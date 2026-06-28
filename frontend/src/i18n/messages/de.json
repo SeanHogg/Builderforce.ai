@@ -55,7 +55,16 @@
       "delivery": "Lieferung",
       "surveys": "Umfragen",
       "dashboards": "Dashboards",
-      "devfinops": "DevFinOps"
+      "devfinops": "DevFinOps",
+      "workforce": "Belegschaft",
+      "teams": "Teams",
+      "performance": "Leistung",
+      "chats": "Chats",
+      "approvals": "Freigaben & Q&A",
+      "contributors": "Mitwirkende",
+      "logs": "Protokolle",
+      "llm": "LLM-Nutzung",
+      "qa": "Agentische QA"
     }
   },
   "alerts": {
@@ -1215,6 +1224,20 @@
     }
   },
   "workforce": {
+    "page": {
+      "title": "Belegschaft",
+      "sub": {
+        "workforce": "Deine Menschen und Agenten an einem Ort — lade Teamkolleg:innen ein, erstelle Cloud-Agenten und registriere entfernte Agenten. Veröffentliche Agenten im Marketplace, um Einnahmen zu erzielen.",
+        "teams": "Fasse deine Belegschaft — Agenten und Menschen — zu Teams zusammen und ordne ein Team den Projekten zu, an denen es arbeitet.",
+        "performance": "Scorecards zu Wirksamkeit und Engagement für jedes Mitglied — Mensch und Agent — plus DORA-Metriken. Klicke auf ein Mitglied, um sein Kompetenz- und Verfügbarkeitsprofil festzulegen (das der Sprint-Planer zur Arbeitszuweisung nutzt).",
+        "chats": "Durchsuche Chat-Sitzungen über jeden agentHost in diesem Arbeitsbereich.",
+        "approvals": "Bearbeite Freigaben, Fragen und Rückmeldungen, die deine Agenten an einen Menschen eskalieren — gib Aktionen frei oder beantworte, was sie zum Fortfahren benötigen.",
+        "contributors": "Sieh, wer — Mensch und Agent — in deinem Arbeitsbereich beiträgt und wie.",
+        "logs": "Agenten-Protokolle, Ausführungs-Zeitleisten und Diagnosen in deinem Arbeitsbereich.",
+        "llm": "LLM-Nutzungsmetriken, Modellzustand und Kosten in deinem Arbeitsbereich.",
+        "qa": "Projektbezogene QA-Automatisierung — Abläufe, generierte Tests und CI-Läufe."
+      }
+    },
     "discipline": "Disziplin",
     "allDisciplines": "Alle Disziplinen",
     "unassigned": "Nicht zugewiesen",
