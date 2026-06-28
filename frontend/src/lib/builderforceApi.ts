@@ -2832,6 +2832,20 @@ export interface PmoRollup {
   blocks: InitiativeRef[];
 }
 
+/** Value stream — the initiative dependency graph + per-node delivery progress. */
+export interface ValueStreamInitiative {
+  id: string; name: string; status: string;
+  onCriticalPath: boolean; blockedBy: string[];
+  totalTasks: number; completedTasks: number; completionPct: number;
+}
+export interface ValueStreamEdge { id: string; fromInitiativeId: string; toInitiativeId: string; onCriticalPath: boolean }
+export interface ValueStream {
+  nodes: ValueStreamInitiative[];
+  edges: ValueStreamEdge[];
+  criticalPath: string[];
+  cycleDetected: boolean;
+}
+
 const portfolioTracker = segmentTrackerClient('/api/pmo/portfolios');
 const initiativeTracker = segmentTrackerClient('/api/pmo/initiatives');
 const objectiveTracker = segmentTrackerClient('/api/pmo/objectives');
@@ -2853,6 +2867,9 @@ export const pmoApi = {
   /** Remove an initiative dependency edge by id. */
   removeDependency: (id: string): Promise<{ deleted: string }> =>
     request(`/api/pmo/dependencies/${id}`, { method: 'DELETE' }),
+  /** The value stream: initiative dependency graph + per-node delivery progress +
+   *  critical path (the cross-artifact "where is value stuck" view). */
+  valueStream: (): Promise<ValueStream> => request<ValueStream>('/api/pmo/value-stream'),
 
   /** The unified planning spine: every level dated + cost-rolled, with effective
    *  CAPEX/OPEX, anomalies and agent suggestions. Powers the Gantt + reconcile.
@@ -4079,6 +4096,7 @@ export interface AllocationGoal extends TrackerRow {
 export type DeliverableScope = 'initiative' | 'project' | 'release' | 'sprint';
 export type DeliveryStatus = 'on_track' | 'at_risk' | 'late' | 'no_signal' | 'done';
 export interface BurnPoint { date: string; scope: number; completed: number; remaining: number }
+export interface ScopeEffortPoint { date: string; definedPoints: number; completedPoints: number; fte: number }
 export interface DeliveryInsights {
   scope: DeliverableScope; scopeId: string; name: string;
   totalTasks: number; completedTasks: number; openTasks: number; completionPct: number;
@@ -4089,6 +4107,11 @@ export interface DeliveryInsights {
   series: BurnPoint[];
   /** Forward completion ramp from today → forecast date (drawn dashed). */
   projection: BurnPoint[];
+  // Scope & Effort (points-denominated value + development FTE line).
+  hasPoints: boolean; hasEffort: boolean;
+  totalPoints: number; donePoints: number; cancelledPoints: number;
+  currentFte: number;
+  scopeEffort: ScopeEffortPoint[];
 }
 
 /** Scenario planner — what-if completion modelling for a deliverable. */

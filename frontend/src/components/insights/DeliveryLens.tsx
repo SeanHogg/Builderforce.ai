@@ -7,8 +7,9 @@ import {
   type DeliveryInsights, type DeliverableScope, type DeliveryStatus, type BurnPoint,
   type Initiative, type ProductRelease, type VelocityInsights,
   type DeliverableUpdate, type DeliverableUpdateStatus,
-  type ScenarioResponse, type LifecycleInsights, type LifecyclePhase,
+  type ScenarioResponse, type LifecycleInsights, type LifecyclePhase, type ScopeEffortPoint,
 } from '@/lib/builderforceApi';
+import { ValueStreamGraph } from './ValueStreamGraph';
 import { fetchProjects } from '@/lib/api';
 import type { Project } from '@/lib/types';
 import { usePmData } from '@/lib/pm/usePmData';
@@ -105,6 +106,58 @@ function BurnChart({ series, projection, targetDate }: { series: BurnPoint[]; pr
       <text x={PAD} y={PAD - 12} fontSize={11} fill="var(--text-muted)">{maxScope}</text>
       <text x={W - PAD} y={H - 6} fontSize={10} fill="var(--text-muted)" textAnchor="end">{new Date(t1).toISOString().slice(0, 10)}</text>
       <text x={PAD} y={H - 6} fontSize={10} fill="var(--text-muted)">{series[0]!.date}</text>
+    </svg>
+  );
+}
+
+const POINTS_DONE_COLOR = '#22c55e';
+const POINTS_DEFINED_COLOR = 'var(--text-muted)';
+
+/**
+ * Scope & Effort chart — value delivered in STORY POINTS over time (completed
+ * filled, defined-but-open above it) with the development FTE line overlaid on a
+ * secondary axis. The points answer "how much value", the FTE line "how much
+ * capacity drove it" — the Jellyfish "Scope and Effort" view. Pure SVG.
+ */
+function ScopeEffortChart({ points, hasEffort }: { points: ScopeEffortPoint[]; hasEffort: boolean }) {
+  const t = useTranslations('insights');
+  const W = 640, H = 240, PAD = 34;
+  if (points.length < 2) return <span style={{ fontSize: '0.84rem', color: 'var(--text-muted)' }}>{t('deliv.noSeries')}</span>;
+
+  const maxPts = Math.max(1, ...points.map((p) => p.definedPoints));
+  const maxFte = Math.max(0.1, ...points.map((p) => p.fte));
+  const plotW = W - 2 * PAD, plotH = H - 2 * PAD;
+  const bandW = plotW / points.length;
+  const barW = Math.max(2, bandW * 0.7);
+  const yPts = (v: number) => H - PAD - (v / maxPts) * plotH;
+  const xAt = (i: number) => PAD + i * bandW + (bandW - barW) / 2;
+  const fteX = (i: number) => PAD + i * bandW + bandW / 2;
+  const fteY = (v: number) => H - PAD - (v / maxFte) * plotH;
+  const fteLine = points.map((p, i) => `${i === 0 ? 'M' : 'L'}${fteX(i).toFixed(1)},${fteY(p.fte).toFixed(1)}`).join(' ');
+
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} width="100%" role="img" aria-label={t('deliv.scopeEffort.aria')} style={{ maxWidth: '100%' }}>
+      <line x1={PAD} y1={H - PAD} x2={W - PAD} y2={H - PAD} stroke="var(--border-subtle)" />
+      <line x1={PAD} y1={PAD} x2={PAD} y2={H - PAD} stroke="var(--border-subtle)" />
+      {points.map((p, i) => {
+        const doneTop = yPts(p.completedPoints);
+        const defTop = yPts(p.definedPoints);
+        const base = yPts(0);
+        return (
+          <g key={p.date}>
+            {/* defined-but-open (gray) from completed up to defined */}
+            <rect x={xAt(i)} y={defTop} width={barW} height={Math.max(0, doneTop - defTop)} fill="var(--text-muted)" opacity={0.25} rx={1} />
+            {/* completed (green) from baseline up to completed */}
+            <rect x={xAt(i)} y={doneTop} width={barW} height={Math.max(0, base - doneTop)} fill={POINTS_DONE_COLOR} rx={1} />
+          </g>
+        );
+      })}
+      {hasEffort && <path d={fteLine} fill="none" stroke={PROJECTION_COLOR} strokeWidth={2} />}
+      {/* axes labels */}
+      <text x={PAD} y={PAD - 14} fontSize={11} fill="var(--text-muted)">{maxPts} {t('deliv.scopeEffort.ptsAxis')}</text>
+      {hasEffort && <text x={W - PAD} y={PAD - 14} fontSize={11} fill={PROJECTION_COLOR} textAnchor="end">{maxFte.toFixed(1)} {t('deliv.scopeEffort.fteAxis')}</text>}
+      <text x={PAD} y={H - 6} fontSize={10} fill="var(--text-muted)">{points[0]!.date}</text>
+      <text x={W - PAD} y={H - 6} fontSize={10} fill="var(--text-muted)" textAnchor="end">{points[points.length - 1]!.date}</text>
     </svg>
   );
 }

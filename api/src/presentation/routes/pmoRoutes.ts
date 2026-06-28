@@ -43,6 +43,7 @@ import {
   wouldCreateCycle,
   type PmoScopeKind,
 } from '../../application/pmo/portfolioRollup';
+import { computeValueStream } from '../../application/pmo/valueStream';
 import {
   classifyCostClass,
   loadPlanningSpine,
@@ -97,6 +98,18 @@ export function createPmoRoutes(db: Db): Hono<HonoEnv> {
     );
     if (!rollup) return c.json({ error: 'not found' }, 404);
     return c.json(rollup);
+  });
+
+  // ── Value stream: the initiative dependency graph + per-node delivery progress
+  //    + critical path (the cross-artifact "where is value stuck" view). Reuses the
+  //    rollup's dependency math; version-keyed + short TTL like the rollup. ───────
+  router.get('/value-stream', async (c) => {
+    const { tenantId, segmentId } = scope(c);
+    const env = c.env as Env;
+    const ver = await getCacheVersion(env, pmoVersionKey(tenantId));
+    const key = `pmo:value-stream:t:${tenantId}:s:${segmentId}:v:${ver}`;
+    const vs = await getOrSetCached(env, key, () => computeValueStream(db, tenantId, segmentId), { kvTtlSeconds: 60, l1TtlMs: 15_000 });
+    return c.json(vs);
   });
 
   // ── Link / unlink a project to an initiative (the rollup join) ──────────────

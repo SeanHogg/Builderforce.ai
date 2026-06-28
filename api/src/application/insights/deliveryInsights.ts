@@ -16,7 +16,7 @@
  * is unit-testable without a DB; the route caches it.
  */
 
-import { and, eq, or } from 'drizzle-orm';
+import { and, eq, inArray, or } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import {
   initiatives,
@@ -24,12 +24,18 @@ import {
   projects,
   sprints,
   tasks,
+  timeEntries,
 } from '../../infrastructure/database/schema';
 
 const DAY_MS = 86_400_000;
 const MAX_TASKS = 5_000;
+/** Cap on logged time-entry rows pulled for the effort (FTE) line. */
+const MAX_EFFORT_ROWS = 10_000;
 /** Cap on series points — beyond this the range is bucketed to weekly. */
 const MAX_POINTS = 60;
+/** Working-time model for the FTE line: 5/7 of calendar days, 8h each. */
+const BUSINESS_DAY_FRACTION = 5 / 7;
+const HOURS_PER_FTE_DAY = 8;
 
 export type DeliverableScope = 'initiative' | 'project' | 'release' | 'sprint';
 
@@ -39,13 +45,29 @@ export interface DeliveryTaskRow {
   /** Owner of the task (0108) — distinct owners of recently-completed work give the
    *  active-contributor count that seeds the scenario planner's "developers" input. */
   assignedUserId?: string | null;
+  /** Estimate (0246) — drives the points-denominated Scope & Effort chart. */
+  storyPoints?: number | null;
+  /** Board status — used to split cancelled work out of the points totals. */
+  status?: string;
 }
+
+/** One day of logged effort (time_entries) for the scoped tasks — the FTE line input. */
+export interface EffortEntry { date: string; minutes: number }
 
 export interface BurnPoint {
   date: string;       // 'YYYY-MM-DD'
   scope: number;      // cumulative tasks in scope by this date (burnup top line)
   completed: number;  // cumulative completed by this date (burnup fill)
   remaining: number;  // scope − completed (burndown line)
+}
+
+/** One bucket of the Scope & Effort chart: cumulative story points (defined /
+ *  completed) plus the average development FTE working that bucket. */
+export interface ScopeEffortPoint {
+  date: string;
+  definedPoints: number;
+  completedPoints: number;
+  fte: number;
 }
 
 export type DeliveryStatus = 'on_track' | 'at_risk' | 'late' | 'no_signal' | 'done';
@@ -79,6 +101,17 @@ export interface DeliveryInsights {
    *  current throughput (the "when will value land" ramp the chart draws dashed).
    *  Empty when there is no forecast (done, or no throughput signal). */
   projection: BurnPoint[];
+  // ── Scope & Effort (points-denominated value + development FTE) ──────────────
+  /** Any task in scope carries a story-point estimate (else fall back to counts). */
+  hasPoints: boolean;
+  /** Any logged time exists for the scoped tasks (else the FTE line is hidden). */
+  hasEffort: boolean;
+  totalPoints: number;       // defined story points (excl. cancelled)
+  donePoints: number;        // completed story points (excl. cancelled)
+  cancelledPoints: number;   // story points on cancelled work
+  /** Most-recent bucket's development FTE. */
+  currentFte: number;
+  scopeEffort: ScopeEffortPoint[];
 }
 
 function iso(d: Date): string { return d.toISOString().slice(0, 10); }
@@ -103,7 +136,12 @@ export interface SummarizeOpts {
   targetDate: Date | null;
   /** Throughput window in days (recent completions used to forecast). */
   throughputWindowDays?: number;
+  /** Logged effort for the scoped tasks → the development FTE line. */
+  effortEntries?: EffortEntry[];
 }
+
+const isCancelled = (r: DeliveryTaskRow): boolean => !!r.status && /cancel/i.test(r.status);
+const ptsOf = (r: DeliveryTaskRow): number => r.storyPoints ?? 0;
 
 /** Pure: tasks + deliverable metadata → the full delivery rollup. */
 export function summarizeDelivery(rows: DeliveryTaskRow[], opts: SummarizeOpts): DeliveryInsights {
@@ -183,6 +221,36 @@ export function summarizeDelivery(rows: DeliveryTaskRow[], opts: SummarizeOpts):
   }
   const addedScopePct = baselineScope > 0 ? (addedScope / baselineScope) * 100 : 0;
 
+  // ── Scope & Effort (points + development FTE) over the same buckets as `series`.
+  const activeRows = rows.filter((r) => !isCancelled(r));
+  const totalPoints = activeRows.reduce((a, r) => a + ptsOf(r), 0);
+  const donePoints = activeRows.filter((r) => r.completedAt != null).reduce((a, r) => a + ptsOf(r), 0);
+  const cancelledPoints = rows.filter(isCancelled).reduce((a, r) => a + ptsOf(r), 0);
+  const hasPoints = rows.some((r) => r.storyPoints != null);
+
+  const minutesByDay = new Map<number, number>();
+  for (const e of opts.effortEntries ?? []) {
+    const di = Math.floor(new Date(e.date).getTime() / DAY_MS);
+    if (Number.isFinite(di)) minutesByDay.set(di, (minutesByDay.get(di) ?? 0) + e.minutes);
+  }
+  const hasEffort = (opts.effortEntries?.length ?? 0) > 0;
+  const availableHoursPerFte = stepDays * BUSINESS_DAY_FRACTION * HOURS_PER_FTE_DAY;
+
+  const scopeEffort: ScopeEffortPoint[] = [];
+  for (let day = startDay; day <= endDay; day += stepDays) {
+    const cutoff = (day + 1) * DAY_MS - 1;
+    let defined = 0, comp = 0;
+    for (const r of activeRows) {
+      if (r.createdAt.getTime() <= cutoff) defined += ptsOf(r);
+      if (r.completedAt && r.completedAt.getTime() <= cutoff) comp += ptsOf(r);
+    }
+    let minutes = 0;
+    for (let d = day; d < day + stepDays; d++) minutes += minutesByDay.get(d) ?? 0;
+    const fte = availableHoursPerFte > 0 ? (minutes / 60) / availableHoursPerFte : 0;
+    scopeEffort.push({ date: iso(new Date(day * DAY_MS)), definedPoints: defined, completedPoints: comp, fte: Math.round(fte * 100) / 100 });
+  }
+  const currentFte = scopeEffort.length ? scopeEffort[scopeEffort.length - 1]!.fte : 0;
+
   return {
     scope, scopeId, name,
     totalTasks: total, completedTasks: completed, openTasks: open,
@@ -196,6 +264,7 @@ export function summarizeDelivery(rows: DeliveryTaskRow[], opts: SummarizeOpts):
     baselineScope, addedScope, addedScopePct,
     series,
     projection,
+    hasPoints, hasEffort, totalPoints, donePoints, cancelledPoints, currentFte, scopeEffort,
   };
 }
 
@@ -235,12 +304,25 @@ export async function computeDeliveryInsights(
     taskFilter = eq(tasks.sprintId, scopeId);
   }
 
-  const rows = (await db
-    .select({ createdAt: tasks.createdAt, completedAt: tasks.completedAt, assignedUserId: tasks.assignedUserId })
+  const taskRows = await db
+    .select({ id: tasks.id, createdAt: tasks.createdAt, completedAt: tasks.completedAt, assignedUserId: tasks.assignedUserId, storyPoints: tasks.storyPoints, status: tasks.status })
     .from(tasks)
     .innerJoin(projects, eq(projects.id, tasks.projectId))
     .where(and(eq(projects.tenantId, tenantId), eq(tasks.archived, false), taskFilter))
-    .limit(MAX_TASKS)) as DeliveryTaskRow[];
+    .limit(MAX_TASKS);
+  const rows = taskRows as DeliveryTaskRow[];
 
-  return summarizeDelivery(rows, { scope, scopeId, name, now, baselineDate, targetDate });
+  // Logged effort for these tasks → the development FTE line (one bounded query).
+  const taskIds = taskRows.map((r) => r.id);
+  let effortEntries: EffortEntry[] = [];
+  if (taskIds.length) {
+    const er = await db
+      .select({ date: timeEntries.entryDate, minutes: timeEntries.minutes })
+      .from(timeEntries)
+      .where(and(eq(timeEntries.tenantId, tenantId), inArray(timeEntries.taskId, taskIds)))
+      .limit(MAX_EFFORT_ROWS);
+    effortEntries = er.map((r) => ({ date: r.date, minutes: r.minutes }));
+  }
+
+  return summarizeDelivery(rows, { scope, scopeId, name, now, baselineDate, targetDate, effortEntries });
 }

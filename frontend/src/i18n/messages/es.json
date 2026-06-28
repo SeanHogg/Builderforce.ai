@@ -321,7 +321,14 @@
     "percentUsed": "{percent}% usado",
     "usedAmount": "{amount} usado",
     "seePlans": "Ver planes",
-    "manage": "Gestionar"
+    "manage": "Gestionar",
+    "trendAria": "Tendencia de uso diario"
+  },
+  "aiUsageCard": {
+    "title": "Uso de IA este mes",
+    "tokensThisMonth": "tokens este mes",
+    "percentOfPlan": "{percent}% del plan",
+    "trendAria": "Tendencia de uso diario de tokens de IA"
   },
   "settings": {
     "title": "Configuración",
@@ -531,6 +538,7 @@
       "subtitle": "Gasto en IA, presupuesto vs. real, previsión de fin de mes y coste por PR fusionado sobre el libro mayor atribuido.",
       "period": "Mes",
       "spend": "Gasto",
+      "spendOverTime": "Gasto a lo largo del tiempo",
       "forecast": "Previsión",
       "forecastSub": "fin de mes previsto",
       "costPerPr": "Coste / PR fusionado",

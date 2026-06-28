@@ -321,7 +321,14 @@
     "percentUsed": "{percent}% used",
     "usedAmount": "{amount} used",
     "seePlans": "See plans",
-    "manage": "Manage"
+    "manage": "Manage",
+    "trendAria": "Daily usage trend"
+  },
+  "aiUsageCard": {
+    "title": "AI usage this month",
+    "tokensThisMonth": "tokens this month",
+    "percentOfPlan": "{percent}% of plan",
+    "trendAria": "Daily AI token usage trend"
   },
   "settings": {
     "title": "Settings",
@@ -531,6 +538,7 @@
       "subtitle": "AI spend, budget-vs-actual, month-end forecast and cost per merged PR over the attributed ledger.",
       "period": "Month",
       "spend": "Spend",
+      "spendOverTime": "Spend over time",
       "forecast": "Forecast",
       "forecastSub": "projected month-end",
       "costPerPr": "Cost / merged PR",

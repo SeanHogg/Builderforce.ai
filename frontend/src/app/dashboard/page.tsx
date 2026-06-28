@@ -13,6 +13,7 @@ import PageContainer from '@/components/PageContainer';
 import { ProjectsContent } from '@/components/ProjectsContent';
 import { TabCountBadge } from '@/components/TabCountBadge';
 import { WorkforceAgents } from '@/components/workforce/WorkforceAgents';
+import { AiUsageCard } from '@/components/AiUsageCard';
 import { OnboardingStepper } from '@/components/OnboardingStepper';
 import { agentHosts, tasksApi, approvalsApi, type AgentHost } from '@/lib/builderforceApi';
 
@@ -290,6 +291,9 @@ export default function DashboardPage() {
             ))}
           </div>
         )}
+
+        {/* AI usage (month-to-date) — self-gating, all-members consumption card. */}
+        {!loading && <AiUsageCard />}
 
         {/* Tabs — Projects / Workforce */}
         <div

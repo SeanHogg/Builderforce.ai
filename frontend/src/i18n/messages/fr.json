@@ -321,7 +321,14 @@
     "percentUsed": "{percent}% utilisé",
     "usedAmount": "{amount} utilisé",
     "seePlans": "Voir les forfaits",
-    "manage": "Gérer"
+    "manage": "Gérer",
+    "trendAria": "Tendance d’usage quotidien"
+  },
+  "aiUsageCard": {
+    "title": "Usage de l’IA ce mois-ci",
+    "tokensThisMonth": "tokens ce mois-ci",
+    "percentOfPlan": "{percent} % du forfait",
+    "trendAria": "Tendance d’usage quotidien des tokens d’IA"
   },
   "settings": {
     "title": "Paramètres",
@@ -531,6 +538,7 @@
       "subtitle": "Dépenses IA, budget vs réel, prévision de fin de mois et coût par PR fusionnée sur le grand livre attribué.",
       "period": "Mois",
       "spend": "Dépenses",
+      "spendOverTime": "Dépenses au fil du temps",
       "forecast": "Prévision",
       "forecastSub": "fin de mois prévue",
       "costPerPr": "Coût / PR fusionnée",

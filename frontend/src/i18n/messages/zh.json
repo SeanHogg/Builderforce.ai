@@ -321,7 +321,14 @@
     "percentUsed": "已用 {percent}%",
     "usedAmount": "已用 {amount}",
     "seePlans": "查看套餐",
-    "manage": "管理"
+    "manage": "管理",
+    "trendAria": "每日用量趋势"
+  },
+  "aiUsageCard": {
+    "title": "本月 AI 用量",
+    "tokensThisMonth": "本月 token 数",
+    "percentOfPlan": "占套餐的 {percent}%",
+    "trendAria": "每日 AI token 用量趋势"
   },
   "settings": {
     "title": "设置",
@@ -531,6 +538,7 @@
       "subtitle": "AI 支出、预算与实际对比、月末预测，以及按归属账本计算的每个合并 PR 成本。",
       "period": "月份",
       "spend": "支出",
+      "spendOverTime": "支出趋势",
       "forecast": "预测",
       "forecastSub": "预计月末",
       "costPerPr": "每合并 PR 成本",
