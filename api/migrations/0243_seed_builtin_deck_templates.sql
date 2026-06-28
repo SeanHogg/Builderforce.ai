@@ -9,6 +9,18 @@
 --
 -- Fixed UUIDs so the seed is idempotent (ON CONFLICT DO NOTHING) and the frontend
 -- can deep-link a built-in. Re-runnable.
+--
+-- Built-ins live at the sentinel tenant_id=0 (BUILTIN_TENANT in
+-- TemplateLibraryService) — a GLOBAL row owned by no tenant. The original
+-- 0242 table declared `tenant_id ... REFERENCES tenants(id)`, but tenants.id is
+-- a serial starting at 1, so id 0 never exists and this seed violated
+-- deck_templates_tenant_id_fkey ("Key (tenant_id)=(0) is not present in table
+-- tenants"), aborting db:migrate and blocking EVERY API deploy. The FK is
+-- incompatible with the 0-sentinel by design (the column even DEFAULTs to 0), so
+-- we drop it here — the tenant scoping is enforced in the query layer, and no
+-- tenant hard-delete path exists that relied on the cascade. Runs in the same
+-- transaction as the seed, before the INSERT.
+ALTER TABLE deck_templates DROP CONSTRAINT IF EXISTS deck_templates_tenant_id_fkey;
 
 INSERT INTO deck_templates (id, tenant_id, name, description, archetype, is_builtin, manifest_json)
 VALUES
