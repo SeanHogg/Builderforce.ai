@@ -23,9 +23,12 @@ import { validateFileContentForPath, coerceFileContent } from '@/lib/fileContent
 import { isBrainAutoApprove } from '@/lib/brain/autoApprove';
 import { useRegisterBrainActions, useBrainContext, savePrd, saveTasks, type BrainAction } from '@/lib/brain';
 import { PrdReviewModal, TasksReviewModal } from './ArtifactReviewModals';
-import { MODALITIES, DEFAULT_MODALITY, getModality, RIGHT_TAB_LABELS, type ProjectModality, type RightTab } from '@/lib/modality';
+import { getModality, RIGHT_TAB_LABELS, type ProjectModality, type RightTab } from '@/lib/modality';
 import { getStoredTenantToken } from '@/lib/auth';
 import { getApiBaseUrl } from '@/lib/apiClient';
+import { useVoiceStudio } from '@/lib/voiceStudio';
+import { VoiceOutput } from './ide/VoiceOutput';
+import { VoiceConfigPanel } from './ide/VoiceConfigPanel';
 import { StudioPanel } from '@seanhogg/builderforce-studio-embedded';
 import '@seanhogg/builderforce-studio-embedded/styles.css';
 
@@ -110,16 +113,19 @@ interface CheckResult {
 }
 
 export function IDE({ project, initialFiles, onProjectUpdate, onOpenProjectDetails, initialChatId }: IDEProps) {
-  const [modality, setModality] = useState<ProjectModality>(
-    (project.modality as ProjectModality | undefined) ?? DEFAULT_MODALITY,
-  );
+  // The IDE is scoped to its project's type: modality is fixed at creation, not
+  // switchable in-session, so it's derived (and clamped) rather than state.
+  const modality: ProjectModality = getModality(project.modality).id;
+  // Modalities that dock the Brain in the left panel (vs. the floating drawer):
+  // the coding Designer and the Voice studio both drive work from the chat.
+  const hasDockedBrain = modality === 'designer' || modality === 'voice';
   const [videoPrompt, setVideoPrompt] = useState('');
   const [files, setFiles] = useState<FileEntry[]>(initialFiles);
   const [openFiles, setOpenFiles] = useState<string[]>([]);
   const [activeFile, setActiveFile] = useState<string | undefined>();
   const [fileContents, setFileContents] = useState<Record<string, string>>({});
   const [centerView, setCenterView] = useState<CenterView>('preview');
-  const [rightTab, setRightTab] = useState<RightTab>('files');
+  const [rightTab, setRightTab] = useState<RightTab>(() => getModality(project.modality).rightTabs[0]);
   const [previewUrl, setPreviewUrl] = useState<string | undefined>();
   const [terminalWriter, setTerminalWriter] = useState<((data: string) => void) | undefined>();
   const [shellWriter, setShellWriter] = useState<WritableStreamDefaultWriter<string> | undefined>();
@@ -169,6 +175,11 @@ export function IDE({ project, initialFiles, onProjectUpdate, onOpenProjectDetai
   // Video versions: hook owns the IDB-blob + project-file-sidecar persistence
   // triad, so this component just hands the three values straight to <StudioPanel>.
   const videoVersions = useVideoVersions(project.id, files);
+  const projectIdNum = typeof project.id === 'number' ? project.id : Number(project.id);
+  // Voice studio state (clones, selected voice, lines, generation). Always called
+  // for hook stability but only does work for Voice projects; the green Run button
+  // calls voice.synth() and the center/right panels render its state.
+  const voice = useVoiceStudio({ enabled: modality === 'voice', storageProjectId: projectIdNum });
 
   // Task 2: Boot WebContainer and spawn an interactive shell immediately on IDE load.
   // This makes the terminal live from the moment the IDE opens, not just after clicking Run.
@@ -601,23 +612,10 @@ export function IDE({ project, initialFiles, onProjectUpdate, onOpenProjectDetai
     } catch { /* silent */ }
   }, [project.id]);
 
-  const handleModalityChange = useCallback(
-    (next: ProjectModality) => {
-      if (next === modality) return;
-      setModality(next);
-      // Persist the choice so reopening the project restores the modality.
-      updateProject(project.id, { modality: next })
-        .then((updated) => onProjectUpdate?.({ ...project, ...updated }))
-        .catch(() => { /* non-fatal: switch still applies for this session */ });
-    },
-    [modality, project, onProjectUpdate],
-  );
-
   // --- Brain integration ----------------------------------------------------
   // The IDE's AI lives in the global Brain drawer. The IDE exposes its
   // capabilities as MCP-style actions the Brain can call via tool-calling, and
   // publishes ambient context (project, modality, open file) the Brain reads.
-  const projectIdNum = typeof project.id === 'number' ? project.id : Number(project.id);
   const brainCtx = useBrainContext();
 
   const applyCodeToActiveFile = useCallback((code: string): { ok: true } | { ok: false; reason: string } => {
@@ -651,8 +649,8 @@ export function IDE({ project, initialFiles, onProjectUpdate, onOpenProjectDetai
 
   // Latest IDE state for action handlers, so the registered action array stays
   // stable (no re-registration churn) while `run()` reads current values.
-  const liveRef = useRef({ activeFile, modality, applyCodeToActiveFile, createProjectFile, projectIdNum });
-  liveRef.current = { activeFile, modality, applyCodeToActiveFile, createProjectFile, projectIdNum };
+  const liveRef = useRef({ activeFile, modality, applyCodeToActiveFile, createProjectFile, projectIdNum, setVoiceText: voice.setText });
+  liveRef.current = { activeFile, modality, applyCodeToActiveFile, createProjectFile, projectIdNum, setVoiceText: voice.setText };
 
   const brainActions = useMemo<BrainAction[]>(() => [
     {
@@ -698,6 +696,20 @@ export function IDE({ project, initialFiles, onProjectUpdate, onOpenProjectDetai
       run: async ({ prompt }: { prompt: string }) => {
         if (liveRef.current.modality !== 'video') return { error: 'The project is not in Video modality.' };
         setVideoPrompt(prompt ?? '');
+        return { loaded: true };
+      },
+    },
+    {
+      name: 'set_narration_text',
+      description: 'Load the lines to synthesize into the voice studio (voice modality only). The user presses Generate to render them.',
+      parameters: {
+        type: 'object',
+        properties: { text: { type: 'string', description: 'The lines to narrate in the selected voice' } },
+        required: ['text'],
+      },
+      run: async ({ text }: { text: string }) => {
+        if (liveRef.current.modality !== 'voice') return { error: 'The project is not in Voice modality.' };
+        liveRef.current.setVoiceText(text ?? '');
         return { loaded: true };
       },
     },
@@ -845,8 +857,8 @@ export function IDE({ project, initialFiles, onProjectUpdate, onOpenProjectDetai
   useEffect(() => {
     if (initialChatId == null) return;
     setBrainContext({ initialChatId });
-    if (modality !== 'designer') setBrainOpen(true);
-  }, [initialChatId, modality, setBrainContext, setBrainOpen]);
+    if (!hasDockedBrain) setBrainOpen(true);
+  }, [initialChatId, hasDockedBrain, setBrainContext, setBrainOpen]);
 
   const statusLabel = wcState.status === 'booting'
     ? '⏳ Booting…'
@@ -985,45 +997,20 @@ export function IDE({ project, initialFiles, onProjectUpdate, onOpenProjectDetai
           ⚙️
         </button>
 
-        {/* Modality switcher — same chrome across modalities; one project, many modes */}
-        <div
-          role="tablist"
-          aria-label="Project modality"
+        {/* Modality label — the IDE is scoped to this project's type (set at
+            creation), so it's shown, not switchable. */}
+        <span
+          title={`${getModality(modality).label} project`}
           style={{
-            display: 'flex', gap: 2, marginLeft: 8, padding: 2,
-            background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)',
-            borderRadius: 8, flexShrink: 0,
+            display: 'flex', alignItems: 'center', gap: 5, marginLeft: 8, flexShrink: 0,
+            padding: '4px 10px', fontSize: '0.78rem', fontWeight: 600,
+            fontFamily: 'var(--font-display)', color: 'var(--text-secondary)',
+            background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', borderRadius: 8,
           }}
         >
-          {MODALITIES.map((m) => {
-            const active = modality === m.id;
-            const disabled = !!m.comingSoon;
-            return (
-              <button
-                key={m.id}
-                role="tab"
-                aria-selected={active}
-                disabled={disabled}
-                onClick={() => handleModalityChange(m.id)}
-                title={disabled ? `${m.label} — coming soon` : `${m.label} modality`}
-                style={{
-                  display: 'flex', alignItems: 'center', gap: 5,
-                  padding: '4px 10px', fontSize: '0.78rem', fontWeight: 600,
-                  fontFamily: 'var(--font-display)',
-                  background: active ? 'var(--bg-deep)' : 'transparent',
-                  color: active ? 'var(--text-primary)' : 'var(--text-muted)',
-                  border: 'none', borderRadius: 6,
-                  cursor: disabled ? 'not-allowed' : 'pointer',
-                  opacity: disabled ? 0.5 : 1,
-                }}
-              >
-                <span>{m.icon}</span>
-                {m.label}
-                {disabled && <span style={{ fontSize: '0.55rem', marginLeft: 2, opacity: 0.8 }}>·soon</span>}
-              </button>
-            );
-          })}
-        </div>
+          <span>{getModality(modality).icon}</span>
+          {getModality(modality).label}
+        </span>
 
         {/* Spacer */}
         <div style={{ flex: 1 }} />
@@ -1038,7 +1025,7 @@ export function IDE({ project, initialFiles, onProjectUpdate, onOpenProjectDetai
         {statusLabel && (
           <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>{statusLabel}</span>
         )}
-        {getModality(modality).showRunButton && checkResults && (() => {
+        {getModality(modality).showChecks && checkResults && (() => {
           const failed = checkResults.filter(r => r.status === 'fail').length;
           const passed = checkResults.filter(r => r.status === 'pass').length;
           return (
@@ -1053,7 +1040,7 @@ export function IDE({ project, initialFiles, onProjectUpdate, onOpenProjectDetai
             </span>
           );
         })()}
-        {getModality(modality).showRunButton && (
+        {getModality(modality).showChecks && (
           <label
             title="When on, Run is blocked while the last checks are failing"
             style={{
@@ -1070,7 +1057,7 @@ export function IDE({ project, initialFiles, onProjectUpdate, onOpenProjectDetai
             Gate Run
           </label>
         )}
-        {getModality(modality).showRunButton && (
+        {getModality(modality).showChecks && (
           <button
             onClick={handleCheck}
             disabled={isChecking || isRunning}
@@ -1087,22 +1074,30 @@ export function IDE({ project, initialFiles, onProjectUpdate, onOpenProjectDetai
             {isChecking ? '⏳ Checking…' : '✓ Check'}
           </button>
         )}
-        {getModality(modality).showRunButton && (
-          <button
-            onClick={handleRun}
-            disabled={isRunning}
-            style={{
-              background: isRunning ? 'var(--bg-elevated)' : 'linear-gradient(135deg, #22c55e, #16a34a)',
-              color: '#fff', border: 'none', borderRadius: 8,
-              padding: '5px 14px', fontSize: '0.82rem', fontWeight: 600,
-              cursor: isRunning ? 'wait' : 'pointer', fontFamily: 'var(--font-display)',
-              display: 'flex', alignItems: 'center', gap: 5, flexShrink: 0,
-              opacity: isRunning ? 0.6 : 1,
-            }}
-          >
-            {isRunning ? '⏳ Running…' : '▶ Run'}
-          </button>
-        )}
+        {getModality(modality).showRunButton && (() => {
+          // Voice generates speech (voice.synth); Designer runs the dev server.
+          const isVoice = modality === 'voice';
+          const label = getModality(modality).runLabel;
+          const active = isVoice ? voice.busy : isRunning;
+          const disabled = active || (isVoice && !voice.selectedCloneId);
+          return (
+            <button
+              onClick={isVoice ? () => void voice.synth() : handleRun}
+              disabled={disabled}
+              title={isVoice && !voice.selectedCloneId ? 'Create or select a voice first' : undefined}
+              style={{
+                background: active ? 'var(--bg-elevated)' : 'linear-gradient(135deg, #22c55e, #16a34a)',
+                color: '#fff', border: 'none', borderRadius: 8,
+                padding: '5px 14px', fontSize: '0.82rem', fontWeight: 600,
+                cursor: active ? 'wait' : (disabled ? 'not-allowed' : 'pointer'), fontFamily: 'var(--font-display)',
+                display: 'flex', alignItems: 'center', gap: 5, flexShrink: 0,
+                opacity: disabled ? 0.6 : 1,
+              }}
+            >
+              {active ? `⏳ ${isVoice ? 'Generating' : 'Running'}…` : `▶ ${label}`}
+            </button>
+          );
+        })()}
       </div>
 
       <ProjectsSlideOutPanel

@@ -70,15 +70,10 @@ export const NAV_GROUPS: NavGroup[] = [
       { id: 'ceremonies', labelKey: 'tab.ceremonies', icon: '🎯' },
     ],
   },
-  {
-    id: 'ide', labelKey: 'group.ide', icon: '💻', href: '/ide/dashboard',
-    match: ['/ide'],
-    tabKind: 'route',
-    tabs: [
-      { id: '/ide/dashboard', labelKey: 'tab.workspace', icon: '💻', activePaths: ['/ide/dashboard'] },
-      { id: '/ide/voice', labelKey: 'tab.voice', icon: '🎙' },
-    ],
-  },
+  // IDE is one destination scoped to its project type. Each project IS typed by
+  // modality (designer/video/llm/voice) at creation, so there are no modality
+  // sub-tabs here — Voice opens as a Voice IDE project, not a separate menu item.
+  { id: 'ide', labelKey: 'group.ide', icon: '💻', href: '/ide/dashboard', match: ['/ide'] },
   { id: 'workflows', labelKey: 'group.workflows', icon: '🔀', href: '/workflows', match: ['/workflows'] },
   // Workforce keeps its own rich in-page tab bar (counts, sub-labels) — it is
   // already a single destination, so no shell tabs are declared for it.
@@ -156,7 +151,7 @@ export const NAV_GROUPS: NavGroup[] = [
   { id: 'admin', labelKey: 'group.admin', icon: '⚙', href: '/admin', match: ['/admin'], superadminOnly: true },
 ];
 
-/** Longest-prefix match so /ide/voice resolves to IDE, /settings/api-keys to Settings, etc. */
+/** Longest-prefix match so /ide/dashboard resolves to IDE, /settings/api-keys to Settings, etc. */
 export function findActiveGroup(pathname: string): NavGroup | undefined {
   let best: NavGroup | undefined;
   let bestLen = -1;
