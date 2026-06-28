@@ -2,7 +2,7 @@
   "name": "builderforce-vscode",
   "displayName": "BuilderForce",
   "description": "BuilderForce AI coding agent — chat with a codebase-aware agent in your VS Code sidebar.",
-  "version": "2026.6.29",
+  "version": "2026.6.30",
   "publisher": "builderforce",
   "license": "MIT",
   "author": "Sean Hogg",
