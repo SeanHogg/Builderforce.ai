@@ -33,9 +33,11 @@ import {
 import { computeEngineeringInsights } from '../../application/insights/engineeringInsights';
 import { computeDora } from '../../application/metrics/workforceMetrics';
 import { computeFinanceInsights } from '../../application/insights/financeInsights';
-import { computeAllocationInsights, type AllocationGoalMap } from '../../application/insights/allocationInsights';
+import { computeAllocationInsights, computeAllocationHistory, type AllocationGoalMap } from '../../application/insights/allocationInsights';
 import { computeDeliveryInsights, type DeliverableScope } from '../../application/insights/deliveryInsights';
+import { buildScenario } from '../../application/insights/deliveryScenario';
 import { computeBottleneckInsights } from '../../application/insights/bottleneckInsights';
+import { computeLifecycleInsights } from '../../application/insights/lifecycleInsights';
 import { normalizeAllocationCategory } from '../../application/llm/allocationCategories';
 import { computeComplianceSummary, buildEvidencePack, evidencePackToCsv } from '../../application/insights/complianceInsights';
 import { computeQualityInsights } from '../../application/insights/qualityInsights';
@@ -166,6 +168,35 @@ export function createInsightsRoutes(db: Db): Hono<HonoEnv> {
     ));
   });
 
+  // LENS — capitalization history: per-month capitalized FTE-months + cost split,
+  // the cost-report "Historical Months" trend (Jellyfish parity). Manager-gated;
+  // same scoping + version token as /allocation so it refreshes in lock-step.
+  router.get('/allocation/history', requireRole(TenantRole.MANAGER), async (c) => {
+    const { tenantId } = scope(c);
+    const now = Date.now();
+    const months = Math.min(24, Math.max(1, Number(c.req.query('months')) || 12));
+    const projectId = parseId(c.req.query('projectId'));
+    const teamId = parseId(c.req.query('teamId'));
+    const env = c.env as Env;
+
+    let memberKeys: Set<string> | undefined;
+    if (teamId != null) {
+      const members = await db
+        .select({ kind: teamMembers.memberKind, ref: teamMembers.memberRef })
+        .from(teamMembers)
+        .where(eq(teamMembers.teamId, teamId));
+      memberKeys = new Set(members.map((m) => `${m.kind}:${m.ref}`));
+    }
+
+    const ver = await getCacheVersion(env, allocationVersionKey(tenantId));
+    const key = `insights:allochist:t:${tenantId}:m:${months}:pr:${projectId ?? 0}:tm:${teamId ?? 0}:v:${ver}`;
+    return c.json(await getOrSetCached(
+      env, key,
+      () => computeAllocationHistory(db, tenantId, months, now, { projectId, memberKeys }, { lineage: true }),
+      SHORT_TTL,
+    ));
+  });
+
   // LENS — delivery: burnup/burndown + completion forecast + scope creep for a
   // chosen deliverable (initiative | project | release | sprint). Developer-gated
   // (delivery is an IC/Tech-Lead/EM view). Short TTL over hot task tables.
@@ -183,6 +214,43 @@ export function createInsightsRoutes(db: Db): Hono<HonoEnv> {
     const result = await getOrSetCached(env, key, () => computeDeliveryInsights(db, tenantId, scopeKind, scopeId, now), SHORT_TTL);
     if (!result) return c.json({ error: 'deliverable not found' }, 404);
     return c.json(result);
+  });
+
+  // SCENARIO PLANNER (Jellyfish "Scenario Planner") — model how the chosen
+  // deliverable's completion date moves under different team size / focus / scope,
+  // graded against its target. Reads the delivery rollup as the baseline (shared
+  // cache key) then applies the pure what-if math. Developer-gated (same audience).
+  router.get('/delivery/scenario', requireRole(TenantRole.DEVELOPER), async (c) => {
+    const { tenantId } = scope(c);
+    const env = c.env as Env;
+    const now = Date.now();
+    const rawScope = c.req.query('scope');
+    const scopeKind = (['initiative', 'project', 'release', 'sprint'] as const).includes(rawScope as DeliverableScope)
+      ? (rawScope as DeliverableScope) : null;
+    const scopeId = c.req.query('id');
+    if (!scopeKind || !scopeId) return c.json({ error: 'scope (initiative|project|release|sprint) and id are required' }, 400);
+
+    const key = `insights:deliv:t:${tenantId}:s:${scopeKind}:id:${scopeId}`;
+    const baseline = await getOrSetCached(env, key, () => computeDeliveryInsights(db, tenantId, scopeKind, scopeId, now), SHORT_TTL);
+    if (!baseline) return c.json({ error: 'deliverable not found' }, 404);
+
+    const num = (raw: string | undefined, def: number) => { const n = Number(raw); return Number.isFinite(n) ? n : def; };
+    const developers = Math.max(0, Math.min(100, num(c.req.query('developers'), Math.max(1, baseline.activeContributors))));
+    const attentionPct = Math.max(0, Math.min(100, num(c.req.query('attentionPct'), 100)));
+    const scopeDelta = Math.max(-100_000, Math.min(100_000, num(c.req.query('scopeDelta'), 0)));
+
+    const scenario = buildScenario(
+      { openTasks: baseline.openTasks, throughputPerWeek: baseline.throughputPerWeek, activeContributors: baseline.activeContributors, targetDate: baseline.targetDate, now },
+      { developers, attentionPct, scopeDelta },
+    );
+    return c.json({
+      baseline: {
+        openTasks: baseline.openTasks, throughputPerWeek: baseline.throughputPerWeek,
+        activeContributors: baseline.activeContributors, targetDate: baseline.targetDate,
+        forecastDate: baseline.forecastDate, status: baseline.status,
+      },
+      scenario,
+    });
   });
 
   // Deliverable qualitative UPDATE stream (EMP-11) — the human narrative companion
@@ -243,6 +311,17 @@ export function createInsightsRoutes(db: Db): Hono<HonoEnv> {
     const env = c.env as Env;
     const key = `insights:bottlenecks:t:${tenantId}:d:${days}`;
     return c.json(await getOrSetCached(env, key, () => computeBottleneckInsights(db, tenantId, days), SHORT_TTL));
+  });
+
+  // LIFE CYCLE EXPLORER (Jellyfish "Life Cycle Explorer") — time per canonical SDLC
+  // phase (Refinement → Work → Review → Deploy) + the end-to-end lifecycle trend.
+  // Reuses the bottleneck stage-dwell derivation, mapped to phases. Developer-gated.
+  router.get('/delivery/lifecycle', requireRole(TenantRole.DEVELOPER), async (c) => {
+    const { tenantId } = scope(c);
+    const days = parseDays(c.req.query('days'));
+    const env = c.env as Env;
+    const key = `insights:lifecycle:t:${tenantId}:d:${days}`;
+    return c.json(await getOrSetCached(env, key, () => computeLifecycleInsights(db, tenantId, days), SHORT_TTL));
   });
 
   // LENS — Quality (board Quality slide): prod incidents / support / uptime /

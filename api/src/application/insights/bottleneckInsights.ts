@@ -54,13 +54,13 @@ export const DEFAULT_AGING_THRESHOLD_HOURS = 72;
 /** Top-N oldest stuck tasks surfaced in the actionable list. */
 export const AGING_TOP_N = 10;
 
-const median = (xs: number[]): number | null => {
+export const median = (xs: number[]): number | null => {
   if (!xs.length) return null;
   const s = [...xs].sort((a, b) => a - b);
   const mid = Math.floor(s.length / 2);
   return s.length % 2 ? s[mid]! : (s[mid - 1]! + s[mid]!) / 2;
 };
-const avg = (xs: number[]): number | null => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : null);
+export const avg = (xs: number[]): number | null => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : null);
 
 // ── inputs (DB-shaped but plain, so tests construct them directly) ─────────────
 

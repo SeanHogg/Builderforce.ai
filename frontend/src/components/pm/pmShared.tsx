@@ -91,13 +91,15 @@ export function ProgressBar({ value, label }: { value: number; label?: string })
   );
 }
 
-/** A KPI stat card (used by the ROI dashboard). */
-export function StatCard({ label, value, sub }: { label: string; value: string; sub?: string }) {
+/** A KPI stat card (used by the ROI dashboard). `chart` renders an optional
+ *  trailing visual (e.g. a <Sparkline/>) beneath the sub-label. */
+export function StatCard({ label, value, sub, chart }: { label: string; value: string; sub?: string; chart?: ReactNode }) {
   return (
     <div style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', borderRadius: 12, padding: 18 }}>
       <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', fontWeight: 600 }}>{label}</div>
       <div style={{ fontSize: '1.6rem', fontWeight: 700, margin: '6px 0 2px' }}>{value}</div>
       {sub && <div style={{ fontSize: '0.74rem', color: 'var(--text-muted)' }}>{sub}</div>}
+      {chart && <div style={{ marginTop: 10 }}>{chart}</div>}
     </div>
   );
 }

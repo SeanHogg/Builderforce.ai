@@ -22,6 +22,16 @@ export const DEVEX_DIMENSIONS: readonly DevexDimension[] = [
 
 export const DEVEX_QUESTION_TYPES: readonly DevexQuestionType[] = ['rating', 'nps', 'boolean', 'text'] as const;
 
+/** Demographic axes results can be broken down by (heatmap / participation). */
+export type DevexSegmentKind = 'group' | 'team' | 'location' | 'role';
+
+export const DEVEX_SEGMENT_KINDS: readonly DevexSegmentKind[] = ['group', 'team', 'location', 'role'] as const;
+
+export type DevexSegments = Partial<Record<DevexSegmentKind, string>>;
+
+/** Benchmark percentiles the UI offers. */
+export type BenchmarkPercentile = 50 | 75 | 90;
+
 export interface DevexQuestion {
   id: string;
   type: DevexQuestionType;
@@ -51,6 +61,7 @@ export interface DevexCampaign {
   periodMonth: string | null;
   status: 'open' | 'closed';
   anonymous: boolean;
+  recipientCount: number | null;
   openedAt: string;
   closedAt: string | null;
   createdAt: string;
@@ -68,13 +79,26 @@ export interface DevexResponse {
   respondentHash: string | null;
   userId: string | null;
   answers: DevexAnswerMap;
+  segments: DevexSegments;
   submittedAt: string;
+}
+
+export interface DevexDimensionSentiment {
+  negative: number;
+  neutral: number;
+  positive: number;
 }
 
 export interface DevexDimensionScore {
   dimension: DevexDimension;
   avgScore: number;
   n: number;
+  rank: number;
+  trendDelta: number | null;
+  benchmarkDelta: number | null;
+  questionCount: number;
+  commentCount: number;
+  sentiment: DevexDimensionSentiment;
 }
 
 export interface DevexTrendPoint {
@@ -84,14 +108,59 @@ export interface DevexTrendPoint {
   responses: number;
 }
 
+export interface DevexDimensionTrendPoint {
+  periodMonth: string;
+  scores: Partial<Record<DevexDimension, number>>;
+  ranks: Partial<Record<DevexDimension, number>>;
+}
+
+export interface DevexParticipationPoint {
+  date: string;
+  responses: number;
+  cumulative: number;
+}
+
+export interface DevexSegmentCount {
+  label: string;
+  count: number;
+}
+
+export interface DevexSegmentScoreRow {
+  label: string;
+  n: number;
+  overall: number;
+  scores: Partial<Record<DevexDimension, number>>;
+}
+
+export interface DevexBenchmark {
+  percentile: BenchmarkPercentile;
+  index: number;
+  byDimension: Partial<Record<DevexDimension, number>>;
+  companies: number;
+  windowDays: number;
+}
+
 export interface DevexInsights {
   windowDays: number;
   responseRatePct: number;
   totalResponses: number;
+  totalRecipients: number | null;
+  avgResponseTimeSec: number | null;
   enps: number;
+  index: { score: number; trendDelta: number | null; benchmarkDelta: number | null };
   byDimension: DevexDimensionScore[];
   aiToolsSentiment: { avgScore: number; n: number; positivePct: number };
   trend: DevexTrendPoint[];
+  dimensionTrend: DevexDimensionTrendPoint[];
+  participation: {
+    timeline: DevexParticipationPoint[];
+    bySegment: Partial<Record<DevexSegmentKind, DevexSegmentCount[]>>;
+  };
+  segments: {
+    threshold: number;
+    byKind: Partial<Record<DevexSegmentKind, DevexSegmentScoreRow[]>>;
+  };
+  benchmark: DevexBenchmark | null;
 }
 
 export interface CreateTemplateInput {
@@ -106,6 +175,7 @@ export interface CreateCampaignInput {
   templateId?: number | null;
   periodMonth?: string | null;
   anonymous?: boolean;
+  recipientCount?: number | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -114,8 +184,8 @@ export interface CreateCampaignInput {
 
 export const devexApi = {
   /** The insights lens / "AI DevEx Analysis" rollup. */
-  insights: (days = 90): Promise<DevexInsights> =>
-    apiRequest<DevexInsights>(`/api/devex/insights?days=${days}`),
+  insights: (days = 90, percentile: BenchmarkPercentile = 75): Promise<DevexInsights> =>
+    apiRequest<DevexInsights>(`/api/devex/insights?days=${days}&percentile=${percentile}`),
 
   templates: {
     list: (): Promise<DevexTemplate[]> => apiRequest<DevexTemplate[]>('/api/devex/templates'),
@@ -131,14 +201,14 @@ export const devexApi = {
     list: (): Promise<DevexCampaign[]> => apiRequest<DevexCampaign[]>('/api/devex/campaigns'),
     create: (input: CreateCampaignInput): Promise<DevexCampaign> =>
       apiRequest<DevexCampaign>('/api/devex/campaigns', { method: 'POST', body: JSON.stringify(input) }),
-    update: (id: number, patch: Partial<{ title: string; periodMonth: string; status: 'open' | 'closed'; anonymous: boolean }>): Promise<DevexCampaign> =>
+    update: (id: number, patch: Partial<{ title: string; periodMonth: string; status: 'open' | 'closed'; anonymous: boolean; recipientCount: number | null }>): Promise<DevexCampaign> =>
       apiRequest<DevexCampaign>(`/api/devex/campaigns/${id}`, { method: 'PATCH', body: JSON.stringify(patch) }),
   },
 
-  /** Submit a response to an open campaign (developer+). */
-  respond: (campaignId: number, answers: DevexAnswerMap): Promise<DevexResponse> =>
+  /** Submit a response to an open campaign (developer+); `segments` tags it for the heatmap. */
+  respond: (campaignId: number, answers: DevexAnswerMap, segments?: DevexSegments): Promise<DevexResponse> =>
     apiRequest<DevexResponse>(`/api/devex/campaigns/${campaignId}/respond`, {
       method: 'POST',
-      body: JSON.stringify({ answers }),
+      body: JSON.stringify({ answers, segments }),
     }),
 };

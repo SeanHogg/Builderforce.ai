@@ -36,6 +36,9 @@ export type DeliverableScope = 'initiative' | 'project' | 'release' | 'sprint';
 export interface DeliveryTaskRow {
   createdAt: Date;
   completedAt: Date | null;
+  /** Owner of the task (0108) — distinct owners of recently-completed work give the
+   *  active-contributor count that seeds the scenario planner's "developers" input. */
+  assignedUserId?: string | null;
 }
 
 export interface BurnPoint {
@@ -57,6 +60,9 @@ export interface DeliveryInsights {
   completionPct: number;
   /** Completed per 7 days over the recent window — the forecast input. */
   throughputPerWeek: number;
+  /** Distinct owners of work completed in the throughput window — the team size
+   *  currently delivering this, and the scenario planner's "developers" baseline. */
+  activeContributors: number;
   /** Projected completion date (ISO) from throughput, or null if no signal. */
   forecastDate: string | null;
   forecastDateOptimistic: string | null;
@@ -69,10 +75,22 @@ export interface DeliveryInsights {
   addedScope: number;      // tasks created after the baseline
   addedScopePct: number;   // added / baseline × 100
   series: BurnPoint[];
+  /** Forward projection of the completed line from today to the forecast date at
+   *  current throughput (the "when will value land" ramp the chart draws dashed).
+   *  Empty when there is no forecast (done, or no throughput signal). */
+  projection: BurnPoint[];
 }
 
 function iso(d: Date): string { return d.toISOString().slice(0, 10); }
 function clampPct(n: number): number { return Math.max(0, Math.min(100, n)); }
+
+/** On-track verdict for a projected completion vs a target: on by the date, at_risk
+ *  within a 7-day grace, else late. Shared by the delivery rollup and the scenario
+ *  planner so both grade a forecast against a target identically. */
+export function forecastVsTarget(forecastMs: number, targetMs: number): DeliveryStatus {
+  if (forecastMs <= targetMs) return 'on_track';
+  return forecastMs <= targetMs + 7 * DAY_MS ? 'at_risk' : 'late';
+}
 
 export interface SummarizeOpts {
   scope: DeliverableScope;
@@ -116,8 +134,13 @@ export function summarizeDelivery(rows: DeliveryTaskRow[], opts: SummarizeOpts):
   // ── Throughput (recent completions) → forecast.
   const win = opts.throughputWindowDays ?? 28;
   const winStart = now - win * DAY_MS;
-  const recentDone = completedRows.filter((r) => r.completedAt!.getTime() >= winStart).length;
+  const recentlyDone = completedRows.filter((r) => r.completedAt!.getTime() >= winStart);
+  const recentDone = recentlyDone.length;
   const throughputPerWeek = (recentDone / win) * 7;
+  // Active contributors = distinct owners of work completed in the window.
+  const contribIds = new Set<string>();
+  for (const r of recentlyDone) if (r.assignedUserId) contribIds.add(r.assignedUserId);
+  const activeContributors = contribIds.size;
 
   let forecastDate: string | null = null, optimistic: string | null = null, pessimistic: string | null = null;
   if (open > 0 && throughputPerWeek > 0) {
@@ -127,14 +150,28 @@ export function summarizeDelivery(rows: DeliveryTaskRow[], opts: SummarizeOpts):
     pessimistic = iso(new Date(now + (open / (throughputPerWeek * 0.75)) * 7 * DAY_MS));
   }
 
+  // ── Forward projection of the completed line: from today (the last actual point)
+  // to the forecast date, completed ramps linearly to full scope at current pace.
+  // Same bucket step as the history so the dashed continuation lines up visually.
+  const projection: BurnPoint[] = [];
+  if (forecastDate && throughputPerWeek > 0) {
+    const perDayDone = throughputPerWeek / 7;
+    const fEnd = new Date(forecastDate).getTime();
+    projection.push({ date: iso(new Date(endDay * DAY_MS)), scope: total, completed, remaining: open });
+    for (let day = endDay + stepDays; day * DAY_MS < fEnd; day += stepDays) {
+      const ahead = (day * DAY_MS - now) / DAY_MS;
+      const done = Math.min(total, completed + perDayDone * Math.max(0, ahead));
+      projection.push({ date: iso(new Date(day * DAY_MS)), scope: total, completed: Math.round(done), remaining: total - Math.round(done) });
+    }
+    projection.push({ date: forecastDate, scope: total, completed: total, remaining: 0 });
+  }
+
   // ── Status verdict.
   let status: DeliveryStatus;
   if (total > 0 && open === 0) status = 'done';
   else if (open > 0 && throughputPerWeek === 0) status = 'no_signal';
   else if (forecastDate && opts.targetDate) {
-    const f = new Date(forecastDate).getTime();
-    const tgt = opts.targetDate.getTime();
-    status = f <= tgt ? 'on_track' : (f <= tgt + 7 * DAY_MS ? 'at_risk' : 'late');
+    status = forecastVsTarget(new Date(forecastDate).getTime(), opts.targetDate.getTime());
   } else status = 'no_signal';
 
   // ── Scope creep (EMP-8): created after the baseline = added scope.
@@ -151,12 +188,14 @@ export function summarizeDelivery(rows: DeliveryTaskRow[], opts: SummarizeOpts):
     totalTasks: total, completedTasks: completed, openTasks: open,
     completionPct: total > 0 ? clampPct((completed / total) * 100) : 0,
     throughputPerWeek,
+    activeContributors,
     forecastDate, forecastDateOptimistic: optimistic, forecastDatePessimistic: pessimistic,
     targetDate: opts.targetDate ? iso(opts.targetDate) : null,
     status,
     baselineDate: opts.baselineDate ? iso(opts.baselineDate) : null,
     baselineScope, addedScope, addedScopePct,
     series,
+    projection,
   };
 }
 
@@ -197,7 +236,7 @@ export async function computeDeliveryInsights(
   }
 
   const rows = (await db
-    .select({ createdAt: tasks.createdAt, completedAt: tasks.completedAt })
+    .select({ createdAt: tasks.createdAt, completedAt: tasks.completedAt, assignedUserId: tasks.assignedUserId })
     .from(tasks)
     .innerJoin(projects, eq(projects.id, tasks.projectId))
     .where(and(eq(projects.tenantId, tenantId), eq(tasks.archived, false), taskFilter))

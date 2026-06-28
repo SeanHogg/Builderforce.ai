@@ -71,6 +71,28 @@ export async function sumTenantTextTokens(db: Db, tenantId: number, since: Date)
 }
 
 /**
+ * Per-day cache-discounted text-token usage since `since` (UTC day buckets,
+ * sparse — only days with usage). Drives the consumption-meter sparkline; the
+ * day totals sum to the SAME window total as {@link sumTenantTextTokens} (same
+ * {@link rowWeight}, same image-exclusion), so meter + sparkline never disagree.
+ * One grouped scan — it can stand in for the single-total query, not add to it.
+ */
+export async function dailyTenantTextTokens(
+  db: Db,
+  tenantId: number,
+  since: Date,
+): Promise<Array<{ day: string; tokens: number }>> {
+  const dayExpr = sql<string>`to_char(${llmUsageLog.createdAt}, 'YYYY-MM-DD')`;
+  const rows = await db
+    .select({ day: dayExpr, used: sql<number>`COALESCE(SUM(${rowWeight}), 0)` })
+    .from(llmUsageLog)
+    .where(and(eq(llmUsageLog.tenantId, tenantId), gte(llmUsageLog.createdAt, since), notImageRow))
+    .groupBy(dayExpr)
+    .orderBy(dayExpr);
+  return rows.map((r) => ({ day: r.day, tokens: toInt(r.used) }));
+}
+
+/**
  * Day + month usage in ONE table scan — the request-path gate needs both and a
  * single scan beats two round-trips. Month is the outer window; the day total is
  * a FILTER over the same rows, reusing the same {@link rowWeight} expression.

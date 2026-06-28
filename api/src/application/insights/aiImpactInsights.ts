@@ -44,10 +44,14 @@ export interface ImpactOutcomeRow {
   costUsdMillicents: number;
 }
 
-export interface AdoptionWeek {
-  /** ISO date (YYYY-MM-DD) of the week's start (UTC, Monday-agnostic — anchored
-   *  to the window so buckets are stable for the requested range). */
-  weekStart: string;
+/** Bucket grain for the adoption series — daily for short windows (so a 7-day
+ *  trend isn't a single point), weekly for longer ones. */
+export type AdoptionGrain = 'day' | 'week';
+
+export interface AdoptionBucket {
+  /** ISO date (YYYY-MM-DD) of the bucket's start (UTC), anchored to the window
+   *  so buckets are stable for the requested range. */
+  bucketStart: string;
   activeUsers: number;
   runs: number;
   tokens: number;
@@ -93,11 +97,19 @@ export interface ProductivityScore {
 export interface AiImpactInsights {
   windowDays: number;
   adoption: {
-    weekly: AdoptionWeek[];
+    /** Adoption/usage buckets at {@link AiImpactInsights.adoption.grain} grain. */
+    series: AdoptionBucket[];
+    grain: AdoptionGrain;
     modelShareTrend: ModelShareTrend[];
   };
   comparison: ComparisonRow[];
   productivity: ProductivityScore;
+}
+
+/** Short windows get daily buckets; longer ones stay weekly to keep the point
+ *  count readable. 14 days is the crossover (≤14 → daily, else weekly). */
+export function adoptionGrainFor(windowDays: number): AdoptionGrain {
+  return windowDays <= 14 ? 'day' : 'week';
 }
 
 /** UTC YYYY-MM-DD of a timestamp. */
@@ -111,21 +123,22 @@ function weekIndex(ts: number, windowStart: number): number {
 }
 
 /**
- * Pure: roll usage rows into stable weekly adoption buckets anchored at
- * `windowStart`. One bucket per elapsed week so the trend has consistent grain
- * regardless of how sparse a given week is.
+ * Pure: roll usage rows into stable adoption buckets anchored at `windowStart`,
+ * one bucket per elapsed day OR week (per `grain`) so the trend has consistent
+ * grain regardless of how sparse a given bucket is.
  */
-export function summarizeAdoptionWeekly(usage: UsageRow[], windowStart: number, now: number): AdoptionWeek[] {
-  const weeks = Math.max(1, Math.ceil((now - windowStart) / WEEK_MS));
-  const buckets = Array.from({ length: weeks }, (_, i) => ({
-    start: windowStart + i * WEEK_MS,
+export function summarizeAdoption(usage: UsageRow[], windowStart: number, now: number, grain: AdoptionGrain): AdoptionBucket[] {
+  const step = grain === 'day' ? DAY_MS : WEEK_MS;
+  const count = Math.max(1, Math.ceil((now - windowStart) / step));
+  const buckets = Array.from({ length: count }, (_, i) => ({
+    start: windowStart + i * step,
     users: new Set<string>(),
     runs: 0,
     tokens: 0,
     millicents: 0,
   }));
   for (const r of usage) {
-    const idx = weekIndex(r.createdAt.getTime(), windowStart);
+    const idx = Math.floor((r.createdAt.getTime() - windowStart) / step);
     const b = buckets[idx];
     if (!b) continue;
     if (r.userId) b.users.add(r.userId);
@@ -134,7 +147,7 @@ export function summarizeAdoptionWeekly(usage: UsageRow[], windowStart: number, 
     b.millicents += r.costUsdMillicents;
   }
   return buckets.map((b) => ({
-    weekStart: isoDay(b.start),
+    bucketStart: isoDay(b.start),
     activeUsers: b.users.size,
     runs: b.runs,
     tokens: b.tokens,
@@ -260,10 +273,12 @@ export function summarizeAiImpact(
   const prev = scoreComponents(prevOutcomes);
   const deltaPct = prev.score > 0 ? ((cur.score - prev.score) / prev.score) * 100 : (cur.score > 0 ? 100 : 0);
 
+  const grain = adoptionGrainFor(windowDays);
   return {
     windowDays,
     adoption: {
-      weekly: summarizeAdoptionWeekly(usage, windowStart, now),
+      series: summarizeAdoption(usage, windowStart, now, grain),
+      grain,
       modelShareTrend: summarizeModelShareTrend(usage, windowStart, now),
     },
     comparison: summarizeComparison(outcomes, tokensByModel),

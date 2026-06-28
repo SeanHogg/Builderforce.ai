@@ -16,7 +16,7 @@ import type { Db } from '../../infrastructure/database/connection';
 import { resolveEffectivePlan } from '../../domain/tenant/effectivePlan';
 import { resolveTokenLimits, resolveIngestionMonthlyBytes, resolveErrorEventsMonthly } from '../../domain/tenant/PlanLimits';
 import { TenantPlan, TenantBillingStatus } from '../../domain/shared/types';
-import { sumTenantTextTokens } from '../llm/tokenUsage';
+import { dailyTenantTextTokens, utcDayStart } from '../llm/tokenUsage';
 import { sumTenantIngestionBytes } from '../ingestion/ingestionLedger';
 import { sumTenantErrorEvents } from '../quality/errorEventsLedger';
 
@@ -34,6 +34,25 @@ export interface MeterSnapshot {
   remaining: number;
   /** 0–100, clamped; 0 when unlimited. */
   percentUsed: number;
+  /** Month-to-date daily series (one entry per elapsed UTC day) for a sparkline.
+   *  Omitted for meters that don't carry a daily trend. */
+  trend?: number[];
+}
+
+const DAY_MS = 86_400_000;
+
+/**
+ * Densify a sparse per-day series into one value per elapsed UTC day from
+ * `monthStart` through today (inclusive) — zero-filling quiet days so the
+ * sparkline x-axis is evenly spaced.
+ */
+function densifyDaily(sparse: Array<{ day: string; tokens: number }>, monthStart: Date): number[] {
+  const todayStart = utcDayStart();
+  const days = Math.max(1, Math.floor((todayStart.getTime() - monthStart.getTime()) / DAY_MS) + 1);
+  const byDay = new Map(sparse.map((r) => [r.day, r.tokens]));
+  return Array.from({ length: days }, (_, i) =>
+    byDay.get(new Date(monthStart.getTime() + i * DAY_MS).toISOString().slice(0, 10)) ?? 0,
+  );
 }
 
 export interface ConsumptionSnapshot {
@@ -43,7 +62,7 @@ export interface ConsumptionSnapshot {
 }
 
 /** Assemble one meter from a raw used/limit pair (-1 limit = unlimited). */
-function makeMeter(key: MeterKey, unit: MeterUnit, used: number, limit: number): MeterSnapshot {
+function makeMeter(key: MeterKey, unit: MeterUnit, used: number, limit: number, trend?: number[]): MeterSnapshot {
   const unlimited = limit < 0;
   return {
     key,
@@ -53,6 +72,7 @@ function makeMeter(key: MeterKey, unit: MeterUnit, used: number, limit: number):
     unlimited,
     remaining: unlimited ? -1 : Math.max(0, limit - used),
     percentUsed: unlimited || limit <= 0 ? 0 : Math.min(100, Math.round((used / limit) * 100)),
+    ...(trend && trend.length > 0 ? { trend } : {}),
   };
 }
 
@@ -66,8 +86,8 @@ export async function buildConsumptionSnapshot(
   monthStart: Date,
   monthEnd: Date,
 ): Promise<ConsumptionSnapshot> {
-  const [tokensUsed, ingestionUsed, errorEventsUsed, tenantRows] = await Promise.all([
-    sumTenantTextTokens(db, tenantId, monthStart),
+  const [tokensDaily, ingestionUsed, errorEventsUsed, tenantRows] = await Promise.all([
+    dailyTenantTextTokens(db, tenantId, monthStart),
     sumTenantIngestionBytes(db, tenantId, monthStart),
     sumTenantErrorEvents(db, tenantId, monthStart),
     db
@@ -95,11 +115,17 @@ export async function buildConsumptionSnapshot(
   const ingestionLimit = resolveIngestionMonthlyBytes({ effectivePlan, tokenDailyLimitOverride: override });
   const errorEventsLimit = resolveErrorEventsMonthly({ effectivePlan, tokenDailyLimitOverride: override });
 
+  // Tokens come back per-day; the month-to-date total is just the day sum (one
+  // grouped scan does the work of the old single-total query) and the dense
+  // series powers the meter sparkline.
+  const tokensTrend = densifyDaily(tokensDaily, monthStart);
+  const tokensUsed = tokensDaily.reduce((a, r) => a + r.tokens, 0);
+
   return {
     period: { start: monthStart.toISOString(), resetsAt: monthEnd.toISOString() },
     plan: { effective: effectivePlan, billingStatus },
     meters: [
-      makeMeter('ai_tokens', 'tokens', tokensUsed, tokenLimit),
+      makeMeter('ai_tokens', 'tokens', tokensUsed, tokenLimit, tokensTrend),
       makeMeter('ingestion', 'bytes', ingestionUsed, ingestionLimit),
       makeMeter('error_events', 'events', errorEventsUsed, errorEventsLimit),
     ],

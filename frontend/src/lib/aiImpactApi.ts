@@ -6,8 +6,10 @@ import { apiRequest } from './apiClient';
  * productivity score. Manager-gated server-side (insights.aiImpact).
  */
 
-export interface AdoptionWeek {
-  weekStart: string;
+export type AdoptionGrain = 'day' | 'week';
+
+export interface AdoptionBucket {
+  bucketStart: string;
   activeUsers: number;
   runs: number;
   tokens: number;
@@ -43,7 +45,8 @@ export interface ProductivityScore {
 export interface AiImpactInsights {
   windowDays: number;
   adoption: {
-    weekly: AdoptionWeek[];
+    series: AdoptionBucket[];
+    grain: AdoptionGrain;
     modelShareTrend: ModelShareTrend[];
   };
   comparison: ComparisonRow[];

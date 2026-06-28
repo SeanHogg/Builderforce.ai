@@ -33,6 +33,22 @@ export const DEVEX_DIMENSIONS: readonly DevexDimension[] = [
   'flow', 'tooling', 'ai_tools', 'deep_work', 'build_test', 'docs', 'sentiment',
 ] as const;
 
+/**
+ * The demographic axes a response can be tagged on, so results break down by
+ * segment (the heatmap / participation-by-segment visuals). Captured per response
+ * — NOT joined to the user — so anonymous surveys stay anonymous; the rollup hides
+ * any segment group with fewer than {@link ANONYMITY_THRESHOLD} responses.
+ */
+export type DevexSegmentKind = 'group' | 'team' | 'location' | 'role';
+
+export const DEVEX_SEGMENT_KINDS: readonly DevexSegmentKind[] = ['group', 'team', 'location', 'role'] as const;
+
+/** A response's optional segment tags (kind → label). */
+export type DevexSegments = Partial<Record<DevexSegmentKind, string>>;
+
+/** Never show detailed segment results for groups smaller than this. */
+export const ANONYMITY_THRESHOLD = 3;
+
 const QUESTION_TYPES: readonly QuestionType[] = ['rating', 'nps', 'boolean', 'text'] as const;
 
 export interface SurveyQuestion {
@@ -65,6 +81,8 @@ export interface Campaign {
   periodMonth: string | null;
   status: 'open' | 'closed';
   anonymous: boolean;
+  /** Expected reach — drives an honest response rate (responses ÷ recipients). */
+  recipientCount: number | null;
   openedAt: Date;
   closedAt: Date | null;
   createdAt: Date;
@@ -81,6 +99,7 @@ export interface Response {
   respondentHash: string | null;
   userId: string | null;
   answers: AnswerMap;
+  segments: DevexSegments;
   submittedAt: Date;
 }
 
@@ -104,6 +123,23 @@ export function isValidQuestion(q: unknown): q is SurveyQuestion {
 export function normalizeQuestions(input: unknown): SurveyQuestion[] {
   if (!Array.isArray(input)) return [];
   return input.filter(isValidQuestion);
+}
+
+/**
+ * Coerce a submitted segment map to the known kinds with trimmed, length-capped
+ * string labels. Unknown keys and empty/blank labels are dropped, so a malformed
+ * or missing body simply yields `{}` (an untagged response).
+ */
+export function normalizeSegments(input: unknown): DevexSegments {
+  if (!input || typeof input !== 'object' || Array.isArray(input)) return {};
+  const out: DevexSegments = {};
+  for (const kind of DEVEX_SEGMENT_KINDS) {
+    const raw = (input as Record<string, unknown>)[kind];
+    if (typeof raw !== 'string') continue;
+    const label = raw.trim().slice(0, 80);
+    if (label) out[kind] = label;
+  }
+  return out;
 }
 
 /**
@@ -210,6 +246,7 @@ export const devexCampaigns = pgTable('devex_campaigns', {
   periodMonth: varchar('period_month', { length: 7 }),
   status:      varchar('status', { length: 16 }).notNull().default('open').$type<'open' | 'closed'>(),
   anonymous:   boolean('anonymous').notNull().default(true),
+  recipientCount: integer('recipient_count'),
   openedAt:    timestamp('opened_at').notNull().defaultNow(),
   closedAt:    timestamp('closed_at'),
   createdAt:   timestamp('created_at').notNull().defaultNow(),
@@ -224,6 +261,7 @@ export const devexResponses = pgTable('devex_responses', {
   respondentHash: varchar('respondent_hash', { length: 64 }),
   userId:         varchar('user_id', { length: 36 }),
   answers:        jsonb('answers').$type<AnswerMap>().notNull().default({}),
+  segments:       jsonb('segments').$type<DevexSegments>().notNull().default({}),
   submittedAt:    timestamp('submitted_at').notNull().defaultNow(),
 }, (t) => [
   index('idx_devex_responses_tenant').on(t.tenantId),
