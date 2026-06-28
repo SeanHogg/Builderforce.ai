@@ -171,6 +171,30 @@ export const FEATURES: Feature[] = [
     longDesc: 'Your AI Security Officer governs every action: human-in-the-loop approval gates, a full audit trail, per-tenant isolation, and AES-256-GCM encrypted credentials.',
   },
   {
+    icon: '🗺️',
+    title: 'Planning Spine — Portfolio to Task',
+    shortDesc: 'One dated, cost-bearing hierarchy on a single Gantt.',
+    longDesc: 'Plan, deliver, and account for work on one hierarchy: portfolio → initiative → epic → task, with Objectives and Key Results attaching at any level. Every leaf\'s cost — LLM spend priced at write time plus human effort — rolls up to every ancestor and is split CAPEX vs OPEX, with anomaly flags where a capitalization decision needs sign-off. Engineering plans on it, the PMO rolls portfolios up on it, and finance closes from it — one set of numbers, no reconciliation step.',
+  },
+  {
+    icon: '🐞',
+    title: 'Error Observability + One-Click Agent Fix',
+    shortDesc: 'Crash to pull request on a single surface.',
+    longDesc: 'Ingest runtime errors from your browser SDK, OpenTelemetry, Sentry, PostHog, or LogRocket; group them by fingerprint into deduplicated error groups with occurrence and affected-user counts; then turn any group into a fix task a cloud agent picks up and ships as a pull request. Observability that doesn\'t end at a dashboard — the same platform that surfaces the crash assigns it, fixes it, and PRs it.',
+  },
+  {
+    icon: '📚',
+    title: 'Knowledge Management & Compliance',
+    shortDesc: 'Versioned SOPs with an audit-ready acknowledgement trail.',
+    longDesc: 'A versioned base for SOPs, processes, and docs with immutable publish snapshots, timestamped read-acknowledgements, and per-user overdue tracking — audit-ready evidence for SOX, TISAX, and ISO 27001. Author and improve documents with AI, co-edit in real time, and gate access per page. The same knowledge that proves compliance also grounds your agents.',
+  },
+  {
+    icon: '🔗',
+    title: 'Single-Pane Board Connectors',
+    shortDesc: 'Two-way sync with Jira, Linear, Sentry, PagerDuty & more.',
+    longDesc: 'Connect the trackers and incident tools you already run — Jira, Linear, monday, Asana, ClickUp, ServiceNow, Freshservice, Sentry, PagerDuty, and GitHub — and sync work two-ways. Agents pick up and act on a ticket or incident wherever it originates, and changes flow back to the system of record. One pane to orchestrate across everything, with no migration and no lock-in.',
+  },
+  {
     icon: '🗂️',
     title: 'AI Dataset Generation',
     shortDesc: 'Generate datasets from a single prompt.',
@@ -628,6 +652,18 @@ export const HOMEPAGE_FAQ: FaqItem[] = [
     answer: 'A cross-surface semantic cache reuses a prior answer when a new prompt means the same thing as one already answered, so the frontier model is never billed twice for the same work. It runs in two tiers — a free on-device layer using SSM embeddings (in the browser and in each agent) and a shared tenant-scoped gateway layer — and is combined with model routing that exhausts cheaper models before reaching premium ones.',
   },
   {
+    question: 'Can I plan and cost work from portfolio down to task?',
+    answer: 'Yes — that is the Planning Spine. Portfolio, initiative, epic, and task live on one dated hierarchy (with Objectives and Key Results attaching at any level), rendered as a single Gantt. Because every task is instrumented, its cost — LLM spend priced at write time plus human effort — rolls up to every ancestor and is split CAPEX vs OPEX, with anomaly flags where a capitalization decision needs sign-off. Engineering, the PMO, and finance read the same numbers, and the whole spine exports to CSV.',
+  },
+  {
+    question: 'Can Builderforce fix the errors it monitors?',
+    answer: 'Yes. The Quality pillar ingests runtime errors from a browser SDK, OpenTelemetry, Sentry, PostHog, or LogRocket, groups them by fingerprint into deduplicated error groups, then turns any group into a fix task a cloud agent picks up and ships as a pull request. Unlike a monitoring dashboard that ends at a stack trace, the same platform that surfaces the crash assigns it, fixes it, and opens the PR.',
+  },
+  {
+    question: 'Do I have to migrate off Jira or Linear to use Builderforce?',
+    answer: 'No. Board connectors sync work two-ways with the tools you already run — Jira, Linear, monday, Asana, ClickUp, ServiceNow, Freshservice, Sentry, PagerDuty, and GitHub. Agents pick up and act on a ticket or incident wherever it originates, and changes flow back to the system of record. You get one pane to orchestrate across everything with no migration and no lock-in.',
+  },
+  {
     question: 'Is Builderforce free?',
     answer: 'Yes — the Free tier is $0/month forever with no credit card required. It includes WebGPU training, dataset generation, AI evaluation, and public Workforce browsing. The Pro plan ($29/seat/month) unlocks private agents, unlimited training, and priority support.',
   },
@@ -795,7 +831,7 @@ export const REGISTER_FAQ: FaqItem[] = [
 export const BLOG_FAQ: FaqItem[] = [
   {
     question: 'What topics does the Builderforce blog cover?',
-    answer: 'The blog covers AI agent training, WebGPU LoRA fine-tuning, dataset generation, multi-agent orchestration, autonomous Kanban (swimlane) execution, cross-surface semantic caching for token savings, BuilderForce Agents integration, and product development best practices.',
+    answer: 'The blog covers AI agent training, WebGPU LoRA fine-tuning, dataset generation, multi-agent orchestration, autonomous Kanban (swimlane) execution, cross-surface semantic caching for token savings, the Planning Spine (cost-bearing portfolio-to-task delivery), error observability with one-click agent fixes, knowledge management and compliance, autonomous QA with the Agentic Tester, single-pane board connectors, BuilderForce Agents integration, and product development best practices.',
   },
   {
     question: 'Does the blog compare Builderforce.ai to other AI coding tools?',
@@ -928,6 +964,18 @@ export const DEFINED_TERMS: DefinedTermEntry[] = [
     description: 'A view onto the same instrumented work tailored to a role: delivery and DORA metrics for engineering, cost and FinOps for finance, portfolio rollup and the innovation funnel for the PMO and CEO, and an immutable audit trail for security. Because the data is collected once and attributed, each lens is a projection of one source of truth rather than a separate report.',
   },
   {
+    name: 'Planning Spine',
+    description: 'Builderforce.ai\'s single dated hierarchy that unifies planning, delivery, and cost — portfolio → initiative → epic → task, with Objectives and Key Results attaching as a goal layer at any level. Every leaf\'s cost (LLM spend priced at write time plus human effort) rolls up to every ancestor and is split CAPEX vs OPEX, with anomaly flags where a capitalization decision contradicts its parent. It renders as one nested Gantt and exports to CSV, so engineering, the PMO, and finance read the same numbers without a reconciliation step.',
+  },
+  {
+    name: 'Error Observability with one-click agent fix',
+    description: 'Builderforce.ai\'s quality pillar ingests runtime errors from a browser SDK, OpenTelemetry, Sentry, PostHog, or LogRocket, groups them by fingerprint into deduplicated error groups, and turns any group into a fix task a cloud agent picks up and ships as a pull request. Unlike a monitoring dashboard that ends at a stack trace, the same platform that surfaces the crash assigns it, fixes it, and PRs it — and error volume is a metered resource in the same consumption view as tokens.',
+  },
+  {
+    name: 'Knowledge Management & compliance audit trail',
+    description: 'A versioned base for SOPs, processes, and docs on Builderforce.ai. Each publish takes an immutable snapshot, and read-acknowledgements are bound to a specific version with a timestamp and per-user overdue tracking, producing audit-ready evidence for SOX, TISAX, and ISO 27001. Documents are AI-authored and AI-analyzed, co-edited in real time over a CRDT, and access-controlled per page — and because they live on the agent platform, the same knowledge that proves compliance also grounds the agent workforce.',
+  },
+  {
     name: 'Agentic Maturity Index',
     description: 'A CMMI/COBIT-style maturity model that rates how a technology organization runs across six practices — software delivery, release & operations (DORA), quality assurance, project management, agentic AI operations, and governance & security — on a 1–5 scale (Initial → Optimizing). Builderforce.ai scores it two ways: a free, logged-out self-assessment, and a data-driven diagnostic that derives each practice level objectively from real telemetry (cycle time, DORA, rework, run outcomes), then outputs a prioritized plan to mature and innovate.',
   },
@@ -982,6 +1030,8 @@ export const PRODUCT_SECTIONS: ProductSection[] = [
     surfaces: [
       { icon: '🔀', title: 'Workflow Builder', desc: 'Compose agents and tools into repeatable, approval-gated workflows.', href: '/workflows/builder' },
       { icon: '▦', title: 'Projects / Tasks', desc: 'Organize work into project workspaces — each with a full IDE, agents, and a task board — then plan, assign, and watch tasks flow across your agent workforce in board, table, calendar, or Gantt views.', href: '/projects' },
+      { icon: '🗺️', title: 'Planning Spine & Portfolio', desc: 'One dated hierarchy — portfolio → initiative → epic → task with OKRs at any level — where every leaf\'s cost rolls up to each ancestor and is split CAPEX vs OPEX on a single Gantt. Plan, deliver, and account for work in one place.', href: '/projects?tab=portfolio' },
+      { icon: '🔗', title: 'Board Connectors', desc: 'Two-way sync with Jira, Linear, monday, Asana, ClickUp, ServiceNow, Freshservice, Sentry, PagerDuty, and GitHub — orchestrate across the trackers you already run, with no migration.', href: '/projects?tab=connections' },
       { icon: '🕸️', title: 'Workforce Mesh', desc: 'Discover and dispatch work across local and remote AgentHosts — capacity sharing across machines and tenants.', href: '/workforce' },
       { icon: '💬', title: 'Chats', desc: 'Talk to your agents directly, or watch them collaborate in shared conversations.', href: '/workforce?tab=chats' },
     ],
@@ -992,6 +1042,7 @@ export const PRODUCT_SECTIONS: ProductSection[] = [
     title: 'Extend',
     blurb: 'A marketplace of skills, personas, prompts, and content to supercharge agents.',
     surfaces: [
+      { icon: '📚', title: 'Knowledge & SOPs', desc: 'A versioned base for SOPs, processes, and docs with read-acknowledgement audit trails for SOX, TISAX, and ISO 27001, AI authoring, and real-time co-editing — knowledge that grounds your agents and proves compliance.', href: '/knowledge' },
       { icon: '⭐', title: 'Skills', desc: 'Install or publish reusable agent skills from the Workforce marketplace.', href: '/skills' },
       { icon: '👤', title: 'Personas', desc: 'Give agents a voice and behavior profile with reusable personas.', href: '/personas' },
       { icon: '📚', title: 'Prompt Library', desc: 'Browse, use, and share community prompt templates with variables.', href: '/prompts' },
@@ -1007,6 +1058,7 @@ export const PRODUCT_SECTIONS: ProductSection[] = [
       { icon: '✅', title: 'Approvals', desc: 'Human-in-the-loop approval gates on every sensitive action your agents take.', href: '/workforce?tab=approvals' },
       { icon: '🔒', title: 'Security', desc: 'Per-tenant isolation and AES-256-GCM encrypted credentials for every integration.', href: '/security' },
       { icon: '📊', title: 'Observability', desc: 'Full telemetry and an audit trail of every agent action, token, and tool call.', href: '/workforce?tab=logs' },
+      { icon: '🐞', title: 'Quality & Error Tracking', desc: 'Ingest errors from a browser SDK, OpenTelemetry, Sentry, PostHog, or LogRocket; group them by fingerprint; then turn any group into a fix task an agent ships as a pull request — crash to PR on one surface.', href: '/quality' },
       { icon: '📈', title: 'Maturity Diagnostic', desc: 'Rate every practice (Dev, QA, DevOps, PMO, governance) on a CMMI/COBIT-style 1–5 scale — free to self-assess, or scored objectively from your real delivery data with a prioritized plan to mature and innovate.', href: '/diagnostics' },
       { icon: '🏢', title: 'Tenants & Workspaces', desc: 'Multi-tenant workspaces with per-seat roles, members, and cost controls.', href: '/tenants' },
     ],
@@ -1296,6 +1348,8 @@ export const RELATED_ARTICLES: Record<string, string[]> = {
     'agent-tech-stack-all-seven-layers',
     'evermind-self-updating-model',
     'system-of-record-for-agentic-work',
+    'planning-spine-cost-bearing-delivery',
+    'quality-error-observability-one-click-fix',
   ],
   // Evermind technology page / feature teaser.
   evermind: [
@@ -1326,15 +1380,18 @@ export const RELATED_ARTICLES: Record<string, string[]> = {
   ide: ['in-browser-ide-and-collaboration', 'product-ideation-with-builderforce', 'getting-started-with-ai-agents'],
   training: ['webgpu-lora-explained', 'evermind-self-updating-model', 'ai-dataset-generation-best-practices'],
   workflows: ['define-a-need-the-agentic-system-solves-it', 'multi-agent-orchestration', 'autonomous-swimlane-execution'],
-  projects: ['autonomous-swimlane-execution', 'task-execution-and-observability', 'product-ideation-with-builderforce'],
+  projects: ['planning-spine-cost-bearing-delivery', 'autonomous-swimlane-execution', 'task-execution-and-observability'],
   workforce: ['fleet-management-and-agent-routing', 'autonomous-swimlane-execution', 'multi-agent-orchestration'],
   skills: ['skills-assignment-and-the-marketplace', 'builderforce-agents-and-agent-integration', 'best-ai-coding-agents-compared'],
   personas: ['builderforce-agents-and-agent-integration', 'multi-agent-orchestration', 'skills-assignment-and-the-marketplace'],
   'content-manager': ['skills-assignment-and-the-marketplace', 'product-ideation-with-builderforce'],
-  security: ['every-role-operating-picture', 'security-and-multi-tenant-architecture', 'approval-gates-and-human-oversight'],
+  security: ['every-role-operating-picture', 'security-and-multi-tenant-architecture', 'knowledge-management-sops-and-compliance'],
   contributors: ['every-role-operating-picture', 'task-execution-and-observability', 'multi-agent-orchestration'],
   dashboard: ['system-of-record-for-agentic-work', 'every-role-operating-picture', 'introduction-and-overview'],
-  agents: ['builderforce-agents-and-agent-integration', 'fleet-management-and-agent-routing', 'multi-agent-orchestration'],
+  agents: ['builderforce-agents-and-agent-integration', 'fleet-management-and-agent-routing', 'single-pane-board-connectors'],
   prompts: ['specs-and-planning-with-ai', 'product-ideation-with-builderforce', 'getting-started-with-ai-agents'],
   diagnostics: ['system-of-record-for-agentic-work', 'every-role-operating-picture', 'task-execution-and-observability'],
+  // Newer enterprise surfaces.
+  knowledge: ['knowledge-management-sops-and-compliance', 'every-role-operating-picture', 'security-and-multi-tenant-architecture'],
+  quality: ['quality-error-observability-one-click-fix', 'agentic-tester-autonomous-qa', 'task-execution-and-observability'],
 };

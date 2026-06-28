@@ -37,6 +37,11 @@ import everyRolePicture from '@/content/blog/every-role-operating-picture.md';
 import evermind from '@/content/blog/evermind-self-updating-model.md';
 import agentStack from '@/content/blog/agent-tech-stack-all-seven-layers.md';
 import defineANeed from '@/content/blog/define-a-need-the-agentic-system-solves-it.md';
+import planningSpine from '@/content/blog/planning-spine-cost-bearing-delivery.md';
+import qualityObservability from '@/content/blog/quality-error-observability-one-click-fix.md';
+import knowledgeManagement from '@/content/blog/knowledge-management-sops-and-compliance.md';
+import boardConnectors from '@/content/blog/single-pane-board-connectors.md';
+import agenticTester from '@/content/blog/agentic-tester-autonomous-qa.md';
 
 export interface BlogPost {
   slug: string;
@@ -128,6 +133,11 @@ export const BLOG_POSTS: BlogPost[] = [
   buildPost('evermind-self-updating-model', evermind),
   buildPost('agent-tech-stack-all-seven-layers', agentStack),
   buildPost('define-a-need-the-agentic-system-solves-it', defineANeed),
+  buildPost('planning-spine-cost-bearing-delivery', planningSpine),
+  buildPost('quality-error-observability-one-click-fix', qualityObservability),
+  buildPost('knowledge-management-sops-and-compliance', knowledgeManagement),
+  buildPost('single-pane-board-connectors', boardConnectors),
+  buildPost('agentic-tester-autonomous-qa', agenticTester),
 ].sort((a, b) => (a.date < b.date ? 1 : -1));
 
 export function getPostBySlug(slug: string): BlogPost | undefined {
