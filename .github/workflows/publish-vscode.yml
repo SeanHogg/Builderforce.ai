@@ -28,20 +28,20 @@ jobs:
         run: npm run compile
 
       - name: Package
-        run: npx vsce package --no-dependencies -o builderforce-vscode.vsix
+        run: npx vsce package --no-dependencies -o builderforce-ai.vsix
 
       - name: Publish to VS Code Marketplace
-        run: npx vsce publish --no-dependencies --packagePath builderforce-vscode.vsix
+        run: npx vsce publish --no-dependencies --packagePath builderforce-ai.vsix
         env:
           VSCE_PAT: ${{ secrets.VSCE_PAT }}
 
       - name: Publish to Open VSX
-        run: npx ovsx publish builderforce-vscode.vsix -p "$OVSX_PAT"
+        run: npx ovsx publish builderforce-ai.vsix -p "$OVSX_PAT"
         env:
           OVSX_PAT: ${{ secrets.OVSX_PAT }}
 
       - name: Upload .vsix artifact
         uses: actions/upload-artifact@v4
         with:
-          name: builderforce-vscode-vsix
-          path: clients/vscode/builderforce-vscode.vsix
+          name: builderforce-ai-vsix
+          path: clients/vscode/builderforce-ai.vsix

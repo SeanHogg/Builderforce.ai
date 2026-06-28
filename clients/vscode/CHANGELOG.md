@@ -2,8 +2,13 @@
 
 All notable changes to the BuilderForce VS Code extension are documented here.
 
-## [2026.6.31] — Marketplace publish fix + refreshed brand icon
+## [2026.6.31] — New extension id, Marketplace publish fix, refreshed brand icon
 
+- **Renamed the extension id to `builderforce.builderforce-ai`** (was
+  `builderforce.builderforce-vscode`). The previous id was removed from the Marketplace and,
+  per Marketplace policy, a removed name is permanently reserved and cannot be republished —
+  so the extension now ships under a new id. Publisher (`builderforce`) and display name
+  ("BuilderForce") are unchanged.
 - Removed the proposed `chatSessionsProvider` API declaration from the manifest, which was
   blocking Marketplace publishing (proposed APIs cannot be shipped to stable VS Code). The
   dedicated chat-session tab was already feature-detected at runtime and no-ops on stable

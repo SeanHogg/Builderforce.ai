@@ -27,11 +27,11 @@ The extension ships to **two** registries so every editor flavor can install it:
 ```bash
 npm install
 npm run compile
-npm run package                 # → builderforce-vscode-<version>.vsix
-code --install-extension builderforce-vscode-*.vsix   # smoke-test the .vsix
+npm run package                 # → builderforce-ai-<version>.vsix
+code --install-extension builderforce-ai-*.vsix   # smoke-test the .vsix
 
 npm run publish:marketplace     # vsce publish --no-dependencies
-npm run publish:openvsx -- builderforce-vscode-*.vsix
+npm run publish:openvsx -- builderforce-ai-*.vsix
 ```
 
 ## CI publish (recommended)
