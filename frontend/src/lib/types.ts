@@ -50,6 +50,14 @@ export interface Project {
   updatedAt?: string;
   /** From list endpoint */
   taskCount?: number;
+  /** From list endpoint: tasks in a completed status (done/closed/merged/…). */
+  completedTaskCount?: number;
+  /** From list endpoint: tasks not yet completed or cancelled. */
+  openTaskCount?: number;
+  /** From list endpoint: tasks in the blocked status. */
+  blockedTaskCount?: number;
+  /** From list endpoint: open tasks whose due date has passed. */
+  overdueTaskCount?: number;
   /** From list endpoint: number of workflows associated with this project */
   workflowCount?: number;
   /** From list endpoint: true once an architecture PRD (Architect analysis output) exists. */
