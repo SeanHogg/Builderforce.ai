@@ -5,7 +5,8 @@
  * links). Sub-views are NOT separate menu items — they are TABS inside their
  * destination, rendered by one shared <SectionTabs> bar in the app shell. So
  * e.g. Portfolio/PMO and Ceremonies are tabs of Projects, not top-level items;
- * the five insight lenses are tabs of one "Insights" item.
+ * every analytics/measurement lens (incl. Surveys, custom Dashboards and
+ * DevFinOps) is a tab of the one "Insights" item, not its own sidebar entry.
  *
  * Two tab flavors, unified here so the Sidebar + SectionTabs never drift:
  *   - kind:'route'  — each tab is its own route (e.g. /insights/dora). The tab
@@ -84,7 +85,10 @@ export const NAV_GROUPS: NavGroup[] = [
   { id: 'workforce', labelKey: 'group.workforce', icon: '👥', href: '/workforce', match: ['/workforce'] },
   {
     id: 'insights', labelKey: 'group.insights', icon: '📈', href: '/insights/engineering',
-    match: ['/insights', '/alerts'],
+    // Surveys, custom Dashboards and DevFinOps are analytics/measurement surfaces,
+    // so they live here as lenses of Insights rather than as their own top-level
+    // sidebar items (keeping the "few primary destinations" rule above intact).
+    match: ['/insights', '/alerts', '/surveys', '/dashboards', '/finops'],
     tabKind: 'route',
     tabs: [
       { id: '/insights/ai-impact', labelKey: 'tab.aiImpact', icon: '✨' },
@@ -95,17 +99,17 @@ export const NAV_GROUPS: NavGroup[] = [
       { id: '/insights/dora', labelKey: 'tab.dora', icon: '🚀' },
       { id: '/insights/space', labelKey: 'tab.space', icon: '🛰' },
       { id: '/insights/finance', labelKey: 'tab.finops', icon: '💰' },
+      { id: '/finops', labelKey: 'tab.devfinops', icon: '🧾' },
       { id: '/insights/allocation', labelKey: 'tab.allocation', icon: '🧭' },
       { id: '/insights/benchmarking', labelKey: 'tab.benchmarking', icon: '📊' },
+      { id: '/dashboards', labelKey: 'tab.dashboards', icon: '🧮' },
       { id: '/insights/devex', labelKey: 'tab.devex', icon: '🩺' },
+      { id: '/surveys', labelKey: 'tab.surveys', icon: '📝' },
       { id: '/insights/funnel', labelKey: 'tab.funnel', icon: '💡' },
       { id: '/insights/compliance', labelKey: 'tab.compliance', icon: '🛡' },
       { id: '/alerts', labelKey: 'tab.alerts', icon: '🔔' },
     ],
   },
-  { id: 'surveys', labelKey: 'group.surveys', icon: '🩺', href: '/surveys', match: ['/surveys'] },
-  { id: 'dashboards', labelKey: 'group.dashboards', icon: '🧮', href: '/dashboards', match: ['/dashboards'] },
-  { id: 'finops', labelKey: 'group.finops', icon: '🧾', href: '/finops', match: ['/finops'] },
   {
     id: 'quality', labelKey: 'group.quality', icon: '🐞', href: '/quality',
     match: ['/quality'],
