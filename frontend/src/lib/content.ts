@@ -1019,7 +1019,7 @@ export const PRODUCT_SECTIONS: ProductSection[] = [
       { icon: '💡', title: 'Brain Storm', desc: 'Describe what you need in plain language; the Brain turns it into projects, datasets, and agents.', href: '/brainstorm' },
       { icon: '💻', title: 'IDE Workspace', desc: 'Monaco editor, terminal, AI chat, and file explorer in one collaborative project workspace.', href: '/ide' },
       { icon: '🎓', title: 'Training', desc: 'In-browser WebGPU LoRA fine-tuning up to 2B parameters with a live evaluation engine — zero GPU bills. Train a custom agent, then call it from inside your own agent.', href: '/training' },
-      { icon: '🧩', title: 'VS Code Extension', desc: 'Run the whole platform from your editor — chat with agents, assign and run tasks, review and validate their work, and approve actions without leaving VS Code.', href: 'https://marketplace.visualstudio.com/items?itemName=builderforce.builderforce-vscode' },
+      { icon: '🧩', title: 'VS Code Extension', desc: 'Run the whole platform from your editor — chat with agents, assign and run tasks, review and validate their work, and approve actions without leaving VS Code.', href: 'https://marketplace.visualstudio.com/items?itemName=BuilderForce.builderforce-ai' },
     ],
   },
   {
