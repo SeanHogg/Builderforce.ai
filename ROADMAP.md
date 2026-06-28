@@ -329,10 +329,10 @@ These items completed the platform's multi-claw coordination layer. All five are
 >
 > **Stats — 341 register items:** ✅ 53 resolved · 🔓 288 open. Open by revenue impact → 💰 Direct 15 · 🚀 Growth 10 · 🛠️ Core 190 · 🧹 Internal 73.
 
-### 🧹 LLMs page merged into IDE dashboard (added 2026-06-28)
+### 🧹 LLM concept unified onto the LLM Studio (added 2026-06-28)
 
-- ✅ **`/llms` standalone page merged into `/ide/dashboard`.** The "Manage LLMs" button no longer navigates away — it toggles `MyLlmsPanel` inline on the dashboard (`app/ide/dashboard/page.tsx`); the standalone `app/llms/page.tsx` route was deleted. Single LLM-management surface, reachable where IDE projects (including LLM-modality ones) live.
-- ✅ **`MyLlmsPanel` localized.** `components/llm/MyLlmsPanel.tsx` now routes every visible string (heading, subtitle, form labels/placeholders, visibility options, buttons, confirm/error toasts, empty/loading states) through `useTranslations('llms')`; new 27-key `llms` namespace added to all 5 catalogs (en/zh/es/fr/de) with real translations. The merged LLM surface is now i18n-complete; frontend `tsc` clean.
+- ✅ **Redundant "Manage LLMs" / "Your LLMs" surface removed from the IDE dashboard.** The LLM **Studio** (the `llm` IDE-project modality — create / configure / train / chat) is the single LLM concept. The dashboard's separate "Manage LLMs" button + the inline `MyLlmsPanel` (tenant-model presets) were the same idea under a second name and confused operators. Deleted: `app/llms/page.tsx` route, `components/llm/MyLlmsPanel.tsx` (dead after removal), the `ide.manageLlms` key + the `llms` i18n namespace across all 5 catalogs. `app/ide/dashboard/page.tsx` header reverted to just title/subtitle. frontend `tsc` clean.
+- 🔓 **`tenant_model` presets ("Your LLMs", migration 0211) still feed the model pickers but have no creation UI.** `lib/useLlmModels.ts` surfaces `tenantModels` as a "Your LLMs" group in the run picker, cloud-agent base-model form, and Designer Brain — sourced from the now-uncreatable `tenant_model:<slug>` configs (`tenantModelRoutes.ts` / `tenantModelService.ts` / schema `tenant_models`). Existing presets still resolve; the group is just empty for everyone else. **Decision needed:** either (a) fully retire the preset subsystem and make **published LLM Studio models** the picker source (one LLM concept end-to-end), or (b) keep presets but rename the group so it no longer collides with "LLM". Fixing it removes the last place the two LLM concepts diverge.
 
 ### 📊 Project Card Health Visuals (added 2026-06-28)
 
