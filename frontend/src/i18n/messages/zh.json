@@ -64,7 +64,8 @@
       "contributors": "贡献者",
       "logs": "日志",
       "llm": "LLM 用量",
-      "qa": "智能体 QA"
+      "qa": "智能体 QA",
+      "home": "主页"
     }
   },
   "alerts": {
@@ -1091,6 +1092,13 @@
       "key": "编号",
       "status": "状态",
       "age": "滞留时长"
+    },
+    "home": {
+      "title": "洞察",
+      "subtitle": "您的仪表板 — 固定应用中任意小组件以构建您的视图。",
+      "addWidgets": "添加小组件",
+      "emptyTitle": "您的仪表板为空",
+      "emptyBody": "从任意报告或页面固定小组件 — 卡片角落的图钉会将其添加到此处。"
     }
   },
   "cloudAgentForm": {
@@ -1473,7 +1481,20 @@
     "blankProcess": "空白流程",
     "blankProcessDesc": "绘制可重复的工作流或交接。",
     "blankCanvas": "空白画布",
-    "blankCanvasDesc": "用于便签、计时器、图片和嵌入的自由画板。"
+    "blankCanvasDesc": "用于便签、计时器、图片和嵌入的自由画板。",
+    "marketplaceTitle": "市场",
+    "listForSale": "上架出售",
+    "updateListing": "更新上架",
+    "unlist": "下架",
+    "priceLabel": "价格（$）",
+    "listedFor": "售价 ${price}",
+    "installs": "{count, plural, =0 {暂无安装} other {# 次安装}}",
+    "marketTitle": "出售的知识与 SOP",
+    "marketSubtitle": "将现成的 SOP、流程和文档安装到你的工作区。",
+    "free": "免费",
+    "addToKnowledge": "添加到我的知识库",
+    "installing": "安装中…",
+    "by": "作者：{author}"
   },
   "canvas": {
     "add_text": "文本",
@@ -1501,6 +1522,18 @@
     "noEmbed": "未关联文档",
     "embedIdPlaceholder": "知识文档 ID…",
     "openEmbeddedDoc": "打开文档",
+    "add_video": "视频",
+    "add_file": "文件",
+    "type_video": "视频",
+    "type_file": "文件",
+    "noVideo": "暂无视频",
+    "videoUrlPlaceholder": "粘贴视频或嵌入 URL…",
+    "noFile": "未关联文件",
+    "fileNamePlaceholder": "文件名（可选）…",
+    "fileUrlPlaceholder": "粘贴文件 URL…",
+    "saveToKnowledge": "保存到知识库",
+    "saving": "保存中…",
+    "defaultBoardTitle": "未命名画布",
     "start": "开始",
     "pause": "暂停",
     "reset": "重置",
@@ -1709,6 +1742,17 @@
       "titleRequired": "必须填写活动标题。"
     }
   },
+  "dashboard": {
+    "window": "最近 {days} 天",
+    "noTrend": "暂无趋势",
+    "unavailable": "不可用",
+    "recency": {
+      "justNow": "刚刚",
+      "minutesAgo": "{n} 分钟前",
+      "hoursAgo": "{n} 小时前",
+      "daysAgo": "{n} 天前"
+    }
+  },
   "dashboards": {
     "title": "自定义仪表板",
     "subtitle": "基于现有指标用小组件搭建已保存的仪表板，并以自然语言提问。",
@@ -1812,5 +1856,98 @@
     "hoursPh": "小时",
     "log": "记录",
     "delete": "删除记录"
+  },
+  "widgets": {
+    "pin": "固定到仪表板",
+    "unpin": "取消固定",
+    "expand": "打开完整报告",
+    "addTitle": "添加小组件",
+    "addToDashboard": "添加到仪表板",
+    "searchPlaceholder": "搜索小组件…",
+    "group": {
+      "aiImpact": "AI 影响",
+      "delivery": "交付",
+      "dora": "DORA",
+      "finance": "财务",
+      "engineering": "工程效能",
+      "overview": "仪表板",
+      "llmUsage": "LLM 用量"
+    },
+    "title": {
+      "aiProductivity": "AI 生产力评分",
+      "aiThroughput": "吞吐量",
+      "aiQuality": "质量",
+      "aiEfficiency": "效率",
+      "aiPrevScore": "上一周期评分",
+      "aiUsage": "使用趋势",
+      "aiModelShare": "模型运行占比",
+      "aiMergeRate": "各模型合并率",
+      "aiComparison": "多工具评估",
+      "aiShareTrend": "采用与占比趋势",
+      "delivCycleTime": "周期时间",
+      "delivVelocity": "速度",
+      "delivEstimation": "估算覆盖率",
+      "delivLifecyclePhases": "生命周期阶段",
+      "delivLifecycleTrend": "生命周期趋势",
+      "delivVelocityTrend": "速度趋势",
+      "delivSprints": "冲刺速度",
+      "doraDeployFreq": "部署频率",
+      "doraLeadTime": "前置时间",
+      "doraChangeFail": "变更失败率",
+      "doraMttr": "恢复时间",
+      "doraTotalDeploys": "部署总数",
+      "doraPerformance": "行业对标表现",
+      "doraChangeOutcomes": "变更结果",
+      "finSpend": "支出",
+      "finForecast": "预测",
+      "finCostPerPr": "每合并 PR 成本",
+      "finPaidOverflow": "付费溢出",
+      "finCacheRead": "缓存读取",
+      "finSpendTrend": "支出趋势",
+      "finBudgetVariance": "预算差异",
+      "finByProject": "按项目支出",
+      "engOutcome": "成效评分",
+      "engMergeRate": "合并率",
+      "engCiGreen": "CI 通过率",
+      "engDegraded": "降级率",
+      "engCost": "成本",
+      "engByApproach": "按方法",
+      "engByModel": "按模型",
+      "engByActionType": "按工作类型",
+      "projects": "项目",
+      "tasks": "任务",
+      "agentsOnline": "在线代理",
+      "pendingApprovals": "待处理请求",
+      "llmTokens": "令牌用量",
+      "llmRequests": "LLM 请求",
+      "llmByModel": "按模型令牌",
+      "llmBySource": "按来源成本"
+    },
+    "loading": "加载中…",
+    "overview": {
+      "online": "在线",
+      "done": "已完成",
+      "inProgress": "进行中",
+      "other": "其他",
+      "noTasks": "暂无任务",
+      "tasks": "任务",
+      "taskBreakdown": "任务分布",
+      "agentsOnline": "个代理在线",
+      "noHosts": "暂无代理",
+      "requiresReview": "待审核",
+      "allClear": "全部处理完毕"
+    },
+    "llmUsage": {
+      "tokensSub": "令牌总数",
+      "prompt": "提示",
+      "completion": "补全",
+      "tokenSplit": "提示与补全",
+      "requestsSub": "请求总数",
+      "noModels": "暂无模型用量",
+      "byModel": "按模型令牌",
+      "noSpend": "暂无支出",
+      "estCost": "预估成本",
+      "bySource": "按来源成本"
+    }
   }
 }

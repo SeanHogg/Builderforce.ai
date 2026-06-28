@@ -45,7 +45,13 @@ function parseIntParam(raw: string | undefined): number | null {
   return Number.isInteger(n) && n > 0 ? n : null;
 }
 
-const ALLOWED_VIZ = new Set(['stat', 'bar', 'line', 'gauge']);
+const ALLOWED_VIZ = new Set(['stat', 'bar', 'line', 'gauge', 'widget']);
+
+/** A registry widget id (rich client-rendered card); opaque + length-bound. */
+function cleanWidgetKey(raw: unknown): string | null {
+  const s = typeof raw === 'string' ? raw.trim() : '';
+  return s.length >= 1 && s.length <= 96 ? s : null;
+}
 
 export function createDashboardsRoutes(db: Db): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
@@ -168,10 +174,12 @@ export function createDashboardsRoutes(db: Db): Hono<HonoEnv> {
     if (dashboardId == null) return c.json({ error: 'invalid id' }, 400);
     if (!(await ownsDashboard(tenantId, dashboardId))) return c.json({ error: 'not found' }, 404);
 
-    const body = await c.req.json<{ metricKey?: string; viz?: string; title?: string; config?: unknown; position?: number }>().catch(() => ({}) as { metricKey?: string; viz?: string; title?: string; config?: unknown; position?: number });
-    const metricKey = (body.metricKey ?? '').toString();
-    if (!isMetricKey(metricKey)) return c.json({ error: 'unknown metric_key' }, 400);
-    const viz = ALLOWED_VIZ.has(String(body.viz)) ? String(body.viz) : 'stat';
+    const body = await c.req.json<{ metricKey?: string; widgetKey?: string; viz?: string; title?: string; config?: unknown; position?: number }>().catch(() => ({}) as { metricKey?: string; widgetKey?: string; viz?: string; title?: string; config?: unknown; position?: number });
+    // A widget is EITHER a rich registry widget (widgetKey) OR a scalar metric.
+    const widgetKey = cleanWidgetKey(body.widgetKey);
+    const metricKey = widgetKey ? null : (body.metricKey ?? '').toString();
+    if (!widgetKey && !isMetricKey(metricKey as string)) return c.json({ error: 'widgetKey or a valid metric_key is required' }, 400);
+    const viz = widgetKey ? 'widget' : (ALLOWED_VIZ.has(String(body.viz)) ? String(body.viz) : 'stat');
     const config: Record<string, unknown> = body.config && typeof body.config === 'object' ? (body.config as Record<string, unknown>) : {};
     const position = Number.isFinite(body.position) ? Math.floor(body.position as number) : 0;
 
@@ -181,6 +189,7 @@ export function createDashboardsRoutes(db: Db): Hono<HonoEnv> {
         tenantId,
         dashboardId,
         metricKey,
+        widgetKey,
         viz,
         title: typeof body.title === 'string' ? body.title.slice(0, 160) : null,
         config,
@@ -246,15 +255,25 @@ export function createDashboardsRoutes(db: Db): Hono<HonoEnv> {
     const env = c.env as Env;
     const data = await Promise.all(
       widgets.map(async (w) => {
-        const def = METRIC_REGISTRY[w.metricKey];
         const cfg = (w.config ?? {}) as { days?: number };
         const days = parseDays(cfg.days != null ? String(cfg.days) : undefined);
+        // Registry widgets render client-side from the widget registry — no server
+        // metric to resolve. Hand back the key so the client renders the card.
+        if (w.widgetKey) {
+          return { widgetId: w.id, widgetKey: w.widgetKey, metricKey: null, title: w.title, viz: 'widget', value: null, unit: '', label: w.title ?? w.widgetKey, days, series: null };
+        }
+        const def = w.metricKey ? METRIC_REGISTRY[w.metricKey] : undefined;
         if (!def) {
-          return { widgetId: w.id, metricKey: w.metricKey, title: w.title, viz: w.viz, value: null, unit: '', label: w.metricKey, days, error: 'unknown metric' };
+          return { widgetId: w.id, widgetKey: null, metricKey: w.metricKey, title: w.title, viz: w.viz, value: null, unit: '', label: w.metricKey ?? '', days, series: null, error: 'unknown metric' };
         }
         const key = `dashboards:metric:t:${tenantId}:k:${w.metricKey}:d:${days}`;
         const value = await getOrSetCached(env, key, () => def.compute(db, tenantId, days), SHORT_TTL);
-        return { widgetId: w.id, metricKey: w.metricKey, title: w.title ?? def.label, viz: w.viz, value, unit: def.unit, label: def.label, days };
+        // Date-windowed trend (sparkline/line/bar source), cached alongside the
+        // scalar. Absent for point-in-time metrics → widget renders scalar-only.
+        const series = def.series
+          ? await getOrSetCached(env, `${key}:series`, () => def.series!(db, tenantId, days), SHORT_TTL)
+          : null;
+        return { widgetId: w.id, widgetKey: null, metricKey: w.metricKey, title: w.title ?? def.label, viz: w.viz, value, unit: def.unit, label: def.label, days, series };
       }),
     );
 

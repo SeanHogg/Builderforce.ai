@@ -9,12 +9,21 @@ import { apiRequest } from './apiClient';
  * to one of those whitelisted metrics. Manager-gated writes (dashboards.manage).
  */
 
-export type WidgetViz = 'stat' | 'bar' | 'line' | 'gauge';
+export type WidgetViz = 'stat' | 'bar' | 'line' | 'gauge' | 'widget';
+
+/** One day of a date-windowed metric series (UTC 'YYYY-MM-DD' → value). */
+export interface MetricPoint {
+  day: string;
+  value: number;
+}
 
 export interface DashboardWidget {
   id: number;
   dashboardId: number;
-  metricKey: string;
+  /** Scalar whitelisted metric — null for registry widgets. */
+  metricKey: string | null;
+  /** Registry widget id (rich client-rendered card) — null for scalar metrics. */
+  widgetKey: string | null;
   viz: WidgetViz;
   title: string | null;
   config: Record<string, unknown>;
@@ -40,13 +49,17 @@ export interface MetricCatalogEntry {
 
 export interface WidgetValue {
   widgetId: number;
-  metricKey: string;
+  metricKey: string | null;
+  /** Set when this is a registry widget — render it from the widget registry. */
+  widgetKey?: string | null;
   title: string | null;
   viz: WidgetViz;
   value: number | null;
   unit: string;
   label: string;
   days: number;
+  /** Date-windowed daily trend (sparkline/line/bar source); null for point-in-time metrics. */
+  series?: MetricPoint[] | null;
   error?: string;
 }
 
@@ -93,7 +106,7 @@ export const dashboardsApi = {
   // ── Widget CRUD ──────────────────────────────────────────────────────────────
   addWidget: (
     dashboardId: number,
-    widget: { metricKey: string; viz?: WidgetViz; title?: string; config?: Record<string, unknown>; position?: number },
+    widget: { metricKey?: string; widgetKey?: string; viz?: WidgetViz; title?: string; config?: Record<string, unknown>; position?: number },
   ): Promise<DashboardWidget> =>
     apiRequest(`/api/dashboards/dashboards/${dashboardId}/widgets`, {
       method: 'POST',

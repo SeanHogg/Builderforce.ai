@@ -64,7 +64,8 @@
       "contributors": "Contributeurs",
       "logs": "Journaux",
       "llm": "Utilisation LLM",
-      "qa": "QA agentique"
+      "qa": "QA agentique",
+      "home": "Accueil"
     }
   },
   "alerts": {
@@ -1091,6 +1092,13 @@
       "key": "Clé",
       "status": "Statut",
       "age": "Ancienneté"
+    },
+    "home": {
+      "title": "Analyses",
+      "subtitle": "Votre tableau de bord — épinglez n'importe quel widget de l'app pour composer votre vue.",
+      "addWidgets": "Ajouter des widgets",
+      "emptyTitle": "Votre tableau de bord est vide",
+      "emptyBody": "Épinglez des widgets depuis n'importe quel rapport ou page — l'épingle dans le coin d'une carte l'ajoute ici."
     }
   },
   "cloudAgentForm": {
@@ -1473,7 +1481,20 @@
     "blankProcess": "Processus vierge",
     "blankProcessDesc": "Cartographiez un flux de travail ou un transfert répétable.",
     "blankCanvas": "Canevas vierge",
-    "blankCanvasDesc": "Un tableau libre pour notes, minuteurs, images et intégrations."
+    "blankCanvasDesc": "Un tableau libre pour notes, minuteurs, images et intégrations.",
+    "marketplaceTitle": "Marketplace",
+    "listForSale": "Mettre en vente",
+    "updateListing": "Mettre à jour l'annonce",
+    "unlist": "Retirer",
+    "priceLabel": "Prix ($)",
+    "listedFor": "En vente à ${price}",
+    "installs": "{count, plural, =0 {aucune installation} one {# installation} other {# installations}}",
+    "marketTitle": "Connaissances et SOP à vendre",
+    "marketSubtitle": "Installez des SOP, processus et documents prêts à l'emploi dans votre espace de travail.",
+    "free": "Gratuit",
+    "addToKnowledge": "Ajouter à mes Connaissances",
+    "installing": "Installation…",
+    "by": "par {author}"
   },
   "canvas": {
     "add_text": "Texte",
@@ -1501,6 +1522,18 @@
     "noEmbed": "Aucun document lié",
     "embedIdPlaceholder": "ID du document…",
     "openEmbeddedDoc": "Ouvrir le document",
+    "add_video": "Vidéo",
+    "add_file": "Fichier",
+    "type_video": "Vidéo",
+    "type_file": "Fichier",
+    "noVideo": "Aucune vidéo",
+    "videoUrlPlaceholder": "Collez une URL de vidéo ou d'intégration…",
+    "noFile": "Aucun fichier lié",
+    "fileNamePlaceholder": "Nom du fichier (facultatif)…",
+    "fileUrlPlaceholder": "Collez une URL de fichier…",
+    "saveToKnowledge": "Enregistrer dans Connaissances",
+    "saving": "Enregistrement…",
+    "defaultBoardTitle": "Canevas sans titre",
     "start": "Démarrer",
     "pause": "Pause",
     "reset": "Réinitialiser",
@@ -1709,6 +1742,17 @@
       "titleRequired": "Un titre de campagne est requis."
     }
   },
+  "dashboard": {
+    "window": "{days} derniers j",
+    "noTrend": "Pas encore de tendance",
+    "unavailable": "Indisponible",
+    "recency": {
+      "justNow": "à l'instant",
+      "minutesAgo": "il y a {n} min",
+      "hoursAgo": "il y a {n} h",
+      "daysAgo": "il y a {n} j"
+    }
+  },
   "dashboards": {
     "title": "Tableaux de bord personnalisés",
     "subtitle": "Composez des tableaux de bord enregistrés à partir de widgets sur vos métriques existantes, et posez des questions en langage naturel.",
@@ -1812,5 +1856,98 @@
     "hoursPh": "h",
     "log": "Enregistrer",
     "delete": "Supprimer l'entrée"
+  },
+  "widgets": {
+    "pin": "Épingler au tableau de bord",
+    "unpin": "Détacher",
+    "expand": "Ouvrir le rapport complet",
+    "addTitle": "Ajouter des widgets",
+    "addToDashboard": "Ajouter au tableau de bord",
+    "searchPlaceholder": "Rechercher des widgets…",
+    "group": {
+      "aiImpact": "Impact de l'IA",
+      "delivery": "Livraison",
+      "dora": "DORA",
+      "finance": "Finance",
+      "engineering": "Ingénierie",
+      "overview": "Tableau de bord",
+      "llmUsage": "Utilisation LLM"
+    },
+    "title": {
+      "aiProductivity": "Score de productivité IA",
+      "aiThroughput": "Débit",
+      "aiQuality": "Qualité",
+      "aiEfficiency": "Efficacité",
+      "aiPrevScore": "Score précédent",
+      "aiUsage": "Utilisation dans le temps",
+      "aiModelShare": "Part des modèles dans les exécutions",
+      "aiMergeRate": "Taux de fusion par modèle",
+      "aiComparison": "Évaluation multi-outils",
+      "aiShareTrend": "Tendance d'adoption et de part",
+      "delivCycleTime": "Temps de cycle",
+      "delivVelocity": "Vélocité",
+      "delivEstimation": "Estimation",
+      "delivLifecyclePhases": "Phases du cycle de vie",
+      "delivLifecycleTrend": "Tendance du cycle de vie",
+      "delivVelocityTrend": "Tendance de vélocité",
+      "delivSprints": "Vélocité des sprints",
+      "doraDeployFreq": "Fréquence de déploiement",
+      "doraLeadTime": "Délai de livraison",
+      "doraChangeFail": "Taux d'échec des changements",
+      "doraMttr": "Temps de restauration",
+      "doraTotalDeploys": "Déploiements totaux",
+      "doraPerformance": "Performance vs. secteur",
+      "doraChangeOutcomes": "Résultats des changements",
+      "finSpend": "Dépenses",
+      "finForecast": "Prévision",
+      "finCostPerPr": "Coût par PR fusionnée",
+      "finPaidOverflow": "Dépassement payant",
+      "finCacheRead": "Lectures de cache",
+      "finSpendTrend": "Dépenses dans le temps",
+      "finBudgetVariance": "Écart budgétaire",
+      "finByProject": "Dépenses par projet",
+      "engOutcome": "Score de résultat",
+      "engMergeRate": "Taux de fusion",
+      "engCiGreen": "Taux CI au vert",
+      "engDegraded": "Taux dégradé",
+      "engCost": "Coût",
+      "engByApproach": "Par approche",
+      "engByModel": "Par modèle",
+      "engByActionType": "Par type de travail",
+      "projects": "Projets",
+      "tasks": "Tâches",
+      "agentsOnline": "Agents en ligne",
+      "pendingApprovals": "Demandes en attente",
+      "llmTokens": "Utilisation de tokens",
+      "llmRequests": "Requêtes LLM",
+      "llmByModel": "Tokens par modèle",
+      "llmBySource": "Coût par source"
+    },
+    "loading": "Chargement…",
+    "overview": {
+      "online": "en ligne",
+      "done": "Terminé",
+      "inProgress": "En cours",
+      "other": "Autre",
+      "noTasks": "Aucune tâche",
+      "tasks": "tâches",
+      "taskBreakdown": "Répartition des tâches",
+      "agentsOnline": "agents en ligne",
+      "noHosts": "Aucun agent",
+      "requiresReview": "à examiner",
+      "allClear": "Tout est clair"
+    },
+    "llmUsage": {
+      "tokensSub": "tokens au total",
+      "prompt": "Invite",
+      "completion": "Complétion",
+      "tokenSplit": "Invite vs complétion",
+      "requestsSub": "requêtes au total",
+      "noModels": "Aucune utilisation de modèle",
+      "byModel": "Tokens par modèle",
+      "noSpend": "Aucune dépense",
+      "estCost": "Coût est.",
+      "bySource": "Coût par source"
+    }
   }
 }

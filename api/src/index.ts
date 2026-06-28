@@ -54,6 +54,7 @@ import { createBenchmarkingRoutes } from './presentation/routes/benchmarkingRout
 import { createRecommendationsRoutes } from './presentation/routes/recommendationsRoutes';
 import { createDevexRoutes }       from './presentation/routes/devexRoutes';
 import { createDashboardsRoutes }  from './presentation/routes/dashboardsRoutes';
+import { createDashboardPinsRoutes } from './presentation/routes/dashboardPinsRoutes';
 import { createFinopsRoutes }      from './presentation/routes/finopsRoutes';
 import { createDeckRoutes }        from './presentation/routes/deckRoutes';
 import { createAlertRoutes }       from './presentation/routes/alertRoutes';
@@ -394,6 +395,7 @@ function buildApp(env: Env): Hono<HonoEnv> {
   app.route('/api/insights',   createRecommendationsRoutes(db));
   app.route('/api/devex',      createDevexRoutes(db));
   app.route('/api/dashboards', createDashboardsRoutes(db));
+  app.route('/api/dashboard-pins', createDashboardPinsRoutes(db));
   app.route('/api/finops',     createFinopsRoutes(db));
   app.route('/api/decks',      createDeckRoutes(db));
   app.route('/api/alerts',     createAlertRoutes(db));

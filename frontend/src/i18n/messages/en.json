@@ -64,7 +64,8 @@
       "contributors": "Contributors",
       "logs": "Logs",
       "llm": "LLM Usage",
-      "qa": "Agentic QA"
+      "qa": "Agentic QA",
+      "home": "Home"
     }
   },
   "alerts": {
@@ -1091,6 +1092,13 @@
       "key": "Key",
       "status": "Status",
       "age": "Age"
+    },
+    "home": {
+      "title": "Insights",
+      "subtitle": "Your dashboard — pin any widget from across the app to build your view.",
+      "addWidgets": "Add widgets",
+      "emptyTitle": "Your dashboard is empty",
+      "emptyBody": "Pin widgets from any report or page — the pin in a card's corner adds it here."
     }
   },
   "cloudAgentForm": {
@@ -1473,7 +1481,20 @@
     "blankProcess": "Blank process",
     "blankProcessDesc": "Map a repeatable workflow or hand-off.",
     "blankCanvas": "Blank canvas",
-    "blankCanvasDesc": "A free-form board for sticky notes, timers, images and embeds."
+    "blankCanvasDesc": "A free-form board for sticky notes, timers, images and embeds.",
+    "marketplaceTitle": "Marketplace",
+    "listForSale": "List for sale",
+    "updateListing": "Update listing",
+    "unlist": "Unlist",
+    "priceLabel": "Price ($)",
+    "listedFor": "Listed for ${price}",
+    "installs": "{count, plural, =0 {no installs} one {# install} other {# installs}}",
+    "marketTitle": "Knowledge & SOPs for sale",
+    "marketSubtitle": "Install ready-made SOPs, processes and docs into your workspace.",
+    "free": "Free",
+    "addToKnowledge": "Add to my Knowledge",
+    "installing": "Installing…",
+    "by": "by {author}"
   },
   "canvas": {
     "add_text": "Text",
@@ -1501,6 +1522,18 @@
     "noEmbed": "No document linked",
     "embedIdPlaceholder": "Knowledge document ID…",
     "openEmbeddedDoc": "Open document",
+    "add_video": "Video",
+    "add_file": "File",
+    "type_video": "Video",
+    "type_file": "File",
+    "noVideo": "No video",
+    "videoUrlPlaceholder": "Paste a video or embed URL…",
+    "noFile": "No file linked",
+    "fileNamePlaceholder": "File name (optional)…",
+    "fileUrlPlaceholder": "Paste a file URL…",
+    "saveToKnowledge": "Save to Knowledge",
+    "saving": "Saving…",
+    "defaultBoardTitle": "Untitled canvas",
     "start": "Start",
     "pause": "Pause",
     "reset": "Reset",
@@ -1709,6 +1742,17 @@
       "titleRequired": "A campaign title is required."
     }
   },
+  "dashboard": {
+    "window": "Last {days}d",
+    "noTrend": "No trend yet",
+    "unavailable": "Unavailable",
+    "recency": {
+      "justNow": "just now",
+      "minutesAgo": "{n}m ago",
+      "hoursAgo": "{n}h ago",
+      "daysAgo": "{n}d ago"
+    }
+  },
   "dashboards": {
     "title": "Custom Dashboards",
     "subtitle": "Build saved dashboards from widgets over your existing metrics, and ask plain-English questions.",
@@ -1812,5 +1856,98 @@
     "hoursPh": "hrs",
     "log": "Log",
     "delete": "Delete entry"
+  },
+  "widgets": {
+    "pin": "Pin to dashboard",
+    "unpin": "Unpin",
+    "expand": "Open full report",
+    "addTitle": "Add widgets",
+    "addToDashboard": "Add to dashboard",
+    "searchPlaceholder": "Search widgets…",
+    "group": {
+      "aiImpact": "AI Impact",
+      "delivery": "Delivery",
+      "dora": "DORA",
+      "finance": "Finance",
+      "engineering": "Engineering",
+      "overview": "Dashboard",
+      "llmUsage": "LLM Usage"
+    },
+    "title": {
+      "aiProductivity": "AI Productivity Score",
+      "aiThroughput": "Throughput",
+      "aiQuality": "Quality",
+      "aiEfficiency": "Efficiency",
+      "aiPrevScore": "Prior Score",
+      "aiUsage": "Usage over time",
+      "aiModelShare": "Model share of runs",
+      "aiMergeRate": "Merge rate by model",
+      "aiComparison": "Multi-tool evaluation",
+      "aiShareTrend": "Adoption & share trend",
+      "delivCycleTime": "Cycle time",
+      "delivVelocity": "Velocity",
+      "delivEstimation": "Estimation",
+      "delivLifecyclePhases": "Lifecycle phases",
+      "delivLifecycleTrend": "Lifecycle trend",
+      "delivVelocityTrend": "Velocity trend",
+      "delivSprints": "Sprint velocity",
+      "doraDeployFreq": "Deploy frequency",
+      "doraLeadTime": "Lead time",
+      "doraChangeFail": "Change-failure rate",
+      "doraMttr": "Time to restore",
+      "doraTotalDeploys": "Total deployments",
+      "doraPerformance": "Performance vs. industry",
+      "doraChangeOutcomes": "Change outcomes",
+      "finSpend": "Spend",
+      "finForecast": "Forecast",
+      "finCostPerPr": "Cost per Merged PR",
+      "finPaidOverflow": "Paid Overflow",
+      "finCacheRead": "Cache Reads",
+      "finSpendTrend": "Spend Over Time",
+      "finBudgetVariance": "Budget Variance",
+      "finByProject": "Spend by Project",
+      "engOutcome": "Outcome Score",
+      "engMergeRate": "Merge Rate",
+      "engCiGreen": "CI Green Rate",
+      "engDegraded": "Degraded Rate",
+      "engCost": "Cost",
+      "engByApproach": "By Approach",
+      "engByModel": "By Model",
+      "engByActionType": "By Work Type",
+      "projects": "Projects",
+      "tasks": "Tasks",
+      "agentsOnline": "Agents Online",
+      "pendingApprovals": "Pending Requests",
+      "llmTokens": "Token Usage",
+      "llmRequests": "LLM Requests",
+      "llmByModel": "Tokens by Model",
+      "llmBySource": "Cost by Source"
+    },
+    "loading": "Loading…",
+    "overview": {
+      "online": "online",
+      "done": "Done",
+      "inProgress": "In progress",
+      "other": "Other",
+      "noTasks": "No tasks",
+      "tasks": "tasks",
+      "taskBreakdown": "Task breakdown",
+      "agentsOnline": "agents online",
+      "noHosts": "No agents",
+      "requiresReview": "need review",
+      "allClear": "All clear"
+    },
+    "llmUsage": {
+      "tokensSub": "total tokens",
+      "prompt": "Prompt",
+      "completion": "Completion",
+      "tokenSplit": "Prompt vs completion",
+      "requestsSub": "total requests",
+      "noModels": "No model usage",
+      "byModel": "Tokens by model",
+      "noSpend": "No spend",
+      "estCost": "Est. cost",
+      "bySource": "Cost by source"
+    }
   }
 }

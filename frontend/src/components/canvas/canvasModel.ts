@@ -15,7 +15,7 @@
  * the SAME elapsed value from the shared model instead of a private local clock.
  */
 
-export type CanvasBlockType = 'text' | 'sticky' | 'image' | 'embed' | 'timer' | 'stopwatch';
+export type CanvasBlockType = 'text' | 'sticky' | 'image' | 'video' | 'file' | 'embed' | 'timer' | 'stopwatch';
 
 export interface CanvasBlockBase {
   id: string;
@@ -41,6 +41,16 @@ export interface ImageBlock extends CanvasBlockBase {
   url: string;
   alt?: string;
 }
+export interface VideoBlock extends CanvasBlockBase {
+  type: 'video';
+  /** Direct video file URL (mp4/webm) or an embeddable URL (YouTube/Vimeo/Loom). */
+  url: string;
+}
+export interface FileBlock extends CanvasBlockBase {
+  type: 'file';
+  url: string;
+  name?: string;
+}
 export interface EmbedBlock extends CanvasBlockBase {
   type: 'embed';
   /** Transcluded knowledge document id. */
@@ -64,7 +74,7 @@ export interface StopwatchBlock extends CanvasBlockBase {
   label?: string;
 }
 
-export type CanvasBlock = TextBlock | StickyBlock | ImageBlock | EmbedBlock | TimerBlock | StopwatchBlock;
+export type CanvasBlock = TextBlock | StickyBlock | ImageBlock | VideoBlock | FileBlock | EmbedBlock | TimerBlock | StopwatchBlock;
 
 export interface CanvasModel {
   version: 1;
@@ -129,6 +139,10 @@ export function defaultBlock(type: CanvasBlockType, at: { x: number; y: number }
       return { ...base, type, w: 180, h: 160, text: '', color: STICKY_COLORS[0] };
     case 'image':
       return { ...base, type, w: 260, h: 180, url: '', alt: '' };
+    case 'video':
+      return { ...base, type, w: 320, h: 200, url: '' };
+    case 'file':
+      return { ...base, type, w: 240, h: 96, url: '', name: '' };
     case 'embed':
       return { ...base, type, w: 280, h: 160, documentId: '' };
     case 'timer':

@@ -8,6 +8,7 @@ import MarketingShell from './MarketingShell';
 import OnboardingGate from './OnboardingGate';
 import RouteMarketing from './RouteMarketing';
 import { BrainActionsProvider, BrainContextProvider, BrainProvider, brainConfig } from '@/lib/brain';
+import { PinsProvider } from '@/lib/widgets/PinsProvider';
 import { AiInsightPanelProvider } from './insights/AiInsightPanelProvider';
 import { AiInsightPanelBrainBridge } from './insights/AiInsightPanelBrainBridge';
 import { DeliveryPanelProvider } from './insights/DeliveryPanelProvider';
@@ -16,6 +17,8 @@ import { FinancePanelProvider } from './insights/finance/FinancePanelProvider';
 import { FinancePanelBrainBridge } from './insights/finance/FinancePanelBrainBridge';
 import { DevexPanelProvider } from './insights/DevexPanelProvider';
 import { DevexPanelBrainBridge } from './insights/DevexPanelBrainBridge';
+import { CanvasPanelProvider } from './canvas/CanvasPanelProvider';
+import { CanvasPanelBrainBridge } from './canvas/CanvasPanelBrainBridge';
 import { FloatingBrain } from './brain/FloatingBrain';
 import { McpExtensionsBridge } from './brain/McpExtensionsBridge';
 import { PlatformActionsBridge } from './brain/PlatformActionsBridge';
@@ -116,6 +119,9 @@ export default function ConditionalAppShell({ children }: { children: React.Reac
   // in, a sign-in CTA otherwise). See FloatingBrain.
   return (
     <BrainProvider config={brainConfig}>
+      {/* App-wide pin state: any widget anywhere can show a pin control that
+          reflects/updates the user's personal /insights home dashboard. */}
+      <PinsProvider>
       {/* One app-wide AI Insights slide-out, opened by the combined /insights/ai
           dashboard AND by the Brain (via show_ai_insight → AiInsightPanelBrainBridge).
           Wraps the Brain providers so the bridge can reach the drawer. */}
@@ -123,6 +129,7 @@ export default function ConditionalAppShell({ children }: { children: React.Reac
         <DeliveryPanelProvider>
           <FinancePanelProvider>
           <DevexPanelProvider>
+          <CanvasPanelProvider>
           <BrainActionsProvider>
             <BrainContextProvider>
               {content}
@@ -139,12 +146,17 @@ export default function ConditionalAppShell({ children }: { children: React.Reac
               <DeliveryPanelBrainBridge />
               <FinancePanelBrainBridge />
               <DevexPanelBrainBridge />
+              {/* Canvas slide-out tool: `show_canvas` lets the Brain generate a
+                  visual board (notes/timers) and the user save it to Knowledge. */}
+              <CanvasPanelBrainBridge />
             </BrainContextProvider>
           </BrainActionsProvider>
+          </CanvasPanelProvider>
           </DevexPanelProvider>
           </FinancePanelProvider>
         </DeliveryPanelProvider>
       </AiInsightPanelProvider>
+      </PinsProvider>
     </BrainProvider>
   );
 }

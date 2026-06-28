@@ -4,53 +4,23 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import PageContainer from '@/components/PageContainer';
 import { RoleGate } from '@/components/RoleGate';
+import { DashboardWidget } from '@/components/dashboard';
+import { WidgetCard } from '@/components/widgets/WidgetCard';
+import { getWidget, listWidgetGroups } from '@/lib/widgets/registry';
 import {
   dashboardsApi,
   type DashboardData,
   type MetricCatalogEntry,
   type QueryAnswer,
   type SavedDashboard,
-  type WidgetValue,
   type WidgetViz,
 } from '@/lib/dashboardsApi';
 
 const VIZ_OPTIONS: WidgetViz[] = ['stat', 'bar', 'line', 'gauge'];
 
-/** Format a resolved metric value for a StatCard. */
-function formatValue(v: WidgetValue): string {
-  if (v.value == null) return '—';
-  const n = v.value;
-  const rounded = Math.abs(n) >= 100 ? Math.round(n) : Math.round(n * 100) / 100;
-  if (v.unit === 'USD') return `$${rounded.toLocaleString('en-US')}`;
-  if (v.unit === '%') return `${rounded}%`;
-  if (v.unit === '/day') return `${rounded}/day`;
-  if (v.unit === 'hours') return `${rounded}h`;
-  return `${rounded}`;
-}
-
-function StatCard({ v }: { v: WidgetValue }) {
-  return (
-    <div
-      style={{
-        border: '1px solid var(--border-subtle)',
-        borderRadius: 12,
-        padding: 16,
-        background: 'var(--bg-elevated)',
-        minWidth: 180,
-        flex: '1 1 200px',
-      }}
-    >
-      <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 6 }}>{v.title ?? v.label}</div>
-      <div style={{ fontSize: 28, fontWeight: 700, color: 'var(--text-primary)' }}>{formatValue(v)}</div>
-      <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 6 }}>
-        {v.label} · {v.viz} · {v.days}d
-      </div>
-    </div>
-  );
-}
-
 export default function DashboardsClient() {
   const t = useTranslations('dashboards');
+  const tw = useTranslations('widgets');
 
   const [dashboards, setDashboards] = useState<SavedDashboard[]>([]);
   const [metrics, setMetrics] = useState<MetricCatalogEntry[]>([]);
@@ -63,6 +33,8 @@ export default function DashboardsClient() {
   const [newName, setNewName] = useState('');
   const [pickMetric, setPickMetric] = useState('');
   const [pickViz, setPickViz] = useState<WidgetViz>('stat');
+  const [pickWidget, setPickWidget] = useState('');
+  const widgetGroups = useMemo(() => listWidgetGroups(), []);
 
   // Ask box state.
   const [question, setQuestion] = useState('');
@@ -131,6 +103,17 @@ export default function DashboardsClient() {
     if (activeId == null || !pickMetric) return;
     try {
       await dashboardsApi.addWidget(activeId, { metricKey: pickMetric, viz: pickViz });
+      await reload();
+      await loadData(activeId);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    }
+  };
+
+  const addRegistryWidget = async () => {
+    if (activeId == null || !pickWidget) return;
+    try {
+      await dashboardsApi.addWidget(activeId, { widgetKey: pickWidget });
       await reload();
       await loadData(activeId);
     } catch (e) {
@@ -276,9 +259,23 @@ export default function DashboardsClient() {
                 ))}
               </select>
               <select style={inputStyle} value={pickViz} onChange={(e) => setPickViz(e.target.value as WidgetViz)}>
-                {VIZ_OPTIONS.map((v) => <option key={v} value={v}>{v}</option>)}
+                {VIZ_OPTIONS.filter((v) => v !== 'widget').map((v) => <option key={v} value={v}>{v}</option>)}
               </select>
               <button style={btnStyle} onClick={() => void addWidget()}>{t('widget.add')}</button>
+            </div>
+            {/* Rich insight widgets from the app-wide registry (charts, not just scalars). */}
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 16, alignItems: 'center' }}>
+              <select style={inputStyle} value={pickWidget} onChange={(e) => setPickWidget(e.target.value)}>
+                <option value="">{tw('addTitle')}…</option>
+                {widgetGroups.map((g) => (
+                  <optgroup key={g.group} label={tw(`group.${g.group}`)}>
+                    {g.widgets.map((w) => (
+                      <option key={w.id} value={w.id}>{tw(`title.${w.titleKey}`)}</option>
+                    ))}
+                  </optgroup>
+                ))}
+              </select>
+              <button style={btnStyle} onClick={() => void addRegistryWidget()} disabled={!pickWidget}>{tw('addToDashboard')}</button>
             </div>
           </RoleGate>
 
@@ -287,9 +284,11 @@ export default function DashboardsClient() {
           )}
 
           <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-            {data?.widgets.map((w) => (
-              <div key={w.widgetId} style={{ position: 'relative', flex: '1 1 200px', minWidth: 180 }}>
-                <StatCard v={w} />
+            {data?.widgets.map((w) => {
+              const def = w.widgetKey ? getWidget(w.widgetKey) : undefined;
+              return (
+              <div key={w.widgetId} style={{ position: 'relative', flex: '1 1 260px', minWidth: 220 }}>
+                {def ? <WidgetCard def={def} days={w.days} /> : <DashboardWidget v={w} />}
                 <RoleGate capability="dashboards.manage">
                   <button
                     onClick={() => void removeWidget(w.widgetId)}
@@ -304,7 +303,8 @@ export default function DashboardsClient() {
                   </button>
                 </RoleGate>
               </div>
-            ))}
+              );
+            })}
           </div>
         </section>
       )}

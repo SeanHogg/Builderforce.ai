@@ -43,7 +43,12 @@ function fmt(ms: number): string {
   return h > 0 ? `${h}:${mm}:${ss}` : `${mm}:${ss}`;
 }
 
-const ADD_TYPES: CanvasBlockType[] = ['text', 'sticky', 'image', 'embed', 'timer', 'stopwatch'];
+const ADD_TYPES: CanvasBlockType[] = ['text', 'sticky', 'image', 'video', 'file', 'embed', 'timer', 'stopwatch'];
+
+/** Treat a URL as a direct video file (use <video>) vs an embeddable page (<iframe>). */
+function isDirectVideo(url: string): boolean {
+  return /\.(mp4|webm|ogg|mov)(\?|#|$)/i.test(url);
+}
 
 export function CanvasBoard({ value, onChange, readOnly = false, height = 600 }: CanvasBoardProps) {
   const t = useTranslations('canvas');
@@ -327,6 +332,40 @@ function BlockBody({
         <div style={{ color: 'var(--text-muted, #9ca3af)', fontSize: 12, margin: 'auto' }}>{t('noImage')}</div>
       ) : (
         <input value={block.url} placeholder={t('imageUrlPlaceholder')} onChange={(e) => onUpdate({ url: e.target.value })} style={inlineInput} />
+      );
+
+    case 'video':
+      return block.url ? (
+        isDirectVideo(block.url) ? (
+          // eslint-disable-next-line jsx-a11y/media-has-caption
+          <video src={block.url} controls style={{ maxWidth: '100%', maxHeight: '100%', margin: 'auto' }} />
+        ) : (
+          <iframe
+            src={block.url}
+            title={t('type_video')}
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+            allowFullScreen
+            style={{ width: '100%', height: '100%', border: 'none' }}
+          />
+        )
+      ) : readOnly ? (
+        <div style={{ color: 'var(--text-muted, #9ca3af)', fontSize: 12, margin: 'auto' }}>{t('noVideo')}</div>
+      ) : (
+        <input value={block.url} placeholder={t('videoUrlPlaceholder')} onChange={(e) => onUpdate({ url: e.target.value.trim() })} style={inlineInput} />
+      );
+
+    case 'file':
+      return block.url ? (
+        <a href={block.url} target="_blank" rel="noreferrer" style={{ color: 'var(--accent, #60a5fa)', fontSize: 13, margin: 'auto', textAlign: 'center', wordBreak: 'break-all' }}>
+          📎 {block.name || block.url}
+        </a>
+      ) : readOnly ? (
+        <div style={{ color: 'var(--text-muted, #9ca3af)', fontSize: 12, margin: 'auto' }}>{t('noFile')}</div>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 4, margin: 'auto 0' }}>
+          <input value={block.name ?? ''} placeholder={t('fileNamePlaceholder')} onChange={(e) => onUpdate({ name: e.target.value })} style={inlineInput} />
+          <input value={block.url} placeholder={t('fileUrlPlaceholder')} onChange={(e) => onUpdate({ url: e.target.value.trim() })} style={inlineInput} />
+        </div>
       );
 
     case 'embed':

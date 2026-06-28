@@ -4130,6 +4130,40 @@ export const marketplacePersonas = pgTable('marketplace_personas', {
 }));
 
 /**
+ * Marketplace listings for KNOWLEDGE documents (migration 0252). Lets a tenant
+ * publish a SOP/process/doc/canvas for sale; the listing carries a content
+ * snapshot so installing copies it into the buyer's tenant as a new document.
+ * Mirrors marketplacePersonas. Charging/checkout (price_cents) is a separate
+ * Stripe integration — install currently grants a copy.
+ */
+export const marketplaceKnowledge = pgTable('marketplace_knowledge', {
+  id:               uuid('id').primaryKey().defaultRandom(),
+  tenantId:         integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  createdBy:        varchar('created_by', { length: 36 }).references(() => users.id, { onDelete: 'set null' }),
+  /** The document this listing was published from (SET NULL if it is deleted). */
+  sourceDocumentId: uuid('source_document_id').references(() => knowledgeDocuments.id, { onDelete: 'set null' }),
+  title:            varchar('title', { length: 255 }).notNull(),
+  summary:          text('summary'),
+  docType:          varchar('doc_type', { length: 16 }).notNull().default('doc'),
+  /** Content snapshot used to recreate the document on install. */
+  content:          text('content').notNull().default(''),
+  category:         varchar('category', { length: 100 }),
+  /** JSON array of tag strings. */
+  tags:             text('tags').notNull().default('[]'),
+  /** Sale price in cents (0 = free). */
+  priceCents:       integer('price_cents').notNull().default(0),
+  /** 'private' | 'tenant' | 'public' */
+  visibility:       varchar('visibility', { length: 16 }).notNull().default('public'),
+  authorName:       varchar('author_name', { length: 255 }),
+  installCount:     integer('install_count').notNull().default(0),
+  likeCount:        integer('like_count').notNull().default(0),
+  createdAt:        timestamp('created_at').notNull().defaultNow(),
+  updatedAt:        timestamp('updated_at').notNull().defaultNow(),
+}, (t) => ({
+  byTenant:   index('idx_marketplace_knowledge_tenant').on(t.tenantId),
+}));
+
+/**
  * tenant_models — the tenant "LLM" object (migration 0211). A reusable, named
  * bundle of { base model + system prompt + params (+ optional persona / BYO key /
  * future trained model) } that any cloud agent, on-prem host, or the Designer can
@@ -4891,7 +4925,10 @@ export const dashboardWidgets = pgTable('dashboard_widgets', {
   id:          serial('id').primaryKey(),
   tenantId:    integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
   dashboardId: integer('dashboard_id').notNull().references(() => savedDashboards.id, { onDelete: 'cascade' }),
-  metricKey:   varchar('metric_key', { length: 64 }).notNull(),
+  // A widget is EITHER a scalar whitelisted metric (metricKey) OR a rich registry
+  // widget contributed by any surface (widgetKey). Exactly one is set.
+  metricKey:   varchar('metric_key', { length: 64 }),
+  widgetKey:   varchar('widget_key', { length: 96 }),
   viz:         varchar('viz', { length: 16 }).notNull().default('stat'),
   title:       varchar('title', { length: 160 }),
   config:      jsonb('config').$type<Record<string, unknown>>().notNull().default({}),
@@ -4899,6 +4936,19 @@ export const dashboardWidgets = pgTable('dashboard_widgets', {
 }, (t) => ({
   byTenant:    index('idx_dashboard_widgets_tenant').on(t.tenantId),
   byDashboard: index('idx_dashboard_widgets_dashboard').on(t.dashboardId),
+}));
+
+// A user's personal widget pins — the registry widget ids on their /insights
+// home dashboard, scoped to (tenant, user).
+export const dashboardPins = pgTable('dashboard_pins', {
+  id:        serial('id').primaryKey(),
+  tenantId:  integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  userId:    varchar('user_id', { length: 36 }).notNull(),
+  widgetKey: varchar('widget_key', { length: 96 }).notNull(),
+  position:  integer('position').notNull().default(0),
+  pinnedAt:  timestamp('pinned_at').notNull().defaultNow(),
+}, (t) => ({
+  byTenantUser: index('idx_dashboard_pins_tenant_user').on(t.tenantId, t.userId),
 }));
 
 export const savedQueries = pgTable('saved_queries', {
