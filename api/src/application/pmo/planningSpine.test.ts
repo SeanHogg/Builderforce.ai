@@ -76,6 +76,37 @@ describe('buildSpine', () => {
     expect(obj.cost.capexUsd).toBeCloseTo(1, 5);
   });
 
+  it('real logged time overrides the cycle-time estimate for human cost (SPINE-1)', () => {
+    const r = buildSpine({
+      portfolios: [], objectives: [], initiatives: [], projects: [{ id: 1, initiativeId: null }],
+      tasks: [baseTask({
+        id: 40, projectId: 1, assignedUserId: 'u1',
+        createdAt: new Date('2026-01-01T00:00:00Z'), completedAt: new Date('2026-01-01T06:00:00Z'), // 6h cycle
+      })],
+      links: [], taskLlm: [],
+      memberRates: [{ memberRef: 'u1', costRateUsdCents: 5000 }], // $50/h
+      loggedMinutesByTask: new Map([[40, 30]]), // but only 30 min logged
+    });
+    const task = r.nodes.find((n) => n.key === 'task:40')!;
+    expect(task.cost.humanUsd).toBeCloseTo(25, 5); // 0.5h * $50, NOT the 6h estimate
+  });
+
+  it('folds roadmap items in as leaf nodes under their project initiative (SPINE-4)', () => {
+    const r = buildSpine({
+      portfolios: [],
+      objectives: [],
+      initiatives: [{ id: 'i9', name: 'Init', status: 'active', startDate: null, targetDate: null, portfolioId: null, costClass: null, costClassSource: 'manual' }],
+      projects: [{ id: 7, initiativeId: 'i9' }],
+      tasks: [],
+      links: [],
+      taskLlm: [], memberRates: [],
+      roadmapItems: [{ id: 'rm1', title: 'Launch', status: 'planned', targetDate: new Date('2026-03-01'), projectId: 7 }],
+    });
+    const rm = r.nodes.find((n) => n.key === 'roadmap:rm1')!;
+    expect(rm.kind).toBe('roadmap');
+    expect(rm.parentKey).toBe('initiative:i9');
+  });
+
   it('estimates human labour cost from cycle time and member rate', () => {
     const r = buildSpine({
       portfolios: [], objectives: [], initiatives: [], projects: [{ id: 1, initiativeId: null }],

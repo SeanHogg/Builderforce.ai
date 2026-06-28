@@ -1,8 +1,10 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { insightsApi, type AllocationInsights, type AllocationGoal, type AllocationCategory, type CategoryAllocation } from '@/lib/builderforceApi';
+import { fetchProjects } from '@/lib/api';
+import type { Project } from '@/lib/types';
 import { usePmData } from '@/lib/pm/usePmData';
 import { PmCard, PmEmpty, PmError, StatCard, ProgressBar } from '@/components/pm/pmShared';
 import { Select } from '@/components/Select';
@@ -45,8 +47,12 @@ export function AllocationLens() {
   const [busy, setBusy] = useState(false);
   const [goalCat, setGoalCat] = useState<AllocationCategory>('innovation');
   const [goalPct, setGoalPct] = useState('');
+  const [projectId, setProjectId] = useState<number | undefined>(undefined);
+  const [projects, setProjects] = useState<Project[]>([]);
 
-  const { data, error, reload } = usePmData<AllocationInsights>(() => insightsApi.allocation({ days, period }), [days, period]);
+  useEffect(() => { let alive = true; fetchProjects().then((p) => { if (alive) setProjects(p); }).catch(() => {}); return () => { alive = false; }; }, []);
+
+  const { data, error, reload } = usePmData<AllocationInsights>(() => insightsApi.allocation({ days, period, projectId }), [days, period, projectId]);
   const { data: goals, reload: reloadGoals } = usePmData<AllocationGoal[]>(() => insightsApi.allocationGoals.list(), []);
 
   const run = async (fn: () => Promise<unknown>) => {
@@ -58,12 +64,17 @@ export function AllocationLens() {
   if (!data) return <PmEmpty message={t('loading')} />;
 
   const catLabel = (c: AllocationCategory) => t(`alloc.cat.${c}`);
-  // Goals for the active tenant scope + period (the lens shows tenant grain).
-  const periodGoals = (goals ?? []).filter((g) => g.scopeKind === 'tenant' && g.periodMonth === period);
+  // Goals for the active scope (tenant, or the selected project) + period.
+  const goalScope = projectId != null ? 'project' : 'tenant';
+  const periodGoals = (goals ?? []).filter((g) => g.scopeKind === goalScope && g.periodMonth === period && (goalScope === 'tenant' || g.projectId === projectId));
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
       <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+        <Select style={{ ...inputStyle, maxWidth: 200 }} value={projectId ?? ''} onChange={(e) => setProjectId(e.target.value ? Number(e.target.value) : undefined)} aria-label={t('alloc.scope')}>
+          <option value="">{t('alloc.allProjects')}</option>
+          {projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+        </Select>
         <Select style={inputStyle} value={days} onChange={(e) => setDays(Number(e.target.value))} aria-label={t('window')}>
           <option value={7}>{t('days', { n: 7 })}</option>
           <option value={30}>{t('days', { n: 30 })}</option>
@@ -115,7 +126,7 @@ export function AllocationLens() {
             <button
               type="button" style={btnStyle} disabled={busy || !goalPct.trim()}
               onClick={() => run(async () => {
-                await insightsApi.allocationGoals.create({ scopeKind: 'tenant', periodMonth: period, category: goalCat, targetPct: Number(goalPct) });
+                await insightsApi.allocationGoals.create({ scopeKind: goalScope, projectId, periodMonth: period, category: goalCat, targetPct: Number(goalPct) });
                 setGoalPct('');
               })}
             >

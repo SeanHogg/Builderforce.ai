@@ -618,7 +618,9 @@
         "support": "Soporte",
         "tech_debt": "Deuda técnica",
         "other": "Otro"
-      }
+      },
+      "scope": "Ámbito",
+      "allProjects": "Todos los proyectos"
     },
     "deliv": {
       "title": "Entrega",
@@ -657,7 +659,29 @@
       "week": "sem",
       "open": "Abiertas",
       "baseline": "Línea base",
-      "baselineScope": "Alcance base"
+      "baselineScope": "Alcance base",
+      "velocity": "Velocidad del sprint",
+      "avgVelocity": "Velocidad media",
+      "avgVelocitySub": "en {n} sprints",
+      "estimated": "Tareas estimadas",
+      "estimatedSub": "{n} sin estimar",
+      "sprint": "Sprint",
+      "committed": "Comprometido",
+      "completed": "Completado",
+      "sayDo": "Dicho/hecho",
+      "updates": "Actualizaciones de estado",
+      "updateStatus": "Estado",
+      "postUpdate": "Publicar",
+      "noUpdates": "Aún no hay actualizaciones: añade la primera.",
+      "someone": "Alguien",
+      "updatePlaceholder": "Añade una actualización de estado (p. ej. bloqueado por infraestructura, recorte de alcance acordado)…",
+      "updateStatusLabel": {
+        "note": "Nota",
+        "on_track": "En curso",
+        "at_risk": "En riesgo",
+        "blocked": "Bloqueado",
+        "done": "Completado"
+      }
     },
     "aiImpact": {
       "title": "Impacto de la IA",
@@ -881,7 +905,14 @@
     "sampleLabel": "Respuesta de ejemplo",
     "latencyLabel": "Latencia",
     "modeLabel": "Modo de inferencia",
-    "callTitle": "Cómo llamar a tu modelo"
+    "callTitle": "Cómo llamar a tu modelo",
+    "knowledgeTitle": "Conocimiento (entrena con tus datos)",
+    "knowledgeDesc": "Pega documentos propios: preguntas frecuentes, políticas, documentación de producto. El agente recupera los pasajes más relevantes y fundamenta sus respuestas en ellos durante la inferencia.",
+    "knowledgePlaceholder": "Pega aquí tu documentación, preguntas frecuentes o políticas…",
+    "knowledgeBtn": "Ingerir conocimiento",
+    "knowledgeIngesting": "Ingiriendo…",
+    "knowledgeDone": "Ingerido: {count} fragmentos ahora se recuperan durante la inferencia.",
+    "knowledgeError": "Error de ingesta: {error}"
   },
   "projectDiagnostics": {
     "title": "Diagnósticos del proyecto",
@@ -971,8 +1002,10 @@
       "objective": "Objetivo",
       "initiative": "Iniciativa",
       "epic": "Épica",
-      "task": "Tarea"
-    }
+      "task": "Tarea",
+      "roadmap": "Hoja de ruta"
+    },
+    "exportCsv": "Exportar CSV"
   },
   "reconcile": {
     "loading": "Cargando elementos de trabajo…",
@@ -1111,7 +1144,21 @@
     "noCollaborators": "Aún no se ha invitado a nadie.",
     "remove": "Quitar",
     "accessViewerNote": "Has sido invitado a ver esta página.",
-    "accessReadOnlyNote": "Tienes acceso de solo lectura a esta página."
+    "accessReadOnlyNote": "Tienes acceso de solo lectura a esta página.",
+    "analyzeTitle": "Analizar y mejorar",
+    "analyzeHint": "Deja que la IA revise este documento en busca de ineficiencias, lagunas, riesgos y claridad, y proponga un flujo más eficiente.",
+    "analyzeRun": "Analizar proceso",
+    "analyzing": "Analizando…",
+    "analyzeNoFindings": "No se encontraron problemas: parece sólido.",
+    "analyzeImprovedFlow": "Flujo mejorado propuesto",
+    "analyzeApplyFlow": "Reemplazar el documento con el flujo mejorado",
+    "severity_low": "Baja",
+    "severity_medium": "Media",
+    "severity_high": "Alta",
+    "category_inefficiency": "Ineficiencia",
+    "category_gap": "Laguna",
+    "category_risk": "Riesgo",
+    "category_clarity": "Claridad"
   },
   "quality": {
     "title": "Calidad del producto",
@@ -1198,8 +1245,17 @@
       "sdkSnippet": "SDK de navegador",
       "curlSnippet": "Servidor / curl",
       "otlpEndpoint": "Endpoint OTLP",
-      "webhookUrl": "URL del webhook"
-    }
+      "webhookUrl": "URL del webhook",
+      "backfill": "Rellenar",
+      "backfilling": "Rellenando…",
+      "backfillDone": "Se rellenaron {pulled} incidencias ({accepted} almacenadas)",
+      "backfillFailed": "Error al rellenar",
+      "sentryBackfillHint": "Opcional: añade un token de API de Sentry y el ámbito del proyecto para rellenar las incidencias existentes y poblar el panel.",
+      "apiTokenPlaceholder": "Token de API de Sentry (para rellenar)",
+      "scopePlaceholder": "Ámbito — slug-de-organización/slug-de-proyecto",
+      "baseUrlPlaceholder": "URL base de Sentry (autoalojado, opcional)"
+    },
+    "loadMore": "Cargar más"
   },
   "surveys": {
     "title": "Encuestas de DevEx",
@@ -1367,5 +1423,14 @@
     "boardDeck": "Presentación de I+D para el consejo",
     "cfoDeck": "Presentación CFO / DevFinOps",
     "error": "No se pudo generar la presentación"
+  },
+  "timeTracking": {
+    "title": "Tiempo registrado",
+    "windowTotal": "últimos {days}d · {hours}",
+    "loading": "Cargando…",
+    "pickTask": "Elegir una tarea…",
+    "hoursPh": "h",
+    "log": "Registrar",
+    "delete": "Eliminar entrada"
   }
 }

@@ -22,9 +22,9 @@ import { authMiddleware, requireRole } from '../middleware/authMiddleware';
 import { TenantRole } from '../../domain/shared/types';
 import { mountTrackers, scope } from './segmentTrackerRoutes';
 import { getOrSetCached, getCacheVersion } from '../../infrastructure/cache/readThroughCache';
-import { and, eq } from 'drizzle-orm';
+import { and, desc, eq } from 'drizzle-orm';
 import {
-  allocationGoals, budgets, teamMembers,
+  allocationGoals, budgets, teamMembers, deliverableUpdates, users,
   prodIncidents, supportTickets, uptimeSamples,
   headcountEvents, openPositions,
   aiToolAdoption, aiProgramInitiatives,
@@ -41,6 +41,7 @@ import { computeComplianceSummary, buildEvidencePack, evidencePackToCsv } from '
 import { computeQualityInsights } from '../../application/insights/qualityInsights';
 import { computePeopleInsights } from '../../application/insights/peopleInsights';
 import { computeRdFinancials } from '../../application/insights/rdFinancialsInsights';
+import { importBoardRows, isImportDataset, IMPORT_DATASETS } from '../../application/insights/boardImport';
 import type { Env, HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 
@@ -159,7 +160,8 @@ export function createInsightsRoutes(db: Db): Hono<HonoEnv> {
     const key = `insights:alloc:t:${tenantId}:d:${days}:p:${period}:pr:${projectId ?? 0}:tm:${teamId ?? 0}:v:${ver}`;
     return c.json(await getOrSetCached(
       env, key,
-      () => computeAllocationInsights(db, tenantId, days, now, { projectId, memberKeys }, goals),
+      // lineage:true → CAPEX/OPEX honours spine objective/initiative inheritance (SPINE-2). Cached.
+      () => computeAllocationInsights(db, tenantId, days, now, { projectId, memberKeys }, goals, { lineage: true }),
       SHORT_TTL,
     ));
   });
@@ -181,6 +183,53 @@ export function createInsightsRoutes(db: Db): Hono<HonoEnv> {
     const result = await getOrSetCached(env, key, () => computeDeliveryInsights(db, tenantId, scopeKind, scopeId, now), SHORT_TTL);
     if (!result) return c.json({ error: 'deliverable not found' }, 404);
     return c.json(result);
+  });
+
+  // Deliverable qualitative UPDATE stream (EMP-11) — the human narrative companion
+  // to /delivery's quantitative status. Developer-gated (same audience). Newest
+  // first, bounded. Not cached (a small, hot, append-mostly feed).
+  const DELIV_SCOPES = ['initiative', 'project', 'release', 'sprint'] as const;
+  router.get('/deliverable-updates', requireRole(TenantRole.DEVELOPER), async (c) => {
+    const { tenantId } = scope(c);
+    const sk = c.req.query('scope');
+    const sid = c.req.query('id');
+    if (!DELIV_SCOPES.includes(sk as never) || !sid) return c.json({ error: 'scope and id are required' }, 400);
+    const rows = await db
+      .select({
+        id: deliverableUpdates.id, scopeKind: deliverableUpdates.scopeKind, scopeId: deliverableUpdates.scopeId,
+        statusLabel: deliverableUpdates.statusLabel, body: deliverableUpdates.body,
+        authorId: deliverableUpdates.authorId, authorName: deliverableUpdates.authorName,
+        authorDisplay: users.displayName, createdAt: deliverableUpdates.createdAt,
+      })
+      .from(deliverableUpdates)
+      .leftJoin(users, eq(users.id, deliverableUpdates.authorId))
+      .where(and(eq(deliverableUpdates.tenantId, tenantId), eq(deliverableUpdates.scopeKind, sk!), eq(deliverableUpdates.scopeId, sid)))
+      .orderBy(desc(deliverableUpdates.createdAt))
+      .limit(100);
+    return c.json(rows.map((r) => ({ ...r, authorName: r.authorDisplay ?? r.authorName, authorDisplay: undefined })));
+  });
+
+  router.post('/deliverable-updates', requireRole(TenantRole.DEVELOPER), async (c) => {
+    const { tenantId } = scope(c);
+    const userId = (c as unknown as { get(k: string): string | undefined }).get('userId') ?? null;
+    type UpdateBody = { scopeKind?: string; scopeId?: string; body?: string; statusLabel?: string };
+    const body = await c.req.json<UpdateBody>().catch(() => ({} as UpdateBody));
+    if (!DELIV_SCOPES.includes(body.scopeKind as never) || !body.scopeId || !body.body?.trim()) {
+      return c.json({ error: 'scopeKind, scopeId and body are required' }, 400);
+    }
+    const status = ['on_track', 'at_risk', 'blocked', 'done', 'note'].includes(String(body.statusLabel)) ? String(body.statusLabel) : null;
+    const [row] = await db
+      .insert(deliverableUpdates)
+      .values({ tenantId, scopeKind: body.scopeKind!, scopeId: body.scopeId!, body: body.body!.trim().slice(0, 4000), statusLabel: status, authorId: userId })
+      .returning();
+    return c.json(row, 201);
+  });
+
+  router.delete('/deliverable-updates/:id', requireRole(TenantRole.DEVELOPER), async (c) => {
+    const { tenantId } = scope(c);
+    const id = c.req.param('id');
+    await db.delete(deliverableUpdates).where(and(eq(deliverableUpdates.id, id), eq(deliverableUpdates.tenantId, tenantId)));
+    return c.json({ deleted: id });
   });
 
   // LENS — Bottleneck analysis: WHICH stage stalls work and WHY — time-in-status
@@ -229,6 +278,22 @@ export function createInsightsRoutes(db: Db): Hono<HonoEnv> {
     const ver = await getCacheVersion(env, rdFinancialsVersionKey(tenantId));
     const key = `insights:rdfin:t:${tenantId}:fy:${fy}:v:${ver}`;
     return c.json(await getOrSetCached(env, key, () => computeRdFinancials(db, tenantId, fy), SHORT_TTL));
+  });
+
+  // Bulk import — CSV/JSON bulk entry for the manual board-deck datasets
+  // (headcount, positions, R&D financials, support/incidents/uptime, AI program).
+  // Manager-gated; one multi-row insert + a lens cache bump. The dataset list is
+  // the single registry shared with the trackers (IMPORT_DATASETS).
+  router.get('/import/datasets', requireRole(TenantRole.MANAGER), (c) =>
+    c.json({ datasets: Object.fromEntries(Object.entries(IMPORT_DATASETS).map(([k, d]) => [k, d.columns.map((col) => ({ name: col.name, type: col.type, required: !!col.required }))])) }),
+  );
+  router.post('/import/:dataset', requireRole(TenantRole.MANAGER), async (c) => {
+    const { tenantId } = scope(c);
+    const dataset = c.req.param('dataset');
+    if (!isImportDataset(dataset)) return c.json({ error: `unknown dataset "${dataset}"` }, 400);
+    const body = await c.req.json<{ rows?: Array<Record<string, unknown>> }>();
+    const result = await importBoardRows(db, c.env as Env, tenantId, dataset, body.rows ?? []);
+    return c.json(result, result.inserted > 0 ? 201 : 400);
   });
 
   // LENS #6 — compliance summary (manager)

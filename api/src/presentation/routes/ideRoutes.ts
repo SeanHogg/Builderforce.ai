@@ -13,6 +13,7 @@ import {
   buildAgentSystemPrompt,
   applyAgentSystem,
 } from '../../application/agent/agentPrompt';
+import { recallAgentKnowledge, ingestAgentKnowledge } from '../../application/agent/agentKnowledge';
 import {
   importRepoToWorkspace,
   commitWorkspaceToRepo,
@@ -805,6 +806,11 @@ export function createIdeRoutes(): Hono<HonoEnv> {
     const [agent] = await getSql(c)`SELECT * FROM ide_agents WHERE id = ${agentId}`;
     if (!agent) return c.json({ error: 'Agent not found' }, 404);
 
+    // Recall grounded context from the agent's ingested proprietary knowledge,
+    // keyed on the latest user message. '' when the agent has no knowledge or
+    // nothing is relevant (read-through cached; invalidated on re-ingest).
+    const latestUser = [...body.messages].reverse().find((m) => m.role === 'user')?.content ?? '';
+    const recalledContext = await recallAgentKnowledge(c.env, getSql(c), agentId, latestUser);
     const descriptor: AgentDescriptor = {
       name: agent.name as string,
       title: agent.title as string,
@@ -812,10 +818,12 @@ export function createIdeRoutes(): Hono<HonoEnv> {
       skills: agent.skills as string[] | string | null,
       r2_artifact_key: agent.r2_artifact_key as string | null,
       mamba_state: agent.mamba_state,
+      recalledContext,
     };
     const inferenceMode = (agent.inference_mode as string) ?? resolveInferenceMode(descriptor);
     const baseMessages = body.messages.map((m) => ({ role: m.role as 'system' | 'user' | 'assistant', content: m.content }));
-    // Persona + Mamba-memory system prompt is built by the shared helper (same as validate).
+    // Persona + recalled-knowledge + Mamba-memory system prompt is built by the
+    // shared lowering (same helper as validate / the gateway).
     const messages = applyAgentSystem(baseMessages, buildAgentSystemPrompt(descriptor));
 
     const logId = generateId();
@@ -848,6 +856,24 @@ export function createIdeRoutes(): Hono<HonoEnv> {
       `;
       return c.json({ error: errorMessage }, 502);
     }
+  });
+
+  // ── Knowledge ingestion ──────────────────────────────────────────────────
+  // Ingest proprietary documents for a published agent: chunk → store → make
+  // recallable at inference (grounded context). Replace semantics — re-ingesting
+  // supersedes the agent's prior knowledge set. Body: { text?, documents?[] }.
+  router.post('/agents/:id/ingest', async (c) => {
+    const agentId = c.req.param('id');
+    const [agent] = await getSql(c)`SELECT id FROM ide_agents WHERE id = ${agentId}`;
+    if (!agent) return c.json({ error: 'Agent not found' }, 404);
+    const body = await c.req.json<{ text?: string; documents?: Array<{ name?: string; text?: string }> }>();
+    const docs = [
+      ...(body.text?.trim() ? [{ text: body.text }] : []),
+      ...((body.documents ?? []).filter((d): d is { name?: string; text: string } => Boolean(d?.text?.trim()))),
+    ];
+    if (docs.length === 0) return c.json({ error: 'text or documents required' }, 400);
+    const chunks = await ingestAgentKnowledge(c.env, getSql(c), agentId, docs);
+    return c.json({ chunks });
   });
 
   // ── Pre-publish validation ───────────────────────────────────────────────

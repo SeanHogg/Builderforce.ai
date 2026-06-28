@@ -5,7 +5,7 @@ import { Select } from '@/components/Select';
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { useTranslations } from 'next-intl';
 import type { TrainingJob, AgentProfile, AgentPackage, MambaStateSnapshot } from '@/lib/types';
-import { publishAgent, validateAgent, type ValidateAgentResult } from '@/lib/api';
+import { publishAgent, validateAgent, ingestAgentKnowledge, type ValidateAgentResult } from '@/lib/api';
 import ModelApiSamples from '@/components/ModelApiSamples';
 import { MambaEngine } from '@/lib/mamba-engine';
 
@@ -68,6 +68,25 @@ export function AgentPublishPanel({ projectId, completedJobs }: AgentPublishPane
   const [copiedInstall, setCopiedInstall] = useState(false);
   const [includeMamba, setIncludeMamba] = useState(false);
   const [mambaSnapshot, setMambaSnapshot] = useState<MambaStateSnapshot | null>(null);
+  const [knowledgeText, setKnowledgeText] = useState('');
+  const [isIngesting, setIsIngesting] = useState(false);
+  const [ingestResult, setIngestResult] = useState<{ chunks: number } | null>(null);
+  const [ingestError, setIngestError] = useState<string | null>(null);
+
+  const handleIngestKnowledge = useCallback(async () => {
+    if (!publishedId || !knowledgeText.trim()) return;
+    setIsIngesting(true);
+    setIngestError(null);
+    setIngestResult(null);
+    try {
+      const result = await ingestAgentKnowledge(publishedId, { text: knowledgeText });
+      setIngestResult(result);
+    } catch (err) {
+      setIngestError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setIsIngesting(false);
+    }
+  }, [publishedId, knowledgeText]);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Load Mamba snapshot from IndexedDB when toggled on
@@ -435,6 +454,38 @@ export function AgentPublishPanel({ projectId, completedJobs }: AgentPublishPane
                 <div>
                   <div className="text-xs text-gray-400 mb-1">{tp('callTitle')}</div>
                   <ModelApiSamples agentId={publishedId} modelRef={`builderforce/workforce-${publishedId}`} />
+                </div>
+
+                {/* Ground the agent in proprietary knowledge — ingested, then
+                    recalled (BM25) and injected at inference. */}
+                <div>
+                  <div className="text-xs text-gray-400 mb-1">{tp('knowledgeTitle')}</div>
+                  <p className="text-xs text-gray-500 mb-2">{tp('knowledgeDesc')}</p>
+                  <textarea
+                    value={knowledgeText}
+                    onChange={(e) => setKnowledgeText(e.target.value)}
+                    placeholder={tp('knowledgePlaceholder')}
+                    rows={5}
+                    className="w-full bg-gray-950 border border-gray-700 rounded p-2 font-mono text-xs text-gray-100"
+                    aria-label={tp('knowledgeTitle')}
+                  />
+                  <button
+                    onClick={handleIngestKnowledge}
+                    disabled={isIngesting || !knowledgeText.trim()}
+                    className="mt-2 w-full bg-purple-700 hover:bg-purple-600 disabled:opacity-50 text-white px-3 py-2 rounded text-xs font-semibold"
+                  >
+                    {isIngesting ? tp('knowledgeIngesting') : tp('knowledgeBtn')}
+                  </button>
+                  {ingestResult && (
+                    <div className="mt-2 bg-green-900/30 border border-green-700 rounded p-2 text-xs text-green-300">
+                      {tp('knowledgeDone', { count: ingestResult.chunks })}
+                    </div>
+                  )}
+                  {ingestError && (
+                    <div className="mt-2 bg-red-900/30 border border-red-700 rounded p-2 text-xs text-red-300">
+                      {tp('knowledgeError', { error: ingestError })}
+                    </div>
+                  )}
                 </div>
 
                 <a

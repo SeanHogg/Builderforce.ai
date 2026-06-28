@@ -37,6 +37,7 @@ import {
   normalizeAllocationCategory,
   type AllocationCategory,
 } from '../llm/allocationCategories';
+import { loadTaskCostClassMap } from '../pmo/planningSpine';
 
 const HOUR_MS = 3_600_000;
 const MILLICENTS_PER_USD = 100_000;
@@ -75,9 +76,13 @@ export function effectiveCategory(r: AllocationTaskRow): AllocationCategory {
 }
 
 /** The task's effective capex/opex class — stored cost_class wins, else the
- *  category default (GAAP-conservative: only innovation capitalizes). */
-export function effectiveCostClass(r: AllocationTaskRow): 'capex' | 'opex' {
+ *  lineage-inherited class from its objective/initiative (when a `lineage` map is
+ *  supplied — closes SPINE-2), else the category default (GAAP-conservative: only
+ *  innovation capitalizes). */
+export function effectiveCostClass(r: AllocationTaskRow, lineage?: Map<number, 'capex' | 'opex'>): 'capex' | 'opex' {
   if (r.costClass === 'capex' || r.costClass === 'opex') return r.costClass;
+  const inherited = lineage?.get(r.taskId);
+  if (inherited) return inherited;
   return defaultCostClassFor(effectiveCategory(r));
 }
 
@@ -136,6 +141,8 @@ export function summarizeAllocation(
   windowDays: number,
   now: number,
   goals: AllocationGoalMap = new Map(),
+  /** task id → lineage-resolved CAPEX/OPEX (closes SPINE-2; omit = category default). */
+  lineage?: Map<number, 'capex' | 'opex'>,
 ): AllocationInsights {
   const cat = (c: AllocationCategory) => ({
     category: c, label: allocationCategoryLabel(c),
@@ -155,7 +162,7 @@ export function summarizeAllocation(
     const c = effectiveCategory(r);
     const hrs = taskEffortHours(r, now);
     const costUsd = (costByTask.get(r.taskId) ?? 0) / MILLICENTS_PER_USD;
-    const klass = effectiveCostClass(r);
+    const klass = effectiveCostClass(r, lineage);
 
     const bucket = byCat.get(c)!;
     bucket.hours += hrs;
@@ -232,6 +239,10 @@ export async function computeAllocationInsights(
   now: number,
   scope: AllocationScope = {},
   goals: AllocationGoalMap = new Map(),
+  /** When `lineage` is true, resolve CAPEX/OPEX through the planning-spine lineage
+   *  (objective/initiative inheritance) instead of only own-or-category (SPINE-2).
+   *  Off by default so finance aggregates keep the cheap category-default behaviour. */
+  opts: { lineage?: boolean } = {},
 ): Promise<AllocationInsights> {
   const since = new Date(now - days * 24 * HOUR_MS);
 
@@ -290,5 +301,6 @@ export async function computeAllocationInsights(
     }
   }
 
-  return summarizeAllocation(scoped, costByTask, days, now, goals);
+  const lineage = opts.lineage ? await loadTaskCostClassMap(db, tenantId) : undefined;
+  return summarizeAllocation(scoped, costByTask, days, now, goals, lineage);
 }

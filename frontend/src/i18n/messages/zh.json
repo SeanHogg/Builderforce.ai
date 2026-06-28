@@ -618,7 +618,9 @@
         "support": "支持",
         "tech_debt": "技术债",
         "other": "其他"
-      }
+      },
+      "scope": "范围",
+      "allProjects": "所有项目"
     },
     "deliv": {
       "title": "交付",
@@ -657,7 +659,29 @@
       "week": "周",
       "open": "未完成",
       "baseline": "基线",
-      "baselineScope": "基线范围"
+      "baselineScope": "基线范围",
+      "velocity": "冲刺速度",
+      "avgVelocity": "平均速度",
+      "avgVelocitySub": "基于 {n} 个冲刺",
+      "estimated": "已估点任务",
+      "estimatedSub": "{n} 个未估点",
+      "sprint": "冲刺",
+      "committed": "承诺",
+      "completed": "完成",
+      "sayDo": "达成率",
+      "updates": "状态更新",
+      "updateStatus": "状态",
+      "postUpdate": "发布",
+      "noUpdates": "暂无更新——添加第一条。",
+      "someone": "某人",
+      "updatePlaceholder": "添加状态更新（例如：受阻于基础设施、已同意缩减范围）……",
+      "updateStatusLabel": {
+        "note": "备注",
+        "on_track": "正常",
+        "at_risk": "有风险",
+        "blocked": "受阻",
+        "done": "完成"
+      }
     },
     "aiImpact": {
       "title": "AI 影响",
@@ -881,7 +905,14 @@
     "sampleLabel": "示例响应",
     "latencyLabel": "延迟",
     "modeLabel": "推理模式",
-    "callTitle": "如何调用你的模型"
+    "callTitle": "如何调用你的模型",
+    "knowledgeTitle": "知识库（用你的数据训练）",
+    "knowledgeDesc": "粘贴专有文档——常见问题、政策、产品文档。智能体会在推理时检索最相关的段落，并据此给出有依据的回答。",
+    "knowledgePlaceholder": "在此粘贴你的文档、常见问题或政策……",
+    "knowledgeBtn": "导入知识",
+    "knowledgeIngesting": "正在导入……",
+    "knowledgeDone": "已导入——{count} 个片段现在会在推理时被检索。",
+    "knowledgeError": "导入失败：{error}"
   },
   "projectDiagnostics": {
     "title": "项目诊断",
@@ -971,8 +1002,10 @@
       "objective": "目标",
       "initiative": "举措",
       "epic": "史诗",
-      "task": "任务"
-    }
+      "task": "任务",
+      "roadmap": "路线图"
+    },
+    "exportCsv": "导出 CSV"
   },
   "reconcile": {
     "loading": "正在加载工作项…",
@@ -1111,7 +1144,21 @@
     "noCollaborators": "尚未邀请任何人。",
     "remove": "移除",
     "accessViewerNote": "您已被邀请查看此页面。",
-    "accessReadOnlyNote": "您对此页面拥有只读访问权限。"
+    "accessReadOnlyNote": "您对此页面拥有只读访问权限。",
+    "analyzeTitle": "分析与改进",
+    "analyzeHint": "让 AI 审查本文档的低效之处、缺口、风险与清晰度，并提出更高效的流程。",
+    "analyzeRun": "分析流程",
+    "analyzing": "分析中……",
+    "analyzeNoFindings": "未发现问题——看起来很完善。",
+    "analyzeImprovedFlow": "建议的改进流程",
+    "analyzeApplyFlow": "用改进流程替换文档",
+    "severity_low": "低",
+    "severity_medium": "中",
+    "severity_high": "高",
+    "category_inefficiency": "低效",
+    "category_gap": "缺口",
+    "category_risk": "风险",
+    "category_clarity": "清晰度"
   },
   "quality": {
     "title": "产品质量",
@@ -1198,8 +1245,17 @@
       "sdkSnippet": "浏览器 SDK",
       "curlSnippet": "服务器 / curl",
       "otlpEndpoint": "OTLP 端点",
-      "webhookUrl": "Webhook URL"
-    }
+      "webhookUrl": "Webhook URL",
+      "backfill": "回填",
+      "backfilling": "回填中…",
+      "backfillDone": "已回填 {pulled} 个问题（存储 {accepted} 个）",
+      "backfillFailed": "回填失败",
+      "sentryBackfillHint": "可选：填写 Sentry API 令牌和项目范围，立即回填现有问题以填充看板。",
+      "apiTokenPlaceholder": "Sentry API 令牌（用于回填）",
+      "scopePlaceholder": "范围 — 组织标识/项目标识",
+      "baseUrlPlaceholder": "Sentry 基础 URL（自托管，可选）"
+    },
+    "loadMore": "加载更多"
   },
   "surveys": {
     "title": "DevEx 调研",
@@ -1367,5 +1423,14 @@
     "boardDeck": "研发董事会演示文稿",
     "cfoDeck": "CFO / DevFinOps 演示文稿",
     "error": "无法生成演示文稿"
+  },
+  "timeTracking": {
+    "title": "已记录工时",
+    "windowTotal": "近 {days} 天 · {hours}",
+    "loading": "加载中…",
+    "pickTask": "选择任务…",
+    "hoursPh": "小时",
+    "log": "记录",
+    "delete": "删除记录"
   }
 }

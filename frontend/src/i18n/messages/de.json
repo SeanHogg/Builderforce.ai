@@ -618,7 +618,9 @@
         "support": "Support",
         "tech_debt": "Technische Schulden",
         "other": "Sonstiges"
-      }
+      },
+      "scope": "Bereich",
+      "allProjects": "Alle Projekte"
     },
     "deliv": {
       "title": "Lieferung",
@@ -657,7 +659,29 @@
       "week": "Wo",
       "open": "Offen",
       "baseline": "Baseline",
-      "baselineScope": "Baseline-Umfang"
+      "baselineScope": "Baseline-Umfang",
+      "velocity": "Sprint-Velocity",
+      "avgVelocity": "Ø Velocity",
+      "avgVelocitySub": "über {n} Sprints",
+      "estimated": "Geschätzte Aufgaben",
+      "estimatedSub": "{n} ohne Schätzung",
+      "sprint": "Sprint",
+      "committed": "Zugesagt",
+      "completed": "Erledigt",
+      "sayDo": "Soll/Ist",
+      "updates": "Status-Updates",
+      "updateStatus": "Status",
+      "postUpdate": "Posten",
+      "noUpdates": "Noch keine Updates – füge das erste hinzu.",
+      "someone": "Jemand",
+      "updatePlaceholder": "Status-Update hinzufügen (z. B. blockiert durch Infra, Scope-Kürzung vereinbart)…",
+      "updateStatusLabel": {
+        "note": "Notiz",
+        "on_track": "Im Plan",
+        "at_risk": "Gefährdet",
+        "blocked": "Blockiert",
+        "done": "Fertig"
+      }
     },
     "aiImpact": {
       "title": "KI-Wirkung",
@@ -881,7 +905,14 @@
     "sampleLabel": "Beispielantwort",
     "latencyLabel": "Latenz",
     "modeLabel": "Inferenzmodus",
-    "callTitle": "So rufst du dein Modell auf"
+    "callTitle": "So rufst du dein Modell auf",
+    "knowledgeTitle": "Wissen (mit deinen Daten trainieren)",
+    "knowledgeDesc": "Füge proprietäre Dokumente ein – FAQs, Richtlinien, Produktdokumentation. Der Agent ruft die relevantesten Passagen ab und stützt seine Antworten bei der Inferenz darauf.",
+    "knowledgePlaceholder": "Füge hier deine Dokumentation, FAQs oder Richtlinien ein…",
+    "knowledgeBtn": "Wissen einlesen",
+    "knowledgeIngesting": "Wird eingelesen…",
+    "knowledgeDone": "Eingelesen – {count} Fragmente werden jetzt bei der Inferenz abgerufen.",
+    "knowledgeError": "Einlesen fehlgeschlagen: {error}"
   },
   "projectDiagnostics": {
     "title": "Projektdiagnosen",
@@ -971,8 +1002,10 @@
       "objective": "Ziel",
       "initiative": "Initiative",
       "epic": "Epic",
-      "task": "Aufgabe"
-    }
+      "task": "Aufgabe",
+      "roadmap": "Roadmap"
+    },
+    "exportCsv": "CSV exportieren"
   },
   "reconcile": {
     "loading": "Arbeitselemente werden geladen…",
@@ -1111,7 +1144,21 @@
     "noCollaborators": "Es wurde noch niemand eingeladen.",
     "remove": "Entfernen",
     "accessViewerNote": "Sie wurden eingeladen, diese Seite anzusehen.",
-    "accessReadOnlyNote": "Sie haben nur Lesezugriff auf diese Seite."
+    "accessReadOnlyNote": "Sie haben nur Lesezugriff auf diese Seite.",
+    "analyzeTitle": "Analysieren & verbessern",
+    "analyzeHint": "Lassen Sie die KI dieses Dokument auf Ineffizienzen, Lücken, Risiken und Klarheit prüfen und einen effizienteren Ablauf vorschlagen.",
+    "analyzeRun": "Prozess analysieren",
+    "analyzing": "Wird analysiert…",
+    "analyzeNoFindings": "Keine Probleme gefunden — das sieht solide aus.",
+    "analyzeImprovedFlow": "Vorgeschlagener verbesserter Ablauf",
+    "analyzeApplyFlow": "Dokument durch verbesserten Ablauf ersetzen",
+    "severity_low": "Niedrig",
+    "severity_medium": "Mittel",
+    "severity_high": "Hoch",
+    "category_inefficiency": "Ineffizienz",
+    "category_gap": "Lücke",
+    "category_risk": "Risiko",
+    "category_clarity": "Klarheit"
   },
   "quality": {
     "title": "Produktqualität",
@@ -1198,8 +1245,17 @@
       "sdkSnippet": "Browser-SDK",
       "curlSnippet": "Server / curl",
       "otlpEndpoint": "OTLP-Endpunkt",
-      "webhookUrl": "Webhook-URL"
-    }
+      "webhookUrl": "Webhook-URL",
+      "backfill": "Nachfüllen",
+      "backfilling": "Wird nachgefüllt…",
+      "backfillDone": "{pulled} Fehler nachgefüllt ({accepted} gespeichert)",
+      "backfillFailed": "Nachfüllen fehlgeschlagen",
+      "sentryBackfillHint": "Optional: Sentry-API-Token + Projekt-Scope angeben, um bestehende Fehler jetzt nachzufüllen und das Dashboard zu befüllen.",
+      "apiTokenPlaceholder": "Sentry-API-Token (zum Nachfüllen)",
+      "scopePlaceholder": "Scope — Organisations-Slug/Projekt-Slug",
+      "baseUrlPlaceholder": "Sentry-Basis-URL (selbst gehostet, optional)"
+    },
+    "loadMore": "Mehr laden"
   },
   "surveys": {
     "title": "DevEx-Umfragen",
@@ -1367,5 +1423,14 @@
     "boardDeck": "F&E-Board-Deck",
     "cfoDeck": "CFO- / DevFinOps-Deck",
     "error": "Deck konnte nicht erstellt werden"
+  },
+  "timeTracking": {
+    "title": "Erfasste Zeit",
+    "windowTotal": "letzte {days} T · {hours}",
+    "loading": "Wird geladen…",
+    "pickTask": "Aufgabe wählen…",
+    "hoursPh": "Std",
+    "log": "Erfassen",
+    "delete": "Eintrag löschen"
   }
 }

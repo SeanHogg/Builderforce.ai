@@ -1,29 +1,32 @@
 /**
  * Quality management routes — /api/quality (tenant JWT).
  *
- * The authenticated half of the Quality pillar: manage ingest sources (mint the
- * one-time bfq_ ingest key + optional webhook secret), browse fingerprint-grouped
- * errors, triage them (resolve/ignore), and — the payoff — turn a group into a
- * fix: create a task seeded with the stack trace/context and dispatch a cloud
- * agent to it (→ PR) via the same path the CI auto-fix loop uses.
+ * The authenticated half of the Quality pillar:
+ *   - Collectors: ONE per project (one ingest key = one embeddable snippet), or a
+ *     tenant-level collector that routes a mixed stream to projects via mapping rules.
+ *   - Integrations: provider webhooks (Sentry/PostHog/LogRocket) attached to a collector.
+ *   - Mapping rules: route a tenant-level collector's events to a project.
+ *   - Groups: browse/triage fingerprint-grouped errors and "Fix with agent".
  *
  * Reads are served through the canonical read-through cache, invalidated by the
  * ingest engine's version-token bump (per project + per tenant).
  */
 
 import { Hono } from 'hono';
-import { and, desc, eq, gte, lt, or, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, gte, inArray, lt, or, sql } from 'drizzle-orm';
 import { authMiddleware } from '../middleware/authMiddleware';
-import { errorSources, errorGroups, errorEvents, projects } from '../../infrastructure/database/schema';
-import { generateApiKey, hashSecret } from '../../infrastructure/auth/HashService';
-import { encryptCredentials } from '../../application/integrations/credentialCrypto';
 import {
-  QUALITY_SOURCES, QUALITY_SOURCE_IDS, getQualitySourceMeta,
-} from '../../application/quality/qualitySourceCatalog';
+  errorCollectors, errorCollectorIntegrations, errorMappingRules, errorGroups, errorEvents, projects,
+} from '../../infrastructure/database/schema';
+import { generateApiKey, hashSecret } from '../../infrastructure/auth/HashService';
+import { encryptCredentials, decryptCredentials } from '../../application/integrations/credentialCrypto';
+import { pullSentryIssues } from '../../application/quality/sentryPull';
+import { QUALITY_SOURCES, getQualitySourceMeta } from '../../application/quality/qualitySourceCatalog';
 import {
   getOrSetCached, getCacheVersion, bumpCacheVersion,
 } from '../../infrastructure/cache/readThroughCache';
-import { qualityGroupsVersionKey, qualityGroupsTenantVersionKey } from '../../application/quality/ingestEngine';
+import { qualityGroupsVersionKey, qualityGroupsTenantVersionKey, ingestErrorEvents } from '../../application/quality/ingestEngine';
+import type { CollectorRef, MappingRule } from '../../application/quality/errorMapping';
 import { dispatchCloudRunForTask } from './runtimeRoutes';
 import { TaskPriority } from '../../domain/shared/types';
 import type { TaskService } from '../../application/task/TaskService';
@@ -31,9 +34,22 @@ import type { RuntimeService } from '../../application/runtime/RuntimeService';
 import type { HonoEnv, Env } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 
-/** Encryption secret for sealing a webhook secret (same resolver integrations use). */
+/** Encryption secret for sealing webhook/pull credentials (same resolver integrations use). */
 function integrationSecret(env: Env): string {
   return (env.INTEGRATION_ENCRYPTION_SECRET ?? env.JWT_SECRET) as string;
+}
+
+/** Postgres unique-constraint violation (e.g. a second collector for one project). */
+function isUniqueViolation(e: unknown): boolean {
+  const s = e instanceof Error ? e.message : String(e);
+  return /duplicate key|unique constraint|23505/i.test(s);
+}
+
+const MAPPING_FIELDS = ['service', 'release', 'environment', 'url'];
+const MAPPING_OPS = ['equals', 'contains', 'prefix'];
+/** Valid match field: a known top-level field or a `tag:<key>`. */
+function isValidMatchField(f: string): boolean {
+  return MAPPING_FIELDS.includes(f) || (f.startsWith('tag:') && f.length > 4);
 }
 
 /** Decode a `<lastSeenISO>|<id>` keyset cursor; null when absent/malformed. */
@@ -79,13 +95,11 @@ function buildFixBrief(group: { title: string; type: string | null; environment:
   lines.push(`**Error:** ${group.title}`);
   if (group.type) lines.push(`**Type:** ${group.type}`);
   if (group.environment) lines.push(`**Environment:** ${group.environment}`);
-  lines.push(`**Occurrences:** ${group.eventCount} event(s), ~${group.userCount} user(s) affected`);
+  lines.push(`**Occurrences:** ${group.eventCount} event(s), ${group.userCount} user(s) affected`);
   const url = sample && typeof sample.url === 'string' ? sample.url : null;
   if (url) lines.push(`**Where:** ${url}`);
   const stack = renderStack(sample?.stack);
-  if (stack) {
-    lines.push('', '**Stack trace:**', '```', stack, '```');
-  }
+  if (stack) lines.push('', '**Stack trace:**', '```', stack, '```');
   lines.push('', 'Reproduce, find the root cause, fix it, and open a PR. Keep the change minimal and add a regression test where practical.');
   return lines.join('\n');
 }
@@ -94,140 +108,292 @@ export function createQualityRoutes(db: Db, taskService: TaskService, runtimeSer
   const router = new Hono<HonoEnv>();
   router.use('*', authMiddleware);
 
-  // ── Source catalog (static, no DB) ────────────────────────────────────────
+  /** Load a tenant-owned collector by id (CollectorRef shape), or null. */
+  async function loadCollector(tenantId: number, id: string): Promise<(CollectorRef & { tenantId: number }) | null> {
+    const [row] = await db
+      .select({ id: errorCollectors.id, tenantId: errorCollectors.tenantId, projectId: errorCollectors.projectId, defaultProjectId: errorCollectors.defaultProjectId })
+      .from(errorCollectors)
+      .where(and(eq(errorCollectors.id, id), eq(errorCollectors.tenantId, tenantId)))
+      .limit(1);
+    return row ?? null;
+  }
+
+  // ── Source/provider catalog (static, no DB) ───────────────────────────────
   router.get('/source-catalog', (c) => c.json({ sources: QUALITY_SOURCES }));
 
-  // ── List sources (no secrets) ─────────────────────────────────────────────
-  router.get('/sources', async (c) => {
+  // ── List collectors (+ attached integration providers; no secrets) ────────
+  router.get('/collectors', async (c) => {
     const tenantId = c.get('tenantId') as number;
-    const rows = await db
+    const cols = await db
       .select({
-        id: errorSources.id, source: errorSources.source, name: errorSources.name,
-        projectId: errorSources.projectId, enabled: errorSources.enabled, status: errorSources.status,
-        lastEventAt: errorSources.lastEventAt, createdAt: errorSources.createdAt,
-        hasWebhookSecret: sql<boolean>`${errorSources.webhookSecretEnc} IS NOT NULL`,
+        id: errorCollectors.id, name: errorCollectors.name, projectId: errorCollectors.projectId,
+        defaultProjectId: errorCollectors.defaultProjectId, enabled: errorCollectors.enabled,
+        status: errorCollectors.status, lastEventAt: errorCollectors.lastEventAt, createdAt: errorCollectors.createdAt,
       })
-      .from(errorSources)
-      .where(eq(errorSources.tenantId, tenantId))
-      .orderBy(desc(errorSources.createdAt));
-    return c.json({ sources: rows });
+      .from(errorCollectors)
+      .where(eq(errorCollectors.tenantId, tenantId))
+      .orderBy(desc(errorCollectors.createdAt));
+
+    const ids = cols.map((c2) => c2.id);
+    const ints = ids.length
+      ? await db
+          .select({ collectorId: errorCollectorIntegrations.collectorId, provider: errorCollectorIntegrations.provider })
+          .from(errorCollectorIntegrations)
+          .where(inArray(errorCollectorIntegrations.collectorId, ids))
+      : [];
+    const byCollector = new Map<string, string[]>();
+    for (const i of ints) byCollector.set(i.collectorId, [...(byCollector.get(i.collectorId) ?? []), i.provider]);
+
+    return c.json({ collectors: cols.map((co) => ({ ...co, providers: byCollector.get(co.id) ?? [] })) });
   });
 
-  // ── Create a source (mints the ingest key once) ───────────────────────────
-  router.post('/sources', async (c) => {
+  // ── Create a collector (mints the ingest key once) ────────────────────────
+  router.post('/collectors', async (c) => {
     const tenantId = c.get('tenantId') as number;
     const userId = c.get('userId') as string | undefined;
-    const body = await c.req.json<{ projectId?: number; source?: string; name?: string; webhookSecret?: string | null }>();
+    const body = await c.req.json<{ projectId?: number | null; name?: string; defaultProjectId?: number | null }>();
+    if (!body.name) return c.json({ error: 'name is required' }, 400);
 
-    if (!body.projectId || !body.source || !body.name) {
-      return c.json({ error: 'projectId, source and name are required' }, 400);
+    // Validate any referenced project belongs to the tenant.
+    const refProjectIds = [body.projectId, body.defaultProjectId].filter((p): p is number => typeof p === 'number');
+    if (refProjectIds.length) {
+      const owned = await db.select({ id: projects.id }).from(projects)
+        .where(and(eq(projects.tenantId, tenantId), inArray(projects.id, refProjectIds)));
+      if (owned.length !== new Set(refProjectIds).size) return c.json({ error: 'Project not found' }, 404);
     }
-    if (!QUALITY_SOURCE_IDS.includes(body.source)) {
-      return c.json({ error: `source must be one of: ${QUALITY_SOURCE_IDS.join(', ')}` }, 400);
-    }
-    const [project] = await db
-      .select({ id: projects.id })
-      .from(projects)
-      .where(and(eq(projects.id, body.projectId), eq(projects.tenantId, tenantId)))
-      .limit(1);
-    if (!project) return c.json({ error: 'Project not found' }, 404);
 
-    // Mint a universal ingest key (keyed posting works for every source); store
-    // only its hash. A webhook source may also carry an HMAC secret.
     const rawKey = generateApiKey('bfq');
     const keyHash = await hashSecret(rawKey);
 
-    let webhookSecretEnc: string | null = null;
-    let webhookSecretIv: string | null = null;
-    if (body.webhookSecret) {
-      const sealed = await encryptCredentials({ secret: body.webhookSecret }, integrationSecret(c.env as Env), tenantId);
-      webhookSecretEnc = sealed.enc;
-      webhookSecretIv = sealed.iv;
+    let row;
+    try {
+      [row] = await db
+        .insert(errorCollectors)
+        .values({
+          tenantId, projectId: body.projectId ?? null, name: body.name,
+          defaultProjectId: body.defaultProjectId ?? null, keyHash, createdBy: userId ?? null,
+        })
+        .returning({ id: errorCollectors.id, name: errorCollectors.name, projectId: errorCollectors.projectId });
+    } catch (e) {
+      if (isUniqueViolation(e)) return c.json({ error: 'This project already has an error collector' }, 409);
+      throw e;
     }
-
-    const [row] = await db
-      .insert(errorSources)
-      .values({
-        tenantId, projectId: body.projectId, source: body.source, name: body.name,
-        keyHash, webhookSecretEnc, webhookSecretIv, createdBy: userId ?? null,
-      })
-      .returning({ id: errorSources.id, source: errorSources.source, name: errorSources.name, projectId: errorSources.projectId });
-    if (!row) return c.json({ error: 'Failed to create source' }, 500);
+    if (!row) return c.json({ error: 'Failed to create collector' }, 500);
 
     return c.json({
-      source: row,
+      collector: row,
       // Shown ONCE — the raw key is never stored or retrievable again.
       ingestKey: rawKey,
-      webhookUrl: `/api/quality-ingest/webhooks/${row.id}`,
-      otlpEndpoint: `/api/quality-ingest/otlp`,
       eventsEndpoint: `/api/quality-ingest/events`,
+      otlpEndpoint: `/api/quality-ingest/otlp`,
+      webhookBase: `/api/quality-ingest/webhooks/${row.id}`,
     }, 201);
   });
 
-  // ── Update a source (rename / enable / pause) ─────────────────────────────
-  router.patch('/sources/:id', async (c) => {
+  // ── Update a collector (rename / enable / pause / default project) ─────────
+  router.patch('/collectors/:id', async (c) => {
     const tenantId = c.get('tenantId') as number;
     const id = c.req.param('id');
-    const body = await c.req.json<{ name?: string; enabled?: boolean; status?: string }>();
+    const body = await c.req.json<{ name?: string; enabled?: boolean; status?: string; defaultProjectId?: number | null }>();
     const patch: Record<string, unknown> = { updatedAt: new Date() };
     if (body.name !== undefined) patch.name = body.name;
     if (body.enabled !== undefined) patch.enabled = body.enabled;
     if (body.status !== undefined && ['active', 'paused'].includes(body.status)) patch.status = body.status;
+    if (body.defaultProjectId !== undefined) {
+      if (body.defaultProjectId !== null) {
+        const [p] = await db.select({ id: projects.id }).from(projects)
+          .where(and(eq(projects.id, body.defaultProjectId), eq(projects.tenantId, tenantId))).limit(1);
+        if (!p) return c.json({ error: 'Project not found' }, 404);
+      }
+      patch.defaultProjectId = body.defaultProjectId;
+    }
 
     const [row] = await db
-      .update(errorSources)
-      .set(patch)
-      .where(and(eq(errorSources.id, id), eq(errorSources.tenantId, tenantId)))
-      .returning({ id: errorSources.id });
-    if (!row) return c.json({ error: 'Source not found' }, 404);
+      .update(errorCollectors).set(patch)
+      .where(and(eq(errorCollectors.id, id), eq(errorCollectors.tenantId, tenantId)))
+      .returning({ id: errorCollectors.id });
+    if (!row) return c.json({ error: 'Collector not found' }, 404);
     return c.json({ ok: true });
   });
 
-  // ── Delete a source ───────────────────────────────────────────────────────
-  router.delete('/sources/:id', async (c) => {
+  // ── Delete a collector ────────────────────────────────────────────────────
+  router.delete('/collectors/:id', async (c) => {
     const tenantId = c.get('tenantId') as number;
     const id = c.req.param('id');
     const [row] = await db
-      .delete(errorSources)
-      .where(and(eq(errorSources.id, id), eq(errorSources.tenantId, tenantId)))
-      .returning({ id: errorSources.id });
-    if (!row) return c.json({ error: 'Source not found' }, 404);
+      .delete(errorCollectors)
+      .where(and(eq(errorCollectors.id, id), eq(errorCollectors.tenantId, tenantId)))
+      .returning({ id: errorCollectors.id });
+    if (!row) return c.json({ error: 'Collector not found' }, 404);
     return c.json({ ok: true });
   });
 
-  // ── List error groups (cached, version-token invalidated) ─────────────────
+  // ── Integrations: list providers attached to a collector ──────────────────
+  router.get('/collectors/:id/integrations', async (c) => {
+    const tenantId = c.get('tenantId') as number;
+    const id = c.req.param('id');
+    if (!(await loadCollector(tenantId, id))) return c.json({ error: 'Collector not found' }, 404);
+    const rows = await db
+      .select({
+        provider: errorCollectorIntegrations.provider, createdAt: errorCollectorIntegrations.createdAt,
+        hasSecret: sql<boolean>`${errorCollectorIntegrations.secretEnc} IS NOT NULL`,
+        webhookUrl: sql<string>`'/api/quality-ingest/webhooks/' || ${errorCollectorIntegrations.collectorId} || '/' || ${errorCollectorIntegrations.provider}`,
+      })
+      .from(errorCollectorIntegrations)
+      .where(eq(errorCollectorIntegrations.collectorId, id));
+    return c.json({ integrations: rows });
+  });
+
+  // ── Integrations: attach/update a provider webhook on a collector ─────────
+  router.post('/collectors/:id/integrations', async (c) => {
+    const tenantId = c.get('tenantId') as number;
+    const id = c.req.param('id');
+    if (!(await loadCollector(tenantId, id))) return c.json({ error: 'Collector not found' }, 404);
+
+    const body = await c.req.json<{ provider?: string; secret?: string | null; apiToken?: string | null; scope?: string | null; baseUrl?: string | null }>();
+    const meta = body.provider ? getQualitySourceMeta(body.provider) : undefined;
+    if (!meta || !meta.supportsWebhook) {
+      return c.json({ error: 'provider must be a webhook source (sentry, posthog, logrocket)' }, 400);
+    }
+
+    let secretEnc: string | null = null;
+    let secretIv: string | null = null;
+    const blob: Record<string, unknown> = {};
+    if (body.secret) blob.secret = body.secret;
+    if (body.apiToken) blob.apiToken = body.apiToken;
+    if (body.scope) blob.scope = body.scope;
+    if (body.baseUrl) blob.baseUrl = body.baseUrl;
+    if (Object.keys(blob).length > 0) {
+      const sealed = await encryptCredentials(blob, integrationSecret(c.env as Env), tenantId);
+      secretEnc = sealed.enc; secretIv = sealed.iv;
+    }
+
+    await db
+      .insert(errorCollectorIntegrations)
+      .values({ collectorId: id, provider: body.provider!, secretEnc, secretIv })
+      .onConflictDoUpdate({
+        target: [errorCollectorIntegrations.collectorId, errorCollectorIntegrations.provider],
+        set: { secretEnc, secretIv, updatedAt: new Date() },
+      });
+
+    return c.json({ ok: true, webhookUrl: `/api/quality-ingest/webhooks/${id}/${body.provider}` }, 201);
+  });
+
+  // ── Integrations: detach a provider ───────────────────────────────────────
+  router.delete('/collectors/:id/integrations/:provider', async (c) => {
+    const tenantId = c.get('tenantId') as number;
+    const id = c.req.param('id');
+    if (!(await loadCollector(tenantId, id))) return c.json({ error: 'Collector not found' }, 404);
+    await db.delete(errorCollectorIntegrations)
+      .where(and(eq(errorCollectorIntegrations.collectorId, id), eq(errorCollectorIntegrations.provider, c.req.param('provider'))));
+    return c.json({ ok: true });
+  });
+
+  // ── Integrations: Sentry backfill (seeds the model via the issues API) ─────
+  router.post('/collectors/:id/integrations/sentry/backfill', async (c) => {
+    const tenantId = c.get('tenantId') as number;
+    const id = c.req.param('id');
+    const collector = await loadCollector(tenantId, id);
+    if (!collector) return c.json({ error: 'Collector not found' }, 404);
+
+    const [integration] = await db
+      .select({ secretEnc: errorCollectorIntegrations.secretEnc, secretIv: errorCollectorIntegrations.secretIv })
+      .from(errorCollectorIntegrations)
+      .where(and(eq(errorCollectorIntegrations.collectorId, id), eq(errorCollectorIntegrations.provider, 'sentry')))
+      .limit(1);
+    if (!integration?.secretEnc || !integration.secretIv) {
+      return c.json({ error: 'Connect a Sentry integration with an API token + scope first' }, 400);
+    }
+    const blob = await decryptCredentials(integration.secretEnc, integration.secretIv, integrationSecret(c.env as Env), tenantId);
+    const apiToken = typeof blob?.apiToken === 'string' ? blob.apiToken : '';
+    const scope = typeof blob?.scope === 'string' ? blob.scope : '';
+    const baseUrl = typeof blob?.baseUrl === 'string' ? blob.baseUrl : null;
+    if (!apiToken || !scope) return c.json({ error: 'The Sentry integration has no API token / scope configured for backfill' }, 400);
+
+    try {
+      const events = await pullSentryIssues({ apiToken, scope, baseUrl }, fetch);
+      const rules = collector.projectId == null ? await loadRulesForCollector(db, id) : [];
+      const result = await ingestErrorEvents(db, c.env as Env, collector, events, rules);
+      return c.json({ pulled: events.length, ...result });
+    } catch (e) {
+      return c.json({ error: e instanceof Error ? e.message : 'Backfill failed' }, 502);
+    }
+  });
+
+  // ── Mapping rules (tenant-level collector → project routing) ──────────────
+  router.get('/collectors/:id/rules', async (c) => {
+    const tenantId = c.get('tenantId') as number;
+    const id = c.req.param('id');
+    if (!(await loadCollector(tenantId, id))) return c.json({ error: 'Collector not found' }, 404);
+    const rows = await db
+      .select({
+        id: errorMappingRules.id, matchField: errorMappingRules.matchField, matchOp: errorMappingRules.matchOp,
+        matchValue: errorMappingRules.matchValue, projectId: errorMappingRules.projectId, priority: errorMappingRules.priority,
+      })
+      .from(errorMappingRules)
+      .where(eq(errorMappingRules.collectorId, id))
+      .orderBy(asc(errorMappingRules.priority));
+    return c.json({ rules: rows });
+  });
+
+  router.post('/collectors/:id/rules', async (c) => {
+    const tenantId = c.get('tenantId') as number;
+    const id = c.req.param('id');
+    const collector = await loadCollector(tenantId, id);
+    if (!collector) return c.json({ error: 'Collector not found' }, 404);
+    if (collector.projectId != null) return c.json({ error: 'Mapping rules apply only to a tenant-level collector' }, 400);
+
+    const body = await c.req.json<{ matchField?: string; matchOp?: string; matchValue?: string; projectId?: number; priority?: number }>();
+    if (!body.matchField || !isValidMatchField(body.matchField)) return c.json({ error: `matchField must be one of ${MAPPING_FIELDS.join(', ')} or tag:<key>` }, 400);
+    const matchOp = body.matchOp && MAPPING_OPS.includes(body.matchOp) ? body.matchOp : 'equals';
+    if (!body.matchValue) return c.json({ error: 'matchValue is required' }, 400);
+    if (!body.projectId) return c.json({ error: 'projectId is required' }, 400);
+    const [p] = await db.select({ id: projects.id }).from(projects)
+      .where(and(eq(projects.id, body.projectId), eq(projects.tenantId, tenantId))).limit(1);
+    if (!p) return c.json({ error: 'Project not found' }, 404);
+
+    const [row] = await db
+      .insert(errorMappingRules)
+      .values({ tenantId, collectorId: id, matchField: body.matchField, matchOp, matchValue: body.matchValue, projectId: body.projectId, priority: body.priority ?? 100 })
+      .returning({ id: errorMappingRules.id });
+    return c.json({ id: row?.id }, 201);
+  });
+
+  router.delete('/collectors/:id/rules/:ruleId', async (c) => {
+    const tenantId = c.get('tenantId') as number;
+    const id = c.req.param('id');
+    if (!(await loadCollector(tenantId, id))) return c.json({ error: 'Collector not found' }, 404);
+    await db.delete(errorMappingRules)
+      .where(and(eq(errorMappingRules.id, c.req.param('ruleId')), eq(errorMappingRules.collectorId, id), eq(errorMappingRules.tenantId, tenantId)));
+    return c.json({ ok: true });
+  });
+
+  // ── List error groups (cached, version-token invalidated, keyset-paginated) ─
   router.get('/groups', async (c) => {
     const tenantId = c.get('tenantId') as number;
     const projectId = c.req.query('projectId') ? Number(c.req.query('projectId')) : null;
     const status = c.req.query('status') ?? null;
     const level = c.req.query('level') ?? null;
-    const sourceId = c.req.query('sourceId') ?? null;
+    const collectorId = c.req.query('collectorId') ?? null;
     const limit = Math.min(Number(c.req.query('limit') ?? '100'), 200);
-    // Keyset cursor `<lastSeenISO>|<id>` — stable pagination past the page cap.
     const cursor = parseGroupsCursor(c.req.query('cursor'));
 
     const versionKey = projectId ? qualityGroupsVersionKey(projectId) : qualityGroupsTenantVersionKey(tenantId);
     const ver = await getCacheVersion(c.env as Env, versionKey);
-    const cacheKey = `quality-groups:t:${tenantId}:p:${projectId ?? 'all'}:s:${status ?? ''}:l:${level ?? ''}:src:${sourceId ?? ''}:n:${limit}:c:${cursor ? `${cursor.ts.toISOString()}|${cursor.id}` : ''}:v:${ver}`;
+    const cacheKey = `quality-groups:t:${tenantId}:p:${projectId ?? 'all'}:s:${status ?? ''}:l:${level ?? ''}:col:${collectorId ?? ''}:n:${limit}:c:${cursor ? `${cursor.ts.toISOString()}|${cursor.id}` : ''}:v:${ver}`;
 
     const groups = await getOrSetCached(c.env as Env, cacheKey, async () => {
       const conds = [eq(errorGroups.tenantId, tenantId)];
       if (projectId) conds.push(eq(errorGroups.projectId, projectId));
       if (status) conds.push(eq(errorGroups.status, status));
       if (level) conds.push(eq(errorGroups.level, level));
-      if (sourceId) conds.push(eq(errorGroups.sourceId, sourceId));
-      // Keyset: rows strictly "after" the cursor in (lastSeen desc, id desc) order.
+      if (collectorId) conds.push(eq(errorGroups.collectorId, collectorId));
       if (cursor) {
-        conds.push(
-          or(
-            lt(errorGroups.lastSeen, cursor.ts),
-            and(eq(errorGroups.lastSeen, cursor.ts), lt(errorGroups.id, cursor.id)),
-          )!,
-        );
+        conds.push(or(lt(errorGroups.lastSeen, cursor.ts), and(eq(errorGroups.lastSeen, cursor.ts), lt(errorGroups.id, cursor.id)))!);
       }
       return db
         .select({
-          id: errorGroups.id, projectId: errorGroups.projectId, sourceId: errorGroups.sourceId,
+          id: errorGroups.id, projectId: errorGroups.projectId, collectorId: errorGroups.collectorId,
           fingerprint: errorGroups.fingerprint, title: errorGroups.title, type: errorGroups.type,
           level: errorGroups.level, status: errorGroups.status, eventCount: errorGroups.eventCount,
           userCount: errorGroups.userCount, firstSeen: errorGroups.firstSeen, lastSeen: errorGroups.lastSeen,
@@ -239,7 +405,6 @@ export function createQualityRoutes(db: Db, taskService: TaskService, runtimeSer
         .limit(limit);
     });
 
-    // A full page implies more rows may follow — hand back the keyset cursor.
     const last = groups.length === limit ? groups[groups.length - 1] : undefined;
     const nextCursor = last ? `${new Date(last.lastSeen).toISOString()}|${last.id}` : null;
     return c.json({ groups, nextCursor });
@@ -257,20 +422,21 @@ export function createQualityRoutes(db: Db, taskService: TaskService, runtimeSer
     if (!group) return c.json({ error: 'Group not found' }, 404);
 
     const since = new Date(Date.now() - 14 * 24 * 60 * 60 * 1000);
-    const [recent, trend, distinct] = await Promise.all([
+    const [recent, trend] = await Promise.all([
       db.select({ ts: errorEvents.ts, userKey: errorEvents.userKey, release: errorEvents.release, environment: errorEvents.environment, payload: errorEvents.payload })
         .from(errorEvents).where(eq(errorEvents.groupId, id)).orderBy(desc(errorEvents.ts)).limit(20),
       db.select({ day: sql<string>`date_trunc('day', ${errorEvents.ts})`, count: sql<number>`count(*)` })
         .from(errorEvents).where(and(eq(errorEvents.groupId, id), gte(errorEvents.ts, since)))
         .groupBy(sql`date_trunc('day', ${errorEvents.ts})`).orderBy(sql`date_trunc('day', ${errorEvents.ts})`),
-      db.select({ n: sql<number>`count(distinct ${errorEvents.userKey})` }).from(errorEvents).where(eq(errorEvents.groupId, id)),
     ]);
 
     return c.json({
       group,
       recentEvents: recent,
       trend: trend.map((t) => ({ day: t.day, count: Number(t.count) })),
-      affectedUsers: Number(distinct[0]?.n ?? 0),
+      // group.user_count is the EXACT distinct-user figure (error_group_users set,
+      // never purged) — authoritative even after raw events age out via retention.
+      affectedUsers: group.userCount,
     });
   });
 
@@ -309,12 +475,7 @@ export function createQualityRoutes(db: Db, taskService: TaskService, runtimeSer
 
     const brief = buildFixBrief(group, (group.samplePayload as Record<string, unknown> | null) ?? null);
     const task = await taskService.createTask(
-      {
-        projectId: group.projectId,
-        title: `Fix: ${group.title}`.slice(0, 255),
-        description: brief,
-        priority: levelToPriority(group.level),
-      },
+      { projectId: group.projectId, title: `Fix: ${group.title}`.slice(0, 255), description: brief, priority: levelToPriority(group.level) },
       tenantId,
     );
 
@@ -337,4 +498,16 @@ export function createQualityRoutes(db: Db, taskService: TaskService, runtimeSer
   });
 
   return router;
+}
+
+/** Mapping rules for a tenant-level collector, ordered by ascending priority. */
+async function loadRulesForCollector(db: Db, collectorId: string): Promise<MappingRule[]> {
+  return db
+    .select({
+      matchField: errorMappingRules.matchField, matchOp: errorMappingRules.matchOp,
+      matchValue: errorMappingRules.matchValue, projectId: errorMappingRules.projectId, priority: errorMappingRules.priority,
+    })
+    .from(errorMappingRules)
+    .where(eq(errorMappingRules.collectorId, collectorId))
+    .orderBy(asc(errorMappingRules.priority));
 }

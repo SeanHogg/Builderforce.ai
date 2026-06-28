@@ -172,7 +172,7 @@ export function createDashboardsRoutes(db: Db): Hono<HonoEnv> {
     const metricKey = (body.metricKey ?? '').toString();
     if (!isMetricKey(metricKey)) return c.json({ error: 'unknown metric_key' }, 400);
     const viz = ALLOWED_VIZ.has(String(body.viz)) ? String(body.viz) : 'stat';
-    const config = body.config && typeof body.config === 'object' ? body.config : {};
+    const config: Record<string, unknown> = body.config && typeof body.config === 'object' ? (body.config as Record<string, unknown>) : {};
     const position = Number.isFinite(body.position) ? Math.floor(body.position as number) : 0;
 
     const [row] = await db

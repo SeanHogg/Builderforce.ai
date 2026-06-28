@@ -618,7 +618,9 @@
         "support": "Support",
         "tech_debt": "Dette technique",
         "other": "Autre"
-      }
+      },
+      "scope": "Périmètre",
+      "allProjects": "Tous les projets"
     },
     "deliv": {
       "title": "Livraison",
@@ -657,7 +659,29 @@
       "week": "sem",
       "open": "Ouvertes",
       "baseline": "Référence",
-      "baselineScope": "Périmètre de référence"
+      "baselineScope": "Périmètre de référence",
+      "velocity": "Vélocité du sprint",
+      "avgVelocity": "Vélocité moyenne",
+      "avgVelocitySub": "sur {n} sprints",
+      "estimated": "Tâches estimées",
+      "estimatedSub": "{n} non estimées",
+      "sprint": "Sprint",
+      "committed": "Engagé",
+      "completed": "Terminé",
+      "sayDo": "Dit/fait",
+      "updates": "Mises à jour de statut",
+      "updateStatus": "Statut",
+      "postUpdate": "Publier",
+      "noUpdates": "Aucune mise à jour — ajoutez la première.",
+      "someone": "Quelqu’un",
+      "updatePlaceholder": "Ajoutez une mise à jour de statut (ex. bloqué par l’infra, réduction de périmètre validée)…",
+      "updateStatusLabel": {
+        "note": "Note",
+        "on_track": "Dans les temps",
+        "at_risk": "À risque",
+        "blocked": "Bloqué",
+        "done": "Terminé"
+      }
     },
     "aiImpact": {
       "title": "Impact de l’IA",
@@ -881,7 +905,14 @@
     "sampleLabel": "Réponse d’exemple",
     "latencyLabel": "Latence",
     "modeLabel": "Mode d’inférence",
-    "callTitle": "Comment appeler votre modèle"
+    "callTitle": "Comment appeler votre modèle",
+    "knowledgeTitle": "Connaissances (entraînez sur vos données)",
+    "knowledgeDesc": "Collez des documents propriétaires : FAQ, politiques, documentation produit. L'agent récupère les passages les plus pertinents et y ancre ses réponses lors de l'inférence.",
+    "knowledgePlaceholder": "Collez ici votre documentation, vos FAQ ou vos politiques…",
+    "knowledgeBtn": "Ingérer les connaissances",
+    "knowledgeIngesting": "Ingestion en cours…",
+    "knowledgeDone": "Ingéré — {count} fragments sont désormais récupérés lors de l’inférence.",
+    "knowledgeError": "Échec de l'ingestion : {error}"
   },
   "projectDiagnostics": {
     "title": "Diagnostics du projet",
@@ -971,8 +1002,10 @@
       "objective": "Objectif",
       "initiative": "Initiative",
       "epic": "Epic",
-      "task": "Tâche"
-    }
+      "task": "Tâche",
+      "roadmap": "Feuille de route"
+    },
+    "exportCsv": "Exporter CSV"
   },
   "reconcile": {
     "loading": "Chargement des éléments de travail…",
@@ -1111,7 +1144,21 @@
     "noCollaborators": "Personne n'a encore été invité.",
     "remove": "Retirer",
     "accessViewerNote": "Vous avez été invité à consulter cette page.",
-    "accessReadOnlyNote": "Vous avez un accès en lecture seule à cette page."
+    "accessReadOnlyNote": "Vous avez un accès en lecture seule à cette page.",
+    "analyzeTitle": "Analyser et améliorer",
+    "analyzeHint": "Laissez l'IA examiner ce document pour les inefficacités, lacunes, risques et la clarté, et proposer un flux plus efficace.",
+    "analyzeRun": "Analyser le processus",
+    "analyzing": "Analyse…",
+    "analyzeNoFindings": "Aucun problème détecté — cela semble solide.",
+    "analyzeImprovedFlow": "Flux amélioré proposé",
+    "analyzeApplyFlow": "Remplacer le document par le flux amélioré",
+    "severity_low": "Faible",
+    "severity_medium": "Moyenne",
+    "severity_high": "Élevée",
+    "category_inefficiency": "Inefficacité",
+    "category_gap": "Lacune",
+    "category_risk": "Risque",
+    "category_clarity": "Clarté"
   },
   "quality": {
     "title": "Qualité produit",
@@ -1198,8 +1245,17 @@
       "sdkSnippet": "SDK navigateur",
       "curlSnippet": "Serveur / curl",
       "otlpEndpoint": "Point de terminaison OTLP",
-      "webhookUrl": "URL du webhook"
-    }
+      "webhookUrl": "URL du webhook",
+      "backfill": "Remplir",
+      "backfilling": "Remplissage…",
+      "backfillDone": "{pulled} problèmes importés ({accepted} stockés)",
+      "backfillFailed": "Échec du remplissage",
+      "sentryBackfillHint": "Facultatif : ajoutez un jeton d’API Sentry et la portée du projet pour importer les problèmes existants et alimenter le tableau de bord.",
+      "apiTokenPlaceholder": "Jeton d’API Sentry (pour le remplissage)",
+      "scopePlaceholder": "Portée — slug-organisation/slug-projet",
+      "baseUrlPlaceholder": "URL de base Sentry (auto-hébergé, facultatif)"
+    },
+    "loadMore": "Charger plus"
   },
   "surveys": {
     "title": "Enquêtes DevEx",
@@ -1367,5 +1423,14 @@
     "boardDeck": "Deck R&D pour le conseil",
     "cfoDeck": "Deck CFO / DevFinOps",
     "error": "Impossible de générer le deck"
+  },
+  "timeTracking": {
+    "title": "Temps enregistré",
+    "windowTotal": "{days} derniers j · {hours}",
+    "loading": "Chargement…",
+    "pickTask": "Choisir une tâche…",
+    "hoursPh": "h",
+    "log": "Enregistrer",
+    "delete": "Supprimer l'entrée"
   }
 }

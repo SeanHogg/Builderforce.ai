@@ -1,6 +1,55 @@
 import { describe, it, expect } from 'vitest';
-import { buildDocCompliance, normaliseTags, resolveAccess, canEditAccess } from './knowledgeRoutes';
+import { buildDocCompliance, normaliseTags, resolveAccess, canEditAccess, parseAnalysis } from './knowledgeRoutes';
 import { TenantRole } from '../../domain/shared/types';
+
+describe('parseAnalysis', () => {
+  it('parses a clean JSON object', () => {
+    const r = parseAnalysis(
+      JSON.stringify({
+        summary: 'Good overall',
+        findings: [{ category: 'inefficiency', severity: 'high', issue: 'Manual step', recommendation: 'Automate it' }],
+        improvedFlow: '1. Do X',
+      }),
+    );
+    expect(r.summary).toBe('Good overall');
+    expect(r.findings).toHaveLength(1);
+    expect(r.findings[0]!.category).toBe('inefficiency');
+    expect(r.improvedFlow).toBe('1. Do X');
+  });
+
+  it('tolerates a ```json fence and leading prose', () => {
+    const raw = 'Here you go:\n```json\n{"summary":"S","findings":[],"improvedFlow":"F"}\n```';
+    const r = parseAnalysis(raw);
+    expect(r.summary).toBe('S');
+    expect(r.improvedFlow).toBe('F');
+  });
+
+  it('coerces unknown category/severity to safe defaults and drops empty findings', () => {
+    const r = parseAnalysis(
+      JSON.stringify({
+        summary: '',
+        findings: [
+          { category: 'bogus', severity: 'critical', issue: 'X', recommendation: '' },
+          { category: 'gap', severity: 'low' }, // no issue/recommendation → dropped
+        ],
+        improvedFlow: '',
+      }),
+    );
+    expect(r.findings).toHaveLength(1);
+    expect(r.findings[0]!.category).toBe('clarity');
+    expect(r.findings[0]!.severity).toBe('medium');
+  });
+
+  it('falls back to summary-only when no valid JSON is present', () => {
+    const r = parseAnalysis('The process looks fine, no JSON here.');
+    expect(r.summary).toContain('looks fine');
+    expect(r.findings).toEqual([]);
+  });
+
+  it('returns an empty result for empty input', () => {
+    expect(parseAnalysis('')).toEqual({ summary: '', findings: [], improvedFlow: '' });
+  });
+});
 
 describe('resolveAccess', () => {
   it('grants managers full access regardless of collaboration', () => {

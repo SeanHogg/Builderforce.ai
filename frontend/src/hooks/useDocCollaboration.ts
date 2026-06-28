@@ -59,6 +59,28 @@ function applyTextDiff(ytext: Y.Text, oldStr: string, newStr: string): void {
   if (insert.length > 0) ytext.insert(start, insert);
 }
 
+/**
+ * Decide whether THIS client should seed the shared doc from the API content.
+ *
+ * The CollaborationRoom worker is a dumb binary relay (no server-authoritative
+ * doc), so there is no single source to seed from. We seed only when the shared
+ * text is still empty after connecting, and break ties deterministically: among
+ * all known participants (self + awareness peers), only the smallest userId
+ * seeds — so two clients opening a fresh doc simultaneously never double-insert.
+ * A lone first editor has no peers and therefore always seeds.
+ */
+export function shouldSeed(
+  selfUserId: string,
+  peerUserIds: string[],
+  ytextEmpty: boolean,
+  hasInitialContent: boolean,
+): boolean {
+  if (!ytextEmpty || !hasInitialContent) return false;
+  const everyone = [selfUserId, ...peerUserIds];
+  const min = everyone.reduce((a, b) => (b < a ? b : a), selfUserId);
+  return min === selfUserId;
+}
+
 export interface DocCollaboration {
   /** True when collaboration is configured AND a room is active. */
   enabled: boolean;
@@ -106,18 +128,35 @@ export function useDocCollaboration(docId: string, opts: Options): DocCollaborat
     const provider = new WebsocketProvider(wsBase, `knowledge:${docId}`, ydoc, { connect: true });
     providerRef.current = provider;
 
-    provider.on('status', ({ status }: { status: string }) => setConnected(status === 'connected'));
-
-    provider.on('sync', (isSynced: boolean) => {
-      if (!isSynced) return;
-      // First writer seeds the shared doc from the API content; later joiners
-      // just adopt whatever the room already holds.
-      if (ytext.length === 0 && seedRef.current) {
+    // Seed the room from the API content once, after a short settle window so
+    // any existing peer's state has time to arrive. Deterministic tiebreak
+    // ({@link shouldSeed}) prevents two simultaneous first-editors double-seeding.
+    // This replaces seed-on-'sync' which never fires for a lone editor against
+    // the dumb-relay DO (no server doc to complete the sync handshake), leaving
+    // the shared text empty and later joiners desynced from the visible content.
+    let seedTimer: ReturnType<typeof setTimeout> | null = null;
+    const trySeed = () => {
+      const peerIds = Array.from(provider.awareness.getStates().values())
+        .map((s) => (s as Partial<CollabPeer>).userId)
+        .filter((u): u is string => !!u && u !== userId);
+      if (shouldSeed(userId, peerIds, ytext.length === 0, !!seedRef.current)) {
         ydoc.transact(() => ytext.insert(0, seedRef.current), 'seed');
       }
       const current = ytext.toString();
       localValueRef.current = current;
       setValueState(current);
+    };
+
+    provider.on('status', ({ status }: { status: string }) => {
+      const isConnected = status === 'connected';
+      setConnected(isConnected);
+      if (isConnected && seedTimer == null) {
+        seedTimer = setTimeout(trySeed, 600);
+      }
+    });
+    // If the y-websocket sync handshake does complete (peer present), seed/adopt now.
+    provider.on('sync', (isSynced: boolean) => {
+      if (isSynced) trySeed();
     });
 
     const observer = (_e: Y.YTextEvent, tr: Y.Transaction) => {
@@ -147,6 +186,7 @@ export function useDocCollaboration(docId: string, opts: Options): DocCollaborat
     provider.awareness.on('change', onAwareness);
 
     return () => {
+      if (seedTimer != null) clearTimeout(seedTimer);
       ytext.unobserve(observer);
       provider.awareness.off('change', onAwareness);
       provider.destroy();

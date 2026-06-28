@@ -44,7 +44,7 @@ import {
   promptLibraryApi, tenantApiKeysApi, securityApi, mySessionsApi, embedApi,
   dashboardApi, llmApi, providerKeysApi, auditApi, dispatchApi,
   agentHostConfigApi, agentHostProjectsApi, chatSessionsApi, usageApi,
-  alertsApi, decksApi,
+  alertsApi, decksApi, insightsApi,
 } from '@/lib/builderforceApi';
 import type { Task } from '@/lib/builderforceApi';
 import { dashboardsApi } from '@/lib/dashboardsApi';
@@ -563,6 +563,10 @@ export function buildPlatformCapabilities(ctx: PlatformActionContext): PlatformC
     { domain: 'decks', method: 'generate', mutates: true, description: 'Generate a Builderforce-branded board deck (PowerPoint) from this workspace\'s real data and return a download link. Use templateId from decks.list_templates to pick the board deck (default) or the CFO/DevFinOps deck; quarter is e.g. "2026-Q2" (defaults to the current quarter). Returns { deckId, downloadUrl, filename, warnings } — surface the downloadUrl to the user. warnings lists any board fields with no data yet.', parameters: obj({ templateId: S, quarter: S, prompt: S }), run: (a) => decksApi.generate({ mode: 'generative', templateId: f(a, 'templateId') ?? undefined, quarter: f(a, 'quarter') ?? undefined, prompt: f(a, 'prompt') ?? undefined }) },
     { domain: 'decks', method: 'fill_template', mutates: true, description: 'Fill an UPLOADED custom .pptx template (templateId from decks.list_templates where fillable=true) IN PLACE with this workspace\'s data, preserving the original design. Use this when the user uploaded their own board/CFO template and wants it populated. quarter defaults to the current quarter. Returns { deckId, downloadUrl, filename, warnings }.', parameters: obj({ templateId: S, quarter: S }, ['templateId']), run: (a) => decksApi.generate({ mode: 'fill', templateId: f(a, 'templateId'), quarter: f(a, 'quarter') ?? undefined }) },
     { domain: 'decks', method: 'promote_template', mutates: true, description: 'Promote a .pptx the user already uploaded (via the Brain file upload — pass its storage key as sourceKey) into a reusable custom deck template. Returns the new template id and the {{tokens}} found in the file. Author tokens like {{quarter}}, {{uptime}}, {{table:deliverables}} in the .pptx and they fill from workspace data.', parameters: obj({ name: S, description: S, sourceKey: S }, ['name', 'sourceKey']), run: (a) => decksApi.promoteTemplate({ name: f(a, 'name'), description: f(a, 'description') ?? undefined, sourceKey: f(a, 'sourceKey') }) },
+
+    // ---- Board data import (bulk entry for manual board-deck datasets) ----
+    { domain: 'board_data', method: 'import_datasets', mutates: false, description: 'List the board-deck datasets that can be BULK-IMPORTED and their column specs (name/type/required). Datasets: headcount-events, positions, rd-financials, rd-revenue, rd-fte, support-tickets, incidents, uptime, ai-tool-adoption, ai-programs. Use this to learn the columns before board_data.import.', parameters: EMPTY, run: () => insightsApi.importDatasets() },
+    { domain: 'board_data', method: 'import', mutates: true, description: 'Bulk-import rows into a board-deck dataset (e.g. headcount-events, rd-financials, support-tickets) for the board/CFO deck. `rows` is an array of objects whose keys match the dataset columns (call board_data.import_datasets for the spec). Returns { inserted, skipped, errors }. Use for loading a quarter of headcount, R&D spend, or support data at once when there is no live connector.', parameters: obj({ dataset: S, rows: { type: 'array', items: { type: 'object' }, description: 'Row objects keyed by column name.' } }, ['dataset', 'rows']), run: (a) => insightsApi.importBoardData(f(a, 'dataset'), (f(a, 'rows') as Array<Record<string, unknown>>) ?? []) },
   ];
 
   // Announce every successful write on the brain-data bus so the page rendering

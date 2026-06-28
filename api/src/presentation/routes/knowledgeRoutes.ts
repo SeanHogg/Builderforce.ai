@@ -910,7 +910,129 @@ export function createKnowledgeRoutes(db: Db): Hono<HonoEnv> {
     });
   });
 
+  // ---- AI PROCESS ANALYSIS (review an SOP → improvement findings) -------
+  // Realises the "review SOPs → propose a more efficient flow" promise from the
+  // knowledge side: runs the document through the gateway and returns structured
+  // findings + a proposed improved flow. Editors only (it spends tokens).
+  router.post('/documents/:id/analyze', async (c) => {
+    const tenantId = c.get('tenantId') as number;
+    const userId = c.get('userId') as string;
+    const id = c.req.param('id');
+    const doc = await loadDoc(tenantId, id);
+    if (!doc) return c.json({ error: 'Document not found' }, 404);
+    if (!canEditAccess(await accessFor(c, doc))) return c.json({ error: 'You do not have edit access to this document' }, 403);
+    if (!doc.content.trim()) return c.json({ error: 'Document is empty — nothing to analyze' }, 400);
+
+    const system =
+      `You are a process-improvement analyst reviewing a company ${doc.docType === 'process' ? 'process/workflow' : doc.docType === 'sop' ? 'Standard Operating Procedure' : 'knowledge document'} ` +
+      `for clarity, efficiency, compliance (SOX/TISAX/ISO 27001) and missing controls. ` +
+      `Respond with ONLY a JSON object (no markdown fence, no prose) of the shape: ` +
+      `{"summary": string, "findings": [{"category": "inefficiency"|"gap"|"risk"|"clarity", "severity": "low"|"medium"|"high", "issue": string, "recommendation": string}], "improvedFlow": string}. ` +
+      `"improvedFlow" is a concise GitHub-flavored Markdown rewrite of the procedure as a clearer, more efficient numbered flow. Keep findings specific and actionable.`;
+    const userMsg = `Title: ${doc.title}\n\n--- Document ---\n${doc.content}`;
+
+    const traceId = newTraceId();
+    const requestBody = {
+      messages: [
+        { role: 'system' as const, content: system },
+        { role: 'user' as const, content: userMsg },
+      ],
+      stream: false as const,
+      temperature: 0.4,
+    };
+
+    let result;
+    try {
+      result = await ideProxy(c.env).complete(requestBody, undefined, traceId);
+    } catch (err) {
+      return c.json({ error: err instanceof Error ? err.message : 'Analysis failed' }, 502);
+    }
+    const json = (await result.response.json().catch(() => null)) as
+      | { choices?: Array<{ message?: { content?: string } }> }
+      | null;
+    const raw = json?.choices?.[0]?.message?.content ?? '';
+
+    logTrace(c.env, c.executionCtx, {
+      traceId,
+      surface: 'knowledge-ai',
+      tenantId,
+      userId,
+      result,
+      streamed: false,
+      requestIp: c.req.header('cf-connecting-ip') ?? null,
+      origin: c.req.header('Origin') ?? null,
+      userAgent: c.req.header('User-Agent') ?? null,
+      requestBody: requestBody as unknown as Record<string, unknown>,
+      responseBody: null,
+      errorMessage: raw ? null : 'empty response',
+    });
+
+    if (!raw.trim()) return c.json({ error: 'Model returned an empty response' }, 502);
+    return c.json({ ...parseAnalysis(raw), model: result.resolvedModel });
+  });
+
   return router;
+}
+
+export type AnalysisCategory = 'inefficiency' | 'gap' | 'risk' | 'clarity';
+export interface AnalysisFinding {
+  category: AnalysisCategory;
+  severity: 'low' | 'medium' | 'high';
+  issue: string;
+  recommendation: string;
+}
+export interface AnalysisResult {
+  summary: string;
+  findings: AnalysisFinding[];
+  improvedFlow: string;
+}
+
+const ANALYSIS_CATEGORIES: AnalysisCategory[] = ['inefficiency', 'gap', 'risk', 'clarity'];
+const ANALYSIS_SEVERITIES = ['low', 'medium', 'high'] as const;
+
+/**
+ * Parse the model's analysis response into a validated shape. Tolerates a
+ * ```json fenced block or surrounding prose; falls back to a summary-only result
+ * (raw text) when no valid JSON object is present, so the endpoint never 500s on
+ * a non-conforming model.
+ */
+export function parseAnalysis(raw: string): AnalysisResult {
+  const empty: AnalysisResult = { summary: '', findings: [], improvedFlow: '' };
+  if (!raw?.trim()) return empty;
+
+  // Pull the outermost {...} (handles fences / leading prose).
+  const start = raw.indexOf('{');
+  const end = raw.lastIndexOf('}');
+  let parsed: unknown = null;
+  if (start !== -1 && end > start) {
+    try {
+      parsed = JSON.parse(raw.slice(start, end + 1));
+    } catch {
+      parsed = null;
+    }
+  }
+  if (!parsed || typeof parsed !== 'object') {
+    return { summary: raw.trim().slice(0, 2000), findings: [], improvedFlow: '' };
+  }
+
+  const obj = parsed as Record<string, unknown>;
+  const findings: AnalysisFinding[] = Array.isArray(obj.findings)
+    ? obj.findings
+        .filter((f): f is Record<string, unknown> => !!f && typeof f === 'object')
+        .map((f) => ({
+          category: ANALYSIS_CATEGORIES.includes(f.category as AnalysisCategory) ? (f.category as AnalysisCategory) : 'clarity',
+          severity: (ANALYSIS_SEVERITIES as readonly string[]).includes(f.severity as string) ? (f.severity as AnalysisFinding['severity']) : 'medium',
+          issue: typeof f.issue === 'string' ? f.issue : '',
+          recommendation: typeof f.recommendation === 'string' ? f.recommendation : '',
+        }))
+        .filter((f) => f.issue || f.recommendation)
+    : [];
+
+  return {
+    summary: typeof obj.summary === 'string' ? obj.summary : '',
+    findings,
+    improvedFlow: typeof obj.improvedFlow === 'string' ? obj.improvedFlow : '',
+  };
 }
 
 /** Normalise tags: trim, lowercase, dedupe, drop empties, cap length & count. */

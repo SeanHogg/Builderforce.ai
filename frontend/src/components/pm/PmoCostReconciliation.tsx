@@ -30,7 +30,7 @@ const primaryBtn: React.CSSProperties = {
 };
 
 const KIND_ICON: Record<SpineNode['kind'], string> = {
-  portfolio: '📁', objective: '🎯', initiative: '🚩', epic: '🧩', task: '▫️',
+  portfolio: '📁', objective: '🎯', initiative: '🚩', epic: '🧩', task: '▫️', roadmap: '📍',
 };
 
 export function PmoCostReconciliation() {
@@ -55,7 +55,8 @@ export function PmoCostReconciliation() {
     const out: SpineNode[] = [];
     const walk = (n: SpineNode) => { out.push(n); for (const c of byParent.get(n.key) ?? []) walk(c); };
     for (const r of byParent.get(null) ?? []) walk(r);
-    return out;
+    // Roadmap items aren't capitalizable work — exclude from CAPEX/OPEX reconcile.
+    return out.filter((n) => n.kind !== 'roadmap');
   }, [data]);
 
   const needsAttention = (n: SpineNode) =>

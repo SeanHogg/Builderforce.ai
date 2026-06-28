@@ -55,8 +55,15 @@ export function QualitySourcesManager() {
   const [sourceType, setSourceType] = useState('native');
   const [name, setName] = useState('');
   const [webhookSecret, setWebhookSecret] = useState('');
+  // Sentry pull/backfill credentials (only shown for the Sentry source type).
+  const [apiToken, setApiToken] = useState('');
+  const [scope, setScope] = useState('');
+  const [baseUrl, setBaseUrl] = useState('');
+  const [backfilling, setBackfilling] = useState<string | null>(null);
+  const [backfillMsg, setBackfillMsg] = useState<Record<string, string>>({});
 
   const selectedMeta = useMemo(() => catalog.find((s) => s.id === sourceType), [catalog, sourceType]);
+  const isSentry = sourceType === 'sentry';
 
   const load = useCallback(() => {
     setLoading(true);
@@ -69,7 +76,7 @@ export function QualitySourcesManager() {
   useEffect(() => { load(); }, [load]);
   useEffect(() => { if (currentProjectId != null) setProjectId(currentProjectId); }, [currentProjectId]);
 
-  const resetForm = () => { setSourceType('native'); setName(''); setWebhookSecret(''); };
+  const resetForm = () => { setSourceType('native'); setName(''); setWebhookSecret(''); setApiToken(''); setScope(''); setBaseUrl(''); };
 
   const add = async () => {
     setError(null);
@@ -82,6 +89,9 @@ export function QualitySourcesManager() {
         source: sourceType,
         name: name.trim(),
         webhookSecret: webhookSecret.trim() || null,
+        apiToken: isSentry ? apiToken.trim() || null : null,
+        scope: isSentry ? scope.trim() || null : null,
+        baseUrl: isSentry ? baseUrl.trim() || null : null,
       });
       setCreated(res);
       resetForm(); setAdding(false); load();
@@ -98,6 +108,17 @@ export function QualitySourcesManager() {
   };
   const remove = async (s: QualitySource) => {
     if (confirm(t('sources.confirmDelete'))) { await qualityApi.sources.remove(s.id); load(); }
+  };
+  const backfill = async (s: QualitySource) => {
+    setBackfilling(s.id); setBackfillMsg((m) => { const { [s.id]: _drop, ...rest } = m; return rest; });
+    try {
+      const r = await qualityApi.sources.backfill(s.id);
+      setBackfillMsg((m) => ({ ...m, [s.id]: t('sources.backfillDone', { pulled: r.pulled, accepted: r.accepted }) }));
+    } catch (e) {
+      setBackfillMsg((m) => ({ ...m, [s.id]: e instanceof Error ? e.message : t('sources.backfillFailed') }));
+    } finally {
+      setBackfilling(null); load();
+    }
   };
 
   const projName = (id: number) => projects.find((p) => p.id === id)?.name ?? `#${id}`;
@@ -117,19 +138,27 @@ export function QualitySourcesManager() {
           <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>{t('sources.empty')}</div>
         ) : (
           sources.map((s) => (
-            <div key={s.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 0', borderTop: '1px solid var(--border-subtle)' }}>
-              <span style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', color: 'var(--coral-bright)', minWidth: 70 }}>{s.source}</span>
-              <span style={{ fontSize: 13, color: 'var(--text-primary)', flex: 1 }}>
-                {s.name}
-                <span style={{ marginLeft: 6, fontSize: 11, color: 'var(--text-muted)' }}>
-                  {projName(s.projectId)} · {s.enabled ? t('sources.enabled') : t('sources.paused')}
-                  {s.lastEventAt ? ` · ${t('sources.lastEvent')} ${new Date(s.lastEventAt).toLocaleString()}` : ''}
+            <div key={s.id} style={{ display: 'flex', flexDirection: 'column', gap: 4, padding: '10px 0', borderTop: '1px solid var(--border-subtle)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <span style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', color: 'var(--coral-bright)', minWidth: 70 }}>{s.source}</span>
+                <span style={{ fontSize: 13, color: 'var(--text-primary)', flex: 1 }}>
+                  {s.name}
+                  <span style={{ marginLeft: 6, fontSize: 11, color: 'var(--text-muted)' }}>
+                    {projName(s.projectId)} · {s.enabled ? t('sources.enabled') : t('sources.paused')}
+                    {s.lastEventAt ? ` · ${t('sources.lastEvent')} ${new Date(s.lastEventAt).toLocaleString()}` : ''}
+                  </span>
                 </span>
-              </span>
-              <RoleGate capability="quality.manageSources">
-                <button type="button" style={btnSubtle} onClick={() => toggle(s)}>{s.enabled ? t('sources.pause') : t('sources.resume')}</button>
-                <button type="button" style={{ ...btnSubtle, color: 'var(--danger, #dc2626)' }} onClick={() => remove(s)}>{t('sources.delete')}</button>
-              </RoleGate>
+                <RoleGate capability="quality.manageSources">
+                  {s.source === 'sentry' && (
+                    <button type="button" style={btnSubtle} disabled={backfilling === s.id} onClick={() => backfill(s)}>
+                      {backfilling === s.id ? t('sources.backfilling') : t('sources.backfill')}
+                    </button>
+                  )}
+                  <button type="button" style={btnSubtle} onClick={() => toggle(s)}>{s.enabled ? t('sources.pause') : t('sources.resume')}</button>
+                  <button type="button" style={{ ...btnSubtle, color: 'var(--danger, #dc2626)' }} onClick={() => remove(s)}>{t('sources.delete')}</button>
+                </RoleGate>
+              </div>
+              {backfillMsg[s.id] && <div style={{ fontSize: 11, color: 'var(--text-muted)', paddingLeft: 80 }}>{backfillMsg[s.id]}</div>}
             </div>
           ))
         )}
@@ -150,6 +179,14 @@ export function QualitySourcesManager() {
               <input style={inputStyle} placeholder={t('sources.namePlaceholder')} value={name} onChange={(e) => setName(e.target.value)} />
               {selectedMeta?.supportsWebhook && (
                 <input style={inputStyle} placeholder={t('sources.secretPlaceholder')} value={webhookSecret} onChange={(e) => setWebhookSecret(e.target.value)} />
+              )}
+              {isSentry && (
+                <>
+                  <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>{t('sources.sentryBackfillHint')}</div>
+                  <input style={inputStyle} placeholder={t('sources.apiTokenPlaceholder')} value={apiToken} onChange={(e) => setApiToken(e.target.value)} />
+                  <input style={inputStyle} placeholder={t('sources.scopePlaceholder')} value={scope} onChange={(e) => setScope(e.target.value)} />
+                  <input style={inputStyle} placeholder={t('sources.baseUrlPlaceholder')} value={baseUrl} onChange={(e) => setBaseUrl(e.target.value)} />
+                </>
               )}
               <div style={{ display: 'flex', gap: 8 }}>
                 <button type="button" style={btnPrimary} disabled={saving} onClick={add}>{saving ? t('sources.creating') : t('sources.create')}</button>

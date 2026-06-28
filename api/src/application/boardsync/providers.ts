@@ -29,6 +29,10 @@ export interface NormalizedTicket {
   contentHash:     string;
   /** The normalized field bag persisted on the link. */
   fields:          Record<string, unknown>;
+  /** Story-point estimate from the tracker, when the provider exposes one (EMP-4).
+   *  Persisted to tasks.story_points on sync; undefined = provider has no estimate
+   *  (leaves any manual estimate untouched). */
+  storyPoints?:    number | null;
 }
 
 export interface FetchPage {
@@ -71,6 +75,7 @@ function buildTicket(
     title: string;
     body: string | null;
     state: string;
+    storyPoints?: number | null;
     extra?: Record<string, unknown>;
   },
 ): NormalizedTicket {
@@ -78,6 +83,7 @@ function buildTicket(
     title: parts.title,
     body:  parts.body ?? '',
     state: parts.state,
+    ...(parts.storyPoints != null ? { storyPoints: parts.storyPoints } : {}),
     ...(parts.extra ?? {}),
   };
   return {
@@ -90,6 +96,7 @@ function buildTicket(
     source,
     contentHash:     hashFields(fields),
     fields,
+    storyPoints:     parts.storyPoints ?? null,
   };
 }
 
@@ -219,6 +226,10 @@ export class JiraBoardProvider implements BoardProvider {
     if (cursor) clauses.push(`updated >= "${cursor}"`);
     const jql = `${clauses.join(' AND ')} ORDER BY updated ASC`.trim();
 
+    // Story-point field id is instance-specific; default to the Jira Cloud default
+    // (customfield_10016) and let a tenant override via credentials.storyPointsField.
+    const spField = String(this.cfg.credentials.storyPointsField ?? 'customfield_10016');
+
     const url = `${base}/rest/api/3/search`;
     const res = await this.fetchFn(url, {
       method: 'POST',
@@ -227,7 +238,7 @@ export class JiraBoardProvider implements BoardProvider {
         Accept: 'application/json',
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ jql, maxResults: 100, fields: ['summary', 'description', 'updated', 'status'] }),
+      body: JSON.stringify({ jql, maxResults: 100, fields: ['summary', 'description', 'updated', 'status', spField] }),
     });
     if (!res.ok) throw new Error(`Jira search failed: ${res.status}`);
 
@@ -239,6 +250,8 @@ export class JiraBoardProvider implements BoardProvider {
       const updated = issue.fields.updated;
       const body =
         typeof issue.fields.description === 'string' ? issue.fields.description : issue.fields.description ? JSON.stringify(issue.fields.description) : null;
+      const spRaw = (issue.fields as Record<string, unknown>)[spField];
+      const storyPoints = typeof spRaw === 'number' && Number.isFinite(spRaw) ? spRaw : null;
       tickets.push(
         buildTicket(this.id, {
           externalId:      issue.key,
@@ -247,6 +260,7 @@ export class JiraBoardProvider implements BoardProvider {
           title:           issue.fields.summary,
           body,
           state:           issue.fields.status?.name ?? 'unknown',
+          storyPoints,
         }),
       );
       if (!maxUpdated || updated > maxUpdated) maxUpdated = updated;

@@ -99,6 +99,7 @@ function makeTask(id: number, archived: boolean): Task {
     explicitRepoId: null,
     sprintId: null,
     releaseId: null,
+    storyPoints: null,
     githubIssueNumber: null,
     githubIssueUrl: null,
     githubPrUrl: null,

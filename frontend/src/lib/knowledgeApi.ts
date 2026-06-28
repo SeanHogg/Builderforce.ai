@@ -114,6 +114,20 @@ export interface TrainingItem {
   state: 'completed' | 'overdue' | 'pending';
 }
 
+export type AnalysisCategory = 'inefficiency' | 'gap' | 'risk' | 'clarity';
+export interface AnalysisFinding {
+  category: AnalysisCategory;
+  severity: 'low' | 'medium' | 'high';
+  issue: string;
+  recommendation: string;
+}
+export interface AnalysisResult {
+  summary: string;
+  findings: AnalysisFinding[];
+  improvedFlow: string;
+  model?: string;
+}
+
 export interface CreateDocInput {
   title: string;
   summary?: string;
@@ -224,6 +238,9 @@ export const knowledgeApi = {
 
   unassignTraining: (assignmentId: string) =>
     apiRequest<void>(`${BASE}/training/${assignmentId}`, { method: 'DELETE' }),
+
+  analyze: (id: string) =>
+    apiRequest<AnalysisResult>(`${BASE}/documents/${id}/analyze`, { method: 'POST' }),
 
   /**
    * Stream an AI-drafted document. Calls `onDelta` with the running accumulated

@@ -139,7 +139,12 @@ export function createDrizzleStore(db: Db): BoardSyncStore {
       if (input.existingTaskId != null) {
         await db
           .update(tasks)
-          .set({ title: input.title, description: input.description, source: input.provider, updatedAt: now })
+          .set({
+            title: input.title, description: input.description, source: input.provider, updatedAt: now,
+            // Only write the estimate when the provider supplied one — never clobber
+            // a manual estimate with null (EMP-4).
+            ...(input.storyPoints != null ? { storyPoints: input.storyPoints } : {}),
+          })
           .where(eq(tasks.id, input.existingTaskId));
         return input.existingTaskId;
       }
@@ -155,6 +160,7 @@ export function createDrizzleStore(db: Db): BoardSyncStore {
           status: 'backlog',
           priority: 'medium',
           source: input.provider,
+          storyPoints: input.storyPoints ?? undefined,
           createdAt: now,
           updatedAt: now,
         })
