@@ -2,7 +2,7 @@
   "name": "builderforce-vscode",
   "displayName": "BuilderForce",
   "description": "BuilderForce AI coding agent — chat with a codebase-aware agent in your VS Code sidebar.",
-  "version": "2026.6.30",
+  "version": "2026.6.31",
   "publisher": "builderforce",
   "license": "MIT",
   "author": "Sean Hogg",
@@ -40,9 +40,6 @@
   "main": "./out/extension.js",
   "activationEvents": [
     "onStartupFinished"
-  ],
-  "enabledApiProposals": [
-    "chatSessionsProvider"
   ],
   "contributes": {
     "viewsContainers": {
@@ -363,18 +360,6 @@
         "fullName": "BuilderForce",
         "description": "Codebase-aware BuilderForce coding agent",
         "isSticky": true
-      }
-    ],
-    "chatSessions": [
-      {
-        "type": "builderforce",
-        "name": "builderforce",
-        "displayName": "BuilderForce",
-        "icon": "$(comment-discussion)",
-        "welcomeTitle": "BuilderForce Agent",
-        "welcomeMessage": "Codebase-aware coding agent for your open workspace.",
-        "inputPlaceholder": "Ask BuilderForce to build or change something…",
-        "order": 5
       }
     ],
     "configuration": {
