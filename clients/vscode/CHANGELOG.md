@@ -2,9 +2,14 @@
 
 All notable changes to the BuilderForce VS Code extension are documented here.
 
-## [2026.6.30] — Maintenance release
+## [2026.6.31] — Marketplace publish fix + refreshed brand icon
 
-- Version bump and dependency refresh; republished to the VS Code Marketplace and Open VSX.
+- Removed the proposed `chatSessionsProvider` API declaration from the manifest, which was
+  blocking Marketplace publishing (proposed APIs cannot be shipped to stable VS Code). The
+  dedicated chat-session tab was already feature-detected at runtime and no-ops on stable
+  builds, so nothing changes for published users; the stable `@builderforce` chat
+  participant and sidebar are unaffected.
+- Ships the updated BuilderForce.ai brand icon.
 
 ## [2026.6.20] — Coding agent, codebase grounding, browser sign-in
 
