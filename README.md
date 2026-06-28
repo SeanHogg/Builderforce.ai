@@ -108,6 +108,47 @@ Builderforce.ai is the cloud-side control plane for [BuilderForce Agents](https:
 
 ---
 
+## Latest Capabilities
+
+The platform has grown from an IDE-plus-training studio into a full **system of record for agentic work**. These are the most recent additions — the enterprise delivery, quality, knowledge, and FinOps surfaces that sit on top of the agent workforce.
+
+### Planning Spine — Portfolio to Task (mig 0213, 0225)
+- **One dated, cost-bearing hierarchy** — `portfolio → initiative → epic → task`, with **Objectives and Key Results** attaching as a goal layer at any level. Every level is dated and rendered on a single nested Gantt (`PlanningSpineGantt`).
+- **Cost rolls up from the leaf** — LLM spend (priced at write time from `llm_usage_log`) plus human effort (member cost rate × hours) rolls up to every ancestor. No parallel finance system, no backfill.
+- **CAPEX / OPEX split** — each node carries a `cost_class` resolved in priority order (explicit → inherited → agent-classified by investment category → GAAP-conservative default). A child class that contradicts its parent is flagged as an **anomaly** for PM reconciliation.
+- **Endpoints** — `GET /api/pmo/spine`, `GET /api/pmo/spine/export.csv`, `GET /api/pmo/rollup` (portfolio/initiative/workspace), `PATCH /api/pmo/cost-class`, `POST /api/pmo/cost-class/classify`, initiative `POST/DELETE /api/pmo/dependencies` (cycle-checked) → on-demand critical path. Surface: `/projects?tab=portfolio`, gated by `insights.portfolio` / `insights.pm`.
+
+### Quality — Error Observability + One-Click Agent Fix (mig 0240)
+- **Multi-source ingest** — one canonical event shape behind five adapters: **native** (the `@seanhogg/builderforce-quality` browser SDK), **OTLP**, **Sentry**, **PostHog**, **LogRocket** (webhooks HMAC-verified; Sentry connections can backfill).
+- **Fingerprint grouping** — events upsert into `error_groups` keyed by `(tenant, project, fingerprint)` — explicit fingerprint or derived from the top stack frame + normalized message; occurrence + exact distinct-user counts; resolved bugs reopen on recurrence.
+- **One-click fix loop** — `POST /api/quality/groups/:id/fix` creates a board task (titled + prioritized from the error, briefed with the stack trace) and dispatches a cloud agent that ships a **pull request**. Crash → group → task → PR on one surface.
+- **Endpoints** — authenticated `/api/quality/*` (collectors, integrations, rules, groups, fix); public keyed/HMAC ingest `/api/quality-ingest/{events,otlp/v1/logs,otlp/v1/traces,webhooks/:collectorId/:provider}`. Dashboard: `/quality`. Metered as `error_events`.
+
+### Knowledge Management & Compliance (mig 0227)
+- **Versioned SOPs, processes & docs** — live editable body plus an **immutable snapshot on every publish** (version number + change note + publisher).
+- **Audit-ready acknowledgements** — read-acknowledgements bind to a specific version with a timestamp; per-user state is **acknowledged / pending / overdue**, with manager rollups at `GET /api/knowledge/compliance` — evidence for **SOX, TISAX, ISO 27001**.
+- **AI authoring + analysis** — `POST /api/knowledge/ai/draft` streams a Markdown draft; `POST /api/knowledge/documents/:id/analyze` returns structured findings (inefficiency / gap / risk / clarity) + an improved flow. Metered through the LLM gateway.
+- **Real-time co-editing** — Yjs CRDT over `NEXT_PUBLIC_COLLAB_WS_URL` with presence awareness; per-document **editor/viewer** collaborators on top of workspace roles; falls back to autosave when collaboration is unconfigured. Surface: `/knowledge`.
+
+### Single-Pane Board Connectors (mig 0221)
+- **Two-way sync across 10 systems** — each provider implements `fetchTicketsSince(cursor)` + `pushUpdate(externalId, changeSet)`, normalizing to one ticket shape stamped with its source.
+  - **PM / work:** GitHub Issues, Jira, Linear, monday.com, Asana, ClickUp
+  - **ITSM:** ServiceNow, Freshservice
+  - **Incident:** Sentry, PagerDuty
+- **Webhooks where supported** (GitHub, Jira, Linear, monday, Sentry, PagerDuty), polling otherwise. Agents act on a ticket or incident wherever it originates; changes flow back to the system of origin — single pane, no migration.
+- **Endpoints** — `GET /api/board-connections/providers` (catalog), CRUD `/api/board-connections`, `POST /api/board-connections/:id/sync`, `GET /api/board-connections/:id/links`.
+
+### Agentic Tester — Autonomous QA (mig 0063, 0206)
+- **Heatmap-ranked exploration** — journey events (`POST /api/qa/events`) rank route-and-element zones by recency-weighted frequency (`GET /api/qa/heatmap`); explorations plan from the hottest zones within a budget.
+- **AI-generated Playwright** — `POST /api/qa/generate` turns a flow into an executable spec and resolves a persona credential; a deterministic heatmap-only plan is also available (no model cost).
+- **Authenticated container runs** — a harness claims an exploration, logs in as a real persona (encrypted, developer-gated credentials), walks the plan, and captures console/page errors, failed requests, assertion failures, and crashes.
+- **Findings → board → fix** — findings dedupe by fingerprint; with auto-routing enabled, any finding at/above the severity threshold becomes a board task in a fix lane, firing the **same lane auto-run a human board drag triggers** → a fix agent opens a PR. Schedules run it on cron. Quality trend (escaped vs caught defects) at `GET /api/qa/quality`.
+
+### Consumption Metering (mig 0218)
+- **Meter on consumption, not visibility** — one framework (`/api/consumption`) reports month-to-date usage for `ai_tokens`, `ingestion` (bytes), and `error_events` against the plan allowance, using the **same accountants the gateway and ingestion gate enforce** — so the "% used" a member sees equals the cap that's enforced. Cached 60s, keyed per tenant + calendar month.
+
+---
+
 ## Authentication
 
 Builderforce.ai supports three sign-in methods that coexist on the same account. A single user can link multiple OAuth providers, set a password, and use magic links interchangeably.
