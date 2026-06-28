@@ -55,7 +55,16 @@
       "delivery": "Livraison",
       "surveys": "Enquêtes",
       "dashboards": "Tableaux de bord",
-      "devfinops": "DevFinOps"
+      "devfinops": "DevFinOps",
+      "workforce": "Effectif",
+      "teams": "Équipes",
+      "performance": "Performance",
+      "chats": "Discussions",
+      "approvals": "Approbations et Q&R",
+      "contributors": "Contributeurs",
+      "logs": "Journaux",
+      "llm": "Utilisation LLM",
+      "qa": "QA agentique"
     }
   },
   "alerts": {
@@ -1215,6 +1224,20 @@
     }
   },
   "workforce": {
+    "page": {
+      "title": "Effectif",
+      "sub": {
+        "workforce": "Vos personnes et vos agents au même endroit — invitez des collègues, créez des agents cloud et enregistrez des agents distants. Publiez des agents sur la marketplace pour générer des revenus.",
+        "teams": "Regroupez votre effectif — agents et humains — en équipes, et rattachez une équipe aux projets sur lesquels elle travaille.",
+        "performance": "Tableaux de bord d'efficacité et d'engagement pour chaque membre — humain et agent — ainsi que les métriques DORA. Cliquez sur un membre pour définir son profil de compétences et de disponibilité (utilisé par le planificateur de sprint pour répartir le travail).",
+        "chats": "Parcourez les sessions de discussion de chaque agentHost de cet espace de travail.",
+        "approvals": "Traitez les approbations, questions et retours que vos agents remontent à un humain — validez des actions ou répondez à ce dont ils ont besoin pour continuer.",
+        "contributors": "Découvrez qui — humain et agent — contribue dans votre espace de travail, et comment.",
+        "logs": "Journaux des agents, chronologies d'exécution et diagnostics de votre espace de travail.",
+        "llm": "Métriques d'utilisation des LLM, santé des modèles et dépenses de votre espace de travail.",
+        "qa": "Automatisation QA par projet — flux, tests générés et exécutions CI."
+      }
+    },
     "discipline": "Discipline",
     "allDisciplines": "Toutes les disciplines",
     "unassigned": "Non attribué",
