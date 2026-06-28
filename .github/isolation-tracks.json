@@ -67,7 +67,6 @@
         "frontend/src/app/pricing/**",
         "frontend/src/app/projects/[id]/**",
         "frontend/src/app/sitemap.ts",
-        "frontend/src/app/ide/voice/**",
         "frontend/src/app/workflows/**",
         "frontend/src/app/embed/**",
         "frontend/src/components/PublicShell*",
@@ -79,7 +78,6 @@
         "frontend/src/components/blog/**",
         "frontend/src/components/workflow-builder/**",
         "frontend/src/components/LlmStudioPanel*",
-        "frontend/src/components/VoiceClonePanel*",
         "frontend/src/components/QaContent.tsx"
       ]
     },
@@ -131,8 +129,8 @@
         "api/src/presentation/routes/studioVoiceCloneRoutes.ts",
         "api/src/presentation/routes/studioWeightRoutes.ts",
         "frontend/src/components/LlmStudioPanel*",
-        "frontend/src/components/VoiceClonePanel*",
-        "frontend/src/app/ide/voice/**"
+        "frontend/src/components/ide/Voice*",
+        "frontend/src/lib/voiceStudio.ts"
       ],
       "excludes": []
     },

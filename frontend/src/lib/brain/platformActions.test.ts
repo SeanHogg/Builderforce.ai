@@ -89,7 +89,7 @@ describe('buildPlatformActions', () => {
 
   it('does not collide with the IDE-owned action names', () => {
     const names = buildPlatformActions(makeCtx().ctx).map((a) => a.name);
-    for (const ide of ['create_file', 'apply_code_to_active_file', 'generate_prd', 'generate_tasks', 'use_video_prompt']) {
+    for (const ide of ['create_file', 'apply_code_to_active_file', 'generate_prd', 'generate_tasks', 'use_video_prompt', 'set_narration_text']) {
       expect(names).not.toContain(ide);
     }
   });
