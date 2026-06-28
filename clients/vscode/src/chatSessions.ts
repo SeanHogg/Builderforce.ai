@@ -7,7 +7,7 @@ const SESSION_TYPE = "builderforce";
  * Registers BuilderForce as a dedicated chat-session tab (like CLAUDE CODE / CODEX),
  * reusing the same agent handler. This uses VS Code's PROPOSED chat-sessions API
  * (`chatSessionsProvider`), so it is feature-detected and accessed dynamically — it only
- * activates when VS Code is launched with `--enable-proposed-api builderforce.builderforce-vscode`
+ * activates when VS Code is launched with `--enable-proposed-api builderforce.builderforce-ai`
  * on a compatible build. When the API is absent it logs once and no-ops, so the stable
  * sidebar + @builderforce participant are never affected.
  *
@@ -22,7 +22,7 @@ export function registerChatSessions(
   if (typeof chatApi.registerChatSessionContentProvider !== "function") {
     console.log(
       "[BuilderForce] Dedicated chat tab unavailable. Launch with " +
-        "`--enable-proposed-api builderforce.builderforce-vscode` on VS Code 1.125+ to enable it.",
+        "`--enable-proposed-api builderforce.builderforce-ai` on VS Code 1.125+ to enable it.",
     );
     return undefined;
   }
