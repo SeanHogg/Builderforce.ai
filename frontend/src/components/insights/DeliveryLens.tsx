@@ -418,6 +418,24 @@ export function DeliveryLens() {
             <BurnChart series={data.series} projection={data.projection} targetDate={data.targetDate} />
           </PmCard>
 
+          {/* Value delivered in story points + the development FTE that drove it.
+              Shown when the work is estimated or has logged effort. */}
+          {(data.hasPoints || data.hasEffort) && (
+            <PmCard title={t('deliv.scopeEffort.title')}>
+              <div style={{ display: 'flex', gap: 16, alignItems: 'center', marginBottom: 8, fontSize: '0.78rem', color: 'var(--text-muted)', flexWrap: 'wrap' }}>
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}><span style={{ width: 12, height: 12, background: POINTS_DONE_COLOR, borderRadius: 2, display: 'inline-block' }} /> {t('deliv.scopeEffort.completed')}</span>
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}><span style={{ width: 12, height: 12, background: POINTS_DEFINED_COLOR, opacity: 0.25, borderRadius: 2, display: 'inline-block' }} /> {t('deliv.scopeEffort.defined')}</span>
+                {data.hasEffort && <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}><span style={{ width: 14, height: 2, background: PROJECTION_COLOR, display: 'inline-block' }} /> {t('deliv.scopeEffort.fte')}</span>}
+              </div>
+              <ScopeEffortChart points={data.scopeEffort} hasEffort={data.hasEffort} />
+              <KpiGrid>
+                <StatCard label={t('deliv.scopeEffort.totalPoints')} value={data.hasPoints ? `${data.totalPoints}` : '—'} sub={t('deliv.scopeEffort.donePoints', { n: data.donePoints })} />
+                <StatCard label={t('deliv.scopeEffort.cancelledPoints')} value={data.hasPoints ? `${data.cancelledPoints}` : '—'} sub={t('deliv.scopeEffort.cancelledSub')} />
+                <StatCard label={t('deliv.scopeEffort.currentFte')} value={data.hasEffort ? data.currentFte.toFixed(1) : '—'} sub={t('deliv.scopeEffort.fteSub')} />
+              </KpiGrid>
+            </PmCard>
+          )}
+
           {/* What-if completion modelling for this deliverable. Keyed so the levers
               reset to the new baseline when the deliverable changes. */}
           {scope && id && <ScenarioPlanner key={`${scope}:${id}`} scope={scope} id={id} baseline={data} />}
@@ -470,6 +488,10 @@ export function DeliveryLens() {
 
       {/* Life cycle explorer — tenant-wide time per SDLC phase + lifecycle trend. */}
       <LifecycleExplorer />
+
+      {/* Value stream — the cross-artifact initiative dependency graph + critical
+          path. Self-hides when there are no initiatives in scope. */}
+      <ValueStreamGraph />
     </div>
   );
 }

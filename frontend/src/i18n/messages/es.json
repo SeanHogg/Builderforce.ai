@@ -774,6 +774,28 @@
         "trend": "Tiempo de ciclo de vida en los últimos meses",
         "trendSeries": "Ciclo de vida medio (días)",
         "trendAria": "Tiempo medio de ciclo de vida de principio a fin por mes"
+      },
+      "scopeEffort": {
+        "title": "Alcance y esfuerzo",
+        "completed": "Puntos completados",
+        "defined": "Definido (abierto)",
+        "fte": "FTE de desarrollo",
+        "aria": "Puntos de historia completados y definidos a lo largo del tiempo con la línea de FTE de desarrollo",
+        "ptsAxis": "pts",
+        "fteAxis": "FTE",
+        "totalPoints": "Puntos definidos",
+        "donePoints": "{n} completados",
+        "cancelledPoints": "Puntos cancelados",
+        "cancelledSub": "retirados del alcance",
+        "currentFte": "FTE actual",
+        "fteSub": "capacidad de desarrollo reciente"
+      },
+      "valueStream": {
+        "title": "Flujo de valor",
+        "subtitle": "Cómo fluye el valor entre iniciativas — y dónde se bloquea.",
+        "criticalPath": "Ruta crítica",
+        "cycle": "⚠ ciclo de dependencias",
+        "noDeps": "Aún no hay dependencias de iniciativas — vincula bloqueadores en el portafolio para trazar el flujo de valor."
       }
     },
     "aiImpact": {

@@ -774,6 +774,28 @@
         "trend": "Lebenszyklusdauer der letzten Monate",
         "trendSeries": "Durchschn. Lebenszyklus (Tage)",
         "trendAria": "Durchschnittliche durchgängige Lebenszyklusdauer pro Monat"
+      },
+      "scopeEffort": {
+        "title": "Umfang & Aufwand",
+        "completed": "Erledigte Punkte",
+        "defined": "Definiert (offen)",
+        "fte": "Entwicklungs-FTE",
+        "aria": "Erledigte und definierte Story Points im Zeitverlauf mit der Entwicklungs-FTE-Linie",
+        "ptsAxis": "Pkt",
+        "fteAxis": "FTE",
+        "totalPoints": "Definierte Punkte",
+        "donePoints": "{n} erledigt",
+        "cancelledPoints": "Abgebrochene Punkte",
+        "cancelledSub": "aus dem Umfang entfernt",
+        "currentFte": "Aktuelle FTE",
+        "fteSub": "jüngste Entwicklungskapazität"
+      },
+      "valueStream": {
+        "title": "Wertstrom",
+        "subtitle": "Wie Wert durch Initiativen fließt — und wo er blockiert ist.",
+        "criticalPath": "Kritischer Pfad",
+        "cycle": "⚠ Abhängigkeitszyklus",
+        "noDeps": "Noch keine Initiativen-Abhängigkeiten — verknüpfe Blocker im Portfolio, um den Wertstrom abzubilden."
       }
     },
     "aiImpact": {

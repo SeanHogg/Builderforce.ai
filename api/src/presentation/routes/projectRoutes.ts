@@ -8,6 +8,7 @@ import { ProjectStatus, TenantRole } from '../../domain/shared/types';
 import { isAgentHostOnline } from '../../domain/agentHost/onlineStatus';
 import type { Db } from '../../infrastructure/database/connection';
 import { agentHostProjects, agentHosts, projectInsightEvents, projects, sourceControlIntegrations, specs, tasks, tenants, workflows } from '../../infrastructure/database/schema';
+import { relayToRoom } from './realtimeRelay';
 import { buildPlanLimitsGuard } from '../middleware/planLimitsGuard';
 import { projectRoomName } from '../../infrastructure/relay/broadcastRoom';
 
@@ -55,12 +56,7 @@ export function createProjectRoutes(projectService: ProjectService, db: Db): Hon
   // is a dumb fan-out relay (no domain data flows through it), and the authed REST
   // routes stay the source of truth. The browser passes its JWT as `?token=` since
   // it can't set WS headers (authMiddleware already accepts the query param).
-  router.get('/:id/stream', (c) => {
-    if (c.req.header('Upgrade') !== 'websocket') return c.text('Expected WebSocket upgrade', 426);
-    const ns = c.env?.SESSION_ROOM;
-    if (!ns) return c.text('Realtime unavailable', 503);
-    return ns.get(ns.idFromName(projectRoomName(c.req.param('id')))).fetch(c.req.raw);
-  });
+  router.get('/:id/stream', (c) => relayToRoom(c, c.env?.SESSION_ROOM, projectRoomName(c.req.param('id'))));
 
   const normalizeName = (value: string) => value.trim().toLowerCase().replace(/\s+/g, ' ');
 

@@ -28,6 +28,23 @@ export async function sumTenantErrorEvents(db: Db, tenantId: number, since: Date
   return Math.max(0, Math.floor(Number(row?.used ?? 0)));
 }
 
+/** Per-day error-event count since `since` (UTC day buckets, sparse). Day totals
+ *  sum to {@link sumTenantErrorEvents}; drives the consumption-meter sparkline. */
+export async function dailyTenantErrorEvents(
+  db: Db,
+  tenantId: number,
+  since: Date,
+): Promise<Array<{ day: string; value: number }>> {
+  const dayExpr = sql<string>`to_char(${errorEvents.createdAt}, 'YYYY-MM-DD')`;
+  const rows = await db
+    .select({ day: dayExpr, used: sql<number>`COUNT(*)` })
+    .from(errorEvents)
+    .where(and(eq(errorEvents.tenantId, tenantId), gte(errorEvents.createdAt, since)))
+    .groupBy(dayExpr)
+    .orderBy(dayExpr);
+  return rows.map((r) => ({ day: r.day, value: Math.max(0, Math.floor(Number(r.used ?? 0))) }));
+}
+
 export type ErrorEventsCapResult =
   | { allowed: true }
   | { allowed: false; effectivePlan: TenantPlan; used: number; limit: number };

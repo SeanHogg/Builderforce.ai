@@ -81,7 +81,7 @@ export async function dailyTenantTextTokens(
   db: Db,
   tenantId: number,
   since: Date,
-): Promise<Array<{ day: string; tokens: number }>> {
+): Promise<Array<{ day: string; value: number }>> {
   const dayExpr = sql<string>`to_char(${llmUsageLog.createdAt}, 'YYYY-MM-DD')`;
   const rows = await db
     .select({ day: dayExpr, used: sql<number>`COALESCE(SUM(${rowWeight}), 0)` })
@@ -89,7 +89,7 @@ export async function dailyTenantTextTokens(
     .where(and(eq(llmUsageLog.tenantId, tenantId), gte(llmUsageLog.createdAt, since), notImageRow))
     .groupBy(dayExpr)
     .orderBy(dayExpr);
-  return rows.map((r) => ({ day: r.day, tokens: toInt(r.used) }));
+  return rows.map((r) => ({ day: r.day, value: toInt(r.used) }));
 }
 
 /**
