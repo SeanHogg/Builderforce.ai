@@ -1,15 +1,10 @@
-import { pageMetadata } from '@/lib/seo';
-import FinopsClient from './FinopsClient';
+import { redirect } from 'next/navigation';
 
 export const runtime = 'edge';
 
-export const metadata = pageMetadata({
-  title: 'DevFinOps',
-  description:
-    'R&D tax credit (QRE) estimates, SOC 1 Type II control coverage, and one-click audit-ready period reports — derived from effort, cost and the immutable agent-tool audit trail.',
-  path: '/finops',
-});
-
+// DevFinOps is consolidated into the Finance hub at /insights/finance as an
+// interactive drill-down. Preserve old deep links by redirecting into the
+// DevFinOps (R&D / SOC / audit) slide-out panel.
 export default function FinopsPage() {
-  return <FinopsClient />;
+  redirect('/insights/finance?drill=devfinops');
 }

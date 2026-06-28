@@ -129,13 +129,45 @@ export interface AnalysisResult {
 }
 
 export interface CreateDocInput {
-  title: string;
+  title?: string;
   summary?: string;
   content?: string;
   docType?: DocType;
   projectId?: number | null;
   requiresAck?: boolean;
   tags?: string[];
+  /** Seed from a curated standard-library template (server fills the defaults). */
+  templateKey?: string;
+}
+
+/** A standard-library item — both a coverage gap and a one-click template. */
+export interface KnowledgeTemplate {
+  key: string;
+  title: string;
+  docType: DocType;
+  summary: string;
+  tags: string[];
+  present: boolean;
+}
+
+export interface KnowledgeOverview {
+  counts: {
+    total: number;
+    sop: number;
+    process: number;
+    doc: number;
+    published: number;
+    draft: number;
+    archived: number;
+    requiresAck: number;
+  };
+  stale: number;
+  staleDays: number;
+  coverage: { score: number; present: number; total: number };
+  /** Standard items the team has no document for yet. */
+  gaps: KnowledgeTemplate[];
+  /** Full standard-library catalogue for the template gallery. */
+  templates: KnowledgeTemplate[];
 }
 
 export interface UpdateDocInput {
@@ -178,6 +210,8 @@ export const knowledgeApi = {
     apiRequest<{ documents: KnowledgeDoc[] }>(`${BASE}/documents${qs(query)}`).then((r) => r.documents),
 
   tags: () => apiRequest<{ tags: string[] }>(`${BASE}/tags`).then((r) => r.tags),
+
+  overview: () => apiRequest<KnowledgeOverview>(`${BASE}/overview`),
 
   get: (id: string) => apiRequest<KnowledgeDocDetail>(`${BASE}/documents/${id}`),
 

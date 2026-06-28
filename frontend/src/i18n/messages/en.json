@@ -24,7 +24,6 @@
       "planning": "Planning",
       "portfolio": "Portfolio",
       "ceremonies": "Ceremonies",
-      "aiEffectiveness": "AI Effectiveness",
       "dora": "DORA",
       "finops": "FinOps",
       "funnel": "Innovation Funnel",
@@ -44,8 +43,7 @@
       "docs": "Documents",
       "training": "Training",
       "errors": "Errors",
-      "aiImpact": "AI Impact",
-      "recommendations": "Recommendations",
+      "ai": "AI Insights",
       "space": "SPACE",
       "benchmarking": "Benchmarking",
       "devex": "DevEx",
@@ -56,6 +54,7 @@
       "surveys": "Surveys",
       "dashboards": "Dashboards",
       "devfinops": "DevFinOps",
+      "finance": "Finance",
       "workforce": "Workforce",
       "teams": "Teams",
       "performance": "Performance",
@@ -506,6 +505,49 @@
     "loading": "Loading…",
     "window": "Time window",
     "days": "{n} days",
+    "aihub": {
+      "title": "AI Insights",
+      "subtitle": "Adoption, effectiveness and what to do next — your AI program at a glance. Open any report to drill in.",
+      "viewReport": "View report",
+      "panel": {
+        "aiImpact": "AI Impact",
+        "aiImpactDesc": "Adoption & model-usage trends, a multi-tool evaluation matrix and a composite AI productivity score.",
+        "engineering": "AI Effectiveness",
+        "engineeringDesc": "Which AI approach actually ships — outcome score, merge rate and cost by work type and model.",
+        "recommendations": "Recommendations",
+        "recommendationsDesc": "Ranked prescriptive actions and anomalies to act on, drawn from every insight."
+      }
+    },
+    "delivhub": {
+      "title": "Delivery",
+      "subtitle": "Delivery progress, bottlenecks and engineering performance — your delivery program at a glance. Open any report to drill in.",
+      "viewDetails": "View details",
+      "openLens": "Open {name}",
+      "panel": {
+        "delivery": "Delivery",
+        "deliveryDesc": "Burnup, forecast and scope creep for a deliverable across initiatives, projects and releases.",
+        "bottlenecks": "Bottlenecks",
+        "bottlenecksDesc": "Where work stalls — time-in-stage, the slowest stage, rework loops and the WIP stuck right now.",
+        "dora": "DORA Metrics",
+        "doraDesc": "The four DevOps keys — deployment frequency, lead time, change-failure rate and time to restore — vs performance tiers.",
+        "space": "SPACE Metrics",
+        "spaceDesc": "The five-dimension developer-productivity framework that complements DORA.",
+        "benchmarking": "Industry Benchmarking",
+        "benchmarkingDesc": "How your delivery metrics rank against an industry cohort — percentile and rating by industry and team size.",
+        "funnel": "Innovation Funnel",
+        "funnelDesc": "Idea → validated → in build → shipped → measured: conversion, time-to-value and the idea pipeline."
+      }
+    },
+    "finhub": {
+      "title": "Finance",
+      "subtitle": "AI spend, investment allocation and DevFinOps — your finance program at a glance. Open any report to drill in.",
+      "viewDetails": "View details",
+      "openPanel": "Open {name}",
+      "devfinops": {
+        "title": "DevFinOps",
+        "subtitle": "R&D tax credit (QRE) estimates, SOC 1 control coverage and audit-ready period reports — derived from effort, cost and the immutable agent-tool audit trail."
+      }
+    },
     "common": {
       "delete": "Delete",
       "close": "Close",
@@ -863,6 +905,27 @@
       "activeUsers": "Active users",
       "cost": "Cost"
     },
+    "devexhub": {
+      "title": "DevEx",
+      "subtitle": "Developer-experience surveys & results at a glance — the DevEx index, eNPS, sentiment and participation. Open any section to drill in.",
+      "loading": "Loading…",
+      "viewReport": "View report",
+      "newSurvey": "New survey",
+      "panel": {
+        "results": "Survey results",
+        "resultsDesc": "The DevEx Index, per-topic scores with trend, benchmark and sentiment, the segment heatmap, participation over time and how priorities have shifted.",
+        "surveys": "Surveys",
+        "surveysDesc": "Author survey templates, launch campaigns, and view or respond to developer-experience feedback."
+      },
+      "summary": {
+        "templates": "Templates",
+        "templatesSub": "Reusable question sets",
+        "openCampaigns": "Open campaigns",
+        "campaignsSub": "{n} total",
+        "responses": "Responses",
+        "responsesSub": "Across all campaigns"
+      }
+    },
     "devex": {
       "title": "DevEx Surveys & Insights",
       "subtitle": "Developer-experience pulse scores, eNPS, and the AI DevEx analysis cut.",
@@ -1005,7 +1068,7 @@
       }
     },
     "bottleneck": {
-      "title": "Title",
+      "title": "Bottleneck Analysis",
       "subtitle": "Pinpoint exactly where work stalls — time-in-stage, the slowest stage, rework loops, and the WIP that is stuck right now.",
       "slowest": "Slowest stage",
       "noData": "no data yet",

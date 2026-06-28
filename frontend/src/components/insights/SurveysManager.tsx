@@ -1,8 +1,18 @@
 'use client';
 
+/**
+ * Reusable DevEx survey-management surface — template authoring, templates list,
+ * campaign launcher, campaigns list and the respond form.
+ *
+ * Extracted from the retired /surveys page so the SAME component renders inside
+ * the DevEx hub's "Surveys" drill-down slide-out (DevexPanelProvider) and can be
+ * opened by the Brain. It owns no page chrome (no PageContainer/header) — the
+ * slide-out provides the title. Authoring + launching gate on `devex.manage`;
+ * everyone can view and respond. i18n stays under the `surveys` namespace.
+ */
+
 import { useCallback, useState } from 'react';
 import { useTranslations } from 'next-intl';
-import PageContainer from '@/components/PageContainer';
 import { RoleGate } from '@/components/RoleGate';
 import { Select } from '@/components/Select';
 import { usePmData } from '@/lib/pm/usePmData';
@@ -30,39 +40,32 @@ function newQuestion(): DevexQuestion {
   return { id: `q${Math.random().toString(36).slice(2, 8)}`, type: 'rating', prompt: '', dimension: 'flow' };
 }
 
-export function SurveysClient() {
+export function SurveysManager() {
   const t = useTranslations('surveys');
   const { data: templates, error: tErr, reload: reloadTemplates } = usePmData<DevexTemplate[]>(() => devexApi.templates.list(), []);
   const { data: campaigns, error: cErr, reload: reloadCampaigns } = usePmData<DevexCampaign[]>(() => devexApi.campaigns.list(), []);
 
   return (
-    <PageContainer width="readable">
-      <div style={{ marginBottom: 18 }}>
-        <h1 style={{ fontSize: '1.5rem', fontWeight: 700, margin: 0 }}>{t('title')}</h1>
-        <p style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', marginTop: 4 }}>{t('subtitle')}</p>
-      </div>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
+      {tErr && <PmError message={tErr} />}
+      {cErr && <PmError message={cErr} />}
 
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
-        {tErr && <PmError message={tErr} />}
-        {cErr && <PmError message={cErr} />}
+      <RoleGate capability="devex.manage" variant="block">
+        <TemplateAuthor onCreated={reloadTemplates} />
+      </RoleGate>
 
-        <RoleGate capability="devex.manage" variant="block">
-          <TemplateAuthor onCreated={reloadTemplates} />
-        </RoleGate>
+      <TemplatesList templates={templates ?? []} onChanged={reloadTemplates} />
 
-        <TemplatesList templates={templates ?? []} onChanged={reloadTemplates} />
+      <RoleGate capability="devex.manage" variant="block">
+        <CampaignLauncher templates={templates ?? []} onLaunched={reloadCampaigns} />
+      </RoleGate>
 
-        <RoleGate capability="devex.manage" variant="block">
-          <CampaignLauncher templates={templates ?? []} onLaunched={reloadCampaigns} />
-        </RoleGate>
-
-        <CampaignsList
-          campaigns={campaigns ?? []}
-          templates={templates ?? []}
-          onChanged={reloadCampaigns}
-        />
-      </div>
-    </PageContainer>
+      <CampaignsList
+        campaigns={campaigns ?? []}
+        templates={templates ?? []}
+        onChanged={reloadCampaigns}
+      />
+    </div>
   );
 }
 

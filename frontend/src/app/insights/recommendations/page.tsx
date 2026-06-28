@@ -1,12 +1,8 @@
 'use client';
 
-import { LensPage } from '@/components/insights/LensShell';
-import { RecommendationsLens } from '@/components/insights/RecommendationsLens';
+import { InsightsRedirect } from '@/components/insights/InsightsRedirect';
 
+/** Retired — Recommendations is now a section of the combined /insights/ai dashboard. */
 export default function RecommendationsInsightsPage() {
-  return (
-    <LensPage capability="insights.recommendations" titleKey="recs.title" subtitleKey="recs.subtitle">
-      <RecommendationsLens />
-    </LensPage>
-  );
+  return <InsightsRedirect to="/insights/ai?panel=recommendations" />;
 }

@@ -1,12 +1,8 @@
 'use client';
 
-import { LensPage } from '@/components/insights/LensShell';
-import { EngineeringLens } from '@/components/insights/EngineeringLens';
+import { InsightsRedirect } from '@/components/insights/InsightsRedirect';
 
+/** Retired — AI Effectiveness is now a section of the combined /insights/ai dashboard. */
 export default function EngineeringInsightsPage() {
-  return (
-    <LensPage capability="insights.engineering" titleKey="eng.title" subtitleKey="eng.subtitle">
-      <EngineeringLens />
-    </LensPage>
-  );
+  return <InsightsRedirect to="/insights/ai?panel=engineering" />;
 }

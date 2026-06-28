@@ -1,12 +1,8 @@
 'use client';
 
-import { LensPage } from '@/components/insights/LensShell';
-import { BottleneckLens } from '@/components/insights/BottleneckLens';
+import { InsightsRedirect } from '@/components/insights/InsightsRedirect';
 
-export default function BottleneckInsightsPage() {
-  return (
-    <LensPage capability="insights.delivery" titleKey="bottleneck.title" subtitleKey="bottleneck.subtitle">
-      <BottleneckLens />
-    </LensPage>
-  );
+/** Retired — Bottlenecks is now a panel of the combined /insights/delivery hub. */
+export default function BottlenecksInsightsPage() {
+  return <InsightsRedirect to="/insights/delivery?panel=bottlenecks" />;
 }

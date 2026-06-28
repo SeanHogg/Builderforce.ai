@@ -1,12 +1,8 @@
 'use client';
 
-import { LensPage } from '@/components/insights/LensShell';
-import { DoraLens } from '@/components/insights/DoraLens';
+import { InsightsRedirect } from '@/components/insights/InsightsRedirect';
 
+/** Retired — DORA is now a panel of the combined /insights/delivery hub. */
 export default function DoraInsightsPage() {
-  return (
-    <LensPage capability="insights.delivery" titleKey="dora.title" subtitleKey="dora.subtitle">
-      <DoraLens />
-    </LensPage>
-  );
+  return <InsightsRedirect to="/insights/delivery?panel=dora" />;
 }

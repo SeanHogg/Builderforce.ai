@@ -8,6 +8,14 @@ import MarketingShell from './MarketingShell';
 import OnboardingGate from './OnboardingGate';
 import RouteMarketing from './RouteMarketing';
 import { BrainActionsProvider, BrainContextProvider, BrainProvider, brainConfig } from '@/lib/brain';
+import { AiInsightPanelProvider } from './insights/AiInsightPanelProvider';
+import { AiInsightPanelBrainBridge } from './insights/AiInsightPanelBrainBridge';
+import { DeliveryPanelProvider } from './insights/DeliveryPanelProvider';
+import { DeliveryPanelBrainBridge } from './insights/DeliveryPanelBrainBridge';
+import { FinancePanelProvider } from './insights/finance/FinancePanelProvider';
+import { FinancePanelBrainBridge } from './insights/finance/FinancePanelBrainBridge';
+import { DevexPanelProvider } from './insights/DevexPanelProvider';
+import { DevexPanelBrainBridge } from './insights/DevexPanelBrainBridge';
 import { FloatingBrain } from './brain/FloatingBrain';
 import { McpExtensionsBridge } from './brain/McpExtensionsBridge';
 import { PlatformActionsBridge } from './brain/PlatformActionsBridge';
@@ -108,17 +116,35 @@ export default function ConditionalAppShell({ children }: { children: React.Reac
   // in, a sign-in CTA otherwise). See FloatingBrain.
   return (
     <BrainProvider config={brainConfig}>
-      <BrainActionsProvider>
-        <BrainContextProvider>
-          {content}
-          <FloatingBrain />
-          {/* Make the Brain the epicenter for every action: register the platform
-              capability tools + the tenant's server-side MCP extension tools.
-              Both are auth-gated — they call the gateway with the tenant token. */}
-          {hasTenant && <PlatformActionsBridge />}
-          {hasTenant && <McpExtensionsBridge />}
-        </BrainContextProvider>
-      </BrainActionsProvider>
+      {/* One app-wide AI Insights slide-out, opened by the combined /insights/ai
+          dashboard AND by the Brain (via show_ai_insight → AiInsightPanelBrainBridge).
+          Wraps the Brain providers so the bridge can reach the drawer. */}
+      <AiInsightPanelProvider>
+        <DeliveryPanelProvider>
+          <FinancePanelProvider>
+          <DevexPanelProvider>
+          <BrainActionsProvider>
+            <BrainContextProvider>
+              {content}
+              <FloatingBrain />
+              {/* Make the Brain the epicenter for every action: register the platform
+                  capability tools + the tenant's server-side MCP extension tools.
+                  Both are auth-gated — they call the gateway with the tenant token. */}
+              {hasTenant && <PlatformActionsBridge />}
+              {hasTenant && <McpExtensionsBridge />}
+              {/* Insights slide-out tools — register `show_ai_insight` +
+                  `show_delivery_insight` so the Brain can surface insights in the
+                  shared drawers. */}
+              <AiInsightPanelBrainBridge />
+              <DeliveryPanelBrainBridge />
+              <FinancePanelBrainBridge />
+              <DevexPanelBrainBridge />
+            </BrainContextProvider>
+          </BrainActionsProvider>
+          </DevexPanelProvider>
+          </FinancePanelProvider>
+        </DeliveryPanelProvider>
+      </AiInsightPanelProvider>
     </BrainProvider>
   );
 }

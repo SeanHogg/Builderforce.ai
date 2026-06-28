@@ -18,12 +18,18 @@ import type { Capability } from '@/lib/rbac';
  * hidden) — the server requireRole() on /api/insights/* is the real authority.
  */
 export function LensPage({
-  capability, titleKey, subtitleKey, children,
+  capability, titleKey, subtitleKey, children, gate = true,
 }: {
   capability: Capability;
   titleKey: string;
   subtitleKey: string;
   children: ReactNode;
+  /**
+   * Wrap children in the capability <RoleGate>. Default true. Set false for hub
+   * pages whose children gate themselves per-lens (e.g. the delivery hub, where
+   * each drill-down drawer applies its own lens capability).
+   */
+  gate?: boolean;
 }) {
   const t = useTranslations('insights');
   const router = useRouter();
@@ -42,9 +48,13 @@ export function LensPage({
         <h1 style={{ fontSize: '1.5rem', fontWeight: 700, margin: 0 }}>{t(titleKey)}</h1>
         <p style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', marginTop: 4 }}>{t(subtitleKey)}</p>
       </div>
-      <RoleGate capability={capability} variant="block">
-        {children}
-      </RoleGate>
+      {gate ? (
+        <RoleGate capability={capability} variant="block">
+          {children}
+        </RoleGate>
+      ) : (
+        children
+      )}
     </PageContainer>
   );
 }

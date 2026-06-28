@@ -24,7 +24,6 @@
       "planning": "Planung",
       "portfolio": "Portfolio",
       "ceremonies": "Zeremonien",
-      "aiEffectiveness": "KI-Effektivität",
       "dora": "DORA",
       "finops": "FinOps",
       "funnel": "Innovationstrichter",
@@ -44,8 +43,7 @@
       "docs": "Dokumente",
       "training": "Schulung",
       "errors": "Fehler",
-      "aiImpact": "KI-Wirkung",
-      "recommendations": "Empfehlungen",
+      "ai": "KI-Einblicke",
       "space": "SPACE",
       "benchmarking": "Benchmarking",
       "devex": "DevEx",
@@ -56,6 +54,7 @@
       "surveys": "Umfragen",
       "dashboards": "Dashboards",
       "devfinops": "DevFinOps",
+      "finance": "Finanzen",
       "workforce": "Belegschaft",
       "teams": "Teams",
       "performance": "Leistung",
@@ -506,6 +505,49 @@
     "loading": "Lädt…",
     "window": "Zeitraum",
     "days": "{n} Tage",
+    "aihub": {
+      "title": "KI-Einblicke",
+      "subtitle": "Akzeptanz, Effektivität und nächste Schritte – Ihr KI-Programm auf einen Blick. Öffnen Sie einen Bericht für Details.",
+      "viewReport": "Bericht ansehen",
+      "panel": {
+        "aiImpact": "KI-Wirkung",
+        "aiImpactDesc": "Akzeptanz- und Modellnutzungstrends, eine Multi-Tool-Bewertungsmatrix und ein zusammengesetzter KI-Produktivitätswert.",
+        "engineering": "KI-Effektivität",
+        "engineeringDesc": "Welcher KI-Ansatz tatsächlich liefert – Ergebnis-Score, Merge-Rate und Kosten nach Arbeitstyp und Modell.",
+        "recommendations": "Empfehlungen",
+        "recommendationsDesc": "Priorisierte, umsetzbare Empfehlungen und Anomalien aus allen Einblicken."
+      }
+    },
+    "delivhub": {
+      "title": "Lieferung",
+      "subtitle": "Lieferfortschritt, Engpässe und Engineering-Leistung – Ihr Lieferprogramm auf einen Blick. Öffnen Sie einen Bericht, um tiefer einzutauchen.",
+      "viewDetails": "Details ansehen",
+      "openLens": "{name} öffnen",
+      "panel": {
+        "delivery": "Lieferung",
+        "deliveryDesc": "Burnup, Prognose und Scope Creep eines Liefergegenstands über Initiativen, Projekte und Releases hinweg.",
+        "bottlenecks": "Engpässe",
+        "bottlenecksDesc": "Wo die Arbeit stockt – Zeit je Phase, langsamste Phase, Nacharbeitsschleifen und das aktuell festhängende WIP.",
+        "dora": "DORA-Kennzahlen",
+        "doraDesc": "Die vier DevOps-Kennzahlen – Deployment-Häufigkeit, Vorlaufzeit, Change-Failure-Rate und Wiederherstellungszeit – im Vergleich zu Leistungsstufen.",
+        "space": "SPACE-Kennzahlen",
+        "spaceDesc": "Das fünfdimensionale Framework für Entwicklerproduktivität, das DORA ergänzt.",
+        "benchmarking": "Branchen-Benchmarking",
+        "benchmarkingDesc": "Wie Ihre Liefermetriken im Vergleich zu einer Branchenkohorte abschneiden – Perzentil und Bewertung nach Branche und Teamgröße.",
+        "funnel": "Innovationstrichter",
+        "funnelDesc": "Idee → validiert → in Entwicklung → ausgeliefert → gemessen: Conversion, Time-to-Value und die Ideen-Pipeline."
+      }
+    },
+    "finhub": {
+      "title": "Finanzen",
+      "subtitle": "KI-Ausgaben, Investitionsallokation und DevFinOps – Ihr Finanzprogramm auf einen Blick. Öffnen Sie einen Bericht, um ins Detail zu gehen.",
+      "viewDetails": "Details anzeigen",
+      "openPanel": "{name} öffnen",
+      "devfinops": {
+        "title": "DevFinOps",
+        "subtitle": "Schätzungen zur Forschungs- und Entwicklungssteuergutschrift (QRE), SOC-1-Kontrollabdeckung und prüfungsbereite Periodenberichte – abgeleitet aus Aufwand, Kosten und dem unveränderlichen Audit-Trail der Agent-Tools."
+      }
+    },
     "common": {
       "delete": "Löschen",
       "close": "Schließen",
@@ -863,6 +905,27 @@
       "activeUsers": "Aktive Nutzer",
       "cost": "Kosten"
     },
+    "devexhub": {
+      "title": "DevEx",
+      "subtitle": "Umfragen und Ergebnisse zur Developer Experience auf einen Blick – der DevEx-Index, eNPS, Stimmung und Beteiligung. Öffnen Sie einen Bereich, um ins Detail zu gehen.",
+      "loading": "Wird geladen…",
+      "viewReport": "Bericht ansehen",
+      "newSurvey": "Neue Umfrage",
+      "panel": {
+        "results": "Umfrageergebnisse",
+        "resultsDesc": "Der DevEx-Index, Themenwerte mit Trend, Benchmark und Stimmung, die Segment-Heatmap, die Beteiligung im Zeitverlauf und wie sich die Prioritäten verschoben haben.",
+        "surveys": "Umfragen",
+        "surveysDesc": "Erstellen Sie Umfragevorlagen, starten Sie Kampagnen und sehen Sie Developer-Experience-Feedback ein oder beantworten Sie es."
+      },
+      "summary": {
+        "templates": "Vorlagen",
+        "templatesSub": "Wiederverwendbare Fragensätze",
+        "openCampaigns": "Offene Kampagnen",
+        "campaignsSub": "{n} insgesamt",
+        "responses": "Antworten",
+        "responsesSub": "Über alle Kampagnen"
+      }
+    },
     "devex": {
       "title": "DevEx-Umfragen & Insights",
       "subtitle": "Pulse-Werte zur Developer Experience, eNPS und die KI-DevEx-Analysesicht.",
@@ -1005,7 +1068,7 @@
       }
     },
     "bottleneck": {
-      "title": "Titel",
+      "title": "Engpassanalyse",
       "subtitle": "Genau erkennen, wo Arbeit stockt — Zeit je Phase, die langsamste Phase, Nacharbeitsschleifen und die gerade festsitzende laufende Arbeit.",
       "slowest": "Langsamste Phase",
       "noData": "noch keine Daten",
