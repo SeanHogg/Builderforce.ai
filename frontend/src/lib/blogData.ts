@@ -42,6 +42,7 @@ import qualityObservability from '@/content/blog/quality-error-observability-one
 import knowledgeManagement from '@/content/blog/knowledge-management-sops-and-compliance.md';
 import boardConnectors from '@/content/blog/single-pane-board-connectors.md';
 import agenticTester from '@/content/blog/agentic-tester-autonomous-qa.md';
+import agenticWorkforce from '@/content/blog/transitioning-to-an-agentic-workforce.md';
 
 export interface BlogPost {
   slug: string;
@@ -138,6 +139,7 @@ export const BLOG_POSTS: BlogPost[] = [
   buildPost('knowledge-management-sops-and-compliance', knowledgeManagement),
   buildPost('single-pane-board-connectors', boardConnectors),
   buildPost('agentic-tester-autonomous-qa', agenticTester),
+  buildPost('transitioning-to-an-agentic-workforce', agenticWorkforce),
 ].sort((a, b) => (a.date < b.date ? 1 : -1));
 
 export function getPostBySlug(slug: string): BlogPost | undefined {

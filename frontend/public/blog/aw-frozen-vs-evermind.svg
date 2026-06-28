@@ -1,0 +1,45 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900">
+  <defs>
+    <radialGradient id="bgGlow" cx="50%" cy="0%" r="120%">
+      <stop offset="0%" stop-color="#1B1F46"/>
+      <stop offset="55%" stop-color="#13152F"/>
+      <stop offset="100%" stop-color="#0A0B1E"/>
+    </radialGradient>
+    <linearGradient id="violetGrad" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#A98BFF"/><stop offset="100%" stop-color="#6A4DF0"/>
+    </linearGradient>
+    <linearGradient id="coolGrad" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#3DD6F5"/><stop offset="100%" stop-color="#4F8BFF"/>
+    </linearGradient>
+    <linearGradient id="mintGrad" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#5BF0BC"/><stop offset="100%" stop-color="#23B987"/>
+    </linearGradient>
+    <linearGradient id="legacyGrad" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#7A8099"/><stop offset="100%" stop-color="#474C63"/>
+    </linearGradient>
+    <linearGradient id="hairline" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="rgba(139,108,255,0)"/>
+      <stop offset="50%" stop-color="rgba(139,108,255,0.55)"/>
+      <stop offset="100%" stop-color="rgba(61,214,245,0)"/>
+    </linearGradient>
+    <filter id="soft" x="-40%" y="-40%" width="180%" height="180%">
+      <feGaussianBlur stdDeviation="14" result="b"/><feMerge>
+      <feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="glow" x="-80%" y="-80%" width="260%" height="260%">
+      <feGaussianBlur stdDeviation="9"/>
+    </filter>
+  </defs>
+  <rect width="1600" height="900" fill="url(#bgGlow)"/>
+  <rect width="1600" height="900" fill="none"/>
+  
+    <text x="80" y="92" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="20" letter-spacing="3" font-weight="700" fill="#A98BFF">WHY IT IS DIFFERENT</text>
+    <text x="80" y="146" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="46" font-weight="800" fill="#EEF0FA">A frozen frontier model vs. Evermind</text>
+    <rect x="82" y="170" width="120" height="4" rx="2" fill="url(#hairline)"/>
+  <rect x="444" y="160" width="532" height="56" rx="14" fill="rgba(110,116,140,0.16)" stroke="rgba(110,116,140,0.4)" stroke-width="1.5"/><text x="470" y="197" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="24" font-weight="800" fill="#6E748C">❄  FROZEN FRONTIER MODEL</text><rect x="1009" y="160" width="532" height="56" rx="14" fill="rgba(139,108,255,0.14)" stroke="rgba(139,108,255,0.45)" stroke-width="1.5"/><text x="1035" y="197" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="24" font-weight="800" fill="#A98BFF">⚡  EVERMIND</text><text x="90" y="260" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="23" font-weight="800" fill="#EEF0FA"><tspan x="90" dy="0">Knowledge updates</tspan></text><text x="470" y="238" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="20" fill="#A6ADC8"><tspan x="470" dy="0">Frozen at training time — needs a retrain,</tspan><tspan x="470" dy="28">fine-tune, RAG patch, or hand-edit</tspan></text><text x="1035" y="238" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="20" fill="#EEF0FA"><tspan x="1035" dy="0">Written straight through — an update</tspan><tspan x="1035" dy="28">replaces what came before</tspan></text><line x1="90" y1="320" x2="1540" y2="320" stroke="rgba(255,255,255,0.06)" stroke-width="1"/><text x="90" y="364" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="23" font-weight="800" fill="#EEF0FA"><tspan x="90" dy="0">Reconciliation</tspan></text><text x="470" y="342" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="20" fill="#A6ADC8"><tspan x="470" dy="0">Stale and fresh facts coexist; something</tspan><tspan x="470" dy="28">must merge them later</tspan></text><text x="1035" y="342" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="20" fill="#EEF0FA"><tspan x="1035" dy="0">Upsert-by-key + invalidate — there is</tspan><tspan x="1035" dy="28">never a reconcile step</tspan></text><line x1="90" y1="424" x2="1540" y2="424" stroke="rgba(255,255,255,0.06)" stroke-width="1"/><text x="90" y="468" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="23" font-weight="800" fill="#EEF0FA"><tspan x="90" dy="0">Currency</tspan></text><text x="470" y="446" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="20" fill="#A6ADC8"><tspan x="470" dy="0">Goes out of date the moment it ships</tspan></text><text x="1035" y="446" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="20" fill="#EEF0FA"><tspan x="1035" dy="0">Never stale — updates land the moment they</tspan><tspan x="1035" dy="28">happen</tspan></text><line x1="90" y1="528" x2="1540" y2="528" stroke="rgba(255,255,255,0.06)" stroke-width="1"/><text x="90" y="572" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="23" font-weight="800" fill="#EEF0FA"><tspan x="90" dy="0">Footprint</tspan></text><text x="470" y="550" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="20" fill="#A6ADC8"><tspan x="470" dy="0">Large; runs only in the vendor cloud</tspan></text><text x="1035" y="550" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="20" fill="#EEF0FA"><tspan x="1035" dy="0">Runs on WebGPU — browser, on-device, or</tspan><tspan x="1035" dy="28">inside every agent</tspan></text><line x1="90" y1="632" x2="1540" y2="632" stroke="rgba(255,255,255,0.06)" stroke-width="1"/><text x="90" y="676" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="23" font-weight="800" fill="#EEF0FA"><tspan x="90" dy="0">Ownership</tspan></text><text x="470" y="654" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="20" fill="#A6ADC8"><tspan x="470" dy="0">Third-party model; a knowledge cutoff you</tspan><tspan x="470" dy="28">do not control</tspan></text><text x="1035" y="654" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="20" fill="#EEF0FA"><tspan x="1035" dy="0">Yours end to end — open packages, your</tspan><tspan x="1035" dy="28">data</tspan></text><rect x="1005" y="150" width="540" height="550" rx="20" fill="none" stroke="rgba(139,108,255,0.30)" stroke-width="1.5"/>
+  <g opacity="0.85">
+    <circle cx="1336" cy="838" r="9" fill="url(#violetGrad)"/>
+    <text x="1354" y="845" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="20" font-weight="700" fill="#A6ADC8">Builderforce.ai</text>
+  </g>
+  <text x="80" y="844" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="17" fill="#717892">The innovation platform for the agentic era</text>
+</svg>

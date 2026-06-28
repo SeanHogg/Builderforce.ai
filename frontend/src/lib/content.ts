@@ -1344,6 +1344,7 @@ export const INTEGRATION_SLUG_MAP: Record<string, IntegrationSeo> = Object.fromE
  */
 export const RELATED_ARTICLES: Record<string, string[]> = {
   product: [
+    'transitioning-to-an-agentic-workforce',
     'define-a-need-the-agentic-system-solves-it',
     'agent-tech-stack-all-seven-layers',
     'evermind-self-updating-model',
@@ -1354,6 +1355,7 @@ export const RELATED_ARTICLES: Record<string, string[]> = {
   // Evermind technology page / feature teaser.
   evermind: [
     'evermind-self-updating-model',
+    'transitioning-to-an-agentic-workforce',
     'agent-tech-stack-all-seven-layers',
     'semantic-response-cache',
   ],
