@@ -1355,6 +1355,7 @@ export const RELATED_ARTICLES: Record<string, string[]> = {
   // Evermind technology page / feature teaser.
   evermind: [
     'evermind-self-updating-model',
+    'inside-evermind-architecture',
     'transitioning-to-an-agentic-workforce',
     'agent-tech-stack-all-seven-layers',
     'semantic-response-cache',
@@ -1380,7 +1381,7 @@ export const RELATED_ARTICLES: Record<string, string[]> = {
   // teaser (RouteMarketing). Keyed by the route path minus its leading slash.
   brainstorm: ['product-ideation-with-builderforce', 'specs-and-planning-with-ai', 'getting-started-with-ai-agents'],
   ide: ['in-browser-ide-and-collaboration', 'product-ideation-with-builderforce', 'getting-started-with-ai-agents'],
-  training: ['webgpu-lora-explained', 'evermind-self-updating-model', 'ai-dataset-generation-best-practices'],
+  training: ['webgpu-lora-explained', 'inside-evermind-architecture', 'evermind-self-updating-model', 'ai-dataset-generation-best-practices'],
   workflows: ['define-a-need-the-agentic-system-solves-it', 'multi-agent-orchestration', 'autonomous-swimlane-execution'],
   projects: ['planning-spine-cost-bearing-delivery', 'autonomous-swimlane-execution', 'task-execution-and-observability'],
   workforce: ['fleet-management-and-agent-routing', 'autonomous-swimlane-execution', 'multi-agent-orchestration'],

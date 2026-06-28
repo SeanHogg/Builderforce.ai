@@ -35,6 +35,7 @@ import vsDevin from '@/content/blog/builderforce-vs-devin.md';
 import systemOfRecord from '@/content/blog/system-of-record-for-agentic-work.md';
 import everyRolePicture from '@/content/blog/every-role-operating-picture.md';
 import evermind from '@/content/blog/evermind-self-updating-model.md';
+import evermindArchitecture from '@/content/blog/inside-evermind-architecture.md';
 import agentStack from '@/content/blog/agent-tech-stack-all-seven-layers.md';
 import defineANeed from '@/content/blog/define-a-need-the-agentic-system-solves-it.md';
 import planningSpine from '@/content/blog/planning-spine-cost-bearing-delivery.md';
@@ -132,6 +133,7 @@ export const BLOG_POSTS: BlogPost[] = [
   buildPost('system-of-record-for-agentic-work', systemOfRecord),
   buildPost('every-role-operating-picture', everyRolePicture),
   buildPost('evermind-self-updating-model', evermind),
+  buildPost('inside-evermind-architecture', evermindArchitecture),
   buildPost('agent-tech-stack-all-seven-layers', agentStack),
   buildPost('define-a-need-the-agentic-system-solves-it', defineANeed),
   buildPost('planning-spine-cost-bearing-delivery', planningSpine),
