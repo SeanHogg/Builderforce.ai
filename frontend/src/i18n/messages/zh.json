@@ -55,7 +55,16 @@
       "delivery": "交付",
       "surveys": "调研",
       "dashboards": "仪表板",
-      "devfinops": "DevFinOps"
+      "devfinops": "DevFinOps",
+      "workforce": "团队成员",
+      "teams": "团队",
+      "performance": "绩效",
+      "chats": "对话",
+      "approvals": "审批与问答",
+      "contributors": "贡献者",
+      "logs": "日志",
+      "llm": "LLM 用量",
+      "qa": "智能体 QA"
     }
   },
   "alerts": {
@@ -1215,6 +1224,20 @@
     }
   },
   "workforce": {
+    "page": {
+      "title": "团队成员",
+      "sub": {
+        "workforce": "在一处管理你的人员和智能体——邀请团队成员、创建云端智能体并注册远程智能体。将智能体发布到市场即可赚取收益。",
+        "teams": "将你的团队成员——智能体和人员——组成团队，并把团队关联到其负责的项目。",
+        "performance": "面向每位成员（人员与智能体）的效能与投入度记分卡，外加 DORA 指标。点击某位成员可设置其能力与可用性档案（冲刺规划器据此分配工作）。",
+        "chats": "浏览本工作区中每个 agentHost 的聊天会话。",
+        "approvals": "处理智能体上报给人工的审批、提问与反馈——为操作签字或回答其推进所需的信息。",
+        "contributors": "查看本工作区中谁——人员与智能体——在贡献，以及如何贡献。",
+        "logs": "本工作区中的智能体日志、执行时间线与诊断信息。",
+        "llm": "本工作区中的 LLM 用量指标、模型健康状况与开销。",
+        "qa": "按项目的 QA 自动化——流程、生成的测试与 CI 运行。"
+      }
+    },
     "discipline": "职能",
     "allDisciplines": "所有职能",
     "unassigned": "未分配",
