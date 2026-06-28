@@ -524,7 +524,6 @@
       "title": "交付",
       "subtitle": "交付进度、瓶颈与工程效能——一览你的交付全局。打开任意报告即可深入查看。",
       "viewDetails": "查看详情",
-      "openLens": "打开{name}",
       "panel": {
         "delivery": "交付",
         "deliveryDesc": "跨计划、项目与发布的可交付物的燃起图、预测与范围蔓延。",
@@ -538,13 +537,21 @@
         "benchmarkingDesc": "你的交付指标在行业同类中的排名——按行业与团队规模的百分位与评级。",
         "funnel": "创新漏斗",
         "funnelDesc": "想法 → 验证 → 构建中 → 发布 → 衡量：转化率、价值实现时间与创意管道。"
+      },
+      "summary": {
+        "cycleTime": "平均周期时间",
+        "cycleTimeSub": "细化 → 部署",
+        "items": "已测量项",
+        "avgPercentile": "平均百分位",
+        "metricsRated": "共 {n} 项指标",
+        "topRated": "卓越 / 高",
+        "topRatedSub": "处于顶级梯队的指标"
       }
     },
     "finhub": {
       "title": "财务",
       "subtitle": "AI 支出、投资分配与 DevFinOps——一览您的财务全局。打开任意报告即可深入查看。",
       "viewDetails": "查看详情",
-      "openPanel": "打开 {name}",
       "devfinops": {
         "title": "DevFinOps",
         "subtitle": "研发税收抵免 (QRE) 估算、SOC 1 控制覆盖率与审计就绪的周期报告——基于投入、成本和不可篡改的智能体工具审计轨迹得出。"
@@ -1098,7 +1105,8 @@
       "subtitle": "您的仪表板 — 固定应用中任意小组件以构建您的视图。",
       "addWidgets": "添加小组件",
       "emptyTitle": "您的仪表板为空",
-      "emptyBody": "从任意报告或页面固定小组件 — 卡片角落的图钉会将其添加到此处。"
+      "emptyBody": "从任意报告或页面固定小组件 — 卡片角落的图钉会将其添加到此处。",
+      "myDashboard": "我的仪表板"
     }
   },
   "cloudAgentForm": {

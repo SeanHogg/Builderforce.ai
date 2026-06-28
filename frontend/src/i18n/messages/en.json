@@ -524,7 +524,6 @@
       "title": "Delivery",
       "subtitle": "Delivery progress, bottlenecks and engineering performance — your delivery program at a glance. Open any report to drill in.",
       "viewDetails": "View details",
-      "openLens": "Open {name}",
       "panel": {
         "delivery": "Delivery",
         "deliveryDesc": "Burnup, forecast and scope creep for a deliverable across initiatives, projects and releases.",
@@ -538,13 +537,21 @@
         "benchmarkingDesc": "How your delivery metrics rank against an industry cohort — percentile and rating by industry and team size.",
         "funnel": "Innovation Funnel",
         "funnelDesc": "Idea → validated → in build → shipped → measured: conversion, time-to-value and the idea pipeline."
+      },
+      "summary": {
+        "cycleTime": "Avg cycle time",
+        "cycleTimeSub": "Refinement → deploy",
+        "items": "Items measured",
+        "avgPercentile": "Avg percentile",
+        "metricsRated": "across {n} metrics",
+        "topRated": "Elite / High",
+        "topRatedSub": "metrics at the top tiers"
       }
     },
     "finhub": {
       "title": "Finance",
       "subtitle": "AI spend, investment allocation and DevFinOps — your finance program at a glance. Open any report to drill in.",
       "viewDetails": "View details",
-      "openPanel": "Open {name}",
       "devfinops": {
         "title": "DevFinOps",
         "subtitle": "R&D tax credit (QRE) estimates, SOC 1 control coverage and audit-ready period reports — derived from effort, cost and the immutable agent-tool audit trail."
@@ -1098,7 +1105,8 @@
       "subtitle": "Your dashboard — pin any widget from across the app to build your view.",
       "addWidgets": "Add widgets",
       "emptyTitle": "Your dashboard is empty",
-      "emptyBody": "Pin widgets from any report or page — the pin in a card's corner adds it here."
+      "emptyBody": "Pin widgets from any report or page — the pin in a card's corner adds it here.",
+      "myDashboard": "My Dashboard"
     }
   },
   "cloudAgentForm": {

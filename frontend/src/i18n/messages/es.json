@@ -524,7 +524,6 @@
       "title": "Entrega",
       "subtitle": "Progreso de entrega, cuellos de botella y rendimiento de ingeniería: tu programa de entrega de un vistazo. Abre cualquier informe para profundizar.",
       "viewDetails": "Ver detalles",
-      "openLens": "Abrir {name}",
       "panel": {
         "delivery": "Entrega",
         "deliveryDesc": "Burnup, previsión y desviación de alcance de un entregable en iniciativas, proyectos y versiones.",
@@ -538,13 +537,21 @@
         "benchmarkingDesc": "Cómo se posicionan tus métricas de entrega frente a un grupo del sector: percentil y calificación por industria y tamaño de equipo.",
         "funnel": "Embudo de innovación",
         "funnelDesc": "Idea → validada → en construcción → entregada → medida: conversión, tiempo de generación de valor y el flujo de ideas."
+      },
+      "summary": {
+        "cycleTime": "Tiempo de ciclo medio",
+        "cycleTimeSub": "Refinamiento → despliegue",
+        "items": "Elementos medidos",
+        "avgPercentile": "Percentil medio",
+        "metricsRated": "en {n} métricas",
+        "topRated": "Élite / Alto",
+        "topRatedSub": "métricas en los niveles superiores"
       }
     },
     "finhub": {
       "title": "Finanzas",
       "subtitle": "Gasto en IA, asignación de inversión y DevFinOps: tu programa financiero de un vistazo. Abre cualquier informe para profundizar.",
       "viewDetails": "Ver detalles",
-      "openPanel": "Abrir {name}",
       "devfinops": {
         "title": "DevFinOps",
         "subtitle": "Estimaciones del crédito fiscal de I+D (QRE), cobertura de controles SOC 1 e informes de periodo listos para auditoría, derivados del esfuerzo, el coste y el registro de auditoría inmutable de las herramientas del agente."
@@ -1098,7 +1105,8 @@
       "subtitle": "Tu panel: fija cualquier widget de la app para crear tu vista.",
       "addWidgets": "Agregar widgets",
       "emptyTitle": "Tu panel está vacío",
-      "emptyBody": "Fija widgets desde cualquier informe o página: el pin en la esquina de una tarjeta lo añade aquí."
+      "emptyBody": "Fija widgets desde cualquier informe o página: el pin en la esquina de una tarjeta lo añade aquí.",
+      "myDashboard": "Mi panel"
     }
   },
   "cloudAgentForm": {
