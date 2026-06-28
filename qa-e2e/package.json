@@ -1,6 +1,6 @@
 {
   "name": "@builderforce/qa-e2e",
-  "version": "0.1.0",
+  "version": "2026.6.29",
   "private": true,
   "description": "Agentic QA — Playwright harness that pulls AI-generated specs, runs them authenticated, and reports results back to the API.",
   "type": "module",

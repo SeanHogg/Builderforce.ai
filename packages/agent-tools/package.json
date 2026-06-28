@@ -1,6 +1,6 @@
 {
   "name": "@builderforce/agent-tools",
-  "version": "0.1.0",
+  "version": "2026.6.29",
   "private": true,
   "type": "module",
   "description": "Runtime-agnostic agent tool contract shared by the cloud (Worker) and on-prem (Node) engines.",
