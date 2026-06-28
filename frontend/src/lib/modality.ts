@@ -14,7 +14,7 @@
 export type ProjectModality = 'designer' | 'video' | 'llm' | 'voice';
 
 /** Right-panel tab ids the IDE can surface. Each modality picks the relevant subset. */
-export type RightTab = 'files' | 'agent' | 'train' | 'publish' | 'state';
+export type RightTab = 'voice' | 'files' | 'agent' | 'train' | 'publish' | 'state';
 
 export interface ModalityDef {
   id: ProjectModality;
@@ -34,13 +34,20 @@ export interface ModalityDef {
   brainEmptyState: string;
   /** Right-panel tabs relevant to this modality, in display order. */
   rightTabs: RightTab[];
-  /** Whether the green "Run" button applies (npm install + Vite dev server).
-   *  Video drives generation from its own panel; LLM has its own training flow. */
+  /** Whether the green run button applies. Designer runs the WebContainer dev
+   *  server; Voice generates speech. Video/LLM drive generation from their own
+   *  panels, so they hide it. */
   showRunButton: boolean;
+  /** Label for the green run button (e.g. "Run" for Designer, "Generate" for Voice). */
+  runLabel: string;
+  /** Whether the WebContainer Check + "Gate Run" controls apply — only the
+   *  code-running Designer modality validates with type-check/lint/build. */
+  showChecks: boolean;
 }
 
 /** Labels for the right-panel tabs — single source so the IDE doesn't inline them. */
 export const RIGHT_TAB_LABELS: Record<RightTab, string> = {
+  voice: '🎙 Voice',
   files: '📁 Files',
   agent: '🤖 Agent',
   train: '🧠 Train',
@@ -64,6 +71,8 @@ export const MODALITIES: ModalityDef[] = [
     brainEmptyState: 'Open a file for context, or ask me to generate an app or create files.',
     rightTabs: ['files', 'agent', 'train', 'publish', 'state'],
     showRunButton: true,
+    runLabel: 'Run',
+    showChecks: true,
   },
   {
     id: 'video',
@@ -80,6 +89,8 @@ export const MODALITIES: ModalityDef[] = [
     brainEmptyState: "Describe a scene and I'll craft a video prompt — use it in the generator on the left.",
     rightTabs: ['files', 'state'],
     showRunButton: false,
+    runLabel: 'Run',
+    showChecks: false,
   },
   {
     id: 'llm',
@@ -92,6 +103,8 @@ export const MODALITIES: ModalityDef[] = [
     brainEmptyState: 'Design your dataset and training run here — then fine-tune in the Train tab and ship from Publish.',
     rightTabs: ['files', 'train', 'publish', 'state'],
     showRunButton: false,
+    runLabel: 'Run',
+    showChecks: false,
   },
   {
     id: 'voice',
@@ -104,9 +117,11 @@ export const MODALITIES: ModalityDef[] = [
       'Help them write natural, well-punctuated lines to synthesize, and advise on pacing, emphasis, and tone.',
     ].join('\n'),
     brainPlaceholder: 'Describe the voice or the lines to synthesize…',
-    brainEmptyState: 'Enrol a reference sample on the left to clone a voice, then synthesize speech from text.',
-    rightTabs: ['files', 'state'],
-    showRunButton: false,
+    brainEmptyState: 'Write the lines to narrate (or ask me to), pick a voice in the panel, then press Generate.',
+    rightTabs: ['voice', 'files', 'state'],
+    showRunButton: true,
+    runLabel: 'Generate',
+    showChecks: false,
   },
 ];
 
