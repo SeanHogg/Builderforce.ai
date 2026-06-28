@@ -96,7 +96,7 @@ export function CeremonyStage({
     try {
       const [tasksData, sprintsData, memberData, sessionData, execData, profileData] = await Promise.all([
         tasksApi.list(projectId),
-        sprintsApi.list().catch(() => [] as Sprint[]),
+        sprintsApi.list(projectId).catch(() => [] as Sprint[]),
         loadProjectMembers(projectId),
         ceremonySessionsApi.active(projectId, mode).catch((): CeremonySessionDetail => ({ session: null })),
         runtimeApi.listRecent().catch(() => [] as Execution[]),
@@ -253,13 +253,13 @@ export function CeremonyStage({
     const name = window.prompt('New sprint name');
     if (!name?.trim()) return;
     try {
-      const sprint = await sprintsApi.create({ name: name.trim(), status: 'active' });
+      const sprint = await sprintsApi.create({ name: name.trim(), status: 'active', projectId });
       setSprints((prev) => [sprint, ...prev]);
       setActiveSprintId(sprint.id);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Create sprint failed');
     }
-  }, []);
+  }, [projectId]);
 
   // --- session lifecycle (start / advance turn / complete) -----------------
   const applySession = useCallback((d: { session: CeremonySession | null; participants?: CeremonyParticipant[] }) => {

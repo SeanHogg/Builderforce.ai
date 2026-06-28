@@ -1,0 +1,927 @@
+/**
+ * Knowledge Management — SOPs, processes & documents (migration 0227).
+ *
+ * Team-authored knowledge with versioning, tagging, read-acknowledgement
+ * (audit evidence for SOX/TISAX/ISO), training assignments with due dates, and
+ * AI-assisted authoring via the shared LLM gateway. Tenant + segment scoped;
+ * optionally project scoped (null = workspace-wide).
+ *
+ * Reads are served through the read-through cache keyed by a per-tenant version
+ * token; every write bumps the token so the next read recomputes.
+ */
+import { Hono } from 'hono';
+import type { Context } from 'hono';
+import { and, eq, desc, inArray, sql } from 'drizzle-orm';
+import { authMiddleware, requireRole } from '../middleware/authMiddleware';
+import { TenantRole, hasMinRole } from '../../domain/shared/types';
+import {
+  knowledgeDocuments,
+  knowledgeDocumentVersions,
+  knowledgeDocumentTags,
+  knowledgeAcknowledgements,
+  knowledgeTrainingAssignments,
+  knowledgeDocumentCollaborators,
+  tenantMembers,
+  users,
+} from '../../infrastructure/database/schema';
+import {
+  getOrSetCached,
+  getCacheVersion,
+  bumpCacheVersion,
+} from '../../infrastructure/cache/readThroughCache';
+import { ideProxy, newTraceId } from '../../application/llm/LlmProxyService';
+import { logTrace } from '../../application/llm/traceLogger';
+import {
+  notifyCollaboratorInvited,
+  notifyTrainingAssigned,
+  type KnowledgeNotifierEnv,
+} from '../../application/knowledge/knowledgeNotifier';
+import type { Env, HonoEnv } from '../../env';
+import type { Db } from '../../infrastructure/database/connection';
+
+const DOC_TYPES = ['sop', 'process', 'doc'] as const;
+type DocType = (typeof DOC_TYPES)[number];
+const STATUSES = ['draft', 'published', 'archived'] as const;
+
+function knowledgeVersionKey(tenantId: number): string {
+  return `knowledge:${tenantId}`;
+}
+
+// ---------------------------------------------------------------------------
+// Pure helpers (unit-tested) — compliance / training rollups.
+// ---------------------------------------------------------------------------
+
+export interface MemberLite {
+  userId: string;
+  name: string;
+  email: string;
+}
+export interface AckLite {
+  userId: string;
+  versionNumber: number;
+  acknowledgedAt: string;
+}
+export interface TrainingLite {
+  userId: string;
+  dueAt: string | null;
+}
+
+export type ComplianceState = 'acknowledged' | 'pending' | 'overdue' | 'not_required';
+
+export interface ComplianceRow {
+  userId: string;
+  name: string;
+  email: string;
+  state: ComplianceState;
+  acknowledgedVersion: number | null;
+  acknowledgedAt: string | null;
+  dueAt: string | null;
+}
+
+export interface ComplianceSummary {
+  required: number;
+  acknowledged: number;
+  pending: number;
+  overdue: number;
+  /** 0..100, share of required readers who have acknowledged the current version. */
+  percent: number;
+}
+
+/**
+ * Per-document compliance: for each required reader, is their acknowledgement of
+ * the CURRENT published version present, still pending, or overdue (assigned with
+ * a due date that has passed)?
+ *
+ * A reader is "required" when the doc requires acknowledgement (every active
+ * member) OR the reader has an explicit training assignment for the doc.
+ */
+export function buildDocCompliance(input: {
+  members: MemberLite[];
+  acks: AckLite[];
+  training: TrainingLite[];
+  currentVersion: number;
+  requiresAck: boolean;
+  nowMs: number;
+}): { rows: ComplianceRow[]; summary: ComplianceSummary } {
+  const { members, acks, training, currentVersion, requiresAck, nowMs } = input;
+  const ackByUser = new Map(acks.map((a) => [a.userId, a]));
+  const dueByUser = new Map(training.map((t) => [t.userId, t.dueAt]));
+  const memberById = new Map(members.map((m) => [m.userId, m]));
+
+  // Required set = all members (when requiresAck) ∪ explicitly assigned users.
+  const requiredIds = new Set<string>();
+  if (requiresAck) for (const m of members) requiredIds.add(m.userId);
+  for (const t of training) requiredIds.add(t.userId);
+
+  const rows: ComplianceRow[] = [];
+  let acknowledged = 0;
+  let overdue = 0;
+
+  for (const userId of requiredIds) {
+    const m = memberById.get(userId) ?? { userId, name: userId, email: '' };
+    const ack = ackByUser.get(userId);
+    const dueAt = dueByUser.get(userId) ?? null;
+    const hasCurrent = !!ack && ack.versionNumber >= currentVersion && currentVersion > 0;
+    let state: ComplianceState;
+    if (hasCurrent) {
+      state = 'acknowledged';
+      acknowledged++;
+    } else if (dueAt && Date.parse(dueAt) < nowMs) {
+      state = 'overdue';
+      overdue++;
+    } else {
+      state = 'pending';
+    }
+    rows.push({
+      userId,
+      name: m.name,
+      email: m.email,
+      state,
+      acknowledgedVersion: ack?.versionNumber ?? null,
+      acknowledgedAt: hasCurrent ? (ack?.acknowledgedAt ?? null) : null,
+      dueAt,
+    });
+  }
+
+  rows.sort((a, b) => a.name.localeCompare(b.name));
+  const required = requiredIds.size;
+  const pending = required - acknowledged;
+  const percent = required === 0 ? 100 : Math.round((acknowledged / required) * 100);
+  return { rows, summary: { required, acknowledged, pending, overdue, percent } };
+}
+
+export type DocAccess = 'manager' | 'editor' | 'viewer' | 'none';
+
+/**
+ * A user's effective access to a single document. Workspace managers always
+ * have full access; the document creator and invited 'editor' collaborators can
+ * co-edit; invited 'viewer' collaborators are explicitly associated for
+ * awareness; everyone else falls back to tenant-level read ('none').
+ */
+export function resolveAccess(opts: {
+  role: TenantRole;
+  isCreator: boolean;
+  collabRole: string | null;
+}): DocAccess {
+  if (hasMinRole(opts.role, TenantRole.MANAGER)) return 'manager';
+  if (opts.isCreator || opts.collabRole === 'editor') return 'editor';
+  if (opts.collabRole === 'viewer') return 'viewer';
+  return 'none';
+}
+
+export function canEditAccess(access: DocAccess): boolean {
+  return access === 'manager' || access === 'editor';
+}
+
+// ---------------------------------------------------------------------------
+// Routes
+// ---------------------------------------------------------------------------
+
+export function createKnowledgeRoutes(db: Db): Hono<HonoEnv> {
+  const router = new Hono<HonoEnv>();
+  router.use('*', authMiddleware);
+
+  /** Load active tenant members (id, name, email) for compliance rollups. */
+  async function loadMembers(tenantId: number): Promise<MemberLite[]> {
+    const rows = await db
+      .select({
+        userId: tenantMembers.userId,
+        displayName: users.displayName,
+        email: users.email,
+      })
+      .from(tenantMembers)
+      .innerJoin(users, eq(users.id, tenantMembers.userId))
+      .where(and(eq(tenantMembers.tenantId, tenantId), eq(tenantMembers.isActive, true)));
+    return rows.map((r) => ({
+      userId: r.userId,
+      name: r.displayName?.trim() || r.email,
+      email: r.email,
+    }));
+  }
+
+  /** Fetch a tenant-scoped document or null (IDOR guard). */
+  async function loadDoc(tenantId: number, id: string) {
+    const [doc] = await db
+      .select()
+      .from(knowledgeDocuments)
+      .where(and(eq(knowledgeDocuments.id, id), eq(knowledgeDocuments.tenantId, tenantId)));
+    return doc ?? null;
+  }
+
+  /** The current user's collaborator role on a document, or null. */
+  async function loadCollabRole(documentId: string, userId: string): Promise<string | null> {
+    const [row] = await db
+      .select({ role: knowledgeDocumentCollaborators.role })
+      .from(knowledgeDocumentCollaborators)
+      .where(
+        and(
+          eq(knowledgeDocumentCollaborators.documentId, documentId),
+          eq(knowledgeDocumentCollaborators.userId, userId),
+        ),
+      );
+    return row?.role ?? null;
+  }
+
+  /** Resolve the caller's effective access to a document. */
+  async function accessFor(c: Context<HonoEnv>, doc: { id: string; createdBy: string | null }): Promise<DocAccess> {
+    const role = c.get('role') as TenantRole;
+    const userId = c.get('userId') as string;
+    if (hasMinRole(role, TenantRole.MANAGER)) return 'manager';
+    const collabRole = doc.createdBy === userId ? null : await loadCollabRole(doc.id, userId);
+    return resolveAccess({ role, isCreator: doc.createdBy === userId, collabRole });
+  }
+
+  async function tagsFor(documentIds: string[]): Promise<Map<string, string[]>> {
+    const map = new Map<string, string[]>();
+    if (documentIds.length === 0) return map;
+    const rows = await db
+      .select({ documentId: knowledgeDocumentTags.documentId, tag: knowledgeDocumentTags.tag })
+      .from(knowledgeDocumentTags)
+      .where(inArray(knowledgeDocumentTags.documentId, documentIds));
+    for (const r of rows) {
+      const list = map.get(r.documentId) ?? [];
+      list.push(r.tag);
+      map.set(r.documentId, list);
+    }
+    return map;
+  }
+
+  // ---- LIST -------------------------------------------------------------
+  router.get('/documents', async (c) => {
+    const tenantId = c.get('tenantId') as number;
+    const env = c.env as Env;
+    const type = c.req.query('type');
+    const status = c.req.query('status');
+    const projectQ = c.req.query('project');
+    const tag = c.req.query('tag');
+    const q = c.req.query('q')?.trim().toLowerCase();
+
+    const ver = await getCacheVersion(env, knowledgeVersionKey(tenantId));
+    const key = `knowledge:list:${tenantId}:v:${ver}:${type ?? ''}:${status ?? ''}:${projectQ ?? ''}:${tag ?? ''}:${q ?? ''}`;
+
+    const payload = await getOrSetCached(env, key, async () => {
+      const conds = [eq(knowledgeDocuments.tenantId, tenantId)];
+      if (type && (DOC_TYPES as readonly string[]).includes(type)) {
+        conds.push(eq(knowledgeDocuments.docType, type));
+      }
+      if (status && (STATUSES as readonly string[]).includes(status)) {
+        conds.push(eq(knowledgeDocuments.status, status));
+      }
+      if (projectQ && Number.isFinite(Number(projectQ))) {
+        conds.push(eq(knowledgeDocuments.projectId, Number(projectQ)));
+      }
+      const docs = await db
+        .select()
+        .from(knowledgeDocuments)
+        .where(and(...conds))
+        .orderBy(desc(knowledgeDocuments.updatedAt));
+
+      const tagMap = await tagsFor(docs.map((d) => d.id));
+      let enriched = docs.map((d) => ({ ...d, tags: tagMap.get(d.id) ?? [] }));
+      if (tag) enriched = enriched.filter((d) => d.tags.includes(tag));
+      if (q) {
+        enriched = enriched.filter(
+          (d) =>
+            d.title.toLowerCase().includes(q) ||
+            (d.summary ?? '').toLowerCase().includes(q),
+        );
+      }
+      return { documents: enriched };
+    }, { kvTtlSeconds: 120, l1TtlMs: 30_000 });
+
+    return c.json(payload);
+  });
+
+  // ---- DISTINCT TAGS (filter UI) ---------------------------------------
+  router.get('/tags', async (c) => {
+    const tenantId = c.get('tenantId') as number;
+    const env = c.env as Env;
+    const ver = await getCacheVersion(env, knowledgeVersionKey(tenantId));
+    const tags = await getOrSetCached(env, `knowledge:tags:${tenantId}:v:${ver}`, async () => {
+      const rows = await db
+        .selectDistinct({ tag: knowledgeDocumentTags.tag })
+        .from(knowledgeDocumentTags)
+        .where(eq(knowledgeDocumentTags.tenantId, tenantId));
+      return rows.map((r) => r.tag).sort((a, b) => a.localeCompare(b));
+    }, { kvTtlSeconds: 300 });
+    return c.json({ tags });
+  });
+
+  // ---- DETAIL -----------------------------------------------------------
+  router.get('/documents/:id', async (c) => {
+    const tenantId = c.get('tenantId') as number;
+    const userId = c.get('userId') as string;
+    const id = c.req.param('id');
+    const doc = await loadDoc(tenantId, id);
+    if (!doc) return c.json({ error: 'Document not found' }, 404);
+
+    const [tagMap, [myAck], versionCount] = await Promise.all([
+      tagsFor([id]),
+      db
+        .select()
+        .from(knowledgeAcknowledgements)
+        .where(and(eq(knowledgeAcknowledgements.documentId, id), eq(knowledgeAcknowledgements.userId, userId))),
+      db
+        .select({ n: sql<number>`count(*)::int` })
+        .from(knowledgeDocumentVersions)
+        .where(eq(knowledgeDocumentVersions.documentId, id)),
+    ]);
+
+    const acknowledgedCurrent =
+      !!myAck && doc.versionNumber > 0 && myAck.versionNumber >= doc.versionNumber;
+    const myAccess = await accessFor(c, doc);
+
+    return c.json({
+      ...doc,
+      tags: tagMap.get(id) ?? [],
+      myAccess,
+      canEdit: canEditAccess(myAccess),
+      myAcknowledgement: myAck
+        ? { versionNumber: myAck.versionNumber, acknowledgedAt: myAck.acknowledgedAt, current: acknowledgedCurrent }
+        : null,
+      versionCount: versionCount[0]?.n ?? 0,
+    });
+  });
+
+  // ---- CREATE -----------------------------------------------------------
+  // Any team member (developer+) can author knowledge; the creator becomes the
+  // document owner (implicit editor) and can invite collaborators to the page.
+  router.post('/documents', requireRole(TenantRole.DEVELOPER), async (c) => {
+    const tenantId = c.get('tenantId') as number;
+    const userId = c.get('userId') as string;
+    const segmentId = (c.get('segmentId') as string | undefined) ?? null;
+    const body = await c.req.json<{
+      title?: string;
+      summary?: string;
+      content?: string;
+      docType?: DocType;
+      projectId?: number | null;
+      requiresAck?: boolean;
+      tags?: string[];
+    }>();
+
+    if (!body.title?.trim()) return c.json({ error: 'title is required' }, 400);
+    const docType: DocType = (DOC_TYPES as readonly string[]).includes(body.docType ?? '')
+      ? (body.docType as DocType)
+      : 'sop';
+
+    const [doc] = await db
+      .insert(knowledgeDocuments)
+      .values({
+        tenantId,
+        segmentId,
+        projectId: body.projectId ?? null,
+        docType,
+        title: body.title.trim(),
+        summary: body.summary?.trim() || null,
+        content: body.content ?? '',
+        requiresAck: body.requiresAck ?? false,
+        createdBy: userId,
+        updatedBy: userId,
+      })
+      .returning();
+    if (!doc) return c.json({ error: 'Failed to create document' }, 500);
+
+    const tags = normaliseTags(body.tags);
+    if (tags.length) {
+      await db.insert(knowledgeDocumentTags).values(
+        tags.map((tag) => ({ tenantId, documentId: doc.id, tag })),
+      );
+    }
+
+    await bumpCacheVersion(c.env as Env, knowledgeVersionKey(tenantId));
+    return c.json({ ...doc, tags }, 201);
+  });
+
+  // ---- UPDATE -----------------------------------------------------------
+  router.patch('/documents/:id', async (c) => {
+    const tenantId = c.get('tenantId') as number;
+    const userId = c.get('userId') as string;
+    const id = c.req.param('id');
+    const body = await c.req.json<{
+      title?: string;
+      summary?: string | null;
+      content?: string;
+      docType?: DocType;
+      projectId?: number | null;
+      requiresAck?: boolean;
+      status?: 'draft' | 'published' | 'archived';
+    }>();
+
+    const doc = await loadDoc(tenantId, id);
+    if (!doc) return c.json({ error: 'Document not found' }, 404);
+    if (!canEditAccess(await accessFor(c, doc))) return c.json({ error: 'You do not have edit access to this document' }, 403);
+
+    await db
+      .update(knowledgeDocuments)
+      .set({
+        ...(body.title !== undefined ? { title: body.title.trim() } : {}),
+        ...(body.summary !== undefined ? { summary: body.summary?.trim() || null } : {}),
+        ...(body.content !== undefined ? { content: body.content } : {}),
+        ...(body.docType && (DOC_TYPES as readonly string[]).includes(body.docType) ? { docType: body.docType } : {}),
+        ...(body.projectId !== undefined ? { projectId: body.projectId } : {}),
+        ...(body.requiresAck !== undefined ? { requiresAck: body.requiresAck } : {}),
+        ...(body.status === 'archived' || body.status === 'draft' ? { status: body.status } : {}),
+        updatedBy: userId,
+        updatedAt: new Date(),
+      })
+      .where(and(eq(knowledgeDocuments.id, id), eq(knowledgeDocuments.tenantId, tenantId)));
+
+    await bumpCacheVersion(c.env as Env, knowledgeVersionKey(tenantId));
+    return c.json(await loadDoc(tenantId, id));
+  });
+
+  // ---- DELETE -----------------------------------------------------------
+  // Deletion is restricted to workspace managers or the document creator —
+  // invited editors can change content but not destroy the page.
+  router.delete('/documents/:id', async (c) => {
+    const tenantId = c.get('tenantId') as number;
+    const userId = c.get('userId') as string;
+    const role = c.get('role') as TenantRole;
+    const id = c.req.param('id');
+    const doc = await loadDoc(tenantId, id);
+    if (!doc) return c.json({ error: 'Document not found' }, 404);
+    if (!hasMinRole(role, TenantRole.MANAGER) && doc.createdBy !== userId) {
+      return c.json({ error: 'Only a manager or the creator can delete this document' }, 403);
+    }
+    await db
+      .delete(knowledgeDocuments)
+      .where(and(eq(knowledgeDocuments.id, id), eq(knowledgeDocuments.tenantId, tenantId)));
+    await bumpCacheVersion(c.env as Env, knowledgeVersionKey(tenantId));
+    return c.body(null, 204);
+  });
+
+  // ---- PUBLISH (snapshot a new immutable version) -----------------------
+  router.post('/documents/:id/publish', async (c) => {
+    const tenantId = c.get('tenantId') as number;
+    const userId = c.get('userId') as string;
+    const id = c.req.param('id');
+    const body = await c.req.json<{ changeNote?: string }>().catch(() => ({} as { changeNote?: string }));
+
+    const doc = await loadDoc(tenantId, id);
+    if (!doc) return c.json({ error: 'Document not found' }, 404);
+    if (!canEditAccess(await accessFor(c, doc))) return c.json({ error: 'You do not have edit access to this document' }, 403);
+
+    const nextVersion = doc.versionNumber + 1;
+    const now = new Date();
+    await db.insert(knowledgeDocumentVersions).values({
+      tenantId,
+      documentId: id,
+      versionNumber: nextVersion,
+      title: doc.title,
+      content: doc.content,
+      changeNote: body.changeNote?.trim() || null,
+      publishedBy: userId,
+    });
+    await db
+      .update(knowledgeDocuments)
+      .set({ status: 'published', versionNumber: nextVersion, publishedAt: now, updatedBy: userId, updatedAt: now })
+      .where(and(eq(knowledgeDocuments.id, id), eq(knowledgeDocuments.tenantId, tenantId)));
+
+    await bumpCacheVersion(c.env as Env, knowledgeVersionKey(tenantId));
+    return c.json(await loadDoc(tenantId, id));
+  });
+
+  // ---- VERSION HISTORY --------------------------------------------------
+  router.get('/documents/:id/versions', async (c) => {
+    const tenantId = c.get('tenantId') as number;
+    const id = c.req.param('id');
+    const doc = await loadDoc(tenantId, id);
+    if (!doc) return c.json({ error: 'Document not found' }, 404);
+    const versions = await db
+      .select()
+      .from(knowledgeDocumentVersions)
+      .where(eq(knowledgeDocumentVersions.documentId, id))
+      .orderBy(desc(knowledgeDocumentVersions.versionNumber));
+    return c.json({ versions });
+  });
+
+  // ---- ACKNOWLEDGE (audit evidence) ------------------------------------
+  router.post('/documents/:id/acknowledge', async (c) => {
+    const tenantId = c.get('tenantId') as number;
+    const userId = c.get('userId') as string;
+    const id = c.req.param('id');
+    const doc = await loadDoc(tenantId, id);
+    if (!doc) return c.json({ error: 'Document not found' }, 404);
+    if (doc.status !== 'published' || doc.versionNumber < 1) {
+      return c.json({ error: 'Only published documents can be acknowledged' }, 400);
+    }
+
+    const now = new Date();
+    await db
+      .insert(knowledgeAcknowledgements)
+      .values({ tenantId, documentId: id, userId, versionNumber: doc.versionNumber, acknowledgedAt: now })
+      .onConflictDoUpdate({
+        target: [knowledgeAcknowledgements.documentId, knowledgeAcknowledgements.userId],
+        set: { versionNumber: doc.versionNumber, acknowledgedAt: now },
+      });
+
+    await bumpCacheVersion(c.env as Env, knowledgeVersionKey(tenantId));
+    return c.json({ acknowledged: true, versionNumber: doc.versionNumber, acknowledgedAt: now.toISOString() }, 201);
+  });
+
+  // ---- REPLACE TAGS -----------------------------------------------------
+  router.put('/documents/:id/tags', async (c) => {
+    const tenantId = c.get('tenantId') as number;
+    const id = c.req.param('id');
+    const body = await c.req.json<{ tags?: string[] }>();
+    const doc = await loadDoc(tenantId, id);
+    if (!doc) return c.json({ error: 'Document not found' }, 404);
+    if (!canEditAccess(await accessFor(c, doc))) return c.json({ error: 'You do not have edit access to this document' }, 403);
+
+    const tags = normaliseTags(body.tags);
+    await db.delete(knowledgeDocumentTags).where(eq(knowledgeDocumentTags.documentId, id));
+    if (tags.length) {
+      await db.insert(knowledgeDocumentTags).values(tags.map((tag) => ({ tenantId, documentId: id, tag })));
+    }
+    await bumpCacheVersion(c.env as Env, knowledgeVersionKey(tenantId));
+    return c.json({ tags });
+  });
+
+  // ---- PER-DOCUMENT COMPLIANCE (audit rollup) --------------------------
+  router.get('/documents/:id/compliance', requireRole(TenantRole.MANAGER), async (c) => {
+    const tenantId = c.get('tenantId') as number;
+    const id = c.req.param('id');
+    const doc = await loadDoc(tenantId, id);
+    if (!doc) return c.json({ error: 'Document not found' }, 404);
+
+    const [members, ackRows, trainingRows] = await Promise.all([
+      loadMembers(tenantId),
+      db
+        .select()
+        .from(knowledgeAcknowledgements)
+        .where(and(eq(knowledgeAcknowledgements.documentId, id), eq(knowledgeAcknowledgements.tenantId, tenantId))),
+      db
+        .select()
+        .from(knowledgeTrainingAssignments)
+        .where(and(eq(knowledgeTrainingAssignments.documentId, id), eq(knowledgeTrainingAssignments.tenantId, tenantId))),
+    ]);
+
+    const result = buildDocCompliance({
+      members,
+      acks: ackRows.map((a) => ({
+        userId: a.userId,
+        versionNumber: a.versionNumber,
+        acknowledgedAt: a.acknowledgedAt.toISOString(),
+      })),
+      training: trainingRows.map((t) => ({ userId: t.userId, dueAt: t.dueAt ? t.dueAt.toISOString() : null })),
+      currentVersion: doc.versionNumber,
+      requiresAck: doc.requiresAck,
+      nowMs: Date.now(),
+    });
+    return c.json(result);
+  });
+
+  // ---- TENANT-WIDE COMPLIANCE SUMMARY (Training/Compliance tab) ---------
+  router.get('/compliance', requireRole(TenantRole.MANAGER), async (c) => {
+    const tenantId = c.get('tenantId') as number;
+    const env = c.env as Env;
+    const ver = await getCacheVersion(env, knowledgeVersionKey(tenantId));
+    const payload = await getOrSetCached(env, `knowledge:compliance:${tenantId}:v:${ver}`, async () => {
+      const [docs, members, allAcks, allTraining] = await Promise.all([
+        db
+          .select()
+          .from(knowledgeDocuments)
+          .where(and(eq(knowledgeDocuments.tenantId, tenantId), eq(knowledgeDocuments.status, 'published'))),
+        loadMembers(tenantId),
+        db.select().from(knowledgeAcknowledgements).where(eq(knowledgeAcknowledgements.tenantId, tenantId)),
+        db.select().from(knowledgeTrainingAssignments).where(eq(knowledgeTrainingAssignments.tenantId, tenantId)),
+      ]);
+
+      const nowMs = Date.now();
+      const rows = docs
+        .filter((d) => d.requiresAck || allTraining.some((t) => t.documentId === d.id))
+        .map((d) => {
+          const { summary } = buildDocCompliance({
+            members,
+            acks: allAcks
+              .filter((a) => a.documentId === d.id)
+              .map((a) => ({ userId: a.userId, versionNumber: a.versionNumber, acknowledgedAt: a.acknowledgedAt.toISOString() })),
+            training: allTraining
+              .filter((t) => t.documentId === d.id)
+              .map((t) => ({ userId: t.userId, dueAt: t.dueAt ? t.dueAt.toISOString() : null })),
+            currentVersion: d.versionNumber,
+            requiresAck: d.requiresAck,
+            nowMs,
+          });
+          return {
+            documentId: d.id,
+            title: d.title,
+            docType: d.docType,
+            versionNumber: d.versionNumber,
+            ...summary,
+          };
+        });
+
+      const totals = rows.reduce(
+        (acc, r) => ({
+          required: acc.required + r.required,
+          acknowledged: acc.acknowledged + r.acknowledged,
+          overdue: acc.overdue + r.overdue,
+        }),
+        { required: 0, acknowledged: 0, overdue: 0 },
+      );
+      const percent = totals.required === 0 ? 100 : Math.round((totals.acknowledged / totals.required) * 100);
+      return { documents: rows, totals: { ...totals, percent } };
+    }, { kvTtlSeconds: 60 });
+
+    return c.json(payload);
+  });
+
+  // ---- ASSIGNABLE / INVITABLE MEMBERS ----------------------------------
+  // Member display names within a workspace are not sensitive; any author
+  // (developer+) needs this to invite collaborators or assign training.
+  router.get('/members', requireRole(TenantRole.DEVELOPER), async (c) => {
+    const tenantId = c.get('tenantId') as number;
+    return c.json({ members: await loadMembers(tenantId) });
+  });
+
+  // ---- PER-DOCUMENT COLLABORATORS (invite users to a page) -------------
+  router.get('/documents/:id/collaborators', async (c) => {
+    const tenantId = c.get('tenantId') as number;
+    const id = c.req.param('id');
+    const doc = await loadDoc(tenantId, id);
+    if (!doc) return c.json({ error: 'Document not found' }, 404);
+    const [rows, ownerRow] = await Promise.all([
+      db
+        .select({
+          userId: knowledgeDocumentCollaborators.userId,
+          role: knowledgeDocumentCollaborators.role,
+          createdAt: knowledgeDocumentCollaborators.createdAt,
+          displayName: users.displayName,
+          email: users.email,
+        })
+        .from(knowledgeDocumentCollaborators)
+        .innerJoin(users, eq(users.id, knowledgeDocumentCollaborators.userId))
+        .where(eq(knowledgeDocumentCollaborators.documentId, id)),
+      doc.createdBy
+        ? db
+            .select({ id: users.id, displayName: users.displayName, email: users.email })
+            .from(users)
+            .where(eq(users.id, doc.createdBy))
+        : Promise.resolve([]),
+    ]);
+    const owner = ownerRow[0]
+      ? { userId: ownerRow[0].id, name: ownerRow[0].displayName?.trim() || ownerRow[0].email, email: ownerRow[0].email }
+      : null;
+    return c.json({
+      // The creator is the implicit owner — surface them alongside invitees.
+      owner,
+      collaborators: rows.map((r) => ({
+        userId: r.userId,
+        name: r.displayName?.trim() || r.email,
+        email: r.email,
+        role: r.role,
+        createdAt: r.createdAt.toISOString(),
+      })),
+    });
+  });
+
+  router.post('/documents/:id/collaborators', async (c) => {
+    const tenantId = c.get('tenantId') as number;
+    const invitedBy = c.get('userId') as string;
+    const id = c.req.param('id');
+    const body = await c.req.json<{ userId?: string; role?: 'editor' | 'viewer' }>();
+    const doc = await loadDoc(tenantId, id);
+    if (!doc) return c.json({ error: 'Document not found' }, 404);
+    if (!canEditAccess(await accessFor(c, doc))) return c.json({ error: 'You do not have access to manage this page' }, 403);
+
+    const userId = body.userId?.trim();
+    if (!userId) return c.json({ error: 'userId is required' }, 400);
+    const role = body.role === 'viewer' ? 'viewer' : 'editor';
+    if (userId === doc.createdBy) return c.json({ error: 'The document creator is already the owner' }, 400);
+
+    // Only invite users who are members of this tenant (scope guard).
+    const [member] = await db
+      .select({ userId: tenantMembers.userId })
+      .from(tenantMembers)
+      .where(and(eq(tenantMembers.tenantId, tenantId), eq(tenantMembers.userId, userId)));
+    if (!member) return c.json({ error: 'User is not a member of this workspace' }, 400);
+
+    await db
+      .insert(knowledgeDocumentCollaborators)
+      .values({ tenantId, documentId: id, userId, role, invitedBy })
+      .onConflictDoUpdate({
+        target: [knowledgeDocumentCollaborators.documentId, knowledgeDocumentCollaborators.userId],
+        set: { role, invitedBy },
+      });
+
+    await bumpCacheVersion(c.env as Env, knowledgeVersionKey(tenantId));
+    c.executionCtx.waitUntil(
+      notifyCollaboratorInvited(c.env as KnowledgeNotifierEnv, db, {
+        tenantId,
+        documentId: id,
+        title: doc.title,
+        userId,
+        role,
+      }),
+    );
+    return c.json({ userId, role }, 201);
+  });
+
+  router.delete('/documents/:id/collaborators/:userId', async (c) => {
+    const tenantId = c.get('tenantId') as number;
+    const id = c.req.param('id');
+    const targetUserId = c.req.param('userId');
+    const doc = await loadDoc(tenantId, id);
+    if (!doc) return c.json({ error: 'Document not found' }, 404);
+    if (!canEditAccess(await accessFor(c, doc))) return c.json({ error: 'You do not have access to manage this page' }, 403);
+    await db
+      .delete(knowledgeDocumentCollaborators)
+      .where(
+        and(
+          eq(knowledgeDocumentCollaborators.documentId, id),
+          eq(knowledgeDocumentCollaborators.userId, targetUserId),
+        ),
+      );
+    await bumpCacheVersion(c.env as Env, knowledgeVersionKey(tenantId));
+    return c.body(null, 204);
+  });
+
+  // ---- TRAINING: my assignments ----------------------------------------
+  router.get('/training/me', async (c) => {
+    const tenantId = c.get('tenantId') as number;
+    const userId = c.get('userId') as string;
+
+    const assignments = await db
+      .select({
+        id: knowledgeTrainingAssignments.id,
+        documentId: knowledgeTrainingAssignments.documentId,
+        dueAt: knowledgeTrainingAssignments.dueAt,
+        title: knowledgeDocuments.title,
+        docType: knowledgeDocuments.docType,
+        status: knowledgeDocuments.status,
+        versionNumber: knowledgeDocuments.versionNumber,
+      })
+      .from(knowledgeTrainingAssignments)
+      .innerJoin(knowledgeDocuments, eq(knowledgeDocuments.id, knowledgeTrainingAssignments.documentId))
+      .where(and(eq(knowledgeTrainingAssignments.tenantId, tenantId), eq(knowledgeTrainingAssignments.userId, userId)));
+
+    const myAcks = await db
+      .select()
+      .from(knowledgeAcknowledgements)
+      .where(and(eq(knowledgeAcknowledgements.tenantId, tenantId), eq(knowledgeAcknowledgements.userId, userId)));
+    const ackByDoc = new Map(myAcks.map((a) => [a.documentId, a]));
+    const nowMs = Date.now();
+
+    const items = assignments.map((a) => {
+      const ack = ackByDoc.get(a.documentId);
+      const completed = !!ack && a.versionNumber > 0 && ack.versionNumber >= a.versionNumber;
+      const overdue = !completed && !!a.dueAt && a.dueAt.getTime() < nowMs;
+      return {
+        id: a.id,
+        documentId: a.documentId,
+        title: a.title,
+        docType: a.docType,
+        dueAt: a.dueAt ? a.dueAt.toISOString() : null,
+        completed,
+        overdue,
+        state: completed ? 'completed' : overdue ? 'overdue' : 'pending',
+      };
+    });
+    return c.json({ assignments: items });
+  });
+
+  // ---- TRAINING: assign a document to users ----------------------------
+  router.post('/documents/:id/training', requireRole(TenantRole.MANAGER), async (c) => {
+    const tenantId = c.get('tenantId') as number;
+    const assignedBy = c.get('userId') as string;
+    const id = c.req.param('id');
+    const body = await c.req.json<{ userIds?: string[]; dueAt?: string | null }>();
+    const doc = await loadDoc(tenantId, id);
+    if (!doc) return c.json({ error: 'Document not found' }, 404);
+
+    const userIds = Array.from(new Set((body.userIds ?? []).filter((u) => typeof u === 'string' && u.trim())));
+    if (userIds.length === 0) return c.json({ error: 'userIds is required' }, 400);
+    const dueAt = body.dueAt ? new Date(body.dueAt) : null;
+    if (dueAt && Number.isNaN(dueAt.getTime())) return c.json({ error: 'dueAt must be a valid date' }, 400);
+
+    await db
+      .insert(knowledgeTrainingAssignments)
+      .values(userIds.map((userId) => ({ tenantId, documentId: id, userId, assignedBy, dueAt })))
+      .onConflictDoUpdate({
+        target: [knowledgeTrainingAssignments.documentId, knowledgeTrainingAssignments.userId],
+        set: { dueAt, assignedBy },
+      });
+
+    await bumpCacheVersion(c.env as Env, knowledgeVersionKey(tenantId));
+    c.executionCtx.waitUntil(
+      notifyTrainingAssigned(c.env as KnowledgeNotifierEnv, db, {
+        tenantId,
+        documentId: id,
+        title: doc.title,
+        userIds,
+        dueAt,
+      }),
+    );
+    return c.json({ assigned: userIds.length }, 201);
+  });
+
+  // ---- TRAINING: unassign ----------------------------------------------
+  router.delete('/training/:assignmentId', requireRole(TenantRole.MANAGER), async (c) => {
+    const tenantId = c.get('tenantId') as number;
+    const assignmentId = c.req.param('assignmentId');
+    await db
+      .delete(knowledgeTrainingAssignments)
+      .where(and(eq(knowledgeTrainingAssignments.id, assignmentId), eq(knowledgeTrainingAssignments.tenantId, tenantId)));
+    await bumpCacheVersion(c.env as Env, knowledgeVersionKey(tenantId));
+    return c.body(null, 204);
+  });
+
+  // ---- AI-ASSISTED AUTHORING -------------------------------------------
+  // Generate or refine SOP/process/doc markdown from a natural-language prompt.
+  // Routed through the shared LLM gateway (ideProxy) and metered via logTrace.
+  router.post('/ai/draft', requireRole(TenantRole.DEVELOPER), async (c) => {
+    const tenantId = c.get('tenantId') as number;
+    const userId = c.get('userId') as string;
+    const body = await c.req.json<{
+      prompt?: string;
+      docType?: DocType;
+      title?: string;
+      existingContent?: string;
+    }>();
+    if (!body.prompt?.trim()) return c.json({ error: 'prompt is required' }, 400);
+
+    const docType: DocType = (DOC_TYPES as readonly string[]).includes(body.docType ?? '')
+      ? (body.docType as DocType)
+      : 'sop';
+    const kind =
+      docType === 'sop'
+        ? 'a Standard Operating Procedure (SOP)'
+        : docType === 'process'
+          ? 'a process / workflow document'
+          : 'a knowledge-base document';
+
+    const system =
+      `You are an expert technical writer producing ${kind} for a company knowledge base used for ` +
+      `compliance audits (SOX, TISAX, ISO 27001). Write clear, well-structured GitHub-flavored Markdown. ` +
+      `Use a top-level "# Title" heading, a one-line purpose/summary, then numbered steps or clearly ` +
+      `delineated sections (Purpose, Scope, Roles & Responsibilities, Procedure, Records). Be specific and ` +
+      `actionable. Output ONLY the Markdown document — no preamble, no commentary.`;
+    const userMsg =
+      (body.title ? `Title: ${body.title}\n` : '') +
+      (body.existingContent?.trim()
+        ? `Improve and expand the following existing document according to the instruction.\n\n--- Existing document ---\n${body.existingContent}\n\n--- Instruction ---\n${body.prompt}`
+        : `Instruction: ${body.prompt}`);
+
+    const traceId = newTraceId();
+    // Stream the draft (SSE) so long SOPs render progressively in the editor.
+    const requestBody = {
+      messages: [
+        { role: 'system' as const, content: system },
+        { role: 'user' as const, content: userMsg },
+      ],
+      stream: true as const,
+      temperature: 0.6,
+    };
+
+    let result;
+    try {
+      result = await ideProxy(c.env).complete(requestBody, undefined, traceId);
+    } catch (err) {
+      return c.json({ error: err instanceof Error ? err.message : 'AI generation failed' }, 502);
+    }
+
+    // Meter the call (token usage + diagnostic trace), fire-and-forget.
+    logTrace(c.env, c.executionCtx, {
+      traceId,
+      surface: 'knowledge-ai',
+      tenantId,
+      userId,
+      result,
+      streamed: true,
+      requestIp: c.req.header('cf-connecting-ip') ?? null,
+      origin: c.req.header('Origin') ?? null,
+      userAgent: c.req.header('User-Agent') ?? null,
+      requestBody: requestBody as unknown as Record<string, unknown>,
+      responseBody: null,
+      errorMessage: null,
+    });
+
+    // Pass the gateway's OpenAI-compatible SSE stream straight through; the
+    // client accumulates `choices[].delta.content` (same shape as IDE chat).
+    return new Response(result.response.body, {
+      status: result.response.status,
+      headers: {
+        'Content-Type': 'text/event-stream; charset=utf-8',
+        'Cache-Control': 'no-cache',
+        'x-builderforce-model': result.resolvedModel,
+      },
+    });
+  });
+
+  return router;
+}
+
+/** Normalise tags: trim, lowercase, dedupe, drop empties, cap length & count. */
+export function normaliseTags(input: unknown): string[] {
+  if (!Array.isArray(input)) return [];
+  const seen = new Set<string>();
+  for (const raw of input) {
+    if (typeof raw !== 'string') continue;
+    const tag = raw.trim().toLowerCase().slice(0, 64);
+    if (tag) seen.add(tag);
+    if (seen.size >= 25) break;
+  }
+  return Array.from(seen);
+}

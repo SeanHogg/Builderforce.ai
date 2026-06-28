@@ -5,6 +5,7 @@ import { pmoApi, type PmoRollup as PmoRollupData, type PmoScopeKind } from '@/li
 import { usePmData } from '@/lib/pm/usePmData';
 import { tableWrapStyle, tableStyle, theadRowStyle, thStyle, trStyle, tdStyle, tdMutedStyle } from '@/components/dataTableStyles';
 import { PmCard, PmEmpty, PmError, StatCard, ProgressBar } from './pmShared';
+import { DeckDownloadButton } from './DeckDownloadButton';
 
 /**
  * PMO rollup lens — composes the live /api/pmo/rollup for a portfolio,
@@ -33,6 +34,9 @@ export function PmoRollup({ scope }: { scope: { kind: PmoScopeKind; id: string }
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+      <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+        <DeckDownloadButton />
+      </div>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: 14 }}>
         <StatCard label={t('stat.projects')} value={String(data.projectCount)} sub={scope.kind === 'portfolio' ? t('stat.initiativesCount', { count: data.initiativeCount }) : t('stat.inInitiative')} />
         <StatCard label={t('stat.completed')} value={String(data.delivery.completedCount)} sub={t('stat.openCount', { count: data.delivery.openCount })} />

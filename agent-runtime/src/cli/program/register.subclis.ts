@@ -73,6 +73,15 @@ const entries: SubCliEntry[] = [
     },
   },
   {
+    name: "usage",
+    description: "Show provider usage / quota (and workspace spend via gateway)",
+    hasSubcommands: false,
+    register: async (program) => {
+      const mod = await import("../usage-cli.js");
+      mod.registerUsageCli(program);
+    },
+  },
+  {
     name: "system",
     description: "System events, heartbeat, and presence",
     hasSubcommands: true,

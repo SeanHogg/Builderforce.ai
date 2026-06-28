@@ -26,6 +26,7 @@ import {
   initiatives,
   keyResults,
   llmUsageLog,
+  objectiveLinks,
   objectives,
   pmoDependencies,
   portfolios,
@@ -165,14 +166,26 @@ export interface KeyResultProgress {
   progress: number; // 0..1
 }
 
+export interface ObjectiveLinkRef {
+  id: string;
+  kind: 'initiative' | 'epic' | 'task';
+  refId: string;
+  label: string;
+}
+
 export interface ObjectiveProgress {
   id: string;
   title: string;
   period: string | null;
   status: string;
   initiativeId: string | null;
+  startDate: string | null;
+  endDate: string | null;
+  costClass: string | null;
   progress: number; // 0..1
   keyResults: KeyResultProgress[];
+  /** Lineage: initiatives / epics / tasks this objective owns (0225). */
+  links: ObjectiveLinkRef[];
 }
 
 export interface InitiativeRef { initiativeId: string; name: string; status: string }
@@ -284,6 +297,34 @@ async function loadOkrs(
   if (objRows.length === 0) return [];
 
   const objIds = objRows.map((o) => o.id);
+
+  // Lineage links + their human labels (initiative name / task title).
+  const linkRows = await db
+    .select({ id: objectiveLinks.id, objectiveId: objectiveLinks.objectiveId, linkKind: objectiveLinks.linkKind, initiativeId: objectiveLinks.initiativeId, taskId: objectiveLinks.taskId })
+    .from(objectiveLinks)
+    .where(inArray(objectiveLinks.objectiveId, objIds));
+  const linkInitIds = [...new Set(linkRows.map((l) => l.initiativeId).filter((x): x is string => !!x))];
+  const linkTaskIds = [...new Set(linkRows.map((l) => l.taskId).filter((x): x is number => x != null))];
+  const initNameById = new Map<string, string>(
+    linkInitIds.length
+      ? (await db.select({ id: initiatives.id, name: initiatives.name }).from(initiatives).where(inArray(initiatives.id, linkInitIds))).map((r) => [r.id, r.name])
+      : [],
+  );
+  const taskTitleById = new Map<number, string>(
+    linkTaskIds.length
+      ? (await db.select({ id: tasks.id, title: tasks.title }).from(tasks).where(inArray(tasks.id, linkTaskIds))).map((r) => [r.id, r.title])
+      : [],
+  );
+  const linksByObjective = new Map<string, ObjectiveLinkRef[]>();
+  for (const l of linkRows) {
+    const ref: ObjectiveLinkRef = l.initiativeId
+      ? { id: l.id, kind: 'initiative', refId: l.initiativeId, label: initNameById.get(l.initiativeId) ?? l.initiativeId }
+      : { id: l.id, kind: (l.linkKind === 'epic' ? 'epic' : 'task'), refId: String(l.taskId), label: taskTitleById.get(l.taskId as number) ?? `#${l.taskId}` };
+    const list = linksByObjective.get(l.objectiveId) ?? [];
+    list.push(ref);
+    linksByObjective.set(l.objectiveId, list);
+  }
+
   const krRows = await db.select().from(keyResults).where(inArray(keyResults.objectiveId, objIds));
   const krByObjective = new Map<string, KeyResultProgress[]>();
   for (const kr of krRows) {
@@ -315,8 +356,12 @@ async function loadOkrs(
       period: o.period ?? null,
       status: o.status,
       initiativeId: o.initiativeId ?? null,
+      startDate: o.startDate ? new Date(o.startDate).toISOString() : null,
+      endDate: o.endDate ? new Date(o.endDate).toISOString() : null,
+      costClass: o.costClass ?? null,
       progress: objectiveProgress(krs.map((k) => k.progress)),
       keyResults: krs,
+      links: linksByObjective.get(o.id) ?? [],
     };
   });
 }

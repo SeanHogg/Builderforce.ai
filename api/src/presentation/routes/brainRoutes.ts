@@ -221,13 +221,19 @@ export function createBrainRoutes(brainService: BrainService, db: Db): Hono<Hono
       'application/pdf',
       'text/plain', 'text/markdown', 'text/csv',
       'application/json',
+      // Office OpenXML — deck templates (.pptx) to fill, plus .docx/.xlsx.
+      'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
     ];
-    if (!allowedTypes.includes(file.type)) {
+    // Browsers sometimes send octet-stream for .pptx/.docx/.xlsx — allow by extension too.
+    const ext = (file.name.split('.').pop() ?? '').toLowerCase();
+    const allowedExts = ['pptx', 'docx', 'xlsx'];
+    if (!allowedTypes.includes(file.type) && !allowedExts.includes(ext)) {
       return c.json({ error: `File type ${file.type} not allowed` }, 400);
     }
 
-    const ext = file.name.split('.').pop() ?? 'bin';
-    const key = `${tenantId}/${userId}/${Date.now()}-${crypto.randomUUID().slice(0, 8)}.${ext}`;
+    const key = `${tenantId}/${userId}/${Date.now()}-${crypto.randomUUID().slice(0, 8)}.${ext || 'bin'}`;
 
     await env.UPLOADS.put(key, file.stream(), {
       httpMetadata: { contentType: file.type },

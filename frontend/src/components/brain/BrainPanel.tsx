@@ -16,6 +16,7 @@ import { ChatMessageActions } from '@/components/ChatMessageActions';
 import { ThemeSelect } from '@/components/ThemeSelect';
 import { Select } from '@/components/Select';
 import { fetchProjects, createProject } from '@/lib/api';
+import { useOptionalProjectScope } from '@/lib/ProjectScopeContext';
 import type { Project } from '@/lib/types';
 import {
   useBrainChats,
@@ -54,8 +55,6 @@ export interface BrainPanelProps {
   extraSystem?: string;
   /** Deep-link: select this chat on mount. */
   initialChatId?: number | null;
-  /** Brain Storm: pre-select a project filter (from ?projectId=). */
-  initialFilterProjectId?: string | null;
   /**
    * One-shot prompt to auto-send on mount (e.g. a landing-page prompt replayed
    * after auth). Sent exactly once; `conv.send` creates+selects a chat on demand.
@@ -72,12 +71,33 @@ export function BrainPanel({
   modality = 'designer',
   extraSystem,
   initialChatId,
-  initialFilterProjectId,
   initialPrompt,
   onClose,
 }: BrainPanelProps) {
   const isPage = variant === 'page';
-  const [filterProjectId, setFilterProjectId] = useState<string | null>(initialFilterProjectId ?? null);
+
+  // Project scope follows the global TopBar tenant→project selector — one picker
+  // for the whole app (see ProjectScopeContext). The Brain's filter dropdown
+  // reflects and drives it, so a chat created while scoped to a project is
+  // assigned to that project (new chats default to the active filter). "No
+  // project" is a local-only refinement (show unassigned chats) the global scope
+  // can't express — null there means "all projects", not "unassigned". When there
+  // is no scope provider (embed surfaces, outside the app shell) we fall back to
+  // a purely local filter so the dropdown still works.
+  const scope = useOptionalProjectScope();
+  const [unassignedOnly, setUnassignedOnly] = useState(false);
+  const [localFilter, setLocalFilter] = useState<string | null>(null);
+  const filterProjectId: string | null = scope
+    ? (scope.currentProjectId != null
+        ? String(scope.currentProjectId)
+        : (unassignedOnly ? 'none' : null))
+    : localFilter;
+  const setFilterProjectId = useCallback((v: string) => {
+    if (!scope) { setLocalFilter(v === '' ? null : v); return; }
+    if (v === 'none') { setUnassignedOnly(true); scope.setProject(null); }
+    else if (v === '') { setUnassignedOnly(false); scope.setProject(null); }
+    else { setUnassignedOnly(false); scope.setProject(Number(v)); }
+  }, [scope]);
   const [searchQuery, setSearchQuery] = useState('');
   const [input, setInput] = useState('');
   const [historyOpen, setHistoryOpen] = useState(false);
@@ -587,7 +607,7 @@ export function BrainPanel({
               <ThemeSelect
                 ariaLabel="Filter by project"
                 value={filterProjectId ?? ''}
-                onChange={(v) => setFilterProjectId(v === '' ? null : v)}
+                onChange={(v) => setFilterProjectId(v)}
                 options={[
                   { value: '', label: 'All' },
                   { value: 'none', label: 'No project' },

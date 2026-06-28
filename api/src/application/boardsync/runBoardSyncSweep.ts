@@ -21,12 +21,17 @@ import { boardConnections } from '../../infrastructure/database/schema';
 import { SyncEngine, type StoredConnection } from './SyncEngine';
 import { createDrizzleStore, loadConnectionCredentials } from './drizzleStore';
 import { createBoardProvider } from './providers';
+import { isItsmProvider, syncItsmConnection } from './itsmIngest';
 import type { Db } from '../../infrastructure/database/connection';
+import type { Env } from '../../env';
 
 export interface BoardSyncSweepEnv {
   NEON_DATABASE_URL: string;
   INTEGRATION_ENCRYPTION_SECRET?: string;
   JWT_SECRET: string;
+  /** Optional — present when invoked from the Worker scheduled() handler. Lets the
+   *  ITSM path bump the Quality lens cache. Degrades gracefully when absent. */
+  AUTH_CACHE_KV?: KVNamespace;
 }
 
 export interface BoardSyncSweepResult {
@@ -86,6 +91,21 @@ export async function runBoardSyncSweep(env: BoardSyncSweepEnv): Promise<BoardSy
 
   for (const conn of due) {
     try {
+      // ITSM connections (Freshservice/ServiceNow) feed support_tickets (the
+      // Quality lens), NOT the task board — divert them before the task engine.
+      if (isItsmProvider(conn.provider)) {
+        const loaded = await loadConnectionCredentials(db, conn.tenantId, conn.credentialId, secret);
+        if (!loaded) { errors++; continue; }
+        const provider = createBoardProvider(
+          conn.provider,
+          { credentials: loaded.credentials, baseUrl: loaded.baseUrl, externalBoardId: conn.externalBoardId },
+          fetch,
+        );
+        await syncItsmConnection(db, env as unknown as Env, conn, provider, createDrizzleStore(db));
+        synced++;
+        continue; // read-only into support_tickets; no outbox drain
+      }
+
       const engine = await engineForConnection(db, secret, conn);
       if (!engine) {
         errors++;

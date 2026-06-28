@@ -34,6 +34,9 @@ export interface TaskProps {
   explicitRepoId: string | null;
   /** sprints.id this task is scheduled into, or null when unscheduled (backlog). */
   sprintId: string | null;
+  /** product_releases.id this task ships in, or null (0227). Makes a release a
+   *  first-class deliverable for the delivery lens. */
+  releaseId: string | null;
   startDate: Date | null;
   dueDate: Date | null;
   persona: string | null;
@@ -67,7 +70,7 @@ export class Task {
   static create(
     props: Omit<
       TaskProps,
-      'id' | 'key' | 'createdAt' | 'updatedAt' | 'githubIssueNumber' | 'githubIssueUrl' | 'githubPrUrl' | 'githubPrNumber' | 'archived' | 'assignedAgentRef' | 'assignedUserId' | 'gitBranch' | 'explicitRepoId' | 'taskType' | 'parentTaskId' | 'sprintId'
+      'id' | 'key' | 'createdAt' | 'updatedAt' | 'githubIssueNumber' | 'githubIssueUrl' | 'githubPrUrl' | 'githubPrNumber' | 'archived' | 'assignedAgentRef' | 'assignedUserId' | 'gitBranch' | 'explicitRepoId' | 'taskType' | 'parentTaskId' | 'sprintId' | 'releaseId'
     > & {
       projectKey: string;
       /** Highest existing key sequence in the project; this task gets the next one. */
@@ -107,6 +110,7 @@ export class Task {
       gitBranch: null,
       explicitRepoId: null,
       sprintId: null,
+      releaseId: null,
       startDate: props.startDate ?? null,
       dueDate: props.dueDate ?? null,
       persona: props.persona ?? null,
@@ -150,6 +154,7 @@ export class Task {
   get gitBranch(): string | null { return this.props.gitBranch; }
   get explicitRepoId(): string | null { return this.props.explicitRepoId; }
   get sprintId(): string | null { return this.props.sprintId; }
+  get releaseId(): string | null { return this.props.releaseId; }
   get startDate(): Date | null { return this.props.startDate; }
   get dueDate(): Date | null { return this.props.dueDate; }
   get persona(): string | null { return this.props.persona; }
@@ -166,7 +171,7 @@ export class Task {
       Pick<
         TaskProps,
         'title' | 'description' | 'status' | 'priority' | 'taskType' | 'parentTaskId' | 'assignedAgentType'
-        | 'githubPrUrl' | 'githubPrNumber' | 'assignedAgentHostId' | 'assignedAgentRef' | 'assignedUserId' | 'gitBranch' | 'explicitRepoId' | 'sprintId' | 'startDate' | 'dueDate'
+        | 'githubPrUrl' | 'githubPrNumber' | 'assignedAgentHostId' | 'assignedAgentRef' | 'assignedUserId' | 'gitBranch' | 'explicitRepoId' | 'sprintId' | 'releaseId' | 'startDate' | 'dueDate'
         | 'persona' | 'archived'
       >
     >,

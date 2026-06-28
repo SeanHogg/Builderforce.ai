@@ -98,6 +98,7 @@ function makeTask(id: number, archived: boolean): Task {
     gitBranch: null,
     explicitRepoId: null,
     sprintId: null,
+    releaseId: null,
     githubIssueNumber: null,
     githubIssueUrl: null,
     githubPrUrl: null,

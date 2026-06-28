@@ -16,6 +16,7 @@ import type { Db } from '../../infrastructure/database/connection';
 import { authMiddleware } from '../middleware/authMiddleware';
 import { buildPlanLimitsGuard } from '../middleware/planLimitsGuard';
 import {
+  ideProjects,
   studioVoiceCloneLicenses,
   studioVoiceClones,
   studioVoiceovers,
@@ -57,6 +58,7 @@ function toPublicClone(row: typeof studioVoiceClones.$inferSelect) {
     priceMillicents: row.priceMillicents,
     consentAttested: Boolean(row.consentAttestedAt),
     hasReference: Boolean(row.referenceKey),
+    ideProjectId: row.ideProjectId ?? null,
     createdAt: row.createdAt,
   };
 }
@@ -112,11 +114,30 @@ export function createStudioVoiceCloneRoutes(db: Db): Hono<HonoEnv> {
       (v) => v === form.get('visibility'),
     ) ?? 'private';
 
+    // Optional Voice IDE project scoping (0224): bind the clone to the voice
+    // project it was enrolled under, validating tenant ownership so a clone can't
+    // be attached to another tenant's project.
+    let ideProjectId: number | null = null;
+    const ideProjectRaw = form.get('ideProjectId');
+    if (typeof ideProjectRaw === 'string' && ideProjectRaw.trim()) {
+      const n = Number(ideProjectRaw);
+      if (Number.isInteger(n)) {
+        const [ip] = await db
+          .select({ id: ideProjects.id })
+          .from(ideProjects)
+          .where(and(eq(ideProjects.id, n), eq(ideProjects.tenantId, tenantId)))
+          .limit(1);
+        if (!ip) return c.json({ error: 'Invalid IDE project' }, 422);
+        ideProjectId = n;
+      }
+    }
+
     const [created] = await db
       .insert(studioVoiceClones)
       .values({
         tenantId,
         userId,
+        ideProjectId,
         name,
         description: String(form.get('description') ?? '') || null,
         provider: String(form.get('provider') ?? 'ssm-webgpu'),
@@ -170,7 +191,13 @@ export function createStudioVoiceCloneRoutes(db: Db): Hono<HonoEnv> {
       { kvTtlSeconds: 300 },
     );
 
-    return c.json({ clones });
+    // Optional scoping to a Voice IDE project (0224) — filter the cached list in
+    // memory so the per-tenant cache key stays single (no per-project keyspace).
+    const ideProjectRaw = c.req.query('ideProjectId');
+    const scoped = ideProjectRaw && Number.isInteger(Number(ideProjectRaw))
+      ? clones.filter((cl) => cl.ideProjectId === Number(ideProjectRaw))
+      : clones;
+    return c.json({ clones: scoped });
   });
 
   // ── Marketplace catalog (cached) ────────────────────────────────────────

@@ -12,6 +12,7 @@ import {
   varchar,
   smallint,
   bigint,
+  date,
   real,
   jsonb,
   unique,
@@ -866,6 +867,19 @@ export const tasks = pgTable('tasks', {
    *  SET NULL so deleting a sprint un-schedules its tasks rather than deleting the
    *  work. See migration 0115. sprints.id is a UUID. */
   sprintId:          uuid('sprint_id').references((): AnyPgColumn => sprints.id, { onDelete: 'set null' }),
+  /** Lineage edge to the PMO initiative this task/epic rolls up to (0225). Null =
+   *  inherit the initiative from the parent epic / linked project. ON DELETE SET
+   *  NULL so retiring an initiative un-links rather than deletes work. */
+  initiativeId:      uuid('initiative_id').references((): AnyPgColumn => initiatives.id, { onDelete: 'set null' }),
+  /** Release this task/epic ships in (0227) — makes a product release a first-class
+   *  deliverable for the delivery lens (burnup/forecast/scope). ON DELETE SET NULL. */
+  releaseId:         uuid('release_id').references((): AnyPgColumn => productReleases.id, { onDelete: 'set null' }),
+  /** CAPEX/OPEX classification (0225). null = unclassified (inherits from the
+   *  effective parent). costClassSource records who set it (manual PM / agent
+   *  classifier / inherited); costClassVerified gates the PM reconciliation stage. */
+  costClass:         varchar('cost_class', { length: 8 }),               // 'capex' | 'opex' | null
+  costClassSource:   varchar('cost_class_source', { length: 12 }).notNull().default('inherited'), // manual | inherited | agent
+  costClassVerified: boolean('cost_class_verified').notNull().default(false),
   startDate:         timestamp('start_date'),
   dueDate:           timestamp('due_date'),
   persona:           varchar('persona', { length: 50 }),
@@ -891,6 +905,13 @@ export const tasks = pgTable('tasks', {
    *  re-classified later without a schema change. See actionTypes.ts. */
   actionType:           varchar('action_type', { length: 32 }),
   actionTypeConfidence: real('action_type_confidence'),
+  /** Categorical INVESTMENT axis (0226): innovation | ktlo | support | tech_debt |
+   *  other — orthogonal to action_type (the TECHNICAL axis). Derived for free from
+   *  action_type + task signals; a PM can override (source = 'manual'). Null =
+   *  unclassified → the allocation rollup derives it on the fly, so every historical
+   *  task counts with zero backfill. See allocationCategories.ts. */
+  allocationCategory:       varchar('allocation_category', { length: 16 }),
+  allocationCategorySource: varchar('allocation_category_source', { length: 12 }).notNull().default('derived'), // derived | manual | agent
   createdAt:         timestamp('created_at').notNull().defaultNow(),
   updatedAt:         timestamp('updated_at').notNull().defaultNow(),
 });
@@ -941,6 +962,9 @@ export const memberProfiles = pgTable('member_profiles', {
   maxConcurrentWip:      integer('max_concurrent_wip'),
   rampFactor:   real('ramp_factor').notNull().default(1.0),
   experienceLevel:       memberExperienceLevelEnum('experience_level'),
+  // Builder-discipline axis (migration 0228): engineering | product | design |
+  // qa | devops | data | other. Null = unassigned. Orthogonal to memberKind.
+  discipline:   varchar('discipline', { length: 24 }),
   skills:       jsonb('skills'),
   focusAreas:   jsonb('focus_areas'),
   preferredTaskTypes:    jsonb('preferred_task_types'),
@@ -2684,6 +2708,8 @@ export const portfolios = pgTable('portfolios', {
   status:      varchar('status', { length: 20 }).notNull().default('active'), // active | archived
   ownerUserId: varchar('owner_user_id', { length: 36 }).references(() => users.id, { onDelete: 'set null' }),
   targetDate:  timestamp('target_date'),
+  costClass:       varchar('cost_class', { length: 8 }), // capex | opex | null — top of the inheritance chain (0225)
+  costClassSource: varchar('cost_class_source', { length: 12 }).notNull().default('manual'),
   createdAt:   timestamp('created_at').notNull().defaultNow(),
   updatedAt:   timestamp('updated_at').notNull().defaultNow(),
 });
@@ -2697,7 +2723,12 @@ export const initiatives = pgTable('initiatives', {
   description: text('description'),
   status:      varchar('status', { length: 20 }).notNull().default('proposed'), // proposed | active | completed | archived
   ownerUserId: varchar('owner_user_id', { length: 36 }).references(() => users.id, { onDelete: 'set null' }),
+  /** Timeline bounds for the unified Gantt (0225). targetDate stays as the end
+   *  anchor for back-compat; startDate is the new lower bound. */
+  startDate:   timestamp('start_date'),
   targetDate:  timestamp('target_date'),
+  costClass:       varchar('cost_class', { length: 8 }), // capex | opex | null (0225)
+  costClassSource: varchar('cost_class_source', { length: 12 }).notNull().default('manual'),
   createdAt:   timestamp('created_at').notNull().defaultNow(),
   updatedAt:   timestamp('updated_at').notNull().defaultNow(),
 });
@@ -2710,11 +2741,36 @@ export const objectives = pgTable('objectives', {
   initiativeId: uuid('initiative_id').references(() => initiatives.id, { onDelete: 'set null' }),
   title:        varchar('title', { length: 255 }).notNull(),
   description:  text('description'),
-  period:       varchar('period', { length: 20 }), // e.g. '2026-Q2'
+  period:       varchar('period', { length: 20 }), // e.g. '2026-Q2' — DERIVED from startDate (0225); kept for reporting/grouping
+  /** Real timeline span for the unified Gantt (0225). An objective can run a
+   *  quarter, several quarters, a year or more — these bounds drive its bar. */
+  startDate:    timestamp('start_date'),
+  endDate:      timestamp('end_date'),
   status:       varchar('status', { length: 20 }).notNull().default('active'), // active | achieved | missed | archived
   ownerUserId:  varchar('owner_user_id', { length: 36 }).references(() => users.id, { onDelete: 'set null' }),
+  /** CAPEX/OPEX for the whole goal (0225). Set here → the entire linked lineage
+   *  inherits it unless a child manually overrides (which raises an anomaly). */
+  costClass:       varchar('cost_class', { length: 8 }), // capex | opex | null
+  costClassSource: varchar('cost_class_source', { length: 12 }).notNull().default('manual'),
   createdAt:    timestamp('created_at').notNull().defaultNow(),
   updatedAt:    timestamp('updated_at').notNull().defaultNow(),
+});
+
+/**
+ * Objective ↔ work-item lineage (0225). An objective owns ANY mix of initiatives,
+ * epics, or tasks — exactly one of initiativeId / taskId is set per row, keyed by
+ * linkKind. This is the edge that makes "an OKR can have multiple Epics or a task"
+ * real and lets cost/progress roll up from leaf work into the goal.
+ */
+export const objectiveLinks = pgTable('objective_links', {
+  id:           uuid('id').primaryKey().defaultRandom(),
+  tenantId:     integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  segmentId:    uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),
+  objectiveId:  uuid('objective_id').notNull().references(() => objectives.id, { onDelete: 'cascade' }),
+  linkKind:     varchar('link_kind', { length: 12 }).notNull(), // 'initiative' | 'epic' | 'task'
+  initiativeId: uuid('initiative_id').references(() => initiatives.id, { onDelete: 'cascade' }),
+  taskId:       integer('task_id').references((): AnyPgColumn => tasks.id, { onDelete: 'cascade' }),
+  createdAt:    timestamp('created_at').notNull().defaultNow(),
 });
 
 export const keyResults = pgTable('key_results', {
@@ -2821,6 +2877,9 @@ export const sprints = pgTable('sprints', {
   id:           uuid('id').primaryKey().defaultRandom(),
   tenantId:     integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
   segmentId:    uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),
+  // Nullable project scope (0244): NULL = portfolio/segment-level cadence, non-null
+  // = one project. The Planning ceremony is project-scoped, so its sprints follow.
+  projectId:    integer('project_id').references(() => projects.id, { onDelete: 'cascade' }),
   name:         varchar('name', { length: 255 }).notNull(),
   goal:         text('goal'),
   startDate:    timestamp('start_date'),
@@ -4147,4 +4206,614 @@ export const toolRuns = pgTable('tool_runs', {
 }, (t) => ({
   byTenantTool: index('idx_tool_runs_tenant_tool').on(t.tenantId, t.toolId, t.createdAt),
   byProject: index('idx_tool_runs_project').on(t.tenantId, t.projectId, t.toolId, t.createdAt),
+}));
+
+/**
+ * Desired investment mix per scope per month (migration 0226) — the goal half of
+ * the allocation lens (EMP-2). One row per (scope, period, category) sets the
+ * target share of effort (e.g. 30% innovation); the allocation rollup compares it
+ * to the measured actual and surfaces the variance. tenant+segment scoped like the
+ * other planning trackers, so segmentTrackerRoutes drives its CRUD.
+ */
+export const allocationGoals = pgTable('allocation_goals', {
+  id:          uuid('id').primaryKey().defaultRandom(),
+  tenantId:    integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  segmentId:   uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),
+  scopeKind:   varchar('scope_kind', { length: 16 }).notNull().default('tenant'), // tenant | team | project
+  teamId:      integer('team_id').references(() => teams.id, { onDelete: 'cascade' }),
+  projectId:   integer('project_id').references(() => projects.id, { onDelete: 'cascade' }),
+  periodMonth: varchar('period_month', { length: 7 }).notNull(),                   // 'YYYY-MM'
+  category:    varchar('category', { length: 16 }).notNull(),                      // innovation | ktlo | support | tech_debt | other
+  targetPct:   real('target_pct').notNull().default(0),                            // desired share of effort (0..100)
+  notes:       text('notes'),
+  createdAt:   timestamp('created_at').notNull().defaultNow(),
+  updatedAt:   timestamp('updated_at').notNull().defaultNow(),
+});
+
+// ---------------------------------------------------------------------------
+// Knowledge Management — SOPs, processes & documents (migration 0227)
+//
+// Team-authored knowledge with versioning, tagging, read-acknowledgement
+// (audit evidence for SOX/TISAX/ISO) and training assignments with due dates.
+// Tenant + segment scoped; optionally project scoped (null = workspace-wide).
+// ---------------------------------------------------------------------------
+
+/** A knowledge document: an SOP, process flow, or general doc. */
+export const knowledgeDocuments = pgTable('knowledge_documents', {
+  id:            uuid('id').primaryKey().defaultRandom(),
+  tenantId:      integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  segmentId:     uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),
+  projectId:     integer('project_id').references(() => projects.id, { onDelete: 'set null' }), // null = workspace-wide
+  docType:       varchar('doc_type', { length: 16 }).notNull().default('sop'),   // 'sop' | 'process' | 'doc'
+  title:         varchar('title', { length: 255 }).notNull(),
+  summary:       varchar('summary', { length: 500 }),
+  content:       text('content').notNull().default(''),
+  status:        varchar('status', { length: 16 }).notNull().default('draft'),   // 'draft' | 'published' | 'archived'
+  versionNumber: integer('version_number').notNull().default(0),                 // monotonic published version
+  requiresAck:   boolean('requires_ack').notNull().default(false),
+  createdBy:     varchar('created_by', { length: 36 }).references(() => users.id, { onDelete: 'set null' }),
+  updatedBy:     varchar('updated_by', { length: 36 }).references(() => users.id, { onDelete: 'set null' }),
+  publishedAt:   timestamp('published_at'),
+  createdAt:     timestamp('created_at').notNull().defaultNow(),
+  updatedAt:     timestamp('updated_at').notNull().defaultNow(),
+});
+
+/** Immutable snapshot of a document at the moment it was published. */
+export const knowledgeDocumentVersions = pgTable('knowledge_document_versions', {
+  id:            uuid('id').primaryKey().defaultRandom(),
+  tenantId:      integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  documentId:    uuid('document_id').notNull().references(() => knowledgeDocuments.id, { onDelete: 'cascade' }),
+  versionNumber: integer('version_number').notNull(),
+  title:         varchar('title', { length: 255 }).notNull(),
+  content:       text('content').notNull(),
+  changeNote:    varchar('change_note', { length: 500 }),
+  publishedBy:   varchar('published_by', { length: 36 }).references(() => users.id, { onDelete: 'set null' }),
+  createdAt:     timestamp('created_at').notNull().defaultNow(),
+}, (t) => ({
+  uqVersion: uniqueIndex('uq_knowledge_versions').on(t.documentId, t.versionNumber),
+}));
+
+/** Free-form tags for filtering/organising knowledge. */
+export const knowledgeDocumentTags = pgTable('knowledge_document_tags', {
+  id:            uuid('id').primaryKey().defaultRandom(),
+  tenantId:      integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  documentId:    uuid('document_id').notNull().references(() => knowledgeDocuments.id, { onDelete: 'cascade' }),
+  tag:           varchar('tag', { length: 64 }).notNull(),
+  createdAt:     timestamp('created_at').notNull().defaultNow(),
+}, (t) => ({
+  uqTag: uniqueIndex('uq_knowledge_tags').on(t.documentId, t.tag),
+}));
+
+/** Audit evidence: a user read & acknowledged a specific published version. */
+export const knowledgeAcknowledgements = pgTable('knowledge_acknowledgements', {
+  id:             uuid('id').primaryKey().defaultRandom(),
+  tenantId:       integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  documentId:     uuid('document_id').notNull().references(() => knowledgeDocuments.id, { onDelete: 'cascade' }),
+  userId:         varchar('user_id', { length: 36 }).notNull().references(() => users.id, { onDelete: 'cascade' }),
+  versionNumber:  integer('version_number').notNull(),
+  acknowledgedAt: timestamp('acknowledged_at').notNull().defaultNow(),
+}, (t) => ({
+  uqAck: uniqueIndex('uq_knowledge_acks').on(t.documentId, t.userId),
+}));
+
+/** Per-document collaborators: users explicitly invited to a page (editor|viewer). */
+export const knowledgeDocumentCollaborators = pgTable('knowledge_document_collaborators', {
+  id:          uuid('id').primaryKey().defaultRandom(),
+  tenantId:    integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  documentId:  uuid('document_id').notNull().references(() => knowledgeDocuments.id, { onDelete: 'cascade' }),
+  userId:      varchar('user_id', { length: 36 }).notNull().references(() => users.id, { onDelete: 'cascade' }),
+  role:        varchar('role', { length: 16 }).notNull().default('editor'), // 'editor' | 'viewer'
+  invitedBy:   varchar('invited_by', { length: 36 }).references(() => users.id, { onDelete: 'set null' }),
+  createdAt:   timestamp('created_at').notNull().defaultNow(),
+}, (t) => ({
+  uqCollab: uniqueIndex('uq_knowledge_collab').on(t.documentId, t.userId),
+}));
+
+/** Training expectation: a document assigned to a user with an optional due date. */
+export const knowledgeTrainingAssignments = pgTable('knowledge_training_assignments', {
+  id:          uuid('id').primaryKey().defaultRandom(),
+  tenantId:    integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  documentId:  uuid('document_id').notNull().references(() => knowledgeDocuments.id, { onDelete: 'cascade' }),
+  userId:      varchar('user_id', { length: 36 }).notNull().references(() => users.id, { onDelete: 'cascade' }),
+  assignedBy:  varchar('assigned_by', { length: 36 }).references(() => users.id, { onDelete: 'set null' }),
+  dueAt:       timestamp('due_at'),
+  createdAt:   timestamp('created_at').notNull().defaultNow(),
+}, (t) => ({
+  uqTraining: uniqueIndex('uq_knowledge_training').on(t.documentId, t.userId),
+}));
+
+// ===========================================================================
+// Board-deck data spine (migrations 0236-0239) — the collectors that close the
+// remaining gaps in the CTO/R&D quarterly board deck. The existing lenses cover
+// Delivery/DORA, FinOps, Allocation, Deliverables, AI-Impact and DevEx; these
+// add the QUALITY (ops/support), PEOPLE (headcount), AI-PROGRAM (third-party
+// adoption + program investment) and disaggregated R&D FINANCIALS that nothing
+// else collects. Tenant + segment scoped like the other planning trackers, so
+// segmentTrackerRoutes drives their CRUD.
+// ===========================================================================
+
+// ── QUALITY (migration 0236) ───────────────────────────────────────────────
+
+/** A production incident / alert — the ops half of the Quality slide. MTTR =
+ *  resolvedAt − startedAt over resolved incidents (the prod analogue of the
+ *  deploy-tied MTTR in deployment_events). `isAlertOnly` marks noise that paged
+ *  but never became an incident → the Alerts count. Fed by PagerDuty/Sentry
+ *  webhooks (boardsync) keyed by externalRef, or entered manually. */
+export const prodIncidents = pgTable('prod_incidents', {
+  id:             uuid('id').primaryKey().defaultRandom(),
+  tenantId:       integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  segmentId:      uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),
+  projectId:      integer('project_id').references(() => projects.id, { onDelete: 'set null' }),
+  title:          varchar('title', { length: 255 }).notNull(),
+  severity:       varchar('severity', { length: 16 }).notNull().default('sev3'), // sev1 | sev2 | sev3 | sev4
+  status:         varchar('status', { length: 16 }).notNull().default('open'),   // open | acknowledged | mitigated | resolved
+  isAlertOnly:    boolean('is_alert_only').notNull().default(false),
+  source:         varchar('source', { length: 24 }).notNull().default('manual'), // pagerduty | sentry | datadog | manual
+  externalRef:    varchar('external_ref', { length: 255 }),
+  startedAt:      timestamp('started_at').notNull().defaultNow(),
+  acknowledgedAt: timestamp('acknowledged_at'),
+  resolvedAt:     timestamp('resolved_at'),
+  impact:         text('impact'),
+  rootCause:      text('root_cause'),
+  postmortemUrl:  varchar('postmortem_url', { length: 512 }),
+  createdAt:      timestamp('created_at').notNull().defaultNow(),
+  updatedAt:      timestamp('updated_at').notNull().defaultNow(),
+}, (t) => ({
+  byStarted: index('idx_prod_incidents_started').on(t.tenantId, t.startedAt),
+  byStatus:  index('idx_prod_incidents_status').on(t.tenantId, t.status),
+  uqExternal: uniqueIndex('uq_prod_incidents_external').on(t.tenantId, t.source, t.externalRef),
+}));
+
+/** A customer-support ticket — Support Issues / Tech Support Tix / Support-Tix-
+ *  per-Customer (distinct customerRef). `isBug` flags the post-production-bug
+ *  subset. Fed by Freshservice/ServiceNow poll (boardsync) keyed by externalRef,
+ *  or entered manually. */
+export const supportTickets = pgTable('support_tickets', {
+  id:          uuid('id').primaryKey().defaultRandom(),
+  tenantId:    integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  segmentId:   uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),
+  source:      varchar('source', { length: 24 }).notNull().default('manual'), // freshservice | servicenow | zendesk | manual
+  externalRef: varchar('external_ref', { length: 255 }),
+  subject:     varchar('subject', { length: 512 }),
+  category:    varchar('category', { length: 24 }).notNull().default('other'), // bug | how_to | billing | feature_request | other
+  isBug:       boolean('is_bug').notNull().default(false),
+  priority:    varchar('priority', { length: 16 }).notNull().default('normal'),
+  status:      varchar('status', { length: 16 }).notNull().default('open'),
+  customerRef: varchar('customer_ref', { length: 255 }),
+  openedAt:    timestamp('opened_at').notNull().defaultNow(),
+  resolvedAt:  timestamp('resolved_at'),
+  createdAt:   timestamp('created_at').notNull().defaultNow(),
+  updatedAt:   timestamp('updated_at').notNull().defaultNow(),
+}, (t) => ({
+  byOpened: index('idx_support_tickets_opened').on(t.tenantId, t.openedAt),
+  byBug:    index('idx_support_tickets_bug').on(t.tenantId, t.isBug),
+  uqExternal: uniqueIndex('uq_support_tickets_external').on(t.tenantId, t.source, t.externalRef),
+}));
+
+/** A daily uptime sample per service — Uptime % on the Quality slide. One row per
+ *  (service, day). Fed by a status-page connector (not yet built — manual until
+ *  then) or derived from prodIncidents downtime. */
+export const uptimeSamples = pgTable('uptime_samples', {
+  id:              uuid('id').primaryKey().defaultRandom(),
+  tenantId:        integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  segmentId:       uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),
+  serviceName:     varchar('service_name', { length: 120 }).notNull().default('production'),
+  periodDay:       date('period_day').notNull(),
+  uptimePct:       real('uptime_pct').notNull().default(100), // 0..100 for the day
+  downtimeMinutes: real('downtime_minutes').notNull().default(0),
+  source:          varchar('source', { length: 24 }).notNull().default('manual'), // statuspage | pingdom | betterstack | manual
+  createdAt:       timestamp('created_at').notNull().defaultNow(),
+  updatedAt:       timestamp('updated_at').notNull().defaultNow(),
+}, (t) => ({
+  byDay: index('idx_uptime_samples_day').on(t.tenantId, t.periodDay),
+  uqDay: uniqueIndex('uq_uptime_samples_day').on(t.tenantId, t.serviceName, t.periodDay),
+}));
+
+// ── PEOPLE (migration 0237) ─────────────────────────────────────────────────
+
+/** Append-only headcount event — drives the Headcount Waterfall + Attrition Rate
+ *  on the People slide. `isVoluntary` (leave only) splits voluntary vs involuntary
+ *  attrition. memberKind reuses the human/agent axis. */
+export const headcountEvents = pgTable('headcount_events', {
+  id:          uuid('id').primaryKey().defaultRandom(),
+  tenantId:    integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  segmentId:   uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),
+  memberKind:  varchar('member_kind', { length: 16 }).notNull().default('human'), // human | cloud_agent | host_agent
+  memberRef:   varchar('member_ref', { length: 255 }),
+  memberName:  varchar('member_name', { length: 255 }),
+  eventType:   varchar('event_type', { length: 16 }).notNull(),                    // hire | leave | transfer
+  teamId:      integer('team_id').references(() => teams.id, { onDelete: 'set null' }),
+  effectiveOn: date('effective_on').notNull(),
+  isVoluntary: boolean('is_voluntary'),                                            // leave only
+  reason:      text('reason'),
+  createdAt:   timestamp('created_at').notNull().defaultNow(),
+  updatedAt:   timestamp('updated_at').notNull().defaultNow(),
+}, (t) => ({
+  byEffective: index('idx_headcount_events_effective').on(t.tenantId, t.effectiveOn),
+}));
+
+/** An open requisition — High Priority Open Positions on the People slide.
+ *  days_open = today − openedOn (derived in the rollup). */
+export const openPositions = pgTable('open_positions', {
+  id:            uuid('id').primaryKey().defaultRandom(),
+  tenantId:      integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  segmentId:     uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),
+  reqTitle:      varchar('req_title', { length: 255 }).notNull(),
+  teamId:        integer('team_id').references(() => teams.id, { onDelete: 'set null' }),
+  priority:      varchar('priority', { length: 16 }).notNull().default('normal'), // high | normal | low
+  status:        varchar('status', { length: 16 }).notNull().default('open'),     // open | filled | on_hold | cancelled
+  openedOn:      date('opened_on').notNull().defaultNow(),
+  targetStartOn: date('target_start_on'),
+  filledOn:      date('filled_on'),
+  notes:         text('notes'),
+  createdAt:     timestamp('created_at').notNull().defaultNow(),
+  updatedAt:     timestamp('updated_at').notNull().defaultNow(),
+}, (t) => ({
+  byStatus: index('idx_open_positions_status').on(t.tenantId, t.status, t.priority),
+}));
+
+// ── AI PROGRAM (migration 0238) — layers on top of aiImpactInsights ──────────
+
+/** Third-party AI-tool adoption the platform can't instrument directly (Copilot,
+ *  Cursor, …) — AI Tools Adoption & Impact on the AI slide. adoption % =
+ *  activeUsers/eligibleUsers; ROI = estHoursSaved vs monthlyCostUsd. */
+export const aiToolAdoption = pgTable('ai_tool_adoption', {
+  id:            uuid('id').primaryKey().defaultRandom(),
+  tenantId:      integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  segmentId:     uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),
+  toolName:      varchar('tool_name', { length: 120 }).notNull(),
+  category:      varchar('category', { length: 24 }).notNull().default('coding'), // coding | review | testing | docs | other
+  periodMonth:   varchar('period_month', { length: 7 }).notNull(),                // 'YYYY-MM'
+  activeUsers:   integer('active_users').notNull().default(0),
+  eligibleUsers: integer('eligible_users').notNull().default(0),
+  estHoursSaved: real('est_hours_saved').notNull().default(0),
+  monthlyCostUsd: real('monthly_cost_usd').notNull().default(0),
+  notes:         text('notes'),
+  createdAt:     timestamp('created_at').notNull().defaultNow(),
+  updatedAt:     timestamp('updated_at').notNull().defaultNow(),
+}, (t) => ({
+  byPeriod: index('idx_ai_tool_adoption_period').on(t.tenantId, t.periodMonth),
+  uqTool:   uniqueIndex('uq_ai_tool_adoption').on(t.tenantId, t.toolName, t.periodMonth),
+}));
+
+/** AI program investment linked to the PMO initiative tier — AI Program Investment
+ *  (Objective → Summary) on the AI slide. investedUsd reconciles against budgets
+ *  scoped to the same initiative. */
+export const aiProgramInitiatives = pgTable('ai_program_initiatives', {
+  id:           uuid('id').primaryKey().defaultRandom(),
+  tenantId:     integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  segmentId:    uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),
+  initiativeId: uuid('initiative_id').references(() => initiatives.id, { onDelete: 'set null' }),
+  programName:  varchar('program_name', { length: 255 }).notNull(),
+  tier:         varchar('tier', { length: 16 }).notNull().default('strategic'),   // strategic | experiment | enablement
+  investedUsd:  real('invested_usd').notNull().default(0),
+  status:       varchar('status', { length: 16 }).notNull().default('active'),
+  objective:    text('objective'),
+  notes:        text('notes'),
+  createdAt:    timestamp('created_at').notNull().defaultNow(),
+  updatedAt:    timestamp('updated_at').notNull().defaultNow(),
+}, (t) => ({
+  byTenant:     index('idx_ai_program_initiatives_tenant').on(t.tenantId),
+  byInitiative: index('idx_ai_program_initiatives_init').on(t.initiativeId),
+}));
+
+// ── R&D FINANCIALS (migration 0239) — disaggregated quarterly ────────────────
+
+/** Quarterly R&D spend by category — Key R&D Financials on the Investment slide.
+ *  One row per (fy, quarter, category) with actual + plan dollars. The board's
+ *  categories (headcount/hosting/COGS/licenses) are not in any live ledger, so
+ *  these are entered/imported (LLM/ingestion lines can auto-seed). */
+export const rdFinancialsQuarterly = pgTable('rd_financials_quarterly', {
+  id:          uuid('id').primaryKey().defaultRandom(),
+  tenantId:    integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  segmentId:   uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),
+  fiscalYear:  integer('fiscal_year').notNull(),
+  quarter:     integer('quarter').notNull(),                                       // 1..4
+  category:    varchar('category', { length: 24 }).notNull(),                      // headcount | tech_debt | hosting_storage | cogs | internal | third_party_licenses
+  actualUsd:   real('actual_usd').notNull().default(0),
+  planUsd:     real('plan_usd').notNull().default(0),
+  source:      varchar('source', { length: 16 }).notNull().default('manual'),      // manual | llm_usage | import
+  notes:       text('notes'),
+  createdAt:   timestamp('created_at').notNull().defaultNow(),
+  updatedAt:   timestamp('updated_at').notNull().defaultNow(),
+}, (t) => ({
+  byFy: index('idx_rd_financials_fy').on(t.tenantId, t.fiscalYear, t.quarter),
+  uqCat: uniqueIndex('uq_rd_financials_cat').on(t.tenantId, t.fiscalYear, t.quarter, t.category),
+}));
+
+/** Quarterly R&D revenue — backs the Total-R&D$/Revenue ratio on the Investment slide. */
+export const rdRevenueQuarterly = pgTable('rd_revenue_quarterly', {
+  id:         uuid('id').primaryKey().defaultRandom(),
+  tenantId:   integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  segmentId:  uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),
+  fiscalYear: integer('fiscal_year').notNull(),
+  quarter:    integer('quarter').notNull(),
+  revenueUsd: real('revenue_usd').notNull().default(0),
+  createdAt:  timestamp('created_at').notNull().defaultNow(),
+  updatedAt:  timestamp('updated_at').notNull().defaultNow(),
+}, (t) => ({
+  uqQuarter: uniqueIndex('uq_rd_revenue_quarter').on(t.tenantId, t.fiscalYear, t.quarter),
+}));
+
+/** Quarterly R&D FTE allocation by category — Historical Investment Allocation
+ *  (R&D FTEs) on the Investment slide. Separate grain from dollars so neither
+ *  null-pads the other. */
+export const rdFteAllocationQuarterly = pgTable('rd_fte_allocation_quarterly', {
+  id:         uuid('id').primaryKey().defaultRandom(),
+  tenantId:   integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  segmentId:  uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),
+  fiscalYear: integer('fiscal_year').notNull(),
+  quarter:    integer('quarter').notNull(),
+  category:   varchar('category', { length: 24 }).notNull(),                       // growth | infrastructure | support | unplanned | other
+  fte:        real('fte').notNull().default(0),
+  createdAt:  timestamp('created_at').notNull().defaultNow(),
+  updatedAt:  timestamp('updated_at').notNull().defaultNow(),
+}, (t) => ({
+  uqCat: uniqueIndex('uq_rd_fte_cat').on(t.tenantId, t.fiscalYear, t.quarter, t.category),
+}));
+
+// ===========================================================================
+// Deck generator (migrations 0242-0243) — the template library + generated-deck
+// records behind the board-deck download / Brain "generate deck" tooling.
+// ===========================================================================
+
+/** A stored .pptx template + its {{token}}→binding manifest. Built-in templates
+ *  (the R&D board deck, the CFO/DevFinOps deck) live at tenant_id=0; tenant
+ *  uploads carry their own tenant_id. The binary lives in R2 at r2Key. */
+export const deckTemplates = pgTable('deck_templates', {
+  id:           uuid('id').primaryKey().defaultRandom(),
+  tenantId:     integer('tenant_id').notNull().default(0).references(() => tenants.id, { onDelete: 'cascade' }),
+  name:         varchar('name', { length: 255 }).notNull(),
+  description:  text('description'),
+  archetype:    varchar('archetype', { length: 24 }).notNull().default('custom'), // board | cfo_devfinops | custom | generative
+  r2Key:        varchar('r2_key', { length: 512 }),
+  manifestJson: jsonb('manifest_json').notNull().default(sql`'{"version":1,"bindings":[]}'::jsonb`),
+  isBuiltin:    boolean('is_builtin').notNull().default(false),
+  createdBy:    varchar('created_by', { length: 36 }),
+  createdAt:    timestamp('created_at').notNull().defaultNow(),
+  updatedAt:    timestamp('updated_at').notNull().defaultNow(),
+}, (t) => ({
+  byTenant: index('idx_deck_templates_tenant').on(t.tenantId),
+}));
+
+/** A generated deck instance — the audit/history record + the R2 pointer to the
+ *  rendered .pptx the user downloads. */
+export const generatedDecks = pgTable('generated_decks', {
+  id:           uuid('id').primaryKey().defaultRandom(),
+  tenantId:     integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  templateId:   uuid('template_id').references(() => deckTemplates.id, { onDelete: 'set null' }),
+  mode:         varchar('mode', { length: 16 }).notNull().default('generative'),  // generative | fill
+  quarter:      varchar('quarter', { length: 12 }),
+  r2Key:        varchar('r2_key', { length: 512 }),
+  status:       varchar('status', { length: 16 }).notNull().default('pending'),   // pending | ready | failed
+  warningsJson: jsonb('warnings_json').notNull().default(sql`'[]'::jsonb`),
+  createdBy:    varchar('created_by', { length: 36 }),
+  createdAt:    timestamp('created_at').notNull().defaultNow(),
+}, (t) => ({
+  byTenant: index('idx_generated_decks_tenant').on(t.tenantId, t.createdAt),
+}));
+
+// ---------------------------------------------------------------------------
+// Product Quality / error observability (migration 0240)
+// ---------------------------------------------------------------------------
+
+/**
+ * A connected error source. `keyHash` authenticates keyed ingest (native SDK /
+ * OTLP exporter); `webhookSecretEnc`/`webhookSecretIv` (AES-256-GCM per-tenant)
+ * authenticate signed provider webhooks (Sentry/PostHog/LogRocket). One source =
+ * one ingest credential. See application/quality/qualitySourceCatalog.ts.
+ */
+export const errorSources = pgTable('error_sources', {
+  id:               uuid('id').primaryKey().defaultRandom(),
+  tenantId:         integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  projectId:        integer('project_id').notNull().references(() => projects.id, { onDelete: 'cascade' }),
+  /** 'native' | 'otlp' | 'sentry' | 'posthog' | 'logrocket'. */
+  source:           varchar('source', { length: 32 }).notNull(),
+  name:             varchar('name', { length: 255 }).notNull(),
+  /** SHA-256 of the bfq_* ingest key (raw key shown once at creation). */
+  keyHash:          varchar('key_hash', { length: 64 }).unique(),
+  webhookSecretEnc: text('webhook_secret_enc'),
+  webhookSecretIv:  varchar('webhook_secret_iv', { length: 32 }),
+  enabled:          boolean('enabled').notNull().default(true),
+  status:           varchar('status', { length: 16 }).notNull().default('active'),
+  lastEventAt:      timestamp('last_event_at'),
+  createdBy:        varchar('created_by', { length: 36 }).references(() => users.id, { onDelete: 'set null' }),
+  createdAt:        timestamp('created_at').notNull().defaultNow(),
+  updatedAt:        timestamp('updated_at').notNull().defaultNow(),
+});
+
+/**
+ * A fingerprint-grouped error. One row per distinct bug; aggregates are bumped on
+ * every matching event (the ingest upsert). `samplePayload` holds the latest event
+ * for the dashboard; `taskId` links the fix task once "Fix with agent" runs.
+ */
+export const errorGroups = pgTable('error_groups', {
+  id:             uuid('id').primaryKey().defaultRandom(),
+  tenantId:       integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  projectId:      integer('project_id').notNull().references(() => projects.id, { onDelete: 'cascade' }),
+  sourceId:       uuid('source_id').references(() => errorSources.id, { onDelete: 'set null' }),
+  fingerprint:    varchar('fingerprint', { length: 128 }).notNull(),
+  title:          varchar('title', { length: 500 }).notNull(),
+  type:           varchar('type', { length: 255 }),
+  culprit:        text('culprit'),
+  /** 'fatal' | 'error' | 'warning' | 'info'. */
+  level:          varchar('level', { length: 16 }).notNull().default('error'),
+  /** 'unresolved' | 'resolved' | 'ignored' | 'fixing'. */
+  status:         varchar('status', { length: 16 }).notNull().default('unresolved'),
+  eventCount:     integer('event_count').notNull().default(0),
+  userCount:      integer('user_count').notNull().default(0),
+  firstSeen:      timestamp('first_seen').notNull().defaultNow(),
+  lastSeen:       timestamp('last_seen').notNull().defaultNow(),
+  release:        varchar('release', { length: 255 }),
+  environment:    varchar('environment', { length: 64 }),
+  samplePayload:  jsonb('sample_payload'),
+  taskId:         integer('task_id').references(() => tasks.id, { onDelete: 'set null' }),
+  createdAt:      timestamp('created_at').notNull().defaultNow(),
+  updatedAt:      timestamp('updated_at').notNull().defaultNow(),
+}, (t) => ({
+  uqFingerprint: unique('uq_error_groups_fingerprint').on(t.tenantId, t.projectId, t.fingerprint),
+}));
+
+/**
+ * The raw, high-volume event stream feeding a group. The `(tenant_id, created_at)`
+ * index backs the month-to-date sum the consumption meter (error_events) reads.
+ */
+export const errorEvents = pgTable('error_events', {
+  id:           uuid('id').primaryKey().defaultRandom(),
+  groupId:      uuid('group_id').notNull().references(() => errorGroups.id, { onDelete: 'cascade' }),
+  tenantId:     integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  ts:           timestamp('ts').notNull().defaultNow(),
+  release:      varchar('release', { length: 255 }),
+  environment:  varchar('environment', { length: 64 }),
+  userKey:      varchar('user_key', { length: 255 }),
+  payload:      jsonb('payload'),
+  createdAt:    timestamp('created_at').notNull().defaultNow(),
+});
+
+/**
+ * Distinct affected users per error group (migration 0245) — the set behind the
+ * EXACT `error_groups.user_count`. The ingest path inserts (group_id, user_key)
+ * with ON CONFLICT DO NOTHING and bumps user_count only for newly-inserted pairs.
+ */
+export const errorGroupUsers = pgTable('error_group_users', {
+  groupId:   uuid('group_id').notNull().references(() => errorGroups.id, { onDelete: 'cascade' }),
+  userKey:   varchar('user_key', { length: 255 }).notNull(),
+  firstSeen: timestamp('first_seen').notNull().defaultNow(),
+}, (t) => ({
+  pk: primaryKey({ columns: [t.groupId, t.userKey] }),
+}));
+
+// ---------------------------------------------------------------------------
+// Alerts — threshold alert rules on platform metrics (migration 0234).
+//
+// A user defines a rule (metric + comparator + threshold + window); the daily
+// runAlertSweep evaluates each enabled rule by reusing the existing metric
+// collectors and, when it trips (respecting cooldown), raises an alert_event and
+// notifies via the shared Slack/email channels (approvalNotifier). The system
+// 'eval_drift' alert always fires from runEvalDriftSweep without a rule.
+// tenant+segment scoped (uuid PK) like the other planning trackers.
+// ---------------------------------------------------------------------------
+
+/** Metric keys a rule may target (kept in lockstep with metricEvaluators). */
+export type AlertMetric =
+  | 'token_spend_usd'
+  | 'token_spend_pct_of_cap'
+  | 'cost_per_merged_pr_usd'
+  | 'dora_change_failure_rate'
+  | 'dora_lead_time_hours'
+  | 'ai_effectiveness_score'
+  | 'eval_drift';
+
+export const alerts = pgTable('alerts', {
+  id:              uuid('id').primaryKey().defaultRandom(),
+  tenantId:        integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  segmentId:       uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),
+  name:            varchar('name', { length: 255 }).notNull(),
+  metric:          varchar('metric', { length: 40 }).notNull(),       // see AlertMetric
+  comparator:      varchar('comparator', { length: 4 }).notNull(),    // gt | lt | gte | lte
+  threshold:       real('threshold').notNull().default(0),
+  windowDays:      integer('window_days').notNull().default(7),
+  scopeKind:       varchar('scope_kind', { length: 16 }).notNull().default('tenant'), // tenant | project | team
+  projectId:       integer('project_id').references(() => projects.id, { onDelete: 'cascade' }),
+  teamId:          integer('team_id').references(() => teams.id, { onDelete: 'cascade' }),
+  notifySlack:     boolean('notify_slack').notNull().default(true),
+  notifyEmail:     boolean('notify_email').notNull().default(true),
+  enabled:         boolean('enabled').notNull().default(true),
+  cooldownHours:   integer('cooldown_hours').notNull().default(24),
+  lastTriggeredAt: timestamp('last_triggered_at'),
+  lastEvaluatedAt: timestamp('last_evaluated_at'),
+  createdBy:       varchar('created_by', { length: 36 }),
+  createdAt:       timestamp('created_at').notNull().defaultNow(),
+  updatedAt:       timestamp('updated_at').notNull().defaultNow(),
+}, (t) => ({
+  byTenantEnabled: index('idx_alerts_tenant_enabled').on(t.tenantId, t.enabled),
+}));
+
+/** A single firing of a rule (or a system eval-drift alert). */
+export const alertEvents = pgTable('alert_events', {
+  id:             uuid('id').primaryKey().defaultRandom(),
+  alertId:        uuid('alert_id').references(() => alerts.id, { onDelete: 'cascade' }),
+  tenantId:       integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  metric:         varchar('metric', { length: 40 }),
+  observedValue:  real('observed_value'),
+  threshold:      real('threshold'),
+  comparator:     varchar('comparator', { length: 4 }),
+  message:        text('message').notNull(),
+  status:         varchar('status', { length: 16 }).notNull().default('triggered'), // triggered | acknowledged | resolved
+  notifiedSlack:  boolean('notified_slack').default(false),
+  notifiedEmail:  boolean('notified_email').default(false),
+  acknowledgedBy: varchar('acknowledged_by', { length: 36 }),
+  acknowledgedAt: timestamp('acknowledged_at'),
+  createdAt:      timestamp('created_at').notNull().defaultNow(),
+}, (t) => ({
+  byTenantCreated: index('idx_alert_events_tenant_created').on(t.tenantId, t.createdAt),
+}));
+
+// ── Industry Benchmarking (migration 0230) ─────────────────────────────────
+// Seeded reference percentiles per (industry, size_band, metric) + the tenant's
+// chosen benchmark cohort. The lens maps live metric values onto these.
+export const industryBenchmarks = pgTable('industry_benchmarks', {
+  id:             serial('id').primaryKey(),
+  industry:       varchar('industry', { length: 48 }).notNull(),
+  sizeBand:       varchar('size_band', { length: 16 }).notNull(),
+  metric:         varchar('metric', { length: 48 }).notNull(),
+  unit:           varchar('unit', { length: 16 }),
+  p10:            real('p10'),
+  p25:            real('p25'),
+  p50:            real('p50'),
+  p75:            real('p75'),
+  p90:            real('p90'),
+  higherIsBetter: boolean('higher_is_better').notNull().default(true),
+  source:         varchar('source', { length: 120 }),
+  updatedAt:      timestamp('updated_at').notNull().defaultNow(),
+}, (t) => ({
+  uqCohortMetric: uniqueIndex('uq_industry_benchmarks_cohort_metric').on(t.industry, t.sizeBand, t.metric),
+}));
+
+export const tenantBenchmarkProfiles = pgTable('tenant_benchmark_profiles', {
+  tenantId:  integer('tenant_id').primaryKey().references(() => tenants.id, { onDelete: 'cascade' }),
+  industry:  varchar('industry', { length: 48 }).notNull().default('software_saas'),
+  sizeBand:  varchar('size_band', { length: 16 }).notNull().default('mid'),
+  updatedAt: timestamp('updated_at').notNull().defaultNow(),
+});
+
+// ── Custom Dashboards & AI-Powered Queries (migration 0231) ─────────────────
+// Saved dashboards composed of widgets over whitelisted existing metrics, plus a
+// log of natural-language questions and the metric each resolved to.
+export const savedDashboards = pgTable('saved_dashboards', {
+  id:         serial('id').primaryKey(),
+  tenantId:   integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  segmentId:  uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),
+  name:       varchar('name', { length: 160 }).notNull(),
+  isDefault:  boolean('is_default').notNull().default(false),
+  createdBy:  varchar('created_by', { length: 36 }),
+  createdAt:  timestamp('created_at').notNull().defaultNow(),
+  updatedAt:  timestamp('updated_at').notNull().defaultNow(),
+}, (t) => ({
+  byTenant: index('idx_saved_dashboards_tenant').on(t.tenantId),
+}));
+
+export const dashboardWidgets = pgTable('dashboard_widgets', {
+  id:          serial('id').primaryKey(),
+  tenantId:    integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  dashboardId: integer('dashboard_id').notNull().references(() => savedDashboards.id, { onDelete: 'cascade' }),
+  metricKey:   varchar('metric_key', { length: 64 }).notNull(),
+  viz:         varchar('viz', { length: 16 }).notNull().default('stat'),
+  title:       varchar('title', { length: 160 }),
+  config:      jsonb('config').$type<Record<string, unknown>>().notNull().default({}),
+  position:    integer('position').notNull().default(0),
+}, (t) => ({
+  byTenant:    index('idx_dashboard_widgets_tenant').on(t.tenantId),
+  byDashboard: index('idx_dashboard_widgets_dashboard').on(t.dashboardId),
+}));
+
+export const savedQueries = pgTable('saved_queries', {
+  id:            serial('id').primaryKey(),
+  tenantId:      integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  question:      text('question').notNull(),
+  matchedMetric: varchar('matched_metric', { length: 64 }),
+  createdBy:     varchar('created_by', { length: 36 }),
+  createdAt:     timestamp('created_at').notNull().defaultNow(),
+}, (t) => ({
+  byTenant: index('idx_saved_queries_tenant').on(t.tenantId),
 }));

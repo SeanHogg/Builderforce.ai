@@ -12,8 +12,9 @@
 
 import { sql } from 'drizzle-orm';
 import { buildDatabase } from '../../infrastructure/database/connection';
-import { runModelOutcomes } from '../../infrastructure/database/schema';
+import { alertEvents, runModelOutcomes } from '../../infrastructure/database/schema';
 import { buildTenantDriftReport } from '../../presentation/routes/evalRoutes';
+import { notifyAlert } from '../alerts/runAlertSweep';
 import type { Env } from '../../env';
 
 export async function runEvalDriftSweep(env: Env): Promise<void> {
@@ -38,6 +39,37 @@ export async function runEvalDriftSweep(env: Env): Promise<void> {
           `[cron:eval-drift] tenant=${tenantId} group=${g.group} severity=${g.result.severity} ` +
             `delta=${g.result.delta.toFixed(3)} z=${g.result.zScore.toFixed(2)} psi=${g.result.psi.toFixed(3)} (n=${g.samples})`,
         );
+      }
+
+      // Eval drift is a SYSTEM alert: it fires whenever a regression is detected,
+      // independently of any user-defined rule. Raise an alert_event + notify the
+      // team over the same Slack/email channels the threshold sweep uses. Guarded
+      // so a notification/insert failure can't disrupt the drift sweep.
+      if (report.drifting.length > 0) {
+        try {
+          const groups = report.drifting
+            .map((g) => `${g.group} (severity ${g.result.severity})`)
+            .join(', ');
+          const message =
+            `Eval drift detected on ${report.drifting.length} ` +
+            `${report.drifting.length === 1 ? 'group' : 'groups'}: ${groups}.`;
+          const notified = await notifyAlert(env, db, {
+            tenantId,
+            message,
+            notifySlack: true,
+            notifyEmail: true,
+          });
+          await db.insert(alertEvents).values({
+            tenantId,
+            metric: 'eval_drift',
+            observedValue: report.drifting.length,
+            message,
+            notifiedSlack: notified.slack,
+            notifiedEmail: notified.email,
+          });
+        } catch (alertErr) {
+          console.error(`[cron:eval-drift] tenant=${tenantId} alert raise failed`, alertErr);
+        }
       }
     } catch (err) {
       console.error(`[cron:eval-drift] tenant=${tenantId} failed`, err);

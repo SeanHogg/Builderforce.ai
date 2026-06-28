@@ -48,6 +48,14 @@ import { createAgileRoutes }       from './presentation/routes/agileRoutes';
 import { createRoiRoutes }         from './presentation/routes/roiRoutes';
 import { createPmoRoutes }         from './presentation/routes/pmoRoutes';
 import { createInsightsRoutes }    from './presentation/routes/insightsRoutes';
+import { createAiImpactRoutes }    from './presentation/routes/aiImpactRoutes';
+import { createBenchmarkingRoutes } from './presentation/routes/benchmarkingRoutes';
+import { createRecommendationsRoutes } from './presentation/routes/recommendationsRoutes';
+import { createDevexRoutes }       from './presentation/routes/devexRoutes';
+import { createDashboardsRoutes }  from './presentation/routes/dashboardsRoutes';
+import { createFinopsRoutes }      from './presentation/routes/finopsRoutes';
+import { createDeckRoutes }        from './presentation/routes/deckRoutes';
+import { createAlertRoutes }       from './presentation/routes/alertRoutes';
 import { createInnovationRoutes }  from './presentation/routes/innovationRoutes';
 import { createSeamRoutes }        from './presentation/routes/seamRoutes';
 import { createBiRoutes }          from './presentation/routes/biRoutes';
@@ -119,12 +127,15 @@ import { createStudioRoutes }          from './presentation/routes/studioWeightR
 import { createBoardRoutes }           from './presentation/routes/boardRoutes';
 import { createBoardConnectionRoutes } from './presentation/routes/boardConnectionRoutes';
 import { createBoardWebhookRoutes }    from './presentation/routes/boardWebhookRoutes';
+import { createQualityRoutes }         from './presentation/routes/qualityRoutes';
+import { createQualityIngestRoutes }   from './presentation/routes/qualityIngestRoutes';
 import { createPrdRoutes }             from './presentation/routes/prdRoutes';
 import { createRepoRoutes }            from './presentation/routes/repoRoutes';
 import { createAgentRuntimeRoutes }    from './presentation/routes/agentRuntimeRoutes';
 import { createGitProxyRoutes }        from './presentation/routes/gitProxyRoutes';
 import { createAgentAssignmentRoutes } from './presentation/routes/agentAssignmentRoutes';
 import { createSecurityReviewRoutes } from './presentation/routes/securityReviewRoutes';
+import { createKnowledgeRoutes } from './presentation/routes/knowledgeRoutes';
 
 import { API_VERSION } from './version';
 import {
@@ -135,6 +146,7 @@ import {
 import { runVendorHealthCron } from './application/llm/vendorHealthCron';
 import { runRetentionPurge } from './application/maintenance/retentionPurge';
 import { runEvalDriftSweep } from './application/eval/runEvalDriftSweep';
+import { runAlertSweep } from './application/alerts/runAlertSweep';
 import { runDueTriggers } from './application/workflow/runDueTriggers';
 import { processPendingCloudWorkflows } from './application/workflow/cloudExecutor';
 import { reapStaleExecutions } from './application/runtime/staleExecutionReaper';
@@ -326,6 +338,10 @@ function buildApp(env: Env): Hono<HonoEnv> {
   // token, optional HMAC; no JWT. Mounted with the other public webhook routes.
   app.route('/api/workflow-triggers', createWorkflowTriggerRoutes(db));
 
+  // Public Quality error ingest — keyed (bfq_ ingest key) or HMAC-signed webhooks;
+  // no JWT. Tenant/project are resolved from the credential, never the request.
+  app.route('/api/quality-ingest', createQualityIngestRoutes(db));
+
   // Anonymous landing-prompt handoff: POST / is public (pre-auth); /claim applies
   // web-auth per-route so it can associate the row to the now-known user.
   app.route('/api/pending-prompts', createPendingPromptRoutes(db));
@@ -369,6 +385,16 @@ function buildApp(env: Env): Hono<HonoEnv> {
   app.route('/api/roi',      createRoiRoutes(db));
   app.route('/api/pmo',      createPmoRoutes(db));
   app.route('/api/insights',   createInsightsRoutes(db));
+  // Additional insight lenses (each is its own router mounted on the same prefix;
+  // Hono merges them — distinct subpaths, each carries its own authMiddleware).
+  app.route('/api/insights',   createAiImpactRoutes(db));
+  app.route('/api/insights',   createBenchmarkingRoutes(db));
+  app.route('/api/insights',   createRecommendationsRoutes(db));
+  app.route('/api/devex',      createDevexRoutes(db));
+  app.route('/api/dashboards', createDashboardsRoutes(db));
+  app.route('/api/finops',     createFinopsRoutes(db));
+  app.route('/api/decks',      createDeckRoutes(db));
+  app.route('/api/alerts',     createAlertRoutes(db));
   app.route('/api/innovation', createInnovationRoutes(db));
   app.route('/api/bi',       createBiRoutes(db));
   // Cross-domain (channel-3) seams — server-to-server, scoped tenant API keys.
@@ -419,12 +445,15 @@ function buildApp(env: Env): Hono<HonoEnv> {
   app.route('/api/boards',            createBoardRoutes(db));
   app.route('/api/board-connections', createBoardConnectionRoutes(db));
   app.route('/api/board-webhooks',    createBoardWebhookRoutes(db));
+  // Product Quality / error observability (tenant JWT) — error groups + fix dispatch.
+  app.route('/api/quality',           createQualityRoutes(db, taskService, runtimeService));
   app.route('/api/prd',               createPrdRoutes(db));
   app.route('/api/repos',             createRepoRoutes(db));
   app.route('/api/agent-runtime',     createAgentRuntimeRoutes(db));
   app.route('/api/git-proxy',         createGitProxyRoutes(db));
   app.route('/api/agent-assignments', createAgentAssignmentRoutes(db));
   app.route('/api/security',          createSecurityReviewRoutes(db));
+  app.route('/api/knowledge',         createKnowledgeRoutes(db));
 
   app.onError(errorHandler);
   app.notFound((c) => addCorsToResponse(c, c.json({ error: 'Not found' }, 404)));
@@ -485,6 +514,13 @@ export default {
       ctx.waitUntil(
         runEvalDriftSweep(env).catch((err) => {
           console.error('[cron:eval-drift] failed', err);
+        }),
+      );
+      // Daily threshold-alert sweep — evaluate every enabled alert rule and fire
+      // (Slack/email + alert_event) the ones that trip, respecting cooldown.
+      ctx.waitUntil(
+        runAlertSweep(env).catch((err) => {
+          console.error('[cron:alerts] failed', err);
         }),
       );
     }

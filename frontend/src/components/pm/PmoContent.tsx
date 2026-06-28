@@ -9,6 +9,7 @@ import { PmEmpty, PmError } from './pmShared';
 import { PmoRollup } from './PmoRollup';
 import { PmoStructure } from './PmoStructure';
 import { PmoOkrs } from './PmoOkrs';
+import { PmoCostReconciliation } from './PmoCostReconciliation';
 
 /**
  * PMO lens — the portfolio/initiative/OKR cockpit. One page, three tabs (Rollup,
@@ -16,7 +17,7 @@ import { PmoOkrs } from './PmoOkrs';
  * or the org-level workspace). The page-level RoleGate (insights.portfolio) owns
  * access; this component owns scope + tab state only. Fully localized.
  */
-type Tab = 'rollup' | 'structure' | 'okrs';
+type Tab = 'rollup' | 'structure' | 'okrs' | 'cost';
 const WORKSPACE = 'workspace';
 
 const tabBtn = (active: boolean): React.CSSProperties => ({
@@ -61,12 +62,13 @@ export function PmoContent() {
           ? { kind: 'portfolio', id: effectivePortfolioId }
           : null;
 
-  const showScopePicker = tab !== 'structure' && (tree.portfolios.length > 0);
+  // Structure + Cost are segment-wide (no portfolio/initiative scope).
+  const showScopePicker = tab !== 'structure' && tab !== 'cost' && (tree.portfolios.length > 0);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
       <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
-        {(['rollup', 'structure', 'okrs'] as Tab[]).map((tb) => (
+        {(['rollup', 'structure', 'okrs', 'cost'] as Tab[]).map((tb) => (
           <button key={tb} type="button" style={tabBtn(tab === tb)} onClick={() => setTab(tb)}>
             {t(`tabs.${tb}`)}
           </button>
@@ -95,6 +97,7 @@ export function PmoContent() {
       {tab === 'structure' && <PmoStructure tree={tree} onChange={reload} />}
       {tab === 'rollup' && (scope ? <PmoRollup scope={scope} /> : <PmEmpty message={t('emptyRollup')} />)}
       {tab === 'okrs' && (scope ? <PmoOkrs scope={scope} /> : <PmEmpty message={t('emptyOkrs')} />)}
+      {tab === 'cost' && <PmoCostReconciliation />}
     </div>
   );
 }

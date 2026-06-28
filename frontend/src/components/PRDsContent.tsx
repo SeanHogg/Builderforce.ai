@@ -88,7 +88,10 @@ export function PRDsContent({ projectId, projectName }: PRDsContentProps) {
     setEditPreview(true);
   };
 
-  const brainstormUrl = `/brainstorm?projectId=${projectId}`;
+  // `?project=` is the global scope param adopted by ProjectScopeProvider on
+  // navigation, so the Brain Storm filter (and new-chat default) lands on this
+  // project — one picker for the whole app.
+  const brainstormUrl = `/brainstorm?project=${projectId}`;
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>

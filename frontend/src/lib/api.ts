@@ -149,6 +149,12 @@ export async function fetchIdeProject(id: number | string): Promise<IdeProject> 
   return apiRequest<IdeProject>(`/api/ide-projects/${id}`);
 }
 
+/** Resolve the IDE project backing a given storage project (e.g. to scope the
+ *  Voice studio when the IDE is opened by storage project id). */
+export async function fetchIdeProjectByStorage(storageProjectId: number): Promise<IdeProject> {
+  return apiRequest<IdeProject>(`/api/ide-projects/by-storage/${storageProjectId}`);
+}
+
 export async function listIdeContainers(): Promise<IdeContainerOption[]> {
   return apiRequest<IdeContainerOption[]>('/api/ide-projects/containers');
 }
@@ -160,6 +166,8 @@ export async function createIdeProject(data: {
   /** Optional parent Project to group this build under. */
   containerProjectId?: number | null;
   template?: string | null;
+  /** Required for the 'llm' modality — the workflow the project runs. */
+  workflowDefinitionId?: string | null;
 }): Promise<IdeProject> {
   return apiRequest<IdeProject>('/api/ide-projects', {
     method: 'POST',

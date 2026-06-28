@@ -29,6 +29,7 @@ import {
   memberMetricsCacheKey,
   readWorkforceMetricsVersion,
   bumpWorkforceMetricsVersion,
+  rollupByDiscipline,
   type MemberScorecard,
 } from '../../application/metrics/workforceMetrics';
 import { recommendAssignee } from '../../application/metrics/assigneeRecommender';
@@ -53,6 +54,7 @@ interface ProfileBody {
   maxConcurrentWip?: number | null;
   rampFactor?: number | null;
   experienceLevel?: 'junior' | 'mid' | 'senior' | 'staff' | 'principal' | null;
+  discipline?: 'engineering' | 'product' | 'design' | 'qa' | 'devops' | 'data' | 'other' | null;
   skills?: unknown;
   focusAreas?: unknown;
   preferredTaskTypes?: unknown;
@@ -117,6 +119,7 @@ export function createMemberRoutes(db: Db): Hono<HonoEnv> {
       maxConcurrentWip: body.maxConcurrentWip ?? null,
       rampFactor: body.rampFactor ?? 1.0,
       experienceLevel: body.experienceLevel ?? null,
+      discipline: body.discipline ?? null,
       skills: body.skills ?? null,
       focusAreas: body.focusAreas ?? null,
       preferredTaskTypes: body.preferredTaskTypes ?? null,
@@ -188,10 +191,15 @@ export function createMemberRoutes(db: Db): Hono<HonoEnv> {
     return c.json(result, result.ok ? 200 : 502);
   });
 
-  // ── GET /api/members/metrics?days=7 — all scorecards (MANAGER+) ────────────
+  // ── GET /api/members/metrics?days=7[&discipline=] — all scorecards (MANAGER+) ─
+  // Optional ?discipline= filters the returned members to one builder discipline
+  // (the Jellyfish "beyond engineers" lens). The cache stays discipline-agnostic
+  // (filter applied after load); byDiscipline is computed from the FULL unfiltered
+  // set so the rollup is stable regardless of the active filter.
   router.get('/metrics', requireRole(TenantRole.MANAGER), async (c) => {
     const tenantId = c.get('tenantId') as number;
     const days = clampDays(parseInt(c.req.query('days') ?? '7', 10), 7, 180);
+    const discipline = (c.req.query('discipline') ?? '').trim() || null;
     const env = c.env as Env;
     const version = await readWorkforceMetricsVersion(env, tenantId);
     const scorecards = await getOrSetCached(env, memberMetricsCacheKey(tenantId, version, days), () =>
@@ -200,7 +208,9 @@ export function createMemberRoutes(db: Db): Hono<HonoEnv> {
     // Snapshot into member_metrics_period (best-effort) so the table is the
     // queryable history behind sprint retros, not just an on-the-fly read.
     c.executionCtx.waitUntil(snapshotMetrics(db, tenantId, days, scorecards).catch(() => {}));
-    return c.json({ windowDays: days, members: scorecards });
+    const byDiscipline = rollupByDiscipline(scorecards);
+    const members = discipline ? scorecards.filter((m) => (m.discipline ?? null) === discipline) : scorecards;
+    return c.json({ windowDays: days, members, byDiscipline });
   });
 
   // ── GET /api/members/:kind/:ref/metrics?days=7 — one member ────────────────

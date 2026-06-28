@@ -44,6 +44,7 @@ import {
 } from '@builderforce/agent-tools';
 import { parseRemediation, parseFollowUp, parseCloudAgentRef, parseModel, parseRoutingBias } from './cloudDispatch';
 import { classifyTaskAction } from '../llm/classifyTask';
+import { deriveAllocationCategory } from '../llm/allocationCategories';
 import { normalizeActionType, learnedRoutingEnabled, type ActionType } from '../llm/actionTypes';
 import { getRoutingTable, MIN_SAMPLES, type RoutingScope } from '../llm/routingTable';
 import type { ActionModelRankStat } from '../llm/LlmProxyService';
@@ -557,8 +558,15 @@ export async function resolveLearnedRoutingInputs(
     } else {
       const verdict = await classifyTaskAction(env, { title: args.taskRow.title, description: args.taskRow.description });
       actionType = verdict.actionType;
+      // Co-derive the investment-allocation category for free off the same signals
+      // (no extra LLM call) — the column is the cache/override (EMP-1).
+      const allocationCategory = deriveAllocationCategory({
+        actionType: verdict.actionType,
+        title: args.taskRow.title,
+        description: args.taskRow.description,
+      });
       await db.update(tasks)
-        .set({ actionType: verdict.actionType, actionTypeConfidence: verdict.confidence })
+        .set({ actionType: verdict.actionType, actionTypeConfidence: verdict.confidence, allocationCategory, allocationCategorySource: 'derived' })
         .where(eq(tasks.id, args.taskRow.id))
         .catch(() => { /* best-effort: classification is a cache, not a gate */ });
     }

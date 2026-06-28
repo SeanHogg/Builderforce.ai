@@ -76,6 +76,98 @@ export async function getModels(
   return data;
 }
 
+/**
+ * Builder-level Insights snapshot — the real-time builder spend/budget surface
+ * pushed from the gateway. Mirrors `BuilderInsightsSnapshot` in
+ * `api/src/application/insights/builderInsights.ts`.
+ */
+export interface BuilderInsightsSnapshot {
+  generatedAt: string;
+  windowLabel: string;
+  todayTokens: number;
+  todayCostUsd: number;
+  dailyCapTokens: number | null;
+  pctOfDailyCap: number | null;
+  topModel: { model: string; tokens: number } | null;
+  costPerMergedPrUsd: number | null;
+  tip: string | null;
+}
+
+/** Fetch the current builder-insights snapshot once (cached server-side). */
+export async function getBuilderInsights(
+  secrets: vscode.SecretStorage,
+): Promise<BuilderInsightsSnapshot> {
+  const key = await getApiKey(secrets);
+  if (!key) throw new Error("not_signed_in");
+  const res = await fetch(`${getBaseUrl()}/llm/v1/builder-insights`, {
+    headers: { authorization: `Bearer ${key}` },
+  });
+  if (!res.ok) throw new Error(`insights_failed_${res.status}`);
+  return (await res.json()) as BuilderInsightsSnapshot;
+}
+
+/**
+ * Subscribe to the builder-insights SSE stream. Invokes `onSnapshot` for each
+ * `data:` frame until the stream closes or `signal` aborts. Throws
+ * `not_signed_in` when no key, and `insights_stream_failed_<status>` on a bad
+ * response so the caller can decide whether to reconnect. Mirrors the SSE
+ * frame parser in agent-runtime's native-llm.ts.
+ */
+export async function streamBuilderInsights(
+  secrets: vscode.SecretStorage,
+  onSnapshot: (s: BuilderInsightsSnapshot) => void,
+  signal: AbortSignal,
+): Promise<void> {
+  const key = await getApiKey(secrets);
+  if (!key) throw new Error("not_signed_in");
+  const res = await fetch(`${getBaseUrl()}/llm/v1/builder-insights/stream`, {
+    headers: { authorization: `Bearer ${key}`, accept: "text/event-stream" },
+    signal,
+  });
+  if (!res.ok || !res.body) throw new Error(`insights_stream_failed_${res.status}`);
+
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+
+  const handleFrame = (frame: string): void => {
+    let eventName = "message";
+    const dataLines: string[] = [];
+    for (const line of frame.split("\n")) {
+      if (line.startsWith("event:")) eventName = line.slice(6).trim();
+      else if (line.startsWith("data:")) dataLines.push(line.slice(5).trim());
+    }
+    if (eventName === "error" || dataLines.length === 0) return;
+    try {
+      const snapshot = JSON.parse(dataLines.join("\n")) as BuilderInsightsSnapshot;
+      onSnapshot(snapshot);
+    } catch {
+      /* ignore malformed frame */
+    }
+  };
+
+  try {
+    for (;;) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      let sep: number;
+      // SSE frames are separated by a blank line.
+      while ((sep = buffer.indexOf("\n\n")) !== -1) {
+        const frame = buffer.slice(0, sep);
+        buffer = buffer.slice(sep + 2);
+        if (frame.trim()) handleFrame(frame);
+      }
+    }
+  } finally {
+    try {
+      await reader.cancel();
+    } catch {
+      /* already closed */
+    }
+  }
+}
+
 /** Non-streaming completion (used by the codebase scanner). */
 export async function complete(
   secrets: vscode.SecretStorage,

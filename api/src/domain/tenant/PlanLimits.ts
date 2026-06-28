@@ -33,6 +33,14 @@ export interface PlanLimits {
    * or visibility. Filled against the ingestion ledger (ingestion_usage_log).
    */
   ingestionMonthlyBytes: number;
+  /**
+   * Monthly error-event allowance (COUNT of ingested error events), surfaced by the
+   * consumption meter as "Error events"; -1 = unlimited. Meters the Quality pillar's
+   * inbound volume (SDK / OTLP / Sentry-PostHog-LogRocket webhooks) so free-vs-paid
+   * caps high-cardinality telemetry. Filled against error_events
+   * (application/quality/errorEventsLedger.ts).
+   */
+  errorEventsMonthly: number;
   /** Image-generation credits per calendar day (1 credit = 1 returned image);
    *  -1 = unlimited. Independent of the text token budget. */
   imageCreditsDailyLimit: number;
@@ -70,6 +78,7 @@ export const PLAN_LIMITS: Record<TenantPlan, PlanLimits> = {
     tokenDailyLimit: 10_000,
     tokenMonthlyLimit: 50_000,
     ingestionMonthlyBytes: 50_000_000, // 50 MB/mo — a handful of repo imports
+    errorEventsMonthly: 10_000, // 10K error events/mo
     imageCreditsDailyLimit: 10,
     maxTokensPerRequest: 4_096,
     approvalWorkflows: false,
@@ -87,6 +96,7 @@ export const PLAN_LIMITS: Record<TenantPlan, PlanLimits> = {
     tokenDailyLimit: 1_000_000,
     tokenMonthlyLimit: 5_000_000,
     ingestionMonthlyBytes: 5_000_000_000, // 5 GB/mo
+    errorEventsMonthly: 1_000_000, // 1M error events/mo
     imageCreditsDailyLimit: 1_000,
     maxTokensPerRequest: 16_384,
     approvalWorkflows: true,
@@ -104,6 +114,7 @@ export const PLAN_LIMITS: Record<TenantPlan, PlanLimits> = {
     tokenDailyLimit: 5_000_000,
     tokenMonthlyLimit: -1,
     ingestionMonthlyBytes: -1, // unlimited
+    errorEventsMonthly: -1, // unlimited
     imageCreditsDailyLimit: 5_000,
     maxTokensPerRequest: 64_000,
     approvalWorkflows: true,
@@ -190,6 +201,21 @@ export function resolveIngestionMonthlyBytes(input: {
 }): number {
   if (input.tokenDailyLimitOverride === -1 || input.isSuperadmin) return -1;
   return getLimits(input.effectivePlan).ingestionMonthlyBytes;
+}
+
+/**
+ * Resolve a tenant's effective monthly error-event allowance (count); -1 =
+ * unlimited. Mirrors {@link resolveIngestionMonthlyBytes} so the Quality meter
+ * display and the error-ingest gate agree. A superadmin-unlimited tenant is
+ * unlimited; a positive *token* override does not lift this (different axis).
+ */
+export function resolveErrorEventsMonthly(input: {
+  effectivePlan: TenantPlan;
+  tokenDailyLimitOverride: number | null;
+  isSuperadmin?: boolean;
+}): number {
+  if (input.tokenDailyLimitOverride === -1 || input.isSuperadmin) return -1;
+  return getLimits(input.effectivePlan).errorEventsMonthly;
 }
 
 /**

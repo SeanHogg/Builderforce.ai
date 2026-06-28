@@ -48,6 +48,10 @@ import { llmUsageLog, llmFailoverLog, tenants, tenantMembers, agentHosts, tenant
 import { getRoutingTable, parseScopeToken, scopeToken } from '../../application/llm/routingTable';
 import { actionTypeLabel, type ActionType } from '../../application/llm/actionTypes';
 import { getOrSetCached } from '../../infrastructure/cache/readThroughCache';
+import {
+  buildBuilderInsightsSnapshot,
+  getCachedBuilderInsightsSnapshot,
+} from '../../application/insights/builderInsights';
 import { originAllowed, deserializeScopes } from '../../application/llm/tenantApiKeyService';
 import { listToolsForTenant, callMcpTool } from '../../application/llm/mcpExtensionService';
 import { listBuiltinTools, callBuiltinTool, BUILTIN_EXTENSION_ID } from '../../application/llm/builtinMcpService';
@@ -1941,6 +1945,102 @@ export function createLlmRoutes(): Hono<HonoEnv> {
       proPool: PRO_MODEL_POOL.length,
       imagePool: FREE_IMAGE_MODEL_POOL.length,
       imageProPool: PAID_IMAGE_MODEL_POOL.length,
+    });
+  });
+
+  // -----------------------------------------------------------------------
+  // GET /v1/builder-insights
+  // Builder-level Insights snapshot — the cheap, cacheable "current state"
+  // the IDE/CLI poll-once or render on demand. Tenant (and caller) scoped.
+  // Mirrors the auth of /v1/usage.
+  // -----------------------------------------------------------------------
+  router.get('/v1/builder-insights', async (c) => {
+    let access: TenantAccess;
+    try {
+      access = await requireTenantAccess(c);
+    } catch (err) {
+      return respondToAccessError(c, err);
+    }
+    const db = buildDatabase(c.env);
+    const snapshot = await getCachedBuilderInsightsSnapshot(db, c.env, {
+      tenantId: access.tenantId,
+      userId: access.userId,
+    });
+    return c.json(snapshot);
+  });
+
+  // -----------------------------------------------------------------------
+  // GET /v1/builder-insights/stream
+  // Server-Sent Events — the PUSH surface. Emits a snapshot immediately, then
+  // a freshly-built snapshot every 30s (up to ~5 min), then closes. Aborts on
+  // client disconnect. Each tick is wrapped so a transient DB error emits an
+  // `event: error` frame rather than tearing down the stream. Cloudflare
+  // Workers compatible (ReadableStream + new Response).
+  // -----------------------------------------------------------------------
+  router.get('/v1/builder-insights/stream', async (c) => {
+    let access: TenantAccess;
+    try {
+      access = await requireTenantAccess(c);
+    } catch (err) {
+      return respondToAccessError(c, err);
+    }
+
+    const db = buildDatabase(c.env);
+    const scope = { tenantId: access.tenantId, userId: access.userId };
+    const signal = c.req.raw.signal;
+    const MAX_TICKS = 10;
+    const INTERVAL_MS = 30_000;
+
+    const encoder = new TextEncoder();
+    const stream = new ReadableStream<Uint8Array>({
+      async start(controller) {
+        const emit = (text: string) => {
+          try {
+            controller.enqueue(encoder.encode(text));
+          } catch {
+            /* controller already closed */
+          }
+        };
+
+        for (let tick = 0; tick < MAX_TICKS; tick++) {
+          if (signal?.aborted) break;
+          try {
+            const snapshot = await buildBuilderInsightsSnapshot(db, c.env, scope);
+            emit(`data: ${JSON.stringify(snapshot)}\n\n`);
+          } catch (err) {
+            emit(`event: error\ndata: ${JSON.stringify({ error: (err as Error).message || 'tick_failed' })}\n\n`);
+          }
+          if (tick === MAX_TICKS - 1) break;
+          // Wait for the next tick, but bail early if the client disconnects.
+          await new Promise<void>((resolve) => {
+            let done = false;
+            const finish = () => {
+              if (done) return;
+              done = true;
+              clearTimeout(timer);
+              if (signal) signal.removeEventListener('abort', finish);
+              resolve();
+            };
+            const timer = setTimeout(finish, INTERVAL_MS);
+            if (signal) signal.addEventListener('abort', finish, { once: true });
+          });
+          if (signal?.aborted) break;
+        }
+        try {
+          controller.close();
+        } catch {
+          /* already closed */
+        }
+      },
+    });
+
+    return new Response(stream, {
+      status: 200,
+      headers: {
+        'content-type': 'text/event-stream; charset=utf-8',
+        'cache-control': 'no-cache',
+        connection: 'keep-alive',
+      },
     });
   });
 

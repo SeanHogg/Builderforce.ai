@@ -36,6 +36,7 @@ import systemOfRecord from '@/content/blog/system-of-record-for-agentic-work.md'
 import everyRolePicture from '@/content/blog/every-role-operating-picture.md';
 import evermind from '@/content/blog/evermind-self-updating-model.md';
 import agentStack from '@/content/blog/agent-tech-stack-all-seven-layers.md';
+import defineANeed from '@/content/blog/define-a-need-the-agentic-system-solves-it.md';
 
 export interface BlogPost {
   slug: string;
@@ -126,6 +127,7 @@ export const BLOG_POSTS: BlogPost[] = [
   buildPost('every-role-operating-picture', everyRolePicture),
   buildPost('evermind-self-updating-model', evermind),
   buildPost('agent-tech-stack-all-seven-layers', agentStack),
+  buildPost('define-a-need-the-agentic-system-solves-it', defineANeed),
 ].sort((a, b) => (a.date < b.date ? 1 : -1));
 
 export function getPostBySlug(slug: string): BlogPost | undefined {

@@ -28,7 +28,7 @@ function buildTask(status: string): Task {
     status, priority: TaskPriority.MEDIUM, taskType: TaskType.TASK, parentTaskId: null,
     assignedAgentType: null, githubIssueNumber: null, githubIssueUrl: null, githubPrUrl: null,
     githubPrNumber: null, assignedAgentHostId: null, assignedAgentRef: null, assignedUserId: null,
-    gitBranch: null, explicitRepoId: null, sprintId: null, startDate: null, dueDate: null,
+    gitBranch: null, explicitRepoId: null, sprintId: null, releaseId: null, startDate: null, dueDate: null,
     persona: null, archived: false, createdAt: now, updatedAt: now,
   });
 }

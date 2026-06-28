@@ -14,7 +14,12 @@
       "insights": "Insights",
       "library": "Library",
       "settings": "Settings",
-      "admin": "Admin"
+      "admin": "Admin",
+      "knowledge": "Knowledge",
+      "quality": "Quality",
+      "surveys": "Surveys",
+      "dashboards": "Dashboards",
+      "finops": "DevFinOps"
     },
     "tab": {
       "projects": "Projects",
@@ -29,6 +34,7 @@
       "finops": "FinOps",
       "funnel": "Innovation Funnel",
       "compliance": "Compliance",
+      "alerts": "Alerts",
       "content": "Content",
       "skills": "Skills",
       "personas": "Personas",
@@ -37,7 +43,92 @@
       "security": "Security",
       "billing": "Billing",
       "tenant": "Workspaces",
-      "apiKeys": "API Keys"
+      "apiKeys": "API Keys",
+      "sops": "SOPs",
+      "processes": "Processes",
+      "docs": "Documents",
+      "training": "Training",
+      "errors": "Errors",
+      "sources": "Sources",
+      "aiImpact": "AI Impact",
+      "recommendations": "Recommendations",
+      "space": "SPACE",
+      "benchmarking": "Benchmarking",
+      "devex": "DevEx",
+      "bottlenecks": "Bottlenecks"
+    },
+    "tab.allocation": "Allocation",
+    "tab.delivery": "Delivery"
+  },
+  "alerts": {
+    "title": "Alerts",
+    "subtitle": "Define threshold alerts on platform metrics. A daily sweep evaluates each rule and notifies your team via Slack and email when it trips.",
+    "loading": "Loading…",
+    "days": "{n} days",
+    "common": {
+      "delete": "Delete"
+    },
+    "create": {
+      "title": "New alert rule",
+      "submit": "Create alert"
+    },
+    "field": {
+      "name": "Name",
+      "namePlaceholder": "e.g. Monthly spend guard",
+      "metric": "Metric",
+      "comparator": "Condition",
+      "threshold": "Threshold",
+      "windowDays": "Window (days)",
+      "scope": "Scope",
+      "notifySlack": "Notify Slack",
+      "notifyEmail": "Notify email"
+    },
+    "metric": {
+      "token_spend_usd": "Token spend (USD)",
+      "token_spend_pct_of_cap": "Token usage (% of cap)",
+      "cost_per_merged_pr_usd": "Cost per merged PR (USD)",
+      "dora_change_failure_rate": "Change-failure rate (%)",
+      "dora_lead_time_hours": "Lead time (hours)",
+      "ai_effectiveness_score": "AI effectiveness score",
+      "eval_drift": "Eval drift (groups)"
+    },
+    "comparator": {
+      "gt": "Above",
+      "lt": "Below",
+      "gte": "At or above",
+      "lte": "At or below"
+    },
+    "scope": {
+      "tenant": "Workspace",
+      "project": "Project",
+      "team": "Team"
+    },
+    "rules": {
+      "title": "Alert rules",
+      "empty": "No alert rules yet. Create one above.",
+      "condition": "Condition",
+      "status": "Status",
+      "actions": "Actions",
+      "enabled": "Enabled",
+      "disabled": "Disabled",
+      "test": "Test"
+    },
+    "eventStatus": {
+      "triggered": "Triggered",
+      "acknowledged": "Acknowledged",
+      "resolved": "Resolved"
+    },
+    "events": {
+      "title": "Recent firings",
+      "empty": "No alerts have fired yet.",
+      "when": "When",
+      "message": "Message",
+      "acknowledge": "Acknowledge"
+    },
+    "test": {
+      "observed": "Observed: {value}",
+      "na": "Not computable for this scope",
+      "failed": "Test failed"
     }
   },
   "ceremonies": {
@@ -87,7 +178,8 @@
     "depTypeFinishToStart": "Finish → Start",
     "depTypeStartToStart": "Start → Start",
     "depTypeFinishToFinish": "Finish → Finish",
-    "depTypeStartToFinish": "Start → Finish"
+    "depTypeStartToFinish": "Start → Finish",
+    "spine": "Planning spine"
   },
   "ide": {
     "all": "All",
@@ -131,7 +223,17 @@
     "colActions": "Actions",
     "workflowLabel": "Workflow",
     "noWorkflow": "No workflow",
-    "workflowHint": "LLM projects run a workflow. Assign a shared one, or build a custom one in Workflows."
+    "workflowHint": "LLM projects run a workflow. Assign a shared one, or build a custom one in Workflows.",
+    "workflowRequired": "Workflow (required)",
+    "selectWorkflow": "Select a workflow…",
+    "customTag": "custom",
+    "customizeWorkflow": "Customize",
+    "runWorkflow": "Run workflow",
+    "working": "Working…",
+    "workflowForked": "Forked into a custom workflow for this project.",
+    "workflowRunStarted": "Workflow run started.",
+    "noWorkflowsYet": "You have no workflows yet.",
+    "goToWorkflows": "Build one in Workflows →"
   },
   "tools": {
     "outOf5": "out of 5.0",
@@ -196,11 +298,24 @@
   "common": {
     "language": "Language"
   },
+  "llmUsage": {
+    "byUser": "By user · last 7 days",
+    "byTeam": "By team · last 7 days",
+    "byRepo": "By repo · last 7 days",
+    "user": "User",
+    "team": "Team",
+    "repository": "Repository",
+    "rollsUpTo": "rolls up to {total} account total",
+    "noUser": "No per-user spend in this window.",
+    "noTeam": "No per-team spend in this window.",
+    "noRepo": "No per-repo spend in this window."
+  },
   "usageMeter": {
     "title": "Usage",
     "meter": {
       "ai_tokens": "AI tokens",
-      "ingestion": "Data ingestion"
+      "ingestion": "Data ingestion",
+      "error_events": "Error events"
     },
     "unlimited": "Unlimited",
     "freePerMo": "{amount} free / mo",
@@ -223,7 +338,8 @@
     "tabs": {
       "rollup": "Rollup",
       "structure": "Structure",
-      "okrs": "OKRs"
+      "okrs": "OKRs",
+      "cost": "CAPEX/OPEX"
     },
     "scope": {
       "wholePortfolio": "Whole portfolio",
@@ -323,7 +439,24 @@
       "addKr": "Add KR",
       "current": "current",
       "update": "Update",
-      "deleteObjective": "Delete objective"
+      "deleteObjective": "Delete objective",
+      "startDate": "Start date",
+      "endDate": "End date",
+      "costClass": "Class",
+      "capex": "CAPEX",
+      "opex": "OPEX",
+      "unset": "Clear",
+      "noDates": "No dates",
+      "deliveredBy": "Delivered by",
+      "noLinks": "No linked work yet.",
+      "addLink": "Link",
+      "removeLink": "Remove link",
+      "pickItem": "Link an initiative, epic or task…",
+      "linkKind": {
+        "initiative": "Initiative",
+        "epic": "Epic",
+        "task": "Task"
+      }
     },
     "projectLink": {
       "title": "PMO initiative",
@@ -451,6 +584,245 @@
         "measured": "Measured",
         "killed": "Killed"
       }
+    },
+    "alloc": {
+      "title": "Investment Allocation",
+      "subtitle": "Where engineering time and spend actually go — by investment category, with capitalizable cost and goal variance.",
+      "period": "Period",
+      "totalHours": "Effort tracked",
+      "totalHoursSub": "{n} tasks",
+      "capitalizable": "Capitalizable",
+      "capitalizableSub": "Share of spend (CapEx)",
+      "capex": "CapEx",
+      "capexSub": "Capitalizable cost",
+      "opex": "OpEx",
+      "opexSub": "Expensed cost",
+      "mix": "Investment mix",
+      "noData": "No effort tracked in this window yet.",
+      "target": "target {n}%",
+      "noGoal": "No goal",
+      "goals": "Allocation goals",
+      "category": "Category",
+      "targetPct": "Target %",
+      "setGoal": "Set goal",
+      "noGoals": "No goals set for this period.",
+      "byMember": "By member",
+      "member": "Member",
+      "hours": "Hours",
+      "topCategory": "Top category",
+      "spread": "Categories",
+      "noMembers": "No assigned work in this window.",
+      "cat": {
+        "innovation": "Innovation",
+        "ktlo": "Keep the lights on",
+        "support": "Support",
+        "tech_debt": "Tech debt",
+        "other": "Other"
+      }
+    },
+    "deliv": {
+      "title": "Delivery",
+      "subtitle": "Track a deliverable to completion — burnup, forecast, and scope creep across initiatives, projects, and releases.",
+      "deliverable": "Deliverable",
+      "noDeliverables": "No deliverables yet — create an initiative, project, or release.",
+      "noSeries": "Not enough history to chart yet.",
+      "chartAria": "Burnup chart of scope versus completed work over time",
+      "kind": {
+        "initiative": "Initiative",
+        "project": "Project",
+        "release": "Release"
+      },
+      "progress": "Progress",
+      "progressSub": "{done} of {total} done",
+      "status": "Status",
+      "statusLabel": {
+        "on_track": "On track",
+        "at_risk": "At risk",
+        "late": "Late",
+        "done": "Done",
+        "no_signal": "No signal"
+      },
+      "target": "target {d}",
+      "noTarget": "no target date",
+      "forecast": "Forecast completion",
+      "forecastBand": "{o} – {p}",
+      "forecastNone": "needs throughput to forecast",
+      "scopeCreep": "Scope creep",
+      "scopeCreepSub": "+{added} after baseline of {base}",
+      "burnup": "Burnup / burndown",
+      "legendScope": "Scope",
+      "legendDone": "Completed",
+      "detail": "Details",
+      "throughput": "Throughput",
+      "week": "wk",
+      "open": "Open",
+      "baseline": "Baseline",
+      "baselineScope": "Baseline scope"
+    },
+    "aiImpact": {
+      "title": "AI Impact",
+      "subtitle": "Adoption trends, head-to-head tool evaluation, and your AI productivity score.",
+      "wow": "vs. prior window",
+      "productivityScore": "AI Productivity Score",
+      "throughput": "Throughput",
+      "throughputSub": "Merged-PR volume",
+      "quality": "Quality",
+      "qualitySub": "Score blended with CI-green",
+      "efficiency": "Efficiency",
+      "efficiencySub": "Inverse cost per merged PR",
+      "prevScore": "Prior Score",
+      "prevSub": "Previous equal window",
+      "comparisonTitle": "Multi-Tool Evaluation",
+      "model": "Model",
+      "runs": "Runs",
+      "avgScore": "Avg score",
+      "mergeRate": "Merge rate",
+      "ciGreen": "CI green",
+      "avgSteps": "Avg steps",
+      "costPerMergedPr": "Cost / merged PR",
+      "tokens": "Tokens",
+      "noRuns": "No scored runs in this window.",
+      "shareTrendTitle": "Model Share Trend",
+      "currentShare": "Current share",
+      "shareDelta": "Δ share (first→last week)",
+      "noUsage": "No usage in this window.",
+      "weeklyTitle": "Weekly Adoption & Usage",
+      "weekStart": "Week of",
+      "activeUsers": "Active users",
+      "cost": "Cost"
+    },
+    "devex": {
+      "title": "DevEx Surveys & Insights",
+      "subtitle": "Developer-experience pulse scores, eNPS, and the AI DevEx analysis cut.",
+      "responseRate": "Response rate",
+      "responseRateSub": "Responses per campaign",
+      "responses": "Responses",
+      "enps": "eNPS",
+      "enpsSub": "% promoters − % detractors",
+      "aiScore": "AI tools score",
+      "aiScoreSub": "Sentiment on AI-tools questions (0–100)",
+      "aiPositive": "AI tools positive",
+      "aiPositiveSub": "{n} answered datapoints",
+      "byDimension": "Scores by dimension",
+      "dimension": "Dimension",
+      "avgScore": "Avg score (0–100)",
+      "datapoints": "Datapoints",
+      "noData": "No survey responses in this window yet.",
+      "trend": "Trend across campaigns",
+      "period": "Period",
+      "noTrend": "No period-tagged campaigns yet.",
+      "dim": {
+        "flow": "Flow",
+        "tooling": "Tooling",
+        "ai_tools": "AI tools",
+        "deep_work": "Deep work",
+        "build_test": "Build & test",
+        "docs": "Docs",
+        "sentiment": "Sentiment"
+      }
+    },
+    "benchmarking": {
+      "title": "Industry Benchmarking",
+      "subtitle": "See how your delivery metrics rank against an industry cohort — percentile and rating vs your industry and team size.",
+      "industry": "Industry",
+      "sizeBand": "Team size",
+      "tableTitle": "Your metrics vs cohort",
+      "footnote": "Percentiles are interpolated against seeded industry cohort distributions (p10–p90). For metrics where lower is better (lead time, change failure rate, MTTR, cost), a smaller value ranks higher.",
+      "industries": {
+        "software_saas": "Software / SaaS"
+      },
+      "sizeBands": {
+        "small": "Small (1–20)",
+        "mid": "Mid (21–200)",
+        "large": "Large (200+)"
+      },
+      "rating": {
+        "elite": "Elite",
+        "high": "High",
+        "medium": "Medium",
+        "low": "Low"
+      },
+      "col": {
+        "metric": "Metric",
+        "value": "Your value",
+        "percentile": "Percentile",
+        "rating": "Rating",
+        "median": "Cohort median",
+        "elite": "Elite (p90)"
+      },
+      "metrics": {
+        "deploy_freq_per_week": "Deployment frequency",
+        "lead_time_hours": "Lead time",
+        "change_failure_rate_pct": "Change failure rate",
+        "mttr_hours": "Time to restore",
+        "ai_merge_rate_pct": "AI merge rate",
+        "cost_per_merged_pr_usd": "Cost per merged PR",
+        "ai_adoption_pct": "AI adoption"
+      }
+    },
+    "recs": {
+      "title": "Recommendations",
+      "subtitle": "AI-driven prescriptive actions and anomalies synthesized from your insight lenses.",
+      "empty": "No recommendations right now — everything is within thresholds.",
+      "action": "Action",
+      "dismiss": "Dismiss",
+      "dismissing": "Dismissing…",
+      "severity": {
+        "critical": "Critical",
+        "warning": "Warning",
+        "info": "Info"
+      },
+      "category": {
+        "cost": "Cost",
+        "quality": "Quality",
+        "allocation": "Allocation",
+        "delivery": "Delivery"
+      }
+    },
+    "space": {
+      "title": "SPACE Metrics",
+      "subtitle": "The five-dimension developer-productivity framework that complements DORA.",
+      "noSignal": "No signal in this window",
+      "figure": "Figure",
+      "value": "Value",
+      "dim": {
+        "satisfaction": "Satisfaction",
+        "performance": "Performance",
+        "activity": "Activity",
+        "communication": "Communication",
+        "efficiency": "Efficiency & Flow"
+      },
+      "sub": {
+        "satisfaction": "Member engagement proxy",
+        "performance": "Deployment success rate",
+        "activity": "Output throughput",
+        "communication": "Collaboration breadth × flow",
+        "efficiency": "Low rework + fast cycle"
+      }
+    },
+    "bottleneck": {
+      "title": "Title",
+      "subtitle": "Pinpoint exactly where work stalls — time-in-stage, the slowest stage, rework loops, and the WIP that is stuck right now.",
+      "slowest": "Slowest stage",
+      "noData": "no data yet",
+      "reworkRate": "Rework rate",
+      "reworkSub": "{n} tasks reworked",
+      "reopens": "Reopens",
+      "redos": "{n} redos",
+      "stuck": "Stuck WIP",
+      "stuckSub": "idle > {n}h",
+      "sample": "Tasks sampled",
+      "byStageTitle": "Time in stage",
+      "noStages": "No stage history in this window yet.",
+      "stage": "Stage",
+      "avgHrs": "Avg",
+      "medianHrs": "Median",
+      "tasks": "Tasks",
+      "agingTitle": "Aging WIP — unstick these now",
+      "noAging": "Nothing is stuck — all work in progress is fresh.",
+      "key": "Key",
+      "status": "Status",
+      "age": "Age"
     }
   },
   "cloudAgentForm": {
@@ -578,5 +950,422 @@
     "workspaceTitle": "Workspace",
     "workspaceDesc": "Workspace and file system for this project. Open the IDE to edit files.",
     "openInIde": "Open in IDE"
+  },
+  "spine": {
+    "loading": "Loading the planning spine…",
+    "empty": "Nothing to plan yet. Add dates to objectives, initiatives, epics or tasks to see the timeline.",
+    "totalInvestment": "Total investment",
+    "capex": "CAPEX",
+    "opex": "OPEX",
+    "anomalies": "{count} classification anomalies",
+    "estimateNote": "$ = LLM spend + estimated labour",
+    "item": "Item",
+    "expand": "Expand",
+    "collapse": "Collapse",
+    "undated": "no dates",
+    "unclassified": "Unclassified",
+    "anomalyTip": "This item’s CAPEX/OPEX class contradicts its parent — reconcile it.",
+    "descendantAnomalyTip": "A child item’s class contradicts its parent.",
+    "kind": {
+      "portfolio": "Portfolio",
+      "objective": "Objective",
+      "initiative": "Initiative",
+      "epic": "Epic",
+      "task": "Task"
+    }
+  },
+  "reconcile": {
+    "loading": "Loading work items…",
+    "title": "CAPEX / OPEX reconciliation",
+    "classifyAgent": "Classify with agent",
+    "summaryAnomalies": "{count} anomalies",
+    "summaryUnverified": "{count} unverified",
+    "capex": "CAPEX",
+    "opex": "OPEX",
+    "attentionOnly": "Needs attention only",
+    "hint": "Each item inherits its class from its objective or initiative unless overridden. Verify or recategorise; the agent pre-classifies new work (adding capability → CAPEX, fixing or maintaining → OPEX).",
+    "allClear": "Everything is classified and verified.",
+    "unclassified": "Unclassified",
+    "verified": "Verified",
+    "suggests": "suggests {class}",
+    "clearTip": "Clear override (inherit from parent)",
+    "anomalyTip": "Declared {declared} but inherits {inherited}",
+    "kind": {
+      "portfolio": "Portfolio",
+      "objective": "Objective",
+      "initiative": "Initiative",
+      "epic": "Epic",
+      "task": "Task"
+    },
+    "source": {
+      "manual": "manual",
+      "inherited": "inherited",
+      "agent": "agent"
+    }
+  },
+  "workforce": {
+    "discipline": "Discipline",
+    "allDisciplines": "All disciplines",
+    "unassigned": "Unassigned",
+    "disciplineOptions": {
+      "engineering": "Engineering",
+      "product": "Product",
+      "design": "Design",
+      "qa": "QA",
+      "devops": "DevOps",
+      "data": "Data",
+      "other": "Other"
+    }
+  },
+  "knowledge": {
+    "headingSops": "Standard Operating Procedures",
+    "headingProcesses": "Processes & Flows",
+    "headingDocs": "Knowledge Base",
+    "subtitleSops": "Document and standardize how your team works — audit-ready and trainable.",
+    "subtitleProcesses": "Map repeatable workflows and hand-offs across your team.",
+    "subtitleDocs": "Shared reference documentation your whole team can find and trust.",
+    "newDocument": "New document",
+    "searchPlaceholder": "Search documents…",
+    "allTags": "All tags",
+    "loading": "Loading…",
+    "empty": "No documents yet.",
+    "status_draft": "Draft",
+    "status_published": "Published",
+    "status_archived": "Archived",
+    "requiresAckBadge": "Acknowledgement required",
+    "createTitle": "New document",
+    "fieldTitle": "Title",
+    "fieldSummary": "Short summary",
+    "requiresAckLabel": "Require team to read & acknowledge",
+    "cancel": "Cancel",
+    "create": "Create",
+    "creating": "Creating…",
+    "trainingTitle": "Training & Compliance",
+    "trainingSubtitle": "Your assigned reading and the team-wide audit trail.",
+    "myTraining": "My training",
+    "noTraining": "You have no assigned training.",
+    "due": "Due",
+    "state_completed": "Completed",
+    "state_overdue": "Overdue",
+    "state_pending": "Pending",
+    "state_acknowledged": "Acknowledged",
+    "state_not_required": "Not required",
+    "complianceAudit": "Compliance audit",
+    "overallCompliance": "Overall compliance",
+    "required": "Required",
+    "acknowledged": "Acknowledged",
+    "overdue": "Overdue",
+    "noComplianceDocs": "No documents currently require acknowledgement.",
+    "document": "Document",
+    "percentComplete": "% complete",
+    "pending": "Pending",
+    "backToList": "Back to Knowledge",
+    "saving": "Saving…",
+    "saved": "Saved",
+    "type_sop": "SOP",
+    "type_process": "Process",
+    "type_doc": "Document",
+    "removeTag": "Remove tag",
+    "addTag": "Add tag…",
+    "youAcknowledged": "You have acknowledged this version",
+    "ackRequiredPrompt": "You are required to read and acknowledge this document.",
+    "ackPrompt": "Confirm you have read this document.",
+    "acknowledging": "Acknowledging…",
+    "acknowledge": "I have read this",
+    "aiAssist": "AI assist",
+    "aiHint": "Describe what to write or how to improve the document. The AI drafts audit-ready Markdown.",
+    "aiPromptPlaceholder": "e.g. Draft an onboarding SOP for new engineers covering access, tooling and first-week goals.",
+    "generating": "Generating…",
+    "generate": "Generate",
+    "aiReplace": "Replace document",
+    "aiInsert": "Append to document",
+    "edit": "Edit",
+    "preview": "Preview",
+    "contentPlaceholder": "Write in Markdown…",
+    "emptyContent": "This document is empty.",
+    "changeNotePlaceholder": "What changed in this version? (optional)",
+    "publishing": "Publishing…",
+    "publishNewVersion": "Publish new version",
+    "publish": "Publish",
+    "deleteDoc": "Delete",
+    "deleteConfirm": "Delete this document permanently? This cannot be undone.",
+    "versionHistory": "Version history",
+    "noVersions": "No published versions yet.",
+    "trainingAndAudit": "Training & read audit",
+    "assignTraining": "Assign as training",
+    "noMembers": "No team members found.",
+    "dueDate": "Due date",
+    "assigning": "Assigning…",
+    "assign": "Assign",
+    "readStatus": "Read status",
+    "noReadersRequired": "No readers are required for this document yet.",
+    "liveCollab": "Live collaboration",
+    "editingNow": "editing now",
+    "share": "Share",
+    "owner": "Owner",
+    "roleEditor": "Editor",
+    "roleViewer": "Viewer",
+    "invite": "Invite",
+    "inviting": "Inviting…",
+    "selectMember": "Select a member…",
+    "noCollaborators": "No one has been invited yet.",
+    "remove": "Remove",
+    "accessViewerNote": "You have been invited to view this page.",
+    "accessReadOnlyNote": "You have read-only access to this page."
+  },
+  "quality": {
+    "title": "Product Quality",
+    "subtitle": "Every error across your product — ingested, grouped, and ready to fix.",
+    "loading": "Loading…",
+    "empty": "No errors yet. Connect a source to start ingesting.",
+    "summary": {
+      "groups": "Error groups",
+      "unresolved": "Unresolved",
+      "events": "Total events",
+      "users": "Users affected"
+    },
+    "filter": {
+      "status": "Status",
+      "allStatuses": "All statuses",
+      "level": "Level",
+      "allLevels": "All levels"
+    },
+    "status": {
+      "unresolved": "Unresolved",
+      "fixing": "Fixing",
+      "resolved": "Resolved",
+      "ignored": "Ignored"
+    },
+    "level": {
+      "fatal": "Fatal",
+      "error": "Error",
+      "warning": "Warning",
+      "info": "Info"
+    },
+    "col": {
+      "error": "Error",
+      "level": "Level",
+      "status": "Status",
+      "events": "Events",
+      "users": "Users",
+      "lastSeen": "Last seen"
+    },
+    "card": {
+      "meta": "{events} events · {users} users"
+    },
+    "detail": {
+      "events": "Events",
+      "users": "Users affected",
+      "environment": "Environment",
+      "trend": "Last 14 days",
+      "noTrend": "No recent events",
+      "where": "Where",
+      "stack": "Stack trace",
+      "close": "Close",
+      "fix": "Fix with agent",
+      "fixLinked": "Fix task #{taskId}",
+      "fixStarted": "Fix dispatched — task #{taskId} created.",
+      "resolve": "Resolve",
+      "ignore": "Ignore",
+      "reopen": "Reopen"
+    },
+    "sources": {
+      "title": "Quality sources",
+      "subtitle": "Connect where your errors come from.",
+      "intro": "Ingest errors from your own SDK, OpenTelemetry, Sentry, PostHog or LogRocket. We translate every source into one canonical format.",
+      "empty": "No sources connected yet.",
+      "enabled": "enabled",
+      "paused": "paused",
+      "lastEvent": "last event",
+      "pause": "Pause",
+      "resume": "Resume",
+      "delete": "Delete",
+      "add": "Connect a source",
+      "project": "Project",
+      "selectProject": "— Select project —",
+      "type": "Source type",
+      "namePlaceholder": "Name (e.g. Web app — production)",
+      "secretPlaceholder": "Webhook signing secret (optional)",
+      "create": "Create source",
+      "creating": "Creating…",
+      "cancel": "Cancel",
+      "needProject": "Pick a project for this source.",
+      "needName": "Give the source a name.",
+      "confirmDelete": "Delete this source? Ingested errors are kept.",
+      "created": "Source created",
+      "keyOnce": "Copy the ingest key now — it is shown only once.",
+      "ingestKey": "Ingest key",
+      "sdkSnippet": "Browser SDK",
+      "curlSnippet": "Server / curl",
+      "otlpEndpoint": "OTLP endpoint",
+      "webhookUrl": "Webhook URL"
+    }
+  },
+  "surveys": {
+    "title": "DevEx Surveys",
+    "subtitle": "Author pulse surveys, launch campaigns, and collect developer-experience feedback.",
+    "saving": "Saving…",
+    "yes": "Yes",
+    "no": "No",
+    "author": {
+      "title": "New survey template",
+      "namePlaceholder": "Template name (e.g. Monthly DevEx pulse)",
+      "descPlaceholder": "Description (optional)",
+      "promptPlaceholder": "Question prompt",
+      "type": "Type",
+      "dimension": "Dimension",
+      "addQuestion": "+ Add question",
+      "removeQuestion": "Remove",
+      "create": "Create template"
+    },
+    "qtype": {
+      "rating": "Rating (1–5)",
+      "nps": "NPS (0–10)",
+      "boolean": "Yes / No",
+      "text": "Free text"
+    },
+    "dim": {
+      "flow": "Flow",
+      "tooling": "Tooling",
+      "ai_tools": "AI tools",
+      "deep_work": "Deep work",
+      "build_test": "Build & test",
+      "docs": "Docs",
+      "sentiment": "Sentiment"
+    },
+    "templates": {
+      "title": "Templates",
+      "empty": "No templates yet — create one above.",
+      "name": "Name",
+      "questions": "Questions",
+      "active": "Active",
+      "delete": "Delete"
+    },
+    "launch": {
+      "title": "Launch a campaign",
+      "titlePlaceholder": "Campaign title (e.g. June DevEx pulse)",
+      "template": "Template",
+      "noTemplate": "No template",
+      "anonymous": "Anonymous",
+      "create": "Launch campaign"
+    },
+    "campaigns": {
+      "title": "Campaigns",
+      "empty": "No campaigns yet.",
+      "name": "Campaign",
+      "period": "Period",
+      "status": "Status",
+      "responses": "Responses",
+      "respond": "Respond",
+      "close": "Close",
+      "anon": "anonymous"
+    },
+    "respond": {
+      "title": "Your responses",
+      "noQuestions": "This campaign has no questions.",
+      "submit": "Submit",
+      "cancel": "Cancel",
+      "thanks": "Thanks — your response was recorded."
+    },
+    "err": {
+      "nameRequired": "A template name is required.",
+      "questionRequired": "Add at least one question with a prompt.",
+      "titleRequired": "A campaign title is required."
+    }
+  },
+  "dashboards": {
+    "title": "Custom Dashboards",
+    "subtitle": "Build saved dashboards from widgets over your existing metrics, and ask plain-English questions.",
+    "empty": "No dashboard selected. Create one to get started.",
+    "ask": {
+      "heading": "Ask a question",
+      "placeholder": "e.g. How much are we spending this month?",
+      "button": "Ask",
+      "asking": "Asking…",
+      "matched": "Matched metric"
+    },
+    "create": {
+      "placeholder": "New dashboard name",
+      "button": "Create dashboard"
+    },
+    "delete": {
+      "button": "Delete"
+    },
+    "widget": {
+      "add": "Add widget",
+      "remove": "Remove widget",
+      "empty": "No widgets yet — add one above."
+    }
+  },
+  "finops": {
+    "title": "DevFinOps",
+    "subtitle": "R&D tax credit estimates, SOC 1 control coverage, and audit-ready period reports — derived from your effort, cost and audit trail.",
+    "loading": "Loading…",
+    "saving": "Saving…",
+    "tab": {
+      "rd": "R&D Tax Credit",
+      "soc": "SOC 1 Controls",
+      "audit": "Audit Report"
+    },
+    "rd": {
+      "configTitle": "Qualified Research definition",
+      "configHint": "Choose which investment categories (and optional action types) count as Qualified Research, and set a blended labor rate. Used for a Form 6765-style QRE estimate.",
+      "qualifiedCategories": "Qualified categories (comma-separated)",
+      "qualifiedActionTypes": "Qualified action types (optional)",
+      "blendedRate": "Blended labor rate (USD/hour)",
+      "save": "Save & recompute",
+      "qualifiedHours": "Qualified hours",
+      "qualifiedLabor": "Qualified labor",
+      "qualifiedAiSpend": "Qualified AI/cloud spend",
+      "qualifiedBase": "Qualified base",
+      "form6765": "Form 6765 base estimate",
+      "byCategory": "By category",
+      "category": "Category",
+      "hours": "Hours",
+      "labor": "Labor",
+      "aiSpend": "AI spend",
+      "qualified": "Qualified"
+    },
+    "soc": {
+      "coverage": "Control coverage",
+      "implemented": "Implemented",
+      "partial": "Partial",
+      "gap": "Gap",
+      "implementedOfTotal": "{a} of {b} implemented",
+      "seededNote": "Showing the seeded default control set. Change a status or owner to start your own register.",
+      "ref": "Ref",
+      "objective": "Control objective",
+      "category": "Category",
+      "status": {
+        "implemented": "Implemented",
+        "partial": "Partial",
+        "gap": "Gap"
+      },
+      "owner": "Owner",
+      "statusCol": "Status"
+    },
+    "audit": {
+      "period": "Period",
+      "exportCsv": "Export CSV",
+      "exportJson": "Export JSON",
+      "finance": "Finance",
+      "spend": "Spend",
+      "forecast": "Forecast",
+      "capex": "Capitalized (capex)",
+      "opex": "Expensed (opex)",
+      "rd": "R&D Qualified Research",
+      "controls": "SOC 1 controls & evidence",
+      "evidenceEvents": "Audit events",
+      "sensitive": "{n} sensitive"
+    }
+  },
+  "decks": {
+    "download": "Download deck",
+    "generating": "Generating…",
+    "pickTemplate": "Choose a deck template",
+    "pickQuarter": "Choose a quarter",
+    "boardDeck": "R&D Board Deck",
+    "cfoDeck": "CFO / DevFinOps Deck",
+    "error": "Could not generate the deck"
   }
 }

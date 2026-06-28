@@ -16,7 +16,12 @@ import {
   agentHosts,
   llmUsageLog,
   projects,
+  projectRepositories,
+  tasks,
+  teams,
+  teamMembers,
   tenants,
+  users,
   workflows,
 } from '../../infrastructure/database/schema';
 import { agentHostOnlineCondition } from '../../infrastructure/database/agentHostOnline';
@@ -41,7 +46,7 @@ function mcToUsd(millicents: unknown): number {
 async function buildUsageBreakdown(db: Db, tenantId: number, windowStart: Date) {
   const where = and(eq(llmUsageLog.tenantId, tenantId), gte(llmUsageLog.createdAt, windowStart));
 
-  const [byKind, perModel, perAgentHost, perProject, totalRow] = await Promise.all([
+  const [byKind, perModel, perAgentHost, perProject, perUser, perTeam, perRepo, totalRow] = await Promise.all([
     db.select({
       kind: USAGE_KIND,
       promptTokens: sum(llmUsageLog.promptTokens),
@@ -79,6 +84,62 @@ async function buildUsageBreakdown(db: Db, tenantId: number, windowStart: Date) 
       .leftJoin(projects, eq(projects.id, llmUsageLog.projectId))
       .where(and(where, sql`${llmUsageLog.projectId} is not null`))
       .groupBy(llmUsageLog.projectId, projects.name)
+      .orderBy(desc(sum(llmUsageLog.costUsdMillicents))).limit(50),
+
+    // Per-user spend — attributed to the individual human / SDK caller that
+    // initiated the request (userId, nullable for fully autonomous agent rows).
+    // Joined to users for the display name. Jellyfish-parity "by individual".
+    db.select({
+      userId: llmUsageLog.userId,
+      userName: users.displayName,
+      userEmail: users.email,
+      totalTokens: sum(llmUsageLog.totalTokens),
+      costMc: sum(llmUsageLog.costUsdMillicents),
+      requests: count(),
+    }).from(llmUsageLog)
+      .leftJoin(users, eq(users.id, llmUsageLog.userId))
+      .where(and(where, sql`${llmUsageLog.userId} is not null`))
+      .groupBy(llmUsageLog.userId, users.displayName, users.email)
+      .orderBy(desc(sum(llmUsageLog.costUsdMillicents))).limit(50),
+
+    // Per-team spend — map each usage row to a team via team_members, matching
+    // the heterogeneous member ref (human→userId, cloud_agent→cloudAgentRef,
+    // host_agent→agentHostId-as-text). A row counts once per team it maps to;
+    // only rows that map to a tenant team are included. Jellyfish-parity "by team".
+    db.select({
+      teamId: teams.id,
+      teamName: teams.name,
+      totalTokens: sum(llmUsageLog.totalTokens),
+      costMc: sum(llmUsageLog.costUsdMillicents),
+      requests: count(),
+    }).from(llmUsageLog)
+      .leftJoin(
+        teamMembers,
+        eq(
+          teamMembers.memberRef,
+          sql`coalesce(${llmUsageLog.userId}, ${llmUsageLog.cloudAgentRef}, cast(${llmUsageLog.agentHostId} as text))`,
+        ),
+      )
+      .innerJoin(teams, and(eq(teams.id, teamMembers.teamId), eq(teams.tenantId, tenantId)))
+      .where(where)
+      .groupBy(teams.id, teams.name)
+      .orderBy(desc(sum(llmUsageLog.costUsdMillicents))).limit(50),
+
+    // Per-repo spend — cost attributed to the explicit repo of the originating
+    // task (tasks.explicitRepoId → project_repositories). The inner join filters
+    // to rows with a known repo. Jellyfish-parity "by repo".
+    db.select({
+      repoId: projectRepositories.id,
+      owner: projectRepositories.owner,
+      repo: projectRepositories.repo,
+      totalTokens: sum(llmUsageLog.totalTokens),
+      costMc: sum(llmUsageLog.costUsdMillicents),
+      requests: count(),
+    }).from(llmUsageLog)
+      .leftJoin(tasks, eq(tasks.id, llmUsageLog.taskId))
+      .innerJoin(projectRepositories, eq(projectRepositories.id, tasks.explicitRepoId))
+      .where(where)
+      .groupBy(projectRepositories.id, projectRepositories.owner, projectRepositories.repo)
       .orderBy(desc(sum(llmUsageLog.costUsdMillicents))).limit(50),
 
     db.select({
@@ -120,6 +181,27 @@ async function buildUsageBreakdown(db: Db, tenantId: number, windowStart: Date) 
       totalTokens: Number(p.totalTokens ?? 0),
       requests: Number(p.requests ?? 0),
       estimatedCostUsd: mcToUsd(p.costMc),
+    })),
+    perUser: perUser.map((u) => ({
+      userId: u.userId,
+      userName: u.userName ?? u.userEmail ?? `User ${u.userId}`,
+      totalTokens: Number(u.totalTokens ?? 0),
+      requests: Number(u.requests ?? 0),
+      estimatedCostUsd: mcToUsd(u.costMc),
+    })),
+    perTeam: perTeam.map((t) => ({
+      teamId: t.teamId,
+      teamName: t.teamName,
+      totalTokens: Number(t.totalTokens ?? 0),
+      requests: Number(t.requests ?? 0),
+      estimatedCostUsd: mcToUsd(t.costMc),
+    })),
+    perRepo: perRepo.map((r) => ({
+      repoId: r.repoId,
+      repoLabel: `${r.owner}/${r.repo}`,
+      totalTokens: Number(r.totalTokens ?? 0),
+      requests: Number(r.requests ?? 0),
+      estimatedCostUsd: mcToUsd(r.costMc),
     })),
   };
 }
@@ -246,7 +328,7 @@ export function createDashboardRoutes(db: Db): Hono<HonoEnv> {
 
     const payload = await getOrSetCached(
       c.env as Env,
-      `dashboard-usage:v2:${tenantId}:${window}:${windowStart.toISOString().slice(0, 13)}`,
+      `dashboard-usage:v3:${tenantId}:${window}:${windowStart.toISOString().slice(0, 13)}`,
       () => buildUsageBreakdown(db, tenantId, windowStart),
       { kvTtlSeconds: 60, l1TtlMs: 30_000 },
     );

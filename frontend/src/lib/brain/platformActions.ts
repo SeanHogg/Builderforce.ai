@@ -44,8 +44,10 @@ import {
   promptLibraryApi, tenantApiKeysApi, securityApi, mySessionsApi, embedApi,
   dashboardApi, llmApi, providerKeysApi, auditApi, dispatchApi,
   agentHostConfigApi, agentHostProjectsApi, chatSessionsApi, usageApi,
+  alertsApi, decksApi,
 } from '@/lib/builderforceApi';
 import type { Task } from '@/lib/builderforceApi';
+import { dashboardsApi } from '@/lib/dashboardsApi';
 import type { BrainAction } from '@/lib/brain';
 import { coerceFileContent } from '@/lib/fileContentGuard';
 import { dispatchBrainDataChanged } from './brainDataEvent';
@@ -491,7 +493,19 @@ export function buildPlatformCapabilities(ctx: PlatformActionContext): PlatformC
     { domain: 'llm', method: 'usage', mutates: false, description: 'Token usage stats for the workspace.', parameters: EMPTY, run: () => llmApi.usage() },
     { domain: 'llm', method: 'health', mutates: false, description: 'Model availability + per-model cooldowns.', parameters: EMPTY, run: () => llmApi.health() },
     { domain: 'llm', method: 'models', mutates: false, description: 'Available models for the workspace plan.', parameters: EMPTY, run: () => llmApi.models() },
-    { domain: 'dashboard', method: 'usage', mutates: false, description: 'Token + cost usage split by source (cloud/on-prem/web).', parameters: obj({ window: { type: 'string', enum: ['today', 'week', 'month'] } }), run: (a) => dashboardApi.usage(f(a, 'window') ?? 'week') },
+    { domain: 'dashboard', method: 'usage', mutates: false, description: 'Token + cost usage split by source (cloud/on-prem/web), and by user/team/repo/project.', parameters: obj({ window: { type: 'string', enum: ['today', 'week', 'month'] } }), run: (a) => dashboardApi.usage(f(a, 'window') ?? 'week') },
+
+    // ---- Saved dashboards (custom widget layouts over whitelisted metrics) ----
+    { domain: 'dashboards', method: 'list', mutates: false, description: 'List the workspace’s saved dashboards (with their widgets).', parameters: EMPTY, run: () => dashboardsApi.list() },
+    { domain: 'dashboards', method: 'metrics', mutates: false, description: 'List the whitelisted metric keys a dashboard widget can chart.', parameters: EMPTY, run: () => dashboardsApi.metrics() },
+    { domain: 'dashboards', method: 'create', mutates: true, description: 'Create a saved dashboard.', parameters: obj({ name: S, isDefault: B }, ['name']), run: (a) => dashboardsApi.create(f(a, 'name'), f(a, 'isDefault') ?? false) },
+    { domain: 'dashboards', method: 'update', mutates: true, description: 'Rename a dashboard or set it as the default.', parameters: obj({ id: N, name: S, isDefault: B }, ['id']), run: (a) => dashboardsApi.update(f(a, 'id'), { name: f(a, 'name'), isDefault: f(a, 'isDefault') }) },
+    { domain: 'dashboards', method: 'delete', mutates: true, description: 'Delete a saved dashboard (and its widgets).', parameters: obj({ id: N }, ['id']), run: (a) => dashboardsApi.remove(f(a, 'id')) },
+    { domain: 'dashboards', method: 'add_widget', mutates: true, description: 'Add a widget charting a whitelisted metric (see dashboards.metrics) to a dashboard. viz: stat|bar|line|gauge.', parameters: obj({ dashboardId: N, metricKey: S, viz: { type: 'string', enum: ['stat', 'bar', 'line', 'gauge'] }, title: S, position: N }, ['dashboardId', 'metricKey']), run: (a) => dashboardsApi.addWidget(f(a, 'dashboardId'), { metricKey: f(a, 'metricKey'), viz: f(a, 'viz'), title: f(a, 'title'), position: f(a, 'position') }) },
+    { domain: 'dashboards', method: 'update_widget', mutates: true, description: 'Update a dashboard widget (metric, viz, title or position).', parameters: obj({ dashboardId: N, widgetId: N, metricKey: S, viz: { type: 'string', enum: ['stat', 'bar', 'line', 'gauge'] }, title: S, position: N }, ['dashboardId', 'widgetId']), run: (a) => dashboardsApi.updateWidget(f(a, 'dashboardId'), f(a, 'widgetId'), { metricKey: f(a, 'metricKey'), viz: f(a, 'viz'), title: f(a, 'title'), position: f(a, 'position') }) },
+    { domain: 'dashboards', method: 'remove_widget', mutates: true, description: 'Remove a widget from a dashboard.', parameters: obj({ dashboardId: N, widgetId: N }, ['dashboardId', 'widgetId']), run: (a) => dashboardsApi.removeWidget(f(a, 'dashboardId'), f(a, 'widgetId')) },
+    { domain: 'dashboards', method: 'data', mutates: false, description: 'Resolve every widget on a dashboard to its current value.', parameters: obj({ dashboardId: N }, ['dashboardId']), run: (a) => dashboardsApi.data(f(a, 'dashboardId')) },
+    { domain: 'dashboards', method: 'query', mutates: false, description: 'Ask a natural-language question; it is mapped deterministically to one whitelisted metric and answered.', parameters: obj({ question: S }, ['question']), run: (a) => dashboardsApi.query(f(a, 'question')) },
     { domain: 'provider_keys', method: 'list', mutates: false, description: 'Which LLM providers the workspace has a key configured for.', parameters: EMPTY, run: () => providerKeysApi.list() },
     { domain: 'provider_keys', method: 'remove', mutates: true, description: 'Remove a stored provider key.', parameters: obj({ provider: { type: 'string', enum: ['anthropic'] } }, ['provider']), run: (a) => providerKeysApi.remove(f(a, 'provider')) },
 
@@ -512,6 +526,43 @@ export function buildPlatformCapabilities(ctx: PlatformActionContext): PlatformC
     { domain: 'api_keys', method: 'list', mutates: false, description: 'List the workspace’s gateway API keys (bfk_*).', parameters: EMPTY, run: () => tenant((tid) => tenantApiKeysApi.list(tid)) },
     { domain: 'api_keys', method: 'mint', mutates: true, description: 'Mint a new gateway API key. The raw key is returned once — show it carefully.', parameters: obj({ name: S, allowedOrigins: arr(S) }, ['name']), run: (a) => tenant((tid) => tenantApiKeysApi.mint(tid, a as unknown as Parameters<typeof tenantApiKeysApi.mint>[1])) },
     { domain: 'api_keys', method: 'revoke', mutates: true, description: 'Revoke a gateway API key.', parameters: obj({ keyId: S }, ['keyId']), run: (a) => tenant((tid) => tenantApiKeysApi.revoke(tid, f(a, 'keyId'))) },
+
+    // ---- Alerts (threshold alert rules on platform metrics) --------------
+    { domain: 'alerts', method: 'list', mutates: false, description: 'List threshold alert rules defined on platform metrics.', parameters: EMPTY, run: () => alertsApi.list() },
+    {
+      domain: 'alerts', method: 'create', mutates: true,
+      description: 'Create a threshold alert rule. The rule fires when the metric, measured over windowDays, satisfies comparator vs threshold. metric is one of: token_spend_usd, token_spend_pct_of_cap, cost_per_merged_pr_usd, dora_change_failure_rate, dora_lead_time_hours, ai_effectiveness_score, eval_drift. comparator is gt|lt|gte|lte. scopeKind is tenant|project|team. The daily sweep notifies via Slack/email when it trips.',
+      parameters: obj({
+        name: S,
+        metric: { type: 'string', enum: ['token_spend_usd', 'token_spend_pct_of_cap', 'cost_per_merged_pr_usd', 'dora_change_failure_rate', 'dora_lead_time_hours', 'ai_effectiveness_score', 'eval_drift'] },
+        comparator: { type: 'string', enum: ['gt', 'lt', 'gte', 'lte'] },
+        threshold: N, windowDays: N,
+        scopeKind: { type: 'string', enum: ['tenant', 'project', 'team'] },
+        notifySlack: B, notifyEmail: B,
+      }, ['name', 'metric', 'comparator', 'threshold']),
+      run: (a) => alertsApi.create(a as Parameters<typeof alertsApi.create>[0]),
+    },
+    updateCap({
+      domain: 'alerts', method: 'update',
+      description: 'Update an alert rule (toggle enabled, change threshold/comparator/metric/window/scope/notify channels).',
+      parameters: obj({
+        id: S, name: S,
+        metric: { type: 'string', enum: ['token_spend_usd', 'token_spend_pct_of_cap', 'cost_per_merged_pr_usd', 'dora_change_failure_rate', 'dora_lead_time_hours', 'ai_effectiveness_score', 'eval_drift'] },
+        comparator: { type: 'string', enum: ['gt', 'lt', 'gte', 'lte'] },
+        threshold: N, windowDays: N,
+        scopeKind: { type: 'string', enum: ['tenant', 'project', 'team'] },
+        notifySlack: B, notifyEmail: B, enabled: B, cooldownHours: N,
+      }, ['id']),
+    }, (a, patch) => alertsApi.update(f(a, 'id'), patch as Parameters<typeof alertsApi.update>[1])),
+    { domain: 'alerts', method: 'delete', mutates: true, description: 'Delete an alert rule.', parameters: obj({ id: S }, ['id']), run: (a) => alertsApi.remove(f(a, 'id')) },
+    { domain: 'alerts', method: 'events', mutates: false, description: 'List recent alert firings (events), optionally filtered by status (triggered|acknowledged|resolved).', parameters: obj({ limit: N, status: { type: 'string', enum: ['triggered', 'acknowledged', 'resolved'] } }), run: (a) => alertsApi.listEvents({ limit: f(a, 'limit') ?? undefined, status: f(a, 'status') ?? undefined }) },
+    { domain: 'alerts', method: 'acknowledge', mutates: true, description: 'Acknowledge an alert firing (event).', parameters: obj({ id: S }, ['id']), run: (a) => alertsApi.ackEvent(f(a, 'id')) },
+
+    // ---- Decks (board / CFO PowerPoint generation) -----------------------
+    { domain: 'decks', method: 'list_templates', mutates: false, description: 'List available deck templates: the built-in R&D board deck and CFO/DevFinOps deck, plus any custom .pptx templates this workspace has uploaded. Each has an id, name and whether it is "fillable" (a custom uploaded .pptx that can be filled in place).', parameters: EMPTY, run: () => decksApi.listTemplates() },
+    { domain: 'decks', method: 'generate', mutates: true, description: 'Generate a Builderforce-branded board deck (PowerPoint) from this workspace\'s real data and return a download link. Use templateId from decks.list_templates to pick the board deck (default) or the CFO/DevFinOps deck; quarter is e.g. "2026-Q2" (defaults to the current quarter). Returns { deckId, downloadUrl, filename, warnings } — surface the downloadUrl to the user. warnings lists any board fields with no data yet.', parameters: obj({ templateId: S, quarter: S, prompt: S }), run: (a) => decksApi.generate({ mode: 'generative', templateId: f(a, 'templateId') ?? undefined, quarter: f(a, 'quarter') ?? undefined, prompt: f(a, 'prompt') ?? undefined }) },
+    { domain: 'decks', method: 'fill_template', mutates: true, description: 'Fill an UPLOADED custom .pptx template (templateId from decks.list_templates where fillable=true) IN PLACE with this workspace\'s data, preserving the original design. Use this when the user uploaded their own board/CFO template and wants it populated. quarter defaults to the current quarter. Returns { deckId, downloadUrl, filename, warnings }.', parameters: obj({ templateId: S, quarter: S }, ['templateId']), run: (a) => decksApi.generate({ mode: 'fill', templateId: f(a, 'templateId'), quarter: f(a, 'quarter') ?? undefined }) },
+    { domain: 'decks', method: 'promote_template', mutates: true, description: 'Promote a .pptx the user already uploaded (via the Brain file upload — pass its storage key as sourceKey) into a reusable custom deck template. Returns the new template id and the {{tokens}} found in the file. Author tokens like {{quarter}}, {{uptime}}, {{table:deliverables}} in the .pptx and they fill from workspace data.', parameters: obj({ name: S, description: S, sourceKey: S }, ['name', 'sourceKey']), run: (a) => decksApi.promoteTemplate({ name: f(a, 'name'), description: f(a, 'description') ?? undefined, sourceKey: f(a, 'sourceKey') }) },
   ];
 
   // Announce every successful write on the brain-data bus so the page rendering
@@ -628,6 +679,10 @@ const STATIC_PROMOTIONS: ReadonlyArray<readonly [string, string, string]> = [
   ['brain', 'list', 'list_chats'],
   ['approvals', 'list', 'list_approvals'],
   ['approvals', 'decide', 'decide_approval'],
+  ['alerts', 'list', 'list_alerts'],
+  ['alerts', 'create', 'create_alert'],
+  ['decks', 'generate', 'generate_deck'],
+  ['decks', 'fill_template', 'fill_deck_template'],
 ];
 
 /** Methods worth promoting first-class when a domain is in focus for the route. */

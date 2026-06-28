@@ -5,7 +5,7 @@ export const runtime = 'edge';
 import { useEffect, useState } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import dynamic from 'next/dynamic';
-import { fetchProject, fetchFiles, updateProject, deleteProject } from '@/lib/api';
+import { fetchProject, fetchFiles, updateProject, deleteProject, fetchIdeProjectByStorage } from '@/lib/api';
 import { persistLastProjectId } from '@/lib/auth';
 import type { Project, FileEntry } from '@/lib/types';
 import { ProjectDetailsPanel } from '@/components/ProjectDetailsPanel';
@@ -15,6 +15,24 @@ const IDE = dynamic(() => import('@/components/IDE').then((m) => m.IDE), { ssr: 
 // rather than the code editor. Loaded lazily so the heavy voice/WebGPU bundle
 // only ships when a voice project is actually opened.
 const VoiceClonePanel = dynamic(() => import('@/components/VoiceClonePanel').then((m) => m.VoiceClonePanel), { ssr: false });
+
+/**
+ * Resolves the IDE project backing this storage project so the Voice studio can
+ * scope its clones to this project's own custom voices, then renders the panel.
+ * Renders the panel unscoped while resolving (and if the lookup fails) so the
+ * studio always works.
+ */
+function VoiceStudioForProject({ storageProjectId }: { storageProjectId: number }) {
+  const [ideProjectId, setIdeProjectId] = useState<number | undefined>(undefined);
+  useEffect(() => {
+    let cancelled = false;
+    fetchIdeProjectByStorage(storageProjectId)
+      .then((ip) => { if (!cancelled) setIdeProjectId(ip.id); })
+      .catch(() => { /* fall back to unscoped studio */ });
+    return () => { cancelled = true; };
+  }, [storageProjectId]);
+  return <VoiceClonePanel ideProjectId={ideProjectId} />;
+}
 
 /**
  * IDE page — opens a project in the IDE. Use ?chat= to open with a specific project chat active
@@ -148,11 +166,12 @@ export default function IDEPage() {
     );
   }
 
-  // Voice modality (0224): a Voice IDE project opens the Voice studio.
+  // Voice modality (0224): a Voice IDE project opens the Voice studio, scoped to
+  // this project's own custom voices.
   if (project!.modality === 'voice') {
     return (
       <div style={{ flex: 1, color: 'var(--text-primary)', minHeight: '100vh', background: 'var(--bg-deep)' }}>
-        <VoiceClonePanel />
+        <VoiceStudioForProject storageProjectId={project!.id} />
       </div>
     );
   }

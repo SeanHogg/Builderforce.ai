@@ -51,7 +51,7 @@ const ghostBtn: React.CSSProperties = {
   color: 'var(--text-secondary)', borderRadius: 8, padding: '7px 12px', cursor: 'pointer',
 };
 
-export function VoiceClonePanel() {
+export function VoiceClonePanel({ ideProjectId }: { ideProjectId?: number } = {}) {
   const [clones, setClones] = useState<VoiceClone[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -62,13 +62,14 @@ export function VoiceClonePanel() {
     setLoading(true);
     setError(null);
     try {
-      setClones(await listVoiceClones());
+      // Scope to this Voice IDE project's own custom voices when opened from one.
+      setClones(await listVoiceClones(ideProjectId));
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to load voice clones.');
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [ideProjectId]);
 
   useEffect(() => { void load(); }, [load]);
   useEffect(() => { void getOnDeviceEngine().then((e) => setOnDevice(Boolean(e))); }, []);
@@ -89,7 +90,7 @@ export function VoiceClonePanel() {
         </div>
       )}
 
-      <CreateCloneForm onDeviceReady={onDevice === true} onCreated={() => void load()} />
+      <CreateCloneForm onDeviceReady={onDevice === true} onCreated={() => void load()} ideProjectId={ideProjectId} />
 
       <div style={card}>
         <h2 style={{ fontSize: '1.05rem', fontWeight: 600, marginBottom: 12 }}>Your voices</h2>
@@ -119,7 +120,7 @@ function EngineBadge({ onDevice }: { onDevice: boolean | null }) {
   );
 }
 
-function CreateCloneForm({ onDeviceReady, onCreated }: { onDeviceReady: boolean; onCreated: () => void }) {
+function CreateCloneForm({ onDeviceReady, onCreated, ideProjectId }: { onDeviceReady: boolean; onCreated: () => void; ideProjectId?: number }) {
   const [name, setName] = useState('');
   const [consent, setConsent] = useState(false);
   const [reference, setReference] = useState<File | null>(null);
@@ -167,6 +168,7 @@ function CreateCloneForm({ onDeviceReady, onCreated }: { onDeviceReady: boolean;
         consentAttested: consent,
         reference,
         embedding: embedding?.data ?? null,
+        ideProjectId: ideProjectId ?? null,
       });
       if (embedding) saveEmbedding(created.id, embedding);
 

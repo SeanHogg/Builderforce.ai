@@ -10,14 +10,18 @@
     ".": "./src/index.ts",
     "./nn": "./src/nn/index.ts"
   },
-  "files": ["src"],
+  "files": [
+    "src"
+  ],
   "scripts": {
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "typecheck:native": "tsgo --noEmit"
   },
   "devDependencies": {
-    "typescript": "^5.4.0",
-    "vitest": "^2.1.0"
+    "typescript": "^6.0.3",
+    "vitest": "^2.1.0",
+    "@typescript/native-preview": "7.0.0-dev.20260627.2"
   }
 }

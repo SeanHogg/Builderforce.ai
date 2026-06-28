@@ -10,12 +10,14 @@
     "report": "tsx src/report.ts",
     "ci": "tsx src/pull-tests.ts && (playwright test; true) && tsx src/report.ts",
     "explore": "tsx src/explore.ts",
-    "type-check": "tsc --noEmit"
+    "type-check": "tsc --noEmit",
+    "typecheck:native": "tsgo --noEmit"
   },
   "devDependencies": {
     "@playwright/test": "1.58.2",
     "@types/node": "^22.0.0",
     "tsx": "^4.21.0",
-    "typescript": "^5.9.3"
+    "typescript": "^6.0.3",
+    "@typescript/native-preview": "7.0.0-dev.20260627.2"
   }
 }

@@ -1,9 +1,12 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { membersApi, type DoraRollup, type MemberScorecard } from '@/lib/builderforceApi';
+import { useTranslations } from 'next-intl';
+import { membersApi, type DisciplineRollup, type DoraRollup, type MemberScorecard } from '@/lib/builderforceApi';
 import { MemberProfileEditor } from './MemberProfileEditor';
 import { EngagementSection } from './EngagementSection';
+
+const DISCIPLINE_OPTIONS = ['engineering', 'product', 'design', 'qa', 'devops', 'data', 'other'] as const;
 
 /**
  * Performance tab — workforce effectiveness/engagement scorecards (humans AND
@@ -50,17 +53,28 @@ const th: React.CSSProperties = { textAlign: 'right', padding: '8px 10px', fontS
 const td: React.CSSProperties = { textAlign: 'right', padding: '8px 10px', fontSize: 13, whiteSpace: 'nowrap' };
 
 export function WorkforceMetricsContent() {
+  const t = useTranslations('workforce');
   const [days, setDays] = useState(7);
+  const [discipline, setDiscipline] = useState('');
   const [members, setMembers] = useState<MemberScorecard[] | null>(null);
+  const [byDiscipline, setByDiscipline] = useState<DisciplineRollup[]>([]);
   const [dora, setDora] = useState<DoraRollup | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [editing, setEditing] = useState<MemberScorecard | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
-    membersApi.metrics(days).then((r) => setMembers(r.members)).catch((e: Error) => setError(e.message));
+    membersApi.metrics(days, discipline || undefined)
+      .then((r) => { setMembers(r.members); setByDiscipline(r.byDiscipline); })
+      .catch((e: Error) => setError(e.message));
     membersApi.dora(Math.max(days, 30)).then(setDora).catch(() => { /* optional */ });
-  }, [days, reloadKey]);
+  }, [days, discipline, reloadKey]);
+
+  // Localized label for a discipline value (falls back to the raw value / unassigned).
+  const disciplineLabel = (d: string | null): string => {
+    if (!d) return t('unassigned');
+    return (DISCIPLINE_OPTIONS as readonly string[]).includes(d) ? t(`disciplineOptions.${d}`) : d;
+  };
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
@@ -88,13 +102,40 @@ export function WorkforceMetricsContent() {
 
       {/* Scorecards */}
       <div style={cardStyle}>
-        <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 10 }}>Member scorecards <span style={{ color: 'var(--muted)', fontWeight: 400 }}>· last {days}d · click a row to edit capability/availability</span></div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10, flexWrap: 'wrap' }}>
+          <div style={{ fontWeight: 600, fontSize: 13 }}>Member scorecards <span style={{ color: 'var(--muted)', fontWeight: 400 }}>· last {days}d · click a row to edit capability/availability</span></div>
+          <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 6 }}>
+            <span style={{ fontSize: 12, color: 'var(--muted)' }}>{t('discipline')}</span>
+            <select
+              value={discipline}
+              onChange={(e) => setDiscipline(e.target.value)}
+              style={{ padding: '4px 10px', borderRadius: 8, fontSize: 12, cursor: 'pointer', border: '1px solid var(--border-subtle)', background: 'var(--bg-base)', color: 'var(--text-secondary)' }}
+            >
+              <option value="">{t('allDisciplines')}</option>
+              {DISCIPLINE_OPTIONS.map((d) => <option key={d} value={d}>{t(`disciplineOptions.${d}`)}</option>)}
+              <option value="unassigned">{t('unassigned')}</option>
+            </select>
+          </div>
+        </div>
+        {/* Discipline rollup chips (computed from the full, unfiltered set). */}
+        {byDiscipline.length > 0 && (
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 10 }}>
+            {byDiscipline.map((b) => (
+              <div key={b.discipline} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '4px 10px', borderRadius: 999, fontSize: 12, background: 'var(--bg-base)', border: '1px solid var(--border-subtle)' }}>
+                <span style={{ fontWeight: 600 }}>{disciplineLabel(b.discipline === 'unassigned' ? null : b.discipline)}</span>
+                <span style={{ color: 'var(--muted)' }}>{b.memberCount} · {b.completedCount}✓</span>
+                <span style={{ fontWeight: 700, color: scoreColor(b.avgEffectiveness) }}>{fmtScore(b.avgEffectiveness)}</span>
+              </div>
+            ))}
+          </div>
+        )}
         {error && <div style={{ color: 'var(--danger, #e5484d)', fontSize: 12, marginBottom: 8 }}>{error}</div>}
         <div style={{ overflowX: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
               <tr style={{ borderBottom: '1px solid var(--border-subtle)' }}>
                 <th style={{ ...th, textAlign: 'left' }}>Member</th>
+                <th style={{ ...th, textAlign: 'left' }}>{t('discipline')}</th>
                 <th style={th}>Assigned</th>
                 <th style={th}>Completed</th>
                 <th style={th}>Redo</th>
@@ -109,9 +150,9 @@ export function WorkforceMetricsContent() {
             </thead>
             <tbody>
               {members == null ? (
-                <tr><td style={{ ...td, textAlign: 'left', color: 'var(--muted)' }} colSpan={11}>Loading…</td></tr>
+                <tr><td style={{ ...td, textAlign: 'left', color: 'var(--muted)' }} colSpan={12}>Loading…</td></tr>
               ) : members.length === 0 ? (
-                <tr><td style={{ ...td, textAlign: 'left', color: 'var(--muted)' }} colSpan={11}>No activity in this window.</td></tr>
+                <tr><td style={{ ...td, textAlign: 'left', color: 'var(--muted)' }} colSpan={12}>No activity in this window.</td></tr>
               ) : members.map((m) => (
                 <tr key={`${m.memberKind}:${m.memberRef}`} onClick={() => setEditing(m)}
                   style={{ borderBottom: '1px solid var(--border-subtle)', cursor: 'pointer' }}>
@@ -119,6 +160,7 @@ export function WorkforceMetricsContent() {
                     <div style={{ fontWeight: 500 }}>{m.memberName}</div>
                     <div style={{ fontSize: 11, color: 'var(--muted)' }}>{KIND_LABEL[m.memberKind]}</div>
                   </td>
+                  <td style={{ ...td, textAlign: 'left', color: m.discipline ? undefined : 'var(--muted)' }}>{m.discipline ? disciplineLabel(m.discipline) : '—'}</td>
                   <td style={td}>{m.assignedCount}</td>
                   <td style={td}>{m.completedCount}</td>
                   <td style={{ ...td, color: m.redoCount > 0 ? 'var(--warning, #f5a623)' : undefined }}>{m.redoCount}</td>

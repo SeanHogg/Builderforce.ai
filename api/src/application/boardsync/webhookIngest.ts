@@ -7,6 +7,8 @@
  * feed the identical reconciler.
  */
 
+import { hmacSha256Hex, hmacSha256Base64Url, timingSafeEqualHex } from '../../infrastructure/crypto/webhookHmac';
+
 /** Normalized result of a webhook body, ready to hand to the reconciler. */
 export interface NormalizedWebhookTicket {
   externalId:      string;
@@ -18,36 +20,6 @@ export interface NormalizedWebhookTicket {
   fields:          Record<string, unknown>;
   /** True when the event author is our own integration actor (echo). */
   originatedLocally: boolean;
-}
-
-/** Compute HMAC-SHA256(secret, body) as a lowercase hex string. */
-async function hmacSha256Hex(secret: string, body: string): Promise<string> {
-  const key = await crypto.subtle.importKey(
-    'raw',
-    new TextEncoder().encode(secret),
-    { name: 'HMAC', hash: 'SHA-256' },
-    false,
-    ['sign'],
-  );
-  const mac = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(body));
-  return Array.from(new Uint8Array(mac))
-    .map((b) => b.toString(16).padStart(2, '0'))
-    .join('');
-}
-
-/** Compute HMAC-SHA256(secret, body) as a base64url string (no padding) — JWT HS256 form. */
-async function hmacSha256Base64Url(secret: string, body: string): Promise<string> {
-  const key = await crypto.subtle.importKey(
-    'raw',
-    new TextEncoder().encode(secret),
-    { name: 'HMAC', hash: 'SHA-256' },
-    false,
-    ['sign'],
-  );
-  const mac = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(body));
-  let bin = '';
-  for (const b of new Uint8Array(mac)) bin += String.fromCharCode(b);
-  return btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 }
 
 /**
@@ -130,16 +102,6 @@ async function verifyMondayJwt(authHeader: string, secret: string): Promise<bool
   if (!h || !p || !sig) return false;
   const expected = await hmacSha256Base64Url(secret, `${h}.${p}`);
   return timingSafeEqualHex(expected, sig);
-}
-
-/** Constant-time-ish equal-length string compare (avoids early-exit). */
-function timingSafeEqualHex(a: string, b: string): boolean {
-  if (a.length !== b.length) return false;
-  let diff = 0;
-  for (let i = 0; i < a.length; i++) {
-    diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
-  }
-  return diff === 0;
 }
 
 interface GitHubIssueWebhook {

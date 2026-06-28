@@ -1649,9 +1649,39 @@ async function expandPrompt(opts) {
 
 // src/engine/webcodecs-muxer.ts
 var import_mp4_muxer = require("mp4-muxer");
+var AVC_CODEC_CANDIDATES = [
+  "avc1.42001f",
+  "avc1.42E01E",
+  "avc1.4D401F",
+  "avc1.640028"
+];
+async function selectVideoCodec(opts, probe) {
+  const probeImpl = probe ?? (typeof VideoEncoder !== "undefined" && typeof VideoEncoder.isConfigSupported === "function" ? VideoEncoder : void 0);
+  if (!probeImpl) return AVC_CODEC_CANDIDATES[0];
+  for (const codec of AVC_CODEC_CANDIDATES) {
+    try {
+      const res = await probeImpl.isConfigSupported({
+        codec,
+        width: opts.width,
+        height: opts.height,
+        bitrate: opts.bitrate ?? 2e6,
+        framerate: opts.fps
+      });
+      if (res?.supported) return codec;
+    } catch {
+    }
+  }
+  return null;
+}
 async function muxFramesToMp4(frames, opts) {
   if (typeof VideoEncoder === "undefined") {
     throw new Error("WebCodecs VideoEncoder is not available in this browser");
+  }
+  const codec = await selectVideoCodec(opts);
+  if (codec === null) {
+    throw new Error(
+      "This browser has no supported MP4 (H.264/AVC) encode configuration. MP4 export currently requires a WebCodecs AVC encoder (Chrome 113+, Edge). Use a Chromium-based browser to export video."
+    );
   }
   const muxer = new import_mp4_muxer.Muxer({
     target: new import_mp4_muxer.ArrayBufferTarget(),
@@ -1670,7 +1700,7 @@ async function muxFramesToMp4(frames, opts) {
     }
   });
   encoder.configure({
-    codec: "avc1.42E01F",
+    codec,
     width: opts.width,
     height: opts.height,
     bitrate: opts.bitrate ?? 2e6,

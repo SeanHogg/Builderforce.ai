@@ -20,14 +20,18 @@ export interface VoiceClone {
   priceMillicents: number;
   consentAttested: boolean;
   hasReference: boolean;
+  /** The Voice IDE project this clone belongs to (0224), or null = tenant-wide. */
+  ideProjectId: number | null;
   createdAt: string;
 }
 
 const BASE = '/api/studio/voice-clones';
 
-/** Clones the caller owns or has licensed. */
-export async function listVoiceClones(): Promise<VoiceClone[]> {
-  const res = await apiRequest<{ clones: VoiceClone[] }>(BASE);
+/** Clones the caller owns or has licensed. Pass `ideProjectId` to scope to one
+ *  Voice IDE project (its custom voices). */
+export async function listVoiceClones(ideProjectId?: number): Promise<VoiceClone[]> {
+  const qs = ideProjectId != null ? `?ideProjectId=${ideProjectId}` : '';
+  const res = await apiRequest<{ clones: VoiceClone[] }>(`${BASE}${qs}`);
   return res.clones ?? [];
 }
 
@@ -42,10 +46,13 @@ export async function createVoiceClone(input: {
   embedding?: number[] | null;
   visibility?: VoiceClone['visibility'];
   provider?: string;
+  /** Bind the clone to a Voice IDE project (0224). */
+  ideProjectId?: number | null;
 }): Promise<VoiceClone> {
   const form = new FormData();
   form.append('name', input.name);
   form.append('consentAttested', String(input.consentAttested));
+  if (input.ideProjectId != null) form.append('ideProjectId', String(input.ideProjectId));
   if (input.description) form.append('description', input.description);
   if (input.visibility) form.append('visibility', input.visibility);
   if (input.provider) form.append('provider', input.provider);
