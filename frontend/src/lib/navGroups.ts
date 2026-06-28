@@ -92,28 +92,33 @@ export const NAV_GROUPS: NavGroup[] = [
     ],
   },
   {
-    id: 'insights', labelKey: 'group.insights', icon: '📈', href: '/insights/engineering',
+    id: 'insights', labelKey: 'group.insights', icon: '📈', href: '/insights/ai',
     // Surveys, custom Dashboards and DevFinOps are analytics/measurement surfaces,
     // so they live here as lenses of Insights rather than as their own top-level
     // sidebar items (keeping the "few primary destinations" rule above intact).
     match: ['/insights', '/alerts', '/surveys', '/dashboards', '/finops'],
     tabKind: 'route',
     tabs: [
-      { id: '/insights/ai-impact', labelKey: 'tab.aiImpact', icon: '✨' },
-      { id: '/insights/delivery', labelKey: 'tab.delivery', icon: '📦' },
-      { id: '/insights/bottlenecks', labelKey: 'tab.bottlenecks', icon: '⏳' },
-      { id: '/insights/engineering', labelKey: 'tab.aiEffectiveness', icon: '🤖' },
-      { id: '/insights/recommendations', labelKey: 'tab.recommendations', icon: '🧠' },
-      { id: '/insights/dora', labelKey: 'tab.dora', icon: '🚀' },
-      { id: '/insights/space', labelKey: 'tab.space', icon: '🛰' },
-      { id: '/insights/finance', labelKey: 'tab.finops', icon: '💰' },
-      { id: '/finops', labelKey: 'tab.devfinops', icon: '🧾' },
-      { id: '/insights/allocation', labelKey: 'tab.allocation', icon: '🧭' },
-      { id: '/insights/benchmarking', labelKey: 'tab.benchmarking', icon: '📊' },
+      // One combined entry point for the AI reports (AI Impact, AI Effectiveness
+      // and Recommendations) — each is now a drillable section of /insights/ai,
+      // not its own tab, trimming the over-long tab bar. activePaths keeps the AI
+      // tab highlighted on the retired routes while they redirect in.
+      { id: '/insights/ai', labelKey: 'tab.ai', icon: '✨', activePaths: ['/insights/ai-impact', '/insights/engineering', '/insights/recommendations'] },
+      // Delivery is a HUB: delivery + bottlenecks + DORA + SPACE + benchmarking +
+      // funnel are drill-down slide-outs of this one tab (their old routes
+      // redirect here with ?panel=). activePaths keeps the tab highlighted on the
+      // retired routes while they redirect in. [insights consolidation]
+      { id: '/insights/delivery', labelKey: 'tab.delivery', icon: '📦', activePaths: ['/insights/bottlenecks', '/insights/dora', '/insights/space', '/insights/benchmarking', '/insights/funnel'] },
+      // Finance is a HUB: FinOps spend + Investment Allocation + DevFinOps (R&D /
+      // SOC / audit) are drill-down slide-outs of this one tab (their old routes
+      // redirect here with ?drill=). activePaths keeps the tab highlighted on the
+      // retired routes while they redirect in. [insights consolidation]
+      { id: '/insights/finance', labelKey: 'tab.finance', icon: '💰', activePaths: ['/finops', '/insights/allocation'] },
       { id: '/dashboards', labelKey: 'tab.dashboards', icon: '🧮' },
-      { id: '/insights/devex', labelKey: 'tab.devex', icon: '🩺' },
-      { id: '/surveys', labelKey: 'tab.surveys', icon: '📝' },
-      { id: '/insights/funnel', labelKey: 'tab.funnel', icon: '💡' },
+      // DevEx is a HUB: survey results + survey management (the retired /surveys
+      // page) are drill-down slide-outs of this one tab. activePaths keeps the tab
+      // highlighted on /surveys while it redirects in (?panel=surveys). [insights consolidation]
+      { id: '/insights/devex', labelKey: 'tab.devex', icon: '🩺', activePaths: ['/surveys'] },
       { id: '/insights/compliance', labelKey: 'tab.compliance', icon: '🛡' },
       { id: '/alerts', labelKey: 'tab.alerts', icon: '🔔' },
     ],

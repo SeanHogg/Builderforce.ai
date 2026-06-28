@@ -1,12 +1,8 @@
 'use client';
 
-import { LensPage } from '@/components/insights/LensShell';
-import { BenchmarkingLens } from '@/components/insights/BenchmarkingLens';
+import { InsightsRedirect } from '@/components/insights/InsightsRedirect';
 
+/** Retired — Benchmarking is now a panel of the combined /insights/delivery hub. */
 export default function BenchmarkingInsightsPage() {
-  return (
-    <LensPage capability="insights.benchmarking" titleKey="benchmarking.title" subtitleKey="benchmarking.subtitle">
-      <BenchmarkingLens />
-    </LensPage>
-  );
+  return <InsightsRedirect to="/insights/delivery?panel=benchmarking" />;
 }

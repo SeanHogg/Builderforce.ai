@@ -24,7 +24,6 @@
       "planning": "规划",
       "portfolio": "项目组合",
       "ceremonies": "仪式",
-      "aiEffectiveness": "AI 效能",
       "dora": "DORA",
       "finops": "FinOps",
       "funnel": "创新漏斗",
@@ -44,8 +43,7 @@
       "docs": "文档",
       "training": "培训",
       "errors": "错误",
-      "aiImpact": "AI 影响",
-      "recommendations": "建议",
+      "ai": "AI 洞察",
       "space": "SPACE",
       "benchmarking": "基准对标",
       "devex": "DevEx",
@@ -56,6 +54,7 @@
       "surveys": "调研",
       "dashboards": "仪表板",
       "devfinops": "DevFinOps",
+      "finance": "财务",
       "workforce": "团队成员",
       "teams": "团队",
       "performance": "绩效",
@@ -506,6 +505,49 @@
     "loading": "加载中…",
     "window": "时间范围",
     "days": "{n} 天",
+    "aihub": {
+      "title": "AI 洞察",
+      "subtitle": "一览您的 AI 项目——采用情况、效能与后续行动。打开任意报告即可深入查看。",
+      "viewReport": "查看报告",
+      "panel": {
+        "aiImpact": "AI 影响",
+        "aiImpactDesc": "采用与模型使用趋势、多工具评估矩阵，以及综合 AI 生产力评分。",
+        "engineering": "AI 效能",
+        "engineeringDesc": "哪种 AI 方式真正交付——按工作类型和模型分列的结果评分、合并率与成本。",
+        "recommendations": "建议",
+        "recommendationsDesc": "依据各项洞察生成的、可执行的优先建议与异常项。"
+      }
+    },
+    "delivhub": {
+      "title": "交付",
+      "subtitle": "交付进度、瓶颈与工程效能——一览你的交付全局。打开任意报告即可深入查看。",
+      "viewDetails": "查看详情",
+      "openLens": "打开{name}",
+      "panel": {
+        "delivery": "交付",
+        "deliveryDesc": "跨计划、项目与发布的可交付物的燃起图、预测与范围蔓延。",
+        "bottlenecks": "瓶颈",
+        "bottlenecksDesc": "工作卡在哪里——各阶段耗时、最慢阶段、返工循环以及当前滞留的在制品。",
+        "dora": "DORA 指标",
+        "doraDesc": "四项 DevOps 关键指标——部署频率、前置时间、变更失败率与恢复时间——并对照绩效等级。",
+        "space": "SPACE 指标",
+        "spaceDesc": "与 DORA 互补的五维开发者生产力框架。",
+        "benchmarking": "行业基准对比",
+        "benchmarkingDesc": "你的交付指标在行业同类中的排名——按行业与团队规模的百分位与评级。",
+        "funnel": "创新漏斗",
+        "funnelDesc": "想法 → 验证 → 构建中 → 发布 → 衡量：转化率、价值实现时间与创意管道。"
+      }
+    },
+    "finhub": {
+      "title": "财务",
+      "subtitle": "AI 支出、投资分配与 DevFinOps——一览您的财务全局。打开任意报告即可深入查看。",
+      "viewDetails": "查看详情",
+      "openPanel": "打开 {name}",
+      "devfinops": {
+        "title": "DevFinOps",
+        "subtitle": "研发税收抵免 (QRE) 估算、SOC 1 控制覆盖率与审计就绪的周期报告——基于投入、成本和不可篡改的智能体工具审计轨迹得出。"
+      }
+    },
     "common": {
       "delete": "删除",
       "close": "关闭",
@@ -863,6 +905,27 @@
       "activeUsers": "活跃用户",
       "cost": "成本"
     },
+    "devexhub": {
+      "title": "开发者体验",
+      "subtitle": "一览开发者体验调研与结果——DevEx 指数、eNPS、情绪与参与度。打开任意板块即可深入查看。",
+      "loading": "加载中…",
+      "viewReport": "查看报告",
+      "newSurvey": "新建调研",
+      "panel": {
+        "results": "调研结果",
+        "resultsDesc": "DevEx 指数、各主题分数及其趋势、基准与情绪、分组热力图、随时间变化的参与度，以及优先级的变化。",
+        "surveys": "调研",
+        "surveysDesc": "创建调研模板、发起活动，并查看或回复开发者体验反馈。"
+      },
+      "summary": {
+        "templates": "模板",
+        "templatesSub": "可复用的问题集",
+        "openCampaigns": "进行中的活动",
+        "campaignsSub": "共 {n} 个",
+        "responses": "回复数",
+        "responsesSub": "所有活动合计"
+      }
+    },
     "devex": {
       "title": "DevEx 调研与洞察",
       "subtitle": "开发者体验脉冲评分、eNPS，以及 AI DevEx 分析视角。",
@@ -1005,7 +1068,7 @@
       }
     },
     "bottleneck": {
-      "title": "标题",
+      "title": "瓶颈分析",
       "subtitle": "精准定位工作停滞之处——各阶段耗时、最慢阶段、返工循环，以及当前卡住的进行中工作。",
       "slowest": "最慢阶段",
       "noData": "暂无数据",

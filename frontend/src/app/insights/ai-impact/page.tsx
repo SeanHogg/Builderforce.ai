@@ -1,12 +1,8 @@
 'use client';
 
-import { LensPage } from '@/components/insights/LensShell';
-import { AiImpactLens } from '@/components/insights/AiImpactLens';
+import { InsightsRedirect } from '@/components/insights/InsightsRedirect';
 
+/** Retired — AI Impact is now a section of the combined /insights/ai dashboard. */
 export default function AiImpactInsightsPage() {
-  return (
-    <LensPage capability="insights.aiImpact" titleKey="aiImpact.title" subtitleKey="aiImpact.subtitle">
-      <AiImpactLens />
-    </LensPage>
-  );
+  return <InsightsRedirect to="/insights/ai?panel=ai-impact" />;
 }

@@ -24,7 +24,6 @@
       "planning": "Planification",
       "portfolio": "Portefeuille",
       "ceremonies": "Cérémonies",
-      "aiEffectiveness": "Efficacité de l’IA",
       "dora": "DORA",
       "finops": "FinOps",
       "funnel": "Entonnoir d’innovation",
@@ -44,8 +43,7 @@
       "docs": "Documents",
       "training": "Formation",
       "errors": "Erreurs",
-      "aiImpact": "Impact de l’IA",
-      "recommendations": "Recommandations",
+      "ai": "Aperçus IA",
       "space": "SPACE",
       "benchmarking": "Analyse comparative",
       "devex": "DevEx",
@@ -56,6 +54,7 @@
       "surveys": "Enquêtes",
       "dashboards": "Tableaux de bord",
       "devfinops": "DevFinOps",
+      "finance": "Finance",
       "workforce": "Effectif",
       "teams": "Équipes",
       "performance": "Performance",
@@ -506,6 +505,49 @@
     "loading": "Chargement…",
     "window": "Période",
     "days": "{n} jours",
+    "aihub": {
+      "title": "Aperçus IA",
+      "subtitle": "Adoption, efficacité et prochaines actions : votre programme IA en un coup d’œil. Ouvrez un rapport pour explorer.",
+      "viewReport": "Voir le rapport",
+      "panel": {
+        "aiImpact": "Impact de l’IA",
+        "aiImpactDesc": "Tendances d’adoption et d’utilisation des modèles, une matrice d’évaluation multi-outils et un score composite de productivité IA.",
+        "engineering": "Efficacité de l’IA",
+        "engineeringDesc": "Quelle approche IA livre vraiment — score de résultat, taux de fusion et coût par type de travail et modèle.",
+        "recommendations": "Recommandations",
+        "recommendationsDesc": "Actions prescriptives priorisées et anomalies à traiter, issues de chaque aperçu."
+      }
+    },
+    "delivhub": {
+      "title": "Livraison",
+      "subtitle": "Avancement de la livraison, goulots d'étranglement et performance d'ingénierie : votre programme de livraison en un coup d'œil. Ouvrez un rapport pour explorer.",
+      "viewDetails": "Voir les détails",
+      "openLens": "Ouvrir {name}",
+      "panel": {
+        "delivery": "Livraison",
+        "deliveryDesc": "Burnup, prévision et dérive du périmètre d'un livrable à travers initiatives, projets et versions.",
+        "bottlenecks": "Goulots d'étranglement",
+        "bottlenecksDesc": "Où le travail bloque — temps par étape, étape la plus lente, boucles de reprise et le WIP bloqué en ce moment.",
+        "dora": "Métriques DORA",
+        "doraDesc": "Les quatre clés DevOps — fréquence de déploiement, délai de livraison, taux d’échec des changements et temps de restauration — face aux paliers de performance.",
+        "space": "Métriques SPACE",
+        "spaceDesc": "Le cadre de productivité des développeurs à cinq dimensions qui complète DORA.",
+        "benchmarking": "Analyse comparative sectorielle",
+        "benchmarkingDesc": "Le classement de vos métriques de livraison par rapport à une cohorte du secteur — percentile et notation par secteur et taille d’équipe.",
+        "funnel": "Entonnoir d'innovation",
+        "funnelDesc": "Idée → validée → en construction → livrée → mesurée : conversion, délai de création de valeur et pipeline d’idées."
+      }
+    },
+    "finhub": {
+      "title": "Finance",
+      "subtitle": "Dépenses d’IA, allocation des investissements et DevFinOps : votre programme financier en un coup d’œil. Ouvrez n’importe quel rapport pour approfondir.",
+      "viewDetails": "Voir les détails",
+      "openPanel": "Ouvrir {name}",
+      "devfinops": {
+        "title": "DevFinOps",
+        "subtitle": "Estimations du crédit d’impôt R&D (QRE), couverture des contrôles SOC 1 et rapports de période prêts pour l’audit, dérivés de l’effort, du coût et de la piste d’audit inviolable des outils de l’agent."
+      }
+    },
     "common": {
       "delete": "Supprimer",
       "close": "Fermer",
@@ -863,6 +905,27 @@
       "activeUsers": "Utilisateurs actifs",
       "cost": "Coût"
     },
+    "devexhub": {
+      "title": "DevEx",
+      "subtitle": "Enquêtes et résultats sur l'expérience développeur en un coup d'œil : l'indice DevEx, l'eNPS, le ressenti et la participation. Ouvrez une section pour explorer en détail.",
+      "loading": "Chargement…",
+      "viewReport": "Voir le rapport",
+      "newSurvey": "Nouvelle enquête",
+      "panel": {
+        "results": "Résultats de l'enquête",
+        "resultsDesc": "L'indice DevEx, les scores par thème avec tendance, référence et ressenti, la carte thermique par segment, la participation dans le temps et l'évolution des priorités.",
+        "surveys": "Enquêtes",
+        "surveysDesc": "Créez des modèles d'enquête, lancez des campagnes, et consultez ou répondez aux retours sur l'expérience développeur."
+      },
+      "summary": {
+        "templates": "Modèles",
+        "templatesSub": "Jeux de questions réutilisables",
+        "openCampaigns": "Campagnes ouvertes",
+        "campaignsSub": "{n} au total",
+        "responses": "Réponses",
+        "responsesSub": "Toutes campagnes confondues"
+      }
+    },
     "devex": {
       "title": "Enquêtes et analyses DevEx",
       "subtitle": "Scores de pulse de l’expérience développeur, eNPS et la coupe d’analyse DevEx avec l’IA.",
@@ -1005,7 +1068,7 @@
       }
     },
     "bottleneck": {
-      "title": "Titre",
+      "title": "Analyse des goulots d'étranglement",
       "subtitle": "Identifiez précisément où le travail bloque : temps par étape, étape la plus lente, boucles de reprise et travail en cours actuellement bloqué.",
       "slowest": "Étape la plus lente",
       "noData": "pas encore de données",

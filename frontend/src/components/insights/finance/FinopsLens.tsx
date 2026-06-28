@@ -1,8 +1,16 @@
 'use client';
 
+/**
+ * Reusable DevFinOps lens — R&D Tax Credit, SOC 1 controls, and the audit-ready
+ * report — as a chrome-free component (no PageContainer / page header), so it can
+ * render BOTH inside the consolidated Finance dashboard's slide-out drill-down
+ * panel AND be opened on demand by the Brain. The old standalone /finops page is
+ * retired in favour of /insights/finance (this is the body that used to live in
+ * FinopsClient).
+ */
+
 import { useCallback, useEffect, useState } from 'react';
 import { useTranslations } from 'next-intl';
-import PageContainer from '@/components/PageContainer';
 import { RoleGate } from '@/components/RoleGate';
 import { usePermission, type Capability } from '@/lib/rbac';
 import {
@@ -24,9 +32,9 @@ import {
 
 // 'finops.manage' is added to the RBAC capability map by the orchestrator-owned
 // rbac.ts merge; cast keeps this client typesafe until that lands.
-const FINOPS_CAP = 'finops.manage' as Capability;
+export const FINOPS_CAP = 'finops.manage' as Capability;
 
-type Tab = 'rd' | 'soc' | 'audit';
+export type FinopsTab = 'rd' | 'soc' | 'audit';
 
 const usd = (n: number | null | undefined) =>
   n == null ? '—' : n.toLocaleString(undefined, { style: 'currency', currency: 'USD', maximumFractionDigits: 0 });
@@ -50,12 +58,16 @@ function StatCard({ label, value, hint }: { label: string; value: string; hint?:
   );
 }
 
-export default function FinopsClient() {
+/**
+ * The DevFinOps body. `initialTab` lets a drill-down deep-link straight to a
+ * section (e.g. the Brain opening the SOC controls). Renders its own tab bar.
+ */
+export function FinopsLens({ initialTab = 'rd' }: { initialTab?: FinopsTab }) {
   const t = useTranslations('finops');
   const canManage = usePermission(FINOPS_CAP).allowed;
-  const [tab, setTab] = useState<Tab>('rd');
+  const [tab, setTab] = useState<FinopsTab>(initialTab);
 
-  const tabBtn = (id: Tab, label: string) => (
+  const tabBtn = (id: FinopsTab, label: string) => (
     <button
       key={id}
       onClick={() => setTab(id)}
@@ -70,10 +82,7 @@ export default function FinopsClient() {
   );
 
   return (
-    <PageContainer width="readable">
-      <h1 style={{ fontSize: 24, fontWeight: 700, marginBottom: 4 }}>{t('title')}</h1>
-      <p style={{ color: 'var(--text-secondary)', marginBottom: 16 }}>{t('subtitle')}</p>
-
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
       <div style={{ display: 'flex', gap: 8, marginBottom: 20, flexWrap: 'wrap' }}>
         {tabBtn('rd', t('tab.rd'))}
         {tabBtn('soc', t('tab.soc'))}
@@ -83,7 +92,7 @@ export default function FinopsClient() {
       {tab === 'rd' && <RdSection t={t} canManage={canManage} />}
       {tab === 'soc' && <SocSection t={t} canManage={canManage} />}
       {tab === 'audit' && <AuditSection t={t} />}
-    </PageContainer>
+    </div>
   );
 }
 

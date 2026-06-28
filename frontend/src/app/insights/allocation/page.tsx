@@ -1,12 +1,8 @@
-'use client';
+import { redirect } from 'next/navigation';
 
-import { LensPage } from '@/components/insights/LensShell';
-import { AllocationLens } from '@/components/insights/AllocationLens';
-
-export default function AllocationInsightsPage() {
-  return (
-    <LensPage capability="insights.allocation" titleKey="alloc.title" subtitleKey="alloc.subtitle">
-      <AllocationLens />
-    </LensPage>
-  );
+// Investment Allocation is consolidated into the Finance hub at /insights/finance
+// as an interactive drill-down. Preserve old deep links by redirecting straight
+// into the allocation slide-out panel.
+export default function AllocationInsightsRedirect() {
+  redirect('/insights/finance?drill=allocation');
 }

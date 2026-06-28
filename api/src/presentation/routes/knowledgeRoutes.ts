@@ -36,6 +36,7 @@ import {
   notifyTrainingAssigned,
   type KnowledgeNotifierEnv,
 } from '../../application/knowledge/knowledgeNotifier';
+import { STANDARD_LIBRARY, standardItem, computeCoverage } from '../../application/knowledge/standardLibrary';
 import type { Env, HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 
@@ -307,6 +308,58 @@ export function createKnowledgeRoutes(db: Db): Hono<HonoEnv> {
     return c.json({ tags });
   });
 
+  // ---- KNOWLEDGE OVERVIEW (dashboard graphs + gap analysis) -------------
+  // The unified Knowledge home: how much knowledge exists, by type, how fresh
+  // it is, and — measured against the curated standard library — what coverage
+  // the team has and which standard SOPs/processes are still missing. The
+  // standardLibrary doubles as the template catalogue (present flag per item).
+  const STALE_DAYS = 90;
+  router.get('/overview', async (c) => {
+    const tenantId = c.get('tenantId') as number;
+    const env = c.env as Env;
+    const ver = await getCacheVersion(env, knowledgeVersionKey(tenantId));
+    const payload = await getOrSetCached(env, `knowledge:overview:${tenantId}:v:${ver}`, async () => {
+      const docs = await db
+        .select()
+        .from(knowledgeDocuments)
+        .where(eq(knowledgeDocuments.tenantId, tenantId));
+      const tagMap = await tagsFor(docs.map((d) => d.id));
+
+      const counts = { total: docs.length, sop: 0, process: 0, doc: 0, published: 0, draft: 0, archived: 0, requiresAck: 0 };
+      const staleMs = STALE_DAYS * 24 * 60 * 60 * 1000;
+      const nowMs = Date.now();
+      let stale = 0;
+      const liteDocs = docs.map((d) => {
+        counts[d.docType] = (counts[d.docType] ?? 0) + 1;
+        counts[d.status] = (counts[d.status] ?? 0) + 1;
+        if (d.requiresAck) counts.requiresAck += 1;
+        const updated = d.updatedAt instanceof Date ? d.updatedAt.getTime() : new Date(d.updatedAt).getTime();
+        if (d.status === 'published' && nowMs - updated > staleMs) stale += 1;
+        return { title: d.title, summary: d.summary, tags: tagMap.get(d.id) ?? [] };
+      });
+
+      const coverage = computeCoverage(liteDocs);
+      // Missing standard items become actionable "create from template" gaps.
+      const gaps = coverage.items.filter((i) => !i.present);
+      // Full catalogue for the template gallery (present flag included).
+      const templates = STANDARD_LIBRARY.map((t) => {
+        const item = coverage.items.find((i) => i.key === t.key);
+        return { key: t.key, title: t.title, docType: t.docType, summary: t.summary, tags: t.tags, present: item?.present ?? false };
+      });
+
+      return {
+        counts,
+        stale,
+        staleDays: STALE_DAYS,
+        coverage: { score: coverage.score, present: coverage.present, total: coverage.total },
+        gaps,
+        templates,
+      };
+    }, { kvTtlSeconds: 60, l1TtlMs: 30_000 });
+
+    return c.json(payload);
+  });
+
   // ---- DETAIL -----------------------------------------------------------
   router.get('/documents/:id', async (c) => {
     const tenantId = c.get('tenantId') as number;
@@ -358,12 +411,17 @@ export function createKnowledgeRoutes(db: Db): Hono<HonoEnv> {
       projectId?: number | null;
       requiresAck?: boolean;
       tags?: string[];
+      /** Start from a curated standard-library template (fills title/content/docType/tags). */
+      templateKey?: string;
     }>();
 
-    if (!body.title?.trim()) return c.json({ error: 'title is required' }, 400);
+    // A template seeds defaults; explicit request fields still win. With the
+    // create-modal gone, an untitled draft is valid — the editor renames inline.
+    const tmpl = body.templateKey ? standardItem(body.templateKey) : undefined;
+    const title = body.title?.trim() || tmpl?.title || 'Untitled document';
     const docType: DocType = (DOC_TYPES as readonly string[]).includes(body.docType ?? '')
       ? (body.docType as DocType)
-      : 'sop';
+      : (tmpl?.docType ?? 'doc');
 
     const [doc] = await db
       .insert(knowledgeDocuments)
@@ -372,9 +430,9 @@ export function createKnowledgeRoutes(db: Db): Hono<HonoEnv> {
         segmentId,
         projectId: body.projectId ?? null,
         docType,
-        title: body.title.trim(),
-        summary: body.summary?.trim() || null,
-        content: body.content ?? '',
+        title,
+        summary: body.summary?.trim() || tmpl?.summary || null,
+        content: body.content ?? tmpl?.starter ?? '',
         requiresAck: body.requiresAck ?? false,
         createdBy: userId,
         updatedBy: userId,
@@ -382,7 +440,7 @@ export function createKnowledgeRoutes(db: Db): Hono<HonoEnv> {
       .returning();
     if (!doc) return c.json({ error: 'Failed to create document' }, 500);
 
-    const tags = normaliseTags(body.tags);
+    const tags = normaliseTags(body.tags ?? tmpl?.tags);
     if (tags.length) {
       await db.insert(knowledgeDocumentTags).values(
         tags.map((tag) => ({ tenantId, documentId: doc.id, tag })),

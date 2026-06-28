@@ -1,19 +1,10 @@
 'use client';
 
-import { useEffect } from 'react';
-import { useRouter } from 'next/navigation';
-import { useAuth } from '@/lib/AuthContext';
-import { SurveysClient } from './SurveysClient';
+import { InsightsRedirect } from '@/components/insights/InsightsRedirect';
 
+/** Retired — survey management is now the "Surveys" panel of the combined
+ *  /insights/devex hub. The old URL stays alive (bookmarks, deep links) by
+ *  redirecting straight into the matching drill-down. */
 export default function SurveysPage() {
-  const router = useRouter();
-  const { isAuthenticated, hasTenant } = useAuth();
-
-  useEffect(() => {
-    if (!isAuthenticated) router.replace('/login');
-    else if (!hasTenant) router.replace('/tenants');
-  }, [isAuthenticated, hasTenant, router]);
-
-  if (!isAuthenticated || !hasTenant) return null;
-  return <SurveysClient />;
+  return <InsightsRedirect to="/insights/devex?panel=surveys" />;
 }

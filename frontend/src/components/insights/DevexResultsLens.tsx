@@ -24,12 +24,14 @@ function loadPercentile(): BenchmarkPercentile {
 }
 
 /**
- * DevEx Surveys & Insights lens (gate insights.devex) — the full results surface:
+ * DevEx results lens — the full survey-results surface drilled into from the
+ * DevEx hub dashboard (and openable by the Brain) via the shared slide-out:
  * the DevEx Index, per-topic scores with trend/benchmark/sentiment, the segment
  * heatmap, participation over time + by segment, and the priorities slope chart.
- * Benchmark percentile is a persisted view preference (localStorage).
+ * Self-contained (prop-less) so it renders standalone inside the panel; benchmark
+ * percentile is a persisted view preference (localStorage).
  */
-export function DevexLens() {
+export function DevexResultsLens() {
   const t = useTranslations('insights');
   const [days, setDays] = useState(90);
   const [percentile, setPercentile] = useState<BenchmarkPercentile>(75);

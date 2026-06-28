@@ -1,12 +1,8 @@
 'use client';
 
-import { LensPage } from '@/components/insights/LensShell';
-import { FunnelLens } from '@/components/insights/FunnelLens';
+import { InsightsRedirect } from '@/components/insights/InsightsRedirect';
 
+/** Retired — Innovation Funnel is now a panel of the combined /insights/delivery hub. */
 export default function FunnelInsightsPage() {
-  return (
-    <LensPage capability="insights.portfolio" titleKey="funnel.title" subtitleKey="funnel.subtitle">
-      <FunnelLens />
-    </LensPage>
-  );
+  return <InsightsRedirect to="/insights/delivery?panel=funnel" />;
 }
