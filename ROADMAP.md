@@ -334,6 +334,15 @@ These items completed the platform's multi-claw coordination layer. All five are
 - ✅ **`/llms` standalone page merged into `/ide/dashboard`.** The "Manage LLMs" button no longer navigates away — it toggles `MyLlmsPanel` inline on the dashboard (`app/ide/dashboard/page.tsx`); the standalone `app/llms/page.tsx` route was deleted. Single LLM-management surface, reachable where IDE projects (including LLM-modality ones) live.
 - ✅ **`MyLlmsPanel` localized.** `components/llm/MyLlmsPanel.tsx` now routes every visible string (heading, subtitle, form labels/placeholders, visibility options, buttons, confirm/error toasts, empty/loading states) through `useTranslations('llms')`; new 27-key `llms` namespace added to all 5 catalogs (en/zh/es/fr/de) with real translations. The merged LLM surface is now i18n-complete; frontend `tsc` clean.
 
+### 📊 Project Card Health Visuals (added 2026-06-28)
+
+Shipped 2026-06-28: every project card on `/projects` now shows a **health speedometer** + a **% done ring**. `/api/projects` list (`presentation/routes/projectRoutes.ts`) upgraded its existing grouped task aggregate to also return `completedTaskCount/openTaskCount/blockedTaskCount/overdueTaskCount` via Postgres `FILTER` (net-zero extra queries / no N+1). New shared `lib/projectHealth.ts` (`computeProjectHealth`) is the single source of the score+progress formula (health erodes with overdue/blocked open work, independent of progress); new reusable `components/charts/GaugeChart.tsx` speedometer primitive; `ProjectCard.tsx` wired + fully localized (new `projectCard.*` namespace, ICU plurals, all 5 catalogs). frontend + api tsgo clean.
+
+Open / deferred:
+- **Worker `/api/projects` returns no health breakdown.** `worker/src/routes/projects.ts` GET `/` is a raw `SELECT * FROM projects` (legacy anonymous path) with no task aggregate, so when `isWorkerForProjects()` is true the card renders without the gauge/ring (graceful — `hasData` false). Adding the same `FILTER` aggregate there (or retiring the worker path) would make the visuals appear in worker mode too. Unblocks: parity between worker and API project lists.
+- **Health visuals are card-only.** The shared `computeProjectHealth` helper is view-agnostic, but only `ProjectCard` consumes it — `ProjectTable` (and the calendar/gantt list) still show no health/progress column. Adding a compact health cell to `ProjectTable` would reuse the helper for free. Unblocks: at-a-glance health in the table/list views.
+- **`ProjectsContent.tsx` has un-localized strings.** The create-project modal, loading/empty states, and "New project" button in `components/ProjectsContent.tsx` are still hardcoded English (pre-existing; not touched this pass since only `ProjectCard` was modified). Should be routed through next-intl like the card. Unblocks: full `/projects` localization.
+
 ### 📊 Value-Delivery Visualization: Scenario Planner + Lifecycle Explorer (added 2026-06-28)
 
 Shipped 2026-06-28 into the **Delivery** insights lens (`components/insights/DeliveryLens.tsx`, `/insights/delivery`), closing the Jellyfish "visualize value delivery / model when value lands / lifecycle" gap:
