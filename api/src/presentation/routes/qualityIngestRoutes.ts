@@ -1,32 +1,28 @@
 /**
  * Quality ingest routes — /api/quality-ingest (PUBLIC, no tenant JWT).
  *
- * The inbound edge of the Quality pillar. Three keyed/​signed surfaces, all
- * resolving the owning tenant/project FROM the credential (never the request):
- *   POST /events            native canonical batch — Authorization: Bearer bfq_… (or ?key=)
- *   POST /otlp/v1/logs      OTLP/HTTP JSON logs     — same ingest key
- *   POST /otlp/v1/traces    OTLP/HTTP JSON traces   — same ingest key
- *   POST /webhooks/:sourceId provider webhook       — HMAC-verified against the source secret
+ * The inbound edge of the Quality pillar. Every channel resolves a COLLECTOR (not
+ * the request) and ingests through it; a project collector lands events straight
+ * in its project, a tenant-level collector routes each event via its mapping rules:
+ *   POST /events                       native canonical batch — Bearer bfq_… (or ?key=)
+ *   POST /otlp/v1/{logs,traces}        OTLP/HTTP (protobuf or JSON) — same key
+ *   POST /webhooks/:collectorId/:provider  provider webhook — HMAC-verified per integration
  *
- * Every body is run through the source's adapter (adapters.ts) → canonical events
- * → ingestEngine. Mirrors the keyed/JWT split of telemetryRoutes + boardWebhookRoutes.
+ * Bodies run through the source adapter (adapters.ts) → canonical events → ingestEngine.
  */
 
 import { Hono } from 'hono';
-import { and, eq } from 'drizzle-orm';
-import { errorSources } from '../../infrastructure/database/schema';
+import { and, asc, eq } from 'drizzle-orm';
+import { errorCollectors, errorCollectorIntegrations, errorMappingRules } from '../../infrastructure/database/schema';
 import { hashSecret } from '../../infrastructure/auth/HashService';
 import { decryptCredentials } from '../../application/integrations/credentialCrypto';
 import { getErrorAdapter } from '../../application/quality/adapters';
-import { ingestErrorEvents, type IngestSourceRef } from '../../application/quality/ingestEngine';
+import { otlpLogsToJson, otlpTracesToJson } from '../../application/quality/otlpProtobuf';
+import { ingestErrorEvents } from '../../application/quality/ingestEngine';
+import type { CollectorRef, MappingRule } from '../../application/quality/errorMapping';
+import type { NormalizedErrorEvent } from '../../application/quality/errorSpec';
 import type { HonoEnv, Env } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
-
-interface ResolvedSource extends IngestSourceRef {
-  source: string;
-  webhookSecretEnc: string | null;
-  webhookSecretIv: string | null;
-}
 
 /** Pull the ingest key from `Authorization: Bearer <key>` or `?key=`. */
 function readIngestKey(c: { req: { header: (n: string) => string | undefined; query: (n: string) => string | undefined } }): string | null {
@@ -35,91 +31,140 @@ function readIngestKey(c: { req: { header: (n: string) => string | undefined; qu
   return c.req.query('key')?.trim() || null;
 }
 
-async function resolveSourceByKey(db: Db, key: string): Promise<ResolvedSource | null> {
+async function resolveCollectorByKey(db: Db, key: string): Promise<CollectorRef | null> {
   const keyHash = await hashSecret(key);
   const [row] = await db
     .select({
-      id: errorSources.id, tenantId: errorSources.tenantId, projectId: errorSources.projectId,
-      source: errorSources.source, enabled: errorSources.enabled,
-      webhookSecretEnc: errorSources.webhookSecretEnc, webhookSecretIv: errorSources.webhookSecretIv,
+      id: errorCollectors.id, tenantId: errorCollectors.tenantId, projectId: errorCollectors.projectId,
+      defaultProjectId: errorCollectors.defaultProjectId, enabled: errorCollectors.enabled,
     })
-    .from(errorSources)
-    .where(eq(errorSources.keyHash, keyHash))
+    .from(errorCollectors)
+    .where(eq(errorCollectors.keyHash, keyHash))
     .limit(1);
   if (!row || !row.enabled) return null;
-  return row as ResolvedSource;
+  return { id: row.id, tenantId: row.tenantId, projectId: row.projectId, defaultProjectId: row.defaultProjectId };
+}
+
+/** Mapping rules (priority asc) — only a tenant-level collector needs them. */
+async function loadRulesIfTenant(db: Db, collector: CollectorRef): Promise<MappingRule[]> {
+  if (collector.projectId != null) return [];
+  return db
+    .select({
+      matchField: errorMappingRules.matchField, matchOp: errorMappingRules.matchOp,
+      matchValue: errorMappingRules.matchValue, projectId: errorMappingRules.projectId,
+      priority: errorMappingRules.priority,
+    })
+    .from(errorMappingRules)
+    .where(eq(errorMappingRules.collectorId, collector.id))
+    .orderBy(asc(errorMappingRules.priority));
+}
+
+/** Ingest a normalized batch through a collector (loads mapping rules as needed). */
+async function ingestForCollector(db: Db, env: Env, collector: CollectorRef, events: NormalizedErrorEvent[]) {
+  const rules = await loadRulesIfTenant(db, collector);
+  return ingestErrorEvents(db, env, collector, events, rules);
 }
 
 export function createQualityIngestRoutes(db: Db): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
 
-  /** Shared keyed-ingest handler for native + OTLP. */
-  const keyedIngest = (adapterId: string) => async (c: import('hono').Context<HonoEnv>) => {
+  /** Keyed native ingest (browser SDK + server/compiled code). */
+  router.post('/events', async (c) => {
     const key = readIngestKey(c);
     if (!key) return c.json({ error: 'Missing ingest key' }, 401);
-    const source = await resolveSourceByKey(db, key);
-    if (!source) return c.json({ error: 'Invalid ingest key' }, 401);
+    const collector = await resolveCollectorByKey(db, key);
+    if (!collector) return c.json({ error: 'Invalid ingest key' }, 401);
 
     let body: unknown;
+    try { body = await c.req.json(); } catch { return c.json({ error: 'Invalid JSON body' }, 400); }
+
+    const events = getErrorAdapter('native').normalize(body);
+    const result = await ingestForCollector(db, c.env as Env, collector, events);
+    return c.json(result, result.capExceeded ? 429 : 202);
+  });
+
+  /**
+   * OTLP/HTTP — exporters append /v1/logs and /v1/traces. Accepts the default
+   * `application/x-protobuf` (our dependency-free reader) AND `application/json`;
+   * both reshape to the OTLP JSON the otlp adapter consumes.
+   */
+  const otlpIngest = (kind: 'logs' | 'traces') => async (c: import('hono').Context<HonoEnv>) => {
+    const key = readIngestKey(c);
+    if (!key) return c.json({ error: 'Missing ingest key' }, 401);
+    const collector = await resolveCollectorByKey(db, key);
+    if (!collector) return c.json({ error: 'Invalid ingest key' }, 401);
+
+    const contentType = (c.req.header('Content-Type') ?? '').toLowerCase();
+    let otlpJson: unknown;
     try {
-      body = await c.req.json();
+      if (contentType.includes('protobuf')) {
+        const bytes = new Uint8Array(await c.req.arrayBuffer());
+        otlpJson = kind === 'logs' ? otlpLogsToJson(bytes) : otlpTracesToJson(bytes);
+      } else {
+        otlpJson = await c.req.json();
+      }
     } catch {
-      return c.json({ error: 'Invalid JSON body' }, 400);
+      return c.json({ error: 'Invalid OTLP body' }, 400);
     }
 
-    const events = getErrorAdapter(adapterId).normalize(body);
-    const result = await ingestErrorEvents(db, c.env as Env, source, events);
+    const events = getErrorAdapter('otlp').normalize(otlpJson);
+    const result = await ingestForCollector(db, c.env as Env, collector, events);
     return c.json(result, result.capExceeded ? 429 : 202);
   };
 
-  // Native canonical batch (browser SDK + server/compiled code).
-  router.post('/events', keyedIngest('native'));
+  router.post('/otlp/v1/logs', otlpIngest('logs'));
+  router.post('/otlp/v1/traces', otlpIngest('traces'));
 
-  // OTLP/HTTP JSON — exporters append /v1/logs and /v1/traces to the configured endpoint.
-  router.post('/otlp/v1/logs', keyedIngest('otlp'));
-  router.post('/otlp/v1/traces', keyedIngest('otlp'));
+  /**
+   * Provider webhook — addressed by collector + provider. The raw body is
+   * HMAC-verified against the integration's decrypted secret (when configured)
+   * before the provider adapter normalizes it.
+   */
+  router.post('/webhooks/:collectorId/:provider', async (c) => {
+    const collectorId = c.req.param('collectorId');
+    const provider = c.req.param('provider');
 
-  // Provider webhook (Sentry/PostHog/LogRocket). Addressed by source id; the raw
-  // body is HMAC-verified against the source's decrypted secret before normalize.
-  router.post('/webhooks/:sourceId', async (c) => {
-    const sourceId = c.req.param('sourceId');
-    const [row] = await db
+    const [col] = await db
       .select({
-        id: errorSources.id, tenantId: errorSources.tenantId, projectId: errorSources.projectId,
-        source: errorSources.source, enabled: errorSources.enabled,
-        webhookSecretEnc: errorSources.webhookSecretEnc, webhookSecretIv: errorSources.webhookSecretIv,
+        id: errorCollectors.id, tenantId: errorCollectors.tenantId, projectId: errorCollectors.projectId,
+        defaultProjectId: errorCollectors.defaultProjectId, enabled: errorCollectors.enabled,
       })
-      .from(errorSources)
-      .where(eq(errorSources.id, sourceId))
+      .from(errorCollectors)
+      .where(eq(errorCollectors.id, collectorId))
       .limit(1);
-    if (!row || !row.enabled) return c.json({ error: 'Unknown source' }, 404);
+    if (!col || !col.enabled) return c.json({ error: 'Unknown collector' }, 404);
 
-    const adapter = getErrorAdapter(row.source);
+    let adapter;
+    try { adapter = getErrorAdapter(provider); } catch { return c.json({ error: 'Unknown provider' }, 404); }
+
+    const [integration] = await db
+      .select({ secretEnc: errorCollectorIntegrations.secretEnc, secretIv: errorCollectorIntegrations.secretIv })
+      .from(errorCollectorIntegrations)
+      .where(and(eq(errorCollectorIntegrations.collectorId, collectorId), eq(errorCollectorIntegrations.provider, provider)))
+      .limit(1);
+    if (!integration) return c.json({ error: 'Provider not connected to this collector' }, 404);
+
     const rawBody = await c.req.text();
 
     // When a secret is configured AND the adapter can verify, the signature must
-    // pass. A source with no secret accepts unsigned posts (some providers don't sign).
-    if (row.webhookSecretEnc && row.webhookSecretIv && adapter.verify) {
-      const secretBlob = await decryptCredentials(
-        row.webhookSecretEnc,
-        row.webhookSecretIv,
-        (c.env.INTEGRATION_ENCRYPTION_SECRET ?? c.env.JWT_SECRET) as string,
-        row.tenantId,
+    // pass. An integration with no secret accepts unsigned posts (some providers
+    // don't sign).
+    if (integration.secretEnc && integration.secretIv && adapter.verify) {
+      const blob = await decryptCredentials(
+        integration.secretEnc, integration.secretIv,
+        (c.env.INTEGRATION_ENCRYPTION_SECRET ?? c.env.JWT_SECRET) as string, col.tenantId,
       );
-      const secret = typeof secretBlob?.secret === 'string' ? secretBlob.secret : '';
+      const secret = typeof blob?.secret === 'string' ? blob.secret : '';
       const ok = secret ? await adapter.verify(rawBody, (n) => c.req.header(n), secret) : false;
       if (!ok) return c.json({ error: 'Invalid signature' }, 401);
     }
 
     let payload: unknown;
-    try {
-      payload = JSON.parse(rawBody);
-    } catch {
-      return c.json({ error: 'Invalid JSON body' }, 400);
-    }
+    try { payload = JSON.parse(rawBody); } catch { return c.json({ error: 'Invalid JSON body' }, 400); }
 
+    const collector: CollectorRef = { id: col.id, tenantId: col.tenantId, projectId: col.projectId, defaultProjectId: col.defaultProjectId };
     const events = adapter.normalize(payload);
-    const result = await ingestErrorEvents(db, c.env as Env, row as ResolvedSource, events);
+    const result = await ingestForCollector(db, c.env as Env, collector, events);
     return c.json(result, result.capExceeded ? 429 : 202);
   });
 

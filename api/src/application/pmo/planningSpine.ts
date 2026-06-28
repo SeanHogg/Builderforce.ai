@@ -17,7 +17,7 @@
  * unit-testable; {@link loadPlanningSpine} just feeds it rows.
  */
 
-import { and, eq, inArray, sql } from 'drizzle-orm';
+import { and, eq, gte, inArray, lte, sql } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import {
   initiatives,
@@ -27,8 +27,10 @@ import {
   objectives,
   portfolios,
   projects,
+  roadmapItems,
   tasks,
 } from '../../infrastructure/database/schema';
+import { loggedMinutesByTask } from '../timeTracking/timeTracking';
 import {
   allocationCategoryLabel,
   defaultCostClassFor,
@@ -39,7 +41,7 @@ import {
 
 export type CostClass = 'capex' | 'opex';
 export type CostClassSource = 'manual' | 'inherited' | 'agent';
-export type SpineNodeKind = 'portfolio' | 'objective' | 'initiative' | 'epic' | 'task';
+export type SpineNodeKind = 'portfolio' | 'objective' | 'initiative' | 'epic' | 'task' | 'roadmap';
 
 const MILLICENTS_PER_USD = 100_000;
 const HOUR_MS = 3_600_000;
@@ -123,6 +125,8 @@ export interface RawTask {
   actionType: string | null; source: string | null; allocationCategory: string | null;
 }
 export interface RawObjectiveLink { objectiveId: string; linkKind: string; initiativeId: string | null; taskId: number | null }
+/** Roadmap item folded into the spine (0225/SPINE-4): targetDate-only, no cost. */
+export interface RawRoadmapItem { id: string; title: string; status: string; targetDate: Date | null; projectId: number | null }
 export interface RawTaskLlm { taskId: number; millicents: number }
 export interface RawMemberRate { memberRef: string; costRateUsdCents: number | null }
 
@@ -185,6 +189,14 @@ export function buildSpine(input: {
   links: RawObjectiveLink[];
   taskLlm: RawTaskLlm[];
   memberRates: RawMemberRate[];
+  /** Real logged minutes per task (migration 0245) — authoritative over the
+   *  cycle-time estimate when present. */
+  loggedMinutesByTask?: Map<number, number>;
+  /** Roadmap items folded in as leaf nodes (SPINE-4). */
+  roadmapItems?: RawRoadmapItem[];
+  /** Drop container nodes (portfolio/objective/initiative) with no leaf descendant
+   *  — used by the project-scoped view (SPINE-3) so empty parents don't show. */
+  prune?: boolean;
 }): SpineResult {
   const projectInitiative = new Map<number, string | null>(input.projects.map((p) => [p.id, p.initiativeId]));
   const llmUsdByTask = new Map<number, number>(
@@ -230,6 +242,9 @@ export function buildSpine(input: {
     nodes.set(`${kind}:${tk.id}`, node);
     categoryDefaultByKey.set(`${kind}:${tk.id}`, defaultCostClassFor(categoryOf(tk)));
   }
+  for (const rm of input.roadmapItems ?? []) {
+    nodes.set(`roadmap:${rm.id}`, baseNode('roadmap', rm.id, rm.title, rm.status, null, iso(rm.targetDate), null, 'inherited', false, null));
+  }
 
   // ── parentKey (single parent; objective link wins) ────────────────────────
   const keyOfTask = (id: number): string => (nodes.has(`epic:${id}`) ? `epic:${id}` : `task:${id}`);
@@ -252,6 +267,32 @@ export function buildSpine(input: {
       ? exists(keyOfTask(tk.parentTaskId))
       : exists((tk.initiativeId ?? projectInitiative.get(tk.projectId) ?? null) ? `initiative:${tk.initiativeId ?? projectInitiative.get(tk.projectId)}` : null);
     node.parentKey = (linked && nodes.has(linked) ? linked : null) ?? structural;
+  }
+  for (const rm of input.roadmapItems ?? []) {
+    const node = nodes.get(`roadmap:${rm.id}`)!;
+    const initId = rm.projectId != null ? projectInitiative.get(rm.projectId) : null;
+    node.parentKey = exists(initId ? `initiative:${initId}` : null);
+  }
+
+  // ── prune empty containers (SPINE-3 project view) ─────────────────────────
+  if (input.prune) {
+    const childrenOf = new Map<string | null, string[]>();
+    for (const n of nodes.values()) {
+      const p = n.parentKey && nodes.has(n.parentKey) ? n.parentKey : null;
+      (childrenOf.get(p) ?? childrenOf.set(p, []).get(p)!).push(n.key);
+    }
+    const leafKinds = new Set<SpineNodeKind>(['task', 'epic', 'roadmap']);
+    const keepCache = new Map<string, boolean>();
+    const hasLeaf = (key: string): boolean => {
+      const cached = keepCache.get(key);
+      if (cached != null) return cached;
+      const n = nodes.get(key)!;
+      keepCache.set(key, true); // cycle backstop
+      const keep = leafKinds.has(n.kind) || (childrenOf.get(key) ?? []).some(hasLeaf);
+      keepCache.set(key, keep);
+      return keep;
+    };
+    for (const key of [...nodes.keys()]) if (!hasLeaf(key)) nodes.delete(key);
   }
 
   // ── effective cost class (top-down, memoised, cycle-guarded) ───────────────
@@ -294,12 +335,16 @@ export function buildSpine(input: {
     const node = nodes.get(key)!;
     const llmUsd = llmUsdByTask.get(tk.id) ?? 0;
     let humanUsd = 0;
-    if (tk.completedAt && tk.assignedUserId) {
-      const rate = ratePerHourByMember.get(tk.assignedUserId);
-      if (rate) {
+    const rate = tk.assignedUserId ? ratePerHourByMember.get(tk.assignedUserId) : undefined;
+    const loggedMinutes = input.loggedMinutesByTask?.get(tk.id) ?? 0;
+    if (rate) {
+      if (loggedMinutes > 0) {
+        // REAL logged time (0245) wins — priced at the task owner's rate.
+        humanUsd = rate * (loggedMinutes / 60);
+      } else if (tk.completedAt) {
+        // Fallback: estimate from cycle time (capped) until time is logged.
         const cycleHours = (new Date(tk.completedAt).getTime() - new Date(tk.createdAt).getTime()) / HOUR_MS;
-        const hours = Math.max(0, Math.min(cycleHours, HUMAN_HOURS_CAP));
-        humanUsd = rate * hours;
+        humanUsd = rate * Math.max(0, Math.min(cycleHours, HUMAN_HOURS_CAP));
       }
     }
     const total = llmUsd + humanUsd;
@@ -361,9 +406,16 @@ function baseNode(
 
 // ── DB loader ────────────────────────────────────────────────────────────────
 
+export interface SpineLoadOpts {
+  /** Restrict the leaf set to one project (SPINE-3); empty containers are pruned. */
+  projectId?: number;
+  /** Bound LLM spend + logged time to a date window for period reporting (SPINE-5). */
+  window?: { from: string; to: string };
+}
+
 /** Load every spine input for a tenant/segment and assemble the spine. */
-export async function loadPlanningSpine(db: Db, tenantId: number, segmentId: string): Promise<SpineResult> {
-  const [pfRows, objRows, initRows, projRows, taskRows, linkRows] = await Promise.all([
+export async function loadPlanningSpine(db: Db, tenantId: number, segmentId: string, opts: SpineLoadOpts = {}): Promise<SpineResult> {
+  const [pfRows, objRows, initRows, projRows, taskRows, linkRows, roadmapRows] = await Promise.all([
     db.select({ id: portfolios.id, name: portfolios.name, status: portfolios.status, costClass: portfolios.costClass, costClassSource: portfolios.costClassSource })
       .from(portfolios).where(and(eq(portfolios.tenantId, tenantId), eq(portfolios.segmentId, segmentId))),
     db.select({ id: objectives.id, title: objectives.title, status: objectives.status, startDate: objectives.startDate, endDate: objectives.endDate, portfolioId: objectives.portfolioId, initiativeId: objectives.initiativeId, costClass: objectives.costClass, costClassSource: objectives.costClassSource })
@@ -378,22 +430,26 @@ export async function loadPlanningSpine(db: Db, tenantId: number, segmentId: str
       startDate: tasks.startDate, dueDate: tasks.dueDate, createdAt: tasks.createdAt, completedAt: tasks.completedAt,
       assignedUserId: tasks.assignedUserId, costClass: tasks.costClass, costClassSource: tasks.costClassSource, costClassVerified: tasks.costClassVerified,
       actionType: tasks.actionType, source: tasks.source, allocationCategory: tasks.allocationCategory,
-    }).from(tasks).where(eq(tasks.segmentId, segmentId)),
+    }).from(tasks).where(opts.projectId != null ? and(eq(tasks.segmentId, segmentId), eq(tasks.projectId, opts.projectId)) : eq(tasks.segmentId, segmentId)),
     db.select({ objectiveId: objectiveLinks.objectiveId, linkKind: objectiveLinks.linkKind, initiativeId: objectiveLinks.initiativeId, taskId: objectiveLinks.taskId })
       .from(objectiveLinks).where(and(eq(objectiveLinks.tenantId, tenantId), eq(objectiveLinks.segmentId, segmentId))),
+    db.select({ id: roadmapItems.id, title: roadmapItems.title, status: roadmapItems.status, targetDate: roadmapItems.targetDate, projectId: roadmapItems.projectId })
+      .from(roadmapItems).where(opts.projectId != null ? and(eq(roadmapItems.tenantId, tenantId), eq(roadmapItems.segmentId, segmentId), eq(roadmapItems.projectId, opts.projectId)) : and(eq(roadmapItems.tenantId, tenantId), eq(roadmapItems.segmentId, segmentId))),
   ]);
 
   const taskIds = taskRows.map((t) => t.id);
-  const [llmRows, rateRows] = await Promise.all([
+  const llmWhere = opts.window
+    ? and(eq(llmUsageLog.tenantId, tenantId), inArray(llmUsageLog.taskId, taskIds), gte(llmUsageLog.createdAt, new Date(opts.window.from)), lte(llmUsageLog.createdAt, new Date(`${opts.window.to}T23:59:59.999Z`)))
+    : and(eq(llmUsageLog.tenantId, tenantId), inArray(llmUsageLog.taskId, taskIds));
+  const [llmRows, rateRows, loggedMin] = await Promise.all([
     taskIds.length
       ? db.select({ taskId: llmUsageLog.taskId, millicents: sql<string>`coalesce(sum(${llmUsageLog.costUsdMillicents}),0)` })
-          .from(llmUsageLog)
-          .where(and(eq(llmUsageLog.tenantId, tenantId), inArray(llmUsageLog.taskId, taskIds)))
-          .groupBy(llmUsageLog.taskId)
+          .from(llmUsageLog).where(llmWhere).groupBy(llmUsageLog.taskId)
       : Promise.resolve([] as Array<{ taskId: number | null; millicents: string }>),
     db.select({ memberRef: memberProfiles.memberRef, costRateUsdCents: memberProfiles.costRateUsdCents })
       .from(memberProfiles)
       .where(and(eq(memberProfiles.tenantId, tenantId), eq(memberProfiles.memberKind, 'human'))),
+    loggedMinutesByTask(db, tenantId, taskIds, opts.window),
   ]);
 
   return buildSpine({
@@ -405,5 +461,43 @@ export async function loadPlanningSpine(db: Db, tenantId: number, segmentId: str
     links: linkRows,
     taskLlm: llmRows.filter((r) => r.taskId != null).map((r) => ({ taskId: r.taskId as number, millicents: Number(r.millicents) })),
     memberRates: rateRows,
+    loggedMinutesByTask: loggedMin,
+    roadmapItems: roadmapRows,
+    prune: opts.projectId != null,
   });
+}
+
+/**
+ * Tenant-wide map of task id → effective CAPEX/OPEX class, resolved through the
+ * SAME lineage rules as the spine (own → ancestor objective/initiative → category
+ * default). Lets the allocation lens (which is tenant-scoped, not segment-scoped)
+ * honour lineage inheritance instead of only own-or-category — closing SPINE-2.
+ * Cost/date inputs are skipped (classification only), so it's a light read.
+ */
+export async function loadTaskCostClassMap(db: Db, tenantId: number): Promise<Map<number, CostClass>> {
+  const [objRows, initRows, projRows, taskRows, linkRows] = await Promise.all([
+    db.select({ id: objectives.id, title: objectives.title, status: objectives.status, startDate: objectives.startDate, endDate: objectives.endDate, portfolioId: objectives.portfolioId, initiativeId: objectives.initiativeId, costClass: objectives.costClass, costClassSource: objectives.costClassSource })
+      .from(objectives).where(eq(objectives.tenantId, tenantId)),
+    db.select({ id: initiatives.id, name: initiatives.name, status: initiatives.status, startDate: initiatives.startDate, targetDate: initiatives.targetDate, portfolioId: initiatives.portfolioId, costClass: initiatives.costClass, costClassSource: initiatives.costClassSource })
+      .from(initiatives).where(eq(initiatives.tenantId, tenantId)),
+    db.select({ id: projects.id, initiativeId: projects.initiativeId }).from(projects).where(eq(projects.tenantId, tenantId)),
+    db.select({
+      id: tasks.id, projectId: tasks.projectId, parentTaskId: tasks.parentTaskId, initiativeId: tasks.initiativeId,
+      taskType: tasks.taskType, title: tasks.title, description: tasks.description, status: tasks.status,
+      startDate: tasks.startDate, dueDate: tasks.dueDate, createdAt: tasks.createdAt, completedAt: tasks.completedAt,
+      assignedUserId: tasks.assignedUserId, costClass: tasks.costClass, costClassSource: tasks.costClassSource, costClassVerified: tasks.costClassVerified,
+      actionType: tasks.actionType, source: tasks.source, allocationCategory: tasks.allocationCategory,
+    }).from(tasks).innerJoin(projects, eq(projects.id, tasks.projectId)).where(eq(projects.tenantId, tenantId)),
+    db.select({ objectiveId: objectiveLinks.objectiveId, linkKind: objectiveLinks.linkKind, initiativeId: objectiveLinks.initiativeId, taskId: objectiveLinks.taskId })
+      .from(objectiveLinks).where(eq(objectiveLinks.tenantId, tenantId)),
+  ]);
+  const spine = buildSpine({
+    portfolios: [], objectives: objRows, initiatives: initRows, projects: projRows,
+    tasks: taskRows as RawTask[], links: linkRows, taskLlm: [], memberRates: [],
+  });
+  const map = new Map<number, CostClass>();
+  for (const n of spine.nodes) {
+    if ((n.kind === 'task' || n.kind === 'epic') && n.effectiveCostClass) map.set(Number(n.id), n.effectiveCostClass);
+  }
+  return map;
 }

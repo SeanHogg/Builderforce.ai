@@ -27,6 +27,11 @@ describe('summarizeQuality', () => {
     expect(q.alertsCount).toBe(1);
     expect(q.prodIncidents.count).toBe(2);
     expect(q.prodIncidents.mttrHours).toBeCloseTo(6, 5);
+    // Uptime derives from incident downtime when no samples: one 6h outage + one
+    // ongoing (2 days → 48h) over a 90-day (2160h) window.
+    expect(q.uptimePct).not.toBeNull();
+    expect(q.uptimePct!).toBeLessThan(100);
+    expect(q.uptimePct!).toBeGreaterThan(97);
     expect(q.support.tickets).toBe(3);
     expect(q.support.bugs).toBe(1);
     expect(q.support.distinctCustomers).toBe(2);

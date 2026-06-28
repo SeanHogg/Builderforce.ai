@@ -84,6 +84,7 @@ export class TaskRepository implements ITaskRepository {
         explicitRepoId:    plain.explicitRepoId ?? undefined,
         sprintId:          plain.sprintId ?? undefined,
         releaseId:         plain.releaseId ?? undefined,
+        storyPoints:       plain.storyPoints ?? undefined,
         githubIssueNumber: plain.githubIssueNumber ?? undefined,
         githubIssueUrl:    plain.githubIssueUrl ?? undefined,
         githubPrUrl:       plain.githubPrUrl ?? undefined,
@@ -128,6 +129,8 @@ export class TaskRepository implements ITaskRepository {
         sprintId:          plain.sprintId ?? null,
         // Authoritative (real null) so un-linking from a release clears it.
         releaseId:         plain.releaseId ?? null,
+        // Authoritative (real null) so clearing the estimate persists.
+        storyPoints:       plain.storyPoints ?? null,
         githubIssueNumber: plain.githubIssueNumber ?? undefined,
         githubIssueUrl:    plain.githubIssueUrl ?? undefined,
         githubPrUrl:       plain.githubPrUrl ?? undefined,
@@ -214,6 +217,7 @@ function toDomain(row: Row): Task {
     explicitRepoId:    row.explicitRepoId ?? null,
     sprintId:          row.sprintId ?? null,
     releaseId:         row.releaseId ?? null,
+    storyPoints:       row.storyPoints ?? null,
     githubIssueNumber: row.githubIssueNumber ?? null,
     githubIssueUrl:    row.githubIssueUrl ?? null,
     githubPrUrl:       row.githubPrUrl ?? null,

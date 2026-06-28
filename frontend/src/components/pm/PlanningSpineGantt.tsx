@@ -4,6 +4,7 @@ import { useMemo, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { pmoApi, type SpineNode, type SpineResult } from '@/lib/builderforceApi';
 import { usePmData } from '@/lib/pm/usePmData';
+import { usePmScope } from '@/lib/pm/scope';
 import { COST_CLASS_COLORS, formatUsd } from '@/lib/pm/costClass';
 import { parseDate, startOfDay, formatShort } from '@/lib/schedule';
 import { PmEmpty, PmError } from './pmShared';
@@ -21,7 +22,7 @@ const ROW_H = 30;
 const DAY_MS = 86_400_000;
 
 const KIND_ICON: Record<SpineNode['kind'], string> = {
-  portfolio: '📁', objective: '🎯', initiative: '🚩', epic: '🧩', task: '▫️',
+  portfolio: '📁', objective: '🎯', initiative: '🚩', epic: '🧩', task: '▫️', roadmap: '📍',
 };
 
 function daysBetween(a: Date, b: Date): number {
@@ -45,8 +46,17 @@ function monthSegments(start: Date, end: Date): Array<{ label: string; days: num
 
 export function PlanningSpineGantt() {
   const t = useTranslations('spine');
-  const { data, error } = usePmData<SpineResult>(() => pmoApi.spine(), []);
+  const { projectId } = usePmScope();
+  const { data, error } = usePmData<SpineResult>(() => pmoApi.spine(projectId), [projectId]);
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+
+  const exportCsv = async () => {
+    const csv = await pmoApi.exportSpineCsv({ projectId });
+    const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
+    const a = document.createElement('a');
+    a.href = url; a.download = 'capex-opex.csv'; a.click();
+    URL.revokeObjectURL(url);
+  };
 
   const { childrenByParent, roots } = useMemo(() => {
     const byParent = new Map<string | null, SpineNode[]>();
@@ -123,6 +133,10 @@ export function PlanningSpineGantt() {
           <span style={{ color: 'var(--coral-bright)', fontWeight: 600 }}>⚠ {t('anomalies', { count: data.anomalyCount })}</span>
         )}
         <span style={{ marginLeft: 'auto', color: 'var(--text-muted)' }}>{t('estimateNote')}</span>
+        <button type="button" onClick={exportCsv}
+          style={{ padding: '4px 10px', borderRadius: 7, border: '1px solid var(--border-subtle)', background: 'transparent', color: 'var(--text-secondary)', fontSize: '0.75rem', fontWeight: 600, cursor: 'pointer' }}>
+          {t('exportCsv')}
+        </button>
       </div>
 
       <div style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', borderRadius: 12, overflow: 'hidden' }}>

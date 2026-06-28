@@ -8,13 +8,15 @@
 
 import { Hono } from 'hono';
 import { authMiddleware } from '../middleware/authMiddleware';
-import { mountTrackers, type TrackerOpts } from './segmentTrackerRoutes';
+import { mountTrackers, scope, type TrackerOpts } from './segmentTrackerRoutes';
 import { createPokerRoutes, createRetroRoutes } from './pokerRetroRoutes';
 import { createCeremonyRoutes } from './ceremonyRoutes';
+import { getOrSetCached } from '../../infrastructure/cache/readThroughCache';
+import { computeVelocityInsights } from '../../application/insights/velocityInsights';
 import {
   sprints, teamVelocity, capacityPlanning, costCalculations, featureScores,
 } from '../../infrastructure/database/schema';
-import type { HonoEnv } from '../../env';
+import type { Env, HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 
 const TRACKERS: Array<{ path: string; table: unknown; opts: TrackerOpts }> = [
@@ -29,6 +31,20 @@ export function createAgileRoutes(db: Db): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
   router.use('*', authMiddleware);
   mountTrackers(router, db, TRACKERS);
+
+  // Derived velocity (EMP-4): committed vs completed STORY POINTS per sprint from
+  // real task estimates + the rolling-average planning forecast. Short TTL (tasks
+  // are hot-write). Read-only — the manual /velocity tracker stays for overrides.
+  router.get('/velocity/derived', async (c) => {
+    const { tenantId } = scope(c);
+    const env = c.env as Env;
+    return c.json(await getOrSetCached(
+      env, `agile:velocity-derived:t:${tenantId}`,
+      () => computeVelocityInsights(db, tenantId),
+      { kvTtlSeconds: 60, l1TtlMs: 15_000 },
+    ));
+  });
+
   // Nested session models (not flat trackers).
   router.route('/poker', createPokerRoutes(db));
   router.route('/retros', createRetroRoutes(db));

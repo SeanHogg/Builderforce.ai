@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import ReactMarkdown from 'react-markdown';
@@ -18,6 +18,7 @@ import {
   type DocType,
   type Collaborator,
   type CollaboratorRole,
+  type AnalysisResult,
 } from '@/lib/knowledgeApi';
 import {
   inputStyle,
@@ -55,6 +56,9 @@ export default function KnowledgeDocClient({ docId }: { docId: string }) {
   const [mode, setMode] = useState<'edit' | 'preview'>('preview');
   const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved'>('idle');
   const dirtyRef = useRef(false);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  // Caret to restore after a remote collaborative edit re-renders the textarea.
+  const pendingCaretRef = useRef<number | null>(null);
 
   const collab = useDocCollaboration(docId, {
     userId: user?.id ?? '',
@@ -68,10 +72,25 @@ export default function KnowledgeDocClient({ docId }: { docId: string }) {
   useEffect(() => {
     if (!collab.enabled || collab.value === null || collab.value === content) return;
     if (collab.value.length === 0 && content.length > 0) return;
+    // Capture the caret so the incoming remote edit doesn't kick it to the end.
+    const ta = textareaRef.current;
+    if (ta && document.activeElement === ta) pendingCaretRef.current = ta.selectionStart;
     setContent(collab.value);
     dirtyRef.current = true;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [collab.value, collab.enabled]);
+
+  // Restore the caret after a remote-driven content change (best-effort; only
+  // ever set on the collaborative path, so single-user editing is untouched).
+  useLayoutEffect(() => {
+    if (pendingCaretRef.current == null) return;
+    const ta = textareaRef.current;
+    if (ta) {
+      const pos = Math.min(pendingCaretRef.current, content.length);
+      ta.setSelectionRange(pos, pos);
+    }
+    pendingCaretRef.current = null;
+  }, [content]);
 
   const reload = useCallback(() => {
     knowledgeApi
@@ -224,6 +243,18 @@ export default function KnowledgeDocClient({ docId }: { docId: string }) {
         />
       )}
 
+      {/* AI process analysis (editors) */}
+      {canEdit && content.trim() && (
+        <AnalyzePanel
+          docId={docId}
+          t={t}
+          onApplyFlow={(flow) => {
+            onContentChange(flow);
+            setMode('edit');
+          }}
+        />
+      )}
+
       {/* Content edit/preview */}
       <div style={{ display: 'flex', gap: 8, margin: '18px 0 8px' }}>
         {canEdit && (
@@ -240,6 +271,7 @@ export default function KnowledgeDocClient({ docId }: { docId: string }) {
 
       {mode === 'edit' && canEdit ? (
         <textarea
+          ref={textareaRef}
           value={content}
           onChange={(e) => onContentChange(e.target.value)}
           style={{
@@ -701,6 +733,131 @@ function AiAssist({
                   {t('aiInsert')}
                 </button>
               </div>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function severityColor(severity: string): React.CSSProperties {
+  if (severity === 'high') return { background: 'var(--error-bg, #3d0f0f)', color: 'var(--error-text, #f87171)' };
+  if (severity === 'medium') return { background: 'var(--warning-bg, #3d320f)', color: 'var(--warning-text, #fbbf24)' };
+  return { background: 'var(--surface-2, #222)', color: 'var(--text-muted, #9ca3af)' };
+}
+
+function AnalyzePanel({
+  docId,
+  t,
+  onApplyFlow,
+}: {
+  docId: string;
+  t: ReturnType<typeof useTranslations>;
+  onApplyFlow: (flow: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [result, setResult] = useState<AnalysisResult | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  async function run() {
+    setBusy(true);
+    setError(null);
+    setResult(null);
+    try {
+      setResult(await knowledgeApi.analyze(docId));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Analysis failed');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div
+      style={{
+        margin: '16px 0',
+        borderRadius: 10,
+        border: '1px solid var(--border, #333)',
+        background: 'var(--surface, #1a1a1a)',
+        overflow: 'hidden',
+      }}
+    >
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        style={{
+          width: '100%',
+          textAlign: 'left',
+          padding: '10px 16px',
+          background: 'transparent',
+          border: 'none',
+          color: 'inherit',
+          cursor: 'pointer',
+          fontWeight: 600,
+        }}
+      >
+        🔍 {t('analyzeTitle')} {open ? '▾' : '▸'}
+      </button>
+      {open && (
+        <div style={{ padding: 16, paddingTop: 0 }}>
+          <p style={{ fontSize: 13, color: 'var(--text-muted, #9ca3af)', marginTop: 0 }}>{t('analyzeHint')}</p>
+          <button type="button" onClick={run} disabled={busy} style={btnPrimary}>
+            {busy ? t('analyzing') : t('analyzeRun')}
+          </button>
+          {error && <div style={{ color: 'var(--error-text, #f87171)', marginTop: 8 }}>{error}</div>}
+          {result && (
+            <div style={{ marginTop: 12, display: 'grid', gap: 12 }}>
+              {result.summary && <p style={{ margin: 0, fontSize: 14 }}>{result.summary}</p>}
+              {result.findings.length === 0 ? (
+                <div style={{ color: 'var(--text-muted, #9ca3af)', fontSize: 13 }}>{t('analyzeNoFindings')}</div>
+              ) : (
+                <div style={{ display: 'grid', gap: 8 }}>
+                  {result.findings.map((f, i) => (
+                    <div
+                      key={i}
+                      style={{ padding: 12, borderRadius: 8, border: '1px solid var(--border, #333)', background: 'var(--surface-2, #111)' }}
+                    >
+                      <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 4 }}>
+                        <span style={{ ...badge, ...severityColor(f.severity) }}>{t(`severity_${f.severity}`)}</span>
+                        <span style={{ fontSize: 12, color: 'var(--text-muted, #9ca3af)' }}>{t(`category_${f.category}`)}</span>
+                      </div>
+                      <div style={{ fontSize: 14, fontWeight: 600 }}>{f.issue}</div>
+                      {f.recommendation && (
+                        <div style={{ fontSize: 13, color: 'var(--text-muted, #9ca3af)', marginTop: 4 }}>
+                          → {f.recommendation}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+              {result.improvedFlow && (
+                <div>
+                  <div style={{ fontSize: 13, fontWeight: 600, margin: '4px 0 6px' }}>{t('analyzeImprovedFlow')}</div>
+                  <div
+                    style={{
+                      padding: 12,
+                      borderRadius: 8,
+                      border: '1px solid var(--border, #333)',
+                      background: 'var(--surface-2, #111)',
+                      maxHeight: 220,
+                      overflow: 'auto',
+                    }}
+                    className="markdown-body"
+                  >
+                    <ReactMarkdown remarkPlugins={[remarkGfm]}>{result.improvedFlow}</ReactMarkdown>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => { onApplyFlow(result.improvedFlow); setResult(null); }}
+                    style={{ ...btnPrimary, marginTop: 8 }}
+                  >
+                    {t('analyzeApplyFlow')}
+                  </button>
+                </div>
+              )}
             </div>
           )}
         </div>

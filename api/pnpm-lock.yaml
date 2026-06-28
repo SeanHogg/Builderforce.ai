@@ -14,6 +14,9 @@ importers:
       '@neondatabase/serverless':
         specifier: ^0.10.4
         version: 0.10.4
+      '@seanhogg/builderforce-memory':
+        specifier: ^2026.6.28
+        version: 2026.6.28(@seanhogg/builderforce-memory-engine@2026.6.28)
       drizzle-orm:
         specifier: ^0.36.4
         version: 0.36.4(@cloudflare/workers-types@4.20260313.1)(@neondatabase/serverless@0.10.4)(@types/pg@8.11.6)
@@ -548,6 +551,16 @@ packages:
 
   '@rolldown/pluginutils@1.0.0-rc.9':
     resolution: {integrity: sha512-w6oiRWgEBl04QkFZgmW+jnU1EC9b57Oihi2ot3HNWIQRqgHp5PnYDia5iZ5FF7rpa4EQdiqMDXjlqKGXBhsoXw==}
+
+  '@seanhogg/builderforce-memory-engine@2026.6.28':
+    resolution: {integrity: sha512-3/Y21asvxjB2e0t+fup+lzIbKN7qgP2QUnA1y/nyzg+m6S+ISMCDvaa6SmbN4jDoAX+pZT0UbinkHc2SGo77og==}
+    engines: {node: '>=18.0.0'}
+
+  '@seanhogg/builderforce-memory@2026.6.28':
+    resolution: {integrity: sha512-zHJZfsR0NVgeM4nqVC0b2h1TExKzz1nCsKTu4WOtpdc2zP/arZVnBfNm3CU40SqKcDRd1ctH6idbc73ZswbfUA==}
+    engines: {node: '>=18.0.0'}
+    peerDependencies:
+      '@seanhogg/builderforce-memory-engine': ^2026.6.28
 
   '@sindresorhus/is@7.2.0':
     resolution: {integrity: sha512-P1Cz1dWaFfR4IR+U13mqqiGsLFf1KbayybWwdd2vfctdV6hDpUkgCY0nKOLLTMSoRd/jJNjtbqzf13K8DCCXQw==}
@@ -1505,6 +1518,12 @@ snapshots:
     optional: true
 
   '@rolldown/pluginutils@1.0.0-rc.9': {}
+
+  '@seanhogg/builderforce-memory-engine@2026.6.28': {}
+
+  '@seanhogg/builderforce-memory@2026.6.28(@seanhogg/builderforce-memory-engine@2026.6.28)':
+    dependencies:
+      '@seanhogg/builderforce-memory-engine': 2026.6.28
 
   '@sindresorhus/is@7.2.0': {}
 

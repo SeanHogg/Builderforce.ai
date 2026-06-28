@@ -912,6 +912,10 @@ export const tasks = pgTable('tasks', {
    *  task counts with zero backfill. See allocationCategories.ts. */
   allocationCategory:       varchar('allocation_category', { length: 16 }),
   allocationCategorySource: varchar('allocation_category_source', { length: 12 }).notNull().default('derived'), // derived | manual | agent
+  /** Story-point estimate (0246) — the leaf source for derived sprint velocity
+   *  (EMP-4) + productivity metrics. Captured from the issue tracker on board sync
+   *  (Jira estimate) or set on the board. Null = unestimated. */
+  storyPoints:       real('story_points'),
   createdAt:         timestamp('created_at').notNull().defaultNow(),
   updatedAt:         timestamp('updated_at').notNull().defaultNow(),
 });
@@ -978,6 +982,28 @@ export const memberProfiles = pgTable('member_profiles', {
 }, (t) => [
   unique('uq_member_profile').on(t.tenantId, t.memberKind, t.memberRef),
 ]);
+
+/**
+ * Per-task time logging (migration 0247) — REAL logged effort, replacing the
+ * cycle-time estimate the planning spine used for human cost. A member logs
+ * `minutes` against a task on `entryDate`; the spine sums minutes × the member's
+ * cost rate, and the member activity chart buckets logged hours by day. Member is
+ * polymorphic (human | cloud_agent | host_agent) — same identity as the metrics.
+ */
+export const timeEntries = pgTable('time_entries', {
+  id:         uuid('id').primaryKey().defaultRandom(),
+  tenantId:   integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  segmentId:  uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),
+  taskId:     integer('task_id').notNull().references((): AnyPgColumn => tasks.id, { onDelete: 'cascade' }),
+  memberKind: varchar('member_kind', { length: 16 }).notNull(), // human | cloud_agent | host_agent
+  memberRef:  varchar('member_ref', { length: 64 }).notNull(),
+  minutes:    integer('minutes').notNull(),
+  entryDate:  date('entry_date').notNull(),
+  source:     varchar('source', { length: 12 }).notNull().default('manual'), // manual | timer | derived
+  note:       text('note'),
+  createdAt:  timestamp('created_at').notNull().defaultNow(),
+  updatedAt:  timestamp('updated_at').notNull().defaultNow(),
+});
 
 /**
  * Append-only ticket-lifecycle event log — one row per status (lane) move. The
@@ -4209,6 +4235,25 @@ export const toolRuns = pgTable('tool_runs', {
 }));
 
 /**
+ * Human-authored qualitative update stream on any deliverable (migration 0248) —
+ * the narrative companion (EMP-11) to the delivery lens's quantitative status.
+ * Polymorphic target via (scopeKind, scopeId); newest-first per deliverable.
+ */
+export const deliverableUpdates = pgTable('deliverable_updates', {
+  id:          uuid('id').primaryKey().defaultRandom(),
+  tenantId:    integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  segmentId:   uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),
+  scopeKind:   varchar('scope_kind', { length: 16 }).notNull(),  // initiative | project | release | sprint
+  scopeId:     varchar('scope_id', { length: 64 }).notNull(),
+  statusLabel: varchar('status_label', { length: 16 }),          // on_track | at_risk | blocked | done | note
+  body:        text('body').notNull(),
+  authorId:    varchar('author_id', { length: 36 }).references(() => users.id, { onDelete: 'set null' }),
+  authorName:  varchar('author_name', { length: 255 }),
+  createdAt:   timestamp('created_at').notNull().defaultNow(),
+  updatedAt:   timestamp('updated_at').notNull().defaultNow(),
+});
+
+/**
  * Desired investment mix per scope per month (migration 0226) — the goal half of
  * the allocation lens (EMP-2). One row per (scope, period, category) sets the
  * target share of effort (e.g. 30% innovation); the allocation rollup compares it
@@ -4594,33 +4639,77 @@ export const generatedDecks = pgTable('generated_decks', {
 }));
 
 // ---------------------------------------------------------------------------
-// Product Quality / error observability (migration 0240)
+// Product Quality / error observability (migrations 0240, 0245, 0250)
 // ---------------------------------------------------------------------------
 
 /**
- * A connected error source. `keyHash` authenticates keyed ingest (native SDK /
- * OTLP exporter); `webhookSecretEnc`/`webhookSecretIv` (AES-256-GCM per-tenant)
- * authenticate signed provider webhooks (Sentry/PostHog/LogRocket). One source =
- * one ingest credential. See application/quality/qualitySourceCatalog.ts.
+ * A project's (or tenant's) error collector — the unit of error gathering. ONE
+ * per project (`projectId` set; one ingest key = one embeddable snippet, serving
+ * all the project's repos and every channel: native SDK, OTLP, provider webhooks).
+ * A TENANT-level collector (`projectId` NULL) ingests a mixed stream and routes
+ * each event to a project via [[errorMappingRules]], with `defaultProjectId` as
+ * the fallback. `keyHash` authenticates keyed ingest (native/OTLP). Provider
+ * webhook secrets live per-provider in [[errorCollectorIntegrations]].
  */
-export const errorSources = pgTable('error_sources', {
+export const errorCollectors = pgTable('error_collectors', {
   id:               uuid('id').primaryKey().defaultRandom(),
   tenantId:         integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
-  projectId:        integer('project_id').notNull().references(() => projects.id, { onDelete: 'cascade' }),
-  /** 'native' | 'otlp' | 'sentry' | 'posthog' | 'logrocket'. */
-  source:           varchar('source', { length: 32 }).notNull(),
+  /** NULL = tenant-level collector (routes via mapping rules); set = project collector. */
+  projectId:        integer('project_id').references(() => projects.id, { onDelete: 'cascade' }),
   name:             varchar('name', { length: 255 }).notNull(),
   /** SHA-256 of the bfq_* ingest key (raw key shown once at creation). */
   keyHash:          varchar('key_hash', { length: 64 }).unique(),
-  webhookSecretEnc: text('webhook_secret_enc'),
-  webhookSecretIv:  varchar('webhook_secret_iv', { length: 32 }),
+  /** Fallback project for a tenant-level collector when no mapping rule matches. */
+  defaultProjectId: integer('default_project_id').references(() => projects.id, { onDelete: 'set null' }),
   enabled:          boolean('enabled').notNull().default(true),
   status:           varchar('status', { length: 16 }).notNull().default('active'),
   lastEventAt:      timestamp('last_event_at'),
   createdBy:        varchar('created_by', { length: 36 }).references(() => users.id, { onDelete: 'set null' }),
   createdAt:        timestamp('created_at').notNull().defaultNow(),
   updatedAt:        timestamp('updated_at').notNull().defaultNow(),
-});
+}, (t) => ({
+  // One collector per project (tenant-level collectors have NULL projectId).
+  uqProject: uniqueIndex('uq_error_collectors_project').on(t.tenantId, t.projectId).where(sql`project_id IS NOT NULL`),
+}));
+
+/**
+ * A provider webhook integration attached to a collector (Sentry/PostHog/
+ * LogRocket). `secretEnc`/`secretIv` (AES-256-GCM per-tenant) seal
+ * `{ secret?, apiToken?, scope?, baseUrl? }` — the webhook HMAC secret plus any
+ * pull credentials (Sentry backfill).
+ */
+export const errorCollectorIntegrations = pgTable('error_collector_integrations', {
+  id:           uuid('id').primaryKey().defaultRandom(),
+  collectorId:  uuid('collector_id').notNull().references(() => errorCollectors.id, { onDelete: 'cascade' }),
+  /** 'sentry' | 'posthog' | 'logrocket'. */
+  provider:     varchar('provider', { length: 32 }).notNull(),
+  secretEnc:    text('secret_enc'),
+  secretIv:     varchar('secret_iv', { length: 32 }),
+  createdAt:    timestamp('created_at').notNull().defaultNow(),
+  updatedAt:    timestamp('updated_at').notNull().defaultNow(),
+}, (t) => ({
+  uqProvider: unique('uq_collector_provider').on(t.collectorId, t.provider),
+}));
+
+/**
+ * An error-mapping rule for a tenant-level collector: the first rule (by priority)
+ * whose `matchField` `matchOp` `matchValue` matches an inbound event routes it to
+ * `projectId`. `matchField`: 'service' | 'release' | 'environment' | 'url' |
+ * 'tag:<key>'. `matchOp`: 'equals' | 'contains' | 'prefix'.
+ */
+export const errorMappingRules = pgTable('error_mapping_rules', {
+  id:           uuid('id').primaryKey().defaultRandom(),
+  tenantId:     integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  collectorId:  uuid('collector_id').notNull().references(() => errorCollectors.id, { onDelete: 'cascade' }),
+  matchField:   varchar('match_field', { length: 64 }).notNull(),
+  matchOp:      varchar('match_op', { length: 16 }).notNull().default('equals'),
+  matchValue:   varchar('match_value', { length: 255 }).notNull(),
+  projectId:    integer('project_id').notNull().references(() => projects.id, { onDelete: 'cascade' }),
+  priority:     integer('priority').notNull().default(100),
+  createdAt:    timestamp('created_at').notNull().defaultNow(),
+}, (t) => ({
+  byCollector: index('idx_error_mapping_rules_collector').on(t.collectorId, t.priority),
+}));
 
 /**
  * A fingerprint-grouped error. One row per distinct bug; aggregates are bumped on
@@ -4631,7 +4720,7 @@ export const errorGroups = pgTable('error_groups', {
   id:             uuid('id').primaryKey().defaultRandom(),
   tenantId:       integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
   projectId:      integer('project_id').notNull().references(() => projects.id, { onDelete: 'cascade' }),
-  sourceId:       uuid('source_id').references(() => errorSources.id, { onDelete: 'set null' }),
+  collectorId:    uuid('collector_id').references(() => errorCollectors.id, { onDelete: 'set null' }),
   fingerprint:    varchar('fingerprint', { length: 128 }).notNull(),
   title:          varchar('title', { length: 500 }).notNull(),
   type:           varchar('type', { length: 255 }),

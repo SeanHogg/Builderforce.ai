@@ -64,6 +64,10 @@ export interface UpsertTaskInput {
   provider:    string;
   title:       string;
   description: string | null;
+  /** Story-point estimate from the tracker (EMP-4), or null/undefined when the
+   *  provider exposes none — the store only writes it when present so a manual
+   *  estimate is never clobbered with null. */
+  storyPoints?: number | null;
   /** Existing BF task id when the link already points at one. */
   existingTaskId: number | null;
 }
@@ -266,6 +270,7 @@ export class SyncEngine {
         provider: conn.provider,
         title: ticket.title,
         description: ticket.body,
+        storyPoints: ticket.storyPoints ?? null,
         existingTaskId: existing?.taskId ?? null,
       });
     }

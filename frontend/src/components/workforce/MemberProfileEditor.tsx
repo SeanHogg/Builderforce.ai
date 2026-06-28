@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { Select } from '@/components/Select';
 import { membersApi, type MemberKind, type MemberProfile } from '@/lib/builderforceApi';
+import { MemberTimeChart } from './MemberTimeChart';
 
 /**
  * Capability & availability profile editor for one workforce member (human OR
@@ -120,6 +121,9 @@ export function MemberProfileEditor({ kind, refId, name, onClose, onSaved }: {
           </div>
           <button onClick={onClose} style={{ ...field, width: 'auto', cursor: 'pointer' }}>Close</button>
         </div>
+
+        {/* Activity chart — real logged time (migration 0245). */}
+        <MemberTimeChart kind={kind} refId={refId} />
 
         {loading ? (
           <div style={{ color: 'var(--muted)', fontSize: 13 }}>Loading…</div>

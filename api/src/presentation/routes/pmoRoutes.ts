@@ -52,8 +52,9 @@ import type { Env, HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 
 /** One version token per tenant: every PMO write bumps it, orphaning the tree +
- *  rollup caches that embed it. */
-function pmoVersionKey(tenantId: number): string {
+ *  rollup + spine caches that embed it. Exported so cross-cutting writes (e.g. a
+ *  time-entry, which changes spine human cost) can invalidate the spine too. */
+export function pmoVersionKey(tenantId: number): string {
   return `pmo-version:tenant:${tenantId}`;
 }
 
@@ -177,14 +178,44 @@ export function createPmoRoutes(db: Db): Hono<HonoEnv> {
   router.get('/spine', async (c) => {
     const { tenantId, segmentId } = scope(c);
     const env = c.env as Env;
+    const projectRaw = Number(c.req.query('project'));
+    const projectId = Number.isFinite(projectRaw) && projectRaw > 0 ? projectRaw : undefined;
     const ver = await getCacheVersion(env, pmoVersionKey(tenantId));
-    const key = `pmo:spine:t:${tenantId}:s:${segmentId}:v:${ver}`;
+    const key = `pmo:spine:t:${tenantId}:s:${segmentId}:p:${projectId ?? 'all'}:v:${ver}`;
     const spine = await getOrSetCached(
       env, key,
-      () => loadPlanningSpine(db, tenantId, segmentId),
+      () => loadPlanningSpine(db, tenantId, segmentId, { projectId }),
       { kvTtlSeconds: 60, l1TtlMs: 15_000 }, // live LLM spend rides the hot path — short TTL keeps it fresh
     );
     return c.json(spine);
+  });
+
+  // ── Period-bounded CapEx/OpEx finance export (CSV) ──────────────────────────
+  // ?from=YYYY-MM-DD&to=YYYY-MM-DD bounds the LLM + logged-time cost; ?project= scopes.
+  router.get('/spine/export.csv', async (c) => {
+    const { tenantId, segmentId } = scope(c);
+    const from = c.req.query('from');
+    const to = c.req.query('to');
+    const dateOk = (s: string | undefined): s is string => !!s && /^\d{4}-\d{2}-\d{2}$/.test(s);
+    const window = dateOk(from) && dateOk(to) ? { from, to } : undefined;
+    const projectRaw = Number(c.req.query('project'));
+    const projectId = Number.isFinite(projectRaw) && projectRaw > 0 ? projectRaw : undefined;
+
+    const spine = await loadPlanningSpine(db, tenantId, segmentId, { projectId, window });
+    const esc = (v: unknown) => {
+      const s = String(v ?? '');
+      return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+    };
+    const header = ['kind', 'id', 'title', 'effective_cost_class', 'llm_usd', 'human_usd', 'total_usd', 'capex_usd', 'opex_usd'];
+    const lines = [header.join(',')];
+    for (const n of spine.nodes) {
+      lines.push([n.kind, n.id, esc(n.title), n.effectiveCostClass ?? '', n.cost.llmUsd.toFixed(2), n.cost.humanUsd.toFixed(2), n.cost.totalUsd.toFixed(2), n.cost.capexUsd.toFixed(2), n.cost.opexUsd.toFixed(2)].join(','));
+    }
+    lines.push(['TOTAL', '', '', '', spine.totals.llmUsd.toFixed(2), spine.totals.humanUsd.toFixed(2), spine.totals.totalUsd.toFixed(2), spine.totals.capexUsd.toFixed(2), spine.totals.opexUsd.toFixed(2)].join(','));
+    const suffix = window ? `${window.from}_${window.to}` : 'all';
+    return new Response(lines.join('\n'), {
+      headers: { 'content-type': 'text/csv; charset=utf-8', 'content-disposition': `attachment; filename="capex-opex-${suffix}.csv"` },
+    });
   });
 
   // ── CAPEX/OPEX classification: set the class on any level, or run the agent ──

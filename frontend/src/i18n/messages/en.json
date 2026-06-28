@@ -618,7 +618,9 @@
         "support": "Support",
         "tech_debt": "Tech debt",
         "other": "Other"
-      }
+      },
+      "scope": "Scope",
+      "allProjects": "All projects"
     },
     "deliv": {
       "title": "Delivery",
@@ -657,7 +659,29 @@
       "week": "wk",
       "open": "Open",
       "baseline": "Baseline",
-      "baselineScope": "Baseline scope"
+      "baselineScope": "Baseline scope",
+      "velocity": "Sprint velocity",
+      "avgVelocity": "Avg velocity",
+      "avgVelocitySub": "over {n} sprints",
+      "estimated": "Estimated tasks",
+      "estimatedSub": "{n} unestimated",
+      "sprint": "Sprint",
+      "committed": "Committed",
+      "completed": "Completed",
+      "sayDo": "Say/do",
+      "updates": "Status updates",
+      "updateStatus": "Status",
+      "postUpdate": "Post",
+      "noUpdates": "No updates yet — add the first one.",
+      "someone": "Someone",
+      "updatePlaceholder": "Add a status update (e.g. blocked on infra, scope cut agreed)…",
+      "updateStatusLabel": {
+        "note": "Note",
+        "on_track": "On track",
+        "at_risk": "At risk",
+        "blocked": "Blocked",
+        "done": "Done"
+      }
     },
     "aiImpact": {
       "title": "AI Impact",
@@ -881,7 +905,14 @@
     "sampleLabel": "Sample response",
     "latencyLabel": "Latency",
     "modeLabel": "Inference mode",
-    "callTitle": "How to call your model"
+    "callTitle": "How to call your model",
+    "knowledgeTitle": "Knowledge (train on your data)",
+    "knowledgeDesc": "Paste proprietary documents — FAQs, policies, product docs. The agent recalls the most relevant passages and grounds its answers in them at inference.",
+    "knowledgePlaceholder": "Paste your documentation, FAQs, or policies here…",
+    "knowledgeBtn": "Ingest knowledge",
+    "knowledgeIngesting": "Ingesting…",
+    "knowledgeDone": "Ingested — {count} chunks are now recalled at inference.",
+    "knowledgeError": "Ingestion failed: {error}"
   },
   "projectDiagnostics": {
     "title": "Project diagnostics",
@@ -971,8 +1002,10 @@
       "objective": "Objective",
       "initiative": "Initiative",
       "epic": "Epic",
-      "task": "Task"
-    }
+      "task": "Task",
+      "roadmap": "Roadmap"
+    },
+    "exportCsv": "Export CSV"
   },
   "reconcile": {
     "loading": "Loading work items…",
@@ -1111,7 +1144,21 @@
     "noCollaborators": "No one has been invited yet.",
     "remove": "Remove",
     "accessViewerNote": "You have been invited to view this page.",
-    "accessReadOnlyNote": "You have read-only access to this page."
+    "accessReadOnlyNote": "You have read-only access to this page.",
+    "analyzeTitle": "Analyze & improve",
+    "analyzeHint": "Have AI review this document for inefficiencies, gaps, risks and clarity, and propose a more efficient flow.",
+    "analyzeRun": "Analyze process",
+    "analyzing": "Analyzing…",
+    "analyzeNoFindings": "No issues found — this looks solid.",
+    "analyzeImprovedFlow": "Proposed improved flow",
+    "analyzeApplyFlow": "Replace document with improved flow",
+    "severity_low": "Low",
+    "severity_medium": "Medium",
+    "severity_high": "High",
+    "category_inefficiency": "Inefficiency",
+    "category_gap": "Gap",
+    "category_risk": "Risk",
+    "category_clarity": "Clarity"
   },
   "quality": {
     "title": "Product Quality",
@@ -1198,8 +1245,17 @@
       "sdkSnippet": "Browser SDK",
       "curlSnippet": "Server / curl",
       "otlpEndpoint": "OTLP endpoint",
-      "webhookUrl": "Webhook URL"
-    }
+      "webhookUrl": "Webhook URL",
+      "backfill": "Backfill",
+      "backfilling": "Backfilling…",
+      "backfillDone": "Backfilled {pulled} issues ({accepted} stored)",
+      "backfillFailed": "Backfill failed",
+      "sentryBackfillHint": "Optional: add a Sentry API token + project scope to backfill existing issues now and seed the dashboard.",
+      "apiTokenPlaceholder": "Sentry API token (for backfill)",
+      "scopePlaceholder": "Scope — organization-slug/project-slug",
+      "baseUrlPlaceholder": "Sentry base URL (self-hosted, optional)"
+    },
+    "loadMore": "Load more"
   },
   "surveys": {
     "title": "DevEx Surveys",
@@ -1367,5 +1423,14 @@
     "boardDeck": "R&D Board Deck",
     "cfoDeck": "CFO / DevFinOps Deck",
     "error": "Could not generate the deck"
+  },
+  "timeTracking": {
+    "title": "Logged time",
+    "windowTotal": "last {days}d · {hours}",
+    "loading": "Loading…",
+    "pickTask": "Pick a task…",
+    "hoursPh": "hrs",
+    "log": "Log",
+    "delete": "Delete entry"
   }
 }

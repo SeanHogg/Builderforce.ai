@@ -966,6 +966,10 @@ export interface Task {
   parentTaskId: number | null;
   /** sprints.id this task is scheduled into, or null when unscheduled (backlog). */
   sprintId: string | null;
+  /** product_releases.id this task ships in, or null (the delivery deliverable). */
+  releaseId?: string | null;
+  /** Story-point estimate, or null when unestimated — drives derived sprint velocity. */
+  storyPoints?: number | null;
   assignedAgentType: string | null;
   assignedAgentHostId: number | null;
   /** ide_agents.id of the cloud agent working this ticket (agents are assignees). */
@@ -2750,7 +2754,7 @@ export type PmoScopeKind = 'portfolio' | 'initiative' | 'workspace';
 
 // ── Planning spine (0225): the unified dated, cost-bearing hierarchy ──────────
 export type CostClass = 'capex' | 'opex';
-export type SpineNodeKind = 'portfolio' | 'objective' | 'initiative' | 'epic' | 'task';
+export type SpineNodeKind = 'portfolio' | 'objective' | 'initiative' | 'epic' | 'task' | 'roadmap';
 
 export interface CostClassSuggestion { costClass: CostClass; confidence: number; rationale: string }
 export interface SpineCost { llmUsd: number; humanUsd: number; totalUsd: number; capexUsd: number; opexUsd: number }
@@ -2848,8 +2852,19 @@ export const pmoApi = {
     request(`/api/pmo/dependencies/${id}`, { method: 'DELETE' }),
 
   /** The unified planning spine: every level dated + cost-rolled, with effective
-   *  CAPEX/OPEX, anomalies and agent suggestions. Powers the Gantt + reconcile. */
-  spine: (): Promise<SpineResult> => request<SpineResult>('/api/pmo/spine'),
+   *  CAPEX/OPEX, anomalies and agent suggestions. Powers the Gantt + reconcile.
+   *  Pass a projectId to scope the leaf set to one project (empty parents pruned). */
+  spine: (projectId?: number | null): Promise<SpineResult> =>
+    request<SpineResult>(`/api/pmo/spine${projectId != null ? `?project=${projectId}` : ''}`),
+  /** Period-bounded CapEx/OpEx finance export (CSV text). from/to are YYYY-MM-DD. */
+  exportSpineCsv: async (params: { from?: string; to?: string; projectId?: number | null } = {}): Promise<string> => {
+    const q = new URLSearchParams();
+    if (params.from && params.to) { q.set('from', params.from); q.set('to', params.to); }
+    if (params.projectId != null) q.set('project', String(params.projectId));
+    const res = await fetch(`${AUTH_API_URL}/api/pmo/spine/export.csv${q.toString() ? `?${q}` : ''}`, { headers: authHeaders() });
+    if (!res.ok) throw new Error(`Export failed (${res.status})`);
+    return res.text();
+  },
   /** Set (or clear, with null) the CAPEX/OPEX class on any level. A PM 'manual'
    *  set also verifies the row; pass source:'agent' for an applied suggestion. */
   setCostClass: (kind: SpineNodeKind, id: string, costClass: CostClass | null, source?: 'manual' | 'agent'): Promise<{ ok: true }> =>
@@ -2888,6 +2903,31 @@ export const pmoApi = {
     update: (id: string, body: Partial<Omit<KeyResult, 'id'>>) => keyResultTracker.update(id, body) as unknown as Promise<KeyResult>,
     remove: (id: string) => keyResultTracker.remove(id),
   },
+};
+
+// ── Time tracking (real logged effort; /api/time/*) ───────────────────────────
+export interface DailyHoursBucket { date: string; hours: number }
+export interface MemberTimeEntry {
+  id: string; taskId: number; taskKey: string | null; taskTitle: string | null;
+  minutes: number; entryDate: string; source: string; note: string | null;
+}
+export interface MemberDailyHours {
+  windowDays: number; totalHours: number; daily: DailyHoursBucket[]; entries: MemberTimeEntry[];
+}
+
+export const timeApi = {
+  /** Log minutes against a task. Defaults to the current user; a manager may pass
+   *  memberKind/memberRef to log for another member. */
+  log: (body: { taskId: number; minutes: number; entryDate?: string; note?: string; memberKind?: string; memberRef?: string }): Promise<{ id: string }> =>
+    request('/api/time/entries', { method: 'POST', body: JSON.stringify(body) }),
+  /** A member's daily logged-hours chart + recent entries. */
+  member: (kind: string, ref: string, days = 30): Promise<MemberDailyHours> =>
+    request<MemberDailyHours>(`/api/time/member/${kind}/${encodeURIComponent(ref)}?days=${days}`),
+  /** All entries logged against a task. */
+  forTask: (taskId: number): Promise<{ entries: Array<{ id: string; memberKind: string; memberRef: string; minutes: number; entryDate: string; source: string; note: string | null }> }> =>
+    request(`/api/time/entries?taskId=${taskId}`),
+  remove: (id: string): Promise<{ deleted: string }> =>
+    request(`/api/time/entries/${id}`, { method: 'DELETE' }),
 };
 
 // Sprints (agile tracker; /api/agile/sprints). A planning ceremony creates/uses a
@@ -2968,6 +3008,11 @@ export const sprintsApi = {
   update: (id: string, body: Partial<Omit<Sprint, 'id'>>) =>
     sprintTracker.update(id, body) as unknown as Promise<Sprint>,
   remove: (id: string) => sprintTracker.remove(id),
+};
+
+/** Derived sprint velocity from real task story points (EMP-4). */
+export const agileMetricsApi = {
+  derivedVelocity: (): Promise<VelocityInsights> => request<VelocityInsights>('/api/agile/velocity/derived'),
 };
 
 // Planning Poker + Retrospectives (nested session models; /api/agile/*).
@@ -3556,12 +3601,15 @@ export const qualityApi = {
   sources: {
     list: (): Promise<QualitySource[]> =>
       request<{ sources: QualitySource[] }>('/api/quality/sources').then((r) => r.sources ?? []),
-    create: (body: { projectId: number; source: string; name: string; webhookSecret?: string | null }): Promise<CreateQualitySourceResult> =>
+    create: (body: { projectId: number; source: string; name: string; webhookSecret?: string | null; apiToken?: string | null; scope?: string | null; baseUrl?: string | null }): Promise<CreateQualitySourceResult> =>
       request('/api/quality/sources', { method: 'POST', body: JSON.stringify(body) }),
     update: (id: string, body: { name?: string; enabled?: boolean; status?: string }): Promise<{ ok: true }> =>
       request(`/api/quality/sources/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
     remove: (id: string): Promise<void> =>
       request<void>(`/api/quality/sources/${id}`, { method: 'DELETE' }),
+    /** Seed the Quality model from a Sentry source's issues API. */
+    backfill: (id: string): Promise<{ pulled: number; accepted: number; dropped: number }> =>
+      request(`/api/quality/sources/${id}/backfill`, { method: 'POST' }),
   },
 
   groups: {
@@ -3986,6 +4034,26 @@ export interface ProductRelease extends TrackerRow {
   name: string; version: string | null; releaseDate: string | null; status: string; notes: string | null;
 }
 
+export type DeliverableUpdateStatus = 'on_track' | 'at_risk' | 'blocked' | 'done' | 'note';
+export interface DeliverableUpdate {
+  id: string; scopeKind: DeliverableScope; scopeId: string;
+  statusLabel: DeliverableUpdateStatus | null; body: string;
+  authorId: string | null; authorName: string | null; createdAt: string;
+}
+
+export interface SprintVelocity {
+  sprintId: string; name: string; status: string; endDate: string | null;
+  committedPoints: number; completedPoints: number; taskCount: number; completedCount: number;
+  completionRatePct: number | null;
+}
+export interface VelocityInsights {
+  sprints: SprintVelocity[];
+  averageVelocity: number | null;
+  velocitySampleSize: number;
+  estimatedTasks: number;
+  unestimatedTasks: number;
+}
+
 export interface Budget extends TrackerRow {
   scopeKind: string; projectId: number | null; initiativeId: string | null; periodMonth: string; limitUsd: number; notes: string | null;
 }
@@ -4024,6 +4092,14 @@ export const insightsApi = {
   },
   delivery: (scope: DeliverableScope, id: string): Promise<DeliveryInsights> =>
     request<DeliveryInsights>(`/api/insights/delivery?scope=${scope}&id=${encodeURIComponent(id)}`),
+  deliverableUpdates: {
+    list: (scope: DeliverableScope, id: string): Promise<DeliverableUpdate[]> =>
+      request<DeliverableUpdate[]>(`/api/insights/deliverable-updates?scope=${scope}&id=${encodeURIComponent(id)}`),
+    create: (body: { scopeKind: DeliverableScope; scopeId: string; body: string; statusLabel?: DeliverableUpdateStatus }): Promise<DeliverableUpdate> =>
+      request<DeliverableUpdate>(`/api/insights/deliverable-updates`, { method: 'POST', body: JSON.stringify(body) }),
+    remove: (id: string): Promise<{ deleted: string }> =>
+      request<{ deleted: string }>(`/api/insights/deliverable-updates/${id}`, { method: 'DELETE' }),
+  },
   budgets: {
     list: () => budgetTracker.list() as unknown as Promise<Budget[]>,
     create: (body: Partial<Omit<Budget, 'id'>>) => budgetTracker.create(body) as unknown as Promise<Budget>,
@@ -4036,6 +4112,13 @@ export const insightsApi = {
     update: (id: string, body: Partial<Omit<AllocationGoal, 'id'>>) => allocationGoalTracker.update(id, body) as unknown as Promise<AllocationGoal>,
     remove: (id: string) => allocationGoalTracker.remove(id),
   },
+  /** Bulk-import board-deck datasets (headcount/financials/quality/AI). Returns the
+   *  importable dataset → column spec. */
+  importDatasets: (): Promise<{ datasets: Record<string, Array<{ name: string; type: string; required: boolean }>> }> =>
+    request<{ datasets: Record<string, Array<{ name: string; type: string; required: boolean }>> }>('/api/insights/import/datasets'),
+  /** Bulk-insert rows for one dataset (CSV parsed to row objects client-side). */
+  importBoardData: (dataset: string, rows: Array<Record<string, unknown>>): Promise<{ inserted: number; skipped: number; errors: string[] }> =>
+    request(`/api/insights/import/${encodeURIComponent(dataset)}`, { method: 'POST', body: JSON.stringify({ rows }) }),
 };
 
 // ---------------------------------------------------------------------------

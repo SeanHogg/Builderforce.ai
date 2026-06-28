@@ -629,6 +629,22 @@ export async function validateAgent(data: {
   });
 }
 
+/**
+ * Ingest proprietary documents for a published agent so it recalls them at
+ * inference (grounded context). Replace semantics — re-ingesting supersedes the
+ * agent's prior knowledge. Returns the number of stored chunks.
+ */
+export async function ingestAgentKnowledge(
+  agentId: string,
+  data: { text?: string; documents?: Array<{ name?: string; text: string }> },
+): Promise<{ chunks: number }> {
+  return apiRequest<{ chunks: number }>(`${IDE}/agents/${agentId}/ingest`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+}
+
 export async function listAgents(): Promise<PublishedAgent[]> {
   // Public workforce registry — works for anonymous visitors on /marketplace.
   // Management endpoints (hire, update, etc.) still live under /api/ide/agents.

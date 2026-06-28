@@ -53,6 +53,8 @@ export interface UpdateTaskDto {
   sprintId?: string | null;
   /** Link to / unlink from a product release (the delivery deliverable). null = unlinked. */
   releaseId?: string | null;
+  /** Story-point estimate (drives derived sprint velocity). null = unestimated. */
+  storyPoints?: number | null;
   assignedAgentType?: AgentType | null;
   assignedAgentHostId?: number | null;
   /** Cloud agent (ide_agents.id) assigned to this task. Mutually exclusive with host. */

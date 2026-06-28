@@ -543,6 +543,7 @@ export function createTaskRoutes(taskService: TaskService, db: Db, runtimeServic
       parentTaskId?: number | null;
       sprintId?: string | null;
       releaseId?: string | null;
+      storyPoints?: number | null;
       assignedAgentType?: AgentType | null;
       assignedAgentHostId?: number | null;
       assignedAgentRef?: string | null;
