@@ -33,6 +33,7 @@ import {
   vendorKeyBound,
   passthroughVendorKeys,
   MAX_VENDOR_CALL_TIMEOUT_MS,
+  SCHEMA_TOO_COMPLEX_REASON,
   WorkerSubrequestExhaustedError,
   RequestAbortedError,
   VendorFatalError,
@@ -567,8 +568,15 @@ export interface FailoverEvent {
   /** Wall-clock time spent on this attempt, ms (diagnostic tracing). */
   durationMs?: number;
   /** Coarse failure class — rate_limit | timeout | auth | server_error |
-   *  network | skipped (diagnostic tracing). */
+   *  schema | network | skipped (diagnostic tracing). */
   kind?: string;
+  /** Stable machine-readable cause slug when one applies (e.g. `schema_too_complex`).
+   *  Lets consumers branch on structured data instead of regex-sniffing the message. */
+  reason?: string;
+  /** The REAL upstream HTTP status before the gateway normalized it into its own
+   *  failure class (e.g. a Gemini schema 400 normalized to the 422 request-error
+   *  class records `upstreamStatus: 400`). Absent when `code` IS the upstream status. */
+  upstreamStatus?: number;
 }
 
 export interface ProxyResult {
@@ -849,10 +857,12 @@ export class LlmProxyService {
       return this.finalize(primary, tid, startedAt, candidates);
     }
 
-    // Every candidate rejected the request as malformed (400/422). The backstop
-    // would 400 too — it's the caller's payload, not the model — so skip it and
-    // surface the fatal 4xx straight away with its schema diagnostic intact.
-    if (primary.outcome === 'request_error') {
+    // Every candidate rejected the request as malformed (400/422) — or rejected
+    // the json_schema as too complex for its constrained-decoding engine. The
+    // backstop would reject it too (it's the caller's payload/schema, not the
+    // model), so skip it and surface the terminal 4xx straight away with its
+    // diagnostic intact rather than burning a funded paid call on a doomed retry.
+    if (primary.outcome === 'request_error' || primary.outcome === 'schema_too_complex') {
       return this.finalize(primary, tid, startedAt, candidates);
     }
 
@@ -1231,11 +1241,7 @@ export class LlmProxyService {
   ): ProxyResult {
     const message = err instanceof Error ? err.message : (err ? String(err) : 'All candidates produced non-conforming output');
     const failovers: FailoverEvent[] = attempts && attempts.length > 0
-      ? attempts.map((a) => ({
-          model: a.model, vendor: a.vendor, code: a.status,
-          ...(a.durationMs != null ? { durationMs: a.durationMs } : {}),
-          ...(a.kind ? { kind: a.kind } : {}),
-        }))
+      ? attempts.map(attemptToFailover)
       : candidates.map((model) => ({ model, vendor: vendorForModel(model), code: 0, durationMs: 0, kind: 'skipped' }));
     // Pick the *last* dispatched attempt as the "model the gateway was on when
     // it gave up" — that's the most informative attribution for consumers
@@ -1313,11 +1319,29 @@ export class LlmProxyService {
     // carries the most specific validation diagnostic.
     const last   = attempts[attempts.length - 1]!;
     const status = isRequestErrorStatus(last.status) ? last.status : 400;
+
+    // Distinguish a SCHEMA-too-complex cascade from a generic malformed-payload
+    // one: when every dispatched attempt rejected the request because the
+    // `response_format.json_schema` exceeded its constrained-decoding ceiling
+    // (Gemini "too many states", etc.), surface a distinct, actionable code so
+    // the caller knows to simplify the schema or drop to `json_object` mode —
+    // NOT a generic `invalid_request_error` that reads like a payload bug.
+    const allSchema = attempts.length > 0 && attempts.every((a) => a.kind === 'schema');
+    const code: string | number = allSchema ? SCHEMA_TOO_COMPLEX_REASON : status;
+    const message = allSchema
+      ? `Every candidate model rejected the supplied response_format.json_schema as too complex for its constrained-decoding engine. Simplify the schema (fewer/optional fields, shallower nesting, fewer enums) or use response_format { type: 'json_object' }. Upstream: ${last.error || 'schema too complex'}`
+      : (last.error || 'Request rejected by every candidate model as malformed (400/422).');
     const body = JSON.stringify({
       error: {
-        message: last.error || 'Request rejected by every candidate model as malformed (400/422).',
-        code: status,
+        message,
+        code,
         type: 'invalid_request_error',
+        // Both classes are TERMINAL: retrying the SAME request on a DIFFERENT
+        // model won't help — every candidate already rejected it. The SDK honours
+        // `terminal` to short-circuit its own failover loop (no more burning the
+        // chain on a request that can never succeed as-is).
+        terminal: true,
+        ...(allSchema ? { reason: SCHEMA_TOO_COMPLEX_REASON } : {}),
         vendor: resolvedVendor,
         model: resolvedModel,
         details: { failovers },
@@ -1332,7 +1356,7 @@ export class LlmProxyService {
       resolvedVendor,
       retries: attempts.length,
       failovers,
-      outcome: 'request_error',
+      outcome: allSchema ? 'schema_too_complex' : 'request_error',
       attempts: [...attempts],
       ...(schemaRetries > 0 ? { schemaRetries } : {}),
     };
@@ -1474,13 +1498,22 @@ function fatalErrorAttempt(err: VendorFatalError, chain: readonly string[]): Dis
 }
 
 function attemptsToFailovers(attempts: DispatchAttempt[]): FailoverEvent[] {
-  return attempts.map((a) => ({
+  return attempts.map(attemptToFailover);
+}
+
+/** One {@link DispatchAttempt} → {@link FailoverEvent}, carrying the structured
+ *  `reason`/`upstreamStatus` when present so consumers branch on data, not prose.
+ *  Single source for both `attemptsToFailovers` and `exhaustedResponse`'s mapper. */
+function attemptToFailover(a: DispatchAttempt): FailoverEvent {
+  return {
     model: a.model,
     vendor: a.vendor,
     code: a.status,
     ...(a.durationMs != null ? { durationMs: a.durationMs } : {}),
     ...(a.kind ? { kind: a.kind } : {}),
-  }));
+    ...(a.reason ? { reason: a.reason } : {}),
+    ...(a.upstreamStatus != null ? { upstreamStatus: a.upstreamStatus } : {}),
+  };
 }
 
 /** Authoritative gateway trace id. Prefix `llm-` mirrors what consumers already
