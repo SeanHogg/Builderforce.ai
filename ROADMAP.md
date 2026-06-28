@@ -329,6 +329,11 @@ These items completed the platform's multi-claw coordination layer. All five are
 >
 > **Stats — 341 register items:** ✅ 53 resolved · 🔓 288 open. Open by revenue impact → 💰 Direct 15 · 🚀 Growth 10 · 🛠️ Core 190 · 🧹 Internal 73.
 
+### 🧹 LLMs page merged into IDE dashboard (added 2026-06-28)
+
+- ✅ **`/llms` standalone page merged into `/ide/dashboard`.** The "Manage LLMs" button no longer navigates away — it toggles `MyLlmsPanel` inline on the dashboard (`app/ide/dashboard/page.tsx`); the standalone `app/llms/page.tsx` route was deleted. Single LLM-management surface, reachable where IDE projects (including LLM-modality ones) live.
+- ✅ **`MyLlmsPanel` localized.** `components/llm/MyLlmsPanel.tsx` now routes every visible string (heading, subtitle, form labels/placeholders, visibility options, buttons, confirm/error toasts, empty/loading states) through `useTranslations('llms')`; new 27-key `llms` namespace added to all 5 catalogs (en/zh/es/fr/de) with real translations. The merged LLM surface is now i18n-complete; frontend `tsc` clean.
+
 ### 📊 Value-Delivery Visualization: Scenario Planner + Lifecycle Explorer (added 2026-06-28)
 
 Shipped 2026-06-28 into the **Delivery** insights lens (`components/insights/DeliveryLens.tsx`, `/insights/delivery`), closing the Jellyfish "visualize value delivery / model when value lands / lifecycle" gap:
