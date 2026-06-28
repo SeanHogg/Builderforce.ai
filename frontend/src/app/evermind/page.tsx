@@ -194,12 +194,12 @@ export default function EvermindPage() {
             <img
               className="ev-figure"
               src="/blog/aw-architecture.svg"
-              alt="Evermind's three layers: a frontier-LLM cortex, the self-updating Evermind hippocampus, and a trainable limbic layer"
+              alt="Evermind's three layers, all its own: a generator cortex, a self-updating write-through hippocampus, and a trainable limbic layer"
               loading="lazy"
               width={1600}
               height={900}
             />
-            <p className="ev-figcap">One brain: a frontier-LLM cortex for reasoning, the Evermind hippocampus for write-through memory, and a limbic layer for dynamics.</p>
+            <p className="ev-figcap">One brain, all yours: Evermind&apos;s own generator as the cortex, its write-through hippocampus for memory, and a limbic layer for dynamics. (External frontier models stay routable when you want them — just not required.)</p>
           </section>
 
           {/* ── Evermind vs a frozen model ── */}

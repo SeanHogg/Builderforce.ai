@@ -40,15 +40,15 @@ For a CTO, this is the difference between "we have a RAG pipeline and an eval su
 
 ## One brain: reasoning, memory, and dynamics
 
-Evermind isn't a monolith. It is three cooperating layers — and importantly, it does **not** ask you to throw away the frontier model you already trust.
+Evermind isn't a monolith. It is three cooperating layers — and all three are **yours**, not a frozen third-party model you rent.
 
-![Evermind's three layers: a frontier-LLM cortex, the self-updating Evermind hippocampus, and a trainable limbic layer](/blog/aw-architecture.svg)
+![Evermind's three layers, all its own: a generator cortex, a self-updating write-through hippocampus, and a trainable limbic layer](/blog/aw-architecture.svg)
 
-- **Cortex — the frontier LLM.** Reasoning and language stay with the model you already rely on. Evermind augments it; it does not replace your reasoning engine.
+- **Cortex — Evermind's own generator.** Reasoning and language run on Evermind itself: a shared-expert hybrid model you own that learns as it works and never goes stale. Prefer an external frontier model for a particular job? You can still route to one — it just isn't the default, and it isn't required.
 - **Hippocampus — the Evermind SSM.** Self-updating, write-through memory that is always current. This is the layer that makes the workforce trustworthy.
 - **Limbic — the affective layer.** A trainable layer that modulates *how* an agent responds in the moment: personality as setpoints, limbic state as dynamics, so agents behave consistently with the persona you assign them.
 
-Underneath sits a **shared-expert hybrid generator** — a dense, always-on backbone that carries continuous online learning, with lazily-loaded routed SSM experts that page in on demand. You get specialist depth without shipping one giant frozen blob, and it runs on WebGPU with zero runtime dependencies.
+Powering the cortex is that **shared-expert hybrid generator** — a dense, always-on backbone that carries continuous online learning, with lazily-loaded routed SSM experts that page in on demand. You get specialist depth without shipping one giant frozen blob, and it runs on WebGPU with zero runtime dependencies.
 
 ## It doesn't win on scale — it wins on what a board cares about
 

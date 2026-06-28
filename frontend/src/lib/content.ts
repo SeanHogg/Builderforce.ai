@@ -697,7 +697,7 @@ export const HOMEPAGE_FAQ: FaqItem[] = [
   },
   {
     question: 'Can I integrate Builderforce agents with BuilderForce Agents?',
-    answer: 'Yes — agents trained on Builderforce can be exported and deployed as BuilderForce Agents hippocampus models. The platform supports the full pipeline from training custom SSM models to pushing them to your self-hosted BuilderForce Agents gateway.',
+    answer: 'Yes — models trained on Builderforce can be exported and published as Evermind models that your self-hosted BuilderForce Agents gateway calls directly as the model, not just as a memory layer. The platform supports the full pipeline: train a custom SSM in the browser, publish it, and route live traffic to it over the OpenAI-compatible API.',
   },
 ];
 
