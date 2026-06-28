@@ -774,6 +774,28 @@
         "trend": "Durée du cycle de vie sur les derniers mois",
         "trendSeries": "Cycle de vie moyen (jours)",
         "trendAria": "Durée moyenne du cycle de vie de bout en bout par mois"
+      },
+      "scopeEffort": {
+        "title": "Périmètre et effort",
+        "completed": "Points terminés",
+        "defined": "Défini (ouvert)",
+        "fte": "ETP développement",
+        "aria": "Points d'histoire terminés et définis au fil du temps avec la courbe d'ETP de développement",
+        "ptsAxis": "pts",
+        "fteAxis": "ETP",
+        "totalPoints": "Points définis",
+        "donePoints": "{n} terminés",
+        "cancelledPoints": "Points annulés",
+        "cancelledSub": "retirés du périmètre",
+        "currentFte": "ETP actuel",
+        "fteSub": "capacité de dev récente"
+      },
+      "valueStream": {
+        "title": "Flux de valeur",
+        "subtitle": "Comment la valeur circule entre les initiatives — et où elle est bloquée.",
+        "criticalPath": "Chemin critique",
+        "cycle": "⚠ cycle de dépendances",
+        "noDeps": "Aucune dépendance d'initiative pour l'instant — liez des bloqueurs dans le portefeuille pour cartographier le flux de valeur."
       }
     },
     "aiImpact": {

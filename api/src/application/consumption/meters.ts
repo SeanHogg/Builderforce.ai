@@ -17,8 +17,8 @@ import { resolveEffectivePlan } from '../../domain/tenant/effectivePlan';
 import { resolveTokenLimits, resolveIngestionMonthlyBytes, resolveErrorEventsMonthly } from '../../domain/tenant/PlanLimits';
 import { TenantPlan, TenantBillingStatus } from '../../domain/shared/types';
 import { dailyTenantTextTokens, utcDayStart } from '../llm/tokenUsage';
-import { sumTenantIngestionBytes } from '../ingestion/ingestionLedger';
-import { sumTenantErrorEvents } from '../quality/errorEventsLedger';
+import { dailyTenantIngestionBytes } from '../ingestion/ingestionLedger';
+import { dailyTenantErrorEvents } from '../quality/errorEventsLedger';
 
 export type MeterKey = 'ai_tokens' | 'ingestion' | 'error_events';
 export type MeterUnit = 'tokens' | 'bytes' | 'events';
@@ -44,15 +44,18 @@ const DAY_MS = 86_400_000;
 /**
  * Densify a sparse per-day series into one value per elapsed UTC day from
  * `monthStart` through today (inclusive) — zero-filling quiet days so the
- * sparkline x-axis is evenly spaced.
+ * sparkline x-axis is evenly spaced. Returns `[total, trend]` (the day sum is the
+ * meter total, so each meter needs ONE grouped scan, not a sum + a series).
  */
-function densifyDaily(sparse: Array<{ day: string; tokens: number }>, monthStart: Date): number[] {
+function densifyDaily(sparse: Array<{ day: string; value: number }>, monthStart: Date): [number, number[]] {
   const todayStart = utcDayStart();
   const days = Math.max(1, Math.floor((todayStart.getTime() - monthStart.getTime()) / DAY_MS) + 1);
-  const byDay = new Map(sparse.map((r) => [r.day, r.tokens]));
-  return Array.from({ length: days }, (_, i) =>
+  const byDay = new Map(sparse.map((r) => [r.day, r.value]));
+  const trend = Array.from({ length: days }, (_, i) =>
     byDay.get(new Date(monthStart.getTime() + i * DAY_MS).toISOString().slice(0, 10)) ?? 0,
   );
+  const total = sparse.reduce((a, r) => a + r.value, 0);
+  return [total, trend];
 }
 
 export interface ConsumptionSnapshot {
@@ -86,10 +89,10 @@ export async function buildConsumptionSnapshot(
   monthStart: Date,
   monthEnd: Date,
 ): Promise<ConsumptionSnapshot> {
-  const [tokensDaily, ingestionUsed, errorEventsUsed, tenantRows] = await Promise.all([
+  const [tokensDaily, ingestionDaily, errorEventsDaily, tenantRows] = await Promise.all([
     dailyTenantTextTokens(db, tenantId, monthStart),
-    sumTenantIngestionBytes(db, tenantId, monthStart),
-    sumTenantErrorEvents(db, tenantId, monthStart),
+    dailyTenantIngestionBytes(db, tenantId, monthStart),
+    dailyTenantErrorEvents(db, tenantId, monthStart),
     db
       .select({
         plan: tenants.plan,
@@ -115,19 +118,20 @@ export async function buildConsumptionSnapshot(
   const ingestionLimit = resolveIngestionMonthlyBytes({ effectivePlan, tokenDailyLimitOverride: override });
   const errorEventsLimit = resolveErrorEventsMonthly({ effectivePlan, tokenDailyLimitOverride: override });
 
-  // Tokens come back per-day; the month-to-date total is just the day sum (one
-  // grouped scan does the work of the old single-total query) and the dense
-  // series powers the meter sparkline.
-  const tokensTrend = densifyDaily(tokensDaily, monthStart);
-  const tokensUsed = tokensDaily.reduce((a, r) => a + r.tokens, 0);
+  // Every meter comes back per-day; the month-to-date total is the day sum (one
+  // grouped scan per meter does the work of the old single-total query) and the
+  // dense series powers each meter's sparkline.
+  const [tokensUsed, tokensTrend] = densifyDaily(tokensDaily, monthStart);
+  const [ingestionUsed, ingestionTrend] = densifyDaily(ingestionDaily, monthStart);
+  const [errorEventsUsed, errorEventsTrend] = densifyDaily(errorEventsDaily, monthStart);
 
   return {
     period: { start: monthStart.toISOString(), resetsAt: monthEnd.toISOString() },
     plan: { effective: effectivePlan, billingStatus },
     meters: [
       makeMeter('ai_tokens', 'tokens', tokensUsed, tokenLimit, tokensTrend),
-      makeMeter('ingestion', 'bytes', ingestionUsed, ingestionLimit),
-      makeMeter('error_events', 'events', errorEventsUsed, errorEventsLimit),
+      makeMeter('ingestion', 'bytes', ingestionUsed, ingestionLimit, ingestionTrend),
+      makeMeter('error_events', 'events', errorEventsUsed, errorEventsLimit, errorEventsTrend),
     ],
   };
 }

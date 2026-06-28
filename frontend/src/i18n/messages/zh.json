@@ -774,6 +774,28 @@
         "trend": "近几个月的生命周期时长",
         "trendSeries": "平均生命周期（天）",
         "trendAria": "每月端到端平均生命周期时长"
+      },
+      "scopeEffort": {
+        "title": "范围与投入",
+        "completed": "已完成点数",
+        "defined": "已定义（未完成）",
+        "fte": "开发 FTE",
+        "aria": "随时间变化的已完成与已定义故事点，叠加开发 FTE 曲线",
+        "ptsAxis": "点",
+        "fteAxis": "FTE",
+        "totalPoints": "已定义点数",
+        "donePoints": "已完成 {n}",
+        "cancelledPoints": "已取消点数",
+        "cancelledSub": "已移出范围",
+        "currentFte": "当前 FTE",
+        "fteSub": "近期开发投入"
+      },
+      "valueStream": {
+        "title": "价值流",
+        "subtitle": "价值如何在各项举措间流动——以及在何处受阻。",
+        "criticalPath": "关键路径",
+        "cycle": "⚠ 依赖循环",
+        "noDeps": "暂无举措依赖——在项目组合中关联阻塞项以绘制价值流。"
       }
     },
     "aiImpact": {

@@ -774,6 +774,28 @@
         "trend": "Lifecycle time over recent months",
         "trendSeries": "Avg lifecycle (days)",
         "trendAria": "Average end-to-end lifecycle time per month"
+      },
+      "scopeEffort": {
+        "title": "Scope & effort",
+        "completed": "Completed points",
+        "defined": "Defined (open)",
+        "fte": "Development FTE",
+        "aria": "Story points completed and defined over time with the development FTE line",
+        "ptsAxis": "pts",
+        "fteAxis": "FTE",
+        "totalPoints": "Defined points",
+        "donePoints": "{n} completed",
+        "cancelledPoints": "Cancelled points",
+        "cancelledSub": "removed from scope",
+        "currentFte": "Current FTE",
+        "fteSub": "recent dev capacity"
+      },
+      "valueStream": {
+        "title": "Value stream",
+        "subtitle": "How value flows across initiatives — and where it's blocked.",
+        "criticalPath": "Critical path",
+        "cycle": "⚠ dependency cycle",
+        "noDeps": "No initiative dependencies yet — link blockers in the portfolio to map the value stream."
       }
     },
     "aiImpact": {

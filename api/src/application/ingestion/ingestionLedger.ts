@@ -53,6 +53,23 @@ export async function sumTenantIngestionBytes(db: Db, tenantId: number, since: D
   return Math.max(0, Math.floor(Number(row?.used ?? 0)));
 }
 
+/** Per-day bytes ingested since `since` (UTC day buckets, sparse). Day totals sum
+ *  to {@link sumTenantIngestionBytes}; drives the consumption-meter sparkline. */
+export async function dailyTenantIngestionBytes(
+  db: Db,
+  tenantId: number,
+  since: Date,
+): Promise<Array<{ day: string; value: number }>> {
+  const dayExpr = sql<string>`to_char(${ingestionUsageLog.createdAt}, 'YYYY-MM-DD')`;
+  const rows = await db
+    .select({ day: dayExpr, used: sql<number>`COALESCE(SUM(${ingestionUsageLog.bytesIngested}), 0)` })
+    .from(ingestionUsageLog)
+    .where(and(eq(ingestionUsageLog.tenantId, tenantId), gte(ingestionUsageLog.createdAt, since)))
+    .groupBy(dayExpr)
+    .orderBy(dayExpr);
+  return rows.map((r) => ({ day: r.day, value: Math.max(0, Math.floor(Number(r.used ?? 0))) }));
+}
+
 export type IngestionCapResult =
   | { allowed: true }
   | { allowed: false; effectivePlan: TenantPlan; used: number; limit: number };

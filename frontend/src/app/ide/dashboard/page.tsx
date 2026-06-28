@@ -20,6 +20,7 @@ import { IdeProjectCard } from '@/components/IdeProjectCard';
 import { IdeProjectDetailsModal } from '@/components/IdeProjectDetailsModal';
 import { ViewToggle } from '@/components/ViewToggle';
 import { UpgradeModal } from '@/components/UpgradeModal';
+import { MyLlmsPanel } from '@/components/llm/MyLlmsPanel';
 
 type IdeView = 'grouped' | 'card' | 'table';
 
@@ -44,6 +45,7 @@ export default function IDEDashboardPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [view, setView] = useState<IdeView>('grouped');
+  const [showLlms, setShowLlms] = useState(false);
 
   // New-project modal state
   const [createType, setCreateType] = useState<ProjectModality | null>(null);
@@ -193,12 +195,20 @@ export default function IDEDashboardPage() {
           </div>
           <button
             type="button"
-            onClick={() => router.push('/llms')}
-            style={{ padding: '8px 14px', fontSize: 13, fontWeight: 600, background: 'var(--bg-elevated)', color: 'var(--text-primary)', border: '1px solid var(--border-subtle)', borderRadius: 8, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}
+            onClick={() => setShowLlms((v) => !v)}
+            aria-expanded={showLlms}
+            style={{ padding: '8px 14px', fontSize: 13, fontWeight: 600, background: showLlms ? 'var(--surface-interactive)' : 'var(--bg-elevated)', color: 'var(--text-primary)', border: `1px solid ${showLlms ? 'var(--coral-bright)' : 'var(--border-subtle)'}`, borderRadius: 8, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}
           >
             🧠 {t('manageLlms')}
           </button>
         </div>
+
+        {/* Inline LLM management — the former /llms page, merged into the dashboard */}
+        {showLlms && (
+          <section style={{ marginTop: 24, background: 'var(--bg-deep)', border: '1px solid var(--border-subtle)', borderRadius: 12, padding: 24 }}>
+            <MyLlmsPanel />
+          </section>
+        )}
 
         {error && (
           <div style={{ borderRadius: 8, padding: '12px 16px', margin: '16px 0', fontSize: 14, background: 'var(--error-bg)', border: '1px solid var(--error-border)', color: 'var(--error-text)' }}>
