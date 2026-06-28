@@ -368,6 +368,37 @@ export class VendorFatalError extends Error {
 }
 
 /**
+ * Schema-shape rejection: the upstream refused the request because the supplied
+ * `response_format.json_schema` is too complex for ITS constrained-decoding
+ * engine — Gemini's "too many states for serving" / "schema is too complex" is
+ * the canonical case, but OpenAI-shaped vendors emit analogous
+ * `response_format.json_schema` / "schema is invalid" 400s. This is NOT a
+ * malformed request (the JSON-Schema is valid) and NOT a model-health problem
+ * (a different vendor with a higher/absent ceiling can serve the SAME schema),
+ * so the dispatcher CASCADES on it like a retryable error — but tags the attempt
+ * as `kind: 'schema'` and carries the upstream status, so that when EVERY
+ * candidate rejects the same schema the proxy can surface a deterministic,
+ * TERMINAL 4xx (`schema_too_complex`) instead of a misleading 429 that invites a
+ * doomed retry loop. Distinct from {@link VendorFatalError} (genuine 400 bad
+ * payload) and {@link VendorRetryableError} (transient/rate-limit) so the
+ * dispatcher can classify it without sniffing the message a second time.
+ */
+export class VendorSchemaError extends Error {
+  public readonly vendorId: string;
+  public readonly model: string;
+  /** The real upstream HTTP status (usually 400) before the gateway normalized
+   *  it to the 422 request-error class. Surfaced as `FailoverEvent.upstreamStatus`. */
+  public readonly status: number;
+  constructor(vendorId: string, model: string, status: number, message: string) {
+    super(`[${vendorId}/${model}] schema_too_complex (upstream ${status}): ${message}`);
+    this.name = 'VendorSchemaError';
+    this.vendorId = vendorId;
+    this.model = model;
+    this.status = status;
+  }
+}
+
+/**
  * Worker-runtime exhaustion: the Cloudflare Worker that's running the gateway
  * has hit its per-invocation subrequest cap (50 on free, 1000 on paid). Every
  * subsequent `fetch()` from the same isolate will throw the same error, so
@@ -462,6 +493,42 @@ export function isCapacityLimitBody(text: string | undefined | null): boolean {
 }
 
 /**
+ * Stable `reason` slug a schema-shape rejection carries through the cascade
+ * ({@link VendorSchemaError} → `DispatchAttempt.reason` → `FailoverEvent.reason`
+ * → the terminal `error.code`). Single source so the producer (the vendor
+ * transport) and every downstream consumer (proxy envelope, SDK `classifyError`)
+ * agree on the slug.
+ */
+export const SCHEMA_TOO_COMPLEX_REASON = 'schema_too_complex';
+
+/**
+ * True when a non-OK 4xx body (or a 200-embedded error) is the upstream
+ * rejecting a `response_format.json_schema` as too complex for its constrained-
+ * decoding engine, rather than a malformed request. Several upstreams surface
+ * this differently:
+ *   - Gemini (direct or via OpenRouter): `"too many states for serving"`,
+ *     `"schema is too complex"`, `"exceeds the maximum number of ... states"`.
+ *   - OpenAI-shaped vendors: `"response_format.json_schema"` invalid /
+ *     `"schema is too large"` / `"too many enum values"` / constrained-decoding
+ *     ceiling messages.
+ * These are NOT payload bugs (the JSON-Schema is structurally valid) and a
+ * DIFFERENT vendor can serve the SAME schema — so the cascade fails over, but
+ * the proxy surfaces a deterministic TERMINAL `schema_too_complex` 4xx when
+ * EVERY candidate rejects it (rather than a misleading 429). Deliberately narrow
+ * so a generic `"invalid request"` 400 stays a normal request-error.
+ */
+export function isSchemaComplexityBody(text: string | undefined | null): boolean {
+  if (!text) return false;
+  // Must mention a schema/structured-output construct AND a complexity/limit
+  // signal — keeps a plain malformed-payload 400 out of this bucket.
+  const mentionsSchema = /schema|response_format|structured\s+output|constrained|grammar|states\s+for\s+serving/i.test(text);
+  if (!mentionsSchema) return false;
+  return /too\s+complex|too\s+many\s+states|too\s+many\s+enum|too\s+large|maximum\s+number\s+of|exceeds?\s+the\s+maximum|state\s+limit|nesting\s+(depth|too\s+deep)|too\s+deeply\s+nested/i.test(
+    text,
+  );
+}
+
+/**
  * Classify a would-be-FATAL 4xx the shared way and throw: a capacity/billing
  * limit ({@link isCapacityLimitBody}) becomes a **retryable** error tagged 429
  * so the cascade fails over to another vendor AND `recordFailure` cools this one
@@ -475,6 +542,13 @@ export function throwClassified4xx(
   status: number,
   errText: string,
 ): never {
+  // Schema-too-complex is checked FIRST: it rides on a 400 (so the fatal branch
+  // below would wrongly hard-fail the run) but a DIFFERENT vendor can serve the
+  // same schema, so it must cascade — and carry the `schema` class so an
+  // all-schema cascade surfaces a terminal `schema_too_complex` 4xx, not a 429.
+  if (isSchemaComplexityBody(errText)) {
+    throw new VendorSchemaError(vendorId, model, status, errText.slice(0, 240));
+  }
   if (isCapacityLimitBody(errText)) {
     throw new VendorRetryableError(
       vendorId,
@@ -655,6 +729,14 @@ export async function executeChatCompletion(args: {
       const msg = (errObj && typeof errObj === 'object' && 'message' in errObj
         ? String((errObj as Record<string, unknown>)['message'])
         : JSON.stringify(errObj)).slice(0, 240);
+      // A schema-too-complex rejection from Gemini-family upstreams routinely
+      // arrives HERE — a 200 OK with the real cause buried in an embedded error
+      // body (the `code: 0` failovers hired.video's trace showed). Classify it
+      // as `schema` so an all-schema cascade surfaces a terminal 4xx instead of
+      // cascading as a generic embedded/network failure and collapsing into 429.
+      if (isSchemaComplexityBody(msg)) {
+        throw new VendorSchemaError(vendorId, model, 200, msg);
+      }
       throw new VendorRetryableError(vendorId, model, 0, `embedded: ${msg}`);
     }
     const parsed = parseResponse(raw);
@@ -741,6 +823,12 @@ export async function executeChatCompletionStream(args: {
 
   if (isChunkError(firstText)) {
     await pass.cancel().catch(() => { /* ignore */ });
+    // Schema-too-complex can also surface as a first-chunk embedded error on the
+    // streaming surface — classify it the same way so the cascade tags it
+    // `schema` (terminal-eligible) rather than a generic embedded failure.
+    if (isSchemaComplexityBody(firstText)) {
+      throw new VendorSchemaError(vendorId, model, 200, firstText.slice(0, 200));
+    }
     throw new VendorRetryableError(vendorId, model, 0, `embedded chunk error: ${firstText.slice(0, 200)}`);
   }
 

@@ -18,9 +18,11 @@ import { registerSchemaDialectResolver } from '../jsonSchemaSanitize';
 import {
   VendorRetryableError,
   VendorFatalError,
+  VendorSchemaError,
   WorkerSubrequestExhaustedError,
   RequestAbortedError,
   isEmptyChatResponse,
+  SCHEMA_TOO_COMPLEX_REASON,
   type AiModelTier,
   type VendorCallParams,
   type VendorCallResult,
@@ -225,8 +227,16 @@ export interface DispatchAttempt {
   /** Wall-clock time spent on this attempt, ms (diagnostic tracing). */
   durationMs?: number;
   /** Coarse failure class — rate_limit | timeout | auth | server_error |
-   *  client_error | network (diagnostic tracing). Derived from status + error. */
+   *  client_error | schema | network (diagnostic tracing). Derived from status +
+   *  error, except `schema` which is set explicitly for a {@link VendorSchemaError}. */
   kind?: string;
+  /** Stable machine-readable cause slug when one applies (e.g. `schema_too_complex`).
+   *  Lets consumers branch on structured data instead of regex-sniffing the message. */
+  reason?: string;
+  /** The REAL upstream HTTP status before the gateway normalized it into its own
+   *  class (e.g. a Gemini schema 400 normalized to the 422 request-error class is
+   *  recorded here as `400`). Absent when `status` already IS the upstream status. */
+  upstreamStatus?: number;
 }
 
 /**
@@ -379,6 +389,22 @@ async function dispatchInternal<R extends VendorCallResult | VendorStreamResult>
       if (err instanceof RequestAbortedError) {
         attempts.push({ model, vendor: vendorId, status: 0, error: err.message, durationMs, kind: 'aborted' });
         throw err;
+      }
+      // Schema-too-complex: the upstream rejected the json_schema as too complex
+      // for ITS constrained-decoding engine. A different vendor may accept the
+      // same schema, so CASCADE — but normalize to the 422 request-error class
+      // (so it writes NO cooldown; the model is healthy) and tag `kind: 'schema'`
+      // + the real upstream status. If EVERY candidate rejects it, the proxy
+      // surfaces a terminal `schema_too_complex` 4xx instead of a 429.
+      if (err instanceof VendorSchemaError) {
+        attempts.push({
+          model, vendor: vendorId, status: 422, error: err.message, durationMs,
+          kind: 'schema', reason: SCHEMA_TOO_COMPLEX_REASON, upstreamStatus: err.status,
+        });
+        console.warn(
+          `[vendors] ${cfg.logTag}${vendorId}/${model} rejected json_schema as too complex (upstream ${err.status}); trying next vendor (${attempts.length}/${modelChain.length})`,
+        );
+        continue;
       }
       if (err instanceof VendorRetryableError) {
         attempts.push({ model, vendor: vendorId, status: err.status, error: err.message, durationMs, kind: kindForStatus(err.status, err.message) });

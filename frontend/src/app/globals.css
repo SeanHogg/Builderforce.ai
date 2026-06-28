@@ -122,6 +122,15 @@
   --success: #22c55e;
   --success-text: #86efac;
   --success-bg: rgba(34, 197, 94, 0.15);
+  --warning: #f59e0b;
+  --warning-text: #fcd34d;
+  --warning-bg: rgba(245, 158, 11, 0.16);
+  /* Opaque panel surfaces — theme-aware aliases that flip via the tokens they
+     reference (bg-elevated / surface-interactive are overridden per theme). Many
+     components reference these intuitive names; defining them here keeps them
+     readable in BOTH light and dark instead of falling back to a dark literal. */
+  --surface: var(--bg-elevated);
+  --surface-2: var(--surface-interactive);
   --text-on-accent: #fff;
 }
 
@@ -191,6 +200,9 @@ html[data-theme='light'] {
   --success: #16a34a;
   --success-text: #15803d;
   --success-bg: rgba(34, 197, 94, 0.12);
+  --warning: #d97706;
+  --warning-text: #b45309;
+  --warning-bg: rgba(245, 158, 11, 0.14);
   --text-on-accent: #fff;
 }
 

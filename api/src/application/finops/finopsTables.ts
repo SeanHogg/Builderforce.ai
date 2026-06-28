@@ -16,8 +16,11 @@ export const rdTaxCreditConfig = pgTable('rd_tax_credit_config', {
   updatedAt:           timestamp('updated_at').notNull().defaultNow(),
 });
 
-/** SOC 1 Type II controls register — one assertion row per control objective. */
-export const socControls = pgTable('soc_controls', {
+/** SOC 1 Type II controls register — one assertion row per control objective.
+ *  NOTE: table is `finops_soc_controls`, NOT `soc_controls`. The latter is the
+ *  unrelated SOC 2 governance tracker (schema.ts / migration 0057); colliding on
+ *  it made 0233's CREATE a no-op and 500'd the finops audit report (mig 0254). */
+export const socControls = pgTable('finops_soc_controls', {
   id:           serial('id').primaryKey(),
   tenantId:     integer('tenant_id').notNull(),
   controlRef:   varchar('control_ref', { length: 32 }).notNull(),
