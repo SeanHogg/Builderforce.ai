@@ -1871,7 +1871,11 @@
       "finance": "Finanzen",
       "engineering": "Engineering",
       "overview": "Übersicht",
-      "llmUsage": "LLM-Nutzung"
+      "llmUsage": "LLM-Nutzung",
+      "skills": "Skills",
+      "personas": "Personas",
+      "prompts": "Prompts",
+      "models": "Modelle"
     },
     "title": {
       "aiProductivity": "KI-Produktivitätswert",
@@ -1921,10 +1925,18 @@
       "llmTokens": "Token-Nutzung",
       "llmRequests": "LLM-Anfragen",
       "llmByModel": "Tokens nach Modell",
-      "llmBySource": "Kosten nach Quelle"
+      "llmBySource": "Kosten nach Quelle",
+      "catalogSkillsTopInstalls": "Meistinstallierte Skills",
+      "catalogSkillsByCategory": "Skills nach Kategorie",
+      "catalogPersonasTopInstalls": "Meistinstallierte Personas",
+      "catalogPromptsMostUsed": "Meistgenutzte Prompts",
+      "catalogPromptsTopRated": "Bestbewertete Prompts",
+      "catalogModelsByProvider": "Modelle nach Anbieter"
     },
     "loading": "Laden…",
     "overview": {
+      "activeOfTotal": "{active} aktiv",
+      "registeredCount": "{total} registriert",
       "online": "online",
       "done": "Erledigt",
       "inProgress": "In Bearbeitung",
@@ -1948,6 +1960,16 @@
       "noSpend": "Keine Ausgaben",
       "estCost": "Gesch. Kosten",
       "bySource": "Kosten nach Quelle"
+    },
+    "catalog": {
+      "noInstalls": "Noch keine Installationen",
+      "noUsage": "Noch keine Nutzung",
+      "noRatings": "Noch keine Bewertungen",
+      "noData": "Noch keine Daten",
+      "uncategorized": "Ohne Kategorie",
+      "unknownProvider": "Unbekannt",
+      "skills": "Skills",
+      "models": "Modelle"
     }
   }
 }

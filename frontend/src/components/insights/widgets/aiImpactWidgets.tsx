@@ -17,6 +17,7 @@ import { useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { aiImpactApi, type AiImpactInsights } from '@/lib/aiImpactApi';
 import { useSharedSource } from '@/lib/widgets/sharedSource';
+import { WidgetStat as Stat, WidgetMuted as Muted } from '@/components/widgets/widgetBody';
 import type { WidgetCardProps, WidgetDef, WidgetDrill } from '@/lib/widgets/types';
 import { DonutChart } from '@/components/charts/DonutChart';
 import { BarChart } from '@/components/charts/BarChart';
@@ -35,19 +36,6 @@ const DRILL: WidgetDrill = { kind: 'panel', hub: 'ai', panel: 'ai-impact' };
 const CAP = 'insights.aiImpact' as const;
 
 // ── Small presentational bodies (the WidgetCard owns the frame/title/pin) ──────
-
-function Stat({ value, sub }: { value: string; sub?: string }) {
-  return (
-    <div>
-      <div style={{ fontSize: '1.9rem', fontWeight: 700, color: 'var(--text-primary)' }}>{value}</div>
-      {sub && <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: 2 }}>{sub}</div>}
-    </div>
-  );
-}
-
-function Muted({ children }: { children: React.ReactNode }) {
-  return <span style={{ fontSize: '0.84rem', color: 'var(--text-muted)' }}>{children}</span>;
-}
 
 /** Wrap a card body: handles loading / error so each widget needn't repeat it. */
 function useImpact(days: number) {

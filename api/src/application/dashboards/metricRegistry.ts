@@ -29,6 +29,13 @@ export interface MetricDef {
   unit: string;
   /** One-line plain description used by the NL-query explanation. */
   description: string;
+  /**
+   * Trend polarity: `true` when a rising value is GOOD (merge rate, uptime),
+   * `false` when rising is BAD (errors, lead time, spend, attrition). Omit for
+   * metrics with no inherent good/bad direction (token volume, capex share) — the
+   * widget then renders the delta in a neutral tone instead of green/red.
+   */
+  goodWhenUp?: boolean;
   /** Compute the scalar for this metric over the tenant + window. */
   compute(db: Db, tenantId: number, days: number): Promise<number | null>;
   /**
@@ -57,6 +64,7 @@ export const METRIC_REGISTRY: Record<string, MetricDef> = {
     label: 'LLM spend (month to date)',
     unit: 'USD',
     description: 'Total attributed LLM spend for the current calendar month.',
+    goodWhenUp: false,
     async compute(db, tenantId) {
       const now = Date.now();
       const fin = await computeFinanceInsights(db, tenantId, '', currentPeriodMonth(now), now);
@@ -67,6 +75,7 @@ export const METRIC_REGISTRY: Record<string, MetricDef> = {
     label: 'Forecast month-end spend',
     unit: 'USD',
     description: 'Linear month-end projection of LLM spend at the current burn rate.',
+    goodWhenUp: false,
     async compute(db, tenantId) {
       const now = Date.now();
       const fin = await computeFinanceInsights(db, tenantId, '', currentPeriodMonth(now), now);
@@ -77,6 +86,7 @@ export const METRIC_REGISTRY: Record<string, MetricDef> = {
     label: 'Cost per merged PR',
     unit: 'USD',
     description: 'Month-to-date LLM spend divided by merged runs (null until a PR merges).',
+    goodWhenUp: false,
     async compute(db, tenantId) {
       const now = Date.now();
       const fin = await computeFinanceInsights(db, tenantId, '', currentPeriodMonth(now), now);
@@ -89,6 +99,7 @@ export const METRIC_REGISTRY: Record<string, MetricDef> = {
     label: 'Deployment frequency',
     unit: '/day',
     description: 'Average deployments per day over the window (DORA).',
+    goodWhenUp: true,
     async compute(db, tenantId, days) {
       const dora = await computeDora(db, tenantId, days);
       return dora.deploymentFrequencyPerDay;
@@ -98,6 +109,7 @@ export const METRIC_REGISTRY: Record<string, MetricDef> = {
     label: 'Lead time for changes',
     unit: 'hours',
     description: 'Average task created→completed lead time over the window (DORA).',
+    goodWhenUp: false,
     async compute(db, tenantId, days) {
       const dora = await computeDora(db, tenantId, days);
       return dora.leadTimeHours;
@@ -107,6 +119,7 @@ export const METRIC_REGISTRY: Record<string, MetricDef> = {
     label: 'Change failure rate',
     unit: '%',
     description: 'Share of deployments flagged as failures over the window (DORA).',
+    goodWhenUp: false,
     async compute(db, tenantId, days) {
       const dora = await computeDora(db, tenantId, days);
       return dora.changeFailureRatePct;
@@ -118,6 +131,7 @@ export const METRIC_REGISTRY: Record<string, MetricDef> = {
     label: 'AI merge rate',
     unit: '%',
     description: 'Share of AI runs that merged over the window (run effectiveness).',
+    goodWhenUp: true,
     async compute(db, tenantId, days) {
       const eng = await computeEngineeringInsights(db, tenantId, days);
       return eng.totals.mergedRatePct;
@@ -127,6 +141,7 @@ export const METRIC_REGISTRY: Record<string, MetricDef> = {
     label: 'AI run quality score',
     unit: 'score',
     description: 'Average per-run outcome score (0..1) over the window.',
+    goodWhenUp: true,
     async compute(db, tenantId, days) {
       const eng = await computeEngineeringInsights(db, tenantId, days);
       return eng.totals.avgScore;
@@ -138,6 +153,7 @@ export const METRIC_REGISTRY: Record<string, MetricDef> = {
     label: 'AI productivity score',
     unit: 'score',
     description: 'Composite AI productivity score (throughput · quality · efficiency).',
+    goodWhenUp: true,
     async compute(db, tenantId, days) {
       const impact = await computeAiImpact(db, tenantId, days);
       return impact.productivity.score;
@@ -160,6 +176,7 @@ export const METRIC_REGISTRY: Record<string, MetricDef> = {
     label: 'Uptime',
     unit: '%',
     description: 'Average production uptime over the window (Quality slide).',
+    goodWhenUp: true,
     async compute(db, tenantId, days) {
       return (await computeQualityInsights(db, tenantId, days)).uptimePct;
     },
@@ -168,6 +185,7 @@ export const METRIC_REGISTRY: Record<string, MetricDef> = {
     label: 'MTTR (prod incidents)',
     unit: 'hours',
     description: 'Mean time to resolve production incidents over the window.',
+    goodWhenUp: false,
     async compute(db, tenantId, days) {
       return (await computeQualityInsights(db, tenantId, days)).prodIncidents.mttrHours;
     },
@@ -178,6 +196,7 @@ export const METRIC_REGISTRY: Record<string, MetricDef> = {
     label: 'Attrition rate',
     unit: '%',
     description: 'Departures over the window relative to average headcount.',
+    goodWhenUp: false,
     async compute(db, tenantId, days) {
       return (await computePeopleInsights(db, tenantId, Math.max(1, Math.round(days / 30)))).attritionRatePct;
     },
@@ -186,6 +205,7 @@ export const METRIC_REGISTRY: Record<string, MetricDef> = {
     label: 'Developer satisfaction',
     unit: 'score',
     description: 'Mean DevEx survey score (0..100) over recent campaigns.',
+    goodWhenUp: true,
     async compute(db, tenantId, days) {
       return (await computePeopleInsights(db, tenantId, Math.max(1, Math.round(days / 30)))).devSatisfaction.score;
     },
@@ -200,6 +220,7 @@ export const METRIC_REGISTRY: Record<string, MetricDef> = {
     label: 'Error events',
     unit: '',
     description: 'New error events ingested per day over the window.',
+    goodWhenUp: false,
     async compute(db, tenantId, days) {
       return seriesTotal(await dailyCountSeries(db, errorEvents, errorEvents.tenantId, errorEvents.ts, tenantId, days));
     },
@@ -211,6 +232,7 @@ export const METRIC_REGISTRY: Record<string, MetricDef> = {
     label: 'Agent runs',
     unit: '',
     description: 'Agent executions started per day over the window.',
+    goodWhenUp: true,
     async compute(db, tenantId, days) {
       return seriesTotal(await dailyCountSeries(db, executions, executions.tenantId, executions.createdAt, tenantId, days));
     },

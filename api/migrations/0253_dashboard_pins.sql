@@ -1,4 +1,4 @@
--- 0252_dashboard_pins.sql
+-- 0253_dashboard_pins.sql
 -- Pinnable widget dashboard.
 --
 -- Two additions that turn the custom-dashboard tables into the unified, pinnable

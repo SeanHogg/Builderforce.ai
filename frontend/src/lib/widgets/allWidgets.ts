@@ -3,6 +3,7 @@ import { AI_IMPACT_WIDGETS } from '@/components/insights/widgets/aiImpactWidgets
 import { DELIVERY_WIDGETS } from '@/components/insights/widgets/deliveryWidgets';
 import { FINANCE_WIDGETS } from '@/components/insights/widgets/financeWidgets';
 import { CORE_WIDGETS } from '@/components/widgets/registry-modules/coreWidgets';
+import { CATALOG_WIDGETS } from '@/components/widgets/registry-modules/catalogWidgets';
 
 /**
  * The single aggregation point for the app-wide widget registry.
@@ -20,4 +21,5 @@ export const ALL_WIDGETS: WidgetDef[] = [
   ...FINANCE_WIDGETS,
   // ── Non-insights surfaces (proves the registry is app-wide) ──
   ...CORE_WIDGETS,
+  ...CATALOG_WIDGETS,
 ];
