@@ -4607,7 +4607,12 @@ export const rdFteAllocationQuarterly = pgTable('rd_fte_allocation_quarterly', {
  *  uploads carry their own tenant_id. The binary lives in R2 at r2Key. */
 export const deckTemplates = pgTable('deck_templates', {
   id:           uuid('id').primaryKey().defaultRandom(),
-  tenantId:     integer('tenant_id').notNull().default(0).references(() => tenants.id, { onDelete: 'cascade' }),
+  // Sentinel 0 = BUILTIN_TENANT (global, tenant-less built-in templates); real
+  // templates carry a live tenant id. Intentionally NO FK to tenants(id): the
+  // 0 sentinel is not a real tenant row (tenants.id is serial from 1), so an FK
+  // here rejected the built-in seed and blocked deploys (see migration 0243).
+  // Tenant scoping is enforced in TemplateLibraryService queries.
+  tenantId:     integer('tenant_id').notNull().default(0),
   name:         varchar('name', { length: 255 }).notNull(),
   description:  text('description'),
   archetype:    varchar('archetype', { length: 24 }).notNull().default('custom'), // board | cfo_devfinops | custom | generative
