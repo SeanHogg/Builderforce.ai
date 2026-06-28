@@ -1,0 +1,47 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900">
+  <defs>
+    <radialGradient id="bgGlow" cx="50%" cy="0%" r="120%">
+      <stop offset="0%" stop-color="#1B1F46"/>
+      <stop offset="55%" stop-color="#13152F"/>
+      <stop offset="100%" stop-color="#0A0B1E"/>
+    </radialGradient>
+    <linearGradient id="violetGrad" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#A98BFF"/><stop offset="100%" stop-color="#6A4DF0"/>
+    </linearGradient>
+    <linearGradient id="coolGrad" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#3DD6F5"/><stop offset="100%" stop-color="#4F8BFF"/>
+    </linearGradient>
+    <linearGradient id="mintGrad" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#5BF0BC"/><stop offset="100%" stop-color="#23B987"/>
+    </linearGradient>
+    <linearGradient id="legacyGrad" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#7A8099"/><stop offset="100%" stop-color="#474C63"/>
+    </linearGradient>
+    <linearGradient id="hairline" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="rgba(139,108,255,0)"/>
+      <stop offset="50%" stop-color="rgba(139,108,255,0.55)"/>
+      <stop offset="100%" stop-color="rgba(61,214,245,0)"/>
+    </linearGradient>
+    <filter id="soft" x="-40%" y="-40%" width="180%" height="180%">
+      <feGaussianBlur stdDeviation="14" result="b"/><feMerge>
+      <feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="glow" x="-80%" y="-80%" width="260%" height="260%">
+      <feGaussianBlur stdDeviation="9"/>
+    </filter>
+  </defs>
+  <rect width="1600" height="900" fill="url(#bgGlow)"/>
+  <rect width="1600" height="900" fill="none"/>
+  
+    <text x="80" y="92" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="20" letter-spacing="3" font-weight="700" fill="#A98BFF">THE GOVERNING LAW</text>
+    <text x="80" y="146" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="46" font-weight="800" fill="#EEF0FA">Write-Through Cognition: update means replace</text>
+    <rect x="82" y="170" width="120" height="4" rx="2" fill="url(#hairline)"/>
+  <rect x="80" y="250" width="640" height="470" rx="22" fill="rgba(255,255,255,0.035)" stroke="rgba(110,116,140,0.4)" stroke-width="1.5"/><text x="120" y="306" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="26" font-weight="800" fill="#6E748C">Conventional model · append + reconcile</text><rect x="120" y="350" width="560" height="44" rx="10" fill="rgba(255,255,255,0.04)" stroke="rgba(255,255,255,0.08)" stroke-width="1.5"/><circle cx="146" cy="372" r="7" fill="#6E748C"/><text x="168" y="379" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="19" fill="#A6ADC8">fact v1</text><rect x="120" y="406" width="560" height="44" rx="10" fill="rgba(255,255,255,0.04)" stroke="rgba(255,255,255,0.08)" stroke-width="1.5"/><circle cx="146" cy="428" r="7" fill="#6E748C"/><text x="168" y="435" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="19" fill="#A6ADC8">fact v1 (stale)</text><rect x="120" y="462" width="560" height="44" rx="10" fill="rgba(255,255,255,0.04)" stroke="rgba(255,255,255,0.08)" stroke-width="1.5"/><circle cx="146" cy="484" r="7" fill="#E5A93C"/><text x="168" y="491" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="19" fill="#A6ADC8">fact v2</text><rect x="120" y="518" width="560" height="44" rx="10" fill="rgba(255,255,255,0.04)" stroke="rgba(255,255,255,0.08)" stroke-width="1.5"/><circle cx="146" cy="540" r="7" fill="#E5A93C"/><text x="168" y="547" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="19" fill="#A6ADC8">+ RAG patch</text><rect x="120" y="574" width="560" height="44" rx="10" fill="rgba(255,255,255,0.04)" stroke="rgba(255,255,255,0.08)" stroke-width="1.5"/><circle cx="146" cy="596" r="7" fill="#FF7597"/><text x="168" y="603" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="19" fill="#A6ADC8">fact v3?</text><text x="120" y="692" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="18" fill="#FF7597">⚠ Stale + fresh coexist → a reconcile step must merge them</text><rect x="880" y="250" width="640" height="470" rx="22" fill="rgba(255,255,255,0.035)" stroke="rgba(139,108,255,0.4)" stroke-width="1.5"/><text x="920" y="306" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="26" font-weight="800" fill="#A98BFF">Evermind · upsert-by-key + invalidate</text><rect x="920" y="400" width="560" height="120" rx="14" fill="rgba(139,108,255,0.10)" stroke="rgba(139,108,255,0.5)" stroke-width="1.5"/><text x="950" y="444" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="18" letter-spacing="2" fill="#717892">KEY · customer.plan</text><text x="950" y="488" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="28" font-weight="800" fill="#34E0A1">= latest truth</text><g transform="translate(1350,460)"><circle r="34" fill="url(#mintGrad)"/><path d="M-14,2 L-4,12 L16,-10" stroke="#0A0B1E" stroke-width="6" fill="none" stroke-linecap="round" stroke-linejoin="round"/></g><defs><marker id="ah3166" markerWidth="10" markerHeight="10" refX="7" refY="5" orient="auto">
+    <path d="M0,0 L9,5 L0,10 Z" fill="#A98BFF"/></marker></defs>
+    <line x1="1200" y1="370" x2="1200" y2="396" stroke="#A98BFF" stroke-width="3" marker-end="url(#ah3166)"/><text x="920" y="356" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="19" fill="#A6ADC8">write v2 → replaces v1 in place</text><text x="920" y="658" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="19" fill="#34E0A1">✓ Reads always reflect the latest — no reconcile step, ever</text><text x="920" y="692" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="17" fill="#717892">Same invalidate-on-write rule the platform uses for caching.</text>
+  <g opacity="0.85">
+    <circle cx="1336" cy="838" r="9" fill="url(#violetGrad)"/>
+    <text x="1354" y="845" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="20" font-weight="700" fill="#A6ADC8">Builderforce.ai</text>
+  </g>
+  <text x="80" y="844" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="17" fill="#717892">The innovation platform for the agentic era</text>
+</svg>
