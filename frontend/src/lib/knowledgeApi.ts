@@ -150,6 +150,31 @@ export interface KnowledgeTemplate {
   present: boolean;
 }
 
+/** A public knowledge listing in the marketplace (browse shape). */
+export interface KnowledgeListing {
+  id: string;
+  title: string;
+  summary: string | null;
+  docType: DocType;
+  category: string | null;
+  tags: string[];
+  priceCents: number;
+  authorName: string | null;
+  installCount: number;
+  createdAt: string;
+}
+
+/** The caller-tenant's own listing for a document (drives the list/unlist UI). */
+export interface MyKnowledgeListing {
+  id: string;
+  sourceDocumentId: string | null;
+  priceCents: number;
+  visibility: string;
+  category: string | null;
+  tags: string[];
+  installCount: number;
+}
+
 export interface KnowledgeOverview {
   counts: {
     total: number;
@@ -212,6 +237,25 @@ export const knowledgeApi = {
   tags: () => apiRequest<{ tags: string[] }>(`${BASE}/tags`).then((r) => r.tags),
 
   overview: () => apiRequest<KnowledgeOverview>(`${BASE}/overview`),
+
+  // --- Marketplace: sell / install knowledge documents -------------------
+  listings: () =>
+    apiRequest<{ listings: KnowledgeListing[] }>(`${BASE}/listings`).then((r) => r.listings),
+
+  docListing: (id: string) =>
+    apiRequest<{ listing: MyKnowledgeListing | null }>(`${BASE}/documents/${id}/listing`).then((r) => r.listing),
+
+  publishListing: (id: string, input: { priceCents?: number; category?: string; visibility?: string }) =>
+    apiRequest<{ listing: MyKnowledgeListing }>(`${BASE}/documents/${id}/list`, {
+      method: 'POST',
+      ...jsonBody(input),
+    }).then((r) => r.listing),
+
+  unpublishListing: (listingId: string) =>
+    apiRequest<void>(`${BASE}/listings/${listingId}`, { method: 'DELETE' }),
+
+  installListing: (listingId: string) =>
+    apiRequest<{ documentId: string }>(`${BASE}/listings/${listingId}/install`, { method: 'POST' }),
 
   get: (id: string) => apiRequest<KnowledgeDocDetail>(`${BASE}/documents/${id}`),
 

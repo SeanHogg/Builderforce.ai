@@ -191,6 +191,45 @@ export const METRIC_REGISTRY: Record<string, MetricDef> = {
     },
   },
 
+  // ── Trend metrics (date-windowed daily series) ─────────────────────────────
+  // These carry a `series` so a widget can render a real sparkline/line/bar, not
+  // just a scalar. They close the audited trend gaps (Quality errors, agent-run
+  // throughput, token volume) via the dashboard framework rather than bespoke
+  // per-surface endpoints.
+  'quality.errorEvents': {
+    label: 'Error events',
+    unit: '',
+    description: 'New error events ingested per day over the window.',
+    async compute(db, tenantId, days) {
+      return seriesTotal(await dailyCountSeries(db, errorEvents, errorEvents.tenantId, errorEvents.ts, tenantId, days));
+    },
+    series(db, tenantId, days) {
+      return dailyCountSeries(db, errorEvents, errorEvents.tenantId, errorEvents.ts, tenantId, days);
+    },
+  },
+  'delivery.agentRuns': {
+    label: 'Agent runs',
+    unit: '',
+    description: 'Agent executions started per day over the window.',
+    async compute(db, tenantId, days) {
+      return seriesTotal(await dailyCountSeries(db, executions, executions.tenantId, executions.createdAt, tenantId, days));
+    },
+    series(db, tenantId, days) {
+      return dailyCountSeries(db, executions, executions.tenantId, executions.createdAt, tenantId, days);
+    },
+  },
+  'ai.tokens': {
+    label: 'LLM tokens',
+    unit: '',
+    description: 'Total LLM tokens consumed per day over the window.',
+    async compute(db, tenantId, days) {
+      return seriesTotal(await dailySumSeries(db, llmUsageLog, llmUsageLog.tenantId, llmUsageLog.createdAt, llmUsageLog.totalTokens, tenantId, days));
+    },
+    series(db, tenantId, days) {
+      return dailySumSeries(db, llmUsageLog, llmUsageLog.tenantId, llmUsageLog.createdAt, llmUsageLog.totalTokens, tenantId, days);
+    },
+  },
+
   // ── R&D financials (computeRdFinancials → latest quarter) ───────────────────
   'rdFinancials.rdToRevenue': {
     label: 'Total R&D $ / Revenue',

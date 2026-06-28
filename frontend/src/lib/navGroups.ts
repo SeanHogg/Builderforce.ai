@@ -91,13 +91,17 @@ export const NAV_GROUPS: NavGroup[] = [
     ],
   },
   {
-    id: 'insights', labelKey: 'group.insights', icon: '📈', href: '/insights/ai',
+    id: 'insights', labelKey: 'group.insights', icon: '📈', href: '/insights',
     // Surveys, custom Dashboards and DevFinOps are analytics/measurement surfaces,
     // so they live here as lenses of Insights rather than as their own top-level
     // sidebar items (keeping the "few primary destinations" rule above intact).
     match: ['/insights', '/alerts', '/surveys', '/dashboards', '/finops'],
     tabKind: 'route',
     tabs: [
+      // The composed, out-of-box HOME dashboard: the widgets the user PINNED from
+      // anywhere in the app. Every other tab is itself a dashboard whose cards can
+      // be pinned here.
+      { id: '/insights', labelKey: 'tab.home', icon: '🏠' },
       // One combined entry point for the AI reports (AI Impact, AI Effectiveness
       // and Recommendations) — each is now a drillable section of /insights/ai,
       // not its own tab, trimming the over-long tab bar. activePaths keeps the AI

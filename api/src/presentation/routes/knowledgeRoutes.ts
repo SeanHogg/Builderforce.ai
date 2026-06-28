@@ -21,6 +21,7 @@ import {
   knowledgeAcknowledgements,
   knowledgeTrainingAssignments,
   knowledgeDocumentCollaborators,
+  marketplaceKnowledge,
   tenantMembers,
   users,
 } from '../../infrastructure/database/schema';
@@ -1027,6 +1028,164 @@ export function createKnowledgeRoutes(db: Db): Hono<HonoEnv> {
 
     if (!raw.trim()) return c.json({ error: 'Model returned an empty response' }, 502);
     return c.json({ ...parseAnalysis(raw), model: result.resolvedModel });
+  });
+
+  // =====================================================================
+  // MARKETPLACE — sell knowledge documents (migration 0252).
+  // A listing snapshots the doc's content so installing copies it into the
+  // buyer's tenant as a fresh document. Browse reads are cached behind a global
+  // version token (cross-tenant) bumped on every listing write. Charging/checkout
+  // (priceCents) is a separate Stripe integration — install grants a copy.
+  // =====================================================================
+  const MARKET_VERSION_KEY = 'knowledge-market';
+  const LISTING_VISIBILITIES = ['private', 'tenant', 'public'] as const;
+
+  function parseTags(json: string): string[] {
+    try {
+      const v = JSON.parse(json);
+      return Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : [];
+    } catch {
+      return [];
+    }
+  }
+
+  // ---- LIST A DOC FOR SALE (publish / re-list) -------------------------
+  router.post('/documents/:id/list', async (c) => {
+    const tenantId = c.get('tenantId') as number;
+    const userId = c.get('userId') as string;
+    const id = c.req.param('id');
+    const doc = await loadDoc(tenantId, id);
+    if (!doc) return c.json({ error: 'Document not found' }, 404);
+    const access = await accessFor(c, doc);
+    if (!canEditAccess(access)) return c.json({ error: 'Forbidden' }, 403);
+
+    type ListBody = { priceCents?: number; category?: string; visibility?: string };
+    const body = await c.req.json<ListBody>().catch((): ListBody => ({}));
+    const priceCents = Math.max(0, Math.round(Number(body.priceCents) || 0));
+    const visibility = (LISTING_VISIBILITIES as readonly string[]).includes(body.visibility ?? '')
+      ? (body.visibility as string)
+      : 'public';
+
+    const tags = (await tagsFor([id])).get(id) ?? [];
+    const [author] = await db.select({ name: users.displayName, email: users.email }).from(users).where(eq(users.id, userId));
+    const authorName = author?.name?.trim() || author?.email || null;
+
+    const values = {
+      tenantId,
+      createdBy: userId,
+      sourceDocumentId: id,
+      title: doc.title,
+      summary: doc.summary,
+      docType: doc.docType,
+      content: doc.content,
+      category: body.category?.trim() || null,
+      tags: JSON.stringify(tags),
+      priceCents,
+      visibility,
+      authorName,
+      updatedAt: new Date(),
+    };
+
+    const [existing] = await db.select().from(marketplaceKnowledge).where(eq(marketplaceKnowledge.sourceDocumentId, id));
+    const [listing] = existing
+      ? await db.update(marketplaceKnowledge).set(values).where(eq(marketplaceKnowledge.id, existing.id)).returning()
+      : await db.insert(marketplaceKnowledge).values(values).returning();
+    await bumpCacheVersion(c.env as Env, MARKET_VERSION_KEY);
+    return c.json({ listing: { ...listing, tags } });
+  });
+
+  // ---- THE CALLER-TENANT'S LISTING FOR A DOC (editor list/unlist UI) ----
+  router.get('/documents/:id/listing', async (c) => {
+    const tenantId = c.get('tenantId') as number;
+    const id = c.req.param('id');
+    const [listing] = await db
+      .select()
+      .from(marketplaceKnowledge)
+      .where(and(eq(marketplaceKnowledge.sourceDocumentId, id), eq(marketplaceKnowledge.tenantId, tenantId)));
+    return c.json({ listing: listing ? { ...listing, tags: parseTags(listing.tags) } : null });
+  });
+
+  // ---- UNLIST (seller tenant only) -------------------------------------
+  router.delete('/listings/:listingId', async (c) => {
+    const tenantId = c.get('tenantId') as number;
+    const listingId = c.req.param('listingId');
+    const [listing] = await db.select().from(marketplaceKnowledge).where(eq(marketplaceKnowledge.id, listingId));
+    if (!listing) return c.json({ error: 'Listing not found' }, 404);
+    if (listing.tenantId !== tenantId) return c.json({ error: 'Forbidden' }, 403);
+    await db.delete(marketplaceKnowledge).where(eq(marketplaceKnowledge.id, listingId));
+    await bumpCacheVersion(c.env as Env, MARKET_VERSION_KEY);
+    return c.body(null, 204);
+  });
+
+  // ---- BROWSE PUBLIC LISTINGS (cross-tenant, cached) -------------------
+  router.get('/listings', async (c) => {
+    const env = c.env as Env;
+    const ver = await getCacheVersion(env, MARKET_VERSION_KEY);
+    const payload = await getOrSetCached(env, `knowledge-market:listings:v:${ver}`, async () => {
+      const rows = await db
+        .select()
+        .from(marketplaceKnowledge)
+        .where(eq(marketplaceKnowledge.visibility, 'public'))
+        .orderBy(desc(marketplaceKnowledge.installCount), desc(marketplaceKnowledge.createdAt));
+      return {
+        listings: rows.map((r) => ({
+          id: r.id,
+          title: r.title,
+          summary: r.summary,
+          docType: r.docType,
+          category: r.category,
+          tags: parseTags(r.tags),
+          priceCents: r.priceCents,
+          authorName: r.authorName,
+          installCount: r.installCount,
+          createdAt: r.createdAt,
+        })),
+      };
+    }, { kvTtlSeconds: 120, l1TtlMs: 30_000 });
+    return c.json(payload);
+  });
+
+  // ---- INSTALL A LISTING (copy into the caller's tenant) ---------------
+  router.post('/listings/:listingId/install', requireRole(TenantRole.DEVELOPER), async (c) => {
+    const tenantId = c.get('tenantId') as number;
+    const userId = c.get('userId') as string;
+    const segmentId = (c.get('segmentId') as string | undefined) ?? null;
+    const listingId = c.req.param('listingId');
+    const [listing] = await db.select().from(marketplaceKnowledge).where(eq(marketplaceKnowledge.id, listingId));
+    if (!listing) return c.json({ error: 'Listing not found' }, 404);
+    // Public listings install anywhere; non-public only within the owning tenant.
+    if (listing.visibility !== 'public' && listing.tenantId !== tenantId) {
+      return c.json({ error: 'Forbidden' }, 403);
+    }
+
+    const [doc] = await db
+      .insert(knowledgeDocuments)
+      .values({
+        tenantId,
+        segmentId,
+        projectId: null,
+        docType: listing.docType,
+        title: listing.title,
+        summary: listing.summary,
+        content: listing.content,
+        createdBy: userId,
+        updatedBy: userId,
+      })
+      .returning();
+    if (!doc) return c.json({ error: 'Failed to install listing' }, 500);
+
+    const tags = parseTags(listing.tags);
+    if (tags.length) {
+      await db.insert(knowledgeDocumentTags).values(tags.map((tag) => ({ tenantId, documentId: doc.id, tag })));
+    }
+    await db
+      .update(marketplaceKnowledge)
+      .set({ installCount: listing.installCount + 1 })
+      .where(eq(marketplaceKnowledge.id, listingId));
+
+    await bumpCacheVersion(c.env as Env, knowledgeVersionKey(tenantId));
+    await bumpCacheVersion(c.env as Env, MARKET_VERSION_KEY);
+    return c.json({ documentId: doc.id }, 201);
   });
 
   return router;

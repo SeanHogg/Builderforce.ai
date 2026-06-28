@@ -64,7 +64,8 @@
       "contributors": "Mitwirkende",
       "logs": "Protokolle",
       "llm": "LLM-Nutzung",
-      "qa": "Agentische QA"
+      "qa": "Agentische QA",
+      "home": "Start"
     }
   },
   "alerts": {
@@ -1091,6 +1092,13 @@
       "key": "Schlüssel",
       "status": "Status",
       "age": "Alter"
+    },
+    "home": {
+      "title": "Einblicke",
+      "subtitle": "Ihr Dashboard – heften Sie beliebige Widgets aus der App an, um Ihre Ansicht zu erstellen.",
+      "addWidgets": "Widgets hinzufügen",
+      "emptyTitle": "Ihr Dashboard ist leer",
+      "emptyBody": "Heften Sie Widgets aus jedem Bericht oder jeder Seite an – die Stecknadel in der Kartenecke fügt es hier hinzu."
     }
   },
   "cloudAgentForm": {
@@ -1473,7 +1481,20 @@
     "blankProcess": "Leerer Prozess",
     "blankProcessDesc": "Bilden Sie einen wiederholbaren Workflow oder eine Übergabe ab.",
     "blankCanvas": "Leere Leinwand",
-    "blankCanvasDesc": "Eine freie Tafel für Notizzettel, Timer, Bilder und Einbettungen."
+    "blankCanvasDesc": "Eine freie Tafel für Notizzettel, Timer, Bilder und Einbettungen.",
+    "marketplaceTitle": "Marktplatz",
+    "listForSale": "Zum Verkauf anbieten",
+    "updateListing": "Angebot aktualisieren",
+    "unlist": "Zurückziehen",
+    "priceLabel": "Preis ($)",
+    "listedFor": "Angeboten für ${price}",
+    "installs": "{count, plural, =0 {keine Installationen} one {# Installation} other {# Installationen}}",
+    "marketTitle": "Wissen & SOPs zu verkaufen",
+    "marketSubtitle": "Installieren Sie fertige SOPs, Prozesse und Dokumente in Ihrem Arbeitsbereich.",
+    "free": "Kostenlos",
+    "addToKnowledge": "Zu meinem Wissen hinzufügen",
+    "installing": "Installation…",
+    "by": "von {author}"
   },
   "canvas": {
     "add_text": "Text",
@@ -1501,6 +1522,18 @@
     "noEmbed": "Kein Dokument verknüpft",
     "embedIdPlaceholder": "Dokument-ID…",
     "openEmbeddedDoc": "Dokument öffnen",
+    "add_video": "Video",
+    "add_file": "Datei",
+    "type_video": "Video",
+    "type_file": "Datei",
+    "noVideo": "Kein Video",
+    "videoUrlPlaceholder": "Video- oder Einbettungs-URL einfügen…",
+    "noFile": "Keine Datei verknüpft",
+    "fileNamePlaceholder": "Dateiname (optional)…",
+    "fileUrlPlaceholder": "Datei-URL einfügen…",
+    "saveToKnowledge": "In Wissen speichern",
+    "saving": "Speichern…",
+    "defaultBoardTitle": "Unbenannte Leinwand",
     "start": "Start",
     "pause": "Pause",
     "reset": "Zurücksetzen",
@@ -1709,6 +1742,17 @@
       "titleRequired": "Ein Kampagnentitel ist erforderlich."
     }
   },
+  "dashboard": {
+    "window": "Letzte {days} T",
+    "noTrend": "Noch kein Trend",
+    "unavailable": "Nicht verfügbar",
+    "recency": {
+      "justNow": "gerade eben",
+      "minutesAgo": "vor {n} Min.",
+      "hoursAgo": "vor {n} Std.",
+      "daysAgo": "vor {n} T"
+    }
+  },
   "dashboards": {
     "title": "Benutzerdefinierte Dashboards",
     "subtitle": "Erstellen Sie gespeicherte Dashboards aus Widgets über Ihre bestehenden Kennzahlen und stellen Sie Fragen in natürlicher Sprache.",
@@ -1812,5 +1856,98 @@
     "hoursPh": "Std",
     "log": "Erfassen",
     "delete": "Eintrag löschen"
+  },
+  "widgets": {
+    "pin": "An Dashboard anheften",
+    "unpin": "Lösen",
+    "expand": "Vollständigen Bericht öffnen",
+    "addTitle": "Widgets hinzufügen",
+    "addToDashboard": "Zum Dashboard hinzufügen",
+    "searchPlaceholder": "Widgets suchen…",
+    "group": {
+      "aiImpact": "KI-Wirkung",
+      "delivery": "Lieferung",
+      "dora": "DORA",
+      "finance": "Finanzen",
+      "engineering": "Engineering",
+      "overview": "Übersicht",
+      "llmUsage": "LLM-Nutzung"
+    },
+    "title": {
+      "aiProductivity": "KI-Produktivitätswert",
+      "aiThroughput": "Durchsatz",
+      "aiQuality": "Qualität",
+      "aiEfficiency": "Effizienz",
+      "aiPrevScore": "Vorheriger Wert",
+      "aiUsage": "Nutzung im Zeitverlauf",
+      "aiModelShare": "Modellanteil an Läufen",
+      "aiMergeRate": "Merge-Rate nach Modell",
+      "aiComparison": "Multi-Tool-Bewertung",
+      "aiShareTrend": "Akzeptanz- & Anteilstrend",
+      "delivCycleTime": "Durchlaufzeit",
+      "delivVelocity": "Velocity",
+      "delivEstimation": "Schätzung",
+      "delivLifecyclePhases": "Lebenszyklusphasen",
+      "delivLifecycleTrend": "Lebenszyklus-Trend",
+      "delivVelocityTrend": "Velocity-Trend",
+      "delivSprints": "Sprint-Velocity",
+      "doraDeployFreq": "Deployment-Häufigkeit",
+      "doraLeadTime": "Vorlaufzeit",
+      "doraChangeFail": "Änderungsfehlerrate",
+      "doraMttr": "Wiederherstellungszeit",
+      "doraTotalDeploys": "Deployments gesamt",
+      "doraPerformance": "Leistung vs. Branche",
+      "doraChangeOutcomes": "Änderungsergebnisse",
+      "finSpend": "Ausgaben",
+      "finForecast": "Prognose",
+      "finCostPerPr": "Kosten pro gemergtem PR",
+      "finPaidOverflow": "Bezahlter Überlauf",
+      "finCacheRead": "Cache-Lesevorgänge",
+      "finSpendTrend": "Ausgabenverlauf",
+      "finBudgetVariance": "Budgetabweichung",
+      "finByProject": "Ausgaben nach Projekt",
+      "engOutcome": "Ergebnis-Score",
+      "engMergeRate": "Merge-Rate",
+      "engCiGreen": "CI-Grün-Rate",
+      "engDegraded": "Degradierungsrate",
+      "engCost": "Kosten",
+      "engByApproach": "Nach Ansatz",
+      "engByModel": "Nach Modell",
+      "engByActionType": "Nach Arbeitstyp",
+      "projects": "Projekte",
+      "tasks": "Aufgaben",
+      "agentsOnline": "Agenten online",
+      "pendingApprovals": "Offene Anfragen",
+      "llmTokens": "Token-Nutzung",
+      "llmRequests": "LLM-Anfragen",
+      "llmByModel": "Tokens nach Modell",
+      "llmBySource": "Kosten nach Quelle"
+    },
+    "loading": "Laden…",
+    "overview": {
+      "online": "online",
+      "done": "Erledigt",
+      "inProgress": "In Bearbeitung",
+      "other": "Andere",
+      "noTasks": "Keine Aufgaben",
+      "tasks": "Aufgaben",
+      "taskBreakdown": "Aufgabenaufschlüsselung",
+      "agentsOnline": "Agenten online",
+      "noHosts": "Keine Agenten",
+      "requiresReview": "zu prüfen",
+      "allClear": "Alles erledigt"
+    },
+    "llmUsage": {
+      "tokensSub": "Tokens gesamt",
+      "prompt": "Prompt",
+      "completion": "Vervollständigung",
+      "tokenSplit": "Prompt vs Vervollständigung",
+      "requestsSub": "Anfragen gesamt",
+      "noModels": "Keine Modellnutzung",
+      "byModel": "Tokens nach Modell",
+      "noSpend": "Keine Ausgaben",
+      "estCost": "Gesch. Kosten",
+      "bySource": "Kosten nach Quelle"
+    }
   }
 }

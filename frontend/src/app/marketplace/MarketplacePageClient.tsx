@@ -28,6 +28,7 @@ import type { PublishedAgent } from '@/lib/types';
 import { isAgentOwner } from '@/lib/agentPermissions';
 import { formatAgentPrice } from '@/lib/agentPresentation';
 import ArtifactAssigner from '@/components/ArtifactAssigner';
+import { KnowledgeMarketSection } from './KnowledgeMarketSection';
 import { ViewToggle, type ViewMode } from '@/components/ViewToggle';
 import { tableWrapStyle, tableStyle, theadRowStyle, thStyle, trStyle, tdStyle, tdMutedStyle } from '@/components/dataTableStyles';
 import { AgentCard } from '@/components/workforce/AgentCard';
@@ -467,6 +468,10 @@ export default function MarketplacePageClient() {
           Browse and install personas, skills, and content to supercharge your workforce.
         </p>
       </div>
+
+      {/* Knowledge listings (SOPs/processes/docs published for sale). Self-gating:
+          renders nothing for logged-out visitors or when there are no listings. */}
+      <KnowledgeMarketSection />
 
       <div
         style={{

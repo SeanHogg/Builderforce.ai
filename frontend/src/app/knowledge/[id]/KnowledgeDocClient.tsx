@@ -21,6 +21,7 @@ import {
   type Collaborator,
   type CollaboratorRole,
   type AnalysisResult,
+  type MyKnowledgeListing,
 } from '@/lib/knowledgeApi';
 import {
   inputStyle,
@@ -331,7 +332,10 @@ export default function KnowledgeDocClient({ docId }: { docId: string }) {
 
       {/* Publish / delete (editors) */}
       {canEdit && (
-        <PublishBar doc={doc} t={t} onPublished={reload} onDeleted={() => router.push('/knowledge')} />
+        <>
+          <PublishBar doc={doc} t={t} onPublished={reload} onDeleted={() => router.push('/knowledge')} />
+          <ListingControl docId={docId} t={t} />
+        </>
       )}
 
       {/* Versions + training/compliance */}
@@ -946,6 +950,100 @@ function PublishBar({
       <button type="button" onClick={remove} disabled={busy} style={{ ...btnGhost, color: 'var(--error-text, #f87171)' }}>
         {t('deleteDoc')}
       </button>
+    </div>
+  );
+}
+
+/**
+ * List the document for sale in the marketplace (or unlist it). Editors only —
+ * self-loads the doc's current listing so the consumer just drops it in. The
+ * snapshot is taken server-side from the live document on each (re)list.
+ */
+function ListingControl({ docId, t }: { docId: string; t: ReturnType<typeof useTranslations> }) {
+  const [listing, setListing] = useState<MyKnowledgeListing | null>(null);
+  const [loaded, setLoaded] = useState(false);
+  const [price, setPrice] = useState('0');
+  const [busy, setBusy] = useState(false);
+
+  const reload = useCallback(() => {
+    knowledgeApi
+      .docListing(docId)
+      .then((l) => {
+        setListing(l);
+        if (l) setPrice((l.priceCents / 100).toString());
+      })
+      .catch(() => setListing(null))
+      .finally(() => setLoaded(true));
+  }, [docId]);
+
+  useEffect(() => {
+    reload();
+  }, [reload]);
+
+  async function list() {
+    setBusy(true);
+    try {
+      const priceCents = Math.max(0, Math.round(parseFloat(price || '0') * 100));
+      const next = await knowledgeApi.publishListing(docId, { priceCents });
+      setListing(next);
+    } finally {
+      setBusy(false);
+    }
+  }
+  async function unlist() {
+    if (!listing) return;
+    setBusy(true);
+    try {
+      await knowledgeApi.unpublishListing(listing.id);
+      setListing(null);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (!loaded) return null;
+
+  return (
+    <div
+      style={{
+        display: 'flex',
+        gap: 10,
+        alignItems: 'center',
+        margin: '4px 0 20px',
+        flexWrap: 'wrap',
+      }}
+    >
+      <span style={{ fontSize: 13, fontWeight: 600 }}>🏪 {t('marketplaceTitle')}</span>
+      {listing ? (
+        <>
+          <span style={{ fontSize: 13, color: 'var(--text-muted, #9ca3af)' }}>
+            {t('listedFor', { price: (listing.priceCents / 100).toFixed(2) })} · {t('installs', { count: listing.installCount })}
+          </span>
+          <button type="button" onClick={list} disabled={busy} style={btnGhost}>
+            {busy ? t('saving') : t('updateListing')}
+          </button>
+          <button type="button" onClick={unlist} disabled={busy} style={{ ...btnGhost, color: 'var(--error-text, #f87171)' }}>
+            {t('unlist')}
+          </button>
+        </>
+      ) : (
+        <>
+          <label style={{ fontSize: 13, color: 'var(--text-muted, #9ca3af)', display: 'flex', alignItems: 'center', gap: 6 }}>
+            {t('priceLabel')}
+            <input
+              type="number"
+              min={0}
+              step="0.01"
+              value={price}
+              onChange={(e) => setPrice(e.target.value)}
+              style={{ ...inputStyle, width: 90, minWidth: 0 }}
+            />
+          </label>
+          <button type="button" onClick={list} disabled={busy} style={btnPrimary}>
+            {busy ? t('saving') : t('listForSale')}
+          </button>
+        </>
+      )}
     </div>
   );
 }
