@@ -1,6 +1,6 @@
 {
   "name": "@seanhogg/builderforce-embedded",
-  "version": "0.1.0",
+  "version": "2026.6.29",
   "description": "Embed BuilderForce surfaces (Product Management, Agile, Governance) into any React host with one component. <BuilderForceEmbed view=\"kanban\" token={sso} /> mounts a sandboxed iframe, hands the SSO/tenant JWT to it over postMessage (never in the URL), auto-resizes to content, and syncs deep links. The single DRY embed rail for re-embedding BuilderForce back into BurnRateOS and other host apps.",
   "license": "MIT",
   "author": "Sean Hogg",

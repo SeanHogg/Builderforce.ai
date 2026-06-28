@@ -1,6 +1,6 @@
 {
   "name": "builderforce-docs",
-  "version": "1.0.0",
+  "version": "2026.6.29",
   "type": "module",
   "scripts": {
     "dev": "astro dev",

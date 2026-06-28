@@ -1,6 +1,6 @@
 {
   "name": "@seanhogg/builderforce-voice",
-  "version": "0.1.0",
+  "version": "2026.6.29",
   "description": "Voice-cloning + LLM-narration client for Builderforce.ai Studio. One resolveNarrationEngine() seam routes text→speech through an on-device SSM clone engine (WebGPU, $0) or the metered gateway synthesize endpoint, with an honest named-voice fallback. Consumed by hired.video Studio.",
   "license": "MIT",
   "author": "Sean Hogg",

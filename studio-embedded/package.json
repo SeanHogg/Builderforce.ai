@@ -1,6 +1,6 @@
 {
   "name": "@seanhogg/builderforce-studio-embedded",
-  "version": "0.1.0",
+  "version": "2026.6.29",
   "description": "Full embeddable AI Video Studio for React — <StudioPanel> drop-in that runs LCM / SD-Turbo diffusion on WebGPU/WebNN, conditioned on a Mamba SSM state for temporal coherence, and muxes MP4 via WebCodecs. React layer on top of the headless @seanhogg/builderforce-studio engine.",
   "license": "MIT",
   "author": "Sean Hogg",
