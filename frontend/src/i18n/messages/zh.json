@@ -16,10 +16,7 @@
       "settings": "设置",
       "admin": "管理",
       "knowledge": "知识库",
-      "quality": "质量",
-      "surveys": "调研",
-      "dashboards": "仪表板",
-      "finops": "DevFinOps"
+      "quality": "质量"
     },
     "tab": {
       "projects": "项目",
@@ -55,10 +52,13 @@
       "benchmarking": "基准对标",
       "devex": "DevEx",
       "bottlenecks": "瓶颈",
-      "collectors": "采集器"
-    },
-    "tab.allocation": "分配",
-    "tab.delivery": "交付"
+      "collectors": "采集器",
+      "allocation": "分配",
+      "delivery": "交付",
+      "surveys": "调研",
+      "dashboards": "仪表板",
+      "devfinops": "DevFinOps"
+    }
   },
   "alerts": {
     "title": "告警",

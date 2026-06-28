@@ -16,10 +16,7 @@
       "settings": "Settings",
       "admin": "Admin",
       "knowledge": "Knowledge",
-      "quality": "Quality",
-      "surveys": "Surveys",
-      "dashboards": "Dashboards",
-      "finops": "DevFinOps"
+      "quality": "Quality"
     },
     "tab": {
       "projects": "Projects",
@@ -55,10 +52,13 @@
       "benchmarking": "Benchmarking",
       "devex": "DevEx",
       "bottlenecks": "Bottlenecks",
-      "collectors": "Collectors"
-    },
-    "tab.allocation": "Allocation",
-    "tab.delivery": "Delivery"
+      "collectors": "Collectors",
+      "allocation": "Allocation",
+      "delivery": "Delivery",
+      "surveys": "Surveys",
+      "dashboards": "Dashboards",
+      "devfinops": "DevFinOps"
+    }
   },
   "alerts": {
     "title": "Alerts",
