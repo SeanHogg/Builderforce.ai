@@ -21,6 +21,9 @@ describe('classifyShell — app-shell deny-list model [1557]', () => {
     expect(classifyShell('/pricing')).toBe('public');
     expect(classifyShell('/compare')).toBe('public'); // added so the inversion doesn't give marketing the app shell
     expect(classifyShell('/marketplace')).toBe('public');
+    // Dedicated Evermind marketing page (app/evermind/page.tsx) must render its
+    // own rich content for logged-out visitors, not the RouteMarketing teaser.
+    expect(classifyShell('/evermind')).toBe('public');
     expect(classifyShell('/agents/overview')).toBe('public');
     // Programmatic-SEO integrations surface must render its real content for
     // logged-out visitors + crawlers (robots-Allowed + in sitemap), not a teaser.
