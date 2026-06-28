@@ -524,7 +524,6 @@
       "title": "Lieferung",
       "subtitle": "Lieferfortschritt, Engpässe und Engineering-Leistung – Ihr Lieferprogramm auf einen Blick. Öffnen Sie einen Bericht, um tiefer einzutauchen.",
       "viewDetails": "Details ansehen",
-      "openLens": "{name} öffnen",
       "panel": {
         "delivery": "Lieferung",
         "deliveryDesc": "Burnup, Prognose und Scope Creep eines Liefergegenstands über Initiativen, Projekte und Releases hinweg.",
@@ -538,13 +537,21 @@
         "benchmarkingDesc": "Wie Ihre Liefermetriken im Vergleich zu einer Branchenkohorte abschneiden – Perzentil und Bewertung nach Branche und Teamgröße.",
         "funnel": "Innovationstrichter",
         "funnelDesc": "Idee → validiert → in Entwicklung → ausgeliefert → gemessen: Conversion, Time-to-Value und die Ideen-Pipeline."
+      },
+      "summary": {
+        "cycleTime": "Ø Durchlaufzeit",
+        "cycleTimeSub": "Verfeinerung → Deployment",
+        "items": "Gemessene Elemente",
+        "avgPercentile": "Ø Perzentil",
+        "metricsRated": "über {n} Kennzahlen",
+        "topRated": "Elite / Hoch",
+        "topRatedSub": "Kennzahlen in den Top-Stufen"
       }
     },
     "finhub": {
       "title": "Finanzen",
       "subtitle": "KI-Ausgaben, Investitionsallokation und DevFinOps – Ihr Finanzprogramm auf einen Blick. Öffnen Sie einen Bericht, um ins Detail zu gehen.",
       "viewDetails": "Details anzeigen",
-      "openPanel": "{name} öffnen",
       "devfinops": {
         "title": "DevFinOps",
         "subtitle": "Schätzungen zur Forschungs- und Entwicklungssteuergutschrift (QRE), SOC-1-Kontrollabdeckung und prüfungsbereite Periodenberichte – abgeleitet aus Aufwand, Kosten und dem unveränderlichen Audit-Trail der Agent-Tools."
@@ -1098,7 +1105,8 @@
       "subtitle": "Ihr Dashboard – heften Sie beliebige Widgets aus der App an, um Ihre Ansicht zu erstellen.",
       "addWidgets": "Widgets hinzufügen",
       "emptyTitle": "Ihr Dashboard ist leer",
-      "emptyBody": "Heften Sie Widgets aus jedem Bericht oder jeder Seite an – die Stecknadel in der Kartenecke fügt es hier hinzu."
+      "emptyBody": "Heften Sie Widgets aus jedem Bericht oder jeder Seite an – die Stecknadel in der Kartenecke fügt es hier hinzu.",
+      "myDashboard": "Mein Dashboard"
     }
   },
   "cloudAgentForm": {

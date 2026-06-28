@@ -1,15 +1,12 @@
-import { pageMetadata } from '@/lib/seo';
-import DashboardsClient from './DashboardsClient';
+import { redirect } from 'next/navigation';
 
 export const runtime = 'edge';
 
-export const metadata = pageMetadata({
-  title: 'Custom Dashboards',
-  description:
-    'Build saved dashboards from widgets over your existing delivery, FinOps and AI-effectiveness metrics — and ask plain-English questions that map to a safe metric query.',
-  path: '/dashboards',
-});
-
+/**
+ * The standalone "Custom Dashboards" page was absorbed into the unified Insights
+ * home (/insights) — there is one dashboard surface, not two. This route stays as
+ * a redirect so old links/bookmarks keep working.
+ */
 export default function DashboardsPage() {
-  return <DashboardsClient />;
+  redirect('/insights');
 }

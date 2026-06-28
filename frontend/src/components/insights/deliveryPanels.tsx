@@ -18,7 +18,7 @@
  * dashboard Summary) — the detail lives entirely in the drill-down.
  */
 
-import type { ReactNode } from 'react';
+import type { ComponentType, ReactNode } from 'react';
 import type { Capability } from '@/lib/rbac';
 import { DeliveryLens } from './DeliveryLens';
 import { BottleneckLens } from './BottleneckLens';
@@ -26,6 +26,9 @@ import { DoraLens } from './DoraLens';
 import { SpaceLens } from './SpaceLens';
 import { BenchmarkingLens } from './BenchmarkingLens';
 import { FunnelLens } from './FunnelLens';
+import {
+  DeliverySummary, BottleneckSummary, DoraSummary, SpaceSummary, BenchmarkingSummary, FunnelSummary,
+} from './DeliverySummaries';
 
 /** Stable ids (also the `?panel=` deep-link + Brain enum values). */
 export type DeliveryPanelId =
@@ -42,6 +45,8 @@ export interface DeliveryPanelDef {
   capability: Capability;
   /** Drawer width (wide for the table/chart-heavy lenses). */
   width?: string;
+  /** Compact at-a-glance KPI card for the dashboard (reads the shared `days`). */
+  Summary: ComponentType<{ days: number }>;
   /** The full report rendered inside the drill-down slide-out. */
   render: () => ReactNode;
 }
@@ -51,27 +56,27 @@ const WIDE = 'min(960px, 96vw)';
 export const DELIVERY_PANELS: Record<DeliveryPanelId, DeliveryPanelDef> = {
   delivery: {
     id: 'delivery', icon: '📦', titleKey: 'panel.delivery', descKey: 'panel.deliveryDesc',
-    capability: 'insights.delivery', width: WIDE, render: () => <DeliveryLens />,
+    capability: 'insights.delivery', width: WIDE, Summary: DeliverySummary, render: () => <DeliveryLens />,
   },
   bottlenecks: {
     id: 'bottlenecks', icon: '⏳', titleKey: 'panel.bottlenecks', descKey: 'panel.bottlenecksDesc',
-    capability: 'insights.delivery', width: WIDE, render: () => <BottleneckLens />,
+    capability: 'insights.delivery', width: WIDE, Summary: BottleneckSummary, render: () => <BottleneckLens />,
   },
   dora: {
     id: 'dora', icon: '🚀', titleKey: 'panel.dora', descKey: 'panel.doraDesc',
-    capability: 'insights.delivery', width: WIDE, render: () => <DoraLens />,
+    capability: 'insights.delivery', width: WIDE, Summary: DoraSummary, render: () => <DoraLens />,
   },
   space: {
     id: 'space', icon: '🛰', titleKey: 'panel.space', descKey: 'panel.spaceDesc',
-    capability: 'insights.delivery', width: WIDE, render: () => <SpaceLens />,
+    capability: 'insights.delivery', width: WIDE, Summary: SpaceSummary, render: () => <SpaceLens />,
   },
   benchmarking: {
     id: 'benchmarking', icon: '📊', titleKey: 'panel.benchmarking', descKey: 'panel.benchmarkingDesc',
-    capability: 'insights.benchmarking', width: WIDE, render: () => <BenchmarkingLens />,
+    capability: 'insights.benchmarking', width: WIDE, Summary: BenchmarkingSummary, render: () => <BenchmarkingLens />,
   },
   funnel: {
     id: 'funnel', icon: '💡', titleKey: 'panel.funnel', descKey: 'panel.funnelDesc',
-    capability: 'insights.portfolio', width: WIDE, render: () => <FunnelLens />,
+    capability: 'insights.portfolio', width: WIDE, Summary: FunnelSummary, render: () => <FunnelLens />,
   },
 };
 

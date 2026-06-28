@@ -117,7 +117,6 @@ export const NAV_GROUPS: NavGroup[] = [
       // redirect here with ?drill=). activePaths keeps the tab highlighted on the
       // retired routes while they redirect in. [insights consolidation]
       { id: '/insights/finance', labelKey: 'tab.finance', icon: '💰', activePaths: ['/finops', '/insights/allocation'] },
-      { id: '/dashboards', labelKey: 'tab.dashboards', icon: '🧮' },
       // DevEx is a HUB: survey results + survey management (the retired /surveys
       // page) are drill-down slide-outs of this one tab. activePaths keeps the tab
       // highlighted on /surveys while it redirects in (?panel=surveys). [insights consolidation]

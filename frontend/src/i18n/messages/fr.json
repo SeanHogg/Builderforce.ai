@@ -524,7 +524,6 @@
       "title": "Livraison",
       "subtitle": "Avancement de la livraison, goulots d'étranglement et performance d'ingénierie : votre programme de livraison en un coup d'œil. Ouvrez un rapport pour explorer.",
       "viewDetails": "Voir les détails",
-      "openLens": "Ouvrir {name}",
       "panel": {
         "delivery": "Livraison",
         "deliveryDesc": "Burnup, prévision et dérive du périmètre d'un livrable à travers initiatives, projets et versions.",
@@ -538,13 +537,21 @@
         "benchmarkingDesc": "Le classement de vos métriques de livraison par rapport à une cohorte du secteur — percentile et notation par secteur et taille d’équipe.",
         "funnel": "Entonnoir d'innovation",
         "funnelDesc": "Idée → validée → en construction → livrée → mesurée : conversion, délai de création de valeur et pipeline d’idées."
+      },
+      "summary": {
+        "cycleTime": "Temps de cycle moyen",
+        "cycleTimeSub": "Affinage → déploiement",
+        "items": "Éléments mesurés",
+        "avgPercentile": "Percentile moyen",
+        "metricsRated": "sur {n} métriques",
+        "topRated": "Élite / Élevé",
+        "topRatedSub": "métriques aux niveaux supérieurs"
       }
     },
     "finhub": {
       "title": "Finance",
       "subtitle": "Dépenses d’IA, allocation des investissements et DevFinOps : votre programme financier en un coup d’œil. Ouvrez n’importe quel rapport pour approfondir.",
       "viewDetails": "Voir les détails",
-      "openPanel": "Ouvrir {name}",
       "devfinops": {
         "title": "DevFinOps",
         "subtitle": "Estimations du crédit d’impôt R&D (QRE), couverture des contrôles SOC 1 et rapports de période prêts pour l’audit, dérivés de l’effort, du coût et de la piste d’audit inviolable des outils de l’agent."
@@ -1098,7 +1105,8 @@
       "subtitle": "Votre tableau de bord — épinglez n'importe quel widget de l'app pour composer votre vue.",
       "addWidgets": "Ajouter des widgets",
       "emptyTitle": "Votre tableau de bord est vide",
-      "emptyBody": "Épinglez des widgets depuis n'importe quel rapport ou page — l'épingle dans le coin d'une carte l'ajoute ici."
+      "emptyBody": "Épinglez des widgets depuis n'importe quel rapport ou page — l'épingle dans le coin d'une carte l'ajoute ici.",
+      "myDashboard": "Mon tableau de bord"
     }
   },
   "cloudAgentForm": {
