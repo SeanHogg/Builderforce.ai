@@ -20,7 +20,6 @@ import { IdeProjectCard } from '@/components/IdeProjectCard';
 import { IdeProjectDetailsModal } from '@/components/IdeProjectDetailsModal';
 import { ViewToggle } from '@/components/ViewToggle';
 import { UpgradeModal } from '@/components/UpgradeModal';
-import { MyLlmsPanel } from '@/components/llm/MyLlmsPanel';
 
 type IdeView = 'grouped' | 'card' | 'table';
 
@@ -45,7 +44,17 @@ export default function IDEDashboardPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [view, setView] = useState<IdeView>('grouped');
-  const [showLlms, setShowLlms] = useState(false);
+  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
+
+  const toggleGroup = useCallback((key: number | 'none') => {
+    setCollapsedGroups((prev) => {
+      const next = new Set(prev);
+      const k = String(key);
+      if (next.has(k)) next.delete(k);
+      else next.add(k);
+      return next;
+    });
+  }, []);
 
   // New-project modal state
   const [createType, setCreateType] = useState<ProjectModality | null>(null);
@@ -188,27 +197,10 @@ export default function IDEDashboardPage() {
   return (
     <div style={{ flex: 1, color: 'var(--text-primary)' }}>
       <main style={{ maxWidth: 1200, margin: '0 auto', padding: '40px 24px' }}>
-        <div style={{ marginBottom: 8, display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
-          <div>
-            <h1 style={{ fontSize: '1.6rem', fontWeight: 700, margin: 0 }}>{t('title')}</h1>
-            <p style={{ color: 'var(--text-secondary)', marginTop: 6, fontSize: 14 }}>{t('subtitle')}</p>
-          </div>
-          <button
-            type="button"
-            onClick={() => setShowLlms((v) => !v)}
-            aria-expanded={showLlms}
-            style={{ padding: '8px 14px', fontSize: 13, fontWeight: 600, background: showLlms ? 'var(--surface-interactive)' : 'var(--bg-elevated)', color: 'var(--text-primary)', border: `1px solid ${showLlms ? 'var(--coral-bright)' : 'var(--border-subtle)'}`, borderRadius: 8, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}
-          >
-            🧠 {t('manageLlms')}
-          </button>
+        <div style={{ marginBottom: 8 }}>
+          <h1 style={{ fontSize: '1.6rem', fontWeight: 700, margin: 0 }}>{t('title')}</h1>
+          <p style={{ color: 'var(--text-secondary)', marginTop: 6, fontSize: 14 }}>{t('subtitle')}</p>
         </div>
-
-        {/* Inline LLM management — the former /llms page, merged into the dashboard */}
-        {showLlms && (
-          <section style={{ marginTop: 24, background: 'var(--bg-deep)', border: '1px solid var(--border-subtle)', borderRadius: 12, padding: 24 }}>
-            <MyLlmsPanel />
-          </section>
-        )}
 
         {error && (
           <div style={{ borderRadius: 8, padding: '12px 16px', margin: '16px 0', fontSize: 14, background: 'var(--error-bg)', border: '1px solid var(--error-border)', color: 'var(--error-text)' }}>
@@ -306,16 +298,27 @@ export default function IDEDashboardPage() {
           ) : view === 'card' ? (
             cardGrid(filtered)
           ) : (
-            byContainer.map(({ key, name, items }) => (
-              <div key={String(key)} style={{ marginBottom: 32 }}>
-                <h3 style={{ fontSize: 14, fontWeight: 600, margin: '0 0 12px', color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <span aria-hidden>{key === 'none' ? '🗂' : '📁'}</span>
-                  {key === 'none' ? t('ungrouped') : name}
-                  <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}>· {items.length}</span>
-                </h3>
-                {cardGrid(items)}
-              </div>
-            ))
+            byContainer.map(({ key, name, items }) => {
+              const collapsed = collapsedGroups.has(String(key));
+              const groupName = key === 'none' ? t('ungrouped') : name;
+              return (
+                <div key={String(key)} style={{ marginBottom: 32 }}>
+                  <button
+                    type="button"
+                    onClick={() => toggleGroup(key)}
+                    aria-expanded={!collapsed}
+                    aria-label={collapsed ? t('expandGroup', { name: groupName ?? '' }) : t('collapseGroup', { name: groupName ?? '' })}
+                    style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '0 0 12px', padding: 0, background: 'none', border: 'none', cursor: 'pointer', fontSize: 14, fontWeight: 600, color: 'var(--text-primary)', textAlign: 'left' }}
+                  >
+                    <span aria-hidden style={{ display: 'inline-block', width: 12, fontSize: 11, color: 'var(--text-muted)', transition: 'transform 0.15s', transform: collapsed ? 'rotate(-90deg)' : 'none' }}>▼</span>
+                    <span aria-hidden>{key === 'none' ? '🗂' : '📁'}</span>
+                    {groupName}
+                    <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}>· {items.length}</span>
+                  </button>
+                  {!collapsed && cardGrid(items)}
+                </div>
+              );
+            })
           )}
         </section>
       </main>
