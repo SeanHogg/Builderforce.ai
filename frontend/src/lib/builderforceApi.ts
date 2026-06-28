@@ -3524,31 +3524,50 @@ export interface QualitySourceCatalogEntry {
   hint: string;
 }
 
-export interface QualitySource {
+/** A project's (or tenant's) error collector — one per project (1 snippet). */
+export interface QualityCollector {
   id: string;
-  source: string;
   name: string;
-  projectId: number;
+  /** null = tenant-level collector (routes via mapping rules). */
+  projectId: number | null;
+  defaultProjectId: number | null;
   enabled: boolean;
   status: string;
   lastEventAt: string | null;
   createdAt: string;
-  hasWebhookSecret: boolean;
+  /** Attached provider-webhook integrations. */
+  providers: string[];
 }
 
-export interface CreateQualitySourceResult {
-  source: { id: string; source: string; name: string; projectId: number };
+export interface CreateQualityCollectorResult {
+  collector: { id: string; name: string; projectId: number | null };
   /** Plaintext ingest key — shown ONCE, never retrievable again. */
   ingestKey: string;
-  webhookUrl: string;
-  otlpEndpoint: string;
   eventsEndpoint: string;
+  otlpEndpoint: string;
+  webhookBase: string;
+}
+
+export interface QualityIntegration {
+  provider: string;
+  createdAt: string;
+  hasSecret: boolean;
+  webhookUrl: string;
+}
+
+export interface QualityMappingRule {
+  id: string;
+  matchField: string;
+  matchOp: string;
+  matchValue: string;
+  projectId: number;
+  priority: number;
 }
 
 export interface ErrorGroup {
   id: string;
   projectId: number;
-  sourceId: string | null;
+  collectorId: string | null;
   fingerprint: string;
   title: string;
   type: string | null;
@@ -3582,7 +3601,7 @@ export interface QualityGroupFilter {
   projectId?: number | null;
   status?: string;
   level?: string;
-  sourceId?: string;
+  collectorId?: string;
   limit?: number;
   /** Keyset cursor from a previous page's `nextCursor`. */
   cursor?: string | null;
@@ -3598,18 +3617,36 @@ export const qualityApi = {
   sourceCatalog: (): Promise<QualitySourceCatalogEntry[]> =>
     request<{ sources: QualitySourceCatalogEntry[] }>('/api/quality/source-catalog').then((r) => r.sources ?? []),
 
-  sources: {
-    list: (): Promise<QualitySource[]> =>
-      request<{ sources: QualitySource[] }>('/api/quality/sources').then((r) => r.sources ?? []),
-    create: (body: { projectId: number; source: string; name: string; webhookSecret?: string | null; apiToken?: string | null; scope?: string | null; baseUrl?: string | null }): Promise<CreateQualitySourceResult> =>
-      request('/api/quality/sources', { method: 'POST', body: JSON.stringify(body) }),
-    update: (id: string, body: { name?: string; enabled?: boolean; status?: string }): Promise<{ ok: true }> =>
-      request(`/api/quality/sources/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
+  collectors: {
+    list: (): Promise<QualityCollector[]> =>
+      request<{ collectors: QualityCollector[] }>('/api/quality/collectors').then((r) => r.collectors ?? []),
+    create: (body: { projectId?: number | null; name: string; defaultProjectId?: number | null }): Promise<CreateQualityCollectorResult> =>
+      request('/api/quality/collectors', { method: 'POST', body: JSON.stringify(body) }),
+    update: (id: string, body: { name?: string; enabled?: boolean; status?: string; defaultProjectId?: number | null }): Promise<{ ok: true }> =>
+      request(`/api/quality/collectors/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
     remove: (id: string): Promise<void> =>
-      request<void>(`/api/quality/sources/${id}`, { method: 'DELETE' }),
-    /** Seed the Quality model from a Sentry source's issues API. */
-    backfill: (id: string): Promise<{ pulled: number; accepted: number; dropped: number }> =>
-      request(`/api/quality/sources/${id}/backfill`, { method: 'POST' }),
+      request<void>(`/api/quality/collectors/${id}`, { method: 'DELETE' }),
+
+    integrations: {
+      list: (id: string): Promise<QualityIntegration[]> =>
+        request<{ integrations: QualityIntegration[] }>(`/api/quality/collectors/${id}/integrations`).then((r) => r.integrations ?? []),
+      save: (id: string, body: { provider: string; secret?: string | null; apiToken?: string | null; scope?: string | null; baseUrl?: string | null }): Promise<{ ok: true; webhookUrl: string }> =>
+        request(`/api/quality/collectors/${id}/integrations`, { method: 'POST', body: JSON.stringify(body) }),
+      remove: (id: string, provider: string): Promise<void> =>
+        request<void>(`/api/quality/collectors/${id}/integrations/${provider}`, { method: 'DELETE' }),
+      /** Seed the Quality model from the collector's Sentry integration. */
+      backfillSentry: (id: string): Promise<{ pulled: number; accepted: number; dropped: number }> =>
+        request(`/api/quality/collectors/${id}/integrations/sentry/backfill`, { method: 'POST' }),
+    },
+
+    rules: {
+      list: (id: string): Promise<QualityMappingRule[]> =>
+        request<{ rules: QualityMappingRule[] }>(`/api/quality/collectors/${id}/rules`).then((r) => r.rules ?? []),
+      create: (id: string, body: { matchField: string; matchOp: string; matchValue: string; projectId: number; priority?: number }): Promise<{ id: string }> =>
+        request(`/api/quality/collectors/${id}/rules`, { method: 'POST', body: JSON.stringify(body) }),
+      remove: (id: string, ruleId: string): Promise<void> =>
+        request<void>(`/api/quality/collectors/${id}/rules/${ruleId}`, { method: 'DELETE' }),
+    },
   },
 
   groups: {
@@ -3618,7 +3655,7 @@ export const qualityApi = {
       if (filter.projectId != null) q.set('projectId', String(filter.projectId));
       if (filter.status) q.set('status', filter.status);
       if (filter.level) q.set('level', filter.level);
-      if (filter.sourceId) q.set('sourceId', filter.sourceId);
+      if (filter.collectorId) q.set('collectorId', filter.collectorId);
       if (filter.limit) q.set('limit', String(filter.limit));
       if (filter.cursor) q.set('cursor', filter.cursor);
       const qs = q.toString();
