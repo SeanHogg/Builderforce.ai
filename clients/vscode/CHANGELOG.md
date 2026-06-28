@@ -2,6 +2,10 @@
 
 All notable changes to the BuilderForce VS Code extension are documented here.
 
+## [2026.6.30] — Maintenance release
+
+- Version bump and dependency refresh; republished to the VS Code Marketplace and Open VSX.
+
 ## [2026.6.20] — Coding agent, codebase grounding, browser sign-in
 
 - **In-folder agent editing** — the chat now runs an agentic tool-calling loop with
