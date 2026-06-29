@@ -2004,5 +2004,75 @@
     "outputHeading": "智能体响应",
     "outputEmpty": "（无响应）",
     "errorGeneric": "出现错误，请重试。"
+  },
+  "benchmark": {
+    "subtitle": "用你的文本训练一个小模型，并在它从未见过的数据上评分——困惑度、准确率和速度，全部在本地运行。",
+    "corpusLabel": "评估语料",
+    "corpusPlaceholder": "粘贴用于训练和基准测试的文本……",
+    "epochsLabel": "训练轮数",
+    "run": "运行基准测试",
+    "running": "正在基准测试……",
+    "onDeviceNote": "在你的浏览器中运行——数据不会离开设备。",
+    "error": "基准测试失败。",
+    "emptyHint": "运行基准测试以查看困惑度、准确率和生成示例。",
+    "heldOutNote": "在 {train} 个句子上训练，在 {evalSeq} 个留出句子（{tokens} 个词元）上评分。",
+    "accuracyTitle": "下一词元准确率",
+    "lossDrop": "训练损失从 {from} 降至 {to}（−{delta}）。",
+    "sampleLabel": "生成示例",
+    "sampleEmpty": "（空）",
+    "unit": {
+      "tokPerSec": "词元 / 秒"
+    },
+    "metric": {
+      "perplexity": "困惑度",
+      "bitsPerToken": "每词元比特",
+      "throughput": "吞吐量",
+      "vocab": "词汇表",
+      "top1": "Top-1 准确率",
+      "topK": "Top-{k} 准确率",
+      "lowerBetter": "越低越好"
+    },
+    "verdict": {
+      "strong": "优秀——远低于随机基线。",
+      "good": "良好——明显优于随机。",
+      "weak": "较弱——接近随机基线。"
+    },
+    "nudge": {
+      "underfit": "损失几乎没有下降。请提高训练轮数或增加训练文本。",
+      "weak": "困惑度接近随机。请增加文本、提高轮数或扩大模型。"
+    }
+  },
+  "llmStudio": {
+    "title": "构建自定义模型",
+    "intro": "设计数据、微调 LoRA 适配器，并将其作为可雇佣的智能体发布——全部在浏览器中完成。聊天和提示设计在左侧的 Brain 中进行；下面的步骤驱动构建流程。",
+    "retry": "重试",
+    "loadError": "加载项目状态失败。",
+    "footer": "☁️ 云端推理现已可用。💻 本地（设备端）和 ⚡ 混合推理将随浏览器内模型运行时一起到来——可在 Brain 工具栏切换模式。",
+    "step1": {
+      "title": "设计数据集",
+      "body": "使用左侧的 Brain 起草指令/响应对并思考架构。数据集按项目存储并用于训练。",
+      "metric": "{count, plural, other {# 个数据集}}",
+      "cta": "打开文件"
+    },
+    "step2": {
+      "title": "训练 LoRA 适配器",
+      "body": "通过 WebGPU 在浏览器内微调基础模型。每次运行都会生成一个可移植的 LoRA 产物，便于评估和迭代。",
+      "metric": "{runs, plural, other {# 次运行}} · 已训练 {trained}",
+      "cta": "打开训练"
+    },
+    "step3": {
+      "title": "为模型做基准测试",
+      "body": "在留出文本上为 EvermindLM 评分——困惑度、准确率、吞吐量——完全在设备端运行。发布前先衡量质量，并了解改进方向。",
+      "metric": "设备端",
+      "open": "打开基准测试 ▾",
+      "close": "隐藏基准测试 ▲"
+    },
+    "step4": {
+      "title": "发布到 Workforce",
+      "body": "将训练好的适配器（可选附带 Mamba 记忆）打包成智能体并发布到 Workforce 注册表。",
+      "metricReady": "可以发布",
+      "metricNeedTrain": "请先训练模型",
+      "cta": "打开发布"
+    }
   }
 }

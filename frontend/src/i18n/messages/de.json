@@ -2004,5 +2004,75 @@
     "outputHeading": "Agentenantwort",
     "outputEmpty": "(keine Antwort)",
     "errorGeneric": "Etwas ist schiefgelaufen. Bitte erneut versuchen."
+  },
+  "benchmark": {
+    "subtitle": "Trainiere ein kleines Modell mit deinem Text und bewerte es an nie gesehenen Daten – Perplexität, Genauigkeit und Tempo, alles auf dem Gerät.",
+    "corpusLabel": "Evaluierungs-Korpus",
+    "corpusPlaceholder": "Text zum Trainieren und Benchmarken einfügen…",
+    "epochsLabel": "Epochen",
+    "run": "Benchmark starten",
+    "running": "Wird bewertet…",
+    "onDeviceNote": "Läuft in deinem Browser – keine Daten verlassen das Gerät.",
+    "error": "Benchmark fehlgeschlagen.",
+    "emptyHint": "Starte einen Benchmark, um Perplexität, Genauigkeit und eine Generierungsprobe zu sehen.",
+    "heldOutNote": "Mit {train} Sätzen trainiert, an {evalSeq} zurückgehaltenen bewertet ({tokens} Tokens).",
+    "accuracyTitle": "Genauigkeit des nächsten Tokens",
+    "lossDrop": "Trainingsverlust sank von {from} auf {to} (−{delta}).",
+    "sampleLabel": "Generierungsprobe",
+    "sampleEmpty": "(leer)",
+    "unit": {
+      "tokPerSec": "Tokens / s"
+    },
+    "metric": {
+      "perplexity": "Perplexität",
+      "bitsPerToken": "Bits / Token",
+      "throughput": "Durchsatz",
+      "vocab": "Vokabular",
+      "top1": "Top-1-Genauigkeit",
+      "topK": "Top-{k}-Genauigkeit",
+      "lowerBetter": "niedriger ist besser"
+    },
+    "verdict": {
+      "strong": "Stark – weit unter der Zufalls-Basislinie.",
+      "good": "Gut – deutlich besser als Zufall.",
+      "weak": "Schwach – nahe der Zufalls-Basislinie."
+    },
+    "nudge": {
+      "underfit": "Der Verlust hat sich kaum bewegt. Erhöhe die Epochen oder füge mehr Trainingstext hinzu.",
+      "weak": "Die Perplexität ist fast zufällig. Füge mehr Text hinzu, erhöhe die Epochen oder vergrößere das Modell."
+    }
+  },
+  "llmStudio": {
+    "title": "Eigenes Modell erstellen",
+    "intro": "Entwirf Daten, optimiere einen LoRA-Adapter und veröffentliche ihn als anheuerbaren Agenten – alles im Browser. Chat und Prompt-Design passieren im Brain links; die Schritte unten steuern die Build-Pipeline.",
+    "retry": "Erneut versuchen",
+    "loadError": "Projektstatus konnte nicht geladen werden.",
+    "footer": "☁️ Cloud-Inferenz ist jetzt aktiv. 💻 Lokale (geräteinterne) und ⚡ hybride Inferenz kommen mit der modellinternen Browser-Runtime – Modus über die Brain-Leiste wechseln.",
+    "step1": {
+      "title": "Datensatz entwerfen",
+      "body": "Nutze das Brain links, um Anweisungs-/Antwortpaare zu entwerfen und über die Architektur nachzudenken. Datensätze werden pro Projekt gespeichert und speisen das Training.",
+      "metric": "{count, plural, one {# Datensatz} other {# Datensätze}}",
+      "cta": "Dateien öffnen"
+    },
+    "step2": {
+      "title": "LoRA-Adapter trainieren",
+      "body": "Optimiere ein Basismodell im Browser via WebGPU. Jeder Lauf erzeugt ein portables LoRA-Artefakt, das du bewerten und iterieren kannst.",
+      "metric": "{runs, plural, one {# Lauf} other {# Läufe}} · {trained} trainiert",
+      "cta": "Training öffnen"
+    },
+    "step3": {
+      "title": "Modell benchmarken",
+      "body": "Bewerte ein EvermindLM an zurückgehaltenem Text – Perplexität, Genauigkeit, Durchsatz – vollständig auf dem Gerät. Miss die Qualität vor der Veröffentlichung und sieh, was zu verbessern ist.",
+      "metric": "Auf dem Gerät",
+      "open": "Benchmark öffnen ▾",
+      "close": "Benchmark ausblenden ▲"
+    },
+    "step4": {
+      "title": "In der Workforce veröffentlichen",
+      "body": "Bündle deinen trainierten Adapter (optional mit Mamba-Speicher) in ein Agentenpaket und veröffentliche es in der Workforce-Registry.",
+      "metricReady": "Bereit zur Veröffentlichung",
+      "metricNeedTrain": "Trainiere zuerst ein Modell",
+      "cta": "Veröffentlichung öffnen"
+    }
   }
 }

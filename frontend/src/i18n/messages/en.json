@@ -2004,5 +2004,75 @@
     "outputHeading": "Agent response",
     "outputEmpty": "(no response)",
     "errorGeneric": "Something went wrong. Please try again."
+  },
+  "benchmark": {
+    "subtitle": "Train a small model on your text and score it on data it never saw — perplexity, accuracy, and speed, all on-device.",
+    "corpusLabel": "Evaluation corpus",
+    "corpusPlaceholder": "Paste the text to train and benchmark on…",
+    "epochsLabel": "Epochs",
+    "run": "Run benchmark",
+    "running": "Benchmarking…",
+    "onDeviceNote": "Runs in your browser — no data leaves the device.",
+    "error": "Benchmark failed.",
+    "emptyHint": "Run a benchmark to see perplexity, accuracy, and a generation sample.",
+    "heldOutNote": "Trained on {train} sentences, scored on {evalSeq} held-out ({tokens} tokens).",
+    "accuracyTitle": "Next-token accuracy",
+    "lossDrop": "Training loss fell {from} → {to} (−{delta}).",
+    "sampleLabel": "Generation sample",
+    "sampleEmpty": "(empty)",
+    "unit": {
+      "tokPerSec": "tokens / sec"
+    },
+    "metric": {
+      "perplexity": "Perplexity",
+      "bitsPerToken": "Bits / token",
+      "throughput": "Throughput",
+      "vocab": "Vocabulary",
+      "top1": "Top-1 accuracy",
+      "topK": "Top-{k} accuracy",
+      "lowerBetter": "lower is better"
+    },
+    "verdict": {
+      "strong": "Strong — far below the random baseline.",
+      "good": "Good — clearly better than chance.",
+      "weak": "Weak — close to the random baseline."
+    },
+    "nudge": {
+      "underfit": "The loss barely moved. Raise epochs or add more training text.",
+      "weak": "Perplexity is near random. Add more text, raise epochs, or enlarge the model."
+    }
+  },
+  "llmStudio": {
+    "title": "Build a Custom Model",
+    "intro": "Design data, fine-tune a LoRA adapter, and ship it as a hireable agent — all from the browser. Chat and prompt design happen in the Brain on the left; the steps below drive the build pipeline.",
+    "retry": "Retry",
+    "loadError": "Failed to load project state.",
+    "footer": "☁️ Cloud inference is active now. 💻 On-device (Local) and ⚡ Hybrid inference arrive with the in-browser model runtime — switch modes from the toolbar in the Brain.",
+    "step1": {
+      "title": "Design your dataset",
+      "body": "Use the Brain on the left to draft instruction/response pairs and reason about architecture. Datasets are stored per-project and feed training.",
+      "metric": "{count, plural, one {# dataset} other {# datasets}}",
+      "cta": "Open Files"
+    },
+    "step2": {
+      "title": "Train a LoRA adapter",
+      "body": "Fine-tune a base model in-browser via WebGPU. Each run produces a portable LoRA artifact you can evaluate and iterate on.",
+      "metric": "{runs, plural, one {# run} other {# runs}} · {trained} trained",
+      "cta": "Open Train"
+    },
+    "step3": {
+      "title": "Benchmark your model",
+      "body": "Score an EvermindLM on held-out text — perplexity, accuracy, throughput — entirely on-device. Measure quality before you publish, and see what to improve.",
+      "metric": "On-device",
+      "open": "Open Benchmark ▾",
+      "close": "Hide Benchmark ▲"
+    },
+    "step4": {
+      "title": "Publish to the Workforce",
+      "body": "Bundle your trained adapter (optionally with Mamba memory) into an agent package and publish it to the Workforce Registry.",
+      "metricReady": "Ready to publish",
+      "metricNeedTrain": "Train a model first",
+      "cta": "Open Publish"
+    }
   }
 }

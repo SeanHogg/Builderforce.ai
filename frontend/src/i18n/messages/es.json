@@ -2004,5 +2004,75 @@
     "outputHeading": "Respuesta del agente",
     "outputEmpty": "(sin respuesta)",
     "errorGeneric": "Algo salió mal. Inténtalo de nuevo."
+  },
+  "benchmark": {
+    "subtitle": "Entrena un modelo pequeño con tu texto y puntúalo con datos que nunca vio: perplejidad, precisión y velocidad, todo en el dispositivo.",
+    "corpusLabel": "Corpus de evaluación",
+    "corpusPlaceholder": "Pega el texto para entrenar y evaluar…",
+    "epochsLabel": "Épocas",
+    "run": "Ejecutar benchmark",
+    "running": "Evaluando…",
+    "onDeviceNote": "Se ejecuta en tu navegador: ningún dato sale del dispositivo.",
+    "error": "El benchmark falló.",
+    "emptyHint": "Ejecuta un benchmark para ver perplejidad, precisión y una muestra de generación.",
+    "heldOutNote": "Entrenado con {train} oraciones, evaluado con {evalSeq} reservadas ({tokens} tokens).",
+    "accuracyTitle": "Precisión del siguiente token",
+    "lossDrop": "La pérdida de entrenamiento bajó {from} → {to} (−{delta}).",
+    "sampleLabel": "Muestra de generación",
+    "sampleEmpty": "(vacío)",
+    "unit": {
+      "tokPerSec": "tokens / s"
+    },
+    "metric": {
+      "perplexity": "Perplejidad",
+      "bitsPerToken": "Bits / token",
+      "throughput": "Rendimiento",
+      "vocab": "Vocabulario",
+      "top1": "Precisión top-1",
+      "topK": "Precisión top-{k}",
+      "lowerBetter": "menos es mejor"
+    },
+    "verdict": {
+      "strong": "Fuerte: muy por debajo de la línea base aleatoria.",
+      "good": "Bueno: claramente mejor que el azar.",
+      "weak": "Débil: cerca de la línea base aleatoria."
+    },
+    "nudge": {
+      "underfit": "La pérdida apenas cambió. Aumenta las épocas o añade más texto de entrenamiento.",
+      "weak": "La perplejidad es casi aleatoria. Añade más texto, sube las épocas o agranda el modelo."
+    }
+  },
+  "llmStudio": {
+    "title": "Crear un modelo personalizado",
+    "intro": "Diseña datos, ajusta un adaptador LoRA y publícalo como un agente contratable, todo desde el navegador. El chat y el diseño de prompts ocurren en el Brain a la izquierda; los pasos siguientes impulsan el flujo de creación.",
+    "retry": "Reintentar",
+    "loadError": "No se pudo cargar el estado del proyecto.",
+    "footer": "☁️ La inferencia en la nube ya está activa. 💻 La inferencia local (en el dispositivo) y ⚡ híbrida llegan con el runtime de modelos en el navegador; cambia de modo desde la barra del Brain.",
+    "step1": {
+      "title": "Diseña tu conjunto de datos",
+      "body": "Usa el Brain de la izquierda para redactar pares de instrucción/respuesta y razonar sobre la arquitectura. Los conjuntos de datos se guardan por proyecto y alimentan el entrenamiento.",
+      "metric": "{count, plural, one {# conjunto de datos} other {# conjuntos de datos}}",
+      "cta": "Abrir archivos"
+    },
+    "step2": {
+      "title": "Entrena un adaptador LoRA",
+      "body": "Ajusta un modelo base en el navegador con WebGPU. Cada ejecución produce un artefacto LoRA portátil que puedes evaluar e iterar.",
+      "metric": "{runs, plural, one {# ejecución} other {# ejecuciones}} · {trained} entrenados",
+      "cta": "Abrir entrenamiento"
+    },
+    "step3": {
+      "title": "Evalúa tu modelo",
+      "body": "Puntúa un EvermindLM con texto reservado: perplejidad, precisión, rendimiento, todo en el dispositivo. Mide la calidad antes de publicar y descubre qué mejorar.",
+      "metric": "En el dispositivo",
+      "open": "Abrir benchmark ▾",
+      "close": "Ocultar benchmark ▲"
+    },
+    "step4": {
+      "title": "Publica en el Workforce",
+      "body": "Empaqueta tu adaptador entrenado (opcionalmente con memoria Mamba) en un paquete de agente y publícalo en el registro del Workforce.",
+      "metricReady": "Listo para publicar",
+      "metricNeedTrain": "Entrena un modelo primero",
+      "cta": "Abrir publicación"
+    }
   }
 }

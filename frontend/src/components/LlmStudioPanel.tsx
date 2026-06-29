@@ -15,10 +15,12 @@
  */
 
 import { useCallback, useEffect, useState } from 'react';
+import { useTranslations } from 'next-intl';
 import { listDatasets, listTrainingJobs } from '@/lib/api';
 import type { Dataset, FileEntry, TrainingJob } from '@/lib/types';
 import { getFileName } from '@/lib/utils';
 import type { RightTab } from '@/lib/modality';
+import { BenchmarkPanel } from '@/components/BenchmarkPanel';
 
 interface LlmStudioPanelProps {
   projectId: number | string;
@@ -36,10 +38,12 @@ function isDatasetFile(path: string): boolean {
 }
 
 export function LlmStudioPanel({ projectId, files = [], onGoToTab, onOpenFile }: LlmStudioPanelProps) {
+  const t = useTranslations('llmStudio');
   const [datasets, setDatasets] = useState<Dataset[]>([]);
   const [jobs, setJobs] = useState<TrainingJob[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [benchmarkOpen, setBenchmarkOpen] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -52,11 +56,11 @@ export function LlmStudioPanel({ projectId, files = [], onGoToTab, onOpenFile }:
       setDatasets(Array.isArray(ds) ? ds : []);
       setJobs(Array.isArray(tj) ? tj : []);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to load project state.');
+      setError(e instanceof Error ? e.message : t('loadError'));
     } finally {
       setLoading(false);
     }
-  }, [projectId]);
+  }, [projectId, t]);
 
   useEffect(() => { void load(); }, [load]);
 
@@ -77,30 +81,40 @@ export function LlmStudioPanel({ projectId, files = [], onGoToTab, onOpenFile }:
     body: string;
     metric: string;
     cta?: { label: string; tab: RightTab };
+    /** Special-cased step rendered with an inline panel instead of a tab CTA. */
+    kind?: 'benchmark';
   }> = [
     {
       n: 1,
       icon: '📝',
-      title: 'Design your dataset',
-      body: 'Use the Brain on the left to draft instruction/response pairs and reason about architecture. Datasets are stored per-project and feed training.',
-      metric: `${datasetTotal} dataset${datasetTotal === 1 ? '' : 's'}`,
-      cta: { label: 'Open Files', tab: 'files' },
+      title: t('step1.title'),
+      body: t('step1.body'),
+      metric: t('step1.metric', { count: datasetTotal }),
+      cta: { label: t('step1.cta'), tab: 'files' },
     },
     {
       n: 2,
       icon: '🧠',
-      title: 'Train a LoRA adapter',
-      body: 'Fine-tune a base model in-browser via WebGPU. Each run produces a portable LoRA artifact you can evaluate and iterate on.',
-      metric: `${jobs.length} run${jobs.length === 1 ? '' : 's'} · ${trainedCount} trained`,
-      cta: { label: 'Open Train', tab: 'train' },
+      title: t('step2.title'),
+      body: t('step2.body'),
+      metric: t('step2.metric', { runs: jobs.length, trained: trainedCount }),
+      cta: { label: t('step2.cta'), tab: 'train' },
     },
     {
       n: 3,
+      icon: '📊',
+      title: t('step3.title'),
+      body: t('step3.body'),
+      metric: t('step3.metric'),
+      kind: 'benchmark',
+    },
+    {
+      n: 4,
       icon: '🚀',
-      title: 'Publish to the Workforce',
-      body: 'Bundle your trained adapter (optionally with Mamba memory) into an agent package and publish it to the Workforce Registry.',
-      metric: trainedCount > 0 ? 'Ready to publish' : 'Train a model first',
-      cta: { label: 'Open Publish', tab: 'publish' },
+      title: t('step4.title'),
+      body: t('step4.body'),
+      metric: trainedCount > 0 ? t('step4.metricReady') : t('step4.metricNeedTrain'),
+      cta: { label: t('step4.cta'), tab: 'publish' },
     },
   ];
 
@@ -118,12 +132,11 @@ export function LlmStudioPanel({ projectId, files = [], onGoToTab, onOpenFile }:
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6 }}>
           <span style={{ fontSize: '1.6rem' }}>🧠</span>
           <h1 style={{ fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '1.25rem', margin: 0 }}>
-            Build a Custom Model
+            {t('title')}
           </h1>
         </div>
         <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', lineHeight: 1.5, marginTop: 0, marginBottom: 20 }}>
-          Design data, fine-tune a LoRA adapter, and ship it as a hireable agent — all from the browser.
-          Chat and prompt design happen in the Brain on the left; the steps below drive the build pipeline.
+          {t('intro')}
         </p>
 
         {error && (
@@ -143,7 +156,7 @@ export function LlmStudioPanel({ projectId, files = [], onGoToTab, onOpenFile }:
                 borderRadius: 6, padding: '2px 10px', fontSize: '0.75rem', cursor: 'pointer',
               }}
             >
-              Retry
+              {t('retry')}
             </button>
           </div>
         )}
@@ -199,6 +212,31 @@ export function LlmStudioPanel({ projectId, files = [], onGoToTab, onOpenFile }:
                   </button>
                 )}
 
+                {/* Benchmark step: an inline, on-device scorecard rather than a
+                    right-panel tab — the model is trained + scored right here. */}
+                {step.kind === 'benchmark' && (
+                  <div style={{ marginTop: 4 }}>
+                    <button
+                      type="button"
+                      onClick={() => setBenchmarkOpen((v) => !v)}
+                      aria-expanded={benchmarkOpen}
+                      style={{
+                        fontFamily: 'var(--font-display)', fontWeight: 600, fontSize: '0.78rem',
+                        background: 'var(--bg-elevated)', color: 'var(--text-primary)',
+                        border: '1px solid var(--border-subtle)', borderRadius: 8,
+                        padding: '5px 12px', cursor: 'pointer',
+                      }}
+                    >
+                      {benchmarkOpen ? t('step3.close') : t('step3.open')}
+                    </button>
+                    {benchmarkOpen && (
+                      <div style={{ marginTop: 12 }}>
+                        <BenchmarkPanel />
+                      </div>
+                    )}
+                  </div>
+                )}
+
                 {/* Step 1: surface dataset files the Brain wrote so the user can
                     open/select them — bridges the file store to this step. */}
                 {step.n === 1 && datasetFiles.length > 0 && (
@@ -233,8 +271,7 @@ export function LlmStudioPanel({ projectId, files = [], onGoToTab, onOpenFile }:
         </div>
 
         <p style={{ color: 'var(--text-muted)', fontSize: '0.72rem', lineHeight: 1.5, marginTop: 20 }}>
-          ☁️ Cloud inference is active now. 💻 On-device (Local) and ⚡ Hybrid inference arrive with the
-          in-browser model runtime — switch modes from the toolbar in the Brain.
+          {t('footer')}
         </p>
       </div>
     </div>
