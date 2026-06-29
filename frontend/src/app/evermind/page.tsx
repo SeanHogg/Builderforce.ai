@@ -122,7 +122,7 @@ export default function EvermindPage() {
 
         .ev-figure { width: 100%; height: auto; display: block; border-radius: 16px; border: 1px solid var(--border-subtle); margin: 18px 0 6px; background: #0e1525; }
         .ev-figcap { font-size: 0.8rem; color: var(--text-muted); margin: 0 0 4px; text-align: center; }
-        .ev-steps { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; counter-reset: ev-step; }
+        .ev-steps { display: grid; grid-template-columns: repeat(auto-fit, minmax(168px, 1fr)); gap: 14px; counter-reset: ev-step; }
         @media (max-width: 760px) { .ev-steps { grid-template-columns: 1fr 1fr; } }
         @media (max-width: 460px) { .ev-steps { grid-template-columns: 1fr; } }
         .ev-step { position: relative; padding: 22px 18px 18px; border-radius: 16px; border: 1px solid var(--border-subtle); background: var(--surface-card); }
@@ -144,7 +144,10 @@ export default function EvermindPage() {
               <h1 className="ev-title">
                 {EVERMIND.name} — the <span className="ev-grad">Builderforce.ai LLM</span>
               </h1>
-              <p className="ev-sub">{EVERMIND.tagline}. {EVERMIND.blurb}</p>
+              {/* One clean subline — the full Write-Through Cognition blurb lives
+                  in the section directly below, so the hero stays readable over
+                  the brain animation (bolt.new-clean). */}
+              <p className="ev-sub">{EVERMIND.tagline}.</p>
               <div className="ev-actions">
                 <Link href="/register" className="ev-btn-primary">⚡ Start building free</Link>
                 <Link href="/product" className="ev-btn-secondary">Tour the platform →</Link>
@@ -275,6 +278,10 @@ export default function EvermindPage() {
               <div className="ev-step">
                 <h3 className="ev-step-title">Train</h3>
                 <p className="ev-step-desc">Fine-tune in-browser on WebGPU — LoRA adapters plus a persistent memory snapshot. Nothing leaves your machine.</p>
+              </div>
+              <div className="ev-step">
+                <h3 className="ev-step-title">Benchmark</h3>
+                <p className="ev-step-desc">Score the model on a held-out slice on-device — perplexity, next-token accuracy, and throughput — and A/B it against the prior checkpoint. Publish on evidence.</p>
               </div>
               <div className="ev-step">
                 <h3 className="ev-step-title">Validate via API</h3>

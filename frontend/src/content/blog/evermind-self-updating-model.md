@@ -44,7 +44,7 @@ Evermind isn't trying to out-parameter the biggest frontier models. It's built t
 
 An AI workforce that forgets — or worse, remembers the wrong thing — can't be trusted to run unattended. Evermind is what lets Builderforce.ai's agents carry knowledge across sessions and keep it *correct*: the write-through memory means a corrected fact stays corrected, and the on-device footprint means that memory rides along wherever the agent runs.
 
-It's the same substrate behind in-browser LoRA training, persistent agent memory, and recall — now with a governing law that guarantees the knowledge tier can never quietly go out of date.
+It's the same substrate behind in-browser LoRA training, persistent agent memory, recall, and on-device benchmarking — every model you train is scored on held-out data (perplexity, accuracy, throughput) before you publish it, so you ship on evidence — now with a governing law that guarantees the knowledge tier can never quietly go out of date.
 
 If you're evaluating AI platforms, ask the question that actually predicts whether they'll still be right next month: *when the truth changes, does the model replace what it knew — or just pile the new fact on top?* On Builderforce.ai, it replaces it.
 

@@ -731,6 +731,10 @@ export const EVERMIND_FAQ: FaqItem[] = [
     question: 'How does Evermind stay up to date without retraining?',
     answer: 'Through its shared-expert hybrid generator and write-through memory. A dense always-on backbone carries continuous online learning while routed experts page in on demand, and every new fact upserts by a stable key and invalidates its prior recall. New knowledge lands in the model the moment it happens, so there is no retrain cycle and no knowledge cutoff you do not control.',
   },
+  {
+    question: 'Does Evermind have benchmarks — how do I know a model I train is any good?',
+    answer: 'Yes. Every model you train in the Studio is scored on-device before you publish it. The built-in benchmarking harness holds out a slice of your corpus the model never trains on, then reports the standard language-model yardsticks — held-out perplexity, bits-per-token, top-1 and top-k next-token accuracy, and generation throughput — and can A/B two checkpoints so you can see whether a fresh adaptation actually improved on the last one. It runs entirely in your browser with no GPU bill and no data leaving your machine, so you publish on evidence, not vibes. The same harness is the open measurement instrument behind the Evermind technical report.',
+  },
 ];
 
 /** Pricing page FAQ */
