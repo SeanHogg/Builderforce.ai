@@ -407,8 +407,8 @@
     "typecheck:native": "tsgo --noEmit"
   },
   "dependencies": {
-    "@seanhogg/builderforce-memory": "^2026.6.34",
-    "@seanhogg/builderforce-memory-engine": "^2026.6.34"
+    "@seanhogg/builderforce-memory": "^2026.6.35",
+    "@seanhogg/builderforce-memory-engine": "^2026.6.35"
   },
   "devDependencies": {
     "@types/node": "^20.14.0",
