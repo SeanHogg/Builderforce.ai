@@ -33,6 +33,9 @@ export interface NormalizedTicket {
    *  Persisted to tasks.story_points on sync; undefined = provider has no estimate
    *  (leaves any manual estimate untouched). */
   storyPoints?:    number | null;
+  /** External item type (Jira issuetype, GitLab issue_type, Bitbucket kind, Rally
+   *  artifact). Drives board_type_mappings → task_type/status on sync. */
+  externalType?:   string | null;
 }
 
 export interface FetchPage {
@@ -48,12 +51,52 @@ export interface ChangeSet {
   [k: string]: unknown;
 }
 
+/** A project/board discovered on the external system (migration wizard step 1). */
+export interface DiscoveredProject {
+  externalId:  string;
+  /** Human-readable key (Jira project key, GitLab path, repo slug) when distinct from id. */
+  key?:        string | null;
+  name:        string;
+  description?: string | null;
+  url?:        string | null;
+  /** Best-effort item count; null when the provider can't cheaply report one. */
+  itemCount?:  number | null;
+}
+
+/** An item/issue type discovered on the external system (drives type mapping). */
+export interface DiscoveredItemType {
+  externalType: string;
+  name:         string;
+  /** Provider hint: 'epic' | 'story' | 'bug' | 'subtask' | 'task' | … (best-effort). */
+  category?:    string | null;
+}
+
+/** A user/member discovered on the external system (drives user mapping). */
+export interface DiscoveredUser {
+  externalId:   string;
+  displayName:  string;
+  email?:       string | null;
+}
+
+export interface DiscoveryResult {
+  projects:  DiscoveredProject[];
+  itemTypes: DiscoveredItemType[];
+  users:     DiscoveredUser[];
+}
+
 export interface BoardProvider {
   readonly id: string;
   /** Pull tickets changed at/after `cursor` (null = full/initial pull). */
   fetchTicketsSince(cursor: string | null): Promise<FetchPage>;
   /** Push a change-set to one external ticket. Resolves on success, throws on failure. */
   pushUpdate(externalId: string, changeSet: ChangeSet): Promise<void>;
+  /**
+   * Enumerate the external projects/boards, item types, and users for the
+   * migration wizard. Optional — a provider that can't discover (or hasn't been
+   * wired yet) simply omits it; MigrationService treats absence as "not
+   * discoverable" rather than an error.
+   */
+  discover?(): Promise<DiscoveryResult>;
 }
 
 export interface ProviderConfig {
@@ -76,6 +119,7 @@ function buildTicket(
     body: string | null;
     state: string;
     storyPoints?: number | null;
+    externalType?: string | null;
     extra?: Record<string, unknown>;
   },
 ): NormalizedTicket {
@@ -84,6 +128,7 @@ function buildTicket(
     body:  parts.body ?? '',
     state: parts.state,
     ...(parts.storyPoints != null ? { storyPoints: parts.storyPoints } : {}),
+    ...(parts.externalType ? { externalType: parts.externalType } : {}),
     ...(parts.extra ?? {}),
   };
   return {
@@ -97,6 +142,7 @@ function buildTicket(
     contentHash:     hashFields(fields),
     fields,
     storyPoints:     parts.storyPoints ?? null,
+    externalType:    parts.externalType ?? null,
   };
 }
 
@@ -198,6 +244,7 @@ interface JiraIssueRaw {
     description?: string | null;
     updated: string;
     status?: { name?: string };
+    issuetype?: { name?: string; subtask?: boolean };
   };
 }
 
@@ -238,7 +285,7 @@ export class JiraBoardProvider implements BoardProvider {
         Accept: 'application/json',
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ jql, maxResults: 100, fields: ['summary', 'description', 'updated', 'status', spField] }),
+      body: JSON.stringify({ jql, maxResults: 100, fields: ['summary', 'description', 'updated', 'status', 'issuetype', spField] }),
     });
     if (!res.ok) throw new Error(`Jira search failed: ${res.status}`);
 
@@ -261,6 +308,7 @@ export class JiraBoardProvider implements BoardProvider {
           body,
           state:           issue.fields.status?.name ?? 'unknown',
           storyPoints,
+          externalType:    issue.fields.issuetype?.name ?? null,
         }),
       );
       if (!maxUpdated || updated > maxUpdated) maxUpdated = updated;
@@ -286,6 +334,66 @@ export class JiraBoardProvider implements BoardProvider {
       body: JSON.stringify({ fields }),
     });
     if (!res.ok) throw new Error(`Jira issue update failed: ${res.status}`);
+  }
+
+  async discover(): Promise<DiscoveryResult> {
+    const base = (this.cfg.baseUrl ?? '').replace(/\/$/, '');
+    if (!base) throw new Error('jira provider requires baseUrl');
+    const headers = { Authorization: this.authHeader(), Accept: 'application/json' };
+
+    // Projects — page through /project/search (50/page).
+    const projects: DiscoveredProject[] = [];
+    let startAt = 0;
+    for (let page = 0; page < MAX_SYNC_PAGES; page += 1) {
+      const res = await this.fetchFn(`${base}/rest/api/3/project/search?startAt=${startAt}&maxResults=50`, { headers });
+      if (!res.ok) throw new Error(`Jira project search failed: ${res.status}`);
+      const data = (await res.json()) as { values?: Array<{ id: string; key: string; name: string; description?: string; self?: string }>; isLast?: boolean; total?: number };
+      for (const p of data.values ?? []) {
+        projects.push({ externalId: p.key, key: p.key, name: p.name, description: p.description ?? null, url: p.self ? `${base}/browse/${p.key}` : null, itemCount: await this.projectIssueCount(base, headers, p.key) });
+      }
+      if (data.isLast || !(data.values?.length)) break;
+      startAt += data.values.length;
+    }
+
+    // Issue types.
+    const typesRes = await this.fetchFn(`${base}/rest/api/3/issuetype`, { headers });
+    const rawTypes = typesRes.ok ? ((await typesRes.json()) as Array<{ name: string; subtask?: boolean; hierarchyLevel?: number }>) : [];
+    const seenType = new Set<string>();
+    const itemTypes: DiscoveredItemType[] = [];
+    for (const t of rawTypes) {
+      if (seenType.has(t.name)) continue;
+      seenType.add(t.name);
+      itemTypes.push({ externalType: t.name, name: t.name, category: t.subtask ? 'subtask' : (t.hierarchyLevel ?? 0) > 0 ? 'epic' : null });
+    }
+
+    // Users — assignable across projects (best-effort; needs Browse Users).
+    const users: DiscoveredUser[] = [];
+    const uRes = await this.fetchFn(`${base}/rest/api/3/users/search?maxResults=200`, { headers });
+    if (uRes.ok) {
+      const rawUsers = (await uRes.json()) as Array<{ accountId: string; displayName?: string; emailAddress?: string; accountType?: string }>;
+      for (const u of rawUsers) {
+        if (u.accountType && u.accountType !== 'atlassian') continue; // skip app/bot accounts
+        users.push({ externalId: u.accountId, displayName: u.displayName ?? u.accountId, email: u.emailAddress ?? null });
+      }
+    }
+
+    return { projects, itemTypes, users };
+  }
+
+  /** Total issue count for a project via a 0-result JQL search (count only). */
+  private async projectIssueCount(base: string, headers: Record<string, string>, key: string): Promise<number | null> {
+    try {
+      const res = await this.fetchFn(`${base}/rest/api/3/search`, {
+        method: 'POST',
+        headers: { ...headers, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ jql: `project = "${key}"`, maxResults: 0 }),
+      });
+      if (!res.ok) return null;
+      const data = (await res.json()) as { total?: number };
+      return typeof data.total === 'number' ? data.total : null;
+    } catch {
+      return null;
+    }
   }
 }
 
@@ -844,6 +952,35 @@ export class MondayBoardProvider implements BoardProvider {
       { 'API-Version': '2024-01' },
     );
   }
+
+  async discover(): Promise<DiscoveryResult> {
+    const token = String(this.cfg.credentials.token ?? '');
+    if (!token) throw new Error('monday provider requires a token credential');
+    const hdr = { 'API-Version': '2024-01' };
+
+    // Boards (= projects) with item counts + their groups (= item types).
+    const boardsQuery = `query { boards(limit: 200, state: active) { id name description items_count groups { id title } } }`;
+    const boardsData = await gqlFetch<{ boards: Array<{ id: string; name: string; description?: string; items_count?: number; groups?: Array<{ id: string; title: string }> }> }>(
+      this.fetchFn, MondayBoardProvider.ENDPOINT, token, boardsQuery, {}, 'monday', hdr,
+    );
+    const projects: DiscoveredProject[] = [];
+    const typeSet = new Map<string, DiscoveredItemType>();
+    for (const b of boardsData.boards ?? []) {
+      projects.push({ externalId: b.id, name: b.name, description: b.description ?? null, url: `https://monday.com/boards/${b.id}`, itemCount: b.items_count ?? null });
+      for (const g of b.groups ?? []) {
+        if (!typeSet.has(g.title)) typeSet.set(g.title, { externalType: g.title, name: g.title, category: null });
+      }
+    }
+
+    // Users.
+    const usersQuery = `query { users(limit: 200, kind: non_guests) { id name email } }`;
+    const usersData = await gqlFetch<{ users: Array<{ id: string; name: string; email?: string }> }>(
+      this.fetchFn, MondayBoardProvider.ENDPOINT, token, usersQuery, {}, 'monday', hdr,
+    );
+    const users: DiscoveredUser[] = (usersData.users ?? []).map((u) => ({ externalId: u.id, displayName: u.name, email: u.email ?? null }));
+
+    return { projects, itemTypes: [...typeSet.values()], users };
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -997,6 +1134,344 @@ export class ClickUpBoardProvider implements BoardProvider {
 }
 
 // ---------------------------------------------------------------------------
+// GitLab (REST v4) — scm/pm (Issues)
+// ---------------------------------------------------------------------------
+
+interface GitLabIssueRaw {
+  iid: number;
+  title: string;
+  description?: string | null;
+  web_url?: string;
+  state?: string;          // opened | closed
+  updated_at?: string;
+  issue_type?: string;     // issue | incident | test_case | task
+}
+
+export class GitLabBoardProvider implements BoardProvider {
+  readonly id = 'gitlab';
+  constructor(private readonly cfg: ProviderConfig, private readonly fetchFn: FetchLike) {}
+
+  private root(): string {
+    return trimSlash(this.cfg.baseUrl) || 'https://gitlab.com';
+  }
+
+  private headers(): Record<string, string> {
+    const token = String(this.cfg.credentials.accessToken ?? '');
+    return { Authorization: `Bearer ${token}`, 'PRIVATE-TOKEN': token, Accept: 'application/json' };
+  }
+
+  async fetchTicketsSince(cursor: string | null): Promise<FetchPage> {
+    const project = (this.cfg.externalBoardId ?? '').trim();
+    if (!project) throw new Error('gitlab provider requires externalBoardId (project id or path)');
+    const pid = encodeURIComponent(project);
+
+    const params = new URLSearchParams({ order_by: 'updated_at', sort: 'asc', per_page: '100', scope: 'all' });
+    if (cursor) params.set('updated_after', cursor);
+
+    const res = await this.fetchFn(`${this.root()}/api/v4/projects/${pid}/issues?${params.toString()}`, { headers: this.headers() });
+    if (!res.ok) throw new Error(`GitLab issues fetch failed: ${res.status}`);
+    const raw = (await res.json()) as GitLabIssueRaw[];
+
+    const tickets: NormalizedTicket[] = [];
+    let next = cursor;
+    for (const i of raw) {
+      tickets.push(
+        buildTicket(this.id, {
+          externalId:      String(i.iid),
+          externalUrl:     i.web_url ?? null,
+          externalVersion: i.updated_at ?? null,
+          title:           i.title,
+          body:            i.description ?? null,
+          state:           i.state ?? 'opened',
+          externalType:    i.issue_type ?? 'issue',
+        }),
+      );
+      next = maxVersion(next, i.updated_at ?? null);
+    }
+    return { tickets, nextCursor: next };
+  }
+
+  async pushUpdate(externalId: string, changeSet: ChangeSet): Promise<void> {
+    const project = (this.cfg.externalBoardId ?? '').trim();
+    const pid = encodeURIComponent(project);
+    const body: Record<string, unknown> = {};
+    if (changeSet.title !== undefined) body.title = changeSet.title;
+    if (changeSet.body !== undefined) body.description = changeSet.body;
+    if (changeSet.state !== undefined) body.state_event = String(changeSet.state) === 'closed' ? 'close' : 'reopen';
+    if (Object.keys(body).length === 0) return;
+
+    const res = await this.fetchFn(`${this.root()}/api/v4/projects/${pid}/issues/${externalId}`, {
+      method: 'PUT',
+      headers: { ...this.headers(), 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) throw new Error(`GitLab issue update failed: ${res.status}`);
+  }
+
+  async discover(): Promise<DiscoveryResult> {
+    const headers = this.headers();
+    // Projects the token is a member of (id + path, with issue counts).
+    const projects: DiscoveredProject[] = [];
+    const pRes = await this.fetchFn(`${this.root()}/api/v4/projects?membership=true&per_page=100&order_by=last_activity_at&with_issues_enabled=true`, { headers });
+    if (!pRes.ok) throw new Error(`GitLab projects fetch failed: ${pRes.status}`);
+    const rawProjects = (await pRes.json()) as Array<{ id: number; name: string; path_with_namespace?: string; description?: string; web_url?: string; open_issues_count?: number }>;
+    for (const p of rawProjects) {
+      projects.push({ externalId: String(p.id), key: p.path_with_namespace ?? null, name: p.name, description: p.description ?? null, url: p.web_url ?? null, itemCount: p.open_issues_count ?? null });
+    }
+
+    // GitLab work-item types are a fixed vocabulary.
+    const itemTypes: DiscoveredItemType[] = [
+      { externalType: 'issue', name: 'Issue', category: 'task' },
+      { externalType: 'incident', name: 'Incident', category: 'bug' },
+      { externalType: 'task', name: 'Task', category: 'task' },
+      { externalType: 'test_case', name: 'Test Case', category: 'task' },
+    ];
+
+    // Users — dedupe members across the first 20 discovered projects (bounded).
+    const users = new Map<string, DiscoveredUser>();
+    for (const p of projects.slice(0, 20)) {
+      const mRes = await this.fetchFn(`${this.root()}/api/v4/projects/${p.externalId}/members/all?per_page=100`, { headers });
+      if (!mRes.ok) continue;
+      const members = (await mRes.json()) as Array<{ id: number; name?: string; username?: string }>;
+      for (const m of members) {
+        const id = String(m.id);
+        if (!users.has(id)) users.set(id, { externalId: id, displayName: m.name ?? m.username ?? id, email: null });
+      }
+    }
+
+    return { projects, itemTypes, users: [...users.values()] };
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Bitbucket (Cloud REST 2.0) — scm/pm (Issues)
+// ---------------------------------------------------------------------------
+
+interface BitbucketIssueRaw {
+  id: number;
+  title: string;
+  content?: { raw?: string | null };
+  state?: string;          // new | open | resolved | on hold | invalid | duplicate | wontfix | closed
+  updated_on?: string;
+  kind?: string;           // bug | enhancement | proposal | task
+  links?: { html?: { href?: string } };
+}
+
+export class BitbucketBoardProvider implements BoardProvider {
+  readonly id = 'bitbucket';
+  private static readonly BASE = 'https://api.bitbucket.org/2.0';
+  constructor(private readonly cfg: ProviderConfig, private readonly fetchFn: FetchLike) {}
+
+  private headers(): Record<string, string> {
+    return { Authorization: `Bearer ${String(this.cfg.credentials.accessToken ?? '')}`, Accept: 'application/json' };
+  }
+
+  /** A board connection scopes to "workspace/repo_slug"; discovery uses the workspace alone. */
+  private workspace(): string {
+    const ws = String(this.cfg.credentials.workspace ?? '').trim();
+    if (ws) return ws;
+    return (this.cfg.externalBoardId ?? '').split('/')[0]?.trim() ?? '';
+  }
+
+  async fetchTicketsSince(cursor: string | null): Promise<FetchPage> {
+    const scope = (this.cfg.externalBoardId ?? '').trim();
+    const [ws, repo] = scope.split('/');
+    if (!ws || !repo) throw new Error('bitbucket provider requires externalBoardId "workspace/repo_slug"');
+
+    const params = new URLSearchParams({ sort: 'updated_on', pagelen: '100' });
+    if (cursor) params.set('q', `updated_on > "${cursor}"`);
+
+    const res = await this.fetchFn(`${BitbucketBoardProvider.BASE}/repositories/${ws}/${repo}/issues?${params.toString()}`, { headers: this.headers() });
+    if (!res.ok) throw new Error(`Bitbucket issues fetch failed: ${res.status}`);
+    const raw = (await res.json()) as { values?: BitbucketIssueRaw[] };
+
+    const tickets: NormalizedTicket[] = [];
+    let next = cursor;
+    for (const i of raw.values ?? []) {
+      tickets.push(
+        buildTicket(this.id, {
+          externalId:      String(i.id),
+          externalUrl:     i.links?.html?.href ?? null,
+          externalVersion: i.updated_on ?? null,
+          title:           i.title,
+          body:            i.content?.raw ?? null,
+          state:           i.state ?? 'new',
+          externalType:    i.kind ?? 'task',
+        }),
+      );
+      next = maxVersion(next, i.updated_on ?? null);
+    }
+    return { tickets, nextCursor: next };
+  }
+
+  async pushUpdate(externalId: string, changeSet: ChangeSet): Promise<void> {
+    const scope = (this.cfg.externalBoardId ?? '').trim();
+    const [ws, repo] = scope.split('/');
+    const body: Record<string, unknown> = {};
+    if (changeSet.title !== undefined) body.title = changeSet.title;
+    if (changeSet.body !== undefined) body.content = { raw: changeSet.body };
+    if (Object.keys(body).length === 0) return;
+
+    const res = await this.fetchFn(`${BitbucketBoardProvider.BASE}/repositories/${ws}/${repo}/issues/${externalId}`, {
+      method: 'PUT',
+      headers: { ...this.headers(), 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) throw new Error(`Bitbucket issue update failed: ${res.status}`);
+  }
+
+  async discover(): Promise<DiscoveryResult> {
+    const ws = this.workspace();
+    if (!ws) throw new Error('bitbucket discovery requires a workspace credential or externalBoardId');
+    const headers = this.headers();
+
+    // Repositories (= projects). externalId carries "workspace/repo_slug" so a
+    // staged project maps straight onto a connection scope.
+    const projects: DiscoveredProject[] = [];
+    const rRes = await this.fetchFn(`${BitbucketBoardProvider.BASE}/repositories/${ws}?role=member&pagelen=100`, { headers });
+    if (!rRes.ok) throw new Error(`Bitbucket repositories fetch failed: ${rRes.status}`);
+    const repos = (await rRes.json()) as { values?: Array<{ slug?: string; name: string; full_name?: string; description?: string; links?: { html?: { href?: string } } }> };
+    for (const r of repos.values ?? []) {
+      const slug = r.slug ?? r.full_name?.split('/')[1] ?? r.name;
+      projects.push({ externalId: `${ws}/${slug}`, key: r.full_name ?? `${ws}/${slug}`, name: r.name, description: r.description ?? null, url: r.links?.html?.href ?? null, itemCount: null });
+    }
+
+    // Bitbucket issue kinds are a fixed vocabulary.
+    const itemTypes: DiscoveredItemType[] = [
+      { externalType: 'bug', name: 'Bug', category: 'bug' },
+      { externalType: 'enhancement', name: 'Enhancement', category: 'story' },
+      { externalType: 'proposal', name: 'Proposal', category: 'story' },
+      { externalType: 'task', name: 'Task', category: 'task' },
+    ];
+
+    // Workspace members (Bitbucket does not expose member emails).
+    const users: DiscoveredUser[] = [];
+    const mRes = await this.fetchFn(`${BitbucketBoardProvider.BASE}/workspaces/${ws}/members?pagelen=100`, { headers });
+    if (mRes.ok) {
+      const members = (await mRes.json()) as { values?: Array<{ user?: { uuid?: string; account_id?: string; display_name?: string } }> };
+      for (const m of members.values ?? []) {
+        const u = m.user;
+        const id = u?.uuid ?? u?.account_id;
+        if (id) users.push({ externalId: id, displayName: u?.display_name ?? id, email: null });
+      }
+    }
+
+    return { projects, itemTypes, users };
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Rally / CA Agile Central (WSAPI v2.0) — pm
+// ---------------------------------------------------------------------------
+
+interface RallyArtifactRaw {
+  ObjectID: number;
+  FormattedID?: string;
+  Name: string;
+  Description?: string | null;
+  ScheduleState?: string;
+  LastUpdateDate?: string;
+  _ref?: string;
+  _refObjectName?: string;
+}
+
+export class RallyBoardProvider implements BoardProvider {
+  readonly id = 'rally';
+  constructor(private readonly cfg: ProviderConfig, private readonly fetchFn: FetchLike) {}
+
+  private base(): string {
+    return trimSlash(this.cfg.baseUrl) || 'https://rally1.rallydev.com';
+  }
+
+  private headers(): Record<string, string> {
+    // Rally WSAPI authenticates with an API key in the ZSESSIONID header.
+    return { ZSESSIONID: String(this.cfg.credentials.apiKey ?? ''), Accept: 'application/json' };
+  }
+
+  async fetchTicketsSince(cursor: string | null): Promise<FetchPage> {
+    const projectRef = (this.cfg.externalBoardId ?? '').trim();
+    const clauses: string[] = [];
+    if (cursor) clauses.push(`(LastUpdateDate > "${cursor}")`);
+    const query = clauses.length ? clauses.join('') : '';
+    const params = new URLSearchParams({
+      order: 'LastUpdateDate',
+      pagesize: '100',
+      fetch: 'FormattedID,Name,Description,ScheduleState,LastUpdateDate,ObjectID',
+    });
+    if (query) params.set('query', query);
+    if (projectRef) params.set('project', projectRef);
+
+    const res = await this.fetchFn(`${this.base()}/slm/webservice/v2.0/hierarchicalrequirement?${params.toString()}`, { headers: this.headers() });
+    if (!res.ok) throw new Error(`Rally fetch failed: ${res.status}`);
+    const data = (await res.json()) as { QueryResult?: { Results?: RallyArtifactRaw[] } };
+
+    const tickets: NormalizedTicket[] = [];
+    let next = cursor;
+    for (const a of data.QueryResult?.Results ?? []) {
+      tickets.push(
+        buildTicket(this.id, {
+          externalId:      String(a.ObjectID),
+          externalUrl:     a._ref ?? null,
+          externalVersion: a.LastUpdateDate ?? null,
+          title:           a.Name,
+          body:            a.Description ?? null,
+          state:           a.ScheduleState ?? 'Defined',
+          externalType:    'User Story',
+          extra:           { formattedId: a.FormattedID ?? null },
+        }),
+      );
+      next = maxVersion(next, a.LastUpdateDate ?? null);
+    }
+    return { tickets, nextCursor: next };
+  }
+
+  async pushUpdate(externalId: string, changeSet: ChangeSet): Promise<void> {
+    const fields: Record<string, unknown> = {};
+    if (changeSet.title !== undefined) fields.Name = changeSet.title;
+    if (changeSet.body !== undefined) fields.Description = changeSet.body;
+    if (Object.keys(fields).length === 0) return;
+
+    const res = await this.fetchFn(`${this.base()}/slm/webservice/v2.0/hierarchicalrequirement/${externalId}`, {
+      method: 'POST',
+      headers: { ...this.headers(), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ HierarchicalRequirement: fields }),
+    });
+    if (!res.ok) throw new Error(`Rally update failed: ${res.status}`);
+  }
+
+  async discover(): Promise<DiscoveryResult> {
+    const headers = this.headers();
+
+    const projects: DiscoveredProject[] = [];
+    const pRes = await this.fetchFn(`${this.base()}/slm/webservice/v2.0/project?fetch=Name,Description,ObjectID&pagesize=100`, { headers });
+    if (!pRes.ok) throw new Error(`Rally project fetch failed: ${pRes.status}`);
+    const pData = (await pRes.json()) as { QueryResult?: { Results?: Array<{ ObjectID: number; Name: string; Description?: string; _ref?: string }> } };
+    for (const p of pData.QueryResult?.Results ?? []) {
+      projects.push({ externalId: String(p.ObjectID), key: null, name: p.Name, description: p.Description ?? null, url: p._ref ?? null, itemCount: null });
+    }
+
+    // Rally artifact types we can import as tasks.
+    const itemTypes: DiscoveredItemType[] = [
+      { externalType: 'User Story', name: 'User Story', category: 'story' },
+      { externalType: 'Defect', name: 'Defect', category: 'bug' },
+      { externalType: 'Task', name: 'Task', category: 'task' },
+      { externalType: 'Feature', name: 'Feature', category: 'epic' },
+    ];
+
+    const users: DiscoveredUser[] = [];
+    const uRes = await this.fetchFn(`${this.base()}/slm/webservice/v2.0/user?fetch=UserName,DisplayName,EmailAddress,ObjectID&pagesize=200`, { headers });
+    if (uRes.ok) {
+      const uData = (await uRes.json()) as { QueryResult?: { Results?: Array<{ ObjectID: number; DisplayName?: string; UserName?: string; EmailAddress?: string }> } };
+      for (const u of uData.QueryResult?.Results ?? []) {
+        users.push({ externalId: String(u.ObjectID), displayName: u.DisplayName ?? u.UserName ?? String(u.ObjectID), email: u.EmailAddress ?? null });
+      }
+    }
+
+    return { projects, itemTypes, users };
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Registry
 // ---------------------------------------------------------------------------
 
@@ -1014,6 +1489,9 @@ const PROVIDER_REGISTRY: Record<string, BoardProviderCtor> = {
   monday:       MondayBoardProvider,
   asana:        AsanaBoardProvider,
   clickup:      ClickUpBoardProvider,
+  gitlab:       GitLabBoardProvider,
+  bitbucket:    BitbucketBoardProvider,
+  rally:        RallyBoardProvider,
 };
 
 /** Factory: build a provider adapter by id. Throws for unknown providers. */

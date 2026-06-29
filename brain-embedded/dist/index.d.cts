@@ -306,6 +306,18 @@ declare function useBrainActions(): BrainActionsContextValue;
  */
 declare function useRegisterBrainActions(actions: BrainAction[]): void;
 
+/** What a tool call resolved to — handed to {@link UseMcpExtensionsOptions.onToolResult}. */
+interface McpToolResultInfo {
+    /** Flat advertised name the model called (e.g. `builtin_tasks_create`). */
+    name: string;
+    /** Owning server's tool name + extension id (the relay coordinates). */
+    tool: string;
+    extensionId: string;
+    /** Whether the tool writes (advertised mutates, fail-safe true). */
+    mutating: boolean;
+    /** True when the relay call succeeded (no transport error / `{error}` result). */
+    ok: boolean;
+}
 interface UseMcpExtensionsOptions {
     /**
      * Extension ids to drop from the fetched tool list. A host that already
@@ -314,6 +326,14 @@ interface UseMcpExtensionsOptions {
      * Brain doesn't get the same capability twice.
      */
     skipExtensionIds?: string[];
+    /**
+     * Called after every relay tool call resolves. Lets the host react to writes —
+     * e.g. dispatch a "brain data changed" event so the page rendering that domain
+     * refetches live instead of going stale. Replaces the per-cap announce wrapper
+     * the app used to apply in its native manifest, so catalog tools refresh the UI
+     * the same way. Kept generic (no app types) so the package stays portable.
+     */
+    onToolResult?: (info: McpToolResultInfo) => void;
 }
 declare function useMcpExtensions(options?: UseMcpExtensionsOptions): {
     loading: boolean;
@@ -552,4 +572,4 @@ declare function savePendingPrompt(text: string): void;
 /** Read and clear the saved prompt. Returns null when none is stored or on SSR. */
 declare function takePendingPrompt(): string | null;
 
-export { type AssembledToolCall, type BrainAction, type BrainActionsContextValue, BrainActionsProvider, type BrainChat, type BrainConfig, BrainContextProvider, type BrainContextValue, type BrainMessage, type BrainModality, type BrainPageContext, type BrainPersistenceAdapter, BrainProvider, type BrainRuntime, type BrainToolSpec, type BrainTraceEvent, type BrainTransport, type BuildBrainTriageOptions, type ChatCompletionMessage, type ChatInputAttachment, type ContentPart, type ImageUrlContentPart, type PreparedImage, type StreamChatOptions, type StreamChatResult, type StreamHandlers, type TextContentPart, type UseBrainChats, type UseBrainChatsOptions, type UseBrainConversation, type UseBrainConversationOptions, buildBrainTriageReport, isFailedToolResult, prepareImageDataUrl, savePendingPrompt, streamChatCompletion, takePendingPrompt, useBrainActions, useBrainChats, useBrainConfig, useBrainContext, useBrainConversation, useMcpExtensions, useOptionalBrainContext, useRegisterBrainActions };
+export { type AssembledToolCall, type BrainAction, type BrainActionsContextValue, BrainActionsProvider, type BrainChat, type BrainConfig, BrainContextProvider, type BrainContextValue, type BrainMessage, type BrainModality, type BrainPageContext, type BrainPersistenceAdapter, BrainProvider, type BrainRuntime, type BrainToolSpec, type BrainTraceEvent, type BrainTransport, type BuildBrainTriageOptions, type ChatCompletionMessage, type ChatInputAttachment, type ContentPart, type ImageUrlContentPart, type McpToolResultInfo, type PreparedImage, type StreamChatOptions, type StreamChatResult, type StreamHandlers, type TextContentPart, type UseBrainChats, type UseBrainChatsOptions, type UseBrainConversation, type UseBrainConversationOptions, type UseMcpExtensionsOptions, buildBrainTriageReport, isFailedToolResult, prepareImageDataUrl, savePendingPrompt, streamChatCompletion, takePendingPrompt, useBrainActions, useBrainChats, useBrainConfig, useBrainContext, useBrainConversation, useMcpExtensions, useOptionalBrainContext, useRegisterBrainActions };

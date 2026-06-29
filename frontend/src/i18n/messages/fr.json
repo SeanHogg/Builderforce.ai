@@ -1,4 +1,113 @@
 {
+  "integrations": {
+    "gallery": {
+      "loading": "Chargement des intégrations…",
+      "connected": "Connecté",
+      "notConnected": "Non connecté",
+      "migratable": "Migration",
+      "keyCount": "{count} clé(s)",
+      "tapToConnect": "Appuyez pour connecter",
+      "category": {
+        "pm": "Gestion de projet et du travail",
+        "scm": "Gestion de code source",
+        "itsm": "Gestion des services informatiques",
+        "incident": "Surveillance et astreinte"
+      }
+    },
+    "panel": {
+      "credentials": "Identifiants",
+      "connections": "Connexions",
+      "activity": "Activité",
+      "startMigration": "Démarrer la migration"
+    },
+    "connections": {
+      "empty": "Aucune connexion pour l’instant. Lancez une migration en mode « synchronisation » ou ajoutez-en une depuis un projet.",
+      "allBoards": "Tous les tableaux",
+      "lastPolled": "Dernière synchro {time}",
+      "neverPolled": "Jamais synchronisé",
+      "syncNow": "Synchroniser maintenant",
+      "syncing": "Synchronisation…",
+      "syncQueued": "Synchronisation lancée.",
+      "syncFailed": "Échec de la synchronisation.",
+      "remove": "Retirer",
+      "confirmRemove": "Retirer cette connexion ? Les tâches importées restent ; la synchronisation continue s’arrête."
+    },
+    "activity": {
+      "noCredentials": "Ajoutez un identifiant pour voir les diagnostics et l’historique de synchronisation.",
+      "healthy": "● Sain",
+      "failing": "● En échec",
+      "runDiagnostic": "Lancer le diagnostic",
+      "testing": "Test en cours…",
+      "history": "Historique de synchronisation",
+      "noRuns": "Aucune synchronisation pour l’instant.",
+      "processed": "{count} traités",
+      "errored": "{count} en erreur"
+    },
+    "migration": {
+      "title": "Migrer depuis {provider}",
+      "step": {
+        "connect": "Connexion",
+        "projects": "Projets",
+        "types": "Types d’éléments",
+        "users": "Utilisateurs",
+        "review": "Vérifier",
+        "import": "Importer"
+      },
+      "connectIntro": "Connectez-vous à {provider} et découvrez ce qu’il faut importer. Rien n’est importé avant la dernière étape.",
+      "needCredential": "Choisissez un identifiant pour continuer.",
+      "noCredentials": "Aucun identifiant pour ce fournisseur. Ajoutez-en un dans l’onglet Identifiants d’abord.",
+      "credential": "Identifiant",
+      "mode": "Mode",
+      "modeBoth": "Importer l’historique + continuer la synchro",
+      "modeMigrate": "Import unique",
+      "modeSync": "Synchronisation continue uniquement",
+      "modeHint": {
+        "both": "Importez les éléments existants ET gardez le tableau synchronisé par la suite.",
+        "migrate": "Importez les éléments existants une fois ; aucune connexion continue.",
+        "sync": "Configurez une synchro en direct ; les éléments existants arrivent au fil des changements."
+      },
+      "discovering": "Découverte…",
+      "connectAndDiscover": "Connecter et découvrir",
+      "discoveryFailed": "Échec de la découverte.",
+      "saveFailed": "Impossible d’enregistrer les correspondances.",
+      "stageFailed": "Impossible de préparer les éléments.",
+      "importFailed": "Échec de l’import.",
+      "projectsIntro": "Associez chaque projet externe à un projet BuilderForce nouveau ou existant. Associez-en plusieurs au même projet pour les combiner.",
+      "noProjects": "Aucun projet trouvé sur le système externe.",
+      "itemsCount": "{count} éléments",
+      "actionCreate": "Créer",
+      "actionMap": "Associer à un existant",
+      "actionSkip": "Ignorer",
+      "newProjectName": "Nom du nouveau projet",
+      "selectProject": "Sélectionnez un projet…",
+      "typesIntro": "Associez chaque type d’élément externe à un type de tâche BuilderForce et à un statut initial.",
+      "noTypes": "Aucun type d’élément découvert.",
+      "typeTask": "Tâche",
+      "typeEpic": "Épopée",
+      "usersIntro": "Choisissez les utilisateurs externes à inviter dans cet espace de travail.",
+      "noUsers": "Aucun utilisateur découvert.",
+      "userInvite": "Inviter",
+      "userSkip": "Ignorer",
+      "stageAndReview": "Préparer et vérifier",
+      "reviewIntro": "{included} sur {total} éléments seront importés. Décochez ceux que vous souhaitez laisser.",
+      "colTitle": "Titre",
+      "colType": "Type",
+      "colStatus": "Statut",
+      "includeItem": "Inclure cet élément",
+      "truncatedPreview": "Affichage des 500 premiers sur {total} éléments préparés.",
+      "import": "Importer {count} éléments",
+      "importing": "Import en cours…",
+      "done": "Migration terminée",
+      "summaryProjects": "{count} projets créés",
+      "summaryTasks": "{count} tâches importées",
+      "summaryUsers": "{count} utilisateurs invités",
+      "summaryConnections": "{count} connexions de synchronisation créées",
+      "finish": "Terminé",
+      "back": "Retour",
+      "next": "Suivant",
+      "working": "Traitement…"
+    }
+  },
   "nav": {
     "menu": "Menu",
     "expandSidebar": "Développer la barre latérale",
@@ -381,7 +490,8 @@
     "usedAmount": "{amount} utilisé",
     "seePlans": "Voir les forfaits",
     "manage": "Gérer",
-    "trendAria": "Tendance d’usage quotidien"
+    "trendAria": "Tendance d’usage quotidien",
+    "openReport": "Ouvrir le rapport {meter}"
   },
   "aiUsageCard": {
     "title": "Usage de l’IA ce mois-ci",

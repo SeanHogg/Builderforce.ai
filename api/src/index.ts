@@ -130,6 +130,7 @@ import { createEvermindModelRoutes }   from './presentation/routes/evermindModel
 // Cloud Agent Boards — agentic swimlanes, external board sync, PRD versioning, multi-repo PRs
 import { createBoardRoutes }           from './presentation/routes/boardRoutes';
 import { createBoardConnectionRoutes } from './presentation/routes/boardConnectionRoutes';
+import { createMigrationRoutes } from './presentation/routes/migrationRoutes';
 import { createBoardWebhookRoutes }    from './presentation/routes/boardWebhookRoutes';
 import { createQualityRoutes }         from './presentation/routes/qualityRoutes';
 import { createQualityIngestRoutes }   from './presentation/routes/qualityIngestRoutes';
@@ -453,6 +454,8 @@ function buildApp(env: Env): Hono<HonoEnv> {
   app.route('/api/boards',            createBoardRoutes(db));
   app.route('/api/board-connections', createBoardConnectionRoutes(db));
   app.route('/api/board-webhooks',    createBoardWebhookRoutes(db));
+  // Platform migration / import wizard (Jira/Monday/Rally/GitLab/Bitbucket → BF).
+  app.route('/api/migrations',        createMigrationRoutes(db));
   // Product Quality / error observability (tenant JWT) — error groups + fix dispatch.
   app.route('/api/quality',           createQualityRoutes(db, taskService, runtimeService));
   app.route('/api/prd',               createPrdRoutes(db));

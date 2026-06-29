@@ -11,6 +11,7 @@ import {
   boardConnections,
   externalTicketLinks,
   boardSyncOutbox,
+  boardTypeMappings,
   integrationSyncLogs,
   integrationCredentials,
   tasks,
@@ -23,6 +24,7 @@ import type {
   UpsertLinkInput,
   UpsertTaskInput,
   OutboxRow,
+  TypeMapping,
 } from './SyncEngine';
 import type { SyncState } from './reconciler';
 import type { ChangeSet } from './providers';
@@ -85,6 +87,18 @@ export function createDrizzleStore(db: Db): BoardSyncStore {
         syncState: row.syncState as SyncState,
         fields: normalizeFields(row.fields),
       };
+    },
+
+    async listTypeMappings(connectionId: string): Promise<TypeMapping[]> {
+      const rows = await db
+        .select({
+          externalType: boardTypeMappings.externalType,
+          targetTaskType: boardTypeMappings.targetTaskType,
+          targetStatus: boardTypeMappings.targetStatus,
+        })
+        .from(boardTypeMappings)
+        .where(eq(boardTypeMappings.connectionId, connectionId));
+      return rows.map((r) => ({ externalType: r.externalType, targetTaskType: r.targetTaskType, targetStatus: r.targetStatus ?? null }));
     },
 
     async upsertLink(input: UpsertLinkInput): Promise<StoredLink> {
@@ -157,8 +171,11 @@ export function createDrizzleStore(db: Db): BoardSyncStore {
           key,
           title: input.title,
           description: input.description,
-          status: 'backlog',
+          // Type/status from the persistent board_type_mapping (migration 0256) when
+          // present; otherwise the original backlog/task defaults.
+          status: input.status ?? 'backlog',
           priority: 'medium',
+          taskType: (input.taskType === 'epic' ? 'epic' : 'task'),
           source: input.provider,
           storyPoints: input.storyPoints ?? undefined,
           createdAt: now,

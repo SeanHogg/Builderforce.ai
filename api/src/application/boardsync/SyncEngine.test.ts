@@ -8,6 +8,7 @@ import {
   type OutboxRow,
   type UpsertLinkInput,
   type UpsertTaskInput,
+  type TypeMapping,
 } from './SyncEngine';
 import type { BoardProvider, NormalizedTicket, ChangeSet } from './providers';
 import { hashFields } from './reconciler';
@@ -20,6 +21,8 @@ function makeStore(conn: StoredConnection): {
   store: BoardSyncStore;
   links: Map<string, StoredLink>;
   tasks: number[];
+  taskInserts: UpsertTaskInput[];
+  typeMappings: TypeMapping[];
   logs: Array<{ status: string; itemsProcessed: number; itemsErrored: number }>;
   cursor: { value: string | null };
   outbox: OutboxRow[];
@@ -27,6 +30,8 @@ function makeStore(conn: StoredConnection): {
 } {
   const links = new Map<string, StoredLink>();
   const tasks: number[] = [];
+  const taskInserts: UpsertTaskInput[] = [];
+  const typeMappings: TypeMapping[] = [];
   const logs: Array<{ status: string; itemsProcessed: number; itemsErrored: number }> = [];
   const cursor = { value: conn.pollCursor };
   let taskSeq = 100;
@@ -40,6 +45,9 @@ function makeStore(conn: StoredConnection): {
     },
     async getLink(_c, externalId) {
       return links.get(externalId) ?? null;
+    },
+    async listTypeMappings() {
+      return typeMappings;
     },
     async upsertLink(input: UpsertLinkInput) {
       const existing = links.get(input.externalId);
@@ -57,6 +65,7 @@ function makeStore(conn: StoredConnection): {
       return link;
     },
     async upsertTask(input: UpsertTaskInput) {
+      taskInserts.push(input);
       if (input.existingTaskId != null) return input.existingTaskId;
       const id = taskSeq++;
       tasks.push(id);
@@ -85,7 +94,7 @@ function makeStore(conn: StoredConnection): {
     },
   };
 
-  return { store, links, tasks, logs, cursor, outbox, outboxState };
+  return { store, links, tasks, taskInserts, typeMappings, logs, cursor, outbox, outboxState };
 }
 
 function ticket(num: string, version: string, fields: Record<string, unknown>): NormalizedTicket {
@@ -219,6 +228,40 @@ describe('SyncEngine.drainOutbox', () => {
     const r = await engine.drainOutbox('conn-1');
     expect(r.dead).toBe(1);
     expect(ctx.outboxState.get('o1')).toBe('dead');
+  });
+});
+
+describe('SyncEngine type mapping (board_type_mappings)', () => {
+  it('applies the mapped task_type/status on a NEW task, but not on update', async () => {
+    const f = { title: 'A', body: 'a', state: 'open' };
+    const page = { tickets: [{ ...ticket('1', 'v1', f), externalType: 'Epic' }], nextCursor: 'c1' };
+    const ctx = makeStore(CONN);
+    ctx.typeMappings.push({ externalType: 'Epic', targetTaskType: 'epic', targetStatus: 'in_progress' });
+    const engine = new SyncEngine(ctx.store, () => fakeProvider(page));
+
+    await engine.syncConnection('conn-1');
+    const insert = ctx.taskInserts.find((t) => t.existingTaskId == null);
+    expect(insert?.taskType).toBe('epic');
+    expect(insert?.status).toBe('in_progress');
+
+    // A second sync with an advanced version updates the SAME task and must NOT
+    // re-apply the mapping (no status reset on a board move).
+    const page2 = { tickets: [{ ...ticket('1', 'v2', { ...f, body: 'changed' }), externalType: 'Epic' }], nextCursor: 'c2' };
+    const engine2 = new SyncEngine(ctx.store, () => fakeProvider(page2));
+    await engine2.syncConnection('conn-1');
+    const update = ctx.taskInserts.find((t) => t.existingTaskId != null);
+    expect(update?.taskType ?? null).toBeNull();
+    expect(update?.status ?? null).toBeNull();
+  });
+
+  it('leaves task_type/status unset when no mapping matches', async () => {
+    const page = { tickets: [{ ...ticket('9', 'v1', { title: 'X' }), externalType: 'Bug' }], nextCursor: 'c1' };
+    const ctx = makeStore(CONN);
+    const engine = new SyncEngine(ctx.store, () => fakeProvider(page));
+    await engine.syncConnection('conn-1');
+    const insert = ctx.taskInserts[0];
+    expect(insert?.taskType ?? null).toBeNull();
+    expect(insert?.status ?? null).toBeNull();
   });
 });
 

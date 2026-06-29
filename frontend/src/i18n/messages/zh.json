@@ -1,4 +1,113 @@
 {
+  "integrations": {
+    "gallery": {
+      "loading": "正在加载集成…",
+      "connected": "已连接",
+      "notConnected": "未连接",
+      "migratable": "可迁移",
+      "keyCount": "{count} 个密钥",
+      "tapToConnect": "点击连接",
+      "category": {
+        "pm": "项目与工作管理",
+        "scm": "源代码管理",
+        "itsm": "IT 服务管理",
+        "incident": "监控与值班"
+      }
+    },
+    "panel": {
+      "credentials": "凭据",
+      "connections": "连接",
+      "activity": "活动",
+      "startMigration": "开始迁移"
+    },
+    "connections": {
+      "empty": "暂无连接。以“同步”模式运行迁移，或从项目中添加。",
+      "allBoards": "所有看板",
+      "lastPolled": "上次同步 {time}",
+      "neverPolled": "从未同步",
+      "syncNow": "立即同步",
+      "syncing": "正在同步…",
+      "syncQueued": "同步已开始。",
+      "syncFailed": "同步失败。",
+      "remove": "移除",
+      "confirmRemove": "移除此连接？已导入的任务保留，持续同步将停止。"
+    },
+    "activity": {
+      "noCredentials": "添加凭据以查看诊断和同步历史。",
+      "healthy": "● 正常",
+      "failing": "● 异常",
+      "runDiagnostic": "运行诊断",
+      "testing": "正在测试…",
+      "history": "同步历史",
+      "noRuns": "尚无同步运行。",
+      "processed": "已处理 {count} 项",
+      "errored": "{count} 项出错"
+    },
+    "migration": {
+      "title": "从 {provider} 迁移",
+      "step": {
+        "connect": "连接",
+        "projects": "项目",
+        "types": "条目类型",
+        "users": "用户",
+        "review": "审核",
+        "import": "导入"
+      },
+      "connectIntro": "连接到 {provider} 并发现要迁移的内容。在最后一步之前不会导入任何内容。",
+      "needCredential": "请选择一个凭据以继续。",
+      "noCredentials": "此提供方暂无凭据。请先在“凭据”选项卡中添加。",
+      "credential": "凭据",
+      "mode": "模式",
+      "modeBoth": "导入历史 + 持续同步",
+      "modeMigrate": "一次性导入",
+      "modeSync": "仅持续同步",
+      "modeHint": {
+        "both": "迁移现有条目，并持续保持看板同步。",
+        "migrate": "仅迁移一次现有条目；不建立持续连接。",
+        "sync": "建立实时同步；现有条目随变更流入。"
+      },
+      "discovering": "正在发现…",
+      "connectAndDiscover": "连接并发现",
+      "discoveryFailed": "发现失败。",
+      "saveFailed": "无法保存映射。",
+      "stageFailed": "无法暂存条目。",
+      "importFailed": "导入失败。",
+      "projectsIntro": "将每个外部项目映射到新的或现有的 BuilderForce 项目。将多个映射到同一项目即可合并。",
+      "noProjects": "在外部系统中未找到项目。",
+      "itemsCount": "{count} 个条目",
+      "actionCreate": "新建",
+      "actionMap": "映射到现有",
+      "actionSkip": "跳过",
+      "newProjectName": "新项目名称",
+      "selectProject": "选择一个项目…",
+      "typesIntro": "将每个外部条目类型映射到 BuilderForce 任务类型和初始状态。",
+      "noTypes": "未发现条目类型。",
+      "typeTask": "任务",
+      "typeEpic": "史诗",
+      "usersIntro": "选择要邀请到此工作区的外部用户。",
+      "noUsers": "未发现用户。",
+      "userInvite": "邀请",
+      "userSkip": "跳过",
+      "stageAndReview": "暂存并审核",
+      "reviewIntro": "将导入 {total} 个条目中的 {included} 个。取消勾选不想保留的条目。",
+      "colTitle": "标题",
+      "colType": "类型",
+      "colStatus": "状态",
+      "includeItem": "包含此条目",
+      "truncatedPreview": "显示 {total} 个暂存条目中的前 500 个。",
+      "import": "导入 {count} 个条目",
+      "importing": "正在导入…",
+      "done": "迁移完成",
+      "summaryProjects": "已创建 {count} 个项目",
+      "summaryTasks": "已导入 {count} 个任务",
+      "summaryUsers": "已邀请 {count} 位用户",
+      "summaryConnections": "已创建 {count} 个同步连接",
+      "finish": "完成",
+      "back": "返回",
+      "next": "下一步",
+      "working": "处理中…"
+    }
+  },
   "nav": {
     "menu": "菜单",
     "expandSidebar": "展开侧边栏",
@@ -381,7 +490,8 @@
     "usedAmount": "已用 {amount}",
     "seePlans": "查看套餐",
     "manage": "管理",
-    "trendAria": "每日用量趋势"
+    "trendAria": "每日用量趋势",
+    "openReport": "打开{meter}报告"
   },
   "aiUsageCard": {
     "title": "本月 AI 用量",

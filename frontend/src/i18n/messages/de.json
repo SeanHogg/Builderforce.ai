@@ -1,4 +1,113 @@
 {
+  "integrations": {
+    "gallery": {
+      "loading": "Integrationen werden geladen…",
+      "connected": "Verbunden",
+      "notConnected": "Nicht verbunden",
+      "migratable": "Migration",
+      "keyCount": "{count} Schlüssel",
+      "tapToConnect": "Zum Verbinden tippen",
+      "category": {
+        "pm": "Projekt- & Arbeitsmanagement",
+        "scm": "Versionsverwaltung",
+        "itsm": "IT-Service-Management",
+        "incident": "Überwachung & Bereitschaft"
+      }
+    },
+    "panel": {
+      "credentials": "Zugangsdaten",
+      "connections": "Verbindungen",
+      "activity": "Aktivität",
+      "startMigration": "Migration starten"
+    },
+    "connections": {
+      "empty": "Noch keine Verbindungen. Führe eine Migration im „Sync“-Modus aus oder füge eine aus einem Projekt hinzu.",
+      "allBoards": "Alle Boards",
+      "lastPolled": "Zuletzt synchronisiert {time}",
+      "neverPolled": "Nie synchronisiert",
+      "syncNow": "Jetzt synchronisieren",
+      "syncing": "Synchronisiert…",
+      "syncQueued": "Synchronisierung gestartet.",
+      "syncFailed": "Synchronisierung fehlgeschlagen.",
+      "remove": "Entfernen",
+      "confirmRemove": "Diese Verbindung entfernen? Importierte Aufgaben bleiben; die laufende Synchronisierung stoppt."
+    },
+    "activity": {
+      "noCredentials": "Füge Zugangsdaten hinzu, um Diagnose und Sync-Verlauf zu sehen.",
+      "healthy": "● In Ordnung",
+      "failing": "● Fehlerhaft",
+      "runDiagnostic": "Diagnose ausführen",
+      "testing": "Wird getestet…",
+      "history": "Sync-Verlauf",
+      "noRuns": "Noch keine Sync-Läufe.",
+      "processed": "{count} verarbeitet",
+      "errored": "{count} fehlerhaft"
+    },
+    "migration": {
+      "title": "Von {provider} migrieren",
+      "step": {
+        "connect": "Verbinden",
+        "projects": "Projekte",
+        "types": "Elementtypen",
+        "users": "Benutzer",
+        "review": "Prüfen",
+        "import": "Importieren"
+      },
+      "connectIntro": "Verbinde dich mit {provider} und ermittle, was übernommen werden soll. Es wird nichts importiert, bis zum letzten Schritt.",
+      "needCredential": "Wähle Zugangsdaten, um fortzufahren.",
+      "noCredentials": "Noch keine Zugangsdaten für diesen Anbieter. Füge zuerst welche im Tab Zugangsdaten hinzu.",
+      "credential": "Zugangsdaten",
+      "mode": "Modus",
+      "modeBoth": "Verlauf importieren + weiter synchronisieren",
+      "modeMigrate": "Einmaliger Import",
+      "modeSync": "Nur laufende Synchronisierung",
+      "modeHint": {
+        "both": "Übernimm vorhandene Elemente UND halte das Board fortlaufend synchron.",
+        "migrate": "Übernimm vorhandene Elemente einmalig; keine laufende Verbindung.",
+        "sync": "Richte eine Live-Synchronisierung ein; vorhandene Elemente fließen bei Änderungen ein."
+      },
+      "discovering": "Wird ermittelt…",
+      "connectAndDiscover": "Verbinden & ermitteln",
+      "discoveryFailed": "Ermittlung fehlgeschlagen.",
+      "saveFailed": "Zuordnungen konnten nicht gespeichert werden.",
+      "stageFailed": "Elemente konnten nicht vorbereitet werden.",
+      "importFailed": "Import fehlgeschlagen.",
+      "projectsIntro": "Ordne jedes externe Projekt einem neuen oder bestehenden BuilderForce-Projekt zu. Ordne mehrere demselben Projekt zu, um sie zusammenzuführen.",
+      "noProjects": "Keine Projekte im externen System gefunden.",
+      "itemsCount": "{count} Elemente",
+      "actionCreate": "Neu erstellen",
+      "actionMap": "Bestehendem zuordnen",
+      "actionSkip": "Überspringen",
+      "newProjectName": "Name des neuen Projekts",
+      "selectProject": "Projekt auswählen…",
+      "typesIntro": "Ordne jeden externen Elementtyp einem BuilderForce-Aufgabentyp und Startstatus zu.",
+      "noTypes": "Keine Elementtypen ermittelt.",
+      "typeTask": "Aufgabe",
+      "typeEpic": "Epic",
+      "usersIntro": "Wähle, welche externen Benutzer in diesen Arbeitsbereich eingeladen werden.",
+      "noUsers": "Keine Benutzer ermittelt.",
+      "userInvite": "Einladen",
+      "userSkip": "Überspringen",
+      "stageAndReview": "Vorbereiten & prüfen",
+      "reviewIntro": "{included} von {total} Elementen werden importiert. Hake die ab, die du weglassen möchtest.",
+      "colTitle": "Titel",
+      "colType": "Typ",
+      "colStatus": "Status",
+      "includeItem": "Dieses Element einschließen",
+      "truncatedPreview": "Es werden die ersten 500 von {total} vorbereiteten Elementen angezeigt.",
+      "import": "{count} Elemente importieren",
+      "importing": "Wird importiert…",
+      "done": "Migration abgeschlossen",
+      "summaryProjects": "{count} Projekte erstellt",
+      "summaryTasks": "{count} Aufgaben importiert",
+      "summaryUsers": "{count} Benutzer eingeladen",
+      "summaryConnections": "{count} Sync-Verbindungen erstellt",
+      "finish": "Fertig",
+      "back": "Zurück",
+      "next": "Weiter",
+      "working": "Wird bearbeitet…"
+    }
+  },
   "nav": {
     "menu": "Menü",
     "expandSidebar": "Seitenleiste erweitern",
@@ -381,7 +490,8 @@
     "usedAmount": "{amount} genutzt",
     "seePlans": "Tarife ansehen",
     "manage": "Verwalten",
-    "trendAria": "Täglicher Nutzungsverlauf"
+    "trendAria": "Täglicher Nutzungsverlauf",
+    "openReport": "{meter}-Bericht öffnen"
   },
   "aiUsageCard": {
     "title": "KI-Nutzung diesen Monat",

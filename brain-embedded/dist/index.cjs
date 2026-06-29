@@ -434,11 +434,30 @@ function useRegisterBrainActions(actions) {
 
 // src/useMcpExtensions.ts
 var import_react3 = require("react");
+var CREATE_DEDUPE_MS = 8e3;
+var recentCreates = /* @__PURE__ */ new Map();
+function nowMs() {
+  return typeof Date !== "undefined" ? Date.now() : 0;
+}
+function stableStringify(value) {
+  if (value == null || typeof value !== "object") return JSON.stringify(value) ?? "null";
+  if (Array.isArray(value)) return `[${value.map(stableStringify).join(",")}]`;
+  const o = value;
+  return `{${Object.keys(o).sort().map((k) => `${JSON.stringify(k)}:${stableStringify(o[k])}`).join(",")}}`;
+}
+function isCreateTool(name, tool) {
+  return /(^|_)create($|_)/.test(name) || tool.endsWith(".create");
+}
+function isErrorResult(out) {
+  return !!out && typeof out === "object" && typeof out.error === "string";
+}
 function useMcpExtensions(options) {
   const { transport } = useBrainConfig();
   const [entries, setEntries] = (0, import_react3.useState)([]);
   const [loading, setLoading] = (0, import_react3.useState)(true);
   const skipKey = (options?.skipExtensionIds ?? []).join(",");
+  const onToolResultRef = (0, import_react3.useRef)(options?.onToolResult);
+  onToolResultRef.current = options?.onToolResult;
   (0, import_react3.useEffect)(() => {
     let cancelled = false;
     const token = transport.getToken();
@@ -461,18 +480,46 @@ function useMcpExtensions(options) {
       name: entry.name,
       description: entry.description,
       parameters: entry.parameters,
-      run: async (args) => {
-        const token = transport.getToken();
-        const headers = { "Content-Type": "application/json" };
-        if (token) headers.Authorization = `Bearer ${token}`;
-        const res = await fetch(`${transport.baseUrl}/llm/v1/mcp/call`, {
-          method: "POST",
-          headers,
-          body: JSON.stringify({ extensionId: entry.extensionId, tool: entry.tool, arguments: args })
-        });
-        const body = await res.json().catch(() => ({}));
-        if (!res.ok) return { error: body.error ?? `MCP call failed (${res.status})` };
-        return body.result ?? body;
+      // Gate writes off the advertised flag; only an explicit mutates=false is
+      // read-only. Undefined (external servers) ⇒ mutating, so the host's
+      // confirm-before-mutate gate fires (fail safe).
+      mutates: entry.mutates !== false,
+      run: (args) => {
+        const mutating = entry.mutates !== false;
+        const exec = async () => {
+          const token = transport.getToken();
+          const headers = { "Content-Type": "application/json" };
+          if (token) headers.Authorization = `Bearer ${token}`;
+          const res = await fetch(`${transport.baseUrl}/llm/v1/mcp/call`, {
+            method: "POST",
+            headers,
+            body: JSON.stringify({ extensionId: entry.extensionId, tool: entry.tool, arguments: args })
+          });
+          const body = await res.json().catch(() => ({}));
+          const out = !res.ok ? { error: body.error ?? `MCP call failed (${res.status})` } : body.result ?? body;
+          onToolResultRef.current?.({
+            name: entry.name,
+            tool: entry.tool,
+            extensionId: entry.extensionId,
+            mutating,
+            ok: res.ok && !isErrorResult(out)
+          });
+          return out;
+        };
+        if (mutating && isCreateTool(entry.name, entry.tool)) {
+          const key = `${entry.extensionId}:${entry.tool}:${stableStringify(args)}`;
+          const now = nowMs();
+          const prior = recentCreates.get(key);
+          if (prior && now - prior.at < CREATE_DEDUPE_MS) return prior.result;
+          const result = exec();
+          recentCreates.set(key, { at: now, result });
+          for (const [k, v] of recentCreates) if (now - v.at >= CREATE_DEDUPE_MS) recentCreates.delete(k);
+          result.then((out) => {
+            if (isErrorResult(out)) recentCreates.delete(key);
+          }).catch(() => recentCreates.delete(key));
+          return result;
+        }
+        return exec();
       }
     })),
     [entries, transport]
@@ -831,7 +878,7 @@ function recordAppended(c, msg) {
   c.appended = next.length > MAX_APPENDED ? next.slice(next.length - MAX_APPENDED) : next;
   c.messagesEpoch += 1;
 }
-function nowMs() {
+function nowMs2() {
   return typeof Date !== "undefined" ? Date.now() : 0;
 }
 function nowIso() {
@@ -910,7 +957,7 @@ async function runLoop(chatId, c, req) {
       { role: "system", content: resolvedSystemPrompt },
       ...windowed(convo)
     ];
-    const llmStart = nowMs();
+    const llmStart = nowMs2();
     let result;
     try {
       result = await stream(
@@ -925,7 +972,7 @@ async function runLoop(chatId, c, req) {
         ts: nowIso(),
         category: "error",
         label: "llm.complete",
-        durationMs: nowMs() - llmStart,
+        durationMs: nowMs2() - llmStart,
         args: { model: model ?? "default", step: iter },
         result: e instanceof Error ? `${e.name}: ${e.message}` : String(e),
         isError: true
@@ -936,7 +983,7 @@ async function runLoop(chatId, c, req) {
       ts: nowIso(),
       category: "llm",
       label: "llm.complete",
-      durationMs: nowMs() - llmStart,
+      durationMs: nowMs2() - llmStart,
       args: { model: model ?? "default", step: iter, toolCalls: result.toolCalls.length },
       result: `${result.toolCalls.length} tool call(s) \xB7 ${result.text.length} chars \xB7 finish: ${result.finishReason ?? "\u2014"}`
     });
@@ -976,7 +1023,7 @@ async function runLoop(chatId, c, req) {
             continue;
           }
         }
-        const toolStart = nowMs();
+        const toolStart = nowMs2();
         let out;
         try {
           out = await runTool(tc.name, args);
@@ -984,11 +1031,11 @@ async function runLoop(chatId, c, req) {
           const message = e instanceof Error ? `${e.name}: ${e.message}` : String(e);
           out = { ok: false, error: message };
           convo.push({ role: "tool", tool_call_id: tc.id, content: JSON.stringify(out) });
-          pushTrace(c, { ts: nowIso(), category: "tool", label: tc.name, durationMs: nowMs() - toolStart, args, result: out, isError: true });
+          pushTrace(c, { ts: nowIso(), category: "tool", label: tc.name, durationMs: nowMs2() - toolStart, args, result: out, isError: true });
           continue;
         }
         convo.push({ role: "tool", tool_call_id: tc.id, content: JSON.stringify(out ?? null) });
-        pushTrace(c, { ts: nowIso(), category: "tool", label: tc.name, durationMs: nowMs() - toolStart, args, result: out ?? null, isError: isFailedToolResult(out) });
+        pushTrace(c, { ts: nowIso(), category: "tool", label: tc.name, durationMs: nowMs2() - toolStart, args, result: out ?? null, isError: isFailedToolResult(out) });
       }
       continue;
     }

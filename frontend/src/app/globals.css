@@ -1123,6 +1123,18 @@ html[data-theme='light'] .nebula {
 .usage-meter .usage-meter-link:hover {
   text-decoration: underline;
 }
+/* Clicking a meter's trend chart drills into its Insights report. */
+.usage-meter .usage-meter-chart-link {
+  border-radius: 6px;
+  opacity: 0.92;
+  transition: opacity 0.2s, background 0.2s;
+}
+.usage-meter .usage-meter-chart-link:hover,
+.usage-meter .usage-meter-chart-link:focus-visible {
+  opacity: 1;
+  background: var(--bg-elevated, rgba(255, 255, 255, 0.06));
+  outline: none;
+}
 
 /* Version + Terms/Privacy block in the sidebar footer (relocated from the old
    global page footer). Sits under the Sign in / Get started CTAs. */

@@ -11,6 +11,9 @@ import {
   MondayBoardProvider,
   AsanaBoardProvider,
   ClickUpBoardProvider,
+  GitLabBoardProvider,
+  BitbucketBoardProvider,
+  RallyBoardProvider,
   type FetchLike,
 } from './providers';
 import { BOARD_PROVIDER_IDS } from './providerCatalog';
@@ -392,6 +395,70 @@ describe('provider pagination (full-drain within one sync)', () => {
     const page = await p.fetchTicketsSince('2024-03-01T00:00:00Z');
     expect(page.tickets.map((t) => t.externalId)).toEqual(['3']); // old one skipped, paging stops
     expect(fetchFn).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('GitLabBoardProvider', () => {
+  it('normalizes issues with externalType and advances cursor', async () => {
+    const fetchFn: FetchLike = vi.fn(async () =>
+      jsonResponse([
+        { iid: 7, title: 'Bug', description: 'd', web_url: 'https://gitlab/x/7', state: 'opened', updated_at: '2024-02-01T00:00:00Z', issue_type: 'incident' },
+      ]),
+    );
+    const provider = new GitLabBoardProvider({ credentials: { accessToken: 'glpat' }, externalBoardId: 'group/repo' }, fetchFn);
+    const page = await provider.fetchTicketsSince(null);
+    expect(page.tickets).toHaveLength(1);
+    expect(page.tickets[0]!.externalId).toBe('7');
+    expect(page.tickets[0]!.externalType).toBe('incident');
+    expect(page.tickets[0]!.source).toBe('gitlab');
+    expect(page.nextCursor).toBe('2024-02-01T00:00:00Z');
+  });
+
+  it('discovers projects, fixed item types, and members', async () => {
+    const fetchFn: FetchLike = vi.fn(async (url: string) => {
+      if (url.includes('/projects?membership')) return jsonResponse([{ id: 12, name: 'Repo', path_with_namespace: 'g/repo', web_url: 'https://gitlab/g/repo', open_issues_count: 3 }]);
+      if (url.includes('/members/all')) return jsonResponse([{ id: 5, name: 'Ada' }]);
+      return jsonResponse([]);
+    });
+    const provider = new GitLabBoardProvider({ credentials: { accessToken: 'glpat' } }, fetchFn);
+    const d = await provider.discover();
+    expect(d.projects).toHaveLength(1);
+    expect(d.projects[0]!.externalId).toBe('12');
+    expect(d.itemTypes.length).toBeGreaterThan(0);
+    expect(d.users[0]!.displayName).toBe('Ada');
+  });
+});
+
+describe('BitbucketBoardProvider', () => {
+  it('discovers repositories as projects scoped to workspace/slug', async () => {
+    const fetchFn: FetchLike = vi.fn(async (url: string) => {
+      if (url.includes('/repositories/acme?')) return jsonResponse({ values: [{ slug: 'web', name: 'Web', full_name: 'acme/web' }] });
+      if (url.includes('/members')) return jsonResponse({ values: [{ user: { uuid: '{u1}', display_name: 'Bo' } }] });
+      return jsonResponse({ values: [] });
+    });
+    const provider = new BitbucketBoardProvider({ credentials: { accessToken: 'tok', workspace: 'acme' } }, fetchFn);
+    const d = await provider.discover();
+    expect(d.projects[0]!.externalId).toBe('acme/web');
+    expect(d.users[0]!.displayName).toBe('Bo');
+    expect(d.itemTypes.map((t) => t.externalType)).toContain('bug');
+  });
+});
+
+describe('RallyBoardProvider', () => {
+  it('normalizes hierarchical requirements and discovers projects', async () => {
+    const fetchFn: FetchLike = vi.fn(async (url: string) => {
+      if (url.includes('/hierarchicalrequirement')) return jsonResponse({ QueryResult: { Results: [{ ObjectID: 111, FormattedID: 'US1', Name: 'Story', Description: 'd', ScheduleState: 'Defined', LastUpdateDate: '2024-03-01T00:00:00Z' }] } });
+      if (url.includes('/project?')) return jsonResponse({ QueryResult: { Results: [{ ObjectID: 9, Name: 'Proj' }] } });
+      if (url.includes('/user?')) return jsonResponse({ QueryResult: { Results: [{ ObjectID: 3, DisplayName: 'Cy', EmailAddress: 'cy@x.com' }] } });
+      return jsonResponse({ QueryResult: { Results: [] } });
+    });
+    const provider = new RallyBoardProvider({ credentials: { apiKey: 'k' } }, fetchFn);
+    const page = await provider.fetchTicketsSince(null);
+    expect(page.tickets[0]!.externalId).toBe('111');
+    expect(page.tickets[0]!.externalType).toBe('User Story');
+    const d = await provider.discover();
+    expect(d.projects[0]!.name).toBe('Proj');
+    expect(d.users[0]!.email).toBe('cy@x.com');
   });
 });
 

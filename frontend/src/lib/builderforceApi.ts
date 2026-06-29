@@ -3605,6 +3605,120 @@ export const boardConnectionsApi = {
 
   links: (id: string) =>
     request<{ links: unknown[] }>(`/api/board-connections/${id}/links`).then((r) => r.links ?? []),
+
+  /** The connectable-board catalog (single source of truth for the gallery). */
+  providers: (): Promise<BoardProviderMeta[]> =>
+    request<{ providers: BoardProviderMeta[] }>(`/api/board-connections/providers`).then((r) => r.providers ?? []),
+};
+
+export interface BoardProviderMeta {
+  id: string;
+  label: string;
+  category: 'pm' | 'itsm' | 'incident' | 'scm';
+  externalBoardId: 'required' | 'optional';
+  externalBoardIdHint: string;
+  supportsWebhook: boolean;
+  supportsDiscovery: boolean;
+}
+
+// ---------------------------------------------------------------------------
+// Platform migration / import wizard — /api/migrations
+// ---------------------------------------------------------------------------
+
+export type MigrationMode = 'migrate' | 'sync' | 'both';
+export type MigrationStatus =
+  | 'discovering' | 'staged' | 'mapped' | 'importing' | 'completed' | 'failed' | 'cancelled';
+
+export interface MigrationRun {
+  id: string;
+  provider: string;
+  credentialId: string | null;
+  mode: MigrationMode;
+  status: MigrationStatus;
+  summary: Record<string, number> | null;
+  errorMessage: string | null;
+  createdBy: string | null;
+}
+
+export interface MigStagedProject {
+  id: string;
+  externalId: string;
+  externalKey: string | null;
+  name: string;
+  description: string | null;
+  externalUrl: string | null;
+  itemCount: number | null;
+  action: 'create' | 'map' | 'skip';
+  targetProjectId: number | null;
+  targetProjectName: string | null;
+}
+
+export interface MigTypeMapping {
+  externalType: string;
+  targetTaskType: string;
+  targetStatus: string;
+}
+
+export interface MigStagedUser {
+  id: string;
+  externalId: string;
+  displayName: string | null;
+  email: string | null;
+  action: 'invite' | 'map' | 'skip';
+  targetUserId: string | null;
+}
+
+export interface MigStagedItem {
+  id: string;
+  stagedProjectId: string;
+  externalId: string;
+  externalType: string | null;
+  externalUrl: string | null;
+  title: string;
+  body: string | null;
+  state: string | null;
+  storyPoints: number | null;
+  targetTaskType: string;
+  targetStatus: string;
+  include: boolean;
+}
+
+export interface MigrationRunDetail {
+  run: MigrationRun;
+  projects: MigStagedProject[];
+  itemTypes: MigTypeMapping[];
+  users: MigStagedUser[];
+  items: MigStagedItem[];
+}
+
+export interface MigrationMappingInput {
+  projects?: Array<{ id: string; action?: 'create' | 'map' | 'skip'; targetProjectId?: number | null; targetProjectName?: string | null }>;
+  types?: MigTypeMapping[];
+  users?: Array<{ id: string; action?: 'invite' | 'map' | 'skip'; targetUserId?: string | null }>;
+  items?: Array<{ id: string; include: boolean }>;
+}
+
+export const migrationsApi = {
+  start: (body: { provider: string; credentialId: string; mode?: MigrationMode }): Promise<MigrationRunDetail> =>
+    request('/api/migrations', { method: 'POST', body: JSON.stringify(body) }),
+
+  list: (): Promise<MigrationRun[]> =>
+    request<{ runs: MigrationRun[] }>('/api/migrations').then((r) => r.runs ?? []),
+
+  get: (id: string): Promise<MigrationRunDetail> =>
+    request(`/api/migrations/${id}`),
+
+  setMappings: (id: string, body: MigrationMappingInput): Promise<MigrationRunDetail> =>
+    request(`/api/migrations/${id}/mappings`, { method: 'PATCH', body: JSON.stringify(body) }),
+
+  stage: (id: string): Promise<MigrationRunDetail> =>
+    request(`/api/migrations/${id}/stage`, { method: 'POST' }),
+
+  commit: (id: string): Promise<MigrationRun> =>
+    request(`/api/migrations/${id}/commit`, { method: 'POST' }),
+
+  discard: (id: string): Promise<void> =>
+    request<void>(`/api/migrations/${id}`, { method: 'DELETE' }),
 };
 
 // ---------------------------------------------------------------------------

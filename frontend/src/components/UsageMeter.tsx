@@ -47,6 +47,17 @@ const METER_ICON: Record<MeterSnapshot['key'], string> = {
   error_events: '🐞',
 };
 
+/**
+ * Each meter's trend chart deep-links to the matching Insights report — AI tokens
+ * → AI Insights, error events → the Quality (error observability) dashboard, data
+ * ingestion → the Finance hub where metered/billed consumption is reported.
+ */
+const METER_INSIGHT_HREF: Record<MeterSnapshot['key'], string> = {
+  ai_tokens: '/insights/ai',
+  ingestion: '/insights/finance',
+  error_events: '/quality',
+};
+
 function MeterCard({ meter, isFree }: { meter: MeterSnapshot; isFree: boolean }) {
   const t = useTranslations('usageMeter');
   const { percentUsed, unlimited, unit } = meter;
@@ -108,9 +119,15 @@ function MeterCard({ meter, isFree }: { meter: MeterSnapshot; isFree: boolean })
       </div>
 
       {meter.trend && meter.trend.length > 1 && meter.trend.some((v) => v > 0) && (
-        <div style={{ marginTop: 8 }}>
+        <Link
+          href={METER_INSIGHT_HREF[meter.key]}
+          className="usage-meter-chart-link"
+          aria-label={t('openReport', { meter: t(`meter.${meter.key}`) })}
+          title={t('openReport', { meter: t(`meter.${meter.key}`) })}
+          style={{ display: 'block', marginTop: 8, cursor: 'pointer' }}
+        >
           <Sparkline values={meter.trend} width={220} height={26} color={barColor(percentUsed)} ariaLabel={t('trendAria')} />
-        </div>
+        </Link>
       )}
     </div>
   );

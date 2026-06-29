@@ -44,6 +44,7 @@ export type { BrainAction, BrainActionsContextValue } from './BrainActionsContex
 
 // Bridge server-side (tenant-registered) MCP extensions into the client loop.
 export { useMcpExtensions } from './useMcpExtensions';
+export type { UseMcpExtensionsOptions, McpToolResultInfo } from './useMcpExtensions';
 
 // Ambient page context
 export {

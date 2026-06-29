@@ -1,4 +1,113 @@
 {
+  "integrations": {
+    "gallery": {
+      "loading": "Loading integrations…",
+      "connected": "Connected",
+      "notConnected": "Not connected",
+      "migratable": "Migration",
+      "keyCount": "{count} key(s)",
+      "tapToConnect": "Tap to connect",
+      "category": {
+        "pm": "Project & work management",
+        "scm": "Source control",
+        "itsm": "IT service management",
+        "incident": "Monitoring & on-call"
+      }
+    },
+    "panel": {
+      "credentials": "Credentials",
+      "connections": "Connections",
+      "activity": "Activity",
+      "startMigration": "Start migration"
+    },
+    "connections": {
+      "empty": "No connections yet. Run a migration in “sync” mode or add one from a project.",
+      "allBoards": "All boards",
+      "lastPolled": "Last synced {time}",
+      "neverPolled": "Never synced",
+      "syncNow": "Sync now",
+      "syncing": "Syncing…",
+      "syncQueued": "Sync started.",
+      "syncFailed": "Sync failed.",
+      "remove": "Remove",
+      "confirmRemove": "Remove this connection? Imported tasks stay; ongoing sync stops."
+    },
+    "activity": {
+      "noCredentials": "Add a credential to see diagnostics and sync history.",
+      "healthy": "● Healthy",
+      "failing": "● Failing",
+      "runDiagnostic": "Run diagnostic",
+      "testing": "Testing…",
+      "history": "Sync history",
+      "noRuns": "No sync runs yet.",
+      "processed": "{count} processed",
+      "errored": "{count} errored"
+    },
+    "migration": {
+      "title": "Migrate from {provider}",
+      "step": {
+        "connect": "Connect",
+        "projects": "Projects",
+        "types": "Item types",
+        "users": "Users",
+        "review": "Review",
+        "import": "Import"
+      },
+      "connectIntro": "Connect to {provider} and discover what to bring over. Nothing is imported until the final step.",
+      "needCredential": "Choose a credential to continue.",
+      "noCredentials": "No credentials for this provider yet. Add one on the Credentials tab first.",
+      "credential": "Credential",
+      "mode": "Mode",
+      "modeBoth": "Import history + keep syncing",
+      "modeMigrate": "One-time import",
+      "modeSync": "Ongoing sync only",
+      "modeHint": {
+        "both": "Bring over existing items AND keep the board synced going forward.",
+        "migrate": "Bring over existing items once; no ongoing connection.",
+        "sync": "Set up a live sync; existing items flow in as they change."
+      },
+      "discovering": "Discovering…",
+      "connectAndDiscover": "Connect & discover",
+      "discoveryFailed": "Discovery failed.",
+      "saveFailed": "Could not save mappings.",
+      "stageFailed": "Could not stage items.",
+      "importFailed": "Import failed.",
+      "projectsIntro": "Map each external project to a new or existing BuilderForce project. Map several to the same project to combine them.",
+      "noProjects": "No projects found on the external system.",
+      "itemsCount": "{count} items",
+      "actionCreate": "Create new",
+      "actionMap": "Map to existing",
+      "actionSkip": "Skip",
+      "newProjectName": "New project name",
+      "selectProject": "Select a project…",
+      "typesIntro": "Map each external item type to a BuilderForce task type and starting status.",
+      "noTypes": "No item types discovered.",
+      "typeTask": "Task",
+      "typeEpic": "Epic",
+      "usersIntro": "Choose which external users to invite to this workspace.",
+      "noUsers": "No users discovered.",
+      "userInvite": "Invite",
+      "userSkip": "Skip",
+      "stageAndReview": "Stage & review",
+      "reviewIntro": "{included} of {total} items will be imported. Uncheck any you want to leave behind.",
+      "colTitle": "Title",
+      "colType": "Type",
+      "colStatus": "Status",
+      "includeItem": "Include this item",
+      "truncatedPreview": "Showing the first 500 of {total} staged items.",
+      "import": "Import {count} items",
+      "importing": "Importing…",
+      "done": "Migration complete",
+      "summaryProjects": "{count} projects created",
+      "summaryTasks": "{count} tasks imported",
+      "summaryUsers": "{count} users invited",
+      "summaryConnections": "{count} sync connections created",
+      "finish": "Done",
+      "back": "Back",
+      "next": "Next",
+      "working": "Working…"
+    }
+  },
   "nav": {
     "menu": "Menu",
     "expandSidebar": "Expand sidebar",
@@ -381,7 +490,8 @@
     "usedAmount": "{amount} used",
     "seePlans": "See plans",
     "manage": "Manage",
-    "trendAria": "Daily usage trend"
+    "trendAria": "Daily usage trend",
+    "openReport": "Open {meter} report"
   },
   "aiUsageCard": {
     "title": "AI usage this month",

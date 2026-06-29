@@ -1113,6 +1113,38 @@ export const agents = pgTable('agents', {
   updatedAt:  timestamp('updated_at').notNull().defaultNow(),
 });
 
+/**
+ * Cloud agents (the workforce "marketplace + my agents" tier). A cloud agent is
+ * an `ide_agents` row with project_id NULL + tenant_id set (migration 0075). When
+ * `published` it appears in the world-readable marketplace registry. Tenant-scoped
+ * (NO segment_id). `id` is a client-generated UUID stored as text. Mirrors the
+ * raw-SQL shape used by workforceRoutes / ideRoutes; declared here so the built-in
+ * MCP catalog can reach it through Drizzle like every other domain.
+ */
+export const ideAgents = pgTable('ide_agents', {
+  id:               varchar('id', { length: 64 }).primaryKey(),
+  tenantId:         integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  projectId:        integer('project_id').references(() => projects.id, { onDelete: 'cascade' }),
+  name:             varchar('name', { length: 255 }).notNull(),
+  title:            varchar('title', { length: 255 }),
+  bio:              text('bio'),
+  skills:           text('skills'),              // JSON string[] as text
+  baseModel:        varchar('base_model', { length: 120 }),
+  status:           varchar('status', { length: 16 }).notNull().default('active'),
+  hireCount:        integer('hire_count').notNull().default(0),
+  runtimeSupport:   varchar('runtime_support', { length: 16 }).notNull().default('cloud'),
+  preferredRuntime: varchar('preferred_runtime', { length: 16 }),
+  engine:           varchar('engine', { length: 32 }),
+  runtimeSurface:   varchar('runtime_surface', { length: 16 }),
+  priceCents:       integer('price_cents').notNull().default(0),
+  pricingModel:     varchar('pricing_model', { length: 24 }).notNull().default('flat_fee'),
+  priceUnit:        varchar('price_unit', { length: 100 }),
+  evalScore:        real('eval_score'),
+  published:        boolean('published').notNull().default(false),
+  createdAt:        timestamp('created_at').notNull().defaultNow(),
+  updatedAt:        timestamp('updated_at').notNull().defaultNow(),
+});
+
 export const skills = pgTable('skills', {
   id:           serial('id').primaryKey(),
   agentId:      integer('agent_id').notNull().references(() => agents.id, { onDelete: 'cascade' }),
@@ -3647,6 +3679,106 @@ export const boardSyncOutbox = pgTable('board_sync_outbox', {
   status:        varchar('status', { length: 16 }).notNull().default('pending'),  // pending|inflight|done|dead
   lastError:     text('last_error'),
   createdAt:     timestamp('created_at').notNull().defaultNow(),
+});
+
+/**
+ * Persistent per-connection external-type → BF task mapping (migration 0256).
+ * Consulted by SyncEngine on every inbound ticket so ongoing sync sets the right
+ * task_type ('task'|'epic') and status lane instead of the hardcoded backlog/task
+ * defaults. Seeded from a migration run's import_type_mappings on commit.
+ */
+export const boardTypeMappings = pgTable('board_type_mappings', {
+  id:             uuid('id').primaryKey().defaultRandom(),
+  tenantId:       integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  segmentId:      uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),
+  connectionId:   uuid('connection_id').notNull().references(() => boardConnections.id, { onDelete: 'cascade' }),
+  externalType:   varchar('external_type', { length: 120 }).notNull(),
+  targetTaskType: varchar('target_task_type', { length: 16 }).notNull().default('task'),
+  targetStatus:   varchar('target_status', { length: 64 }),
+  createdAt:      timestamp('created_at').notNull().defaultNow(),
+  updatedAt:      timestamp('updated_at').notNull().defaultNow(),
+});
+
+// ---------------------------------------------------------------------------
+// Migration staging (migration 0256) — "stage before it lands" import buffer.
+// One import_run = one wizard session; nothing touches projects/tasks/members
+// until commit. See application/migration/MigrationService.
+// ---------------------------------------------------------------------------
+
+export const importRuns = pgTable('import_runs', {
+  id:           uuid('id').primaryKey().defaultRandom(),
+  tenantId:     integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  segmentId:    uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),
+  provider:     varchar('provider', { length: 24 }).notNull(),
+  credentialId: uuid('credential_id').references(() => integrationCredentials.id, { onDelete: 'set null' }),
+  /** 'migrate' (one-time) | 'sync' (ongoing only) | 'both'. */
+  mode:         varchar('mode', { length: 12 }).notNull().default('migrate'),
+  /** discovering | staged | mapped | importing | completed | failed | cancelled. */
+  status:       varchar('status', { length: 16 }).notNull().default('discovering'),
+  summary:      jsonb('summary'),
+  errorMessage: text('error_message'),
+  createdBy:    varchar('created_by', { length: 36 }),
+  createdAt:    timestamp('created_at').notNull().defaultNow(),
+  updatedAt:    timestamp('updated_at').notNull().defaultNow(),
+});
+
+export const importStagedProjects = pgTable('import_staged_projects', {
+  id:                uuid('id').primaryKey().defaultRandom(),
+  runId:             uuid('run_id').notNull().references(() => importRuns.id, { onDelete: 'cascade' }),
+  tenantId:          integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  externalId:        varchar('external_id', { length: 255 }).notNull(),
+  externalKey:       varchar('external_key', { length: 120 }),
+  name:              varchar('name', { length: 255 }).notNull(),
+  description:       text('description'),
+  externalUrl:       varchar('external_url', { length: 500 }),
+  itemCount:         integer('item_count'),
+  /** 'create' (new BF project) | 'map' (fold into targetProjectId — combine) | 'skip'. */
+  action:            varchar('action', { length: 8 }).notNull().default('create'),
+  targetProjectId:   integer('target_project_id').references(() => projects.id, { onDelete: 'set null' }),
+  targetProjectName: varchar('target_project_name', { length: 255 }),
+  createdAt:         timestamp('created_at').notNull().defaultNow(),
+});
+
+export const importStagedItems = pgTable('import_staged_items', {
+  id:              uuid('id').primaryKey().defaultRandom(),
+  runId:           uuid('run_id').notNull().references(() => importRuns.id, { onDelete: 'cascade' }),
+  tenantId:        integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  stagedProjectId: uuid('staged_project_id').notNull().references(() => importStagedProjects.id, { onDelete: 'cascade' }),
+  externalId:      varchar('external_id', { length: 255 }).notNull(),
+  externalType:    varchar('external_type', { length: 120 }),
+  externalUrl:     varchar('external_url', { length: 500 }),
+  title:           text('title').notNull(),
+  body:            text('body'),
+  state:           varchar('state', { length: 120 }),
+  storyPoints:     real('story_points'),
+  raw:             jsonb('raw'),
+  targetTaskType:  varchar('target_task_type', { length: 16 }).notNull().default('task'),
+  targetStatus:    varchar('target_status', { length: 64 }).notNull().default('backlog'),
+  include:         boolean('include').notNull().default(true),
+  createdAt:       timestamp('created_at').notNull().defaultNow(),
+});
+
+export const importTypeMappings = pgTable('import_type_mappings', {
+  id:             uuid('id').primaryKey().defaultRandom(),
+  runId:          uuid('run_id').notNull().references(() => importRuns.id, { onDelete: 'cascade' }),
+  tenantId:       integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  externalType:   varchar('external_type', { length: 120 }).notNull(),
+  targetTaskType: varchar('target_task_type', { length: 16 }).notNull().default('task'),
+  targetStatus:   varchar('target_status', { length: 64 }).notNull().default('backlog'),
+  createdAt:      timestamp('created_at').notNull().defaultNow(),
+});
+
+export const importStagedUsers = pgTable('import_staged_users', {
+  id:           uuid('id').primaryKey().defaultRandom(),
+  runId:        uuid('run_id').notNull().references(() => importRuns.id, { onDelete: 'cascade' }),
+  tenantId:     integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  externalId:   varchar('external_id', { length: 255 }).notNull(),
+  displayName:  varchar('display_name', { length: 255 }),
+  email:        varchar('email', { length: 320 }),
+  /** 'invite' (send workspace invite) | 'map' (link targetUserId) | 'skip'. */
+  action:       varchar('action', { length: 8 }).notNull().default('invite'),
+  targetUserId: varchar('target_user_id', { length: 36 }).references(() => users.id, { onDelete: 'set null' }),
+  createdAt:    timestamp('created_at').notNull().defaultNow(),
 });
 
 // ── Cross-domain (channel-3) seams: feedback ingest + outbound webhooks ──────
