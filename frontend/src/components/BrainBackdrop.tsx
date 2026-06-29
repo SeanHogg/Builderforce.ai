@@ -250,7 +250,7 @@ export default function BrainBackdrop({ className = '' }: { className?: string }
         const pulse = n.hub ? 0.5 + 0.5 * Math.sin(t * 0.002 + n.x * 0.02) : 0;
         const glow = n.r * (n.hub ? 4.5 : 3) * (1 + n.act * 1.4 + pulse * 0.4);
         const halo = ctx.createRadialGradient(n.x, n.y, 0, n.x, n.y, glow);
-        halo.addColorStop(0, rgba(n.color, (n.hub ? 0.5 : 0.32) + n.act * 0.5));
+        halo.addColorStop(0, rgba(n.color, (n.hub ? 0.32 : 0.18) + n.act * 0.45));
         halo.addColorStop(1, rgba(n.color, 0));
         ctx.fillStyle = halo;
         ctx.beginPath();
@@ -259,7 +259,7 @@ export default function BrainBackdrop({ className = '' }: { className?: string }
       }
       // Bright cores.
       for (const n of nodes) {
-        ctx.fillStyle = rgba(mix(n.color, [255, 255, 255], 0.4 + n.act * 0.4), 0.9);
+        ctx.fillStyle = rgba(mix(n.color, [255, 255, 255], 0.4 + n.act * 0.4), 0.7);
         ctx.beginPath();
         ctx.arc(n.x, n.y, n.r * (1 + n.act * 0.8), 0, Math.PI * 2);
         ctx.fill();
@@ -283,9 +283,11 @@ export default function BrainBackdrop({ className = '' }: { className?: string }
       ctx.fillStyle = bg;
       ctx.fillRect(0, 0, width, height);
       ctx.globalCompositeOperation = 'lighter';
-      const neb = ctx.createRadialGradient(cx, cy, 0, cx, cy, Math.max(width, height) * 0.55);
-      neb.addColorStop(0, 'rgba(40,90,180,0.16)');
-      neb.addColorStop(0.5, 'rgba(0,160,150,0.06)');
+      // Glow pushed toward the lower arc (like bolt.new), keeping the centre —
+      // where the hero copy sits — dark and readable.
+      const neb = ctx.createRadialGradient(cx, cy + scale * 0.5, 0, cx, cy + scale * 0.5, Math.max(width, height) * 0.55);
+      neb.addColorStop(0, 'rgba(40,90,180,0.09)');
+      neb.addColorStop(0.5, 'rgba(0,160,150,0.03)');
       neb.addColorStop(1, 'rgba(0,0,0,0)');
       ctx.fillStyle = neb;
       ctx.fillRect(0, 0, width, height);
@@ -293,7 +295,7 @@ export default function BrainBackdrop({ className = '' }: { className?: string }
 
       // Brain silhouette — soft inner mass + glowing contour + central fissure.
       const mass = ctx.createRadialGradient(cx, cy - scale * 0.1, scale * 0.1, cx, cy, scale * 1.1);
-      mass.addColorStop(0, 'rgba(60,90,160,0.10)');
+      mass.addColorStop(0, 'rgba(60,90,160,0.05)');
       mass.addColorStop(1, 'rgba(10,20,40,0)');
       ctx.fillStyle = mass;
       ctx.beginPath();
@@ -400,6 +402,9 @@ export default function BrainBackdrop({ className = '' }: { className?: string }
   return (
     <div className={`wb-scene ${className}`} aria-hidden="true">
       <canvas ref={canvasRef} className="wb-canvas" />
+      {/* Darken the centre, where the hero copy sits, so text stays legible over
+          the neural mesh (the glow reads at the edges, bolt.new-style). */}
+      <div className="wb-veil" />
       {/* Fade the foot of the scene into the page background so content blends in. */}
       <div className="wb-fade" />
     </div>

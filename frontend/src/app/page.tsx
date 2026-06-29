@@ -88,15 +88,33 @@ export default function LandingPage() {
           flex-direction: column;
           align-items: center;
         }
-        .lp-tagline-sub {
-          color: rgba(214, 224, 244, 0.85);
-          letter-spacing: 0.14em;
-          margin-top: -10px;
+        /* Hero headline — the single dominant line (bolt.new-clean). */
+        .lp-hero-title {
+          font-family: var(--font-display);
+          font-size: clamp(2.4rem, 6vw, 4rem);
+          font-weight: 700;
+          line-height: 1.04;
+          letter-spacing: -0.02em;
+          color: rgba(236, 242, 255, 0.98);
+          margin: 0 0 14px;
+          max-width: 16ch;
+          animation: fadeInUp 0.8s ease-out both;
         }
-        /* The hero rides over a dark deep-space backdrop in BOTH themes, so its
-           text is forced light here for contrast (page text colour follows the
-           theme and would be invisible on black in light mode). */
-        .lp-hero-content .lp-desc { color: rgba(222, 230, 246, 0.92); }
+        .lp-hero-title em {
+          font-style: italic;
+          background: linear-gradient(135deg, var(--coral-bright), var(--cyan-bright));
+          -webkit-background-clip: text;
+          -webkit-text-fill-color: transparent;
+          background-clip: text;
+        }
+        .lp-hero-sub {
+          font-size: clamp(1rem, 2.2vw, 1.2rem);
+          color: rgba(214, 224, 244, 0.78);
+          line-height: 1.55;
+          max-width: 540px;
+          margin: 0 0 34px;
+          animation: fadeInUp 0.9s ease-out 0.15s both;
+        }
 
         /* Prompt row — the prompt sits centred (the mascot now lives below it,
            centred on the page, rather than in a right-hand column). */
@@ -149,28 +167,6 @@ export default function LandingPage() {
         @keyframes fadeInUp {
           from { opacity: 0; transform: translateY(22px); }
           to   { opacity: 1; transform: translateY(0); }
-        }
-
-        /* Sub-tagline */
-        .lp-tagline {
-          font-family: var(--font-display);
-          font-size: clamp(0.8rem, 2vw, 0.95rem);
-          font-weight: 600;
-          color: var(--coral-bright);
-          letter-spacing: 0.18em;
-          text-transform: uppercase;
-          margin-bottom: 20px;
-          animation: fadeInUp 0.9s ease-out 0.15s both;
-        }
-
-        /* Description */
-        .lp-desc {
-          font-size: clamp(0.95rem, 2vw, 1.1rem);
-          color: var(--text-secondary);
-          max-width: 620px;
-          line-height: 1.75;
-          margin-bottom: 44px;
-          animation: fadeInUp 0.9s ease-out 0.3s both;
         }
 
         /* CTA buttons */
@@ -505,9 +501,16 @@ export default function LandingPage() {
             Human-in-the-loop · Fully agentic cloud
           </div>
 
-          {/* The agentic prompt is the hero's primary action — it sits at the
-              top (where the wordmark used to be), with the agentHost mascot as a
-              right-hand column on tablet/desktop (hidden on mobile). */}
+          {/* One dominant headline + one subline, then the prompt — the hero's
+              single primary action (bolt.new-clean; no competing paragraphs). */}
+          <h1 className="lp-hero-title">
+            See the future, <em>clearly</em>
+          </h1>
+          <p className="lp-hero-sub">
+            The innovation platform for the agentic era — one workforce of humans
+            and AI agents, on a single board.
+          </p>
+
           <div className="lp-prompt-row">
             <div className="lp-prompt-col">
               <form onSubmit={handlePromptSubmit} className="lp-prompt">
@@ -534,27 +537,6 @@ export default function LandingPage() {
                 ))}
               </div>
             </div>
-          </div>
-
-          <p className="lp-tagline">See the future, clearly</p>
-          <p className="lp-tagline lp-tagline-sub">The innovation platform for the agentic era</p>
-
-          <p className="lp-desc">
-            The end-to-end system of record for agentic work. Plan, build, ship,
-            and measure with one workforce of humans and AI agents on a single
-            board — where every unit of work is instrumented, costed, and
-            attributed from idea to production. Train your own agents, govern
-            every action with roles, approvals and a full audit trail, and give
-            every role its operating picture — all without ever leaving VS Code.
-          </p>
-
-          <div className="lp-actions">
-            <Link href="/register" className="lp-btn-secondary">
-              🚀 Start Building Free
-            </Link>
-            <Link href="/marketplace" className="lp-btn-secondary">
-              🤖 Browse Agents
-            </Link>
           </div>
           </div>
         </section>
