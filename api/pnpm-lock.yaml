@@ -15,11 +15,11 @@ importers:
         specifier: ^0.10.4
         version: 0.10.4
       '@seanhogg/builderforce-memory':
-        specifier: ^2026.6.31
-        version: 2026.6.31(@seanhogg/builderforce-memory-engine@2026.6.31)
+        specifier: ^2026.6.34
+        version: 2026.6.34(@seanhogg/builderforce-memory-engine@2026.6.34)
       '@seanhogg/builderforce-memory-engine':
-        specifier: ^2026.6.31
-        version: 2026.6.31
+        specifier: ^2026.6.34
+        version: 2026.6.34
       drizzle-orm:
         specifier: ^0.36.4
         version: 0.36.4(@cloudflare/workers-types@4.20260313.1)(@neondatabase/serverless@0.10.4)(@types/pg@8.11.6)
@@ -555,15 +555,15 @@ packages:
   '@rolldown/pluginutils@1.0.0-rc.9':
     resolution: {integrity: sha512-w6oiRWgEBl04QkFZgmW+jnU1EC9b57Oihi2ot3HNWIQRqgHp5PnYDia5iZ5FF7rpa4EQdiqMDXjlqKGXBhsoXw==}
 
-  '@seanhogg/builderforce-memory-engine@2026.6.31':
-    resolution: {integrity: sha512-gb7JPo+Dy/iwjD/2tOddKgVV29TnseRmieyMuF8XFCvlneEGyR1CAF/fsSsuykZrO16Qvq1XX8PTTzQkGveEDA==}
+  '@seanhogg/builderforce-memory-engine@2026.6.34':
+    resolution: {integrity: sha512-sOkffVsdbJa72FspNuW441xDbdmCqEQ1l6mMhqD7DjprCzFUosMu6dpMo7urN+Ft3towbrHjdO1jtUuUTFkzsw==}
     engines: {node: '>=18.0.0'}
 
-  '@seanhogg/builderforce-memory@2026.6.31':
-    resolution: {integrity: sha512-hNmyozT3ar303Ut01s6cn/HI57Co0+XZiPndhqY9ljQRY6tCOcmJIqmWmAWVpdKNsTr8rU0PXeSgMIjVRf2RUw==}
+  '@seanhogg/builderforce-memory@2026.6.34':
+    resolution: {integrity: sha512-yXPsfdTkJASuDN9VTYARLNQsE8+5ulQd9c17+S7yZtNakWKlYq09UurTl9BxrdB/AFn78TsAO5OMt3NDzTV97g==}
     engines: {node: '>=18.0.0'}
     peerDependencies:
-      '@seanhogg/builderforce-memory-engine': ^2026.6.31
+      '@seanhogg/builderforce-memory-engine': ^2026.6.34
 
   '@sindresorhus/is@7.2.0':
     resolution: {integrity: sha512-P1Cz1dWaFfR4IR+U13mqqiGsLFf1KbayybWwdd2vfctdV6hDpUkgCY0nKOLLTMSoRd/jJNjtbqzf13K8DCCXQw==}
@@ -1522,11 +1522,11 @@ snapshots:
 
   '@rolldown/pluginutils@1.0.0-rc.9': {}
 
-  '@seanhogg/builderforce-memory-engine@2026.6.31': {}
+  '@seanhogg/builderforce-memory-engine@2026.6.34': {}
 
-  '@seanhogg/builderforce-memory@2026.6.31(@seanhogg/builderforce-memory-engine@2026.6.31)':
+  '@seanhogg/builderforce-memory@2026.6.34(@seanhogg/builderforce-memory-engine@2026.6.34)':
     dependencies:
-      '@seanhogg/builderforce-memory-engine': 2026.6.31
+      '@seanhogg/builderforce-memory-engine': 2026.6.34
 
   '@sindresorhus/is@7.2.0': {}
 

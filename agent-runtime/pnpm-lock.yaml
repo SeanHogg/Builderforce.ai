@@ -415,8 +415,11 @@ importers:
         specifier: ^0.26.2
         version: 0.26.2(apache-arrow@18.1.0)
       '@seanhogg/builderforce-memory':
-        specifier: ^2026.6.28
-        version: 2026.6.28(@seanhogg/builderforce-memory-engine@2026.6.28)
+        specifier: ^2026.6.34
+        version: 2026.6.34(@seanhogg/builderforce-memory-engine@2026.6.34)
+      '@seanhogg/builderforce-memory-engine':
+        specifier: ^2026.6.34
+        version: 2026.6.34
       '@sinclair/typebox':
         specifier: 0.34.48
         version: 0.34.48
@@ -2484,11 +2487,21 @@ packages:
     resolution: {integrity: sha512-3/Y21asvxjB2e0t+fup+lzIbKN7qgP2QUnA1y/nyzg+m6S+ISMCDvaa6SmbN4jDoAX+pZT0UbinkHc2SGo77og==}
     engines: {node: '>=18.0.0'}
 
+  '@seanhogg/builderforce-memory-engine@2026.6.34':
+    resolution: {integrity: sha512-sOkffVsdbJa72FspNuW441xDbdmCqEQ1l6mMhqD7DjprCzFUosMu6dpMo7urN+Ft3towbrHjdO1jtUuUTFkzsw==}
+    engines: {node: '>=18.0.0'}
+
   '@seanhogg/builderforce-memory@2026.6.28':
     resolution: {integrity: sha512-zHJZfsR0NVgeM4nqVC0b2h1TExKzz1nCsKTu4WOtpdc2zP/arZVnBfNm3CU40SqKcDRd1ctH6idbc73ZswbfUA==}
     engines: {node: '>=18.0.0'}
     peerDependencies:
       '@seanhogg/builderforce-memory-engine': ^2026.6.28
+
+  '@seanhogg/builderforce-memory@2026.6.34':
+    resolution: {integrity: sha512-yXPsfdTkJASuDN9VTYARLNQsE8+5ulQd9c17+S7yZtNakWKlYq09UurTl9BxrdB/AFn78TsAO5OMt3NDzTV97g==}
+    engines: {node: '>=18.0.0'}
+    peerDependencies:
+      '@seanhogg/builderforce-memory-engine': ^2026.6.34
 
   '@selderee/plugin-htmlparser2@0.11.0':
     resolution: {integrity: sha512-P33hHGdldxGabLFjPPpaTxVolMrzrcegejx+0GxjrIb9Zv48D8yAIA/QTDR2dFl7Uz7urX8aX6+5bCZslr+gWQ==}
@@ -7475,11 +7488,19 @@ snapshots:
       '@noble/hashes': 2.0.1
       '@scure/base': 2.0.0
 
-  '@seanhogg/builderforce-memory-engine@2026.6.28': {}
+  '@seanhogg/builderforce-memory-engine@2026.6.28':
+    optional: true
+
+  '@seanhogg/builderforce-memory-engine@2026.6.34': {}
 
   '@seanhogg/builderforce-memory@2026.6.28(@seanhogg/builderforce-memory-engine@2026.6.28)':
     dependencies:
       '@seanhogg/builderforce-memory-engine': 2026.6.28
+    optional: true
+
+  '@seanhogg/builderforce-memory@2026.6.34(@seanhogg/builderforce-memory-engine@2026.6.34)':
+    dependencies:
+      '@seanhogg/builderforce-memory-engine': 2026.6.34
 
   '@selderee/plugin-htmlparser2@0.11.0':
     dependencies:
