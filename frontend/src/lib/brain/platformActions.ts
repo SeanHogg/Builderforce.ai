@@ -44,7 +44,7 @@ import {
   promptLibraryApi, tenantApiKeysApi, securityApi, mySessionsApi, embedApi,
   dashboardApi, llmApi, providerKeysApi, auditApi, dispatchApi,
   agentHostConfigApi, agentHostProjectsApi, chatSessionsApi, usageApi,
-  alertsApi, decksApi, insightsApi,
+  alertsApi, decksApi, insightsApi, pmoApi,
 } from '@/lib/builderforceApi';
 import type { Task } from '@/lib/builderforceApi';
 import { dashboardsApi } from '@/lib/dashboardsApi';
@@ -313,7 +313,7 @@ export function buildPlatformCapabilities(ctx: PlatformActionContext): PlatformC
     // was ~145k chars when every task's full body was returned verbatim).
     { domain: 'tasks', method: 'list', mutates: false, description: 'List tasks, optionally filtered by project. Returns a SLIM projection (id, key, title, status, priority, taskType, parentTaskId, assignee, PR link, archived) — call tasks.get for a single task’s full description/body.', parameters: obj({ projectId: N }), run: async (a) => (await tasksApi.list(f(a, 'projectId'))).map(toSlimTask) },
     { domain: 'tasks', method: 'get', mutates: false, description: 'Get a task by id.', parameters: obj({ id: N }, ['id']), run: (a) => tasksApi.get(f(a, 'id')) },
-    { domain: 'tasks', method: 'create', mutates: true, description: 'Create a task on a project board. Set taskType="epic" to create a planning Epic (a container for other tasks), or pass parentTaskId to nest the new task under an existing Epic. Assign it by passing exactly one of: assignedUserId (a human member), assignedAgentRef (a cloud agent, e.g. one named "Bob") or assignedAgentHostId (a self-hosted agent host). Resolve ANY assignee name — person OR agent — with tasks.assignees, which returns the whole team and tells you which id field to set (humans and agents are one team).', parameters: obj({ projectId: N, title: S, description: S, priority: { type: 'string', enum: ['low', 'medium', 'high', 'urgent'] }, dueDate: S, taskType: { type: 'string', enum: ['task', 'epic'] }, parentTaskId: N, assignedUserId: S, assignedAgentRef: S, assignedAgentHostId: N }, ['projectId', 'title']), run: (a) => tasksApi.create(a as Parameters<typeof tasksApi.create>[0]) },
+    { domain: 'tasks', method: 'create', mutates: true, description: 'Create a task on a project board. Set taskType="epic" to create a planning Epic (a DELIVERY container for other tasks), or pass parentTaskId to nest the new task under an existing Epic. An Epic is NOT an OKR/Objective — if the user wants OKRs, objectives, key results, or measurable goals, use objectives.create + key_results.create (the Portfolio ▸ OKRs tab), NOT an epic. Assign it by passing exactly one of: assignedUserId (a human member), assignedAgentRef (a cloud agent, e.g. one named "Bob") or assignedAgentHostId (a self-hosted agent host). Resolve ANY assignee name — person OR agent — with tasks.assignees, which returns the whole team and tells you which id field to set (humans and agents are one team).', parameters: obj({ projectId: N, title: S, description: S, priority: { type: 'string', enum: ['low', 'medium', 'high', 'urgent'] }, dueDate: S, taskType: { type: 'string', enum: ['task', 'epic'] }, parentTaskId: N, assignedUserId: S, assignedAgentRef: S, assignedAgentHostId: N }, ['projectId', 'title']), run: (a) => tasksApi.create(a as Parameters<typeof tasksApi.create>[0]) },
     updateCap({ domain: 'tasks', method: 'update', description: "Update a task. Link it under an Epic with parentTaskId (or null to detach), reclassify with taskType ('task'|'epic'), schedule into a sprint with sprintId, or (re)assign via exactly one of assignedUserId (human member; null unassigns), assignedAgentRef (cloud agent, e.g. one named 'Bob') or assignedAgentHostId (agent host) — resolve ANY assignee name, person OR agent, with tasks.assignees, which returns the whole team and the id field to set (humans and agents are one team). Also supports title, description, status/lane, priority, dueDate, archived.", parameters: obj({ id: N, title: S, description: S, status: S, priority: S, dueDate: S, archived: B, taskType: { type: 'string', enum: ['task', 'epic'] }, parentTaskId: { type: ['number', 'null'] }, sprintId: { type: ['string', 'null'] }, assignedUserId: { type: ['string', 'null'] }, assignedAgentRef: { type: ['string', 'null'] }, assignedAgentHostId: { type: ['number', 'null'] } }, ['id']) }, (a, patch) => tasksApi.update(f(a, 'id'), patch as Parameters<typeof tasksApi.update>[1])),
     { domain: 'tasks', method: 'delete', mutates: true, description: 'Delete a task.', parameters: obj({ id: N }, ['id']), run: (a) => tasksApi.delete(f(a, 'id')) },
     { domain: 'tasks', method: 'move', mutates: true, description: 'Move a task to another project board (re-keys it).', parameters: obj({ id: N, projectId: N }, ['id', 'projectId']), run: (a) => tasksApi.move(f(a, 'id'), f(a, 'projectId')) },
@@ -351,6 +351,38 @@ export function buildPlatformCapabilities(ctx: PlatformActionContext): PlatformC
     { domain: 'specs', method: 'create', mutates: true, description: 'Create a spec/PRD (goal + optional markdown PRD).', parameters: obj({ projectId: N, goal: S, prd: S, status: { type: 'string', enum: ['draft', 'ready', 'in_progress', 'complete'] } }, ['goal']), run: (a) => specsApi.create(a as Parameters<typeof specsApi.create>[0]) },
     updateCap({ domain: 'specs', method: 'patch', description: 'Update a spec (goal/status/prd).', parameters: obj({ id: S, goal: S, status: S, prd: S }, ['id']) }, (a, patch) => specsApi.patch(f(a, 'id'), patch as Parameters<typeof specsApi.patch>[1])),
     { domain: 'specs', method: 'delete', mutates: true, description: 'Delete a spec.', parameters: obj({ id: S }, ['id']), run: (a) => specsApi.delete(f(a, 'id')) },
+
+    // ---- Strategy: Portfolios ▸ Initiatives ▸ OKRs (objectives + key results) --
+    // The PMO/Portfolio tier (the "Portfolio" tab). OKRs (objectives + measurable
+    // key results) live HERE — in their own tables — NOT on the Tasks board. An
+    // Epic (tasks.create taskType="epic") is a DELIVERY container; an Objective is
+    // a STRATEGIC goal whose progress rolls up from its key results. They are
+    // different concepts: to capture OKRs use objectives.create + key_results.create,
+    // then link the epics/initiatives that deliver an objective via objectives.add_link.
+    { domain: 'pmo', method: 'tree', mutates: false, description: 'The portfolio structure: portfolios ▸ initiatives ▸ linked projects (+ initiative dependency edges). Use this to find the portfolioId / initiativeId an OKR should attach to.', parameters: EMPTY, run: () => pmoApi.tree() },
+    { domain: 'pmo', method: 'rollup', mutates: false, description: 'Composed rollup (delivery + cost + DORA + OKR progress) for one scope. kind="workspace" is the whole org (ignores id); kind="portfolio"|"initiative" needs that id. The `okr` field holds objectives with computed progress.', parameters: obj({ kind: { type: 'string', enum: ['workspace', 'portfolio', 'initiative'] }, id: S }, ['kind']), run: (a) => pmoApi.rollup(f(a, 'kind'), f(a, 'id')) },
+
+    { domain: 'portfolios', method: 'list', mutates: false, description: 'List portfolios (top of the strategy hierarchy).', parameters: EMPTY, run: () => pmoApi.portfolios.list() },
+    { domain: 'portfolios', method: 'create', mutates: true, description: 'Create a portfolio (a strategic grouping that initiatives and OKRs attach to).', parameters: obj({ name: S, description: S, status: S, targetDate: S }, ['name']), run: (a) => pmoApi.portfolios.create(a as Parameters<typeof pmoApi.portfolios.create>[0]) },
+    updateCap({ domain: 'portfolios', method: 'update', description: 'Update a portfolio (name/description/status/targetDate).', parameters: obj({ id: S, name: S, description: S, status: S, targetDate: S }, ['id']) }, (a, patch) => pmoApi.portfolios.update(f(a, 'id'), patch as Parameters<typeof pmoApi.portfolios.update>[1])),
+    { domain: 'portfolios', method: 'delete', mutates: true, description: 'Delete a portfolio.', parameters: obj({ id: S }, ['id']), run: (a) => pmoApi.portfolios.remove(f(a, 'id')) },
+
+    { domain: 'initiatives', method: 'list', mutates: false, description: 'List initiatives (programs of work under a portfolio).', parameters: EMPTY, run: () => pmoApi.initiatives.list() },
+    { domain: 'initiatives', method: 'create', mutates: true, description: 'Create an initiative under a portfolio (pass portfolioId).', parameters: obj({ name: S, description: S, status: S, portfolioId: S, startDate: S, targetDate: S }, ['name']), run: (a) => pmoApi.initiatives.create(a as Parameters<typeof pmoApi.initiatives.create>[0]) },
+    updateCap({ domain: 'initiatives', method: 'update', description: 'Update an initiative (name/description/status/portfolioId/dates).', parameters: obj({ id: S, name: S, description: S, status: S, portfolioId: S, startDate: S, targetDate: S }, ['id']) }, (a, patch) => pmoApi.initiatives.update(f(a, 'id'), patch as Parameters<typeof pmoApi.initiatives.update>[1])),
+    { domain: 'initiatives', method: 'delete', mutates: true, description: 'Delete an initiative.', parameters: obj({ id: S }, ['id']), run: (a) => pmoApi.initiatives.remove(f(a, 'id')) },
+
+    { domain: 'objectives', method: 'list', mutates: false, description: 'List OKR objectives. These are the strategic goals shown on the Portfolio ▸ OKRs tab — NOT Epics on the task board.', parameters: EMPTY, run: () => pmoApi.objectives.list() },
+    { domain: 'objectives', method: 'create', mutates: true, description: 'Create an OKR Objective — a strategic, qualitative goal (e.g. "Unlock recurring revenue"). This is what populates the Portfolio ▸ OKRs tab. Do NOT model OKRs as Epics (tasks.create). Attach it with portfolioId or initiativeId (omit both for a workspace/org-level objective — the default "Workspace" scope). After creating, add its measurable targets with key_results.create, and link the epics/initiatives that deliver it with objectives.add_link. status: active|achieved|missed|archived; period is an optional label like "2026-Q2".', parameters: obj({ title: S, description: S, period: S, status: { type: 'string', enum: ['active', 'achieved', 'missed', 'archived'] }, portfolioId: S, initiativeId: S, startDate: S, endDate: S }, ['title']), run: (a) => pmoApi.objectives.create(a as Parameters<typeof pmoApi.objectives.create>[0]) },
+    updateCap({ domain: 'objectives', method: 'update', description: 'Update an OKR objective (title/description/status/period/scope/dates).', parameters: obj({ id: S, title: S, description: S, period: S, status: { type: 'string', enum: ['active', 'achieved', 'missed', 'archived'] }, portfolioId: S, initiativeId: S, startDate: S, endDate: S }, ['id']) }, (a, patch) => pmoApi.objectives.update(f(a, 'id'), patch as Parameters<typeof pmoApi.objectives.update>[1])),
+    { domain: 'objectives', method: 'delete', mutates: true, description: 'Delete an OKR objective (and its key results).', parameters: obj({ id: S }, ['id']), run: (a) => pmoApi.objectives.remove(f(a, 'id')) },
+    { domain: 'objectives', method: 'add_link', mutates: true, description: 'Link a delivery work-item to an OKR objective — the OKR lineage edge. linkKind="initiative" needs initiativeId; linkKind="epic" or "task" needs the numeric taskId (an Epic IS a task with taskType="epic"). This is how the Epics on the board connect to the Objective they advance.', parameters: obj({ objectiveId: S, linkKind: { type: 'string', enum: ['initiative', 'epic', 'task'] }, initiativeId: S, taskId: N }, ['objectiveId', 'linkKind']), run: (a) => pmoApi.objectives.addLink(f(a, 'objectiveId'), { linkKind: f(a, 'linkKind'), initiativeId: f<string | undefined>(a, 'initiativeId'), taskId: f<number | undefined>(a, 'taskId') }) },
+    { domain: 'objectives', method: 'remove_link', mutates: true, description: 'Remove an objective ▸ work-item link.', parameters: obj({ objectiveId: S, linkId: S }, ['objectiveId', 'linkId']), run: (a) => pmoApi.objectives.removeLink(f(a, 'objectiveId'), f(a, 'linkId')) },
+
+    { domain: 'key_results', method: 'list', mutates: false, description: 'List key results (the measurable targets under OKR objectives).', parameters: EMPTY, run: () => pmoApi.keyResults.list() },
+    { domain: 'key_results', method: 'create', mutates: true, description: 'Create a measurable Key Result under an Objective (pass its objectiveId). A KR is a number that moves from startValue → targetValue; progress rolls up into the objective and the OKR dashboard. metricType: number|percent|currency|boolean; status: on_track|at_risk|off_track|done. Every objective should get 2–5 of these.', parameters: obj({ objectiveId: S, title: S, metricType: { type: 'string', enum: ['number', 'percent', 'currency', 'boolean'] }, startValue: N, targetValue: N, currentValue: N, unit: S, status: { type: 'string', enum: ['on_track', 'at_risk', 'off_track', 'done'] } }, ['objectiveId', 'title']), run: (a) => pmoApi.keyResults.create(a as Parameters<typeof pmoApi.keyResults.create>[0]) },
+    updateCap({ domain: 'key_results', method: 'update', description: 'Update a key result — most often currentValue to record progress (also title/metricType/start/target/unit/status).', parameters: obj({ id: S, title: S, metricType: { type: 'string', enum: ['number', 'percent', 'currency', 'boolean'] }, startValue: N, targetValue: N, currentValue: N, unit: S, status: { type: 'string', enum: ['on_track', 'at_risk', 'off_track', 'done'] } }, ['id']) }, (a, patch) => pmoApi.keyResults.update(f(a, 'id'), patch as Parameters<typeof pmoApi.keyResults.update>[1])),
+    { domain: 'key_results', method: 'delete', mutates: true, description: 'Delete a key result.', parameters: obj({ id: S }, ['id']), run: (a) => pmoApi.keyResults.remove(f(a, 'id')) },
 
     // ---- Approvals (human-in-the-loop) -----------------------------------
     { domain: 'approvals', method: 'list', mutates: false, description: 'List approval requests, optionally by status.', parameters: obj({ status: { type: 'string', enum: ['pending', 'approved', 'rejected', 'expired'] }, agentHostId: N }), run: (a) => approvalsApi.list(a as Parameters<typeof approvalsApi.list>[0]) },
@@ -681,6 +713,10 @@ const STATIC_PROMOTIONS: ReadonlyArray<readonly [string, string, string]> = [
   ['workflows', 'run', 'run_workflow'],
   ['specs', 'list', 'list_specs'],
   ['specs', 'create', 'create_spec'],
+  ['objectives', 'list', 'list_objectives'],
+  ['objectives', 'create', 'create_objective'],
+  ['objectives', 'add_link', 'link_objective'],
+  ['key_results', 'create', 'create_key_result'],
   ['agents_published', 'list', 'list_agents'],
   ['agents_published', 'hire', 'hire_agent'],
   ['cloud_agents', 'create', 'create_cloud_agent'],
@@ -703,8 +739,9 @@ const FOCUS_METHODS = ['list', 'get', 'create', 'update', 'run'];
 export function focusDomainsForPath(pathname: string | null | undefined): string[] {
   const p = pathname ?? '';
   const has = (seg: string) => p === seg || p.startsWith(`${seg}/`) || p.startsWith(`${seg}?`);
-  if (has('/projects') || has('/ide') || has('/dashboard')) return ['projects', 'tasks', 'repo_analysis'];
+  if (has('/projects') || has('/ide') || has('/dashboard')) return ['projects', 'tasks', 'repo_analysis', 'objectives', 'key_results', 'initiatives', 'portfolios'];
   if (has('/tasks')) return ['tasks'];
+  if (has('/pmo')) return ['objectives', 'key_results', 'initiatives', 'portfolios'];
   if (has('/workflows')) return ['workflows', 'workflow_runs'];
   if (has('/workforce') || has('/agents')) return ['cloud_agents', 'agents_published', 'approvals'];
   if (has('/marketplace') || has('/skills')) return ['skills_marketplace', 'artifact_assignments'];

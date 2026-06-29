@@ -82,6 +82,7 @@ describe('buildPlatformActions', () => {
       'create_project', 'update_project', 'delete_project', 'list_projects',
       'list_tasks', 'create_task', 'run_workflow', 'create_spec',
       'hire_agent', 'create_cloud_agent', 'decide_approval', 'fetch_url',
+      'create_objective', 'list_objectives', 'link_objective', 'create_key_result',
     ]) {
       expect(names).toContain(expected);
     }
@@ -109,6 +110,40 @@ describe('buildPlatformActions', () => {
       expect(a.parameters).toMatchObject({ type: 'object' });
       expect(typeof a.run).toBe('function');
     }
+  });
+});
+
+describe('OKRs / PMO live in their own tables, not the task board', () => {
+  it('exposes objective + key-result capabilities (the Portfolio ▸ OKRs surface)', () => {
+    const caps = buildPlatformCapabilities(makeCtx().ctx);
+    const has = (domain: string, method: string) => caps.some((c) => c.domain === domain && c.method === method);
+    expect(has('objectives', 'create')).toBe(true);
+    expect(has('objectives', 'list')).toBe(true);
+    expect(has('objectives', 'add_link')).toBe(true);
+    expect(has('key_results', 'create')).toBe(true);
+    expect(has('portfolios', 'create')).toBe(true);
+    expect(has('initiatives', 'create')).toBe(true);
+    expect(has('pmo', 'tree')).toBe(true);
+  });
+
+  it('objectives.create requires a title and key_results.create needs an objectiveId', () => {
+    const caps = buildPlatformCapabilities(makeCtx().ctx);
+    const obj = caps.find((c) => c.domain === 'objectives' && c.method === 'create')!;
+    const kr = caps.find((c) => c.domain === 'key_results' && c.method === 'create')!;
+    expect(obj.mutates).toBe(true);
+    expect(obj.parameters).toMatchObject({ required: ['title'] });
+    expect(kr.parameters).toMatchObject({ required: ['objectiveId', 'title'] });
+  });
+
+  it('steers create_task away from modeling OKRs as Epics', () => {
+    const create = actionByName('create_task')!;
+    expect(create.description).toMatch(/not an okr/i);
+    expect(create.description).toMatch(/objectives\.create/i);
+  });
+
+  it('promotes OKR tools when the Portfolio (/pmo) route is in focus', () => {
+    expect(focusDomainsForPath('/pmo')).toContain('objectives');
+    expect(focusDomainsForPath('/projects')).toContain('objectives');
   });
 });
 
