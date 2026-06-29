@@ -273,6 +273,52 @@
     "doneAria": "{pct}% completado — {completed} de {total} tareas completadas",
     "donePct": "{pct}% completado"
   },
+  "projectInspection": {
+    "title": "Inspección",
+    "reportTitle": "Inspección del proyecto",
+    "whatToTarget": "Qué priorizar",
+    "allClear": "Nada que señalar: la necesidad de este proyecto está bien definida y va por buen camino. Mantén los objetivos y las fechas límite al día a medida que avanza el trabajo.",
+    "fixCta": "Resolver",
+    "noData": "Sin datos",
+    "outOf": "{score}/100",
+    "scoreOf": "{score}/100",
+    "toFix": "{count, plural, one {# por resolver} other {# por resolver}}",
+    "openReportAria": "Abrir el informe de inspección del proyecto: calificación {grade}, {score} de 100",
+    "dimAria": "{name}: {score}",
+    "tier": {
+      "healthy": "Sólido",
+      "watch": "Aceptable",
+      "at_risk": "Débil",
+      "critical": "Crítico"
+    },
+    "verdict": {
+      "healthy": "La necesidad de este proyecto está bien definida y el trabajo va por buen camino: un sistema agéntico puede ponerse en marcha con él. Mantén los objetivos y las fechas límite al día.",
+      "watch": "Un buen comienzo, pero algunas carencias frenan este proyecto. Resuelve los elementos siguientes para afinar su rumbo.",
+      "at_risk": "Este proyecto carece de una definición clara de hacia dónde debe ir. Trabaja la lista siguiente —empezando por la visión y los objetivos— para que pueda ejecutarse.",
+      "critical": "Todavía hay poco con lo que un agente o un equipo puedan actuar. Define primero la necesidad: visión, objetivos y luego un conjunto de tareas planificadas."
+    },
+    "dim": {
+      "direction": { "label": "Dirección", "desc": "Qué tan claramente está definida la necesidad: visión, objetivos/OKR, una fecha límite y una arquitectura. Cuanto más clara sea la necesidad, más podrá resolver el sistema agéntico." },
+      "planning": { "label": "Planificación", "desc": "Si el trabajo está desglosado en tareas y programado con fechas de inicio y de vencimiento." },
+      "health": { "label": "Salud", "desc": "Qué tan bien va el trabajo abierto: se erosiona por tareas vencidas y bloqueadas, no por ir temprano. No es una puntuación de participación ni de actividad." },
+      "progress": { "label": "Progreso", "desc": "Hasta dónde ha avanzado el proyecto: tareas completadas como proporción del total." },
+      "execution": { "label": "Ejecución", "desc": "Si algo impulsa activamente el trabajo: un responsable o agente asignado, flujos de trabajo conectados y avance real." }
+    },
+    "rec": {
+      "vision": { "title": "Define la visión", "detail": "Añade una descripción del proyecto que exprese la necesidad en lenguaje claro, para que el sistema agéntico sepa qué construir." },
+      "goals": { "title": "Establece objetivos u OKR", "detail": "Vincula un objetivo o resultado clave (o asocia el proyecto a una iniciativa) para que el éxito sea medible y no solo implícito." },
+      "deadline": { "title": "Establece una fecha límite", "detail": "Añade una fecha de vencimiento del proyecto para poder marcar el ritmo y priorizarlo frente a todo lo demás." },
+      "schedule": { "title": "Programa el trabajo", "detail": "Asigna a las tareas fechas de inicio y de vencimiento para que la línea de tiempo y el Gantt reflejen un plan real." },
+      "architecture": { "title": "Ejecuta el análisis de arquitectura", "detail": "Genera un PRD de arquitectura para que el sistema agéntico tenga un plano técnico sobre el que ejecutar." },
+      "tasks": { "title": "Desglosa el trabajo en tareas", "detail": "Este proyecto aún no tiene tareas. Añade los elementos de trabajo que un agente o el equipo ejecutarán realmente." },
+      "decompose": { "title": "Desglosa más el trabajo", "detail": "Solo {count, plural, one {# tarea} other {# tareas}} hasta ahora: divide el trabajo en partes más pequeñas y ejecutables para un alcance y un progreso más claros." },
+      "overdue": { "title": "Resuelve el trabajo vencido", "detail": "{count, plural, one {# tarea está vencida} other {# tareas están vencidas}}. Reprográmalas o ciérralas para recuperar la salud del proyecto." },
+      "blocked": { "title": "Desbloquea el trabajo detenido", "detail": "{count, plural, one {# tarea está bloqueada} other {# tareas están bloqueadas}}. Resuelve los bloqueos para que el trabajo avance de nuevo." },
+      "stalled": { "title": "Empieza a avanzar", "detail": "Hay tareas pero ninguna está completada todavía. Mueve los primeros elementos a «hecho» para generar impulso." },
+      "owner": { "title": "Asigna un responsable", "detail": "Asigna un agente de Workforce o un responsable para que haya alguien —persona o agente— que rinda cuentas de impulsar el trabajo." },
+      "workflows": { "title": "Conecta un flujo de trabajo", "detail": "Añade un flujo de trabajo para que los pasos repetibles se ejecuten automáticamente en lugar de a mano." }
+    }
+  },
   "projectScope": {
     "workspace": "Espacio de trabajo",
     "allProjects": "Todos los proyectos",

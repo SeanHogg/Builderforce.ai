@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useTranslations } from 'next-intl';
 import type { Project } from '@/lib/types';
 import { ProjectHealthGauges } from './ProjectHealth';
+import { ProjectInspectionGrade } from './ProjectInspection';
 import { ProjectOriginBadge } from './ProjectOriginBadge';
 import type { ProjectPanelTab } from './ProjectDetailsPanel';
 import { DeleteProjectDialog } from './DeleteProjectDialog';
@@ -250,6 +251,14 @@ export function ProjectCard({
           track and how far along" visual. Shared with the details panel so the
           numbers/colours can never drift between surfaces. */}
       <ProjectHealthGauges project={project} />
+
+      {/* Full-inspection PM grade — the "where does this project need to go" rating
+          (vision/goals/planning/health/progress/execution). Clicking opens the
+          prescriptive report in the details panel so the user knows what to target. */}
+      <ProjectInspectionGrade
+        project={project}
+        onOpen={onDetailsClick ? (p) => onDetailsClick(p, 'details') : undefined}
+      />
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 'auto', flexWrap: 'wrap' }}>
         {project.taskCount != null && (

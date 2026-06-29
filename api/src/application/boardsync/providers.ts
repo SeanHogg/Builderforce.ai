@@ -36,6 +36,9 @@ export interface NormalizedTicket {
   /** External item type (Jira issuetype, GitLab issue_type, Bitbucket kind, Rally
    *  artifact). Drives board_type_mappings → task_type/status on sync. */
   externalType?:   string | null;
+  /** External assignee id (matches a DiscoveredUser.externalId). Lets a migration
+   *  set assignedUserId when that user maps to an existing member. */
+  assigneeExternalId?: string | null;
 }
 
 export interface FetchPage {
@@ -120,6 +123,7 @@ function buildTicket(
     state: string;
     storyPoints?: number | null;
     externalType?: string | null;
+    assigneeExternalId?: string | null;
     extra?: Record<string, unknown>;
   },
 ): NormalizedTicket {
@@ -143,6 +147,7 @@ function buildTicket(
     fields,
     storyPoints:     parts.storyPoints ?? null,
     externalType:    parts.externalType ?? null,
+    assigneeExternalId: parts.assigneeExternalId ?? null,
   };
 }
 
@@ -157,6 +162,8 @@ interface GitHubIssueRaw {
   html_url: string;
   state: string;
   updated_at: string;
+  assignee?: { login?: string } | null;
+  labels?: Array<{ name?: string } | string>;
   pull_request?: unknown; // present on PRs; we skip those
 }
 
@@ -201,6 +208,7 @@ export class GitHubBoardProvider implements BoardProvider {
           title:           issue.title,
           body:            issue.body,
           state:           issue.state,
+          assigneeExternalId: issue.assignee?.login ?? null,
         }),
       );
       if (!maxUpdated || issue.updated_at > maxUpdated) maxUpdated = issue.updated_at;
@@ -230,6 +238,52 @@ export class GitHubBoardProvider implements BoardProvider {
     });
     if (!res.ok) throw new Error(`GitHub issue update failed: ${res.status}`);
   }
+
+  async discover(): Promise<DiscoveryResult> {
+    const token = String(this.cfg.credentials.accessToken ?? '');
+    const headers = { Authorization: `Bearer ${token}`, 'User-Agent': 'Builderforce/1.0', Accept: 'application/vnd.github+json' };
+    const scope = (this.cfg.externalBoardId ?? '').trim();
+
+    // Repos: an explicit owner/repo scopes to that one; otherwise list the token's
+    // repos (so the operator can pick which to migrate). Each repo's externalId is
+    // "owner/repo" so a staged project maps straight onto a connection scope.
+    const projects: DiscoveredProject[] = [];
+    if (scope) {
+      const res = await this.fetchFn(`https://api.github.com/repos/${scope}`, { headers });
+      if (res.ok) {
+        const r = (await res.json()) as { full_name: string; description?: string; html_url?: string; open_issues_count?: number };
+        projects.push({ externalId: r.full_name, key: r.full_name, name: r.full_name, description: r.description ?? null, url: r.html_url ?? null, itemCount: r.open_issues_count ?? null });
+      }
+    } else {
+      const res = await this.fetchFn('https://api.github.com/user/repos?per_page=100&sort=updated&affiliation=owner,collaborator,organization_member', { headers });
+      if (!res.ok) throw new Error(`GitHub repos fetch failed: ${res.status}`);
+      const repos = (await res.json()) as Array<{ full_name: string; description?: string; html_url?: string; open_issues_count?: number; has_issues?: boolean }>;
+      for (const r of repos) {
+        if (r.has_issues === false) continue;
+        projects.push({ externalId: r.full_name, key: r.full_name, name: r.full_name, description: r.description ?? null, url: r.html_url ?? null, itemCount: r.open_issues_count ?? null });
+      }
+    }
+
+    // GitHub has no first-class issue "types"; expose the common label vocabulary
+    // so the operator can map bug/feature labels to task/epic.
+    const itemTypes: DiscoveredItemType[] = [
+      { externalType: 'issue', name: 'Issue', category: 'task' },
+      { externalType: 'bug', name: 'Bug', category: 'bug' },
+      { externalType: 'feature', name: 'Feature', category: 'story' },
+      { externalType: 'epic', name: 'Epic', category: 'epic' },
+    ];
+
+    // Users: dedupe assignees/collaborators across the first 20 discovered repos.
+    const users = new Map<string, DiscoveredUser>();
+    for (const p of projects.slice(0, 20)) {
+      const res = await this.fetchFn(`https://api.github.com/repos/${p.externalId}/assignees?per_page=100`, { headers });
+      if (!res.ok) continue;
+      const list = (await res.json()) as Array<{ login: string; id: number }>;
+      for (const u of list) if (!users.has(u.login)) users.set(u.login, { externalId: u.login, displayName: u.login, email: null });
+    }
+
+    return { projects, itemTypes, users: [...users.values()] };
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -245,6 +299,7 @@ interface JiraIssueRaw {
     updated: string;
     status?: { name?: string };
     issuetype?: { name?: string; subtask?: boolean };
+    assignee?: { accountId?: string } | null;
   };
 }
 
@@ -285,7 +340,7 @@ export class JiraBoardProvider implements BoardProvider {
         Accept: 'application/json',
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ jql, maxResults: 100, fields: ['summary', 'description', 'updated', 'status', 'issuetype', spField] }),
+      body: JSON.stringify({ jql, maxResults: 100, fields: ['summary', 'description', 'updated', 'status', 'issuetype', 'assignee', spField] }),
     });
     if (!res.ok) throw new Error(`Jira search failed: ${res.status}`);
 
@@ -309,6 +364,7 @@ export class JiraBoardProvider implements BoardProvider {
           state:           issue.fields.status?.name ?? 'unknown',
           storyPoints,
           externalType:    issue.fields.issuetype?.name ?? null,
+          assigneeExternalId: issue.fields.assignee?.accountId ?? null,
         }),
       );
       if (!maxUpdated || updated > maxUpdated) maxUpdated = updated;
@@ -1145,6 +1201,7 @@ interface GitLabIssueRaw {
   state?: string;          // opened | closed
   updated_at?: string;
   issue_type?: string;     // issue | incident | test_case | task
+  assignee?: { id?: number } | null;
 }
 
 export class GitLabBoardProvider implements BoardProvider {
@@ -1184,6 +1241,7 @@ export class GitLabBoardProvider implements BoardProvider {
           body:            i.description ?? null,
           state:           i.state ?? 'opened',
           externalType:    i.issue_type ?? 'issue',
+          assigneeExternalId: i.assignee?.id != null ? String(i.assignee.id) : null,
         }),
       );
       next = maxVersion(next, i.updated_at ?? null);
@@ -1254,6 +1312,7 @@ interface BitbucketIssueRaw {
   state?: string;          // new | open | resolved | on hold | invalid | duplicate | wontfix | closed
   updated_on?: string;
   kind?: string;           // bug | enhancement | proposal | task
+  assignee?: { uuid?: string; account_id?: string } | null;
   links?: { html?: { href?: string } };
 }
 
@@ -1297,6 +1356,7 @@ export class BitbucketBoardProvider implements BoardProvider {
           body:            i.content?.raw ?? null,
           state:           i.state ?? 'new',
           externalType:    i.kind ?? 'task',
+          assigneeExternalId: i.assignee?.uuid ?? i.assignee?.account_id ?? null,
         }),
       );
       next = maxVersion(next, i.updated_on ?? null);

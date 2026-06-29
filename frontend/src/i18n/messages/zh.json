@@ -273,6 +273,52 @@
     "doneAria": "已完成 {pct}% — {total} 个任务中已完成 {completed} 个",
     "donePct": "完成 {pct}%"
   },
+  "projectInspection": {
+    "title": "检查",
+    "reportTitle": "项目检查",
+    "whatToTarget": "需要改进的方面",
+    "allClear": "没有发现问题——该项目的需求定义清晰且进展顺利。随着工作推进，请及时更新目标和截止日期。",
+    "fixCta": "处理",
+    "noData": "暂无数据",
+    "outOf": "{score}/100",
+    "scoreOf": "{score}/100",
+    "toFix": "{count, plural, other {# 项待处理}}",
+    "openReportAria": "打开项目检查报告——评级 {grade}，{score} / 100",
+    "dimAria": "{name}：{score}",
+    "tier": {
+      "healthy": "良好",
+      "watch": "一般",
+      "at_risk": "薄弱",
+      "critical": "严重"
+    },
+    "verdict": {
+      "healthy": "该项目的需求定义清晰、工作进展顺利——智能体系统可以据此运行。请保持目标和截止日期为最新。",
+      "watch": "起步不错，但仍有一些不足拖慢了项目。请处理下方事项以明确方向。",
+      "at_risk": "该项目缺乏明确的方向定义。请处理下方清单——从愿景和目标开始——使其可被执行。",
+      "critical": "目前几乎没有可供智能体或团队执行的内容。请先定义需求：愿景、目标，然后是一组有计划的任务。"
+    },
+    "dim": {
+      "direction": { "label": "方向", "desc": "需求的定义有多清晰——愿景、目标 / OKR、截止日期和架构。需求越清晰，智能体系统能解决的部分就越多。" },
+      "planning": { "label": "规划", "desc": "工作是否已拆解为任务，并设定了开始和截止日期。" },
+      "health": { "label": "健康度", "desc": "进行中的工作进展如何——会因逾期和受阻的任务而下降，而非因为项目刚起步。这不是参与度或活跃度评分。" },
+      "progress": { "label": "进度", "desc": "项目的完成程度——已完成任务占总任务的比例。" },
+      "execution": { "label": "执行", "desc": "是否有人在积极推进工作——指定的负责人或智能体、已接入的工作流以及实际进展。" }
+    },
+    "rec": {
+      "vision": { "title": "定义愿景", "detail": "添加项目描述，用通俗语言阐明需求，让智能体系统知道要构建什么。" },
+      "goals": { "title": "设定目标或 OKR", "detail": "关联一个目标或关键结果（或将项目挂接到某个举措），让成功可衡量，而非仅是隐含。" },
+      "deadline": { "title": "设定截止日期", "detail": "添加项目截止日期，以便统筹安排并与其他工作排定优先级。" },
+      "schedule": { "title": "安排工作日程", "detail": "为任务设定开始和截止日期，使时间线和甘特图反映真实的计划。" },
+      "architecture": { "title": "运行架构分析", "detail": "生成架构 PRD，为智能体系统提供可据以执行的技术蓝图。" },
+      "tasks": { "title": "将工作拆解为任务", "detail": "该项目尚无任务。请添加智能体或团队将实际执行的工作项。" },
+      "decompose": { "title": "进一步拆解工作", "detail": "目前仅有 {count, plural, other {# 项任务}}——请将工作拆解为更小、可执行的部分，使范围和进度更清晰。" },
+      "overdue": { "title": "处理逾期工作", "detail": "有 {count, plural, other {# 项任务}}已逾期。请重新排期或关闭，以恢复项目健康度。" },
+      "blocked": { "title": "解除受阻工作", "detail": "有 {count, plural, other {# 项任务}}处于受阻状态。请解决阻碍，让工作重新推进。" },
+      "stalled": { "title": "开始取得进展", "detail": "已有任务但尚无完成项。请先完成最初的几项，建立推进势头。" },
+      "owner": { "title": "指定负责人", "detail": "指定一名 Workforce 智能体或负责人，确保有人——无论是人还是智能体——负责推进工作。" },
+      "workflows": { "title": "接入工作流", "detail": "添加工作流，让可重复的步骤自动运行，而非手动执行。" }
+    }
+  },
   "projectScope": {
     "workspace": "工作区",
     "allProjects": "全部项目",

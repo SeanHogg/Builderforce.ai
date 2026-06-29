@@ -1037,7 +1037,7 @@ export function createLlmRoutes(): Hono<HonoEnv> {
       // First-party platform tools run in-process; everything else relays to the
       // tenant's external MCP server.
       const result = body.extensionId === BUILTIN_EXTENSION_ID
-        ? await callBuiltinTool(db, { tenantId: access.tenantId, tool: body.tool, arguments: body.arguments })
+        ? await callBuiltinTool(db, { tenantId: access.tenantId, tool: body.tool, arguments: body.arguments, env: c.env as Env })
         : await callMcpTool(db, {
             tenantId: access.tenantId,
             extensionId: body.extensionId,

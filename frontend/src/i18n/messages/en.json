@@ -273,6 +273,103 @@
     "doneAria": "{pct}% done — {completed} of {total} tasks complete",
     "donePct": "{pct}% done"
   },
+  "projectInspection": {
+    "title": "Inspection",
+    "reportTitle": "Project inspection",
+    "whatToTarget": "What to target",
+    "allClear": "Nothing flagged — this project's need is well defined and on track. Keep the goals and deadlines current as the work evolves.",
+    "fixCta": "Fix",
+    "noData": "No data",
+    "outOf": "{score}/100",
+    "scoreOf": "{score}/100",
+    "toFix": "{count, plural, one {# to fix} other {# to fix}}",
+    "openReportAria": "Open the project inspection report — grade {grade}, {score} of 100",
+    "dimAria": "{name}: {score}",
+    "tier": {
+      "healthy": "Strong",
+      "watch": "Fair",
+      "at_risk": "Weak",
+      "critical": "Critical"
+    },
+    "verdict": {
+      "healthy": "This project's need is well defined and the work is on track — an agentic system can run with it. Keep goals and deadlines current.",
+      "watch": "A solid start, but a few gaps are holding this project back. Clear the items below to sharpen its direction.",
+      "at_risk": "This project lacks a clear definition of where it needs to go. Work the list below — starting with vision and goals — so it can be executed.",
+      "critical": "There's little here for an agent or a team to act on yet. Define the need first: vision, goals, then a planned set of tasks."
+    },
+    "dim": {
+      "direction": {
+        "label": "Direction",
+        "desc": "How clearly the need is defined — vision, goals/OKRs, a deadline and an architecture. The clearer the need, the more of it the agentic system can solve."
+      },
+      "planning": {
+        "label": "Planning",
+        "desc": "Whether the work is broken down into tasks and scheduled with start and due dates."
+      },
+      "health": {
+        "label": "Health",
+        "desc": "How well open work is going — eroded by overdue and blocked tasks, not by being early. This is not an engagement or activity score."
+      },
+      "progress": {
+        "label": "Progress",
+        "desc": "How far along the project is — completed tasks as a share of the total."
+      },
+      "execution": {
+        "label": "Execution",
+        "desc": "Whether something is actively driving the work — an assigned owner or agent, wired workflows, and real momentum."
+      }
+    },
+    "rec": {
+      "vision": {
+        "title": "Define the vision",
+        "detail": "Add a project description that states the need in plain language, so the agentic system knows what to build."
+      },
+      "goals": {
+        "title": "Set goals or OKRs",
+        "detail": "Link an objective or key result (or attach the project to an initiative) so success is measurable, not just implied."
+      },
+      "deadline": {
+        "title": "Set a deadline",
+        "detail": "Add a project due date so the work can be paced and prioritized against everything else."
+      },
+      "schedule": {
+        "title": "Schedule the work",
+        "detail": "Give the tasks start and due dates so the timeline and Gantt reflect a real plan."
+      },
+      "architecture": {
+        "title": "Run architecture analysis",
+        "detail": "Generate an architecture PRD so the agentic system has a technical blueprint to execute against."
+      },
+      "tasks": {
+        "title": "Break the work into tasks",
+        "detail": "This project has no tasks yet. Add the work items an agent or the team will actually execute."
+      },
+      "decompose": {
+        "title": "Decompose the work further",
+        "detail": "Only {count, plural, one {# task} other {# tasks}} so far — break the work into smaller, executable pieces for clearer scope and progress."
+      },
+      "overdue": {
+        "title": "Clear overdue work",
+        "detail": "{count, plural, one {# task is} other {# tasks are}} past due. Reschedule or close them to recover the project's health."
+      },
+      "blocked": {
+        "title": "Unblock stalled work",
+        "detail": "{count, plural, one {# task is} other {# tasks are}} blocked. Resolve the blockers so the work can move again."
+      },
+      "stalled": {
+        "title": "Start making progress",
+        "detail": "Tasks exist but none are complete yet. Move the first items to done to build momentum."
+      },
+      "owner": {
+        "title": "Assign an owner",
+        "detail": "Assign a Workforce agent or owner so there's someone — human or agent — accountable for driving the work."
+      },
+      "workflows": {
+        "title": "Wire a workflow",
+        "detail": "Add a workflow so repeatable steps run automatically instead of by hand."
+      }
+    }
+  },
   "projectScope": {
     "workspace": "Workspace",
     "allProjects": "All projects",

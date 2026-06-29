@@ -273,6 +273,52 @@
     "doneAria": "{pct}% terminé — {completed} sur {total} tâches terminées",
     "donePct": "{pct} % terminé"
   },
+  "projectInspection": {
+    "title": "Inspection",
+    "reportTitle": "Inspection du projet",
+    "whatToTarget": "Quoi cibler",
+    "allClear": "Rien à signaler : le besoin de ce projet est bien défini et sur la bonne voie. Maintenez les objectifs et les échéances à jour à mesure que le travail évolue.",
+    "fixCta": "Corriger",
+    "noData": "Aucune donnée",
+    "outOf": "{score}/100",
+    "scoreOf": "{score}/100",
+    "toFix": "{count, plural, one {# à corriger} other {# à corriger}}",
+    "openReportAria": "Ouvrir le rapport d'inspection du projet — note {grade}, {score} sur 100",
+    "dimAria": "{name} : {score}",
+    "tier": {
+      "healthy": "Solide",
+      "watch": "Correct",
+      "at_risk": "Faible",
+      "critical": "Critique"
+    },
+    "verdict": {
+      "healthy": "Le besoin de ce projet est bien défini et le travail est sur la bonne voie — un système agentique peut s'en emparer. Maintenez les objectifs et les échéances à jour.",
+      "watch": "Un bon début, mais quelques lacunes freinent ce projet. Traitez les éléments ci-dessous pour préciser sa direction.",
+      "at_risk": "Ce projet manque d'une définition claire de la direction à prendre. Traitez la liste ci-dessous — en commençant par la vision et les objectifs — pour qu'il puisse être exécuté.",
+      "critical": "Il y a encore peu de matière sur laquelle un agent ou une équipe peut agir. Définissez d'abord le besoin : vision, objectifs, puis un ensemble de tâches planifiées."
+    },
+    "dim": {
+      "direction": { "label": "Direction", "desc": "À quel point le besoin est clairement défini — vision, objectifs/OKR, une échéance et une architecture. Plus le besoin est clair, plus le système agentique peut en résoudre." },
+      "planning": { "label": "Planification", "desc": "Si le travail est découpé en tâches et planifié avec des dates de début et d'échéance." },
+      "health": { "label": "Santé", "desc": "À quel point le travail en cours se déroule bien — érodé par les tâches en retard et bloquées, pas par le fait d'être en avance. Ce n'est pas un score d'engagement ou d'activité." },
+      "progress": { "label": "Progression", "desc": "Jusqu'où le projet est avancé — tâches terminées en proportion du total." },
+      "execution": { "label": "Exécution", "desc": "Si quelque chose fait activement avancer le travail — un responsable ou un agent assigné, des flux de travail connectés et un réel élan." }
+    },
+    "rec": {
+      "vision": { "title": "Définir la vision", "detail": "Ajoutez une description de projet qui énonce le besoin en langage clair, afin que le système agentique sache quoi construire." },
+      "goals": { "title": "Fixer des objectifs ou OKR", "detail": "Reliez un objectif ou un résultat clé (ou rattachez le projet à une initiative) pour que le succès soit mesurable, et non seulement implicite." },
+      "deadline": { "title": "Fixer une échéance", "detail": "Ajoutez une date d'échéance au projet pour pouvoir cadencer le travail et le prioriser par rapport au reste." },
+      "schedule": { "title": "Planifier le travail", "detail": "Donnez aux tâches des dates de début et d'échéance pour que la chronologie et le Gantt reflètent un vrai plan." },
+      "architecture": { "title": "Lancer l'analyse d'architecture", "detail": "Générez un PRD d'architecture afin que le système agentique dispose d'un plan technique à exécuter." },
+      "tasks": { "title": "Découper le travail en tâches", "detail": "Ce projet n'a pas encore de tâches. Ajoutez les éléments de travail qu'un agent ou l'équipe exécutera réellement." },
+      "decompose": { "title": "Découper davantage le travail", "detail": "Seulement {count, plural, one {# tâche} other {# tâches}} pour l'instant — découpez le travail en éléments plus petits et exécutables pour un périmètre et une progression plus clairs." },
+      "overdue": { "title": "Traiter le travail en retard", "detail": "{count, plural, one {# tâche est en retard} other {# tâches sont en retard}}. Replanifiez-les ou clôturez-les pour rétablir la santé du projet." },
+      "blocked": { "title": "Débloquer le travail à l'arrêt", "detail": "{count, plural, one {# tâche est bloquée} other {# tâches sont bloquées}}. Levez les blocages pour que le travail reparte." },
+      "stalled": { "title": "Commencer à progresser", "detail": "Des tâches existent mais aucune n'est encore terminée. Passez les premiers éléments à « terminé » pour créer de l'élan." },
+      "owner": { "title": "Assigner un responsable", "detail": "Assignez un agent Workforce ou un responsable afin qu'il y ait quelqu'un — humain ou agent — chargé de faire avancer le travail." },
+      "workflows": { "title": "Connecter un flux de travail", "detail": "Ajoutez un flux de travail pour que les étapes répétables s'exécutent automatiquement plutôt qu'à la main." }
+    }
+  },
   "projectScope": {
     "workspace": "Espace de travail",
     "allProjects": "Tous les projets",

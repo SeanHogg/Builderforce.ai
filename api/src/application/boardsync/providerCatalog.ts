@@ -32,7 +32,7 @@ export interface BoardProviderMeta {
 }
 
 export const BOARD_PROVIDERS: readonly BoardProviderMeta[] = [
-  { id: 'github',       label: 'GitHub Issues', category: 'scm',      externalBoardId: 'required', externalBoardIdHint: 'Repository — owner/repo (e.g. octocat/hello-world)', supportsWebhook: true,  supportsDiscovery: false },
+  { id: 'github',       label: 'GitHub Issues', category: 'scm',      externalBoardId: 'optional', externalBoardIdHint: 'Repository — owner/repo (blank = pick during migration)', supportsWebhook: true,  supportsDiscovery: true },
   { id: 'jira',         label: 'Jira',          category: 'pm',       externalBoardId: 'optional', externalBoardIdHint: 'Project key (e.g. ENG) — blank syncs all', supportsWebhook: true,  supportsDiscovery: true },
   { id: 'linear',       label: 'Linear',        category: 'pm',       externalBoardId: 'optional', externalBoardIdHint: 'Team ID (optional) — blank syncs all teams', supportsWebhook: true,  supportsDiscovery: false },
   { id: 'monday',       label: 'monday.com',    category: 'pm',       externalBoardId: 'required', externalBoardIdHint: 'Board ID (numeric)', supportsWebhook: true,  supportsDiscovery: true },

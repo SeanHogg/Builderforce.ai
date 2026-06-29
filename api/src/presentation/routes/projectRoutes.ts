@@ -1,5 +1,5 @@
 import { Hono, type Context } from 'hono';
-import { and, count, eq, inArray, max, min, sql } from 'drizzle-orm';
+import { and, count, countDistinct, eq, inArray, max, min, sql } from 'drizzle-orm';
 import { ProjectService } from '../../application/project/ProjectService';
 import { ensureProjectTemplate } from '../../application/project/projectTemplate';
 import type { HonoEnv } from '../../env';
@@ -7,7 +7,7 @@ import { authMiddleware, requireRole } from '../middleware/authMiddleware';
 import { ProjectStatus, TenantRole } from '../../domain/shared/types';
 import { isAgentHostOnline } from '../../domain/agentHost/onlineStatus';
 import type { Db } from '../../infrastructure/database/connection';
-import { agentHostProjects, agentHosts, projectInsightEvents, projects, sourceControlIntegrations, specs, tasks, tenants, workflows } from '../../infrastructure/database/schema';
+import { agentHostProjects, agentHosts, objectiveLinks, projectInsightEvents, projects, sourceControlIntegrations, specs, tasks, tenants, workflows } from '../../infrastructure/database/schema';
 import { relayToRoom } from './realtimeRelay';
 import { buildPlanLimitsGuard } from '../middleware/planLimitsGuard';
 import { projectRoomName } from '../../infrastructure/relay/broadcastRoom';
@@ -365,6 +365,23 @@ export function createProjectRoutes(projectService: ProjectService, db: Db): Hon
       archSpecRows.filter((row) => row.projectId != null).map((row) => row.projectId as number),
     );
 
+    // Distinct objectives/OKRs linked to each project's tasks — the "is the need
+    // defined" (goals) signal that powers the inspection's Direction dimension.
+    // Single grouped query joined through tasks; no per-project round trip.
+    const goalLinkRows = await db
+      .select({ projectId: tasks.projectId, goalCount: countDistinct(objectiveLinks.objectiveId) })
+      .from(objectiveLinks)
+      .innerJoin(tasks, eq(objectiveLinks.taskId, tasks.id))
+      .where(and(
+        eq(objectiveLinks.tenantId, tenantId),
+        eq(objectiveLinks.linkKind, 'task'),
+        inArray(tasks.projectId, projectIds),
+      ))
+      .groupBy(tasks.projectId);
+    const goalCountByProject = new Map<number, number>(
+      goalLinkRows.map((row) => [row.projectId, Number(row.goalCount)]),
+    );
+
     return c.json({
       projects: plainProjects.map((project) => {
         const b = taskBreakdownByProject.get(project.id);
@@ -379,6 +396,11 @@ export function createProjectRoutes(projectService: ProjectService, db: Db): Hon
         overdueTaskCount: b?.overdue ?? 0,
         workflowCount: workflowCountByProject.get(project.id) ?? 0,
         hasArchitecturePrd: hasArchByProject.has(project.id),
+        // Goal/OKR linkage + planning-spine membership — the inspection Direction
+        // dimension treats a project with linked objectives or an initiative as
+        // having a defined "need" (the platform North Star).
+        linkedGoalCount: goalCountByProject.get(project.id) ?? 0,
+        initiativeId: project.initiativeId ?? null,
         assignedAgentHost: assignedAgentHostByProject.get(project.id) ?? null,
         startDate: dateRangeByProject.get(project.id)?.startDate ?? null,
         // Effective deadline drives the calendar/Gantt: the PM's explicit project

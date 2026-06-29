@@ -60,6 +60,9 @@ export interface StagedItemRow {
   body: string | null;
   state: string | null;
   storyPoints: number | null;
+  assigneeExternalId: string | null;
+  externalVersion: string | null;
+  contentHash: string | null;
   targetTaskType: string;
   targetStatus: string;
   include: boolean;
@@ -128,13 +131,13 @@ export interface MigrationStore {
   /** Confirm a project belongs to the tenant (for action='map'). */
   projectBelongsToTenant(projectId: number, tenantId: number): Promise<boolean>;
   /** Insert a task, returning its id. externalId + source seed a unique key. */
-  insertTask(input: { tenantId: number; projectId: number; segmentId: string | null; title: string; description: string | null; taskType: string; status: string; storyPoints: number | null; source: string; externalId: string }): Promise<number>;
+  insertTask(input: { tenantId: number; projectId: number; segmentId: string | null; title: string; description: string | null; taskType: string; status: string; storyPoints: number | null; source: string; externalId: string; assignedUserId: string | null }): Promise<number>;
   /** Create an ongoing board connection, returning its id. */
   insertConnection(input: { tenantId: number; segmentId: string | null; projectId: number; credentialId: string | null; provider: string; externalBoardId: string | null }): Promise<string>;
   /** Seed the persistent type mapping for a connection. */
   insertTypeMappings(connectionId: string, tenantId: number, segmentId: string | null, rows: TypeMappingRow[]): Promise<void>;
   /** Create the idempotency link so a later sync recognises the imported task. */
-  insertTicketLink(input: { tenantId: number; segmentId: string | null; connectionId: string; taskId: number; provider: string; externalId: string; externalUrl: string | null }): Promise<void>;
+  insertTicketLink(input: { tenantId: number; segmentId: string | null; connectionId: string; taskId: number; provider: string; externalId: string; externalUrl: string | null; externalVersion: string | null; contentHash: string | null }): Promise<void>;
   /** Whether an email is already a member or pending invite of the tenant. */
   hasMemberOrInvite(tenantId: number, email: string): Promise<boolean>;
   /** Create a pending workspace invitation. */
@@ -255,6 +258,9 @@ export class MigrationService {
             body: t.body,
             state: t.state,
             storyPoints: t.storyPoints ?? null,
+            assigneeExternalId: t.assigneeExternalId ?? null,
+            externalVersion: t.externalVersion ?? null,
+            contentHash: t.contentHash ?? null,
             targetTaskType: mapped?.targetTaskType ?? 'task',
             targetStatus: mapped?.targetStatus ?? 'backlog',
             include: true,
@@ -315,7 +321,10 @@ export class MigrationService {
 
       // Users — invite by email (skip ones already a member/invite); 'map' is a no-op.
       let usersInvited = 0;
+      // Map external user id → existing BF user id (only 'map' users carry one).
+      const userIdByExternal = new Map<string, string>();
       for (const u of users) {
+        if (u.action === 'map' && u.targetUserId) userIdByExternal.set(u.externalId, u.targetUserId);
         if (u.action !== 'invite' || !u.email) continue;
         if (await this.store.hasMemberOrInvite(tenantId, u.email.toLowerCase())) continue;
         await this.store.insertInvitation({ tenantId, email: u.email.toLowerCase(), invitedByUserId: run.createdBy });
@@ -324,10 +333,13 @@ export class MigrationService {
 
       // Items — create tasks (the import) + idempotency links when syncing.
       let tasksCreated = 0;
+      let tasksAssigned = 0;
       if (wantsMigrate || wantsSync) {
         for (const item of items) {
           const bfProjectId = projectIdByStaged.get(item.stagedProjectId);
           if (bfProjectId == null) continue;
+          const assignedUserId = item.assigneeExternalId ? (userIdByExternal.get(item.assigneeExternalId) ?? null) : null;
+          if (assignedUserId) tasksAssigned += 1;
           const taskId = await this.store.insertTask({
             tenantId,
             projectId: bfProjectId,
@@ -339,16 +351,17 @@ export class MigrationService {
             storyPoints: item.storyPoints,
             source: run.provider,
             externalId: item.externalId,
+            assignedUserId,
           });
           tasksCreated += 1;
           const connId = connectionByStaged.get(item.stagedProjectId);
           if (connId) {
-            await this.store.insertTicketLink({ tenantId, segmentId: run.segmentId, connectionId: connId, taskId, provider: run.provider, externalId: item.externalId, externalUrl: item.externalUrl });
+            await this.store.insertTicketLink({ tenantId, segmentId: run.segmentId, connectionId: connId, taskId, provider: run.provider, externalId: item.externalId, externalUrl: item.externalUrl, externalVersion: item.externalVersion, contentHash: item.contentHash });
           }
         }
       }
 
-      const summary = { ...(run.summary ?? {}), projectsCreated, connectionsCreated, usersInvited, tasksCreated };
+      const summary = { ...(run.summary ?? {}), projectsCreated, connectionsCreated, usersInvited, tasksCreated, tasksAssigned };
       await this.store.updateRun(runId, { status: 'completed', summary });
       return (await this.store.getRun(runId, tenantId))!;
     } catch (err) {

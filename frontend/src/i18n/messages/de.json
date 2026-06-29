@@ -273,6 +273,52 @@
     "doneAria": "{pct}% erledigt — {completed} von {total} Aufgaben abgeschlossen",
     "donePct": "{pct} % erledigt"
   },
+  "projectInspection": {
+    "title": "Inspektion",
+    "reportTitle": "Projektinspektion",
+    "whatToTarget": "Worauf ausrichten",
+    "allClear": "Nichts zu beanstanden – der Bedarf dieses Projekts ist klar definiert und auf Kurs. Halte Ziele und Fristen aktuell, während die Arbeit voranschreitet.",
+    "fixCta": "Beheben",
+    "noData": "Keine Daten",
+    "outOf": "{score}/100",
+    "scoreOf": "{score}/100",
+    "toFix": "{count, plural, one {# zu beheben} other {# zu beheben}}",
+    "openReportAria": "Projektinspektionsbericht öffnen – Note {grade}, {score} von 100",
+    "dimAria": "{name}: {score}",
+    "tier": {
+      "healthy": "Stark",
+      "watch": "Mittel",
+      "at_risk": "Schwach",
+      "critical": "Kritisch"
+    },
+    "verdict": {
+      "healthy": "Der Bedarf dieses Projekts ist klar definiert und die Arbeit ist auf Kurs – ein agentisches System kann damit loslegen. Halte Ziele und Fristen aktuell.",
+      "watch": "Ein solider Start, aber einige Lücken bremsen dieses Projekt. Arbeite die folgenden Punkte ab, um seine Ausrichtung zu schärfen.",
+      "at_risk": "Diesem Projekt fehlt eine klare Definition, wohin es gehen soll. Arbeite die folgende Liste ab – beginnend mit Vision und Zielen – damit es ausgeführt werden kann.",
+      "critical": "Es gibt noch wenig, womit ein Agent oder ein Team handeln kann. Definiere zuerst den Bedarf: Vision, Ziele und dann eine geplante Reihe von Aufgaben."
+    },
+    "dim": {
+      "direction": { "label": "Ausrichtung", "desc": "Wie klar der Bedarf definiert ist – Vision, Ziele/OKR, eine Frist und eine Architektur. Je klarer der Bedarf, desto mehr davon kann das agentische System lösen." },
+      "planning": { "label": "Planung", "desc": "Ob die Arbeit in Aufgaben zerlegt und mit Start- und Fälligkeitsterminen geplant ist." },
+      "health": { "label": "Gesundheit", "desc": "Wie gut die offene Arbeit läuft – wird durch überfällige und blockierte Aufgaben gemindert, nicht dadurch, dass man früh dran ist. Dies ist keine Engagement- oder Aktivitätsbewertung." },
+      "progress": { "label": "Fortschritt", "desc": "Wie weit das Projekt fortgeschritten ist – abgeschlossene Aufgaben im Verhältnis zur Gesamtzahl." },
+      "execution": { "label": "Ausführung", "desc": "Ob etwas die Arbeit aktiv vorantreibt – ein zugewiesener Verantwortlicher oder Agent, verdrahtete Workflows und echte Dynamik." }
+    },
+    "rec": {
+      "vision": { "title": "Vision definieren", "detail": "Füge eine Projektbeschreibung hinzu, die den Bedarf in klarer Sprache benennt, damit das agentische System weiß, was es bauen soll." },
+      "goals": { "title": "Ziele oder OKR festlegen", "detail": "Verknüpfe ein Ziel oder Key Result (oder hänge das Projekt an eine Initiative an), damit der Erfolg messbar und nicht nur impliziert ist." },
+      "deadline": { "title": "Frist festlegen", "detail": "Füge ein Projektfälligkeitsdatum hinzu, damit die Arbeit getaktet und gegenüber allem anderen priorisiert werden kann." },
+      "schedule": { "title": "Arbeit terminieren", "detail": "Gib den Aufgaben Start- und Fälligkeitstermine, damit Zeitachse und Gantt einen echten Plan widerspiegeln." },
+      "architecture": { "title": "Architekturanalyse ausführen", "detail": "Erstelle ein Architektur-PRD, damit das agentische System einen technischen Bauplan zum Ausführen hat." },
+      "tasks": { "title": "Arbeit in Aufgaben zerlegen", "detail": "Dieses Projekt hat noch keine Aufgaben. Füge die Arbeitselemente hinzu, die ein Agent oder das Team tatsächlich ausführen wird." },
+      "decompose": { "title": "Arbeit weiter zerlegen", "detail": "Bisher nur {count, plural, one {# Aufgabe} other {# Aufgaben}} – zerlege die Arbeit in kleinere, ausführbare Teile für klareren Umfang und Fortschritt." },
+      "overdue": { "title": "Überfällige Arbeit erledigen", "detail": "{count, plural, one {# Aufgabe ist überfällig} other {# Aufgaben sind überfällig}}. Plane sie neu oder schließe sie ab, um die Projektgesundheit wiederherzustellen." },
+      "blocked": { "title": "Blockierte Arbeit freigeben", "detail": "{count, plural, one {# Aufgabe ist blockiert} other {# Aufgaben sind blockiert}}. Beseitige die Blocker, damit die Arbeit wieder vorankommt." },
+      "stalled": { "title": "Fortschritt beginnen", "detail": "Es gibt Aufgaben, aber noch keine ist abgeschlossen. Verschiebe die ersten Elemente auf „erledigt“, um Dynamik aufzubauen." },
+      "owner": { "title": "Verantwortlichen zuweisen", "detail": "Weise einen Workforce-Agenten oder Verantwortlichen zu, damit es jemanden – Mensch oder Agent – gibt, der für das Vorantreiben der Arbeit verantwortlich ist." },
+      "workflows": { "title": "Workflow verdrahten", "detail": "Füge einen Workflow hinzu, damit wiederholbare Schritte automatisch statt von Hand ausgeführt werden." }
+    }
+  },
   "projectScope": {
     "workspace": "Arbeitsbereich",
     "allProjects": "Alle Projekte",

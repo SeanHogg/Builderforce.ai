@@ -20,10 +20,9 @@ import { authMiddleware, requireRole } from '../middleware/authMiddleware';
 import { TenantRole } from '../../domain/shared/types';
 import type { Env, HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
-import { MigrationService, type ImportMode, type ProviderForBoard } from '../../application/migration/MigrationService';
+import { MigrationService, type ImportMode } from '../../application/migration/MigrationService';
 import { createMigrationStore } from '../../application/migration/migrationStore';
-import { loadConnectionCredentials } from '../../application/boardsync/drizzleStore';
-import { createBoardProvider } from '../../application/boardsync/providers';
+import { buildMigrationProviderFactory } from '../../application/migration/buildProviderFactory';
 import { DISCOVERY_PROVIDER_IDS } from '../../application/boardsync/providerCatalog';
 import { getOrSetCached, getCacheVersion, bumpCacheVersion } from '../../infrastructure/cache/readThroughCache';
 
@@ -39,14 +38,8 @@ export function createMigrationRoutes(db: Db): Hono<HonoEnv> {
   const bump = (c: { env: Env }, tenantId: number) => bumpCacheVersion(c.env, verKey(tenantId));
 
   /** Build a provider factory bound to a run's credential (null board = discover). */
-  async function providerFactory(
-    env: Env, tenantId: number, provider: string, credentialId: string | null,
-  ): Promise<ProviderForBoard | null> {
-    const secret = env.INTEGRATION_ENCRYPTION_SECRET ?? env.JWT_SECRET;
-    const loaded = await loadConnectionCredentials(db, tenantId, credentialId, secret);
-    if (!loaded) return null;
-    return (externalBoardId) => createBoardProvider(provider, { credentials: loaded.credentials, baseUrl: loaded.baseUrl, externalBoardId }, fetch);
-  }
+  const providerFactory = (env: Env, tenantId: number, provider: string, credentialId: string | null) =>
+    buildMigrationProviderFactory(db, env, tenantId, provider, credentialId);
 
   // POST /api/migrations — create + discover.
   router.post('/', manager, async (c) => {

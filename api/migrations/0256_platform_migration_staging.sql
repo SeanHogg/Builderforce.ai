@@ -12,7 +12,11 @@
 --
 -- The integration_provider enum already carries every provider we need
 -- (github/gitlab/bitbucket/jira/rally/monday/linear/... — migrations 0064/0074/
--- 0122/0221), so this migration adds NO enum values.
+-- 0122/0221). The legacy source_control_provider enum (used by the older
+-- source_control_integrations / projects.source_control_provider path) had only
+-- github+bitbucket; add gitlab so that path can accept GitLab repos too (the
+-- canonical project_repositories path already supports all three).
+ALTER TYPE source_control_provider ADD VALUE IF NOT EXISTS 'gitlab';
 
 -- ── Persistent per-connection type mapping (drives ongoing sync) ─────────────
 CREATE TABLE IF NOT EXISTS board_type_mappings (
@@ -87,6 +91,13 @@ CREATE TABLE IF NOT EXISTS import_staged_items (
   body              TEXT,
   state             VARCHAR(120),
   story_points      REAL,
+  -- External assignee id (matches import_staged_users.external_id) → resolved to
+  -- assignedUserId on commit when that user is mapped to an existing member.
+  assignee_external_id VARCHAR(255),
+  -- Provider version token + content hash, carried so commit can seed the
+  -- external_ticket_link cleanly (first post-import sync is then a no-op).
+  external_version  VARCHAR(128),
+  content_hash      VARCHAR(64),
   raw               JSONB,
   target_task_type  VARCHAR(16) NOT NULL DEFAULT 'task',
   target_status     VARCHAR(64) NOT NULL DEFAULT 'backlog',

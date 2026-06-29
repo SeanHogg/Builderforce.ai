@@ -19,6 +19,7 @@ import { BoardConnectionsManager } from './integrations/BoardConnectionsManager'
 import { ProjectDiagnosticsTab } from './ProjectDiagnosticsTab';
 import { ProjectInitiativeLink } from './pm/ProjectInitiativeLink';
 import { ProjectHealthGauges } from './ProjectHealth';
+import { ProjectInspectionReport } from './ProjectInspection';
 
 /** ISO timestamp → `yyyy-mm-dd` for a native date input (empty string when unset). */
 const toDateInputValue = (iso?: string | null): string => {
@@ -337,6 +338,13 @@ export function ProjectDetailsPanel({
                   project card/list so the score can't drift. Self-hides when the
                   project has no task data. */}
               <ProjectHealthGauges project={project} size={120} />
+
+              {/* Full project inspection — the prescriptive PM rating: every
+                  dimension benchmarked + a "what to target" list that deep-links
+                  each fix to the right tab. Spans the whole grid. */}
+              <div style={{ gridColumn: '1 / -1' }}>
+                <ProjectInspectionReport project={project} onNavigate={setActiveTab} />
+              </div>
               <div style={cardStyle}>
                 <div style={{ position: 'relative' }}>
                 <div style={{ fontWeight: 600, marginBottom: 10, fontSize: 14 }}>{t('overview')}</div>

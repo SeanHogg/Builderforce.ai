@@ -134,7 +134,8 @@ export function createMigrationStore(db: Db): MigrationStore {
         await db.insert(importStagedItems).values(slice.map((r) => ({
           runId, tenantId, stagedProjectId: r.stagedProjectId, externalId: r.externalId,
           externalType: r.externalType, externalUrl: r.externalUrl, title: r.title, body: r.body,
-          state: r.state, storyPoints: r.storyPoints, targetTaskType: r.targetTaskType,
+          state: r.state, storyPoints: r.storyPoints, assigneeExternalId: r.assigneeExternalId,
+          externalVersion: r.externalVersion, contentHash: r.contentHash, targetTaskType: r.targetTaskType,
           targetStatus: r.targetStatus, include: r.include,
         })));
       }
@@ -156,6 +157,8 @@ export function createMigrationStore(db: Db): MigrationStore {
         id: r.id, runId: r.runId, stagedProjectId: r.stagedProjectId, externalId: r.externalId,
         externalType: r.externalType ?? null, externalUrl: r.externalUrl ?? null, title: r.title,
         body: r.body ?? null, state: r.state ?? null, storyPoints: r.storyPoints ?? null,
+        assigneeExternalId: r.assigneeExternalId ?? null, externalVersion: r.externalVersion ?? null,
+        contentHash: r.contentHash ?? null,
         targetTaskType: r.targetTaskType, targetStatus: r.targetStatus, include: r.include,
       }));
     },
@@ -231,6 +234,7 @@ export function createMigrationStore(db: Db): MigrationStore {
         taskType: input.taskType === 'epic' ? 'epic' : 'task',
         source: input.source,
         storyPoints: input.storyPoints ?? undefined,
+        assignedUserId: input.assignedUserId ?? undefined,
         createdAt: now,
         updatedAt: now,
       }).returning({ id: tasks.id });
@@ -268,6 +272,8 @@ export function createMigrationStore(db: Db): MigrationStore {
         provider: input.provider,
         externalId: input.externalId,
         externalUrl: input.externalUrl,
+        externalVersion: input.externalVersion,
+        contentHash: input.contentHash,
         syncState: 'synced',
         lastInboundAt: new Date(),
       }).onConflictDoNothing();

@@ -39,6 +39,11 @@ interface BuiltinCtx {
   tenantId: number;
   projects: ProjectService;
   tasks: TaskService;
+  /** Worker env — present when the caller threads it (needed by tools that
+   *  decrypt integration credentials / reach external providers, e.g. migration). */
+  env?: Env;
+  /** Authed user id (createdBy on migration runs), when known. */
+  userId?: string | null;
 }
 
 interface BuiltinTool {
@@ -791,9 +796,9 @@ const CATALOG: BuiltinTool[] = [
   // ---- Governance (SOC 2) — soc_controls + soc_evidence. Both segment-scoped. The
   //       finops collision table was renamed to finops_soc_controls (mig 0254); these
   //       are the GOVERNANCE tables. seed SKIPPED (bulk control-set generation). ----
-  { tool: 'governance_soc2.list_controls', mutates: false, description: 'List SOC 2 controls and their status.', parameters: obj({}), run: async (ctx) => { const seg = await resolveSegment(ctx.db, ctx.tenantId); return ctx.db.select().from(socControls).where(and(eq(socControls.tenantId, ctx.tenantId), eq(socControls.segmentId, seg))).orderBy(socControls.controlRef).limit(500); } },
+  { tool: 'governance_soc.list_controls', mutates: false, description: 'List SOC 2 controls and their status.', parameters: obj({}), run: async (ctx) => { const seg = await resolveSegment(ctx.db, ctx.tenantId); return ctx.db.select().from(socControls).where(and(eq(socControls.tenantId, ctx.tenantId), eq(socControls.segmentId, seg))).orderBy(socControls.controlRef).limit(500); } },
   {
-    tool: 'governance_soc2.patch_control', mutates: true,
+    tool: 'governance_soc.patch_control', mutates: true,
     description: 'Update a SOC 2 control (status/owner/notes). status: not_started|in_progress|ready|out_of_scope.',
     parameters: obj({ id: S, status: { type: 'string', enum: ['not_started', 'in_progress', 'ready', 'out_of_scope'] }, ownerId: S, notes: S }, ['id']),
     run: async (ctx, a) => {
@@ -808,7 +813,7 @@ const CATALOG: BuiltinTool[] = [
     },
   },
   {
-    tool: 'governance_soc2.add_evidence', mutates: true,
+    tool: 'governance_soc.add_evidence', mutates: true,
     description: 'Attach evidence to a SOC 2 control (verified via the parent control, tenant+segment-scoped).',
     parameters: obj({ id: S, title: S, evidenceType: S, url: S, note: S }, ['id', 'title', 'evidenceType']),
     run: async (ctx, a) => {
@@ -1082,7 +1087,7 @@ function advertisedName(tool: string): string {
   return `builtin_${tool.replace(/[^a-zA-Z0-9]+/g, '_')}`;
 }
 
-function buildCtx(db: Db, tenantId: number): BuiltinCtx {
+function buildCtx(db: Db, tenantId: number, opts?: { env?: Env; userId?: string | null }): BuiltinCtx {
   const projectRepo = new ProjectRepository(db);
   const taskRepo = new TaskRepository(db);
   return {
@@ -1090,6 +1095,8 @@ function buildCtx(db: Db, tenantId: number): BuiltinCtx {
     tenantId,
     projects: new ProjectService(projectRepo),
     tasks: new TaskService(taskRepo, projectRepo),
+    env: opts?.env,
+    userId: opts?.userId ?? null,
   };
 }
 
@@ -1108,10 +1115,10 @@ export function listBuiltinTools(): McpToolEntry[] {
 /** Run one built-in tool in-process, tenant-scoped. Throws on unknown tool. */
 export async function callBuiltinTool(
   db: Db,
-  args: { tenantId: number; tool: string; arguments: unknown },
+  args: { tenantId: number; tool: string; arguments: unknown; env?: Env; userId?: string | null },
 ): Promise<unknown> {
   const entry = CATALOG.find((t) => t.tool === args.tool);
   if (!entry) throw new Error(`Unknown built-in tool '${args.tool}'`);
-  const ctx = buildCtx(db, args.tenantId);
+  const ctx = buildCtx(db, args.tenantId, { env: args.env, userId: args.userId });
   return entry.run(ctx, (args.arguments ?? {}) as Json);
 }
