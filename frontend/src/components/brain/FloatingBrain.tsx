@@ -15,6 +15,7 @@ import { useEffect, useState } from 'react';
 import { usePathname } from 'next/navigation';
 import Link from 'next/link';
 import { BrainPanel } from './BrainPanel';
+import { MigrationPanelHost } from '@/components/integrations/MigrationPanelHost';
 import { useBrainContext, takePendingPrompt } from '@/lib/brain';
 import { pendingPromptsApi } from '@/lib/builderforceApi';
 import { useAuth } from '@/lib/AuthContext';
@@ -72,6 +73,9 @@ export function FloatingBrain() {
 
   return (
     <>
+      {/* Brain-driven migration / reconciliation panel (opens on the LEFT). */}
+      <MigrationPanelHost />
+
       {/* Floating launcher */}
       {!open && (
         <>

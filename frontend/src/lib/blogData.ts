@@ -45,6 +45,8 @@ import boardConnectors from '@/content/blog/single-pane-board-connectors.md';
 import agenticTester from '@/content/blog/agentic-tester-autonomous-qa.md';
 import agenticWorkforce from '@/content/blog/transitioning-to-an-agentic-workforce.md';
 import aiDevMaturity from '@/content/blog/ai-development-maturity-diagnostic.md';
+import migrateAndIntegrate from '@/content/blog/migrate-and-integrate-jira-monday-rally-gitlab-bitbucket.md';
+import agenticEmployee from '@/content/blog/everything-an-agentic-employee-can-do.md';
 
 export interface BlogPost {
   slug: string;
@@ -144,6 +146,8 @@ export const BLOG_POSTS: BlogPost[] = [
   buildPost('agentic-tester-autonomous-qa', agenticTester),
   buildPost('transitioning-to-an-agentic-workforce', agenticWorkforce),
   buildPost('ai-development-maturity-diagnostic', aiDevMaturity),
+  buildPost('migrate-and-integrate-jira-monday-rally-gitlab-bitbucket', migrateAndIntegrate),
+  buildPost('everything-an-agentic-employee-can-do', agenticEmployee),
 ].sort((a, b) => (a.date < b.date ? 1 : -1));
 
 export function getPostBySlug(slug: string): BlogPost | undefined {

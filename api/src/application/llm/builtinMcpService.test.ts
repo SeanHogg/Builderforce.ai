@@ -77,6 +77,22 @@ describe('listBuiltinTools', () => {
     expect(byName('builtin_projects_list').mutates).toBe(false);
   });
 
+  it('advertises the migration / integration flow (Brain-callable)', () => {
+    const names = tools.map((t) => t.name);
+    for (const n of [
+      'builtin_integrations_providers', 'builtin_integrations_create_credential', 'builtin_integrations_test',
+      'builtin_migrations_start', 'builtin_migrations_get', 'builtin_migrations_set_mappings',
+      'builtin_migrations_stage', 'builtin_migrations_commit',
+    ]) {
+      expect(names).toContain(n);
+    }
+    const byName = (n: string) => tools.find((t) => t.name === n)!;
+    expect(byName('builtin_integrations_providers').mutates).toBe(false);
+    expect(byName('builtin_integrations_create_credential').mutates).toBe(true);
+    expect(byName('builtin_migrations_commit').mutates).toBe(true);
+    expect(byName('builtin_migrations_get').mutates).toBe(false);
+  });
+
   it('has globally-unique advertised names', () => {
     const names = tools.map((t) => t.name);
     expect(new Set(names).size).toBe(names.length);

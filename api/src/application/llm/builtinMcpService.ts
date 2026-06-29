@@ -25,9 +25,17 @@ import { TaskService } from '../task/TaskService';
 import { ProjectRepository } from '../../infrastructure/repositories/ProjectRepository';
 import { TaskRepository } from '../../infrastructure/repositories/TaskRepository';
 import { ProjectStatus, TaskPriority, TaskType } from '../../domain/shared/types';
-import { workflows, workflowDefinitions, specs, promptLibraryEntries, promptLibraryVersions, approvalRules, approvals, brainChats, agents, projectAgents, agentAssignments, savedDashboards, dashboardWidgets, alerts, alertEvents, auditEvents, boards, cronJobs, portfolios, initiatives, objectives, objectiveLinks, keyResults, ideAgents, marketplaceSkills, artifactAssignments, socControls, socEvidence, pokerSessions, pokerStories, pokerVotes, retrospectives, retroItems, boardConnections, projectRepositories, pullRequests, chatSessions, chatMessages, swimlanes, swimlaneAgentAssignments, tenants } from '../../infrastructure/database/schema';
+import { workflows, workflowDefinitions, specs, promptLibraryEntries, promptLibraryVersions, approvalRules, approvals, brainChats, agents, projectAgents, agentAssignments, savedDashboards, dashboardWidgets, alerts, alertEvents, auditEvents, boards, cronJobs, portfolios, initiatives, objectives, objectiveLinks, keyResults, ideAgents, marketplaceSkills, artifactAssignments, socControls, socEvidence, pokerSessions, pokerStories, pokerVotes, retrospectives, retroItems, boardConnections, projectRepositories, pullRequests, chatSessions, chatMessages, swimlanes, swimlaneAgentAssignments, tenants, executions, usageSnapshots, toolAuditEvents, executionMessages, agentHosts, agentHostProjects } from '../../infrastructure/database/schema';
 import { resolveSegment } from '../../infrastructure/auth/segmentResolver';
 import type { McpToolEntry } from './mcpExtensionService';
+import type { Env } from '../../env';
+import { integrationCredentials } from '../../infrastructure/database/schema';
+import { fetchWebDocument } from '../web/webFetch';
+import { encryptCredentials } from '../integrations/credentialCrypto';
+import { MigrationService, type ImportMode } from '../migration/MigrationService';
+import { createMigrationStore } from '../migration/migrationStore';
+import { buildMigrationProviderFactory } from '../migration/buildProviderFactory';
+import { BOARD_PROVIDERS, DISCOVERY_PROVIDER_IDS } from '../boardsync/providerCatalog';
 
 /** Sentinel extensionId the gateway routes to this in-process catalog. */
 export const BUILTIN_EXTENSION_ID = 'builtin';
@@ -1072,7 +1080,164 @@ const CATALOG: BuiltinTool[] = [
     },
   },
   { tool: 'swimlane_agents.remove', mutates: true, description: 'Unassign an agent from a swimlane.', parameters: obj({ boardId: S, laneId: S, id: S }, ['boardId', 'laneId', 'id']), run: async (ctx, a) => { const seg = await resolveSegment(ctx.db, ctx.tenantId); const [lane] = await ctx.db.select({ id: swimlanes.id }).from(swimlanes).innerJoin(boards, eq(swimlanes.boardId, boards.id)).where(and(eq(swimlanes.id, str(a.laneId)), eq(boards.id, str(a.boardId)), eq(swimlanes.tenantId, ctx.tenantId), eq(swimlanes.segmentId, seg))).limit(1); if (!lane) return { deleted: null }; const rows = await ctx.db.delete(swimlaneAgentAssignments).where(and(eq(swimlaneAgentAssignments.id, str(a.id)), eq(swimlaneAgentAssignments.swimlaneId, lane.id), eq(swimlaneAgentAssignments.tenantId, ctx.tenantId), eq(swimlaneAgentAssignments.segmentId, seg))).returning({ id: swimlaneAgentAssignments.id }); return { deleted: rows.length > 0 ? str(a.id) : null }; } },
+
+  // ---- Integrations + Platform migration (Jira/Monday/Rally/GitLab/Bitbucket/GitHub → BuilderForce) ----
+  // The Brain can drive the whole "connect → test → migrate" flow: create a
+  // credential, validate it, then discover→map→stage→commit a migration run.
+  { tool: 'integrations.providers', mutates: false, description: 'List external systems that can be connected/migrated, with which support the migration wizard (discovery).', parameters: obj({}), run: async () => ({ providers: BOARD_PROVIDERS, migratable: DISCOVERY_PROVIDER_IDS }) },
+  { tool: 'integrations.list', mutates: false, description: 'List this workspace\'s integration credentials (no secrets).', parameters: obj({}), run: (ctx) => ctx.db.select({ id: integrationCredentials.id, provider: integrationCredentials.provider, name: integrationCredentials.name, baseUrl: integrationCredentials.baseUrl, lastTestOk: integrationCredentials.lastTestOk, lastTestedAt: integrationCredentials.lastTestedAt }).from(integrationCredentials).where(eq(integrationCredentials.tenantId, ctx.tenantId)).orderBy(desc(integrationCredentials.createdAt)).limit(200) },
+  {
+    tool: 'integrations.create_credential', mutates: true,
+    description: 'Store an encrypted integration credential (e.g. connect Bitbucket with an access token). credentials is a provider-specific bag — e.g. Jira {email,apiToken}+baseUrl; GitHub/Bitbucket/GitLab {accessToken}; monday/ClickUp {token}.',
+    parameters: obj({ provider: S, name: S, baseUrl: S, credentials: { type: 'object' } }, ['provider', 'name', 'credentials']),
+    run: async (ctx, a) => {
+      const env = requireEnv(ctx);
+      const secret = env.INTEGRATION_ENCRYPTION_SECRET ?? env.JWT_SECRET;
+      const { enc, iv } = await encryptCredentials(a.credentials as Record<string, unknown>, secret, ctx.tenantId);
+      const [row] = await ctx.db.insert(integrationCredentials).values({ tenantId: ctx.tenantId, provider: str(a.provider) as never, name: str(a.name).trim(), baseUrl: a.baseUrl != null ? str(a.baseUrl) : null, credentialsEnc: enc, iv, isEnabled: true }).returning({ id: integrationCredentials.id, provider: integrationCredentials.provider, name: integrationCredentials.name });
+      return row;
+    },
+  },
+  {
+    tool: 'integrations.test', mutates: true,
+    description: 'Validate/test a stored integration credential by connecting to the provider. Returns { ok, message, projectCount? }.',
+    parameters: obj({ credentialId: S }, ['credentialId']),
+    run: async (ctx, a) => {
+      const env = requireEnv(ctx);
+      const [cred] = await ctx.db.select().from(integrationCredentials).where(and(eq(integrationCredentials.id, str(a.credentialId)), eq(integrationCredentials.tenantId, ctx.tenantId))).limit(1);
+      if (!cred) throw new Error('Integration credential not found');
+      const factory = await buildMigrationProviderFactory(ctx.db, env, ctx.tenantId, cred.provider, cred.id);
+      if (!factory) { await markTested(ctx, cred.id, false); return { ok: false, message: 'Could not load credential' }; }
+      try {
+        const provider = factory(null);
+        let projectCount: number | undefined;
+        if (typeof provider.discover === 'function') projectCount = (await provider.discover()).projects.length;
+        else await provider.fetchTicketsSince(null);
+        await markTested(ctx, cred.id, true);
+        return { ok: true, message: 'Connected', ...(projectCount != null ? { projectCount } : {}) };
+      } catch (e) {
+        await markTested(ctx, cred.id, false);
+        return { ok: false, message: e instanceof Error ? e.message : 'Connection failed' };
+      }
+    },
+  },
+  {
+    tool: 'migrations.start', mutates: true,
+    description: 'Start a migration run: discover an external system\'s projects, item types and users into staging (nothing is imported yet). mode: migrate (one-time) | sync (ongoing) | both.',
+    parameters: obj({ provider: S, credentialId: S, mode: S }, ['provider', 'credentialId']),
+    run: async (ctx, a) => {
+      const env = requireEnv(ctx);
+      if (!DISCOVERY_PROVIDER_IDS.includes(str(a.provider))) throw new Error(`Migration is available for: ${DISCOVERY_PROVIDER_IDS.join(', ')}`);
+      const factory = await buildMigrationProviderFactory(ctx.db, env, ctx.tenantId, str(a.provider), str(a.credentialId));
+      if (!factory) throw new Error('Could not load integration credentials');
+      const seg = await resolveSegment(ctx.db, ctx.tenantId);
+      const svc = new MigrationService(createMigrationStore(ctx.db));
+      const mode = (['migrate', 'sync', 'both'] as ImportMode[]).includes(a.mode as ImportMode) ? (a.mode as ImportMode) : 'both';
+      return svc.startRun({ tenantId: ctx.tenantId, segmentId: seg, provider: str(a.provider), credentialId: str(a.credentialId), mode, createdBy: ctx.userId ?? null }, factory(null));
+    },
+  },
+  { tool: 'migrations.list', mutates: false, description: 'List migration runs (history) for the workspace.', parameters: obj({}), run: (ctx) => new MigrationService(createMigrationStore(ctx.db)).listRuns(ctx.tenantId) },
+  { tool: 'migrations.get', mutates: false, description: 'Get the full staging snapshot of a migration run (projects, item types, users, staged items).', parameters: obj({ id: S }, ['id']), run: (ctx, a) => new MigrationService(createMigrationStore(ctx.db)).getDetail(str(a.id), ctx.tenantId) },
+  {
+    tool: 'migrations.set_mappings', mutates: true,
+    description: 'Set project (create/map/skip — map several external projects to the same BF project to COMBINE), item-type, user (invite/map/skip) and item-include mappings for a run.',
+    parameters: obj({ id: S, projects: { type: 'array' }, types: { type: 'array' }, users: { type: 'array' }, items: { type: 'array' } }, ['id']),
+    run: (ctx, a) => new MigrationService(createMigrationStore(ctx.db)).setMappings(str(a.id), ctx.tenantId, { projects: a.projects as never, types: a.types as never, users: a.users as never, items: a.items as never }),
+  },
+  {
+    tool: 'migrations.stage', mutates: true,
+    description: 'Pull the items for every non-skipped project into staging so they can be reviewed before import.',
+    parameters: obj({ id: S }, ['id']),
+    run: async (ctx, a) => {
+      const env = requireEnv(ctx);
+      const svc = new MigrationService(createMigrationStore(ctx.db));
+      const detail = await svc.getDetail(str(a.id), ctx.tenantId);
+      if (!detail) throw new Error('Migration run not found');
+      const factory = await buildMigrationProviderFactory(ctx.db, env, ctx.tenantId, detail.run.provider, detail.run.credentialId);
+      if (!factory) throw new Error('Could not load integration credentials');
+      return svc.stageItems(str(a.id), ctx.tenantId, factory);
+    },
+  },
+  {
+    tool: 'migrations.commit', mutates: true,
+    description: 'Promote the staged data into real projects/tasks/members (and create ongoing sync connections when mode includes sync). This is the irreversible import step.',
+    parameters: obj({ id: S }, ['id']),
+    run: async (ctx, a) => {
+      const env = requireEnv(ctx);
+      const svc = new MigrationService(createMigrationStore(ctx.db));
+      const detail = await svc.getDetail(str(a.id), ctx.tenantId);
+      if (!detail) throw new Error('Migration run not found');
+      const factory = await buildMigrationProviderFactory(ctx.db, env, ctx.tenantId, detail.run.provider, detail.run.credentialId);
+      if (!factory) throw new Error('Could not load integration credentials');
+      return svc.commit(str(a.id), ctx.tenantId, factory);
+    },
+  },
+
+  // ---- Web (server-side fetch) — read an external URL behind the SSRF guard and return its
+  //       readable text. No DB; delegates to fetchWebDocument (assertSafeUrl + HTML→text + size cap).
+  //       The browser Brain can't fetch cross-origin URLs (CORS), so the gateway does it here. ----
+  { tool: 'web.fetch', mutates: false, description: 'Read an external URL, file, or website (e.g. a GitHub file like https://github.com/owner/repo/blob/main/ROADMAP.md, a docs page, or an article). The platform fetches it server-side and returns its text content (HTML is stripped to readable text; GitHub/GitLab "blob" links are resolved to the raw file automatically). Use this whenever the user pastes a link and asks you to read, summarize, or work from it — do NOT claim you cannot access external URLs. Returns { url, title, text, truncated }.', parameters: obj({ url: { ...S, description: 'Absolute http(s) URL to fetch.' } }, ['url']), run: (_ctx, a) => fetchWebDocument(str(a.url)) },
+
+  // ---- Executions (agent-runtime runs) — READS only. The `executions` table is tenant- AND
+  //       segment-scoped. submit/cancel/post_message are SKIPPED (side-effects: they dispatch /
+  //       steer live runs, not table ops). `trace` is computed by reading the same tenant+segment
+  //       -scoped telemetry tables the /executions/:id/trace route reads (usage_snapshots +
+  //       tool_audit_events + execution_messages — execution_messages is tenant-scoped, NO
+  //       segment_id). `task_file_changes` reads the raw-SQL task_file_changes table (no drizzle
+  //       model), tenant-scoped by task_id + tenant_id. ----
+  { tool: 'executions.list_recent', mutates: false, description: 'Recent executions across the workspace.', parameters: obj({ limit: N }), run: async (ctx, a) => { const seg = await resolveSegment(ctx.db, ctx.tenantId); return ctx.db.select().from(executions).where(and(eq(executions.tenantId, ctx.tenantId), eq(executions.segmentId, seg))).orderBy(desc(executions.createdAt)).limit(a.limit != null ? num(a.limit) : 200); } },
+  { tool: 'executions.list_active', mutates: false, description: "What's running right now across the fleet (pending / running executions).", parameters: obj({}), run: async (ctx) => { const seg = await resolveSegment(ctx.db, ctx.tenantId); return ctx.db.select().from(executions).where(and(eq(executions.tenantId, ctx.tenantId), eq(executions.segmentId, seg), sql`${executions.status} IN ('pending','running')`)).orderBy(desc(executions.createdAt)).limit(200); } },
+  { tool: 'executions.get', mutates: false, description: 'Get one execution by id.', parameters: obj({ id: N }, ['id']), run: async (ctx, a) => { const seg = await resolveSegment(ctx.db, ctx.tenantId); return (await ctx.db.select().from(executions).where(and(eq(executions.id, num(a.id)), eq(executions.tenantId, ctx.tenantId), eq(executions.segmentId, seg))).limit(1))[0] ?? null; } },
+  { tool: 'executions.list_for_task', mutates: false, description: 'Execution history for a task.', parameters: obj({ taskId: N }, ['taskId']), run: async (ctx, a) => { const seg = await resolveSegment(ctx.db, ctx.tenantId); return ctx.db.select().from(executions).where(and(eq(executions.taskId, num(a.taskId)), eq(executions.tenantId, ctx.tenantId), eq(executions.segmentId, seg))).orderBy(desc(executions.createdAt)).limit(200); } },
+  {
+    tool: 'executions.trace', mutates: false,
+    description: 'Execution trace: usage snapshots + tool-call audit (+ the durable steering thread).',
+    parameters: obj({ id: N }, ['id']),
+    run: async (ctx, a) => {
+      const seg = await resolveSegment(ctx.db, ctx.tenantId);
+      const id = num(a.id);
+      const [execution] = await ctx.db.select().from(executions).where(and(eq(executions.id, id), eq(executions.tenantId, ctx.tenantId), eq(executions.segmentId, seg))).limit(1);
+      if (!execution) return null;
+      // Cloud runs are keyed by execution_id; host runs by (agent_host_id, session_key). All
+      // telemetry tables are tenant+segment-scoped, so guard tenant+segment in every filter.
+      const isCloudRun = execution.agentHostId == null || !execution.sessionId;
+      const usageFilter = isCloudRun
+        ? and(eq(usageSnapshots.tenantId, ctx.tenantId), eq(usageSnapshots.segmentId, seg), eq(usageSnapshots.executionId, id))
+        : and(eq(usageSnapshots.tenantId, ctx.tenantId), eq(usageSnapshots.segmentId, seg), eq(usageSnapshots.agentHostId, execution.agentHostId!), eq(usageSnapshots.sessionKey, execution.sessionId!));
+      const toolFilter = isCloudRun
+        ? and(eq(toolAuditEvents.tenantId, ctx.tenantId), eq(toolAuditEvents.segmentId, seg), eq(toolAuditEvents.executionId, id))
+        : and(eq(toolAuditEvents.tenantId, ctx.tenantId), eq(toolAuditEvents.segmentId, seg), eq(toolAuditEvents.agentHostId, execution.agentHostId!), eq(toolAuditEvents.sessionKey, execution.sessionId!));
+      const usage = await ctx.db.select().from(usageSnapshots).where(usageFilter).orderBy(desc(usageSnapshots.ts)).limit(500);
+      const toolEvents = await ctx.db.select().from(toolAuditEvents).where(toolFilter).orderBy(desc(toolAuditEvents.ts)).limit(500);
+      const messages = await ctx.db.select().from(executionMessages).where(and(eq(executionMessages.executionId, id), eq(executionMessages.tenantId, ctx.tenantId))).orderBy(executionMessages.createdAt).limit(500);
+      return { execution, trace: { source: isCloudRun ? 'cloud-telemetry' : 'runtime-fallback', usageSnapshots: usage, toolEvents, messages } };
+    },
+  },
+  { tool: 'executions.task_file_changes', mutates: false, description: 'Files an agent created/modified/deleted for a task.', parameters: obj({ taskId: N }, ['taskId']), run: async (ctx, a) => (await ctx.db.execute(sql`SELECT path, change, agent, execution_id AS "executionId", created_at AS "createdAt" FROM task_file_changes WHERE task_id = ${num(a.taskId)} AND tenant_id = ${ctx.tenantId} ORDER BY created_at DESC LIMIT 500`)).rows },
+
+  // ---- Integrations (read): integrations.list already exists above (line ~1088, secret-safe,
+  //       tenant-scoped) — not re-added here to keep advertised names unique. ----
+
+  // ---- Agent hosts (self-hosted runners) — agent_hosts is tenant- AND segment-scoped. register /
+  //       deregister SKIPPED (mint/revoke API keys). ----
+  { tool: 'agent_hosts.list', mutates: false, description: 'List registered self-hosted agent hosts.', parameters: obj({}), run: async (ctx) => { const seg = await resolveSegment(ctx.db, ctx.tenantId); return ctx.db.select().from(agentHosts).where(and(eq(agentHosts.tenantId, ctx.tenantId), eq(agentHosts.segmentId, seg))).orderBy(desc(agentHosts.createdAt)).limit(200); } },
+  // agent_host_projects is tenant- AND segment-scoped (composite PK tenantId+agentHostId+projectId).
+  { tool: 'agent_host_projects.list', mutates: false, description: 'Projects associated with an agent host.', parameters: obj({ agentHostId: N }, ['agentHostId']), run: async (ctx, a) => { const seg = await resolveSegment(ctx.db, ctx.tenantId); return ctx.db.select().from(agentHostProjects).where(and(eq(agentHostProjects.tenantId, ctx.tenantId), eq(agentHostProjects.segmentId, seg), eq(agentHostProjects.agentHostId, num(a.agentHostId)))).limit(200); } },
+  // usage_snapshots is tenant- AND segment-scoped; filtered to one host's token telemetry.
+  { tool: 'usage_snapshots.list', mutates: false, description: 'Token usage snapshots for an agent host.', parameters: obj({ agentHostId: N, limit: N }, ['agentHostId']), run: async (ctx, a) => { const seg = await resolveSegment(ctx.db, ctx.tenantId); return ctx.db.select().from(usageSnapshots).where(and(eq(usageSnapshots.tenantId, ctx.tenantId), eq(usageSnapshots.segmentId, seg), eq(usageSnapshots.agentHostId, num(a.agentHostId)))).orderBy(desc(usageSnapshots.ts)).limit(a.limit != null ? num(a.limit) : 50); } },
 ];
+
+/** Assert the worker env was threaded (tools that decrypt credentials / reach
+ *  external providers need it; tests + the no-env path get a clear error). */
+function requireEnv(ctx: BuiltinCtx): Env {
+  if (!ctx.env) throw new Error('This tool requires the worker environment (credential access) and is unavailable in this context');
+  return ctx.env;
+}
+
+/** Persist an integration credential's connectivity-test result. */
+async function markTested(ctx: BuiltinCtx, credentialId: string, ok: boolean): Promise<void> {
+  await ctx.db.update(integrationCredentials).set({ lastTestedAt: new Date(), lastTestOk: ok, updatedAt: new Date() }).where(and(eq(integrationCredentials.id, credentialId), eq(integrationCredentials.tenantId, ctx.tenantId)));
+}
 
 /** Load a task and assert it belongs to the caller's tenant (services that take
  *  only a task id don't verify ownership — the project lookup throws if not). */

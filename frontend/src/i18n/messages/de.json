@@ -285,6 +285,12 @@
     "toFix": "{count, plural, one {# zu beheben} other {# zu beheben}}",
     "openReportAria": "Projektinspektionsbericht öffnen – Note {grade}, {score} von 100",
     "dimAria": "{name}: {score}",
+    "maturity": {
+      "title": "Diagnose-Reife",
+      "subtitle": "Selbst- und datenbasiert bewertete agentische Reife (1–5), getrennt von der PM-Bewertung oben.",
+      "outOf": "{score}/5",
+      "viewCta": "Diagnosen ansehen"
+    },
     "tier": {
       "healthy": "Stark",
       "watch": "Mittel",
@@ -298,25 +304,76 @@
       "critical": "Es gibt noch wenig, womit ein Agent oder ein Team handeln kann. Definiere zuerst den Bedarf: Vision, Ziele und dann eine geplante Reihe von Aufgaben."
     },
     "dim": {
-      "direction": { "label": "Ausrichtung", "desc": "Wie klar der Bedarf definiert ist – Vision, Ziele/OKR, eine Frist und eine Architektur. Je klarer der Bedarf, desto mehr davon kann das agentische System lösen." },
-      "planning": { "label": "Planung", "desc": "Ob die Arbeit in Aufgaben zerlegt und mit Start- und Fälligkeitsterminen geplant ist." },
-      "health": { "label": "Gesundheit", "desc": "Wie gut die offene Arbeit läuft – wird durch überfällige und blockierte Aufgaben gemindert, nicht dadurch, dass man früh dran ist. Dies ist keine Engagement- oder Aktivitätsbewertung." },
-      "progress": { "label": "Fortschritt", "desc": "Wie weit das Projekt fortgeschritten ist – abgeschlossene Aufgaben im Verhältnis zur Gesamtzahl." },
-      "execution": { "label": "Ausführung", "desc": "Ob etwas die Arbeit aktiv vorantreibt – ein zugewiesener Verantwortlicher oder Agent, verdrahtete Workflows und echte Dynamik." }
+      "direction": {
+        "label": "Ausrichtung",
+        "desc": "Wie klar der Bedarf definiert ist – Vision, Ziele/OKR, eine Frist und eine Architektur. Je klarer der Bedarf, desto mehr davon kann das agentische System lösen."
+      },
+      "planning": {
+        "label": "Planung",
+        "desc": "Ob die Arbeit in Aufgaben zerlegt und mit Start- und Fälligkeitsterminen geplant ist."
+      },
+      "health": {
+        "label": "Gesundheit",
+        "desc": "Wie gut die offene Arbeit läuft – wird durch überfällige und blockierte Aufgaben gemindert, nicht dadurch, dass man früh dran ist. Dies ist keine Engagement- oder Aktivitätsbewertung."
+      },
+      "progress": {
+        "label": "Fortschritt",
+        "desc": "Wie weit das Projekt fortgeschritten ist – abgeschlossene Aufgaben im Verhältnis zur Gesamtzahl."
+      },
+      "execution": {
+        "label": "Ausführung",
+        "desc": "Ob etwas die Arbeit aktiv vorantreibt – ein zugewiesener Verantwortlicher oder Agent, verdrahtete Workflows und echte Dynamik."
+      }
     },
     "rec": {
-      "vision": { "title": "Vision definieren", "detail": "Füge eine Projektbeschreibung hinzu, die den Bedarf in klarer Sprache benennt, damit das agentische System weiß, was es bauen soll." },
-      "goals": { "title": "Ziele oder OKR festlegen", "detail": "Verknüpfe ein Ziel oder Key Result (oder hänge das Projekt an eine Initiative an), damit der Erfolg messbar und nicht nur impliziert ist." },
-      "deadline": { "title": "Frist festlegen", "detail": "Füge ein Projektfälligkeitsdatum hinzu, damit die Arbeit getaktet und gegenüber allem anderen priorisiert werden kann." },
-      "schedule": { "title": "Arbeit terminieren", "detail": "Gib den Aufgaben Start- und Fälligkeitstermine, damit Zeitachse und Gantt einen echten Plan widerspiegeln." },
-      "architecture": { "title": "Architekturanalyse ausführen", "detail": "Erstelle ein Architektur-PRD, damit das agentische System einen technischen Bauplan zum Ausführen hat." },
-      "tasks": { "title": "Arbeit in Aufgaben zerlegen", "detail": "Dieses Projekt hat noch keine Aufgaben. Füge die Arbeitselemente hinzu, die ein Agent oder das Team tatsächlich ausführen wird." },
-      "decompose": { "title": "Arbeit weiter zerlegen", "detail": "Bisher nur {count, plural, one {# Aufgabe} other {# Aufgaben}} – zerlege die Arbeit in kleinere, ausführbare Teile für klareren Umfang und Fortschritt." },
-      "overdue": { "title": "Überfällige Arbeit erledigen", "detail": "{count, plural, one {# Aufgabe ist überfällig} other {# Aufgaben sind überfällig}}. Plane sie neu oder schließe sie ab, um die Projektgesundheit wiederherzustellen." },
-      "blocked": { "title": "Blockierte Arbeit freigeben", "detail": "{count, plural, one {# Aufgabe ist blockiert} other {# Aufgaben sind blockiert}}. Beseitige die Blocker, damit die Arbeit wieder vorankommt." },
-      "stalled": { "title": "Fortschritt beginnen", "detail": "Es gibt Aufgaben, aber noch keine ist abgeschlossen. Verschiebe die ersten Elemente auf „erledigt“, um Dynamik aufzubauen." },
-      "owner": { "title": "Verantwortlichen zuweisen", "detail": "Weise einen Workforce-Agenten oder Verantwortlichen zu, damit es jemanden – Mensch oder Agent – gibt, der für das Vorantreiben der Arbeit verantwortlich ist." },
-      "workflows": { "title": "Workflow verdrahten", "detail": "Füge einen Workflow hinzu, damit wiederholbare Schritte automatisch statt von Hand ausgeführt werden." }
+      "vision": {
+        "title": "Vision definieren",
+        "detail": "Füge eine Projektbeschreibung hinzu, die den Bedarf in klarer Sprache benennt, damit das agentische System weiß, was es bauen soll."
+      },
+      "goals": {
+        "title": "Ziele oder OKR festlegen",
+        "detail": "Verknüpfe ein Ziel oder Key Result (oder hänge das Projekt an eine Initiative an), damit der Erfolg messbar und nicht nur impliziert ist."
+      },
+      "deadline": {
+        "title": "Frist festlegen",
+        "detail": "Füge ein Projektfälligkeitsdatum hinzu, damit die Arbeit getaktet und gegenüber allem anderen priorisiert werden kann."
+      },
+      "schedule": {
+        "title": "Arbeit terminieren",
+        "detail": "Gib den Aufgaben Start- und Fälligkeitstermine, damit Zeitachse und Gantt einen echten Plan widerspiegeln."
+      },
+      "architecture": {
+        "title": "Architekturanalyse ausführen",
+        "detail": "Erstelle ein Architektur-PRD, damit das agentische System einen technischen Bauplan zum Ausführen hat."
+      },
+      "tasks": {
+        "title": "Arbeit in Aufgaben zerlegen",
+        "detail": "Dieses Projekt hat noch keine Aufgaben. Füge die Arbeitselemente hinzu, die ein Agent oder das Team tatsächlich ausführen wird."
+      },
+      "decompose": {
+        "title": "Arbeit weiter zerlegen",
+        "detail": "Bisher nur {count, plural, one {# Aufgabe} other {# Aufgaben}} – zerlege die Arbeit in kleinere, ausführbare Teile für klareren Umfang und Fortschritt."
+      },
+      "overdue": {
+        "title": "Überfällige Arbeit erledigen",
+        "detail": "{count, plural, one {# Aufgabe ist überfällig} other {# Aufgaben sind überfällig}}. Plane sie neu oder schließe sie ab, um die Projektgesundheit wiederherzustellen."
+      },
+      "blocked": {
+        "title": "Blockierte Arbeit freigeben",
+        "detail": "{count, plural, one {# Aufgabe ist blockiert} other {# Aufgaben sind blockiert}}. Beseitige die Blocker, damit die Arbeit wieder vorankommt."
+      },
+      "stalled": {
+        "title": "Fortschritt beginnen",
+        "detail": "Es gibt Aufgaben, aber noch keine ist abgeschlossen. Verschiebe die ersten Elemente auf „erledigt“, um Dynamik aufzubauen."
+      },
+      "owner": {
+        "title": "Verantwortlichen zuweisen",
+        "detail": "Weise einen Workforce-Agenten oder Verantwortlichen zu, damit es jemanden – Mensch oder Agent – gibt, der für das Vorantreiben der Arbeit verantwortlich ist."
+      },
+      "workflows": {
+        "title": "Workflow verdrahten",
+        "detail": "Füge einen Workflow hinzu, damit wiederholbare Schritte automatisch statt von Hand ausgeführt werden."
+      }
     }
   },
   "projectScope": {
@@ -2423,5 +2480,536 @@
     "description": "Beschreibung",
     "agent": "Agent",
     "actions": "Aktionen"
+  },
+  "marketing": {
+    "ctaGetStartedFree": "Kostenlos starten",
+    "ctaStartBuildingFree": "Kostenlos loslegen",
+    "ctaTourPlatform": "Plattform-Tour",
+    "ctaSeePricing": "Preise ansehen"
+  },
+  "evermind": {
+    "seo": {
+      "title": "Evermind — das Builderforce.ai LLM, ein sich selbst aktualisierendes Modell",
+      "description": "Evermind ist das Builderforce.ai LLM: ein sich selbst aktualisierendes Modell nach dem Prinzip der Write-Through Cognition. Anders als eingefrorene Frontier-Modelle wird neues Wissen direkt durchgeschrieben, sodass ein Update das Vorherige ersetzt — ohne erneutes Training, ohne Abgleichschritt. Läuft auf WebGPU im Browser, auf dem Gerät oder in jedem Agenten.",
+      "ogTitle": "Evermind — das sich selbst aktualisierende Builderforce.ai LLM"
+    },
+    "eyebrow": "Lernen Sie Evermind kennen",
+    "tagline": "Ein Modell, das beim Arbeiten lernt — und nie veraltet",
+    "title": "Evermind — das <grad>Builderforce.ai LLM</grad>",
+    "law": {
+      "heading": "Write-Through Cognition",
+      "lead": "Jedes eingefrorene Frontier-Modell teilt einen Schwachpunkt: Sein Wissen ist zum Trainingszeitpunkt fixiert, und jedes Update ist ein nachträglicher Aufsatz. Evermind folgt einem einzigen Prinzip, das diesen Aufsatz vollständig überflüssig macht.",
+      "quote": "Evermind ist das sich selbst aktualisierende Modell von Builderforce.ai nach dem Prinzip der Write-Through Cognition: Neues Wissen wird direkt durchgeschrieben, sodass ein Update das Vorherige ersetzt — Lesezugriffe sind stets aktuell, es gibt nie einen Abgleichschritt, und es läuft im Browser, auf dem Gerät oder in jedem Agenten.",
+      "figcap": "Herkömmliche Modelle hängen an und gleichen ab; Evermind aktualisiert per Schlüssel (Upsert) und invalidiert — einen Abgleichschritt gibt es nicht."
+    },
+    "architecture": {
+      "heading": "Ein Gehirn, drei zusammenwirkende Schichten",
+      "lead": "Evermind ist kein Monolith. Es sind drei Schichten, die zusammenarbeiten — dieselben drei, die die Hero-Animation aufleuchten lässt, während Informationen sie durchlaufen.",
+      "figcap": "Ein Gehirn, ganz Ihres: Everminds eigener Generator als Kortex, sein durchschreibender Hippocampus für das Gedächtnis und eine limbische Schicht für die Dynamik. (Externe Frontier-Modelle bleiben routbar, wenn Sie sie möchten — nur eben nicht erforderlich.)",
+      "pillars": [
+        {
+          "title": "Write-Through Cognition",
+          "desc": "Wissen wird durchgeschrieben: Ein Update bedeutet ersetzen, nicht anhängen. Lesezugriffe spiegeln stets die aktuellste Wahrheit wider, und es gibt nie einen Schritt vom Veralteten zum Abgleich — dieselbe Invalidate-on-Write-Regel, die die Plattform für das Caching nutzt, angewandt auf das Gedächtnis des Modells."
+        },
+        {
+          "title": "Hybrider Generator mit geteilten Experten",
+          "desc": "Ein dichtes, stets aktives Rückgrat trägt kontinuierliches Online-Lernen, während verzögert geladene, geroutete SSM-Experten bei Bedarf nachgeladen werden. So erhalten Sie spezialisierte Tiefe ohne einen riesigen eingefrorenen Block — und es läuft auf WebGPU ganz ohne Laufzeitabhängigkeiten."
+        },
+        {
+          "title": "Durchschreibendes Gedächtnis",
+          "desc": "Jeder Fakt wird per stabilem Schlüssel aktualisiert (Upsert) und invalidiert seinen alten Abruf, sodass das Modell nie widersprüchliche Kopien derselben Wahrheit anhäuft. Der Wissenskreislauf korrigiert sich an Ort und Stelle, anstatt abzudriften."
+        },
+        {
+          "title": "Limbische Dynamik",
+          "desc": "Eine trainierbare affektive Schicht moduliert, wie das Modell im Moment reagiert — Persönlichkeit als Sollwerte, limbischer Zustand als Dynamik — sodass Agenten sich konsistent mit der Persona verhalten, die Sie ihnen geben."
+        }
+      ]
+    },
+    "contrast": {
+      "heading": "Evermind vs. ein eingefrorenes Frontier-Modell",
+      "lead": "Evermind ist nicht darauf ausgelegt, die größten Modelle bei den Parametern zu übertreffen. Es gewinnt auf den Achsen, die ihre Architektur strukturell aufgibt.",
+      "figcap": "Das gesamte Argument in einem Bild — ein eingefrorenes Modell braucht für jedes Update einen Aufsatz; Evermind kehrt alle fünf Achsen um.",
+      "colAspect": "Aspekt",
+      "colFrozen": "Eingefrorenes Frontier-Modell",
+      "colEvermind": "Evermind",
+      "rows": [
+        {
+          "aspect": "Wissensaktualisierungen",
+          "frozen": "Zum Trainingszeitpunkt eingefroren — erfordert erneutes Training, Fine-Tuning, einen RAG-Patch oder manuelle Bearbeitung",
+          "evermind": "Direkt durchgeschrieben — ein Update ersetzt das Vorherige"
+        },
+        {
+          "aspect": "Abgleich",
+          "frozen": "Veraltete und frische Fakten existieren nebeneinander; irgendetwas muss sie später zusammenführen",
+          "evermind": "Upsert per Schlüssel + Invalidierung — einen Abgleichschritt gibt es nie"
+        },
+        {
+          "aspect": "Aktualität",
+          "frozen": "Veraltet in dem Moment, in dem es ausgeliefert wird",
+          "evermind": "Nie veraltet — Updates greifen in dem Moment, in dem sie geschehen"
+        },
+        {
+          "aspect": "Footprint",
+          "frozen": "Groß; läuft in der Cloud des Anbieters",
+          "evermind": "Läuft auf WebGPU — im Browser, auf dem Gerät oder in jedem Agenten"
+        },
+        {
+          "aspect": "Eigentum",
+          "frozen": "Drittanbieter-Modell, ein Wissensstichtag, den Sie nicht kontrollieren",
+          "evermind": "Durchgängig Ihres — offene Pakete, Ihre Daten"
+        }
+      ]
+    },
+    "edges": {
+      "heading": "Warum es gewinnt — Aktualität, Footprint, Eigentum",
+      "figcap": "Skalierung ist der Burggraben eines Anbieters. Aktualität, Footprint und Eigentum gehören Ihnen.",
+      "items": [
+        {
+          "label": "Aktualität",
+          "desc": "Nie veraltet — Wissensaktualisierungen greifen im Modell in dem Moment, in dem sie geschehen, ohne erneuten Trainingszyklus."
+        },
+        {
+          "label": "Footprint",
+          "desc": "Läuft in jeder Laufzeitumgebung — im Browser, auf dem Gerät oder eingebettet in jeden Agenten über WebGPU."
+        },
+        {
+          "label": "Eigentum",
+          "desc": "Durchgängig Ihres — offene Pakete, Ihre Daten, keine Abhängigkeit von einem Drittanbieter-Modell."
+        }
+      ]
+    },
+    "lifecycle": {
+      "heading": "Vom Training zum aufrufbaren Modell — in Minuten",
+      "lead": "Trainieren Sie ein Modell im Browser, weisen Sie mit einem Live-API-Aufruf nach, dass es funktioniert, veröffentlichen Sie es in Ihrer Workforce Registry und rufen Sie es dann von überall auf. Keine GPU-Rechnung, kein Deploy-Schritt, kein Warten.",
+      "steps": [
+        {
+          "title": "Trainieren",
+          "desc": "Fine-Tuning im Browser auf WebGPU — LoRA-Adapter plus ein persistenter Gedächtnis-Snapshot. Nichts verlässt Ihren Rechner."
+        },
+        {
+          "title": "Benchmarken",
+          "desc": "Bewerten Sie das Modell auf einem zurückgehaltenen Ausschnitt direkt auf dem Gerät — Perplexität, Next-Token-Genauigkeit und Durchsatz — und vergleichen Sie es per A/B mit dem vorherigen Checkpoint. Veröffentlichen Sie auf Basis von Belegen."
+        },
+        {
+          "title": "Per API validieren",
+          "desc": "Führen Sie vor der Veröffentlichung einen Live-Testaufruf gegen das Kandidatenmodell aus. Die Veröffentlichung wird erst freigeschaltet, wenn es tatsächlich antwortet."
+        },
+        {
+          "title": "Veröffentlichen",
+          "desc": "Ein Klick registriert das Modell in Ihrer Workforce Registry, wo Ihr Team und Ihre eigenen Agenten es engagieren können."
+        },
+        {
+          "title": "Aufrufen",
+          "desc": "Rufen Sie es über HTTP mit dem OpenAI-Standard oder dem dedizierten Modell-Endpunkt auf — aus Code, CI oder einem anderen Agenten."
+        }
+      ]
+    },
+    "api": {
+      "heading": "Rufen Sie Ihr Modell über die API auf",
+      "lead": "Ihr veröffentlichtes Modell spricht den OpenAI-Standard, sodass die offiziellen SDKs funktionieren, indem Sie sie auf das Gateway zeigen lassen — und es gibt einen dedizierten Endpunkt, um Ihr Modell per ID aufzurufen. In beiden Fällen dasselbe Chat-Format."
+    },
+    "faqHeading": "Evermind FAQ",
+    "faq": [
+      {
+        "question": "Was ist Evermind?",
+        "answer": "Evermind ist das Builderforce.ai LLM — das sich selbst aktualisierende Modell im Gehirn der Plattform. Es folgt dem Prinzip der Write-Through Cognition: Neues Wissen wird direkt in das Modell durchgeschrieben, sodass ein Update das Vorherige ohne Abgleichschritt ersetzt und Lesezugriffe stets die aktuellste Wahrheit widerspiegeln. Evermind besteht aus einem hybriden SSM-Generator mit geteilten Experten (ein dichtes, stets aktives Rückgrat plus verzögert geladene, geroutete Experten), einem durchschreibenden Wissensgedächtnis und einer trainierbaren limbischen Schicht für die Dynamik, und es läuft auf WebGPU im Browser, auf dem Gerät oder in jedem Agenten."
+      },
+      {
+        "question": "Was ist das Builderforce.ai LLM?",
+        "answer": "Das Builderforce.ai LLM ist Evermind. Statt sich auf ein eingefrorenes Frontier-Modell eines Drittanbieters zu verlassen, betreibt Builderforce.ai sein eigenes, sich selbst aktualisierendes Modell, das beim Arbeiten lernt. Frontier-LLMs können bei Bedarf weiterhin angesteuert werden, doch Evermind ist das native Modell, das der Plattform Aktualität (nie veraltet), einen kleinen Footprint (läuft auf dem Gerät) und volles Eigentum (Ihre Daten, offene Pakete, keine Abhängigkeit von einem Drittanbieter-Modell) verschafft."
+      },
+      {
+        "question": "Was ist Write-Through Cognition?",
+        "answer": "Write-Through Cognition ist das maßgebliche Prinzip von Evermind. Wissen wird direkt in das Modell durchgeschrieben, sodass ein Update einem Upsert per stabilem Schlüssel plus einer Invalidierung des alten Abrufs entspricht — ein Update bedeutet ersetzen, nicht anhängen. Lesezugriffe spiegeln stets die aktuellste Wahrheit wider, und es gibt nie einen Schritt vom Veralteten zum Abgleich. Es ist dieselbe Invalidate-on-Write-Regel, die für das Caching verwendet wird, angewandt auf die Wissensebene eines Modells, sodass es nie unbemerkt veralten kann."
+      },
+      {
+        "question": "Worin unterscheidet sich Evermind von einem eingefrorenen LLM wie GPT oder Claude?",
+        "answer": "Eingefrorene Frontier-Modelle fixieren ihr Wissen zum Trainingszeitpunkt; sie zu aktualisieren bedeutet einen nachträglichen Aufsatz aus erneutem Training, Fine-Tuning, RAG-Pipeline oder manueller Bearbeitung — jeweils ein separater Abgleichschritt. Evermind schreibt neues Wissen direkt in das Modell, sodass es nie widersprüchliche Kopien desselben Fakts anhäuft und nie einen Abgleichdurchlauf benötigt. Es ist darauf ausgelegt, nicht über die reine Parameterzahl zu gewinnen, sondern auf drei Achsen, die ein eingefrorenes Modell strukturell aufgibt: Aktualität, Footprint und Eigentum."
+      },
+      {
+        "question": "Läuft Evermind auf dem Gerät oder im Browser?",
+        "answer": "Ja. Evermind läuft auf WebGPU, sodass es im Browser, auf dem Gerät oder eingebettet in jedem Agenten ausgeführt wird, ganz ohne Laufzeitabhängigkeiten. Dasselbe Modell und sein durchschreibendes Gedächtnis reisen überallhin mit, wo der Agent läuft — und genau das ermöglicht es Agenten, korrektes Wissen über Sitzungen hinweg zu tragen, ohne einen Cloud-Roundtrip."
+      },
+      {
+        "question": "Kann ich Evermind in meinen eigenen Agenten verwenden?",
+        "answer": "Ja. Evermind ist das Modell hinter den Agenten der Plattform, und sein durchschreibendes Gedächtnis und sein Abruf stehen den Agenten zur Verfügung, die Sie betreiben — sodass ein korrigierter Fakt über Sitzungen hinweg korrigiert bleibt. Sie können außerdem eigene Spezialmodelle im Browser trainieren (WebGPU LoRA) und sie in der Workforce Registry veröffentlichen, um sie aus Ihrem eigenen Agenten aufzurufen."
+      },
+      {
+        "question": "Wie bleibt Evermind ohne erneutes Training aktuell?",
+        "answer": "Durch seinen hybriden Generator mit geteilten Experten und sein durchschreibendes Gedächtnis. Ein dichtes, stets aktives Rückgrat trägt kontinuierliches Online-Lernen, während geroutete Experten bei Bedarf nachgeladen werden, und jeder neue Fakt wird per stabilem Schlüssel aktualisiert (Upsert) und invalidiert seinen vorherigen Abruf. Neues Wissen greift im Modell in dem Moment, in dem es geschieht, sodass es keinen erneuten Trainingszyklus und keinen Wissensstichtag gibt, den Sie nicht kontrollieren."
+      },
+      {
+        "question": "Hat Evermind Benchmarks — woher weiß ich, dass ein von mir trainiertes Modell etwas taugt?",
+        "answer": "Ja. Jedes Modell, das Sie im Studio trainieren, wird vor der Veröffentlichung direkt auf dem Gerät bewertet. Die integrierte Benchmarking-Umgebung hält einen Ausschnitt Ihres Korpus zurück, auf dem das Modell nie trainiert, und meldet dann die Standard-Kennzahlen für Sprachmodelle — zurückgehaltene Perplexität, Bits pro Token, Top-1- und Top-k-Next-Token-Genauigkeit sowie Generierungsdurchsatz — und kann zwei Checkpoints per A/B vergleichen, sodass Sie sehen, ob eine frische Anpassung tatsächlich besser ist als die vorherige. Sie läuft vollständig in Ihrem Browser, ohne GPU-Rechnung und ohne dass Daten Ihren Rechner verlassen, sodass Sie auf Basis von Belegen veröffentlichen, nicht auf Bauchgefühl. Dieselbe Umgebung ist das offene Messinstrument hinter dem technischen Bericht zu Evermind."
+      }
+    ],
+    "adoption": {
+      "heading": "Wie die Einführung von Evermind aussieht",
+      "lead": "Die Einführung einer agentischen Workforce ist kein Rip-and-Replace. Menschen und KI-Agenten sitzen auf demselben Board, werden auf dieselbe Weise zugewiesen und nachverfolgt — und jeder Agent läuft auf einem Modell, das Ihnen gehört und nie veraltet.",
+      "figcapBoard": "Dasselbe Board, ein größeres Team — orchestriert, gemessen und gesteuert von Builderforce.ai.",
+      "figcapStack": "Ein eigener Stack, vom Gehirn bis zum Editor — Evermind, die Agenten-Laufzeitumgebung, Orchestrierung und Ihre Oberflächen.",
+      "readLink": "Lesen: Der Übergang zu einer agentischen Workforce →"
+    },
+    "cta": {
+      "title": "Bauen Sie auf einem Modell, das nie veraltet",
+      "desc": "Kostenlos starten — keine Kreditkarte erforderlich. Setzen Sie Evermind und Ihre KI-Workforce vollständig in Ihrem Browser ein."
+    },
+    "relatedHeading": "Tiefer eintauchen",
+    "alt": {
+      "writeThrough": "Herkömmliches Wissen nach dem Prinzip Anhängen-dann-Abgleichen vs. Everminds Upsert-per-Schlüssel und Invalidierung",
+      "architecture": "Everminds drei Schichten, allesamt eigene: ein Generator-Kortex, ein sich selbst aktualisierender, durchschreibender Hippocampus und eine trainierbare limbische Schicht",
+      "frozenVsEvermind": "Ein eingefrorenes Frontier-Modell gegenüber Evermind auf fünf Achsen: Wissensaktualisierungen, Abgleich, Aktualität, Footprint und Eigentum",
+      "threeEdges": "Aktualität, Footprint und Eigentum — die drei Vorteile, die über einen Enterprise-Rollout entscheiden",
+      "workforce": "Menschen und KI-Agenten auf einem Kanban-Board, orchestriert von Builderforce.ai — dasselbe Board, ein größeres Team",
+      "platformStack": "Ein eigener Stack: Evermind als Basis, die Agenten-Laufzeitumgebung, die Orchestrierung von Builderforce.ai und die Oberflächen, die Ihr Team bereits nutzt"
+    },
+    "blurb": "Evermind ist das Gehirn von Builderforce: ein selbstaktualisierendes Modell, gesteuert durch Write-Through Cognition. Eingefrorene Frontier-Modelle veralten in dem Moment, in dem sie ausgeliefert werden – jede Aktualisierung erfordert ein aufgesetztes Retraining, Feintuning oder einen RAG-Patch. Evermind schreibt neues Wissen direkt durch ins Modell, sodass eine Aktualisierung das Vorhandene einfach ersetzt. Lesevorgänge spiegeln stets die neueste Wahrheit wider, es gibt nie einen Abgleichschritt, und es läuft überall – im Browser, auf dem Gerät oder in jedem Agenten.",
+    "exploreCta": "Evermind entdecken"
+  },
+  "features": [
+    {
+      "title": "Evermind – Das selbstaktualisierende Modell",
+      "shortDesc": "Ein Modell, das beim Arbeiten lernt und nie veraltet.",
+      "longDesc": "Evermind ist das Gehirn der Plattform – ein selbstaktualisierendes Modell, gesteuert durch Write-Through Cognition: Neues Wissen wird direkt durchgeschrieben, sodass eine Aktualisierung das Vorherige ersetzt, ganz ohne Abgleichschritt. Ein hybrider Generator mit gemeinsam genutzten Experten (dichtes Backbone + geroutete SSM-Experten) lernt online und läuft auf WebGPU, sodass er bei Aktualität, Footprint und Eigentum punktet statt bei reiner Größe – im Browser, auf dem Gerät oder in jedem Agenten."
+    },
+    {
+      "title": "Kanban-Board & Projektmanagement",
+      "shortDesc": "Arbeit auf einem Live-Agenten-Kanban-Board planen, zuweisen & verfolgen.",
+      "longDesc": "Eine vollständige Projektmanagement-Oberfläche: Organisieren Sie Arbeit in Projekten und planen, weisen und verfolgen Sie dann jede Aufgabe auf einem Live-Kanban-Board – Swimlanes pro Status oder pro Agent, dazu Tabellen-, Kalender- und Gantt-Ansichten. Menschen und KI-Agenten sitzen auf demselben Board, und Arbeit fließt in Echtzeit vom Backlog bis zur Fertigstellung."
+    },
+    {
+      "title": "Trainieren Sie Ihre eigenen Agenten – und nutzen Sie sie in Ihrem Agenten",
+      "shortDesc": "Eigene Agenten trainieren und aus Ihrem Agenten heraus aufrufen.",
+      "longDesc": "Schließen Sie den Kreislauf: Trainieren Sie einen eigenen Agenten (WebGPU-LoRA im Browser + KI-Bewertung), veröffentlichen Sie ihn in der Workforce Registry, stellen Sie ihn dann ein und rufen Sie ihn aus Ihrem eigenen Agenten heraus auf. Ihre trainierten Spezialisten werden zu Werkzeugen, an die Ihr Hauptagent delegiert – eine vollständig agentische Belegschaft, die Sie besitzen und orchestrieren."
+    },
+    {
+      "title": "VS Code nie verlassen",
+      "shortDesc": "Steuern Sie Ihre gesamte Belegschaft über die VS-Code-Erweiterung.",
+      "longDesc": "Die BuilderForce-Erweiterung für VS Code bringt die gesamte Plattform in Ihren Editor: Chatten Sie mit Agenten, weisen Sie Aufgaben zu und führen Sie sie aus, prüfen und validieren Sie deren Arbeit und verwalten Sie Ihre gesamte Agenten-Belegschaft – alles ohne VS Code zu verlassen. Human-in-the-Loop-Freigaben erfolgen genau dort, wo Sie programmieren."
+    },
+    {
+      "title": "Agentic Tester – Autonome QA",
+      "shortDesc": "Ein KI-Agent, der Ihre App planmäßig im Browser testet.",
+      "longDesc": "Der Agentic Tester ist ein einstellbarer QA-Agent. Richten Sie ihn auf die URL Ihres Projekts, hinterlegen Sie die zu verwendenden Logins, und er steuert einen echten Browser durch Ihre meistgenutzten Abläufe – priorisiert anhand realer Nutzungs-Heatmaps, was getestet wird, meldet sich als jede Persona an und erfasst Konsolenfehler, fehlgeschlagene Anfragen und Abstürze. Führen Sie ihn bei Bedarf aus oder planen Sie ihn als Teil eines Workflows ein; jeder gefundene Fehler landet direkt auf Ihrem Kanban-Board."
+    },
+    {
+      "title": "AI CTO",
+      "shortDesc": "Baut, trainiert & deployt Ihre KI-Belegschaft.",
+      "longDesc": "Ihr AI CTO baut, trainiert und deployt Ihre KI-Agenten-Belegschaft – WebGPU-LoRA-Feintuning im Browser, KI-Bewertung und Ein-Klick-Veröffentlichung in der Workforce Registry."
+    },
+    {
+      "title": "AI CIO",
+      "shortDesc": "Verbindet & orchestriert Ihre Systeme.",
+      "longDesc": "Ihr AI CIO verbindet sich mit Ihren Systemen – GitHub, Jira, Confluence und mehr über verschlüsselte Zugangsdaten – und orchestriert Arbeit über die Tool-Registry des Brain-Assistenten."
+    },
+    {
+      "title": "AI Security Officer",
+      "shortDesc": "Steuert jede Aktion mit Freigaben & Audit.",
+      "longDesc": "Ihr AI Security Officer steuert jede Aktion: Human-in-the-Loop-Freigabe-Gates, ein vollständiger Audit-Trail, mandantenweise Isolation und AES-256-GCM-verschlüsselte Zugangsdaten."
+    },
+    {
+      "title": "Planning Spine – Vom Portfolio bis zur Aufgabe",
+      "shortDesc": "Eine datierte, kostentragende Hierarchie auf einem einzigen Gantt.",
+      "longDesc": "Planen, liefern und verbuchen Sie Arbeit auf einer Hierarchie: Portfolio → Initiative → Epic → Aufgabe, wobei Objectives und Key Results auf jeder Ebene andocken können. Die Kosten jedes Blatts – zum Schreibzeitpunkt bewertete LLM-Ausgaben plus menschlicher Aufwand – rollen zu jedem Vorgänger hinauf und werden in CAPEX vs. OPEX aufgeteilt, mit Anomalie-Markierungen dort, wo eine Aktivierungsentscheidung eine Freigabe benötigt. Engineering plant darauf, das PMO rollt Portfolios darauf hinauf, und die Finanzabteilung schließt daraus ab – ein Satz Zahlen, kein Abgleichschritt."
+    },
+    {
+      "title": "Fehler-Observability + Ein-Klick-Agentenfix",
+      "shortDesc": "Vom Absturz zum Pull Request auf einer einzigen Oberfläche.",
+      "longDesc": "Erfassen Sie Laufzeitfehler aus Ihrem Browser-SDK, OpenTelemetry, Sentry, PostHog oder LogRocket; gruppieren Sie sie per Fingerprint in deduplizierte Fehlergruppen mit Auftretens- und Betroffenen-Zählung; verwandeln Sie dann jede Gruppe in eine Fix-Aufgabe, die ein Cloud-Agent aufnimmt und als Pull Request ausliefert. Observability, die nicht am Dashboard endet – dieselbe Plattform, die den Absturz sichtbar macht, weist ihn zu, behebt ihn und stellt den PR."
+    },
+    {
+      "title": "Wissensmanagement & Compliance",
+      "shortDesc": "Versionierte SOPs mit auditfähigem Bestätigungs-Trail.",
+      "longDesc": "Eine versionierte Basis für SOPs, Prozesse und Dokumente mit unveränderlichen Veröffentlichungs-Snapshots, zeitgestempelten Lesebestätigungen und überfälliger Nachverfolgung pro Nutzer – auditfähige Nachweise für SOX, TISAX und ISO 27001. Erstellen und verbessern Sie Dokumente mit KI, bearbeiten Sie gemeinsam in Echtzeit und steuern Sie den Zugriff pro Seite. Dasselbe Wissen, das Compliance belegt, erdet auch Ihre Agenten."
+    },
+    {
+      "title": "Single-Pane-Board-Konnektoren",
+      "shortDesc": "Zwei-Wege-Synchronisierung mit Jira, Linear, Sentry, PagerDuty & mehr.",
+      "longDesc": "Verbinden Sie die Tracker und Incident-Tools, die Sie bereits einsetzen – Jira, Linear, monday, Asana, ClickUp, ServiceNow, Freshservice, Sentry, PagerDuty und GitHub – und synchronisieren Sie Arbeit in beide Richtungen. Agenten nehmen ein Ticket oder einen Incident auf und handeln darauf, wo immer es entsteht, und Änderungen fließen zurück ins System of Record. Eine Oberfläche, um über alles zu orchestrieren – ohne Migration und ohne Lock-in."
+    },
+    {
+      "title": "KI-Datensatzgenerierung",
+      "shortDesc": "Datensätze aus einem einzigen Prompt generieren.",
+      "longDesc": "Generieren Sie Instruction-Tuning-Datensätze aus einem einzigen Capability-Prompt mit einem beliebigen OpenRouter-Modell. Export als JSONL, gespeichert in R2."
+    },
+    {
+      "title": "LoRA-Training im Browser",
+      "shortDesc": "Feintuning von bis zu 2 Mrd. Parametern mit WebGPU.",
+      "longDesc": "Feintunen Sie Modelle mit bis zu 2 Milliarden Parametern direkt in Chrome mit WebGPU. Keine Cloud-GPU-Rechnungen, keine Round-Trips, vollständige Privatsphäre."
+    },
+    {
+      "title": "Geerdetes RAG & Antwortbewertung",
+      "shortDesc": "Hybrides Retrieval plus Treue- & Drift-Bewertung.",
+      "longDesc": "Der vollständige Retrieval-und-Bewertungs-Stack, integriert. Memory nutzt hybrides Retrieval – dichte Embeddings und BM25-Stichwortsuche, fusioniert mit Reciprocal Rank Fusion und mit MMR auf Relevanz und Vielfalt nachsortiert, über aufgeteilte Dokumente. Jeder Lauf wird dann auf Treue, Antwortrelevanz und Halluzinationsrate bewertet, und ein Drift-Monitor schlägt Alarm, wenn die Qualität eines Modells im Laufe der Zeit zurückgeht – sodass sich eine falsche Antwort nie hinter einem grünen Dashboard versteckt."
+    },
+    {
+      "title": "KI-Bewertungs-Engine",
+      "shortDesc": "Ausgaben mit einem KI-Bewerter beurteilen.",
+      "longDesc": "Bewerten Sie Ihre Modellausgaben mit einem unabhängigen KI-Bewerter. Erhalten Sie strukturierte Qualitätsmetriken: Korrektheit, Reasoning, Halluzinationsrate."
+    },
+    {
+      "title": "Agenten-Registry",
+      "shortDesc": "Veröffentlichen Sie Agenten in der Workforce Registry.",
+      "longDesc": "Veröffentlichen Sie Ihren trainierten Agenten in der öffentlichen Workforce Registry mit Profil, Skills und Bewertungsscore. Andere können ihn sofort einstellen."
+    },
+    {
+      "title": "R2-Artefaktspeicher",
+      "shortDesc": "LoRA-Gewichte in Cloudflare R2 persistieren.",
+      "longDesc": "LoRA-Adaptergewichte werden aus WebGPU-Puffern serialisiert und automatisch mit signierten URLs in Cloudflare R2 persistiert."
+    },
+    {
+      "title": "Semantischer Antwort-Cache",
+      "shortDesc": "Antworten über Paraphrasen hinweg wiederverwenden – Tokenkosten drücken.",
+      "longDesc": "Ein Embedding-basierter Cache verwendet eine frühere Antwort wieder, wenn ein neuer Prompt dasselbe bedeutet wie ein bereits beantworteter, sodass dem Frontier-Modell dieselbe Arbeit nie zweimal in Rechnung gestellt wird. Zwei Stufen: eine kostenlose On-Device-Schicht (SSM-Embeddings, in Ihrem Browser und in jedem Agenten) plus eine gemeinsame Gateway-Schicht – sodass ein Cache-Treffer in der Web-App auch Ihren Agenten Tokens spart."
+    },
+    {
+      "title": "Vollständiger IDE-Workspace",
+      "shortDesc": "Monaco-Editor, Terminal, KI-Chat – alles in einem.",
+      "longDesc": "Monaco-Editor, Terminal, KI-Chat, Datei-Explorer – alles, was Sie brauchen, in einem kollaborativen Projekt-Workspace."
+    },
+    {
+      "title": "Sicher & mandantenfähig",
+      "shortDesc": "JWT-Authentifizierung mit Mandantenisolation.",
+      "longDesc": "JWT-Authentifizierung mit Mandantenisolation. Projekte, Datensätze, Modelle und Agenten sind standardmäßig privat und pro Mandant abgegrenzt."
+    },
+    {
+      "title": "Cloudflare Edge",
+      "shortDesc": "Globale Verteilung ohne Cold-Start.",
+      "longDesc": "Worker-API ohne Cold-Start mit globaler Verteilung. COOP/COEP-Header aktivieren SharedArrayBuffer für Transformers.js."
+    }
+  ],
+  "compare": {
+    "teaser": {
+      "title": "Für Lieferung gebaut, nicht nur für Fertigstellung",
+      "blurb": "GitHub Copilot, Cursor, Claude Code und Devin steuern einen einzelnen Agenten. Builderforce.ai orchestriert eine selbstgehostete, modellunabhängige Agenten-Belegschaft mit Governance, Audit und persistentem Gedächtnis. Sehen Sie den vollständigen Vergleich.",
+      "ctaLabel": "Builderforce.ai mit dem Feld vergleichen",
+      "highlightFeatures": [
+        "Eigene Agenten trainieren – dann in Ihrem Agenten aufrufen",
+        "Kanban-Board + Projektmanagement für Ihre Belegschaft",
+        "Ihre gesamte Belegschaft verwalten, ohne VS Code zu verlassen",
+        "Multi-Agenten-Orchestrierung (7 Rollen + DAG)",
+        "Human-in-the-Loop-Freigabe-Gates + Audit-Trail",
+        "Über 30 Modellanbieter inkl. lokalem Ollama"
+      ]
+    }
+  },
+  "home": {
+    "heroBadge": "Human-in-the-Loop · Vollständig agentische Cloud",
+    "heroTitle": "Sehen Sie die Zukunft, <em>klar</em>",
+    "heroSub": "Die Innovationsplattform für die agentische Ära – eine Belegschaft aus Menschen und KI-Agenten auf einem einzigen Board.",
+    "heroPromptPlaceholder": "Beschreiben Sie, was Ihre KI-Belegschaft tun soll…",
+    "heroPromptAria": "Beschreiben Sie, was Ihre KI-Belegschaft tun soll",
+    "heroGetStarted": "Loslegen",
+    "heroExamples": [
+      "Mein Repository auf Sicherheitsprobleme prüfen",
+      "Jira verbinden und diesen Sprint zusammenfassen",
+      "Einen Kundensupport-Agenten bauen & trainieren"
+    ],
+    "evermindHeadingSuffix": "Ein Modell, das beim Arbeiten lernt – und nie veraltet",
+    "pillarsHeading": "Human in the Loop. Vollständig agentisch.",
+    "pillarsLead": "Trainieren Sie Ihre eigenen Agenten, setzen Sie sie in Ihrem Agenten ein und behalten Sie über jeden Schritt die Kontrolle – von einem einzigen Ort aus.",
+    "pillars": [
+      {
+        "title": "Agenten trainieren, in Ihrem Agenten nutzen",
+        "desc": "Trainieren Sie einen eigenen Agenten im Browser (WebGPU-LoRA + Bewertung), veröffentlichen Sie ihn in der Workforce Registry, stellen Sie ihn dann ein und rufen Sie ihn aus Ihrem eigenen Agenten heraus auf. Ihre Spezialisten werden zu Werkzeugen, an die Ihr Hauptagent delegiert."
+      },
+      {
+        "title": "Ihre Belegschaft auf einem Kanban-Board verwalten",
+        "desc": "Planen, weisen und verfolgen Sie jede Aufgabe auf einem Live-Kanban-Board – Menschen und KI-Agenten auf demselben Board, mit Tabellen-, Kalender- und Gantt-Ansichten. Arbeit fließt in Echtzeit vom Backlog bis zur Fertigstellung."
+      },
+      {
+        "title": "VS Code nie verlassen",
+        "desc": "Die BuilderForce-Erweiterung für VS Code führt die gesamte Plattform in Ihrem Editor aus: Chatten Sie mit Agenten, weisen Sie Aufgaben zu und führen Sie sie aus, prüfen und validieren Sie deren Arbeit und genehmigen Sie Human-in-the-Loop-Aktionen – ohne Ihren Code zu verlassen."
+      }
+    ],
+    "rolesHeading": "Ein System of Record. Das Lagebild für jede Rolle.",
+    "rolesLead": "Weil jede Aktion – ob Mensch oder Agent – instrumentiert, kostenbewertet und zugeordnet ist, arbeitet die gesamte Organisation aus einer einzigen Quelle der Wahrheit. Kein Sechs-Tool-Stack, keine Tabellen, die abgleichen, wer was zu welchen Kosten getan hat. Sichtbarkeit auf Enterprise-Niveau, bepreist als Plattform.",
+    "roles": [
+      {
+        "role": "CEO",
+        "desc": "Innovationsdurchsatz, Idee-zu-Auslieferung-Konversion und der ROI der gesamten KI-Investition – ein einziges Führungs-Lagebild."
+      },
+      {
+        "role": "CTO / Engineering",
+        "desc": "DORA-Vier-Schlüssel, Agenten-vs.-Mensch-Produktivität und welcher KI-Ansatz tatsächlich gemergt wird – aus realen Lieferdaten."
+      },
+      {
+        "role": "CFO / Finanzen",
+        "desc": "Jedes Token und jede Aufgabe kostenbewertet und zugeordnet: Ticket → Projekt → Initiative, mit Budgets und Kosten pro Ergebnis."
+      },
+      {
+        "role": "PMO",
+        "desc": "Portfolio-Rollup, Kapazität und Lieferprognose über jede Initiative – mit realen Kosten und realen Ergebnissen verknüpft."
+      },
+      {
+        "role": "Security / CISO",
+        "desc": "Ein unveränderlicher, aktionsweiser Audit-Trail über alles, was jeder Agent berührt hat – gebaut für Nachweise, nicht für Screenshots."
+      },
+      {
+        "role": "Manager & Teams",
+        "desc": "Durchsatz, Durchlaufzeit, Nacharbeit und Engagement für die gemischte Mensch-plus-Agent-Belegschaft auf einem Board."
+      }
+    ],
+    "stats": [
+      {
+        "label": "Parameter\nim Browser"
+      },
+      {
+        "label": "Datensatz-\ngenerierung"
+      },
+      {
+        "label": "Hardware-\nbeschleunigt"
+      },
+      {
+        "label": "Privat – läuft\nin Ihrem Browser"
+      }
+    ],
+    "comparisonHeading": "Builderforce vs. konventionelle Workflows",
+    "comparisonLead": "Von Grund auf für KI-Agenten gebaut – kein weiteres Cloud-Notebook und kein Plugin.",
+    "comparisonColFeature": "Funktion",
+    "comparisonColBuilderforce": "Builderforce",
+    "comparisonColNotebooks": "Generische Notebooks",
+    "comparisonColCloud": "Cloud-Training",
+    "comparisonRows": [
+      "LoRA-Training im Browser",
+      "Datensatzgenerierungs-Assistent",
+      "KI-Bewertungs-Engine",
+      "Agenten-Registry & Skills",
+      "Globaler Workforce-Marktplatz",
+      "Keine GPU-Rechnungen"
+    ],
+    "stepsHeading": "In drei Schritten einsatzbereit",
+    "steps": [
+      {
+        "title": "Konto erstellen",
+        "desc": "Registrieren Sie sich mit Ihrer E-Mail-Adresse und starten Sie einen kostenlosen Workspace. 14-tägige Pro-Testphase, keine Kreditkarte erforderlich."
+      },
+      {
+        "title": "Datensatz generieren",
+        "desc": "Erstellen Sie mit dem Assistenten einen Instruction-Tuning-Datensatz aus einem einzigen Capability-Prompt."
+      },
+      {
+        "title": "Trainieren & veröffentlichen",
+        "desc": "Führen Sie das LoRA-Training in Ihrem Browser aus, bewerten Sie die Ergebnisse und veröffentlichen Sie Ihren Agenten in der Workforce Registry."
+      }
+    ],
+    "featuresHeading": "Alles, was Ihre KI-Belegschaft kann",
+    "pricingHeading": "Preise",
+    "pricingTeaser": [
+      {
+        "name": "Free",
+        "price": "$0",
+        "perks": [
+          "Evermind-Modell (auf dem Gerät)",
+          "WebGPU-Training",
+          "Workforce durchsuchen"
+        ]
+      },
+      {
+        "name": "Pro",
+        "price": "$29/seat",
+        "perks": [
+          "Unbegrenzte Agenten",
+          "Private Modelle",
+          "Priorisierter Support"
+        ]
+      }
+    ],
+    "blogHeading": "Neuestes aus dem Blog",
+    "blogLead": "Tiefe Einblicke, Tutorials und Best Practices für das Bauen und Deployen von KI-Agenten – vom WebGPU-LoRA-Training bis zur Multi-Agenten-Orchestrierung.",
+    "blogReadAll": "Alle Artikel lesen",
+    "newsletterHeading": "Bleiben Sie auf dem Laufenden",
+    "newsletterLead": "Erhalten Sie Updates zu neuen Funktionen, Agenten und Plattformverbesserungen. Kein Spam, jederzeit abbestellbar.",
+    "newsletterSubscribe": "Abonnieren",
+    "newsletterSubscribing": "Wird abonniert…",
+    "newsletterSubscribed": "Abonniert",
+    "newsletterSubscribedConfirm": "Abonniert ✓",
+    "newsletterError": "Abonnement nicht möglich. Bitte erneut versuchen.",
+    "faqHeading": "Häufig gestellte Fragen",
+    "ctaTitle": "Setzen Sie Ihren AI CTO ein",
+    "ctaDesc": "Beschreiben Sie, was Sie brauchen, melden Sie sich an, und Ihr KI-Gehirn legt los – baut Agenten, verbindet Ihre Systeme und steuert jede Aktion. Keine Kreditkarte erforderlich.",
+    "ctaSeeLiveAgents": "Live-Agenten ansehen",
+    "faq": [
+      {
+        "question": "Was ist Evermind?",
+        "answer": "Evermind ist das Gehirn von Builderforce.ai – ein selbstaktualisierendes Modell, gesteuert durch Write-Through Cognition. Statt Wissen wie ein konventionelles Frontier-Modell zum Trainingszeitpunkt einzufrieren, schreibt Evermind neues Wissen direkt durch ins Modell, sodass eine Aktualisierung das Vorherige ohne Abgleichschritt ersetzt und Lesevorgänge stets die neueste Wahrheit widerspiegeln. Es besteht aus einem hybriden Generator mit gemeinsam genutzten Experten (ein dichtes Backbone, das online lernt, plus geroutete SSM-Experten, die bei Bedarf eingelagert werden), einem Write-Through-Wissensspeicher, der per stabilem Schlüssel upsertet, und einer trainierbaren limbischen Schicht für die Dynamik. Es läuft auf WebGPU im Browser, auf dem Gerät oder in jedem Agenten und ist darauf ausgelegt, bei Aktualität, Footprint und Eigentum zu punkten statt bei reiner Größe."
+      },
+      {
+        "question": "Was ist Builderforce.ai?",
+        "answer": "Builderforce.ai ist die Innovationsplattform für die agentische Ära – ein einziges System of Record, in dem jede Arbeitseinheit, ausgeführt von einem Menschen oder einem KI-Agenten, von der Idee über die Auslieferung bis zum Lernen instrumentiert, kostenbewertet und zugeordnet wird. Sie planen, bauen, liefern und messen mit einer Belegschaft aus Menschen und Agenten auf einem Kanban-Board, trainieren Ihre eigenen Agenten im Browser (Datensatzgenerierung, WebGPU-LoRA-Training, KI-Bewertung und die Workforce Registry), verbinden sich mit Ihren Systemen und Daten und steuern jede Aktion mit Rollen, Freigabe-Gates und einem vollständigen Audit-Trail – alles ohne VS Code zu verlassen."
+      },
+      {
+        "question": "Ist Builderforce.ai eine Enterprise-Plattform?",
+        "answer": "Ja – sie ist darauf ausgelegt, wie ein Enterprise-System-of-Record zu arbeiten, ohne Enterprise-Preise. Weil jede Aktion (Mensch oder Agent) instrumentiert und kostenbewertet ist, arbeitet die gesamte Organisation aus einer einzigen Quelle der Wahrheit, statt ein Board, einen Code-Host, ein Observability-Tool, ein FinOps-Tool und Tabellen zusammenzuflicken. Jede Rolle erhält ihr eigenes Lagebild aus denselben Daten: Lieferung und DORA für Engineering, Kosten und Budgets für die Finanzabteilung, Portfolio-Rollup und der Innovationstrichter für PMO und CEO sowie ein unveränderlicher Audit-Trail für die Security. Der Zugriff wird über Workspace-Rollen gesteuert (Owner, Manager, Developer, Viewer), sodass Personen sehen, was ihre Rolle erlaubt."
+      },
+      {
+        "question": "Kann ich meine eigenen Agenten trainieren und sie in meinem eigenen Agenten nutzen?",
+        "answer": "Ja – das ist der Kernkreislauf. Trainieren Sie einen eigenen Agenten im Browser mit WebGPU-LoRA-Feintuning und der KI-Bewertungs-Engine, veröffentlichen Sie ihn in der Workforce Registry, stellen Sie ihn dann ein und rufen Sie ihn aus Ihrem eigenen Agenten heraus auf. Ihre trainierten Spezialisten werden zu Werkzeugen, an die Ihr Hauptagent delegiert, sodass Sie eine vollständig agentische Belegschaft bauen und orchestrieren, die Sie besitzen."
+      },
+      {
+        "question": "Muss ich VS Code verlassen, um meine Agenten zu verwalten?",
+        "answer": "Nein. Die BuilderForce-Erweiterung für VS Code bringt die gesamte Plattform in Ihren Editor: Chatten Sie mit Agenten, weisen Sie Aufgaben auf dem Kanban-Board zu und führen Sie sie aus, prüfen und validieren Sie deren Arbeit und genehmigen Sie Human-in-the-Loop-Aktionen – alles ohne VS Code zu verlassen."
+      },
+      {
+        "question": "Hat Builderforce ein Kanban-Board und Projektmanagement?",
+        "answer": "Ja. Projekte organisieren Ihre Arbeit, und das Aufgaben-Board verfolgt sie auf einem Live-Kanban-Board mit Swimlanes pro Status oder pro Agent, dazu Tabellen-, Kalender- und Gantt-Ansichten. Menschen und KI-Agenten teilen sich dasselbe Board, sodass Sie planen, zuweisen und in Echtzeit zusehen, wie Arbeit vom Backlog bis zur Fertigstellung fließt."
+      },
+      {
+        "question": "Kann sich das Kanban-Board mit KI-Agenten selbst betreiben?",
+        "answer": "Ja – das ist Autonomous Swimlane Execution. Weisen Sie einer Board-Lane einen Agenten (Cloud oder On-Premise) zu, und Tickets in dieser Lane werden ihm automatisch zugeteilt; das Board rückt von Lane zu Lane vor, sobald Agenten fertig sind, und pausiert nur an den von Ihnen gewählten Freigabe-Gates. Sie verwalten Ergebnisse auf einem Board, statt Prompts einzeln auszugeben."
+      },
+      {
+        "question": "Wie hält Builderforce die LLM-Tokenkosten niedrig?",
+        "answer": "Ein oberflächenübergreifender semantischer Cache verwendet eine frühere Antwort wieder, wenn ein neuer Prompt dasselbe bedeutet wie ein bereits beantworteter, sodass dem Frontier-Modell dieselbe Arbeit nie zweimal in Rechnung gestellt wird. Er läuft in zwei Stufen – einer kostenlosen On-Device-Schicht mit SSM-Embeddings (im Browser und in jedem Agenten) und einer gemeinsamen mandantenweise abgegrenzten Gateway-Schicht – und wird mit Modell-Routing kombiniert, das günstigere Modelle ausschöpft, bevor Premium-Modelle erreicht werden."
+      },
+      {
+        "question": "Kann ich Arbeit vom Portfolio bis zur Aufgabe planen und kostenbewerten?",
+        "answer": "Ja – das ist die Planning Spine. Portfolio, Initiative, Epic und Aufgabe liegen auf einer datierten Hierarchie (wobei Objectives und Key Results auf jeder Ebene andocken), dargestellt als ein einziges Gantt. Weil jede Aufgabe instrumentiert ist, rollen ihre Kosten – zum Schreibzeitpunkt bewertete LLM-Ausgaben plus menschlicher Aufwand – zu jedem Vorgänger hinauf und werden in CAPEX vs. OPEX aufgeteilt, mit Anomalie-Markierungen dort, wo eine Aktivierungsentscheidung eine Freigabe benötigt. Engineering, das PMO und die Finanzabteilung lesen dieselben Zahlen, und die gesamte Spine exportiert nach CSV."
+      },
+      {
+        "question": "Kann Builderforce die Fehler beheben, die es überwacht?",
+        "answer": "Ja. Die Quality-Säule erfasst Laufzeitfehler aus einem Browser-SDK, OpenTelemetry, Sentry, PostHog oder LogRocket, gruppiert sie per Fingerprint in deduplizierte Fehlergruppen und verwandelt dann jede Gruppe in eine Fix-Aufgabe, die ein Cloud-Agent aufnimmt und als Pull Request ausliefert. Anders als ein Monitoring-Dashboard, das an einem Stack-Trace endet, weist dieselbe Plattform, die den Absturz sichtbar macht, ihn zu, behebt ihn und öffnet den PR."
+      },
+      {
+        "question": "Muss ich von Jira oder Linear migrieren, um Builderforce zu nutzen?",
+        "answer": "Nein. Board-Konnektoren synchronisieren Arbeit in beide Richtungen mit den Tools, die Sie bereits einsetzen – Jira, Linear, monday, Asana, ClickUp, ServiceNow, Freshservice, Sentry, PagerDuty und GitHub. Agenten nehmen ein Ticket oder einen Incident auf und handeln darauf, wo immer es entsteht, und Änderungen fließen zurück ins System of Record. Sie erhalten eine Oberfläche, um über alles zu orchestrieren – ohne Migration und ohne Lock-in."
+      },
+      {
+        "question": "Ist Builderforce kostenlos?",
+        "answer": "Ja – die Free-Stufe kostet für immer $0/Monat ohne Kreditkarte. Sie umfasst WebGPU-Training, Datensatzgenerierung, KI-Bewertung und öffentliches Durchsuchen der Workforce. Der Pro-Plan ($29/seat/Monat) schaltet private Agenten, unbegrenztes Training und priorisierten Support frei."
+      },
+      {
+        "question": "Wie trainiere ich ein Modell in meinem Browser?",
+        "answer": "Starten Sie ein Projekt, generieren oder laden Sie einen Datensatz hoch und starten Sie dann den LoRA-Trainingsassistenten im Browser. Das Training läuft vollständig auf Ihrem lokalen WebGPU-Gerät – es werden keine Cloud-GPUs benötigt, und Ihre Daten verlassen nie Ihren Browser."
+      },
+      {
+        "question": "Was ist die Workforce Registry?",
+        "answer": "Die Workforce Registry ist ein öffentlicher Marktplatz, auf dem trainierte KI-Agenten mit Profilen, Skills und Bewertungsscores gelistet werden können. Andere Teams und Anwendungen können Agenten sofort entdecken und einstellen."
+      },
+      {
+        "question": "Was ist WebGPU-LoRA-Feintuning?",
+        "answer": "LoRA (Low-Rank Adaptation) ist eine parametereffiziente Feintuning-Technik, die einen kleinen Satz Adaptergewichte statt des gesamten Modells trainiert. Builderforce führt das LoRA-Training direkt in Ihrem Browser mit der WebGPU-API aus und unterstützt Modelle mit bis zu 2 Milliarden Parametern ohne Cloud-GPU-Kosten."
+      },
+      {
+        "question": "Wie funktioniert die KI-Bewertungs-Engine?",
+        "answer": "Nach dem Training bewertet ein unabhängiger KI-Bewerter die Ausgaben Ihres Modells anhand strukturierter Qualitätsmetriken, darunter Korrektheit, Reasoning-Qualität und Halluzinationsrate. Das liefert Ihnen objektive Bewertungsscores vor der Veröffentlichung in der Workforce Registry."
+      },
+      {
+        "question": "Welche Modelle kann ich feintunen?",
+        "answer": "Builderforce unterstützt das LoRA-Feintuning von Transformer- und SSM-Architekturen (State Space Model) mit bis zu 2 Milliarden Parametern. Das Training läuft auf Ihrer lokalen GPU über die WebGPU-API in Chrome, Edge oder jedem WebGPU-fähigen Browser."
+      },
+      {
+        "question": "Sind meine Daten während des Trainings privat?",
+        "answer": "Ja – 100 % privat. Die gesamte Trainingsberechnung erfolgt lokal auf Ihrem Gerät mit WebGPU. Ihre Datensätze, Modellgewichte und Trainingsartefakte werden während des Trainings nie an externe Server gesendet. Fertige LoRA-Adapter werden in verschlüsseltem Cloudflare-R2-Speicher persistiert."
+      },
+      {
+        "question": "Wie schneidet Builderforce im Vergleich zu Cloud-Trainingsplattformen ab?",
+        "answer": "Anders als Cloud-Trainingsplattformen, die pro GPU-Stunde abrechnen, führt Builderforce das Training auf Ihrem lokalen WebGPU-Gerät kostenlos aus. Es umfasst zudem integrierte Datensatzgenerierung, KI-Bewertung und einen Marktplatz zum Veröffentlichen von Agenten – Funktionen, die üblicherweise mehrere separate Tools erfordern."
+      },
+      {
+        "question": "Kann ich Builderforce-Agenten mit BuilderForce Agents integrieren?",
+        "answer": "Ja – auf Builderforce trainierte Modelle können als Evermind-Modelle exportiert und veröffentlicht werden, die Ihr selbstgehostetes BuilderForce Agents-Gateway direkt als Modell aufruft, nicht nur als Memory-Schicht. Die Plattform unterstützt die gesamte Pipeline: Trainieren Sie ein eigenes SSM im Browser, veröffentlichen Sie es und leiten Sie Live-Traffic über die OpenAI-kompatible API darauf."
+      }
+    ]
   }
 }

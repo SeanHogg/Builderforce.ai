@@ -84,6 +84,16 @@ export interface PlatformActionContext {
    * {@link focusDomainsForPath}.
    */
   focusDomains?: string[];
+  /**
+   * `domain.method` keys the SERVER MCP catalog already provides (fetched from
+   * `/llm/v1/mcp/tools`, parsed from each entry's `tool`). Any matching capability
+   * here is DROPPED so the catalog is the single source for it — the web Brain
+   * uses the gateway's `builtin_*` tool instead, exactly like the VS Code chat.
+   * What remains is only the not-yet-ported tail + the client-local actions
+   * (navigation). As the catalog grows, the web manifest auto-shrinks — no
+   * hand-maintained list, no duplication, no capability lost mid-migration.
+   */
+  excludeToolKeys?: Set<string>;
 }
 
 const S = { type: 'string' } as const;
@@ -753,7 +763,14 @@ export function focusDomainsForPath(pathname: string | null | undefined): string
 }
 
 export function buildPlatformActions(ctx: PlatformActionContext): BrainAction[] {
-  const caps = buildPlatformCapabilities(ctx);
+  // Drop every capability the server MCP catalog already owns — those reach the
+  // Brain via the catalog (builtin_* tools) instead, so each capability lives in
+  // exactly ONE place. The remaining caps are the not-yet-ported tail.
+  const allCaps = buildPlatformCapabilities(ctx);
+  const exclude = ctx.excludeToolKeys;
+  const caps = exclude && exclude.size
+    ? allCaps.filter((c) => !exclude.has(`${c.domain}.${c.method}`))
+    : allCaps;
 
   // Navigation — open any page in the app.
   const navigate_to: BrainAction = {
@@ -790,6 +807,28 @@ export function buildPlatformActions(ctx: PlatformActionContext): BrainAction[] 
       const chatId = f<number | undefined>(a, 'chatId');
       ctx.navigate(`/ide/${id}${chatId != null ? `?chat=${chatId}` : ''}`);
       return { opened: `/ide/${id}` };
+    },
+  };
+
+  // Open the migration / reconciliation work panel on the LEFT (the Brain sits on
+  // the right). The Brain calls this after testing a connection so the human can
+  // map/combine projects, map item types + users, review and import. Pass a runId
+  // to resume an in-progress run, or just a provider to start fresh.
+  const open_migration_panel: BrainAction = {
+    name: 'open_migration_panel',
+    description: 'Open the migration / reconciliation panel on the left so the user can map projects (combine), item types and users, review staged items, and import. Use after connecting + testing a provider credential. Pass runId to resume a run, or provider to start a new one.',
+    parameters: obj({
+      runId: { ...S, description: 'Existing migration run id to resume/review.' },
+      provider: { ...S, description: 'Provider id to start a new migration for (e.g. "bitbucket", "jira", "github").' },
+    }),
+    mutates: false,
+    run: (args) => {
+      const a = args as Json;
+      const runId = f<string | undefined>(a, 'runId');
+      const provider = f<string | undefined>(a, 'provider');
+      if (typeof window === 'undefined') return { error: 'Migration panel is only available in the browser.' };
+      window.dispatchEvent(new CustomEvent('builderforce:open-migration-panel', { detail: { runId: runId ?? null, provider: provider ?? null } }));
+      return { opened: 'migration-panel', runId: runId ?? null, provider: provider ?? null };
     },
   };
 
@@ -841,9 +880,12 @@ export function buildPlatformActions(ctx: PlatformActionContext): BrainAction[] 
     },
   };
 
-  // Tier-1 promoted tools (single source of truth = the manifest).
-  const promotedKeys = new Set(STATIC_PROMOTIONS.map(([d, m]) => `${d}.${m}`));
-  const promoted = STATIC_PROMOTIONS.map(([d, m, name]) => promote(caps, d, m, name));
+  // Tier-1 promoted tools (single source of truth = the manifest). Skip any whose
+  // capability was excluded (catalog-owned) so promote() never misses — the catalog
+  // surfaces those directly.
+  const corePromotions = STATIC_PROMOTIONS.filter(([d, m]) => caps.some((c) => c.domain === d && c.method === m));
+  const promotedKeys = new Set(corePromotions.map(([d, m]) => `${d}.${m}`));
+  const promoted = corePromotions.map(([d, m, name]) => promote(caps, d, m, name));
 
   // Context-aware promotion: bring the route's relevant domains' core methods
   // first-class too, deduped against the static core and each other.
@@ -859,5 +901,5 @@ export function buildPlatformActions(ctx: PlatformActionContext): BrainAction[] 
     }
   }
 
-  return [navigate_to, open_project, ...promoted, ...focusActions, list_platform_capabilities, call_platform_capability];
+  return [navigate_to, open_project, open_migration_panel, ...promoted, ...focusActions, list_platform_capabilities, call_platform_capability];
 }

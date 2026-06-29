@@ -138,6 +138,15 @@ The platform has grown from an IDE-plus-training studio into a full **system of 
 - **Webhooks where supported** (GitHub, Jira, Linear, monday, Sentry, PagerDuty), polling otherwise. Agents act on a ticket or incident wherever it originates; changes flow back to the system of origin — single pane, no migration.
 - **Endpoints** — `GET /api/board-connections/providers` (catalog), CRUD `/api/board-connections`, `POST /api/board-connections/:id/sync`, `GET /api/board-connections/:id/links`.
 
+### Platform Migration & Integration Hub (mig 0256)
+Move off a competitor tracker without fear, or just sync data in — a **staged** importer on top of the connector framework. Nothing lands in real projects/tasks/members until you commit.
+- **Provider discovery** — `discover()` enumerates external projects, item types, and users for **Jira, monday, Rally, GitLab, Bitbucket, GitHub** (the migration-eligible providers; new Rally/GitLab/Bitbucket adapters added).
+- **Staging buffer** — `import_runs` + `import_staged_{projects,items,users}` + `import_type_mappings`; combine several external projects into one BuilderForce project, map item types → task type/status, and invite/map users — all reviewed before import.
+- **Migrate / sync / both** — one-time historical import, an ongoing `board_connections` sync, or both. The persistent `board_type_mappings` makes ongoing sync land tasks in the mapped type/status (not a hardcoded backlog). Imported items keep their **assignee** (mapped to a member) and **story points**.
+- **Integrations gallery** — `/settings/integrations` is the workspace home: cards by category (PM / SCM / ITSM / incident), per-provider config panel (Credentials · Connections · Activity/diagnostics), and a "Start migration" launcher. GitHub/GitLab/Bitbucket connect **both** issues (migration) **and** repositories (code).
+- **Brain-drivable** — the whole flow is in the gateway MCP catalog (`integrations.create_credential`/`test`, `migrations.start`/`set_mappings`/`stage`/`commit`); the Brain (right-docked) opens the migration panel on the **left** via `open_migration_panel`.
+- **Endpoints** — `/api/migrations` (start/list/get/`:id/mappings`/`:id/stage`/`:id/commit`, MANAGER+, cached + version-bumped).
+
 ### Agentic Tester — Autonomous QA (mig 0063, 0206)
 - **Heatmap-ranked exploration** — journey events (`POST /api/qa/events`) rank route-and-element zones by recency-weighted frequency (`GET /api/qa/heatmap`); explorations plan from the hottest zones within a budget.
 - **AI-generated Playwright** — `POST /api/qa/generate` turns a flow into an executable spec and resolves a persona credential; a deterministic heatmap-only plan is also available (no model cost).

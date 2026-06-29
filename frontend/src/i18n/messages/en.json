@@ -285,6 +285,12 @@
     "toFix": "{count, plural, one {# to fix} other {# to fix}}",
     "openReportAria": "Open the project inspection report — grade {grade}, {score} of 100",
     "dimAria": "{name}: {score}",
+    "maturity": {
+      "title": "Diagnostic maturity",
+      "subtitle": "Self- and data-assessed agentic maturity (1–5), separate from the PM rating above.",
+      "outOf": "{score}/5",
+      "viewCta": "View diagnostics"
+    },
     "tier": {
       "healthy": "Strong",
       "watch": "Fair",
@@ -2474,5 +2480,536 @@
     "description": "Description",
     "agent": "Agent",
     "actions": "Actions"
+  },
+  "marketing": {
+    "ctaGetStartedFree": "Get Started Free",
+    "ctaStartBuildingFree": "Start building free",
+    "ctaTourPlatform": "Tour the platform",
+    "ctaSeePricing": "See pricing"
+  },
+  "evermind": {
+    "seo": {
+      "title": "Evermind — The Builderforce.ai LLM, a Self-Updating Model",
+      "description": "Evermind is the Builderforce.ai LLM: a self-updating model governed by Write-Through Cognition. Unlike frozen frontier models, new knowledge is written straight through so an update replaces what came before — no retrain, no reconciliation step. Runs on WebGPU in the browser, on-device, or inside every agent.",
+      "ogTitle": "Evermind — The Self-Updating Builderforce.ai LLM"
+    },
+    "eyebrow": "Meet Evermind",
+    "tagline": "A model that learns as it works — and never goes stale",
+    "title": "Evermind — the <grad>Builderforce.ai LLM</grad>",
+    "law": {
+      "heading": "Write-Through Cognition",
+      "lead": "Every frozen frontier model shares one flaw: its knowledge is fixed at training time, and every update is a bolt-on. Evermind is governed by a single principle that removes the bolt-on entirely.",
+      "quote": "Evermind is Builderforce.ai's self-updating model, governed by Write-Through Cognition: new knowledge is written straight through so an update replaces what came before — reads are always current, there is never a reconciliation step, and it runs in the browser, on-device, or inside every agent.",
+      "figcap": "Conventional models append and reconcile; Evermind upserts by key and invalidates — there is no reconcile step."
+    },
+    "architecture": {
+      "heading": "One brain, three cooperating layers",
+      "lead": "Evermind isn't a monolith. It's three layers working together — the same three the hero animation lights up as information travels through it.",
+      "figcap": "One brain, all yours: Evermind's own generator as the cortex, its write-through hippocampus for memory, and a limbic layer for dynamics. (External frontier models stay routable when you want them — just not required.)",
+      "pillars": [
+        {
+          "title": "Write-Through Cognition",
+          "desc": "Knowledge is write-through: an update means replace, not append. Reads always reflect the latest truth and there is never a stale-then-reconcile step — the same invalidate-on-write rule the platform uses for caching, applied to the model's memory."
+        },
+        {
+          "title": "Shared-expert hybrid generator",
+          "desc": "A dense always-on backbone carries continuous online learning, while lazily-loaded routed SSM experts page in on demand. You get specialist depth without a giant frozen blob — and it runs on WebGPU with zero runtime dependencies."
+        },
+        {
+          "title": "Write-through memory",
+          "desc": "Every fact upserts by a stable key and invalidates its old recall, so the model never accumulates contradictory copies of the same truth. The knowledge loop corrects in place instead of drifting."
+        },
+        {
+          "title": "Limbic dynamics",
+          "desc": "A trainable affective layer modulates how the model responds in the moment — personality as setpoints, limbic state as dynamics — so agents behave consistently with the persona you give them."
+        }
+      ]
+    },
+    "contrast": {
+      "heading": "Evermind vs. a frozen frontier model",
+      "lead": "Evermind isn't built to out-parameter the biggest models. It wins on the axes their architecture structurally trades away.",
+      "figcap": "The whole argument in one frame — a frozen model needs a bolt-on for every update; Evermind inverts all five axes.",
+      "colAspect": "Aspect",
+      "colFrozen": "Frozen frontier model",
+      "colEvermind": "Evermind",
+      "rows": [
+        {
+          "aspect": "Knowledge updates",
+          "frozen": "Frozen at training time — needs a retrain, fine-tune, RAG patch, or hand-edit",
+          "evermind": "Written straight through — an update replaces what came before"
+        },
+        {
+          "aspect": "Reconciliation",
+          "frozen": "Stale and fresh facts coexist; something must merge them later",
+          "evermind": "Upsert-by-key + invalidate — there is never a reconcile step"
+        },
+        {
+          "aspect": "Currency",
+          "frozen": "Goes out of date the moment it ships",
+          "evermind": "Never stale — updates land the moment they happen"
+        },
+        {
+          "aspect": "Footprint",
+          "frozen": "Large; runs in the vendor cloud",
+          "evermind": "Runs on WebGPU — in the browser, on-device, or inside every agent"
+        },
+        {
+          "aspect": "Ownership",
+          "frozen": "Third-party model, a knowledge cutoff you do not control",
+          "evermind": "Yours end to end — open packages, your data"
+        }
+      ]
+    },
+    "edges": {
+      "heading": "Why it wins — currency, footprint, ownership",
+      "figcap": "Scale is a vendor's moat. Currency, footprint, and ownership are yours.",
+      "items": [
+        {
+          "label": "Currency",
+          "desc": "Never stale — knowledge updates land in the model the moment they happen, with no retrain cycle."
+        },
+        {
+          "label": "Footprint",
+          "desc": "Runs in any runtime — in the browser, on-device, or embedded in every agent via WebGPU."
+        },
+        {
+          "label": "Ownership",
+          "desc": "Yours end to end — open packages, your data, no third-party model dependency."
+        }
+      ]
+    },
+    "lifecycle": {
+      "heading": "From training to a callable model — in minutes",
+      "lead": "Train a model in the browser, prove it works with a live API call, publish it to your Workforce Registry, then call it from anywhere. No GPU bill, no deploy step, no waiting.",
+      "steps": [
+        {
+          "title": "Train",
+          "desc": "Fine-tune in-browser on WebGPU — LoRA adapters plus a persistent memory snapshot. Nothing leaves your machine."
+        },
+        {
+          "title": "Benchmark",
+          "desc": "Score the model on a held-out slice on-device — perplexity, next-token accuracy, and throughput — and A/B it against the prior checkpoint. Publish on evidence."
+        },
+        {
+          "title": "Validate via API",
+          "desc": "Before publishing, run a live test call against the candidate model. Publishing unlocks only once it actually responds."
+        },
+        {
+          "title": "Publish",
+          "desc": "One click registers the model in your Workforce Registry, where your team and your own agents can hire it."
+        },
+        {
+          "title": "Call",
+          "desc": "Invoke it over HTTP with the OpenAI standard or the dedicated model endpoint — from code, CI, or another agent."
+        }
+      ]
+    },
+    "api": {
+      "heading": "Call your model over the API",
+      "lead": "Your published model speaks the OpenAI standard, so the official SDKs work by pointing them at the gateway — and there's a dedicated endpoint for calling your model by id. Same chat shape either way."
+    },
+    "faqHeading": "Evermind FAQ",
+    "faq": [
+      {
+        "question": "What is Evermind?",
+        "answer": "Evermind is the Builderforce.ai LLM — the self-updating model at the brain of the platform. It is governed by Write-Through Cognition: new knowledge is written straight through into the model, so an update replaces what came before with no reconciliation step, and reads always reflect the latest truth. Evermind is built from a shared-expert hybrid SSM generator (a dense always-on backbone plus lazily-loaded routed experts), a write-through knowledge memory, and a trainable limbic layer for dynamics, and it runs on WebGPU in the browser, on-device, or inside every agent."
+      },
+      {
+        "question": "What is the Builderforce.ai LLM?",
+        "answer": "The Builderforce.ai LLM is Evermind. Rather than relying on a frozen third-party frontier model, Builderforce.ai runs its own self-updating model that learns as it works. Frontier LLMs can still be routed to when you want them, but Evermind is the native model that gives the platform currency (never stale), a small footprint (runs on-device), and full ownership (your data, open packages, no third-party model dependency)."
+      },
+      {
+        "question": "What is Write-Through Cognition?",
+        "answer": "Write-Through Cognition is the governing principle of Evermind. Knowledge is written straight through into the model, so an update is an upsert by a stable key plus an invalidation of the old recall — an update means replace, not append. Reads always reflect the latest truth and there is never a stale-then-reconcile step. It is the same invalidate-on-write rule used for caching, applied to a model's knowledge tier so it can never quietly drift out of date."
+      },
+      {
+        "question": "How is Evermind different from a frozen LLM like GPT or Claude?",
+        "answer": "Frozen frontier models fix their knowledge at training time; updating them means a bolt-on retrain, fine-tune, RAG pipeline, or hand-edit — each a separate reconciliation step. Evermind writes new knowledge directly into the model, so it never accumulates contradictory copies of the same fact and never needs a reconcile pass. It is designed to win not on raw parameter count but on three axes a frozen model structurally trades away: currency, footprint, and ownership."
+      },
+      {
+        "question": "Does Evermind run on-device or in the browser?",
+        "answer": "Yes. Evermind runs on WebGPU, so it executes in the browser, on-device, or embedded inside every agent, with zero runtime dependencies. The same model and its write-through memory travel wherever the agent runs, which is what lets agents carry correct knowledge across sessions without a cloud round-trip."
+      },
+      {
+        "question": "Can I use Evermind inside my own agents?",
+        "answer": "Yes. Evermind is the model behind the platform's agents, and its write-through memory and recall are available to the agents you run — so a corrected fact stays corrected across sessions. You can also train custom specialist models in the browser (WebGPU LoRA) and publish them to the Workforce Registry to call from inside your own agent."
+      },
+      {
+        "question": "How does Evermind stay up to date without retraining?",
+        "answer": "Through its shared-expert hybrid generator and write-through memory. A dense always-on backbone carries continuous online learning while routed experts page in on demand, and every new fact upserts by a stable key and invalidates its prior recall. New knowledge lands in the model the moment it happens, so there is no retrain cycle and no knowledge cutoff you do not control."
+      },
+      {
+        "question": "Does Evermind have benchmarks — how do I know a model I train is any good?",
+        "answer": "Yes. Every model you train in the Studio is scored on-device before you publish it. The built-in benchmarking harness holds out a slice of your corpus the model never trains on, then reports the standard language-model yardsticks — held-out perplexity, bits-per-token, top-1 and top-k next-token accuracy, and generation throughput — and can A/B two checkpoints so you can see whether a fresh adaptation actually improved on the last one. It runs entirely in your browser with no GPU bill and no data leaving your machine, so you publish on evidence, not vibes. The same harness is the open measurement instrument behind the Evermind technical report."
+      }
+    ],
+    "adoption": {
+      "heading": "What adopting Evermind looks like",
+      "lead": "Adopting an agentic workforce isn't a rip-and-replace. Humans and AI agents sit on the same board, assigned and tracked the same way — and every agent runs on a model you own, that never goes stale.",
+      "figcapBoard": "The same board, a bigger team — orchestrated, metered, and governed by Builderforce.ai.",
+      "figcapStack": "One owned stack, from the brain to the editor — Evermind, the agent runtime, orchestration, and your surfaces.",
+      "readLink": "Read: Transitioning to an Agentic Workforce →"
+    },
+    "cta": {
+      "title": "Build on a model that never goes stale",
+      "desc": "Start free — no credit card required. Put Evermind and your AI workforce to work entirely in your browser."
+    },
+    "relatedHeading": "Go deeper",
+    "alt": {
+      "writeThrough": "Conventional append-then-reconcile knowledge vs Evermind's upsert-by-key and invalidate",
+      "architecture": "Evermind's three layers, all its own: a generator cortex, a self-updating write-through hippocampus, and a trainable limbic layer",
+      "frozenVsEvermind": "A frozen frontier model versus Evermind across five axes: knowledge updates, reconciliation, currency, footprint, and ownership",
+      "threeEdges": "Currency, footprint, and ownership — the three edges that decide an enterprise rollout",
+      "workforce": "Humans and AI agents on one Kanban board, orchestrated by Builderforce.ai — the same board, a bigger team",
+      "platformStack": "One owned stack: Evermind at the base, the agent runtime, Builderforce.ai orchestration, and the surfaces your team already uses"
+    },
+    "blurb": "Evermind is the brain of Builderforce: a self-updating model governed by Write-Through Cognition. Frozen frontier models go out of date the moment they ship — every update needs a bolt-on retrain, fine-tune, or RAG patch. Evermind writes new knowledge straight through into the model, so an update simply replaces what was there. Reads always reflect the latest truth, there is never a reconciliation step, and it runs anywhere — in the browser, on-device, or inside every agent.",
+    "exploreCta": "Explore Evermind"
+  },
+  "features": [
+    {
+      "title": "Evermind — The Self-Updating Model",
+      "shortDesc": "A model that learns as it works and never goes stale.",
+      "longDesc": "Evermind is the brain of the platform — a self-updating model governed by Write-Through Cognition: new knowledge is written straight through, so an update replaces what came before with no reconciliation step. A shared-expert hybrid generator (dense backbone + routed SSM experts) learns online and runs on WebGPU, so it wins on currency, footprint, and ownership rather than raw scale — in the browser, on-device, or inside every agent."
+    },
+    {
+      "title": "Kanban Board & Project Management",
+      "shortDesc": "Plan, assign & track work on a live agent Kanban board.",
+      "longDesc": "A full project-management surface: organize work into projects, then plan, assign, and track every task on a live Kanban board — swimlanes per status or per agent, plus table, calendar, and Gantt views. Humans and AI agents sit on the same board, and work flows from backlog to done in real time."
+    },
+    {
+      "title": "Train Your Own Agents — Then Use Them Inside Your Agent",
+      "shortDesc": "Train custom agents and call them from inside your agent.",
+      "longDesc": "Close the loop: train a custom agent (in-browser WebGPU LoRA + AI evaluation), publish it to the Workforce Registry, then hire it and call it from inside your own agent. Your trained specialists become tools your main agent delegates to — a fully agentic workforce you own and orchestrate."
+    },
+    {
+      "title": "Never Leave VS Code",
+      "shortDesc": "Run your whole workforce from the VS Code extension.",
+      "longDesc": "The BuilderForce VS Code extension brings the entire platform into your editor: chat with agents, assign and run tasks, review and validate their work, and manage your whole agent workforce — all without leaving VS Code. Human-in-the-loop approvals happen right where you code."
+    },
+    {
+      "title": "Agentic Tester — Autonomous QA",
+      "shortDesc": "An AI agent that browser-tests your app on a schedule.",
+      "longDesc": "The Agentic Tester is a hireable QA agent. Point it at your project's URL, save the logins it should use, and it drives a real browser through your highest-traffic flows — ranking what to test from real usage heatmaps, logging in as each persona, and capturing console errors, failed requests, and crashes. Run it on demand or schedule it as part of a workflow; every bug it finds lands straight on your Kanban board."
+    },
+    {
+      "title": "AI CTO",
+      "shortDesc": "Builds, trains & deploys your AI workforce.",
+      "longDesc": "Your AI CTO builds, trains and deploys your AI agent workforce — in-browser WebGPU LoRA fine-tuning, AI evaluation, and one-click publish to the Workforce Registry."
+    },
+    {
+      "title": "AI CIO",
+      "shortDesc": "Connects & orchestrates your systems.",
+      "longDesc": "Your AI CIO connects to your systems — GitHub, Jira, Confluence and more via encrypted credentials — and orchestrates work through the Brain assistant’s tool registry."
+    },
+    {
+      "title": "AI Security Officer",
+      "shortDesc": "Governs every action with approvals & audit.",
+      "longDesc": "Your AI Security Officer governs every action: human-in-the-loop approval gates, a full audit trail, per-tenant isolation, and AES-256-GCM encrypted credentials."
+    },
+    {
+      "title": "Planning Spine — Portfolio to Task",
+      "shortDesc": "One dated, cost-bearing hierarchy on a single Gantt.",
+      "longDesc": "Plan, deliver, and account for work on one hierarchy: portfolio → initiative → epic → task, with Objectives and Key Results attaching at any level. Every leaf's cost — LLM spend priced at write time plus human effort — rolls up to every ancestor and is split CAPEX vs OPEX, with anomaly flags where a capitalization decision needs sign-off. Engineering plans on it, the PMO rolls portfolios up on it, and finance closes from it — one set of numbers, no reconciliation step."
+    },
+    {
+      "title": "Error Observability + One-Click Agent Fix",
+      "shortDesc": "Crash to pull request on a single surface.",
+      "longDesc": "Ingest runtime errors from your browser SDK, OpenTelemetry, Sentry, PostHog, or LogRocket; group them by fingerprint into deduplicated error groups with occurrence and affected-user counts; then turn any group into a fix task a cloud agent picks up and ships as a pull request. Observability that doesn't end at a dashboard — the same platform that surfaces the crash assigns it, fixes it, and PRs it."
+    },
+    {
+      "title": "Knowledge Management & Compliance",
+      "shortDesc": "Versioned SOPs with an audit-ready acknowledgement trail.",
+      "longDesc": "A versioned base for SOPs, processes, and docs with immutable publish snapshots, timestamped read-acknowledgements, and per-user overdue tracking — audit-ready evidence for SOX, TISAX, and ISO 27001. Author and improve documents with AI, co-edit in real time, and gate access per page. The same knowledge that proves compliance also grounds your agents."
+    },
+    {
+      "title": "Single-Pane Board Connectors",
+      "shortDesc": "Two-way sync with Jira, Linear, Sentry, PagerDuty & more.",
+      "longDesc": "Connect the trackers and incident tools you already run — Jira, Linear, monday, Asana, ClickUp, ServiceNow, Freshservice, Sentry, PagerDuty, and GitHub — and sync work two-ways. Agents pick up and act on a ticket or incident wherever it originates, and changes flow back to the system of record. One pane to orchestrate across everything, with no migration and no lock-in."
+    },
+    {
+      "title": "AI Dataset Generation",
+      "shortDesc": "Generate datasets from a single prompt.",
+      "longDesc": "Generate instruction-tuning datasets from a single capability prompt using any OpenRouter model. Export as JSONL, stored in R2."
+    },
+    {
+      "title": "In-Browser LoRA Training",
+      "shortDesc": "Fine-tune up to 2B params with WebGPU.",
+      "longDesc": "Fine-tune models up to 2B parameters directly in Chrome with WebGPU. No cloud GPU bills, zero round-trips, total privacy."
+    },
+    {
+      "title": "Grounded RAG & Answer Evaluation",
+      "shortDesc": "Hybrid retrieval, plus faithfulness & drift scoring.",
+      "longDesc": "The full retrieval-and-evaluation stack, built in. Memory uses hybrid retrieval — dense embeddings and BM25 keyword search fused with Reciprocal Rank Fusion and reranked with MMR for relevance and diversity, over chunked documents. Every run is then scored for faithfulness, answer relevance, and hallucination rate, and a drift monitor flags when a model's quality regresses over time — so a wrong answer never hides behind a green dashboard."
+    },
+    {
+      "title": "AI Evaluation Engine",
+      "shortDesc": "Score outputs with an AI judge.",
+      "longDesc": "Score your model outputs with an independent AI judge. Get structured quality metrics: correctness, reasoning, hallucination rate."
+    },
+    {
+      "title": "Agent Registry",
+      "shortDesc": "Publish agents to the Workforce Registry.",
+      "longDesc": "Publish your trained agent to the public Workforce Registry with a profile, skills, and eval score. Others can hire it instantly."
+    },
+    {
+      "title": "R2 Artifact Storage",
+      "shortDesc": "Persist LoRA weights to Cloudflare R2.",
+      "longDesc": "LoRA adapter weights are serialised from WebGPU buffers and automatically persisted to Cloudflare R2 with signed URLs."
+    },
+    {
+      "title": "Semantic Response Cache",
+      "shortDesc": "Reuse answers across paraphrases — slash token spend.",
+      "longDesc": "An embedding-keyed cache reuses a prior answer when a new prompt means the same thing as one already answered, so the frontier model is never billed twice for the same work. Two tiers: a free on-device layer (SSM embeddings, in your browser and in each agent) plus a shared gateway layer — so a cache hit in the web app saves tokens for your agents too."
+    },
+    {
+      "title": "Full IDE Workspace",
+      "shortDesc": "Monaco editor, terminal, AI chat — all-in-one.",
+      "longDesc": "Monaco editor, terminal, AI chat, file explorer — everything you need in one collaborative project workspace."
+    },
+    {
+      "title": "Secure Multi-Tenant",
+      "shortDesc": "JWT auth with tenant isolation.",
+      "longDesc": "JWT auth with tenant isolation. Projects, datasets, models, and agents are private and scoped per tenant by default."
+    },
+    {
+      "title": "Cloudflare Edge",
+      "shortDesc": "Zero cold-start global distribution.",
+      "longDesc": "Zero cold-start Worker API with global distribution. COOP/COEP headers enable SharedArrayBuffer for Transformers.js."
+    }
+  ],
+  "compare": {
+    "teaser": {
+      "title": "Built for delivery, not just completion",
+      "blurb": "GitHub Copilot, Cursor, Claude Code and Devin drive a single agent. Builderforce.ai orchestrates a self-hosted, model-agnostic agent workforce with governance, audit and persistent memory. See the full comparison.",
+      "ctaLabel": "Compare Builderforce.ai vs the field",
+      "highlightFeatures": [
+        "Train your own agents — then call them inside your agent",
+        "Kanban board + project management for your workforce",
+        "Manage your whole workforce without leaving VS Code",
+        "Multi-agent orchestration (7 roles + DAG)",
+        "Human-in-the-loop approval gates + audit trail",
+        "30+ model providers incl. local Ollama"
+      ]
+    }
+  },
+  "home": {
+    "heroBadge": "Human-in-the-loop · Fully agentic cloud",
+    "heroTitle": "See the future, <em>clearly</em>",
+    "heroSub": "The innovation platform for the agentic era — one workforce of humans and AI agents, on a single board.",
+    "heroPromptPlaceholder": "Describe what you want your AI workforce to do…",
+    "heroPromptAria": "Describe what you want your AI workforce to do",
+    "heroGetStarted": "Get started",
+    "heroExamples": [
+      "Audit my repo for security issues",
+      "Connect Jira and summarize this sprint",
+      "Build & train a customer-support agent"
+    ],
+    "evermindHeadingSuffix": "A model that learns as it works — and never goes stale",
+    "pillarsHeading": "Human in the loop. Fully agentic.",
+    "pillarsLead": "Train your own agents, put them to work inside your agent, and stay in control of every step — from one place.",
+    "pillars": [
+      {
+        "title": "Train agents, use them inside your agent",
+        "desc": "Train a custom agent in-browser (WebGPU LoRA + evaluation), publish it to the Workforce Registry, then hire it and call it from inside your own agent. Your specialists become tools your main agent delegates to."
+      },
+      {
+        "title": "Manage your workforce on a Kanban board",
+        "desc": "Plan, assign, and track every task on a live Kanban board — humans and AI agents on the same board, with table, calendar, and Gantt views. Work flows from backlog to done in real time."
+      },
+      {
+        "title": "Never leave VS Code",
+        "desc": "The BuilderForce VS Code extension runs the whole platform in your editor: chat with agents, assign and run tasks, review and validate their work, and approve human-in-the-loop actions — without leaving your code."
+      }
+    ],
+    "rolesHeading": "One system of record. Every role's operating picture.",
+    "rolesLead": "Because every action — human or agent — is instrumented, costed, and attributed, the whole organization works from one source of truth. No six-tool stack, no spreadsheets reconciling who did what at what cost. Enterprise-grade visibility, priced as a platform.",
+    "roles": [
+      {
+        "role": "CEO",
+        "desc": "Innovation throughput, idea-to-ship conversion, and the ROI of the whole AI investment — one executive picture."
+      },
+      {
+        "role": "CTO / Engineering",
+        "desc": "DORA four-keys, agent-vs-human productivity, and which AI approach actually merges — from real delivery data."
+      },
+      {
+        "role": "CFO / Finance",
+        "desc": "Every token and task costed and attributed ticket → project → initiative, with budgets and cost-per-outcome."
+      },
+      {
+        "role": "PMO",
+        "desc": "Portfolio rollup, capacity, and delivery forecast across every initiative — with real cost and real outcomes attached."
+      },
+      {
+        "role": "Security / CISO",
+        "desc": "An immutable, per-action audit trail of everything every agent touched — built for evidence, not screenshots."
+      },
+      {
+        "role": "Managers & Teams",
+        "desc": "Throughput, cycle time, rework, and engagement for the blended human-plus-agent workforce on one board."
+      }
+    ],
+    "stats": [
+      {
+        "label": "Parameters\nin-browser"
+      },
+      {
+        "label": "Dataset\ngeneration"
+      },
+      {
+        "label": "Hardware\naccelerated"
+      },
+      {
+        "label": "Private — runs\nin your browser"
+      }
+    ],
+    "comparisonHeading": "Builderforce vs. Conventional Workflows",
+    "comparisonLead": "Purpose-built for AI agents from the ground up — not another cloud notebook or plugin.",
+    "comparisonColFeature": "Feature",
+    "comparisonColBuilderforce": "Builderforce",
+    "comparisonColNotebooks": "Generic notebooks",
+    "comparisonColCloud": "Cloud training",
+    "comparisonRows": [
+      "In-browser LoRA training",
+      "Dataset generation wizard",
+      "AI evaluation engine",
+      "Agent registry & skills",
+      "Global Workforce marketplace",
+      "Zero GPU bills"
+    ],
+    "stepsHeading": "Up and running in three steps",
+    "steps": [
+      {
+        "title": "Create an account",
+        "desc": "Sign up with your email and start a free workspace. 14-day Pro trial, no credit card required."
+      },
+      {
+        "title": "Generate a dataset",
+        "desc": "Use the wizard to author an instruction-tuning dataset from a single capability prompt."
+      },
+      {
+        "title": "Train & publish",
+        "desc": "Run LoRA training in your browser, evaluate results, and publish your agent to the Workforce Registry."
+      }
+    ],
+    "featuresHeading": "Everything your AI workforce can do",
+    "pricingHeading": "Pricing",
+    "pricingTeaser": [
+      {
+        "name": "Free",
+        "price": "$0",
+        "perks": [
+          "Evermind model (on-device)",
+          "WebGPU training",
+          "Workforce browse"
+        ]
+      },
+      {
+        "name": "Pro",
+        "price": "$29/seat",
+        "perks": [
+          "Unlimited agents",
+          "Private models",
+          "Priority support"
+        ]
+      }
+    ],
+    "blogHeading": "Latest from the blog",
+    "blogLead": "Deep dives, tutorials, and best practices for building and deploying AI agents — from WebGPU LoRA training to multi-agent orchestration.",
+    "blogReadAll": "Read all articles",
+    "newsletterHeading": "Stay in the loop",
+    "newsletterLead": "Get updates on new features, agents, and platform improvements. No spam, unsubscribe anytime.",
+    "newsletterSubscribe": "Subscribe",
+    "newsletterSubscribing": "Subscribing…",
+    "newsletterSubscribed": "Subscribed",
+    "newsletterSubscribedConfirm": "Subscribed ✓",
+    "newsletterError": "Unable to subscribe. Try again.",
+    "faqHeading": "Frequently asked questions",
+    "ctaTitle": "Put your AI CTO to work",
+    "ctaDesc": "Describe what you need, sign in, and your AI brain gets to work — building agents, connecting your systems, and governing every action. No credit card required.",
+    "ctaSeeLiveAgents": "See Live Agents",
+    "faq": [
+      {
+        "question": "What is Evermind?",
+        "answer": "Evermind is the brain of Builderforce.ai — a self-updating model governed by Write-Through Cognition. Instead of freezing knowledge at training time like a conventional frontier model, Evermind writes new knowledge straight through into the model, so an update replaces what came before with no reconciliation step and reads always reflect the latest truth. It is built from a shared-expert hybrid generator (a dense backbone that learns online plus routed SSM experts that page in on demand), a write-through knowledge memory that upserts by stable key, and a trainable limbic layer for dynamics. It runs on WebGPU in the browser, on-device, or inside every agent, and is designed to win on currency, footprint, and ownership rather than raw scale."
+      },
+      {
+        "question": "What is Builderforce.ai?",
+        "answer": "Builderforce.ai is the innovation platform for the agentic era — a single system of record where every unit of work, done by a human or an AI agent, is instrumented, costed, and attributed from idea to ship to learn. You plan, build, ship, and measure with one workforce of humans and agents on a Kanban board, train your own agents in the browser (dataset generation, WebGPU LoRA training, AI evaluation, and the Workforce Registry), connect to your systems and data, and govern every action with roles, approval gates, and a full audit trail — all without leaving VS Code."
+      },
+      {
+        "question": "Is Builderforce.ai an enterprise platform?",
+        "answer": "Yes — it is built to operate like an enterprise system of record, without enterprise pricing. Because every action (human or agent) is instrumented and costed, the whole organization works from one source of truth instead of stitching together a board, a code host, an observability tool, a FinOps tool, and spreadsheets. Each role gets its own operating picture from the same data: delivery and DORA for engineering, cost and budgets for finance, portfolio rollup and the innovation funnel for the PMO and CEO, and an immutable audit trail for security. Access is governed by workspace roles (owner, manager, developer, viewer), so people see what their role allows."
+      },
+      {
+        "question": "Can I train my own agents and use them inside my own agent?",
+        "answer": "Yes — that is the core loop. Train a custom agent in the browser with WebGPU LoRA fine-tuning and the AI evaluation engine, publish it to the Workforce Registry, then hire it and call it from inside your own agent. Your trained specialists become tools your main agent delegates to, so you build and orchestrate a fully agentic workforce you own."
+      },
+      {
+        "question": "Do I have to leave VS Code to manage my agents?",
+        "answer": "No. The BuilderForce VS Code extension brings the whole platform into your editor: chat with agents, assign and run tasks on the Kanban board, review and validate their work, and approve human-in-the-loop actions — all without leaving VS Code."
+      },
+      {
+        "question": "Does Builderforce have a Kanban board and project management?",
+        "answer": "Yes. Projects organize your work, and the task board tracks it on a live Kanban board with swimlanes per status or per agent, plus table, calendar, and Gantt views. Humans and AI agents share the same board, so you plan, assign, and watch work flow from backlog to done in real time."
+      },
+      {
+        "question": "Can the Kanban board run itself with AI agents?",
+        "answer": "Yes — that is Autonomous Swimlane Execution. Assign an agent (Cloud or On-Premise) to a board lane and tickets in that lane are dispatched to it automatically; the board advances from lane to lane as agents finish, pausing only at the approval gates you choose. You manage outcomes on a board instead of issuing prompts one at a time."
+      },
+      {
+        "question": "How does Builderforce keep LLM token costs down?",
+        "answer": "A cross-surface semantic cache reuses a prior answer when a new prompt means the same thing as one already answered, so the frontier model is never billed twice for the same work. It runs in two tiers — a free on-device layer using SSM embeddings (in the browser and in each agent) and a shared tenant-scoped gateway layer — and is combined with model routing that exhausts cheaper models before reaching premium ones."
+      },
+      {
+        "question": "Can I plan and cost work from portfolio down to task?",
+        "answer": "Yes — that is the Planning Spine. Portfolio, initiative, epic, and task live on one dated hierarchy (with Objectives and Key Results attaching at any level), rendered as a single Gantt. Because every task is instrumented, its cost — LLM spend priced at write time plus human effort — rolls up to every ancestor and is split CAPEX vs OPEX, with anomaly flags where a capitalization decision needs sign-off. Engineering, the PMO, and finance read the same numbers, and the whole spine exports to CSV."
+      },
+      {
+        "question": "Can Builderforce fix the errors it monitors?",
+        "answer": "Yes. The Quality pillar ingests runtime errors from a browser SDK, OpenTelemetry, Sentry, PostHog, or LogRocket, groups them by fingerprint into deduplicated error groups, then turns any group into a fix task a cloud agent picks up and ships as a pull request. Unlike a monitoring dashboard that ends at a stack trace, the same platform that surfaces the crash assigns it, fixes it, and opens the PR."
+      },
+      {
+        "question": "Do I have to migrate off Jira or Linear to use Builderforce?",
+        "answer": "No. Board connectors sync work two-ways with the tools you already run — Jira, Linear, monday, Asana, ClickUp, ServiceNow, Freshservice, Sentry, PagerDuty, and GitHub. Agents pick up and act on a ticket or incident wherever it originates, and changes flow back to the system of record. You get one pane to orchestrate across everything with no migration and no lock-in."
+      },
+      {
+        "question": "Is Builderforce free?",
+        "answer": "Yes — the Free tier is $0/month forever with no credit card required. It includes WebGPU training, dataset generation, AI evaluation, and public Workforce browsing. The Pro plan ($29/seat/month) unlocks private agents, unlimited training, and priority support."
+      },
+      {
+        "question": "How do I train a model in my browser?",
+        "answer": "Start a project, generate or upload a dataset, then launch the in-browser LoRA training wizard. Training runs entirely on your local WebGPU device — no cloud GPUs are required, and your data never leaves your browser."
+      },
+      {
+        "question": "What is the Workforce Registry?",
+        "answer": "The Workforce Registry is a public marketplace where trained AI agents can be listed with profiles, skills, and evaluation scores. Other teams and applications can discover and hire agents instantly."
+      },
+      {
+        "question": "What is WebGPU LoRA fine-tuning?",
+        "answer": "LoRA (Low-Rank Adaptation) is a parameter-efficient fine-tuning technique that trains a small set of adapter weights instead of the full model. Builderforce runs LoRA training directly in your browser using the WebGPU API, supporting models up to 2 billion parameters with zero cloud GPU costs."
+      },
+      {
+        "question": "How does the AI evaluation engine work?",
+        "answer": "After training, an independent AI judge scores your model's outputs on structured quality metrics including correctness, reasoning quality, and hallucination rate. This gives you objective eval scores before publishing to the Workforce Registry."
+      },
+      {
+        "question": "What models can I fine-tune?",
+        "answer": "Builderforce supports LoRA fine-tuning of transformer and SSM (State Space Model) architectures up to 2 billion parameters. Training runs on your local GPU via the WebGPU API in Chrome, Edge, or any WebGPU-capable browser."
+      },
+      {
+        "question": "Is my data private during training?",
+        "answer": "Yes — 100% private. All training computation happens locally on your device using WebGPU. Your datasets, model weights, and training artifacts are never sent to external servers during training. Finished LoRA adapters are persisted to encrypted Cloudflare R2 storage."
+      },
+      {
+        "question": "How does Builderforce compare to cloud training platforms?",
+        "answer": "Unlike cloud training platforms that charge per GPU-hour, Builderforce runs training on your local WebGPU device at zero cost. It also includes built-in dataset generation, AI evaluation, and a marketplace for publishing agents — features typically requiring multiple separate tools."
+      },
+      {
+        "question": "Can I integrate Builderforce agents with BuilderForce Agents?",
+        "answer": "Yes — models trained on Builderforce can be exported and published as Evermind models that your self-hosted BuilderForce Agents gateway calls directly as the model, not just as a memory layer. The platform supports the full pipeline: train a custom SSM in the browser, publish it, and route live traffic to it over the OpenAI-compatible API."
+      }
+    ]
   }
 }

@@ -57,9 +57,20 @@ export interface MigrationWizardProps {
   credentials: IntegrationCredential[];
   /** Fired after a successful import so the parent can refresh. */
   onImported?: () => void;
+  /** Which edge to dock to. Default 'right'; the Brain opens it 'left'. */
+  side?: 'left' | 'right';
+  /** Resume an existing run (e.g. one the Brain already started) instead of the connect step. */
+  initialRunId?: string | null;
 }
 
-export function MigrationWizard({ open, onClose, provider, providerLabel, credentials, onImported }: MigrationWizardProps) {
+/** Map a run's status to the wizard step the operator should resume at. */
+function stepForStatus(status: MigrationRunDetail['run']['status']): Step {
+  if (status === 'completed') return 'import';
+  if (status === 'mapped') return 'review';
+  return 'projects';
+}
+
+export function MigrationWizard({ open, onClose, provider, providerLabel, credentials, onImported, side = 'right', initialRunId = null }: MigrationWizardProps) {
   const t = useTranslations('integrations');
   const [step, setStep] = useState<Step>('connect');
   const [busy, setBusy] = useState(false);
@@ -74,6 +85,19 @@ export function MigrationWizard({ open, onClose, provider, providerLabel, creden
 
   useEffect(() => { setCredentialId(credentials[0]?.id ?? ''); }, [credentials]);
   useEffect(() => { if (open) fetchProjects().then(setProjects).catch(() => undefined); }, [open]);
+
+  // Resume a run the Brain already started: load its staging snapshot and jump
+  // straight to the right step instead of the connect form.
+  useEffect(() => {
+    if (!open || !initialRunId) return;
+    let cancelled = false;
+    setBusy(true);
+    migrationsApi.get(initialRunId)
+      .then((d) => { if (!cancelled) { setDetail(d); setStep(stepForStatus(d.run.status)); } })
+      .catch((e) => { if (!cancelled) setError(e instanceof Error ? e.message : 'Could not load migration run'); })
+      .finally(() => { if (!cancelled) setBusy(false); });
+    return () => { cancelled = true; };
+  }, [open, initialRunId]);
 
   const reset = useCallback(() => {
     setStep('connect'); setDetail(null); setError(null); setBusy(false); setMode('both');
@@ -167,6 +191,7 @@ export function MigrationWizard({ open, onClose, provider, providerLabel, creden
       onClose={close}
       title={t('migration.title', { provider: providerLabel })}
       width="min(820px, 98vw)"
+      side={side}
       tabs={tabs}
       activeTabId={step}
       onTabChange={(id) => { if (STEPS.indexOf(id as Step) <= stepIndex) setStep(id as Step); }}
