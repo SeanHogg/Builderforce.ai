@@ -11,6 +11,12 @@ export interface ToolDef {
   description: string;
   parameters: Record<string, unknown>;
   mutating: boolean;
+  /**
+   * Remote (platform) tools run server-side via the gateway MCP relay and need no
+   * workspace root — they're available in chat-only mode too. Local file tools
+   * leave this falsy and require a root. The agent loop branches on it.
+   */
+  remote?: boolean;
   execute: (args: Record<string, unknown>, root: string) => Promise<string>;
 }
 

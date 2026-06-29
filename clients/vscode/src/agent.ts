@@ -1,6 +1,7 @@
 import * as vscode from "vscode";
 import { ChatMessage, getApiKey, getBaseUrl } from "./gateway";
 import { describeTool, TOOL_DEFS, type ToolDef } from "./fileTools";
+import { listPlatformTools, describePlatformTool } from "./platformTools";
 import { cognitionToolDefs, recallSystemMessage } from "./cognition";
 import { evaluatePolicyGate, renderPolicyDirectives, type PolicyGate } from "./policy";
 
@@ -66,9 +67,15 @@ export async function runAgent(
   deps: AgentDeps,
   events: AgentEvents,
 ): Promise<void> {
-  // File tools + Evermind's write-through `remember_fact` tool (workspace only).
-  const toolDefs: ToolDef[] = deps.root ? [...TOOL_DEFS, ...cognitionToolDefs()] : [];
-  const tools = deps.root ? toOpenAiTools(toolDefs) : undefined;
+  // The SAME brain as the web: local workspace tools (file edits + Evermind's
+  // write-through `remember_fact`, workspace-only) PLUS the shared, server-side
+  // platform catalog (projects, tasks, OKRs, specs, …) fetched from the gateway
+  // MCP relay. The platform tools are the one source of truth — not copied here —
+  // so the IDE chat can do everything the web Brain can, even with no folder open.
+  const localTools: ToolDef[] = deps.root ? [...TOOL_DEFS, ...cognitionToolDefs()] : [];
+  const platformTools = await listPlatformTools(deps.secrets);
+  const toolDefs: ToolDef[] = [...localTools, ...platformTools];
+  const tools = toolDefs.length ? toOpenAiTools(toolDefs) : undefined;
 
   // Governance: render the gate directives into a leading system block so the model
   // is bound by the same policy on every surface; hard enforcement is at the tool
@@ -123,8 +130,13 @@ export async function runAgent(
     for (const tc of turn.toolCalls) {
       const def = toolDefs.find((d) => d.name === tc.name);
       const toolCallId = tc.id || tc.name;
-      if (!def || !deps.root) {
+      if (!def) {
         messages.push({ role: "tool", tool_call_id: toolCallId, content: `Unknown tool: ${tc.name}` });
+        continue;
+      }
+      // Local file tools need a workspace root; platform (remote) tools don't.
+      if (!def.remote && !deps.root) {
+        messages.push({ role: "tool", tool_call_id: toolCallId, content: `Tool "${tc.name}" needs an open workspace folder.` });
         continue;
       }
 
@@ -136,7 +148,7 @@ export async function runAgent(
         continue;
       }
 
-      const label = describeTool(def.name, args);
+      const label = def.remote ? describePlatformTool(def.name, args) : describeTool(def.name, args);
       events.onToolStart(label);
 
       // Governance gate (compile-primitive policy modality), enforced BEFORE the tool
@@ -168,7 +180,7 @@ export async function runAgent(
       }
 
       try {
-        const result = await def.execute(args, deps.root);
+        const result = await def.execute(args, deps.root ?? "");
         events.onToolResult(label, true);
         messages.push({ role: "tool", tool_call_id: toolCallId, content: result });
       } catch (e) {

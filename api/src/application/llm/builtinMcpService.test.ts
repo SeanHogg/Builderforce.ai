@@ -56,6 +56,31 @@ describe('listBuiltinTools', () => {
       expect(t.description).toBeTruthy();
     }
   });
+
+  it('advertises the OKR / strategy tier (one source for web + VS Code)', () => {
+    const names = tools.map((t) => t.name);
+    for (const n of [
+      'builtin_portfolios_list', 'builtin_portfolios_create',
+      'builtin_initiatives_list', 'builtin_initiatives_create',
+      'builtin_objectives_list', 'builtin_objectives_create', 'builtin_objectives_add_link',
+      'builtin_key_results_create',
+    ]) {
+      expect(names).toContain(n);
+    }
+  });
+
+  it('advertises the mutates flag so any client can gate writes off one source', () => {
+    const byName = (n: string) => tools.find((t) => t.name === n)!;
+    expect(byName('builtin_objectives_create').mutates).toBe(true);
+    expect(byName('builtin_key_results_create').mutates).toBe(true);
+    expect(byName('builtin_objectives_list').mutates).toBe(false);
+    expect(byName('builtin_projects_list').mutates).toBe(false);
+  });
+
+  it('has globally-unique advertised names', () => {
+    const names = tools.map((t) => t.name);
+    expect(new Set(names).size).toBe(names.length);
+  });
 });
 
 describe('callBuiltinTool', () => {

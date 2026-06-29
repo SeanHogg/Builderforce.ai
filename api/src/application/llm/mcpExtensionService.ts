@@ -55,6 +55,14 @@ export interface McpToolEntry {
   name: string;
   description: string;
   parameters: Record<string, unknown>;
+  /**
+   * Whether the tool changes state. Lets every client (web Brain, VS Code
+   * extension, external MCP clients) gate writes behind a confirm prompt off ONE
+   * advertised flag instead of re-deriving it. First-party built-in tools always
+   * set this; external tenant MCP servers don't expose it, so it's omitted there
+   * and clients MUST treat `undefined` as mutating (fail safe — confirm).
+   */
+  mutates?: boolean;
 }
 
 /**

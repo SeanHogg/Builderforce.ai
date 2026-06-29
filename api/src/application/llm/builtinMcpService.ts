@@ -9,9 +9,13 @@
  * external MCP clients, and the agent-runtime alike — the server-side twin of
  * the frontend's `platformActions` manifest.
  *
- * Catalog scope: projects + tasks (full CRUD). The dispatch + advertise wiring
- * is the reusable part; adding a domain is one `CATALOG` entry. Remaining
- * domains are tracked in the README Consolidated Gap Register.
+ * Catalog scope: projects + tasks (CRUD), specs/workflows/prompts/approvals/
+ * agents/boards/cron (read or simple CRUD), and the full strategy tier —
+ * portfolios, initiatives, OKR objectives + key results + lineage links (CRUD,
+ * segment-scoped). The dispatch + advertise wiring is the reusable part; adding a
+ * domain is one `CATALOG` entry. Remaining web-Brain domains still to port (so
+ * the web Brain can drop its client-side manifest) are tracked in the ROADMAP
+ * Consolidated Gap Register.
  */
 
 import { and, eq, desc } from 'drizzle-orm';
@@ -21,7 +25,8 @@ import { TaskService } from '../task/TaskService';
 import { ProjectRepository } from '../../infrastructure/repositories/ProjectRepository';
 import { TaskRepository } from '../../infrastructure/repositories/TaskRepository';
 import { ProjectStatus, TaskPriority } from '../../domain/shared/types';
-import { workflows, specs, promptLibraryEntries, approvalRules, agents, boards, cronJobs } from '../../infrastructure/database/schema';
+import { workflows, specs, promptLibraryEntries, approvalRules, agents, boards, cronJobs, portfolios, initiatives, objectives, objectiveLinks, keyResults } from '../../infrastructure/database/schema';
+import { resolveSegment } from '../../infrastructure/auth/segmentResolver';
 import type { McpToolEntry } from './mcpExtensionService';
 
 /** Sentinel extensionId the gateway routes to this in-process catalog. */
@@ -53,6 +58,12 @@ const B = { type: 'boolean' } as const;
 const obj = (properties: Json, required: string[] = []): Json => ({ type: 'object', properties, required });
 const num = (v: unknown): number => Number(v);
 const str = (v: unknown): string => String(v ?? '');
+/** Coerce an ISO date string arg to a Date for a timestamp column (undefined when absent/invalid). */
+const dt = (v: unknown): Date | undefined => {
+  if (v == null || str(v) === '') return undefined;
+  const d = new Date(str(v));
+  return Number.isNaN(d.getTime()) ? undefined : d;
+};
 
 // ---------------------------------------------------------------------------
 // Catalog
@@ -155,6 +166,178 @@ const CATALOG: BuiltinTool[] = [
   },
   { tool: 'specs.delete', mutates: true, description: 'Delete a spec / PRD by id.', parameters: obj({ id: S }, ['id']), run: async (ctx, a) => { const rows = await ctx.db.delete(specs).where(and(eq(specs.id, str(a.id)), eq(specs.tenantId, ctx.tenantId))).returning({ id: specs.id }); return { deleted: rows.length > 0 ? str(a.id) : null }; } },
 
+  // ---- Strategy: Portfolios ▸ Initiatives ▸ OKRs (objectives + key results) ----
+  // OKRs live in their OWN tables (segment-scoped), NOT on the task board. A board
+  // Epic is a delivery container; an Objective is a strategic goal whose progress
+  // rolls up from its Key Results. Capture OKRs with objectives.create +
+  // key_results.create, then link the delivering epics/initiatives via
+  // objectives.add_link. This is the single server-side source both the web Brain
+  // and the VS Code chat consume.
+  { tool: 'portfolios.list', mutates: false, description: 'List portfolios (top of the strategy hierarchy).', parameters: obj({}), run: async (ctx) => { const seg = await resolveSegment(ctx.db, ctx.tenantId); return ctx.db.select().from(portfolios).where(and(eq(portfolios.tenantId, ctx.tenantId), eq(portfolios.segmentId, seg))).orderBy(desc(portfolios.updatedAt)).limit(200); } },
+  {
+    tool: 'portfolios.create', mutates: true,
+    description: 'Create a portfolio (a strategic grouping that initiatives and OKRs attach to).',
+    parameters: obj({ name: S, description: S, status: S, targetDate: S }, ['name']),
+    run: async (ctx, a) => {
+      const name = str(a.name).trim(); if (!name) throw new Error('name is required');
+      const seg = await resolveSegment(ctx.db, ctx.tenantId);
+      const [row] = await ctx.db.insert(portfolios).values({ tenantId: ctx.tenantId, segmentId: seg, name, description: a.description != null ? str(a.description) : null, ...(a.status != null ? { status: str(a.status) } : {}), targetDate: dt(a.targetDate) }).returning();
+      return row;
+    },
+  },
+  {
+    tool: 'portfolios.update', mutates: true,
+    description: "Update a portfolio (name/description/status/targetDate).",
+    parameters: obj({ id: S, name: S, description: S, status: S, targetDate: S }, ['id']),
+    run: async (ctx, a) => {
+      const seg = await resolveSegment(ctx.db, ctx.tenantId);
+      const patch: Json = { updatedAt: new Date() };
+      if (a.name != null) patch.name = str(a.name);
+      if (a.description != null) patch.description = str(a.description);
+      if (a.status != null) patch.status = str(a.status);
+      if (a.targetDate != null) patch.targetDate = dt(a.targetDate);
+      const [row] = await ctx.db.update(portfolios).set(patch).where(and(eq(portfolios.id, str(a.id)), eq(portfolios.tenantId, ctx.tenantId), eq(portfolios.segmentId, seg))).returning();
+      if (!row) throw new Error('portfolio not found');
+      return row;
+    },
+  },
+  { tool: 'portfolios.delete', mutates: true, description: 'Delete a portfolio.', parameters: obj({ id: S }, ['id']), run: async (ctx, a) => { const seg = await resolveSegment(ctx.db, ctx.tenantId); const rows = await ctx.db.delete(portfolios).where(and(eq(portfolios.id, str(a.id)), eq(portfolios.tenantId, ctx.tenantId), eq(portfolios.segmentId, seg))).returning({ id: portfolios.id }); return { deleted: rows.length > 0 ? str(a.id) : null }; } },
+
+  { tool: 'initiatives.list', mutates: false, description: 'List initiatives (programs of work under a portfolio).', parameters: obj({}), run: async (ctx) => { const seg = await resolveSegment(ctx.db, ctx.tenantId); return ctx.db.select().from(initiatives).where(and(eq(initiatives.tenantId, ctx.tenantId), eq(initiatives.segmentId, seg))).orderBy(desc(initiatives.updatedAt)).limit(200); } },
+  {
+    tool: 'initiatives.create', mutates: true,
+    description: 'Create an initiative under a portfolio (pass portfolioId).',
+    parameters: obj({ name: S, description: S, status: S, portfolioId: S, startDate: S, targetDate: S }, ['name']),
+    run: async (ctx, a) => {
+      const name = str(a.name).trim(); if (!name) throw new Error('name is required');
+      const seg = await resolveSegment(ctx.db, ctx.tenantId);
+      const [row] = await ctx.db.insert(initiatives).values({ tenantId: ctx.tenantId, segmentId: seg, name, description: a.description != null ? str(a.description) : null, ...(a.status != null ? { status: str(a.status) } : {}), portfolioId: a.portfolioId != null ? str(a.portfolioId) : null, startDate: dt(a.startDate), targetDate: dt(a.targetDate) }).returning();
+      return row;
+    },
+  },
+  {
+    tool: 'initiatives.update', mutates: true,
+    description: 'Update an initiative (name/description/status/portfolioId/dates).',
+    parameters: obj({ id: S, name: S, description: S, status: S, portfolioId: S, startDate: S, targetDate: S }, ['id']),
+    run: async (ctx, a) => {
+      const seg = await resolveSegment(ctx.db, ctx.tenantId);
+      const patch: Json = { updatedAt: new Date() };
+      if (a.name != null) patch.name = str(a.name);
+      if (a.description != null) patch.description = str(a.description);
+      if (a.status != null) patch.status = str(a.status);
+      if (a.portfolioId != null) patch.portfolioId = str(a.portfolioId);
+      if (a.startDate != null) patch.startDate = dt(a.startDate);
+      if (a.targetDate != null) patch.targetDate = dt(a.targetDate);
+      const [row] = await ctx.db.update(initiatives).set(patch).where(and(eq(initiatives.id, str(a.id)), eq(initiatives.tenantId, ctx.tenantId), eq(initiatives.segmentId, seg))).returning();
+      if (!row) throw new Error('initiative not found');
+      return row;
+    },
+  },
+  { tool: 'initiatives.delete', mutates: true, description: 'Delete an initiative.', parameters: obj({ id: S }, ['id']), run: async (ctx, a) => { const seg = await resolveSegment(ctx.db, ctx.tenantId); const rows = await ctx.db.delete(initiatives).where(and(eq(initiatives.id, str(a.id)), eq(initiatives.tenantId, ctx.tenantId), eq(initiatives.segmentId, seg))).returning({ id: initiatives.id }); return { deleted: rows.length > 0 ? str(a.id) : null }; } },
+
+  { tool: 'objectives.list', mutates: false, description: 'List OKR objectives — the strategic goals on the Portfolio ▸ OKRs tab, NOT board Epics.', parameters: obj({}), run: async (ctx) => { const seg = await resolveSegment(ctx.db, ctx.tenantId); return ctx.db.select().from(objectives).where(and(eq(objectives.tenantId, ctx.tenantId), eq(objectives.segmentId, seg))).orderBy(desc(objectives.updatedAt)).limit(200); } },
+  {
+    tool: 'objectives.create', mutates: true,
+    description: 'Create an OKR Objective — a strategic, qualitative goal (e.g. "Unlock recurring revenue"). This populates the Portfolio ▸ OKRs tab. Do NOT model OKRs as board Epics. Attach with portfolioId or initiativeId (omit both for a workspace/org-level objective). Then add measurable targets with key_results.create and link the delivering epics/initiatives with objectives.add_link. status: active|achieved|missed|archived; period is an optional label like "2026-Q2".',
+    parameters: obj({ title: S, description: S, period: S, status: { type: 'string', enum: ['active', 'achieved', 'missed', 'archived'] }, portfolioId: S, initiativeId: S, startDate: S, endDate: S }, ['title']),
+    run: async (ctx, a) => {
+      const title = str(a.title).trim(); if (!title) throw new Error('title is required');
+      const seg = await resolveSegment(ctx.db, ctx.tenantId);
+      const [row] = await ctx.db.insert(objectives).values({
+        tenantId: ctx.tenantId, segmentId: seg, title,
+        description: a.description != null ? str(a.description) : null,
+        period: a.period != null ? str(a.period) : null,
+        ...(a.status != null ? { status: str(a.status) } : {}),
+        portfolioId: a.portfolioId != null ? str(a.portfolioId) : null,
+        initiativeId: a.initiativeId != null ? str(a.initiativeId) : null,
+        startDate: dt(a.startDate), endDate: dt(a.endDate),
+      }).returning();
+      return row;
+    },
+  },
+  {
+    tool: 'objectives.update', mutates: true,
+    description: 'Update an OKR objective (title/description/status/period/scope/dates).',
+    parameters: obj({ id: S, title: S, description: S, period: S, status: { type: 'string', enum: ['active', 'achieved', 'missed', 'archived'] }, portfolioId: S, initiativeId: S, startDate: S, endDate: S }, ['id']),
+    run: async (ctx, a) => {
+      const seg = await resolveSegment(ctx.db, ctx.tenantId);
+      const patch: Json = { updatedAt: new Date() };
+      if (a.title != null) patch.title = str(a.title);
+      if (a.description != null) patch.description = str(a.description);
+      if (a.period != null) patch.period = str(a.period);
+      if (a.status != null) patch.status = str(a.status);
+      if (a.portfolioId != null) patch.portfolioId = str(a.portfolioId);
+      if (a.initiativeId != null) patch.initiativeId = str(a.initiativeId);
+      if (a.startDate != null) patch.startDate = dt(a.startDate);
+      if (a.endDate != null) patch.endDate = dt(a.endDate);
+      const [row] = await ctx.db.update(objectives).set(patch).where(and(eq(objectives.id, str(a.id)), eq(objectives.tenantId, ctx.tenantId), eq(objectives.segmentId, seg))).returning();
+      if (!row) throw new Error('objective not found');
+      return row;
+    },
+  },
+  { tool: 'objectives.delete', mutates: true, description: 'Delete an OKR objective (and its key results).', parameters: obj({ id: S }, ['id']), run: async (ctx, a) => { const seg = await resolveSegment(ctx.db, ctx.tenantId); const rows = await ctx.db.delete(objectives).where(and(eq(objectives.id, str(a.id)), eq(objectives.tenantId, ctx.tenantId), eq(objectives.segmentId, seg))).returning({ id: objectives.id }); return { deleted: rows.length > 0 ? str(a.id) : null }; } },
+  {
+    tool: 'objectives.add_link', mutates: true,
+    description: 'Link a delivery work-item to an OKR objective — the lineage edge. linkKind="initiative" needs initiativeId; "epic"/"task" needs the numeric taskId (an Epic IS a task with taskType="epic"). Connects board work to the objective it advances.',
+    parameters: obj({ objectiveId: S, linkKind: { type: 'string', enum: ['initiative', 'epic', 'task'] }, initiativeId: S, taskId: N }, ['objectiveId', 'linkKind']),
+    run: async (ctx, a) => {
+      const seg = await resolveSegment(ctx.db, ctx.tenantId);
+      const [own] = await ctx.db.select({ id: objectives.id }).from(objectives).where(and(eq(objectives.id, str(a.objectiveId)), eq(objectives.tenantId, ctx.tenantId), eq(objectives.segmentId, seg))).limit(1);
+      if (!own) throw new Error('objective not found');
+      const linkKind = str(a.linkKind);
+      const [row] = await ctx.db.insert(objectiveLinks).values({
+        tenantId: ctx.tenantId, segmentId: seg, objectiveId: str(a.objectiveId), linkKind,
+        initiativeId: linkKind === 'initiative' && a.initiativeId != null ? str(a.initiativeId) : null,
+        taskId: (linkKind === 'epic' || linkKind === 'task') && a.taskId != null ? num(a.taskId) : null,
+      }).returning();
+      return row;
+    },
+  },
+  { tool: 'objectives.remove_link', mutates: true, description: 'Remove an objective ▸ work-item link by linkId.', parameters: obj({ objectiveId: S, linkId: S }, ['objectiveId', 'linkId']), run: async (ctx, a) => { const seg = await resolveSegment(ctx.db, ctx.tenantId); const rows = await ctx.db.delete(objectiveLinks).where(and(eq(objectiveLinks.id, str(a.linkId)), eq(objectiveLinks.objectiveId, str(a.objectiveId)), eq(objectiveLinks.tenantId, ctx.tenantId), eq(objectiveLinks.segmentId, seg))).returning({ id: objectiveLinks.id }); return { deleted: rows.length > 0 ? str(a.linkId) : null }; } },
+
+  { tool: 'key_results.list', mutates: false, description: 'List key results (the measurable targets under OKR objectives).', parameters: obj({}), run: async (ctx) => { const seg = await resolveSegment(ctx.db, ctx.tenantId); return ctx.db.select().from(keyResults).where(and(eq(keyResults.tenantId, ctx.tenantId), eq(keyResults.segmentId, seg))).orderBy(desc(keyResults.updatedAt)).limit(500); } },
+  {
+    tool: 'key_results.create', mutates: true,
+    description: 'Create a measurable Key Result under an Objective (objectiveId). A KR moves startValue→targetValue; progress rolls up into the objective and the OKR dashboard. metricType: number|percent|currency|boolean; status: on_track|at_risk|off_track|done. Give each objective 2–5.',
+    parameters: obj({ objectiveId: S, title: S, metricType: { type: 'string', enum: ['number', 'percent', 'currency', 'boolean'] }, startValue: N, targetValue: N, currentValue: N, unit: S, status: { type: 'string', enum: ['on_track', 'at_risk', 'off_track', 'done'] } }, ['objectiveId', 'title']),
+    run: async (ctx, a) => {
+      const title = str(a.title).trim(); if (!title) throw new Error('title is required');
+      const seg = await resolveSegment(ctx.db, ctx.tenantId);
+      const [own] = await ctx.db.select({ id: objectives.id }).from(objectives).where(and(eq(objectives.id, str(a.objectiveId)), eq(objectives.tenantId, ctx.tenantId), eq(objectives.segmentId, seg))).limit(1);
+      if (!own) throw new Error('objective not found');
+      const [row] = await ctx.db.insert(keyResults).values({
+        tenantId: ctx.tenantId, segmentId: seg, objectiveId: str(a.objectiveId), title,
+        ...(a.metricType != null ? { metricType: str(a.metricType) } : {}),
+        ...(a.startValue != null ? { startValue: num(a.startValue) } : {}),
+        ...(a.targetValue != null ? { targetValue: num(a.targetValue) } : {}),
+        ...(a.currentValue != null ? { currentValue: num(a.currentValue) } : {}),
+        unit: a.unit != null ? str(a.unit) : null,
+        ...(a.status != null ? { status: str(a.status) } : {}),
+      }).returning();
+      return row;
+    },
+  },
+  {
+    tool: 'key_results.update', mutates: true,
+    description: 'Update a key result — most often currentValue to record progress (also title/metricType/start/target/unit/status).',
+    parameters: obj({ id: S, title: S, metricType: { type: 'string', enum: ['number', 'percent', 'currency', 'boolean'] }, startValue: N, targetValue: N, currentValue: N, unit: S, status: { type: 'string', enum: ['on_track', 'at_risk', 'off_track', 'done'] } }, ['id']),
+    run: async (ctx, a) => {
+      const seg = await resolveSegment(ctx.db, ctx.tenantId);
+      const patch: Json = { updatedAt: new Date() };
+      if (a.title != null) patch.title = str(a.title);
+      if (a.metricType != null) patch.metricType = str(a.metricType);
+      if (a.startValue != null) patch.startValue = num(a.startValue);
+      if (a.targetValue != null) patch.targetValue = num(a.targetValue);
+      if (a.currentValue != null) patch.currentValue = num(a.currentValue);
+      if (a.unit != null) patch.unit = str(a.unit);
+      if (a.status != null) patch.status = str(a.status);
+      const [row] = await ctx.db.update(keyResults).set(patch).where(and(eq(keyResults.id, str(a.id)), eq(keyResults.tenantId, ctx.tenantId), eq(keyResults.segmentId, seg))).returning();
+      if (!row) throw new Error('key result not found');
+      return row;
+    },
+  },
+  { tool: 'key_results.delete', mutates: true, description: 'Delete a key result.', parameters: obj({ id: S }, ['id']), run: async (ctx, a) => { const seg = await resolveSegment(ctx.db, ctx.tenantId); const rows = await ctx.db.delete(keyResults).where(and(eq(keyResults.id, str(a.id)), eq(keyResults.tenantId, ctx.tenantId), eq(keyResults.segmentId, seg))).returning({ id: keyResults.id }); return { deleted: rows.length > 0 ? str(a.id) : null }; } },
+
   // ---- Prompt library (read) ----
   { tool: 'prompts.list', mutates: false, description: 'List prompt-library entries in the workspace.', parameters: obj({}), run: (ctx) => ctx.db.select().from(promptLibraryEntries).where(eq(promptLibraryEntries.tenantId, ctx.tenantId)).orderBy(desc(promptLibraryEntries.updatedAt)).limit(200) },
 
@@ -222,6 +405,7 @@ export function listBuiltinTools(): McpToolEntry[] {
     name: advertisedName(t.tool),
     description: t.description,
     parameters: t.parameters,
+    mutates: t.mutates,
   }));
 }
 

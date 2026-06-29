@@ -10,6 +10,7 @@ import { registerChatSessions } from "./chatSessions";
 import { scanCodebase } from "./codebaseScan";
 import { getModels, getWebBaseUrl, SECRET_KEY } from "./gateway";
 import { InsightsController } from "./insights";
+import { clearPlatformToolsCache } from "./platformTools";
 import { setGroundingSummary } from "./grounding";
 import { setSelectedModel } from "./modelState";
 import { getSelectedProject, initProjectState, setSelectedProject } from "./projectState";
@@ -628,6 +629,7 @@ async function signIn(context: vscode.ExtensionContext): Promise<void> {
   }
   vscode.window.showInformationMessage("BuilderForce: signed in.");
   bfApi.clearJwt();
+  clearPlatformToolsCache();
   await ChatPanel.refreshAll(context);
   void heartbeat(context);
   void vscode.commands.executeCommand("builderforce.refreshProjects");
@@ -641,6 +643,7 @@ async function signOut(
 ): Promise<void> {
   await auth.removeSession();
   bfApi.clearJwt();
+  clearPlatformToolsCache();
   bfApi.setSelectedWorkspace(undefined);
   await context.globalState.update(SELECTED_TENANT_KEY, undefined);
   setGroundingSummary(undefined);
