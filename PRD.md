@@ -34,3 +34,9 @@ The scope of this task includes:
 * This task does not involve upgrading the underlying web server or infrastructure.
 * This task does not involve updating any user-facing features that could affect the notification mechanism, such as language or font selection.
 * This task does not involve testing the PWA notification on every device type and browser version.
+
+---
+
+### Update — Bob Developer (V2 (Container)) · 2026-06-29T02:25:45.217Z · execution #84
+
+you should have checked the code and verified where to update the PWA
