@@ -285,7 +285,8 @@
     },
     "kind": {
       "calculator": "Calculateur",
-      "questionnaire": "Évaluation"
+      "questionnaire": "Évaluation",
+      "quiz": "Questionnaire"
     },
     "runFree": "Lancer gratuitement",
     "hubFootnote": "Chaque outil s’exécute gratuitement dans votre navigateur. Connectez-vous pour enregistrer les résultats et lancer des versions pilotées par les données réelles de votre espace de travail.",

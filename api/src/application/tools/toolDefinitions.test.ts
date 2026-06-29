@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { TOOLS, getTool } from './toolDefinitions';
-import { toDefinition, type CalculatorTool, type QuestionnaireTool } from './toolTypes';
+import { toDefinition, type CalculatorTool, type QuestionnaireTool, type QuizTool } from './toolTypes';
 
 describe('tools registry', () => {
   it('exposes client-safe definitions without the compute fn', () => {
@@ -73,6 +73,56 @@ describe('build-buy-agent', () => {
     const r = tool.compute({ devMonths: 6, devMonthlyCost: 13000, maintPctPerYear: 20, buyAnnualLicense: 30000, agentMonthlyCost: 800 });
     expect(r.headline).toContain('Agent');
     expect(r.metrics.find((m) => m.label === 'Cheapest')!.value).toBe('Agent');
+  });
+});
+
+describe('ai-dev-maturity (quiz)', () => {
+  const tool = getTool('ai-dev-maturity') as QuizTool;
+  const answerAll = (level: number): Record<string, number> =>
+    Object.fromEntries(tool.questions.map((q) => [q.id, level]));
+
+  it('is a quiz with named levels and per-dimension options', () => {
+    expect(tool.kind).toBe('quiz');
+    expect(tool.questions.length).toBeGreaterThan(0);
+    // Every question offers a distinct option per defined level.
+    const maxLevel = Math.max(...tool.levels.map((l) => l.level));
+    for (const q of tool.questions) {
+      const levels = q.options.map((o) => o.level).sort((a, b) => a - b);
+      expect(levels).toEqual(tool.levels.map((l) => l.level).sort((a, b) => a - b));
+      expect(Math.max(...levels)).toBe(maxLevel);
+    }
+  });
+
+  it('top answers yield the top level with no advancement step', () => {
+    const top = Math.max(...tool.levels.map((l) => l.level));
+    const r = tool.score(answerAll(top));
+    expect(r.score).toBe(top);
+    expect(r.headline).toContain(`Level ${top}`);
+    // At the top level there is nothing to advance to, so no recommendations.
+    expect(r.recommendations).toHaveLength(0);
+  });
+
+  it('lowest answers band to level 1 and produce a prioritized plan', () => {
+    const r = tool.score(answerAll(1));
+    expect(r.score).toBe(1);
+    expect(r.recommendations.length).toBeGreaterThan(0);
+    // The first recommendation advances the overall band to level 2.
+    expect(r.recommendations[0]!.title).toContain('Level 2');
+  });
+
+  it('targets the weakest dimension first', () => {
+    const answers = answerAll(4);
+    answers[tool.questions[0]!.id] = 1; // make the first dimension the weakest
+    const r = tool.score(answers);
+    // After the overall-band step, the weakest dimension is surfaced before stronger ones.
+    const dimRecs = r.recommendations.filter((rec) => rec.title.includes('to Level'));
+    expect(dimRecs[0]!.title).toContain(tool.questions[0]!.dimension);
+  });
+
+  it('returns a not-enough-answers result when nothing is answered', () => {
+    const r = tool.score({});
+    expect(r.score).toBeNull();
+    expect(r.recommendations).toHaveLength(0);
   });
 });
 

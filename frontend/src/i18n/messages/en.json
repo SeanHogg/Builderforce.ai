@@ -285,7 +285,8 @@
     },
     "kind": {
       "calculator": "Calculator",
-      "questionnaire": "Assessment"
+      "questionnaire": "Assessment",
+      "quiz": "Quiz"
     },
     "runFree": "Run free",
     "hubFootnote": "Every tool runs free in your browser. Sign in to save results and run data-driven versions from your real workspace data.",

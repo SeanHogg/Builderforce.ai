@@ -285,7 +285,8 @@
     },
     "kind": {
       "calculator": "Rechner",
-      "questionnaire": "Bewertung"
+      "questionnaire": "Bewertung",
+      "quiz": "Quiz"
     },
     "runFree": "Kostenlos ausführen",
     "hubFootnote": "Jedes Werkzeug läuft kostenlos in Ihrem Browser. Melden Sie sich an, um Ergebnisse zu speichern und datengetriebene Versionen aus Ihren echten Arbeitsbereichsdaten auszuführen.",

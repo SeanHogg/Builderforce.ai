@@ -8,7 +8,7 @@ import { Select } from '@/components/Select';
 import { toolsApi } from '@/lib/builderforceApi';
 import { ToolResultView } from '@/components/tools/ToolResultView';
 import { DataDrivenPanel } from '@/components/tools/DataDrivenPanel';
-import { defaultInput, questionnaireComplete, type ToolDefinition, type ToolResult } from '@/lib/tools';
+import { defaultInput, answersComplete, type ToolDefinition, type ToolResult } from '@/lib/tools';
 import { getStoredUser, getStoredTenantToken } from '@/lib/auth';
 import { useOptionalProjectScope } from '@/lib/ProjectScopeContext';
 
@@ -85,7 +85,7 @@ export default function ToolRunnerClient({ toolId }: { toolId: string }) {
   if (error && !def) return <div style={wrap}><div style={card}>{t('loadError')}: {error}</div></div>;
   if (!def) return <div style={wrap}><div style={{ color: 'var(--muted)' }}>{t('loading')}</div></div>;
 
-  const canRun = def.kind === 'calculator' || questionnaireComplete(def, input);
+  const canRun = answersComplete(def, input);
   const answeredAny = Object.keys(input).length > 0;
 
   return (
@@ -152,6 +152,40 @@ export default function ToolRunnerClient({ toolId }: { toolId: string }) {
             </div>
           ))}
         </div>
+      ) : def.kind === 'quiz' ? (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+          {def.questions.map((q) => (
+            <section key={q.id} style={card}>
+              <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 0.6, textTransform: 'uppercase', color: 'var(--coral-bright)', marginBottom: 4 }}>{q.dimension}</div>
+              <h2 style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-strong)', margin: '0 0 12px' }}>{q.text}</h2>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {q.options.map((o) => {
+                  const active = input[q.id] === o.level;
+                  return (
+                    <button
+                      key={o.level} type="button" onClick={() => setVal(q.id, o.level)}
+                      aria-pressed={active}
+                      style={{
+                        display: 'flex', alignItems: 'flex-start', gap: 10, textAlign: 'left', width: '100%',
+                        padding: '12px 14px', fontSize: 13, lineHeight: 1.45, borderRadius: 10, cursor: 'pointer',
+                        border: `1px solid ${active ? 'var(--accent)' : 'var(--border-subtle)'}`,
+                        background: active ? 'var(--accent)' : 'var(--bg-elevated)',
+                        color: active ? '#fff' : 'var(--text-secondary)',
+                      }}
+                    >
+                      <span aria-hidden style={{
+                        flexShrink: 0, marginTop: 2, width: 16, height: 16, borderRadius: '50%',
+                        border: `2px solid ${active ? '#fff' : 'var(--border-subtle)'}`,
+                        background: active ? '#fff' : 'transparent', boxShadow: active ? 'inset 0 0 0 3px var(--accent)' : 'none',
+                      }} />
+                      <span>{o.text}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </section>
+          ))}
+        </div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
           <div style={{ ...card, padding: '12px 16px' }}>
@@ -205,7 +239,7 @@ export default function ToolRunnerClient({ toolId }: { toolId: string }) {
       {/* Run */}
       <div style={{ ...card, marginTop: 16, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
         <div style={{ fontSize: 13, color: 'var(--muted)' }}>
-          {def.kind === 'questionnaire' && !canRun && answeredAny ? t('answerAll') : ''}
+          {def.kind !== 'calculator' && !canRun && answeredAny ? t('answerAll') : ''}
         </div>
         <button type="button" disabled={!canRun || computing} onClick={run} style={{ ...btnPrimary, opacity: !canRun || computing ? 0.6 : 1, cursor: !canRun || computing ? 'not-allowed' : 'pointer' }}>
           {computing ? t('computing') : t('run')}

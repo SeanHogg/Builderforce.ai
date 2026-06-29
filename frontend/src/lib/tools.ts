@@ -6,7 +6,7 @@
  */
 
 export type ToolCategory = 'delivery' | 'finops' | 'governance' | 'quality';
-export type ToolKind = 'calculator' | 'questionnaire';
+export type ToolKind = 'calculator' | 'questionnaire' | 'quiz';
 
 export interface ToolSummary {
   id: string;
@@ -42,9 +42,14 @@ export interface QuestionnaireSection {
 }
 export interface ScaleAnchor { value: number; label: string }
 
+export interface QuizOption { level: number; text: string }
+export interface QuizQuestion { id: string; dimension: string; text: string; options: QuizOption[] }
+export interface QuizLevel { level: number; name: string; summary: string; advance: string }
+
 export type ToolDefinition =
   | (ToolSummary & { kind: 'calculator'; about: string; inputs: CalculatorInput[] })
-  | (ToolSummary & { kind: 'questionnaire'; about: string; scale: ScaleAnchor[]; sections: QuestionnaireSection[] });
+  | (ToolSummary & { kind: 'questionnaire'; about: string; scale: ScaleAnchor[]; sections: QuestionnaireSection[] })
+  | (ToolSummary & { kind: 'quiz'; about: string; levels: QuizLevel[]; questions: QuizQuestion[] });
 
 export interface ToolMetric { label: string; value: string; hint?: string; tier?: number }
 export interface ToolRecommendation { title: string; detail: string }
@@ -102,7 +107,7 @@ export interface TenantDiagnosticsRollup {
   projects: TenantProjectScore[];
 }
 
-/** Default input map for a definition (calculator defaults; questionnaires start empty). */
+/** Default input map for a definition (calculator defaults; questionnaires/quizzes start empty). */
 export function defaultInput(def: ToolDefinition): Record<string, number> {
   if (def.kind === 'calculator') {
     return Object.fromEntries(def.inputs.map((i) => [i.id, i.default]));
@@ -110,8 +115,14 @@ export function defaultInput(def: ToolDefinition): Record<string, number> {
   return {};
 }
 
-/** Whether a questionnaire has every question answered. */
-export function questionnaireComplete(def: ToolDefinition, input: Record<string, number>): boolean {
-  if (def.kind !== 'questionnaire') return true;
-  return def.sections.every((s) => s.questions.every((q) => typeof input[q.id] === 'number'));
+/** Whether every answer is provided for an answer-based tool. Calculators are
+ *  always "complete" (they have defaults), so they can run immediately. */
+export function answersComplete(def: ToolDefinition, input: Record<string, number>): boolean {
+  if (def.kind === 'questionnaire') {
+    return def.sections.every((s) => s.questions.every((q) => typeof input[q.id] === 'number'));
+  }
+  if (def.kind === 'quiz') {
+    return def.questions.every((q) => typeof input[q.id] === 'number');
+  }
+  return true;
 }

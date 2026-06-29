@@ -21,6 +21,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     { url: `${BASE}/prompts`, lastModified: now, changeFrequency: 'daily', priority: 0.6 },
     { url: `${BASE}/tools`, lastModified: now, changeFrequency: 'monthly', priority: 0.7 },
     { url: `${BASE}/tools/agentic-maturity`, lastModified: now, changeFrequency: 'monthly', priority: 0.7 },
+    { url: `${BASE}/tools/ai-dev-maturity`, lastModified: now, changeFrequency: 'monthly', priority: 0.7 },
     { url: `${BASE}/tools/dora-quickcheck`, lastModified: now, changeFrequency: 'monthly', priority: 0.6 },
     { url: `${BASE}/tools/ai-cost-estimator`, lastModified: now, changeFrequency: 'monthly', priority: 0.6 },
     { url: `${BASE}/tools/cobit-governance`, lastModified: now, changeFrequency: 'monthly', priority: 0.6 },

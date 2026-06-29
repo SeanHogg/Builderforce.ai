@@ -8,8 +8,10 @@ import {
   type Tool,
   type CalculatorTool,
   type QuestionnaireTool,
+  type QuizTool,
   type ToolResult,
   scoreQuestionnaire,
+  scoreQuiz,
 } from './toolTypes';
 
 const TIER_NAME = ['Low', 'Low', 'Medium', 'High', 'Elite'];
@@ -645,9 +647,122 @@ export const agenticMaturity: QuestionnaireTool = {
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
+// AI Development Maturity (quiz) — a level-banded assessment of how AI-native the
+// *development workflow* is (idea-to-customer speed, prototype fidelity, who can
+// ship, org-level impact). Single-select prose answers per dimension, each mapping
+// to a maturity level — distinct from the CMMI-style agenticMaturity above, which
+// rates statements across six operating practices.
+// ─────────────────────────────────────────────────────────────────────────────
+
+const aiDevMaturity: QuizTool = {
+  id: 'ai-dev-maturity',
+  name: 'AI Development Maturity',
+  tagline: 'See how AI-native your development workflow really is — in four questions.',
+  icon: '⚡',
+  category: 'delivery',
+  kind: 'quiz',
+  about:
+    'Most teams have adopted AI coding tools yet still ship at the same pace, because the tools were bolted onto an unchanged process. This assessment rates where your organization actually sits across four dimensions of AI-native development — idea-to-customer speed, prototype fidelity, who can ship, and org-level impact — and what it takes to reach the next level. Pick the statement that best fits each dimension, or sign in to track your level over time.',
+  levels: [
+    {
+      level: 1,
+      name: 'AI-assisted steps',
+      summary:
+        'AI helps individual steps, but the development process is otherwise unchanged. Planning cycles, hand-offs, and review queues look the same as they did before the tools arrived, so the time from idea to customer has barely moved.',
+      advance:
+        'Pick one workflow and let AI compress a whole stage, not just keystrokes — e.g. generate a working slice on the real codebase instead of a hand-off document — so the speed-up shows up in delivery, not just in the editor.',
+    },
+    {
+      level: 2,
+      name: 'Faster individuals',
+      summary:
+        'Individuals are noticeably faster with AI, but the gains stop at the person. Sprint cadence, release frequency, and the queue between roles are unchanged, so the organization ships at roughly the old pace.',
+      advance:
+        'Move the speed-up from the individual to the flow: shrink hand-offs so a faster step actually shortens the cycle, and let non-engineers validate on the real stack instead of waiting for an engineering slot.',
+    },
+    {
+      level: 3,
+      name: 'AI-native workflow',
+      summary:
+        'The workflow itself is built around AI. Ideas become working software on the real codebase without a dedicated engineering sprint, and review and governance have been adapted to the higher output rather than left as the old bottleneck.',
+      advance:
+        'Open up contribution: let PMs, designers, and QA propose reviewed production changes directly, and make review scale with output so a faster front end does not just refill the review queue.',
+    },
+    {
+      level: 4,
+      name: 'Cross-functional delivery',
+      summary:
+        'Every role contributes directly to production, with engineers reviewing and merging rather than gatekeeping every change. Delivery timelines reflect the new workflow, and you can point to the specific changes that drove the improvement.',
+      advance:
+        'Run work in parallel: have multiple agents and workstreams advance simultaneously, and harden the review structure so parallel output does not recreate the queue problem you already solved.',
+    },
+    {
+      level: 5,
+      name: 'Parallel agentic delivery',
+      summary:
+        'Multiple agents run in parallel across multiple workstreams, and review and governance scale with the output. Product leaders can place several bets at once, read early signal on each, and steer investment toward what is working without waiting for any one initiative to close.',
+      advance:
+        'You are operating at the frontier — keep review capacity and governance ahead of agent output, and treat that balance as the thing you continuously tune.',
+    },
+  ],
+  questions: [
+    {
+      id: 'speed',
+      dimension: 'Idea-to-customer speed',
+      text: 'How quickly can a raw idea become something a customer can actually use?',
+      options: [
+        { level: 1, text: 'Ideas run the full PRD → design → sprint-planning → engineering path before anyone can try them — weeks to months from idea to working software.' },
+        { level: 2, text: 'Once an idea is prioritized AI speeds the individual steps, but it still waits on engineering capacity to become testable. Timelines are measured in sprints.' },
+        { level: 3, text: 'Product or design can stand up a working version on the real codebase without booking an engineering sprint — measured in days.' },
+        { level: 4, text: 'Most ideas reach a real, testable version within a day, and the team validates before committing engineering time.' },
+        { level: 5, text: 'Several ideas are taken to working versions in parallel within hours, and the team kills or doubles down on each from real signal.' },
+      ],
+    },
+    {
+      id: 'fidelity',
+      dimension: 'Prototype fidelity',
+      text: 'When you validate an idea before building it, what is the prototype actually made of?',
+      options: [
+        { level: 1, text: 'Static mockups or click-through flows. Feedback is about how things look.' },
+        { level: 2, text: 'Placeholder components in a separate tool — the real thing gets rebuilt from scratch when engineering implements it.' },
+        { level: 3, text: 'Built on the real stack, but only engineering can set it up and keep it running.' },
+        { level: 4, text: 'Built from your actual components and design system; once approved it becomes the starting point for production.' },
+        { level: 5, text: 'Prototypes are production-grade from the first pass — validated against real data and constraints, then promoted rather than rebuilt.' },
+      ],
+    },
+    {
+      id: 'contributors',
+      dimension: 'Who can ship',
+      text: 'Who can currently move work forward on the production codebase?',
+      options: [
+        { level: 1, text: 'Only engineers touch production code — everyone else files tickets and waits.' },
+        { level: 2, text: 'Engineers own all production work; PMs and designers review via mockups and comments, then wait for implementation.' },
+        { level: 3, text: 'Non-engineers can contribute in separate tools, but engineering rebuilds it for production.' },
+        { level: 4, text: 'PMs, designers, and QA contribute directly to production code; engineers review and merge.' },
+        { level: 5, text: 'Every role — including agents — opens reviewed changes against production; the limit is review capacity, not who is allowed.' },
+      ],
+    },
+    {
+      id: 'impact',
+      dimension: 'Org-level impact',
+      text: 'What has measurably changed at the org level since you adopted AI development tools?',
+      options: [
+        { level: 1, text: 'No measurable change in how fast ideas reach customers.' },
+        { level: 2, text: 'Individual developers are faster, but sprint velocity and release frequency are unchanged.' },
+        { level: 3, text: 'Some teams ship noticeably faster, but the improvement is inconsistent across the org.' },
+        { level: 4, text: 'Delivery timelines have shortened, and we can point to the specific workflow changes that drove it.' },
+        { level: 5, text: 'Throughput scales with parallel agentic work, and we steer investment from early signal across many simultaneous bets.' },
+      ],
+    },
+  ],
+  score(answers) { return scoreQuiz(this, answers); },
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
 
 export const TOOLS: Tool[] = [
   agenticMaturity,
+  aiDevMaturity,
   doraQuickCheck,
   aiCostEstimator,
   cobitGovernance,

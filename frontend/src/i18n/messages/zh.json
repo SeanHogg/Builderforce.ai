@@ -285,7 +285,8 @@
     },
     "kind": {
       "calculator": "计算器",
-      "questionnaire": "评估"
+      "questionnaire": "评估",
+      "quiz": "测评"
     },
     "runFree": "免费运行",
     "hubFootnote": "所有工具均可在浏览器中免费运行。登录后可保存结果，并根据真实工作区数据运行数据驱动版本。",
