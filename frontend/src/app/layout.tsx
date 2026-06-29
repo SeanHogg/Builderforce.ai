@@ -62,8 +62,10 @@ export const metadata: Metadata = {
     // Front-loaded for chat/link unfurls, which truncate after ~1–2 lines on mobile.
     description:
       'Train your own AI agents, run a whole AI workforce on a Kanban board, and approve every action — without leaving VS Code.',
-    // og:image is supplied by the app-level opengraph-image route (shared branded
-    // template), so every link preview stays on-brand and never drifts to a stale PNG.
+    // Static branded PNG (the B-logo lockup). We do NOT use a next/og ImageResponse
+    // route here: on the Cloudflare edge runtime it returns an empty 0-byte image, so
+    // iMessage/SMS/Slack unfurl a stale cached preview. See lib/seo.ts → OG_IMAGE.
+    images: [{ url: '/og-image.png', width: 1200, height: 630, alt: 'Builderforce.ai' }],
     locale: 'en_US',
   },
   twitter: {
@@ -71,6 +73,7 @@ export const metadata: Metadata = {
     title: 'Builderforce.ai — Your AI CTO, CIO & Security Officer',
     description:
       'Train your own AI agents and run an AI workforce on a Kanban board — approve every action without leaving VS Code.',
+    images: ['/og-image.png'],
   },
   manifest: '/manifest.json',
   applicationName: 'Builderforce.ai',
