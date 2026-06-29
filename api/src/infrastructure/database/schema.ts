@@ -794,6 +794,10 @@ export const projects = pgTable('projects', {
   // unassigned. The join that lets cost/DORA/outcome collectors roll up to the
   // initiative → portfolio tier. Forward ref to `initiatives` (defined below).
   initiativeId:    uuid('initiative_id').references((): AnyPgColumn => initiatives.id, { onDelete: 'set null' }),
+  // Explicit, PM-set project deadline (0255). NULL = no explicit deadline; the
+  // list endpoint then falls back to the derived max-task-due-date so the
+  // calendar/Gantt still plot a deadline when tasks carry due dates.
+  dueDate:         timestamp('due_date'),
   createdAt:       timestamp('created_at').notNull().defaultNow(),
   updatedAt:       timestamp('updated_at').notNull().defaultNow(),
 });

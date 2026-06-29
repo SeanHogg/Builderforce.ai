@@ -22,6 +22,12 @@ interface ScheduleCalendarProps<T extends Schedulable & { id: string | number }>
   /** Human label for an item (e.g. project name, task title). */
   getLabel: (item: T) => string;
   onSelect: (item: T) => void;
+  /**
+   * Optional health/status accent for an item, surfaced as a coloured dot on its
+   * pill so the calendar carries the same at-a-glance health signal as the card
+   * and list views. Return undefined to omit the dot (e.g. items with no data).
+   */
+  getAccentColor?: (item: T) => string | undefined;
 }
 
 const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
@@ -43,6 +49,7 @@ export function ScheduleCalendar<T extends Schedulable & { id: string | number }
   items,
   getLabel,
   onSelect,
+  getAccentColor,
 }: ScheduleCalendarProps<T>) {
   const today = startOfDay(new Date());
   const [viewMonth, setViewMonth] = useState<Date>(new Date(today.getFullYear(), today.getMonth(), 1));
@@ -142,6 +149,7 @@ export function ScheduleCalendar<T extends Schedulable & { id: string | number }
                   {dayItems.map((item) => {
                     const status = getSchedule(item).status;
                     const label = getLabel(item);
+                    const accent = getAccentColor?.(item);
                     return (
                       <button
                         key={item.id}
@@ -168,6 +176,9 @@ export function ScheduleCalendar<T extends Schedulable & { id: string | number }
                           whiteSpace: 'nowrap',
                         }}
                       >
+                        {accent && (
+                          <span style={{ width: 7, height: 7, borderRadius: '50%', background: accent, flexShrink: 0 }} aria-hidden />
+                        )}
                         <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{label}</span>
                       </button>
                     );
@@ -183,25 +194,34 @@ export function ScheduleCalendar<T extends Schedulable & { id: string | number }
       {undated.length > 0 && (
         <div style={{ marginTop: 12, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
           <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>No deadline set:</span>
-          {undated.map((item) => (
-            <button
-              key={item.id}
-              type="button"
-              onClick={() => onSelect(item)}
-              style={{
-                padding: '3px 10px',
-                fontSize: '0.75rem',
-                fontWeight: 600,
-                color: 'var(--text-secondary)',
-                background: 'var(--bg-elevated)',
-                border: '1px solid var(--border-subtle)',
-                borderRadius: 999,
-                cursor: 'pointer',
-              }}
-            >
-              {getLabel(item)}
-            </button>
-          ))}
+          {undated.map((item) => {
+            const accent = getAccentColor?.(item);
+            return (
+              <button
+                key={item.id}
+                type="button"
+                onClick={() => onSelect(item)}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 6,
+                  padding: '3px 10px',
+                  fontSize: '0.75rem',
+                  fontWeight: 600,
+                  color: 'var(--text-secondary)',
+                  background: 'var(--bg-elevated)',
+                  border: '1px solid var(--border-subtle)',
+                  borderRadius: 999,
+                  cursor: 'pointer',
+                }}
+              >
+                {accent && (
+                  <span style={{ width: 7, height: 7, borderRadius: '50%', background: accent, flexShrink: 0 }} aria-hidden />
+                )}
+                {getLabel(item)}
+              </button>
+            );
+          })}
         </div>
       )}
     </div>

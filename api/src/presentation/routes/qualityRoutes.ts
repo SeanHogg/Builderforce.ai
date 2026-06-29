@@ -410,6 +410,74 @@ export function createQualityRoutes(db: Db, taskService: TaskService, runtimeSer
     return c.json({ groups, nextCursor });
   });
 
+  // ── Aggregate stats (volume collected, breakdowns, daily frequency) ───────
+  // Powers the data-driven Quality charts + the collectors "data collected" card.
+  // Project-scoped or tenant-wide; cached off the same version token as /groups.
+  router.get('/stats', async (c) => {
+    const tenantId = c.get('tenantId') as number;
+    const projectId = c.req.query('projectId') ? Number(c.req.query('projectId')) : null;
+    const days = Math.min(Math.max(Number(c.req.query('days') ?? '30'), 1), 90);
+
+    const versionKey = projectId ? qualityGroupsVersionKey(projectId) : qualityGroupsTenantVersionKey(tenantId);
+    const ver = await getCacheVersion(c.env as Env, versionKey);
+    const cacheKey = `quality-stats:t:${tenantId}:p:${projectId ?? 'all'}:d:${days}:v:${ver}`;
+
+    const stats = await getOrSetCached(c.env as Env, cacheKey, async () => {
+      const gconds = [eq(errorGroups.tenantId, tenantId)];
+      if (projectId) gconds.push(eq(errorGroups.projectId, projectId));
+      const since = new Date(Date.now() - days * 86_400_000);
+
+      const events = sql<number>`coalesce(sum(${errorGroups.eventCount}), 0)`;
+      const groupCount = sql<number>`count(*)`;
+
+      const [byLevel, byStatus, byCollector, totalsRow, daily] = await Promise.all([
+        db.select({ level: errorGroups.level, groups: groupCount, events })
+          .from(errorGroups).where(and(...gconds)).groupBy(errorGroups.level),
+        db.select({ status: errorGroups.status, groups: groupCount })
+          .from(errorGroups).where(and(...gconds)).groupBy(errorGroups.status),
+        db.select({
+          collectorId: errorGroups.collectorId,
+          name: sql<string | null>`max(${errorCollectors.name})`,
+          groups: groupCount, events,
+          lastEventAt: sql<string | null>`max(${errorGroups.lastSeen})`,
+        })
+          .from(errorGroups)
+          .leftJoin(errorCollectors, eq(errorGroups.collectorId, errorCollectors.id))
+          .where(and(...gconds)).groupBy(errorGroups.collectorId),
+        db.select({
+          groups: groupCount, events,
+          users: sql<number>`coalesce(sum(${errorGroups.userCount}), 0)`,
+        }).from(errorGroups).where(and(...gconds)),
+        projectId
+          ? db.select({ day: sql<string>`date_trunc('day', ${errorEvents.ts})`, count: sql<number>`count(*)` })
+              .from(errorEvents)
+              .innerJoin(errorGroups, eq(errorEvents.groupId, errorGroups.id))
+              .where(and(eq(errorGroups.tenantId, tenantId), eq(errorGroups.projectId, projectId), gte(errorEvents.ts, since)))
+              .groupBy(sql`date_trunc('day', ${errorEvents.ts})`).orderBy(sql`date_trunc('day', ${errorEvents.ts})`)
+          : db.select({ day: sql<string>`date_trunc('day', ${errorEvents.ts})`, count: sql<number>`count(*)` })
+              .from(errorEvents)
+              .where(and(eq(errorEvents.tenantId, tenantId), gte(errorEvents.ts, since)))
+              .groupBy(sql`date_trunc('day', ${errorEvents.ts})`).orderBy(sql`date_trunc('day', ${errorEvents.ts})`),
+      ]);
+
+      const totals = totalsRow[0] ?? { groups: 0, events: 0, users: 0 };
+      return {
+        windowDays: days,
+        totals: { groups: Number(totals.groups), events: Number(totals.events), users: Number(totals.users) },
+        byLevel: byLevel.map((r) => ({ level: r.level, groups: Number(r.groups), events: Number(r.events) })),
+        byStatus: byStatus.map((r) => ({ status: r.status, groups: Number(r.groups) })),
+        byCollector: byCollector.map((r) => ({
+          collectorId: r.collectorId, name: r.name ?? null,
+          groups: Number(r.groups), events: Number(r.events),
+          lastEventAt: r.lastEventAt ? new Date(r.lastEventAt).toISOString() : null,
+        })),
+        daily: daily.map((r) => ({ day: new Date(r.day).toISOString().slice(0, 10), count: Number(r.count) })),
+      };
+    });
+
+    return c.json(stats);
+  });
+
   // ── Group detail (sample + recent events + trend + exact affected users) ──
   router.get('/groups/:id', async (c) => {
     const tenantId = c.get('tenantId') as number;

@@ -381,7 +381,12 @@ export function createProjectRoutes(projectService: ProjectService, db: Db): Hon
         hasArchitecturePrd: hasArchByProject.has(project.id),
         assignedAgentHost: assignedAgentHostByProject.get(project.id) ?? null,
         startDate: dateRangeByProject.get(project.id)?.startDate ?? null,
-        dueDate: dateRangeByProject.get(project.id)?.dueDate ?? null,
+        // Effective deadline drives the calendar/Gantt: the PM's explicit project
+        // due date (0255) when set, else the derived latest-task-due-date.
+        dueDate: toIso(project.dueDate) ?? dateRangeByProject.get(project.id)?.dueDate ?? null,
+        // The explicit value alone, so the details editor can distinguish "set by a
+        // PM" from "auto-derived from tasks" and seed its date input correctly.
+        projectDueDate: toIso(project.dueDate),
         };
       }),
     });
@@ -578,7 +583,20 @@ export function createProjectRoutes(projectService: ProjectService, db: Db): Hon
       sourceControlRepoUrl?: string | null;
       githubRepoUrl?: string | null;
       modality?: string | null;
+      /** Explicit project deadline as an ISO/date string, or null to clear it. */
+      dueDate?: string | null;
     }>();
+
+    // Parse the explicit deadline: a non-empty string → Date, explicit null → clear,
+    // omitted (undefined) → leave unchanged. An unparseable string is treated as
+    // "leave unchanged" rather than silently writing an Invalid Date.
+    let dueDate: Date | null | undefined;
+    if (body.dueDate === null) {
+      dueDate = null;
+    } else if (typeof body.dueDate === 'string' && body.dueDate.trim()) {
+      const parsed = new Date(body.dueDate);
+      dueDate = Number.isNaN(parsed.getTime()) ? undefined : parsed;
+    }
 
     const existing = await projectService.getProject(rawId, tenantId);
     const assignment = await resolveSourceControlAssignment(
@@ -601,6 +619,7 @@ export function createProjectRoutes(projectService: ProjectService, db: Db): Hon
 
     const project = await projectService.updateProject(existing.id, {
       ...body,
+      dueDate,
       sourceControlIntegrationId: assignment.value.sourceControlIntegrationId,
       sourceControlProvider: assignment.value.sourceControlProvider,
       sourceControlRepoFullName: assignment.value.sourceControlRepoFullName,

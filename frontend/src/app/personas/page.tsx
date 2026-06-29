@@ -15,6 +15,7 @@ import {
 } from '@/lib/builderforceApi';
 import { BUILTIN_PERSONAS, userPersonasKey, type Persona, type UserPersona } from '@/lib/marketplaceData';
 import ArtifactAssigner from '@/components/ArtifactAssigner';
+import { CatalogInsightsBar, type CatalogInsightsItem } from '@/components/CatalogInsightsBar';
 import PsychometricEditor from '@/components/PsychometricEditor';
 import type { PsychometricProfile } from '@/lib/psychometric';
 import PageContainer from '@/components/PageContainer';
@@ -246,6 +247,11 @@ export default function PersonasPage() {
       (p.tags ?? []).some((t) => t.includes(search.toLowerCase()))
   );
 
+  const insightsItems: CatalogInsightsItem[] = marketplacePersonas.map((p) => {
+    const stat = stats[p.name] ?? { likes: 0, installs: 0, liked: false };
+    return { key: p.name, name: p.name, group: p.source ?? null, primary: stat.installs, secondary: stat.likes };
+  });
+
   const sourceBadge = (source: Persona['source']) => {
     const map: Record<string, { label: string; color: string }> = {
       builtin: { label: 'Built-in', color: 'var(--accent,#6366f1)' },
@@ -383,6 +389,7 @@ export default function PersonasPage() {
         )
       ) : (
         <>
+          <CatalogInsightsBar entity="personas" items={insightsItems} primaryMetric="installs" secondaryMetric="likes" groupKind="source" />
           <div style={{ marginBottom: 16 }}>
             <input
               type="search"

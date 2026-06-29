@@ -63,9 +63,9 @@
       "approvals": "Aprobaciones y P&R",
       "contributors": "Colaboradores",
       "logs": "Registros",
-      "llm": "Uso de LLM",
       "qa": "QA agéntica",
-      "home": "Inicio"
+      "home": "Inicio",
+      "integrations": "Integraciones"
     }
   },
   "alerts": {
@@ -161,7 +161,8 @@
       "critical": "Crítico"
     },
     "healthAria": "Salud del proyecto {score} de 100 — {tier}",
-    "doneAria": "{pct}% completado — {completed} de {total} tareas completadas"
+    "doneAria": "{pct}% completado — {completed} de {total} tareas completadas",
+    "donePct": "{pct}% completado"
   },
   "projectScope": {
     "workspace": "Espacio de trabajo",
@@ -208,7 +209,32 @@
     "depTypeStartToStart": "Inicio → Inicio",
     "depTypeFinishToFinish": "Fin → Fin",
     "depTypeStartToFinish": "Inicio → Fin",
-    "spine": "Eje de planificación"
+    "spine": "Eje de planificación",
+    "newEpic": "Nueva épica",
+    "editEpic": "Editar épica",
+    "epicTitlePlaceholder": "¿De qué trata la épica?",
+    "epicDescription": "Descripción",
+    "epicDescriptionPlaceholder": "Resumen opcional del resultado",
+    "epicTitleRequired": "El título es obligatorio.",
+    "epicNeedsProject": "Elige un proyecto antes de crear una épica.",
+    "epicCreate": "Crear épica",
+    "epicSaveChanges": "Guardar cambios",
+    "epicCancel": "Cancelar",
+    "epicStatus": {
+      "backlog": "Pendientes",
+      "todo": "Por hacer",
+      "ready": "Lista",
+      "in_progress": "En curso",
+      "in_review": "En revisión",
+      "done": "Hecha",
+      "blocked": "Bloqueada"
+    },
+    "epicPriority": {
+      "low": "Baja",
+      "medium": "Media",
+      "high": "Alta",
+      "urgent": "Urgente"
+    }
   },
   "ide": {
     "all": "Todos",
@@ -368,7 +394,27 @@
     "profile": "Perfil",
     "workspace": "Espacio de trabajo",
     "language": "Idioma",
-    "languageDescription": "Elige el idioma de la interfaz de la aplicación."
+    "languageDescription": "Elige el idioma de la interfaz de la aplicación.",
+    "email": "Correo electrónico",
+    "displayName": "Nombre visible",
+    "userId": "ID de usuario",
+    "name": "Nombre",
+    "slug": "Slug",
+    "id": "ID",
+    "switchWorkspace": "Cambiar de espacio",
+    "manageMemberSessions": "Gestionar sesiones de miembros",
+    "apiKeysLink": "Claves API",
+    "connectedAccounts": "Cuentas conectadas",
+    "connected": "Conectada",
+    "connect": "Conectar",
+    "disconnect": "Desconectar",
+    "loading": "Cargando…",
+    "providerAlreadyLinked": "Esa cuenta de proveedor ya está conectada a otra cuenta de Builderforce.",
+    "singleSignInWarning": "Añade una contraseña o conecta otro proveedor antes de desconectar tu único método de inicio de sesión.",
+    "error": "Error: {message}",
+    "integrationsTitle": "Integraciones",
+    "integrationsSubtitle": "Conecta el control de código y herramientas externas, y gestiona los widgets integrados de este espacio.",
+    "sourceControlKeys": "Claves de control de código e integraciones"
   },
   "pmo": {
     "title": "Portafolio (PMO)",
@@ -508,6 +554,15 @@
     "loading": "Cargando…",
     "window": "Período",
     "days": "{n} días",
+    "llm": {
+      "requests": "Solicitudes",
+      "requestsSub": "solicitudes de LLM totales",
+      "promptTokens": "Tokens de prompt",
+      "completionTokens": "Tokens de salida",
+      "tokensSub": "este espacio de trabajo",
+      "estCost": "Gasto est.",
+      "estCostSub": "estimado, últimos 7 días"
+    },
     "aihub": {
       "title": "Perspectivas de IA",
       "subtitle": "Adopción, eficacia y próximos pasos: tu programa de IA de un vistazo. Abre cualquier informe para profundizar.",
@@ -517,8 +572,25 @@
         "aiImpactDesc": "Tendencias de adopción y uso de modelos, una matriz de evaluación multiherramienta y una puntuación compuesta de productividad de IA.",
         "engineering": "Eficacia de la IA",
         "engineeringDesc": "Qué enfoque de IA realmente se entrega: puntuación de resultados, tasa de fusión y coste por tipo de trabajo y modelo.",
+        "llmUsage": "Uso de LLM",
+        "llmUsageDesc": "Uso de tokens, solicitudes y estado de los modelos, además del gasto estimado por origen, proyecto, equipo, usuario y repositorio.",
         "recommendations": "Recomendaciones",
         "recommendationsDesc": "Acciones prescriptivas priorizadas y anomalías sobre las que actuar, extraídas de cada perspectiva."
+      },
+      "consumption": {
+        "title": "Tokens de IA este mes",
+        "thisMonth": "tokens consumidos este mes",
+        "ofPlan": "{percent} del plan · {limit} incluidos",
+        "used": "Usados",
+        "remaining": "Restantes",
+        "plan": "Plan",
+        "planName": {
+          "free": "Gratis",
+          "pro": "Pro",
+          "teams": "Equipos"
+        },
+        "trendAria": "Consumo diario de tokens de IA este mes",
+        "noTrend": "Aún no hay uso de tokens este mes"
       }
     },
     "delivhub": {
@@ -547,6 +619,31 @@
         "metricsRated": "en {n} métricas",
         "topRated": "Élite / Alto",
         "topRatedSub": "métricas en los niveles superiores"
+      },
+      "verdict": {
+        "loading": "Leyendo señales de entrega…",
+        "eyebrow": "¿Estáis entregando valor?",
+        "scoreLabel": "Salud",
+        "scoreAria": "Puntuación de salud de entrega {score} sobre 100",
+        "headline": {
+          "yes": "Sí — estáis entregando valor",
+          "at_risk": "En riesgo — la entrega se está deteriorando",
+          "no": "Todavía no — la entrega necesita atención",
+          "no_data": "Aún no hay datos suficientes"
+        },
+        "explain": {
+          "yes": "El ritmo de despliegue, el lead time y el flujo están saludables en los últimos {days} días.",
+          "at_risk": "Algunas señales de entrega se debilitan en los últimos {days} días — actuad antes de que empeoren.",
+          "no": "La entrega se está estancando en los últimos {days} días. Las señales de abajo indican dónde centrarse.",
+          "no_data": "Conecta los despliegues y mueve el trabajo por el tablero para ver tu veredicto de entrega."
+        },
+        "reason": {
+          "deploy": "Despliega {value}/día",
+          "cycle": "ciclo de {value} d",
+          "cfr": "{value}% de fallos por cambio",
+          "stuck": "{n} atascados en curso",
+          "rework": "{value}% de retrabajo"
+        }
       }
     },
     "finhub": {
@@ -902,7 +999,7 @@
       "ciGreen": "CI en verde",
       "avgSteps": "Pasos medios",
       "costPerMergedPr": "Coste / PR fusionado",
-      "tokens": "Tokens",
+      "tokens": "Tokens usados",
       "noRuns": "No hay ejecuciones puntuadas en este periodo.",
       "shareTrendTitle": "Tendencia de cuota por modelo",
       "currentShare": "Cuota actual",
@@ -913,7 +1010,9 @@
       "mergeRateTitle": "Tasa de fusión por modelo",
       "models": "modelos",
       "activeUsers": "Usuarios activos",
-      "cost": "Coste"
+      "cost": "Coste",
+      "tokensSub": "en todos los modelos",
+      "tokensByModel": "Tokens por modelo"
     },
     "devexhub": {
       "title": "DevEx",
@@ -1241,7 +1340,11 @@
     "integrationKeys": "Claves de integración del proyecto",
     "workspaceTitle": "Espacio de trabajo",
     "workspaceDesc": "Espacio de trabajo y sistema de archivos de este proyecto. Abre el IDE para editar archivos.",
-    "openInIde": "Abrir en el IDE"
+    "openInIde": "Abrir en el IDE",
+    "dueDateLabel": "Fecha límite",
+    "dueDateHint": "Establece una fecha límite del proyecto. Déjalo vacío para usar la última fecha de vencimiento de las tareas.",
+    "deadline": "Fecha límite",
+    "deadlineDerived": "(según tareas)"
   },
   "spine": {
     "loading": "Cargando el eje de planificación…",
@@ -1308,7 +1411,6 @@
         "approvals": "Resuelve aprobaciones, preguntas y comentarios que tus agentes escalan a una persona: aprueba acciones o responde lo que necesitan para continuar.",
         "contributors": "Mira quién —persona y agente— está contribuyendo en tu espacio de trabajo, y cómo.",
         "logs": "Registros de agentes, líneas de tiempo de ejecución y diagnósticos de tu espacio de trabajo.",
-        "llm": "Métricas de uso de LLM, salud de los modelos y gasto de tu espacio de trabajo.",
         "qa": "Automatización de QA por proyecto: flujos, pruebas generadas y ejecuciones de CI."
       }
     },
@@ -1677,6 +1779,17 @@
         "op_contains": "contiene",
         "op_prefix": "empieza por"
       }
+    },
+    "stats": {
+      "empty": "Aún no se han recopilado datos — añade un colector para empezar a graficar errores.",
+      "unassigned": "Sin asignar",
+      "eventsCollected": "Eventos recopilados",
+      "windowDays": "Periodo",
+      "events": "eventos",
+      "frequency": "Frecuencia de recopilación",
+      "byLevel": "Por nivel",
+      "byStatus": "Por estado",
+      "byCollector": "Por colector"
     }
   },
   "surveys": {
@@ -1935,6 +2048,8 @@
       "llmRequests": "Solicitudes LLM",
       "llmByModel": "Tokens por modelo",
       "llmBySource": "Coste por origen",
+      "llmSpend": "Gasto estimado",
+      "llmByProject": "Gasto por proyecto",
       "catalogSkillsTopInstalls": "Habilidades más instaladas",
       "catalogSkillsByCategory": "Habilidades por categoría",
       "catalogPersonasTopInstalls": "Perfiles más instalados",
@@ -1968,7 +2083,10 @@
       "byModel": "Tokens por modelo",
       "noSpend": "Sin gasto",
       "estCost": "Coste est.",
-      "bySource": "Coste por origen"
+      "bySource": "Coste por origen",
+      "spendSub": "estimado, últimos 7 días",
+      "byProject": "Gasto por proyecto",
+      "noProjects": "Sin gasto por proyecto"
     },
     "catalog": {
       "noInstalls": "Sin instalaciones aún",
@@ -2075,5 +2193,79 @@
       "metricNeedTrain": "Entrena un modelo primero",
       "cta": "Abrir publicación"
     }
+  },
+  "security": {
+    "title": "Seguridad",
+    "subtitle": "Gestiona tus sesiones, revisa el acceso de administradores y administra los miembros del espacio.",
+    "refresh": "Actualizar",
+    "loading": "Cargando…",
+    "loadingMembers": "Cargando miembros…",
+    "loadingSessions": "Cargando sesiones…",
+    "noMembers": "No se encontraron miembros.",
+    "noSessions": "No se encontraron sesiones.",
+    "noWorkspace": "No se ha seleccionado un espacio. Selecciona un espacio primero.",
+    "error": "Error: {message}",
+    "mySessions": "Mis sesiones activas",
+    "mySessionsSubtitle": "Sesiones con inicio de sesión en tu cuenta en todos los dispositivos.",
+    "adminAccess": "Acceso de administrador reciente",
+    "adminAccessNote": "Estas son sesiones en las que un administrador de la plataforma vio tu cuenta. Todas las sesiones de administrador son de solo lectura.",
+    "noAdminAccess": "No se encontraron sesiones de acceso de administrador.",
+    "memberSessions": "Miembros del espacio",
+    "memberSessionsSubtitle": "Gestiona las sesiones activas y los tokens de todos los miembros de este espacio.",
+    "securityAgents": "Agentes de seguridad",
+    "securityAgentsEmpty": "Ningún agente asignado a seguridad. Asigna un agente para supervisar/revisar la seguridad de este espacio.",
+    "you": "Tú",
+    "current": "Actual",
+    "session": "Sesión",
+    "sessionsHeading": "Sesiones",
+    "sessionsLabel": "sesiones",
+    "tokensLabel": "tokens",
+    "selectAll": "Seleccionar todo",
+    "selected": "{count} seleccionadas",
+    "revokeSelected": "Cerrar sesión seleccionadas ({count})",
+    "revoke": "Cerrar sesión",
+    "confirmRevokeSelected": "¿Cerrar las {count} sesiones seleccionadas?",
+    "lastActive": "Última actividad {time}",
+    "created": "Creada {time}",
+    "revoked": "Revocada",
+    "prev": "Anterior",
+    "next": "Siguiente",
+    "pageOf": "Página {page} de {pages}",
+    "as": "como",
+    "duration": "Duración",
+    "reason": "Motivo",
+    "active": "Activa",
+    "ended": "Finalizada",
+    "writeBlocked": "{count} intentos de escritura bloqueados"
+  },
+  "catalogInsights": {
+    "total": {
+      "skills": "Habilidades",
+      "personas": "Personas",
+      "prompts": "Prompts"
+    },
+    "metric": {
+      "installs": "Instalaciones",
+      "likes": "Me gusta",
+      "usage": "Usos",
+      "stars": "Estrellas"
+    },
+    "by": {
+      "category": "Por categoría",
+      "source": "Por origen"
+    },
+    "top": {
+      "installs": "Top por instalaciones",
+      "usage": "Más usados"
+    },
+    "uncategorized": "Sin categoría",
+    "other": "Otros"
+  },
+  "projectTable": {
+    "name": "Nombre",
+    "health": "Estado",
+    "description": "Descripción",
+    "agent": "Agente",
+    "actions": "Acciones"
   }
 }

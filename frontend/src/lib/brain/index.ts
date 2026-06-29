@@ -74,7 +74,10 @@ export {
   type PlatformCapability,
   type PlatformActionContext,
 } from './platformActions';
-export { PLATFORM_BRAIN_SYSTEM_PROMPT } from './platformPrompt';
+export { PLATFORM_BRAIN_SYSTEM_PROMPT, BRAIN_AUTO_APPROVE_DIRECTIVE } from './platformPrompt';
+
+// Model-authored "next step" buttons parsed out of a Brain reply.
+export { parseSuggestedActions, type SuggestedAction, type ParsedSuggestedActions } from './suggestedActions';
 
 // Brain → data-view refresh bus: mutating platform actions announce writes here
 // so the page rendering that data (e.g. the Tasks board) can refetch live.

@@ -1,9 +1,11 @@
 'use client';
 
 import { useState } from 'react';
+import { useTranslations } from 'next-intl';
 import { useRouter } from 'next/navigation';
 import type { Project } from '@/lib/types';
 import { ProjectOriginBadge } from './ProjectOriginBadge';
+import { ProjectHealthBadge } from './ProjectHealth';
 import type { ProjectPanelTab } from './ProjectDetailsPanel';
 import { DeleteProjectDialog } from './DeleteProjectDialog';
 import { RunDiagnosticsButton } from './RunDiagnosticsButton';
@@ -53,6 +55,7 @@ export function ProjectTable({
   onAssignedAgentClick,
   onDelete,
 }: ProjectTableProps) {
+  const t = useTranslations('projectTable');
   const router = useRouter();
   const [confirmProject, setConfirmProject] = useState<Project | null>(null);
   const openIde = onOpenIde ?? ((p: Project) => { window.location.href = `/ide/${p.publicId ?? p.id}`; });
@@ -62,10 +65,11 @@ export function ProjectTable({
       <table style={tableStyle}>
         <thead>
           <tr style={{ borderBottom: '1px solid var(--border-subtle)', textAlign: 'left' }}>
-            <th style={headStyle}>Name</th>
-            <th style={headStyle}>Description</th>
-            <th style={headStyle}>Agent</th>
-            <th style={headStyle}>Actions</th>
+            <th style={headStyle}>{t('name')}</th>
+            <th style={headStyle}>{t('health')}</th>
+            <th style={headStyle}>{t('description')}</th>
+            <th style={headStyle}>{t('agent')}</th>
+            <th style={headStyle}>{t('actions')}</th>
           </tr>
         </thead>
         <tbody>
@@ -76,6 +80,9 @@ export function ProjectTable({
                   {project.name}
                   <ProjectOriginBadge origin={project.origin} />
                 </span>
+              </td>
+              <td style={cellStyle}>
+                <ProjectHealthBadge project={project} />
               </td>
               <td style={{ ...cellStyle, color: 'var(--text-secondary)', maxWidth: 280, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                 {project.description ?? '—'}

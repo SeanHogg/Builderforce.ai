@@ -1,5 +1,6 @@
 import type { WidgetDef } from './types';
 import { AI_IMPACT_WIDGETS } from '@/components/insights/widgets/aiImpactWidgets';
+import { LLM_USAGE_WIDGETS } from '@/components/insights/widgets/llmUsageWidgets';
 import { DELIVERY_WIDGETS } from '@/components/insights/widgets/deliveryWidgets';
 import { FINANCE_WIDGETS } from '@/components/insights/widgets/financeWidgets';
 import { CORE_WIDGETS } from '@/components/widgets/registry-modules/coreWidgets';
@@ -17,6 +18,7 @@ import { CATALOG_WIDGETS } from '@/components/widgets/registry-modules/catalogWi
 export const ALL_WIDGETS: WidgetDef[] = [
   // ── Insights lenses ──
   ...AI_IMPACT_WIDGETS,
+  ...LLM_USAGE_WIDGETS,
   ...DELIVERY_WIDGETS,
   ...FINANCE_WIDGETS,
   // ── Non-insights surfaces (proves the registry is app-wide) ──

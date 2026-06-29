@@ -1,7 +1,7 @@
 'use client';
 
-import { Suspense } from 'react';
-import { useSearchParams } from 'next/navigation';
+import { Suspense, useEffect } from 'react';
+import { useSearchParams, useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import { useAuth } from '@/lib/AuthContext';
 import { WorkforceAgents } from '@/components/workforce/WorkforceAgents';
@@ -10,8 +10,6 @@ import { ChatsView } from '@/components/chats/ChatsView';
 import { HumanRequestsView } from '@/components/humanRequests/HumanRequestsView';
 import { ObservabilityContent } from '@/components/ObservabilityContent';
 import { PerformanceView } from '@/components/workforce/PerformanceView';
-import { LlmUsageContent } from '@/components/LlmUsageContent';
-import { ModelRoutingAnalytics } from '@/components/ModelRoutingAnalytics';
 import { QaContent } from '@/components/QaContent';
 import { ActiveRunsPanel } from '@/components/ActiveRunsPanel';
 import PageContainer from '@/components/PageContainer';
@@ -19,18 +17,24 @@ import PageContainer from '@/components/PageContainer';
 // Workforce sub-views are declared as query tabs in navGroups; the shell
 // <SectionTabs> bar renders the tab bar. Here we just read `?tab=` to pick the
 // body and the per-tab sub-label, mirroring the /quality surface.
-type WorkforceTab = 'workforce' | 'teams' | 'performance' | 'chats' | 'approvals' | 'logs' | 'llm' | 'qa';
+type WorkforceTab = 'workforce' | 'teams' | 'performance' | 'chats' | 'approvals' | 'logs' | 'qa';
 
 const TAB_IDS: ReadonlyArray<WorkforceTab> = [
-  'workforce', 'teams', 'performance', 'chats', 'approvals', 'logs', 'llm', 'qa',
+  'workforce', 'teams', 'performance', 'chats', 'approvals', 'logs', 'qa',
 ];
 
 function WorkforcePageInner() {
   const t = useTranslations('workforce.page');
   const { tenant } = useAuth();
+  const router = useRouter();
   const tenantId = tenant?.id != null ? Number(tenant.id) : undefined;
 
   const requested = useSearchParams().get('tab');
+  // LLM Usage folded into the AI Insights hub; keep old ?tab=llm links working.
+  useEffect(() => {
+    if (requested === 'llm') router.replace('/insights/ai?panel=llm-usage');
+  }, [requested, router]);
+
   // Contributors merged into Performance; keep old ?tab=contributors links working.
   const normalized = requested === 'contributors' ? 'performance' : requested;
   const tab: WorkforceTab = TAB_IDS.includes(normalized as WorkforceTab) ? (normalized as WorkforceTab) : 'workforce';
@@ -59,11 +63,6 @@ function WorkforcePageInner() {
             <ActiveRunsPanel />
           </div>
           <ObservabilityContent initialView="logs" />
-        </>
-      ) : tab === 'llm' ? (
-        <>
-          <LlmUsageContent />
-          <ModelRoutingAnalytics />
         </>
       ) : tab === 'qa' ? (
         <QaContent />

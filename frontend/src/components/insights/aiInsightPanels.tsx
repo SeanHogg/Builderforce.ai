@@ -19,10 +19,11 @@ import type { Capability } from '@/lib/rbac';
 import { AiImpactLens } from './AiImpactLens';
 import { EngineeringLens } from './EngineeringLens';
 import { RecommendationsLens } from './RecommendationsLens';
-import { AiImpactSummary, EngineeringSummary, RecommendationsSummary } from './AiInsightSummaries';
+import { LlmUsageLens } from './LlmUsageLens';
+import { AiImpactSummary, EngineeringSummary, RecommendationsSummary, LlmUsageSummary } from './AiInsightSummaries';
 
 /** Stable ids (also the `?panel=` deep-link + Brain enum values). */
-export type AiInsightPanelId = 'ai-impact' | 'engineering' | 'recommendations';
+export type AiInsightPanelId = 'ai-impact' | 'engineering' | 'llm-usage' | 'recommendations';
 
 export interface AiInsightPanelDef {
   id: AiInsightPanelId;
@@ -51,6 +52,10 @@ export const AI_INSIGHT_PANELS: Record<AiInsightPanelId, AiInsightPanelDef> = {
   engineering: {
     id: 'engineering', icon: '🤖', titleKey: 'panel.engineering', descKey: 'panel.engineeringDesc',
     capability: 'insights.engineering', width: WIDE, Summary: EngineeringSummary, render: () => <EngineeringLens />,
+  },
+  'llm-usage': {
+    id: 'llm-usage', icon: '🪙', titleKey: 'panel.llmUsage', descKey: 'panel.llmUsageDesc',
+    capability: 'insights.llmUsage', width: WIDE, Summary: LlmUsageSummary, render: () => <LlmUsageLens />,
   },
   recommendations: {
     id: 'recommendations', icon: '🧠', titleKey: 'panel.recommendations', descKey: 'panel.recommendationsDesc',

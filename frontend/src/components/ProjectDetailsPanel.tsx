@@ -18,6 +18,21 @@ import { IntegrationCredentialsManager } from './integrations/IntegrationCredent
 import { BoardConnectionsManager } from './integrations/BoardConnectionsManager';
 import { ProjectDiagnosticsTab } from './ProjectDiagnosticsTab';
 import { ProjectInitiativeLink } from './pm/ProjectInitiativeLink';
+import { ProjectHealthGauges } from './ProjectHealth';
+
+/** ISO timestamp → `yyyy-mm-dd` for a native date input (empty string when unset). */
+const toDateInputValue = (iso?: string | null): string => {
+  if (!iso) return '';
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime()) ? '' : d.toISOString().slice(0, 10);
+};
+
+/** Localized deadline label, or an em dash when there is no deadline at all. */
+const formatDeadline = (iso?: string | null): string => {
+  if (!iso) return '—';
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime()) ? '—' : d.toLocaleDateString();
+};
 
 export type ProjectPanelTab =
   | 'details'
@@ -97,6 +112,7 @@ export function ProjectDetailsPanel({
   const [editDescription, setEditDescription] = useState(project.description ?? '');
   const [editKey, setEditKey] = useState(project.key ?? '');
   const [editStatus, setEditStatus] = useState(project.status ?? 'active');
+  const [editDueDate, setEditDueDate] = useState(toDateInputValue(project.projectDueDate));
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [keyStatus, setKeyStatus] = useState<'idle' | 'checking' | 'available' | 'taken'>('idle');
@@ -122,7 +138,8 @@ export function ProjectDetailsPanel({
     setEditDescription(project.description ?? '');
     setEditKey(project.key ?? '');
     setEditStatus(project.status ?? 'active');
-  }, [project.id, project.name, project.description, project.key, project.status]);
+    setEditDueDate(toDateInputValue(project.projectDueDate));
+  }, [project.id, project.name, project.description, project.key, project.status, project.projectDueDate]);
 
   if (!open) return null;
 
@@ -139,6 +156,9 @@ export function ProjectDetailsPanel({
         description: editDescription.trim() || undefined,
         key: editKey.trim() || undefined,
         status: editStatus,
+        // Empty input clears the explicit deadline (null) so it reverts to the
+        // derived task-based deadline; a date sets it explicitly.
+        dueDate: editDueDate ? new Date(editDueDate).toISOString() : null,
       });
       onProjectUpdate?.(updated);
       setEditingProject(false);
@@ -313,6 +333,10 @@ export function ProjectDetailsPanel({
         }}>
           {activeTab === 'details' && (
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 16 }}>
+              {/* Health speedometer + % done ring — same shared visual as the
+                  project card/list so the score can't drift. Self-hides when the
+                  project has no task data. */}
+              <ProjectHealthGauges project={project} size={120} />
               <div style={cardStyle}>
                 <div style={{ position: 'relative' }}>
                 <div style={{ fontWeight: 600, marginBottom: 10, fontSize: 14 }}>{t('overview')}</div>
@@ -325,6 +349,7 @@ export function ProjectDetailsPanel({
                       setEditDescription(project.description ?? '');
                       setEditKey(project.key ?? '');
                       setEditStatus(project.status ?? 'active');
+                      setEditDueDate(toDateInputValue(project.projectDueDate));
                     }}
                     aria-label={t('editAria')}
                     style={{
@@ -416,6 +441,26 @@ export function ProjectDetailsPanel({
                       ))}
                     </Select>
                   </div>
+                  <div style={{ marginBottom: 10 }}>
+                    <label htmlFor="edit-due-date" style={{ display: 'block', fontSize: 12, color: 'var(--text-muted)', marginBottom: 4 }}>{t('dueDateLabel')}</label>
+                    <input
+                      id="edit-due-date"
+                      type="date"
+                      value={editDueDate}
+                      onChange={(e) => setEditDueDate(e.target.value)}
+                      style={{
+                        width: '100%',
+                        padding: '8px 10px',
+                        fontSize: 13,
+                        border: '1px solid var(--border-subtle)',
+                        borderRadius: 8,
+                        background: 'var(--bg-deep)',
+                        color: 'var(--text-primary)',
+                        colorScheme: 'light dark',
+                      }}
+                    />
+                    <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>{t('dueDateHint')}</div>
+                  </div>
                   <div style={{ marginBottom: 14 }}>
                     <label htmlFor="edit-description" style={{ display: 'block', fontSize: 12, color: 'var(--text-muted)', marginBottom: 4 }}>{t('descriptionLabel')}</label>
                     <textarea
@@ -503,6 +548,15 @@ export function ProjectDetailsPanel({
                   <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12 }}>
                     <span style={{ color: 'var(--text-muted)' }}>{t('template')}</span>
                     <span>{project.template ?? '—'}</span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12 }}>
+                    <span style={{ color: 'var(--text-muted)' }}>{t('deadline')}</span>
+                    <span>
+                      {formatDeadline(project.dueDate)}
+                      {project.dueDate && !project.projectDueDate && (
+                        <span style={{ color: 'var(--text-muted)', marginLeft: 6 }}>{t('deadlineDerived')}</span>
+                      )}
+                    </span>
                   </div>
                 </div>
                 <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid var(--border-subtle)' }}>

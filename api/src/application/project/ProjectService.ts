@@ -38,6 +38,8 @@ export interface UpdateProjectDto {
   githubRepoUrl?: string | null;
   governance?: string | null;
   modality?: string | null;
+  /** Explicit project deadline (0255). null clears it (falls back to the derived task deadline). */
+  dueDate?: Date | null;
 }
 
 /**
@@ -152,6 +154,7 @@ export class ProjectService {
       githubRepoName,
       governance: dto.governance,
       modality: dto.modality,
+      dueDate: dto.dueDate,
     });
 
     return this.projects.update(updated);

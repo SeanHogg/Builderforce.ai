@@ -24,6 +24,9 @@ import {
   useBrainActions,
   useOptionalBrainContext,
   PLATFORM_BRAIN_SYSTEM_PROMPT,
+  BRAIN_AUTO_APPROVE_DIRECTIVE,
+  parseSuggestedActions,
+  type SuggestedAction,
   type BrainModality,
 } from '@/lib/brain';
 import type { BrainChat, BrainMessage } from '@/lib/builderforceApi';
@@ -216,11 +219,18 @@ export function BrainPanel({
   // when available; the id is what the tools actually need.
   const ctxProjectId = viewingProjectId ?? pinnedProjectId;
   const ambientSystem = useMemo(() => {
-    if (ctxProjectId == null) return extraSystem;
-    const name = projects.find((p) => p.id === ctxProjectId)?.name;
-    const line = `The current project is ${name ? `"${name}" ` : ''}(projectId ${ctxProjectId}). When the user asks to create, list, or operate on tasks, specs, or other project-scoped items without naming a project, use projectId ${ctxProjectId} by default. To take them to the result, call navigate_to — do not write out absolute URLs.`;
-    return extraSystem ? `${extraSystem}\n${line}` : line;
-  }, [ctxProjectId, projects, extraSystem]);
+    const parts: string[] = [];
+    if (extraSystem) parts.push(extraSystem);
+    if (ctxProjectId != null) {
+      const name = projects.find((p) => p.id === ctxProjectId)?.name;
+      parts.push(`The current project is ${name ? `"${name}" ` : ''}(projectId ${ctxProjectId}). When the user asks to create, list, or operate on tasks, specs, or other project-scoped items without naming a project, use projectId ${ctxProjectId} by default. To take them to the result, call navigate_to — do not write out absolute URLs.`);
+    }
+    // Auto-approve flips the model from "ask before acting" to "act decisively"
+    // — the toggle already skips the per-action confirm UI; this keeps the model
+    // from asking for permission in prose anyway.
+    if (autoApprove) parts.push(BRAIN_AUTO_APPROVE_DIRECTIVE);
+    return parts.length > 0 ? parts.join('\n') : undefined;
+  }, [ctxProjectId, projects, extraSystem, autoApprove]);
 
   const conv = useBrainConversation({
     chatId: chats.activeChatId,
@@ -509,22 +519,35 @@ export function BrainPanel({
           )}
           <div className="bs-messages" style={{ flex: 1, overflowY: 'auto', minHeight: 0 }}>
             {conv.loadingMessages && <div style={{ color: 'var(--text-muted)', fontSize: 13, padding: 12 }}>Loading messages…</div>}
-            {conv.messages.map((msg) => (
-              <ChatMessageBubble
-                key={msg.id}
-                role={msg.role as 'user' | 'assistant'}
-                content={msg.content}
-                onApplyCode={hasTool('apply_code_to_active_file') ? (code) => { void runTool('apply_code_to_active_file', { code }); } : undefined}
-                onCreateFile={hasTool('create_file') ? (path, content) => { void runTool('create_file', { path, content }); } : undefined}
-                actions={
-                  msg.role !== 'user' ? (
-                    <MessageActions msg={msg} conv={conv} projectId={chats.activeChat?.projectId ?? pinnedProjectId ?? undefined} />
-                  ) : undefined
-                }
-              />
-            ))}
+            {conv.messages.map((msg) => {
+              const isAssistant = msg.role !== 'user';
+              // Lift the model-authored "next step" buttons out of the reply so
+              // the raw JSON block never renders and the buttons reflect what the
+              // AI actually proposed (not a fixed PRD/Tasks pair).
+              const parsed = isAssistant ? parseSuggestedActions(msg.content) : null;
+              return (
+                <ChatMessageBubble
+                  key={msg.id}
+                  role={msg.role as 'user' | 'assistant'}
+                  content={parsed ? parsed.content : msg.content}
+                  onApplyCode={hasTool('apply_code_to_active_file') ? (code) => { void runTool('apply_code_to_active_file', { code }); } : undefined}
+                  onCreateFile={hasTool('create_file') ? (path, content) => { void runTool('create_file', { path, content }); } : undefined}
+                  actions={
+                    isAssistant ? (
+                      <MessageActions
+                        msg={msg}
+                        conv={conv}
+                        projectId={chats.activeChat?.projectId ?? pinnedProjectId ?? undefined}
+                        suggestions={parsed?.actions ?? []}
+                        onRunSuggestion={(prompt) => { void conv.send(prompt); }}
+                      />
+                    ) : undefined
+                  }
+                />
+              );
+            })}
             {conv.sending && (
-              <ChatMessageBubble role="assistant" content={conv.streamingText} isStreaming={!conv.streamingText} />
+              <ChatMessageBubble role="assistant" content={parseSuggestedActions(conv.streamingText).content} isStreaming={!conv.streamingText} />
             )}
           </div>
           <div className="bs-input-area" style={{ flexShrink: 0, padding: isPage ? undefined : '12px 16px', borderTop: isPage ? undefined : '1px solid var(--border-subtle)' }}>
@@ -695,21 +718,55 @@ function ToolConfirmBar({ req, onDecide, onApproveAll }: { req: { name: string; 
   );
 }
 
-function MessageActions({ msg, conv, projectId }: {
+function MessageActions({ msg, conv, projectId, suggestions, onRunSuggestion }: {
   msg: BrainMessage;
   conv: ReturnType<typeof useBrainConversation>;
   projectId?: number;
+  /** Model-authored next-step buttons parsed from this reply. */
+  suggestions?: SuggestedAction[];
+  onRunSuggestion?: (prompt: string) => void;
 }) {
   return (
-    <ChatMessageActions
-      onCopy={() => conv.copyMessage(msg)}
-      copied={conv.copiedMessageId === msg.id}
-      feedback={conv.feedbackMap[msg.id]}
-      onFeedback={(value) => conv.submitFeedback(msg, value)}
-      projectId={projectId}
-      assistantContent={msg.content}
-      conversationMessages={conv.messages.map((m) => ({ role: m.role, content: m.content }))}
-    />
+    <>
+      {suggestions && suggestions.length > 0 && onRunSuggestion && (
+        <div style={{ flexBasis: '100%', display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 6 }}>
+          {suggestions.map((s, i) => (
+            <button
+              key={i}
+              type="button"
+              onClick={() => onRunSuggestion(s.prompt)}
+              disabled={conv.sending}
+              title={s.prompt}
+              style={{
+                fontSize: 12,
+                fontWeight: 600,
+                padding: '5px 12px',
+                cursor: conv.sending ? 'wait' : 'pointer',
+                background: 'var(--coral-bright, #f4726e)',
+                color: 'var(--text-on-accent, #fff)',
+                border: 'none',
+                borderRadius: 999,
+                maxWidth: '100%',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              {s.label}
+            </button>
+          ))}
+        </div>
+      )}
+      <ChatMessageActions
+        onCopy={() => conv.copyMessage(msg)}
+        copied={conv.copiedMessageId === msg.id}
+        feedback={conv.feedbackMap[msg.id]}
+        onFeedback={(value) => conv.submitFeedback(msg, value)}
+        projectId={projectId}
+        assistantContent={msg.content}
+        conversationMessages={conv.messages.map((m) => ({ role: m.role, content: m.content }))}
+      />
+    </>
   );
 }
 

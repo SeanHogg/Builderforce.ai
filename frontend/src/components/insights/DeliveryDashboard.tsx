@@ -19,6 +19,7 @@ import { useTranslations } from 'next-intl';
 import { PmCard } from '@/components/pm/pmShared';
 import { RoleGate } from '@/components/RoleGate';
 import { usePermission } from '@/lib/rbac';
+import { DeliveryVerdict } from './DeliveryVerdict';
 import { DaysWindowSelect } from './LensShell';
 import { useDeliveryPanel } from './DeliveryPanelProvider';
 import { DELIVERY_PANEL_IDS, DELIVERY_PANELS, isDeliveryPanelId, type DeliveryPanelDef, type DeliveryPanelId } from './deliveryPanels';
@@ -79,19 +80,26 @@ export function DeliveryDashboard() {
         <DaysWindowSelect value={days} onChange={setDays} />
       </div>
 
-      {DELIVERY_PANEL_IDS.map((id) => {
-        const def = DELIVERY_PANELS[id];
-        return (
-          <PmCard
-            key={id}
-            title={`${def.icon} ${t(def.titleKey)}`}
-            action={<DrillButton label={t('viewDetails')} onClick={() => open(id)} />}
-          >
-            <p style={{ fontSize: '0.84rem', color: 'var(--text-secondary)', margin: '-6px 0 14px' }}>{t(def.descKey)}</p>
-            <SummarySlot def={def} days={days} />
-          </PmCard>
-        );
-      })}
+      {/* Narrative headline: are we delivering value? — the answer first. */}
+      <DeliveryVerdict days={days} />
+
+      {/* Denser two-up grid so the supporting reports read as one story, not a
+          spaced-out stack of rows. */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))', gap: 16, alignItems: 'start' }}>
+        {DELIVERY_PANEL_IDS.map((id) => {
+          const def = DELIVERY_PANELS[id];
+          return (
+            <PmCard
+              key={id}
+              title={`${def.icon} ${t(def.titleKey)}`}
+              action={<DrillButton label={t('viewDetails')} onClick={() => open(id)} />}
+            >
+              <p style={{ fontSize: '0.84rem', color: 'var(--text-secondary)', margin: '-6px 0 14px' }}>{t(def.descKey)}</p>
+              <SummarySlot def={def} days={days} />
+            </PmCard>
+          );
+        })}
+      </div>
     </div>
   );
 }

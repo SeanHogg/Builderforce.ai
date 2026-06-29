@@ -1,0 +1,62 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 860 470" font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, sans-serif">
+  <defs>
+    <linearGradient id="coral" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#FF6B5C"/>
+      <stop offset="1" stop-color="#E8472F"/>
+    </linearGradient>
+    <linearGradient id="green" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#3FE0A5"/>
+      <stop offset="1" stop-color="#1f8f63"/>
+    </linearGradient>
+    <linearGradient id="rise" x1="0" y1="1" x2="1" y2="0">
+      <stop offset="0" stop-color="#52617d" stop-opacity="0.15"/>
+      <stop offset="1" stop-color="#3FE0A5" stop-opacity="0.5"/>
+    </linearGradient>
+  </defs>
+  <rect width="860" height="470" fill="#0E1525"/>
+  <text x="430" y="40" fill="#FFFFFF" font-size="25" font-weight="700" text-anchor="middle">AI Development Maturity — the five levels</text>
+  <text x="430" y="66" fill="#8FA0BD" font-size="14" text-anchor="middle">Where adopting AI tools stops being a feature and starts changing how you ship</text>
+
+  <!-- ascending guide arrow -->
+  <path d="M70,392 L790,150" stroke="url(#rise)" stroke-width="3" fill="none" stroke-dasharray="2 7" stroke-linecap="round"/>
+
+  <!-- baseline -->
+  <line x1="60" y1="392" x2="800" y2="392" stroke="#26324f" stroke-width="1.5"/>
+
+  <!-- 5 ascending bars -->
+  <g font-size="13">
+    <!-- L1 -->
+    <rect x="70" y="312" width="128" height="80" rx="10" fill="#212d49" stroke="#26324f"/>
+    <text x="134" y="345" fill="#8FA0BD" font-size="22" font-weight="800" text-anchor="middle">1</text>
+    <text x="134" y="372" fill="#DCE6F7" font-size="12" font-weight="700" text-anchor="middle">AI-assisted</text>
+    <text x="134" y="388" fill="#8FA0BD" font-size="12" text-anchor="middle">steps</text>
+
+    <!-- L2 -->
+    <rect x="218" y="262" width="128" height="130" rx="10" fill="#2c3a5e" stroke="#26324f"/>
+    <text x="282" y="295" fill="#b9c6e0" font-size="22" font-weight="800" text-anchor="middle">2</text>
+    <text x="282" y="322" fill="#DCE6F7" font-size="12" font-weight="700" text-anchor="middle">Faster</text>
+    <text x="282" y="338" fill="#8FA0BD" font-size="12" text-anchor="middle">individuals</text>
+
+    <!-- L3 -->
+    <rect x="366" y="212" width="128" height="180" rx="10" fill="url(#coral)"/>
+    <text x="430" y="245" fill="#fff" font-size="22" font-weight="800" text-anchor="middle">3</text>
+    <text x="430" y="272" fill="#fff" font-size="12" font-weight="700" text-anchor="middle">AI-native</text>
+    <text x="430" y="288" fill="#ffd9d2" font-size="12" text-anchor="middle">workflow</text>
+
+    <!-- L4 -->
+    <rect x="514" y="162" width="128" height="230" rx="10" fill="url(#coral)"/>
+    <text x="578" y="195" fill="#fff" font-size="22" font-weight="800" text-anchor="middle">4</text>
+    <text x="578" y="222" fill="#fff" font-size="12" font-weight="700" text-anchor="middle">Cross-functional</text>
+    <text x="578" y="238" fill="#ffd9d2" font-size="12" text-anchor="middle">delivery</text>
+
+    <!-- L5 -->
+    <rect x="662" y="112" width="128" height="280" rx="10" fill="url(#green)"/>
+    <text x="726" y="145" fill="#062b1f" font-size="22" font-weight="800" text-anchor="middle">5</text>
+    <text x="726" y="172" fill="#062b1f" font-size="12" font-weight="800" text-anchor="middle">Parallel agentic</text>
+    <text x="726" y="188" fill="#0a3d2c" font-size="12" font-weight="600" text-anchor="middle">delivery</text>
+  </g>
+
+  <text x="70" y="430" fill="#52617d" font-size="12">Tools bolted onto an unchanged process</text>
+  <text x="790" y="430" fill="#52617d" font-size="12" text-anchor="end">Multiple agents, parallel workstreams, review that scales</text>
+  <text x="430" y="456" fill="#52617d" font-size="12" text-anchor="middle">Most teams that "adopted AI" sit at Level 1–2 — faster keystrokes, same delivery pace</text>
+</svg>

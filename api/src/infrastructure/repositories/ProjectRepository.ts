@@ -74,6 +74,7 @@ export class ProjectRepository implements IProjectRepository {
         modality:        plain.modality ?? undefined,
         origin:          plain.origin ?? undefined,
         initiativeId:    plain.initiativeId ?? undefined,
+        dueDate:         plain.dueDate ?? undefined,
       })
       .returning();
     if (!inserted) throw new Error('Insert returned no rows');
@@ -104,6 +105,9 @@ export class ProjectRepository implements IProjectRepository {
         // can be UNassigned from its initiative. Drizzle still skips `undefined`,
         // so omitting initiativeId from the update DTO leaves the link unchanged.
         initiativeId:    plain.initiativeId,
+        // Written directly too: null must persist so a PM can CLEAR the explicit
+        // deadline (falling back to the derived task-based one).
+        dueDate:         plain.dueDate,
         updatedAt:       plain.updatedAt,
       })
       .where(eq(projectsTable.id, plain.id))
@@ -145,6 +149,7 @@ function toDomain(row: Row): Project {
     modality:        row.modality ?? 'designer',
     origin:          row.origin ?? null,
     initiativeId:    row.initiativeId ?? null,
+    dueDate:         row.dueDate ?? null,
     createdAt:       row.createdAt,
     updatedAt:       row.updatedAt,
   });

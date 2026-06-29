@@ -509,6 +509,11 @@ export function buildPlatformCapabilities(ctx: PlatformActionContext): PlatformC
     { domain: 'provider_keys', method: 'list', mutates: false, description: 'Which LLM providers the workspace has a key configured for.', parameters: EMPTY, run: () => providerKeysApi.list() },
     { domain: 'provider_keys', method: 'remove', mutates: true, description: 'Remove a stored provider key.', parameters: obj({ provider: { type: 'string', enum: ['anthropic'] } }, ['provider']), run: (a) => providerKeysApi.remove(f(a, 'provider')) },
 
+    // ---- Web (read an external URL / file / website) ---------------------
+    // Server-side fetch (CORS-free) so the Brain can read a link the user
+    // pastes — a GitHub ROADMAP.md, a docs page, an article. Read-only.
+    { domain: 'web', method: 'fetch', mutates: false, description: 'Read an external URL, file, or website (e.g. a GitHub file like https://github.com/owner/repo/blob/main/ROADMAP.md, a docs page, or an article). The platform fetches it server-side and returns its text content (HTML is stripped to readable text; GitHub/GitLab "blob" links are resolved to the raw file automatically). Use this whenever the user pastes a link and asks you to read, summarize, or work from it — do NOT claim you cannot access external URLs. Returns { url, title, text, truncated }.', parameters: obj({ url: { ...S, description: 'Absolute http(s) URL to fetch.' } }, ['url']), run: (a) => brain.fetchUrl(f(a, 'url')) },
+
     // ---- Audit + embed ---------------------------------------------------
     { domain: 'audit', method: 'list', mutates: false, description: 'List audit events for the workspace.', parameters: obj({ limit: N, eventType: S, resourceType: S }), run: (a) => auditApi.list(a as Parameters<typeof auditApi.list>[0]) },
     { domain: 'embed', method: 'get_config', mutates: false, description: 'Get the workspace embed configuration.', parameters: EMPTY, run: () => embedApi.getConfig() },
@@ -687,6 +692,7 @@ const STATIC_PROMOTIONS: ReadonlyArray<readonly [string, string, string]> = [
   ['alerts', 'create', 'create_alert'],
   ['decks', 'generate', 'generate_deck'],
   ['decks', 'fill_template', 'fill_deck_template'],
+  ['web', 'fetch', 'fetch_url'],
 ];
 
 /** Methods worth promoting first-class when a domain is in focus for the route. */

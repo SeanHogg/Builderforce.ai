@@ -1397,7 +1397,7 @@ export const RELATED_ARTICLES: Record<string, string[]> = {
   dashboard: ['system-of-record-for-agentic-work', 'every-role-operating-picture', 'introduction-and-overview'],
   agents: ['builderforce-agents-and-agent-integration', 'fleet-management-and-agent-routing', 'single-pane-board-connectors'],
   prompts: ['specs-and-planning-with-ai', 'product-ideation-with-builderforce', 'getting-started-with-ai-agents'],
-  diagnostics: ['system-of-record-for-agentic-work', 'every-role-operating-picture', 'task-execution-and-observability'],
+  diagnostics: ['ai-development-maturity-diagnostic', 'system-of-record-for-agentic-work', 'every-role-operating-picture'],
   // Newer enterprise surfaces.
   knowledge: ['knowledge-management-sops-and-compliance', 'every-role-operating-picture', 'security-and-multi-tenant-architecture'],
   quality: ['quality-error-observability-one-click-fix', 'agentic-tester-autonomous-qa', 'task-execution-and-observability'],

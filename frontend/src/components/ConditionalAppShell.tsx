@@ -23,6 +23,7 @@ import { FloatingBrain } from './brain/FloatingBrain';
 import { McpExtensionsBridge } from './brain/McpExtensionsBridge';
 import { PlatformActionsBridge } from './brain/PlatformActionsBridge';
 import { useAuth } from '@/lib/AuthContext';
+import { findActiveGroup } from '@/lib/navGroups';
 
 const FOOTER_ONLY_PATHS = ['/login', '/register'];
 
@@ -85,9 +86,18 @@ function useShellContent(children: React.ReactNode): React.ReactNode {
 
   // Marketing + public browse.
   if (kind === 'public') {
-    return isAuthenticated
-      ? <PublicShell>{children}</PublicShell>
-      : <MarketingShell>{children}</MarketingShell>;
+    if (!isAuthenticated) return <MarketingShell>{children}</MarketingShell>;
+    // A public route that is ALSO an in-app destination with sub-tabs (e.g.
+    // /pricing is the Settings "Billing" tab) must keep the app's section-tab
+    // bar for signed-in users — PublicShell drops it, so the in-page tab nav
+    // vanished mid-flow. Render those in AppShell so the tabs persist (no
+    // OnboardingGate — the page stays publicly viewable); other public-browse
+    // routes (blog, marketplace, …) stay in PublicShell.
+    const group = findActiveGroup(pathname);
+    if (group?.tabs && group.tabs.length > 1) {
+      return <AppShell>{children}</AppShell>;
+    }
+    return <PublicShell>{children}</PublicShell>;
   }
 
   // Default: authenticated app route. Logged out → a per-route marketing teaser

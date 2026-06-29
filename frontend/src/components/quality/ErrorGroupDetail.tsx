@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { RoleGate } from '@/components/RoleGate';
+import { TrendChart } from '@/components/charts/TrendChart';
 import { qualityApi, type ErrorGroupDetail as Detail } from '@/lib/builderforceApi';
 
 const overlay: React.CSSProperties = {
@@ -90,7 +91,7 @@ export function ErrorGroupDetail({ groupId, onClose, onChanged }: { groupId: str
 
   const g = detail?.group;
   const stack = renderStack(g?.samplePayload?.stack);
-  const maxTrend = Math.max(1, ...(detail?.trend.map((d) => d.count) ?? [1]));
+  const trend = detail?.trend ?? [];
 
   return (
     <div style={overlay} onClick={onClose}>
@@ -117,13 +118,17 @@ export function ErrorGroupDetail({ groupId, onClose, onChanged }: { groupId: str
             {/* Trend */}
             <div style={{ marginTop: 18 }}>
               <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 6 }}>{t('detail.trend')}</div>
-              <div style={{ display: 'flex', alignItems: 'flex-end', gap: 3, height: 60 }}>
-                {(detail?.trend ?? []).map((d) => (
-                  <div key={d.day} title={`${new Date(d.day).toLocaleDateString()}: ${d.count}`}
-                    style={{ flex: 1, height: `${(d.count / maxTrend) * 100}%`, minHeight: 2, background: 'var(--coral-bright)', borderRadius: 2 }} />
-                ))}
-                {(detail?.trend.length ?? 0) === 0 && <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>{t('detail.noTrend')}</div>}
-              </div>
+              {trend.length > 0 ? (
+                <TrendChart
+                  labels={trend.map((d) => new Date(d.day).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }))}
+                  series={[{ key: 'events', label: t('detail.events'), values: trend.map((d) => d.count), color: 'var(--coral-bright)' }]}
+                  height={120}
+                  area
+                  ariaLabel={t('detail.trend')}
+                />
+              ) : (
+                <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>{t('detail.noTrend')}</div>
+              )}
             </div>
 
             {/* Where + stack */}

@@ -17,3 +17,13 @@ export const score2 = (n: number | null | undefined): string =>
 
 export const int = (n: number | null | undefined): string =>
   n == null ? '—' : Math.round(n).toLocaleString();
+
+/** Compact token/unit count: 1_240_000 → "1.2M", 12_400 → "12.4K". The single
+ *  source of truth for token formatting across the AI-usage surfaces. */
+export const compactTokens = (n: number | null | undefined): string => {
+  if (n == null) return '—';
+  const abs = Math.abs(n);
+  if (abs >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
+  if (abs >= 1_000) return `${(n / 1_000).toFixed(1)}K`;
+  return Math.round(n).toLocaleString();
+};

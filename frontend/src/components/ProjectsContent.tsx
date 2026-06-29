@@ -18,6 +18,7 @@ import { ViewToggle } from '@/components/ViewToggle';
 import { ScheduleCalendar } from '@/components/ScheduleCalendar';
 import { ScheduleGantt } from '@/components/ScheduleGantt';
 import { isPlanLimitError, type PlanLimitError } from '@/lib/planLimitError';
+import { computeProjectHealth } from '@/lib/projectHealth';
 
 type ProjectsView = 'card' | 'table' | 'calendar' | 'gantt';
 
@@ -330,7 +331,15 @@ export function ProjectsContent({ limit, viewAllHref, onCount }: ProjectsContent
           ))}
         </div>
       ) : viewMode === 'calendar' ? (
-        <ScheduleCalendar items={visibleProjects} getLabel={(p) => p.name} onSelect={(p) => openDetails(p)} />
+        <ScheduleCalendar
+          items={visibleProjects}
+          getLabel={(p) => p.name}
+          onSelect={(p) => openDetails(p)}
+          getAccentColor={(p) => {
+            const h = computeProjectHealth(p);
+            return h.hasData ? h.color : undefined;
+          }}
+        />
       ) : viewMode === 'gantt' ? (
         <ScheduleGantt items={visibleProjects} getLabel={(p) => p.name} onSelect={(p) => openDetails(p)} noun="project" />
       ) : (
@@ -353,8 +362,21 @@ export function ProjectsContent({ limit, viewAllHref, onCount }: ProjectsContent
           initialTab={detailsInitialTab}
           onClose={() => setDetailsProject(null)}
           onProjectUpdate={(updated) => {
-            setProjects((prev) => prev.map((p) => (p.id === updated.id ? { ...updated, assignedAgentHost: p.assignedAgentHost } : p)));
-            setDetailsProject((p) => (p && p.id === updated.id ? updated : p));
+            // The PATCH response carries only the editable domain fields, so MERGE
+            // it over the list row instead of replacing it — otherwise the derived
+            // list-only fields (task/health counts, startDate, workflowCount) would
+            // be wiped until a reload, blanking the card's health visuals. `dueDate`
+            // is the EXPLICIT value here: keep it as projectDueDate and fall back to
+            // the previously-resolved (possibly derived) deadline when cleared.
+            const merge = (p: Project): Project => ({
+              ...p,
+              ...updated,
+              assignedAgentHost: p.assignedAgentHost,
+              projectDueDate: updated.dueDate ?? null,
+              dueDate: updated.dueDate ?? p.dueDate ?? null,
+            });
+            setProjects((prev) => prev.map((p) => (p.id === updated.id ? merge(p) : p)));
+            setDetailsProject((p) => (p && p.id === updated.id ? merge(p) : p));
           }}
           onDelete={removeProject}
         />

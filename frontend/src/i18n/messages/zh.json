@@ -63,9 +63,9 @@
       "approvals": "审批与问答",
       "contributors": "贡献者",
       "logs": "日志",
-      "llm": "LLM 用量",
       "qa": "智能体 QA",
-      "home": "主页"
+      "home": "主页",
+      "integrations": "集成"
     }
   },
   "alerts": {
@@ -161,7 +161,8 @@
       "critical": "严重"
     },
     "healthAria": "项目健康度 {score}/100 — {tier}",
-    "doneAria": "已完成 {pct}% — {total} 个任务中已完成 {completed} 个"
+    "doneAria": "已完成 {pct}% — {total} 个任务中已完成 {completed} 个",
+    "donePct": "完成 {pct}%"
   },
   "projectScope": {
     "workspace": "工作区",
@@ -208,7 +209,32 @@
     "depTypeStartToStart": "开始 → 开始",
     "depTypeFinishToFinish": "完成 → 完成",
     "depTypeStartToFinish": "开始 → 完成",
-    "spine": "规划主线"
+    "spine": "规划主线",
+    "newEpic": "新建史诗",
+    "editEpic": "编辑史诗",
+    "epicTitlePlaceholder": "这个史诗是什么？",
+    "epicDescription": "描述",
+    "epicDescriptionPlaceholder": "对成果的可选摘要",
+    "epicTitleRequired": "标题为必填项。",
+    "epicNeedsProject": "请先选择一个项目再创建史诗。",
+    "epicCreate": "创建史诗",
+    "epicSaveChanges": "保存更改",
+    "epicCancel": "取消",
+    "epicStatus": {
+      "backlog": "待办池",
+      "todo": "待办",
+      "ready": "就绪",
+      "in_progress": "进行中",
+      "in_review": "审核中",
+      "done": "已完成",
+      "blocked": "受阻"
+    },
+    "epicPriority": {
+      "low": "低",
+      "medium": "中",
+      "high": "高",
+      "urgent": "紧急"
+    }
   },
   "ide": {
     "all": "全部",
@@ -368,7 +394,27 @@
     "profile": "个人资料",
     "workspace": "工作区",
     "language": "语言",
-    "languageDescription": "选择应用界面的语言。"
+    "languageDescription": "选择应用界面的语言。",
+    "email": "邮箱",
+    "displayName": "显示名称",
+    "userId": "用户 ID",
+    "name": "名称",
+    "slug": "标识",
+    "id": "ID",
+    "switchWorkspace": "切换工作区",
+    "manageMemberSessions": "管理成员会话",
+    "apiKeysLink": "API 密钥",
+    "connectedAccounts": "已连接账户",
+    "connected": "已连接",
+    "connect": "连接",
+    "disconnect": "断开连接",
+    "loading": "加载中…",
+    "providerAlreadyLinked": "该第三方账户已连接到另一个 Builderforce 账户。",
+    "singleSignInWarning": "在断开您唯一的登录方式之前，请先设置密码或连接其他登录方式。",
+    "error": "错误：{message}",
+    "integrationsTitle": "集成",
+    "integrationsSubtitle": "连接源代码管理与外部工具，并管理本工作区的嵌入式组件。",
+    "sourceControlKeys": "源代码管理与集成密钥"
   },
   "pmo": {
     "title": "项目组合（PMO）",
@@ -517,9 +563,35 @@
         "aiImpactDesc": "采用与模型使用趋势、多工具评估矩阵，以及综合 AI 生产力评分。",
         "engineering": "AI 效能",
         "engineeringDesc": "哪种 AI 方式真正交付——按工作类型和模型分列的结果评分、合并率与成本。",
+        "llmUsage": "LLM 用量",
+        "llmUsageDesc": "令牌用量、请求数和模型健康状况，以及按来源、项目、团队、用户和代码库估算的支出。",
         "recommendations": "建议",
         "recommendationsDesc": "依据各项洞察生成的、可执行的优先建议与异常项。"
+      },
+      "consumption": {
+        "title": "本月 AI 令牌",
+        "thisMonth": "本月已消耗的令牌",
+        "ofPlan": "已用套餐的 {percent} · 含 {limit}",
+        "used": "已用",
+        "remaining": "剩余",
+        "plan": "套餐",
+        "planName": {
+          "free": "免费版",
+          "pro": "专业版",
+          "teams": "团队版"
+        },
+        "trendAria": "本月每日 AI 令牌消耗",
+        "noTrend": "本月暂无令牌使用"
       }
+    },
+    "llm": {
+      "requests": "请求数",
+      "requestsSub": "LLM 请求总数",
+      "promptTokens": "提示令牌",
+      "completionTokens": "补全令牌",
+      "tokensSub": "本工作区",
+      "estCost": "预计支出",
+      "estCostSub": "预估，最近 7 天"
     },
     "delivhub": {
       "title": "交付",
@@ -547,6 +619,31 @@
         "metricsRated": "共 {n} 项指标",
         "topRated": "卓越 / 高",
         "topRatedSub": "处于顶级梯队的指标"
+      },
+      "verdict": {
+        "loading": "正在读取交付信号…",
+        "eyebrow": "你们在创造价值吗？",
+        "scoreLabel": "健康度",
+        "scoreAria": "交付健康度评分 {score}（满分 100）",
+        "headline": {
+          "yes": "是的 — 你们在创造价值",
+          "at_risk": "有风险 — 交付正在下滑",
+          "no": "尚未达标 — 交付需要关注",
+          "no_data": "数据尚不足"
+        },
+        "explain": {
+          "yes": "过去 {days} 天的发布节奏、交付周期和流转都很健康。",
+          "at_risk": "过去 {days} 天部分交付信号在减弱 — 请在进一步恶化前采取行动。",
+          "no": "过去 {days} 天交付陷入停滞。下面的信号指明了应关注的重点。",
+          "no_data": "接入部署并推动看板上的工作流转，即可查看交付结论。"
+        },
+        "reason": {
+          "deploy": "每日发布 {value} 次",
+          "cycle": "周期 {value} 天",
+          "cfr": "变更失败率 {value}%",
+          "stuck": "{n} 项停滞中",
+          "rework": "返工 {value}%"
+        }
       }
     },
     "finhub": {
@@ -902,7 +999,7 @@
       "ciGreen": "CI 通过",
       "avgSteps": "平均步骤数",
       "costPerMergedPr": "每个已合并 PR 成本",
-      "tokens": "Token",
+      "tokens": "已用令牌",
       "noRuns": "此周期内没有已评分的运行。",
       "shareTrendTitle": "模型占比趋势",
       "currentShare": "当前占比",
@@ -913,7 +1010,9 @@
       "mergeRateTitle": "各模型合并率",
       "models": "个模型",
       "activeUsers": "活跃用户",
-      "cost": "成本"
+      "cost": "成本",
+      "tokensSub": "所有模型合计",
+      "tokensByModel": "各模型令牌用量"
     },
     "devexhub": {
       "title": "开发者体验",
@@ -1241,7 +1340,11 @@
     "integrationKeys": "项目集成密钥",
     "workspaceTitle": "工作区",
     "workspaceDesc": "此项目的工作区和文件系统。打开 IDE 以编辑文件。",
-    "openInIde": "在 IDE 中打开"
+    "openInIde": "在 IDE 中打开",
+    "dueDateLabel": "截止日期",
+    "dueDateHint": "设置项目截止日期。留空则使用最晚的任务截止日期。",
+    "deadline": "截止时间",
+    "deadlineDerived": "（来自任务）"
   },
   "spine": {
     "loading": "正在加载规划主线…",
@@ -1308,7 +1411,6 @@
         "approvals": "处理智能体上报给人工的审批、提问与反馈——为操作签字或回答其推进所需的信息。",
         "contributors": "查看本工作区中谁——人员与智能体——在贡献，以及如何贡献。",
         "logs": "本工作区中的智能体日志、执行时间线与诊断信息。",
-        "llm": "本工作区中的 LLM 用量指标、模型健康状况与开销。",
         "qa": "按项目的 QA 自动化——流程、生成的测试与 CI 运行。"
       }
     },
@@ -1677,6 +1779,17 @@
         "op_contains": "包含",
         "op_prefix": "开头为"
       }
+    },
+    "stats": {
+      "empty": "尚未采集到数据 — 添加采集器即可开始绘制错误图表。",
+      "unassigned": "未分配",
+      "eventsCollected": "已采集事件",
+      "windowDays": "时间窗",
+      "events": "个事件",
+      "frequency": "采集频率",
+      "byLevel": "按级别",
+      "byStatus": "按状态",
+      "byCollector": "按采集器"
     }
   },
   "surveys": {
@@ -1935,6 +2048,8 @@
       "llmRequests": "LLM 请求",
       "llmByModel": "按模型令牌",
       "llmBySource": "按来源成本",
+      "llmSpend": "预计支出",
+      "llmByProject": "按项目支出",
       "catalogSkillsTopInstalls": "安装量最高的技能",
       "catalogSkillsByCategory": "按类别的技能",
       "catalogPersonasTopInstalls": "安装量最高的角色",
@@ -1968,7 +2083,10 @@
       "byModel": "按模型令牌",
       "noSpend": "暂无支出",
       "estCost": "预估成本",
-      "bySource": "按来源成本"
+      "bySource": "按来源成本",
+      "spendSub": "预估，最近 7 天",
+      "byProject": "按项目支出",
+      "noProjects": "暂无项目支出"
     },
     "catalog": {
       "noInstalls": "暂无安装",
@@ -2075,5 +2193,79 @@
       "metricNeedTrain": "请先训练模型",
       "cta": "打开发布"
     }
+  },
+  "security": {
+    "title": "安全",
+    "subtitle": "管理您的会话、查看管理员访问记录，并治理工作区成员。",
+    "refresh": "刷新",
+    "loading": "加载中…",
+    "loadingMembers": "正在加载成员…",
+    "loadingSessions": "正在加载会话…",
+    "noMembers": "未找到成员。",
+    "noSessions": "未找到会话。",
+    "noWorkspace": "未选择工作区。请先选择一个工作区。",
+    "error": "错误：{message}",
+    "mySessions": "我的活动会话",
+    "mySessionsSubtitle": "在各设备上登录到您账户的会话。",
+    "adminAccess": "近期管理员访问",
+    "adminAccessNote": "这些是平台管理员查看您账户的会话。所有管理员会话均为只读。",
+    "noAdminAccess": "未找到管理员访问会话。",
+    "memberSessions": "工作区成员",
+    "memberSessionsSubtitle": "管理本工作区中所有成员的活动会话与令牌。",
+    "securityAgents": "安全智能体",
+    "securityAgentsEmpty": "尚未为安全分配智能体。分配一个智能体来监控/审查本工作区的安全。",
+    "you": "您",
+    "current": "当前",
+    "session": "会话",
+    "sessionsHeading": "会话",
+    "sessionsLabel": "个会话",
+    "tokensLabel": "个令牌",
+    "selectAll": "全选",
+    "selected": "已选择 {count} 个",
+    "revokeSelected": "注销所选（{count}）",
+    "revoke": "注销",
+    "confirmRevokeSelected": "注销所选的 {count} 个会话？",
+    "lastActive": "最近活动 {time}",
+    "created": "创建于 {time}",
+    "revoked": "已注销",
+    "prev": "上一页",
+    "next": "下一页",
+    "pageOf": "第 {page} 页，共 {pages} 页",
+    "as": "身份",
+    "duration": "时长",
+    "reason": "原因",
+    "active": "活动",
+    "ended": "已结束",
+    "writeBlocked": "已拦截 {count} 次写入尝试"
+  },
+  "catalogInsights": {
+    "total": {
+      "skills": "技能",
+      "personas": "角色",
+      "prompts": "提示词"
+    },
+    "metric": {
+      "installs": "安装数",
+      "likes": "点赞数",
+      "usage": "使用数",
+      "stars": "收藏数"
+    },
+    "by": {
+      "category": "按类别",
+      "source": "按来源"
+    },
+    "top": {
+      "installs": "安装数排行",
+      "usage": "最常使用"
+    },
+    "uncategorized": "未分类",
+    "other": "其他"
+  },
+  "projectTable": {
+    "name": "名称",
+    "health": "健康度",
+    "description": "描述",
+    "agent": "代理",
+    "actions": "操作"
   }
 }

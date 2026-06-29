@@ -369,7 +369,31 @@ export const brain = {
     });
     return `${AUTH_API_URL}/api/brain-files/${key}?exp=${exp}&sig=${encodeURIComponent(sig)}`;
   },
+
+  /**
+   * Fetch an external URL/file/website server-side (CORS-free) so the Brain can
+   * read a link the user pastes. The gateway strips HTML to text, follows
+   * github-blob → raw rewrites, and caps the size. Throws on a blocked/internal
+   * URL or an unreachable origin.
+   */
+  fetchUrl: (url: string) =>
+    request<WebFetchResult>('/api/brain/fetch-url', { method: 'POST', body: JSON.stringify({ url }) }),
 };
+
+/** Readable result of {@link brain.fetchUrl}. */
+export interface WebFetchResult {
+  /** The URL actually fetched (after github-blob → raw rewrite + redirects). */
+  url: string;
+  /** Original URL passed in. */
+  requestedUrl: string;
+  status: number;
+  contentType: string;
+  /** Page <title> when the document was HTML, else null. */
+  title: string | null;
+  /** Plain-text content (HTML stripped), capped server-side. */
+  text: string;
+  truncated: boolean;
+}
 
 /** Structured error from the LLM gateway, with the fields callers branch on. */
 export type LlmError = Error & { status?: number; code?: string; body?: Record<string, unknown> };
@@ -3684,6 +3708,17 @@ export interface ErrorGroupPage {
   nextCursor: string | null;
 }
 
+/** Aggregate Quality stats — volume collected, breakdowns and daily frequency. */
+export interface QualityStats {
+  windowDays: number;
+  totals: { groups: number; events: number; users: number };
+  byLevel: { level: string; groups: number; events: number }[];
+  byStatus: { status: string; groups: number }[];
+  byCollector: { collectorId: string | null; name: string | null; groups: number; events: number; lastEventAt: string | null }[];
+  /** Event volume per UTC day (YYYY-MM-DD) over the window. */
+  daily: { day: string; count: number }[];
+}
+
 export const qualityApi = {
   sourceCatalog: (): Promise<QualitySourceCatalogEntry[]> =>
     request<{ sources: QualitySourceCatalogEntry[] }>('/api/quality/source-catalog').then((r) => r.sources ?? []),
@@ -3739,6 +3774,15 @@ export const qualityApi = {
       request(`/api/quality/groups/${id}`, { method: 'PATCH', body: JSON.stringify({ status }) }),
     fix: (id: string): Promise<{ taskId: number; executionId: number | null }> =>
       request(`/api/quality/groups/${id}/fix`, { method: 'POST' }),
+  },
+
+  /** Aggregate volume + breakdowns + daily frequency for the Quality charts and
+   *  the collectors "data collected" card. Project-scoped or tenant-wide. */
+  stats: (projectId?: number | null, days = 30): Promise<QualityStats> => {
+    const q = new URLSearchParams();
+    if (projectId != null) q.set('projectId', String(projectId));
+    q.set('days', String(days));
+    return request<QualityStats>(`/api/quality/stats?${q.toString()}`);
   },
 };
 

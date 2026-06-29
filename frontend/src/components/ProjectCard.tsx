@@ -3,9 +3,7 @@
 import { useState } from 'react';
 import { useTranslations } from 'next-intl';
 import type { Project } from '@/lib/types';
-import { computeProjectHealth } from '@/lib/projectHealth';
-import { GaugeChart } from '@/components/charts/GaugeChart';
-import { DonutChart } from '@/components/charts/DonutChart';
+import { ProjectHealthGauges } from './ProjectHealth';
 import { ProjectOriginBadge } from './ProjectOriginBadge';
 import type { ProjectPanelTab } from './ProjectDetailsPanel';
 import { DeleteProjectDialog } from './DeleteProjectDialog';
@@ -50,7 +48,6 @@ export function ProjectCard({
   onOpenIde,
 }: ProjectCardProps) {
   const t = useTranslations('projectCard');
-  const health = computeProjectHealth(project);
   const openIde = onOpenIde ?? ((p: Project) => { window.location.href = `/ide/${p.publicId ?? p.id}`; });
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (onCardClick && e.key === 'Enter') {
@@ -250,38 +247,9 @@ export function ProjectCard({
       )}
 
       {/* Health speedometer + % done ring — the at-a-glance "is this project on
-          track and how far along" visual. Both derive from the shared
-          computeProjectHealth helper so card/table can't drift. */}
-      {health.hasData && (
-        <div
-          style={{
-            display: 'flex', alignItems: 'center', justifyContent: 'space-around', gap: 12,
-            padding: '10px 8px', margin: '2px 0 4px',
-            background: 'var(--bg-base)', border: '1px solid var(--border-subtle)', borderRadius: 10,
-          }}
-        >
-          <GaugeChart
-            value={health.healthScore}
-            color={health.color}
-            size={104}
-            centerValue={String(health.healthScore)}
-            centerLabel={t('health')}
-            ariaLabel={t('healthAria', { score: health.healthScore, tier: t(`tier.${health.tier}`) })}
-          />
-          <DonutChart
-            size={84}
-            thickness={12}
-            legend={false}
-            centerValue={`${health.progressPct}%`}
-            centerLabel={t('done')}
-            ariaLabel={t('doneAria', { pct: health.progressPct, completed: health.completed, total: health.total })}
-            segments={[
-              { key: 'done', label: t('done'), value: health.completed, color: 'var(--accent)' },
-              { key: 'remaining', label: t('remaining'), value: Math.max(0, health.total - health.completed), color: 'var(--border-subtle)' },
-            ]}
-          />
-        </div>
-      )}
+          track and how far along" visual. Shared with the details panel so the
+          numbers/colours can never drift between surfaces. */}
+      <ProjectHealthGauges project={project} />
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 'auto', flexWrap: 'wrap' }}>
         {project.taskCount != null && (

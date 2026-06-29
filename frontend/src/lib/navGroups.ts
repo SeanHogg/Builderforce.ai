@@ -86,7 +86,6 @@ export const NAV_GROUPS: NavGroup[] = [
       { id: 'chats', labelKey: 'tab.chats', icon: '💬' },
       { id: 'approvals', labelKey: 'tab.approvals', icon: '✅' },
       { id: 'logs', labelKey: 'tab.logs', icon: '📜' },
-      { id: 'llm', labelKey: 'tab.llm', icon: '🧠' },
       { id: 'qa', labelKey: 'tab.qa', icon: '🧪' },
     ],
   },
@@ -157,6 +156,7 @@ export const NAV_GROUPS: NavGroup[] = [
     tabs: [
       { id: '/settings', labelKey: 'tab.settings', icon: '⚙', activePaths: [] },
       { id: '/security', labelKey: 'tab.security', icon: '🔒' },
+      { id: '/settings/integrations', labelKey: 'tab.integrations', icon: '🔌' },
       { id: '/pricing', labelKey: 'tab.billing', icon: '💳' },
       { id: '/tenants', labelKey: 'tab.tenant', icon: '🏢' },
       { id: '/settings/api-keys', labelKey: 'tab.apiKeys', icon: '🔑', ownerOnly: true },

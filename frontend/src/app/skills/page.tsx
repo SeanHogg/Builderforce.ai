@@ -14,6 +14,7 @@ import {
 } from '@/lib/builderforceApi';
 import { BUILTIN_SKILLS, userSkillsKey, type BuiltinSkill, type UserSkill } from '@/lib/marketplaceData';
 import ArtifactAssigner from '@/components/ArtifactAssigner';
+import { CatalogInsightsBar, type CatalogInsightsItem } from '@/components/CatalogInsightsBar';
 import PageContainer from '@/components/PageContainer';
 import { SkillAssignmentsContent } from '@/components/SkillAssignmentsContent';
 import { ViewToggle, type ViewMode } from '@/components/ViewToggle';
@@ -187,6 +188,11 @@ export default function SkillsPage() {
     ...builtinFiltered.filter((b) => !apiSlugSet.has(b.slug)).map((b) => ({ slug: b.slug, name: b.name, description: b.description, category: b.category, icon: b.image, emoji: b.emoji, author: b.author })),
   ];
 
+  const insightsItems: CatalogInsightsItem[] = marketplaceItems.map((s) => {
+    const stat = stats[s.slug] ?? { likes: 0, installs: 0, liked: false };
+    return { key: s.slug, name: s.name, group: s.category ?? null, primary: stat.installs, secondary: stat.likes };
+  });
+
   return (
     <PageContainer width="readable">
       <div className="page-header" style={{ marginBottom: 24 }}>
@@ -293,6 +299,7 @@ export default function SkillsPage() {
         )
       ) : (
         <>
+          <CatalogInsightsBar entity="skills" items={insightsItems} primaryMetric="installs" secondaryMetric="likes" groupKind="category" />
           <div style={{ marginBottom: 16 }}>
             <input type="search" className="input" style={{ maxWidth: 320 }} placeholder="Search skills…" value={search} onChange={(e) => setSearch(e.target.value)} />
           </div>

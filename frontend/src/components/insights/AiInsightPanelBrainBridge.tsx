@@ -28,8 +28,8 @@ export function AiInsightPanelBrainBridge() {
         name: 'show_ai_insight',
         description:
           'Open a slide-out side panel showing an AI insight for the user. ' +
-          `Use this when the user asks to see AI impact, AI adoption, AI effectiveness, which model/approach ships best, AI cost, or recommendations / what to do next. Panel ids: ${menu}. ` +
-          'ai-impact = adoption & model-usage trends, multi-tool evaluation matrix & a composite AI productivity score; engineering = AI effectiveness (which approach actually ships — outcome score, merge rate & cost by work type and model); recommendations = ranked prescriptive actions + anomalies to act on.',
+          `Use this when the user asks to see AI impact, AI adoption, AI effectiveness, which model/approach ships best, LLM/token usage, model health, AI cost/spend, or recommendations / what to do next. Panel ids: ${menu}. ` +
+          'ai-impact = adoption & model-usage trends, multi-tool evaluation matrix & a composite AI productivity score; engineering = AI effectiveness (which approach actually ships — outcome score, merge rate & cost by work type and model); llm-usage = LLM token/request totals, provider & model health, learned model routing, and estimated spend broken down by source, project, user, team & repo; recommendations = ranked prescriptive actions + anomalies to act on.',
         parameters: {
           type: 'object',
           properties: {

@@ -64,6 +64,7 @@ function makeProject(): Project {
     modality: null,
     origin: null,
     initiativeId: null,
+    dueDate: null,
     createdAt: new Date(),
     updatedAt: new Date(),
   });

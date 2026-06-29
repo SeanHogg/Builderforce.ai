@@ -81,10 +81,18 @@ describe('buildPlatformActions', () => {
       'navigate_to', 'open_project', 'list_platform_capabilities', 'call_platform_capability',
       'create_project', 'update_project', 'delete_project', 'list_projects',
       'list_tasks', 'create_task', 'run_workflow', 'create_spec',
-      'hire_agent', 'create_cloud_agent', 'decide_approval',
+      'hire_agent', 'create_cloud_agent', 'decide_approval', 'fetch_url',
     ]) {
       expect(names).toContain(expected);
     }
+  });
+
+  it('exposes a read-only web.fetch capability for reading external URLs', () => {
+    const caps = buildPlatformCapabilities(makeCtx().ctx);
+    const web = caps.find((c) => c.domain === 'web' && c.method === 'fetch');
+    expect(web).toBeTruthy();
+    expect(web?.mutates).toBe(false);
+    expect(web?.parameters).toMatchObject({ required: ['url'] });
   });
 
   it('does not collide with the IDE-owned action names', () => {

@@ -66,8 +66,12 @@ export interface Project {
   assignedAgentHost?: { id: number; name: string } | null;
   /** From list endpoint: earliest task start date (falls back to earliest due date). ISO string. Drives the calendar/Gantt timeline. */
   startDate?: string | null;
-  /** From list endpoint: latest task due date — the project deadline. ISO string. */
+  /** From list endpoint: the EFFECTIVE project deadline (ISO) — the PM's explicit
+   *  due date when set, else the derived latest-task due date. Drives calendar/Gantt. */
   dueDate?: string | null;
+  /** From list endpoint: the PM's EXPLICIT project deadline only (ISO), or null when
+   *  the deadline is auto-derived from tasks. Seeds the details due-date editor. */
+  projectDueDate?: string | null;
 }
 
 export interface FileEntry {

@@ -2,12 +2,13 @@
 
 import { useTranslations } from 'next-intl';
 import { aiImpactApi, type AiImpactInsights } from '@/lib/aiImpactApi';
-import { insightsApi, type EngineeringInsights } from '@/lib/builderforceApi';
+import { insightsApi, llmApi, dashboardApi, type EngineeringInsights, type LlmUsageStats, type DashboardUsage } from '@/lib/builderforceApi';
 import { recommendationsApi, type RecommendationsResult, type RecSeverity } from '@/lib/recommendationsApi';
 import { usePmData } from '@/lib/pm/usePmData';
 import { PmEmpty, PmError, StatCard } from '@/components/pm/pmShared';
+import { BarChart } from '@/components/charts/BarChart';
 import { KpiGrid } from './LensShell';
-import { usd, pct, score2 } from './format';
+import { usd, pct, score2, int, compactTokens } from './format';
 
 /**
  * Compact "at-a-glance" summaries for the combined AI Insights dashboard.
@@ -34,12 +35,59 @@ export function AiImpactSummary({ days }: { days: number }) {
 
   const p = data.productivity;
   const deltaSub = `${p.deltaPct >= 0 ? '+' : ''}${p.deltaPct.toFixed(0)}% ${t('aiImpact.wow')}`;
+
+  // Token spend by model — the raw consumption broken out, ranked. Only the
+  // models that actually burned tokens in the window.
+  const byModel = data.comparison
+    .filter((m) => m.tokens > 0)
+    .sort((a, b) => b.tokens - a.tokens)
+    .map((m) => ({ key: m.model, label: m.model, value: m.tokens }));
+  const totalTokens = byModel.reduce((s, m) => s + m.value, 0);
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+      <KpiGrid>
+        <StatCard label={t('aiImpact.tokens')} value={compactTokens(totalTokens)} sub={t('aiImpact.tokensSub')} />
+        <StatCard label={t('aiImpact.productivityScore')} value={score2(p.score)} sub={deltaSub} />
+        <StatCard label={t('aiImpact.throughput')} value={pct(p.throughput * 100)} sub={t('aiImpact.throughputSub')} />
+        <StatCard label={t('aiImpact.quality')} value={pct(p.quality * 100)} sub={t('aiImpact.qualitySub')} />
+        <StatCard label={t('aiImpact.efficiency')} value={pct(p.efficiency * 100)} sub={t('aiImpact.efficiencySub')} />
+      </KpiGrid>
+
+      {byModel.length > 0 && (
+        <div>
+          <div style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--text-secondary)', marginBottom: 10 }}>
+            {t('aiImpact.tokensByModel')}
+          </div>
+          <BarChart
+            data={byModel}
+            maxRows={6}
+            labelWidth={150}
+            formatValue={compactTokens}
+            ariaLabel={t('aiImpact.tokensByModel')}
+          />
+        </div>
+      )}
+    </div>
+  );
+}
+
+export function LlmUsageSummary(_props: { days: number }) {
+  const t = useTranslations('insights');
+  // Provider totals are visible to any member; the cost roll-up is a manager
+  // surface, so its read is tolerated to fail (the spend KPI shows "—" then).
+  const { data: usage, error } = usePmData<LlmUsageStats>(() => llmApi.usage(), []);
+  const { data: source } = usePmData<DashboardUsage>(() => dashboardApi.usage('week'), []);
+
+  if (error) return <PmError message={error} />;
+  if (!usage) return <PmEmpty message={t('loading')} />;
+
   return (
     <KpiGrid>
-      <StatCard label={t('aiImpact.productivityScore')} value={score2(p.score)} sub={deltaSub} />
-      <StatCard label={t('aiImpact.throughput')} value={pct(p.throughput * 100)} sub={t('aiImpact.throughputSub')} />
-      <StatCard label={t('aiImpact.quality')} value={pct(p.quality * 100)} sub={t('aiImpact.qualitySub')} />
-      <StatCard label={t('aiImpact.efficiency')} value={pct(p.efficiency * 100)} sub={t('aiImpact.efficiencySub')} />
+      <StatCard label={t('llm.requests')} value={int(usage.totalRequests)} sub={t('llm.requestsSub')} />
+      <StatCard label={t('llm.promptTokens')} value={compactTokens(usage.promptTokens)} sub={t('llm.tokensSub')} />
+      <StatCard label={t('llm.completionTokens')} value={compactTokens(usage.completionTokens)} sub={t('llm.tokensSub')} />
+      <StatCard label={t('llm.estCost')} value={source ? usd(source.totals.estimatedCostUsd) : '—'} sub={t('llm.estCostSub')} />
     </KpiGrid>
   );
 }

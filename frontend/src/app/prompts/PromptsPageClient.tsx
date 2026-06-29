@@ -13,6 +13,7 @@ import {
 } from '@/lib/builderforceApi';
 import { getStoredUser } from '@/lib/auth';
 import { ViewToggle, type ViewMode } from '@/components/ViewToggle';
+import { CatalogInsightsBar, type CatalogInsightsItem } from '@/components/CatalogInsightsBar';
 import { tableWrapStyle, tableStyle, theadRowStyle, thStyle, trStyle, tdStyle, tdMutedStyle } from '@/components/dataTableStyles';
 
 const card: React.CSSProperties = {
@@ -143,6 +144,16 @@ export default function PromptsPage() {
             <option value="featured">Featured</option>
           </Select>
         </div>
+      )}
+
+      {tab === 'public' && !loading && !error && (
+        <CatalogInsightsBar
+          entity="prompts"
+          items={prompts.map((p): CatalogInsightsItem => ({ key: p.id, name: p.title, group: p.category ?? null, primary: p.usageCount, secondary: p.starCount }))}
+          primaryMetric="usage"
+          secondaryMetric="stars"
+          groupKind="category"
+        />
       )}
 
       {loading && <div style={card}>Loading prompts…</div>}

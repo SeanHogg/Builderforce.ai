@@ -28,6 +28,8 @@ export interface ProjectProps {
   origin:          string | null;
   /** PMO rollup link (0213): the initiative this project belongs to, or null. */
   initiativeId:    string | null;
+  /** Explicit PM-set deadline (0255), or null when the deadline is derived from tasks. */
+  dueDate:         Date | null;
   createdAt:       Date;
   updatedAt:       Date;
 }
@@ -51,8 +53,8 @@ export class Project {
    * Enforces domain invariants before the object can exist.
    */
   static create(
-    props: Omit<ProjectProps, 'id' | 'createdAt' | 'updatedAt' | 'publicId' | 'initiativeId'>
-      & { publicId?: string; initiativeId?: string | null },
+    props: Omit<ProjectProps, 'id' | 'createdAt' | 'updatedAt' | 'publicId' | 'initiativeId' | 'dueDate'>
+      & { publicId?: string; initiativeId?: string | null; dueDate?: Date | null },
   ): Project {
     if (!props.key.trim()) throw new ValidationError('Project key is required');
     if (!props.name.trim()) throw new ValidationError('Project name is required');
@@ -62,6 +64,7 @@ export class Project {
       ...props,
       template: props.template ?? null,
       initiativeId: props.initiativeId ?? null,
+      dueDate: props.dueDate ?? null,
       id: 0 as ProjectId,
       publicId: props.publicId ?? '',
       key: props.key.trim().toUpperCase(),
@@ -99,6 +102,7 @@ export class Project {
   get modality(): string | null { return this.props.modality; }
   get origin(): string | null { return this.props.origin; }
   get initiativeId(): string | null { return this.props.initiativeId ?? null; }
+  get dueDate(): Date | null { return this.props.dueDate ?? null; }
   get createdAt(): Date { return this.props.createdAt; }
   get updatedAt(): Date { return this.props.updatedAt; }
 
@@ -125,6 +129,7 @@ export class Project {
         | 'githubRepoName'
         | 'governance'
         | 'modality'
+        | 'dueDate'
       >
     >,
   ): Project {

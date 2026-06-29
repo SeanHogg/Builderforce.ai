@@ -16,6 +16,7 @@ import { useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import { PmCard } from '@/components/pm/pmShared';
+import { AiConsumptionHeader } from './AiConsumptionHeader';
 import { DaysWindowSelect } from './LensShell';
 import { useAiInsightPanel } from './AiInsightPanelProvider';
 import { AI_INSIGHT_PANELS, AI_INSIGHT_PANEL_IDS, isAiInsightPanelId, type AiInsightPanelId } from './aiInsightPanels';
@@ -56,6 +57,9 @@ export function AiInsightsDashboard() {
       <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
         <DaysWindowSelect value={days} onChange={setDays} />
       </div>
+
+      {/* Headline: total AI tokens consumed this month (all-members, always shown). */}
+      <AiConsumptionHeader />
 
       {AI_INSIGHT_PANEL_IDS.map((id) => {
         const def = AI_INSIGHT_PANELS[id];

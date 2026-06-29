@@ -1,5 +1,6 @@
 'use client';
 
+import { useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { tasksApi, type Task } from '@/lib/builderforceApi';
 import { usePmScope } from '@/lib/pm/scope';
@@ -7,6 +8,12 @@ import { useOptionalProjectScope } from '@/lib/ProjectScopeContext';
 import { usePmData } from '@/lib/pm/usePmData';
 import { tableWrapStyle, tableStyle, theadRowStyle, thStyle, trStyle, tdStyle, tdMutedStyle } from '@/components/dataTableStyles';
 import { PmEmpty, PmError, StatusPill } from './pmShared';
+import { EpicPanel } from './EpicPanel';
+
+const newEpicButtonStyle: React.CSSProperties = {
+  padding: '6px 14px', borderRadius: 6, border: 'none', background: 'var(--coral-bright)',
+  color: '#fff', fontWeight: 600, fontSize: '0.82rem', cursor: 'pointer', whiteSpace: 'nowrap',
+};
 
 /**
  * Epic → child-task decomposition tree. Built from a single tasks list
@@ -20,8 +27,9 @@ import { PmEmpty, PmError, StatusPill } from './pmShared';
  * project is selected.
  */
 
-/** Render one project's epic/child tree as a table. */
-function EpicTable({ tasks, t }: { tasks: Task[]; t: ReturnType<typeof useTranslations> }) {
+/** Render one project's epic/child tree as a table. Clicking an epic row opens
+ *  the edit panel via {@link onEdit}. */
+function EpicTable({ tasks, t, onEdit }: { tasks: Task[]; t: ReturnType<typeof useTranslations>; onEdit: (epic: Task) => void }) {
   const epics = tasks.filter((tk) => tk.taskType === 'epic');
   const childrenByParent = new Map<number, Task[]>();
   for (const tk of tasks) {
@@ -60,7 +68,12 @@ function EpicTable({ tasks, t }: { tasks: Task[]; t: ReturnType<typeof useTransl
             const kids = childrenByParent.get(epic.id) ?? [];
             return (
               <>
-                <tr key={epic.id} style={{ ...trStyle, background: 'var(--bg-subtle, rgba(127,127,127,0.06))' }}>
+                <tr
+                  key={epic.id}
+                  onClick={() => onEdit(epic)}
+                  style={{ ...trStyle, background: 'var(--bg-subtle, rgba(127,127,127,0.06))', cursor: 'pointer' }}
+                  title={t('editEpic')}
+                >
                   <td style={{ ...tdStyle, fontWeight: 700 }}>
                     📦 {epic.key} · {epic.title}{' '}
                     <span style={{ color: 'var(--text-muted)', fontWeight: 500 }}>({kids.length})</span>
@@ -94,18 +107,47 @@ export function EpicTreeView() {
   const { projectId } = usePmScope();
   // Optional: present in the app shell, absent in embed (which scopes explicitly).
   const scope = useOptionalProjectScope();
-  const { data: tasks, error } = usePmData<Task[]>(
+  const { data: tasks, error, reload } = usePmData<Task[]>(
     () => tasksApi.list(projectId ?? undefined),
     [projectId],
+  );
+
+  // Epic create/edit panel. `panel.epic === null` = create under `panel.projectId`;
+  // a row = edit that epic. `null` = closed.
+  const [panel, setPanel] = useState<{ epic: Task | null; projectId: number | null } | null>(null);
+  const openCreate = (pid: number | null) => setPanel({ epic: null, projectId: pid });
+  const openEdit = (epic: Task) => setPanel({ epic, projectId: epic.projectId });
+
+  const epicPanel = panel && (
+    <EpicPanel
+      open
+      epic={panel.epic}
+      projectId={panel.projectId}
+      onClose={() => setPanel(null)}
+      onSaved={reload}
+    />
   );
 
   if (error) return <PmError message={error} />;
   if (!tasks) return <PmEmpty message={t('loadingEpics')} />;
 
-  // Single-project view.
-  if (projectId != null) return <EpicTable tasks={tasks} t={t} />;
+  // Single-project view: a "New epic" action above the tree.
+  if (projectId != null) {
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+        <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+          <button type="button" style={newEpicButtonStyle} onClick={() => openCreate(projectId)}>
+            + {t('newEpic')}
+          </button>
+        </div>
+        <EpicTable tasks={tasks} t={t} onEdit={openEdit} />
+        {epicPanel}
+      </div>
+    );
+  }
 
-  // All-projects rollup: group every project's tasks under a per-project heading.
+  // All-projects rollup: group every project's tasks under a per-project heading,
+  // each with its own "New epic" action (create needs a single target project).
   const byProject = new Map<number, Task[]>();
   for (const tk of tasks) {
     const arr = byProject.get(tk.projectId) ?? [];
@@ -121,10 +163,16 @@ export function EpicTreeView() {
       <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>{t('allProjectsCaption')}</div>
       {Array.from(byProject.entries()).map(([pid, ptasks]) => (
         <div key={pid} style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-          <h3 style={{ fontSize: '0.95rem', fontWeight: 700, margin: 0 }}>{projectName(pid)}</h3>
-          <EpicTable tasks={ptasks} t={t} />
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+            <h3 style={{ fontSize: '0.95rem', fontWeight: 700, margin: 0 }}>{projectName(pid)}</h3>
+            <button type="button" style={newEpicButtonStyle} onClick={() => openCreate(pid)}>
+              + {t('newEpic')}
+            </button>
+          </div>
+          <EpicTable tasks={ptasks} t={t} onEdit={openEdit} />
         </div>
       ))}
+      {epicPanel}
     </div>
   );
 }

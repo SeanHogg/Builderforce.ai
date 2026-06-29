@@ -20,6 +20,7 @@ import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import { tenantMcpExtensions } from '../../infrastructure/database/schema';
 import { getOrSetCached, invalidateCached } from '../../infrastructure/cache/readThroughCache';
+import { assertSafeUrl } from '../../infrastructure/net/ssrfGuard';
 import {
   encryptSecretForStorage,
   decryptSecretFromStorage,
@@ -56,65 +57,21 @@ export interface McpToolEntry {
   parameters: Record<string, unknown>;
 }
 
-/** Reject anything that isn't a plain https URL — minimal SSRF guard. */
-/** Reject an IPv4 literal in a loopback / private / link-local / reserved range
- *  (incl. the cloud metadata endpoint 169.254.169.254). Returns false for
- *  non-IPv4 strings so the caller falls through to hostname checks. */
-function isBlockedIpv4(host: string): boolean {
-  const m = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec(host);
-  if (!m) return false;
-  const a = Number(m[1]), b = Number(m[2]), c = Number(m[3]), d = Number(m[4]);
-  if ([a, b, c, d].some((n) => n > 255)) return true; // malformed → reject
-  return (
-    a === 0 ||                            // 0.0.0.0/8 "this host"
-    a === 10 ||                           // 10.0.0.0/8 private
-    a === 127 ||                          // 127.0.0.0/8 loopback
-    (a === 169 && b === 254) ||           // 169.254.0.0/16 link-local (+ metadata)
-    (a === 172 && b >= 16 && b <= 31) ||  // 172.16.0.0/12 private
-    (a === 192 && b === 168) ||           // 192.168.0.0/16 private
-    (a === 100 && b >= 64 && b <= 127) || // 100.64.0.0/10 CGNAT
-    a >= 224                              // 224.0.0.0/4 multicast + 240/4 reserved
-  );
-}
-
 /**
  * SSRF guard for a tenant-supplied MCP server URL [1402]. The gateway fetches
  * this URL server-side with the tenant's stored secret, so an internal target
- * must be rejected. Blocks non-https, loopback/private/link-local/reserved IP
- * literals (incl. 169.254.169.254 metadata), and obvious internal hostnames.
- *
- * Residual: a PUBLIC hostname that DNS-resolves to a private IP (rebinding) is
- * not caught here — that needs fetch-time IP pinning, which the Workers runtime
- * doesn't expose pre-fetch. The literal-IP + internal-name checks cover the
- * realistic owner-probing case.
+ * must be rejected. Delegates to the shared {@link assertSafeUrl} guard
+ * (https-only here), which blocks loopback/private/link-local/reserved IP
+ * literals (incl. 169.254.169.254 metadata) and obvious internal hostnames.
  */
 export function assertSafeServerUrl(serverUrl: string): void {
-  let u: URL;
   try {
-    u = new URL(serverUrl);
-  } catch {
-    throw new Error('serverUrl must be a valid absolute URL');
-  }
-  if (u.protocol !== 'https:') {
-    throw new Error('serverUrl must use https://');
-  }
-  // Normalise: strip IPv6 brackets, lowercase.
-  const host = u.hostname.replace(/^\[|\]$/g, '').toLowerCase();
-  const blockedNames = new Set(['localhost', 'metadata.google.internal']);
-  const blockedSuffixes = ['.local', '.internal', '.lan', '.localhost'];
-  const isBlockedIpv6 =
-    host === '::1' || host === '::' ||
-    host.startsWith('fe80:') ||           // link-local
-    host.startsWith('fc') || host.startsWith('fd') || // fc00::/7 unique-local
-    host.startsWith('::ffff:127.') ||     // IPv4-mapped loopback
-    host.startsWith('::ffff:10.') || host.startsWith('::ffff:192.168.');
-  if (
-    blockedNames.has(host) ||
-    blockedSuffixes.some((s) => host.endsWith(s)) ||
-    isBlockedIpv4(host) ||
-    isBlockedIpv6
-  ) {
-    throw new Error('serverUrl must be a public host (internal/loopback/metadata addresses are not allowed)');
+    assertSafeUrl(serverUrl, { allowHttp: false });
+  } catch (e) {
+    // Preserve this endpoint's "serverUrl …" wording (and its tests) while the
+    // host/IP rules live once in the shared guard.
+    const msg = e instanceof Error ? e.message : String(e);
+    throw new Error(msg.replace(/^URL/, 'serverUrl'));
   }
 }
 

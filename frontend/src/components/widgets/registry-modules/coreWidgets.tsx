@@ -4,22 +4,20 @@
  * Core (non-insights) surfaces, decomposed into individually-pinnable widgets —
  * the proof that the app-wide widget registry is NOT insights-only.
  *
- * Two surfaces that previously rendered their metrics as plain text badges are
- * converted here into pinnable {@link WidgetDef}s that draw a CHART/STAT via the
- * shared `@/components/charts/*` primitives:
+ * Dashboard home (`/dashboard`) previously rendered its metrics as plain text
+ * badges; they are converted here into pinnable {@link WidgetDef}s that draw a
+ * CHART/STAT via the shared `@/components/charts/*` primitives — the four stat
+ * cards (Projects, Tasks, Agents online, Pending requests) backed by
+ * `fetchProjects`, `tasksApi`, `agentHosts`, and `approvalsApi`, all from one
+ * shared, deduped read.
  *
- *   • Dashboard home (`/dashboard`) — the four stat cards (Projects, Tasks,
- *     Agents online, Pending requests) backed by `fetchProjects`, `tasksApi`,
- *     `agentHosts`, and `approvalsApi`. One shared, deduped read of all four.
- *   • LLM Usage (`/workforce?tab=llm`) — token totals + by-model split from
- *     `llmApi.usage()`, and the cost-bearing by-source breakdown from
- *     `dashboardApi.usage()` (manager-gated, mirroring the page's "manager
- *     surface" note).
+ * (LLM-usage widgets used to live here too; they now ride the AI Insights hub —
+ * see components/insights/widgets/llmUsageWidgets.tsx.)
  *
  * Mirrors aiImpactWidgets.tsx exactly: a `useSharedSource` hook per data source
  * so every card on a dashboard dedupes onto ONE fetch; each Card renders ONLY its
  * body (inline Stat/Muted helpers); the WidgetCard chrome owns frame/title/pin.
- * These are non-insights surfaces, so the `drill` is a plain route navigation.
+ * This is a non-insights surface, so the `drill` is a plain route navigation.
  */
 
 import { useTranslations } from 'next-intl';
@@ -30,13 +28,9 @@ import {
   tasksApi,
   agentHosts,
   approvalsApi,
-  llmApi,
-  dashboardApi,
   type Task,
   type AgentHost,
   type Approval,
-  type LlmUsageStats,
-  type DashboardUsage,
 } from '@/lib/builderforceApi';
 import type { Project } from '@/lib/types';
 import { useSharedSource } from '@/lib/widgets/sharedSource';
@@ -45,7 +39,7 @@ import type { WidgetCardProps, WidgetDef, WidgetDrill } from '@/lib/widgets/type
 import { DonutChart } from '@/components/charts/DonutChart';
 import { BarChart } from '@/components/charts/BarChart';
 import { colorAt } from '@/components/charts/chartColors';
-import { usd, int } from '@/components/insights/format';
+import { int } from '@/components/insights/format';
 
 // ── Shared, deduped data sources (one fetch per source regardless of pins) ──────
 
@@ -73,36 +67,12 @@ function useOverview() {
   });
 }
 
-/** LLM provider usage totals + per-model split (`/llm/v1/usage`). */
-function useLlmUsage() {
-  return useSharedSource<LlmUsageStats>('core:llm-usage', () => llmApi.usage());
-}
-
-/** Token + estimated-cost usage split by source — cloud/on-prem/web (`/api/dashboard/usage`). */
-function useLlmBySource() {
-  return useSharedSource<DashboardUsage>('core:llm-by-source:week', () => dashboardApi.usage('week'));
-}
-
 // ── Small presentational bodies (the WidgetCard owns the frame/title/pin) ──────
 
 /** Wrap an overview card body: handles loading / error so each widget needn't repeat it. */
 function useOverviewBody() {
   const t = useTranslations('widgets');
   const { data, error } = useOverview();
-  const state: React.ReactNode = error ? <Muted>{error}</Muted> : data == null ? <Muted>{t('loading')}</Muted> : null;
-  return { data, state, t };
-}
-
-function useLlmUsageBody() {
-  const t = useTranslations('widgets');
-  const { data, error } = useLlmUsage();
-  const state: React.ReactNode = error ? <Muted>{error}</Muted> : data == null ? <Muted>{t('loading')}</Muted> : null;
-  return { data, state, t };
-}
-
-function useLlmBySourceBody() {
-  const t = useTranslations('widgets');
-  const { data, error } = useLlmBySource();
   const state: React.ReactNode = error ? <Muted>{error}</Muted> : data == null ? <Muted>{t('loading')}</Muted> : null;
   return { data, state, t };
 }
@@ -169,77 +139,9 @@ function PendingApprovalsCard(_props: WidgetCardProps) {
   return <Stat value={int(n)} sub={n > 0 ? t('overview.requiresReview') : t('overview.allClear')} />;
 }
 
-// ── LLM-usage widget bodies (group: 'llmUsage') ────────────────────────────────
-
-function LlmTokensCard(_props: WidgetCardProps) {
-  const { data, state, t } = useLlmUsageBody();
-  if (!data) return state;
-  return (
-    <div>
-      <Stat value={int(data.totalTokens)} sub={t('llmUsage.tokensSub')} />
-      <div style={{ marginTop: 12 }}>
-        <BarChart
-          data={[
-            { key: 'prompt', label: t('llmUsage.prompt'), value: data.promptTokens, color: colorAt(0) },
-            { key: 'completion', label: t('llmUsage.completion'), value: data.completionTokens, color: colorAt(1) },
-          ]}
-          formatValue={(v) => int(v)}
-          ariaLabel={t('llmUsage.tokenSplit')}
-        />
-      </div>
-    </div>
-  );
-}
-
-function LlmRequestsCard(_props: WidgetCardProps) {
-  const { data, state, t } = useLlmUsageBody();
-  if (!data) return state;
-  return <Stat value={int(data.totalRequests)} sub={t('llmUsage.requestsSub')} />;
-}
-
-function LlmByModelCard(_props: WidgetCardProps) {
-  const { data, state, t } = useLlmUsageBody();
-  if (!data) return state;
-  const models = (data.byModel ?? []).filter((m) => m.tokens > 0);
-  if (models.length === 0) return <Muted>{t('llmUsage.noModels')}</Muted>;
-  const bars = models
-    .slice()
-    .sort((a, b) => b.tokens - a.tokens)
-    .map((m, i) => ({ key: m.model, label: m.model, value: m.tokens, color: colorAt(i) }));
-  return <BarChart data={bars} maxRows={6} formatValue={(v) => int(v)} ariaLabel={t('llmUsage.byModel')} />;
-}
-
-const SOURCE_LABEL: Record<DashboardUsage['byKind'][number]['kind'], string> = {
-  cloud: 'Cloud',
-  'on-prem': 'On-prem',
-  web: 'Web / SDK',
-};
-
-function LlmBySourceCard(_props: WidgetCardProps) {
-  const { data, state, t } = useLlmBySourceBody();
-  if (!data) return state;
-  const segments = data.byKind
-    .filter((k) => k.estimatedCostUsd > 0)
-    .map((k, i) => ({ key: k.kind, label: SOURCE_LABEL[k.kind], value: k.estimatedCostUsd, color: colorAt(i) }));
-  if (segments.length === 0) return <Muted>{t('llmUsage.noSpend')}</Muted>;
-  return (
-    <DonutChart
-      segments={segments}
-      centerValue={usd(data.totals.estimatedCostUsd)}
-      centerLabel={t('llmUsage.estCost')}
-      formatValue={(v) => usd(v)}
-      ariaLabel={t('llmUsage.bySource')}
-    />
-  );
-}
-
 // ── Registry ─────────────────────────────────────────────────────────────────
 
 const DASHBOARD_DRILL: WidgetDrill = { kind: 'route', href: '/dashboard' };
-const LLM_DRILL: WidgetDrill = { kind: 'route', href: '/workforce?tab=llm' };
-
-/** by-source carries estimated SPEND — manager surface, gated like the finance lens. */
-const FINANCE_CAP = 'insights.finance' as const;
 
 export const CORE_WIDGETS: WidgetDef[] = [
   // ── Dashboard home (`/dashboard`) ──
@@ -247,10 +149,4 @@ export const CORE_WIDGETS: WidgetDef[] = [
   { id: 'core.tasks', group: 'overview', titleKey: 'tasks', size: 'md', Card: TasksCard, drill: DASHBOARD_DRILL },
   { id: 'core.agents-online', group: 'overview', titleKey: 'agentsOnline', size: 'md', Card: AgentsOnlineCard, drill: DASHBOARD_DRILL },
   { id: 'core.pending-approvals', group: 'overview', titleKey: 'pendingApprovals', size: 'sm', Card: PendingApprovalsCard, drill: DASHBOARD_DRILL },
-
-  // ── LLM Usage (`/workforce?tab=llm`) ──
-  { id: 'core.llm-tokens', group: 'llmUsage', titleKey: 'llmTokens', size: 'md', Card: LlmTokensCard, drill: LLM_DRILL },
-  { id: 'core.llm-requests', group: 'llmUsage', titleKey: 'llmRequests', size: 'sm', Card: LlmRequestsCard, drill: LLM_DRILL },
-  { id: 'core.llm-by-model', group: 'llmUsage', titleKey: 'llmByModel', size: 'md', Card: LlmByModelCard, drill: LLM_DRILL },
-  { id: 'core.llm-by-source', group: 'llmUsage', titleKey: 'llmBySource', capability: FINANCE_CAP, size: 'md', Card: LlmBySourceCard, drill: LLM_DRILL },
 ];

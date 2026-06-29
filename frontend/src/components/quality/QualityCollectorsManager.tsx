@@ -14,6 +14,7 @@ import {
   type QualityIntegration,
   type QualityMappingRule,
 } from '@/lib/builderforceApi';
+import { QualityStatsPanel } from './QualityStatsPanel';
 
 const ingestBase = `${AUTH_API_URL}/api/quality-ingest`;
 
@@ -79,6 +80,9 @@ export function QualityCollectorsManager() {
       <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>
         {isTenant ? t('setup.tenantIntro') : t('setup.projectIntro')}
       </div>
+
+      {/* How much is this collection actually gathering? — volume, frequency, types. */}
+      <QualityStatsPanel projectId={currentProjectId} />
 
       {created && <CreatedKeyPanel created={created} onDismiss={() => setCreated(null)} t={t} />}
       {error && <div role="alert" style={{ fontSize: 13, color: 'var(--danger, #dc2626)' }}>{error}</div>}

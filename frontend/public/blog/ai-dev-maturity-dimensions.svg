@@ -1,0 +1,71 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 860 470" font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, sans-serif">
+  <defs>
+    <linearGradient id="coral2" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#FF6B5C"/>
+      <stop offset="1" stop-color="#E8472F"/>
+    </linearGradient>
+  </defs>
+  <rect width="860" height="470" fill="#0E1525"/>
+  <text x="430" y="40" fill="#FFFFFF" font-size="25" font-weight="700" text-anchor="middle">Four dimensions, measured end to end</text>
+  <text x="430" y="66" fill="#8FA0BD" font-size="14" text-anchor="middle">The diagnostic scores each dimension from where teams get stuck (left) to AI-native (right)</text>
+
+  <!-- column headers -->
+  <text x="245" y="100" fill="#8FA0BD" font-size="12" font-weight="700" text-anchor="middle" letter-spacing="1">LEVEL 1 — STUCK</text>
+  <text x="690" y="100" fill="#3FE0A5" font-size="12" font-weight="700" text-anchor="middle" letter-spacing="1">LEVEL 5 — AI-NATIVE</text>
+
+  <g font-size="13">
+    <!-- Row 1 -->
+    <rect x="40" y="118" width="160" height="62" rx="9" fill="#15203A" stroke="#26324f"/>
+    <text x="48" y="143" fill="#fff" font-size="13" font-weight="700">Idea-to-customer</text>
+    <text x="48" y="161" fill="#fff" font-size="13" font-weight="700">speed</text>
+    <rect x="210" y="118" width="220" height="62" rx="9" fill="#1a2540" stroke="#26324f"/>
+    <text x="222" y="143" fill="#b9c6e0" font-size="12.5">Weeks to months —</text>
+    <text x="222" y="161" fill="#8FA0BD" font-size="12.5">full PRD → sprint gauntlet</text>
+    <path d="M438,149 L470,149" stroke="#3FE0A5" stroke-width="2"/>
+    <polygon points="468,144 480,149 468,154" fill="#3FE0A5"/>
+    <rect x="488" y="118" width="332" height="62" rx="9" fill="#15203A" stroke="#3FE0A5" stroke-opacity="0.5"/>
+    <text x="502" y="143" fill="#DCE6F7" font-size="12.5">Several ideas to working versions</text>
+    <text x="502" y="161" fill="#8FA0BD" font-size="12.5">in hours — validated before eng. time</text>
+
+    <!-- Row 2 -->
+    <rect x="40" y="190" width="160" height="62" rx="9" fill="#15203A" stroke="#26324f"/>
+    <text x="48" y="215" fill="#fff" font-size="13" font-weight="700">Prototype</text>
+    <text x="48" y="233" fill="#fff" font-size="13" font-weight="700">fidelity</text>
+    <rect x="210" y="190" width="220" height="62" rx="9" fill="#1a2540" stroke="#26324f"/>
+    <text x="222" y="215" fill="#b9c6e0" font-size="12.5">Static mockups —</text>
+    <text x="222" y="233" fill="#8FA0BD" font-size="12.5">rebuilt from scratch later</text>
+    <path d="M438,221 L470,221" stroke="#3FE0A5" stroke-width="2"/>
+    <polygon points="468,216 480,221 468,226" fill="#3FE0A5"/>
+    <rect x="488" y="190" width="332" height="62" rx="9" fill="#15203A" stroke="#3FE0A5" stroke-opacity="0.5"/>
+    <text x="502" y="215" fill="#DCE6F7" font-size="12.5">Production-grade from the first pass —</text>
+    <text x="502" y="233" fill="#8FA0BD" font-size="12.5">promoted, not rebuilt</text>
+
+    <!-- Row 3 -->
+    <rect x="40" y="262" width="160" height="62" rx="9" fill="#15203A" stroke="#26324f"/>
+    <text x="48" y="287" fill="#fff" font-size="13" font-weight="700">Who can</text>
+    <text x="48" y="305" fill="#fff" font-size="13" font-weight="700">ship</text>
+    <rect x="210" y="262" width="220" height="62" rx="9" fill="#1a2540" stroke="#26324f"/>
+    <text x="222" y="287" fill="#b9c6e0" font-size="12.5">Engineers only —</text>
+    <text x="222" y="305" fill="#8FA0BD" font-size="12.5">everyone else files tickets</text>
+    <path d="M438,293 L470,293" stroke="#3FE0A5" stroke-width="2"/>
+    <polygon points="468,288 480,293 468,298" fill="#3FE0A5"/>
+    <rect x="488" y="262" width="332" height="62" rx="9" fill="#15203A" stroke="#3FE0A5" stroke-opacity="0.5"/>
+    <text x="502" y="287" fill="#DCE6F7" font-size="12.5">Every role — including agents — opens</text>
+    <text x="502" y="305" fill="#8FA0BD" font-size="12.5">reviewed changes against production</text>
+
+    <!-- Row 4 -->
+    <rect x="40" y="334" width="160" height="62" rx="9" fill="#15203A" stroke="#26324f"/>
+    <text x="48" y="359" fill="#fff" font-size="13" font-weight="700">Org-level</text>
+    <text x="48" y="377" fill="#fff" font-size="13" font-weight="700">impact</text>
+    <rect x="210" y="334" width="220" height="62" rx="9" fill="#1a2540" stroke="#26324f"/>
+    <text x="222" y="359" fill="#b9c6e0" font-size="12.5">No measurable change in</text>
+    <text x="222" y="377" fill="#8FA0BD" font-size="12.5">how fast ideas reach customers</text>
+    <path d="M438,365 L470,365" stroke="#3FE0A5" stroke-width="2"/>
+    <polygon points="468,360 480,365 468,370" fill="#3FE0A5"/>
+    <rect x="488" y="334" width="332" height="62" rx="9" fill="#15203A" stroke="#3FE0A5" stroke-opacity="0.5"/>
+    <text x="502" y="359" fill="#DCE6F7" font-size="12.5">Throughput scales with parallel agentic</text>
+    <text x="502" y="377" fill="#8FA0BD" font-size="12.5">work — steered from early signal</text>
+  </g>
+
+  <text x="430" y="432" fill="#52617d" font-size="12" text-anchor="middle">Your overall level is the banded average across all four — the weakest dimension is where the plan starts</text>
+</svg>

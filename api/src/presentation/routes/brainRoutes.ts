@@ -8,6 +8,7 @@ import { Hono } from 'hono';
 import { eq } from 'drizzle-orm';
 import { authMiddleware } from '../middleware/authMiddleware';
 import { signUpload } from '../../infrastructure/auth/uploadSign';
+import { fetchWebDocument } from '../../application/web/webFetch';
 import { agentHosts } from '../../infrastructure/database/schema';
 import type { HonoEnv } from '../../env';
 import type { BrainService } from '../../application/brain/BrainService';
@@ -143,6 +144,27 @@ export function createBrainRoutes(brainService: BrainService, db: Db): Hono<Hono
       apiKey,
     );
     if ('error' in result) return c.json({ error: result.error }, 404);
+    return c.json(result);
+  });
+
+  // POST /fetch-url — fetch an external URL/file/website server-side (CORS-free)
+  // so the Brain can read a link the user pastes (e.g. a GitHub ROADMAP.md, a
+  // docs page). Behind the auth middleware + an SSRF guard; returns readable
+  // text capped to keep the model's context bounded.
+  router.post('/fetch-url', async (c) => {
+    const { url } = await c.req.json<{ url?: string }>().catch(() => ({ url: undefined }));
+    if (!url || typeof url !== 'string') return c.json({ error: 'A url is required' }, 400);
+
+    let result;
+    try {
+      result = await fetchWebDocument(url);
+    } catch (e) {
+      // SSRF rejection or unreachable origin — a 400 the model can relay.
+      return c.json({ error: e instanceof Error ? e.message : 'Could not fetch the URL' }, 400);
+    }
+    if (result.status >= 400) {
+      return c.json({ error: `The URL returned HTTP ${result.status}.`, url: result.url, status: result.status }, 502);
+    }
     return c.json(result);
   });
 

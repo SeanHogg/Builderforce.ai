@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useTranslations } from 'next-intl';
 import { useConsumption } from '@/lib/useConsumption';
 import { Sparkline } from '@/components/charts/Sparkline';
+import { compactTokens } from '@/components/insights/format';
 
 /**
  * Dashboard AI-usage card — month-to-date AI token consumption with a daily
@@ -13,12 +14,6 @@ import { Sparkline } from '@/components/charts/Sparkline';
  * consumption snapshot as the sidebar <UsageMeter/> via the shared hook — no
  * manager-gated insights fetch, so it never 403s for non-managers.
  */
-
-function formatTokens(n: number): string {
-  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
-  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`;
-  return String(n);
-}
 
 export function AiUsageCard() {
   const t = useTranslations('aiUsageCard');
@@ -41,7 +36,7 @@ export function AiUsageCard() {
             {t('title')}
           </div>
           <div style={{ fontSize: 28, fontWeight: 700, color: 'var(--coral-bright, #4d9eff)', lineHeight: 1.1 }}>
-            {formatTokens(meter.used)}
+            {compactTokens(meter.used)}
           </div>
           <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
             {meter.unlimited ? t('tokensThisMonth') : t('percentOfPlan', { percent: meter.percentUsed })}

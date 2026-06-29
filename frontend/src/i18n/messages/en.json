@@ -63,9 +63,9 @@
       "approvals": "Approvals & Q&A",
       "contributors": "Contributors",
       "logs": "Logs",
-      "llm": "LLM Usage",
       "qa": "Agentic QA",
-      "home": "Home"
+      "home": "Home",
+      "integrations": "Integrations"
     }
   },
   "alerts": {
@@ -161,7 +161,8 @@
       "critical": "Critical"
     },
     "healthAria": "Project health {score} of 100 — {tier}",
-    "doneAria": "{pct}% done — {completed} of {total} tasks complete"
+    "doneAria": "{pct}% done — {completed} of {total} tasks complete",
+    "donePct": "{pct}% done"
   },
   "projectScope": {
     "workspace": "Workspace",
@@ -208,7 +209,32 @@
     "depTypeStartToStart": "Start → Start",
     "depTypeFinishToFinish": "Finish → Finish",
     "depTypeStartToFinish": "Start → Finish",
-    "spine": "Planning spine"
+    "spine": "Planning spine",
+    "newEpic": "New epic",
+    "editEpic": "Edit epic",
+    "epicTitlePlaceholder": "What's the epic?",
+    "epicDescription": "Description",
+    "epicDescriptionPlaceholder": "Optional summary of the outcome",
+    "epicTitleRequired": "Title is required.",
+    "epicNeedsProject": "Pick a project before creating an epic.",
+    "epicCreate": "Create epic",
+    "epicSaveChanges": "Save changes",
+    "epicCancel": "Cancel",
+    "epicStatus": {
+      "backlog": "Backlog",
+      "todo": "To do",
+      "ready": "Ready",
+      "in_progress": "In progress",
+      "in_review": "In review",
+      "done": "Done",
+      "blocked": "Blocked"
+    },
+    "epicPriority": {
+      "low": "Low",
+      "medium": "Medium",
+      "high": "High",
+      "urgent": "Urgent"
+    }
   },
   "ide": {
     "all": "All",
@@ -368,7 +394,27 @@
     "profile": "Profile",
     "workspace": "Workspace",
     "language": "Language",
-    "languageDescription": "Choose the language for the application interface."
+    "languageDescription": "Choose the language for the application interface.",
+    "email": "Email",
+    "displayName": "Display name",
+    "userId": "User ID",
+    "name": "Name",
+    "slug": "Slug",
+    "id": "ID",
+    "switchWorkspace": "Switch workspace",
+    "manageMemberSessions": "Manage member sessions",
+    "apiKeysLink": "API keys",
+    "connectedAccounts": "Connected Accounts",
+    "connected": "Connected",
+    "connect": "Connect",
+    "disconnect": "Disconnect",
+    "loading": "Loading…",
+    "providerAlreadyLinked": "That provider account is already connected to a different Builderforce account.",
+    "singleSignInWarning": "Add a password or connect another provider before disconnecting your only sign-in method.",
+    "error": "Error: {message}",
+    "integrationsTitle": "Integrations",
+    "integrationsSubtitle": "Connect source control and external tools, and manage embedded widgets for this workspace.",
+    "sourceControlKeys": "Source control & integration keys"
   },
   "pmo": {
     "title": "Portfolio (PMO)",
@@ -517,9 +563,35 @@
         "aiImpactDesc": "Adoption & model-usage trends, a multi-tool evaluation matrix and a composite AI productivity score.",
         "engineering": "AI Effectiveness",
         "engineeringDesc": "Which AI approach actually ships — outcome score, merge rate and cost by work type and model.",
+        "llmUsage": "LLM Usage",
+        "llmUsageDesc": "Token usage, requests and model health, plus estimated spend by source, project, team, user and repo.",
         "recommendations": "Recommendations",
         "recommendationsDesc": "Ranked prescriptive actions and anomalies to act on, drawn from every insight."
+      },
+      "consumption": {
+        "title": "AI tokens this month",
+        "thisMonth": "tokens consumed this month",
+        "ofPlan": "{percent} of plan · {limit} included",
+        "used": "Used",
+        "remaining": "Remaining",
+        "plan": "Plan",
+        "planName": {
+          "free": "Free",
+          "pro": "Pro",
+          "teams": "Teams"
+        },
+        "trendAria": "Daily AI token consumption this month",
+        "noTrend": "No token usage yet this month"
       }
+    },
+    "llm": {
+      "requests": "Requests",
+      "requestsSub": "total LLM requests",
+      "promptTokens": "Prompt tokens",
+      "completionTokens": "Completion tokens",
+      "tokensSub": "this workspace",
+      "estCost": "Est. spend",
+      "estCostSub": "estimated, last 7 days"
     },
     "delivhub": {
       "title": "Delivery",
@@ -547,6 +619,31 @@
         "metricsRated": "across {n} metrics",
         "topRated": "Elite / High",
         "topRatedSub": "metrics at the top tiers"
+      },
+      "verdict": {
+        "loading": "Reading delivery signals…",
+        "eyebrow": "Are you delivering value?",
+        "scoreLabel": "Health",
+        "scoreAria": "Delivery health score {score} out of 100",
+        "headline": {
+          "yes": "Yes — you're delivering value",
+          "at_risk": "At risk — delivery is slipping",
+          "no": "Not yet — delivery needs attention",
+          "no_data": "Not enough data yet"
+        },
+        "explain": {
+          "yes": "Shipping cadence, lead time and flow are all healthy over the last {days} days.",
+          "at_risk": "Some delivery signals are weakening over the last {days} days — act before they slip further.",
+          "no": "Delivery is stalling over the last {days} days. The signals below show where to focus.",
+          "no_data": "Connect deployments and move work through the board to see your delivery verdict."
+        },
+        "reason": {
+          "deploy": "Ships {value}/day",
+          "cycle": "{value}d cycle time",
+          "cfr": "{value}% change-failure rate",
+          "stuck": "{n} stuck in progress",
+          "rework": "{value}% rework"
+        }
       }
     },
     "finhub": {
@@ -902,7 +999,7 @@
       "ciGreen": "CI green",
       "avgSteps": "Avg steps",
       "costPerMergedPr": "Cost / merged PR",
-      "tokens": "Tokens",
+      "tokens": "Tokens used",
       "noRuns": "No scored runs in this window.",
       "shareTrendTitle": "Model Share Trend",
       "currentShare": "Current share",
@@ -913,7 +1010,9 @@
       "mergeRateTitle": "Merge rate by model",
       "models": "models",
       "activeUsers": "Active users",
-      "cost": "Cost"
+      "cost": "Cost",
+      "tokensSub": "across all models",
+      "tokensByModel": "Tokens by model"
     },
     "devexhub": {
       "title": "DevEx",
@@ -1241,7 +1340,11 @@
     "integrationKeys": "Project integration keys",
     "workspaceTitle": "Workspace",
     "workspaceDesc": "Workspace and file system for this project. Open the IDE to edit files.",
-    "openInIde": "Open in IDE"
+    "openInIde": "Open in IDE",
+    "dueDateLabel": "Due date",
+    "dueDateHint": "Set a project deadline. Leave empty to use the latest task due date.",
+    "deadline": "Deadline",
+    "deadlineDerived": "(from tasks)"
   },
   "spine": {
     "loading": "Loading the planning spine…",
@@ -1308,7 +1411,6 @@
         "approvals": "Resolve approvals, questions, and feedback your agents escalate for a human — sign off on actions or answer what they need to proceed.",
         "contributors": "See who — human and agent — is contributing across your workspace, and how.",
         "logs": "Agent logs, execution timelines, and diagnostics across your workspace.",
-        "llm": "LLM usage metrics, model health, and spend across your workspace.",
         "qa": "Per-project QA automation — flows, generated tests, and CI runs."
       }
     },
@@ -1677,6 +1779,17 @@
         "op_contains": "contains",
         "op_prefix": "starts with"
       }
+    },
+    "stats": {
+      "empty": "No data collected yet — add a collector to start charting errors.",
+      "unassigned": "Unassigned",
+      "eventsCollected": "Events collected",
+      "windowDays": "Window",
+      "events": "events",
+      "frequency": "Collection frequency",
+      "byLevel": "By level",
+      "byStatus": "By status",
+      "byCollector": "By collector"
     }
   },
   "surveys": {
@@ -1935,6 +2048,8 @@
       "llmRequests": "LLM Requests",
       "llmByModel": "Tokens by Model",
       "llmBySource": "Cost by Source",
+      "llmSpend": "Estimated Spend",
+      "llmByProject": "Spend by Project",
       "catalogSkillsTopInstalls": "Top skills by installs",
       "catalogSkillsByCategory": "Skills by category",
       "catalogPersonasTopInstalls": "Top personas by installs",
@@ -1968,7 +2083,10 @@
       "byModel": "Tokens by model",
       "noSpend": "No spend",
       "estCost": "Est. cost",
-      "bySource": "Cost by source"
+      "bySource": "Cost by source",
+      "spendSub": "estimated, last 7 days",
+      "byProject": "Spend by project",
+      "noProjects": "No project spend"
     },
     "catalog": {
       "noInstalls": "No installs yet",
@@ -2075,5 +2193,79 @@
       "metricNeedTrain": "Train a model first",
       "cta": "Open Publish"
     }
+  },
+  "security": {
+    "title": "Security",
+    "subtitle": "Manage your sessions, review admin access, and govern workspace members.",
+    "refresh": "Refresh",
+    "loading": "Loading…",
+    "loadingMembers": "Loading members…",
+    "loadingSessions": "Loading sessions…",
+    "noMembers": "No members found.",
+    "noSessions": "No sessions found.",
+    "noWorkspace": "No workspace selected. Please select a workspace first.",
+    "error": "Error: {message}",
+    "mySessions": "My active sessions",
+    "mySessionsSubtitle": "Sessions signed in to your account across devices.",
+    "adminAccess": "Recent admin access",
+    "adminAccessNote": "These are sessions in which a platform administrator viewed your account. All admin sessions are read-only.",
+    "noAdminAccess": "No admin access sessions found.",
+    "memberSessions": "Workspace members",
+    "memberSessionsSubtitle": "Manage active sessions and tokens for everyone in this workspace.",
+    "securityAgents": "Security agents",
+    "securityAgentsEmpty": "No agents assigned to security. Assign an agent to monitor/review security for this workspace.",
+    "you": "You",
+    "current": "Current",
+    "session": "Session",
+    "sessionsHeading": "Sessions",
+    "sessionsLabel": "sessions",
+    "tokensLabel": "tokens",
+    "selectAll": "Select all",
+    "selected": "{count} selected",
+    "revokeSelected": "Sign out selected ({count})",
+    "revoke": "Sign out",
+    "confirmRevokeSelected": "Sign out the {count} selected sessions?",
+    "lastActive": "Last active {time}",
+    "created": "Created {time}",
+    "revoked": "Revoked",
+    "prev": "Prev",
+    "next": "Next",
+    "pageOf": "Page {page} of {pages}",
+    "as": "as",
+    "duration": "Duration",
+    "reason": "Reason",
+    "active": "Active",
+    "ended": "Ended",
+    "writeBlocked": "{count} write attempts blocked"
+  },
+  "catalogInsights": {
+    "total": {
+      "skills": "Skills",
+      "personas": "Personas",
+      "prompts": "Prompts"
+    },
+    "metric": {
+      "installs": "Installs",
+      "likes": "Likes",
+      "usage": "Uses",
+      "stars": "Stars"
+    },
+    "by": {
+      "category": "By category",
+      "source": "By source"
+    },
+    "top": {
+      "installs": "Top by installs",
+      "usage": "Most used"
+    },
+    "uncategorized": "Uncategorized",
+    "other": "Other"
+  },
+  "projectTable": {
+    "name": "Name",
+    "health": "Health",
+    "description": "Description",
+    "agent": "Agent",
+    "actions": "Actions"
   }
 }
