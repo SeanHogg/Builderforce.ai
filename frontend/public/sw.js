@@ -12,8 +12,16 @@
  *   3. PwaUpdateBanner detects the waiting SW and shows the update toast
  *   4. User clicks "Update now" → banner posts SKIP_WAITING → SW activates
  *   5. Page reloads with the new version
+ *
+ * Versioning:
+ *   The CACHE_NAME includes the app version and build metadata.
+ *   `scripts/inject-sw-version.js` runs before every build to embed the
+ *   current package.json version, date, and git SHA into this file.
+ *   This ensures the service worker file changes on EVERY deployment,
+ *   reliably triggering the PWA update notification.
  */
 
+/* __BUILD_TOKEN__ — replaced at build time by scripts/inject-sw-version.js */
 const CACHE_NAME = 'bf-cache-v2';
 
 const PRECACHE_URLS = [
