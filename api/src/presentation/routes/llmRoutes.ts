@@ -1037,7 +1037,13 @@ export function createLlmRoutes(): Hono<HonoEnv> {
       // First-party platform tools run in-process; everything else relays to the
       // tenant's external MCP server.
       const result = body.extensionId === BUILTIN_EXTENSION_ID
-        ? await callBuiltinTool(db, { tenantId: access.tenantId, tool: body.tool, arguments: body.arguments, env: c.env as Env })
+        ? await callBuiltinTool(db, {
+            tenantId: access.tenantId, tool: body.tool, arguments: body.arguments,
+            env: c.env as Env, userId: access.userId, role: access.role,
+            // Forwarded so route-replay tools run as the caller (JWT) or mint for gateway keys.
+            authToken: (c.req.header('Authorization') ?? '').replace(/^Bearer\s+/i, '') || null,
+            executionCtx: c.executionCtx,
+          })
         : await callMcpTool(db, {
             tenantId: access.tenantId,
             extensionId: body.extensionId,

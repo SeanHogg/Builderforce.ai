@@ -1,8 +1,10 @@
 import { Hono, type Context } from 'hono';
-import { and, count, countDistinct, eq, inArray, max, min, sql } from 'drizzle-orm';
+import { and, count, eq, inArray, max, min, sql } from 'drizzle-orm';
 import { ProjectService } from '../../application/project/ProjectService';
 import { ensureProjectTemplate } from '../../application/project/projectTemplate';
 import type { HonoEnv } from '../../env';
+import type { Env } from '../../env';
+import { getCacheVersion, getOrSetCached, bumpCacheVersion } from '../../infrastructure/cache/readThroughCache';
 import { authMiddleware, requireRole } from '../middleware/authMiddleware';
 import { ProjectStatus, TenantRole } from '../../domain/shared/types';
 import { isAgentHostOnline } from '../../domain/agentHost/onlineStatus';
@@ -45,6 +47,24 @@ type ChatCompletionPayload = {
  * Maps between HTTP request/response and the application service.
  * No business logic lives here.
  */
+/** Version-token key for a tenant's cached `/api/projects` list. */
+export function projectsListVersionKey(tenantId: number): string {
+  return `projects-list:tenant:${tenantId}`;
+}
+
+/**
+ * Bust the cached `/api/projects` list for a tenant. Call from any write that
+ * changes the list rows OR the aggregates it folds in (project CRUD, task
+ * count/status/date/archival changes). Bumping a per-tenant version token is one
+ * cheap KV write; every list key embedding the old token ages out on its TTL.
+ * The KV TTL is the backstop for the rarer aggregates we don't bump explicitly
+ * (workflow count, architecture PRD, agent-host assignment, initiative-level
+ * goal links) — mirrors the completed-by-assignee convention in reportRoutes.
+ */
+export async function invalidateProjectsList(env: Env, tenantId: number): Promise<void> {
+  await bumpCacheVersion(env, projectsListVersionKey(tenantId));
+}
+
 export function createProjectRoutes(projectService: ProjectService, db: Db): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
   router.use('*', authMiddleware);
@@ -251,12 +271,28 @@ export function createProjectRoutes(projectService: ProjectService, db: Db): Hon
   };
 
   // GET /api/projects
+  // Read-through cached per tenant + version token: ~7 grouped aggregates is too
+  // much to recompute on every dashboard/projects load. Writes bump the token via
+  // invalidateProjectsList() so the next read recomputes; the KV TTL backstops the
+  // rarer aggregates we don't bump explicitly.
   router.get('/', async (c) => {
-    const projectList = await projectService.listProjects(c.get('tenantId'));
+    const tenantId = c.get('tenantId');
+    const version = await getCacheVersion(c.env as Env, projectsListVersionKey(tenantId));
+    const projects = await getOrSetCached(
+      c.env as Env,
+      `${projectsListVersionKey(tenantId)}:v:${version}`,
+      () => buildProjectsList(tenantId),
+    );
+    return c.json({ projects });
+  });
+
+  /** Compute the full projects-list payload (base rows + all card aggregates). */
+  async function buildProjectsList(tenantId: number) {
+    const projectList = await projectService.listProjects(tenantId);
     const plainProjects = projectList.map((project) => project.toPlain());
 
     if (plainProjects.length === 0) {
-      return c.json({ projects: [] });
+      return [];
     }
 
     const projectIds = plainProjects.map((project) => project.id);
@@ -324,7 +360,6 @@ export function createProjectRoutes(projectService: ProjectService, db: Db): Hon
       ]),
     );
 
-    const tenantId = c.get('tenantId');
     const assignedAgentHostRows = await db
       .select({
         projectId: agentHostProjects.projectId,
@@ -365,27 +400,65 @@ export function createProjectRoutes(projectService: ProjectService, db: Db): Hon
       archSpecRows.filter((row) => row.projectId != null).map((row) => row.projectId as number),
     );
 
-    // Distinct objectives/OKRs linked to each project's tasks — the "is the need
-    // defined" (goals) signal that powers the inspection's Direction dimension.
-    // Single grouped query joined through tasks; no per-project round trip.
-    const goalLinkRows = await db
-      .select({ projectId: tasks.projectId, goalCount: countDistinct(objectiveLinks.objectiveId) })
+    // Distinct objectives/OKRs linked to each project — the "is the need defined"
+    // (goals) signal behind the inspection's Direction dimension. A project's goals
+    // come from TWO edges: objectives linked to its TASKS, and objectives linked to
+    // the INITIATIVE it rolls up to. We union both into a distinct count per project
+    // (two grouped reads, no per-project round trip; merged in memory).
+    const initiativeByProject = new Map<number, string>();
+    for (const project of plainProjects) {
+      if (project.initiativeId) initiativeByProject.set(project.id, project.initiativeId);
+    }
+
+    const taskGoalRows = await db
+      .select({ projectId: tasks.projectId, objectiveId: objectiveLinks.objectiveId })
       .from(objectiveLinks)
       .innerJoin(tasks, eq(objectiveLinks.taskId, tasks.id))
       .where(and(
         eq(objectiveLinks.tenantId, tenantId),
         eq(objectiveLinks.linkKind, 'task'),
         inArray(tasks.projectId, projectIds),
-      ))
-      .groupBy(tasks.projectId);
+      ));
+
+    const initiativeIds = [...new Set(initiativeByProject.values())];
+    const initiativeGoalRows = initiativeIds.length
+      ? await db
+          .select({ initiativeId: objectiveLinks.initiativeId, objectiveId: objectiveLinks.objectiveId })
+          .from(objectiveLinks)
+          .where(and(
+            eq(objectiveLinks.tenantId, tenantId),
+            eq(objectiveLinks.linkKind, 'initiative'),
+            inArray(objectiveLinks.initiativeId, initiativeIds),
+          ))
+      : [];
+    const objectivesByInitiative = new Map<string, Set<string>>();
+    for (const row of initiativeGoalRows) {
+      if (!row.initiativeId || !row.objectiveId) continue;
+      const set = objectivesByInitiative.get(row.initiativeId) ?? new Set<string>();
+      set.add(row.objectiveId);
+      objectivesByInitiative.set(row.initiativeId, set);
+    }
+
+    const goalObjectivesByProject = new Map<number, Set<string>>();
+    const goalSet = (projectId: number): Set<string> => {
+      const set = goalObjectivesByProject.get(projectId) ?? new Set<string>();
+      goalObjectivesByProject.set(projectId, set);
+      return set;
+    };
+    for (const row of taskGoalRows) {
+      if (row.objectiveId) goalSet(row.projectId).add(row.objectiveId);
+    }
+    for (const [projectId, initiativeId] of initiativeByProject) {
+      const objectives = objectivesByInitiative.get(initiativeId);
+      if (objectives) for (const objectiveId of objectives) goalSet(projectId).add(objectiveId);
+    }
     const goalCountByProject = new Map<number, number>(
-      goalLinkRows.map((row) => [row.projectId, Number(row.goalCount)]),
+      [...goalObjectivesByProject].map(([projectId, set]) => [projectId, set.size]),
     );
 
-    return c.json({
-      projects: plainProjects.map((project) => {
-        const b = taskBreakdownByProject.get(project.id);
-        return {
+    return plainProjects.map((project) => {
+      const b = taskBreakdownByProject.get(project.id);
+      return {
         ...project,
         taskCount: b?.total ?? 0,
         // Status/timeliness breakdown for the health speedometer + % done ring
@@ -409,10 +482,9 @@ export function createProjectRoutes(projectService: ProjectService, db: Db): Hon
         // The explicit value alone, so the details editor can distinguish "set by a
         // PM" from "auto-derived from tasks" and seed its date input correctly.
         projectDueDate: toIso(project.dueDate),
-        };
-      }),
+      };
     });
-  });
+  }
 
   // GET /api/projects/check-key?key=SOMEKEY[&excludeId=123] — returns { available: boolean }
   router.get('/check-key', async (c) => {
@@ -513,6 +585,7 @@ export function createProjectRoutes(projectService: ProjectService, db: Db): Hon
       tenantId,
     });
     await ensureProjectTemplate(c.env.UPLOADS, project);
+    await invalidateProjectsList(c.env as Env, tenantId).catch(() => {});
     return c.json(project.toPlain(), 201);
   });
 
@@ -569,6 +642,7 @@ export function createProjectRoutes(projectService: ProjectService, db: Db): Hon
         },
         tenantId,
       );
+      await invalidateProjectsList(c.env as Env, tenantId).catch(() => {});
       return c.json({ action: 'updated', project: updated.toPlain() });
     }
 
@@ -586,6 +660,7 @@ export function createProjectRoutes(projectService: ProjectService, db: Db): Hon
     });
 
     await ensureProjectTemplate(c.env.UPLOADS, created);
+    await invalidateProjectsList(c.env as Env, tenantId).catch(() => {});
     return c.json({ action: 'created', project: created.toPlain() }, 201);
   });
 
@@ -648,6 +723,7 @@ export function createProjectRoutes(projectService: ProjectService, db: Db): Hon
       sourceControlRepoUrl: assignment.value.sourceControlRepoUrl,
       githubRepoUrl: assignment.value.githubRepoUrl,
     }, tenantId);
+    await invalidateProjectsList(c.env as Env, tenantId).catch(() => {});
     return c.json(project.toPlain());
   });
 
@@ -739,6 +815,7 @@ export function createProjectRoutes(projectService: ProjectService, db: Db): Hon
       ? await projectService.updateProject(project.id, { status: ProjectStatus.ON_HOLD }, tenantId)
       : await projectService.updateProject(project.id, { status: ProjectStatus.ACTIVE }, tenantId);
 
+    await invalidateProjectsList(c.env as Env, tenantId).catch(() => {});
     return c.json({
       project: finalProject.toPlain(),
       scaffold: {
@@ -754,6 +831,7 @@ export function createProjectRoutes(projectService: ProjectService, db: Db): Hon
     const tenantId = c.get('tenantId');
     const project = await projectService.getProject(c.req.param('id'), tenantId);
     await projectService.deleteProject(project.id, tenantId);
+    await invalidateProjectsList(c.env as Env, tenantId).catch(() => {});
     return c.body(null, 204);
   });
 

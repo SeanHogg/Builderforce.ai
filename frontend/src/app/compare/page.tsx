@@ -1,29 +1,40 @@
 import type { Metadata } from 'next';
 import { Fragment } from 'react';
 import Link from 'next/link';
+import { getTranslations } from 'next-intl/server';
 import JsonLd from '@/components/JsonLd';
 import RelatedArticles from '@/components/blog/RelatedArticles';
 import { compareSchema } from '@/lib/structured-data';
 import { pageMetadata } from '@/lib/seo';
-import {
-  COMPARE,
-  COMPARE_FAQ,
-  COMPETITORS,
-  COMPETITIVE_COMPARISON,
-} from '@/lib/content';
+import { COMPARE, COMPETITORS } from '@/lib/content';
 
 export const runtime = 'edge';
 
-export const metadata: Metadata = pageMetadata({
-  title: COMPARE.seo.title,
-  description: COMPARE.seo.description,
-  path: '/compare',
-  ogTitle: COMPARE.seo.ogTitle,
-});
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations('compare.seo');
+  return pageMetadata({
+    title: t('title'),
+    description: t('description'),
+    path: '/compare',
+    ogTitle: t('ogTitle'),
+  });
+}
 
 const COL_COUNT = 2 + COMPETITORS.length;
 
-export default function ComparePage() {
+type CompareCategory = { id: string; title: string; blurb: string; rows: { feature: string; note?: string; values: Record<string, string> }[] };
+type CompareFaq = { question: string; answer: string };
+
+// Visible copy from the `compare` catalog (localized in all 5 locales).
+// `content.ts` COMPARE/COMPETITIVE_COMPARISON stays canonical English for the
+// crawler-facing JSON-LD (compareSchema); COMPETITORS supplies the stable column
+// ORDER + keys, and pillar ICONS are paired from COMPARE.pillars by index.
+export default async function ComparePage() {
+  const t = await getTranslations();
+  const pillars = t.raw('compare.pillars') as { title: string; desc: string }[];
+  const categories = t.raw('compare.categories') as CompareCategory[];
+  const faq = t.raw('compare.faq') as CompareFaq[];
+
   return (
     <>
       <JsonLd data={compareSchema()} />
@@ -131,15 +142,15 @@ export default function ComparePage() {
       <div className="cmp">
         <main>
           <section className="cmp-hero">
-            <div className="cmp-eyebrow">{COMPARE.hero.eyebrow}</div>
-            <h1 className="cmp-title">{COMPARE.hero.title}</h1>
-            <p className="cmp-sub">{COMPARE.hero.subtitle}</p>
+            <div className="cmp-eyebrow">{t('compare.hero.eyebrow')}</div>
+            <h1 className="cmp-title">{t('compare.hero.title')}</h1>
+            <p className="cmp-sub">{t('compare.hero.subtitle')}</p>
           </section>
 
           <div className="cmp-pillars">
-            {COMPARE.pillars.map((p) => (
+            {pillars.map((p, i) => (
               <div key={p.title} className="cmp-pillar">
-                <div className="cmp-pillar-icon">{p.icon}</div>
+                <div className="cmp-pillar-icon">{COMPARE.pillars[i]?.icon}</div>
                 <h2 className="cmp-pillar-title">{p.title}</h2>
                 <p className="cmp-pillar-desc">{p.desc}</p>
               </div>
@@ -147,20 +158,20 @@ export default function ComparePage() {
           </div>
 
           <section className="cmp-section">
-            <p className="cmp-intro">{COMPARE.intro}</p>
+            <p className="cmp-intro">{t('compare.intro')}</p>
             <div className="cmp-table-wrap">
               <table className="cmp-table">
                 <thead>
                   <tr>
-                    <th className="cmp-feat-head">Capability</th>
+                    <th className="cmp-feat-head">{t('compare.capabilityHeader')}</th>
                     <th className="cmp-bf-head">Builderforce.ai</th>
                     {COMPETITORS.map((c) => (
-                      <th key={c.key}>{c.label}</th>
+                      <th key={c.key}>{t(`compare.competitorLabels.${c.key}`)}</th>
                     ))}
                   </tr>
                 </thead>
                 <tbody>
-                  {COMPETITIVE_COMPARISON.map((cat) => (
+                  {categories.map((cat) => (
                     <Fragment key={cat.id}>
                       <tr className="cmp-cat-row">
                         <th colSpan={COL_COUNT} scope="colgroup">
@@ -188,31 +199,28 @@ export default function ComparePage() {
           </section>
 
           <section className="cmp-quote">
-            <blockquote className="cmp-quote-box">{COMPARE.quotable}</blockquote>
+            <blockquote className="cmp-quote-box">{t('compare.quotable')}</blockquote>
           </section>
 
           <section className="cmp-faq">
-            <h2>Builderforce.ai vs the field — FAQ</h2>
-            {COMPARE_FAQ.map((faq) => (
-              <details key={faq.question}>
-                <summary>{faq.question}</summary>
-                <p>{faq.answer}</p>
+            <h2>{t('compare.faqHeading')}</h2>
+            {faq.map((item) => (
+              <details key={item.question}>
+                <summary>{item.question}</summary>
+                <p>{item.answer}</p>
               </details>
             ))}
           </section>
 
-          <RelatedArticles surface="compare" heading="Read the head-to-heads" />
+          <RelatedArticles surface="compare" heading={t('compare.relatedHeading')} />
 
           <section className="cmp-cta">
             <div className="cmp-cta-box">
-              <h2 className="cmp-cta-title">Outgrown autocomplete?</h2>
-              <p className="cmp-cta-desc">
-                Start free — self-hosted, MIT-licensed, and model-agnostic. Put a whole
-                AI agent workforce to work, with approvals and an audit trail on every action.
-              </p>
+              <h2 className="cmp-cta-title">{t('compare.ctaTitle')}</h2>
+              <p className="cmp-cta-desc">{t('compare.ctaDesc')}</p>
               <div className="cmp-actions">
-                <Link href="/register" className="cmp-btn-primary">⚡ Get Started Free</Link>
-                <Link href="/product" className="cmp-btn-secondary">👀 Tour the Platform</Link>
+                <Link href="/register" className="cmp-btn-primary">⚡ {t('marketing.ctaGetStartedFree')}</Link>
+                <Link href="/product" className="cmp-btn-secondary">👀 {t('compare.ctaTourPlatform')}</Link>
               </div>
             </div>
           </section>

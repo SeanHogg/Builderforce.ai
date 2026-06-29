@@ -24,7 +24,8 @@ import { ProjectService } from '../project/ProjectService';
 import { TaskService } from '../task/TaskService';
 import { ProjectRepository } from '../../infrastructure/repositories/ProjectRepository';
 import { TaskRepository } from '../../infrastructure/repositories/TaskRepository';
-import { ProjectStatus, TaskPriority, TaskType } from '../../domain/shared/types';
+import { ProjectStatus, TaskPriority, TaskType, TenantRole } from '../../domain/shared/types';
+import { signJwt } from '../../infrastructure/auth/JwtService';
 import { workflows, workflowDefinitions, specs, promptLibraryEntries, promptLibraryVersions, approvalRules, approvals, brainChats, agents, projectAgents, agentAssignments, savedDashboards, dashboardWidgets, alerts, alertEvents, auditEvents, boards, cronJobs, portfolios, initiatives, objectives, objectiveLinks, keyResults, ideAgents, marketplaceSkills, artifactAssignments, socControls, socEvidence, pokerSessions, pokerStories, pokerVotes, retrospectives, retroItems, boardConnections, projectRepositories, pullRequests, chatSessions, chatMessages, swimlanes, swimlaneAgentAssignments, tenants, executions, usageSnapshots, toolAuditEvents, executionMessages, agentHosts, agentHostProjects } from '../../infrastructure/database/schema';
 import { resolveSegment } from '../../infrastructure/auth/segmentResolver';
 import type { McpToolEntry } from './mcpExtensionService';
@@ -52,6 +53,63 @@ interface BuiltinCtx {
   env?: Env;
   /** Authed user id (createdBy on migration runs), when known. */
   userId?: string | null;
+  /** The caller's role — used to mint a replay JWT for gateway-key callers. */
+  role?: TenantRole;
+  /** The caller's raw Bearer token — forwarded on route replay when it's a JWT
+   *  (a real user) so the replayed route runs with the caller's exact identity. */
+  authToken?: string | null;
+  /** The request's ExecutionContext — passed to `app.request` so replayed routes'
+   *  `waitUntil` side-effects don't throw. */
+  executionCtx?: ExecutionContext;
+}
+
+/**
+ * Run a platform action by REPLAYING the real `/api/*` route in-process (reuses
+ * its logic AND its role-gate authz — the single source of truth). Forwards the
+ * caller's JWT when present (real-user identity/role/segment); mints a short-lived
+ * tenant JWT for gateway-key callers (bfk_/bfa_). Used for the heavy/computed/auth
+ * tail that isn't a simple table op (executions dispatch, decks, analytics, …).
+ */
+async function replayRoute(
+  ctx: BuiltinCtx,
+  method: 'GET' | 'POST' | 'PATCH' | 'PUT' | 'DELETE',
+  path: string,
+  body?: Json,
+  /** Send `body.text` as a raw text/plain body instead of JSON (e.g. project file
+   *  contents, whose route reads `c.req.text()`). */
+  opts?: { rawText?: string },
+): Promise<unknown> {
+  if (!ctx.env) throw new Error('route replay unavailable in this context');
+  // Dynamic import avoids a static import cycle (index → routes → this module).
+  const { buildApp } = await import('../../index');
+  const app = buildApp(ctx.env);
+  const tok = ctx.authToken ?? '';
+  const isGatewayKey = /^(bfk_|bfa_|clk_)/.test(tok);
+  const bearer = tok && !isGatewayKey
+    ? tok
+    : await signJwt(
+        { sub: ctx.userId && !isGatewayKey ? ctx.userId : 'agentHost:mcp', tid: ctx.tenantId, role: ctx.role ?? TenantRole.DEVELOPER },
+        ctx.env.JWT_SECRET,
+      );
+  const headers: Record<string, string> = { authorization: `Bearer ${bearer}` };
+  const rawText = opts?.rawText;
+  if (rawText !== undefined) headers['content-type'] = 'text/plain';
+  else if (body !== undefined) headers['content-type'] = 'application/json';
+  const req = new Request(`https://internal${path}`, {
+    method,
+    headers,
+    body: rawText !== undefined ? rawText : body !== undefined ? JSON.stringify(body) : undefined,
+  });
+  const noopCtx = { waitUntil: () => undefined, passThroughOnException: () => undefined } as unknown as ExecutionContext;
+  const res = await app.request(req, {}, ctx.env, ctx.executionCtx ?? noopCtx);
+  const text = await res.text();
+  let parsed: unknown;
+  try { parsed = text ? JSON.parse(text) : null; } catch { parsed = text; }
+  if (!res.ok) {
+    const detail = typeof parsed === 'object' && parsed ? JSON.stringify(parsed) : String(parsed);
+    throw new Error(`${method} ${path} → ${res.status} ${detail}`.slice(0, 400));
+  }
+  return parsed;
 }
 
 interface BuiltinTool {
@@ -804,9 +862,9 @@ const CATALOG: BuiltinTool[] = [
   // ---- Governance (SOC 2) — soc_controls + soc_evidence. Both segment-scoped. The
   //       finops collision table was renamed to finops_soc_controls (mig 0254); these
   //       are the GOVERNANCE tables. seed SKIPPED (bulk control-set generation). ----
-  { tool: 'governance_soc.list_controls', mutates: false, description: 'List SOC 2 controls and their status.', parameters: obj({}), run: async (ctx) => { const seg = await resolveSegment(ctx.db, ctx.tenantId); return ctx.db.select().from(socControls).where(and(eq(socControls.tenantId, ctx.tenantId), eq(socControls.segmentId, seg))).orderBy(socControls.controlRef).limit(500); } },
+  { tool: 'governance_soc2.list_controls', mutates: false, description: 'List SOC 2 controls and their status.', parameters: obj({}), run: async (ctx) => { const seg = await resolveSegment(ctx.db, ctx.tenantId); return ctx.db.select().from(socControls).where(and(eq(socControls.tenantId, ctx.tenantId), eq(socControls.segmentId, seg))).orderBy(socControls.controlRef).limit(500); } },
   {
-    tool: 'governance_soc.patch_control', mutates: true,
+    tool: 'governance_soc2.patch_control', mutates: true,
     description: 'Update a SOC 2 control (status/owner/notes). status: not_started|in_progress|ready|out_of_scope.',
     parameters: obj({ id: S, status: { type: 'string', enum: ['not_started', 'in_progress', 'ready', 'out_of_scope'] }, ownerId: S, notes: S }, ['id']),
     run: async (ctx, a) => {
@@ -821,7 +879,7 @@ const CATALOG: BuiltinTool[] = [
     },
   },
   {
-    tool: 'governance_soc.add_evidence', mutates: true,
+    tool: 'governance_soc2.add_evidence', mutates: true,
     description: 'Attach evidence to a SOC 2 control (verified via the parent control, tenant+segment-scoped).',
     parameters: obj({ id: S, title: S, evidenceType: S, url: S, note: S }, ['id', 'title', 'evidenceType']),
     run: async (ctx, a) => {
@@ -1214,6 +1272,11 @@ const CATALOG: BuiltinTool[] = [
     },
   },
   { tool: 'executions.task_file_changes', mutates: false, description: 'Files an agent created/modified/deleted for a task.', parameters: obj({ taskId: N }, ['taskId']), run: async (ctx, a) => (await ctx.db.execute(sql`SELECT path, change, agent, execution_id AS "executionId", created_at AS "createdAt" FROM task_file_changes WHERE task_id = ${num(a.taskId)} AND tenant_id = ${ctx.tenantId} ORDER BY created_at DESC LIMIT 500`)).rows },
+  // ---- Executions (writes) — dispatch/steer live runs via route replay (reuses the
+  //       runtime route's gating + dispatch logic; not a simple table op). ----
+  { tool: 'executions.submit', mutates: true, description: 'Submit a task for agent execution (dispatches to an agent host or the cloud).', parameters: obj({ taskId: N, agentHostId: N, sessionId: S, payload: S }, ['taskId']), run: (ctx, a) => replayRoute(ctx, 'POST', '/api/runtime/executions', { taskId: num(a.taskId), ...(a.agentHostId != null ? { agentHostId: num(a.agentHostId) } : {}), ...(a.sessionId != null ? { sessionId: str(a.sessionId) } : {}), ...(a.payload != null ? { payload: str(a.payload) } : {}) }) },
+  { tool: 'executions.cancel', mutates: true, description: 'Cancel a running/queued execution.', parameters: obj({ id: N }, ['id']), run: (ctx, a) => replayRoute(ctx, 'POST', `/api/runtime/executions/${num(a.id)}/cancel`) },
+  { tool: 'executions.post_message', mutates: true, description: 'Send a follow-up direction to a running execution (steer it mid-run).', parameters: obj({ id: N, text: S }, ['id', 'text']), run: (ctx, a) => replayRoute(ctx, 'POST', `/api/runtime/executions/${num(a.id)}/messages`, { text: str(a.text) }) },
 
   // ---- Integrations (read): integrations.list already exists above (line ~1088, secret-safe,
   //       tenant-scoped) — not re-added here to keep advertised names unique. ----
@@ -1225,6 +1288,153 @@ const CATALOG: BuiltinTool[] = [
   { tool: 'agent_host_projects.list', mutates: false, description: 'Projects associated with an agent host.', parameters: obj({ agentHostId: N }, ['agentHostId']), run: async (ctx, a) => { const seg = await resolveSegment(ctx.db, ctx.tenantId); return ctx.db.select().from(agentHostProjects).where(and(eq(agentHostProjects.tenantId, ctx.tenantId), eq(agentHostProjects.segmentId, seg), eq(agentHostProjects.agentHostId, num(a.agentHostId)))).limit(200); } },
   // usage_snapshots is tenant- AND segment-scoped; filtered to one host's token telemetry.
   { tool: 'usage_snapshots.list', mutates: false, description: 'Token usage snapshots for an agent host.', parameters: obj({ agentHostId: N, limit: N }, ['agentHostId']), run: async (ctx, a) => { const seg = await resolveSegment(ctx.db, ctx.tenantId); return ctx.db.select().from(usageSnapshots).where(and(eq(usageSnapshots.tenantId, ctx.tenantId), eq(usageSnapshots.segmentId, seg), eq(usageSnapshots.agentHostId, num(a.agentHostId)))).orderBy(desc(usageSnapshots.ts)).limit(a.limit != null ? num(a.limit) : 50); } },
+
+  // =====================================================================
+  // Web-Brain parity tail — every remaining web platformActions capability,
+  // ported by REPLAYING its real /api route (reuses the route's logic + role
+  // gates). Tool names are the web cap's exact `domain.method` so the web
+  // Brain's catalog-exclude matches and the capability lives in ONE place.
+  // The only web caps intentionally left web-only are the client-local
+  // navigation actions (navigate_to / open_project).
+  // =====================================================================
+
+  // ---- Agent hosts (register / deregister / tool audit) ----
+  { tool: 'agent_hosts.register', mutates: true, description: 'Register a new agent host (returns a one-time API key).', parameters: obj({ name: S }, ['name']), run: (ctx, a) => replayRoute(ctx, 'POST', '/api/agent-hosts', { name: str(a.name).trim() }) },
+  { tool: 'agent_hosts.deregister', mutates: true, description: 'Deregister an agent host (revokes its key).', parameters: obj({ agentHostId: N }, ['agentHostId']), run: (ctx, a) => replayRoute(ctx, 'DELETE', `/api/agent-hosts/${num(a.agentHostId)}`) },
+  { tool: 'agent_hosts.tool_audit', mutates: false, description: 'Tool-call audit events for an agent host.', parameters: obj({ agentHostId: N, runId: S, limit: N }, ['agentHostId']), run: (ctx, a) => { const q = new URLSearchParams(); if (a.runId != null) q.set('runId', str(a.runId)); if (a.limit != null) q.set('limit', String(num(a.limit))); const qs = q.toString(); return replayRoute(ctx, 'GET', `/api/agent-hosts/${num(a.agentHostId)}/tool-audit${qs ? `?${qs}` : ''}`); } },
+
+  // ---- Agent host config (runtime config JSON) ----
+  { tool: 'agent_host_config.get', mutates: false, description: 'Get an agent host’s runtime config JSON.', parameters: obj({ agentHostId: N }, ['agentHostId']), run: (ctx, a) => replayRoute(ctx, 'GET', `/api/agent-hosts/${num(a.agentHostId)}/config`) },
+  { tool: 'agent_host_config.update', mutates: true, description: 'Replace an agent host’s runtime config JSON.', parameters: obj({ agentHostId: N, config: obj({}) }, ['agentHostId', 'config']), run: (ctx, a) => replayRoute(ctx, 'PUT', `/api/agent-hosts/${num(a.agentHostId)}/config`, { config: (a.config ?? {}) as Json }) },
+
+  // ---- Agent host ↔ project associations ----
+  { tool: 'agent_host_projects.assign', mutates: true, description: 'Associate a project with an agent host.', parameters: obj({ agentHostId: N, projectId: N, role: S }, ['agentHostId', 'projectId']), run: (ctx, a) => replayRoute(ctx, 'PUT', `/api/agent-hosts/${num(a.agentHostId)}/projects/${num(a.projectId)}`, { role: a.role != null ? str(a.role) : undefined }) },
+  { tool: 'agent_host_projects.unassign', mutates: true, description: 'Remove a project↔agent-host association.', parameters: obj({ agentHostId: N, projectId: N }, ['agentHostId', 'projectId']), run: (ctx, a) => replayRoute(ctx, 'DELETE', `/api/agent-hosts/${num(a.agentHostId)}/projects/${num(a.projectId)}`) },
+
+  // ---- Agent host skills ----
+  { tool: 'agent_host_skills.list', mutates: false, description: 'Skills assigned to an agent host.', parameters: obj({ agentHostId: N }, ['agentHostId']), run: (ctx, a) => replayRoute(ctx, 'GET', `/api/skill-assignments?agentHostId=${num(a.agentHostId)}`) },
+  { tool: 'agent_host_skills.assign', mutates: true, description: 'Assign a skill to an agent host.', parameters: obj({ agentHostId: N, skillSlug: S }, ['agentHostId', 'skillSlug']), run: (ctx, a) => replayRoute(ctx, 'POST', `/api/skill-assignments/agentHost/${num(a.agentHostId)}`, { skillSlug: str(a.skillSlug) }) },
+  { tool: 'agent_host_skills.revoke', mutates: true, description: 'Revoke a skill assignment.', parameters: obj({ assignmentId: N }, ['assignmentId']), run: (ctx, a) => replayRoute(ctx, 'DELETE', `/api/skill-assignments/${num(a.assignmentId)}`) },
+
+  // ---- Agent host channels (multi-channel messaging) ----
+  { tool: 'channels.list', mutates: false, description: 'List messaging channels on an agent host.', parameters: obj({ agentHostId: N }, ['agentHostId']), run: (ctx, a) => replayRoute(ctx, 'GET', `/api/agent-hosts/${num(a.agentHostId)}/channels`) },
+  { tool: 'channels.create', mutates: true, description: 'Create a messaging channel (whatsapp/telegram/slack/discord/teams/webhook…).', parameters: obj({ agentHostId: N, platform: S, name: S, config: S, enabled: B }, ['agentHostId', 'platform', 'name']), run: (ctx, a) => replayRoute(ctx, 'POST', `/api/agent-hosts/${num(a.agentHostId)}/channels`, { platform: str(a.platform), name: str(a.name), config: a.config != null ? str(a.config) : undefined, ...(typeof a.enabled === 'boolean' ? { enabled: a.enabled } : {}) }) },
+  { tool: 'channels.update', mutates: true, description: 'Update a messaging channel.', parameters: obj({ agentHostId: N, channelId: S, name: S, config: S, enabled: B }, ['agentHostId', 'channelId']), run: (ctx, a) => { const body: Json = {}; if (a.name != null) body.name = str(a.name); if (a.config != null) body.config = str(a.config); if (typeof a.enabled === 'boolean') body.enabled = a.enabled; return replayRoute(ctx, 'PATCH', `/api/agent-hosts/${num(a.agentHostId)}/channels/${encodeURIComponent(str(a.channelId))}`, body); } },
+  { tool: 'channels.delete', mutates: true, description: 'Delete a messaging channel.', parameters: obj({ agentHostId: N, channelId: S }, ['agentHostId', 'channelId']), run: (ctx, a) => replayRoute(ctx, 'DELETE', `/api/agent-hosts/${num(a.agentHostId)}/channels/${encodeURIComponent(str(a.channelId))}`) },
+
+  // ---- Agent host workspace (synced directories + files) ----
+  { tool: 'workspace.list_directories', mutates: false, description: 'List synced directories on an agent host.', parameters: obj({ agentHostId: N }, ['agentHostId']), run: (ctx, a) => replayRoute(ctx, 'GET', `/api/agent-hosts/${num(a.agentHostId)}/directories`) },
+  { tool: 'workspace.list_files', mutates: false, description: 'List files in a synced directory.', parameters: obj({ agentHostId: N, directoryId: N }, ['agentHostId', 'directoryId']), run: (ctx, a) => replayRoute(ctx, 'GET', `/api/agent-hosts/${num(a.agentHostId)}/directories/${num(a.directoryId)}/files`) },
+  { tool: 'workspace.trigger_sync', mutates: true, description: 'Trigger a directory re-sync on an agent host.', parameters: obj({ agentHostId: N, directoryId: N }, ['agentHostId', 'directoryId']), run: (ctx, a) => replayRoute(ctx, 'POST', `/api/agent-hosts/${num(a.agentHostId)}/directories/${num(a.directoryId)}/sync`) },
+
+  // ---- Dispatch (send a command payload to an agent host via the relay) ----
+  { tool: 'dispatch.send', mutates: true, description: 'Send a command payload to an agent host via the relay.', parameters: obj({ agentHostId: N, payload: obj({}) }, ['agentHostId', 'payload']), run: (ctx, a) => replayRoute(ctx, 'POST', `/api/agent-hosts/${num(a.agentHostId)}/dispatch`, (a.payload ?? {}) as Json) },
+
+  // ---- Autonomous boards (live dispatch status) ----
+  { tool: 'boards.dispatches', mutates: false, description: 'Live per-agent dispatch status across a board.', parameters: obj({ boardId: S }, ['boardId']), run: (ctx, a) => replayRoute(ctx, 'GET', `/api/boards/${encodeURIComponent(str(a.boardId))}/dispatches`) },
+
+  // ---- Marketplace: hire a published agent (purchase flow) ----
+  { tool: 'agents_published.hire', mutates: true, description: 'Hire (acquire) a marketplace agent for this workspace.', parameters: obj({ agentId: S }, ['agentId']), run: (ctx, a) => replayRoute(ctx, 'POST', `/api/workforce/agents/${encodeURIComponent(str(a.agentId))}/hire`, {}) },
+
+  // ---- Marketplace artifact stats (likes/installs) ----
+  { tool: 'marketplace_stats.get_stats', mutates: false, description: 'Likes/installs for artifacts.', parameters: obj({ type: { type: 'string', enum: ['skill', 'persona', 'content'] }, slugs: { type: 'array', items: S } }, ['type', 'slugs']), run: (ctx, a) => { const slugs = Array.isArray(a.slugs) ? a.slugs.map(str) : []; const q = new URLSearchParams({ type: str(a.type), slugs: slugs.join(',') }); return replayRoute(ctx, 'GET', `/api/marketplace-stats/stats?${q.toString()}`); } },
+  { tool: 'marketplace_stats.toggle_like', mutates: true, description: 'Like/unlike an artifact.', parameters: obj({ type: S, artifactSlug: S }, ['type', 'artifactSlug']), run: (ctx, a) => replayRoute(ctx, 'POST', '/api/marketplace-stats/like', { artifactType: str(a.type), artifactSlug: str(a.artifactSlug) }) },
+
+  // ---- Integrations (write twins of the existing integrations.create_credential) ----
+  // Web cap names are integrations.create/update/remove; ported under those exact names
+  // so the web exclude matches (replays the same /api/integrations routes).
+  { tool: 'integrations.create', mutates: true, description: 'Store an integration credential (GitHub/GitLab/Jira/etc).', parameters: obj({ provider: { type: 'string', enum: ['github', 'gitlab', 'bitbucket', 'jira', 'confluence', 'freshservice'] }, name: S, baseUrl: S, projectId: N, credentials: obj({}) }, ['provider', 'name', 'credentials']), run: (ctx, a) => replayRoute(ctx, 'POST', '/api/integrations', { provider: str(a.provider), name: str(a.name), baseUrl: a.baseUrl != null ? str(a.baseUrl) : undefined, projectId: a.projectId != null ? num(a.projectId) : undefined, credentials: (a.credentials ?? {}) as Json }) },
+  { tool: 'integrations.update', mutates: true, description: 'Update an integration credential.', parameters: obj({ id: S, name: S, baseUrl: S, isEnabled: B }, ['id']), run: (ctx, a) => { const body: Json = {}; if (a.name != null) body.name = str(a.name); if (a.baseUrl != null) body.baseUrl = str(a.baseUrl); if (typeof a.isEnabled === 'boolean') body.isEnabled = a.isEnabled; return replayRoute(ctx, 'PATCH', `/api/integrations/${encodeURIComponent(str(a.id))}`, body); } },
+  { tool: 'integrations.remove', mutates: true, description: 'Delete an integration credential.', parameters: obj({ id: S }, ['id']), run: (ctx, a) => replayRoute(ctx, 'DELETE', `/api/integrations/${encodeURIComponent(str(a.id))}`) },
+
+  // ---- Repos: list_pull_requests already exists above; add the project-default toggle is also above.
+  // (No additional repos caps to port — all are already in the catalog.)
+
+  // ---- Board connections (trigger external sync) ----
+  { tool: 'board_connections.sync', mutates: true, description: 'Trigger a sync for an external board connection.', parameters: obj({ id: S }, ['id']), run: (ctx, a) => replayRoute(ctx, 'POST', `/api/board-connections/${encodeURIComponent(str(a.id))}/sync`) },
+
+  // ---- Project files (R2-backed; save uses a raw text/plain body) ----
+  { tool: 'project_files.list', mutates: false, description: 'List files in a project.', parameters: obj({ projectId: N }, ['projectId']), run: (ctx, a) => replayRoute(ctx, 'GET', `/api/projects/${num(a.projectId)}/files`) },
+  { tool: 'project_files.read', mutates: false, description: 'Read a project file’s content.', parameters: obj({ projectId: N, path: S }, ['projectId', 'path']), run: (ctx, a) => replayRoute(ctx, 'GET', `/api/projects/${num(a.projectId)}/files/${str(a.path).split('/').map(encodeURIComponent).join('/')}`) },
+  { tool: 'project_files.save', mutates: true, description: 'Create or overwrite a project file.', parameters: obj({ projectId: N, path: S, content: S }, ['projectId', 'path', 'content']), run: (ctx, a) => replayRoute(ctx, 'PUT', `/api/projects/${num(a.projectId)}/files/${str(a.path).split('/').map(encodeURIComponent).join('/')}`, undefined, { rawText: str(a.content) }) },
+  { tool: 'project_files.delete', mutates: true, description: 'Delete a project file.', parameters: obj({ projectId: N, path: S }, ['projectId', 'path']), run: (ctx, a) => replayRoute(ctx, 'DELETE', `/api/projects/${num(a.projectId)}/files/${str(a.path).split('/').map(encodeURIComponent).join('/')}`) },
+
+  // ---- Projects: key availability check ----
+  { tool: 'projects.check_key', mutates: false, description: 'Check whether a project key (prefix) is available.', parameters: obj({ key: S }, ['key']), run: (ctx, a) => replayRoute(ctx, 'GET', `/api/projects/check-key?key=${encodeURIComponent(str(a.key).trim().toUpperCase())}`) },
+
+  // ---- Repo analysis (run the Architect on a project; writes a PRD) ----
+  { tool: 'repo_analysis.start', mutates: true, description: 'Run the Architect: create an architecture-analysis task on a project and start it. The result is written back as a PRD. Requires a repo mapped to the project.', parameters: obj({ projectId: N }, ['projectId']), run: (ctx, a) => replayRoute(ctx, 'POST', `/api/repo-analysis/projects/${num(a.projectId)}/architect`, {}) },
+
+  // ---- Analytics ----
+  { tool: 'analytics.activity_calendar', mutates: false, description: 'Contributor activity calendar (humans + AI agents).', parameters: obj({ from: S, to: S, contributorId: N }), run: (ctx, a) => { const q = new URLSearchParams(); if (a.from != null) q.set('from', str(a.from)); if (a.to != null) q.set('to', str(a.to)); if (a.contributorId != null) q.set('contributorId', String(num(a.contributorId))); const qs = q.toString(); return replayRoute(ctx, 'GET', `/api/analytics/activity-calendar${qs ? `?${qs}` : ''}`); } },
+  { tool: 'analytics.sync_agents', mutates: true, description: 'Refresh AI-agent contributor data.', parameters: obj({}), run: (ctx) => replayRoute(ctx, 'POST', '/api/analytics/sync-agents', {}) },
+
+  // ---- Tasks: the assignable team roster (humans + agents) ----
+  { tool: 'tasks.assignees', mutates: false, description: 'List the FULL team a task can be assigned to — humans AND agents in one roster. Resolve an assignee name here, then set the matching id field on tasks.create / tasks.update.', parameters: obj({}), run: (ctx) => replayRoute(ctx, 'GET', '/api/tasks/assignees') },
+
+  // ---- Workflow DEFINITIONS: write/run/import + computed reads not backed by a plain table op ----
+  { tool: 'workflows.create', mutates: true, description: 'Create a workflow definition.', parameters: obj({ name: S, description: S, projectId: N }, ['name']), run: (ctx, a) => replayRoute(ctx, 'POST', '/api/workflow-definitions', { name: str(a.name), description: a.description != null ? str(a.description) : undefined, projectId: a.projectId != null ? num(a.projectId) : undefined }) },
+  { tool: 'workflows.update', mutates: true, description: 'Update a workflow definition (name/description/project).', parameters: obj({ id: S, name: S, description: S, projectId: N }, ['id']), run: (ctx, a) => { const body: Json = {}; if (a.name != null) body.name = str(a.name); if (a.description != null) body.description = str(a.description); if (a.projectId != null) body.projectId = num(a.projectId); return replayRoute(ctx, 'PATCH', `/api/workflow-definitions/${encodeURIComponent(str(a.id))}`, body); } },
+  { tool: 'workflows.remove', mutates: true, description: 'Delete a workflow definition.', parameters: obj({ id: S }, ['id']), run: (ctx, a) => replayRoute(ctx, 'DELETE', `/api/workflow-definitions/${encodeURIComponent(str(a.id))}`) },
+  { tool: 'workflows.run', mutates: true, description: 'Run a workflow on a target. runtime is "host" (pass agentHostId) or "cloud" (pass cloudAgentRef).', parameters: obj({ id: S, runtime: { type: 'string', enum: ['host', 'cloud'] }, agentHostId: N, cloudAgentRef: S }, ['id', 'runtime']), run: (ctx, a) => replayRoute(ctx, 'POST', `/api/workflow-definitions/${encodeURIComponent(str(a.id))}/run`, { runtime: str(a.runtime), agentHostId: a.agentHostId != null ? num(a.agentHostId) : null, cloudAgentRef: a.cloudAgentRef != null ? str(a.cloudAgentRef) : null }) },
+  { tool: 'workflows.import_yaml', mutates: true, description: 'Create a workflow from a YAML/JSON document.', parameters: obj({ name: S, yaml: S }, ['name', 'yaml']), run: (ctx, a) => replayRoute(ctx, 'POST', '/api/workflow-definitions/import', { name: str(a.name), yaml: str(a.yaml) }) },
+  { tool: 'workflows.runs', mutates: false, description: 'Run history for a workflow definition.', parameters: obj({ id: S }, ['id']), run: (ctx, a) => replayRoute(ctx, 'GET', `/api/workflow-definitions/${encodeURIComponent(str(a.id))}/runs`) },
+  { tool: 'workflows.run_targets', mutates: false, description: 'Available run targets (agent hosts + cloud agents).', parameters: obj({}), run: (ctx) => replayRoute(ctx, 'GET', '/api/workflow-definitions/run-targets') },
+  { tool: 'workflows.triggers', mutates: false, description: 'Trigger activation state (webhook/schedule/rss/email) for a workflow.', parameters: obj({ id: S }, ['id']), run: (ctx, a) => replayRoute(ctx, 'GET', `/api/workflow-definitions/${encodeURIComponent(str(a.id))}/triggers`) },
+
+  // ---- Workflow RUNS: graph (computed node/edge view) ----
+  { tool: 'workflow_runs.graph', mutates: false, description: 'Get a workflow run’s node/edge graph for visualization.', parameters: obj({ id: S }, ['id']), run: (ctx, a) => replayRoute(ctx, 'GET', `/api/workflows/${encodeURIComponent(str(a.id))}/graph`) },
+
+  // ---- Brain chat summarize (LLM call, not a table op) ----
+  { tool: 'brain.summarize', mutates: true, description: 'Summarize a Brain chat and store the summary.', parameters: obj({ chatId: N }, ['chatId']), run: (ctx, a) => replayRoute(ctx, 'POST', `/api/brain/chats/${num(a.chatId)}/summarize`, {}) },
+
+  // ---- LLM proxy: usage / health / models ----
+  { tool: 'llm.usage', mutates: false, description: 'Token usage stats for the workspace.', parameters: obj({}), run: (ctx) => replayRoute(ctx, 'GET', '/llm/v1/usage') },
+  { tool: 'llm.health', mutates: false, description: 'Model availability + per-model cooldowns.', parameters: obj({}), run: (ctx) => replayRoute(ctx, 'GET', '/llm/v1/health') },
+  { tool: 'llm.models', mutates: false, description: 'Available models for the workspace plan.', parameters: obj({}), run: (ctx) => replayRoute(ctx, 'GET', '/llm/v1/models') },
+
+  // ---- Dashboard token/cost usage ----
+  { tool: 'dashboard.usage', mutates: false, description: 'Token + cost usage split by source (cloud/on-prem/web), and by user/team/repo/project.', parameters: obj({ window: { type: 'string', enum: ['today', 'week', 'month'] } }), run: (ctx, a) => replayRoute(ctx, 'GET', `/api/dashboard/usage?window=${encodeURIComponent(a.window != null ? str(a.window) : 'week')}`) },
+
+  // ---- Saved dashboards: computed reads (metrics catalogue, resolved data, NL query) ----
+  { tool: 'dashboards.metrics', mutates: false, description: 'List the whitelisted metric keys a dashboard widget can chart.', parameters: obj({}), run: (ctx) => replayRoute(ctx, 'GET', '/api/dashboards/metrics') },
+  { tool: 'dashboards.data', mutates: false, description: 'Resolve every widget on a dashboard to its current value.', parameters: obj({ dashboardId: N }, ['dashboardId']), run: (ctx, a) => replayRoute(ctx, 'GET', `/api/dashboards/dashboards/${num(a.dashboardId)}/data`) },
+  { tool: 'dashboards.query', mutates: false, description: 'Ask a natural-language question; it is mapped deterministically to one whitelisted metric and answered.', parameters: obj({ question: S }, ['question']), run: (ctx, a) => replayRoute(ctx, 'POST', '/api/dashboards/query', { question: str(a.question) }) },
+
+  // ---- Provider keys (remove a stored key; list already exists above) ----
+  { tool: 'provider_keys.remove', mutates: true, description: 'Remove a stored provider key.', parameters: obj({ provider: { type: 'string', enum: ['anthropic'] } }, ['provider']), run: (ctx, a) => replayRoute(ctx, 'DELETE', `/llm/provider-keys/${encodeURIComponent(str(a.provider))}`) },
+
+  // ---- PMO: structure tree + composed rollup (computed reads) ----
+  { tool: 'pmo.tree', mutates: false, description: 'The portfolio structure: portfolios ▸ initiatives ▸ linked projects (+ initiative dependency edges).', parameters: obj({}), run: (ctx) => replayRoute(ctx, 'GET', '/api/pmo/tree') },
+  { tool: 'pmo.rollup', mutates: false, description: 'Composed rollup (delivery + cost + DORA + OKR progress) for one scope. kind="workspace" is the whole org (ignores id); kind="portfolio"|"initiative" needs that id.', parameters: obj({ kind: { type: 'string', enum: ['workspace', 'portfolio', 'initiative'] }, id: S }, ['kind']), run: (ctx, a) => { const kind = str(a.kind); const idPart = kind !== 'workspace' && a.id != null ? `&id=${encodeURIComponent(str(a.id))}` : ''; return replayRoute(ctx, 'GET', `/api/pmo/rollup?kind=${encodeURIComponent(kind)}${idPart}`); } },
+
+  // ---- Governance SOC 2: seed (bulk control-set generation) ----
+  { tool: 'governance_soc2.seed', mutates: true, description: 'Seed the SOC 2 control set.', parameters: obj({}), run: (ctx) => replayRoute(ctx, 'POST', '/api/governance/soc2/seed', {}) },
+
+  // ---- Decks (board / CFO PowerPoint generation) ----
+  { tool: 'decks.list_templates', mutates: false, description: 'List available deck templates (built-in board + CFO decks, plus any uploaded custom .pptx templates).', parameters: obj({}), run: (ctx) => replayRoute(ctx, 'GET', '/api/decks/templates') },
+  { tool: 'decks.generate', mutates: true, description: 'Generate a Builderforce-branded board deck (PowerPoint) from this workspace\'s real data and return a download link. templateId picks the board deck (default) or CFO/DevFinOps deck; quarter is e.g. "2026-Q2".', parameters: obj({ templateId: S, quarter: S, prompt: S }), run: (ctx, a) => replayRoute(ctx, 'POST', '/api/decks/generate', { mode: 'generative', templateId: a.templateId != null ? str(a.templateId) : undefined, quarter: a.quarter != null ? str(a.quarter) : undefined, prompt: a.prompt != null ? str(a.prompt) : undefined }) },
+  { tool: 'decks.fill_template', mutates: true, description: 'Fill an UPLOADED custom .pptx template (templateId from decks.list_templates where fillable=true) IN PLACE with this workspace\'s data, preserving the original design.', parameters: obj({ templateId: S, quarter: S }, ['templateId']), run: (ctx, a) => replayRoute(ctx, 'POST', '/api/decks/generate', { mode: 'fill', templateId: str(a.templateId), quarter: a.quarter != null ? str(a.quarter) : undefined }) },
+  { tool: 'decks.promote_template', mutates: true, description: 'Promote an uploaded .pptx (pass its storage key as sourceKey) into a reusable custom deck template.', parameters: obj({ name: S, description: S, sourceKey: S }, ['name', 'sourceKey']), run: (ctx, a) => replayRoute(ctx, 'POST', '/api/decks/templates', { name: str(a.name), description: a.description != null ? str(a.description) : undefined, sourceKey: str(a.sourceKey) }) },
+
+  // ---- Board data import (bulk entry for board-deck datasets) ----
+  { tool: 'board_data.import_datasets', mutates: false, description: 'List the board-deck datasets that can be BULK-IMPORTED and their column specs.', parameters: obj({}), run: (ctx) => replayRoute(ctx, 'GET', '/api/insights/import/datasets') },
+  { tool: 'board_data.import', mutates: true, description: 'Bulk-import rows into a board-deck dataset (e.g. headcount-events, rd-financials, support-tickets). `rows` is an array of objects whose keys match the dataset columns (call board_data.import_datasets for the spec).', parameters: obj({ dataset: S, rows: { type: 'array', items: { type: 'object' } } }, ['dataset', 'rows']), run: (ctx, a) => replayRoute(ctx, 'POST', `/api/insights/import/${encodeURIComponent(str(a.dataset))}`, { rows: Array.isArray(a.rows) ? a.rows : [] }) },
+
+  // ---- My sessions (the current user's own active sessions) ----
+  { tool: 'my_sessions.list', mutates: false, description: 'List the current user’s active sessions.', parameters: obj({}), run: (ctx) => replayRoute(ctx, 'GET', '/api/auth/sessions') },
+  { tool: 'my_sessions.revoke', mutates: true, description: 'Revoke one of my sessions.', parameters: obj({ sessionId: S }, ['sessionId']), run: (ctx, a) => replayRoute(ctx, 'POST', `/api/auth/sessions/${encodeURIComponent(str(a.sessionId))}/revoke`, {}) },
+  { tool: 'my_sessions.revoke_others', mutates: true, description: 'Revoke all of my other sessions.', parameters: obj({}), run: (ctx) => replayRoute(ctx, 'POST', '/api/auth/sessions/revoke-others', {}) },
+
+  // ---- Tenant-scoped: security (member sessions) — path built from ctx.tenantId ----
+  { tool: 'security.list_users', mutates: false, description: 'List workspace members and their session/token counts.', parameters: obj({}), run: (ctx) => replayRoute(ctx, 'GET', `/api/tenants/${ctx.tenantId}/security/users`) },
+  { tool: 'security.get_user', mutates: false, description: 'Get a member’s active sessions.', parameters: obj({ userId: S }, ['userId']), run: (ctx, a) => replayRoute(ctx, 'GET', `/api/tenants/${ctx.tenantId}/security/users/${encodeURIComponent(str(a.userId))}`) },
+  { tool: 'security.revoke_all_sessions', mutates: true, description: 'Log a member out of all sessions.', parameters: obj({ userId: S }, ['userId']), run: (ctx, a) => replayRoute(ctx, 'POST', `/api/tenants/${ctx.tenantId}/security/users/${encodeURIComponent(str(a.userId))}/sessions/revoke-all`, {}) },
+
+  // ---- Tenant-scoped: gateway API keys — path built from ctx.tenantId ----
+  { tool: 'api_keys.list', mutates: false, description: 'List the workspace’s gateway API keys (bfk_*).', parameters: obj({}), run: (ctx) => replayRoute(ctx, 'GET', `/api/tenants/${ctx.tenantId}/api-keys`) },
+  { tool: 'api_keys.mint', mutates: true, description: 'Mint a new gateway API key. The raw key is returned once — show it carefully.', parameters: obj({ name: S, allowedOrigins: { type: 'array', items: S } }, ['name']), run: (ctx, a) => replayRoute(ctx, 'POST', `/api/tenants/${ctx.tenantId}/api-keys`, { name: str(a.name), allowedOrigins: Array.isArray(a.allowedOrigins) ? a.allowedOrigins.map(str) : undefined }) },
+  { tool: 'api_keys.revoke', mutates: true, description: 'Revoke a gateway API key.', parameters: obj({ keyId: S }, ['keyId']), run: (ctx, a) => replayRoute(ctx, 'DELETE', `/api/tenants/${ctx.tenantId}/api-keys/${encodeURIComponent(str(a.keyId))}`) },
 ];
 
 /** Assert the worker env was threaded (tools that decrypt credentials / reach
@@ -1252,7 +1462,11 @@ function advertisedName(tool: string): string {
   return `builtin_${tool.replace(/[^a-zA-Z0-9]+/g, '_')}`;
 }
 
-function buildCtx(db: Db, tenantId: number, opts?: { env?: Env; userId?: string | null }): BuiltinCtx {
+function buildCtx(
+  db: Db,
+  tenantId: number,
+  opts?: { env?: Env; userId?: string | null; role?: TenantRole; authToken?: string | null; executionCtx?: ExecutionContext },
+): BuiltinCtx {
   const projectRepo = new ProjectRepository(db);
   const taskRepo = new TaskRepository(db);
   return {
@@ -1262,6 +1476,9 @@ function buildCtx(db: Db, tenantId: number, opts?: { env?: Env; userId?: string 
     tasks: new TaskService(taskRepo, projectRepo),
     env: opts?.env,
     userId: opts?.userId ?? null,
+    role: opts?.role,
+    authToken: opts?.authToken ?? null,
+    executionCtx: opts?.executionCtx,
   };
 }
 
@@ -1280,10 +1497,10 @@ export function listBuiltinTools(): McpToolEntry[] {
 /** Run one built-in tool in-process, tenant-scoped. Throws on unknown tool. */
 export async function callBuiltinTool(
   db: Db,
-  args: { tenantId: number; tool: string; arguments: unknown; env?: Env; userId?: string | null },
+  args: { tenantId: number; tool: string; arguments: unknown; env?: Env; userId?: string | null; role?: TenantRole; authToken?: string | null; executionCtx?: ExecutionContext },
 ): Promise<unknown> {
   const entry = CATALOG.find((t) => t.tool === args.tool);
   if (!entry) throw new Error(`Unknown built-in tool '${args.tool}'`);
-  const ctx = buildCtx(db, args.tenantId, { env: args.env, userId: args.userId });
+  const ctx = buildCtx(db, args.tenantId, { env: args.env, userId: args.userId, role: args.role, authToken: args.authToken, executionCtx: args.executionCtx });
   return entry.run(ctx, (args.arguments ?? {}) as Json);
 }

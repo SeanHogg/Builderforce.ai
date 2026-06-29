@@ -3,9 +3,10 @@
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
+import { useTranslations } from 'next-intl';
 import JsonLd from '@/components/JsonLd';
 import { homepageSchema } from '@/lib/structured-data';
-import { HOMEPAGE_FAQ, COMPARE, FEATURES, EVERMIND } from '@/lib/content';
+import { FEATURES, EVERMIND } from '@/lib/content';
 import { savePendingPrompt } from '@/lib/brain';
 import { pendingPromptsApi } from '@/lib/builderforceApi';
 import { BLOG_POSTS } from '@/lib/blogData';
@@ -13,14 +14,20 @@ import { ArticleCardGrid } from '@/components/blog/ArticleCard';
 import QuickStart from '@/components/QuickStart';
 import BrainBackdrop from '@/components/BrainBackdrop';
 
-const HERO_PROMPT_EXAMPLES = [
-  'Audit my repo for security issues',
-  'Connect Jira and summarize this sprint',
-  'Build & train a customer-support agent',
-];
+// Visible copy is sourced from the `home`, `features`, `compare` and `evermind`
+// catalog namespaces (localized in all 5 locales). `content.ts` (EVERMIND,
+// FEATURES, HOMEPAGE_FAQ, COMPARE) stays canonical English for the crawler-facing
+// JSON-LD (homepageSchema) — only non-translatable ICONS are read from it here,
+// paired with the translated arrays by index, so the arrays stay length/order-aligned.
+type TitleDesc = { title: string; desc: string };
+type RoleDesc = { role: string; desc: string };
+type StatLabel = { label: string };
+type FaqItem = { question: string; answer: string };
+type PricingTeaser = { name: string; price: string; perks: string[] };
 
 export default function LandingPage() {
   const router = useRouter();
+  const t = useTranslations();
   const [prompt, setPrompt] = useState('');
   const [nlEmail, setNlEmail] = useState('');
   const [nlStatus, setNlStatus] = useState<'idle'|'sending'|'ok'|'error'>('idle');
@@ -498,18 +505,15 @@ export default function LandingPage() {
           <div className="lp-hero-content">
           <div className="lp-badge">
             <span className="lp-badge-dot" />
-            Human-in-the-loop · Fully agentic cloud
+            {t('home.heroBadge')}
           </div>
 
           {/* One dominant headline + one subline, then the prompt — the hero's
               single primary action (bolt.new-clean; no competing paragraphs). */}
           <h1 className="lp-hero-title">
-            See the future, <em>clearly</em>
+            {t.rich('home.heroTitle', { em: (c) => <em>{c}</em> })}
           </h1>
-          <p className="lp-hero-sub">
-            The innovation platform for the agentic era — one workforce of humans
-            and AI agents, on a single board.
-          </p>
+          <p className="lp-hero-sub">{t('home.heroSub')}</p>
 
           <div className="lp-prompt-row">
             <div className="lp-prompt-col">
@@ -521,16 +525,16 @@ export default function LandingPage() {
                   onKeyDown={(e) => {
                     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handlePromptSubmit(e); }
                   }}
-                  placeholder="Describe what you want your AI workforce to do…"
+                  placeholder={t('home.heroPromptPlaceholder')}
                   rows={3}
-                  aria-label="Describe what you want your AI workforce to do"
+                  aria-label={t('home.heroPromptAria')}
                 />
                 <button type="submit" className="lp-prompt-send" disabled={!prompt.trim()}>
-                  Get started →
+                  {t('home.heroGetStarted')} →
                 </button>
               </form>
               <div className="lp-prompt-examples">
-                {HERO_PROMPT_EXAMPLES.map((ex) => (
+                {(t.raw('home.heroExamples') as string[]).map((ex) => (
                   <button key={ex} type="button" className="lp-chip" onClick={() => setPrompt(ex)}>
                     {ex}
                   </button>
@@ -544,24 +548,24 @@ export default function LandingPage() {
         {/* ── Evermind: the brain behind the platform (what the hero animation depicts) ── */}
         <section className="lp-features" id="evermind" style={{ paddingTop: 0, scrollMarginTop: '90px' }}>
           <div className="lp-evermind">
-            <span className="lp-evermind-eyebrow">{EVERMIND.eyebrow}</span>
+            <span className="lp-evermind-eyebrow">{t('evermind.eyebrow')}</span>
             <h2 className="section-title" style={{ marginBottom: 8 }}>
-              <span className="agentHost-accent">⟩</span> {EVERMIND.name} — {EVERMIND.tagline}
+              <span className="agentHost-accent">⟩</span> Evermind — {t('evermind.tagline')}
             </h2>
             <p style={{ maxWidth: '780px', margin: '0 0 28px', color: 'var(--text-secondary)' }}>
-              {EVERMIND.blurb}
+              {t('evermind.blurb')}
             </p>
             <div className="lp-grid" style={{ gridTemplateColumns: 'repeat(auto-fit,minmax(240px,1fr))' }}>
-              {EVERMIND.pillars.map((p) => (
+              {(t.raw('evermind.architecture.pillars') as TitleDesc[]).map((p, i) => (
                 <div key={p.title} className="lp-card">
-                  <span className="lp-card-icon">{p.icon}</span>
+                  <span className="lp-card-icon">{EVERMIND.pillars[i]?.icon}</span>
                   <h3 className="lp-card-title">{p.title}</h3>
                   <p className="lp-card-desc">{p.desc}</p>
                 </div>
               ))}
             </div>
             <div className="lp-evermind-edges">
-              {EVERMIND.edges.map((e) => (
+              {(t.raw('evermind.edges.items') as { label: string; desc: string }[]).map((e) => (
                 <div key={e.label} className="lp-evermind-edge">
                   <span className="lp-evermind-edge-label">{e.label}</span>
                   <span className="lp-evermind-edge-desc">{e.desc}</span>
@@ -569,7 +573,7 @@ export default function LandingPage() {
               ))}
             </div>
             <div className="lp-actions" style={{ marginTop: 24 }}>
-              <Link href="/evermind" className="lp-btn-primary">🧠 Explore Evermind →</Link>
+              <Link href="/evermind" className="lp-btn-primary">🧠 {t('evermind.exploreCta')} →</Link>
             </div>
           </div>
         </section>
@@ -577,32 +581,15 @@ export default function LandingPage() {
         {/* ── Pillars: the human-in-the-loop, fully agentic framing ── */}
         <section className="lp-features" style={{ paddingTop: 0 }}>
           <h2 className="section-title">
-            <span className="agentHost-accent">⟩</span> Human in the loop. Fully agentic.
+            <span className="agentHost-accent">⟩</span> {t('home.pillarsHeading')}
           </h2>
           <p style={{ maxWidth: 'none', margin: '0 0 32px', color: 'var(--text-secondary)' }}>
-            Train your own agents, put them to work inside your agent, and stay in
-            control of every step — from one place.
+            {t('home.pillarsLead')}
           </p>
           <div className="lp-grid" style={{ gridTemplateColumns: 'repeat(auto-fit,minmax(260px,1fr))' }}>
-            {[
-              {
-                icon: '🔁',
-                title: 'Train agents, use them inside your agent',
-                desc: 'Train a custom agent in-browser (WebGPU LoRA + evaluation), publish it to the Workforce Registry, then hire it and call it from inside your own agent. Your specialists become tools your main agent delegates to.',
-              },
-              {
-                icon: '▦',
-                title: 'Manage your workforce on a Kanban board',
-                desc: 'Plan, assign, and track every task on a live Kanban board — humans and AI agents on the same board, with table, calendar, and Gantt views. Work flows from backlog to done in real time.',
-              },
-              {
-                icon: '🧩',
-                title: 'Never leave VS Code',
-                desc: 'The BuilderForce VS Code extension runs the whole platform in your editor: chat with agents, assign and run tasks, review and validate their work, and approve human-in-the-loop actions — without leaving your code.',
-              },
-            ].map((p) => (
+            {(t.raw('home.pillars') as TitleDesc[]).map((p, i) => (
               <div key={p.title} className="lp-card">
-                <span className="lp-card-icon">{p.icon}</span>
+                <span className="lp-card-icon">{['🔁', '▦', '🧩'][i]}</span>
                 <h3 className="lp-card-title">{p.title}</h3>
                 <p className="lp-card-desc">{p.desc}</p>
               </div>
@@ -613,25 +600,15 @@ export default function LandingPage() {
         {/* ── Enterprise framing: one instrumented system → every role's operating picture ── */}
         <section className="lp-features" style={{ paddingTop: 0 }}>
           <h2 className="section-title">
-            <span className="agentHost-accent">⟩</span> One system of record. Every role&apos;s operating picture.
+            <span className="agentHost-accent">⟩</span> {t('home.rolesHeading')}
           </h2>
           <p style={{ maxWidth: 'none', margin: '0 0 32px', color: 'var(--text-secondary)' }}>
-            Because every action — human or agent — is instrumented, costed, and attributed,
-            the whole organization works from one source of truth. No six-tool stack, no
-            spreadsheets reconciling who did what at what cost. Enterprise-grade visibility,
-            priced as a platform.
+            {t('home.rolesLead')}
           </p>
           <div className="lp-grid" style={{ gridTemplateColumns: 'repeat(auto-fit,minmax(240px,1fr))' }}>
-            {[
-              { icon: '🧭', role: 'CEO', desc: 'Innovation throughput, idea-to-ship conversion, and the ROI of the whole AI investment — one executive picture.' },
-              { icon: '⚙️', role: 'CTO / Engineering', desc: 'DORA four-keys, agent-vs-human productivity, and which AI approach actually merges — from real delivery data.' },
-              { icon: '💰', role: 'CFO / Finance', desc: 'Every token and task costed and attributed ticket → project → initiative, with budgets and cost-per-outcome.' },
-              { icon: '🗂️', role: 'PMO', desc: 'Portfolio rollup, capacity, and delivery forecast across every initiative — with real cost and real outcomes attached.' },
-              { icon: '🛡️', role: 'Security / CISO', desc: 'An immutable, per-action audit trail of everything every agent touched — built for evidence, not screenshots.' },
-              { icon: '👥', role: 'Managers & Teams', desc: 'Throughput, cycle time, rework, and engagement for the blended human-plus-agent workforce on one board.' },
-            ].map((p) => (
+            {(t.raw('home.roles') as RoleDesc[]).map((p, i) => (
               <div key={p.role} className="lp-card">
-                <span className="lp-card-icon">{p.icon}</span>
+                <span className="lp-card-icon">{['🧭', '⚙️', '💰', '🗂️', '🛡️', '👥'][i]}</span>
                 <h3 className="lp-card-title">{p.role}</h3>
                 <p className="lp-card-desc">{p.desc}</p>
               </div>
@@ -644,15 +621,10 @@ export default function LandingPage() {
 
         {/* ── Stats ── */}
         <div className="lp-stats">
-          {[
-            { n: '2B+', l: 'Parameters\nin-browser' },
-            { n: '<30s', l: 'Dataset\ngeneration' },
-            { n: 'WebGPU', l: 'Hardware\naccelerated' },
-            { n: '100%', l: 'Private — runs\nin your browser' },
-          ].map(s => (
-            <div key={s.l} className="lp-stat">
-              <div className="lp-stat-number">{s.n}</div>
-              <div className="lp-stat-label" style={{ whiteSpace: 'pre-line' }}>{s.l}</div>
+          {(t.raw('home.stats') as StatLabel[]).map((s, i) => (
+            <div key={i} className="lp-stat">
+              <div className="lp-stat-number">{['2B+', '<30s', 'WebGPU', '100%'][i]}</div>
+              <div className="lp-stat-label" style={{ whiteSpace: 'pre-line' }}>{s.label}</div>
             </div>
           ))}
         </div>
@@ -661,37 +633,32 @@ export default function LandingPage() {
         <section className="lp-section" style={{ background: 'var(--surface-card-strong)' }}>
           <div className="lp-features">
             <h2 className="section-title">
-              <span className="agentHost-accent">⟩</span> Builderforce vs. Conventional Workflows
+              <span className="agentHost-accent">⟩</span> {t('home.comparisonHeading')}
             </h2>
             <p style={{maxWidth:'none',margin:'0 0 32px',color:'var(--text-secondary)'}}>
-              Purpose‑built for AI agents from the ground up — not another cloud notebook or plugin.
+              {t('home.comparisonLead')}
             </p>
             <div style={{overflowX:'auto'}}>
               <table style={{width:'100%',borderCollapse:'collapse',fontSize:'13px',minWidth:'560px'}}>
                 <thead>
                   <tr>
-                    <th style={{textAlign:'left',padding:'10px 14px',color:'var(--muted)',fontWeight:600,borderBottom:'2px solid var(--border)'}}>Feature</th>
-                    <th style={{textAlign:'center',padding:'10px 14px',color:'var(--accent)',fontWeight:700,borderBottom:'2px solid var(--accent)'}}>Builderforce</th>
-                    <th style={{textAlign:'center',padding:'10px 14px',color:'var(--muted)',fontWeight:600,borderBottom:'2px solid var(--border)'}}>Generic notebooks</th>
-                    <th style={{textAlign:'center',padding:'10px 14px',color:'var(--muted)',fontWeight:600,borderBottom:'2px solid var(--border)'}}>Cloud training</th>
+                    <th style={{textAlign:'left',padding:'10px 14px',color:'var(--muted)',fontWeight:600,borderBottom:'2px solid var(--border)'}}>{t('home.comparisonColFeature')}</th>
+                    <th style={{textAlign:'center',padding:'10px 14px',color:'var(--accent)',fontWeight:700,borderBottom:'2px solid var(--accent)'}}>{t('home.comparisonColBuilderforce')}</th>
+                    <th style={{textAlign:'center',padding:'10px 14px',color:'var(--muted)',fontWeight:600,borderBottom:'2px solid var(--border)'}}>{t('home.comparisonColNotebooks')}</th>
+                    <th style={{textAlign:'center',padding:'10px 14px',color:'var(--muted)',fontWeight:600,borderBottom:'2px solid var(--border)'}}>{t('home.comparisonColCloud')}</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {[
-                    ['In‑browser LoRA training', '✅','❌','⚠️'],
-                    ['Dataset generation wizard', '✅','⚠️','❌'],
-                    ['AI evaluation engine', '✅','❌','❌'],
-                    ['Agent registry & skills', '✅','❌','❌'],
-                    ['Global Workforce marketplace', '✅','❌','❌'],
-                    ['Zero GPU bills', '✅','❌','⚠️'],
-                  ].map((row,i)=>(
+                  {(t.raw('home.comparisonRows') as string[]).map((feature,i)=>{
+                    const marks = [['✅','❌','⚠️'],['✅','⚠️','❌'],['✅','❌','❌'],['✅','❌','❌'],['✅','❌','❌'],['✅','❌','⚠️']][i];
+                    return (
                     <tr key={i} style={{background:i%2===0?'transparent':'var(--surface-2)'}}>
-                      <td style={{padding:'9px 14px',borderBottom:'1px solid var(--border)'}}>{row[0]}</td>
-                      <td style={{textAlign:'center',padding:'9px 14px',borderBottom:'1px solid var(--border)',fontWeight:600,color:'var(--accent)'}}>{row[1]}</td>
-                      <td style={{textAlign:'center',padding:'9px 14px',borderBottom:'1px solid var(--border)',color:'var(--muted)'}}>{row[2]}</td>
-                      <td style={{textAlign:'center',padding:'9px 14px',borderBottom:'1px solid var(--border)',color:'var(--muted)'}}>{row[3]}</td>
+                      <td style={{padding:'9px 14px',borderBottom:'1px solid var(--border)'}}>{feature}</td>
+                      <td style={{textAlign:'center',padding:'9px 14px',borderBottom:'1px solid var(--border)',fontWeight:600,color:'var(--accent)'}}>{marks[0]}</td>
+                      <td style={{textAlign:'center',padding:'9px 14px',borderBottom:'1px solid var(--border)',color:'var(--muted)'}}>{marks[1]}</td>
+                      <td style={{textAlign:'center',padding:'9px 14px',borderBottom:'1px solid var(--border)',color:'var(--muted)'}}>{marks[2]}</td>
                     </tr>
-                  ))}
+                  );})}
                 </tbody>
               </table>
             </div>
@@ -702,13 +669,13 @@ export default function LandingPage() {
         <section className="lp-section">
           <div className="lp-features" style={{textAlign:'center'}}>
             <h2 className="section-title">
-              <span className="agentHost-accent">⟩</span> {COMPARE.teaser.title}
+              <span className="agentHost-accent">⟩</span> {t('compare.teaser.title')}
             </h2>
             <p style={{maxWidth:'none',margin:'0 auto 28px',color:'var(--text-secondary)'}}>
-              {COMPARE.teaser.blurb}
+              {t('compare.teaser.blurb')}
             </p>
             <div className="lp-grid" style={{gap:'14px',gridTemplateColumns:'repeat(auto-fit,minmax(210px,1fr))'}}>
-              {COMPARE.teaser.highlightFeatures.map((f)=>(
+              {(t.raw('compare.teaser.highlightFeatures') as string[]).map((f)=>(
                 <div key={f} className="lp-card" style={{display:'flex',gap:'10px',alignItems:'flex-start',textAlign:'left'}}>
                   <span aria-hidden style={{color:'var(--accent)',fontWeight:700,lineHeight:1.4}}>✅</span>
                   <span style={{fontSize:'0.88rem',color:'var(--text-primary)',lineHeight:1.45}}>{f}</span>
@@ -716,7 +683,7 @@ export default function LandingPage() {
               ))}
             </div>
             <div style={{marginTop:'28px'}}>
-              <Link href="/compare" className="lp-btn-primary">{COMPARE.teaser.ctaLabel} →</Link>
+              <Link href="/compare" className="lp-btn-primary">{t('compare.teaser.ctaLabel')} →</Link>
             </div>
           </div>
         </section>
@@ -725,16 +692,12 @@ export default function LandingPage() {
         <section className="lp-section">
           <div className="lp-features">
             <h2 className="section-title">
-              <span className="agentHost-accent">⟩</span> Up and running in three steps
+              <span className="agentHost-accent">⟩</span> {t('home.stepsHeading')}
             </h2>
             <div className="lp-grid" style={{gap:'24px'}}>
-              {[
-                { num:'01', title:'Create an account', desc:'Sign up with your email and start a free workspace. 14‑day Pro trial, no credit card required.' },
-                { num:'02', title:'Generate a dataset', desc:'Use the wizard to author an instruction‑tuning dataset from a single capability prompt.' },
-                { num:'03', title:'Train & publish', desc:'Run LoRA training in your browser, evaluate results, and publish your agent to the Workforce Registry.' },
-              ].map(s=>(
-                <div key={s.num} className="lp-card" style={{textAlign:'center'}}>
-                  <div style={{fontSize:'2rem',fontWeight:700,color:'var(--accent)',marginBottom:'8px'}}>{s.num}</div>
+              {(t.raw('home.steps') as TitleDesc[]).map((s,i)=>(
+                <div key={i} className="lp-card" style={{textAlign:'center'}}>
+                  <div style={{fontSize:'2rem',fontWeight:700,color:'var(--accent)',marginBottom:'8px'}}>{['01','02','03'][i]}</div>
                   <h3 className="lp-card-title">{s.title}</h3>
                   <p className="lp-card-desc">{s.desc}</p>
                 </div>
@@ -746,12 +709,12 @@ export default function LandingPage() {
         {/* ── Features ── */}
         <section className="lp-features" id="features">
           <h2 className="section-title">
-            <span className="agentHost-accent">⟩</span> Everything your AI workforce can do
+            <span className="agentHost-accent">⟩</span> {t('home.featuresHeading')}
           </h2>
           <div className="lp-grid">
-            {FEATURES.map(f => (
+            {(t.raw('features') as { title: string; longDesc: string }[]).map((f, i) => (
               <div key={f.title} className="lp-card">
-                <span className="lp-card-icon">{f.icon}</span>
+                <span className="lp-card-icon">{FEATURES[i]?.icon}</span>
                 <h3 className="lp-card-title">{f.title}</h3>
                 <p className="lp-card-desc">{f.longDesc}</p>
               </div>
@@ -763,13 +726,10 @@ export default function LandingPage() {
         <section className="lp-section" id="pricing" style={{background:'var(--surface-2)'}}>
           <div className="lp-features">
             <h2 className="section-title">
-              <span className="agentHost-accent">⟩</span> Pricing
+              <span className="agentHost-accent">⟩</span> {t('home.pricingHeading')}
             </h2>
             <div className="lp-grid" style={{gap:'18px',marginTop:'24px'}}>
-              {[
-                { name:'Free', price:'$0', perks:['Evermind model (on-device)','WebGPU training','Workforce browse'] },
-                { name:'Pro', price:'$29/seat', perks:['Unlimited agents','Private models','Priority support'] },
-              ].map(p=>(
+              {(t.raw('home.pricingTeaser') as PricingTeaser[]).map(p=>(
                 <div key={p.name} className="lp-card">
                   <h3 className="lp-card-title">{p.name}</h3>
                   <div style={{fontSize:'1.6rem',fontWeight:700,margin:'12px 0'}}>{p.price}</div>
@@ -786,15 +746,14 @@ export default function LandingPage() {
         <section className="lp-section" id="blog">
           <div className="lp-features">
             <h2 className="section-title">
-              <span className="agentHost-accent">⟩</span> Latest from the blog
+              <span className="agentHost-accent">⟩</span> {t('home.blogHeading')}
             </h2>
             <p style={{maxWidth:'none',width:'100%',margin:'0 auto 32px',color:'var(--text-secondary)',textAlign:'center'}}>
-              Deep dives, tutorials, and best practices for building and deploying
-              AI agents — from WebGPU LoRA training to multi-agent orchestration.
+              {t('home.blogLead')}
             </p>
             <ArticleCardGrid posts={BLOG_POSTS} limit={3} />
             <div style={{marginTop:'32px',textAlign:'center'}}>
-              <Link href="/blog" className="lp-btn-secondary">📝 Read all articles →</Link>
+              <Link href="/blog" className="lp-btn-secondary">📝 {t('home.blogReadAll')} →</Link>
             </div>
           </div>
         </section>
@@ -803,9 +762,9 @@ export default function LandingPage() {
         <section className="lp-section">
           <div className="lp-features" style={{maxWidth:'700px',margin:'0 auto'}}>
             <h2 className="section-title">
-              <span className="agentHost-accent">⟩</span> Stay in the loop
+              <span className="agentHost-accent">⟩</span> {t('home.newsletterHeading')}
             </h2>
-            <p style={{color:'var(--text-secondary)',marginBottom:'24px'}}>Get updates on new features, agents, and platform improvements. No spam, unsubscribe anytime.</p>
+            <p style={{color:'var(--text-secondary)',marginBottom:'24px'}}>{t('home.newsletterLead')}</p>
             <form onSubmit={handleNewsletterSubmit} style={{display:'flex',gap:'6px',flexWrap:'wrap',justifyContent:'center'}}>
               <input
                 type="email"
@@ -821,11 +780,11 @@ export default function LandingPage() {
                 disabled={nlStatus==='sending' || nlStatus==='ok'}
                 className="lp-btn-primary"
               >
-                {nlStatus==='sending'? 'Subscribing…' : nlStatus==='ok'? 'Subscribed' : 'Subscribe'}
+                {nlStatus==='sending'? t('home.newsletterSubscribing') : nlStatus==='ok'? t('home.newsletterSubscribed') : t('home.newsletterSubscribe')}
               </button>
             </form>
-            {nlStatus==='ok' && <p style={{color:'var(--accent)',marginTop:'12px'}}>Subscribed ✓</p>}
-            {nlStatus==='error' && <p style={{color:'var(--error)',marginTop:'12px'}}>Unable to subscribe. Try again.</p>}
+            {nlStatus==='ok' && <p style={{color:'var(--accent)',marginTop:'12px'}}>{t('home.newsletterSubscribedConfirm')}</p>}
+            {nlStatus==='error' && <p style={{color:'var(--error)',marginTop:'12px'}}>{t('home.newsletterError')}</p>}
           </div>
         </section>
 
@@ -833,9 +792,9 @@ export default function LandingPage() {
         <section className="lp-section" style={{background:'var(--surface-card-strong)'}}>
           <div className="lp-features" style={{maxWidth:'800px',margin:'0 auto'}}>
             <h2 className="section-title">
-              <span className="agentHost-accent">⟩</span> Frequently asked questions
+              <span className="agentHost-accent">⟩</span> {t('home.faqHeading')}
             </h2>
-            {HOMEPAGE_FAQ.map((faq) => (
+            {(t.raw('home.faq') as FaqItem[]).map((faq) => (
               <details key={faq.question}><summary>{faq.question}</summary>
                 <p>{faq.answer}</p>
               </details>
@@ -846,15 +805,11 @@ export default function LandingPage() {
         {/* ── Bottom CTA ── */}
         <section className="lp-cta-section">
           <div className="lp-cta-box">
-            <h2 className="lp-cta-title">Put your AI CTO to work</h2>
-            <p className="lp-cta-desc">
-              Describe what you need, sign in, and your AI brain gets to work —
-              building agents, connecting your systems, and governing every
-              action. No credit card required.
-            </p>
+            <h2 className="lp-cta-title">{t('home.ctaTitle')}</h2>
+            <p className="lp-cta-desc">{t('home.ctaDesc')}</p>
             <div className="lp-actions">
-              <Link href="/register" className="lp-btn-primary">⚡ Get Started Free</Link>
-              <Link href="/marketplace" className="lp-btn-secondary">👀 See Live Agents</Link>
+              <Link href="/register" className="lp-btn-primary">⚡ {t('marketing.ctaGetStartedFree')}</Link>
+              <Link href="/marketplace" className="lp-btn-secondary">👀 {t('home.ctaSeeLiveAgents')}</Link>
             </div>
           </div>
         </section>

@@ -8,6 +8,7 @@ import { auditEvents, boards, projects, specs, swimlanes, swimlaneAgentAssignmen
 import { getOrSetCached, getCacheVersion, bumpCacheVersion } from '../../infrastructure/cache/readThroughCache';
 import { addDependency, deleteDependency, listProjectDependencies, isDepType } from '../../application/task/taskDependencies';
 import { invalidateCompletedByAssignee } from './reportRoutes';
+import { invalidateProjectsList } from './projectRoutes';
 import { AuditEventType } from '../../domain/shared/types';
 import type { Db } from '../../infrastructure/database/connection';
 import { resolveDefaultRepoForTask } from '../../application/repos/resolveDefaultRepo';
@@ -497,6 +498,8 @@ export function createTaskRoutes(taskService: TaskService, db: Db, runtimeServic
     const epic = await taskService.decomposeEpic(id, body.children);
     const children = (await taskService.getEpicTree(id)).children;
     await bumpTreeVersion(c.env as Env, epic.toPlain().projectId);
+    // New child tasks change the project's task counts → bust the projects-list cache.
+    await invalidateProjectsList(c.env as Env, c.get('tenantId')).catch(() => {});
     return c.json({ epic: epic.toPlain(), children: children.map(t => t.toPlain()) }, 201);
   });
 
@@ -520,6 +523,8 @@ export function createTaskRoutes(taskService: TaskService, db: Db, runtimeServic
     const task = await taskService.createTask(body, c.get('tenantId'));
     const created = task.toPlain();
     await bumpTreeVersion(c.env as Env, created.projectId);
+    // A new task changes the project's task counts/dates → bust the projects-list cache.
+    await invalidateProjectsList(c.env as Env, c.get('tenantId')).catch(() => {});
     // Push the new card to everyone watching this project's live board.
     c.executionCtx.waitUntil(broadcastProjectChanged(c.env?.SESSION_ROOM, created.projectId));
 
@@ -565,6 +570,8 @@ export function createTaskRoutes(taskService: TaskService, db: Db, runtimeServic
     const task = await taskService.updateTask(id, body);
     // A PATCH can change parent/sprint/title/status — any of which reshapes a tree.
     await bumpTreeVersion(c.env as Env, task.toPlain().projectId);
+    // status/dueDate/startDate/archived all feed the projects-list aggregates → bust it.
+    await invalidateProjectsList(c.env as Env, c.get('tenantId')).catch(() => {});
     // Live board: push the edit (status move, reassignment, field change) to every
     // client viewing this project so cards/lane chips update without a reload. The
     // auto-run queued below (lane entry) lands its own execution-lifecycle push, so
@@ -643,6 +650,8 @@ export function createTaskRoutes(taskService: TaskService, db: Db, runtimeServic
     const task = await taskService.moveTask(id, body.projectId, c.get('tenantId'));
     await bumpTreeVersion(c.env as Env, before?.projectId);
     await bumpTreeVersion(c.env as Env, body.projectId);
+    // The task count shifts between two projects → bust the projects-list cache.
+    await invalidateProjectsList(c.env as Env, c.get('tenantId')).catch(() => {});
     // The card leaves one project's board and joins another's — push both.
     c.executionCtx.waitUntil(broadcastProjectChanged(c.env?.SESSION_ROOM, before?.projectId));
     c.executionCtx.waitUntil(broadcastProjectChanged(c.env?.SESSION_ROOM, body.projectId));
@@ -670,6 +679,8 @@ export function createTaskRoutes(taskService: TaskService, db: Db, runtimeServic
     if (!before) return c.json({ error: 'Task not found' }, 404);
     await taskService.deleteTask(id);
     await bumpTreeVersion(c.env as Env, before?.projectId);
+    // Deleting a task changes the project's task counts → bust the projects-list cache.
+    await invalidateProjectsList(c.env as Env, c.get('tenantId')).catch(() => {});
     // Drop the card from every client viewing this project's live board.
     c.executionCtx.waitUntil(broadcastProjectChanged(c.env?.SESSION_ROOM, before?.projectId));
     return c.body(null, 204);

@@ -51,7 +51,7 @@ describe('listBuiltinTools', () => {
     expect(names).toContain('builtin_boards_list');
     expect(names).toContain('builtin_cron_list');
     for (const t of tools) {
-      expect(t.name).toMatch(/^builtin_[a-z_]+$/); // flat, no dots
+      expect(t.name).toMatch(/^builtin_[a-z0-9_]+$/); // flat, no dots
       expect(t.parameters).toMatchObject({ type: 'object' });
       expect(t.description).toBeTruthy();
     }

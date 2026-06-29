@@ -1,24 +1,22 @@
 import type { Metadata } from 'next';
+import { getTranslations } from 'next-intl/server';
+import { pageMetadata } from '@/lib/seo';
 import BlogPageClient from './BlogPageClient';
 
-export const metadata: Metadata = {
-  title: 'Blog — AI Agent Guides, Tutorials & Tool Comparisons',
-  description:
-    'Deep dives, tutorials, and honest comparisons for building and deploying AI agents — autonomous Kanban execution, semantic caching, WebGPU LoRA training, multi-agent orchestration, and how Builderforce.ai stacks up against Copilot, Cursor, Claude Code and Devin.',
-  alternates: { canonical: '/blog' },
-  openGraph: {
-    title: 'Builderforce Blog — AI Agent Guides & Tool Comparisons',
-    description:
-      'Tutorials, deep dives, and head-to-head comparisons: multi-agent orchestration, semantic caching, WebGPU LoRA training, and Builderforce.ai vs Copilot, Cursor, Claude Code and Devin.',
-    url: 'https://builderforce.ai/blog',
-    type: 'website',
-  },
-  twitter: {
-    title: 'Builderforce Blog — AI Agent Guides & Tool Comparisons',
-    description:
-      'Multi-agent orchestration, semantic caching, WebGPU LoRA training, and Builderforce.ai vs Copilot, Cursor, Claude Code and Devin.',
-  },
-};
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations('blog.seo');
+  const base = pageMetadata({
+    title: t('title'),
+    description: t('description'),
+    path: '/blog',
+    ogTitle: t('ogTitle'),
+  });
+  return {
+    ...base,
+    openGraph: { ...base.openGraph, description: t('ogDescription') },
+    twitter: { ...base.twitter, title: t('ogTitle'), description: t('twitterDescription') },
+  };
+}
 
 export default function BlogPage() {
   return <BlogPageClient />;

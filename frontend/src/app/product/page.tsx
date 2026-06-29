@@ -1,25 +1,35 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
+import { getTranslations } from 'next-intl/server';
 import JsonLd from '@/components/JsonLd';
 import RelatedArticles from '@/components/blog/RelatedArticles';
 import { productSchema } from '@/lib/structured-data';
 import { pageMetadata } from '@/lib/seo';
-import {
-  STATS,
-  PRODUCT_SECTIONS,
-} from '@/lib/content';
+import { STATS, PRODUCT_SECTIONS } from '@/lib/content';
 
 export const runtime = 'edge';
 
-export const metadata: Metadata = pageMetadata({
-  title: 'Product — Build, Train, Orchestrate & Govern Your AI Workforce',
-  description:
-    'Tour everything Builderforce.ai ships: in-browser WebGPU LoRA training, an AI evaluation engine, a skills & personas marketplace, workflow orchestration, a workforce mesh, and full approvals + audit. See the whole platform before you sign up.',
-  path: '/product',
-  ogTitle: 'The Builderforce.ai Platform — Build, Train, Orchestrate & Govern',
-});
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations('product.seo');
+  return pageMetadata({
+    title: t('title'),
+    description: t('description'),
+    path: '/product',
+    ogTitle: t('ogTitle'),
+  });
+}
 
-export default function ProductPage() {
+type ProductSection = { id: string; title: string; blurb: string; surfaces: { title: string; desc: string }[] };
+
+// Visible copy from the `product` catalog (localized in all 5 locales).
+// content.ts STATS/PRODUCT_SECTIONS stays canonical English for the JSON-LD
+// (productSchema); stat VALUES, section/surface ICONS and hrefs are paired from
+// content by index, so the catalog arrays stay length/order-aligned with it.
+export default async function ProductPage() {
+  const t = await getTranslations();
+  const statLabels = t.raw('product.statLabels') as string[];
+  const sections = t.raw('product.sections') as ProductSection[];
+
   return (
     <>
       <JsonLd data={productSchema()} />
@@ -98,27 +108,22 @@ export default function ProductPage() {
       <div className="pp">
         <main>
           <section className="pp-hero">
-            <div className="pp-eyebrow">The Platform</div>
-            <h1 className="pp-title">Everything your AI workforce needs, in one place</h1>
-            <p className="pp-sub">
-              Builderforce.ai is your AI CTO, CIO &amp; Security Officer. It builds and trains
-              your agents, orchestrates them across a mesh of hosts, and governs every action
-              with approvals and an audit trail. Here&apos;s the whole platform — explore any
-              part before you sign up.
-            </p>
+            <div className="pp-eyebrow">{t('product.eyebrow')}</div>
+            <h1 className="pp-title">{t('product.title')}</h1>
+            <p className="pp-sub">{t('product.sub')}</p>
           </section>
 
           <div className="pp-stats">
-            {STATS.marketing.map((s) => (
-              <div key={s.label} className="pp-stat">
-                <div className="pp-stat-n">{s.value}</div>
-                <div className="pp-stat-l">{s.label}</div>
+            {statLabels.map((label, i) => (
+              <div key={i} className="pp-stat">
+                <div className="pp-stat-n">{STATS.marketing[i]?.value}</div>
+                <div className="pp-stat-l">{label}</div>
               </div>
             ))}
           </div>
 
           <div className="pp-sections">
-            {PRODUCT_SECTIONS.map((section) => (
+            {sections.map((section, si) => (
               <section key={section.id} className="pp-section" id={section.id}>
                 <div className="pp-section-head">
                   <h2 className="pp-section-title">
@@ -128,12 +133,12 @@ export default function ProductPage() {
                   <p className="pp-section-blurb">{section.blurb}</p>
                 </div>
                 <div className="pp-grid">
-                  {section.surfaces.map((surface) => (
-                    <Link key={surface.title} href={surface.href} className="pp-card">
-                      <span className="pp-card-icon">{surface.icon}</span>
+                  {section.surfaces.map((surface, fi) => (
+                    <Link key={surface.title} href={PRODUCT_SECTIONS[si]?.surfaces[fi]?.href ?? '#'} className="pp-card">
+                      <span className="pp-card-icon">{PRODUCT_SECTIONS[si]?.surfaces[fi]?.icon}</span>
                       <h3 className="pp-card-title">{surface.title}</h3>
                       <p className="pp-card-desc">{surface.desc}</p>
-                      <span className="pp-card-cta">Explore →</span>
+                      <span className="pp-card-cta">{t('product.exploreCta')} →</span>
                     </Link>
                   ))}
                 </div>
@@ -143,19 +148,16 @@ export default function ProductPage() {
 
           <section className="pp-cta">
             <div className="pp-cta-box">
-              <h2 className="pp-cta-title">Put your AI workforce to work</h2>
-              <p className="pp-cta-desc">
-                Start free — no credit card required. Build, train, and deploy your first
-                agent in minutes, entirely in your browser.
-              </p>
+              <h2 className="pp-cta-title">{t('product.ctaTitle')}</h2>
+              <p className="pp-cta-desc">{t('product.ctaDesc')}</p>
               <div className="pp-actions">
-                <Link href="/register" className="pp-btn-primary">⚡ Get Started Free</Link>
-                <Link href="/marketplace" className="pp-btn-secondary">👀 Browse the Workforce</Link>
+                <Link href="/register" className="pp-btn-primary">⚡ {t('marketing.ctaGetStartedFree')}</Link>
+                <Link href="/marketplace" className="pp-btn-secondary">👀 {t('product.ctaBrowseWorkforce')}</Link>
               </div>
             </div>
           </section>
 
-          <RelatedArticles surface="product" heading="Go deeper" />
+          <RelatedArticles surface="product" heading={t('product.relatedHeading')} />
         </main>
         {/* Footer is the canonical <AppFooter variant="full"> rendered by PublicShell. */}
       </div>

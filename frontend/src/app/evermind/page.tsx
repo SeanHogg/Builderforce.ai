@@ -1,32 +1,42 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
+import { getTranslations } from 'next-intl/server';
 import JsonLd from '@/components/JsonLd';
 import RelatedArticles from '@/components/blog/RelatedArticles';
 import BrainBackdrop from '@/components/BrainBackdrop';
 import ModelApiSamples from '@/components/ModelApiSamples';
 import { evermindSchema } from '@/lib/structured-data';
 import { pageMetadata } from '@/lib/seo';
-import { EVERMIND, EVERMIND_FAQ } from '@/lib/content';
+import { EVERMIND } from '@/lib/content';
 
 export const runtime = 'edge';
 
-export const metadata: Metadata = pageMetadata({
-  title: EVERMIND.seo.title,
-  description: EVERMIND.seo.description,
-  path: '/evermind',
-  ogTitle: EVERMIND.seo.ogTitle,
-});
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations('evermind.seo');
+  return pageMetadata({
+    title: t('title'),
+    description: t('description'),
+    path: '/evermind',
+    ogTitle: t('ogTitle'),
+  });
+}
 
-/** Frozen-frontier-model vs Evermind contrast — the core GEO/SEO argument. */
-const CONTRAST: { aspect: string; frozen: string; evermind: string }[] = [
-  { aspect: 'Knowledge updates', frozen: 'Frozen at training time — needs a retrain, fine-tune, RAG patch, or hand-edit', evermind: 'Written straight through — an update replaces what came before' },
-  { aspect: 'Reconciliation', frozen: 'Stale and fresh facts coexist; something must merge them later', evermind: 'Upsert-by-key + invalidate — there is never a reconcile step' },
-  { aspect: 'Currency', frozen: 'Goes out of date the moment it ships', evermind: 'Never stale — updates land the moment they happen' },
-  { aspect: 'Footprint', frozen: 'Large; runs in the vendor cloud', evermind: 'Runs on WebGPU — in the browser, on-device, or inside every agent' },
-  { aspect: 'Ownership', frozen: 'Third-party model, a knowledge cutoff you do not control', evermind: 'Yours end to end — open packages, your data' },
-];
+type Pillar = { title: string; desc: string };
+type Edge = { label: string; desc: string };
+type ContrastRow = { aspect: string; frozen: string; evermind: string };
+type Faq = { question: string; answer: string };
 
-export default function EvermindPage() {
+export default async function EvermindPage() {
+  const t = await getTranslations();
+  // Visible copy is sourced from the `evermind` catalog (single source for UI,
+  // localized in all 5 locales). `content.ts` EVERMIND stays canonical English
+  // for the crawler-facing JSON-LD (evermindSchema) — pillar ICONS are paired
+  // from it by index, so the two arrays must stay the same length and order.
+  const pillars = t.raw('evermind.architecture.pillars') as Pillar[];
+  const edges = t.raw('evermind.edges.items') as Edge[];
+  const contrast = t.raw('evermind.contrast.rows') as ContrastRow[];
+  const faq = t.raw('evermind.faq') as Faq[];
+
   return (
     <>
       <JsonLd data={evermindSchema()} />
@@ -140,54 +150,48 @@ export default function EvermindPage() {
           <section className="ev-hero">
             <BrainBackdrop />
             <div className="ev-hero-content">
-              <span className="ev-eyebrow">{EVERMIND.eyebrow}</span>
+              <span className="ev-eyebrow">{t('evermind.eyebrow')}</span>
               <h1 className="ev-title">
-                {EVERMIND.name} — the <span className="ev-grad">Builderforce.ai LLM</span>
+                {t.rich('evermind.title', { grad: (c) => <span className="ev-grad">{c}</span> })}
               </h1>
               {/* One clean subline — the full Write-Through Cognition blurb lives
                   in the section directly below, so the hero stays readable over
                   the brain animation (bolt.new-clean). */}
-              <p className="ev-sub">{EVERMIND.tagline}.</p>
+              <p className="ev-sub">{t('evermind.tagline')}.</p>
               <div className="ev-actions">
-                <Link href="/register" className="ev-btn-primary">⚡ Start building free</Link>
-                <Link href="/product" className="ev-btn-secondary">Tour the platform →</Link>
+                <Link href="/register" className="ev-btn-primary">⚡ {t('marketing.ctaStartBuildingFree')}</Link>
+                <Link href="/product" className="ev-btn-secondary">{t('marketing.ctaTourPlatform')} →</Link>
               </div>
             </div>
           </section>
 
           {/* ── Governing law ── */}
           <section className="ev-section">
-            <h2 className="ev-h2"><span className="ev-accent">⟩</span> Write-Through Cognition</h2>
-            <p className="ev-lead">
-              Every frozen frontier model shares one flaw: its knowledge is fixed at training time, and every
-              update is a bolt-on. Evermind is governed by a single principle that removes the bolt-on entirely.
-            </p>
+            <h2 className="ev-h2"><span className="ev-accent">⟩</span> {t('evermind.law.heading')}</h2>
+            <p className="ev-lead">{t('evermind.law.lead')}</p>
             <div className="ev-law">
-              <p className="ev-law-quote">{EVERMIND.quotable}</p>
+              <p className="ev-law-quote">{t('evermind.law.quote')}</p>
             </div>
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               className="ev-figure"
               src="/blog/aw-write-through.svg"
-              alt="Conventional append-then-reconcile knowledge vs Evermind's upsert-by-key and invalidate"
+              alt={t('evermind.alt.writeThrough')}
               loading="lazy"
               width={1600}
               height={900}
             />
-            <p className="ev-figcap">Conventional models append and reconcile; Evermind upserts by key and invalidates — there is no reconcile step.</p>
+            <p className="ev-figcap">{t('evermind.law.figcap')}</p>
           </section>
 
           {/* ── Architecture (the key aspects the brain animation depicts) ── */}
           <section className="ev-section">
-            <h2 className="ev-h2"><span className="ev-accent">⟩</span> One brain, three cooperating layers</h2>
-            <p className="ev-lead">
-              Evermind isn&apos;t a monolith. It&apos;s three layers working together — the same three the hero
-              animation lights up as information travels through it.
-            </p>
+            <h2 className="ev-h2"><span className="ev-accent">⟩</span> {t('evermind.architecture.heading')}</h2>
+            <p className="ev-lead">{t('evermind.architecture.lead')}</p>
             <div className="ev-grid">
-              {EVERMIND.pillars.map((p) => (
+              {pillars.map((p, i) => (
                 <div key={p.title} className="ev-card">
-                  <span className="ev-card-icon">{p.icon}</span>
+                  <span className="ev-card-icon">{EVERMIND.pillars[i]?.icon}</span>
                   <h3 className="ev-card-title">{p.title}</h3>
                   <p className="ev-card-desc">{p.desc}</p>
                 </div>
@@ -197,42 +201,39 @@ export default function EvermindPage() {
             <img
               className="ev-figure"
               src="/blog/aw-architecture.svg"
-              alt="Evermind's three layers, all its own: a generator cortex, a self-updating write-through hippocampus, and a trainable limbic layer"
+              alt={t('evermind.alt.architecture')}
               loading="lazy"
               width={1600}
               height={900}
             />
-            <p className="ev-figcap">One brain, all yours: Evermind&apos;s own generator as the cortex, its write-through hippocampus for memory, and a limbic layer for dynamics. (External frontier models stay routable when you want them — just not required.)</p>
+            <p className="ev-figcap">{t('evermind.architecture.figcap')}</p>
           </section>
 
           {/* ── Evermind vs a frozen model ── */}
           <section className="ev-section">
-            <h2 className="ev-h2"><span className="ev-accent">⟩</span> Evermind vs. a frozen frontier model</h2>
-            <p className="ev-lead">
-              Evermind isn&apos;t built to out-parameter the biggest models. It wins on the axes their
-              architecture structurally trades away.
-            </p>
+            <h2 className="ev-h2"><span className="ev-accent">⟩</span> {t('evermind.contrast.heading')}</h2>
+            <p className="ev-lead">{t('evermind.contrast.lead')}</p>
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               className="ev-figure"
               src="/blog/aw-frozen-vs-evermind.svg"
-              alt="A frozen frontier model versus Evermind across five axes: knowledge updates, reconciliation, currency, footprint, and ownership"
+              alt={t('evermind.alt.frozenVsEvermind')}
               loading="lazy"
               width={1600}
               height={900}
             />
-            <p className="ev-figcap">The whole argument in one frame — a frozen model needs a bolt-on for every update; Evermind inverts all five axes.</p>
+            <p className="ev-figcap">{t('evermind.contrast.figcap')}</p>
             <div className="ev-table-wrap">
               <table className="ev-table">
                 <thead>
                   <tr>
-                    <th>Aspect</th>
-                    <th className="ev-col-frozen">Frozen frontier model</th>
-                    <th className="ev-col-evermind">Evermind</th>
+                    <th>{t('evermind.contrast.colAspect')}</th>
+                    <th className="ev-col-frozen">{t('evermind.contrast.colFrozen')}</th>
+                    <th className="ev-col-evermind">{t('evermind.contrast.colEvermind')}</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {CONTRAST.map((row) => (
+                  {contrast.map((row) => (
                     <tr key={row.aspect}>
                       <td className="ev-aspect">{row.aspect}</td>
                       <td>{row.frozen}</td>
@@ -246,9 +247,9 @@ export default function EvermindPage() {
 
           {/* ── Why it wins ── */}
           <section className="ev-section">
-            <h2 className="ev-h2"><span className="ev-accent">⟩</span> Why it wins — currency, footprint, ownership</h2>
+            <h2 className="ev-h2"><span className="ev-accent">⟩</span> {t('evermind.edges.heading')}</h2>
             <div className="ev-edges">
-              {EVERMIND.edges.map((e) => (
+              {edges.map((e) => (
                 <div key={e.label} className="ev-edge">
                   <span className="ev-edge-label">{e.label}</span>
                   <span className="ev-edge-desc">{e.desc}</span>
@@ -259,52 +260,32 @@ export default function EvermindPage() {
             <img
               className="ev-figure"
               src="/blog/aw-three-edges.svg"
-              alt="Currency, footprint, and ownership — the three edges that decide an enterprise rollout"
+              alt={t('evermind.alt.threeEdges')}
               loading="lazy"
               width={1600}
               height={900}
             />
-            <p className="ev-figcap">Scale is a vendor&apos;s moat. Currency, footprint, and ownership are yours.</p>
+            <p className="ev-figcap">{t('evermind.edges.figcap')}</p>
           </section>
 
           {/* ── Lifecycle: train → validate → publish → call ── */}
           <section className="ev-section">
-            <h2 className="ev-h2"><span className="ev-accent">⟩</span> From training to a callable model — in minutes</h2>
-            <p className="ev-lead">
-              Train a model in the browser, prove it works with a live API call, publish it to your Workforce
-              Registry, then call it from anywhere. No GPU bill, no deploy step, no waiting.
-            </p>
+            <h2 className="ev-h2"><span className="ev-accent">⟩</span> {t('evermind.lifecycle.heading')}</h2>
+            <p className="ev-lead">{t('evermind.lifecycle.lead')}</p>
             <div className="ev-steps">
-              <div className="ev-step">
-                <h3 className="ev-step-title">Train</h3>
-                <p className="ev-step-desc">Fine-tune in-browser on WebGPU — LoRA adapters plus a persistent memory snapshot. Nothing leaves your machine.</p>
-              </div>
-              <div className="ev-step">
-                <h3 className="ev-step-title">Benchmark</h3>
-                <p className="ev-step-desc">Score the model on a held-out slice on-device — perplexity, next-token accuracy, and throughput — and A/B it against the prior checkpoint. Publish on evidence.</p>
-              </div>
-              <div className="ev-step">
-                <h3 className="ev-step-title">Validate via API</h3>
-                <p className="ev-step-desc">Before publishing, run a live test call against the candidate model. Publishing unlocks only once it actually responds.</p>
-              </div>
-              <div className="ev-step">
-                <h3 className="ev-step-title">Publish</h3>
-                <p className="ev-step-desc">One click registers the model in your Workforce Registry, where your team and your own agents can hire it.</p>
-              </div>
-              <div className="ev-step">
-                <h3 className="ev-step-title">Call</h3>
-                <p className="ev-step-desc">Invoke it over HTTP with the OpenAI standard or the dedicated model endpoint — from code, CI, or another agent.</p>
-              </div>
+              {(t.raw('evermind.lifecycle.steps') as Pillar[]).map((s) => (
+                <div key={s.title} className="ev-step">
+                  <h3 className="ev-step-title">{s.title}</h3>
+                  <p className="ev-step-desc">{s.desc}</p>
+                </div>
+              ))}
             </div>
           </section>
 
           {/* ── Call it over the API ── */}
           <section className="ev-section">
-            <h2 className="ev-h2"><span className="ev-accent">⟩</span> Call your model over the API</h2>
-            <p className="ev-lead">
-              Your published model speaks the OpenAI standard, so the official SDKs work by pointing them at the
-              gateway — and there&apos;s a dedicated endpoint for calling your model by id. Same chat shape either way.
-            </p>
+            <h2 className="ev-h2"><span className="ev-accent">⟩</span> {t('evermind.api.heading')}</h2>
+            <p className="ev-lead">{t('evermind.api.lead')}</p>
             <div className="ev-api">
               <ModelApiSamples />
             </div>
@@ -312,46 +293,42 @@ export default function EvermindPage() {
 
           {/* ── FAQ (GEO) ── */}
           <section className="ev-section ev-faq">
-            <h2 className="ev-h2"><span className="ev-accent">⟩</span> Evermind FAQ</h2>
-            {EVERMIND_FAQ.map((faq) => (
-              <details key={faq.question}>
-                <summary>{faq.question}</summary>
-                <p>{faq.answer}</p>
+            <h2 className="ev-h2"><span className="ev-accent">⟩</span> {t('evermind.faqHeading')}</h2>
+            {faq.map((item) => (
+              <details key={item.question}>
+                <summary>{item.question}</summary>
+                <p>{item.answer}</p>
               </details>
             ))}
           </section>
 
           {/* ── The adoption case: workforce + owned stack ── */}
           <section className="ev-section">
-            <h2 className="ev-h2"><span className="ev-accent">⟩</span> What adopting Evermind looks like</h2>
-            <p className="ev-lead">
-              Adopting an agentic workforce isn&apos;t a rip-and-replace. Humans and AI agents sit on the same
-              board, assigned and tracked the same way — and every agent runs on a model you own, that never
-              goes stale.
-            </p>
+            <h2 className="ev-h2"><span className="ev-accent">⟩</span> {t('evermind.adoption.heading')}</h2>
+            <p className="ev-lead">{t('evermind.adoption.lead')}</p>
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               className="ev-figure"
               src="/blog/aw-workforce.svg"
-              alt="Humans and AI agents on one Kanban board, orchestrated by Builderforce.ai — the same board, a bigger team"
+              alt={t('evermind.alt.workforce')}
               loading="lazy"
               width={1600}
               height={900}
             />
-            <p className="ev-figcap">The same board, a bigger team — orchestrated, metered, and governed by Builderforce.ai.</p>
+            <p className="ev-figcap">{t('evermind.adoption.figcapBoard')}</p>
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               className="ev-figure"
               src="/blog/aw-platform-stack.svg"
-              alt="One owned stack: Evermind at the base, the agent runtime, Builderforce.ai orchestration, and the surfaces your team already uses"
+              alt={t('evermind.alt.platformStack')}
               loading="lazy"
               width={1600}
               height={900}
             />
-            <p className="ev-figcap">One owned stack, from the brain to the editor — Evermind, the agent runtime, orchestration, and your surfaces.</p>
+            <p className="ev-figcap">{t('evermind.adoption.figcapStack')}</p>
             <div className="ev-actions" style={{ marginTop: 22 }}>
               <Link href="/blog/transitioning-to-an-agentic-workforce" className="ev-btn-secondary">
-                Read: Transitioning to an Agentic Workforce →
+                {t('evermind.adoption.readLink')}
               </Link>
             </div>
           </section>
@@ -359,19 +336,16 @@ export default function EvermindPage() {
           {/* ── CTA ── */}
           <section className="ev-cta">
             <div className="ev-cta-box">
-              <h2 className="ev-cta-title">Build on a model that never goes stale</h2>
-              <p className="ev-cta-desc">
-                Start free — no credit card required. Put Evermind and your AI workforce to work entirely
-                in your browser.
-              </p>
+              <h2 className="ev-cta-title">{t('evermind.cta.title')}</h2>
+              <p className="ev-cta-desc">{t('evermind.cta.desc')}</p>
               <div className="ev-actions" style={{ justifyContent: 'center' }}>
-                <Link href="/register" className="ev-btn-primary">⚡ Get Started Free</Link>
-                <Link href="/pricing" className="ev-btn-secondary">See pricing →</Link>
+                <Link href="/register" className="ev-btn-primary">⚡ {t('marketing.ctaGetStartedFree')}</Link>
+                <Link href="/pricing" className="ev-btn-secondary">{t('marketing.ctaSeePricing')} →</Link>
               </div>
             </div>
           </section>
 
-          <RelatedArticles surface="evermind" heading="Go deeper" />
+          <RelatedArticles surface="evermind" heading={t('evermind.relatedHeading')} />
         </main>
         {/* Footer is the canonical <AppFooter variant="full"> rendered by PublicShell. */}
       </div>

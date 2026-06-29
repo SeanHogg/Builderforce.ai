@@ -147,6 +147,30 @@ describe('OKRs / PMO live in their own tables, not the task board', () => {
   });
 });
 
+describe('catalog flip — excludeToolKeys drops catalog-owned caps (single source)', () => {
+  it('drops excluded capabilities and their Tier-1 promotions, keeps the rest + navigation', () => {
+    const navigate = vi.fn();
+    const names = buildPlatformActions({ navigate, getTenantId: () => 7, excludeToolKeys: new Set(['tasks.create', 'tasks.list']) }).map((a) => a.name);
+    expect(names).not.toContain('create_task'); // promotion of an excluded cap is skipped (no throw)
+    expect(names).not.toContain('list_tasks');
+    expect(names).toContain('create_project'); // un-excluded core still promoted
+    expect(names).toContain('navigate_to'); // client-local action always present
+  });
+
+  it('does not reach an excluded capability through the Tier-2 dispatcher', async () => {
+    const navigate = vi.fn();
+    const list = buildPlatformActions({ navigate, getTenantId: () => 7, excludeToolKeys: new Set(['tasks.create']) }).find((a) => a.name === 'list_platform_capabilities')!;
+    const res = (await list.run({ domain: 'tasks' })) as { capabilities: Array<{ method: string }> };
+    expect(res.capabilities.some((c) => c.method === 'create')).toBe(false);
+    expect(res.capabilities.some((c) => c.method === 'list')).toBe(true); // un-excluded sibling stays
+  });
+
+  it('no exclude set = full manifest (back-compat)', () => {
+    const names = buildPlatformActions(makeCtx().ctx).map((a) => a.name);
+    expect(names).toContain('create_task');
+  });
+});
+
 describe('navigate_to', () => {
   it('resolves a static page and calls navigate', async () => {
     const { ctx, navigate } = makeCtx();

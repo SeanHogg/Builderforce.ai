@@ -2,14 +2,13 @@ import type { Metadata } from 'next';
 import { Fragment } from 'react';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
+import { getTranslations } from 'next-intl/server';
 import JsonLd from '@/components/JsonLd';
 import RelatedArticles from '@/components/blog/RelatedArticles';
 import { pageMetadata } from '@/lib/seo';
 import { competitorCompareSchema } from '@/lib/structured-data';
 import {
   COMPETITORS,
-  COMPETITIVE_COMPARISON,
-  COMPARE_FAQ,
   COMPETITOR_SEO,
   COMPETITOR_SLUG_TO_KEY,
 } from '@/lib/content';
@@ -20,12 +19,18 @@ export function generateStaticParams() {
   return Object.values(COMPETITOR_SEO).map((c) => ({ competitor: c.slug }));
 }
 
+type CompareCategory = { id: string; title: string; blurb: string; rows: { feature: string; note?: string; values: Record<string, string> }[] };
+type CompareFaq = { question: string; answer: string };
+
+// Resolve the URL slug to its stable key + canonical-English SEO record
+// (content.ts COMPETITOR_SEO drives JSON-LD + routing); the visible copy is
+// pulled from the localized `compare` catalog by key.
 function resolve(slug: string) {
   const key = COMPETITOR_SLUG_TO_KEY[slug];
   if (!key) return null;
   const seo = COMPETITOR_SEO[key];
-  const col = COMPETITORS.find((c) => c.key === key);
-  return seo && col ? { key, seo, label: col.label } : null;
+  const hasCol = COMPETITORS.some((c) => c.key === key);
+  return seo && hasCol ? { key, seo } : null;
 }
 
 export async function generateMetadata({
@@ -36,11 +41,13 @@ export async function generateMetadata({
   const { competitor } = await params;
   const hit = resolve(competitor);
   if (!hit) return { title: 'Comparison Not Found' };
+  const t = await getTranslations('compare');
+  const vs = t('leaf.vsLabel', { name: hit.seo.name });
   return pageMetadata({
-    title: `Builderforce.ai vs ${hit.seo.name}: Self-Hosted Multi-Agent Alternative | Builderforce.ai`,
-    description: hit.seo.summary,
+    title: `${vs} — ${t(`competitors.${hit.key}.tagline`)}`,
+    description: t(`competitors.${hit.key}.summary`),
     path: `/compare/${hit.seo.slug}`,
-    ogTitle: `Builderforce.ai vs ${hit.seo.name}`,
+    ogTitle: vs,
   });
 }
 
@@ -52,7 +59,14 @@ export default async function CompetitorComparePage({
   const { competitor } = await params;
   const hit = resolve(competitor);
   if (!hit) notFound();
-  const { key, seo, label } = hit;
+  const { key, seo } = hit;
+  const t = await getTranslations();
+  const label = t(`compare.competitorLabels.${key}`);
+  const tagline = t(`compare.competitors.${key}.tagline`);
+  const summary = t(`compare.competitors.${key}.summary`);
+  const verdict = t(`compare.competitors.${key}.verdict`);
+  const categories = t.raw('compare.categories') as CompareCategory[];
+  const faq = t.raw('compare.faq') as CompareFaq[];
 
   return (
     <>
@@ -86,18 +100,18 @@ export default async function CompetitorComparePage({
 
       <main className="vs">
         <header className="vs-hero">
-          <div className="vs-eyebrow">Builderforce.ai vs {label}</div>
-          <h1 className="vs-title">Builderforce.ai vs {seo.name}</h1>
-          <p className="vs-tagline">{seo.tagline}</p>
-          <p className="vs-sub">{seo.summary}</p>
+          <div className="vs-eyebrow">{t('compare.leaf.vsLabel', { name: label })}</div>
+          <h1 className="vs-title">{t('compare.leaf.vsLabel', { name: seo.name })}</h1>
+          <p className="vs-tagline">{tagline}</p>
+          <p className="vs-sub">{summary}</p>
           <div className="vs-cta-row">
-            <Link className="vs-btn vs-btn-primary" href="/register">Get Started Free</Link>
-            <Link className="vs-btn vs-btn-ghost" href="/compare">See the full comparison</Link>
+            <Link className="vs-btn vs-btn-primary" href="/register">{t('marketing.ctaGetStartedFree')}</Link>
+            <Link className="vs-btn vs-btn-ghost" href="/compare">{t('compare.leaf.seeFullComparison')}</Link>
           </div>
         </header>
 
         <section className="vs-section">
-          {COMPETITIVE_COMPARISON.map((cat) => (
+          {categories.map((cat) => (
             <Fragment key={cat.id}>
               <h2 className="vs-cat">{cat.title}</h2>
               <p className="vs-cat-blurb">{cat.blurb}</p>
@@ -105,7 +119,7 @@ export default async function CompetitorComparePage({
                 <table className="vs-table">
                   <thead>
                     <tr>
-                      <th>Capability</th>
+                      <th>{t('compare.capabilityHeader')}</th>
                       <th className="col-bf">Builderforce.ai</th>
                       <th>{label}</th>
                     </tr>
@@ -127,11 +141,11 @@ export default async function CompetitorComparePage({
             </Fragment>
           ))}
 
-          <h2 className="vs-cat">The bottom line</h2>
-          <p className="vs-verdict">{seo.verdict}</p>
+          <h2 className="vs-cat">{t('compare.leaf.bottomLine')}</h2>
+          <p className="vs-verdict">{verdict}</p>
 
-          <h2 className="vs-cat">Frequently asked questions</h2>
-          {COMPARE_FAQ.map((q) => (
+          <h2 className="vs-cat">{t('compare.leaf.faqHeading')}</h2>
+          {faq.map((q) => (
             <Fragment key={q.question}>
               <h3 className="vs-faq-q">{q.question}</h3>
               <p className="vs-faq-a">{q.answer}</p>
@@ -139,7 +153,7 @@ export default async function CompetitorComparePage({
           ))}
         </section>
 
-        <RelatedArticles surface={`compare:${key}`} heading="Related reading" />
+        <RelatedArticles surface={`compare:${key}`} heading={t('compare.leaf.relatedHeading')} />
 
         {/* Footer is the canonical <AppFooter variant="full"> rendered by PublicShell. */}
       </main>

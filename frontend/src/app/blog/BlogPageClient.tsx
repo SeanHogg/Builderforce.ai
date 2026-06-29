@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { useTranslations } from 'next-intl';
 import { BLOG_POSTS } from '@/lib/blogData';
 import JsonLd from '@/components/JsonLd';
 import { blogIndexSchema } from '@/lib/structured-data';
@@ -10,6 +11,7 @@ import { ArticleCardGrid } from '@/components/blog/ArticleCard';
 const PAGE_SIZE = 9;
 
 export default function BlogPageClient() {
+  const t = useTranslations('blog');
   const totalPages = Math.max(1, Math.ceil(BLOG_POSTS.length / PAGE_SIZE));
   const [page, setPage] = useState(1);
   const current = Math.min(page, totalPages);
@@ -138,13 +140,9 @@ export default function BlogPageClient() {
       <div className="blog-page">
         {/* ── Hero ── */}
         <div className="blog-hero">
-          <div className="blog-hero-badge">📝 Latest Articles</div>
+          <div className="blog-hero-badge">📝 {t('badge')}</div>
           <h1 className="blog-hero-title">Builderforce Blog</h1>
-          <p className="blog-hero-desc">
-            Deep dives, tutorials, and honest tool comparisons for building and
-            deploying AI agents — from autonomous Kanban execution and semantic
-            caching to how we stack up against Copilot, Cursor, Claude Code and Devin.
-          </p>
+          <p className="blog-hero-desc">{t('desc')}</p>
         </div>
 
         {/* ── Post grid ── */}
@@ -152,13 +150,13 @@ export default function BlogPageClient() {
           <ArticleCardGrid posts={visible} />
 
           {totalPages > 1 && (
-            <nav className="blog-pagination" aria-label="Blog pagination">
+            <nav className="blog-pagination" aria-label={t('paginationLabel')}>
               <button
                 type="button"
                 className="blog-page-btn"
                 onClick={() => goTo(current - 1)}
                 disabled={current === 1}
-                aria-label="Previous page"
+                aria-label={t('prevPage')}
               >
                 ←
               </button>
@@ -169,7 +167,7 @@ export default function BlogPageClient() {
                   className={`blog-page-btn${p === current ? ' is-active' : ''}`}
                   onClick={() => goTo(p)}
                   aria-current={p === current ? 'page' : undefined}
-                  aria-label={`Page ${p}`}
+                  aria-label={t('pageN', { n: p })}
                 >
                   {p}
                 </button>
@@ -179,7 +177,7 @@ export default function BlogPageClient() {
                 className="blog-page-btn"
                 onClick={() => goTo(current + 1)}
                 disabled={current === totalPages}
-                aria-label="Next page"
+                aria-label={t('nextPage')}
               >
                 →
               </button>

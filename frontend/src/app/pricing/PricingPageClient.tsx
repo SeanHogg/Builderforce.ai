@@ -3,6 +3,7 @@
 import { Select } from '@/components/Select';
 
 import { useState, useEffect } from 'react';
+import { useTranslations } from 'next-intl';
 import { useSearchParams } from 'next/navigation';
 import { useAuth } from '@/lib/AuthContext';
 import { AUTH_API_URL, getStoredTenantToken } from '@/lib/auth';
@@ -38,24 +39,27 @@ const cardStyle: React.CSSProperties = {
   padding: 24,
 };
 
-const PLAN_FEATURES: { label: string; free: boolean; pro: boolean; teams: boolean }[] = [
-  { label: 'Evermind self-updating model (on-device)', free: true,  pro: true,  teams: true  },
-  { label: '1 AgentHost',                           free: true,  pro: false, teams: false },
-  { label: 'Up to 3 AgentHosts',                    free: false, pro: true,  teams: false },
-  { label: 'Unlimited AgentHosts',                  free: false, pro: false, teams: true  },
-  { label: '5 projects',                       free: true,  pro: false, teams: false },
-  { label: 'Unlimited projects',               free: false, pro: true,  teams: true  },
-  { label: '10K tokens / day',                 free: true,  pro: false, teams: false },
-  { label: '1M tokens / day',                  free: false, pro: true,  teams: false },
-  { label: '5M tokens / day',                  free: false, pro: false, teams: true  },
-  { label: 'Approval workflows',               free: false, pro: true,  teams: true  },
-  { label: 'Fleet mesh + remote dispatch',     free: false, pro: true,  teams: true  },
-  { label: 'Full telemetry + audit trail',     free: false, pro: true,  teams: true  },
-  { label: 'Custom agent roles',               free: false, pro: true,  teams: true  },
-  { label: 'Shared team approval inbox',       free: false, pro: false, teams: true  },
-  { label: 'Per-seat cost controls',           free: false, pro: false, teams: true  },
-  { label: 'Priority support',                 free: false, pro: true,  teams: true  },
-  { label: 'Community support',                free: true,  pro: false, teams: false },
+// Non-translatable plan/feature matrix (entitlement booleans). Row LABELS come
+// from the `pricing.planFeatures` catalog array, paired by index — keep the two
+// the same length and order.
+const PLAN_FEATURE_FLAGS: { free: boolean; pro: boolean; teams: boolean }[] = [
+  { free: true,  pro: true,  teams: true  },
+  { free: true,  pro: false, teams: false },
+  { free: false, pro: true,  teams: false },
+  { free: false, pro: false, teams: true  },
+  { free: true,  pro: false, teams: false },
+  { free: false, pro: true,  teams: true  },
+  { free: true,  pro: false, teams: false },
+  { free: false, pro: true,  teams: false },
+  { free: false, pro: false, teams: true  },
+  { free: false, pro: true,  teams: true  },
+  { free: false, pro: true,  teams: true  },
+  { free: false, pro: true,  teams: true  },
+  { free: false, pro: true,  teams: true  },
+  { free: false, pro: false, teams: true  },
+  { free: false, pro: false, teams: true  },
+  { free: false, pro: true,  teams: true  },
+  { free: true,  pro: false, teams: false },
 ];
 
 function PlanBadge({ plan }: { plan: Plan }) {
@@ -97,16 +101,18 @@ function PlanCta({ plan, effectivePlan, onUpgrade, isAnon }: {
   onUpgrade: (target: 'pro' | 'teams') => void;
   isAnon?: boolean;
 }) {
+  const t = useTranslations('pricing');
+  const planName = plan === 'teams' ? 'Teams' : 'Pro';
   // An anonymous visitor has no subscription, so never label a column as their
   // "Current plan"; the free column links them to sign-up instead.
   if (!isAnon && plan === effectivePlan) {
-    return <span style={{ fontSize: 12, color: PLAN_ACCENT[plan], fontWeight: 600 }}>Current plan</span>;
+    return <span style={{ fontSize: 12, color: PLAN_ACCENT[plan], fontWeight: 600 }}>{t('ctaCurrentPlan')}</span>;
   }
   if (plan === 'free') {
     if (isAnon) {
       return (
         <a href="/register" style={{ fontSize: 12, color: PLAN_ACCENT.free, fontWeight: 600, textDecoration: 'none' }}>
-          Get started
+          {t('ctaGetStarted')}
         </a>
       );
     }
@@ -115,12 +121,13 @@ function PlanCta({ plan, effectivePlan, onUpgrade, isAnon }: {
   return (
     <button type="button" onClick={() => onUpgrade(plan)}
       style={{ padding: '7px 16px', fontSize: 12, fontWeight: 600, background: PLAN_ACCENT[plan], color: '#fff', border: 'none', borderRadius: 7, cursor: 'pointer' }}>
-      {isAnon ? 'Get' : 'Upgrade to'} {plan === 'teams' ? 'Teams' : 'Pro'}
+      {isAnon ? t('ctaGet', { plan: planName }) : t('ctaUpgradeTo', { plan: planName })}
     </button>
   );
 }
 
 export default function PricingPageClient() {
+  const t = useTranslations('pricing');
   const { tenant } = useAuth();
   const tenantId = tenant?.id != null ? Number(tenant.id) : null;
 
@@ -151,7 +158,7 @@ export default function PricingPageClient() {
       const data = await res.json() as Subscription;
       setSub(data);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to load subscription');
+      setError(e instanceof Error ? e.message : t('errorLoad'));
     } finally {
       setLoading(false);
     }
@@ -204,9 +211,9 @@ export default function PricingPageClient() {
   const handleUpgrade = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!tenantId || upgrading || !upgradeTarget) return;
-    if (!billingEmail.trim()) { setUpgradeError('Billing email is required.'); return; }
+    if (!billingEmail.trim()) { setUpgradeError(t('errorBillingEmailRequired')); return; }
     if (isManualProvider && (!cardLast4.trim() || !/^\d{4}$/.test(cardLast4))) {
-      setUpgradeError('Card last 4 must be exactly 4 digits.'); return;
+      setUpgradeError(t('errorCardLast4')); return;
     }
     setUpgrading(true);
     setUpgradeError(null);
@@ -232,7 +239,7 @@ export default function PricingPageClient() {
       setUpgradeTarget(null);
       await fetchSub();
     } catch (e) {
-      setUpgradeError(e instanceof Error ? e.message : 'Upgrade failed');
+      setUpgradeError(e instanceof Error ? e.message : t('errorUpgradeFailed'));
     } finally {
       setUpgrading(false);
     }
@@ -240,7 +247,7 @@ export default function PricingPageClient() {
 
   const handleDowngrade = async () => {
     if (!tenantId || downgrading) return;
-    if (!confirm('Downgrade to Free? You will lose your current plan features at end of billing period.')) return;
+    if (!confirm(t('downgradeConfirm'))) return;
     setDowngrading(true);
     try {
       const token = getStoredTenantToken();
@@ -256,8 +263,8 @@ export default function PricingPageClient() {
 
   const teamsCostNote = upgradeTarget === 'teams'
     ? billingCycle === 'yearly'
-      ? `$${teamYearly}/seat/yr — billed as $${teamYearly * seats}/yr`
-      : `$${teamMonthly}/seat/mo — billed as $${teamMonthly * seats}/mo`
+      ? t('teamsCostNoteYear', { perSeat: teamYearly, total: teamYearly * seats })
+      : t('teamsCostNoteMonth', { perSeat: teamMonthly, total: teamMonthly * seats })
     : null;
 
   return (
@@ -266,19 +273,17 @@ export default function PricingPageClient() {
     <PageContainer width="readable">
       <div style={{ marginBottom: 28 }}>
         <h1 style={{ fontSize: 22, fontWeight: 700, color: 'var(--text-primary)', margin: 0 }}>
-          {isAnon ? 'Simple, transparent pricing' : 'Pricing & Billing'}
+          {isAnon ? t('titleAnon') : t('titleConsole')}
         </h1>
         <p style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 6, marginBottom: 0 }}>
-          {isAnon
-            ? 'Start free, upgrade when your agent workforce grows. No credit card to get started.'
-            : 'Manage your subscription and billing details.'}
+          {isAnon ? t('subtitleAnon') : t('subtitleConsole')}
         </p>
       </div>
 
       {error && <div style={{ ...cardStyle, color: 'var(--coral-bright)', fontSize: 13, marginBottom: 16 }}>{error}</div>}
 
       {loading ? (
-        <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>Loading subscription…</div>
+        <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>{t('loading')}</div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
 
@@ -288,15 +293,15 @@ export default function PricingPageClient() {
             <div style={{ ...cardStyle, display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 4 }}>
-                  Get started with the Free plan
+                  {t('anonBannerTitle')}
                 </div>
                 <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>
-                  $0/month forever — 1 AgentHost, 5 projects, WebGPU LoRA training. Upgrade any time.
+                  {t('anonBannerDesc')}
                 </div>
               </div>
               <a href="/register"
                 style={{ padding: '9px 18px', fontSize: 13, fontWeight: 700, background: 'var(--coral-bright, #f4726e)', color: '#fff', border: 'none', borderRadius: 8, textDecoration: 'none' }}>
-                Create free account
+                {t('anonBannerCta')}
               </a>
             </div>
           ) : (
@@ -305,7 +310,7 @@ export default function PricingPageClient() {
           <div style={{ ...cardStyle, display: 'flex', alignItems: 'flex-start', gap: 16, flexWrap: 'wrap' }}>
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6 }}>
-                <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--text-primary)' }}>Current Plan</div>
+                <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--text-primary)' }}>{t('currentPlan')}</div>
                 <PlanBadge plan={sub?.plan ?? 'free'} />
                 {sub?.billingStatus && sub.billingStatus !== 'active' && sub.billingStatus !== 'none' && (
                   <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>({sub.billingStatus})</span>
@@ -315,31 +320,31 @@ export default function PricingPageClient() {
                 <div style={{ display: 'grid', gap: 6, fontSize: 13 }}>
                   {sub.billingCycle && (
                     <div style={{ display: 'flex', gap: 8 }}>
-                      <span style={{ color: 'var(--text-muted)', minWidth: 130 }}>Billing cycle</span>
-                      <span style={{ textTransform: 'capitalize' }}>{sub.billingCycle}</span>
+                      <span style={{ color: 'var(--text-muted)', minWidth: 130 }}>{t('fieldBillingCycle')}</span>
+                      <span>{sub.billingCycle === 'yearly' ? t('cycleYearlyCap') : t('cycleMonthlyCap')}</span>
                     </div>
                   )}
                   {sub.seatCount != null && (
                     <div style={{ display: 'flex', gap: 8 }}>
-                      <span style={{ color: 'var(--text-muted)', minWidth: 130 }}>Seats</span>
+                      <span style={{ color: 'var(--text-muted)', minWidth: 130 }}>{t('fieldSeats')}</span>
                       <span>{sub.seatCount}</span>
                     </div>
                   )}
                   {sub.billingEmail && (
                     <div style={{ display: 'flex', gap: 8 }}>
-                      <span style={{ color: 'var(--text-muted)', minWidth: 130 }}>Billing email</span>
+                      <span style={{ color: 'var(--text-muted)', minWidth: 130 }}>{t('fieldBillingEmail')}</span>
                       <span>{sub.billingEmail}</span>
                     </div>
                   )}
                   {sub.billingPaymentBrand && sub.billingPaymentLast4 && (
                     <div style={{ display: 'flex', gap: 8 }}>
-                      <span style={{ color: 'var(--text-muted)', minWidth: 130 }}>Payment method</span>
+                      <span style={{ color: 'var(--text-muted)', minWidth: 130 }}>{t('fieldPaymentMethod')}</span>
                       <span style={{ textTransform: 'capitalize' }}>{sub.billingPaymentBrand} ···· {sub.billingPaymentLast4}</span>
                     </div>
                   )}
                   {sub.billingUpdatedAt && (
                     <div style={{ display: 'flex', gap: 8 }}>
-                      <span style={{ color: 'var(--text-muted)', minWidth: 130 }}>Last updated</span>
+                      <span style={{ color: 'var(--text-muted)', minWidth: 130 }}>{t('fieldLastUpdated')}</span>
                       <span>{new Date(sub.billingUpdatedAt).toLocaleDateString()}</span>
                     </div>
                   )}
@@ -349,12 +354,12 @@ export default function PricingPageClient() {
             {effectivePlan === 'free' ? (
               <button type="button" onClick={() => openUpgrade('pro')}
                 style={{ padding: '9px 18px', fontSize: 13, fontWeight: 700, background: 'var(--coral-bright, #f4726e)', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer' }}>
-                Upgrade plan
+                {t('upgradePlan')}
               </button>
             ) : (
               <button type="button" onClick={handleDowngrade} disabled={downgrading}
                 style={{ padding: '9px 18px', fontSize: 13, fontWeight: 600, background: 'var(--bg-elevated)', color: 'var(--text-secondary)', border: '1px solid var(--border-subtle)', borderRadius: 8, cursor: downgrading ? 'wait' : 'pointer' }}>
-                {downgrading ? 'Downgrading…' : 'Downgrade to Free'}
+                {downgrading ? t('downgrading') : t('downgradeToFree')}
               </button>
             )}
           </div>
@@ -375,20 +380,21 @@ export default function PricingPageClient() {
               onClick={(e) => e.stopPropagation()}
             >
               <div id="upgrade-modal-title" style={{ fontWeight: 600, fontSize: 15, marginBottom: 16 }}>
-                Upgrade to {upgradeTarget === 'teams' ? 'Teams' : 'Pro'}
+                {t('modalUpgradeTo', { plan: upgradeTarget === 'teams' ? 'Teams' : 'Pro' })}
               </div>
               <form onSubmit={handleUpgrade} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
                 <div>
-                  <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 6 }}>Billing Cycle</label>
+                  <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 6 }}>{t('labelBillingCycle')}</label>
                   <div style={{ display: 'flex', gap: 8 }}>
                     {(['monthly', 'yearly'] as const).map((c) => {
                       const saving = upgradeTarget === 'teams'
-                        ? `save ${sub?.pricing.teams.yearlySavingsPercent ?? 20}%`
-                        : `save ${sub?.pricing.pro.yearlySavingsPercent ?? 17}%`;
+                        ? t('saveCycle', { pct: sub?.pricing.teams.yearlySavingsPercent ?? 20 })
+                        : t('saveCycle', { pct: sub?.pricing.pro.yearlySavingsPercent ?? 17 });
+                      const cycleLabel = c === 'yearly' ? t('cycleYearly') : t('cycleMonthly');
                       return (
                         <button key={c} type="button" onClick={() => setBillingCycle(c)}
                           style={{ padding: '7px 16px', fontSize: 13, fontWeight: 600, borderRadius: 8, border: '1px solid var(--border-subtle)', background: billingCycle === c ? 'var(--surface-coral-soft, rgba(244,114,94,0.15))' : 'var(--bg-elevated)', color: billingCycle === c ? 'var(--coral-bright, #f4726e)' : 'var(--text-secondary)', cursor: 'pointer' }}>
-                          {c}{c === 'yearly' ? ` (${saving})` : ''}
+                          {c === 'yearly' ? t('cycleYearlyWithSaving', { cycle: cycleLabel, saving }) : cycleLabel}
                         </button>
                       );
                     })}
@@ -397,7 +403,7 @@ export default function PricingPageClient() {
 
                 {upgradeTarget === 'teams' && (
                   <div>
-                    <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 6 }}>Seats</label>
+                    <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 6 }}>{t('labelSeats')}</label>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                       <input type="number" min={1} value={seats}
                         onChange={(e) => setSeats(Math.max(1, parseInt(e.target.value, 10) || 1))}
@@ -408,16 +414,16 @@ export default function PricingPageClient() {
                 )}
 
                 <div>
-                  <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 6 }}>Billing Email</label>
+                  <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 6 }}>{t('labelBillingEmail')}</label>
                   <input type="email" required value={billingEmail} onChange={(e) => setBillingEmail(e.target.value)}
-                    placeholder="billing@example.com"
+                    placeholder={t('placeholderBillingEmail')}
                     style={{ width: '100%', padding: '8px 12px', fontSize: 13, background: 'var(--bg-elevated)', color: 'var(--text-primary)', border: '1px solid var(--border-subtle)', borderRadius: 8, boxSizing: 'border-box' }} />
                 </div>
 
                 {isManualProvider && (
                   <div style={{ display: 'flex', gap: 10 }}>
                     <div style={{ flex: 1 }}>
-                      <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 6 }}>Card Brand</label>
+                      <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 6 }}>{t('labelCardBrand')}</label>
                       <Select value={cardBrand} onChange={(e) => setCardBrand(e.target.value)}
                         style={{ width: '100%', padding: '8px 10px', fontSize: 13, background: 'var(--bg-elevated)', color: 'var(--text-primary)', border: '1px solid var(--border-subtle)', borderRadius: 8 }}>
                         {['visa', 'mastercard', 'amex', 'discover', 'other'].map((b) => (
@@ -426,7 +432,7 @@ export default function PricingPageClient() {
                       </Select>
                     </div>
                     <div style={{ flex: 1 }}>
-                      <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 6 }}>Card Last 4 Digits</label>
+                      <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 6 }}>{t('labelCardLast4')}</label>
                       <input type="text" required value={cardLast4}
                         onChange={(e) => setCardLast4(e.target.value.replace(/\D/g, '').slice(0, 4))}
                         placeholder="4242" maxLength={4}
@@ -437,13 +443,13 @@ export default function PricingPageClient() {
 
                 {!isManualProvider && (
                   <div style={{ fontSize: 12, color: 'var(--text-muted)', padding: '8px 12px', background: 'var(--bg-elevated)', borderRadius: 8 }}>
-                    You will be redirected to our payment provider to securely enter your card details.
+                    {t('redirectNote')}
                   </div>
                 )}
 
                 <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', padding: '10px 14px', background: 'var(--bg-elevated)', borderRadius: 8 }}>
-                  Total: ${upgradePrice}/{billingCycle === 'yearly' ? 'yr' : 'mo'}
-                  {upgradeTarget === 'teams' && ` for ${seats} seat${seats > 1 ? 's' : ''}`}
+                  {t('total', { price: upgradePrice, unit: billingCycle === 'yearly' ? t('unitYear') : t('unitMonth') })}
+                  {upgradeTarget === 'teams' && ` ${t('totalForSeats', { seats })}`}
                 </div>
 
                 {upgradeError && <div style={{ fontSize: 12, color: 'var(--coral-bright, #f4726e)' }}>{upgradeError}</div>}
@@ -451,13 +457,13 @@ export default function PricingPageClient() {
                 <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
                   <button type="button" onClick={() => { setUpgradeTarget(null); setUpgradeError(null); }}
                     style={{ padding: '8px 16px', fontSize: 13, background: 'none', color: 'var(--text-muted)', border: 'none', cursor: 'pointer' }}>
-                    Cancel
+                    {t('cancel')}
                   </button>
                   <button type="submit" disabled={upgrading}
                     style={{ padding: '8px 18px', fontSize: 13, fontWeight: 600, background: upgradeTarget === 'teams' ? '#60a5fa' : 'var(--coral-bright, #f4726e)', color: '#fff', border: 'none', borderRadius: 8, cursor: upgrading ? 'wait' : 'pointer' }}>
                     {upgrading
-                      ? (isManualProvider ? 'Activating…' : 'Redirecting…')
-                      : (isManualProvider ? `Activate ${upgradeTarget === 'teams' ? 'Teams' : 'Pro'}` : 'Continue to Payment')}
+                      ? (isManualProvider ? t('activating') : t('redirecting'))
+                      : (isManualProvider ? t('activatePlan', { plan: upgradeTarget === 'teams' ? 'Teams' : 'Pro' }) : t('continueToPayment'))}
                   </button>
                 </div>
               </form>
@@ -467,35 +473,37 @@ export default function PricingPageClient() {
 
           {/* Plan comparison table */}
           <div style={cardStyle}>
-            <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 14 }}>Plan Comparison</div>
+            <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 14 }}>{t('planComparison')}</div>
             <div style={{ overflowX: 'auto' }}>
               <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
                 <thead>
                   <tr>
-                    <th style={{ textAlign: 'left', padding: '8px 12px', color: 'var(--text-muted)', fontWeight: 600, borderBottom: '1px solid var(--border-subtle)' }}>Feature</th>
+                    <th style={{ textAlign: 'left', padding: '8px 12px', color: 'var(--text-muted)', fontWeight: 600, borderBottom: '1px solid var(--border-subtle)' }}>{t('colFeature')}</th>
                     <th style={{ textAlign: 'center', padding: '8px 12px', fontWeight: 700, color: 'var(--text-secondary)', borderBottom: '1px solid var(--border-subtle)', minWidth: 90 }}>
-                      Free<br /><span style={{ fontWeight: 400, fontSize: 11 }}>$0</span>
+                      Free<br /><span style={{ fontWeight: 400, fontSize: 11 }}>{t('priceFree')}</span>
                       <div style={{ marginTop: 8 }}><PlanCta plan="free" effectivePlan={effectivePlan} onUpgrade={openUpgrade} isAnon={isAnon} /></div>
                     </th>
                     <th style={{ textAlign: 'center', padding: '8px 12px', fontWeight: 700, color: 'var(--coral-bright, #f4726e)', borderBottom: '1px solid var(--border-subtle)', minWidth: 90 }}>
-                      Pro<br /><span style={{ fontWeight: 400, fontSize: 11 }}>${proMonthly}/mo</span>
+                      Pro<br /><span style={{ fontWeight: 400, fontSize: 11 }}>{t('priceProMonthly', { price: proMonthly })}</span>
                       <div style={{ marginTop: 8 }}><PlanCta plan="pro" effectivePlan={effectivePlan} onUpgrade={openUpgrade} isAnon={isAnon} /></div>
                     </th>
                     <th style={{ textAlign: 'center', padding: '8px 12px', fontWeight: 700, color: '#60a5fa', borderBottom: '1px solid var(--border-subtle)', minWidth: 110 }}>
-                      Teams<br /><span style={{ fontWeight: 400, fontSize: 11 }}>${teamMonthly}/seat/mo</span>
+                      Teams<br /><span style={{ fontWeight: 400, fontSize: 11 }}>{t('priceTeamsMonthly', { price: teamMonthly })}</span>
                       <div style={{ marginTop: 8 }}><PlanCta plan="teams" effectivePlan={effectivePlan} onUpgrade={openUpgrade} isAnon={isAnon} /></div>
                     </th>
                   </tr>
                 </thead>
                 <tbody>
-                  {PLAN_FEATURES.map(({ label, free, pro, teams }, i) => (
+                  {(t.raw('planFeatures') as string[]).map((label, i) => {
+                    const flags = PLAN_FEATURE_FLAGS[i];
+                    return (
                     <tr key={i} style={{ borderBottom: '1px solid var(--border-subtle)' }}>
                       <td style={{ padding: '9px 12px', color: 'var(--text-secondary)' }}>{label}</td>
-                      <td style={{ textAlign: 'center', padding: '9px 12px' }}><CheckIcon checked={free} color="var(--text-secondary)" /></td>
-                      <td style={{ textAlign: 'center', padding: '9px 12px' }}><CheckIcon checked={pro} color="var(--coral-bright, #f4726e)" /></td>
-                      <td style={{ textAlign: 'center', padding: '9px 12px' }}><CheckIcon checked={teams} color="#60a5fa" /></td>
+                      <td style={{ textAlign: 'center', padding: '9px 12px' }}><CheckIcon checked={flags.free} color="var(--text-secondary)" /></td>
+                      <td style={{ textAlign: 'center', padding: '9px 12px' }}><CheckIcon checked={flags.pro} color="var(--coral-bright, #f4726e)" /></td>
+                      <td style={{ textAlign: 'center', padding: '9px 12px' }}><CheckIcon checked={flags.teams} color="#60a5fa" /></td>
                     </tr>
-                  ))}
+                  );})}
                 </tbody>
                 <tfoot>
                   <tr>
@@ -514,13 +522,16 @@ export default function PricingPageClient() {
               </table>
             </div>
             <div style={{ marginTop: 14, fontSize: 11, color: 'var(--text-muted)' }}>
-              Add-on: <strong>Managed AgentHost</strong> — ${sub?.pricing.managedAgentHost.perAgentHostMonthly ?? 49}/mo per hosted AgentHost. We run your BuilderForce Agents instance for you — no Docker, no DevOps.
+              {t.rich('managedAddon', {
+                price: sub?.pricing.managedAgentHost.perAgentHostMonthly ?? 49,
+                b: (c) => <strong>{c}</strong>,
+              })}
             </div>
           </div>
 
         </div>
       )}
-      {isAnon && <RelatedArticles surface="pricing" heading="Before you decide" />}
+      {isAnon && <RelatedArticles surface="pricing" heading={t('relatedHeading')} />}
     </PageContainer>
     </>
   );

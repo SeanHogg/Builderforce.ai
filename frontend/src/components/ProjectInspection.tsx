@@ -1,7 +1,10 @@
 'use client';
 
+import { useEffect, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import type { Project } from '@/lib/types';
+import { toolsApi } from '@/lib/builderforceApi';
+import type { ProjectScore } from '@/lib/tools';
 import {
   computeProjectInspection,
   type InspectionDimension,
@@ -143,9 +146,30 @@ export interface ProjectInspectionReportProps {
   onNavigate?: (tab: ProjectPanelTab) => void;
 }
 
+/** Map a 1–5 maturity score to one of the shared tier colours. */
+function maturityColor(score: number): string {
+  if (score >= 4) return TIER_HEX.healthy;
+  if (score >= 3) return TIER_HEX.watch;
+  if (score >= 2) return TIER_HEX.at_risk;
+  return TIER_HEX.critical;
+}
+
 export function ProjectInspectionReport({ project, onNavigate }: ProjectInspectionReportProps) {
   const t = useTranslations('projectInspection');
   const insp = computeProjectInspection(project);
+
+  // Saved diagnostic maturity (1–5) for THIS project — a separate, manager-gated
+  // rating from the Diagnostics engine. Panel-only (single project, no N+1), and
+  // best-effort: a 403 (non-manager) or "no runs yet" just hides the row.
+  const [maturity, setMaturity] = useState<ProjectScore | null>(null);
+  useEffect(() => {
+    let live = true;
+    toolsApi.projectScore(project.id)
+      .then((s) => { if (live) setMaturity(s); })
+      .catch(() => { if (live) setMaturity(null); });
+    return () => { live = false; };
+  }, [project.id]);
+  const maturityScore = maturity?.result.score ?? null;
 
   const tiers: MetricTier[] = TIER_ORDER.map((tier) => ({
     key: tier, label: t(`tier.${tier}`), color: TIER_HEX[tier],
@@ -202,6 +226,44 @@ export function ProjectInspectionReport({ project, onNavigate }: ProjectInspecti
           </div>
         ))}
       </div>
+
+      {/* Saved diagnostic maturity (1–5) — separate from the derived PM rating. */}
+      {maturityScore != null && (
+        <div
+          style={{
+            display: 'flex', flexDirection: 'column', gap: 8, padding: 14,
+            background: 'var(--bg-base)', border: '1px solid var(--border-subtle)', borderRadius: 12,
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, flexWrap: 'wrap' }}>
+            <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-primary)' }}>{t('maturity.title')}</span>
+            {maturity?.result.scoreLabel && (
+              <span style={{
+                fontSize: '0.7rem', fontWeight: 700, color: '#fff', background: maturityColor(maturityScore),
+                padding: '1px 8px', borderRadius: 999,
+              }}>
+                {maturity.result.scoreLabel}
+              </span>
+            )}
+            <span style={{ marginLeft: 'auto', fontSize: 13, fontWeight: 700, color: 'var(--text-primary)' }}>
+              {t('maturity.outOf', { score: maturityScore })}
+            </span>
+          </div>
+          <div style={{ height: 8, borderRadius: 999, background: 'var(--border-subtle)', overflow: 'hidden' }}>
+            <div style={{ width: `${(maturityScore / 5) * 100}%`, height: '100%', background: maturityColor(maturityScore), borderRadius: 999 }} />
+          </div>
+          <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: 0, lineHeight: 1.5 }}>{t('maturity.subtitle')}</p>
+          {onNavigate && (
+            <button
+              type="button"
+              onClick={() => onNavigate('diagnostics')}
+              style={{ ...recActionStyle, cursor: 'pointer', alignSelf: 'flex-start' }}
+            >
+              {t('maturity.viewCta')}
+            </button>
+          )}
+        </div>
+      )}
 
       {/* Prescriptive "what to target" */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>

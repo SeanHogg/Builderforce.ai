@@ -2,28 +2,34 @@ import type { Metadata } from 'next';
 import Image from 'next/image';
 import Link from 'next/link';
 import type { ReactNode } from 'react';
+import { getTranslations } from 'next-intl/server';
 import QuickStart from '@/components/QuickStart';
 import JsonLd from '@/components/JsonLd';
 import RelatedArticles from '@/components/blog/RelatedArticles';
 import FeatureCard from './FeatureCard';
 import NewsletterForm from './NewsletterForm';
 import { CAPABILITY_ICONS } from './capabilityIcons';
-import { AGENT_CAPABILITIES, AGENTS_FAQ } from '@/lib/content';
+import { AGENT_CAPABILITIES } from '@/lib/content';
 import { pageMetadata } from '@/lib/seo';
 import { routeMarketingSchema } from '@/lib/structured-data';
 
 export const runtime = 'edge';
 
-export const metadata: Metadata = pageMetadata({
-  title: 'BuilderForce Agents — Self-Hosted, Open-Source AI Agent Runtime',
-  description:
-    'BuilderForce Agents is the MIT-licensed, self-hosted agent runtime behind Builderforce.ai — autonomous coding agents and sub-agents with deep codebase understanding, a skills system, multi-agent workflows, an AgentHost mesh, and human-in-the-loop approval gates.',
-  path: '/agents',
-  ogTitle: 'BuilderForce Agents — Self-Hosted AI Agent Runtime',
-});
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations('agents.seo');
+  return pageMetadata({
+    title: t('title'),
+    description: t('description'),
+    path: '/agents',
+    ogTitle: t('ogTitle'),
+  });
+}
+
+type Capability = { title: string; description: string };
+type AgentFaq = { question: string; answer: string };
 
 /**
- * Render a capability description (a plain string in the `content.ts` source of
+ * Render a capability description (a plain string in the catalog source of
  * truth) into a ReactNode, turning `backtick`-wrapped tokens into inline <code>
  * so the data can stay JSX-free while preserving the original styling.
  */
@@ -36,15 +42,22 @@ function renderDescription(text: string): ReactNode {
   );
 }
 
-export default function AgentsHome() {
+// Visible copy from the `agents` catalog (localized in all 5 locales).
+// content.ts AGENT_CAPABILITIES supplies stable iconKey + href, paired with the
+// translated capability array by index.
+export default async function AgentsHome() {
+  const t = await getTranslations();
+  const capabilities = t.raw('agents.capabilities') as Capability[];
+  const faq = t.raw('agents.faq') as AgentFaq[];
+
   return (
     <>
       <JsonLd
         data={routeMarketingSchema({
           path: '/agents',
           title: 'BuilderForce Agents',
-          description: metadata.description as string,
-          faq: AGENTS_FAQ,
+          description: t('agents.seo.description'),
+          faq,
         })}
       />
       <div className="cc-stars" aria-hidden />
@@ -52,70 +65,58 @@ export default function AgentsHome() {
       <div className="cc-page">
         <header className="cc-hero">
           <div className="cc-logo">
-            <Image src="/agents.png" alt="BuilderForce Agents logo" width={140} height={140} priority />
+            <Image src="/agents.png" alt={t('agents.logoAlt')} width={140} height={140} priority />
           </div>
           <h1 className="cc-title">BuilderForce Agents</h1>
-          <p className="cc-tagline">Self-hosted, developer-first multi-agent coding workflows.</p>
+          <p className="cc-tagline">{t('agents.tagline')}</p>
           <p className="cc-description">
-            Transition from coding to managing business outcomes.<br />
-            <strong>BuilderForce Agents</strong> manages independent agents &amp; sub-agents with persistent memory &amp; self-repair.{' '}
-            <strong>
-              <Link href="/" className="cc-link">Builderforce.ai</Link>
-            </strong>{' '}
-            orchestrates projects across your entire mesh.
+            {t.rich('agents.description', {
+              br: () => <br />,
+              strong: (c) => <strong>{c}</strong>,
+              home: (c) => <Link href="/" className="cc-link">{c}</Link>,
+            })}
           </p>
         </header>
 
         <QuickStart />
 
         <section className="cc-section">
-          <h2 className="cc-h2"><span className="cc-agentHost-accent">⟩</span> What It Does</h2>
+          <h2 className="cc-h2"><span className="cc-agentHost-accent">⟩</span> {t('agents.whatItDoes')}</h2>
           <div className="cc-features-grid">
-            {AGENT_CAPABILITIES.map((f) => (
+            {capabilities.map((f, i) => (
               <FeatureCard
                 key={f.title}
-                href={f.href}
+                href={AGENT_CAPABILITIES[i]?.href ?? '#'}
                 title={f.title}
                 description={renderDescription(f.description)}
-                icon={CAPABILITY_ICONS[f.iconKey]}
+                icon={CAPABILITY_ICONS[AGENT_CAPABILITIES[i]?.iconKey]}
               />
             ))}
           </div>
         </section>
 
         <section className="cc-section">
-          <h2 className="cc-h2"><span className="cc-agentHost-accent">⟩</span> Why BuilderForce Agents?</h2>
-          <p className="cc-prose">
-            Self-hosted, multi-agent orchestration built for developers — from startups (5–50 devs) to enterprises (100–1,000+).
-            Key differentiators:
-          </p>
+          <h2 className="cc-h2"><span className="cc-agentHost-accent">⟩</span> {t('agents.whyHeading')}</h2>
+          <p className="cc-prose">{t('agents.whyIntro')}</p>
           <ul className="cc-prose-list">
-            <li>Deep codebase understanding (AST, semantic maps, git history, persistent context).</li>
-            <li>Pre-built multi-agent workflows: planning, coding, review, testing, adversarial passes.</li>
-            <li>Self-healing runtime: agents detect failures, fix themselves, and adapt over time.</li>
-            <li>Persistent memory &amp; context-aware reasoning across sessions — no re-explaining your codebase.</li>
-            <li>Staged diff review: all agent changes buffered for accept/reject.</li>
-            <li>AgentHost-to-agentHost mesh: distribute tasks across a fleet; <code>remote:auto[caps]</code> routes to the best peer automatically.</li>
-            <li>Workflow telemetry: every task emits JSONL spans locally and forwards to the Builderforce.ai timeline in real time.</li>
-            <li>Enforced approval gates: <code>requestApproval()</code> blocks agent execution until a manager approves.</li>
-            <li>Portal-managed skills loaded at startup; portal-managed cron jobs executed on schedule.</li>
-            <li>Security &amp; governance: RBAC, device trust, HMAC-signed dispatch, and audit trails.</li>
-            <li>CI/CD integration and private/self-hosted deployments.</li>
-            <li>Works from any channel or CLI, with any model provider.</li>
-            <li>Open source (MIT) with no vendor lock-in.</li>
+            {(t.raw('agents.whyList') as string[]).map((item, i) => (
+              <li key={i}>{renderDescription(item)}</li>
+            ))}
           </ul>
           <p className="cc-prose">
-            See the <a href="/docs/agents-vs-alternatives" className="cc-link">comparison with Copilot, Cursor, Claude</a> or the{' '}
-            <a href="/docs" className="cc-link">full docs</a>.
+            {t.rich('agents.whyLinks', {
+              cmp: (c) => <a href="/docs/agents-vs-alternatives" className="cc-link">{c}</a>,
+              docs: (c) => <a href="/docs" className="cc-link">{c}</a>,
+            })}
           </p>
         </section>
 
         <section className="cc-section">
-          <h2 className="cc-h2"><span className="cc-agentHost-accent">⟩</span> Works With Everything</h2>
-          <p className="cc-prose">50+ integrations across messaging, AI, dev, productivity and IoT.</p>
+          <h2 className="cc-h2"><span className="cc-agentHost-accent">⟩</span> {t('agents.worksWithHeading')}</h2>
+          <p className="cc-prose">{t('agents.worksWithIntro')}</p>
           <div className="cc-cta-row">
-            <Link href="/agents/integrations" className="cc-link-cta">View all integrations →</Link>
-            <Link href="/agents/showcase" className="cc-link-cta">See what people built →</Link>
+            <Link href="/agents/integrations" className="cc-link-cta">{t('agents.viewAllIntegrations')} →</Link>
+            <Link href="/agents/showcase" className="cc-link-cta">{t('agents.seeShowcase')} →</Link>
           </div>
         </section>
 
@@ -126,14 +127,14 @@ export default function AgentsHome() {
               <line x1="12" y1="8" x2="12" y2="14"/><line x1="12" y1="14" x2="5" y2="19"/><line x1="12" y1="14" x2="19" y2="19"/>
             </svg>
             <span className="cc-cta-label">Builderforce.ai</span>
-            <span className="cc-cta-sub">Orchestration platform</span>
+            <span className="cc-cta-sub">{t('agents.ctaOrchestrationSub')}</span>
           </Link>
           <a href="https://discord.gg/9gUsc2sNG6" target="_blank" rel="noopener" className="cc-cta">
             <svg viewBox="0 0 24 24" fill="currentColor" className="cc-cta-icon">
               <path d="M20.317 4.37a19.791 19.791 0 0 0-4.885-1.515.074.074 0 0 0-.079.037c-.21.375-.444.864-.608 1.25a18.27 18.27 0 0 0-5.487 0 12.64 12.64 0 0 0-.617-1.25.077.077 0 0 0-.079-.037A19.736 19.736 0 0 0 3.677 4.37a.07.07 0 0 0-.032.027C.533 9.046-.32 13.58.099 18.057a.082.082 0 0 0 .031.057 19.9 19.9 0 0 0 5.993 3.03.078.078 0 0 0 .084-.028 14.09 14.09 0 0 0 1.226-1.994.076.076 0 0 0-.041-.106 13.107 13.107 0 0 1-1.872-.892.077.077 0 0 1-.008-.128 10.2 10.2 0 0 0 .372-.292.074.074 0 0 1 .077-.01c3.928 1.793 8.18 1.793 12.062 0a.074.074 0 0 1 .078.01c.12.098.246.198.373.292a.077.077 0 0 1-.006.127 12.299 12.299 0 0 1-1.873.892.077.077 0 0 0-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 0 0 .084.028 19.839 19.839 0 0 0 6.002-3.03.077.077 0 0 0 .032-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 0 0-.031-.03zM8.02 15.33c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.956-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.956 2.418-2.157 2.418zm7.975 0c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.955-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.946 2.418-2.157 2.418z"/>
             </svg>
             <span className="cc-cta-label">Discord</span>
-            <span className="cc-cta-sub">Join the community</span>
+            <span className="cc-cta-sub">{t('agents.ctaDiscordSub')}</span>
           </a>
           <a href="/docs" className="cc-cta">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="cc-cta-icon">
@@ -142,28 +143,28 @@ export default function AgentsHome() {
               <line x1="8" y1="7" x2="16" y2="7"/>
               <line x1="8" y1="11" x2="14" y2="11"/>
             </svg>
-            <span className="cc-cta-label">Documentation</span>
-            <span className="cc-cta-sub">Learn the ropes</span>
+            <span className="cc-cta-label">{t('agents.ctaDocsLabel')}</span>
+            <span className="cc-cta-sub">{t('agents.ctaDocsSub')}</span>
           </a>
           <a href="https://github.com/seanhogg/agents" target="_blank" rel="noopener" className="cc-cta">
             <svg viewBox="0 0 24 24" fill="currentColor" className="cc-cta-icon">
               <path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/>
             </svg>
             <span className="cc-cta-label">GitHub</span>
-            <span className="cc-cta-sub">View the source</span>
+            <span className="cc-cta-sub">{t('agents.ctaGithubSub')}</span>
           </a>
           <Link href="/agents/skills" className="cc-cta">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="cc-cta-icon">
               <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
             </svg>
-            <span className="cc-cta-label">Agent Skills</span>
-            <span className="cc-cta-sub">Discover and share</span>
+            <span className="cc-cta-label">{t('agents.ctaSkillsLabel')}</span>
+            <span className="cc-cta-sub">{t('agents.ctaSkillsSub')}</span>
           </Link>
         </nav>
 
         <section className="cc-faq">
-          <h2 className="cc-faq-head">Frequently asked questions</h2>
-          {AGENTS_FAQ.map((q) => (
+          <h2 className="cc-faq-head">{t('agents.faqHeading')}</h2>
+          {faq.map((q) => (
             <details key={q.question} className="cc-faq-item">
               <summary className="cc-faq-q">{q.question}</summary>
               <p className="cc-faq-a">{q.answer}</p>
@@ -171,7 +172,7 @@ export default function AgentsHome() {
           ))}
         </section>
 
-        <RelatedArticles surface="agents" heading="Related reading" />
+        <RelatedArticles surface="agents" heading={t('agents.relatedHeading')} />
 
         <NewsletterForm />
       </div>

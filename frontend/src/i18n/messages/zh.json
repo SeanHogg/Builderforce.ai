@@ -2791,6 +2791,655 @@
         "人在回路的审批关卡 + 审计追踪",
         "30+ 模型提供方，含本地 Ollama"
       ]
+    },
+    "seo": {
+      "title": "Builderforce.ai 与同类产品对比：多智能体交付能力横评 | Builderforce.ai",
+      "description": "了解 Builderforce.ai 与 GitHub Copilot、Cursor、Windsurf、Claude Code、Devin、OpenHands、Aider 和 Continue.dev 的对比。自托管、MIT 许可、模型无关的多智能体编排，具备治理、审计和持久化记忆能力。",
+      "ogTitle": "Builderforce.ai 对比 GitHub Copilot、Cursor、Claude Code、Devin 等"
+    },
+    "hero": {
+      "eyebrow": "Builderforce.ai 与同类产品对比",
+      "title": "为多智能体交付而生，而非文件级自动补全",
+      "subtitle": "GitHub Copilot 帮你补全一行代码。Cursor 帮你重写一个函数。Builderforce.ai 则规划整个功能，协调一支专家智能体团队来构建、评审和测试它，以审批和审计轨迹治理每一项操作，并记住你的项目在上个迭代中所做的决策。自托管、MIT 许可、模型无关。"
+    },
+    "pillars": [
+      {
+        "title": "自托管、MIT 许可、可气隙部署",
+        "desc": "你的代码和你的智能体运行在你自己的机器上。MIT 许可，没有订阅上限，并提供完整的气隙部署路径，让安全与合规团队始终掌控全局。大多数竞品都是封闭的 SaaS，会把你的代码发送到它们的云端。"
+      },
+      {
+        "title": "真正的多智能体编排",
+        "desc": "通过依赖 DAG 协调七个专家角色，端到端运行规划、缺陷修复、重构和对抗式评审等工作流。Copilot、Cursor、Claude Code、Devin 及其余产品都只驱动单个智能体，一次给出一条建议。"
+      },
+      {
+        "title": "模型自由，无厂商锁定",
+        "desc": "可将任意任务路由到 30+ 家供应商中的任意一家，包括通过 Ollama 运行的完全本地模型和自管理的 Bedrock。Copilot 绑定 GPT 和 Claude；Devin 是专有产品。Builderforce.ai 独立于 IDE，从不被单一厂商所束缚。"
+      },
+      {
+        "title": "治理、记忆与机群覆盖",
+        "desc": "人在回路的审批关卡和完整的审计轨迹包裹着每一项操作，持久化的项目记忆存放于 .builderforce/，智能体之间的分布式委派可跨越多台机器和 15+ 个聊天渠道，并配有语音及移动端伴侣应用。"
+      }
+    ],
+    "intro": "大多数 AI 编码工具都是强大的自动补全引擎，止步于文件边界。Builderforce.ai 高出一个层级运作：它是智能化工作的记录系统——构建、训练和部署一支 AI 智能体团队，连接到你的各个系统，对每一项操作进行度量与计费，并以角色、审批和审计轨迹对其加以治理。下方表格将 Builderforce.ai 与团队最常评估的工具进行对比，聚焦于那些将“运营一个创新组织”与“补全一行代码”区分开来的能力。",
+    "quotable": "在这些工具中，Builderforce.ai 是唯一为多智能体交付而专门打造的：自托管、MIT 许可、跨 30+ 家供应商的模型无关，并由审批和审计轨迹加以治理；而其余产品只是在单个编辑器中优化单个智能体。",
+    "competitorLabels": {
+      "copilot": "GitHub Copilot",
+      "cursor": "Cursor / Windsurf",
+      "claudeCode": "Claude Code",
+      "devin": "Devin",
+      "openhands": "OpenHands",
+      "aider": "Aider",
+      "continueDev": "Continue.dev"
+    },
+    "categories": [
+      {
+        "id": "ownership",
+        "title": "所有权与部署",
+        "blurb": "平台在哪里运行、由谁掌控，决定了成本、数据驻留和锁定程度。",
+        "rows": [
+          {
+            "feature": "价格",
+            "values": {
+              "builderforce": "免费（MIT）",
+              "copilot": "$19/user/mo",
+              "cursor": "$20/user/mo",
+              "claudeCode": "按用量计费",
+              "devin": "$500/mo",
+              "openhands": "免费（MIT）",
+              "aider": "免费（MIT）",
+              "continueDev": "免费（MIT）"
+            }
+          },
+          {
+            "feature": "自托管 / 开源",
+            "note": "MIT，完全自托管",
+            "values": {
+              "builderforce": "✅",
+              "copilot": "❌ 微软云",
+              "cursor": "❌ 厂商云",
+              "claudeCode": "❌ Anthropic 云",
+              "devin": "❌ 仅云端",
+              "openhands": "✅",
+              "aider": "✅",
+              "continueDev": "✅"
+            }
+          },
+          {
+            "feature": "气隙 / 私有部署",
+            "values": {
+              "builderforce": "✅",
+              "copilot": "❌",
+              "cursor": "❌",
+              "claudeCode": "❌",
+              "devin": "❌",
+              "openhands": "✅",
+              "aider": "✅",
+              "continueDev": "✅"
+            }
+          },
+          {
+            "feature": "RBAC + 审计轨迹",
+            "values": {
+              "builderforce": "✅",
+              "copilot": "❌",
+              "cursor": "❌",
+              "claudeCode": "❌",
+              "devin": "⚠️ 基础",
+              "openhands": "❌",
+              "aider": "❌",
+              "continueDev": "❌"
+            }
+          }
+        ]
+      },
+      {
+        "id": "model-flexibility",
+        "title": "模型与工具灵活性",
+        "blurb": "可自由选择任意模型、离线运行，并与开放的 MCP 生态集成。",
+        "rows": [
+          {
+            "feature": "任意模型供应商",
+            "note": "30+ 家供应商",
+            "values": {
+              "builderforce": "✅",
+              "copilot": "❌ GPT/Claude",
+              "cursor": "⚠️ 有限",
+              "claudeCode": "❌ 仅 Anthropic",
+              "devin": "❌ 专有",
+              "openhands": "✅",
+              "aider": "✅",
+              "continueDev": "✅"
+            }
+          },
+          {
+            "feature": "本地 / 离线模型（Ollama）",
+            "values": {
+              "builderforce": "✅",
+              "copilot": "❌",
+              "cursor": "⚠️",
+              "claudeCode": "❌",
+              "devin": "❌",
+              "openhands": "✅",
+              "aider": "✅",
+              "continueDev": "✅"
+            }
+          },
+          {
+            "feature": "独立于 IDE",
+            "note": "任意渠道 / CLI",
+            "values": {
+              "builderforce": "✅",
+              "copilot": "❌ VS Code",
+              "cursor": "❌ VS Code 分支",
+              "claudeCode": "⚠️ 终端",
+              "devin": "✅ Web UI",
+              "openhands": "✅ Web/CLI",
+              "aider": "✅ CLI",
+              "continueDev": "❌ 扩展"
+            }
+          },
+          {
+            "feature": "MCP — 消费",
+            "values": {
+              "builderforce": "✅",
+              "copilot": "❌",
+              "cursor": "✅ 原生",
+              "claudeCode": "❌",
+              "devin": "❌",
+              "openhands": "❌",
+              "aider": "❌",
+              "continueDev": "✅ 原生"
+            }
+          },
+          {
+            "feature": "MCP — 作为服务端暴露",
+            "note": "/mcp 端点",
+            "values": {
+              "builderforce": "✅",
+              "copilot": "❌",
+              "cursor": "❌",
+              "claudeCode": "❌",
+              "devin": "❌",
+              "openhands": "❌",
+              "aider": "❌",
+              "continueDev": "❌"
+            }
+          }
+        ]
+      },
+      {
+        "id": "orchestration",
+        "title": "多智能体编排",
+        "blurb": "跨结构化工作流协调专业化的智能体，而非单次提示。",
+        "rows": [
+          {
+            "feature": "多智能体编排",
+            "note": "7 个角色 + 依赖 DAG",
+            "values": {
+              "builderforce": "✅",
+              "copilot": "❌",
+              "cursor": "❌",
+              "claudeCode": "❌",
+              "devin": "❌",
+              "openhands": "❌",
+              "aider": "❌",
+              "continueDev": "❌"
+            }
+          },
+          {
+            "feature": "规划工作流",
+            "note": "PRD → Arch → 任务，经由 /spec",
+            "values": {
+              "builderforce": "✅",
+              "copilot": "❌",
+              "cursor": "❌",
+              "claudeCode": "❌",
+              "devin": "⚠️ 基础规划",
+              "openhands": "❌",
+              "aider": "❌",
+              "continueDev": "❌"
+            }
+          },
+          {
+            "feature": "缺陷修复工作流",
+            "note": "分析者 → 创建者 → 评审者",
+            "values": {
+              "builderforce": "✅",
+              "copilot": "⚠️ 内联",
+              "cursor": "⚠️ 内联",
+              "claudeCode": "⚠️ 内联",
+              "devin": "✅",
+              "openhands": "⚠️ 单次",
+              "aider": "⚠️ 单次",
+              "continueDev": "⚠️ 内联"
+            }
+          },
+          {
+            "feature": "重构工作流",
+            "note": "评审者 → 重构 → 测试",
+            "values": {
+              "builderforce": "✅",
+              "copilot": "❌",
+              "cursor": "⚠️ 单次",
+              "claudeCode": "⚠️ 单次",
+              "devin": "⚠️ 单次",
+              "openhands": "⚠️ 单次",
+              "aider": "⚠️ 单次",
+              "continueDev": "❌"
+            }
+          },
+          {
+            "feature": "对抗式评审环节",
+            "note": "内置工作流",
+            "values": {
+              "builderforce": "✅",
+              "copilot": "❌",
+              "cursor": "❌",
+              "claudeCode": "❌",
+              "devin": "❌",
+              "openhands": "❌",
+              "aider": "❌",
+              "continueDev": "❌"
+            }
+          },
+          {
+            "feature": "自定义智能体人设 / 角色",
+            "note": ".builderforce/personas/ 中的 YAML",
+            "values": {
+              "builderforce": "✅",
+              "copilot": "❌",
+              "cursor": "❌",
+              "claudeCode": "❌",
+              "devin": "❌",
+              "openhands": "❌",
+              "aider": "❌",
+              "continueDev": "❌"
+            }
+          }
+        ]
+      },
+      {
+        "id": "governance",
+        "title": "治理与可靠性",
+        "blurb": "审批关卡、恢复机制和自动化，让智能体可安全地在生产环境运行。",
+        "rows": [
+          {
+            "feature": "人在回路的审批关卡",
+            "note": "经由门户挂起 + 审批",
+            "values": {
+              "builderforce": "✅",
+              "copilot": "❌",
+              "cursor": "❌",
+              "claudeCode": "❌",
+              "devin": "⚠️ 基础",
+              "openhands": "❌",
+              "aider": "❌",
+              "continueDev": "❌"
+            }
+          },
+          {
+            "feature": "自愈 / 错误恢复",
+            "note": "自动检测 + 重跑",
+            "values": {
+              "builderforce": "✅",
+              "copilot": "❌",
+              "cursor": "❌",
+              "claudeCode": "❌",
+              "devin": "⚠️ 仅重试",
+              "openhands": "⚠️ 仅重试",
+              "aider": "❌",
+              "continueDev": "❌"
+            }
+          },
+          {
+            "feature": "定时自动化（cron）",
+            "note": "与 Builderforce 同步",
+            "values": {
+              "builderforce": "✅",
+              "copilot": "❌",
+              "cursor": "❌",
+              "claudeCode": "❌",
+              "devin": "❌",
+              "openhands": "❌",
+              "aider": "❌",
+              "continueDev": "❌"
+            }
+          },
+          {
+            "feature": "CI/CD 流水线集成",
+            "note": "CLI + webhook 触发",
+            "values": {
+              "builderforce": "✅",
+              "copilot": "⚠️ PR 建议",
+              "cursor": "❌",
+              "claudeCode": "⚠️ 仅 CLI",
+              "devin": "⚠️ API",
+              "openhands": "⚠️ API",
+              "aider": "⚠️ CLI",
+              "continueDev": "❌"
+            }
+          },
+          {
+            "feature": "语义答案评估",
+            "note": "忠实度 / 相关性 / 幻觉",
+            "values": {
+              "builderforce": "✅",
+              "copilot": "❌",
+              "cursor": "❌",
+              "claudeCode": "❌",
+              "devin": "❌",
+              "openhands": "❌",
+              "aider": "❌",
+              "continueDev": "❌"
+            }
+          },
+          {
+            "feature": "质量漂移监控",
+            "note": "按模型的回归告警",
+            "values": {
+              "builderforce": "✅",
+              "copilot": "❌",
+              "cursor": "❌",
+              "claudeCode": "❌",
+              "devin": "❌",
+              "openhands": "❌",
+              "aider": "❌",
+              "continueDev": "❌"
+            }
+          }
+        ]
+      },
+      {
+        "id": "codebase-context",
+        "title": "代码库理解与编辑",
+        "blurb": "工具对你的代码仓库读取得有多深入，以及它将变更暂存以供评审时有多干净利落。",
+        "rows": [
+          {
+            "feature": "代码库语义搜索",
+            "values": {
+              "builderforce": "✅",
+              "copilot": "⚠️",
+              "cursor": "✅",
+              "claudeCode": "⚠️ 基础 RAG",
+              "devin": "✅",
+              "openhands": "⚠️ 基础",
+              "aider": "⚠️ Git 感知",
+              "continueDev": "✅"
+            }
+          },
+          {
+            "feature": "混合检索（稠密 + BM25 + 重排）",
+            "note": "RRF 融合 + MMR 多样性",
+            "values": {
+              "builderforce": "✅",
+              "copilot": "❌",
+              "cursor": "⚠️ 仅向量",
+              "claudeCode": "⚠️ 仅向量",
+              "devin": "⚠️ 仅向量",
+              "openhands": "⚠️ 仅向量",
+              "aider": "⚠️ Git 感知",
+              "continueDev": "⚠️ 仅向量"
+            }
+          },
+          {
+            "feature": "深度 AST + git 历史分析",
+            "values": {
+              "builderforce": "✅",
+              "copilot": "❌",
+              "cursor": "⚠️ 基础 RAG",
+              "claudeCode": "⚠️ 基础 RAG",
+              "devin": "⚠️ 基础 RAG",
+              "openhands": "⚠️ 基础 RAG",
+              "aider": "⚠️ Git 感知",
+              "continueDev": "⚠️ 基础 RAG"
+            }
+          },
+          {
+            "feature": "暂存差异 / 接受-拒绝",
+            "note": "/diff、/accept、/reject",
+            "values": {
+              "builderforce": "✅",
+              "copilot": "❌",
+              "cursor": "✅ Composer",
+              "claudeCode": "❌",
+              "devin": "❌",
+              "openhands": "❌",
+              "aider": "✅ Git diff",
+              "continueDev": "✅ ⌘K diff"
+            }
+          },
+          {
+            "feature": "内置技能",
+            "note": "53 个内置 + 市场",
+            "values": {
+              "builderforce": "✅",
+              "copilot": "❌",
+              "cursor": "❌",
+              "claudeCode": "❌",
+              "devin": "❌",
+              "openhands": "❌",
+              "aider": "❌",
+              "continueDev": "❌"
+            }
+          }
+        ]
+      },
+      {
+        "id": "memory-fleet",
+        "title": "记忆与机群",
+        "blurb": "跨会话的持久化知识，以及跨机器的协调能力。",
+        "rows": [
+          {
+            "feature": "持久化项目知识",
+            "note": ".builderforce/",
+            "values": {
+              "builderforce": "✅",
+              "copilot": "❌",
+              "cursor": "⚠️ 会话内",
+              "claudeCode": "⚠️ 会话内",
+              "devin": "⚠️ 会话内",
+              "openhands": "❌",
+              "aider": "❌",
+              "continueDev": "❌"
+            }
+          },
+          {
+            "feature": "会话交接",
+            "note": "/handoff + 自动加载",
+            "values": {
+              "builderforce": "✅",
+              "copilot": "❌",
+              "cursor": "❌",
+              "claudeCode": "❌",
+              "devin": "❌",
+              "openhands": "❌",
+              "aider": "❌",
+              "continueDev": "❌"
+            }
+          },
+          {
+            "feature": "跨重启的工作流持久化",
+            "note": "YAML 检查点 + 恢复",
+            "values": {
+              "builderforce": "✅",
+              "copilot": "❌",
+              "cursor": "❌",
+              "claudeCode": "❌",
+              "devin": "⚠️ 基于会话",
+              "openhands": "❌",
+              "aider": "❌",
+              "continueDev": "❌"
+            }
+          },
+          {
+            "feature": "任务后知识闭环",
+            "note": ".builderforce/memory/ 自动更新",
+            "values": {
+              "builderforce": "✅",
+              "copilot": "❌",
+              "cursor": "❌",
+              "claudeCode": "❌",
+              "devin": "❌",
+              "openhands": "❌",
+              "aider": "❌",
+              "continueDev": "❌"
+            }
+          },
+          {
+            "feature": "智能体之间的分布式委派",
+            "note": "remote:<id> 调度",
+            "values": {
+              "builderforce": "✅",
+              "copilot": "❌",
+              "cursor": "❌",
+              "claudeCode": "❌",
+              "devin": "❌",
+              "openhands": "❌",
+              "aider": "❌",
+              "continueDev": "❌"
+            }
+          },
+          {
+            "feature": "机群 / 多机协调",
+            "note": "Builderforce 机群注册表",
+            "values": {
+              "builderforce": "✅",
+              "copilot": "❌",
+              "cursor": "❌",
+              "claudeCode": "❌",
+              "devin": "❌",
+              "openhands": "❌",
+              "aider": "❌",
+              "continueDev": "❌"
+            }
+          }
+        ]
+      },
+      {
+        "id": "reach",
+        "title": "渠道与覆盖",
+        "blurb": "在团队已经工作的地方、在任意设备上与他们相遇。",
+        "rows": [
+          {
+            "feature": "可在 WhatsApp / Telegram / Slack 中运行",
+            "note": "15+ 个渠道",
+            "values": {
+              "builderforce": "✅",
+              "copilot": "❌",
+              "cursor": "❌",
+              "claudeCode": "❌",
+              "devin": "❌",
+              "openhands": "❌",
+              "aider": "❌",
+              "continueDev": "❌"
+            }
+          },
+          {
+            "feature": "语音 + Talk 模式",
+            "note": "macOS / iOS / Android",
+            "values": {
+              "builderforce": "✅",
+              "copilot": "❌",
+              "cursor": "❌",
+              "claudeCode": "❌",
+              "devin": "❌",
+              "openhands": "❌",
+              "aider": "❌",
+              "continueDev": "❌"
+            }
+          },
+          {
+            "feature": "移动端伴侣应用",
+            "note": "iOS + Android",
+            "values": {
+              "builderforce": "✅",
+              "copilot": "❌",
+              "cursor": "❌",
+              "claudeCode": "❌",
+              "devin": "❌",
+              "openhands": "❌",
+              "aider": "❌",
+              "continueDev": "❌"
+            }
+          }
+        ]
+      }
+    ],
+    "faq": [
+      {
+        "question": "Builderforce.ai 是 GitHub Copilot 的替代品吗？",
+        "answer": "是的，但二者解决的范畴不同。GitHub Copilot 是 VS Code 内的单智能体自动补全，绑定 GPT 和 Claude 模型。Builderforce.ai 是一个自托管、MIT 许可的多智能体平台，通过完整的规划、缺陷修复、重构和对抗式评审工作流编排七个专家角色，运行于 30+ 家模型供应商（包括本地的 Ollama），并增加了审批、审计和持久化记忆。已超越行级补全的团队会采用 Builderforce.ai 来实现端到端交付。"
+      },
+      {
+        "question": "Builderforce.ai 与 Cursor 和 Windsurf 相比如何？",
+        "answer": "Cursor 和 Windsurf 是出色的 AI 原生编辑器，但它们仍是单智能体且绑定 IDE。Builderforce.ai 独立于 IDE，可从任意渠道或 CLI 工作，通过依赖 DAG 在一项任务上协调多个智能体，并完全自托管，跨 30+ 家供应商拥有模型自由。你甚至可以通过 MCP 将 Cursor 或 Windsurf 连接到 Builderforce.ai，将其用作你的编排和记忆层。"
+      },
+      {
+        "question": "Builderforce.ai 对比 Claude Code 和 Aider，区别是什么？",
+        "answer": "Claude Code 被锁定于 Anthropic 模型，而 Aider 运行的是单个 CLI 智能体。Builderforce.ai 运行一支专家智能体团队，内置对抗式评审环节、人工审批关卡、审计轨迹，以及位于 .builderforce/ 的持久化项目记忆。它跨 30+ 家供应商保持模型无关，并增加了机群网格、remote:<id> 调度和 15+ 个聊天渠道，因而可从一名开发者扩展到一支被编排的机群。"
+      },
+      {
+        "question": "Builderforce.ai 对比 Devin 和 OpenHands，自主工程该选哪一个？",
+        "answer": "Devin 是一个专有的托管式自主智能体，OpenHands 则是一个开源的单智能体运行时。Builderforce.ai 的不同之处在于：它自托管、MIT 许可，内置真正的多智能体编排与治理：审批关卡、审计轨迹，以及能自动检测故障并重跑受影响步骤的自愈恢复机制。你的代码保留在你自己的基础设施上，并可选择任意模型，包括本地模型。"
+      },
+      {
+        "question": "Builderforce.ai 能完全离线或气隙运行吗？",
+        "answer": "可以。Builderforce.ai 是自托管的，并支持气隙部署。借助通过 Ollama 运行的本地模型，你可以在不让任何代码或提示离开你的网络的情况下运行整支智能体团队，而这是大多数封闭竞品所无法提供的。项目记忆持久化保存在本地的 .builderforce/ 中，因此上下文可在多个会话间存续，而无需依赖云端。"
+      },
+      {
+        "question": "Builderforce.ai 会把我锁定在某一种模型或 IDE 上吗？",
+        "answer": "不会。Builderforce.ai 跨 30+ 家供应商保持模型无关，包括 Anthropic、OpenAI、Bedrock 和本地的 Ollama，并且独立于 IDE，可从任意 CLI 或聊天渠道访问。无需采用任何编辑器分支，也没有单一厂商的模型要求，这正是它与 Copilot、Cursor、Windsurf 和 Claude Code 的核心区别。"
+      }
+    ],
+    "capabilityHeader": "能力",
+    "faqHeading": "Builderforce.ai 与同类产品对比 — 常见问题",
+    "relatedHeading": "阅读逐一对决",
+    "ctaTitle": "已超越自动补全？",
+    "ctaDesc": "免费开始——自托管、MIT 许可、模型无关。让一整支 AI 智能体团队投入工作，并对每一项操作配以审批和审计轨迹。",
+    "ctaTourPlatform": "浏览平台",
+    "leaf": {
+      "bottomLine": "结论",
+      "faqHeading": "常见问题",
+      "seeFullComparison": "查看完整对比",
+      "relatedHeading": "相关阅读",
+      "vsLabel": "Builderforce.ai 对比 {name}"
+    },
+    "competitors": {
+      "copilot": {
+        "tagline": "单智能体自动补全的自托管多智能体替代方案",
+        "summary": "GitHub Copilot 是 VS Code 内的单智能体自动补全，绑定 GPT 和 Claude。Builderforce.ai 是一个自托管、MIT 许可的多智能体平台，跨 30+ 家模型供应商规划、构建、评审和测试功能，并具备审批、审计和持久化记忆。",
+        "verdict": "当你已超越行级补全，需要可自托管、被编排、受治理且模型无关的交付时，选择 Builderforce.ai 而非 GitHub Copilot。"
+      },
+      "cursor": {
+        "tagline": "编排一支自托管的智能体团队，而非一个绑定 IDE 的智能体",
+        "summary": "Cursor 和 Windsurf 是 AI 原生编辑器，但仍是单智能体且绑定 IDE。Builderforce.ai 独立于 IDE，通过依赖 DAG 在一项任务上协调多个智能体，完全自托管，甚至可通过 MCP 置于 Cursor 之后，作为你的编排和记忆层。",
+        "verdict": "当你想要独立于 IDE 的多智能体编排、模型自由和自托管，而非又一个编辑器分支时，选择 Builderforce.ai 而非 Cursor 或 Windsurf。"
+      },
+      "claudeCode": {
+        "tagline": "超越单一厂商 CLI 的模型无关、多智能体交付",
+        "summary": "Claude Code 被锁定于 Anthropic 模型，并驱动单个终端智能体。Builderforce.ai 运行一支专家智能体团队，内置对抗式评审环节、审批关卡、审计轨迹和持久化项目记忆——跨 30+ 家供应商（包括本地的 Ollama）保持模型无关。",
+        "verdict": "当你需要多智能体工作流、治理，以及摆脱单一模型厂商的自由时，选择 Builderforce.ai 而非 Claude Code。"
+      },
+      "devin": {
+        "tagline": "自托管、MIT 许可、带治理的自主工程",
+        "summary": "Devin 是一个专有的托管式自主智能体，定价 $500/mo。Builderforce.ai 提供你可自托管并拥有的真正多智能体编排，MIT 许可，具备审批关卡、审计轨迹和自愈恢复——让你的代码保留在自己的基础设施上，并可使用任意模型。",
+        "verdict": "当你想要自托管、可审计、模型无关的自主工程，而不愿接受专有云或 $500/mo 起步价时，选择 Builderforce.ai 而非 Devin。"
+      },
+      "openhands": {
+        "tagline": "在开源运行时之上叠加多智能体编排与治理",
+        "summary": "OpenHands 是一个开源的单智能体运行时。Builderforce.ai 增加了真正的多智能体编排（七个角色 + 依赖 DAG）、人工审批关卡、审计轨迹、持久化记忆和机群网格——全部自托管且 MIT 许可。",
+        "verdict": "当你需要被协调的多智能体工作流和治理，而非单智能体循环时，选择 Builderforce.ai 而非 OpenHands。"
+      },
+      "aider": {
+        "tagline": "从单个 CLI 智能体，到一支被编排、受治理的智能体团队",
+        "summary": "Aider 运行一个 git 感知的 CLI 智能体。Builderforce.ai 协调一支专家智能体团队，具备对抗式评审、审批关卡、持久化项目记忆、机群网格和 15+ 个聊天渠道——跨 30+ 家供应商保持模型无关，且自托管。",
+        "verdict": "当一个 CLI 智能体已不再够用，而你需要团队规模的编排、治理和记忆时，选择 Builderforce.ai 而非 Aider。"
+      },
+      "continueDev": {
+        "tagline": "超越 IDE 扩展——编排、治理与记忆",
+        "summary": "Continue.dev 是一个用于单智能体辅助的开源 IDE 扩展。Builderforce.ai 独立于 IDE，通过完整的规划、缺陷修复、重构和评审工作流编排多个专家智能体，并具备审批、审计和持久化记忆。",
+        "verdict": "当你想要独立于 IDE 的多智能体交付和治理，而非编辑器内的助手时，选择 Builderforce.ai 而非 Continue.dev。"
+      }
     }
   },
   "home": {
@@ -3011,5 +3660,390 @@
         "answer": "可以——在 Builderforce 上训练的模型可被导出并发布为 Evermind 模型，由你自托管的 BuilderForce Agents 网关直接作为模型调用，而不仅仅是作为记忆层。该平台支持完整流水线：在浏览器中训练一个定制 SSM、发布它，并通过兼容 OpenAI 的 API 将实时流量路由到它。"
       }
     ]
+  },
+  "pricing": {
+    "seo": {
+      "title": "定价 — 免费版、Pro 版和 Teams 版",
+      "description": "Builderforce.ai 定价：免费版（永久 $0/月）、Pro 版（$29/席位/月）和 Teams 版（$20/席位/月）。包含 WebGPU LoRA 训练、数据集生成、AI 评估和 Workforce Registry。",
+      "ogTitle": "Builderforce.ai 定价 — 免费版、Pro 版和 Teams 版",
+      "ogDescription": "永久免费版，含 WebGPU 训练。Pro 版 $29/席位/月，可无限创建智能体。Teams 版 $20/席位/月，含共享审批收件箱。",
+      "twitterTitle": "Builderforce.ai 定价",
+      "twitterDescription": "永久免费。Pro 版 $29/席位/月。Teams 版 $20/席位/月。含 WebGPU LoRA 训练。"
+    },
+    "titleAnon": "简单、透明的定价",
+    "titleConsole": "定价与账单",
+    "subtitleAnon": "免费起步，随着您的智能体团队壮大再升级。无需信用卡即可开始。",
+    "subtitleConsole": "管理您的订阅和账单详情。",
+    "loading": "正在加载订阅…",
+    "errorLoad": "加载订阅失败",
+    "anonBannerTitle": "从免费版开始",
+    "anonBannerDesc": "永久 $0/月 — 1 个 AgentHost、5 个项目、WebGPU LoRA 训练。随时可升级。",
+    "anonBannerCta": "创建免费账户",
+    "currentPlan": "当前套餐",
+    "fieldBillingCycle": "计费周期",
+    "fieldSeats": "席位",
+    "fieldBillingEmail": "账单邮箱",
+    "fieldPaymentMethod": "付款方式",
+    "fieldLastUpdated": "最后更新",
+    "upgradePlan": "升级套餐",
+    "downgrading": "正在降级…",
+    "downgradeToFree": "降级到免费版",
+    "ctaCurrentPlan": "当前套餐",
+    "ctaGetStarted": "立即开始",
+    "ctaUpgradeTo": "升级到 {plan}",
+    "ctaGet": "获取 {plan}",
+    "downgradeConfirm": "降级到免费版？您将在当前计费周期结束时失去当前套餐的功能。",
+    "modalUpgradeTo": "升级到 {plan}",
+    "labelBillingCycle": "计费周期",
+    "cycleMonthly": "按月",
+    "cycleYearly": "按年",
+    "cycleMonthlyCap": "按月",
+    "cycleYearlyCap": "按年",
+    "saveCycle": "节省 {pct}%",
+    "cycleYearlyWithSaving": "{cycle}（{saving}）",
+    "labelSeats": "席位",
+    "labelBillingEmail": "账单邮箱",
+    "placeholderBillingEmail": "billing@example.com",
+    "labelCardBrand": "卡片品牌",
+    "labelCardLast4": "卡号后 4 位",
+    "redirectNote": "您将被重定向到我们的支付服务商，以安全地输入您的卡片详情。",
+    "total": "合计：${price}/{unit}",
+    "totalForSeats": "{seats, plural, one {共 # 个席位} other {共 # 个席位}}",
+    "unitYear": "年",
+    "unitMonth": "月",
+    "errorBillingEmailRequired": "账单邮箱为必填项。",
+    "errorCardLast4": "卡号后 4 位必须正好是 4 位数字。",
+    "errorUpgradeFailed": "升级失败",
+    "cancel": "取消",
+    "activating": "正在激活…",
+    "redirecting": "正在重定向…",
+    "activatePlan": "激活 {plan}",
+    "continueToPayment": "继续付款",
+    "planComparison": "套餐对比",
+    "colFeature": "功能",
+    "priceFree": "$0",
+    "priceProMonthly": "${price}/月",
+    "priceTeamsMonthly": "${price}/席位/月",
+    "teamsCostNoteYear": "${perSeat}/席位/年 — 按 ${total}/年 计费",
+    "teamsCostNoteMonth": "${perSeat}/席位/月 — 按 ${total}/月 计费",
+    "managedAddon": "附加组件：<b>托管 AgentHost</b> — 每个托管 AgentHost ${price}/月。我们为您运行 BuilderForce Agents 实例 — 无需 Docker，无需 DevOps。",
+    "relatedHeading": "在您决定之前",
+    "planFeatures": [
+      "Evermind 自更新模型（设备端）",
+      "1 个 AgentHost",
+      "最多 3 个 AgentHosts",
+      "无限 AgentHosts",
+      "5 个项目",
+      "无限项目",
+      "1 万令牌 / 天",
+      "100 万令牌 / 天",
+      "500 万令牌 / 天",
+      "审批工作流",
+      "舰队网格 + 远程调度",
+      "完整遥测 + 审计追踪",
+      "自定义智能体角色",
+      "共享团队审批收件箱",
+      "按席位成本控制",
+      "优先支持",
+      "社区支持"
+    ]
+  },
+  "product": {
+    "seo": {
+      "title": "产品 — 构建、训练、编排并治理你的 AI 团队",
+      "description": "全面体验 Builderforce.ai 所提供的一切：浏览器内 WebGPU LoRA 训练、AI 评估引擎、技能与人格市场、工作流编排、团队网格，以及完整的审批与审计。在注册之前先了解整个平台。",
+      "ogTitle": "Builderforce.ai 平台 — 构建、训练、编排与治理"
+    },
+    "eyebrow": "平台",
+    "title": "AI 团队所需的一切，尽在一处",
+    "sub": "Builderforce.ai 是你的 AI CTO、CIO 兼安全官。它构建并训练你的智能体，在主机网格中对它们进行编排，并通过审批和审计轨迹治理每一项操作。这里就是整个平台 — 在注册之前自由探索任意部分。",
+    "statLabels": [
+      "参数规模\n浏览器内",
+      "数据集\n生成",
+      "硬件\n加速",
+      "私密 — 运行于\n你的浏览器中"
+    ],
+    "exploreCta": "探索",
+    "ctaTitle": "让你的 AI 团队投入工作",
+    "ctaDesc": "免费开始 — 无需信用卡。在几分钟内完全在浏览器中构建、训练并部署你的第一个智能体。",
+    "ctaBrowseWorkforce": "浏览团队",
+    "relatedHeading": "深入了解",
+    "sections": [
+      {
+        "id": "build",
+        "title": "构建与训练",
+        "blurb": "从一个想法到一个经过训练、评估的 AI 智能体 — 全程在浏览器中完成。",
+        "surfaces": [
+          {
+            "title": "Evermind",
+            "desc": "平台的大脑 — 一个由写穿认知（Write-Through Cognition）治理的自更新模型。新知识会替换此前的内容，无需任何对账步骤；它通过 WebGPU 在浏览器中、设备端，或在每个智能体内部运行。"
+          },
+          {
+            "title": "仪表盘",
+            "desc": "你的指挥中心：工作区健康状况、近期运行记录，以及你的 AI 团队此刻正在做什么。"
+          },
+          {
+            "title": "头脑风暴",
+            "desc": "用平实的语言描述你的需求；Brain 会将其转化为项目、数据集和智能体。"
+          },
+          {
+            "title": "IDE 工作区",
+            "desc": "Monaco 编辑器、终端、AI 聊天与文件浏览器，集于一个协作式项目工作区。"
+          },
+          {
+            "title": "训练",
+            "desc": "浏览器内 WebGPU LoRA 微调，参数规模最高可达 20 亿，配备实时评估引擎 — 零 GPU 账单。训练一个自定义智能体，然后在你自己的智能体内部调用它。"
+          },
+          {
+            "title": "VS Code 扩展",
+            "desc": "在你的编辑器中运行整个平台 — 与智能体对话、分配并运行任务、审查并验证它们的工作，无需离开 VS Code 即可审批操作。"
+          }
+        ]
+      },
+      {
+        "id": "orchestrate",
+        "title": "编排",
+        "blurb": "在智能体、工作流以及远程 AgentHost 网格之间协调工作。",
+        "surfaces": [
+          {
+            "title": "工作流构建器",
+            "desc": "将智能体与工具组合成可重复、需审批门控的工作流。"
+          },
+          {
+            "title": "项目 / 任务",
+            "desc": "将工作组织进项目工作区 — 每个工作区都配有完整的 IDE、智能体和任务看板 — 随后在看板、表格、日历或甘特视图中规划、分配并观察任务在你的智能体团队中流转。"
+          },
+          {
+            "title": "规划主线与组合",
+            "desc": "一个带日期的层级结构 — 组合 → 举措 → 史诗 → 任务，并可在任意层级设置 OKR — 其中每个叶节点的成本都向上汇总至每个上级，并在同一张甘特图上按 CAPEX 与 OPEX 拆分。在一处完成规划、交付和核算工作。"
+          },
+          {
+            "title": "看板连接器",
+            "desc": "与 Jira、Linear、monday、Asana、ClickUp、ServiceNow、Freshservice、Sentry、PagerDuty 和 GitHub 双向同步 — 跨越你已在使用的各类跟踪工具进行编排，无需迁移。"
+          },
+          {
+            "title": "团队网格",
+            "desc": "在本地和远程 AgentHost 之间发现并派发工作 — 在多台机器和多个租户之间共享算力。"
+          },
+          {
+            "title": "聊天",
+            "desc": "直接与你的智能体对话，或观看它们在共享会话中协作。"
+          }
+        ]
+      },
+      {
+        "id": "extend",
+        "title": "扩展",
+        "blurb": "一个技能、人格、提示词与内容的市场，为智能体全面赋能。",
+        "surfaces": [
+          {
+            "title": "知识与 SOP",
+            "desc": "一个带版本管理的 SOP、流程与文档库，配备面向 SOX、TISAX 和 ISO 27001 的阅读确认审计轨迹、AI 撰写以及实时协同编辑 — 这些知识为你的智能体提供依据并证明合规性。"
+          },
+          {
+            "title": "技能",
+            "desc": "从 Workforce 市场安装或发布可复用的智能体技能。"
+          },
+          {
+            "title": "人格",
+            "desc": "通过可复用的人格为智能体赋予语气和行为画像。"
+          },
+          {
+            "title": "提示词库",
+            "desc": "浏览、使用并分享带变量的社区提示词模板。"
+          },
+          {
+            "title": "内容管理器",
+            "desc": "撰写并分享可供你的智能体和市场复用的内容块。"
+          }
+        ]
+      },
+      {
+        "id": "govern",
+        "title": "治理与运营",
+        "blurb": "审批、安全与完整的可观测性 — 你的 AI 安全官。",
+        "surfaces": [
+          {
+            "title": "审批",
+            "desc": "对智能体执行的每一项敏感操作设置人工参与的审批门控。"
+          },
+          {
+            "title": "安全",
+            "desc": "每个租户隔离，以及对每个集成采用 AES-256-GCM 加密的凭据。"
+          },
+          {
+            "title": "可观测性",
+            "desc": "对每一项智能体操作、每个 token 和每次工具调用提供完整的遥测和审计轨迹。"
+          },
+          {
+            "title": "质量与错误跟踪",
+            "desc": "从浏览器 SDK、OpenTelemetry、Sentry、PostHog 或 LogRocket 摄取错误；按指纹分组；然后将任意一组转化为修复任务，由智能体以拉取请求的形式交付 — 在同一界面上实现从崩溃到 PR 的闭环。"
+          },
+          {
+            "title": "成熟度诊断",
+            "desc": "在 CMMI/COBIT 式的 1–5 级量表上为每项实践（开发、QA、DevOps、PMO、治理）评级 — 可免费自评，也可根据你真实的交付数据进行客观评分，并附带一份用于成熟与创新的优先级计划。"
+          },
+          {
+            "title": "租户与工作区",
+            "desc": "多租户工作区，配备按席位的角色、成员和成本管控。"
+          }
+        ]
+      }
+    ]
+  },
+  "agents": {
+    "seo": {
+      "title": "BuilderForce Agents — 自托管、开源的 AI 智能体运行时",
+      "description": "BuilderForce Agents 是 Builderforce.ai 背后采用 MIT 许可、自托管的智能体运行时 — 自主编码智能体与子智能体，具备深度代码库理解、技能系统、多智能体工作流、AgentHost 网格以及人工参与的审批门控。",
+      "ogTitle": "BuilderForce Agents — 自托管的 AI 智能体运行时"
+    },
+    "logoAlt": "BuilderForce Agents 徽标",
+    "tagline": "自托管、开发者优先的多智能体编码工作流。",
+    "description": "从编写代码转向管理业务成果。<br></br><strong>BuilderForce Agents</strong> 管理具备持久记忆与自我修复能力的独立智能体及子智能体。<strong><home>Builderforce.ai</home></strong> 在你的整个网格中编排项目。",
+    "whatItDoes": "它能做什么",
+    "whyHeading": "为什么选择 BuilderForce Agents？",
+    "whyIntro": "为开发者打造的自托管、多智能体编排 — 从初创团队（5–50 名开发者）到企业（100–1,000+）。关键差异化优势：",
+    "whyList": [
+      "深度代码库理解（AST、语义图、git 历史、持久上下文）。",
+      "预置的多智能体工作流：规划、编码、审查、测试、对抗式回合。",
+      "自愈运行时：智能体检测故障、自我修复，并随时间不断适应。",
+      "跨会话的持久记忆与上下文感知推理 — 无需反复讲解你的代码库。",
+      "分阶段差异审查：所有智能体更改均经缓冲以供接受/拒绝。",
+      "AgentHost 间网格：在一支主机舰队中分发任务；`remote:auto[caps]` 会自动路由到最合适的对等节点。",
+      "工作流遥测：每项任务都在本地发出 JSONL span，并实时转发至 Builderforce.ai 时间线。",
+      "强制审批门控：`requestApproval()` 会阻断智能体执行，直至管理者批准。",
+      "门户管理的技能在启动时加载；门户管理的 cron 任务按计划执行。",
+      "安全与治理：RBAC、设备信任、HMAC 签名的派发以及审计轨迹。",
+      "CI/CD 集成以及私有/自托管部署。",
+      "可从任意渠道或 CLI 使用，搭配任意模型提供方。",
+      "开源（MIT），无供应商锁定。"
+    ],
+    "whyLinks": "查看 <cmp>与 Copilot、Cursor、Claude 的对比</cmp> 或 <docs>完整文档</docs>。",
+    "worksWithHeading": "与一切协同",
+    "worksWithIntro": "50+ 集成，覆盖即时通讯、AI、开发、生产力和 IoT。",
+    "viewAllIntegrations": "查看所有集成",
+    "seeShowcase": "看看大家构建了什么",
+    "ctaOrchestrationSub": "编排平台",
+    "ctaDiscordSub": "加入社区",
+    "ctaDocsLabel": "文档",
+    "ctaDocsSub": "快速上手",
+    "ctaGithubSub": "查看源代码",
+    "ctaSkillsLabel": "智能体技能",
+    "ctaSkillsSub": "发现与分享",
+    "faqHeading": "常见问题",
+    "relatedHeading": "相关阅读",
+    "capabilities": [
+      {
+        "title": "智能体与子智能体管理器",
+        "description": "BuilderForce Agents 运行并协调独立的编码智能体和子智能体。在你的整个工作流中自主地委派工作。"
+      },
+      {
+        "title": "网格编排",
+        "description": "Builderforce.ai 是项目管理与网格编排器 — 在你的整个团队中协调智能体、任务与成果。"
+      },
+      {
+        "title": "聚焦业务成果",
+        "description": "从编写代码转向管理业务成果。让智能体处理执行，而你专注于战略。"
+      },
+      {
+        "title": "自愈运行时",
+        "description": "智能体检测故障、自我修复，并随时间不断适应。持久记忆意味着上下文能在重启后留存 — 无需反复讲解你的代码库。"
+      },
+      {
+        "title": "人工参与的控制",
+        "description": "审批门控会阻断智能体执行，直至管理者在 Builderforce.ai 门户中批准。工作流可见性、可审计性和人工签核 — 是强制执行的，而非可选项。"
+      },
+      {
+        "title": "AgentHost 间网格",
+        "description": "在一支 AgentHost 舰队中分发工作。使用 `remote:auto[caps]` 将任务路由到最匹配的对等节点。所有派发均经 HMAC 签名并采用 Bearer 认证。"
+      },
+      {
+        "title": "完全自动化",
+        "description": "智能体可以浏览网页、控制你的浏览器、运行 shell 命令，并代表你与任何工具或服务交互。"
+      },
+      {
+        "title": "完整系统访问",
+        "description": "读写文件、运行 shell 命令、执行脚本。完全访问或沙箱隔离 — 由你选择。"
+      },
+      {
+        "title": "技能与插件",
+        "description": "通过社区技能进行扩展，或构建你自己的技能。在 Builderforce.ai 门户中分配的技能会在启动时自动加载。"
+      },
+      {
+        "title": "深度代码库理解",
+        "description": "AST 解析、语义图、依赖图和 git 历史让智能体真正理解你的项目。"
+      },
+      {
+        "title": "智能体工作流构建器",
+        "description": "拖放式、IPAAS 风格的画布，用于组合你自己的 LLM 逻辑 — 记忆、知识库和训练节点 — 接入你的智能体并在你的 AgentHost 上运行。"
+      },
+      {
+        "title": "多智能体工作流",
+        "description": "针对规划、功能开发、缺陷修复、重构和对抗式审查的内置模式让工作持续推进。"
+      },
+      {
+        "title": "安全与 RBAC",
+        "description": "基于角色的访问控制、设备信任以及完整的审计轨迹。AgentHost 间派发经 HMAC 签名并采用 Bearer 认证。"
+      },
+      {
+        "title": "工作流遥测",
+        "description": "每项任务和工作流都在本地发出结构化 JSONL span，并实时转发至 Builderforce.ai 门户时间线。"
+      },
+      {
+        "title": "自主泳道执行",
+        "description": "将任意智能体 — 云端或本地部署 — 分配到一条看板泳道。工单会自动派发，看板会随着智能体完成工作而自行推进，仅在你所选择的审批门控处停下。"
+      },
+      {
+        "title": "能交付代码的智能体",
+        "description": "云端智能体通过安全的服务器端 git 代理克隆绑定的仓库（你的 Git 令牌绝不离开服务器），编写更改、推送分支并发起拉取请求 — 无头运行，不打开浏览器。本地部署智能体在你自己的机器上执行相同操作。"
+      },
+      {
+        "title": "自托管与开源",
+        "description": "在 MIT 许可下运行于你自己的基础设施 — 无供应商锁定，也无订阅上限。"
+      }
+    ],
+    "faq": [
+      {
+        "question": "什么是 BuilderForce Agents？",
+        "answer": "BuilderForce Agents 是 Builderforce.ai 背后自托管的智能体运行时。它在 MIT 许可下、在你自己的基础设施上运行并协调独立的编码智能体和子智能体，具备深度代码库理解、技能系统、多智能体工作流以及人工参与的审批门控 — 由 Builderforce.ai 门户进行编排。"
+      },
+      {
+        "question": "BuilderForce Agents 是开源且自托管的吗？",
+        "answer": "是的。它采用 MIT 许可，运行于你自己的基础设施 — 无供应商锁定，也无订阅上限。你可以完全离网（air-gapped）运行，并通过 Ollama 使用本地模型，让任何代码或提示词都无需离开你的网络。"
+      },
+      {
+        "question": "智能体如何跨机器协调？",
+        "answer": "智能体组成一个 AgentHost 间网格。工作在一支主机舰队中分发，并通过 remote:auto[caps] 派发路由到最匹配的对等节点；每次派发均经 HMAC 签名并采用 Bearer 认证，门户会展示每项操作的实时遥测时间线。"
+      },
+      {
+        "question": "智能体能自行交付代码吗？",
+        "answer": "可以。云端智能体通过安全的服务器端 git 代理克隆绑定的仓库（你的 Git 令牌绝不离开服务器），编写更改、推送分支并发起拉取请求 — 无头运行，不打开浏览器。本地部署智能体在你自己的机器上执行相同操作，并且审批门控可在任何高影响步骤之前要求人工签核。"
+      }
+    ]
+  },
+  "newsletter": {
+    "heading": "保持关注",
+    "lead": "获取新功能、集成和智能体心得的更新。绝无垃圾邮件，可随时取消订阅。",
+    "emailAria": "电子邮箱地址",
+    "subscribe": "订阅",
+    "subscribing": "订阅中…",
+    "subscribed": "已订阅 ✓",
+    "error": "暂时无法订阅，请重试。",
+    "success": "感谢 — 您已成功加入列表。"
+  },
+  "blog": {
+    "seo": {
+      "title": "博客 — AI 智能体指南、教程与工具对比",
+      "description": "深入剖析、实战教程与诚恳对比，助你构建和部署 AI 智能体 — 自主 Kanban 执行、语义缓存、WebGPU LoRA 训练、多智能体编排，以及 Builderforce.ai 与 Copilot、Cursor、Claude Code 和 Devin 的实力较量。",
+      "ogTitle": "Builderforce 博客 — AI 智能体指南与工具对比",
+      "ogDescription": "教程、深度解析与正面对决：多智能体编排、语义缓存、WebGPU LoRA 训练，以及 Builderforce.ai 对比 Copilot、Cursor、Claude Code 和 Devin。",
+      "twitterDescription": "多智能体编排、语义缓存、WebGPU LoRA 训练，以及 Builderforce.ai 对比 Copilot、Cursor、Claude Code 和 Devin。"
+    },
+    "badge": "最新文章",
+    "desc": "深入剖析、实战教程与诚恳的工具对比，助你构建和部署 AI 智能体 — 从自主 Kanban 执行、语义缓存，到我们与 Copilot、Cursor、Claude Code 和 Devin 的实力较量。",
+    "paginationLabel": "博客分页",
+    "prevPage": "上一页",
+    "nextPage": "下一页",
+    "pageN": "第 {n} 页"
   }
 }

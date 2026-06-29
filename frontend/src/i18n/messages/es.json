@@ -2791,6 +2791,655 @@
         "Puertas de aprobación con intervención humana + registro de auditoría",
         "Más de 30 proveedores de modelos, incluido Ollama local"
       ]
+    },
+    "seo": {
+      "title": "Builderforce.ai frente al resto: entrega multiagente comparada | Builderforce.ai",
+      "description": "Descubre cómo se compara Builderforce.ai con GitHub Copilot, Cursor, Windsurf, Claude Code, Devin, OpenHands, Aider y Continue.dev. Orquestación multiagente autoalojada, con licencia MIT, agnóstica de modelo, con gobernanza, auditoría y memoria persistente.",
+      "ogTitle": "Builderforce.ai frente a GitHub Copilot, Cursor, Claude Code, Devin y más"
+    },
+    "hero": {
+      "eyebrow": "Builderforce.ai frente al resto",
+      "title": "Diseñado a propósito para la entrega multiagente, no para el autocompletado a nivel de archivo",
+      "subtitle": "GitHub Copilot termina tu línea. Cursor reescribe tu función. Builderforce.ai planifica la funcionalidad, coordina un equipo de agentes especialistas para construirla, revisarla y probarla, gobierna cada acción con aprobaciones y un registro de auditoría, y recuerda lo que tu proyecto decidió el sprint pasado. Autoalojado, con licencia MIT y agnóstico de modelo."
+    },
+    "pillars": [
+      {
+        "title": "Autoalojado, con licencia MIT, aislado de la red",
+        "desc": "Tu código y tus agentes se ejecutan en tus propias máquinas. Con licencia MIT, sin tope de suscripción y con una ruta completa de despliegue aislado de la red, para que los equipos de seguridad y cumplimiento mantengan el control. La mayoría de los rivales son SaaS cerrados que envían tu código a su nube."
+      },
+      {
+        "title": "Verdadera orquestación multiagente",
+        "desc": "Siete roles especialistas coordinados mediante un DAG de dependencias ejecutan flujos de trabajo de planificación, corrección de errores, refactorización y revisión adversaria de principio a fin. Copilot, Cursor, Claude Code, Devin y los demás impulsan un único agente que hace una sugerencia a la vez."
+      },
+      {
+        "title": "Libertad de modelo, sin dependencia de proveedor",
+        "desc": "Enruta cualquier tarea a cualquiera de más de 30 proveedores, incluidos modelos totalmente locales mediante Ollama y Bedrock autogestionado. Copilot está atado a GPT y Claude; Devin es propietario. Builderforce.ai es independiente del IDE y nunca está ligado a un solo proveedor."
+      },
+      {
+        "title": "Gobernanza, memoria y alcance de flota",
+        "desc": "Puertas de aprobación con intervención humana y un registro de auditoría completo envuelven cada acción, la memoria persistente del proyecto vive en .builderforce/, y la delegación distribuida entre agentes abarca máquinas y más de 15 canales de chat con voz y apps complementarias para móvil."
+      }
+    ],
+    "intro": "La mayoría de las herramientas de codificación con IA son potentes motores de autocompletado que se detienen en el límite del archivo. Builderforce.ai opera un nivel por encima: es el sistema de registro del trabajo agéntico — construye, entrena y despliega una fuerza laboral de agentes de IA, se conecta a tus sistemas, instrumenta y costea cada acción, y la gobierna con roles, aprobaciones y un registro de auditoría. Las tablas siguientes comparan Builderforce.ai con las herramientas que los equipos evalúan con más frecuencia, centradas en las capacidades que separan dirigir una organización de innovación de terminar una línea.",
+    "quotable": "Builderforce.ai es la única de estas herramientas diseñada a propósito para la entrega multiagente: autoalojada, con licencia MIT, agnóstica de modelo entre más de 30 proveedores y gobernada por aprobaciones y un registro de auditoría, mientras que las demás optimizan un único agente dentro de un único editor.",
+    "competitorLabels": {
+      "copilot": "GitHub Copilot",
+      "cursor": "Cursor / Windsurf",
+      "claudeCode": "Claude Code",
+      "devin": "Devin",
+      "openhands": "OpenHands",
+      "aider": "Aider",
+      "continueDev": "Continue.dev"
+    },
+    "categories": [
+      {
+        "id": "ownership",
+        "title": "Propiedad y despliegue",
+        "blurb": "Dónde se ejecuta la plataforma y quién la controla determina el costo, la residencia de los datos y la dependencia.",
+        "rows": [
+          {
+            "feature": "Precio",
+            "values": {
+              "builderforce": "Gratis (MIT)",
+              "copilot": "$19/usuario/mes",
+              "cursor": "$20/usuario/mes",
+              "claudeCode": "Según uso",
+              "devin": "$500/mes",
+              "openhands": "Gratis (MIT)",
+              "aider": "Gratis (MIT)",
+              "continueDev": "Gratis (MIT)"
+            }
+          },
+          {
+            "feature": "Autoalojado / código abierto",
+            "note": "MIT, totalmente autoalojado",
+            "values": {
+              "builderforce": "✅",
+              "copilot": "❌ Nube de MS",
+              "cursor": "❌ Nube del proveedor",
+              "claudeCode": "❌ Nube de Anthropic",
+              "devin": "❌ Solo en la nube",
+              "openhands": "✅",
+              "aider": "✅",
+              "continueDev": "✅"
+            }
+          },
+          {
+            "feature": "Despliegue aislado de la red / privado",
+            "values": {
+              "builderforce": "✅",
+              "copilot": "❌",
+              "cursor": "❌",
+              "claudeCode": "❌",
+              "devin": "❌",
+              "openhands": "✅",
+              "aider": "✅",
+              "continueDev": "✅"
+            }
+          },
+          {
+            "feature": "RBAC + registros de auditoría",
+            "values": {
+              "builderforce": "✅",
+              "copilot": "❌",
+              "cursor": "❌",
+              "claudeCode": "❌",
+              "devin": "⚠️ Básico",
+              "openhands": "❌",
+              "aider": "❌",
+              "continueDev": "❌"
+            }
+          }
+        ]
+      },
+      {
+        "id": "model-flexibility",
+        "title": "Flexibilidad de modelo y herramientas",
+        "blurb": "Libertad para elegir cualquier modelo, ejecutar sin conexión e integrarse con el ecosistema abierto de MCP.",
+        "rows": [
+          {
+            "feature": "Cualquier proveedor de modelo",
+            "note": "Más de 30 proveedores",
+            "values": {
+              "builderforce": "✅",
+              "copilot": "❌ GPT/Claude",
+              "cursor": "⚠️ Limitado",
+              "claudeCode": "❌ Solo Anthropic",
+              "devin": "❌ Propietario",
+              "openhands": "✅",
+              "aider": "✅",
+              "continueDev": "✅"
+            }
+          },
+          {
+            "feature": "Modelos locales / sin conexión (Ollama)",
+            "values": {
+              "builderforce": "✅",
+              "copilot": "❌",
+              "cursor": "⚠️",
+              "claudeCode": "❌",
+              "devin": "❌",
+              "openhands": "✅",
+              "aider": "✅",
+              "continueDev": "✅"
+            }
+          },
+          {
+            "feature": "Independiente del IDE",
+            "note": "Cualquier canal / CLI",
+            "values": {
+              "builderforce": "✅",
+              "copilot": "❌ VS Code",
+              "cursor": "❌ Fork de VS Code",
+              "claudeCode": "⚠️ Terminal",
+              "devin": "✅ UI web",
+              "openhands": "✅ Web/CLI",
+              "aider": "✅ CLI",
+              "continueDev": "❌ Extensión"
+            }
+          },
+          {
+            "feature": "MCP — consumir",
+            "values": {
+              "builderforce": "✅",
+              "copilot": "❌",
+              "cursor": "✅ Nativo",
+              "claudeCode": "❌",
+              "devin": "❌",
+              "openhands": "❌",
+              "aider": "❌",
+              "continueDev": "✅ Nativo"
+            }
+          },
+          {
+            "feature": "MCP — exponer como servidor",
+            "note": "Endpoint /mcp",
+            "values": {
+              "builderforce": "✅",
+              "copilot": "❌",
+              "cursor": "❌",
+              "claudeCode": "❌",
+              "devin": "❌",
+              "openhands": "❌",
+              "aider": "❌",
+              "continueDev": "❌"
+            }
+          }
+        ]
+      },
+      {
+        "id": "orchestration",
+        "title": "Orquestación multiagente",
+        "blurb": "Coordinar agentes especializados a través de flujos de trabajo estructurados, no prompts de una sola pasada.",
+        "rows": [
+          {
+            "feature": "Orquestación multiagente",
+            "note": "7 roles + DAG de dependencias",
+            "values": {
+              "builderforce": "✅",
+              "copilot": "❌",
+              "cursor": "❌",
+              "claudeCode": "❌",
+              "devin": "❌",
+              "openhands": "❌",
+              "aider": "❌",
+              "continueDev": "❌"
+            }
+          },
+          {
+            "feature": "Flujo de trabajo de planificación",
+            "note": "PRD → Arquitectura → Tareas mediante /spec",
+            "values": {
+              "builderforce": "✅",
+              "copilot": "❌",
+              "cursor": "❌",
+              "claudeCode": "❌",
+              "devin": "⚠️ Plan básico",
+              "openhands": "❌",
+              "aider": "❌",
+              "continueDev": "❌"
+            }
+          },
+          {
+            "feature": "Flujo de trabajo de corrección de errores",
+            "note": "Analizador → Creador → Revisor",
+            "values": {
+              "builderforce": "✅",
+              "copilot": "⚠️ En línea",
+              "cursor": "⚠️ En línea",
+              "claudeCode": "⚠️ En línea",
+              "devin": "✅",
+              "openhands": "⚠️ Una sola pasada",
+              "aider": "⚠️ Una sola pasada",
+              "continueDev": "⚠️ En línea"
+            }
+          },
+          {
+            "feature": "Flujo de trabajo de refactorización",
+            "note": "Revisor → Refactorización → Pruebas",
+            "values": {
+              "builderforce": "✅",
+              "copilot": "❌",
+              "cursor": "⚠️ Una sola pasada",
+              "claudeCode": "⚠️ Una sola pasada",
+              "devin": "⚠️ Una sola pasada",
+              "openhands": "⚠️ Una sola pasada",
+              "aider": "⚠️ Una sola pasada",
+              "continueDev": "❌"
+            }
+          },
+          {
+            "feature": "Pasada de revisión adversaria",
+            "note": "Flujo de trabajo integrado",
+            "values": {
+              "builderforce": "✅",
+              "copilot": "❌",
+              "cursor": "❌",
+              "claudeCode": "❌",
+              "devin": "❌",
+              "openhands": "❌",
+              "aider": "❌",
+              "continueDev": "❌"
+            }
+          },
+          {
+            "feature": "Personas / roles de agente personalizados",
+            "note": "YAML en .builderforce/personas/",
+            "values": {
+              "builderforce": "✅",
+              "copilot": "❌",
+              "cursor": "❌",
+              "claudeCode": "❌",
+              "devin": "❌",
+              "openhands": "❌",
+              "aider": "❌",
+              "continueDev": "❌"
+            }
+          }
+        ]
+      },
+      {
+        "id": "governance",
+        "title": "Gobernanza y fiabilidad",
+        "blurb": "Puertas de aprobación, recuperación y automatización que hacen que los agentes sean seguros de ejecutar en producción.",
+        "rows": [
+          {
+            "feature": "Puertas de aprobación con intervención humana",
+            "note": "Suspender + aprobar mediante el portal",
+            "values": {
+              "builderforce": "✅",
+              "copilot": "❌",
+              "cursor": "❌",
+              "claudeCode": "❌",
+              "devin": "⚠️ Básico",
+              "openhands": "❌",
+              "aider": "❌",
+              "continueDev": "❌"
+            }
+          },
+          {
+            "feature": "Autorreparación / recuperación de errores",
+            "note": "Detección automática + reejecución",
+            "values": {
+              "builderforce": "✅",
+              "copilot": "❌",
+              "cursor": "❌",
+              "claudeCode": "❌",
+              "devin": "⚠️ Solo reintento",
+              "openhands": "⚠️ Solo reintento",
+              "aider": "❌",
+              "continueDev": "❌"
+            }
+          },
+          {
+            "feature": "Automatización programada (cron)",
+            "note": "Sincronizada con Builderforce",
+            "values": {
+              "builderforce": "✅",
+              "copilot": "❌",
+              "cursor": "❌",
+              "claudeCode": "❌",
+              "devin": "❌",
+              "openhands": "❌",
+              "aider": "❌",
+              "continueDev": "❌"
+            }
+          },
+          {
+            "feature": "Integración con pipeline de CI/CD",
+            "note": "Disparadores por CLI + webhook",
+            "values": {
+              "builderforce": "✅",
+              "copilot": "⚠️ Sugerencia de PR",
+              "cursor": "❌",
+              "claudeCode": "⚠️ Solo CLI",
+              "devin": "⚠️ API",
+              "openhands": "⚠️ API",
+              "aider": "⚠️ CLI",
+              "continueDev": "❌"
+            }
+          },
+          {
+            "feature": "Evaluación semántica de respuestas",
+            "note": "fidelidad / relevancia / alucinación",
+            "values": {
+              "builderforce": "✅",
+              "copilot": "❌",
+              "cursor": "❌",
+              "claudeCode": "❌",
+              "devin": "❌",
+              "openhands": "❌",
+              "aider": "❌",
+              "continueDev": "❌"
+            }
+          },
+          {
+            "feature": "Monitoreo de deriva de calidad",
+            "note": "alertas de regresión por modelo",
+            "values": {
+              "builderforce": "✅",
+              "copilot": "❌",
+              "cursor": "❌",
+              "claudeCode": "❌",
+              "devin": "❌",
+              "openhands": "❌",
+              "aider": "❌",
+              "continueDev": "❌"
+            }
+          }
+        ]
+      },
+      {
+        "id": "codebase-context",
+        "title": "Comprensión y edición del código base",
+        "blurb": "Con qué profundidad la herramienta lee tu repositorio y con qué limpieza prepara los cambios para su revisión.",
+        "rows": [
+          {
+            "feature": "Búsqueda semántica del código base",
+            "values": {
+              "builderforce": "✅",
+              "copilot": "⚠️",
+              "cursor": "✅",
+              "claudeCode": "⚠️ RAG básico",
+              "devin": "✅",
+              "openhands": "⚠️ Básico",
+              "aider": "⚠️ Consciente de git",
+              "continueDev": "✅"
+            }
+          },
+          {
+            "feature": "Recuperación híbrida (densa + BM25 + reordenamiento)",
+            "note": "Fusión RRF + diversidad MMR",
+            "values": {
+              "builderforce": "✅",
+              "copilot": "❌",
+              "cursor": "⚠️ Solo vectorial",
+              "claudeCode": "⚠️ Solo vectorial",
+              "devin": "⚠️ Solo vectorial",
+              "openhands": "⚠️ Solo vectorial",
+              "aider": "⚠️ Consciente de git",
+              "continueDev": "⚠️ Solo vectorial"
+            }
+          },
+          {
+            "feature": "Análisis profundo de AST + historial de git",
+            "values": {
+              "builderforce": "✅",
+              "copilot": "❌",
+              "cursor": "⚠️ RAG básico",
+              "claudeCode": "⚠️ RAG básico",
+              "devin": "⚠️ RAG básico",
+              "openhands": "⚠️ RAG básico",
+              "aider": "⚠️ Consciente de git",
+              "continueDev": "⚠️ RAG básico"
+            }
+          },
+          {
+            "feature": "Diff preparado / aceptar-rechazar",
+            "note": "/diff, /accept, /reject",
+            "values": {
+              "builderforce": "✅",
+              "copilot": "❌",
+              "cursor": "✅ Composer",
+              "claudeCode": "❌",
+              "devin": "❌",
+              "openhands": "❌",
+              "aider": "✅ Diff de git",
+              "continueDev": "✅ Diff ⌘K"
+            }
+          },
+          {
+            "feature": "Habilidades incluidas",
+            "note": "53 integradas + marketplace",
+            "values": {
+              "builderforce": "✅",
+              "copilot": "❌",
+              "cursor": "❌",
+              "claudeCode": "❌",
+              "devin": "❌",
+              "openhands": "❌",
+              "aider": "❌",
+              "continueDev": "❌"
+            }
+          }
+        ]
+      },
+      {
+        "id": "memory-fleet",
+        "title": "Memoria y flota",
+        "blurb": "Conocimiento persistente entre sesiones y coordinación entre máquinas.",
+        "rows": [
+          {
+            "feature": "Conocimiento persistente del proyecto",
+            "note": ".builderforce/",
+            "values": {
+              "builderforce": "✅",
+              "copilot": "❌",
+              "cursor": "⚠️ En sesión",
+              "claudeCode": "⚠️ En sesión",
+              "devin": "⚠️ En sesión",
+              "openhands": "❌",
+              "aider": "❌",
+              "continueDev": "❌"
+            }
+          },
+          {
+            "feature": "Traspasos de sesión",
+            "note": "/handoff + carga automática",
+            "values": {
+              "builderforce": "✅",
+              "copilot": "❌",
+              "cursor": "❌",
+              "claudeCode": "❌",
+              "devin": "❌",
+              "openhands": "❌",
+              "aider": "❌",
+              "continueDev": "❌"
+            }
+          },
+          {
+            "feature": "Persistencia del flujo de trabajo entre reinicios",
+            "note": "Punto de control YAML + reanudación",
+            "values": {
+              "builderforce": "✅",
+              "copilot": "❌",
+              "cursor": "❌",
+              "claudeCode": "❌",
+              "devin": "⚠️ Basado en sesión",
+              "openhands": "❌",
+              "aider": "❌",
+              "continueDev": "❌"
+            }
+          },
+          {
+            "feature": "Bucle de conocimiento posterior a la tarea",
+            "note": ".builderforce/memory/ actualizado automáticamente",
+            "values": {
+              "builderforce": "✅",
+              "copilot": "❌",
+              "cursor": "❌",
+              "claudeCode": "❌",
+              "devin": "❌",
+              "openhands": "❌",
+              "aider": "❌",
+              "continueDev": "❌"
+            }
+          },
+          {
+            "feature": "Delegación distribuida entre agentes",
+            "note": "Despacho remote:<id>",
+            "values": {
+              "builderforce": "✅",
+              "copilot": "❌",
+              "cursor": "❌",
+              "claudeCode": "❌",
+              "devin": "❌",
+              "openhands": "❌",
+              "aider": "❌",
+              "continueDev": "❌"
+            }
+          },
+          {
+            "feature": "Coordinación de flota / multimáquina",
+            "note": "Registro de flota de Builderforce",
+            "values": {
+              "builderforce": "✅",
+              "copilot": "❌",
+              "cursor": "❌",
+              "claudeCode": "❌",
+              "devin": "❌",
+              "openhands": "❌",
+              "aider": "❌",
+              "continueDev": "❌"
+            }
+          }
+        ]
+      },
+      {
+        "id": "reach",
+        "title": "Canales y alcance",
+        "blurb": "Llegar a tu equipo donde ya trabaja, en cualquier dispositivo.",
+        "rows": [
+          {
+            "feature": "Funciona en WhatsApp / Telegram / Slack",
+            "note": "Más de 15 canales",
+            "values": {
+              "builderforce": "✅",
+              "copilot": "❌",
+              "cursor": "❌",
+              "claudeCode": "❌",
+              "devin": "❌",
+              "openhands": "❌",
+              "aider": "❌",
+              "continueDev": "❌"
+            }
+          },
+          {
+            "feature": "Modo voz + conversación",
+            "note": "macOS / iOS / Android",
+            "values": {
+              "builderforce": "✅",
+              "copilot": "❌",
+              "cursor": "❌",
+              "claudeCode": "❌",
+              "devin": "❌",
+              "openhands": "❌",
+              "aider": "❌",
+              "continueDev": "❌"
+            }
+          },
+          {
+            "feature": "Apps complementarias para móvil",
+            "note": "iOS + Android",
+            "values": {
+              "builderforce": "✅",
+              "copilot": "❌",
+              "cursor": "❌",
+              "claudeCode": "❌",
+              "devin": "❌",
+              "openhands": "❌",
+              "aider": "❌",
+              "continueDev": "❌"
+            }
+          }
+        ]
+      }
+    ],
+    "faq": [
+      {
+        "question": "¿Es Builderforce.ai una alternativa a GitHub Copilot?",
+        "answer": "Sí, pero resuelven alcances diferentes. GitHub Copilot es autocompletado de un solo agente dentro de VS Code, atado a los modelos GPT y Claude. Builderforce.ai es una plataforma multiagente autoalojada y con licencia MIT que orquesta siete roles especialistas a través de flujos de trabajo completos de planificación, corrección de errores, refactorización y revisión adversaria, se ejecuta en más de 30 proveedores de modelos incluido Ollama local, y añade aprobaciones, auditoría y memoria persistente. Los equipos que han superado la finalización de líneas adoptan Builderforce.ai para la entrega de principio a fin."
+      },
+      {
+        "question": "¿Cómo se compara Builderforce.ai con Cursor y Windsurf?",
+        "answer": "Cursor y Windsurf son excelentes editores nativos de IA, pero siguen siendo de un solo agente y ligados al IDE. Builderforce.ai es independiente del IDE y funciona desde cualquier canal o CLI, coordina múltiples agentes en una sola tarea mediante un DAG de dependencias, y es totalmente autoalojado con libertad de modelo entre más de 30 proveedores. Incluso puedes conectar Cursor o Windsurf a Builderforce.ai a través de MCP y usarlo como tu capa de orquestación y memoria."
+      },
+      {
+        "question": "Builderforce.ai frente a Claude Code y Aider, ¿cuál es la diferencia?",
+        "answer": "Claude Code está limitado a los modelos de Anthropic y Aider ejecuta un único agente de CLI. Builderforce.ai ejecuta un equipo de agentes especialistas con una pasada de revisión adversaria integrada, puertas de aprobación humana, un registro de auditoría y memoria persistente del proyecto en .builderforce/. Es agnóstico de modelo entre más de 30 proveedores y añade malla de flota, despacho remote:<id> y más de 15 canales de chat, por lo que escala desde un solo desarrollador hasta una flota orquestada."
+      },
+      {
+        "question": "Builderforce.ai frente a Devin y OpenHands, ¿cuál debería elegir para ingeniería autónoma?",
+        "answer": "Devin es un agente autónomo propietario y alojado, y OpenHands es un runtime abierto de un solo agente. Builderforce.ai se diferencia por ser autoalojado y con licencia MIT, con verdadera orquestación multiagente y gobernanza integrada: puertas de aprobación, registros de auditoría y recuperación con autorreparación que detecta fallos automáticamente y reejecuta los pasos afectados. Mantienes tu código en tu propia infraestructura y eliges cualquier modelo, incluidos los locales."
+      },
+      {
+        "question": "¿Puede Builderforce.ai ejecutarse totalmente sin conexión o aislado de la red?",
+        "answer": "Sí. Builderforce.ai es autoalojado y admite despliegue aislado de la red. Con modelos locales mediante Ollama puedes ejecutar toda la fuerza laboral de agentes sin que ningún código o prompt salga de tu red, algo que la mayoría de los competidores cerrados no pueden ofrecer. La memoria del proyecto persiste localmente en .builderforce/ para que el contexto sobreviva entre sesiones sin depender de la nube."
+      },
+      {
+        "question": "¿Builderforce.ai me ata a un solo modelo o IDE?",
+        "answer": "No. Builderforce.ai es agnóstico de modelo entre más de 30 proveedores, incluidos Anthropic, OpenAI, Bedrock y Ollama local, y es independiente del IDE, accesible desde cualquier CLI o canal de chat. No hay ningún fork de editor que adoptar ni requisito de modelo de un solo proveedor, lo cual es una diferencia clave frente a Copilot, Cursor, Windsurf y Claude Code."
+      }
+    ],
+    "capabilityHeader": "Capacidad",
+    "faqHeading": "Builderforce.ai frente al resto — preguntas frecuentes",
+    "relatedHeading": "Lee los enfrentamientos directos",
+    "ctaTitle": "¿Superaste el autocompletado?",
+    "ctaDesc": "Empieza gratis — autoalojado, con licencia MIT y agnóstico de modelo. Pon a trabajar a toda una fuerza laboral de agentes de IA, con aprobaciones y un registro de auditoría en cada acción.",
+    "ctaTourPlatform": "Recorre la plataforma",
+    "leaf": {
+      "bottomLine": "En resumen",
+      "faqHeading": "Preguntas frecuentes",
+      "seeFullComparison": "Ver la comparación completa",
+      "relatedHeading": "Lecturas relacionadas",
+      "vsLabel": "Builderforce.ai frente a {name}"
+    },
+    "competitors": {
+      "copilot": {
+        "tagline": "Una alternativa autoalojada y multiagente al autocompletado de un solo agente",
+        "summary": "GitHub Copilot es autocompletado de un solo agente dentro de VS Code, atado a GPT y Claude. Builderforce.ai es una plataforma multiagente autoalojada y con licencia MIT que planifica, construye, revisa y prueba funcionalidades en más de 30 proveedores de modelos con aprobaciones, auditoría y memoria persistente.",
+        "verdict": "Elige Builderforce.ai en lugar de GitHub Copilot cuando hayas superado la finalización de líneas y necesites una entrega orquestada, gobernada y agnóstica de modelo que puedas autoalojar."
+      },
+      "cursor": {
+        "tagline": "Orquesta una fuerza laboral de agentes autoalojada, no un único agente ligado al IDE",
+        "summary": "Cursor y Windsurf son editores nativos de IA, pero siguen siendo de un solo agente y ligados al IDE. Builderforce.ai es independiente del IDE, coordina múltiples agentes en una sola tarea mediante un DAG de dependencias, es totalmente autoalojado, e incluso puede ubicarse detrás de Cursor a través de MCP como tu capa de orquestación y memoria.",
+        "verdict": "Elige Builderforce.ai en lugar de Cursor o Windsurf cuando quieras orquestación multiagente independiente del IDE, libertad de modelo y autoalojamiento en vez de un único fork de editor."
+      },
+      "claudeCode": {
+        "tagline": "Entrega multiagente agnóstica de modelo más allá de una CLI de un solo proveedor",
+        "summary": "Claude Code está limitado a los modelos de Anthropic e impulsa un único agente de terminal. Builderforce.ai ejecuta un equipo de agentes especialistas con una pasada de revisión adversaria integrada, puertas de aprobación, un registro de auditoría y memoria persistente del proyecto - agnóstico de modelo entre más de 30 proveedores incluido Ollama local.",
+        "verdict": "Elige Builderforce.ai en lugar de Claude Code cuando necesites flujos de trabajo multiagente, gobernanza y libertad de un único proveedor de modelo."
+      },
+      "devin": {
+        "tagline": "Ingeniería autónoma autoalojada, con licencia MIT y con gobernanza",
+        "summary": "Devin es un agente autónomo propietario y alojado a $500/mes. Builderforce.ai ofrece una verdadera orquestación multiagente que autoalojas y posees, con licencia MIT, con puertas de aprobación, registros de auditoría y recuperación con autorreparación - manteniendo tu código en tu propia infraestructura con cualquier modelo.",
+        "verdict": "Elige Builderforce.ai en lugar de Devin cuando quieras ingeniería autónoma autoalojada, auditable y agnóstica de modelo sin una nube propietaria ni un piso de $500/mes."
+      },
+      "openhands": {
+        "tagline": "Orquestación multiagente y gobernanza sobre runtimes abiertos",
+        "summary": "OpenHands es un runtime abierto de un solo agente. Builderforce.ai añade verdadera orquestación multiagente (siete roles + DAG de dependencias), puertas de aprobación humana, un registro de auditoría, memoria persistente y malla de flota - todo autoalojado y con licencia MIT.",
+        "verdict": "Elige Builderforce.ai en lugar de OpenHands cuando necesites flujos de trabajo multiagente coordinados y gobernanza, no un bucle de un solo agente."
+      },
+      "aider": {
+        "tagline": "De un único agente de CLI a una fuerza laboral de agentes orquestada y gobernada",
+        "summary": "Aider ejecuta un único agente de CLI consciente de git. Builderforce.ai coordina un equipo de agentes especialistas con revisión adversaria, puertas de aprobación, memoria persistente del proyecto, malla de flota y más de 15 canales de chat - agnóstico de modelo entre más de 30 proveedores y autoalojado.",
+        "verdict": "Elige Builderforce.ai en lugar de Aider cuando un único agente de CLI ya no sea suficiente y necesites orquestación, gobernanza y memoria a escala de equipo."
+      },
+      "continueDev": {
+        "tagline": "Más allá de una extensión de IDE - orquestación, gobernanza y memoria",
+        "summary": "Continue.dev es una extensión de IDE abierta para asistencia de un solo agente. Builderforce.ai es independiente del IDE y orquesta múltiples agentes especialistas a través de flujos de trabajo completos de planificación, corrección de errores, refactorización y revisión con aprobaciones, auditoría y memoria persistente.",
+        "verdict": "Elige Builderforce.ai en lugar de Continue.dev cuando quieras entrega multiagente independiente del IDE y gobernanza en vez de un asistente dentro del editor."
+      }
     }
   },
   "home": {
@@ -3011,5 +3660,390 @@
         "answer": "Sí: los modelos entrenados en Builderforce pueden exportarse y publicarse como modelos Evermind que tu gateway autoalojado de BuilderForce Agents invoca directamente como el modelo, no solo como una capa de memoria. La plataforma admite la canalización completa: entrena un SSM personalizado en el navegador, publícalo y enruta tráfico en vivo hacia él a través de la API compatible con OpenAI."
       }
     ]
+  },
+  "pricing": {
+    "seo": {
+      "title": "Precios — Planes Free, Pro y Teams",
+      "description": "Precios de Builderforce.ai: plan Free ($0/mes para siempre), Pro ($29/asiento/mes) y Teams ($20/asiento/mes). Entrenamiento LoRA con WebGPU, generación de datasets, evaluación de IA y Workforce Registry.",
+      "ogTitle": "Precios de Builderforce.ai — Free, Pro y Teams",
+      "ogDescription": "Plan gratis para siempre con entrenamiento WebGPU. Pro $29/asiento/mes para agentes ilimitados. Teams $20/asiento/mes con bandeja de aprobaciones compartida.",
+      "twitterTitle": "Precios de Builderforce.ai",
+      "twitterDescription": "Gratis para siempre. Pro $29/asiento/mes. Teams $20/asiento/mes. Entrenamiento LoRA con WebGPU incluido."
+    },
+    "titleAnon": "Precios simples y transparentes",
+    "titleConsole": "Precios y facturación",
+    "subtitleAnon": "Empieza gratis y mejora tu plan cuando crezca tu plantilla de agentes. Sin tarjeta de crédito para comenzar.",
+    "subtitleConsole": "Gestiona tu suscripción y los detalles de facturación.",
+    "loading": "Cargando suscripción…",
+    "errorLoad": "Error al cargar la suscripción",
+    "anonBannerTitle": "Comienza con el plan Free",
+    "anonBannerDesc": "$0/mes para siempre — 1 AgentHost, 5 proyectos, entrenamiento LoRA con WebGPU. Mejora tu plan cuando quieras.",
+    "anonBannerCta": "Crear cuenta gratis",
+    "currentPlan": "Plan actual",
+    "fieldBillingCycle": "Ciclo de facturación",
+    "fieldSeats": "Asientos",
+    "fieldBillingEmail": "Correo de facturación",
+    "fieldPaymentMethod": "Método de pago",
+    "fieldLastUpdated": "Última actualización",
+    "upgradePlan": "Mejorar plan",
+    "downgrading": "Bajando de plan…",
+    "downgradeToFree": "Bajar a Free",
+    "ctaCurrentPlan": "Plan actual",
+    "ctaGetStarted": "Comenzar",
+    "ctaUpgradeTo": "Mejorar a {plan}",
+    "ctaGet": "Obtener {plan}",
+    "downgradeConfirm": "¿Bajar a Free? Perderás las funciones de tu plan actual al final del período de facturación.",
+    "modalUpgradeTo": "Mejorar a {plan}",
+    "labelBillingCycle": "Ciclo de facturación",
+    "cycleMonthly": "mensual",
+    "cycleYearly": "anual",
+    "cycleMonthlyCap": "Mensual",
+    "cycleYearlyCap": "Anual",
+    "saveCycle": "ahorra {pct}%",
+    "cycleYearlyWithSaving": "{cycle} ({saving})",
+    "labelSeats": "Asientos",
+    "labelBillingEmail": "Correo de facturación",
+    "placeholderBillingEmail": "facturacion@ejemplo.com",
+    "labelCardBrand": "Marca de la tarjeta",
+    "labelCardLast4": "Últimos 4 dígitos de la tarjeta",
+    "redirectNote": "Serás redirigido a nuestro proveedor de pagos para introducir los datos de tu tarjeta de forma segura.",
+    "total": "Total: ${price}/{unit}",
+    "totalForSeats": "{seats, plural, one {por # asiento} other {por # asientos}}",
+    "unitYear": "año",
+    "unitMonth": "mes",
+    "errorBillingEmailRequired": "El correo de facturación es obligatorio.",
+    "errorCardLast4": "Los últimos 4 dígitos de la tarjeta deben ser exactamente 4 dígitos.",
+    "errorUpgradeFailed": "Error al mejorar el plan",
+    "cancel": "Cancelar",
+    "activating": "Activando…",
+    "redirecting": "Redirigiendo…",
+    "activatePlan": "Activar {plan}",
+    "continueToPayment": "Continuar al pago",
+    "planComparison": "Comparación de planes",
+    "colFeature": "Función",
+    "priceFree": "$0",
+    "priceProMonthly": "${price}/mes",
+    "priceTeamsMonthly": "${price}/asiento/mes",
+    "teamsCostNoteYear": "${perSeat}/asiento/año — facturado como ${total}/año",
+    "teamsCostNoteMonth": "${perSeat}/asiento/mes — facturado como ${total}/mes",
+    "managedAddon": "Complemento: <b>AgentHost gestionado</b> — ${price}/mes por cada AgentHost alojado. Ejecutamos tu instancia de BuilderForce Agents por ti — sin Docker, sin DevOps.",
+    "relatedHeading": "Antes de decidir",
+    "planFeatures": [
+      "Modelo autoactualizable Evermind (en el dispositivo)",
+      "1 AgentHost",
+      "Hasta 3 AgentHosts",
+      "AgentHosts ilimitados",
+      "5 proyectos",
+      "Proyectos ilimitados",
+      "10K tokens / día",
+      "1M tokens / día",
+      "5M tokens / día",
+      "Flujos de aprobación",
+      "Malla de flota + despacho remoto",
+      "Telemetría completa + registro de auditoría",
+      "Roles de agente personalizados",
+      "Bandeja de aprobaciones compartida del equipo",
+      "Controles de costos por asiento",
+      "Soporte prioritario",
+      "Soporte de la comunidad"
+    ]
+  },
+  "product": {
+    "seo": {
+      "title": "Producto — Crea, entrena, orquesta y gobierna tu fuerza de trabajo de IA",
+      "description": "Recorre todo lo que ofrece Builderforce.ai: entrenamiento LoRA con WebGPU en el navegador, un motor de evaluación de IA, un marketplace de habilidades y personas, orquestación de flujos de trabajo, una malla de fuerza de trabajo y aprobaciones + auditoría completas. Conoce toda la plataforma antes de registrarte.",
+      "ogTitle": "La plataforma Builderforce.ai — Crea, entrena, orquesta y gobierna"
+    },
+    "eyebrow": "La plataforma",
+    "title": "Todo lo que tu fuerza de trabajo de IA necesita, en un solo lugar",
+    "sub": "Builderforce.ai es tu AI CTO, CIO y responsable de seguridad. Construye y entrena tus agentes, los orquesta a través de una malla de hosts y gobierna cada acción con aprobaciones y un registro de auditoría. Esta es toda la plataforma: explora cualquier parte antes de registrarte.",
+    "statLabels": [
+      "Parámetros\nen el navegador",
+      "Generación\nde conjuntos de datos",
+      "Aceleración\npor hardware",
+      "Privado — se ejecuta\nen tu navegador"
+    ],
+    "exploreCta": "Explorar",
+    "ctaTitle": "Pon a trabajar a tu fuerza de trabajo de IA",
+    "ctaDesc": "Empieza gratis — sin tarjeta de crédito. Crea, entrena y despliega tu primer agente en minutos, totalmente en tu navegador.",
+    "ctaBrowseWorkforce": "Explorar la fuerza de trabajo",
+    "relatedHeading": "Profundiza más",
+    "sections": [
+      {
+        "id": "build",
+        "title": "Crear y entrenar",
+        "blurb": "Pasa de una idea a un agente de IA entrenado y evaluado, todo en el navegador.",
+        "surfaces": [
+          {
+            "title": "Evermind",
+            "desc": "El cerebro de la plataforma: un modelo que se actualiza solo, gobernado por Write-Through Cognition. El conocimiento nuevo reemplaza al anterior sin un paso de reconciliación, y se ejecuta sobre WebGPU en el navegador, en el dispositivo o dentro de cada agente."
+          },
+          {
+            "title": "Panel",
+            "desc": "Tu centro de mando: estado del espacio de trabajo, ejecuciones recientes y lo que tu fuerza de trabajo de IA está haciendo en este momento."
+          },
+          {
+            "title": "Brain Storm",
+            "desc": "Describe lo que necesitas en lenguaje natural; el Brain lo convierte en proyectos, conjuntos de datos y agentes."
+          },
+          {
+            "title": "Espacio de trabajo IDE",
+            "desc": "Editor Monaco, terminal, chat de IA y explorador de archivos en un único espacio de trabajo colaborativo del proyecto."
+          },
+          {
+            "title": "Entrenamiento",
+            "desc": "Ajuste fino LoRA con WebGPU en el navegador de hasta 2 mil millones de parámetros con un motor de evaluación en vivo, sin facturas de GPU. Entrena un agente personalizado y luego invócalo desde dentro de tu propio agente."
+          },
+          {
+            "title": "Extensión de VS Code",
+            "desc": "Ejecuta toda la plataforma desde tu editor: chatea con los agentes, asigna y ejecuta tareas, revisa y valida su trabajo, y aprueba acciones sin salir de VS Code."
+          }
+        ]
+      },
+      {
+        "id": "orchestrate",
+        "title": "Orquestar",
+        "blurb": "Coordina el trabajo entre agentes, flujos de trabajo y una malla de AgentHosts remotos.",
+        "surfaces": [
+          {
+            "title": "Constructor de flujos de trabajo",
+            "desc": "Combina agentes y herramientas en flujos de trabajo repetibles y con control de aprobaciones."
+          },
+          {
+            "title": "Proyectos / Tareas",
+            "desc": "Organiza el trabajo en espacios de trabajo de proyecto, cada uno con un IDE completo, agentes y un tablero de tareas; luego planifica, asigna y observa cómo las tareas fluyen a través de tu fuerza de trabajo de agentes en vistas de tablero, tabla, calendario o Gantt."
+          },
+          {
+            "title": "Columna vertebral de planificación y portafolio",
+            "desc": "Una jerarquía con fechas — portafolio → iniciativa → épica → tarea con OKRs en cualquier nivel — donde el costo de cada hoja se acumula hacia cada ancestro y se divide en CAPEX vs OPEX en un único Gantt. Planifica, entrega y contabiliza el trabajo en un solo lugar."
+          },
+          {
+            "title": "Conectores de tablero",
+            "desc": "Sincronización bidireccional con Jira, Linear, monday, Asana, ClickUp, ServiceNow, Freshservice, Sentry, PagerDuty y GitHub: orquesta a través de los rastreadores que ya utilizas, sin necesidad de migración."
+          },
+          {
+            "title": "Malla de fuerza de trabajo",
+            "desc": "Descubre y distribuye trabajo entre AgentHosts locales y remotos: compartición de capacidad entre máquinas e inquilinos."
+          },
+          {
+            "title": "Chats",
+            "desc": "Habla directamente con tus agentes u observa cómo colaboran en conversaciones compartidas."
+          }
+        ]
+      },
+      {
+        "id": "extend",
+        "title": "Ampliar",
+        "blurb": "Un marketplace de habilidades, personas, prompts y contenido para potenciar a los agentes.",
+        "surfaces": [
+          {
+            "title": "Conocimiento y SOPs",
+            "desc": "Una base con versiones para SOPs, procesos y documentos, con registros de auditoría de acuse de lectura para SOX, TISAX e ISO 27001, autoría con IA y coedición en tiempo real: conocimiento que fundamenta a tus agentes y demuestra el cumplimiento."
+          },
+          {
+            "title": "Habilidades",
+            "desc": "Instala o publica habilidades de agente reutilizables desde el marketplace de la fuerza de trabajo."
+          },
+          {
+            "title": "Personas",
+            "desc": "Dale a los agentes una voz y un perfil de comportamiento con personas reutilizables."
+          },
+          {
+            "title": "Biblioteca de prompts",
+            "desc": "Explora, usa y comparte plantillas de prompts de la comunidad con variables."
+          },
+          {
+            "title": "Gestor de contenido",
+            "desc": "Crea y comparte bloques de contenido que tus agentes y el marketplace pueden reutilizar."
+          }
+        ]
+      },
+      {
+        "id": "govern",
+        "title": "Gobernar y operar",
+        "blurb": "Aprobaciones, seguridad y observabilidad completa: tu responsable de seguridad de IA.",
+        "surfaces": [
+          {
+            "title": "Aprobaciones",
+            "desc": "Controles de aprobación con intervención humana en cada acción sensible que realizan tus agentes."
+          },
+          {
+            "title": "Seguridad",
+            "desc": "Aislamiento por inquilino y credenciales cifradas con AES-256-GCM para cada integración."
+          },
+          {
+            "title": "Observabilidad",
+            "desc": "Telemetría completa y un registro de auditoría de cada acción de agente, token y llamada a herramienta."
+          },
+          {
+            "title": "Calidad y seguimiento de errores",
+            "desc": "Ingiere errores desde un SDK de navegador, OpenTelemetry, Sentry, PostHog o LogRocket; agrúpalos por huella; luego convierte cualquier grupo en una tarea de corrección que un agente entrega como una pull request: del fallo a la PR en una sola superficie."
+          },
+          {
+            "title": "Diagnóstico de madurez",
+            "desc": "Califica cada práctica (Dev, QA, DevOps, PMO, gobernanza) en una escala de 1–5 al estilo CMMI/COBIT: gratis para autoevaluarte, o calificada objetivamente a partir de tus datos reales de entrega con un plan priorizado para madurar e innovar."
+          },
+          {
+            "title": "Inquilinos y espacios de trabajo",
+            "desc": "Espacios de trabajo multiinquilino con roles por asiento, miembros y controles de costos."
+          }
+        ]
+      }
+    ]
+  },
+  "agents": {
+    "seo": {
+      "title": "BuilderForce Agents — Runtime de agentes de IA autoalojado y de código abierto",
+      "description": "BuilderForce Agents es el runtime de agentes autoalojado y con licencia MIT detrás de Builderforce.ai: agentes de codificación autónomos y subagentes con comprensión profunda del código, un sistema de habilidades, flujos de trabajo multiagente, una malla de AgentHost y controles de aprobación con intervención humana.",
+      "ogTitle": "BuilderForce Agents — Runtime de agentes de IA autoalojado"
+    },
+    "logoAlt": "Logotipo de BuilderForce Agents",
+    "tagline": "Flujos de trabajo de codificación multiagente, autoalojados y centrados en el desarrollador.",
+    "description": "Pasa de programar a gestionar resultados de negocio.<br></br><strong>BuilderForce Agents</strong> gestiona agentes y subagentes independientes con memoria persistente y autorreparación. <strong><home>Builderforce.ai</home></strong> orquesta proyectos a través de toda tu malla.",
+    "whatItDoes": "Qué hace",
+    "whyHeading": "¿Por qué BuilderForce Agents?",
+    "whyIntro": "Orquestación multiagente autoalojada creada para desarrolladores, desde startups (5–50 desarrolladores) hasta empresas (100–1,000+). Diferenciadores clave:",
+    "whyList": [
+      "Comprensión profunda del código (AST, mapas semánticos, historial de git, contexto persistente).",
+      "Flujos de trabajo multiagente predefinidos: planificación, codificación, revisión, pruebas y pasadas adversariales.",
+      "Runtime con autorreparación: los agentes detectan fallos, se reparan a sí mismos y se adaptan con el tiempo.",
+      "Memoria persistente y razonamiento consciente del contexto entre sesiones, sin tener que volver a explicar tu código.",
+      "Revisión de diferencias por etapas: todos los cambios del agente quedan en búfer para aceptar o rechazar.",
+      "Malla de AgentHost a AgentHost: distribuye tareas a través de una flota; `remote:auto[caps]` enruta automáticamente al mejor par.",
+      "Telemetría de flujos de trabajo: cada tarea emite spans JSONL localmente y los reenvía a la línea de tiempo de Builderforce.ai en tiempo real.",
+      "Controles de aprobación obligatorios: `requestApproval()` bloquea la ejecución del agente hasta que un gerente apruebe.",
+      "Habilidades gestionadas desde el portal y cargadas al iniciar; tareas cron gestionadas desde el portal y ejecutadas según lo programado.",
+      "Seguridad y gobernanza: RBAC, confianza de dispositivos, despacho firmado con HMAC y registros de auditoría.",
+      "Integración CI/CD y despliegues privados/autoalojados.",
+      "Funciona desde cualquier canal o CLI, con cualquier proveedor de modelos.",
+      "Código abierto (MIT) sin dependencia de un proveedor."
+    ],
+    "whyLinks": "Consulta la <cmp>comparación con Copilot, Cursor, Claude</cmp> o la <docs>documentación completa</docs>.",
+    "worksWithHeading": "Funciona con todo",
+    "worksWithIntro": "50+ integraciones en mensajería, IA, desarrollo, productividad e IoT.",
+    "viewAllIntegrations": "Ver todas las integraciones",
+    "seeShowcase": "Mira lo que la gente ha creado",
+    "ctaOrchestrationSub": "Plataforma de orquestación",
+    "ctaDiscordSub": "Únete a la comunidad",
+    "ctaDocsLabel": "Documentación",
+    "ctaDocsSub": "Aprende lo básico",
+    "ctaGithubSub": "Ver el código fuente",
+    "ctaSkillsLabel": "Habilidades de agente",
+    "ctaSkillsSub": "Descubre y comparte",
+    "faqHeading": "Preguntas frecuentes",
+    "relatedHeading": "Lecturas relacionadas",
+    "capabilities": [
+      {
+        "title": "Gestor de agentes y subagentes",
+        "description": "BuilderForce Agents ejecuta y coordina agentes de codificación y subagentes independientes. Delega trabajo de forma autónoma a lo largo de todo tu flujo de trabajo."
+      },
+      {
+        "title": "Orquestación de malla",
+        "description": "Builderforce.ai es el gestor de proyectos y orquestador de malla, coordinando agentes, tareas y resultados a través de todo tu equipo."
+      },
+      {
+        "title": "Enfoque en resultados de negocio",
+        "description": "Pasa de escribir código a gestionar resultados de negocio. Deja que los agentes se encarguen de la ejecución mientras tú te enfocas en la estrategia."
+      },
+      {
+        "title": "Runtime con autorreparación",
+        "description": "Los agentes detectan fallos, se reparan a sí mismos y se adaptan con el tiempo. La memoria persistente significa que el contexto sobrevive a los reinicios, sin tener que volver a explicar tu código."
+      },
+      {
+        "title": "Control con intervención humana",
+        "description": "Los controles de aprobación bloquean la ejecución del agente hasta que un gerente apruebe en el portal de Builderforce.ai. Visibilidad del flujo de trabajo, auditabilidad y aprobación humana: obligatorios, no opcionales."
+      },
+      {
+        "title": "Malla de AgentHost a AgentHost",
+        "description": "Distribuye el trabajo a través de una flota de AgentHosts. Usa `remote:auto[caps]` para enrutar tareas al par mejor adaptado. Todo el despacho está firmado con HMAC y autenticado con Bearer."
+      },
+      {
+        "title": "Automatización completa",
+        "description": "Los agentes pueden navegar por la web, controlar tu navegador, ejecutar comandos de shell e interactuar con cualquier herramienta o servicio en tu nombre."
+      },
+      {
+        "title": "Acceso completo al sistema",
+        "description": "Lee y escribe archivos, ejecuta comandos de shell, ejecuta scripts. Acceso completo o en entorno aislado: tú eliges."
+      },
+      {
+        "title": "Habilidades y plugins",
+        "description": "Amplía con habilidades de la comunidad o crea las tuyas. Las habilidades asignadas en el portal de Builderforce.ai se cargan automáticamente al iniciar."
+      },
+      {
+        "title": "Comprensión profunda del código",
+        "description": "El análisis AST, los mapas semánticos, los grafos de dependencias y el historial de git dan a los agentes una comprensión real de tu proyecto."
+      },
+      {
+        "title": "Constructor de flujos de trabajo agénticos",
+        "description": "Lienzo estilo IPAAS de arrastrar y soltar para componer tu propia lógica de LLM — nodos de memoria, base de conocimiento y entrenamiento — conectados a tus agentes y ejecutados en tus agentHosts."
+      },
+      {
+        "title": "Flujos de trabajo multiagente",
+        "description": "Patrones integrados para planificación, desarrollo de funciones, corrección de errores, refactorizaciones y revisiones adversariales mantienen el trabajo en movimiento."
+      },
+      {
+        "title": "Seguridad y RBAC",
+        "description": "Control de acceso basado en roles, confianza de dispositivos y registros de auditoría completos. Despacho entre AgentHosts firmado con HMAC y autenticación Bearer."
+      },
+      {
+        "title": "Telemetría de flujos de trabajo",
+        "description": "Cada tarea y flujo de trabajo emite spans JSONL estructurados localmente y los reenvía a la línea de tiempo del portal de Builderforce.ai en tiempo real."
+      },
+      {
+        "title": "Ejecución autónoma por carriles",
+        "description": "Asigna cualquier agente — en la nube o en las instalaciones — a un carril del kanban. Los tickets se despachan automáticamente y el tablero avanza por sí solo a medida que los agentes terminan, deteniéndose solo en los controles de aprobación que elijas."
+      },
+      {
+        "title": "Agentes que entregan código",
+        "description": "Un agente en la nube clona el repositorio vinculado a través de un proxy de git seguro del lado del servidor (tu token de Git nunca sale del servidor), escribe el cambio, sube una rama y abre una pull request — sin interfaz, sin abrir un navegador. Los agentes en las instalaciones hacen lo mismo en tu propia máquina."
+      },
+      {
+        "title": "Autoalojado y de código abierto",
+        "description": "Ejecútalo en tu infraestructura bajo la licencia MIT: sin dependencia de un proveedor ni límites de suscripción."
+      }
+    ],
+    "faq": [
+      {
+        "question": "¿Qué es BuilderForce Agents?",
+        "answer": "BuilderForce Agents es el runtime de agentes autoalojado detrás de Builderforce.ai. Ejecuta y coordina agentes de codificación y subagentes independientes en tu propia infraestructura bajo la licencia MIT, con comprensión profunda del código, un sistema de habilidades, flujos de trabajo multiagente y controles de aprobación con intervención humana, orquestados desde el portal de Builderforce.ai."
+      },
+      {
+        "question": "¿BuilderForce Agents es de código abierto y autoalojado?",
+        "answer": "Sí. Tiene licencia MIT y se ejecuta en tu propia infraestructura, sin dependencia de un proveedor ni límites de suscripción. Puedes ejecutarlo totalmente aislado de la red y, con modelos locales mediante Ollama, ningún código ni prompt tiene que salir de tu red."
+      },
+      {
+        "question": "¿Cómo se coordinan los agentes entre máquinas?",
+        "answer": "Los agentes forman una malla de AgentHost a AgentHost. El trabajo se distribuye a través de una flota de hosts y se enruta al par mejor adaptado con el despacho remote:auto[caps]; cada despacho está firmado con HMAC y autenticado con Bearer, y el portal muestra una línea de tiempo de telemetría en vivo de cada acción."
+      },
+      {
+        "question": "¿Pueden los agentes entregar código por sí solos?",
+        "answer": "Sí. Un agente en la nube clona el repositorio vinculado a través de un proxy de git seguro del lado del servidor (tu token de Git nunca sale del servidor), escribe el cambio, sube una rama y abre una pull request — sin interfaz, sin abrir un navegador. Los agentes en las instalaciones hacen lo mismo en tu propia máquina, y los controles de aprobación pueden requerir aprobación humana antes de cualquier paso de alto impacto."
+      }
+    ]
+  },
+  "newsletter": {
+    "heading": "Mantente al día",
+    "lead": "Recibe novedades sobre funciones, integraciones y consejos sobre agentes. Sin spam, cancela cuando quieras.",
+    "emailAria": "Dirección de correo electrónico",
+    "subscribe": "Suscribirse",
+    "subscribing": "Suscribiendo…",
+    "subscribed": "Suscrito ✓",
+    "error": "No se pudo completar la suscripción. Inténtalo de nuevo.",
+    "success": "Gracias: ya estás en la lista."
+  },
+  "blog": {
+    "seo": {
+      "title": "Blog — Guías, tutoriales y comparativas de herramientas de agentes de AI",
+      "description": "Análisis en profundidad, tutoriales y comparativas honestas para crear e implementar agentes de AI — ejecución autónoma en Kanban, almacenamiento en caché semántico, entrenamiento de LoRA con WebGPU, orquestación multiagente y cómo se compara Builderforce.ai con Copilot, Cursor, Claude Code y Devin.",
+      "ogTitle": "Blog de Builderforce — Guías de agentes de AI y comparativas de herramientas",
+      "ogDescription": "Tutoriales, análisis en profundidad y comparativas directas: orquestación multiagente, almacenamiento en caché semántico, entrenamiento de LoRA con WebGPU y Builderforce.ai frente a Copilot, Cursor, Claude Code y Devin.",
+      "twitterDescription": "Orquestación multiagente, almacenamiento en caché semántico, entrenamiento de LoRA con WebGPU y Builderforce.ai frente a Copilot, Cursor, Claude Code y Devin."
+    },
+    "badge": "Últimos artículos",
+    "desc": "Análisis en profundidad, tutoriales y comparativas honestas de herramientas para crear e implementar agentes de AI — desde la ejecución autónoma en Kanban y el almacenamiento en caché semántico hasta cómo nos comparamos con Copilot, Cursor, Claude Code y Devin.",
+    "paginationLabel": "Paginación del blog",
+    "prevPage": "Página anterior",
+    "nextPage": "Página siguiente",
+    "pageN": "Página {n}"
   }
 }

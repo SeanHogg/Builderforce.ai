@@ -183,7 +183,10 @@ export { TenantRateLimiterDO } from './infrastructure/ratelimit/TenantRateLimite
 // injecting the concrete infrastructure implementations.
 // ---------------------------------------------------------------------------
 
-function buildApp(env: Env): Hono<HonoEnv> {
+// Exported so the in-process MCP catalog can replay platform actions through the
+// real /api routes (reusing their logic + role-gate authz) via `app.request(...)`.
+// Imported dynamically by the catalog to avoid a static import cycle.
+export function buildApp(env: Env): Hono<HonoEnv> {
   const db = buildDatabase(env);
 
   // --- Infrastructure ---
