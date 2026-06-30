@@ -19,11 +19,15 @@ import { authMiddleware } from '../middleware/authMiddleware';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env, HonoEnv } from '../../env';
 import { createTenantModel, resolveTenantModel, TENANT_MODEL_REF_PREFIX } from '../../application/llm/tenantModelService';
+import { zipSync, type Zippable } from 'fflate';
 import {
   EVERMIND_MODEL_ROOT,
   evermindGenerate,
   buildEvermindCompletion,
   benchmarkEvermind,
+  exportEvermindArtifact,
+  EXPORT_FORMATS,
+  type ExportFormat,
 } from '../../application/llm/evermindRuntime';
 import { getOrSetCached } from '../../infrastructure/cache/readThroughCache';
 
@@ -195,6 +199,71 @@ export function createEvermindModelRoutes(db: Db): Hono<HonoEnv> {
       return c.json(result);
     } catch (err) {
       return c.json({ error: 'Evermind benchmark failed', detail: err instanceof Error ? err.message : String(err) }, 502);
+    }
+  });
+
+  /**
+   * GET /api/studio/models/:slug/export?format=<id>&fp16=<bool>
+   * → exports the user's published `.evermind` model to a portable artifact and
+   *   streams it as a download: a single file (safetensors / onnx / gguf) or a
+   *   ZIP of the full Hugging Face repo bundle. No external credential needed —
+   *   pushing the bundle to a hub is a separate, token-gated step.
+   *
+   * Not read-through cached: the artifact bytes are large binary blobs that can
+   * exceed KV value limits; the expensive part (load + deserialize) is already
+   * memoized per-isolate by `loadEvermindModel`, export is deterministic
+   * serialization, and the immutable ref lets the browser/edge cache via headers.
+   */
+  router.get('/:slug/export', async (c) => {
+    const tenantId = c.get('tenantId') as number;
+    const slug = c.req.param('slug');
+    if (!c.env.UPLOADS) return c.json({ error: 'R2 artifact storage not configured' }, 503);
+
+    const tm = await resolveTenantModel(c.env as Env, db, tenantId, `${TENANT_MODEL_REF_PREFIX}${slug}`);
+    if (!tm || !tm.baseModel?.startsWith(EVERMIND_PIN_PREFIX)) {
+      return c.json({ error: 'No published Evermind model with that slug' }, 404);
+    }
+    const ref = tm.baseModel.slice(EVERMIND_PIN_PREFIX.length);
+
+    const formatId = (c.req.query('format') ?? 'huggingface') as ExportFormat;
+    const formatDef = EXPORT_FORMATS.find((f) => f.id === formatId);
+    if (!formatDef) {
+      return c.json({ error: `unknown export format — one of: ${EXPORT_FORMATS.map((f) => f.id).join(', ')}` }, 400);
+    }
+    const fp16 = c.req.query('fp16') === 'true';
+    const safeSlug = slug.replace(/[^a-zA-Z0-9._-]/g, '_');
+
+    try {
+      const result = await exportEvermindArtifact(c.env.UPLOADS as Parameters<typeof exportEvermindArtifact>[0], ref, formatId, {
+        fp16,
+        name: tm.name || slug,
+      });
+      const toBytes = (data: Uint8Array | string): Uint8Array =>
+        typeof data === 'string' ? new TextEncoder().encode(data) : data;
+
+      // Single-file formats stream directly; the multi-file HF repo is zipped.
+      const [single] = result.files;
+      if (result.files.length === 1 && single) {
+        return new Response(toBytes(single.data) as BodyInit, {
+          headers: {
+            'Content-Type': single.contentType,
+            'Content-Disposition': `attachment; filename="${safeSlug}${formatDef.ext}"`,
+            'Cache-Control': 'private, max-age=3600',
+          },
+        });
+      }
+      const zippable: Zippable = {};
+      for (const file of result.files) zippable[file.path] = toBytes(file.data);
+      const zipped = zipSync(zippable);
+      return new Response(zipped as BodyInit, {
+        headers: {
+          'Content-Type': 'application/zip',
+          'Content-Disposition': `attachment; filename="${safeSlug}-evermind-hf.zip"`,
+          'Cache-Control': 'private, max-age=3600',
+        },
+      });
+    } catch (err) {
+      return c.json({ error: 'Evermind export failed', detail: err instanceof Error ? err.message : String(err) }, 502);
     }
   });
 

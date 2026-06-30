@@ -2417,6 +2417,13 @@
       "metricReady": "可以发布",
       "metricNeedTrain": "请先训练模型",
       "cta": "打开发布"
+    },
+    "step5": {
+      "title": "导出您的模型",
+      "body": "将训练好的模型下载为可移植产物——Hugging Face 仓库、ONNX、safetensors 或 GGUF。",
+      "metric": "可移植格式：HF 仓库、ONNX、safetensors、GGUF",
+      "open": "导出模型",
+      "close": "隐藏导出"
     }
   },
   "security": {
@@ -4073,6 +4080,37 @@
       "copied": "已复制",
       "apply": "应用",
       "createFile": "创建文件"
+    }
+  },
+  "modelExport": {
+    "subtitle": "将已发布的模型导出为可移植产物——Hugging Face 仓库、ONNX、safetensors 或 GGUF——并下载。模型在服务器端生成，无需令牌。",
+    "modelLabel": "已发布模型",
+    "noModels": "尚无已发布的模型——请先训练并发布一个，然后在此导出。",
+    "loading": "加载中…",
+    "formatLabel": "格式",
+    "fp16Label": "半精度（F16）——文件更小",
+    "export": "导出并下载",
+    "exporting": "导出中…",
+    "pushNote": "下载到您的设备。推送到 Hugging Face 中心是单独的步骤。",
+    "error": "导出失败。",
+    "done": "已下载 {filename}",
+    "format": {
+      "huggingface": {
+        "label": "Hugging Face 仓库",
+        "description": "完整可发布仓库（safetensors + ONNX + GGUF + 配置 + 分词器 + 模型卡），打包为 zip。"
+      },
+      "onnx": {
+        "label": "ONNX",
+        "description": "可在 onnxruntime / transformers.js 中运行的计算图（input_ids → logits）。"
+      },
+      "safetensors": {
+        "label": "Safetensors",
+        "description": "HF 原生权重格式（无损 F32，或半精度 F16）。"
+      },
+      "gguf": {
+        "label": "GGUF",
+        "description": "llama.cpp 容器（自定义架构；用于 GGUF 工具）。"
+      }
     }
   }
 }

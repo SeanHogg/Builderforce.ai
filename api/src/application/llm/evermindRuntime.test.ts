@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   evermindGenerate,
   benchmarkEvermind,
+  exportEvermindArtifact,
   buildEvermindCompletion,
   messagesToPrompt,
   loadEvermindModel,
@@ -64,6 +65,35 @@ describe('benchmarkEvermind (scores the real published artifact)', () => {
   it('throws a clear error when the artifact is missing', async () => {
     const store: ArtifactStore = { async get() { return null; } };
     await expect(benchmarkEvermind(store, 'evermind-models/1/missing', 'alpha beta gamma delta epsilon'))
+      .rejects.toThrow(/not found/);
+  });
+});
+
+describe('exportEvermindArtifact (portable export of the published model)', () => {
+  it('exports a single-file format (onnx) with bytes + content type', async () => {
+    const ref = 'evermind-models/1/fixture-export-onnx';
+    const store = buildFixture(ref);
+    const r = await exportEvermindArtifact(store, ref, 'onnx');
+    expect(r.format).toBe('onnx');
+    expect(r.files.length).toBe(1);
+    expect(r.files[0]!.path).toMatch(/\.onnx$/);
+    expect((r.files[0]!.data as Uint8Array).length ?? (r.files[0]!.data as string).length).toBeGreaterThan(0);
+    expect(r.paramCount).toBeGreaterThan(0);
+  }, 20000);
+
+  it('exports the huggingface bundle as multiple files incl. a tokenizer.json', async () => {
+    const ref = 'evermind-models/1/fixture-export-hf';
+    const store = buildFixture(ref);
+    const r = await exportEvermindArtifact(store, ref, 'huggingface', { name: 'My Model' });
+    expect(r.format).toBe('huggingface');
+    expect(r.files.length).toBeGreaterThan(1);
+    expect(r.files.some((f) => f.path.endsWith('tokenizer.json'))).toBe(true);
+    expect(r.files.some((f) => f.path.endsWith('.safetensors'))).toBe(true);
+  }, 20000);
+
+  it('throws a clear error when the artifact is missing', async () => {
+    const store: ArtifactStore = { async get() { return null; } };
+    await expect(exportEvermindArtifact(store, 'evermind-models/1/missing', 'safetensors'))
       .rejects.toThrow(/not found/);
   });
 });

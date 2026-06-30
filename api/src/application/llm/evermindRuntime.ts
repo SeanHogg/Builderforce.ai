@@ -18,7 +18,19 @@
  * per-isolate loaded-model cache below is safe (a re-publish gets a new ref).
  */
 
-import { EvermindModelPackage, EvermindLM, BPETokenizer, benchmarkText } from '@seanhogg/builderforce-memory-engine';
+import {
+  EvermindModelPackage,
+  EvermindLM,
+  BPETokenizer,
+  benchmarkText,
+  exportEvermind,
+  EXPORT_FORMATS,
+  type ExportFormat,
+  type ExportResult,
+} from '@seanhogg/builderforce-memory-engine';
+
+export { EXPORT_FORMATS };
+export type { ExportFormat, ExportResult };
 
 /** R2 key prefix under which published Evermind models live. */
 export const EVERMIND_MODEL_ROOT = 'evermind-models';
@@ -162,6 +174,33 @@ export async function benchmarkEvermind(
     vocabSize: tok.vocabSize,
     sample,
   };
+}
+
+/**
+ * Export a PUBLISHED `.evermind` model to a portable format (safetensors / ONNX /
+ * GGUF, or a full Hugging Face repo bundle), reusing the same R2 loader the
+ * gateway/test/benchmark paths use (DRY). The engine's export subsystem reads the
+ * model through its public surface only and emits the file set; no external
+ * credential is involved (pushing the bundle to a hub is a separate step). The
+ * tokenizer is passed so the "huggingface" bundle can emit a real `tokenizer.json`.
+ */
+export async function exportEvermindArtifact(
+  store: ArtifactStore,
+  ref: string,
+  format: ExportFormat,
+  opts: { fp16?: boolean; name?: string; license?: string } = {},
+): Promise<ExportResult> {
+  const { lm, tok } = await loadEvermindModel(store, ref);
+  return exportEvermind(
+    lm,
+    format,
+    {
+      ...(opts.fp16 != null ? { fp16: opts.fp16 } : {}),
+      ...(opts.name ? { name: opts.name } : {}),
+      ...(opts.license ? { license: opts.license } : {}),
+    },
+    tok,
+  );
 }
 
 /** Build an OpenAI-compatible chat-completion object from a generation result. */

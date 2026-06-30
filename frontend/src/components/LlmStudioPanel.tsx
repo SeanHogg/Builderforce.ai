@@ -21,6 +21,7 @@ import type { Dataset, FileEntry, TrainingJob } from '@/lib/types';
 import { getFileName } from '@/lib/utils';
 import type { RightTab } from '@/lib/modality';
 import { BenchmarkPanel } from '@/components/BenchmarkPanel';
+import { ModelExportPanel } from '@/components/ModelExportPanel';
 
 interface LlmStudioPanelProps {
   projectId: number | string;
@@ -44,6 +45,7 @@ export function LlmStudioPanel({ projectId, files = [], onGoToTab, onOpenFile }:
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [benchmarkOpen, setBenchmarkOpen] = useState(false);
+  const [exportOpen, setExportOpen] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -82,7 +84,7 @@ export function LlmStudioPanel({ projectId, files = [], onGoToTab, onOpenFile }:
     metric: string;
     cta?: { label: string; tab: RightTab };
     /** Special-cased step rendered with an inline panel instead of a tab CTA. */
-    kind?: 'benchmark';
+    kind?: 'benchmark' | 'export';
   }> = [
     {
       n: 1,
@@ -115,6 +117,14 @@ export function LlmStudioPanel({ projectId, files = [], onGoToTab, onOpenFile }:
       body: t('step4.body'),
       metric: trainedCount > 0 ? t('step4.metricReady') : t('step4.metricNeedTrain'),
       cta: { label: t('step4.cta'), tab: 'publish' },
+    },
+    {
+      n: 5,
+      icon: '📦',
+      title: t('step5.title'),
+      body: t('step5.body'),
+      metric: t('step5.metric'),
+      kind: 'export',
     },
   ];
 
@@ -232,6 +242,31 @@ export function LlmStudioPanel({ projectId, files = [], onGoToTab, onOpenFile }:
                     {benchmarkOpen && (
                       <div style={{ marginTop: 12 }}>
                         <BenchmarkPanel />
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Export step: an inline panel that downloads the published
+                    model as a portable artifact (HF repo / ONNX / safetensors / GGUF). */}
+                {step.kind === 'export' && (
+                  <div style={{ marginTop: 4 }}>
+                    <button
+                      type="button"
+                      onClick={() => setExportOpen((v) => !v)}
+                      aria-expanded={exportOpen}
+                      style={{
+                        fontFamily: 'var(--font-display)', fontWeight: 600, fontSize: '0.78rem',
+                        background: 'var(--bg-elevated)', color: 'var(--text-primary)',
+                        border: '1px solid var(--border-subtle)', borderRadius: 8,
+                        padding: '5px 12px', cursor: 'pointer',
+                      }}
+                    >
+                      {exportOpen ? t('step5.close') : t('step5.open')}
+                    </button>
+                    {exportOpen && (
+                      <div style={{ marginTop: 12 }}>
+                        <ModelExportPanel />
                       </div>
                     )}
                   </div>

@@ -2417,6 +2417,13 @@
       "metricReady": "Listo para publicar",
       "metricNeedTrain": "Entrena un modelo primero",
       "cta": "Abrir publicación"
+    },
+    "step5": {
+      "title": "Exporta tu modelo",
+      "body": "Descarga tu modelo entrenado como un artefacto portátil: un repositorio de Hugging Face, ONNX, safetensors o GGUF.",
+      "metric": "Formatos portátiles: repo HF, ONNX, safetensors, GGUF",
+      "open": "Exportar modelo",
+      "close": "Ocultar exportación"
     }
   },
   "security": {
@@ -4073,6 +4080,37 @@
       "copied": "Copiado",
       "apply": "Aplicar",
       "createFile": "Crear archivo"
+    }
+  },
+  "modelExport": {
+    "subtitle": "Exporta un modelo publicado a un artefacto portátil —un repositorio de Hugging Face, ONNX, safetensors o GGUF— y descárgalo. El modelo se genera en el servidor; no se necesita ningún token.",
+    "modelLabel": "Modelo publicado",
+    "noModels": "Aún no hay modelos publicados: entrena y publica uno primero y luego expórtalo aquí.",
+    "loading": "Cargando…",
+    "formatLabel": "Formato",
+    "fp16Label": "Media precisión (F16): archivo más pequeño",
+    "export": "Exportar y descargar",
+    "exporting": "Exportando…",
+    "pushNote": "Se descarga en tu dispositivo. Publicar en un hub de Hugging Face es un paso aparte.",
+    "error": "La exportación falló.",
+    "done": "Descargado {filename}",
+    "format": {
+      "huggingface": {
+        "label": "Repositorio de Hugging Face",
+        "description": "Repositorio publicable completo (safetensors + ONNX + GGUF + config + tokenizador + tarjeta de modelo), comprimido."
+      },
+      "onnx": {
+        "label": "ONNX",
+        "description": "Grafo ejecutable para onnxruntime / transformers.js (input_ids → logits)."
+      },
+      "safetensors": {
+        "label": "Safetensors",
+        "description": "Formato de pesos nativo de HF (F32 sin pérdidas o F16 de medio tamaño)."
+      },
+      "gguf": {
+        "label": "GGUF",
+        "description": "Contenedor de llama.cpp (arquitectura personalizada; para herramientas GGUF)."
+      }
     }
   }
 }

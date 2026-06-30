@@ -2417,6 +2417,13 @@
       "metricReady": "Bereit zur Veröffentlichung",
       "metricNeedTrain": "Trainiere zuerst ein Modell",
       "cta": "Veröffentlichung öffnen"
+    },
+    "step5": {
+      "title": "Exportieren Sie Ihr Modell",
+      "body": "Laden Sie Ihr trainiertes Modell als portables Artefakt herunter – ein Hugging-Face-Repo, ONNX, safetensors oder GGUF.",
+      "metric": "Portable Formate: HF-Repo, ONNX, safetensors, GGUF",
+      "open": "Modell exportieren",
+      "close": "Export ausblenden"
     }
   },
   "security": {
@@ -4073,6 +4080,37 @@
       "copied": "Kopiert",
       "apply": "Anwenden",
       "createFile": "Datei erstellen"
+    }
+  },
+  "modelExport": {
+    "subtitle": "Exportieren Sie ein veröffentlichtes Modell in ein portables Artefakt – ein Hugging-Face-Repo, ONNX, safetensors oder GGUF – und laden Sie es herunter. Das Modell wird serverseitig erzeugt; es ist kein Token erforderlich.",
+    "modelLabel": "Veröffentlichtes Modell",
+    "noModels": "Noch keine veröffentlichten Modelle – trainieren und veröffentlichen Sie zuerst eines und exportieren Sie es dann hier.",
+    "loading": "Wird geladen…",
+    "formatLabel": "Format",
+    "fp16Label": "Halbe Genauigkeit (F16) – kleinere Datei",
+    "export": "Exportieren & herunterladen",
+    "exporting": "Wird exportiert…",
+    "pushNote": "Wird auf Ihr Gerät heruntergeladen. Das Veröffentlichen in einem Hugging-Face-Hub ist ein separater Schritt.",
+    "error": "Export fehlgeschlagen.",
+    "done": "{filename} heruntergeladen",
+    "format": {
+      "huggingface": {
+        "label": "Hugging-Face-Repo",
+        "description": "Vollständiges veröffentlichbares Repo (safetensors + ONNX + GGUF + Config + Tokenizer + Modellkarte), gezippt."
+      },
+      "onnx": {
+        "label": "ONNX",
+        "description": "Ausführbarer Graph für onnxruntime / transformers.js (input_ids → logits)."
+      },
+      "safetensors": {
+        "label": "Safetensors",
+        "description": "HF-natives Gewichtsformat (verlustfreies F32 oder halb so großes F16)."
+      },
+      "gguf": {
+        "label": "GGUF",
+        "description": "llama.cpp-Container (benutzerdefinierte Architektur; für GGUF-Tools)."
+      }
     }
   }
 }

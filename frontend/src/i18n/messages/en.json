@@ -2417,6 +2417,13 @@
       "metricReady": "Ready to publish",
       "metricNeedTrain": "Train a model first",
       "cta": "Open Publish"
+    },
+    "step5": {
+      "title": "Export your model",
+      "body": "Download your trained model as a portable artifact — a Hugging Face repo, ONNX, safetensors, or GGUF.",
+      "metric": "Portable formats: HF repo, ONNX, safetensors, GGUF",
+      "open": "Export model",
+      "close": "Hide export"
     }
   },
   "security": {
@@ -4073,6 +4080,37 @@
       "copied": "Copied",
       "apply": "Apply",
       "createFile": "Create file"
+    }
+  },
+  "modelExport": {
+    "subtitle": "Export a published model to a portable artifact — a Hugging Face repo, ONNX, safetensors, or GGUF — and download it. The model is produced on the server; no token is needed.",
+    "modelLabel": "Published model",
+    "noModels": "No published models yet — train and publish one first, then export it here.",
+    "loading": "Loading…",
+    "formatLabel": "Format",
+    "fp16Label": "Half-precision (F16) — smaller file",
+    "export": "Export & download",
+    "exporting": "Exporting…",
+    "pushNote": "Downloads to your device. Pushing to a Hugging Face hub is a separate step.",
+    "error": "Export failed.",
+    "done": "Downloaded {filename}",
+    "format": {
+      "huggingface": {
+        "label": "Hugging Face repo",
+        "description": "Full publishable repo (safetensors + ONNX + GGUF + config + tokenizer + model card), zipped."
+      },
+      "onnx": {
+        "label": "ONNX",
+        "description": "Runnable graph for onnxruntime / transformers.js (input_ids → logits)."
+      },
+      "safetensors": {
+        "label": "Safetensors",
+        "description": "HF-native weight format (lossless F32, or half-size F16)."
+      },
+      "gguf": {
+        "label": "GGUF",
+        "description": "llama.cpp container (custom architecture; for GGUF tooling)."
+      }
     }
   }
 }

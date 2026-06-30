@@ -2417,6 +2417,13 @@
       "metricReady": "Prêt à publier",
       "metricNeedTrain": "Entraînez d’abord un modèle",
       "cta": "Ouvrir la publication"
+    },
+    "step5": {
+      "title": "Exportez votre modèle",
+      "body": "Téléchargez votre modèle entraîné comme un artefact portable — un dépôt Hugging Face, ONNX, safetensors ou GGUF.",
+      "metric": "Formats portables : dépôt HF, ONNX, safetensors, GGUF",
+      "open": "Exporter le modèle",
+      "close": "Masquer l’export"
     }
   },
   "security": {
@@ -4073,6 +4080,37 @@
       "copied": "Copié",
       "apply": "Appliquer",
       "createFile": "Créer un fichier"
+    }
+  },
+  "modelExport": {
+    "subtitle": "Exportez un modèle publié vers un artefact portable — un dépôt Hugging Face, ONNX, safetensors ou GGUF — et téléchargez-le. Le modèle est produit sur le serveur ; aucun jeton n’est nécessaire.",
+    "modelLabel": "Modèle publié",
+    "noModels": "Aucun modèle publié pour l’instant — entraînez-en et publiez-en un d’abord, puis exportez-le ici.",
+    "loading": "Chargement…",
+    "formatLabel": "Format",
+    "fp16Label": "Demi-précision (F16) — fichier plus petit",
+    "export": "Exporter et télécharger",
+    "exporting": "Exportation…",
+    "pushNote": "Téléchargé sur votre appareil. La publication vers un hub Hugging Face est une étape distincte.",
+    "error": "L’exportation a échoué.",
+    "done": "Téléchargé {filename}",
+    "format": {
+      "huggingface": {
+        "label": "Dépôt Hugging Face",
+        "description": "Dépôt publiable complet (safetensors + ONNX + GGUF + config + tokeniseur + carte de modèle), compressé."
+      },
+      "onnx": {
+        "label": "ONNX",
+        "description": "Graphe exécutable pour onnxruntime / transformers.js (input_ids → logits)."
+      },
+      "safetensors": {
+        "label": "Safetensors",
+        "description": "Format de poids natif HF (F32 sans perte, ou F16 de demi-taille)."
+      },
+      "gguf": {
+        "label": "GGUF",
+        "description": "Conteneur llama.cpp (architecture personnalisée ; pour l’outillage GGUF)."
+      }
     }
   }
 }
