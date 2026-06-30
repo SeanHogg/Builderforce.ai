@@ -37,5 +37,11 @@
   "config.defaultModel.desc": "要使用的默认模型 id。留空则让网关从精选的编程模型池中选择。",
   "config.permissionMode.desc": "代理如何将更改应用到你的工作区。",
   "config.permissionMode.ask": "在应用每次文件编辑或命令前询问（推荐）。",
-  "config.permissionMode.acceptEdits": "自动应用文件编辑，不再提示。"
+  "config.permissionMode.acceptEdits": "自动应用文件编辑，不再提示。",
+  "view.inbox": "收件箱",
+  "command.reviewPullRequests": "BuilderForce：审查拉取请求",
+  "command.fixErrors": "BuilderForce：修复生产错误",
+  "command.openPullRequest": "BuilderForce：创建拉取请求",
+  "command.reviewChanges": "BuilderForce：审查更改",
+  "command.refreshInbox": "BuilderForce：刷新收件箱"
 }

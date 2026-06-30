@@ -26,7 +26,7 @@ import { ProjectRepository } from '../../infrastructure/repositories/ProjectRepo
 import { TaskRepository } from '../../infrastructure/repositories/TaskRepository';
 import { ProjectStatus, TaskPriority, TaskType, TenantRole } from '../../domain/shared/types';
 import { signJwt } from '../../infrastructure/auth/JwtService';
-import { workflows, workflowDefinitions, specs, promptLibraryEntries, promptLibraryVersions, approvalRules, approvals, brainChats, agents, projectAgents, agentAssignments, savedDashboards, dashboardWidgets, alerts, alertEvents, auditEvents, boards, cronJobs, portfolios, initiatives, objectives, objectiveLinks, keyResults, ideAgents, marketplaceSkills, artifactAssignments, socControls, socEvidence, pokerSessions, pokerStories, pokerVotes, retrospectives, retroItems, boardConnections, projectRepositories, pullRequests, chatSessions, chatMessages, swimlanes, swimlaneAgentAssignments, tenants, executions, usageSnapshots, toolAuditEvents, executionMessages, agentHosts, agentHostProjects } from '../../infrastructure/database/schema';
+import { workflows, workflowDefinitions, specs, promptLibraryEntries, promptLibraryVersions, approvalRules, approvals, brainChats, agents, projectAgents, agentAssignments, savedDashboards, dashboardWidgets, alerts, alertEvents, auditEvents, boards, cronJobs, portfolios, initiatives, objectives, objectiveLinks, keyResults, ideAgents, marketplaceSkills, artifactAssignments, socControls, socEvidence, pokerSessions, pokerStories, pokerVotes, retrospectives, retroItems, boardConnections, projectRepositories, pullRequests, chatSessions, chatMessages, swimlanes, swimlaneAgentAssignments, tenants, executions, usageSnapshots, toolAuditEvents, executionMessages, agentHosts, agentHostProjects, errorGroups } from '../../infrastructure/database/schema';
 import { resolveSegment } from '../../infrastructure/auth/segmentResolver';
 import type { McpToolEntry } from './mcpExtensionService';
 import type { Env } from '../../env';
@@ -1292,6 +1292,18 @@ const CATALOG: BuiltinTool[] = [
   { tool: 'executions.submit', mutates: true, description: 'Submit a task for agent execution (dispatches to an agent host or the cloud).', parameters: obj({ taskId: N, agentHostId: N, sessionId: S, payload: S }, ['taskId']), run: (ctx, a) => replayRoute(ctx, 'POST', '/api/runtime/executions', { taskId: num(a.taskId), ...(a.agentHostId != null ? { agentHostId: num(a.agentHostId) } : {}), ...(a.sessionId != null ? { sessionId: str(a.sessionId) } : {}), ...(a.payload != null ? { payload: str(a.payload) } : {}) }) },
   { tool: 'executions.cancel', mutates: true, description: 'Cancel a running/queued execution.', parameters: obj({ id: N }, ['id']), run: (ctx, a) => replayRoute(ctx, 'POST', `/api/runtime/executions/${num(a.id)}/cancel`) },
   { tool: 'executions.post_message', mutates: true, description: 'Send a follow-up direction to a running execution (steer it mid-run).', parameters: obj({ id: N, text: S }, ['id', 'text']), run: (ctx, a) => replayRoute(ctx, 'POST', `/api/runtime/executions/${num(a.id)}/messages`, { text: str(a.text) }) },
+
+  // ---- Quality / error observability (read): production errors the Quality pillar
+  //       fingerprint-groups, so the Brain (web AND editor) can see what is breaking
+  //       and fix it — the "error → fix" loop, callable from either surface. ----
+  { tool: 'quality.list_error_groups', mutates: false, description: 'List production error groups (fingerprint-grouped runtime errors), newest first. Optionally filter by project, status (unresolved/resolved/ignored/fixing), or level (fatal/error/warning/info). Use this to see what is breaking, then search_code/read_file the referenced code and fix it.', parameters: obj({ projectId: N, status: S, level: S, limit: N }), run: (ctx, a) => {
+    const conds: SQL[] = [eq(errorGroups.tenantId, ctx.tenantId)];
+    if (a.projectId != null) conds.push(eq(errorGroups.projectId, num(a.projectId)));
+    if (a.status != null) conds.push(eq(errorGroups.status, str(a.status)));
+    if (a.level != null) conds.push(eq(errorGroups.level, str(a.level)));
+    return ctx.db.select().from(errorGroups).where(and(...conds)).orderBy(desc(errorGroups.lastSeen)).limit(a.limit != null ? Math.min(num(a.limit), 100) : 50);
+  } },
+  { tool: 'quality.get_error_group', mutates: false, description: 'Get one error group by id — fingerprint, title, culprit, level, status, event/user counts, environment, release, a sample payload, and any linked task.', parameters: obj({ id: S }, ['id']), run: async (ctx, a) => (await ctx.db.select().from(errorGroups).where(and(eq(errorGroups.id, str(a.id)), eq(errorGroups.tenantId, ctx.tenantId))).limit(1))[0] ?? null },
 
   // ---- Integrations (read): integrations.list already exists above (line ~1088, secret-safe,
   //       tenant-scoped) — not re-added here to keep advertised names unique. ----

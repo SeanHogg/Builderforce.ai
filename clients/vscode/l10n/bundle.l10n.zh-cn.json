@@ -33,5 +33,20 @@
   "New chat name": "新的对话名称",
   "Copy chat transcript (for triage)": "复制对话记录（用于排查）",
   "Run connection diagnostics": "运行连接诊断",
-  "Chat transcript copied to clipboard.": "对话记录已复制到剪贴板。"
+  "Chat transcript copied to clipboard.": "对话记录已复制到剪贴板。",
+  "Review pull requests": "审查拉取请求",
+  "Fix production errors": "修复生产错误",
+  "Open a pull request": "创建拉取请求",
+  "List your open PRs and their CI status, and triage them": "列出你打开的 PR 及其 CI 状态并进行分流",
+  "See your unresolved runtime errors and fix the top one": "查看你未解决的运行时错误并修复最严重的一个",
+  "Review your changes, commit on a branch, and open a PR": "审查你的更改，提交到分支并创建 PR",
+  "Nothing needs you right now": "目前没有需要你处理的事项",
+  "Approval request": "审批请求",
+  "question": "问题",
+  "feedback": "反馈",
+  "approval": "审批",
+  "Review request": "审查请求",
+  "Review my open pull requests: use repos.list_pull_requests to list them, summarize each PR's status and any failing CI checks, and flag anything stale or blocked so I can triage.": "审查我打开的拉取请求：使用 repos.list_pull_requests 列出它们，总结每个 PR 的状态和任何失败的 CI 检查，并标记任何陈旧或被阻塞的项以便我分流。",
+  "Show my unresolved production errors using quality.list_error_groups (most impactful first). For the top one, get its details with quality.get_error_group, then search_code/read_file the culprit and propose a fix.": "使用 quality.list_error_groups 显示我未解决的生产错误（影响最大的优先）。针对最严重的一个，用 quality.get_error_group 获取详情，然后用 search_code/read_file 查看出错代码并提出修复方案。",
+  "Review my current changes with git_status and git_diff, then commit them on a new branch, push, and open a pull request. Confirm the branch name and PR title with me first.": "使用 git_status 和 git_diff 审查我当前的更改，然后将它们提交到新分支、推送并创建拉取请求。请先与我确认分支名称和 PR 标题。"
 }

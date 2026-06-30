@@ -12,8 +12,10 @@ A codebase-aware BuilderForce AI coding agent in your editor sidebar.
   commit, push, and open a PR — going from idea to shipped without leaving the editor. Every
   change and command asks for your approval first.
 - **Run your team's work from the editor** — open, update, and dispatch projects, tasks, and
-  OKRs directly in chat. Kick off a run on a ticket and follow its status without switching to
-  a dashboard.
+  OKRs directly in chat, and kick off a run on a ticket and follow its status — no dashboard.
+  A **Work Inbox** in the sidebar shows what needs you (pending approvals) with one-click
+  starts to **review your pull requests** and their CI, **fix a production error** from the
+  error straight to the code, or **open a pull request** for your changes.
 - **It knows your codebase** — scans the open folder once (cached) and grounds every answer in
   your project's real structure, so suggestions fit your code. Refresh with **Rescan
   Codebase**.

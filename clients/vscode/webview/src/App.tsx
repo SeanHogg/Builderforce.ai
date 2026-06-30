@@ -178,6 +178,11 @@ function Chat({ init }: { init: InitData }) {
       if (intent.kind === 'new') {
         setChatId(null);
         setInput('');
+      } else if (intent.kind === 'seed') {
+        // Fresh chat pre-filled with an editor entry point's prompt (review PRs / fix
+        // errors / open a PR); the user can tweak before sending.
+        setChatId(null);
+        setInput(intent.text ?? '');
       } else if (intent.kind === 'focus' && intent.chatId != null) {
         setChatId(intent.chatId);
       } else if (intent.kind === 'task' && intent.task) {

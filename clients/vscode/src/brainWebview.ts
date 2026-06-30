@@ -7,8 +7,10 @@ import { getSelectedModel } from "./modelState";
 
 /** A host-driven request to the singleton Brain panel (mirror of the webview type). */
 export interface BrainIntent {
-  kind: "new" | "focus" | "task";
+  kind: "new" | "focus" | "task" | "seed";
   chatId?: number;
+  /** For 'seed': a prompt pre-filled into a fresh chat (editor entry points). */
+  text?: string;
   task?: { id: number; key?: string; title: string; projectId?: number; dispatched?: boolean };
 }
 

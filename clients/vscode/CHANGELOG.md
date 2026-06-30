@@ -2,6 +2,14 @@
 
 All notable changes to the BuilderForce VS Code extension are documented here.
 
+## [2026.6.42] — Your team's work, in the editor
+
+- **A Work Inbox** — a new sidebar list shows what needs you: pending approvals to act on, plus one-click starts for the jobs below. No dashboard trip.
+- **Review your pull requests** — ask the agent to list your open PRs, summarize their status and CI checks, and flag what's stale or blocked.
+- **Fix production errors** — the agent can now see your unresolved runtime errors and take you straight from an error to a fix in the code (works the same in the web app and the editor).
+- **Open a pull request** — one action reviews your changes, commits them on a branch, pushes, and opens the PR.
+- **Review changes before you commit** — open all of the agent's edits as one diff in Source Control.
+
 ## [2026.6.41] — More git, same toolset everywhere
 
 - **Works your git history** — the agent can review `git status`/`diff`/`log`, sync the

@@ -37,5 +37,11 @@
   "config.defaultModel.desc": "Default model id to use. Leave empty to let the gateway pick from the curated coding pool.",
   "config.permissionMode.desc": "How the agent applies changes to your workspace.",
   "config.permissionMode.ask": "Ask before applying each file edit or command (recommended).",
-  "config.permissionMode.acceptEdits": "Apply file edits automatically without prompting."
+  "config.permissionMode.acceptEdits": "Apply file edits automatically without prompting.",
+  "view.inbox": "Inbox",
+  "command.reviewPullRequests": "BuilderForce: Review Pull Requests",
+  "command.fixErrors": "BuilderForce: Fix Production Errors",
+  "command.openPullRequest": "BuilderForce: Open a Pull Request",
+  "command.reviewChanges": "BuilderForce: Review Changes",
+  "command.refreshInbox": "BuilderForce: Refresh Inbox"
 }

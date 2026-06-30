@@ -16,6 +16,7 @@ import { setSelectedModel } from "./modelState";
 import { getSelectedProject, initProjectState, setSelectedProject } from "./projectState";
 import { ProjectsTreeProvider } from "./projectsTree";
 import { SessionsTreeProvider } from "./sessionsTree";
+import { InboxTreeProvider } from "./inboxTree";
 
 /** Pull a numeric Brain chat id out of a Sessions tree item or a raw id argument. */
 function chatIdOf(item: bfApi.BfBrainChat | number | string | undefined): number | undefined {
@@ -75,6 +76,7 @@ export function activate(context: vscode.ExtensionContext): void {
   initProjectState(context.workspaceState);
   const tree = new SessionsTreeProvider(context.secrets);
   const projects = new ProjectsTreeProvider(context);
+  const inbox = new InboxTreeProvider(context.secrets);
 
   // The Brain panel is the ONE chat surface — keep the sidebars live as it writes:
   // a new/renamed conversation refreshes the Sessions list; a platform-catalog write
@@ -111,6 +113,34 @@ export function activate(context: vscode.ExtensionContext): void {
   context.subscriptions.push(
     participant,
     vscode.window.registerTreeDataProvider("builderforce.sessions", tree),
+    vscode.window.registerTreeDataProvider("builderforce.inbox", inbox),
+    vscode.commands.registerCommand("builderforce.refreshInbox", () => inbox.refresh()),
+    // Work Inbox entry points — each hands the unified Brain a job to do with its
+    // shared platform + git tools (one Brain, one tool catalog; no bespoke dashboards).
+    vscode.commands.registerCommand("builderforce.reviewPullRequests", () =>
+      BrainWebview.open(context, {
+        kind: "seed",
+        text: vscode.l10n.t("Review my open pull requests: use repos.list_pull_requests to list them, summarize each PR's status and any failing CI checks, and flag anything stale or blocked so I can triage."),
+      }),
+    ),
+    vscode.commands.registerCommand("builderforce.fixErrors", () =>
+      BrainWebview.open(context, {
+        kind: "seed",
+        text: vscode.l10n.t("Show my unresolved production errors using quality.list_error_groups (most impactful first). For the top one, get its details with quality.get_error_group, then search_code/read_file the culprit and propose a fix."),
+      }),
+    ),
+    vscode.commands.registerCommand("builderforce.openPullRequest", () =>
+      BrainWebview.open(context, {
+        kind: "seed",
+        text: vscode.l10n.t("Review my current changes with git_status and git_diff, then commit them on a new branch, push, and open a pull request. Confirm the branch name and PR title with me first."),
+      }),
+    ),
+    // Review the agent's working-tree changes as one diff before committing — VS Code's
+    // native Source Control view already renders the multi-file diff, so reuse it.
+    vscode.commands.registerCommand("builderforce.reviewChanges", async () => {
+      await vscode.commands.executeCommand("workbench.view.scm").then(undefined, () => undefined);
+      await vscode.commands.executeCommand("workbench.scm.focus").then(undefined, () => undefined);
+    }),
     vscode.commands.registerCommand("builderforce.refreshInsights", () => insights?.refresh()),
     // Internal: repaint the server-backed Sessions list (after auth / chat writes).
     vscode.commands.registerCommand("builderforce.refreshSessions", () => tree.refresh()),
@@ -610,6 +640,7 @@ async function reviewHumanRequests(
     // An approval may have auto-started a run — refresh the board/task tree to reflect it.
     bfApi.invalidateTasks(getSelectedProject()?.id);
     projects.refresh();
+    void vscode.commands.executeCommand("builderforce.refreshInbox");
     const verb = decision === "answer" ? "answered" : decision === "approve" ? "approved" : "rejected";
     const started = updated.startedExecutionId ? ` Run #${updated.startedExecutionId} started.` : "";
     vscode.window.showInformationMessage(`BuilderForce: request ${verb}.${started}`);
@@ -646,6 +677,7 @@ async function signIn(context: vscode.ExtensionContext): Promise<void> {
   clearPlatformToolsCache();
   BrainWebview.refresh();
   void vscode.commands.executeCommand("builderforce.refreshSessions");
+  void vscode.commands.executeCommand("builderforce.refreshInbox");
   void heartbeat(context);
   void vscode.commands.executeCommand("builderforce.refreshProjects");
   void maybeScan(context, false);
@@ -666,6 +698,7 @@ async function signOut(
   vscode.window.showInformationMessage("BuilderForce: signed out.");
   BrainWebview.refresh();
   void vscode.commands.executeCommand("builderforce.refreshSessions");
+  void vscode.commands.executeCommand("builderforce.refreshInbox");
   void vscode.commands.executeCommand("builderforce.refreshProjects");
   void insights?.start();
 }

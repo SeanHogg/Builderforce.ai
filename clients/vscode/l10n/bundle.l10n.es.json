@@ -33,5 +33,20 @@
   "New chat name": "Nuevo nombre del chat",
   "Copy chat transcript (for triage)": "Copiar la transcripción del chat (para diagnóstico)",
   "Run connection diagnostics": "Ejecutar diagnóstico de conexión",
-  "Chat transcript copied to clipboard.": "Transcripción del chat copiada al portapapeles."
+  "Chat transcript copied to clipboard.": "Transcripción del chat copiada al portapapeles.",
+  "Review pull requests": "Revisar pull requests",
+  "Fix production errors": "Corregir errores de producción",
+  "Open a pull request": "Abrir un pull request",
+  "List your open PRs and their CI status, and triage them": "Lista tus PR abiertos y su estado de CI, y clasifícalos",
+  "See your unresolved runtime errors and fix the top one": "Ve tus errores de ejecución sin resolver y corrige el principal",
+  "Review your changes, commit on a branch, and open a PR": "Revisa tus cambios, confírmalos en una rama y abre un PR",
+  "Nothing needs you right now": "Nada requiere tu atención ahora mismo",
+  "Approval request": "Solicitud de aprobación",
+  "question": "pregunta",
+  "feedback": "comentarios",
+  "approval": "aprobación",
+  "Review request": "Revisar solicitud",
+  "Review my open pull requests: use repos.list_pull_requests to list them, summarize each PR's status and any failing CI checks, and flag anything stale or blocked so I can triage.": "Revisa mis pull requests abiertos: usa repos.list_pull_requests para listarlos, resume el estado de cada PR y cualquier verificación de CI fallida, y marca lo que esté obsoleto o bloqueado para que pueda clasificarlo.",
+  "Show my unresolved production errors using quality.list_error_groups (most impactful first). For the top one, get its details with quality.get_error_group, then search_code/read_file the culprit and propose a fix.": "Muestra mis errores de producción sin resolver con quality.list_error_groups (los de mayor impacto primero). Para el principal, obtén sus detalles con quality.get_error_group, luego usa search_code/read_file en el código culpable y propón una corrección.",
+  "Review my current changes with git_status and git_diff, then commit them on a new branch, push, and open a pull request. Confirm the branch name and PR title with me first.": "Revisa mis cambios actuales con git_status y git_diff, luego confírmalos en una nueva rama, súbelos y abre un pull request. Confirma conmigo el nombre de la rama y el título del PR primero."
 }

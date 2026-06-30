@@ -2,7 +2,7 @@
   "name": "builderforce-ai",
   "displayName": "BuilderForce.ai",
   "description": "%extension.description%",
-  "version": "2026.6.41",
+  "version": "2026.6.42",
   "publisher": "builderforce",
   "license": "MIT",
   "author": "Sean Hogg",
@@ -57,6 +57,10 @@
         {
           "id": "builderforce.sessions",
           "name": "%view.sessions%"
+        },
+        {
+          "id": "builderforce.inbox",
+          "name": "%view.inbox%"
         },
         {
           "id": "builderforce.project",
@@ -210,6 +214,31 @@
         "command": "builderforce.openBrain",
         "title": "%command.openBrain%",
         "icon": "$(sparkle)"
+      },
+      {
+        "command": "builderforce.reviewPullRequests",
+        "title": "%command.reviewPullRequests%",
+        "icon": "$(git-pull-request)"
+      },
+      {
+        "command": "builderforce.fixErrors",
+        "title": "%command.fixErrors%",
+        "icon": "$(bug)"
+      },
+      {
+        "command": "builderforce.openPullRequest",
+        "title": "%command.openPullRequest%",
+        "icon": "$(git-commit)"
+      },
+      {
+        "command": "builderforce.reviewChanges",
+        "title": "%command.reviewChanges%",
+        "icon": "$(diff)"
+      },
+      {
+        "command": "builderforce.refreshInbox",
+        "title": "%command.refreshInbox%",
+        "icon": "$(sync)"
       }
     ],
     "menus": {
@@ -299,6 +328,11 @@
           "command": "builderforce.showDoneTasks",
           "when": "view == builderforce.project && builderforce.hideDoneTasks",
           "group": "navigation@6"
+        },
+        {
+          "command": "builderforce.refreshInbox",
+          "when": "view == builderforce.inbox",
+          "group": "navigation@1"
         }
       ],
       "view/item/context": [
@@ -355,6 +389,10 @@
         },
         {
           "command": "builderforce.editorChat",
+          "when": "false"
+        },
+        {
+          "command": "builderforce.refreshInbox",
           "when": "false"
         }
       ]

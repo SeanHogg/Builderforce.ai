@@ -37,5 +37,11 @@
   "config.defaultModel.desc": "Standard-Modell-Id. Leer lassen, damit das Gateway aus dem kuratierten Coding-Modell-Pool wählt.",
   "config.permissionMode.desc": "Wie der Agent Änderungen auf deinen Arbeitsbereich anwendet.",
   "config.permissionMode.ask": "Vor jeder Dateiänderung oder jedem Befehl nachfragen (empfohlen).",
-  "config.permissionMode.acceptEdits": "Dateiänderungen automatisch ohne Nachfrage anwenden."
+  "config.permissionMode.acceptEdits": "Dateiänderungen automatisch ohne Nachfrage anwenden.",
+  "view.inbox": "Posteingang",
+  "command.reviewPullRequests": "BuilderForce: Pull Requests prüfen",
+  "command.fixErrors": "BuilderForce: Produktionsfehler beheben",
+  "command.openPullRequest": "BuilderForce: Pull Request öffnen",
+  "command.reviewChanges": "BuilderForce: Änderungen prüfen",
+  "command.refreshInbox": "BuilderForce: Posteingang aktualisieren"
 }

@@ -33,5 +33,20 @@
   "New chat name": "New chat name",
   "Copy chat transcript (for triage)": "Copy chat transcript (for triage)",
   "Run connection diagnostics": "Run connection diagnostics",
-  "Chat transcript copied to clipboard.": "Chat transcript copied to clipboard."
+  "Chat transcript copied to clipboard.": "Chat transcript copied to clipboard.",
+  "Review pull requests": "Review pull requests",
+  "Fix production errors": "Fix production errors",
+  "Open a pull request": "Open a pull request",
+  "List your open PRs and their CI status, and triage them": "List your open PRs and their CI status, and triage them",
+  "See your unresolved runtime errors and fix the top one": "See your unresolved runtime errors and fix the top one",
+  "Review your changes, commit on a branch, and open a PR": "Review your changes, commit on a branch, and open a PR",
+  "Nothing needs you right now": "Nothing needs you right now",
+  "Approval request": "Approval request",
+  "question": "question",
+  "feedback": "feedback",
+  "approval": "approval",
+  "Review request": "Review request",
+  "Review my open pull requests: use repos.list_pull_requests to list them, summarize each PR's status and any failing CI checks, and flag anything stale or blocked so I can triage.": "Review my open pull requests: use repos.list_pull_requests to list them, summarize each PR's status and any failing CI checks, and flag anything stale or blocked so I can triage.",
+  "Show my unresolved production errors using quality.list_error_groups (most impactful first). For the top one, get its details with quality.get_error_group, then search_code/read_file the culprit and propose a fix.": "Show my unresolved production errors using quality.list_error_groups (most impactful first). For the top one, get its details with quality.get_error_group, then search_code/read_file the culprit and propose a fix.",
+  "Review my current changes with git_status and git_diff, then commit them on a new branch, push, and open a pull request. Confirm the branch name and PR title with me first.": "Review my current changes with git_status and git_diff, then commit them on a new branch, push, and open a pull request. Confirm the branch name and PR title with me first."
 }

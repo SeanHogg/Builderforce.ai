@@ -33,5 +33,20 @@
   "New chat name": "Nouveau nom de la conversation",
   "Copy chat transcript (for triage)": "Copier la transcription de la conversation (pour le diagnostic)",
   "Run connection diagnostics": "Exécuter le diagnostic de connexion",
-  "Chat transcript copied to clipboard.": "Transcription de la conversation copiée dans le presse-papiers."
+  "Chat transcript copied to clipboard.": "Transcription de la conversation copiée dans le presse-papiers.",
+  "Review pull requests": "Examiner les pull requests",
+  "Fix production errors": "Corriger les erreurs de production",
+  "Open a pull request": "Ouvrir une pull request",
+  "List your open PRs and their CI status, and triage them": "Liste tes PR ouvertes et leur état CI, et trie-les",
+  "See your unresolved runtime errors and fix the top one": "Vois tes erreurs d'exécution non résolues et corrige la principale",
+  "Review your changes, commit on a branch, and open a PR": "Examine tes modifications, valide-les sur une branche et ouvre une PR",
+  "Nothing needs you right now": "Rien ne requiert votre attention pour le moment",
+  "Approval request": "Demande d'approbation",
+  "question": "question",
+  "feedback": "retour",
+  "approval": "approbation",
+  "Review request": "Examiner la demande",
+  "Review my open pull requests: use repos.list_pull_requests to list them, summarize each PR's status and any failing CI checks, and flag anything stale or blocked so I can triage.": "Examine mes pull requests ouvertes : utilise repos.list_pull_requests pour les lister, résume l’état de chaque PR et toute vérification CI en échec, et signale ce qui est obsolète ou bloqué pour que je puisse trier.",
+  "Show my unresolved production errors using quality.list_error_groups (most impactful first). For the top one, get its details with quality.get_error_group, then search_code/read_file the culprit and propose a fix.": "Affiche mes erreurs de production non résolues avec quality.list_error_groups (les plus impactantes d’abord). Pour la principale, obtiens ses détails avec quality.get_error_group, puis utilise search_code/read_file sur le code fautif et propose un correctif.",
+  "Review my current changes with git_status and git_diff, then commit them on a new branch, push, and open a pull request. Confirm the branch name and PR title with me first.": "Examine mes modifications actuelles avec git_status et git_diff, puis valide-les sur une nouvelle branche, pousse-les et ouvre une pull request. Confirme d’abord avec moi le nom de la branche et le titre de la PR."
 }

@@ -37,5 +37,11 @@
   "config.defaultModel.desc": "Id del modelo predeterminado. Déjalo vacío para que la puerta de enlace elija del grupo de modelos de programación curado.",
   "config.permissionMode.desc": "Cómo aplica el agente los cambios a tu espacio de trabajo.",
   "config.permissionMode.ask": "Preguntar antes de aplicar cada edición de archivo o comando (recomendado).",
-  "config.permissionMode.acceptEdits": "Aplicar las ediciones de archivos automáticamente sin preguntar."
+  "config.permissionMode.acceptEdits": "Aplicar las ediciones de archivos automáticamente sin preguntar.",
+  "view.inbox": "Bandeja de entrada",
+  "command.reviewPullRequests": "BuilderForce: Revisar Pull Requests",
+  "command.fixErrors": "BuilderForce: Corregir errores de producción",
+  "command.openPullRequest": "BuilderForce: Abrir un Pull Request",
+  "command.reviewChanges": "BuilderForce: Revisar cambios",
+  "command.refreshInbox": "BuilderForce: Actualizar bandeja de entrada"
 }

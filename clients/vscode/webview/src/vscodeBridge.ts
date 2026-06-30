@@ -31,9 +31,13 @@ export type LabelBundle = Record<string, string>;
  * Brain panel: open a fresh chat, focus an existing one, or seed a task-scoped chat.
  */
 export interface BrainIntent {
-  kind: 'new' | 'focus' | 'task';
+  kind: 'new' | 'focus' | 'task' | 'seed';
   /** For 'focus': the server chat id to load. */
   chatId?: number;
+  /** For 'seed': open a fresh chat with this prompt pre-filled in the composer, so an
+   *  editor entry point (review PRs / fix errors / open a PR) hands the unified Brain a
+   *  job to do with its shared platform + git tools. */
+  text?: string;
   /** For 'task': the BuilderForce task to scope a new chat to. `dispatched` marks a
    *  task that was just handed to the platform runtime, so the seed nudges the Brain
    *  to monitor the run (via the `executions.*` platform tools) rather than start work. */

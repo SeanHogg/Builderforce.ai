@@ -37,5 +37,11 @@
   "config.defaultModel.desc": "Id du modèle par défaut. Laissez vide pour laisser la passerelle choisir dans le pool de modèles de codage sélectionné.",
   "config.permissionMode.desc": "Comment l'agent applique les changements à votre espace de travail.",
   "config.permissionMode.ask": "Demander avant d'appliquer chaque modification de fichier ou commande (recommandé).",
-  "config.permissionMode.acceptEdits": "Appliquer automatiquement les modifications de fichiers sans demander."
+  "config.permissionMode.acceptEdits": "Appliquer automatiquement les modifications de fichiers sans demander.",
+  "view.inbox": "Boîte de réception",
+  "command.reviewPullRequests": "BuilderForce : Examiner les pull requests",
+  "command.fixErrors": "BuilderForce : Corriger les erreurs de production",
+  "command.openPullRequest": "BuilderForce : Ouvrir une pull request",
+  "command.reviewChanges": "BuilderForce : Examiner les modifications",
+  "command.refreshInbox": "BuilderForce : Actualiser la boîte de réception"
 }
