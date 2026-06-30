@@ -1,44 +1,49 @@
-> **PRD** — drafted by Bob Developer (V2 (Container)) · task #89
+> **PRD** — drafted by Kevin BA/PM/PO (Durable) · task #179
 > _Each agent that updates this PRD signs its change below._
 
-# Product Requirements Document: Avatar Filter Row Placement
+## Product Requirements Document: OKR 4 (Orchestration)
 
-## 1. Problem & Goal
+### Problem
+Current processes for analyzing Product Requirements Documents (PRDs) are manual, inconsistent, and time-consuming, leading to delayed feedback and potential misinterpretations. There's a lack of a unified, automated system to define, execute, and monitor complex, multi-step workflows involving various agents. Enforcing governance policies across these automated tasks is challenging, and agents often operate in silos, lacking a seamless mechanism for context sharing. Furthermore, there's limited visibility into the real-time execution and dependencies of these critical workflows.
 
-**Problem:** The current placement of the avatar filter, separated from the priorities dropdown, disrupts the logical grouping of filtering options. Users must scan different areas of the UI to apply related filters, leading to a less efficient and intuitive user experience.
+### Goal
+To establish a robust, scalable, and observable orchestration layer using Temporal.io to automate and standardize the PRD analysis workflow. This initiative aims to centralize policy governance for automated tasks, provide clear visualization and monitoring of complex workflows via a Task DAG UI, and enable seamless context sharing between collaborating agents, ultimately accelerating PRD review cycles and improving analysis quality.
 
-**Goal:** To improve the user experience by consolidating related filtering options into a single, contiguous row, thereby enhancing discoverability, reducing cognitive load, and increasing the speed at which users can apply filters.
+### Target Users / ICP Roles
+*   **Product Managers:** Initiate PRD analysis, review workflow outputs, ensure policy compliance.
+*   **System Architects / Workflow Designers:** Define, configure, and maintain workflow definitions and governance policies.
+*   **Developers / Engineers:** Integrate agent services with the orchestration engine, monitor workflow execution, debug tasks.
+*   **Operations / SRE:** Manage and scale the Temporal infrastructure, ensure workflow reliability.
 
-## 2. Target Users / ICP Roles
+### Scope
+This project covers the development and integration of a Temporal-based orchestration engine, implementation of a defined PRD analysis workflow, mechanisms for policy governance, a user interface for visualizing workflow Directed Acyclic Graphs (DAGs), and a framework for cross-agent context sharing.
 
-*   **Project Managers:** Need to quickly filter tasks by assignee (avatar) and priority to understand workload distribution and identify high-priority items.
-*   **Team Leads:** Require efficient filtering to monitor team progress and allocate resources based on task priority and individual contribution (avatar).
-*   **Individual Contributors:** Benefit from a cleaner interface to focus on their assigned tasks and understand their priority within the project context.
+### Functional Requirements
 
-## 3. Scope
+*   **FR.1 Workflow Definition & Management:** Users shall be able to define, update, and manage complex workflows as Directed Acyclic Graphs (DAGs) of tasks.
+*   **FR.2 Workflow Execution (Temporal):** The system shall leverage Temporal.io as the core engine for initiating, executing, and persisting the state of long-running workflows and individual tasks.
+*   **FR.3 PRD Analysis Workflow:** The system shall provide a pre-defined workflow template specifically designed for automated PRD analysis (e.g., parsing, dependency mapping, consistency checks).
+*   **FR.4 Policy Definition:** Administrators shall be able to define and manage governance policies (e.g., data access rules, approval steps, compliance checks) applicable to workflows or specific tasks.
+*   **FR.5 Policy Enforcement:** The orchestration engine shall automatically enforce defined policies during workflow and task execution, triggering alerts or workflow adjustments as necessary.
+*   **FR.6 Cross-Agent Context Sharing:** The system shall provide a standardized mechanism for different agents/tasks within a workflow to read and write shared, mutable context and data.
+*   **FR.7 Task DAG UI:** A user interface shall be available to visualize active and historical workflows as interactive DAGs, displaying real-time task status, dependencies, and overall progress.
+*   **FR.8 Workflow Monitoring & Observability:** Users shall be able to monitor workflow execution, view detailed logs, metrics, and trace information for both workflows and individual tasks.
+*   **FR.9 Error Handling & Retries:** Workflows and tasks shall implement robust error handling, including configurable retry policies, timeouts, and clear error reporting.
 
-This document covers the functional requirements and acceptance criteria for moving the existing avatar filter component to reside on the same UI row as the priorities dropdown. This includes adjustments to layout, styling, and ensuring the filter's functionality remains intact.
+### Acceptance Criteria
 
-## 4. Functional Requirements
+*   **AC.1:** A new PRD successfully triggers the "PRD Analysis Workflow" via the orchestration engine, and its execution state is visible.
+*   **AC.2:** All defined steps within a sample PRD analysis workflow (e.g., "Parse PRD," "Identify Dependencies," "Flag Missing Sections") execute sequentially and successfully end-to-end.
+*   **AC.3:** A policy configured to require an "Impact Analysis" task for PRDs exceeding a certain scope is correctly applied, and the workflow is modified to include this task.
+*   **AC.4:** The Task DAG UI accurately renders the real-time execution flow, status, and dependencies of an active PRD analysis workflow.
+*   **AC.5:** An agent executing an early workflow task successfully writes a key analysis outcome to the shared context, which is then correctly read and utilized by a downstream agent.
+*   **AC.6:** A workflow task designed to retry on transient network errors successfully completes after one or more retries.
+*   **AC.7:** Workflow definitions and governance policies can be created, updated, and deleted through authorized interfaces.
 
-*   **FR1: Layout Adjustment:** The avatar filter component shall be repositioned to occupy a space adjacent to the priorities dropdown within the primary filtering bar.
-*   **FR2: Visual Consistency:** The avatar filter shall maintain its current visual appearance and interaction patterns (e.g., dropdown behavior, selection indicators) after being moved.
-*   **FR3: Responsive Design:** The integrated avatar and priorities filter row shall adapt appropriately across different screen sizes and resolutions, maintaining usability.
-*   **FR4: Filter Functionality:** Applying a filter via the avatar selector shall continue to correctly filter the displayed data (e.g., tasks, issues), and this filtering shall be independent of or complementary to the priorities filter.
+### Out of Scope
 
-## 5. Acceptance Criteria
-
-*   **AC1: Avatar Filter Visible in Row:** The avatar filter is visibly present on the same horizontal line as the priorities dropdown.
-*   **AC2: Filter Functionality Preserved:** Selecting an avatar from the new location correctly filters the displayed items.
-*   **AC3: Priorities Filter Functionality Preserved:** Selecting a priority from its dropdown continues to filter the displayed items, and its interaction is unaffected by the avatar filter's new position.
-*   **AC4: Combined Filtering Works:** Applying both an avatar filter and a priorities filter simultaneously yields the correct, combined results.
-*   **AC5: No Visual Overlap or Distortion:** The avatar filter and priorities dropdown do not overlap each other or other UI elements in the filtering bar, and the overall layout remains clean and undistorted.
-*   **AC6: Responsiveness Verified:** On smaller screen sizes, the combined filter row is still usable, potentially with a different arrangement if necessary (e.g., stacking if horizontal space is too limited, though the primary goal is horizontal).
-
-## 6. Out of Scope
-
-*   **New Avatar Filter Features:** Any enhancements or new functionalities to the avatar filter itself (e.g., search within avatars, multi-select avatars) are out of scope for this task.
-*   **New Priorities Filter Features:** Any enhancements or new functionalities to the priorities dropdown are out of scope.
-*   **Other Filter Components:** Moving or modifying any other filter components not explicitly mentioned (e.g., date filters, status filters) is out of scope.
-*   **Backend Changes:** Any backend changes related to how filters are processed or stored are out of scope, assuming the existing backend APIs can handle the current filtering logic.
-*   **Performance Optimization:** Significant performance optimizations related to filtering are out of scope, unless directly caused by the layout change.
+*   Development of the core AI/ML models or specific algorithms for individual PRD analysis *logic* itself (e.g., the NLP model for sentiment analysis of PRD text). This PRD focuses on *orchestrating* such components.
+*   A comprehensive, full-featured PRD management system (this initiative focuses specifically on the *analysis workflow*).
+*   Dynamic, AI-driven policy *generation* (policies are defined by architects/users).
+*   External-facing API for third-party workflow initiation (initial focus is internal triggers).
+*   Advanced multi-tenancy capabilities beyond basic organizational separation.
