@@ -2371,8 +2371,20 @@
     },
     "nudge": {
       "underfit": "La perte a à peine bougé. Augmentez les époques ou ajoutez du texte d’entraînement.",
-      "weak": "La perplexité est proche de l’aléatoire. Ajoutez du texte, augmentez les époques ou agrandissez le modèle."
-    }
+      "weak": "La perplexité est proche de l’aléatoire. Ajoutez du texte, augmentez les époques ou agrandissez le modèle.",
+      "weakScore": "La perplexité est proche du hasard. Entraînez le modèle sur davantage de texte ou plus d’époques, puis republiez-le."
+    },
+    "mode": {
+      "train": "En entraîner un nouveau",
+      "score": "Évaluer un modèle entraîné"
+    },
+    "subtitleScore": "Évaluez l’un de vos modèles Evermind publiés sur du texte réservé : perplexité, précision et vitesse, calculés sur le serveur avec le propre tokeniseur du modèle.",
+    "modelLabel": "Modèle publié",
+    "noModels": "Aucun modèle publié pour l’instant — entraînez-en et publiez-en un d’abord, puis évaluez-le ici.",
+    "corpusLabelScore": "Texte réservé",
+    "runScore": "Évaluer le modèle",
+    "serverNote": "S’exécute sur le serveur avec le tokeniseur de votre modèle.",
+    "scoredNote": "{tokens} tokens de texte réservé évalués."
   },
   "llmStudio": {
     "title": "Créer un modèle personnalisé",

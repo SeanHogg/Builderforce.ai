@@ -2371,8 +2371,20 @@
     },
     "nudge": {
       "underfit": "Der Verlust hat sich kaum bewegt. Erhöhe die Epochen oder füge mehr Trainingstext hinzu.",
-      "weak": "Die Perplexität ist fast zufällig. Füge mehr Text hinzu, erhöhe die Epochen oder vergrößere das Modell."
-    }
+      "weak": "Die Perplexität ist fast zufällig. Füge mehr Text hinzu, erhöhe die Epochen oder vergrößere das Modell.",
+      "weakScore": "Die Perplexität ist nahezu zufällig. Trainieren Sie das Modell mit mehr Text oder mehr Epochen und veröffentlichen Sie es erneut."
+    },
+    "mode": {
+      "train": "Neues trainieren",
+      "score": "Trainiertes Modell bewerten"
+    },
+    "subtitleScore": "Bewerten Sie eines Ihrer veröffentlichten Evermind-Modelle anhand von zurückgehaltenem Text – Perplexität, Genauigkeit und Geschwindigkeit, serverseitig mit dem eigenen Tokenizer des Modells berechnet.",
+    "modelLabel": "Veröffentlichtes Modell",
+    "noModels": "Noch keine veröffentlichten Modelle – trainieren und veröffentlichen Sie zuerst eines und bewerten Sie es dann hier.",
+    "corpusLabelScore": "Zurückgehaltener Text",
+    "runScore": "Modell bewerten",
+    "serverNote": "Läuft serverseitig mit dem Tokenizer Ihres Modells.",
+    "scoredNote": "{tokens} Token zurückgehaltenen Texts bewertet."
   },
   "llmStudio": {
     "title": "Eigenes Modell erstellen",

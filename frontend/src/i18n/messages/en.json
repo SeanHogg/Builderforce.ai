@@ -2371,8 +2371,20 @@
     },
     "nudge": {
       "underfit": "The loss barely moved. Raise epochs or add more training text.",
-      "weak": "Perplexity is near random. Add more text, raise epochs, or enlarge the model."
-    }
+      "weak": "Perplexity is near random. Add more text, raise epochs, or enlarge the model.",
+      "weakScore": "Perplexity is near random. Train the model on more text or for more epochs, then re-publish."
+    },
+    "mode": {
+      "train": "Train fresh",
+      "score": "Score a trained model"
+    },
+    "subtitleScore": "Score one of your published Evermind models on held-out text — perplexity, accuracy, and speed, computed on the server against the model's own tokenizer.",
+    "modelLabel": "Published model",
+    "noModels": "No published models yet — train and publish one first, then score it here.",
+    "corpusLabelScore": "Held-out text",
+    "runScore": "Score model",
+    "serverNote": "Runs on the server against your model's tokenizer.",
+    "scoredNote": "Scored {tokens} tokens of held-out text."
   },
   "llmStudio": {
     "title": "Build a Custom Model",
