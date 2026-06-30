@@ -26,10 +26,19 @@ import {
 
 const ENDPOINT = 'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions';
 
+// All Gemini 2.5 models are natively multimodal (image input), support function
+// calling, and emit structured output — declare it so the shape-router
+// (`reorderPoolByShape`/`capabilitiesForModel`) recognises them. Without this an
+// image request treated them as NON-vision and demoted them below the small
+// declared vision models, which returned an empty turn → the user's "No response"
+// on a pasted image. (The Gemini strict-`json_schema` ceiling is handled
+// separately by `isLowSchemaCeilingModel`, not by withholding `structured_output`.)
+const GEMINI_CAPS: VendorModelEntry['capabilities'] = ['tools', 'structured_output', 'vision'];
+
 const CATALOG: ReadonlyArray<VendorModelEntry> = [
-  { id: 'gemini-2.5-flash',      tier: 'PREMIUM', label: 'Gemini 2.5 Flash (Google AI)',      brand: 'Google' },
-  { id: 'gemini-2.5-flash-lite', tier: 'PREMIUM', label: 'Gemini 2.5 Flash Lite (Google AI)', brand: 'Google' },
-  { id: 'gemini-2.5-pro',        tier: 'PREMIUM', label: 'Gemini 2.5 Pro (Google AI)',        brand: 'Google' },
+  { id: 'gemini-2.5-flash',      tier: 'PREMIUM', label: 'Gemini 2.5 Flash (Google AI)',      brand: 'Google', capabilities: GEMINI_CAPS },
+  { id: 'gemini-2.5-flash-lite', tier: 'PREMIUM', label: 'Gemini 2.5 Flash Lite (Google AI)', brand: 'Google', capabilities: GEMINI_CAPS },
+  { id: 'gemini-2.5-pro',        tier: 'PREMIUM', label: 'Gemini 2.5 Pro (Google AI)',        brand: 'Google', capabilities: GEMINI_CAPS },
 ];
 
 const CATALOG_BY_ID = new Map(CATALOG.map((m) => [m.id, m]));
