@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   evermindGenerate,
+  benchmarkEvermind,
   buildEvermindCompletion,
   messagesToPrompt,
   loadEvermindModel,
@@ -40,6 +41,29 @@ describe('evermindGenerate (real .evermind from a mock R2)', () => {
   it('throws a clear error when the artifact is missing', async () => {
     const store: ArtifactStore = { async get() { return null; } };
     await expect(evermindGenerate(store, 'evermind-models/1/missing', [{ role: 'user', content: 'x' }]))
+      .rejects.toThrow(/not found/);
+  });
+});
+
+describe('benchmarkEvermind (scores the real published artifact)', () => {
+  it('returns a scorecard with metrics, vocab size, and a sample — tokenized by the model tokenizer', async () => {
+    const ref = 'evermind-models/1/fixture-bench';
+    const store = buildFixture(ref);
+    const corpus = 'alpha beta gamma. alpha beta delta. gamma beta alpha.';
+    const r = await benchmarkEvermind(store, ref, corpus, { topK: 3 });
+    expect(r.tokens).toBeGreaterThan(0);
+    expect(Number.isFinite(r.perplexity)).toBe(true);
+    expect(r.perplexity).toBeGreaterThan(0);
+    expect(r.top1Accuracy).toBeGreaterThanOrEqual(0);
+    expect(r.top1Accuracy).toBeLessThanOrEqual(1);
+    expect(r.topK).toBe(3);
+    expect(r.vocabSize).toBeGreaterThan(0);
+    expect(typeof r.sample).toBe('string');
+  }, 20000);
+
+  it('throws a clear error when the artifact is missing', async () => {
+    const store: ArtifactStore = { async get() { return null; } };
+    await expect(benchmarkEvermind(store, 'evermind-models/1/missing', 'alpha beta gamma delta epsilon'))
       .rejects.toThrow(/not found/);
   });
 });
