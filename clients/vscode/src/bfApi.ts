@@ -61,12 +61,6 @@ export interface BfApproval {
   updatedAt?: string;
 }
 
-/** A prior conversation turn loaded from a task's server-side execution thread. */
-export interface BfConversationMessage {
-  role: "user" | "assistant";
-  content: string;
-}
-
 /**
  * Client for BuilderForce's tenant APIs (projects/tasks/connection). The extension holds
  * a `bfk_*` gateway key, which only reaches `/llm/*`; this exchanges it for a short-lived
@@ -350,62 +344,49 @@ export async function listTasks(
 export function invalidateTasks(projectId?: number): void {
   if (projectId == null) taskCache.clear();
   else taskCache.delete(projectId);
-  // Conversations are keyed by task, not project, so a project-level bust can't
-  // target them precisely — clear all (small, TTL-bounded) so a freshly-run task
-  // re-hydrates its latest transcript on next open.
-  conversationCache.clear();
 }
 
-// Task conversation cache: single-process, short TTL, busted by invalidateTasks.
-// (Same rationale as taskCache: one Node host serving one user — a local TTL map
-// is the correct shape; the cross-isolate getOrSetCached rule governs the backend.)
-const conversationCache = new Map<number, { ts: number; messages: BfConversationMessage[] }>();
-const CONVERSATION_TTL = 30_000;
+/** A server-side Brain conversation (GET /api/brain/chats). The SAME unified chat
+ *  store the web app and the in-editor Brain webview share. */
+export interface BfBrainChat {
+  id: number;
+  title: string;
+  projectId: number | null;
+  origin?: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
 
 /**
- * Load a task's existing conversation from the server — the durable message thread
- * of its most-recent execution (GET /tasks/:id/executions → GET /executions/:id/trace).
- * Hydrates a VS Code chat panel so opening a task shows its real history instead of a
- * blank composer. Degrades to [] when the task has no executions/messages yet or the
- * runtime endpoints aren't reachable.
+ * List the tenant's Brain conversations (GET /api/brain/chats) for the Sessions
+ * sidebar — the SAME conversations the webview's `/api/brain` persistence loads, so
+ * the sidebar, the in-panel switcher and the web app all show one unified history.
+ * Degrades to [] when signed out / unreachable.
  */
-export async function loadTaskConversation(
+export async function listBrainChats(
   secrets: vscode.SecretStorage,
-  taskId: number,
-  force = false,
-): Promise<BfConversationMessage[]> {
-  const cached = conversationCache.get(taskId);
-  if (!force && cached && Date.now() - cached.ts < CONVERSATION_TTL) return cached.messages;
-
-  let messages: BfConversationMessage[] = [];
+  limit = 50,
+): Promise<BfBrainChat[]> {
   try {
-    const executions =
-      (await authed<BfExecution[]>(secrets, `/api/runtime/tasks/${taskId}/executions`)) ?? [];
-    const latest = pickLatestExecution(executions);
-    if (latest) {
-      const trace = await authed<{ trace?: { messages?: Array<{ role?: string; text?: string }> } }>(
-        secrets,
-        `/api/runtime/executions/${latest.id}/trace`,
-      );
-      messages = (trace?.trace?.messages ?? [])
-        .filter((m): m is { role?: string; text: string } => typeof m.text === "string" && m.text.trim() !== "")
-        .map((m) => ({ role: m.role === "assistant" ? "assistant" : "user", content: m.text }));
-    }
+    const r = await authed<{ chats: BfBrainChat[] }>(secrets, `/api/brain/chats?limit=${limit}`);
+    return r?.chats ?? [];
   } catch {
-    messages = [];
+    return [];
   }
-  conversationCache.set(taskId, { ts: Date.now(), messages });
-  return messages;
 }
 
-/** Newest execution by updated/created time (falls back to id when timestamps are absent). */
-function pickLatestExecution(executions: BfExecution[]): BfExecution | undefined {
-  if (!executions.length) return undefined;
-  const time = (e: BfExecution): number => {
-    const t = Date.parse(e.updatedAt ?? e.createdAt ?? "");
-    return Number.isFinite(t) ? t : e.id;
-  };
-  return [...executions].sort((a, b) => time(b) - time(a))[0];
+/** Rename a Brain conversation (PATCH /api/brain/chats/:id). */
+export async function renameBrainChat(
+  secrets: vscode.SecretStorage,
+  id: number,
+  title: string,
+): Promise<void> {
+  await authed(secrets, `/api/brain/chats/${id}`, { method: "PATCH", body: JSON.stringify({ title }) });
+}
+
+/** Delete a Brain conversation (DELETE /api/brain/chats/:id). */
+export async function deleteBrainChat(secrets: vscode.SecretStorage, id: number): Promise<void> {
+  await authed(secrets, `/api/brain/chats/${id}`, { method: "DELETE" });
 }
 
 export async function updateTaskStatus(
@@ -455,8 +436,7 @@ async function authedRaw<T>(
  * Dispatch a PLATFORM run for a task — the SAME endpoint the web app's
  * `runtimeApi.submitExecution` hits (POST /api/runtime/executions). This is DISTINCT
  * from the local in-editor agent loop: it asks the platform to run the task on its
- * assigned AgentHost / cloud agent. The run is then observable via loadTaskConversation
- * / the execution trace.
+ * assigned AgentHost / cloud agent. The run is then observable on the board / web app.
  *
  * Returns either the started execution (HTTP 201) or, when a priority/policy gate fires,
  * an `awaitingApproval` descriptor (HTTP 202). Throws on 402 (plan limit) with a
@@ -482,18 +462,6 @@ export async function submitExecution(
   }
   // Surface the verbatim status so the command layer can branch (402 → upgrade).
   throw new Error(`/api/runtime/executions → HTTP ${status} ${text.slice(0, 200)}`);
-}
-
-/** Read a single platform execution's current status (GET /api/runtime/executions/:id). */
-export async function getExecution(
-  secrets: vscode.SecretStorage,
-  id: number,
-): Promise<BfExecution | undefined> {
-  try {
-    return await authed<BfExecution>(secrets, `/api/runtime/executions/${id}`);
-  } catch {
-    return undefined;
-  }
 }
 
 /**

@@ -6,14 +6,50 @@ import {
   useBrainActions,
   useBrainConversation,
   useBrainConfig,
+  useMcpExtensions,
   type BrainConfig,
   type BrainChat,
 } from '@seanhogg/builderforce-brain-embedded';
-import { BrainTimeline } from '@seanhogg/builderforce-brain-ui';
-import { getToken, onInit, onTokenChange, post, refreshToken, type InitData } from './vscodeBridge';
+import { BrainTimeline, type BrainTimelineLabels } from '@seanhogg/builderforce-brain-ui';
+import {
+  getToken,
+  onInit,
+  onIntent,
+  onTokenChange,
+  post,
+  refreshToken,
+  type BrainIntent,
+  type InitData,
+  type LabelBundle,
+} from './vscodeBridge';
 import { createPersistence } from './persistence';
 import { buildHostTools } from './hostTools';
 import { buildIdeSystemPrompt } from './systemPrompt';
+
+/** Read a localized string from the host's bundle, falling back to English. */
+function makeT(labels: LabelBundle) {
+  return (key: string, fallback: string): string => labels[key] ?? fallback;
+}
+
+/** The subset of the host bundle the shared <BrainTimeline> consumes. */
+function timelineLabels(labels: LabelBundle): Partial<BrainTimelineLabels> {
+  const t = makeT(labels);
+  return {
+    thinking: t('tl.thinking', 'Thinking…'),
+    thoughtFor: t('tl.thoughtFor', 'Thought for {duration}'),
+    you: t('tl.you', 'You'),
+    assistant: t('tl.assistant', 'BuilderForce'),
+    input: t('tl.input', 'Input'),
+    output: t('tl.output', 'Output'),
+    error: t('tl.error', 'Error'),
+    loading: t('tl.loading', 'Loading…'),
+    empty: t('tl.empty', 'Ask BuilderForce to build or change something.'),
+    copy: t('tl.copy', 'Copy'),
+    copied: t('tl.copied', 'Copied'),
+    apply: t('tl.apply', 'Apply'),
+    createFile: t('tl.createFile', 'Create file'),
+  };
+}
 
 /** Root: wait for the host's init frame, then mount the brain providers. */
 export function App() {
@@ -28,12 +64,13 @@ export function App() {
   if (!init) {
     return <div className="bf-center">Connecting…</div>;
   }
+  const t = makeT(init.labels);
   if (!init.signedIn || !getToken()) {
     return (
       <div className="bf-center">
-        <p>Sign in to BuilderForce to start.</p>
+        <p>{t('app.signInPrompt', 'Sign in to BuilderForce to start.')}</p>
         <button className="bf-btn bf-btn--primary" onClick={() => post('signin')}>
-          Sign in
+          {t('app.signIn', 'Sign in')}
         </button>
       </div>
     );
@@ -60,6 +97,7 @@ function ConfiguredApp({ init }: { init: InitData }) {
     <BrainProvider config={config}>
       <BrainActionsProvider>
         <ToolRegistrar tools={init.tools} />
+        <PlatformTools />
         <Chat init={init} />
       </BrainActionsProvider>
     </BrainProvider>
@@ -73,7 +111,25 @@ function ToolRegistrar({ tools }: { tools: InitData['tools'] }) {
   return null;
 }
 
+/**
+ * Registers the SHARED gateway MCP catalog (projects/tasks/OKRs/specs/…) — the
+ * exact same server-side tool list the web Brain consumes via this hook, fetched
+ * directly from the gateway (the webview reaches it over HTTPS; CORS allows the
+ * `vscode-webview://` origin). So the IDE Brain can manage work items, not just
+ * edit local files: one brain, one tool catalog. On any write we nudge the host so
+ * its Project & Tasks tree refreshes live.
+ */
+function PlatformTools() {
+  useMcpExtensions({
+    onToolResult: (info) => {
+      if (info.mutating && info.ok) post('platform.write', { name: info.name });
+    },
+  });
+  return null;
+}
+
 function Chat({ init }: { init: InitData }) {
+  const t = makeT(init.labels);
   const { persistence } = useBrainConfig();
   const { toolSpecs, runTool, isMutating } = useBrainActions();
   const [chatId, setChatId] = useState<number | null>(null);
@@ -83,7 +139,9 @@ function Chat({ init }: { init: InitData }) {
   const [dragOver, setDragOver] = useState(false);
 
   const reloadChats = useCallback(() => {
-    persistence.listChats({ limit: 50 }).then(setChats).catch(() => {});
+    persistence.listChats({ limit: 50 })
+      .then((list) => { setChats(list); post('chats.changed'); })
+      .catch(() => {});
   }, [persistence]);
   useEffect(() => { reloadChats(); }, [reloadChats]);
 
@@ -94,11 +152,11 @@ function Chat({ init }: { init: InitData }) {
 
   const ensureChatId = useCallback(async () => {
     if (chatId != null) return chatId;
-    const chat = await persistence.createChat({ title: 'New chat', projectId: null });
+    const chat = await persistence.createChat({ title: t('app.newChat', 'New chat'), projectId: null });
     setChatId(chat.id);
     reloadChats();
     return chat.id;
-  }, [chatId, persistence, reloadChats]);
+  }, [chatId, persistence, reloadChats, t]);
 
   const conv = useBrainConversation({
     chatId,
@@ -110,6 +168,34 @@ function Chat({ init }: { init: InitData }) {
     ensureChatId,
     onActivity: reloadChats,
   });
+
+  // Host-driven intents: the Sessions sidebar / task commands drive this singleton
+  // panel (open a fresh chat, focus an existing one, or seed a task-scoped chat).
+  useEffect(() => {
+    return onIntent((intent: BrainIntent) => {
+      if (intent.kind === 'new') {
+        setChatId(null);
+        setInput('');
+      } else if (intent.kind === 'focus' && intent.chatId != null) {
+        setChatId(intent.chatId);
+      } else if (intent.kind === 'task' && intent.task) {
+        const task = intent.task;
+        const title = `${task.key ? `${task.key} ` : ''}${task.title}`.slice(0, 60);
+        persistence
+          .createChat({ title, projectId: task.projectId ?? null })
+          .then((chat) => {
+            setChatId(chat.id);
+            const seed = t('app.taskSeed', "Let's work on {task}.").replace(
+              '{task}',
+              `${task.key ? `${task.key}: ` : ''}${task.title}`,
+            );
+            setInput(seed);
+            reloadChats();
+          })
+          .catch(() => {});
+      }
+    });
+  }, [persistence, reloadChats, t]);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const attachFiles = useCallback((files: FileList | File[] | null) => {
@@ -136,20 +222,20 @@ function Chat({ init }: { init: InitData }) {
     <div className="bf-app">
       <header className="bf-header">
         <span className="bf-header__title">BuilderForce</span>
-        <span className="bf-header__beta">beta</span>
+        <span className="bf-header__beta">{t('app.beta', 'beta')}</span>
         <div className="bf-header__spacer" />
         <select
           className="bf-select"
           value={chatId ?? ''}
           onChange={(e) => setChatId(e.target.value ? Number(e.target.value) : null)}
-          aria-label="Conversation"
+          aria-label={t('app.conversation', 'Conversation')}
         >
-          <option value="">New chat</option>
+          <option value="">{t('app.newChat', 'New chat')}</option>
           {chats.map((c) => (
             <option key={c.id} value={c.id}>{c.title || `Chat ${c.id}`}</option>
           ))}
         </select>
-        <button className="bf-btn" title="New chat" onClick={() => setChatId(null)}>＋</button>
+        <button className="bf-btn" title={t('app.newChat', 'New chat')} onClick={() => setChatId(null)}>＋</button>
       </header>
 
       <div className="bf-body">
@@ -160,6 +246,7 @@ function Chat({ init }: { init: InitData }) {
           isRunning={conv.sending}
           loading={conv.loadingMessages}
           assistantName="BuilderForce"
+          labels={timelineLabels(init.labels)}
         />
       </div>
 
@@ -168,14 +255,16 @@ function Chat({ init }: { init: InitData }) {
       {conv.pendingConfirm && (
         <div className="bf-confirm">
           <span>
-            Run <code>{conv.pendingConfirm.name}</code>?
+            {t('app.confirmRun', 'Run {name}?').split('{name}')[0]}
+            <code>{conv.pendingConfirm.name}</code>
+            {t('app.confirmRun', 'Run {name}?').split('{name}')[1] ?? ''}
           </span>
           <div className="bf-confirm__actions">
-            <button className="bf-btn bf-btn--primary" onClick={() => conv.resolveConfirm(true)}>Approve</button>
-            <button className="bf-btn" onClick={() => conv.resolveConfirm(false)}>Cancel</button>
+            <button className="bf-btn bf-btn--primary" onClick={() => conv.resolveConfirm(true)}>{t('app.approve', 'Approve')}</button>
+            <button className="bf-btn" onClick={() => conv.resolveConfirm(false)}>{t('app.cancel', 'Cancel')}</button>
             <label className="bf-confirm__auto">
               <input type="checkbox" checked={autoApprove} onChange={(e) => { setAutoApprove(e.target.checked); if (e.target.checked) conv.resolveConfirm(true); }} />
-              Always
+              {t('app.always', 'Always')}
             </label>
           </div>
         </div>
@@ -193,7 +282,7 @@ function Chat({ init }: { init: InitData }) {
               <span key={a.key} className="bf-chip">
                 {a.imageUrl && <img src={a.imageUrl} alt="" className="bf-chip__thumb" />}
                 <span className="bf-chip__name">{a.name}</span>
-                <button className="bf-chip__x" onClick={() => conv.removeAttachment(a.key)} aria-label="Remove">×</button>
+                <button className="bf-chip__x" onClick={() => conv.removeAttachment(a.key)} aria-label={t('app.remove', 'Remove')}>×</button>
               </span>
             ))}
           </div>
@@ -201,14 +290,14 @@ function Chat({ init }: { init: InitData }) {
         <textarea
           className="bf-input"
           rows={2}
-          placeholder="Ask BuilderForce to build or change something…"
+          placeholder={t('app.placeholder', 'Ask BuilderForce to build or change something…')}
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onPaste={onPaste}
           onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submit(); } }}
         />
         <div className="bf-composer__actions">
-          <button className="bf-btn" title="Attach image" onClick={() => fileInputRef.current?.click()} disabled={conv.uploading}>
+          <button className="bf-btn" title={t('app.attachImage', 'Attach image')} onClick={() => fileInputRef.current?.click()} disabled={conv.uploading}>
             {conv.uploading ? '…' : '📎'}
           </button>
           <input
@@ -222,7 +311,7 @@ function Chat({ init }: { init: InitData }) {
           {init.model && <span className="bf-model">{init.model}</span>}
           <div className="bf-header__spacer" />
           <button className="bf-btn bf-btn--primary" onClick={submit} disabled={conv.sending || !input.trim()}>
-            {conv.sending ? 'Working…' : 'Send'}
+            {conv.sending ? t('app.working', 'Working…') : t('app.send', 'Send')}
           </button>
         </div>
       </div>

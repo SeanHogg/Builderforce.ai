@@ -4,7 +4,6 @@ import { BuilderForceAuthProvider } from "./auth";
 import * as bfApi from "./bfApi";
 import { BoardPanel } from "./boardPanel";
 import { BrainWebview } from "./brainWebview";
-import { ChatPanel } from "./chatPanel";
 import { EmbedPanel } from "./embedPanel";
 import { registerChatParticipant } from "./chatParticipant";
 import { registerChatSessions } from "./chatSessions";
@@ -16,8 +15,15 @@ import { setGroundingSummary } from "./grounding";
 import { setSelectedModel } from "./modelState";
 import { getSelectedProject, initProjectState, setSelectedProject } from "./projectState";
 import { ProjectsTreeProvider } from "./projectsTree";
-import { ChatSession, SessionStore } from "./sessionStore";
 import { SessionsTreeProvider } from "./sessionsTree";
+
+/** Pull a numeric Brain chat id out of a Sessions tree item or a raw id argument. */
+function chatIdOf(item: bfApi.BfBrainChat | number | string | undefined): number | undefined {
+  if (item == null) return undefined;
+  if (typeof item === "number") return item;
+  if (typeof item === "string") return Number(item) || undefined;
+  return typeof item.id === "number" ? item.id : undefined;
+}
 
 type TaskNode = { kind: "task"; task: bfApi.BfTask };
 
@@ -67,9 +73,20 @@ function projectHash(): string | undefined {
 
 export function activate(context: vscode.ExtensionContext): void {
   initProjectState(context.workspaceState);
-  const store = new SessionStore(context.workspaceState);
-  const tree = new SessionsTreeProvider(store);
+  const tree = new SessionsTreeProvider(context.secrets);
   const projects = new ProjectsTreeProvider(context);
+
+  // The Brain panel is the ONE chat surface — keep the sidebars live as it writes:
+  // a new/renamed conversation refreshes the Sessions list; a platform-catalog write
+  // (task/project/OKR) refreshes Project & Tasks.
+  BrainWebview.configure({
+    onChatsChanged: () => tree.refresh(),
+    onPlatformWrite: () => {
+      bfApi.invalidateTasks();
+      projects.refresh();
+      void refreshWorkspaceHeader(context);
+    },
+  });
   projectView = vscode.window.createTreeView("builderforce.project", { treeDataProvider: projects });
   context.subscriptions.push(projectView);
   // Restore the workspace the editor was last acting as (re-scopes the tenant JWT).
@@ -95,14 +112,15 @@ export function activate(context: vscode.ExtensionContext): void {
     participant,
     vscode.window.registerTreeDataProvider("builderforce.sessions", tree),
     vscode.commands.registerCommand("builderforce.refreshInsights", () => insights?.refresh()),
-    vscode.commands.registerCommand("builderforce.newSession", () => {
-      const sel = getSelectedProject();
-      const s = store.create(sel ? { projectId: sel.id } : {});
-      ChatPanel.open(context, store, s.id);
-    }),
-    vscode.commands.registerCommand("builderforce.openSession", (id: string) =>
-      ChatPanel.open(context, store, id),
+    // Internal: repaint the server-backed Sessions list (after auth / chat writes).
+    vscode.commands.registerCommand("builderforce.refreshSessions", () => tree.refresh()),
+    vscode.commands.registerCommand("builderforce.newSession", () =>
+      BrainWebview.open(context, { kind: "new" }),
     ),
+    vscode.commands.registerCommand("builderforce.openSession", (id: number | string) => {
+      const chatId = chatIdOf(id);
+      BrainWebview.open(context, chatId != null ? { kind: "focus", chatId } : { kind: "new" });
+    }),
     vscode.commands.registerCommand("builderforce.selectProject", () => selectProject(context, projects)),
     vscode.commands.registerCommand("builderforce.createProject", () => createProject(context, projects)),
     vscode.commands.registerCommand("builderforce.createWorkspace", () => manageWorkspace(context, projects)),
@@ -123,19 +141,12 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.commands.registerCommand("builderforce.startTaskSession", (node: TaskNode) => {
       const t = node?.task;
       if (!t) return;
-      // Reattach to the task's existing session if one exists (no duplicate blank
-      // sessions on re-click); otherwise create one. Either way the panel hydrates
-      // the task's server-side conversation on open (see ChatPanel).
-      const s =
-        store.findByTask(t.id) ??
-        store.create({
-          title: `${t.key ? `${t.key} ` : ""}${t.title}`.slice(0, 60),
-          projectId: getSelectedProject()?.id,
-          taskId: t.id,
-          taskKey: t.key,
-          taskTitle: t.title,
-        });
-      ChatPanel.open(context, store, s.id);
+      // Open the unified Brain seeded for this task. The Brain has the shared platform
+      // tools (tasks.get/update/…), so it can read + act on the task, not just chat.
+      BrainWebview.open(context, {
+        kind: "task",
+        task: { id: t.id, key: t.key, title: t.title, projectId: getSelectedProject()?.id },
+      });
     }),
     vscode.commands.registerCommand("builderforce.setTaskStatus", (node: TaskNode) =>
       setTaskStatus(context, projects, node?.task),
@@ -143,7 +154,7 @@ export function activate(context: vscode.ExtensionContext): void {
     // Dispatch a PLATFORM run for the task (its assigned AgentHost / cloud agent) —
     // distinct from the local in-editor agent loop. Surfaces the run via a task session.
     vscode.commands.registerCommand("builderforce.runTask", (node: TaskNode) =>
-      runTask(context, store, projects, node?.task),
+      runTask(context, projects, node?.task),
     ),
     // Review the tenant's pending human-in-the-loop approvals and resolve them.
     vscode.commands.registerCommand("builderforce.humanRequests", () =>
@@ -171,26 +182,34 @@ export function activate(context: vscode.ExtensionContext): void {
       }
       EmbedPanel.open(context, pick.view, { title: `BuilderForce: ${pick.label}`, hash: projectHash() });
     }),
-    vscode.commands.registerCommand("builderforce.deleteSession", (item: ChatSession | string) => {
-      const id = typeof item === "string" ? item : item?.id;
-      if (!id) return;
-      ChatPanel.close(id);
-      store.delete(id);
+    vscode.commands.registerCommand("builderforce.deleteSession", async (item: bfApi.BfBrainChat | string) => {
+      const id = chatIdOf(item);
+      if (id == null) return;
+      try {
+        await bfApi.deleteBrainChat(context.secrets, id);
+        tree.refresh();
+        BrainWebview.open(context, { kind: "new" });
+      } catch (e) {
+        vscode.window.showErrorMessage(`BuilderForce: could not delete chat (${(e as Error).message}).`);
+      }
     }),
-    vscode.commands.registerCommand("builderforce.renameSession", async (item: ChatSession | string) => {
-      const id = typeof item === "string" ? item : item?.id;
-      if (!id) return;
-      const current = store.get(id);
+    vscode.commands.registerCommand("builderforce.renameSession", async (item: bfApi.BfBrainChat | string) => {
+      const id = chatIdOf(item);
+      if (id == null) return;
+      const current = typeof item === "object" ? item.title : "";
       const title = await vscode.window.showInputBox({
-        title: "Rename session",
-        prompt: "New session name",
-        value: current?.title ?? "",
+        title: vscode.l10n.t("Rename chat"),
+        prompt: vscode.l10n.t("New chat name"),
+        value: current ?? "",
         ignoreFocusOut: true,
       });
       if (title === undefined) return;
-      const finalTitle = title.trim() || "New session";
-      store.rename(id, finalTitle);
-      ChatPanel.setTitle(id, finalTitle);
+      try {
+        await bfApi.renameBrainChat(context.secrets, id, title.trim() || vscode.l10n.t("New chat"));
+        tree.refresh();
+      } catch (e) {
+        vscode.window.showErrorMessage(`BuilderForce: could not rename chat (${(e as Error).message}).`);
+      }
     }),
     // "Open Chat" opens the unified Brain (the improved experience).
     vscode.commands.registerCommand("builderforce.openChat", () => BrainWebview.open(context)),
@@ -452,7 +471,6 @@ async function setTaskStatus(
  */
 async function runTask(
   context: vscode.ExtensionContext,
-  store: SessionStore,
   projects: ProjectsTreeProvider,
   task?: bfApi.BfTask,
 ): Promise<void> {
@@ -484,19 +502,13 @@ async function runTask(
     }
 
     // Run started — refresh task state (status may have flipped to in_progress) and open
-    // the task session so its trace polling surfaces the platform run's progress.
+    // the unified Brain seeded for this task so the user can follow up / steer it.
     bfApi.invalidateTasks(getSelectedProject()?.id);
     projects.refresh();
-    const s =
-      store.findByTask(task.id) ??
-      store.create({
-        title: `${task.key ? `${task.key} ` : ""}${task.title}`.slice(0, 60),
-        projectId: getSelectedProject()?.id,
-        taskId: task.id,
-        taskKey: task.key,
-        taskTitle: task.title,
-      });
-    ChatPanel.open(context, store, s.id);
+    BrainWebview.open(context, {
+      kind: "task",
+      task: { id: task.id, key: task.key, title: task.title, projectId: getSelectedProject()?.id },
+    });
     vscode.window.showInformationMessage(`BuilderForce: dispatched ${label} to the platform runtime.`);
   } catch (e) {
     const message = (e as Error).message;
@@ -632,8 +644,8 @@ async function signIn(context: vscode.ExtensionContext): Promise<void> {
   vscode.window.showInformationMessage("BuilderForce: signed in.");
   bfApi.clearJwt();
   clearPlatformToolsCache();
-  await ChatPanel.refreshAll(context);
   BrainWebview.refresh();
+  void vscode.commands.executeCommand("builderforce.refreshSessions");
   void heartbeat(context);
   void vscode.commands.executeCommand("builderforce.refreshProjects");
   void maybeScan(context, false);
@@ -652,8 +664,8 @@ async function signOut(
   setGroundingSummary(undefined);
   setSelectedProject(undefined);
   vscode.window.showInformationMessage("BuilderForce: signed out.");
-  await ChatPanel.refreshAll(context);
   BrainWebview.refresh();
+  void vscode.commands.executeCommand("builderforce.refreshSessions");
   void vscode.commands.executeCommand("builderforce.refreshProjects");
   void insights?.start();
 }

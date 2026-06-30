@@ -5,38 +5,106 @@ import { getBaseUrl, SECRET_KEY } from "./gateway";
 import { getGroundingSummary } from "./grounding";
 import { getSelectedModel } from "./modelState";
 
+/** A host-driven request to the singleton Brain panel (mirror of the webview type). */
+export interface BrainIntent {
+  kind: "new" | "focus" | "task";
+  chatId?: number;
+  task?: { id: number; key?: string; title: string; projectId?: number };
+}
+
+/** Host callbacks so the Brain panel can keep the sidebar trees live. */
+export interface BrainWebviewHooks {
+  /** A chat was created / renamed / had activity — refresh the Sessions sidebar. */
+  onChatsChanged?: () => void;
+  /** A platform (catalog) write happened in the chat — refresh Project & Tasks. */
+  onPlatformWrite?: (toolName: string) => void;
+}
+
+/**
+ * Localized UI strings handed to the bundled React webview. The webview ships no
+ * i18n stack of its own (next-intl is web-only), so the host translates here via
+ * `vscode.l10n` (editor display language) and forwards the bundle through `init`.
+ * Keys are the webview's namespace; the l10n lookup is keyed off the English message.
+ */
+function buildLabels(): Record<string, string> {
+  const t = vscode.l10n.t;
+  return {
+    // <BrainTimeline> (shared transcript UI)
+    "tl.thinking": t("Thinking…"),
+    "tl.thoughtFor": t("Thought for {duration}"),
+    "tl.you": t("You"),
+    "tl.assistant": "BuilderForce",
+    "tl.input": t("Input"),
+    "tl.output": t("Output"),
+    "tl.error": t("Error"),
+    "tl.loading": t("Loading…"),
+    "tl.empty": t("Ask BuilderForce to build or change something."),
+    "tl.copy": t("Copy"),
+    "tl.copied": t("Copied"),
+    "tl.apply": t("Apply"),
+    "tl.createFile": t("Create file"),
+    // Composer + chrome
+    "app.signInPrompt": t("Sign in to BuilderForce to start."),
+    "app.signIn": t("Sign in"),
+    "app.beta": t("beta"),
+    "app.newChat": t("New chat"),
+    "app.conversation": t("Conversation"),
+    "app.attachImage": t("Attach image"),
+    "app.remove": t("Remove"),
+    "app.working": t("Working…"),
+    "app.send": t("Send"),
+    "app.placeholder": t("Ask BuilderForce to build or change something…"),
+    "app.confirmRun": t("Run {name}?"),
+    "app.approve": t("Approve"),
+    "app.cancel": t("Cancel"),
+    "app.always": t("Always"),
+    "app.taskSeed": t("Let's work on {task}."),
+  };
+}
+
 /**
  * The unified BuilderForce Brain — a bundled React webview (the SAME
  * <BrainTimeline> + brain-embedded core the web app uses), so the chat experience
  * is identical on the web and in VS Code, backed by the same server-side `/api/brain`
- * conversations.
+ * conversations. This is the ONE chat surface in the editor: the Sessions sidebar
+ * and task commands all drive it (there is no separate legacy chat panel).
  *
  * The React app reaches the gateway/API directly (CORS allows the
- * `vscode-webview://` origin). Two things only the privileged host can do cross a
- * typed postMessage bridge:
+ * `vscode-webview://` origin) — including the shared MCP tool catalog. Two things
+ * only the privileged host can do cross a typed postMessage bridge:
  *   - local file tools (read/list/write/edit/delete) run here against the workspace
  *   - the tenant token is minted/refreshed here from the stored editor key
  */
 export class BrainWebview {
   private static current: BrainWebview | undefined;
+  private static hooks: BrainWebviewHooks = {};
 
-  static open(ctx: vscode.ExtensionContext): void {
-    if (BrainWebview.current) {
-      BrainWebview.current.panel.reveal();
-      return;
-    }
-    BrainWebview.current = new BrainWebview(ctx);
+  /** Wire host callbacks once (from `activate`) so the panel can refresh the trees. */
+  static configure(hooks: BrainWebviewHooks): void {
+    BrainWebview.hooks = hooks;
   }
 
-  /** Re-push init (token/grounding/model) to an open panel — e.g. after sign-in. */
+  static open(ctx: vscode.ExtensionContext, intent?: BrainIntent): void {
+    if (BrainWebview.current) {
+      BrainWebview.current.panel.reveal();
+      if (intent) BrainWebview.current.sendIntent(intent);
+      return;
+    }
+    BrainWebview.current = new BrainWebview(ctx, intent);
+  }
+
+  /** Re-push init (token/grounding/model/labels) to an open panel — e.g. after sign-in. */
   static refresh(): void {
     void BrainWebview.current?.sendInit();
   }
 
   private readonly panel: vscode.WebviewPanel;
   private readonly disposables: vscode.Disposable[] = [];
+  /** Intent captured at construction, flushed once the webview signals `ready`. */
+  private pendingIntent?: BrainIntent;
 
-  private constructor(private readonly ctx: vscode.ExtensionContext) {
+  private constructor(private readonly ctx: vscode.ExtensionContext, intent?: BrainIntent) {
+    this.pendingIntent = intent;
     this.panel = vscode.window.createWebviewPanel(
       "builderforce.brain",
       "BuilderForce",
@@ -62,6 +130,10 @@ export class BrainWebview {
     switch (msg.type) {
       case "ready":
         await this.sendInit();
+        if (this.pendingIntent) {
+          this.sendIntent(this.pendingIntent);
+          this.pendingIntent = undefined;
+        }
         break;
       case "tool.call":
         await this.runTool(msg.id, msg.name, msg.args);
@@ -74,10 +146,21 @@ export class BrainWebview {
       case "signin":
         void vscode.commands.executeCommand("builderforce.signIn");
         break;
+      case "chats.changed":
+        BrainWebview.hooks.onChatsChanged?.();
+        break;
+      case "platform.write":
+        BrainWebview.hooks.onPlatformWrite?.(typeof msg.name === "string" ? msg.name : "");
+        break;
     }
   }
 
-  /** Hand the React app its config: gateway URL, tenant token, model, grounding, tools. */
+  /** Post a host-driven intent to the React app (new / focus / task). */
+  private sendIntent(intent: BrainIntent): void {
+    void this.panel.webview.postMessage({ type: "intent", intent });
+  }
+
+  /** Hand the React app its config: gateway URL, tenant token, model, grounding, tools, labels. */
   private async sendInit(): Promise<void> {
     const signedIn = !!(await this.ctx.secrets.get(SECRET_KEY));
     const token = signedIn ? ((await getTenantJwt(this.ctx.secrets)) ?? null) : null;
@@ -91,12 +174,14 @@ export class BrainWebview {
       signedIn,
       hasWorkspace: !!root,
       // The local file tools, forwarded so the model can call them over the bridge.
+      // (The shared platform catalog is fetched by the webview directly from the gateway.)
       tools: TOOL_DEFS.map((d) => ({
         name: d.name,
         description: d.description,
         parameters: d.parameters,
         mutating: d.mutating,
       })),
+      labels: buildLabels(),
     });
   }
 

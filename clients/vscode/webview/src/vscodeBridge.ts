@@ -7,8 +7,9 @@
  * no proxy. The ONLY things it can't do itself are touch the local filesystem and
  * mint a tenant token — those cross this typed postMessage bridge to the host:
  *
- *   webview → host : 'ready', 'tool.call'{id,name,args}, 'token.refresh'{id}, 'signin'
- *   host → webview : 'init'{…}, 'token'{token}, 'response'{id,ok,result|error}
+ *   webview → host : 'ready', 'tool.call'{id,name,args}, 'token.refresh'{id}, 'signin',
+ *                    'chats.changed', 'platform.write'{name}
+ *   host → webview : 'init'{…}, 'token'{token}, 'response'{id,ok,result|error}, 'intent'{intent}
  */
 
 export interface ToolSpecMsg {
@@ -16,6 +17,25 @@ export interface ToolSpecMsg {
   description: string;
   parameters: Record<string, unknown>;
   mutating: boolean;
+}
+
+/**
+ * A localized string bundle the host builds from its `vscode.l10n` catalog and
+ * passes through `init`, so the bundled React UI renders in the editor's display
+ * language without shipping its own i18n stack (next-intl is web-only).
+ */
+export type LabelBundle = Record<string, string>;
+
+/**
+ * A request from the host (Sessions sidebar / task command) to drive the singleton
+ * Brain panel: open a fresh chat, focus an existing one, or seed a task-scoped chat.
+ */
+export interface BrainIntent {
+  kind: 'new' | 'focus' | 'task';
+  /** For 'focus': the server chat id to load. */
+  chatId?: number;
+  /** For 'task': the BuilderForce task to scope a new chat to. */
+  task?: { id: number; key?: string; title: string; projectId?: number };
 }
 
 export interface InitData {
@@ -27,6 +47,8 @@ export interface InitData {
   hasWorkspace: boolean;
   /** The host's local file tools, forwarded so the model can call them over the bridge. */
   tools: ToolSpecMsg[];
+  /** Localized UI strings (see {@link LabelBundle}). */
+  labels: LabelBundle;
 }
 
 interface VsCodeApi {
@@ -45,6 +67,11 @@ export const getToken = (): string | null => token;
 let initData: InitData | null = null;
 const initWaiters: Array<(d: InitData) => void> = [];
 const tokenWaiters: Array<() => void> = [];
+const intentWaiters: Array<(i: BrainIntent) => void> = [];
+// Buffer intents that arrive before a subscriber mounts (the host posts `intent`
+// right after `init`, but React's onIntent effect registers a tick later). Drained
+// on first subscribe so a first-open focus/task intent is never lost.
+const pendingIntents: BrainIntent[] = [];
 
 type Pending = { resolve: (v: unknown) => void; reject: (e: Error) => void };
 const pending = new Map<string, Pending>();
@@ -70,6 +97,19 @@ export function onInit(cb: (d: InitData) => void): void {
   else initWaiters.push(cb);
 }
 
+/** Subscribe to host-driven intents (open new chat / focus a chat / seed a task). */
+export function onIntent(cb: (i: BrainIntent) => void): () => void {
+  intentWaiters.push(cb);
+  // Deliver any intents that arrived before this subscriber mounted.
+  if (pendingIntents.length) {
+    for (const i of pendingIntents.splice(0)) cb(i);
+  }
+  return () => {
+    const i = intentWaiters.indexOf(cb);
+    if (i >= 0) intentWaiters.splice(i, 1);
+  };
+}
+
 /** Subscribe to token changes (re-issued on refresh / re-auth). */
 export function onTokenChange(cb: () => void): () => void {
   tokenWaiters.push(cb);
@@ -91,7 +131,7 @@ export async function refreshToken(): Promise<void> {
 }
 
 window.addEventListener('message', (e: MessageEvent) => {
-  const m = e.data as { type?: string; id?: string; ok?: boolean; result?: unknown; error?: string; token?: string | null } & Partial<InitData>;
+  const m = e.data as { type?: string; id?: string; ok?: boolean; result?: unknown; error?: string; token?: string | null; intent?: BrainIntent } & Partial<InitData>;
   if (!m || typeof m !== 'object') return;
   if (m.type === 'init') {
     token = m.token ?? null;
@@ -103,6 +143,11 @@ window.addEventListener('message', (e: MessageEvent) => {
   if (m.type === 'token') {
     token = m.token ?? null;
     for (const w of tokenWaiters) w();
+    return;
+  }
+  if (m.type === 'intent' && m.intent) {
+    if (intentWaiters.length) for (const w of intentWaiters) w(m.intent);
+    else pendingIntents.push(m.intent);
     return;
   }
   if (m.type === 'response' && m.id) {

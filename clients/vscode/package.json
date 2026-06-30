@@ -2,7 +2,7 @@
   "name": "builderforce-ai",
   "displayName": "BuilderForce.ai",
   "description": "BuilderForce AI coding agent — chat with a codebase-aware agent in your VS Code sidebar.",
-  "version": "2026.6.36",
+  "version": "2026.6.37",
   "publisher": "builderforce",
   "license": "MIT",
   "author": "Sean Hogg",
@@ -38,6 +38,7 @@
     "url": "https://github.com/SeanHogg/Builderforce.ai/issues"
   },
   "main": "./out/extension.js",
+  "l10n": "./l10n",
   "activationEvents": [
     "onStartupFinished"
   ],
@@ -70,7 +71,7 @@
     "viewsWelcome": [
       {
         "view": "builderforce.sessions",
-        "contents": "Start a conversation with the BuilderForce agent.\n[New Session](command:builderforce.newSession)\n\nThe chat opens as a document in the editor so you can review changes side by side."
+        "contents": "Start a conversation with the BuilderForce Brain.\n[New Chat](command:builderforce.newSession)\n\nThe Brain opens in the editor — the same unified chat as the web app, so you can review changes side by side."
       },
       {
         "view": "builderforce.insights",
