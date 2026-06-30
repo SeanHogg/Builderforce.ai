@@ -2,6 +2,14 @@
 
 All notable changes to the BuilderForce VS Code extension are documented here.
 
+## [2026.6.41] — More git, same toolset everywhere
+
+- **Works your git history** — the agent can review `git status`/`diff`/`log`, sync the
+  latest, and undo or redo its own changes, so it can check and correct what it did before
+  you commit.
+- The editor agent now uses the exact same coding tools as BuilderForce's cloud agents, so it
+  behaves the same whether it runs in your editor or in the cloud.
+
 ## [2026.6.40] — Ships verified code: runs your tests, finds code, opens PRs
 
 - **Verifies its own work** — after editing, the agent can run your tests, build, lint, or
