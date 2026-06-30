@@ -1,6 +1,8 @@
 'use client';
 
 import { Select } from '@/components/Select';
+import { RoleGate } from '@/components/RoleGate';
+import { useTranslations } from 'next-intl';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { SlideOutPanel } from '../SlideOutPanel';
@@ -52,10 +54,16 @@ export interface BoardConfigPanelProps {
   onClose: () => void;
   projectId: number;
   projectName?: string;
+  /** Which tab to open on. Defaults to 'lanes'; the approval banner opens 'settings'. */
+  initialTab?: ConfigTab;
 }
 
-export function BoardConfigPanel({ open, onClose, projectId, projectName }: BoardConfigPanelProps) {
-  const [tab, setTab] = useState<ConfigTab>('lanes');
+export function BoardConfigPanel({ open, onClose, projectId, projectName, initialTab = 'lanes' }: BoardConfigPanelProps) {
+  const [tab, setTab] = useState<ConfigTab>(initialTab);
+  // Re-sync the active tab each time the panel is (re)opened so a caller that
+  // requests 'settings' always lands there, even after a prior open left another
+  // tab selected.
+  useEffect(() => { if (open) setTab(initialTab); }, [open, initialTab]);
   const { board, lanes, agentsByLane, loading, error, reload } = useBoardConfig(projectId, open);
   const [provisioning, setProvisioning] = useState(false);
   const [provisionError, setProvisionError] = useState<string | null>(null);
@@ -492,11 +500,14 @@ function TeamsTab({ projectId }: { projectId: number }) {
 }
 
 function SettingsTab({ board, onSaved }: { board: Board; onSaved: () => void }) {
+  const t = useTranslations('boardConfig');
   const [maxConcurrent, setMaxConcurrent] = useState(board.maxConcurrentTickets);
   const [name, setName] = useState(board.name);
   const [turnMode, setTurnMode] = useState<'facilitator' | 'timeboxed'>(board.standupTurnMode ?? 'facilitator');
   const [turnSeconds, setTurnSeconds] = useState(board.standupTurnSeconds ?? 90);
   const [hideDoneItems, setHideDoneItems] = useState(board.hideDoneItems ?? false);
+  // Default true: a board with the flag unset still gates high/urgent work.
+  const [requireApproval, setRequireApproval] = useState(board.requireExecutionApproval ?? true);
   const [saving, setSaving] = useState(false);
 
   const save = async () => {
@@ -508,6 +519,7 @@ function SettingsTab({ board, onSaved }: { board: Board; onSaved: () => void }) 
         standupTurnMode: turnMode,
         standupTurnSeconds: turnSeconds,
         hideDoneItems,
+        requireExecutionApproval: requireApproval,
       });
       onSaved();
     } finally { setSaving(false); }
@@ -532,6 +544,32 @@ function SettingsTab({ board, onSaved }: { board: Board; onSaved: () => void }) 
         <input type="checkbox" checked={hideDoneItems} onChange={(e) => setHideDoneItems(e.target.checked)} />
         Hide done items
       </label>
+
+      {/* Governance: whether HIGH/URGENT tickets must clear a manager-approval
+          request before an agent runs them. Manager-gated (disabled, not hidden,
+          for non-managers) — the same control the board banner points to when it
+          blocks a run. Off = the override: high/urgent work runs without approval. */}
+      <div style={{ borderTop: '1px solid var(--border-subtle)', paddingTop: 14 }}>
+        <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 6 }}>
+          {t('approvalHeading')}
+        </div>
+        <RoleGate capability="board.manageApproval" variant="block">
+          <label style={{ fontSize: 13, color: 'var(--text-secondary)', display: 'flex', gap: 8, alignItems: 'flex-start' }}>
+            <input
+              type="checkbox"
+              checked={requireApproval}
+              onChange={(e) => setRequireApproval(e.target.checked)}
+              style={{ marginTop: 3 }}
+            />
+            <span>
+              {t('approvalToggle')}
+              <span style={{ display: 'block', fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>
+                {requireApproval ? t('approvalOnHint') : t('approvalOffHint')}
+              </span>
+            </span>
+          </label>
+        </RoleGate>
+      </div>
 
       {/* Standup turn timer — drives the ceremony round-table's "who's next". */}
       <div style={{ borderTop: '1px solid var(--border-subtle)', paddingTop: 14 }}>
