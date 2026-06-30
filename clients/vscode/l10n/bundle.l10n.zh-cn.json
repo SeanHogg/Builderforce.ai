@@ -26,8 +26,12 @@
   "Cancel": "取消",
   "Always": "始终",
   "Let's work on {task}.": "我们来处理 {task}。",
+  "I just dispatched {task} to run on the platform. Check the latest execution's status and trace, then help me follow up.": "我刚刚把 {task} 派发到平台上运行。请查看最新一次执行的状态和轨迹，然后帮我跟进。",
   "Open Chat": "打开对话",
   "now": "刚刚",
   "Rename chat": "重命名对话",
-  "New chat name": "新的对话名称"
+  "New chat name": "新的对话名称",
+  "Copy chat transcript (for triage)": "复制对话记录（用于排查）",
+  "Run connection diagnostics": "运行连接诊断",
+  "Chat transcript copied to clipboard.": "对话记录已复制到剪贴板。"
 }

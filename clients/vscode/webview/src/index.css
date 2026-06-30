@@ -123,6 +123,11 @@ body {
   cursor: default;
 }
 
+.bf-btn--icon {
+  padding: 4px 7px;
+  line-height: 1;
+}
+
 .bf-btn--primary {
   border-color: transparent;
   background: var(--vscode-button-background);

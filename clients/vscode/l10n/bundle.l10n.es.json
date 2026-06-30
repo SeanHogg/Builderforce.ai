@@ -26,8 +26,12 @@
   "Cancel": "Cancelar",
   "Always": "Siempre",
   "Let's work on {task}.": "Trabajemos en {task}.",
+  "I just dispatched {task} to run on the platform. Check the latest execution's status and trace, then help me follow up.": "Acabo de enviar {task} para ejecutarse en la plataforma. Revisa el estado y la traza de la última ejecución y luego ayúdame a darle seguimiento.",
   "Open Chat": "Abrir chat",
   "now": "ahora",
   "Rename chat": "Cambiar nombre del chat",
-  "New chat name": "Nuevo nombre del chat"
+  "New chat name": "Nuevo nombre del chat",
+  "Copy chat transcript (for triage)": "Copiar la transcripción del chat (para diagnóstico)",
+  "Run connection diagnostics": "Ejecutar diagnóstico de conexión",
+  "Chat transcript copied to clipboard.": "Transcripción del chat copiada al portapapeles."
 }

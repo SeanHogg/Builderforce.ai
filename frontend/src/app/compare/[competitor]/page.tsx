@@ -13,6 +13,9 @@ import {
   COMPETITOR_SLUG_TO_KEY,
 } from '@/lib/content';
 
+// next-on-pages requires every non-static route to opt into the Edge Runtime.
+export const runtime = 'edge';
+
 export const dynamicParams = false;
 
 export function generateStaticParams() {

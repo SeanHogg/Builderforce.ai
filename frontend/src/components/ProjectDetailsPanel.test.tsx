@@ -26,6 +26,11 @@ describe('ProjectDetailsPanel', () => {
     // via pmoApi.tree(); give the automocked call a resolved (empty) tree so
     // usePmData's loader resolves instead of crashing on `undefined.then`.
     vi.spyOn(builderforceApi.pmoApi, 'tree').mockResolvedValue({ portfolios: [], initiatives: [], projects: [], dependencies: [] });
+    // The panel also embeds ProjectInspectionReport, which best-effort loads the
+    // saved diagnostic maturity via toolsApi.projectScore() on mount. Give the
+    // automocked call a resolved value so the effect's `.then` doesn't crash on
+    // `undefined.then`; null mirrors the "no runs yet / non-manager" path.
+    vi.spyOn(builderforceApi.toolsApi, 'projectScore').mockResolvedValue(null as never);
   });
 
   afterEach(() => {

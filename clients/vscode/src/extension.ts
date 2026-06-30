@@ -507,7 +507,7 @@ async function runTask(
     projects.refresh();
     BrainWebview.open(context, {
       kind: "task",
-      task: { id: task.id, key: task.key, title: task.title, projectId: getSelectedProject()?.id },
+      task: { id: task.id, key: task.key, title: task.title, projectId: getSelectedProject()?.id, dispatched: true },
     });
     vscode.window.showInformationMessage(`BuilderForce: dispatched ${label} to the platform runtime.`);
   } catch (e) {

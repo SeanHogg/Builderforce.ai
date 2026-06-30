@@ -1,8 +1,8 @@
 {
   "name": "builderforce-ai",
   "displayName": "BuilderForce.ai",
-  "description": "BuilderForce AI coding agent — chat with a codebase-aware agent in your VS Code sidebar.",
-  "version": "2026.6.37",
+  "description": "%extension.description%",
+  "version": "2026.6.39",
   "publisher": "builderforce",
   "license": "MIT",
   "author": "Sean Hogg",
@@ -56,151 +56,151 @@
       "builderforce": [
         {
           "id": "builderforce.sessions",
-          "name": "Sessions"
+          "name": "%view.sessions%"
         },
         {
           "id": "builderforce.project",
-          "name": "Project & Tasks"
+          "name": "%view.project%"
         },
         {
           "id": "builderforce.insights",
-          "name": "Insights"
+          "name": "%view.insights%"
         }
       ]
     },
     "viewsWelcome": [
       {
         "view": "builderforce.sessions",
-        "contents": "Start a conversation with the BuilderForce Brain.\n[New Chat](command:builderforce.newSession)\n\nThe Brain opens in the editor — the same unified chat as the web app, so you can review changes side by side."
+        "contents": "%welcome.sessions%"
       },
       {
         "view": "builderforce.insights",
-        "contents": "Sign in to see live builder-level insights (token spend, budget, top model, cost per merged PR).\n[Sign In](command:builderforce.signIn)"
+        "contents": "%welcome.insights%"
       }
     ],
     "commands": [
       {
         "command": "builderforce.openChat",
-        "title": "BuilderForce: Open Chat",
+        "title": "%command.openChat%",
         "icon": "$(comment-discussion)"
       },
       {
         "command": "builderforce.refreshInsights",
-        "title": "BuilderForce: Refresh Insights",
+        "title": "%command.refreshInsights%",
         "icon": "$(sync)"
       },
       {
         "command": "builderforce.signIn",
-        "title": "BuilderForce: Sign In",
+        "title": "%command.signIn%",
         "icon": "$(sign-in)"
       },
       {
         "command": "builderforce.signOut",
-        "title": "BuilderForce: Sign Out",
+        "title": "%command.signOut%",
         "icon": "$(sign-out)"
       },
       {
         "command": "builderforce.newSession",
-        "title": "BuilderForce: New Session",
+        "title": "%command.newSession%",
         "icon": "$(add)"
       },
       {
         "command": "builderforce.openSession",
-        "title": "BuilderForce: Open Session"
+        "title": "%command.openSession%"
       },
       {
         "command": "builderforce.renameSession",
-        "title": "BuilderForce: Rename Session",
+        "title": "%command.renameSession%",
         "icon": "$(edit)"
       },
       {
         "command": "builderforce.deleteSession",
-        "title": "BuilderForce: Delete Session",
+        "title": "%command.deleteSession%",
         "icon": "$(trash)"
       },
       {
         "command": "builderforce.selectProject",
-        "title": "BuilderForce: Select Project",
+        "title": "%command.selectProject%",
         "icon": "$(folder)"
       },
       {
         "command": "builderforce.createProject",
-        "title": "BuilderForce: New Project",
+        "title": "%command.createProject%",
         "icon": "$(new-folder)"
       },
       {
         "command": "builderforce.createWorkspace",
-        "title": "BuilderForce: Create / Switch Workspace",
+        "title": "%command.createWorkspace%",
         "icon": "$(organization)"
       },
       {
         "command": "builderforce.refreshProjects",
-        "title": "BuilderForce: Refresh Tasks",
+        "title": "%command.refreshProjects%",
         "icon": "$(sync)"
       },
       {
         "command": "builderforce.hideDoneTasks",
-        "title": "BuilderForce: Hide Done Tasks",
+        "title": "%command.hideDoneTasks%",
         "icon": "$(eye)"
       },
       {
         "command": "builderforce.showDoneTasks",
-        "title": "BuilderForce: Show Done Tasks",
+        "title": "%command.showDoneTasks%",
         "icon": "$(eye-closed)"
       },
       {
         "command": "builderforce.startTaskSession",
-        "title": "BuilderForce: Start Session on Task",
+        "title": "%command.startTaskSession%",
         "icon": "$(comment-discussion)"
       },
       {
         "command": "builderforce.setTaskStatus",
-        "title": "BuilderForce: Set Task Status",
+        "title": "%command.setTaskStatus%",
         "icon": "$(checklist)"
       },
       {
         "command": "builderforce.runTask",
-        "title": "BuilderForce: Run Task on Platform",
+        "title": "%command.runTask%",
         "icon": "$(play)"
       },
       {
         "command": "builderforce.humanRequests",
-        "title": "BuilderForce: Review Approvals",
+        "title": "%command.humanRequests%",
         "icon": "$(verified)"
       },
       {
         "command": "builderforce.openBoard",
-        "title": "BuilderForce: Open Board",
+        "title": "%command.openBoard%",
         "icon": "$(layout)"
       },
       {
         "command": "builderforce.openView",
-        "title": "BuilderForce: Open Page…",
+        "title": "%command.openView%",
         "icon": "$(browser)"
       },
       {
         "command": "builderforce.diagnose",
-        "title": "BuilderForce: Diagnose Connection",
+        "title": "%command.diagnose%",
         "icon": "$(pulse)"
       },
       {
         "command": "builderforce.rescanCodebase",
-        "title": "BuilderForce: Rescan Codebase",
+        "title": "%command.rescanCodebase%",
         "icon": "$(sync)"
       },
       {
         "command": "builderforce.pickModel",
-        "title": "BuilderForce: Pick Model",
+        "title": "%command.pickModel%",
         "icon": "$(list-selection)"
       },
       {
         "command": "builderforce.openSettings",
-        "title": "BuilderForce: Open Settings",
+        "title": "%command.openSettings%",
         "icon": "$(gear)"
       },
       {
         "command": "builderforce.editorChat",
-        "title": "BuilderForce: Chat",
+        "title": "%command.editorChat%",
         "icon": {
           "light": "media/icon.png",
           "dark": "media/icon.png"
@@ -208,7 +208,7 @@
       },
       {
         "command": "builderforce.openBrain",
-        "title": "BuilderForce: Open Brain Chat",
+        "title": "%command.openBrain%",
         "icon": "$(sparkle)"
       }
     ],
@@ -364,7 +364,7 @@
         "id": "builderforce.agent",
         "name": "builderforce",
         "fullName": "BuilderForce",
-        "description": "Codebase-aware BuilderForce coding agent",
+        "description": "%chatParticipant.description%",
         "isSticky": true
       }
     ],
@@ -374,17 +374,17 @@
         "builderforce.baseUrl": {
           "type": "string",
           "default": "https://api.builderforce.ai",
-          "markdownDescription": "Base URL of the BuilderForce gateway. The OpenAI-compatible endpoint `/llm/v1/chat/completions` is appended automatically. Override for self-hosted deployments."
+          "markdownDescription": "%config.baseUrl.desc%"
         },
         "builderforce.webUrl": {
           "type": "string",
           "default": "",
-          "markdownDescription": "Base URL of the BuilderForce web app (where embedded pages like the board live). Leave empty to derive it from `builderforce.baseUrl` (api.* → root domain)."
+          "markdownDescription": "%config.webUrl.desc%"
         },
         "builderforce.defaultModel": {
           "type": "string",
           "default": "",
-          "description": "Default model id to use. Leave empty to let the gateway pick from the curated coding pool."
+          "description": "%config.defaultModel.desc%"
         },
         "builderforce.permissionMode": {
           "type": "string",
@@ -394,10 +394,10 @@
           ],
           "default": "ask",
           "markdownEnumDescriptions": [
-            "Ask before applying each file edit or command (recommended).",
-            "Apply file edits automatically without prompting."
+            "%config.permissionMode.ask%",
+            "%config.permissionMode.acceptEdits%"
           ],
-          "description": "How the agent applies changes to your workspace."
+          "description": "%config.permissionMode.desc%"
         }
       }
     }

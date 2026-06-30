@@ -9,7 +9,7 @@ import { getSelectedModel } from "./modelState";
 export interface BrainIntent {
   kind: "new" | "focus" | "task";
   chatId?: number;
-  task?: { id: number; key?: string; title: string; projectId?: number };
+  task?: { id: number; key?: string; title: string; projectId?: number; dispatched?: boolean };
 }
 
 /** Host callbacks so the Brain panel can keep the sidebar trees live. */
@@ -49,6 +49,8 @@ function buildLabels(): Record<string, string> {
     "app.beta": t("beta"),
     "app.newChat": t("New chat"),
     "app.conversation": t("Conversation"),
+    "app.copyChat": t("Copy chat transcript (for triage)"),
+    "app.diagnostics": t("Run connection diagnostics"),
     "app.attachImage": t("Attach image"),
     "app.remove": t("Remove"),
     "app.working": t("Working…"),
@@ -59,6 +61,7 @@ function buildLabels(): Record<string, string> {
     "app.cancel": t("Cancel"),
     "app.always": t("Always"),
     "app.taskSeed": t("Let's work on {task}."),
+    "app.taskSeedDispatched": t("I just dispatched {task} to run on the platform. Check the latest execution's status and trace, then help me follow up."),
   };
 }
 
@@ -125,6 +128,7 @@ export class BrainWebview {
     type?: string;
     id?: string;
     name?: string;
+    text?: string;
     args?: Record<string, unknown>;
   }): Promise<void> {
     switch (msg.type) {
@@ -151,6 +155,17 @@ export class BrainWebview {
         break;
       case "platform.write":
         BrainWebview.hooks.onPlatformWrite?.(typeof msg.name === "string" ? msg.name : "");
+        break;
+      // Triage: the webview built a full transcript (turns + tool I/O + errors);
+      // the privileged host writes it to the clipboard reliably (a sandboxed
+      // webview can't), so a "No response" turn can be pasted out to debug.
+      case "copy":
+        await vscode.env.clipboard.writeText(typeof msg.text === "string" ? msg.text : "");
+        void vscode.window.showInformationMessage(vscode.l10n.t("Chat transcript copied to clipboard."));
+        break;
+      // Run the existing connection-diagnostics command (opens the output channel).
+      case "diagnose":
+        void vscode.commands.executeCommand("builderforce.diagnose");
         break;
     }
   }

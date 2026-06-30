@@ -25,6 +25,7 @@ import {
 import { createPersistence } from './persistence';
 import { buildHostTools } from './hostTools';
 import { buildIdeSystemPrompt } from './systemPrompt';
+import { buildTranscript, hasTranscriptContent } from './transcript';
 
 /** Read a localized string from the host's bundle, falling back to English. */
 function makeT(labels: LabelBundle) {
@@ -137,6 +138,7 @@ function Chat({ init }: { init: InitData }) {
   const [autoApprove, setAutoApprove] = useState(false);
   const [input, setInput] = useState('');
   const [dragOver, setDragOver] = useState(false);
+  const [copied, setCopied] = useState(false);
 
   const reloadChats = useCallback(() => {
     persistence.listChats({ limit: 50 })
@@ -185,11 +187,11 @@ function Chat({ init }: { init: InitData }) {
           .createChat({ title, projectId: task.projectId ?? null })
           .then((chat) => {
             setChatId(chat.id);
-            const seed = t('app.taskSeed', "Let's work on {task}.").replace(
-              '{task}',
-              `${task.key ? `${task.key}: ` : ''}${task.title}`,
-            );
-            setInput(seed);
+            const taskLabel = `${task.key ? `${task.key}: ` : ''}${task.title}`;
+            const template = task.dispatched
+              ? t('app.taskSeedDispatched', "I just dispatched {task} to run on the platform. Check the latest execution's status and trace, then help me follow up.")
+              : t('app.taskSeed', "Let's work on {task}.");
+            setInput(template.replace('{task}', taskLabel));
             reloadChats();
           })
           .catch(() => {});
@@ -218,6 +220,25 @@ function Chat({ init }: { init: InitData }) {
     void conv.send(text);
   }, [input, conv]);
 
+  // Triage helpers: copy the full transcript (turns + tool I/O + errors) so a
+  // "No response" turn can be shared with its underlying system output, and run
+  // the host's connection diagnostics. The host owns the clipboard + the
+  // `builderforce.diagnose` command, reached over the bridge.
+  const canCopy = hasTranscriptContent({ messages: conv.messages, trace: conv.trace, error: conv.error });
+  const copyTranscript = useCallback(() => {
+    post('copy', {
+      text: buildTranscript({
+        messages: conv.messages,
+        trace: conv.trace,
+        assistantName: 'BuilderForce',
+        model: init.model,
+        error: conv.error,
+      }),
+    });
+    setCopied(true);
+    window.setTimeout(() => setCopied(false), 1500);
+  }, [conv.messages, conv.trace, conv.error, init.model]);
+
   return (
     <div className="bf-app">
       <header className="bf-header">
@@ -236,6 +257,23 @@ function Chat({ init }: { init: InitData }) {
           ))}
         </select>
         <button className="bf-btn" title={t('app.newChat', 'New chat')} onClick={() => setChatId(null)}>＋</button>
+        <button
+          className="bf-btn bf-btn--icon"
+          title={t('app.copyChat', 'Copy chat transcript (for triage)')}
+          aria-label={t('app.copyChat', 'Copy chat transcript (for triage)')}
+          disabled={!canCopy}
+          onClick={copyTranscript}
+        >
+          {copied ? '✓' : '⧉'}
+        </button>
+        <button
+          className="bf-btn bf-btn--icon"
+          title={t('app.diagnostics', 'Run connection diagnostics')}
+          aria-label={t('app.diagnostics', 'Run connection diagnostics')}
+          onClick={() => post('diagnose')}
+        >
+          🩺
+        </button>
       </header>
 
       <div className="bf-body">

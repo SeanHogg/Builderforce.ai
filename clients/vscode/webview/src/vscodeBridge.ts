@@ -34,8 +34,10 @@ export interface BrainIntent {
   kind: 'new' | 'focus' | 'task';
   /** For 'focus': the server chat id to load. */
   chatId?: number;
-  /** For 'task': the BuilderForce task to scope a new chat to. */
-  task?: { id: number; key?: string; title: string; projectId?: number };
+  /** For 'task': the BuilderForce task to scope a new chat to. `dispatched` marks a
+   *  task that was just handed to the platform runtime, so the seed nudges the Brain
+   *  to monitor the run (via the `executions.*` platform tools) rather than start work. */
+  task?: { id: number; key?: string; title: string; projectId?: number; dispatched?: boolean };
 }
 
 export interface InitData {

@@ -3,6 +3,9 @@ import { getTranslations } from 'next-intl/server';
 import { pageMetadata } from '@/lib/seo';
 import BlogPageClient from './BlogPageClient';
 
+// next-on-pages requires every non-static route to opt into the Edge Runtime.
+export const runtime = 'edge';
+
 export async function generateMetadata(): Promise<Metadata> {
   const t = await getTranslations('blog.seo');
   const base = pageMetadata({

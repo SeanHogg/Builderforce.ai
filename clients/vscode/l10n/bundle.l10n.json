@@ -26,8 +26,12 @@
   "Cancel": "Cancel",
   "Always": "Always",
   "Let's work on {task}.": "Let's work on {task}.",
+  "I just dispatched {task} to run on the platform. Check the latest execution's status and trace, then help me follow up.": "I just dispatched {task} to run on the platform. Check the latest execution's status and trace, then help me follow up.",
   "Open Chat": "Open Chat",
   "now": "now",
   "Rename chat": "Rename chat",
-  "New chat name": "New chat name"
+  "New chat name": "New chat name",
+  "Copy chat transcript (for triage)": "Copy chat transcript (for triage)",
+  "Run connection diagnostics": "Run connection diagnostics",
+  "Chat transcript copied to clipboard.": "Chat transcript copied to clipboard."
 }
