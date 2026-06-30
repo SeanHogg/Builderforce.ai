@@ -283,6 +283,29 @@ export class KnowledgeLoopService {
         } catch (err) {
           logDebug(`[ssm-memory] learn() failed: ${String(err)}`);
         }
+        // Write-through belief layer (Evermind Write-Through Cognition). The
+        // remember()/learn() calls above are the append-only ACTIVITY EVENT LOG
+        // (events legitimately accumulate — they don't supersede). On top of it
+        // we record a per-FILE state belief keyed by a STABLE subject
+        // (`file:<path>`), so the latest change to a file SUPERSEDES the prior
+        // note instead of piling up alongside it — the exact drift a
+        // reconcile-free model exists to eliminate. commitFact routes through
+        // EvermindCognition (Canonicalize → Recall incumbent → Evaluate →
+        // Reconcile supersede|augment|confirm|reject → write-through + recall
+        // invalidation) and degrades to a plain keyed put on older packages.
+        for (const { file, action } of [
+          ...created.map((file) => ({ file, action: "created" as const })),
+          ...edited.map((file) => ({ file, action: "edited" as const })),
+        ]) {
+          try {
+            await ssmSvc.commitFact(`file:${file}`, `${file} was ${action} — ${summary}`, {
+              tags: ["file-state"],
+              importance: 0.55,
+            });
+          } catch (err) {
+            logDebug(`[ssm-memory] commitFact() failed for ${file}: ${String(err)}`);
+          }
+        }
         // Push to team mesh (P4-5) — fire-and-forget
         void this.pushMemoryToMesh(runId, summary, ["activity"]);
       }
