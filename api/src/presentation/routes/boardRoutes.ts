@@ -34,6 +34,8 @@ import { Hono } from 'hono';
 import type { Context } from 'hono';
 import { and, asc, eq } from 'drizzle-orm';
 import { authMiddleware } from '../middleware/authMiddleware';
+import { TenantRole, hasMinRole } from '../../domain/shared/types';
+import { ForbiddenError } from '../../domain/shared/errors';
 import {
   boards,
   swimlanes,
@@ -175,7 +177,16 @@ export function createBoardRoutes(db: Db): Hono<HonoEnv> {
       standupTurnMode?: string;
       standupTurnSeconds?: number;
       hideDoneItems?: boolean;
+      requireExecutionApproval?: boolean;
     }>();
+
+    // The execution-approval gate is a governance control: only managers+ may
+    // override it (mirrors the <RoleGate capability="board.manageApproval"> UX
+    // and the API's requireRole convention). Other board settings stay open to
+    // any workspace member, so this is gated per-field rather than on the route.
+    if (body.requireExecutionApproval !== undefined && !hasMinRole(c.get('role') as TenantRole, TenantRole.MANAGER)) {
+      throw new ForbiddenError('Only a manager can change the approval requirement for this board');
+    }
 
     await db
       .update(boards)
@@ -186,6 +197,7 @@ export function createBoardRoutes(db: Db): Hono<HonoEnv> {
         ...(body.standupTurnMode !== undefined ? { standupTurnMode: body.standupTurnMode } : {}),
         ...(body.standupTurnSeconds !== undefined ? { standupTurnSeconds: body.standupTurnSeconds } : {}),
         ...(body.hideDoneItems !== undefined ? { hideDoneItems: body.hideDoneItems } : {}),
+        ...(body.requireExecutionApproval !== undefined ? { requireExecutionApproval: body.requireExecutionApproval } : {}),
         updatedAt: new Date(),
       })
       .where(and(eq(boards.id, boardId), eq(boards.tenantId, tenantId)));

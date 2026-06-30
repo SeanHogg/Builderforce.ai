@@ -3540,6 +3540,11 @@ export const boards = pgTable('boards', {
    *  so only live work is shown (migration 0194). Display-only — does not affect
    *  the coordinator lifecycle or capacity. */
   hideDoneItems:        boolean('hide_done_items').notNull().default(false),
+  /** Governance gate: when true (default), running a HIGH/URGENT priority ticket
+   *  on this board first opens a manager-approval request before the agent
+   *  executes (see evaluateExecutionApprovalGate). A manager can set this FALSE to
+   *  OVERRIDE the gate so high/urgent work runs without approval (migration 0257). */
+  requireExecutionApproval: boolean('require_execution_approval').notNull().default(true),
   createdAt:            timestamp('created_at').notNull().defaultNow(),
   updatedAt:            timestamp('updated_at').notNull().defaultNow(),
 });

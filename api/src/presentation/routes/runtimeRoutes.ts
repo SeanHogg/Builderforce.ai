@@ -27,7 +27,7 @@ import type { Execution } from '../../domain/execution/Execution';
 import type { Env, HonoEnv } from '../../env';
 import { authMiddleware } from '../middleware/authMiddleware';
 import type { Db } from '../../infrastructure/database/connection';
-import { agentHosts, executions, projectInsightEvents, projectRepositories, projects, specs, tasks, toolAuditEvents, usageSnapshots } from '../../infrastructure/database/schema';
+import { agentHosts, boards, executions, projectInsightEvents, projectRepositories, projects, specs, tasks, toolAuditEvents, usageSnapshots } from '../../infrastructure/database/schema';
 import { approvals } from '../../infrastructure/database/schema';
 import type { AgentHostRelayDO } from '../../infrastructure/relay/AgentHostRelayDO';
 
@@ -163,8 +163,28 @@ function parseApprovalTaskId(metadata: string | null): number | null {
   }
 }
 
-function requiresTaskExecutionApproval(task: ExecutionTaskRow): boolean {
-  return task.priority === 'high' || task.priority === 'urgent';
+/**
+ * Whether running this task must first open a manager-approval request.
+ *
+ * Only HIGH/URGENT priority tickets are gated. A manager can OVERRIDE the gate
+ * per board (boards.require_execution_approval = false) so high/urgent work on
+ * that board runs without approval — see the board "Require manager approval"
+ * setting. The board flag is read directly (not cached) so flipping the toggle
+ * takes effect on the very next run rather than after a cache TTL; it is a single
+ * indexed lookup on the manual-execution path, alongside the gate's own
+ * uncached approvals query.
+ */
+async function requiresTaskExecutionApproval(db: Db, tenantId: number, task: ExecutionTaskRow): Promise<boolean> {
+  if (task.priority !== 'high' && task.priority !== 'urgent') return false;
+
+  const [board] = await db
+    .select({ requireExecutionApproval: boards.requireExecutionApproval })
+    .from(boards)
+    .where(and(eq(boards.tenantId, tenantId), eq(boards.projectId, task.projectId)))
+    .limit(1);
+
+  // No board row yet → keep the default governance behaviour (gate on).
+  return board?.requireExecutionApproval !== false;
 }
 
 /** Run context replayed when a `task.execution` approval is approved. */
@@ -207,7 +227,7 @@ async function evaluateExecutionApprovalGate(
   /** The original submit context, persisted so an approve replays the exact run. */
   submitContext?: { payload?: string },
 ): Promise<ExecutionApprovalGateResult> {
-  if (!requiresTaskExecutionApproval(task)) {
+  if (!(await requiresTaskExecutionApproval(db, tenantId, task))) {
     return { allowed: true };
   }
 
@@ -720,26 +740,7 @@ async function startDispatchedExecution(
       else if (executor === 'durable') await startDurable();
       else await runWorkerFallback();
     };
-    // orchestrate() self-handles every executor failure (each path degrades to the
-    // next), so a throw escaping it is unexpected (e.g. a telemetry write) and would
-    // otherwise leave the run sitting PENDING until the 15-min queued reaper — read
-    // by the board as a stuck "pending" agent. Fail it now IF still un-started so the
-    // board reflects reality and the chip offers a retry.
-    waitUntil(
-      orchestrate().catch(async (e) => {
-        try {
-          const cur = await runtimeService.getExecution(execution.id);
-          const s = cur.toPlain().status;
-          if (s === ExecutionStatus.PENDING || s === ExecutionStatus.SUBMITTED) {
-            await runtimeService.update(execution.id, {
-              status: ExecutionStatus.FAILED,
-              errorMessage: `Dispatch failed before the run started: ${e instanceof Error ? e.message : String(e)}`,
-            });
-            await notifyDone();
-          }
-        } catch { /* best-effort — the queued reaper is the backstop */ }
-      }),
-    );
+    waitUntil(orchestrate());
   }
 
   // Announce the queued/dispatched execution immediately.

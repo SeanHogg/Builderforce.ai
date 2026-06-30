@@ -43,7 +43,7 @@ import {
   type VendorId,
 } from './vendors';
 import { composeFreeCappedCascade, buildCooldownPredicate } from './cascadeComposer';
-import { sanitizeRequestToolNames, restoreResponseToolNames, restoreStreamToolNames } from './toolNameSanitizer';
+import { sanitizeRequestToolCalls, restoreResponseToolNames, restoreStreamToolNames } from './toolNameSanitizer';
 import {
   loadCooldownExpiries,
   loadCooldowns,
@@ -1130,10 +1130,12 @@ export class LlmProxyService {
     overrides?: { vendorEnv?: VendorEnv; timeoutMs?: number; signal?: AbortSignal },
   ): Promise<ProxyResult> {
     // Sanitize tool names (`governance.snapshot` → `governance__DOT__snapshot`)
+    // AND tool-call ids (foreign ids with `:` `/` `.` → `^[a-zA-Z0-9_-]+$`)
     // before the body reaches a vendor — Anthropic / some Cerebras configs
-    // reject dots. Walks `tools`, `tool_choice`, message `tool_calls`, and
-    // tool-message `name`. Restored in dispatchJson before returning to caller.
-    const sanitizedBody = sanitizeRequestToolNames(body as unknown as Record<string, unknown>) as unknown as ChatCompletionRequest;
+    // reject both. Walks `tools`, `tool_choice`, message `tool_calls` (name+id),
+    // and tool-message `name`/`tool_call_id`. Names are restored in dispatchJson
+    // before returning to the caller; ids are opaque and are not restored.
+    const sanitizedBody = sanitizeRequestToolCalls(body as unknown as Record<string, unknown>) as unknown as ChatCompletionRequest;
     const messages = sanitizedBody.messages as unknown as Array<Record<string, unknown>>;
     const extraBody = stripStandardFields(sanitizedBody);
     // Timeout precedence: an explicit dispatch override (e.g. the paid backstop

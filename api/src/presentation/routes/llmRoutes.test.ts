@@ -30,16 +30,17 @@ vi.mock('../../application/llm/LlmProxyService', async (orig) => ({
 
 // Imports must follow the vi.mock calls above so the mocks are in place.
 const { requireTenantAccess } = await import('./llmRoutes');
-const { sanitizeToolName, restoreToolName, sanitizeRequestToolNames, restoreResponseToolNames, StreamingToolNameRestorer } =
+const { sanitizeToolName, restoreToolName, sanitizeToolCallId, sanitizeRequestToolCalls, restoreResponseToolNames, StreamingToolNameRestorer } =
   await import('../../application/llm/toolNameSanitizer');
 
 // ---------------------------------------------------------------------------
-// Tool-name sanitizer — bidirectional dot escape for vendors that reject dots
-// (Anthropic). Sanitizer runs gateway-side; restoration brings the caller's
-// dotted namespace back on the response path.
+// Tool-call sanitizer — one gateway-side pass that makes tool NAMES (reversible
+// dot escape, restored on the response path) and tool-call IDs (deterministic
+// rewrite, never restored) safe for vendors that reject dots / non-`[A-Za-z0-9_-]`
+// ids (Anthropic).
 // ---------------------------------------------------------------------------
 
-describe('toolNameSanitizer', () => {
+describe('toolCallSanitizer', () => {
   it('escapes dots and restores them losslessly', () => {
     const cases = ['governance.snapshot', 'agile.kanban.list', 'no_dots', 'a.b.c.d'];
     for (const original of cases) {
@@ -68,11 +69,44 @@ describe('toolNameSanitizer', () => {
         { role: 'tool', name: 'governance.snapshot', tool_call_id: 'c1', content: '{}' },
       ],
     };
-    const out = sanitizeRequestToolNames(body) as typeof body;
+    const out = sanitizeRequestToolCalls(body) as typeof body;
     expect(out.tools[0]!.function.name).not.toMatch(/\./);
     expect((out.tool_choice.function as { name: string }).name).not.toMatch(/\./);
     expect((out.messages[1]!.tool_calls as Array<{ function: { name: string } }>)[0]!.function.name).not.toMatch(/\./);
     expect((out.messages[2] as { name: string }).name).not.toMatch(/\./);
+  });
+
+  it('rewrites foreign tool-call ids to Anthropic\'s charset, keeping use↔result paired', () => {
+    // A non-Anthropic provider minted an id with ':' and '/'. When the cascade
+    // later fails over into Anthropic, the id must already match ^[a-zA-Z0-9_-]+$
+    // AND the assistant tool_call id must still equal the tool result's tool_call_id.
+    const foreignId = 'call_abc:123/xyz';
+    const body = {
+      messages: [
+        {
+          role: 'assistant',
+          content: null,
+          tool_calls: [{ id: foreignId, type: 'function', function: { name: 'search', arguments: '{}' } }],
+        },
+        { role: 'tool', tool_call_id: foreignId, content: '{}' },
+      ],
+    };
+    const out = sanitizeRequestToolCalls(body) as typeof body;
+    const useId = (out.messages[0]!.tool_calls as Array<{ id: string }>)[0]!.id;
+    const resultId = (out.messages[1] as { tool_call_id: string }).tool_call_id;
+    expect(useId).toMatch(/^[a-zA-Z0-9_-]+$/);
+    expect(resultId).toMatch(/^[a-zA-Z0-9_-]+$/);
+    expect(useId).toBe(resultId); // deterministic → still paired
+  });
+
+  it('leaves already-valid tool-call ids untouched (idempotent across failover turns)', () => {
+    for (const id of ['c1', 'toolu_01ABC', 'call-9_x']) {
+      expect(sanitizeToolCallId(id)).toBe(id);
+    }
+    // Distinct foreign ids that collapse to the same characters do not collide.
+    expect(sanitizeToolCallId('a:b')).not.toBe(sanitizeToolCallId('a/b'));
+    // Deterministic: same input → same output (pairing guarantee).
+    expect(sanitizeToolCallId('x.y:z')).toBe(sanitizeToolCallId('x.y:z'));
   });
 
   it('restores tool_calls names in the response', () => {
