@@ -1,4 +1,11 @@
 {
+  "boardConfig": {
+    "approvalHeading": "Ausführungsfreigabe",
+    "approvalToggle": "Freigabe durch Manager erforderlich, bevor hohe oder dringende Tickets ausgeführt werden",
+    "approvalOnHint": "Ein — beim Ausführen eines hohen oder dringenden Tickets wird eine Manager-Freigabe angefordert, bevor ein Agent es ausführt.",
+    "approvalOffHint": "Aus — hohe und dringende Tickets werden sofort ausgeführt, ohne Freigabeschritt. Mit Bedacht verwenden: Dies umgeht die Governance-Kontrolle dieses Boards.",
+    "bannerManage": "Freigabeeinstellung verwalten"
+  },
   "integrations": {
     "gallery": {
       "loading": "Integrationen werden geladen…",
@@ -4110,6 +4117,27 @@
       "gguf": {
         "label": "GGUF",
         "description": "llama.cpp-Container (benutzerdefinierte Architektur; für GGUF-Tools)."
+      }
+    }
+  },
+  "board": {
+    "triage": {
+      "button": "Triage",
+      "title": "Warum laufen diese nicht?",
+      "runAll": "Alle geeigneten ausführen ({count})",
+      "run": "Jetzt ausführen",
+      "running": "Läuft…",
+      "loading": "Wird geprüft…",
+      "error": "Triage konnte nicht geladen werden",
+      "reason": {
+        "will_run": "Bereit — wird ausgeführt",
+        "already_running": "Läuft bereits",
+        "human_gate": "Warte auf Freigabe",
+        "capability_mismatch": "Agent fehlen erforderliche Fähigkeiten",
+        "no_agent": "Kein Agent zugewiesen",
+        "no_board": "Kein Board konfiguriert",
+        "no_lane": "Spur nicht konfiguriert",
+        "terminal_lane": "Fertig — kein Lauf nötig"
       }
     }
   }

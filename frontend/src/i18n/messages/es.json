@@ -1,4 +1,11 @@
 {
+  "boardConfig": {
+    "approvalHeading": "Aprobación de ejecución",
+    "approvalToggle": "Exigir aprobación del responsable antes de ejecutar tickets altos o urgentes",
+    "approvalOnHint": "Activado — ejecutar un ticket alto o urgente abre una solicitud de aprobación del responsable antes de que ningún agente lo ejecute.",
+    "approvalOffHint": "Desactivado — los tickets altos y urgentes se ejecutan de inmediato, sin paso de aprobación. Úsalo con cuidado: anula el control de gobernanza de este tablero.",
+    "bannerManage": "Gestionar ajuste de aprobación"
+  },
   "integrations": {
     "gallery": {
       "loading": "Cargando integraciones…",
@@ -4110,6 +4117,27 @@
       "gguf": {
         "label": "GGUF",
         "description": "Contenedor de llama.cpp (arquitectura personalizada; para herramientas GGUF)."
+      }
+    }
+  },
+  "board": {
+    "triage": {
+      "button": "Triaje",
+      "title": "¿Por qué no se ejecutan?",
+      "runAll": "Ejecutar todos los elegibles ({count})",
+      "run": "Ejecutar ahora",
+      "running": "Ejecutando…",
+      "loading": "Comprobando…",
+      "error": "No se pudo cargar el triaje",
+      "reason": {
+        "will_run": "Listo — se ejecutará",
+        "already_running": "Ya en ejecución",
+        "human_gate": "Esperando aprobación",
+        "capability_mismatch": "Al agente le faltan capacidades requeridas",
+        "no_agent": "Sin agente asignado",
+        "no_board": "Sin tablero configurado",
+        "no_lane": "Carril no configurado",
+        "terminal_lane": "Hecho — no requiere ejecución"
       }
     }
   }

@@ -1,4 +1,11 @@
 {
+  "boardConfig": {
+    "approvalHeading": "执行审批",
+    "approvalToggle": "运行高优先级或紧急工单前需经经理审批",
+    "approvalOnHint": "开启 — 运行高优先级或紧急工单时，会在任何代理执行前发起经理审批请求。",
+    "approvalOffHint": "关闭 — 高优先级和紧急工单将立即运行，无需审批。请谨慎使用：这将绕过本看板的治理审批关卡。",
+    "bannerManage": "管理审批设置"
+  },
   "integrations": {
     "gallery": {
       "loading": "正在加载集成…",
@@ -4110,6 +4117,27 @@
       "gguf": {
         "label": "GGUF",
         "description": "llama.cpp 容器（自定义架构；用于 GGUF 工具）。"
+      }
+    }
+  },
+  "board": {
+    "triage": {
+      "button": "分诊",
+      "title": "为什么这些没有运行？",
+      "runAll": "运行所有符合条件的（{count}）",
+      "run": "立即运行",
+      "running": "运行中…",
+      "loading": "检查中…",
+      "error": "无法加载分诊",
+      "reason": {
+        "will_run": "就绪 — 即将运行",
+        "already_running": "已在运行",
+        "human_gate": "等待人工批准",
+        "capability_mismatch": "智能体缺少所需技能",
+        "no_agent": "未分配智能体",
+        "no_board": "未配置看板",
+        "no_lane": "泳道未配置",
+        "terminal_lane": "已完成 — 无需运行"
       }
     }
   }

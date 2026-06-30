@@ -4,6 +4,8 @@ import { Select } from '@/components/Select';
 
 import { useState, useEffect, useCallback, useMemo, Fragment, type CSSProperties } from 'react';
 import Link from 'next/link';
+import { useTranslations } from 'next-intl';
+import { RoleGate } from '@/components/RoleGate';
 import {
   tasksApi,
   agentHosts,
@@ -31,7 +33,8 @@ import {
   type TeamMember,
 } from '@/lib/taskAssignee';
 import { BoardConfigPanel } from './board/BoardConfigPanel';
-import { AgentChip } from './board/AgentChip';
+import { AgentChip, ACTIVE_EXECUTION_STATUSES } from './board/AgentChip';
+import { SwimlaneTriageButton } from './board/SwimlaneTriageButton';
 import { TeamMemberAvatarFilter } from './board/TeamMemberAvatarFilter';
 import { useBoardConfig } from './board/useBoardConfig';
 import { useBoardLiveRuns } from './board/useBoardLiveRuns';
@@ -158,6 +161,7 @@ export function TaskMgmtContent({
   projects: projectsProp,
   compact = false,
 }: TaskMgmtContentProps) {
+  const tApproval = useTranslations('boardConfig');
   // Global project scope (present in the app shell, absent in embed/standalone).
   // When present it is the single project picker — the board's own project filter
   // is hidden and the TopBar tenant→project selector drives scope instead.
@@ -197,6 +201,9 @@ export function TaskMgmtContent({
   const [bulkStatus, setBulkStatus] = useState<string>('');
   const [editingStatusId, setEditingStatusId] = useState<number | null>(null);
   const [boardConfigOpen, setBoardConfigOpen] = useState(false);
+  // Which tab the board-config panel opens on: the cog opens 'lanes'; the
+  // approval banner's shortcut opens 'settings' (where the override toggle lives).
+  const [boardConfigTab, setBoardConfigTab] = useState<'lanes' | 'settings'>('lanes');
   // Live ceremony overlay (standup/planning round-table) for the selected board.
   const [ceremony, setCeremony] = useState<CeremonyMode | null>(null);
   const [prdOpen, setPrdOpen] = useState(false);
@@ -870,6 +877,30 @@ export function TaskMgmtContent({
                 }}
               />
             )}
+            {/* Shortcut to the board's override setting — opens Board config →
+                Board settings, where a manager can turn the gate off. Only shown
+                when a single board is selected (the panel is board-scoped), and
+                manager-gated (disabled, not hidden, for everyone else). */}
+            {effectiveProjectId != null && (
+              <RoleGate capability="board.manageApproval">
+                <button
+                  type="button"
+                  onClick={() => { setBoardConfigTab('settings'); setBoardConfigOpen(true); }}
+                  style={{
+                    fontWeight: 700,
+                    color: 'var(--coral-bright)',
+                    textDecoration: 'none',
+                    background: 'none',
+                    border: 'none',
+                    cursor: 'pointer',
+                    padding: 0,
+                    font: 'inherit',
+                  }}
+                >
+                  {tApproval('bannerManage')}
+                </button>
+              </RoleGate>
+            )}
             <Link
               href="/workforce?tab=approvals"
               style={{
@@ -955,7 +986,7 @@ export function TaskMgmtContent({
                   </button>
                   <button
                     type="button"
-                    onClick={() => canConfigure && setBoardConfigOpen(true)}
+                    onClick={() => { if (canConfigure) { setBoardConfigTab('lanes'); setBoardConfigOpen(true); } }}
                     disabled={!canConfigure}
                     style={iconBtn}
                     aria-label="Configure board"
@@ -1190,7 +1221,14 @@ export function TaskMgmtContent({
                     }}
                   >
                     <span>{column.label}</span>
-                    <span>{tasksForStatus.length}</span>
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+                      <SwimlaneTriageButton
+                        tasks={tasksForStatus}
+                        isActive={(taskId) => (agentRunsByTask.get(taskId) ?? []).some((r) => ACTIVE_EXECUTION_STATUSES.has(r.status))}
+                        onDispatched={refreshRuns}
+                      />
+                      <span>{tasksForStatus.length}</span>
+                    </span>
                   </div>
                   {column.agents.length > 0 && (
                     <div
@@ -2155,6 +2193,7 @@ export function TaskMgmtContent({
           onClose={() => setBoardConfigOpen(false)}
           projectId={effectiveProjectId}
           projectName={effectiveProjectName}
+          initialTab={boardConfigTab}
         />
       )}
 

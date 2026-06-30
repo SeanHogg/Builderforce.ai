@@ -1,10 +1,10 @@
 import { Hono, type Context } from 'hono';
 import { and, count, desc, eq, inArray } from 'drizzle-orm';
 import { TaskService } from '../../application/task/TaskService';
-import { TaskPriority, AgentType, TaskStatus, TaskType, ExecutionStatus } from '../../domain/shared/types';
+import { TaskPriority, AgentType, TaskStatus, TaskType } from '../../domain/shared/types';
 import type { Env, HonoEnv } from '../../env';
 import { authMiddleware } from '../middleware/authMiddleware';
-import { auditEvents, boards, projects, specs, swimlanes, swimlaneAgentAssignments, taskSpecs, tasks, tenantMembers, users } from '../../infrastructure/database/schema';
+import { auditEvents, projects, specs, taskSpecs, tasks, tenantMembers, users } from '../../infrastructure/database/schema';
 import { getOrSetCached, getCacheVersion, bumpCacheVersion } from '../../infrastructure/cache/readThroughCache';
 import { addDependency, deleteDependency, listProjectDependencies, isDepType } from '../../application/task/taskDependencies';
 import { invalidateCompletedByAssignee } from './reportRoutes';
@@ -18,24 +18,12 @@ import { recordStatusTransition } from '../../application/task/taskLifecycle';
 import { RuntimeService } from '../../application/runtime/RuntimeService';
 import { dispatchCloudRunForTask } from './runtimeRoutes';
 import { recordCloudToolEvent } from '../../application/runtime/cloudAgentEngine';
-import { decideLaneAutoRun, withOwnerAgentFallback, type LaneAgentLike } from '../../application/swimlane/laneAutoRun';
-import { resolveArtifacts } from '../../application/artifact/resolveArtifacts';
+import { evaluateTaskAutoRun, type AutoRunReason } from '../../application/swimlane/evaluateAutoRun';
 import { broadcastProjectChanged } from '../../infrastructure/relay/broadcastRoom';
 
 /** Parse a swimlane assignment's `required_capabilities` (JSON array stored as
  *  text) into a clean string[]. Tolerates null / malformed / non-array values by
  *  returning [] (no requirement) so a bad row never blocks auto-run with a throw. */
-function parseRequiredCapabilities(raw: string | null | undefined): string[] {
-  if (!raw) return [];
-  try {
-    const parsed: unknown = JSON.parse(raw);
-    if (!Array.isArray(parsed)) return [];
-    return parsed.filter((v): v is string => typeof v === 'string' && v.trim().length > 0).map((v) => v.trim());
-  } catch {
-    return [];
-  }
-}
-
 /** Minimal shape of the agentHost relay Durable Object namespace binding. */
 type RelayNamespace = {
   idFromName(name: string): unknown;
@@ -182,116 +170,30 @@ export async function maybeAutoRunOnLaneEntry(
   args: { tenantId: number; projectId: number; taskId: number; status: string; submittedBy: string; originLaneKey?: string },
 ): Promise<void> {
   try {
-    // A terminal (Done) lane finalizes the ticket; never spin up a fresh agent run
-    // for it — that path is handled by dispatchTaskFinalize.
-    if (args.status === TaskStatus.DONE) return;
+    // ONE read-only evaluation answers "should this run, as which agent, and if
+    // not why" — shared verbatim with the triage diagnostic + Run-now endpoints so
+    // the trigger and the UI can never disagree. It already applies the terminal/
+    // board/lane/gate resolution, the owner-fallback, the capability guardrail, the
+    // same-lane loop guard, and the live-run idempotency check.
+    const evaln = await evaluateTaskAutoRun(db, runtimeService, {
+      tenantId:     args.tenantId,
+      projectId:    args.projectId,
+      taskId:       args.taskId,
+      status:       args.status,
+      originLaneKey: args.originLaneKey,
+    });
 
-    // Resolve the lane the ticket just entered (the swimlane keyed by its status)
-    // plus that lane's configured agents and gate. No board / no matching lane →
-    // no configured agent → no auto-run.
-    let agents: LaneAgentLike[] | undefined;
-    let gate: 'auto' | 'human' | undefined;
-    const [board] = await db
-      .select({ id: boards.id })
-      .from(boards)
-      .where(eq(boards.projectId, args.projectId))
-      .limit(1);
-    if (board) {
-      const [lane] = await db
-        .select({ id: swimlanes.id, gate: swimlanes.gate })
-        .from(swimlanes)
-        .where(and(eq(swimlanes.boardId, board.id), eq(swimlanes.key, args.status)))
-        .limit(1);
-      if (lane) {
-        gate = lane.gate === 'human' ? 'human' : 'auto';
-        const rows = await db
-          .select({
-            agentRef: swimlaneAgentAssignments.agentRef,
-            model: swimlaneAgentAssignments.model,
-            requiredCapabilities: swimlaneAgentAssignments.requiredCapabilities,
-          })
-          .from(swimlaneAgentAssignments)
-          .where(eq(swimlaneAgentAssignments.swimlaneId, lane.id));
-
-        // Capability guardrail: when a lane assignment declares
-        // `required_capabilities`, resolve the agent's actual capabilities (its
-        // assigned skill + persona slugs, in this task's scope) so `decideLaneAutoRun`
-        // can skip an agent that lacks them — e.g. a docs/BA agent on a coding lane.
-        // Resolution is per-agent and only done when there's a requirement to check,
-        // so the common (unconfigured) case stays a single cheap query.
-        const laneAgents = await Promise.all(
-          rows.map(async (r): Promise<LaneAgentLike> => {
-            const requiredCapabilities = parseRequiredCapabilities(r.requiredCapabilities);
-            let capabilities: string[] | undefined;
-            if (requiredCapabilities.length > 0 && r.agentRef) {
-              const resolved = await resolveArtifacts(db, {
-                tenantId: args.tenantId,
-                taskId: args.taskId,
-                cloudAgentRef: r.agentRef,
-              }).catch(() => ({ skills: [], personas: [], content: [] }));
-              capabilities = [...resolved.skills, ...resolved.personas];
-            }
-            return { agentRef: r.agentRef, model: r.model, requiredCapabilities, capabilities };
-          }),
-        );
-
-        // Per-ticket owner autonomy: a ticket explicitly assigned to a cloud agent
-        // (tasks.assigned_agent_ref) should be worked by that agent in this
-        // (auto-gated) lane even when the lane carries no explicit swimlane
-        // staffing — assigning the agent IS the "go" signal. The owner is appended
-        // as the lowest-priority lane agent so explicit staffing still wins; the
-        // lane gate ('human' lanes never auto-run) and the live-run idempotency
-        // guard below both still apply. This is the fix for agent-owned tickets
-        // that sat forever showing a "pending" placeholder with no execution.
-        const [owner] = await db
-          .select({ assignedAgentRef: tasks.assignedAgentRef })
-          .from(tasks)
-          .where(eq(tasks.id, args.taskId))
-          .limit(1);
-        agents = withOwnerAgentFallback(laneAgents, { agentRef: owner?.assignedAgentRef ?? null });
-      }
-    }
-
-    const decision = decideLaneAutoRun(agents, gate);
-
-    // A lane staffed with an agent that lacks the lane's required capabilities is a
+    // A lane whose every candidate agent lacks its required capabilities is a
     // configuration error, not a silent no-op. Emit a `capability_mismatch` warning
-    // (Worker telemetry sink) so a mis-staffed lane is diagnosable. There is no
-    // execution to attach a timeline event to yet — see the README gap register entry
-    // for surfacing this on the Observability timeline.
-    if (decision.capabilityMismatches?.length) {
-      for (const m of decision.capabilityMismatches) {
+    // so a mis-staffed lane is diagnosable (the triage diagnostic surfaces the same).
+    if (evaln.decision.capabilityMismatches?.length) {
+      for (const m of evaln.decision.capabilityMismatches) {
         console.warn(
           `[capability_mismatch] task ${args.taskId} lane '${args.status}': agent '${m.agentRef}' lacks required capabilities [${m.missing.join(', ')}] — skipped for auto-run`,
         );
       }
     }
-    if (!decision.autoRun) return;
-
-    // Same-lane re-entry guard: the execution-completion path
-    // (RuntimeService.onLaneEntry) always lands a completed ticket in `in_review`.
-    // If that lane is staffed (gate overridden to 'auto'), the run it auto-starts
-    // would complete back into `in_review` and re-fire forever. `originLaneKey` is
-    // the lane the JUST-COMPLETED run was dispatched for; skip only when the ticket
-    // is re-entering that SAME lane. Keyed on lane, not agent — a genuine handoff to
-    // a DIFFERENT lane that happens to be staffed by the same agent still runs. A
-    // human drag / manual run passes no `originLaneKey`, so it never blocks a hop.
-    if (args.originLaneKey && args.originLaneKey === args.status) return;
-
-    // Idempotency: never stack a second run on a ticket that already has a live
-    // one (a manual run just started, or a re-PATCH to the same lane) — this is what
-    // lets every caller invoke the trigger safely. Read through runtimeService (NOT a
-    // raw query) so a stale cloud run abandoned RUNNING by an evicted isolate is
-    // reaped to FAILED on read FIRST. A raw status check would treat that dead row as
-    // "active" and silently block the lane's agent from ever starting again — the
-    // "drag does nothing on a ticket that ran once before" failure mode.
-    const live = (await runtimeService.listByTask(args.taskId)).some(
-      (e) =>
-        e.status === ExecutionStatus.PENDING ||
-        e.status === ExecutionStatus.SUBMITTED ||
-        e.status === ExecutionStatus.RUNNING,
-    );
-    if (live) return;
+    if (!evaln.canRunNow) return;
 
     // Hand the lane's agent + model to the single surface-aware dispatcher (the
     // `cloudAgentRef` payload key is the existing dispatch contract — the V2 agent
@@ -299,8 +201,8 @@ export async function maybeAutoRunOnLaneEntry(
     // lane this run serves so a completion that re-enters the SAME lane (a loop) is
     // suppressed by the same-lane guard above on the next hop.
     const payloadObj: { cloudAgentRef?: string; model?: string; laneKey?: string } = { laneKey: args.status };
-    if (decision.agentRef) payloadObj.cloudAgentRef = decision.agentRef;
-    if (decision.model) payloadObj.model = decision.model;
+    if (evaln.decision.agentRef) payloadObj.cloudAgentRef = evaln.decision.agentRef;
+    if (evaln.decision.model) payloadObj.model = evaln.decision.model;
 
     // Collect the dispatcher's deferred executor kickoff (`orchestrate()`) and AWAIT
     // it here instead of letting it re-register on the (already-closed) request
@@ -447,6 +349,60 @@ export function createTaskRoutes(taskService: TaskService, db: Db, runtimeServic
     if (!(await loadTenantTask(id, c.get('tenantId')))) return c.json({ error: 'Task not found' }, 404);
     const task = await taskService.getTask(id);
     return c.json(task.toPlain());
+  });
+
+  // GET /api/tasks/:id/autorun-diagnostics — the board TRIAGE read: explains, for a
+  // single ticket, whether the autonomous agent will run AND if not exactly why
+  // (no agent, human gate, capability mismatch, already running, terminal/backlog
+  // lane). Same evaluator the trigger uses, so the answer is authoritative. Not
+  // cached — it reflects live execution status, which changes on every tick.
+  router.get('/:id/autorun-diagnostics', async (c) => {
+    const id = Number(c.req.param('id'));
+    const row = await loadTenantTask(id, c.get('tenantId'));
+    if (!row) return c.json({ error: 'Task not found' }, 404);
+    const evaln = await evaluateTaskAutoRun(db, runtimeService, {
+      tenantId:  c.get('tenantId'),
+      projectId: row.projectId,
+      taskId:    id,
+      status:    row.status,
+    });
+    return c.json(evaln);
+  });
+
+  // POST /api/tasks/:id/run-now — manual TRIAGE trigger: dispatch the ticket's
+  // owner / first-capable lane agent immediately, IGNORING the lane gate (an
+  // explicit human click is itself the approval — so it works on a human-gated lane
+  // too). 409 when a run is already live; 400 when no agent can run the ticket
+  // (`reason` lets the UI explain what to fix). Reuses the one dispatcher.
+  router.post('/:id/run-now', async (c) => {
+    const id = Number(c.req.param('id'));
+    const row = await loadTenantTask(id, c.get('tenantId'));
+    if (!row) return c.json({ error: 'Task not found' }, 404);
+    const evaln = await evaluateTaskAutoRun(db, runtimeService, {
+      tenantId:  c.get('tenantId'),
+      projectId: row.projectId,
+      taskId:    id,
+      status:    row.status,
+    });
+    if (evaln.liveExecution) {
+      return c.json({ error: 'A run is already in progress for this ticket.', reason: 'already_running' satisfies AutoRunReason, executionId: evaln.liveExecution.id }, 409);
+    }
+    if (!evaln.candidate) {
+      // Nothing to run as — surface the precise reason so the UI can prompt the fix
+      // (assign an agent, staff the lane, or relax the capability requirement).
+      const reason: AutoRunReason = evaln.reason === 'will_run' ? 'no_agent' : evaln.reason;
+      return c.json({ error: 'No agent is configured to run this ticket. Assign a cloud agent (or staff this lane), then try again.', reason }, 400);
+    }
+    const payloadObj: { cloudAgentRef: string; model?: string; laneKey: string } = {
+      cloudAgentRef: evaln.candidate.agentRef,
+      laneKey:       row.status,
+    };
+    if (evaln.candidate.model) payloadObj.model = evaln.candidate.model;
+    const executionId = await dispatchCloudRunForTask(
+      c.env as Env, db, runtimeService, (p) => c.executionCtx.waitUntil(p),
+      { taskId: id, tenantId: c.get('tenantId'), payload: JSON.stringify(payloadObj), submittedBy: (c as { get(k: 'userId'): string | undefined }).get('userId') ?? 'system:run-now' },
+    );
+    return c.json({ ok: true, executionId, agentRef: evaln.candidate.agentRef }, 202);
   });
 
   // GET /api/tasks/:id/tree — an Epic and its direct child tasks (parent/child
@@ -725,7 +681,7 @@ export function createTaskRoutes(taskService: TaskService, db: Db, runtimeServic
   /** Verify the task belongs to the tenant; returns its row or null. */
   async function loadTenantTask(taskId: number, tenantId: number) {
     const [row] = await db
-      .select({ id: tasks.id, projectId: tasks.projectId, title: tasks.title, description: tasks.description })
+      .select({ id: tasks.id, projectId: tasks.projectId, status: tasks.status, title: tasks.title, description: tasks.description })
       .from(tasks)
       .innerJoin(projects, eq(projects.id, tasks.projectId))
       .where(and(eq(tasks.id, taskId), eq(projects.tenantId, tenantId)));

@@ -1,4 +1,11 @@
 {
+  "boardConfig": {
+    "approvalHeading": "Execution approval",
+    "approvalToggle": "Require manager approval before running high or urgent tickets",
+    "approvalOnHint": "On — running a high or urgent ticket opens a manager-approval request before any agent executes it.",
+    "approvalOffHint": "Off — high and urgent tickets run immediately, with no approval step. Use with care: this overrides the governance gate for this board.",
+    "bannerManage": "Manage approval setting"
+  },
   "integrations": {
     "gallery": {
       "loading": "Loading integrations…",
@@ -4110,6 +4117,27 @@
       "gguf": {
         "label": "GGUF",
         "description": "llama.cpp container (custom architecture; for GGUF tooling)."
+      }
+    }
+  },
+  "board": {
+    "triage": {
+      "button": "Triage",
+      "title": "Why aren't these running?",
+      "runAll": "Run all eligible ({count})",
+      "run": "Run now",
+      "running": "Running…",
+      "loading": "Checking…",
+      "error": "Couldn't load triage",
+      "reason": {
+        "will_run": "Ready — will run",
+        "already_running": "Already running",
+        "human_gate": "Waiting for approval",
+        "capability_mismatch": "Agent missing required skills",
+        "no_agent": "No agent assigned",
+        "no_board": "No board configured",
+        "no_lane": "Lane not configured",
+        "terminal_lane": "Done — no run needed"
       }
     }
   }

@@ -1076,6 +1076,36 @@ export interface TaskSummary {
   status?: string;
 }
 
+/** Why a ticket will / will not auto-run its assigned agent (board triage). */
+export type AutoRunReason =
+  | 'will_run'
+  | 'no_board'
+  | 'no_lane'
+  | 'terminal_lane'
+  | 'human_gate'
+  | 'no_agent'
+  | 'capability_mismatch'
+  | 'already_running';
+
+export interface AutoRunDiagnostic {
+  status: string;
+  assignedAgentRef: string | null;
+  laneResolved: boolean;
+  isTerminalLane: boolean;
+  laneGate: 'auto' | 'human' | null;
+  staffedAgentRefs: string[];
+  decision: {
+    autoRun: boolean;
+    agentRef?: string;
+    model?: string;
+    capabilityMismatches?: { agentRef: string; missing: string[] }[];
+  };
+  candidate: { agentRef: string; model?: string } | null;
+  liveExecution: { id: number; status: string } | null;
+  canRunNow: boolean;
+  reason: AutoRunReason;
+}
+
 export const tasksApi = {
   list: (projectId?: number, opts?: { includeArchived?: boolean }): Promise<Task[]> => {
     const params = new URLSearchParams();
@@ -1144,6 +1174,15 @@ export const tasksApi = {
   /** An Epic and its direct child tasks (the planning tree). */
   tree: (id: number): Promise<{ epic: Task; children: Task[] }> =>
     request<{ epic: Task; children: Task[] }>(`/api/tasks/${id}/tree`),
+
+  /** Triage: why a ticket will / will not auto-run its assigned agent. */
+  autorunDiagnostics: (id: number): Promise<AutoRunDiagnostic> =>
+    request<AutoRunDiagnostic>(`/api/tasks/${id}/autorun-diagnostics`),
+
+  /** Triage: dispatch the ticket's owner / first-capable lane agent now,
+   *  overriding the lane gate (an explicit human click is the approval). */
+  runNow: (id: number): Promise<{ ok: true; executionId: number | null; agentRef: string }> =>
+    request<{ ok: true; executionId: number | null; agentRef: string }>(`/api/tasks/${id}/run-now`, { method: 'POST' }),
 
   /** Turn a task into an Epic and fan the given children out as child tasks. */
   decompose: (
@@ -3916,6 +3955,9 @@ export interface Board {
   standupTurnSeconds: number;
   /** Hide tickets sitting in a terminal (Done) lane from the board (migration 0194). */
   hideDoneItems: boolean;
+  /** When true (default), high/urgent tickets need manager approval before an agent
+   *  executes them; a manager can set false to override the gate (migration 0257). */
+  requireExecutionApproval: boolean;
   createdAt: string;
   updatedAt: string;
   swimlanes?: Swimlane[];
@@ -3987,7 +4029,7 @@ export const boardsApi = {
   create: (body: { projectId: number; name: string; maxConcurrentTickets?: number; needsAttentionLane?: string | null }): Promise<Board> =>
     request('/api/boards', { method: 'POST', body: JSON.stringify(body) }),
 
-  update: (boardId: string, body: Partial<{ name: string; maxConcurrentTickets: number; needsAttentionLane: string | null; standupTurnMode: 'facilitator' | 'timeboxed'; standupTurnSeconds: number; hideDoneItems: boolean }>): Promise<Board> =>
+  update: (boardId: string, body: Partial<{ name: string; maxConcurrentTickets: number; needsAttentionLane: string | null; standupTurnMode: 'facilitator' | 'timeboxed'; standupTurnSeconds: number; hideDoneItems: boolean; requireExecutionApproval: boolean }>): Promise<Board> =>
     request(`/api/boards/${boardId}`, { method: 'PATCH', body: JSON.stringify(body) }),
 
   remove: (boardId: string): Promise<void> =>

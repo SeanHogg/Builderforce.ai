@@ -1,4 +1,11 @@
 {
+  "boardConfig": {
+    "approvalHeading": "Approbation d'exécution",
+    "approvalToggle": "Exiger l'approbation d'un responsable avant d'exécuter les tickets élevés ou urgents",
+    "approvalOnHint": "Activé — l'exécution d'un ticket élevé ou urgent ouvre une demande d'approbation du responsable avant qu'un agent ne l'exécute.",
+    "approvalOffHint": "Désactivé — les tickets élevés et urgents s'exécutent immédiatement, sans étape d'approbation. À utiliser avec prudence : cela contourne le contrôle de gouvernance de ce tableau.",
+    "bannerManage": "Gérer le paramètre d'approbation"
+  },
   "integrations": {
     "gallery": {
       "loading": "Chargement des intégrations…",
@@ -4110,6 +4117,27 @@
       "gguf": {
         "label": "GGUF",
         "description": "Conteneur llama.cpp (architecture personnalisée ; pour l’outillage GGUF)."
+      }
+    }
+  },
+  "board": {
+    "triage": {
+      "button": "Triage",
+      "title": "Pourquoi ne s'exécutent-ils pas ?",
+      "runAll": "Exécuter tous les éligibles ({count})",
+      "run": "Exécuter",
+      "running": "En cours…",
+      "loading": "Vérification…",
+      "error": "Échec du chargement du triage",
+      "reason": {
+        "will_run": "Prêt — va s'exécuter",
+        "already_running": "Déjà en cours",
+        "human_gate": "En attente d'approbation",
+        "capability_mismatch": "Compétences requises manquantes",
+        "no_agent": "Aucun agent assigné",
+        "no_board": "Aucun tableau configuré",
+        "no_lane": "Voie non configurée",
+        "terminal_lane": "Terminé — aucune exécution"
       }
     }
   }
