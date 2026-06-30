@@ -13,15 +13,14 @@ import {
   COMPETITOR_SLUG_TO_KEY,
 } from '@/lib/content';
 
-// Fully static: every slug is enumerated by generateStaticParams and
-// dynamicParams = false, so this route is prerendered at build time and must
-// NOT opt into the Edge Runtime (Next 15.5 forbids combining `runtime = 'edge'`
-// with `generateStaticParams`). Mirrors /integrations/[tool].
-export const dynamicParams = false;
-
-export function generateStaticParams() {
-  return Object.values(COMPETITOR_SEO).map((c) => ({ competitor: c.slug }));
-}
+// Dynamic on the Edge Runtime — NOT statically prerendered. `getTranslations()`
+// reads the locale cookie (cookie-based i18n), which forces this route dynamic, so
+// it can't use `generateStaticParams` (and Next 15.5 forbids combining that with
+// `runtime = 'edge'` anyway). next-on-pages then requires every non-static route to
+// opt into the Edge Runtime. Invalid slugs 404 via `notFound()` in `resolve()`, so
+// no slug enumeration is needed. (Differs from /integrations/[tool], which has no
+// cookie-i18n and stays static.)
+export const runtime = 'edge';
 
 type CompareCategory = { id: string; title: string; blurb: string; rows: { feature: string; note?: string; values: Record<string, string> }[] };
 type CompareFaq = { question: string; answer: string };
