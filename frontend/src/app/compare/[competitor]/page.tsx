@@ -13,9 +13,10 @@ import {
   COMPETITOR_SLUG_TO_KEY,
 } from '@/lib/content';
 
-// next-on-pages requires every non-static route to opt into the Edge Runtime.
-export const runtime = 'edge';
-
+// Fully static: every slug is enumerated by generateStaticParams and
+// dynamicParams = false, so this route is prerendered at build time and must
+// NOT opt into the Edge Runtime (Next 15.5 forbids combining `runtime = 'edge'`
+// with `generateStaticParams`). Mirrors /integrations/[tool].
 export const dynamicParams = false;
 
 export function generateStaticParams() {
