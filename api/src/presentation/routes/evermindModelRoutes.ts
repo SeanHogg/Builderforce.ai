@@ -23,9 +23,19 @@ import {
   EVERMIND_MODEL_ROOT,
   evermindGenerate,
   buildEvermindCompletion,
+  benchmarkEvermind,
 } from '../../application/llm/evermindRuntime';
+import { getOrSetCached } from '../../infrastructure/cache/readThroughCache';
 
 const EVERMIND_PIN_PREFIX = 'evermind/';
+
+/** Stable content hash for a benchmark cache key (hex SHA-256). */
+async function sha256Hex(input: string): Promise<string> {
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(input));
+  return Array.from(new Uint8Array(digest))
+    .map((b) => b.toString(16).padStart(2, '0'))
+    .join('');
+}
 
 interface PublishBody {
   name?: unknown;
@@ -141,6 +151,50 @@ export function createEvermindModelRoutes(db: Db): Hono<HonoEnv> {
       return c.json(buildEvermindCompletion(gen, tm.baseModel));
     } catch (err) {
       return c.json({ error: 'Evermind generation failed', detail: err instanceof Error ? err.message : String(err) }, 502);
+    }
+  });
+
+  /**
+   * POST /api/studio/models/:slug/benchmark
+   * Body: { corpus, topK? }
+   * → scores the user's ACTUAL trained `.evermind` artifact on held-out text
+   *   (perplexity / bits-per-token / top-1 / top-k / throughput + a sample),
+   *   tokenized with the model's OWN persisted tokenizer. Read-through cached on
+   *   the immutable ref + corpus hash (same model + same text ⇒ same score).
+   */
+  router.post('/:slug/benchmark', async (c) => {
+    const tenantId = c.get('tenantId') as number;
+    const slug = c.req.param('slug');
+    if (!c.env.UPLOADS) return c.json({ error: 'R2 artifact storage not configured' }, 503);
+
+    const tm = await resolveTenantModel(c.env as Env, db, tenantId, `${TENANT_MODEL_REF_PREFIX}${slug}`);
+    if (!tm || !tm.baseModel?.startsWith(EVERMIND_PIN_PREFIX)) {
+      return c.json({ error: 'No published Evermind model with that slug' }, 404);
+    }
+    const ref = tm.baseModel.slice(EVERMIND_PIN_PREFIX.length);
+
+    const body = (await c.req.json<{ corpus?: unknown; topK?: unknown }>().catch(() => ({}))) as {
+      corpus?: unknown; topK?: unknown;
+    };
+    const corpus = typeof body.corpus === 'string' ? body.corpus.trim() : '';
+    if (corpus.length < 20) {
+      return c.json({ error: 'corpus is required — provide held-out text (≥ 20 chars) to score the model on' }, 400);
+    }
+    const topK = typeof body.topK === 'number' && body.topK > 0 ? Math.min(20, Math.floor(body.topK)) : 5;
+
+    try {
+      // ref is immutable (versioned at publish) and the corpus hash makes the key
+      // content-addressed, so (ref, corpus, topK) fully determines the result — no
+      // invalidation needed; it stays cached until a different model/corpus is scored.
+      const result = await getOrSetCached(
+        c.env as Env,
+        `evermind_bench:${ref}:${await sha256Hex(`${topK}\n${corpus}`)}`,
+        () => benchmarkEvermind(c.env.UPLOADS as Parameters<typeof benchmarkEvermind>[0], ref, corpus, { topK }),
+        { kvTtlSeconds: 600 },
+      );
+      return c.json(result);
+    } catch (err) {
+      return c.json({ error: 'Evermind benchmark failed', detail: err instanceof Error ? err.message : String(err) }, 502);
     }
   });
 

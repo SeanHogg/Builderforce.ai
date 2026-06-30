@@ -19,6 +19,17 @@ describe('reorderPoolByShape capability-aware routing [1429]', () => {
     expect(out[0]).toBe('microsoft/phi-4-multimodal-instruct');
   });
 
+  it('promotes a direct Gemini model (googleai catalog vision capability) for a vision request', () => {
+    // Regression: gemini-2.5-flash is natively multimodal but its googleai
+    // catalog entry declared NO capabilities, so an image request treated it as
+    // non-vision and demoted it below the small declared vision models — which
+    // returned an empty turn → the user's "No response" on a pasted image. The
+    // catalog now declares vision, so it must float to the head here.
+    const pool = ['plain/text-only-model', 'gemini-2.5-flash'];
+    const out = reorderPoolByShape(visionBody, pool);
+    expect(out[0]).toBe('gemini-2.5-flash');
+  });
+
   it('leaves the pool untouched when the request has no special shape', () => {
     const pool = ['a', 'b', 'c'];
     expect(reorderPoolByShape(plainBody, pool)).toEqual(pool);

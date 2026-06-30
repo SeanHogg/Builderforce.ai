@@ -18,7 +18,7 @@
  * per-isolate loaded-model cache below is safe (a re-publish gets a new ref).
  */
 
-import { EvermindModelPackage, EvermindLM, BPETokenizer } from '@seanhogg/builderforce-memory-engine';
+import { EvermindModelPackage, EvermindLM, BPETokenizer, benchmarkText } from '@seanhogg/builderforce-memory-engine';
 
 /** R2 key prefix under which published Evermind models live. */
 export const EVERMIND_MODEL_ROOT = 'evermind-models';
@@ -106,6 +106,62 @@ export async function evermindGenerate(
   const prompt_tokens = tok.encode(prompt).length;
   const completion_tokens = content ? tok.encode(content).length : 0;
   return { content, usage: { prompt_tokens, completion_tokens, total_tokens: prompt_tokens + completion_tokens } };
+}
+
+/** Scorecard for a PUBLISHED Evermind model, scored against held-out text. */
+export interface EvermindBenchmarkResult {
+  /** Total tokens scored across the held-out corpus. */
+  tokens: number;
+  /** Held-out perplexity (lower is better). */
+  perplexity: number;
+  /** Bits per token (lower is better). */
+  bitsPerToken: number;
+  /** Next-token top-1 accuracy (0..1). */
+  top1Accuracy: number;
+  /** Next-token top-k accuracy (0..1). */
+  topKAccuracy: number;
+  /** The k used for {@link topKAccuracy}. */
+  topK: number;
+  /** Forward throughput (tokens/sec). */
+  tokensPerSecond?: number;
+  /** The model's tokenizer vocabulary size (baseline for the verdict). */
+  vocabSize: number;
+  /** A short qualitative generation sample from the model. */
+  sample: string;
+}
+
+/**
+ * Benchmark a PUBLISHED `.evermind` model against a held-out corpus, on the
+ * server, by reusing the same R2 loader the gateway/test paths use (DRY). This
+ * scores the user's ACTUAL trained artifact — tokenized with the model's OWN
+ * persisted tokenizer, so the token ids are coherent with the weights — rather
+ * than a freshly-trained throwaway model. CPU-only, zero-dep; the loaded-model
+ * memo means repeated scoring of the same ref pays the deserialize cost once.
+ */
+export async function benchmarkEvermind(
+  store: ArtifactStore,
+  ref: string,
+  corpus: string,
+  opts: { topK?: number; samplePrompt?: string } = {},
+): Promise<EvermindBenchmarkResult> {
+  const { lm, tok } = await loadEvermindModel(store, ref);
+  const report = benchmarkText(lm, tok, corpus, { topK: opts.topK ?? 5, measureLatency: true });
+  const sample = lm.generateText(opts.samplePrompt ?? 'The', tok, {
+    maxNewTokens: 24,
+    temperature: 0.7,
+    seed: 1,
+  });
+  return {
+    tokens: report.tokens,
+    perplexity: report.perplexity,
+    bitsPerToken: report.bitsPerToken,
+    top1Accuracy: report.top1Accuracy,
+    topKAccuracy: report.topKAccuracy,
+    topK: report.topK,
+    ...(report.tokensPerSecond != null ? { tokensPerSecond: report.tokensPerSecond } : {}),
+    vocabSize: tok.vocabSize,
+    sample,
+  };
 }
 
 /** Build an OpenAI-compatible chat-completion object from a generation result. */
