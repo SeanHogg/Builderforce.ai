@@ -720,7 +720,26 @@ async function startDispatchedExecution(
       else if (executor === 'durable') await startDurable();
       else await runWorkerFallback();
     };
-    waitUntil(orchestrate());
+    // orchestrate() self-handles every executor failure (each path degrades to the
+    // next), so a throw escaping it is unexpected (e.g. a telemetry write) and would
+    // otherwise leave the run sitting PENDING until the 15-min queued reaper — read
+    // by the board as a stuck "pending" agent. Fail it now IF still un-started so the
+    // board reflects reality and the chip offers a retry.
+    waitUntil(
+      orchestrate().catch(async (e) => {
+        try {
+          const cur = await runtimeService.getExecution(execution.id);
+          const s = cur.toPlain().status;
+          if (s === ExecutionStatus.PENDING || s === ExecutionStatus.SUBMITTED) {
+            await runtimeService.update(execution.id, {
+              status: ExecutionStatus.FAILED,
+              errorMessage: `Dispatch failed before the run started: ${e instanceof Error ? e.message : String(e)}`,
+            });
+            await notifyDone();
+          }
+        } catch { /* best-effort — the queued reaper is the backstop */ }
+      }),
+    );
   }
 
   // Announce the queued/dispatched execution immediately.

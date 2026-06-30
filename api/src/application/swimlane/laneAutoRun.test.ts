@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { decideLaneAutoRun, missingCapabilities, type LaneAgentLike } from './laneAutoRun';
+import { decideLaneAutoRun, missingCapabilities, withOwnerAgentFallback, type LaneAgentLike } from './laneAutoRun';
 
 const agent = (over: Partial<LaneAgentLike> = {}): LaneAgentLike => ({
   agentRef: 'agent_kevin',
@@ -73,6 +73,52 @@ describe('decideLaneAutoRun', () => {
       expect(decideLaneAutoRun([agent({ requiredCapabilities: [] })], 'auto').autoRun).toBe(true);
       expect(decideLaneAutoRun([agent({ requiredCapabilities: undefined })], 'auto').autoRun).toBe(true);
     });
+  });
+});
+
+describe('withOwnerAgentFallback', () => {
+  it('appends the owner agent as a fallback when the lane has no staffing', () => {
+    const list = withOwnerAgentFallback([], { agentRef: 'agent_ada' });
+    expect(list).toEqual([{ agentRef: 'agent_ada', model: null, requiredCapabilities: null, capabilities: null }]);
+    // …and the decision then auto-runs AS the owner (the bug fix: an agent-owned
+    // ticket in an auto lane with no lane staffing now runs).
+    expect(decideLaneAutoRun(list, 'auto')).toEqual({ autoRun: true, agentRef: 'agent_ada', model: undefined });
+  });
+
+  it('also covers an undefined lane-agent list', () => {
+    expect(withOwnerAgentFallback(undefined, { agentRef: 'agent_ada' })).toEqual([
+      { agentRef: 'agent_ada', model: null, requiredCapabilities: null, capabilities: null },
+    ]);
+  });
+
+  it('keeps explicit lane staffing ahead of the owner (staffing wins)', () => {
+    const lane: LaneAgentLike[] = [{ agentRef: 'agent_lane', model: 'm' }];
+    const list = withOwnerAgentFallback(lane, { agentRef: 'agent_ada' });
+    expect(list.map((a) => a.agentRef)).toEqual(['agent_lane', 'agent_ada']);
+    expect(decideLaneAutoRun(list, 'auto').agentRef).toBe('agent_lane');
+  });
+
+  it('does NOT duplicate the owner when it is already a lane agent', () => {
+    const lane: LaneAgentLike[] = [{ agentRef: 'agent_ada', model: 'm' }];
+    expect(withOwnerAgentFallback(lane, { agentRef: 'agent_ada' })).toEqual(lane);
+  });
+
+  it('is a no-op when there is no owner agent (human-owned or unassigned ticket)', () => {
+    const lane: LaneAgentLike[] = [{ agentRef: 'agent_lane', model: null }];
+    expect(withOwnerAgentFallback(lane, { agentRef: null })).toEqual(lane);
+    expect(withOwnerAgentFallback(lane, { agentRef: undefined })).toEqual(lane);
+    expect(withOwnerAgentFallback(lane, { agentRef: '  ' })).toEqual(lane);
+    expect(withOwnerAgentFallback([], undefined)).toEqual([]);
+  });
+
+  it('carries the owner pinned model through when provided', () => {
+    const list = withOwnerAgentFallback([], { agentRef: 'agent_ada', model: 'claude-opus-4-8' });
+    expect(list[0]).toMatchObject({ agentRef: 'agent_ada', model: 'claude-opus-4-8' });
+  });
+
+  it('a human-gated lane still does not auto-run an owner-assigned ticket', () => {
+    const list = withOwnerAgentFallback([], { agentRef: 'agent_ada' });
+    expect(decideLaneAutoRun(list, 'human')).toEqual({ autoRun: false });
   });
 });
 

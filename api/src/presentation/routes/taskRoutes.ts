@@ -18,7 +18,7 @@ import { recordStatusTransition } from '../../application/task/taskLifecycle';
 import { RuntimeService } from '../../application/runtime/RuntimeService';
 import { dispatchCloudRunForTask } from './runtimeRoutes';
 import { recordCloudToolEvent } from '../../application/runtime/cloudAgentEngine';
-import { decideLaneAutoRun, type LaneAgentLike } from '../../application/swimlane/laneAutoRun';
+import { decideLaneAutoRun, withOwnerAgentFallback, type LaneAgentLike } from '../../application/swimlane/laneAutoRun';
 import { resolveArtifacts } from '../../application/artifact/resolveArtifacts';
 import { broadcastProjectChanged } from '../../infrastructure/relay/broadcastRoom';
 
@@ -219,7 +219,7 @@ export async function maybeAutoRunOnLaneEntry(
         // can skip an agent that lacks them — e.g. a docs/BA agent on a coding lane.
         // Resolution is per-agent and only done when there's a requirement to check,
         // so the common (unconfigured) case stays a single cheap query.
-        agents = await Promise.all(
+        const laneAgents = await Promise.all(
           rows.map(async (r): Promise<LaneAgentLike> => {
             const requiredCapabilities = parseRequiredCapabilities(r.requiredCapabilities);
             let capabilities: string[] | undefined;
@@ -234,6 +234,21 @@ export async function maybeAutoRunOnLaneEntry(
             return { agentRef: r.agentRef, model: r.model, requiredCapabilities, capabilities };
           }),
         );
+
+        // Per-ticket owner autonomy: a ticket explicitly assigned to a cloud agent
+        // (tasks.assigned_agent_ref) should be worked by that agent in this
+        // (auto-gated) lane even when the lane carries no explicit swimlane
+        // staffing — assigning the agent IS the "go" signal. The owner is appended
+        // as the lowest-priority lane agent so explicit staffing still wins; the
+        // lane gate ('human' lanes never auto-run) and the live-run idempotency
+        // guard below both still apply. This is the fix for agent-owned tickets
+        // that sat forever showing a "pending" placeholder with no execution.
+        const [owner] = await db
+          .select({ assignedAgentRef: tasks.assignedAgentRef })
+          .from(tasks)
+          .where(eq(tasks.id, args.taskId))
+          .limit(1);
+        agents = withOwnerAgentFallback(laneAgents, { agentRef: owner?.assignedAgentRef ?? null });
       }
     }
 
@@ -560,11 +575,12 @@ export function createTaskRoutes(taskService: TaskService, db: Db, runtimeServic
       persona?: string | null;
       archived?: boolean;
     }>();
-    // Capture the pre-update status so a status change can be recorded as a lane
-    // transition (the metrics keystone, migration 0117). Cheap PK read; only when
-    // the PATCH actually carries a status.
-    const prevStatus = body.status !== undefined
-      ? (await db.select({ status: tasks.status, projectId: tasks.projectId }).from(tasks).where(eq(tasks.id, id)).limit(1))[0]
+    // Capture the pre-update status + owner so a status change can be recorded as a
+    // lane transition (the metrics keystone, migration 0117) AND an owner-agent
+    // change can fire the autonomous trigger. Cheap PK read; only when the PATCH
+    // carries a status and/or a reassignment.
+    const prevStatus = (body.status !== undefined || body.assignedAgentRef !== undefined)
+      ? (await db.select({ status: tasks.status, projectId: tasks.projectId, assignedAgentRef: tasks.assignedAgentRef }).from(tasks).where(eq(tasks.id, id)).limit(1))[0]
       : undefined;
 
     const task = await taskService.updateTask(id, body);
@@ -607,6 +623,20 @@ export function createTaskRoutes(taskService: TaskService, db: Db, runtimeServic
       // the ticket (board drag, status dropdown, the brain, a raw API PATCH), so a
       // brain-created ticket moved to a To Do lane with an agent actually runs.
       fireLaneAutoRun(c, { projectId: prevStatus.projectId, taskId: id, status: body.status });
+    }
+
+    // Autonomous trigger on REASSIGNMENT: assigning a cloud agent as the ticket's
+    // owner is itself a "go" — the owner agent should pick the ticket up in its
+    // current (auto-gated) lane, even with no explicit swimlane staffing (see
+    // withOwnerAgentFallback). Fire only when the owner ref actually CHANGED to a
+    // non-null value AND the status did not also change in this PATCH (that path
+    // already fired for the lane the ticket entered), so a single PATCH never
+    // double-fires. The live-run idempotency guard makes a redundant fire a no-op.
+    const statusChanged = !!prevStatus && body.status !== undefined && body.status !== prevStatus.status;
+    const newAgentRef = typeof body.assignedAgentRef === 'string' ? body.assignedAgentRef.trim() : null;
+    if (!statusChanged && newAgentRef && prevStatus && newAgentRef !== (prevStatus.assignedAgentRef ?? null)) {
+      const plain = task.toPlain();
+      fireLaneAutoRun(c, { projectId: plain.projectId, taskId: id, status: plain.status });
     }
 
     // On transition to Done, finalize the ticket → commit + PR (host relay or

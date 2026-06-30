@@ -117,3 +117,29 @@ export function decideLaneAutoRun(
   // a mismatched agent; surface why so the lane staffing can be corrected.
   return { autoRun: false, capabilityMismatches };
 }
+
+/**
+ * Append the ticket's OWNER agent (`tasks.assigned_agent_ref`) to a lane's agent
+ * list as the LOWEST-priority candidate, so a ticket explicitly assigned to a
+ * cloud agent auto-runs AS that agent even when the lane carries no explicit
+ * swimlane staffing — closing the "I assigned Ada to this ticket, why isn't she
+ * working it" gap (assigning an agent as a ticket's owner is itself the "go").
+ *
+ * Explicit lane agents keep precedence: {@link decideLaneAutoRun} tries the list
+ * in order, so staffing wins and the owner is only reached when no lane agent
+ * qualifies (or the lane has none). The owner is capability-unconstrained — the
+ * lane pinned no `required_capabilities` to it — so it always qualifies. No-op
+ * when there is no owner agent, or the owner is already a configured lane agent
+ * (so the run is never attributed to it twice).
+ */
+export function withOwnerAgentFallback(
+  laneAgents: LaneAgentLike[] | undefined,
+  owner: { agentRef: string | null | undefined; model?: string | null } | undefined,
+): LaneAgentLike[] {
+  const list: LaneAgentLike[] = [...(laneAgents ?? [])];
+  const ref = owner?.agentRef?.trim();
+  if (ref && !list.some((a) => a.agentRef?.trim() === ref)) {
+    list.push({ agentRef: ref, model: owner?.model ?? null, requiredCapabilities: null, capabilities: null });
+  }
+  return list;
+}
