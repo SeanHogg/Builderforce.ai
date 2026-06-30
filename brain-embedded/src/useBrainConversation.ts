@@ -28,7 +28,7 @@ import { useBrainConfig } from './config';
 import type { BrainMessage, BrainModality, ChatInputAttachment } from './types';
 import type { BrainToolSpec, ChatCompletionMessage, ContentPart } from './streamChatCompletion';
 import { prepareImageDataUrl } from './imagePrep';
-import { buildBrainTriageReport } from './brainTriage';
+import { buildBrainTriageReport, type BrainTraceEvent } from './brainTriage';
 import {
   startRun,
   isRunning,
@@ -92,6 +92,13 @@ export interface UseBrainConversation {
    * — drives the "capture execution" affordance.
    */
   hasTrace: boolean;
+  /**
+   * The live execution trace (LLM turns + tool calls + errors) for the active
+   * chat, in order — updated AS THE RUN HAPPENS. Render it as the timeline's
+   * tool/thinking/error steps; pair it with `messages` for the durable
+   * user/assistant turns. Empty when the chat has no run this session.
+   */
+  trace: BrainTraceEvent[];
   /**
    * Assemble a paste-able triage report of the active chat's execution — the LLM
    * steps, the full tool chain (args + results), intermediate assistant messages,
@@ -383,6 +390,7 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
     pendingConfirm: snapshot.pendingConfirm,
     resolveConfirm,
     hasTrace: snapshot.hasTrace,
+    trace: snapshot.trace,
     buildTriageReport,
   };
 }

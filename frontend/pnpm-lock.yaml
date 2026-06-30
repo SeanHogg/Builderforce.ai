@@ -28,6 +28,9 @@ importers:
       '@seanhogg/builderforce-brain-embedded':
         specifier: link:../brain-embedded
         version: link:../brain-embedded
+      '@seanhogg/builderforce-brain-ui':
+        specifier: link:../packages/brain-ui
+        version: link:../packages/brain-ui
       '@seanhogg/builderforce-embedded':
         specifier: link:../builderforce-embedded
         version: link:../builderforce-embedded

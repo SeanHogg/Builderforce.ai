@@ -14,7 +14,7 @@ const nextConfig = {
   // optimizer endpoint (/_next/image), so optimized <Image> requests 404 and
   // render broken. Serve images unoptimized — they emit plain <img src> tags.
   images: { unoptimized: true },
-  transpilePackages: ['@monaco-editor/react', 'monaco-editor', '@seanhogg/builderforce-studio', '@seanhogg/builderforce-studio-embedded', '@seanhogg/builderforce-sdk'],
+  transpilePackages: ['@monaco-editor/react', 'monaco-editor', '@seanhogg/builderforce-studio', '@seanhogg/builderforce-studio-embedded', '@seanhogg/builderforce-sdk', '@seanhogg/builderforce-brain-ui'],
   webpack(config) {
     config.module.rules.push({
       test: /\.md$/,

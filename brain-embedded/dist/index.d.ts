@@ -76,6 +76,16 @@ interface BrainTransport {
     mapError?: (res: Response) => Promise<Error>;
     /** Default model when a call doesn't specify one. */
     defaultModel?: string;
+    /**
+     * Optional networking override. When set, the streaming request is performed
+     * through this instead of the global `fetch`. It MUST resolve to a `Response`
+     * whose `body` is a readable stream of the raw SSE bytes (same contract as
+     * `fetch`). Hosts that can't reach the gateway directly from the UI context
+     * (e.g. a VS Code webview, where a `vscode-webview://` origin is CORS-blocked)
+     * inject a fetch that proxies the call through their privileged side. Defaults
+     * to the global `fetch` for the browser/web app.
+     */
+    fetch?: (input: string, init: RequestInit) => Promise<Response>;
 }
 /** OpenAI function-tool spec (the `tools[]` entries sent to the model). */
 interface BrainToolSpec {
@@ -426,75 +436,6 @@ interface UseBrainChats {
 }
 declare function useBrainChats(options?: UseBrainChatsOptions): UseBrainChats;
 
-interface UseBrainConversationOptions {
-    chatId: number | null;
-    modality?: BrainModality;
-    /** Extra system-prompt context (e.g. an IDE's open file + content). */
-    extraSystem?: string;
-    /** Override the system prompt entirely (e.g. a fixed Brain Storm persona). */
-    systemPrompt?: string;
-    /** Override the model (e.g. run the Brain as a specific assigned agent). */
-    model?: string;
-    /** Tool specs from the page-action registry. */
-    toolSpecs?: BrainToolSpec[];
-    /** Dispatch a tool call to the registry. */
-    runTool?: (name: string, args: unknown) => Promise<unknown>;
-    /**
-     * Pure predicate: return true to pause the loop for an explicit user
-     * confirmation before the tool runs (the human-in-the-loop gate). The prompt
-     * UI is driven by `pendingConfirm` + `resolveConfirm` on the return value, so
-     * the gate survives a navigation that swaps which Brain panel is mounted.
-     * Hosts typically gate only mutating tools (see BrainActions `isMutating`).
-     * Omit to run every requested tool immediately.
-     */
-    needsConfirm?: (req: {
-        name: string;
-        args: unknown;
-    }) => boolean;
-    /** Create-on-demand when sending without an active chat; returns the new chat id. */
-    ensureChatId?: () => Promise<number | null>;
-    /** Notify the host (chats hook) that this chat got new activity. */
-    onActivity?: (chatId: number) => void;
-}
-interface UseBrainConversation {
-    messages: BrainMessage[];
-    loadingMessages: boolean;
-    sending: boolean;
-    error: string;
-    /** Live assistant delta buffer (rendered as a trailing bubble while streaming). */
-    streamingText: string;
-    copiedMessageId: number | null;
-    feedbackMap: Record<number, 'up' | 'down'>;
-    pendingAttachments: ChatInputAttachment[];
-    uploading: boolean;
-    send(text: string): Promise<void>;
-    copyMessage(msg: BrainMessage): Promise<void>;
-    submitFeedback(msg: BrainMessage, value: 'up' | 'down'): Promise<void>;
-    attach(file: File): Promise<void>;
-    removeAttachment(key: string): void;
-    setError(msg: string): void;
-    /** A tool call awaiting the user's Approve/Cancel decision (or null). */
-    pendingConfirm: {
-        name: string;
-        args: unknown;
-    } | null;
-    /** Resolve the pending confirmation. */
-    resolveConfirm(ok: boolean): void;
-    /**
-     * True once the active chat has any recorded execution steps (LLM/tool/error)
-     * — drives the "capture execution" affordance.
-     */
-    hasTrace: boolean;
-    /**
-     * Assemble a paste-able triage report of the active chat's execution — the LLM
-     * steps, the full tool chain (args + results), intermediate assistant messages,
-     * every error, and the visible transcript. `agentLabel` names the persona the
-     * Brain ran as. Mirrors the host/cloud "Copy triage info" report.
-     */
-    buildTriageReport(agentLabel?: string): string;
-}
-declare function useBrainConversation(options: UseBrainConversationOptions): UseBrainConversation;
-
 /**
  * Brain execution triage — capture the Brain's run (LLM steps, tool chain,
  * intermediate assistant messages, and errors) as a single paste-able report.
@@ -566,6 +507,82 @@ interface BuildBrainTriageOptions {
  * header → errors-first → full event log → derived log lines → transcript.
  */
 declare function buildBrainTriageReport(opts: BuildBrainTriageOptions): string;
+
+interface UseBrainConversationOptions {
+    chatId: number | null;
+    modality?: BrainModality;
+    /** Extra system-prompt context (e.g. an IDE's open file + content). */
+    extraSystem?: string;
+    /** Override the system prompt entirely (e.g. a fixed Brain Storm persona). */
+    systemPrompt?: string;
+    /** Override the model (e.g. run the Brain as a specific assigned agent). */
+    model?: string;
+    /** Tool specs from the page-action registry. */
+    toolSpecs?: BrainToolSpec[];
+    /** Dispatch a tool call to the registry. */
+    runTool?: (name: string, args: unknown) => Promise<unknown>;
+    /**
+     * Pure predicate: return true to pause the loop for an explicit user
+     * confirmation before the tool runs (the human-in-the-loop gate). The prompt
+     * UI is driven by `pendingConfirm` + `resolveConfirm` on the return value, so
+     * the gate survives a navigation that swaps which Brain panel is mounted.
+     * Hosts typically gate only mutating tools (see BrainActions `isMutating`).
+     * Omit to run every requested tool immediately.
+     */
+    needsConfirm?: (req: {
+        name: string;
+        args: unknown;
+    }) => boolean;
+    /** Create-on-demand when sending without an active chat; returns the new chat id. */
+    ensureChatId?: () => Promise<number | null>;
+    /** Notify the host (chats hook) that this chat got new activity. */
+    onActivity?: (chatId: number) => void;
+}
+interface UseBrainConversation {
+    messages: BrainMessage[];
+    loadingMessages: boolean;
+    sending: boolean;
+    error: string;
+    /** Live assistant delta buffer (rendered as a trailing bubble while streaming). */
+    streamingText: string;
+    copiedMessageId: number | null;
+    feedbackMap: Record<number, 'up' | 'down'>;
+    pendingAttachments: ChatInputAttachment[];
+    uploading: boolean;
+    send(text: string): Promise<void>;
+    copyMessage(msg: BrainMessage): Promise<void>;
+    submitFeedback(msg: BrainMessage, value: 'up' | 'down'): Promise<void>;
+    attach(file: File): Promise<void>;
+    removeAttachment(key: string): void;
+    setError(msg: string): void;
+    /** A tool call awaiting the user's Approve/Cancel decision (or null). */
+    pendingConfirm: {
+        name: string;
+        args: unknown;
+    } | null;
+    /** Resolve the pending confirmation. */
+    resolveConfirm(ok: boolean): void;
+    /**
+     * True once the active chat has any recorded execution steps (LLM/tool/error)
+     * — drives the "capture execution" affordance.
+     */
+    hasTrace: boolean;
+    /**
+     * The live execution trace (LLM turns + tool calls + errors) for the active
+     * chat, in order — updated AS THE RUN HAPPENS. Render it as the timeline's
+     * tool/thinking/error steps; pair it with `messages` for the durable
+     * user/assistant turns. Empty when the chat has no run this session.
+     */
+    trace: BrainTraceEvent[];
+    /**
+     * Assemble a paste-able triage report of the active chat's execution — the LLM
+     * steps, the full tool chain (args + results), intermediate assistant messages,
+     * every error, and the visible transcript. `agentLabel` names the persona the
+     * Brain ran as. Mirrors the host/cloud "Copy triage info" report.
+     */
+    buildTriageReport(agentLabel?: string): string;
+}
+declare function useBrainConversation(options: UseBrainConversationOptions): UseBrainConversation;
 
 /** Persist a landing-page prompt for replay after authentication. No-ops on empty input or SSR. */
 declare function savePendingPrompt(text: string): void;

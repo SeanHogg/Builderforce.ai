@@ -34,6 +34,16 @@ export interface BrainTransport {
   mapError?: (res: Response) => Promise<Error>;
   /** Default model when a call doesn't specify one. */
   defaultModel?: string;
+  /**
+   * Optional networking override. When set, the streaming request is performed
+   * through this instead of the global `fetch`. It MUST resolve to a `Response`
+   * whose `body` is a readable stream of the raw SSE bytes (same contract as
+   * `fetch`). Hosts that can't reach the gateway directly from the UI context
+   * (e.g. a VS Code webview, where a `vscode-webview://` origin is CORS-blocked)
+   * inject a fetch that proxies the call through their privileged side. Defaults
+   * to the global `fetch` for the browser/web app.
+   */
+  fetch?: (input: string, init: RequestInit) => Promise<Response>;
 }
 
 /** OpenAI function-tool spec (the `tools[]` entries sent to the model). */
@@ -158,7 +168,8 @@ export async function streamChatCompletion(
     body.tool_choice = opts.tool_choice ?? 'auto';
   }
 
-  const res = await fetch(`${transport.baseUrl}/llm/v1/chat/completions`, {
+  const doFetch = transport.fetch ?? ((input: string, init: RequestInit) => fetch(input, init));
+  const res = await doFetch(`${transport.baseUrl}/llm/v1/chat/completions`, {
     method: 'POST',
     headers,
     body: JSON.stringify(body),

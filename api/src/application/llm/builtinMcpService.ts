@@ -37,6 +37,9 @@ import { MigrationService, type ImportMode } from '../migration/MigrationService
 import { createMigrationStore } from '../migration/migrationStore';
 import { buildMigrationProviderFactory } from '../migration/buildProviderFactory';
 import { BOARD_PROVIDERS, DISCOVERY_PROVIDER_IDS } from '../boardsync/providerCatalog';
+import { maybeAutoRunOnLaneEntry } from '../../presentation/routes/taskRoutes';
+import { buildRuntimeService } from '../../buildRuntimeService';
+import type { Task } from '../../domain/task/Task';
 
 /** Sentinel extensionId the gateway routes to this in-process catalog. */
 export const BUILTIN_EXTENSION_ID = 'builtin';
@@ -187,25 +190,34 @@ const CATALOG: BuiltinTool[] = [
     tool: 'tasks.create', mutates: true,
     description: 'Create a task on a project board. Set taskType="epic" to create a planning Epic (a DELIVERY container for other tasks), or pass parentTaskId to nest the new task under an existing Epic. An Epic is NOT an OKR/Objective — for OKRs/goals use objectives.create + key_results.create. Assign by passing exactly one of assignedUserId (human member), assignedAgentRef (cloud agent) or assignedAgentHostId (self-hosted runner).',
     parameters: obj({ projectId: N, title: S, description: S, priority: { type: 'string', enum: ['low', 'medium', 'high', 'urgent'] }, dueDate: S, taskType: { type: 'string', enum: ['task', 'epic'] }, parentTaskId: N, assignedUserId: S, assignedAgentRef: S, assignedAgentHostId: N }, ['projectId', 'title']),
-    run: (ctx, a) => ctx.tasks.createTask({
-      projectId: num(a.projectId),
-      title: str(a.title),
-      description: a.description != null ? str(a.description) : null,
-      priority: a.priority != null ? (str(a.priority) as TaskPriority) : undefined,
-      dueDate: a.dueDate != null ? str(a.dueDate) : null,
-      taskType: a.taskType != null ? (str(a.taskType) as TaskType) : undefined,
-      parentTaskId: a.parentTaskId != null ? num(a.parentTaskId) : undefined,
-      assignedUserId: a.assignedUserId != null ? str(a.assignedUserId) : undefined,
-      assignedAgentRef: a.assignedAgentRef != null ? str(a.assignedAgentRef) : undefined,
-      assignedAgentHostId: a.assignedAgentHostId != null ? num(a.assignedAgentHostId) : undefined,
-    }, ctx.tenantId).then((t) => t.toPlain()),
+    run: async (ctx, a) => {
+      const created = await ctx.tasks.createTask({
+        projectId: num(a.projectId),
+        title: str(a.title),
+        description: a.description != null ? str(a.description) : null,
+        priority: a.priority != null ? (str(a.priority) as TaskPriority) : undefined,
+        dueDate: a.dueDate != null ? str(a.dueDate) : null,
+        taskType: a.taskType != null ? (str(a.taskType) as TaskType) : undefined,
+        parentTaskId: a.parentTaskId != null ? num(a.parentTaskId) : undefined,
+        assignedUserId: a.assignedUserId != null ? str(a.assignedUserId) : undefined,
+        assignedAgentRef: a.assignedAgentRef != null ? str(a.assignedAgentRef) : undefined,
+        assignedAgentHostId: a.assignedAgentHostId != null ? num(a.assignedAgentHostId) : undefined,
+      }, ctx.tenantId);
+      // A ticket created straight into a staffed lane auto-runs, same as the board's
+      // POST path (a create lands in the Backlog lane — fires only if that lane is staffed).
+      await fireLaneAutoRun(ctx, created);
+      return created.toPlain();
+    },
   },
   {
     tool: 'tasks.update', mutates: true,
     description: 'Update a task (title, description, status/lane, priority, dueDate, archived). Reclassify with taskType, re-parent under an Epic with parentTaskId (null to detach), or (re)assign via exactly one of assignedUserId/assignedAgentRef/assignedAgentHostId (null unassigns).',
     parameters: obj({ id: N, title: S, description: S, status: S, priority: S, dueDate: S, archived: B, taskType: { type: 'string', enum: ['task', 'epic'] }, parentTaskId: { type: ['number', 'null'] }, assignedUserId: { type: ['string', 'null'] }, assignedAgentRef: { type: ['string', 'null'] }, assignedAgentHostId: { type: ['number', 'null'] } }, ['id']),
     run: async (ctx, a) => {
-      await getTenantTask(ctx, num(a.id)); // tenant-scope guard (service.updateTask doesn't check)
+      // tenant-scope guard (service.updateTask doesn't check) + capture the prior
+      // lane so the autonomous trigger only fires on a genuine lane change.
+      const before = await getTenantTask(ctx, num(a.id));
+      const previousStatus = before.toPlain().status;
       const updated = await ctx.tasks.updateTask(num(a.id), {
         title: a.title != null ? str(a.title) : undefined,
         description: a.description != null ? str(a.description) : undefined,
@@ -219,6 +231,9 @@ const CATALOG: BuiltinTool[] = [
         assignedAgentRef: a.assignedAgentRef !== undefined ? (a.assignedAgentRef === null ? null : str(a.assignedAgentRef)) : undefined,
         assignedAgentHostId: a.assignedAgentHostId !== undefined ? (a.assignedAgentHostId === null ? null : num(a.assignedAgentHostId)) : undefined,
       });
+      // The ticket may have just entered a new lane — run that lane's configured
+      // agent (AS the lane agent; the ticket's own assignee is left untouched).
+      await fireLaneAutoRun(ctx, updated, previousStatus);
       return updated.toPlain();
     },
   },
@@ -1455,6 +1470,49 @@ async function getTenantTask(ctx: BuiltinCtx, id: number) {
   const task = await ctx.tasks.getTask(id);
   await ctx.projects.getProject(task.projectId, ctx.tenantId); // throws Forbidden/NotFound on mismatch
   return task;
+}
+
+/**
+ * Fire the board's autonomous lane trigger for a Brain task write. This is the
+ * SAME canonical {@link maybeAutoRunOnLaneEntry} the HTTP board path, RuntimeService
+ * (agent hand-off) and qaRoutes all call — the single source of truth for "a ticket
+ * entered a lane; run the lane's configured agent AS that agent". The decision and
+ * dispatch logic live ONCE in that function; each status-write entry point only has
+ * to invoke it from its own request context (a Worker needs `executionCtx.waitUntil`
+ * to keep the dispatch alive past the response, and that is reachable only per
+ * request — which is why it cannot be hoisted into TaskService construction).
+ *
+ * The Brain called {@link TaskService} directly and was the one status-writer that
+ * never invoked the trigger, so a ticket the Brain moved into a staffed lane
+ * silently never ran — the reported "even when the brain moves an item into the
+ * swimlane the agent doesn't fire" bug.
+ *
+ * Crucially the run executes AS the LANE's agent (resolved inside the trigger from
+ * `swimlane_agent_assignments`) and is independent of the ticket's own assignee —
+ * a ticket assigned to a human or to another agent still gets worked by whoever
+ * staffs the lane it enters, and its assignee is left untouched.
+ *
+ * Best-effort and off the tool's result path: backgrounded on the request's
+ * `executionCtx` when present (so the run survives the tool returning), else awaited.
+ * A no-env context (the service-stub unit tests) simply skips the trigger.
+ */
+async function fireLaneAutoRun(ctx: BuiltinCtx, task: Task, previousStatus?: string): Promise<void> {
+  const env = ctx.env;
+  if (!env) return; // dispatch needs the worker env (credentials + runtime bindings)
+  const plain = task.toPlain();
+  // Only a genuine lane CHANGE triggers a run — a no-status-change update (title,
+  // priority, reassignment) must not re-fire the lane's agent. A create has no
+  // previousStatus, so it always evaluates the lane it was created into.
+  if (previousStatus !== undefined && plain.status === previousStatus) return;
+  const run = maybeAutoRunOnLaneEntry(env, ctx.db, buildRuntimeService(env, ctx.db), {
+    tenantId: ctx.tenantId,
+    projectId: plain.projectId,
+    taskId: plain.id,
+    status: plain.status,
+    submittedBy: ctx.userId ?? 'system:lane-auto',
+  });
+  if (ctx.executionCtx) ctx.executionCtx.waitUntil(run);
+  else await run;
 }
 
 /** Flat, gateway-safe advertised name: `builtin_projects_list` (no dots). */

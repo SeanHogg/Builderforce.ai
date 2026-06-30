@@ -196,7 +196,8 @@ async function streamChatCompletion(opts, handlers = {}) {
     body.tools = opts.tools;
     body.tool_choice = opts.tool_choice ?? "auto";
   }
-  const res = await fetch(`${transport.baseUrl}/llm/v1/chat/completions`, {
+  const doFetch = transport.fetch ?? ((input, init) => fetch(input, init));
+  const res = await doFetch(`${transport.baseUrl}/llm/v1/chat/completions`, {
     method: "POST",
     headers,
     body: JSON.stringify(body),
@@ -819,7 +820,8 @@ var EMPTY_SNAPSHOT = {
   pendingConfirm: null,
   messagesEpoch: 0,
   appended: [],
-  hasTrace: false
+  hasTrace: false,
+  trace: []
 };
 function makeCell() {
   return {
@@ -864,7 +866,8 @@ function emit(c) {
     pendingConfirm: c.pendingConfirm,
     messagesEpoch: c.messagesEpoch,
     appended: c.appended,
-    hasTrace: c.trace.length > 0
+    hasTrace: c.trace.length > 0,
+    trace: c.trace
   };
   for (const l of c.listeners) l();
 }
@@ -1292,6 +1295,7 @@ ${refs}`;
     pendingConfirm: snapshot.pendingConfirm,
     resolveConfirm,
     hasTrace: snapshot.hasTrace,
+    trace: snapshot.trace,
     buildTriageReport
   };
 }

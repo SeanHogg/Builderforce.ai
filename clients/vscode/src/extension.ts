@@ -3,6 +3,7 @@ import * as vscode from "vscode";
 import { BuilderForceAuthProvider } from "./auth";
 import * as bfApi from "./bfApi";
 import { BoardPanel } from "./boardPanel";
+import { BrainWebview } from "./brainWebview";
 import { ChatPanel } from "./chatPanel";
 import { EmbedPanel } from "./embedPanel";
 import { registerChatParticipant } from "./chatParticipant";
@@ -191,15 +192,16 @@ export function activate(context: vscode.ExtensionContext): void {
       store.rename(id, finalTitle);
       ChatPanel.setTitle(id, finalTitle);
     }),
-    // Recover/reveal the sidebar list if it was moved or hidden.
-    vscode.commands.registerCommand("builderforce.openChat", () =>
-      vscode.commands.executeCommand("builderforce.sessions.focus"),
-    ),
+    // "Open Chat" opens the unified Brain (the improved experience).
+    vscode.commands.registerCommand("builderforce.openChat", () => BrainWebview.open(context)),
+    // The unified Brain — the SAME React <BrainTimeline> + brain-embedded core as
+    // the web app, backed by the same server-side /api/brain conversations. This is
+    // the primary, improved chat experience (timeline transcript, tool input/output,
+    // images). Local file edits run in the host via the tool bridge.
+    vscode.commands.registerCommand("builderforce.openBrain", () => BrainWebview.open(context)),
     // Mascot button in the editor title bar (top-right of the active pane) —
-    // opens a fresh BuilderForce chat, mirroring how peer agents surface there.
-    vscode.commands.registerCommand("builderforce.editorChat", () =>
-      vscode.commands.executeCommand("builderforce.newSession"),
-    ),
+    // opens the unified Brain chat, mirroring how peer agents surface there.
+    vscode.commands.registerCommand("builderforce.editorChat", () => BrainWebview.open(context)),
     vscode.commands.registerCommand("builderforce.signIn", () => signIn(context)),
     vscode.commands.registerCommand("builderforce.signOut", () => signOut(context, auth)),
     vscode.commands.registerCommand("builderforce.pickModel", () => pickModel(context)),
@@ -631,6 +633,7 @@ async function signIn(context: vscode.ExtensionContext): Promise<void> {
   bfApi.clearJwt();
   clearPlatformToolsCache();
   await ChatPanel.refreshAll(context);
+  BrainWebview.refresh();
   void heartbeat(context);
   void vscode.commands.executeCommand("builderforce.refreshProjects");
   void maybeScan(context, false);
@@ -650,6 +653,7 @@ async function signOut(
   setSelectedProject(undefined);
   vscode.window.showInformationMessage("BuilderForce: signed out.");
   await ChatPanel.refreshAll(context);
+  BrainWebview.refresh();
   void vscode.commands.executeCommand("builderforce.refreshProjects");
   void insights?.start();
 }

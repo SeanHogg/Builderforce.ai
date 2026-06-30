@@ -132,6 +132,25 @@
   --surface: var(--bg-elevated);
   --surface-2: var(--surface-interactive);
   --text-on-accent: #fff;
+
+  /* Shared Brain UI (@seanhogg/builderforce-brain-ui) theme bridge. The
+     <BrainTimeline> transcript reads `--bf-*`; we map them to the app's
+     theme-aware tokens so the SAME component (also used in the VS Code webview,
+     where these map to --vscode-* instead) inherits light/dark automatically. */
+  --bf-text: var(--text-primary);
+  --bf-text-muted: var(--text-muted);
+  --bf-surface: var(--bg-elevated);
+  --bf-surface-2: var(--surface-interactive);
+  --bf-border: var(--border-subtle);
+  --bf-border-strong: var(--border-accent);
+  --bf-accent: var(--coral-bright);
+  --bf-accent-soft: var(--surface-coral-soft);
+  --bf-link: var(--cyan-bright);
+  --bf-error: var(--error);
+  --bf-error-text: var(--error-text);
+  --bf-error-bg: var(--error-bg);
+  --bf-success: var(--success);
+  --bf-font-mono: var(--font-mono);
 }
 
 /* ── Light theme overrides ── */

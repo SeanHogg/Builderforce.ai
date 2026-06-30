@@ -9,9 +9,12 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useTranslations } from 'next-intl';
 import Link from 'next/link';
+import { BrainTimeline } from '@seanhogg/builderforce-brain-ui';
+import '@seanhogg/builderforce-brain-ui/styles.css';
 import { ChatInput } from '@/components/ChatInput';
-import { ChatMessageBubble } from '@/components/ChatMessageBubble';
+import { ChatMessageContent } from '@/components/ChatMessageContent';
 import { ChatMessageActions } from '@/components/ChatMessageActions';
 import { ThemeSelect } from '@/components/ThemeSelect';
 import { Select } from '@/components/Select';
@@ -78,6 +81,7 @@ export function BrainPanel({
   onClose,
 }: BrainPanelProps) {
   const isPage = variant === 'page';
+  const tTimeline = useTranslations('brain.timeline');
 
   // Project scope follows the global TopBar tenant→project selector — one picker
   // for the whole app (see ProjectScopeContext). The Brain's filter dropdown
@@ -517,38 +521,50 @@ export function BrainPanel({
               <button type="button" onClick={() => { setShowNewProject(false); setNewProjectName(''); }} style={{ padding: '8px 12px', fontSize: 13, background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', borderRadius: 8, cursor: 'pointer' }}>Cancel</button>
             </div>
           )}
-          <div className="bs-messages" style={{ flex: 1, overflowY: 'auto', minHeight: 0 }}>
-            {conv.loadingMessages && <div style={{ color: 'var(--text-muted)', fontSize: 13, padding: 12 }}>Loading messages…</div>}
-            {conv.messages.map((msg) => {
-              const isAssistant = msg.role !== 'user';
-              // Lift the model-authored "next step" buttons out of the reply so
-              // the raw JSON block never renders and the buttons reflect what the
-              // AI actually proposed (not a fixed PRD/Tasks pair).
-              const parsed = isAssistant ? parseSuggestedActions(msg.content) : null;
-              return (
-                <ChatMessageBubble
-                  key={msg.id}
-                  role={msg.role as 'user' | 'assistant'}
-                  content={parsed ? parsed.content : msg.content}
-                  onApplyCode={hasTool('apply_code_to_active_file') ? (code) => { void runTool('apply_code_to_active_file', { code }); } : undefined}
-                  onCreateFile={hasTool('create_file') ? (path, content) => { void runTool('create_file', { path, content }); } : undefined}
-                  actions={
-                    isAssistant ? (
-                      <MessageActions
-                        msg={msg}
-                        conv={conv}
-                        projectId={chats.activeChat?.projectId ?? pinnedProjectId ?? undefined}
-                        suggestions={parsed?.actions ?? []}
-                        onRunSuggestion={(prompt) => { void conv.send(prompt); }}
-                      />
-                    ) : undefined
-                  }
+          <div className="bs-messages" style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+            <BrainTimeline
+              messages={conv.messages}
+              trace={conv.trace}
+              streamingText={conv.sending ? conv.streamingText : ''}
+              isRunning={conv.sending}
+              loading={conv.loadingMessages}
+              labels={{
+                thinking: tTimeline('thinking'),
+                thoughtFor: tTimeline('thoughtFor'),
+                you: tTimeline('you'),
+                assistant: tTimeline('assistant'),
+                input: tTimeline('input'),
+                output: tTimeline('output'),
+                error: tTimeline('error'),
+                loading: tTimeline('loading'),
+                empty: tTimeline('empty'),
+                copy: tTimeline('copy'),
+                copied: tTimeline('copied'),
+                apply: tTimeline('apply'),
+                createFile: tTimeline('createFile'),
+              }}
+              onApplyCode={hasTool('apply_code_to_active_file') ? (code) => { void runTool('apply_code_to_active_file', { code }); } : undefined}
+              onCreateFile={hasTool('create_file') ? (path, content) => { void runTool('create_file', { path, content }); } : undefined}
+              // Reuse the web's rich markdown (mermaid, router links, code-apply) so
+              // no feature is lost; the model-authored "next step" JSON is lifted out.
+              renderMessage={(msg, ctx) => (
+                <ChatMessageContent
+                  content={ctx.role === 'assistant' ? parseSuggestedActions(msg.content).content : ctx.text}
+                  onApplyCode={ctx.role === 'assistant' && hasTool('apply_code_to_active_file') ? (code) => { void runTool('apply_code_to_active_file', { code }); } : undefined}
+                  onCreateFile={ctx.role === 'assistant' && hasTool('create_file') ? (path, content) => { void runTool('create_file', { path, content }); } : undefined}
                 />
-              );
-            })}
-            {conv.sending && (
-              <ChatMessageBubble role="assistant" content={parseSuggestedActions(conv.streamingText).content} isStreaming={!conv.streamingText} />
-            )}
+              )}
+              renderStreaming={(text) => <ChatMessageContent content={parseSuggestedActions(text).content} />}
+              renderAssistantActions={(msg) => (
+                <MessageActions
+                  msg={msg}
+                  conv={conv}
+                  projectId={chats.activeChat?.projectId ?? pinnedProjectId ?? undefined}
+                  suggestions={parseSuggestedActions(msg.content).actions}
+                  onRunSuggestion={(prompt) => { void conv.send(prompt); }}
+                />
+              )}
+            />
           </div>
           <div className="bs-input-area" style={{ flexShrink: 0, padding: isPage ? undefined : '12px 16px', borderTop: isPage ? undefined : '1px solid var(--border-subtle)' }}>
             {pendingConfirm && <ToolConfirmBar req={pendingConfirm} onDecide={resolveConfirm} onApproveAll={approveAll} />}

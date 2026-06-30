@@ -108,6 +108,15 @@ export interface BrainRunSnapshot {
    */
   appended: BrainMessage[];
   hasTrace: boolean;
+  /**
+   * The live execution trace (LLM turns + tool calls + errors), in order. The
+   * same array `getRunTrace` returns — exposed on the snapshot so a mounted view
+   * (e.g. the timeline transcript) can render each step AS IT HAPPENS. The
+   * snapshot object identity changes on every `emit` (including every
+   * `pushTrace`), so consumers re-render even though the array reference is
+   * stable; they read it fresh each render. Bounded by {@link MAX_TRACE_EVENTS}.
+   */
+  trace: BrainTraceEvent[];
 }
 
 interface RunCell {
@@ -136,6 +145,7 @@ const EMPTY_SNAPSHOT: BrainRunSnapshot = {
   messagesEpoch: 0,
   appended: [],
   hasTrace: false,
+  trace: [],
 };
 
 function makeCell(): RunCell {
@@ -196,6 +206,7 @@ function emit(c: RunCell): void {
     messagesEpoch: c.messagesEpoch,
     appended: c.appended,
     hasTrace: c.trace.length > 0,
+    trace: c.trace,
   };
   for (const l of c.listeners) l();
 }

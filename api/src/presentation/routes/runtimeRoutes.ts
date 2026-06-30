@@ -114,6 +114,10 @@ type ExecutionTaskRow = {
    *  agent). The authoritative cloud-agent identity for an "Auto" run when the
    *  caller doesn't pin one in the payload. */
   assignedAgentRef: string | null;
+  /** users.id of the human who OWNS this ticket, if any. The swimlane agent that
+   *  executes a stage must not seize ownership from an existing assignee (human or
+   *  agent) — used to decide whether a run may claim an otherwise-unowned ticket. */
+  assignedUserId: string | null;
   priority: 'low' | 'medium' | 'high' | 'urgent';
   projectId: number;
 };
@@ -396,6 +400,7 @@ export async function dispatchCloudRunForTask(
     .select({
       id: tasks.id, title: tasks.title, description: tasks.description,
       assignedAgentHostId: tasks.assignedAgentHostId, assignedAgentRef: tasks.assignedAgentRef,
+      assignedUserId: tasks.assignedUserId,
       priority: tasks.priority, projectId: tasks.projectId,
     })
     .from(tasks)
@@ -476,14 +481,25 @@ async function startDispatchedExecution(
     resolveDefaultRepoForTask(db, tenantId, taskRow.id),
   ]);
 
-  // Agents are first-class assignees: when a cloud agent runs the ticket, it
-  // self-assigns as it starts the work. Also stamp the EXECUTION with the agent
-  // that ran it, so its logs/telemetry stay scoped to THIS run even after a later
-  // run reassigns the ticket (the "logs show the wrong agent" bug).
+  // The EXECUTING agent vs the ticket's OWNER are distinct roles. The swimlane's
+  // agent works whatever stage (lane) the ticket is in — it executes AS itself
+  // (resolved into `agent.ref` from the lane assignment / payload) and that run is
+  // attributed to it via `executions.cloud_agent_ref`. But it must NOT seize
+  // OWNERSHIP of the ticket: a ticket assigned to "bob" (an agent) during planning,
+  // or to a human, stays assigned to them when a different lane agent runs a stage.
+  // Self-assignment is therefore a CLAIM, only for a ticket that has no owner yet —
+  // so the board shows who is working an otherwise-unowned ticket. Previously this
+  // unconditionally overwrote `tasks.assignedAgentRef` with the executing agent,
+  // clobbering the planned assignee every time a lane agent picked the ticket up.
   if (agent.ref) {
+    const unowned = !taskRow.assignedAgentRef && taskRow.assignedAgentHostId == null && !taskRow.assignedUserId;
     await Promise.all([
-      db.update(tasks).set({ assignedAgentRef: agent.ref, updatedAt: new Date() })
-        .where(eq(tasks.id, taskRow.id)).catch(() => { /* best-effort */ }),
+      unowned
+        ? db.update(tasks).set({ assignedAgentRef: agent.ref, updatedAt: new Date() })
+            .where(eq(tasks.id, taskRow.id)).catch(() => { /* best-effort */ })
+        : Promise.resolve(),
+      // Always stamp the EXECUTION with the agent that ran it, so its logs/telemetry
+      // stay scoped to THIS run even when ownership stays with someone else.
       db.update(executions).set({ cloudAgentRef: agent.ref })
         .where(eq(executions.id, execution.id)).catch(() => { /* best-effort */ }),
     ]);
@@ -816,6 +832,7 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
         description: tasks.description,
         assignedAgentHostId: tasks.assignedAgentHostId,
         assignedAgentRef: tasks.assignedAgentRef,
+        assignedUserId: tasks.assignedUserId,
         priority: tasks.priority,
         projectId: tasks.projectId,
       })
@@ -898,6 +915,7 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
         description: tasks.description,
         assignedAgentHostId: tasks.assignedAgentHostId,
         assignedAgentRef: tasks.assignedAgentRef,
+        assignedUserId: tasks.assignedUserId,
         priority: tasks.priority,
         projectId: tasks.projectId,
       })
@@ -1532,7 +1550,7 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
     // Task essentials for PRD write-back and (on a terminal run) the re-run dispatch.
     const [taskRow] = plain.taskId != null
       ? await db
-          .select({ id: tasks.id, title: tasks.title, description: tasks.description, assignedAgentHostId: tasks.assignedAgentHostId, assignedAgentRef: tasks.assignedAgentRef, priority: tasks.priority, projectId: tasks.projectId })
+          .select({ id: tasks.id, title: tasks.title, description: tasks.description, assignedAgentHostId: tasks.assignedAgentHostId, assignedAgentRef: tasks.assignedAgentRef, assignedUserId: tasks.assignedUserId, priority: tasks.priority, projectId: tasks.projectId })
           .from(tasks).innerJoin(projects, eq(projects.id, tasks.projectId))
           .where(and(eq(tasks.id, plain.taskId), eq(projects.tenantId, tenantId))).limit(1)
       : [undefined];

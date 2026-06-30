@@ -4045,5 +4045,22 @@
     "prevPage": "Previous page",
     "nextPage": "Next page",
     "pageN": "Page {n}"
+  },
+  "brain": {
+    "timeline": {
+      "thinking": "Thinking…",
+      "thoughtFor": "Thought for {duration}",
+      "you": "You",
+      "assistant": "BuilderForce",
+      "input": "Input",
+      "output": "Output",
+      "error": "Error",
+      "loading": "Loading messages…",
+      "empty": "Ask BuilderForce to build or change something.",
+      "copy": "Copy",
+      "copied": "Copied",
+      "apply": "Apply",
+      "createFile": "Create file"
+    }
   }
 }

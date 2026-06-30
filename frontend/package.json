@@ -20,6 +20,7 @@
     "@isomorphic-git/lightning-fs": "^4.6.2",
     "@monaco-editor/react": "^4.6.0",
     "@seanhogg/builderforce-brain-embedded": "link:../brain-embedded",
+    "@seanhogg/builderforce-brain-ui": "link:../packages/brain-ui",
     "@seanhogg/builderforce-embedded": "link:../builderforce-embedded",
     "@seanhogg/builderforce-memory": "^2026.6.35",
     "@seanhogg/builderforce-memory-engine": "^2026.6.35",

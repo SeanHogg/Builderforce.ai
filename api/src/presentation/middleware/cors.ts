@@ -3,6 +3,17 @@ import type { HonoEnv } from '../../env';
 
 const DEV_ORIGINS = ['http://localhost:3000', 'http://127.0.0.1:3000', 'http://localhost:5173', 'http://127.0.0.1:5173'];
 
+/**
+ * VS Code (and other editor) webviews load from an opaque, per-session origin
+ * (`vscode-webview://<uuid>` / `vscode-file://`) that can't be enumerated in an
+ * allow-list. The bundled BuilderForce Brain webview calls the gateway + /api/*
+ * directly from that context, so we trust the SCHEME — authorization is enforced
+ * by the Bearer token on every request, CORS is not the security boundary here.
+ */
+function isEditorWebviewOrigin(origin: string): boolean {
+  return origin.startsWith('vscode-webview://') || origin.startsWith('vscode-file://');
+}
+
 function getCorsConfig(c: Context<HonoEnv>) {
   const origin = c.req.header('Origin') ?? '';
   const corsOrigins = c.env.CORS_ORIGINS ?? 'https://builderforce.ai';
@@ -10,7 +21,8 @@ function getCorsConfig(c: Context<HonoEnv>) {
   const allowed = allowAll
     ? []
     : corsOrigins.split(',').map((s) => s.trim()).filter(Boolean);
-  const isAllowed = allowAll || allowed.includes(origin) || DEV_ORIGINS.includes(origin);
+  const isAllowed =
+    allowAll || allowed.includes(origin) || DEV_ORIGINS.includes(origin) || isEditorWebviewOrigin(origin);
   const allowOriginValue = isAllowed ? (allowAll ? '*' : origin) : null;
   return { isAllowed, allowOriginValue, isWebSocket: c.req.header('Upgrade')?.toLowerCase() === 'websocket' };
 }

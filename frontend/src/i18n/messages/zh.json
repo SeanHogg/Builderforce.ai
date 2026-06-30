@@ -4045,5 +4045,22 @@
     "prevPage": "上一页",
     "nextPage": "下一页",
     "pageN": "第 {n} 页"
+  },
+  "brain": {
+    "timeline": {
+      "thinking": "思考中…",
+      "thoughtFor": "思考了 {duration}",
+      "you": "你",
+      "assistant": "BuilderForce",
+      "input": "输入",
+      "output": "输出",
+      "error": "错误",
+      "loading": "正在加载消息…",
+      "empty": "让 BuilderForce 帮你构建或修改内容。",
+      "copy": "复制",
+      "copied": "已复制",
+      "apply": "应用",
+      "createFile": "创建文件"
+    }
   }
 }

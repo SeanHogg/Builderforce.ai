@@ -2,7 +2,7 @@
   "name": "builderforce-ai",
   "displayName": "BuilderForce.ai",
   "description": "BuilderForce AI coding agent — chat with a codebase-aware agent in your VS Code sidebar.",
-  "version": "2026.6.32",
+  "version": "2026.6.36",
   "publisher": "builderforce",
   "license": "MIT",
   "author": "Sean Hogg",
@@ -204,6 +204,11 @@
           "light": "media/icon.png",
           "dark": "media/icon.png"
         }
+      },
+      {
+        "command": "builderforce.openBrain",
+        "title": "BuilderForce: Open Brain Chat",
+        "icon": "$(sparkle)"
       }
     ],
     "menus": {
@@ -397,10 +402,12 @@
     }
   },
   "scripts": {
-    "vscode:prepublish": "node esbuild.mjs --production && tsc -p ./",
-    "compile": "node esbuild.mjs && tsc -p ./",
+    "vscode:prepublish": "node esbuild.mjs --production && tsc -p ./ && pnpm run build:webview",
+    "compile": "node esbuild.mjs && tsc -p ./ && pnpm run build:webview",
+    "build:webview": "vite build --config webview/vite.config.ts",
     "watch": "node esbuild.mjs --watch",
-    "typecheck": "tsc -p ./",
+    "watch:webview": "vite build --watch --config webview/vite.config.ts",
+    "typecheck": "tsc -p ./ && tsc -p webview/tsconfig.json",
     "package": "vsce package --no-dependencies",
     "publish:marketplace": "vsce publish --no-dependencies",
     "publish:openvsx": "ovsx publish",
@@ -411,12 +418,25 @@
     "@seanhogg/builderforce-memory-engine": "^2026.6.35"
   },
   "devDependencies": {
+    "@seanhogg/builderforce-brain-embedded": "link:../../brain-embedded",
+    "@seanhogg/builderforce-brain-ui": "link:../../packages/brain-ui",
     "@types/node": "^20.14.0",
+    "@types/react": "^18",
+    "@types/react-dom": "^18",
     "@types/vscode": "^1.95.0",
+    "@typescript/native-preview": "7.0.0-dev.20260627.2",
+    "@vitejs/plugin-react": "^4.3.4",
     "@vscode/vsce": "^3.2.0",
+    "autoprefixer": "^10.4.20",
     "esbuild": "^0.24.0",
     "ovsx": "^0.10.0",
+    "postcss": "^8.4.49",
+    "react": "^18",
+    "react-dom": "^18",
+    "react-markdown": "^10.1.0",
+    "remark-gfm": "^4.0.1",
+    "tailwindcss": "^3.4.17",
     "typescript": "^6.0.3",
-    "@typescript/native-preview": "7.0.0-dev.20260627.2"
+    "vite": "^6.0.7"
   }
 }
