@@ -40,21 +40,6 @@ function activeIndex(tier: HealthTier | null): number | null {
   return tier == null ? null : TIER_ORDER.indexOf(tier);
 }
 
-/** Where each prescriptive fix is actually made — drives the report's deep-links. */
-const REC_TAB: Record<string, ProjectPanelTab> = {
-  vision: 'details',
-  goals: 'details',
-  deadline: 'details',
-  schedule: 'details',
-  architecture: 'prds',
-  tasks: 'taskMgmt',
-  decompose: 'taskMgmt',
-  overdue: 'taskMgmt',
-  blocked: 'taskMgmt',
-  stalled: 'taskMgmt',
-  owner: 'capabilities',
-};
-
 // ---------------------------------------------------------------------------
 // Compact: grade chip + dimension strip (project card)
 // ---------------------------------------------------------------------------
@@ -144,6 +129,13 @@ export interface ProjectInspectionReportProps {
   project: Project;
   /** Jump to another panel tab where a fix is made (e.g. 'taskMgmt'). */
   onNavigate?: (tab: ProjectPanelTab) => void;
+  /**
+   * Act on a "what to target" recommendation. The owning panel decides where the
+   * fix is made — switching tabs AND, for details-resident fixes (vision,
+   * goals, deadline), opening the edit form and focusing the right field — so a
+   * Fix that lands on the tab the report already lives on still does something.
+   */
+  onTargetRecommendation?: (rec: InspectionRecommendation) => void;
 }
 
 /** Map a 1–5 maturity score to one of the shared tier colours. */
@@ -154,7 +146,7 @@ function maturityColor(score: number): string {
   return TIER_HEX.critical;
 }
 
-export function ProjectInspectionReport({ project, onNavigate }: ProjectInspectionReportProps) {
+export function ProjectInspectionReport({ project, onNavigate, onTargetRecommendation }: ProjectInspectionReportProps) {
   const t = useTranslations('projectInspection');
   const insp = computeProjectInspection(project);
 
@@ -176,7 +168,6 @@ export function ProjectInspectionReport({ project, onNavigate }: ProjectInspecti
   }));
 
   const dimLabel = (d: InspectionDimension) => t(`dim.${d.key}.label`);
-  const recTab = (rec: InspectionRecommendation): ProjectPanelTab | undefined => REC_TAB[rec.key];
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
@@ -280,7 +271,6 @@ export function ProjectInspectionReport({ project, onNavigate }: ProjectInspecti
         ) : (
           <ol style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: 8 }}>
             {insp.recommendations.map((rec, i) => {
-              const tab = recTab(rec);
               const isWorkflows = rec.key === 'workflows';
               return (
                 <li
@@ -316,10 +306,10 @@ export function ProjectInspectionReport({ project, onNavigate }: ProjectInspecti
                     >
                       {t('fixCta')}
                     </a>
-                  ) : tab && onNavigate ? (
+                  ) : onTargetRecommendation ? (
                     <button
                       type="button"
-                      onClick={() => onNavigate(tab)}
+                      onClick={() => onTargetRecommendation(rec)}
                       style={{ ...recActionStyle, cursor: 'pointer' }}
                     >
                       {t('fixCta')}

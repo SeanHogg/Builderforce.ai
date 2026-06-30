@@ -20,6 +20,7 @@ import { ProjectDiagnosticsTab } from './ProjectDiagnosticsTab';
 import { ProjectInitiativeLink } from './pm/ProjectInitiativeLink';
 import { ProjectHealthGauges } from './ProjectHealth';
 import { ProjectInspectionReport } from './ProjectInspection';
+import type { InspectionRecommendation } from '@/lib/projectInspection';
 
 /** ISO timestamp → `yyyy-mm-dd` for a native date input (empty string when unset). */
 const toDateInputValue = (iso?: string | null): string => {
@@ -71,6 +72,31 @@ const TAB_DEFS: { id: ProjectPanelTab; key: string }[] = [
 
 const PROJECT_STATUSES = ['active', 'completed', 'archived', 'on_hold'] as const;
 
+/** DOM ids of details-tab fields a "Fix" can scroll to / focus. */
+type DetailsFocusTarget = 'edit-description' | 'edit-due-date' | 'project-initiative-section';
+
+/**
+ * Where each prescriptive "what to target" fix is actually made. Most fixes live
+ * on another tab; the details-resident ones (vision, goals, deadline) also name
+ * the field to surface so the Fix button does something visible instead of
+ * re-selecting the tab the report already lives on. `edit` opens the overview
+ * edit form first (the field only exists in edit mode). `workflows` is omitted —
+ * the report renders that one as a link to the top-level /workflows route.
+ */
+const REC_TARGET: Record<string, { tab: ProjectPanelTab; focus?: DetailsFocusTarget; edit?: boolean }> = {
+  vision: { tab: 'details', focus: 'edit-description', edit: true },
+  goals: { tab: 'details', focus: 'project-initiative-section' },
+  deadline: { tab: 'details', focus: 'edit-due-date', edit: true },
+  schedule: { tab: 'taskMgmt' },
+  tasks: { tab: 'taskMgmt' },
+  decompose: { tab: 'taskMgmt' },
+  overdue: { tab: 'taskMgmt' },
+  blocked: { tab: 'taskMgmt' },
+  stalled: { tab: 'taskMgmt' },
+  owner: { tab: 'capabilities' },
+  architecture: { tab: 'prds' },
+};
+
 const panelOverlayStyle: React.CSSProperties = {
   position: 'fixed',
   inset: 0,
@@ -119,6 +145,8 @@ export function ProjectDetailsPanel({
   const [keyStatus, setKeyStatus] = useState<'idle' | 'checking' | 'available' | 'taken'>('idle');
   const keyCheckTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [showConfirm, setShowConfirm] = useState(false);
+  // A details-tab field a pending "Fix" should scroll to / focus once it renders.
+  const [pendingFocus, setPendingFocus] = useState<DetailsFocusTarget | null>(null);
 
   /** Localized status label; falls back to the raw value for unknown statuses. */
   const statusLabel = (s: string) =>
@@ -133,6 +161,22 @@ export function ProjectDetailsPanel({
       setEditingProject(false);
     }
   }, [activeTab, editingProject]);
+
+  // Once a "Fix" has switched to the details tab (and opened the edit form when
+  // needed), scroll the target field into view and focus it. Re-runs when the
+  // form mounts (editingProject) so an edit-only field exists before we focus.
+  useEffect(() => {
+    if (!pendingFocus || activeTab !== 'details') return;
+    const timer = setTimeout(() => {
+      const el = document.getElementById(pendingFocus);
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        if (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement) el.focus();
+      }
+      setPendingFocus(null);
+    }, 60);
+    return () => clearTimeout(timer);
+  }, [pendingFocus, activeTab, editingProject]);
 
   useEffect(() => {
     setEditName(project.name);
@@ -168,6 +212,18 @@ export function ProjectDetailsPanel({
     } finally {
       setSaving(false);
     }
+  };
+
+  // Act on a "what to target" recommendation: switch to the tab where the fix is
+  // made and, for details-resident fixes, open the edit form and queue a focus so
+  // a Fix that lands on the already-open details tab still surfaces the field.
+  const handleTargetRecommendation = (rec: InspectionRecommendation) => {
+    const target = REC_TARGET[rec.key];
+    if (!target) return;
+    setActiveTab(target.tab);
+    if (target.tab !== 'details') return;
+    if (target.edit) setEditingProject(true);
+    if (target.focus) setPendingFocus(target.focus);
   };
 
   const handleKeyChange = (value: string) => {
@@ -343,7 +399,11 @@ export function ProjectDetailsPanel({
                   dimension benchmarked + a "what to target" list that deep-links
                   each fix to the right tab. Spans the whole grid. */}
               <div style={{ gridColumn: '1 / -1' }}>
-                <ProjectInspectionReport project={project} onNavigate={setActiveTab} />
+                <ProjectInspectionReport
+                  project={project}
+                  onNavigate={setActiveTab}
+                  onTargetRecommendation={handleTargetRecommendation}
+                />
               </div>
               <div style={cardStyle}>
                 <div style={{ position: 'relative' }}>
@@ -567,7 +627,7 @@ export function ProjectDetailsPanel({
                     </span>
                   </div>
                 </div>
-                <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid var(--border-subtle)' }}>
+                <div id="project-initiative-section" style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid var(--border-subtle)' }}>
                   <ProjectInitiativeLink projectId={project.id} />
                 </div>
               </div>
