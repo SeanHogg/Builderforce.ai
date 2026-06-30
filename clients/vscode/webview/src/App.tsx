@@ -297,6 +297,12 @@ function Chat({ init }: { init: InitData }) {
             <code>{conv.pendingConfirm.name}</code>
             {t('app.confirmRun', 'Run {name}?').split('{name}')[1] ?? ''}
           </span>
+          {/* For run_command, show the exact command line so the user approves what
+              actually runs, not just the tool name. */}
+          {conv.pendingConfirm.name === 'run_command'
+            && typeof (conv.pendingConfirm.args as { command?: unknown })?.command === 'string' && (
+            <pre className="bf-confirm__cmd">{(conv.pendingConfirm.args as { command: string }).command}</pre>
+          )}
           <div className="bf-confirm__actions">
             <button className="bf-btn bf-btn--primary" onClick={() => conv.resolveConfirm(true)}>{t('app.approve', 'Approve')}</button>
             <button className="bf-btn" onClick={() => conv.resolveConfirm(false)}>{t('app.cancel', 'Cancel')}</button>

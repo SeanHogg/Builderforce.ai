@@ -2,6 +2,32 @@
 
 All notable changes to the BuilderForce VS Code extension are documented here.
 
+## [2026.6.40] — Ships verified code: runs your tests, finds code, opens PRs
+
+- **Verifies its own work** — after editing, the agent can run your tests, build, lint, or
+  typecheck and read the results, then fix what fails before telling you it's done — instead
+  of leaving you to find out it broke.
+- **Commit & ship from chat** — it can run `git` and `gh` to commit, push, and open a pull
+  request, so a change goes from idea to PR without leaving the editor.
+- **Finds the right code fast** — searches your whole repo for what to change before editing,
+  so its edits land in the right place on large projects.
+- Every command runs in your workspace and asks for approval first, showing the exact command
+  line before it runs.
+
+## [2026.6.39] — Run your team's work from the editor, with full visibility
+
+- **Run your team's work from the editor** — open, update, and dispatch projects, tasks, and
+  OKRs right in chat, and follow a run's status without switching to a dashboard.
+- **See exactly what the agent did** — its reasoning, each tool call with input/output, file
+  edits, and errors are all visible, so you can trust and verify before applying.
+- **Show it a screenshot** — paste or attach an image of a bug, error, or design and the agent
+  acts on what it sees (previously a pasted image could return an empty reply).
+- **Copy chat & Diagnostics** — one click copies the whole conversation for a teammate or
+  support; another runs connection diagnostics.
+- **Pick up anywhere** — conversations are shared with the BuilderForce web app, so you can
+  start in the editor and continue in the browser.
+- Editor UI is fully localized (English, 简体中文, Español, Français, Deutsch).
+
 ## [2026.6.31] — New extension id, Marketplace publish fix, refreshed brand icon
 
 - **Renamed the extension id to `builderforce.builderforce-ai`** (was
@@ -37,12 +63,8 @@ All notable changes to the BuilderForce VS Code extension are documented here.
 - Sidebar **Chat** webview (Activity Bar container) with streaming responses from the
   BuilderForce gateway (`/llm/v1/chat/completions`).
 - **Sign in / Sign out** via SecretStorage (OS keychain). v0 uses paste-key; browser
-  device-code login lands once the `/api/auth/device/*` endpoints deploy (PRD 14).
+  device-code login lands once the `/api/auth/device/*` endpoints deploy.
 - **Pick model** from the live gateway pool (`/llm/v1/models`, cached).
 - **New chat**, **Open settings** commands; configurable `baseUrl`, `defaultModel`,
   `permissionMode`.
 - Dual-registry publish pipeline (VS Code Marketplace + Open VSX).
-
-> Next phases (PRD 14): browser device-code auth, the reused `BrainPanel` UI from
-> `@seanhogg/builderforce-brain-embedded/ui`, in-process `agentLoop` against the open
-> folder, codebase scan + knowledge summary, and PRD 13 learned routing.

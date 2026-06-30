@@ -2,23 +2,33 @@
 
 A codebase-aware BuilderForce AI coding agent in your editor sidebar.
 
-> **Status:** working agent. It signs you in (browser or paste-key), scans the open folder
-> for grounding, and edits files in that folder with your approval. The remaining PRD 14
-> items (reusing the web `BrainPanel` UI, PRD 13 learned routing) are tracked in
-> [PRD 14](../../specs/builderforce/14-prd-vscode-extension.md).
+> **Status:** working agent. Sign in, point it at your repo, and ship — it edits code with
+> your approval and runs your team's work without leaving the editor.
 
 ## Features
 
-- **Coding agent** — runs an agentic tool-calling loop that reads and edits files in your
-  open folder (sandboxed to that folder), with per-edit Apply/Skip approval.
-- **Codebase grounding** — scans the open folder once (cached) into
-  `.builderforce/architecture.md` + a summary injected as agent context, so it understands
-  your project. Refresh anytime with **Rescan Codebase**.
-- **Browser sign-in** — one-click device-code login (falls back to paste-key); your key is
-  stored in the OS keychain via SecretStorage, never in settings or logs.
-- **Bring your gateway** — `https://api.builderforce.ai` by default; override
-  `builderforce.baseUrl` for self-hosted deployments.
-- **Model picker** — choose from the live gateway model pool, or let the gateway choose.
+- **Ship code by chatting** — describe what you want and the agent finds the right code, edits
+  it (sandboxed to the open folder), runs your tests/build/lint to verify it works, and can
+  commit, push, and open a PR — going from idea to shipped without leaving the editor. Every
+  change and command asks for your approval first.
+- **Run your team's work from the editor** — open, update, and dispatch projects, tasks, and
+  OKRs directly in chat. Kick off a run on a ticket and follow its status without switching to
+  a dashboard.
+- **It knows your codebase** — scans the open folder once (cached) and grounds every answer in
+  your project's real structure, so suggestions fit your code. Refresh with **Rescan
+  Codebase**.
+- **Show it a screenshot** — paste or attach an image of a bug, error, or design and the agent
+  acts on what it sees.
+- **See exactly what it did** — every step (its reasoning, each tool call with input/output,
+  file edits, and errors) is visible, so you can trust and verify the work. One click copies
+  the whole transcript for a teammate or support; another runs connection diagnostics.
+- **Pick up anywhere** — your conversations are the same ones in the BuilderForce web app, so
+  you can start in the editor and continue in the browser (or the reverse).
+- **Secure sign-in** — one-click browser login (or paste-key); your key lives in the OS
+  keychain, never in settings or logs.
+- **Your gateway, your models** — defaults to `https://api.builderforce.ai`; override
+  `builderforce.baseUrl` for self-hosted, and pick any model from the live pool or let the
+  gateway choose.
 
 ## Getting started
 

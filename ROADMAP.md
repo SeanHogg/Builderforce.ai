@@ -254,6 +254,24 @@ Gaps found during audit on 2026-03-28. Severity reflects impact on shipped user 
 - **CLOSED (gap-closing pass 2026-06-29; prompt half) — the IDE system prompt is ONE shared source.** Extracted `src/idePersona.ts` (`ideSystemPromptBase` + `withWorkspaceMap` + `WORKSPACE_MAP_INTRO`, pure strings); both the native participant (`prompt.ts` → `ChatMessage[]`) and the Brain webview (`webview/src/systemPrompt.ts` → string) import it, so the persona can't drift (imported across the esbuild host + Vite webview bundles).
 - **GAP (loop half, narrowed) — unify the agent LOOP across surfaces.** Tool catalog + transcript UI + system prompt are now shared; what remains is the run loop — the webview Brain runs on `brain-embedded` (React-coupled, persists to `/api/brain`) while the `@builderforce` participant runs the native `agent.ts` loop streaming to a `ChatResponseStream`. Truly one loop = extract a framework-free `runBrainLoop()` from `brain-embedded` (`brainRunStore` + hooks) that the participant can drive, injecting transport + client-local tools + a stream sink. Lower-priority now (host adapters, not duplicated logic). Fold in: the native loop injects the limbic affect block, which the webview Brain does NOT (the brain-embedded `resolveSystemPrompt` is sync, so a per-turn async limbic fetch isn't wired).
 
+### 🎯 VS Code editor agent — northstar feature gaps (analysis 2026-06-30)
+
+> Northstar: an AI agent in the editor that **ships code** AND **runs your team's actual work** (projects/tasks/OKRs, dispatch + follow runs) without context-switching to a dashboard. Today the editor agent can EDIT files (`read/list/write/edit/delete_file`) and READ/WRITE work items via the shared catalog, but the "ship" half is missing its core primitives and the "no dashboard" promise still breaks for PR/CI. Prioritized:
+
+**Tier 1 — "ship code" primitives (DONE 2026-06-30, VSIX `2026.6.40`):**
+- **DONE — `run_command` tool** (`fileTools.ts`, `mutating` → approval gate, shows the exact command line in the webview confirm). The agent runs tests/build/lint/typecheck/install in the workspace root (2-min timeout, output clamped) and reads failures to fix them, and runs `git`/`gh` to commit/push/open a PR — so an edit goes idea → verified → shipped without leaving the editor. Lights up BOTH surfaces (webview Brain + native participant) via the shared `TOOL_DEFS`.
+- **DONE — `search_code` tool** (`fileTools.ts`, read-only, bounded JS walk: skips node_modules/.git/build dirs + binaries, caps matches/files). Regex search returns `path:line: text` so the agent finds the right code before editing on large repos.
+- **REMAINING (enhancement) — dedicated git/PR tools.** `run_command` already lets the agent drive `git`/`gh`, but a first-class "Open PR" action (reusing the repos/GitHub integration + a structured PR form) would be richer and need no `gh` on PATH. Lower priority now that the raw capability exists.
+
+**Tier 2 — "run your team's work" without leaving the editor:**
+- **GAP — PRs + CI status not in the editor.** The platform syncs GitHub PRs, fails CI → ticket, and generates code-review reports, but the editor can't surface "your open PRs / failing CI / review requests." The "no dashboard" promise breaks here. Add a PR/CI panel (or catalog tools) so review/triage happens in-editor.
+- **GAP — no proactive work inbox.** Assigned tasks, human-in-the-loop approval requests (`humanRequests` is a manual quick-pick, not proactive), and review requests should be a live inbox with notifications, not pull-only. Unblocks: the agent/editor tells you what needs you, matching the "run your team's work" half.
+- **GAP — production error → fix loop not surfaced.** The Quality pillar groups errors → one-click agent fix; the editor doesn't surface "errors in your service → fix here." Add an errors panel that opens the Brain seeded to fix a fingerprinted error group.
+
+**Tier 3 — polish / risk:**
+- **GAP — per-file Apply/Skip only; no changeset diff review.** A multi-file turn can't be reviewed as one diff before applying. Add a changeset/diff review surface.
+- **RISK — extension never launched in an Extension Development Host** (carried from the 2026.6.38 pass): sign-in handshake, streaming transcript, file-edit approval round-trip, platform-tool write refreshing the tree, focus-chat intent, and image attach are unverified end-to-end in a live editor.
+
 ### 🤖 Swimlane autonomous-agent trigger — Brain bypass + ownership clobber — remaining gaps (FIXED 2026-06-29; write-up in [DONE.md](./DONE.md))
 
 **Remaining adjacent gaps (NOT fixed this pass):**

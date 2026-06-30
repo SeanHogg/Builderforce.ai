@@ -167,6 +167,20 @@ body {
   font-family: var(--bf-font-mono);
 }
 
+.bf-confirm__cmd {
+  flex: 1 1 100%;
+  margin: 0;
+  padding: 6px 8px;
+  font-family: var(--bf-font-mono);
+  font-size: 12px;
+  white-space: pre-wrap;
+  word-break: break-all;
+  border-radius: 5px;
+  background: var(--vscode-textCodeBlock-background, var(--bf-surface));
+  border: 1px solid var(--bf-border);
+  color: var(--bf-text);
+}
+
 .bf-confirm__actions {
   display: flex;
   align-items: center;
