@@ -1,44 +1,54 @@
-> **PRD** — drafted by Bob Developer (V2 (Container)) · task #89
+> **PRD** — drafted by Kevin BA/PM/PO (Durable) · task #167
 > _Each agent that updates this PRD signs its change below._
 
-# Product Requirements Document: Avatar Filter Row Placement
+# OKR Feature Mapping PRD
 
-## 1. Problem & Goal
+## Problem & Goal
 
-**Problem:** The current placement of the avatar filter, separated from the priorities dropdown, disrupts the logical grouping of filtering options. Users must scan different areas of the UI to apply related filters, leading to a less efficient and intuitive user experience.
+**Problem:** As we discover and develop new features, it's crucial to maintain alignment with our strategic OKRs. Without a clear mapping, we risk developing features that don't contribute to our core objectives, leading to misallocated resources and missed opportunities.
 
-**Goal:** To improve the user experience by consolidating related filtering options into a single, contiguous row, thereby enhancing discoverability, reducing cognitive load, and increasing the speed at which users can apply filters.
+**Goal:** To establish a clear and consistent process for mapping all discovered features to one of the five OKR epics: Revenue, Quality, Analytics, Orchestration, and Security. This will ensure that every feature contributes tangibly to our strategic goals and that OKR alignment is a primary consideration throughout the feature lifecycle.
 
-## 2. Target Users / ICP Roles
+## Target Users / ICP Roles
 
-*   **Project Managers:** Need to quickly filter tasks by assignee (avatar) and priority to understand workload distribution and identify high-priority items.
-*   **Team Leads:** Require efficient filtering to monitor team progress and allocate resources based on task priority and individual contribution (avatar).
-*   **Individual Contributors:** Benefit from a cleaner interface to focus on their assigned tasks and understand their priority within the project context.
+This PRD is relevant to:
+*   Product Managers
+*   Engineering Leads
+*   Designers
+*   Business Analysts
+*   Anyone involved in feature discovery, prioritization, and development.
 
-## 3. Scope
+## Scope
 
-This document covers the functional requirements and acceptance criteria for moving the existing avatar filter component to reside on the same UI row as the priorities dropdown. This includes adjustments to layout, styling, and ensuring the filter's functionality remains intact.
+This PRD defines the process and requirements for mapping features to OKR epics. It covers:
+*   The defined OKR epics and their general scope.
+*   The expected output for feature mapping.
+*   The criteria for successful feature mapping.
 
-## 4. Functional Requirements
+## Functional Requirements
 
-*   **FR1: Layout Adjustment:** The avatar filter component shall be repositioned to occupy a space adjacent to the priorities dropdown within the primary filtering bar.
-*   **FR2: Visual Consistency:** The avatar filter shall maintain its current visual appearance and interaction patterns (e.g., dropdown behavior, selection indicators) after being moved.
-*   **FR3: Responsive Design:** The integrated avatar and priorities filter row shall adapt appropriately across different screen sizes and resolutions, maintaining usability.
-*   **FR4: Filter Functionality:** Applying a filter via the avatar selector shall continue to correctly filter the displayed data (e.g., tasks, issues), and this filtering shall be independent of or complementary to the priorities filter.
+1.  **OKR Epic Definitions:** Clearly define the scope and intent of each of the five OKR epics:
+    *   **Revenue:** Features directly contributing to increased revenue, user acquisition, or expansion.
+    *   **Quality:** Features aimed at improving product stability, performance, reliability, and user satisfaction.
+    *   **Analytics:** Features that enhance data collection, reporting, insights, and usability of data.
+    *   **Orchestration:** Features that improve the efficiency, automation, scalability, and management of internal processes or customer workflows.
+    *   **Security:** Features focused on protecting user data, system integrity, and compliance.
+2.  **Feature Mapping Input:** For each discovered feature, a clear description and proposed functionality must be available.
+3.  **Mapping Mechanism:** A designated mechanism (e.g., a field in our product management tool, a dedicated document, a clear comment structure) must exist for associating a feature with a single, primary OKR epic.
+4.  **Justification:** For each feature mapped to an OKR epic, a brief (1-2 sentence) justification must be provided explaining the primary contribution.
+5.  **Review Process:** A process must be in place to review feature mappings for accuracy and alignment, ideally as part of the feature refinement or prioritization stage.
 
-## 5. Acceptance Criteria
+## Acceptance Criteria
 
-*   **AC1: Avatar Filter Visible in Row:** The avatar filter is visibly present on the same horizontal line as the priorities dropdown.
-*   **AC2: Filter Functionality Preserved:** Selecting an avatar from the new location correctly filters the displayed items.
-*   **AC3: Priorities Filter Functionality Preserved:** Selecting a priority from its dropdown continues to filter the displayed items, and its interaction is unaffected by the avatar filter's new position.
-*   **AC4: Combined Filtering Works:** Applying both an avatar filter and a priorities filter simultaneously yields the correct, combined results.
-*   **AC5: No Visual Overlap or Distortion:** The avatar filter and priorities dropdown do not overlap each other or other UI elements in the filtering bar, and the overall layout remains clean and undistorted.
-*   **AC6: Responsiveness Verified:** On smaller screen sizes, the combined filter row is still usable, potentially with a different arrangement if necessary (e.g., stacking if horizontal space is too limited, though the primary goal is horizontal).
+**AC1:** Every new feature identified and documented will have a clear mapping to one of the five OKR epics (Revenue, Quality, Analytics, Orchestration, Security).
+**AC2:** Each feature mapping will include a concise justification explaining its primary contribution to the selected OKR epic.
+**AC3:** The OKR epic definitions will be readily accessible and understood by all relevant stakeholders.
+**AC4:** The mapping process will be integrated into the existing feature development workflow without introducing significant friction.
+**AC5:** A mechanism exists for reviewing and validating feature-to-OKR epic mappings.
 
-## 6. Out of Scope
+## Out of Scope
 
-*   **New Avatar Filter Features:** Any enhancements or new functionalities to the avatar filter itself (e.g., search within avatars, multi-select avatars) are out of scope for this task.
-*   **New Priorities Filter Features:** Any enhancements or new functionalities to the priorities dropdown are out of scope.
-*   **Other Filter Components:** Moving or modifying any other filter components not explicitly mentioned (e.g., date filters, status filters) is out of scope.
-*   **Backend Changes:** Any backend changes related to how filters are processed or stored are out of scope, assuming the existing backend APIs can handle the current filtering logic.
-*   **Performance Optimization:** Significant performance optimizations related to filtering are out of scope, unless directly caused by the layout change.
+*   The actual definition or refinement of the OKR epics themselves (this PRD assumes they are defined and will focus on the *mapping* process).
+*   Creation or modification of the features themselves.
+*   Detailed metrics for measuring OKR success (this PRD focuses on the *mapping* of features to epics).
+*   Prioritization of features within or across OKR epics.
