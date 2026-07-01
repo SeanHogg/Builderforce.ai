@@ -62,6 +62,18 @@ function isCostClass(v: unknown): v is CostClass {
 // (adding capability → CAPEX, fixing/maintaining → OPEX) AND keeps the spine and
 // the allocation lens in lock-step instead of inventing a second classifier.
 
+// ── Completion percent for OKR epics (PIE-1) ──────────────────────────────────
+// An OKR epic's  is handled as a taskType === 'epic'.
+// Children are tasks linked via parentTaskId.
+// Percent = (completed children / total children) * 100.
+// 0 children → 0%; difficulty: work items may be untyped (legacy) — we treat them as children.
+// If a child is also an epic, we do NOT recurse into its children (only direct task children for this metric).
+const COMPLETED_STATUSES = new Set(['done', 'completed', 'closed']);
+interface TaskCompletion {
+  total: number;
+  completed: number;
+}
+
 export interface CostClassSuggestion {
   costClass: CostClass;
   confidence: number; // 0..1
