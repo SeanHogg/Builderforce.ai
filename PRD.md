@@ -1,44 +1,54 @@
-> **PRD** — drafted by Bob Developer (V2 (Container)) · task #89
+> **PRD** — drafted by Kevin BA/PM/PO (Durable) · task #237
 > _Each agent that updates this PRD signs its change below._
 
-# Product Requirements Document: Avatar Filter Row Placement
+# Product Requirements Document: Cost Projection Feature
 
 ## 1. Problem & Goal
 
-**Problem:** The current placement of the avatar filter, separated from the priorities dropdown, disrupts the logical grouping of filtering options. Users must scan different areas of the UI to apply related filters, leading to a less efficient and intuitive user experience.
+### Problem
+Project teams often struggle with accurately forecasting and tracking total project costs, especially those involving both human labor and evolving AI resource consumption. This lack of clear visibility leads to potential budget overruns, reactive cost management, and hindered financial planning.
 
-**Goal:** To improve the user experience by consolidating related filtering options into a single, contiguous row, thereby enhancing discoverability, reducing cognitive load, and increasing the speed at which users can apply filters.
+### Goal
+To provide project managers and stakeholders with a transparent, real-time projection of total project costs (combining human and AI expenses) against an allocated budget, enabling proactive financial management and informed decision-making.
 
 ## 2. Target Users / ICP Roles
 
-*   **Project Managers:** Need to quickly filter tasks by assignee (avatar) and priority to understand workload distribution and identify high-priority items.
-*   **Team Leads:** Require efficient filtering to monitor team progress and allocate resources based on task priority and individual contribution (avatar).
-*   **Individual Contributors:** Benefit from a cleaner interface to focus on their assigned tasks and understand their priority within the project context.
+*   **Project Managers:** To monitor project finances and ensure budget adherence.
+*   **Team Leads:** To understand the cost implications of their team's work and AI resource usage.
+*   **Financial Analysts / Budget Owners:** To oversee project profitability and allocate resources effectively.
 
 ## 3. Scope
 
-This document covers the functional requirements and acceptance criteria for moving the existing avatar filter component to reside on the same UI row as the priorities dropdown. This includes adjustments to layout, styling, and ensuring the filter's functionality remains intact.
+This feature will enable users to define a project budget, input human and AI cost parameters, calculate projected total costs, and visualize these projections against the budget.
 
 ## 4. Functional Requirements
 
-*   **FR1: Layout Adjustment:** The avatar filter component shall be repositioned to occupy a space adjacent to the priorities dropdown within the primary filtering bar.
-*   **FR2: Visual Consistency:** The avatar filter shall maintain its current visual appearance and interaction patterns (e.g., dropdown behavior, selection indicators) after being moved.
-*   **FR3: Responsive Design:** The integrated avatar and priorities filter row shall adapt appropriately across different screen sizes and resolutions, maintaining usability.
-*   **FR4: Filter Functionality:** Applying a filter via the avatar selector shall continue to correctly filter the displayed data (e.g., tasks, issues), and this filtering shall be independent of or complementary to the priorities filter.
+*   **FR1: Budget Definition:** The system MUST allow users to define a specific budget for each project.
+*   **FR2: Human Cost Input:** The system MUST allow users to input parameters for human labor costs (e.g., roles, hourly/daily rates, estimated hours/days per resource).
+*   **FR3: AI Cost Input:** The system MUST allow users to input parameters for AI resource costs (e.g., per-token rates, API call costs, compute unit costs, estimated usage/volume).
+*   **FR4: Human Cost Calculation:** The system MUST calculate the projected total human cost based on provided inputs.
+*   **FR5: AI Cost Calculation:** The system MUST calculate the projected total AI cost based on provided inputs.
+*   **FR6: Total Cost Aggregation:** The system MUST sum the projected human cost and projected AI cost to derive a total projected project cost.
+*   **FR7: Cost vs. Budget Display:** The system MUST display the total projected cost, the project budget, and the variance (over/under budget).
+*   **FR8: Budget Status Indicator:** The system MUST provide a clear visual indicator (e.g., color-coding, progress bar) reflecting the project's budget status (e.g., green for under budget, yellow for approaching, red for over budget).
+*   **FR9: Dynamic Updates:** The system MUST dynamically update all cost projections and budget status whenever input parameters are modified.
 
 ## 5. Acceptance Criteria
 
-*   **AC1: Avatar Filter Visible in Row:** The avatar filter is visibly present on the same horizontal line as the priorities dropdown.
-*   **AC2: Filter Functionality Preserved:** Selecting an avatar from the new location correctly filters the displayed items.
-*   **AC3: Priorities Filter Functionality Preserved:** Selecting a priority from its dropdown continues to filter the displayed items, and its interaction is unaffected by the avatar filter's new position.
-*   **AC4: Combined Filtering Works:** Applying both an avatar filter and a priorities filter simultaneously yields the correct, combined results.
-*   **AC5: No Visual Overlap or Distortion:** The avatar filter and priorities dropdown do not overlap each other or other UI elements in the filtering bar, and the overall layout remains clean and undistorted.
-*   **AC6: Responsiveness Verified:** On smaller screen sizes, the combined filter row is still usable, potentially with a different arrangement if necessary (e.g., stacking if horizontal space is too limited, though the primary goal is horizontal).
+*   **AC1:** A project budget can be successfully defined and saved.
+*   **AC2:** Entering human labor rates and estimated hours accurately reflects in the projected human cost.
+*   **AC3:** Entering AI resource rates and estimated usage accurately reflects in the projected AI cost.
+*   **AC4:** The total projected cost displayed is the correct sum of human and AI projected costs.
+*   **AC5:** The variance (difference) between the total projected cost and the budget is accurately calculated and shown.
+*   **AC6:** The budget status indicator correctly changes based on whether the total projected cost is under, near, or over the defined budget.
+*   **AC7:** Any change to human cost input parameters immediately updates the total projected cost and budget status without manual refresh.
+*   **AC8:** Any change to AI cost input parameters immediately updates the total projected cost and budget status without manual refresh.
 
 ## 6. Out of Scope
 
-*   **New Avatar Filter Features:** Any enhancements or new functionalities to the avatar filter itself (e.g., search within avatars, multi-select avatars) are out of scope for this task.
-*   **New Priorities Filter Features:** Any enhancements or new functionalities to the priorities dropdown are out of scope.
-*   **Other Filter Components:** Moving or modifying any other filter components not explicitly mentioned (e.g., date filters, status filters) is out of scope.
-*   **Backend Changes:** Any backend changes related to how filters are processed or stored are out of scope, assuming the existing backend APIs can handle the current filtering logic.
-*   **Performance Optimization:** Significant performance optimizations related to filtering are out of scope, unless directly caused by the layout change.
+*   Real-time integration with external payroll or AI billing systems for actual expenditures.
+*   Historical cost analysis or reporting beyond current projections.
+*   Automated budget approval workflows or multi-level financial approvals.
+*   Complex scenario modeling (e.g., "what-if" analysis for multiple cost variations).
+*   Multi-currency support.
+*   User role-based access control for viewing/editing cost projections (initial release assumes standard user permissions).
