@@ -1,44 +1,92 @@
-> **PRD** — drafted by Bob Developer (V2 (Container)) · task #89
+> **PRD** — drafted by Kevin BA/PM/PO (Durable) · task #231
 > _Each agent that updates this PRD signs its change below._
 
-# Product Requirements Document: Avatar Filter Row Placement
+# Historical Velocity (Human + AI Combined)
 
-## 1. Problem & Goal
+## Problem & Goal
 
-**Problem:** The current placement of the avatar filter, separated from the priorities dropdown, disrupts the logical grouping of filtering options. Users must scan different areas of the UI to apply related filters, leading to a less efficient and intuitive user experience.
+**Problem:** Teams struggle to accurately assess their historical delivery pace when both human developers and AI-assisted tools are involved in the development process. This makes it difficult to forecast future work, identify bottlenecks, and make informed decisions about resource allocation and process improvements.
 
-**Goal:** To improve the user experience by consolidating related filtering options into a single, contiguous row, thereby enhancing discoverability, reducing cognitive load, and increasing the speed at which users can apply filters.
+**Goal:** To provide a clear, unified metric for historical development velocity that accounts for contributions from both human effort and AI assistance, enabling more accurate forecasting, performance analysis, and continuous improvement.
 
-## 2. Target Users / ICP Roles
+## Target Users / ICP Roles
 
-*   **Project Managers:** Need to quickly filter tasks by assignee (avatar) and priority to understand workload distribution and identify high-priority items.
-*   **Team Leads:** Require efficient filtering to monitor team progress and allocate resources based on task priority and individual contribution (avatar).
-*   **Individual Contributors:** Benefit from a cleaner interface to focus on their assigned tasks and understand their priority within the project context.
+*   Engineering Managers
+*   Team Leads
+*   Product Managers
+*   Scrum Masters
+*   Individual Contributors (Developers, QA Engineers)
 
-## 3. Scope
+## Scope
 
-This document covers the functional requirements and acceptance criteria for moving the existing avatar filter component to reside on the same UI row as the priorities dropdown. This includes adjustments to layout, styling, and ensuring the filter's functionality remains intact.
+This PRD focuses on defining the requirements for a system that can:
 
-## 4. Functional Requirements
+1.  Track and aggregate development activity data from various sources (e.g., version control systems, CI/CD pipelines, AI tool usage logs).
+2.  Differentiate and quantify contributions from human effort and AI assistance.
+3.  Calculate a unified historical velocity metric based on this aggregated data.
+4.  Provide a mechanism to visualize and report on this historical velocity.
 
-*   **FR1: Layout Adjustment:** The avatar filter component shall be repositioned to occupy a space adjacent to the priorities dropdown within the primary filtering bar.
-*   **FR2: Visual Consistency:** The avatar filter shall maintain its current visual appearance and interaction patterns (e.g., dropdown behavior, selection indicators) after being moved.
-*   **FR3: Responsive Design:** The integrated avatar and priorities filter row shall adapt appropriately across different screen sizes and resolutions, maintaining usability.
-*   **FR4: Filter Functionality:** Applying a filter via the avatar selector shall continue to correctly filter the displayed data (e.g., tasks, issues), and this filtering shall be independent of or complementary to the priorities filter.
+## Functional Requirements
 
-## 5. Acceptance Criteria
+### FR1: Data Ingestion and Integration
+*   The system shall be able to ingest data from relevant development tools and platforms.
+*   Supported integrations include:
+    *   Version Control Systems (e.g., Git via GitHub, GitLab, Bitbucket)
+    *   CI/CD Platforms (e.g., Jenkins, GitHub Actions, GitLab CI)
+    *   AI Code Assistance Tools (e.g., GitHub Copilot, AWS CodeWhisperer) - via explicit logging or API integration where available.
+*   The system shall normalize data from different sources into a common schema.
 
-*   **AC1: Avatar Filter Visible in Row:** The avatar filter is visibly present on the same horizontal line as the priorities dropdown.
-*   **AC2: Filter Functionality Preserved:** Selecting an avatar from the new location correctly filters the displayed items.
-*   **AC3: Priorities Filter Functionality Preserved:** Selecting a priority from its dropdown continues to filter the displayed items, and its interaction is unaffected by the avatar filter's new position.
-*   **AC4: Combined Filtering Works:** Applying both an avatar filter and a priorities filter simultaneously yields the correct, combined results.
-*   **AC5: No Visual Overlap or Distortion:** The avatar filter and priorities dropdown do not overlap each other or other UI elements in the filtering bar, and the overall layout remains clean and undistorted.
-*   **AC6: Responsiveness Verified:** On smaller screen sizes, the combined filter row is still usable, potentially with a different arrangement if necessary (e.g., stacking if horizontal space is too limited, though the primary goal is horizontal).
+### FR2: Activity Attribution
+*   The system shall be able to identify and attribute development activities (e.g., code commits, pull requests, tests executed, code generated by AI).
+*   For AI-assisted activities, the system shall attempt to differentiate between AI-generated and human-modified/approved contributions. This may involve:
+    *   Analyzing commit messages for AI-generated hints.
+    *   Leveraging AI tool-specific APIs or logging mechanisms that tag AI contributions.
+    *   Potentially using heuristics to identify AI-generated code patterns (with a clear disclaimer on accuracy).
 
-## 6. Out of Scope
+### FR3: Velocity Calculation
+*   The system shall define and calculate a unified historical velocity metric.
+*   The metric should consider factors such as:
+    *   Number of completed features/stories/tasks.
+    *   Code churn (lines added/deleted/modified) attributed to human vs. AI.
+    *   Time taken for code reviews and merges.
+    *   Success rate of builds and deployments.
+    *   AI contribution percentage to completed work items.
+*   The system shall allow for configurable weighting of different factors in the velocity calculation.
 
-*   **New Avatar Filter Features:** Any enhancements or new functionalities to the avatar filter itself (e.g., search within avatars, multi-select avatars) are out of scope for this task.
-*   **New Priorities Filter Features:** Any enhancements or new functionalities to the priorities dropdown are out of scope.
-*   **Other Filter Components:** Moving or modifying any other filter components not explicitly mentioned (e.g., date filters, status filters) is out of scope.
-*   **Backend Changes:** Any backend changes related to how filters are processed or stored are out of scope, assuming the existing backend APIs can handle the current filtering logic.
-*   **Performance Optimization:** Significant performance optimizations related to filtering are out of scope, unless directly caused by the layout change.
+### FR4: Historical Data Storage and Retrieval
+*   The system shall store historical development data for a configurable period.
+*   Users shall be able to query and retrieve historical velocity data for specific timeframes, teams, or projects.
+
+### FR5: Visualization and Reporting
+*   The system shall provide dashboards and reports to visualize historical velocity trends.
+*   Visualizations should clearly distinguish between pure human velocity and AI-augmented velocity where applicable.
+*   Reports should be exportable in common formats (e.g., CSV, PDF).
+
+## Acceptance Criteria
+
+### AC1: Data Ingestion and Integration
+*   **Given** a Git repository with recent commits, **When** the integration is configured and activated, **Then** commit data, including author, timestamp, and file changes, is successfully ingested into the system.
+*   **Given** an AI code assistant is used to generate code that is then committed, **When** the integration is configured, **Then** the AI-assisted nature of the commit is identifiable (e.g., via a tag or specific metadata).
+
+### AC2: Activity Attribution
+*   **Given** a pull request with commits where AI code generation was used, **When** the system analyzes the commits, **Then** a reasonable attempt is made to identify AI-generated lines of code within those commits, and this is flagged in the system.
+
+### AC3: Velocity Calculation
+*   **Given** a set of completed work items (stories/tasks) over a sprint, **When** the velocity calculation is performed, **Then** the output aligns with the defined metric, providing a single velocity score.
+*   **Given** the system has data for two sprints with varying levels of AI usage, **When** the velocity is calculated for both, **Then** the output logically reflects any perceived difference in efficiency, with clear indications of AI's impact.
+
+### AC4: Historical Data Storage and Retrieval
+*   **Given** historical sprint data has been ingested for the last six months, **When** a user requests velocity data for a specific sprint from three months ago, **Then** the correct data is retrieved and presented.
+
+### AC5: Visualization and Reporting
+*   **Given** historical velocity data is available, **When** the user accesses the dashboard, **Then** a trend line showing velocity over time is displayed, with clear labels and axis.
+*   **Given** the system can differentiate AI contributions, **When** viewing velocity data, **Then** a breakdown or comparison showing "Human-only" vs. "AI-assisted" velocity is available.
+
+## Out of Scope
+
+*   Real-time velocity calculation or prediction.
+*   Attribution of AI contributions to specific AI models or versions unless explicitly provided by the AI tool's integration.
+*   Analysis of code quality or security vulnerabilities as part of the velocity metric.
+*   Automated intervention or optimization based on velocity trends.
+*   Integration with project management tools for work item definition (e.g., Jira, Asana) beyond data ingestion for completed items.
+*   Defining the "correct" or "optimal" way to use AI tools.
