@@ -128,3 +128,15 @@ export const HealthColor = {
   YELLOW: 'yellow',
   GREEN: 'green',
 } as const;
+
+/**
+ * Insight rule explanations for tooltips
+ */
+export const InsightExplanation = {
+  red: 'Task is at immediate risk (due date within 1-24 hours)',
+  yellow: 'Task is approaching schedule (due date within 3 days)',
+  green: 'Task is on track (due date > 3 days)',
+  improving: 'Task state has improved over the last 3 days',
+  worsening: 'Task state has worsened over the last 3 days',
+  stable: 'Task state has remained stable over the last 3 days',
+} as const;
