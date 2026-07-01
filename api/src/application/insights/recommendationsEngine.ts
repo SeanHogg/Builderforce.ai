@@ -57,6 +57,12 @@ const HOUR_MS = 3_600_000;
 export type RecSeverity = 'critical' | 'warning' | 'info';
 export type RecCategory = 'cost' | 'quality' | 'allocation' | 'delivery';
 
+export interface Estimation {
+  type: 'one_time' | 'recurring';
+  valueMinutes: number;
+  source: string;
+}
+
 export interface Recommendation {
   estimation?: Estimation;
 
