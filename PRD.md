@@ -1,44 +1,71 @@
-> **PRD** — drafted by Bob Developer (V2 (Container)) · task #89
+> **PRD** — drafted by Kevin BA/PM/PO (Durable) · task #184
 > _Each agent that updates this PRD signs its change below._
 
-# Product Requirements Document: Avatar Filter Row Placement
+# Structured Report Generation
 
-## 1. Problem & Goal
+## Problem & Goal
 
-**Problem:** The current placement of the avatar filter, separated from the priorities dropdown, disrupts the logical grouping of filtering options. Users must scan different areas of the UI to apply related filters, leading to a less efficient and intuitive user experience.
+**Problem:** Project status reporting is often fragmented and inconsistent, making it difficult for stakeholders to gain a clear, holistic understanding of project health. This leads to missed risks, budget overruns, and misaligned expectations.
 
-**Goal:** To improve the user experience by consolidating related filtering options into a single, contiguous row, thereby enhancing discoverability, reducing cognitive load, and increasing the speed at which users can apply filters.
+**Goal:** To create a standardized, structured report that consolidates key project information across defined categories, providing a comprehensive and easily digestible overview for all stakeholders.
 
-## 2. Target Users / ICP Roles
+## Target Users / ICP Roles
 
-*   **Project Managers:** Need to quickly filter tasks by assignee (avatar) and priority to understand workload distribution and identify high-priority items.
-*   **Team Leads:** Require efficient filtering to monitor team progress and allocate resources based on task priority and individual contribution (avatar).
-*   **Individual Contributors:** Benefit from a cleaner interface to focus on their assigned tasks and understand their priority within the project context.
+*   Project Managers
+*   Program Managers
+*   Team Leads
+*   Product Owners
+*   Engineering Leads
+*   Executive Stakeholders
+*   Scrum Masters
 
-## 3. Scope
+## Scope
 
-This document covers the functional requirements and acceptance criteria for moving the existing avatar filter component to reside on the same UI row as the priorities dropdown. This includes adjustments to layout, styling, and ensuring the filter's functionality remains intact.
+This document outlines the requirements for a system/process that generates a structured report. The report will include predefined sections for:
 
-## 4. Functional Requirements
+*   Timeline
+*   Budget
+*   Quality
+*   Risk
+*   Team
+*   Alignment
 
-*   **FR1: Layout Adjustment:** The avatar filter component shall be repositioned to occupy a space adjacent to the priorities dropdown within the primary filtering bar.
-*   **FR2: Visual Consistency:** The avatar filter shall maintain its current visual appearance and interaction patterns (e.g., dropdown behavior, selection indicators) after being moved.
-*   **FR3: Responsive Design:** The integrated avatar and priorities filter row shall adapt appropriately across different screen sizes and resolutions, maintaining usability.
-*   **FR4: Filter Functionality:** Applying a filter via the avatar selector shall continue to correctly filter the displayed data (e.g., tasks, issues), and this filtering shall be independent of or complementary to the priorities filter.
+The system should allow for data input and compilation into this standardized report format.
 
-## 5. Acceptance Criteria
+## Functional Requirements
 
-*   **AC1: Avatar Filter Visible in Row:** The avatar filter is visibly present on the same horizontal line as the priorities dropdown.
-*   **AC2: Filter Functionality Preserved:** Selecting an avatar from the new location correctly filters the displayed items.
-*   **AC3: Priorities Filter Functionality Preserved:** Selecting a priority from its dropdown continues to filter the displayed items, and its interaction is unaffected by the avatar filter's new position.
-*   **AC4: Combined Filtering Works:** Applying both an avatar filter and a priorities filter simultaneously yields the correct, combined results.
-*   **AC5: No Visual Overlap or Distortion:** The avatar filter and priorities dropdown do not overlap each other or other UI elements in the filtering bar, and the overall layout remains clean and undistorted.
-*   **AC6: Responsiveness Verified:** On smaller screen sizes, the combined filter row is still usable, potentially with a different arrangement if necessary (e.g., stacking if horizontal space is too limited, though the primary goal is horizontal).
+1.  **Report Generation:** The system shall allow users to initiate the generation of a project status report.
+2.  **Section Population:** Each section (Timeline, Budget, Quality, Risk, Team, Alignment) must be populated with relevant, up-to-date information.
+    *   **Timeline:** Display key milestones, current progress against schedule, and any identified deviations or upcoming deadlines.
+    *   **Budget:** Show allocated budget, actual spend, projected spend, and variance.
+    *   **Quality:** Report on key quality metrics (e.g., bug count/severity, test coverage, performance indicators, customer satisfaction scores).
+    *   **Risk:** List identified risks, their impact, likelihood, mitigation plans, and ownership.
+    *   **Team:** Provide an overview of team members, their roles, availability, and any staffing concerns.
+    *   **Alignment:** Summarize progress against project goals, strategic alignment, and any identified dependencies or blockers impacting alignment.
+3.  **Data Source Integration (Optional but Recommended):** The system should ideally integrate with existing project management tools (Jira, Asana, etc.), financial systems, and CI/CD pipelines to automate data collection where possible.
+4.  **Manual Input:** The system shall provide an interface for manual input and updates to data points that cannot be automated.
+5.  **Customization (Basic):** Users should be able to select the project for which the report is generated.
+6.  **Export Functionality:** The generated report shall be exportable in common formats (e.g., PDF, Markdown).
+7.  **Reporting Cadence (Implied):** The system should support generating reports on a recurring basis (e.g., weekly, bi-weekly, monthly) as configured by the user.
 
-## 6. Out of Scope
+## Acceptance Criteria
 
-*   **New Avatar Filter Features:** Any enhancements or new functionalities to the avatar filter itself (e.g., search within avatars, multi-select avatars) are out of scope for this task.
-*   **New Priorities Filter Features:** Any enhancements or new functionalities to the priorities dropdown are out of scope.
-*   **Other Filter Components:** Moving or modifying any other filter components not explicitly mentioned (e.g., date filters, status filters) is out of scope.
-*   **Backend Changes:** Any backend changes related to how filters are processed or stored are out of scope, assuming the existing backend APIs can handle the current filtering logic.
-*   **Performance Optimization:** Significant performance optimizations related to filtering are out of scope, unless directly caused by the layout change.
+*   **AC1:** A user can successfully initiate report generation for a selected project. The report displays a title including the project name and reporting period.
+*   **AC2:** The "Timeline" section accurately reflects upcoming milestones and current progress, populated either automatically from an integrated tool or manually.
+*   **AC3:** The "Budget" section displays accurate allocated, spent, and projected budget figures, either linked from financial data or manually entered.
+*   **AC4:** The "Quality" section provides a summary of key quality metrics relevant to the project.
+*   **AC5:** The "Risk" section lists identified risks with their associated impact, likelihood, and mitigation status.
+*   **AC6:** The "Team" section provides a list of key team members and their roles.
+*   **AC7:** The "Alignment" section clearly articulates how the project progress aligns with overarching strategic objectives.
+*   **AC8:** The generated report can be exported as a PDF document.
+*   **AC9:** Data for at least one section (e.g., Timeline via Jira integration) can be automatically pulled into the report, reducing manual effort.
+*   **AC10:** If a data point is not automated, a user can manually enter or edit the information for that specific section prior to report generation.
+
+## Out of Scope
+
+*   Automated decision-making or prescriptive recommendations based on report data.
+*   Complex workflow automation beyond data gathering and report assembly.
+*   Auditing of historical report data (beyond what's necessary for current report generation).
+*   Advanced analytics or predictive modeling.
+*   Real-time dashboard capabilities (this is for *generated reports*).
+*   Integration with niche or highly specialized project tools not commonly used.
