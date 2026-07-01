@@ -9,6 +9,15 @@ export type ExecutionId = number & { readonly __brand: 'ExecutionId' };
 /** User IDs are UUID strings (not sequential integers). */
 export type UserId = string & { readonly __brand: 'UserId' };
 
+/**
+ * Feature Sign - the curated status tag for a product feature:
+ *   * SHIPPED: Feature has been released to production
+ *   * IN_PROGRESS: Feature is actively being developed or has partial functionality released
+ *   * NOT_STARTED: Feature has been defined but development has not yet begun
+ *   * BROKEN: Feature is in development or shipped, but has critical issues preventing its intended use
+ */
+export type FeatureSign = 'SHIPPED' | 'IN_PROGRESS' | 'NOT_STARTED' | 'BROKEN';
+
 export const asProjectId   = (n: number): ProjectId   => n as ProjectId;
 export const asTaskId      = (n: number): TaskId      => n as TaskId;
 export const asTenantId    = (n: number): TenantId    => n as TenantId;
