@@ -118,7 +118,7 @@ function PersonasTopInstallsCard(_props: WidgetCardProps) {
   const { data, error } = usePersonas();
   if (error) return <Muted>{error}</Muted>;
   if (!data) return <Muted>{t('loading')}</Muted>;
-  const bars = topBars(data, (p) => p.downloads ?? 0, (p) => p.name, (p) => p.slug);
+  const bars = topBars(data, (p) => p.installCount ?? 0, (p) => p.name, (p) => p.slug);
   if (!bars.length) return <Muted>{t('catalog.noInstalls')}</Muted>;
   return <BarChart data={bars} formatValue={(v) => int(v)} ariaLabel={t('title.catalogPersonasTopInstalls')} />;
 }
