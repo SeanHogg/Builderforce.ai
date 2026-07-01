@@ -94,7 +94,70 @@ function ranked(r: Omit<Recommendation, 'rank'>, magnitude = 0): Recommendation 
 }
 
 const pctStr = (n: number) => `${n.toFixed(0)}%`;
-const usdStr = (n: number) => `$${n.toLocaleString(undefined, { maximumFractionDigits: 2 })}`;
+const usdStr = (n: number) => `${n.toLocaleString(undefined, { maximumFractionDigits: 2 })}`;
+
+// ── Time-saving estimation ──────────────────────────────────────────────────
+// Each recommendation is mapped to a reasonable estimate of the MINUTES saved
+// per instance / per week by acting on it. Sources are documented in the
+// `source` field so the UI can display them in a tooltip.
+
+/**
+ * Pure: derive a time-saving estimate for a given recommendation key + context.
+ * Returns `null` when no sensible estimate applies (the rec is purely advisory).
+ */
+export function estimateTimeSavings(recKey: string, inp: RuleInputs): Estimation | null {
+  switch (true) {
+    // Budget overspend — capping spend saves the ~30 min/week of manual
+    // investigation + stakeholder sync that budget-drift otherwise requires.
+    case recKey === 'cost.budget_over':
+      return { type: 'recurring', valueMinutes: 30, source: 'Reduced budget-manual overhead (investigation + stakeholder sync)' };
+
+    // Cost-per-PR spike — shifting models avoids the recurring analysis time
+    // spent diagnosing per-PR cost variance (finance team cross-check).
+    case recKey === 'cost.per_pr_spike':
+      return { type: 'recurring', valueMinutes: 45, source: 'Eliminates per-PR cost-anomaly triage across the window' };
+
+    // Low overall merge rate — improving merge rate reclaims time spent
+    // re-reviewing, re-running, and re-merging failed agent output.
+    case recKey === 'quality.low_merge_rate':
+      return { type: 'recurring', valueMinutes: 120, source: 'Reduced re-review + re-run overhead from low-merge-rate work' };
+
+    // Per-model low merge — shifting to a higher-merge model saves wasted
+    // output review + rework cycles on the underperforming model.
+    case recKey.startsWith('quality.model_low_merge.'):
+      return { type: 'recurring', valueMinutes: 60, source: 'Time saved by switching from a low-merge model to a higher-merge one' };
+
+    // High degraded (coding→non-coding fallback) — raising the coding-model
+    // floor avoids manual repair of degraded-output damage.
+    case recKey === 'quality.high_degraded':
+      return { type: 'recurring', valueMinutes: 90, source: 'Manual fix-up time avoided when a coding model serves non-coding output' };
+
+    // Allocation below target — re-balancing ensures the team spends time on
+    // priority work instead of misaligned discretionary effort.
+    case recKey.startsWith('allocation.below_target.'):
+      return { type: 'recurring', valueMinutes: 60, source: 'Misaligned-labour waste reclaimed by re-balancing the investment mix' };
+
+    // Low capitalizable share — fixing cost-class tags is a one-time audit.
+    case recKey === 'allocation.low_capitalizable':
+      return { type: 'one_time', valueMinutes: 20, source: 'One-time cost-class audit to correctly label capitalizable R&D work' };
+
+    // High change-failure rate — reducing failures saves the incident-response
+    // + rollback + re-deploy cycle per failed deployment.
+    case recKey === 'delivery.high_cfr':
+      return { type: 'recurring', valueMinutes: 180, source: 'Incident-response + rollback + re-deploy overhead from each failed deployment' };
+
+    // High MTTR — faster recovery directly reduces mean downtime per incident.
+    case recKey === 'delivery.high_mttr':
+      return { type: 'recurring', valueMinutes: 120, source: 'Reduced recovery time per incident by automating rollback and runbooks' };
+
+    // High lead time — shorter cycle time cuts context-switching and wait waste.
+    case recKey === 'delivery.high_lead_time':
+      return { type: 'recurring', valueMinutes: 60, source: 'Waiting + context-switching waste from long-lived tickets' };
+
+    default:
+      return null;
+  }
+}
 
 // ── Pure rule inputs (kept DB-free so the rules are unit-testable) ─────────────
 
