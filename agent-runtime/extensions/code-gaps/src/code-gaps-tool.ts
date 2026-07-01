@@ -1,6 +1,6 @@
-import { Type } from "@sinclair/typebox";
 import { execSync } from "node:child_process";
 import { glob } from "glob";
+import type { AnyAgentTool } from "../../../src/agents/tools/common.js";
 
 // Types
 interface PlannedItem {
@@ -33,7 +33,6 @@ interface GapReport {
   summary: {
     totalItems: number;
     implemented: number;
-    inProgress?: number;
     notStarted?: number;
     blocked?: number;
   };
@@ -127,7 +126,7 @@ async function findSignatureOccurrences(
 /**
  * Scans the codebase and verifies planned items against actual code
  */
-export function createCodeGapsTool(api: any) {
+export function createCodeGapsTool(api: any): AnyAgentTool {
   return {
     name: "code-gaps",
     label: "Code Gap Analysis",
