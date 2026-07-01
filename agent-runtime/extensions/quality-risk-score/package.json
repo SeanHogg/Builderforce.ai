@@ -12,10 +12,18 @@
     "test": "echo 'Tests to be implemented'",
     "type-check": "tsc --noEmit"
   },
-  "files": [
-    "src/",
-    "README.md"
+  "entrypoints": [
+    "./index.ts"
   ],
+  "exports": {
+    ".": "./index.ts",
+    "./provider": "./quality-risk-score-provider.ts",
+    "./config": "./config.ts",
+    "./score-engine": "./score-engine.ts",
+    "./quality-risk-score": "./quality-risk-score.ts",
+    "./metrics": "./METRIC_TEMPLATES.ts",
+    "./README": "./README.md"
+  },
   "keywords": [
     "quality",
     "risk",
