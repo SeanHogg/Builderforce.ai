@@ -1,6 +1,14 @@
-import { QualityMetric, RiskScoreConfig } from './config.js';
+import type { QualityMetric, RiskScoreConfig } from './config.js';
 
 export type RiskLevel = 'High' | 'Medium' | 'Low';
+
+export type Artifacts = {
+  id?: string;
+  type: string;
+  name: string;
+  description?: string;
+  metadata?: Record<string, any>;
+};
 
 export interface CalculatedScore {
   level: RiskLevel;
