@@ -25,6 +25,8 @@ export interface OverrideRequest {
   overrideBy: string;
 }
 
+export { Artifacts };
+
 export class QualityRiskScore {
   private config;
   private currentArtifacts: Map<string, Artifacts> = new Map();
