@@ -4,7 +4,14 @@
  */
 
 import crypto from "node:crypto";
-import type { TaskState, TaskStatus, TaskSubmitRequest, TaskUpdateEvent } from "./types.js";
+import type {
+  TaskState,
+  TaskStatus,
+  TaskSubmitRequest,
+  TaskPriority,
+  TaskUpdateEvent,
+  QuickWinTask,
+} from "./types.js";
 
 /**
  * Task transition rules based on state machine

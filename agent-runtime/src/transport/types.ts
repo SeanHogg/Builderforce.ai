@@ -15,7 +15,24 @@ export type TaskSubmitRequest = {
   sessionId?: string;
   parentTaskId?: string;
   metadata?: Record<string, unknown>;
+  /**
+   * Estimated effort for the task (e.g. story points, hours, or a complexity
+   * score). Lower means less effort. Tasks without a valid (finite, >= 0)
+   * estimate are excluded from the "quick wins" ranking.
+   */
+  estimatedEffort?: number;
+  /**
+   * Optional task priority used as a tie-breaker when effort estimates are
+   * equal. Higher priority is preferred first.
+   */
+  priority?: TaskPriority;
 };
+
+/**
+ * Task priority, from highest to lowest urgency. Used as a tie-breaker in the
+ * quick-wins ranking when two tasks share the same estimated effort.
+ */
+export type TaskPriority = "critical" | "high" | "medium" | "low";
 
 /**
  * Task status enumeration for state machine
@@ -46,6 +63,33 @@ export type TaskState = {
   error?: string;
   progress?: number;
   metadata?: Record<string, unknown>;
+  /**
+   * Estimated effort for the task (e.g. story points, hours, or a complexity
+   * score). Lower means less effort. Tasks without a valid estimate are
+   * excluded from the "quick wins" ranking.
+   */
+  estimatedEffort?: number;
+  /** Optional priority used as a tie-breaker in the quick-wins ranking. */
+  priority?: TaskPriority;
+};
+
+/**
+ * A single entry in the "Top N Quick Wins" list: the smallest-effort tasks a
+ * user can close fastest. Carries just enough for display and navigation.
+ */
+export type QuickWinTask = {
+  /** Task id, used to navigate to the full task details. */
+  id: string;
+  /** Task title/summary shown in the quick-wins list. */
+  description: string;
+  /** The estimated effort that qualified this task as a quick win. */
+  estimatedEffort: number;
+  /** Current status of the task. */
+  status: TaskStatus;
+  /** Optional priority, when set. */
+  priority?: TaskPriority;
+  /** When the task was created (used for stable ordering). */
+  createdAt: Date;
 };
 
 /**
