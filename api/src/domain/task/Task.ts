@@ -1,7 +1,12 @@
-import { TaskId, ProjectId, TaskStatus, TaskPriority, TaskType, AgentType, AgentHostId } from '../shared/types';
+import { TaskId, ProjectId, TaskStatus, TaskPriority, TaskType, AgentType, AgentHostId, FeatureSign } from '../shared/types';
 import { ValidationError } from '../shared/errors';
 
 export interface TaskProps {
+  /**
+   * Feature sign tag (0125) - indicates the feature's overall development and release status.
+   * Must be one of: SHIPPED, IN_PROGRESS, NOT_STARTED, BROKEN
+   */
+  featureSign: FeatureSign;
   id: TaskId;
   projectId: ProjectId;
   key: string;
