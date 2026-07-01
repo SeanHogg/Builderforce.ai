@@ -38,6 +38,11 @@ export interface ProjectEvermindHead {
   version: number;
   mode: ProjectEvermindMode;
   contributions: number;
+  /**
+   * Opt-in consumer flag. When true AND seeded, agent runs for this project resolve
+   * their inference model to {@link ref} — see {@link resolveProjectInferenceModel}.
+   */
+  inferenceEnabled: boolean;
   /** Immutable ref usable by {@link loadEvermindModel}; null when unseeded. */
   ref: string | null;
 }
@@ -87,7 +92,7 @@ export async function getProjectEvermindHead(
         .where(and(eq(projectEvermind.tenantId, tenantId), eq(projectEvermind.projectId, projectId)))
         .limit(1);
       if (!row || row.version <= 0) {
-        return { tenantId, projectId, name: row?.name ?? 'Project Evermind', version: 0, mode: toMode(row?.mode), contributions: row?.contributions ?? 0, ref: null };
+        return { tenantId, projectId, name: row?.name ?? 'Project Evermind', version: 0, mode: toMode(row?.mode), contributions: row?.contributions ?? 0, inferenceEnabled: row?.inferenceEnabled ?? false, ref: null };
       }
       return {
         tenantId,
@@ -96,6 +101,7 @@ export async function getProjectEvermindHead(
         version: row.version,
         mode: toMode(row.mode),
         contributions: row.contributions,
+        inferenceEnabled: row.inferenceEnabled,
         ref: projectEvermindRef(tenantId, projectId, row.version),
       };
     },
@@ -235,6 +241,42 @@ export async function resolveProjectEvermindModelPin(
   if (!Number.isInteger(projectId) || projectId <= 0) return { matched: true, model: undefined };
   const head = await getProjectEvermindHead(env, db, tenantId, projectId);
   return { matched: true, model: head.ref ? `evermind/${head.ref}` : undefined };
+}
+
+/**
+ * Consumer emitter (the other half of the pin). Resolve the inference model for a
+ * project run: when the project opted into running on its Evermind (`inferenceEnabled`)
+ * AND a base is seeded, returns the concrete `evermind/<ref>` of the CURRENT head so
+ * the caller can hard-pin it (pull-on-boundary via the immutable per-version ref).
+ * Returns undefined when inference is off or the model isn't seeded — the caller
+ * then keeps its normal model selection (plan default), so this is safe to call on
+ * every run. Cached through {@link getProjectEvermindHead}.
+ */
+export async function resolveProjectInferenceModel(
+  env: Env,
+  db: Db,
+  tenantId: number,
+  projectId: number,
+): Promise<string | undefined> {
+  if (!Number.isInteger(projectId) || projectId <= 0) return undefined;
+  const head = await getProjectEvermindHead(env, db, tenantId, projectId);
+  if (!head.inferenceEnabled || !head.ref) return undefined;
+  return `evermind/${head.ref}`;
+}
+
+/** Toggle the opt-in inference consumer flag. Bumps the head cache. */
+export async function setProjectEvermindInference(
+  env: Env,
+  db: Db,
+  tenantId: number,
+  projectId: number,
+  enabled: boolean,
+): Promise<void> {
+  await db
+    .update(projectEvermind)
+    .set({ inferenceEnabled: enabled, updatedAt: new Date() })
+    .where(and(eq(projectEvermind.tenantId, tenantId), eq(projectEvermind.projectId, projectId)));
+  await bumpCacheVersion(env, versionKey(tenantId, projectId));
 }
 
 /** Durable Object instance name for a project's coordinator (single writer). */

@@ -1335,6 +1335,17 @@ export async function runCloudToolLoop(
     ? `${tenantModel.directives}\n\n${systemPrompt}`
     : systemPrompt;
 
+  // Project Evermind consumer. The dispatcher (runtimeRoutes `withDefaultModel`)
+  // emits a concrete `evermind/<ref>` as the run's model when the project is
+  // configured to run its agents on its own self-learning model (resolved ONCE at the
+  // run boundary — pull-on-boundary). That ref is a direct vendor route, NOT a catalog
+  // id, so it must bypass the coding-pool `pickCloudModel` selection and hard-pin: the
+  // in-process evermind vendor (uploads-threaded) serves it, and a toy-model failure
+  // cascades to the coding backstop (graceful). [[evermind-learning-architecture]]
+  const projectInferenceModel = typeof effectiveModel === 'string' && effectiveModel.startsWith('evermind/')
+    ? effectiveModel
+    : undefined;
+
   // The PRD (committed to the ticket branch during prep) is part of this task's
   // single PR. Seed it into writtenPaths on the first tick so the finalize opens a
   // PR — and lists PRD.md — even if the agent ends up writing zero code files. Done
@@ -1385,13 +1396,17 @@ export async function runCloudToolLoop(
   // the order on top of the shared table.
   const learned = opts?.resume ? { actionType: 'other' as ActionType, actionStats: undefined } : await resolveLearnedRoutingInputs(env, db, { tenantId, projectId, taskRow });
   // The resolved pin rides CloudLoopState so the DO surface keeps every tick on it.
-  const pick = pickCloudModel(effectiveModel, routing.effectivePlan, routing.premiumOverride, {
-    actionType: learned.actionType,
-    actionStats: learned.actionStats,
-    bias: opts?.routingBias,
-    // Context-aware seed: don't pick a small-window model for a big first turn.
-    estimatedTokens: estimateRequestTokens(messages, CLOUD_AGENT_TOOLS),
-  });
+  // A live project-Evermind pin hard-pins the project model (strict) and skips the
+  // coding-pool selection entirely; otherwise the normal learned-routing seed runs.
+  const pick = projectInferenceModel
+    ? { model: projectInferenceModel, strict: true as const }
+    : pickCloudModel(effectiveModel, routing.effectivePlan, routing.premiumOverride, {
+        actionType: learned.actionType,
+        actionStats: learned.actionStats,
+        bias: opts?.routingBias,
+        // Context-aware seed: don't pick a small-window model for a big first turn.
+        estimatedTokens: estimateRequestTokens(messages, CLOUD_AGENT_TOOLS),
+      });
   // Mutable: a 429 on the pinned model drops the strict pin so the proxy cascades
   // (see the per-turn cascade below); the run then stays unpinned for later turns.
   let strictPin = pick.strict;

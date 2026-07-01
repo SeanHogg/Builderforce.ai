@@ -29,6 +29,7 @@ import {
   getProjectEvermindHead,
   seedProjectEvermind,
   setProjectEvermindMode,
+  setProjectEvermindInference,
   dispatchProjectEvermindLearn,
   projectEvermindRef,
   type ProjectEvermindMode,
@@ -53,7 +54,7 @@ const json = (body: unknown, status = 200): Response =>
 async function headCore(env: Env, db: Db, tenantId: number, projectId: number): Promise<Response> {
   if (!(await ownsProject(db, tenantId, projectId))) return json({ error: 'project not found' }, 404);
   const head = await getProjectEvermindHead(env, db, tenantId, projectId);
-  return json({ version: head.version, ref: head.ref, mode: head.mode, name: head.name, contributions: head.contributions, seeded: head.version > 0 });
+  return json({ version: head.version, ref: head.ref, mode: head.mode, name: head.name, contributions: head.contributions, inferenceEnabled: head.inferenceEnabled, seeded: head.version > 0 });
 }
 
 async function artifactCore(env: Env, db: Db, tenantId: number, projectId: number, versionQ: string | undefined, file: 'model.evermind' | 'tokenizer.json'): Promise<Response> {
@@ -150,6 +151,22 @@ export function createProjectEvermindRoutes(db: Db): Hono<HonoEnv> {
     await setProjectEvermindMode(c.env as Env, db, tenantId, projectId, mode);
     const head = await getProjectEvermindHead(c.env as Env, db, tenantId, projectId);
     return c.json({ ok: true, mode: head.mode });
+  });
+
+  /** Toggle whether this project's agent runs execute ON its Evermind (manager).
+   *  Body: { enabled: boolean }. The emitter of the `project_evermind:<id>` pin. */
+  router.patch('/:projectId/evermind/inference', requireRole(TenantRole.MANAGER), async (c) => {
+    const tenantId = t(c);
+    const projectId = pid(c);
+    if (!(await ownsProject(db, tenantId, projectId))) return c.json({ error: 'project not found' }, 404);
+    const body = (await c.req.json<{ enabled?: unknown }>().catch(() => ({}))) as { enabled?: unknown };
+    if (typeof body.enabled !== 'boolean') return c.json({ error: 'enabled (boolean) is required' }, 400);
+    const head = await getProjectEvermindHead(c.env as Env, db, tenantId, projectId);
+    if (body.enabled && head.version <= 0) {
+      return c.json({ error: 'seed a base model before enabling inference' }, 409);
+    }
+    await setProjectEvermindInference(c.env as Env, db, tenantId, projectId, body.enabled);
+    return c.json({ ok: true, inferenceEnabled: body.enabled });
   });
 
   return router;

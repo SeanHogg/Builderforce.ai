@@ -2213,7 +2213,16 @@
       "skills": "Skills",
       "personas": "Personas",
       "prompts": "Prompts",
-      "models": "Models"
+      "models": "Models",
+      "tasks": "Tasks",
+      "workflows": "Workflows",
+      "brain": "Brainstorm",
+      "wfAgents": "Workforce · Agents",
+      "wfTeams": "Workforce · Teams",
+      "wfPerformance": "Workforce · Performance",
+      "marketplace": "Marketplace",
+      "tools": "Tools",
+      "ide": "IDE"
     },
     "title": {
       "aiProductivity": "AI Productivity Score",
@@ -2271,7 +2280,23 @@
       "catalogPersonasTopInstalls": "Top personas by installs",
       "catalogPromptsMostUsed": "Most-used prompts",
       "catalogPromptsTopRated": "Top-rated prompts",
-      "catalogModelsByProvider": "Models by provider"
+      "catalogModelsByProvider": "Models by provider",
+      "opTasksByStatus": "Tasks by status",
+      "opTasksWip": "Work in progress",
+      "opWorkflowRuns": "Workflow runs",
+      "opWorkflowHealth": "Workflow health",
+      "opBrainByOrigin": "Chats by origin",
+      "opBrainActivity": "Chat activity",
+      "wfAgentsOnline": "Agents online",
+      "wfTeamsSize": "Team sizes",
+      "wfDoraDeployFreq": "Deploy frequency",
+      "wfPerformanceByDiscipline": "Effectiveness by discipline",
+      "wfPerformanceTopMembers": "Top members by completed work",
+      "catalogMarketplaceTopHired": "Top agents by hires",
+      "catalogMarketplaceTopEval": "Best-evaluated agent",
+      "catalogToolsByCategory": "Tools by category",
+      "ideByModality": "Builds by modality",
+      "ideRecency": "IDE builds"
     },
     "loading": "Loading…",
     "overview": {
@@ -2312,7 +2337,56 @@
       "uncategorized": "Uncategorized",
       "unknownProvider": "Unknown",
       "skills": "skills",
-      "models": "models"
+      "models": "models",
+      "noHires": "No hires yet",
+      "noEval": "Not evaluated yet",
+      "tools": "tools",
+      "toolCat": {
+        "delivery": "Delivery",
+        "finops": "FinOps",
+        "governance": "Governance",
+        "quality": "Quality"
+      }
+    },
+    "op": {
+      "tasks": "tasks",
+      "done": "Done",
+      "inProgress": "In progress",
+      "backlog": "Backlog",
+      "noTasks": "No tasks",
+      "wipSub": "{total} tasks total",
+      "workflows": "workflows",
+      "noWorkflows": "No workflows",
+      "noRuns": "No runs yet",
+      "healthy": "Healthy",
+      "failing": "Failing",
+      "neverRun": "Never run",
+      "chats": "chats",
+      "noChats": "No chats yet",
+      "originOther": "Other",
+      "chatsScopedSub": "{scoped} tied to a project"
+    },
+    "wf": {
+      "online": "Online",
+      "offline": "Offline",
+      "cloud": "Cloud",
+      "active": "active",
+      "noAgents": "No agents",
+      "noTeams": "No teams yet",
+      "teamsEmptySub": "teams (no members yet)",
+      "perDay": "per day",
+      "noPerformance": "No performance data"
+    },
+    "ide": {
+      "builds": "builds",
+      "buildsSub": "IDE builds",
+      "noProjects": "No IDE builds yet",
+      "modality": {
+        "designer": "Designer",
+        "video": "Video",
+        "llm": "LLM",
+        "voice": "Voice"
+      }
     }
   },
   "compile": {

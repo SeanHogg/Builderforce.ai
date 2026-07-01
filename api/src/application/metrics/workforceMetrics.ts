@@ -378,22 +378,40 @@ export interface DoraRollup {
   leadTimeHours: number | null;        // task createdAt → completedAt, avg
   changeFailureRatePct: number | null; // failed deploys / total deploys
   mttrHours: number | null;            // avg(restoredAt − deployedAt) over failed+restored
+  /** Per-week buckets so the four keys can be charted over time. Mirrors the
+   *  adoption-series bucketing (application/insights/aiImpactInsights.ts). */
+  series: DoraSeriesPoint[];
+}
+
+/** One weekly DORA bucket — the four keys computed over that week's rows. */
+export interface DoraSeriesPoint {
+  /** UTC YYYY-MM-DD of the bucket start (anchored at the window start). */
+  bucketStart: string;
+  deploymentFrequencyPerDay: number;
+  totalDeployments: number;
+  leadTimeHours: number | null;
+  changeFailureRatePct: number | null;
+  mttrHours: number | null;
 }
 
 export interface DeployRow { deployedAt: Date; isFailure: boolean; restoredAt: Date | null; }
+/** A completed task's create→complete span, used for per-bucket lead time. */
+export interface LeadRow { completedAt: Date; leadTimeHrs: number; }
 
-/** Pure DORA math. Separated for unit testing. */
-export function rollupDora(days: number, leadTimesHrs: number[], deploys: DeployRow[]): DoraRollup {
+const DAY_MS = 24 * HOUR_MS;
+const WEEK_MS = 7 * DAY_MS;
+
+/** The four DORA keys over one bucket of `bucketDays` — the shared math both the
+ *  window rollup and each weekly series point use (no second definition). */
+function doraKeys(bucketDays: number, leadTimesHrs: number[], deploys: DeployRow[]) {
   const total = deploys.length;
   const failures = deploys.filter((d) => d.isFailure).length;
   const mttr = deploys
     .filter((d) => d.isFailure && d.restoredAt != null)
     .map((d) => (d.restoredAt!.getTime() - d.deployedAt.getTime()) / HOUR_MS)
     .filter((h) => h >= 0);
-
   return {
-    windowDays: days,
-    deploymentFrequencyPerDay: total / days,
+    deploymentFrequencyPerDay: bucketDays > 0 ? total / bucketDays : 0,
     totalDeployments: total,
     leadTimeHours: avg(leadTimesHrs),
     changeFailureRatePct: total ? (failures / total) * 100 : null,
@@ -401,8 +419,46 @@ export function rollupDora(days: number, leadTimesHrs: number[], deploys: Deploy
   };
 }
 
+/** UTC YYYY-MM-DD of a timestamp. */
+function isoDay(ms: number): string {
+  return new Date(ms).toISOString().slice(0, 10);
+}
+
+/**
+ * Pure: bucket deploys + lead times into per-week DORA points anchored at
+ * `windowStart` (one bucket per elapsed week), mirroring summarizeAdoption. A
+ * deploy is bucketed by deployedAt, a lead time by its completedAt. The last
+ * (current) week is partial; its per-day frequency uses the elapsed days so it
+ * isn't diluted by the not-yet-elapsed remainder of the week.
+ */
+export function rollupDoraSeries(windowStart: number, now: number, leads: LeadRow[], deploys: DeployRow[]): DoraSeriesPoint[] {
+  const count = Math.max(1, Math.ceil((now - windowStart) / WEEK_MS));
+  const deployBuckets: DeployRow[][] = Array.from({ length: count }, () => []);
+  const leadBuckets: number[][] = Array.from({ length: count }, () => []);
+  for (const d of deploys) {
+    const idx = Math.floor((d.deployedAt.getTime() - windowStart) / WEEK_MS);
+    if (idx >= 0 && idx < count) deployBuckets[idx]!.push(d);
+  }
+  for (const l of leads) {
+    const idx = Math.floor((l.completedAt.getTime() - windowStart) / WEEK_MS);
+    if (idx >= 0 && idx < count) leadBuckets[idx]!.push(l.leadTimeHrs);
+  }
+  return deployBuckets.map((bucketDeploys, i) => {
+    const bucketStartMs = windowStart + i * WEEK_MS;
+    const elapsedMs = Math.min(WEEK_MS, now - bucketStartMs);
+    const bucketDays = Math.max(1, elapsedMs / DAY_MS);
+    return { bucketStart: isoDay(bucketStartMs), ...doraKeys(bucketDays, leadBuckets[i]!, bucketDeploys) };
+  });
+}
+
+/** Pure DORA math for the whole window. Separated for unit testing. */
+export function rollupDora(days: number, leadTimesHrs: number[], deploys: DeployRow[], series: DoraSeriesPoint[] = []): DoraRollup {
+  return { windowDays: days, ...doraKeys(days, leadTimesHrs, deploys), series };
+}
+
 export async function computeDora(db: Db, tenantId: number, days: number): Promise<DoraRollup> {
-  const since = new Date(Date.now() - days * 24 * HOUR_MS);
+  const now = Date.now();
+  const since = new Date(now - days * DAY_MS);
 
   const deploys = (await db
     .select({ deployedAt: deploymentEvents.deployedAt, isFailure: deploymentEvents.isFailure, restoredAt: deploymentEvents.restoredAt })
@@ -420,9 +476,11 @@ export async function computeDora(db: Db, tenantId: number, days: number): Promi
       isNotNull(tasks.completedAt),
       gte(tasks.completedAt, since),
     ));
-  const leadTimes = leadRows
-    .map((r) => (r.completedAt!.getTime() - r.createdAt.getTime()) / HOUR_MS)
-    .filter((h) => h >= 0);
+  const leads: LeadRow[] = leadRows
+    .map((r) => ({ completedAt: r.completedAt!, leadTimeHrs: (r.completedAt!.getTime() - r.createdAt.getTime()) / HOUR_MS }))
+    .filter((l) => l.leadTimeHrs >= 0);
+  const leadTimes = leads.map((l) => l.leadTimeHrs);
 
-  return rollupDora(days, leadTimes, deploys);
+  const series = rollupDoraSeries(since.getTime(), now, leads, deploys);
+  return rollupDora(days, leadTimes, deploys, series);
 }

@@ -4362,6 +4362,13 @@ export const projectEvermind = pgTable('project_evermind', {
   mode:          varchar('mode', { length: 16 }).notNull().default('connected'),
   /** Total merged learning contributions across this model's life (telemetry). */
   contributions: integer('contributions').notNull().default(0),
+  /**
+   * Opt-in consumer flag (migration 0264). When TRUE + seeded, agent runs for this
+   * project's tasks resolve their inference model to the project's current Evermind
+   * head — the emitter of the `project_evermind:<projectId>` pin. Independent of
+   * `mode` (write-back): read without contributing, or contribute without reading.
+   */
+  inferenceEnabled: boolean('inference_enabled').notNull().default(false),
   lastLearnedAt: timestamp('last_learned_at'),
   createdAt:     timestamp('created_at').notNull().defaultNow(),
   updatedAt:     timestamp('updated_at').notNull().defaultNow(),
@@ -4968,8 +4975,24 @@ export const errorEvents = pgTable('error_events', {
   release:      varchar('release', { length: 255 }),
   environment:  varchar('environment', { length: 64 }),
   userKey:      varchar('user_key', { length: 255 }),
+  // Adapter that produced this event ('native' | 'otlp' | 'sentry' | 'posthog' |
+  // 'logrocket') — powers the by-source volume breakdown in /api/quality/stats.
+  source:       varchar('source', { length: 32 }),
   payload:      jsonb('payload'),
   createdAt:    timestamp('created_at').notNull().defaultNow(),
+});
+
+/**
+ * Outbound-fetch consumption ledger (migration 0262) — one row per Brain
+ * `/fetch-url` request that hit the wire. COUNT(*) over a window is the metered
+ * quantity for the `outbound_fetches` consumption meter + the abuse cap gate,
+ * mirroring error_events / ingestion_usage_log.
+ */
+export const outboundFetchLog = pgTable('outbound_fetch_log', {
+  id:        uuid('id').primaryKey().defaultRandom(),
+  tenantId:  integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  url:       text('url'),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
 });
 
 /**
