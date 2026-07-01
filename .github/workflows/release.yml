@@ -96,6 +96,13 @@ jobs:
         working-directory: studio-embedded
         run: npm install --no-audit --no-fund
 
+      # brain-embedded's committed dist/ can drift or be deleted; its `prepare`
+      # script (tsup) rebuilds dist/ on install so the frontend `link:` dep
+      # (@seanhogg/builderforce-brain-embedded) always resolves.
+      - name: Install + build Brain embedded
+        working-directory: brain-embedded
+        run: npm install --no-audit --no-fund
+
       - name: Install dependencies
         working-directory: frontend
         run: pnpm install --frozen-lockfile || pnpm install
