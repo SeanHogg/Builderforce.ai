@@ -1,44 +1,58 @@
-> **PRD** — drafted by Bob Developer (V2 (Container)) · task #89
+> **PRD** — drafted by Kevin BA/PM/PO (Durable) · task #202
 > _Each agent that updates this PRD signs its change below._
 
-# Product Requirements Document: Avatar Filter Row Placement
+# Product Requirements Document: Task PR Status Tracker
 
-## 1. Problem & Goal
+## Problem & Goal
 
-**Problem:** The current placement of the avatar filter, separated from the priorities dropdown, disrupts the logical grouping of filtering options. Users must scan different areas of the UI to apply related filters, leading to a less efficient and intuitive user experience.
+### Problem
 
-**Goal:** To improve the user experience by consolidating related filtering options into a single, contiguous row, thereby enhancing discoverability, reducing cognitive load, and increasing the speed at which users can apply filters.
+Development teams often struggle to quickly ascertain the completion status of tasks based on their associated Pull Requests (PRs). Manually checking each task's PR status (merged vs. open) across various repositories is time-consuming and prone to error, leading to delays in release planning, inaccurate progress reporting, and confusion regarding task readiness for deployment.
 
-## 2. Target Users / ICP Roles
+### Goal
 
-*   **Project Managers:** Need to quickly filter tasks by assignee (avatar) and priority to understand workload distribution and identify high-priority items.
-*   **Team Leads:** Require efficient filtering to monitor team progress and allocate resources based on task priority and individual contribution (avatar).
-*   **Individual Contributors:** Benefit from a cleaner interface to focus on their assigned tasks and understand their priority within the project context.
+To provide a concise, automated mechanism for identifying which development tasks have their associated Pull Requests (PRs) merged and which still have open PRs. This will improve project visibility, streamline release readiness assessments, and enhance overall development workflow efficiency.
 
-## 3. Scope
+## Target users / ICP roles
 
-This document covers the functional requirements and acceptance criteria for moving the existing avatar filter component to reside on the same UI row as the priorities dropdown. This includes adjustments to layout, styling, and ensuring the filter's functionality remains intact.
+*   **Development Leads:** To monitor team progress and identify blockers.
+*   **Project Managers:** To track task completion and update project schedules.
+*   **Release Managers:** To determine the readiness of features for deployment.
+*   **Developers:** To quickly review the status of their own or team's work.
 
-## 4. Functional Requirements
+## Scope
 
-*   **FR1: Layout Adjustment:** The avatar filter component shall be repositioned to occupy a space adjacent to the priorities dropdown within the primary filtering bar.
-*   **FR2: Visual Consistency:** The avatar filter shall maintain its current visual appearance and interaction patterns (e.g., dropdown behavior, selection indicators) after being moved.
-*   **FR3: Responsive Design:** The integrated avatar and priorities filter row shall adapt appropriately across different screen sizes and resolutions, maintaining usability.
-*   **FR4: Filter Functionality:** Applying a filter via the avatar selector shall continue to correctly filter the displayed data (e.g., tasks, issues), and this filtering shall be independent of or complementary to the priorities filter.
+This tool will focus on querying a version control system (e.g., GitHub, GitLab) to retrieve the status of Pull Requests linked to a specified set of tasks. The output will clearly differentiate between tasks with merged PRs and those with open PRs.
 
-## 5. Acceptance Criteria
+## Functional requirements
 
-*   **AC1: Avatar Filter Visible in Row:** The avatar filter is visibly present on the same horizontal line as the priorities dropdown.
-*   **AC2: Filter Functionality Preserved:** Selecting an avatar from the new location correctly filters the displayed items.
-*   **AC3: Priorities Filter Functionality Preserved:** Selecting a priority from its dropdown continues to filter the displayed items, and its interaction is unaffected by the avatar filter's new position.
-*   **AC4: Combined Filtering Works:** Applying both an avatar filter and a priorities filter simultaneously yields the correct, combined results.
-*   **AC5: No Visual Overlap or Distortion:** The avatar filter and priorities dropdown do not overlap each other or other UI elements in the filtering bar, and the overall layout remains clean and undistorted.
-*   **AC6: Responsiveness Verified:** On smaller screen sizes, the combined filter row is still usable, potentially with a different arrangement if necessary (e.g., stacking if horizontal space is too limited, though the primary goal is horizontal).
+*   **F1: Task ID Input:** Users must be able to provide a list of task identifiers (e.g., Jira ticket numbers, internal tracking IDs).
+*   **F2: PR Association Lookup:** The system shall search for Pull Requests that are associated with the provided task identifiers (e.g., by matching task IDs in PR titles or descriptions).
+*   **F3: PR Status Determination:** For each found PR, the system must accurately determine its current status:
+    *   `Open`: The PR is still active and awaiting review/merge.
+    *   `Merged`: The PR has been successfully integrated into the target branch.
+    *   `Closed (Unmerged)`: The PR was closed without being merged.
+*   **F4: Configurable Scope:** Users shall be able to specify the repository(ies) or organization(s) to search within.
+*   **F5: Output Report Generation:** The system shall generate a human-readable report summarizing the status for each task ID:
+    *   Task ID
+    *   Associated PRs (if any)
+    *   Status of each associated PR (Open, Merged, Closed)
+    *   A summary indicating if *all* associated PRs are merged for a given task, or if *any* remain open.
 
-## 6. Out of Scope
+## Acceptance criteria
 
-*   **New Avatar Filter Features:** Any enhancements or new functionalities to the avatar filter itself (e.g., search within avatars, multi-select avatars) are out of scope for this task.
-*   **New Priorities Filter Features:** Any enhancements or new functionalities to the priorities dropdown are out of scope.
-*   **Other Filter Components:** Moving or modifying any other filter components not explicitly mentioned (e.g., date filters, status filters) is out of scope.
-*   **Backend Changes:** Any backend changes related to how filters are processed or stored are out of scope, assuming the existing backend APIs can handle the current filtering logic.
-*   **Performance Optimization:** Significant performance optimizations related to filtering are out of scope, unless directly caused by the layout change.
+*   **AC1: Accurate Merged Status:** Given a task ID with an associated PR that has been merged, the report correctly identifies the PR status as "Merged" and indicates the task as "All PRs Merged" (if applicable).
+*   **AC2: Accurate Open Status:** Given a task ID with an associated PR that is currently open, the report correctly identifies the PR status as "Open" and indicates the task as "PR(s) Open."
+*   **AC3: Handling No PRs:** Given a task ID with no associated PR found, the report clearly indicates "No PR Found."
+*   **AC4: Multiple PRs per Task:** If a task ID has multiple associated PRs, the report correctly lists all of them and their individual statuses. The summary for the task should reflect that it is "PR(s) Open" if even one associated PR is not merged.
+*   **AC5: Clear & Concise Output:** The generated report is easy to read, well-formatted, and provides the necessary information at a glance.
+*   **AC6: Error Handling:** The system gracefully handles cases like invalid task IDs, inaccessible repositories, or API rate limits, providing informative error messages.
+
+## Out of scope
+
+*   Creating, modifying, or deleting Pull Requests.
+*   Detailed code analysis or linting within PRs.
+*   Integration with project management tools beyond consuming task IDs.
+*   Sending notifications or alerts based on PR status changes.
+*   Advanced analytics or historical trend reporting on PR status.
+*   Automated merging or closing of PRs.
