@@ -1,44 +1,70 @@
-> **PRD** — drafted by Bob Developer (V2 (Container)) · task #89
+> **PRD** — drafted by Kevin BA/PM/PO (Durable) · task #207
 > _Each agent that updates this PRD signs its change below._
 
-# Product Requirements Document: Avatar Filter Row Placement
+# Product Requirements Document: Deadline Enforcement & Recommendation
 
-## 1. Problem & Goal
+## Problem & Goal
 
-**Problem:** The current placement of the avatar filter, separated from the priorities dropdown, disrupts the logical grouping of filtering options. Users must scan different areas of the UI to apply related filters, leading to a less efficient and intuitive user experience.
+**Problem:** Projects and tasks within the system frequently lack due dates, leading to a lack of accountability, missed deadlines, and inefficient project management. This hinders timely delivery and makes it difficult to track progress effectively.
 
-**Goal:** To improve the user experience by consolidating related filtering options into a single, contiguous row, thereby enhancing discoverability, reducing cognitive load, and increasing the speed at which users can apply filters.
+**Goal:** To improve project completion rates, foster proactive task management, and provide users with clear visibility into timelines by implementing mechanisms to encourage and enforce the setting of due dates.
 
-## 2. Target Users / ICP Roles
+## Target Users / ICP Roles
 
-*   **Project Managers:** Need to quickly filter tasks by assignee (avatar) and priority to understand workload distribution and identify high-priority items.
-*   **Team Leads:** Require efficient filtering to monitor team progress and allocate resources based on task priority and individual contribution (avatar).
-*   **Individual Contributors:** Benefit from a cleaner interface to focus on their assigned tasks and understand their priority within the project context.
+This feature impacts all users who create, manage, or are assigned to projects and tasks. Specifically:
 
-## 3. Scope
+*   **Project Managers:** Responsible for overall project timelines and task delegation.
+*   **Team Leads:** Oversee specific workstreams and individual task assignments.
+*   **Individual Contributors:** Responsible for completing assigned tasks within given deadlines.
+*   **Stakeholders / Clients (if applicable):** Benefit from predictable project delivery.
 
-This document covers the functional requirements and acceptance criteria for moving the existing avatar filter component to reside on the same UI row as the priorities dropdown. This includes adjustments to layout, styling, and ensuring the filter's functionality remains intact.
+## Scope
 
-## 4. Functional Requirements
+This PRD covers the following:
 
-*   **FR1: Layout Adjustment:** The avatar filter component shall be repositioned to occupy a space adjacent to the priorities dropdown within the primary filtering bar.
-*   **FR2: Visual Consistency:** The avatar filter shall maintain its current visual appearance and interaction patterns (e.g., dropdown behavior, selection indicators) after being moved.
-*   **FR3: Responsive Design:** The integrated avatar and priorities filter row shall adapt appropriately across different screen sizes and resolutions, maintaining usability.
-*   **FR4: Filter Functionality:** Applying a filter via the avatar selector shall continue to correctly filter the displayed data (e.g., tasks, issues), and this filtering shall be independent of or complementary to the priorities filter.
+*   **Recommendation Engine:** Proactive suggestions to users to set due dates on new and existing projects/tasks.
+*   **Enforcement Mechanism:** A configurable setting to make due dates mandatory for certain project/task types or at a system-wide level.
+*   **Notifications:** Alerts for users when projects/tasks are approaching their due dates or are overdue.
 
-## 5. Acceptance Criteria
+## Functional Requirements
 
-*   **AC1: Avatar Filter Visible in Row:** The avatar filter is visibly present on the same horizontal line as the priorities dropdown.
-*   **AC2: Filter Functionality Preserved:** Selecting an avatar from the new location correctly filters the displayed items.
-*   **AC3: Priorities Filter Functionality Preserved:** Selecting a priority from its dropdown continues to filter the displayed items, and its interaction is unaffected by the avatar filter's new position.
-*   **AC4: Combined Filtering Works:** Applying both an avatar filter and a priorities filter simultaneously yields the correct, combined results.
-*   **AC5: No Visual Overlap or Distortion:** The avatar filter and priorities dropdown do not overlap each other or other UI elements in the filtering bar, and the overall layout remains clean and undistorted.
-*   **AC6: Responsiveness Verified:** On smaller screen sizes, the combined filter row is still usable, potentially with a different arrangement if necessary (e.g., stacking if horizontal space is too limited, though the primary goal is horizontal).
+1.  **New Project/Task Creation:**
+    *   When a user creates a new project or task, the system SHALL present a clear option to set a due date.
+    *   If a due date is not set, the system SHALL evaluate whether to trigger a recommendation or enforcement based on configuration.
 
-## 6. Out of Scope
+2.  **Existing Project/Task Modification:**
+    *   When a user edits an existing project or task without a due date, the system SHALL present a clear option to set a due date.
+    *   If a due date is not set during editing, the system SHALL evaluate whether to trigger a recommendation or enforcement based on configuration.
 
-*   **New Avatar Filter Features:** Any enhancements or new functionalities to the avatar filter itself (e.g., search within avatars, multi-select avatars) are out of scope for this task.
-*   **New Priorities Filter Features:** Any enhancements or new functionalities to the priorities dropdown are out of scope.
-*   **Other Filter Components:** Moving or modifying any other filter components not explicitly mentioned (e.g., date filters, status filters) is out of scope.
-*   **Backend Changes:** Any backend changes related to how filters are processed or stored are out of scope, assuming the existing backend APIs can handle the current filtering logic.
-*   **Performance Optimization:** Significant performance optimizations related to filtering are out of scope, unless directly caused by the layout change.
+3.  **Recommendation Engine:**
+    *   The system SHALL identify projects and tasks that do not have due dates set.
+    *   The system SHALL provide a non-intrusive UI element (e.g., a banner, tooltip, or prompt) suggesting the user set a due date.
+    *   The recommendation SHALL be context-aware, potentially suggesting a reasonable timeframe based on task complexity or project phase (future enhancement).
+
+4.  **Enforcement Mechanism (Configurable):**
+    *   An administrator SHALL be able to configure a policy to make due dates mandatory for all new projects and tasks.
+    *   An administrator SHALL be able to configure a policy to make due dates mandatory for specific project types or task categories.
+    *   When enforced, the system SHALL prevent the creation or saving of projects/tasks without a due date until one is provided.
+
+5.  **Notifications:**
+    *   The system SHALL send automated notifications to assigned users for upcoming due dates (e.g., 24 hours prior).
+    *   The system SHALL send automated notifications to assigned users for overdue projects/tasks.
+    *   Notification settings (frequency, timing) SHALL be configurable by the user and/or administrator.
+
+## Acceptance Criteria
+
+*   Users can easily add a due date when creating new projects and tasks.
+*   Users can easily add a due date when editing existing projects and tasks that lack them.
+*   The system triggers visible recommendations for setting due dates on projects/tasks without them.
+*   An administrator can successfully enable/disable the mandatory due date setting globally.
+*   An administrator can successfully enable/disable the mandatory due date setting for specific project types.
+*   Attempts to save a project/task without a due date are blocked when the enforcement mechanism is active.
+*   Users receive timely notifications for approaching and overdue deadlines.
+*   Notification preferences can be adjusted to a reasonable extent.
+
+## Out of Scope
+
+*   Automated assignment of due dates based on complex algorithmic predictions.
+*   Integration with external calendar applications for due date synchronization.
+*   Advanced project scheduling features (e.g., Gantt charts, critical path analysis) beyond simple deadline setting.
+*   AI-driven proactive rescheduling of tasks based on progress.
