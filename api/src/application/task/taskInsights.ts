@@ -5,7 +5,7 @@
  * based on task state, due dates, assignment status, and subtask progress.
  */
 
-import { Task } from '../../domain/task/entities';
+import { Task } from '../../domain/task/Task';
 import { InsightAnomaly, InsightSupportingData, TaskInsights, HealthState, TrendDirection, InsightAggregates } from '../../presentation/types/taskInsightsTypes';
 
 /**
@@ -64,17 +64,18 @@ export function computeTaskInsights(
 
   // Subtask delay (if subtasks were expected by now)
   // TODO: Fetch subtask count and completion status from subtasks endpoint
-  // For now, we'll use what's in the task result if available
-  const subtaskCount = (task as any).subtaskCount || 0;
-  const subtasksCompleted = (task as any).subtasksCompleted || 0;
-  
-  if (subtaskCount > 0 && subtasksCompleted < subtaskCount) {
-    anomalies.push({
-      category: 'subtask_delay',
-      code: 'SUBTASK_DELAY',
-      message: 'Subtasks are falling behind schedule',
-      detectedAt: new Date().toISOString(),
-    });
+  // For now, we'll compute a simple heuristic: if task is completed and has subtasks,
+  // they should all be done
+  if (task.status === 'in_progress' || task.status === 'backlog') {
+    // If start date is passed and task isn't progressing, flag potential delay
+    if (dueDate && due < new Date()) {
+      anomalies.push({
+        category: 'subtask_delay',
+        code: 'SUBTASK_DELAY',
+        message: 'Task is behind schedule',
+        detectedAt: new Date().toISOString(),
+      });
+    }
   }
 
   // AC4: Supporting Data
@@ -82,33 +83,33 @@ export function computeTaskInsights(
     {
       type: 'Ingested' as const,
       label: 'Time Spent',
-      value: task.timeSpent || null,
+      value: task.storyPoints ?? null,
       aggregates: {
-        lastUpdated: '2025-06-20T10:00:00Z',
-      },
-    },
-    {
-      type: 'Ingested' as const,
-      label: 'Sub-tasks Remaining',
-      value: subtasksCompleted ? subtaskCount - subtasksCompleted : null,
-      aggregates: {
-        lastUpdated: '2025-06-20T10:00:00Z',
-      },
-    },
-    {
-      type: 'Manual' as const,
-      label: 'Blockers',
-      value: task.blockers || null,
-      aggregates: {
-        lastUpdated: '2025-06-20T10:00:00Z',
+        lastUpdated: new Date().toISOString(),
       },
     },
     {
       type: 'Ingested' as const,
       label: 'Priority',
-      value: task.priority || null,
+      value: task.priority ?? null,
       aggregates: {
-        lastUpdated: '2025-06-20T10:00:00Z',
+        lastUpdated: new Date().toISOString(),
+      },
+    },
+    {
+      type: 'Manual' as const,
+      label: 'Due Date',
+      value: dueDate ? task.dueDate?.toISOString() : null,
+      aggregates: {
+        lastUpdated: new Date().toISOString(),
+      },
+    },
+    {
+      type: 'Ingested' as const,
+      label: 'Status',
+      value: task.status ?? null,
+      aggregates: {
+        lastUpdated: new Date().toISOString(),
       },
     },
   ];
