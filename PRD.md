@@ -1,44 +1,77 @@
-> **PRD** — drafted by Bob Developer (V2 (Container)) · task #89
+> **PRD** — drafted by Kevin BA/PM/PO (Durable) · task #176
 > _Each agent that updates this PRD signs its change below._
 
-# Product Requirements Document: Avatar Filter Row Placement
+# PRD: Managed Hosting - Onboarding Funnel Optimization
 
-## 1. Problem & Goal
+## Problem & Goal
 
-**Problem:** The current placement of the avatar filter, separated from the priorities dropdown, disrupts the logical grouping of filtering options. Users must scan different areas of the UI to apply related filters, leading to a less efficient and intuitive user experience.
+**Problem:** Our current managed hosting onboarding funnel for new customers is experiencing a high drop-off rate, leading to lost revenue and inefficient resource allocation for our sales and support teams. Customers are struggling with the complexity and time commitment required to get started, resulting in a poor initial experience.
 
-**Goal:** To improve the user experience by consolidating related filtering options into a single, contiguous row, thereby enhancing discoverability, reducing cognitive load, and increasing the speed at which users can apply filters.
+**Goal:** To optimize the managed hosting onboarding funnel to increase conversion rates by 15% and reduce the average onboarding time by 20% within the next quarter. This will be achieved by simplifying the user journey, providing clearer guidance, and automating key steps.
 
-## 2. Target Users / ICP Roles
+## Target Users / ICP Roles
 
-*   **Project Managers:** Need to quickly filter tasks by assignee (avatar) and priority to understand workload distribution and identify high-priority items.
-*   **Team Leads:** Require efficient filtering to monitor team progress and allocate resources based on task priority and individual contribution (avatar).
-*   **Individual Contributors:** Benefit from a cleaner interface to focus on their assigned tasks and understand their priority within the project context.
+*   **Small to Medium Business (SMB) Owners:** Decision-makers responsible for selecting and managing hosting solutions for their businesses. They often have limited technical expertise and are looking for a hassle-free, high-performance hosting experience.
+*   **Technical Lead / IT Manager (Mid-Market/Enterprise):** Responsible for evaluating and implementing technical solutions. They require clear technical specifications, security assurances (e.g., SOC 2 compliance), and efficient deployment processes.
 
-## 3. Scope
+## Scope
 
-This document covers the functional requirements and acceptance criteria for moving the existing avatar filter component to reside on the same UI row as the priorities dropdown. This includes adjustments to layout, styling, and ensuring the filter's functionality remains intact.
+The scope of this project is to redesign and implement an optimized onboarding funnel specifically for our Managed Hosting product. This includes:
 
-## 4. Functional Requirements
+*   Revising the initial sign-up flow for clarity and user guidance.
+*   Streamlining the pre-provisioning information gathering process.
+*   Automating account setup and initial deployment where possible.
+*   Introducing guided setup wizards for essential configurations.
+*   Enhancing communication and educational materials throughout the onboarding journey.
+*   Ensuring seamless integration with our existing billing and account management systems.
+*   Validating and displaying SOC 2 compliance readiness information early in the funnel.
 
-*   **FR1: Layout Adjustment:** The avatar filter component shall be repositioned to occupy a space adjacent to the priorities dropdown within the primary filtering bar.
-*   **FR2: Visual Consistency:** The avatar filter shall maintain its current visual appearance and interaction patterns (e.g., dropdown behavior, selection indicators) after being moved.
-*   **FR3: Responsive Design:** The integrated avatar and priorities filter row shall adapt appropriately across different screen sizes and resolutions, maintaining usability.
-*   **FR4: Filter Functionality:** Applying a filter via the avatar selector shall continue to correctly filter the displayed data (e.g., tasks, issues), and this filtering shall be independent of or complementary to the priorities filter.
+## Functional Requirements
 
-## 5. Acceptance Criteria
+1.  **Simplified Sign-up Flow:**
+    *   Reduce the number of required fields in the initial sign-up form.
+    *   Implement inline validation and helpful tooltips for all form fields.
+    *   Provide clear package selection options with comparative features.
 
-*   **AC1: Avatar Filter Visible in Row:** The avatar filter is visibly present on the same horizontal line as the priorities dropdown.
-*   **AC2: Filter Functionality Preserved:** Selecting an avatar from the new location correctly filters the displayed items.
-*   **AC3: Priorities Filter Functionality Preserved:** Selecting a priority from its dropdown continues to filter the displayed items, and its interaction is unaffected by the avatar filter's new position.
-*   **AC4: Combined Filtering Works:** Applying both an avatar filter and a priorities filter simultaneously yields the correct, combined results.
-*   **AC5: No Visual Overlap or Distortion:** The avatar filter and priorities dropdown do not overlap each other or other UI elements in the filtering bar, and the overall layout remains clean and undistorted.
-*   **AC6: Responsiveness Verified:** On smaller screen sizes, the combined filter row is still usable, potentially with a different arrangement if necessary (e.g., stacking if horizontal space is too limited, though the primary goal is horizontal).
+2.  **Intelligent Information Gathering:**
+    *   Utilize conditional logic to ask for relevant information based on chosen hosting plan and user role.
+    *   Offer pre-filled options for common configurations.
+    *   Integrate with existing customer data where appropriate (e.g., for existing clients looking to add managed hosting).
 
-## 6. Out of Scope
+3.  **Automated Account & Environment Setup:**
+    *   Automate the creation of user accounts and associated managed hosting environments upon successful payment.
+    *   Provide real-time status updates on provisioning progress.
 
-*   **New Avatar Filter Features:** Any enhancements or new functionalities to the avatar filter itself (e.g., search within avatars, multi-select avatars) are out of scope for this task.
-*   **New Priorities Filter Features:** Any enhancements or new functionalities to the priorities dropdown are out of scope.
-*   **Other Filter Components:** Moving or modifying any other filter components not explicitly mentioned (e.g., date filters, status filters) is out of scope.
-*   **Backend Changes:** Any backend changes related to how filters are processed or stored are out of scope, assuming the existing backend APIs can handle the current filtering logic.
-*   **Performance Optimization:** Significant performance optimizations related to filtering are out of scope, unless directly caused by the layout change.
+4.  **Guided Setup Wizard:**
+    *   Develop an interactive wizard to guide users through essential post-provisioning configurations (e.g., domain connection, initial security settings, basic application deployment for common types).
+    *   Allow users to skip advanced configuration steps if they are not immediately needed, with clear options to return later.
+
+5.  **Enhanced Communication & Education:**
+    *   Send triggered email notifications at key stages of the onboarding process (e.g., welcome, provisioning complete, setup wizard prompt).
+    *   Provide access to a dedicated "Getting Started" guide and FAQs within the onboarding portal.
+    *   Clearly display available support channels.
+
+6.  **SOC 2 Compliance Information Display:**
+    *   Clearly communicate our current SOC 2 compliance status and relevant audit information early in the funnel.
+    *   Provide resources explaining what SOC 2 compliance means for the customer.
+
+7.  **Integration with Billing & Account Management:**
+    *   Ensure all new managed hosting subscriptions are correctly recorded and managed within the existing billing and account management systems.
+
+## Acceptance Criteria
+
+*   **Conversion Rate:** The overall conversion rate from initiating managed hosting sign-up to a successfully provisioned and configured account increases by 15% within 90 days post-launch.
+*   **Onboarding Time:** The average time from sign-up initiation to a fully provisioned and ready-to-use managed hosting environment decreases by 20% within 90 days post-launch.
+*   **Drop-off Analysis:** Significant reduction in user drop-off observed at the initial sign-up, information gathering, and configuration steps.
+*   **User Feedback:** Positive sentiment scores (measured through post-onboarding surveys) regarding ease of use, clarity, and overall experience.
+*   **Successful Provisioning:** 99% of accounts are provisioned successfully without manual intervention.
+*   **Wizard Completion:** At least 70% of users complete the guided setup wizard within 24 hours of provisioning.
+*   **SOC 2 Visibility:** New customers can easily find and understand information about our SOC 2 compliance during the onboarding process.
+
+## Out of Scope
+
+*   **Complete Redesign of the General Billing System:** This PRD focuses on the onboarding *funnel* for managed hosting, not a full overhaul of the entire billing infrastructure.
+*   **Advanced Feature Configuration:** Deep configuration of specific applications or complex server setups will remain outside the scope of the *initial* onboarding wizard. Users will be guided to advanced documentation or support for these.
+*   **Migration Services:** Automated migration of existing websites or data from other hosts is out of scope for this project.
+*   **Enterprise-Specific Custom Workflows:** Highly tailored onboarding processes for large enterprise clients requiring bespoke solutions are out of scope for this generalized funnel optimization.
+*   **New Marketplace Integrations:** Development of new integrations within the marketplace is not part of this onboarding funnel optimization.
