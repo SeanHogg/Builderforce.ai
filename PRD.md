@@ -1,44 +1,115 @@
-> **PRD** — drafted by Bob Developer (V2 (Container)) · task #89
+> **PRD** — drafted by Kevin BA/PM/PO (Durable) · task #200
 > _Each agent that updates this PRD signs its change below._
 
-# Product Requirements Document: Avatar Filter Row Placement
+# Product Requirements Document (PRD): Task Aging Analysis
 
-## 1. Problem & Goal
+## **Problem & Goal**
+**Problem:**
+Product, engineering, and leadership teams lack visibility into how long open tasks remain in different workflow states (e.g., Backlog, Ready, In Progress). This opacity hinders prioritization efficiency, leads to stale or orphaned work, and obscures bottlenecks in delivery pipelines.
 
-**Problem:** The current placement of the avatar filter, separated from the priorities dropdown, disrupts the logical grouping of filtering options. Users must scan different areas of the UI to apply related filters, leading to a less efficient and intuitive user experience.
+**Goal:**
+Build an automated, self-service task-aging dashboard that surfaces:
+- Age distribution (e.g., <7d, 7–14d, 15–30d, 30d+) of open tasks by workflow state.
+- Trend analysis (e.g., % of tasks aging beyond SLO thresholds over time).
+- Actionable insights (e.g., tasks exceeding team-specific aging policies).
 
-**Goal:** To improve the user experience by consolidating related filtering options into a single, contiguous row, thereby enhancing discoverability, reducing cognitive load, and increasing the speed at which users can apply filters.
+## **Target Users / ICP Roles**
+| Role | Use Case |
+|---|---|
+| **Engineering Managers** | Identify long-running tasks, unblock stalled work, and coach teams on prioritization. |
+| **Product Managers** | Audit backlog health, remove deprecated tasks, and reprioritize based on aging signals. |
+| **DevOps/Platform Teams** | Monitor CI/CD pipeline efficiency (e.g., tasks stuck "In Progress"). |
+| **Leadership/Executives** | Track organizational health metrics (e.g., Mean Time to Complete tasks). |
 
-## 2. Target Users / ICP Roles
+---
 
-*   **Project Managers:** Need to quickly filter tasks by assignee (avatar) and priority to understand workload distribution and identify high-priority items.
-*   **Team Leads:** Require efficient filtering to monitor team progress and allocate resources based on task priority and individual contribution (avatar).
-*   **Individual Contributors:** Benefit from a cleaner interface to focus on their assigned tasks and understand their priority within the project context.
+## **Scope**
+### **In Scope**
+1. **Data Pipeline**
+   - Extract task metadata from project management tools (e.g., Jira, Linear) via API.
+   - Compute aging based on `created_at`, `updated_at`, and state transitions.
+   - Store raw and aggregated data in a query-optimized database (e.g., BigQuery, Snowflake).
 
-## 3. Scope
+2. **Core Features**
+   - **Dashboard:** Filters for project/team, workflow state, aging buckets, assignee, and labels.
+   - **Alerts:** Slack/email notifications for tasks exceeding configurable aging thresholds (e.g., "tasks stuck in Backlog >30d").
+   - **Export:** CSV/JSON downloads of aging data for offline analysis.
 
-This document covers the functional requirements and acceptance criteria for moving the existing avatar filter component to reside on the same UI row as the priorities dropdown. This includes adjustments to layout, styling, and ensuring the filter's functionality remains intact.
+3. **Analytics**
+   - Mean/Median age by state and project.
+   - Burndown charts showing aging trends (e.g., "tasks aging beyond 14d declined 20% MoM").
+   - Benchmarking against team-specific SLOs (e.g., "90% of tasks in Backlog <7d").
 
-## 4. Functional Requirements
+4. **Integrations**
+   - Native support for Jira, Linear, GitHub Issues.
+   - SDK for custom tooling (e.g., internal project trackers).
 
-*   **FR1: Layout Adjustment:** The avatar filter component shall be repositioned to occupy a space adjacent to the priorities dropdown within the primary filtering bar.
-*   **FR2: Visual Consistency:** The avatar filter shall maintain its current visual appearance and interaction patterns (e.g., dropdown behavior, selection indicators) after being moved.
-*   **FR3: Responsive Design:** The integrated avatar and priorities filter row shall adapt appropriately across different screen sizes and resolutions, maintaining usability.
-*   **FR4: Filter Functionality:** Applying a filter via the avatar selector shall continue to correctly filter the displayed data (e.g., tasks, issues), and this filtering shall be independent of or complementary to the priorities filter.
+### **Out of Scope**
+- **Root cause analysis:** No built-in RCA tools (e.g., linking aging to PR reviews or dependencies).
+- **Automated cleanup:** No functionality to auto-archive/close stale tasks.
+- **Cross-tool deduplication:** No merging of tasks tracked in multiple tools.
+- **Forecasting:** No predictive models (e.g., "this task will likely age 5d longer based on history").
+- **Custom workflows:** No support for bespoke state transitions (e.g., "Review → QA").
 
-## 5. Acceptance Criteria
+---
 
-*   **AC1: Avatar Filter Visible in Row:** The avatar filter is visibly present on the same horizontal line as the priorities dropdown.
-*   **AC2: Filter Functionality Preserved:** Selecting an avatar from the new location correctly filters the displayed items.
-*   **AC3: Priorities Filter Functionality Preserved:** Selecting a priority from its dropdown continues to filter the displayed items, and its interaction is unaffected by the avatar filter's new position.
-*   **AC4: Combined Filtering Works:** Applying both an avatar filter and a priorities filter simultaneously yields the correct, combined results.
-*   **AC5: No Visual Overlap or Distortion:** The avatar filter and priorities dropdown do not overlap each other or other UI elements in the filtering bar, and the overall layout remains clean and undistorted.
-*   **AC6: Responsiveness Verified:** On smaller screen sizes, the combined filter row is still usable, potentially with a different arrangement if necessary (e.g., stacking if horizontal space is too limited, though the primary goal is horizontal).
+## **Functional Requirements**
+| ID | Requirement | Priority |
+|---|---|---|
+| **FR-1** | System retrieves task data via OAuth/API keys for configured tools. | P0 |
+| **FR-2** | Compute task age as `(current_time - timestamp_of_state_entry)`, excluding weekends/holidays (configurable). | P0 |
+| **FR-3** | Dashboard displays:
+   - Histogram of open tasks by aging bucket and state.
+   - Table view with task ID, title, age, state, assignee, and labels.
+   - Time-series trend of aging metrics (e.g., "# tasks >30d over past 90d"). | P0 |
+| **FR-4** | User can filter dashboard by:
+   - Project/team, workflow state, age range, assignee, label, priority.
+   - Custom date ranges (e.g., "tasks that entered Backlog in Q3"). | P0 |
+| **FR-5** | Alerts trigger when tasks exceed aging thresholds (e.g., "Backlog task X older than 14d"). Thresholds configurable per project/team. | P1 |
+| **FR-6** | Export data to CSV/JSON with all dashboard fields + computed metadata (e.g., `days_since_last_update`). | P1 |
+| **FR-7** | Benchmarking mode compares aging metrics to historical averages or team SLOs (e.g., "tasks are aging 20% slower than last quarter"). | P2 |
+| **FR-8** | Annotations allow users to tag tasks with reasons for aging (e.g., "blocked on external team") via dashboard or API. | P2 |
 
-## 6. Out of Scope
+---
 
-*   **New Avatar Filter Features:** Any enhancements or new functionalities to the avatar filter itself (e.g., search within avatars, multi-select avatars) are out of scope for this task.
-*   **New Priorities Filter Features:** Any enhancements or new functionalities to the priorities dropdown are out of scope.
-*   **Other Filter Components:** Moving or modifying any other filter components not explicitly mentioned (e.g., date filters, status filters) is out of scope.
-*   **Backend Changes:** Any backend changes related to how filters are processed or stored are out of scope, assuming the existing backend APIs can handle the current filtering logic.
-*   **Performance Optimization:** Significant performance optimizations related to filtering are out of scope, unless directly caused by the layout change.
+## **Acceptance Criteria**
+### **Core Functionality (MVP)**
+✅ **Data Accuracy**
+- Task age calculations match manual review for a sample of 100 tasks across all states.
+- Aging buckets (`<7d`, `7–14d`, etc.) are correctly populated in dashboard.
+
+✅ **Dashboard UX**
+- Filters apply in <500ms for datasets ≤100k tasks.
+- Default view shows aging distribution for user’s teams/projects.
+- Trend charts render with tooltips showing exact metrics.
+
+✅ **Alerts**
+- Alerts fire within 1 hour of a task exceeding configured thresholds (tested with Slack + email).
+- Alerts include task link, age, state, and assignee.
+
+✅ **Performance**
+- Dashboard loads in <2s for 95% of queries with filters applied.
+- Data refresh latency ≤1 hour for new tasks/state changes.
+
+### **Analytics**
+✅ **Trends**
+- Burndown charts accurately reflect changes in aging metrics (e.g., "tasks >30d decreased from 50 to 30").
+- Benchmarking correctly highlights deviations from SLOs (e.g., "Backlog SLO violation: 25% of tasks >7d").
+
+✅ **Exports**
+- CSV/JSON export includes all dashboard fields plus computed aging metrics.
+- Exports complete in <30s for datasets ≤100k tasks.
+
+### **Edge Cases**
+✅ **Handling:**
+- Tasks with missing/invalid timestamps excluded from analysis.
+- State transitions spanning weekends/holidays computed correctly.
+- Deleted tasks purged from dashboard (configurable retention period).
+
+### **Integration**
+✅ **Jira/Linear/GitHub:**
+- OAuth flow completes without errors.
+- API rate limits handled gracefully (e.g., exponential backoff).
+- Webhook-based incremental updates trigger data re-computation.
+
+---
