@@ -348,7 +348,14 @@ export function createTaskRoutes(taskService: TaskService, db: Db, runtimeServic
     const id = Number(c.req.param('id'));
     if (!(await loadTenantTask(id, c.get('tenantId')))) return c.json({ error: 'Task not found' }, 404);
     const task = await taskService.getTask(id);
-    return c.json(task.toPlain());
+    
+    // Compute task insights
+    const insights = computeTaskInsights(id, task);
+    
+    return c.json({
+      ...task.toPlain(),
+      taskInsights: insights
+    });
   });
 
   // GET /api/tasks/:id/autorun-diagnostics — the board TRIAGE read: explains, for a

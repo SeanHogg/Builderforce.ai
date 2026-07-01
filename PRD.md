@@ -1,44 +1,72 @@
-> **PRD** — drafted by Bob Developer (V2 (Container)) · task #89
+> **PRD** — drafted by Kevin BA/PM/PO (Durable) · task #185
 > _Each agent that updates this PRD signs its change below._
 
-# Product Requirements Document: Avatar Filter Row Placement
+# Product Requirements Document: Task Status & Insights View
 
 ## 1. Problem & Goal
 
-**Problem:** The current placement of the avatar filter, separated from the priorities dropdown, disrupts the logical grouping of filtering options. Users must scan different areas of the UI to apply related filters, leading to a less efficient and intuitive user experience.
+### Problem
+Task management systems often lack a consolidated, at-a-glance view of a task's health, historical performance, and underlying data. Users struggle to quickly ascertain the current status, identify performance shifts, or understand the critical data driving a task's progress without extensive drill-downs or manual data correlation. This leads to delayed issue detection, inefficient oversight, and reactive decision-making.
 
-**Goal:** To improve the user experience by consolidating related filtering options into a single, contiguous row, thereby enhancing discoverability, reducing cognitive load, and increasing the speed at which users can apply filters.
+### Goal
+To provide task owners, project managers, and stakeholders with a single, intuitive view for each task that encapsulates its current health (Red/Yellow/Green), performance trend (Improving/Worsening/Stable), detected anomalies, and supporting data (both ingested and manual). This will enable proactive identification of task-related issues, foster data-driven decision-making, and improve overall task management efficiency.
 
 ## 2. Target Users / ICP Roles
 
-*   **Project Managers:** Need to quickly filter tasks by assignee (avatar) and priority to understand workload distribution and identify high-priority items.
-*   **Team Leads:** Require efficient filtering to monitor team progress and allocate resources based on task priority and individual contribution (avatar).
-*   **Individual Contributors:** Benefit from a cleaner interface to focus on their assigned tasks and understand their priority within the project context.
+*   **Task Owners:** Individuals responsible for completing specific tasks.
+*   **Team Leads:** Managers overseeing teams and task progress.
+*   **Project Managers:** Responsible for overall project health and task dependencies.
+*   **Stakeholders:** Executives or clients requiring high-level task status updates.
 
 ## 3. Scope
 
-This document covers the functional requirements and acceptance criteria for moving the existing avatar filter component to reside on the same UI row as the priorities dropdown. This includes adjustments to layout, styling, and ensuring the filter's functionality remains intact.
+This feature will introduce a new "Insights" section or tab within the existing task detail view. This section will display four key data points for the selected task: Current State, Trend, Anomalies, and Supporting Data. The data will be dynamically updated based on configured rules and integrated data sources.
 
 ## 4. Functional Requirements
 
-*   **FR1: Layout Adjustment:** The avatar filter component shall be repositioned to occupy a space adjacent to the priorities dropdown within the primary filtering bar.
-*   **FR2: Visual Consistency:** The avatar filter shall maintain its current visual appearance and interaction patterns (e.g., dropdown behavior, selection indicators) after being moved.
-*   **FR3: Responsive Design:** The integrated avatar and priorities filter row shall adapt appropriately across different screen sizes and resolutions, maintaining usability.
-*   **FR4: Filter Functionality:** Applying a filter via the avatar selector shall continue to correctly filter the displayed data (e.g., tasks, issues), and this filtering shall be independent of or complementary to the priorities filter.
+*   **FR1: Display Current State Indicator**
+    *   The system SHALL display a visual indicator for the task's current state (Red, Yellow, or Green).
+    *   The state SHALL be determined by predefined business rules (e.g., due date proximity, sub-task completion, resource allocation status).
+    *   A tooltip or popover SHALL provide a brief explanation of how the current state was determined.
+*   **FR2: Display Trend Indicator**
+    *   The system SHALL display a visual indicator for the task's performance trend (Improving, Worsening, or Stable).
+    *   The trend SHALL be calculated based on changes in the task's state or key metrics over a defined historical period (e.g., last 7 days).
+    *   A tooltip or popover SHALL provide a brief explanation of how the trend was determined.
+*   **FR3: Display Detected Anomalies**
+    *   The system SHALL list any detected anomalies pertinent to the task.
+    *   Anomalies SHALL be identified by a predefined set of rules (e.g., missed deadlines, unusual activity patterns, unexpected resource consumption, critical path blockage).
+    *   Each anomaly SHALL include a brief description and a timestamp of detection.
+*   **FR4: Display Supporting Data**
+    *   The system SHALL present relevant data points supporting the current state, trend, and anomaly detection.
+    *   Data points SHALL be clearly categorized as "Ingested Data" (automated feeds) or "Manual Data" (user input).
+    *   For ingested data, the source and last updated timestamp SHALL be displayed.
+    *   Users SHALL be able to click on individual data points (where applicable) to view more details or historical charts.
 
 ## 5. Acceptance Criteria
 
-*   **AC1: Avatar Filter Visible in Row:** The avatar filter is visibly present on the same horizontal line as the priorities dropdown.
-*   **AC2: Filter Functionality Preserved:** Selecting an avatar from the new location correctly filters the displayed items.
-*   **AC3: Priorities Filter Functionality Preserved:** Selecting a priority from its dropdown continues to filter the displayed items, and its interaction is unaffected by the avatar filter's new position.
-*   **AC4: Combined Filtering Works:** Applying both an avatar filter and a priorities filter simultaneously yields the correct, combined results.
-*   **AC5: No Visual Overlap or Distortion:** The avatar filter and priorities dropdown do not overlap each other or other UI elements in the filtering bar, and the overall layout remains clean and undistorted.
-*   **AC6: Responsiveness Verified:** On smaller screen sizes, the combined filter row is still usable, potentially with a different arrangement if necessary (e.g., stacking if horizontal space is too limited, though the primary goal is horizontal).
+*   **AC1: Current State Indicator**
+    *   When a task's due date is within 24 hours and not completed, its state shows `RED`.
+    *   When a task's due date is within 3 days and not completed, its state shows `YELLOW`.
+    *   When a task is on track and outside the 3-day window, its state shows `GREEN`.
+    *   The explanation tooltip accurately describes the rule triggering the displayed state.
+*   **AC2: Trend Indicator**
+    *   When the task's state has improved (e.g., from Yellow to Green) over the last 3 days, the trend shows `IMPROVING`.
+    *   When the task's state has worsened (e.g., from Green to Yellow/Red) over the last 3 days, the trend shows `WORSENING`.
+    *   When the task's state has remained unchanged over the last 3 days, the trend shows `STABLE`.
+*   **AC3: Detected Anomalies**
+    *   When a task's primary assignee has exceeded 100% estimated capacity for the next 5 working days, an anomaly "Resource Overload" is displayed.
+    *   When a task's deadline is missed, an anomaly "Deadline Missed" is displayed.
+    *   Each displayed anomaly includes its description and the exact timestamp.
+*   **AC4: Supporting Data**
+    *   The section displays at least 3 relevant data points (e.g., "Time Spent (Ingested)", "Sub-tasks Remaining (Ingested)", "Blockers (Manual)").
+    *   Each data point clearly labels its type (`Ingested` or `Manual`).
+    *   Clicking on "Time Spent (Ingested)" opens a modal showing a historical chart of time logged against the task over the last 30 days.
 
 ## 6. Out of Scope
 
-*   **New Avatar Filter Features:** Any enhancements or new functionalities to the avatar filter itself (e.g., search within avatars, multi-select avatars) are out of scope for this task.
-*   **New Priorities Filter Features:** Any enhancements or new functionalities to the priorities dropdown are out of scope.
-*   **Other Filter Components:** Moving or modifying any other filter components not explicitly mentioned (e.g., date filters, status filters) is out of scope.
-*   **Backend Changes:** Any backend changes related to how filters are processed or stored are out of scope, assuming the existing backend APIs can handle the current filtering logic.
-*   **Performance Optimization:** Significant performance optimizations related to filtering are out of scope, unless directly caused by the layout change.
+*   Customization of R/Y/G, Trend, or Anomaly detection rules by end-users (admin-configured only).
+*   Real-time notifications for status changes or anomalies (this release focuses on display).
+*   Aggregated reporting or dashboard views across multiple tasks.
+*   New task creation or editing capabilities within the new "Insights" section.
+*   Integration with external 3rd party analytics platforms (beyond ingesting defined data feeds).
+*   Predictive analytics for task completion or risk assessment.
