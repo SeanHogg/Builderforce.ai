@@ -45,7 +45,9 @@ export type TaskEvent = {
 export interface TaskStorage {
   save(task: TaskState): Promise<void>;
   load(taskId: string): Promise<TaskState | null>;
-  list(filter?: { status?: TaskStatus; sessionId?: string }): Promise<TaskState[]>;
+  list(filter?: { status?: TaskStatus; sessionId?: string; projectId?: string }): Promise<
+    TaskState[]
+  >;
   delete(taskId: string): Promise<void>;
   saveEvent(event: TaskEvent): Promise<void>;
   getEvents(taskId: string): Promise<TaskEvent[]>;
