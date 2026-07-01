@@ -69,7 +69,11 @@ export class MemoryTaskStorage implements TaskStorage {
     return task ? { ...task } : null;
   }
 
-  async list(filter?: { status?: TaskStatus; sessionId?: string }): Promise<TaskState[]> {
+  async list(filter?: {
+    status?: TaskStatus;
+    sessionId?: string;
+    projectId?: string;
+  }): Promise<TaskState[]> {
     let tasks = Array.from(this.tasks.values());
 
     if (filter?.status) {
@@ -78,6 +82,10 @@ export class MemoryTaskStorage implements TaskStorage {
 
     if (filter?.sessionId) {
       tasks = tasks.filter((t) => t.sessionId === filter.sessionId);
+    }
+
+    if (filter?.projectId) {
+      tasks = tasks.filter((t) => t.projectId === filter.projectId);
     }
 
     return tasks.map((t) => ({ ...t }));
