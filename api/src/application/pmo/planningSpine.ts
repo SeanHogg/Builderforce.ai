@@ -172,6 +172,12 @@ export interface SpineNode {
   suggestion: CostClassSuggestion | null;
   cost: SpineCost;
   childCount: number;
+  /** Percentage complete of this epic based on direct task children. */
+  completionPercent: number | null;
+  /** Number of direct task children that are completed (Done/Completed/Closed). */
+  completedItems: number;
+  /** Total number of direct task children (includes untyped/legacy items). */
+  totalItems: number;
 }
 
 export interface SpineResult {
