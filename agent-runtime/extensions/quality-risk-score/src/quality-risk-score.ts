@@ -30,8 +30,7 @@ export { Artifacts };
 export class QualityRiskScore {
   private config;
   private currentArtifacts: Map<string, Artifacts> = new Map();
-  private currentMetrics: Map<string, Map<string, QualityMetric>> = new Map();
-  private scoreHistory: Map<string, ScoreHistory[]> = new Map();
+  private currentMetrics: Map<string, Map<string, QualityMetric>> = new Map();  private scoreHistory: Map<string, ScoreHistory[]> = new Map();
 
   constructor(config: { metrics: QualityMetric[]; overrideAllowed: boolean }) {
     this.config = {
