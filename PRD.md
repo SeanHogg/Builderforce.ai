@@ -1,44 +1,41 @@
-> **PRD** — drafted by Bob Developer (V2 (Container)) · task #89
+> **PRD** — drafted by Kevin BA/PM/PO (Durable) · task #174
 > _Each agent that updates this PRD signs its change below._
 
-# Product Requirements Document: Avatar Filter Row Placement
+# Product Requirements Document: OKR Key Result Extraction
 
 ## 1. Problem & Goal
 
-**Problem:** The current placement of the avatar filter, separated from the priorities dropdown, disrupts the logical grouping of filtering options. Users must scan different areas of the UI to apply related filters, leading to a less efficient and intuitive user experience.
+**Problem:** Currently, there's no automated or efficient way to extract Key Results (KRs) from OKR epic descriptions. This manual process is time-consuming and prone to human error, hindering our ability to track progress against strategic objectives.
 
-**Goal:** To improve the user experience by consolidating related filtering options into a single, contiguous row, thereby enhancing discoverability, reducing cognitive load, and increasing the speed at which users can apply filters.
+**Goal:** To develop a system that accurately identifies and extracts Key Results from OKR epic descriptions, making them readily available for operational tracking and reporting.
 
 ## 2. Target Users / ICP Roles
 
-*   **Project Managers:** Need to quickly filter tasks by assignee (avatar) and priority to understand workload distribution and identify high-priority items.
-*   **Team Leads:** Require efficient filtering to monitor team progress and allocate resources based on task priority and individual contribution (avatar).
-*   **Individual Contributors:** Benefit from a cleaner interface to focus on their assigned tasks and understand their priority within the project context.
+This feature is primarily for Product Managers, Engineering Leads, and anyone responsible for defining, tracking, and reporting on OKRs.
 
 ## 3. Scope
 
-This document covers the functional requirements and acceptance criteria for moving the existing avatar filter component to reside on the same UI row as the priorities dropdown. This includes adjustments to layout, styling, and ensuring the filter's functionality remains intact.
+The scope of this project is to develop a mechanism (likely a script or a microservice) that can process existing OKR epic descriptions and output a structured list of their associated Key Results.
 
 ## 4. Functional Requirements
 
-*   **FR1: Layout Adjustment:** The avatar filter component shall be repositioned to occupy a space adjacent to the priorities dropdown within the primary filtering bar.
-*   **FR2: Visual Consistency:** The avatar filter shall maintain its current visual appearance and interaction patterns (e.g., dropdown behavior, selection indicators) after being moved.
-*   **FR3: Responsive Design:** The integrated avatar and priorities filter row shall adapt appropriately across different screen sizes and resolutions, maintaining usability.
-*   **FR4: Filter Functionality:** Applying a filter via the avatar selector shall continue to correctly filter the displayed data (e.g., tasks, issues), and this filtering shall be independent of or complementary to the priorities filter.
+*   **FR1: Text Parsing:** The system shall parse the text content of OKR epic descriptions.
+*   **FR2: Key Result Identification:** The system shall identify phrases or sentences within the epic description that represent Key Results. This will likely involve pattern matching based on common KR phrasing (e.g., "Achieve X by Y", "Increase Z by N%", "Reduce Q by M%").
+*   **FR3: Key Result Extraction:** The system shall extract the identified Key Results as distinct textual entities.
+*   **FR4: Structured Output:** The system shall output the extracted Key Results in a structured format, such as a JSON array or a CSV file, where each element represents a single Key Result.
+*   **FR5: Error Handling:** The system shall gracefully handle cases where no Key Results are found or when parsing errors occur, providing informative feedback.
 
 ## 5. Acceptance Criteria
 
-*   **AC1: Avatar Filter Visible in Row:** The avatar filter is visibly present on the same horizontal line as the priorities dropdown.
-*   **AC2: Filter Functionality Preserved:** Selecting an avatar from the new location correctly filters the displayed items.
-*   **AC3: Priorities Filter Functionality Preserved:** Selecting a priority from its dropdown continues to filter the displayed items, and its interaction is unaffected by the avatar filter's new position.
-*   **AC4: Combined Filtering Works:** Applying both an avatar filter and a priorities filter simultaneously yields the correct, combined results.
-*   **AC5: No Visual Overlap or Distortion:** The avatar filter and priorities dropdown do not overlap each other or other UI elements in the filtering bar, and the overall layout remains clean and undistorted.
-*   **AC6: Responsiveness Verified:** On smaller screen sizes, the combined filter row is still usable, potentially with a different arrangement if necessary (e.g., stacking if horizontal space is too limited, though the primary goal is horizontal).
+*   **AC1: Accurate Extraction:** For a given set of 10 sample OKR epic descriptions with clearly defined KRs, the system must correctly identify and extract at least 90% of the KRs.
+*   **AC2: Structured Output Validation:** The output format (e.g., JSON or CSV) must be easily parsable by downstream systems and contain only the extracted Key Results.
+*   **AC3: Robustness:** The system should not crash when encountering malformed or unexpected text in an epic description.
+*   **AC4: Performance:** The system should be able to process a batch of 100 OKR epic descriptions within 5 minutes.
 
 ## 6. Out of Scope
 
-*   **New Avatar Filter Features:** Any enhancements or new functionalities to the avatar filter itself (e.g., search within avatars, multi-select avatars) are out of scope for this task.
-*   **New Priorities Filter Features:** Any enhancements or new functionalities to the priorities dropdown are out of scope.
-*   **Other Filter Components:** Moving or modifying any other filter components not explicitly mentioned (e.g., date filters, status filters) is out of scope.
-*   **Backend Changes:** Any backend changes related to how filters are processed or stored are out of scope, assuming the existing backend APIs can handle the current filtering logic.
-*   **Performance Optimization:** Significant performance optimizations related to filtering are out of scope, unless directly caused by the layout change.
+*   **KR Quantification:** The system will not attempt to automatically quantify KRs if they are not explicitly stated with numerical targets within the text (e.g., "Improve customer satisfaction" without a target percentage).
+*   **OKR Goal Alignment:** The system will not link extracted KRs back to their parent OKR Objectives.
+*   **Real-time Monitoring:** This is an extraction tool, not a real-time OKR tracking dashboard.
+*   **User Interface:** No user interface will be developed as part of this initial phase. The output will be raw data.
+*   **Natural Language Understanding (NLU) beyond pattern matching:** Advanced sentiment analysis or comprehension of complex, nuanced phrasing for KR identification is out of scope for this iteration.
