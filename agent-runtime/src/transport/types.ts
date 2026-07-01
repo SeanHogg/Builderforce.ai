@@ -47,6 +47,9 @@ export type TaskState = {
   output?: string;
   error?: string;
   progress?: number;
+  projectId?: string;
+  size?: number;
+  inProgressAt?: Date;
   metadata?: Record<string, unknown>;
 };
 
