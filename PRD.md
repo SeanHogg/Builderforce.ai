@@ -1,44 +1,75 @@
-> **PRD** — drafted by Bob Developer (V2 (Container)) · task #89
+> **PRD** — drafted by Kevin BA/PM/PO (Durable) · task #171
 > _Each agent that updates this PRD signs its change below._
 
-# Product Requirements Document: Avatar Filter Row Placement
+# Product Requirements Document: OKR Epic-Feature Mapping
+
+---
 
 ## 1. Problem & Goal
 
-**Problem:** The current placement of the avatar filter, separated from the priorities dropdown, disrupts the logical grouping of filtering options. Users must scan different areas of the UI to apply related filters, leading to a less efficient and intuitive user experience.
+### Problem
+Currently, there is a lack of clear, consistent traceability between individual product features and high-level strategic OKR (Objectives and Key Results) Epics. This leads to:
+*   Difficulty for product and engineering teams to understand the strategic "why" behind their work.
+*   Challenges in prioritizing features based on their direct contribution to company objectives.
+*   Inefficient reporting on progress against strategic OKRs due to fragmented data.
+*   Potential for work to drift out of alignment with company goals.
 
-**Goal:** To improve the user experience by consolidating related filtering options into a single, contiguous row, thereby enhancing discoverability, reducing cognitive load, and increasing the speed at which users can apply filters.
+### Goal
+Establish a robust and mandatory system for explicitly linking every new product feature or user story to its parent OKR Epic. This will enhance transparency, improve strategic alignment, streamline prioritization, and enable more accurate reporting on company objectives across product and engineering teams.
+
+---
 
 ## 2. Target Users / ICP Roles
 
-*   **Project Managers:** Need to quickly filter tasks by assignee (avatar) and priority to understand workload distribution and identify high-priority items.
-*   **Team Leads:** Require efficient filtering to monitor team progress and allocate resources based on task priority and individual contribution (avatar).
-*   **Individual Contributors:** Benefit from a cleaner interface to focus on their assigned tasks and understand their priority within the project context.
+*   **Product Managers:** To define OKR Epics and ensure all features map to strategic objectives.
+*   **Engineering Leads/Managers:** To ensure team efforts are aligned with company goals and to prioritize work effectively.
+*   **Individual Contributors (Developers, Designers, QA):** To understand the strategic context and impact of their work.
+*   **Company Leadership / Stakeholders:** To gain clear visibility into product development's contribution to OKRs and track progress.
+
+---
 
 ## 3. Scope
 
-This document covers the functional requirements and acceptance criteria for moving the existing avatar filter component to reside on the same UI row as the priorities dropdown. This includes adjustments to layout, styling, and ensuring the filter's functionality remains intact.
+This project focuses on implementing a new workflow and configuration within our primary project management tool (e.g., Jira, Azure DevOps, GitHub Projects) to:
+1.  Define and manage "OKR Epic" issue types.
+2.  Enforce a mandatory one-to-many linkage from new Features/User Stories to a single OKR Epic.
+3.  Provide clear visibility of this linkage within the tool.
+4.  Enable basic reporting/filtering based on OKR Epic affiliation.
+
+---
 
 ## 4. Functional Requirements
 
-*   **FR1: Layout Adjustment:** The avatar filter component shall be repositioned to occupy a space adjacent to the priorities dropdown within the primary filtering bar.
-*   **FR2: Visual Consistency:** The avatar filter shall maintain its current visual appearance and interaction patterns (e.g., dropdown behavior, selection indicators) after being moved.
-*   **FR3: Responsive Design:** The integrated avatar and priorities filter row shall adapt appropriately across different screen sizes and resolutions, maintaining usability.
-*   **FR4: Filter Functionality:** Applying a filter via the avatar selector shall continue to correctly filter the displayed data (e.g., tasks, issues), and this filtering shall be independent of or complementary to the priorities filter.
+*   **FR1: OKR Epic Definition:**
+    *   As a Product Manager, I can create a new issue type specifically for "OKR Epic" within the project management tool.
+    *   OKR Epics should include fields for `Title`, `Description`, `Target Quarter/Period`, and `Owner`.
+*   **FR2: Mandatory Feature-to-OKR Epic Linkage:**
+    *   As a Product Manager or Engineer, when creating a new "Feature" or "User Story" issue type, I *must* select an existing "OKR Epic" from a predefined list.
+    *   This linkage field will be mandatory before the new Feature/User Story can be saved/created.
+*   **FR3: Linkage Visibility:**
+    *   As any user, I can easily view the associated "OKR Epic" on the detail page of any "Feature" or "User Story."
+    *   The "OKR Epic" should be a clickable link, allowing navigation to the associated OKR Epic's detail page.
+*   **FR4: Reporting and Filtering by OKR Epic:**
+    *   As a Product Manager or Lead, I can filter and group existing "Features" and "User Stories" by their linked "OKR Epic."
+    *   The project management tool should support basic queries or reports showing all Features/Stories linked to a specific OKR Epic.
+
+---
 
 ## 5. Acceptance Criteria
 
-*   **AC1: Avatar Filter Visible in Row:** The avatar filter is visibly present on the same horizontal line as the priorities dropdown.
-*   **AC2: Filter Functionality Preserved:** Selecting an avatar from the new location correctly filters the displayed items.
-*   **AC3: Priorities Filter Functionality Preserved:** Selecting a priority from its dropdown continues to filter the displayed items, and its interaction is unaffected by the avatar filter's new position.
-*   **AC4: Combined Filtering Works:** Applying both an avatar filter and a priorities filter simultaneously yields the correct, combined results.
-*   **AC5: No Visual Overlap or Distortion:** The avatar filter and priorities dropdown do not overlap each other or other UI elements in the filtering bar, and the overall layout remains clean and undistorted.
-*   **AC6: Responsiveness Verified:** On smaller screen sizes, the combined filter row is still usable, potentially with a different arrangement if necessary (e.g., stacking if horizontal space is too limited, though the primary goal is horizontal).
+*   **AC1:** All newly created "Feature" and "User Story" issues have a mandatory and valid link to an "OKR Epic."
+*   **AC2:** It is impossible to create a "Feature" or "User Story" without selecting an "OKR Epic."
+*   **AC3:** The "OKR Epic" field is clearly visible and navigable on the detail view of all "Features" and "User Stories."
+*   **AC4:** Product Managers and Leads can successfully generate lists or reports of "Features" and "User Stories" grouped or filtered by "OKR Epic."
+*   **AC5:** The "OKR Epic" issue type is correctly configured with the specified attributes (`Title`, `Description`, `Target Quarter/Period`, `Owner`).
+*   **AC6:** Documentation outlining the new workflow for creating and linking Features/Stories to OKR Epics is available and accessible.
+
+---
 
 ## 6. Out of Scope
 
-*   **New Avatar Filter Features:** Any enhancements or new functionalities to the avatar filter itself (e.g., search within avatars, multi-select avatars) are out of scope for this task.
-*   **New Priorities Filter Features:** Any enhancements or new functionalities to the priorities dropdown are out of scope.
-*   **Other Filter Components:** Moving or modifying any other filter components not explicitly mentioned (e.g., date filters, status filters) is out of scope.
-*   **Backend Changes:** Any backend changes related to how filters are processed or stored are out of scope, assuming the existing backend APIs can handle the current filtering logic.
-*   **Performance Optimization:** Significant performance optimizations related to filtering are out of scope, unless directly caused by the layout change.
+*   **Automated OKR progress calculation:** This project does not include any automated tracking or dashboarding for OKR key result progress based on feature completion.
+*   **Integration with external OKR tracking tools:** The scope is limited to our existing project management tool, not third-party OKR platforms.
+*   **Bulk migration/mapping of existing features:** This project focuses solely on new feature creation; existing features will not be retroactively mapped to OKR Epics as part of this initial phase.
+*   **Complex permissioning for OKR Epics:** Access control for creating/modifying OKR Epics will leverage existing role-based permissions within the project management tool.
+*   **Enforcement of Key Results:** This project defines the "OKR Epic" container but does not enforce the definition or tracking of specific Key Results within it.
