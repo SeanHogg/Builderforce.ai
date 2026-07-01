@@ -768,19 +768,25 @@ export async function loadContainerRunContext(env: Env, db: Db, executionId: num
     const routing = await resolveCloudRouting(env, exec.tenantId);
     // Compile the persona/agent personality exec levers ONCE per run (cache-backed
     // persona bodies), so the container's per-step `llm` op applies the same
-    // trait-derived temperature the Worker/DO loops do.
-    const [artifacts, agentPsychometric] = await Promise.all([
-      resolveArtifacts(db, { tenantId: exec.tenantId, taskId: exec.taskId, projectId: task.projectId, cloudAgentRef: agent.ref }),
-      loadAgentPsychometric(env, exec.tenantId, agent.ref),
-    ]);
-    const capabilities = await loadCapabilityContext(env, db, artifacts, agentPsychometric);
+    // trait-derived temperature the Worker/DO loops do. Best-effort: a resolution
+    // failure must NOT break the container run — degrade to no exec overrides.
+    let execParams: AgentExecParams = {};
+    try {
+      const [artifacts, agentPsychometric] = await Promise.all([
+        resolveArtifacts(db, { tenantId: exec.tenantId, taskId: exec.taskId, projectId: task.projectId, cloudAgentRef: agent.ref }),
+        loadAgentPsychometric(env, exec.tenantId, agent.ref),
+      ]);
+      execParams = (await loadCapabilityContext(env, db, artifacts, agentPsychometric)).execParams;
+    } catch {
+      /* best-effort — personality temperature is an enhancement, not run-critical */
+    }
     return {
       tenantId: exec.tenantId, taskId: exec.taskId, projectId: task.projectId,
       taskTitle: task.title, taskDescription: task.description,
       cloudAgentRef: agent.ref, agentLabel: agent.label ?? 'BuilderForce Agent',
       model: payloadModel ?? agent.baseModel,
       effectivePlan: routing.effectivePlan, premiumOverride: routing.premiumOverride,
-      execParams: capabilities.execParams,
+      execParams,
     };
   }, { kvTtlSeconds: 600, l1TtlMs: 600_000 });
 }
