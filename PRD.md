@@ -1,44 +1,59 @@
-> **PRD** — drafted by Bob Developer (V2 (Container)) · task #89
+> **PRD** — drafted by Kevin BA/PM/PO (Durable) · task #240
 > _Each agent that updates this PRD signs its change below._
 
-# Product Requirements Document: Avatar Filter Row Placement
+# Resource Estimation Engine
 
 ## 1. Problem & Goal
 
-**Problem:** The current placement of the avatar filter, separated from the priorities dropdown, disrupts the logical grouping of filtering options. Users must scan different areas of the UI to apply related filters, leading to a less efficient and intuitive user experience.
+**Problem:** Project teams often struggle to accurately estimate the resources (personnel, equipment, etc.) required for new projects. This leads to under-resourcing (delays, burnout, cost overruns) or over-resourcing (wasted budget, inefficient allocation). Current estimation methods are often manual, subjective, and lack data-driven insights.
 
-**Goal:** To improve the user experience by consolidating related filtering options into a single, contiguous row, thereby enhancing discoverability, reducing cognitive load, and increasing the speed at which users can apply filters.
+**Goal:** To develop an intelligent resource estimation engine that leverages historical project data and baselines to provide accurate and data-driven resource estimates for new projects. This will enable better project planning, resource allocation, and cost forecasting.
 
 ## 2. Target Users / ICP Roles
 
-*   **Project Managers:** Need to quickly filter tasks by assignee (avatar) and priority to understand workload distribution and identify high-priority items.
-*   **Team Leads:** Require efficient filtering to monitor team progress and allocate resources based on task priority and individual contribution (avatar).
-*   **Individual Contributors:** Benefit from a cleaner interface to focus on their assigned tasks and understand their priority within the project context.
+*   **Project Managers:** Responsible for planning, executing, and closing projects. Will use the engine to generate initial resource estimates and refine them throughout the project lifecycle.
+*   **Resource Managers / Team Leads:** Responsible for allocating and managing personnel and other resources. Will use estimates to understand future resource needs and identify potential bottlenecks.
+*   **Program Managers:** Oversee multiple projects. Will use aggregate estimates to understand overall resource demand and capacity planning.
+*   **Finance / Budgeting Teams:** Responsible for financial planning and cost control. Will use estimates for budget allocation and financial forecasting.
 
 ## 3. Scope
 
-This document covers the functional requirements and acceptance criteria for moving the existing avatar filter component to reside on the same UI row as the priorities dropdown. This includes adjustments to layout, styling, and ensuring the filter's functionality remains intact.
+The Resource Estimation Engine will be a software component integrated within our existing project management platform. It will:
+
+*   Ingest and process historical project data, including planning information, actual resource allocation, and baselines.
+*   Develop and apply predictive models to estimate resource needs for new projects based on project attributes and historical patterns.
+*   Provide a user interface for inputting new project characteristics and viewing generated resource estimates.
+*   Allow users to compare estimated resources against historical baselines.
 
 ## 4. Functional Requirements
 
-*   **FR1: Layout Adjustment:** The avatar filter component shall be repositioned to occupy a space adjacent to the priorities dropdown within the primary filtering bar.
-*   **FR2: Visual Consistency:** The avatar filter shall maintain its current visual appearance and interaction patterns (e.g., dropdown behavior, selection indicators) after being moved.
-*   **FR3: Responsive Design:** The integrated avatar and priorities filter row shall adapt appropriately across different screen sizes and resolutions, maintaining usability.
-*   **FR4: Filter Functionality:** Applying a filter via the avatar selector shall continue to correctly filter the displayed data (e.g., tasks, issues), and this filtering shall be independent of or complementary to the priorities filter.
+| ID  | Requirement                                                                                             | Description                                                                                                                                                                                                                                                                                                                           |
+| :-- | :------------------------------------------------------------------------------------------------------ | :------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| FR1 | **Data Ingestion and Preprocessing**                                                                    | The system shall ingest historical project data, including task breakdowns, resource types, estimated vs. actual hours/effort, project duration, project type, complexity scores, and any associated baseline data. Data must be cleaned and formatted for model training.                                                              |
+| FR2 | **Predictive Model Development**                                                                        | The system shall develop and maintain predictive models (e.g., regression, machine learning) to forecast resource requirements based on identified key project drivers from historical data. Models should be adaptable and retrainable.                                                                                              |
+| FR3 | **Resource Estimation Interface**                                                                       | The system shall provide an intuitive interface where users can input key characteristics of a new project (e.g., project type, scope summary, estimated duration, complexity level, key deliverables).                                                                                                                             |
+| FR4 | **Resource Estimate Generation**                                                                        | Based on user input and the trained predictive models, the system shall generate estimated resource requirements (e.g., number of engineers, specific skill sets, equipment hours) for the new project, broken down by project phase or major task if applicable.                                                                    |
+| FR5 | **Baseline Comparison**                                                                                 | The system shall allow users to define a baseline for a new project and compare the generated resource estimates against this baseline. This includes visualizing differences and identifying potential variances.                                                                                                                           |
+| FR6 | **Confidence Scoring / Uncertainty**                                                                    | The system shall provide a confidence score or range of estimates to indicate the uncertainty associated with the generated resource prediction.                                                                                                                                                                                            |
+| FR7 | **User Feedback Integration**                                                                           | The system shall allow users to provide feedback on the accuracy of the generated estimates once actual project data becomes available. This feedback loop will be used to refine models.                                                                                                                                            |
+| FR8 | **Export and Reporting**                                                                                | The system shall allow users to export generated resource estimates and comparison reports in standard formats (e.g., CSV, PDF).                                                                                                                                                                                                       |
 
 ## 5. Acceptance Criteria
 
-*   **AC1: Avatar Filter Visible in Row:** The avatar filter is visibly present on the same horizontal line as the priorities dropdown.
-*   **AC2: Filter Functionality Preserved:** Selecting an avatar from the new location correctly filters the displayed items.
-*   **AC3: Priorities Filter Functionality Preserved:** Selecting a priority from its dropdown continues to filter the displayed items, and its interaction is unaffected by the avatar filter's new position.
-*   **AC4: Combined Filtering Works:** Applying both an avatar filter and a priorities filter simultaneously yields the correct, combined results.
-*   **AC5: No Visual Overlap or Distortion:** The avatar filter and priorities dropdown do not overlap each other or other UI elements in the filtering bar, and the overall layout remains clean and undistorted.
-*   **AC6: Responsiveness Verified:** On smaller screen sizes, the combined filter row is still usable, potentially with a different arrangement if necessary (e.g., stacking if horizontal space is too limited, though the primary goal is horizontal).
+| ID  | Criteria                                                                                                                                                                                                                                                                                                                       |
+| :-- | :----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| AC1 | **Accuracy Threshold:** For a defined set of historical projects (hold-out set), the engine's estimated total person-hours for a project must be within +/- 20% of the actual total person-hours for at least 70% of projects.                                                                                                       |
+| AC2 | **Usability:** A project manager can successfully input 5 different new project scenarios and generate resource estimates within 10 minutes without significant assistance.                                                                                                                                                      |
+| AC3 | **Integration:** The engine successfully ingests historical data from at least two distinct historical project data sources without manual data transformation.                                                                                                                                                                  |
+| AC4 | **Baseline Visualization:** Users can clearly see and interact with a visual comparison showing estimated resources vs. user-defined baseline resources for a sample project, highlighting key differences.                                                                                                                    |
+| AC5 | **Performance:** Generating a resource estimate for a moderately complex project (defined by 10-15 input parameters) takes no longer than 15 seconds.                                                                                                                                                                             |
+| AC6 | **Feedback Loop:** When actual resource data for a completed project is entered, the system correctly processes this feedback and flags it for potential model retraining.                                                                                                                                                     |
 
 ## 6. Out of Scope
 
-*   **New Avatar Filter Features:** Any enhancements or new functionalities to the avatar filter itself (e.g., search within avatars, multi-select avatars) are out of scope for this task.
-*   **New Priorities Filter Features:** Any enhancements or new functionalities to the priorities dropdown are out of scope.
-*   **Other Filter Components:** Moving or modifying any other filter components not explicitly mentioned (e.g., date filters, status filters) is out of scope.
-*   **Backend Changes:** Any backend changes related to how filters are processed or stored are out of scope, assuming the existing backend APIs can handle the current filtering logic.
-*   **Performance Optimization:** Significant performance optimizations related to filtering are out of scope, unless directly caused by the layout change.
+*   **Real-time resource allocation/scheduling:** The engine provides *estimates*, not a dynamic scheduling tool that adjusts resources as the project progresses.
+*   **Integration with external HR/Payroll systems:** The engine focuses on estimating resource *needs*, not managing actual employee assignments, time tracking, or payroll.
+*   **Detailed skill gap analysis:** While estimates may include skill types, the engine will not perform a granular analysis of individual skill proficiency or identify specific training needs.
+*   **Automated model selection and hyperparameter tuning:** Initial model development will be guided by data scientists; the engine itself will not autonomously discover optimal model architectures.
+*   **Advanced AI-driven risk assessment based on resource loading:** Focus is on resource needs, not complex risk prediction related to resource availability or contention.
+*   **Direct API integration for all historical data sources:** While ingestion is in scope, the initial release may require some pre-configuration or specific connectors for each data source.
