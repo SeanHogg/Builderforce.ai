@@ -35,11 +35,11 @@ importers:
         specifier: link:../builderforce-embedded
         version: link:../builderforce-embedded
       '@seanhogg/builderforce-memory':
-        specifier: ^2026.6.35
-        version: 2026.6.35(@seanhogg/builderforce-memory-engine@2026.6.35)
+        specifier: ^2026.6.39
+        version: 2026.6.39(@seanhogg/builderforce-memory-engine@2026.6.39)
       '@seanhogg/builderforce-memory-engine':
-        specifier: ^2026.6.35
-        version: 2026.6.35
+        specifier: ^2026.6.39
+        version: 2026.6.39
       '@seanhogg/builderforce-sdk':
         specifier: link:../sdk
         version: link:../sdk
@@ -1255,15 +1255,15 @@ packages:
   '@schummar/icu-type-parser@1.21.5':
     resolution: {integrity: sha512-bXHSaW5jRTmke9Vd0h5P7BtWZG9Znqb8gSDxZnxaGSJnGwPLDPfS+3g0BKzeWqzgZPsIVZkM7m2tbo18cm5HBw==}
 
-  '@seanhogg/builderforce-memory-engine@2026.6.35':
-    resolution: {integrity: sha512-jcXSo4dur+lCB0jOdW5rtCWdT6ewCvEETybt+T7tYLusChzYnLGnXx81DEPE9KRJYhcfrHL3yg2mp+pTLI3pdQ==}
+  '@seanhogg/builderforce-memory-engine@2026.6.39':
+    resolution: {integrity: sha512-zjZb0jf1iFWRJecMkqcx8FfK61I8RNK1vbXoScyZGcKjxzK7HyHpcgh8U0mw2FZcACKQuzT74wN6+AocrWYZMA==}
     engines: {node: '>=18.0.0'}
 
-  '@seanhogg/builderforce-memory@2026.6.35':
-    resolution: {integrity: sha512-mhxQyzY3nk1U7lfRJfl2vQdjtctj71/ImfNBt+57HlQbDxkmzx8vb+SjienurDPFzfp1zZTD5yrFV7zqMZT1dw==}
+  '@seanhogg/builderforce-memory@2026.6.39':
+    resolution: {integrity: sha512-nOEcaWbsC7l4ASEKLXtX4sEnCeN1bTnNf4PFDsueYfpO8axuzhhns7xVvXBQHyfvBytjw5gT0Pl6+2DyWLvSHA==}
     engines: {node: '>=18.0.0'}
     peerDependencies:
-      '@seanhogg/builderforce-memory-engine': ^2026.6.35
+      '@seanhogg/builderforce-memory-engine': ^2026.6.39
 
   '@sinclair/typebox@0.25.24':
     resolution: {integrity: sha512-XJfwUVUKDHF5ugKwIcxEgc9k8b7HbznCp6eUfWgu710hMPNIO4aw4/zB5RogDQz8nd6gyCDpU9O/m6qYEWY6yQ==}
@@ -1694,6 +1694,7 @@ packages:
 
   '@ungap/structured-clone@1.3.0':
     resolution: {integrity: sha512-WmoN8qaIAo7WTYWbAZuG8PYEhn5fkz7dZrqTBZ7dtt//lL2Gwms1IcnQ5yHqjDfX8Ft5j4YzDM23f87zBfDe9g==}
+    deprecated: Potential CWE-502 - Update to 1.3.1 or higher
 
   '@unrs/resolver-binding-android-arm-eabi@1.11.1':
     resolution: {integrity: sha512-ppLRUgHVaGRWUx0R0Ut06Mjo9gBaBkg3v/8AxusGLhsIotbBLuRk51rAzqLC8gq6NyyAojEXglNjzf6R948DNw==}
@@ -6349,11 +6350,11 @@ snapshots:
 
   '@schummar/icu-type-parser@1.21.5': {}
 
-  '@seanhogg/builderforce-memory-engine@2026.6.35': {}
+  '@seanhogg/builderforce-memory-engine@2026.6.39': {}
 
-  '@seanhogg/builderforce-memory@2026.6.35(@seanhogg/builderforce-memory-engine@2026.6.35)':
+  '@seanhogg/builderforce-memory@2026.6.39(@seanhogg/builderforce-memory-engine@2026.6.39)':
     dependencies:
-      '@seanhogg/builderforce-memory-engine': 2026.6.35
+      '@seanhogg/builderforce-memory-engine': 2026.6.39
 
   '@sinclair/typebox@0.25.24': {}
 

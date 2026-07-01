@@ -6,10 +6,10 @@
   "type": "module",
   "dependencies": {
     "@lancedb/lancedb": "^0.26.2",
-    "@seanhogg/builderforce-memory": "^2026.6.35",
+    "@seanhogg/builderforce-memory": "^2026.6.39",
     "@sinclair/typebox": "0.34.48",
     "openai": "^6.22.0",
-    "@seanhogg/builderforce-memory-engine": "^2026.6.35"
+    "@seanhogg/builderforce-memory-engine": "^2026.6.39"
   },
   "devDependencies": {
     "@seanhogg/builderforce-agents": "workspace:*"

@@ -9,11 +9,11 @@ importers:
   .:
     dependencies:
       '@seanhogg/builderforce-memory':
-        specifier: ^2026.6.35
-        version: 2026.6.35(@seanhogg/builderforce-memory-engine@2026.6.35)
+        specifier: ^2026.6.39
+        version: 2026.6.39(@seanhogg/builderforce-memory-engine@2026.6.39)
       '@seanhogg/builderforce-memory-engine':
-        specifier: ^2026.6.35
-        version: 2026.6.35
+        specifier: ^2026.6.39
+        version: 2026.6.39
     devDependencies:
       '@seanhogg/builderforce-brain-embedded':
         specifier: link:../../brain-embedded
@@ -797,15 +797,15 @@ packages:
     cpu: [x64]
     os: [win32]
 
-  '@seanhogg/builderforce-memory-engine@2026.6.35':
-    resolution: {integrity: sha512-jcXSo4dur+lCB0jOdW5rtCWdT6ewCvEETybt+T7tYLusChzYnLGnXx81DEPE9KRJYhcfrHL3yg2mp+pTLI3pdQ==}
+  '@seanhogg/builderforce-memory-engine@2026.6.39':
+    resolution: {integrity: sha512-zjZb0jf1iFWRJecMkqcx8FfK61I8RNK1vbXoScyZGcKjxzK7HyHpcgh8U0mw2FZcACKQuzT74wN6+AocrWYZMA==}
     engines: {node: '>=18.0.0'}
 
-  '@seanhogg/builderforce-memory@2026.6.35':
-    resolution: {integrity: sha512-mhxQyzY3nk1U7lfRJfl2vQdjtctj71/ImfNBt+57HlQbDxkmzx8vb+SjienurDPFzfp1zZTD5yrFV7zqMZT1dw==}
+  '@seanhogg/builderforce-memory@2026.6.39':
+    resolution: {integrity: sha512-nOEcaWbsC7l4ASEKLXtX4sEnCeN1bTnNf4PFDsueYfpO8axuzhhns7xVvXBQHyfvBytjw5gT0Pl6+2DyWLvSHA==}
     engines: {node: '>=18.0.0'}
     peerDependencies:
-      '@seanhogg/builderforce-memory-engine': ^2026.6.35
+      '@seanhogg/builderforce-memory-engine': ^2026.6.39
 
   '@secretlint/config-creator@10.2.2':
     resolution: {integrity: sha512-BynOBe7Hn3LJjb3CqCHZjeNB09s/vgf0baBaHVw67w7gHF0d25c3ZsZ5+vv8TgwSchRdUCRrbbcq5i2B1fJ2QQ==}
@@ -3138,11 +3138,11 @@ snapshots:
   '@rollup/rollup-win32-x64-msvc@4.62.2':
     optional: true
 
-  '@seanhogg/builderforce-memory-engine@2026.6.35': {}
+  '@seanhogg/builderforce-memory-engine@2026.6.39': {}
 
-  '@seanhogg/builderforce-memory@2026.6.35(@seanhogg/builderforce-memory-engine@2026.6.35)':
+  '@seanhogg/builderforce-memory@2026.6.39(@seanhogg/builderforce-memory-engine@2026.6.39)':
     dependencies:
-      '@seanhogg/builderforce-memory-engine': 2026.6.35
+      '@seanhogg/builderforce-memory-engine': 2026.6.39
 
   '@secretlint/config-creator@10.2.2':
     dependencies:
