@@ -424,6 +424,7 @@ function baseNode(
     declaredCostClass, costClassSource, inheritedCostClass: null, effectiveCostClass: declaredCostClass,
     costClassVerified, anomaly: false, hasDescendantAnomaly: false, suggestion,
     cost: emptyCost(), childCount: 0,
+    completionPercent: null, completedItems: 0, totalItems: 0,
   };
 }
 
