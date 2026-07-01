@@ -392,6 +392,43 @@ export function buildSpine(input: {
     }
   }
 
+  // ── compute completion percentage for epic nodes ( PIE-1 ) ───────────────────
+  for (const node of nodes.values()) {
+    if (node.kind !== 'epic') continue; // Only epics get completion metrics
+
+    // Determine the parent key before any updates
+    const parentKey = node.parentKey && nodes.has(node.parentKey) ? node.parentKey : null;
+
+    // Only consider direct task children of this epic (not tasks of other epics)
+    // We filter nodes that match this epic's key as their parent (task/epic keys resolve to the same base)
+    const childKeys = nodes.entries().filter(([k, v]) => v.parentKey === `epic:${node.id}`).map(([k]) => k);
+
+    let totalItems = 0;
+    let completedItems = 0;
+
+    for (const childKey of childKeys) {
+      const child = nodes.get(childKey);
+      if (child && child.kind === 'task') {  // Direct task children only (not sub-epics per the spec)
+        totalItems++;
+        if (COMPLETED_STATUSES.has(child.status.toLowerCase())) {
+          completedItems++;
+        }
+      }
+    }
+
+    // Only update fields for epics with at least one direct task child
+    if (totalItems > 0) {
+      node.completionPercent = computeCompletionPercent(totalItems, completedItems);
+      node.completedItems = completedItems;
+      node.totalItems = totalItems;
+    } else {
+      // No direct task children configured for this epic
+      node.completionPercent = 0;
+      node.completedItems = 0;
+      node.totalItems = 0;
+    }
+  }
+
   // ── depth (from root) ─────────────────────────────────────────────────────
   for (const node of nodes.values()) node.depth = Math.max(0, ancestorsOf(node.key).length - 1);
 
