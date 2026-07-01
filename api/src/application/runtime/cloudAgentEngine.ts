@@ -37,10 +37,10 @@ import {
   CONTAINER_MAX_STEPS, assertsUnrunVerification, hasNoCodeDeliverable, type RawToolCall,
 } from './cloudAgentTools';
 import {
-  DEFAULT_ENGINE_ID, ENGINE_IDS, resolveEngineById, evaluatePolicyGate,
+  CURRENT_ENGINE_ID, evaluatePolicyGate,
   appraiseTask, buildLimbicBlock, compileLimbicState, neutralState,
   applyDelta, appraiseAmygdala, homeostasis,
-  type AgentEngine, type AgentRunInput, type AgentRunResult, type CapabilityProvider, type ToolContext, type ToolControl, type LimbicState, type LimbicEvent, type PolicyGate,
+  type AgentEngine, type AgentRunInput, type AgentRunResult, type CapabilityProvider, type ToolContext, type ToolControl, type LimbicState, type LimbicEvent, type PolicyGate, type AgentExecParams,
 } from '@builderforce/agent-tools';
 import { parseRemediation, parseFollowUp, parseCloudAgentRef, parseModel, parseRoutingBias, parsePolicyGates } from './cloudDispatch';
 import { classifyTaskAction } from '../llm/classifyTask';
@@ -100,12 +100,14 @@ export async function resolveCloudAgent(
   tenantId: number,
   ref: string | undefined,
 ): Promise<ResolvedCloudAgent> {
-  const DEFAULT: ResolvedCloudAgent = { engine: DEFAULT_ENGINE_ID, ref, runtimeSurface: 'durable' };
+  // The engine is ALWAYS the current version (a code constant) — never read from the
+  // DB. A run is the current engine regardless of any legacy `engine` value on the row.
+  const DEFAULT: ResolvedCloudAgent = { engine: CURRENT_ENGINE_ID, ref, runtimeSurface: 'durable' };
   if (!ref) return DEFAULT;
   try {
     const sql = neon(env.NEON_DATABASE_URL);
-    const rows = (await sql`SELECT engine, name, runtime_surface, base_model, runtime_support, preferred_runtime FROM ide_agents WHERE id = ${ref} AND tenant_id = ${tenantId} LIMIT 1`) as Array<{ engine?: string; name?: string; runtime_surface?: string; base_model?: string; runtime_support?: string; preferred_runtime?: string | null }>;
-    const engine = typeof rows[0]?.engine === 'string' && rows[0].engine ? rows[0].engine : DEFAULT_ENGINE_ID;
+    const rows = (await sql`SELECT name, runtime_surface, base_model, runtime_support, preferred_runtime FROM ide_agents WHERE id = ${ref} AND tenant_id = ${tenantId} LIMIT 1`) as Array<{ name?: string; runtime_surface?: string; base_model?: string; runtime_support?: string; preferred_runtime?: string | null }>;
+    const engine = CURRENT_ENGINE_ID;
     const label = typeof rows[0]?.name === 'string' && rows[0].name ? rows[0].name : undefined;
     const runtimeSurface = rows[0]?.runtime_surface === 'container' ? 'container' : 'durable';
     const rawModel = typeof rows[0]?.base_model === 'string' ? rows[0].base_model.trim() : '';
@@ -117,6 +119,27 @@ export async function resolveCloudAgent(
     return DEFAULT;
   }
 }
+/**
+ * Load a cloud agent's OWN psychometric profile (ide_agents.psychometric) — the
+ * per-agent personality set from the Workforce editor, independent of any assigned
+ * persona. Returns the raw JSON string (or null). Tenant-scoped, one indexed lookup;
+ * consumed by prepareCloudRun to compile prompt directives + exec params + setpoints.
+ */
+export async function loadAgentPsychometric(
+  env: Env,
+  tenantId: number,
+  ref: string | undefined,
+): Promise<string | null> {
+  if (!ref) return null;
+  try {
+    const sql = neon(env.NEON_DATABASE_URL);
+    const rows = (await sql`SELECT psychometric FROM ide_agents WHERE id = ${ref} AND tenant_id = ${tenantId} LIMIT 1`) as Array<{ psychometric?: string | null }>;
+    return typeof rows[0]?.psychometric === 'string' ? rows[0].psychometric : null;
+  } catch {
+    return null;
+  }
+}
+
 /**
  * Run an execution server-side via the gateway when NO online agentHost took the
  * dispatch (Auto / cloud agent with no self-hosted runtime). The task is run as a
@@ -1090,6 +1113,11 @@ export interface CloudLoopOpts {
    *  modality). The first tick seeds {@link CloudLoopState.policyGates} from this;
    *  later ticks resume from state. */
   policyGates?: PolicyGate[];
+  /** Execution levers compiled from the agent's/personas' psychometric personality
+   *  (from {@link prepareCloudRun}). Today only `temperature` is honored in cloud —
+   *  thinkLevel/reasoning are stripped by the gateway request whitelist. Applied to
+   *  every LLM turn so personality changes how the agent samples, not just its prompt. */
+  execParams?: AgentExecParams;
 }
 export interface CloudLoopResult {
   ok: boolean;
@@ -1474,6 +1502,10 @@ export async function runCloudToolLoop(
             tools: CLOUD_AGENT_TOOLS,
             tool_choice: 'auto',
             ...(activeModel ? { model: activeModel, ...(strictPin ? { modelStrict: true } : {}) } : {}),
+            // Personality temperature (compiled from the agent's/personas' traits).
+            // The reliable cloud lever — thinkLevel/reasoning are stripped by the
+            // gateway request whitelist, so they are not passed here.
+            ...(opts?.execParams?.temperature != null ? { temperature: opts.execParams.temperature } : {}),
             useCase: 'task_execution',
           },
           undefined,
@@ -1712,51 +1744,34 @@ export interface CloudEngineContext {
   /** Resolved assigned artifacts (skills/personas/content). Used by V3 to derive
    *  limbic setpoints from the assigned personas' psychometric profiles. */
   artifacts?: ResolvedArtifacts;
+  /** Execution levers compiled from the personas + the agent's own personality
+   *  (from {@link prepareCloudRun}). Passed through to the loop's per-turn LLM call. */
+  execParams?: AgentExecParams;
+  /** The agent's OWN psychometric JSON (ide_agents.psychometric). Folded into the
+   *  limbic setpoints alongside the assigned personas. */
+  agentPsychometric?: string | null;
 }
 
 /**
- * The cloud tool-loop engine behind the shared {@link AgentEngine} seam. Wraps
- * {@link runCloudToolLoop} so dispatch sites depend on the INTERFACE, not the
- * concrete loop — the whole point of the seam is that "the next engine" (a
- * Claude-Agent-SDK loop, a different surface strategy) is injected at one composition
- * root ({@link resolveAgentEngine}) without editing any call site.
- */
-export class CloudToolLoopEngine implements AgentEngine {
-  // The engine id that backs `builderforce-v2` cloud agents — drawn from the single
-  // ENGINE_IDS source so the id never drifts from the registry's well-known names.
-  readonly id = ENGINE_IDS.v2;
-  constructor(private readonly rc: CloudEngineContext) {}
-  async run(input: AgentRunInput): Promise<AgentRunResult> {
-    const r = await runCloudToolLoop(
-      this.rc.env, this.rc.db, this.rc.executionId, this.rc.tenantId, this.rc.taskRow,
-      this.rc.cloudAgentRef, this.rc.agentLabel, input.model, input.systemPrompt, input.userContent,
-      this.rc.isCancelled, this.rc.projectId,
-      { routingBias: this.rc.routingBias, ...(input.policy?.gates ? { policyGates: [...input.policy.gates] } : {}) },
-    );
-    return { ok: r.ok, output: r.output, cancelled: r.cancelled, finished: r.finished, awaitingInput: r.awaitingInput, state: r.state };
-  }
-}
-
-/**
- * V3 — the cloud limbic engine. Composes the V2 loop WITHOUT modifying it: it
- * derives a task-appropriate affective state via the shared, Worker-safe limbic
- * compiler (`@builderforce/agent-tools`) and injects the affect block through the
- * loop's per-step {@link CloudLoopOpts.dynamicSystem} seam — NOT by mutating the
- * persisted prompt/conversation. That decoupling is what lets affect evolve
- * across DO ticks (see {@link CloudRunnerDO}) and lets *any* future engine layer
- * per-step behaviour the same way. Cloudflare Workers can't run `@webgpu/node`,
- * so the cloud limbic is the deterministic heuristic regions only — GPU
- * *training* stays on-prem. Selecting V3 leaves every V2 agent byte-for-byte
- * unchanged (V2 passes no `dynamicSystem`).
+ * The cloud agent engine behind the shared {@link AgentEngine} seam — THE current
+ * engine (V3). It drives {@link runCloudToolLoop} (the Claude-Agent-SDK tool loop)
+ * with the limbic affective layer ALWAYS composed on top: it derives a task-appropriate
+ * affective state via the shared, Worker-safe limbic compiler (`@builderforce/agent-tools`)
+ * and injects the affect block through the loop's per-step {@link CloudLoopOpts.dynamicSystem}
+ * seam — NOT by mutating the persisted prompt/conversation. That decoupling lets affect
+ * evolve across DO ticks (see {@link CloudRunnerDO}). Cloudflare Workers can't run
+ * `@webgpu/node`, so the cloud limbic is the deterministic heuristic regions only — GPU
+ * *training* stays on-prem. Dispatch sites depend on the INTERFACE via
+ * {@link resolveAgentEngine}, so the NEXT engine (a future V4) is a one-line wiring change.
  */
 export class CloudLimbicEngine implements AgentEngine {
-  readonly id = ENGINE_IDS.v3;
+  readonly id = CURRENT_ENGINE_ID;
   constructor(private readonly rc: CloudEngineContext) {}
 
   async run(input: AgentRunInput): Promise<AgentRunResult> {
     // Personality = setpoints (from the assigned personas' psychometric profiles);
     // dynamics = the task-appraised affect around those setpoints.
-    const setpoints = await loadPersonaSetpoints(this.rc.env, this.rc.db, this.rc.artifacts?.personas ?? []);
+    const setpoints = await loadPersonaSetpoints(this.rc.env, this.rc.db, this.rc.artifacts?.personas ?? [], this.rc.agentPsychometric);
     const state = initialCloudLimbicState(this.rc.taskRow, setpoints);
     await recordLimbicState(this.rc.db, { tenantId: this.rc.tenantId, cloudAgentRef: this.rc.cloudAgentRef, executionId: this.rc.executionId }, state);
     const directive = buildLimbicBlock(state);
@@ -1765,7 +1780,7 @@ export class CloudLimbicEngine implements AgentEngine {
       this.rc.env, this.rc.db, this.rc.executionId, this.rc.tenantId, this.rc.taskRow,
       this.rc.cloudAgentRef, this.rc.agentLabel, input.model, input.systemPrompt, input.userContent,
       this.rc.isCancelled, this.rc.projectId,
-      { routingBias: this.rc.routingBias, ...(directive ? { dynamicSystem: directive } : {}), ...(input.policy?.gates ? { policyGates: [...input.policy.gates] } : {}) },
+      { routingBias: this.rc.routingBias, ...(directive ? { dynamicSystem: directive } : {}), ...(input.policy?.gates ? { policyGates: [...input.policy.gates] } : {}), ...(this.rc.execParams ? { execParams: this.rc.execParams } : {}) },
     );
     return { ok: r.ok, output: r.output, cancelled: r.cancelled, finished: r.finished, awaitingInput: r.awaitingInput, state: r.state };
   }
@@ -1825,20 +1840,14 @@ export async function recordLimbicState(
 }
 
 /**
- * The single composition root for cloud engine selection. An id-keyed registry of
- * engine factories resolved via the shared {@link resolveEngineById} — the SAME
- * pattern the on-prem relay `resolveEngine` uses — so adding an engine is one
- * registry entry on BOTH surfaces, never a new branch. `builderforce-v2` is the
- * default tool loop; `builderforce-v3` adds the limbic layer on top of it; any
- * legacy/unknown id falls back to `DEFAULT_ENGINE_ID`. (Surface routing —
- * durable DO / container / worker — is a separate decision in `runtimeRoutes.ts`.)
+ * The single composition root for the cloud engine. There is ONE engine (the current
+ * V3 = tool loop + limbic); every run resolves to it regardless of any legacy engine
+ * value. The seam stays a function so the NEXT engine (a future V4) is a one-line swap
+ * here, never a branch at the call sites. (Surface routing — durable DO / container /
+ * worker — is a separate decision in `runtimeRoutes.ts`.)
  */
-export function resolveAgentEngine(rc: CloudEngineContext, engineId?: string): AgentEngine {
-  const registry: Record<string, (c: CloudEngineContext) => AgentEngine> = {
-    [ENGINE_IDS.v2]: (c) => new CloudToolLoopEngine(c),
-    [ENGINE_IDS.v3]: (c) => new CloudLimbicEngine(c),
-  };
-  return resolveEngineById(registry, engineId)(rc);
+export function resolveAgentEngine(rc: CloudEngineContext): AgentEngine {
+  return new CloudLimbicEngine(rc);
 }
 
 /**
@@ -2012,12 +2021,15 @@ export async function prepareCloudRun(
   cloudAgentRef?: string,
   payload?: string,
   opts?: { shell?: boolean },
-): Promise<{ systemPrompt: string; userContent: string }> {
+): Promise<{ systemPrompt: string; userContent: string; execParams: AgentExecParams; agentPsychometric: string | null }> {
   const tPrep0 = Date.now();
+  // The agent's OWN personality (independent of assigned personas) — folded into the
+  // capability prompt block, the exec params, and (by the caller) the limbic setpoints.
+  const agentPsychometric = await loadAgentPsychometric(env, tenantId, cloudAgentRef);
   const [prd, governance, capabilities, workspace] = await Promise.all([
     ensureTaskPrd(env, db, executionId, taskRow, tenantId, projectId, taskRow.id, agentLabel, model),
     loadGovernanceContext(db, tenantId, projectId),
-    loadCapabilityContext(env, db, artifacts),
+    loadCapabilityContext(env, db, artifacts, agentPsychometric),
     // The repo the agent runs against — its identity + top-level shape (so a wrong/
     // empty binding is visible before any LLM spend) AND what a prior pass already
     // committed to this branch (so a re-run reconciles instead of blindly appending).
@@ -2118,7 +2130,7 @@ export async function prepareCloudRun(
     capabilities.promptBlock || null,
   ].filter(Boolean).join('\n\n');
 
-  return { systemPrompt, userContent };
+  return { systemPrompt, userContent, execParams: capabilities.execParams, agentPsychometric };
 }
 
 /**
@@ -2183,19 +2195,17 @@ export async function runCloudExecution(
     if (await isCancelled()) return;
     await markCloudExecutionRunning(runtimeService, executionId);
 
-    const { systemPrompt, userContent } = await prepareCloudRun(
+    const { systemPrompt, userContent, execParams, agentPsychometric } = await prepareCloudRun(
       env, db, executionId, taskRow, tenantId, projectId, agentLabel, model, artifacts, cloudAgentRef, payload,
     );
     // Resolve the engine behind the shared seam (DI), then drive it with just the
     // per-task input. Surface/runtime wiring lives in the engine, not this call site.
-    // The agent's `engine` column selects the implementation: V2 (default) or V3
-    // (limbic). Unknown/legacy ids fall back to the default — so V2 agents are
-    // unaffected and only rows explicitly set to `builderforce-v3` get the layer.
-    const engineId = (await resolveCloudAgent(env, tenantId, cloudAgentRef)).engine;
+    // There is ONE engine (the current V3 = tool loop + limbic always-on); no DB
+    // engine read, no per-agent selection.
     const engine = resolveAgentEngine({
       env, db, executionId, taskRow, tenantId, projectId, agentLabel, cloudAgentRef, isCancelled,
-      routingBias: parseRoutingBias(payload), artifacts,
-    }, engineId);
+      routingBias: parseRoutingBias(payload), artifacts, execParams, agentPsychometric,
+    });
     const policyGates = parsePolicyGates(payload);
     const { ok, output, cancelled, awaitingInput } = await engine.run({
       systemPrompt, userContent, model,

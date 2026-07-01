@@ -680,10 +680,11 @@ export async function fetchAgentPackage(agentId: string): Promise<AgentPackage> 
 export type AgentRuntimeSupport = 'cloud' | 'host' | 'both';
 export type AgentPricingModel = 'flat_fee' | 'consumption';
 /**
- * Agent runtime engine. **V1 is RETIRED (2026-06-13)** — `builderforce-v2` (the Claude
- * Agent SDK runner, gateway-routed) is the only engine. The `builderforce-v1` pi loop is gone.
+ * Agent runtime engine. There is ONE engine — the current version (`builderforce-v3`,
+ * the Claude-Agent-SDK loop with the limbic layer always composed). It is not
+ * user-selectable; the field is a read-only denormalized value on the agent record.
  */
-export type AgentEngine = 'builderforce-v2' | 'builderforce-v3';
+export type AgentEngine = 'builderforce-v3';
 /**
  * Execution surface for a V2 cloud agent — the two types the user picks at
  * creation. Both run the full task IN THE CLOUD (all Cloudflare, no local/hybrid
@@ -707,6 +708,8 @@ export interface CloudAgentInput {
   pricingModel?: AgentPricingModel;
   priceUnit?: string | null;
   published?: boolean;
+  /** This agent's OWN personality (Pro). null clears it; server ignores for free plans. */
+  psychometric?: import('./psychometric').PsychometricProfile | null;
 }
 
 /** The tenant's own agents (any publish state). */

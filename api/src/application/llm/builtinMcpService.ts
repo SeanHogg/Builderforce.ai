@@ -19,6 +19,7 @@
  */
 
 import { and, eq, desc, sql, type SQL } from 'drizzle-orm';
+import { CURRENT_ENGINE_ID } from '@builderforce/agent-tools';
 import type { Db } from '../../infrastructure/database/connection';
 import { ProjectService } from '../project/ProjectService';
 import { TaskService } from '../task/TaskService';
@@ -816,11 +817,11 @@ const CATALOG: BuiltinTool[] = [
   { tool: 'cloud_agents.list_purchased', mutates: false, description: 'Cloud agents this workspace acquired from the marketplace.', parameters: obj({}), run: async (ctx) => (await ctx.db.execute(sql`SELECT a.* FROM ide_agents a JOIN agent_purchases p ON p.agent_id = a.id WHERE p.tenant_id = ${ctx.tenantId} AND p.unhired_at IS NULL AND a.status = 'active' ORDER BY p.created_at DESC LIMIT 200`)).rows },
   {
     tool: 'cloud_agents.create', mutates: true,
-    description: 'Create a cloud agent. engine: builderforce-v2 (Claude Agent SDK) or builderforce-v3 (V2 + limbic affective layer); V1 retired.',
-    parameters: obj({ name: S, title: S, bio: S, skills: { type: 'array', items: S }, baseModel: S, engine: { type: 'string', enum: ['builderforce-v2', 'builderforce-v3'] }, published: B }, ['name']),
+    description: 'Create a cloud agent. The engine is always the current agent version (no selection).',
+    parameters: obj({ name: S, title: S, bio: S, skills: { type: 'array', items: S }, baseModel: S, published: B }, ['name']),
     run: async (ctx, a) => {
       const name = str(a.name).trim(); if (!name) throw new Error('name is required');
-      const engine = a.engine != null && ['builderforce-v2', 'builderforce-v3'].includes(str(a.engine)) ? str(a.engine) : 'builderforce-v2';
+      const engine = CURRENT_ENGINE_ID;
       const [row] = await ctx.db.insert(ideAgents).values({
         id: crypto.randomUUID(), tenantId: ctx.tenantId, projectId: null, name,
         title: a.title != null ? str(a.title) : name,

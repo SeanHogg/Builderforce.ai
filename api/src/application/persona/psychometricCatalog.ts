@@ -245,3 +245,27 @@ export function sanitizeVector(raw: unknown): Record<string, number> {
   }
   return out;
 }
+
+/**
+ * Sanitize a full PsychometricProfile before persisting: clamp/whitelist the trait
+ * vector (drops unknown dimensions via {@link sanitizeVector}), keep the typological
+ * skins (enneagram 1..9, MBTI), and coerce provenance. Returns a JSON string ready
+ * for a `psychometric` column, or null when there is no usable profile. THE single
+ * sanitizer — shared by the persona publish route AND the per-agent Workforce route
+ * so a stored profile is always the exact shape the runtime compiler consumes.
+ */
+export function sanitizePsychometricProfile(v: unknown): string | null {
+  if (!v || typeof v !== 'object') return null;
+  const o = v as Record<string, unknown>;
+  const vector = sanitizeVector(o.vector);
+  if (Object.keys(vector).length === 0 && typeof o.enneagramType !== 'number') return null;
+  const profile: Record<string, unknown> = { vector };
+  if (typeof o.enneagramType === 'number' && o.enneagramType >= 1 && o.enneagramType <= 9) {
+    profile.enneagramType = Math.round(o.enneagramType);
+  }
+  if (typeof o.mbti === 'string' && o.mbti.trim()) profile.mbti = o.mbti.trim().toUpperCase().slice(0, 4);
+  if (Array.isArray(o.frameworks)) profile.frameworks = o.frameworks.map(String).filter(Boolean);
+  if (o.source === 'sliders' || o.source === 'questionnaire' || o.source === 'imported') profile.source = o.source;
+  if (typeof o.notes === 'string' && o.notes.trim()) profile.notes = o.notes.trim().slice(0, 2000);
+  return JSON.stringify(profile);
+}

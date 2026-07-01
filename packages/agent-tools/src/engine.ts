@@ -55,44 +55,35 @@ export interface AgentEngine {
 }
 
 /**
- * The well-known engine ids, shared so every surface names the same engines and the
- * default lives in ONE place. The on-prem relay registry, the cloud `resolveCloudAgent`,
- * and the API route fallbacks all import {@link DEFAULT_ENGINE_ID}.
+ * The ONE current engine id, shared so every surface names the same engine and the
+ * value lives in ONE place. The on-prem relay registry, the cloud `resolveCloudAgent`,
+ * and the API route fallbacks all import {@link CURRENT_ENGINE_ID} / {@link DEFAULT_ENGINE_ID}.
  *
- * **V1 and Local are RETIRED (operator decision 2026-06-14).** `v2` (the Claude-Agent-SDK
- * engine, gateway-routed — drives the vendor pool, no tenant BYO key) is the SOLE runner and
- * the consolidated default on every surface (cloud + on-prem); the frontend/api `AGENT_ENGINES`
- * set is `['builderforce-v2']`. The retired `v1` id is kept only to recognize/back-fill legacy
- * `engine='builderforce-v1'` rows — no runtime serves it. `builderforce-local` (the on-prem
- * pi-free shared-registry engine) was deleted as dead code: it was never selectable, so no row
- * carries it and no back-fill token is needed.
+ * **There is no per-agent engine selection and no v1/v2 legacy path.** A run is ALWAYS
+ * the current engine — "V3" = the tool loop (Claude-Agent-SDK, gateway-routed) with the
+ * limbic affective layer ALWAYS composed on top. The retired v1 (legacy pi loop) and v2
+ * (limbic-off variant) are gone; any legacy `engine` value on an old row is ignored and
+ * resolves to the current engine at runtime — versions are a code constant, never DB data.
+ * When a "V4" ships, this one constant moves and every surface follows; prior versions are
+ * not retained as selectable options.
  */
-export const ENGINE_IDS = {
-  /** RETIRED — legacy pi loop. Kept only to recognize/back-fill old rows; no runner. */
-  v1: "builderforce-v1",
-  v2: "builderforce-v2",
-  /** V3 — the V2 loop with the limbic affective layer composed on top (additive;
-   *  V2 behaviour is unchanged). Selectable per agent via `ide_agents.engine`. */
-  v3: "builderforce-v3",
-} as const;
+export const CURRENT_ENGINE_ID = "builderforce-v3" as const;
 
-export type EngineId = (typeof ENGINE_IDS)[keyof typeof ENGINE_IDS];
+export type EngineId = typeof CURRENT_ENGINE_ID;
 
 /**
- * The default engine when a dispatch / agent record does not name one. **`builderforce-v2`**
- * (V1 retired) — one constant, every surface. Cloud `resolveCloudAgent`, on-prem relay
- * `resolveEngine`, `workforceRoutes` create, and the `task.assign` fallback all read this.
+ * The default (and only) engine == the current engine. Kept as a distinct export so the
+ * many call sites that read a "default" don't all have to change when the current id moves.
  */
-export const DEFAULT_ENGINE_ID: EngineId = ENGINE_IDS.v2;
+export const DEFAULT_ENGINE_ID: EngineId = CURRENT_ENGINE_ID;
 
 /**
- * Resolve an engine implementation by id from a registry, falling back to the default
- * when the id is unknown/absent (legacy `builderforce-v1`/`builderforce-local` rows all
- * land on {@link DEFAULT_ENGINE_ID}). The id→impl + fallback logic lived inline in the
- * relay `resolveEngine`; sharing it here means every surface that keeps an engine
- * registry (on-prem relay today, a cloud registry tomorrow) registers a V3 the same way
- * — a registry entry, never a new branch. Generic over the engine shape so it serves
- * both the orchestration `RelayTaskEngine` and the pure-loop `AgentEngine`.
+ * Resolve an engine implementation by id from a registry, falling back to the current
+ * engine when the id is unknown/absent (every legacy id lands on {@link CURRENT_ENGINE_ID}).
+ * With a single engine the registry has one entry and any id resolves to it; the generic
+ * DI seam stays so the NEXT engine (a future V4) is a registry entry, never a new branch.
+ * Generic over the engine shape so it serves both the orchestration `RelayTaskEngine` and
+ * the pure-loop `AgentEngine`.
  */
 export function resolveEngineById<E>(
   registry: Readonly<Record<string, E>>,

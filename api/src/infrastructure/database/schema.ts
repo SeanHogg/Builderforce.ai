@@ -1136,6 +1136,8 @@ export const ideAgents = pgTable('ide_agents', {
   preferredRuntime: varchar('preferred_runtime', { length: 16 }),
   engine:           varchar('engine', { length: 32 }),
   runtimeSurface:   varchar('runtime_surface', { length: 16 }),
+  /** JSON PsychometricProfile (Pro) — this agent's OWN personality; null = none. Compiled at run time. */
+  psychometric:     text('psychometric'),
   priceCents:       integer('price_cents').notNull().default(0),
   pricingModel:     varchar('pricing_model', { length: 24 }).notNull().default('flat_fee'),
   priceUnit:        varchar('price_unit', { length: 100 }),
@@ -4262,6 +4264,8 @@ export const marketplacePersonas = pgTable('marketplace_personas', {
   tags:         text('tags').notNull().default('[]'),
   /** Persona body: { voice, perspective, decisionStyle, outputPrefix, capabilities[], systemDirectives? }. */
   persona:      jsonb('persona').notNull().default(sql`'{}'::jsonb`),
+  /** JSON PsychometricProfile (Pro) — the behaviour-bearing trait vector; null = none. Compiled at run time. */
+  psychometric: text('psychometric'),
   /** 'private' | 'tenant' | 'public' */
   visibility:   varchar('visibility', { length: 16 }).notNull().default('private'),
   authorName:   varchar('author_name', { length: 255 }),

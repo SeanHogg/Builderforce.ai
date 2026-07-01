@@ -15,9 +15,9 @@
 import { eq } from 'drizzle-orm';
 import { buildDatabase, type Db } from '../database/connection';
 import { executions } from '../database/schema';
-import { prepareCloudRun, runCloudToolLoop, markCloudExecutionRunning, resolveCloudAgent, initialCloudLimbicState, evolveCloudLimbicState, recordLimbicState, type CloudLoopState } from '../../application/runtime/cloudAgentEngine';
+import { prepareCloudRun, runCloudToolLoop, markCloudExecutionRunning, initialCloudLimbicState, evolveCloudLimbicState, recordLimbicState, type CloudLoopState } from '../../application/runtime/cloudAgentEngine';
 import { loadPersonaSetpoints } from '../../application/artifact/capabilityContext';
-import { ENGINE_IDS, buildLimbicBlock, type LimbicState } from '@builderforce/agent-tools';
+import { buildLimbicBlock, type LimbicState, type AgentExecParams } from '@builderforce/agent-tools';
 import { parseRoutingBias, parsePolicyGates } from '../../application/runtime/cloudDispatch';
 import { scoreRunOutcome } from '../../application/runtime/scoreRunOutcome';
 import { releasePendingSteers } from '../../application/runtime/executionSteering';
@@ -55,6 +55,9 @@ interface Cursor extends StartBody {
   limbic?: boolean;
   limbicState?: LimbicState;
   limbicSetpoints?: LimbicState;
+  /** Execution levers compiled from the agent's/personas' personality (resolved on
+   *  the prep tick, reused every loop tick so personality applies across DO ticks). */
+  execParams?: AgentExecParams;
 }
 
 const CURSOR_KEY = 'cursor';
@@ -128,31 +131,31 @@ export class CloudRunnerDO implements DurableObject {
 
     try {
       if (cursor.stage === 'prep') {
-        const { systemPrompt, userContent } = await prepareCloudRun(
+        const { systemPrompt, userContent, execParams, agentPsychometric } = await prepareCloudRun(
           this.env, this.db, cursor.executionId,
           { id: cursor.taskId, title: cursor.taskTitle, description: cursor.taskDescription },
           cursor.tenantId, cursor.projectId, cursor.agentLabel, cursor.model, cursor.artifacts, cursor.cloudAgentRef, cursor.payload,
         );
         cursor.systemPrompt = systemPrompt;
         cursor.userContent = userContent;
-        // V3 (limbic) agents: seed the affective state from the personality
-        // setpoints + the task. It's injected per-tick via the loop's dynamicSystem
-        // seam (NOT baked into systemPrompt) and EVOLVES across ticks below. V2
-        // agents skip this entirely (engine id gate; unknown/legacy → V2).
-        const engineId = (await resolveCloudAgent(this.env, cursor.tenantId, cursor.cloudAgentRef)).engine;
-        if (engineId === ENGINE_IDS.v3) {
-          cursor.limbic = true;
-          cursor.limbicSetpoints = await loadPersonaSetpoints(this.env, this.db, cursor.artifacts?.personas ?? []);
-          cursor.limbicState = initialCloudLimbicState(
-            { title: cursor.taskTitle, description: cursor.taskDescription },
-            cursor.limbicSetpoints,
-          );
-          await recordLimbicState(
-            this.db,
-            { tenantId: cursor.tenantId, cloudAgentRef: cursor.cloudAgentRef, executionId: cursor.executionId },
-            cursor.limbicState,
-          );
-        }
+        // Persona/agent personality exec levers — persisted so every loop tick applies
+        // the same temperature (personality must hold across DO ticks, not just tick 1).
+        cursor.execParams = execParams;
+        // The current engine (V3) ALWAYS runs the limbic layer: seed the affective
+        // state from the personality setpoints + the task. It's injected per-tick via
+        // the loop's dynamicSystem seam (NOT baked into systemPrompt) and EVOLVES
+        // across ticks below. The agent's OWN personality contributes a setpoint too.
+        cursor.limbic = true;
+        cursor.limbicSetpoints = await loadPersonaSetpoints(this.env, this.db, cursor.artifacts?.personas ?? [], agentPsychometric);
+        cursor.limbicState = initialCloudLimbicState(
+          { title: cursor.taskTitle, description: cursor.taskDescription },
+          cursor.limbicSetpoints,
+        );
+        await recordLimbicState(
+          this.db,
+          { tenantId: cursor.tenantId, cloudAgentRef: cursor.cloudAgentRef, executionId: cursor.executionId },
+          cursor.limbicState,
+        );
         cursor.stage = 'loop';
         await this.persistAndArm(cursor);
         return;
@@ -169,7 +172,7 @@ export class CloudRunnerDO implements DurableObject {
         cursor.systemPrompt ?? '', cursor.userContent ?? '',
         () => this.isCancelled(cursor.executionId),
         cursor.projectId,
-        { resume: cursor.loop, maxSteps: 1, deferFinalize: true, routingBias: parseRoutingBias(cursor.payload), policyGates: parsePolicyGates(cursor.payload), ...(dynamicSystem ? { dynamicSystem } : {}) },
+        { resume: cursor.loop, maxSteps: 1, deferFinalize: true, routingBias: parseRoutingBias(cursor.payload), policyGates: parsePolicyGates(cursor.payload), ...(dynamicSystem ? { dynamicSystem } : {}), ...(cursor.execParams ? { execParams: cursor.execParams } : {}) },
       );
 
       // V3: evolve affect from this tick's outcome (amygdala) toward setpoints

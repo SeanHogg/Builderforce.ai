@@ -1448,12 +1448,6 @@
     "bestExperience": "Best experience on",
     "bestCloud": "Cloud",
     "bestHost": "Remote (agentHost)",
-    "engine": "Agent runtime engine",
-    "engineLabel": {
-      "builderforce-v2": "BuilderForce-V2 (Anthropic — Claude Agent SDK)",
-      "builderforce-v3": "BuilderForce-V3 (V2 + Limbic affective layer)"
-    },
-    "engineHelp": "V2 runs the Claude Agent SDK; models route through the gateway with your tenant's Anthropic key. V3 adds the limbic affective layer on top of V2 — the agent appraises the task and executes under a fitting affective state (e.g. heightened caution on risky work).",
     "surface": "Runtime surface",
     "surfaceLabel": {
       "durable": "Durable (cloud, on-demand serverless)",
@@ -1462,7 +1456,9 @@
     "surfaceHelp": "Both run the full task in the cloud (all Cloudflare). Durable executes on-demand on a Durable Object (per step) — the default. Long-lived Cloudflare Container keeps a process running for very long, continuous tasks (falls back to Durable until Container infra is enabled).",
     "baseModel": "Base model (optional)",
     "baseModelDefault": "builderforce.ai default (best coding model)",
-    "baseModelHelp": "The tool-calling + coding model this agent runs on — pick one of your LLMs or a model from the pool. A run pins one model for the whole task; leave default to use the plan's best coding model."
+    "baseModelHelp": "The tool-calling + coding model this agent runs on — pick one of your LLMs or a model from the pool. A run pins one model for the whole task; leave default to use the plan's best coding model.",
+    "personality": "Personality",
+    "personalityHelp": "Give this agent a personality with a trait test or sliders. It shapes how the agent reasons, how carefully it works, and how it communicates on every run."
   },
   "modelApiSamples": {
     "copy": "Copy",

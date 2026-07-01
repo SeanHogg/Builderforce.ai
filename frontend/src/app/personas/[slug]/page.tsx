@@ -33,18 +33,20 @@ export default function PersonaDetailPage() {
       if (!p) {
         const pub: PublicPersona | null = await personasApi.getBySlug(slug).catch(() => null);
         if (pub) {
+          // Behaviour fields are NESTED under `persona` (server contract), not flat.
+          const b = pub.persona ?? {};
           p = {
             name: pub.slug || pub.name,
             description: pub.description ?? '',
-            voice: pub.voice ?? '—',
-            perspective: pub.perspective ?? '—',
-            decisionStyle: pub.decisionStyle ?? '—',
-            outputPrefix: pub.outputPrefix ?? '',
-            capabilities: pub.capabilities ?? [],
+            voice: b.voice || '—',
+            perspective: b.perspective || '—',
+            decisionStyle: b.decisionStyle || '—',
+            outputPrefix: b.outputPrefix ?? '',
+            capabilities: b.capabilities ?? [],
             source: 'user-global',
             tags: pub.tags ?? [],
-            author: pub.author ?? 'Community',
-            image: pub.image,
+            author: pub.authorName ?? 'Community',
+            psychometric: pub.psychometric ?? undefined,
           };
         }
       }

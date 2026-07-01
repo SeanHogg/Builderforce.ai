@@ -1448,12 +1448,6 @@
     "bestExperience": "Mejor experiencia en",
     "bestCloud": "Nube",
     "bestHost": "Remoto (agentHost)",
-    "engine": "Motor de ejecución del agente",
-    "engineLabel": {
-      "builderforce-v2": "BuilderForce-V2 (Anthropic — Claude Agent SDK)",
-      "builderforce-v3": "BuilderForce-V3 (V2 + capa afectiva límbica)"
-    },
-    "engineHelp": "V2 ejecuta el Claude Agent SDK; los modelos se enrutan por la pasarela con la clave de Anthropic de tu inquilino. V3 añade la capa afectiva límbica sobre V2: el agente evalúa la tarea y se ejecuta en un estado afectivo adecuado (p. ej. mayor cautela en trabajos arriesgados).",
     "surface": "Superficie de ejecución",
     "surfaceLabel": {
       "durable": "Durable (nube, sin servidor bajo demanda)",
@@ -1462,7 +1456,9 @@
     "surfaceHelp": "Ambas ejecutan la tarea completa en la nube (todo Cloudflare). Durable se ejecuta bajo demanda en un Durable Object (por paso): la opción predeterminada. El contenedor de Cloudflare de larga duración mantiene un proceso en ejecución para tareas muy largas y continuas (recurre a Durable hasta que se habilite la infraestructura de contenedores).",
     "baseModel": "Modelo base (opcional)",
     "baseModelDefault": "Predeterminado de builderforce.ai (mejor modelo de programación)",
-    "baseModelHelp": "El modelo de llamada a herramientas y programación con el que se ejecuta este agente: elige uno de tus LLM o un modelo del grupo. Una ejecución fija un modelo para toda la tarea; deja el predeterminado para usar el mejor modelo de programación de tu plan."
+    "baseModelHelp": "El modelo de llamada a herramientas y programación con el que se ejecuta este agente: elige uno de tus LLM o un modelo del grupo. Una ejecución fija un modelo para toda la tarea; deja el predeterminado para usar el mejor modelo de programación de tu plan.",
+    "personality": "Personalidad",
+    "personalityHelp": "Dale una personalidad a este agente con un test de rasgos o controles deslizantes. Determina cómo razona el agente, con cuánto cuidado trabaja y cómo se comunica en cada ejecución."
   },
   "modelApiSamples": {
     "copy": "Copiar",

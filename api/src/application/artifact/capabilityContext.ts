@@ -11,8 +11,8 @@
  * bounded keyspace — one entry per published skill/persona), and invalidated by
  * the admin-persona and marketplace-skill mutations via {@link invalidateCapabilityCache}.
  */
-import { eq } from 'drizzle-orm';
-import { marketplaceSkills, platformPersonas } from '../../infrastructure/database/schema';
+import { and, eq } from 'drizzle-orm';
+import { marketplaceSkills, platformPersonas, marketplacePersonas } from '../../infrastructure/database/schema';
 import type { ResolvedArtifacts } from '../../domain/shared/types';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
@@ -22,8 +22,11 @@ import {
   deriveLimbicSetpoints,
   neutralState,
   LIMBIC_DIM_NAMES,
+  buildPsychometricBlock,
+  mergeExecParams,
   type LimbicState,
   type LimbicPsychProfile,
+  type AgentExecParams,
 } from '@builderforce/agent-tools';
 
 /** Per-skill readme is capped so a few large skills can't blow the context budget. */
@@ -44,6 +47,11 @@ type PersonaBody = {
 export interface CapabilityContext {
   /** Markdown block to prepend to the agent's system prompt ('' when nothing resolved). */
   promptBlock: string;
+  /** Execution levers contributed by the assigned personas' psychometric profiles
+   *  (thinkLevel / reasoningLevel / temperature), merged across all that carry one.
+   *  Empty object when none — the second half of "execute under the persona", so a
+   *  trait vector changes how a cloud agent reasons, not just its prompt text. */
+  execParams: AgentExecParams;
   /** Compact summary for the Observability timeline + logs. */
   summary: {
     skills: string[];
@@ -79,6 +87,7 @@ async function loadSkillBody(env: Env, db: Db, slug: string): Promise<SkillBody>
 
 async function loadPersonaBody(env: Env, db: Db, slug: string): Promise<PersonaBody> {
   return getOrSetCached<PersonaBody>(env, personaCacheKey(slug), async () => {
+    // 1. Admin-managed platform personas (builtins) — highest precedence.
     const [row] = await db
       .select({
         name: platformPersonas.name,
@@ -92,7 +101,35 @@ async function loadPersonaBody(env: Env, db: Db, slug: string): Promise<PersonaB
       .from(platformPersonas)
       .where(eq(platformPersonas.slug, slug))
       .limit(1);
-    return row ?? null;
+    if (row) return row;
+
+    // 2. Fall back to a TENANT-PUBLISHED (public) marketplace persona so the
+    //    personas a user creates + installs actually shape their cloud agents —
+    //    previously they were never loaded, so their psychometric never applied.
+    //    Public slugs are globally unique (partial unique index, mig 0203), so this
+    //    is tenant-safe; the behaviour body lives nested under the `persona` column.
+    const [mkt] = await db
+      .select({
+        name: marketplacePersonas.name,
+        description: marketplacePersonas.description,
+        persona: marketplacePersonas.persona,
+        psychometric: marketplacePersonas.psychometric,
+      })
+      .from(marketplacePersonas)
+      .where(and(eq(marketplacePersonas.slug, slug), eq(marketplacePersonas.visibility, 'public')))
+      .limit(1);
+    if (!mkt) return null;
+    const body = (mkt.persona ?? {}) as Record<string, unknown>;
+    const str = (k: string): string | null => (typeof body[k] === 'string' ? (body[k] as string) : null);
+    return {
+      name: mkt.name,
+      description: mkt.description,
+      voice: str('voice'),
+      perspective: str('perspective'),
+      decisionStyle: str('decisionStyle'),
+      outputPrefix: str('outputPrefix'),
+      psychometric: mkt.psychometric,
+    };
   });
 }
 
@@ -118,14 +155,18 @@ export async function loadPersonaSetpoints(
   env: Env,
   db: Db,
   slugs: string[],
+  agentPsychometric?: string | null,
 ): Promise<LimbicState | undefined> {
-  if (slugs.length === 0) return undefined;
   const profiles: LimbicPsychProfile[] = [];
   for (const slug of slugs) {
     const body = await loadPersonaBody(env, db, slug);
     const prof = parsePsychometric(body?.psychometric ?? null);
     if (prof) profiles.push(prof);
   }
+  // The agent's OWN personality (ide_agents.psychometric) contributes a setpoint too,
+  // independent of any assigned persona.
+  const own = parsePsychometric(agentPsychometric ?? null);
+  if (own) profiles.push(own);
   if (profiles.length === 0) return undefined;
   const acc = neutralState();
   for (const name of LIMBIC_DIM_NAMES) acc[name] = 0;
@@ -154,6 +195,10 @@ function personaBlock(p: NonNullable<PersonaBody>): string {
   if (p.perspective) lines.push(`Perspective: ${p.perspective}`);
   if (p.decisionStyle) lines.push(`Decision style: ${p.decisionStyle}`);
   if (p.outputPrefix) lines.push(`Prefix your summary with: ${p.outputPrefix}`);
+  // Compile the psychometric trait vector into behaviour directives so a persona's
+  // personality shapes the cloud agent's prompt, not just its voice/perspective.
+  const psych = buildPsychometricBlock(parsePsychometric(p.psychometric));
+  if (psych) lines.push(psych);
   lines.push('---');
   return lines.join('\n');
 }
@@ -174,15 +219,20 @@ export async function loadCapabilityContext(
   env: Env,
   db: Db,
   artifacts: ResolvedArtifacts | undefined,
+  /** The running agent's OWN psychometric JSON (ide_agents.psychometric), if any.
+   *  Compiled alongside assigned personas so a per-agent personality is honored. */
+  agentPsychometric?: string | null,
 ): Promise<CapabilityContext> {
   const skills = artifacts?.skills ?? [];
   const personas = artifacts?.personas ?? [];
   const content = artifacts?.content ?? [];
+  const ownProfile = parsePsychometric(agentPsychometric ?? null);
   const empty: CapabilityContext = {
     promptBlock: '',
+    execParams: {},
     summary: { skills, personas, content, missing: [] },
   };
-  if (skills.length === 0 && personas.length === 0 && content.length === 0) return empty;
+  if (skills.length === 0 && personas.length === 0 && content.length === 0 && !ownProfile) return empty;
 
   const [skillRows, personaRows] = await Promise.all([
     Promise.all(skills.map(async (slug) => ({ slug, body: await loadSkillBody(env, db, slug) }))),
@@ -201,6 +251,19 @@ export async function loadCapabilityContext(
   if (resolvedPersonas.length > 0) {
     sections.push('### Persona', resolvedPersonas.map((r) => personaBlock(r.body)).join('\n\n'));
   }
+
+  // The agent's OWN personality (set on the agent itself, no persona wrapper) —
+  // rendered as its own section so it composes with any assigned personas.
+  const ownPsychBlock = ownProfile ? buildPsychometricBlock(ownProfile) : '';
+  if (ownPsychBlock) sections.push('### Personality', ownPsychBlock);
+
+  // Merge the execution levers (thinkLevel / reasoning / temperature) from every
+  // profile in play — assigned personas + the agent's own — so personality changes
+  // how the cloud agent reasons, not just its prompt text.
+  const execParams = mergeExecParams([
+    ...resolvedPersonas.map((r) => parsePsychometric(r.body.psychometric)).filter((p): p is LimbicPsychProfile => Boolean(p)),
+    ...(ownProfile ? [ownProfile] : []),
+  ]);
 
   // A skill assigned to the agent is a real capability even when its README body
   // isn't in the marketplace store (e.g. builtin skills like `github` /
@@ -227,9 +290,9 @@ export async function loadCapabilityContext(
       `Assigned content references: ${content.join(', ')}. Treat these as authoritative source material for the task.`);
   }
 
-  const promptBlock = resolvedPersonas.length || resolvedSkills.length || referencedSkills.length || content.length
+  const promptBlock = resolvedPersonas.length || ownPsychBlock || resolvedSkills.length || referencedSkills.length || content.length
     ? sections.join('\n\n')
     : '';
 
-  return { promptBlock, summary: { skills, personas, content, missing } };
+  return { promptBlock, execParams, summary: { skills, personas, content, missing } };
 }

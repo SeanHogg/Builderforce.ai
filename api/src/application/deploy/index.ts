@@ -78,7 +78,8 @@ export function deploy(spec: AgentSpec, surface: AgentSurface, opts: DeployOptio
     );
   }
   const lowered = lowerAgentSpec(spec);
-  // V3/limbic is selectable via opts.engineId; the default stays the consolidated V2.
+  // One engine — the current version (DEFAULT_ENGINE_ID). `opts.engineId` stays as a
+  // DI seam so a future V4 can be exercised without touching call sites.
   const engineId = opts.engineId ?? DEFAULT_ENGINE_ID;
   return {
     surface,

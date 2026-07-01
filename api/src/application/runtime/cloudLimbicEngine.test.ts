@@ -4,13 +4,12 @@ import {
   initialCloudLimbicState,
   evolveCloudLimbicState,
   CloudLimbicEngine,
-  CloudToolLoopEngine,
   type CloudEngineContext,
 } from './cloudAgentEngine';
-import { buildLimbicBlock, neutralState } from '@builderforce/agent-tools';
+import { buildLimbicBlock, neutralState, CURRENT_ENGINE_ID } from '@builderforce/agent-tools';
 import { loadPersonaSetpoints } from '../artifact/capabilityContext';
 
-// Minimal context — the engine factories only store it; resolveAgentEngine does
+// Minimal context — the engine factory only stores it; resolveAgentEngine does
 // not run the loop, so the env/db are never touched here.
 const rc = {
   env: {}, db: {}, executionId: 1,
@@ -18,23 +17,12 @@ const rc = {
   tenantId: 1, projectId: 1, agentLabel: 'Agent', isCancelled: async () => false,
 } as unknown as CloudEngineContext;
 
-describe('cloud engine selection (V3 is additive, V2 untouched)', () => {
-  it('maps builderforce-v2 → CloudToolLoopEngine', () => {
-    const e = resolveAgentEngine(rc, 'builderforce-v2');
-    expect(e).toBeInstanceOf(CloudToolLoopEngine);
-    expect(e.id).toBe('builderforce-v2');
-  });
-
-  it('maps builderforce-v3 → CloudLimbicEngine', () => {
-    const e = resolveAgentEngine(rc, 'builderforce-v3');
+describe('cloud engine (one engine: the current V3 = loop + limbic always-on)', () => {
+  it('always resolves the current engine (limbic composed)', () => {
+    const e = resolveAgentEngine(rc);
     expect(e).toBeInstanceOf(CloudLimbicEngine);
+    expect(e.id).toBe(CURRENT_ENGINE_ID);
     expect(e.id).toBe('builderforce-v3');
-  });
-
-  it('falls back to V2 for unknown / legacy / absent ids', () => {
-    expect(resolveAgentEngine(rc, 'builderforce-v1').id).toBe('builderforce-v2');
-    expect(resolveAgentEngine(rc, 'nonsense').id).toBe('builderforce-v2');
-    expect(resolveAgentEngine(rc, undefined).id).toBe('builderforce-v2');
   });
 });
 

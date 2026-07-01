@@ -1448,12 +1448,6 @@
     "bestExperience": "Meilleure expérience sur",
     "bestCloud": "Cloud",
     "bestHost": "Distant (agentHost)",
-    "engine": "Moteur d'exécution de l'agent",
-    "engineLabel": {
-      "builderforce-v2": "BuilderForce-V2 (Anthropic — Claude Agent SDK)",
-      "builderforce-v3": "BuilderForce-V3 (V2 + couche affective limbique)"
-    },
-    "engineHelp": "V2 exécute le Claude Agent SDK ; les modèles sont routés via la passerelle avec la clé Anthropic de votre locataire. V3 ajoute la couche affective limbique au-dessus de V2 — l'agent évalue la tâche et s'exécute dans un état affectif adapté (p. ex. une prudence accrue pour les travaux risqués).",
     "surface": "Surface d'exécution",
     "surfaceLabel": {
       "durable": "Durable (cloud, sans serveur à la demande)",
@@ -1462,7 +1456,9 @@
     "surfaceHelp": "Les deux exécutent la tâche complète dans le cloud (tout Cloudflare). Durable s'exécute à la demande sur un Durable Object (par étape) — l'option par défaut. Le conteneur Cloudflare longue durée maintient un processus actif pour des tâches très longues et continues (revient à Durable tant que l'infrastructure de conteneurs n'est pas activée).",
     "baseModel": "Modèle de base (facultatif)",
     "baseModelDefault": "Par défaut builderforce.ai (meilleur modèle de codage)",
-    "baseModelHelp": "Le modèle d'appel d'outils et de codage sur lequel cet agent s'exécute — choisissez l'un de vos LLM ou un modèle du pool. Une exécution fixe un modèle pour toute la tâche ; laissez par défaut pour utiliser le meilleur modèle de codage de votre forfait."
+    "baseModelHelp": "Le modèle d'appel d'outils et de codage sur lequel cet agent s'exécute — choisissez l'un de vos LLM ou un modèle du pool. Une exécution fixe un modèle pour toute la tâche ; laissez par défaut pour utiliser le meilleur modèle de codage de votre forfait.",
+    "personality": "Personnalité",
+    "personalityHelp": "Donnez une personnalité à cet agent grâce à un test de traits ou à des curseurs. Elle façonne la manière dont l'agent raisonne, le soin qu'il apporte à son travail et sa façon de communiquer à chaque exécution."
   },
   "modelApiSamples": {
     "copy": "Copier",

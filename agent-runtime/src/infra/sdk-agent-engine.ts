@@ -20,7 +20,7 @@
  */
 
 import type { AgentEngine, AgentRunInput, AgentRunResult } from "@builderforce/agent-tools";
-import { ENGINE_IDS } from "@builderforce/agent-tools";
+import { CURRENT_ENGINE_ID } from "@builderforce/agent-tools";
 import { runClaudeAgentSdkV2, type V2RunnerSinks } from "../agents/claude-agent-sdk-runner.js";
 
 /** Runtime collaborators an on-prem SDK run needs, supplied once at construction. */
@@ -39,9 +39,9 @@ export interface ClaudeSdkEngineDeps {
 
 /** The on-prem Claude-Agent-SDK loop, behind the shared {@link AgentEngine} seam. */
 export class ClaudeSdkAgentEngine implements AgentEngine {
-  // Read from the shared ENGINE_IDS source so the id never drifts from the registry's
-  // well-known names (mirrors the cloud CloudToolLoopEngine).
-  readonly id = ENGINE_IDS.v2;
+  // Read from the shared source so the id never drifts — one current engine id
+  // across every surface (mirrors the cloud CloudLimbicEngine).
+  readonly id = CURRENT_ENGINE_ID;
 
   constructor(private readonly deps: ClaudeSdkEngineDeps) {}
 

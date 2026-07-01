@@ -17,10 +17,12 @@
  */
 import { Hono } from 'hono';
 import { neon } from '@neondatabase/serverless';
-import { DEFAULT_ENGINE_ID } from '@builderforce/agent-tools';
+import { CURRENT_ENGINE_ID } from '@builderforce/agent-tools';
 import { authMiddleware } from '../middleware/authMiddleware';
 import { getOrSetCached, invalidateCached } from '../../infrastructure/cache/readThroughCache';
 import { runtimeHiredAgentsCacheKey } from './runtimeRoutes';
+import { tenantHasPsychometricPersona } from './llmRoutes';
+import { sanitizePsychometricProfile } from '../../application/persona/psychometricCatalog';
 import type { Env, HonoEnv } from '../../env';
 
 /** Cache key for a tenant's purchased (marketplace-acquired) agents. */
@@ -56,12 +58,10 @@ const PERF_CACHE_TTL_SECONDS = 60;
 
 const RUNTIME_SUPPORT = ['cloud', 'host', 'both'] as const;
 const PRICING_MODELS = ['flat_fee', 'consumption'] as const;
-// V1 RETIRED (2026-06-13). Creatable engines: `builderforce-v2` (Claude Agent SDK
-// tool loop) and `builderforce-v3` (V2 + the limbic affective layer composed on
-// top). A legacy/unknown id in a request body is not in this set → falls to
-// DEFAULT_ENGINE_ID (v2).
-const AGENT_ENGINES = ['builderforce-v2', 'builderforce-v3'] as const;
-/** The two V2 cloud-agent execution surfaces (see migration 0105 / cloudDispatch). */
+// There is ONE agent engine — the current version (CURRENT_ENGINE_ID). It is not
+// user-selectable and is never read from the DB for version purposes; the `engine`
+// column is written with the current id purely as a denormalized display value.
+/** The two cloud-agent execution surfaces (see migration 0105 / cloudDispatch). */
 const RUNTIME_SURFACES = ['durable', 'container'] as const;
 
 /**
@@ -78,7 +78,13 @@ function mapAgentRow<T extends Record<string, unknown>>(row: T | null | undefine
     : typeof skills === 'string'
       ? (() => { try { const v = JSON.parse(skills); return Array.isArray(v) ? v : []; } catch { return []; } })()
       : [];
-  return { ...row, skills: parsed };
+  // Parse the agent's own personality JSON so the editor round-trips it as an object
+  // (stored as text; mirrors how `skills` is parsed). null when unset.
+  const psy = row.psychometric;
+  const psychometric = typeof psy === 'string'
+    ? (() => { try { return JSON.parse(psy) as unknown; } catch { return null; } })()
+    : (psy ?? null);
+  return { ...row, skills: parsed, psychometric };
 }
 
 /**
@@ -281,6 +287,7 @@ export function createWorkforceRoutes(): Hono<HonoEnv> {
       pricingModel?: string;
       priceUnit?: string | null;
       published?: boolean;
+      psychometric?: unknown;
     }>();
 
     if (!body.name?.trim()) return c.json({ error: 'name is required' }, 400);
@@ -289,26 +296,30 @@ export function createWorkforceRoutes(): Hono<HonoEnv> {
       ? body.runtimeSupport! : 'cloud';
     const pricingModel = (PRICING_MODELS as readonly string[]).includes(body.pricingModel ?? '')
       ? body.pricingModel! : 'flat_fee';
-    const engine = (AGENT_ENGINES as readonly string[]).includes(body.engine ?? '')
-      ? body.engine! : DEFAULT_ENGINE_ID;
-    // Which execution surface a V2 agent runs on (durable DO vs long-lived node).
+    const engine = CURRENT_ENGINE_ID;
+    // Which execution surface the agent runs on (durable DO vs long-lived node).
     const runtimeSurface = (RUNTIME_SURFACES as readonly string[]).includes(body.runtimeSurface ?? '')
       ? body.runtimeSurface! : 'durable';
     // preferred_runtime only meaningful when both are supported
     const preferredRuntime = runtimeSupport === 'both' ? (body.preferredRuntime ?? null) : null;
+    // Per-agent personality is a Pro feature — store none for free plans (rather than
+    // failing the create) so the agent still saves.
+    const psychometric = body.psychometric != null && (await tenantHasPsychometricPersona(c.env, tenantId))
+      ? sanitizePsychometricProfile(body.psychometric)
+      : null;
 
     const id = crypto.randomUUID();
     const [row] = await sql(c.env)`
       INSERT INTO ide_agents
         (id, tenant_id, project_id, name, title, bio, skills, base_model,
          status, hire_count, runtime_support, preferred_runtime, engine, runtime_surface,
-         price_cents, pricing_model, price_unit, published)
+         price_cents, pricing_model, price_unit, published, psychometric)
       VALUES
         (${id}, ${tenantId}, NULL, ${body.name.trim()}, ${body.title?.trim() || body.name.trim()},
          ${body.bio ?? ''}, ${JSON.stringify(body.skills ?? [])}, ${body.baseModel || 'builderforce-default'},
          'active', 0, ${runtimeSupport}, ${preferredRuntime}, ${engine}, ${runtimeSurface},
          ${Math.max(0, Math.round(body.priceCents ?? 0))}, ${pricingModel}, ${body.priceUnit ?? null},
-         ${body.published ?? false})
+         ${body.published ?? false}, ${psychometric})
       RETURNING *
     `;
     // A newly-created active/published agent can appear in the public listing.
@@ -334,6 +345,7 @@ export function createWorkforceRoutes(): Hono<HonoEnv> {
       priceUnit?: string | null;
       published?: boolean;
       status?: string;
+      psychometric?: unknown;
     }>();
 
     const [existing] = await sql(c.env)`
@@ -341,12 +353,21 @@ export function createWorkforceRoutes(): Hono<HonoEnv> {
     `;
     if (!existing) return c.json({ error: 'Agent not found' }, 404);
 
+    // Per-agent personality (Pro). `undefined` = field not sent → keep existing;
+    // `null` = explicit clear; an object = set (Pro-gated, sanitized).
+    let psychometric = existing.psychometric as string | null;
+    if (body.psychometric !== undefined) {
+      psychometric = body.psychometric != null && (await tenantHasPsychometricPersona(c.env, tenantId))
+        ? sanitizePsychometricProfile(body.psychometric)
+        : null;
+    }
+
     const runtimeSupport = body.runtimeSupport != null && (RUNTIME_SUPPORT as readonly string[]).includes(body.runtimeSupport)
       ? body.runtimeSupport : existing.runtime_support;
     const pricingModel = body.pricingModel != null && (PRICING_MODELS as readonly string[]).includes(body.pricingModel)
       ? body.pricingModel : existing.pricing_model;
-    const engine = body.engine != null && (AGENT_ENGINES as readonly string[]).includes(body.engine)
-      ? body.engine : existing.engine;
+    // Engine is not user-selectable — always the current version.
+    const engine = CURRENT_ENGINE_ID;
     const runtimeSurface = body.runtimeSurface != null && (RUNTIME_SURFACES as readonly string[]).includes(body.runtimeSurface)
       ? body.runtimeSurface : (existing.runtime_surface ?? 'durable');
     const preferredRuntime = runtimeSupport === 'both'
@@ -369,6 +390,7 @@ export function createWorkforceRoutes(): Hono<HonoEnv> {
         price_unit        = ${body.priceUnit !== undefined ? body.priceUnit : existing.price_unit},
         published         = ${body.published ?? existing.published},
         status            = ${body.status ?? existing.status},
+        psychometric      = ${psychometric},
         updated_at        = NOW()
       WHERE id = ${id} AND tenant_id = ${tenantId}
       RETURNING *

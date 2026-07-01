@@ -124,7 +124,7 @@ describe('AgentExecutionPanel — steering echo', () => {
         source: 'cloud-telemetry',
         usageSnapshots: [],
         toolEvents: [
-          { id: 1, ts: '2026-06-12T05:15:44Z', toolName: 'runtime.dispatch', args: JSON.stringify({ agentType: 'V2 Cloud Agent (Node/Container)', engine: 'builderforce-v2', surface: 'container' }) },
+          { id: 1, ts: '2026-06-12T05:15:44Z', toolName: 'runtime.dispatch', args: JSON.stringify({ agentType: 'V2 Cloud Agent (Node/Container)', engine: 'builderforce-v3', surface: 'container' }) },
         ],
       },
     });

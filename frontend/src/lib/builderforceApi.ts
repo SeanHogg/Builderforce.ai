@@ -4138,36 +4138,45 @@ export const pendingPromptsApi = {
 // working with its localStorage "My Personas" draft layer as a fallback.
 // ---------------------------------------------------------------------------
 
-/** A persona published to the public registry. Mirrors the marketplace persona shape. */
+/** The behaviour body of a persona (mirrors the server `persona` JSON column). */
+export interface PersonaBody {
+  voice?: string;
+  perspective?: string;
+  decisionStyle?: string;
+  outputPrefix?: string;
+  capabilities?: string[];
+  systemDirectives?: string;
+}
+
+/** A persona published to the public registry. Mirrors the server `publicView`. */
 export interface PublicPersona {
   id: string;
   slug: string;
   name: string;
-  description: string;
-  voice?: string;
-  perspective?: string;
-  decisionStyle?: string;
-  outputPrefix?: string;
-  capabilities?: string[];
+  description: string | null;
+  category?: string | null;
   tags?: string[];
-  author?: string;
-  image?: string;
-  likes?: number;
-  downloads?: number;
-  createdAt?: string;
+  /** Behaviour body — nested (NOT flat) to match the server contract. */
+  persona?: PersonaBody | null;
+  /** Psychometric profile (Pro) — compiled into behaviour at run time. */
+  psychometric?: import('./psychometric').PsychometricProfile | null;
+  authorName?: string | null;
+  installCount?: number;
+  likeCount?: number;
+  updatedAt?: string;
 }
 
 export interface PublishPersonaInput {
   name: string;
-  slug?: string;
   description?: string;
-  voice?: string;
-  perspective?: string;
-  decisionStyle?: string;
-  outputPrefix?: string;
-  capabilities?: string[];
+  category?: string;
   tags?: string[];
-  image?: string;
+  visibility?: 'private' | 'tenant' | 'public';
+  authorName?: string;
+  /** Behaviour body — sent nested to match the server `sanitizePersonaBody`. */
+  persona?: PersonaBody;
+  /** Psychometric profile (Pro); the server stores it only for entitled tenants. */
+  psychometric?: import('./psychometric').PsychometricProfile;
 }
 
 /** True when an error came from a 404 (older backend without the personas routes). */

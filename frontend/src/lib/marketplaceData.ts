@@ -24,6 +24,8 @@ export interface Persona {
   price?: number;
   pricingModel?: PricingModel;
   priceUnit?: string;
+  /** Optional psychometric profile (Pro). Compiled into behaviour at run time. */
+  psychometric?: import('./psychometric').PsychometricProfile;
 }
 
 export interface UserPersona {

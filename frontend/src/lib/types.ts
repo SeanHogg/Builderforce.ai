@@ -274,14 +274,17 @@ export interface PublishedAgent {
   tenant_id?: number | null;
   runtime_support?: 'cloud' | 'host' | 'both';
   preferred_runtime?: 'cloud' | 'host' | null;
-  /** Agent runtime engine: Claude Agent SDK (V1 retired 2026-06-13, migrations 0087/0120). */
-  engine?: 'builderforce-v2';
-  /** V2 execution surface (migration 0105): durable DO vs long-lived Cloudflare Container. */
+  /** Agent runtime engine — always the current version (read-only denormalized value). */
+  engine?: 'builderforce-v3';
+  /** Cloud execution surface (migration 0105): durable DO vs long-lived Cloudflare Container. */
   runtime_surface?: 'durable' | 'container';
   price_cents?: number;
   pricing_model?: 'flat_fee' | 'consumption';
   price_unit?: string | null;
   published?: boolean;
+  /** This agent's OWN personality (Pro). Parsed object (null when unset). Compiled at
+   *  run time into prompt directives, sampling temperature, and limbic setpoints. */
+  psychometric?: import('./psychometric').PsychometricProfile | null;
   /**
    * Number of tenants CURRENTLY holding this agent (active, non-unhired
    * purchases). Owner-only metric — populated by GET /agents/mine, not by the

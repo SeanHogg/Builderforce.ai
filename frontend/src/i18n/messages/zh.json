@@ -1448,12 +1448,6 @@
     "bestExperience": "最佳运行环境",
     "bestCloud": "云端",
     "bestHost": "远程（agentHost）",
-    "engine": "智能体运行时引擎",
-    "engineLabel": {
-      "builderforce-v2": "BuilderForce-V2（Anthropic — Claude Agent SDK）",
-      "builderforce-v3": "BuilderForce-V3（V2 + 边缘系统情感层）"
-    },
-    "engineHelp": "V2 运行 Claude Agent SDK；模型通过网关使用你租户的 Anthropic 密钥进行路由。V3 在 V2 之上增加边缘系统情感层——智能体会评估任务并在相应的情感状态下执行（例如在高风险工作中提高谨慎度）。",
     "surface": "运行时载体",
     "surfaceLabel": {
       "durable": "持久（云端、按需无服务器）",
@@ -1462,7 +1456,9 @@
     "surfaceHelp": "两者都在云端（全部 Cloudflare）运行完整任务。持久型按需在 Durable Object 上逐步执行——默认选项。长时运行的 Cloudflare 容器会为超长、连续的任务保持进程运行（在容器基础设施启用前会回退到持久型）。",
     "baseModel": "基础模型（可选）",
     "baseModelDefault": "builderforce.ai 默认（最佳编码模型）",
-    "baseModelHelp": "该智能体运行所用的工具调用 + 编码模型——选择你的某个 LLM 或模型池中的模型。一次运行会为整个任务固定一个模型；保留默认则使用套餐的最佳编码模型。"
+    "baseModelHelp": "该智能体运行所用的工具调用 + 编码模型——选择你的某个 LLM 或模型池中的模型。一次运行会为整个任务固定一个模型；保留默认则使用套餐的最佳编码模型。",
+    "personality": "性格",
+    "personalityHelp": "通过性格测试或滑块为该智能体设定性格。它会影响智能体在每次运行中的推理方式、工作严谨程度以及沟通风格。"
   },
   "modelApiSamples": {
     "copy": "复制",

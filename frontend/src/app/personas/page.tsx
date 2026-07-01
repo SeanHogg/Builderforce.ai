@@ -36,22 +36,24 @@ function saveUserPersonas(tenantId: string, personas: UserPersona[]) {
   localStorage.setItem(userPersonasKey(tenantId), JSON.stringify(personas));
 }
 
-/** Map a server-published persona into the marketplace display shape (`Persona`). */
+/** Map a server-published persona into the marketplace display shape (`Persona`).
+ *  The behaviour fields live NESTED under `persona` (server contract), not flat. */
 function publicToPersona(p: PublicPersona): Persona {
+  const b = p.persona ?? {};
   return {
     name: p.slug || p.name,
     description: p.description ?? '',
-    voice: p.voice ?? '—',
-    perspective: p.perspective ?? '—',
-    decisionStyle: p.decisionStyle ?? '—',
-    outputPrefix: p.outputPrefix ?? '',
-    capabilities: p.capabilities ?? [],
+    voice: b.voice || '—',
+    perspective: b.perspective || '—',
+    decisionStyle: b.decisionStyle || '—',
+    outputPrefix: b.outputPrefix ?? '',
+    capabilities: b.capabilities ?? [],
     source: 'user-global',
     tags: p.tags ?? [],
-    author: p.author ?? 'Community',
-    image: p.image,
-    likes: p.likes,
-    downloads: p.downloads,
+    author: p.authorName ?? 'Community',
+    likes: p.likeCount,
+    downloads: p.installCount,
+    psychometric: p.psychometric ?? undefined,
   };
 }
 
@@ -211,15 +213,20 @@ export default function PersonasPage() {
     try {
       await personasApi.publish({
         name: p.name,
-        slug: p.slug,
         description: p.description,
-        voice: p.voice,
-        perspective: p.perspective,
-        decisionStyle: p.decisionStyle,
-        outputPrefix: p.outputPrefix,
-        capabilities: p.capabilities,
         tags: p.tags,
-        image: p.image,
+        // Publish makes it browsable in the Marketplace tab (server default is private).
+        visibility: 'public',
+        // Behaviour fields are sent NESTED under `persona` (server contract).
+        persona: {
+          voice: p.voice,
+          perspective: p.perspective,
+          decisionStyle: p.decisionStyle,
+          outputPrefix: p.outputPrefix,
+          capabilities: p.capabilities,
+        },
+        // The personality the user built from the test / sliders — was previously dropped.
+        psychometric: p.psychometric,
       });
       const next = userPersonas.map((u) => (u.id === p.id ? { ...u, shared: true } : u));
       setUserPersonas(next);

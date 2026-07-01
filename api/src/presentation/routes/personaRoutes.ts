@@ -26,15 +26,17 @@
 import { Hono } from 'hono';
 import { and, desc, eq, ilike, ne, or, sql as dsql } from 'drizzle-orm';
 import { authMiddleware } from '../middleware/authMiddleware';
-import { resolveTenantPlan } from './llmRoutes';
+import { tenantHasPsychometricPersona } from './llmRoutes';
 import {
   PSYCHOMETRIC_CATALOG,
   PSYCHOMETRIC_QUESTIONS,
   ENNEAGRAM_TYPES,
   scoreQuestionnaire,
   sanitizeVector,
+  sanitizePsychometricProfile,
 } from '../../application/persona/psychometricCatalog';
 import { marketplacePersonas } from '../../infrastructure/database/schema';
+import { invalidateCapabilityCache } from '../../application/artifact/capabilityContext';
 import { getOrSetCached, getCacheVersion, bumpCacheVersion } from '../../infrastructure/cache/readThroughCache';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env, HonoEnv } from '../../env';
@@ -91,6 +93,7 @@ function publicView(r: PersonaRow) {
     category: r.category,
     tags: safeTags(r.tags),
     persona: r.persona,
+    psychometric: r.psychometric ? (JSON.parse(r.psychometric) as unknown) : null,
     authorName: r.authorName,
     installCount: r.installCount,
     likeCount: r.likeCount,
@@ -147,12 +150,6 @@ export function createPersonaRoutes(db: Db): Hono<HonoEnv> {
     return c.json({ personas });
   });
 
-  /** True when the tenant's plan includes the psychometric-persona Pro feature. */
-  async function tenantHasPsychometric(env: HonoEnv['Bindings'], tenantId: number): Promise<boolean> {
-    const access = await resolveTenantPlan(env, tenantId);
-    return access.premiumOverride || access.effectivePlan !== 'free';
-  }
-
   // -------------------------------------------------------------------------
   // GET /api/personas/psychometric/catalog
   // The full framework suite + questionnaire bank. Static constant — every
@@ -160,7 +157,7 @@ export function createPersonaRoutes(db: Db): Hono<HonoEnv> {
   // -------------------------------------------------------------------------
   router.get('/psychometric/catalog', authMiddleware, async (c) => {
     const tenantId = c.get('tenantId') as number;
-    const entitled = await tenantHasPsychometric(c.env, tenantId);
+    const entitled = await tenantHasPsychometricPersona(c.env, tenantId);
     return c.json({
       entitled,
       frameworks: PSYCHOMETRIC_CATALOG,
@@ -175,7 +172,7 @@ export function createPersonaRoutes(db: Db): Hono<HonoEnv> {
   // -------------------------------------------------------------------------
   router.post('/psychometric/score', authMiddleware, async (c) => {
     const tenantId = c.get('tenantId') as number;
-    if (!(await tenantHasPsychometric(c.env, tenantId))) {
+    if (!(await tenantHasPsychometricPersona(c.env, tenantId))) {
       return c.json({ error: 'Psychometric personas require a Pro plan.', upgrade: true }, 403);
     }
     const body = await c.req
@@ -192,7 +189,7 @@ export function createPersonaRoutes(db: Db): Hono<HonoEnv> {
   // -------------------------------------------------------------------------
   router.post('/psychometric/import', authMiddleware, async (c) => {
     const tenantId = c.get('tenantId') as number;
-    if (!(await tenantHasPsychometric(c.env, tenantId))) {
+    if (!(await tenantHasPsychometricPersona(c.env, tenantId))) {
       return c.json({ error: 'Psychometric personas require a Pro plan.', upgrade: true }, 403);
     }
     const body = await c.req.json<{ vector?: unknown }>().catch(() => ({ vector: undefined }));
@@ -227,6 +224,8 @@ export function createPersonaRoutes(db: Db): Hono<HonoEnv> {
       visibility?: 'private' | 'tenant' | 'public';
       authorName?: string;
       persona?: unknown;
+      /** PsychometricProfile — the behaviour-bearing trait vector (Pro only). */
+      psychometric?: unknown;
     };
     const body = await c.req.json<PersonaCreateBody>().catch((): PersonaCreateBody => ({}));
 
@@ -234,6 +233,13 @@ export function createPersonaRoutes(db: Db): Hono<HonoEnv> {
     const visibility = body.visibility ?? 'private';
     let slug = slugify(body.name);
     if (visibility === 'public') slug = await publicSafeSlug(db, slug, null);
+
+    // Psychometric profiles are a Pro feature — silently store none for free plans
+    // (rather than failing the whole publish) so the persona still saves.
+    const psychometric =
+      body.psychometric != null && (await tenantHasPsychometricPersona(c.env, tenantId))
+        ? sanitizePsychometricProfile(body.psychometric)
+        : null;
 
     const [row] = await db
       .insert(marketplacePersonas)
@@ -246,6 +252,7 @@ export function createPersonaRoutes(db: Db): Hono<HonoEnv> {
         category: body.category ?? null,
         tags: JSON.stringify(body.tags ?? []),
         persona: sanitizePersonaBody(body.persona),
+        psychometric,
         visibility,
         authorName: body.authorName ?? null,
       })
@@ -253,6 +260,9 @@ export function createPersonaRoutes(db: Db): Hono<HonoEnv> {
     if (!row) return c.json({ error: 'Failed to create persona' }, 500);
 
     if (visibility === 'public') await bumpCacheVersion(c.env as Env, PERSONA_PUBLIC_VERSION_KEY);
+    // Drop any stale runtime body cached under this slug so the next cloud run
+    // re-reads the persona (incl. its psychometric) — symmetric with the admin path.
+    await invalidateCapabilityCache(c.env as Env, 'persona', slug);
     return c.json({ ...publicView(row), visibility: row.visibility }, 201);
   });
 

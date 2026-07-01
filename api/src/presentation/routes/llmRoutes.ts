@@ -273,6 +273,21 @@ export async function resolveTenantPlan(
   };
 }
 
+/**
+ * True when the tenant's plan includes the psychometric-persona Pro feature (a
+ * behaviour-bearing personality trait vector). THE single entitlement check —
+ * shared by the persona editor scoring routes AND the per-agent personality on the
+ * Workforce agent routes, so "who can set a personality" is defined once. A
+ * superadmin premium override always grants it.
+ */
+export async function tenantHasPsychometricPersona(
+  env: HonoEnv['Bindings'],
+  tenantId: number,
+): Promise<boolean> {
+  const access = await resolveTenantPlan(env, tenantId);
+  return access.premiumOverride || getLimits(toTenantPlan(access.effectivePlan)).psychometricPersona;
+}
+
 /** What a passing {@link enforceTokenCaps} returns for the response headers/body. */
 interface TokenCapUsage {
   usageToday: number;
@@ -872,7 +887,7 @@ export function createLlmRoutes(): Hono<HonoEnv> {
               cacheReadTokens: u.cache_read_input_tokens ?? 0,
               cacheCreationTokens: u.cache_creation_input_tokens ?? 0,
             },
-            metadata: { engine: 'builderforce-v2' }, idempotencyKey, useCase: 'v2_agent',
+            metadata: { engine: 'agent' }, idempotencyKey, useCase: 'agent',
             tenantApiKeyId: access.tenantApiKeyId, attribution: { agentHostId: access.agentHostId },
           });
         }
@@ -890,7 +905,7 @@ export function createLlmRoutes(): Hono<HonoEnv> {
           logUsage(c.env, c.executionCtx, {
             tenantId: access.tenantId, userId: access.userId, llmProduct: product, model,
             retries: 0, streamed: true, usage: parseAnthropicSseUsage(text),
-            metadata: { engine: 'builderforce-v2' }, idempotencyKey, useCase: 'v2_agent',
+            metadata: { engine: 'agent' }, idempotencyKey, useCase: 'agent',
             tenantApiKeyId: access.tenantApiKeyId, attribution: { agentHostId: access.agentHostId },
           });
         } catch { /* metering is best-effort */ }
@@ -926,8 +941,8 @@ export function createLlmRoutes(): Hono<HonoEnv> {
         logUsage(c.env, c.executionCtx, {
           tenantId: access.tenantId, userId: access.userId, llmProduct: product, model: result.resolvedModel,
           retries: result.retries, streamed: true, usage,
-          metadata: { engine: 'builderforce-v2', resolvedModel: result.resolvedModel }, idempotencyKey,
-          useCase: 'v2_agent', tenantApiKeyId: access.tenantApiKeyId,
+          metadata: { engine: 'agent', resolvedModel: result.resolvedModel }, idempotencyKey,
+          useCase: 'agent', tenantApiKeyId: access.tenantApiKeyId,
           attribution: { agentHostId: access.agentHostId }, traceId,
           paidOverflow: result.paidOverflow,
         });
@@ -943,8 +958,8 @@ export function createLlmRoutes(): Hono<HonoEnv> {
       tenantId: access.tenantId, userId: access.userId, llmProduct: product, model: result.resolvedModel,
       retries: result.retries, streamed: false,
       usage: result.usage ?? { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
-      metadata: { engine: 'builderforce-v2', resolvedModel: result.resolvedModel }, idempotencyKey,
-      useCase: 'v2_agent', tenantApiKeyId: access.tenantApiKeyId,
+      metadata: { engine: 'agent', resolvedModel: result.resolvedModel }, idempotencyKey,
+      useCase: 'agent', tenantApiKeyId: access.tenantApiKeyId,
       attribution: { agentHostId: access.agentHostId }, traceId,
       paidOverflow: result.paidOverflow,
     });

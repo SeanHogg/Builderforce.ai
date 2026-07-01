@@ -371,12 +371,12 @@ type SubmittedExecution = { id: number; status: string; toPlain(): unknown };
 /**
  * Resolve the runtime engine + display label for a cloud-agent run from its
  * `ide_agents.id`. The ref is the one the caller pinned, else the ticket's
- * assigned agent (see {@link dispatchAndQueue}). When a ref resolves, the engine
- * and name are read from that agent's `ide_agents` record (authoritative,
- * tenant-scoped); otherwise the default engine (`builderforce-v2`) with no label.
+ * assigned agent (see {@link dispatchAndQueue}). When a ref resolves, the name is
+ * read from that agent's `ide_agents` record (authoritative, tenant-scoped); the
+ * engine is always the current version (never read from the DB).
  *
  * One indexed lookup per execution-submit (not a hot read path), so it is not
- * cached. Never throws — defaults to `DEFAULT_ENGINE_ID` (`builderforce-v2`; V1 retired) on any failure.
+ * cached. Never throws — falls back to the current engine with no label on any failure.
  */
 /**
  * Shared post-submit dispatch path for `/executions` and `/tasks/submit`.
