@@ -1,44 +1,52 @@
-> **PRD** — drafted by Bob Developer (V2 (Container)) · task #89
+> **PRD** — drafted by Kevin BA/PM/PO (Durable) · task #204
 > _Each agent that updates this PRD signs its change below._
 
-# Product Requirements Document: Avatar Filter Row Placement
+# Product Requirements Document: Agent Throughput Assessment
 
 ## 1. Problem & Goal
 
-**Problem:** The current placement of the avatar filter, separated from the priorities dropdown, disrupts the logical grouping of filtering options. Users must scan different areas of the UI to apply related filters, leading to a less efficient and intuitive user experience.
+### Problem
+We currently lack a clear, quantifiable, and easily accessible measure of individual agent productivity over time. This hinders our ability to identify high-performing agents, detect dips in productivity, understand team capacity, and make data-driven decisions regarding staffing, training, and workload distribution.
 
-**Goal:** To improve the user experience by consolidating related filtering options into a single, contiguous row, thereby enhancing discoverability, reducing cognitive load, and increasing the speed at which users can apply filters.
+### Goal
+Enable Product Managers, Team Leads, and Operations Managers to accurately track and visualize the number of tasks completed by each agent on a weekly basis. This will provide actionable insights into agent throughput and overall team productivity.
 
 ## 2. Target Users / ICP Roles
 
-*   **Project Managers:** Need to quickly filter tasks by assignee (avatar) and priority to understand workload distribution and identify high-priority items.
-*   **Team Leads:** Require efficient filtering to monitor team progress and allocate resources based on task priority and individual contribution (avatar).
-*   **Individual Contributors:** Benefit from a cleaner interface to focus on their assigned tasks and understand their priority within the project context.
+*   **Product Managers:** To assess feature adoption, identify bottlenecks, and measure the impact of product changes on agent efficiency.
+*   **Team Leads:** To monitor individual and team performance, facilitate coaching, and manage workloads.
+*   **Operations Managers:** To understand overall operational efficiency, resource allocation, and identify training needs.
 
 ## 3. Scope
 
-This document covers the functional requirements and acceptance criteria for moving the existing avatar filter component to reside on the same UI row as the priorities dropdown. This includes adjustments to layout, styling, and ensuring the filter's functionality remains intact.
+This feature will focus on providing a clear, aggregated view of agent task completion rates per week. It involves data collection, aggregation, and presentation within an existing or new reporting interface.
 
 ## 4. Functional Requirements
 
-*   **FR1: Layout Adjustment:** The avatar filter component shall be repositioned to occupy a space adjacent to the priorities dropdown within the primary filtering bar.
-*   **FR2: Visual Consistency:** The avatar filter shall maintain its current visual appearance and interaction patterns (e.g., dropdown behavior, selection indicators) after being moved.
-*   **FR3: Responsive Design:** The integrated avatar and priorities filter row shall adapt appropriately across different screen sizes and resolutions, maintaining usability.
-*   **FR4: Filter Functionality:** Applying a filter via the avatar selector shall continue to correctly filter the displayed data (e.g., tasks, issues), and this filtering shall be independent of or complementary to the priorities filter.
+1.  **Task Completion Tracking:** The system must accurately identify and log tasks marked as "completed" across all relevant task types.
+2.  **Agent Attribution:** Each completed task must be correctly attributed to the specific agent who marked it as complete.
+3.  **Weekly Aggregation:** Tasks must be aggregated on a weekly basis, defining a week as Monday 00:00 UTC to Sunday 23:59 UTC.
+4.  **Reporting Interface:** A dedicated section or report within the existing analytics dashboard will display the throughput data.
+5.  **Per-Agent View:** The interface must allow users to view the weekly throughput for individual agents.
+6.  **Team Aggregate View:** The interface must allow users to view the total weekly throughput for the entire team.
+7.  **Historical Data Display:** The report should support displaying historical weekly throughput data for at least the last 8 weeks.
+8.  **Filter/Selection:** Users must be able to filter or select specific teams or departments if the system supports multi-team management.
 
 ## 5. Acceptance Criteria
 
-*   **AC1: Avatar Filter Visible in Row:** The avatar filter is visibly present on the same horizontal line as the priorities dropdown.
-*   **AC2: Filter Functionality Preserved:** Selecting an avatar from the new location correctly filters the displayed items.
-*   **AC3: Priorities Filter Functionality Preserved:** Selecting a priority from its dropdown continues to filter the displayed items, and its interaction is unaffected by the avatar filter's new position.
-*   **AC4: Combined Filtering Works:** Applying both an avatar filter and a priorities filter simultaneously yields the correct, combined results.
-*   **AC5: No Visual Overlap or Distortion:** The avatar filter and priorities dropdown do not overlap each other or other UI elements in the filtering bar, and the overall layout remains clean and undistorted.
-*   **AC6: Responsiveness Verified:** On smaller screen sizes, the combined filter row is still usable, potentially with a different arrangement if necessary (e.g., stacking if horizontal space is too limited, though the primary goal is horizontal).
+*   A user with appropriate permissions can navigate to the "Agent Throughput" report.
+*   The report displays a list of agents and their corresponding count of completed tasks for each week within the selected historical period (e.g., last 4 weeks).
+*   The total number of completed tasks for a selected week, across all agents, is accurately displayed.
+*   When filtering by a specific agent, only that agent's weekly task completion data is shown.
+*   Tasks marked as "completed" within the defined weekly period (Monday 00:00 UTC - Sunday 23:59 UTC) are correctly counted.
+*   Tasks completed by Agent A are correctly attributed and counted for Agent A only.
+*   The report loads and displays data within 5 seconds for typical datasets (e.g., 50 agents, 8 weeks of data).
 
 ## 6. Out of Scope
 
-*   **New Avatar Filter Features:** Any enhancements or new functionalities to the avatar filter itself (e.g., search within avatars, multi-select avatars) are out of scope for this task.
-*   **New Priorities Filter Features:** Any enhancements or new functionalities to the priorities dropdown are out of scope.
-*   **Other Filter Components:** Moving or modifying any other filter components not explicitly mentioned (e.g., date filters, status filters) is out of scope.
-*   **Backend Changes:** Any backend changes related to how filters are processed or stored are out of scope, assuming the existing backend APIs can handle the current filtering logic.
-*   **Performance Optimization:** Significant performance optimizations related to filtering are out of scope, unless directly caused by the layout change.
+*   Real-time throughput monitoring (updates faster than daily or hourly).
+*   Prediction or forecasting of future agent throughput.
+*   Detailed breakdown of tasks by type (e.g., "how many support tickets vs. how many bug fixes"). Focus is on total task count.
+*   Automated alerts or notifications based on throughput thresholds.
+*   Agent-facing view or self-service report for agents to track their own throughput.
+*   Comparison or benchmarking against external industry standards or other organizations.
