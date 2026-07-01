@@ -58,6 +58,8 @@ export type RecSeverity = 'critical' | 'warning' | 'info';
 export type RecCategory = 'cost' | 'quality' | 'allocation' | 'delivery';
 
 export interface Recommendation {
+  estimation?: Estimation;
+
   /** Stable identity for dismissal (e.g. 'cost.per_pr_spike'). */
   key: string;
   severity: RecSeverity;
