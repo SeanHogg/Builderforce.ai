@@ -1,44 +1,77 @@
-> **PRD** — drafted by Bob Developer (V2 (Container)) · task #89
+> **PRD** — drafted by Kevin BA/PM/PO (Durable) · task #203
 > _Each agent that updates this PRD signs its change below._
 
-# Product Requirements Document: Avatar Filter Row Placement
+# PRD: Project Due Date Audit and Implementation
 
-## 1. Problem & Goal
+## Problem & Goal
+**Problem:**
+Currently, no projects within our system have due dates set. This creates gaps in accountability, deadline tracking, and prioritization, leading to potential delays and misalignment across teams.
 
-**Problem:** The current placement of the avatar filter, separated from the priorities dropdown, disrupts the logical grouping of filtering options. Users must scan different areas of the UI to apply related filters, leading to a less efficient and intuitive user experience.
+**Goal:**
+- Audit all active projects to confirm the absence of due dates.
+- Flag the lack of due dates as a critical gap for visibility and escalation.
+- Define a path forward for implementing due dates as a core project attribute to improve planning and execution.
 
-**Goal:** To improve the user experience by consolidating related filtering options into a single, contiguous row, thereby enhancing discoverability, reducing cognitive load, and increasing the speed at which users can apply filters.
+---
 
-## 2. Target Users / ICP Roles
+## Target Users / ICP Roles
+- **Project Managers / Owners:** Need due dates to track progress, set priorities, and allocate resources.
+- **Executives / Leadership:** Require visibility into project timelines for strategic decision-making.
+- **Team Members / Contributors:** Depend on clear deadlines to manage workload and deliverables.
+- **Operations / Program Managers:** Leverage due dates to align cross-functional initiatives.
 
-*   **Project Managers:** Need to quickly filter tasks by assignee (avatar) and priority to understand workload distribution and identify high-priority items.
-*   **Team Leads:** Require efficient filtering to monitor team progress and allocate resources based on task priority and individual contribution (avatar).
-*   **Individual Contributors:** Benefit from a cleaner interface to focus on their assigned tasks and understand their priority within the project context.
+---
 
-## 3. Scope
+## Scope
+### In Scope
+- Audit all active projects to validate the absence of due dates.
+- Document findings in a report (e.g., count/percentage of projects without due dates).
+- Flag the gap to relevant stakeholders (e.g., leadership, project owners).
+- Propose functional requirements for adding due dates as a mandatory or optional field.
+- Define acceptance criteria for tracking due dates post-implementation.
 
-This document covers the functional requirements and acceptance criteria for moving the existing avatar filter component to reside on the same UI row as the priorities dropdown. This includes adjustments to layout, styling, and ensuring the filter's functionality remains intact.
+### Out of Scope
+- Implementation of due date tracking or notifications systems (covered in a follow-up PRD).
+- Backfilling due dates for existing projects.
+- Integration with third-party tools (e.g., Jira, Asana) for due date synchronization.
+- Changes to project creation workflows beyond due date validation.
 
-## 4. Functional Requirements
+---
 
-*   **FR1: Layout Adjustment:** The avatar filter component shall be repositioned to occupy a space adjacent to the priorities dropdown within the primary filtering bar.
-*   **FR2: Visual Consistency:** The avatar filter shall maintain its current visual appearance and interaction patterns (e.g., dropdown behavior, selection indicators) after being moved.
-*   **FR3: Responsive Design:** The integrated avatar and priorities filter row shall adapt appropriately across different screen sizes and resolutions, maintaining usability.
-*   **FR4: Filter Functionality:** Applying a filter via the avatar selector shall continue to correctly filter the displayed data (e.g., tasks, issues), and this filtering shall be independent of or complementary to the priorities filter.
+## Functional Requirements
+1. **Audit Mechanism:**
+   - A script/query to scan all active projects and identify those without due dates.
+   - Generate a report with:
+     - Total number of active projects.
+     - Number/percentage of projects without due dates.
+     - Sample list of projects without due dates (optional, for visibility).
 
-## 5. Acceptance Criteria
+2. **Stakeholder Communication:**
+   - Template for flagging the gap to leadership and project owners (e.g., email, Slack message, or dashboard alert).
+   - Escalation path for urgent projects requiring immediate due dates.
 
-*   **AC1: Avatar Filter Visible in Row:** The avatar filter is visibly present on the same horizontal line as the priorities dropdown.
-*   **AC2: Filter Functionality Preserved:** Selecting an avatar from the new location correctly filters the displayed items.
-*   **AC3: Priorities Filter Functionality Preserved:** Selecting a priority from its dropdown continues to filter the displayed items, and its interaction is unaffected by the avatar filter's new position.
-*   **AC4: Combined Filtering Works:** Applying both an avatar filter and a priorities filter simultaneously yields the correct, combined results.
-*   **AC5: No Visual Overlap or Distortion:** The avatar filter and priorities dropdown do not overlap each other or other UI elements in the filtering bar, and the overall layout remains clean and undistorted.
-*   **AC6: Responsiveness Verified:** On smaller screen sizes, the combined filter row is still usable, potentially with a different arrangement if necessary (e.g., stacking if horizontal space is too limited, though the primary goal is horizontal).
+3. **Gap Documentation:**
+   - Update project metadata schema to support due dates (if not already present).
+   - Define requirements for adding due dates as a field in project creation/editing workflows.
 
-## 6. Out of Scope
+---
 
-*   **New Avatar Filter Features:** Any enhancements or new functionalities to the avatar filter itself (e.g., search within avatars, multi-select avatars) are out of scope for this task.
-*   **New Priorities Filter Features:** Any enhancements or new functionalities to the priorities dropdown are out of scope.
-*   **Other Filter Components:** Moving or modifying any other filter components not explicitly mentioned (e.g., date filters, status filters) is out of scope.
-*   **Backend Changes:** Any backend changes related to how filters are processed or stored are out of scope, assuming the existing backend APIs can handle the current filtering logic.
-*   **Performance Optimization:** Significant performance optimizations related to filtering are out of scope, unless directly caused by the layout change.
+## Acceptance Criteria
+- [ ] Audit script/query successfully runs and generates a report of projects without due dates.
+- [ ] Report includes:
+  - Total active projects.
+  - Count/percentage of projects without due dates.
+  - List of projects without due dates (sample or full list, depending on sensitivity).
+- [ ] Gap is flagged to relevant stakeholders with clear next steps (e.g., "Add due dates to projects" or "Implement due date tracking").
+- [ ] Documentation is updated to reflect the need for due dates (e.g., PRD, project metadata schema, or internal wiki).
+- [ ] Functional requirements for due date implementation are approved by product and engineering teams.
+
+---
+
+## Out of Scope
+- Implementation of due date tracking features.
+- User interface changes for due date input/output.
+- Automated reminders or notifications for upcoming/overdue projects.
+- Backfilling due dates for historical projects.
+- Integration with external project management tools.
+- Changes to project templates or creation flows beyond due date validation.
