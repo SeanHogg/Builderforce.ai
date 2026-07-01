@@ -81,6 +81,11 @@ export interface CostClassSuggestion {
 }
 
 /** Investment category for a task/epic from its signals (shared taxonomy). */
+function computeCompletionPercent(totalItems: number, completedItems: number): number | null {
+  if (totalItems === 0) return 0;
+  const percent = Math.round((completedItems / totalItems) * 100);
+  return Math.max(0, Math.min(100, percent));
+}
 export function categoryOf(input: {
   title?: string | null; description?: string | null; actionType?: string | null;
   source?: string | null; allocationCategory?: string | null;
