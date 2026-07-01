@@ -45,7 +45,9 @@ export type TaskEvent = {
 export interface TaskStorage {
   save(task: TaskState): Promise<void>;
   load(taskId: string): Promise<TaskState | null>;
-  list(filter?: { status?: TaskStatus; sessionId?: string }): Promise<TaskState[]>;
+  list(filter?: { status?: TaskStatus; sessionId?: string; projectId?: string }): Promise<
+    TaskState[]
+  >;
   delete(taskId: string): Promise<void>;
   saveEvent(event: TaskEvent): Promise<void>;
   getEvents(taskId: string): Promise<TaskEvent[]>;
@@ -67,7 +69,11 @@ export class MemoryTaskStorage implements TaskStorage {
     return task ? { ...task } : null;
   }
 
-  async list(filter?: { status?: TaskStatus; sessionId?: string }): Promise<TaskState[]> {
+  async list(filter?: {
+    status?: TaskStatus;
+    sessionId?: string;
+    projectId?: string;
+  }): Promise<TaskState[]> {
     let tasks = Array.from(this.tasks.values());
 
     if (filter?.status) {
@@ -76,6 +82,10 @@ export class MemoryTaskStorage implements TaskStorage {
 
     if (filter?.sessionId) {
       tasks = tasks.filter((t) => t.sessionId === filter.sessionId);
+    }
+
+    if (filter?.projectId) {
+      tasks = tasks.filter((t) => t.projectId === filter.projectId);
     }
 
     return tasks.map((t) => ({ ...t }));
@@ -119,6 +129,8 @@ export class DistributedTaskEngine {
       description: request.description,
       sessionId: request.sessionId,
       parentTaskId: request.parentTaskId,
+      projectId: request.projectId,
+      size: request.size,
       createdAt: new Date(),
       metadata: request.metadata,
     };
@@ -157,6 +169,12 @@ export class DistributedTaskEngine {
     // Update timestamps
     if (newStatus === "planning" || newStatus === "running") {
       task.startedAt = task.startedAt || new Date();
+    }
+
+    // Capture the first moment the task enters "In Progress" (running). Used
+    // to compute time-to-done for velocity metrics (PRD FR2/FR6, AC6).
+    if (newStatus === "running") {
+      task.inProgressAt = task.inProgressAt || new Date();
     }
 
     if (newStatus === "completed" || newStatus === "failed" || newStatus === "cancelled") {

@@ -1,44 +1,57 @@
-> **PRD** — drafted by Bob Developer (V2 (Container)) · task #89
+> **PRD** — drafted by Kevin BA/PM/PO (Durable) · task #205
 > _Each agent that updates this PRD signs its change below._
 
-# Product Requirements Document: Avatar Filter Row Placement
+# Velocity Metrics Per Project
 
-## 1. Problem & Goal
+## Problem & Goal
 
-**Problem:** The current placement of the avatar filter, separated from the priorities dropdown, disrupts the logical grouping of filtering options. Users must scan different areas of the UI to apply related filters, leading to a less efficient and intuitive user experience.
+**Problem:** Project teams currently lack visibility into consistent velocity metrics for their projects. This makes it difficult to accurately forecast completion times, identify bottlenecks, and understand team performance.
 
-**Goal:** To improve the user experience by consolidating related filtering options into a single, contiguous row, thereby enhancing discoverability, reducing cognitive load, and increasing the speed at which users can apply filters.
+**Goal:** To provide project teams with clear, actionable velocity metrics, specifically project completion percentage and average time-to-done, to improve predictability and efficiency in project delivery.
 
-## 2. Target Users / ICP Roles
+## Target Users / ICP Roles
 
-*   **Project Managers:** Need to quickly filter tasks by assignee (avatar) and priority to understand workload distribution and identify high-priority items.
-*   **Team Leads:** Require efficient filtering to monitor team progress and allocate resources based on task priority and individual contribution (avatar).
-*   **Individual Contributors:** Benefit from a cleaner interface to focus on their assigned tasks and understand their priority within the project context.
+*   Project Managers
+*   Team Leads
+*   Scrum Masters
+*   Engineering Managers
+*   Individual Contributors (for self-assessment)
 
-## 3. Scope
+## Scope
 
-This document covers the functional requirements and acceptance criteria for moving the existing avatar filter component to reside on the same UI row as the priorities dropdown. This includes adjustments to layout, styling, and ensuring the filter's functionality remains intact.
+This feature will introduce the calculation and display of two key velocity metrics for active projects:
 
-## 4. Functional Requirements
+1.  **Project Completion Percentage:** Visualized as a progress bar indicating the percentage of work completed relative to the total estimated work.
+2.  **Average Time-to-Done:** The average number of days it takes for a work item (e.g., task, story, bug) to move from "In Progress" to "Done."
 
-*   **FR1: Layout Adjustment:** The avatar filter component shall be repositioned to occupy a space adjacent to the priorities dropdown within the primary filtering bar.
-*   **FR2: Visual Consistency:** The avatar filter shall maintain its current visual appearance and interaction patterns (e.g., dropdown behavior, selection indicators) after being moved.
-*   **FR3: Responsive Design:** The integrated avatar and priorities filter row shall adapt appropriately across different screen sizes and resolutions, maintaining usability.
-*   **FR4: Filter Functionality:** Applying a filter via the avatar selector shall continue to correctly filter the displayed data (e.g., tasks, issues), and this filtering shall be independent of or complementary to the priorities filter.
+These metrics will be accessible via a dedicated "Velocity" or "Reporting" section within the project view.
 
-## 5. Acceptance Criteria
+## Functional Requirements
 
-*   **AC1: Avatar Filter Visible in Row:** The avatar filter is visibly present on the same horizontal line as the priorities dropdown.
-*   **AC2: Filter Functionality Preserved:** Selecting an avatar from the new location correctly filters the displayed items.
-*   **AC3: Priorities Filter Functionality Preserved:** Selecting a priority from its dropdown continues to filter the displayed items, and its interaction is unaffected by the avatar filter's new position.
-*   **AC4: Combined Filtering Works:** Applying both an avatar filter and a priorities filter simultaneously yields the correct, combined results.
-*   **AC5: No Visual Overlap or Distortion:** The avatar filter and priorities dropdown do not overlap each other or other UI elements in the filtering bar, and the overall layout remains clean and undistorted.
-*   **AC6: Responsiveness Verified:** On smaller screen sizes, the combined filter row is still usable, potentially with a different arrangement if necessary (e.g., stacking if horizontal space is too limited, though the primary goal is horizontal).
+1.  **Work Item Status Tracking:** The system must accurately track the status of all work items within a project.
+2.  **Time-to-Done Calculation:** The system shall calculate the duration (in days) from the point a work item transitions to an "In Progress" state to the point it transitions to a "Done" state. Only work items that have reached a "Done" state will be included in this calculation.
+3.  **Average Time-to-Done Aggregation:** The system shall calculate the average time-to-done for all completed work items within a project over a defined historical period (e.g., last 30 days, last quarter, project lifetime).
+4.  **Total Work Estimation:** The system requires a mechanism to estimate the total effort or size of work items within a project (e.g., story points, estimated hours). This is necessary for calculating completion percentage.
+5.  **Work Completed Estimation:** The system shall sum the estimates of all work items that have reached a "Done" state.
+6.  **Project Completion Percentage Calculation:** The system shall calculate project completion percentage using the formula: `(Sum of estimates for Done work items / Total estimated work for the project) * 100`.
+7.  **Metric Display:** The calculated project completion percentage and average time-to-done shall be displayed clearly within the project's reporting or velocity view.
+8.  **Historical Data Window:** Users should have the ability to select a historical period for which to view the average time-to-done (e.g., last sprint, last 30 days, project lifetime).
+9.  **Data Accuracy:** Calculations must be based on the actual timestamps of status transitions.
 
-## 6. Out of Scope
+## Acceptance Criteria
 
-*   **New Avatar Filter Features:** Any enhancements or new functionalities to the avatar filter itself (e.g., search within avatars, multi-select avatars) are out of scope for this task.
-*   **New Priorities Filter Features:** Any enhancements or new functionalities to the priorities dropdown are out of scope.
-*   **Other Filter Components:** Moving or modifying any other filter components not explicitly mentioned (e.g., date filters, status filters) is out of scope.
-*   **Backend Changes:** Any backend changes related to how filters are processed or stored are out of scope, assuming the existing backend APIs can handle the current filtering logic.
-*   **Performance Optimization:** Significant performance optimizations related to filtering are out of scope, unless directly caused by the layout change.
+*   **AC1:** A project with 10 tasks, each estimated at 1 story point, and 5 tasks marked as "Done" displays "Project Completion: 50%" with a corresponding visual indicator.
+*   **AC2:** For a project with 3 completed tasks having durations of 2, 3, and 4 days respectively, the "Average Time-to-Done" metric displays "3 days."
+*   **AC3:** When a new task is marked "Done," the project completion percentage and average time-to-done are immediately updated.
+*   **AC4:** The historical data window selector allows users to choose "Last 30 Days," "Last Quarter," and "Project Lifetime" for viewing average time-to-done.
+*   **AC5:** The system correctly handles projects with no completed work items, displaying "0%" completion and an N/A or "No data available" for average time-to-done.
+*   **AC6:** The system accurately calculates time-to-done based on the difference between the "In Progress" and "Done" timestamp of individual work items.
+
+## Out of Scope
+
+*   Predictive forecasting of project completion dates based on velocity.
+*   Integration with external BI tools for advanced reporting.
+*   Automated alerts or notifications based on velocity metrics.
+*   Defining custom "In Progress" or "Done" states beyond standard configurations.
+*   Calculation of cycle time for work items that are not yet "Done."
+*   Metrics on specific bottlenecks within the workflow (e.g., time spent in a particular status).

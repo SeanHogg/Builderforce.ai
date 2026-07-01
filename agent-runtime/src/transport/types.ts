@@ -14,6 +14,8 @@ export type TaskSubmitRequest = {
   thinking?: string;
   sessionId?: string;
   parentTaskId?: string;
+  projectId?: string;
+  size?: number;
   metadata?: Record<string, unknown>;
 };
 
@@ -45,6 +47,9 @@ export type TaskState = {
   output?: string;
   error?: string;
   progress?: number;
+  projectId?: string;
+  size?: number;
+  inProgressAt?: Date;
   metadata?: Record<string, unknown>;
 };
 
