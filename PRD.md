@@ -1,44 +1,59 @@
-> **PRD** — drafted by Bob Developer (V2 (Container)) · task #89
+> **PRD** — drafted by Kevin BA/PM/PO (Durable) · task #210
 > _Each agent that updates this PRD signs its change below._
 
-# Product Requirements Document: Avatar Filter Row Placement
+# WIP Product Requirements Document: Team Capacity Analysis
 
-## 1. Problem & Goal
+## Problem & Goal
 
-**Problem:** The current placement of the avatar filter, separated from the priorities dropdown, disrupts the logical grouping of filtering options. Users must scan different areas of the UI to apply related filters, leading to a less efficient and intuitive user experience.
+**Problem:** The team lacks a clear, quantifiable understanding of its current capacity, making effective workload distribution, project estimation, and resource allocation difficult. This can lead to burnout, missed deadlines, and inefficient use of resources.
 
-**Goal:** To improve the user experience by consolidating related filtering options into a single, contiguous row, thereby enhancing discoverability, reducing cognitive load, and increasing the speed at which users can apply filters.
+**Goal:** To establish a baseline and a repeatable process for analyzing and understanding the team's available capacity, enabling more accurate planning and resource management.
 
-## 2. Target Users / ICP Roles
+## Target Users / ICP Roles
 
-*   **Project Managers:** Need to quickly filter tasks by assignee (avatar) and priority to understand workload distribution and identify high-priority items.
-*   **Team Leads:** Require efficient filtering to monitor team progress and allocate resources based on task priority and individual contribution (avatar).
-*   **Individual Contributors:** Benefit from a cleaner interface to focus on their assigned tasks and understand their priority within the project context.
+*   **Team Lead / Manager:** Responsible for assigning tasks, managing project timelines, and ensuring team well-being.
+*   **Project Manager:** Needs to understand team velocity and capacity for realistic project planning and stakeholder communication.
+*   **Individual Contributors (Human & Cloud Agents):** Need to understand their own capacity to manage their workload and report progress.
 
-## 3. Scope
+## Scope
 
-This document covers the functional requirements and acceptance criteria for moving the existing avatar filter component to reside on the same UI row as the priorities dropdown. This includes adjustments to layout, styling, and ensuring the filter's functionality remains intact.
+This document defines the initial requirements for analyzing the capacity of the current team, which includes one human resource (seanhogg@gmail.com) and four cloud-based agents (named Kevin, Mike, Bob, and John, with defined roles of BA/PM, QA, Developer, and Coder, respectively). The analysis will focus on identifying available working time and potential constraints.
 
-## 4. Functional Requirements
+## Functional Requirements
 
-*   **FR1: Layout Adjustment:** The avatar filter component shall be repositioned to occupy a space adjacent to the priorities dropdown within the primary filtering bar.
-*   **FR2: Visual Consistency:** The avatar filter shall maintain its current visual appearance and interaction patterns (e.g., dropdown behavior, selection indicators) after being moved.
-*   **FR3: Responsive Design:** The integrated avatar and priorities filter row shall adapt appropriately across different screen sizes and resolutions, maintaining usability.
-*   **FR4: Filter Functionality:** Applying a filter via the avatar selector shall continue to correctly filter the displayed data (e.g., tasks, issues), and this filtering shall be independent of or complementary to the priorities filter.
+1.  **Identify Available Working Hours:**
+    *   The system shall allow for the definition of standard working hours for each team member (human and agent).
+    *   The system shall allow for the input and consideration of non-working time (e.g., holidays, planned breaks, scheduled maintenance for agents).
+2.  **Define Task Granularity & Effort Estimation:**
+    *   The system shall support defining a unit of work (e.g., story points, hours) for tasks.
+    *   The system shall provide a mechanism for estimating the effort required for individual tasks.
+3.  **Track Resource Allocation:**
+    *   The system shall track the allocation of team members to specific projects or tasks.
+    *   The system shall prevent over-allocation of resources.
+4.  **Calculate Available Capacity:**
+    *   The system shall calculate the aggregate available capacity of the team for a given period based on working hours and non-working time.
+    *   The system shall calculate the capacity remaining after accounting for allocated tasks.
+5.  **Reporting:**
+    *   The system shall generate a summary report of current team capacity.
+    *   The report shall include total available capacity, allocated capacity, and remaining capacity.
+    *   The report shall be filterable by individual team member and by project.
 
-## 5. Acceptance Criteria
+## Acceptance Criteria
 
-*   **AC1: Avatar Filter Visible in Row:** The avatar filter is visibly present on the same horizontal line as the priorities dropdown.
-*   **AC2: Filter Functionality Preserved:** Selecting an avatar from the new location correctly filters the displayed items.
-*   **AC3: Priorities Filter Functionality Preserved:** Selecting a priority from its dropdown continues to filter the displayed items, and its interaction is unaffected by the avatar filter's new position.
-*   **AC4: Combined Filtering Works:** Applying both an avatar filter and a priorities filter simultaneously yields the correct, combined results.
-*   **AC5: No Visual Overlap or Distortion:** The avatar filter and priorities dropdown do not overlap each other or other UI elements in the filtering bar, and the overall layout remains clean and undistorted.
-*   **AC6: Responsiveness Verified:** On smaller screen sizes, the combined filter row is still usable, potentially with a different arrangement if necessary (e.g., stacking if horizontal space is too limited, though the primary goal is horizontal).
+*   **AC1:** For a given week, the system accurately calculates the total available working hours for seanhogg@gmail.com, Kevin, Mike, Bob, and John, considering predefined standard working hours and any explicitly marked non-working periods.
+*   **AC2:** A task estimated at 8 hours can be assigned to Bob the Developer, and the system reflects that 8 hours of his capacity for the relevant period are now allocated.
+*   **AC3:** If a task is estimated at 10 hours and Bob the Developer only has 8 hours of available capacity remaining for the week, the system flags this as an over-allocation or prevents the assignment.
+*   **AC4:** A generated capacity report for the current week shows:
+    *   Total available hours for the team.
+    *   Total hours allocated to ongoing tasks.
+    *   Net remaining hours for the team.
+    *   Breakdown of available and allocated hours per team member.
+*   **AC5:** The system can correctly identify that cloud agents (Kevin, Mike, Bob, John) have 24/7 availability by default unless specific maintenance or downtime is declared.
 
-## 6. Out of Scope
+## Out of Scope
 
-*   **New Avatar Filter Features:** Any enhancements or new functionalities to the avatar filter itself (e.g., search within avatars, multi-select avatars) are out of scope for this task.
-*   **New Priorities Filter Features:** Any enhancements or new functionalities to the priorities dropdown are out of scope.
-*   **Other Filter Components:** Moving or modifying any other filter components not explicitly mentioned (e.g., date filters, status filters) is out of scope.
-*   **Backend Changes:** Any backend changes related to how filters are processed or stored are out of scope, assuming the existing backend APIs can handle the current filtering logic.
-*   **Performance Optimization:** Significant performance optimizations related to filtering are out of scope, unless directly caused by the layout change.
+*   **Performance Monitoring of Cloud Agents:** This PRD does not cover the monitoring of the *performance* or *efficiency* of the cloud agents (e.g., processing speed, network latency). The focus is solely on their availability as a resource.
+*   **Automated Task Assignment:** The system will not automatically assign tasks to team members. The focus is on understanding capacity, not on orchestrating task distribution.
+*   **Skill-Based Capacity Analysis:** This initial analysis does not differentiate capacity based on specific skill sets. All hours are treated as interchangeable within the defined roles initially.
+*   **Real-time Availability Changes:** The system will not dynamically adjust capacity based on real-time, unannounced events (e.g., an agent crashing unexpectedly). Capacity updates will rely on explicit input.
+*   **Integration with external project management tools:** This initial phase focuses on internal capacity calculation and reporting.
