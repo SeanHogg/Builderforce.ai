@@ -1,44 +1,49 @@
-> **PRD** — drafted by Bob Developer (V2 (Container)) · task #89
+> **PRD** — drafted by Kevin BA/PM/PO (Durable) · task #198
 > _Each agent that updates this PRD signs its change below._
 
-# Product Requirements Document: Avatar Filter Row Placement
+# Product Requirements Document: Quality Risk Score
 
-## 1. Problem & Goal
+## Problem & Goal
 
-**Problem:** The current placement of the avatar filter, separated from the priorities dropdown, disrupts the logical grouping of filtering options. Users must scan different areas of the UI to apply related filters, leading to a less efficient and intuitive user experience.
+### Problem
+Teams currently lack a standardized, data-driven mechanism to assess and communicate the quality risk associated with features, releases, or projects. This leads to inconsistent understanding of quality posture, inefficient prioritization of quality-related work, and potential overlooking of critical issues before they impact users.
 
-**Goal:** To improve the user experience by consolidating related filtering options into a single, contiguous row, thereby enhancing discoverability, reducing cognitive load, and increasing the speed at which users can apply filters.
+### Goal
+To implement a "Quality Risk Score" (High, Medium, Low) that provides a consistent, objective, and justifiable assessment of the quality risk for product artifacts. This score will enable teams to quickly identify high-risk areas, prioritize mitigation efforts, and make informed decisions regarding quality gates and release readiness.
 
-## 2. Target Users / ICP Roles
+## Target Users / ICP Roles
 
-*   **Project Managers:** Need to quickly filter tasks by assignee (avatar) and priority to understand workload distribution and identify high-priority items.
-*   **Team Leads:** Require efficient filtering to monitor team progress and allocate resources based on task priority and individual contribution (avatar).
-*   **Individual Contributors:** Benefit from a cleaner interface to focus on their assigned tasks and understand their priority within the project context.
+*   **Product Managers:** To understand overall quality risk for features/releases and make informed go/no-go decisions.
+*   **Engineering Leads:** To identify engineering areas requiring immediate attention for quality improvement.
+*   **QA Engineers:** To focus testing efforts and report on the overall quality health.
+*   **Project Managers:** To track project health and potential delays due to quality issues.
+*   **Stakeholders:** To gain a quick overview of the quality state of ongoing development.
 
-## 3. Scope
+## Scope
 
-This document covers the functional requirements and acceptance criteria for moving the existing avatar filter component to reside on the same UI row as the priorities dropdown. This includes adjustments to layout, styling, and ensuring the filter's functionality remains intact.
+This feature encompasses the calculation, display, and justification of a Quality Risk Score (High/Medium/Low) for defined product artifacts (e.g., features, user stories, releases, modules). The score will be derived from a predefined set of quality metrics and displayed within relevant product management and development interfaces.
 
-## 4. Functional Requirements
+## Functional Requirements
 
-*   **FR1: Layout Adjustment:** The avatar filter component shall be repositioned to occupy a space adjacent to the priorities dropdown within the primary filtering bar.
-*   **FR2: Visual Consistency:** The avatar filter shall maintain its current visual appearance and interaction patterns (e.g., dropdown behavior, selection indicators) after being moved.
-*   **FR3: Responsive Design:** The integrated avatar and priorities filter row shall adapt appropriately across different screen sizes and resolutions, maintaining usability.
-*   **FR4: Filter Functionality:** Applying a filter via the avatar selector shall continue to correctly filter the displayed data (e.g., tasks, issues), and this filtering shall be independent of or complementary to the priorities filter.
+*   **FR1: Score Calculation:** The system shall calculate a Quality Risk Score (High, Medium, Low) based on a configurable set of input metrics (e.g., number of open bugs, test coverage percentage, static analysis warnings, code complexity, recent deployment failures).
+*   **FR2: Justification Generation:** The system shall automatically generate a concise, human-readable justification explaining the rationale behind the assigned Quality Risk Score.
+*   **FR3: Score Display:** The Quality Risk Score (High/Medium/Low) and its justification shall be prominently displayed in relevant product artifact views.
+*   **FR4: Drill-down for Factors:** Users shall be able to view the specific metrics and their values that contributed to the current Quality Risk Score.
+*   **FR5: Manual Override:** Authorized users shall be able to manually override the calculated Quality Risk Score, with a mandatory field for providing a justification for the override.
+*   **FR6: Re-evaluation:** The Quality Risk Score shall be automatically re-evaluated and updated whenever significant changes occur in the underlying contributing metrics.
 
-## 5. Acceptance Criteria
+## Acceptance Criteria
 
-*   **AC1: Avatar Filter Visible in Row:** The avatar filter is visibly present on the same horizontal line as the priorities dropdown.
-*   **AC2: Filter Functionality Preserved:** Selecting an avatar from the new location correctly filters the displayed items.
-*   **AC3: Priorities Filter Functionality Preserved:** Selecting a priority from its dropdown continues to filter the displayed items, and its interaction is unaffected by the avatar filter's new position.
-*   **AC4: Combined Filtering Works:** Applying both an avatar filter and a priorities filter simultaneously yields the correct, combined results.
-*   **AC5: No Visual Overlap or Distortion:** The avatar filter and priorities dropdown do not overlap each other or other UI elements in the filtering bar, and the overall layout remains clean and undistorted.
-*   **AC6: Responsiveness Verified:** On smaller screen sizes, the combined filter row is still usable, potentially with a different arrangement if necessary (e.g., stacking if horizontal space is too limited, though the primary goal is horizontal).
+*   **AC1:** For any assessed product artifact, a Quality Risk Score (High, Medium, or Low) is consistently displayed.
+*   **AC2:** The displayed justification accurately reflects the primary reasons for the assigned score (e.g., "High: 5+ open P1 bugs, Test coverage < 60%").
+*   **AC3:** Clicking or hovering over the score reveals a detailed breakdown of the contributing metrics and their impact on the score.
+*   **AC4:** If a score is manually overridden, the override reason is recorded and displayed alongside the overridden score. The system indicates that the score is manually overridden.
+*   **AC5:** A significant change in a contributing metric (e.g., new P1 bug introduced, test coverage drops by 10%) triggers an update to the score within [X] minutes.
+*   **AC6:** The score accurately differentiates between artifacts with clear quality issues (High), moderate concerns (Medium), and robust quality (Low), as validated by subject matter experts.
 
-## 6. Out of Scope
+## Out of Scope
 
-*   **New Avatar Filter Features:** Any enhancements or new functionalities to the avatar filter itself (e.g., search within avatars, multi-select avatars) are out of scope for this task.
-*   **New Priorities Filter Features:** Any enhancements or new functionalities to the priorities dropdown are out of scope.
-*   **Other Filter Components:** Moving or modifying any other filter components not explicitly mentioned (e.g., date filters, status filters) is out of scope.
-*   **Backend Changes:** Any backend changes related to how filters are processed or stored are out of scope, assuming the existing backend APIs can handle the current filtering logic.
-*   **Performance Optimization:** Significant performance optimizations related to filtering are out of scope, unless directly caused by the layout change.
+*   **Automated Actioning:** The system will not automatically block deployments or trigger specific workflows based on the Quality Risk Score in this initial release.
+*   **User-Configurable Scoring Logic:** End-users will not be able to customize the algorithms or weights used for score calculation in the initial release. This will be an administrative configuration.
+*   **Historical Trend Analysis:** Detailed historical tracking and trending of Quality Risk Scores over time are out of scope for the initial release.
+*   **Integration with External GRC Tools:** Direct integration with third-party Governance, Risk, and Compliance (GRC) tools is out of scope.
