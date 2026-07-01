@@ -161,6 +161,12 @@ export class DistributedTaskEngine {
       task.startedAt = task.startedAt || new Date();
     }
 
+    // Capture the first moment the task enters "In Progress" (running). Used
+    // to compute time-to-done for velocity metrics (PRD FR2/FR6, AC6).
+    if (newStatus === "running") {
+      task.inProgressAt = task.inProgressAt || new Date();
+    }
+
     if (newStatus === "completed" || newStatus === "failed" || newStatus === "cancelled") {
       task.completedAt = new Date();
     }
