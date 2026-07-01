@@ -23,6 +23,7 @@
 import { useTranslations } from 'next-intl';
 import {
   fetchProjects,
+  listIdeProjects,
 } from '@/lib/api';
 import {
   tasksApi,
@@ -32,9 +33,12 @@ import {
   type AgentHost,
   type Approval,
 } from '@/lib/builderforceApi';
-import type { Project } from '@/lib/types';
+import type { Project, IdeProject } from '@/lib/types';
+import { MODALITIES, getModality } from '@/lib/modality';
 import { useSharedSource } from '@/lib/widgets/sharedSource';
 import { WidgetStat as Stat, WidgetMuted as Muted } from '@/components/widgets/widgetBody';
+import { InsightStat } from '@/components/dashboard/InsightStat';
+import { formatRecency } from '@/components/dashboard/metricFormat';
 import type { WidgetCardProps, WidgetDef, WidgetDrill } from '@/lib/widgets/types';
 import { DonutChart } from '@/components/charts/DonutChart';
 import { BarChart } from '@/components/charts/BarChart';
@@ -139,9 +143,57 @@ function PendingApprovalsCard(_props: WidgetCardProps) {
   return <Stat value={int(n)} sub={n > 0 ? t('overview.requiresReview') : t('overview.allClear')} />;
 }
 
+// ── IDE dashboard (`/ide/dashboard`, group: 'ide') ─────────────────────────────
+
+/** IDE projects split by modality — the IDE-portfolio composition view. */
+function IdeByModalityCard(_props: WidgetCardProps) {
+  const t = useTranslations('widgets');
+  const { data, error } = useSharedSource<IdeProject[]>('core:ide-projects', () => listIdeProjects());
+  if (error) return <Muted>{error}</Muted>;
+  if (!data) return <Muted>{t('loading')}</Muted>;
+  if (data.length === 0) return <Muted>{t('ide.noProjects')}</Muted>;
+  // Keep modality order stable per MODALITIES; translate the label by id.
+  const counts = new Map<string, number>();
+  for (const p of data) counts.set(getModality(p.modality).id, (counts.get(getModality(p.modality).id) ?? 0) + 1);
+  const segments = MODALITIES
+    .filter((m) => (counts.get(m.id) ?? 0) > 0)
+    .map((m, i) => ({ key: m.id, label: t(`ide.modality.${m.id}`), value: counts.get(m.id) ?? 0, color: colorAt(i) }));
+  return (
+    <DonutChart
+      segments={segments}
+      centerValue={int(data.length)}
+      centerLabel={t('ide.builds')}
+      formatValue={(v) => int(v)}
+      ariaLabel={t('title.ideByModality')}
+    />
+  );
+}
+
+/** IDE build count with the most-recently-touched recency badge (staleness signal). */
+function IdeRecencyCard(_props: WidgetCardProps) {
+  const t = useTranslations('widgets');
+  const dt = useTranslations('dashboard');
+  const { data, error } = useSharedSource<IdeProject[]>('core:ide-projects', () => listIdeProjects());
+  if (error) return <Muted>{error}</Muted>;
+  if (!data) return <Muted>{t('loading')}</Muted>;
+  let latest = -Infinity;
+  for (const p of data) { const ms = Date.parse(p.updatedAt); if (Number.isFinite(ms) && ms > latest) latest = ms; }
+  const recency = formatRecency(latest === -Infinity ? null : latest, dt);
+  return (
+    <InsightStat
+      label={t('title.ideRecency')}
+      value={int(data.length)}
+      sub={t('ide.buildsSub')}
+      recencyLabel={recency}
+      href="/ide/dashboard"
+    />
+  );
+}
+
 // ── Registry ─────────────────────────────────────────────────────────────────
 
 const DASHBOARD_DRILL: WidgetDrill = { kind: 'route', href: '/dashboard' };
+const IDE_DRILL: WidgetDrill = { kind: 'route', href: '/ide/dashboard' };
 
 export const CORE_WIDGETS: WidgetDef[] = [
   // ── Dashboard home (`/dashboard`) ──
@@ -149,4 +201,8 @@ export const CORE_WIDGETS: WidgetDef[] = [
   { id: 'core.tasks', group: 'overview', titleKey: 'tasks', size: 'md', Card: TasksCard, drill: DASHBOARD_DRILL },
   { id: 'core.agents-online', group: 'overview', titleKey: 'agentsOnline', size: 'md', Card: AgentsOnlineCard, drill: DASHBOARD_DRILL },
   { id: 'core.pending-approvals', group: 'overview', titleKey: 'pendingApprovals', size: 'sm', Card: PendingApprovalsCard, drill: DASHBOARD_DRILL },
+
+  // ── IDE dashboard (`/ide/dashboard`) ──
+  { id: 'core.ide-by-modality', group: 'ide', titleKey: 'ideByModality', size: 'md', Card: IdeByModalityCard, drill: IDE_DRILL },
+  { id: 'core.ide-recency', group: 'ide', titleKey: 'ideRecency', size: 'sm', Card: IdeRecencyCard, drill: IDE_DRILL },
 ];

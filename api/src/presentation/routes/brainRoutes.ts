@@ -7,10 +7,12 @@
 import { Hono } from 'hono';
 import { eq } from 'drizzle-orm';
 import { authMiddleware } from '../middleware/authMiddleware';
+import { rateLimitMiddleware } from '../middleware/rateLimitMiddleware';
 import { signUpload } from '../../infrastructure/auth/uploadSign';
 import { fetchWebDocument } from '../../application/web/webFetch';
+import { recordOutboundFetch, enforceOutboundFetchCap } from '../../application/web/outboundFetchLedger';
 import { agentHosts } from '../../infrastructure/database/schema';
-import type { HonoEnv } from '../../env';
+import type { Env, HonoEnv } from '../../env';
 import type { BrainService } from '../../application/brain/BrainService';
 import type { Db } from '../../infrastructure/database/connection';
 import type { AgentHostRelayDO } from '../../infrastructure/relay/AgentHostRelayDO';
@@ -151,9 +153,23 @@ export function createBrainRoutes(brainService: BrainService, db: Db): Hono<Hono
   // so the Brain can read a link the user pastes (e.g. a GitHub ROADMAP.md, a
   // docs page). Behind the auth middleware + an SSRF guard; returns readable
   // text capped to keep the model's context bounded.
-  router.post('/fetch-url', async (c) => {
+  //
+  // Abuse controls (this is a tenant-authed but otherwise-arbitrary outbound GET
+  // proxy): a per-tenant sliding-window rate limit (reuses rateLimitMiddleware)
+  // caps burst, and a monthly consumption meter (outbound_fetches) caps sustained
+  // volume — graceful backpressure, refused with 429 once over the allowance.
+  router.post('/fetch-url', rateLimitMiddleware, async (c) => {
+    const tenantId = c.get('tenantId') as number;
     const { url } = await c.req.json<{ url?: string }>().catch(() => ({ url: undefined }));
     if (!url || typeof url !== 'string') return c.json({ error: 'A url is required' }, 400);
+
+    const cap = await enforceOutboundFetchCap(db, tenantId);
+    if (!cap.allowed) {
+      return c.json(
+        { error: 'Monthly outbound-fetch allowance reached for your plan.', used: cap.used, limit: cap.limit },
+        429,
+      );
+    }
 
     let result;
     try {
@@ -162,6 +178,10 @@ export function createBrainRoutes(brainService: BrainService, db: Db): Hono<Hono
       // SSRF rejection or unreachable origin — a 400 the model can relay.
       return c.json({ error: e instanceof Error ? e.message : 'Could not fetch the URL' }, 400);
     }
+    // Meter every fetch that actually hit the wire (success OR upstream error) —
+    // the outbound cost is the request, not the response. Best-effort; never fail
+    // the read over a metering write.
+    c.executionCtx.waitUntil(recordOutboundFetch(db, tenantId, result.url).catch(() => {}));
     if (result.status >= 400) {
       return c.json({ error: `The URL returned HTTP ${result.status}.`, url: result.url, status: result.status }, 502);
     }

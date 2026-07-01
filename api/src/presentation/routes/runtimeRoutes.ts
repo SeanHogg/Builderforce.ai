@@ -30,6 +30,7 @@ import type { Db } from '../../infrastructure/database/connection';
 import { agentHosts, boards, executions, projectInsightEvents, projectRepositories, projects, specs, tasks, toolAuditEvents, usageSnapshots } from '../../infrastructure/database/schema';
 import { approvals } from '../../infrastructure/database/schema';
 import type { AgentHostRelayDO } from '../../infrastructure/relay/AgentHostRelayDO';
+import { resolveProjectInferenceModel } from '../../application/llm/projectEvermind';
 
 /**
  * Runtime routes – task execution lifecycle.
@@ -528,7 +529,19 @@ async function startDispatchedExecution(
   // Fold the agent's own model into the payload up front so EVERY surface — the
   // on-prem host included — runs AS the agent's model, never silently the gateway
   // default. (The cloud branch reuses this same effective payload below.)
-  const effectivePayload = withDefaultModel(payload, agent.baseModel);
+  //
+  // Project Evermind consumer emitter (single point, all surfaces). When the agent
+  // has NO explicit base model AND the project is configured to run on its own
+  // self-learning model, default to the project's CURRENT Evermind head (a concrete
+  // `evermind/<ref>`, resolved ONCE here — the run boundary → pull-on-boundary). Every
+  // surface then agrees: the cloud loop hard-pins the `evermind/` route, on-prem sends
+  // it to the gateway (which routes it to the evermind vendor). Precedence:
+  // payload pin > agent.baseModel > project Evermind > gateway default. Off/unseeded →
+  // undefined → today's behaviour. [[evermind-learning-architecture]]
+  const projectEvermindPin = agent.baseModel
+    ? undefined
+    : await resolveProjectInferenceModel(env as Env, db, tenantId, taskRow.projectId);
+  const effectivePayload = withDefaultModel(payload, agent.baseModel ?? projectEvermindPin);
 
   const message: DispatchMessage = {
     type: 'task.assign',

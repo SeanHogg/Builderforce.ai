@@ -23,11 +23,16 @@ import {
   type PublicPersona,
 } from '@/lib/builderforceApi';
 import { getModelCatalog, type ModelRecord } from '@/lib/modelCatalog';
+import { listAgents } from '@/lib/api';
+import type { PublishedAgent } from '@/lib/types';
+import { toolsApi } from '@/lib/builderforceApi';
+import type { ToolSummary } from '@/lib/tools';
 import { useSharedSource } from '@/lib/widgets/sharedSource';
 import { WidgetMuted as Muted } from '@/components/widgets/widgetBody';
 import type { WidgetCardProps, WidgetDef, WidgetDrill } from '@/lib/widgets/types';
 import { BarChart, type BarDatum } from '@/components/charts/BarChart';
 import { DonutChart } from '@/components/charts/DonutChart';
+import { GaugeChart } from '@/components/charts/GaugeChart';
 import { colorAt } from '@/components/charts/chartColors';
 import { int } from '@/components/insights/format';
 
@@ -63,6 +68,14 @@ function usePrompts() {
 
 function useModels() {
   return useSharedSource<ModelRecord[]>('catalog:models', () => getModelCatalog());
+}
+
+function useMarketplaceAgents() {
+  return useSharedSource<PublishedAgent[]>('catalog:mkt-agents', () => listAgents());
+}
+
+function useTools() {
+  return useSharedSource<ToolSummary[]>('catalog:tools', () => toolsApi.list());
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
@@ -172,12 +185,77 @@ function ModelsByProviderCard(_props: WidgetCardProps) {
   );
 }
 
+// ── Marketplace (group: 'marketplace') ─────────────────────────────────────────
+
+/** Top marketplace agents by cumulative hires. */
+function MarketplaceTopHiredCard(_props: WidgetCardProps) {
+  const t = useTranslations('widgets');
+  const { data, error } = useMarketplaceAgents();
+  if (error) return <Muted>{error}</Muted>;
+  if (!data) return <Muted>{t('loading')}</Muted>;
+  const bars = topBars(data, (a) => a.hire_count ?? 0, (a) => a.name, (a) => a.id);
+  if (!bars.length) return <Muted>{t('catalog.noHires')}</Muted>;
+  return <BarChart data={bars} formatValue={(v) => int(v)} ariaLabel={t('title.catalogMarketplaceTopHired')} />;
+}
+
+/** Best-evaluated marketplace agent (0-100 gauge from the AI eval score). */
+function MarketplaceTopEvalCard(_props: WidgetCardProps) {
+  const t = useTranslations('widgets');
+  const { data, error } = useMarketplaceAgents();
+  if (error) return <Muted>{error}</Muted>;
+  if (!data) return <Muted>{t('loading')}</Muted>;
+  const scored = data
+    .map((a) => ({ name: a.name, score: a.evalScore ?? a.eval_score ?? null }))
+    .filter((a): a is { name: string; score: number } => a.score != null);
+  if (!scored.length) return <Muted>{t('catalog.noEval')}</Muted>;
+  const best = scored.sort((a, b) => b.score - a.score)[0];
+  const pct = Math.round(best.score * 100);
+  return (
+    <GaugeChart
+      value={pct}
+      min={0}
+      max={100}
+      color={colorAt(2)}
+      centerValue={`${pct}`}
+      centerLabel={best.name}
+      ariaLabel={t('title.catalogMarketplaceTopEval')}
+    />
+  );
+}
+
+// ── Tools (group: 'tools') ─────────────────────────────────────────────────────
+
+/** Diagnostics & tools split by category — catalog composition at a glance. */
+function ToolsByCategoryCard(_props: WidgetCardProps) {
+  const t = useTranslations('widgets');
+  const { data, error } = useTools();
+  if (error) return <Muted>{error}</Muted>;
+  if (!data) return <Muted>{t('loading')}</Muted>;
+  if (data.length === 0) return <Muted>{t('catalog.noData')}</Muted>;
+  const counts = new Map<string, number>();
+  for (const tool of data) counts.set(tool.category, (counts.get(tool.category) ?? 0) + 1);
+  const segments = [...counts.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .map(([k, v], i) => ({ key: k, label: t(`catalog.toolCat.${k}`), value: v, color: colorAt(i) }));
+  return (
+    <DonutChart
+      segments={segments}
+      centerValue={int(data.length)}
+      centerLabel={t('catalog.tools')}
+      formatValue={(v) => int(v)}
+      ariaLabel={t('title.catalogToolsByCategory')}
+    />
+  );
+}
+
 // ── Registry ─────────────────────────────────────────────────────────────────
 
 const SKILLS_DRILL: WidgetDrill = { kind: 'route', href: '/skills' };
 const PERSONAS_DRILL: WidgetDrill = { kind: 'route', href: '/personas' };
 const PROMPTS_DRILL: WidgetDrill = { kind: 'route', href: '/prompts' };
 const MODELS_DRILL: WidgetDrill = { kind: 'route', href: '/models' };
+const MARKETPLACE_DRILL: WidgetDrill = { kind: 'route', href: '/marketplace' };
+const TOOLS_DRILL: WidgetDrill = { kind: 'route', href: '/tools' };
 
 export const CATALOG_WIDGETS: WidgetDef[] = [
   // ── Skills (`/skills`) ──
@@ -193,4 +271,11 @@ export const CATALOG_WIDGETS: WidgetDef[] = [
 
   // ── Models (`/models`) ──
   { id: 'catalog.models-by-provider', group: 'models', titleKey: 'catalogModelsByProvider', size: 'md', Card: ModelsByProviderCard, drill: MODELS_DRILL },
+
+  // ── Marketplace (`/marketplace`) ──
+  { id: 'catalog.marketplace-top-hired', group: 'marketplace', titleKey: 'catalogMarketplaceTopHired', size: 'md', Card: MarketplaceTopHiredCard, drill: MARKETPLACE_DRILL },
+  { id: 'catalog.marketplace-top-eval', group: 'marketplace', titleKey: 'catalogMarketplaceTopEval', size: 'sm', Card: MarketplaceTopEvalCard, drill: MARKETPLACE_DRILL },
+
+  // ── Tools (`/tools`) ──
+  { id: 'catalog.tools-by-category', group: 'tools', titleKey: 'catalogToolsByCategory', size: 'md', Card: ToolsByCategoryCard, drill: TOOLS_DRILL },
 ];

@@ -430,11 +430,27 @@ export function createQualityRoutes(db: Db, taskService: TaskService, runtimeSer
       const events = sql<number>`coalesce(sum(${errorGroups.eventCount}), 0)`;
       const groupCount = sql<number>`count(*)`;
 
-      const [byLevel, byStatus, byCollector, totalsRow, daily] = await Promise.all([
+      // By-source volume (native SDK / OTLP / Sentry / PostHog / LogRocket): the
+      // adapter is persisted on error_events, not error_groups, so this leg counts
+      // event rows in-window by source (NULL source → 'native', the legacy default).
+      const sourceExpr = sql<string>`coalesce(${errorEvents.source}, 'native')`;
+      const bySourceConds = projectId
+        ? and(eq(errorGroups.tenantId, tenantId), eq(errorGroups.projectId, projectId), gte(errorEvents.ts, since))
+        : and(eq(errorEvents.tenantId, tenantId), gte(errorEvents.ts, since));
+
+      const [byLevel, byStatus, bySource, byCollector, totalsRow, daily] = await Promise.all([
         db.select({ level: errorGroups.level, groups: groupCount, events })
           .from(errorGroups).where(and(...gconds)).groupBy(errorGroups.level),
         db.select({ status: errorGroups.status, groups: groupCount })
           .from(errorGroups).where(and(...gconds)).groupBy(errorGroups.status),
+        projectId
+          ? db.select({ source: sourceExpr, events: sql<number>`count(*)` })
+              .from(errorEvents)
+              .innerJoin(errorGroups, eq(errorEvents.groupId, errorGroups.id))
+              .where(bySourceConds).groupBy(sourceExpr)
+          : db.select({ source: sourceExpr, events: sql<number>`count(*)` })
+              .from(errorEvents)
+              .where(bySourceConds).groupBy(sourceExpr),
         db.select({
           collectorId: errorGroups.collectorId,
           name: sql<string | null>`max(${errorCollectors.name})`,
@@ -466,6 +482,8 @@ export function createQualityRoutes(db: Db, taskService: TaskService, runtimeSer
         totals: { groups: Number(totals.groups), events: Number(totals.events), users: Number(totals.users) },
         byLevel: byLevel.map((r) => ({ level: r.level, groups: Number(r.groups), events: Number(r.events) })),
         byStatus: byStatus.map((r) => ({ status: r.status, groups: Number(r.groups) })),
+        // In-window event volume attributed to the adapter that produced it.
+        bySource: bySource.map((r) => ({ source: r.source, events: Number(r.events) })),
         byCollector: byCollector.map((r) => ({
           collectorId: r.collectorId, name: r.name ?? null,
           groups: Number(r.groups), events: Number(r.events),

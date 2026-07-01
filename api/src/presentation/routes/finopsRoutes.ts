@@ -22,7 +22,8 @@ import { and, eq } from 'drizzle-orm';
 import { authMiddleware, requireRole } from '../middleware/authMiddleware';
 import { TenantRole } from '../../domain/shared/types';
 import { scope } from './segmentTrackerRoutes';
-import { getOrSetCached, invalidateCached } from '../../infrastructure/cache/readThroughCache';
+import { getOrSetCached, getCacheVersion, invalidateCached } from '../../infrastructure/cache/readThroughCache';
+import { financeVersionKey, allocationVersionKey } from '../../application/insights/versionKeys';
 import type { Env, HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 import { rdTaxCreditConfig, socControls } from '../../application/finops/finopsTables';
@@ -209,7 +210,16 @@ export function createFinopsRoutes(db: Db): Hono<HonoEnv> {
     const now = Date.now();
     const period = parsePeriod(c.req.query('period'), now);
     const env = c.env as Env;
-    const key = `finops:audit:t:${tenantId}:s:${segmentId}:p:${period}`;
+    // Served through the canonical read-through cache. It recomputes finance +
+    // allocation + R&D + SOC + compliance rollups per request, so beyond the short
+    // TTL (hot-write source tables) we fold in the finance + allocation version
+    // tokens — bumped on every budget / allocation-goal write — so a structural
+    // edit refreshes the report immediately instead of waiting out the TTL.
+    const [finVer, allocVer] = await Promise.all([
+      getCacheVersion(env, financeVersionKey(tenantId)),
+      getCacheVersion(env, allocationVersionKey(tenantId)),
+    ]);
+    const key = `finops:audit:t:${tenantId}:s:${segmentId}:p:${period}:fv:${finVer}:av:${allocVer}`;
     return c.json(await getOrSetCached(env, key, () => assembleAuditReport(db, tenantId, segmentId, period), SHORT_TTL));
   });
 

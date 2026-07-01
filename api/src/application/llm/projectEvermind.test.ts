@@ -5,6 +5,7 @@ import {
   coordinatorName,
   getProjectEvermindHead,
   resolveProjectEvermindModelPin,
+  resolveProjectInferenceModel,
   PROJECT_EVERMIND_MODEL_PREFIX,
 } from './projectEvermind';
 import type { Env } from '../../env';
@@ -91,5 +92,42 @@ describe('resolveProjectEvermindModelPin (pull-on-boundary)', () => {
     const out = await resolveProjectEvermindModelPin(env, makeDb(null), 7, `${PROJECT_EVERMIND_MODEL_PREFIX}abc`);
     expect(out.matched).toBe(true);
     expect(out.model).toBeUndefined();
+  });
+});
+
+describe('resolveProjectInferenceModel (opt-in consumer emitter)', () => {
+  it('emits the current evermind/<ref> when inference is enabled AND seeded', async () => {
+    const out = await resolveProjectInferenceModel(
+      env,
+      makeDb({ name: 'PM', version: 4, mode: 'connected', contributions: 0, inferenceEnabled: true }),
+      7,
+      42,
+    );
+    expect(out).toBe('evermind/evermind/project/7/42/v4');
+  });
+
+  it('stays undefined when inference is enabled but the model is not seeded', async () => {
+    const out = await resolveProjectInferenceModel(
+      env,
+      makeDb({ name: 'PM', version: 0, mode: 'connected', contributions: 0, inferenceEnabled: true }),
+      7,
+      42,
+    );
+    expect(out).toBeUndefined();
+  });
+
+  it('stays undefined when a seeded model has inference disabled (default behaviour)', async () => {
+    const out = await resolveProjectInferenceModel(
+      env,
+      makeDb({ name: 'PM', version: 4, mode: 'connected', contributions: 0, inferenceEnabled: false }),
+      7,
+      42,
+    );
+    expect(out).toBeUndefined();
+  });
+
+  it('stays undefined for a malformed project id', async () => {
+    const out = await resolveProjectInferenceModel(env, makeDb(null), 7, 0);
+    expect(out).toBeUndefined();
   });
 });

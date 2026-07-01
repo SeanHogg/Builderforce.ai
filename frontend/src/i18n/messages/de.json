@@ -2213,7 +2213,16 @@
       "skills": "Skills",
       "personas": "Personas",
       "prompts": "Prompts",
-      "models": "Modelle"
+      "models": "Modelle",
+      "tasks": "Aufgaben",
+      "workflows": "Workflows",
+      "brain": "Brainstorming",
+      "wfAgents": "Belegschaft · Agenten",
+      "wfTeams": "Belegschaft · Teams",
+      "wfPerformance": "Belegschaft · Leistung",
+      "marketplace": "Marktplatz",
+      "tools": "Werkzeuge",
+      "ide": "IDE"
     },
     "title": {
       "aiProductivity": "KI-Produktivitätswert",
@@ -2271,7 +2280,23 @@
       "catalogPersonasTopInstalls": "Meistinstallierte Personas",
       "catalogPromptsMostUsed": "Meistgenutzte Prompts",
       "catalogPromptsTopRated": "Bestbewertete Prompts",
-      "catalogModelsByProvider": "Modelle nach Anbieter"
+      "catalogModelsByProvider": "Modelle nach Anbieter",
+      "opTasksByStatus": "Aufgaben nach Status",
+      "opTasksWip": "Laufende Arbeit",
+      "opWorkflowRuns": "Workflow-Ausführungen",
+      "opWorkflowHealth": "Workflow-Zustand",
+      "opBrainByOrigin": "Chats nach Herkunft",
+      "opBrainActivity": "Chat-Aktivität",
+      "wfAgentsOnline": "Agenten online",
+      "wfTeamsSize": "Teamgrößen",
+      "wfDoraDeployFreq": "Bereitstellungshäufigkeit",
+      "wfPerformanceByDiscipline": "Wirksamkeit nach Disziplin",
+      "wfPerformanceTopMembers": "Mitglieder mit den meisten erledigten Aufgaben",
+      "catalogMarketplaceTopHired": "Meistengagierte Agenten",
+      "catalogMarketplaceTopEval": "Bestbewerteter Agent",
+      "catalogToolsByCategory": "Werkzeuge nach Kategorie",
+      "ideByModality": "Projekte nach Modalität",
+      "ideRecency": "IDE-Projekte"
     },
     "loading": "Laden…",
     "overview": {
@@ -2312,7 +2337,56 @@
       "uncategorized": "Ohne Kategorie",
       "unknownProvider": "Unbekannt",
       "skills": "Skills",
-      "models": "Modelle"
+      "models": "Modelle",
+      "noHires": "Noch keine Engagements",
+      "noEval": "Noch nicht bewertet",
+      "tools": "Werkzeuge",
+      "toolCat": {
+        "delivery": "Lieferung",
+        "finops": "FinOps",
+        "governance": "Governance",
+        "quality": "Qualität"
+      }
+    },
+    "op": {
+      "tasks": "Aufgaben",
+      "done": "Erledigt",
+      "inProgress": "In Arbeit",
+      "backlog": "Rückstand",
+      "noTasks": "Keine Aufgaben",
+      "wipSub": "Insgesamt {total} Aufgaben",
+      "workflows": "Workflows",
+      "noWorkflows": "Keine Workflows",
+      "noRuns": "Noch keine Ausführungen",
+      "healthy": "Fehlerfrei",
+      "failing": "Fehlerhaft",
+      "neverRun": "Nie ausgeführt",
+      "chats": "Chats",
+      "noChats": "Noch keine Chats",
+      "originOther": "Sonstige",
+      "chatsScopedSub": "{scoped} mit einem Projekt verknüpft"
+    },
+    "wf": {
+      "online": "Online",
+      "offline": "Offline",
+      "cloud": "Cloud",
+      "active": "aktiv",
+      "noAgents": "Keine Agenten",
+      "noTeams": "Noch keine Teams",
+      "teamsEmptySub": "Teams (noch ohne Mitglieder)",
+      "perDay": "pro Tag",
+      "noPerformance": "Keine Leistungsdaten"
+    },
+    "ide": {
+      "builds": "Projekte",
+      "buildsSub": "IDE-Projekte",
+      "noProjects": "Noch keine IDE-Projekte",
+      "modality": {
+        "designer": "Designer",
+        "video": "Video",
+        "llm": "LLM",
+        "voice": "Sprache"
+      }
     }
   },
   "compile": {

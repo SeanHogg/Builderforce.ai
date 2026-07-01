@@ -2,12 +2,14 @@ import { describe, expect, it } from 'vitest';
 import {
   scoreMembers,
   rollupDora,
+  rollupDoraSeries,
   rollupByDiscipline,
   memberMetricsCacheKey,
   doraCacheKey,
   type MemberScorecard,
   type MemberTaskRow,
   type DeployRow,
+  type LeadRow,
 } from './workforceMetrics';
 
 /**
@@ -108,6 +110,44 @@ describe('rollupDora', () => {
     expect(dora.leadTimeHours).toBeNull();
     expect(dora.changeFailureRatePct).toBeNull();
     expect(dora.mttrHours).toBeNull();
+    expect(dora.series).toEqual([]);
+  });
+});
+
+describe('rollupDoraSeries', () => {
+  const WEEK = 7 * 24 * H;
+  it('buckets deploys + lead times into per-week points anchored at the window start', () => {
+    const windowStart = Date.UTC(2026, 5, 1); // 2026-06-01
+    const now = windowStart + 3 * WEEK; // three full weeks
+    const deploys: DeployRow[] = [
+      // week 0: one clean deploy
+      { deployedAt: new Date(windowStart + 1 * 24 * H), isFailure: false, restoredAt: null },
+      // week 1: one failed+restored deploy
+      { deployedAt: new Date(windowStart + WEEK + 2 * 24 * H), isFailure: true, restoredAt: new Date(windowStart + WEEK + 2 * 24 * H + 5 * H) },
+    ];
+    const leads: LeadRow[] = [
+      { completedAt: new Date(windowStart + 1 * 24 * H), leadTimeHrs: 10 },
+      { completedAt: new Date(windowStart + WEEK + 1 * 24 * H), leadTimeHrs: 30 },
+    ];
+    const series = rollupDoraSeries(windowStart, now, leads, deploys);
+    expect(series).toHaveLength(3);
+    expect(series[0]!.bucketStart).toBe('2026-06-01');
+    expect(series[0]!.totalDeployments).toBe(1);
+    expect(series[0]!.leadTimeHours).toBeCloseTo(10, 5);
+    expect(series[0]!.changeFailureRatePct).toBeCloseTo(0, 5);
+    expect(series[1]!.totalDeployments).toBe(1);
+    expect(series[1]!.changeFailureRatePct).toBeCloseTo(100, 5);
+    expect(series[1]!.mttrHours).toBeCloseTo(5, 5);
+    expect(series[1]!.leadTimeHours).toBeCloseTo(30, 5);
+    expect(series[2]!.totalDeployments).toBe(0); // empty final week
+    expect(series[2]!.leadTimeHours).toBeNull();
+  });
+
+  it('returns at least one bucket for a sub-week window', () => {
+    const windowStart = Date.UTC(2026, 5, 1);
+    const series = rollupDoraSeries(windowStart, windowStart + 2 * 24 * H, [], []);
+    expect(series).toHaveLength(1);
+    expect(series[0]!.totalDeployments).toBe(0);
   });
 });
 
