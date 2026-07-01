@@ -1,0 +1,36 @@
+{
+  "name": "@builderforce/cloud-agent-gap-tracker",
+  "version": "2026.3.21",
+  "private": true,
+  "description": "Cloud Agent 50-gap validation status tracker with dashboard, Jira sync, and Slack digest",
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "node --loader tsx tests/**/*.test.ts",
+    "lint": "oxlint src",
+    "fmt": "oxfmt ."
+  },
+  "devDependencies": {
+    "@seanhogg/builderforce-agents": "workspace:*",
+    "@types/node": "^22.10.2",
+    "oxlint": "^0.14.0",
+    "oxfmt": "^0.9.0",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.3"
+  },
+  "dependencies": {
+    "@opentelemetry/api": "^1.9.0",
+    "@opentelemetry/sdk-node": "^0.212.0"
+  },
+  "files": [
+    "dist/",
+    "src/",
+    "dashboard.html",
+    "README.md"
+  ],
+  "builderforce": {
+    "extensions": [
+      "./dist/index.js"
+    ]
+  }
+}
