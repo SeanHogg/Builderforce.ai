@@ -119,6 +119,8 @@ export class DistributedTaskEngine {
       description: request.description,
       sessionId: request.sessionId,
       parentTaskId: request.parentTaskId,
+      projectId: request.projectId,
+      size: request.size,
       createdAt: new Date(),
       metadata: request.metadata,
     };
