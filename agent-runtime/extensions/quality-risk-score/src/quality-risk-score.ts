@@ -1,5 +1,5 @@
 import { QualityMetric } from './config.js';
-import { calculateScore, type RiskLevel, type CalculatedScore } from './score-engine.js';
+import { calculateScore, type RiskLevel, type CalculatedScore, type Artifacts } from './score-engine.js';
 
 export interface ScoreHistory {
   level: RiskLevel;
