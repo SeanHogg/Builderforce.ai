@@ -1,44 +1,64 @@
-> **PRD** — drafted by Bob Developer (V2 (Container)) · task #89
+> **PRD** — drafted by Kevin BA/PM/PO (Durable) · task #173
 > _Each agent that updates this PRD signs its change below._
 
-# Product Requirements Document: Avatar Filter Row Placement
+# Product Requirements Document: Explicit Listing of Code Gaps
 
 ## 1. Problem & Goal
 
-**Problem:** The current placement of the avatar filter, separated from the priorities dropdown, disrupts the logical grouping of filtering options. Users must scan different areas of the UI to apply related filters, leading to a less efficient and intuitive user experience.
+### Problem
+Current code analysis primarily focuses on what *is* present in the codebase. However, there is no explicit mechanism to identify and list planned features, functionalities, or architectural components that were intended to be developed but are currently absent from the codebase. This lack of transparency leads to:
+*   An incomplete understanding of project status relative to design and product intentions.
+*   Difficulty for stakeholders (e.g., Product Managers, Architects, new developers) in discerning discrepancies between design and implementation.
+*   Potential for missed features, architectural inconsistencies, and miscommunication across teams.
+*   Challenges in onboarding new team members who lack historical context on intended but unimplemented work.
 
-**Goal:** To improve the user experience by consolidating related filtering options into a single, contiguous row, thereby enhancing discoverability, reducing cognitive load, and increasing the speed at which users can apply filters.
+### Goal
+To provide a clear, explicit, and actionable listing of planned features or functionalities that are absent from the current codebase. This will enhance transparency, facilitate accurate project status assessments, and enable better prioritization of development, refactoring, or documentation efforts to align code with design intent.
 
 ## 2. Target Users / ICP Roles
 
-*   **Project Managers:** Need to quickly filter tasks by assignee (avatar) and priority to understand workload distribution and identify high-priority items.
-*   **Team Leads:** Require efficient filtering to monitor team progress and allocate resources based on task priority and individual contribution (avatar).
-*   **Individual Contributors:** Benefit from a cleaner interface to focus on their assigned tasks and understand their priority within the project context.
+*   **Product Managers:** To verify feature completeness against product roadmaps and designs.
+*   **Software Architects:** To ensure the codebase adheres to architectural specifications and identify missing components.
+*   **Development Leads/Managers:** To assess project scope, identify potential technical debt (unimplemented features), and plan future work.
+*   **Developers (especially new hires):** To gain a comprehensive understanding of the project's intended scope, not just its current state.
+*   **Quality Assurance (QA) Engineers:** To identify potential test coverage gaps based on unimplemented features.
 
 ## 3. Scope
 
-This document covers the functional requirements and acceptance criteria for moving the existing avatar filter component to reside on the same UI row as the priorities dropdown. This includes adjustments to layout, styling, and ensuring the filter's functionality remains intact.
+This project focuses on establishing a system to:
+1.  Define planned features or components.
+2.  Analyze the existing codebase to identify the presence or absence of these defined items.
+3.  Generate an explicit, structured list of all identified "gaps" (planned but not found items).
 
 ## 4. Functional Requirements
 
-*   **FR1: Layout Adjustment:** The avatar filter component shall be repositioned to occupy a space adjacent to the priorities dropdown within the primary filtering bar.
-*   **FR2: Visual Consistency:** The avatar filter shall maintain its current visual appearance and interaction patterns (e.g., dropdown behavior, selection indicators) after being moved.
-*   **FR3: Responsive Design:** The integrated avatar and priorities filter row shall adapt appropriately across different screen sizes and resolutions, maintaining usability.
-*   **FR4: Filter Functionality:** Applying a filter via the avatar selector shall continue to correctly filter the displayed data (e.g., tasks, issues), and this filtering shall be independent of or complementary to the priorities filter.
+*   **FR1: Planned Item Definition:** The system MUST allow for the definition of planned features, functionalities, or components. Each definition MUST include:
+    *   A unique identifier (e.g., `feature-id-001`).
+    *   A descriptive name (e.g., "User Profile Avatar Upload").
+    *   An expected code signature or artifact (e.g., `class UserProfileAvatarService`, `function uploadAvatar(userId, file)`, `api/v1/user/{id}/avatar`).
+    *   An optional association with a source document (e.g., design document ID, Jira ticket).
+    *   An optional priority level.
+*   **FR2: Codebase Analysis Integration:** The system MUST integrate with code analysis mechanisms to scan the current codebase. This analysis MUST be capable of identifying the presence or absence of the code signatures/artifacts defined in FR1.
+*   **FR3: Gap Identification Logic:** The system MUST compare the defined planned items (FR1) against the results of the codebase analysis (FR2) to accurately identify items that are *planned* but *not found*.
+*   **FR4: Gap Listing Output:** The system MUST generate an explicit list of all identified gaps. For each gap, the output MUST include:
+    *   The unique identifier of the planned item.
+    *   Its descriptive name.
+    *   The expected code signature/artifact that was not found.
+    *   Any associated source document or priority.
+*   **FR5: Output Format:** The gap list MUST be available in a human-readable, machine-parsable format (e.g., Markdown table, JSON, CSV).
 
 ## 5. Acceptance Criteria
 
-*   **AC1: Avatar Filter Visible in Row:** The avatar filter is visibly present on the same horizontal line as the priorities dropdown.
-*   **AC2: Filter Functionality Preserved:** Selecting an avatar from the new location correctly filters the displayed items.
-*   **AC3: Priorities Filter Functionality Preserved:** Selecting a priority from its dropdown continues to filter the displayed items, and its interaction is unaffected by the avatar filter's new position.
-*   **AC4: Combined Filtering Works:** Applying both an avatar filter and a priorities filter simultaneously yields the correct, combined results.
-*   **AC5: No Visual Overlap or Distortion:** The avatar filter and priorities dropdown do not overlap each other or other UI elements in the filtering bar, and the overall layout remains clean and undistorted.
-*   **AC6: Responsiveness Verified:** On smaller screen sizes, the combined filter row is still usable, potentially with a different arrangement if necessary (e.g., stacking if horizontal space is too limited, though the primary goal is horizontal).
+*   **AC1: Gap Identification Accuracy:** Given a defined planned item (e.g., "Feature: Email Notifications - `NotificationService.sendEmail(...)`") and a codebase where this item is demonstrably absent, the system MUST correctly list "Email Notifications" as a gap.
+*   **AC2: No False Positives:** Given a defined planned item and a codebase where the item *is* present (matching the defined signature/artifact), the system MUST NOT list it as a gap.
+*   **AC3: Detailed Reporting:** The generated gap report MUST include the planned item's descriptive name, its unique ID, and the expected code signature/artifact for each identified gap.
+*   **AC4: Performance:** The system MUST be able to process a minimum of 100 planned items against a typical-sized codebase (e.g., 50k LOC) and generate a gap report within 5 minutes.
+*   **AC5: Usability:** The output format of the gap report must be clear and easily understandable by the target users.
 
 ## 6. Out of Scope
 
-*   **New Avatar Filter Features:** Any enhancements or new functionalities to the avatar filter itself (e.g., search within avatars, multi-select avatars) are out of scope for this task.
-*   **New Priorities Filter Features:** Any enhancements or new functionalities to the priorities dropdown are out of scope.
-*   **Other Filter Components:** Moving or modifying any other filter components not explicitly mentioned (e.g., date filters, status filters) is out of scope.
-*   **Backend Changes:** Any backend changes related to how filters are processed or stored are out of scope, assuming the existing backend APIs can handle the current filtering logic.
-*   **Performance Optimization:** Significant performance optimizations related to filtering are out of scope, unless directly caused by the layout change.
+*   **Automated Remediation:** The system will not automatically generate code stubs or templates for identified gaps.
+*   **Reason Tracking:** The system will not track or infer the *reason* why a planned item is missing (e.g., intentionally deferred, cut from scope, forgotten). It only reports the *absence*.
+*   **Prioritization/Assignment:** The system will not manage the prioritization, assignment, or workflow integration of identified gaps into project management tools (e.g., creating Jira tickets). It provides the raw data for such processes.
+*   **Semantic Inference:** The system will rely on explicit definitions for identifying planned items. It will not perform deep semantic analysis or AI-driven inference to guess if a general concept (e.g., "user profile management") is present if not explicitly defined with a matching code signature.
+*   **Historic Gap Tracking:** While a report is generated, the system will not maintain a historical log or trend analysis of gaps over time.
