@@ -1,44 +1,55 @@
-> **PRD** — drafted by Bob Developer (V2 (Container)) · task #89
+> **PRD** — drafted by Kevin BA/PM/PO (Durable) · task #166
 > _Each agent that updates this PRD signs its change below._
 
-# Product Requirements Document: Avatar Filter Row Placement
+# API and Frontend Feature Catalog
 
-## 1. Problem & Goal
+## Problem & Goal
 
-**Problem:** The current placement of the avatar filter, separated from the priorities dropdown, disrupts the logical grouping of filtering options. Users must scan different areas of the UI to apply related filters, leading to a less efficient and intuitive user experience.
+Many user-facing features are implemented across our API routes, frontend pages, and components. Without a centralized catalog, it's difficult to get a complete understanding of the features available to our users, hindering efficient planning, development, and documentation.
 
-**Goal:** To improve the user experience by consolidating related filtering options into a single, contiguous row, thereby enhancing discoverability, reducing cognitive load, and increasing the speed at which users can apply filters.
+**Goal:** To create a comprehensive catalog of all user-facing features, detailing their location within the codebase (API routes, frontend pages, components) and a brief description.
 
-## 2. Target Users / ICP Roles
+## Target Users / ICP Roles
 
-*   **Project Managers:** Need to quickly filter tasks by assignee (avatar) and priority to understand workload distribution and identify high-priority items.
-*   **Team Leads:** Require efficient filtering to monitor team progress and allocate resources based on task priority and individual contribution (avatar).
-*   **Individual Contributors:** Benefit from a cleaner interface to focus on their assigned tasks and understand their priority within the project context.
+*   Product Managers
+*   Frontend Engineers
+*   Backend Engineers
+*   Technical Writers
+*   QA Engineers
 
-## 3. Scope
+## Scope
 
-This document covers the functional requirements and acceptance criteria for moving the existing avatar filter component to reside on the same UI row as the priorities dropdown. This includes adjustments to layout, styling, and ensuring the filter's functionality remains intact.
+This project will focus on identifying and cataloging all features that are directly exposed or accessible to end-users. This includes:
 
-## 4. Functional Requirements
+*   **API Routes:** Endpoints that allow users or client applications to interact with our system's functionality.
+*   **Frontend Pages:** Distinct views or sections of the user interface that users navigate to.
+*   **Frontend Components:** Reusable UI elements that provide specific functionalities or display information to the user.
 
-*   **FR1: Layout Adjustment:** The avatar filter component shall be repositioned to occupy a space adjacent to the priorities dropdown within the primary filtering bar.
-*   **FR2: Visual Consistency:** The avatar filter shall maintain its current visual appearance and interaction patterns (e.g., dropdown behavior, selection indicators) after being moved.
-*   **FR3: Responsive Design:** The integrated avatar and priorities filter row shall adapt appropriately across different screen sizes and resolutions, maintaining usability.
-*   **FR4: Filter Functionality:** Applying a filter via the avatar selector shall continue to correctly filter the displayed data (e.g., tasks, issues), and this filtering shall be independent of or complementary to the priorities filter.
+## Functional Requirements
 
-## 5. Acceptance Criteria
+1.  **Feature Identification:** Scan the codebase to identify all user-facing API routes, frontend pages, and components.
+2.  **Feature Description:** For each identified item, extract or generate a concise description of its user-facing functionality.
+3.  **Location Tagging:** Tag each feature with its source location (e.g., `GET /users/{id}`, `/dashboard`, `UserProfileCard`).
+4.  **Categorization (Optional but Recommended):** Where feasible, assign a high-level category to each feature (e.g., Authentication, User Management, Data Display).
+5.  **Catalog Storage:** Store the catalog in a structured, accessible format.
 
-*   **AC1: Avatar Filter Visible in Row:** The avatar filter is visibly present on the same horizontal line as the priorities dropdown.
-*   **AC2: Filter Functionality Preserved:** Selecting an avatar from the new location correctly filters the displayed items.
-*   **AC3: Priorities Filter Functionality Preserved:** Selecting a priority from its dropdown continues to filter the displayed items, and its interaction is unaffected by the avatar filter's new position.
-*   **AC4: Combined Filtering Works:** Applying both an avatar filter and a priorities filter simultaneously yields the correct, combined results.
-*   **AC5: No Visual Overlap or Distortion:** The avatar filter and priorities dropdown do not overlap each other or other UI elements in the filtering bar, and the overall layout remains clean and undistorted.
-*   **AC6: Responsiveness Verified:** On smaller screen sizes, the combined filter row is still usable, potentially with a different arrangement if necessary (e.g., stacking if horizontal space is too limited, though the primary goal is horizontal).
+## Acceptance Criteria
 
-## 6. Out of Scope
+*   A documented list exists containing at least 95% of identified user-facing API routes with their full path and HTTP method.
+*   A documented list exists containing at least 95% of identified user-facing frontend pages with their respective routes.
+*   A documented list exists containing at least 95% of identified user-facing frontend components with their names and a brief functional description.
+*   Each catalog entry includes a clear, concise description of the feature's user-facing purpose.
+*   Each catalog entry specifies its origin (API route, page, or component).
+*   The catalog is stored in a system or file accessible to the target users.
 
-*   **New Avatar Filter Features:** Any enhancements or new functionalities to the avatar filter itself (e.g., search within avatars, multi-select avatars) are out of scope for this task.
-*   **New Priorities Filter Features:** Any enhancements or new functionalities to the priorities dropdown are out of scope.
-*   **Other Filter Components:** Moving or modifying any other filter components not explicitly mentioned (e.g., date filters, status filters) is out of scope.
-*   **Backend Changes:** Any backend changes related to how filters are processed or stored are out of scope, assuming the existing backend APIs can handle the current filtering logic.
-*   **Performance Optimization:** Significant performance optimizations related to filtering are out of scope, unless directly caused by the layout change.
+## Out of Scope
+
+*   **Internal-only APIs or components:** Features not directly intended for end-user interaction (e.g., internal microservice communication, administrative tools not user-facing).
+*   **Detailed technical implementation:
+    *   Specific code logic beyond the feature's purpose.
+    *   Database schemas or data models directly.
+    *   Performance metrics.
+*   **User authentication credentials:** Actual username/password storage mechanisms or sensitive user data.
+*   **Automated code generation:** This PRD focuses on cataloging existing features; it does not imply automatic generation of code or documentation.
+*   **Manual translation or localization:** The catalog will be in the primary language of the codebase.
+*   **Visual design specifications:** While components are cataloged, detailed UI/UX design specs are not within scope.
