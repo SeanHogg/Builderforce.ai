@@ -3,6 +3,7 @@ import path from "node:path";
 
 const DEFAULT_BUILDERFORCE_URL = "https://api.builderforce.ai";
 import { appendKnowledgeMemory } from "../builderforce/project-context.js";
+import { contributeProjectEvermindFromText, type ProjectEvermindSyncConfig } from "./project-evermind-sync.js";
 import { logDebug } from "../logger.js";
 import { normalizeBaseUrl } from "../utils/normalize-base-url.js";
 import { onAgentEvent } from "./agent-events.js";
@@ -311,7 +312,36 @@ export class KnowledgeLoopService {
       }
     }
 
+    // Contribute a WEIGHT DELTA to the project's shared Evermind (concurrent
+    // learning): adapt the project model on this run's activity and push the diff
+    // to the coordinator. Fire-and-forget + fully guarded — a no-op unless the
+    // runtime is configured to reach a seeded, connected project model.
+    void this.contributeToProjectEvermind((entry ?? summary ?? "").trim());
+
     await this.syncIfConfigured();
+  }
+
+  /** Build project-Evermind sync config from the loop's gateway opts (reuses the
+   *  same Bearer + X-AgentHost-Id auth `pushMemoryToMesh` uses). Null unless a
+   *  gateway key, numeric host id, and project id are all present. */
+  private projectEvermindConfig(): ProjectEvermindSyncConfig | null {
+    const { apiKey, baseUrl, agentNodeId, projectId } = this.opts;
+    const hostId = Number(agentNodeId);
+    if (!apiKey || !Number.isInteger(hostId) || hostId <= 0 || !projectId) return null;
+    return { gatewayUrl: baseUrl ?? DEFAULT_BUILDERFORCE_URL, apiKey, agentHostId: hostId, projectId: Number(projectId) };
+  }
+
+  /** Adapt-and-push a project-Evermind contribution (best-effort, non-fatal). */
+  private async contributeToProjectEvermind(text: string): Promise<void> {
+    const cfg = this.projectEvermindConfig();
+    if (!cfg || text.length < 20) return;
+    try {
+      const res = await contributeProjectEvermindFromText(cfg, text);
+      if (res.ok) logDebug(`[project-evermind] contributed a delta (base v${res.version})`);
+      else logDebug(`[project-evermind] skipped: ${res.reason}`);
+    } catch (err) {
+      logDebug(`[project-evermind] contribution error: ${String(err)}`);
+    }
   }
 
   private async syncIfConfigured(): Promise<void> {

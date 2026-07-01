@@ -43,6 +43,7 @@ import {
 } from '../../application/llm/ImageProxyService';
 import { buildDatabase } from '../../infrastructure/database/connection';
 import { resolveTenantModel, TENANT_MODEL_REF_PREFIX } from '../../application/llm/tenantModelService';
+import { resolveProjectEvermindModelPin, PROJECT_EVERMIND_MODEL_PREFIX } from '../../application/llm/projectEvermind';
 import { resolveWorkforceModel, WORKFORCE_MODEL_REF_PREFIX } from '../../application/agent/agentPrompt';
 import { llmUsageLog, llmFailoverLog, tenants, tenantMembers, agentHosts, tenantApiKeys, users, projects, tasks, runModelOutcomes } from '../../infrastructure/database/schema';
 import { getRoutingTable, parseScopeToken, scopeToken } from '../../application/llm/routingTable';
@@ -1081,6 +1082,13 @@ export function createLlmRoutes(): Hono<HonoEnv> {
     // /v1/chat/completions caller all honour a tenant's named model the same way
     // (the cloud agent loop resolves the same ref via runCloudToolLoop).
     const bodyAny = body as Record<string, unknown>;
+    // A `project_evermind:<projectId>` pin expands to the project's CURRENT
+    // Evermind version (evermind/<ref>) at call time — the cloud/IDE replica
+    // pulling the latest learned model on each run (pull-on-boundary).
+    if (typeof bodyAny.model === 'string' && bodyAny.model.startsWith(PROJECT_EVERMIND_MODEL_PREFIX)) {
+      const expanded = await resolveProjectEvermindModelPin(c.env as Env, buildDatabase(c.env), access.tenantId, bodyAny.model);
+      bodyAny.model = expanded.model; // undefined when unseeded → plan default
+    }
     if (typeof bodyAny.model === 'string' && bodyAny.model.startsWith(TENANT_MODEL_REF_PREFIX)) {
       const tm = await resolveTenantModel(c.env as Env, buildDatabase(c.env), access.tenantId, bodyAny.model);
       // null base → let the plan default resolve; unknown ref → drop the bad id too.

@@ -127,6 +127,7 @@ import { createTeamMemoryRoutes }      from './presentation/routes/teamMemoryRou
 import { createPublicApiRoutes }       from './presentation/routes/publicApiRoutes';
 import { createStudioRoutes }          from './presentation/routes/studioWeightRoutes';
 import { createEvermindModelRoutes }   from './presentation/routes/evermindModelRoutes';
+import { createProjectEvermindRoutes, createProjectEvermindAgentRoutes }  from './presentation/routes/projectEvermindRoutes';
 // Cloud Agent Boards — agentic swimlanes, external board sync, PRD versioning, multi-repo PRs
 import { createBoardRoutes }           from './presentation/routes/boardRoutes';
 import { createBoardConnectionRoutes } from './presentation/routes/boardConnectionRoutes';
@@ -174,6 +175,7 @@ export { SessionRoomDO } from './infrastructure/relay/SessionRoomDO';
 export { CeremonyRoomDO } from './infrastructure/relay/CeremonyRoomDO';
 export { AnalysisRunnerDO } from './infrastructure/relay/AnalysisRunnerDO';
 export { CloudRunnerDO } from './infrastructure/relay/CloudRunnerDO';
+export { ProjectEvermindCoordinatorDO } from './infrastructure/relay/ProjectEvermindCoordinatorDO';
 export { AgentContainerDO } from './infrastructure/relay/AgentContainerDO';
 export { QaRunnerContainerDO } from './infrastructure/relay/QaRunnerContainerDO';
 export { TenantRateLimiterDO } from './infrastructure/ratelimit/TenantRateLimiterDO';
@@ -451,6 +453,8 @@ export function buildApp(env: Env): Hono<HonoEnv> {
   app.route('/api/ide-projects', createIdeProjectRoutes(projectService, db));
   app.route('/api/ai',        createIdeAiRoutes(projectService));
   app.route('/api/studio/models', createEvermindModelRoutes(db));
+  app.route('/api/projects',  createProjectEvermindRoutes(db));
+  app.route('/api/agent/projects', createProjectEvermindAgentRoutes(db));
   app.route('/api/studio',    createStudioRoutes());
 
   // Cloud Agent Boards

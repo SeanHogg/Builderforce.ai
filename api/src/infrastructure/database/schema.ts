@@ -4339,6 +4339,32 @@ export const tenantModels = pgTable('tenant_models', {
   uqSlug:   uniqueIndex('uq_tenant_models_slug').on(t.tenantId, t.slug),
 }));
 
+/**
+ * project_evermind (migration 0258) — the per-project, self-learning Evermind
+ * model pointer. The canonical weights live in R2 as versioned immutable objects
+ * (`evermind/project/<tenantId>/<projectId>/v<version>/…`); this row tracks the
+ * CURRENT version + learning mode. The ProjectEvermindCoordinator Durable Object
+ * is the single serialized writer (concurrent-learning + FedAvg merge); every
+ * surface reads `version` and runs a local replica. See [[evermind-learning-architecture]].
+ */
+export const projectEvermind = pgTable('project_evermind', {
+  id:            uuid('id').primaryKey().defaultRandom(),
+  tenantId:      integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  projectId:     integer('project_id').notNull().references(() => projects.id, { onDelete: 'cascade' }),
+  name:          text('name').notNull().default('Project Evermind'),
+  /** Current canonical version (monotonic). 0 = not yet seeded (no model in R2). */
+  version:       integer('version').notNull().default(0),
+  /** 'connected' (pull + contribute) | 'offline-frozen' (pinned, no write-back). */
+  mode:          varchar('mode', { length: 16 }).notNull().default('connected'),
+  /** Total merged learning contributions across this model's life (telemetry). */
+  contributions: integer('contributions').notNull().default(0),
+  lastLearnedAt: timestamp('last_learned_at'),
+  createdAt:     timestamp('created_at').notNull().defaultNow(),
+  updatedAt:     timestamp('updated_at').notNull().defaultNow(),
+}, (t) => ({
+  uqProject: uniqueIndex('uq_project_evermind_project').on(t.tenantId, t.projectId),
+}));
+
 // ── Insight-lens object tiers (migration 0220) ───────────────────────────────
 // The only NEW storage the role-insight lenses need; everything else they read
 // (run_model_outcomes, deployment_events, llm_usage_log, tool_audit_events) is

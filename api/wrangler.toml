@@ -71,6 +71,10 @@ name = "CLOUD_RUNNER"
 class_name = "CloudRunnerDO"
 
 [[durable_objects.bindings]]
+name = "PROJECT_EVERMIND"
+class_name = "ProjectEvermindCoordinatorDO"
+
+[[durable_objects.bindings]]
 name = "AGENT_CONTAINER"
 class_name = "AgentContainerDO"
 
@@ -157,6 +161,13 @@ tag = "v8"
 # QaRunnerContainerDO backs the Agentic Tester Cloudflare Container (the Playwright
 # browser-exploration runner). Container-control DOs are SQLite-backed.
 new_sqlite_classes = ["QaRunnerContainerDO"]
+
+[[migrations]]
+tag = "v9"
+# ProjectEvermindCoordinatorDO is the single serialized writer for a project's
+# self-learning Evermind model — it batches concurrent learning pushes via a
+# storage alarm and FedAvg-merges weight deltas. Alarms require SQLite-backed DOs.
+new_sqlite_classes = ["ProjectEvermindCoordinatorDO"]
 
 # Cron triggers — see scheduled() in src/index.ts
 #   "0 9 * * *"   09:00 UTC daily: probe every LLM vendor; email superadmins on status change.

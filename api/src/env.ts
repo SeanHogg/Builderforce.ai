@@ -189,6 +189,15 @@ export interface Env {
    *    [[durable_objects.bindings]] name = "CLOUD_RUNNER" class_name = "CloudRunnerDO" */
   CLOUD_RUNNER?: DurableObjectNamespace;
 
+  /** Durable Object: the SINGLE WRITER for a project's self-learning Evermind
+   *  model. One instance per project (`idFromName('proj:<tenantId>:<projectId>')`);
+   *  serializes concurrent learning pushes, FedAvg-merges weight deltas, and
+   *  republishes versioned models to R2 (UPLOADS). Optional: when unset, the
+   *  /learn path returns 503 (concurrent learning disabled) and replicas still
+   *  read published versions. Bind in wrangler.toml:
+   *    [[durable_objects.bindings]] name = "PROJECT_EVERMIND" class_name = "ProjectEvermindCoordinatorDO" */
+  PROJECT_EVERMIND?: DurableObjectNamespace;
+
   /** Cloudflare Container runtime for a "V2 Cloud Agent (Node/Container)" — a
    *  long-lived Node process with a real shell (the `container` runtime surface).
    *  One instance per execution (`idFromName('exec:<id>')`). Optional: when unset
