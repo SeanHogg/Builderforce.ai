@@ -1,44 +1,64 @@
-> **PRD** — drafted by Bob Developer (V2 (Container)) · task #89
+> **PRD** — drafted by Kevin BA/PM/PO (Durable) · task #206
 > _Each agent that updates this PRD signs its change below._
 
-# Product Requirements Document: Avatar Filter Row Placement
+# Product Requirements Document: Stale Tasks List
 
 ## 1. Problem & Goal
 
-**Problem:** The current placement of the avatar filter, separated from the priorities dropdown, disrupts the logical grouping of filtering options. Users must scan different areas of the UI to apply related filters, leading to a less efficient and intuitive user experience.
+**Problem:** Teams often struggle to keep track of tasks that have been open for an extended period without any recent activity. This "staleness" can lead to missed deadlines, decreased productivity, and a general lack of accountability.
 
-**Goal:** To improve the user experience by consolidating related filtering options into a single, contiguous row, thereby enhancing discoverability, reducing cognitive load, and increasing the speed at which users can apply filters.
+**Goal:** To provide a clear and easily accessible list of tasks that are stale, enabling teams to proactively address them, re-prioritize, delegate, or close them out. This will improve task management efficiency and overall project momentum.
 
 ## 2. Target Users / ICP Roles
 
-*   **Project Managers:** Need to quickly filter tasks by assignee (avatar) and priority to understand workload distribution and identify high-priority items.
-*   **Team Leads:** Require efficient filtering to monitor team progress and allocate resources based on task priority and individual contribution (avatar).
-*   **Individual Contributors:** Benefit from a cleaner interface to focus on their assigned tasks and understand their priority within the project context.
+*   Project Managers
+*   Team Leads
+*   Individual Contributors
+*   Scrum Masters
+*   Anyone responsible for task management and workflow optimization.
 
 ## 3. Scope
 
-This document covers the functional requirements and acceptance criteria for moving the existing avatar filter component to reside on the same UI row as the priorities dropdown. This includes adjustments to layout, styling, and ensuring the filter's functionality remains intact.
+This document outlines the requirements for a feature that identifies and presents a list of tasks that meet specific criteria for staleness. The feature will be accessible within the existing task management interface.
 
 ## 4. Functional Requirements
 
-*   **FR1: Layout Adjustment:** The avatar filter component shall be repositioned to occupy a space adjacent to the priorities dropdown within the primary filtering bar.
-*   **FR2: Visual Consistency:** The avatar filter shall maintain its current visual appearance and interaction patterns (e.g., dropdown behavior, selection indicators) after being moved.
-*   **FR3: Responsive Design:** The integrated avatar and priorities filter row shall adapt appropriately across different screen sizes and resolutions, maintaining usability.
-*   **FR4: Filter Functionality:** Applying a filter via the avatar selector shall continue to correctly filter the displayed data (e.g., tasks, issues), and this filtering shall be independent of or complementary to the priorities filter.
+*   **FR.1: Task Identification:** The system shall identify tasks that are considered "stale" based on the following criteria:
+    *   The task is currently in an "Open" or equivalent status (i.e., not "Closed," "Completed," "Done," or a similar terminal state).
+    *   The task has had no activity (e.g., comment, status change, assignee change, due date change) for a configurable period of at least 14 days.
+*   **FR.2: Stale Task List View:** A dedicated view (e.g., a tab, filter, or report) shall be available to display the identified stale tasks.
+*   **FR.3: Displayed Task Information:** For each stale task in the list, the following information shall be displayed:
+    *   Task Title/Name
+    *   Task ID/Number
+    *   Current Assignee(s)
+    *   Original Creation Date
+    *   Date of Last Activity
+    *   Days Since Last Activity
+    *   Link to the task for direct access.
+*   **FR.4: Sortable List:** The stale task list shall be sortable by:
+    *   Days Since Last Activity (ascending/descending)
+    *   Date of Last Activity (ascending/descending)
+    *   Task Title (alphabetical)
+    *   Assignee (alphabetical)
+*   **FR.5: Configurable Staleness Period:** The system shall allow administrators or authorized users to configure the "minimum days of inactivity" to define a stale task (defaulting to 14 days).
+*   **FR.6: Filtering/Search:** Users shall be able to filter the stale task list by assignee, project, or other relevant task attributes.
+*   **FR.7: Visual Indication:** Stale tasks within the main task list (if applicable) should have a visual indicator highlighting their stale status.
 
 ## 5. Acceptance Criteria
 
-*   **AC1: Avatar Filter Visible in Row:** The avatar filter is visibly present on the same horizontal line as the priorities dropdown.
-*   **AC2: Filter Functionality Preserved:** Selecting an avatar from the new location correctly filters the displayed items.
-*   **AC3: Priorities Filter Functionality Preserved:** Selecting a priority from its dropdown continues to filter the displayed items, and its interaction is unaffected by the avatar filter's new position.
-*   **AC4: Combined Filtering Works:** Applying both an avatar filter and a priorities filter simultaneously yields the correct, combined results.
-*   **AC5: No Visual Overlap or Distortion:** The avatar filter and priorities dropdown do not overlap each other or other UI elements in the filtering bar, and the overall layout remains clean and undistorted.
-*   **AC6: Responsiveness Verified:** On smaller screen sizes, the combined filter row is still usable, potentially with a different arrangement if necessary (e.g., stacking if horizontal space is too limited, though the primary goal is horizontal).
+*   **AC.1:** A task marked "Open" and with no recorded activity for 15 days is correctly identified and appears in the "Stale Tasks List" view.
+*   **AC.2:** A task marked "In Progress" with no recorded activity for 13 days is *not* identified as stale.
+*   **AC.3:** A task that was "Open" and inactive for 10 days, but then had a comment added, is no longer identified as stale even if it hasn't had activity for another 5 days.
+*   **AC.4:** The "Stale Tasks List" view displays Task Title, Assignee, Last Activity Date, and the number of "Days Since Last Activity" for all identified stale tasks.
+*   **AC.5:** Clicking on a task in the "Stale Tasks List" navigates the user directly to that task's detail page.
+*   **AC.6:** The stale task list can be sorted by "Days Since Last Activity" in descending order, showing the oldest inactive tasks first.
+*   **AC.7:** An administrator can successfully change the staleness period from 14 days to 7 days, and the list updates accordingly.
+*   **AC.8:** A user can filter the stale task list to show only tasks assigned to a specific individual.
 
 ## 6. Out of Scope
 
-*   **New Avatar Filter Features:** Any enhancements or new functionalities to the avatar filter itself (e.g., search within avatars, multi-select avatars) are out of scope for this task.
-*   **New Priorities Filter Features:** Any enhancements or new functionalities to the priorities dropdown are out of scope.
-*   **Other Filter Components:** Moving or modifying any other filter components not explicitly mentioned (e.g., date filters, status filters) is out of scope.
-*   **Backend Changes:** Any backend changes related to how filters are processed or stored are out of scope, assuming the existing backend APIs can handle the current filtering logic.
-*   **Performance Optimization:** Significant performance optimizations related to filtering are out of scope, unless directly caused by the layout change.
+*   Automated task closing or archiving based on staleness.
+*   Automated notifications or escalations for stale tasks (this may be a follow-up feature).
+*   Integration with external communication tools for stale task follow-up.
+*   Complex reporting dashboards beyond a simple list view.
+*   Defining "activity" beyond comments, status changes, assignee changes, and due date changes.
