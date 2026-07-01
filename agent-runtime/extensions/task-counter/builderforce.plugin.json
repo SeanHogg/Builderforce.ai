@@ -1,0 +1,54 @@
+{
+  "id": "task-counter",
+  "name": "Task Counter",
+  "description": "Counts open tasks per project and estimates remaining effort using story points or T-shirt sizes. Ideal for workload analysis and capacity planning.",
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "defaultProvider": { "type": "string" },
+      "defaultModel": { "type": "string" },
+      "defaultAuthProfileId": { "type": "string" },
+      "allowedModels": {
+        "type": "array",
+        "items": { "type": "string" },
+        "description": "Allowlist of provider/model keys like openai-chat/gpt-4o."
+      },
+      "maxTokens": { "type": "number" },
+      "timeoutMs": { "type": "number" },
+      "effortMapping": {
+        "type": "object",
+        "description": "T-shirt size to story points mapping (e.g., S=1, M=3, L=5).",
+        "additionalProperties": {
+          "type": "number"
+        },
+        "examples": {
+          "S": 1,
+          "M": 3,
+          "L": 5,
+          "XL": 8
+        }
+      },
+      "defaultUnestimatedEffort": {
+        "type": "number",
+        "description": "Default story points for tasks w/o an effort estimate (used when manual override is off)."
+      },
+      "manualOverrides": {
+        "type": "array",
+        "description": "Maps project identifiers to manual effort overrides (e.g., [{ \"project\": \"engineering-open-source\", \"override\": 100 }]).",
+        "items": {
+          "type": "object",
+          "required": ["project"],
+          "properties": {
+            "project": { "type": "string" },
+            "override": { "type": "number" }
+          }
+        }
+      },
+      "includeDetails": {
+        "type": "boolean",
+        "description": "If true, returns per-project task details (limited count to avoid token usage)."
+      }
+    }
+  }
+}
