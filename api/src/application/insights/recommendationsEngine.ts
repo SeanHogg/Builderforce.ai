@@ -333,7 +333,11 @@ export function deriveRecommendations(inp: RuleInputs): Recommendation[] {
   }
 
   // Most urgent first; stable key tiebreak.
-  return out.sort((a, b) => b.rank - a.rank || a.key.localeCompare(b.key));
+  const enriched = out.map((r) => ({
+    ...r,
+    estimation: estimateTimeSavings(r.key, inp) ?? undefined,
+  }));
+  return enriched.sort((a, b) => b.rank - a.rank || a.key.localeCompare(b.key));
 }
 
 /**
