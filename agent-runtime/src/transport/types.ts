@@ -14,6 +14,8 @@ export type TaskSubmitRequest = {
   thinking?: string;
   sessionId?: string;
   parentTaskId?: string;
+  projectId?: string;
+  size?: number;
   metadata?: Record<string, unknown>;
 };
 
