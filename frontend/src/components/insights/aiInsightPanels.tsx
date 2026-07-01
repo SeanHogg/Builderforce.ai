@@ -36,8 +36,12 @@ export interface AiInsightPanelDef {
   capability: Capability;
   /** Drawer width (wide for the table-heavy lenses). */
   width?: string;
-  /** Compact KPI card for the dashboard (reads `days` from the shared window). */
-  Summary: ComponentType<{ days: number }>;
+  /** Compact KPI card for the dashboard (reads `days` from the shared window).
+   *  Three of these (AI Impact / Engineering / Recommendations) also accept an
+   *  optional `overrideData` slice from the bundled `/ai-overview` read so the
+   *  dashboard shares one round-trip; when absent the summary self-fetches. */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  Summary: ComponentType<{ days: number; overrideData?: any; bundleLoading?: boolean }>;
   /** The full report rendered inside the drill-down slide-out. */
   render: () => ReactNode;
 }

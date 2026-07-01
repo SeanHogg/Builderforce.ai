@@ -5,7 +5,7 @@ import type { DoraInsights, BottleneckInsights, LifecycleInsights } from '@/lib/
 /** Minimal fixtures — only the fields the verdict reads. */
 const dora = (o: Partial<DoraInsights> = {}): DoraInsights => ({
   windowDays: 30, deploymentFrequencyPerDay: 0, totalDeployments: 0,
-  leadTimeHours: null, changeFailureRatePct: null, mttrHours: null, ...o,
+  leadTimeHours: null, changeFailureRatePct: null, mttrHours: null, series: [], ...o,
 });
 const life = (o: Partial<LifecycleInsights> = {}): LifecycleInsights =>
   ({ windowDays: 30, sampleSize: 0, totalAvgHours: 0, byPhase: [], trend: [], ...o });

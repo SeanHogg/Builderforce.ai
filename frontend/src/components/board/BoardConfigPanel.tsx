@@ -59,6 +59,7 @@ export interface BoardConfigPanelProps {
 }
 
 export function BoardConfigPanel({ open, onClose, projectId, projectName, initialTab = 'lanes' }: BoardConfigPanelProps) {
+  const t = useTranslations('boardConfig');
   const [tab, setTab] = useState<ConfigTab>(initialTab);
   // Re-sync the active tab each time the panel is (re)opened so a caller that
   // requests 'settings' always lands there, even after a prior open left another
@@ -88,9 +89,9 @@ export function BoardConfigPanel({ open, onClose, projectId, projectName, initia
     if (!board) {
       setProvisioning(true);
       boardsApi
-        .create({ projectId, name: `${projectName ?? 'Project'} board` })
+        .create({ projectId, name: t('boardNameDefault', { name: projectName ?? t('projectFallback') }) })
         .then(() => reload())
-        .catch((e) => setProvisionError(e instanceof Error ? e.message : 'Could not create board'))
+        .catch((e) => setProvisionError(e instanceof Error ? e.message : t('errCreateBoard')))
         .finally(() => setProvisioning(false));
       return;
     }
@@ -100,10 +101,10 @@ export function BoardConfigPanel({ open, onClose, projectId, projectName, initia
       boardsApi.swimlanes
         .ensureDefaults(board.id)
         .then(() => reload())
-        .catch((e) => setProvisionError(e instanceof Error ? e.message : 'Could not set up swimlanes'))
+        .catch((e) => setProvisionError(e instanceof Error ? e.message : t('errSetupLanes')))
         .finally(() => setProvisioning(false));
     }
-  }, [open, loading, error, board, lanes.length, provisioning, provisionError, projectId, projectName, reload]);
+  }, [open, loading, error, board, lanes.length, provisioning, provisionError, projectId, projectName, reload, t]);
 
   const shownError = error ?? provisionError;
 
@@ -111,13 +112,13 @@ export function BoardConfigPanel({ open, onClose, projectId, projectName, initia
     <SlideOutPanel
       open={open}
       onClose={onClose}
-      title="Board configuration"
+      title={t('title')}
       width="min(720px, 96vw)"
       tabs={[
-        { id: 'lanes', label: 'Swimlanes & agents' },
-        { id: 'teams', label: 'Teams' },
-        { id: 'settings', label: 'Board settings' },
-        { id: 'external', label: 'External boards' },
+        { id: 'lanes', label: t('tab.lanes') },
+        { id: 'teams', label: t('tab.teams') },
+        { id: 'settings', label: t('tab.settings') },
+        { id: 'external', label: t('tab.external') },
       ]}
       activeTabId={tab}
       onTabChange={(t) => setTab(t as ConfigTab)}
@@ -128,7 +129,7 @@ export function BoardConfigPanel({ open, onClose, projectId, projectName, initia
             <span style={{ fontSize: 13, color: 'var(--danger, #dc2626)' }}>{shownError}</span>
           ) : (
             <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>
-              {provisioning || !board ? 'Setting up this board…' : 'Loading…'}
+              {provisioning || !board ? t('settingUp') : t('loading')}
             </span>
           )}
         </div>
@@ -142,7 +143,7 @@ export function BoardConfigPanel({ open, onClose, projectId, projectName, initia
         <SettingsTab board={board} onSaved={reload} />
       ) : (
         <div style={sectionPad}>
-          <BoardConnectionsManager projectId={projectId} heading="External boards feeding this board" />
+          <BoardConnectionsManager projectId={projectId} heading={t('externalHeading')} />
         </div>
       )}
     </SlideOutPanel>
@@ -154,6 +155,7 @@ export function BoardConfigPanel({ open, onClose, projectId, projectName, initia
 function LanesTab({ board, lanes, agentsByLane, reload }: {
   board: Board; lanes: Swimlane[]; agentsByLane: Record<string, SwimlaneAgent[]>; reload: () => void;
 }) {
+  const t = useTranslations('boardConfig');
   const [laneName, setLaneName] = useState('');
   const [adding, setAdding] = useState(false);
   // Workflow definitions are the targets for a lane's "Run workflow" action.
@@ -182,7 +184,7 @@ function LanesTab({ board, lanes, agentsByLane, reload }: {
     await boardsApi.swimlanes.create(board.id, { key: keyFor(name), name, position: lanes.length });
     setLaneName(''); setAdding(false); reload();
   };
-  const removeLane = async (id: string) => { if (confirm('Delete this swimlane?')) { await boardsApi.swimlanes.remove(board.id, id); reload(); } };
+  const removeLane = async (id: string) => { if (confirm(t('confirmDeleteLane'))) { await boardsApi.swimlanes.remove(board.id, id); reload(); } };
   const patchLane = async (id: string, body: Record<string, unknown>) => { await boardsApi.swimlanes.patch(board.id, id, body); reload(); };
   // Swap a lane's position with its neighbour to reorder the board columns.
   const moveLane = async (index: number, dir: -1 | 1) => {
@@ -197,40 +199,39 @@ function LanesTab({ board, lanes, agentsByLane, reload }: {
   return (
     <div style={sectionPad}>
       <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 12 }}>
-        Swimlanes are the columns of this project&apos;s task board. Add, rename, reorder, or assign agents and the
-        board updates to match.
+        {t('lanesIntro')}
       </div>
-      {lanes.length === 0 && <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>No swimlanes yet.</div>}
+      {lanes.length === 0 && <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>{t('noLanes')}</div>}
       {lanes.map((lane, index) => (
         <div key={lane.id} style={{ border: '1px solid var(--border-subtle)', borderRadius: 10, padding: 14, marginBottom: 12 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
             <div style={{ display: 'flex', flexDirection: 'column' }}>
-              <button type="button" style={{ ...btnSubtle, padding: '0 6px', lineHeight: 1.2 }} disabled={index === 0} title="Move left" onClick={() => moveLane(index, -1)}>▲</button>
-              <button type="button" style={{ ...btnSubtle, padding: '0 6px', lineHeight: 1.2 }} disabled={index === lanes.length - 1} title="Move right" onClick={() => moveLane(index, 1)}>▼</button>
+              <button type="button" style={{ ...btnSubtle, padding: '0 6px', lineHeight: 1.2 }} disabled={index === 0} title={t('moveLeft')} onClick={() => moveLane(index, -1)}>▲</button>
+              <button type="button" style={{ ...btnSubtle, padding: '0 6px', lineHeight: 1.2 }} disabled={index === lanes.length - 1} title={t('moveRight')} onClick={() => moveLane(index, 1)}>▼</button>
             </div>
             <input
               style={{ ...inputStyle, fontWeight: 600, fontSize: 14, flex: 1, minWidth: 140 }}
               defaultValue={lane.name}
-              title="Swimlane name (shown as the board column header)"
+              title={t('laneNameTitle')}
               onBlur={(e) => { const v = e.target.value.trim(); if (v && v !== lane.name) patchLane(lane.id, { name: v }); }}
             />
-            <Select value={lane.gate} onChange={(e) => patchLane(lane.id, { gate: e.target.value })} style={inputStyle} title="Gate">
-              <option value="auto">auto</option>
-              <option value="human">human gate</option>
+            <Select value={lane.gate} onChange={(e) => patchLane(lane.id, { gate: e.target.value })} style={inputStyle} title={t('gate')}>
+              <option value="auto">{t('gateAuto')}</option>
+              <option value="human">{t('gateHuman')}</option>
             </Select>
-            <Select value={lane.executionMode} onChange={(e) => patchLane(lane.id, { executionMode: e.target.value })} style={inputStyle} title="Execution">
-              <option value="sequential">sequential</option>
-              <option value="parallel">parallel</option>
+            <Select value={lane.executionMode} onChange={(e) => patchLane(lane.id, { executionMode: e.target.value })} style={inputStyle} title={t('execution')}>
+              <option value="sequential">{t('execSequential')}</option>
+              <option value="parallel">{t('execParallel')}</option>
             </Select>
-            <Select value={lane.failurePolicy} onChange={(e) => patchLane(lane.id, { failurePolicy: e.target.value })} style={inputStyle} title="On failure">
-              <option value="needs_attention">needs attention</option>
-              <option value="retry">retry</option>
-              <option value="skip">skip</option>
+            <Select value={lane.failurePolicy} onChange={(e) => patchLane(lane.id, { failurePolicy: e.target.value })} style={inputStyle} title={t('onFailure')}>
+              <option value="needs_attention">{t('failNeedsAttention')}</option>
+              <option value="retry">{t('failRetry')}</option>
+              <option value="skip">{t('failSkip')}</option>
             </Select>
             <label style={{ fontSize: 12, color: 'var(--text-secondary)', display: 'flex', gap: 4, alignItems: 'center' }}>
-              <input type="checkbox" checked={lane.isTerminal} onChange={(e) => patchLane(lane.id, { isTerminal: e.target.checked })} /> terminal
+              <input type="checkbox" checked={lane.isTerminal} onChange={(e) => patchLane(lane.id, { isTerminal: e.target.checked })} /> {t('terminal')}
             </label>
-            <button type="button" style={{ ...btnSubtle, color: 'var(--danger, #dc2626)' }} onClick={() => removeLane(lane.id)}>Delete</button>
+            <button type="button" style={{ ...btnSubtle, color: 'var(--danger, #dc2626)' }} onClick={() => removeLane(lane.id)}>{t('delete')}</button>
           </div>
           <LaneActionRow lane={lane} lanes={lanes} workflows={workflows} patchLane={patchLane} />
           <AgentList board={board} lane={lane} agents={agentsByLane[lane.id] ?? []} reload={reload} />
@@ -239,12 +240,12 @@ function LanesTab({ board, lanes, agentsByLane, reload }: {
 
       {adding ? (
         <div style={{ display: 'flex', gap: 8, marginTop: 10, flexWrap: 'wrap' }}>
-          <input style={{ ...inputStyle, flex: 1, minWidth: 140 }} placeholder="Column name (e.g. Design, In Review, QA)" value={laneName} onChange={(e) => setLaneName(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') addLane(); }} />
-          <button type="button" style={btnPrimary} onClick={addLane}>Add</button>
-          <button type="button" style={btnSubtle} onClick={() => { setAdding(false); setLaneName(''); }}>Cancel</button>
+          <input style={{ ...inputStyle, flex: 1, minWidth: 140 }} placeholder={t('columnNamePlaceholder')} value={laneName} onChange={(e) => setLaneName(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') addLane(); }} />
+          <button type="button" style={btnPrimary} onClick={addLane}>{t('add')}</button>
+          <button type="button" style={btnSubtle} onClick={() => { setAdding(false); setLaneName(''); }}>{t('cancel')}</button>
         </div>
       ) : (
-        <button type="button" style={btnPrimary} onClick={() => setAdding(true)}>Add swimlane</button>
+        <button type="button" style={btnPrimary} onClick={() => setAdding(true)}>{t('addSwimlane')}</button>
       )}
     </div>
   );
@@ -257,50 +258,51 @@ function LaneActionRow({ lane, lanes, workflows, patchLane }: {
   workflows: WorkflowDefinitionSummary[];
   patchLane: (id: string, body: Record<string, unknown>) => void;
 }) {
+  const t = useTranslations('boardConfig');
   const actionType = lane.actionType ?? 'advance';
   const labelStyle: React.CSSProperties = { fontSize: 11, fontWeight: 700, textTransform: 'uppercase', color: 'var(--text-muted)' };
   return (
     <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', marginTop: 10 }}>
-      <span style={labelStyle}>When done</span>
+      <span style={labelStyle}>{t('whenDone')}</span>
       <Select
         value={actionType}
         onChange={(e) => patchLane(lane.id, { actionType: e.target.value, actionTarget: '' })}
         style={inputStyle}
-        title="What happens to the ticket once this lane's agents finish"
+        title={t('whenDoneTitle')}
       >
-        <option value="advance">Advance to next lane</option>
-        <option value="move_ticket">Move ticket to…</option>
-        <option value="run_workflow">Run workflow…</option>
-        <option value="do_nothing">Do nothing</option>
+        <option value="advance">{t('actionAdvance')}</option>
+        <option value="move_ticket">{t('actionMoveTicket')}</option>
+        <option value="run_workflow">{t('actionRunWorkflow')}</option>
+        <option value="do_nothing">{t('actionDoNothing')}</option>
       </Select>
       {actionType === 'move_ticket' && (
-        <Select value={lane.actionTarget ?? ''} onChange={(e) => patchLane(lane.id, { actionTarget: e.target.value })} style={inputStyle} title="Destination lane">
-          <option value="">Select lane…</option>
+        <Select value={lane.actionTarget ?? ''} onChange={(e) => patchLane(lane.id, { actionTarget: e.target.value })} style={inputStyle} title={t('destinationLane')}>
+          <option value="">{t('selectLane')}</option>
           {lanes.filter((l) => l.id !== lane.id).map((l) => <option key={l.id} value={l.key}>{l.name}</option>)}
         </Select>
       )}
       {actionType === 'run_workflow' && (
-        <Select value={lane.actionTarget ?? ''} onChange={(e) => patchLane(lane.id, { actionTarget: e.target.value })} style={inputStyle} title="Workflow to run">
-          <option value="">Select workflow…</option>
+        <Select value={lane.actionTarget ?? ''} onChange={(e) => patchLane(lane.id, { actionTarget: e.target.value })} style={inputStyle} title={t('workflowToRun')}>
+          <option value="">{t('selectWorkflow')}</option>
           {workflows.map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}
         </Select>
       )}
       <span style={{ width: 1, height: 18, background: 'var(--border-subtle)' }} />
-      <span style={labelStyle}>Succeeds when</span>
+      <span style={labelStyle}>{t('succeedsWhen')}</span>
       <Select
         value={lane.successPolicy ?? 'all'}
         onChange={(e) => patchLane(lane.id, { successPolicy: e.target.value, ...(e.target.value === 'n_of_m' ? {} : { successThreshold: null }) })}
         style={inputStyle}
-        title="How many of this lane's agents must succeed for the action to fire"
+        title={t('succeedsWhenTitle')}
       >
-        <option value="all">All agents</option>
-        <option value="any">At least one</option>
-        <option value="n_of_m">At least N</option>
+        <option value="all">{t('successAll')}</option>
+        <option value="any">{t('successAny')}</option>
+        <option value="n_of_m">{t('successNofM')}</option>
       </Select>
       {lane.successPolicy === 'n_of_m' && (
         <input
           type="number" min={1} style={{ ...inputStyle, width: 64 }} defaultValue={lane.successThreshold ?? 1}
-          onBlur={(e) => patchLane(lane.id, { successThreshold: Math.max(1, Number(e.target.value) || 1) })} title="N"
+          onBlur={(e) => patchLane(lane.id, { successThreshold: Math.max(1, Number(e.target.value) || 1) })} title={t('nLabel')}
         />
       )}
     </div>
@@ -308,6 +310,7 @@ function LaneActionRow({ lane, lanes, workflows, patchLane }: {
 }
 
 function AgentList({ board, lane, agents, reload }: { board: Board; lane: Swimlane; agents: SwimlaneAgent[]; reload: () => void }) {
+  const t = useTranslations('boardConfig');
   // The user picks an agent from the project's registered/workforce agents; that
   // agent already carries its runtime/host/model defaults, so the form is just
   // "which agent" + an optional model override.
@@ -344,45 +347,45 @@ function AgentList({ board, lane, agents, reload }: { board: Board; lane: Swimla
 
   return (
     <div style={{ marginTop: 10, paddingTop: 10, borderTop: '1px dashed var(--border-subtle)' }}>
-      <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 6 }}>Autonomous agents</div>
-      {agents.length === 0 && <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>No agents assigned to this lane.</div>}
+      <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 6 }}>{t('autonomousAgents')}</div>
+      {agents.length === 0 && <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>{t('noAgentsInLane')}</div>}
       {agents.map((a) => (
         <div key={a.id} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, padding: '4px 0' }}>
           <span style={{ fontWeight: 600 }}>{a.name ?? a.role}</span>
-          <span className="badge-blue" style={{ fontSize: 10, padding: '1px 7px', borderRadius: 4, textTransform: 'capitalize' }} title="Role this agent runs under in this lane">
+          <span className="badge-blue" style={{ fontSize: 10, padding: '1px 7px', borderRadius: 4, textTransform: 'capitalize' }} title={t('roleTitle')}>
             {a.role}
           </span>
           <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>
             {a.runtime}
-            {a.model ? ` · ${a.model}` : ' · default LLM'}
+            {a.model ? ` · ${a.model}` : ` · ${t('defaultLlm')}`}
           </span>
           <span style={{ flex: 1 }} />
-          <button type="button" style={{ ...btnSubtle, color: 'var(--danger, #dc2626)' }} onClick={() => remove(a.id)}>Remove</button>
+          <button type="button" style={{ ...btnSubtle, color: 'var(--danger, #dc2626)' }} onClick={() => remove(a.id)}>{t('remove')}</button>
         </div>
       ))}
       {adding ? (
         <>
           <div style={{ display: 'flex', gap: 6, marginTop: 8, flexWrap: 'wrap' }}>
-            <Select value={agentSel} onChange={(e) => setAgentSel(e.target.value)} style={{ ...inputStyle, flex: 1, minWidth: 180 }} aria-label="Select an agent">
-              <option value="">Select an agent…</option>
+            <Select value={agentSel} onChange={(e) => setAgentSel(e.target.value)} style={{ ...inputStyle, flex: 1, minWidth: 180 }} aria-label={t('selectAgent')}>
+              <option value="">{t('selectAgent')}</option>
               {available.map((a) => (
                 <option key={`${a.kind}:${a.ref}`} value={`${a.kind}:${a.ref}`}>{a.name}</option>
               ))}
             </Select>
-            <input style={{ ...inputStyle, width: 140 }} placeholder="name (blank = agent's)" value={name} onChange={(e) => setName(e.target.value)} title="Display name for this lane slot" />
-            <input style={{ ...inputStyle, width: 120 }} placeholder="role (e.g. QA)" value={role} onChange={(e) => setRole(e.target.value)} title="Role this agent runs under in this lane" />
-            <input style={{ ...inputStyle, width: 160 }} placeholder="model (blank = default)" value={model} onChange={(e) => setModel(e.target.value)} />
-            <button type="button" style={btnPrimary} onClick={add} disabled={!agentSel}>Add</button>
-            <button type="button" style={btnSubtle} onClick={() => { setAdding(false); setAgentSel(''); setName(''); setRole(''); setModel(''); }}>Cancel</button>
+            <input style={{ ...inputStyle, width: 140 }} placeholder={t('namePlaceholder')} value={name} onChange={(e) => setName(e.target.value)} title={t('nameTitle')} />
+            <input style={{ ...inputStyle, width: 120 }} placeholder={t('rolePlaceholder')} value={role} onChange={(e) => setRole(e.target.value)} title={t('roleTitle')} />
+            <input style={{ ...inputStyle, width: 160 }} placeholder={t('modelPlaceholder')} value={model} onChange={(e) => setModel(e.target.value)} />
+            <button type="button" style={btnPrimary} onClick={add} disabled={!agentSel}>{t('add')}</button>
+            <button type="button" style={btnSubtle} onClick={() => { setAdding(false); setAgentSel(''); setName(''); setRole(''); setModel(''); }}>{t('cancel')}</button>
           </div>
           {available.length === 0 && (
             <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 6 }}>
-              No agents registered yet — create one in Workforce or register one in Settings.
+              {t('noAgentsRegistered')}
             </div>
           )}
         </>
       ) : (
-        <button type="button" style={{ ...btnSubtle, marginTop: 8 }} onClick={() => setAdding(true)}>+ Assign agent</button>
+        <button type="button" style={{ ...btnSubtle, marginTop: 8 }} onClick={() => setAdding(true)}>{t('assignAgent')}</button>
       )}
     </div>
   );
@@ -395,6 +398,7 @@ function AgentList({ board, lane, agents, reload }: { board: Board; lane: Swimla
  * this tab only governs which teams work this board.
  */
 function TeamsTab({ projectId }: { projectId: number }) {
+  const t = useTranslations('boardConfig');
   const [allTeams, setAllTeams] = useState<TeamSummary[]>([]);
   const [attached, setAttached] = useState<AttachedTeam[]>([]);
   const [loading, setLoading] = useState(true);
@@ -410,11 +414,11 @@ function TeamsTab({ projectId }: { projectId: number }) {
       setAllTeams(all);
       setAttached(here);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to load teams');
+      setError(e instanceof Error ? e.message : t('errLoadTeams'));
     } finally {
       setLoading(false);
     }
-  }, [projectId]);
+  }, [projectId, t]);
 
   useEffect(() => { void load(); }, [load]);
 
@@ -425,16 +429,18 @@ function TeamsTab({ projectId }: { projectId: number }) {
     setBusy(true);
     setError(null);
     try { await fn(); await load(); }
-    catch (e) { setError(e instanceof Error ? e.message : 'Update failed'); }
+    catch (e) { setError(e instanceof Error ? e.message : t('errUpdate')); }
     finally { setBusy(false); }
   };
+
+  const workforceLink = (chunks: React.ReactNode) => (
+    <a href="/workforce?tab=teams" style={{ color: 'var(--coral-bright)', fontWeight: 600 }}>{chunks}</a>
+  );
 
   return (
     <div style={sectionPad}>
       <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 12 }}>
-        Teams working this board. A team groups agents and humans; assign one here and it&apos;s linked to this
-        project. Manage a team&apos;s members in{' '}
-        <a href="/workforce?tab=teams" style={{ color: 'var(--coral-bright)', fontWeight: 600 }}>Workforce → Teams</a>.
+        {t.rich('teamsIntro', { link: workforceLink })}
       </div>
 
       {error && (
@@ -442,24 +448,24 @@ function TeamsTab({ projectId }: { projectId: number }) {
       )}
 
       {loading ? (
-        <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>Loading teams…</div>
+        <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>{t('loadingTeams')}</div>
       ) : (
         <>
           {attached.length === 0 ? (
-            <div style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 12 }}>No teams assigned to this board yet.</div>
+            <div style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 12 }}>{t('noTeamsAssigned')}</div>
           ) : (
             <div style={{ marginBottom: 12 }}>
-              {attached.map((t) => (
-                <div key={t.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0', borderBottom: '1px solid var(--border-subtle)' }}>
+              {attached.map((tm) => (
+                <div key={tm.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0', borderBottom: '1px solid var(--border-subtle)' }}>
                   <div style={{ minWidth: 0 }}>
-                    <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)' }}>{t.name}</div>
-                    {t.description && (
-                      <div style={{ fontSize: 12, color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.description}</div>
+                    <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)' }}>{tm.name}</div>
+                    {tm.description && (
+                      <div style={{ fontSize: 12, color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{tm.description}</div>
                     )}
                   </div>
                   <span style={{ flex: 1 }} />
-                  <button type="button" style={{ ...btnSubtle, color: 'var(--danger, #dc2626)' }} disabled={busy} onClick={() => void mutate(() => removeTeamProject(t.id, projectId))}>
-                    Remove
+                  <button type="button" style={{ ...btnSubtle, color: 'var(--danger, #dc2626)' }} disabled={busy} onClick={() => void mutate(() => removeTeamProject(tm.id, projectId))}>
+                    {t('remove')}
                   </button>
                 </div>
               ))}
@@ -468,8 +474,7 @@ function TeamsTab({ projectId }: { projectId: number }) {
 
           {allTeams.length === 0 ? (
             <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
-              No teams exist yet. Create one in{' '}
-              <a href="/workforce?tab=teams" style={{ color: 'var(--coral-bright)', fontWeight: 600 }}>Workforce → Teams</a>, then assign it here.
+              {t.rich('noTeamsExist', { link: workforceLink })}
             </div>
           ) : (
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
@@ -477,11 +482,11 @@ function TeamsTab({ projectId }: { projectId: number }) {
                 value={pick}
                 onChange={(e) => setPick(e.target.value)}
                 style={{ ...inputStyle, flex: 1, minWidth: 200 }}
-                aria-label="Select a team to assign"
+                aria-label={t('selectTeamToAssign')}
                 disabled={busy || available.length === 0}
               >
-                <option value="">{available.length === 0 ? 'All teams already assigned' : 'Assign a team…'}</option>
-                {available.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+                <option value="">{available.length === 0 ? t('allTeamsAssigned') : t('assignTeam')}</option>
+                {available.map((tm) => <option key={tm.id} value={tm.id}>{tm.name}</option>)}
               </Select>
               <button
                 type="button"
@@ -489,7 +494,7 @@ function TeamsTab({ projectId }: { projectId: number }) {
                 disabled={!pick || busy}
                 onClick={() => { const id = Number(pick); if (id) void mutate(async () => { await addTeamProject(id, projectId); setPick(''); }); }}
               >
-                Assign
+                {t('assign')}
               </button>
             </div>
           )}
@@ -528,13 +533,13 @@ function SettingsTab({ board, onSaved }: { board: Board; onSaved: () => void }) 
   return (
     <div style={{ ...sectionPad, display: 'flex', flexDirection: 'column', gap: 14, maxWidth: 420 }}>
       <label style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
-        Board name
+        {t('boardNameLabel')}
         <input style={{ ...inputStyle, width: '100%', marginTop: 4 }} value={name} onChange={(e) => setName(e.target.value)} />
       </label>
       {/* Autonomy is implicit now: a lane with agents + an auto gate advances on
           its own; a human gate waits. There is no board-level autonomous toggle. */}
       <label style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
-        Max concurrent tickets
+        {t('maxConcurrent')}
         <input type="number" min={1} style={{ ...inputStyle, width: 120, marginTop: 4 }} value={maxConcurrent} onChange={(e) => setMaxConcurrent(Number(e.target.value))} />
       </label>
 
@@ -542,7 +547,7 @@ function SettingsTab({ board, onSaved }: { board: Board; onSaved: () => void }) 
           live work. Display-only — the tickets and their history are untouched. */}
       <label style={{ fontSize: 13, color: 'var(--text-secondary)', display: 'flex', gap: 8, alignItems: 'center' }}>
         <input type="checkbox" checked={hideDoneItems} onChange={(e) => setHideDoneItems(e.target.checked)} />
-        Hide done items
+        {t('hideDoneItems')}
       </label>
 
       {/* Governance: whether HIGH/URGENT tickets must clear a manager-approval
@@ -573,28 +578,28 @@ function SettingsTab({ board, onSaved }: { board: Board; onSaved: () => void }) 
 
       {/* Standup turn timer — drives the ceremony round-table's "who's next". */}
       <div style={{ borderTop: '1px solid var(--border-subtle)', paddingTop: 14 }}>
-        <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 8 }}>Standup turn timer</div>
+        <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 8 }}>{t('standupTimer')}</div>
         <label style={{ fontSize: 13, color: 'var(--text-secondary)', display: 'block' }}>
-          Mode
+          {t('mode')}
           <Select
             style={{ ...inputStyle, width: '100%', marginTop: 4 }}
             value={turnMode}
             onChange={(e) => setTurnMode(e.target.value as 'facilitator' | 'timeboxed')}
           >
-            <option value="facilitator">Facilitator advances (manual “Next”)</option>
-            <option value="timeboxed">Timeboxed (auto-advance per speaker)</option>
+            <option value="facilitator">{t('modeFacilitator')}</option>
+            <option value="timeboxed">{t('modeTimeboxed')}</option>
           </Select>
         </label>
         {turnMode === 'timeboxed' && (
           <label style={{ fontSize: 13, color: 'var(--text-secondary)', display: 'block', marginTop: 10 }}>
-            Seconds per person
+            {t('secondsPerPerson')}
             <input type="number" min={10} step={5} style={{ ...inputStyle, width: 120, marginTop: 4 }} value={turnSeconds} onChange={(e) => setTurnSeconds(Number(e.target.value))} />
           </label>
         )}
       </div>
 
       <div>
-        <button type="button" style={btnPrimary} disabled={saving} onClick={save}>{saving ? 'Saving…' : 'Save settings'}</button>
+        <button type="button" style={btnPrimary} disabled={saving} onClick={save}>{saving ? t('saving') : t('saveSettings')}</button>
       </div>
     </div>
   );

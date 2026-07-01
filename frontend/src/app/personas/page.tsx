@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import { useTranslations } from 'next-intl';
 import Link from 'next/link';
 import { useAuth } from '@/lib/AuthContext';
 import { contrastText } from '@/lib/contrastText';
@@ -59,6 +60,7 @@ function publicToPersona(p: PublicPersona): Persona {
 }
 
 export default function PersonasPage() {
+  const t = useTranslations('personasPage');
   const { tenant } = useAuth();
   const tenantId = tenant?.id ?? '';
   const tenantNum = Number(tenantId);
@@ -277,13 +279,13 @@ export default function PersonasPage() {
     <PageContainer width="readable">
       <div className="page-header" style={{ marginBottom: 24 }}>
         <div>
-          <h1 className="page-title" style={{ margin: 0 }}>Personas</h1>
+          <h1 className="page-title" style={{ margin: 0 }}>{t('title')}</h1>
           <p className="page-sub" style={{ fontSize: 13, color: 'var(--muted)', margin: '4px 0 0' }}>
-            Agent personas shape identity, tone, and decision-making for every sub-agent in a workflow
+            {t('subtitle')}
           </p>
         </div>
         <button type="button" className="btn btn-primary" onClick={() => setCreateOpen(true)}>
-          + New persona
+          {t('newPersona')}
         </button>
       </div>
 
@@ -293,13 +295,13 @@ export default function PersonasPage() {
 
       <div style={{ display: 'flex', gap: 4, marginBottom: 20, alignItems: 'center' }}>
         <button type="button" className={`btn ${tab === 'assigned' ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setTab('assigned')}>
-          Assigned ({assigned.length})
+          {t('tabAssigned', { n: assigned.length })}
         </button>
         <button type="button" className={`btn ${tab === 'marketplace' ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setTab('marketplace')}>
-          Marketplace ({marketplacePersonas.length})
+          {t('tabMarketplace', { n: marketplacePersonas.length })}
         </button>
         <button type="button" className={`btn ${tab === 'my-personas' ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setTab('my-personas')}>
-          My Personas ({userPersonas.length})
+          {t('tabMyPersonas', { n: userPersonas.length })}
         </button>
         {tab !== 'assigned' && (
           <div style={{ marginLeft: 'auto' }}>
@@ -309,23 +311,23 @@ export default function PersonasPage() {
       </div>
 
       {loading && tab !== 'assigned' ? (
-        <div style={{ color: 'var(--muted)', fontSize: 13 }}>Loading…</div>
+        <div style={{ color: 'var(--muted)', fontSize: 13 }}>{t('loading')}</div>
       ) : tab === 'assigned' ? (
         tenantNum ? (
           <PersonaAssignmentsContent scope="tenant" scopeId={tenantNum} />
         ) : (
           <div className="empty-state">
             <div className="empty-state-icon">🔗</div>
-            <div className="empty-state-title">No tenant selected</div>
+            <div className="empty-state-title">{t('noTenant')}</div>
           </div>
         )
       ) : tab === 'my-personas' ? (
         userPersonas.length === 0 ? (
           <div className="empty-state">
             <div className="empty-state-icon">🎭</div>
-            <div className="empty-state-title">No custom personas yet</div>
-            <div className="empty-state-sub">Create your own persona to shape how your agents think and communicate</div>
-            <button type="button" className="btn btn-primary" style={{ marginTop: 16 }} onClick={() => setCreateOpen(true)}>New persona</button>
+            <div className="empty-state-title">{t('noCustomTitle')}</div>
+            <div className="empty-state-sub">{t('noCustomSub')}</div>
+            <button type="button" className="btn btn-primary" style={{ marginTop: 16 }} onClick={() => setCreateOpen(true)}>{t('newPersonaShort')}</button>
           </div>
         ) : viewMode === 'card' ? (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 16 }}>
@@ -404,13 +406,13 @@ export default function PersonasPage() {
               type="search"
               className="input"
               style={{ maxWidth: 320 }}
-              placeholder="Search personas…"
+              placeholder={t('searchPlaceholder')}
               value={search}
               onChange={(e) => setSearch(e.target.value)}
             />
           </div>
           {filteredMarketplace.length === 0 ? (
-            <div className="empty-state"><div className="empty-state-title">No personas found</div></div>
+            <div className="empty-state"><div className="empty-state-title">{t('noPersonasFound')}</div></div>
           ) : viewMode === 'card' ? (
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 16 }}>
               {filteredMarketplace.map((p) => {
@@ -543,53 +545,53 @@ export default function PersonasPage() {
         <div className="modal-overlay" onClick={() => setCreateOpen(false)}>
           <div className="card" style={{ maxWidth: 540, width: '100%', padding: 24 }} onClick={(e) => e.stopPropagation()}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-              <div className="modal-title">New persona</div>
+              <div className="modal-title">{t('newPersonaShort')}</div>
               <button type="button" className="btn btn-secondary btn-sm" onClick={() => setCreateOpen(false)}>✕</button>
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
               <div>
-                <label className="label">Name *</label>
-                <input className="input" placeholder="e.g. security-auditor" value={createForm.name} onChange={(e) => setCreateForm((f) => ({ ...f, name: e.target.value }))} />
+                <label className="label">{t('formName')}</label>
+                <input className="input" placeholder={t('formNamePlaceholder')} value={createForm.name} onChange={(e) => setCreateForm((f) => ({ ...f, name: e.target.value }))} />
               </div>
               <div>
-                <label className="label">Description</label>
-                <textarea className="input" rows={2} placeholder="What does this persona do?" value={createForm.description} onChange={(e) => setCreateForm((f) => ({ ...f, description: e.target.value }))} />
+                <label className="label">{t('formDescription')}</label>
+                <textarea className="input" rows={2} placeholder={t('formDescPlaceholder')} value={createForm.description} onChange={(e) => setCreateForm((f) => ({ ...f, description: e.target.value }))} />
               </div>
               <div style={{ display: 'flex', gap: 12 }}>
                 <div style={{ flex: 1 }}>
-                  <label className="label">Voice</label>
-                  <input className="input" placeholder="e.g. cautious and thorough" value={createForm.voice} onChange={(e) => setCreateForm((f) => ({ ...f, voice: e.target.value }))} />
+                  <label className="label">{t('formVoice')}</label>
+                  <input className="input" placeholder={t('formVoicePlaceholder')} value={createForm.voice} onChange={(e) => setCreateForm((f) => ({ ...f, voice: e.target.value }))} />
                 </div>
                 <div style={{ flex: 1 }}>
-                  <label className="label">Output Prefix</label>
-                  <input className="input" placeholder="e.g. SECURITY:" value={createForm.outputPrefix} onChange={(e) => setCreateForm((f) => ({ ...f, outputPrefix: e.target.value }))} />
+                  <label className="label">{t('formOutputPrefix')}</label>
+                  <input className="input" placeholder={t('formOutputPrefixPlaceholder')} value={createForm.outputPrefix} onChange={(e) => setCreateForm((f) => ({ ...f, outputPrefix: e.target.value }))} />
                 </div>
               </div>
               <div>
-                <label className="label">Perspective</label>
-                <input className="input" placeholder="How this persona views the world" value={createForm.perspective} onChange={(e) => setCreateForm((f) => ({ ...f, perspective: e.target.value }))} />
+                <label className="label">{t('formPerspective')}</label>
+                <input className="input" placeholder={t('formPerspectivePlaceholder')} value={createForm.perspective} onChange={(e) => setCreateForm((f) => ({ ...f, perspective: e.target.value }))} />
               </div>
               <div>
-                <label className="label">Decision Style</label>
-                <input className="input" placeholder="How this persona makes decisions" value={createForm.decisionStyle} onChange={(e) => setCreateForm((f) => ({ ...f, decisionStyle: e.target.value }))} />
+                <label className="label">{t('formDecisionStyle')}</label>
+                <input className="input" placeholder={t('formDecisionStylePlaceholder')} value={createForm.decisionStyle} onChange={(e) => setCreateForm((f) => ({ ...f, decisionStyle: e.target.value }))} />
               </div>
               <div>
-                <label className="label">Capabilities (comma-separated)</label>
-                <input className="input" placeholder="e.g. Vulnerability scanning, Threat modeling" value={createForm.capabilities} onChange={(e) => setCreateForm((f) => ({ ...f, capabilities: e.target.value }))} />
+                <label className="label">{t('formCapabilities')}</label>
+                <input className="input" placeholder={t('formCapabilitiesPlaceholder')} value={createForm.capabilities} onChange={(e) => setCreateForm((f) => ({ ...f, capabilities: e.target.value }))} />
               </div>
               <div>
-                <label className="label">Tags (comma-separated)</label>
-                <input className="input" placeholder="e.g. security, compliance" value={createForm.tags} onChange={(e) => setCreateForm((f) => ({ ...f, tags: e.target.value }))} />
+                <label className="label">{t('formTags')}</label>
+                <input className="input" placeholder={t('formTagsPlaceholder')} value={createForm.tags} onChange={(e) => setCreateForm((f) => ({ ...f, tags: e.target.value }))} />
               </div>
               <div>
-                <label className="label">Cover Image URL</label>
+                <label className="label">{t('formCoverImage')}</label>
                 <input className="input" placeholder="https://example.com/image.jpg" value={createForm.image} onChange={(e) => setCreateForm((f) => ({ ...f, image: e.target.value }))} />
               </div>
               <PsychometricEditor value={createPsychometric} onChange={setCreatePsychometric} />
             </div>
             <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 20 }}>
-              <button type="button" className="btn btn-secondary" onClick={() => setCreateOpen(false)}>Cancel</button>
-              <button type="button" className="btn btn-primary" onClick={savePersona} disabled={!createForm.name.trim()}>Save Persona</button>
+              <button type="button" className="btn btn-secondary" onClick={() => setCreateOpen(false)}>{t('cancel')}</button>
+              <button type="button" className="btn btn-primary" onClick={savePersona} disabled={!createForm.name.trim()}>{t('savePersona')}</button>
             </div>
           </div>
         </div>
