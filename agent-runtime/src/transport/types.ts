@@ -15,7 +15,24 @@ export type TaskSubmitRequest = {
   sessionId?: string;
   parentTaskId?: string;
   metadata?: Record<string, unknown>;
+  /**
+   * Estimated effort for the task (e.g. story points, hours, or a complexity
+   * score). Lower means less effort. Tasks without a valid (finite, >= 0)
+   * estimate are excluded from the "quick wins" ranking.
+   */
+  estimatedEffort?: number;
+  /**
+   * Optional task priority used as a tie-breaker when effort estimates are
+   * equal. Higher priority is preferred first.
+   */
+  priority?: TaskPriority;
 };
+
+/**
+ * Task priority, from highest to lowest urgency. Used as a tie-breaker in the
+ * quick-wins ranking when two tasks share the same estimated effort.
+ */
+export type TaskPriority = "critical" | "high" | "medium" | "low";
 
 /**
  * Task status enumeration for state machine
