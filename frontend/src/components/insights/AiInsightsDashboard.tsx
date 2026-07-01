@@ -16,6 +16,8 @@ import { useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import { PmCard } from '@/components/pm/pmShared';
+import { aiImpactApi } from '@/lib/aiImpactApi';
+import { usePmData } from '@/lib/pm/usePmData';
 import { AiConsumptionHeader } from './AiConsumptionHeader';
 import { DaysWindowSelect } from './LensShell';
 import { useAiInsightPanel } from './AiInsightPanelProvider';
@@ -52,6 +54,25 @@ export function AiInsightsDashboard() {
     if (isAiInsightPanelId(panelParam)) open(panelParam as AiInsightPanelId);
   }, [panelParam, open]);
 
+  // ONE bundled read for the three summary cards (AI Impact + Engineering +
+  // Recommendations) instead of three separate fetches on mount. Each leg is
+  // handed to its summary as `overrideData` (the bundle may degrade a leg to
+  // `null`, which the summary renders as its own empty/error state). The
+  // drill-down lenses still fetch their individual endpoints. `llm-usage` isn't
+  // part of the bundle, so it self-fetches as before.
+  const { data: overview } = usePmData(() => aiImpactApi.overview(days), [days]);
+  // Which panels the bundle covers. `llm-usage` isn't in /ai-overview → it keeps
+  // self-fetching (no bundle props passed).
+  const bundledSlice: Partial<Record<AiInsightPanelId, unknown>> = {
+    'ai-impact': overview?.aiImpact,
+    engineering: overview?.engineering,
+    recommendations: overview?.recommendations,
+  };
+  const bundleProps = (id: AiInsightPanelId): { overrideData?: unknown; bundleLoading?: boolean } => {
+    if (!(id in bundledSlice)) return {}; // not bundled → self-fetch
+    return overview ? { overrideData: bundledSlice[id] } : { bundleLoading: true };
+  };
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
       <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
@@ -71,7 +92,7 @@ export function AiInsightsDashboard() {
             action={<DrillButton label={t('viewReport')} onClick={() => open(id)} />}
           >
             <p style={{ fontSize: '0.84rem', color: 'var(--text-secondary)', margin: '-6px 0 14px' }}>{t(def.descKey)}</p>
-            <Summary days={days} />
+            <Summary days={days} {...bundleProps(id)} />
           </PmCard>
         );
       })}

@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
+import { useTranslations } from 'next-intl';
 import { useBrainDataRefresh } from '@/lib/brain/useBrainDataRefresh';
 import { useRouter, useSearchParams } from 'next/navigation';
 import type { Project } from '@/lib/types';
@@ -44,6 +45,7 @@ export interface ProjectsContentProps {
  * parent's job; this component fetches its own data, mirroring {@link TaskMgmtContent}.
  */
 export function ProjectsContent({ limit, viewAllHref, onCount }: ProjectsContentProps = {}) {
+  const t = useTranslations('projectsContent');
   const router = useRouter();
   const searchParams = useSearchParams();
   // Global project scope (present in the app shell): when a single project is
@@ -73,7 +75,7 @@ export function ProjectsContent({ limit, viewAllHref, onCount }: ProjectsContent
   useEffect(() => {
     Promise.all([
       fetchProjects().catch(() => {
-        setError('Failed to load projects. Check your connection and try again.');
+        setError(t('errLoad'));
         return [] as Project[];
       }),
       agentHosts.list().catch(() => [] as AgentHost[]),
@@ -81,6 +83,8 @@ export function ProjectsContent({ limit, viewAllHref, onCount }: ProjectsContent
       setProjects(projs);
       setAgentHostList(agentHostsData);
     }).finally(() => setIsLoading(false));
+    // Mount-only fetch; `t` (next-intl) is stable and only used in the error path.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Refetch the project list when the Brain creates/updates/deletes a project,
@@ -123,7 +127,7 @@ export function ProjectsContent({ limit, viewAllHref, onCount }: ProjectsContent
         setShowForm(false);
         setPlanError(err);
       } else {
-        setError('Failed to create project');
+        setError(t('errCreate'));
       }
     } finally {
       setIsCreating(false);
@@ -150,9 +154,9 @@ export function ProjectsContent({ limit, viewAllHref, onCount }: ProjectsContent
       scope?.reload();
     } catch (err) {
       console.error(err);
-      alert('Failed to delete project');
+      alert(t('errDelete'));
     }
-  }, [scope]);
+  }, [scope, t]);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
@@ -164,18 +168,18 @@ export function ProjectsContent({ limit, viewAllHref, onCount }: ProjectsContent
             style={{ background: 'var(--bg-elevated)' }}
           >
             <h3 className="text-lg font-semibold mb-4" style={{ color: 'var(--text-primary)' }}>
-              New Project
+              {t('newProjectTitle')}
             </h3>
             <form onSubmit={handleCreate} className="space-y-4">
               <div>
                 <label className="block text-sm mb-1" style={{ color: 'var(--text-secondary)' }}>
-                  Project Name *
+                  {t('nameLabel')}
                 </label>
                 <input
                   autoFocus
                   value={newProjectName}
                   onChange={(e) => setNewProjectName(e.target.value)}
-                  placeholder="My Awesome App"
+                  placeholder={t('namePlaceholder')}
                   required
                   style={{
                     width: '100%',
@@ -190,12 +194,12 @@ export function ProjectsContent({ limit, viewAllHref, onCount }: ProjectsContent
               </div>
               <div>
                 <label className="block text-sm mb-1" style={{ color: 'var(--text-secondary)' }}>
-                  Description
+                  {t('descLabel')}
                 </label>
                 <input
                   value={newProjectDesc}
                   onChange={(e) => setNewProjectDesc(e.target.value)}
-                  placeholder="Optional description..."
+                  placeholder={t('descPlaceholder')}
                   style={{
                     width: '100%',
                     background: 'var(--bg-deep)',
@@ -213,7 +217,7 @@ export function ProjectsContent({ limit, viewAllHref, onCount }: ProjectsContent
                   onClick={() => setShowForm(false)}
                   style={{ fontSize: '0.875rem', color: 'var(--text-secondary)', background: 'none', border: 'none', cursor: 'pointer' }}
                 >
-                  Cancel
+                  {t('cancel')}
                 </button>
                 <button
                   type="submit"
@@ -230,7 +234,7 @@ export function ProjectsContent({ limit, viewAllHref, onCount }: ProjectsContent
                     opacity: isCreating || !newProjectName.trim() ? 0.7 : 1,
                   }}
                 >
-                  {isCreating ? 'Creating…' : 'Create'}
+                  {isCreating ? t('creating') : t('create')}
                 </button>
               </div>
             </form>
@@ -254,7 +258,7 @@ export function ProjectsContent({ limit, viewAllHref, onCount }: ProjectsContent
           <ViewToggle value={viewMode} onChange={setViewMode} card table calendar gantt />
           {viewAllHref && (
             <Link href={viewAllHref} style={{ fontSize: 13, fontWeight: 600, color: 'var(--coral-bright)', textDecoration: 'none' }}>
-              View all
+              {t('viewAll')}
             </Link>
           )}
           <button
@@ -276,13 +280,13 @@ export function ProjectsContent({ limit, viewAllHref, onCount }: ProjectsContent
               boxShadow: '0 4px 14px var(--shadow-coral-mid)',
             }}
           >
-            + New project
+            {t('newProjectBtn')}
           </button>
         </div>
       </div>
 
       {isLoading ? (
-        <div style={{ color: 'var(--text-muted)', padding: 24 }}>Loading projects…</div>
+        <div style={{ color: 'var(--text-muted)', padding: 24 }}>{t('loading')}</div>
       ) : projects.length === 0 ? (
         <div
           style={{
@@ -294,7 +298,7 @@ export function ProjectsContent({ limit, viewAllHref, onCount }: ProjectsContent
           }}
         >
           <div style={{ fontSize: 56, marginBottom: 16 }}>🚀</div>
-          <p style={{ color: 'var(--text-secondary)', marginBottom: 8 }}>No projects yet. Create your first one!</p>
+          <p style={{ color: 'var(--text-secondary)', marginBottom: 8 }}>{t('emptyTitle')}</p>
           <button
             type="button"
             onClick={() => setShowForm(true)}
@@ -309,7 +313,7 @@ export function ProjectsContent({ limit, viewAllHref, onCount }: ProjectsContent
               fontFamily: 'var(--font-display)',
             }}
           >
-            Create project
+            {t('createProject')}
           </button>
         </div>
       ) : viewMode === 'card' ? (

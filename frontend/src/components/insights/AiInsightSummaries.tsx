@@ -26,9 +26,28 @@ const SEVERITY_COLOR: Record<RecSeverity, string> = {
   info: '#2563eb',
 };
 
-export function AiImpactSummary({ days }: { days: number }) {
+/**
+ * The dashboard bundles all three summaries in one `/ai-overview` read and hands
+ * each its slice via `overrideData` (the bundle may degrade a leg to `null`).
+ * While the bundle is in flight it passes `bundleLoading` so the summary shows
+ * its loader instead of self-fetching — guaranteeing exactly one round-trip.
+ * When neither prop is set (standalone) the summary self-fetches its own lens
+ * endpoint — so the same component works both bundled and on its own.
+ */
+export interface SummaryProps<T> { days: number; overrideData?: T | null; bundleLoading?: boolean }
+
+/** True when the parent is sourcing this summary's data (loading or resolved). */
+function isBundled<T>(p: SummaryProps<T>): boolean {
+  return p.bundleLoading === true || p.overrideData !== undefined;
+}
+
+export function AiImpactSummary(props: SummaryProps<AiImpactInsights>) {
+  const { days, overrideData } = props;
   const t = useTranslations('insights');
-  const { data, error } = usePmData<AiImpactInsights>(() => aiImpactApi.get(days), [days]);
+  const bundled = isBundled(props);
+  const self = usePmData<AiImpactInsights>(() => aiImpactApi.get(days), [days], { skip: bundled });
+  const data = bundled ? (overrideData ?? null) : self.data;
+  const error = bundled ? null : self.error;
 
   if (error) return <PmError message={error} />;
   if (!data) return <PmEmpty message={t('loading')} />;
@@ -92,9 +111,13 @@ export function LlmUsageSummary(_props: { days: number }) {
   );
 }
 
-export function EngineeringSummary({ days }: { days: number }) {
+export function EngineeringSummary(props: SummaryProps<EngineeringInsights>) {
+  const { days, overrideData } = props;
   const t = useTranslations('insights');
-  const { data, error } = usePmData<EngineeringInsights>(() => insightsApi.engineering(days), [days]);
+  const bundled = isBundled(props);
+  const self = usePmData<EngineeringInsights>(() => insightsApi.engineering(days), [days], { skip: bundled });
+  const data = bundled ? (overrideData ?? null) : self.data;
+  const error = bundled ? null : self.error;
 
   if (error) return <PmError message={error} />;
   if (!data) return <PmEmpty message={t('loading')} />;
@@ -109,9 +132,13 @@ export function EngineeringSummary({ days }: { days: number }) {
   );
 }
 
-export function RecommendationsSummary({ days }: { days: number }) {
+export function RecommendationsSummary(props: SummaryProps<RecommendationsResult>) {
+  const { days, overrideData } = props;
   const t = useTranslations('insights');
-  const { data, error } = usePmData<RecommendationsResult>(() => recommendationsApi.recommendations(days), [days]);
+  const bundled = isBundled(props);
+  const self = usePmData<RecommendationsResult>(() => recommendationsApi.recommendations(days), [days], { skip: bundled });
+  const data = bundled ? (overrideData ?? null) : self.data;
+  const error = bundled ? null : self.error;
 
   if (error) return <PmError message={error} />;
   if (!data) return <PmEmpty message={t('loading')} />;

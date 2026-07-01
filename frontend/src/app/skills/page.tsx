@@ -4,6 +4,7 @@ import { Select } from '@/components/Select';
 
 import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
+import { useTranslations } from 'next-intl';
 import { useAuth } from '@/lib/AuthContext';
 import {
   artifactAssignments,
@@ -36,6 +37,7 @@ function saveUserSkills(tenantId: string, skills: UserSkill[]) {
 type SkillItem = { slug: string; name: string; description: string; category?: string; icon?: string; emoji?: string; author?: string };
 
 export default function SkillsPage() {
+  const t = useTranslations('skillsPage');
   const { tenant } = useAuth();
   const tenantId = tenant?.id ?? '';
   const tenantNum = Number(tenantId);
@@ -197,18 +199,18 @@ export default function SkillsPage() {
     <PageContainer width="readable">
       <div className="page-header" style={{ marginBottom: 24 }}>
         <div>
-          <h1 className="page-title" style={{ margin: 0 }}>Skills</h1>
-          <p className="page-sub" style={{ fontSize: 13, color: 'var(--muted)', margin: '4px 0 0' }}>Extend your workforce with marketplace skills</p>
+          <h1 className="page-title" style={{ margin: 0 }}>{t('title')}</h1>
+          <p className="page-sub" style={{ fontSize: 13, color: 'var(--muted)', margin: '4px 0 0' }}>{t('subtitle')}</p>
         </div>
-        <button type="button" className="btn btn-primary" onClick={() => setCreateOpen(true)}>+ New skill</button>
+        <button type="button" className="btn btn-primary" onClick={() => setCreateOpen(true)}>{t('newSkill')}</button>
       </div>
 
       {error && <div style={{ marginBottom: 16, padding: '10px 14px', fontSize: 13, background: 'var(--error-bg)', color: 'var(--error-text)', borderRadius: 8 }}>{error}</div>}
 
       <div style={{ display: 'flex', gap: 4, marginBottom: 20, alignItems: 'center' }}>
-        <button type="button" className={`btn ${tab === 'assigned' ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setTab('assigned')}>Assigned ({assigned.length})</button>
-        <button type="button" className={`btn ${tab === 'marketplace' ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setTab('marketplace')}>Marketplace ({marketplaceItems.length})</button>
-        <button type="button" className={`btn ${tab === 'my-skills' ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setTab('my-skills')}>My Skills ({userSkills.length})</button>
+        <button type="button" className={`btn ${tab === 'assigned' ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setTab('assigned')}>{t('tabAssigned', { n: assigned.length })}</button>
+        <button type="button" className={`btn ${tab === 'marketplace' ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setTab('marketplace')}>{t('tabMarketplace', { n: marketplaceItems.length })}</button>
+        <button type="button" className={`btn ${tab === 'my-skills' ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setTab('my-skills')}>{t('tabMySkills', { n: userSkills.length })}</button>
         {tab !== 'assigned' && (
           <div style={{ marginLeft: 'auto' }}>
             <ViewToggle value={viewMode} onChange={setViewMode} />
@@ -217,23 +219,23 @@ export default function SkillsPage() {
       </div>
 
       {loading && tab !== 'assigned' ? (
-        <div style={{ color: 'var(--muted)', fontSize: 13 }}>Loading…</div>
+        <div style={{ color: 'var(--muted)', fontSize: 13 }}>{t('loading')}</div>
       ) : tab === 'assigned' ? (
         tenantNum ? (
           <SkillAssignmentsContent scope="tenant" scopeId={tenantNum} />
         ) : (
           <div className="empty-state">
             <div className="empty-state-icon">🔗</div>
-            <div className="empty-state-title">No tenant selected</div>
+            <div className="empty-state-title">{t('noTenant')}</div>
           </div>
         )
       ) : tab === 'my-skills' ? (
         userSkills.length === 0 ? (
           <div className="empty-state">
             <div className="empty-state-icon">🛠️</div>
-            <div className="empty-state-title">No custom skills yet</div>
-            <div className="empty-state-sub">Create your own skill and share it in the marketplace</div>
-            <button type="button" className="btn btn-primary" style={{ marginTop: 16 }} onClick={() => setCreateOpen(true)}>New skill</button>
+            <div className="empty-state-title">{t('noCustomTitle')}</div>
+            <div className="empty-state-sub">{t('noCustomSub')}</div>
+            <button type="button" className="btn btn-primary" style={{ marginTop: 16 }} onClick={() => setCreateOpen(true)}>{t('newSkillShort')}</button>
           </div>
         ) : viewMode === 'card' ? (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 16 }}>
@@ -301,10 +303,10 @@ export default function SkillsPage() {
         <>
           <CatalogInsightsBar entity="skills" items={insightsItems} primaryMetric="installs" secondaryMetric="likes" groupKind="category" />
           <div style={{ marginBottom: 16 }}>
-            <input type="search" className="input" style={{ maxWidth: 320 }} placeholder="Search skills…" value={search} onChange={(e) => setSearch(e.target.value)} />
+            <input type="search" className="input" style={{ maxWidth: 320 }} placeholder={t('searchPlaceholder')} value={search} onChange={(e) => setSearch(e.target.value)} />
           </div>
           {marketplaceItems.length === 0 ? (
-            <div className="empty-state"><div className="empty-state-title">No skills found</div></div>
+            <div className="empty-state"><div className="empty-state-title">{t('noSkillsFound')}</div></div>
           ) : viewMode === 'card' ? (
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 16 }}>
               {marketplaceItems.map((s) => {
@@ -392,21 +394,21 @@ export default function SkillsPage() {
         <div className="modal-overlay" onClick={() => setCreateOpen(false)}>
           <div className="card" style={{ maxWidth: 480, width: '100%', padding: 24 }} onClick={(e) => e.stopPropagation()}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-              <div className="modal-title">New skill</div>
+              <div className="modal-title">{t('newSkillShort')}</div>
               <button type="button" className="btn btn-secondary btn-sm" onClick={() => setCreateOpen(false)}>✕</button>
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
               <div>
-                <label className="label">Name *</label>
-                <input className="input" placeholder="My custom skill" value={createForm.name} onChange={(e) => setCreateForm((f) => ({ ...f, name: e.target.value }))} />
+                <label className="label">{t('formName')}</label>
+                <input className="input" placeholder={t('formNamePlaceholder')} value={createForm.name} onChange={(e) => setCreateForm((f) => ({ ...f, name: e.target.value }))} />
               </div>
               <div>
-                <label className="label">Description</label>
-                <textarea className="input" rows={3} placeholder="What does this skill do?" value={createForm.description} onChange={(e) => setCreateForm((f) => ({ ...f, description: e.target.value }))} />
+                <label className="label">{t('formDescription')}</label>
+                <textarea className="input" rows={3} placeholder={t('formDescPlaceholder')} value={createForm.description} onChange={(e) => setCreateForm((f) => ({ ...f, description: e.target.value }))} />
               </div>
               <div style={{ display: 'flex', gap: 12 }}>
                 <div style={{ flex: 1 }}>
-                  <label className="label">Category</label>
+                  <label className="label">{t('formCategory')}</label>
                   <Select className="input" value={createForm.category} onChange={(e) => setCreateForm((f) => ({ ...f, category: e.target.value }))}>
                     <option value="general">General</option>
                     <option value="coding">Coding</option>
@@ -417,22 +419,22 @@ export default function SkillsPage() {
                   </Select>
                 </div>
                 <div style={{ flex: 1 }}>
-                  <label className="label">Version</label>
+                  <label className="label">{t('formVersion')}</label>
                   <input className="input" placeholder="1.0.0" value={createForm.version} onChange={(e) => setCreateForm((f) => ({ ...f, version: e.target.value }))} />
                 </div>
               </div>
               <div>
-                <label className="label">Cover Image URL</label>
+                <label className="label">{t('formCoverImage')}</label>
                 <input className="input" placeholder="https://example.com/image.jpg" value={createForm.image} onChange={(e) => setCreateForm((f) => ({ ...f, image: e.target.value }))} />
               </div>
               <div>
-                <label className="label">Tags (comma-separated)</label>
-                <input className="input" placeholder="e.g. coding, automation" value={createForm.tags} onChange={(e) => setCreateForm((f) => ({ ...f, tags: e.target.value }))} />
+                <label className="label">{t('formTags')}</label>
+                <input className="input" placeholder={t('formTagsPlaceholder')} value={createForm.tags} onChange={(e) => setCreateForm((f) => ({ ...f, tags: e.target.value }))} />
               </div>
             </div>
             <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 20 }}>
-              <button type="button" className="btn btn-secondary" onClick={() => setCreateOpen(false)}>Cancel</button>
-              <button type="button" className="btn btn-primary" onClick={saveSkill} disabled={!createForm.name.trim()}>Save Skill</button>
+              <button type="button" className="btn btn-secondary" onClick={() => setCreateOpen(false)}>{t('cancel')}</button>
+              <button type="button" className="btn btn-primary" onClick={saveSkill} disabled={!createForm.name.trim()}>{t('saveSkill')}</button>
             </div>
           </div>
         </div>

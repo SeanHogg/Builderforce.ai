@@ -3867,6 +3867,9 @@ export interface QualityStats {
   totals: { groups: number; events: number; users: number };
   byLevel: { level: string; groups: number; events: number }[];
   byStatus: { status: string; groups: number }[];
+  /** In-window event volume attributed to the ingest adapter that produced it
+   *  (native SDK / OTLP / Sentry / PostHog / LogRocket). */
+  bySource: { source: string; events: number }[];
   byCollector: { collectorId: string | null; name: string | null; groups: number; events: number; lastEventAt: string | null }[];
   /** Event volume per UTC day (YYYY-MM-DD) over the window. */
   daily: { day: string; count: number }[];
@@ -4262,6 +4265,17 @@ export interface EngineeringInsights {
   byApproach: EffectivenessBucket[];
 }
 
+/** One weekly DORA bucket — the four keys computed over that week's rows. */
+export interface DoraSeriesPoint {
+  /** UTC YYYY-MM-DD of the bucket start. */
+  bucketStart: string;
+  deploymentFrequencyPerDay: number;
+  totalDeployments: number;
+  leadTimeHours: number | null;
+  changeFailureRatePct: number | null;
+  mttrHours: number | null;
+}
+
 export interface DoraInsights {
   windowDays: number;
   deploymentFrequencyPerDay: number;
@@ -4269,6 +4283,8 @@ export interface DoraInsights {
   leadTimeHours: number | null;
   changeFailureRatePct: number | null;
   mttrHours: number | null;
+  /** Per-week buckets so the four keys can be charted over time (may be empty/short). */
+  series: DoraSeriesPoint[];
 }
 
 export interface BottleneckStageStat { stage: string; avgHours: number; medianHours: number; taskCount: number }

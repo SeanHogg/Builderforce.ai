@@ -19,8 +19,16 @@ export interface PmAsync<T> {
  * Stale results are dropped by tagging each settle with the request `key`: when
  * deps change, the previously-loaded state no longer matches the current key, so
  * the hook reports `loading` again without a synchronous setState in the effect.
+ *
+ * Pass `{ skip: true }` to suppress the fetch entirely (e.g. when a parent has
+ * already supplied the data via a bundled read) — the hook stays mounted but
+ * never loads, so callers can conditionally source data without breaking the
+ * rules of hooks.
  */
-export function usePmData<T>(loader: () => Promise<T>, deps: unknown[]): PmAsync<T> {
+export interface UsePmDataOptions { skip?: boolean }
+
+export function usePmData<T>(loader: () => Promise<T>, deps: unknown[], opts: UsePmDataOptions = {}): PmAsync<T> {
+  const skip = opts.skip === true;
   const [tick, setTick] = useState(0);
   const key = `${JSON.stringify(deps)}:${tick}`;
   const [settled, setSettled] = useState<{ key: string; data: T | null; error: string | null }>({
@@ -30,16 +38,21 @@ export function usePmData<T>(loader: () => Promise<T>, deps: unknown[]): PmAsync
   });
 
   useEffect(() => {
+    if (skip) return;
     let alive = true;
     loader()
       .then((d) => { if (alive) setSettled({ key, data: d, error: null }); })
       .catch((e: unknown) => { if (alive) setSettled({ key, data: null, error: e instanceof Error ? e.message : String(e) }); });
     return () => { alive = false; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [key]);
+  }, [key, skip]);
+
+  const reload = () => setTick((t) => t + 1);
+  // Skipped: the caller sources data elsewhere → stay inert (not loading).
+  if (skip) return { data: null, error: null, loading: false, reload };
 
   const fresh = settled.key === key;
   const data = fresh ? settled.data : null;
   const error = fresh ? settled.error : null;
-  return { data, error, loading: data == null && error == null, reload: () => setTick((t) => t + 1) };
+  return { data, error, loading: data == null && error == null, reload };
 }

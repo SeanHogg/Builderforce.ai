@@ -8,6 +8,7 @@ import { PmCard, PmEmpty, PmError, StatCard } from '@/components/pm/pmShared';
 import { DaysWindowSelect, KpiGrid } from './LensShell';
 import { BandedMetricBar, type MetricTier } from '@/components/charts/BandedMetricBar';
 import { DonutChart } from '@/components/charts/DonutChart';
+import { TrendChart, type TrendSeries } from '@/components/charts/TrendChart';
 import { hrs, pct } from './format';
 
 /**
@@ -69,6 +70,20 @@ export function DoraLens() {
 
   const cfr = data.changeFailureRatePct;
 
+  // Four keys over time — each week's key mapped to a shared 0..3 performance
+  // score (3 = Elite … 0 = Low) so the four differently-scaled keys are
+  // comparable on one axis. Null keys (no signal that week) plot as 0.
+  const series = data.series ?? [];
+  const score = (idx: number | null) => (idx == null ? 0 : 3 - idx);
+  const trendLabels = series.map((p) => p.bucketStart.slice(5)); // MM-DD
+  const trendSeries: TrendSeries[] = [
+    { key: 'deploy', label: t('dora.deployFreq'), color: TIER_COLOR.elite, values: series.map((p) => score(p.totalDeployments > 0 ? tierDeployFreq(p.deploymentFrequencyPerDay) : null)) },
+    { key: 'lead', label: t('dora.leadTime'), color: '#2563eb', values: series.map((p) => score(p.leadTimeHours != null ? tierLeadTime(p.leadTimeHours) : null)) },
+    { key: 'cfr', label: t('dora.cfr'), color: TIER_COLOR.medium, values: series.map((p) => score(p.changeFailureRatePct != null ? tierCfr(p.changeFailureRatePct) : null)) },
+    { key: 'mttr', label: t('dora.mttr'), color: TIER_COLOR.low, values: series.map((p) => score(p.mttrHours != null ? tierMttr(p.mttrHours) : null)) },
+  ];
+  const tierBandLabel = (v: number) => t(`dora.tier.${TIER_ORDER[Math.max(0, Math.min(3, 3 - Math.round(v)))]}`);
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
       <div style={{ display: 'flex', justifyContent: 'flex-end' }}><DaysWindowSelect value={days} onChange={setDays} /></div>
@@ -129,6 +144,21 @@ export function DoraLens() {
           />
         )}
       </PmCard>
+
+      {/* Four keys over time — weekly performance band per key (self-gating: needs
+          at least two buckets to draw a trend). */}
+      {trendLabels.length >= 2 && (
+        <PmCard title={t('dora.trendTitle')}>
+          <TrendChart
+            labels={trendLabels}
+            series={trendSeries}
+            height={210}
+            formatValue={tierBandLabel}
+            ariaLabel={t('dora.trendTitle')}
+          />
+          <span style={{ fontSize: '0.74rem', color: 'var(--text-muted)' }}>{t('dora.trendSub')}</span>
+        </PmCard>
+      )}
     </div>
   );
 }

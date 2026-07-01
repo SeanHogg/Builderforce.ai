@@ -61,6 +61,9 @@ export const CAPABILITIES = {
   // Workforce
   'agents.create':        'manager',
   'agents.manage':        'manager',
+  // Manage a project's self-learning Evermind model (seed base, flip inference /
+  // learning mode). Mirrors the API's requireRole(MANAGER) on the evermind routes.
+  'project.manageEvermind': 'manager',
 
   // Board governance — override the execution-approval gate (whether high/urgent
   // tickets need manager sign-off before an agent runs them). Mirrors the API's
