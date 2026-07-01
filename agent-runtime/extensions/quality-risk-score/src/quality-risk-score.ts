@@ -30,7 +30,8 @@ export { Artifacts };
 export class QualityRiskScore {
   private config;
   private currentArtifacts: Map<string, Artifacts> = new Map();
-  private currentMetrics: Map<string, Map<string, QualityMetric>> = new Map();  private scoreHistory: Map<string, ScoreHistory[]> = new Map();
+  private Metrics: Map<string, Map<string, QualityMetric>> = new Map();
+  private scoreHistory: Map<string, ScoreHistory[]> = new Map();
 
   constructor(config: { metrics: QualityMetric[]; overrideAllowed: boolean }) {
     this.config = {
@@ -40,20 +41,17 @@ export class QualityRiskScore {
     };
   }
 
-  // Core scoring for an artifact
   public calculateRiskScore(
     artifactId: string,
     metrics: QualityMetric[]
   ): CalculatedScore {
     const score = calculateScore(metrics, this.config);
     
-    // Store score for history
     this.updateHistory(artifactId, score, false, null, null, null);
     
     return score;
   }
 
-  // Manual override - FR5
   public manualOverride(
     artifactId: string,
     override: OverrideRequest
@@ -62,10 +60,9 @@ export class QualityRiskScore {
       return null;
     }
 
-    const metrics = this.getMetrics(artifactId);
-    const calculated = calculateScore(metrics, this.config);
+    const mets = this.Metrics.get(artifactId);
+    const calculated = calculateScore(mets || [], this.config);
 
-    // Create override history entry
     const overrideEntry: ScoreHistory = {
       level: override.manualScore,
       justification: calculated.justification,
@@ -76,10 +73,8 @@ export class QualityRiskScore {
       overrideReason: override.reason
     };
 
-    // Update history
     this.updateHistory(artifactId, overrideEntry, true, override.overrideBy, override.reason);
 
-    // Return override score data
     return {
       level: override.manualScore,
       score: this.scoreToNumber(override.manualScore),
@@ -89,27 +84,25 @@ export class QualityRiskScore {
     };
   }
 
-  // Re-evaluate when metrics change significantly - FR6
   public reevaluate(artifactId: string): CalculatedScore | null {
-    const metrics = this.getMetrics(artifactId);
-    if (!metrics) {
+    const mets = this.Metrics.get(artifactId);
+    if (!mets) {
       return null;
     }
 
-    const calculated = calculateScore(Array.from(metrics.values()), this.config);
+    const calculated = calculateScore(Array.from(mets.values()), this.config);
     this.updateHistory(artifactId, calculated, false, null, null, null);
     
     return calculated;
   }
 
-  // Get detailed breakdown - FR4
   public getArtifactsMetrics(artifactId: string): Record<string, {
     value: number;
     weight: number;
     thresholdHigh: number;
   }> | null {
-    const metrics = this.getMetrics(artifactId);
-    if (!metrics) {
+    const mets = this.Metrics.get(artifactId);
+    if (!mets) {
       return null;
     }
 
@@ -119,7 +112,7 @@ export class QualityRiskScore {
       thresholdHigh: number;
     }> = {};
 
-    for (const [name, metric] of metrics) {
+    for (const [name, metric] of mets) {
       result[name] = {
         value: metric.value,
         weight: metric.weight,
@@ -130,35 +123,29 @@ export class QualityRiskScore {
     return result;
   }
 
-  // Get score history for a specific artifact
   public getScoreHistory(artifactId: string): ScoreHistory[] | null {
     const history = this.scoreHistory.get(artifactId);
     if (!history) {
       return null;
     }
 
-    // Sort by calculatedAt descending
     return [...history].sort((a, b) => b.calculatedAt.getTime() - a.calculatedAt.getTime());
   }
 
-  // Register an artifact - FR3
   public registerArtifact(artifact: Artifacts): string {
     const id = artifact.id || `art-${Date.now()}`;
     this.currentArtifacts.set(id, artifact);
     
-    // Initialize empty metrics storage for new artifact
     const artifactMetrics = new Map<string, QualityMetric>();
-    this.currentMetrics.set(id, artifactMetrics);
+    this.Metrics.set(id, artifactMetrics);
     
-    // Initialize empty history
     this.scoreHistory.set(id, []);
     
     return id;
   }
 
-  // Update or add a metric for an artifact
   public updateMetric(artifactId: string, metric: QualityMetric): void {
-    const artifactMetrics = this.currentMetrics.get(artifactId);
+    const artifactMetrics = this.Metrics.get(artifactId);
     if (!artifactMetrics) {
       throw new Error(`Artifact ${artifactId} not registered`);
     }
@@ -166,9 +153,8 @@ export class QualityRiskScore {
     artifactMetrics.set(metric.name, metric);
   }
 
-  // Remove a metric for an artifact
   public removeMetric(artifactId: string, metricName: string): void {
-    const artifactMetrics = this.currentMetrics.get(artifactId);
+    const artifactMetrics = this.Metrics.get(artifactId);
     if (!artifactMetrics) {
       throw new Error(`Artifact ${artifactId} not registered`);
     }
@@ -176,19 +162,16 @@ export class QualityRiskScore {
     artifactMetrics.delete(metricName);
   }
 
-  // Get metrics for an artifact
   public getMetrics(artifactId: string): Map<string, QualityMetric> | null {
-    return this.currentMetrics.get(artifactId) || null;
+    return this.Metrics.get(artifactId) || null;
   }
 
-  // Get all artifacts
   public getArtifacts(): Artifacts[] {
     return Array.from(this.currentArtifacts.values());
   }
 
-  // Delete an artifact
   public deleteArtifact(artifactId: string): boolean {
-    const deletedMetrics = this.currentMetrics.delete(artifactId);
+    const deletedMetrics = this.Metrics.delete(artifactId);
     const deletedHistory = this.scoreHistory.delete(artifactId);
     const deletedArtifact = this.currentArtifacts.delete(artifactId);
     
