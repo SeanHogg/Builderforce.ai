@@ -71,6 +71,9 @@ function sanitizePersonaBody(v: unknown): Record<string, unknown> {
     outputPrefix: str('outputPrefix'),
     capabilities: Array.isArray(o.capabilities) ? (o.capabilities as unknown[]).map(String).filter(Boolean) : [],
     systemDirectives: str('systemDirectives'),
+    // Cover image URL — carried in the body JSON so a published persona keeps its
+    // marketplace card image (no dedicated column needed).
+    image: str('image'),
   };
 }
 

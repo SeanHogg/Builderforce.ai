@@ -4146,6 +4146,8 @@ export interface PersonaBody {
   outputPrefix?: string;
   capabilities?: string[];
   systemDirectives?: string;
+  /** Cover image URL for the marketplace card. */
+  image?: string;
 }
 
 /** A persona published to the public registry. Mirrors the server `publicView`. */

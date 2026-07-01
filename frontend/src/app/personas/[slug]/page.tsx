@@ -46,6 +46,7 @@ export default function PersonaDetailPage() {
             source: 'user-global',
             tags: pub.tags ?? [],
             author: pub.authorName ?? 'Community',
+            image: b.image,
             psychometric: pub.psychometric ?? undefined,
           };
         }

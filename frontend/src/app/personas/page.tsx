@@ -51,6 +51,7 @@ function publicToPersona(p: PublicPersona): Persona {
     source: 'user-global',
     tags: p.tags ?? [],
     author: p.authorName ?? 'Community',
+    image: b.image,
     likes: p.likeCount,
     downloads: p.installCount,
     psychometric: p.psychometric ?? undefined,
@@ -224,6 +225,7 @@ export default function PersonasPage() {
           decisionStyle: p.decisionStyle,
           outputPrefix: p.outputPrefix,
           capabilities: p.capabilities,
+          image: p.image,
         },
         // The personality the user built from the test / sliders — was previously dropped.
         psychometric: p.psychometric,

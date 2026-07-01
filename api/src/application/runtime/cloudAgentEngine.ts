@@ -28,6 +28,7 @@ import { resolveTenantPlan } from '../../presentation/routes/llmRoutes';
 import { recordUsageRow, clampTokenCount } from '../llm/usageLedger';
 import { ensureTaskPrdRecord, appendTaskPrdRevision } from '../prd/taskPrd';
 import { loadCapabilityContext, loadPersonaSetpoints } from '../artifact/capabilityContext';
+import { resolveArtifacts } from '../artifact/resolveArtifacts';
 import { pullPendingSteering, releasePendingSteers } from './executionSteering';
 import { notifyExecutionSubscribers } from './executionEvents';
 import { notifyApprovalRequested } from '../approval/approvalNotifier';
@@ -743,6 +744,10 @@ interface ContainerRunContext {
    *  so per-op `llm` calls pick the plan's pool/key without a per-call plan query. */
   effectivePlan: EffectivePlan;
   premiumOverride: boolean;
+  /** Execution levers compiled from the assigned personas + the agent's own
+   *  personality, resolved once at context build (cached) so the container's per-step
+   *  `llm` op applies the trait-derived temperature — parity with the Worker/DO loop. */
+  execParams: AgentExecParams;
 }
 
 /** Load (and briefly cache) the container-run context for an execution. No secret
@@ -761,12 +766,21 @@ export async function loadContainerRunContext(env: Env, db: Db, executionId: num
     const agent = await resolveCloudAgent(env, exec.tenantId, ref);
     const payloadModel = parseModel(exec.payload ?? undefined);
     const routing = await resolveCloudRouting(env, exec.tenantId);
+    // Compile the persona/agent personality exec levers ONCE per run (cache-backed
+    // persona bodies), so the container's per-step `llm` op applies the same
+    // trait-derived temperature the Worker/DO loops do.
+    const [artifacts, agentPsychometric] = await Promise.all([
+      resolveArtifacts(db, { tenantId: exec.tenantId, taskId: exec.taskId, projectId: task.projectId, cloudAgentRef: agent.ref }),
+      loadAgentPsychometric(env, exec.tenantId, agent.ref),
+    ]);
+    const capabilities = await loadCapabilityContext(env, db, artifacts, agentPsychometric);
     return {
       tenantId: exec.tenantId, taskId: exec.taskId, projectId: task.projectId,
       taskTitle: task.title, taskDescription: task.description,
       cloudAgentRef: agent.ref, agentLabel: agent.label ?? 'BuilderForce Agent',
       model: payloadModel ?? agent.baseModel,
       effectivePlan: routing.effectivePlan, premiumOverride: routing.premiumOverride,
+      execParams: capabilities.execParams,
     };
   }, { kvTtlSeconds: 600, l1TtlMs: 600_000 });
 }
@@ -962,6 +976,8 @@ export async function handleContainerOp(
     const result = await llmProxyForPlan(env, ctx.effectivePlan, ctx.premiumOverride, { backstopModels: CODING_BACKSTOP_MODELS, codingOnly: true, ...(anthropicOAuthToken ? { anthropicOAuthToken } : {}) }).complete({
       messages: sendMessages as unknown as ChatMessage[], tools: CONTAINER_AGENT_TOOLS, tool_choice: 'auto',
       ...(pick.model ? { model: pick.model, ...(pick.strict ? { modelStrict: true } : {}) } : {}),
+      // Personality temperature — parity with the Worker/DO loop.
+      ...(ctx.execParams.temperature != null ? { temperature: ctx.execParams.temperature } : {}),
       useCase: 'task_execution',
     });
     // Shared post-`complete` processing (metering + telemetry) — identical to the
