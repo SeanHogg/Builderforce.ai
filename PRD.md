@@ -1,44 +1,87 @@
-> **PRD** — drafted by Bob Developer (V2 (Container)) · task #89
+> **PRD** — drafted by Kevin BA/PM/PO (Durable) · task #197
 > _Each agent that updates this PRD signs its change below._
 
-# Product Requirements Document: Avatar Filter Row Placement
+# Product Requirements Document (PRD): Cloud Agent 50-Gap Validation Status Tracker
 
-## 1. Problem & Goal
+## **Problem & Goal**
+**Problem:**
+Today, the Cloud Agent team lacks real-time visibility into the validation status of the 50 identified security/compliance gaps (classified as P0/P1/P2). Without a centralized tracker, engineering, security, and leadership teams cannot:
+- Accurately measure progress toward SOC2/HIPAA readiness.
+- Prioritize blocking gaps for upcoming audits.
+- Report status transparently to stakeholders.
 
-**Problem:** The current placement of the avatar filter, separated from the priorities dropdown, disrupts the logical grouping of filtering options. Users must scan different areas of the UI to apply related filters, leading to a less efficient and intuitive user experience.
+**Goal:**
+Build a lightweight, automated system to track and visualize the validation status of all 50 gaps, surfacing:
+- How many P0/P1/P2 gaps remain open.
+- Trends over time (e.g., “20 open gaps reduced to 5 in the last 30 days”).
+- Ownership and next action for each gap.
 
-**Goal:** To improve the user experience by consolidating related filtering options into a single, contiguous row, thereby enhancing discoverability, reducing cognitive load, and increasing the speed at which users can apply filters.
+---
 
-## 2. Target Users / ICP Roles
+## **Target Users / ICP Roles**
+| Role                     | Use Case                                                                 |
+|--------------------------|--------------------------------------------------------------------------|
+| **Product Security Lead** | Track blocking gaps vs. audit deadlines; prove SOC2/HIPAA readiness.    |
+| **Engineering Managers** | Identify team capacity needs; prioritize sprint work on open gaps.      |
+| **QA Engineers**         | Verify fixes; update validation status post-testing.                    |
+| **CPO/CTO**              | Monitor progress toward compliance milestones; allocate resources.      |
 
-*   **Project Managers:** Need to quickly filter tasks by assignee (avatar) and priority to understand workload distribution and identify high-priority items.
-*   **Team Leads:** Require efficient filtering to monitor team progress and allocate resources based on task priority and individual contribution (avatar).
-*   **Individual Contributors:** Benefit from a cleaner interface to focus on their assigned tasks and understand their priority within the project context.
+---
 
-## 3. Scope
+## **Scope**
+**In Scope:**
+- **Data:**
+  - Ingest gap metadata (ID, title, severity, owner, Jira ticket, validation evidence URL).
+  - Capture validation timestamps, tester name, and status (`Open → In Progress → Validated`).
+- **UI:**
+  - Simple dashboard showing:
+    - Countdown (`3/50 P0 gaps open → 47 validated`).
+    - Severity breakdown (P0/P1/P2 grid).
+    - Time trend chart (last 90 days).
+    - Click-through to gap details/Jira ticket.
+- **Automation:**
+  - Daily sync from Jira → tracker (no manual CSV uploads).
+  - Slack/Wiki digest summarizing delta changes (e.g., “P1 gap CA-223 validated yesterday”).
+- **Ops:**
+  - Self-service permissions for team leads to edit metadata/ownership.
 
-This document covers the functional requirements and acceptance criteria for moving the existing avatar filter component to reside on the same UI row as the priorities dropdown. This includes adjustments to layout, styling, and ensuring the filter's functionality remains intact.
+**Out of Scope:**
+- Root-cause deep dives or bug reproduction steps outside Jira.
+- Integrations beyond Jira (e.g., GitHub PRs, AWS Config).
+- Custom reporting for external auditors (export dumps acceptable).
 
-## 4. Functional Requirements
+---
 
-*   **FR1: Layout Adjustment:** The avatar filter component shall be repositioned to occupy a space adjacent to the priorities dropdown within the primary filtering bar.
-*   **FR2: Visual Consistency:** The avatar filter shall maintain its current visual appearance and interaction patterns (e.g., dropdown behavior, selection indicators) after being moved.
-*   **FR3: Responsive Design:** The integrated avatar and priorities filter row shall adapt appropriately across different screen sizes and resolutions, maintaining usability.
-*   **FR4: Filter Functionality:** Applying a filter via the avatar selector shall continue to correctly filter the displayed data (e.g., tasks, issues), and this filtering shall be independent of or complementary to the priorities filter.
+## **Functional Requirements**
+| ID   | Requirement                                                                 | Owner           |
+|------|-----------------------------------------------------------------------------|-----------------|
+| FR1  | Ingest gap list from CSV/Jira with severity labels (`P0`/`P1`/`P2`).        | Infra           |
+| FR2  | Display real-time count & status for each severity level.                   | Frontend        |
+| FR3  | Allow status transitions (`Open → In Progress → Validated`) via dropdown.  | Frontend        |
+| FR4  | Show trend chart (gaps closed/opened per week) for any 30/60/90-day view.   | Frontend        |
+| FR5  | Link each gap row to its Jira ticket and validation evidence.               | Frontend        |
+| FR6  | Generate weekly Slack digest of delta changes (net new gaps closed).        | Backend         |
+| FR7  | Enforce permissions so only leads can mutate severity/ownership.            | Backend         |
+| FR8  | Sync Jira ticket status daily → normalize to tracker state.                 | Backend         |
 
-## 5. Acceptance Criteria
+---
 
-*   **AC1: Avatar Filter Visible in Row:** The avatar filter is visibly present on the same horizontal line as the priorities dropdown.
-*   **AC2: Filter Functionality Preserved:** Selecting an avatar from the new location correctly filters the displayed items.
-*   **AC3: Priorities Filter Functionality Preserved:** Selecting a priority from its dropdown continues to filter the displayed items, and its interaction is unaffected by the avatar filter's new position.
-*   **AC4: Combined Filtering Works:** Applying both an avatar filter and a priorities filter simultaneously yields the correct, combined results.
-*   **AC5: No Visual Overlap or Distortion:** The avatar filter and priorities dropdown do not overlap each other or other UI elements in the filtering bar, and the overall layout remains clean and undistorted.
-*   **AC6: Responsiveness Verified:** On smaller screen sizes, the combined filter row is still usable, potentially with a different arrangement if necessary (e.g., stacking if horizontal space is too limited, though the primary goal is horizontal).
+## **Acceptance Criteria**
+**MVP:**
+- [ ] Dashboard renders total open/validated counts by severity.
+- [ ] All 50 gaps displayed as rows with Jira links; 80% have status populated.
+- [ ] Daily Slack digest sent to `#cloud-compliance` with yesterday’s delta.
+- [ ] Data freshness ≤ 24 hours latency.
 
-## 6. Out of Scope
+**Polish:**
+- [ ] Trend chart shows moving average over rolling 90 days.
+- [ ] Email digest option for managers off-Slack.
+- [ ] Time-to-close metric calculated for each gap closed in last 30 days.
 
-*   **New Avatar Filter Features:** Any enhancements or new functionalities to the avatar filter itself (e.g., search within avatars, multi-select avatars) are out of scope for this task.
-*   **New Priorities Filter Features:** Any enhancements or new functionalities to the priorities dropdown are out of scope.
-*   **Other Filter Components:** Moving or modifying any other filter components not explicitly mentioned (e.g., date filters, status filters) is out of scope.
-*   **Backend Changes:** Any backend changes related to how filters are processed or stored are out of scope, assuming the existing backend APIs can handle the current filtering logic.
-*   **Performance Optimization:** Significant performance optimizations related to filtering are out of scope, unless directly caused by the layout change.
+---
+
+## **Out of Scope**
+- Root-cause debugging workflows.
+- Automated playbooks for remediation.
+- Auditor-specific compliance reporting (PDF/export only).
+- Integration with ticketing beyond Jira.
