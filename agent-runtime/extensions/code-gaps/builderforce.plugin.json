@@ -1,0 +1,39 @@
+{
+  "id": "code-gaps",
+  "name": "Code Gap Analysis",
+  "description": "Define and analyze planned features/components to identify code gaps",
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "outputFormats": {
+        "type": "array",
+        "items": {
+          "type": "string",
+          "enum": ["markdown", "json", "csv"]
+        },
+        "default": ["markdown"],
+        "description": "Output formats for gap reports"
+      },
+      "scanPaths": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        },
+        "description": "Paths to scan for expected artifacts"
+      },
+      "excludePatterns": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        },
+        "description": "Exclude patterns (e.g., node_modules, dist)"
+      },
+      "defaultPriority": {
+        "type": "string",
+        "enum": ["P0", "P1", "P2", "P3"],
+        "description": "Default priority if not specified"
+      }
+    }
+  }
+}
