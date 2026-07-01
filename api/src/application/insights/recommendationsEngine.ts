@@ -89,7 +89,7 @@ export interface RecommendationsResult {
 const SEVERITY_BASE: Record<RecSeverity, number> = { critical: 1000, warning: 500, info: 100 };
 
 /** Severity → base rank + a 0..100 magnitude bump so worse offenders sort first. */
-function ranked(r: Omit<Recommendation, 'rank'>, magnitude = 0): Recommendation {
+function ranked(r: Omit<Recommendation, 'rank' | 'estimation'>, magnitude = 0): Recommendation {
   return { ...r, rank: SEVERITY_BASE[r.severity] + Math.max(0, Math.min(100, magnitude)) };
 }
 
