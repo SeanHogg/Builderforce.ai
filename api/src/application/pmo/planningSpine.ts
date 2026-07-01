@@ -62,6 +62,18 @@ function isCostClass(v: unknown): v is CostClass {
 // (adding capability → CAPEX, fixing/maintaining → OPEX) AND keeps the spine and
 // the allocation lens in lock-step instead of inventing a second classifier.
 
+// ── Completion percent for OKR epics (PIE-1) ──────────────────────────────────
+// An OKR epic's  is handled as a taskType === 'epic'.
+// Children are tasks linked via parentTaskId.
+// Percent = (completed children / total children) * 100.
+// 0 children → 0%; difficulty: work items may be untyped (legacy) — we treat them as children.
+// If a child is also an epic, we do NOT recurse into its children (only direct task children for this metric).
+const COMPLETED_STATUSES = new Set(['done', 'completed', 'closed']);
+interface TaskCompletion {
+  total: number;
+  completed: number;
+}
+
 export interface CostClassSuggestion {
   costClass: CostClass;
   confidence: number; // 0..1
@@ -69,6 +81,11 @@ export interface CostClassSuggestion {
 }
 
 /** Investment category for a task/epic from its signals (shared taxonomy). */
+function computeCompletionPercent(totalItems: number, completedItems: number): number | null {
+  if (totalItems === 0) return 0;
+  const percent = Math.round((completedItems / totalItems) * 100);
+  return Math.max(0, Math.min(100, percent));
+}
 export function categoryOf(input: {
   title?: string | null; description?: string | null; actionType?: string | null;
   source?: string | null; allocationCategory?: string | null;
@@ -155,6 +172,12 @@ export interface SpineNode {
   suggestion: CostClassSuggestion | null;
   cost: SpineCost;
   childCount: number;
+  /** Percentage complete of this epic based on direct task children. */
+  completionPercent: number | null;
+  /** Number of direct task children that are completed (Done/Completed/Closed). */
+  completedItems: number;
+  /** Total number of direct task children (includes untyped/legacy items). */
+  totalItems: number;
 }
 
 export interface SpineResult {
@@ -369,6 +392,43 @@ export function buildSpine(input: {
     }
   }
 
+  // ── compute completion percentage for epic nodes ( PIE-1 ) ───────────────────
+  for (const node of nodes.values()) {
+    if (node.kind !== 'epic') continue; // Only epics get completion metrics
+
+    // Determine the parent key before any updates
+    const parentKey = node.parentKey && nodes.has(node.parentKey) ? node.parentKey : null;
+
+    // Only consider direct task children of this epic (not tasks of other epics)
+    // We filter nodes that match this epic's key as their parent (task/epic keys resolve to the same base)
+    const childKeys = nodes.entries().filter(([k, v]) => v.parentKey === `epic:${node.id}`).map(([k]) => k);
+
+    let totalItems = 0;
+    let completedItems = 0;
+
+    for (const childKey of childKeys) {
+      const child = nodes.get(childKey);
+      if (child && child.kind === 'task') {  // Direct task children only (not sub-epics per the spec)
+        totalItems++;
+        if (COMPLETED_STATUSES.has(child.status.toLowerCase())) {
+          completedItems++;
+        }
+      }
+    }
+
+    // Only update fields for epics with at least one direct task child
+    if (totalItems > 0) {
+      node.completionPercent = computeCompletionPercent(totalItems, completedItems);
+      node.completedItems = completedItems;
+      node.totalItems = totalItems;
+    } else {
+      // No direct task children configured for this epic
+      node.completionPercent = 0;
+      node.completedItems = 0;
+      node.totalItems = 0;
+    }
+  }
+
   // ── depth (from root) ─────────────────────────────────────────────────────
   for (const node of nodes.values()) node.depth = Math.max(0, ancestorsOf(node.key).length - 1);
 
@@ -401,6 +461,7 @@ function baseNode(
     declaredCostClass, costClassSource, inheritedCostClass: null, effectiveCostClass: declaredCostClass,
     costClassVerified, anomaly: false, hasDescendantAnomaly: false, suggestion,
     cost: emptyCost(), childCount: 0,
+    completionPercent: null, completedItems: 0, totalItems: 0,
   };
 }
 
