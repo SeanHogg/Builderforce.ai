@@ -71,9 +71,10 @@ export async function probeContainerHealth(stub: { fetch: (input: string, init?:
 
 /** Human-readable name for a cloud agent run by surface — the canonical taxonomy.
  *  Used in dispatch telemetry so the timeline says exactly which cloud surface ran.
- *  There is ONE engine (the V2 Agent; V1 is deleted), so only the surface varies. */
+ *  There is ONE engine, so only the surface varies — the label is just "Cloud Agent"
+ *  plus the surface (no engine-version prefix). */
 export function cloudAgentTypeLabel(surface: string): string {
-  return surface === 'container' ? 'V2 Cloud Agent (Node/Container)' : 'V2 Cloud Agent (Durable Object)';
+  return surface === 'container' ? 'Cloud Agent (Node/Container)' : 'Cloud Agent (Durable Object)';
 }
 
 /** Terminal = the run has settled and has no live session to steer. A "Send" to a

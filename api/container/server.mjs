@@ -1,5 +1,5 @@
 /**
- * BuilderForce Agent Container — the long-lived process behind a "V2 Cloud Agent
+ * BuilderForce Agent Container — the long-lived process behind a "Cloud Agent
  * (Node/Container)" run (the `container` runtime surface). AgentContainerDO starts
  * this image and proxies `POST /run` to it.
  *

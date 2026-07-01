@@ -594,39 +594,21 @@ Planned milestones (including **PHASE 4 — Multi-Agent Orchestration at Scale**
 
 ## Cloud Agent Types
 
-Builderforce runs agents on two execution **planes** — **On-Prem (Hosted)** and **Cloud** — and the Cloud plane has **three distinct agent types**. They are easy to conflate; each has its own engine, surface, and code path. The routing decision is a single source of truth in [cloudDispatch.ts](api/src/application/runtime/cloudDispatch.ts) (`resolveCloudSurface`) and [runtimeRoutes.ts](api/src/presentation/routes/runtimeRoutes.ts) (`resolveCloudAgent` / `cloudAgentTypeLabel`); the engine/surface columns live on `ide_agents` (`engine` migration 0087, `runtime_surface` migration 0105).
+Builderforce runs agents on two execution **planes** — **On-Prem (Hosted)** and **Cloud**. There is ONE agent engine (the current version), so the Cloud plane is a single **Cloud Agent** that runs on one of **two surfaces**: a **Durable Object** or a **Node/Container**. The routing decision is a single source of truth in [cloudDispatch.ts](api/src/application/runtime/cloudDispatch.ts) (`resolveCloudSurface` / `cloudAgentTypeLabel`) and [runtimeRoutes.ts](api/src/presentation/routes/runtimeRoutes.ts) (`resolveCloudAgent`); the surface column lives on `ide_agents` (`runtime_surface` migration 0105). The engine is never read from the DB — it is always the current version.
 
 > **Cloud vs. On-Prem is a hard boundary.** A cloud agent executes **only** in the cloud (everything is Cloudflare — Worker, Durable Object, or Container). A cloud agent is **never** dispatched to a client machine. An **On-Prem (Hosted)** agent — an *agentHost*, of which many can run on one machine — runs a task only when a host is **explicitly pinned** to it. See the agent taxonomy ([[agent-types-taxonomy]]).
 
 ### At a glance
 
-| Agent type | Engine | Surface / where it runs | Persistent shell? | Best for |
-|---|---|---|---|---|
-| **V1 Cloud Agent** | `builderforce-v1` (pi-coding-agent) — the default engine | Cloud (Worker / durable executor) | No | Existing pi-engine workloads; the legacy default |
-| **V2 Cloud Agent (Durable Object)** | `builderforce-v2` (Claude Agent SDK) | `durable` — `CloudRunnerDO`, one LLM step per `alarm()` tick. **Default V2 surface.** | No (CI verifies builds) | Most cloud tasks: on-demand, no always-on compute, survives long runs |
-| **V2 Cloud Agent (Node/Container)** | `builderforce-v2` (Claude Agent SDK) | `container` — long-lived Cloudflare Container (`AgentContainerDO`) | **Yes** (`run_command`) | Very long / continuous tasks needing a real shell to install deps + run builds/tests/lint |
-| *(On-Prem Hosted — for contrast)* | host runtime | Client machine (agentHost), only when pinned | Yes (the host's own machine) | BYO-machine execution; not a cloud agent |
+| Cloud Agent surface | Where it runs | Persistent shell? | Best for |
+|---|---|---|---|
+| **Cloud Agent (Durable Object)** | `durable` — `CloudRunnerDO`, one LLM step per `alarm()` tick. **Default surface.** | No (CI verifies builds) | Most cloud tasks: on-demand, no always-on compute, survives long runs |
+| **Cloud Agent (Node/Container)** | `container` — long-lived Cloudflare Container (`AgentContainerDO`) | **Yes** (`run_command`) | Very long / continuous tasks needing a real shell to install deps + run builds/tests/lint |
+| *(On-Prem Hosted — for contrast)* | Client machine (agentHost), only when pinned | Yes (the host's own machine) | BYO-machine execution; not a cloud agent |
 
-### V1 Cloud Agent — engine `builderforce-v1`
+### Cloud Agent (Durable Object) — surface `durable`
 
-The original cloud engine (pi-coding-agent). It is the **default** engine when an agent declares no `engine`, and the fallback `resolveCloudAgent` returns on any lookup failure.
-
-**Features**
-- Runs entirely in the cloud; no client machine involved.
-- Self-assigns the ticket as it starts work; mirrors status into the `executions` row for the polling UI.
-- Produces the same PRD / file-change / PR finalize artifacts as V2.
-
-**Pros**
-- Simplest path; the safe default for existing workloads.
-- No dependency on a tenant Anthropic key or the Claude Agent SDK toolchain.
-
-**Cons**
-- Older engine — does not benefit from the Claude Agent SDK tool loop, steering, or the per-tick durability model below.
-- No persistent shell; no real build/test verification of its own.
-
-### V2 Cloud Agent (Durable Object) — engine `builderforce-v2`, surface `durable`
-
-The modern default. Runs the Claude Agent SDK tool loop fully in the cloud across Durable Object `alarm()` ticks — **one LLM step per tick**, conversation state persisted in DO storage between ticks (`CloudRunnerDO`). V2 inference routes through the **LLM Gateway** using the tenant's **BYO Anthropic key**.
+The default. Runs the Claude Agent SDK tool loop fully in the cloud across Durable Object `alarm()` ticks — **one LLM step per tick**, conversation state persisted in DO storage between ticks (`CloudRunnerDO`). Inference routes through the **LLM Gateway** using the tenant's **BYO Anthropic key**.
 
 **Features**
 - One step per `alarm()` tick; each tick is a fresh Worker invocation with a fresh CPU/subrequest budget, so a multi-step run **never hits the ~30s `waitUntil` wall** that kills the interim Worker executor.
@@ -646,7 +628,7 @@ The modern default. Runs the Claude Agent SDK tool loop fully in the cloud acros
 
 > When the `CloudRunnerDO` binding is absent, an **interim Worker executor** (`runCloudExecution`) runs the whole loop inline. It works but dies at the ~30s `waitUntil` wall on long runs — it exists only as a fallback until the DO is deployed.
 
-### V2 Cloud Agent (Node/Container) — engine `builderforce-v2`, surface `container`
+### Cloud Agent (Node/Container) — surface `container`
 
 The Claude Agent SDK loop running in a **persistent Node process inside a real Cloudflare Container** (`AgentContainerDO`). The container boots a small HTTP server; the DO is the Cloudflare-Containers control plane that starts/stops it and proxies the run. The container drives the loop and calls back into the Worker for every LLM step, repo telemetry, and the final PR — so the Worker stays the single source of truth for the Gateway, usage metering, and PR finalize.
 
@@ -667,7 +649,7 @@ The Claude Agent SDK loop running in a **persistent Node process inside a real C
 
 ### How a type is selected at dispatch
 
-`resolveCloudAgent` reads the agent's `engine` + `runtime_surface` from `ide_agents`; `resolveCloudSurface(agentSurface, hasExplicitHost)` then picks the surface — an explicitly-pinned host ⇒ `container`, otherwise the agent's chosen surface, defaulting to `durable`. `cloudAgentTypeLabel(engine, surface)` produces the human label used for run attribution (`V1 Cloud Agent` / `V2 Cloud Agent (Durable Object)` / `V2 Cloud Agent (Node/Container)`).
+`resolveCloudAgent` reads the agent's `runtime_surface` from `ide_agents` (the engine is always the current version, never read); `resolveCloudSurface(agentSurface, hasExplicitHost)` then picks the surface — an explicitly-pinned host ⇒ `container`, otherwise the agent's chosen surface, defaulting to `durable`. `cloudAgentTypeLabel(surface)` produces the human label used for run attribution (`Cloud Agent (Durable Object)` / `Cloud Agent (Node/Container)`).
 
 ---
 

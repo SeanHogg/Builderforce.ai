@@ -82,7 +82,7 @@ class_name = "AgentContainerDO"
 name = "QA_RUNNER_CONTAINER"
 class_name = "QaRunnerContainerDO"
 
-# Long-lived Cloudflare Container for "V2 Cloud Agent (Node/Container)" runs — a
+# Long-lived Cloudflare Container for "Cloud Agent (Node/Container)" runs — a
 # persistent Node process with a real shell (build/test/lint). The image lives in
 # api/container; build context is that dir. Requires a Workers Paid plan with
 # Containers enabled. `max_instances` caps concurrent containers (cost guard).

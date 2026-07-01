@@ -124,7 +124,7 @@ describe('AgentExecutionPanel — steering echo', () => {
         source: 'cloud-telemetry',
         usageSnapshots: [],
         toolEvents: [
-          { id: 1, ts: '2026-06-12T05:15:44Z', toolName: 'runtime.dispatch', args: JSON.stringify({ agentType: 'V2 Cloud Agent (Node/Container)', engine: 'builderforce-v3', surface: 'container' }) },
+          { id: 1, ts: '2026-06-12T05:15:44Z', toolName: 'runtime.dispatch', args: JSON.stringify({ agentType: 'Cloud Agent (Node/Container)', engine: 'builderforce-v3', surface: 'container' }) },
         ],
       },
     });
@@ -135,7 +135,7 @@ describe('AgentExecutionPanel — steering echo', () => {
     // The header shows the run's own agent name (not the task's current assignment)…
     expect((await findByTitle('Agent that ran this execution')).textContent).toContain('Coder Agent');
     // …and the engine type it actually dispatched as, from its own telemetry.
-    expect(await findByText(/ran as V2 Cloud Agent \(Node\/Container\)/)).toBeTruthy();
+    expect(await findByText(/ran as Cloud Agent \(Node\/Container\)/)).toBeTruthy();
   });
 
   it('shows ticket-level spend beside the Executions heading', async () => {

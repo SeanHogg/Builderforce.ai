@@ -198,11 +198,10 @@ function executionAgentName(
   return cloudAgentNames.get(ref) ?? 'Cloud agent';
 }
 
-/** The cloud-agent TYPE a run actually dispatched as (e.g. "V2 Cloud Agent
+/** The cloud-agent TYPE a run actually dispatched as (e.g. "Cloud Agent
  *  (Node/Container)"), read from the run's own `runtime.dispatch` telemetry — the
- *  authoritative per-run engine, independent of the agent's current V1/V2 config.
- *  This is why reopening a run no longer "reverts to V1": the type comes from what
- *  the run recorded, not from re-reading the agent's (possibly since-changed) engine. */
+ *  authoritative per-run surface, independent of anything on the agent since. The
+ *  type comes from what the run recorded, not from re-reading the agent's record. */
 function runDispatchType(toolEvents: ExecutionTraceToolEvent[]): string | undefined {
   const ev = toolEvents.find((e) => e.toolName === 'runtime.dispatch');
   if (!ev?.args) return undefined;

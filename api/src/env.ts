@@ -198,7 +198,7 @@ export interface Env {
    *    [[durable_objects.bindings]] name = "PROJECT_EVERMIND" class_name = "ProjectEvermindCoordinatorDO" */
   PROJECT_EVERMIND?: DurableObjectNamespace;
 
-  /** Cloudflare Container runtime for a "V2 Cloud Agent (Node/Container)" — a
+  /** Cloudflare Container runtime for a "Cloud Agent (Node/Container)" — a
    *  long-lived Node process with a real shell (the `container` runtime surface).
    *  One instance per execution (`idFromName('exec:<id>')`). Optional: when unset
    *  (or the container can't start), a `container`-surface run degrades to the
