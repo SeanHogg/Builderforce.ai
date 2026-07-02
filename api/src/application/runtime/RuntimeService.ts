@@ -99,6 +99,17 @@ export class RuntimeService {
        *  agent. Absent for manual / human-drag runs. */
       originLaneKey?: string;
     }) => Promise<void>,
+    /**
+     * Optional resolver for the board's NEXT swimlane by configured order — used to
+     * advance a ticket on COMPLETED to whatever lane the board defines after the
+     * current one, instead of a hardcoded `in_review`. Wired at the composition root
+     * to {@link resolveNextTaskStatus} (reads the project board's `swimlanes` by
+     * `position`). Returns null for a non-board task or an unresolvable lane, so the
+     * default (in_review) still applies. Best-effort by contract.
+     */
+    private readonly resolveNextStatus?: (info: {
+      projectId: number; fromStatus: string;
+    }) => Promise<string | null>,
   ) {}
 
   async submit(dto: SubmitTaskDto): Promise<Execution> {
@@ -311,12 +322,18 @@ export class RuntimeService {
           await this.tasks.update(task.update({ status: TaskStatus.IN_PROGRESS }));
         }
         if (dto.status === ExecutionStatus.COMPLETED) {
-          // default move to in_review; some governance rules may auto-complete
-          let newStatus: TaskStatus = TaskStatus.IN_REVIEW;
           const resultText = dto.result ?? '';
-          // simple governance rule: include token [auto-approve] to skip review
+          // Default advance is the board's NEXT swimlane by configured order — so a
+          // custom board (renamed / re-ordered lanes) flows correctly instead of
+          // always jumping to in_review. Falls back to in_review when there is no
+          // board / the lane can't be resolved (a non-board task). A governance
+          // token still short-circuits straight to Done.
+          let newStatus: string = TaskStatus.IN_REVIEW;
           if (resultText.includes('[auto-approve]')) {
             newStatus = TaskStatus.DONE;
+          } else {
+            const nextKey = await this.resolveNextStatus?.({ projectId, fromStatus }).catch(() => null);
+            if (nextKey) newStatus = nextKey;
           }
           toStatus = newStatus;
           await this.tasks.update(task.update({ status: newStatus }));

@@ -26,19 +26,22 @@
  * tenant can't abort the sweep, and the dispatch trigger is itself idempotent
  * (dedupes on a live execution), so overlapping ticks never double-run a ticket.
  */
-import { and, asc, eq, inArray, isNotNull, ne } from 'drizzle-orm';
+import { and, asc, eq, exists, inArray, isNotNull, or, sql } from 'drizzle-orm';
 import { buildDatabase, type Db } from '../../infrastructure/database/connection';
 import { buildRuntimeService } from '../../buildRuntimeService';
-import { tasks, projects } from '../../infrastructure/database/schema';
+import { tasks, projects, boards, swimlanes, swimlaneAgentAssignments } from '../../infrastructure/database/schema';
 import { TaskStatus } from '../../domain/shared/types';
 import { getTenantTokenAvailability } from '../llm/tenantTokenAvailability';
 import { sendPendingAgentsUpgradeEmail } from './pendingAgentsUpgradeEmail';
 import { maybeAutoRunOnLaneEntry } from '../../presentation/routes/taskRoutes';
 import type { Env } from '../../env';
 
-/** Statuses that can never auto-run (Done is terminal; the lane evaluator also
- *  rejects terminal lanes, this just trims the candidate scan up front). */
-const TERMINAL_STATUSES: string[] = [TaskStatus.DONE];
+/** The non-terminal statuses whose lane an agent could work — the candidate scan
+ *  is bounded to these (Done/Blocked are excluded up front; the lane evaluator
+ *  still has the final say per ticket). */
+const RUNNABLE_STATUSES: string[] = [
+  TaskStatus.BACKLOG, TaskStatus.TODO, TaskStatus.READY, TaskStatus.IN_PROGRESS, TaskStatus.IN_REVIEW,
+];
 
 /** Storm guards. The sweep runs every few minutes; these bound one tick's work so
  *  a huge backlog is drained across ticks instead of dispatching thousands at once
@@ -65,14 +68,34 @@ interface CandidateTask {
 }
 
 /**
- * Load the agent-owned, non-terminal, non-archived tickets that could auto-run,
- * across every tenant, oldest-waiting first (so the longest-stuck work goes first).
- * "Agent-owned" = `tasks.assigned_agent_ref` set — the concrete "# of agents
- * pending" the board shows. Lane-staffed-but-unowned tickets are handled on
- * lane-entry by {@link maybeAutoRunOnLaneEntry}; the cron backstops the owner set.
+ * Load the non-terminal, non-archived tickets that could auto-run, across every
+ * tenant, oldest-waiting first (so the longest-stuck work goes first). A ticket
+ * qualifies when EITHER:
+ *   • it is agent-OWNED (`tasks.assigned_agent_ref` set) — the concrete "# of
+ *     agents pending" the board shows, OR
+ *   • its current-status lane is STAFFED (the swimlane matching its status has ≥1
+ *     `swimlane_agent_assignments` row) — a lane agent should pick it up even
+ *     though no one owns the ticket.
+ * The lane evaluator ({@link maybeAutoRunOnLaneEntry}) still has the final say per
+ * ticket (gate / capability / live-run), so this is a superset filter that only
+ * bounds the scan.
  */
 export async function loadAutonomousCandidates(db: Db, limit: number): Promise<CandidateTask[]> {
-  const rows = await db
+  // Correlated EXISTS: does the ticket's project board have a swimlane whose key
+  // matches the ticket's status AND that lane carries an agent assignment?
+  const laneStaffed = exists(
+    db
+      .select({ one: sql`1` })
+      .from(swimlaneAgentAssignments)
+      .innerJoin(swimlanes, eq(swimlanes.id, swimlaneAgentAssignments.swimlaneId))
+      .innerJoin(boards, eq(boards.id, swimlanes.boardId))
+      .where(and(
+        eq(boards.projectId, tasks.projectId),
+        eq(swimlanes.key, tasks.status),
+      )),
+  );
+
+  return db
     .select({
       taskId: tasks.id,
       projectId: tasks.projectId,
@@ -83,18 +106,13 @@ export async function loadAutonomousCandidates(db: Db, limit: number): Promise<C
     .innerJoin(projects, eq(projects.id, tasks.projectId))
     .where(and(
       eq(tasks.archived, false),
-      isNotNull(tasks.assignedAgentRef),
-      ne(tasks.status, TaskStatus.DONE),
-      // A blocked ticket is waiting on a dependency, not on an agent — don't burn a
-      // run on it (the lane evaluator would still gate, but skip the churn early).
-      ne(tasks.status, TaskStatus.BLOCKED),
-      inArray(tasks.status, [TaskStatus.BACKLOG, TaskStatus.TODO, TaskStatus.READY, TaskStatus.IN_PROGRESS, TaskStatus.IN_REVIEW]),
+      // Runnable lanes only — Done/Blocked are excluded here (a blocked ticket waits
+      // on a dependency, not an agent); the lane evaluator gates the rest per ticket.
+      inArray(tasks.status, RUNNABLE_STATUSES),
+      or(isNotNull(tasks.assignedAgentRef), laneStaffed),
     ))
     .orderBy(asc(tasks.updatedAt))
     .limit(limit);
-  // The two status filters overlap intentionally — inArray names the runnable lanes
-  // and the ne() guards keep the intent explicit even if the enum grows.
-  return rows.filter((r) => !TERMINAL_STATUSES.includes(r.status));
 }
 
 /** Group candidates by tenant, preserving the oldest-first order within each. */

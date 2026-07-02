@@ -31,6 +31,7 @@ import { agentHosts, boards, executions, projectInsightEvents, projectRepositori
 import { approvals } from '../../infrastructure/database/schema';
 import type { AgentHostRelayDO } from '../../infrastructure/relay/AgentHostRelayDO';
 import { resolveProjectInferenceModel } from '../../application/llm/projectEvermind';
+import { checkTenantTokenGate } from '../../application/llm/tenantTokenAvailability';
 
 /**
  * Runtime routes – task execution lifecycle.
@@ -882,6 +883,12 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
       return c.json({ error: 'Task not found' }, 404);
     }
 
+    // Token gate — no budget → no run (shared with Run-now + the autonomous cron so
+    // every dispatch surface agrees). Fails open on a scan error. Superadmin /
+    // unlimited tenants pass through.
+    const tokenGate = await checkTenantTokenGate(db, c.get('tenantId'));
+    if (tokenGate) return c.json(tokenGate, 429);
+
     const gate = await evaluateExecutionApprovalGate(
       db,
       c.get('tenantId'),
@@ -964,6 +971,12 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
     if (!taskRow) {
       return c.json({ error: 'Task not found' }, 404);
     }
+
+    // Token gate — no budget → no run (shared with Run-now + the autonomous cron so
+    // every dispatch surface agrees). Fails open on a scan error. Superadmin /
+    // unlimited tenants pass through.
+    const tokenGate = await checkTenantTokenGate(db, c.get('tenantId'));
+    if (tokenGate) return c.json(tokenGate, 429);
 
     const gate = await evaluateExecutionApprovalGate(
       db,

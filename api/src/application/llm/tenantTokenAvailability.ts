@@ -102,3 +102,58 @@ export async function getTenantTokenAvailability(db: Db, tenantId: number): Prom
     effectivePlan,
   };
 }
+
+/** The 429 body an interactive run path returns when the tenant is out of tokens.
+ *  Codes mirror the LLM gateway's `enforceTokenCaps` so a client that already
+ *  handles the gateway's 429 handles these identically. */
+export interface TokenGateBlock {
+  error: string;
+  code: 'plan_token_limit_exceeded' | 'plan_monthly_token_limit_exceeded';
+  reason: TokenExhaustionReason;
+  effectivePlan: 'free' | 'pro' | 'teams';
+}
+
+/** Plan-tailored upgrade hint appended to a cap-exceeded message (mirrors the
+ *  gateway's copy so the daily/monthly caps read the same everywhere). */
+function tokenGateUpgradeHint(effectivePlan: 'free' | 'pro' | 'teams', window: 'daily' | 'monthly'): string {
+  if (effectivePlan === 'free') {
+    return window === 'monthly'
+      ? ' Upgrade to Pro at builderforce.ai/pricing for a higher monthly allowance.'
+      : ' Upgrade to Pro at builderforce.ai/pricing.';
+  }
+  if (effectivePlan === 'pro') {
+    return window === 'monthly'
+      ? ' Upgrade to Teams for an unlimited monthly allowance.'
+      : ' Upgrade to Teams for a 5× higher daily budget.';
+  }
+  return '';
+}
+
+/**
+ * THE single token gate for the interactive run paths (Run-now, submit execution):
+ * returns a 429 block when the tenant is out of budget, or null to proceed. Shared
+ * so "no budget → no run" is defined once for every manual dispatch surface (and
+ * matches the autonomous cron's gate + the gateway's spend gate). Fails OPEN on any
+ * error — a transient usage-scan failure must not block a human clicking Run.
+ */
+export async function checkTenantTokenGate(db: Db, tenantId: number): Promise<TokenGateBlock | null> {
+  let availability: TenantTokenAvailability;
+  try {
+    availability = await getTenantTokenAvailability(db, tenantId);
+  } catch {
+    return null; // fail open
+  }
+  if (availability.hasTokens || !availability.reason) return null;
+
+  const window = availability.reason === 'monthly_exhausted' ? 'monthly' : 'daily';
+  const cap = window === 'monthly' ? availability.monthlyLimit : availability.dailyLimit;
+  const base = window === 'monthly'
+    ? `Plan monthly token allowance reached (${cap.toLocaleString()} tokens).`
+    : `Plan daily token limit reached (${cap.toLocaleString()} tokens).`;
+  return {
+    error: `${base}${tokenGateUpgradeHint(availability.effectivePlan, window)}`,
+    code: window === 'monthly' ? 'plan_monthly_token_limit_exceeded' : 'plan_token_limit_exceeded',
+    reason: availability.reason,
+    effectivePlan: availability.effectivePlan,
+  };
+}
