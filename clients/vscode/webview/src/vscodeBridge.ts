@@ -51,6 +51,9 @@ export interface InitData {
   grounding?: string;
   signedIn: boolean;
   hasWorkspace: boolean;
+  /** The sidebar's active BuilderForce project — injected into the system prompt so
+   *  the Brain scopes platform tools to it, and used to scope new chats. */
+  project?: { id: number; name: string };
   /** The host's local file tools, forwarded so the model can call them over the bridge. */
   tools: ToolSpecMsg[];
   /** Localized UI strings (see {@link LabelBundle}). */
