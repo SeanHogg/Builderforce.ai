@@ -112,6 +112,10 @@ export function useEmbedFrame(): EmbedFrameState {
     };
     window.addEventListener('message', onMessage);
     window.addEventListener('bfembed:unauthorized', onUnauthorized);
+    // Signal the early embed reporter (embedErrorReporter.ts) that the app booted
+    // far enough to post `ready`, so its boot-stall heartbeat stays quiet on a
+    // healthy frame and only fires when the bundle never reaches this point.
+    (window as unknown as { __bfEmbedReady?: boolean }).__bfEmbedReady = true;
     postToHost({ source: BFEMBED_SOURCE, type: 'ready' });
     return () => {
       window.removeEventListener('message', onMessage);

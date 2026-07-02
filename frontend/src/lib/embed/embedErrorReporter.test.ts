@@ -19,8 +19,7 @@ describe('embed in-band error reporter', () => {
     expect(EMBED_ERROR_REPORTER).toContain(`var SRC = '${BFEMBED_SOURCE}';`);
   });
 
-  it('posts a frame `error` message shape to the parent', () => {
-    expect(EMBED_ERROR_REPORTER).toContain("type: 'error'");
+  it('posts frame messages to the parent', () => {
     expect(EMBED_ERROR_REPORTER).toContain('window.parent.postMessage');
   });
 
@@ -28,9 +27,22 @@ describe('embed in-band error reporter', () => {
     expect(EMBED_ERROR_REPORTER).toContain('if (window === window.parent) return;');
   });
 
-  it('catches both window errors and unhandled promise rejections', () => {
+  it('emits a proof-of-life `boot` ping the instant inline JS runs', () => {
+    expect(EMBED_ERROR_REPORTER).toContain("send('boot'");
+  });
+
+  it('catches window errors, unhandled rejections, AND capture-phase resource-load failures', () => {
     expect(EMBED_ERROR_REPORTER).toContain("addEventListener('error'");
     expect(EMBED_ERROR_REPORTER).toContain("addEventListener('unhandledrejection'");
+    // Capture phase (3rd arg true) is what catches a chunk that fails to LOAD —
+    // those errors do not bubble to window and were otherwise invisible.
+    expect(EMBED_ERROR_REPORTER).toContain('}, true);');
+    expect(EMBED_ERROR_REPORTER).toContain('resource failed to load');
+  });
+
+  it('reports a boot-stall, gated on the app never posting ready', () => {
+    expect(EMBED_ERROR_REPORTER).toContain('boot-stall');
+    expect(EMBED_ERROR_REPORTER).toContain('__bfEmbedReady');
   });
 
   it('runs before the route bundle via a raw inline <head> script in the ROOT layout', () => {

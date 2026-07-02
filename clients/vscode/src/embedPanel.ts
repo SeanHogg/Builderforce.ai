@@ -56,6 +56,19 @@ export class EmbedPanel {
   private readonly panel: vscode.WebviewPanel;
   private readonly disposables: vscode.Disposable[] = [];
   private readonly webUrl = getWebBaseUrl();
+  /**
+   * Handshake telemetry, reset per (re)load. The framed `/embed` page can fail in
+   * several distinct ways that all look like "blank panel + 15s timeout" from the
+   * host; these flags let the extension emit a plain-language DIAGNOSIS to its
+   * output channel (see logDiagnosis) so the failure mode is identifiable WITHOUT
+   * reading the cross-origin iframe console (which the host cannot).
+   */
+  private diag: { domLoad: boolean; boot: boolean; anyFrameMsg: boolean; ready: boolean; lastError?: string } = {
+    domLoad: false,
+    boot: false,
+    anyFrameMsg: false,
+    ready: false,
+  };
 
   private constructor(
     private readonly ctx: vscode.ExtensionContext,
@@ -73,7 +86,7 @@ export class EmbedPanel {
     this.render();
 
     this.panel.webview.onDidReceiveMessage(
-      (m: { type: string }) => void this.onMessage(m),
+      (m: { type: string; signal?: string; detail?: string }) => void this.onMessage(m),
       undefined,
       this.disposables,
     );
@@ -97,6 +110,7 @@ export class EmbedPanel {
   /** (Re)load the iframe with a fresh cache-busting token so a new deploy / Reload
    *  never serves a stale (pre-deploy) document from the SW or edge cache. */
   private render(): void {
+    this.diag = { domLoad: false, boot: false, anyFrameMsg: false, ready: false };
     const version =
       (this.ctx.extension.packageJSON as { version?: string }).version ?? "0";
     const cb = `${version}.${Date.now()}`;
@@ -113,8 +127,14 @@ export class EmbedPanel {
     this.panel.webview.postMessage({ type: "log", line });
   }
 
-  private async onMessage(m: { type: string }): Promise<void> {
+  private async onMessage(m: { type: string; signal?: string; detail?: string }): Promise<void> {
     switch (m.type) {
+      // Handshake telemetry forwarded from the framed page's inline reporter +
+      // the webview shell (boot / ready / resize / error / domload). Mirrored to
+      // the output channel and folded into the diagnosis on timeout.
+      case "diag":
+        this.onDiag(m.signal, m.detail);
+        break;
       case "authNeeded": {
         this.note("iframe ready → exchanging tenant token");
         const token = await getTenantJwt(this.ctx.secrets);
@@ -133,10 +153,8 @@ export class EmbedPanel {
         this.note("frame painted content");
         break;
       case "timeout":
-        this.note("frame did not render within 15s (likely a stale cache or blocked load)");
-        break;
-      case "frameError":
-        this.note("frame reported an error");
+        this.note("frame did not render within 15s");
+        this.logDiagnosis();
         break;
       case "reload":
         this.note("reload requested");
@@ -149,6 +167,60 @@ export class EmbedPanel {
         void vscode.commands.executeCommand("builderforce.diagnose");
         break;
     }
+  }
+
+  /** Record one handshake signal from the frame or the webview shell. The webview
+   *  already logs it into its own copyable log, so mirror only to the output
+   *  channel here (via log, not note) to avoid a duplicate copy-log line. */
+  private onDiag(signal: string | undefined, detail: string | undefined): void {
+    const s = signal ?? "?";
+    log(`${this.view}: frame:${s}${detail ? ` — ${detail}` : ""}`);
+    switch (s) {
+      case "domload":
+        this.diag.domLoad = true;
+        break;
+      case "boot":
+        this.diag.boot = true;
+        this.diag.anyFrameMsg = true;
+        break;
+      case "ready":
+      case "resize":
+        this.diag.ready = true;
+        this.diag.anyFrameMsg = true;
+        break;
+      case "error":
+        this.diag.lastError = detail ?? "(no message)";
+        this.diag.anyFrameMsg = true;
+        break;
+      default:
+        this.diag.anyFrameMsg = true;
+    }
+  }
+
+  /**
+   * Turn the collected handshake telemetry into a plain-language verdict in the
+   * output channel, so a blank/timed-out embed panel says WHY instead of just
+   * "didn't render". Each branch maps to a different fix, so the distinction is
+   * the whole point.
+   */
+  private logDiagnosis(): void {
+    const d = this.diag;
+    let verdict: string;
+    if (d.lastError) {
+      verdict = `the framed page reported an error before painting → ${d.lastError}. If this is a "resource failed to load", a JS chunk is being blocked in the credentialless webview; otherwise a provider threw during render.`;
+    } else if (!d.domLoad) {
+      verdict =
+        "the iframe never even fired its DOM load event → the page URL did not load in the webview (network, CSP frame-src, or an auth/redirect). Try Open in Browser to confirm the URL works while signed in.";
+    } else if (!d.anyFrameMsg) {
+      verdict =
+        "the document loaded but the frame sent NO messages — not even the inline 'boot' ping → the page's JavaScript is NOT executing inside the credentialless webview iframe. This is a webview/credentialless block, not a provider crash, so a lean provider tree cannot help; the reliable path for this view is a native panel (like the Board) or Open in Browser. (If the deployed frontend predates the 'boot' reporter, redeploy it to sharpen this verdict.)";
+    } else if (d.boot && !d.ready) {
+      verdict =
+        "inline JS ran ('boot' seen) but the app never became ready → the route bundle failed to load or a provider suspends/hangs during hydration. Look for a 'resource failed to load' line above; if none, it is a hydration hang.";
+    } else {
+      verdict = "the frame booted and became ready but never painted → a post-ready render or auth-handshake issue.";
+    }
+    this.note(`DIAGNOSIS: ${verdict}`);
   }
 
   private html(webview: vscode.Webview, src: string, embedOrigin: string): string {
@@ -239,13 +311,19 @@ export class EmbedPanel {
   function pushLog(line) {
     logLines.push(new Date().toISOString().slice(11, 23) + '  ' + line);
   }
+  // A structured handshake signal: logged locally AND forwarded to the extension
+  // host, which records it (output channel) and folds it into the timeout diagnosis.
+  function diag(signal, detail) {
+    pushLog('frame:' + signal + (detail ? ' — ' + detail : ''));
+    vscode.postMessage({ type: 'diag', signal: signal, detail: detail });
+  }
   pushLog('embed webview init');
   pushLog('frame src: ' + iframe.src);
   pushLog('origin (expected frame): ' + EMBED_ORIGIN);
   pushLog('iframe credentialless: ' + ('credentialless' in iframe ? iframe.credentialless : 'unsupported-attr'));
   // Distinguishes "document never loaded" (frame blocked by COEP/CSP) from "loaded but JS
   // never ran" (subresource blocked / SW hang / hydration error) when no 'ready' arrives.
-  iframe.addEventListener('load', () => pushLog('iframe DOM load event fired (document reached the frame)'));
+  iframe.addEventListener('load', () => diag('domload', 'document reached the frame'));
   iframe.addEventListener('error', () => pushLog('iframe DOM error event'));
   // Parent-side signals the cross-origin frame can't report itself.
   document.addEventListener('securitypolicyviolation', (e) => {
@@ -306,7 +384,9 @@ export class EmbedPanel {
     // Messages from the embedded page (tagged with the embed protocol source).
     if (d && d.source === SRC && typeof d.type === 'string') {
       if (e.origin && e.origin !== 'null') frameOrigin = e.origin;
-      pushLog('frame msg: origin=' + e.origin + ' type=' + d.type);
+      // Forward EVERY tagged signal (boot / ready / resize / error / …) to the
+      // host so it lands in the output channel + feeds the timeout diagnosis.
+      diag(d.type, d.type === 'error' ? (d.message || '(no message)') : (d.message || undefined));
       if (d.type === 'ready') {
         vscode.postMessage({ type: 'authNeeded' });
         showLoading('Authorizing…', 'Signing in to your workspace.');
@@ -314,8 +394,6 @@ export class EmbedPanel {
         if (!painted) { painted = true; clearTimeout(timeout); vscode.postMessage({ type: 'rendered' }); }
         hideOverlays();
       } else if (d.type === 'error') {
-        pushLog('frame → error: ' + (d.message || '(no message)'));
-        vscode.postMessage({ type: 'frameError' });
         showError(d.message ? ('BuilderForce: ' + d.message) : undefined);
       }
       return;
