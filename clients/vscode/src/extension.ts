@@ -54,14 +54,15 @@ async function refreshWorkspaceHeader(context: vscode.ExtensionContext): Promise
 }
 
 /** Embeddable BuilderForce web views opened inside VS Code (reuse the real pages, DRY). */
+// Only views the framed `/embed/<view>` surface actually renders are listed here —
+// `sprints` and `velocity` have no wired surface (they fell through to a null
+// render, i.e. a blank panel), so they are intentionally omitted until built.
 const EMBED_VIEWS: { label: string; view: string }[] = [
   { label: "Board (Kanban)", view: "kanban" },
   { label: "Backlog", view: "backlog" },
   { label: "Roadmap", view: "roadmap" },
-  { label: "Sprints", view: "sprints" },
   { label: "Retrospectives", view: "retros" },
   { label: "Planning Poker", view: "poker" },
-  { label: "Velocity", view: "velocity" },
   { label: "PRDs & Specs", view: "prd" },
   { label: "Ideas", view: "ideas" },
   { label: "Feature ROI", view: "feature-roi" },

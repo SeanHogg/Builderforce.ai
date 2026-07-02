@@ -118,7 +118,38 @@ function useShellContent(children: React.ReactNode): React.ReactNode {
   );
 }
 
-export default function ConditionalAppShell({ children }: { children: React.ReactNode }) {
+/**
+ * Lean provider tree for the `/embed/*` surface.
+ *
+ * The framed embed pages run inside a `credentialless`, cross-origin iframe — the
+ * BuilderForce VS Code extension webview, or a third-party host (e.g. BurnRateOS).
+ * The global Brain launcher + always-on network bridges that the full app tree
+ * mounts app-wide — FloatingBrain (which also fires `pendingPromptsApi.claim()`
+ * and mounts MigrationPanelHost portals), PlatformActionsBridge, McpExtensionsBridge,
+ * and the five insights panel bridges — run effects/portals that throw or hang in
+ * that partitioned webview context. An uncaught throw during the first render pass
+ * unmounts the whole subtree (the root ErrorBoundary swallows it), so the framed
+ * page never mounts and never posts `ready` → the host only sees a blank panel and
+ * a 15s timeout. That failure is exactly why the Kanban board was moved to a native
+ * webview panel (see boardPanel.ts); this restores the *rest* of the embed catalog
+ * (roadmap, backlog, retros, poker, PRDs, ideas, trackers) by not mounting the
+ * hostile globals in the frame. The resurfaced embed surfaces only ever consume the
+ * Brain *context* providers (BrainPanel for `ideas`) and Pins (pinnable PM widgets),
+ * never the global launcher — so mount just those. [native-board-vs-embed]
+ */
+function EmbedShell({ children }: { children: React.ReactNode }) {
+  return (
+    <BrainProvider config={brainConfig}>
+      <PinsProvider>
+        <BrainActionsProvider>
+          <BrainContextProvider>{children}</BrainContextProvider>
+        </BrainActionsProvider>
+      </PinsProvider>
+    </BrainProvider>
+  );
+}
+
+function AppBrainShell({ children }: { children: React.ReactNode }) {
   const content = useShellContent(children);
   const { hasTenant } = useAuth();
 
@@ -168,5 +199,19 @@ export default function ConditionalAppShell({ children }: { children: React.Reac
       </AiInsightPanelProvider>
       </PinsProvider>
     </BrainProvider>
+  );
+}
+
+export default function ConditionalAppShell({ children }: { children: React.ReactNode }) {
+  // `/embed` is framed cross-origin (VS Code webview / third-party host) and gets a
+  // lean provider tree (no global Brain launcher/bridges) so a webview-hostile
+  // global effect can't take the framed page down with it; every other route gets
+  // the full app tree. Branch by delegating to distinct child components so neither
+  // path ever calls the other's hooks conditionally (rules-of-hooks safe).
+  const pathname = usePathname() || '';
+  return pathname.startsWith('/embed') ? (
+    <EmbedShell>{children}</EmbedShell>
+  ) : (
+    <AppBrainShell>{children}</AppBrainShell>
   );
 }
