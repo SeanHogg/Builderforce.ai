@@ -675,7 +675,8 @@
     "meter": {
       "ai_tokens": "AI 令牌",
       "ingestion": "数据摄取",
-      "error_events": "错误事件"
+      "error_events": "错误事件",
+      "outbound_fetches": "网络请求"
     },
     "unlimited": "无限制",
     "freePerMo": "每月免费 {amount}",

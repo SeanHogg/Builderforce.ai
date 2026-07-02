@@ -1491,8 +1491,8 @@ export const dashboardApi = {
 // powers the sidebar UsageMeter widget.
 // ---------------------------------------------------------------------------
 
-export type MeterKey = 'ai_tokens' | 'ingestion' | 'error_events';
-export type MeterUnit = 'tokens' | 'bytes' | 'events';
+export type MeterKey = 'ai_tokens' | 'ingestion' | 'error_events' | 'outbound_fetches';
+export type MeterUnit = 'tokens' | 'bytes' | 'events' | 'fetches';
 
 export interface MeterSnapshot {
   key: MeterKey;

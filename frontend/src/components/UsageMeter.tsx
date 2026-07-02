@@ -45,17 +45,20 @@ const METER_ICON: Record<MeterSnapshot['key'], string> = {
   ai_tokens: '⚡',
   ingestion: '🗄',
   error_events: '🐞',
+  outbound_fetches: '🌐',
 };
 
 /**
  * Each meter's trend chart deep-links to the matching Insights report — AI tokens
  * → AI Insights, error events → the Quality (error observability) dashboard, data
- * ingestion → the Finance hub where metered/billed consumption is reported.
+ * ingestion and outbound web fetches → the Finance hub where metered/billed
+ * consumption is reported.
  */
 const METER_INSIGHT_HREF: Record<MeterSnapshot['key'], string> = {
   ai_tokens: '/insights/ai',
   ingestion: '/insights/finance',
   error_events: '/quality',
+  outbound_fetches: '/insights/finance',
 };
 
 function MeterCard({ meter, isFree }: { meter: MeterSnapshot; isFree: boolean }) {

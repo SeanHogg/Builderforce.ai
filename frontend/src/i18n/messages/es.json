@@ -675,7 +675,8 @@
     "meter": {
       "ai_tokens": "Tokens de IA",
       "ingestion": "Ingesta de datos",
-      "error_events": "Eventos de error"
+      "error_events": "Eventos de error",
+      "outbound_fetches": "Solicitudes web"
     },
     "unlimited": "Ilimitado",
     "freePerMo": "{amount} gratis / mes",
