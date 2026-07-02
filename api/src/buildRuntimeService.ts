@@ -23,6 +23,7 @@ import { recordRunFailureEvent } from './application/runtime/recordRunFailureEve
 import { loadCloudRunForSelfHeal, selfHealCloudRun } from './application/runtime/cloudSelfHeal';
 import { syncExecutionTaskLifecycle } from './application/task/taskLifecycle';
 import { maybeAutoRunOnLaneEntry } from './presentation/routes/taskRoutes';
+import { resolveNextTaskStatus } from './application/swimlane/nextLane';
 
 export function buildRuntimeService(env: Env, db: Db): RuntimeService {
   // eslint-disable-next-line prefer-const -- the lane-auto callback closes over the
@@ -51,6 +52,10 @@ export function buildRuntimeService(env: Env, db: Db): RuntimeService {
     async (info) => {
       await maybeAutoRunOnLaneEntry(env, db, runtimeService, { ...info, submittedBy: 'system:lane-auto' });
     },
+    // Config-driven completion advance: move the ticket into the board's next
+    // swimlane by position (not a hardcoded in_review), so a custom lane sequence
+    // flows correctly. Null → the default in_review applies (non-board task).
+    (info) => resolveNextTaskStatus(db, info.projectId, info.fromStatus),
   );
   return runtimeService;
 }

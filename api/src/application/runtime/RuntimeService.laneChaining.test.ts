@@ -45,7 +45,7 @@ function buildExecution(payload: string | null, status = ExecutionStatus.RUNNING
 
 type Captured = { status: string; originLaneKey?: string } | null;
 
-function makeService(opts: { taskStatus: string; payload: string | null }) {
+function makeService(opts: { taskStatus: string; payload: string | null; nextStatus?: string | null }) {
   let stored = buildTask(opts.taskStatus);
   const exec = buildExecution(opts.payload);
   const executions = {
@@ -63,7 +63,13 @@ function makeService(opts: { taskStatus: string; payload: string | null }) {
   const onLaneEntry = async (info: { status: string; originLaneKey?: string }) => {
     captured = { status: info.status, originLaneKey: info.originLaneKey };
   };
-  const svc = new RuntimeService(executions, tasks, agents, audit, undefined, undefined, undefined, onLaneEntry);
+  // When a nextStatus is provided the service is wired WITH the config-driven
+  // resolver (mimicking the board having a next swimlane); otherwise it is left
+  // undefined so the default in_review path is exercised.
+  const resolveNextStatus = opts.nextStatus !== undefined
+    ? async () => opts.nextStatus ?? null
+    : undefined;
+  const svc = new RuntimeService(executions, tasks, agents, audit, undefined, undefined, undefined, onLaneEntry, resolveNextStatus);
   return { svc, getCaptured: () => captured, getStored: () => stored };
 }
 
@@ -107,6 +113,32 @@ describe('RuntimeService lane chaining', () => {
     });
     await svc.update(EXEC_ID, { status: ExecutionStatus.RUNNING });
     expect(getStored().status).toBe(TaskStatus.IN_PROGRESS);
+    expect(getCaptured()).toBeNull();
+  });
+
+  it('advances to the board’s CONFIGURED next swimlane on COMPLETED (not hardcoded in_review)', async () => {
+    const { svc, getStored, getCaptured } = makeService({
+      taskStatus: 'build', payload: JSON.stringify({ laneKey: 'build' }), nextStatus: 'qa',
+    });
+    await svc.update(EXEC_ID, { status: ExecutionStatus.COMPLETED, result: 'done' });
+    expect(getStored().status).toBe('qa');
+    expect(getCaptured()).toEqual({ status: 'qa', originLaneKey: 'build' });
+  });
+
+  it('falls back to in_review when the resolver returns null (non-board task)', async () => {
+    const { svc, getStored } = makeService({
+      taskStatus: TaskStatus.IN_PROGRESS, payload: null, nextStatus: null,
+    });
+    await svc.update(EXEC_ID, { status: ExecutionStatus.COMPLETED, result: 'done' });
+    expect(getStored().status).toBe(TaskStatus.IN_REVIEW);
+  });
+
+  it('[auto-approve] still short-circuits to Done even with a configured next lane', async () => {
+    const { svc, getStored, getCaptured } = makeService({
+      taskStatus: 'build', payload: JSON.stringify({ laneKey: 'build' }), nextStatus: 'qa',
+    });
+    await svc.update(EXEC_ID, { status: ExecutionStatus.COMPLETED, result: 'shipped [auto-approve]' });
+    expect(getStored().status).toBe(TaskStatus.DONE);
     expect(getCaptured()).toBeNull();
   });
 

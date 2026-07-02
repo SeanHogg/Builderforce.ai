@@ -19,6 +19,7 @@ import { RuntimeService } from '../../application/runtime/RuntimeService';
 import { dispatchCloudRunForTask } from './runtimeRoutes';
 import { recordCloudToolEvent } from '../../application/runtime/cloudAgentEngine';
 import { evaluateTaskAutoRun, type AutoRunReason } from '../../application/swimlane/evaluateAutoRun';
+import { checkTenantTokenGate } from '../../application/llm/tenantTokenAvailability';
 import { broadcastProjectChanged } from '../../infrastructure/relay/broadcastRoom';
 
 /** Parse a swimlane assignment's `required_capabilities` (JSON array stored as
@@ -389,6 +390,11 @@ export function createTaskRoutes(taskService: TaskService, db: Db, runtimeServic
     if (evaln.liveExecution) {
       return c.json({ error: 'A run is already in progress for this ticket.', reason: 'already_running' satisfies AutoRunReason, executionId: evaln.liveExecution.id }, 409);
     }
+    // Token gate — no budget → no run. Same check the autonomous cron applies, so a
+    // human Run-now and the cron agree; the gateway would 429 the spend anyway, but
+    // blocking here avoids creating a run that can't make progress.
+    const gate = await checkTenantTokenGate(db, c.get('tenantId'));
+    if (gate) return c.json(gate, 429);
     if (!evaln.candidate) {
       // Nothing to run as — surface the precise reason so the UI can prompt the fix
       // (assign an agent, staff the lane, or relax the capability requirement).

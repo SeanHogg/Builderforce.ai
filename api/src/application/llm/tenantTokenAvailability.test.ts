@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { getTenantTokenAvailability } from './tenantTokenAvailability';
+import { getTenantTokenAvailability, checkTenantTokenGate } from './tenantTokenAvailability';
 import type { Db } from '../../infrastructure/database/connection';
 
 /**
@@ -64,5 +64,31 @@ describe('getTenantTokenAvailability', () => {
     const a = await getTenantTokenAvailability(db, 1);
     // billing 'none' downgrades pro→free regardless of the stored plan.
     expect(a.effectivePlan).toBe('free');
+  });
+});
+
+describe('checkTenantTokenGate', () => {
+  it('returns null (proceed) when the tenant has budget', async () => {
+    const db = fakeDb([
+      [{ ...activePro, tokenDailyLimitOverride: 1000 }],
+      [{ day: 10, month: 10 }],
+    ]);
+    expect(await checkTenantTokenGate(db, 1)).toBeNull();
+  });
+
+  it('returns a 429 block with the gateway daily code when the daily cap is hit', async () => {
+    const db = fakeDb([
+      [{ ...activePro, tokenDailyLimitOverride: 1000 }],
+      [{ day: 1000, month: 1000 }],
+    ]);
+    const block = await checkTenantTokenGate(db, 1);
+    expect(block?.code).toBe('plan_token_limit_exceeded');
+    expect(block?.reason).toBe('daily_exhausted');
+    expect(block?.error).toContain('daily token limit reached');
+  });
+
+  it('fails OPEN (returns null) when the availability lookup throws', async () => {
+    const throwingDb = { select: () => { throw new Error('db down'); } } as unknown as Db;
+    expect(await checkTenantTokenGate(throwingDb, 1)).toBeNull();
   });
 });
