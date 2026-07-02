@@ -20,16 +20,19 @@
 
 import { neon } from '@neondatabase/serverless';
 import type { Env } from '../../env';
-import { cloudOrphanReason } from './orphanReasons';
-import { markReaperRequeued } from './cloudDispatch';
+import { cloudOrphanReason, cloudSilenceCeilingMs } from './orphanReasons';
+import { markReaperRequeued, parseExecutor } from './cloudDispatch';
 import { isSelfHealEligible, buildDurableStartBody, dispatchDurableStart } from './cloudSelfHeal';
 import { runParkAgeTimeoutSweep, type ParkAgeTimeoutResult } from '../maintenance/parkAgeTimeout';
 
 /** A self-hosted host run executing longer than this is treated as hung. */
 export const RUNNING_DEADLINE_MS = 30 * 60_000; // 30 min
-/** A cloud (serverless) run executing longer than this is dead: Cloudflare stops
- *  `waitUntil` work ~30s after the response, so nothing runs past the wall. Kept
- *  in lockstep with RuntimeService.CLOUD_ORPHAN_MS (the read-path ceiling). */
+/** Candidate-pull floor for stale CLOUD runs: the SMALLEST cloud silence ceiling
+ *  ({@link cloudSilenceCeilingMs} — the serverless 'worker' wall), so the SQL sweep
+ *  surfaces every cloud run stale past 90s. Each candidate is then held against its
+ *  OWN per-surface ceiling in the loop below: a 'worker' run fails at 90s, but a
+ *  long-lived durable/container run gets the larger ceiling so a live tick mid-LLM-step
+ *  is not reaped. Kept = CLOUD_SERVERLESS_SILENCE_MS (the read-path's tight ceiling). */
 export const CLOUD_RUNNING_DEADLINE_MS = 90_000; // 90s
 /** A run never picked up by any agent within this window is treated as dropped. */
 export const QUEUED_DEADLINE_MS = 15 * 60_000; // 15 min
@@ -89,6 +92,18 @@ export async function reapStaleExecutions(env: Env, nowMs = Date.now()): Promise
   const cloudRunning: ReapedRow[] = [];
   let requeuedCloud = 0;
   for (const row of cloudCandidates) {
+    // Per-surface silence ceiling: the SQL above pulls every cloud run stale past the
+    // serverless 90s wall, but a long-lived executor (durable DO / container) heartbeats
+    // only once per alarm tick and a tick legitimately spans one slow LLM step. Spare a
+    // durable/container run still inside its (larger) ceiling — it is mid-completion,
+    // NOT silent — so we don't reap a live tick (execution #136: a 93s LLM call reaped at
+    // 90s, 2s before it returned). Only the 'worker' loop (and a genuinely stalled
+    // long-lived run past 5 min) falls through to self-heal/fail below.
+    const lastActivityMs = tsToMs(row.updated_at ?? row.created_at);
+    if (lastActivityMs != null && nowMs - lastActivityMs <= cloudSilenceCeilingMs(parseExecutor(row.payload))) {
+      continue;
+    }
+
     // Re-dispatch ONCE, idempotently. Skip (and fail) a run that has already been
     // re-queued by a prior sweep, has an open PR a re-run could double, or when no
     // durable runner is bound to retry on. The eligibility RULE is shared with the

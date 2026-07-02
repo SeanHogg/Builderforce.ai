@@ -878,8 +878,8 @@ async function recordCloudLlmTurn(
 
 /**
  * Bump `executions.updated_at` — the cloud-run liveness heartbeat the orphan reaper
- * (RuntimeService.CLOUD_ORPHAN_MS / staleExecutionReaper.CLOUD_RUNNING_DEADLINE_MS,
- * both 90s) measures "last activity" from. The container can spend minutes inside a
+ * (the per-surface {@link cloudSilenceCeilingMs}) measures "last activity" from. The
+ * container can spend minutes inside a
  * single `run_command` (a build/test step) with no LLM round-trip, so it pings this
  * on a timer independent of LLM steps; without that the reaper would kill a healthy,
  * busy container mid-build. ONE writer so the `llm` op and the dedicated `heartbeat`

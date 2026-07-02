@@ -346,11 +346,17 @@ export const CODING_PREMIUM_FALLBACK_MODELS: readonly string[] = leadPoolWithVen
   'xiaomi/mimo-v2.5',            // $0.14/$0.28 — OpenRouter Programming #1
   // Cloudflare Workers AI coders — FREE up to the daily neuron allowance; `leadPoolWithVendor`
   // floats all of these to the head so the free neurons are spent before any metered coder.
-  // Big-window first (a coding context can exceed a small window → 413 → cascade).
-  '@cf/zai-org/glm-4.7-flash',                 // 128K ctx
-  '@cf/moonshotai/kimi-k2.7-code',             // 256K ctx
-  '@cf/qwen/qwen3-30b-a3b-fp8',                // 32K ctx
-  '@cf/meta/llama-3.3-70b-instruct-fp8-fast',  // 24K ctx
+  // Ordered FAST-FIRST behind a big-window lead: glm-4.7-flash (128K) leads — it fits the
+  // cloud loop's compacted (~15-20K) contexts and is the cost-effective big-window coder;
+  // the small/fast qwen (32K) + llama (24K) are the quick failovers (a fast 413 there just
+  // cascades). The 256K kimi is LAST among the CF coders: it is the slowest by far — a
+  // single completion ran 93s and got a live durable tick orphan-reaped (execution #136) —
+  // so it is reached only when a genuinely huge (>128K) context needs it, never auto-picked
+  // ahead of a faster coder for a normal turn.
+  '@cf/zai-org/glm-4.7-flash',                 // 128K ctx — big-window lead
+  '@cf/qwen/qwen3-30b-a3b-fp8',                // 32K ctx — small/fast failover
+  '@cf/meta/llama-3.3-70b-instruct-fp8-fast',  // 24K ctx — small/fast failover
+  '@cf/moonshotai/kimi-k2.7-code',             // 256K ctx — slowest; huge-context last resort
   'anthropic/claude-sonnet-4.6', // strongest agentic coder (via OpenRouter)
   'claude-sonnet-4-6',           // direct-Anthropic last-resort floor (CLAUDE_API_KEY)
   'claude-opus-4-8',

@@ -9,7 +9,7 @@ import { and, desc, eq, gte, inArray, isNull } from 'drizzle-orm';
 import { RuntimeService } from '../../application/runtime/RuntimeService';
 import {
   resolveCloudSurface, chooseCloudExecutor, probeContainerHealth, cloudAgentTypeLabel,
-  isTerminalExecutionStatus, parseCloudAgentRef, parseRepoId, buildFollowUpPayload, withDefaultModel,
+  isTerminalExecutionStatus, parseCloudAgentRef, parseRepoId, buildFollowUpPayload, withDefaultModel, withExecutor,
 } from '../../application/runtime/cloudDispatch';
 import { mintContainerRunToken, verifyContainerRunToken } from '../../application/runtime/containerRunToken';
 import { agentHostOnlineCondition } from '../../infrastructure/database/agentHostOnline';
@@ -609,8 +609,14 @@ async function startDispatchedExecution(
     const hasContainerBinding = wantsContainer && !!env.AGENT_CONTAINER;
     const hasCloudRunner = !!env.CLOUD_RUNNER;
 
+    // The payload the run is dispatched with. Once `orchestrate` resolves the executor
+    // it re-stamps this (and the executions row) with `executor` so the orphan reaper /
+    // read-path repair pick the right per-surface silence ceiling. The kickoff closures
+    // read this variable (not `effectivePayload`) so they carry the stamped copy.
+    let dispatchPayload = effectivePayload;
+
     const runWorkerFallback = async () => {
-      await runCloudExecution(env, runtimeService, db, execution.id, taskRow, tenantId, taskRow.projectId, agent.label ?? 'BuilderForce Agent', agent.ref, effectivePayload, artifacts);
+      await runCloudExecution(env, runtimeService, db, execution.id, taskRow, tenantId, taskRow.projectId, agent.label ?? 'BuilderForce Agent', agent.ref, dispatchPayload, artifacts);
       await notifyDone();
     };
     const startDurable = async () => {
@@ -633,7 +639,7 @@ async function startDispatchedExecution(
             executionId: execution.id, tenantId, projectId: taskRow.projectId,
             taskId: taskRow.id, taskTitle: taskRow.title, taskDescription: taskRow.description,
             cloudAgentRef: agent.ref, agentLabel: agent.label ?? 'BuilderForce Agent',
-            payload: effectivePayload, artifacts,
+            payload: dispatchPayload, artifacts,
           }),
         });
         if (!res.ok) {
@@ -668,7 +674,7 @@ async function startDispatchedExecution(
       try {
         const { systemPrompt, userContent } = await prepareCloudRun(
           env, db, execution.id, taskRow, tenantId, taskRow.projectId,
-          agent.label ?? 'BuilderForce Agent', agent.baseModel, artifacts, agent.ref, effectivePayload,
+          agent.label ?? 'BuilderForce Agent', agent.baseModel, artifacts, agent.ref, dispatchPayload,
           { shell: true },
         );
         const token = await mintContainerRunToken(env.JWT_SECRET, execution.id);
@@ -731,6 +737,16 @@ async function startDispatchedExecution(
         : null;
       const containerHealthy = stub ? await probeContainerHealth(stub) : false;
       const executor = chooseCloudExecutor({ wantsContainer, hasContainerBinding, containerHealthy, hasCloudRunner });
+
+      // Stamp the resolved executor onto the payload + the executions row so the orphan
+      // reaper and read-path repair measure this run against the RIGHT silence ceiling:
+      // a long-lived 'durable'/'container' run heartbeats once per alarm tick and a tick
+      // spans one slow LLM step, so it must not be reaped at the serverless 90s wall
+      // (execution #136). The row is what the reaper reads; the kickoff body carries the
+      // same stamped copy so a self-heal re-dispatch keeps it.
+      dispatchPayload = withExecutor(effectivePayload, executor);
+      await db.update(executions).set({ payload: dispatchPayload })
+        .where(eq(executions.id, execution.id)).catch(() => { /* best-effort — reaper falls back to the long-lived ceiling on an unstamped payload */ });
 
       await recordCloudToolEvent(db, {
         tenantId, cloudAgentRef: agent.ref, executionId: execution.id,

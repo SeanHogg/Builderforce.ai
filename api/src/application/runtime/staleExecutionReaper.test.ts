@@ -169,3 +169,55 @@ describe('reapStaleExecutions — orphaned cloud run re-dispatch', () => {
     expect(captured.failedReasons.get(63)).toBe(CLOUD_ORPHAN_REASON);
   });
 });
+
+describe('reapStaleExecutions — per-surface silence ceiling (execution #136)', () => {
+  const NOW = Date.parse('2026-07-01T00:00:00.000Z');
+  const iso = (msAgo: number) => new Date(NOW - msAgo).toISOString();
+
+  it('SPARES a durable run mid a slow LLM step (93s of silence < long-lived ceiling) — not failed, not requeued', async () => {
+    // The exact #136 shape: a durable tick made ONE 93s LLM call, so updated_at is 93s
+    // stale — past the 90s pull floor but WELL inside the durable ceiling. The run is
+    // alive (mid-completion), so the reaper must leave it be.
+    candidateRows = [{
+      id: 136, tenant_id: 1, agent_host_id: null, payload: '{"executor":"durable","model":"m"}', error_message: null,
+      task_id: 79, task_title: 'OKR 4', task_description: null,
+      project_id: 3, cloud_agent_ref: 'kevin', open_pr_count: 0,
+      started_at: iso(5 * 60_000), updated_at: iso(93_000),
+    }];
+
+    const res = await reapStaleExecutions(envWithRunner(true), NOW);
+
+    expect(res.requeuedCloud).toBe(0);
+    expect(res.failedRunning).toBe(0);
+    expect(captured.failed).not.toContain(136);
+    expect(startMock).not.toHaveBeenCalled();
+  });
+
+  it('REAPS a worker (serverless) run at the same 93s of silence — it never heartbeats past the wall', async () => {
+    candidateRows = [{
+      id: 200, tenant_id: 1, agent_host_id: null, payload: '{"executor":"worker","reaperRequeued":true}', error_message: null,
+      task_id: 80, task_title: 'Quick', task_description: null,
+      project_id: 3, cloud_agent_ref: null, open_pr_count: 0,
+      started_at: iso(93_000), updated_at: iso(93_000),
+    }];
+
+    const res = await reapStaleExecutions(envWithRunner(true), NOW);
+
+    expect(res.failedRunning).toBe(1);
+    expect(captured.failed).toContain(200);
+  });
+
+  it('REAPS a durable run that is genuinely silent (past the long-lived ceiling)', async () => {
+    candidateRows = [{
+      id: 201, tenant_id: 1, agent_host_id: null, payload: '{"executor":"durable","reaperRequeued":true}', error_message: null,
+      task_id: 81, task_title: 'Dead', task_description: null,
+      project_id: 3, cloud_agent_ref: null, open_pr_count: 0,
+      started_at: iso(10 * 60_000), updated_at: iso(6 * 60_000),
+    }];
+
+    const res = await reapStaleExecutions(envWithRunner(true), NOW);
+
+    expect(res.failedRunning).toBe(1);
+    expect(captured.failed).toContain(201);
+  });
+});

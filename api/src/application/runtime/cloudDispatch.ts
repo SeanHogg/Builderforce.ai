@@ -250,6 +250,37 @@ export function parseRemediation(payload: string | undefined): RemediationContex
 }
 
 /**
+ * The cloud executor a run actually landed on, parsed off its execution payload
+ * (stamped by dispatch once {@link chooseCloudExecutor} decides). The orphan
+ * detectors read this to pick the right silence ceiling: a long-lived 'durable' /
+ * 'container' run heartbeats once per alarm tick and a tick legitimately spans one
+ * whole (possibly slow) LLM step, so it must NOT be reaped at the serverless wall;
+ * the in-request 'worker' loop never heartbeats and dies ~30s, so it keeps the tight
+ * fast-fail. Absent (older/unstamped payloads) → undefined, which the ceiling helper
+ * treats conservatively as long-lived so a live run is never reaped prematurely. */
+export function parseExecutor(payload: string | null | undefined): CloudExecutor | undefined {
+  if (!payload) return undefined;
+  try {
+    const e = (JSON.parse(payload) as { executor?: unknown }).executor;
+    return e === 'durable' || e === 'container' || e === 'worker' ? e : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/** Stamp the resolved cloud executor into the execution payload so the orphan
+ *  detectors can measure it against the right silence ceiling. Idempotent (re-stamps
+ *  overwrite). Returns the payload unchanged shape with `executor` set. */
+export function withExecutor(payload: string | null | undefined, executor: CloudExecutor): string {
+  let obj: Record<string, unknown> = {};
+  if (payload) {
+    try { obj = JSON.parse(payload) as Record<string, unknown>; } catch { obj = {}; }
+  }
+  obj.executor = executor;
+  return JSON.stringify(obj);
+}
+
+/**
  * Ensure the execution payload carries a model: an explicitly-pinned model wins,
  * otherwise fall back to the agent's own `base_model` so a V2 cloud run executes
  * AS the agent's model rather than the v1 gateway default. Returns the payload
