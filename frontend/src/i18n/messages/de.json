@@ -675,7 +675,8 @@
     "meter": {
       "ai_tokens": "KI-Tokens",
       "ingestion": "Datenaufnahme",
-      "error_events": "Fehlerereignisse"
+      "error_events": "Fehlerereignisse",
+      "outbound_fetches": "Webabrufe"
     },
     "unlimited": "Unbegrenzt",
     "freePerMo": "{amount} kostenlos / Mon.",
