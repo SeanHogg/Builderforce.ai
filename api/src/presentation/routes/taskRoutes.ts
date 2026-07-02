@@ -168,7 +168,7 @@ export async function maybeAutoRunOnLaneEntry(
   db: Db,
   runtimeService: RuntimeService,
   args: { tenantId: number; projectId: number; taskId: number; status: string; submittedBy: string; originLaneKey?: string },
-): Promise<void> {
+): Promise<boolean> {
   try {
     // ONE read-only evaluation answers "should this run, as which agent, and if
     // not why" — shared verbatim with the triage diagnostic + Run-now endpoints so
@@ -193,7 +193,7 @@ export async function maybeAutoRunOnLaneEntry(
         );
       }
     }
-    if (!evaln.canRunNow) return;
+    if (!evaln.canRunNow) return false;
 
     // Hand the lane's agent + model to the single surface-aware dispatcher (the
     // `cloudAgentRef` payload key is the existing dispatch contract — the V2 agent
@@ -217,9 +217,11 @@ export async function maybeAutoRunOnLaneEntry(
       submittedBy: args.submittedBy,
     });
     await Promise.allSettled(deferred);
+    return true;
   } catch {
     // Best-effort: the status change already succeeded; an autonomous-run failure
     // must not surface as a failed PATCH/create.
+    return false;
   }
 }
 

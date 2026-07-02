@@ -2177,7 +2177,12 @@ export function TaskMgmtContent({
               <RunTaskButton
                 task={drawerTask}
                 label="Run this task"
-                onRan={() => { patchStatus(drawerTask.id, 'in_progress'); setDrawerTab('agent'); }}
+                // The lane move is SERVER-SIDE: the runtime transitions the ticket to
+                // in_progress when the run reports RUNNING, and the change arrives over
+                // the project realtime socket. The client no longer writes the status
+                // itself (that pre-empted the server and forced a board re-render before
+                // the run had even started). Just surface the live output + refresh runs.
+                onRan={() => { setDrawerTab('agent'); refreshRuns(); }}
                 onAwaitingApproval={(g) => setApprovalGate({ approvalId: g.approvalId, taskId: g.taskId, reason: g.reason })}
               />
             </div>
