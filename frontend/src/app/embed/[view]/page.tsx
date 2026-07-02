@@ -171,6 +171,10 @@ function renderSurface(view: string, projectId: number | null): React.ReactNode 
     case 'rice-matrix':
       return <PmScopeProvider projectId={projectId}><RiceMatrix /></PmScopeProvider>;
     case 'roi-dashboard':
+    case 'feature-roi':
+      // Both keys surface the ROI dashboard (feature-ROI models). Handling
+      // 'feature-roi' explicitly keeps its EMBED_VIEWS `available: true` honest —
+      // without this case it fell through to the tracker lookup and rendered null.
       return <PmScopeProvider projectId={projectId}><RoiDashboard /></PmScopeProvider>;
     case 'soc2':
       // SOC 2 Control Tracker — bespoke (readiness scoreboard + baseline seed).
