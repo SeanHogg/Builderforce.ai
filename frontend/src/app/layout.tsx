@@ -21,6 +21,7 @@ import { PwaUpdateBanner } from '@/components/PwaUpdateBanner';
 import { PwaInstallPrompt } from '@/components/PwaInstallPrompt';
 import { GlobalErrorHandler } from '@/components/GlobalErrorHandler';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
+import { EMBED_ERROR_REPORTER } from '@/lib/embed/embedErrorReporter';
 
 const BASE_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://builderforce.ai';
 
@@ -128,6 +129,15 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             __html: `(function(){try{var t=localStorage.getItem('bf-theme');var th=t==='light'?'light':'dark';document.documentElement.dataset.theme=th;document.documentElement.style.colorScheme=th;}catch(e){}})();`,
           }}
         />
+
+        {/*
+          Framed-only embed crash reporter. Runs before any route bundle (raw
+          inline <head> script — the reliable "beforeInteractive", which a nested
+          layout can't provide). No-ops on the top-level app; when framed, it
+          relays render/hydration throws to the host so an embed failure is
+          diagnosable instead of a silent 15s timeout. See embedErrorReporter.ts.
+        */}
+        <script dangerouslySetInnerHTML={{ __html: EMBED_ERROR_REPORTER }} />
 
         {/* Fontshare loaded via CSS @import in globals.css — no <link> needed here */}
         {/* JetBrains Mono loaded via next/font/google (see jetbrainsMono variable above) — no <link> needed */}

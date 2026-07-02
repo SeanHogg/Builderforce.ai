@@ -234,8 +234,12 @@ export function TaskMgmtContent({
     return () => { alive = false; };
   }, [approvalGate?.approvalId]);
 
-  const load = useCallback(async () => {
-    setLoading(true);
+  // `background:true` refetches WITHOUT flipping the full-screen "Loading…" state,
+  // so a live refresh (a realtime echo of the user's own drag, the brain bus, an
+  // approval/ceremony/agent update) reconciles in place instead of blanking the
+  // board. Only the initial mount / project switch shows the spinner.
+  const load = useCallback(async (opts?: { background?: boolean }) => {
+    if (!opts?.background) setLoading(true);
     setError(null);
     try {
       const [tasksData, agentHostsData, runTargets, membersData, projectWf] = await Promise.all([
@@ -277,7 +281,7 @@ export function TaskMgmtContent({
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to load');
     } finally {
-      setLoading(false);
+      if (!opts?.background) setLoading(false);
     }
   }, [projectId, projectsProp, globalScope]);
 
@@ -296,7 +300,7 @@ export function TaskMgmtContent({
   // "update task" action in the docked drawer), the write lands via the API but
   // this board holds its own state — so listen on the brain-data bus and refetch
   // to reflect the change live instead of going stale until a manual reload.
-  useBrainDataRefresh(['tasks', 'executions', 'projects'], () => { void load(); });
+  useBrainDataRefresh(['tasks', 'executions', 'projects'], () => { void load({ background: true }); });
 
   useEffect(() => {
     if (view === 'board') {
@@ -381,7 +385,10 @@ export function TaskMgmtContent({
   // This is the primary liveness path; the run-feed poll above is a reconcile
   // backstop for a dropped socket (cross-isolate WS is lossy on Workers).
   const onRealtimeChange = useCallback(() => {
-    void load();
+    // A realtime push is a LIVE reconcile (often the echo of the user's own drag) —
+    // refetch in the background so the board updates in place instead of flashing
+    // the full-screen "Loading…" placeholder.
+    void load({ background: true });
     refreshRuns();
   }, [load, refreshRuns]);
   useRealtimeRoom(
@@ -873,7 +880,7 @@ export function TaskMgmtContent({
                 onResolved={(updated) => {
                   setApprovalGate(null);
                   setGateApproval(null);
-                  if (updated.status === 'approved') { void load(); }
+                  if (updated.status === 'approved') { void load({ background: true }); }
                 }}
               />
             )}
@@ -1877,7 +1884,7 @@ export function TaskMgmtContent({
 
             {drawerTab === 'agent' ? (
               <div style={{ flex: 1, overflow: 'auto' }}>
-                <AgentTab task={drawerTask} projectId={drawerTask.projectId} agentHosts={agentHostsList} onTaskChanged={load} />
+                <AgentTab task={drawerTask} projectId={drawerTask.projectId} agentHosts={agentHostsList} onTaskChanged={() => load({ background: true })} />
               </div>
             ) : drawerTab === 'prd' ? (
               <div style={{ flex: 1, overflow: 'auto' }}>
@@ -2241,7 +2248,7 @@ export function TaskMgmtContent({
               projectId={effectiveProjectId}
               mode={ceremony}
               onModeChange={setCeremony}
-              onClose={() => { setCeremony(null); load(); }}
+              onClose={() => { setCeremony(null); void load({ background: true }); }}
             />
           </div>
         </div>
