@@ -156,6 +156,7 @@ import { runAlertSweep } from './application/alerts/runAlertSweep';
 import { runDueTriggers } from './application/workflow/runDueTriggers';
 import { processPendingCloudWorkflows } from './application/workflow/cloudExecutor';
 import { reapStaleExecutions } from './application/runtime/staleExecutionReaper';
+import { runAutonomousExecutionSweep } from './application/runtime/autonomousExecutionSweep';
 import { runWebhookRetrySweep } from './application/seams/webhookService';
 import { runBoardSyncSweep } from './application/boardsync/runBoardSyncSweep';
 import { runParkedWorkflowSweep } from './application/swimlane/resumeParkedWorkflows';
@@ -558,6 +559,23 @@ export default {
         reapStaleExecutions(env).catch((err) => {
           console.error('[cron:exec-reaper] failed', err);
         }),
+      );
+      // Always-on autonomous executor — across ALL tenants/projects, start every
+      // agent-owned, non-terminal ticket that has no live run (token-gated; a tenant
+      // out of budget is skipped + nudged to upgrade). This is the server-side
+      // backstop that makes "agents work continuously in the cloud" true even when
+      // the live lane-entry trigger's kickoff was dropped or a ticket was created
+      // into a staffed lane while nothing was watching.
+      ctx.waitUntil(
+        runAutonomousExecutionSweep(env)
+          .then((r) => {
+            if (r.dispatched > 0 || r.tokenBlockedTenants > 0) {
+              console.log(`[cron:auto-exec] dispatched=${r.dispatched} candidates=${r.candidates} tokenBlockedTenants=${r.tokenBlockedTenants} pendingUnderBlocked=${r.pendingUnderBlockedTenants} upgradeEmails=${r.upgradeEmailsSent}`);
+            }
+          })
+          .catch((err) => {
+            console.error('[cron:auto-exec] failed', err);
+          }),
       );
       // Redeliver failed outbound webhook deliveries with capped exponential
       // backoff (at-least-once semantics for the cross-domain seam events).
