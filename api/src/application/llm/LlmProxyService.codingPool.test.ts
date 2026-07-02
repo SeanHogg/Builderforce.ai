@@ -299,4 +299,22 @@ describe('Cloudflare paid coders', () => {
       expect(codingModelsForPlan('free')).not.toContain(id);
     }
   });
+
+  it('the slow 256K kimi is the LAST Cloudflare coder in the backstop — faster coders lead (execution #136)', () => {
+    // kimi-k2.7-code is the slowest CF coder by far (a single completion ran 93s and
+    // got a live durable tick orphan-reaped). It must sit behind the fast big-window
+    // glm lead AND the small/fast qwen/llama failovers, so a free/exhausted coding run
+    // prefers a faster coder and only reaches kimi for a genuinely huge context.
+    const glm   = CODING_PREMIUM_FALLBACK_MODELS.indexOf('@cf/zai-org/glm-4.7-flash');
+    const qwen  = CODING_PREMIUM_FALLBACK_MODELS.indexOf('@cf/qwen/qwen3-30b-a3b-fp8');
+    const llama = CODING_PREMIUM_FALLBACK_MODELS.indexOf('@cf/meta/llama-3.3-70b-instruct-fp8-fast');
+    const kimi  = CODING_PREMIUM_FALLBACK_MODELS.indexOf('@cf/moonshotai/kimi-k2.7-code');
+    expect(glm).toBeGreaterThanOrEqual(0);
+    expect(glm).toBeLessThan(kimi);   // big-window lead before the slow model
+    expect(qwen).toBeLessThan(kimi);  // fast small coders before the slow model
+    expect(llama).toBeLessThan(kimi);
+    // glm stays the Cloudflare lead (fits the cloud loop's compacted contexts).
+    expect(glm).toBeLessThan(qwen);
+    expect(glm).toBeLessThan(llama);
+  });
 });

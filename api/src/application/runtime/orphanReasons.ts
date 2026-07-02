@@ -40,6 +40,38 @@ export const CLOUD_LONG_LIVED_ORPHAN_REASON =
 export const SERVERLESS_WALL_MS = 45_000;
 
 /**
+ * Silence ceiling for the in-request serverless 'worker' loop: it runs in Cloudflare
+ * `waitUntil` (stopped ~30s after the response) and NEVER heartbeats `updated_at`
+ * mid-run, so 90s = that wall + margin is the right fast-fail. Kept in lockstep with
+ * {@link ../runtime/staleExecutionReaper.CLOUD_RUNNING_DEADLINE_MS}.
+ */
+export const CLOUD_SERVERLESS_SILENCE_MS = 90_000;
+
+/**
+ * Silence ceiling for a long-lived executor — the durable CloudRunnerDO or a
+ * Cloudflare Container. These heartbeat `updated_at` exactly ONCE per alarm tick, and
+ * a tick legitimately spans a single LLM step: a slow free coder (or a funded-backstop
+ * failover chain) routinely runs 60-90s+ for ONE completion (observed 93s on
+ * `@cf/moonshotai/kimi-k2.7-code`, execution #136). At the old 90s ceiling that live,
+ * mid-completion tick was orphan-reaped ~2s before it returned. 5 min clears the
+ * worst-case single step + failover with margin, so only a genuinely silent (crashed /
+ * hung) long-lived run is reaped — while still surfacing a dead one in minutes.
+ */
+export const CLOUD_LONG_LIVED_SILENCE_MS = 5 * 60_000;
+
+/**
+ * Pick the silence ceiling from the executor the run landed on (stamped on the payload
+ * by dispatch; see {@link ../runtime/cloudDispatch.parseExecutor}). Only the serverless
+ * 'worker' loop gets the tight 90s wall; 'durable'/'container' — and an UNKNOWN executor
+ * (older/unstamped payloads) — get the long-lived ceiling, because reaping a live tick
+ * mid-completion (false positive) is far worse than a few extra minutes before failing a
+ * genuinely dead run (false negative).
+ */
+export function cloudSilenceCeilingMs(executor: string | null | undefined): number {
+  return executor === 'worker' ? CLOUD_SERVERLESS_SILENCE_MS : CLOUD_LONG_LIVED_SILENCE_MS;
+}
+
+/**
  * Pick the right cloud-orphan reason from how long the run actually made progress.
  * `startedAtMs` = when the run started; `lastActivityMs` = its last heartbeat
  * (`updated_at`). When that span exceeds the serverless wall the run provably ran on

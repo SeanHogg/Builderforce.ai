@@ -9,7 +9,8 @@ import {
   asExecutionId, asTaskId, asAgentId, asAgentHostId, asTenantId, TaskStatus,
 } from '../../domain/shared/types';
 import { NotFoundError, ForbiddenError } from '../../domain/shared/errors';
-import { cloudOrphanReason, HOST_ORPHAN_REASON } from './orphanReasons';
+import { cloudOrphanReason, cloudSilenceCeilingMs, HOST_ORPHAN_REASON } from './orphanReasons';
+import { parseExecutor } from './cloudDispatch';
 
 export interface SubmitTaskDto {
   taskId:      number;
@@ -170,22 +171,21 @@ export class RuntimeService {
    * process to recover, so once a run exceeds a per-kind ceiling we mark it failed
    * on read.
    *
-   * Cloud ceiling is tight on purpose: the interim Worker loop runs in `waitUntil`,
-   * which Cloudflare stops shortly after the HTTP response returns (observed ~30s),
-   * so that serverless path cannot make progress past the wall. 90s = that wall +
-   * margin for the terminal-status write + clock skew, so a genuinely-dead run
-   * surfaces in ~1.5 min instead of the old 8 min. A long-lived executor (durable
-   * CloudRunnerDO or a Cloudflare Container) heartbeats `updatedAt` as it works, so
-   * the ceiling is measured from last activity below and only a SILENT long-lived
-   * run is reaped — and {@link orphanReason} then reports it as a crash, not a 30s
-   * timeout. A self-hosted host has a real long-lived process and legitimately runs
-   * much longer, so it keeps a far larger ceiling.
+   * Cloud ceiling is PER-SURFACE ({@link cloudSilenceCeilingMs}, keyed off the executor
+   * stamped on the payload at dispatch): the interim Worker loop runs in `waitUntil`,
+   * which Cloudflare stops shortly after the HTTP response returns (observed ~30s), so
+   * it keeps the tight 90s wall + margin — a genuinely-dead serverless run surfaces in
+   * ~1.5 min. A long-lived executor (durable CloudRunnerDO / Cloudflare Container)
+   * heartbeats `updatedAt` once per alarm tick, and a tick legitimately spans one slow
+   * LLM step (60-90s+), so it gets the larger long-lived ceiling — measured from last
+   * activity below — and only a SILENT (crashed/hung) long-lived run is reaped;
+   * {@link orphanReason} then reports it as a crash, not a 30s timeout. A self-hosted
+   * host has a real long-lived process and keeps a far larger ceiling still.
    *
    * Read-path repair (no cron needed): the stream's reconciliation poll calls
    * `getExecution` every few seconds, so an orphan self-heals on next view.
    * Bounded — only stale, non-terminal rows incur a write; healthy reads don't.
    */
-  private static readonly CLOUD_ORPHAN_MS = 90_000;
   private static readonly HOST_ORPHAN_MS = 30 * 60_000;
 
   private isCloudRun(e: Execution): boolean {
@@ -206,8 +206,13 @@ export class RuntimeService {
     const sinceMs = this.isCloudRun(e)
       ? (e.updatedAt ?? e.createdAt).getTime()
       : (e.startedAt ?? e.updatedAt ?? e.createdAt).getTime();
+    // Cloud ceiling is per-surface: a long-lived executor (durable DO / container)
+    // heartbeats once per alarm tick and a tick spans one (possibly slow) LLM step, so
+    // it must not be reaped at the serverless 90s wall — only the in-request 'worker'
+    // loop keeps that tight fast-fail (execution #136: a 93s durable tick reaped at 90s
+    // while still alive). The executor is stamped on the payload at dispatch.
     const ceiling = this.isCloudRun(e)
-      ? RuntimeService.CLOUD_ORPHAN_MS
+      ? cloudSilenceCeilingMs(parseExecutor(e.payload))
       : RuntimeService.HOST_ORPHAN_MS;
     return nowMs - sinceMs > ceiling;
   }
