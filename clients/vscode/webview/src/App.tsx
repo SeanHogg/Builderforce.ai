@@ -25,6 +25,7 @@ import {
 import { createPersistence } from './persistence';
 import { buildHostTools } from './hostTools';
 import { buildIdeSystemPrompt } from './systemPrompt';
+import { activeProjectDirective } from '../../src/idePersona';
 import { buildTranscript, hasTranscriptContent } from './transcript';
 
 /** Read a localized string from the host's bundle, falling back to English. */
@@ -152,18 +153,29 @@ function Chat({ init }: { init: InitData }) {
     [autoApprove, isMutating],
   );
 
+  // Scope new chats to the sidebar's active project (same as task-seeded chats),
+  // so a conversation is associated with the project it's about server-side.
   const ensureChatId = useCallback(async () => {
     if (chatId != null) return chatId;
-    const chat = await persistence.createChat({ title: t('app.newChat', 'New chat'), projectId: null });
+    const chat = await persistence.createChat({ title: t('app.newChat', 'New chat'), projectId: init.project?.id ?? null });
     setChatId(chat.id);
     reloadChats();
     return chat.id;
-  }, [chatId, persistence, reloadChats, t]);
+  }, [chatId, persistence, reloadChats, t, init.project?.id]);
+
+  // Ambient project context — the SAME `extraSystem` channel the web Brain uses to
+  // tell the model the current project, so platform tools (repos.*/tasks.*/…)
+  // default to it instead of asking for a projectId. Updates on project switch.
+  const projectDirective = useMemo(
+    () => activeProjectDirective(init.project),
+    [init.project?.id, init.project?.name],
+  );
 
   const conv = useBrainConversation({
     chatId,
     modality: 'ide',
     model: init.model,
+    extraSystem: projectDirective,
     toolSpecs,
     runTool,
     needsConfirm,

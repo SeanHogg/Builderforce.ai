@@ -13,7 +13,7 @@ import { InsightsController } from "./insights";
 import { clearPlatformToolsCache } from "./platformTools";
 import { setGroundingSummary } from "./grounding";
 import { setSelectedModel } from "./modelState";
-import { getSelectedProject, initProjectState, setSelectedProject } from "./projectState";
+import { getSelectedProject, initProjectState, onProjectChange, setSelectedProject } from "./projectState";
 import { ProjectsTreeProvider } from "./projectsTree";
 import { SessionsTreeProvider } from "./sessionsTree";
 import { InboxTreeProvider } from "./inboxTree";
@@ -263,6 +263,9 @@ export function activate(context: vscode.ExtensionContext): void {
       setGroundingSummary(undefined);
       void maybeScan(context, false);
     }),
+    // Switching the active project re-pushes Brain init so an open chat's system
+    // prompt (and new-chat scoping) tracks the current project without a reopen.
+    onProjectChange(() => BrainWebview.refresh()),
   );
 
   void maybeScan(context, false);

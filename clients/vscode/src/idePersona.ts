@@ -28,3 +28,29 @@ export function ideSystemPromptBase(hasWorkspace: boolean): string {
 export function withWorkspaceMap(base: string, grounding?: string): string {
   return grounding ? `${base}\n\n${WORKSPACE_MAP_INTRO}\n\n${grounding}` : base;
 }
+
+/** The selected BuilderForce project (the sidebar's active project), if any. */
+export interface ActiveProject {
+  id: number;
+  name: string;
+}
+
+/**
+ * The ambient "active project" directive — the SAME dynamic system-context the web
+ * Brain injects via `extraSystem` (see BrainPanel's `ambientSystem`), so the Brain
+ * scopes the shared platform tools (repos.*, tasks.*, executions.*, …) to the
+ * sidebar's selected project WITHOUT asking the user for a project id. Injected as
+ * ambient context (NOT baked into the persona), so it updates when the project
+ * switches and stays consistent across every entry point — the Work Inbox seeds
+ * (review PRs / fix errors / open PR), a new chat, and the `@builderforce`
+ * participant. Returns undefined (no directive) when no project is selected.
+ */
+export function activeProjectDirective(project?: ActiveProject): string | undefined {
+  if (!project) return undefined;
+  return (
+    `The current project is "${project.name}" (projectId ${project.id}). ` +
+    `When the user asks to review, create, list, or operate on pull requests, tasks, specs, or other ` +
+    `project-scoped items without naming a project, use projectId ${project.id} by default — ` +
+    `do NOT ask the user for the project id.`
+  );
+}

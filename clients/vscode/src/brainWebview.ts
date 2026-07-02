@@ -4,6 +4,7 @@ import { TOOL_DEFS } from "./fileTools";
 import { getBaseUrl, SECRET_KEY } from "./gateway";
 import { getGroundingSummary } from "./grounding";
 import { getSelectedModel } from "./modelState";
+import { getSelectedProject } from "./projectState";
 
 /** A host-driven request to the singleton Brain panel (mirror of the webview type). */
 export interface BrainIntent {
@@ -190,6 +191,10 @@ export class BrainWebview {
       grounding: root ? getGroundingSummary() : undefined,
       signedIn,
       hasWorkspace: !!root,
+      // The sidebar's active project — injected into the system prompt (so the
+      // Brain scopes platform tools without asking for a projectId) AND used to
+      // scope newly-created chats. Re-pushed on project change via refresh().
+      project: getSelectedProject(),
       // The local file tools, forwarded so the model can call them over the bridge.
       // (The shared platform catalog is fetched by the webview directly from the gateway.)
       tools: TOOL_DEFS.map((d) => ({
