@@ -1,7 +1,12 @@
-import { TaskId, ProjectId, TaskStatus, TaskPriority, TaskType, AgentType, AgentHostId } from '../shared/types';
+import { TaskId, ProjectId, TaskStatus, TaskPriority, TaskType, AgentType, AgentHostId, FeatureSign } from '../shared/types';
 import { ValidationError } from '../shared/errors';
 
 export interface TaskProps {
+  /**
+   * Feature sign tag (0125) - indicates the feature's overall development and release status.
+   * Must be one of: SHIPPED, IN_PROGRESS, NOT_STARTED, BROKEN
+   */
+  featureSign: FeatureSign;
   id: TaskId;
   projectId: ProjectId;
   key: string;
@@ -73,7 +78,7 @@ export class Task {
   static create(
     props: Omit<
       TaskProps,
-      'id' | 'key' | 'createdAt' | 'updatedAt' | 'githubIssueNumber' | 'githubIssueUrl' | 'githubPrUrl' | 'githubPrNumber' | 'archived' | 'assignedAgentRef' | 'assignedUserId' | 'gitBranch' | 'explicitRepoId' | 'taskType' | 'parentTaskId' | 'sprintId' | 'releaseId' | 'storyPoints'
+      'id' | 'key' | 'createdAt' | 'updatedAt' | 'githubIssueNumber' | 'githubIssueUrl' | 'githubPrUrl' | 'githubPrNumber' | 'archived' | 'assignedAgentRef' | 'assignedUserId' | 'gitBranch' | 'explicitRepoId' | 'taskType' | 'parentTaskId' | 'sprintId' | 'releaseId' | 'storyPoints' | 'featureSign'
     > & {
       projectKey: string;
       /** Highest existing key sequence in the project; this task gets the next one. */
@@ -85,6 +90,11 @@ export class Task {
       /** Type at creation (default `task`). A decomposed child passes the Epic's id as parent. */
       taskType?: TaskType;
       parentTaskId?: TaskId | null;
+      /**
+       * Feature sign tag (0125) - indicates the feature's overall development and release status.
+       * Default: NOT_STARTED as per PRD AC2 requirement for new features.
+       */
+      featureSign?: FeatureSign;
     },
   ): Task {
     if (!props.title.trim()) throw new ValidationError('Task title is required');
@@ -115,6 +125,7 @@ export class Task {
       sprintId: null,
       releaseId: null,
       storyPoints: null,
+      featureSign: props.featureSign ?? 'NOT_STARTED',
       startDate: props.startDate ?? null,
       dueDate: props.dueDate ?? null,
       persona: props.persona ?? null,
