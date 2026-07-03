@@ -22,6 +22,7 @@ import {
   getProfile as hiredGetProfile,
   createEmbedToken as hiredCreateEmbedToken,
   connectExisting as hiredConnectExisting,
+  getByExternalUserId as hiredGetByExternalUserId,
 } from '../../application/integrations/hiredVideo';
 import type { Env, HonoEnv } from '../../env';
 
@@ -85,6 +86,24 @@ async function optionalUserId(c: { req: { header(n: string): string | undefined 
 export function createFreelancerRoutes(): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
   const sql = (env: HonoEnv['Bindings']) => neon(env.NEON_DATABASE_URL);
+
+  /** Resolve a freelancer's hired.video userId — from the stored value, else
+   *  reconcile via getByExternalUserId and persist it (covers accounts that were
+   *  provisioned before the partner key was configured). ONE place so the résumé,
+   *  embed-token and profile paths share the linkage logic (DRY). */
+  async function resolveHiredUserId(env: HonoEnv['Bindings'], userId: string, known?: string | null): Promise<string | null> {
+    if (known) return known;
+    const ref = await hiredGetByExternalUserId(env, userId);
+    if (ref.ref?.userId) {
+      await sql(env)`
+        UPDATE freelancer_profiles SET hired_video_user_id = ${ref.ref.userId},
+          hired_video_connection_id = COALESCE(${ref.ref.connectionId ?? null}, hired_video_connection_id), updated_at = NOW()
+        WHERE user_id = ${userId}
+      `;
+      return ref.ref.userId;
+    }
+    return null;
+  }
 
   // ------------------------------------------------------------------ SELF ----
   // Registered before the public :id route so "me" isn't swallowed by it.
@@ -168,16 +187,26 @@ export function createFreelancerRoutes(): Hono<HonoEnv> {
     // register the title (hired.video parses the claimed upload on their side).
     const rawText = type.startsWith('text/') ? (await file.text()).slice(0, 100_000) : undefined;
 
-    const [row] = await sql(c.env)`SELECT hired_video_user_id FROM freelancer_profiles WHERE user_id = ${userId}`;
+    const [row] = await sql(c.env)`SELECT hired_video_user_id, skills FROM freelancer_profiles WHERE user_id = ${userId}`;
     let resumeId: string | undefined;
-    const hiredId = row?.hired_video_user_id as string | undefined;
+    const hiredId = await resolveHiredUserId(c.env, userId, row?.hired_video_user_id as string | undefined);
     if (hiredId) {
+      // Text résumés parse on hired.video; binaries are R2-only (uploadResume skips
+      // them — hired.video rejects binary — and the worker parses/claims on their side).
       const res = await hiredUploadResume(c.env, hiredId, { title: file.name, rawText });
       resumeId = res.resumeId;
-      // Refresh the cached extract (skills/experience) for prefill/display.
+      // Refresh the cached extract, and PREFILL skills when the worker has none yet.
       const prof = await hiredGetProfile(c.env, hiredId);
-      if (prof.profile) {
-        await sql(c.env)`UPDATE freelancer_profiles SET resume_extract = ${JSON.stringify(prof.profile)} WHERE user_id = ${userId}`;
+      if (prof.extract) {
+        const hasSkills = parseSkills(row?.skills).length > 0;
+        const prefill = !hasSkills && prof.extract.skills.length > 0 ? JSON.stringify(prof.extract.skills.slice(0, 50)) : null;
+        await sql(c.env)`
+          UPDATE freelancer_profiles
+          SET resume_extract = ${JSON.stringify(prof.extract.raw)},
+              skills = COALESCE(${prefill}, skills), updated_at = NOW()
+          WHERE user_id = ${userId}
+        `;
+        if (prefill) await invalidateCached(c.env as Env, FREELANCER_PUBLIC_LIST_CACHE_KEY);
       }
     }
     await sql(c.env)`
@@ -194,10 +223,10 @@ export function createFreelancerRoutes(): Hono<HonoEnv> {
     const userId = c.get('userId') as string;
     const kind = c.req.query('kind') === 'resume' ? 'resume' : 'profile';
     const [row] = await sql(c.env)`SELECT hired_video_user_id FROM freelancer_profiles WHERE user_id = ${userId}`;
-    const hiredId = row?.hired_video_user_id as string | undefined;
+    const hiredId = await resolveHiredUserId(c.env, userId, row?.hired_video_user_id as string | undefined);
     if (!hiredId) return c.json({ configured: false, embedUrl: null });
     const res = await hiredCreateEmbedToken(c.env, hiredId, kind);
-    return c.json({ configured: res.configured, embedUrl: res.embedUrl ?? null });
+    return c.json({ configured: res.configured, embedUrl: res.embedUrl ?? null, expiresAt: res.expiresAt ?? null });
   });
 
   // POST /me/connect — start the consent flow to link an EXISTING hired.video

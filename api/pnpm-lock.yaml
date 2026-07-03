@@ -20,6 +20,9 @@ importers:
       '@seanhogg/builderforce-memory-engine':
         specifier: ^2026.6.39
         version: 2026.6.39
+      '@seanhogg/hired-video-sdk':
+        specifier: ^0.2.0
+        version: 0.2.0
       drizzle-orm:
         specifier: ^0.36.4
         version: 0.36.4(@cloudflare/workers-types@4.20260313.1)(@neondatabase/serverless@0.10.4)(@types/pg@8.11.6)
@@ -564,6 +567,15 @@ packages:
     engines: {node: '>=18.0.0'}
     peerDependencies:
       '@seanhogg/builderforce-memory-engine': ^2026.6.39
+
+  '@seanhogg/hired-video-sdk@0.2.0':
+    resolution: {integrity: sha512-z4TPPpthYKQj02TfKFhRSzUgdVrIQ9clW6I8mvv71rVBEOYDB1fFTUBpJ4KQ9ba3KZFM2LSQ3SzPS21R8RmHHw==}
+    engines: {node: '>=18'}
+    peerDependencies:
+      react: '>=17'
+    peerDependenciesMeta:
+      react:
+        optional: true
 
   '@sindresorhus/is@7.2.0':
     resolution: {integrity: sha512-P1Cz1dWaFfR4IR+U13mqqiGsLFf1KbayybWwdd2vfctdV6hDpUkgCY0nKOLLTMSoRd/jJNjtbqzf13K8DCCXQw==}
@@ -1527,6 +1539,8 @@ snapshots:
   '@seanhogg/builderforce-memory@2026.6.39(@seanhogg/builderforce-memory-engine@2026.6.39)':
     dependencies:
       '@seanhogg/builderforce-memory-engine': 2026.6.39
+
+  '@seanhogg/hired-video-sdk@0.2.0': {}
 
   '@sindresorhus/is@7.2.0': {}
 
