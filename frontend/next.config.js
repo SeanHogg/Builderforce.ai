@@ -39,6 +39,17 @@ const nextConfig = {
       'onnxruntime-node$': false,
       sharp$: false,
     };
+    // Silence unactionable "Critical dependency" warnings emitted from inside
+    // third-party deps we don't control: @huggingface/transformers uses a
+    // dynamic `require(expr)` and reads `import.meta` directly, and
+    // @seanhogg/builderforce-memory's HF publish path does the same. These are
+    // browser/edge-unused code paths (stubbed above) — the warnings are pure
+    // noise and cannot be fixed in our source, so filter them out.
+    config.ignoreWarnings = [
+      ...(config.ignoreWarnings || []),
+      { message: /Critical dependency: the request of a dependency is an expression/ },
+      { message: /Critical dependency: Accessing import\.meta directly is unsupported/ },
+    ];
     return config;
   },
   async redirects() {
