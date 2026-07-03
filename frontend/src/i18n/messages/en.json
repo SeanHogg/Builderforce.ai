@@ -4823,7 +4823,11 @@
     "rate": "Rate",
     "location": "Location",
     "availability": "Availability",
-    "private": "Private profile"
+    "private": "Private profile",
+    "hero": {
+      "blurb": "Hire vetted freelance developers, DBAs, designers and other specialists — browse résumés and skills, agree an hourly rate, interview, and track billable hours all in one place.",
+      "ctaHire": "Post work & hire"
+    }
   },
   "hires": {
     "title": "Hires",

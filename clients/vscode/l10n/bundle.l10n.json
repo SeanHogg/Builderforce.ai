@@ -94,5 +94,7 @@
   "Promote this item to an OKR objective? Its child tasks are re-linked to the new objective and it leaves the board.": "Promote this item to an OKR objective? Its child tasks are re-linked to the new objective and it leaves the board.",
   "Promote": "Promote",
   "BuilderForce: could not change the item's type.": "BuilderForce: could not change the item's type.",
-  "BuilderForce: {0} → {1}": "BuilderForce: {0} → {1}"
+  "BuilderForce: {0} → {1}": "BuilderForce: {0} → {1}",
+  "Dismiss": "Dismiss",
+  "Reconnect": "Reconnect"
 }

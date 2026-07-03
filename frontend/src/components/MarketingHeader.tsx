@@ -34,6 +34,7 @@ const RESOURCE_LINKS: SimpleLink[] = [
 // Flat links that sit directly in the bar (no dropdown).
 const FLAT_LINKS: SimpleLink[] = [
   { href: '/marketplace', label: 'Workforce' },
+  { href: '/talent', label: 'Talent' },
   { href: '/agents', label: 'Agents' },
   // Evermind intentionally NOT a top-level flat link — it lives under the Product
   // mega-menu and in the footer; keeping it out of the bar reduces nav clutter.

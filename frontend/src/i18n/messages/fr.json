@@ -4823,7 +4823,11 @@
     "rate": "Tarif",
     "location": "Lieu",
     "availability": "Disponibilité",
-    "private": "Profil privé"
+    "private": "Profil privé",
+    "hero": {
+      "blurb": "Recrutez des freelances vérifiés : développeurs, DBA, designers et autres spécialistes. Consultez les CV et compétences, convenez d’un tarif horaire, menez des entretiens et suivez les heures facturables au même endroit.",
+      "ctaHire": "Publier une offre et recruter"
+    }
   },
   "hires": {
     "title": "Recrutements",

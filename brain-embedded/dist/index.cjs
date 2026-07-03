@@ -1105,6 +1105,8 @@ function useBrainConversation(options) {
   } = options;
   const [messages, setMessages] = (0, import_react6.useState)([]);
   const [loadingMessages, setLoadingMessages] = (0, import_react6.useState)(false);
+  const [reloadNonce, setReloadNonce] = (0, import_react6.useState)(0);
+  const reloadMessages = (0, import_react6.useCallback)(() => setReloadNonce((n) => n + 1), []);
   const [localSending, setLocalSending] = (0, import_react6.useState)(false);
   const [localError, setLocalError] = (0, import_react6.useState)("");
   const [copiedMessageId, setCopiedMessageId] = (0, import_react6.useState)(null);
@@ -1136,7 +1138,7 @@ function useBrainConversation(options) {
     return () => {
       cancelled = true;
     };
-  }, [persistence, chatId]);
+  }, [persistence, chatId, reloadNonce]);
   (0, import_react6.useEffect)(() => {
     const appended = snapshot.appended;
     if (appended.length === 0) return;
@@ -1314,6 +1316,7 @@ ${refs}`;
   return {
     messages,
     loadingMessages,
+    reloadMessages,
     sending: localSending || snapshot.running,
     error: localError || snapshot.error,
     streamingText: snapshot.streamingText,

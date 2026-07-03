@@ -466,7 +466,7 @@ var DEFAULT_CHAT_TICKETS_LABELS = {
 // src/chatTickets/ChatTicketsPanel.tsx
 import { jsx as jsx4, jsxs as jsxs4 } from "react/jsx-runtime";
 var RUNNABLE = new Set(RUNNABLE_KINDS);
-function ChatTicketsPanel({ chatId, projectId, chatList, adapter, labels, onChanged }) {
+function ChatTicketsPanel({ chatId, projectId, chatList, adapter, labels, onChanged, refreshSignal }) {
   const [tickets, setTickets] = useState2([]);
   const [agents, setAgents] = useState2([]);
   const [pool, setPool] = useState2([]);
@@ -487,7 +487,7 @@ function ChatTicketsPanel({ chatId, projectId, chatList, adapter, labels, onChan
   }, [adapter, chatId]);
   useEffect2(() => {
     void load();
-  }, [load]);
+  }, [load, refreshSignal]);
   useEffect2(() => {
     adapter.loadAgentPool().then(setPool).catch(() => setPool([]));
   }, [adapter]);

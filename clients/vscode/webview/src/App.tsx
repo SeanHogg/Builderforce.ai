@@ -134,7 +134,12 @@ function ToolRegistrar({ tools }: { tools: InitData['tools'] }) {
 function PlatformTools() {
   useMcpExtensions({
     onToolResult: (info) => {
-      if (info.mutating && info.ok) post('platform.write', { name: info.name });
+      if (info.mutating && info.ok) {
+        post('platform.write', { name: info.name });
+        // Let in-webview views (e.g. the chat↔ticket panel) refresh live after a
+        // Brain-driven MCP write, mirroring the web app's brain-data event bus.
+        window.dispatchEvent(new CustomEvent('bf:mcp-write', { detail: { name: info.name } }));
+      }
     },
   });
   return null;
@@ -247,6 +252,14 @@ function Chat({ init }: { init: InitData }) {
     () => createChatTicketsAdapter(init.baseUrl, getToken, () => void refreshToken()),
     [init.baseUrl],
   );
+  // Bumped when the Brain mutates work items via MCP tools, so the ticket panel
+  // refreshes live (rings/links) rather than only on its own button actions.
+  const [ticketRefresh, setTicketRefresh] = useState(0);
+  useEffect(() => {
+    const h = () => setTicketRefresh((n) => n + 1);
+    window.addEventListener('bf:mcp-write', h);
+    return () => window.removeEventListener('bf:mcp-write', h);
+  }, []);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const attachFiles = useCallback((files: FileList | File[] | null) => {
@@ -346,7 +359,8 @@ function Chat({ init }: { init: InitData }) {
             chatList={chats.map((c) => ({ id: c.id, title: c.title }))}
             adapter={ticketAdapter}
             labels={DEFAULT_CHAT_TICKETS_LABELS}
-            onChanged={reloadChats}
+            onChanged={() => { reloadChats(); conv.reloadMessages(); }}
+            refreshSignal={ticketRefresh}
           />
         </div>
       )}

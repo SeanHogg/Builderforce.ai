@@ -519,7 +519,7 @@ var DEFAULT_CHAT_TICKETS_LABELS = {
 // src/chatTickets/ChatTicketsPanel.tsx
 var import_jsx_runtime4 = require("react/jsx-runtime");
 var RUNNABLE = new Set(RUNNABLE_KINDS);
-function ChatTicketsPanel({ chatId, projectId, chatList, adapter, labels, onChanged }) {
+function ChatTicketsPanel({ chatId, projectId, chatList, adapter, labels, onChanged, refreshSignal }) {
   const [tickets, setTickets] = (0, import_react3.useState)([]);
   const [agents, setAgents] = (0, import_react3.useState)([]);
   const [pool, setPool] = (0, import_react3.useState)([]);
@@ -540,7 +540,7 @@ function ChatTicketsPanel({ chatId, projectId, chatList, adapter, labels, onChan
   }, [adapter, chatId]);
   (0, import_react3.useEffect)(() => {
     void load();
-  }, [load]);
+  }, [load, refreshSignal]);
   (0, import_react3.useEffect)(() => {
     adapter.loadAgentPool().then(setPool).catch(() => setPool([]));
   }, [adapter]);

@@ -9,7 +9,7 @@
  *      initiative / portfolio — picker options come from), and
  *   2. map the next-intl `brain.tickets` catalog into the shared labels bundle.
  */
-import { useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import {
   ChatTicketsPanel as SharedChatTicketsPanel,
@@ -21,6 +21,7 @@ import {
   type Objective, type Initiative, type Portfolio,
 } from '@/lib/builderforceApi';
 import { loadAgentPool } from '@/lib/agentPool';
+import { onBrainDataChanged } from '@/lib/brain/brainDataEvent';
 
 export function ChatTicketsPanel({ chatId, projectId, chatList, onChanged }: {
   chatId: number;
@@ -29,6 +30,11 @@ export function ChatTicketsPanel({ chatId, projectId, chatList, onChanged }: {
   onChanged?: () => void;
 }) {
   const t = useTranslations('brain.tickets');
+
+  // Live-refresh when the Brain mutates work items via MCP tools (link/merge/
+  // invite, or a task move that changes a health ring) — not just our own actions.
+  const [refreshSignal, setRefreshSignal] = useState(0);
+  useEffect(() => onBrainDataChanged(['chats', 'brain', 'tasks'], () => setRefreshSignal((n) => n + 1)), []);
 
   const labels = useMemo<ChatTicketsLabels>(() => ({
     none: t('none'), spawned: t('spawned'), run: t('run'), lineage: t('lineage'), unlink: t('unlink'),
@@ -96,6 +102,7 @@ export function ChatTicketsPanel({ chatId, projectId, chatList, onChanged }: {
         adapter={adapter}
         labels={labels}
         onChanged={onChanged}
+        refreshSignal={refreshSignal}
       />
     </div>
   );

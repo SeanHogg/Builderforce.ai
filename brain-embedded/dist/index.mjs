@@ -1063,6 +1063,8 @@ function useBrainConversation(options) {
   } = options;
   const [messages, setMessages] = useState5([]);
   const [loadingMessages, setLoadingMessages] = useState5(false);
+  const [reloadNonce, setReloadNonce] = useState5(0);
+  const reloadMessages = useCallback4(() => setReloadNonce((n) => n + 1), []);
   const [localSending, setLocalSending] = useState5(false);
   const [localError, setLocalError] = useState5("");
   const [copiedMessageId, setCopiedMessageId] = useState5(null);
@@ -1094,7 +1096,7 @@ function useBrainConversation(options) {
     return () => {
       cancelled = true;
     };
-  }, [persistence, chatId]);
+  }, [persistence, chatId, reloadNonce]);
   useEffect5(() => {
     const appended = snapshot.appended;
     if (appended.length === 0) return;
@@ -1272,6 +1274,7 @@ ${refs}`;
   return {
     messages,
     loadingMessages,
+    reloadMessages,
     sending: localSending || snapshot.running,
     error: localError || snapshot.error,
     streamingText: snapshot.streamingText,

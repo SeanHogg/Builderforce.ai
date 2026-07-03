@@ -541,6 +541,8 @@ interface UseBrainConversationOptions {
 interface UseBrainConversation {
     messages: BrainMessage[];
     loadingMessages: boolean;
+    /** Force a transcript refetch without changing the chat id (e.g. after a merge). */
+    reloadMessages: () => void;
     sending: boolean;
     error: string;
     /** Live assistant delta buffer (rendered as a trailing bubble while streaming). */

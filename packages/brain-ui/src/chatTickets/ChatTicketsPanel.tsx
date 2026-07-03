@@ -29,11 +29,15 @@ export interface ChatTicketsPanelProps {
   labels: ChatTicketsLabels;
   /** Called after a merge (so the host can refresh its chat list). */
   onChanged?: () => void;
+  /** Bump to force a reload of tickets + agents — the host raises this when the
+   *  Brain mutates work items via MCP tools (link/merge/invite/task move) so the
+   *  panel doesn't go stale after a change it didn't originate. */
+  refreshSignal?: number;
 }
 
 const RUNNABLE = new Set<TicketKind>(RUNNABLE_KINDS);
 
-export function ChatTicketsPanel({ chatId, projectId, chatList, adapter, labels, onChanged }: ChatTicketsPanelProps) {
+export function ChatTicketsPanel({ chatId, projectId, chatList, adapter, labels, onChanged, refreshSignal }: ChatTicketsPanelProps) {
   const [tickets, setTickets] = useState<TicketLinkVM[]>([]);
   const [agents, setAgents] = useState<ChatAgentVM[]>([]);
   const [pool, setPool] = useState<AgentOptionVM[]>([]);
@@ -54,7 +58,7 @@ export function ChatTicketsPanel({ chatId, projectId, chatList, adapter, labels,
     setAgents(ag);
   }, [adapter, chatId]);
 
-  useEffect(() => { void load(); }, [load]);
+  useEffect(() => { void load(); }, [load, refreshSignal]);
   useEffect(() => { adapter.loadAgentPool().then(setPool).catch(() => setPool([])); }, [adapter]);
   useEffect(() => { adapter.loadTicketOptions(projectId).then(setOptions).catch(() => setOptions(null)); }, [adapter, projectId]);
 

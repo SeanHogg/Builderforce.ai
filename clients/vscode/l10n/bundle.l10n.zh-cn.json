@@ -94,5 +94,7 @@
   "Promote this item to an OKR objective? Its child tasks are re-linked to the new objective and it leaves the board.": "将此项提升为 OKR 目标？其子任务将重新链接到新目标，并从看板中移除。",
   "Promote": "提升",
   "BuilderForce: could not change the item's type.": "BuilderForce：无法更改该项的类型。",
-  "BuilderForce: {0} → {1}": "BuilderForce：{0} → {1}"
+  "BuilderForce: {0} → {1}": "BuilderForce：{0} → {1}",
+  "Dismiss": "关闭",
+  "Reconnect": "重新连接"
 }
