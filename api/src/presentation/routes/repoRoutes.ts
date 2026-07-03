@@ -33,9 +33,8 @@ import { resolveRepoCredential, isResolveError } from '../../application/repos/r
 import { importRepoContents } from '../../application/repos/importRepoContents';
 import { enforceIngestionCap, recordIngestion } from '../../application/ingestion/ingestionLedger';
 import { githubStatusMessage } from '../../application/integrations/githubTestError';
-import { mergePullRequest, normalizeMergeMethod } from '../../application/repos/mergePullRequest';
-import { markPullRequestMergedById } from '../../application/repos/recordPullRequestRow';
-import { getPullRequestDetail, invalidatePullRequestDetail } from '../../application/repos/getPullRequestDetail';
+import { mergeRecordedPullRequest } from '../../application/repos/mergeRecordedPr';
+import { getPullRequestDetail } from '../../application/repos/getPullRequestDetail';
 import { getOrSetCached, invalidateCached } from '../../infrastructure/cache/readThroughCache';
 import { resolveHostAuth } from '../../infrastructure/auth/agentHostAuth';
 import type { CreatePrMessage } from '../../application/repos/prDispatch';
@@ -523,47 +522,17 @@ export function createRepoRoutes(db: Db): Hono<RepoHonoEnv> {
     const id = c.req.param('id');
     const body = await c.req.json<{ method?: string }>().catch(() => ({} as { method?: string }));
 
-    const [row] = await db
-      .select()
-      .from(pullRequests)
-      .where(and(eq(pullRequests.id, id), eq(pullRequests.tenantId, tenantId)))
-      .limit(1);
-    if (!row) return c.json({ error: 'Pull request not found' }, 404);
-    if (row.status === 'merged') return c.json({ ok: true, alreadyMerged: true, pullRequest: row });
-    if (!row.repoId) return c.json({ error: 'PR has no linked repo to merge against' }, 409);
-    if (row.number == null) return c.json({ error: 'PR has no provider number yet (still being opened)' }, 409);
-
-    const env = c.env as { INTEGRATION_ENCRYPTION_SECRET?: string; JWT_SECRET?: string };
-    const secret = env.INTEGRATION_ENCRYPTION_SECRET ?? env.JWT_SECRET ?? '';
-    const resolved = await resolveRepoCredential(db, secret, tenantId, row.repoId);
-    if (isResolveError(resolved)) return c.json({ error: resolved.error }, resolved.status);
-
-    const result = await mergePullRequest({
-      provider: resolved.repo.provider, host: resolved.repo.host,
-      owner: resolved.repo.owner, repo: resolved.repo.repo, token: resolved.token,
-      number: row.number, method: normalizeMergeMethod(body.method),
-      commitTitle: `Task #${row.taskId ?? ''}: merge ${row.branchName ?? ''}`.trim(),
+    // Shared with the AI Manager's autonomous PR coordination so the human "Approve
+    // & Merge" and the manager merge never drift (resolve credential → provider
+    // merge → mark merged → bust cache).
+    const result = await mergeRecordedPullRequest(db, c.env as Env, {
+      tenantId, prId: id, method: body.method, mergedBy: userId ?? null,
     });
-
     if (!result.ok) {
-      const httpStatus = result.code === 'unsupported' ? 501
-        : (result.code === 'conflict' || result.code === 'not_mergeable') ? 409
-        : 502;
-      return c.json({ error: result.reason, code: result.code }, httpStatus);
+      return c.json({ error: result.error, code: result.code }, result.httpStatus as 409);
     }
-
-    const updated = await markPullRequestMergedById(db, id, tenantId, {
-      mergeSha: result.sha ?? null,
-      mergedBy: userId ?? null,
-    });
-
-    // Bust the cached live detail keyed by the PRE-merge updatedAt token.
-    await invalidatePullRequestDetail(
-      c.env as Env, id,
-      row.updatedAt instanceof Date ? row.updatedAt.toISOString() : String(row.updatedAt),
-    ).catch(() => { /* cache miss is fine */ });
-
-    return c.json({ ok: true, merged: result.merged, sha: result.sha, pullRequest: updated ?? row });
+    if (result.alreadyMerged) return c.json({ ok: true, alreadyMerged: true, pullRequest: result.pullRequest });
+    return c.json({ ok: true, merged: result.merged, sha: result.sha, pullRequest: result.pullRequest });
   });
 
   return router;

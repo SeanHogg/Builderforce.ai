@@ -368,3 +368,235 @@
   line-height: 1.5;
   color: var(--bf-text, #e6e6e6);
 }
+
+/* ============================================================================
+ * Project 360 — the whole-picture project management surface. Theme-agnostic:
+ * every colour is a --bf-* variable with a fallback (mapped to --vscode-* in the
+ * webview, to the web app tokens on the web). Tier colours come inline from the
+ * API. Reflows to one column on a narrow panel.
+ * ========================================================================== */
+
+.bf-360 {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  overflow-y: auto;
+  box-sizing: border-box;
+}
+
+.bf-360-head {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--bf-border, rgba(128, 128, 128, 0.25));
+  background: var(--bf-surface, #1e1e1e);
+}
+.bf-360-head__id { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
+.bf-360-head__title { font-weight: 600; font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bf-360-head__key {
+  font-size: 11px;
+  font-family: var(--bf-font-mono, ui-monospace, monospace);
+  color: var(--bf-text-muted, #8a8a8a);
+}
+.bf-360-head__spacer { flex: 1 1 auto; }
+
+.bf-360-grid {
+  display: grid;
+  grid-template-columns: minmax(260px, 1fr) minmax(220px, 1fr);
+  gap: 14px;
+  padding: 14px 12px;
+  align-items: start;
+}
+@media (max-width: 620px) {
+  .bf-360-grid { grid-template-columns: 1fr; }
+}
+
+.bf-360-col--wheel { display: flex; flex-direction: column; align-items: center; gap: 10px; }
+.bf-360-wheel { width: 100%; max-width: 320px; height: auto; user-select: none; }
+
+.bf-360-arc { transition: fill-opacity 0.12s ease; }
+.bf-360-arc-group { cursor: pointer; }
+.bf-360-arc-group:hover .bf-360-arc--dim { fill-opacity: 1; }
+.bf-360-arc--dim.is-selected { stroke: var(--bf-text, #eee); stroke-width: 2; }
+.bf-360-arc-label {
+  font-size: 9px;
+  font-weight: 600;
+  fill: #fff;
+  paint-order: stroke;
+  stroke: rgba(0, 0, 0, 0.45);
+  stroke-width: 2px;
+  pointer-events: none;
+}
+.bf-360-arc-label--pillar { font-size: 9.5px; font-weight: 700; }
+.bf-360-center { fill: var(--bf-surface, #1e1e1e); cursor: pointer; }
+.bf-360-center-score { font-size: 26px; font-weight: 700; }
+.bf-360-center-label { font-size: 8px; font-weight: 700; letter-spacing: 0.12em; fill: var(--bf-text-muted, #8a8a8a); }
+
+.bf-360-overall { width: 100%; max-width: 320px; display: flex; flex-direction: column; gap: 6px; }
+.bf-360-progress {
+  height: 8px;
+  border-radius: 999px;
+  background: var(--bf-surface-2, rgba(128, 128, 128, 0.15));
+  overflow: hidden;
+}
+.bf-360-progress__fill { height: 100%; border-radius: 999px; transition: width 0.2s ease; }
+.bf-360-progress__label { font-size: 11px; color: var(--bf-text-muted, #8a8a8a); }
+.bf-360-counts { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 2px; }
+.bf-360-count {
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--bf-border, rgba(128, 128, 128, 0.25));
+  color: var(--bf-text-muted, #8a8a8a);
+}
+.bf-360-count b { color: var(--bf-text, #eee); }
+.bf-360-count--good { border-color: #3fb95055; }
+.bf-360-count--warn { border-color: #eab30855; }
+.bf-360-count--bad { border-color: #ef444455; }
+
+.bf-360-legend-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 12px;
+  font-weight: 600;
+  margin-bottom: 6px;
+}
+.bf-360-clear {
+  border: none;
+  background: transparent;
+  color: var(--bf-link, #6ea8ff);
+  cursor: pointer;
+  font-size: 11px;
+}
+.bf-360-dim-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.bf-360-dim-row {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 6px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  text-align: left;
+  font: inherit;
+}
+.bf-360-dim-row:hover { background: var(--bf-surface-2, rgba(128, 128, 128, 0.12)); }
+.bf-360-dim-row__label { font-weight: 600; font-size: 12px; }
+.bf-360-dim-row__summary { color: var(--bf-text-muted, #8a8a8a); font-size: 11px; margin-left: auto; text-align: right; }
+.bf-360-dim-detail { display: flex; align-items: center; gap: 10px; padding: 6px 2px; }
+.bf-360-dim-detail__summary { font-size: 12px; }
+.bf-360-scoredot {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 999px;
+  border: 2px solid;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.bf-360-section { padding: 4px 12px 14px; }
+.bf-360-section__title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--bf-text-muted, #8a8a8a);
+  margin: 6px 0 8px;
+}
+.bf-360-section__count {
+  font-size: 11px;
+  padding: 0 7px;
+  border-radius: 999px;
+  background: var(--bf-surface-2, rgba(128, 128, 128, 0.15));
+  color: var(--bf-text, #eee);
+}
+.bf-360-empty { font-size: 12px; color: var(--bf-text-muted, #8a8a8a); margin: 0; }
+
+.bf-360-gaps, .bf-360-people { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.bf-360-gap {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border: 1px solid var(--bf-border, rgba(128, 128, 128, 0.25));
+  border-radius: 8px;
+  background: var(--bf-surface, rgba(128, 128, 128, 0.05));
+}
+.bf-360-sev { flex: 0 0 auto; width: 8px; height: 8px; border-radius: 999px; }
+.bf-360-sev--high { background: #ef4444; }
+.bf-360-sev--medium { background: #f59e0b; }
+.bf-360-sev--low { background: #eab308; }
+.bf-360-gap__body { flex: 1 1 auto; min-width: 0; }
+.bf-360-gap__title { font-size: 12.5px; }
+.bf-360-gap__detail { font-size: 11px; color: var(--bf-text-muted, #8a8a8a); margin-top: 2px; }
+.bf-360-gap__cta { flex: 0 0 auto; white-space: nowrap; }
+
+.bf-360-person {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 10px;
+  border: 1px solid var(--bf-border, rgba(128, 128, 128, 0.25));
+  border-radius: 8px;
+}
+.bf-360-dot { flex: 0 0 auto; width: 10px; height: 10px; border-radius: 999px; background: #8a8a8a; }
+.bf-360-dot--working { background: #3fb950; box-shadow: 0 0 0 3px rgba(63, 185, 80, 0.2); }
+.bf-360-dot--awaiting { background: #a78bfa; }
+.bf-360-dot--blocked { background: #ef4444; }
+.bf-360-dot--idle { background: #eab308; }
+.bf-360-dot--available { background: #8a8a8a; }
+.bf-360-person__body { flex: 1 1 auto; min-width: 0; }
+.bf-360-person__top { display: flex; align-items: center; gap: 8px; }
+.bf-360-person__name { font-weight: 600; font-size: 12.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bf-360-kind {
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 1px 6px;
+  border-radius: 999px;
+  border: 1px solid var(--bf-border, rgba(128, 128, 128, 0.25));
+  color: var(--bf-text-muted, #8a8a8a);
+}
+.bf-360-kind--cloud { border-color: var(--bf-accent, #4f80ff); color: var(--bf-accent, #4f80ff); }
+.bf-360-person__status { font-size: 11px; color: var(--bf-text-muted, #8a8a8a); margin-left: auto; }
+.bf-360-person__reason { font-size: 11px; color: var(--bf-text-muted, #8a8a8a); margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bf-360-person__actions { flex: 0 0 auto; display: flex; gap: 6px; }
+.bf-360-person__btn { padding: 3px 9px; }
+
+.bf-360-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 40px 24px;
+  text-align: center;
+  color: var(--bf-text-muted, #8a8a8a);
+}
+.bf-360-state__title { font-size: 14px; font-weight: 600; color: var(--bf-text, #eee); }
+.bf-360-state__hint { font-size: 12px; max-width: 360px; }
+.bf-360-spinner {
+  width: 20px;
+  height: 20px;
+  border: 2px solid var(--bf-text-muted, #8a8a8a);
+  border-top-color: transparent;
+  border-radius: 50%;
+  animation: bf-360-spin 0.8s linear infinite;
+}
+@keyframes bf-360-spin { to { transform: rotate(360deg); } }

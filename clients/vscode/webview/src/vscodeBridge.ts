@@ -31,7 +31,7 @@ export type LabelBundle = Record<string, string>;
  * Brain panel: open a fresh chat, focus an existing one, or seed a task-scoped chat.
  */
 export interface BrainIntent {
-  kind: 'new' | 'focus' | 'task' | 'seed';
+  kind: 'new' | 'focus' | 'task' | 'seed' | 'revalidate';
   /** For 'focus': the server chat id to load. */
   chatId?: number;
   /** For 'seed': open a fresh chat with this prompt pre-filled in the composer, so an
@@ -51,6 +51,10 @@ export interface InitData {
   grounding?: string;
   signedIn: boolean;
   hasWorkspace: boolean;
+  /** Which screen this webview should render. The bundled React app is multi-screen:
+   *  the host decides via `init` whether this panel is the Brain chat (default) or the
+   *  Project 360 management view — same bundle, same transport, one code path. */
+  view?: 'brain' | 'project360';
   /** The sidebar's active BuilderForce project — injected into the system prompt so
    *  the Brain scopes platform tools to it, and used to scope new chats. */
   project?: { id: number; name: string };

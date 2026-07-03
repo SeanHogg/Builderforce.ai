@@ -35,6 +35,7 @@ import { AgentHostService }     from './application/agentHost/AgentHostService';
 // Routes
 import { createProjectRoutes }     from './presentation/routes/projectRoutes';
 import { createTaskRoutes } from './presentation/routes/taskRoutes';
+import { createManagerRoutes } from './presentation/routes/managerRoutes';
 import { createVscodeRoutes } from './presentation/routes/vscodeRoutes';
 import { setExecutionBoardSink }   from './application/runtime/executionEvents';
 import { makeExecutionBoardSink }  from './application/runtime/executionBoardBroadcast';
@@ -157,6 +158,7 @@ import { runDueTriggers } from './application/workflow/runDueTriggers';
 import { processPendingCloudWorkflows } from './application/workflow/cloudExecutor';
 import { reapStaleExecutions } from './application/runtime/staleExecutionReaper';
 import { runAutonomousExecutionSweep } from './application/runtime/autonomousExecutionSweep';
+import { runManagerSweep } from './application/manager/runManagerSweep';
 import { runWebhookRetrySweep } from './application/seams/webhookService';
 import { runBoardSyncSweep } from './application/boardsync/runBoardSyncSweep';
 import { runParkedWorkflowSweep } from './application/swimlane/resumeParkedWorkflows';
@@ -385,6 +387,7 @@ export function buildApp(env: Env): Hono<HonoEnv> {
   // Protected endpoints (JWT injected by authMiddleware inside each router)
   app.route('/api/projects', createProjectRoutes(projectService, db));
   app.route('/api/tasks',    createTaskRoutes(taskService, db, runtimeService));
+  app.route('/api/manager',  createManagerRoutes(db, runtimeService));
   app.route('/api/vscode',   createVscodeRoutes(db, tenantService));
   app.route('/api/members',  createMemberRoutes(db));
   app.route('/api/tenants',  createTenantRoutes(tenantService, db));
@@ -575,6 +578,22 @@ export default {
           })
           .catch((err) => {
             console.error('[cron:auto-exec] failed', err);
+          }),
+      );
+      // AI Manager pass: the judgement layer on top of the mechanical executor.
+      // Every managed project gets its backlog value-scored + priority-ranked, its
+      // unowned work assigned, and its finished work's PRs conducted/merged/closed —
+      // so the team (human + agent) always works the highest-value, most-urgent
+      // tickets first and PRs don't pile up waiting on a human.
+      ctx.waitUntil(
+        runManagerSweep(env)
+          .then((r) => {
+            if (r.managed > 0) {
+              console.log(`[cron:manager] projects=${r.projects} managed=${r.managed} scored=${r.scored} ranked=${r.ranked} assigned=${r.assigned} prsConducted=${r.prsConducted} prsMerged=${r.prsMerged} dispatched=${r.dispatched} tokenBlocked=${r.tokenBlockedTenants}`);
+            }
+          })
+          .catch((err) => {
+            console.error('[cron:manager] failed', err);
           }),
       );
       // Redeliver failed outbound webhook deliveries with capped exponential

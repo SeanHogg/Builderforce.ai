@@ -55,6 +55,10 @@ export interface UpdateTaskDto {
   releaseId?: string | null;
   /** Story-point estimate (drives derived sprint velocity). null = unestimated. */
   storyPoints?: number | null;
+  /** AI Manager business value 0-100 (a human edit pins businessValueSource='manual'). */
+  businessValue?: number | null;
+  businessValueRationale?: string | null;
+  businessValueSource?: string | null;
   assignedAgentType?: AgentType | null;
   assignedAgentHostId?: number | null;
   /** Cloud agent (ide_agents.id) assigned to this task. Mutually exclusive with host. */

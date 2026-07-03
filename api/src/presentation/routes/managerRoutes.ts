@@ -1,0 +1,163 @@
+/**
+ * Manager routes — /api/manager
+ *
+ * The human-facing surface for the AI Manager. A human manager sees + drives the
+ * SAME concepts the AI manager acts on: the effective policy + designation, the
+ * priority-ranked backlog, the coordination stats, the decision activity feed, and
+ * a "run the manager now" button. Every read is tenant-scoped to the project.
+ *
+ *   GET  /api/manager/:projectId           config + policy + stats + ranked backlog
+ *   PUT  /api/manager/:projectId           designate a manager + tune policy (MANAGER)
+ *   POST /api/manager/:projectId/run        run the manager pass now (MANAGER)
+ *   GET  /api/manager/:projectId/activity   the decision audit feed
+ */
+import { Hono } from 'hono';
+import { and, eq, sql, asc, inArray } from 'drizzle-orm';
+import { authMiddleware, requireRole } from '../middleware/authMiddleware';
+import { TenantRole, TaskStatus } from '../../domain/shared/types';
+import { projects, tasks, pullRequests } from '../../infrastructure/database/schema';
+import type { HonoEnv, Env } from '../../env';
+import type { Db } from '../../infrastructure/database/connection';
+import type { RuntimeService } from '../../application/runtime/RuntimeService';
+import {
+  getManagerConfigRow, getEffectiveManagerPolicy, upsertManagerConfig,
+  listManagerActions, runManagerForProject,
+} from '../../application/manager/ManagerService';
+import { normalizePrMergePolicy } from '../../application/manager/managerPolicy';
+
+const NON_TERMINAL: string[] = [
+  TaskStatus.BACKLOG, TaskStatus.TODO, TaskStatus.READY,
+  TaskStatus.IN_PROGRESS, TaskStatus.IN_REVIEW, TaskStatus.BLOCKED,
+];
+
+export function createManagerRoutes(db: Db, runtimeService: RuntimeService): Hono<HonoEnv> {
+  const router = new Hono<HonoEnv>();
+  router.use('*', authMiddleware);
+
+  /** Verify the project belongs to the caller's tenant; returns it or null. */
+  async function ownProject(tenantId: number, projectId: number) {
+    const [p] = await db
+      .select({ id: projects.id })
+      .from(projects)
+      .where(and(eq(projects.id, projectId), eq(projects.tenantId, tenantId)))
+      .limit(1);
+    return p ?? null;
+  }
+
+  // GET /api/manager/:projectId — config + effective policy + coordination stats +
+  // the priority-ranked backlog the manager produced. Not cached (live state).
+  router.get('/:projectId', async (c) => {
+    const tenantId = c.get('tenantId');
+    const projectId = Number(c.req.param('projectId'));
+    if (!Number.isFinite(projectId) || !(await ownProject(tenantId, projectId))) {
+      return c.json({ error: 'Project not found' }, 404);
+    }
+
+    const [config, policy] = await Promise.all([
+      getManagerConfigRow(db, tenantId, projectId),
+      getEffectiveManagerPolicy(db, tenantId, projectId),
+    ]);
+
+    // Coordination stats (small aggregate queries).
+    const [counts] = await db
+      .select({
+        total: sql<number>`count(*)::int`,
+        unscored: sql<number>`count(*) filter (where ${tasks.businessValue} is null)::int`,
+        unranked: sql<number>`count(*) filter (where ${tasks.managerRank} is null)::int`,
+        unowned: sql<number>`count(*) filter (where ${tasks.assignedUserId} is null and ${tasks.assignedAgentRef} is null and ${tasks.assignedAgentHostId} is null)::int`,
+      })
+      .from(tasks)
+      .where(and(eq(tasks.projectId, projectId), eq(tasks.archived, false), inArray(tasks.status, NON_TERMINAL)));
+
+    const [prCount] = await db
+      .select({ open: sql<number>`count(*)::int` })
+      .from(pullRequests)
+      .where(and(eq(pullRequests.tenantId, tenantId), eq(pullRequests.projectId, projectId), eq(pullRequests.status, 'open')));
+
+    // The ranked backlog (what the team should work next, in order).
+    const backlog = await db
+      .select({
+        id: tasks.id, key: tasks.key, title: tasks.title, status: tasks.status, priority: tasks.priority,
+        businessValue: tasks.businessValue, businessValueRationale: tasks.businessValueRationale,
+        managerRank: tasks.managerRank, dueDate: tasks.dueDate,
+        assignedUserId: tasks.assignedUserId, assignedAgentRef: tasks.assignedAgentRef, assignedAgentHostId: tasks.assignedAgentHostId,
+      })
+      .from(tasks)
+      .where(and(eq(tasks.projectId, projectId), eq(tasks.archived, false), inArray(tasks.status, NON_TERMINAL)))
+      .orderBy(sql`${tasks.managerRank} asc nulls last`, asc(tasks.updatedAt))
+      .limit(30);
+
+    const actions = await listManagerActions(db, tenantId, projectId, 30);
+
+    return c.json({
+      config: config ?? null,
+      policy,
+      stats: {
+        total: counts?.total ?? 0,
+        unscored: counts?.unscored ?? 0,
+        unranked: counts?.unranked ?? 0,
+        unowned: counts?.unowned ?? 0,
+        openPullRequests: prCount?.open ?? 0,
+        lastRunAt: config?.lastRunAt ?? null,
+      },
+      backlog,
+      actions,
+    });
+  });
+
+  // PUT /api/manager/:projectId — designate a manager + tune policy (managers only).
+  router.put('/:projectId', requireRole(TenantRole.MANAGER), async (c) => {
+    const tenantId = c.get('tenantId');
+    const projectId = Number(c.req.param('projectId'));
+    if (!Number.isFinite(projectId) || !(await ownProject(tenantId, projectId))) {
+      return c.json({ error: 'Project not found' }, 404);
+    }
+    const body = await c.req.json<{
+      managerRef?: string | null;
+      enabled?: boolean;
+      prMergePolicy?: string;
+      autoAssign?: boolean;
+      autoBusinessValue?: boolean;
+      autoPrioritize?: boolean;
+    }>().catch(() => ({}));
+
+    const config = await upsertManagerConfig(db, tenantId, projectId, {
+      ...(body.managerRef !== undefined ? { managerRef: body.managerRef === '' ? null : body.managerRef } : {}),
+      ...(body.enabled !== undefined ? { enabled: !!body.enabled } : {}),
+      ...(body.prMergePolicy !== undefined ? { prMergePolicy: normalizePrMergePolicy(body.prMergePolicy) } : {}),
+      ...(body.autoAssign !== undefined ? { autoAssign: !!body.autoAssign } : {}),
+      ...(body.autoBusinessValue !== undefined ? { autoBusinessValue: !!body.autoBusinessValue } : {}),
+      ...(body.autoPrioritize !== undefined ? { autoPrioritize: !!body.autoPrioritize } : {}),
+    });
+    const policy = await getEffectiveManagerPolicy(db, tenantId, projectId);
+    return c.json({ config, policy });
+  });
+
+  // POST /api/manager/:projectId/run — run the manager pass now (managers only).
+  router.post('/:projectId/run', requireRole(TenantRole.MANAGER), async (c) => {
+    const tenantId = c.get('tenantId');
+    const userId = (c as { get(k: 'userId'): string | undefined }).get('userId');
+    const projectId = Number(c.req.param('projectId'));
+    if (!Number.isFinite(projectId) || !(await ownProject(tenantId, projectId))) {
+      return c.json({ error: 'Project not found' }, 404);
+    }
+    const summary = await runManagerForProject(c.env as Env, db, runtimeService, {
+      tenantId, projectId, submittedBy: `manager:${userId ?? 'human'}`,
+    });
+    return c.json({ summary });
+  });
+
+  // GET /api/manager/:projectId/activity — the decision audit feed.
+  router.get('/:projectId/activity', async (c) => {
+    const tenantId = c.get('tenantId');
+    const projectId = Number(c.req.param('projectId'));
+    if (!Number.isFinite(projectId) || !(await ownProject(tenantId, projectId))) {
+      return c.json({ error: 'Project not found' }, 404);
+    }
+    const limit = Number(c.req.query('limit')) || 50;
+    const actions = await listManagerActions(db, tenantId, projectId, limit);
+    return c.json({ actions });
+  });
+
+  return router;
+}

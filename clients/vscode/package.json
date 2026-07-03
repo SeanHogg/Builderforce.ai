@@ -2,7 +2,7 @@
   "name": "builderforce-ai",
   "displayName": "BuilderForce.ai",
   "description": "%extension.description%",
-  "version": "2026.7.2",
+  "version": "2026.7.3",
   "publisher": "builderforce",
   "license": "MIT",
   "author": "Sean Hogg",
@@ -173,14 +173,14 @@
         "icon": "$(verified)"
       },
       {
+        "command": "builderforce.openProject360",
+        "title": "%command.openProject360%",
+        "icon": "$(pie-chart)"
+      },
+      {
         "command": "builderforce.openBoard",
         "title": "%command.openBoard%",
         "icon": "$(layout)"
-      },
-      {
-        "command": "builderforce.openView",
-        "title": "%command.openView%",
-        "icon": "$(browser)"
       },
       {
         "command": "builderforce.diagnose",
@@ -300,34 +300,34 @@
           "group": "1_workspace@1"
         },
         {
-          "command": "builderforce.openBoard",
+          "command": "builderforce.openProject360",
           "when": "view == builderforce.project",
           "group": "navigation@2"
         },
         {
-          "command": "builderforce.openView",
+          "command": "builderforce.openBoard",
           "when": "view == builderforce.project",
           "group": "navigation@3"
         },
         {
           "command": "builderforce.humanRequests",
           "when": "view == builderforce.project",
-          "group": "navigation@4"
+          "group": "navigation@5"
         },
         {
           "command": "builderforce.refreshProjects",
           "when": "view == builderforce.project",
-          "group": "navigation@5"
+          "group": "navigation@6"
         },
         {
           "command": "builderforce.hideDoneTasks",
           "when": "view == builderforce.project && !builderforce.hideDoneTasks",
-          "group": "navigation@6"
+          "group": "navigation@7"
         },
         {
           "command": "builderforce.showDoneTasks",
           "when": "view == builderforce.project && builderforce.hideDoneTasks",
-          "group": "navigation@6"
+          "group": "navigation@7"
         },
         {
           "command": "builderforce.refreshInbox",
