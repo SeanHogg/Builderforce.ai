@@ -186,6 +186,48 @@ export async function rejectTimecard(id: string, reason?: string): Promise<void>
   await jsonOrThrow(res, 'Failed to reject');
 }
 
+export interface TimecardEntry {
+  id: string;
+  workDate: string;
+  minutes: number;
+  source: 'auto' | 'manual' | 'meeting';
+  billable: boolean;
+  description: string | null;
+}
+
+// Worker: view + edit the line items on a draft timecard.
+export async function listTimecardEntries(id: string): Promise<TimecardEntry[]> {
+  const res = await fetch(`${AUTH_API_URL}/api/timecards/${id}/entries`, { headers: webHeaders(false) });
+  return jsonOrThrow<TimecardEntry[]>(res, 'Failed to load entries');
+}
+
+export async function addTimecardEntry(id: string, input: { workDate?: string; minutes: number; description?: string; billable?: boolean }): Promise<void> {
+  const res = await fetch(`${AUTH_API_URL}/api/timecards/${id}/entries`, { method: 'POST', headers: webHeaders(), body: JSON.stringify(input) });
+  await jsonOrThrow(res, 'Failed to add entry');
+}
+
+export async function updateTimecardEntry(id: string, entryId: string, patch: { minutes?: number; billable?: boolean; description?: string }): Promise<void> {
+  const res = await fetch(`${AUTH_API_URL}/api/timecards/${id}/entries/${entryId}`, { method: 'PATCH', headers: webHeaders(), body: JSON.stringify(patch) });
+  await jsonOrThrow(res, 'Failed to update entry');
+}
+
+export async function deleteTimecardEntry(id: string, entryId: string): Promise<void> {
+  const res = await fetch(`${AUTH_API_URL}/api/timecards/${id}/entries/${entryId}`, { method: 'DELETE', headers: webHeaders(false) });
+  await jsonOrThrow(res, 'Failed to delete entry');
+}
+
+// Employer: the approval view (card + its entries), tenant-scoped.
+export async function getTimecardReview(id: string): Promise<{ card: Timecard; entries: TimecardEntry[] }> {
+  const res = await fetch(`${AUTH_API_URL}/api/timecards/${id}/review`, { headers: tenantHeaders(false) });
+  return jsonOrThrow(res, 'Failed to load timecard');
+}
+
+// Worker: log a meeting as paid time (emits a billable meeting span).
+export async function logMeeting(input: { engagementId: string; occurredAt?: string; durationMinutes: number; note?: string }): Promise<void> {
+  const res = await fetch(`${AUTH_API_URL}/api/activity/meeting`, { method: 'POST', headers: webHeaders(), body: JSON.stringify(input) });
+  await jsonOrThrow(res, 'Failed to log meeting');
+}
+
 // ---- Activity signals (portal capture) ----------------------------------
 
 export interface ActivitySignalInput {

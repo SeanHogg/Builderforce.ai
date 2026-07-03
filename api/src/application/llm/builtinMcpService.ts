@@ -27,7 +27,7 @@ import { ProjectRepository } from '../../infrastructure/repositories/ProjectRepo
 import { TaskRepository } from '../../infrastructure/repositories/TaskRepository';
 import { ProjectStatus, TaskPriority, TaskType, TenantRole } from '../../domain/shared/types';
 import { signJwt } from '../../infrastructure/auth/JwtService';
-import { workflows, workflowDefinitions, specs, promptLibraryEntries, promptLibraryVersions, approvalRules, approvals, ideProjectChats, agents, projectAgents, agentAssignments, savedDashboards, dashboardWidgets, alerts, alertEvents, auditEvents, boards, cronJobs, portfolios, initiatives, objectives, objectiveLinks, keyResults, ideAgents, marketplaceSkills, artifactAssignments, socControls, socEvidence, pokerSessions, pokerStories, pokerVotes, retrospectives, retroItems, boardConnections, projectRepositories, pullRequests, chatSessions, chatMessages, swimlanes, swimlaneAgentAssignments, tenants, executions, usageSnapshots, toolAuditEvents, executionMessages, agentHosts, agentHostProjects, errorGroups } from '../../infrastructure/database/schema';
+import { workflows, workflowDefinitions, specs, promptLibraryEntries, promptLibraryVersions, approvalRules, approvals, brainChats, agents, projectAgents, agentAssignments, savedDashboards, dashboardWidgets, alerts, alertEvents, auditEvents, boards, cronJobs, portfolios, initiatives, objectives, objectiveLinks, keyResults, ideAgents, marketplaceSkills, artifactAssignments, socControls, socEvidence, pokerSessions, pokerStories, pokerVotes, retrospectives, retroItems, boardConnections, projectRepositories, pullRequests, chatSessions, chatMessages, swimlanes, swimlaneAgentAssignments, tenants, executions, usageSnapshots, toolAuditEvents, executionMessages, agentHosts, agentHostProjects, errorGroups } from '../../infrastructure/database/schema';
 import { resolveSegment } from '../../infrastructure/auth/segmentResolver';
 import type { McpToolEntry } from './mcpExtensionService';
 import type { Env } from '../../env';
@@ -43,6 +43,8 @@ import { invalidateProjectsList } from '../../presentation/routes/projectRoutes'
 import { convertWorkItemType, ConvertError, type WorkItemKind } from '../workitem/convertWorkItemType';
 import { buildRuntimeService } from '../../buildRuntimeService';
 import { ChatTicketService } from '../brain/ChatTicketService';
+import { WorkDeltaService, type DeltaKind } from '../delta/WorkDeltaService';
+import { ValidationService, type ReviewVerdict, type ReviewGapInput } from '../validation/ValidationService';
 import type { Task } from '../../domain/task/Task';
 
 /** Sentinel extensionId the gateway routes to this in-process catalog. */
@@ -251,6 +253,56 @@ const CATALOG: BuiltinTool[] = [
   },
   { tool: 'tasks.delete', mutates: true, description: 'Delete a task.', parameters: obj({ id: N }, ['id']), run: async (ctx, a) => { await getTenantTask(ctx, num(a.id)); await ctx.tasks.deleteTask(num(a.id)); return { deleted: num(a.id) }; } },
   { tool: 'tasks.move', mutates: true, description: 'Move a task to another project board (re-keys it).', parameters: obj({ id: N, projectId: N }, ['id', 'projectId']), run: (ctx, a) => ctx.tasks.moveTask(num(a.id), num(a.projectId), ctx.tenantId).then((t) => t.toPlain()) },
+
+  // ---- Work-delta capture + Validator review (0270) ----
+  {
+    tool: 'tickets.from_delta', mutates: true,
+    description: 'Record a code CHANGE you just made as a classified work delta AND open the associated ticket so the work is visible on the board. Call this whenever your turn added or changed code (a feature, fix, or bug repair) that is not already tracked by an existing ticket. kind: improvement (new/better behaviour) | fix (repaired something) | bug (a defect you are logging). Pass files you touched and, when working in a Brain chat, the chatId so the ticket is tied back to this conversation. The ticket opens in review and completes automatically when the change is merged + deployed.',
+    parameters: obj({
+      projectId: N, summary: S, detail: S,
+      kind: { type: 'string', enum: ['improvement', 'fix', 'bug'] },
+      files: { type: 'array', items: S }, modality: S, chatId: N,
+      createTicket: B,
+    }, ['projectId', 'summary']),
+    run: async (ctx, a) => {
+      if (!ctx.env) throw new Error('work-delta recording requires the worker env');
+      const files = Array.isArray(a.files) ? (a.files as unknown[]).map(str) : undefined;
+      return new WorkDeltaService(ctx.db, ctx.env).record(ctx.tenantId, ctx.userId ?? null, {
+        projectId: num(a.projectId),
+        summary: str(a.summary),
+        detail: a.detail != null ? str(a.detail) : null,
+        kind: a.kind != null ? (str(a.kind) as DeltaKind) : undefined,
+        files,
+        modality: a.modality != null ? str(a.modality) : 'mcp',
+        chatId: a.chatId != null ? num(a.chatId) : null,
+        createdBy: ctx.userId ?? null,
+        createTicket: typeof a.createTicket === 'boolean' ? a.createTicket : true,
+      });
+    },
+  },
+  {
+    tool: 'reviews.record', mutates: true,
+    description: 'Report the outcome of reviewing a Done work item against the codebase (Validator agent). verdict: complete (the delivered code fully satisfies the ticket) | gaps (work is missing). For every gap, pass an entry in gaps[] — each becomes a first-class GAP task tied back to the reviewed item so it is scheduled, not lost. Provide a one-paragraph summary of what you checked. A Done item may be reviewed repeatedly; each call is one recorded pass.',
+    parameters: obj({
+      taskId: N,
+      verdict: { type: 'string', enum: ['complete', 'gaps'] },
+      summary: S,
+      reviewerRef: S,
+      gaps: { type: 'array', items: obj({ title: S, detail: S, priority: { type: 'string', enum: ['low', 'medium', 'high', 'urgent'] } }, ['title']) },
+    }, ['taskId']),
+    run: async (ctx, a) => {
+      const gaps: ReviewGapInput[] = Array.isArray(a.gaps)
+        ? (a.gaps as Json[]).map((g) => ({ title: str(g.title), detail: g.detail != null ? str(g.detail) : null, priority: g.priority != null ? (str(g.priority) as TaskPriority) : undefined }))
+        : [];
+      return new ValidationService(ctx.db).recordReview(ctx.tenantId, {
+        taskId: num(a.taskId),
+        verdict: a.verdict != null ? (str(a.verdict) as ReviewVerdict) : undefined,
+        summary: a.summary != null ? str(a.summary) : null,
+        reviewerRef: a.reviewerRef != null ? str(a.reviewerRef) : (ctx.userId ?? null),
+        gaps,
+      });
+    },
+  },
 
   // ---- Workflows (read) — tenant-scoped direct queries [1296] ----
   { tool: 'workflows.list', mutates: false, description: 'List workflows in the workspace.', parameters: obj({}), run: (ctx) => ctx.db.select().from(workflows).where(eq(workflows.tenantId, ctx.tenantId)).orderBy(desc(workflows.updatedAt)).limit(200) },
@@ -607,21 +659,21 @@ const CATALOG: BuiltinTool[] = [
   },
   { tool: 'prompts.remove', mutates: true, description: 'Delete a prompt entry (and its versions).', parameters: obj({ id: S }, ['id']), run: async (ctx, a) => { const seg = await resolveSegment(ctx.db, ctx.tenantId); const [entry] = await ctx.db.select({ id: promptLibraryEntries.id }).from(promptLibraryEntries).where(and(eq(promptLibraryEntries.id, str(a.id)), eq(promptLibraryEntries.tenantId, ctx.tenantId), eq(promptLibraryEntries.segmentId, seg))).limit(1); if (!entry) return { deleted: null }; await ctx.db.delete(promptLibraryVersions).where(eq(promptLibraryVersions.entryId, entry.id)); await ctx.db.delete(promptLibraryEntries).where(and(eq(promptLibraryEntries.id, entry.id), eq(promptLibraryEntries.tenantId, ctx.tenantId), eq(promptLibraryEntries.segmentId, seg))); return { deleted: str(a.id) }; } },
 
-  // ---- Brain chats (CRUD) — the LIVE unified `ide_project_chats` table
+  // ---- Brain chats (CRUD) — the LIVE unified `brain_chats` table
   // (origin='brainstorm'), the SAME rows the web + VS Code Brain read/write, so a
-  // chat created via MCP shows up in the actual Brain (the legacy `brain_chats`
-  // table these tools used before was orphaned from the UI). Scoped by tenant +
+  // chat created via MCP shows up in the actual Brain (these tools used to target
+  // the old orphaned Brain-only table, dropped in 0272). Scoped by tenant +
   // origin, and by user when the caller is a real user (gateway keys are
   // tenant-wide). summarize SKIPPED (needs an LLM call, not a table op). ----
-  { tool: 'brain.list', mutates: false, description: 'List Brain chats, optionally filtered by project.', parameters: obj({ projectId: N, limit: N }), run: async (ctx, a) => { const conds = [eq(ideProjectChats.tenantId, ctx.tenantId), eq(ideProjectChats.origin, 'brainstorm'), eq(ideProjectChats.isArchived, false)]; if (ctx.userId) conds.push(eq(ideProjectChats.userId, ctx.userId)); if (a.projectId != null) conds.push(eq(ideProjectChats.projectId, num(a.projectId))); return ctx.db.select().from(ideProjectChats).where(and(...conds)).orderBy(desc(ideProjectChats.updatedAt)).limit(a.limit != null ? num(a.limit) : 100); } },
-  { tool: 'brain.get', mutates: false, description: 'Get a Brain chat by id.', parameters: obj({ id: N }, ['id']), run: async (ctx, a) => { const conds = [eq(ideProjectChats.id, num(a.id)), eq(ideProjectChats.tenantId, ctx.tenantId), eq(ideProjectChats.origin, 'brainstorm')]; if (ctx.userId) conds.push(eq(ideProjectChats.userId, ctx.userId)); return (await ctx.db.select().from(ideProjectChats).where(and(...conds)).limit(1))[0] ?? null; } },
+  { tool: 'brain.list', mutates: false, description: 'List Brain chats, optionally filtered by project.', parameters: obj({ projectId: N, limit: N }), run: async (ctx, a) => { const conds = [eq(brainChats.tenantId, ctx.tenantId), eq(brainChats.origin, 'brainstorm'), eq(brainChats.isArchived, false)]; if (ctx.userId) conds.push(eq(brainChats.userId, ctx.userId)); if (a.projectId != null) conds.push(eq(brainChats.projectId, num(a.projectId))); return ctx.db.select().from(brainChats).where(and(...conds)).orderBy(desc(brainChats.updatedAt)).limit(a.limit != null ? num(a.limit) : 100); } },
+  { tool: 'brain.get', mutates: false, description: 'Get a Brain chat by id.', parameters: obj({ id: N }, ['id']), run: async (ctx, a) => { const conds = [eq(brainChats.id, num(a.id)), eq(brainChats.tenantId, ctx.tenantId), eq(brainChats.origin, 'brainstorm')]; if (ctx.userId) conds.push(eq(brainChats.userId, ctx.userId)); return (await ctx.db.select().from(brainChats).where(and(...conds)).limit(1))[0] ?? null; } },
   {
     tool: 'brain.create', mutates: true,
     description: 'Create a new Brain chat.',
     parameters: obj({ title: S, projectId: N }),
     run: async (ctx, a) => {
       const seg = await resolveSegment(ctx.db, ctx.tenantId);
-      const [row] = await ctx.db.insert(ideProjectChats).values({ tenantId: ctx.tenantId, segmentId: seg, userId: ctx.userId ?? 'system', origin: 'brainstorm', ...(a.title != null ? { title: str(a.title) } : {}), projectId: a.projectId != null ? num(a.projectId) : null }).returning();
+      const [row] = await ctx.db.insert(brainChats).values({ tenantId: ctx.tenantId, segmentId: seg, userId: ctx.userId ?? 'system', origin: 'brainstorm', ...(a.title != null ? { title: str(a.title) } : {}), projectId: a.projectId != null ? num(a.projectId) : null }).returning();
       return row;
     },
   },
@@ -633,14 +685,14 @@ const CATALOG: BuiltinTool[] = [
       const patch: Json = { updatedAt: new Date() };
       if (a.title != null) patch.title = str(a.title);
       if (a.projectId !== undefined) patch.projectId = a.projectId === null ? null : num(a.projectId);
-      const conds = [eq(ideProjectChats.id, num(a.id)), eq(ideProjectChats.tenantId, ctx.tenantId), eq(ideProjectChats.origin, 'brainstorm')];
-      if (ctx.userId) conds.push(eq(ideProjectChats.userId, ctx.userId));
-      const [row] = await ctx.db.update(ideProjectChats).set(patch).where(and(...conds)).returning();
+      const conds = [eq(brainChats.id, num(a.id)), eq(brainChats.tenantId, ctx.tenantId), eq(brainChats.origin, 'brainstorm')];
+      if (ctx.userId) conds.push(eq(brainChats.userId, ctx.userId));
+      const [row] = await ctx.db.update(brainChats).set(patch).where(and(...conds)).returning();
       if (!row) throw new Error('chat not found');
       return row;
     },
   },
-  { tool: 'brain.delete', mutates: true, description: 'Archive a Brain chat.', parameters: obj({ id: N }, ['id']), run: async (ctx, a) => { const conds = [eq(ideProjectChats.id, num(a.id)), eq(ideProjectChats.tenantId, ctx.tenantId), eq(ideProjectChats.origin, 'brainstorm')]; if (ctx.userId) conds.push(eq(ideProjectChats.userId, ctx.userId)); const [row] = await ctx.db.update(ideProjectChats).set({ isArchived: true, updatedAt: new Date() }).where(and(...conds)).returning({ id: ideProjectChats.id }); return { archived: row != null }; } },
+  { tool: 'brain.delete', mutates: true, description: 'Archive a Brain chat.', parameters: obj({ id: N }, ['id']), run: async (ctx, a) => { const conds = [eq(brainChats.id, num(a.id)), eq(brainChats.tenantId, ctx.tenantId), eq(brainChats.origin, 'brainstorm')]; if (ctx.userId) conds.push(eq(brainChats.userId, ctx.userId)); const [row] = await ctx.db.update(brainChats).set({ isArchived: true, updatedAt: new Date() }).where(and(...conds)).returning({ id: brainChats.id }); return { archived: row != null }; } },
 
   // ---- Chat ↔ ticket links, lineage, consolidation, agent invites ----
   // Tie a Brain chat to work items of ANY tier (portfolio | objective/OKR |

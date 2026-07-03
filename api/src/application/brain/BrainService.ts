@@ -1,7 +1,7 @@
 import { eq, and, desc, isNull, sql } from 'drizzle-orm';
 import {
-  ideProjectChats,
-  ideProjectChatMessages,
+  brainChats,
+  brainChatMessages,
   chatMemories,
   chatSessions,
   chatMessages,
@@ -40,26 +40,26 @@ export interface AppendMessagesDto {
 // ---------------------------------------------------------------------------
 
 const chatColumns = {
-  id: ideProjectChats.id,
-  projectId: ideProjectChats.projectId,
-  origin: ideProjectChats.origin,
-  title: ideProjectChats.title,
-  createdAt: ideProjectChats.createdAt,
-  updatedAt: ideProjectChats.updatedAt,
+  id: brainChats.id,
+  projectId: brainChats.projectId,
+  origin: brainChats.origin,
+  title: brainChats.title,
+  createdAt: brainChats.createdAt,
+  updatedAt: brainChats.updatedAt,
 } as const;
 
 const chatDetailColumns = {
   ...chatColumns,
-  isArchived: ideProjectChats.isArchived,
+  isArchived: brainChats.isArchived,
 } as const;
 
 const messageColumns = {
-  id: ideProjectChatMessages.id,
-  role: ideProjectChatMessages.role,
-  content: ideProjectChatMessages.content,
-  metadata: ideProjectChatMessages.metadata,
-  seq: ideProjectChatMessages.seq,
-  createdAt: ideProjectChatMessages.createdAt,
+  id: brainChatMessages.id,
+  role: brainChatMessages.role,
+  content: brainChatMessages.content,
+  metadata: brainChatMessages.metadata,
+  seq: brainChatMessages.seq,
+  createdAt: brainChatMessages.createdAt,
 } as const;
 
 type MessageFeedback = 'up' | 'down' | null;
@@ -87,16 +87,16 @@ export class BrainService {
     userId: string,
     selectExtra?: Record<string, unknown>,
   ) {
-    const columns = { id: ideProjectChats.id, ...(selectExtra ?? {}) };
+    const columns = { id: brainChats.id, ...(selectExtra ?? {}) };
     const [chat] = await this.db
-      .select(columns as typeof columns & { id: typeof ideProjectChats.id })
-      .from(ideProjectChats)
+      .select(columns as typeof columns & { id: typeof brainChats.id })
+      .from(brainChats)
       .where(
         and(
-          eq(ideProjectChats.id, chatId),
-          eq(ideProjectChats.tenantId, tenantId),
-          eq(ideProjectChats.userId, userId),
-          eq(ideProjectChats.origin, BRAIN_ORIGIN),
+          eq(brainChats.id, chatId),
+          eq(brainChats.tenantId, tenantId),
+          eq(brainChats.userId, userId),
+          eq(brainChats.origin, BRAIN_ORIGIN),
         ),
       )
       .limit(1);
@@ -142,17 +142,17 @@ export class BrainService {
     opts?: { projectId?: string; limit?: number; offset?: number },
   ) {
     const conditions = [
-      eq(ideProjectChats.tenantId, tenantId),
-      eq(ideProjectChats.userId, userId),
-      eq(ideProjectChats.origin, BRAIN_ORIGIN),
-      eq(ideProjectChats.isArchived, false),
+      eq(brainChats.tenantId, tenantId),
+      eq(brainChats.userId, userId),
+      eq(brainChats.origin, BRAIN_ORIGIN),
+      eq(brainChats.isArchived, false),
     ];
 
     if (opts?.projectId === 'none') {
-      conditions.push(isNull(ideProjectChats.projectId));
+      conditions.push(isNull(brainChats.projectId));
     } else if (opts?.projectId) {
       const pid = Number(opts.projectId);
-      if (!Number.isNaN(pid)) conditions.push(eq(ideProjectChats.projectId, pid));
+      if (!Number.isNaN(pid)) conditions.push(eq(brainChats.projectId, pid));
     }
 
     const limit = Math.min(opts?.limit ?? 50, 200);
@@ -160,9 +160,9 @@ export class BrainService {
 
     return this.db
       .select(chatColumns)
-      .from(ideProjectChats)
+      .from(brainChats)
       .where(and(...conditions))
-      .orderBy(desc(ideProjectChats.updatedAt))
+      .orderBy(desc(brainChats.updatedAt))
       .limit(limit)
       .offset(offset);
   }
@@ -176,7 +176,7 @@ export class BrainService {
     }
 
     const [chat] = await this.db
-      .insert(ideProjectChats)
+      .insert(brainChats)
       .values({
         tenantId: dto.tenantId,
         userId: dto.userId,
@@ -192,13 +192,13 @@ export class BrainService {
   async getChat(chatId: number, tenantId: number, userId: string) {
     const [chat] = await this.db
       .select(chatDetailColumns)
-      .from(ideProjectChats)
+      .from(brainChats)
       .where(
         and(
-          eq(ideProjectChats.id, chatId),
-          eq(ideProjectChats.tenantId, tenantId),
-          eq(ideProjectChats.userId, userId),
-          eq(ideProjectChats.origin, BRAIN_ORIGIN),
+          eq(brainChats.id, chatId),
+          eq(brainChats.tenantId, tenantId),
+          eq(brainChats.userId, userId),
+          eq(brainChats.origin, BRAIN_ORIGIN),
         ),
       )
       .limit(1);
@@ -224,9 +224,9 @@ export class BrainService {
     if (dto.projectId !== undefined) updates.projectId = dto.projectId;
 
     const [updated] = await this.db
-      .update(ideProjectChats)
+      .update(brainChats)
       .set(updates)
-      .where(eq(ideProjectChats.id, chatId))
+      .where(eq(brainChats.id, chatId))
       .returning(chatColumns);
 
     return updated;
@@ -237,9 +237,9 @@ export class BrainService {
     if (!existing) return { error: 'Chat not found' as const };
 
     await this.db
-      .update(ideProjectChats)
+      .update(brainChats)
       .set({ isArchived: true, updatedAt: new Date() })
-      .where(eq(ideProjectChats.id, chatId));
+      .where(eq(brainChats.id, chatId));
 
     return { ok: true };
   }
@@ -254,9 +254,9 @@ export class BrainService {
 
     const msgs = await this.db
       .select(messageColumns)
-      .from(ideProjectChatMessages)
-      .where(eq(ideProjectChatMessages.chatId, chatId))
-      .orderBy(ideProjectChatMessages.seq)
+      .from(brainChatMessages)
+      .where(eq(brainChatMessages.chatId, chatId))
+      .orderBy(brainChatMessages.seq)
       .limit(Math.min(limit, 500));
 
     return msgs;
@@ -277,9 +277,9 @@ export class BrainService {
 
     // Get current max seq
     const [maxRow] = await this.db
-      .select({ maxSeq: sql<number>`COALESCE(MAX(${ideProjectChatMessages.seq}), 0)` })
-      .from(ideProjectChatMessages)
-      .where(eq(ideProjectChatMessages.chatId, chatId));
+      .select({ maxSeq: sql<number>`COALESCE(MAX(${brainChatMessages.seq}), 0)` })
+      .from(brainChatMessages)
+      .where(eq(brainChatMessages.chatId, chatId));
     let seq = maxRow?.maxSeq ?? 0;
 
     const inserted: Array<{
@@ -295,7 +295,7 @@ export class BrainService {
       if (!msg.role || typeof msg.content !== 'string') continue;
       seq += 1;
       const [row] = await this.db
-        .insert(ideProjectChatMessages)
+        .insert(brainChatMessages)
         .values({
           chatId,
           role: msg.role,
@@ -309,9 +309,9 @@ export class BrainService {
 
     // Touch updatedAt on the chat
     await this.db
-      .update(ideProjectChats)
+      .update(brainChats)
       .set({ updatedAt: new Date() })
-      .where(eq(ideProjectChats.id, chatId));
+      .where(eq(brainChats.id, chatId));
 
     return inserted;
   }
@@ -329,12 +329,12 @@ export class BrainService {
     // Find the message and verify ownership through its chat
     const [msg] = await this.db
       .select({
-        id: ideProjectChatMessages.id,
-        chatId: ideProjectChatMessages.chatId,
-        metadata: ideProjectChatMessages.metadata,
+        id: brainChatMessages.id,
+        chatId: brainChatMessages.chatId,
+        metadata: brainChatMessages.metadata,
       })
-      .from(ideProjectChatMessages)
-      .where(eq(ideProjectChatMessages.id, messageId));
+      .from(brainChatMessages)
+      .where(eq(brainChatMessages.id, messageId));
     if (!msg) return { error: 'Message not found' as const };
 
     // Verify ownership of the parent chat
@@ -346,9 +346,9 @@ export class BrainService {
     existing.feedback = feedback;
 
     const [updated] = await this.db
-      .update(ideProjectChatMessages)
+      .update(brainChatMessages)
       .set({ metadata: JSON.stringify(existing) })
-      .where(eq(ideProjectChatMessages.id, messageId))
+      .where(eq(brainChatMessages.id, messageId))
       .returning(messageColumns);
 
     return updated ?? { error: 'Update failed' as const };
@@ -360,15 +360,15 @@ export class BrainService {
 
   async summarizeChat(chatId: number, tenantId: number, userId: string, apiKey: string) {
     const chat = await this.verifyChatOwnership(chatId, tenantId, userId, {
-      projectId: ideProjectChats.projectId,
+      projectId: brainChats.projectId,
     }) as { id: number; projectId: number | null } | null;
     if (!chat) return { error: 'Chat not found' as const };
 
     const msgs = await this.db
-      .select({ role: ideProjectChatMessages.role, content: ideProjectChatMessages.content })
-      .from(ideProjectChatMessages)
-      .where(eq(ideProjectChatMessages.chatId, chatId))
-      .orderBy(ideProjectChatMessages.seq)
+      .select({ role: brainChatMessages.role, content: brainChatMessages.content })
+      .from(brainChatMessages)
+      .where(eq(brainChatMessages.chatId, chatId))
+      .orderBy(brainChatMessages.seq)
       .limit(500);
 
     if (msgs.length < 2) {
@@ -402,11 +402,11 @@ export class BrainService {
       return { summary: null, reason: 'LLM returned empty response' };
     }
 
-    // Store summary on the unified chat row (Brain Storm chats use ide_project_chats)
+    // Store summary on the unified chat row (Brain Storm chats use brain_chats)
     await this.db
-      .update(ideProjectChats)
+      .update(brainChats)
       .set({ summary, updatedAt: new Date() })
-      .where(eq(ideProjectChats.id, chatId));
+      .where(eq(brainChats.id, chatId));
 
     return { summary };
   }

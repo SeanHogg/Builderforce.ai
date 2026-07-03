@@ -6,7 +6,7 @@ import { getBaseUrl, SECRET_KEY } from "./gateway";
 /** The list-shaped project pages rendered natively (bundled-React webview, NO iframe —
  *  the same reliable hosting model as the Brain chat + Project 360). Add a view here +
  *  a mapper in the webview's ProjectPageScreen + a menu entry; nothing else. */
-export type ProjectPageView = "backlog" | "prd";
+export type ProjectPageView = "backlog" | "prd" | "roadmap" | "retros" | "poker";
 
 /** Human labels for the "Open Page…" picker, localized via vscode.l10n. */
 export function projectPageChoices(): { view: ProjectPageView; label: string }[] {
@@ -14,6 +14,9 @@ export function projectPageChoices(): { view: ProjectPageView; label: string }[]
   return [
     { view: "backlog", label: t("Backlog") },
     { view: "prd", label: t("PRDs & Specs") },
+    { view: "roadmap", label: t("Roadmap") },
+    { view: "retros", label: t("Retrospectives") },
+    { view: "poker", label: t("Planning Poker") },
   ];
 }
 
@@ -221,6 +224,29 @@ function buildProjectPageLabels(): Record<string, string> {
     "act.openTask": t("Open a working session for this task"),
     "act.workPrd": t("Work on this spec with the Brain"),
     "prd.seed": t("Let's work on the spec \"{title}\". Summarise it, then help me move it forward."),
+    // Roadmap
+    "roadmap.title": t("Roadmap"),
+    "roadmap.empty": t("No roadmap items yet"),
+    "roadmap.emptyHint": t("Add roadmap items to this project to see them here."),
+    "hz.now": t("Now"),
+    "hz.next": t("Next"),
+    "hz.later": t("Later"),
+    "roadmap.seed": t("Let's work on the roadmap item \"{title}\". Summarise it and help me plan the work to deliver it."),
+    "act.workRoadmap": t("Plan this roadmap item with the Brain"),
+    // Retrospectives + Planning Poker (workspace-scoped)
+    "retros.title": t("Retrospectives"),
+    "retros.empty": t("No retrospectives yet"),
+    "retros.emptyHint": t("Start a retrospective in your workspace to see it here."),
+    "retros.seed": t("Open the retrospective \"{title}\": summarise the feedback and turn the action items into tasks."),
+    "act.workRetro": t("Review this retrospective with the Brain"),
+    "poker.title": t("Planning Poker"),
+    "poker.empty": t("No planning-poker sessions yet"),
+    "poker.emptyHint": t("Start a planning-poker session in your workspace to see it here."),
+    "poker.seed": t("Summarise the planning-poker session \"{title}\" and its story estimates, and flag anything unestimated."),
+    "act.workPoker": t("Review this session with the Brain"),
+    // Session statuses (retros/poker groups)
+    "st.active": t("Active"),
+    "st.closed": t("Closed"),
   };
 }
 

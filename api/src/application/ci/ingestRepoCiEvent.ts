@@ -22,6 +22,7 @@ import { resolveRepoCredential, isResolveError } from '../repos/resolveRepoCrede
 import { mergeBranchToBase, cloudAutoMergeRequiresGreen, cloudAutofixOnBuildFailure, MAX_AUTOFIX_ATTEMPTS } from '../repos/mergeBranchToBase';
 import { ticketBranchName } from '../repos/commitFileAsPendingChange';
 import { markPullRequestMergedByTask, findMergedPullRequestBySha, findOpenPullRequestByTask, setPullRequestBuildStatus } from '../repos/recordPullRequestRow';
+import { completeTaskOnMerge } from '../task/taskLifecycle';
 import { fetchBuildError } from './fetchBuildError';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
@@ -258,7 +259,11 @@ async function ingestPreMergeEvent(db: Db, env: Env, secret: string, evt: RepoCi
         });
         merged = mr.ok;
         // Stamp the merge SHA so the resulting deploy-branch build correlates back.
-        if (mr.ok) await markPullRequestMergedByTask(db, task.tenantId, taskId, { mergeSha: mr.sha ?? null }).catch(() => {});
+        if (mr.ok) {
+          await markPullRequestMergedByTask(db, task.tenantId, taskId, { mergeSha: mr.sha ?? null }).catch(() => {});
+          // Merge on green → ticket complete (same completion path as the human/manager merge).
+          await completeTaskOnMerge(env, db, { tenantId: task.tenantId, taskId }).catch(() => {});
+        }
       }
     }
   }
@@ -285,6 +290,14 @@ async function ingestPostMergeEvent(db: Db, env: Env, secret: string, evt: RepoC
     .from(tasks).where(eq(tasks.id, taskId)).limit(1);
 
   const execId = await latestExecutionId(db, taskId, tenantId);
+
+  // Merge & deploy → ticket complete: a SUCCESSFUL post-merge deploy is the final
+  // "it shipped" signal, so complete the ticket here too (idempotent — a no-op if an
+  // earlier merge path already completed it). A deploy FAILURE leaves it open and
+  // drives auto-fix below.
+  if (evt.outcome === 'success') {
+    await completeTaskOnMerge(env, db, { tenantId, taskId }).catch(() => {});
+  }
 
   // Post-merge always allows auto-fix (a deploy failure is authoritative even without
   // a runId — e.g. deployment_status events). Same outcome + reason + intent contract

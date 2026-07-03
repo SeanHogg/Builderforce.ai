@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { tasksApi, type Task } from '@/lib/builderforceApi';
+import { taskTypeBadgeClass, taskTypeLabelKey } from '@/lib/taskType';
 import { usePmScope } from '@/lib/pm/scope';
 import { useOptionalProjectScope } from '@/lib/ProjectScopeContext';
 import { usePmData } from '@/lib/pm/usePmData';
@@ -29,7 +30,7 @@ const newEpicButtonStyle: React.CSSProperties = {
 
 /** Render one project's epic/child tree as a table. Clicking an epic row opens
  *  the edit panel via {@link onEdit}. */
-function EpicTable({ tasks, t, onEdit }: { tasks: Task[]; t: ReturnType<typeof useTranslations>; onEdit: (epic: Task) => void }) {
+function EpicTable({ tasks, t, tCommon, onEdit }: { tasks: Task[]; t: ReturnType<typeof useTranslations>; tCommon: ReturnType<typeof useTranslations>; onEdit: (epic: Task) => void }) {
   const epics = tasks.filter((tk) => tk.taskType === 'epic');
   const childrenByParent = new Map<number, Task[]>();
   for (const tk of tasks) {
@@ -45,7 +46,14 @@ function EpicTable({ tasks, t, onEdit }: { tasks: Task[]; t: ReturnType<typeof u
 
   const renderChild = (tk: Task) => (
     <tr key={tk.id} style={trStyle}>
-      <td style={{ ...tdStyle, paddingLeft: 40 }}>↳ {tk.key} · {tk.title}</td>
+      <td style={{ ...tdStyle, paddingLeft: 40 }}>
+        ↳ {tk.key} · {tk.title}
+        {taskTypeBadgeClass(tk.taskType) && (
+          <span className={taskTypeBadgeClass(tk.taskType)!} style={{ marginLeft: 6, fontSize: 10 }}>
+            {tCommon(taskTypeLabelKey(tk.taskType))}
+          </span>
+        )}
+      </td>
       <td style={tdStyle}><StatusPill value={tk.status} /></td>
       <td style={tdMutedStyle}>{tk.priority}</td>
       <td style={tdMutedStyle}>{tk.sprintId ? t('scheduled') : '—'}</td>
@@ -104,6 +112,7 @@ function EpicTable({ tasks, t, onEdit }: { tasks: Task[]; t: ReturnType<typeof u
 
 export function EpicTreeView() {
   const t = useTranslations('pm');
+  const tCommon = useTranslations('common');
   const { projectId } = usePmScope();
   // Optional: present in the app shell, absent in embed (which scopes explicitly).
   const scope = useOptionalProjectScope();
@@ -140,7 +149,7 @@ export function EpicTreeView() {
             + {t('newEpic')}
           </button>
         </div>
-        <EpicTable tasks={tasks} t={t} onEdit={openEdit} />
+        <EpicTable tasks={tasks} t={t} tCommon={tCommon} onEdit={openEdit} />
         {epicPanel}
       </div>
     );
@@ -169,7 +178,7 @@ export function EpicTreeView() {
               + {t('newEpic')}
             </button>
           </div>
-          <EpicTable tasks={ptasks} t={t} onEdit={openEdit} />
+          <EpicTable tasks={ptasks} t={t} tCommon={tCommon} onEdit={openEdit} />
         </div>
       ))}
       {epicPanel}

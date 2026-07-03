@@ -8,6 +8,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import type { Project } from '@/lib/types';
 import type { AgentHost } from '@/lib/builderforceApi';
 import { fetchProjects, createProject, deleteProject } from '@/lib/api';
+import { trackActivity } from '@/lib/activity/tracker';
 import { useOptionalProjectScope } from '@/lib/ProjectScopeContext';
 import { agentHosts } from '@/lib/builderforceApi';
 import { ProjectDetailsPanel, type ProjectPanelTab } from '@/components/ProjectDetailsPanel';
@@ -116,6 +117,8 @@ export function ProjectsContent({ limit, viewAllHref, onCount }: ProjectsContent
         description: newProjectDesc.trim() || undefined,
         template: 'vanilla',
       });
+      // Audited engagement signal: creating/updating a project is billable activity.
+      trackActivity('project_update', { ref: `project:${project.id}`, projectId: project.id });
       setProjects((prev) => [project, ...prev]);
       scope?.reload();
       setNewProjectName('');

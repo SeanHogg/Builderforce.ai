@@ -14,6 +14,7 @@ import { resolveRepoCredential, isResolveError } from './resolveRepoCredential';
 import { mergePullRequest, normalizeMergeMethod, type MergeMethod } from './mergePullRequest';
 import { markPullRequestMergedById } from './recordPullRequestRow';
 import { invalidatePullRequestDetail } from './getPullRequestDetail';
+import { completeTaskOnMerge } from '../task/taskLifecycle';
 
 export type MergeRecordedPrResult =
   | { ok: true; merged: boolean; alreadyMerged?: boolean; sha: string | null; pullRequest: unknown }
@@ -72,6 +73,18 @@ export async function mergeRecordedPullRequest(
     args.prId,
     row.updatedAt instanceof Date ? row.updatedAt.toISOString() : String(row.updatedAt),
   ).catch(() => { /* cache miss is fine */ });
+
+  // Merge → ticket complete: the ONE place every merge path funnels through, so the
+  // human "Approve & Merge", the AI Manager sweep and the green-CI auto-merge all
+  // complete the linked ticket identically. Best-effort — a merged PR must not be
+  // reported as failed just because the completion write hiccuped.
+  if (row.taskId != null) {
+    await completeTaskOnMerge(env, db, {
+      tenantId: args.tenantId,
+      taskId: row.taskId,
+      actorUserId: args.mergedBy && !args.mergedBy.startsWith('manager:') ? args.mergedBy : null,
+    }).catch(() => { /* completion is best-effort; the merge itself succeeded */ });
+  }
 
   return { ok: true, merged: result.merged, sha: result.sha, pullRequest: updated ?? row };
 }

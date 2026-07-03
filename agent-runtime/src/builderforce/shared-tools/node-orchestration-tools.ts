@@ -85,7 +85,7 @@ function validateRole(role: string): string | null {
   return (
     `Unknown agent role: "${role}". Use a built-in role ` +
     `(code-creator, code-reviewer, test-generator, bug-analyzer, refactor-agent, ` +
-    `documentation-agent, architecture-advisor) or a hired-agent roleKey/id.`
+    `documentation-agent, architecture-advisor, validator-agent) or a hired-agent roleKey/id.`
   );
 }
 

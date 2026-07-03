@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useTranslations } from 'next-intl';
 import Link from 'next/link';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
@@ -14,6 +15,7 @@ import { REGISTER_FAQ, STATS, FEATURES } from '@/lib/content';
 
 export default function RegisterPageClient() {
   const router = useRouter();
+  const tr = useTranslations('register');
   const { register, isAuthenticated } = useAuth();
 
   const [name, setName] = useState('');
@@ -159,11 +161,11 @@ export default function RegisterPageClient() {
               {/* Account type — a freelancer gets the restricted for-hire shell
                   (Profile / Find Work / Timecard); a builder gets the full app. */}
               <div>
-                <label style={labelStyle}>I want to</label>
-                <div role="radiogroup" aria-label="Account type" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                <label style={labelStyle}>{tr('want')}</label>
+                <div role="radiogroup" aria-label={tr('accountTypeAria')} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
                   {([
-                    { key: 'standard' as const, icon: '🚀', title: 'Build with AI', sub: 'Projects, agents & workspace' },
-                    { key: 'freelancer' as const, icon: '💼', title: 'Get hired', sub: 'Freelance profile & gigs' },
+                    { key: 'standard' as const, icon: '🚀', title: tr('buildTitle'), sub: tr('buildSub') },
+                    { key: 'freelancer' as const, icon: '💼', title: tr('hireTitle'), sub: tr('hireSub') },
                   ]).map((opt) => {
                     const active = accountType === opt.key;
                     return (

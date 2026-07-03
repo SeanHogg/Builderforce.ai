@@ -56,6 +56,7 @@ import {
   taskStatusLabel,
   taskStatusBadgeClass,
 } from '@/lib/taskStatus';
+import { taskTypeBadgeClass, taskTypeLabelKey } from '@/lib/taskType';
 
 type TaskView = 'board' | 'table' | 'calendar' | 'gantt';
 
@@ -164,6 +165,7 @@ export function TaskMgmtContent({
 }: TaskMgmtContentProps) {
   const tApproval = useTranslations('boardConfig');
   const tBoard = useTranslations('board');
+  const tCommon = useTranslations('common');
   // Global project scope (present in the app shell, absent in embed/standalone).
   // When present it is the single project picker — the board's own project filter
   // is hidden and the TopBar tenant→project selector drives scope instead.
@@ -794,6 +796,48 @@ export function TaskMgmtContent({
           >
             {task.priority}
           </span>
+          {taskTypeBadgeClass(task.taskType) && (
+            <span
+              className={taskTypeBadgeClass(task.taskType)!}
+              style={{ fontSize: 10, padding: '2px 6px', borderRadius: 4 }}
+            >
+              {tCommon(taskTypeLabelKey(task.taskType))}
+            </span>
+          )}
+          {task.reviewCount ? (
+            <span
+              title={
+                task.lastReviewVerdict === 'complete'
+                  ? tCommon('reviewComplete')
+                  : task.lastReviewVerdict === 'gaps'
+                    ? tCommon('reviewGaps')
+                    : undefined
+              }
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 3,
+                fontSize: 10,
+                padding: '2px 6px',
+                borderRadius: 4,
+                background: 'var(--bg-elevated)',
+                color:
+                  task.lastReviewVerdict === 'gaps'
+                    ? '#f59e0b'
+                    : task.lastReviewVerdict === 'complete'
+                      ? '#22c55e'
+                      : 'var(--text-secondary)',
+                fontWeight: 600,
+              }}
+            >
+              {task.lastReviewVerdict === 'complete'
+                ? '✓'
+                : task.lastReviewVerdict === 'gaps'
+                  ? '⚠'
+                  : '↻'}{' '}
+              {tCommon('reviewedTimes', { count: task.reviewCount })}
+            </span>
+          ) : null}
           {task.businessValue != null && (
             <span
               title={task.businessValueRationale ?? tBoard('businessValue.badgeTitle')}

@@ -15,8 +15,8 @@
  */
 import { and, eq, inArray, sql } from 'drizzle-orm';
 import {
-  ideProjectChats,
-  ideProjectChatMessages,
+  brainChats,
+  brainChatMessages,
   chatTicketLinks,
   tasks,
   projects,
@@ -93,14 +93,14 @@ export class ChatTicketService {
    *  callers pass null and get tenant-wide access, matching the brain.* tools). */
   private async ownedChat(chatId: number, tenantId: number, userId: string | null) {
     const conds = [
-      eq(ideProjectChats.id, chatId),
-      eq(ideProjectChats.tenantId, tenantId),
-      eq(ideProjectChats.origin, BRAIN_ORIGIN),
+      eq(brainChats.id, chatId),
+      eq(brainChats.tenantId, tenantId),
+      eq(brainChats.origin, BRAIN_ORIGIN),
     ];
-    if (userId) conds.push(eq(ideProjectChats.userId, userId));
+    if (userId) conds.push(eq(brainChats.userId, userId));
     const [row] = await this.db
-      .select({ id: ideProjectChats.id, projectId: ideProjectChats.projectId })
-      .from(ideProjectChats)
+      .select({ id: brainChats.id, projectId: brainChats.projectId })
+      .from(brainChats)
       .where(and(...conds))
       .limit(1);
     return row ?? null;
@@ -342,13 +342,13 @@ export class ChatTicketService {
     if (!isTicketKind(kind)) return [];
     const rows = await this.db
       .select({
-        chatId: ideProjectChats.id, title: ideProjectChats.title, projectId: ideProjectChats.projectId,
-        isArchived: ideProjectChats.isArchived, mergedIntoChatId: ideProjectChats.mergedIntoChatId,
-        createdAt: ideProjectChats.createdAt, updatedAt: ideProjectChats.updatedAt,
+        chatId: brainChats.id, title: brainChats.title, projectId: brainChats.projectId,
+        isArchived: brainChats.isArchived, mergedIntoChatId: brainChats.mergedIntoChatId,
+        createdAt: brainChats.createdAt, updatedAt: brainChats.updatedAt,
         linkType: chatTicketLinks.linkType,
       })
       .from(chatTicketLinks)
-      .innerJoin(ideProjectChats, eq(ideProjectChats.id, chatTicketLinks.chatId))
+      .innerJoin(brainChats, eq(brainChats.id, chatTicketLinks.chatId))
       .where(and(eq(chatTicketLinks.tenantId, tenantId), eq(chatTicketLinks.ticketKind, kind), eq(chatTicketLinks.ticketRef, ref)))
       .orderBy(chatTicketLinks.createdAt);
     return rows.map((r) => ({
@@ -382,21 +382,21 @@ export class ChatTicketService {
 
     // Current max seq on the target, so appended messages continue the sequence.
     const [maxRow] = await this.db
-      .select({ maxSeq: sql<number>`COALESCE(MAX(${ideProjectChatMessages.seq}), 0)` })
-      .from(ideProjectChatMessages).where(eq(ideProjectChatMessages.chatId, input.targetChatId));
+      .select({ maxSeq: sql<number>`COALESCE(MAX(${brainChatMessages.seq}), 0)` })
+      .from(brainChatMessages).where(eq(brainChatMessages.chatId, input.targetChatId));
     let seq = Number(maxRow?.maxSeq ?? 0);
 
     // Gather source messages, ordered chronologically across all sources.
     const srcMsgs = await this.db
-      .select({ role: ideProjectChatMessages.role, content: ideProjectChatMessages.content, metadata: ideProjectChatMessages.metadata, createdAt: ideProjectChatMessages.createdAt, seq: ideProjectChatMessages.seq })
-      .from(ideProjectChatMessages)
-      .where(inArray(ideProjectChatMessages.chatId, sources))
-      .orderBy(ideProjectChatMessages.createdAt, ideProjectChatMessages.seq);
+      .select({ role: brainChatMessages.role, content: brainChatMessages.content, metadata: brainChatMessages.metadata, createdAt: brainChatMessages.createdAt, seq: brainChatMessages.seq })
+      .from(brainChatMessages)
+      .where(inArray(brainChatMessages.chatId, sources))
+      .orderBy(brainChatMessages.createdAt, brainChatMessages.seq);
 
     let messagesMoved = 0;
     for (const m of srcMsgs) {
       seq += 1;
-      await this.db.insert(ideProjectChatMessages).values({
+      await this.db.insert(brainChatMessages).values({
         chatId: input.targetChatId, role: m.role, content: m.content, metadata: m.metadata, seq,
       });
       messagesMoved += 1;
@@ -431,10 +431,10 @@ export class ChatTicketService {
     }
 
     // Archive + redirect each source; touch the target.
-    await this.db.update(ideProjectChats)
+    await this.db.update(brainChats)
       .set({ isArchived: true, mergedIntoChatId: input.targetChatId, updatedAt: new Date() })
-      .where(and(eq(ideProjectChats.tenantId, tenantId), inArray(ideProjectChats.id, sources)));
-    await this.db.update(ideProjectChats).set({ updatedAt: new Date() }).where(eq(ideProjectChats.id, input.targetChatId));
+      .where(and(eq(brainChats.tenantId, tenantId), inArray(brainChats.id, sources)));
+    await this.db.update(brainChats).set({ updatedAt: new Date() }).where(eq(brainChats.id, input.targetChatId));
 
     return { targetChatId: input.targetChatId, mergedChats: sources.length, messagesMoved, linksMoved };
   }

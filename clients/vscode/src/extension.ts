@@ -2,6 +2,7 @@ import * as os from "os";
 import * as vscode from "vscode";
 import { BuilderForceAuthProvider } from "./auth";
 import * as bfApi from "./bfApi";
+import { initActivity, trackVsix } from "./activity";
 import { BoardPanel } from "./boardPanel";
 import { BrainWebview } from "./brainWebview";
 import { Project360Panel } from "./project360Panel";
@@ -98,6 +99,10 @@ export function activate(context: vscode.ExtensionContext): void {
   insights = new InsightsController(context);
   context.subscriptions.push(insights);
 
+  // Editor activity capture — heartbeats + file-open navigation feed the billable
+  // timecard pipeline (source 'vscode'). Best-effort; no-op when signed out.
+  context.subscriptions.push(initActivity(context.secrets));
+
   context.subscriptions.push(
     participant,
     vscode.window.registerTreeDataProvider("builderforce.inbox", inbox),
@@ -188,9 +193,19 @@ export function activate(context: vscode.ExtensionContext): void {
     ),
     // Dispatch a PLATFORM run for the task (its assigned AgentHost / cloud agent) —
     // distinct from the local in-editor agent loop. Surfaces the run via a task session.
-    vscode.commands.registerCommand("builderforce.runTask", (node: TaskNode) =>
-      runTask(context, projects, node?.task),
-    ),
+    vscode.commands.registerCommand("builderforce.runTask", (node: TaskNode) => {
+      // Audited engagement signal: dispatching a run is billable activity.
+      trackVsix("agent_run", { ref: node?.task ? `task:${node.task.id}` : undefined, weight: 2 });
+      return runTask(context, projects, node?.task);
+    }),
+    // Log a meeting as PAID time (it's the worker's time) — prompts for minutes.
+    vscode.commands.registerCommand("builderforce.logMeeting", async () => {
+      const mins = await vscode.window.showInputBox({ prompt: "Meeting length in minutes", validateInput: (v) => (Number(v) > 0 ? null : "Enter a positive number") });
+      if (!mins) return;
+      const note = await vscode.window.showInputBox({ prompt: "Meeting note (optional)" });
+      trackVsix("meeting", { durationSeconds: Math.round(Number(mins) * 60), ref: "meeting", metadata: note ? { note } : undefined });
+      void vscode.window.showInformationMessage(`Logged a ${mins}-minute meeting as paid time.`);
+    }),
     // Review the tenant's pending human-in-the-loop approvals and resolve them.
     vscode.commands.registerCommand("builderforce.humanRequests", () =>
       reviewHumanRequests(context, projects),

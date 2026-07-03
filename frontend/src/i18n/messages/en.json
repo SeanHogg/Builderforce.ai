@@ -175,6 +175,7 @@
       "noTypes": "No item types discovered.",
       "typeTask": "Task",
       "typeEpic": "Epic",
+      "typeGap": "Gap",
       "usersIntro": "Choose which external users to invite to this workspace.",
       "noUsers": "No users discovered.",
       "userInvite": "Invite",
@@ -219,7 +220,8 @@
       "quality": "Quality",
       "myProfile": "My Profile",
       "findWork": "Find Work",
-      "timecard": "Timecard"
+      "timecard": "Timecard",
+      "hires": "Hires"
     },
     "tab": {
       "projects": "Projects",
@@ -666,7 +668,13 @@
     "home": "Back to home"
   },
   "common": {
-    "language": "Language"
+    "language": "Language",
+    "typeTask": "Task",
+    "typeEpic": "Epic",
+    "typeGap": "Gap",
+    "reviewedTimes": "{count, plural, one {Reviewed # time} other {Reviewed # times}}",
+    "reviewComplete": "Last review passed — complete",
+    "reviewGaps": "Last review found gaps"
   },
   "llmUsage": {
     "byUser": "By user · last 7 days",
@@ -4303,7 +4311,6 @@
       "linkFailed": "Could not link — check the ticket exists.",
       "kindLabel": "Ticket type",
       "pickTicket": "Choose a ticket…",
-      "refPlaceholder": "Objective / initiative / portfolio id",
       "linkTypeLabel": "Link type",
       "linkTypeLinked": "Linked",
       "linkTypeCreated": "Created from chat",
@@ -4768,6 +4775,29 @@
         "rejected": "Rejected",
         "paid": "Paid"
       }
+    },
+    "meeting": {
+      "title": "Log a meeting",
+      "subtitle": "Meetings are paid — it’s your time. Logged as billable minutes.",
+      "selectWorkspace": "Workspace",
+      "minutes": "Minutes",
+      "note": "What was it about? (optional)",
+      "log": "Log meeting"
+    },
+    "entries": {
+      "hide": "Hide",
+      "edit": "Edit entries",
+      "none": "No line items yet.",
+      "billable": "Billable",
+      "nonBillable": "Non-billable",
+      "remove": "Remove",
+      "descPlaceholder": "Description (optional)",
+      "add": "Add",
+      "source": {
+        "auto": "Tracked",
+        "manual": "Manual",
+        "meeting": "Meeting"
+      }
     }
   },
   "talent": {
@@ -4793,5 +4823,52 @@
     "location": "Location",
     "availability": "Availability",
     "private": "Private profile"
+  },
+  "hires": {
+    "title": "Hires",
+    "subtitle": "Manage your hired freelancers and approve their timecards.",
+    "loading": "Loading…",
+    "noWorkspace": "Select a workspace to manage hires.",
+    "team": "Your freelancers",
+    "teamEmpty": "No freelancers hired yet. Browse the talent marketplace to hire.",
+    "perHour": "/hr",
+    "activate": "Activate",
+    "terminate": "Terminate",
+    "terminateConfirm": "End this engagement? Their tracked hours are kept.",
+    "approvals": "Timecards",
+    "approvalsEmpty": "No timecards yet.",
+    "review": "Review",
+    "hide": "Hide",
+    "reject": "Reject",
+    "approve": "Approve",
+    "noEntries": "No line items.",
+    "nonBillable": "non-billable",
+    "status": {
+      "invited": "Invited",
+      "interviewing": "Interviewing",
+      "active": "Active",
+      "declined": "Declined",
+      "terminated": "Ended"
+    },
+    "cardStatus": {
+      "draft": "Draft",
+      "submitted": "Submitted",
+      "approved": "Approved",
+      "rejected": "Rejected",
+      "paid": "Paid"
+    },
+    "entrySource": {
+      "auto": "Tracked",
+      "manual": "Manual",
+      "meeting": "Meeting"
+    }
+  },
+  "register": {
+    "want": "I want to",
+    "buildTitle": "Build with AI",
+    "buildSub": "Projects, agents & workspace",
+    "hireTitle": "Get hired",
+    "hireSub": "Freelance profile & gigs",
+    "accountTypeAria": "Account type"
   }
 }

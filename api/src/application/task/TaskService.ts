@@ -30,10 +30,12 @@ export interface CreateTaskDto {
   assignedAgentRef?: string | null;
   /** Human assignee (users.id). Mutually exclusive with the agent assignees. */
   assignedUserId?: string | null;
-  /** 'task' | 'epic' at creation (default 'task'). */
+  /** 'task' | 'epic' | 'gap' at creation (default 'task'). */
   taskType?: TaskType;
   /** Parent Epic's id — set when creating a child of an Epic. */
   parentTaskId?: number | null;
+  /** For a GAP task: the Done item whose review produced it (Validator sets this). */
+  gapOriginTaskId?: number | null;
   startDate?: string | null;
   dueDate?: string | null;
   persona?: string | null;
@@ -168,6 +170,7 @@ export class TaskService {
         assignedUserId: dto.assignedUserId ?? null,
         taskType: dto.taskType,
         parentTaskId: dto.parentTaskId != null ? asTaskId(dto.parentTaskId) : null,
+        gapOriginTaskId: dto.gapOriginTaskId != null ? asTaskId(dto.gapOriginTaskId) : null,
         startDate: dto.startDate ? new Date(dto.startDate) : null,
         dueDate: dto.dueDate ? new Date(dto.dueDate) : null,
         persona: dto.persona ?? null,

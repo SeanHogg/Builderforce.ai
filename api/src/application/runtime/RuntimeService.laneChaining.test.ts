@@ -30,6 +30,7 @@ function buildTask(status: string): Task {
     githubPrNumber: null, assignedAgentHostId: null, assignedAgentRef: null, assignedUserId: null,
     gitBranch: null, explicitRepoId: null, sprintId: null, releaseId: null, storyPoints: null,
     businessValue: null, businessValueRationale: null, businessValueSource: null, managerRank: null,
+    reviewCount: 0, lastReviewedAt: null, lastReviewVerdict: null, gapOriginTaskId: null,
     startDate: null, dueDate: null,
     persona: null, archived: false, createdAt: now, updatedAt: now,
   });

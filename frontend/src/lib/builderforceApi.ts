@@ -1112,10 +1112,20 @@ export interface Task {
   /** Free-form lane key (board column). The canonical defaults are {@link TaskStatus}. */
   status: string;
   priority: TaskPriority;
-  /** Fixed type dimension: a plain task or an Epic (planning container with children). */
-  taskType: 'task' | 'epic';
+  /** Fixed type dimension: a plain task, an Epic (planning container with
+   *  children), or a GAP (minted by the Validator when a Done item is reviewed
+   *  and found incomplete). */
+  taskType: 'task' | 'epic' | 'gap';
   /** Parent Epic's id (null for top-level tasks). Set when grouped under an Epic. */
   parentTaskId: number | null;
+  /** How many times a Validator has reviewed this item (0 = never reviewed). */
+  reviewCount?: number;
+  /** ISO timestamp of the most recent review, or null when never reviewed. */
+  lastReviewedAt?: string | null;
+  /** Verdict of the most recent review: complete, gaps found, or null. */
+  lastReviewVerdict?: 'complete' | 'gaps' | null;
+  /** For a GAP task: the Done item's id this gap was minted from (else null). */
+  gapOriginTaskId?: number | null;
   /** sprints.id this task is scheduled into, or null when unscheduled (backlog). */
   sprintId: string | null;
   /** product_releases.id this task ships in, or null (the delivery deliverable). */

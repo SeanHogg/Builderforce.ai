@@ -19,6 +19,10 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 import { agentFleetTool } from "../builderforce/tools/agent-fleet-tool.js";
 import { codebaseSearchTool } from "../builderforce/tools/codebase-search-tool.js";
 import { gitHistoryTool } from "../builderforce/tools/git-history-tool.js";
+import {
+  reviewsRecordTool,
+  ticketsFromDeltaTool,
+} from "../builderforce/tools/platform-ticket-tools.js";
 import { projectKnowledgeTool } from "../builderforce/tools/project-knowledge-tool.js";
 import { semanticSearchTool } from "../builderforce/tools/semantic-search-tool.js";
 import { workflowStatusTool } from "../builderforce/tools/workflow-status-tool.js";
@@ -45,6 +49,8 @@ const MCP_TOOLS = [
   gitHistoryTool,
   workflowStatusTool,
   agentFleetTool,
+  ticketsFromDeltaTool, // relay: record a code delta on the board (builtin tickets.from_delta)
+  reviewsRecordTool, // relay: record a Done-item review outcome (builtin reviews.record)
 ];
 
 /**

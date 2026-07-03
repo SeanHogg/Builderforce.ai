@@ -10,7 +10,7 @@
  * employer approval uses the TENANT JWT.
  */
 import { Hono } from 'hono';
-import { neon } from '@neondatabase/serverless';
+import { neon, type NeonQueryFunction } from '@neondatabase/serverless';
 import { authMiddleware } from '../middleware/authMiddleware';
 import { webAuthMiddleware } from '../middleware/webAuthMiddleware';
 import { resolveActiveMinutes, type ResolvableSignal } from '../../application/activity/resolveTime';
@@ -24,7 +24,10 @@ const MAX_BATCH = 100;
  *  signal to an active engagement when one resolves; otherwise stores it for audit.
  *  `defaultTenantId` (VSIX: from the tenant token) backfills a signal's tenantId. */
 async function ingestSignals(
-  sql: ReturnType<typeof neon>,
+  // The concrete type `neon(url)` returns — its defaults are <false, false>. Using
+  // `ReturnType<typeof neon>` instead widens to <boolean, boolean>, which an actual
+  // call is NOT assignable to (the params sit in a contravariant transaction position).
+  sql: NeonQueryFunction<false, false>,
   userId: string,
   list: unknown[],
   defaultSource: string,
@@ -64,6 +67,31 @@ async function ingestSignals(
   return ingested;
 }
 
+/** Recompute a timecard's totals from its entries and persist them. Shared by the
+ *  signal resolver AND the manual-entry mutations so the rollup is computed in ONE
+ *  place (DRY). amount = billable hours × the card's snapshot rate. */
+async function recomputeTimecard(
+  sql: NeonQueryFunction<false, false>,
+  cardId: string,
+): Promise<{ totalMinutes: number; billableMinutes: number; amountCents: number }> {
+  const [sums] = await sql`
+    SELECT COALESCE(SUM(minutes),0)::int AS total,
+           COALESCE(SUM(minutes) FILTER (WHERE billable),0)::int AS billable
+    FROM timecard_entries WHERE timecard_id = ${cardId}
+  `;
+  const [card] = await sql`SELECT rate_cents FROM timecards WHERE id = ${cardId}`;
+  const total = Number(sums?.total ?? 0);
+  const billable = Number(sums?.billable ?? 0);
+  const rate = Number(card?.rate_cents ?? 0);
+  const amount = Math.round((billable / 60) * rate);
+  await sql`
+    UPDATE timecards SET total_minutes = ${total}, billable_minutes = ${billable},
+      amount_cents = ${amount}, updated_at = NOW()
+    WHERE id = ${cardId}
+  `;
+  return { totalMinutes: total, billableMinutes: billable, amountCents: amount };
+}
+
 export function createActivityRoutes(): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
   const sql = (env: HonoEnv['Bindings']) => neon(env.NEON_DATABASE_URL);
@@ -87,6 +115,21 @@ export function createActivityRoutes(): Hono<HonoEnv> {
     const list = Array.isArray(body.signals) ? body.signals.slice(0, MAX_BATCH) : [];
     if (list.length === 0) return c.json({ ok: true, ingested: 0 });
     const ingested = await ingestSignals(sql(c.env), userId, list, 'vscode', tenantId);
+    return c.json({ ok: true, ingested });
+  });
+
+  // POST /meeting — log a meeting as PAID time (it's the worker's time). Emits a
+  // single 'meeting' span signal whose full duration the resolver credits. Worker
+  // (web JWT); attributed to the given engagement.
+  router.post('/meeting', webAuthMiddleware, async (c) => {
+    const userId = c.get('userId') as string;
+    const b = await c.req.json<{ engagementId?: string; occurredAt?: string; durationMinutes?: number; note?: string }>();
+    if (!b.engagementId || !b.durationMinutes || b.durationMinutes <= 0) return c.json({ error: 'engagementId and durationMinutes required' }, 400);
+    const ingested = await ingestSignals(sql(c.env), userId, [{
+      source: 'meeting', kind: 'meeting', engagementId: b.engagementId,
+      durationSeconds: Math.round(b.durationMinutes * 60),
+      occurredAt: b.occurredAt, ref: 'meeting', metadata: b.note ? { note: b.note } : undefined,
+    }], 'meeting', null);
     return c.json({ ok: true, ingested });
   });
 
@@ -172,30 +215,17 @@ export function createTimecardRoutes(): Hono<HonoEnv> {
 
     // Replace auto entries for this card (idempotent re-resolve).
     await sql(c.env)`DELETE FROM timecard_entries WHERE timecard_id = ${realCardId} AND source = 'auto'`;
-    let total = 0;
     for (const [day, daySignals] of byDay) {
       const resolved = resolveActiveMinutes(daySignals.map((s): ResolvableSignal => ({ id: s.id, occurredAt: s.occurred_at, durationSeconds: s.duration_seconds, weight: s.weight, kind: s.kind })));
       if (resolved.minutes <= 0) continue;
-      total += resolved.minutes;
       await sql(c.env)`
         INSERT INTO timecard_entries (id, engagement_id, user_id, tenant_id, work_date, minutes, source, billable, resolved_from, timecard_id)
         VALUES (${crypto.randomUUID()}, ${b.engagementId}, ${userId}, ${eng.tenant_id}, ${day}, ${resolved.minutes}, 'auto', true, ${JSON.stringify(resolved)}, ${realCardId})
       `;
     }
-    // Include any manual entries already in the period.
-    const [sums] = await sql(c.env)`
-      SELECT COALESCE(SUM(minutes),0)::int AS total, COALESCE(SUM(minutes) FILTER (WHERE billable),0)::int AS billable
-      FROM timecard_entries WHERE timecard_id = ${realCardId}
-    `;
-    const totalMin = Number(sums?.total ?? total);
-    const billableMin = Number(sums?.billable ?? total);
-    const rate = Number(eng.rate_cents ?? 0);
-    await sql(c.env)`
-      UPDATE timecards SET total_minutes = ${totalMin}, billable_minutes = ${billableMin},
-        amount_cents = ${Math.round((billableMin / 60) * rate)}, updated_at = NOW()
-      WHERE id = ${realCardId}
-    `;
-    return c.json({ id: realCardId, totalMinutes: totalMin, billableMinutes: billableMin });
+    // Recompute totals over auto + any manual entries already in the period.
+    const totals = await recomputeTimecard(sql(c.env), realCardId);
+    return c.json({ id: realCardId, ...totals });
   });
 
   // GET /mine — worker's timecards (web JWT).
@@ -218,7 +248,12 @@ export function createTimecardRoutes(): Hono<HonoEnv> {
     return c.json(rows.map(mapCard));
   });
 
-  // GET /:id/entries — the line items on one timecard (worker or employer).
+  const mapEntry = (r: Record<string, unknown>) => ({
+    id: r.id, workDate: r.work_date, minutes: Number(r.minutes), source: r.source,
+    billable: Boolean(r.billable), description: r.description ?? null,
+  });
+
+  // GET /:id/entries — the worker's own timecard line items (web JWT).
   router.get('/:id/entries', webAuthMiddleware, async (c) => {
     const userId = c.get('userId') as string;
     const id = c.req.param('id');
@@ -227,7 +262,75 @@ export function createTimecardRoutes(): Hono<HonoEnv> {
       WHERE te.timecard_id = ${id} AND tc.user_id = ${userId}
       ORDER BY te.work_date ASC
     ` as unknown as Record<string, unknown>[];
-    return c.json(rows.map((r) => ({ id: r.id, workDate: r.work_date, minutes: Number(r.minutes), source: r.source, billable: Boolean(r.billable), description: r.description ?? null })));
+    return c.json(rows.map(mapEntry));
+  });
+
+  // GET /:id/review — employer approval view: the card + its line items, scoped to
+  // the employer's tenant (tenant JWT).
+  router.get('/:id/review', authMiddleware, async (c) => {
+    const tenantId = c.get('tenantId') as number;
+    const id = c.req.param('id');
+    const [cardRow] = await sql(c.env)`
+      SELECT tc.*, u.display_name AS freelancer_name FROM timecards tc JOIN users u ON u.id = tc.user_id
+      WHERE tc.id = ${id} AND tc.tenant_id = ${tenantId}
+    `;
+    if (!cardRow) return c.json({ error: 'Not found' }, 404);
+    const rows = await sql(c.env)`
+      SELECT * FROM timecard_entries WHERE timecard_id = ${id} ORDER BY work_date ASC
+    ` as unknown as Record<string, unknown>[];
+    return c.json({ card: mapCard(cardRow), entries: rows.map(mapEntry) });
+  });
+
+  // POST /:id/entries — worker adds a MANUAL line item to a DRAFT timecard.
+  router.post('/:id/entries', webAuthMiddleware, async (c) => {
+    const userId = c.get('userId') as string;
+    const id = c.req.param('id');
+    const b = await c.req.json<{ workDate?: string; minutes?: number; description?: string; billable?: boolean }>();
+    const [card] = await sql(c.env)`SELECT id, engagement_id, tenant_id FROM timecards WHERE id = ${id} AND user_id = ${userId} AND status = 'draft'`;
+    if (!card) return c.json({ error: 'Not found or not draft' }, 404);
+    const minutes = typeof b.minutes === 'number' ? Math.max(0, Math.round(b.minutes)) : 0;
+    const workDate = typeof b.workDate === 'string' ? b.workDate.slice(0, 10) : new Date().toISOString().slice(0, 10);
+    await sql(c.env)`
+      INSERT INTO timecard_entries (id, engagement_id, user_id, tenant_id, work_date, minutes, source, billable, description, timecard_id)
+      VALUES (${crypto.randomUUID()}, ${card.engagement_id}, ${userId}, ${card.tenant_id}, ${workDate}, ${minutes}, 'manual', ${b.billable !== false}, ${b.description ?? null}, ${id})
+    `;
+    const totals = await recomputeTimecard(sql(c.env), id);
+    return c.json({ ok: true, ...totals }, 201);
+  });
+
+  // PATCH /:id/entries/:entryId — worker edits a line item on a DRAFT timecard
+  // (adjust minutes, toggle billable, or annotate).
+  router.patch('/:id/entries/:entryId', webAuthMiddleware, async (c) => {
+    const userId = c.get('userId') as string;
+    const id = c.req.param('id');
+    const entryId = c.req.param('entryId');
+    const b = await c.req.json<{ minutes?: number; billable?: boolean; description?: string }>();
+    const [card] = await sql(c.env)`SELECT id FROM timecards WHERE id = ${id} AND user_id = ${userId} AND status = 'draft'`;
+    if (!card) return c.json({ error: 'Not found or not draft' }, 404);
+    const minutes = typeof b.minutes === 'number' ? Math.max(0, Math.round(b.minutes)) : null;
+    const rows = await sql(c.env)`
+      UPDATE timecard_entries SET
+        minutes = COALESCE(${minutes}, minutes),
+        billable = COALESCE(${typeof b.billable === 'boolean' ? b.billable : null}, billable),
+        description = COALESCE(${b.description ?? null}, description),
+        updated_at = NOW()
+      WHERE id = ${entryId} AND timecard_id = ${id} RETURNING id
+    `;
+    if (rows.length === 0) return c.json({ error: 'Entry not found' }, 404);
+    const totals = await recomputeTimecard(sql(c.env), id);
+    return c.json({ ok: true, ...totals });
+  });
+
+  // DELETE /:id/entries/:entryId — worker removes a line item from a DRAFT timecard.
+  router.delete('/:id/entries/:entryId', webAuthMiddleware, async (c) => {
+    const userId = c.get('userId') as string;
+    const id = c.req.param('id');
+    const entryId = c.req.param('entryId');
+    const [card] = await sql(c.env)`SELECT id FROM timecards WHERE id = ${id} AND user_id = ${userId} AND status = 'draft'`;
+    if (!card) return c.json({ error: 'Not found or not draft' }, 404);
+    await sql(c.env)`DELETE FROM timecard_entries WHERE id = ${entryId} AND timecard_id = ${id}`;
+    const totals = await recomputeTimecard(sql(c.env), id);
+    return c.json({ ok: true, ...totals });
   });
 
   // POST /:id/submit — worker submits a draft timecard for approval.
