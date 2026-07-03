@@ -24,7 +24,7 @@
   "command.runTask": "BuilderForce: Run Task on Platform",
   "command.humanRequests": "BuilderForce: Review Approvals",
   "command.openBoard": "BuilderForce: Open Board",
-  "command.openView": "BuilderForce: Open Page…",
+  "command.openProject360": "BuilderForce: Open Project 360",
   "command.diagnose": "BuilderForce: Diagnose Connection",
   "command.rescanCodebase": "BuilderForce: Rescan Codebase",
   "command.pickModel": "BuilderForce: Pick Model",

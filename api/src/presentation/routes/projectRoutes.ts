@@ -5,6 +5,7 @@ import { ensureProjectTemplate } from '../../application/project/projectTemplate
 import type { HonoEnv } from '../../env';
 import type { Env } from '../../env';
 import { getCacheVersion, getOrSetCached, bumpCacheVersion } from '../../infrastructure/cache/readThroughCache';
+import { computeProject360, type Project360Aggregate } from '../../application/project/computeProject360';
 import { authMiddleware, requireRole } from '../middleware/authMiddleware';
 import { ProjectStatus, TenantRole } from '../../domain/shared/types';
 import { isAgentHostOnline } from '../../domain/agentHost/onlineStatus';
@@ -500,6 +501,47 @@ export function createProjectRoutes(projectService: ProjectService, db: Db): Hon
   router.get('/:id', async (c) => {
     const project = await projectService.getProject(c.req.param('id'), c.get('tenantId'));
     return c.json(project.toPlain());
+  });
+
+  /**
+   * GET /api/projects/:id/360 — the whole-picture health rollup (Project 360): four
+   * pillars × eight dimensions, the missing-item "improve" checklist, and the LIVE
+   * workforce (who's working / idle and why). The single source of truth the VS Code
+   * native panel renders — the web app can render the SAME payload later.
+   *
+   * Reuses the already-cached projects-list aggregate for the expensive grouped task
+   * counts (no re-count), then composes the live signals fresh. The result itself is
+   * intentionally NOT cached: it folds in non-terminal executions (who is running
+   * right now), which must stay real-time — caching it would make "who's working"
+   * stale. The costly part (the grouped counts) is served from the shared list cache.
+   */
+  router.get('/:id/360', async (c) => {
+    const tenantId = c.get('tenantId');
+    const project = await projectService.getProject(c.req.param('id'), tenantId);
+    const version = await getCacheVersion(c.env as Env, projectsListVersionKey(tenantId));
+    const list = await getOrSetCached(
+      c.env as Env,
+      `${projectsListVersionKey(tenantId)}:v:${version}`,
+      () => buildProjectsList(tenantId),
+    );
+    const row = list.find((p) => p.id === project.id);
+    if (!row) return c.json({ error: 'project not found' }, 404);
+    const aggregate: Project360Aggregate = {
+      id: row.id,
+      name: row.name,
+      key: row.key ?? null,
+      status: row.status ?? null,
+      taskCount: row.taskCount,
+      completedTaskCount: row.completedTaskCount,
+      openTaskCount: row.openTaskCount,
+      blockedTaskCount: row.blockedTaskCount,
+      overdueTaskCount: row.overdueTaskCount,
+      linkedGoalCount: row.linkedGoalCount,
+      initiativeId: row.initiativeId ?? null,
+      hasArchitecturePrd: row.hasArchitecturePrd,
+      assignedAgentHost: row.assignedAgentHost ?? null,
+    };
+    return c.json(await computeProject360(db, tenantId, aggregate));
   });
 
   // NOTE: the per-project chat CRUD (`GET/POST /:id/chats`, `GET/PATCH

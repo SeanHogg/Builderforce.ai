@@ -40,6 +40,14 @@ export interface TaskProps {
   /** Story-point estimate (0246), or null when unestimated — the leaf source for
    *  derived sprint velocity. */
   storyPoints: number | null;
+  /** AI Manager (0265): business value 0-100, null when unscored. */
+  businessValue: number | null;
+  /** One-line justification for {@link businessValue}. */
+  businessValueRationale: string | null;
+  /** How the score was set: 'ai' | 'rice' | 'manual' (a manual edit pins it). */
+  businessValueSource: string | null;
+  /** The manager's computed backlog rank (1 = do first), null when unranked. */
+  managerRank: number | null;
   startDate: Date | null;
   dueDate: Date | null;
   persona: string | null;
@@ -73,7 +81,7 @@ export class Task {
   static create(
     props: Omit<
       TaskProps,
-      'id' | 'key' | 'createdAt' | 'updatedAt' | 'githubIssueNumber' | 'githubIssueUrl' | 'githubPrUrl' | 'githubPrNumber' | 'archived' | 'assignedAgentRef' | 'assignedUserId' | 'gitBranch' | 'explicitRepoId' | 'taskType' | 'parentTaskId' | 'sprintId' | 'releaseId' | 'storyPoints'
+      'id' | 'key' | 'createdAt' | 'updatedAt' | 'githubIssueNumber' | 'githubIssueUrl' | 'githubPrUrl' | 'githubPrNumber' | 'archived' | 'assignedAgentRef' | 'assignedUserId' | 'gitBranch' | 'explicitRepoId' | 'taskType' | 'parentTaskId' | 'sprintId' | 'releaseId' | 'storyPoints' | 'businessValue' | 'businessValueRationale' | 'businessValueSource' | 'managerRank'
     > & {
       projectKey: string;
       /** Highest existing key sequence in the project; this task gets the next one. */
@@ -115,6 +123,10 @@ export class Task {
       sprintId: null,
       releaseId: null,
       storyPoints: null,
+      businessValue: null,
+      businessValueRationale: null,
+      businessValueSource: null,
+      managerRank: null,
       startDate: props.startDate ?? null,
       dueDate: props.dueDate ?? null,
       persona: props.persona ?? null,
@@ -160,6 +172,10 @@ export class Task {
   get sprintId(): string | null { return this.props.sprintId; }
   get releaseId(): string | null { return this.props.releaseId; }
   get storyPoints(): number | null { return this.props.storyPoints; }
+  get businessValue(): number | null { return this.props.businessValue; }
+  get businessValueRationale(): string | null { return this.props.businessValueRationale; }
+  get businessValueSource(): string | null { return this.props.businessValueSource; }
+  get managerRank(): number | null { return this.props.managerRank; }
   get startDate(): Date | null { return this.props.startDate; }
   get dueDate(): Date | null { return this.props.dueDate; }
   get persona(): string | null { return this.props.persona; }
@@ -177,6 +193,7 @@ export class Task {
         TaskProps,
         'title' | 'description' | 'status' | 'priority' | 'taskType' | 'parentTaskId' | 'assignedAgentType'
         | 'githubPrUrl' | 'githubPrNumber' | 'assignedAgentHostId' | 'assignedAgentRef' | 'assignedUserId' | 'gitBranch' | 'explicitRepoId' | 'sprintId' | 'releaseId' | 'storyPoints' | 'startDate' | 'dueDate'
+        | 'businessValue' | 'businessValueRationale' | 'businessValueSource' | 'managerRank'
         | 'persona' | 'archived'
       >
     >,

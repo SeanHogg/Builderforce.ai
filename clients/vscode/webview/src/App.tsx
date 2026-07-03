@@ -22,6 +22,7 @@ import {
   type InitData,
   type LabelBundle,
 } from './vscodeBridge';
+import { Project360Screen } from './Project360Screen';
 import { createPersistence } from './persistence';
 import { buildHostTools } from './hostTools';
 import { buildIdeSystemPrompt } from './systemPrompt';
@@ -77,6 +78,10 @@ export function App() {
       </div>
     );
   }
+  // Multi-screen: the host picks which surface this webview renders via `init.view`
+  // (same bundle, same transport). Project 360 is a standalone screen — no Brain
+  // providers needed, it fetches its rollup directly like the chat fetches /api/brain.
+  if (init.view === 'project360') return <Project360Screen init={init} />;
   return <ConfiguredApp init={init} />;
 }
 

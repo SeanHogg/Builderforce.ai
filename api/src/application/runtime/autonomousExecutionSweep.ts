@@ -111,7 +111,17 @@ export async function loadAutonomousCandidates(db: Db, limit: number): Promise<C
       inArray(tasks.status, RUNNABLE_STATUSES),
       or(isNotNull(tasks.assignedAgentRef), laneStaffed),
     ))
-    .orderBy(asc(tasks.updatedAt))
+    // Priority-first dispatch: the AI Manager's computed `manager_rank` (highest
+    // value × urgency = rank 1) leads, then the raw priority tier, then oldest-waiting
+    // as the final tiebreak. Unranked tickets (null rank) sort last so a groomed
+    // backlog always runs before an ungroomed one. This is the fix for "items are not
+    // ordered in priority" — the executor now drains the backlog by importance, not
+    // just by arrival.
+    .orderBy(
+      sql`${tasks.managerRank} asc nulls last`,
+      sql`case ${tasks.priority} when 'urgent' then 0 when 'high' then 1 when 'medium' then 2 else 3 end`,
+      asc(tasks.updatedAt),
+    )
     .limit(limit);
 }
 

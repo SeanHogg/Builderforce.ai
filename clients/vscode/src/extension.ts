@@ -4,7 +4,7 @@ import { BuilderForceAuthProvider } from "./auth";
 import * as bfApi from "./bfApi";
 import { BoardPanel } from "./boardPanel";
 import { BrainWebview } from "./brainWebview";
-import { EmbedPanel } from "./embedPanel";
+import { Project360Panel } from "./project360Panel";
 import { registerChatParticipant } from "./chatParticipant";
 import { registerChatSessions } from "./chatSessions";
 import { scanCodebase } from "./codebaseScan";
@@ -51,26 +51,6 @@ async function refreshWorkspaceHeader(context: vscode.ExtensionContext): Promise
   } catch {
     projectView.description = undefined;
   }
-}
-
-/** Embeddable BuilderForce web views opened inside VS Code (reuse the real pages, DRY). */
-// Only views the framed `/embed/<view>` surface actually renders are listed here —
-// `sprints` and `velocity` have no wired surface (they fell through to a null
-// render, i.e. a blank panel), so they are intentionally omitted until built.
-const EMBED_VIEWS: { label: string; view: string }[] = [
-  { label: "Board (Kanban)", view: "kanban" },
-  { label: "Backlog", view: "backlog" },
-  { label: "Roadmap", view: "roadmap" },
-  { label: "Retrospectives", view: "retros" },
-  { label: "Planning Poker", view: "poker" },
-  { label: "PRDs & Specs", view: "prd" },
-  { label: "Ideas", view: "ideas" },
-  { label: "Feature ROI", view: "feature-roi" },
-];
-
-function projectHash(): string | undefined {
-  const p = getSelectedProject();
-  return p ? `projectId=${p.id}` : undefined;
 }
 
 export function activate(context: vscode.ExtensionContext): void {
@@ -201,17 +181,16 @@ export function activate(context: vscode.ExtensionContext): void {
       }
       if (project) BoardPanel.open(context, project.id, project.name);
     }),
-    vscode.commands.registerCommand("builderforce.openView", async () => {
-      const pick = await vscode.window.showQuickPick(
-        EMBED_VIEWS.map((v) => ({ label: v.label, view: v.view })),
-        { title: "Open a BuilderForce page in VS Code", placeHolder: "Manage your workforce & tasks without leaving the editor" },
-      );
-      if (!pick) return;
-      if (pick.view === "kanban") {
-        void vscode.commands.executeCommand("builderforce.openBoard");
-        return;
+    // Project 360 — the whole-picture management view (health wheel, missing items,
+    // who's working / idle). Renders NATIVELY as a bundled React webview (the shared
+    // <Project360View>, same hosting model as the Brain chat), fed by /api/projects/:id/360.
+    vscode.commands.registerCommand("builderforce.openProject360", async () => {
+      let project = getSelectedProject();
+      if (!project) {
+        await selectProject(context, projects);
+        project = getSelectedProject();
       }
-      EmbedPanel.open(context, pick.view, { title: `BuilderForce: ${pick.label}`, hash: projectHash() });
+      if (project) Project360Panel.open(context, project.id, project.name);
     }),
     vscode.commands.registerCommand("builderforce.deleteSession", async (item: bfApi.BfBrainChat | string) => {
       const id = chatIdOf(item);

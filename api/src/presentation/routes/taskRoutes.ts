@@ -1,6 +1,6 @@
 import { Hono, type Context } from 'hono';
 import { and, count, desc, eq, inArray } from 'drizzle-orm';
-import { TaskService } from '../../application/task/TaskService';
+import { TaskService, type UpdateTaskDto } from '../../application/task/TaskService';
 import { TaskPriority, AgentType, TaskStatus, TaskType } from '../../domain/shared/types';
 import type { Env, HonoEnv } from '../../env';
 import { authMiddleware } from '../middleware/authMiddleware';
@@ -72,7 +72,10 @@ async function countSpecsByTask(db: Db, taskIds: number[]): Promise<Map<number, 
   }
 }
 
-async function dispatchTaskFinalize(
+// Exported so the AI Manager (which advances review-complete tickets to Done under
+// non-queue PR policy) opens the PR through the SAME finalize path the board does,
+// rather than duplicating the commit/push/PR-open logic.
+export async function dispatchTaskFinalize(
   env: HonoEnv['Bindings'],
   db: Db,
   tenantId: number,
@@ -528,6 +531,7 @@ export function createTaskRoutes(taskService: TaskService, db: Db, runtimeServic
       sprintId?: string | null;
       releaseId?: string | null;
       storyPoints?: number | null;
+      businessValue?: number | null;
       assignedAgentType?: AgentType | null;
       assignedAgentHostId?: number | null;
       assignedAgentRef?: string | null;
@@ -539,6 +543,14 @@ export function createTaskRoutes(taskService: TaskService, db: Db, runtimeServic
       persona?: string | null;
       archived?: boolean;
     }>();
+    // A human setting business value on the board pins the source to 'manual' so the
+    // AI Manager never overwrites the number (it only backfills unscored/AI tickets).
+    if (body.businessValue !== undefined) {
+      (body as UpdateTaskDto).businessValueSource = 'manual';
+      if (body.businessValue !== null) {
+        (body as UpdateTaskDto).businessValueRationale = 'Set by a team member.';
+      }
+    }
     // Capture the pre-update status + owner so a status change can be recorded as a
     // lane transition (the metrics keystone, migration 0117) AND an owner-agent
     // change can fire the autonomous trigger. Cheap PK read; only when the PATCH

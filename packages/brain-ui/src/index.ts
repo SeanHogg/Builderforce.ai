@@ -20,3 +20,19 @@ export {
   formatPayload,
 } from './timelineModel';
 export type { TimelineNode, TimelineImage, BuildTimelineInput } from './timelineModel';
+
+export { Project360View } from './project360/Project360View';
+export type { Project360ViewProps } from './project360/Project360View';
+export { Sunburst } from './project360/Sunburst';
+export type { SunburstProps } from './project360/Sunburst';
+export { DEFAULT_PROJECT360_LABELS } from './project360/types';
+export type {
+  Project360,
+  Project360Action,
+  Project360Dimension,
+  Project360Gap,
+  Project360Labels,
+  Project360Member,
+  Project360Pillar,
+  HealthTier,
+} from './project360/types';

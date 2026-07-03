@@ -920,9 +920,75 @@ export const tasks = pgTable('tasks', {
    *  (EMP-4) + productivity metrics. Captured from the issue tracker on board sync
    *  (Jira estimate) or set on the board. Null = unestimated. */
   storyPoints:       real('story_points'),
+  /** AI Manager (0265): the ticket's business value 0-100. Null = unscored — the
+   *  manager backfills it (AI-scored with a rationale, or RICE-derived from PMO
+   *  fields). Drives the manager's backlog ranking. Editable by a human PM. */
+  businessValue:         integer('business_value'),
+  /** One-line justification for {@link businessValue} (shown on the card/drawer). */
+  businessValueRationale: text('business_value_rationale'),
+  /** How the score was set: 'ai' | 'rice' | 'manual'. A manual edit pins it so the
+   *  manager never overwrites a human's number. */
+  businessValueSource:   varchar('business_value_source', { length: 12 }),
+  /** The manager's computed backlog rank (1 = do this first). Null = unranked. The
+   *  priority-aware autonomous dispatcher + the board default sort read this so the
+   *  team works highest-value/most-urgent tickets first, not oldest-updated. */
+  managerRank:           integer('manager_rank'),
   createdAt:         timestamp('created_at').notNull().defaultNow(),
   updatedAt:         timestamp('updated_at').notNull().defaultNow(),
 });
+
+// ---------------------------------------------------------------------------
+// AI Manager coordination layer (migration 0265)
+// ---------------------------------------------------------------------------
+
+/**
+ * Per-project manager designation + policy. A row overrides the default-on tenant
+ * system service: it names a manager (an AI agent OR a human, assignee-encoded)
+ * and tunes what the manager is allowed to do (assign, backfill value, rank, and
+ * how much PR authority it has). Absent row = the system service manages the
+ * project with tenant-default policy.
+ */
+export const projectManagerConfigs = pgTable('project_manager_configs', {
+  id:                uuid('id').primaryKey().defaultRandom(),
+  tenantId:          integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  projectId:         integer('project_id').notNull().references(() => projects.id, { onDelete: 'cascade' }),
+  /** Designated manager, assignee-encoded ('u:<userId>' | 'c:<cloudRef>' | 'h:<hostId>').
+   *  Null = the tenant system service manages this project (no named manager). */
+  managerRef:        text('manager_ref'),
+  /** Master switch for this project — false skips it entirely. */
+  enabled:           boolean('enabled').notNull().default(true),
+  /** PR authority: 'immediate' | 'on_green' | 'queue'. Tenant default 'immediate'. */
+  prMergePolicy:     varchar('pr_merge_policy', { length: 12 }).notNull().default('immediate'),
+  autoAssign:        boolean('auto_assign').notNull().default(true),
+  autoBusinessValue: boolean('auto_business_value').notNull().default(true),
+  autoPrioritize:    boolean('auto_prioritize').notNull().default(true),
+  lastRunAt:         timestamp('last_run_at'),
+  createdAt:         timestamp('created_at').notNull().defaultNow(),
+  updatedAt:         timestamp('updated_at').notNull().defaultNow(),
+}, (t) => ({
+  byProject: uniqueIndex('uq_project_manager_configs_project').on(t.tenantId, t.projectId),
+}));
+
+/**
+ * Audit feed of every decision the manager took (ranked, assigned, scored, merged,
+ * flagged…). Backs the Manager surface "activity" list so a human can see — and
+ * trust — exactly what the AI manager did and why.
+ */
+export const managerActions = pgTable('manager_actions', {
+  id:         uuid('id').primaryKey().defaultRandom(),
+  tenantId:   integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  projectId:  integer('project_id').notNull().references(() => projects.id, { onDelete: 'cascade' }),
+  /** The ticket the action was about (null for project-wide actions like a re-rank). */
+  taskId:     integer('task_id').references(() => tasks.id, { onDelete: 'set null' }),
+  /** 'prioritize' | 'assign' | 'score_value' | 'dispatch' | 'merge_pr' | 'close_pr' | 'flag'. */
+  actionType: varchar('action_type', { length: 24 }).notNull(),
+  summary:    text('summary').notNull(),
+  /** Structured JSON payload for drill-in. */
+  detail:     text('detail'),
+  createdAt:  timestamp('created_at').notNull().defaultNow(),
+}, (t) => ({
+  byFeed: index('idx_manager_actions_feed').on(t.tenantId, t.projectId, t.createdAt),
+}));
 
 // ---------------------------------------------------------------------------
 // Workforce member profiles + lifecycle metrics (migrations 0116–0118)
