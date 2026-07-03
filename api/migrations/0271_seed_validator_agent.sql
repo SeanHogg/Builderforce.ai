@@ -18,7 +18,7 @@
 -- no-op. New tenants provisioned after this migration get a Validator via onboarding
 -- (tracked in the ROADMAP gap register) — the sweep no-ops for a tenant without one.
 
-INSERT INTO ide_agents (id, tenant_id, name, title, bio, skills, status, runtime_support, published, price_cents)
+INSERT INTO ide_agents (id, tenant_id, name, title, bio, skills, base_model, status, runtime_support, published, price_cents)
 SELECT
   'validator-t' || t.id,
   t.id,
@@ -26,6 +26,7 @@ SELECT
   'Validator — Team Lead (acceptance review: QA + BA)',
   'Reviews Done work against the codebase like a senior team lead. Verifies the delivered code fully satisfies the ticket end-to-end — requirements coverage, wiring, edge cases, tests, and docs. Flags each item reviewed and files a GAP task for anything missing, so nothing ships half-done.',
   '["code-review","business-analysis","acceptance-testing","validation"]',
+  'builderforce-default',
   'active',
   'cloud',
   FALSE,
