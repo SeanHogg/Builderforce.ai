@@ -25,7 +25,7 @@ jobs:
           cache-dependency-path: sdk/package-lock.json
       - name: Install dependencies
         working-directory: sdk
-        run: npm install
+        run: npm ci
       - name: Type check
         working-directory: sdk
         run: npm run type-check
@@ -48,7 +48,7 @@ jobs:
           cache-dependency-path: api/package-lock.json
       - name: Install dependencies
         working-directory: api
-        run: npm install
+        run: npm ci
       - name: Type check
         working-directory: api
         run: npm run type-check
@@ -81,14 +81,16 @@ jobs:
       # committed dist/) so its dist/ can be gitignored to match the siblings.
       - name: "Build SDK + Studio + Studio-embedded + Brain-embedded (link: dep prerequisites)"
         run: |
-          (cd sdk && npm install --no-audit --no-fund)
-          (cd studio && npm install --no-audit --no-fund)
-          (cd studio-embedded && npm install --no-audit --no-fund)
+          (cd sdk && npm ci --no-audit --no-fund)
+          (cd studio && npm ci --no-audit --no-fund)
+          (cd studio-embedded && npm ci --no-audit --no-fund)
+          # brain-embedded uses a pnpm lockfile (no package-lock.json) — npm ci is
+          # not possible; npm install runs its prepare (tsup) to build dist/.
           (cd brain-embedded && npm install --no-audit --no-fund)
 
       - name: Install dependencies
         working-directory: frontend
-        run: pnpm install --frozen-lockfile || pnpm install
+        run: pnpm install --frozen-lockfile
       - name: Lint
         working-directory: frontend
         run: pnpm run lint
@@ -113,7 +115,7 @@ jobs:
           cache-dependency-path: docs-site/package-lock.json
       - name: Install dependencies
         working-directory: docs-site
-        run: npm install
+        run: npm ci
       - name: Build
         working-directory: docs-site
         run: npm run build

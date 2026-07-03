@@ -1,14 +1,28 @@
 name: Deploy Builderforce
 
-# Harden npm against transient registry network errors (ECONNRESET) in CI.
+# Deploy is GATED on CI. It no longer triggers directly on push:main — instead it
+# fires via workflow_run only after the "CI" workflow COMPLETES on main, and every
+# job hangs off the `gate` job which requires that CI run to have SUCCEEDED. This
+# closes the old hole where CI and Deploy raced on push:main and a test/lint/build
+# failure still shipped to production (even on a direct push that skipped PR checks).
 env:
+  # Harden npm against transient registry network errors (ECONNRESET) in CI.
   NPM_CONFIG_FETCH_RETRIES: "5"
   NPM_CONFIG_FETCH_RETRY_MINTIMEOUT: "20000"
   NPM_CONFIG_FETCH_RETRY_MAXTIMEOUT: "120000"
 
 on:
-  push:
-    branches: [ main ]
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
+    branches: [main]
+
+# Serialize deploys: never run two production deploys (or two DB migrations) at once.
+# cancel-in-progress:false so an in-flight migrate/deploy finishes rather than being
+# killed mid-write; a newer push queues behind it.
+concurrency:
+  group: deploy-main
+  cancel-in-progress: false
 
 # Required for npm provenance attestation on `npm publish --provenance`.
 permissions:
@@ -16,12 +30,31 @@ permissions:
   id-token: write
 
 jobs:
+  # Single gate: proceed only if the triggering CI run was a push to main that passed.
+  # Every deploy/publish job `needs:` this (directly or transitively), so a failed or
+  # non-main CI run leaves the whole deploy skipped. DRY — the CI-success condition
+  # lives here once, not repeated as an `if:` on every job.
+  gate:
+    name: Require passing CI on main
+    runs-on: ubuntu-latest
+    if: >-
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'push' &&
+      github.event.workflow_run.head_branch == 'main'
+    steps:
+      - name: CI passed — proceed
+        run: echo "CI succeeded for ${{ github.event.workflow_run.head_sha }} — deploying."
+
   deploy-api:
     name: Deploy API (api.builderforce.ai)
+    needs: gate
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
+        with:
+          # Deploy the exact commit CI validated, not whatever is at main HEAD now.
+          ref: ${{ github.event.workflow_run.head_sha }}
 
       - name: Use Node.js 20
         uses: actions/setup-node@v4
@@ -30,14 +63,12 @@ jobs:
 
       - name: Install API dependencies
         working-directory: api
-        run: npm install
+        run: npm ci
 
       # Drift guard — same file-based checks CI runs, but here they GATE the deploy.
-      # CI and this Deploy both trigger on push:main and run concurrently, so a
-      # drift-failing CI does NOT stop a deploy. Without this, a schema.ts column/
-      # table with no migration would ship a worker the DB can't serve (the
-      # "column \"action_type\" does not exist" 500). Failing here aborts the deploy
-      # loudly instead of shipping the broken worker.
+      # Without this, a schema.ts column/table with no migration would ship a worker
+      # the DB can't serve (the "column \"action_type\" does not exist" 500). Failing
+      # here aborts the deploy loudly instead of shipping the broken worker.
       - name: Guard — block deploy on schema/migration drift
         working-directory: api
         run: |
@@ -60,10 +91,17 @@ jobs:
         run: npm run deploy:worker
 
   build-and-deploy:
+    name: Build + deploy frontend
+    # Frontend depends on the API being migrated+deployed first: shipping a frontend
+    # that calls an un-migrated API schema is the exact "column does not exist" 500
+    # the drift guard exists to prevent. If deploy-api fails, this is skipped.
+    needs: deploy-api
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
 
       # No root package.json in this repo — pnpm lives in frontend/, so point
       # action-setup at frontend/package.json to read its `packageManager` pin.
@@ -82,30 +120,30 @@ jobs:
 
       # Frontend's `link:` deps don't auto-build the linked packages' dist/.
       # Each linked package's `prepare` script runs `npm run build` on install,
-      # so a plain `npm install` here is sufficient to produce dist/.
+      # so a clean `npm ci` here is sufficient to produce dist/.
       - name: Install + build SDK
         working-directory: sdk
-        run: npm install --no-audit --no-fund
+        run: npm ci --no-audit --no-fund
 
       - name: Install + build Studio engine
         working-directory: studio
-        run: npm install --no-audit --no-fund
+        run: npm ci --no-audit --no-fund
 
       # Must follow the engine build — studio-embedded file:-depends on it.
       - name: Install + build Studio embedded
         working-directory: studio-embedded
-        run: npm install --no-audit --no-fund
+        run: npm ci --no-audit --no-fund
 
-      # brain-embedded's committed dist/ can drift or be deleted; its `prepare`
-      # script (tsup) rebuilds dist/ on install so the frontend `link:` dep
-      # (@seanhogg/builderforce-brain-embedded) always resolves.
+      # brain-embedded uses a pnpm lockfile (no package-lock.json), so `npm ci` is
+      # not possible here; `npm install` runs its `prepare` (tsup) to rebuild dist/
+      # for the frontend `link:` dep. Tracked in ROADMAP for lockfile unification.
       - name: Install + build Brain embedded
         working-directory: brain-embedded
         run: npm install --no-audit --no-fund
 
       - name: Install dependencies
         working-directory: frontend
-        run: pnpm install --frozen-lockfile || pnpm install
+        run: pnpm install --frozen-lockfile
 
       - name: Build Next.js
         working-directory: frontend
@@ -151,30 +189,36 @@ jobs:
 
   publish-sdk:
     name: Publish SDK (@seanhogg/builderforce-sdk)
+    needs: gate
     uses: ./.github/workflows/publish-npm-package.yml
     with:
       package-dir: sdk
       package-name: '@seanhogg/builderforce-sdk'
+      ref: ${{ github.event.workflow_run.head_sha }}
     secrets:
       NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
 
   publish-studio:
     name: Publish Studio engine (@seanhogg/builderforce-studio)
+    needs: gate
     uses: ./.github/workflows/publish-npm-package.yml
     with:
       package-dir: studio
       package-name: '@seanhogg/builderforce-studio'
+      ref: ${{ github.event.workflow_run.head_sha }}
     secrets:
       NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
 
   publish-studio-embedded:
     name: Publish Studio embedded (@seanhogg/builderforce-studio-embedded)
     # Engine must publish first — the embedded package peer-depends on it.
+    # (Transitively needs gate via publish-studio.)
     needs: publish-studio
     uses: ./.github/workflows/publish-npm-package.yml
     with:
       package-dir: studio-embedded
       package-name: '@seanhogg/builderforce-studio-embedded'
+      ref: ${{ github.event.workflow_run.head_sha }}
       # studio-embedded file:-depends on ../studio; build the engine (with its
       # devDeps) first so the embedded install's prepare re-run finds tsup.
       prebuild-package-dir: studio
@@ -183,19 +227,24 @@ jobs:
 
   publish-voice:
     name: Publish Voice client (@seanhogg/builderforce-voice)
+    needs: gate
     uses: ./.github/workflows/publish-npm-package.yml
     with:
       package-dir: voice
       package-name: '@seanhogg/builderforce-voice'
+      ref: ${{ github.event.workflow_run.head_sha }}
     secrets:
       NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
 
   deploy-docs:
     name: Deploy Docs (builderforce.ai/docs)
+    needs: gate
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
 
       - name: Use Node.js 20
         uses: actions/setup-node@v4
@@ -204,7 +253,7 @@ jobs:
 
       - name: Install dependencies
         working-directory: docs-site
-        run: npm install
+        run: npm ci
 
       - name: Build Astro Starlight (base=/docs)
         working-directory: docs-site

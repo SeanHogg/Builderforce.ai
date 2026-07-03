@@ -39,6 +39,11 @@ on:
         type: string
         required: false
         default: ''
+      ref:
+        description: 'Git ref/SHA to check out. Callers triggered by workflow_run pass github.event.workflow_run.head_sha so the publish builds the exact CI-validated commit, not main HEAD.'
+        type: string
+        required: false
+        default: ''
     secrets:
       NPM_TOKEN:
         description: 'Optional fallback when OIDC trusted publishing is not yet configured for this package on npmjs.com'
@@ -54,6 +59,10 @@ jobs:
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
+        with:
+          # Empty ref falls back to the default checkout behaviour; callers under
+          # workflow_run pass the CI-validated head_sha explicitly.
+          ref: ${{ inputs.ref }}
 
       - name: Use Node.js 20
         uses: actions/setup-node@v4
@@ -72,14 +81,14 @@ jobs:
       - name: Pre-build local dependency
         if: inputs.prebuild-package-dir != ''
         working-directory: ${{ inputs.prebuild-package-dir }}
-        run: npm install --no-audit --no-fund
+        run: npm ci --no-audit --no-fund
 
-      # `npm install` triggers the package's `prepare` script which runs the
-      # build, so we don't need an explicit Build step here.
+      # `npm ci` triggers the package's `prepare` script which runs the build,
+      # so we don't need an explicit Build step here.
       - name: Install + type-check + test
         working-directory: ${{ inputs.package-dir }}
         run: |
-          npm install --no-audit --no-fund
+          npm ci --no-audit --no-fund
           npm run type-check
           npm test
 
