@@ -80,7 +80,8 @@ export function PmoOkrs({ scope }: { scope: { kind: PmoScopeKind; id: string } }
       const attach =
         scope.kind === 'portfolio' ? { portfolioId: scope.id }
           : scope.kind === 'initiative' ? { initiativeId: scope.id }
-            : {};
+            : scope.kind === 'project' ? { projectId: Number(scope.id) }
+              : {};
       await pmoApi.objectives.create({
         title: newObjective.trim(),
         startDate: newStart || undefined,
@@ -137,6 +138,11 @@ export function PmoOkrs({ scope }: { scope: { kind: PmoScopeKind; id: string } }
               <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
                 <span style={{ fontSize: '0.74rem', color: 'var(--text-muted)' }}>{span}</span>
                 {o.period && <span style={{ fontSize: '0.74rem', color: 'var(--text-muted)' }}>{o.period}</span>}
+                <button type="button" style={ghostBtn} disabled={busy}
+                  title={t('okr.convertToEpicHint')}
+                  onClick={() => { if (window.confirm(t('okr.convertToEpicConfirm'))) run(() => pmoApi.objectives.convertType(o.id, 'epic')); }}>
+                  {t('okr.convertToEpic')}
+                </button>
                 <button type="button" style={ghostBtn} disabled={busy}
                   onClick={() => { if (window.confirm(t('structure.confirmDeleteObjective'))) run(() => pmoApi.objectives.remove(o.id)); }}>
                   {t('okr.deleteObjective')}

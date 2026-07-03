@@ -2,7 +2,7 @@
   "name": "builderforce-ai",
   "displayName": "BuilderForce.ai",
   "description": "%extension.description%",
-  "version": "2026.7.5",
+  "version": "2026.7.7",
   "publisher": "builderforce",
   "license": "MIT",
   "author": "Sean Hogg",
@@ -151,6 +151,31 @@
         "command": "builderforce.showDoneTasks",
         "title": "%command.showDoneTasks%",
         "icon": "$(eye-closed)"
+      },
+      {
+        "command": "builderforce.projectViewHierarchy",
+        "title": "%command.projectViewHierarchy%",
+        "icon": "$(list-tree)"
+      },
+      {
+        "command": "builderforce.projectViewFlat",
+        "title": "%command.projectViewFlat%",
+        "icon": "$(list-flat)"
+      },
+      {
+        "command": "builderforce.projectGroupBy",
+        "title": "%command.projectGroupBy%",
+        "icon": "$(group-by-ref-type)"
+      },
+      {
+        "command": "builderforce.projectSortBy",
+        "title": "%command.projectSortBy%",
+        "icon": "$(sort-precedence)"
+      },
+      {
+        "command": "builderforce.projectFilterStatus",
+        "title": "%command.projectFilterStatus%",
+        "icon": "$(filter)"
       },
       {
         "command": "builderforce.startTaskSession",
@@ -338,6 +363,31 @@
           "command": "builderforce.showDoneTasks",
           "when": "view == builderforce.project && builderforce.hideDoneTasks",
           "group": "navigation@7"
+        },
+        {
+          "command": "builderforce.projectViewHierarchy",
+          "when": "view == builderforce.project && !builderforce.projectHierarchy",
+          "group": "navigation@8"
+        },
+        {
+          "command": "builderforce.projectViewFlat",
+          "when": "view == builderforce.project && builderforce.projectHierarchy",
+          "group": "navigation@8"
+        },
+        {
+          "command": "builderforce.projectGroupBy",
+          "when": "view == builderforce.project",
+          "group": "1_arrange@1"
+        },
+        {
+          "command": "builderforce.projectSortBy",
+          "when": "view == builderforce.project",
+          "group": "1_arrange@2"
+        },
+        {
+          "command": "builderforce.projectFilterStatus",
+          "when": "view == builderforce.project",
+          "group": "1_arrange@3"
         },
         {
           "command": "builderforce.refreshInbox",

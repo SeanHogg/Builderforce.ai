@@ -525,6 +525,11 @@
     "epicCreate": "Create epic",
     "epicSaveChanges": "Save changes",
     "epicCancel": "Cancel",
+    "convertTypeHeading": "Change type",
+    "convertTypeHint": "Convert this epic to a plain task, or promote it to an OKR objective (it moves to the OKRs tab and counts toward the project's direction).",
+    "convertToOkr": "Convert to OKR objective",
+    "convertToTask": "Convert to task",
+    "convertToOkrConfirm": "Promote this epic to an OKR objective? Its child tasks will be linked to the new objective and this board item will be removed.",
     "epicStatus": {
       "backlog": "Backlog",
       "todo": "To do",
@@ -740,11 +745,13 @@
     },
     "scope": {
       "wholePortfolio": "Whole portfolio",
-      "workspace": "Workspace (org-level)"
+      "workspace": "Workspace (org-level)",
+      "byProject": "By project…"
     },
     "scopeWord": {
       "portfolio": "portfolio",
       "initiative": "initiative",
+      "project": "project",
       "workspace": "workspace"
     },
     "loading": "Loading…",
@@ -837,6 +844,9 @@
       "current": "current",
       "update": "Update",
       "deleteObjective": "Delete objective",
+      "convertToEpic": "Convert to epic",
+      "convertToEpicHint": "Turn this objective back into a board epic",
+      "convertToEpicConfirm": "Convert this objective to a board epic? Its key results will be dropped and any linked tasks will be re-parented under the new epic.",
       "startDate": "Start date",
       "endDate": "End date",
       "costClass": "Class",

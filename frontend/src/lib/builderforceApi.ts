@@ -1191,6 +1191,17 @@ export interface AutoRunDiagnostic {
   reason: AutoRunReason;
 }
 
+/** The three work-item types you can convert between across the board ⇄ OKR boundary. */
+export type WorkItemKind = 'task' | 'epic' | 'objective';
+/** Result of a {@link tasksApi.convertType} / objectives convert-type call. */
+export interface WorkItemConversion {
+  kind: WorkItemKind;
+  id: string;
+  projectId: number | null;
+  migrated: { children: number; links: number; keyResultsDropped: number; initiativeLinksDropped: number };
+  warnings: string[];
+}
+
 export const tasksApi = {
   list: (projectId?: number, opts?: { includeArchived?: boolean }): Promise<Task[]> => {
     const params = new URLSearchParams();
@@ -1258,6 +1269,12 @@ export const tasksApi = {
 
   delete: (id: number): Promise<void> =>
     request<void>(`/api/tasks/${id}`, { method: 'DELETE' }),
+
+  /** Change a board item's TYPE: task⇄epic, or promote it to an OKR Objective
+   *  ('objective'). Promoting re-links the item's child tasks to the new objective
+   *  and scopes it to the item's project (so the 360 counts it). See {@link WorkItemConversion}. */
+  convertType: (id: number, target: WorkItemKind): Promise<WorkItemConversion> =>
+    request<WorkItemConversion>(`/api/tasks/${id}/convert-type`, { method: 'POST', body: JSON.stringify({ target }) }),
 
   /** An Epic and its direct child tasks (the planning tree). */
   tree: (id: number): Promise<{ epic: Task; children: Task[] }> =>
@@ -3081,7 +3098,7 @@ export const roiApi = {
 // The enterprise rollup objects. Management CRUD rides the segment-tracker
 // clients; the live rollup + structure tree are bespoke composed reads. Mirrors
 // the API shapes in api/src/application/pmo/portfolioRollup.ts.
-export type PmoScopeKind = 'portfolio' | 'initiative' | 'workspace';
+export type PmoScopeKind = 'portfolio' | 'initiative' | 'project' | 'workspace';
 
 // ── Planning spine (0225): the unified dated, cost-bearing hierarchy ──────────
 export type CostClass = 'capex' | 'opex';
@@ -3113,7 +3130,7 @@ export interface Initiative {
 }
 export interface Objective {
   id: string; title: string; description: string | null; period: string | null;
-  status: string; portfolioId: string | null; initiativeId: string | null; ownerUserId: string | null;
+  status: string; projectId: number | null; portfolioId: string | null; initiativeId: string | null; ownerUserId: string | null;
   startDate: string | null; endDate: string | null;
   costClass: CostClass | null; costClassSource: string;
 }
@@ -3244,6 +3261,10 @@ export const pmoApi = {
       request(`/api/pmo/objectives/${objectiveId}/links`, { method: 'POST', body: JSON.stringify(link) }),
     removeLink: (objectiveId: string, linkId: string): Promise<{ deleted: string }> =>
       request(`/api/pmo/objectives/${objectiveId}/links/${linkId}`, { method: 'DELETE' }),
+    /** Demote an objective back to a board task/epic (the reverse of promoting an
+     *  epic to an OKR). Re-parents linked tasks; key results are dropped. */
+    convertType: (objectiveId: string, target: 'task' | 'epic', projectId?: number | null): Promise<WorkItemConversion> =>
+      request<WorkItemConversion>(`/api/pmo/objectives/${objectiveId}/convert-type`, { method: 'POST', body: JSON.stringify({ target, projectId }) }),
   },
   keyResults: {
     list: () => keyResultTracker.list() as unknown as Promise<KeyResult[]>,

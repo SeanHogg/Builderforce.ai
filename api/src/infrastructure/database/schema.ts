@@ -2905,6 +2905,12 @@ export const objectives = pgTable('objectives', {
   segmentId:    uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),
   portfolioId:  uuid('portfolio_id').references(() => portfolios.id, { onDelete: 'set null' }),
   initiativeId: uuid('initiative_id').references(() => initiatives.id, { onDelete: 'set null' }),
+  /** Direct PROJECT scope (0268) — a fourth scope axis alongside portfolio/initiative.
+   *  An objective created "for a project" (the Brain's `objectives.create` with a
+   *  projectId, the OKR tab's project scope) lives here; the Project 360 counts these
+   *  as the project's linked goals (its Direction dimension) without needing a task or
+   *  initiative link. Null = an org/portfolio/initiative-level objective. */
+  projectId:    integer('project_id').references(() => projects.id, { onDelete: 'set null' }),
   title:        varchar('title', { length: 255 }).notNull(),
   description:  text('description'),
   period:       varchar('period', { length: 20 }), // e.g. '2026-Q2' — DERIVED from startDate (0225); kept for reporting/grouping

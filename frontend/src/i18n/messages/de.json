@@ -740,11 +740,13 @@
     },
     "scope": {
       "wholePortfolio": "Gesamtes Portfolio",
-      "workspace": "Arbeitsbereich (Organisationsebene)"
+      "workspace": "Arbeitsbereich (Organisationsebene)",
+      "byProject": "Nach Projekt…"
     },
     "scopeWord": {
       "portfolio": "Portfolio",
       "initiative": "Initiative",
+      "project": "Projekt",
       "workspace": "Arbeitsbereich"
     },
     "loading": "Wird geladen…",

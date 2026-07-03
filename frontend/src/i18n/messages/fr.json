@@ -525,6 +525,11 @@
     "epicCreate": "Créer l'epic",
     "epicSaveChanges": "Enregistrer les modifications",
     "epicCancel": "Annuler",
+    "convertTypeHeading": "Changer de type",
+    "convertTypeHint": "Convertissez cet épic en tâche simple, ou promouvez-le en objectif OKR (il passe dans l’onglet OKR et compte pour la direction du projet).",
+    "convertToOkr": "Convertir en objectif OKR",
+    "convertToTask": "Convertir en tâche",
+    "convertToOkrConfirm": "Promouvoir cet épic en objectif OKR ? Ses tâches enfants seront liées au nouvel objectif et cet élément du tableau sera supprimé.",
     "epicStatus": {
       "backlog": "Backlog",
       "todo": "À faire",
@@ -740,11 +745,13 @@
     },
     "scope": {
       "wholePortfolio": "Tout le portefeuille",
-      "workspace": "Espace de travail (niveau organisation)"
+      "workspace": "Espace de travail (niveau organisation)",
+      "byProject": "Par projet…"
     },
     "scopeWord": {
       "portfolio": "portefeuille",
       "initiative": "initiative",
+      "project": "projet",
       "workspace": "espace de travail"
     },
     "loading": "Chargement…",

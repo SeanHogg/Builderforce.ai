@@ -9,6 +9,7 @@ import { getOrSetCached, getCacheVersion, bumpCacheVersion } from '../../infrast
 import { addDependency, deleteDependency, listProjectDependencies, isDepType } from '../../application/task/taskDependencies';
 import { invalidateCompletedByAssignee } from './reportRoutes';
 import { invalidateProjectsList } from './projectRoutes';
+import { convertWorkItemType, ConvertError, type WorkItemKind } from '../../application/workitem/convertWorkItemType';
 import { AuditEventType } from '../../domain/shared/types';
 import type { Db } from '../../infrastructure/database/connection';
 import { resolveDefaultRepoForTask } from '../../application/repos/resolveDefaultRepo';
@@ -690,6 +691,32 @@ export function createTaskRoutes(taskService: TaskService, db: Db, runtimeServic
     // Drop the card from every client viewing this project's live board.
     c.executionCtx.waitUntil(broadcastProjectChanged(c.env?.SESSION_ROOM, before?.projectId));
     return c.body(null, 204);
+  });
+
+  // POST /api/tasks/:id/convert-type — change a board item's type: task⇄epic, or
+  // promote it to an OKR Objective (target='objective'). The reverse (objective →
+  // board) lives on the pmo route since its id space is different. Shared logic in
+  // convertWorkItemType so both callers + the MCP tool stay in lockstep.
+  router.post('/:id/convert-type', async (c) => {
+    const id = Number(c.req.param('id'));
+    const before = await loadTenantTask(id, c.get('tenantId'));
+    if (!before) return c.json({ error: 'Task not found' }, 404);
+    const body = await c.req.json<{ target?: WorkItemKind }>();
+    const target = body.target;
+    if (target !== 'task' && target !== 'epic' && target !== 'objective') {
+      return c.json({ error: 'target must be task|epic|objective' }, 400);
+    }
+    try {
+      const result = await convertWorkItemType(
+        { db, tasks: taskService, env: c.env as Env },
+        { tenantId: c.get('tenantId'), segmentId: c.get('segmentId') as string, sourceKind: 'epic', sourceId: String(id), target },
+      );
+      c.executionCtx.waitUntil(broadcastProjectChanged(c.env?.SESSION_ROOM, before.projectId));
+      return c.json(result);
+    } catch (e) {
+      if (e instanceof ConvertError) return c.json({ error: e.message }, 400);
+      throw e;
+    }
   });
 
   // ── Task ↔ PRD links (many-to-many via task_specs, 0098) ──────────────────
