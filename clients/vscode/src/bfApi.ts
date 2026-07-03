@@ -57,6 +57,9 @@ export interface BfApproval {
   executionId?: number | null;
   agentHostId?: number | null;
   cloudAgentRef?: string | null;
+  /** The project this approval belongs to (via its execution's task), or null when it
+   *  isn't tied to a task. Server-enriched so the Inbox can scope/label by project. */
+  projectId?: number | null;
   createdAt?: string;
   updatedAt?: string;
 }

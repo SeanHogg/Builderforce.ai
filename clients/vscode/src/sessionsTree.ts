@@ -1,7 +1,8 @@
 import * as vscode from "vscode";
-import { BfBrainChat, listBrainChats, listProjects } from "./bfApi";
+import { BfBrainChat, listBrainChats } from "./bfApi";
 import { SECRET_KEY } from "./gateway";
 import { getSelectedProject, onProjectChange } from "./projectState";
+import { getProjectNames, projectLabel } from "./projectNames";
 
 /**
  * The sidebar history list (Activity Bar → BuilderForce → Sessions). Each item is a
@@ -25,8 +26,6 @@ export class SessionsTreeProvider implements vscode.TreeDataProvider<BfBrainChat
   // list is unfiltered we show each chat's project; when scoped to one it's implied.
   private filtered = false;
   private projectNameById = new Map<number, string>();
-  private projectCache: { ts: number; byId: Map<number, string> } | undefined;
-  private static readonly PROJECT_TTL = 60_000;
 
   constructor(private readonly secrets: vscode.SecretStorage) {
     // The active project scopes this list — repaint when it changes.
@@ -48,8 +47,7 @@ export class SessionsTreeProvider implements vscode.TreeDataProvider<BfBrainChat
     if (this.filtered) {
       item.description = time;
     } else {
-      const project =
-        chat.projectId != null ? this.projectNameById.get(chat.projectId) : vscode.l10n.t("No project");
+      const project = projectLabel(this.projectNameById, chat.projectId);
       item.description = project ? (time ? `${project} · ${time}` : project) : time;
     }
     item.iconPath = new vscode.ThemeIcon("comment-discussion");
@@ -70,23 +68,8 @@ export class SessionsTreeProvider implements vscode.TreeDataProvider<BfBrainChat
     if (project) return this.cache.chats.filter((c) => c.projectId === project.id);
 
     // Unfiltered: resolve project names for the per-row labels (best-effort, cached).
-    this.projectNameById = await this.loadProjectNames();
+    this.projectNameById = await getProjectNames(this.secrets);
     return this.cache.chats;
-  }
-
-  /** projectId → name, for labelling chats when the list spans every project. */
-  private async loadProjectNames(): Promise<Map<number, string>> {
-    if (this.projectCache && Date.now() - this.projectCache.ts < SessionsTreeProvider.PROJECT_TTL) {
-      return this.projectCache.byId;
-    }
-    const byId = new Map<number, string>();
-    try {
-      for (const p of await listProjects(this.secrets)) byId.set(p.id, p.name);
-    } catch {
-      /* names are best-effort — a chat just falls back to showing only its time */
-    }
-    this.projectCache = { ts: Date.now(), byId };
-    return byId;
   }
 }
 

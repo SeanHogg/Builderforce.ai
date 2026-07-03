@@ -93,11 +93,15 @@ export function pickTip(input: {
 export async function buildBuilderInsightsSnapshot(
   db: Db,
   env: Env,
-  scope: { tenantId: number; userId: string | null },
+  scope: { tenantId: number; userId: string | null; projectId?: number | null },
 ): Promise<BuilderInsightsSnapshot> {
   const dayStart = utcDayStart();
   const filters = [eq(llmUsageLog.tenantId, scope.tenantId), gte(llmUsageLog.createdAt, dayStart)];
   if (scope.userId) filters.push(eq(llmUsageLog.userId, scope.userId));
+  // Project scope (0103 stamps project_id on run spend): narrows every metric to
+  // one project's ledger. The daily cap stays the tenant/user budget, so
+  // pctOfDailyCap reads as "this project used X% of your daily cap".
+  if (scope.projectId != null) filters.push(eq(llmUsageLog.projectId, scope.projectId));
   const where = and(...filters);
 
   // Today's totals + the top model, in two bounded grouped scans.
@@ -138,8 +142,15 @@ export async function buildBuilderInsightsSnapshot(
   const pctOfDailyCap = computePctOfCap(todayTokens, dailyCapTokens);
 
   // Cost-per-merged-PR: bounded — count today's merged outcomes and divide
-  // today's spend by them. No catalog re-pricing, no project joins.
-  const costPerMergedPrUsd = await computeCostPerMergedPrToday(db, scope.tenantId, dayStart, todayCostUsd);
+  // today's spend by them. Scoped to the same project when one is selected so
+  // the ratio matches the project-scoped spend above.
+  const costPerMergedPrUsd = await computeCostPerMergedPrToday(
+    db,
+    scope.tenantId,
+    dayStart,
+    todayCostUsd,
+    scope.projectId ?? null,
+  );
 
   const tip = pickTip({ pctOfDailyCap, topModel });
 
@@ -166,14 +177,17 @@ async function computeCostPerMergedPrToday(
   tenantId: number,
   dayStart: Date,
   todayCostUsd: number,
+  projectId: number | null,
 ): Promise<number | null> {
   const { runModelOutcomes } = await import('../../infrastructure/database/schema');
+  const filters = [eq(runModelOutcomes.tenantId, tenantId), gte(runModelOutcomes.createdAt, dayStart)];
+  if (projectId != null) filters.push(eq(runModelOutcomes.projectId, projectId));
   const [agg] = await db
     .select({
       merged: sql<string>`coalesce(sum(case when ${runModelOutcomes.merged} then 1 else 0 end), 0)`,
     })
     .from(runModelOutcomes)
-    .where(and(eq(runModelOutcomes.tenantId, tenantId), gte(runModelOutcomes.createdAt, dayStart)));
+    .where(and(...filters));
   const mergedRuns = Number(agg?.merged ?? 0);
   return mergedRuns > 0 ? todayCostUsd / mergedRuns : null;
 }
@@ -182,20 +196,24 @@ async function computeCostPerMergedPrToday(
  * Cache key for the plain GET. The hour bucket bounds staleness even if the KV
  * TTL is missed, and keeps the key tenant+user scoped.
  */
-export function builderInsightsCacheKey(tenantId: number, userId: string | null): string {
+export function builderInsightsCacheKey(
+  tenantId: number,
+  userId: string | null,
+  projectId?: number | null,
+): string {
   const hourBucket = Math.floor(Date.now() / 3_600_000);
-  return `builder-insights:t:${tenantId}:u:${userId ?? '-'}:${hourBucket}`;
+  return `builder-insights:t:${tenantId}:u:${userId ?? '-'}:p:${projectId ?? '-'}:${hourBucket}`;
 }
 
 /** The cached loader the plain GET route uses. */
 export async function getCachedBuilderInsightsSnapshot(
   db: Db,
   env: Env,
-  scope: { tenantId: number; userId: string | null },
+  scope: { tenantId: number; userId: string | null; projectId?: number | null },
 ): Promise<BuilderInsightsSnapshot> {
   return getOrSetCached(
     env,
-    builderInsightsCacheKey(scope.tenantId, scope.userId),
+    builderInsightsCacheKey(scope.tenantId, scope.userId, scope.projectId),
     () => buildBuilderInsightsSnapshot(db, env, scope),
     { kvTtlSeconds: 30, l1TtlMs: 15_000 },
   );
