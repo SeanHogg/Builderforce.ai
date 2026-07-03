@@ -176,6 +176,9 @@ export const users = pgTable('users', {
   sessionVersion:         integer('session_version').notNull().default(0),
   onboardingCompletedAt:  timestamp('onboarding_completed_at'),
   userIntent:             text('user_intent'), // JSON array of intent strings, set during onboarding
+  /** JSON PsychometricProfile (Pro) — this human's OWN personality; null = none. Same
+   *  shape agents/personas use, so a person and an agent are described the same way. */
+  psychometric:           text('psychometric'),
   createdAt:              timestamp('created_at').notNull().defaultNow(),
   updatedAt:              timestamp('updated_at').notNull().defaultNow(),
 });
@@ -1968,9 +1971,42 @@ export const ideProjectChats = pgTable('ide_project_chats', {
   title:      varchar('title', { length: 500 }).notNull().default('New chat'),
   summary:    text('summary'),
   isArchived: boolean('is_archived').notNull().default(false),
+  /** Consolidation pointer (0266): when this chat was merged into another, the
+   *  surviving chat's id. Set with isArchived=true so the source drops out of the
+   *  list but any ticket still resolves to the one surviving conversation. */
+  mergedIntoChatId: integer('merged_into_chat_id').references((): AnyPgColumn => ideProjectChats.id, { onDelete: 'set null' }),
   createdAt:  timestamp('created_at').notNull().defaultNow(),
   updatedAt:  timestamp('updated_at').notNull().defaultNow(),
 });
+
+// ---------------------------------------------------------------------------
+// Chat <-> ticket links (0266) — a many-to-many, lineage-aware edge between a
+// Brain chat and a work item of ANY tier (portfolio | objective | initiative |
+// epic | task). MANY chats can reference one ticket; ONE chat can reference MANY
+// tickets (a brainstorm that spawned several). ticketRef is the target id AS TEXT
+// (tasks.id is int; the strategy-tier ids are UUIDs) so one column addresses
+// every tier — resolved against the right table by ticketKind at read time.
+// ---------------------------------------------------------------------------
+
+export const chatTicketLinks = pgTable('chat_ticket_links', {
+  id:         serial('id').primaryKey(),
+  tenantId:   integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  segmentId:  uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),
+  chatId:     integer('chat_id').notNull().references(() => ideProjectChats.id, { onDelete: 'cascade' }),
+  /** 'portfolio' | 'objective' | 'initiative' | 'epic' | 'task' (spine node kinds). */
+  ticketKind: varchar('ticket_kind', { length: 12 }).notNull(),
+  /** Target id as text — tasks.id (epic/task) or a UUID (portfolio/objective/initiative). */
+  ticketRef:  varchar('ticket_ref', { length: 64 }).notNull(),
+  /** Lineage: 'created' (ticket spawned from this chat) | 'linked' (attached later). */
+  linkType:   varchar('link_type', { length: 16 }).notNull().default('linked'),
+  /** User id or agent ref that made the link (provenance). */
+  createdBy:  varchar('created_by', { length: 64 }),
+  createdAt:  timestamp('created_at').notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex('uq_chat_ticket_links').on(t.chatId, t.ticketKind, t.ticketRef),
+  index('idx_chat_ticket_links_chat').on(t.tenantId, t.chatId),
+  index('idx_chat_ticket_links_ticket').on(t.tenantId, t.ticketKind, t.ticketRef),
+]);
 
 // ---------------------------------------------------------------------------
 // Cron jobs (agentHost-scoped, optionally project-associated, synced via GUID)

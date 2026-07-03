@@ -79,10 +79,13 @@ export interface ManagerRunSummary {
 
 // ── config store ────────────────────────────────────────────────────────────
 
+/** A stored config row plus its last-run stamp (the surface shows both). */
+export type ManagerConfigRowWithMeta = ManagerConfigRow & { lastRunAt: Date | null };
+
 /** Load a project's manager config row (null when it has none → tenant default). */
 export async function getManagerConfigRow(
   db: Db, tenantId: number, projectId: number,
-): Promise<ManagerConfigRow | null> {
+): Promise<ManagerConfigRowWithMeta | null> {
   const [row] = await db
     .select({
       managerRef: projectManagerConfigs.managerRef,
@@ -91,6 +94,7 @@ export async function getManagerConfigRow(
       autoAssign: projectManagerConfigs.autoAssign,
       autoBusinessValue: projectManagerConfigs.autoBusinessValue,
       autoPrioritize: projectManagerConfigs.autoPrioritize,
+      lastRunAt: projectManagerConfigs.lastRunAt,
     })
     .from(projectManagerConfigs)
     .where(and(eq(projectManagerConfigs.tenantId, tenantId), eq(projectManagerConfigs.projectId, projectId)))

@@ -65,6 +65,7 @@ export const NAV_GROUPS: NavGroup[] = [
     tabs: [
       { id: '', labelKey: 'tab.projects', icon: '▦', countKey: PROJECTS_COUNT_KEY },
       { id: 'tasks', labelKey: 'tab.tasks', icon: '✓' },
+      { id: 'manager', labelKey: 'tab.manager', icon: '🧭' },
       { id: 'pm', labelKey: 'tab.planning', icon: '🗺' },
       { id: 'portfolio', labelKey: 'tab.portfolio', icon: '📊' },
       { id: 'ceremonies', labelKey: 'tab.ceremonies', icon: '🎯' },

@@ -20,6 +20,7 @@
   "Remove": "Remove",
   "Working…": "Working…",
   "Send": "Send",
+  "Stop": "Stop",
   "Ask BuilderForce to build or change something…": "Ask BuilderForce to build or change something…",
   "Run {name}?": "Run {name}?",
   "Approve": "Approve",
@@ -76,5 +77,12 @@
   "Available": "Available",
   "Run": "Run",
   "Open": "Open",
-  "Here is my project's Project 360 health check. Help me work through these gaps, highest impact first.": "Here is my project's Project 360 health check. Help me work through these gaps, highest impact first."
+  "Here is my project's Project 360 health check. Help me work through these gaps, highest impact first.": "Here is my project's Project 360 health check. Help me work through these gaps, highest impact first.",
+  "switch": "switch",
+  "change": "change",
+  "No project": "No project",
+  "Select workspace": "Select workspace",
+  "Switch Workspace": "Switch Workspace",
+  "Switch or create a workspace": "Switch or create a workspace",
+  "Change Project": "Change Project"
 }

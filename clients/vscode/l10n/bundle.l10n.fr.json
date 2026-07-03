@@ -20,6 +20,7 @@
   "Remove": "Supprimer",
   "Working…": "En cours…",
   "Send": "Envoyer",
+  "Stop": "Arrêter",
   "Ask BuilderForce to build or change something…": "Demandez à BuilderForce de créer ou de modifier quelque chose…",
   "Run {name}?": "Exécuter {name} ?",
   "Approve": "Approuver",
@@ -76,5 +77,12 @@
   "Available": "Disponible",
   "Run": "Exécuter",
   "Open": "Ouvrir",
-  "Here is my project's Project 360 health check. Help me work through these gaps, highest impact first.": "Voici le bilan de santé Projet 360 de mon projet. Aide-moi à combler ces lacunes, en commençant par les plus importantes."
+  "Here is my project's Project 360 health check. Help me work through these gaps, highest impact first.": "Voici le bilan de santé Projet 360 de mon projet. Aide-moi à combler ces lacunes, en commençant par les plus importantes.",
+  "switch": "changer",
+  "change": "modifier",
+  "No project": "Aucun projet",
+  "Select workspace": "Sélectionner un espace de travail",
+  "Switch Workspace": "Changer d'espace de travail",
+  "Switch or create a workspace": "Changer ou créer un espace de travail",
+  "Change Project": "Changer de projet"
 }

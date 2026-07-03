@@ -835,6 +835,7 @@ function makeCell() {
     appended: [],
     messagesEpoch: 0,
     listeners: /* @__PURE__ */ new Set(),
+    abort: null,
     snapshot: EMPTY_SNAPSHOT
   };
 }
@@ -921,6 +922,19 @@ function getRunTrace(chatId) {
   if (chatId == null) return [];
   return cells.get(chatId)?.trace ?? [];
 }
+function stopRun(chatId) {
+  const c = cells.get(chatId);
+  if (!c || !c.running) return;
+  c.abort?.abort();
+  if (c.confirmResolver) {
+    const resolve = c.confirmResolver;
+    c.confirmResolver = null;
+    c.pendingConfirm = null;
+    resolve(false);
+  }
+  c.streamingText = "";
+  pushTrace(c, { ts: nowIso(), category: "message", label: "agent.stopped", result: "Stopped by user." });
+}
 function resolveRunConfirm(chatId, ok) {
   const c = cells.get(chatId);
   if (!c || !c.confirmResolver) return;
@@ -936,16 +950,18 @@ async function startRun(chatId, req) {
   c.running = true;
   c.error = "";
   c.streamingText = "";
+  c.abort = new AbortController();
   if (req.seed && c.transcript.length === 0) c.transcript = req.seed.slice();
   if (req.userTurn !== void 0) c.transcript.push({ role: "user", content: req.userTurn });
   emit(c);
   try {
     await runLoop(chatId, c, req);
   } catch (e) {
-    c.error = e instanceof Error ? e.message : "Reply failed";
+    if (!c.abort?.signal.aborted) c.error = e instanceof Error ? e.message : "Reply failed";
   } finally {
     c.running = false;
     c.streamingText = "";
+    c.abort = null;
     emit(c);
   }
 }
@@ -954,6 +970,7 @@ async function runLoop(chatId, c, req) {
   const convo = c.transcript;
   const tools = toolSpecs && toolSpecs.length > 0 ? toolSpecs : void 0;
   for (let iter = 0; iter < MAX_TOOL_ITERATIONS; iter++) {
+    if (c.abort?.signal.aborted) return;
     c.streamingText = "";
     emit(c);
     const working = [
@@ -964,13 +981,14 @@ async function runLoop(chatId, c, req) {
     let result;
     try {
       result = await stream(
-        { messages: working, tools, tool_choice: tools ? "auto" : void 0, model },
+        { messages: working, tools, tool_choice: tools ? "auto" : void 0, model, signal: c.abort?.signal },
         { onTextDelta: (d) => {
           c.streamingText += d;
           emit(c);
         } }
       );
     } catch (e) {
+      if (c.abort?.signal.aborted) return;
       pushTrace(c, {
         ts: nowIso(),
         category: "error",
@@ -1265,6 +1283,9 @@ ${refs}`;
   const resolveConfirm = (0, import_react6.useCallback)((ok) => {
     if (chatId != null) resolveRunConfirm(chatId, ok);
   }, [chatId]);
+  const stop = (0, import_react6.useCallback)(() => {
+    if (chatId != null) stopRun(chatId);
+  }, [chatId]);
   const buildTriageReport = (0, import_react6.useCallback)(
     (agentLabel) => buildBrainTriageReport({
       capturedAt: (/* @__PURE__ */ new Date()).toISOString(),
@@ -1287,6 +1308,7 @@ ${refs}`;
     pendingAttachments,
     uploading,
     send,
+    stop,
     copyMessage,
     submitFeedback,
     attach,

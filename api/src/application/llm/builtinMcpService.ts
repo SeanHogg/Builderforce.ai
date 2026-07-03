@@ -27,7 +27,7 @@ import { ProjectRepository } from '../../infrastructure/repositories/ProjectRepo
 import { TaskRepository } from '../../infrastructure/repositories/TaskRepository';
 import { ProjectStatus, TaskPriority, TaskType, TenantRole } from '../../domain/shared/types';
 import { signJwt } from '../../infrastructure/auth/JwtService';
-import { workflows, workflowDefinitions, specs, promptLibraryEntries, promptLibraryVersions, approvalRules, approvals, brainChats, agents, projectAgents, agentAssignments, savedDashboards, dashboardWidgets, alerts, alertEvents, auditEvents, boards, cronJobs, portfolios, initiatives, objectives, objectiveLinks, keyResults, ideAgents, marketplaceSkills, artifactAssignments, socControls, socEvidence, pokerSessions, pokerStories, pokerVotes, retrospectives, retroItems, boardConnections, projectRepositories, pullRequests, chatSessions, chatMessages, swimlanes, swimlaneAgentAssignments, tenants, executions, usageSnapshots, toolAuditEvents, executionMessages, agentHosts, agentHostProjects, errorGroups } from '../../infrastructure/database/schema';
+import { workflows, workflowDefinitions, specs, promptLibraryEntries, promptLibraryVersions, approvalRules, approvals, ideProjectChats, agents, projectAgents, agentAssignments, savedDashboards, dashboardWidgets, alerts, alertEvents, auditEvents, boards, cronJobs, portfolios, initiatives, objectives, objectiveLinks, keyResults, ideAgents, marketplaceSkills, artifactAssignments, socControls, socEvidence, pokerSessions, pokerStories, pokerVotes, retrospectives, retroItems, boardConnections, projectRepositories, pullRequests, chatSessions, chatMessages, swimlanes, swimlaneAgentAssignments, tenants, executions, usageSnapshots, toolAuditEvents, executionMessages, agentHosts, agentHostProjects, errorGroups } from '../../infrastructure/database/schema';
 import { resolveSegment } from '../../infrastructure/auth/segmentResolver';
 import type { McpToolEntry } from './mcpExtensionService';
 import type { Env } from '../../env';
@@ -40,6 +40,7 @@ import { buildMigrationProviderFactory } from '../migration/buildProviderFactory
 import { BOARD_PROVIDERS, DISCOVERY_PROVIDER_IDS } from '../boardsync/providerCatalog';
 import { maybeAutoRunOnLaneEntry } from '../../presentation/routes/taskRoutes';
 import { buildRuntimeService } from '../../buildRuntimeService';
+import { ChatTicketService } from '../brain/ChatTicketService';
 import type { Task } from '../../domain/task/Task';
 
 /** Sentinel extensionId the gateway routes to this in-process catalog. */
@@ -567,16 +568,21 @@ const CATALOG: BuiltinTool[] = [
   },
   { tool: 'prompts.remove', mutates: true, description: 'Delete a prompt entry (and its versions).', parameters: obj({ id: S }, ['id']), run: async (ctx, a) => { const seg = await resolveSegment(ctx.db, ctx.tenantId); const [entry] = await ctx.db.select({ id: promptLibraryEntries.id }).from(promptLibraryEntries).where(and(eq(promptLibraryEntries.id, str(a.id)), eq(promptLibraryEntries.tenantId, ctx.tenantId), eq(promptLibraryEntries.segmentId, seg))).limit(1); if (!entry) return { deleted: null }; await ctx.db.delete(promptLibraryVersions).where(eq(promptLibraryVersions.entryId, entry.id)); await ctx.db.delete(promptLibraryEntries).where(and(eq(promptLibraryEntries.id, entry.id), eq(promptLibraryEntries.tenantId, ctx.tenantId), eq(promptLibraryEntries.segmentId, seg))); return { deleted: str(a.id) }; } },
 
-  // ---- Brain chats (CRUD) — segment-scoped. summarize SKIPPED (needs an LLM call, not a table op). ----
-  { tool: 'brain.list', mutates: false, description: 'List Brain chats, optionally filtered by project.', parameters: obj({ projectId: N, limit: N }), run: async (ctx, a) => { const seg = await resolveSegment(ctx.db, ctx.tenantId); const where = a.projectId != null ? and(eq(brainChats.tenantId, ctx.tenantId), eq(brainChats.segmentId, seg), eq(brainChats.projectId, num(a.projectId))) : and(eq(brainChats.tenantId, ctx.tenantId), eq(brainChats.segmentId, seg)); return ctx.db.select().from(brainChats).where(where).orderBy(desc(brainChats.updatedAt)).limit(a.limit != null ? num(a.limit) : 100); } },
-  { tool: 'brain.get', mutates: false, description: 'Get a Brain chat by id.', parameters: obj({ id: N }, ['id']), run: async (ctx, a) => { const seg = await resolveSegment(ctx.db, ctx.tenantId); return (await ctx.db.select().from(brainChats).where(and(eq(brainChats.id, num(a.id)), eq(brainChats.tenantId, ctx.tenantId), eq(brainChats.segmentId, seg))).limit(1))[0] ?? null; } },
+  // ---- Brain chats (CRUD) — the LIVE unified `ide_project_chats` table
+  // (origin='brainstorm'), the SAME rows the web + VS Code Brain read/write, so a
+  // chat created via MCP shows up in the actual Brain (the legacy `brain_chats`
+  // table these tools used before was orphaned from the UI). Scoped by tenant +
+  // origin, and by user when the caller is a real user (gateway keys are
+  // tenant-wide). summarize SKIPPED (needs an LLM call, not a table op). ----
+  { tool: 'brain.list', mutates: false, description: 'List Brain chats, optionally filtered by project.', parameters: obj({ projectId: N, limit: N }), run: async (ctx, a) => { const conds = [eq(ideProjectChats.tenantId, ctx.tenantId), eq(ideProjectChats.origin, 'brainstorm'), eq(ideProjectChats.isArchived, false)]; if (ctx.userId) conds.push(eq(ideProjectChats.userId, ctx.userId)); if (a.projectId != null) conds.push(eq(ideProjectChats.projectId, num(a.projectId))); return ctx.db.select().from(ideProjectChats).where(and(...conds)).orderBy(desc(ideProjectChats.updatedAt)).limit(a.limit != null ? num(a.limit) : 100); } },
+  { tool: 'brain.get', mutates: false, description: 'Get a Brain chat by id.', parameters: obj({ id: N }, ['id']), run: async (ctx, a) => { const conds = [eq(ideProjectChats.id, num(a.id)), eq(ideProjectChats.tenantId, ctx.tenantId), eq(ideProjectChats.origin, 'brainstorm')]; if (ctx.userId) conds.push(eq(ideProjectChats.userId, ctx.userId)); return (await ctx.db.select().from(ideProjectChats).where(and(...conds)).limit(1))[0] ?? null; } },
   {
     tool: 'brain.create', mutates: true,
     description: 'Create a new Brain chat.',
     parameters: obj({ title: S, projectId: N }),
     run: async (ctx, a) => {
       const seg = await resolveSegment(ctx.db, ctx.tenantId);
-      const [row] = await ctx.db.insert(brainChats).values({ tenantId: ctx.tenantId, segmentId: seg, userId: 'system', ...(a.title != null ? { title: str(a.title) } : {}), projectId: a.projectId != null ? num(a.projectId) : null }).returning();
+      const [row] = await ctx.db.insert(ideProjectChats).values({ tenantId: ctx.tenantId, segmentId: seg, userId: ctx.userId ?? 'system', origin: 'brainstorm', ...(a.title != null ? { title: str(a.title) } : {}), projectId: a.projectId != null ? num(a.projectId) : null }).returning();
       return row;
     },
   },
@@ -585,16 +591,46 @@ const CATALOG: BuiltinTool[] = [
     description: 'Rename a Brain chat or move it to a project.',
     parameters: obj({ id: N, title: S, projectId: N }, ['id']),
     run: async (ctx, a) => {
-      const seg = await resolveSegment(ctx.db, ctx.tenantId);
       const patch: Json = { updatedAt: new Date() };
       if (a.title != null) patch.title = str(a.title);
       if (a.projectId !== undefined) patch.projectId = a.projectId === null ? null : num(a.projectId);
-      const [row] = await ctx.db.update(brainChats).set(patch).where(and(eq(brainChats.id, num(a.id)), eq(brainChats.tenantId, ctx.tenantId), eq(brainChats.segmentId, seg))).returning();
+      const conds = [eq(ideProjectChats.id, num(a.id)), eq(ideProjectChats.tenantId, ctx.tenantId), eq(ideProjectChats.origin, 'brainstorm')];
+      if (ctx.userId) conds.push(eq(ideProjectChats.userId, ctx.userId));
+      const [row] = await ctx.db.update(ideProjectChats).set(patch).where(and(...conds)).returning();
       if (!row) throw new Error('chat not found');
       return row;
     },
   },
-  { tool: 'brain.delete', mutates: true, description: 'Archive a Brain chat.', parameters: obj({ id: N }, ['id']), run: async (ctx, a) => { const seg = await resolveSegment(ctx.db, ctx.tenantId); const [row] = await ctx.db.update(brainChats).set({ isArchived: true, updatedAt: new Date() }).where(and(eq(brainChats.id, num(a.id)), eq(brainChats.tenantId, ctx.tenantId), eq(brainChats.segmentId, seg))).returning({ id: brainChats.id }); return { archived: row != null }; } },
+  { tool: 'brain.delete', mutates: true, description: 'Archive a Brain chat.', parameters: obj({ id: N }, ['id']), run: async (ctx, a) => { const conds = [eq(ideProjectChats.id, num(a.id)), eq(ideProjectChats.tenantId, ctx.tenantId), eq(ideProjectChats.origin, 'brainstorm')]; if (ctx.userId) conds.push(eq(ideProjectChats.userId, ctx.userId)); const [row] = await ctx.db.update(ideProjectChats).set({ isArchived: true, updatedAt: new Date() }).where(and(...conds)).returning({ id: ideProjectChats.id }); return { archived: row != null }; } },
+
+  // ---- Chat ↔ ticket links, lineage, consolidation, agent invites ----
+  // Tie a Brain chat to work items of ANY tier (portfolio | objective/OKR |
+  // initiative | epic | task), MANY-to-MANY, with a health (% done) summary and
+  // chat↔ticket lineage; merge chats into one; invite/tag agents to execute.
+  // All logic lives in ChatTicketService (shared with the HTTP routes).
+  { tool: 'chats.list_tickets', mutates: false, description: "List the work items (portfolio/objective/initiative/epic/task) a Brain chat is tied to, each with a health summary (% done). Use to show a chat's ticket status.", parameters: obj({ chatId: N }, ['chatId']), run: async (ctx, a) => { const svc = new ChatTicketService(ctx.db, ctx.env as Env); const r = await svc.listTicketsForChat(ctx.tenantId, num(a.chatId), ctx.userId ?? null); if (!Array.isArray(r)) throw new Error(r.error); return r; } },
+  { tool: 'chats.link_ticket', mutates: true, description: "Tie a Brain chat to a work item. kind = portfolio|objective|initiative|epic|task; ref = the task/epic id (number) or the portfolio/objective/initiative UUID. linkType='created' records that this chat SPAWNED the ticket (lineage); 'linked' (default) attaches an existing one.", parameters: obj({ chatId: N, kind: { type: 'string', enum: ['portfolio', 'objective', 'initiative', 'epic', 'task'] }, ref: S, linkType: { type: 'string', enum: ['linked', 'created'] } }, ['chatId', 'kind', 'ref']), run: async (ctx, a) => { const svc = new ChatTicketService(ctx.db, ctx.env as Env); const r = await svc.linkTicket(ctx.tenantId, num(a.chatId), ctx.userId ?? null, { kind: str(a.kind), ref: str(a.ref), linkType: a.linkType === 'created' ? 'created' : 'linked' }); if ('error' in r) throw new Error(r.error); return r; } },
+  { tool: 'chats.unlink_ticket', mutates: true, description: 'Remove a chat ↔ ticket link.', parameters: obj({ chatId: N, kind: S, ref: S }, ['chatId', 'kind', 'ref']), run: async (ctx, a) => { const svc = new ChatTicketService(ctx.db, ctx.env as Env); const r = await svc.unlinkTicket(ctx.tenantId, num(a.chatId), ctx.userId ?? null, str(a.kind), str(a.ref)); if ('error' in r) throw new Error(r.error); return r; } },
+  { tool: 'chats.ticket_lineage', mutates: false, description: 'List every Brain chat that references a work item — the lineage (which conversations shaped it, and which SPAWNED it). kind/ref identify the ticket.', parameters: obj({ kind: S, ref: S }, ['kind', 'ref']), run: async (ctx, a) => { const svc = new ChatTicketService(ctx.db, ctx.env as Env); return svc.listChatsForTicket(ctx.tenantId, str(a.kind), str(a.ref)); } },
+  { tool: 'chats.consolidate', mutates: true, description: 'Merge one or more source Brain chats INTO a target chat: source messages are appended in time order, their ticket links + agent invites move to the target, and each source is archived and redirected to the target (so any ticket still resolves to the one surviving chat). Use to de-duplicate scattered conversations about the same work.', parameters: obj({ targetChatId: N, sourceChatIds: { type: 'array', items: N } }, ['targetChatId', 'sourceChatIds']), run: async (ctx, a) => { const svc = new ChatTicketService(ctx.db, ctx.env as Env); const ids = Array.isArray(a.sourceChatIds) ? (a.sourceChatIds as unknown[]).map((x) => num(x)) : []; const r = await svc.consolidate(ctx.tenantId, ctx.userId ?? null, { targetChatId: num(a.targetChatId), sourceChatIds: ids }); if ('error' in r) throw new Error(r.error); return r; } },
+  { tool: 'chats.list_agents', mutates: false, description: 'List the agents invited into a Brain chat.', parameters: obj({ chatId: N }, ['chatId']), run: async (ctx, a) => { const svc = new ChatTicketService(ctx.db, ctx.env as Env); const r = await svc.listAgents(ctx.tenantId, num(a.chatId), ctx.userId ?? null); if ('error' in r) throw new Error(r.error); return r; } },
+  { tool: 'chats.invite_agent', mutates: true, description: 'Invite an agent into a Brain chat as a participant (agentRef = cloud agent id / workforce ref). Once invited it can be tagged to take action; use chats.dispatch_agent to have it execute a linked ticket.', parameters: obj({ chatId: N, agentRef: S, agentKind: S, role: S }, ['chatId', 'agentRef']), run: async (ctx, a) => { const svc = new ChatTicketService(ctx.db, ctx.env as Env); const r = await svc.inviteAgent(ctx.tenantId, num(a.chatId), ctx.userId ?? null, { agentRef: str(a.agentRef), agentKind: a.agentKind != null ? str(a.agentKind) : undefined, role: a.role != null ? str(a.role) : undefined }); if ('error' in r) throw new Error(r.error); return r; } },
+  {
+    tool: 'chats.dispatch_agent', mutates: true,
+    description: "Tag an invited agent to EXECUTE: assign it to a task/epic (typically one linked to the chat — see chats.list_tickets) and start a run immediately. Returns the started execution. Only task/epic tickets are runnable.",
+    parameters: obj({ chatId: N, agentRef: S, taskId: N }, ['chatId', 'agentRef', 'taskId']),
+    run: async (ctx, a) => {
+      if (!ctx.env) throw new Error('dispatch unavailable in this context');
+      const svc = new ChatTicketService(ctx.db, ctx.env);
+      // Record the agent as a chat participant (idempotent).
+      const invited = await svc.inviteAgent(ctx.tenantId, num(a.chatId), ctx.userId ?? null, { agentRef: str(a.agentRef) });
+      if ('error' in invited) throw new Error(invited.error);
+      // Assign the agent to the ticket, then start a run — reuses the real routes'
+      // authz + the single cloud-run dispatcher (no duplicated dispatch logic).
+      await replayRoute(ctx, 'PATCH', `/api/tasks/${num(a.taskId)}`, { assignedAgentRef: str(a.agentRef) });
+      return replayRoute(ctx, 'POST', `/api/tasks/${num(a.taskId)}/run-now`, {});
+    },
+  },
 
   // ---- Agents: registered (read) + per-project + assignments ----
   // registered_agents.list mirrors the existing agents.list (the tenant `agents` table) under the

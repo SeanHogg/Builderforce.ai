@@ -13,6 +13,9 @@ export type { BrainTimelineProps, BrainTimelineLabels } from './BrainTimeline';
 export { Markdown } from './Markdown';
 export type { MarkdownProps, MarkdownLabels } from './Markdown';
 
+export { HealthRing, healthRingColor } from './HealthRing';
+export type { HealthRingProps } from './HealthRing';
+
 export {
   buildTimeline,
   attachmentsOf,
@@ -36,3 +39,16 @@ export type {
   Project360Pillar,
   HealthTier,
 } from './project360/types';
+
+export { ProjectListView } from './projectList/ProjectListView';
+export type { ProjectListViewProps } from './projectList/ProjectListView';
+export { DEFAULT_PROJECT_LIST_LABELS } from './projectList/types';
+export type {
+  ProjectListModel,
+  ProjectListGroup,
+  ProjectListItem,
+  ProjectListBadge,
+  ProjectListAction,
+  ProjectListLabels,
+  ProjectListTone,
+} from './projectList/types';

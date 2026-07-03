@@ -52,9 +52,10 @@ export interface InitData {
   signedIn: boolean;
   hasWorkspace: boolean;
   /** Which screen this webview should render. The bundled React app is multi-screen:
-   *  the host decides via `init` whether this panel is the Brain chat (default) or the
-   *  Project 360 management view — same bundle, same transport, one code path. */
-  view?: 'brain' | 'project360';
+   *  the host decides via `init` which surface this panel is — the Brain chat (default),
+   *  Project 360, or a list-shaped project page (Backlog / PRDs) — same bundle, same
+   *  transport, one code path. */
+  view?: 'brain' | 'project360' | 'backlog' | 'prd';
   /** The sidebar's active BuilderForce project — injected into the system prompt so
    *  the Brain scopes platform tools to it, and used to scope new chats. */
   project?: { id: number; name: string };

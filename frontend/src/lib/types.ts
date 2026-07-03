@@ -9,6 +9,8 @@ export interface AuthUser {
   avatar?: string;
   /** When true, user can access Platform Admin (/admin). */
   isSuperadmin?: boolean;
+  /** This user's OWN personality (same shape agents/personas use); null when unset. */
+  psychometric?: import('./psychometric').PsychometricProfile | null;
 }
 
 export interface Tenant {

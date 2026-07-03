@@ -265,7 +265,8 @@
       "logs": "Protokolle",
       "qa": "Agentische QA",
       "home": "Start",
-      "integrations": "Integrationen"
+      "integrations": "Integrationen",
+      "manager": "Manager"
     }
   },
   "alerts": {
@@ -362,7 +363,8 @@
     },
     "healthAria": "Projektzustand {score} von 100 — {tier}",
     "doneAria": "{pct}% erledigt — {completed} von {total} Aufgaben abgeschlossen",
-    "donePct": "{pct} % erledigt"
+    "donePct": "{pct} % erledigt",
+    "health360": "Projekt 360"
   },
   "projectInspection": {
     "title": "Inspektion",
@@ -703,6 +705,12 @@
     "email": "E-Mail",
     "displayName": "Anzeigename",
     "userId": "Benutzer-ID",
+    "personality": "Persönlichkeit",
+    "personalityDescription": "Mach den Persönlichkeitstest, um dein eigenes Profil zu erhalten. Es erscheint auf deiner Team-Karte, damit dein Team weiß, wie du am besten arbeitest.",
+    "personalitySave": "Persönlichkeit speichern",
+    "personalitySaving": "Wird gespeichert…",
+    "personalitySaved": "Persönlichkeit gespeichert.",
+    "personalitySaveFailed": "Deine Persönlichkeit konnte nicht gespeichert werden.",
     "name": "Name",
     "slug": "Slug",
     "id": "ID",
@@ -1546,6 +1554,14 @@
     "baseModelHelp": "Das Tool-Calling- und Coding-Modell, auf dem dieser Agent läuft – wähle eines deiner LLMs oder ein Modell aus dem Pool. Ein Lauf legt ein Modell für die gesamte Aufgabe fest; lass den Standard, um das beste Coding-Modell deines Tarifs zu verwenden.",
     "personality": "Persönlichkeit",
     "personalityHelp": "Gib diesem Agenten mit einem Eigenschaftstest oder Reglern eine Persönlichkeit. Sie prägt, wie der Agent denkt, wie sorgfältig er arbeitet und wie er bei jedem Lauf kommuniziert."
+  },
+  "personalitySummary": {
+    "title": "Persönlichkeit",
+    "enneagram": "Enneagramm",
+    "mbti": "MBTI",
+    "high": "Hoch",
+    "low": "Niedrig",
+    "moderate": "Mittel"
   },
   "modelApiSamples": {
     "copy": "Kopieren",
@@ -4251,7 +4267,49 @@
       "copy": "Kopieren",
       "copied": "Kopiert",
       "apply": "Anwenden",
-      "createFile": "Datei erstellen"
+      "createFile": "Datei erstellen",
+      "stop": "Stoppen"
+    },
+    "tickets": {
+      "none": "Noch keine Tickets verknüpft.",
+      "ringAria": "{label}: {pct}% erledigt",
+      "spawned": "hier erstellt",
+      "run": "Agent auf dem Ticket ausführen",
+      "lineage": "Chat-Herkunft",
+      "unlink": "Verknüpfung lösen",
+      "pickAgent": "Als Agent ausführen…",
+      "lineageTitle": "Chats zu diesem Ticket",
+      "lineageEmpty": "Kein anderer Chat verweist auf dieses Ticket.",
+      "merged": "zusammengeführt",
+      "runStarted": "{agent} auf dem Ticket gestartet.",
+      "runNoAgent": "Kein Agent konnte dieses Ticket ausführen – weise zuerst einen zu.",
+      "runFailed": "Ausführung konnte nicht gestartet werden.",
+      "link": "Ticket verknüpfen",
+      "agents": "Agenten",
+      "merge": "Zusammenführen",
+      "linkFailed": "Verknüpfung fehlgeschlagen – prüfe, ob das Ticket existiert.",
+      "kindLabel": "Tickettyp",
+      "pickTicket": "Ticket auswählen…",
+      "refPlaceholder": "Objective-/Initiative-/Portfolio-ID",
+      "linkTypeLabel": "Verknüpfungsart",
+      "linkTypeLinked": "Verknüpft",
+      "linkTypeCreated": "Aus Chat erstellt",
+      "linkAction": "Verknüpfen",
+      "noAgents": "Noch keine Agenten in diesem Chat.",
+      "removeAgent": "Entfernen",
+      "inviteAgent": "Agent einladen…",
+      "agentsHint": "Eingeladene Agenten können markiert werden, um eine verknüpfte Aufgabe oder ein Epic auszuführen.",
+      "mergeHint": "Andere Chats in diesen zusammenführen. Ihre Nachrichten, Tickets und Agenten wandern hierher; die Quellen werden archiviert.",
+      "mergeNoOthers": "Keine anderen Chats zum Zusammenführen.",
+      "mergeAction": "{n} hier zusammenführen",
+      "mergedN": "{n} Chat(s) zusammengeführt.",
+      "kind": {
+        "task": "Aufgabe",
+        "epic": "Epic",
+        "objective": "Objective",
+        "initiative": "Initiative",
+        "portfolio": "Portfolio"
+      }
     }
   },
   "modelExport": {
@@ -4304,6 +4362,14 @@
         "no_lane": "Spur nicht konfiguriert",
         "terminal_lane": "Fertig — kein Lauf nötig"
       }
+    },
+    "businessValue": {
+      "badge": "GW {value}",
+      "badgeTitle": "Vom KI-Manager bewerteter Geschäftswert.",
+      "label": "Geschäftswert",
+      "rankTitle": "Der Backlog-Rang, den der KI-Manager diesem Ticket gegeben hat.",
+      "editTitle": "Klicken, um einen Geschäftswert festzulegen (0–100).",
+      "unset": "Nicht gesetzt"
     }
   },
   "projectsContent": {
@@ -4459,5 +4525,141 @@
     "frozen": "Eingefroren",
     "contributions": "Bisher {count} Lernbeiträge",
     "errorGeneric": "Etwas ist schiefgelaufen. Bitte versuchen Sie es erneut."
+  },
+  "manager": {
+    "title": "KI-Manager",
+    "subtitle": "Lassen Sie einen KI-Manager dieses Backlog gesund halten: Er bewertet den Geschäftswert jedes Tickets, ordnet die Arbeit, weist Verantwortliche zu und steuert Pull Requests, damit Ihr Team immer weiß, was als Nächstes am wichtigsten ist.",
+    "lastManaged": "Zuletzt verwaltet {when}",
+    "neverManaged": "Dieses Backlog wurde noch nicht verwaltet.",
+    "runNow": "Manager jetzt ausführen",
+    "running": "Wird verwaltet…",
+    "loading": "Manager wird geladen…",
+    "noProject": {
+      "title": "Projekt auswählen",
+      "body": "Wählen Sie oben im Umschalter ein Projekt, um dessen KI-Manager zu sehen."
+    },
+    "error": {
+      "title": "Manager konnte nicht geladen werden",
+      "body": "Beim Laden dieses Backlogs ist etwas schiefgelaufen. Bitte versuchen Sie es erneut.",
+      "retry": "Erneut versuchen"
+    },
+    "priority": {
+      "urgent": "Dringend",
+      "high": "Hoch",
+      "medium": "Mittel",
+      "low": "Niedrig"
+    },
+    "stat": {
+      "total": "Tickets",
+      "unscored": "Ohne Wert",
+      "unranked": "Nicht eingeordnet",
+      "unowned": "Ohne Verantwortlichen",
+      "openPullRequests": "Offene PRs"
+    },
+    "chart": {
+      "title": "Backlog nach Priorität",
+      "caption": "Wie sich die offene Arbeit auf die Prioritätsstufen verteilt.",
+      "empty": "Noch keine offenen Tickets für das Diagramm."
+    },
+    "insightNudge": "{unscored} Tickets brauchen noch einen Geschäftswert und {unranked} sind nicht eingeordnet – führen Sie den Manager aus, um sie aufzuholen.",
+    "policy": {
+      "title": "Wie dieses Backlog verwaltet wird",
+      "subtitle": "Legen Sie fest, wer das Backlog führt und wie viel automatisch geschieht. Sie können das jederzeit ändern.",
+      "manager": {
+        "label": "Wer dieses Backlog verwaltet",
+        "help": "Wählen Sie einen Teamkollegen oder Agenten als Verantwortlichen für das Backlog, oder lassen Sie den integrierten Dienst es in Ordnung halten.",
+        "system": "Systemdienst (für Sie verwaltet)",
+        "people": "Teamkollegen",
+        "agents": "Agenten",
+        "hosts": "Agent-Hosts"
+      },
+      "enabled": {
+        "label": "Dieses Backlog verwaltet halten",
+        "help": "Wenn aktiviert, bewertet, ordnet und organisiert der Manager die Arbeit automatisch. Zum Pausieren ausschalten."
+      },
+      "autoBusinessValue": {
+        "label": "Geschäftswert automatisch bewerten",
+        "help": "Geben Sie jedem neuen Ticket einen Wert, um immer zu sehen, was sich zuerst lohnt – ohne Raten."
+      },
+      "autoPrioritize": {
+        "label": "Backlog für mich ordnen",
+        "help": "Ordnet die Arbeit fortlaufend neu, damit die wirkungsvollsten Tickets nach oben steigen."
+      },
+      "autoAssign": {
+        "label": "Verantwortliche automatisch zuweisen",
+        "help": "Übergibt jedes Ticket dem am besten geeigneten Kollegen oder Agenten, damit nichts unbetreut bleibt."
+      },
+      "prMerge": {
+        "label": "Wenn die Arbeit fertig ist",
+        "help": "Wählen Sie, was mit einem Pull Request geschieht, sobald ein Agent ein Ticket abschließt.",
+        "immediate": {
+          "label": "Sofort ausliefern",
+          "help": "Führt den Pull Request zusammen und schließt ihn, sobald der Agent fertig ist – am schnellsten, ideal wenn Sie den Prüfungen vertrauen."
+        },
+        "on_green": {
+          "label": "Ausliefern, wenn Tests bestehen",
+          "help": "Wartet auf grüne automatische Prüfungen, bevor zusammengeführt wird – eine sichere Standardwahl."
+        },
+        "queue": {
+          "label": "Einem Menschen überlassen",
+          "help": "Niemals automatisch zusammenführen – hält jeden Pull Request für eine menschliche Prüfung und Zusammenführung zurück."
+        }
+      }
+    },
+    "backlog": {
+      "title": "Geordnetes Backlog",
+      "empty": "Noch keine Tickets in diesem Backlog.",
+      "rank": "Rang",
+      "key": "Schlüssel",
+      "taskTitle": "Titel",
+      "priority": "Priorität",
+      "businessValue": "Geschäftswert",
+      "dueDate": "Fällig",
+      "assignee": "Verantwortlich",
+      "unassigned": "Nicht zugewiesen",
+      "noRationale": "Noch keine Begründung erfasst."
+    },
+    "action": {
+      "prioritize": "Priorisiert",
+      "assign": "Zugewiesen",
+      "score_value": "Bewertet",
+      "dispatch": "Versandt",
+      "merge_pr": "PR zusammengeführt",
+      "flag": "Markiert"
+    },
+    "activity": {
+      "title": "Letzte Aktivität",
+      "empty": "Der Manager hat noch keine Aktionen durchgeführt."
+    }
+  },
+  "project360": {
+    "title": "Projekt 360",
+    "subtitle": "Das Gesamtbild — Zustand, Lücken und wer die Arbeit voranbringt.",
+    "overall": "Gesamtzustand",
+    "progress": "Fortschritt",
+    "refresh": "Aktualisieren",
+    "openBoard": "Board öffnen",
+    "improveAll": "Mit Brain verbessern",
+    "connecting": "Projekt 360 wird geladen…",
+    "loadError": "Projekt 360 konnte nicht geladen werden",
+    "noData": "Noch keine Aufgaben",
+    "noDataHint": "Füge diesem Projekt Aufgaben hinzu, um Zustand, Lücken und Teamaktivität zu sehen.",
+    "missingItems": "Fehlende Punkte — Zustand verbessern",
+    "noGaps": "Keine Lücken gefunden. Dieses Projekt ist in guter Verfassung.",
+    "workforce": "Wer arbeitet / ist untätig",
+    "noWorkforce": "Diesem Projekt ist noch niemand zugewiesen.",
+    "allDimensions": "Alle Dimensionen",
+    "counts_open": "offen",
+    "counts_blocked": "blockiert",
+    "counts_overdue": "überfällig",
+    "counts_running": "aktiv",
+    "status_working": "Arbeitet",
+    "status_awaiting": "Wartet auf Eingabe",
+    "status_blocked": "Blockiert",
+    "status_idle": "Untätig",
+    "status_available": "Verfügbar",
+    "member_run": "Ausführen",
+    "member_open": "Öffnen",
+    "improveSeedIntro": "Hier ist die Projekt-360-Zustandsprüfung meines Projekts. Hilf mir, diese Lücken zu schließen, die wichtigsten zuerst."
   }
 }

@@ -138,6 +138,24 @@ body {
   background: var(--vscode-button-hoverBackground, var(--vscode-button-background));
 }
 
+/* Stop: replaces the primary Send button while a run is in flight. Uses the
+   editor's error color so it reads as an interrupt in both light and dark. */
+.bf-btn--stop {
+  border-color: transparent;
+  background: var(--vscode-inputValidation-errorBackground, var(--vscode-errorForeground, #c72e2e));
+  color: var(--vscode-button-foreground, #fff);
+}
+
+.bf-btn--stop:hover {
+  background: var(--vscode-errorForeground, #c72e2e);
+  opacity: 0.9;
+}
+
+.bf-stop-glyph {
+  font-size: 9px;
+  vertical-align: middle;
+}
+
 .bf-error {
   flex: 0 0 auto;
   margin: 0 10px 6px;

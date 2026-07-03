@@ -13,15 +13,13 @@
  * renders a locked upsell instead of the editor (shared-component gating, so the
  * persona modal never needs to know the plan).
  */
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { Select } from '@/components/Select';
 import { psychometric as psychometricApi } from '@/lib/builderforceApi';
+import { usePsychometricCatalog } from '@/lib/usePsychometricCatalog';
 import {
   NEUTRAL_SCORE,
   profileHasSignal,
-  type CatalogFramework,
-  type CatalogQuestion,
-  type EnneagramType,
   type PsychometricProfile,
 } from '@/lib/psychometric';
 
@@ -30,15 +28,21 @@ type Tab = 'sliders' | 'questionnaire' | 'import';
 interface Props {
   value?: PsychometricProfile;
   onChange: (profile: PsychometricProfile | undefined) => void;
+  /**
+   * Bypass the Pro entitlement gate. Personality is a Pro feature for agents /
+   * personas, but it is UNIVERSAL for human users — every person can take the test
+   * — so the user's own profile passes this to always show the editor.
+   */
+  forceUnlocked?: boolean;
 }
 
-export default function PsychometricEditor({ value, onChange }: Props) {
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
-  const [entitled, setEntitled] = useState(false);
-  const [frameworks, setFrameworks] = useState<CatalogFramework[]>([]);
-  const [questions, setQuestions] = useState<CatalogQuestion[]>([]);
-  const [enneagram, setEnneagram] = useState<EnneagramType[]>([]);
+export default function PsychometricEditor({ value, onChange, forceUnlocked = false }: Props) {
+  // Shared, session-cached catalog (fetched once across the editor + summary).
+  const { catalog, loading, error } = usePsychometricCatalog();
+  const entitled = forceUnlocked || (catalog?.entitled ?? false);
+  const frameworks = catalog?.frameworks ?? [];
+  const questions = catalog?.questions ?? [];
+  const enneagram = catalog?.enneagram ?? [];
 
   const [tab, setTab] = useState<Tab>('sliders');
   const [vector, setVector] = useState<Record<string, number>>(value?.vector ?? {});
@@ -48,24 +52,6 @@ export default function PsychometricEditor({ value, onChange }: Props) {
   const [importText, setImportText] = useState('');
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState('');
-
-  useEffect(() => {
-    let alive = true;
-    psychometricApi
-      .catalog()
-      .then((cat) => {
-        if (!alive) return;
-        setEntitled(cat.entitled);
-        setFrameworks(cat.frameworks);
-        setQuestions(cat.questions);
-        setEnneagram(cat.enneagram);
-      })
-      .catch((e) => alive && setError(e instanceof Error ? e.message : 'Failed to load catalog'))
-      .finally(() => alive && setLoading(false));
-    return () => {
-      alive = false;
-    };
-  }, []);
 
   const emit = useCallback(
     (next: { vector?: Record<string, number>; enneagramType?: number; mbti?: string; source?: PsychometricProfile['source'] }) => {

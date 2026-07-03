@@ -510,10 +510,11 @@ export function createProjectRoutes(projectService: ProjectService, db: Db): Hon
    * native panel renders — the web app can render the SAME payload later.
    *
    * Reuses the already-cached projects-list aggregate for the expensive grouped task
-   * counts (no re-count), then composes the live signals fresh. The result itself is
-   * intentionally NOT cached: it folds in non-terminal executions (who is running
-   * right now), which must stay real-time — caching it would make "who's working"
-   * stale. The costly part (the grouped counts) is served from the shared list cache.
+   * counts (no re-count), then composes the live signals (per-task assignment,
+   * non-terminal executions, availability). The composed result rides a DELIBERATELY
+   * SHORT read-through cache (5s L1 / 10s KV, keyed by the projects-list version so a
+   * task write busts it) — enough to absorb open/refresh storms without serving stale
+   * "who's working": an explicit refresh sends `?fresh=1` to bypass it entirely.
    */
   router.get('/:id/360', async (c) => {
     const tenantId = c.get('tenantId');
@@ -541,7 +542,15 @@ export function createProjectRoutes(projectService: ProjectService, db: Db): Hon
       hasArchitecturePrd: row.hasArchitecturePrd,
       assignedAgentHost: row.assignedAgentHost ?? null,
     };
-    return c.json(await computeProject360(db, tenantId, aggregate));
+    const fresh = c.req.query('fresh') === '1';
+    if (fresh) return c.json(await computeProject360(db, tenantId, aggregate));
+    const model = await getOrSetCached(
+      c.env as Env,
+      `project-360:tenant:${tenantId}:project:${project.id}:v:${version}`,
+      () => computeProject360(db, tenantId, aggregate),
+      { l1TtlMs: 5_000, kvTtlSeconds: 10 },
+    );
+    return c.json(model);
   });
 
   // NOTE: the per-project chat CRUD (`GET/POST /:id/chats`, `GET/PATCH

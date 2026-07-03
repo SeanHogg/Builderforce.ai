@@ -20,6 +20,7 @@
   "Remove": "移除",
   "Working…": "处理中…",
   "Send": "发送",
+  "Stop": "停止",
   "Ask BuilderForce to build or change something…": "让 BuilderForce 构建或修改一些内容…",
   "Run {name}?": "运行 {name}？",
   "Approve": "批准",
@@ -76,5 +77,12 @@
   "Available": "可用",
   "Run": "运行",
   "Open": "打开",
-  "Here is my project's Project 360 health check. Help me work through these gaps, highest impact first.": "这是我项目的“项目 360”健康检查。请帮我逐一解决这些缺口，从影响最大的开始。"
+  "Here is my project's Project 360 health check. Help me work through these gaps, highest impact first.": "这是我项目的“项目 360”健康检查。请帮我逐一解决这些缺口，从影响最大的开始。",
+  "switch": "切换",
+  "change": "更改",
+  "No project": "无项目",
+  "Select workspace": "选择工作区",
+  "Switch Workspace": "切换工作区",
+  "Switch or create a workspace": "切换或创建工作区",
+  "Change Project": "切换项目"
 }

@@ -65,6 +65,11 @@ export const CAPABILITIES = {
   // learning mode). Mirrors the API's requireRole(MANAGER) on the evermind routes.
   'project.manageEvermind': 'manager',
 
+  // AI Manager — configure a project's manager policy (designate the manager,
+  // toggle auto-scoring/assign/prioritize, set the PR-merge policy) and trigger a
+  // manager run. Mirrors the API's requireRole(MANAGER) on PUT/POST /api/manager.
+  'manager.manage':       'manager',
+
   // Board governance — override the execution-approval gate (whether high/urgent
   // tickets need manager sign-off before an agent runs them). Mirrors the API's
   // per-field requireRole(MANAGER) check on PATCH /api/boards/:id.

@@ -265,7 +265,8 @@
       "logs": "日志",
       "qa": "智能体 QA",
       "home": "主页",
-      "integrations": "集成"
+      "integrations": "集成",
+      "manager": "经理"
     }
   },
   "alerts": {
@@ -362,7 +363,8 @@
     },
     "healthAria": "项目健康度 {score}/100 — {tier}",
     "doneAria": "已完成 {pct}% — {total} 个任务中已完成 {completed} 个",
-    "donePct": "完成 {pct}%"
+    "donePct": "完成 {pct}%",
+    "health360": "项目 360"
   },
   "projectInspection": {
     "title": "检查",
@@ -703,6 +705,12 @@
     "email": "邮箱",
     "displayName": "显示名称",
     "userId": "用户 ID",
+    "personality": "性格",
+    "personalityDescription": "完成性格测试来创建你的个人档案。它会显示在你的工作团队卡片上，让团队了解你的最佳工作方式。",
+    "personalitySave": "保存性格",
+    "personalitySaving": "保存中…",
+    "personalitySaved": "性格已保存。",
+    "personalitySaveFailed": "无法保存你的性格。",
     "name": "名称",
     "slug": "标识",
     "id": "ID",
@@ -1546,6 +1554,14 @@
     "baseModelHelp": "该智能体运行所用的工具调用 + 编码模型——选择你的某个 LLM 或模型池中的模型。一次运行会为整个任务固定一个模型；保留默认则使用套餐的最佳编码模型。",
     "personality": "性格",
     "personalityHelp": "通过性格测试或滑块为该智能体设定性格。它会影响智能体在每次运行中的推理方式、工作严谨程度以及沟通风格。"
+  },
+  "personalitySummary": {
+    "title": "性格",
+    "enneagram": "九型人格",
+    "mbti": "MBTI",
+    "high": "高",
+    "low": "低",
+    "moderate": "中等"
   },
   "modelApiSamples": {
     "copy": "复制",
@@ -4251,7 +4267,49 @@
       "copy": "复制",
       "copied": "已复制",
       "apply": "应用",
-      "createFile": "创建文件"
+      "createFile": "创建文件",
+      "stop": "停止"
+    },
+    "tickets": {
+      "none": "尚未关联任何工单。",
+      "ringAria": "{label}：完成 {pct}%",
+      "spawned": "在此创建",
+      "run": "让代理执行该工单",
+      "lineage": "聊天脉络",
+      "unlink": "取消关联",
+      "pickAgent": "以代理身份执行…",
+      "lineageTitle": "关联此工单的聊天",
+      "lineageEmpty": "没有其他聊天引用此工单。",
+      "merged": "已合并",
+      "runStarted": "已让 {agent} 开始处理该工单。",
+      "runNoAgent": "没有可执行此工单的代理——请先指派一个。",
+      "runFailed": "无法启动运行。",
+      "link": "关联工单",
+      "agents": "代理",
+      "merge": "合并",
+      "linkFailed": "无法关联——请确认该工单存在。",
+      "kindLabel": "工单类型",
+      "pickTicket": "选择工单…",
+      "refPlaceholder": "目标 / 举措 / 组合 的 ID",
+      "linkTypeLabel": "关联类型",
+      "linkTypeLinked": "关联",
+      "linkTypeCreated": "由聊天创建",
+      "linkAction": "关联",
+      "noAgents": "此聊天中还没有代理。",
+      "removeAgent": "移除",
+      "inviteAgent": "邀请代理…",
+      "agentsHint": "被邀请的代理可被指派去执行关联的任务或史诗。",
+      "mergeHint": "将其他聊天合并到此聊天。其消息、工单和代理都会转移到这里；来源聊天将被归档。",
+      "mergeNoOthers": "没有可合并的其他聊天。",
+      "mergeAction": "将 {n} 个合并到此处",
+      "mergedN": "已合并 {n} 个聊天。",
+      "kind": {
+        "task": "任务",
+        "epic": "史诗",
+        "objective": "目标",
+        "initiative": "举措",
+        "portfolio": "组合"
+      }
     }
   },
   "modelExport": {
@@ -4304,6 +4362,14 @@
         "no_lane": "泳道未配置",
         "terminal_lane": "已完成 — 无需运行"
       }
+    },
+    "businessValue": {
+      "badge": "BV {value}",
+      "badgeTitle": "由 AI 经理评定的业务价值。",
+      "label": "业务价值",
+      "rankTitle": "AI 经理为此工单给出的待办排名。",
+      "editTitle": "点击设置业务价值（0–100）。",
+      "unset": "未设置"
     }
   },
   "projectsContent": {
@@ -4459,5 +4525,141 @@
     "frozen": "已冻结",
     "contributions": "目前已有 {count} 次学习贡献",
     "errorGeneric": "出了点问题，请重试。"
+  },
+  "manager": {
+    "title": "AI 经理",
+    "subtitle": "让 AI 经理保持这个待办列表的健康——它会为每个工单评估业务价值、对工作排序、分配负责人并推进合并请求，让团队始终清楚接下来最重要的事。",
+    "lastManaged": "上次管理于 {when}",
+    "neverManaged": "此待办列表尚未被管理。",
+    "runNow": "立即运行经理",
+    "running": "管理中…",
+    "loading": "正在加载经理…",
+    "noProject": {
+      "title": "选择一个项目",
+      "body": "在上方的切换器中选择一个项目以查看其 AI 经理。"
+    },
+    "error": {
+      "title": "无法加载经理",
+      "body": "加载此待办列表时出错，请重试。",
+      "retry": "重试"
+    },
+    "priority": {
+      "urgent": "紧急",
+      "high": "高",
+      "medium": "中",
+      "low": "低"
+    },
+    "stat": {
+      "total": "工单",
+      "unscored": "待评估",
+      "unranked": "待排序",
+      "unowned": "无负责人",
+      "openPullRequests": "开放的 PR"
+    },
+    "chart": {
+      "title": "按优先级分组的待办",
+      "caption": "开放工作在各优先级上的分布。",
+      "empty": "暂无开放工单可展示。"
+    },
+    "insightNudge": "还有 {unscored} 个工单待评估业务价值，{unranked} 个尚未排序——运行经理以补齐。",
+    "policy": {
+      "title": "如何管理此待办列表",
+      "subtitle": "决定由谁运行待办列表以及自动化程度。您可随时更改。",
+      "manager": {
+        "label": "由谁管理此待办列表",
+        "help": "选择一位队友或代理来负责待办列表，或让内置服务为您整理。",
+        "system": "系统服务（为您托管）",
+        "people": "队友",
+        "agents": "代理",
+        "hosts": "代理主机"
+      },
+      "enabled": {
+        "label": "持续管理此待办列表",
+        "help": "开启后，经理会自动评分、排序并组织工作。关闭可暂停一切。"
+      },
+      "autoBusinessValue": {
+        "label": "自动评估业务价值",
+        "help": "为每个新工单譄予价值，让您始终清楚应优先做什么——无需手动猜测。"
+      },
+      "autoPrioritize": {
+        "label": "为我排序待办列表",
+        "help": "持续重新排序，让影响最大的工单浮到顶部。"
+      },
+      "autoAssign": {
+        "label": "自动分配负责人",
+        "help": "将每个工单交给最合适的队友或代理，避免无人认领。"
+      },
+      "prMerge": {
+        "label": "工作完成时",
+        "help": "选择代理完成工单后对合并请求的处理方式。",
+        "immediate": {
+          "label": "立即发布",
+          "help": "代理一完成就合并并关闭请求——最快，适用于您信任检查时。"
+        },
+        "on_green": {
+          "label": "测试通过后发布",
+          "help": "等自动检查通过后再合并——安全的默认选项。"
+        },
+        "queue": {
+          "label": "交给人工",
+          "help": "绝不自动合并——保留每个请求供人工审查和合并。"
+        }
+      }
+    },
+    "backlog": {
+      "title": "已排序的待办列表",
+      "empty": "此待办列表暂无工单。",
+      "rank": "排名",
+      "key": "编号",
+      "taskTitle": "标题",
+      "priority": "优先级",
+      "businessValue": "业务价值",
+      "dueDate": "截止",
+      "assignee": "负责人",
+      "unassigned": "未分配",
+      "noRationale": "尚未记录理由。"
+    },
+    "action": {
+      "prioritize": "已排序",
+      "assign": "已分配",
+      "score_value": "已评估",
+      "dispatch": "已派发",
+      "merge_pr": "已合并 PR",
+      "flag": "已标记"
+    },
+    "activity": {
+      "title": "最近活动",
+      "empty": "经理尚未采取任何操作。"
+    }
+  },
+  "project360": {
+    "title": "项目 360",
+    "subtitle": "全局视图——健康度、缺口以及谁在推进工作。",
+    "overall": "整体健康度",
+    "progress": "进度",
+    "refresh": "刷新",
+    "openBoard": "打开看板",
+    "improveAll": "用 Brain 改进",
+    "connecting": "正在加载项目 360…",
+    "loadError": "无法加载项目 360",
+    "noData": "尚无任务",
+    "noDataHint": "为该项目添加任务，以查看其健康度、缺口和团队活动。",
+    "missingItems": "缺失项——改进健康度",
+    "noGaps": "未发现缺口。该项目状态良好。",
+    "workforce": "谁在工作 / 空闲",
+    "noWorkforce": "尚未有人分配到该项目。",
+    "allDimensions": "所有维度",
+    "counts_open": "未完成",
+    "counts_blocked": "受阻",
+    "counts_overdue": "逾期",
+    "counts_running": "运行中",
+    "status_working": "工作中",
+    "status_awaiting": "等待输入",
+    "status_blocked": "受阻",
+    "status_idle": "空闲",
+    "status_available": "可用",
+    "member_run": "运行",
+    "member_open": "打开",
+    "improveSeedIntro": "这是我项目的“项目 360”健康检查。请帮我逐一解决这些缺口，从影响最大的开始。"
   }
 }

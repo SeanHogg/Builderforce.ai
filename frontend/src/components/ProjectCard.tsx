@@ -162,6 +162,23 @@ export function ProjectCard({
               <rect x="17" y="4" width="4" height="14" rx="1" />
             </svg>
           </button>
+          {/* Project 360 button — the whole-picture health view (health wheel,
+              missing items, who's working). Reuses the shared <Project360View>. */}
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              window.location.href = `/projects/${project.id}/360`;
+            }}
+            aria-label={t('health360')}
+            title={t('health360')}
+            style={iconButtonStyle}
+          >
+            <svg viewBox="0 0 24 24" style={{ width: 18, height: 18, stroke: 'currentColor', fill: 'none', strokeWidth: 2 }}>
+              <circle cx="12" cy="12" r="9" />
+              <path d="M12 3 v9 l6.5 3.5" />
+            </svg>
+          </button>
           {/* IDE button */}
           <button
             type="button"

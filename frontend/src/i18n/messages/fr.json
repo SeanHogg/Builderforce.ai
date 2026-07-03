@@ -265,7 +265,8 @@
       "logs": "Journaux",
       "qa": "QA agentique",
       "home": "Accueil",
-      "integrations": "Intégrations"
+      "integrations": "Intégrations",
+      "manager": "Manager"
     }
   },
   "alerts": {
@@ -362,7 +363,8 @@
     },
     "healthAria": "Santé du projet {score} sur 100 — {tier}",
     "doneAria": "{pct}% terminé — {completed} sur {total} tâches terminées",
-    "donePct": "{pct} % terminé"
+    "donePct": "{pct} % terminé",
+    "health360": "Projet 360"
   },
   "projectInspection": {
     "title": "Inspection",
@@ -703,6 +705,12 @@
     "email": "E-mail",
     "displayName": "Nom affiché",
     "userId": "ID utilisateur",
+    "personality": "Personnalité",
+    "personalityDescription": "Passez le test de personnalité pour obtenir votre profil. Il apparaît sur votre carte d'équipe afin que vos collègues sachent comment vous travaillez le mieux.",
+    "personalitySave": "Enregistrer la personnalité",
+    "personalitySaving": "Enregistrement…",
+    "personalitySaved": "Personnalité enregistrée.",
+    "personalitySaveFailed": "Impossible d'enregistrer votre personnalité.",
     "name": "Nom",
     "slug": "Slug",
     "id": "ID",
@@ -1546,6 +1554,14 @@
     "baseModelHelp": "Le modèle d'appel d'outils et de codage sur lequel cet agent s'exécute — choisissez l'un de vos LLM ou un modèle du pool. Une exécution fixe un modèle pour toute la tâche ; laissez par défaut pour utiliser le meilleur modèle de codage de votre forfait.",
     "personality": "Personnalité",
     "personalityHelp": "Donnez une personnalité à cet agent grâce à un test de traits ou à des curseurs. Elle façonne la manière dont l'agent raisonne, le soin qu'il apporte à son travail et sa façon de communiquer à chaque exécution."
+  },
+  "personalitySummary": {
+    "title": "Personnalité",
+    "enneagram": "Ennéagramme",
+    "mbti": "MBTI",
+    "high": "Élevé",
+    "low": "Faible",
+    "moderate": "Modéré"
   },
   "modelApiSamples": {
     "copy": "Copier",
@@ -4251,7 +4267,49 @@
       "copy": "Copier",
       "copied": "Copié",
       "apply": "Appliquer",
-      "createFile": "Créer un fichier"
+      "createFile": "Créer un fichier",
+      "stop": "Arrêter"
+    },
+    "tickets": {
+      "none": "Aucun ticket lié pour l’instant.",
+      "ringAria": "{label} : {pct}% terminé",
+      "spawned": "créé ici",
+      "run": "Exécuter l’agent sur le ticket",
+      "lineage": "Lignée du chat",
+      "unlink": "Dissocier",
+      "pickAgent": "Exécuter en tant qu’agent…",
+      "lineageTitle": "Chats de ce ticket",
+      "lineageEmpty": "Aucun autre chat ne référence ce ticket.",
+      "merged": "fusionné",
+      "runStarted": "{agent} a démarré sur le ticket.",
+      "runNoAgent": "Aucun agent ne peut exécuter ce ticket — attribuez-en un d’abord.",
+      "runFailed": "Impossible de démarrer l’exécution.",
+      "link": "Lier un ticket",
+      "agents": "Agents",
+      "merge": "Fusionner",
+      "linkFailed": "Impossible de lier — vérifiez que le ticket existe.",
+      "kindLabel": "Type de ticket",
+      "pickTicket": "Choisir un ticket…",
+      "refPlaceholder": "ID d’objectif / initiative / portefeuille",
+      "linkTypeLabel": "Type de lien",
+      "linkTypeLinked": "Lié",
+      "linkTypeCreated": "Créé depuis le chat",
+      "linkAction": "Lier",
+      "noAgents": "Aucun agent dans ce chat pour l’instant.",
+      "removeAgent": "Retirer",
+      "inviteAgent": "Inviter un agent…",
+      "agentsHint": "Les agents invités peuvent être mentionnés pour exécuter une tâche ou une épopée liée.",
+      "mergeHint": "Fusionnez d’autres chats dans celui-ci. Leurs messages, tickets et agents sont déplacés ici ; les sources sont archivées.",
+      "mergeNoOthers": "Aucun autre chat à fusionner.",
+      "mergeAction": "Fusionner {n} ici",
+      "mergedN": "{n} chat(s) fusionné(s).",
+      "kind": {
+        "task": "Tâche",
+        "epic": "Épopée",
+        "objective": "Objectif",
+        "initiative": "Initiative",
+        "portfolio": "Portefeuille"
+      }
     }
   },
   "modelExport": {
@@ -4304,6 +4362,14 @@
         "no_lane": "Voie non configurée",
         "terminal_lane": "Terminé — aucune exécution"
       }
+    },
+    "businessValue": {
+      "badge": "VM {value}",
+      "badgeTitle": "Valeur métier évaluée par le Manager IA.",
+      "label": "Valeur métier",
+      "rankTitle": "Le rang de backlog attribué à ce ticket par le Manager IA.",
+      "editTitle": "Cliquez pour définir une valeur métier (0–100).",
+      "unset": "Non défini"
     }
   },
   "projectsContent": {
@@ -4459,5 +4525,141 @@
     "frozen": "Gelé",
     "contributions": "{count} contributions d'apprentissage à ce jour",
     "errorGeneric": "Une erreur s'est produite. Veuillez réessayer."
+  },
+  "manager": {
+    "title": "Manager IA",
+    "subtitle": "Laissez un manager IA garder ce backlog en bonne santé : il évalue la valeur métier de chaque ticket, classe le travail, attribue les responsables et pilote les pull requests pour que votre équipe sache toujours ce qui compte le plus ensuite.",
+    "lastManaged": "Dernière gestion {when}",
+    "neverManaged": "Ce backlog n’a pas encore été géré.",
+    "runNow": "Lancer le manager",
+    "running": "Gestion en cours…",
+    "loading": "Chargement du manager…",
+    "noProject": {
+      "title": "Choisissez un projet",
+      "body": "Sélectionnez un projet dans le sélecteur ci-dessus pour voir son Manager IA."
+    },
+    "error": {
+      "title": "Impossible de charger le manager",
+      "body": "Une erreur s’est produite lors du chargement de ce backlog. Veuillez réessayer.",
+      "retry": "Réessayer"
+    },
+    "priority": {
+      "urgent": "Urgent",
+      "high": "Haute",
+      "medium": "Moyenne",
+      "low": "Basse"
+    },
+    "stat": {
+      "total": "Tickets",
+      "unscored": "À évaluer",
+      "unranked": "Non classés",
+      "unowned": "Sans responsable",
+      "openPullRequests": "PR ouvertes"
+    },
+    "chart": {
+      "title": "Backlog par priorité",
+      "caption": "Répartition du travail ouvert selon les niveaux de priorité.",
+      "empty": "Aucun ticket ouvert à afficher pour l’instant."
+    },
+    "insightNudge": "{unscored} tickets ont encore besoin d’une valeur métier et {unranked} ne sont pas classés — lancez le manager pour les mettre à jour.",
+    "policy": {
+      "title": "Comment ce backlog est géré",
+      "subtitle": "Décidez qui gère le backlog et ce qui est fait automatiquement. Vous pouvez changer cela à tout moment.",
+      "manager": {
+        "label": "Qui gère ce backlog",
+        "help": "Choisissez un coéquipier ou un agent comme responsable du backlog, ou laissez le service intégré le tenir en ordre.",
+        "system": "Service système (géré pour vous)",
+        "people": "Coéquipiers",
+        "agents": "Agents",
+        "hosts": "Hôtes d’agents"
+      },
+      "enabled": {
+        "label": "Continuer à gérer ce backlog",
+        "help": "Activé, le manager évalue, classe et organise le travail automatiquement. Désactivez pour tout mettre en pause."
+      },
+      "autoBusinessValue": {
+        "label": "Évaluer la valeur métier automatiquement",
+        "help": "Donnez une valeur à chaque nouveau ticket pour toujours voir ce qui vaut la peine d’être fait en premier, sans deviner."
+      },
+      "autoPrioritize": {
+        "label": "Classer le backlog pour moi",
+        "help": "Reclasse le travail en continu pour faire remonter les tickets à plus fort impact."
+      },
+      "autoAssign": {
+        "label": "Attribuer les responsables automatiquement",
+        "help": "Confie chaque ticket au coéquipier ou à l’agent le plus adapté pour que rien ne reste sans responsable."
+      },
+      "prMerge": {
+        "label": "Quand le travail est terminé",
+        "help": "Choisissez ce qui arrive à une pull request une fois qu’un agent termine un ticket.",
+        "immediate": {
+          "label": "Livrer immédiatement",
+          "help": "Fusionne et ferme la pull request dès que l’agent a fini — le plus rapide, idéal si vous faites confiance aux vérifications."
+        },
+        "on_green": {
+          "label": "Livrer une fois les tests passés",
+          "help": "Attend que les vérifications automatiques soient au vert avant de fusionner — un choix sûr."
+        },
+        "queue": {
+          "label": "Laisser à un humain",
+          "help": "Ne jamais fusionner automatiquement — réserve chaque pull request à une relecture et une fusion humaines."
+        }
+      }
+    },
+    "backlog": {
+      "title": "Backlog classé",
+      "empty": "Aucun ticket dans ce backlog pour l’instant.",
+      "rank": "Rang",
+      "key": "Clé",
+      "taskTitle": "Titre",
+      "priority": "Priorité",
+      "businessValue": "Valeur métier",
+      "dueDate": "Échéance",
+      "assignee": "Responsable",
+      "unassigned": "Non attribué",
+      "noRationale": "Aucune justification enregistrée pour l’instant."
+    },
+    "action": {
+      "prioritize": "Priorisé",
+      "assign": "Attribué",
+      "score_value": "Évalué",
+      "dispatch": "Envoyé",
+      "merge_pr": "PR fusionnée",
+      "flag": "Signalé"
+    },
+    "activity": {
+      "title": "Activité récente",
+      "empty": "Le manager n’a encore effectué aucune action."
+    }
+  },
+  "project360": {
+    "title": "Projet 360",
+    "subtitle": "La vue d’ensemble — santé, lacunes et qui fait avancer le travail.",
+    "overall": "Santé globale",
+    "progress": "Progression",
+    "refresh": "Actualiser",
+    "openBoard": "Ouvrir le tableau",
+    "improveAll": "Améliorer avec Brain",
+    "connecting": "Chargement de Projet 360…",
+    "loadError": "Impossible de charger Projet 360",
+    "noData": "Pas encore de tâches",
+    "noDataHint": "Ajoutez des tâches à ce projet pour voir sa santé, ses lacunes et l’activité de l’équipe.",
+    "missingItems": "Éléments manquants — améliorer la santé",
+    "noGaps": "Aucune lacune trouvée. Ce projet est en bonne forme.",
+    "workforce": "Qui travaille / est inactif",
+    "noWorkforce": "Personne n’est encore affecté à ce projet.",
+    "allDimensions": "Toutes les dimensions",
+    "counts_open": "ouvertes",
+    "counts_blocked": "bloquées",
+    "counts_overdue": "en retard",
+    "counts_running": "en cours",
+    "status_working": "Au travail",
+    "status_awaiting": "En attente de réponse",
+    "status_blocked": "Bloqué",
+    "status_idle": "Inactif",
+    "status_available": "Disponible",
+    "member_run": "Exécuter",
+    "member_open": "Ouvrir",
+    "improveSeedIntro": "Voici le bilan de santé Projet 360 de mon projet. Aide-moi à combler ces lacunes, en commençant par les plus importantes."
   }
 }

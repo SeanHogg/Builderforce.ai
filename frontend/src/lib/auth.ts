@@ -9,6 +9,7 @@
  */
 
 import type { AuthUser, Tenant } from './types';
+import type { PsychometricProfile } from './psychometric';
 
 export const AUTH_API_URL =
   process.env.NEXT_PUBLIC_AUTH_API_URL || 'https://api.builderforce.ai';
@@ -383,15 +384,38 @@ export async function resolveAndSelectTenant(webToken: string): Promise<Tenant |
   }
 }
 
-/** Fetch the current user profile, including onboarding status. */
-export async function getMe(webToken: string): Promise<{ onboardingCompletedAt: string | null }> {
+/** Fetch the current user profile, including onboarding status + personality. */
+export async function getMe(webToken: string): Promise<{ onboardingCompletedAt: string | null; psychometric: PsychometricProfile | null }> {
   const res = await fetch(`${AUTH_API_URL}/api/auth/me`, {
     headers: { Authorization: `Bearer ${webToken}` },
   });
   checkUnauthorizedAndRedirect(res, !!webToken);
-  if (!res.ok) return { onboardingCompletedAt: null };
-  const data = await res.json() as { user?: { onboardingCompletedAt?: string | null } };
-  return { onboardingCompletedAt: data.user?.onboardingCompletedAt ?? null };
+  if (!res.ok) return { onboardingCompletedAt: null, psychometric: null };
+  const data = await res.json() as { user?: { onboardingCompletedAt?: string | null; psychometric?: PsychometricProfile | null } };
+  return {
+    onboardingCompletedAt: data.user?.onboardingCompletedAt ?? null,
+    psychometric: data.user?.psychometric ?? null,
+  };
+}
+
+/** Update the signed-in user's OWN personality (psychometric profile). Pass null to
+ *  clear it. Personality is universal to every user, so this is not Pro-gated. */
+export async function updateMyPersonality(
+  webToken: string,
+  psychometric: PsychometricProfile | null,
+): Promise<PsychometricProfile | null> {
+  const res = await fetch(`${AUTH_API_URL}/api/auth/me`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${webToken}` },
+    body: JSON.stringify({ psychometric }),
+  });
+  checkUnauthorizedAndRedirect(res, !!webToken);
+  if (!res.ok) {
+    const body = (await res.json().catch(() => ({}))) as { error?: string };
+    throw new Error(body.error || `Request failed (${res.status})`);
+  }
+  const data = await res.json() as { user?: { psychometric?: PsychometricProfile | null } };
+  return data.user?.psychometric ?? null;
 }
 
 /** Mark onboarding as complete and optionally store user intent. */
@@ -417,6 +441,8 @@ export interface TenantMember {
   joinedAt: string | null;
   activeSessions: number;
   activeTokens: number;
+  /** This person's personality (parsed); null when they haven't taken the test. */
+  psychometric?: PsychometricProfile | null;
 }
 
 /** List all active members of a workspace. Requires manager role. */

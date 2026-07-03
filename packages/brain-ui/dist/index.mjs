@@ -361,11 +361,72 @@ function BrainTimeline({
   ] });
 }
 
+// src/HealthRing.tsx
+import { jsx as jsx3, jsxs as jsxs3 } from "react/jsx-runtime";
+function healthRingColor(percent, muted = false) {
+  if (muted) return "var(--bf-health-muted, #9ca3af)";
+  if (percent >= 100) return "var(--bf-health-done, #16a34a)";
+  if (percent >= 67) return "var(--bf-health-good, #22c55e)";
+  if (percent >= 34) return "var(--bf-health-mid, #f59e0b)";
+  if (percent > 0) return "var(--bf-health-low, #f97316)";
+  return "var(--bf-health-none, #ef4444)";
+}
+function HealthRing({ percent, size = 40, stroke = 4, caption, muted = false, ariaLabel }) {
+  const pct = Math.max(0, Math.min(100, Math.round(percent || 0)));
+  const r = (size - stroke) / 2;
+  const c = 2 * Math.PI * r;
+  const dash = pct / 100 * c;
+  const color = healthRingColor(pct, muted);
+  const label = ariaLabel ?? `${pct}% complete`;
+  return /* @__PURE__ */ jsxs3("span", { className: "bf-health-ring", style: { display: "inline-flex", flexDirection: "column", alignItems: "center", gap: 2 }, children: [
+    /* @__PURE__ */ jsxs3("svg", { width: size, height: size, viewBox: `0 0 ${size} ${size}`, role: "img", "aria-label": label, children: [
+      /* @__PURE__ */ jsx3(
+        "circle",
+        {
+          cx: size / 2,
+          cy: size / 2,
+          r,
+          fill: "none",
+          stroke: "var(--bf-health-track, rgba(148,163,184,0.25))",
+          strokeWidth: stroke
+        }
+      ),
+      /* @__PURE__ */ jsx3(
+        "circle",
+        {
+          cx: size / 2,
+          cy: size / 2,
+          r,
+          fill: "none",
+          stroke: color,
+          strokeWidth: stroke,
+          strokeLinecap: "round",
+          strokeDasharray: `${dash.toFixed(2)} ${(c - dash).toFixed(2)}`,
+          transform: `rotate(-90 ${size / 2} ${size / 2})`
+        }
+      ),
+      /* @__PURE__ */ jsx3(
+        "text",
+        {
+          x: "50%",
+          y: "50%",
+          textAnchor: "middle",
+          dominantBaseline: "central",
+          fill: "var(--bf-health-text, currentColor)",
+          style: { fontSize: Math.max(9, size * 0.28), fontWeight: 600 },
+          children: pct
+        }
+      )
+    ] }),
+    caption ? /* @__PURE__ */ jsx3("span", { style: { fontSize: 10, color: "var(--bf-health-caption, var(--bf-text-muted, #6b7280))", lineHeight: 1 }, children: caption }) : null
+  ] });
+}
+
 // src/project360/Project360View.tsx
 import { useMemo as useMemo2, useState as useState2 } from "react";
 
 // src/project360/Sunburst.tsx
-import { jsx as jsx3, jsxs as jsxs3 } from "react/jsx-runtime";
+import { jsx as jsx4, jsxs as jsxs4 } from "react/jsx-runtime";
 var CX = 160;
 var CY = 160;
 var R_CENTER = 46;
@@ -405,7 +466,7 @@ function Sunburst({ pillars, dimensions, overall, selected, onSelect, ariaLabel 
   const nPillars = pillars.length || 1;
   const pillarSpan = 360 / nPillars;
   const dimsByPillar = pillars.map((p) => dimensions.filter((d) => d.pillar === p.key));
-  return /* @__PURE__ */ jsxs3(
+  return /* @__PURE__ */ jsxs4(
     "svg",
     {
       className: "bf-360-wheel",
@@ -420,8 +481,8 @@ function Sunburst({ pillars, dimensions, overall, selected, onSelect, ariaLabel 
           const dims = dimsByPillar[pi];
           const dimSpan = pillarSpan / (dims.length || 1);
           const pLabel = labelAt((R_INNER_0 + R_INNER_1) / 2, pMid);
-          return /* @__PURE__ */ jsxs3("g", { children: [
-            /* @__PURE__ */ jsx3(
+          return /* @__PURE__ */ jsxs4("g", { children: [
+            /* @__PURE__ */ jsx4(
               "path",
               {
                 d: sector(R_INNER_0, R_INNER_1, pStart + 0.6, pEnd - 0.6),
@@ -430,7 +491,7 @@ function Sunburst({ pillars, dimensions, overall, selected, onSelect, ariaLabel 
                 className: "bf-360-arc bf-360-arc--pillar"
               }
             ),
-            /* @__PURE__ */ jsx3(
+            /* @__PURE__ */ jsx4(
               "text",
               {
                 x: pLabel.x,
@@ -448,7 +509,7 @@ function Sunburst({ pillars, dimensions, overall, selected, onSelect, ariaLabel 
               const isSel = selected === dim.key;
               const lab = labelAt((R_OUTER_0 + R_OUTER_1) / 2, dMid);
               const lines = twoLines(dim.label);
-              return /* @__PURE__ */ jsxs3(
+              return /* @__PURE__ */ jsxs4(
                 "g",
                 {
                   className: "bf-360-arc-group",
@@ -457,7 +518,7 @@ function Sunburst({ pillars, dimensions, overall, selected, onSelect, ariaLabel 
                   "aria-pressed": isSel,
                   "aria-label": `${dim.label}: ${dim.score} of 100`,
                   children: [
-                    /* @__PURE__ */ jsx3(
+                    /* @__PURE__ */ jsx4(
                       "path",
                       {
                         d: sector(R_OUTER_0, R_OUTER_1, dStart + 0.6, dEnd - 0.6),
@@ -466,7 +527,7 @@ function Sunburst({ pillars, dimensions, overall, selected, onSelect, ariaLabel 
                         className: `bf-360-arc bf-360-arc--dim${isSel ? " is-selected" : ""}`
                       }
                     ),
-                    /* @__PURE__ */ jsx3(
+                    /* @__PURE__ */ jsx4(
                       "text",
                       {
                         x: lab.x,
@@ -474,7 +535,7 @@ function Sunburst({ pillars, dimensions, overall, selected, onSelect, ariaLabel 
                         className: "bf-360-arc-label",
                         textAnchor: "middle",
                         dominantBaseline: "central",
-                        children: lines.map((ln, li) => /* @__PURE__ */ jsx3("tspan", { x: lab.x, dy: li === 0 ? lines.length > 1 ? "-0.5em" : "0" : "1em", children: ln }, li))
+                        children: lines.map((ln, li) => /* @__PURE__ */ jsx4("tspan", { x: lab.x, dy: li === 0 ? lines.length > 1 ? "-0.5em" : "0" : "1em", children: ln }, li))
                       }
                     )
                   ]
@@ -484,10 +545,10 @@ function Sunburst({ pillars, dimensions, overall, selected, onSelect, ariaLabel 
             })
           ] }, pillar.key);
         }),
-        /* @__PURE__ */ jsx3("circle", { cx: CX, cy: CY, r: R_CENTER, className: "bf-360-center", onClick: () => onSelect?.(null), role: "button", "aria-label": "Clear selection" }),
-        /* @__PURE__ */ jsx3("circle", { cx: CX, cy: CY, r: R_CENTER, fill: "none", stroke: overall.color, strokeWidth: 3, className: "bf-360-center-ring" }),
-        /* @__PURE__ */ jsx3("text", { x: CX, y: CY - 8, className: "bf-360-center-score", textAnchor: "middle", dominantBaseline: "central", fill: overall.color, children: overall.score }),
-        /* @__PURE__ */ jsx3("text", { x: CX, y: CY + 14, className: "bf-360-center-label", textAnchor: "middle", dominantBaseline: "central", children: "HEALTH" })
+        /* @__PURE__ */ jsx4("circle", { cx: CX, cy: CY, r: R_CENTER, className: "bf-360-center", onClick: () => onSelect?.(null), role: "button", "aria-label": "Clear selection" }),
+        /* @__PURE__ */ jsx4("circle", { cx: CX, cy: CY, r: R_CENTER, fill: "none", stroke: overall.color, strokeWidth: 3, className: "bf-360-center-ring" }),
+        /* @__PURE__ */ jsx4("text", { x: CX, y: CY - 8, className: "bf-360-center-score", textAnchor: "middle", dominantBaseline: "central", fill: overall.color, children: overall.score }),
+        /* @__PURE__ */ jsx4("text", { x: CX, y: CY + 14, className: "bf-360-center-label", textAnchor: "middle", dominantBaseline: "central", children: "HEALTH" })
       ]
     }
   );
@@ -526,21 +587,21 @@ var DEFAULT_PROJECT360_LABELS = {
 };
 
 // src/project360/Project360View.tsx
-import { Fragment as Fragment2, jsx as jsx4, jsxs as jsxs4 } from "react/jsx-runtime";
+import { Fragment as Fragment2, jsx as jsx5, jsxs as jsxs5 } from "react/jsx-runtime";
 var STATUS_ORDER = ["working", "awaiting", "blocked", "idle", "available"];
 function Project360View({ data, loading, error, labels, onAction, onRefresh }) {
   const L = useMemo2(() => ({ ...DEFAULT_PROJECT360_LABELS, ...labels ?? {} }), [labels]);
   const [selected, setSelected] = useState2(null);
   if (error) {
-    return /* @__PURE__ */ jsxs4("div", { className: "bf-360-state", children: [
-      /* @__PURE__ */ jsx4("div", { className: "bf-360-state__title", children: L.loadError }),
-      /* @__PURE__ */ jsx4("div", { className: "bf-360-state__hint", children: error }),
-      onRefresh && /* @__PURE__ */ jsx4("button", { className: "bf-btn", onClick: onRefresh, children: L.refresh })
+    return /* @__PURE__ */ jsxs5("div", { className: "bf-360-state", children: [
+      /* @__PURE__ */ jsx5("div", { className: "bf-360-state__title", children: L.loadError }),
+      /* @__PURE__ */ jsx5("div", { className: "bf-360-state__hint", children: error }),
+      onRefresh && /* @__PURE__ */ jsx5("button", { className: "bf-btn", onClick: onRefresh, children: L.refresh })
     ] });
   }
   if (!data || loading) {
-    return /* @__PURE__ */ jsxs4("div", { className: "bf-360-state", children: [
-      /* @__PURE__ */ jsx4("div", { className: "bf-360-spinner" }),
+    return /* @__PURE__ */ jsxs5("div", { className: "bf-360-state", children: [
+      /* @__PURE__ */ jsx5("div", { className: "bf-360-spinner" }),
       L.connecting
     ] });
   }
@@ -560,24 +621,24 @@ Gaps:
 ${lines}`
     });
   };
-  return /* @__PURE__ */ jsxs4("div", { className: "bf-360", children: [
-    /* @__PURE__ */ jsxs4("header", { className: "bf-360-head", children: [
-      /* @__PURE__ */ jsxs4("div", { className: "bf-360-head__id", children: [
-        /* @__PURE__ */ jsx4("span", { className: "bf-360-head__title", children: project.name }),
-        project.key && /* @__PURE__ */ jsx4("span", { className: "bf-360-head__key", children: project.key })
+  return /* @__PURE__ */ jsxs5("div", { className: "bf-360", children: [
+    /* @__PURE__ */ jsxs5("header", { className: "bf-360-head", children: [
+      /* @__PURE__ */ jsxs5("div", { className: "bf-360-head__id", children: [
+        /* @__PURE__ */ jsx5("span", { className: "bf-360-head__title", children: project.name }),
+        project.key && /* @__PURE__ */ jsx5("span", { className: "bf-360-head__key", children: project.key })
       ] }),
-      /* @__PURE__ */ jsx4("div", { className: "bf-360-head__spacer" }),
-      /* @__PURE__ */ jsx4("button", { className: "bf-btn", onClick: () => onAction?.({ kind: "board", label: L.openBoard }), children: L.openBoard }),
-      gaps.length > 0 && /* @__PURE__ */ jsx4("button", { className: "bf-btn bf-btn--primary", onClick: improveAll, children: L.improveAll }),
-      onRefresh && /* @__PURE__ */ jsx4("button", { className: "bf-btn bf-btn--icon", title: L.refresh, "aria-label": L.refresh, onClick: onRefresh, children: "\u27F3" })
+      /* @__PURE__ */ jsx5("div", { className: "bf-360-head__spacer" }),
+      /* @__PURE__ */ jsx5("button", { className: "bf-btn", onClick: () => onAction?.({ kind: "board", label: L.openBoard }), children: L.openBoard }),
+      gaps.length > 0 && /* @__PURE__ */ jsx5("button", { className: "bf-btn bf-btn--primary", onClick: improveAll, children: L.improveAll }),
+      onRefresh && /* @__PURE__ */ jsx5("button", { className: "bf-btn bf-btn--icon", title: L.refresh, "aria-label": L.refresh, onClick: onRefresh, children: "\u27F3" })
     ] }),
-    !hasData ? /* @__PURE__ */ jsxs4("div", { className: "bf-360-state", children: [
-      /* @__PURE__ */ jsx4("div", { className: "bf-360-state__title", children: L.noData }),
-      /* @__PURE__ */ jsx4("div", { className: "bf-360-state__hint", children: L.noDataHint }),
-      /* @__PURE__ */ jsx4("button", { className: "bf-btn", onClick: () => onAction?.({ kind: "board", label: L.openBoard }), children: L.openBoard })
-    ] }) : /* @__PURE__ */ jsxs4("div", { className: "bf-360-grid", children: [
-      /* @__PURE__ */ jsxs4("section", { className: "bf-360-col bf-360-col--wheel", children: [
-        /* @__PURE__ */ jsx4(
+    !hasData ? /* @__PURE__ */ jsxs5("div", { className: "bf-360-state", children: [
+      /* @__PURE__ */ jsx5("div", { className: "bf-360-state__title", children: L.noData }),
+      /* @__PURE__ */ jsx5("div", { className: "bf-360-state__hint", children: L.noDataHint }),
+      /* @__PURE__ */ jsx5("button", { className: "bf-btn", onClick: () => onAction?.({ kind: "board", label: L.openBoard }), children: L.openBoard })
+    ] }) : /* @__PURE__ */ jsxs5("div", { className: "bf-360-grid", children: [
+      /* @__PURE__ */ jsxs5("section", { className: "bf-360-col bf-360-col--wheel", children: [
+        /* @__PURE__ */ jsx5(
           Sunburst,
           {
             pillars,
@@ -588,83 +649,83 @@ ${lines}`
             ariaLabel: `${project.name} health wheel`
           }
         ),
-        /* @__PURE__ */ jsxs4("div", { className: "bf-360-overall", children: [
-          /* @__PURE__ */ jsx4("div", { className: "bf-360-progress", "aria-label": `${L.progress} ${overall.progressPct}%`, children: /* @__PURE__ */ jsx4("div", { className: "bf-360-progress__fill", style: { width: `${overall.progressPct}%`, background: overall.color } }) }),
-          /* @__PURE__ */ jsxs4("div", { className: "bf-360-progress__label", children: [
+        /* @__PURE__ */ jsxs5("div", { className: "bf-360-overall", children: [
+          /* @__PURE__ */ jsx5("div", { className: "bf-360-progress", "aria-label": `${L.progress} ${overall.progressPct}%`, children: /* @__PURE__ */ jsx5("div", { className: "bf-360-progress__fill", style: { width: `${overall.progressPct}%`, background: overall.color } }) }),
+          /* @__PURE__ */ jsxs5("div", { className: "bf-360-progress__label", children: [
             L.progress,
             ": ",
             overall.progressPct,
             "%"
           ] }),
-          /* @__PURE__ */ jsxs4("div", { className: "bf-360-counts", children: [
-            /* @__PURE__ */ jsx4(Count, { n: counts.open, label: L.counts_open }),
-            /* @__PURE__ */ jsx4(Count, { n: counts.blocked, label: L.counts_blocked, tone: counts.blocked ? "warn" : void 0 }),
-            /* @__PURE__ */ jsx4(Count, { n: counts.overdue, label: L.counts_overdue, tone: counts.overdue ? "bad" : void 0 }),
-            /* @__PURE__ */ jsx4(Count, { n: counts.activeRuns, label: L.counts_running, tone: counts.activeRuns ? "good" : void 0 })
+          /* @__PURE__ */ jsxs5("div", { className: "bf-360-counts", children: [
+            /* @__PURE__ */ jsx5(Count, { n: counts.open, label: L.counts_open }),
+            /* @__PURE__ */ jsx5(Count, { n: counts.blocked, label: L.counts_blocked, tone: counts.blocked ? "warn" : void 0 }),
+            /* @__PURE__ */ jsx5(Count, { n: counts.overdue, label: L.counts_overdue, tone: counts.overdue ? "bad" : void 0 }),
+            /* @__PURE__ */ jsx5(Count, { n: counts.activeRuns, label: L.counts_running, tone: counts.activeRuns ? "good" : void 0 })
           ] })
         ] })
       ] }),
-      /* @__PURE__ */ jsxs4("section", { className: "bf-360-col bf-360-col--detail", children: [
-        /* @__PURE__ */ jsxs4("div", { className: "bf-360-legend-head", children: [
-          /* @__PURE__ */ jsx4("span", { children: selectedDim ? selectedDim.label : L.allDimensions }),
-          selectedDim && /* @__PURE__ */ jsxs4("button", { className: "bf-360-clear", onClick: () => setSelected(null), children: [
+      /* @__PURE__ */ jsxs5("section", { className: "bf-360-col bf-360-col--detail", children: [
+        /* @__PURE__ */ jsxs5("div", { className: "bf-360-legend-head", children: [
+          /* @__PURE__ */ jsx5("span", { children: selectedDim ? selectedDim.label : L.allDimensions }),
+          selectedDim && /* @__PURE__ */ jsxs5("button", { className: "bf-360-clear", onClick: () => setSelected(null), children: [
             L.allDimensions,
             " \u2715"
           ] })
         ] }),
-        selectedDim ? /* @__PURE__ */ jsxs4("div", { className: "bf-360-dim-detail", children: [
-          /* @__PURE__ */ jsx4(ScoreDot, { score: selectedDim.score, color: selectedDim.color }),
-          /* @__PURE__ */ jsx4("div", { className: "bf-360-dim-detail__summary", children: selectedDim.summary })
-        ] }) : /* @__PURE__ */ jsx4("ul", { className: "bf-360-dim-list", children: dimensions.map((d) => /* @__PURE__ */ jsx4("li", { children: /* @__PURE__ */ jsxs4(
+        selectedDim ? /* @__PURE__ */ jsxs5("div", { className: "bf-360-dim-detail", children: [
+          /* @__PURE__ */ jsx5(ScoreDot, { score: selectedDim.score, color: selectedDim.color }),
+          /* @__PURE__ */ jsx5("div", { className: "bf-360-dim-detail__summary", children: selectedDim.summary })
+        ] }) : /* @__PURE__ */ jsx5("ul", { className: "bf-360-dim-list", children: dimensions.map((d) => /* @__PURE__ */ jsx5("li", { children: /* @__PURE__ */ jsxs5(
           "button",
           {
             className: "bf-360-dim-row",
             onClick: () => setSelected(d.key),
             children: [
-              /* @__PURE__ */ jsx4(ScoreDot, { score: d.score, color: d.color }),
-              /* @__PURE__ */ jsx4("span", { className: "bf-360-dim-row__label", children: d.label }),
-              /* @__PURE__ */ jsx4("span", { className: "bf-360-dim-row__summary", children: d.summary })
+              /* @__PURE__ */ jsx5(ScoreDot, { score: d.score, color: d.color }),
+              /* @__PURE__ */ jsx5("span", { className: "bf-360-dim-row__label", children: d.label }),
+              /* @__PURE__ */ jsx5("span", { className: "bf-360-dim-row__summary", children: d.summary })
             ]
           }
         ) }, d.key)) })
       ] })
     ] }),
-    hasData && /* @__PURE__ */ jsxs4(Fragment2, { children: [
-      /* @__PURE__ */ jsxs4("section", { className: "bf-360-section", children: [
-        /* @__PURE__ */ jsxs4("h3", { className: "bf-360-section__title", children: [
+    hasData && /* @__PURE__ */ jsxs5(Fragment2, { children: [
+      /* @__PURE__ */ jsxs5("section", { className: "bf-360-section", children: [
+        /* @__PURE__ */ jsxs5("h3", { className: "bf-360-section__title", children: [
           L.missingItems,
-          shownGaps.length > 0 && /* @__PURE__ */ jsx4("span", { className: "bf-360-section__count", children: shownGaps.length })
+          shownGaps.length > 0 && /* @__PURE__ */ jsx5("span", { className: "bf-360-section__count", children: shownGaps.length })
         ] }),
-        shownGaps.length === 0 ? /* @__PURE__ */ jsx4("p", { className: "bf-360-empty", children: L.noGaps }) : /* @__PURE__ */ jsx4("ul", { className: "bf-360-gaps", children: shownGaps.map((g) => /* @__PURE__ */ jsx4(GapRow, { gap: g, onAction }, g.id)) })
+        shownGaps.length === 0 ? /* @__PURE__ */ jsx5("p", { className: "bf-360-empty", children: L.noGaps }) : /* @__PURE__ */ jsx5("ul", { className: "bf-360-gaps", children: shownGaps.map((g) => /* @__PURE__ */ jsx5(GapRow, { gap: g, onAction }, g.id)) })
       ] }),
-      /* @__PURE__ */ jsxs4("section", { className: "bf-360-section", children: [
-        /* @__PURE__ */ jsxs4("h3", { className: "bf-360-section__title", children: [
+      /* @__PURE__ */ jsxs5("section", { className: "bf-360-section", children: [
+        /* @__PURE__ */ jsxs5("h3", { className: "bf-360-section__title", children: [
           L.workforce,
-          workforce.length > 0 && /* @__PURE__ */ jsx4("span", { className: "bf-360-section__count", children: workforce.length })
+          workforce.length > 0 && /* @__PURE__ */ jsx5("span", { className: "bf-360-section__count", children: workforce.length })
         ] }),
-        workforce.length === 0 ? /* @__PURE__ */ jsx4("p", { className: "bf-360-empty", children: L.noWorkforce }) : /* @__PURE__ */ jsx4("ul", { className: "bf-360-people", children: [...workforce].sort((a, b) => STATUS_ORDER.indexOf(a.status) - STATUS_ORDER.indexOf(b.status)).map((m) => /* @__PURE__ */ jsx4(MemberRow, { member: m, labels: L, onAction }, m.ref)) })
+        workforce.length === 0 ? /* @__PURE__ */ jsx5("p", { className: "bf-360-empty", children: L.noWorkforce }) : /* @__PURE__ */ jsx5("ul", { className: "bf-360-people", children: [...workforce].sort((a, b) => STATUS_ORDER.indexOf(a.status) - STATUS_ORDER.indexOf(b.status)).map((m) => /* @__PURE__ */ jsx5(MemberRow, { member: m, labels: L, onAction }, m.ref)) })
       ] })
     ] })
   ] });
 }
 function Count({ n, label, tone }) {
-  return /* @__PURE__ */ jsxs4("span", { className: `bf-360-count${tone ? ` bf-360-count--${tone}` : ""}`, children: [
-    /* @__PURE__ */ jsx4("b", { children: n }),
+  return /* @__PURE__ */ jsxs5("span", { className: `bf-360-count${tone ? ` bf-360-count--${tone}` : ""}`, children: [
+    /* @__PURE__ */ jsx5("b", { children: n }),
     " ",
     label
   ] });
 }
 function ScoreDot({ score, color }) {
-  return /* @__PURE__ */ jsx4("span", { className: "bf-360-scoredot", style: { borderColor: color, color }, children: score });
+  return /* @__PURE__ */ jsx5("span", { className: "bf-360-scoredot", style: { borderColor: color, color }, children: score });
 }
 function GapRow({ gap, onAction }) {
-  return /* @__PURE__ */ jsxs4("li", { className: `bf-360-gap bf-360-gap--${gap.severity}`, children: [
-    /* @__PURE__ */ jsx4("span", { className: `bf-360-sev bf-360-sev--${gap.severity}`, "aria-hidden": true }),
-    /* @__PURE__ */ jsxs4("div", { className: "bf-360-gap__body", children: [
-      /* @__PURE__ */ jsx4("div", { className: "bf-360-gap__title", children: gap.title }),
-      gap.detail && /* @__PURE__ */ jsx4("div", { className: "bf-360-gap__detail", children: gap.detail })
+  return /* @__PURE__ */ jsxs5("li", { className: `bf-360-gap bf-360-gap--${gap.severity}`, children: [
+    /* @__PURE__ */ jsx5("span", { className: `bf-360-sev bf-360-sev--${gap.severity}`, "aria-hidden": true }),
+    /* @__PURE__ */ jsxs5("div", { className: "bf-360-gap__body", children: [
+      /* @__PURE__ */ jsx5("div", { className: "bf-360-gap__title", children: gap.title }),
+      gap.detail && /* @__PURE__ */ jsx5("div", { className: "bf-360-gap__detail", children: gap.detail })
     ] }),
-    gap.action && /* @__PURE__ */ jsx4("button", { className: "bf-btn bf-360-gap__cta", onClick: () => onAction?.(gap.action), children: gap.action.label })
+    gap.action && /* @__PURE__ */ jsx5("button", { className: "bf-btn bf-360-gap__cta", onClick: () => onAction?.(gap.action), children: gap.action.label })
   ] });
 }
 function MemberRow({ member, labels, onAction }) {
@@ -676,32 +737,128 @@ function MemberRow({ member, labels, onAction }) {
     available: labels.status_available
   }[member.status];
   const task = member.taskId != null ? { id: member.taskId, key: member.taskKey, title: member.taskTitle ?? "" } : void 0;
-  return /* @__PURE__ */ jsxs4("li", { className: "bf-360-person", children: [
-    /* @__PURE__ */ jsx4("span", { className: `bf-360-dot bf-360-dot--${member.status}`, title: statusLabel, "aria-label": statusLabel }),
-    /* @__PURE__ */ jsxs4("div", { className: "bf-360-person__body", children: [
-      /* @__PURE__ */ jsxs4("div", { className: "bf-360-person__top", children: [
-        /* @__PURE__ */ jsx4("span", { className: "bf-360-person__name", children: member.name }),
-        /* @__PURE__ */ jsx4("span", { className: `bf-360-kind bf-360-kind--${member.kind}`, children: member.kind }),
-        /* @__PURE__ */ jsx4("span", { className: "bf-360-person__status", children: statusLabel })
+  return /* @__PURE__ */ jsxs5("li", { className: "bf-360-person", children: [
+    /* @__PURE__ */ jsx5("span", { className: `bf-360-dot bf-360-dot--${member.status}`, title: statusLabel, "aria-label": statusLabel }),
+    /* @__PURE__ */ jsxs5("div", { className: "bf-360-person__body", children: [
+      /* @__PURE__ */ jsxs5("div", { className: "bf-360-person__top", children: [
+        /* @__PURE__ */ jsx5("span", { className: "bf-360-person__name", children: member.name }),
+        /* @__PURE__ */ jsx5("span", { className: `bf-360-kind bf-360-kind--${member.kind}`, children: member.kind }),
+        /* @__PURE__ */ jsx5("span", { className: "bf-360-person__status", children: statusLabel })
       ] }),
-      /* @__PURE__ */ jsx4("div", { className: "bf-360-person__reason", children: member.reason })
+      /* @__PURE__ */ jsx5("div", { className: "bf-360-person__reason", children: member.reason })
     ] }),
-    task && /* @__PURE__ */ jsxs4("div", { className: "bf-360-person__actions", children: [
-      (member.status === "idle" || member.status === "available") && member.kind !== "human" && /* @__PURE__ */ jsx4("button", { className: "bf-btn bf-360-person__btn", onClick: () => onAction?.({ kind: "run-task", label: labels.member_run, task }), children: labels.member_run }),
-      /* @__PURE__ */ jsx4("button", { className: "bf-btn bf-360-person__btn", onClick: () => onAction?.({ kind: "open-task", label: labels.member_open, task }), children: labels.member_open })
+    task && /* @__PURE__ */ jsxs5("div", { className: "bf-360-person__actions", children: [
+      (member.status === "idle" || member.status === "available") && member.kind !== "human" && /* @__PURE__ */ jsx5("button", { className: "bf-btn bf-360-person__btn", onClick: () => onAction?.({ kind: "run-task", label: labels.member_run, task }), children: labels.member_run }),
+      /* @__PURE__ */ jsx5("button", { className: "bf-btn bf-360-person__btn", onClick: () => onAction?.({ kind: "open-task", label: labels.member_open, task }), children: labels.member_open })
     ] })
   ] });
+}
+
+// src/projectList/ProjectListView.tsx
+import { useMemo as useMemo3 } from "react";
+
+// src/projectList/types.ts
+var DEFAULT_PROJECT_LIST_LABELS = {
+  refresh: "Refresh",
+  connecting: "Loading\u2026",
+  loadError: "Couldn't load this page",
+  empty: "Nothing here yet",
+  emptyHint: "",
+  items: "items"
+};
+
+// src/projectList/ProjectListView.tsx
+import { jsx as jsx6, jsxs as jsxs6 } from "react/jsx-runtime";
+function ProjectListView({ title, subtitle, data, loading, error, labels, onAction, onRefresh }) {
+  const L = useMemo3(() => ({ ...DEFAULT_PROJECT_LIST_LABELS, ...labels ?? {} }), [labels]);
+  const header = /* @__PURE__ */ jsxs6("header", { className: "bf-list-head", children: [
+    /* @__PURE__ */ jsxs6("div", { className: "bf-list-head__id", children: [
+      /* @__PURE__ */ jsx6("span", { className: "bf-list-head__title", children: title }),
+      data && /* @__PURE__ */ jsxs6("span", { className: "bf-list-head__count", children: [
+        data.total,
+        " ",
+        L.items
+      ] })
+    ] }),
+    subtitle && /* @__PURE__ */ jsx6("div", { className: "bf-list-head__sub", children: subtitle }),
+    /* @__PURE__ */ jsx6("div", { className: "bf-list-head__spacer" }),
+    onRefresh && /* @__PURE__ */ jsx6("button", { className: "bf-btn bf-btn--icon", title: L.refresh, "aria-label": L.refresh, onClick: onRefresh, children: "\u27F3" })
+  ] });
+  if (error) {
+    return /* @__PURE__ */ jsxs6("div", { className: "bf-list", children: [
+      header,
+      /* @__PURE__ */ jsxs6("div", { className: "bf-360-state", children: [
+        /* @__PURE__ */ jsx6("div", { className: "bf-360-state__title", children: L.loadError }),
+        /* @__PURE__ */ jsx6("div", { className: "bf-360-state__hint", children: error }),
+        onRefresh && /* @__PURE__ */ jsx6("button", { className: "bf-btn", onClick: onRefresh, children: L.refresh })
+      ] })
+    ] });
+  }
+  if (!data || loading) {
+    return /* @__PURE__ */ jsxs6("div", { className: "bf-list", children: [
+      header,
+      /* @__PURE__ */ jsxs6("div", { className: "bf-360-state", children: [
+        /* @__PURE__ */ jsx6("div", { className: "bf-360-spinner" }),
+        L.connecting
+      ] })
+    ] });
+  }
+  if (data.total === 0) {
+    return /* @__PURE__ */ jsxs6("div", { className: "bf-list", children: [
+      header,
+      /* @__PURE__ */ jsxs6("div", { className: "bf-360-state", children: [
+        /* @__PURE__ */ jsx6("div", { className: "bf-360-state__title", children: L.empty }),
+        L.emptyHint && /* @__PURE__ */ jsx6("div", { className: "bf-360-state__hint", children: L.emptyHint })
+      ] })
+    ] });
+  }
+  return /* @__PURE__ */ jsxs6("div", { className: "bf-list", children: [
+    header,
+    data.groups.filter((g) => g.items.length > 0).map((g) => /* @__PURE__ */ jsxs6("section", { className: "bf-list-group", children: [
+      /* @__PURE__ */ jsxs6("h3", { className: "bf-list-group__title", children: [
+        /* @__PURE__ */ jsx6("span", { className: `bf-list-group__dot bf-list-tone--${g.tone ?? "default"}`, "aria-hidden": true }),
+        g.label,
+        /* @__PURE__ */ jsx6("span", { className: "bf-360-section__count", children: g.items.length })
+      ] }),
+      /* @__PURE__ */ jsx6("ul", { className: "bf-list-rows", children: g.items.map((it) => /* @__PURE__ */ jsx6(Row, { item: it, onAction }, it.id)) })
+    ] }, g.key))
+  ] });
+}
+function Row({ item, onAction }) {
+  const act = item.action;
+  const clickable = !!act && !!onAction;
+  return /* @__PURE__ */ jsx6("li", { className: "bf-list-row", children: /* @__PURE__ */ jsxs6(
+    "button",
+    {
+      className: "bf-list-row__main",
+      disabled: !clickable,
+      onClick: clickable ? () => onAction(act) : void 0,
+      title: clickable ? act.label : void 0,
+      children: [
+        item.key && /* @__PURE__ */ jsx6("span", { className: "bf-list-row__key", children: item.key }),
+        /* @__PURE__ */ jsxs6("span", { className: "bf-list-row__body", children: [
+          /* @__PURE__ */ jsx6("span", { className: "bf-list-row__title", children: item.title }),
+          item.subtitle && /* @__PURE__ */ jsx6("span", { className: "bf-list-row__sub", children: item.subtitle })
+        ] }),
+        item.badges && item.badges.length > 0 && /* @__PURE__ */ jsx6("span", { className: "bf-list-row__badges", children: item.badges.map((b, i) => /* @__PURE__ */ jsx6("span", { className: `bf-list-badge bf-list-tone--${b.tone ?? "default"}`, children: b.label }, i)) })
+      ]
+    }
+  ) });
 }
 export {
   BrainTimeline,
   DEFAULT_PROJECT360_LABELS,
+  DEFAULT_PROJECT_LIST_LABELS,
   DEFAULT_TIMELINE_LABELS,
+  HealthRing,
   Markdown,
   Project360View,
+  ProjectListView,
   Sunburst,
   attachmentsOf,
   buildTimeline,
   formatDuration,
-  formatPayload
+  formatPayload,
+  healthRingColor
 };
 //# sourceMappingURL=index.mjs.map
