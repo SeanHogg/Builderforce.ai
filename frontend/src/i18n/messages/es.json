@@ -216,7 +216,10 @@
       "settings": "Ajustes",
       "admin": "Administración",
       "knowledge": "Conocimiento",
-      "quality": "Calidad"
+      "quality": "Calidad",
+      "myProfile": "Mi perfil",
+      "findWork": "Buscar trabajo",
+      "timecard": "Hoja de horas"
     },
     "tab": {
       "projects": "Proyectos",
@@ -4671,5 +4674,124 @@
     "member_run": "Ejecutar",
     "member_open": "Abrir",
     "improveSeedIntro": "Esta es la revisión de estado Proyecto 360 de mi proyecto. Ayúdame a resolver estas brechas, empezando por las de mayor impacto."
+  },
+  "freelancer": {
+    "loading": "Cargando…",
+    "loadFailed": "No se pudo cargar tu perfil.",
+    "save": "Guardar",
+    "saving": "Guardando…",
+    "saved": "Guardado",
+    "discipline": {
+      "developer": "Desarrollador",
+      "dba": "DBA",
+      "designer": "Diseñador",
+      "devops": "DevOps",
+      "qa": "QA",
+      "pm": "Jefe de proyecto",
+      "data": "Datos",
+      "security": "Seguridad",
+      "other": "Otro"
+    },
+    "availability": {
+      "open": "Disponible",
+      "limited": "Limitada",
+      "unavailable": "No disponible"
+    },
+    "visibility": {
+      "public": "Público",
+      "private": "Privado",
+      "publicHint": "Cualquiera puede ver tus datos completos.",
+      "privateHint": "Solo los miembros registrados pueden ver tus datos."
+    },
+    "status": {
+      "invited": "Invitado",
+      "interviewing": "Entrevistando",
+      "active": "Activo",
+      "declined": "Rechazado",
+      "terminated": "Finalizado"
+    },
+    "profile": {
+      "title": "Perfil disponible",
+      "subtitle": "Tu perfil público en el mercado de talento.",
+      "headline": "Titular",
+      "headlinePlaceholder": "Ingeniero full-stack sénior, 10 años",
+      "discipline": "Disciplina",
+      "availability": "Disponibilidad",
+      "bio": "Acerca de",
+      "bioPlaceholder": "Cuenta a los empleadores sobre tu experiencia…",
+      "skills": "Habilidades",
+      "skillsPlaceholder": "TypeScript, PostgreSQL, React (separadas por comas)",
+      "rate": "Tarifa por hora",
+      "currency": "Moneda",
+      "location": "Ubicación",
+      "visibility": "Visibilidad",
+      "publish": "Listarme en el mercado"
+    },
+    "resume": {
+      "title": "Currículum",
+      "subtitle": "Subido a hired.video y mostrado en el visor integrado.",
+      "upload": "Subir currículum",
+      "replace": "Reemplazar currículum",
+      "uploading": "Subiendo…",
+      "viewerTitle": "Visor de currículum",
+      "viewerPending": "Tu currículum está siendo procesado por hired.video.",
+      "viewerNotConnected": "Conecta hired.video para mostrar tu currículum integrado.",
+      "claimHiredVideo": "Reclama tu cuenta de hired.video"
+    },
+    "gigs": {
+      "title": "Buscar trabajo",
+      "subtitle": "Tus contrataciones y los espacios donde puedes trabajar.",
+      "empty": "Aún no tienes contrataciones. Publica tu perfil para que te contraten.",
+      "workspace": "Espacio",
+      "rate": "Tarifa",
+      "since": "Desde"
+    },
+    "timecard": {
+      "title": "Hoja de horas",
+      "subtitle": "Tus horas registradas, calculadas desde tu actividad, listas para aprobación.",
+      "today": "Hoy",
+      "active": "activo",
+      "actions": "acciones",
+      "noActivity": "Aún no se ha capturado actividad hoy.",
+      "thisWeek": "Calcular esta semana",
+      "resolveWeek": "Calcular semana",
+      "resolving": "Calculando…",
+      "history": "Hojas de horas",
+      "empty": "Aún no hay hojas de horas. Calcula una semana para crear una.",
+      "billable": "facturable",
+      "submit": "Enviar",
+      "resolving2": "Calculando…",
+      "status": {
+        "draft": "Borrador",
+        "submitted": "Enviada",
+        "approved": "Aprobada",
+        "rejected": "Rechazada",
+        "paid": "Pagada"
+      }
+    }
+  },
+  "talent": {
+    "title": "Mercado de talento",
+    "subtitle": "Contrata freelancers verificados: desarrolladores, DBA, diseñadores y más.",
+    "empty": "Aún no hay freelancers listados.",
+    "perHour": "/h",
+    "viewProfile": "Ver perfil",
+    "signInToView": "Inicia sesión para ver perfiles privados.",
+    "back": "Volver al talento",
+    "hire": "Contratar",
+    "interview": "Entrevistar",
+    "hiring": "Contratando…",
+    "hired": "Contratado",
+    "invited": "Entrevista solicitada",
+    "hireError": "No se pudo contratar. Asegúrate de tener un espacio seleccionado.",
+    "resumeTitle": "Currículum",
+    "noResume": "No hay currículum disponible.",
+    "signInForResume": "Inicia sesión para ver este currículum.",
+    "about": "Acerca de",
+    "skills": "Habilidades",
+    "rate": "Tarifa",
+    "location": "Ubicación",
+    "availability": "Disponibilidad",
+    "private": "Perfil privado"
   }
 }

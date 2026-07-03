@@ -84,5 +84,15 @@
   "Select workspace": "选择工作区",
   "Switch Workspace": "切换工作区",
   "Switch or create a workspace": "切换或创建工作区",
-  "Change Project": "切换项目"
+  "Change Project": "切换项目",
+  "OKR": "OKR",
+  "OKR objective — {0}% complete": "OKR 目标 — 完成 {0}%",
+  "Promote to OKR objective": "提升为 OKR 目标",
+  "Convert to task": "转换为任务",
+  "Convert to epic": "转换为史诗",
+  "Change type — {0}": "更改类型 — {0}",
+  "Promote this item to an OKR objective? Its child tasks are re-linked to the new objective and it leaves the board.": "将此项提升为 OKR 目标？其子任务将重新链接到新目标，并从看板中移除。",
+  "Promote": "提升",
+  "BuilderForce: could not change the item's type.": "BuilderForce：无法更改该项的类型。",
+  "BuilderForce: {0} → {1}": "BuilderForce：{0} → {1}"
 }

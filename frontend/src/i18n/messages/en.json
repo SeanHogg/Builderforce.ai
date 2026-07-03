@@ -216,7 +216,10 @@
       "settings": "Settings",
       "admin": "Admin",
       "knowledge": "Knowledge",
-      "quality": "Quality"
+      "quality": "Quality",
+      "myProfile": "My Profile",
+      "findWork": "Find Work",
+      "timecard": "Timecard"
     },
     "tab": {
       "projects": "Projects",
@@ -4671,5 +4674,124 @@
     "member_run": "Run",
     "member_open": "Open",
     "improveSeedIntro": "Here is my project’s Project 360 health check. Help me work through these gaps, highest impact first."
+  },
+  "freelancer": {
+    "loading": "Loading…",
+    "loadFailed": "Could not load your profile.",
+    "save": "Save",
+    "saving": "Saving…",
+    "saved": "Saved",
+    "discipline": {
+      "developer": "Developer",
+      "dba": "DBA",
+      "designer": "Designer",
+      "devops": "DevOps",
+      "qa": "QA",
+      "pm": "Project Manager",
+      "data": "Data",
+      "security": "Security",
+      "other": "Other"
+    },
+    "availability": {
+      "open": "Open to work",
+      "limited": "Limited",
+      "unavailable": "Unavailable"
+    },
+    "visibility": {
+      "public": "Public",
+      "private": "Private",
+      "publicHint": "Anyone can view your full details.",
+      "privateHint": "Only signed-in members can view your details."
+    },
+    "status": {
+      "invited": "Invited",
+      "interviewing": "Interviewing",
+      "active": "Active",
+      "declined": "Declined",
+      "terminated": "Ended"
+    },
+    "profile": {
+      "title": "For-hire profile",
+      "subtitle": "Your public profile in the talent marketplace.",
+      "headline": "Headline",
+      "headlinePlaceholder": "Senior full-stack engineer, 10 yrs",
+      "discipline": "Discipline",
+      "availability": "Availability",
+      "bio": "About",
+      "bioPlaceholder": "Tell employers about your experience…",
+      "skills": "Skills",
+      "skillsPlaceholder": "TypeScript, PostgreSQL, React (comma-separated)",
+      "rate": "Hourly rate",
+      "currency": "Currency",
+      "location": "Location",
+      "visibility": "Visibility",
+      "publish": "List me in the marketplace"
+    },
+    "resume": {
+      "title": "Résumé",
+      "subtitle": "Uploaded to hired.video and shown in the embedded viewer.",
+      "upload": "Upload résumé",
+      "replace": "Replace résumé",
+      "uploading": "Uploading…",
+      "viewerTitle": "Résumé viewer",
+      "viewerPending": "Your résumé is being processed by hired.video.",
+      "viewerNotConnected": "Connect hired.video to show your embedded résumé.",
+      "claimHiredVideo": "Claim your hired.video account"
+    },
+    "gigs": {
+      "title": "Find work",
+      "subtitle": "Your engagements and the workspaces you can work in.",
+      "empty": "No engagements yet. Publish your profile so employers can hire you.",
+      "workspace": "Workspace",
+      "rate": "Rate",
+      "since": "Since"
+    },
+    "timecard": {
+      "title": "Timecard",
+      "subtitle": "Your tracked hours, resolved from your activity, ready for approval.",
+      "today": "Today",
+      "active": "active",
+      "actions": "actions",
+      "noActivity": "No activity captured yet today.",
+      "thisWeek": "Resolve this week",
+      "resolveWeek": "Resolve week",
+      "resolving": "Resolving…",
+      "history": "Timecards",
+      "empty": "No timecards yet. Resolve a week to create one.",
+      "billable": "billable",
+      "submit": "Submit",
+      "resolving2": "Resolving…",
+      "status": {
+        "draft": "Draft",
+        "submitted": "Submitted",
+        "approved": "Approved",
+        "rejected": "Rejected",
+        "paid": "Paid"
+      }
+    }
+  },
+  "talent": {
+    "title": "Talent marketplace",
+    "subtitle": "Hire vetted freelancers — developers, DBAs, designers and more.",
+    "empty": "No freelancers are listed yet.",
+    "perHour": "/hr",
+    "viewProfile": "View profile",
+    "signInToView": "Sign in to view private profiles.",
+    "back": "Back to talent",
+    "hire": "Hire",
+    "interview": "Interview",
+    "hiring": "Hiring…",
+    "hired": "Hired",
+    "invited": "Interview requested",
+    "hireError": "Could not hire. Make sure you have a workspace selected.",
+    "resumeTitle": "Résumé",
+    "noResume": "No résumé available.",
+    "signInForResume": "Sign in to view this résumé.",
+    "about": "About",
+    "skills": "Skills",
+    "rate": "Rate",
+    "location": "Location",
+    "availability": "Availability",
+    "private": "Private profile"
   }
 }

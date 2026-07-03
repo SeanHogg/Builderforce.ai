@@ -4,6 +4,14 @@
 
 ---
 
+### 🌳 VS Code Project tree: OKR/objective tier + "Needs attention" filter + right-click type conversion (shipped VSIX 2026.7.8) — ✅ RESOLVED
+
+The Project & Tasks sidebar (`clients/vscode/src/projectsTree.ts`) now shows **all levels and types** in Hierarchy mode: the project's OKR **Objectives** lead as top nodes (icon `$(target)`, `title · NN%`), each owning the epics/tasks that deliver it, which then nest their own children via `parentTaskId` — Objective → Epic → task → subtask. Objectives + links come from the project rollup (`GET /api/pmo/rollup?kind=project&id=`, read-through cached) via a new `listProjectObjectives` in `bfApi.ts`; a claimed-id set prevents an objective-owned task from also appearing in the loose list, so every item shows once. A shared `taskNeedsAttention(task, now)` predicate (blocked · overdue by `dueDate` · stale > 14d by `updatedAt` — both fields now on `BfTask`) drives a **paired "Needs attention" toolbar toggle** (`projectFilterAttentionOn/Off`, when-clause `builderforce.projectNeedsAttention`) plus a ⚠ badge on at-risk rows. A **right-click "Change type"** action (`convertTaskType`, `view/item/context`) calls the new `POST /api/tasks/:id/convert-type` to flip task⇄epic or promote an epic to a real OKR. Commands + menus + `package.nls.*` titles added in all 5 locales; extension `tsc` clean; packaged to `builderforce-ai-2026.7.8.vsix`.
+
+**Follow-up shipped (VSIX 2026.7.9):** the **"Assigned to me" filter** + full runtime l10n. The earlier "blocked on identity" call was wrong — the editor's key-exchanged JWT already carries the human `userId` (`vscodeRoutes.ts` uses `c.get('userId')`). Added `GET /api/vscode/me` (returns the caller's userId), `bfApi.getCurrentUserId` (session-cached, cleared on sign-out), and a paired `projectFilterMineOn/Off` toolbar toggle filtering `task.assignedUserId === me` (degrades to a no-op if `/me` 404s). Also translated the new runtime `vscode.l10n.t()` strings (convert type, "OKR", attention/percent) in all 5 `l10n/bundle.l10n.*.json`. Extension `tsc` clean; packaged to `builderforce-ai-2026.7.9.vsix`. NOTE: `/api/vscode/me` can't deploy until two UNRELATED concurrent-edit breakages in `api/` are fixed (duplicate `timeEntries`, missing `@seanhogg/hired-video-sdk` — logged to ROADMAP).
+
+---
+
 ### 🔀 Convert a work-item's TYPE across the board ⇄ OKR boundary (task ⇄ epic ⇄ objective) (2026-07-03) — ✅ RESOLVED
 
 **Reported:** items named "OKR 1–5" showed on the board as **Epics**, not real OKRs — so they never appeared on the OKRs tab and never satisfied a project's 360 "Direction" (they're the wrong TYPE). Need a way to change a work-item's type, including as an MCP.

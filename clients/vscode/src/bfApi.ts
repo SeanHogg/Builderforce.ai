@@ -22,6 +22,22 @@ export interface BfTask {
   /** Parent epic's id (null/undefined for top-level tasks) — the nesting edge for
    *  the Hierarchy view (mirrors the API's `parentTaskId`). */
   parentTaskId?: number | null;
+  /** Last-touched timestamp + due date (ISO) — drive the "Needs attention" filter
+   *  (stale / overdue). Present in the API's `toPlain()` payload. */
+  updatedAt?: string | null;
+  dueDate?: string | null;
+}
+
+/** A project-scoped OKR Objective + the board items that deliver it — the top tier
+ *  of the Hierarchy view (Objective → Epic → task → subtask). Sourced from the
+ *  project rollup (`GET /api/pmo/rollup?kind=project`). */
+export interface BfObjective {
+  id: string;
+  title: string;
+  progress: number;
+  status?: string;
+  /** Ids of the tasks/epics linked to this objective (its delivery lineage). */
+  linkedTaskIds: number[];
 }
 
 /** The terminal task status. Single source of truth for "done" across surfaces
@@ -155,6 +171,28 @@ export function clearJwt(): void {
   scopedJwt = undefined;
   rescopeUnsupported = false;
   workspaceCache = undefined;
+  currentUserId = undefined;
+}
+
+// The signed-in human's user id (from GET /api/vscode/me), cached for the session so
+// the "assigned to me" task filter doesn't refetch. `null` = resolved-but-unavailable
+// (older API); undefined = not yet fetched. Cleared on sign-out via clearJwt.
+let currentUserId: string | null | undefined;
+
+/**
+ * The signed-in user's id — for the "Assigned to me" task filter. Cached; returns
+ * null when the identity endpoint isn't reachable (older API), so the caller can
+ * degrade the filter to a no-op rather than hide everything.
+ */
+export async function getCurrentUserId(secrets: vscode.SecretStorage): Promise<string | null> {
+  if (currentUserId !== undefined) return currentUserId;
+  try {
+    const r = await authed<{ userId?: string }>(secrets, "/api/vscode/me");
+    currentUserId = r?.userId ?? null;
+  } catch {
+    currentUserId = null;
+  }
+  return currentUserId;
 }
 
 // The active workspace's {id, name}, cached until the workspace changes / sign-out.
@@ -355,6 +393,65 @@ export function invalidateTasks(projectId?: number): void {
   else taskCache.delete(projectId);
 }
 
+// Project-scoped OKR objectives, cached briefly like tasks so the Hierarchy view's
+// top tier doesn't refetch on every expand. Keyed by project id.
+const objectiveCache = new Map<number, { ts: number; objectives: BfObjective[] }>();
+
+/**
+ * The project's OKR Objectives + their delivery links — the top tier of the
+ * Hierarchy view. Reads the composed project rollup (already read-through cached
+ * server-side, 60s). Degrades to [] when the rollup isn't reachable (older API /
+ * not a manager), so the tree still renders its board items.
+ */
+export async function listProjectObjectives(
+  secrets: vscode.SecretStorage,
+  projectId: number,
+  force = false,
+): Promise<BfObjective[]> {
+  const cached = objectiveCache.get(projectId);
+  if (!force && cached && Date.now() - cached.ts < TASKS_TTL) return cached.objectives;
+  try {
+    const r = await authed<{
+      okr?: { objectives?: Array<{ id: string; title: string; progress: number; status?: string; links?: Array<{ kind: string; refId: string }> }> };
+    }>(secrets, `/api/pmo/rollup?kind=project&id=${projectId}`);
+    const objectives: BfObjective[] = (r?.okr?.objectives ?? []).map((o) => ({
+      id: o.id,
+      title: o.title,
+      progress: o.progress ?? 0,
+      status: o.status,
+      linkedTaskIds: (o.links ?? [])
+        .filter((l) => l.kind === "task" || l.kind === "epic")
+        .map((l) => Number(l.refId))
+        .filter((n) => Number.isFinite(n)),
+    }));
+    objectiveCache.set(projectId, { ts: Date.now(), objectives });
+    return objectives;
+  } catch {
+    return [];
+  }
+}
+
+export function invalidateObjectives(projectId?: number): void {
+  if (projectId == null) objectiveCache.clear();
+  else objectiveCache.delete(projectId);
+}
+
+/** Change a board item's type — task⇄epic, or promote it to an OKR Objective
+ *  ('objective'). Server re-links children + scopes the new objective to the
+ *  project. Returns false on failure so the caller can surface an error. */
+export async function convertTaskType(
+  secrets: vscode.SecretStorage,
+  id: number,
+  target: "task" | "epic" | "objective",
+): Promise<boolean> {
+  try {
+    await authed(secrets, `/api/tasks/${id}/convert-type`, { method: "POST", body: JSON.stringify({ target }) });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 /** A server-side Brain conversation (GET /api/brain/chats). The SAME unified chat
  *  store the web app and the in-editor Brain webview share. */
 export interface BfBrainChat {
@@ -405,6 +502,35 @@ export async function updateTaskStatus(
 ): Promise<void> {
   // Partial merge on the server — only status changes (and triggers lane automation).
   await authed(secrets, `/api/tasks/${id}`, { method: "PATCH", body: JSON.stringify({ status }) });
+}
+
+/** One activity signal the VSIX reports for the billable-timecard pipeline. */
+export interface VsixActivitySignal {
+  kind: string;
+  ref?: string;
+  weight?: number;
+  durationSeconds?: number;
+  projectId?: number;
+  occurredAt?: string;
+  metadata?: unknown;
+}
+
+/**
+ * Push a batch of audited "click sense" signals from the editor (source 'vscode').
+ * Best-effort: capture must never disrupt the editor, so errors are swallowed. The
+ * server attributes each signal to the signed-in user + active tenant and resolves
+ * it into billable time (see api/src/presentation/routes/activityRoutes.ts).
+ */
+export async function postActivitySignals(
+  secrets: vscode.SecretStorage,
+  signals: VsixActivitySignal[],
+): Promise<void> {
+  if (signals.length === 0) return;
+  try {
+    await authed(secrets, `/api/activity/ingest`, { method: "POST", body: JSON.stringify({ signals }) });
+  } catch {
+    /* best-effort activity capture */
+  }
 }
 
 /**

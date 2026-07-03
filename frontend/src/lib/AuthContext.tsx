@@ -35,7 +35,7 @@ interface AuthContextValue {
   isAuthenticated: boolean;
   hasTenant: boolean;
   login: (email: string, password: string) => Promise<void>;
-  register: (email: string, password: string, name: string | undefined, agreeToTerms: boolean) => Promise<void>;
+  register: (email: string, password: string, name: string | undefined, agreeToTerms: boolean, accountType?: 'standard' | 'freelancer') => Promise<void>;
   selectTenant: (tenant: Tenant) => Promise<void>;
   fetchTenants: () => Promise<Tenant[]>;
   logout: () => void;
@@ -72,8 +72,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const register = useCallback(
-    async (email: string, password: string, name: string | undefined, agreeToTerms: boolean) => {
-      const res = await apiRegister(email, password, name, agreeToTerms);
+    async (email: string, password: string, name: string | undefined, agreeToTerms: boolean, accountType?: 'standard' | 'freelancer') => {
+      const res = await apiRegister(email, password, name, agreeToTerms, accountType);
       setWebToken(res.token);
       setUser(res.user);
       persistSession(res.token, res.user);

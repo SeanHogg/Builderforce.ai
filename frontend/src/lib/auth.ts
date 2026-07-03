@@ -220,12 +220,13 @@ export async function register(
   email: string,
   password: string,
   name: string | undefined,
-  agreeToTerms: boolean
+  agreeToTerms: boolean,
+  accountType?: 'standard' | 'freelancer'
 ): Promise<RegisterResponse> {
   const res = await fetch(`${AUTH_API_URL}/api/auth/web/register`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email, password, name, agreeToTerms }),
+    body: JSON.stringify({ email, password, name, agreeToTerms, accountType }),
   });
   if (!res.ok) {
     const body = await res.json().catch(() => ({})) as { message?: string };

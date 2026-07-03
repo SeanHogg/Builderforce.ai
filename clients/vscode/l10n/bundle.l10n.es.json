@@ -84,5 +84,15 @@
   "Select workspace": "Seleccionar espacio de trabajo",
   "Switch Workspace": "Cambiar de espacio de trabajo",
   "Switch or create a workspace": "Cambiar o crear un espacio de trabajo",
-  "Change Project": "Cambiar de proyecto"
+  "Change Project": "Cambiar de proyecto",
+  "OKR": "OKR",
+  "OKR objective — {0}% complete": "Objetivo OKR: {0}% completado",
+  "Promote to OKR objective": "Promover a objetivo OKR",
+  "Convert to task": "Convertir en tarea",
+  "Convert to epic": "Convertir en épica",
+  "Change type — {0}": "Cambiar tipo — {0}",
+  "Promote this item to an OKR objective? Its child tasks are re-linked to the new objective and it leaves the board.": "¿Promover este elemento a un objetivo OKR? Sus tareas secundarias se vinculan al nuevo objetivo y sale del tablero.",
+  "Promote": "Promover",
+  "BuilderForce: could not change the item's type.": "BuilderForce: no se pudo cambiar el tipo del elemento.",
+  "BuilderForce: {0} → {1}": "BuilderForce: {0} → {1}"
 }

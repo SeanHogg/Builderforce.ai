@@ -125,6 +125,7 @@ export interface WebJwtPayload {
   email:    string;
   username: string;
   sa?:      boolean;  // true only for superadmins
+  act?:     string;   // account_type ('freelancer' | 'standard'); omitted for standard
   jti?:     string;
   sid?:     string;
   mfa?:     boolean;

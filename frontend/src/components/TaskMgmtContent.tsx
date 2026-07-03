@@ -35,6 +35,7 @@ import {
 import { BoardConfigPanel } from './board/BoardConfigPanel';
 import { AgentChip, ACTIVE_EXECUTION_STATUSES } from './board/AgentChip';
 import { SwimlaneTriageButton } from './board/SwimlaneTriageButton';
+import { trackActivity } from '@/lib/activity/tracker';
 import { TeamMemberAvatarFilter } from './board/TeamMemberAvatarFilter';
 import { useBoardConfig } from './board/useBoardConfig';
 import { useBoardLiveRuns } from './board/useBoardLiveRuns';
@@ -628,6 +629,9 @@ export function TaskMgmtContent({
       const updated = await tasksApi.update(id, { status });
       setTasks((prev) => prev.map((i) => (i.id === updated.id ? updated : i)));
       if (drawerTask?.id === id) setDrawerTask(updated);
+      // Audited "click sense": moving a ticket between swimlanes is a billable
+      // engagement action (see activity tracker → timecard pipeline).
+      trackActivity('ticket_move', { ref: `task:${id}`, metadata: { status } });
       // The board "autonomous trigger" (auto-run a ticket entering a lane with a
       // configured cloud agent) is now decided SERVER-SIDE on the task PATCH — see
       // maybeAutoRunOnLaneEntry / decideLaneAutoRun in the api. The frontend no

@@ -227,6 +227,18 @@ body {
   outline-offset: -4px;
 }
 
+/* When the user is focused in / has typed into the composer, highlight the
+   whole section in BuilderForce blue. Clears back to the normal border when
+   the input is empty and unfocused. */
+.bf-composer--active {
+  border-top-color: var(--bf-accent);
+}
+
+.bf-composer--active .bf-input {
+  border-color: var(--bf-accent);
+  box-shadow: 0 0 0 1px var(--bf-accent);
+}
+
 .bf-attachments {
   display: flex;
   flex-wrap: wrap;
@@ -284,7 +296,7 @@ body {
 
 .bf-input:focus {
   outline: none;
-  border-color: var(--bf-border-strong);
+  border-color: var(--bf-accent);
 }
 
 .bf-composer__actions {

@@ -2,7 +2,7 @@
   "name": "builderforce-ai",
   "displayName": "BuilderForce.ai",
   "description": "%extension.description%",
-  "version": "2026.7.7",
+  "version": "2026.7.9",
   "publisher": "builderforce",
   "license": "MIT",
   "author": "Sean Hogg",
@@ -176,6 +176,31 @@
         "command": "builderforce.projectFilterStatus",
         "title": "%command.projectFilterStatus%",
         "icon": "$(filter)"
+      },
+      {
+        "command": "builderforce.projectFilterAttentionOn",
+        "title": "%command.projectFilterAttentionOn%",
+        "icon": "$(warning)"
+      },
+      {
+        "command": "builderforce.projectFilterAttentionOff",
+        "title": "%command.projectFilterAttentionOff%",
+        "icon": "$(filter-filled)"
+      },
+      {
+        "command": "builderforce.projectFilterMineOn",
+        "title": "%command.projectFilterMineOn%",
+        "icon": "$(account)"
+      },
+      {
+        "command": "builderforce.projectFilterMineOff",
+        "title": "%command.projectFilterMineOff%",
+        "icon": "$(account)"
+      },
+      {
+        "command": "builderforce.convertTaskType",
+        "title": "%command.convertTaskType%",
+        "icon": "$(type-hierarchy-sub)"
       },
       {
         "command": "builderforce.startTaskSession",
@@ -390,6 +415,26 @@
           "group": "1_arrange@3"
         },
         {
+          "command": "builderforce.projectFilterAttentionOn",
+          "when": "view == builderforce.project && !builderforce.projectNeedsAttention",
+          "group": "1_arrange@4"
+        },
+        {
+          "command": "builderforce.projectFilterAttentionOff",
+          "when": "view == builderforce.project && builderforce.projectNeedsAttention",
+          "group": "1_arrange@4"
+        },
+        {
+          "command": "builderforce.projectFilterMineOn",
+          "when": "view == builderforce.project && !builderforce.projectAssignedToMe",
+          "group": "1_arrange@5"
+        },
+        {
+          "command": "builderforce.projectFilterMineOff",
+          "when": "view == builderforce.project && builderforce.projectAssignedToMe",
+          "group": "1_arrange@5"
+        },
+        {
           "command": "builderforce.refreshInbox",
           "when": "view == builderforce.inbox",
           "group": "navigation@1"
@@ -420,6 +465,11 @@
           "command": "builderforce.setTaskStatus",
           "when": "view == builderforce.project && viewItem == builderforceTask",
           "group": "inline@3"
+        },
+        {
+          "command": "builderforce.convertTaskType",
+          "when": "view == builderforce.project && viewItem == builderforceTask",
+          "group": "9_modify@1"
         }
       ],
       "commandPalette": [
@@ -441,6 +491,10 @@
         },
         {
           "command": "builderforce.setTaskStatus",
+          "when": "false"
+        },
+        {
+          "command": "builderforce.convertTaskType",
           "when": "false"
         },
         {

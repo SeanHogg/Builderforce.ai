@@ -80,6 +80,8 @@ import { createArtifactAssignmentRoutes } from './presentation/routes/artifactAs
 import { createProjectAgentRoutes } from './presentation/routes/projectAgentRoutes';
 import { createMarketplaceStatsRoutes } from './presentation/routes/marketplaceStatsRoutes';
 import { createWorkforceRoutes }        from './presentation/routes/workforceRoutes';
+import { createFreelancerRoutes, createEngagementRoutes } from './presentation/routes/freelancerRoutes';
+import { createActivityRoutes, createTimecardRoutes } from './presentation/routes/activityRoutes';
 import { createLimbicRoutes }           from './presentation/routes/limbicRoutes';
 import { createPersonaRoutes }          from './presentation/routes/personaRoutes';
 import { createLlmRoutes }          from './presentation/routes/llmRoutes';
@@ -314,6 +316,14 @@ export function buildApp(env: Env): Hono<HonoEnv> {
 
   // Public workforce registry (browse published agents without login)
   app.route('/api/workforce', createWorkforceRoutes());
+
+  // Freelance worker marketplace: for-hire human profiles (public browse without
+  // login for public profiles), cross-tenant engagements (hire/interview/terminate),
+  // and the activity-signal → billable-timecard pipeline.
+  app.route('/api/freelancers', createFreelancerRoutes());
+  app.route('/api/engagements', createEngagementRoutes());
+  app.route('/api/activity', createActivityRoutes());
+  app.route('/api/timecards', createTimecardRoutes());
 
   // Limbic affective layer — serves the shared compiler's directive block to
   // clients that can't bundle it (the VS Code built-in agent).
