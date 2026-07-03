@@ -4,6 +4,16 @@
 
 ---
 
+### 🔀 Convert a work-item's TYPE across the board ⇄ OKR boundary (task ⇄ epic ⇄ objective) (2026-07-03) — ✅ RESOLVED
+
+**Reported:** items named "OKR 1–5" showed on the board as **Epics**, not real OKRs — so they never appeared on the OKRs tab and never satisfied a project's 360 "Direction" (they're the wrong TYPE). Need a way to change a work-item's type, including as an MCP.
+
+**Fix (full vertical slice):** one shared `convertWorkItemType` service (`api/src/application/workitem/convertWorkItemType.ts`) handles every transition: **task ⇄ epic** (a `tasks.task_type` flip), **task/epic → objective** (creates a project-scoped Objective — so the 360 counts it immediately via the 0268 `projectId` scope — re-links the item's child tasks as the objective's delivery links, deletes the board item), and **objective → task/epic** (creates a board item, re-parents the objective's task links under it, drops key results with a warning). It busts the tree / projects-list / PMO caches on every write. Exposed THREE ways off the one implementation: the **MCP tool** `work_items.convert_type` (`fromKind`/`id`/`toKind`/`projectId`), REST `POST /api/tasks/:id/convert-type` (board source) + `POST /api/pmo/objectives/:id/convert-type` (objective source, manager-gated), and the web UI — `EpicPanel` gains "Convert to OKR objective" / "Convert to task" (edit mode) and each objective card in `PmoOkrs` gains "Convert to epic". i18n `pm.convert*` / `pmo.okr.convertToEpic*` in all 5 catalogs. api + frontend typecheck clean; 48 MCP + PMO tests pass.
+
+**Follow-up logged (ROADMAP):** the VS Code Project sidebar should also render the OKR/objective tier as parent nodes (all types, >2 levels — data already in `GET /api/pmo/rollup?kind=project`) and gain "Needs attention" (stale/blocked/overdue) + "Assigned to me" filters — the latter BLOCKED on the extension having no signed-in human user id (workspace-key auth); needs a `/api/vscode/me`.
+
+---
+
 ### 🎯 Project 360 "Direction" ignored created OKRs — objectives gain a direct PROJECT scope (2026-07-03) — ✅ RESOLVED
 
 **Reported:** creating OKRs "for a project" via the Brain left the Project 360 panel still showing "No goal or OKR linked" (Direction stuck at 20). **Root cause:** the Brain's `objectives.create` was called with `projectId`, but that param was NOT in the tool's schema, so it was silently dropped — the objective was created with no portfolio, no initiative, no task link, and no project scope. The 360's `linkedGoalCount` only counted objectives linked via the project's TASKS (`linkKind='task'`) or its INITIATIVE, so a project-only OKR was invisible. Compounding it, NO objective/link write ever invalidated the projects-list cache the 360 reads, so even a correctly task-linked objective wouldn't refresh until the short TTL lapsed.
