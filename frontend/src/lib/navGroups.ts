@@ -166,6 +166,44 @@ export const NAV_GROUPS: NavGroup[] = [
   { id: 'admin', labelKey: 'group.admin', icon: '⚙', href: '/admin', match: ['/admin'], superadminOnly: true },
 ];
 
+/**
+ * The RESTRICTED navigation for a freelancer / gig account (users.account_type =
+ * 'freelancer'). A for-hire worker never sees the IDE, Brain, projects, insights,
+ * etc. — only their for-hire profile, the gigs they can bid on / are engaged with,
+ * their timecard, and account settings. Kept as its own list (not a filter of the
+ * builder nav) because it is a deliberately different, minimal destination set.
+ */
+export const FREELANCER_NAV_GROUPS: NavGroup[] = [
+  { id: 'freelancer-profile', labelKey: 'group.myProfile', icon: '👤', href: '/freelancer/profile', match: ['/freelancer/profile'] },
+  { id: 'freelancer-gigs', labelKey: 'group.findWork', icon: '🔎', href: '/freelancer/gigs', match: ['/freelancer/gigs'] },
+  { id: 'freelancer-timecard', labelKey: 'group.timecard', icon: '⏱', href: '/freelancer/timecard', match: ['/freelancer/timecard'] },
+  {
+    id: 'settings', labelKey: 'group.settings', icon: '⚙', href: '/security',
+    match: ['/settings', '/security'],
+    tabKind: 'route',
+    tabs: [
+      { id: '/security', labelKey: 'tab.security', icon: '🔒' },
+    ],
+  },
+];
+
+/** Route prefixes a freelancer account is allowed to reach in the app shell. Used
+ *  by both the nav (which groups to show) and the route guard (redirect away from
+ *  anything else). Public/marketing routes are handled separately by the shell. */
+export const FREELANCER_ALLOWED_PREFIXES = ['/freelancer', '/security', '/settings'];
+
+/** The nav destinations for the current account type — the ONE place the
+ *  freelancer-vs-builder nav split is decided, so the Sidebar + SectionTabs and
+ *  the route guard never drift. */
+export function navGroupsForAccountType(isFreelancer: boolean): NavGroup[] {
+  return isFreelancer ? FREELANCER_NAV_GROUPS : NAV_GROUPS;
+}
+
+/** Whether a freelancer account may view this in-app path (else redirect). */
+export function isFreelancerAllowedPath(pathname: string): boolean {
+  return FREELANCER_ALLOWED_PREFIXES.some((p) => pathname === p || pathname.startsWith(`${p}/`));
+}
+
 /** Longest-prefix match so /ide/dashboard resolves to IDE, /settings/api-keys to Settings, etc. */
 export function findActiveGroup(pathname: string): NavGroup | undefined {
   let best: NavGroup | undefined;

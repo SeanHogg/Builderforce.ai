@@ -1,5 +1,14 @@
 import * as vscode from "vscode";
-import { BfTask, DEFAULT_HIDE_DONE, getCurrentWorkspace, isDoneStatus, listTasks } from "./bfApi";
+import {
+  BfObjective,
+  BfTask,
+  DEFAULT_HIDE_DONE,
+  getCurrentUserId,
+  getCurrentWorkspace,
+  isDoneStatus,
+  listProjectObjectives,
+  listTasks,
+} from "./bfApi";
 import { SECRET_KEY } from "./gateway";
 import { getSelectedProject, onProjectChange } from "./projectState";
 
@@ -7,6 +16,32 @@ const HIDE_DONE_KEY = "builderforce.hideDoneTasks";
 const CONFIG_KEY = "builderforce.projectTreeConfig";
 // When-clause context key so the view/title shows the right Flat⇄Hierarchy icon.
 const HIERARCHY_CTX = "builderforce.projectHierarchy";
+// When-clause context key for the "Needs attention" filter toggle icon.
+const ATTENTION_CTX = "builderforce.projectNeedsAttention";
+// When-clause context key for the "Assigned to me" filter toggle icon.
+const MINE_CTX = "builderforce.projectAssignedToMe";
+// A ticket is "stale" (needs attention) once it hasn't moved in this many days.
+const STALE_DAYS = 14;
+const STALE_MS = STALE_DAYS * 24 * 60 * 60 * 1000;
+
+/**
+ * "Needs attention" predicate — shared by the filter and the row badge so both
+ * agree on what's at risk: blocked, past its due date, or gone stale (not touched
+ * in {@link STALE_DAYS} days). Done work never needs attention.
+ */
+export function taskNeedsAttention(task: BfTask, nowMs: number): boolean {
+  if (isDoneStatus(task.status)) return false;
+  if ((task.status ?? "").toLowerCase() === "blocked") return true;
+  if (task.dueDate) {
+    const due = Date.parse(task.dueDate);
+    if (Number.isFinite(due) && due < nowMs) return true;
+  }
+  if (task.updatedAt) {
+    const touched = Date.parse(task.updatedAt);
+    if (Number.isFinite(touched) && nowMs - touched > STALE_MS) return true;
+  }
+  return false;
+}
 
 export type ProjectGroupBy = "none" | "status" | "priority";
 export type ProjectSortBy = "status" | "priority" | "title" | "key";
@@ -20,14 +55,19 @@ interface TreeConfig {
   sortBy: ProjectSortBy;
   /** Show only these statuses; null = show all. Composes with the hide-done toggle. */
   statusFilter: string[] | null;
+  /** Show only tickets that need attention (blocked / overdue / stale). */
+  needsAttention: boolean;
+  /** Show only tickets assigned to the signed-in user. */
+  assignedToMe: boolean;
 }
 
-const DEFAULT_CONFIG: TreeConfig = { hierarchy: false, groupBy: "none", sortBy: "status", statusFilter: null };
+const DEFAULT_CONFIG: TreeConfig = { hierarchy: false, groupBy: "none", sortBy: "status", statusFilter: null, needsAttention: false, assignedToMe: false };
 
 type Node =
   | { kind: "workspace"; name?: string }
   | { kind: "project"; name: string }
   | { kind: "group"; label: string; groupKey: string; tasks: BfTask[] }
+  | { kind: "objective"; objective: BfObjective; tasks: BfTask[] }
   | { kind: "task"; task: BfTask; hasChildren: boolean }
   | { kind: "info"; label: string; command?: string };
 
@@ -79,6 +119,12 @@ export class ProjectsTreeProvider implements vscode.TreeDataProvider<Node> {
   /** Child-task lookup for the Hierarchy view, rebuilt on each root fetch (no N+1:
    *  listTasks is read-through cached in bfApi, so child lookups hit the cache). */
   private childrenByParent = new Map<number, BfTask[]>();
+  /** The project's OKR objectives (top tier of the Hierarchy view), fetched with the
+   *  task roots. Empty in Flat mode / when the rollup isn't reachable. */
+  private objectives: BfObjective[] = [];
+  /** The signed-in user's id (for the "Assigned to me" filter); null = unresolved,
+   *  so the filter degrades to a no-op rather than hiding everything. */
+  private currentUserId: string | null = null;
 
   constructor(private readonly ctx: vscode.ExtensionContext) {
     this.hideDone = ctx.globalState.get<boolean>(HIDE_DONE_KEY, DEFAULT_HIDE_DONE);
@@ -86,6 +132,8 @@ export class ProjectsTreeProvider implements vscode.TreeDataProvider<Node> {
     // Seed the menu when-clause contexts so the right toggle icons show on load.
     void vscode.commands.executeCommand("setContext", HIDE_DONE_KEY, this.hideDone);
     void vscode.commands.executeCommand("setContext", HIERARCHY_CTX, this.config.hierarchy);
+    void vscode.commands.executeCommand("setContext", ATTENTION_CTX, this.config.needsAttention);
+    void vscode.commands.executeCommand("setContext", MINE_CTX, this.config.assignedToMe);
     onProjectChange(() => this.refresh());
   }
 
@@ -105,11 +153,23 @@ export class ProjectsTreeProvider implements vscode.TreeDataProvider<Node> {
     this.config = { ...this.config, ...patch };
     void this.ctx.globalState.update(CONFIG_KEY, this.config);
     void vscode.commands.executeCommand("setContext", HIERARCHY_CTX, this.config.hierarchy);
+    void vscode.commands.executeCommand("setContext", ATTENTION_CTX, this.config.needsAttention);
+    void vscode.commands.executeCommand("setContext", MINE_CTX, this.config.assignedToMe);
     this.refresh();
   }
 
   setHierarchy(on: boolean): void {
     this.saveConfig({ hierarchy: on });
+  }
+
+  /** Toggle the "Needs attention" filter (blocked / overdue / stale). */
+  setNeedsAttention(on: boolean): void {
+    this.saveConfig({ needsAttention: on });
+  }
+
+  /** Toggle the "Assigned to me" filter (tasks owned by the signed-in user). */
+  setAssignedToMe(on: boolean): void {
+    this.saveConfig({ assignedToMe: on });
   }
 
   /** View-options entry points — each opens a quick-pick and persists the choice. */
@@ -207,12 +267,22 @@ export class ProjectsTreeProvider implements vscode.TreeDataProvider<Node> {
       item.contextValue = "builderforceTaskGroup";
       return item;
     }
+    if (node.kind === "objective") {
+      const o = node.objective;
+      const item = new vscode.TreeItem(o.title, vscode.TreeItemCollapsibleState.Expanded);
+      item.description = `${vscode.l10n.t("OKR")} · ${Math.round(o.progress)}%`;
+      item.tooltip = vscode.l10n.t("OKR objective — {0}% complete", Math.round(o.progress));
+      item.iconPath = new vscode.ThemeIcon("target");
+      item.contextValue = "builderforceObjective";
+      return item;
+    }
     const t = node.task;
     const collapsible = node.hasChildren
       ? vscode.TreeItemCollapsibleState.Collapsed
       : vscode.TreeItemCollapsibleState.None;
     const item = new vscode.TreeItem(`${t.key ? `${t.key} ` : ""}${t.title}`, collapsible);
-    item.description = t.status ?? "";
+    const attention = taskNeedsAttention(t, Date.now());
+    item.description = `${attention ? "⚠ " : ""}${t.status ?? ""}`;
     item.tooltip = t.description ?? t.title;
     item.iconPath = new vscode.ThemeIcon(t.taskType === "epic" ? "type-hierarchy" : iconForStatus(t.status));
     item.contextValue = "builderforceTask";
@@ -223,6 +293,8 @@ export class ProjectsTreeProvider implements vscode.TreeDataProvider<Node> {
   async getChildren(element?: Node): Promise<Node[]> {
     // Expand a group header → its tasks (already sorted at build time).
     if (element?.kind === "group") return element.tasks.map((task) => this.taskNode(task));
+    // Expand an OKR objective → the board items that deliver it (its top tier).
+    if (element?.kind === "objective") return this.sort(element.tasks).map((task) => this.taskNode(task));
     // Expand a task in Hierarchy view → its child tasks.
     if (element?.kind === "task") {
       if (!this.config.hierarchy) return [];
@@ -255,8 +327,17 @@ export class ProjectsTreeProvider implements vscode.TreeDataProvider<Node> {
     nodes.push({ kind: "project", name: project.name });
 
     try {
-      const tasks = await listTasks(this.ctx.secrets, project.id);
-      if (tasks.length === 0) {
+      // In Hierarchy mode, also load the project's OKR objectives (the top tier); when
+      // the "assigned to me" filter is on, resolve the signed-in user. All parallel;
+      // tasks + objectives are read-through cached, the user id is cached for the session.
+      const [tasks, objectives, userId] = await Promise.all([
+        listTasks(this.ctx.secrets, project.id),
+        this.config.hierarchy ? listProjectObjectives(this.ctx.secrets, project.id) : Promise.resolve([] as BfObjective[]),
+        this.config.assignedToMe ? getCurrentUserId(this.ctx.secrets) : Promise.resolve(null),
+      ]);
+      this.objectives = objectives;
+      this.currentUserId = userId;
+      if (tasks.length === 0 && objectives.length === 0) {
         nodes.push({ kind: "info", label: "No tasks in this project" });
         return nodes;
       }
@@ -272,7 +353,8 @@ export class ProjectsTreeProvider implements vscode.TreeDataProvider<Node> {
         }
       }
 
-      if (visible.length === 0) {
+      // Nothing to show — unless Hierarchy mode still has objectives to render.
+      if (visible.length === 0 && !(this.config.hierarchy && this.objectives.length > 0)) {
         nodes.push({ kind: "info", label: "No tasks match the current filter", command: "builderforce.projectFilterStatus" });
         return nodes;
       }
@@ -280,7 +362,23 @@ export class ProjectsTreeProvider implements vscode.TreeDataProvider<Node> {
       if (this.config.hierarchy) {
         // Top-level = no parent, or a parent hidden by the filter (so children aren't lost).
         const top = visible.filter((t) => t.parentTaskId == null || !visibleIds.has(t.parentTaskId));
-        nodes.push(...this.sort(top).map((task) => this.taskNode(task)));
+        // Top tier: the project's OKR objectives, each owning the top-level board items
+        // it links to (which then nest their own children below). A task claimed by an
+        // objective isn't repeated in the loose list — so every level + type shows once.
+        const byId = new Map(top.map((t) => [t.id, t]));
+        const claimed = new Set<number>();
+        const objectiveNodes: Node[] = [];
+        for (const o of this.objectives) {
+          const owned = o.linkedTaskIds
+            .map((tid) => byId.get(tid))
+            .filter((t): t is BfTask => t != null && !claimed.has(t.id));
+          owned.forEach((t) => claimed.add(t.id));
+          // Show the objective even with no visible owned items — it's still a goal.
+          objectiveNodes.push({ kind: "objective", objective: o, tasks: owned });
+        }
+        nodes.push(...objectiveNodes);
+        const loose = top.filter((t) => !claimed.has(t.id));
+        nodes.push(...this.sort(loose).map((task) => this.taskNode(task)));
       } else if (this.config.groupBy === "none") {
         nodes.push(...this.sort(visible).map((task) => this.taskNode(task)));
       } else {
@@ -298,12 +396,18 @@ export class ProjectsTreeProvider implements vscode.TreeDataProvider<Node> {
     return { kind: "task", task, hasChildren };
   }
 
-  /** Hide-done toggle + status filter, composed. */
+  /** Hide-done toggle + status filter + "needs attention" + "assigned to me", composed. */
   private applyFilters(tasks: BfTask[]): BfTask[] {
     const f = this.config.statusFilter;
+    const now = Date.now();
+    // Only enforce "assigned to me" once the user id is known — otherwise (older API)
+    // it degrades to a no-op instead of hiding the whole list.
+    const mine = this.config.assignedToMe && this.currentUserId ? this.currentUserId : null;
     return tasks.filter((t) => {
       if (this.hideDone && isDoneStatus(t.status)) return false;
       if (f && !f.includes((t.status ?? "").toLowerCase())) return false;
+      if (this.config.needsAttention && !taskNeedsAttention(t, now)) return false;
+      if (mine && t.assignedUserId !== mine) return false;
       return true;
     });
   }

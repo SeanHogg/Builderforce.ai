@@ -144,3 +144,20 @@ export function usePermission(cap: Capability): PermissionResult {
   const required = CAPABILITIES[cap];
   return { allowed: hasMinRole(role, required), role, required, requiredLabel: ROLE_LABEL[required] };
 }
+
+/**
+ * The current user's ACCOUNT TYPE. Distinct from workspace role: it's a GLOBAL
+ * property (a freelancer works across many tenants). 'freelancer' = a restricted
+ * gig/for-hire account that sees only the Profile / Find Work / Timecard shell.
+ * Undefined outside an AuthProvider so callers never crash the tree.
+ */
+export function useAccountType(): 'standard' | 'freelancer' | undefined {
+  const auth = useOptionalAuth();
+  return auth?.user?.accountType;
+}
+
+/** True when the signed-in user is a freelancer (restricted gig shell). The ONE
+ *  place this branch is decided, so nav/shell/route gating never drift. */
+export function useIsFreelancer(): boolean {
+  return useAccountType() === 'freelancer';
+}

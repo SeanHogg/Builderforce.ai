@@ -216,7 +216,10 @@
       "settings": "设置",
       "admin": "管理",
       "knowledge": "知识库",
-      "quality": "质量"
+      "quality": "质量",
+      "myProfile": "我的资料",
+      "findWork": "寻找工作",
+      "timecard": "工时卡"
     },
     "tab": {
       "projects": "项目",
@@ -4671,5 +4674,124 @@
     "member_run": "运行",
     "member_open": "打开",
     "improveSeedIntro": "这是我项目的“项目 360”健康检查。请帮我逐一解决这些缺口，从影响最大的开始。"
+  },
+  "freelancer": {
+    "loading": "加载中…",
+    "loadFailed": "无法加载您的资料。",
+    "save": "保存",
+    "saving": "保存中…",
+    "saved": "已保存",
+    "discipline": {
+      "developer": "开发者",
+      "dba": "数据库管理员",
+      "designer": "设计师",
+      "devops": "运维",
+      "qa": "测试",
+      "pm": "项目经理",
+      "data": "数据",
+      "security": "安全",
+      "other": "其他"
+    },
+    "availability": {
+      "open": "可接工作",
+      "limited": "有限",
+      "unavailable": "不可用"
+    },
+    "visibility": {
+      "public": "公开",
+      "private": "私密",
+      "publicHint": "任何人都可以查看您的完整信息。",
+      "privateHint": "仅登录成员可查看您的信息。"
+    },
+    "status": {
+      "invited": "已邀请",
+      "interviewing": "面试中",
+      "active": "进行中",
+      "declined": "已拒绝",
+      "terminated": "已结束"
+    },
+    "profile": {
+      "title": "可雇佣资料",
+      "subtitle": "您在人才市场中的公开资料。",
+      "headline": "标题",
+      "headlinePlaceholder": "资深全栈工程师，10 年经验",
+      "discipline": "专业",
+      "availability": "可用性",
+      "bio": "简介",
+      "bioPlaceholder": "向雇主介绍您的经验…",
+      "skills": "技能",
+      "skillsPlaceholder": "TypeScript、PostgreSQL、React（用逗号分隔）",
+      "rate": "时薪",
+      "currency": "货币",
+      "location": "所在地",
+      "visibility": "可见性",
+      "publish": "在市场中展示我"
+    },
+    "resume": {
+      "title": "简历",
+      "subtitle": "上传至 hired.video 并在嵌入式查看器中显示。",
+      "upload": "上传简历",
+      "replace": "替换简历",
+      "uploading": "上传中…",
+      "viewerTitle": "简历查看器",
+      "viewerPending": "您的简历正在由 hired.video 处理。",
+      "viewerNotConnected": "连接 hired.video 以显示嵌入式简历。",
+      "claimHiredVideo": "认领您的 hired.video 账户"
+    },
+    "gigs": {
+      "title": "寻找工作",
+      "subtitle": "您的合作项目以及可参与的工作区。",
+      "empty": "暂无合作。发布您的资料，让雇主可以雇用您。",
+      "workspace": "工作区",
+      "rate": "费率",
+      "since": "始于"
+    },
+    "timecard": {
+      "title": "工时卡",
+      "subtitle": "根据您的活动生成的已跟踪工时，等待审批。",
+      "today": "今天",
+      "active": "活跃",
+      "actions": "操作",
+      "noActivity": "今天尚未捕获任何活动。",
+      "thisWeek": "结算本周",
+      "resolveWeek": "结算本周",
+      "resolving": "结算中…",
+      "history": "工时卡",
+      "empty": "暂无工时卡。结算一周以创建。",
+      "billable": "可计费",
+      "submit": "提交",
+      "resolving2": "结算中…",
+      "status": {
+        "draft": "草稿",
+        "submitted": "已提交",
+        "approved": "已批准",
+        "rejected": "已拒绝",
+        "paid": "已付款"
+      }
+    }
+  },
+  "talent": {
+    "title": "人才市场",
+    "subtitle": "雇用经过审核的自由职业者——开发者、数据库管理员、设计师等。",
+    "empty": "暂无自由职业者展示。",
+    "perHour": "/小时",
+    "viewProfile": "查看资料",
+    "signInToView": "登录以查看私密资料。",
+    "back": "返回人才",
+    "hire": "雇用",
+    "interview": "面试",
+    "hiring": "雇用中…",
+    "hired": "已雇用",
+    "invited": "已请求面试",
+    "hireError": "无法雇用。请确保已选择工作区。",
+    "resumeTitle": "简历",
+    "noResume": "暂无简历。",
+    "signInForResume": "登录以查看此简历。",
+    "about": "简介",
+    "skills": "技能",
+    "rate": "费率",
+    "location": "所在地",
+    "availability": "可用性",
+    "private": "私密资料"
   }
 }

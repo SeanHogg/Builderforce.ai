@@ -20,10 +20,14 @@ import { DevexPanelBrainBridge } from './insights/DevexPanelBrainBridge';
 import { CanvasPanelProvider } from './canvas/CanvasPanelProvider';
 import { CanvasPanelBrainBridge } from './canvas/CanvasPanelBrainBridge';
 import { FloatingBrain } from './brain/FloatingBrain';
+import ActivityTracker from './ActivityTracker';
 import { McpExtensionsBridge } from './brain/McpExtensionsBridge';
 import { PlatformActionsBridge } from './brain/PlatformActionsBridge';
 import { useAuth } from '@/lib/AuthContext';
-import { findActiveGroup } from '@/lib/navGroups';
+import { useIsFreelancer } from '@/lib/rbac';
+import { findActiveGroup, isFreelancerAllowedPath } from '@/lib/navGroups';
+import { useRouter } from 'next/navigation';
+import { useEffect } from 'react';
 
 const FOOTER_ONLY_PATHS = ['/login', '/register'];
 
@@ -37,7 +41,7 @@ const NO_CHROME_PREFIXES = ['/embed', '/webcontainer', '/auth/'];
 // no-chrome / footer-only) defaults to the authenticated app shell, so a new
 // authed page gets correct chrome without being added to a list [1557]. Keep
 // this list current as marketing/public routes are added.
-const PUBLIC_SHELL_PREFIXES = ['/product', '/blog', '/agents', '/pricing', '/compare', '/marketplace', '/prompts', '/models', '/integrations', '/diagnostics', '/tools', '/evermind'];
+const PUBLIC_SHELL_PREFIXES = ['/product', '/blog', '/agents', '/pricing', '/compare', '/marketplace', '/talent', '/prompts', '/models', '/integrations', '/diagnostics', '/tools', '/evermind'];
 
 export type ShellKind = 'none' | 'footer' | 'public' | 'app';
 
@@ -149,9 +153,32 @@ function EmbedShell({ children }: { children: React.ReactNode }) {
   );
 }
 
+/**
+ * Redirects a freelancer/gig account away from any builder-app route they aren't
+ * allowed to see (IDE, projects, insights, …) to their profile. Renders nothing —
+ * the nav already hides those destinations; this closes deep links. Standard
+ * accounts are unaffected.
+ */
+function FreelancerRouteGuard() {
+  const isFreelancer = useIsFreelancer();
+  const { isAuthenticated } = useAuth();
+  const pathname = usePathname() || '';
+  const router = useRouter();
+  useEffect(() => {
+    if (!isAuthenticated || !isFreelancer) return;
+    if (classifyShell(pathname) === 'app' && !isFreelancerAllowedPath(pathname)) {
+      router.replace('/freelancer/profile');
+    }
+  }, [isAuthenticated, isFreelancer, pathname, router]);
+  return null;
+}
+
 function AppBrainShell({ children }: { children: React.ReactNode }) {
   const content = useShellContent(children);
   const { hasTenant } = useAuth();
+  // Freelancers get the restricted shell: no global Brain launcher/bridges.
+  const isFreelancer = useIsFreelancer();
+  const showBrain = !isFreelancer;
 
   // The Brain (global AI assistant) is available on EVERY route — marketing,
   // blog, and app pages alike. The providers wrap the whole app so any page can
@@ -174,22 +201,28 @@ function AppBrainShell({ children }: { children: React.ReactNode }) {
           <BrainActionsProvider>
             <BrainContextProvider>
               {content}
-              <FloatingBrain />
+              <FreelancerRouteGuard />
+              {/* Audited "click sense" capture — navigations + explicit signals
+                  feed the billable-timecard pipeline. Signed-in users only. */}
+              <ActivityTracker />
+              {/* The Brain (launcher + capability/insight bridges) is a builder-app
+                  surface — a freelancer/gig account never sees it. */}
+              {showBrain && <FloatingBrain />}
               {/* Make the Brain the epicenter for every action: register the platform
                   capability tools + the tenant's server-side MCP extension tools.
                   Both are auth-gated — they call the gateway with the tenant token. */}
-              {hasTenant && <PlatformActionsBridge />}
-              {hasTenant && <McpExtensionsBridge />}
+              {showBrain && hasTenant && <PlatformActionsBridge />}
+              {showBrain && hasTenant && <McpExtensionsBridge />}
               {/* Insights slide-out tools — register `show_ai_insight` +
                   `show_delivery_insight` so the Brain can surface insights in the
                   shared drawers. */}
-              <AiInsightPanelBrainBridge />
-              <DeliveryPanelBrainBridge />
-              <FinancePanelBrainBridge />
-              <DevexPanelBrainBridge />
+              {showBrain && <AiInsightPanelBrainBridge />}
+              {showBrain && <DeliveryPanelBrainBridge />}
+              {showBrain && <FinancePanelBrainBridge />}
+              {showBrain && <DevexPanelBrainBridge />}
               {/* Canvas slide-out tool: `show_canvas` lets the Brain generate a
                   visual board (notes/timers) and the user save it to Knowledge. */}
-              <CanvasPanelBrainBridge />
+              {showBrain && <CanvasPanelBrainBridge />}
             </BrainContextProvider>
           </BrainActionsProvider>
           </CanvasPanelProvider>

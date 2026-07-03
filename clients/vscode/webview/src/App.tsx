@@ -158,6 +158,7 @@ function Chat({ init }: { init: InitData }) {
     setAutoApprove(on);
   }, []);
   const [input, setInput] = useState('');
+  const [inputFocused, setInputFocused] = useState(false);
   const [dragOver, setDragOver] = useState(false);
   const [copied, setCopied] = useState(false);
 
@@ -352,7 +353,7 @@ function Chat({ init }: { init: InitData }) {
       )}
 
       <div
-        className={`bf-composer${dragOver ? ' bf-composer--drag' : ''}`}
+        className={`bf-composer${dragOver ? ' bf-composer--drag' : ''}${(inputFocused || input.trim().length > 0) ? ' bf-composer--active' : ''}`}
         onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
         onDragLeave={() => setDragOver(false)}
         onDrop={(e) => { e.preventDefault(); setDragOver(false); attachFiles(e.dataTransfer.files); }}
@@ -374,6 +375,8 @@ function Chat({ init }: { init: InitData }) {
           placeholder={t('app.placeholder', 'Ask BuilderForce to build or change something…')}
           value={input}
           onChange={(e) => setInput(e.target.value)}
+          onFocus={() => setInputFocused(true)}
+          onBlur={() => setInputFocused(false)}
           onPaste={onPaste}
           onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submit(); } }}
         />

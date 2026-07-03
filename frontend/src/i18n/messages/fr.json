@@ -216,7 +216,10 @@
       "settings": "Paramètres",
       "admin": "Administration",
       "knowledge": "Connaissances",
-      "quality": "Qualité"
+      "quality": "Qualité",
+      "myProfile": "Mon profil",
+      "findWork": "Trouver du travail",
+      "timecard": "Feuille de temps"
     },
     "tab": {
       "projects": "Projets",
@@ -4671,5 +4674,124 @@
     "member_run": "Exécuter",
     "member_open": "Ouvrir",
     "improveSeedIntro": "Voici le bilan de santé Projet 360 de mon projet. Aide-moi à combler ces lacunes, en commençant par les plus importantes."
+  },
+  "freelancer": {
+    "loading": "Chargement…",
+    "loadFailed": "Impossible de charger votre profil.",
+    "save": "Enregistrer",
+    "saving": "Enregistrement…",
+    "saved": "Enregistré",
+    "discipline": {
+      "developer": "Développeur",
+      "dba": "DBA",
+      "designer": "Designer",
+      "devops": "DevOps",
+      "qa": "QA",
+      "pm": "Chef de projet",
+      "data": "Données",
+      "security": "Sécurité",
+      "other": "Autre"
+    },
+    "availability": {
+      "open": "Disponible",
+      "limited": "Limitée",
+      "unavailable": "Indisponible"
+    },
+    "visibility": {
+      "public": "Public",
+      "private": "Privé",
+      "publicHint": "Tout le monde peut voir vos informations complètes.",
+      "privateHint": "Seuls les membres connectés peuvent voir vos informations."
+    },
+    "status": {
+      "invited": "Invité",
+      "interviewing": "Entretien",
+      "active": "Actif",
+      "declined": "Refusé",
+      "terminated": "Terminé"
+    },
+    "profile": {
+      "title": "Profil à recruter",
+      "subtitle": "Votre profil public sur la place de marché de talents.",
+      "headline": "Titre",
+      "headlinePlaceholder": "Ingénieur full-stack senior, 10 ans",
+      "discipline": "Discipline",
+      "availability": "Disponibilité",
+      "bio": "À propos",
+      "bioPlaceholder": "Parlez de votre expérience aux employeurs…",
+      "skills": "Compétences",
+      "skillsPlaceholder": "TypeScript, PostgreSQL, React (séparés par des virgules)",
+      "rate": "Tarif horaire",
+      "currency": "Devise",
+      "location": "Lieu",
+      "visibility": "Visibilité",
+      "publish": "Me lister sur la place de marché"
+    },
+    "resume": {
+      "title": "CV",
+      "subtitle": "Téléversé sur hired.video et affiché dans la visionneuse intégrée.",
+      "upload": "Téléverser le CV",
+      "replace": "Remplacer le CV",
+      "uploading": "Téléversement…",
+      "viewerTitle": "Visionneuse de CV",
+      "viewerPending": "Votre CV est en cours de traitement par hired.video.",
+      "viewerNotConnected": "Connectez hired.video pour afficher votre CV intégré.",
+      "claimHiredVideo": "Revendiquez votre compte hired.video"
+    },
+    "gigs": {
+      "title": "Trouver du travail",
+      "subtitle": "Vos missions et les espaces où vous pouvez travailler.",
+      "empty": "Aucune mission pour l’instant. Publiez votre profil pour être recruté.",
+      "workspace": "Espace",
+      "rate": "Tarif",
+      "since": "Depuis"
+    },
+    "timecard": {
+      "title": "Feuille de temps",
+      "subtitle": "Vos heures suivies, calculées à partir de votre activité, prêtes à approuver.",
+      "today": "Aujourd’hui",
+      "active": "actif",
+      "actions": "actions",
+      "noActivity": "Aucune activité capturée aujourd’hui.",
+      "thisWeek": "Calculer cette semaine",
+      "resolveWeek": "Calculer la semaine",
+      "resolving": "Calcul…",
+      "history": "Feuilles de temps",
+      "empty": "Aucune feuille de temps. Calculez une semaine pour en créer une.",
+      "billable": "facturable",
+      "submit": "Soumettre",
+      "resolving2": "Calcul…",
+      "status": {
+        "draft": "Brouillon",
+        "submitted": "Soumise",
+        "approved": "Approuvée",
+        "rejected": "Rejetée",
+        "paid": "Payée"
+      }
+    }
+  },
+  "talent": {
+    "title": "Place de marché de talents",
+    "subtitle": "Recrutez des freelances vérifiés : développeurs, DBA, designers et plus.",
+    "empty": "Aucun freelance listé pour l’instant.",
+    "perHour": "/h",
+    "viewProfile": "Voir le profil",
+    "signInToView": "Connectez-vous pour voir les profils privés.",
+    "back": "Retour aux talents",
+    "hire": "Recruter",
+    "interview": "Entretien",
+    "hiring": "Recrutement…",
+    "hired": "Recruté",
+    "invited": "Entretien demandé",
+    "hireError": "Recrutement impossible. Assurez-vous d’avoir sélectionné un espace.",
+    "resumeTitle": "CV",
+    "noResume": "Aucun CV disponible.",
+    "signInForResume": "Connectez-vous pour voir ce CV.",
+    "about": "À propos",
+    "skills": "Compétences",
+    "rate": "Tarif",
+    "location": "Lieu",
+    "availability": "Disponibilité",
+    "private": "Profil privé"
   }
 }

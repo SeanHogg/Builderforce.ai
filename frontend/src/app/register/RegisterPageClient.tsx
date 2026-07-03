@@ -21,6 +21,7 @@ export default function RegisterPageClient() {
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [agreeToTerms, setAgreeToTerms] = useState(false);
+  const [accountType, setAccountType] = useState<'standard' | 'freelancer'>('standard');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -34,8 +35,10 @@ export default function RegisterPageClient() {
     setError(null);
     setIsLoading(true);
     try {
-      await register(email, password, name.trim() || undefined, agreeToTerms);
-      router.push('/dashboard');
+      await register(email, password, name.trim() || undefined, agreeToTerms, accountType);
+      // Freelancers land on their for-hire profile (the restricted gig shell);
+      // standard accounts go to the builder dashboard.
+      router.push(accountType === 'freelancer' ? '/freelancer/profile' : '/dashboard');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Registration failed');
     } finally {
@@ -153,6 +156,39 @@ export default function RegisterPageClient() {
             boxShadow: '0 16px 48px var(--shadow-coral-soft)',
           }}>
             <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+              {/* Account type — a freelancer gets the restricted for-hire shell
+                  (Profile / Find Work / Timecard); a builder gets the full app. */}
+              <div>
+                <label style={labelStyle}>I want to</label>
+                <div role="radiogroup" aria-label="Account type" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                  {([
+                    { key: 'standard' as const, icon: '🚀', title: 'Build with AI', sub: 'Projects, agents & workspace' },
+                    { key: 'freelancer' as const, icon: '💼', title: 'Get hired', sub: 'Freelance profile & gigs' },
+                  ]).map((opt) => {
+                    const active = accountType === opt.key;
+                    return (
+                      <button
+                        key={opt.key}
+                        type="button"
+                        role="radio"
+                        aria-checked={active}
+                        onClick={() => setAccountType(opt.key)}
+                        style={{
+                          textAlign: 'left', cursor: 'pointer', borderRadius: 12, padding: '12px 14px',
+                          background: active ? 'var(--surface-coral-soft)' : 'var(--bg-elevated)',
+                          border: `1px solid ${active ? 'var(--coral-bright)' : 'var(--border-subtle)'}`,
+                          boxShadow: active ? '0 0 0 3px var(--surface-coral-soft)' : 'none',
+                          transition: 'border-color 0.2s, box-shadow 0.2s, background 0.2s',
+                        }}
+                      >
+                        <div style={{ fontSize: '1.1rem', marginBottom: 4 }} aria-hidden>{opt.icon}</div>
+                        <div style={{ fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '0.9rem', color: 'var(--text-primary)' }}>{opt.title}</div>
+                        <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: 2 }}>{opt.sub}</div>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
               <div>
                 <label htmlFor="name" style={labelStyle}>
                   Name <span style={{ color: 'var(--text-muted)', fontWeight: 400, textTransform: 'none', letterSpacing: 0 }}>(optional)</span>

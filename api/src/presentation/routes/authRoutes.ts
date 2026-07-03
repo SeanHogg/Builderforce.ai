@@ -19,6 +19,7 @@ import {
   userMfaRecoveryCodes,
   users,
   tenantApiKeys,
+  freelancerProfiles,
 } from '../../infrastructure/database/schema';
 import { hashPassword, hashSecret, verifyPassword } from '../../infrastructure/auth/HashService';
 import { decodeJwtPayload, signJwt, signWebJwt, verifyWebJwt } from '../../infrastructure/auth/JwtService';
@@ -37,6 +38,7 @@ import {
 } from '../../infrastructure/auth/MfaService';
 import { checkTermsAcceptance } from '../middleware/termsEnforcement';
 import { sanitizePsychometricProfile } from '../../application/persona/psychometricCatalog';
+import { provisionJobSeeker } from '../../application/integrations/hiredVideo';
 
 /** Parse a stored psychometric JSON column into an object (null when unset/invalid). */
 function parsePsychometric(raw: string | null | undefined): unknown {
@@ -85,6 +87,8 @@ function toUserResponse(user: typeof users.$inferSelect) {
     // This human's OWN personality (same PsychometricProfile shape agents/personas use).
     psychometric: parsePsychometric(user.psychometric),
     isSuperadmin: superadmin,
+    // 'standard' | 'freelancer' — drives the restricted gig shell on the client.
+    accountType: user.accountType ?? 'standard',
     mfaEnabled: user.mfaEnabled,
   };
 }
@@ -648,10 +652,13 @@ export function createAuthRoutes(authService: AuthService, db: Db): Hono<HonoEnv
       username?: string;
       password: string;
       agreeToTerms?: boolean;
+      accountType?: string;
     }>();
     if (!body.email || !body.password) {
       return c.json({ error: 'email and password are required' }, 400);
     }
+    // 'freelancer' = restricted gig account for hire; anything else = standard.
+    const accountType = body.accountType === 'freelancer' ? 'freelancer' : 'standard';
     if (body.agreeToTerms !== true) {
       return c.json({ error: 'You must accept the Terms of Use and Privacy Policy' }, 400);
     }
@@ -695,6 +702,7 @@ export function createAuthRoutes(authService: AuthService, db: Db): Hono<HonoEnv
         displayName: username,
         passwordHash,
         apiKeyHash,
+        accountType,
       })
       .returning();
 
@@ -705,6 +713,25 @@ export function createAuthRoutes(authService: AuthService, db: Db): Hono<HonoEnv
       { userId: created.id, documentType: 'privacy', version: privacyDoc.version },
     ]);
 
+    // A freelancer gets a for-hire profile stub immediately (private + unpublished
+    // until they fill it in) and is auto-provisioned a hired.video job-seeker
+    // account when the partner SDK is configured — otherwise the native resume
+    // path is used and hired.video linkage is filled in later on resume upload.
+    if (accountType === 'freelancer') {
+      const prov = await provisionJobSeeker(c.env, {
+        email: created.email,
+        name: created.displayName ?? created.username ?? undefined,
+        externalUserId: created.id,
+      });
+      await db.insert(freelancerProfiles).values({
+        userId: created.id,
+        hiredVideoUserId: prov.hiredVideoUserId,
+        hiredVideoConnectionId: prov.connectionId,
+        hiredVideoClaimUrl: prov.claimUrl,
+        hiredVideoResumeId: prov.resumeId,
+      }).onConflictDoNothing();
+    }
+
     const sessionName = 'Current device';
     const userAgent = getUserAgent(c);
     const ipAddress = getClientIp(c);
@@ -714,6 +741,7 @@ export function createAuthRoutes(authService: AuthService, db: Db): Hono<HonoEnv
         sub: created.id,
         email: created.email,
         username: created.username ?? '',
+        act: accountType === 'freelancer' ? 'freelancer' : undefined,
         mfa: false,
         amr: ['pwd'],
       },
@@ -794,6 +822,7 @@ export function createAuthRoutes(authService: AuthService, db: Db): Hono<HonoEnv
         email: user.email,
         username: user.username ?? '',
         sa: superadmin ? true : undefined,
+        act: user.accountType === 'freelancer' ? 'freelancer' : undefined,
         mfa: false,
         amr: ['pwd'],
       },
@@ -860,6 +889,7 @@ export function createAuthRoutes(authService: AuthService, db: Db): Hono<HonoEnv
         email: user.email,
         username: user.username ?? '',
         sa: superadmin ? true : undefined,
+        act: user.accountType === 'freelancer' ? 'freelancer' : undefined,
         mfa: true,
         amr: ['pwd', 'mfa'],
       },

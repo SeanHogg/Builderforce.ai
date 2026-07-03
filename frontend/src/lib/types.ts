@@ -9,6 +9,11 @@ export interface AuthUser {
   avatar?: string;
   /** When true, user can access Platform Admin (/admin). */
   isSuperadmin?: boolean;
+  /** Account-type discriminator. 'freelancer' = a restricted gig/for-hire account
+   *  that sees only the Profile / Find Work / Timecard shell; 'standard' (or
+   *  undefined) = the full builder app. Sourced from the web JWT `act` claim /
+   *  /api/auth/me. */
+  accountType?: 'standard' | 'freelancer';
   /** This user's OWN personality (same shape agents/personas use); null when unset. */
   psychometric?: import('./psychometric').PsychometricProfile | null;
 }

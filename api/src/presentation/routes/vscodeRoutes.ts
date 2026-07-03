@@ -20,6 +20,14 @@ export function createVscodeRoutes(db: Db, tenantService: TenantService): Hono<H
   const router = new Hono<HonoEnv>();
   router.use('*', authMiddleware);
 
+  // GET /api/vscode/me — the signed-in user's id, so the editor can filter the task
+  // tree to "assigned to me" (compared against tasks.assignedUserId). The editor's key
+  // is bound to a tenant but the exchanged JWT still carries the human's userId.
+  router.get('/me', async (c) => {
+    const userId = c.get('userId') as string;
+    return c.json({ userId });
+  });
+
   // GET /api/vscode/tenants — workspaces the signed-in user belongs to.
   // Intentionally uncached: low-QPS interactive call (only when opening the workspace
   // picker) that MUST reflect a just-created workspace immediately — same posture as

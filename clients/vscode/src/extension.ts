@@ -155,6 +155,17 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.commands.registerCommand("builderforce.projectGroupBy", () => projects.pickGroupBy()),
     vscode.commands.registerCommand("builderforce.projectSortBy", () => projects.pickSortBy()),
     vscode.commands.registerCommand("builderforce.projectFilterStatus", () => projects.pickStatusFilter()),
+    // "Needs attention" filter (blocked / overdue / stale) — paired on/off so the
+    // toolbar icon reflects the active state, like hide-done and Flat⇄Hierarchy.
+    vscode.commands.registerCommand("builderforce.projectFilterAttentionOn", () => projects.setNeedsAttention(true)),
+    vscode.commands.registerCommand("builderforce.projectFilterAttentionOff", () => projects.setNeedsAttention(false)),
+    // "Assigned to me" filter — paired on/off like the others.
+    vscode.commands.registerCommand("builderforce.projectFilterMineOn", () => projects.setAssignedToMe(true)),
+    vscode.commands.registerCommand("builderforce.projectFilterMineOff", () => projects.setAssignedToMe(false)),
+    // Change a work-item's type from the tree: task⇄epic, or promote an epic to an OKR.
+    vscode.commands.registerCommand("builderforce.convertTaskType", (node: TaskNode) =>
+      convertTaskType(context, projects, node?.task),
+    ),
     vscode.commands.registerCommand("builderforce.diagnose", async () => {
       output.clear();
       output.appendLine("BuilderForce connection diagnostics");
@@ -481,6 +492,48 @@ async function applyWorkspace(
 /** Workspace onboarding on the web (fallback when the in-editor endpoints are absent). */
 function openWorkspaceWeb(): Thenable<boolean> {
   return vscode.env.openExternal(vscode.Uri.parse(`${getWebBaseUrl()}/tenants`));
+}
+
+/**
+ * Change a work-item's TYPE from the tree (task ⇄ epic, or promote to an OKR
+ * Objective). Promoting an epic to an OKR moves it off the board onto the OKRs tab
+ * (and satisfies the project's 360 direction), so we confirm that first. Server-side
+ * `POST /api/tasks/:id/convert-type` re-links children + scopes the new objective.
+ */
+async function convertTaskType(
+  context: vscode.ExtensionContext,
+  projects: ProjectsTreeProvider,
+  task?: bfApi.BfTask,
+): Promise<void> {
+  if (!task) return;
+  const isEpic = task.taskType === "epic";
+  const choices: { label: string; target: "task" | "epic" | "objective" }[] = [
+    { label: vscode.l10n.t("Promote to OKR objective"), target: "objective" },
+    isEpic
+      ? { label: vscode.l10n.t("Convert to task"), target: "task" }
+      : { label: vscode.l10n.t("Convert to epic"), target: "epic" },
+  ];
+  const pick = await vscode.window.showQuickPick(choices, {
+    title: vscode.l10n.t("Change type — {0}", task.key ?? task.title),
+  });
+  if (!pick) return;
+  if (pick.target === "objective") {
+    const ok = await vscode.window.showWarningMessage(
+      vscode.l10n.t("Promote this item to an OKR objective? Its child tasks are re-linked to the new objective and it leaves the board."),
+      { modal: true },
+      vscode.l10n.t("Promote"),
+    );
+    if (!ok) return;
+  }
+  const done = await bfApi.convertTaskType(context.secrets, task.id, pick.target);
+  if (!done) {
+    vscode.window.showErrorMessage(vscode.l10n.t("BuilderForce: could not change the item's type."));
+    return;
+  }
+  bfApi.invalidateTasks(getSelectedProject()?.id);
+  bfApi.invalidateObjectives(getSelectedProject()?.id);
+  projects.refresh();
+  vscode.window.showInformationMessage(vscode.l10n.t("BuilderForce: {0} → {1}", task.key ?? "item", pick.target));
 }
 
 async function setTaskStatus(

@@ -216,7 +216,10 @@
       "settings": "Einstellungen",
       "admin": "Administration",
       "knowledge": "Wissen",
-      "quality": "Qualität"
+      "quality": "Qualität",
+      "myProfile": "Mein Profil",
+      "findWork": "Arbeit finden",
+      "timecard": "Zeiterfassung"
     },
     "tab": {
       "projects": "Projekte",
@@ -4671,5 +4674,124 @@
     "member_run": "Ausführen",
     "member_open": "Öffnen",
     "improveSeedIntro": "Hier ist die Projekt-360-Zustandsprüfung meines Projekts. Hilf mir, diese Lücken zu schließen, die wichtigsten zuerst."
+  },
+  "freelancer": {
+    "loading": "Wird geladen…",
+    "loadFailed": "Ihr Profil konnte nicht geladen werden.",
+    "save": "Speichern",
+    "saving": "Wird gespeichert…",
+    "saved": "Gespeichert",
+    "discipline": {
+      "developer": "Entwickler",
+      "dba": "DBA",
+      "designer": "Designer",
+      "devops": "DevOps",
+      "qa": "QA",
+      "pm": "Projektmanager",
+      "data": "Daten",
+      "security": "Sicherheit",
+      "other": "Sonstige"
+    },
+    "availability": {
+      "open": "Verfügbar",
+      "limited": "Begrenzt",
+      "unavailable": "Nicht verfügbar"
+    },
+    "visibility": {
+      "public": "Öffentlich",
+      "private": "Privat",
+      "publicHint": "Jeder kann Ihre vollständigen Angaben sehen.",
+      "privateHint": "Nur angemeldete Mitglieder können Ihre Angaben sehen."
+    },
+    "status": {
+      "invited": "Eingeladen",
+      "interviewing": "Im Gespräch",
+      "active": "Aktiv",
+      "declined": "Abgelehnt",
+      "terminated": "Beendet"
+    },
+    "profile": {
+      "title": "Verfügbares Profil",
+      "subtitle": "Ihr öffentliches Profil im Talent-Marktplatz.",
+      "headline": "Überschrift",
+      "headlinePlaceholder": "Senior Full-Stack-Entwickler, 10 Jahre",
+      "discipline": "Fachgebiet",
+      "availability": "Verfügbarkeit",
+      "bio": "Über mich",
+      "bioPlaceholder": "Erzählen Sie Arbeitgebern von Ihrer Erfahrung…",
+      "skills": "Fähigkeiten",
+      "skillsPlaceholder": "TypeScript, PostgreSQL, React (durch Kommas getrennt)",
+      "rate": "Stundensatz",
+      "currency": "Währung",
+      "location": "Standort",
+      "visibility": "Sichtbarkeit",
+      "publish": "Im Marktplatz auflisten"
+    },
+    "resume": {
+      "title": "Lebenslauf",
+      "subtitle": "Auf hired.video hochgeladen und im eingebetteten Viewer angezeigt.",
+      "upload": "Lebenslauf hochladen",
+      "replace": "Lebenslauf ersetzen",
+      "uploading": "Wird hochgeladen…",
+      "viewerTitle": "Lebenslauf-Viewer",
+      "viewerPending": "Ihr Lebenslauf wird von hired.video verarbeitet.",
+      "viewerNotConnected": "Verbinden Sie hired.video, um Ihren eingebetteten Lebenslauf anzuzeigen.",
+      "claimHiredVideo": "Beanspruchen Sie Ihr hired.video-Konto"
+    },
+    "gigs": {
+      "title": "Arbeit finden",
+      "subtitle": "Ihre Engagements und die Arbeitsbereiche, in denen Sie arbeiten können.",
+      "empty": "Noch keine Engagements. Veröffentlichen Sie Ihr Profil, damit Sie eingestellt werden können.",
+      "workspace": "Arbeitsbereich",
+      "rate": "Satz",
+      "since": "Seit"
+    },
+    "timecard": {
+      "title": "Zeiterfassung",
+      "subtitle": "Ihre erfassten Stunden, aus Ihrer Aktivität ermittelt, bereit zur Genehmigung.",
+      "today": "Heute",
+      "active": "aktiv",
+      "actions": "Aktionen",
+      "noActivity": "Heute noch keine Aktivität erfasst.",
+      "thisWeek": "Diese Woche abrechnen",
+      "resolveWeek": "Woche abrechnen",
+      "resolving": "Wird ermittelt…",
+      "history": "Zeiterfassungen",
+      "empty": "Noch keine Zeiterfassungen. Rechnen Sie eine Woche ab, um eine zu erstellen.",
+      "billable": "abrechenbar",
+      "submit": "Einreichen",
+      "resolving2": "Wird ermittelt…",
+      "status": {
+        "draft": "Entwurf",
+        "submitted": "Eingereicht",
+        "approved": "Genehmigt",
+        "rejected": "Abgelehnt",
+        "paid": "Bezahlt"
+      }
+    }
+  },
+  "talent": {
+    "title": "Talent-Marktplatz",
+    "subtitle": "Stellen Sie geprüfte Freelancer ein – Entwickler, DBAs, Designer und mehr.",
+    "empty": "Noch keine Freelancer gelistet.",
+    "perHour": "/Std",
+    "viewProfile": "Profil ansehen",
+    "signInToView": "Melden Sie sich an, um private Profile zu sehen.",
+    "back": "Zurück zu Talenten",
+    "hire": "Einstellen",
+    "interview": "Interview",
+    "hiring": "Wird eingestellt…",
+    "hired": "Eingestellt",
+    "invited": "Interview angefragt",
+    "hireError": "Einstellen fehlgeschlagen. Stellen Sie sicher, dass ein Arbeitsbereich ausgewählt ist.",
+    "resumeTitle": "Lebenslauf",
+    "noResume": "Kein Lebenslauf verfügbar.",
+    "signInForResume": "Melden Sie sich an, um diesen Lebenslauf zu sehen.",
+    "about": "Über",
+    "skills": "Fähigkeiten",
+    "rate": "Satz",
+    "location": "Standort",
+    "availability": "Verfügbarkeit",
+    "private": "Privates Profil"
   }
 }

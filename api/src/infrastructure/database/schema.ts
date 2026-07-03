@@ -173,6 +173,10 @@ export const users = pgTable('users', {
   mfaLastVerifiedAt: timestamp('mfa_last_verified_at'),
   isSuperadmin:           boolean('is_superadmin').notNull().default(false),
   isSuspended:            boolean('is_suspended').notNull().default(false),
+  /** Account-type discriminator. GLOBAL (a freelancer works across many tenants).
+   *  'standard' = normal builder; 'freelancer' = restricted gig account (minimal
+   *  shell: profile + gigs + timecard). Drives shell/nav gating. (0269) */
+  accountType:            varchar('account_type', { length: 20 }).notNull().default('standard'),
   sessionVersion:         integer('session_version').notNull().default(0),
   onboardingCompletedAt:  timestamp('onboarding_completed_at'),
   userIntent:             text('user_intent'), // JSON array of intent strings, set during onboarding
@@ -5265,4 +5269,130 @@ export const savedQueries = pgTable('saved_queries', {
   createdAt:     timestamp('created_at').notNull().defaultNow(),
 }, (t) => ({
   byTenant: index('idx_saved_queries_tenant').on(t.tenantId),
+}));
+
+// ---------------------------------------------------------------------------
+// Freelance worker marketplace (0269)
+//
+// A freelancer (users.account_type='freelancer') publishes a for-hire profile,
+// is hired across many tenants/projects via engagements, and has time measured
+// from an audited activity-signal stream that resolves into billable timecards.
+// ---------------------------------------------------------------------------
+
+/** One per freelancer user: skills / resume / rate + public-or-private toggle. */
+export const freelancerProfiles = pgTable('freelancer_profiles', {
+  userId:                 varchar('user_id', { length: 36 }).primaryKey().references(() => users.id, { onDelete: 'cascade' }),
+  headline:               varchar('headline', { length: 200 }),
+  bio:                    text('bio'),
+  discipline:             varchar('discipline', { length: 60 }),  // developer|dba|designer|... (card role)
+  skills:                 text('skills'),                          // JSON string[]
+  hourlyRateCents:        integer('hourly_rate_cents'),
+  currency:               varchar('currency', { length: 3 }).notNull().default('USD'),
+  visibility:             varchar('visibility', { length: 10 }).notNull().default('private'), // public|private
+  published:              boolean('published').notNull().default(false),
+  availability:           varchar('availability', { length: 20 }).notNull().default('open'),  // open|limited|unavailable
+  location:               varchar('location', { length: 120 }),
+  timezone:               varchar('timezone', { length: 60 }),
+  hiredVideoUserId:       varchar('hired_video_user_id', { length: 120 }),
+  hiredVideoConnectionId: varchar('hired_video_connection_id', { length: 120 }),
+  hiredVideoResumeId:     varchar('hired_video_resume_id', { length: 120 }),
+  hiredVideoClaimUrl:     varchar('hired_video_claim_url', { length: 500 }),
+  resumeKey:              varchar('resume_key', { length: 300 }),
+  resumeFilename:         varchar('resume_filename', { length: 255 }),
+  resumeExtract:          text('resume_extract'),                  // cached hired.video getProfile JSON
+  createdAt:              timestamp('created_at').notNull().defaultNow(),
+  updatedAt:              timestamp('updated_at').notNull().defaultNow(),
+}, (t) => ({
+  byPublished: index('idx_freelancer_profiles_published').on(t.published),
+}));
+
+/** Employer hires a freelancer (optionally onto a project). Hire record + the
+ *  cross-tenant membership bridge. Soft-terminate via terminatedAt. */
+export const freelancerEngagements = pgTable('freelancer_engagements', {
+  id:                 varchar('id', { length: 36 }).primaryKey(),
+  tenantId:           integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  projectId:          integer('project_id').references(() => projects.id, { onDelete: 'set null' }),
+  freelancerUserId:   varchar('freelancer_user_id', { length: 36 }).notNull().references(() => users.id, { onDelete: 'cascade' }),
+  status:             varchar('status', { length: 20 }).notNull().default('invited'), // invited|interviewing|active|declined|terminated
+  rateCents:          integer('rate_cents'),
+  currency:           varchar('currency', { length: 3 }).notNull().default('USD'),
+  title:              varchar('title', { length: 200 }),
+  note:               text('note'),
+  createdByUserId:    varchar('created_by_user_id', { length: 36 }).references(() => users.id, { onDelete: 'set null' }),
+  invitedAt:          timestamp('invited_at').notNull().defaultNow(),
+  hiredAt:            timestamp('hired_at'),
+  terminatedAt:       timestamp('terminated_at'),
+  terminatedReason:   text('terminated_reason'),
+  createdAt:          timestamp('created_at').notNull().defaultNow(),
+  updatedAt:          timestamp('updated_at').notNull().defaultNow(),
+}, (t) => ({
+  byTenant:     index('idx_engagements_tenant').on(t.tenantId),
+  byFreelancer: index('idx_engagements_freelancer').on(t.freelancerUserId),
+}));
+
+/** Raw audited "click sense" + engagement stream (portal + VSIX). Append-only. */
+export const activitySignals = pgTable('activity_signals', {
+  id:               bigint('id', { mode: 'number' }).primaryKey(),   // DB bigserial
+  userId:           varchar('user_id', { length: 36 }).notNull().references(() => users.id, { onDelete: 'cascade' }),
+  tenantId:         integer('tenant_id').references(() => tenants.id, { onDelete: 'cascade' }),
+  engagementId:     varchar('engagement_id', { length: 36 }).references(() => freelancerEngagements.id, { onDelete: 'set null' }),
+  projectId:        integer('project_id'),
+  source:           varchar('source', { length: 20 }).notNull(),   // portal|vscode|agent|meeting|system
+  kind:             varchar('kind', { length: 40 }).notNull(),     // nav|tool_exec|ticket_move|project_update|agent_message|agent_run|meeting|heartbeat
+  ref:              varchar('ref', { length: 300 }),
+  weight:           integer('weight').notNull().default(1),
+  durationSeconds:  integer('duration_seconds'),
+  metadata:         text('metadata'),
+  sessionId:        varchar('session_id', { length: 64 }),
+  occurredAt:       timestamp('occurred_at').notNull().defaultNow(),
+  createdAt:        timestamp('created_at').notNull().defaultNow(),
+}, (t) => ({
+  byUserDay:      index('idx_signals_user_day').on(t.userId, t.occurredAt),
+  byEngagement:   index('idx_signals_engagement').on(t.engagementId, t.occurredAt),
+}));
+
+/** Resolved billable blocks — "what did you do today". Editable pre-submit.
+ *  Named timecardEntries (table timecard_entries) to avoid the existing per-task
+ *  `time_entries`/`timeEntries` (migration 0247) — a different subsystem. */
+export const timecardEntries = pgTable('timecard_entries', {
+  id:            varchar('id', { length: 36 }).primaryKey(),
+  engagementId:  varchar('engagement_id', { length: 36 }).notNull().references(() => freelancerEngagements.id, { onDelete: 'cascade' }),
+  userId:        varchar('user_id', { length: 36 }).notNull().references(() => users.id, { onDelete: 'cascade' }),
+  tenantId:      integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  workDate:      date('work_date').notNull(),
+  minutes:       integer('minutes').notNull().default(0),
+  source:        varchar('source', { length: 20 }).notNull().default('auto'), // auto|manual|meeting
+  description:   text('description'),
+  billable:      boolean('billable').notNull().default(true),
+  resolvedFrom:  text('resolved_from'),   // JSON audit
+  timecardId:    varchar('timecard_id', { length: 36 }),
+  createdAt:     timestamp('created_at').notNull().defaultNow(),
+  updatedAt:     timestamp('updated_at').notNull().defaultNow(),
+}, (t) => ({
+  byEngagementDate: index('idx_timecard_entries_engagement_date').on(t.engagementId, t.workDate),
+  byCard:           index('idx_timecard_entries_card').on(t.timecardId),
+}));
+
+/** Approvable per-engagement period rollup. */
+export const timecards = pgTable('timecards', {
+  id:                 varchar('id', { length: 36 }).primaryKey(),
+  engagementId:       varchar('engagement_id', { length: 36 }).notNull().references(() => freelancerEngagements.id, { onDelete: 'cascade' }),
+  userId:             varchar('user_id', { length: 36 }).notNull().references(() => users.id, { onDelete: 'cascade' }),
+  tenantId:           integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  periodStart:        date('period_start').notNull(),
+  periodEnd:          date('period_end').notNull(),
+  status:             varchar('status', { length: 20 }).notNull().default('draft'), // draft|submitted|approved|rejected|paid
+  totalMinutes:       integer('total_minutes').notNull().default(0),
+  billableMinutes:    integer('billable_minutes').notNull().default(0),
+  rateCents:          integer('rate_cents'),
+  currency:           varchar('currency', { length: 3 }).notNull().default('USD'),
+  amountCents:        integer('amount_cents').notNull().default(0),
+  submittedAt:        timestamp('submitted_at'),
+  approvedAt:         timestamp('approved_at'),
+  approvedByUserId:   varchar('approved_by_user_id', { length: 36 }).references(() => users.id, { onDelete: 'set null' }),
+  rejectReason:       text('reject_reason'),
+  createdAt:          timestamp('created_at').notNull().defaultNow(),
+  updatedAt:          timestamp('updated_at').notNull().defaultNow(),
+}, (t) => ({
+  byEngagement: index('idx_timecards_engagement').on(t.engagementId),
 }));
