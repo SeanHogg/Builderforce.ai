@@ -674,7 +674,8 @@
     "typeGap": "缺口",
     "reviewedTimes": "{count, plural, other {已审查 # 次}}",
     "reviewComplete": "上次审查通过——已完成",
-    "reviewGaps": "上次审查发现缺口"
+    "reviewGaps": "上次审查发现缺口",
+    "dismiss": "关闭"
   },
   "llmUsage": {
     "byUser": "按用户 · 最近 7 天",

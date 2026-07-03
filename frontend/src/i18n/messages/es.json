@@ -674,7 +674,8 @@
     "typeGap": "Brecha",
     "reviewedTimes": "{count, plural, one {Revisado # vez} other {Revisado # veces}}",
     "reviewComplete": "Última revisión superada: completa",
-    "reviewGaps": "La última revisión encontró brechas"
+    "reviewGaps": "La última revisión encontró brechas",
+    "dismiss": "Descartar"
   },
   "llmUsage": {
     "byUser": "Por usuario · últimos 7 días",

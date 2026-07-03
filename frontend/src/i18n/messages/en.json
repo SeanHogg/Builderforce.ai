@@ -674,7 +674,8 @@
     "typeGap": "Gap",
     "reviewedTimes": "{count, plural, one {Reviewed # time} other {Reviewed # times}}",
     "reviewComplete": "Last review passed — complete",
-    "reviewGaps": "Last review found gaps"
+    "reviewGaps": "Last review found gaps",
+    "dismiss": "Dismiss"
   },
   "llmUsage": {
     "byUser": "By user · last 7 days",

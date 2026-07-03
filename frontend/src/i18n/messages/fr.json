@@ -674,7 +674,8 @@
     "typeGap": "Écart",
     "reviewedTimes": "{count, plural, one {Révisé # fois} other {Révisé # fois}}",
     "reviewComplete": "Dernière revue réussie — complète",
-    "reviewGaps": "La dernière revue a trouvé des écarts"
+    "reviewGaps": "La dernière revue a trouvé des écarts",
+    "dismiss": "Ignorer"
   },
   "llmUsage": {
     "byUser": "Par utilisateur · 7 derniers jours",

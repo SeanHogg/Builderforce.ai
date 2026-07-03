@@ -674,7 +674,8 @@
     "typeGap": "Lücke",
     "reviewedTimes": "{count, plural, one {# Mal geprüft} other {# Mal geprüft}}",
     "reviewComplete": "Letzte Prüfung bestanden — vollständig",
-    "reviewGaps": "Letzte Prüfung fand Lücken"
+    "reviewGaps": "Letzte Prüfung fand Lücken",
+    "dismiss": "Schließen"
   },
   "llmUsage": {
     "byUser": "Nach Benutzer · letzte 7 Tage",

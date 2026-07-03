@@ -568,14 +568,36 @@ async function authedRaw<T>(
 }
 
 /**
+ * A failed platform dispatch, carrying the structured detail the command layer needs
+ * to show a SPECIFIC, actionable message instead of the raw HTTP dump. `httpStatus`
+ * branches the outcome (402 → run-limit upgrade, 429 → token-budget), `code` is the
+ * gateway's machine code (e.g. `plan_token_limit_exceeded`), and `serverMessage` is
+ * the human-readable reason the API already tailored to the tenant's plan.
+ */
+export class BfDispatchError extends Error {
+  readonly httpStatus: number;
+  readonly code?: string;
+  readonly serverMessage?: string;
+  constructor(message: string, detail: { httpStatus: number; code?: string; serverMessage?: string }) {
+    super(message);
+    this.name = "BfDispatchError";
+    this.httpStatus = detail.httpStatus;
+    this.code = detail.code;
+    this.serverMessage = detail.serverMessage;
+  }
+}
+
+/**
  * Dispatch a PLATFORM run for a task — the SAME endpoint the web app's
  * `runtimeApi.submitExecution` hits (POST /api/runtime/executions). This is DISTINCT
  * from the local in-editor agent loop: it asks the platform to run the task on its
  * assigned AgentHost / cloud agent. The run is then observable on the board / web app.
  *
  * Returns either the started execution (HTTP 201) or, when a priority/policy gate fires,
- * an `awaitingApproval` descriptor (HTTP 202). Throws on 402 (plan limit) with a
- * `HTTP 402` message so the caller can route to an upgrade, and on other 4xx/5xx.
+ * an `awaitingApproval` descriptor (HTTP 202). On any other status throws a
+ * {@link BfDispatchError} carrying the HTTP status, the gateway's machine `code`, and
+ * the server's tailored message so the command layer can branch (402 → run-limit
+ * upgrade, 429 → token-budget) and show the specific reason.
  */
 export async function submitExecution(
   secrets: vscode.SecretStorage,
@@ -583,7 +605,7 @@ export async function submitExecution(
   opts?: { agentHostId?: number | null; sessionId?: string; payload?: string },
 ): Promise<BfSubmitResult> {
   const { status, body, text } = await authedRaw<
-    BfExecution & { status?: string; approvalId?: string; reason?: string }
+    BfExecution & { status?: string; approvalId?: string; reason?: string; error?: string; code?: string }
   >(secrets, "/api/runtime/executions", {
     method: "POST",
     body: JSON.stringify({ taskId, ...opts }),
@@ -595,8 +617,14 @@ export async function submitExecution(
   if (status === 201 || status === 200) {
     return { execution: body as BfExecution };
   }
-  // Surface the verbatim status so the command layer can branch (402 → upgrade).
-  throw new Error(`/api/runtime/executions → HTTP ${status} ${text.slice(0, 200)}`);
+  // Non-2xx: hand the command layer structured detail (status + code + the server's
+  // tailored message) instead of a raw dump. Falls back to the verbatim status line
+  // when the body carried no JSON `error` (e.g. an infra 5xx).
+  const serverMessage = typeof body?.error === "string" ? body.error : undefined;
+  throw new BfDispatchError(
+    serverMessage ?? `/api/runtime/executions → HTTP ${status} ${text.slice(0, 200)}`,
+    { httpStatus: status, code: typeof body?.code === "string" ? body.code : undefined, serverMessage },
+  );
 }
 
 /**

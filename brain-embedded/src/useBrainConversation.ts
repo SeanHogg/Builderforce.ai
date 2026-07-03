@@ -37,6 +37,7 @@ import {
   getRunSnapshot,
   getRunTrace,
   resolveRunConfirm,
+  clearRunError,
 } from './brainRunStore';
 
 export interface UseBrainConversationOptions {
@@ -78,7 +79,13 @@ export interface UseBrainConversation {
   feedbackMap: Record<number, 'up' | 'down'>;
   pendingAttachments: ChatInputAttachment[];
   uploading: boolean;
-  send(text: string): Promise<void>;
+  /**
+   * Persist + answer a user turn. Resolves `true` once the turn is safely
+   * persisted and the run has started (the message can no longer be lost), or
+   * `false` if it failed before persisting (e.g. the token expired mid-send) —
+   * so a composer can restore the text the user typed instead of dropping it.
+   */
+  send(text: string): Promise<boolean>;
   /**
    * Stop the in-flight run for the active chat: aborts the streaming LLM request
    * and unwinds the agent loop (no error surfaced). No-op when nothing is
@@ -90,6 +97,12 @@ export interface UseBrainConversation {
   attach(file: File): Promise<void>;
   removeAttachment(key: string): void;
   setError(msg: string): void;
+  /**
+   * Dismiss the current error banner. Clears BOTH the hook's local error and the
+   * run cell's error (a failed LLM stream / tool loop sets the latter, which
+   * `setError('')` alone can't reach) — so the user can always close the banner.
+   */
+  clearError(): void;
   /** A tool call awaiting the user's Approve/Cancel decision (or null). */
   pendingConfirm: { name: string; args: unknown } | null;
   /** Resolve the pending confirmation. */
@@ -225,16 +238,16 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
   );
 
   const send = useCallback(
-    async (text: string) => {
+    async (text: string): Promise<boolean> => {
       const trimmed = text.trim();
-      if (!trimmed || localSending || isRunning(chatId)) return;
+      if (!trimmed || localSending || isRunning(chatId)) return false;
 
       let id = chatId;
       if (id == null) {
         id = (await ensureChatId?.()) ?? null;
         if (id == null) {
           setLocalError('Could not start a chat.');
-          return;
+          return false;
         }
       }
       // Claim the auto-reply guard for this chat: a user-driven send must not be
@@ -282,8 +295,14 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
           content: m.content,
         }));
         await startRun(id, buildRequest(seed, modelContent));
+        return true;
       } catch (e) {
+        // Persisting the user turn failed (commonly an expired token) — the turn
+        // was NOT saved. Restore the attachments too so the whole message can be
+        // resent, and signal failure so the composer keeps the typed text.
+        setPendingAttachments(attachments);
         setLocalError(e instanceof Error ? e.message : 'Send failed');
+        return false;
       } finally {
         setLocalSending(false);
       }
@@ -365,6 +384,11 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
     if (chatId != null) resolveRunConfirm(chatId, ok);
   }, [chatId]);
 
+  const clearError = useCallback(() => {
+    setLocalError('');
+    clearRunError(chatId);
+  }, [chatId]);
+
   const stop = useCallback(() => {
     if (chatId != null) stopRun(chatId);
   }, [chatId]);
@@ -399,6 +423,7 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
     attach,
     removeAttachment,
     setError: setLocalError,
+    clearError,
     pendingConfirm: snapshot.pendingConfirm,
     resolveConfirm,
     hasTrace: snapshot.hasTrace,
