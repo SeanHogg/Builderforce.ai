@@ -1,6 +1,7 @@
 'use client';
 
 import { Select } from '@/components/Select';
+import Link from 'next/link';
 
 import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '@/lib/AuthContext';
@@ -530,13 +531,13 @@ export default function MarketplacePageClient() {
               </button>
             ))}
             {/* Cross-link to the human talent marketplace (freelancers for hire). */}
-            <a
+            <Link
               href="/talent"
               className="btn btn-secondary"
               style={{ padding: '8px 16px', borderRadius: 8, border: '1px solid var(--border)', fontWeight: 500, fontSize: 13, cursor: 'pointer', textDecoration: 'none' }}
             >
               👤 Talent
-            </a>
+            </Link>
           </div>
         </div>
         {category !== 'publish' && (
@@ -556,8 +557,8 @@ export default function MarketplacePageClient() {
                 Any Builderforce.ai account can publish skills, personas, and agents to the marketplace. Create an account or sign in to get started.
               </p>
               <div style={{ display: 'flex', gap: 10, justifyContent: 'center' }}>
-                <a href="/register" className="btn btn-primary" style={{ textDecoration: 'none', padding: '10px 24px' }}>Create Account</a>
-                <a href="/login" className="btn btn-secondary" style={{ textDecoration: 'none', padding: '10px 24px' }}>Sign In</a>
+                <Link href="/register" className="btn btn-primary" style={{ textDecoration: 'none', padding: '10px 24px' }}>Create Account</Link>
+                <Link href="/login" className="btn btn-secondary" style={{ textDecoration: 'none', padding: '10px 24px' }}>Sign In</Link>
               </div>
             </div>
           ) : (
