@@ -1,118 +1,62 @@
-'use client';
+import type { Metadata } from 'next';
+import { pageMetadata } from '@/lib/seo';
+import JsonLd from '@/components/JsonLd';
+import { BRAND } from '@/lib/content';
+import TalentDetailClient from './TalentDetailClient';
 
 export const runtime = 'edge';
 
-import { useEffect, useState } from 'react';
-import { useParams } from 'next/navigation';
-import Link from 'next/link';
-import { useTranslations } from 'next-intl';
-import PageContainer from '@/components/PageContainer';
-import { useOptionalAuth } from '@/lib/AuthContext';
-import { getFreelancer, hireFreelancer, type FreelancerProfile } from '@/lib/freelancerApi';
+interface PublicFreelancer {
+  userId: string; displayName?: string | null; headline?: string | null; discipline?: string | null;
+  bio?: string | null; skills?: string[] | null; visibility?: string; rating?: number | null; ratingCount?: number;
+}
 
-const card: React.CSSProperties = {
-  background: 'var(--bg-base)', border: '1px solid var(--border-subtle)', borderRadius: 12, padding: 20,
-};
-
-export default function TalentDetailPage() {
-  const t = useTranslations('talent');
-  const params = useParams();
-  const id = String(params?.id ?? '');
-  const auth = useOptionalAuth();
-  const [profile, setProfile] = useState<FreelancerProfile | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [hireState, setHireState] = useState<'idle' | 'busy' | 'hired' | 'invited'>('idle');
-  const [hireError, setHireError] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (!id) return;
-    getFreelancer(id).then(setProfile).catch((e: Error) => setError(e.message)).finally(() => setLoading(false));
-  }, [id]);
-
-  const doHire = async (status: 'active' | 'interviewing') => {
-    if (!profile) return;
-    setHireState('busy'); setHireError(null);
-    try {
-      await hireFreelancer({ freelancerUserId: profile.userId, status });
-      setHireState(status === 'active' ? 'hired' : 'invited');
-    } catch (e) {
-      setHireError(e instanceof Error ? e.message : t('hireError'));
-      setHireState('idle');
-    }
-  };
-
-  if (loading) return <PageContainer width="readable" style={{ padding: '32px 40px' }}><p style={{ color: 'var(--text-muted)' }}>…</p></PageContainer>;
-  if (error || !profile) {
-    return (
-      <PageContainer width="readable" style={{ padding: '32px 40px' }}>
-        <p style={{ color: 'var(--coral-bright)' }}>{error === 'AUTH_REQUIRED' || (error ?? '').includes('signed-in') ? t('signInForResume') : (error ?? t('private'))}</p>
-        <Link href="/talent" style={{ color: 'var(--coral-bright)', fontWeight: 600, textDecoration: 'none' }}>← {t('back')}</Link>
-      </PageContainer>
-    );
+async function fetchFreelancer(id: string): Promise<PublicFreelancer | null> {
+  const apiBase = process.env.NEXT_PUBLIC_AUTH_API_URL || 'https://api.builderforce.ai';
+  try {
+    const res = await fetch(`${apiBase}/api/freelancers/${encodeURIComponent(id)}`, { next: { revalidate: 3600 } });
+    if (!res.ok) return null; // private/404 → generic metadata below
+    return (await res.json()) as PublicFreelancer;
+  } catch {
+    return null;
   }
+}
 
-  const canHire = !!auth?.hasTenant && auth.user?.id !== profile.userId;
+export async function generateMetadata({ params }: { params: Promise<{ id: string }> }): Promise<Metadata> {
+  const { id } = await params;
+  const f = await fetchFreelancer(id);
+  if (!f) {
+    return pageMetadata({ title: 'Freelancer profile — Talent Marketplace', description: 'Hire vetted freelance specialists on Builderforce.ai.', path: `/talent/${id}` });
+  }
+  const role = f.headline || f.discipline || 'Freelance specialist';
+  return pageMetadata({
+    title: `${f.displayName ?? 'Freelancer'} — ${role} for hire`,
+    description: (f.bio || `${f.displayName ?? 'A freelancer'} is available for hire on Builderforce.ai. ${(f.skills ?? []).slice(0, 8).join(', ')}`).slice(0, 200),
+    path: `/talent/${id}`,
+  });
+}
 
+/** Person JSON-LD for a public freelancer profile (only when it's a public profile). */
+function personSchema(f: PublicFreelancer, id: string) {
+  return {
+    '@context': 'https://schema.org',
+    '@type': 'Person',
+    name: f.displayName ?? 'Freelancer',
+    url: `${BRAND.url}/talent/${id}`,
+    ...(f.headline || f.discipline ? { jobTitle: f.headline ?? f.discipline } : {}),
+    ...(f.bio ? { description: f.bio } : {}),
+    ...(f.skills && f.skills.length > 0 ? { knowsAbout: f.skills.join(', ') } : {}),
+    ...(f.rating != null && f.ratingCount ? { aggregateRating: { '@type': 'AggregateRating', ratingValue: f.rating, reviewCount: f.ratingCount, bestRating: 5 } } : {}),
+  };
+}
+
+export default async function TalentDetailPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
+  const f = await fetchFreelancer(id);
   return (
-    <PageContainer width="readable" style={{ padding: '32px 40px' }}>
-      <Link href="/talent" style={{ color: 'var(--text-muted)', fontSize: 13, textDecoration: 'none' }}>← {t('back')}</Link>
-
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 16, flexWrap: 'wrap', margin: '16px 0 20px' }}>
-        <div>
-          <h1 style={{ fontSize: 24, fontWeight: 800, color: 'var(--text-primary)', margin: 0 }}>{profile.displayName ?? '—'}</h1>
-          <p style={{ fontSize: 14, color: 'var(--text-secondary)', margin: '4px 0 0' }}>{profile.headline ?? profile.discipline ?? ''}</p>
-          <div style={{ display: 'flex', gap: 16, marginTop: 8, fontSize: 13, color: 'var(--text-muted)', flexWrap: 'wrap' }}>
-            {profile.hourlyRateCents != null && <span>{t('rate')}: <strong style={{ color: 'var(--coral-bright)' }}>{profile.currency} {(profile.hourlyRateCents / 100).toFixed(0)}{t('perHour')}</strong></span>}
-            {profile.location && <span>{t('location')}: {profile.location}</span>}
-            <span>{t('availability')}: {profile.availability}</span>
-          </div>
-        </div>
-        {canHire && (
-          <div style={{ display: 'flex', gap: 10 }}>
-            <button type="button" onClick={() => doHire('interviewing')} disabled={hireState === 'busy' || hireState !== 'idle'}
-              style={{ padding: '9px 16px', borderRadius: 10, border: '1px solid var(--border-subtle)', background: 'var(--bg-elevated)', color: 'var(--text-primary)', fontWeight: 600, fontSize: 13, cursor: 'pointer' }}>
-              {t('interview')}
-            </button>
-            <button type="button" onClick={() => doHire('active')} disabled={hireState === 'busy' || hireState !== 'idle'}
-              style={{ padding: '9px 18px', borderRadius: 10, border: 'none', background: 'linear-gradient(135deg, var(--coral-bright), var(--coral-dark))', color: '#fff', fontWeight: 700, fontSize: 13, cursor: hireState === 'busy' ? 'wait' : 'pointer' }}>
-              {hireState === 'busy' ? t('hiring') : hireState === 'hired' ? t('hired') : t('hire')}
-            </button>
-          </div>
-        )}
-      </div>
-      {hireState === 'hired' && <div style={{ ...card, background: 'rgba(34,197,94,0.1)', border: '1px solid rgba(34,197,94,0.4)', color: 'rgba(34,197,94,0.95)', fontSize: 13, marginBottom: 16 }}>{t('hired')} ✓</div>}
-      {hireState === 'invited' && <div style={{ ...card, background: 'rgba(59,130,246,0.1)', border: '1px solid rgba(59,130,246,0.4)', color: 'rgba(59,130,246,0.95)', fontSize: 13, marginBottom: 16 }}>{t('invited')} ✓</div>}
-      {hireError && <div style={{ ...card, color: 'var(--coral-bright)', fontSize: 13, marginBottom: 16 }}>{hireError}</div>}
-
-      {profile.bio && (
-        <div style={{ ...card, marginBottom: 16 }}>
-          <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 8 }}>{t('about')}</div>
-          <p style={{ fontSize: 14, color: 'var(--text-secondary)', lineHeight: 1.6, margin: 0, whiteSpace: 'pre-wrap' }}>{profile.bio}</p>
-        </div>
-      )}
-
-      {profile.skills.length > 0 && (
-        <div style={{ ...card, marginBottom: 16 }}>
-          <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 8 }}>{t('skills')}</div>
-          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-            {profile.skills.map((s) => (
-              <span key={s} style={{ fontSize: 12, padding: '4px 10px', borderRadius: 999, background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', color: 'var(--text-secondary)' }}>{s}</span>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Embedded résumé viewer (hired.video) */}
-      <div style={{ ...card }}>
-        <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 10 }}>{t('resumeTitle')}</div>
-        {profile.embedUrl ? (
-          <iframe title={t('resumeTitle')} src={profile.embedUrl}
-            style={{ width: '100%', height: 560, border: '1px solid var(--border-subtle)', borderRadius: 10, background: 'var(--bg-elevated)' }} />
-        ) : (
-          <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: 0 }}>{auth?.isAuthenticated ? t('noResume') : t('signInForResume')}</p>
-        )}
-      </div>
-    </PageContainer>
+    <>
+      {f && f.visibility === 'public' && <JsonLd data={personSchema(f, id)} />}
+      <TalentDetailClient />
+    </>
   );
 }

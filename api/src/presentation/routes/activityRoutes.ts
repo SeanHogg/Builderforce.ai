@@ -14,6 +14,8 @@ import { neon, type NeonQueryFunction } from '@neondatabase/serverless';
 import { authMiddleware } from '../middleware/authMiddleware';
 import { webAuthMiddleware } from '../middleware/webAuthMiddleware';
 import { resolveActiveMinutes, type ResolvableSignal } from '../../application/activity/resolveTime';
+import { notify } from '../../application/notifications/notify';
+import { isPayoutsConfigured, createPayout } from '../../application/integrations/payments';
 import type { HonoEnv } from '../../env';
 
 const SIGNAL_SOURCES = ['portal', 'vscode', 'agent', 'meeting', 'system'] as const;
@@ -333,28 +335,45 @@ export function createTimecardRoutes(): Hono<HonoEnv> {
     return c.json({ ok: true, ...totals });
   });
 
-  // POST /:id/submit — worker submits a draft timecard for approval.
+  // POST /:id/submit — worker submits a draft timecard for approval (notifies the
+  // employer who owns the engagement).
   router.post('/:id/submit', webAuthMiddleware, async (c) => {
     const userId = c.get('userId') as string;
     const id = c.req.param('id');
     const rows = await sql(c.env)`
       UPDATE timecards SET status = 'submitted', submitted_at = NOW(), updated_at = NOW()
-      WHERE id = ${id} AND user_id = ${userId} AND status = 'draft' RETURNING id
+      WHERE id = ${id} AND user_id = ${userId} AND status = 'draft' RETURNING id, tenant_id, engagement_id, billable_minutes
     `;
-    if (rows.length === 0) return c.json({ error: 'Not found or not draft' }, 404);
+    const card = rows[0];
+    if (!card) return c.json({ error: 'Not found or not draft' }, 404);
+    const [eng] = await sql(c.env)`SELECT created_by_user_id FROM freelancer_engagements WHERE id = ${card.engagement_id}`;
+    const [me] = await sql(c.env)`SELECT display_name FROM users WHERE id = ${userId}`;
+    if (eng?.created_by_user_id) {
+      await notify(sql(c.env), c.env, { userId: eng.created_by_user_id as string, tenantId: Number(card.tenant_id), kind: 'timecard_submitted', title: `${(me?.display_name as string) ?? 'A freelancer'} submitted a timecard`, ref: id });
+    }
     return c.json({ ok: true, status: 'submitted' });
   });
 
-  // POST /:id/approve — employer approves a submitted timecard (tenant JWT).
+  // POST /:id/approve — employer approves a submitted timecard (tenant JWT). This
+  // ISSUES an invoice (pending) for the billable amount and notifies the worker.
   router.post('/:id/approve', authMiddleware, async (c) => {
     const tenantId = c.get('tenantId') as number;
     const actor = c.get('userId') as string;
     const id = c.req.param('id');
     const rows = await sql(c.env)`
       UPDATE timecards SET status = 'approved', approved_at = NOW(), approved_by_user_id = ${actor}, updated_at = NOW()
-      WHERE id = ${id} AND tenant_id = ${tenantId} AND status = 'submitted' RETURNING id
+      WHERE id = ${id} AND tenant_id = ${tenantId} AND status = 'submitted'
+      RETURNING id, engagement_id, user_id, amount_cents, currency
     `;
-    if (rows.length === 0) return c.json({ error: 'Not found or not submitted' }, 404);
+    const card = rows[0];
+    if (!card) return c.json({ error: 'Not found or not submitted' }, 404);
+    // Issue an invoice (idempotent per timecard).
+    await sql(c.env)`
+      INSERT INTO freelancer_invoices (id, timecard_id, engagement_id, tenant_id, freelancer_user_id, amount_cents, currency, status)
+      VALUES (${crypto.randomUUID()}, ${id}, ${card.engagement_id}, ${tenantId}, ${card.user_id}, ${card.amount_cents}, ${card.currency ?? 'USD'}, 'pending')
+      ON CONFLICT (timecard_id) DO UPDATE SET amount_cents = EXCLUDED.amount_cents, updated_at = NOW()
+    `;
+    await notify(sql(c.env), c.env, { userId: card.user_id as string, tenantId, kind: 'timecard_approved', title: 'Your timecard was approved', body: `${card.currency ?? 'USD'} ${((Number(card.amount_cents) || 0) / 100).toFixed(2)}`, ref: id });
     return c.json({ ok: true, status: 'approved' });
   });
 
@@ -366,11 +385,85 @@ export function createTimecardRoutes(): Hono<HonoEnv> {
     try { const b = await c.req.json<{ reason?: string }>(); reason = b.reason ?? null; } catch { /* optional */ }
     const rows = await sql(c.env)`
       UPDATE timecards SET status = 'draft', reject_reason = ${reason}, submitted_at = NULL, updated_at = NOW()
-      WHERE id = ${id} AND tenant_id = ${tenantId} AND status = 'submitted' RETURNING id
+      WHERE id = ${id} AND tenant_id = ${tenantId} AND status = 'submitted' RETURNING id, user_id
     `;
-    if (rows.length === 0) return c.json({ error: 'Not found or not submitted' }, 404);
+    const card = rows[0];
+    if (!card) return c.json({ error: 'Not found or not submitted' }, 404);
+    await notify(sql(c.env), c.env, { userId: card.user_id as string, tenantId, kind: 'timecard_rejected', title: 'Your timecard was returned', body: reason, ref: id });
     return c.json({ ok: true, status: 'draft' });
+  });
+
+  // GET /invoices — employer's invoices (tenant JWT).
+  router.get('/invoices', authMiddleware, async (c) => {
+    const tenantId = c.get('tenantId') as number;
+    const rows = await sql(c.env)`
+      SELECT i.*, u.display_name AS freelancer_name FROM freelancer_invoices i JOIN users u ON u.id = i.freelancer_user_id
+      WHERE i.tenant_id = ${tenantId} ORDER BY i.issued_at DESC LIMIT 500
+    ` as unknown as Record<string, unknown>[];
+    return c.json(rows.map(mapInvoice));
+  });
+
+  // GET /invoices/mine — worker's invoices (web JWT).
+  router.get('/invoices/mine', webAuthMiddleware, async (c) => {
+    const userId = c.get('userId') as string;
+    const rows = await sql(c.env)`
+      SELECT i.*, t.name AS tenant_name FROM freelancer_invoices i JOIN tenants t ON t.id = i.tenant_id
+      WHERE i.freelancer_user_id = ${userId} ORDER BY i.issued_at DESC LIMIT 500
+    ` as unknown as Record<string, unknown>[];
+    return c.json(rows.map(mapInvoice));
+  });
+
+  // POST /invoices/:invId/pay — employer settles an invoice. Uses the payout
+  // provider when configured; otherwise the caller falls back to /mark-paid.
+  router.post('/invoices/:invId/pay', authMiddleware, async (c) => {
+    const tenantId = c.get('tenantId') as number;
+    const invId = c.req.param('invId');
+    const [inv] = await sql(c.env)`SELECT * FROM freelancer_invoices WHERE id = ${invId} AND tenant_id = ${tenantId} AND status = 'pending'`;
+    if (!inv) return c.json({ error: 'Not found or already settled' }, 404);
+    if (!isPayoutsConfigured(c.env)) return c.json({ error: 'No payout provider configured — use manual mark-paid', code: 'PAYOUTS_NOT_CONFIGURED' }, 409);
+    const res = await createPayout(c.env, { invoiceId: invId, amountCents: Number(inv.amount_cents), currency: inv.currency as string, freelancerUserId: inv.freelancer_user_id as string, tenantId });
+    if (!res.ok) return c.json({ error: res.error ?? 'Payout failed' }, 502);
+    await markInvoicePaid(sql(c.env), c.env, invId, res.externalRef ?? null);
+    return c.json({ ok: true, status: 'paid', externalRef: res.externalRef ?? null });
+  });
+
+  // POST /invoices/:invId/mark-paid — employer records a manual/off-platform payment.
+  router.post('/invoices/:invId/mark-paid', authMiddleware, async (c) => {
+    const tenantId = c.get('tenantId') as number;
+    const invId = c.req.param('invId');
+    const [inv] = await sql(c.env)`SELECT id FROM freelancer_invoices WHERE id = ${invId} AND tenant_id = ${tenantId} AND status = 'pending'`;
+    if (!inv) return c.json({ error: 'Not found or already settled' }, 404);
+    await markInvoicePaid(sql(c.env), c.env, invId, null);
+    return c.json({ ok: true, status: 'paid' });
   });
 
   return router;
 }
+
+/** Settle an invoice: mark it + its timecard paid, and notify the worker. Shared by
+ *  the provider-payout and manual mark-paid paths (DRY). */
+async function markInvoicePaid(sql: NeonQueryFunction<false, false>, env: Parameters<typeof notify>[1], invId: string, externalRef: string | null): Promise<void> {
+  const rows = await sql`
+    UPDATE freelancer_invoices SET status = 'paid', paid_at = NOW(), external_ref = ${externalRef}, updated_at = NOW()
+    WHERE id = ${invId} RETURNING timecard_id, tenant_id, freelancer_user_id, amount_cents, currency
+  `;
+  const inv = rows[0];
+  if (!inv) return;
+  await sql`UPDATE timecards SET status = 'paid', updated_at = NOW() WHERE id = ${inv.timecard_id}`;
+  await notify(sql, env, { userId: inv.freelancer_user_id as string, tenantId: Number(inv.tenant_id), kind: 'paid', title: 'You were paid', body: `${inv.currency ?? 'USD'} ${((Number(inv.amount_cents) || 0) / 100).toFixed(2)}`, ref: inv.timecard_id as string });
+}
+
+const mapInvoice = (r: Record<string, unknown>) => ({
+  id: r.id,
+  timecardId: r.timecard_id,
+  engagementId: r.engagement_id,
+  tenantId: Number(r.tenant_id),
+  tenantName: r.tenant_name ?? null,
+  freelancerName: r.freelancer_name ?? null,
+  amountCents: Number(r.amount_cents ?? 0),
+  currency: r.currency ?? 'USD',
+  status: r.status,
+  externalRef: r.external_ref ?? null,
+  issuedAt: r.issued_at ?? null,
+  paidAt: r.paid_at ?? null,
+});

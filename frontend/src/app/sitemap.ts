@@ -5,6 +5,20 @@ import { listPublishedSkillSlugs } from '@/lib/marketplaceSeo';
 
 const BASE = 'https://builderforce.ai';
 
+/** Public (published + public-visibility) freelancer userIds for the sitemap.
+ *  Best-effort: empty on any error so sitemap generation never fails. */
+async function listPublicFreelancerIds(): Promise<string[]> {
+  const apiBase = process.env.NEXT_PUBLIC_AUTH_API_URL || 'https://api.builderforce.ai';
+  try {
+    const res = await fetch(`${apiBase}/api/freelancers?pageSize=48`, { next: { revalidate: 3600 } });
+    if (!res.ok) return [];
+    const body = (await res.json()) as { items?: { userId: string }[] };
+    return Array.isArray(body.items) ? body.items.map((f) => f.userId).filter(Boolean) : [];
+  } catch {
+    return [];
+  }
+}
+
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const now = new Date().toISOString();
 
@@ -82,5 +96,13 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     priority: 0.6,
   }));
 
-  return [...staticPages, ...blogPages, ...comparePages, ...integrationPages, ...marketplacePages];
+  // Public freelancer profiles — indexable Person pages. Best-effort.
+  const talentPages: MetadataRoute.Sitemap = (await listPublicFreelancerIds()).map((id) => ({
+    url: `${BASE}/talent/${id}`,
+    lastModified: now,
+    changeFrequency: 'weekly' as const,
+    priority: 0.5,
+  }));
+
+  return [...staticPages, ...blogPages, ...comparePages, ...integrationPages, ...marketplacePages, ...talentPages];
 }

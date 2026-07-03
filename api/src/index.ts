@@ -82,6 +82,7 @@ import { createMarketplaceStatsRoutes } from './presentation/routes/marketplaceS
 import { createWorkforceRoutes }        from './presentation/routes/workforceRoutes';
 import { createFreelancerRoutes, createEngagementRoutes } from './presentation/routes/freelancerRoutes';
 import { createActivityRoutes, createTimecardRoutes } from './presentation/routes/activityRoutes';
+import { createJobRoutes, createNotificationRoutes } from './presentation/routes/jobRoutes';
 import { createLimbicRoutes }           from './presentation/routes/limbicRoutes';
 import { createPersonaRoutes }          from './presentation/routes/personaRoutes';
 import { createLlmRoutes }          from './presentation/routes/llmRoutes';
@@ -325,6 +326,9 @@ export function buildApp(env: Env): Hono<HonoEnv> {
   app.route('/api/engagements', createEngagementRoutes());
   app.route('/api/activity', createActivityRoutes());
   app.route('/api/timecards', createTimecardRoutes());
+  // Two-sided marketplace: job postings + proposals (bidding) and the in-app feed.
+  app.route('/api/jobs', createJobRoutes());
+  app.route('/api/notifications', createNotificationRoutes());
 
   // Limbic affective layer — serves the shared compiler's directive block to
   // clients that can't bundle it (the VS Code built-in agent).

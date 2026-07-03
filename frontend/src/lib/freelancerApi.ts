@@ -28,7 +28,74 @@ export interface FreelancerProfile {
   resumeFilename?: string | null;
   email?: string;
   embedUrl?: string | null;
+  rating?: number | null;
+  ratingCount?: number;
+  reviews?: FreelancerReview[];
   updatedAt?: string | null;
+}
+
+export interface FreelancerReview {
+  rating: number;
+  comment: string | null;
+  createdAt: string | null;
+  reviewerName: string | null;
+}
+
+export interface JobPosting {
+  id: string;
+  tenantId: number;
+  tenantName: string | null;
+  projectId: number | null;
+  title: string;
+  description: string | null;
+  discipline: string | null;
+  skills: string[];
+  rateMinCents: number | null;
+  rateMaxCents: number | null;
+  currency: string;
+  status: 'open' | 'closed' | 'filled';
+  visibility: 'public' | 'private';
+  proposalCount?: number;
+  createdAt: string | null;
+  myProposal?: { id: string; status: string } | null;
+}
+
+export interface JobProposal {
+  id: string;
+  jobId: string;
+  jobTitle: string | null;
+  freelancerUserId: string;
+  freelancerName: string | null;
+  coverNote: string | null;
+  rateCents: number | null;
+  currency: string;
+  status: 'submitted' | 'shortlisted' | 'accepted' | 'declined' | 'withdrawn';
+  createdAt: string | null;
+}
+
+export interface Notification {
+  id: number;
+  kind: string;
+  title: string;
+  body: string | null;
+  ref: string | null;
+  read: boolean;
+  createdAt: string | null;
+}
+
+export interface Invoice {
+  id: string;
+  timecardId: string;
+  engagementId: string;
+  tenantId: number;
+  tenantName?: string | null;
+  freelancerName?: string | null;
+  amountCents: number;
+  currency: string;
+  status: 'pending' | 'paid' | 'void';
+  externalRef: string | null;
+  issuedAt: string | null;
+  paidAt: string | null;
 }
 
 export interface Engagement {
@@ -111,12 +178,24 @@ export async function getMyEmbedToken(kind: 'profile' | 'resume' = 'profile'): P
 
 // ---- Marketplace: browse ------------------------------------------------
 
-export async function listFreelancers(): Promise<FreelancerProfile[]> {
+export interface TalentFilters { q?: string; discipline?: string; skill?: string; minRate?: number; maxRate?: number; sort?: string; page?: number; pageSize?: number }
+
+export async function listFreelancers(filters: TalentFilters = {}): Promise<{ items: FreelancerProfile[]; total: number; page: number; pageSize: number }> {
   const token = getStoredWebToken();
-  const res = await fetch(`${AUTH_API_URL}/api/freelancers`, {
+  const p = new URLSearchParams();
+  if (filters.q) p.set('q', filters.q);
+  if (filters.discipline) p.set('discipline', filters.discipline);
+  if (filters.skill) p.set('skill', filters.skill);
+  if (filters.minRate != null) p.set('minRate', String(filters.minRate));
+  if (filters.maxRate != null) p.set('maxRate', String(filters.maxRate));
+  if (filters.sort) p.set('sort', filters.sort);
+  if (filters.page) p.set('page', String(filters.page));
+  if (filters.pageSize) p.set('pageSize', String(filters.pageSize));
+  const qs = p.toString();
+  const res = await fetch(`${AUTH_API_URL}/api/freelancers${qs ? `?${qs}` : ''}`, {
     headers: token ? { Authorization: `Bearer ${token}` } : undefined,
   });
-  return jsonOrThrow<FreelancerProfile[]>(res, 'Failed to load freelancers');
+  return jsonOrThrow(res, 'Failed to load freelancers');
 }
 
 export async function getFreelancer(userId: string): Promise<FreelancerProfile> {
@@ -258,4 +337,113 @@ export async function sendActivitySignals(signals: ActivitySignalInput[]): Promi
 export async function getTodayActivity(): Promise<{ signalCount: number; minutes: number; byKind: Record<string, number> }> {
   const res = await fetch(`${AUTH_API_URL}/api/activity/today`, { headers: webHeaders(false) });
   return jsonOrThrow(res, 'Failed to load activity');
+}
+
+// ---- Worker: respond to an invite/interview -----------------------------
+export async function respondEngagement(id: string, accept: boolean): Promise<void> {
+  const res = await fetch(`${AUTH_API_URL}/api/engagements/${id}/respond`, { method: 'POST', headers: webHeaders(), body: JSON.stringify({ accept }) });
+  await jsonOrThrow(res, 'Failed to respond');
+}
+
+// ---- Employer: rate a freelancer ----------------------------------------
+export async function reviewFreelancer(engagementId: string, rating: number, comment?: string): Promise<void> {
+  const res = await fetch(`${AUTH_API_URL}/api/engagements/${engagementId}/review`, { method: 'POST', headers: tenantHeaders(), body: JSON.stringify({ rating, comment }) });
+  await jsonOrThrow(res, 'Failed to submit review');
+}
+
+// ---- Jobs + proposals (bidding) -----------------------------------------
+export async function listJobs(filters: { q?: string; discipline?: string; skill?: string } = {}): Promise<JobPosting[]> {
+  const p = new URLSearchParams();
+  if (filters.q) p.set('q', filters.q);
+  if (filters.discipline) p.set('discipline', filters.discipline);
+  if (filters.skill) p.set('skill', filters.skill);
+  const token = getStoredWebToken();
+  const res = await fetch(`${AUTH_API_URL}/api/jobs${p.toString() ? `?${p}` : ''}`, { headers: token ? { Authorization: `Bearer ${token}` } : undefined });
+  return jsonOrThrow<JobPosting[]>(res, 'Failed to load jobs');
+}
+
+export async function getJob(id: string): Promise<JobPosting> {
+  const token = getStoredWebToken();
+  const res = await fetch(`${AUTH_API_URL}/api/jobs/${id}`, { headers: token ? { Authorization: `Bearer ${token}` } : undefined });
+  return jsonOrThrow<JobPosting>(res, 'Failed to load job');
+}
+
+export async function listMyJobs(): Promise<JobPosting[]> {
+  const res = await fetch(`${AUTH_API_URL}/api/jobs/mine`, { headers: tenantHeaders(false) });
+  return jsonOrThrow<JobPosting[]>(res, 'Failed to load jobs');
+}
+
+export async function postJob(input: { title: string; description?: string; discipline?: string; skills?: string[]; rateMinCents?: number; rateMaxCents?: number; projectId?: number; visibility?: 'public' | 'private' }): Promise<{ id: string }> {
+  const res = await fetch(`${AUTH_API_URL}/api/jobs`, { method: 'POST', headers: tenantHeaders(), body: JSON.stringify(input) });
+  return jsonOrThrow(res, 'Failed to post job');
+}
+
+export async function updateJob(id: string, patch: { status?: string; title?: string; description?: string }): Promise<void> {
+  const res = await fetch(`${AUTH_API_URL}/api/jobs/${id}`, { method: 'PATCH', headers: tenantHeaders(), body: JSON.stringify(patch) });
+  await jsonOrThrow(res, 'Failed to update job');
+}
+
+export async function listJobProposals(jobId: string): Promise<JobProposal[]> {
+  const res = await fetch(`${AUTH_API_URL}/api/jobs/${jobId}/proposals`, { headers: tenantHeaders(false) });
+  return jsonOrThrow<JobProposal[]>(res, 'Failed to load proposals');
+}
+
+export async function bidJob(jobId: string, input: { coverNote?: string; rateCents?: number }): Promise<{ id: string }> {
+  const res = await fetch(`${AUTH_API_URL}/api/jobs/${jobId}/proposals`, { method: 'POST', headers: webHeaders(), body: JSON.stringify(input) });
+  return jsonOrThrow(res, 'Failed to submit proposal');
+}
+
+export async function listMyProposals(): Promise<JobProposal[]> {
+  const res = await fetch(`${AUTH_API_URL}/api/jobs/proposals/mine`, { headers: webHeaders(false) });
+  return jsonOrThrow<JobProposal[]>(res, 'Failed to load proposals');
+}
+
+export async function withdrawProposal(pid: string): Promise<void> {
+  const res = await fetch(`${AUTH_API_URL}/api/jobs/proposals/${pid}/withdraw`, { method: 'POST', headers: webHeaders(false) });
+  await jsonOrThrow(res, 'Failed to withdraw');
+}
+
+export async function acceptProposal(pid: string): Promise<{ engagementId: string }> {
+  const res = await fetch(`${AUTH_API_URL}/api/jobs/proposals/${pid}/accept`, { method: 'POST', headers: tenantHeaders(false) });
+  return jsonOrThrow(res, 'Failed to accept proposal');
+}
+
+export async function declineProposal(pid: string): Promise<void> {
+  const res = await fetch(`${AUTH_API_URL}/api/jobs/proposals/${pid}/decline`, { method: 'POST', headers: tenantHeaders(false) });
+  await jsonOrThrow(res, 'Failed to decline proposal');
+}
+
+// ---- Invoices + payments -------------------------------------------------
+export async function listEmployerInvoices(): Promise<Invoice[]> {
+  const res = await fetch(`${AUTH_API_URL}/api/timecards/invoices`, { headers: tenantHeaders(false) });
+  return jsonOrThrow<Invoice[]>(res, 'Failed to load invoices');
+}
+
+export async function listMyInvoices(): Promise<Invoice[]> {
+  const res = await fetch(`${AUTH_API_URL}/api/timecards/invoices/mine`, { headers: webHeaders(false) });
+  return jsonOrThrow<Invoice[]>(res, 'Failed to load invoices');
+}
+
+/** Settle an invoice: uses the payout provider when configured, else falls back to
+ *  a manual record. Returns whether the provider path ran. */
+export async function payInvoice(invId: string): Promise<{ paid: boolean; manual: boolean }> {
+  const res = await fetch(`${AUTH_API_URL}/api/timecards/invoices/${invId}/pay`, { method: 'POST', headers: tenantHeaders(false) });
+  if (res.status === 409) { // no payout provider — fall back to manual record
+    const m = await fetch(`${AUTH_API_URL}/api/timecards/invoices/${invId}/mark-paid`, { method: 'POST', headers: tenantHeaders(false) });
+    await jsonOrThrow(m, 'Failed to mark paid');
+    return { paid: true, manual: true };
+  }
+  await jsonOrThrow(res, 'Failed to pay');
+  return { paid: true, manual: false };
+}
+
+// ---- Notifications feed --------------------------------------------------
+export async function listNotifications(): Promise<{ unread: number; items: Notification[] }> {
+  const res = await fetch(`${AUTH_API_URL}/api/notifications`, { headers: webHeaders(false) });
+  return jsonOrThrow(res, 'Failed to load notifications');
+}
+
+export async function markNotificationsRead(ids?: number[]): Promise<void> {
+  const res = await fetch(`${AUTH_API_URL}/api/notifications/read`, { method: 'POST', headers: webHeaders(), body: JSON.stringify({ ids }) });
+  await jsonOrThrow(res, 'Failed');
 }
