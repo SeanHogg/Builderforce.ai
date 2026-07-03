@@ -349,6 +349,20 @@ export function stopRun(chatId: number): void {
   pushTrace(c, { ts: nowIso(), category: 'message', label: 'agent.stopped', result: 'Stopped by user.' });
 }
 
+/**
+ * Clear a chat's surfaced run error so the UI's error banner can be dismissed.
+ * The error lives on the run cell (set when the LLM stream / tool loop threw),
+ * so the hook's local `setError('')` can't reach it — this is the store-side
+ * companion `clearError()` calls. No-op when there's no cell or no error.
+ */
+export function clearRunError(chatId: number | null): void {
+  if (chatId == null) return;
+  const c = cells.get(chatId);
+  if (!c || !c.error) return;
+  c.error = '';
+  emit(c);
+}
+
 /** Resolve a pending human-in-the-loop confirmation. No-op if none is pending. */
 export function resolveRunConfirm(chatId: number, ok: boolean): void {
   const c = cells.get(chatId);

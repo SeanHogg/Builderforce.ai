@@ -65,6 +65,31 @@ describe('getTenantTokenAvailability', () => {
     // billing 'none' downgrades pro→free regardless of the stored plan.
     expect(a.effectivePlan).toBe('free');
   });
+
+  it('a superadmin acting user is unlimited even on a capped free tenant (no usage scan)', async () => {
+    // Order of selects with actingUserId: tenant row, then users.isSuperadmin. The
+    // superadmin short-circuit skips the usage scan entirely, so none is queued.
+    const db = fakeDb([
+      [{ plan: 'free', billingStatus: 'none', trialEndsAt: null, tokenDailyLimitOverride: null }],
+      [{ isSuperadmin: true }],
+    ]);
+    const a = await getTenantTokenAvailability(db, 1, { actingUserId: 'user_admin' });
+    expect(a.hasTokens).toBe(true);
+    expect(a.reason).toBeNull();
+    expect(a.dailyLimit).toBe(-1);
+    expect(a.monthlyLimit).toBe(-1);
+  });
+
+  it('a non-superadmin acting user is still gated by the tenant cap', async () => {
+    const db = fakeDb([
+      [{ ...activePro, tokenDailyLimitOverride: 1000 }],
+      [{ isSuperadmin: false }],
+      [{ day: 1000, month: 1000 }],
+    ]);
+    const a = await getTenantTokenAvailability(db, 1, { actingUserId: 'user_dev' });
+    expect(a.hasTokens).toBe(false);
+    expect(a.reason).toBe('daily_exhausted');
+  });
 });
 
 describe('checkTenantTokenGate', () => {

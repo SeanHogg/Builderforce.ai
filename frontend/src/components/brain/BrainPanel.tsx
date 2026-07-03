@@ -84,6 +84,7 @@ export function BrainPanel({
 }: BrainPanelProps) {
   const isPage = variant === 'page';
   const tTimeline = useTranslations('brain.timeline');
+  const tCommon = useTranslations('common');
 
   // Project scope follows the global TopBar tenant→project selector — one picker
   // for the whole app (see ProjectScopeContext). The Brain's filter dropdown
@@ -333,7 +334,10 @@ export function BrainPanel({
     setInput('');
     // Audited engagement signal: interacting with the AI agent is billable activity.
     trackActivity('agent_message', { weight: 2 });
-    await conv.send(text);
+    // Restore the text if the send fails before it's persisted (e.g. an expired
+    // session) so the user's message is never silently lost.
+    const ok = await conv.send(text);
+    if (!ok) setInput((cur) => cur || text);
   }, [input, conv]);
 
   // Capture execution: copy the Brain run's LLM/tool/error trace + transcript to
@@ -405,6 +409,8 @@ export function BrainPanel({
   }, [initialPrompt, conv]);
 
   const error = chats.error || conv.error;
+  // The banner surfaces either source; dismissing must clear whichever is set.
+  const dismissError = useCallback(() => { chats.setError(''); conv.clearError(); }, [chats, conv]);
 
   // ---- Shared sub-renders ---------------------------------------------------
 
@@ -486,8 +492,17 @@ export function BrainPanel({
   const conversation = (
     <>
       {error && (
-        <div style={{ margin: '8px 12px 0', padding: '8px 12px', fontSize: 13, background: 'var(--error-bg)', color: 'var(--error-text)', borderRadius: 8 }}>
-          {error}
+        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, margin: '8px 12px 0', padding: '8px 12px', fontSize: 13, background: 'var(--error-bg)', color: 'var(--error-text)', borderRadius: 8 }} role="alert">
+          <span style={{ flex: 1, minWidth: 0, overflowWrap: 'anywhere' }}>{error}</span>
+          <button
+            type="button"
+            onClick={dismissError}
+            title={tCommon('dismiss')}
+            aria-label={tCommon('dismiss')}
+            style={{ flex: '0 0 auto', background: 'transparent', border: 'none', color: 'inherit', cursor: 'pointer', fontSize: 16, lineHeight: 1, padding: 0 }}
+          >
+            ×
+          </button>
         </div>
       )}
       {chats.activeChatId == null ? (

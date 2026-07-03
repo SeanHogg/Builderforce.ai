@@ -215,6 +215,43 @@ export function marketplaceAgentsSchema(
   };
 }
 
+/** Talent marketplace: CollectionPage + an ItemList of for-hire freelancers. */
+export function talentMarketplaceSchema(
+  freelancers: { userId: string; displayName?: string | null; headline?: string | null; discipline?: string | null; skills?: string[] | null }[],
+) {
+  return {
+    '@context': 'https://schema.org',
+    '@graph': [
+      {
+        '@type': 'CollectionPage',
+        name: 'Talent Marketplace',
+        description: 'Hire vetted freelance developers, DBAs, designers and other specialists on Builderforce.ai — with résumés, skills and hourly rates.',
+        url: `${BRAND.url}/talent`,
+        publisher: { '@id': `${BRAND.url}/#organization` },
+      },
+      {
+        '@type': 'ItemList',
+        itemListElement: freelancers.slice(0, 100).map((f, i) => ({
+          '@type': 'ListItem',
+          position: i + 1,
+          item: {
+            '@type': 'Person',
+            name: f.displayName ?? 'Freelancer',
+            url: `${BRAND.url}/talent/${encodeURIComponent(f.userId)}`,
+            ...(f.headline ? { description: f.headline } : {}),
+            ...(f.discipline ? { jobTitle: f.discipline } : {}),
+            ...(f.skills && f.skills.length > 0 ? { knowsAbout: f.skills.join(', ') } : {}),
+          },
+        })),
+      },
+      breadcrumbs(
+        { name: 'Home', url: BRAND.url },
+        { name: 'Talent', url: `${BRAND.url}/talent` },
+      ),
+    ],
+  };
+}
+
 /** Individual blog post: Article + BreadcrumbList */
 export function blogPostSchema(post: {
   slug: string;

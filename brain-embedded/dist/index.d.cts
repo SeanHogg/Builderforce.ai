@@ -549,7 +549,13 @@ interface UseBrainConversation {
     feedbackMap: Record<number, 'up' | 'down'>;
     pendingAttachments: ChatInputAttachment[];
     uploading: boolean;
-    send(text: string): Promise<void>;
+    /**
+     * Persist + answer a user turn. Resolves `true` once the turn is safely
+     * persisted and the run has started (the message can no longer be lost), or
+     * `false` if it failed before persisting (e.g. the token expired mid-send) —
+     * so a composer can restore the text the user typed instead of dropping it.
+     */
+    send(text: string): Promise<boolean>;
     /**
      * Stop the in-flight run for the active chat: aborts the streaming LLM request
      * and unwinds the agent loop (no error surfaced). No-op when nothing is
@@ -561,6 +567,12 @@ interface UseBrainConversation {
     attach(file: File): Promise<void>;
     removeAttachment(key: string): void;
     setError(msg: string): void;
+    /**
+     * Dismiss the current error banner. Clears BOTH the hook's local error and the
+     * run cell's error (a failed LLM stream / tool loop sets the latter, which
+     * `setError('')` alone can't reach) — so the user can always close the banner.
+     */
+    clearError(): void;
     /** A tool call awaiting the user's Approve/Cancel decision (or null). */
     pendingConfirm: {
         name: string;

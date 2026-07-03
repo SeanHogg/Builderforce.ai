@@ -14,7 +14,7 @@
  */
 import { eq } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
-import { tenants } from '../../infrastructure/database/schema';
+import { tenants, users } from '../../infrastructure/database/schema';
 import { TenantPlan, TenantBillingStatus } from '../../domain/shared/types';
 import { resolveEffectivePlan } from '../../domain/tenant/effectivePlan';
 import { resolveTokenLimits } from '../../domain/tenant/PlanLimits';
@@ -46,13 +46,22 @@ function planString(plan: TenantPlan): 'free' | 'pro' | 'teams' {
 }
 
 /**
- * Resolve a tenant's live token availability. Unlimited tenants (superadmin
- * override -1, or a plan with no cap) short-circuit to `hasTokens: true` without a
- * usage scan. Otherwise a single day+month scan decides it. Best-effort by
- * contract: the caller (cron) treats a throw as "unknown" and skips rather than
- * blocks — see the sweep.
+ * Resolve a tenant's live token availability. Unlimited callers short-circuit to
+ * `hasTokens: true` without a usage scan: a tenant on a plan with no cap (or a
+ * `tokenDailyLimitOverride` of -1), OR a superadmin acting user (pass
+ * `opts.actingUserId`) — the platform operator is never gated, mirroring the LLM
+ * gateway's `enforceTokenCaps`, where `users.isSuperadmin` is the sole,
+ * revocation-safe source of truth. Otherwise a single day+month scan decides it.
+ *
+ * Best-effort by contract: the caller (cron) treats a throw as "unknown" and skips
+ * rather than blocks — see the sweep. Cron callers omit `actingUserId` (no acting
+ * user), so their tenant-only gating is unchanged.
  */
-export async function getTenantTokenAvailability(db: Db, tenantId: number): Promise<TenantTokenAvailability> {
+export async function getTenantTokenAvailability(
+  db: Db,
+  tenantId: number,
+  opts?: { actingUserId?: string | null },
+): Promise<TenantTokenAvailability> {
   const [row] = await db
     .select({
       plan: tenants.plan,
@@ -73,9 +82,28 @@ export async function getTenantTokenAvailability(db: Db, tenantId: number): Prom
   });
   const effectivePlan = planString(effectivePlanEnum);
 
+  // Superadmin acting user → unlimited, same as the LLM gateway. Resolved from
+  // `users.isSuperadmin` (fresh on every call → instant revocation), never from a
+  // JWT claim. Best-effort: a lookup failure is treated as "not superadmin" so the
+  // normal plan gate still applies rather than accidentally granting bypass.
+  let isSuperadmin = false;
+  if (opts?.actingUserId) {
+    try {
+      const [u] = await db
+        .select({ isSuperadmin: users.isSuperadmin })
+        .from(users)
+        .where(eq(users.id, opts.actingUserId))
+        .limit(1);
+      isSuperadmin = u?.isSuperadmin === true;
+    } catch {
+      isSuperadmin = false;
+    }
+  }
+
   const { dailyLimit, monthlyLimit } = resolveTokenLimits({
     effectivePlan: effectivePlanEnum,
     tokenDailyLimitOverride: row?.tokenDailyLimitOverride ?? null,
+    isSuperadmin,
   });
 
   const dailyCapped = dailyLimit > 0;
@@ -135,11 +163,18 @@ function tokenGateUpgradeHint(effectivePlan: 'free' | 'pro' | 'teams', window: '
  * so "no budget → no run" is defined once for every manual dispatch surface (and
  * matches the autonomous cron's gate + the gateway's spend gate). Fails OPEN on any
  * error — a transient usage-scan failure must not block a human clicking Run.
+ *
+ * Pass `opts.actingUserId` (the request's `userId`) so a superadmin operator is
+ * never gated — the interactive surfaces always have one; the cron does not.
  */
-export async function checkTenantTokenGate(db: Db, tenantId: number): Promise<TokenGateBlock | null> {
+export async function checkTenantTokenGate(
+  db: Db,
+  tenantId: number,
+  opts?: { actingUserId?: string | null },
+): Promise<TokenGateBlock | null> {
   let availability: TenantTokenAvailability;
   try {
-    availability = await getTenantTokenAvailability(db, tenantId);
+    availability = await getTenantTokenAvailability(db, tenantId, opts);
   } catch {
     return null; // fail open
   }

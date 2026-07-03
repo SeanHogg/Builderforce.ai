@@ -64,6 +64,8 @@ function buildLabels(): Record<string, string> {
     "app.approve": t("Approve"),
     "app.cancel": t("Cancel"),
     "app.always": t("Always"),
+    "app.dismiss": t("Dismiss"),
+    "app.reconnect": t("Reconnect"),
     "app.taskSeed": t("Let's work on {task}."),
     "app.taskSeedDispatched": t("I just dispatched {task} to run on the platform. Check the latest execution's status and trace, then help me follow up."),
   };

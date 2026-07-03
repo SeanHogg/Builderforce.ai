@@ -628,12 +628,31 @@ async function runTask(
     vscode.window.showInformationMessage(`BuilderForce: dispatched ${label} to the platform runtime.`);
   } catch (e) {
     const message = (e as Error).message;
-    if (/HTTP 402/.test(message)) {
+    const dispatchErr = e instanceof bfApi.BfDispatchError ? e : undefined;
+    if (dispatchErr?.httpStatus === 402 || /HTTP 402/.test(message)) {
       const action = await vscode.window.showErrorMessage(
         "BuilderForce: your plan's run limit is reached. Upgrade your workspace to dispatch more runs.",
         "Open BuilderForce",
       );
       if (action) void vscode.env.openExternal(vscode.Uri.parse(`${getWebBaseUrl()}/settings`));
+      return;
+    }
+    // Token budget exhausted (HTTP 429). Show the API's plan-tailored reason (e.g.
+    // "Plan daily token limit reached (10,000 tokens)…") with a direct upgrade path,
+    // instead of dumping the raw dispatch error — the whole point of this branch.
+    const isTokenLimit =
+      dispatchErr?.code === "plan_token_limit_exceeded" ||
+      dispatchErr?.code === "plan_monthly_token_limit_exceeded" ||
+      dispatchErr?.httpStatus === 429;
+    if (isTokenLimit) {
+      const reason = dispatchErr?.serverMessage ?? "Your workspace has reached its plan token limit for now.";
+      const action = await vscode.window.showErrorMessage(
+        `BuilderForce: can't run ${label} — ${reason}`,
+        "Upgrade to Pro",
+        "View Usage",
+      );
+      if (action === "Upgrade to Pro") void vscode.env.openExternal(vscode.Uri.parse(`${getWebBaseUrl()}/pricing`));
+      else if (action === "View Usage") void vscode.env.openExternal(vscode.Uri.parse(`${getWebBaseUrl()}/settings`));
       return;
     }
     if (/not_signed_in/.test(message)) {

@@ -1,76 +1,43 @@
-'use client';
+import type { Metadata } from 'next';
+import { pageMetadata } from '@/lib/seo';
+import JsonLd from '@/components/JsonLd';
+import { talentMarketplaceSchema } from '@/lib/structured-data';
+import TalentMarketplaceClient from './TalentMarketplaceClient';
 
-import { useEffect, useState } from 'react';
-import Link from 'next/link';
-import { useTranslations } from 'next-intl';
-import PageContainer from '@/components/PageContainer';
-import { useOptionalAuth } from '@/lib/AuthContext';
-import { listFreelancers, type FreelancerProfile } from '@/lib/freelancerApi';
+// Server-side data fetch (public freelancers → JSON-LD) runs on the edge runtime
+// under @cloudflare/next-on-pages — same convention as /marketplace.
+export const runtime = 'edge';
 
-const card: React.CSSProperties = {
-  background: 'var(--bg-base)', border: '1px solid var(--border-subtle)', borderRadius: 12, padding: 18,
-  display: 'flex', flexDirection: 'column', gap: 10, textDecoration: 'none',
-};
+export const metadata: Metadata = pageMetadata({
+  title: 'Talent Marketplace — Hire Freelance Developers, DBAs & Designers',
+  description:
+    'Hire vetted freelance developers, DBAs, designers and other specialists on Builderforce.ai. Browse résumés, skills and hourly rates, interview, and track billable hours — all in one place.',
+  path: '/talent',
+});
 
-function initials(name: string | null): string {
-  return (name ?? '?').trim().split(/\s+/).slice(0, 2).map((s) => s[0]?.toUpperCase() ?? '').join('') || '?';
+interface PublicFreelancer { userId: string; displayName?: string | null; headline?: string | null; discipline?: string | null; skills?: string[] | null }
+
+/** Fetch published public freelancers server-side so their skills/headlines are
+ *  crawlable as JSON-LD. Best-effort; failure → no JSON-LD (the client still
+ *  renders the live list after hydration). */
+async function fetchPublicFreelancers(): Promise<PublicFreelancer[]> {
+  const apiBase = process.env.NEXT_PUBLIC_AUTH_API_URL || 'https://api.builderforce.ai';
+  try {
+    const res = await fetch(`${apiBase}/api/freelancers`, { next: { revalidate: 3600 } });
+    if (!res.ok) return [];
+    const rows = (await res.json()) as PublicFreelancer[];
+    return Array.isArray(rows) ? rows : [];
+  } catch {
+    return [];
+  }
 }
 
-export default function TalentMarketplacePage() {
-  const t = useTranslations('talent');
-  const auth = useOptionalAuth();
-  const [rows, setRows] = useState<FreelancerProfile[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    listFreelancers().then(setRows).catch((e: Error) => setError(e.message)).finally(() => setLoading(false));
-  }, []);
-
+export default async function TalentPage() {
+  const freelancers = await fetchPublicFreelancers();
   return (
-    <PageContainer width="full" style={{ padding: '32px 40px' }}>
-      <div style={{ marginBottom: 24 }}>
-        <h1 style={{ fontSize: 24, fontWeight: 800, color: 'var(--text-primary)', marginBottom: 4 }}>{t('title')}</h1>
-        <p style={{ fontSize: 14, color: 'var(--text-muted)', margin: 0 }}>{t('subtitle')}</p>
-        {!auth?.isAuthenticated && <p style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 8 }}>{t('signInToView')}</p>}
-      </div>
-
-      {loading ? (
-        <p style={{ color: 'var(--text-muted)', fontSize: 13 }}>…</p>
-      ) : error ? (
-        <p style={{ color: 'var(--coral-bright)', fontSize: 13 }}>{error}</p>
-      ) : rows.length === 0 ? (
-        <div style={{ ...card, textAlign: 'center', padding: 48, color: 'var(--text-muted)' }}>{t('empty')}</div>
-      ) : (
-        <div style={{ display: 'grid', gap: 14, gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 300px), 1fr))' }}>
-          {rows.map((f) => (
-            <Link key={f.userId} href={`/talent/${f.userId}`} style={card} className="hover-lift">
-              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                <div style={{ width: 44, height: 44, borderRadius: '50%', background: 'var(--surface-interactive)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, color: 'var(--text-primary)', flexShrink: 0 }}>
-                  {initials(f.displayName)}
-                </div>
-                <div style={{ minWidth: 0 }}>
-                  <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{f.displayName ?? '—'}</div>
-                  <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>{f.headline ?? f.discipline ?? ''}</div>
-                </div>
-              </div>
-              {f.skills.length > 0 && (
-                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                  {f.skills.slice(0, 4).map((s) => (
-                    <span key={s} style={{ fontSize: 11, padding: '2px 8px', borderRadius: 999, background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', color: 'var(--text-secondary)' }}>{s}</span>
-                  ))}
-                </div>
-              )}
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 'auto' }}>
-                <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--coral-bright)' }}>
-                  {f.hourlyRateCents != null ? `${f.currency} ${(f.hourlyRateCents / 100).toFixed(0)}${t('perHour')}` : ''}
-                </span>
-                <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{t('viewProfile')} →</span>
-              </div>
-            </Link>
-          ))}
-        </div>
-      )}
-    </PageContainer>
+    <>
+      {freelancers.length > 0 && <JsonLd data={talentMarketplaceSchema(freelancers)} />}
+      <TalentMarketplaceClient />
+    </>
   );
 }

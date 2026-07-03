@@ -935,6 +935,13 @@ function stopRun(chatId) {
   c.streamingText = "";
   pushTrace(c, { ts: nowIso(), category: "message", label: "agent.stopped", result: "Stopped by user." });
 }
+function clearRunError(chatId) {
+  if (chatId == null) return;
+  const c = cells.get(chatId);
+  if (!c || !c.error) return;
+  c.error = "";
+  emit(c);
+}
 function resolveRunConfirm(chatId, ok) {
   const c = cells.get(chatId);
   if (!c || !c.confirmResolver) return;
@@ -1172,13 +1179,13 @@ ${extraSystem}` : resolvedSystemPrompt;
   const send = (0, import_react6.useCallback)(
     async (text) => {
       const trimmed = text.trim();
-      if (!trimmed || localSending || isRunning(chatId)) return;
+      if (!trimmed || localSending || isRunning(chatId)) return false;
       let id = chatId;
       if (id == null) {
         id = await ensureChatId?.() ?? null;
         if (id == null) {
           setLocalError("Could not start a chat.");
-          return;
+          return false;
         }
       }
       autoRepliedChatIdRef.current = id;
@@ -1212,8 +1219,11 @@ ${refs}`;
           content: m.content
         }));
         await startRun(id, buildRequest(seed, modelContent));
+        return true;
       } catch (e) {
+        setPendingAttachments(attachments);
         setLocalError(e instanceof Error ? e.message : "Send failed");
+        return false;
       } finally {
         setLocalSending(false);
       }
@@ -1283,6 +1293,10 @@ ${refs}`;
   const resolveConfirm = (0, import_react6.useCallback)((ok) => {
     if (chatId != null) resolveRunConfirm(chatId, ok);
   }, [chatId]);
+  const clearError = (0, import_react6.useCallback)(() => {
+    setLocalError("");
+    clearRunError(chatId);
+  }, [chatId]);
   const stop = (0, import_react6.useCallback)(() => {
     if (chatId != null) stopRun(chatId);
   }, [chatId]);
@@ -1314,6 +1328,7 @@ ${refs}`;
     attach,
     removeAttachment,
     setError: setLocalError,
+    clearError,
     pendingConfirm: snapshot.pendingConfirm,
     resolveConfirm,
     hasTrace: snapshot.hasTrace,

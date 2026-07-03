@@ -266,8 +266,21 @@ function Chat({ init }: { init: InitData }) {
     const text = input.trim();
     if (!text || conv.sending) return;
     setInput('');
-    void conv.send(text);
+    // Restore the typed text if the send fails before it's persisted (e.g. the
+    // token expired) so the user's message is never silently lost — they can
+    // just hit Send again once reconnected. Guard against clobbering anything
+    // they've started typing in the meantime.
+    void conv.send(text).then((ok) => { if (!ok) setInput((cur) => cur || text); });
   }, [input, conv]);
+
+  // An expired/invalid session surfaces as a 401 whose body mentions the token.
+  // We offer an explicit "Reconnect" affordance for it (re-exchange the token),
+  // on top of the always-available dismiss.
+  const isAuthError = /invalid or expired token|unauthor/i.test(conv.error);
+  const reconnect = useCallback(() => {
+    void refreshToken();
+    conv.clearError();
+  }, [conv]);
 
   // Triage helpers: copy the full transcript (turns + tool I/O + errors) so a
   // "No response" turn can be shared with its underlying system output, and run
@@ -350,7 +363,26 @@ function Chat({ init }: { init: InitData }) {
         />
       </div>
 
-      {conv.error && <div className="bf-error">{conv.error}</div>}
+      {conv.error && (
+        <div className="bf-error" role="alert">
+          <span className="bf-error__msg">{conv.error}</span>
+          <div className="bf-error__actions">
+            {isAuthError && (
+              <button className="bf-btn bf-btn--primary" onClick={reconnect}>
+                {t('app.reconnect', 'Reconnect')}
+              </button>
+            )}
+            <button
+              className="bf-btn bf-btn--icon"
+              onClick={conv.clearError}
+              title={t('app.dismiss', 'Dismiss')}
+              aria-label={t('app.dismiss', 'Dismiss')}
+            >
+              ×
+            </button>
+          </div>
+        </div>
+      )}
 
       {conv.pendingConfirm && (
         <div className="bf-confirm">
