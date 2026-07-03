@@ -4823,7 +4823,11 @@
     "rate": "Tarifa",
     "location": "Ubicación",
     "availability": "Disponibilidad",
-    "private": "Perfil privado"
+    "private": "Perfil privado",
+    "hero": {
+      "blurb": "Contrata freelancers verificados: desarrolladores, DBA, diseñadores y otros especialistas. Revisa currículums y habilidades, acuerda una tarifa por hora, entrevista y controla las horas facturables en un solo lugar.",
+      "ctaHire": "Publicar trabajo y contratar"
+    }
   },
   "hires": {
     "title": "Contrataciones",

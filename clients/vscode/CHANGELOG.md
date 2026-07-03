@@ -2,6 +2,10 @@
 
 All notable changes to the BuilderForce VS Code extension are documented here.
 
+## [2026.7.13] — Your message is never lost when a session expires
+
+- **Fixed: a chat error you can dismiss — and a message you don't lose.** If your session expired mid-send, the chat used to show a red "Invalid or expired token" error you couldn't close, and the message you'd typed was gone. Now the error banner has a **Dismiss** button plus a one-click **Reconnect** that re-establishes your session, and the text you sent is put back in the composer so you can send it again once you're reconnected.
+
 ## [2026.7.10] — Roadmap, retros, and poker — in the editor
 
 - **Three more pages open natively.** "Open Page…" now includes your **Roadmap** (items grouped by Now / Next / Later, with target dates and status at a glance), your **Retrospectives**, and your **Planning Poker** sessions — each opens instantly in the editor like the rest, no blank panels. Click any item to pick it up with the chat (plan a roadmap item, turn retro feedback into tasks, or review the estimates). That completes the set: Backlog, PRDs, Roadmap, Retros, and Poker are all in the editor now.

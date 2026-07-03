@@ -277,6 +277,24 @@ export class ChatTicketService {
     return out;
   }
 
+  // ── chat message history (so an agent can "review the chat history") ───────
+
+  /** A chat's message transcript (role/content/seq), tenant/user-scoped through
+   *  the same ownership guard. Lets the Brain read a conversation before deciding
+   *  what to merge/consolidate — the missing half of "review the chat history". */
+  async listMessages(
+    tenantId: number, chatId: number, userId: string | null, limit = 200,
+  ): Promise<{ error: string } | Array<{ role: string; content: string; seq: number; createdAt: Date }>> {
+    const chat = await this.ownedChat(chatId, tenantId, userId);
+    if (!chat) return { error: 'Chat not found' };
+    return this.db
+      .select({ role: brainChatMessages.role, content: brainChatMessages.content, seq: brainChatMessages.seq, createdAt: brainChatMessages.createdAt })
+      .from(brainChatMessages)
+      .where(eq(brainChatMessages.chatId, chatId))
+      .orderBy(brainChatMessages.seq)
+      .limit(Math.min(limit, 500));
+  }
+
   // ── links (forward: chat → tickets) ───────────────────────────────────────
 
   /** Tickets a chat is tied to, each with live health. */

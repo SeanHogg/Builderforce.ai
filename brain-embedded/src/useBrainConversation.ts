@@ -71,6 +71,8 @@ export interface UseBrainConversationOptions {
 export interface UseBrainConversation {
   messages: BrainMessage[];
   loadingMessages: boolean;
+  /** Force a transcript refetch without changing the chat id (e.g. after a merge). */
+  reloadMessages: () => void;
   sending: boolean;
   error: string;
   /** Live assistant delta buffer (rendered as a trailing bubble while streaming). */
@@ -145,6 +147,10 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
 
   const [messages, setMessages] = useState<BrainMessage[]>([]);
   const [loadingMessages, setLoadingMessages] = useState(false);
+  // Bumped by reloadMessages() to force a transcript refetch without changing the
+  // chat id — e.g. after another chat is merged INTO this one server-side.
+  const [reloadNonce, setReloadNonce] = useState(0);
+  const reloadMessages = useCallback(() => setReloadNonce((n) => n + 1), []);
   const [localSending, setLocalSending] = useState(false);
   const [localError, setLocalError] = useState('');
   const [copiedMessageId, setCopiedMessageId] = useState<number | null>(null);
@@ -184,7 +190,7 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
         if (!cancelled) setLoadingMessages(false);
       });
     return () => { cancelled = true; };
-  }, [persistence, chatId]);
+  }, [persistence, chatId, reloadNonce]);
 
   // A run (possibly started in another, now-unmounted Brain instance) persisted
   // assistant messages — splice them in without a refetch. The store delivers
@@ -409,6 +415,7 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
   return {
     messages,
     loadingMessages,
+    reloadMessages,
     sending: localSending || snapshot.running,
     error: localError || snapshot.error,
     streamingText: snapshot.streamingText,

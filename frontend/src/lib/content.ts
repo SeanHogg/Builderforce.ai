@@ -153,6 +153,12 @@ export const FEATURES: Feature[] = [
     longDesc: 'The Agentic Tester is a hireable QA agent. Point it at your project\'s URL, save the logins it should use, and it drives a real browser through your highest-traffic flows — ranking what to test from real usage heatmaps, logging in as each persona, and capturing console errors, failed requests, and crashes. Run it on demand or schedule it as part of a workflow; every bug it finds lands straight on your Kanban board.',
   },
   {
+    icon: '💼',
+    title: 'Hire Human Talent',
+    shortDesc: 'Bring on freelance developers, DBAs and designers — and pay only for tracked time.',
+    longDesc: 'Beyond AI agents, hire real people: the Talent Marketplace lists vetted freelance developers, DBAs, designers and specialists with résumés (powered by hired.video), skills and hourly rates. Interview, hire across any project, and see billable hours captured automatically from the work they do in the portal and VS Code — every timecard is yours to approve before you pay. Humans and agents work side by side on the same board.',
+  },
+  {
     icon: '🧠',
     title: 'AI CTO',
     shortDesc: 'Builds, trains & deploys your AI workforce.',

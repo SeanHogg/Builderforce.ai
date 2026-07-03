@@ -237,8 +237,12 @@ interface ChatTicketsPanelProps {
     labels: ChatTicketsLabels;
     /** Called after a merge (so the host can refresh its chat list). */
     onChanged?: () => void;
+    /** Bump to force a reload of tickets + agents — the host raises this when the
+     *  Brain mutates work items via MCP tools (link/merge/invite/task move) so the
+     *  panel doesn't go stale after a change it didn't originate. */
+    refreshSignal?: number;
 }
-declare function ChatTicketsPanel({ chatId, projectId, chatList, adapter, labels, onChanged }: ChatTicketsPanelProps): React.JSX.Element;
+declare function ChatTicketsPanel({ chatId, projectId, chatList, adapter, labels, onChanged, refreshSignal }: ChatTicketsPanelProps): React.JSX.Element;
 
 /**
  * Pure transcript view-model — frame-work agnostic so the SAME logic drives the

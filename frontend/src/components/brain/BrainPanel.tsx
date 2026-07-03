@@ -530,7 +530,7 @@ export function BrainPanel({
               chatId={chats.activeChat.id}
               projectId={chats.activeChat.projectId ?? pinnedProjectId ?? viewingProjectId ?? null}
               chatList={chats.chats}
-              onChanged={() => { void chats.reload(); }}
+              onChanged={() => { void chats.reload(); conv.reloadMessages(); }}
             />
           )}
           {showNewProject && (

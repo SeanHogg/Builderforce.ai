@@ -4823,7 +4823,11 @@
     "rate": "Satz",
     "location": "Standort",
     "availability": "Verfügbarkeit",
-    "private": "Privates Profil"
+    "private": "Privates Profil",
+    "hero": {
+      "blurb": "Stellen Sie geprüfte Freelancer ein – Entwickler, DBAs, Designer und weitere Spezialisten. Sehen Sie Lebensläufe und Fähigkeiten, vereinbaren Sie einen Stundensatz, führen Sie Interviews und erfassen Sie abrechenbare Stunden an einem Ort.",
+      "ctaHire": "Auftrag ausschreiben & einstellen"
+    }
   },
   "hires": {
     "title": "Einstellungen",
