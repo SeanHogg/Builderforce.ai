@@ -4,6 +4,16 @@
 
 ---
 
+### 🎯 Project 360 "Direction" ignored created OKRs — objectives gain a direct PROJECT scope (2026-07-03) — ✅ RESOLVED
+
+**Reported:** creating OKRs "for a project" via the Brain left the Project 360 panel still showing "No goal or OKR linked" (Direction stuck at 20). **Root cause:** the Brain's `objectives.create` was called with `projectId`, but that param was NOT in the tool's schema, so it was silently dropped — the objective was created with no portfolio, no initiative, no task link, and no project scope. The 360's `linkedGoalCount` only counted objectives linked via the project's TASKS (`linkKind='task'`) or its INITIATIVE, so a project-only OKR was invisible. Compounding it, NO objective/link write ever invalidated the projects-list cache the 360 reads, so even a correctly task-linked objective wouldn't refresh until the short TTL lapsed.
+
+**Fix (full vertical slice):** (1) **New scope axis** — `objectives.project_id` (mig `0268`, nullable FK, ON DELETE SET NULL). (2) **MCP** — `objectives.create`/`objectives.update` now accept + persist `projectId` (description tells the Brain this is what satisfies a project's Direction check); create/update/delete/add_link/remove_link now bust the projects-list cache (`bumpProjects`). (3) **360** — `buildProjectsList.linkedGoalCount` unions a THIRD edge: objectives scoped directly to the project (merged into the same distinct set, one grouped read). (4) **REST** — the pmo objectives tracker whitelists `projectId` + bumps `projectsListVersionKey`; the `/objectives/:id/links` add/remove routes invalidate the projects list. (5) **Rollup + UI** — a new `project` PMO scope (`resolveScope`/`loadOkrs`; workspace scope now excludes project-scoped goals so they don't leak to org level) + a "By project" selector in the PMO cockpit + `PmoOkrs` attaches `projectId` on create; i18n `pmo.scope.byProject` / `pmo.scopeWord.project` in all 5 catalogs. api + frontend typecheck clean; schema-drift + migration-sequence pass; 31 project360/rollup/MCP tests pass.
+
+**One-time data note:** the 3 objectives already created for project 11 before this fix still have `project_id = null` and no links — re-run "create OKRs for this project" (now scopes correctly) or set their project scope via `objectives.update`.
+
+---
+
 ## Completed Features (from the Consolidated Feature Register)
 
 | Feature | Area | Priority | Target | Status | Revenue Impact |

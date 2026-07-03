@@ -10,7 +10,7 @@ import { authMiddleware, requireRole } from '../middleware/authMiddleware';
 import { ProjectStatus, TenantRole } from '../../domain/shared/types';
 import { isAgentHostOnline } from '../../domain/agentHost/onlineStatus';
 import type { Db } from '../../infrastructure/database/connection';
-import { agentHostProjects, agentHosts, objectiveLinks, projectInsightEvents, projects, sourceControlIntegrations, specs, tasks, tenants, workflows } from '../../infrastructure/database/schema';
+import { agentHostProjects, agentHosts, objectiveLinks, objectives, projectInsightEvents, projects, sourceControlIntegrations, specs, tasks, tenants, workflows } from '../../infrastructure/database/schema';
 import { relayToRoom } from './realtimeRelay';
 import { buildPlanLimitsGuard } from '../middleware/planLimitsGuard';
 import { projectRoomName } from '../../infrastructure/relay/broadcastRoom';
@@ -450,8 +450,18 @@ export function createProjectRoutes(projectService: ProjectService, db: Db): Hon
       if (row.objectiveId) goalSet(row.projectId).add(row.objectiveId);
     }
     for (const [projectId, initiativeId] of initiativeByProject) {
-      const objectives = objectivesByInitiative.get(initiativeId);
-      if (objectives) for (const objectiveId of objectives) goalSet(projectId).add(objectiveId);
+      const initiativeObjectives = objectivesByInitiative.get(initiativeId);
+      if (initiativeObjectives) for (const objectiveId of initiativeObjectives) goalSet(projectId).add(objectiveId);
+    }
+    // Third edge (0268): objectives scoped DIRECTLY to a project — the Brain's
+    // `objectives.create` with a projectId, or the OKR tab's project scope. Merged
+    // into the same distinct set so a project counts each linked objective once.
+    const projectScopedGoalRows = await db
+      .select({ projectId: objectives.projectId, objectiveId: objectives.id })
+      .from(objectives)
+      .where(and(eq(objectives.tenantId, tenantId), inArray(objectives.projectId, projectIds)));
+    for (const row of projectScopedGoalRows) {
+      if (row.projectId != null) goalSet(row.projectId).add(row.objectiveId);
     }
     const goalCountByProject = new Map<number, number>(
       [...goalObjectivesByProject].map(([projectId, set]) => [projectId, set.size]),

@@ -148,6 +148,13 @@ export function activate(context: vscode.ExtensionContext): void {
     }),
     vscode.commands.registerCommand("builderforce.hideDoneTasks", () => projects.setHideDone(true)),
     vscode.commands.registerCommand("builderforce.showDoneTasks", () => projects.setHideDone(false)),
+    // Project & Tasks view arrangement: Flat ⇄ Hierarchy (epic → child tasks),
+    // plus group-by / sort / status-filter quick-picks.
+    vscode.commands.registerCommand("builderforce.projectViewHierarchy", () => projects.setHierarchy(true)),
+    vscode.commands.registerCommand("builderforce.projectViewFlat", () => projects.setHierarchy(false)),
+    vscode.commands.registerCommand("builderforce.projectGroupBy", () => projects.pickGroupBy()),
+    vscode.commands.registerCommand("builderforce.projectSortBy", () => projects.pickSortBy()),
+    vscode.commands.registerCommand("builderforce.projectFilterStatus", () => projects.pickStatusFilter()),
     vscode.commands.registerCommand("builderforce.diagnose", async () => {
       output.clear();
       output.appendLine("BuilderForce connection diagnostics");

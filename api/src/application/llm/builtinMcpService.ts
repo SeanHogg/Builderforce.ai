@@ -39,6 +39,8 @@ import { createMigrationStore } from '../migration/migrationStore';
 import { buildMigrationProviderFactory } from '../migration/buildProviderFactory';
 import { BOARD_PROVIDERS, DISCOVERY_PROVIDER_IDS } from '../boardsync/providerCatalog';
 import { maybeAutoRunOnLaneEntry } from '../../presentation/routes/taskRoutes';
+import { invalidateProjectsList } from '../../presentation/routes/projectRoutes';
+import { convertWorkItemType, ConvertError, type WorkItemKind } from '../workitem/convertWorkItemType';
 import { buildRuntimeService } from '../../buildRuntimeService';
 import { ChatTicketService } from '../brain/ChatTicketService';
 import type { Task } from '../../domain/task/Task';
@@ -66,6 +68,14 @@ interface BuiltinCtx {
   /** The request's ExecutionContext — passed to `app.request` so replayed routes'
    *  `waitUntil` side-effects don't throw. */
   executionCtx?: ExecutionContext;
+}
+
+/** Best-effort bust of the tenant's projects-list cache (the source the Project 360
+ *  reads). OKR writes change a project's linked-goal count / Direction dimension, so
+ *  a create/update/delete/(un)link must orphan that cache or the 360 stays stale until
+ *  its short TTL lapses. No-op when the caller didn't thread the Worker env. */
+async function bumpProjects(ctx: BuiltinCtx): Promise<void> {
+  if (ctx.env) await invalidateProjectsList(ctx.env, ctx.tenantId).catch(() => {});
 }
 
 /**
@@ -341,8 +351,8 @@ const CATALOG: BuiltinTool[] = [
   { tool: 'objectives.list', mutates: false, description: 'List OKR objectives — the strategic goals on the Portfolio ▸ OKRs tab, NOT board Epics.', parameters: obj({}), run: async (ctx) => { const seg = await resolveSegment(ctx.db, ctx.tenantId); return ctx.db.select().from(objectives).where(and(eq(objectives.tenantId, ctx.tenantId), eq(objectives.segmentId, seg))).orderBy(desc(objectives.updatedAt)).limit(200); } },
   {
     tool: 'objectives.create', mutates: true,
-    description: 'Create an OKR Objective — a strategic, qualitative goal (e.g. "Unlock recurring revenue"). This populates the Portfolio ▸ OKRs tab. Do NOT model OKRs as board Epics. Attach with portfolioId or initiativeId (omit both for a workspace/org-level objective). Then add measurable targets with key_results.create and link the delivering epics/initiatives with objectives.add_link. status: active|achieved|missed|archived; period is an optional label like "2026-Q2".',
-    parameters: obj({ title: S, description: S, period: S, status: { type: 'string', enum: ['active', 'achieved', 'missed', 'archived'] }, portfolioId: S, initiativeId: S, startDate: S, endDate: S }, ['title']),
+    description: 'Create an OKR Objective — a strategic, qualitative goal (e.g. "Unlock recurring revenue"). This populates the Portfolio ▸ OKRs tab. Do NOT model OKRs as board Epics. SCOPE the objective by passing exactly one of projectId (a goal FOR a specific project — this is what satisfies that project\'s "Direction" / "goal or OKR linked" health check), initiativeId, or portfolioId (omit all three for a workspace/org-level objective). Then add measurable targets with key_results.create and link the delivering epics/initiatives with objectives.add_link. status: active|achieved|missed|archived; period is an optional label like "2026-Q2".',
+    parameters: obj({ title: S, description: S, period: S, status: { type: 'string', enum: ['active', 'achieved', 'missed', 'archived'] }, projectId: N, portfolioId: S, initiativeId: S, startDate: S, endDate: S }, ['title']),
     run: async (ctx, a) => {
       const title = str(a.title).trim(); if (!title) throw new Error('title is required');
       const seg = await resolveSegment(ctx.db, ctx.tenantId);
@@ -351,17 +361,19 @@ const CATALOG: BuiltinTool[] = [
         description: a.description != null ? str(a.description) : null,
         period: a.period != null ? str(a.period) : null,
         ...(a.status != null ? { status: str(a.status) } : {}),
+        projectId: a.projectId != null ? num(a.projectId) : null,
         portfolioId: a.portfolioId != null ? str(a.portfolioId) : null,
         initiativeId: a.initiativeId != null ? str(a.initiativeId) : null,
         startDate: dt(a.startDate), endDate: dt(a.endDate),
       }).returning();
+      await bumpProjects(ctx);
       return row;
     },
   },
   {
     tool: 'objectives.update', mutates: true,
-    description: 'Update an OKR objective (title/description/status/period/scope/dates).',
-    parameters: obj({ id: S, title: S, description: S, period: S, status: { type: 'string', enum: ['active', 'achieved', 'missed', 'archived'] }, portfolioId: S, initiativeId: S, startDate: S, endDate: S }, ['id']),
+    description: 'Update an OKR objective (title/description/status/period/scope/dates). Pass projectId to (re)scope the objective to a project, or projectId=null to clear the project scope.',
+    parameters: obj({ id: S, title: S, description: S, period: S, status: { type: 'string', enum: ['active', 'achieved', 'missed', 'archived'] }, projectId: N, portfolioId: S, initiativeId: S, startDate: S, endDate: S }, ['id']),
     run: async (ctx, a) => {
       const seg = await resolveSegment(ctx.db, ctx.tenantId);
       const patch: Json = { updatedAt: new Date() };
@@ -369,16 +381,18 @@ const CATALOG: BuiltinTool[] = [
       if (a.description != null) patch.description = str(a.description);
       if (a.period != null) patch.period = str(a.period);
       if (a.status != null) patch.status = str(a.status);
+      if ('projectId' in a) patch.projectId = a.projectId != null ? num(a.projectId) : null;
       if (a.portfolioId != null) patch.portfolioId = str(a.portfolioId);
       if (a.initiativeId != null) patch.initiativeId = str(a.initiativeId);
       if (a.startDate != null) patch.startDate = dt(a.startDate);
       if (a.endDate != null) patch.endDate = dt(a.endDate);
       const [row] = await ctx.db.update(objectives).set(patch).where(and(eq(objectives.id, str(a.id)), eq(objectives.tenantId, ctx.tenantId), eq(objectives.segmentId, seg))).returning();
       if (!row) throw new Error('objective not found');
+      await bumpProjects(ctx);
       return row;
     },
   },
-  { tool: 'objectives.delete', mutates: true, description: 'Delete an OKR objective (and its key results).', parameters: obj({ id: S }, ['id']), run: async (ctx, a) => { const seg = await resolveSegment(ctx.db, ctx.tenantId); const rows = await ctx.db.delete(objectives).where(and(eq(objectives.id, str(a.id)), eq(objectives.tenantId, ctx.tenantId), eq(objectives.segmentId, seg))).returning({ id: objectives.id }); return { deleted: rows.length > 0 ? str(a.id) : null }; } },
+  { tool: 'objectives.delete', mutates: true, description: 'Delete an OKR objective (and its key results).', parameters: obj({ id: S }, ['id']), run: async (ctx, a) => { const seg = await resolveSegment(ctx.db, ctx.tenantId); const rows = await ctx.db.delete(objectives).where(and(eq(objectives.id, str(a.id)), eq(objectives.tenantId, ctx.tenantId), eq(objectives.segmentId, seg))).returning({ id: objectives.id }); await bumpProjects(ctx); return { deleted: rows.length > 0 ? str(a.id) : null }; } },
   {
     tool: 'objectives.add_link', mutates: true,
     description: 'Link a delivery work-item to an OKR objective — the lineage edge. linkKind="initiative" needs initiativeId; "epic"/"task" needs the numeric taskId (an Epic IS a task with taskType="epic"). Connects board work to the objective it advances.',
@@ -393,10 +407,35 @@ const CATALOG: BuiltinTool[] = [
         initiativeId: linkKind === 'initiative' && a.initiativeId != null ? str(a.initiativeId) : null,
         taskId: (linkKind === 'epic' || linkKind === 'task') && a.taskId != null ? num(a.taskId) : null,
       }).returning();
+      await bumpProjects(ctx);
       return row;
     },
   },
-  { tool: 'objectives.remove_link', mutates: true, description: 'Remove an objective ▸ work-item link by linkId.', parameters: obj({ objectiveId: S, linkId: S }, ['objectiveId', 'linkId']), run: async (ctx, a) => { const seg = await resolveSegment(ctx.db, ctx.tenantId); const rows = await ctx.db.delete(objectiveLinks).where(and(eq(objectiveLinks.id, str(a.linkId)), eq(objectiveLinks.objectiveId, str(a.objectiveId)), eq(objectiveLinks.tenantId, ctx.tenantId), eq(objectiveLinks.segmentId, seg))).returning({ id: objectiveLinks.id }); return { deleted: rows.length > 0 ? str(a.linkId) : null }; } },
+  { tool: 'objectives.remove_link', mutates: true, description: 'Remove an objective ▸ work-item link by linkId.', parameters: obj({ objectiveId: S, linkId: S }, ['objectiveId', 'linkId']), run: async (ctx, a) => { const seg = await resolveSegment(ctx.db, ctx.tenantId); const rows = await ctx.db.delete(objectiveLinks).where(and(eq(objectiveLinks.id, str(a.linkId)), eq(objectiveLinks.objectiveId, str(a.objectiveId)), eq(objectiveLinks.tenantId, ctx.tenantId), eq(objectiveLinks.segmentId, seg))).returning({ id: objectiveLinks.id }); await bumpProjects(ctx); return { deleted: rows.length > 0 ? str(a.linkId) : null }; } },
+  {
+    tool: 'work_items.convert_type', mutates: true,
+    description: 'Change a work-item\'s TYPE across the board ⇄ OKR boundary. Use this to fix items modelled as the wrong type — e.g. an Epic named "OKR 1 …" that should be a real OKR Objective (so it appears on the OKRs tab + satisfies the project 360 "Direction"). fromKind = what it is now (task|epic = a board task; objective = an OKR); id = the numeric task id, or the objective uuid; toKind = what to make it. Promoting a board item to an objective re-links its child tasks to the new objective and scopes it to the item\'s project; demoting an objective to a task/epic re-parents its linked tasks and DROPS its key results. For objective → task/epic on an objective with no project, pass projectId.',
+    parameters: obj({ fromKind: { type: 'string', enum: ['task', 'epic', 'objective'] }, id: S, toKind: { type: 'string', enum: ['task', 'epic', 'objective'] }, projectId: N }, ['fromKind', 'id', 'toKind']),
+    run: async (ctx, a) => {
+      const seg = await resolveSegment(ctx.db, ctx.tenantId);
+      try {
+        return await convertWorkItemType(
+          { db: ctx.db, tasks: ctx.tasks, env: ctx.env },
+          {
+            tenantId: ctx.tenantId,
+            segmentId: seg,
+            sourceKind: str(a.fromKind) as WorkItemKind,
+            sourceId: str(a.id),
+            target: str(a.toKind) as WorkItemKind,
+            projectId: a.projectId != null ? num(a.projectId) : undefined,
+          },
+        );
+      } catch (e) {
+        if (e instanceof ConvertError) throw new Error(e.message);
+        throw e;
+      }
+    },
+  },
 
   { tool: 'key_results.list', mutates: false, description: 'List key results (the measurable targets under OKR objectives).', parameters: obj({}), run: async (ctx) => { const seg = await resolveSegment(ctx.db, ctx.tenantId); return ctx.db.select().from(keyResults).where(and(eq(keyResults.tenantId, ctx.tenantId), eq(keyResults.segmentId, seg))).orderBy(desc(keyResults.updatedAt)).limit(500); } },
   {

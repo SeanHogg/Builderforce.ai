@@ -12,7 +12,8 @@
  *   - deps:     pmo_dependencies (0216) → blocked initiatives + critical path
  *
  * Scope kinds: 'portfolio' (its initiatives' projects), 'initiative' (one
- * initiative's projects), 'workspace' (org-level OKRs not attached to either).
+ * initiative's projects), 'project' (a single project's own OKRs + delivery),
+ * 'workspace' (org-level OKRs not attached to any scope axis).
  *
  * Scoring lives in pure functions ({@link keyResultProgress},
  * {@link objectiveProgress}, {@link computeDependencyAnalysis}) so the math is
@@ -153,7 +154,7 @@ export function computeDependencyAnalysis(inits: DepInitiative[], edges: DepEdge
 
 // ── Rollup shapes ────────────────────────────────────────────────────────────
 
-export type PmoScopeKind = 'portfolio' | 'initiative' | 'workspace';
+export type PmoScopeKind = 'portfolio' | 'initiative' | 'project' | 'workspace';
 
 export interface KeyResultProgress {
   id: string;
@@ -241,6 +242,17 @@ async function resolveScope(
     return { name: 'Workspace', initiatives: [], projects: [] };
   }
 
+  if (scope.kind === 'project') {
+    const pid = Number(scope.id);
+    if (!Number.isFinite(pid)) return null;
+    const [pr] = await db
+      .select({ id: projects.id, name: projects.name, initiativeId: projects.initiativeId })
+      .from(projects)
+      .where(and(base, eq(projects.id, pid)));
+    if (!pr) return null;
+    return { name: pr.name, initiatives: [], projects: [{ id: pr.id, initiativeId: pr.initiativeId }] };
+  }
+
   if (scope.kind === 'initiative') {
     const [init] = await db
       .select({ id: initiatives.id, name: initiatives.name, status: initiatives.status })
@@ -284,12 +296,16 @@ async function loadOkrs(
   const conds = [eq(objectives.tenantId, tenantId), eq(objectives.segmentId, segmentId)];
   const scopeFilter =
     scope.kind === 'workspace'
-      ? and(isNull(objectives.portfolioId), isNull(objectives.initiativeId))
-      : scope.kind === 'initiative'
-        ? eq(objectives.initiativeId, scope.id)
-        : initiativeIds.length
-          ? or(eq(objectives.portfolioId, scope.id), inArray(objectives.initiativeId, initiativeIds))
-          : eq(objectives.portfolioId, scope.id);
+      // Org-level = attached to NO scope axis (a project-scoped goal belongs to its
+      // project's OKR view, not the workspace bucket).
+      ? and(isNull(objectives.portfolioId), isNull(objectives.initiativeId), isNull(objectives.projectId))
+      : scope.kind === 'project'
+        ? eq(objectives.projectId, Number(scope.id))
+        : scope.kind === 'initiative'
+          ? eq(objectives.initiativeId, scope.id)
+          : initiativeIds.length
+            ? or(eq(objectives.portfolioId, scope.id), inArray(objectives.initiativeId, initiativeIds))
+            : eq(objectives.portfolioId, scope.id);
   const objRows = await db
     .select()
     .from(objectives)
@@ -367,8 +383,8 @@ async function loadOkrs(
 }
 
 /**
- * Compose the full PMO rollup for a portfolio, initiative, or workspace. Returns
- * null when a portfolio/initiative scope entity doesn't exist for this tenant.
+ * Compose the full PMO rollup for a portfolio, initiative, project, or workspace.
+ * Returns null when the scope entity doesn't exist for this tenant.
  */
 export async function computePortfolioRollup(
   db: Db,

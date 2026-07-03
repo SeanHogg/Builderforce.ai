@@ -37,6 +37,7 @@ export function PmoContent() {
   // '' = default to first portfolio, WORKSPACE = org-level, else a portfolio id.
   const [portfolioSel, setPortfolioSel] = useState<string>('');
   const [initiativeId, setInitiativeId] = useState<string>(''); // '' = whole portfolio
+  const [projectSel, setProjectSel] = useState<string>(''); // '' = none; else a project id — its own OKR scope, takes precedence
 
   const effectivePortfolioId = useMemo(() => {
     if (!tree) return '';
@@ -53,17 +54,23 @@ export function PmoContent() {
   if (error) return <PmError message={error} />;
   if (!tree) return <PmEmpty message={t('loading')} />;
 
+  // A chosen project is its own OKR scope and takes precedence over the portfolio /
+  // initiative lens — it's the surface that satisfies a project's 360 "Direction".
+  const projectScoped = projectSel && tree.projects.some((p) => String(p.id) === projectSel);
+
   const scope: { kind: PmoScopeKind; id: string } | null =
-    effectivePortfolioId === WORKSPACE
-      ? { kind: 'workspace', id: WORKSPACE }
-      : initiativeId && initiativesInPortfolio.some((i) => i.id === initiativeId)
-        ? { kind: 'initiative', id: initiativeId }
-        : effectivePortfolioId
-          ? { kind: 'portfolio', id: effectivePortfolioId }
-          : null;
+    projectScoped
+      ? { kind: 'project', id: projectSel }
+      : effectivePortfolioId === WORKSPACE
+        ? { kind: 'workspace', id: WORKSPACE }
+        : initiativeId && initiativesInPortfolio.some((i) => i.id === initiativeId)
+          ? { kind: 'initiative', id: initiativeId }
+          : effectivePortfolioId
+            ? { kind: 'portfolio', id: effectivePortfolioId }
+            : null;
 
   // Structure + Cost are segment-wide (no portfolio/initiative scope).
-  const showScopePicker = tab !== 'structure' && tab !== 'cost' && (tree.portfolios.length > 0);
+  const showScopePicker = tab !== 'structure' && tab !== 'cost' && (tree.portfolios.length > 0 || tree.projects.length > 0);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
@@ -76,18 +83,31 @@ export function PmoContent() {
 
         {showScopePicker && (
           <div style={{ display: 'flex', gap: 8, marginLeft: 'auto', flexWrap: 'wrap' }}>
-            <Select
-              style={selectStyle}
-              value={effectivePortfolioId}
-              onChange={(e) => { setPortfolioSel(e.target.value); setInitiativeId(''); }}
-            >
-              <option value={WORKSPACE}>{t('scope.workspace')}</option>
-              {tree.portfolios.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-            </Select>
-            {effectivePortfolioId !== WORKSPACE && (
+            {tree.portfolios.length > 0 && (
+              <Select
+                style={selectStyle}
+                value={effectivePortfolioId}
+                onChange={(e) => { setPortfolioSel(e.target.value); setInitiativeId(''); setProjectSel(''); }}
+                disabled={!!projectScoped}
+              >
+                <option value={WORKSPACE}>{t('scope.workspace')}</option>
+                {tree.portfolios.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+              </Select>
+            )}
+            {!projectScoped && tree.portfolios.length > 0 && effectivePortfolioId !== WORKSPACE && (
               <Select style={selectStyle} value={initiativeId} onChange={(e) => setInitiativeId(e.target.value)}>
                 <option value="">{t('scope.wholePortfolio')}</option>
                 {initiativesInPortfolio.map((i) => <option key={i.id} value={i.id}>{i.name}</option>)}
+              </Select>
+            )}
+            {tree.projects.length > 0 && (
+              <Select
+                style={selectStyle}
+                value={projectSel}
+                onChange={(e) => { setProjectSel(e.target.value); if (e.target.value) setInitiativeId(''); }}
+              >
+                <option value="">{t('scope.byProject')}</option>
+                {tree.projects.map((p) => <option key={p.id} value={String(p.id)}>{p.name}</option>)}
               </Select>
             )}
           </div>

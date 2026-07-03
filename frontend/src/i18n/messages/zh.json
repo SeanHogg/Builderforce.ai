@@ -525,6 +525,11 @@
     "epicCreate": "创建史诗",
     "epicSaveChanges": "保存更改",
     "epicCancel": "取消",
+    "convertTypeHeading": "更改类型",
+    "convertTypeHint": "将此史诗转换为普通任务，或提升为 OKR 目标（它将移至 OKR 标签页并计入项目方向）。",
+    "convertToOkr": "转换为 OKR 目标",
+    "convertToTask": "转换为任务",
+    "convertToOkrConfirm": "将此史诗提升为 OKR 目标？其子任务将链接到新目标，此看板项将被移除。",
     "epicStatus": {
       "backlog": "待办池",
       "todo": "待办",
@@ -740,11 +745,13 @@
     },
     "scope": {
       "wholePortfolio": "整个项目组合",
-      "workspace": "工作区（组织级）"
+      "workspace": "工作区（组织级）",
+      "byProject": "按项目…"
     },
     "scopeWord": {
       "portfolio": "项目组合",
       "initiative": "举措",
+      "project": "项目",
       "workspace": "工作区"
     },
     "loading": "加载中…",
@@ -837,6 +844,9 @@
       "current": "当前值",
       "update": "更新",
       "deleteObjective": "删除目标",
+      "convertToEpic": "转换为史诗",
+      "convertToEpicHint": "将此目标转换回看板史诗",
+      "convertToEpicConfirm": "将此目标转换为看板史诗？其关键结果将被丢弃，任何已链接的任务将重新归属到新史诗下。",
       "startDate": "开始日期",
       "endDate": "结束日期",
       "costClass": "类别",

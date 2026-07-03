@@ -525,6 +525,11 @@
     "epicCreate": "Crear épica",
     "epicSaveChanges": "Guardar cambios",
     "epicCancel": "Cancelar",
+    "convertTypeHeading": "Cambiar tipo",
+    "convertTypeHint": "Convierte esta épica en una tarea simple o promuévela a un objetivo OKR (se moverá a la pestaña OKR y contará para la dirección del proyecto).",
+    "convertToOkr": "Convertir en objetivo OKR",
+    "convertToTask": "Convertir en tarea",
+    "convertToOkrConfirm": "¿Promover esta épica a un objetivo OKR? Sus tareas secundarias se vincularán al nuevo objetivo y este elemento del tablero se eliminará.",
     "epicStatus": {
       "backlog": "Pendientes",
       "todo": "Por hacer",
@@ -740,11 +745,13 @@
     },
     "scope": {
       "wholePortfolio": "Todo el portafolio",
-      "workspace": "Espacio de trabajo (nivel organización)"
+      "workspace": "Espacio de trabajo (nivel organización)",
+      "byProject": "Por proyecto…"
     },
     "scopeWord": {
       "portfolio": "portafolio",
       "initiative": "iniciativa",
+      "project": "proyecto",
       "workspace": "espacio de trabajo"
     },
     "loading": "Cargando…",
@@ -837,6 +844,9 @@
       "current": "actual",
       "update": "Actualizar",
       "deleteObjective": "Eliminar objetivo",
+      "convertToEpic": "Convertir en épica",
+      "convertToEpicHint": "Convertir este objetivo de nuevo en una épica del tablero",
+      "convertToEpicConfirm": "¿Convertir este objetivo en una épica del tablero? Sus resultados clave se descartarán y las tareas vinculadas se reasignarán bajo la nueva épica.",
       "startDate": "Fecha de inicio",
       "endDate": "Fecha de fin",
       "costClass": "Clase",

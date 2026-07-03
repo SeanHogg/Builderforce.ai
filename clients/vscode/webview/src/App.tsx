@@ -144,7 +144,19 @@ function Chat({ init }: { init: InitData }) {
   const { toolSpecs, runTool, isMutating } = useBrainActions();
   const [chatId, setChatId] = useState<number | null>(null);
   const [chats, setChats] = useState<BrainChat[]>([]);
+  // Auto-approve skips the per-action confirm prompt. It's read through a REF (not
+  // captured state) so `needsConfirm` stays referentially stable AND the value is
+  // live: a run's tool loop captures `needsConfirm` at run start, so a plain state
+  // read would keep prompting for the rest of an in-flight run even after the user
+  // ticks "auto-approve" (the reported "checked it but got 3 prompts" bug). The ref
+  // is the single source of truth; `autoApprove` state only drives the toggle UI.
+  // Mirrors the web BrainPanel's approach so both surfaces behave identically.
   const [autoApprove, setAutoApprove] = useState(false);
+  const autoApproveRef = useRef(false);
+  const setAutoApproveMode = useCallback((on: boolean) => {
+    autoApproveRef.current = on;
+    setAutoApprove(on);
+  }, []);
   const [input, setInput] = useState('');
   const [dragOver, setDragOver] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -157,8 +169,8 @@ function Chat({ init }: { init: InitData }) {
   useEffect(() => { reloadChats(); }, [reloadChats]);
 
   const needsConfirm = useCallback(
-    (req: { name: string; args: unknown }) => !autoApprove && isMutating(req.name, req.args),
-    [autoApprove, isMutating],
+    (req: { name: string; args: unknown }) => !autoApproveRef.current && isMutating(req.name, req.args),
+    [isMutating],
   );
 
   // Scope new chats to the sidebar's active project (same as task-seeded chats),
@@ -332,7 +344,7 @@ function Chat({ init }: { init: InitData }) {
             <button className="bf-btn bf-btn--primary" onClick={() => conv.resolveConfirm(true)}>{t('app.approve', 'Approve')}</button>
             <button className="bf-btn" onClick={() => conv.resolveConfirm(false)}>{t('app.cancel', 'Cancel')}</button>
             <label className="bf-confirm__auto">
-              <input type="checkbox" checked={autoApprove} onChange={(e) => { setAutoApprove(e.target.checked); if (e.target.checked) conv.resolveConfirm(true); }} />
+              <input type="checkbox" checked={autoApprove} onChange={(e) => { setAutoApproveMode(e.target.checked); if (e.target.checked) conv.resolveConfirm(true); }} />
               {t('app.always', 'Always')}
             </label>
           </div>

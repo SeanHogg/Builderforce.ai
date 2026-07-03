@@ -2,6 +2,15 @@
 
 All notable changes to the BuilderForce VS Code extension are documented here.
 
+## [2026.7.7] — See your tasks your way
+
+- **Flat or Hierarchy.** Switch the Project & Tasks list between a flat list and a hierarchy that nests each task under its epic — one click in the view's toolbar.
+- **Group, sort, and filter.** Group the flat list by status or priority, sort by status/priority/title/key, and filter to just the statuses you care about (e.g. show only In progress). Your choices stick per project.
+
+## [2026.7.6] — Auto-approve now really means it
+
+- **Fixed: "Auto-approve" is respected the moment you tick it.** Turning it on mid-task now skips every remaining approval in that run — previously the chat could keep asking a few more times before it took effect.
+
 ## [2026.7.5] — Pick a workspace and a project, and everything follows
 
 - **Choose who you're building for, right at the top.** The Project & Tasks list now opens with your workspace — one click to switch between the workspaces you belong to (or spin up a new one), no digging through menus. Under it sits your project, then that project's tasks: a clear top-to-bottom line from "which team" to "what's next."

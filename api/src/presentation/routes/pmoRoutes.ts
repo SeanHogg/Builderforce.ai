@@ -44,6 +44,11 @@ import {
   type PmoScopeKind,
 } from '../../application/pmo/portfolioRollup';
 import { computeValueStream } from '../../application/pmo/valueStream';
+import { invalidateProjectsList, projectsListVersionKey } from './projectRoutes';
+import { convertWorkItemType, ConvertError } from '../../application/workitem/convertWorkItemType';
+import { TaskService } from '../../application/task/TaskService';
+import { TaskRepository } from '../../infrastructure/repositories/TaskRepository';
+import { ProjectRepository } from '../../infrastructure/repositories/ProjectRepository';
 import {
   classifyCostClass,
   loadPlanningSpine,
@@ -59,7 +64,7 @@ export function pmoVersionKey(tenantId: number): string {
   return `pmo-version:tenant:${tenantId}`;
 }
 
-const SCOPE_KINDS = new Set<PmoScopeKind>(['portfolio', 'initiative', 'workspace']);
+const SCOPE_KINDS = new Set<PmoScopeKind>(['portfolio', 'initiative', 'project', 'workspace']);
 
 export function createPmoRoutes(db: Db): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
@@ -82,7 +87,7 @@ export function createPmoRoutes(db: Db): Hono<HonoEnv> {
     // Workspace scope (org-level OKRs not attached to a portfolio/initiative) has
     // no entity id — use a fixed sentinel so the cache key stays stable.
     const id = kind === 'workspace' ? 'workspace' : c.req.query('id');
-    if (!kind || !SCOPE_KINDS.has(kind)) return c.json({ error: 'kind must be portfolio|initiative|workspace' }, 400);
+    if (!kind || !SCOPE_KINDS.has(kind)) return c.json({ error: 'kind must be portfolio|initiative|project|workspace' }, 400);
     if (!id) return c.json({ error: 'id is required' }, 400);
 
     const env = c.env as Env;
@@ -314,6 +319,8 @@ export function createPmoRoutes(db: Db): Hono<HonoEnv> {
 
     const rows = await db.insert(objectiveLinks).values(values).returning();
     await bumpCacheVersion(c.env as Env, pmoVersionKey(tenantId));
+    // A task/initiative link changes the project's linkedGoalCount → refresh the 360.
+    await invalidateProjectsList(c.env as Env, tenantId).catch(() => {});
     return c.json(rows[0], 201);
   });
 
@@ -324,11 +331,36 @@ export function createPmoRoutes(db: Db): Hono<HonoEnv> {
       .returning({ id: objectiveLinks.id });
     if (!rows[0]) return c.json({ error: 'not found' }, 404);
     await bumpCacheVersion(c.env as Env, pmoVersionKey(tenantId));
+    await invalidateProjectsList(c.env as Env, tenantId).catch(() => {});
     return c.json({ deleted: rows[0].id });
+  });
+
+  // POST /api/pmo/objectives/:id/convert-type — demote an OKR Objective back to a
+  // board task/epic (the reverse of tasks/:id/convert-type → objective). Re-parents
+  // linked tasks; key results are dropped. Shared logic in convertWorkItemType.
+  router.post('/objectives/:id/convert-type', requireRole(TenantRole.MANAGER), async (c) => {
+    const { tenantId, segmentId } = scope(c);
+    const body = await c.req.json<{ target?: 'task' | 'epic'; projectId?: number | null }>();
+    const target = body.target;
+    if (target !== 'task' && target !== 'epic') return c.json({ error: 'target must be task|epic' }, 400);
+    try {
+      const result = await convertWorkItemType(
+        { db, tasks: new TaskService(new TaskRepository(db), new ProjectRepository(db)), env: c.env as Env },
+        { tenantId, segmentId, sourceKind: 'objective', sourceId: c.req.param('id'), target, projectId: body.projectId ?? undefined },
+      );
+      return c.json(result);
+    } catch (e) {
+      if (e instanceof ConvertError) return c.json({ error: e.message }, 400);
+      throw e;
+    }
   });
 
   // ── CRUD for the four PMO entities (generic tracker factory) ────────────────
   const bumpVersionKeys = (tenantId: number) => [pmoVersionKey(tenantId)];
+  // Objectives additionally carry a PROJECT scope (0268) that feeds the projects-list
+  // aggregate the Project 360 reads (linkedGoalCount / Direction). Bust that cache too
+  // so a create/update/delete refreshes the 360 immediately, not after its short TTL.
+  const objectiveBumpKeys = (tenantId: number) => [pmoVersionKey(tenantId), projectsListVersionKey(tenantId)];
   mountTrackers(router, db, [
     {
       path: '/portfolios',
@@ -354,10 +386,10 @@ export function createPmoRoutes(db: Db): Hono<HonoEnv> {
       path: '/objectives',
       table: objectives,
       opts: {
-        fields: ['title', 'description', 'period', 'status', 'portfolioId', 'initiativeId', 'ownerUserId', 'startDate', 'endDate', 'costClass', 'costClassSource'],
+        fields: ['title', 'description', 'period', 'status', 'projectId', 'portfolioId', 'initiativeId', 'ownerUserId', 'startDate', 'endDate', 'costClass', 'costClassSource'],
         required: ['title'],
         cacheNs: 'pmo-objectives',
-        bumpVersionKeys,
+        bumpVersionKeys: objectiveBumpKeys,
       },
     },
     {
