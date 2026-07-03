@@ -832,6 +832,7 @@ export function createTenantRoutes(tenantService: TenantService, db: Db): Hono<H
         displayName: users.displayName,
         mfaEnabled: users.mfaEnabled,
         mfaEnabledAt: users.mfaEnabledAt,
+        psychometric: users.psychometric,
         role: tenantMembers.role,
         joinedAt: tenantMembers.joinedAt,
       })
@@ -877,6 +878,8 @@ export function createTenantRoutes(tenantService: TenantService, db: Db): Hono<H
         displayName: row.displayName,
         mfaEnabled: row.mfaEnabled,
         mfaEnabledAt: row.mfaEnabledAt,
+        // A person's personality (parsed) — displayed on their card, self-hides when unset.
+        psychometric: row.psychometric ? (JSON.parse(row.psychometric) as unknown) : null,
         role: row.role,
         joinedAt: row.joinedAt,
         activeSessions: sessionsByUser.get(row.userId) ?? 0,

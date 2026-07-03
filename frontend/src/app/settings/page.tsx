@@ -13,7 +13,12 @@ import {
   getLinkedAccounts,
   unlinkProvider,
   getOAuthUrl,
+  getMe,
+  updateMyPersonality,
 } from '@/lib/auth';
+import PsychometricEditor from '@/components/PsychometricEditor';
+import PersonalitySummary from '@/components/PersonalitySummary';
+import type { PsychometricProfile } from '@/lib/psychometric';
 
 /**
  * Self-gating nav link to the API Keys page. Per product rule we don't hide the
@@ -71,6 +76,12 @@ export default function SettingsPage() {
   const [unlinking, setUnlinking] = useState<string | null>(null);
   const [connectError, setConnectError] = useState<string | null>(null);
 
+  // The signed-in user's OWN personality (universal, not Pro-gated). Loaded fresh
+  // from /api/auth/me so it reflects the latest saved profile.
+  const [personality, setPersonality] = useState<PsychometricProfile | undefined>(undefined);
+  const [personalitySaving, setPersonalitySaving] = useState(false);
+  const [personalityNotice, setPersonalityNotice] = useState('');
+
   useEffect(() => {
     const token = getStoredWebToken();
     if (!token) { setLoadingAccounts(false); return; }
@@ -78,6 +89,9 @@ export default function SettingsPage() {
       .then(({ accounts, hasPassword: hp }) => { setLinkedAccounts(accounts); setHasPassword(hp); })
       .catch((e: Error) => setAccountsError(e.message))
       .finally(() => setLoadingAccounts(false));
+    getMe(token)
+      .then(({ psychometric }) => setPersonality(psychometric ?? undefined))
+      .catch(() => { /* best-effort — the editor still lets the user set one */ });
 
     // Show connect error from redirect if present
     const params = new URLSearchParams(window.location.search);
@@ -104,6 +118,22 @@ export default function SettingsPage() {
       setAccountsError(e instanceof Error ? e.message : 'Failed to disconnect');
     } finally {
       setUnlinking(null);
+    }
+  };
+
+  const savePersonality = async () => {
+    const token = getStoredWebToken();
+    if (!token) return;
+    setPersonalitySaving(true);
+    setPersonalityNotice('');
+    try {
+      const saved = await updateMyPersonality(token, personality ?? null);
+      setPersonality(saved ?? undefined);
+      setPersonalityNotice(t('personalitySaved'));
+    } catch (e) {
+      setPersonalityNotice(e instanceof Error ? e.message : t('personalitySaveFailed'));
+    } finally {
+      setPersonalitySaving(false);
     }
   };
 
@@ -134,6 +164,30 @@ export default function SettingsPage() {
               <span style={mono ? { fontFamily: 'var(--font-mono)', fontSize: 11 } : {}}>{value}</span>
             </div>
           ))}
+        </div>
+      </div>
+
+      {/* Personality — every user's own psychometric profile (universal, not Pro-gated). */}
+      <div style={{ ...cardStyle, marginBottom: 20 }}>
+        <div style={sectionTitle}>{t('personality')}</div>
+        <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: '0 0 14px' }}>{t('personalityDescription')}</p>
+        <div style={{ display: 'grid', gap: 14 }}>
+          <PersonalitySummary profile={personality} />
+          <PsychometricEditor value={personality} onChange={setPersonality} forceUnlocked />
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
+            {personalityNotice && <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{personalityNotice}</span>}
+            <button
+              type="button"
+              onClick={savePersonality}
+              disabled={personalitySaving}
+              style={{
+                padding: '8px 16px', fontSize: 13, fontWeight: 600, borderRadius: 8, cursor: 'pointer',
+                background: 'var(--accent, #6366f1)', color: '#fff', border: 'none', opacity: personalitySaving ? 0.6 : 1,
+              }}
+            >
+              {personalitySaving ? t('personalitySaving') : t('personalitySave')}
+            </button>
+          </div>
         </div>
       </div>
 

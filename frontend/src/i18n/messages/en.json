@@ -265,7 +265,8 @@
       "logs": "Logs",
       "qa": "Agentic QA",
       "home": "Home",
-      "integrations": "Integrations"
+      "integrations": "Integrations",
+      "manager": "Manager"
     }
   },
   "alerts": {
@@ -362,7 +363,8 @@
     },
     "healthAria": "Project health {score} of 100 — {tier}",
     "doneAria": "{pct}% done — {completed} of {total} tasks complete",
-    "donePct": "{pct}% done"
+    "donePct": "{pct}% done",
+    "health360": "Project 360"
   },
   "projectInspection": {
     "title": "Inspection",
@@ -703,6 +705,12 @@
     "email": "Email",
     "displayName": "Display name",
     "userId": "User ID",
+    "personality": "Personality",
+    "personalityDescription": "Take the personality test to give yourself a profile. It shows on your workforce card so your team knows how you work best.",
+    "personalitySave": "Save personality",
+    "personalitySaving": "Saving…",
+    "personalitySaved": "Personality saved.",
+    "personalitySaveFailed": "Could not save your personality.",
     "name": "Name",
     "slug": "Slug",
     "id": "ID",
@@ -1546,6 +1554,14 @@
     "baseModelHelp": "The tool-calling + coding model this agent runs on — pick one of your LLMs or a model from the pool. A run pins one model for the whole task; leave default to use the plan's best coding model.",
     "personality": "Personality",
     "personalityHelp": "Give this agent a personality with a trait test or sliders. It shapes how the agent reasons, how carefully it works, and how it communicates on every run."
+  },
+  "personalitySummary": {
+    "title": "Personality",
+    "enneagram": "Enneagram",
+    "mbti": "MBTI",
+    "high": "High",
+    "low": "Low",
+    "moderate": "Moderate"
   },
   "modelApiSamples": {
     "copy": "Copy",
@@ -4251,7 +4267,49 @@
       "copy": "Copy",
       "copied": "Copied",
       "apply": "Apply",
-      "createFile": "Create file"
+      "createFile": "Create file",
+      "stop": "Stop"
+    },
+    "tickets": {
+      "none": "No tickets linked yet.",
+      "ringAria": "{label}: {pct}% done",
+      "spawned": "spawned here",
+      "run": "Run agent on ticket",
+      "lineage": "Chat lineage",
+      "unlink": "Unlink",
+      "pickAgent": "Run as agent…",
+      "lineageTitle": "Chats for this ticket",
+      "lineageEmpty": "No other chats reference this ticket.",
+      "merged": "merged",
+      "runStarted": "Started {agent} on the ticket.",
+      "runNoAgent": "No agent could run this ticket — assign one first.",
+      "runFailed": "Could not start the run.",
+      "link": "Link ticket",
+      "agents": "Agents",
+      "merge": "Merge",
+      "linkFailed": "Could not link — check the ticket exists.",
+      "kindLabel": "Ticket type",
+      "pickTicket": "Choose a ticket…",
+      "refPlaceholder": "Objective / initiative / portfolio id",
+      "linkTypeLabel": "Link type",
+      "linkTypeLinked": "Linked",
+      "linkTypeCreated": "Created from chat",
+      "linkAction": "Link",
+      "noAgents": "No agents in this chat yet.",
+      "removeAgent": "Remove",
+      "inviteAgent": "Invite an agent…",
+      "agentsHint": "Invited agents can be tagged to execute a linked task or epic.",
+      "mergeHint": "Merge other chats into this one. Their messages, tickets and agents move here; the sources are archived.",
+      "mergeNoOthers": "No other chats to merge.",
+      "mergeAction": "Merge {n} here",
+      "mergedN": "Merged {n} chat(s).",
+      "kind": {
+        "task": "Task",
+        "epic": "Epic",
+        "objective": "Objective",
+        "initiative": "Initiative",
+        "portfolio": "Portfolio"
+      }
     }
   },
   "modelExport": {
@@ -4304,6 +4362,14 @@
         "no_lane": "Lane not configured",
         "terminal_lane": "Done — no run needed"
       }
+    },
+    "businessValue": {
+      "badge": "BV {value}",
+      "badgeTitle": "Business value scored by the AI Manager.",
+      "label": "Business value",
+      "rankTitle": "The AI Manager’s backlog rank for this ticket.",
+      "editTitle": "Click to set a business value (0–100).",
+      "unset": "Not set"
     }
   },
   "projectsContent": {
@@ -4459,5 +4525,141 @@
     "frozen": "Frozen",
     "contributions": "{count} learning contributions so far",
     "errorGeneric": "Something went wrong. Please try again."
+  },
+  "manager": {
+    "title": "AI Manager",
+    "subtitle": "Let an AI manager keep this backlog healthy — it scores each ticket’s business value, ranks the work, assigns owners, and shepherds pull requests so your team always knows what matters most next.",
+    "lastManaged": "Last managed {when}",
+    "neverManaged": "This backlog hasn’t been managed yet.",
+    "runNow": "Run manager now",
+    "running": "Managing…",
+    "loading": "Loading the manager…",
+    "noProject": {
+      "title": "Pick a project",
+      "body": "Choose a project from the switcher above to see its AI Manager."
+    },
+    "error": {
+      "title": "Couldn’t load the manager",
+      "body": "Something went wrong loading this backlog. Please try again.",
+      "retry": "Try again"
+    },
+    "priority": {
+      "urgent": "Urgent",
+      "high": "High",
+      "medium": "Medium",
+      "low": "Low"
+    },
+    "stat": {
+      "total": "Tickets",
+      "unscored": "Need a value",
+      "unranked": "Not yet ranked",
+      "unowned": "No owner",
+      "openPullRequests": "Open PRs"
+    },
+    "chart": {
+      "title": "Backlog by priority",
+      "caption": "How the open work breaks down across priority levels.",
+      "empty": "No open tickets to chart yet."
+    },
+    "insightNudge": "{unscored} tickets still need a business value and {unranked} aren’t ranked — run the manager to catch them up.",
+    "policy": {
+      "title": "How this backlog is managed",
+      "subtitle": "Decide who runs the backlog and how much they do automatically. You can change this any time.",
+      "manager": {
+        "label": "Who manages this backlog",
+        "help": "Pick a teammate or agent to own the backlog, or let the built-in service keep it tidy for you.",
+        "system": "System service (managed for you)",
+        "people": "Teammates",
+        "agents": "Agents",
+        "hosts": "Agent hosts"
+      },
+      "enabled": {
+        "label": "Keep this backlog managed",
+        "help": "When on, the manager keeps scoring, ranking, and organising work automatically. Turn off to pause everything."
+      },
+      "autoBusinessValue": {
+        "label": "Score business value automatically",
+        "help": "Give every new ticket a value so you can always see what’s worth doing first — no manual guessing."
+      },
+      "autoPrioritize": {
+        "label": "Order the backlog for me",
+        "help": "Continuously re-rank the work so the highest-impact tickets rise to the top."
+      },
+      "autoAssign": {
+        "label": "Assign owners automatically",
+        "help": "Hand each ticket to the best-suited teammate or agent so nothing sits unowned."
+      },
+      "prMerge": {
+        "label": "When work is finished",
+        "help": "Choose what happens to a pull request once an agent completes a ticket.",
+        "immediate": {
+          "label": "Ship right away",
+          "help": "Merge and close the pull request as soon as the agent finishes — fastest, best when you trust the checks."
+        },
+        "on_green": {
+          "label": "Ship once tests pass",
+          "help": "Wait for the automated checks to go green before merging — a safe default."
+        },
+        "queue": {
+          "label": "Leave for a human",
+          "help": "Never merge automatically — hold every pull request for someone to review and merge."
+        }
+      }
+    },
+    "backlog": {
+      "title": "Ranked backlog",
+      "empty": "No tickets in this backlog yet.",
+      "rank": "Rank",
+      "key": "Key",
+      "taskTitle": "Title",
+      "priority": "Priority",
+      "businessValue": "Business value",
+      "dueDate": "Due",
+      "assignee": "Owner",
+      "unassigned": "Unassigned",
+      "noRationale": "No rationale recorded yet."
+    },
+    "action": {
+      "prioritize": "Prioritized",
+      "assign": "Assigned",
+      "score_value": "Valued",
+      "dispatch": "Dispatched",
+      "merge_pr": "Merged PR",
+      "flag": "Flagged"
+    },
+    "activity": {
+      "title": "Recent activity",
+      "empty": "The manager hasn’t taken any actions yet."
+    }
+  },
+  "project360": {
+    "title": "Project 360",
+    "subtitle": "The whole picture — health, gaps, and who is moving the work.",
+    "overall": "Overall health",
+    "progress": "Progress",
+    "refresh": "Refresh",
+    "openBoard": "Open board",
+    "improveAll": "Improve with Brain",
+    "connecting": "Loading Project 360…",
+    "loadError": "Couldn’t load Project 360",
+    "noData": "No tasks yet",
+    "noDataHint": "Add tasks to this project to see its health, gaps, and team activity.",
+    "missingItems": "Missing items — improve health",
+    "noGaps": "No gaps found. This project is in good shape.",
+    "workforce": "Who’s working / idle",
+    "noWorkforce": "Nobody is assigned to this project yet.",
+    "allDimensions": "All dimensions",
+    "counts_open": "open",
+    "counts_blocked": "blocked",
+    "counts_overdue": "overdue",
+    "counts_running": "running",
+    "status_working": "Working",
+    "status_awaiting": "Awaiting input",
+    "status_blocked": "Blocked",
+    "status_idle": "Idle",
+    "status_available": "Available",
+    "member_run": "Run",
+    "member_open": "Open",
+    "improveSeedIntro": "Here is my project’s Project 360 health check. Help me work through these gaps, highest impact first."
   }
 }

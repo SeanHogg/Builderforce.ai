@@ -378,7 +378,84 @@ export const brain = {
    */
   fetchUrl: (url: string) =>
     request<WebFetchResult>('/api/brain/fetch-url', { method: 'POST', body: JSON.stringify({ url }) }),
+
+  // --- Chat ↔ ticket links, lineage, consolidation, agent invites ---
+
+  /** Work items this chat is tied to, each with a live health (% done) summary. */
+  listChatTickets: (chatId: number) =>
+    request<{ tickets: ChatTicketLink[] }>(`/api/brain/chats/${chatId}/tickets`).then((r) => r.tickets),
+
+  /** Tie a chat to a ticket. kind = portfolio|objective|initiative|epic|task. */
+  linkChatTicket: (chatId: number, body: { kind: TicketKind; ref: string; linkType?: 'linked' | 'created' }) =>
+    request<ChatTicketLink>(`/api/brain/chats/${chatId}/tickets`, { method: 'POST', body: JSON.stringify(body) }),
+
+  /** Remove a chat ↔ ticket link. */
+  unlinkChatTicket: (chatId: number, kind: TicketKind, ref: string) =>
+    request<{ removed: boolean }>(`/api/brain/chats/${chatId}/tickets?kind=${encodeURIComponent(kind)}&ref=${encodeURIComponent(ref)}`, { method: 'DELETE' }),
+
+  /** Lineage: every chat that references a ticket (which spawned it / touched it). */
+  listTicketChats: (kind: TicketKind, ref: string) =>
+    request<{ chats: LinkedChatRef[] }>(`/api/brain/tickets/${encodeURIComponent(kind)}/${encodeURIComponent(ref)}/chats`).then((r) => r.chats),
+
+  /** Merge source chats into a target (archive + redirect the sources). */
+  consolidateChats: (targetChatId: number, sourceChatIds: number[]) =>
+    request<{ targetChatId: number; mergedChats: number; messagesMoved: number; linksMoved: number }>(
+      '/api/brain/chats/consolidate', { method: 'POST', body: JSON.stringify({ targetChatId, sourceChatIds }) }),
+
+  /** Agents invited into a chat. */
+  listChatAgents: (chatId: number) =>
+    request<{ agents: ChatAgentInvite[] }>(`/api/brain/chats/${chatId}/agents`).then((r) => r.agents),
+
+  /** Invite an agent into a chat as a participant. */
+  inviteChatAgent: (chatId: number, body: { agentRef: string; agentKind?: string; role?: string }) =>
+    request<ChatAgentInvite>(`/api/brain/chats/${chatId}/agents`, { method: 'POST', body: JSON.stringify(body) }),
+
+  /** Remove an agent from a chat. */
+  removeChatAgent: (chatId: number, assignmentId: string) =>
+    request<{ removed: boolean }>(`/api/brain/chats/${chatId}/agents/${assignmentId}`, { method: 'DELETE' }),
 };
+
+/** A work-item tier a chat can be tied to (mirrors the planning-spine node kinds). */
+export type TicketKind = 'portfolio' | 'objective' | 'initiative' | 'epic' | 'task';
+
+/** A chat ↔ ticket link with a live health summary. */
+export interface ChatTicketLink {
+  linkId: number;
+  kind: TicketKind;
+  ref: string;
+  label: string;
+  status: string;
+  progressPct: number;
+  done: number;
+  total: number;
+  exists: boolean;
+  linkType: 'linked' | 'created';
+  createdBy: string | null;
+  createdAt: string;
+}
+
+/** A chat that references a ticket (lineage row). */
+export interface LinkedChatRef {
+  chatId: number;
+  title: string;
+  linkType: 'linked' | 'created';
+  projectId: number | null;
+  createdAt: string;
+  updatedAt: string;
+  isArchived: boolean;
+  mergedIntoChatId: number | null;
+}
+
+/** An agent invited into a chat (an agent_assignments row, scope='chat'). */
+export interface ChatAgentInvite {
+  id: string;
+  agentKind: string;
+  agentRef: string;
+  scope: string;
+  scopeId: string | null;
+  executionScope: string;
+  role: string;
+}
 
 /** Readable result of {@link brain.fetchUrl}. */
 export interface WebFetchResult {
@@ -1060,6 +1137,14 @@ export interface Task {
   startDate: string | null;
   dueDate: string | null;
   persona: string | null;
+  /** Manager-scored business value 0–100 (null = unscored). */
+  businessValue?: number | null;
+  /** Plain-language justification for the business value, when scored. */
+  businessValueRationale?: string | null;
+  /** How the value was set: 'manual' (a human pinned it) | 'manager' (AI) | null. */
+  businessValueSource?: string | null;
+  /** The AI Manager's backlog rank (ascending; null = unranked, sorts last). */
+  managerRank?: number | null;
   archived: boolean;
   /** Count of linked PRDs (task_specs) — drives the board card's PRD indicator
    *  [1266]. Best-effort from GET /api/tasks; 0/absent where unknown. */
@@ -1160,6 +1245,9 @@ export const tasksApi = {
       /** Schedule into / out of a sprint (planning "drag onto sprint"). null = unscheduled. */
       sprintId: string | null;
       dueDate: string | null;
+      /** Pin the business value 0–100 (or null to clear). Setting it server-side
+       *  marks the source 'manual'. */
+      businessValue: number | null;
       archived: boolean;
     }>
   ): Promise<Task> =>
@@ -1233,6 +1321,132 @@ export const tasksApi = {
   /** Remove a precedence edge by id. */
   removeDependency: (edgeId: number): Promise<void> =>
     request<void>(`/api/tasks/dependencies/${edgeId}`, { method: 'DELETE' }),
+};
+
+// ---------------------------------------------------------------------------
+// AI Manager — per-project backlog manager (scores business value, ranks the
+// backlog, assigns owners, conducts PRs). Mirrors /api/manager on the API.
+// ---------------------------------------------------------------------------
+
+/** How pull requests an agent opens are merged once it finishes a ticket. */
+export type PrMergePolicy = 'immediate' | 'on_green' | 'queue';
+
+/** The action types the manager records on each run (drives the activity feed). */
+export type ManagerActionType =
+  | 'prioritize' | 'assign' | 'score_value' | 'dispatch' | 'merge_pr' | 'flag';
+
+/** Persisted manager configuration for a project (null until first configured). */
+export interface ManagerConfig {
+  /** Assignee-encoded manager (`c:<ref>` agent / `u:<userId>` human / null = system). */
+  managerRef: string | null;
+  enabled: boolean;
+  prMergePolicy: PrMergePolicy;
+  autoAssign: boolean;
+  autoBusinessValue: boolean;
+  autoPrioritize: boolean;
+  lastRunAt: string | null;
+}
+
+/** Effective policy (config merged with defaults + resolved manager kind). */
+export interface ManagerPolicy {
+  enabled: boolean;
+  managerRef: string | null;
+  managerKind: 'agent' | 'human' | 'system';
+  prMergePolicy: PrMergePolicy;
+  autoAssign: boolean;
+  autoBusinessValue: boolean;
+  autoPrioritize: boolean;
+}
+
+/** Headline counts for the manager dashboard tiles. */
+export interface ManagerStats {
+  total: number;
+  unscored: number;
+  unranked: number;
+  unowned: number;
+  openPullRequests: number;
+  lastRunAt: string | null;
+}
+
+/** One backlog row as ranked/scored by the manager (sorted managerRank asc, nulls last). */
+export interface ManagerBacklogItem {
+  id: number;
+  key: string;
+  title: string;
+  status: string;
+  priority: TaskPriority;
+  businessValue: number | null;
+  businessValueRationale: string | null;
+  managerRank: number | null;
+  dueDate: string | null;
+  assignedUserId: string | null;
+  assignedAgentRef: string | null;
+  assignedAgentHostId: number | null;
+}
+
+/** A single manager action (audit-feed entry). */
+export interface ManagerAction {
+  id: string;
+  taskId: number | null;
+  actionType: ManagerActionType;
+  summary: string;
+  detail: string | null;
+  createdAt: string;
+}
+
+/** The full manager overview returned by GET /api/manager/:projectId. */
+export interface ManagerOverview {
+  config: ManagerConfig | null;
+  policy: ManagerPolicy;
+  stats: ManagerStats;
+  backlog: ManagerBacklogItem[];
+  actions: ManagerAction[];
+}
+
+/** Editable subset accepted by PUT /api/manager/:projectId. */
+export type ManagerConfigPatch = Partial<{
+  /** '' clears the manager (system service takes over); `c:`/`u:` encode an assignee. */
+  managerRef: string;
+  enabled: boolean;
+  prMergePolicy: PrMergePolicy;
+  autoAssign: boolean;
+  autoBusinessValue: boolean;
+  autoPrioritize: boolean;
+}>;
+
+/** What one manager run did (POST /api/manager/:projectId/run). */
+export interface ManagerRunSummary {
+  projectId: number;
+  skipped: boolean;
+  scored: number;
+  ranked: number;
+  assigned: number;
+  prsConducted: number;
+  prsMerged: number;
+  dispatched: number;
+}
+
+export const managerApi = {
+  /** Full manager overview for a project (config, effective policy, stats, backlog, activity). */
+  get: (projectId: number): Promise<ManagerOverview> =>
+    request<ManagerOverview>(`/api/manager/${projectId}`),
+
+  /** Update the manager config (manager-role only). Returns the fresh config + policy. */
+  update: (projectId: number, patch: ManagerConfigPatch): Promise<{ config: ManagerConfig; policy: ManagerPolicy }> =>
+    request<{ config: ManagerConfig; policy: ManagerPolicy }>(`/api/manager/${projectId}`, {
+      method: 'PUT',
+      body: JSON.stringify(patch),
+    }),
+
+  /** Run the manager now (manager-role only). Returns a summary of what it did. */
+  run: (projectId: number): Promise<{ summary: ManagerRunSummary }> =>
+    request<{ summary: ManagerRunSummary }>(`/api/manager/${projectId}/run`, { method: 'POST' }),
+
+  /** Recent manager actions (activity feed), newest first. */
+  activity: (projectId: number, limit?: number): Promise<ManagerAction[]> => {
+    const q = limit != null ? `?limit=${limit}` : '';
+    return request<{ actions: ManagerAction[] }>(`/api/manager/${projectId}/activity${q}`).then((r) => r.actions);
+  },
 };
 
 /** Dependency edge semantics (mirrors the API's DEP_TYPES). */

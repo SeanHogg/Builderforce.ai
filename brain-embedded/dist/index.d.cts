@@ -550,6 +550,12 @@ interface UseBrainConversation {
     pendingAttachments: ChatInputAttachment[];
     uploading: boolean;
     send(text: string): Promise<void>;
+    /**
+     * Stop the in-flight run for the active chat: aborts the streaming LLM request
+     * and unwinds the agent loop (no error surfaced). No-op when nothing is
+     * running. Pair with `sending` to drive a Stop button.
+     */
+    stop(): void;
     copyMessage(msg: BrainMessage): Promise<void>;
     submitFeedback(msg: BrainMessage, value: 'up' | 'down'): Promise<void>;
     attach(file: File): Promise<void>;

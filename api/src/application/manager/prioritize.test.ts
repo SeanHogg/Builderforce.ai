@@ -52,20 +52,20 @@ describe('rankBacklog', () => {
       task({ taskId: 3, priority: 'medium' }),
     ], NOW);
     expect(ranked.map((r) => r.rank)).toEqual([1, 2, 3]);
-    expect(ranked[0].taskId).toBe(2); // urgent + high value wins
+    expect(ranked[0]!.taskId).toBe(2); // urgent + high value wins
   });
   it('breaks ties by earliest creation then id (deterministic)', () => {
     const ranked = rankBacklog([
       task({ taskId: 5, createdAt: iso(-1) }),
       task({ taskId: 4, createdAt: iso(-3) }),
     ], NOW);
-    expect(ranked[0].taskId).toBe(4); // older first when scores tie
+    expect(ranked[0]!.taskId).toBe(4); // older first when scores tie
   });
   it('floats a high-value urgent ticket to rank 1 over an old low-priority one', () => {
     const ranked = rankBacklog([
       task({ taskId: 1, priority: 'low', createdAt: iso(-40) }),
       task({ taskId: 2, priority: 'urgent', businessValue: 95, dueDate: iso(1) }),
     ], NOW);
-    expect(ranked[0].taskId).toBe(2);
+    expect(ranked[0]!.taskId).toBe(2);
   });
 });

@@ -1,20 +1,24 @@
 import * as vscode from "vscode";
-import { BfTask, DEFAULT_HIDE_DONE, isDoneStatus, listTasks } from "./bfApi";
+import { BfTask, DEFAULT_HIDE_DONE, getCurrentWorkspace, isDoneStatus, listTasks } from "./bfApi";
 import { SECRET_KEY } from "./gateway";
 import { getSelectedProject, onProjectChange } from "./projectState";
 
 const HIDE_DONE_KEY = "builderforce.hideDoneTasks";
 
 type Node =
+  | { kind: "workspace"; name?: string }
   | { kind: "project"; name: string }
   | { kind: "task"; task: BfTask }
   | { kind: "info"; label: string; command?: string };
 
 /**
- * The "Project" view: pick a BuilderForce project, then see its tasks. Clicking a task
- * starts a chat session linked to it; right-click sets status (which can trigger the
- * project's lane automation server-side). Degrades to a hint when not signed in or the
- * tenant APIs aren't reachable yet.
+ * The "Project" view: the working context, top-down — the workspace (tenant), then the
+ * project inside it, then that project's tasks. Clicking the workspace row switches (or
+ * creates) a workspace; clicking the project row switches project; clicking a task starts
+ * a chat session linked to it, and right-click sets status (which can trigger the
+ * project's lane automation server-side). Every other panel keys off the same selection:
+ * switching workspace re-scopes the tenant JWT, switching project filters the Sessions
+ * list. Degrades to a hint when not signed in or the tenant APIs aren't reachable yet.
  */
 export class ProjectsTreeProvider implements vscode.TreeDataProvider<Node> {
   private readonly _onDidChangeTreeData = new vscode.EventEmitter<void>();
@@ -48,12 +52,24 @@ export class ProjectsTreeProvider implements vscode.TreeDataProvider<Node> {
       if (node.command) item.command = { command: node.command, title: node.label };
       return item;
     }
+    if (node.kind === "workspace") {
+      const item = new vscode.TreeItem(
+        node.name ?? vscode.l10n.t("Select workspace"),
+        vscode.TreeItemCollapsibleState.None,
+      );
+      item.description = vscode.l10n.t("switch");
+      item.iconPath = new vscode.ThemeIcon("organization");
+      item.contextValue = "builderforceWorkspace";
+      item.tooltip = vscode.l10n.t("Switch or create a workspace");
+      item.command = { command: "builderforce.createWorkspace", title: vscode.l10n.t("Switch Workspace") };
+      return item;
+    }
     if (node.kind === "project") {
       const item = new vscode.TreeItem(node.name, vscode.TreeItemCollapsibleState.None);
-      item.description = "change";
+      item.description = vscode.l10n.t("change");
       item.iconPath = new vscode.ThemeIcon("folder-active");
       item.contextValue = "builderforceProject";
-      item.command = { command: "builderforce.selectProject", title: "Change Project" };
+      item.command = { command: "builderforce.selectProject", title: vscode.l10n.t("Change Project") };
       return item;
     }
     const t = node.task;
@@ -79,10 +95,23 @@ export class ProjectsTreeProvider implements vscode.TreeDataProvider<Node> {
       ];
     }
 
-    const project = getSelectedProject();
-    if (!project) return [{ kind: "info", label: "Select or create a project…", command: "builderforce.selectProject" }];
+    // The flow starts with the workspace (tenant): who you're building for. It's always
+    // shown when signed in so switching is one click, not buried in an overflow menu.
+    let workspaceName: string | undefined;
+    try {
+      workspaceName = (await getCurrentWorkspace(this.ctx.secrets))?.name;
+    } catch {
+      /* name unresolved (older API) — the row still switches; label falls back */
+    }
+    const nodes: Node[] = [{ kind: "workspace", name: workspaceName }];
 
-    const nodes: Node[] = [{ kind: "project", name: project.name }];
+    const project = getSelectedProject();
+    if (!project) {
+      nodes.push({ kind: "info", label: "Select or create a project…", command: "builderforce.selectProject" });
+      return nodes;
+    }
+
+    nodes.push({ kind: "project", name: project.name });
     try {
       const tasks = await listTasks(this.ctx.secrets, project.id);
       const visible = this.hideDone ? tasks.filter((t) => !isDoneStatus(t.status)) : tasks;

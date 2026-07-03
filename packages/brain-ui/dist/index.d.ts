@@ -81,6 +81,30 @@ interface MarkdownProps {
 declare function Markdown({ content, onInternalLink, onApplyCode, onCreateFile, labels }: MarkdownProps): React__default.JSX.Element;
 
 /**
+ * HealthRing — a compact "% done" donut for a work item's health, rendered
+ * identically on the web app and inside the VS Code webview. Pure presentational
+ * SVG (no chart library): give it a 0–100 percent and it draws a tier-coloured
+ * ring with the percentage in the centre. Colours come from `--bf-health-*`
+ * theme variables (with sensible fallbacks) so it reads in light AND dark.
+ */
+interface HealthRingProps {
+    /** 0–100 completion. */
+    percent: number;
+    /** Diameter in px (default 40). */
+    size?: number;
+    /** Ring thickness in px (default 4). */
+    stroke?: number;
+    /** Optional caption under the ring (e.g. "3/8"). */
+    caption?: string;
+    /** Dim the ring (e.g. the ticket no longer exists). */
+    muted?: boolean;
+    ariaLabel?: string;
+}
+/** Map a completion percent to a tier colour (CSS var with hex fallback). */
+declare function healthRingColor(percent: number, muted?: boolean): string;
+declare function HealthRing({ percent, size, stroke, caption, muted, ariaLabel }: HealthRingProps): React.JSX.Element;
+
+/**
  * Pure transcript view-model — frame-work agnostic so the SAME logic drives the
  * web app and the VS Code webview. It merges the durable message list (user +
  * assistant turns) with the live execution trace (LLM turns → "thinking", tool
@@ -318,4 +342,81 @@ interface SunburstProps {
 }
 declare function Sunburst({ pillars, dimensions, overall, selected, onSelect, ariaLabel }: SunburstProps): React.JSX.Element;
 
-export { BrainTimeline, type BrainTimelineLabels, type BrainTimelineProps, type BuildTimelineInput, DEFAULT_PROJECT360_LABELS, DEFAULT_TIMELINE_LABELS, type HealthTier, Markdown, type MarkdownLabels, type MarkdownProps, type Project360, type Project360Action, type Project360Dimension, type Project360Gap, type Project360Labels, type Project360Member, type Project360Pillar, Project360View, type Project360ViewProps, Sunburst, type SunburstProps, type TimelineImage, type TimelineNode, attachmentsOf, buildTimeline, formatDuration, formatPayload };
+/**
+ * Generic project-list model — the shared contract for every list-shaped project
+ * page rendered natively in a bundled-React webview (Backlog, PRDs, and future
+ * list views). One presentational <ProjectListView> renders any of them; each host
+ * screen maps its API response into this model, so the transport/theme/empty-error
+ * handling is written once (DRY) and the per-view code is just a fetch + a mapper.
+ */
+type ProjectListTone = 'default' | 'accent' | 'ok' | 'warn' | 'danger' | 'muted';
+interface ProjectListBadge {
+    label: string;
+    tone?: ProjectListTone;
+}
+/** A row action, forwarded verbatim to the host (which owns the actual command). */
+interface ProjectListAction {
+    kind: 'open-task' | 'brain' | 'open-360';
+    label?: string;
+    /** For `brain`: the seed prompt. */
+    text?: string;
+    /** For `open-task`: the task to open a working session for. */
+    task?: {
+        id: number;
+        key?: string;
+        title: string;
+    };
+}
+interface ProjectListItem {
+    id: string | number;
+    /** Short human key shown as a monospace chip (e.g. a task key or spec id). */
+    key?: string;
+    title: string;
+    subtitle?: string;
+    badges?: ProjectListBadge[];
+    /** Clicking the row (and its primary button) raises this. */
+    action?: ProjectListAction;
+}
+interface ProjectListGroup {
+    key: string;
+    label: string;
+    tone?: ProjectListTone;
+    items: ProjectListItem[];
+}
+interface ProjectListModel {
+    groups: ProjectListGroup[];
+    total: number;
+}
+/** UI strings — English defaults, overridable so the host can localize (the VS Code
+ *  webview feeds its `vscode.l10n` bundle; the web app next-intl). */
+interface ProjectListLabels {
+    refresh: string;
+    connecting: string;
+    loadError: string;
+    empty: string;
+    emptyHint: string;
+    items: string;
+}
+declare const DEFAULT_PROJECT_LIST_LABELS: ProjectListLabels;
+
+/**
+ * <ProjectListView> — the shared, presentational surface for every list-shaped
+ * project page (Backlog, PRDs, …). It takes a {@link ProjectListModel} (groups of
+ * rows with badges + a per-row action) and a single `onAction` callback, so the VS
+ * Code webview and the web app drive it identically. Themed via `--bf-*` variables
+ * → works in light and dark, and reflows to one column on a narrow panel. Loading,
+ * error, and empty are all handled here so a page never renders blank.
+ */
+interface ProjectListViewProps {
+    title: string;
+    subtitle?: string;
+    data: ProjectListModel | null;
+    loading?: boolean;
+    error?: string | null;
+    labels?: Partial<ProjectListLabels>;
+    onAction?: (action: ProjectListAction) => void;
+    onRefresh?: () => void;
+}
+declare function ProjectListView({ title, subtitle, data, loading, error, labels, onAction, onRefresh }: ProjectListViewProps): React.JSX.Element;
+
+export { BrainTimeline, type BrainTimelineLabels, type BrainTimelineProps, type BuildTimelineInput, DEFAULT_PROJECT360_LABELS, DEFAULT_PROJECT_LIST_LABELS, DEFAULT_TIMELINE_LABELS, HealthRing, type HealthRingProps, type HealthTier, Markdown, type MarkdownLabels, type MarkdownProps, type Project360, type Project360Action, type Project360Dimension, type Project360Gap, type Project360Labels, type Project360Member, type Project360Pillar, Project360View, type Project360ViewProps, type ProjectListAction, type ProjectListBadge, type ProjectListGroup, type ProjectListItem, type ProjectListLabels, type ProjectListModel, type ProjectListTone, ProjectListView, type ProjectListViewProps, Sunburst, type SunburstProps, type TimelineImage, type TimelineNode, attachmentsOf, buildTimeline, formatDuration, formatPayload, healthRingColor };

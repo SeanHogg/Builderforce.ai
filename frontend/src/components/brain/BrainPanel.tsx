@@ -16,6 +16,7 @@ import '@seanhogg/builderforce-brain-ui/styles.css';
 import { ChatInput } from '@/components/ChatInput';
 import { ChatMessageContent } from '@/components/ChatMessageContent';
 import { ChatMessageActions } from '@/components/ChatMessageActions';
+import { ChatTicketsPanel } from '@/components/brain/ChatTicketsPanel';
 import { ThemeSelect } from '@/components/ThemeSelect';
 import { Select } from '@/components/Select';
 import { fetchProjects, createProject } from '@/lib/api';
@@ -506,6 +507,14 @@ export function BrainPanel({
               onNewProject={() => setShowNewProject(true)}
             />
           )}
+          {chats.activeChat && (
+            <ChatTicketsPanel
+              chatId={chats.activeChat.id}
+              projectId={chats.activeChat.projectId ?? pinnedProjectId ?? viewingProjectId ?? null}
+              chatList={chats.chats}
+              onChanged={() => { void chats.reload(); }}
+            />
+          )}
           {showNewProject && (
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '8px 12px', padding: '8px 0', borderBottom: '1px solid var(--border-subtle)' }}>
               <input
@@ -609,6 +618,9 @@ export function BrainPanel({
               onSubmit={handleSend}
               placeholder="Message Brain…"
               disabled={conv.sending}
+              running={conv.sending}
+              onStop={conv.stop}
+              stopLabel={tTimeline('stop')}
               rows={2}
               submitOnEnter={false}
               onAttach={conv.attach}

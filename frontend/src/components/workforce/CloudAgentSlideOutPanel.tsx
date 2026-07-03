@@ -14,6 +14,7 @@ import {
 import type { PublishedAgent } from '@/lib/types';
 import { canDeleteAgent, isAgentOwner } from '@/lib/agentPermissions';
 import { CapabilitiesContent } from '@/components/CapabilitiesContent';
+import PersonalitySummary from '@/components/PersonalitySummary';
 import {
   CloudAgentFormFields,
   cloudAgentFormToInput,
@@ -242,6 +243,11 @@ export function CloudAgentSlideOutPanel({
 
           {activeTab === 'details' && (
             <>
+              {/* At-a-glance personality readout (self-hides when none is set); the
+                  editable fields + personality editor follow below. */}
+              <div style={{ marginBottom: 16 }}>
+                <PersonalitySummary profile={form.psychometric} />
+              </div>
               <CloudAgentFormFields form={form} onChange={(patch) => setForm((f) => ({ ...f, ...patch }))} />
               <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 18 }}>
                 <button type="button" onClick={saveDetails} disabled={saving || !form.name.trim()} style={btnPrimary}>

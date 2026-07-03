@@ -5,6 +5,7 @@ import * as bfApi from "./bfApi";
 import { BoardPanel } from "./boardPanel";
 import { BrainWebview } from "./brainWebview";
 import { Project360Panel } from "./project360Panel";
+import { ProjectPagePanel, projectPageChoices } from "./projectPagePanel";
 import { registerChatParticipant } from "./chatParticipant";
 import { registerChatSessions } from "./chatSessions";
 import { scanCodebase } from "./codebaseScan";
@@ -72,6 +73,11 @@ export function activate(context: vscode.ExtensionContext): void {
   });
   projectView = vscode.window.createTreeView("builderforce.project", { treeDataProvider: projects });
   context.subscriptions.push(projectView);
+  // The Sessions list is scoped by the active project — surface that in its header so
+  // it's obvious you're looking at one project's chats vs. every conversation.
+  const sessionsView = vscode.window.createTreeView("builderforce.sessions", { treeDataProvider: tree });
+  sessionsView.description = getSelectedProject()?.name;
+  context.subscriptions.push(sessionsView);
   // Restore the workspace the editor was last acting as (re-scopes the tenant JWT).
   const savedTenant = context.globalState.get<number>(SELECTED_TENANT_KEY);
   if (typeof savedTenant === "number") bfApi.setSelectedWorkspace(savedTenant);
@@ -93,7 +99,6 @@ export function activate(context: vscode.ExtensionContext): void {
 
   context.subscriptions.push(
     participant,
-    vscode.window.registerTreeDataProvider("builderforce.sessions", tree),
     vscode.window.registerTreeDataProvider("builderforce.inbox", inbox),
     vscode.commands.registerCommand("builderforce.refreshInbox", () => inbox.refresh()),
     // Work Inbox entry points — each hands the unified Brain a job to do with its
@@ -192,6 +197,23 @@ export function activate(context: vscode.ExtensionContext): void {
       }
       if (project) Project360Panel.open(context, project.id, project.name);
     }),
+    // Open a list-shaped project page (Backlog, PRDs, …) — NATIVE bundled-React
+    // webview screens (shared <ProjectListView>, same hosting model as the chat +
+    // Project 360), each fed by its own REST endpoint. Replaces the retired /embed
+    // "Open Page…" iframe picker, which never ran in the webview.
+    vscode.commands.registerCommand("builderforce.openPage", async () => {
+      const pick = await vscode.window.showQuickPick(
+        projectPageChoices().map((c) => ({ label: c.label, view: c.view })),
+        { title: vscode.l10n.t("Open a BuilderForce page"), placeHolder: vscode.l10n.t("Manage your project without leaving the editor") },
+      );
+      if (!pick) return;
+      let project = getSelectedProject();
+      if (!project) {
+        await selectProject(context, projects);
+        project = getSelectedProject();
+      }
+      if (project) ProjectPagePanel.open(context, pick.view, project.id, project.name);
+    }),
     vscode.commands.registerCommand("builderforce.deleteSession", async (item: bfApi.BfBrainChat | string) => {
       const id = chatIdOf(item);
       if (id == null) return;
@@ -243,8 +265,12 @@ export function activate(context: vscode.ExtensionContext): void {
       void maybeScan(context, false);
     }),
     // Switching the active project re-pushes Brain init so an open chat's system
-    // prompt (and new-chat scoping) tracks the current project without a reopen.
-    onProjectChange(() => BrainWebview.refresh()),
+    // prompt (and new-chat scoping) tracks the current project without a reopen, and
+    // re-labels the Sessions header to show which project's chats are in view.
+    onProjectChange(() => {
+      BrainWebview.refresh();
+      sessionsView.description = getSelectedProject()?.name;
+    }),
   );
 
   void maybeScan(context, false);

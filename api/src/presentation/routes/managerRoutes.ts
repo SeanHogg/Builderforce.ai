@@ -112,14 +112,15 @@ export function createManagerRoutes(db: Db, runtimeService: RuntimeService): Hon
     if (!Number.isFinite(projectId) || !(await ownProject(tenantId, projectId))) {
       return c.json({ error: 'Project not found' }, 404);
     }
-    const body = await c.req.json<{
+    type ConfigBody = {
       managerRef?: string | null;
       enabled?: boolean;
       prMergePolicy?: string;
       autoAssign?: boolean;
       autoBusinessValue?: boolean;
       autoPrioritize?: boolean;
-    }>().catch(() => ({}));
+    };
+    const body = (await c.req.json<ConfigBody>().catch(() => ({} as ConfigBody)));
 
     const config = await upsertManagerConfig(db, tenantId, projectId, {
       ...(body.managerRef !== undefined ? { managerRef: body.managerRef === '' ? null : body.managerRef } : {}),

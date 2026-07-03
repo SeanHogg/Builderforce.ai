@@ -25,6 +25,7 @@
   "command.humanRequests": "BuilderForce：审核审批",
   "command.openBoard": "BuilderForce：打开看板",
   "command.openProject360": "BuilderForce：打开项目 360",
+  "command.openPage": "BuilderForce：打开页面…",
   "command.diagnose": "BuilderForce：诊断连接",
   "command.rescanCodebase": "BuilderForce：重新扫描代码库",
   "command.pickModel": "BuilderForce：选择模型",

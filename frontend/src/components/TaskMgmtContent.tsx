@@ -162,6 +162,7 @@ export function TaskMgmtContent({
   compact = false,
 }: TaskMgmtContentProps) {
   const tApproval = useTranslations('boardConfig');
+  const tBoard = useTranslations('board');
   // Global project scope (present in the app shell, absent in embed/standalone).
   // When present it is the single project picker — the board's own project filter
   // is hidden and the TopBar tenant→project selector drives scope instead.
@@ -211,7 +212,7 @@ export function TaskMgmtContent({
   // Inline per-field editing in the task drawer. Only one field is editable at a
   // time; `fieldDraft` holds the in-progress value (string for text/date inputs).
   const [editingField, setEditingField] = useState<
-    null | 'title' | 'description' | 'dueDate' | 'assignee' | 'priority' | 'status' | 'project'
+    null | 'title' | 'description' | 'dueDate' | 'assignee' | 'priority' | 'status' | 'project' | 'businessValue'
   >(null);
   const [fieldDraft, setFieldDraft] = useState('');
   const [fieldSaving, setFieldSaving] = useState(false);
@@ -596,7 +597,7 @@ export function TaskMgmtContent({
   // Persist a single edited field from the drawer's inline editors. Patches the
   // open task, syncs the list + drawer, and closes the active editor on success.
   const saveTaskField = async (
-    patch: Partial<Pick<Task, 'title' | 'description' | 'priority' | 'assignedAgentHostId' | 'assignedAgentRef' | 'assignedUserId' | 'dueDate'>>
+    patch: Partial<Pick<Task, 'title' | 'description' | 'priority' | 'assignedAgentHostId' | 'assignedAgentRef' | 'assignedUserId' | 'dueDate' | 'businessValue'>>
   ) => {
     if (!drawerTask) return;
     setFieldSaving(true);
@@ -610,6 +611,16 @@ export function TaskMgmtContent({
     } finally {
       setFieldSaving(false);
     }
+  };
+
+  // Commit the drawer's business-value editor: blank clears it (null), otherwise
+  // clamp to 0–100. Setting it server-side pins the value's source to 'manual'.
+  const commitBusinessValue = () => {
+    const raw = fieldDraft.trim();
+    if (raw === '') { void saveTaskField({ businessValue: null }); return; }
+    const n = Number(raw);
+    if (Number.isNaN(n)) { setEditingField(null); return; }
+    void saveTaskField({ businessValue: Math.max(0, Math.min(100, Math.round(n))) });
   };
 
   const patchStatus = async (id: number, status: string) => {
@@ -779,6 +790,14 @@ export function TaskMgmtContent({
           >
             {task.priority}
           </span>
+          {task.businessValue != null && (
+            <span
+              title={task.businessValueRationale ?? tBoard('businessValue.badgeTitle')}
+              style={{ fontSize: 10, padding: '2px 6px', borderRadius: 4, background: 'var(--surface-interactive, var(--bg-elevated))', color: 'var(--text-secondary)', fontWeight: 700 }}
+            >
+              {tBoard('businessValue.badge', { value: task.businessValue })}
+            </span>
+          )}
           {task.specCount ? (
             <span
               title={`${task.specCount} linked PRD${task.specCount > 1 ? 's' : ''}`}
@@ -1433,6 +1452,14 @@ export function TaskMgmtContent({
                         >
                           {task.priority}
                         </span>
+                        {task.businessValue != null && (
+                          <span
+                            title={task.businessValueRationale ?? tBoard('businessValue.badgeTitle')}
+                            style={{ marginLeft: 6, fontSize: 10, padding: '2px 6px', borderRadius: 4, background: 'var(--surface-interactive, var(--bg-elevated))', color: 'var(--text-secondary)', fontWeight: 700 }}
+                          >
+                            {tBoard('businessValue.badge', { value: task.businessValue })}
+                          </span>
+                        )}
                       </td>
                       {!projectId && (
                         <td style={{ padding: '10px 12px', fontSize: 12, color: 'var(--text-muted)' }}>
@@ -2155,6 +2182,69 @@ export function TaskMgmtContent({
                       </span>
                     )}
                   </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', fontSize: 13, minHeight: 28, gap: 12 }}>
+                    <span style={{ color: 'var(--text-muted)', paddingTop: 4 }}>
+                      {tBoard('businessValue.label')}
+                      {drawerTask.managerRank != null && (
+                        <span
+                          title={tBoard('businessValue.rankTitle')}
+                          style={{ marginLeft: 6, fontSize: 10, padding: '1px 5px', borderRadius: 4, background: 'var(--surface-interactive, var(--bg-elevated))', color: 'var(--text-secondary)', fontWeight: 700 }}
+                        >
+                          #{drawerTask.managerRank}
+                        </span>
+                      )}
+                    </span>
+                    {editingField === 'businessValue' ? (
+                      <input
+                        type="number"
+                        min={0}
+                        max={100}
+                        autoFocus
+                        value={fieldDraft}
+                        disabled={fieldSaving}
+                        onChange={(e) => setFieldDraft(e.target.value)}
+                        onBlur={commitBusinessValue}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') commitBusinessValue();
+                          if (e.key === 'Escape') setEditingField(null);
+                        }}
+                        placeholder="0–100"
+                        style={{
+                          width: 90,
+                          fontSize: 13,
+                          padding: '3px 6px',
+                          border: '1px solid var(--border-subtle)',
+                          borderRadius: 6,
+                          background: 'var(--bg-deep)',
+                          color: 'var(--text-primary)',
+                        }}
+                      />
+                    ) : (
+                      <span
+                        role="button"
+                        tabIndex={0}
+                        onClick={() => { setFieldDraft(drawerTask.businessValue != null ? String(drawerTask.businessValue) : ''); setEditingField('businessValue'); }}
+                        onKeyDown={(e) => { if (e.key === 'Enter') { setFieldDraft(drawerTask.businessValue != null ? String(drawerTask.businessValue) : ''); setEditingField('businessValue'); } }}
+                        title={drawerTask.businessValueRationale ?? tBoard('businessValue.editTitle')}
+                        style={{
+                          color: drawerTask.businessValue != null ? 'var(--text-primary)' : 'var(--text-muted)',
+                          cursor: 'pointer',
+                          borderBottom: '1px dashed var(--border-subtle)',
+                          textAlign: 'right',
+                          maxWidth: 220,
+                        }}
+                      >
+                        {drawerTask.businessValue != null
+                          ? tBoard('businessValue.badge', { value: drawerTask.businessValue })
+                          : tBoard('businessValue.unset')}
+                      </span>
+                    )}
+                  </div>
+                  {drawerTask.businessValue != null && drawerTask.businessValueRationale && editingField !== 'businessValue' && (
+                    <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: -2, lineHeight: 1.5 }}>
+                      {drawerTask.businessValueRationale}
+                    </div>
+                  )}
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 13, minHeight: 28 }}>
                     <span style={{ color: 'var(--text-muted)' }}>Created</span>
                     <span style={{ color: 'var(--text-primary)' }}>{formatDate(drawerTask.createdAt)}</span>

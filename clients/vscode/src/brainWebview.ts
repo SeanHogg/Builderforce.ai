@@ -58,6 +58,7 @@ function buildLabels(): Record<string, string> {
     "app.remove": t("Remove"),
     "app.working": t("Working…"),
     "app.send": t("Send"),
+    "app.stop": t("Stop"),
     "app.placeholder": t("Ask BuilderForce to build or change something…"),
     "app.confirmRun": t("Run {name}?"),
     "app.approve": t("Approve"),
@@ -222,8 +223,36 @@ export class BrainWebview {
     try {
       const result = await def.execute(args, root);
       this.respond(id, true, result);
+      // Link the change back to the editor: reveal the file the agent just wrote
+      // or edited so the user SEES each change land (a preview tab beside the
+      // chat, focus preserved). Fire-and-forget — never blocks the tool result.
+      void this.revealChangedFile(name, args, root);
     } catch (e) {
       this.respond(id, false, undefined, (e as Error).message ?? String(e));
+    }
+  }
+
+  /**
+   * Open the file a mutating file tool just touched, so the change is visible in
+   * the editor (VS Code auto-reloads the on-disk edit). Preview mode reuses one
+   * tab across a multi-file run, opened Beside the chat with focus preserved so
+   * it never steals the composer. Only `write_file`/`edit_file` reveal — a delete
+   * has nothing to show, and shell/read tools aren't changes. Best-effort.
+   */
+  private async revealChangedFile(name: string | undefined, args: Record<string, unknown>, root: string): Promise<void> {
+    if (name !== "write_file" && name !== "edit_file") return;
+    const rel = typeof args.path === "string" ? args.path : "";
+    if (!rel) return;
+    try {
+      const uri = vscode.Uri.joinPath(vscode.Uri.file(root), ...rel.split("/").filter(Boolean));
+      const doc = await vscode.workspace.openTextDocument(uri);
+      await vscode.window.showTextDocument(doc, {
+        preview: true,
+        preserveFocus: true,
+        viewColumn: vscode.ViewColumn.Beside,
+      });
+    } catch {
+      /* file may have been deleted/moved by a later tool — non-fatal */
     }
   }
 

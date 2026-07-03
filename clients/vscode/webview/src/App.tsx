@@ -23,6 +23,7 @@ import {
   type LabelBundle,
 } from './vscodeBridge';
 import { Project360Screen } from './Project360Screen';
+import { ProjectPageScreen } from './ProjectPageScreen';
 import { createPersistence } from './persistence';
 import { buildHostTools } from './hostTools';
 import { buildIdeSystemPrompt } from './systemPrompt';
@@ -79,9 +80,11 @@ export function App() {
     );
   }
   // Multi-screen: the host picks which surface this webview renders via `init.view`
-  // (same bundle, same transport). Project 360 is a standalone screen — no Brain
-  // providers needed, it fetches its rollup directly like the chat fetches /api/brain.
+  // (same bundle, same transport). Project 360 + the list pages are standalone
+  // screens — no Brain providers needed, they fetch their data directly like the
+  // chat fetches /api/brain.
   if (init.view === 'project360') return <Project360Screen init={init} />;
+  if (init.view === 'backlog' || init.view === 'prd') return <ProjectPageScreen init={init} view={init.view} />;
   return <ConfiguredApp init={init} />;
 }
 
@@ -376,9 +379,17 @@ function Chat({ init }: { init: InitData }) {
           />
           {init.model && <span className="bf-model">{init.model}</span>}
           <div className="bf-header__spacer" />
-          <button className="bf-btn bf-btn--primary" onClick={submit} disabled={conv.sending || !input.trim()}>
-            {conv.sending ? t('app.working', 'Working…') : t('app.send', 'Send')}
-          </button>
+          {/* While a run is in flight the primary action becomes Stop — it aborts
+              the streaming LLM request and unwinds the agent loop (conv.stop). */}
+          {conv.sending ? (
+            <button className="bf-btn bf-btn--stop" onClick={conv.stop} title={t('app.stop', 'Stop')}>
+              <span className="bf-stop-glyph" aria-hidden="true">■</span> {t('app.stop', 'Stop')}
+            </button>
+          ) : (
+            <button className="bf-btn bf-btn--primary" onClick={submit} disabled={!input.trim()}>
+              {t('app.send', 'Send')}
+            </button>
+          )}
         </div>
       </div>
     </div>

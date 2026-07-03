@@ -12,11 +12,12 @@ import { useProjectScope } from '@/lib/ProjectScopeContext';
 import { PmVisualizersContent } from '@/components/pm/PmVisualizersContent';
 import { PmoContent } from '@/components/pm/PmoContent';
 import { CeremoniesContent } from '@/components/ceremony/CeremoniesContent';
+import { ManagerContent } from '@/components/manager/ManagerContent';
 import { RoleGate } from '@/components/RoleGate';
 import { usePublishNavCount } from '@/lib/navCounts';
 import { PROJECTS_COUNT_KEY } from '@/lib/navGroups';
 
-type Tab = 'projects' | 'tasks' | 'pm' | 'portfolio' | 'ceremonies';
+type Tab = 'projects' | 'tasks' | 'manager' | 'pm' | 'portfolio' | 'ceremonies';
 
 /**
  * Projects — the single destination for all project work. Its sub-views are
@@ -53,6 +54,7 @@ export default function ProjectsTasksPage() {
   const tabParam = searchParams.get('tab');
   const activeTab: Tab =
     tabParam === 'tasks' ? 'tasks'
+    : tabParam === 'manager' ? 'manager'
     : tabParam === 'pm' ? 'pm'
     : tabParam === 'portfolio' ? 'portfolio'
     : tabParam === 'ceremonies' ? 'ceremonies'
@@ -76,6 +78,7 @@ export default function ProjectsTasksPage() {
     <PageContainer style={{ padding: '20px 16px' }}>
       {activeTab === 'projects' && <ProjectsContent onCount={setProjectCount} />}
       {activeTab === 'tasks' && <TaskMgmtContent projectId={scopedProjectId} />}
+      {activeTab === 'manager' && <ManagerContent projectId={scopedProjectId} />}
       {activeTab === 'pm' && (
         <PmScopeProvider projectId={scopedProjectId ?? null}>
           <PmVisualizersContent />

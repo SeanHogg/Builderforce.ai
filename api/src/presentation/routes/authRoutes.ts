@@ -36,6 +36,13 @@ import {
   verifyTotpCode,
 } from '../../infrastructure/auth/MfaService';
 import { checkTermsAcceptance } from '../middleware/termsEnforcement';
+import { sanitizePsychometricProfile } from '../../application/persona/psychometricCatalog';
+
+/** Parse a stored psychometric JSON column into an object (null when unset/invalid). */
+function parsePsychometric(raw: string | null | undefined): unknown {
+  if (!raw) return null;
+  try { return JSON.parse(raw) as unknown; } catch { return null; }
+}
 
 type TokenPayload = {
   sub: string;
@@ -75,6 +82,8 @@ function toUserResponse(user: typeof users.$inferSelect) {
     displayName: user.displayName,
     avatarUrl: user.avatarUrl,
     bio: user.bio,
+    // This human's OWN personality (same PsychometricProfile shape agents/personas use).
+    psychometric: parsePsychometric(user.psychometric),
     isSuperadmin: superadmin,
     mfaEnabled: user.mfaEnabled,
   };
@@ -885,7 +894,7 @@ export function createAuthRoutes(authService: AuthService, db: Db): Hono<HonoEnv
     const user = await authService.getMe(userId);
     if (!user) return c.json({ error: 'User not found' }, 404);
     const [full] = await db
-      .select({ mfaEnabled: users.mfaEnabled, onboardingCompletedAt: users.onboardingCompletedAt })
+      .select({ mfaEnabled: users.mfaEnabled, onboardingCompletedAt: users.onboardingCompletedAt, psychometric: users.psychometric })
       .from(users)
       .where(eq(users.id, userId))
       .limit(1);
@@ -894,8 +903,29 @@ export function createAuthRoutes(authService: AuthService, db: Db): Hono<HonoEnv
         ...user,
         mfaEnabled: full?.mfaEnabled ?? false,
         onboardingCompletedAt: full?.onboardingCompletedAt ?? null,
+        psychometric: parsePsychometric(full?.psychometric),
       },
     });
+  });
+
+  // PATCH /api/auth/me — the signed-in user edits their OWN profile. Currently the
+  // personality (psychometric) only — personality is intrinsic to a person and
+  // applies to any and all users, so it is NOT Pro-gated here (unlike the agent /
+  // persona editor). Send `psychometric: null` to clear it. Sanitized to the same
+  // trait-vector shape agents/personas store, so a person and an agent are described
+  // identically.
+  router.patch('/me', webAuthMiddleware, async (c) => {
+    const userId = c.get('userId') as UserId;
+    const body = await c.req.json<{ psychometric?: unknown }>().catch(() => ({} as { psychometric?: unknown }));
+
+    const updates: Record<string, unknown> = { updatedAt: new Date() };
+    if (body.psychometric !== undefined) {
+      updates.psychometric = body.psychometric === null ? null : sanitizePsychometricProfile(body.psychometric);
+    }
+
+    const [row] = await db.update(users).set(updates).where(eq(users.id, userId)).returning();
+    if (!row) return c.json({ error: 'User not found' }, 404);
+    return c.json({ user: toUserResponse(row) });
   });
 
   // POST /api/auth/me/onboarding/complete — marks onboarding as done, stores intent

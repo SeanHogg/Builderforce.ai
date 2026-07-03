@@ -2,7 +2,7 @@
   "name": "builderforce-ai",
   "displayName": "BuilderForce.ai",
   "description": "%extension.description%",
-  "version": "2026.7.3",
+  "version": "2026.7.4",
   "publisher": "builderforce",
   "license": "MIT",
   "author": "Sean Hogg",
@@ -183,6 +183,11 @@
         "icon": "$(layout)"
       },
       {
+        "command": "builderforce.openPage",
+        "title": "%command.openPage%",
+        "icon": "$(browser)"
+      },
+      {
         "command": "builderforce.diagnose",
         "title": "%command.diagnose%",
         "icon": "$(pulse)"
@@ -308,6 +313,11 @@
           "command": "builderforce.openBoard",
           "when": "view == builderforce.project",
           "group": "navigation@3"
+        },
+        {
+          "command": "builderforce.openPage",
+          "when": "view == builderforce.project",
+          "group": "navigation@4"
         },
         {
           "command": "builderforce.humanRequests",

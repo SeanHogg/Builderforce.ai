@@ -35,7 +35,7 @@ export function Project360Screen({ init }: { init: InitData }) {
   const [error, setError] = useState<string | null>(null);
   const labels = labelsFrom(init.labels);
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (fresh = false) => {
     if (projectId == null) {
       setError('No project is selected.');
       setLoading(false);
@@ -43,10 +43,10 @@ export function Project360Screen({ init }: { init: InitData }) {
     }
     setLoading(true);
     setError(null);
-    const call = (token: string | null) =>
-      fetch(`${init.baseUrl}/api/projects/${projectId}/360`, {
-        headers: token ? { authorization: `Bearer ${token}` } : {},
-      });
+    // `fresh=1` bypasses the endpoint's short-TTL cache — used for an explicit refresh
+    // or a focus revalidate, so "who's working" is guaranteed live on demand.
+    const url = `${init.baseUrl}/api/projects/${projectId}/360${fresh ? '?fresh=1' : ''}`;
+    const call = (token: string | null) => fetch(url, { headers: token ? { authorization: `Bearer ${token}` } : {} });
     try {
       let res = await call(getToken());
       if (res.status === 401) {
@@ -66,7 +66,7 @@ export function Project360Screen({ init }: { init: InitData }) {
 
   // The host re-pushes a `revalidate` intent when the panel regains focus (a run may
   // have started, work may have moved) so "who's working" stays live without polling.
-  useEffect(() => onIntent((intent) => { if (intent.kind === 'revalidate') void load(); }), [load]);
+  useEffect(() => onIntent((intent) => { if (intent.kind === 'revalidate') void load(true); }), [load]);
 
   const onAction = useCallback((action: Project360Action) => {
     // The host maps each kind to the command it already owns (openBoard / humanRequests
@@ -81,7 +81,7 @@ export function Project360Screen({ init }: { init: InitData }) {
       error={error}
       labels={labels}
       onAction={onAction}
-      onRefresh={() => void load()}
+      onRefresh={() => void load(true)}
     />
   );
 }

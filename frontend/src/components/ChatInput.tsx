@@ -28,6 +28,16 @@ export interface ChatInputProps {
   disabled?: boolean;
   /** Send button label/title. */
   submitLabel?: string;
+  /**
+   * When true, a run is in flight: the Send button is replaced by a Stop button
+   * that calls {@link onStop}. Requires `onStop` to render (otherwise the Send
+   * button shows as before). Lets the user interrupt a streaming reply.
+   */
+  running?: boolean;
+  /** Interrupt the in-flight run (shown as a Stop button while `running`). */
+  onStop?: () => void;
+  /** Stop button label/title. */
+  stopLabel?: string;
   /** Number of rows for the text area. Default 2. */
   rows?: number;
   /** If false, Enter does not submit (send only via button). Default true. */
@@ -120,6 +130,15 @@ function MicIcon({ className }: { className?: string }) {
   );
 }
 
+/** Filled square (stop / interrupt) */
+function StopSquareIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" stroke="none" aria-hidden="true">
+      <rect x="6" y="6" width="12" height="12" rx="2" />
+    </svg>
+  );
+}
+
 /** Up arrow (send) */
 function SendArrowIcon() {
   return (
@@ -141,6 +160,9 @@ export function ChatInput({
   placeholder = 'Message…',
   disabled = false,
   submitLabel = 'Send',
+  running = false,
+  onStop,
+  stopLabel = 'Stop',
   rows = 2,
   submitOnEnter = false,
   onAttach,
@@ -361,14 +383,26 @@ export function ChatInput({
             <MicIcon />
           </button>
         )}
-        <button
-          type="submit"
-          disabled={!canSubmit}
-          title={submitLabel}
-          style={sendButtonStyle(!canSubmit)}
-        >
-          <SendArrowIcon />
-        </button>
+        {running && onStop ? (
+          <button
+            type="button"
+            onClick={onStop}
+            title={stopLabel}
+            aria-label={stopLabel}
+            style={sendButtonStyle(false)}
+          >
+            <StopSquareIcon />
+          </button>
+        ) : (
+          <button
+            type="submit"
+            disabled={!canSubmit}
+            title={submitLabel}
+            style={sendButtonStyle(!canSubmit)}
+          >
+            <SendArrowIcon />
+          </button>
+        )}
       </div>
       {secondaryContent && (
         <div style={{ display: 'flex', justifyContent: 'flex-end' }}>

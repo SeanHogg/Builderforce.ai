@@ -25,6 +25,7 @@
   "command.humanRequests": "BuilderForce: Freigaben prüfen",
   "command.openBoard": "BuilderForce: Board öffnen",
   "command.openProject360": "BuilderForce: Projekt 360 öffnen",
+  "command.openPage": "BuilderForce: Seite öffnen…",
   "command.diagnose": "BuilderForce: Verbindung diagnostizieren",
   "command.rescanCodebase": "BuilderForce: Codebasis neu scannen",
   "command.pickModel": "BuilderForce: Modell auswählen",

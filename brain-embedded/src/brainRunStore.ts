@@ -131,6 +131,13 @@ interface RunCell {
   appended: BrainMessage[];
   messagesEpoch: number;
   listeners: Set<() => void>;
+  /**
+   * Abort handle for the run currently in flight. Created fresh in `startRun` and
+   * used to (a) cancel the streaming LLM fetch and (b) let the loop unwind
+   * cleanly when the user hits Stop. Null while idle. A fresh controller per run
+   * means a stale aborted one never bleeds into the next run.
+   */
+  abort: AbortController | null;
   /** Cached immutable snapshot; identity changes only when something changed. */
   snapshot: BrainRunSnapshot;
 }
@@ -160,6 +167,7 @@ function makeCell(): RunCell {
     appended: [],
     messagesEpoch: 0,
     listeners: new Set(),
+    abort: null,
     snapshot: EMPTY_SNAPSHOT,
   };
 }
@@ -315,6 +323,32 @@ export function getRunTrace(chatId: number | null): BrainTraceEvent[] {
   return cells.get(chatId)?.trace ?? [];
 }
 
+/**
+ * Stop a chat's in-flight run. Aborts the streaming LLM request (which rejects
+ * the in-flight `stream()` — the loop treats an aborted signal as a clean exit,
+ * surfacing no error) and resolves any paused human-in-the-loop confirmation as
+ * declined so a loop waiting on the gate can also unwind. Records a `stopped`
+ * trace step for triage. No-op if nothing is running for this chat.
+ *
+ * `running` flips to false when `runLoop` unwinds and `startRun`'s `finally`
+ * fires; we emit here too so the Stop is reflected immediately.
+ */
+export function stopRun(chatId: number): void {
+  const c = cells.get(chatId);
+  if (!c || !c.running) return;
+  c.abort?.abort();
+  if (c.confirmResolver) {
+    const resolve = c.confirmResolver;
+    c.confirmResolver = null;
+    c.pendingConfirm = null;
+    resolve(false);
+  }
+  c.streamingText = '';
+  // pushTrace emits, so subscribers see both the trace step and the cleared
+  // streaming buffer in one go.
+  pushTrace(c, { ts: nowIso(), category: 'message', label: 'agent.stopped', result: 'Stopped by user.' });
+}
+
 /** Resolve a pending human-in-the-loop confirmation. No-op if none is pending. */
 export function resolveRunConfirm(chatId: number, ok: boolean): void {
   const c = cells.get(chatId);
@@ -338,6 +372,9 @@ export async function startRun(chatId: number, req: BrainRunRequest): Promise<vo
   c.running = true;
   c.error = '';
   c.streamingText = '';
+  // Fresh abort handle for this run, so Stop can cancel the LLM stream and unwind
+  // the loop (a stale, already-aborted controller never bleeds into a new run).
+  c.abort = new AbortController();
 
   // Seed the rich transcript from prior persisted history the FIRST time we
   // touch this chat this session, then append the triggering user turn — done
@@ -350,10 +387,14 @@ export async function startRun(chatId: number, req: BrainRunRequest): Promise<vo
   try {
     await runLoop(chatId, c, req);
   } catch (e) {
-    c.error = e instanceof Error ? e.message : 'Reply failed';
+    // A user-initiated Stop aborts the stream mid-flight; that's a clean exit,
+    // not an error to surface. (runLoop already returns on an aborted signal, so
+    // this guards the rare throw that races the abort.)
+    if (!c.abort?.signal.aborted) c.error = e instanceof Error ? e.message : 'Reply failed';
   } finally {
     c.running = false;
     c.streamingText = '';
+    c.abort = null;
     emit(c);
   }
 }
@@ -364,6 +405,8 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
   const tools = toolSpecs && toolSpecs.length > 0 ? toolSpecs : undefined;
 
   for (let iter = 0; iter < MAX_TOOL_ITERATIONS; iter++) {
+    // User hit Stop between turns (or after a tool call) — unwind cleanly.
+    if (c.abort?.signal.aborted) return;
     c.streamingText = '';
     emit(c);
     const working: ChatCompletionMessage[] = [
@@ -374,10 +417,13 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
     let result;
     try {
       result = await stream(
-        { messages: working, tools, tool_choice: tools ? 'auto' : undefined, model },
+        { messages: working, tools, tool_choice: tools ? 'auto' : undefined, model, signal: c.abort?.signal },
         { onTextDelta: (d) => { c.streamingText += d; emit(c); } },
       );
     } catch (e) {
+      // Aborting the fetch rejects the stream — that's a user Stop, exit quietly
+      // (no error trace, no error message).
+      if (c.abort?.signal.aborted) return;
       pushTrace(c, {
         ts: nowIso(),
         category: 'error',

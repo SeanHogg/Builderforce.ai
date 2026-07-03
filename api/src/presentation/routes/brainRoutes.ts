@@ -12,6 +12,7 @@ import { signUpload } from '../../infrastructure/auth/uploadSign';
 import { fetchWebDocument } from '../../application/web/webFetch';
 import { recordOutboundFetch, enforceOutboundFetchCap } from '../../application/web/outboundFetchLedger';
 import { agentHosts } from '../../infrastructure/database/schema';
+import { ChatTicketService } from '../../application/brain/ChatTicketService';
 import type { Env, HonoEnv } from '../../env';
 import type { BrainService } from '../../application/brain/BrainService';
 import type { Db } from '../../infrastructure/database/connection';
@@ -145,6 +146,108 @@ export function createBrainRoutes(brainService: BrainService, db: Db): Hono<Hono
       c.get('userId') as string,
       apiKey,
     );
+    if ('error' in result) return c.json({ error: result.error }, 404);
+    return c.json(result);
+  });
+
+  // -------------------------------------------------------------------------
+  // Chat ↔ ticket links, lineage, consolidation, agent invites
+  // A chat can be tied to work items of any tier (portfolio | objective | OKR |
+  // initiative | epic | task), MANY-to-MANY, with a health (% done) summary and
+  // chat↔ticket lineage. Logic lives in ChatTicketService (shared with the MCP
+  // tools). Instantiated per-request because it needs the worker env (cache +
+  // agent-assignment reads).
+  // -------------------------------------------------------------------------
+
+  // GET /chats/:id/tickets — the tickets this chat is tied to, each with health.
+  router.get('/chats/:id/tickets', async (c) => {
+    const id = parseId(c.req.param('id'));
+    if (!id) return c.json({ error: 'Invalid chat id' }, 400);
+    const svc = new ChatTicketService(db, c.env as Env);
+    const result = await svc.listTicketsForChat(c.get('tenantId') as number, id, c.get('userId') as string);
+    if (!Array.isArray(result) && 'error' in result) return c.json({ error: result.error }, 404);
+    return c.json({ tickets: result });
+  });
+
+  // POST /chats/:id/tickets — link this chat to a ticket. { kind, ref, linkType? }
+  router.post('/chats/:id/tickets', async (c) => {
+    const id = parseId(c.req.param('id'));
+    if (!id) return c.json({ error: 'Invalid chat id' }, 400);
+    const body = await c.req.json<{ kind?: string; ref?: string | number; linkType?: 'linked' | 'created' }>().catch(() => ({} as { kind?: string; ref?: string | number; linkType?: 'linked' | 'created' }));
+    if (!body.kind || body.ref == null) return c.json({ error: 'kind and ref are required' }, 400);
+    const svc = new ChatTicketService(db, c.env as Env);
+    const result = await svc.linkTicket(c.get('tenantId') as number, id, c.get('userId') as string, {
+      kind: String(body.kind), ref: String(body.ref), linkType: body.linkType,
+    });
+    if ('error' in result) return c.json({ error: result.error }, result.error === 'Chat not found' ? 404 : 400);
+    return c.json(result, 201);
+  });
+
+  // DELETE /chats/:id/tickets?kind=&ref= — remove a chat↔ticket link.
+  router.delete('/chats/:id/tickets', async (c) => {
+    const id = parseId(c.req.param('id'));
+    if (!id) return c.json({ error: 'Invalid chat id' }, 400);
+    const kind = c.req.query('kind');
+    const ref = c.req.query('ref');
+    if (!kind || !ref) return c.json({ error: 'kind and ref are required' }, 400);
+    const svc = new ChatTicketService(db, c.env as Env);
+    const result = await svc.unlinkTicket(c.get('tenantId') as number, id, c.get('userId') as string, kind, ref);
+    if ('error' in result) return c.json({ error: result.error }, 404);
+    return c.json(result);
+  });
+
+  // GET /tickets/:kind/:ref/chats — lineage: every chat that references a ticket
+  // (which conversations shaped it, and which SPAWNED it via linkType='created').
+  router.get('/tickets/:kind/:ref/chats', async (c) => {
+    const svc = new ChatTicketService(db, c.env as Env);
+    const rows = await svc.listChatsForTicket(c.get('tenantId') as number, c.req.param('kind'), c.req.param('ref'));
+    return c.json({ chats: rows });
+  });
+
+  // POST /chats/consolidate — merge source chats into a target (archive+redirect).
+  router.post('/chats/consolidate', async (c) => {
+    const body = await c.req.json<{ targetChatId?: number; sourceChatIds?: number[] }>().catch(() => ({} as { targetChatId?: number; sourceChatIds?: number[] }));
+    if (!body.targetChatId || !Array.isArray(body.sourceChatIds) || body.sourceChatIds.length === 0) {
+      return c.json({ error: 'targetChatId and a non-empty sourceChatIds are required' }, 400);
+    }
+    const svc = new ChatTicketService(db, c.env as Env);
+    const result = await svc.consolidate(c.get('tenantId') as number, c.get('userId') as string, {
+      targetChatId: Number(body.targetChatId), sourceChatIds: body.sourceChatIds.map(Number),
+    });
+    if ('error' in result) return c.json({ error: result.error }, 400);
+    return c.json(result);
+  });
+
+  // GET /chats/:id/agents — agents invited into this chat.
+  router.get('/chats/:id/agents', async (c) => {
+    const id = parseId(c.req.param('id'));
+    if (!id) return c.json({ error: 'Invalid chat id' }, 400);
+    const svc = new ChatTicketService(db, c.env as Env);
+    const result = await svc.listAgents(c.get('tenantId') as number, id, c.get('userId') as string);
+    if ('error' in result) return c.json({ error: result.error }, 404);
+    return c.json({ agents: result });
+  });
+
+  // POST /chats/:id/agents — invite an agent into this chat. { agentRef, agentKind?, role? }
+  router.post('/chats/:id/agents', async (c) => {
+    const id = parseId(c.req.param('id'));
+    if (!id) return c.json({ error: 'Invalid chat id' }, 400);
+    const body = await c.req.json<{ agentRef?: string; agentKind?: string; role?: string }>().catch(() => ({} as { agentRef?: string; agentKind?: string; role?: string }));
+    if (!body.agentRef) return c.json({ error: 'agentRef is required' }, 400);
+    const svc = new ChatTicketService(db, c.env as Env);
+    const result = await svc.inviteAgent(c.get('tenantId') as number, id, c.get('userId') as string, {
+      agentRef: String(body.agentRef), agentKind: body.agentKind, role: body.role,
+    });
+    if ('error' in result) return c.json({ error: result.error }, 404);
+    return c.json(result, 201);
+  });
+
+  // DELETE /chats/:id/agents/:assignmentId — remove an agent from this chat.
+  router.delete('/chats/:id/agents/:assignmentId', async (c) => {
+    const id = parseId(c.req.param('id'));
+    if (!id) return c.json({ error: 'Invalid chat id' }, 400);
+    const svc = new ChatTicketService(db, c.env as Env);
+    const result = await svc.removeAgent(c.get('tenantId') as number, id, c.get('userId') as string, c.req.param('assignmentId'));
     if ('error' in result) return c.json({ error: result.error }, 404);
     return c.json(result);
   });
