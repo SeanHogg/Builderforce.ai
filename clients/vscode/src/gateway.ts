@@ -93,13 +93,20 @@ export interface BuilderInsightsSnapshot {
   tip: string | null;
 }
 
-/** Fetch the current builder-insights snapshot once (cached server-side). */
+/** The `?projectId=` suffix for the insights endpoints when a project is in scope. */
+function insightsProjectQuery(projectId?: number | null): string {
+  return projectId != null ? `?projectId=${projectId}` : "";
+}
+
+/** Fetch the current builder-insights snapshot once (cached server-side). Scoped to
+ *  `projectId` when set, else the whole tenant/caller. */
 export async function getBuilderInsights(
   secrets: vscode.SecretStorage,
+  projectId?: number | null,
 ): Promise<BuilderInsightsSnapshot> {
   const key = await getApiKey(secrets);
   if (!key) throw new Error("not_signed_in");
-  const res = await fetch(`${getBaseUrl()}/llm/v1/builder-insights`, {
+  const res = await fetch(`${getBaseUrl()}/llm/v1/builder-insights${insightsProjectQuery(projectId)}`, {
     headers: { authorization: `Bearer ${key}` },
   });
   if (!res.ok) throw new Error(`insights_failed_${res.status}`);
@@ -117,10 +124,11 @@ export async function streamBuilderInsights(
   secrets: vscode.SecretStorage,
   onSnapshot: (s: BuilderInsightsSnapshot) => void,
   signal: AbortSignal,
+  projectId?: number | null,
 ): Promise<void> {
   const key = await getApiKey(secrets);
   if (!key) throw new Error("not_signed_in");
-  const res = await fetch(`${getBaseUrl()}/llm/v1/builder-insights/stream`, {
+  const res = await fetch(`${getBaseUrl()}/llm/v1/builder-insights/stream${insightsProjectQuery(projectId)}`, {
     headers: { authorization: `Bearer ${key}`, accept: "text/event-stream" },
     signal,
   });

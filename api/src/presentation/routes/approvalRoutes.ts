@@ -10,9 +10,9 @@
  * GET    /api/approvals/escalate  Expire timed-out pending approvals + re-notify (internal/cron)
  */
 import { Hono } from 'hono';
-import { eq, and, desc, lt } from 'drizzle-orm';
+import { eq, and, desc, lt, getTableColumns } from 'drizzle-orm';
 import { authMiddleware } from '../middleware/authMiddleware';
-import { approvals, agentHosts } from '../../infrastructure/database/schema';
+import { approvals, agentHosts, executions, tasks } from '../../infrastructure/database/schema';
 import { verifySecret } from '../../infrastructure/auth/HashService';
 import { checkAutoApprovalRules } from './approvalRuleRoutes';
 import { normalizeRequestKind, isAnswerableKind } from '../../domain/approval/requestKind';
@@ -198,20 +198,31 @@ export function createApprovalRoutes(db: Db, runtimeService: RuntimeService): Ho
   // All read/update routes require tenant JWT
   router.use('*', authMiddleware);
 
-  // GET /api/approvals?status=&agentHostId=
+  // GET /api/approvals?status=&agentHostId=&projectId=
+  // Each row is enriched with `projectId` (via execution → task) so the caller can
+  // scope/group the queue by project without a second round-trip; null when the
+  // approval isn't tied to a task (e.g. a self-hosted host gate). An explicit
+  // `?projectId=` narrows server-side.
   router.get('/', async (c) => {
     const tenantId     = c.get('tenantId') as number;
     const statusFilter = c.req.query('status');
     const agentHostFilter   = c.req.query('agentHostId') ? Number(c.req.query('agentHostId')) : null;
+    const projectFilterRaw  = c.req.query('projectId');
+    const projectFilter     = projectFilterRaw && Number.isInteger(Number(projectFilterRaw))
+      ? Number(projectFilterRaw)
+      : null;
 
     let rows = await db
-      .select()
+      .select({ ...getTableColumns(approvals), projectId: tasks.projectId })
       .from(approvals)
+      .leftJoin(executions, eq(approvals.executionId, executions.id))
+      .leftJoin(tasks, eq(executions.taskId, tasks.id))
       .where(eq(approvals.tenantId, tenantId))
       .orderBy(desc(approvals.createdAt));
 
     if (statusFilter) rows = rows.filter((r) => r.status === statusFilter);
     if (agentHostFilter != null) rows = rows.filter((r) => r.agentHostId === agentHostFilter);
+    if (projectFilter != null) rows = rows.filter((r) => r.projectId === projectFilter);
 
     return c.json({ approvals: rows });
   });

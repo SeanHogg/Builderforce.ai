@@ -15,6 +15,7 @@ import { clearPlatformToolsCache } from "./platformTools";
 import { setGroundingSummary } from "./grounding";
 import { setSelectedModel } from "./modelState";
 import { getSelectedProject, initProjectState, onProjectChange, setSelectedProject } from "./projectState";
+import { invalidateProjectNames } from "./projectNames";
 import { ProjectsTreeProvider } from "./projectsTree";
 import { SessionsTreeProvider } from "./sessionsTree";
 import { InboxTreeProvider } from "./inboxTree";
@@ -358,6 +359,7 @@ async function createProject(
   if (!name?.trim()) return;
   try {
     const project = await bfApi.createProject(context.secrets, name.trim());
+    invalidateProjectNames(); // a new project must appear in the Sessions/Inbox labels
     setSelectedProject({ id: project.id, name: project.name });
     bfApi.invalidateTasks(project.id);
     projects.refresh();

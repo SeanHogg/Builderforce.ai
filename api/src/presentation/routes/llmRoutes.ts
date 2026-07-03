@@ -1991,10 +1991,20 @@ export function createLlmRoutes(): Hono<HonoEnv> {
     });
   });
 
+  // Parse an optional `?projectId=` filter for the insights surfaces. Bad/blank
+  // values collapse to null (whole-tenant scope) rather than erroring — a wrong
+  // id simply matches no rows since the ledger is already tenant-scoped.
+  const parseProjectIdParam = (raw: string | undefined): number | null => {
+    if (!raw) return null;
+    const n = Number(raw);
+    return Number.isInteger(n) && n > 0 ? n : null;
+  };
+
   // -----------------------------------------------------------------------
   // GET /v1/builder-insights
   // Builder-level Insights snapshot — the cheap, cacheable "current state"
-  // the IDE/CLI poll-once or render on demand. Tenant (and caller) scoped.
+  // the IDE/CLI poll-once or render on demand. Tenant (and caller) scoped,
+  // optionally narrowed to one project via ?projectId=.
   // Mirrors the auth of /v1/usage.
   // -----------------------------------------------------------------------
   router.get('/v1/builder-insights', async (c) => {
@@ -2008,6 +2018,7 @@ export function createLlmRoutes(): Hono<HonoEnv> {
     const snapshot = await getCachedBuilderInsightsSnapshot(db, c.env, {
       tenantId: access.tenantId,
       userId: access.userId,
+      projectId: parseProjectIdParam(c.req.query('projectId')),
     });
     return c.json(snapshot);
   });
@@ -2029,7 +2040,11 @@ export function createLlmRoutes(): Hono<HonoEnv> {
     }
 
     const db = buildDatabase(c.env);
-    const scope = { tenantId: access.tenantId, userId: access.userId };
+    const scope = {
+      tenantId: access.tenantId,
+      userId: access.userId,
+      projectId: parseProjectIdParam(c.req.query('projectId')),
+    };
     const signal = c.req.raw.signal;
     const MAX_TICKS = 10;
     const INTERVAL_MS = 30_000;
