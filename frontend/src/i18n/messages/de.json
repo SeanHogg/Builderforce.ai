@@ -175,6 +175,7 @@
       "noTypes": "Keine Elementtypen ermittelt.",
       "typeTask": "Aufgabe",
       "typeEpic": "Epic",
+      "typeGap": "Lücke",
       "usersIntro": "Wähle, welche externen Benutzer in diesen Arbeitsbereich eingeladen werden.",
       "noUsers": "Keine Benutzer ermittelt.",
       "userInvite": "Einladen",
@@ -219,7 +220,8 @@
       "quality": "Qualität",
       "myProfile": "Mein Profil",
       "findWork": "Arbeit finden",
-      "timecard": "Zeiterfassung"
+      "timecard": "Zeiterfassung",
+      "hires": "Einstellungen"
     },
     "tab": {
       "projects": "Projekte",
@@ -666,7 +668,13 @@
     "home": "Zurück zur Startseite"
   },
   "common": {
-    "language": "Sprache"
+    "language": "Sprache",
+    "typeTask": "Aufgabe",
+    "typeEpic": "Epic",
+    "typeGap": "Lücke",
+    "reviewedTimes": "{count, plural, one {# Mal geprüft} other {# Mal geprüft}}",
+    "reviewComplete": "Letzte Prüfung bestanden — vollständig",
+    "reviewGaps": "Letzte Prüfung fand Lücken"
   },
   "llmUsage": {
     "byUser": "Nach Benutzer · letzte 7 Tage",
@@ -4303,7 +4311,6 @@
       "linkFailed": "Verknüpfung fehlgeschlagen – prüfe, ob das Ticket existiert.",
       "kindLabel": "Tickettyp",
       "pickTicket": "Ticket auswählen…",
-      "refPlaceholder": "Objective-/Initiative-/Portfolio-ID",
       "linkTypeLabel": "Verknüpfungsart",
       "linkTypeLinked": "Verknüpft",
       "linkTypeCreated": "Aus Chat erstellt",
@@ -4768,6 +4775,29 @@
         "rejected": "Abgelehnt",
         "paid": "Bezahlt"
       }
+    },
+    "meeting": {
+      "title": "Meeting erfassen",
+      "subtitle": "Meetings werden bezahlt – es ist Ihre Zeit. Als abrechenbare Minuten erfasst.",
+      "selectWorkspace": "Arbeitsbereich",
+      "minutes": "Minuten",
+      "note": "Worum ging es? (optional)",
+      "log": "Erfassen"
+    },
+    "entries": {
+      "hide": "Ausblenden",
+      "edit": "Positionen bearbeiten",
+      "none": "Noch keine Positionen.",
+      "billable": "Abrechenbar",
+      "nonBillable": "Nicht abrechenbar",
+      "remove": "Entfernen",
+      "descPlaceholder": "Beschreibung (optional)",
+      "add": "Hinzufügen",
+      "source": {
+        "auto": "Erfasst",
+        "manual": "Manuell",
+        "meeting": "Meeting"
+      }
     }
   },
   "talent": {
@@ -4793,5 +4823,52 @@
     "location": "Standort",
     "availability": "Verfügbarkeit",
     "private": "Privates Profil"
+  },
+  "hires": {
+    "title": "Einstellungen",
+    "subtitle": "Verwalten Sie Ihre eingestellten Freelancer und genehmigen Sie ihre Zeiterfassungen.",
+    "loading": "Wird geladen…",
+    "noWorkspace": "Wählen Sie einen Arbeitsbereich, um Einstellungen zu verwalten.",
+    "team": "Ihre Freelancer",
+    "teamEmpty": "Noch keine Freelancer eingestellt. Durchsuchen Sie den Talent-Marktplatz.",
+    "perHour": "/Std",
+    "activate": "Aktivieren",
+    "terminate": "Beenden",
+    "terminateConfirm": "Dieses Engagement beenden? Die erfassten Stunden bleiben erhalten.",
+    "approvals": "Zeiterfassungen",
+    "approvalsEmpty": "Noch keine Zeiterfassungen.",
+    "review": "Prüfen",
+    "hide": "Ausblenden",
+    "reject": "Ablehnen",
+    "approve": "Genehmigen",
+    "noEntries": "Keine Positionen.",
+    "nonBillable": "nicht abrechenbar",
+    "status": {
+      "invited": "Eingeladen",
+      "interviewing": "Im Gespräch",
+      "active": "Aktiv",
+      "declined": "Abgelehnt",
+      "terminated": "Beendet"
+    },
+    "cardStatus": {
+      "draft": "Entwurf",
+      "submitted": "Eingereicht",
+      "approved": "Genehmigt",
+      "rejected": "Abgelehnt",
+      "paid": "Bezahlt"
+    },
+    "entrySource": {
+      "auto": "Erfasst",
+      "manual": "Manuell",
+      "meeting": "Meeting"
+    }
+  },
+  "register": {
+    "want": "Ich möchte",
+    "buildTitle": "Mit KI bauen",
+    "buildSub": "Projekte, Agenten & Arbeitsbereich",
+    "hireTitle": "Eingestellt werden",
+    "hireSub": "Freelance-Profil & Jobs",
+    "accountTypeAria": "Kontotyp"
   }
 }

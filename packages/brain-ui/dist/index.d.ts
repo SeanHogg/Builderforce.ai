@@ -105,6 +105,142 @@ declare function healthRingColor(percent: number, muted?: boolean): string;
 declare function HealthRing({ percent, size, stroke, caption, muted, ariaLabel }: HealthRingProps): React.JSX.Element;
 
 /**
+ * Shared types for the ChatTicketsPanel — the chat↔ticket surface rendered
+ * identically on the web app and inside the VS Code webview. The panel is
+ * presentational + self-managing; each host injects a {@link ChatTicketsAdapter}
+ * (its own REST calls) and a {@link ChatTicketsLabels} bundle (its own i18n).
+ */
+/** The work-item tiers a chat can be tied to (planning-spine node kinds). */
+type TicketKind = 'portfolio' | 'objective' | 'initiative' | 'epic' | 'task';
+declare const TICKET_KINDS: TicketKind[];
+/** Only these tiers are runnable (a real board ticket an agent can execute). */
+declare const RUNNABLE_KINDS: TicketKind[];
+type LinkType = 'linked' | 'created';
+/** A chat↔ticket link with a live health summary. */
+interface TicketLinkVM {
+    linkId: number;
+    kind: TicketKind;
+    ref: string;
+    label: string;
+    status: string;
+    progressPct: number;
+    done: number;
+    total: number;
+    exists: boolean;
+    linkType: LinkType;
+}
+/** A chat that references a ticket (a lineage row). */
+interface LineageVM {
+    chatId: number;
+    title: string;
+    linkType: LinkType;
+    isArchived: boolean;
+}
+/** An agent invited into the chat. */
+interface ChatAgentVM {
+    id: string;
+    agentRef: string;
+    role: string;
+}
+/** A selectable agent from the tenant pool. */
+interface AgentOptionVM {
+    ref: string;
+    name: string;
+    meta: string;
+    kind: string;
+}
+/** A pickable ticket for the link form. */
+interface TicketOptionVM {
+    ref: string;
+    label: string;
+}
+/** Another chat, for the merge picker. */
+interface ChatOptionVM {
+    id: number;
+    title: string;
+}
+/**
+ * Host-provided data access — the only coupling to a backend. The web app wires
+ * this to its `brain.*` / `pmoApi` / `tasksApi` clients; the VS Code webview wires
+ * it to its bearer-fetch REST client. Same panel, same endpoints, different host.
+ */
+interface ChatTicketsAdapter {
+    listTickets(chatId: number): Promise<TicketLinkVM[]>;
+    linkTicket(chatId: number, input: {
+        kind: TicketKind;
+        ref: string;
+        linkType: LinkType;
+    }): Promise<void>;
+    unlinkTicket(chatId: number, kind: TicketKind, ref: string): Promise<void>;
+    listTicketChats(kind: TicketKind, ref: string): Promise<LineageVM[]>;
+    consolidate(targetChatId: number, sourceChatIds: number[]): Promise<void>;
+    listAgents(chatId: number): Promise<ChatAgentVM[]>;
+    inviteAgent(chatId: number, input: {
+        agentRef: string;
+        agentKind: string;
+    }): Promise<void>;
+    removeAgent(chatId: number, assignmentId: string): Promise<void>;
+    loadAgentPool(): Promise<AgentOptionVM[]>;
+    /** Pickable tickets per tier for the current project (all tenants tiers). */
+    loadTicketOptions(projectId: number | null): Promise<Record<TicketKind, TicketOptionVM[]>>;
+    /** Tag an agent to execute a runnable (task/epic) ticket. Returns whether a run
+     *  actually started + the agent's display name for the toast. */
+    runTicket(kind: TicketKind, ref: string, agentRef: string): Promise<{
+        started: boolean;
+        agentName: string;
+    }>;
+}
+/** Every visible string. Parametric ones are functions the host localizes. */
+interface ChatTicketsLabels {
+    none: string;
+    spawned: string;
+    run: string;
+    lineage: string;
+    unlink: string;
+    pickAgent: string;
+    lineageTitle: string;
+    lineageEmpty: string;
+    merged: string;
+    runNoAgent: string;
+    runFailed: string;
+    link: string;
+    agents: string;
+    merge: string;
+    linkFailed: string;
+    kindLabel: string;
+    pickTicket: string;
+    linkTypeLabel: string;
+    linkTypeLinked: string;
+    linkTypeCreated: string;
+    linkAction: string;
+    noAgents: string;
+    removeAgent: string;
+    inviteAgent: string;
+    agentsHint: string;
+    mergeHint: string;
+    mergeNoOthers: string;
+    kind: Record<TicketKind, string>;
+    ringAria: (label: string, pct: number) => string;
+    runStarted: (agent: string) => string;
+    mergeAction: (n: number) => string;
+    mergedN: (n: number) => string;
+}
+/** English defaults — the VS Code webview uses these; the web app overrides via next-intl. */
+declare const DEFAULT_CHAT_TICKETS_LABELS: ChatTicketsLabels;
+
+interface ChatTicketsPanelProps {
+    chatId: number;
+    projectId: number | null;
+    /** Other chats (for the merge picker). */
+    chatList: ChatOptionVM[];
+    adapter: ChatTicketsAdapter;
+    labels: ChatTicketsLabels;
+    /** Called after a merge (so the host can refresh its chat list). */
+    onChanged?: () => void;
+}
+declare function ChatTicketsPanel({ chatId, projectId, chatList, adapter, labels, onChanged }: ChatTicketsPanelProps): React.JSX.Element;
+
+/**
  * Pure transcript view-model — frame-work agnostic so the SAME logic drives the
  * web app and the VS Code webview. It merges the durable message list (user +
  * assistant turns) with the live execution trace (LLM turns → "thinking", tool
@@ -419,4 +555,4 @@ interface ProjectListViewProps {
 }
 declare function ProjectListView({ title, subtitle, data, loading, error, labels, onAction, onRefresh }: ProjectListViewProps): React.JSX.Element;
 
-export { BrainTimeline, type BrainTimelineLabels, type BrainTimelineProps, type BuildTimelineInput, DEFAULT_PROJECT360_LABELS, DEFAULT_PROJECT_LIST_LABELS, DEFAULT_TIMELINE_LABELS, HealthRing, type HealthRingProps, type HealthTier, Markdown, type MarkdownLabels, type MarkdownProps, type Project360, type Project360Action, type Project360Dimension, type Project360Gap, type Project360Labels, type Project360Member, type Project360Pillar, Project360View, type Project360ViewProps, type ProjectListAction, type ProjectListBadge, type ProjectListGroup, type ProjectListItem, type ProjectListLabels, type ProjectListModel, type ProjectListTone, ProjectListView, type ProjectListViewProps, Sunburst, type SunburstProps, type TimelineImage, type TimelineNode, attachmentsOf, buildTimeline, formatDuration, formatPayload, healthRingColor };
+export { type AgentOptionVM, BrainTimeline, type BrainTimelineLabels, type BrainTimelineProps, type BuildTimelineInput, type ChatAgentVM, type ChatOptionVM, type ChatTicketsAdapter, type ChatTicketsLabels, ChatTicketsPanel, type ChatTicketsPanelProps, DEFAULT_CHAT_TICKETS_LABELS, DEFAULT_PROJECT360_LABELS, DEFAULT_PROJECT_LIST_LABELS, DEFAULT_TIMELINE_LABELS, HealthRing, type HealthRingProps, type HealthTier, type LineageVM, type LinkType, Markdown, type MarkdownLabels, type MarkdownProps, type Project360, type Project360Action, type Project360Dimension, type Project360Gap, type Project360Labels, type Project360Member, type Project360Pillar, Project360View, type Project360ViewProps, type ProjectListAction, type ProjectListBadge, type ProjectListGroup, type ProjectListItem, type ProjectListLabels, type ProjectListModel, type ProjectListTone, ProjectListView, type ProjectListViewProps, RUNNABLE_KINDS, Sunburst, type SunburstProps, TICKET_KINDS, type TicketKind, type TicketLinkVM, type TicketOptionVM, type TimelineImage, type TimelineNode, attachmentsOf, buildTimeline, formatDuration, formatPayload, healthRingColor };

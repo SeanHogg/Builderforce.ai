@@ -25,7 +25,7 @@ import { sql } from 'drizzle-orm';
 /**
  * Data model aligns with product flow (see README "Data model & API"):
  * Brain Storm (ideate) → Execute → Project → IDE (build) or Tasks + Workforce (assign to AgentHosts).
- * Unified chats: ide_project_chats (origin + optional projectId). Tasks link projects to agentHosts/executions.
+ * Unified chats: brain_chats (all modalities via `origin` + optional projectId). Tasks link projects to agentHosts/executions.
  */
 
 // custom tsvector type for full-text search
@@ -57,7 +57,7 @@ export const agentTypeEnum = pgEnum('agent_type', [
 // per-board `status` lane key): a plain `task`, or an `epic` that decomposes
 // into child tasks (parent_task_id) — see migration 0112.
 export const taskTypeEnum = pgEnum('task_type', [
-  'task', 'epic',
+  'task', 'epic', 'gap',
 ]);
 
 export const tenantStatusEnum = pgEnum('tenant_status', [
@@ -940,8 +940,71 @@ export const tasks = pgTable('tasks', {
    *  priority-aware autonomous dispatcher + the board default sort read this so the
    *  team works highest-value/most-urgent tickets first, not oldest-updated. */
   managerRank:           integer('manager_rank'),
+  /** Validator agent review bookkeeping (0270). A Done item may be reviewed MANY
+   *  times (on entry to Done, then re-swept on a schedule) — the full history lives
+   *  in {@link taskReviews}; these denormalise the LATEST pass for cheap board
+   *  rendering. reviewCount increments per pass; lastReviewVerdict is
+   *  'complete' | 'gaps'. */
+  reviewCount:           integer('review_count').notNull().default(0),
+  lastReviewedAt:        timestamp('last_reviewed_at'),
+  lastReviewVerdict:     varchar('last_review_verdict', { length: 16 }),
+  /** For a GAP-typed task: the Done item whose review produced it (null otherwise).
+   *  Typed AnyPgColumn to break the self-reference inference cycle. ON DELETE SET
+   *  NULL so deleting the origin keeps the gap as standalone work. */
+  gapOriginTaskId:       integer('gap_origin_task_id').references((): AnyPgColumn => tasks.id, { onDelete: 'set null' }),
   createdAt:         timestamp('created_at').notNull().defaultNow(),
   updatedAt:         timestamp('updated_at').notNull().defaultNow(),
+});
+
+// ---------------------------------------------------------------------------
+// Validator agent: review ledger + work-delta provenance (migration 0270)
+// ---------------------------------------------------------------------------
+
+/**
+ * One row per Validator review PASS over a task. A Done item is reviewed
+ * repeatedly (on Done + a recurring sweep), so this is the append-only audit
+ * trail; the task row denormalises the latest pass. verdict is
+ * 'complete' | 'gaps'; gapsCount is how many GAP tasks the pass minted.
+ */
+export const taskReviews = pgTable('task_reviews', {
+  id:          serial('id').primaryKey(),
+  tenantId:    integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  taskId:      integer('task_id').notNull().references(() => tasks.id, { onDelete: 'cascade' }),
+  /** ide_agents.id of the Validator (or 'system' for automation). No FK — raw-SQL table. */
+  reviewerRef: varchar('reviewer_ref', { length: 64 }),
+  verdict:     varchar('verdict', { length: 16 }).notNull(),   // 'complete' | 'gaps'
+  summary:     text('summary'),
+  gapsCount:   integer('gaps_count').notNull().default(0),
+  createdAt:   timestamp('created_at').notNull().defaultNow(),
+});
+
+/**
+ * Provenance ledger for "a chat turn changed code". Every modality (VS Code, web
+ * Brain, MCP, CLI, cloud agent) records a delta here when its work produces a
+ * code change, classified improvement|fix|bug and (optionally) tied to the ticket
+ * it created — giving the operator visibility of ad-hoc work that used to land
+ * silently. Feeds the delta drawer + insight surfaces.
+ */
+export const workDeltas = pgTable('work_deltas', {
+  id:         serial('id').primaryKey(),
+  tenantId:   integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  segmentId:  uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),
+  projectId:  integer('project_id').references(() => projects.id, { onDelete: 'set null' }),
+  /** The ticket this delta created/updated (null if it could not be created). */
+  taskId:     integer('task_id').references(() => tasks.id, { onDelete: 'set null' }),
+  /** The Brain chat/session that produced the delta (null for headless runs). */
+  chatId:     integer('chat_id').references(() => brainChats.id, { onDelete: 'set null' }),
+  /** Interaction surface: 'ide' | 'web' | 'mcp' | 'cli' | 'cloud'. */
+  modality:   varchar('modality', { length: 32 }).notNull().default('unknown'),
+  /** Classification of the change: 'improvement' | 'fix' | 'bug'. */
+  kind:       varchar('kind', { length: 16 }).notNull(),
+  summary:    text('summary').notNull(),
+  detail:     text('detail'),
+  /** Files touched by the change (string[]). */
+  files:      jsonb('files'),
+  /** User id or agent ref that authored the turn. */
+  createdBy:  varchar('created_by', { length: 64 }),
+  createdAt:  timestamp('created_at').notNull().defaultNow(),
 });
 
 // ---------------------------------------------------------------------------
@@ -1904,41 +1967,19 @@ export const approvalRules = pgTable('approval_rules', {
 });
 
 // ---------------------------------------------------------------------------
-// Brain chats (legacy) — superseded by ide_project_chats for the product flow:
-// Brain Storm → Project → IDE or Tasks/Workforce. Kept for reference only.
+// Chat memories — compressed summaries of individual chats
 // ---------------------------------------------------------------------------
-
-export const brainChats = pgTable('brain_chats', {
-  id:         serial('id').primaryKey(),
-  tenantId:   integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
-  segmentId: uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),  // DB NOT NULL via trigger (0056); optional in TS so single-mode writes need no change
-  userId:     varchar('user_id', { length: 36 }).notNull().references(() => users.id, { onDelete: 'cascade' }),
-  projectId:  integer('project_id').references(() => projects.id, { onDelete: 'set null' }),
-  title:      varchar('title', { length: 500 }).notNull().default('New chat'),
-  isArchived: boolean('is_archived').notNull().default(false),
-  createdAt:  timestamp('created_at').notNull().defaultNow(),
-  updatedAt:  timestamp('updated_at').notNull().defaultNow(),
-});
-
-export const brainMessages = pgTable('brain_messages', {
-  id:        serial('id').primaryKey(),
-  chatId:    integer('chat_id').notNull().references(() => brainChats.id, { onDelete: 'cascade' }),
-  role:      varchar('role', { length: 16 }).notNull(),  // 'user' | 'assistant' | 'system'
-  content:   text('content').notNull().default(''),
-  metadata:  text('metadata'),  // JSON string (attachments, model info, etc.)
-  seq:       integer('seq').notNull().default(0),
-  createdAt: timestamp('created_at').notNull().defaultNow(),
-});
-
-// ---------------------------------------------------------------------------
-// Chat memories — compressed summaries of individual brain chats
-// ---------------------------------------------------------------------------
+// (The legacy Brain-only `brain_chats`/`brain_messages` tables — superseded by the
+// unified chats table in 0026 and orphaned — were dropped in migration 0271; the
+// unified table itself was renamed brain_chats there. See `brainChats` below.)
 
 export const chatMemories = pgTable('chat_memories', {
   id:             serial('id').primaryKey(),
   tenantId:       integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
   segmentId: uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),  // DB NOT NULL via trigger (0056); optional in TS so single-mode writes need no change
-  chatId:         integer('chat_id').references(() => brainChats.id, { onDelete: 'cascade' }).unique(),
+  // Vestigial link to the old legacy brain_chats (dropped 0272) — chat memories
+  // are keyed on agent_host_session_id in practice; no FK (plain nullable id).
+  chatId:         integer('chat_id').unique(),
   agentHostSessionId:  integer('agent_host_session_id').references(() => chatSessions.id, { onDelete: 'cascade' }).unique(),
   projectId:      integer('project_id').references(() => projects.id, { onDelete: 'set null' }),
   summary:        text('summary').notNull().default(''),
@@ -1961,11 +2002,15 @@ export const projectMemories = pgTable('project_memories', {
 });
 
 // ---------------------------------------------------------------------------
-// Project chats (unified) — Brain Storm, IDE, and project-level chat.
-// origin = 'brainstorm' | 'ide' | 'project' tells the page which tools/actions to load.
+// Brain chats (unified, all-modality) — Brain Storm, IDE, and project-level chat
+// in ONE table (this is the store the live Brain reads/writes on every surface —
+// web, VS Code, on-prem). origin = 'brainstorm' | 'ide' | 'project' tells the page
+// which tools/actions to load. Named `ide_project_chats` until migration 0272
+// renamed it `brain_chats` (the `ide_` prefix was a historical artifact — it
+// started IDE-only, then 0026 generalized it via the origin column).
 // ---------------------------------------------------------------------------
 
-export const ideProjectChats = pgTable('ide_project_chats', {
+export const brainChats = pgTable('brain_chats', {
   id:        serial('id').primaryKey(),
   projectId: integer('project_id').references(() => projects.id, { onDelete: 'cascade' }),
   tenantId:  integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
@@ -1978,7 +2023,7 @@ export const ideProjectChats = pgTable('ide_project_chats', {
   /** Consolidation pointer (0266): when this chat was merged into another, the
    *  surviving chat's id. Set with isArchived=true so the source drops out of the
    *  list but any ticket still resolves to the one surviving conversation. */
-  mergedIntoChatId: integer('merged_into_chat_id').references((): AnyPgColumn => ideProjectChats.id, { onDelete: 'set null' }),
+  mergedIntoChatId: integer('merged_into_chat_id').references((): AnyPgColumn => brainChats.id, { onDelete: 'set null' }),
   createdAt:  timestamp('created_at').notNull().defaultNow(),
   updatedAt:  timestamp('updated_at').notNull().defaultNow(),
 });
@@ -1996,7 +2041,7 @@ export const chatTicketLinks = pgTable('chat_ticket_links', {
   id:         serial('id').primaryKey(),
   tenantId:   integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
   segmentId:  uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),
-  chatId:     integer('chat_id').notNull().references(() => ideProjectChats.id, { onDelete: 'cascade' }),
+  chatId:     integer('chat_id').notNull().references(() => brainChats.id, { onDelete: 'cascade' }),
   /** 'portfolio' | 'objective' | 'initiative' | 'epic' | 'task' (spine node kinds). */
   ticketKind: varchar('ticket_kind', { length: 12 }).notNull(),
   /** Target id as text — tasks.id (epic/task) or a UUID (portfolio/objective/initiative). */
@@ -2035,9 +2080,9 @@ export const cronJobs = pgTable('cron_jobs', {
   updatedAt:   timestamp('updated_at').notNull().defaultNow(),
 });
 
-export const ideProjectChatMessages = pgTable('ide_project_chat_messages', {
+export const brainChatMessages = pgTable('brain_chat_messages', {
   id:        serial('id').primaryKey(),
-  chatId:    integer('chat_id').notNull().references(() => ideProjectChats.id, { onDelete: 'cascade' }),
+  chatId:    integer('chat_id').notNull().references(() => brainChats.id, { onDelete: 'cascade' }),
   role:      varchar('role', { length: 16 }).notNull(),
   content:   text('content').notNull().default(''),
   metadata:  text('metadata'),

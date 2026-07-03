@@ -28,7 +28,7 @@ export default function TalentMarketplacePage() {
   }, []);
 
   return (
-    <PageContainer width="wide" style={{ padding: '32px 40px' }}>
+    <PageContainer width="full" style={{ padding: '32px 40px' }}>
       <div style={{ marginBottom: 24 }}>
         <h1 style={{ fontSize: 24, fontWeight: 800, color: 'var(--text-primary)', marginBottom: 4 }}>{t('title')}</h1>
         <p style={{ fontSize: 14, color: 'var(--text-muted)', margin: 0 }}>{t('subtitle')}</p>

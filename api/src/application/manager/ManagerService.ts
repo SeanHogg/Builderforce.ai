@@ -430,12 +430,10 @@ async function coordinatePullRequests(
         continue;
       }
       summary.prsMerged += 1;
-      if (pr.taskId) {
-        await db.update(tasks)
-          .set({ status: TaskStatus.DONE, completedAt: new Date(), updatedAt: new Date() })
-          .where(and(eq(tasks.id, pr.taskId), eq(tasks.projectId, projectId)))
-          .catch(() => {});
-      }
+      // Ticket completion now happens inside mergeRecordedPullRequest (the shared
+      // merge core), so the manager, the human "Approve & Merge" and the green-CI
+      // auto-merge all complete the ticket via the ONE completeTaskOnMerge path —
+      // which also records the lifecycle transition/DORA the old direct update skipped.
       await recordManagerAction(db, {
         tenantId, projectId, taskId: pr.taskId, actionType: 'merge_pr',
         summary: `Merged & closed PR #${pr.number ?? '?'}${result.merged ? '' : ' (already up to date)'} — ticket done.`,

@@ -20,6 +20,7 @@ import { ChatTicketsPanel } from '@/components/brain/ChatTicketsPanel';
 import { ThemeSelect } from '@/components/ThemeSelect';
 import { Select } from '@/components/Select';
 import { fetchProjects, createProject } from '@/lib/api';
+import { trackActivity } from '@/lib/activity/tracker';
 import { useOptionalProjectScope } from '@/lib/ProjectScopeContext';
 import type { Project } from '@/lib/types';
 import {
@@ -330,6 +331,8 @@ export function BrainPanel({
     const text = input.trim();
     if (!text) return;
     setInput('');
+    // Audited engagement signal: interacting with the AI agent is billable activity.
+    trackActivity('agent_message', { weight: 2 });
     await conv.send(text);
   }, [input, conv]);
 

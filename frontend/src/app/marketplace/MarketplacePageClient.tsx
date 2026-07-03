@@ -529,6 +529,14 @@ export default function MarketplacePageClient() {
                 {c.label}
               </button>
             ))}
+            {/* Cross-link to the human talent marketplace (freelancers for hire). */}
+            <a
+              href="/talent"
+              className="btn btn-secondary"
+              style={{ padding: '8px 16px', borderRadius: 8, border: '1px solid var(--border)', fontWeight: 500, fontSize: 13, cursor: 'pointer', textDecoration: 'none' }}
+            >
+              👤 Talent
+            </a>
           </div>
         </div>
         {category !== 'publish' && (

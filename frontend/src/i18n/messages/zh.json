@@ -175,6 +175,7 @@
       "noTypes": "未发现条目类型。",
       "typeTask": "任务",
       "typeEpic": "史诗",
+      "typeGap": "缺口",
       "usersIntro": "选择要邀请到此工作区的外部用户。",
       "noUsers": "未发现用户。",
       "userInvite": "邀请",
@@ -219,7 +220,8 @@
       "quality": "质量",
       "myProfile": "我的资料",
       "findWork": "寻找工作",
-      "timecard": "工时卡"
+      "timecard": "工时卡",
+      "hires": "雇员"
     },
     "tab": {
       "projects": "项目",
@@ -666,7 +668,13 @@
     "home": "返回首页"
   },
   "common": {
-    "language": "语言"
+    "language": "语言",
+    "typeTask": "任务",
+    "typeEpic": "史诗",
+    "typeGap": "缺口",
+    "reviewedTimes": "{count, plural, other {已审查 # 次}}",
+    "reviewComplete": "上次审查通过——已完成",
+    "reviewGaps": "上次审查发现缺口"
   },
   "llmUsage": {
     "byUser": "按用户 · 最近 7 天",
@@ -4303,7 +4311,6 @@
       "linkFailed": "无法关联——请确认该工单存在。",
       "kindLabel": "工单类型",
       "pickTicket": "选择工单…",
-      "refPlaceholder": "目标 / 举措 / 组合 的 ID",
       "linkTypeLabel": "关联类型",
       "linkTypeLinked": "关联",
       "linkTypeCreated": "由聊天创建",
@@ -4768,6 +4775,29 @@
         "rejected": "已拒绝",
         "paid": "已付款"
       }
+    },
+    "meeting": {
+      "title": "记录会议",
+      "subtitle": "会议是有偿的——这是您的时间。记为可计费分钟。",
+      "selectWorkspace": "工作区",
+      "minutes": "分钟",
+      "note": "会议内容？（可选）",
+      "log": "记录会议"
+    },
+    "entries": {
+      "hide": "隐藏",
+      "edit": "编辑明细",
+      "none": "暂无明细。",
+      "billable": "可计费",
+      "nonBillable": "不可计费",
+      "remove": "移除",
+      "descPlaceholder": "描述（可选）",
+      "add": "添加",
+      "source": {
+        "auto": "已跟踪",
+        "manual": "手动",
+        "meeting": "会议"
+      }
     }
   },
   "talent": {
@@ -4793,5 +4823,52 @@
     "location": "所在地",
     "availability": "可用性",
     "private": "私密资料"
+  },
+  "hires": {
+    "title": "雇员",
+    "subtitle": "管理您雇用的自由职业者并批准他们的工时卡。",
+    "loading": "加载中…",
+    "noWorkspace": "请选择一个工作区来管理雇员。",
+    "team": "您的自由职业者",
+    "teamEmpty": "尚未雇用自由职业者。浏览人才市场以雇用。",
+    "perHour": "/小时",
+    "activate": "激活",
+    "terminate": "终止",
+    "terminateConfirm": "结束此合作？其已跟踪的工时将被保留。",
+    "approvals": "工时卡",
+    "approvalsEmpty": "暂无工时卡。",
+    "review": "查看",
+    "hide": "隐藏",
+    "reject": "拒绝",
+    "approve": "批准",
+    "noEntries": "暂无明细。",
+    "nonBillable": "不可计费",
+    "status": {
+      "invited": "已邀请",
+      "interviewing": "面试中",
+      "active": "进行中",
+      "declined": "已拒绝",
+      "terminated": "已结束"
+    },
+    "cardStatus": {
+      "draft": "草稿",
+      "submitted": "已提交",
+      "approved": "已批准",
+      "rejected": "已拒绝",
+      "paid": "已付款"
+    },
+    "entrySource": {
+      "auto": "已跟踪",
+      "manual": "手动",
+      "meeting": "会议"
+    }
+  },
+  "register": {
+    "want": "我想要",
+    "buildTitle": "用 AI 构建",
+    "buildSub": "项目、智能体和工作区",
+    "hireTitle": "获得雇用",
+    "hireSub": "自由职业资料和工作",
+    "accountTypeAria": "账户类型"
   }
 }

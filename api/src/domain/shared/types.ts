@@ -54,6 +54,10 @@ export enum TaskPriority {
 export enum TaskType {
   TASK = 'task',
   EPIC = 'epic',
+  /** Minted by the Validator agent when a reviewed Done item is found incomplete
+   *  (migration 0270). A first-class, schedulable board item that carries a
+   *  gapOriginTaskId back to the Done item it was found in. */
+  GAP = 'gap',
 }
 
 export enum AgentType {

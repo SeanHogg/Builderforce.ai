@@ -175,6 +175,7 @@
       "noTypes": "No se descubrieron tipos de elementos.",
       "typeTask": "Tarea",
       "typeEpic": "Épica",
+      "typeGap": "Brecha",
       "usersIntro": "Elige qué usuarios externos invitar a este espacio de trabajo.",
       "noUsers": "No se descubrieron usuarios.",
       "userInvite": "Invitar",
@@ -219,7 +220,8 @@
       "quality": "Calidad",
       "myProfile": "Mi perfil",
       "findWork": "Buscar trabajo",
-      "timecard": "Hoja de horas"
+      "timecard": "Hoja de horas",
+      "hires": "Contrataciones"
     },
     "tab": {
       "projects": "Proyectos",
@@ -666,7 +668,13 @@
     "home": "Volver al inicio"
   },
   "common": {
-    "language": "Idioma"
+    "language": "Idioma",
+    "typeTask": "Tarea",
+    "typeEpic": "Épica",
+    "typeGap": "Brecha",
+    "reviewedTimes": "{count, plural, one {Revisado # vez} other {Revisado # veces}}",
+    "reviewComplete": "Última revisión superada: completa",
+    "reviewGaps": "La última revisión encontró brechas"
   },
   "llmUsage": {
     "byUser": "Por usuario · últimos 7 días",
@@ -4303,7 +4311,6 @@
       "linkFailed": "No se pudo vincular: comprueba que el ticket existe.",
       "kindLabel": "Tipo de ticket",
       "pickTicket": "Elige un ticket…",
-      "refPlaceholder": "ID de objetivo / iniciativa / portafolio",
       "linkTypeLabel": "Tipo de vínculo",
       "linkTypeLinked": "Vinculado",
       "linkTypeCreated": "Creado desde el chat",
@@ -4768,6 +4775,29 @@
         "rejected": "Rechazada",
         "paid": "Pagada"
       }
+    },
+    "meeting": {
+      "title": "Registrar una reunión",
+      "subtitle": "Las reuniones son pagadas: es tu tiempo. Se registran como minutos facturables.",
+      "selectWorkspace": "Espacio",
+      "minutes": "Minutos",
+      "note": "¿De qué trató? (opcional)",
+      "log": "Registrar reunión"
+    },
+    "entries": {
+      "hide": "Ocultar",
+      "edit": "Editar líneas",
+      "none": "Aún no hay líneas.",
+      "billable": "Facturable",
+      "nonBillable": "No facturable",
+      "remove": "Quitar",
+      "descPlaceholder": "Descripción (opcional)",
+      "add": "Añadir",
+      "source": {
+        "auto": "Registrado",
+        "manual": "Manual",
+        "meeting": "Reunión"
+      }
     }
   },
   "talent": {
@@ -4793,5 +4823,52 @@
     "location": "Ubicación",
     "availability": "Disponibilidad",
     "private": "Perfil privado"
+  },
+  "hires": {
+    "title": "Contrataciones",
+    "subtitle": "Gestiona tus freelancers contratados y aprueba sus hojas de horas.",
+    "loading": "Cargando…",
+    "noWorkspace": "Selecciona un espacio para gestionar contrataciones.",
+    "team": "Tus freelancers",
+    "teamEmpty": "Aún no has contratado freelancers. Explora el mercado de talento para contratar.",
+    "perHour": "/h",
+    "activate": "Activar",
+    "terminate": "Finalizar",
+    "terminateConfirm": "¿Finalizar esta contratación? Sus horas registradas se conservan.",
+    "approvals": "Hojas de horas",
+    "approvalsEmpty": "Aún no hay hojas de horas.",
+    "review": "Revisar",
+    "hide": "Ocultar",
+    "reject": "Rechazar",
+    "approve": "Aprobar",
+    "noEntries": "Sin líneas.",
+    "nonBillable": "no facturable",
+    "status": {
+      "invited": "Invitado",
+      "interviewing": "Entrevistando",
+      "active": "Activo",
+      "declined": "Rechazado",
+      "terminated": "Finalizado"
+    },
+    "cardStatus": {
+      "draft": "Borrador",
+      "submitted": "Enviada",
+      "approved": "Aprobada",
+      "rejected": "Rechazada",
+      "paid": "Pagada"
+    },
+    "entrySource": {
+      "auto": "Registrado",
+      "manual": "Manual",
+      "meeting": "Reunión"
+    }
+  },
+  "register": {
+    "want": "Quiero",
+    "buildTitle": "Construir con IA",
+    "buildSub": "Proyectos, agentes y espacio",
+    "hireTitle": "Que me contraten",
+    "hireSub": "Perfil freelance y trabajos",
+    "accountTypeAria": "Tipo de cuenta"
   }
 }

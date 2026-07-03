@@ -27,7 +27,7 @@ const OrchestrateSchema = Type.Object({
           description:
             "Agent role key. Any registered role: a built-in ('code-creator', 'code-reviewer', " +
             "'test-generator', 'bug-analyzer', 'refactor-agent', 'documentation-agent', " +
-            "'architecture-advisor') OR a hired-agent roleKey/id. Validated at runtime; an " +
+            "'architecture-advisor', 'validator-agent') OR a hired-agent roleKey/id. Validated at runtime; an " +
             "unknown role returns a clear error. 'remote:<id>' / 'node:<kind>' dispatch directives also pass through.",
         }),
         task: Type.String({ description: "Task description for this step" }),

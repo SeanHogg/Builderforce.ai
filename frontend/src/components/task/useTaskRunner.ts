@@ -9,6 +9,7 @@ import {
 import { llmApi } from '@/lib/builderforceApi';
 import { loadAgentPool, type PoolAgent } from '@/lib/agentPool';
 import { computeModelRecallBias, seedModelRecallMemory } from '@/lib/modelRecallBias';
+import { trackActivity } from '@/lib/activity/tracker';
 
 /**
  * The run target a task defaults to — derived from its assignee, so "Run" reflects
@@ -95,6 +96,8 @@ export function useTaskRunner({ task, onRan, onAwaitingApproval }: UseTaskRunner
           agentHostId,
           payload: Object.keys(payloadObj).length > 0 ? JSON.stringify(payloadObj) : undefined,
         });
+        // Audited engagement signal: dispatching a run is billable activity.
+        trackActivity('agent_run', { ref: `task:${task.id}`, weight: 2, projectId: task.projectId ?? undefined });
         if (isAwaitingApprovalExecution(result)) {
           onAwaitingApproval?.({ approvalId: result.approvalId, taskId: result.taskId, reason: result.reason });
           return;

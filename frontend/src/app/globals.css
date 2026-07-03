@@ -2025,6 +2025,16 @@ textarea.input { resize: vertical; line-height: 1.5; }
   font-size: 11px;
   font-weight: 600;
 }
+/* "Attention needed" — distinct from yellow (in-review) and red (blocked).
+   Used for GAP task-type badges minted by the Validator. */
+.badge-amber {
+  background: rgba(245, 158, 11, 0.2);
+  color: #f59e0b;
+  padding: 2px 8px;
+  border-radius: var(--radius-full, 6px);
+  font-size: 11px;
+  font-weight: 600;
+}
 /* Muted/"off" counterpart to .badge-green (DRAFT, OFFLINE, inactive states).
    Previously re-inlined as a style object everywhere a non-green badge was needed. */
 .badge-muted {

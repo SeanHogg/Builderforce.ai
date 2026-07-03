@@ -19,7 +19,7 @@ import { getToken, onIntent, post, refreshToken, type InitData, type LabelBundle
  * entry (endpoint + mapper); nothing else here changes.
  */
 
-type PageView = 'backlog' | 'prd';
+type PageView = 'backlog' | 'prd' | 'roadmap' | 'retros' | 'poker';
 
 interface RawTask {
   id: number;
@@ -35,13 +35,56 @@ interface RawSpec {
   status?: string;
   kind?: string;
 }
+interface RawRoadmap {
+  id: string;
+  title?: string;
+  horizon?: string;
+  status?: string;
+  theme?: string;
+  priority?: string;
+  targetDate?: string | null;
+}
+interface RawSession {
+  id: string;
+  name?: string;
+  status?: string;
+  template?: string;
+  votingSystem?: string;
+  createdAt?: string | null;
+}
 
 interface PageConfig {
-  endpoint: (projectId: number) => string;
+  /** Builds the REST path. `projectId` is null for workspace-scoped views. */
+  endpoint: (projectId: number | null) => string;
+  /** false = workspace-scoped (Retros/Poker) — no project needed to load. */
+  projectScoped: boolean;
   titleKey: string;
   emptyKey: string;
   emptyHintKey: string;
   map: (json: unknown, L: (k: string, fb: string) => string) => ProjectListModel;
+}
+
+/** Short localized date for a row subtitle; '' when absent/unparseable. */
+function fmtDate(value: string | null | undefined): string {
+  if (!value) return '';
+  const d = new Date(value);
+  return Number.isNaN(d.getTime()) ? '' : d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
+}
+
+const STATUS_TONE: Record<string, ProjectListTone> = {
+  active: 'accent',
+  in_progress: 'accent',
+  shipped: 'ok',
+  done: 'ok',
+  complete: 'ok',
+  closed: 'muted',
+  blocked: 'danger',
+};
+
+function statusBadge(status: string | undefined, L: (k: string, fb: string) => string) {
+  const s = (status ?? '').toLowerCase();
+  if (!s) return undefined;
+  return { label: L(`st.${s}`, s.charAt(0).toUpperCase() + s.slice(1).replace(/[_-]+/g, ' ')), tone: STATUS_TONE[s] ?? 'default' };
 }
 
 /** Order + display of Backlog status groups. Unknown statuses fall to their own group. */
@@ -97,8 +140,22 @@ function groupBy<T>(
   return out;
 }
 
+/** Roadmap horizon groups (Now / Next / Later); unknown horizons fall to "Other". */
+const HORIZON_GROUPS: { match: string[]; key: string; labelKey: string; label: string; tone: ProjectListTone }[] = [
+  { match: ['now', 'current'], key: 'now', labelKey: 'hz.now', label: 'Now', tone: 'accent' },
+  { match: ['next'], key: 'next', labelKey: 'hz.next', label: 'Next', tone: 'default' },
+  { match: ['later', 'future'], key: 'later', labelKey: 'hz.later', label: 'Later', tone: 'muted' },
+];
+
+/** Session groups (Active / Closed) for Retrospectives + Planning Poker. */
+const SESSION_GROUPS: { match: string[]; key: string; labelKey: string; label: string; tone: ProjectListTone }[] = [
+  { match: ['active', ''], key: 'active', labelKey: 'st.active', label: 'Active', tone: 'accent' },
+  { match: ['closed', 'done', 'complete', 'completed'], key: 'closed', labelKey: 'st.closed', label: 'Closed', tone: 'muted' },
+];
+
 const PAGES: Record<PageView, PageConfig> = {
   backlog: {
+    projectScoped: true,
     endpoint: (p) => `/api/tasks?project_id=${p}`,
     titleKey: 'backlog.title',
     emptyKey: 'backlog.empty',
@@ -129,6 +186,7 @@ const PAGES: Record<PageView, PageConfig> = {
     },
   },
   prd: {
+    projectScoped: true,
     endpoint: (p) => `/api/specs?projectId=${p}`,
     titleKey: 'prd.title',
     emptyKey: 'prd.empty',
@@ -157,7 +215,88 @@ const PAGES: Record<PageView, PageConfig> = {
       return { groups, total: specs.length };
     },
   },
+  roadmap: {
+    projectScoped: true,
+    endpoint: (p) => `/api/product/roadmap?project=${p}`,
+    titleKey: 'roadmap.title',
+    emptyKey: 'roadmap.empty',
+    emptyHintKey: 'roadmap.emptyHint',
+    map: (json, L) => {
+      const items = (Array.isArray(json) ? (json as RawRoadmap[]) : []).filter((r) => r && r.id != null);
+      const groups = groupBy(
+        items,
+        (r) => r.horizon ?? '',
+        (r) => {
+          const title = r.title?.trim() || '(untitled)';
+          const date = fmtDate(r.targetDate);
+          const badges = [statusBadge(r.status, L), priorityBadge(r.priority, L)].filter(Boolean) as ProjectListModel['groups'][number]['items'][number]['badges'];
+          return {
+            id: r.id,
+            title,
+            subtitle: [r.theme, date].filter(Boolean).join(' · ') || undefined,
+            badges,
+            action: {
+              kind: 'brain' as const,
+              label: L('act.workRoadmap', 'Plan this roadmap item with the Brain'),
+              text: L('roadmap.seed', 'Let\'s work on the roadmap item "{title}". Summarise it and help me plan the work to deliver it.').replace('{title}', title),
+            },
+          };
+        },
+        HORIZON_GROUPS,
+        L,
+      );
+      return { groups, total: items.length };
+    },
+  },
+  retros: {
+    projectScoped: false,
+    endpoint: () => `/api/agile/retros`,
+    titleKey: 'retros.title',
+    emptyKey: 'retros.empty',
+    emptyHintKey: 'retros.emptyHint',
+    map: (json, L) => mapSessions(json, L, { template: true, seedKey: 'retros.seed', actKey: 'act.workRetro', actFallback: 'Review this retrospective with the Brain' }),
+  },
+  poker: {
+    projectScoped: false,
+    endpoint: () => `/api/agile/poker/sessions`,
+    titleKey: 'poker.title',
+    emptyKey: 'poker.empty',
+    emptyHintKey: 'poker.emptyHint',
+    map: (json, L) => mapSessions(json, L, { seedKey: 'poker.seed', actKey: 'act.workPoker', actFallback: 'Review this session with the Brain' }),
+  },
 };
+
+/** Shared mapper for the two workspace-scoped session lists (Retros + Poker) — same
+ *  shape ({id,name,status,createdAt,…}), grouped by status, one Brain action per row. */
+function mapSessions(
+  json: unknown,
+  L: (k: string, fb: string) => string,
+  o: { template?: boolean; seedKey: string; actKey: string; actFallback: string },
+): ProjectListModel {
+  const sessions = (Array.isArray(json) ? (json as RawSession[]) : []).filter((s) => s && s.id != null);
+  const groups = groupBy(
+    sessions,
+    (s) => s.status ?? '',
+    (s) => {
+      const title = s.name?.trim() || '(untitled)';
+      const meta = o.template ? s.template : s.votingSystem;
+      const date = fmtDate(s.createdAt);
+      return {
+        id: s.id,
+        title,
+        subtitle: [meta, date].filter(Boolean).join(' · ') || undefined,
+        action: {
+          kind: 'brain' as const,
+          label: L(o.actKey, o.actFallback),
+          text: L(o.seedKey, '{title}').replace('{title}', title),
+        },
+      };
+    },
+    SESSION_GROUPS,
+    L,
+  );
+  return { groups, total: sessions.length };
+}
 
 export function ProjectPageScreen({ init, view }: { init: InitData; view: PageView }) {
   const projectId = init.project?.id;
@@ -183,7 +322,7 @@ export function ProjectPageScreen({ init, view }: { init: InitData; view: PageVi
   );
 
   const load = useCallback(async () => {
-    if (projectId == null) {
+    if (cfg.projectScoped && projectId == null) {
       setError('No project is selected.');
       setLoading(false);
       return;
@@ -191,7 +330,7 @@ export function ProjectPageScreen({ init, view }: { init: InitData; view: PageVi
     setLoading(true);
     setError(null);
     const call = (token: string | null) =>
-      fetch(`${init.baseUrl}${cfg.endpoint(projectId)}`, {
+      fetch(`${init.baseUrl}${cfg.endpoint(projectId ?? null)}`, {
         headers: token ? { authorization: `Bearer ${token}` } : {},
       });
     try {

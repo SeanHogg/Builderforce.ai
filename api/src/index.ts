@@ -165,6 +165,7 @@ import { runWebhookRetrySweep } from './application/seams/webhookService';
 import { runBoardSyncSweep } from './application/boardsync/runBoardSyncSweep';
 import { runParkedWorkflowSweep } from './application/swimlane/resumeParkedWorkflows';
 import { runQaExplorationSweep } from './application/qa/runQaExplorationSweep';
+import { runValidatorReviewSweep } from './application/validation/validationDispatch';
 import { runDueReports } from './application/reports/runDueReports';
 import { handleInboundEmail } from './application/workflow/inboundEmail';
 
@@ -554,6 +555,19 @@ export default {
         runAlertSweep(env).catch((err) => {
           console.error('[cron:alerts] failed', err);
         }),
+      );
+      // Daily Validator review sweep — for every tenant that has a Validator agent,
+      // (re)review its Done items against the codebase so each item accrues multiple
+      // review passes over time and any gaps become GAP tasks. No-op for tenants
+      // without a Validator.
+      ctx.waitUntil(
+        runValidatorReviewSweep(env)
+          .then((r) => {
+            if (r.dispatched > 0) console.log(`[cron:validator] tenantsWithValidator=${r.tenantsWithValidator} dispatched=${r.dispatched}`);
+          })
+          .catch((err) => {
+            console.error('[cron:validator] failed', err);
+          }),
       );
     }
     // Trigger sweep + cloud executor run on the frequent tick. (Also run when no

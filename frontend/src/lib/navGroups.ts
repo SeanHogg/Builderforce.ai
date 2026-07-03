@@ -90,6 +90,10 @@ export const NAV_GROUPS: NavGroup[] = [
       { id: 'qa', labelKey: 'tab.qa', icon: '🧪' },
     ],
   },
+  // Employer-side management of hired freelancers (engagements + timecard approval).
+  // Its own destination so managing external hires doesn't crowd the agent-centric
+  // Workforce directory.
+  { id: 'hires', labelKey: 'group.hires', icon: '🤝', href: '/hires', match: ['/hires'] },
   {
     id: 'insights', labelKey: 'group.insights', icon: '📈', href: '/insights',
     // Surveys, custom Dashboards and DevFinOps are analytics/measurement surfaces,

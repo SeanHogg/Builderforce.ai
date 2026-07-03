@@ -10,7 +10,8 @@ import {
   type BrainConfig,
   type BrainChat,
 } from '@seanhogg/builderforce-brain-embedded';
-import { BrainTimeline, type BrainTimelineLabels } from '@seanhogg/builderforce-brain-ui';
+import { BrainTimeline, ChatTicketsPanel, DEFAULT_CHAT_TICKETS_LABELS, type BrainTimelineLabels } from '@seanhogg/builderforce-brain-ui';
+import { createChatTicketsAdapter } from './chatTicketsAdapter';
 import {
   getToken,
   onInit,
@@ -27,7 +28,7 @@ import { ProjectPageScreen } from './ProjectPageScreen';
 import { createPersistence } from './persistence';
 import { buildHostTools } from './hostTools';
 import { buildIdeSystemPrompt } from './systemPrompt';
-import { activeProjectDirective } from '../../src/idePersona';
+import { activeProjectDirective, deltaVisibilityDirective } from '../../src/idePersona';
 import { buildTranscript, hasTranscriptContent } from './transcript';
 
 /** Read a localized string from the host's bundle, falling back to English. */
@@ -84,7 +85,8 @@ export function App() {
   // screens — no Brain providers needed, they fetch their data directly like the
   // chat fetches /api/brain.
   if (init.view === 'project360') return <Project360Screen init={init} />;
-  if (init.view === 'backlog' || init.view === 'prd') return <ProjectPageScreen init={init} view={init.view} />;
+  if (init.view === 'backlog' || init.view === 'prd' || init.view === 'roadmap' || init.view === 'retros' || init.view === 'poker')
+    return <ProjectPageScreen init={init} view={init.view} />;
   return <ConfiguredApp init={init} />;
 }
 
@@ -188,7 +190,9 @@ function Chat({ init }: { init: InitData }) {
   // tell the model the current project, so platform tools (repos.*/tasks.*/…)
   // default to it instead of asking for a projectId. Updates on project switch.
   const projectDirective = useMemo(
-    () => activeProjectDirective(init.project),
+    () => [activeProjectDirective(init.project), deltaVisibilityDirective()]
+      .filter(Boolean)
+      .join('\n\n'),
     [init.project?.id, init.project?.name],
   );
 
@@ -236,6 +240,13 @@ function Chat({ init }: { init: InitData }) {
       }
     });
   }, [persistence, reloadChats, t]);
+
+  // Chat↔ticket panel data adapter — same gateway endpoints as the web app's
+  // panel, over the webview's bearer fetch (see chatTicketsAdapter).
+  const ticketAdapter = useMemo(
+    () => createChatTicketsAdapter(init.baseUrl, getToken, () => void refreshToken()),
+    [init.baseUrl],
+  );
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const attachFiles = useCallback((files: FileList | File[] | null) => {
@@ -313,6 +324,19 @@ function Chat({ init }: { init: InitData }) {
           🩺
         </button>
       </header>
+
+      {chatId != null && (
+        <div style={{ padding: '0 12px' }}>
+          <ChatTicketsPanel
+            chatId={chatId}
+            projectId={init.project?.id ?? null}
+            chatList={chats.map((c) => ({ id: c.id, title: c.title }))}
+            adapter={ticketAdapter}
+            labels={DEFAULT_CHAT_TICKETS_LABELS}
+            onChanged={reloadChats}
+          />
+        </div>
+      )}
 
       <div className="bf-body">
         <BrainTimeline

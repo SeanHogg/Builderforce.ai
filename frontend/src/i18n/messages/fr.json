@@ -175,6 +175,7 @@
       "noTypes": "Aucun type d’élément découvert.",
       "typeTask": "Tâche",
       "typeEpic": "Épopée",
+      "typeGap": "Écart",
       "usersIntro": "Choisissez les utilisateurs externes à inviter dans cet espace de travail.",
       "noUsers": "Aucun utilisateur découvert.",
       "userInvite": "Inviter",
@@ -219,7 +220,8 @@
       "quality": "Qualité",
       "myProfile": "Mon profil",
       "findWork": "Trouver du travail",
-      "timecard": "Feuille de temps"
+      "timecard": "Feuille de temps",
+      "hires": "Recrutements"
     },
     "tab": {
       "projects": "Projets",
@@ -666,7 +668,13 @@
     "home": "Retour à l’accueil"
   },
   "common": {
-    "language": "Langue"
+    "language": "Langue",
+    "typeTask": "Tâche",
+    "typeEpic": "Épopée",
+    "typeGap": "Écart",
+    "reviewedTimes": "{count, plural, one {Révisé # fois} other {Révisé # fois}}",
+    "reviewComplete": "Dernière revue réussie — complète",
+    "reviewGaps": "La dernière revue a trouvé des écarts"
   },
   "llmUsage": {
     "byUser": "Par utilisateur · 7 derniers jours",
@@ -4303,7 +4311,6 @@
       "linkFailed": "Impossible de lier — vérifiez que le ticket existe.",
       "kindLabel": "Type de ticket",
       "pickTicket": "Choisir un ticket…",
-      "refPlaceholder": "ID d’objectif / initiative / portefeuille",
       "linkTypeLabel": "Type de lien",
       "linkTypeLinked": "Lié",
       "linkTypeCreated": "Créé depuis le chat",
@@ -4768,6 +4775,29 @@
         "rejected": "Rejetée",
         "paid": "Payée"
       }
+    },
+    "meeting": {
+      "title": "Enregistrer une réunion",
+      "subtitle": "Les réunions sont payées — c’est votre temps. Enregistrées en minutes facturables.",
+      "selectWorkspace": "Espace",
+      "minutes": "Minutes",
+      "note": "De quoi s’agissait-il ? (facultatif)",
+      "log": "Enregistrer"
+    },
+    "entries": {
+      "hide": "Masquer",
+      "edit": "Modifier les lignes",
+      "none": "Aucune ligne pour l’instant.",
+      "billable": "Facturable",
+      "nonBillable": "Non facturable",
+      "remove": "Supprimer",
+      "descPlaceholder": "Description (facultatif)",
+      "add": "Ajouter",
+      "source": {
+        "auto": "Suivi",
+        "manual": "Manuel",
+        "meeting": "Réunion"
+      }
     }
   },
   "talent": {
@@ -4793,5 +4823,52 @@
     "location": "Lieu",
     "availability": "Disponibilité",
     "private": "Profil privé"
+  },
+  "hires": {
+    "title": "Recrutements",
+    "subtitle": "Gérez vos freelances recrutés et approuvez leurs feuilles de temps.",
+    "loading": "Chargement…",
+    "noWorkspace": "Sélectionnez un espace pour gérer les recrutements.",
+    "team": "Vos freelances",
+    "teamEmpty": "Aucun freelance recruté. Parcourez la place de marché de talents pour recruter.",
+    "perHour": "/h",
+    "activate": "Activer",
+    "terminate": "Mettre fin",
+    "terminateConfirm": "Mettre fin à cette mission ? Les heures suivies sont conservées.",
+    "approvals": "Feuilles de temps",
+    "approvalsEmpty": "Aucune feuille de temps.",
+    "review": "Examiner",
+    "hide": "Masquer",
+    "reject": "Rejeter",
+    "approve": "Approuver",
+    "noEntries": "Aucune ligne.",
+    "nonBillable": "non facturable",
+    "status": {
+      "invited": "Invité",
+      "interviewing": "Entretien",
+      "active": "Actif",
+      "declined": "Refusé",
+      "terminated": "Terminé"
+    },
+    "cardStatus": {
+      "draft": "Brouillon",
+      "submitted": "Soumise",
+      "approved": "Approuvée",
+      "rejected": "Rejetée",
+      "paid": "Payée"
+    },
+    "entrySource": {
+      "auto": "Suivi",
+      "manual": "Manuel",
+      "meeting": "Réunion"
+    }
+  },
+  "register": {
+    "want": "Je veux",
+    "buildTitle": "Construire avec l’IA",
+    "buildSub": "Projets, agents et espace",
+    "hireTitle": "Être recruté",
+    "hireSub": "Profil freelance et missions",
+    "accountTypeAria": "Type de compte"
   }
 }
