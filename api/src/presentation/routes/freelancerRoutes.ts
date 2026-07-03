@@ -24,6 +24,7 @@ import {
   connectExisting as hiredConnectExisting,
   getByExternalUserId as hiredGetByExternalUserId,
 } from '../../application/integrations/hiredVideo';
+import { notify } from '../../application/notifications/notify';
 import type { Env, HonoEnv } from '../../env';
 
 export const FREELANCER_PUBLIC_LIST_CACHE_KEY = 'fl:public:list';
@@ -67,8 +68,39 @@ function mapPublicProfile(row: Record<string, unknown>): Record<string, unknown>
     location: row.location ?? null,
     timezone: row.timezone ?? null,
     hasResume: Boolean(row.hired_video_user_id) || Boolean(row.resume_key),
+    rating: row.avg_rating == null ? null : Number(row.avg_rating),
+    ratingCount: row.rating_count == null ? 0 : Number(row.rating_count),
     updatedAt: row.updated_at ?? null,
   };
+}
+
+/** In-memory filter/sort/paginate over the (cached) public profile list — keeps the
+ *  cache key bounded (one key) while supporting talent search. Shared by the browse
+ *  route. `q` matches name/headline/skills; discipline/skill/rate are exact/range. */
+function applyTalentFilters(
+  rows: Record<string, unknown>[],
+  f: { q?: string; discipline?: string; skill?: string; minRate?: number; maxRate?: number; sort?: string; page: number; pageSize: number },
+): { items: Record<string, unknown>[]; total: number } {
+  const q = (f.q ?? '').trim().toLowerCase();
+  let out = rows.filter((r) => {
+    if (f.discipline && String(r.discipline ?? '') !== f.discipline) return false;
+    const skills = parseSkills(r.skills).map((s) => s.toLowerCase());
+    if (f.skill && !skills.includes(f.skill.toLowerCase())) return false;
+    const rate = r.hourly_rate_cents == null ? null : Number(r.hourly_rate_cents);
+    if (f.minRate != null && (rate == null || rate < f.minRate)) return false;
+    if (f.maxRate != null && (rate == null || rate > f.maxRate)) return false;
+    if (q) {
+      const hay = `${r.display_name ?? ''} ${r.headline ?? ''} ${skills.join(' ')}`.toLowerCase();
+      if (!hay.includes(q)) return false;
+    }
+    return true;
+  });
+  if (f.sort === 'rate_asc') out = [...out].sort((a, b) => Number(a.hourly_rate_cents ?? Infinity) - Number(b.hourly_rate_cents ?? Infinity));
+  else if (f.sort === 'rate_desc') out = [...out].sort((a, b) => Number(b.hourly_rate_cents ?? -1) - Number(a.hourly_rate_cents ?? -1));
+  else if (f.sort === 'rating') out = [...out].sort((a, b) => Number(b.avg_rating ?? -1) - Number(a.avg_rating ?? -1));
+  const total = out.length;
+  const start = Math.max(0, (f.page - 1) * f.pageSize);
+  return { items: out.slice(start, start + f.pageSize), total };
 }
 
 /** Non-throwing web-JWT probe: returns the userId when a valid web token is present. */
@@ -243,13 +275,24 @@ export function createFreelancerRoutes(): Hono<HonoEnv> {
 
   // --------------------------------------------------------------- PUBLIC -----
 
-  // GET / — browse the marketplace. Public profiles are world-readable; private
-  // ones only surface for a signed-in viewer. The all-public slice is cached.
+  // GET / — browse the marketplace with search/filter/pagination. Public profiles
+  // are world-readable; private ones only surface for a signed-in viewer. The
+  // all-public slice is CACHED under one key and filtered in memory, so search
+  // never explodes the cache keyspace. Review aggregate (rating) is joined in.
   router.get('/', async (c) => {
     const viewer = await optionalUserId(c);
+    const q = c.req.query();
+    const filters = {
+      q: q.q, discipline: q.discipline, skill: q.skill,
+      minRate: q.minRate ? Number(q.minRate) : undefined,
+      maxRate: q.maxRate ? Number(q.maxRate) : undefined,
+      sort: q.sort, page: Math.max(1, Number(q.page) || 1), pageSize: Math.min(48, Math.max(1, Number(q.pageSize) || 24)),
+    };
     const publicRows = await getOrSetCached(c.env as Env, FREELANCER_PUBLIC_LIST_CACHE_KEY, () =>
       sql(c.env)`
-        SELECT p.*, u.display_name, u.avatar_url
+        SELECT p.*, u.display_name, u.avatar_url,
+          (SELECT ROUND(AVG(rating)::numeric, 2) FROM freelancer_reviews r WHERE r.freelancer_user_id = p.user_id) AS avg_rating,
+          (SELECT COUNT(*) FROM freelancer_reviews r WHERE r.freelancer_user_id = p.user_id)::int AS rating_count
         FROM freelancer_profiles p JOIN users u ON u.id = p.user_id
         WHERE p.published = true AND p.visibility = 'public'
         ORDER BY p.updated_at DESC LIMIT 200
@@ -257,25 +300,29 @@ export function createFreelancerRoutes(): Hono<HonoEnv> {
     );
     let rows = publicRows;
     if (viewer) {
-      // Signed-in viewers additionally see published PRIVATE profiles (not cached
-      // — small superset appended for authed viewers only).
       const privateRows = await sql(c.env)`
-        SELECT p.*, u.display_name, u.avatar_url
+        SELECT p.*, u.display_name, u.avatar_url,
+          (SELECT ROUND(AVG(rating)::numeric, 2) FROM freelancer_reviews r WHERE r.freelancer_user_id = p.user_id) AS avg_rating,
+          (SELECT COUNT(*) FROM freelancer_reviews r WHERE r.freelancer_user_id = p.user_id)::int AS rating_count
         FROM freelancer_profiles p JOIN users u ON u.id = p.user_id
         WHERE p.published = true AND p.visibility = 'private'
         ORDER BY p.updated_at DESC LIMIT 200
       ` as unknown as Record<string, unknown>[];
       rows = [...publicRows, ...privateRows];
     }
-    return c.json(rows.map(mapPublicProfile));
+    const { items, total } = applyTalentFilters(rows, filters);
+    return c.json({ items: items.map(mapPublicProfile), total, page: filters.page, pageSize: filters.pageSize });
   });
 
-  // GET /:id — one freelancer's public detail. Private profiles require auth.
+  // GET /:id — one freelancer's public detail (+ rating + recent reviews). Private
+  // profiles require auth.
   router.get('/:id', async (c) => {
     const id = c.req.param('id');
     const viewer = await optionalUserId(c);
     const [row] = await sql(c.env)`
-      SELECT p.*, u.display_name, u.avatar_url
+      SELECT p.*, u.display_name, u.avatar_url,
+        (SELECT ROUND(AVG(rating)::numeric, 2) FROM freelancer_reviews r WHERE r.freelancer_user_id = p.user_id) AS avg_rating,
+        (SELECT COUNT(*) FROM freelancer_reviews r WHERE r.freelancer_user_id = p.user_id)::int AS rating_count
       FROM freelancer_profiles p JOIN users u ON u.id = p.user_id
       WHERE p.user_id = ${id} AND p.published = true
     `;
@@ -289,7 +336,16 @@ export function createFreelancerRoutes(): Hono<HonoEnv> {
       const res = await hiredCreateEmbedToken(c.env, row.hired_video_user_id as string, 'profile');
       embedUrl = res.embedUrl ?? null;
     }
-    return c.json({ ...mapPublicProfile(row), embedUrl });
+    const reviews = await sql(c.env)`
+      SELECT rv.rating, rv.comment, rv.created_at, ru.display_name AS reviewer_name
+      FROM freelancer_reviews rv LEFT JOIN users ru ON ru.id = rv.reviewer_user_id
+      WHERE rv.freelancer_user_id = ${id} ORDER BY rv.created_at DESC LIMIT 20
+    ` as unknown as Record<string, unknown>[];
+    return c.json({
+      ...mapPublicProfile(row),
+      embedUrl,
+      reviews: reviews.map((r) => ({ rating: Number(r.rating), comment: r.comment ?? null, createdAt: r.created_at, reviewerName: r.reviewer_name ?? null })),
+    });
   });
 
   return router;
@@ -370,12 +426,16 @@ export function createEngagementRoutes(): Hono<HonoEnv> {
       WHERE tenant_id = ${tenantId} AND freelancer_user_id = ${b.freelancerUserId}
         AND COALESCE(project_id, 0) = COALESCE(${projectId}, 0) AND terminated_at IS NULL
     `;
+    const [ten] = await sql(c.env)`SELECT name FROM tenants WHERE id = ${tenantId}`;
+    const tenantName = (ten?.name as string) ?? 'A workspace';
+    const notifyKind = status === 'active' ? 'hired' : status === 'interviewing' ? 'interview' : 'invite';
     if (existing) {
       await sql(c.env)`
         UPDATE freelancer_engagements SET status = ${status}, updated_at = NOW(),
           hired_at = CASE WHEN ${status} = 'active' AND hired_at IS NULL THEN NOW() ELSE hired_at END
         WHERE id = ${existing.id}
       `;
+      await notify(sql(c.env), c.env, { userId: b.freelancerUserId, tenantId, kind: notifyKind, title: `${tenantName} updated your engagement`, body: b.note ?? null, ref: existing.id as string });
       return c.json({ id: existing.id, status, reused: true });
     }
     const id = crypto.randomUUID();
@@ -383,6 +443,7 @@ export function createEngagementRoutes(): Hono<HonoEnv> {
       INSERT INTO freelancer_engagements (id, tenant_id, project_id, freelancer_user_id, status, rate_cents, currency, title, note, created_by_user_id, hired_at)
       VALUES (${id}, ${tenantId}, ${projectId}, ${b.freelancerUserId}, ${status}, ${rate}, ${prof.currency ?? 'USD'}, ${b.title ?? null}, ${b.note ?? null}, ${actor}, ${status === 'active' ? new Date().toISOString() : null})
     `;
+    await notify(sql(c.env), c.env, { userId: b.freelancerUserId, tenantId, kind: notifyKind, title: status === 'active' ? `${tenantName} hired you` : `${tenantName} wants to ${status === 'interviewing' ? 'interview' : 'engage'} you`, body: b.title ?? b.note ?? null, ref: id });
     return c.json({ id, status }, 201);
   });
 
@@ -417,11 +478,69 @@ export function createEngagementRoutes(): Hono<HonoEnv> {
     const id = c.req.param('id');
     let reason: string | null = null;
     try { const b = await c.req.json<{ reason?: string }>(); reason = b.reason ?? null; } catch { /* body optional */ }
-    await sql(c.env)`
+    const rows = await sql(c.env)`
       UPDATE freelancer_engagements SET terminated_at = NOW(), terminated_reason = ${reason}, status = 'terminated', updated_at = NOW()
       WHERE id = ${id} AND tenant_id = ${tenantId} AND terminated_at IS NULL
+      RETURNING freelancer_user_id
     `;
+    if (rows[0]) {
+      const [ten] = await sql(c.env)`SELECT name FROM tenants WHERE id = ${tenantId}`;
+      await notify(sql(c.env), c.env, { userId: rows[0].freelancer_user_id as string, tenantId, kind: 'terminated', title: `${(ten?.name as string) ?? 'A workspace'} ended your engagement`, body: reason, ref: id });
+    }
     return c.json({ ok: true });
+  });
+
+  // POST /:id/respond — WORKER (web JWT) accepts or declines an invite/interview.
+  // Accept → 'active' (sets hired_at); decline → 'declined'. Only the engaged
+  // freelancer may respond; notifies the employer who created it.
+  router.post('/:id/respond', webAuthMiddleware, async (c) => {
+    const userId = c.get('userId') as string;
+    const id = c.req.param('id');
+    const b = await c.req.json<{ accept?: boolean }>();
+    const target = b.accept ? 'active' : 'declined';
+    const rows = await sql(c.env)`
+      UPDATE freelancer_engagements SET status = ${target},
+        hired_at = CASE WHEN ${target} = 'active' AND hired_at IS NULL THEN NOW() ELSE hired_at END,
+        updated_at = NOW()
+      WHERE id = ${id} AND freelancer_user_id = ${userId} AND terminated_at IS NULL
+        AND status IN ('invited', 'interviewing')
+      RETURNING tenant_id, created_by_user_id
+    `;
+    const row = rows[0];
+    if (!row) return c.json({ error: 'Not found or not pending' }, 404);
+    const [me] = await sql(c.env)`SELECT display_name FROM users WHERE id = ${userId}`;
+    if (row.created_by_user_id) {
+      await notify(sql(c.env), c.env, {
+        userId: row.created_by_user_id as string, tenantId: Number(row.tenant_id),
+        kind: b.accept ? 'accepted' : 'declined',
+        title: `${(me?.display_name as string) ?? 'A freelancer'} ${b.accept ? 'accepted' : 'declined'} the engagement`, ref: id,
+      });
+    }
+    return c.json({ ok: true, status: target });
+  });
+
+  // POST /:id/review — EMPLOYER (tenant JWT) rates the freelancer for this
+  // engagement (1..5 + comment). One review per engagement; updates reputation.
+  router.post('/:id/review', authMiddleware, async (c) => {
+    const tenantId = c.get('tenantId') as number;
+    const actor = c.get('userId') as string;
+    const id = c.req.param('id');
+    const b = await c.req.json<{ rating?: number; comment?: string }>();
+    const rating = Math.max(1, Math.min(5, Math.round(Number(b.rating))));
+    if (!Number.isFinite(rating)) return c.json({ error: 'rating 1..5 required' }, 400);
+    const [eng] = await sql(c.env)`
+      SELECT id, freelancer_user_id FROM freelancer_engagements WHERE id = ${id} AND tenant_id = ${tenantId}
+    `;
+    if (!eng) return c.json({ error: 'Engagement not found' }, 404);
+    await sql(c.env)`
+      INSERT INTO freelancer_reviews (id, engagement_id, tenant_id, freelancer_user_id, reviewer_user_id, rating, comment)
+      VALUES (${crypto.randomUUID()}, ${id}, ${tenantId}, ${eng.freelancer_user_id}, ${actor}, ${rating}, ${b.comment ?? null})
+      ON CONFLICT (engagement_id) DO UPDATE SET rating = EXCLUDED.rating, comment = EXCLUDED.comment, updated_at = NOW()
+    `;
+    // Rating shows on the (cached) public list — invalidate it.
+    await invalidateCached(c.env as Env, FREELANCER_PUBLIC_LIST_CACHE_KEY);
+    await notify(sql(c.env), c.env, { userId: eng.freelancer_user_id as string, tenantId, kind: 'review', title: `You received a ${rating}★ review`, body: b.comment ?? null, ref: id });
+    return c.json({ ok: true, rating });
   });
 
   return router;

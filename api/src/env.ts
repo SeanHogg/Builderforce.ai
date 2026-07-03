@@ -154,6 +154,23 @@ export interface Env {
    *  `wrangler secret put HIRED_API_BASE_URL`. */
   HIRED_API_BASE_URL?: string;
 
+  /** Freelancer payout provider webhook. When set, "Pay" on an approved freelancer
+   *  invoice POSTs `{invoiceId, amountCents, currency, freelancerUserId, tenantId}`
+   *  here (Bearer PAYOUT_WEBHOOK_KEY) and marks the invoice paid with the returned
+   *  reference. Unset = manual "Mark paid" only (no money movement).
+   *  `wrangler secret put PAYOUT_WEBHOOK_URL`. */
+  PAYOUT_WEBHOOK_URL?: string;
+  /** Bearer key for PAYOUT_WEBHOOK_URL. `wrangler secret put PAYOUT_WEBHOOK_KEY`. */
+  PAYOUT_WEBHOOK_KEY?: string;
+
+  /** Transactional-email webhook for marketplace notifications (invite/hire/paid/…).
+   *  When set, each in-app notification also POSTs `{to, subject, body}` here
+   *  (Bearer NOTIFY_EMAIL_KEY). Unset = in-app notifications only.
+   *  `wrangler secret put NOTIFY_EMAIL_URL`. */
+  NOTIFY_EMAIL_URL?: string;
+  /** Bearer key for NOTIFY_EMAIL_URL. `wrangler secret put NOTIFY_EMAIL_KEY`. */
+  NOTIFY_EMAIL_KEY?: string;
+
   /** Clone-capable TTS endpoint for server-side voice synthesis (Voice PRD §3.1).
    *  Provider-agnostic: any service that accepts (referenceAudio, text) and
    *  returns audio bytes. When unset, the synthesize route returns an honest 503

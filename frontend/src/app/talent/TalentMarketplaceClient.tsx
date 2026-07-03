@@ -1,15 +1,22 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import Link from 'next/link';
 import { useTranslations } from 'next-intl';
 import PageContainer from '@/components/PageContainer';
 import { useOptionalAuth } from '@/lib/AuthContext';
-import { listFreelancers, type FreelancerProfile } from '@/lib/freelancerApi';
+import { listFreelancers, type FreelancerProfile, type TalentFilters } from '@/lib/freelancerApi';
+import { RatingStars } from '@/components/freelance/RatingStars';
+
+const DISCIPLINES = ['developer', 'dba', 'designer', 'devops', 'qa', 'pm', 'data', 'security', 'other'] as const;
 
 const card: React.CSSProperties = {
   background: 'var(--bg-base)', border: '1px solid var(--border-subtle)', borderRadius: 12, padding: 18,
   display: 'flex', flexDirection: 'column', gap: 10, textDecoration: 'none',
+};
+const input: React.CSSProperties = {
+  background: 'var(--bg-elevated)', color: 'var(--text-primary)', border: '1px solid var(--border-subtle)',
+  borderRadius: 8, padding: '8px 12px', fontSize: 13, outline: 'none',
 };
 
 function initials(name: string | null): string {
@@ -18,18 +25,31 @@ function initials(name: string | null): string {
 
 export default function TalentMarketplaceClient() {
   const t = useTranslations('talent');
+  const td = useTranslations('freelancer');
   const auth = useOptionalAuth();
   const [rows, setRows] = useState<FreelancerProfile[]>([]);
+  const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [filters, setFilters] = useState<TalentFilters>({ page: 1, pageSize: 24 });
 
-  useEffect(() => {
-    listFreelancers().then(setRows).catch((e: Error) => setError(e.message)).finally(() => setLoading(false));
+  const load = useCallback(async (f: TalentFilters) => {
+    setLoading(true); setError(null);
+    try { const res = await listFreelancers(f); setRows(res.items); setTotal(res.total); }
+    catch (e) { setError(e instanceof Error ? e.message : 'Failed'); }
+    finally { setLoading(false); }
   }, []);
+
+  useEffect(() => { void load(filters); }, [load, filters]);
+
+  const patch = (p: Partial<TalentFilters>) => setFilters((f) => ({ ...f, page: 1, ...p }));
+  const pageSize = filters.pageSize ?? 24;
+  const page = filters.page ?? 1;
+  const pages = Math.max(1, Math.ceil(total / pageSize));
 
   return (
     <PageContainer width="full" style={{ padding: '32px 40px' }}>
-      <div style={{ marginBottom: 24, maxWidth: 720 }}>
+      <div style={{ marginBottom: 20, maxWidth: 720 }}>
         <h1 style={{ fontSize: 28, fontWeight: 800, color: 'var(--text-primary)', marginBottom: 6 }}>{t('title')}</h1>
         <p style={{ fontSize: 15, color: 'var(--text-secondary)', margin: 0, lineHeight: 1.5 }}>{t('hero.blurb')}</p>
         {!auth?.isAuthenticated && (
@@ -38,6 +58,23 @@ export default function TalentMarketplaceClient() {
             <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{t('signInToView')}</span>
           </div>
         )}
+      </div>
+
+      {/* Filter bar */}
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 18 }}>
+        <input style={{ ...input, flex: 1, minWidth: 180 }} placeholder={t('filter.search')} defaultValue={filters.q ?? ''}
+          onKeyDown={(e) => { if (e.key === 'Enter') patch({ q: (e.target as HTMLInputElement).value }); }}
+          onBlur={(e) => patch({ q: e.target.value })} aria-label={t('filter.search')} />
+        <select style={input} value={filters.discipline ?? ''} onChange={(e) => patch({ discipline: e.target.value || undefined })} aria-label={t('filter.discipline')}>
+          <option value="">{t('filter.allDisciplines')}</option>
+          {DISCIPLINES.map((d) => <option key={d} value={d}>{td(`discipline.${d}`)}</option>)}
+        </select>
+        <select style={input} value={filters.sort ?? ''} onChange={(e) => patch({ sort: e.target.value || undefined })} aria-label={t('filter.sort')}>
+          <option value="">{t('filter.sortRecent')}</option>
+          <option value="rating">{t('filter.sortRating')}</option>
+          <option value="rate_asc">{t('filter.sortRateAsc')}</option>
+          <option value="rate_desc">{t('filter.sortRateDesc')}</option>
+        </select>
       </div>
 
       {loading ? (
@@ -57,6 +94,7 @@ export default function TalentMarketplaceClient() {
                 <div style={{ minWidth: 0 }}>
                   <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{f.displayName ?? '—'}</div>
                   <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>{f.headline ?? f.discipline ?? ''}</div>
+                  <RatingStars rating={f.rating} count={f.ratingCount} />
                 </div>
               </div>
               {f.skills.length > 0 && (
@@ -74,6 +112,17 @@ export default function TalentMarketplaceClient() {
               </div>
             </Link>
           ))}
+        </div>
+      )}
+
+      {/* Pagination */}
+      {pages > 1 && (
+        <div style={{ display: 'flex', gap: 12, justifyContent: 'center', alignItems: 'center', marginTop: 24 }}>
+          <button type="button" disabled={page <= 1} onClick={() => setFilters((f) => ({ ...f, page: page - 1 }))}
+            style={{ ...input, cursor: page <= 1 ? 'default' : 'pointer', opacity: page <= 1 ? 0.5 : 1 }}>←</button>
+          <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>{t('filter.pageOf', { page, pages })}</span>
+          <button type="button" disabled={page >= pages} onClick={() => setFilters((f) => ({ ...f, page: page + 1 }))}
+            style={{ ...input, cursor: page >= pages ? 'default' : 'pointer', opacity: page >= pages ? 0.5 : 1 }}>→</button>
         </div>
       )}
     </PageContainer>

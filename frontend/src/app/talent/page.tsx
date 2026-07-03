@@ -23,10 +23,10 @@ interface PublicFreelancer { userId: string; displayName?: string | null; headli
 async function fetchPublicFreelancers(): Promise<PublicFreelancer[]> {
   const apiBase = process.env.NEXT_PUBLIC_AUTH_API_URL || 'https://api.builderforce.ai';
   try {
-    const res = await fetch(`${apiBase}/api/freelancers`, { next: { revalidate: 3600 } });
+    const res = await fetch(`${apiBase}/api/freelancers?pageSize=48`, { next: { revalidate: 3600 } });
     if (!res.ok) return [];
-    const rows = (await res.json()) as PublicFreelancer[];
-    return Array.isArray(rows) ? rows : [];
+    const body = (await res.json()) as { items?: PublicFreelancer[] };
+    return Array.isArray(body.items) ? body.items : [];
   } catch {
     return [];
   }

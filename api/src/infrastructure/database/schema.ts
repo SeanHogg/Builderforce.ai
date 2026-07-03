@@ -5441,3 +5441,96 @@ export const timecards = pgTable('timecards', {
 }, (t) => ({
   byEngagement: index('idx_timecards_engagement').on(t.engagementId),
 }));
+
+// ---------------------------------------------------------------------------
+// Freelance marketplace — two-sided (0273): job postings + proposals (bidding),
+// reviews/reputation, invoices/payment status, in-app notifications.
+// ---------------------------------------------------------------------------
+
+/** An employer posts work freelancers can BID on (distinct from a direct hire). */
+export const jobPostings = pgTable('job_postings', {
+  id:               varchar('id', { length: 36 }).primaryKey(),
+  tenantId:         integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  projectId:        integer('project_id').references(() => projects.id, { onDelete: 'set null' }),
+  title:            varchar('title', { length: 200 }).notNull(),
+  description:      text('description'),
+  discipline:       varchar('discipline', { length: 60 }),
+  skills:           text('skills'),                        // JSON string[]
+  rateMinCents:     integer('rate_min_cents'),
+  rateMaxCents:     integer('rate_max_cents'),
+  currency:         varchar('currency', { length: 3 }).notNull().default('USD'),
+  status:           varchar('status', { length: 20 }).notNull().default('open'),      // open|closed|filled
+  visibility:       varchar('visibility', { length: 10 }).notNull().default('public'), // public|private
+  createdByUserId:  varchar('created_by_user_id', { length: 36 }).references(() => users.id, { onDelete: 'set null' }),
+  closedAt:         timestamp('closed_at'),
+  createdAt:        timestamp('created_at').notNull().defaultNow(),
+  updatedAt:        timestamp('updated_at').notNull().defaultNow(),
+}, (t) => ({
+  byStatus: index('idx_job_postings_open').on(t.status),
+  byTenant: index('idx_job_postings_tenant').on(t.tenantId),
+}));
+
+/** A freelancer's bid on a job. One live proposal per (job, freelancer). */
+export const jobProposals = pgTable('job_proposals', {
+  id:                varchar('id', { length: 36 }).primaryKey(),
+  jobId:             varchar('job_id', { length: 36 }).notNull().references(() => jobPostings.id, { onDelete: 'cascade' }),
+  freelancerUserId:  varchar('freelancer_user_id', { length: 36 }).notNull().references(() => users.id, { onDelete: 'cascade' }),
+  coverNote:         text('cover_note'),
+  rateCents:         integer('rate_cents'),
+  currency:          varchar('currency', { length: 3 }).notNull().default('USD'),
+  status:            varchar('status', { length: 20 }).notNull().default('submitted'), // submitted|shortlisted|accepted|declined|withdrawn
+  createdAt:         timestamp('created_at').notNull().defaultNow(),
+  updatedAt:         timestamp('updated_at').notNull().defaultNow(),
+}, (t) => ({
+  byFreelancer: index('idx_proposals_freelancer').on(t.freelancerUserId),
+}));
+
+/** Employer's rating of a freelancer for an engagement (reputation). One per engagement. */
+export const freelancerReviews = pgTable('freelancer_reviews', {
+  id:                varchar('id', { length: 36 }).primaryKey(),
+  engagementId:      varchar('engagement_id', { length: 36 }).notNull().references(() => freelancerEngagements.id, { onDelete: 'cascade' }),
+  tenantId:          integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  freelancerUserId:  varchar('freelancer_user_id', { length: 36 }).notNull().references(() => users.id, { onDelete: 'cascade' }),
+  reviewerUserId:    varchar('reviewer_user_id', { length: 36 }).references(() => users.id, { onDelete: 'set null' }),
+  rating:            integer('rating').notNull(),   // 1..5
+  comment:           text('comment'),
+  createdAt:         timestamp('created_at').notNull().defaultNow(),
+  updatedAt:         timestamp('updated_at').notNull().defaultNow(),
+}, (t) => ({
+  byFreelancer: index('idx_reviews_freelancer').on(t.freelancerUserId),
+}));
+
+/** Invoice generated on timecard approval; carries payment status. One per timecard. */
+export const freelancerInvoices = pgTable('freelancer_invoices', {
+  id:                varchar('id', { length: 36 }).primaryKey(),
+  timecardId:        varchar('timecard_id', { length: 36 }).notNull().references(() => timecards.id, { onDelete: 'cascade' }),
+  engagementId:      varchar('engagement_id', { length: 36 }).notNull().references(() => freelancerEngagements.id, { onDelete: 'cascade' }),
+  tenantId:          integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  freelancerUserId:  varchar('freelancer_user_id', { length: 36 }).notNull().references(() => users.id, { onDelete: 'cascade' }),
+  amountCents:       integer('amount_cents').notNull().default(0),
+  currency:          varchar('currency', { length: 3 }).notNull().default('USD'),
+  status:            varchar('status', { length: 20 }).notNull().default('pending'), // pending|paid|void
+  externalRef:       varchar('external_ref', { length: 200 }),
+  issuedAt:          timestamp('issued_at').notNull().defaultNow(),
+  paidAt:            timestamp('paid_at'),
+  createdAt:         timestamp('created_at').notNull().defaultNow(),
+  updatedAt:         timestamp('updated_at').notNull().defaultNow(),
+}, (t) => ({
+  byTenant:     index('idx_invoices_tenant').on(t.tenantId),
+  byFreelancer: index('idx_invoices_freelancer').on(t.freelancerUserId),
+}));
+
+/** In-app notifications for both sides of the marketplace. */
+export const freelancerNotifications = pgTable('freelancer_notifications', {
+  id:         bigint('id', { mode: 'number' }).primaryKey(),   // DB bigserial
+  userId:     varchar('user_id', { length: 36 }).notNull().references(() => users.id, { onDelete: 'cascade' }),
+  tenantId:   integer('tenant_id').references(() => tenants.id, { onDelete: 'cascade' }),
+  kind:       varchar('kind', { length: 40 }).notNull(),
+  title:      varchar('title', { length: 200 }).notNull(),
+  body:       text('body'),
+  ref:        varchar('ref', { length: 200 }),
+  readAt:     timestamp('read_at'),
+  createdAt:  timestamp('created_at').notNull().defaultNow(),
+}, (t) => ({
+  byUser: index('idx_notifications_user').on(t.userId, t.createdAt),
+}));
