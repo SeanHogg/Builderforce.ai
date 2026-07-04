@@ -28,7 +28,12 @@ export interface SlideOutPanelProps {
 const overlayStyle: React.CSSProperties = {
   position: 'fixed',
   inset: 0,
-  zIndex: 9998,
+  zIndex: 10000,
+};
+
+// Add style to ensure panel appears above fixed footer
+const drawerStyle: React.CSSProperties = {
+  zIndex: 10001,
 };
 
 export function SlideOutPanel({
