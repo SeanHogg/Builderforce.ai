@@ -160,12 +160,82 @@ const parseTenantSettings = (raw: string | null | undefined): Json => {
 };
 
 // ---------------------------------------------------------------------------
+// List projections — keep the Brain's context window bounded
+// ---------------------------------------------------------------------------
+//
+// The Brain re-sends its whole transcript to the model every turn, so an
+// unbounded `*.list` result (e.g. `tasks.list` returning 352 full rows, every
+// column, tens of KB) accumulates across tool calls and eventually exhausts the
+// model's context window — the run "dies after several executions". These tools
+// therefore return a COMPACT projection + a `total`/`truncated` envelope so the
+// model knows to narrow its query; full per-record detail stays available via
+// the matching `*.get` tool.
+
+/** Default page size for a list tool, and the hard ceiling a caller can request. */
+const LIST_DEFAULT_LIMIT = 50;
+const LIST_MAX_LIMIT = 200;
+/** Clamp a caller-supplied `limit` into `[1, LIST_MAX_LIMIT]`, defaulting when absent. */
+const clampLimit = (v: unknown): number =>
+  Math.max(1, Math.min(v != null ? num(v) : LIST_DEFAULT_LIMIT, LIST_MAX_LIMIT));
+
+/** A bounded, single-line description hint — never the full (often huge) blob. */
+const snippet = (d: unknown, n = 160): string | undefined => {
+  if (typeof d !== 'string' || !d) return undefined;
+  const one = d.replace(/\s+/g, ' ').trim();
+  return one.length > n ? `${one.slice(0, n)}…` : one;
+};
+
+/**
+ * Project a full task row to the fields an orchestrator actually needs to plan
+ * and route work. Drops the heavy/rarely-needed columns (full description,
+ * git branch/PR, review + business-value metadata, timestamps) — fetch those
+ * per-task with `tasks.get`.
+ */
+const TASK_LIST_FIELDS = [
+  'id', 'projectId', 'key', 'title', 'status', 'priority', 'taskType',
+  'parentTaskId', 'assignedUserId', 'assignedAgentRef', 'assignedAgentHostId',
+  'storyPoints', 'dueDate', 'archived',
+] as const;
+function compactTask(plain: Record<string, unknown>): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const f of TASK_LIST_FIELDS) if (plain[f] !== undefined) out[f] = plain[f];
+  const s = snippet(plain.description);
+  if (s) out.descriptionSnippet = s;
+  return out;
+}
+
+/** Project a full project row to the identity + status fields a planner needs. */
+const PROJECT_LIST_FIELDS = ['id', 'key', 'name', 'status', 'modality', 'template'] as const;
+function compactProject(plain: Record<string, unknown>): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const f of PROJECT_LIST_FIELDS) if (plain[f] !== undefined) out[f] = plain[f];
+  const s = snippet(plain.description);
+  if (s) out.descriptionSnippet = s;
+  return out;
+}
+
+/** Wrap a projected page in the standard `{ items, total, returned, truncated }`
+ *  envelope so the model can see there's more and re-query with a tighter filter. */
+function listEnvelope<T>(key: string, all: T[], limit: number): Record<string, unknown> {
+  const page = all.slice(0, limit);
+  return { [key]: page, total: all.length, returned: page.length, truncated: all.length > page.length };
+}
+
+// ---------------------------------------------------------------------------
 // Catalog
 // ---------------------------------------------------------------------------
 
 const CATALOG: BuiltinTool[] = [
   // ---- Projects ----
-  { tool: 'projects.list', mutates: false, description: 'List all projects in the workspace.', parameters: obj({}), run: (ctx) => ctx.projects.listProjects(ctx.tenantId).then((ps) => ps.map((p) => p.toPlain())) },
+  {
+    tool: 'projects.list', mutates: false,
+    description: 'List projects (compact: id/key/name/status/modality + a short description snippet), capped by limit (default 50, max 200). Use projects.get for one project\'s full detail.',
+    parameters: obj({ limit: N }),
+    run: async (ctx, a) => {
+      const rows = (await ctx.projects.listProjects(ctx.tenantId)).map((p) => compactProject(p.toPlain() as unknown as Record<string, unknown>));
+      return listEnvelope('projects', rows, clampLimit(a.limit));
+    },
+  },
   { tool: 'projects.get', mutates: false, description: 'Get one project by id.', parameters: obj({ id: N }, ['id']), run: (ctx, a) => ctx.projects.getProject(num(a.id), ctx.tenantId).then((p) => p.toPlain()) },
   {
     tool: 'projects.create', mutates: true,
@@ -226,7 +296,18 @@ const CATALOG: BuiltinTool[] = [
   },
 
   // ---- Tasks ----
-  { tool: 'tasks.list', mutates: false, description: 'List tasks, optionally filtered by project.', parameters: obj({ projectId: N }), run: (ctx, a) => ctx.tasks.listTasks(ctx.tenantId, a.projectId != null ? num(a.projectId) : undefined).then((ts) => ts.map((t) => t.toPlain())) },
+  {
+    tool: 'tasks.list', mutates: false,
+    description: 'List tasks as a COMPACT projection (id/key/title/status/priority/type/parent/assignee/points/dueDate + a short description snippet). Filter by projectId and/or status; capped by limit (default 50, max 200). The result is { tasks, total, returned, truncated } — when truncated, narrow with projectId/status/limit. Use tasks.get for one task\'s full description and detail.',
+    parameters: obj({ projectId: N, status: S, limit: N }),
+    run: async (ctx, a) => {
+      const all = await ctx.tasks.listTasks(ctx.tenantId, a.projectId != null ? num(a.projectId) : undefined);
+      const status = a.status != null ? str(a.status) : undefined;
+      let rows = all.map((t) => t.toPlain() as unknown as Record<string, unknown>);
+      if (status) rows = rows.filter((r) => r.status === status);
+      return listEnvelope('tasks', rows.map(compactTask), clampLimit(a.limit));
+    },
+  },
   { tool: 'tasks.get', mutates: false, description: 'Get a task by id.', parameters: obj({ id: N }, ['id']), run: async (ctx, a) => (await getTenantTask(ctx, num(a.id))).toPlain() },
   {
     tool: 'tasks.create', mutates: true,

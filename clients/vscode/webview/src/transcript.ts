@@ -9,7 +9,12 @@
  */
 
 import { buildTimeline, formatPayload, formatDuration } from '@seanhogg/builderforce-brain-ui';
-import { isEvermindModel, modelsUsedInTrace } from '@seanhogg/builderforce-brain-embedded';
+import {
+  isEvermindModel,
+  modelsUsedInTrace,
+  computeBrainDiagnostics,
+  formatBrainDiagnostics,
+} from '@seanhogg/builderforce-brain-embedded';
 import type { BrainMessage, BrainTraceEvent } from '@seanhogg/builderforce-brain-embedded';
 
 export interface TranscriptInput {
@@ -57,6 +62,13 @@ export function buildTranscript(input: TranscriptInput): string {
   const evermind = used.filter(isEvermindModel);
   if (evermind.length) lines.push(`Evermind: yes — ${evermind.join(', ')}`);
   lines.push('');
+
+  // Diagnostics block — the A-vs-B verdict (context exhaustion vs model
+  // degradation) plus the token/tool-payload/downgrade numbers behind it. Same
+  // shared builder the web triage report uses, so both copy surfaces agree.
+  if (input.trace.length) {
+    lines.push(...formatBrainDiagnostics(computeBrainDiagnostics(input.trace, input.model)), '');
+  }
 
   for (const node of nodes) {
     switch (node.kind) {

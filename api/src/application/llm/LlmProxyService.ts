@@ -782,6 +782,7 @@ export class LlmProxyService {
     requestHeaders?: Record<string, string>,
     traceId?: string,
     signal?: AbortSignal,
+    opts?: { estimatedTokens?: number },
   ): Promise<ProxyResult> {
     const startedAt = Date.now();
     const tid = traceId ?? newTraceId();
@@ -820,12 +821,20 @@ export class LlmProxyService {
         })
       : reorderedPool;
 
+    // 1c) Context-fit first pass: when the caller estimates how many tokens the
+    //     turn will send, drop pool models whose catalog window can't hold it, so
+    //     a small-window model isn't SEEDED into a context it would 413 on (the
+    //     97K-into-32K bug — the exact "Brain dies after several executions"
+    //     failover). Never empties the pool (see modelsFittingContext); oversized
+    //     requests still fall through to the normal cascade + 413 failover.
+    const fittedPool = modelsFittingContext(routedPool, opts?.estimatedTokens);
+
     // 2) Caller hint goes at the head; rest of the pool follows.
     //    `callerModel` was extracted at the top of this function for the
     //    strict-pin branch; reuse it here for the chained path.
     const seed: readonly string[] = (typeof callerModel === 'string' && callerModel.length > 0)
-      ? [callerModel, ...routedPool.filter((m) => m !== callerModel)]
-      : routedPool;
+      ? [callerModel, ...fittedPool.filter((m) => m !== callerModel)]
+      : fittedPool;
 
     // 3) Pre-fetch cooldown state for the leading seed slice + premium fallback
     //    (KV-backed when bound, in-memory fallback otherwise). The seed is

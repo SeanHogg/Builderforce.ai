@@ -33,6 +33,7 @@ class ArchiveAwareTaskRepo implements ITaskRepository {
   }
   async findChildren(): Promise<Task[]> { return []; }
   async maxKeySeqByProject(): Promise<number> { return 0; }
+  async rekeyProject(): Promise<number> { return 0; }
   async save(t: Task): Promise<Task> { return t; }
   async update(t: Task): Promise<Task> { return t; }
   async delete(): Promise<void> {}

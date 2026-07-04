@@ -16,6 +16,7 @@ import {
   modelPoolForPlan,
   codingModelsForPlan,
   resolveStrictPin,
+  estimateRequestTokens,
   FREE_MODEL_POOL,
   PRO_MODEL_POOL,
   type ChatCompletionRequest,
@@ -1278,7 +1279,14 @@ export function createLlmRoutes(): Hono<HonoEnv> {
     // key — and isn't metered as overflow. Null for everyone else (unchanged).
     const anthropicOAuthToken = await resolveAnthropicOAuthToken(c.env, access.tenantId);
     const service = llmProxyForPlan(c.env, access.effectivePlan, access.premiumOverride, { disablePaidOverflow, ...(anthropicOAuthToken ? { anthropicOAuthToken } : {}) });
-    const result = await service.complete(body, undefined, traceId);
+    // Context-fit seeding: estimate the turn's tokens so the proxy drops
+    // small-window models from the first-pass seed. This is the preventive half
+    // of the Brain "dies after several executions" fix — the reactive 413
+    // failover still backstops, but a long transcript no longer gets SEEDED onto
+    // a model it would immediately overflow (and the client now also bounds what
+    // it sends; see brainRunStore windowing + tool-result trimming).
+    const estimatedTokens = estimateRequestTokens(body.messages, (body as { tools?: unknown }).tools);
+    const result = await service.complete(body, undefined, traceId, undefined, { estimatedTokens });
 
     // Clone upstream headers we care about
     const upstreamHeaders = new Headers();

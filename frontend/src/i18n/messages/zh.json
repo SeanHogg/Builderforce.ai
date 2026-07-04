@@ -1687,7 +1687,8 @@
   },
   "projectDetails": {
     "tabs": {
-      "details": "项目详情",
+      "analytics": "分析",
+      "details": "详情",
       "integrations": "集成",
       "taskMgmt": "任务管理",
       "prds": "PRD",
@@ -4793,7 +4794,28 @@
       "currency": "货币",
       "location": "所在地",
       "visibility": "可见性",
-      "publish": "在市场中展示我"
+      "publish": "在市场中展示我",
+      "name": "姓名",
+      "namePlaceholder": "Jane Smith",
+      "alias": "公开别名",
+      "aliasPlaceholder": "jane-smith",
+      "aliasHint": "在你的公开资料链接中代替冗长的 ID。",
+      "aliasInvalid": "请使用 3–40 个小写字母、数字或连字符。",
+      "aliasAvailable": "可用",
+      "aliasTaken": "该别名已被占用。",
+      "aliasTry": "试试：",
+      "avatarUpload": "上传照片",
+      "avatarChange": "更换照片",
+      "uploading": "上传中…",
+      "preview": "预览",
+      "previewTitle": "资料预览",
+      "publicUrl": "公开链接",
+      "copyLink": "复制",
+      "copied": "已复制！",
+      "fillFromResume": "从简历填充",
+      "filling": "读取中…",
+      "autofilled": "已根据你的简历填充——请检查并保存。",
+      "autofillUnavailable": "上传文本简历或连接 hired.video 以自动填充。"
     },
     "resume": {
       "title": "简历",
@@ -4804,7 +4826,10 @@
       "viewerTitle": "简历查看器",
       "viewerPending": "您的简历正在由 hired.video 处理。",
       "viewerNotConnected": "连接 hired.video 以显示嵌入式简历。",
-      "claimHiredVideo": "认领您的 hired.video 账户"
+      "claimHiredVideo": "认领您的 hired.video 账户",
+      "connectExisting": "连接现有的 hired.video 账户",
+      "connecting": "连接中…",
+      "connectUnavailable": "hired.video 当前不可用。"
     },
     "gigs": {
       "title": "寻找工作",
@@ -5010,7 +5035,8 @@
       "sortRateAsc": "费率：从低到高",
       "sortRateDesc": "费率：从高到低",
       "pageOf": "第 {page} 页，共 {pages} 页"
-    }
+    },
+    "editProfile": "编辑资料"
   },
   "hires": {
     "title": "雇员",

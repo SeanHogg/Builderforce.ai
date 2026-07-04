@@ -33,6 +33,21 @@ export interface BrainTraceEvent {
   result?: unknown;
   /** True when this step represents a failure (thrown, or `{ ok: false }`). */
   isError?: boolean;
+  // --- Diagnostics (optional, populated by the loop for A-vs-B triage) ---
+  /** `llm` steps: token usage the gateway reported for this completion. */
+  usage?: { prompt?: number; completion?: number; total?: number };
+  /** `llm` steps: OpenAI finish_reason (`stop` | `length` | `tool_calls` | …). */
+  finishReason?: string | null;
+  /** `llm` steps: length of the assistant text this turn produced. */
+  textChars?: number;
+  /**
+   * `tool` steps: byte length of the FULL result the tool returned, before any
+   * transcript trimming — so a diagnostics reader sees which tool flooded the
+   * context even though the model only ever saw a truncated copy.
+   */
+  resultBytes?: number;
+  /** `tool` steps: true when the result sent to the model was truncated. */
+  truncated?: boolean;
 }
 
 /**
@@ -97,6 +112,180 @@ export function modelsUsedInTrace(events: BrainTraceEvent[]): string[] {
   return seen;
 }
 
+/**
+ * Structured run diagnostics derived from the trace — the numbers a reader needs
+ * to tell WHY a Brain run died, without eyeballing a wall of JSON.
+ *
+ * The two failure modes we discriminate:
+ *  - **context-exhaustion** (case A): prompt tokens climb turn over turn (big
+ *    tool dumps in the transcript), the gateway fails over to a smaller-window
+ *    model, and a turn ends on `finish_reason: length` or empty. The context
+ *    starved the model.
+ *  - **model-degradation** (case B): a tenant Evermind/SSM model answered and a
+ *    turn came back empty/failed while token counts stayed LOW — the model
+ *    itself produced nothing, not the context.
+ */
+export interface BrainDiagnostics {
+  turns: number;
+  toolCalls: number;
+  errors: number;
+  loopExhausted: boolean;
+  /** True when at least one llm step reported token usage. */
+  tokensMeasured: boolean;
+  /** Largest prompt-token count seen on any single turn. */
+  promptTokenPeak: number;
+  /** Sum of completion tokens across turns. */
+  completionTokenTotal: number;
+  /** Prompt tokens on the LAST turn (the one nearest any overflow). */
+  lastPromptTokens: number;
+  /** Total bytes of tool results returned this run (pre-trim). */
+  toolResultBytes: number;
+  /** Count of tool results that were truncated before hitting the model. */
+  truncatedToolResults: number;
+  /** The single largest tool result (label + pre-trim bytes). */
+  largestToolResult: { label: string; bytes: number } | null;
+  /** Distinct models that actually answered, first-seen order. */
+  modelsUsed: string[];
+  /** Distinct Evermind/SSM artifacts among them. */
+  evermindUsed: string[];
+  /** Turns where the resolved model differed from what was requested. */
+  downgradeEvents: number;
+  /** Turns that ended on `length` or produced empty text. */
+  emptyOrLengthFinishes: number;
+  /** Best-effort verdict — the header a triager reads first. */
+  likelyCause: 'context-exhaustion' | 'model-degradation' | 'inconclusive';
+}
+
+/** Byte length of a JSON-serialized value (UTF-16 length is a fine proxy here). */
+function byteLen(v: unknown): number {
+  const s = typeof v === 'string' ? v : JSON.stringify(v ?? '');
+  return s.length;
+}
+
+/**
+ * Derive {@link BrainDiagnostics} from a recorded trace. Pure — no clock, no I/O
+ * — so both the web report and the VS Code transcript compute the identical
+ * block from the same events (single source of truth for A-vs-B triage).
+ */
+export function computeBrainDiagnostics(events: BrainTraceEvent[], requestedModel?: string): BrainDiagnostics {
+  const llm = events.filter((e) => e.category === 'llm');
+  const toolEvents = events.filter((e) => e.category === 'tool');
+  const errors = events.filter((e) => e.isError || e.category === 'error');
+  const loopExhausted = events.some((e) => e.label === 'agent.loop' && e.isError);
+
+  let promptTokenPeak = 0;
+  let completionTokenTotal = 0;
+  let lastPromptTokens = 0;
+  let tokensMeasured = false;
+  let emptyOrLengthFinishes = 0;
+  let downgradeEvents = 0;
+  const req = (requestedModel && requestedModel !== 'default') ? requestedModel : undefined;
+
+  for (const ev of llm) {
+    const u = ev.usage;
+    if (u) {
+      tokensMeasured = true;
+      if (typeof u.prompt === 'number') {
+        promptTokenPeak = Math.max(promptTokenPeak, u.prompt);
+        lastPromptTokens = u.prompt;
+      }
+      if (typeof u.completion === 'number') completionTokenTotal += u.completion;
+    }
+    const finish = ev.finishReason ?? null;
+    const emptyText = typeof ev.textChars === 'number' && ev.textChars === 0;
+    // A "no-op" turn (empty text but tool calls requested) is normal; only count
+    // a turn as degenerate when it ended on `length` (truncated) or produced
+    // nothing AND asked for no tools.
+    const toolCallsThisTurn = (ev.args as { toolCalls?: unknown } | undefined)?.toolCalls;
+    const askedNoTools = typeof toolCallsThisTurn === 'number' ? toolCallsThisTurn === 0 : true;
+    if (finish === 'length' || (emptyText && askedNoTools)) emptyOrLengthFinishes += 1;
+    const resolved = (ev.args as { model?: unknown } | undefined)?.model;
+    if (req && typeof resolved === 'string' && resolved && resolved !== 'default' && resolved !== req) downgradeEvents += 1;
+  }
+
+  let toolResultBytes = 0;
+  let truncatedToolResults = 0;
+  let largestToolResult: { label: string; bytes: number } | null = null;
+  for (const ev of toolEvents) {
+    const bytes = typeof ev.resultBytes === 'number' ? ev.resultBytes : byteLen(ev.result);
+    toolResultBytes += bytes;
+    if (ev.truncated) truncatedToolResults += 1;
+    if (!largestToolResult || bytes > largestToolResult.bytes) largestToolResult = { label: ev.label, bytes };
+  }
+
+  const modelsUsed = modelsUsedInTrace(events);
+  const evermindUsed = modelsUsed.filter(isEvermindModel);
+
+  // Verdict. Context-exhaustion signals: big prompt tokens, truncated tool
+  // results, or a model downgrade/length-finish. Degradation signals: an
+  // Evermind model answered, tokens stayed low, and a turn was empty/failed.
+  const contextSignal =
+    promptTokenPeak >= 24_000 || truncatedToolResults > 0 || downgradeEvents > 0 ||
+    (largestToolResult != null && largestToolResult.bytes >= 20_000);
+  const degradationSignal =
+    evermindUsed.length > 0 && emptyOrLengthFinishes > 0 &&
+    (!tokensMeasured || promptTokenPeak < 24_000) && truncatedToolResults === 0;
+  const likelyCause: BrainDiagnostics['likelyCause'] =
+    contextSignal && !degradationSignal ? 'context-exhaustion'
+      : degradationSignal && !contextSignal ? 'model-degradation'
+        : 'inconclusive';
+
+  return {
+    turns: llm.length,
+    toolCalls: toolEvents.length,
+    errors: errors.length,
+    loopExhausted,
+    tokensMeasured,
+    promptTokenPeak,
+    completionTokenTotal,
+    lastPromptTokens,
+    toolResultBytes,
+    truncatedToolResults,
+    largestToolResult,
+    modelsUsed,
+    evermindUsed,
+    downgradeEvents,
+    emptyOrLengthFinishes,
+    likelyCause,
+  };
+}
+
+/** Human-readable KB. */
+function kb(bytes: number): string {
+  return bytes < 1024 ? `${bytes} B` : `${(bytes / 1024).toFixed(1)} KB`;
+}
+
+/**
+ * Render {@link BrainDiagnostics} as transcript lines. Shared by both copy
+ * surfaces so the "Diagnostics" block is identical on web and in VS Code. Emits
+ * a leading `--- Diagnostics ---` header and returns the lines (caller joins).
+ */
+export function formatBrainDiagnostics(d: BrainDiagnostics): string[] {
+  const verdict =
+    d.likelyCause === 'context-exhaustion'
+      ? 'Likely CONTEXT EXHAUSTION (case A) — the transcript outgrew the model window.'
+      : d.likelyCause === 'model-degradation'
+        ? 'Likely MODEL DEGRADATION (case B) — an Evermind/SSM turn returned empty while tokens stayed low.'
+        : 'Inconclusive — not enough signal to separate context exhaustion from model degradation.';
+
+  const lines: string[] = ['--- Diagnostics ---', `Likely cause: ${verdict}`];
+  lines.push(`Turns: ${d.turns} · Tool calls: ${d.toolCalls} · Errors: ${d.errors}${d.loopExhausted ? ' · LOOP EXHAUSTED' : ''}`);
+  if (d.tokensMeasured) {
+    lines.push(
+      `Tokens: prompt peak ${d.promptTokenPeak.toLocaleString()} · last-turn prompt ${d.lastPromptTokens.toLocaleString()} · completion total ${d.completionTokenTotal.toLocaleString()}`,
+    );
+  } else {
+    lines.push('Tokens: not reported by the gateway for this run.');
+  }
+  lines.push(
+    `Tool results: ${kb(d.toolResultBytes)} total${d.largestToolResult ? ` · largest ${d.largestToolResult.label} (${kb(d.largestToolResult.bytes)})` : ''}${d.truncatedToolResults ? ` · ${d.truncatedToolResults} truncated before the model saw them` : ''}`,
+  );
+  if (d.downgradeEvents > 0) lines.push(`Model downgrades: ${d.downgradeEvents} turn(s) answered by a different model than requested (gateway failover).`);
+  if (d.emptyOrLengthFinishes > 0) lines.push(`Degenerate turns: ${d.emptyOrLengthFinishes} ended on \`length\` or returned empty text.`);
+  if (d.evermindUsed.length) lines.push(`Evermind/SSM answered: ${d.evermindUsed.join(', ')}`);
+  return lines;
+}
+
 export interface BuildBrainTriageOptions {
   /** ISO capture time (caller supplies it so the module stays clock-free). */
   capturedAt: string;
@@ -139,6 +328,10 @@ export function buildBrainTriageReport(opts: BuildBrainTriageOptions): string {
   if (evermind.length) lines.push(`Evermind: yes — ${evermind.join(', ')}`);
   lines.push(`Steps: ${events.length} · Errors: ${errors.length} · Messages: ${messages.length}`);
   if (error) lines.push(`Last error: ${error}`);
+
+  // Diagnostics block — the A-vs-B verdict + the token/tool-payload/downgrade
+  // numbers behind it. Same builder the VS Code transcript uses.
+  lines.push('', ...formatBrainDiagnostics(computeBrainDiagnostics(events, configuredModel)));
 
   if (errors.length) {
     lines.push('', `--- Errors (${errors.length}) ---`);

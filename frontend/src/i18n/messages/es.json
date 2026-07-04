@@ -1687,7 +1687,8 @@
   },
   "projectDetails": {
     "tabs": {
-      "details": "Detalles del proyecto",
+      "analytics": "Analítica",
+      "details": "Detalles",
       "integrations": "Integraciones",
       "taskMgmt": "Gestión de tareas",
       "prds": "PRD",
@@ -4793,7 +4794,28 @@
       "currency": "Moneda",
       "location": "Ubicación",
       "visibility": "Visibilidad",
-      "publish": "Listarme en el mercado"
+      "publish": "Listarme en el mercado",
+      "name": "Nombre",
+      "namePlaceholder": "Jane Smith",
+      "alias": "Alias público",
+      "aliasPlaceholder": "jane-smith",
+      "aliasHint": "Se usa en el enlace de tu perfil público en lugar de un ID largo.",
+      "aliasInvalid": "Usa de 3 a 40 letras minúsculas, números o guiones.",
+      "aliasAvailable": "Disponible",
+      "aliasTaken": "Ese alias ya está en uso.",
+      "aliasTry": "Prueba:",
+      "avatarUpload": "Subir foto",
+      "avatarChange": "Cambiar foto",
+      "uploading": "Subiendo…",
+      "preview": "Vista previa",
+      "previewTitle": "Vista previa del perfil",
+      "publicUrl": "Enlace público",
+      "copyLink": "Copiar",
+      "copied": "¡Copiado!",
+      "fillFromResume": "Rellenar desde el CV",
+      "filling": "Leyendo…",
+      "autofilled": "Rellenado desde tu CV: revisa y guarda.",
+      "autofillUnavailable": "Sube un CV de texto o conecta hired.video para autocompletar."
     },
     "resume": {
       "title": "Currículum",
@@ -4804,7 +4826,10 @@
       "viewerTitle": "Visor de currículum",
       "viewerPending": "Tu currículum está siendo procesado por hired.video.",
       "viewerNotConnected": "Conecta hired.video para mostrar tu currículum integrado.",
-      "claimHiredVideo": "Reclama tu cuenta de hired.video"
+      "claimHiredVideo": "Reclama tu cuenta de hired.video",
+      "connectExisting": "Conectar cuenta existente de hired.video",
+      "connecting": "Conectando…",
+      "connectUnavailable": "hired.video no está disponible ahora."
     },
     "gigs": {
       "title": "Buscar trabajo",
@@ -5010,7 +5035,8 @@
       "sortRateAsc": "Tarifa: menor a mayor",
       "sortRateDesc": "Tarifa: mayor a menor",
       "pageOf": "Página {page} de {pages}"
-    }
+    },
+    "editProfile": "Editar perfil"
   },
   "hires": {
     "title": "Contrataciones",

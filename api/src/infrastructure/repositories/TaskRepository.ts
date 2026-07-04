@@ -63,6 +63,22 @@ export class TaskRepository implements ITaskRepository {
     return Number(row?.value ?? 0);
   }
 
+  async rekeyProject(projectId: ProjectId, newProjectKey: string): Promise<number> {
+    // Rebuild each key as `${newProjectKey}-${suffix}`, keeping the existing
+    // zero-padded numeric suffix intact (regexp strips everything up to the last
+    // '-', matching maxKeySeqByProject). Only rows with a purely-numeric suffix
+    // are touched so legacy/odd keys are preserved. `newProjectKey` is globally
+    // unique (enforced in updateProject), so no re-keyed row can collide with an
+    // existing key — the whole project moves prefix in one statement.
+    const isNumericSuffix = sql`regexp_replace(${tasksTable.key}, '^.*-', '') ~ '^[0-9]+$'`;
+    const rekeyed = await this.db
+      .update(tasksTable)
+      .set({ key: sql`${newProjectKey} || '-' || regexp_replace(${tasksTable.key}, '^.*-', '')` })
+      .where(and(eq(tasksTable.projectId, projectId), isNumericSuffix))
+      .returning({ id: tasksTable.id });
+    return rekeyed.length;
+  }
+
   async save(task: Task): Promise<Task> {
     const plain = task.toPlain();
     const [inserted] = await this.db

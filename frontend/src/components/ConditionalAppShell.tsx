@@ -79,6 +79,7 @@ function FooterOnlyShell({ children }: { children: React.ReactNode }) {
 function useShellContent(children: React.ReactNode): React.ReactNode {
   const pathname = usePathname() || '';
   const { isAuthenticated } = useAuth();
+  const isFreelancer = useIsFreelancer();
 
   const kind = classifyShell(pathname);
   if (kind === 'none') return <>{children}</>;
@@ -114,6 +115,13 @@ function useShellContent(children: React.ReactNode): React.ReactNode {
         <RouteMarketing pathname={pathname} />
       </MarketingShell>
     );
+  }
+  // A freelancer/gig account may not view builder app routes. Render the shell WITHOUT
+  // the page so the disallowed page never mounts (and never fires its tenant-scoped
+  // fetches, which 401 for a tenantless account) — FreelancerRouteGuard redirects to
+  // /freelancer/profile on the next tick.
+  if (isFreelancer && !isFreelancerAllowedPath(pathname)) {
+    return <AppShell>{null}</AppShell>;
   }
   return (
     <OnboardingGate renderShell={(gated) => <AppShell>{gated}</AppShell>}>

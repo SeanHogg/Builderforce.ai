@@ -184,7 +184,7 @@ export const FREELANCER_NAV_GROUPS: NavGroup[] = [
   { id: 'freelancer-timecard', labelKey: 'group.timecard', icon: '⏱', href: '/freelancer/timecard', match: ['/freelancer/timecard'] },
   {
     id: 'settings', labelKey: 'group.settings', icon: '⚙', href: '/security',
-    match: ['/settings', '/security'],
+    match: ['/security'],
     tabKind: 'route',
     tabs: [
       { id: '/security', labelKey: 'tab.security', icon: '🔒' },
@@ -194,8 +194,11 @@ export const FREELANCER_NAV_GROUPS: NavGroup[] = [
 
 /** Route prefixes a freelancer account is allowed to reach in the app shell. Used
  *  by both the nav (which groups to show) and the route guard (redirect away from
- *  anything else). Public/marketing routes are handled separately by the shell. */
-export const FREELANCER_ALLOWED_PREFIXES = ['/freelancer', '/security', '/settings'];
+ *  anything else). Public/marketing routes are handled separately by the shell.
+ *  NOTE: `/settings/*` is deliberately EXCLUDED — those pages (integrations, tenant,
+ *  billing, API keys) are tenant/builder features that 401 for a tenantless gig
+ *  account; a freelancer's account controls live under `/security`. */
+export const FREELANCER_ALLOWED_PREFIXES = ['/freelancer', '/security'];
 
 /** The nav destinations for the current account type — the ONE place the
  *  freelancer-vs-builder nav split is decided, so the Sidebar + SectionTabs and

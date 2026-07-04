@@ -132,9 +132,21 @@ export function request<T = unknown>(type: string, payload?: Record<string, unkn
 }
 
 /** Resolve once the host has sent the initial config (token, baseUrl, tools…). */
-export function onInit(cb: (d: InitData) => void): void {
+/**
+ * Subscribe to the host's init frame. The host re-posts `init` on every project /
+ * model / auth change (BrainWebview.refresh → sendInit), so this stays SUBSCRIBED
+ * (it does not fire-once) — otherwise the running panel would keep the stale
+ * project after a sidebar project switch, and the header + chat dropdown would
+ * scope to the wrong project. Delivers the current frame immediately if one has
+ * already arrived. Returns an unsubscribe.
+ */
+export function onInit(cb: (d: InitData) => void): () => void {
+  initWaiters.push(cb);
   if (initData) cb(initData);
-  else initWaiters.push(cb);
+  return () => {
+    const i = initWaiters.indexOf(cb);
+    if (i >= 0) initWaiters.splice(i, 1);
+  };
 }
 
 /** Subscribe to host-driven intents (open new chat / focus a chat / seed a task). */
@@ -177,7 +189,9 @@ window.addEventListener('message', (e: MessageEvent) => {
     token = m.token ?? null;
     initData = m as InitData;
     editorContext = initData.editorContext;
-    for (const w of initWaiters.splice(0)) w(initData);
+    // Notify without draining — the host re-posts `init` on project/model/auth
+    // changes, and subscribers (App's setInit) must keep receiving those updates.
+    for (const w of initWaiters.slice()) w(initData);
     for (const w of tokenWaiters) w();
     return;
   }

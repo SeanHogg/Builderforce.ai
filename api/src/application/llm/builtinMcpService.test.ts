@@ -104,7 +104,9 @@ describe('callBuiltinTool', () => {
     projectSvc.listProjects.mockResolvedValue([{ toPlain: () => ({ id: 1, name: 'P' }) }]);
     const res = await callBuiltinTool(db, { tenantId: TENANT, tool: 'projects.list', arguments: {} });
     expect(projectSvc.listProjects).toHaveBeenCalledWith(TENANT);
-    expect(res).toEqual([{ id: 1, name: 'P' }]);
+    // projects.list returns a compact projection inside a paging envelope so the
+    // Brain's context stays bounded (see LIST_DEFAULT_LIMIT / listEnvelope).
+    expect(res).toEqual({ projects: [{ id: 1, name: 'P' }], total: 1, returned: 1, truncated: false });
   });
 
   it('mints a key + tenant on create', async () => {

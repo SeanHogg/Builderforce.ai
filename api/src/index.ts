@@ -216,7 +216,7 @@ export function buildApp(env: Env): Hono<HonoEnv> {
   const paymentProvider = buildPaymentProvider(env);
 
   // --- Application ---
-  const projectService  = new ProjectService(projectRepo);
+  const projectService  = new ProjectService(projectRepo, taskRepo);
   const taskService     = new TaskService(taskRepo, projectRepo, undefined,
     (projectId) => recommendTopAssignee(env, db, projectId));
   const tenantService   = new TenantService(tenantRepo, paymentProvider);

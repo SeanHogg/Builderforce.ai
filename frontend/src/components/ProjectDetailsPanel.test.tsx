@@ -55,9 +55,13 @@ describe('ProjectDetailsPanel', () => {
       />
     );
 
-    // click edit icon in overview card. The panel is localized via next-intl;
-    // the test mock makes `t('key')` a passthrough returning `projectDetails.<key>`,
-    // so we query by those keys rather than translated English copy.
+    // The overview card lives on the Details tab (the panel opens on Analytics),
+    // so switch to it first. The panel is localized via next-intl; the test mock
+    // makes `t('key')` a passthrough returning `projectDetails.<key>`, so we query
+    // by those keys rather than translated English copy.
+    fireEvent.click(getByText('projectDetails.tabs.details'));
+
+    // click edit icon in overview card.
     const editBtn = getByLabelText('projectDetails.editAria');
     fireEvent.click(editBtn);
 

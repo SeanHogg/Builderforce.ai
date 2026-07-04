@@ -180,8 +180,9 @@ export function App() {
   const [, force] = useState(0);
 
   useEffect(() => {
-    onInit(setInit);
-    return onTokenChange(() => force((n) => n + 1));
+    const offInit = onInit(setInit);
+    const offToken = onTokenChange(() => force((n) => n + 1));
+    return () => { offInit(); offToken(); };
   }, []);
 
   if (!init) {
@@ -309,12 +310,33 @@ function Chat({ init }: { init: InitData }) {
   const speechSupported = typeof window !== 'undefined'
     && ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window);
 
+  // Scope the conversation dropdown to the sidebar's active project so its list
+  // MATCHES the Sessions tree (which filters by project). With no project selected
+  // both show every chat. Server-side filter via ?projectId (same rows the sidebar
+  // filters client-side). Re-runs when the project switches (init.project?.id dep).
   const reloadChats = useCallback(() => {
-    persistence.listChats({ limit: 50 })
+    const projectId = init.project?.id != null ? String(init.project.id) : undefined;
+    persistence.listChats({ limit: 50, projectId })
       .then((list) => { setChats(list); post('chats.changed'); })
       .catch(() => {});
-  }, [persistence]);
+  }, [persistence, init.project?.id]);
   useEffect(() => { reloadChats(); }, [reloadChats]);
+
+  // The open chat may not be in the project-filtered list — e.g. it belongs to
+  // another project, or was just created for a task scoped elsewhere. Fetch it so
+  // the dropdown still shows + keeps it selected instead of going blank.
+  const [orphanChat, setOrphanChat] = useState<BrainChat | null>(null);
+  useEffect(() => {
+    if (chatId == null || chats.some((c) => c.id === chatId)) { setOrphanChat(null); return; }
+    let cancelled = false;
+    persistence.getChat(chatId).then((c) => { if (!cancelled) setOrphanChat(c); }).catch(() => {});
+    return () => { cancelled = true; };
+  }, [chatId, chats, persistence]);
+  // The dropdown's rows: the project-scoped list, plus the open cross-project chat.
+  const chatOptions = useMemo(
+    () => (orphanChat && orphanChat.id === chatId ? [orphanChat, ...chats] : chats),
+    [orphanChat, chatId, chats],
+  );
 
   const needsConfirm = useCallback(
     (req: { name: string; args: unknown }) => !autoApproveRef.current && isMutating(req.name, req.args),
@@ -526,7 +548,7 @@ function Chat({ init }: { init: InitData }) {
   // else (for a not-yet-created chat) the sidebar's active project it will be
   // scoped to on first send. Names resolve from the host's `projectId → name`
   // map, falling back to the active project's name.
-  const activeChat = useMemo(() => chats.find((c) => c.id === chatId) ?? null, [chats, chatId]);
+  const activeChat = useMemo(() => chatOptions.find((c) => c.id === chatId) ?? null, [chatOptions, chatId]);
   const associatedProjectId = activeChat ? activeChat.projectId : (init.project?.id ?? null);
   const associatedProject = useMemo<{ id: number; name: string } | null>(() => {
     if (associatedProjectId == null) return null;
@@ -668,7 +690,7 @@ function Chat({ init }: { init: InitData }) {
             aria-label={t('app.conversation', 'Conversation')}
           >
             <option value="">{t('app.newChat', 'New chat')}</option>
-            {chats.map((c) => (
+            {chatOptions.map((c) => (
               <option key={c.id} value={c.id}>{c.title || `Chat ${c.id}`}</option>
             ))}
           </select>

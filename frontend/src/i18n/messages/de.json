@@ -1687,7 +1687,8 @@
   },
   "projectDetails": {
     "tabs": {
-      "details": "Projektdetails",
+      "analytics": "Analytik",
+      "details": "Details",
       "integrations": "Integrationen",
       "taskMgmt": "Aufgabenverwaltung",
       "prds": "PRDs",
@@ -4793,7 +4794,28 @@
       "currency": "Währung",
       "location": "Standort",
       "visibility": "Sichtbarkeit",
-      "publish": "Im Marktplatz auflisten"
+      "publish": "Im Marktplatz auflisten",
+      "name": "Name",
+      "namePlaceholder": "Jane Smith",
+      "alias": "Öffentlicher Alias",
+      "aliasPlaceholder": "jane-smith",
+      "aliasHint": "Wird im Link zu Ihrem öffentlichen Profil anstelle einer langen ID verwendet.",
+      "aliasInvalid": "Verwenden Sie 3–40 Kleinbuchstaben, Zahlen oder Bindestriche.",
+      "aliasAvailable": "Verfügbar",
+      "aliasTaken": "Dieser Alias ist vergeben.",
+      "aliasTry": "Versuchen Sie:",
+      "avatarUpload": "Foto hochladen",
+      "avatarChange": "Foto ändern",
+      "uploading": "Wird hochgeladen…",
+      "preview": "Vorschau",
+      "previewTitle": "Profilvorschau",
+      "publicUrl": "Öffentlicher Link",
+      "copyLink": "Kopieren",
+      "copied": "Kopiert!",
+      "fillFromResume": "Aus Lebenslauf ausfüllen",
+      "filling": "Wird gelesen…",
+      "autofilled": "Aus Ihrem Lebenslauf ausgefüllt – prüfen und speichern.",
+      "autofillUnavailable": "Laden Sie einen Text-Lebenslauf hoch oder verbinden Sie hired.video zum automatischen Ausfüllen."
     },
     "resume": {
       "title": "Lebenslauf",
@@ -4804,7 +4826,10 @@
       "viewerTitle": "Lebenslauf-Viewer",
       "viewerPending": "Ihr Lebenslauf wird von hired.video verarbeitet.",
       "viewerNotConnected": "Verbinden Sie hired.video, um Ihren eingebetteten Lebenslauf anzuzeigen.",
-      "claimHiredVideo": "Beanspruchen Sie Ihr hired.video-Konto"
+      "claimHiredVideo": "Beanspruchen Sie Ihr hired.video-Konto",
+      "connectExisting": "Bestehendes hired.video-Konto verbinden",
+      "connecting": "Wird verbunden…",
+      "connectUnavailable": "hired.video ist derzeit nicht verfügbar."
     },
     "gigs": {
       "title": "Arbeit finden",
@@ -5010,7 +5035,8 @@
       "sortRateAsc": "Satz: aufsteigend",
       "sortRateDesc": "Satz: absteigend",
       "pageOf": "Seite {page} von {pages}"
-    }
+    },
+    "editProfile": "Profil bearbeiten"
   },
   "hires": {
     "title": "Einstellungen",

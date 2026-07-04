@@ -39,6 +39,18 @@ class InMemoryTaskRepo implements ITaskRepository {
       .filter(n => Number.isFinite(n));
     return seqs.length ? Math.max(...seqs) : 0;
   }
+  async rekeyProject(projectId: ProjectId, newProjectKey: string): Promise<number> {
+    let n = 0;
+    for (const [id, t] of this.store) {
+      if ((t.projectId as number) !== (projectId as number)) continue;
+      const plain = t.toPlain();
+      const suffix = plain.key.split('-').pop() ?? '';
+      if (!/^[0-9]+$/.test(suffix)) continue;
+      this.store.set(id, Task.reconstitute({ ...plain, key: `${newProjectKey}-${suffix}` }));
+      n++;
+    }
+    return n;
+  }
   async save(task: Task): Promise<Task> { return this.put(task); }
   async update(task: Task): Promise<Task> { return this.put(task); }
   async delete(id: TaskId): Promise<void> { this.store.delete(id as number); }

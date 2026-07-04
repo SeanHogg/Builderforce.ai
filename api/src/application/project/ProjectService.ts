@@ -1,4 +1,5 @@
 import { IProjectRepository } from '../../domain/project/IProjectRepository';
+import { ITaskRepository } from '../../domain/task/ITaskRepository';
 import { Project } from '../../domain/project/Project';
 import { ProjectId, ProjectStatus, TenantId, asProjectId, asTenantId } from '../../domain/shared/types';
 import { NotFoundError, ConflictError, ForbiddenError } from '../../domain/shared/errors';
@@ -49,7 +50,15 @@ export interface UpdateProjectDto {
  * Contains no infrastructure concerns (SQL, HTTP, etc.).
  */
 export class ProjectService {
-  constructor(private readonly projects: IProjectRepository) {}
+  /**
+   * `tasks` is optional: it's only needed on the key-change path (re-keying every
+   * task to a renamed Project Key). Call sites that never change a project key
+   * (MCP project.update, delta ingestion) may omit it.
+   */
+  constructor(
+    private readonly projects: IProjectRepository,
+    private readonly tasks?: ITaskRepository,
+  ) {}
 
   async listProjects(tenantId: number): Promise<Project[]> {
     return this.projects.findByTenant(asTenantId(tenantId));
@@ -157,7 +166,23 @@ export class ProjectService {
       dueDate: dto.dueDate,
     });
 
-    return this.projects.update(updated);
+    // Detect a Project Key change from the DTO: the domain `update` treats an
+    // omitted key as "leave unchanged", so the intended new key can't be read
+    // back off the saved aggregate. Normalize exactly as the domain does.
+    const newKey = dto.key?.trim() ? dto.key.trim().toUpperCase() : null;
+    const keyChanged = newKey !== null && newKey !== project.key;
+
+    const saved = await this.projects.update(updated);
+
+    // When the Project Key changes, carry every existing task onto the new
+    // prefix (`<oldKey>-071` → `<newKey>-071`) so the whole project — existing
+    // and future tasks alike — shares one key. New tasks already mint off
+    // `project.key`, so this closes the gap for the ones created before the rename.
+    if (keyChanged && this.tasks) {
+      await this.tasks.rekeyProject(saved.id, newKey);
+    }
+
+    return saved;
   }
 
   async deleteProject(id: number, callerTenantId: number): Promise<void> {

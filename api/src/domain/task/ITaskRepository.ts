@@ -24,6 +24,16 @@ export interface ITaskRepository {
    * collide on the globally-unique `tasks.key`.
    */
   maxKeySeqByProject(projectId: ProjectId): Promise<number>;
+  /**
+   * Re-key every task in a project onto a new project-key prefix, preserving each
+   * task's numeric sequence suffix (`<oldKey>-071` → `<newProjectKey>-071`). Run
+   * when the Project Key changes so existing tasks adopt it alongside new ones.
+   * Only rows whose suffix is purely numeric are touched (mirrors
+   * {@link maxKeySeqByProject}); legacy/odd keys are left untouched. The new
+   * prefix is globally unique, so re-keyed rows never collide. Returns the count
+   * of rows re-keyed.
+   */
+  rekeyProject(projectId: ProjectId, newProjectKey: string): Promise<number>;
   save(task: Task): Promise<Task>;
   update(task: Task): Promise<Task>;
   delete(id: TaskId): Promise<void>;
