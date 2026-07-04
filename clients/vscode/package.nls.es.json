@@ -47,6 +47,7 @@
   "config.webUrl.desc": "URL base de la app web de BuilderForce (donde viven las páginas embebidas como el tablero). Déjala vacía para derivarla de `builderforce.baseUrl` (api.* → dominio raíz).",
   "config.defaultModel.desc": "Id del modelo predeterminado. Déjalo vacío para que la puerta de enlace elija del grupo de modelos de programación curado.",
   "config.permissionMode.desc": "Cómo aplica el agente los cambios a tu espacio de trabajo.",
+  "config.evermindLearning.desc": "Deja que tus chats entrenen el modelo Evermind del proyecto. Tras un chat, se aporta lo aprendido al modelo compartido para que las ejecuciones en la nube, on-premise y del editor mejoren juntas. Desactivado por defecto (ejecuta un pequeño paso de entrenamiento local tras un chat).",
   "config.permissionMode.ask": "Preguntar antes de aplicar cada edición de archivo o comando (recomendado).",
   "config.permissionMode.acceptEdits": "Aplicar las ediciones de archivos automáticamente sin preguntar.",
   "view.inbox": "Bandeja de entrada",

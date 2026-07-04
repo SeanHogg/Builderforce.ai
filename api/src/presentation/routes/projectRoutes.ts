@@ -3,6 +3,7 @@ import { and, count, eq, inArray, max, min, sql } from 'drizzle-orm';
 import { ProjectService } from '../../application/project/ProjectService';
 import { ensureProjectTemplate } from '../../application/project/projectTemplate';
 import { KanbanTemplateService } from '../../application/kanban/kanbanTemplateService';
+import { provisionDefaultProjectEvermind } from '../../application/llm/projectEvermind';
 import { DEFAULT_TEMPLATE_ID } from '../../application/kanban/templateCatalog';
 import type { HonoEnv } from '../../env';
 import type { Env } from '../../env';
@@ -659,6 +660,10 @@ export function createProjectRoutes(projectService: ProjectService, db: Db): Hon
         .applyToProject(c.env as Env, tenantId, plain.id, templateId, plain.name)
         .catch(() => {});
     }
+    // Give the project a DEFAULT Evermind so it always has a self-learning model to
+    // run/learn/edit — even when the manager never seeds one from a Studio model.
+    // Best-effort (never blocks creation); inference stays OFF until opted in.
+    await provisionDefaultProjectEvermind(c.env as Env, db, tenantId, project.toPlain().id, name);
     await invalidateProjectsList(c.env as Env, tenantId).catch(() => {});
     return c.json(project.toPlain(), 201);
   });
@@ -734,6 +739,8 @@ export function createProjectRoutes(projectService: ProjectService, db: Db): Hon
     });
 
     await ensureProjectTemplate(c.env.UPLOADS, created);
+    // Default Evermind for every newly-created project (see POST / above).
+    await provisionDefaultProjectEvermind(c.env as Env, db, tenantId, created.toPlain().id, name);
     await invalidateProjectsList(c.env as Env, tenantId).catch(() => {});
     return c.json({ action: 'created', project: created.toPlain() }, 201);
   });
@@ -845,6 +852,8 @@ export function createProjectRoutes(projectService: ProjectService, db: Db): Hon
     // template so the IDE opens runnable — updates of an existing project keep
     // whatever files it already has.
     if (!existing) await ensureProjectTemplate(c.env.UPLOADS, project);
+    // Default Evermind for a freshly-scaffolded project (see POST / above).
+    if (!existing) await provisionDefaultProjectEvermind(c.env as Env, db, tenantId, project.id, name);
 
     let selectedAgentHostId: number | null = null;
 

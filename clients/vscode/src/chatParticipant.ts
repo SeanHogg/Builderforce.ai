@@ -1,8 +1,10 @@
 import * as vscode from "vscode";
 import { runAgent } from "./agent";
 import { ChatMessage, SECRET_KEY, fetchLimbicBlock } from "./gateway";
+import { contributeProjectEvermind } from "./evermindLearn";
 import { getGroundingSummary } from "./grounding";
 import { resolveEffectiveModel } from "./modelState";
+import { getSelectedProject } from "./projectState";
 import { buildSystemMessages } from "./prompt";
 
 const PARTICIPANT_ID = "builderforce.agent";
@@ -54,6 +56,11 @@ export function createBuilderForceHandler(ctx: vscode.ExtensionContext): vscode.
     const abort = new AbortController();
     token.onCancellationRequested(() => abort.abort());
 
+    // Accumulate the assistant's reply so, after the run, we can feed this
+    // exchange back to the project's Evermind (the same learning loop cloud/on-prem
+    // runs — best-effort, gated by `builderforce.evermindLearning`).
+    let assistantText = "";
+
     await runAgent(
       messages,
       {
@@ -73,12 +80,20 @@ export function createBuilderForceHandler(ctx: vscode.ExtensionContext): vscode.
         signal: abort.signal,
       },
       {
-        onText: (delta) => stream.markdown(delta),
+        onText: (delta) => { assistantText += delta; stream.markdown(delta); },
         onToolStart: (label) => stream.progress(label),
         onToolResult: (label, ok) => stream.markdown(`\n\n${ok ? "✓" : "✗"} ${label}\n\n`),
         onError: (message) => stream.markdown(`\n\n**Error:** ${message}\n`),
       },
     );
+
+    // Contribute this run's text to the active project's Evermind. Fire-and-forget:
+    // the contributor is off by default, throttled, and swallows all errors, so it
+    // never blocks or breaks the chat turn.
+    const project = getSelectedProject();
+    if (project) {
+      void contributeProjectEvermind(ctx.secrets, project.id, `${request.prompt}\n\n${assistantText}`);
+    }
 
     return {};
   };

@@ -1,4 +1,36 @@
 {
+  "chatInput": {
+    "add": "添加",
+    "upload": "从计算机上传",
+    "addContext": "添加上下文",
+    "browseWeb": "浏览网页",
+    "on": "开",
+    "off": "关",
+    "options": "选项",
+    "effort": "投入程度",
+    "effort_quick": "快速",
+    "effort_balanced": "均衡",
+    "effort_thorough": "深入",
+    "thinking": "思考",
+    "accountSettings": "账户设置",
+    "autoMode": "自动模式",
+    "autoModeHint": "自动批准操作，无需确认",
+    "dictate": "语音输入",
+    "stopDictation": "停止语音输入",
+    "removeAttachment": "移除附件",
+    "brainstorm": "头脑风暴（构思）"
+  },
+  "repoContext": {
+    "title": "添加仓库上下文",
+    "repo": "仓库",
+    "default": "默认",
+    "searchPlaceholder": "搜索文件…",
+    "loading": "正在加载文件…",
+    "empty": "未找到文件",
+    "error": "无法加载该仓库",
+    "close": "关闭",
+    "more": "另有 {count} 项 — 请细化搜索"
+  },
   "boardConfig": {
     "approvalHeading": "执行审批",
     "approvalToggle": "运行高优先级或紧急工单前需经经理审批",
@@ -221,7 +253,8 @@
       "myProfile": "我的资料",
       "findWork": "寻找工作",
       "timecard": "工时卡",
-      "hires": "雇员"
+      "hires": "雇员",
+      "kanbanTemplates": "看板模板"
     },
     "tab": {
       "projects": "项目",

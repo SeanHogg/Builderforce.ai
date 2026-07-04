@@ -17,6 +17,7 @@ import { ChatInput } from '@/components/ChatInput';
 import { ChatMessageContent } from '@/components/ChatMessageContent';
 import { ChatMessageActions } from '@/components/ChatMessageActions';
 import { ChatTicketsPanel } from '@/components/brain/ChatTicketsPanel';
+import { RepoContextPicker } from '@/components/brain/RepoContextPicker';
 import { ThemeSelect } from '@/components/ThemeSelect';
 import { Select } from '@/components/Select';
 import { fetchProjects, createProject } from '@/lib/api';
@@ -30,12 +31,14 @@ import {
   useOptionalBrainContext,
   PLATFORM_BRAIN_SYSTEM_PROMPT,
   BRAIN_AUTO_APPROVE_DIRECTIVE,
+  buildComposerDirectives,
   parseSuggestedActions,
   type SuggestedAction,
   type BrainModality,
+  type BrainEffort,
 } from '@/lib/brain';
 import type { BrainChat, BrainMessage } from '@/lib/builderforceApi';
-import { agentAssignmentsApi, type AgentAssignment } from '@/lib/builderforceApi';
+import { agentAssignmentsApi, reposApi, type AgentAssignment, type ProjectRepository } from '@/lib/builderforceApi';
 import { loadAgentPool, type PoolAgent } from '@/lib/agentPool';
 import { MODALITIES, getModality } from '@/lib/modality';
 import { isBrainAutoApprove, setBrainAutoApprove } from '@/lib/brain/autoApprove';
@@ -151,6 +154,19 @@ export function BrainPanel({
     [isMutating],
   );
 
+  // Composer run-shaping toggles (the `/` menu + the `+` menu's web option) —
+  // compiled into the ambient system context below so each actually changes the
+  // next turn. Mirrors the VS Code Brain composer.
+  const [effort, setEffort] = useState<BrainEffort>('balanced');
+  const [thinking, setThinking] = useState(false);
+  const [webBrowsing, setWebBrowsing] = useState(false);
+  // "Add context" from a connected repo: when the active chat's project has one
+  // or more repositories, the composer's + menu offers a repo file picker whose
+  // selection is attached as context. Same repo the agent clones from, so it
+  // works both for planning chats and for chatting with a running agent.
+  const [projectRepos, setProjectRepos] = useState<ProjectRepository[]>([]);
+  const [repoPickerOpen, setRepoPickerOpen] = useState(false);
+
   // Brain agent/persona switcher: the user can run the Brain as the default
   // assistant, as a built-in modality persona, or as one of the agents assigned
   // to the Brain (scope='brain' in the canonical agent-assignment model).
@@ -236,8 +252,11 @@ export function BrainPanel({
     // — the toggle already skips the per-action confirm UI; this keeps the model
     // from asking for permission in prose anyway.
     if (autoApprove) parts.push(BRAIN_AUTO_APPROVE_DIRECTIVE);
+    // Effort / Thinking / Browse-the-web composer toggles.
+    const composer = buildComposerDirectives({ effort, thinking, web: webBrowsing });
+    if (composer) parts.push(composer);
     return parts.length > 0 ? parts.join('\n') : undefined;
-  }, [ctxProjectId, projects, extraSystem, autoApprove]);
+  }, [ctxProjectId, projects, extraSystem, autoApprove, effort, thinking, webBrowsing]);
 
   const conv = useBrainConversation({
     chatId: chats.activeChatId,
@@ -258,6 +277,27 @@ export function BrainPanel({
     setAutoApproveMode(true);
     resolveConfirm(true);
   }, [setAutoApproveMode, resolveConfirm]);
+
+  // The project whose repos back "Add context" — the active chat's project takes
+  // precedence (a chat can be assigned to a different project than the viewport),
+  // then the IDE-pinned / viewing project. Repos are fetched from the cached
+  // list endpoint; the picker only appears when at least one repo is connected.
+  const repoProjectId = chats.activeChat?.projectId ?? pinnedProjectId ?? viewingProjectId ?? null;
+  useEffect(() => {
+    if (repoProjectId == null) { setProjectRepos([]); return; }
+    let live = true;
+    reposApi.list(repoProjectId)
+      .then((r) => { if (live) setProjectRepos(r); })
+      .catch(() => { if (live) setProjectRepos([]); });
+    return () => { live = false; };
+  }, [repoProjectId]);
+  // Presence of this callback IS the entitlement — ChatInput shows "Add context"
+  // only when a repo-backed project is in scope.
+  const onAddContext = projectRepos.length > 0 ? () => setRepoPickerOpen(true) : undefined;
+  const attachRepoFile = useCallback(async (path: string, content: string) => {
+    await conv.attach(new File([content], path, { type: 'text/plain' }));
+    setRepoPickerOpen(false);
+  }, [conv]);
 
   // Projects for the filter/assignment dropdowns.
   useEffect(() => {
@@ -617,18 +657,6 @@ export function BrainPanel({
                   </optgroup>
                 )}
               </Select>
-              <label
-                title="Skip the per-action approval prompt and run mutating actions automatically. Useful for bulk operations."
-                style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 11, color: autoApprove ? 'var(--coral-bright, #f4726e)' : 'var(--text-muted)', cursor: 'pointer', marginLeft: 'auto' }}
-              >
-                <input
-                  type="checkbox"
-                  checked={autoApprove}
-                  onChange={(e) => setAutoApproveMode(e.target.checked)}
-                  style={{ cursor: 'pointer' }}
-                />
-                Auto-approve actions
-              </label>
             </div>
             <ChatInput
               value={input}
@@ -642,6 +670,16 @@ export function BrainPanel({
               rows={2}
               submitOnEnter={false}
               onAttach={conv.attach}
+              onAddContext={onAddContext}
+              webBrowsing={webBrowsing}
+              onWebBrowsingChange={setWebBrowsing}
+              effort={effort}
+              onEffortChange={setEffort}
+              thinking={thinking}
+              onThinkingChange={setThinking}
+              accountSettingsHref="/settings"
+              autoMode={autoApprove}
+              onAutoModeChange={setAutoApproveMode}
               showBrainIcon={false}
               showVoice
               pendingAttachments={conv.pendingAttachments}
@@ -650,6 +688,13 @@ export function BrainPanel({
             {conv.uploading && <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 4 }}>Uploading…</div>}
           </div>
         </>
+      )}
+      {repoPickerOpen && (
+        <RepoContextPicker
+          repos={projectRepos}
+          onPick={attachRepoFile}
+          onClose={() => setRepoPickerOpen(false)}
+        />
       )}
     </>
   );

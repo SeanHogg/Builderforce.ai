@@ -47,6 +47,7 @@
   "config.webUrl.desc": "Base URL of the BuilderForce web app (where embedded pages like the board live). Leave empty to derive it from `builderforce.baseUrl` (api.* → root domain).",
   "config.defaultModel.desc": "Default model id to use. Leave empty to let the gateway pick from the curated coding pool.",
   "config.permissionMode.desc": "How the agent applies changes to your workspace.",
+  "config.evermindLearning.desc": "Let your chats teach the project's Evermind model. After a chat, contribute what was learned back to the shared model so cloud, on-prem, and editor runs all improve together. Off by default (runs a small local training step after a chat).",
   "config.permissionMode.ask": "Ask before applying each file edit or command (recommended).",
   "config.permissionMode.acceptEdits": "Apply file edits automatically without prompting.",
   "view.inbox": "Inbox",

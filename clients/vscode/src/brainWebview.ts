@@ -1,6 +1,7 @@
 import * as vscode from "vscode";
 import { getTenantJwt } from "./bfApi";
 import { TOOL_DEFS } from "./fileTools";
+import { contributeProjectEvermind } from "./evermindLearn";
 import { getBaseUrl, SECRET_KEY } from "./gateway";
 import { getGroundingSummary } from "./grounding";
 import { resolveEffectiveModel } from "./modelState";
@@ -182,6 +183,14 @@ export class BrainWebview {
       case "platform.write":
         BrainWebview.hooks.onPlatformWrite?.(typeof msg.name === "string" ? msg.name : "");
         break;
+      // A chat run finished — contribute what it learned back to the active
+      // project's Evermind (the same weight-delta loop cloud/on-prem run). Gated by
+      // the `builderforce.evermindLearning` setting + throttled inside the helper.
+      case "run.complete": {
+        const project = getSelectedProject();
+        if (project) void contributeProjectEvermind(this.ctx.secrets, project.id, typeof msg.text === "string" ? msg.text : "");
+        break;
+      }
       // Triage: the webview built a full transcript (turns + tool I/O + errors);
       // the privileged host writes it to the clipboard reliably (a sandboxed
       // webview can't), so a "No response" turn can be pasted out to debug.

@@ -1,4 +1,36 @@
 {
+  "chatInput": {
+    "add": "Añadir",
+    "upload": "Subir desde el equipo",
+    "addContext": "Añadir contexto",
+    "browseWeb": "Explorar la web",
+    "on": "Activado",
+    "off": "Desactivado",
+    "options": "Opciones",
+    "effort": "Esfuerzo",
+    "effort_quick": "Rápido",
+    "effort_balanced": "Equilibrado",
+    "effort_thorough": "Exhaustivo",
+    "thinking": "Razonamiento",
+    "accountSettings": "Configuración de la cuenta",
+    "autoMode": "Modo automático",
+    "autoModeHint": "Aprobar acciones automáticamente sin preguntar",
+    "dictate": "Dictar",
+    "stopDictation": "Detener dictado",
+    "removeAttachment": "Quitar adjunto",
+    "brainstorm": "Lluvia de ideas (ideación)"
+  },
+  "repoContext": {
+    "title": "Añadir contexto del repositorio",
+    "repo": "Repositorio",
+    "default": "predeterminado",
+    "searchPlaceholder": "Buscar archivos…",
+    "loading": "Cargando archivos…",
+    "empty": "No se encontraron archivos",
+    "error": "No se pudo cargar el repositorio",
+    "close": "Cerrar",
+    "more": "+{count} más — afina tu búsqueda"
+  },
   "boardConfig": {
     "approvalHeading": "Aprobación de ejecución",
     "approvalToggle": "Exigir aprobación del responsable antes de ejecutar tickets altos o urgentes",
@@ -221,7 +253,8 @@
       "myProfile": "Mi perfil",
       "findWork": "Buscar trabajo",
       "timecard": "Hoja de horas",
-      "hires": "Contrataciones"
+      "hires": "Contrataciones",
+      "kanbanTemplates": "Plantillas kanban"
     },
     "tab": {
       "projects": "Proyectos",

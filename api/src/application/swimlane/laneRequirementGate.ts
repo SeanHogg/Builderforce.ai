@@ -107,10 +107,17 @@ export async function enforceLaneRequirements(
       .orderBy(asc(ticketRoleSignoffs.createdAt));
     const latest = new Map<string, string>();
     for (const s of signoffs) latest.set(s.roleKey, s.verdict);
-    const missing = requiredReviewers.filter((r) => latest.get(r.ref) !== 'approved');
-    if (missing.length === 0) return none;
+    // Unmet = any required reviewer without an APPROVED sign-off (drives the flag +
+    // hard block). To-dispatch = reviewers NEVER engaged (no sign-off row at all) —
+    // once a reviewer records ANY verdict we stop re-dispatching, so repeated lane
+    // entries can't spawn an endless reviewer loop. A 'changes_requested' verdict
+    // therefore keeps the ticket flagged for the Developer to resolve without
+    // re-summoning the reviewer every hop.
+    const unmet = requiredReviewers.filter((r) => latest.get(r.ref) !== 'approved');
+    if (unmet.length === 0) return none;
+    const toDispatch = requiredReviewers.filter((r) => !latest.has(r.ref));
 
-    // Dispatch the missing reviewer role agents (round-trip). Guard against piling
+    // Dispatch the un-engaged reviewer role agents (round-trip). Guard against piling
     // up runs: if a live run already exists on the ticket, only flag this hop.
     const execs = await runtimeService.listByTask(args.taskId).catch(() => []);
     const hasLive = execs
@@ -119,7 +126,7 @@ export async function enforceLaneRequirements(
 
     const dispatchedReviewers: string[] = [];
     if (!hasLive) {
-      for (const req of missing) {
+      for (const req of toDispatch) {
         const agentRef = await resolveRoleAgent(db, args.tenantId, board.id, req.ref);
         if (!agentRef) continue;
         const payload = JSON.stringify({

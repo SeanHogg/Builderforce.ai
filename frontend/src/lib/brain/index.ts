@@ -74,7 +74,7 @@ export {
   type PlatformCapability,
   type PlatformActionContext,
 } from './platformActions';
-export { PLATFORM_BRAIN_SYSTEM_PROMPT, BRAIN_AUTO_APPROVE_DIRECTIVE } from './platformPrompt';
+export { PLATFORM_BRAIN_SYSTEM_PROMPT, BRAIN_AUTO_APPROVE_DIRECTIVE, buildComposerDirectives, type BrainEffort } from './platformPrompt';
 
 // Model-authored "next step" buttons parsed out of a Brain reply.
 export { parseSuggestedActions, type SuggestedAction, type ParsedSuggestedActions } from './suggestedActions';

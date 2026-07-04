@@ -1,4 +1,36 @@
 {
+  "chatInput": {
+    "add": "Add",
+    "upload": "Upload from computer",
+    "addContext": "Add context",
+    "browseWeb": "Browse the web",
+    "on": "On",
+    "off": "Off",
+    "options": "Options",
+    "effort": "Effort",
+    "effort_quick": "Quick",
+    "effort_balanced": "Balanced",
+    "effort_thorough": "Thorough",
+    "thinking": "Thinking",
+    "accountSettings": "Account settings",
+    "autoMode": "Auto mode",
+    "autoModeHint": "Auto-approve actions without asking",
+    "dictate": "Dictate",
+    "stopDictation": "Stop dictation",
+    "removeAttachment": "Remove attachment",
+    "brainstorm": "Brain Storm (ideation)"
+  },
+  "repoContext": {
+    "title": "Add repository context",
+    "repo": "Repository",
+    "default": "default",
+    "searchPlaceholder": "Search files…",
+    "loading": "Loading files…",
+    "empty": "No files found",
+    "error": "Couldn't load the repository",
+    "close": "Close",
+    "more": "+{count} more — refine your search"
+  },
   "boardConfig": {
     "approvalHeading": "Execution approval",
     "approvalToggle": "Require manager approval before running high or urgent tickets",
@@ -221,7 +253,8 @@
       "myProfile": "My Profile",
       "findWork": "Find Work",
       "timecard": "Timecard",
-      "hires": "Hires"
+      "hires": "Hires",
+      "kanbanTemplates": "Kanban Templates"
     },
     "tab": {
       "projects": "Projects",

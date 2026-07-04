@@ -44,3 +44,26 @@ export const BRAIN_AUTO_APPROVE_DIRECTIVE = [
   'AUTO-APPROVE IS ON. The user has pre-approved your actions for this conversation.',
   'Do NOT ask for permission or confirmation before mutating actions — no "should I…?", "shall I proceed?", "do you want me to…", "let me know if…". When you have enough detail, CALL THE TOOL and do it, then report what you did and (when useful) navigate the user to the result. Only pause to ask the user if a genuinely required detail is missing and cannot be reasonably inferred from context.',
 ].join('\n');
+
+/** How hard the model should work on the next turn — surfaced in the composer's `/` menu. */
+export type BrainEffort = 'quick' | 'balanced' | 'thorough';
+
+/**
+ * Compile the composer's Effort / Thinking / Browse-the-web toggles into extra
+ * system-prompt directives, folded into the Brain's ambient system context so a
+ * toggle actually changes how the next turn runs (no hidden model params). This
+ * mirrors the VS Code Brain composer so both surfaces behave identically.
+ * 'balanced' is the neutral default and adds nothing.
+ */
+export function buildComposerDirectives(o: { effort?: BrainEffort; thinking?: boolean; web?: boolean }): string {
+  const parts: string[] = [];
+  if (o.effort === 'quick')
+    parts.push('Effort: favour a fast, concise, direct answer. Keep exploration minimal unless the task truly requires more.');
+  if (o.effort === 'thorough')
+    parts.push('Effort: apply maximum rigor. Be exhaustive, consider edge cases, verify your work, and do not stop until the task is fully complete.');
+  if (o.thinking)
+    parts.push('Reason step by step before answering: work the problem through and lay out your plan before you act.');
+  if (o.web)
+    parts.push('You may browse the web: when a question needs current or external information, call `fetch_url` to read the relevant URL(s) rather than relying on memory, and cite the sources you use.');
+  return parts.join('\n');
+}

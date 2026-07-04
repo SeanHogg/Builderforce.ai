@@ -22,6 +22,7 @@ import { getFileName } from '@/lib/utils';
 import type { RightTab } from '@/lib/modality';
 import { BenchmarkPanel } from '@/components/BenchmarkPanel';
 import { ModelExportPanel } from '@/components/ModelExportPanel';
+import { ProjectEvermindPanel } from '@/components/ide/ProjectEvermindPanel';
 
 interface LlmStudioPanelProps {
   projectId: number | string;
@@ -148,6 +149,13 @@ export function LlmStudioPanel({ projectId, files = [], onGoToTab, onOpenFile }:
         <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', lineHeight: 1.5, marginTop: 0, marginBottom: 20 }}>
           {t('intro')}
         </p>
+
+        {/* The project's Evermind — every project gets a default one on creation, so
+            this always renders a real model to run/learn/edit. Self-gating (RBAC +
+            its own loading/empty states), localized, theme-aware. */}
+        <div style={{ marginBottom: 20 }}>
+          <ProjectEvermindPanel projectId={Number(projectId)} />
+        </div>
 
         {error && (
           <div

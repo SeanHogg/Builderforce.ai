@@ -384,6 +384,28 @@ function Chat({ init }: { init: InitData }) {
     return () => window.removeEventListener('bf:mcp-write', h);
   }, []);
 
+  // Feed the project's Evermind: when a run finishes (sending true→false) with
+  // content, hand the host this exchange so it can contribute what was learned back
+  // to the shared model — the same loop cloud/on-prem run. The host gates it behind
+  // the `builderforce.evermindLearning` setting + throttles, so this is a cheap
+  // best-effort signal (not every frame).
+  const prevSending = useRef(false);
+  useEffect(() => {
+    if (prevSending.current && !conv.sending
+      && hasTranscriptContent({ messages: conv.messages, trace: conv.trace, error: conv.error })) {
+      post('run.complete', {
+        text: buildTranscript({
+          messages: conv.messages,
+          trace: conv.trace,
+          assistantName: 'BuilderForce',
+          model: init.model,
+          error: conv.error,
+        }),
+      });
+    }
+    prevSending.current = conv.sending;
+  }, [conv.sending, conv.messages, conv.trace, conv.error, init.model]);
+
   const fileInputRef = useRef<HTMLInputElement>(null);
   const attachFiles = useCallback((files: FileList | File[] | null) => {
     if (!files) return;

@@ -75,6 +75,7 @@ export const NAV_GROUPS: NavGroup[] = [
   // modality (designer/video/llm/voice) at creation, so there are no modality
   // sub-tabs here — Voice opens as a Voice IDE project, not a separate menu item.
   { id: 'ide', labelKey: 'group.ide', icon: '💻', href: '/ide/dashboard', match: ['/ide'] },
+  { id: 'kanbanTemplates', labelKey: 'group.kanbanTemplates', icon: '🗂', href: '/kanban-templates', match: ['/kanban-templates'] },
   { id: 'workflows', labelKey: 'group.workflows', icon: '🔀', href: '/workflows', match: ['/workflows'] },
   {
     id: 'workforce', labelKey: 'group.workforce', icon: '👥', href: '/workforce',

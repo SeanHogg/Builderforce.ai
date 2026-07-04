@@ -50,6 +50,7 @@ import { normalizeActionType, learnedRoutingEnabled, type ActionType } from '../
 import { getRoutingTable, MIN_SAMPLES, type RoutingScope } from '../llm/routingTable';
 import type { ActionModelRankStat } from '../llm/LlmProxyService';
 import { resolveTenantModel } from '../llm/tenantModelService';
+import { dispatchProjectEvermindLearnText } from '../llm/projectEvermind';
 import { scoreRunOutcome } from './scoreRunOutcome';
 import { handleCloudRunCrash } from './cloudSelfHeal';
 import { cloudCrashReason } from './orphanReasons';
@@ -2035,6 +2036,16 @@ export async function finalizeCloudRun(
   const unverifiedNote = prOpened
     ? '\n\n⚠ Not verified in-agent — this serverless executor ran no build/type-check/tests. CI on the PR is the source of truth.'
     : '';
+
+  // Unified learning: contribute this run's output to the project's Evermind. The
+  // coordinator adapts+diffs+merges IN ITS ALARM, so this finalize (a CF Worker/DO
+  // with a tight CPU budget) pays NO training cost — it just enqueues the text. The
+  // same door IDE + on-prem post to; the coordinator gates seeded/frozen itself.
+  // Best-effort, never affects the run outcome. [[evermind-learning-architecture]]
+  if (repoCtx?.projectId && !cancelled && output.trim().length >= 20) {
+    await dispatchProjectEvermindLearnText(env, tenantId, repoCtx.projectId, output).catch(() => { /* best-effort */ });
+  }
+
   return { ok: !autoMergeFailed, output: output + unverifiedNote };
 }
 
