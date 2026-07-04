@@ -6,7 +6,7 @@ import Link from 'next/link';
 import { useTranslations } from 'next-intl';
 import PageContainer from '@/components/PageContainer';
 import { useOptionalAuth } from '@/lib/AuthContext';
-import { RatingStars } from '@/components/freelance/RatingStars';
+import { TalentProfileView } from '@/components/freelance/TalentProfileView';
 import { getFreelancer, hireFreelancer, type FreelancerProfile } from '@/lib/freelancerApi';
 
 const card: React.CSSProperties = {

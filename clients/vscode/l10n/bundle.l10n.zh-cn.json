@@ -125,5 +125,6 @@
   "Stop dictation": "停止语音输入",
   "Active selection": "当前选区",
   "Choose a file…": "选择文件…",
-  "Add context from your workspace": "从工作区添加上下文"
+  "Add context from your workspace": "从工作区添加上下文",
+  "Chat name": "对话名称"
 }

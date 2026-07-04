@@ -120,6 +120,20 @@ export interface AssembledToolCall {
   args: string;
 }
 
+/**
+ * Token accounting for one completion, as reported by the gateway's final
+ * `usage` chunk (OpenAI shape). Absent when the upstream didn't emit usage
+ * (some providers don't). Surfaced so the triage/diagnostics layer can tell a
+ * CONTEXT-EXHAUSTION death (prompt tokens climbing turn over turn until the
+ * model 413s / truncates) apart from a model-DEGRADATION death (an Evermind/SSM
+ * turn returning empty or garbage while token counts stay low).
+ */
+export interface CompletionUsage {
+  prompt?: number;
+  completion?: number;
+  total?: number;
+}
+
 export interface StreamChatResult {
   text: string;
   toolCalls: AssembledToolCall[];
@@ -133,6 +147,8 @@ export interface StreamChatResult {
    * record which LLM (or which `evermind/…` artifact) produced a turn.
    */
   resolvedModel?: string;
+  /** Token usage for this completion, when the gateway reported it. */
+  usage?: CompletionUsage;
 }
 
 interface DeltaToolCall {

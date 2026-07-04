@@ -9,6 +9,7 @@ import { AUTH_API_URL, getStoredWebToken, getStoredTenantToken } from './auth';
 
 export interface FreelancerProfile {
   userId: string;
+  slug: string | null;
   displayName: string | null;
   avatarUrl: string | null;
   headline: string | null;
@@ -26,6 +27,8 @@ export interface FreelancerProfile {
   hiredVideoConnected?: boolean;
   hiredVideoClaimUrl?: string | null;
   resumeFilename?: string | null;
+  /** True when we can auto-fill fields from the résumé (hired.video link or a cached extract). */
+  canAutofill?: boolean;
   email?: string;
   embedUrl?: string | null;
   rating?: number | null;
@@ -164,11 +167,39 @@ export async function updateMyFreelancerProfile(patch: Partial<FreelancerProfile
   await jsonOrThrow(res, 'Failed to save profile');
 }
 
-export async function uploadMyResume(file: File): Promise<{ resumeFilename: string }> {
+export async function uploadMyResume(file: File): Promise<{ resumeFilename: string; canAutofill?: boolean }> {
   const fd = new FormData();
   fd.append('file', file);
   const res = await fetch(`${AUTH_API_URL}/api/freelancers/me/resume`, { method: 'POST', headers: webHeaders(false), body: fd });
-  return jsonOrThrow<{ resumeFilename: string }>(res, 'Failed to upload resume');
+  return jsonOrThrow<{ resumeFilename: string; canAutofill?: boolean }>(res, 'Failed to upload resume');
+}
+
+export async function uploadMyAvatar(file: File): Promise<{ avatarUrl: string }> {
+  const fd = new FormData();
+  fd.append('file', file);
+  const res = await fetch(`${AUTH_API_URL}/api/freelancers/me/avatar`, { method: 'POST', headers: webHeaders(false), body: fd });
+  return jsonOrThrow<{ avatarUrl: string }>(res, 'Failed to upload avatar');
+}
+
+export interface SlugCheck { slug: string; valid: boolean; available: boolean; reason?: string; suggestions: string[] }
+
+export async function checkMySlug(slug: string): Promise<SlugCheck> {
+  const res = await fetch(`${AUTH_API_URL}/api/freelancers/me/slug-check?slug=${encodeURIComponent(slug)}`, { headers: webHeaders(false) });
+  return jsonOrThrow<SlugCheck>(res, 'Failed to check alias');
+}
+
+export interface ResumeSuggestions { available: boolean; headline: string | null; summary: string | null; skills: string[]; discipline: string | null }
+
+export async function getResumeSuggestions(): Promise<ResumeSuggestions> {
+  const res = await fetch(`${AUTH_API_URL}/api/freelancers/me/resume/suggestions`, { headers: webHeaders(false) });
+  return jsonOrThrow<ResumeSuggestions>(res, 'Failed to read résumé');
+}
+
+/** Start the consent flow to connect an EXISTING hired.video account. Returns a
+ *  consent URL to open (null when hired.video isn't configured server-side). */
+export async function connectHiredVideo(input: { email?: string; redirectUrl?: string } = {}): Promise<{ configured: boolean; consentUrl: string | null }> {
+  const res = await fetch(`${AUTH_API_URL}/api/freelancers/me/connect`, { method: 'POST', headers: webHeaders(), body: JSON.stringify(input) });
+  return jsonOrThrow(res, 'Failed to connect hired.video');
 }
 
 export async function getMyEmbedToken(kind: 'profile' | 'resume' = 'profile'): Promise<{ configured: boolean; embedUrl: string | null }> {

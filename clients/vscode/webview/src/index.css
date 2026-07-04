@@ -115,6 +115,17 @@ body {
   color: var(--vscode-dropdown-foreground, var(--bf-text));
 }
 
+/* Inline chat-title editor — same footprint as the select it replaces, but the
+   editor's input tokens + a focus ring so it reads as an editable field. */
+.bf-rename-input {
+  background: var(--vscode-input-background, var(--bf-surface));
+  color: var(--vscode-input-foreground, var(--bf-text));
+  outline: none;
+}
+.bf-rename-input:focus {
+  border-color: var(--vscode-focusBorder, var(--bf-border));
+}
+
 .bf-btn {
   font-family: inherit;
   font-size: 12px;

@@ -109,6 +109,10 @@ const IconConsolidate = () => (
 const IconFork = () => (
   <svg width="13" height="13" viewBox="0 0 16 16" fill="none" aria-hidden="true"><circle cx="4" cy="3.5" r="1.5" fill="currentColor" /><circle cx="4" cy="12.5" r="1.5" fill="currentColor" /><circle cx="12" cy="3.5" r="1.5" fill="currentColor" /><path d="M4 5v6M4 8h4.5A3.5 3.5 0 0 0 12 4.5V5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" /></svg>
 );
+/* Rename = pencil glyph for editing the selected chat's title. */
+const IconRename = () => (
+  <svg width="15" height="15" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M10.75 2.25 13.75 5.25 6 13H3v-3l7.75-7.75zM9.5 3.5l3 3" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" /></svg>
+);
 
 /**
  * A small popover menu (the `+` and `/` composer affordances). Closes on outside
@@ -265,6 +269,11 @@ function Chat({ init }: { init: InitData }) {
   const { toolSpecs, runTool, isMutating } = useBrainActions();
   const [chatId, setChatId] = useState<number | null>(null);
   const [chats, setChats] = useState<BrainChat[]>([]);
+  // Inline rename of the selected chat: the header select swaps to a text field
+  // (VS Code webviews block window.prompt, so editing is inline — the same pattern
+  // the web Brain's history list uses). Commits via persistence.updateChat.
+  const [renaming, setRenaming] = useState(false);
+  const [renameValue, setRenameValue] = useState('');
   // Auto-approve skips the per-action confirm prompt. It's read through a REF (not
   // captured state) so `needsConfirm` stays referentially stable AND the value is
   // live: a run's tool loop captures `needsConfirm` at run start, so a plain state
@@ -604,6 +613,27 @@ function Chat({ init }: { init: InitData }) {
     }
   }, [chatId, forking, persistence, conv, reloadChats, activeChat?.title, activeChat?.projectId, init.project?.id, t]);
 
+  // Begin editing the selected chat's title (only a real, saved chat can be renamed).
+  const startRename = useCallback(() => {
+    if (chatId == null) return;
+    setRenameValue(activeChat?.title ?? '');
+    setRenaming(true);
+  }, [chatId, activeChat?.title]);
+
+  // Commit the rename: PATCH the title, then refresh the list so the select + the
+  // header reflect it. A blank/unchanged title just cancels (no needless write).
+  const commitRename = useCallback(async () => {
+    const title = renameValue.trim();
+    setRenaming(false);
+    if (chatId == null || !title || title === activeChat?.title) return;
+    try {
+      await persistence.updateChat(chatId, { title });
+      reloadChats();
+    } catch (e) {
+      conv.setError(e instanceof Error ? e.message : 'Rename failed');
+    }
+  }, [chatId, renameValue, activeChat?.title, persistence, reloadChats, conv]);
+
   return (
     <div className="bf-app">
       <header className="bf-header">
@@ -616,17 +646,44 @@ function Chat({ init }: { init: InitData }) {
           ? <span className="bf-header__brand">BuilderForce</span>
           : <span className="bf-header__beta">{t('app.beta', 'beta')}</span>}
         <div className="bf-header__spacer" />
-        <select
-          className="bf-select"
-          value={chatId ?? ''}
-          onChange={(e) => setChatId(e.target.value ? Number(e.target.value) : null)}
-          aria-label={t('app.conversation', 'Conversation')}
+        {renaming ? (
+          <input
+            className="bf-select bf-rename-input"
+            autoFocus
+            value={renameValue}
+            placeholder={t('app.renamePlaceholder', 'Chat name')}
+            aria-label={t('app.rename', 'Rename chat')}
+            onChange={(e) => setRenameValue(e.target.value)}
+            onBlur={commitRename}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') { e.preventDefault(); void commitRename(); }
+              else if (e.key === 'Escape') { e.preventDefault(); setRenaming(false); }
+            }}
+          />
+        ) : (
+          <select
+            className="bf-select"
+            value={chatId ?? ''}
+            onChange={(e) => setChatId(e.target.value ? Number(e.target.value) : null)}
+            aria-label={t('app.conversation', 'Conversation')}
+          >
+            <option value="">{t('app.newChat', 'New chat')}</option>
+            {chats.map((c) => (
+              <option key={c.id} value={c.id}>{c.title || `Chat ${c.id}`}</option>
+            ))}
+          </select>
+        )}
+        {/* Rename the selected chat — only enabled once a real chat is saved (a
+            not-yet-created "New chat" has no server row to PATCH). */}
+        <button
+          className="bf-btn bf-btn--icon"
+          title={t('app.rename', 'Rename chat')}
+          aria-label={t('app.rename', 'Rename chat')}
+          disabled={chatId == null || renaming}
+          onClick={startRename}
         >
-          <option value="">{t('app.newChat', 'New chat')}</option>
-          {chats.map((c) => (
-            <option key={c.id} value={c.id}>{c.title || `Chat ${c.id}`}</option>
-          ))}
-        </select>
+          <IconRename />
+        </button>
         <button className="bf-btn" title={t('app.newChat', 'New chat')} onClick={() => setChatId(null)}>＋</button>
         <button
           className="bf-btn bf-btn--icon"
