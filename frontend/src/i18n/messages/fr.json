@@ -4582,6 +4582,10 @@
     "connected": "Apprentissage",
     "frozen": "Gelé",
     "contributions": "{count} contributions d'apprentissage à ce jour",
+    "teacherLabel": "Enseigner depuis un modèle de pointe",
+    "teacherHint": "Distillez un modèle de premier plan (Opus, Mistral, GLM…) dans l'Evermind de ce projet — chaque exécution apprend de la réponse idéale du modèle de pointe plutôt que du texte brut.",
+    "teacherNone": "Aucun — apprendre uniquement des exécutions",
+    "teacherPaidOnly": "Disponible sur les offres payantes — l'enseignement consomme des tokens du modèle de pointe.",
     "errorGeneric": "Une erreur s'est produite. Veuillez réessayer."
   },
   "manager": {

@@ -98,10 +98,11 @@ async function learnCore(env: Env, db: Db, tenantId: number, projectId: number, 
  */
 async function learnTextCore(env: Env, db: Db, tenantId: number, projectId: number, c: Context): Promise<Response> {
   if (!(await ownsProject(db, tenantId, projectId))) return json({ error: 'project not found' }, 404);
-  const body = (await c.req.json<{ text?: unknown; weight?: unknown }>().catch(() => ({}))) as { text?: unknown; weight?: unknown };
+  const body = (await c.req.json<{ text?: unknown; weight?: unknown; prompt?: unknown }>().catch(() => ({}))) as { text?: unknown; weight?: unknown; prompt?: unknown };
   const text = typeof body.text === 'string' ? body.text : '';
   if (!text.trim()) return json({ error: 'text is required' }, 400);
-  const result = await dispatchProjectEvermindLearnText(env, tenantId, projectId, text, typeof body.weight === 'number' ? body.weight : undefined);
+  const prompt = typeof body.prompt === 'string' ? body.prompt : undefined;
+  const result = await dispatchProjectEvermindLearnText(env, tenantId, projectId, text, typeof body.weight === 'number' ? body.weight : undefined, prompt);
   return json(result.body, result.status);
 }
 
@@ -234,6 +235,27 @@ export function createProjectEvermindRoutes(db: Db): Hono<HonoEnv> {
     }
     await setProjectEvermindInference(c.env as Env, db, tenantId, projectId, body.enabled);
     return c.json({ ok: true, inferenceEnabled: body.enabled });
+  });
+
+  /** Pin/clear the frontier-LLM TEACHER (manager). Body: { model: string | null }.
+   *  A non-empty model id makes the coordinator distill runs through that frontier
+   *  model; null/empty clears it (self-learning on raw run text only). */
+  router.patch('/:projectId/evermind/teacher', requireRole(TenantRole.MANAGER), async (c) => {
+    const tenantId = t(c);
+    const projectId = pid(c);
+    if (!(await ownsProject(db, tenantId, projectId))) return c.json({ error: 'project not found' }, 404);
+    const body = (await c.req.json<{ model?: unknown }>().catch(() => ({}))) as { model?: unknown };
+    if (body.model != null && typeof body.model !== 'string') {
+      return c.json({ error: 'model must be a string or null' }, 400);
+    }
+    const model = typeof body.model === 'string' && body.model.trim() ? body.model.trim() : null;
+    if (model) {
+      // Only meaningful once seeded — a teacher distils INTO a base model.
+      const head = await getProjectEvermindHead(c.env as Env, db, tenantId, projectId);
+      if (head.version <= 0) return c.json({ error: 'seed a base model before setting a teacher' }, 409);
+    }
+    await setProjectEvermindTeacher(c.env as Env, db, tenantId, projectId, model);
+    return c.json({ ok: true, teacherModel: model });
   });
 
   return router;

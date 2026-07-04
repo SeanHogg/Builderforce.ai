@@ -29,11 +29,13 @@ export async function contributeProjectEvermind(
   secrets: vscode.SecretStorage,
   projectId: number,
   text: string,
+  prompt?: string,
 ): Promise<void> {
   try {
     if (!learningEnabled()) return;
     const trimmed = (text ?? "").trim();
     if (trimmed.length < 20 || !Number.isInteger(projectId) || projectId <= 0) return;
+    const promptTrimmed = (prompt ?? "").trim();
 
     const now = Date.now();
     if (now - (lastContribAt.get(projectId) ?? 0) < MIN_INTERVAL_MS) return;
@@ -51,7 +53,7 @@ export async function contributeProjectEvermind(
     await fetch(`${getBaseUrl()}/api/projects/${projectId}/evermind/learn-text`, {
       method: "POST",
       headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
-      body: JSON.stringify({ text: trimmed.slice(0, 8000) }),
+      body: JSON.stringify({ text: trimmed.slice(0, 8000), ...(promptTrimmed ? { prompt: promptTrimmed.slice(0, 8000) } : {}) }),
     });
   } catch {
     /* best-effort: learning must never disrupt the chat */

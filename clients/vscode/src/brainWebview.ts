@@ -156,6 +156,7 @@ export class BrainWebview {
     id?: string;
     name?: string;
     text?: string;
+    prompt?: string;
     args?: Record<string, unknown>;
   }): Promise<void> {
     switch (msg.type) {
@@ -188,7 +189,11 @@ export class BrainWebview {
       // the `builderforce.evermindLearning` setting + throttled inside the helper.
       case "run.complete": {
         const project = getSelectedProject();
-        if (project) void contributeProjectEvermind(this.ctx.secrets, project.id, typeof msg.text === "string" ? msg.text : "");
+        if (project) void contributeProjectEvermind(
+          this.ctx.secrets, project.id,
+          typeof msg.text === "string" ? msg.text : "",
+          typeof msg.prompt === "string" ? msg.prompt : undefined,
+        );
         break;
       }
       // Triage: the webview built a full transcript (turns + tool I/O + errors);

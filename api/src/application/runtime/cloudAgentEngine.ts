@@ -2045,7 +2045,9 @@ export async function finalizeCloudRun(
   // same door IDE + on-prem post to; the coordinator gates seeded/frozen itself.
   // Best-effort, never affects the run outcome. [[evermind-learning-architecture]]
   if (repoCtx?.projectId && !cancelled && output.trim().length >= 20) {
-    await dispatchProjectEvermindLearnText(env, tenantId, repoCtx.projectId, output).catch(() => { /* best-effort */ });
+    // Thread the task title as the teacher prompt so a pinned frontier teacher learns
+    // (task → ideal answer), not just a refinement of this run's output.
+    await dispatchProjectEvermindLearnText(env, tenantId, repoCtx.projectId, output, undefined, taskRow.title).catch(() => { /* best-effort */ });
   }
 
   return { ok: !autoMergeFailed, output: output + unverifiedNote };

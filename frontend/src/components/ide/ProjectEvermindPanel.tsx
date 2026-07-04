@@ -6,11 +6,13 @@ import { Select } from '@/components/Select';
 import { RoleGate } from '@/components/RoleGate';
 import { usePermission } from '@/lib/rbac';
 import { listEvermindModels, type PublishedEvermindModel } from '@/lib/studioModelsApi';
+import { useLlmModels } from '@/lib/useLlmModels';
 import {
   getProjectEvermindHead,
   seedProjectEvermindFromModel,
   setProjectEvermindInference,
   setProjectEvermindMode,
+  setProjectEvermindTeacher,
   type ProjectEvermindHead,
 } from '@/lib/projectEvermindApi';
 
@@ -29,6 +31,7 @@ import {
 export function ProjectEvermindPanel({ projectId }: { projectId: number }) {
   const t = useTranslations('projectEvermind');
   const { allowed: canManage } = usePermission('project.manageEvermind');
+  const { codingModels, isPaid } = useLlmModels();
 
   const [head, setHead] = useState<ProjectEvermindHead | null>(null);
   const [models, setModels] = useState<PublishedEvermindModel[]>([]);
@@ -80,6 +83,10 @@ export function ProjectEvermindPanel({ projectId }: { projectId: number }) {
   const seeded = !!head?.seeded;
   const inferenceOn = !!head?.inferenceEnabled;
   const frozen = head?.mode === 'offline-frozen';
+  // Keep a currently-pinned teacher visible even if it's no longer in the plan pool.
+  const teacherOptions = head?.teacherModel && !codingModels.includes(head.teacherModel)
+    ? [head.teacherModel, ...codingModels]
+    : codingModels;
 
   return (
     <section
@@ -178,6 +185,41 @@ export function ProjectEvermindPanel({ projectId }: { projectId: number }) {
             onText={t('connected')}
             offText={t('frozen')}
           />
+          {/* Teacher — distil this project's Evermind through a frontier LLM (Opus,
+              Mistral, GLM, …). When set, each run adapts the model on the teacher's
+              exemplar instead of raw run text. Offered on paid plans only (a teacher
+              call bills frontier tokens); a teacher the plan can't reach simply fails
+              closed to raw-text learning, so no run is ever blocked. */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            <div>
+              <div style={{ fontSize: '0.82rem', fontWeight: 600, color: 'var(--text-primary)' }}>
+                {t('teacherLabel')}
+              </div>
+              <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', lineHeight: 1.4 }}>
+                {t('teacherHint')}
+              </div>
+            </div>
+            <RoleGate capability="project.manageEvermind">
+              {isPaid ? (
+                <Select
+                  value={head?.teacherModel ?? ''}
+                  onChange={(e) => run(() => setProjectEvermindTeacher(projectId, e.target.value || null))}
+                  disabled={busy}
+                  aria-label={t('teacherLabel')}
+                  style={{ maxWidth: 340, width: '100%' }}
+                >
+                  <option value="">{t('teacherNone')}</option>
+                  {teacherOptions.map((m) => (
+                    <option key={m} value={m}>{m}</option>
+                  ))}
+                </Select>
+              ) : (
+                <p style={{ margin: 0, fontSize: '0.72rem', color: 'var(--text-secondary)', fontStyle: 'italic' }}>
+                  {t('teacherPaidOnly')}
+                </p>
+              )}
+            </RoleGate>
+          </div>
           <p style={{ margin: 0, fontSize: '0.72rem', color: 'var(--text-secondary)' }}>
             {t('contributions', { count: head?.contributions ?? 0 })}
           </p>

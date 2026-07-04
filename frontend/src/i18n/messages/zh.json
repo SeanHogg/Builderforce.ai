@@ -4582,6 +4582,10 @@
     "connected": "学习中",
     "frozen": "已冻结",
     "contributions": "目前已有 {count} 次学习贡献",
+    "teacherLabel": "用前沿大模型来教",
+    "teacherHint": "将顶尖模型（Opus、Mistral、GLM…）蒸馏进本项目的 Evermind——每次运行都从前沿模型的理想答案中学习，而不是原始运行文本。",
+    "teacherNone": "无——仅从运行中学习",
+    "teacherPaidOnly": "仅限付费套餐——教学会消耗前沿模型的 tokens。",
     "errorGeneric": "出了点问题，请重试。"
   },
   "manager": {

@@ -7,7 +7,7 @@ import { contributeProjectEvermindFromText, type ProjectEvermindSyncConfig } fro
 import { pushProjectFact, recallSharedProjectFacts } from "./project-facts-sync.js";
 import { logDebug } from "../logger.js";
 import { normalizeBaseUrl } from "../utils/normalize-base-url.js";
-import { onAgentEvent } from "./agent-events.js";
+import { getAgentRunContext, onAgentEvent } from "./agent-events.js";
 import type { TeamMemoryEntry } from "./api-contract.js";
 import {
   syncBuilderForceAgentsDirectory,
@@ -103,6 +103,9 @@ type RunAccumulator = {
   filesCreated: string[];
   filesEdited: string[];
   toolNames: string[];
+  /** The run's initiating user prompt (the "ticket"), captured at accumulate time
+   *  from the run context so the project-Evermind teacher distils (task → answer). */
+  prompt?: string;
 };
 
 export function buildKnowledgeMemoryEntry(params: {
@@ -229,11 +232,15 @@ export class KnowledgeLoopService {
 
   private accumulate(runId: string, sessionKey: string, data: Record<string, unknown>): void {
     if (!this.runs.has(runId)) {
+      // Capture the initiating prompt NOW (during the run) — the run context is still
+      // registered here; by onRunComplete it may already be cleared.
+      const prompt = getAgentRunContext(runId)?.prompt;
       this.runs.set(runId, {
         sessionKey,
         filesCreated: [],
         filesEdited: [],
         toolNames: [],
+        ...(prompt ? { prompt } : {}),
       });
     }
     const acc = this.runs.get(runId)!;
@@ -332,7 +339,7 @@ export class KnowledgeLoopService {
     // learning): adapt the project model on this run's activity and push the diff
     // to the coordinator. Fire-and-forget + fully guarded — a no-op unless the
     // runtime is configured to reach a seeded, connected project model.
-    void this.contributeToProjectEvermind((entry ?? summary ?? "").trim());
+    void this.contributeToProjectEvermind((entry ?? summary ?? "").trim(), acc?.prompt);
 
     await this.syncIfConfigured();
   }
@@ -347,12 +354,13 @@ export class KnowledgeLoopService {
     return { gatewayUrl: baseUrl ?? DEFAULT_BUILDERFORCE_URL, apiKey, agentHostId: hostId, projectId: Number(projectId) };
   }
 
-  /** Adapt-and-push a project-Evermind contribution (best-effort, non-fatal). */
-  private async contributeToProjectEvermind(text: string): Promise<void> {
+  /** Adapt-and-push a project-Evermind contribution (best-effort, non-fatal). The
+   *  `prompt` (the run's ticket) lets the coordinator's teacher distil (task → answer). */
+  private async contributeToProjectEvermind(text: string, prompt?: string): Promise<void> {
     const cfg = this.projectEvermindConfig();
     if (!cfg || text.length < 20) return;
     try {
-      const res = await contributeProjectEvermindFromText(cfg, text);
+      const res = await contributeProjectEvermindFromText(cfg, text, prompt);
       if (res.ok) logDebug(`[project-evermind] contributed a delta (base v${res.version})`);
       else logDebug(`[project-evermind] skipped: ${res.reason}`);
     } catch (err) {

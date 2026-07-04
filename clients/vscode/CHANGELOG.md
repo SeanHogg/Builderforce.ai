@@ -2,6 +2,14 @@
 
 All notable changes to the BuilderForce VS Code extension are documented here.
 
+## [2026.7.17] — A calmer, more capable chat box
+
+- **The chat box highlights as you type.** It lights up in BuilderForce blue while you're writing — so it's always clear where your focus is — and settles back to normal once it's empty.
+- **Everything you need in one tidy toolbar.** A new **＋** menu keeps your inputs together: upload a file from your computer, pull in a file from your workspace, or let the assistant reach the web. A new **/** menu lets you dial the assistant's effort — Quick, Balanced, or Thorough — turn step-by-step thinking on or off, and jump straight to your account settings.
+- **Auto mode, one tap away.** Flip Auto mode on right from the chat box to let the assistant carry out its actions without stopping to ask each time.
+- **Talk instead of type.** Where your editor supports it, tap the microphone to dictate your message.
+- **Switch models without leaving the chat.** The model name beside the box is now a button — click it to pick a different one.
+
 ## [2026.7.13] — Your message is never lost when a session expires
 
 - **Fixed: a chat error you can dismiss — and a message you don't lose.** If your session expired mid-send, the chat used to show a red "Invalid or expired token" error you couldn't close, and the message you'd typed was gone. Now the error banner has a **Dismiss** button plus a one-click **Reconnect** that re-establishes your session, and the text you sent is put back in the composer so you can send it again once you're reconnected.

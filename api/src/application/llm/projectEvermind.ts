@@ -458,15 +458,17 @@ export async function dispatchProjectEvermindLearnText(
   projectId: number,
   text: string,
   weight?: number,
+  prompt?: string | null,
 ): Promise<LearnDispatchResult> {
   const trimmed = (text ?? '').trim();
   if (trimmed.length < 20) return { ok: false, status: 400, body: { error: 'text too short' } };
+  const promptTrimmed = (prompt ?? '').trim();
   const stub = coordinatorStub(env, tenantId, projectId);
   if (!stub) return { ok: false, status: 503, body: { error: 'concurrent learning not configured (no coordinator binding)' } };
   const res = await stub.fetch('https://coordinator/learn-text', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ tenantId, projectId, text: trimmed.slice(0, 8000), ...(weight != null ? { weight } : {}) }),
+    body: JSON.stringify({ tenantId, projectId, text: trimmed.slice(0, 8000), ...(promptTrimmed ? { prompt: promptTrimmed.slice(0, 8000) } : {}), ...(weight != null ? { weight } : {}) }),
   });
   const body = (await res.json().catch(() => ({}))) as Record<string, unknown>;
   return { ok: res.ok, status: res.status, body };

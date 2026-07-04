@@ -41,14 +41,20 @@ function authHeaders(cfg: ProjectEvermindSyncConfig): Record<string, string> {
 export async function contributeProjectEvermindFromText(
   cfg: ProjectEvermindSyncConfig,
   text: string,
+  prompt?: string,
 ): Promise<ContributeResult> {
   const trimmed = (text ?? "").trim();
   if (trimmed.length < 20) return { ok: false, reason: "text too short" };
+  const promptTrimmed = (prompt ?? "").trim();
   try {
     const res = await fetch(`${cfg.gatewayUrl}/api/agent/projects/${cfg.projectId}/evermind/learn-text`, {
       method: "POST",
       headers: { ...authHeaders(cfg), "Content-Type": "application/json" },
-      body: JSON.stringify({ text: trimmed.slice(0, cfg.maxChars ?? 8000), weight: trimmed.length }),
+      body: JSON.stringify({
+        text: trimmed.slice(0, cfg.maxChars ?? 8000),
+        ...(promptTrimmed ? { prompt: promptTrimmed.slice(0, cfg.maxChars ?? 8000) } : {}),
+        weight: trimmed.length,
+      }),
     });
     const body = (await res.json().catch(() => ({}))) as Record<string, unknown>;
     if (!res.ok) return { ok: false, reason: typeof body["error"] === "string" ? (body["error"] as string) : `learn-text ${res.status}` };
