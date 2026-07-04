@@ -253,7 +253,7 @@ function ToolsByCategoryCard(_props: WidgetCardProps) {
 const SKILLS_DRILL: WidgetDrill = { kind: 'route', href: '/skills' };
 const PERSONAS_DRILL: WidgetDrill = { kind: 'route', href: '/personas' };
 const PROMPTS_DRILL: WidgetDrill = { kind: 'route', href: '/prompts' };
-const MODELS_DRILL: WidgetDrill = { kind: 'route', href: '/models' };
+const MODELS_DRILL: WidgetDrill = { kind: 'route', href: '/marketplace?category=models' };
 const MARKETPLACE_DRILL: WidgetDrill = { kind: 'route', href: '/marketplace' };
 const TOOLS_DRILL: WidgetDrill = { kind: 'route', href: '/tools' };
 

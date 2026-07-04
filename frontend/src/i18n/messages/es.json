@@ -5005,7 +5005,8 @@
     "buildSub": "Proyectos, agentes y espacio",
     "hireTitle": "Que me contraten",
     "hireSub": "Perfil freelance y trabajos",
-    "accountTypeAria": "Tipo de cuenta"
+    "accountTypeAria": "Tipo de cuenta",
+    "commonQuestions": "Preguntas frecuentes"
   },
   "notifications": {
     "title": "Notificaciones",

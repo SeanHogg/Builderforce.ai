@@ -5005,7 +5005,8 @@
     "buildSub": "Projekte, Agenten & Arbeitsbereich",
     "hireTitle": "Eingestellt werden",
     "hireSub": "Freelance-Profil & Jobs",
-    "accountTypeAria": "Kontotyp"
+    "accountTypeAria": "Kontotyp",
+    "commonQuestions": "Häufige Fragen"
   },
   "notifications": {
     "title": "Benachrichtigungen",

@@ -5005,7 +5005,8 @@
     "buildSub": "Projets, agents et espace",
     "hireTitle": "Être recruté",
     "hireSub": "Profil freelance et missions",
-    "accountTypeAria": "Type de compte"
+    "accountTypeAria": "Type de compte",
+    "commonQuestions": "Questions fréquentes"
   },
   "notifications": {
     "title": "Notifications",
