@@ -2,6 +2,7 @@
 
 import { Select } from '@/components/Select';
 import Link from 'next/link';
+import { useSearchParams } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 
 import { useState, useEffect, useCallback } from 'react';
@@ -201,6 +202,7 @@ export default function MarketplacePageClient() {
   const tt = useTranslations('talent');
   const tdis = useTranslations('freelancer');
   const tmodels = useTranslations('models');
+  const searchParams = useSearchParams();
 
   const [search, setSearch] = useState('');
   const [category, setCategory] = useState<MarketplaceCategory>('all');
@@ -361,13 +363,16 @@ export default function MarketplacePageClient() {
 
   useEffect(() => { loadHired(); }, [loadHired]);
 
-  // Deep-link support: /marketplace?category=talent (e.g. the retired /talent route
-  // redirects here) opens the right tab on first paint.
+  // Deep-link support: /marketplace?category=talent|models (the retired /talent and
+  // /models routes redirect here, and the header links deep-link in) selects the
+  // right tab — reactively, so a query-only nav on the same route still switches
+  // (a mount-once read would miss it for a visitor already on /marketplace).
+  const categoryParam = searchParams.get('category');
   useEffect(() => {
-    if (typeof window === 'undefined') return;
-    const c = new URLSearchParams(window.location.search).get('category');
-    if (c && (CATEGORY_IDS as string[]).includes(c)) setCategory(c as MarketplaceCategory);
-  }, []);
+    if (categoryParam && (CATEGORY_IDS as string[]).includes(categoryParam)) {
+      setCategory(categoryParam as MarketplaceCategory);
+    }
+  }, [categoryParam]);
 
   // Any change to the talent filters (shared search box, discipline, sort) resets to
   // page 1 so the viewer never lands on an out-of-range page.
@@ -591,7 +596,7 @@ export default function MarketplacePageClient() {
                   cursor: 'pointer',
                 }}
               >
-                {c.id === 'talent' ? '👤 ' : ''}{tm(`cat.${c.id}`)}
+                {c.id === 'talent' ? '👤 ' : c.id === 'models' ? '🧠 ' : ''}{tm(`cat.${c.id}`)}
               </button>
             ))}
           </div>

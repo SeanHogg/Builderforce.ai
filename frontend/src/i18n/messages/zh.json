@@ -4866,7 +4866,7 @@
   },
   "marketplace": {
     "title": "人才与智能团队",
-    "blurb": "雇用自由职业者和 AI 智能体，并安装人设、技能和内容，为你的团队赋能。",
+    "blurb": "雇用自由职业者和 AI 智能体，安装人设、技能和内容，并路由任意模型 — 一切尽在一个市场。",
     "searchPlaceholder": "搜索市场…",
     "categoryLabel": "分类",
     "cat": {
@@ -4876,12 +4876,86 @@
       "content": "内容",
       "workforce": "智能体",
       "talent": "人才",
+      "models": "模型",
       "publish": "发布"
     },
     "emptyItems": "没有匹配的项目。",
     "emptyAgentsSearch": "没有符合搜索条件的智能体。",
     "emptyAgentsNone": "还没有已发布的智能体。从项目中发布一个智能体即可在此展示。",
     "talentError": "无法加载人才。"
+  },
+  "models": {
+    "searchPlaceholder": "搜索模型、提供商…",
+    "catalogUnavailable": "实时模型目录当前不可用 — 仅显示 Builderforce.ai 模型。",
+    "loadFailed": "加载模型失败。",
+    "empty": "没有符合搜索条件的模型。",
+    "filter": {
+      "tierGroup": "按层级筛选",
+      "all": "全部",
+      "free": "免费",
+      "paid": "付费",
+      "builderforce": "Builderforce.ai",
+      "routableOnly": "仅可路由",
+      "routableOnlyTitle": "仅显示 Builderforce 免费/Pro 级联可路由的模型"
+    },
+    "price": {
+      "free": "免费",
+      "in": "输入",
+      "out": "输出"
+    },
+    "routableChip": {
+      "label": "可路由",
+      "title": "Builderforce 免费/Pro 级联可路由此模型"
+    },
+    "field": {
+      "provider": "提供商",
+      "inputPrice": "输入价格",
+      "outputPrice": "输出价格",
+      "contextWindow": "上下文窗口",
+      "modality": "模态",
+      "tools": "工具/函数",
+      "reasoning": "推理",
+      "imageInput": "图像输入",
+      "routable": "可路由"
+    },
+    "detail": {
+      "supportedParameters": "支持的参数",
+      "routedBlurb": "以相同的每 token 价格通过 Builderforce.ai Pro 路由 — 一个兼容 OpenAI 的端点，具备故障转移、提示缓存和用量计量。",
+      "upgradeToPro": "升级到 Pro",
+      "getStartedFree": "免费开始",
+      "useViaPro": "通过 Builderforce.ai Pro 使用"
+    },
+    "card": {
+      "noDescription": "暂无描述。",
+      "selectViewDetails": "选择并查看详情"
+    },
+    "table": {
+      "compareAria": "比较",
+      "model": "模型",
+      "provider": "提供商",
+      "context": "上下文",
+      "input": "输入 / 1M",
+      "output": "输出 / 1M",
+      "actions": "操作",
+      "details": "详情"
+    },
+    "compare": {
+      "dialogLabel": "比较模型",
+      "comparingCount": "正在比较 {count} 个模型",
+      "close": "关闭",
+      "closeAria": "关闭比较",
+      "attribute": "属性",
+      "selectedRegionLabel": "已选择用于比较的模型",
+      "title": "比较",
+      "clear": "清除",
+      "removeAria": "移除 {name}",
+      "needTwoTitle": "至少选择 2 个模型进行比较",
+      "compareTitle": "比较所选模型",
+      "button": "比较",
+      "maxTitle": "最多可比较 {max} 个模型",
+      "addTitle": "加入比较",
+      "compareAria": "比较 {name}"
+    }
   },
   "talent": {
     "title": "人才市场",
