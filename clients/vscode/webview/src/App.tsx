@@ -18,6 +18,7 @@ import {
   onIntent,
   onTokenChange,
   post,
+  request,
   refreshToken,
   type BrainIntent,
   type InitData,
@@ -54,6 +55,106 @@ function timelineLabels(labels: LabelBundle): Partial<BrainTimelineLabels> {
     apply: t('tl.apply', 'Apply'),
     createFile: t('tl.createFile', 'Create file'),
   };
+}
+
+/** How hard the model should work on the next turn — surfaced in the `/` menu. */
+type Effort = 'quick' | 'balanced' | 'thorough';
+
+/**
+ * Turn the composer's Effort / Thinking / Browse-the-web toggles into extra
+ * system-prompt directives. These ride the SAME `extraSystem` channel the web
+ * Brain uses, so a toggle actually changes how the next turn runs (no hidden
+ * model params needed). 'balanced' is the neutral default and adds nothing.
+ */
+function buildComposerDirectives(o: { effort: Effort; thinking: boolean; web: boolean }): string {
+  const parts: string[] = [];
+  if (o.effort === 'quick')
+    parts.push('Effort: favour a fast, concise, direct answer. Keep exploration minimal unless the task truly requires more.');
+  if (o.effort === 'thorough')
+    parts.push('Effort: apply maximum rigor. Be exhaustive, consider edge cases, verify your work, and do not stop until the task is fully complete.');
+  if (o.thinking)
+    parts.push('Reason step by step before answering: work the problem through and lay out your plan before you act.');
+  if (o.web)
+    parts.push('You may browse the web: when a question needs current or external information, use the `web.fetch` tool to read the relevant URL(s) rather than relying on memory, and cite the sources you use.');
+  return parts.join('\n\n');
+}
+
+/* Toolbar glyphs — inline SVG so they render crisply in the editor's light AND
+   dark themes (they inherit currentColor) with no icon-font dependency. */
+const IconPlus = () => (
+  <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M8 3.25v9.5M3.25 8h9.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" /></svg>
+);
+const IconSlash = () => (
+  <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M10.25 3 5.75 13" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" /></svg>
+);
+const IconMic = () => (
+  <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><rect x="6" y="2" width="4" height="7.5" rx="2" fill="currentColor" /><path d="M3.75 8a4.25 4.25 0 0 0 8.5 0M8 12.25V14" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" /></svg>
+);
+const IconSend = () => (
+  <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M8 13V3.75M4.25 7.5 8 3.75l3.75 3.75" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" /></svg>
+);
+const IconBolt = () => (
+  <svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M9.2 1 3.4 8.6h3.4L6 15l6.2-8.1H8.6L9.2 1z" /></svg>
+);
+
+/**
+ * A small popover menu (the `+` and `/` composer affordances). Closes on outside
+ * click or Escape. `children` is a render prop given a `close()` so an item can
+ * dismiss the menu after acting. Shared by both composer menus (DRY).
+ */
+function PopoverMenu({
+  trigger, title, align = 'left', children,
+}: {
+  trigger: React.ReactNode;
+  title: string;
+  align?: 'left' | 'right';
+  children: (close: () => void) => React.ReactNode;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  const close = useCallback(() => setOpen(false), []);
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false); };
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setOpen(false); };
+    document.addEventListener('mousedown', onDown);
+    document.addEventListener('keydown', onKey);
+    return () => { document.removeEventListener('mousedown', onDown); document.removeEventListener('keydown', onKey); };
+  }, [open]);
+  return (
+    <div className="bf-menu" ref={ref}>
+      <button
+        type="button"
+        className={`bf-iconbtn${open ? ' is-active' : ''}`}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        title={title}
+        aria-label={title}
+        onClick={() => setOpen((o) => !o)}
+      >
+        {trigger}
+      </button>
+      {open && (
+        <div className={`bf-menu__pop bf-menu__pop--${align}`} role="menu">
+          {children(close)}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** One row in a {@link PopoverMenu}. `active` shows a trailing check. */
+function MenuItem({ icon, label, hint, active, onClick }: {
+  icon: React.ReactNode; label: string; hint?: string; active?: boolean; onClick: () => void;
+}) {
+  return (
+    <button type="button" role="menuitem" className={`bf-menu__item${active ? ' is-active' : ''}`} onClick={onClick}>
+      <span className="bf-menu__ico" aria-hidden="true">{icon}</span>
+      <span className="bf-menu__lbl">{label}</span>
+      {hint != null && <span className="bf-menu__hint">{hint}</span>}
+      <span className="bf-menu__check" aria-hidden="true">{active ? '✓' : ''}</span>
+    </button>
+  );
 }
 
 /** Root: wait for the host's init frame, then mount the brain providers. */
@@ -168,6 +269,19 @@ function Chat({ init }: { init: InitData }) {
   const [inputFocused, setInputFocused] = useState(false);
   const [dragOver, setDragOver] = useState(false);
   const [copied, setCopied] = useState(false);
+  // Composer run-shaping toggles (the `/` menu + the `+` menu's web option).
+  // They compile into `extraSystem` directives, so a toggle changes how the next
+  // turn actually runs. 'balanced' is the neutral default.
+  const [effort, setEffort] = useState<Effort>('balanced');
+  const [thinking, setThinking] = useState(false);
+  const [webBrowsing, setWebBrowsing] = useState(false);
+  // Speech-to-text (dictation) via the Web Speech API. Capability-gated: the mic
+  // button only renders where the runtime exposes SpeechRecognition, so it is
+  // never a dead control (see the gap register re: a universal transcription path).
+  const [listening, setListening] = useState(false);
+  const recognitionRef = useRef<{ stop: () => void } | null>(null);
+  const speechSupported = typeof window !== 'undefined'
+    && ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window);
 
   const reloadChats = useCallback(() => {
     persistence.listChats({ limit: 50 })
@@ -201,11 +315,20 @@ function Chat({ init }: { init: InitData }) {
     [init.project?.id, init.project?.name],
   );
 
+  // Fold the composer toggles (effort / thinking / web) into the same system
+  // channel as the project context, so the next turn honors them.
+  const extraSystem = useMemo(
+    () => [projectDirective, buildComposerDirectives({ effort, thinking, web: webBrowsing })]
+      .filter(Boolean)
+      .join('\n\n'),
+    [projectDirective, effort, thinking, webBrowsing],
+  );
+
   const conv = useBrainConversation({
     chatId,
     modality: 'ide',
     model: init.model,
-    extraSystem: projectDirective,
+    extraSystem,
     toolSpecs,
     runTool,
     needsConfirm,
@@ -266,6 +389,48 @@ function Chat({ init }: { init: InitData }) {
     if (!files) return;
     for (const f of Array.from(files)) void conv.attach(f);
   }, [conv]);
+
+  // "Add context" — ask the host to pick a workspace file (or the active editor
+  // selection); it returns the path + text, which we attach through the SAME
+  // upload pipeline as a dropped/uploaded file, so the model gets the content.
+  const addContext = useCallback(async () => {
+    try {
+      const ctx = await request<{ path: string; text: string } | null>('context.pick');
+      if (!ctx || !ctx.text) return;
+      await conv.attach(new File([ctx.text], ctx.path || 'context.txt', { type: 'text/plain' }));
+    } catch {
+      /* host cancelled / no workspace — nothing to attach */
+    }
+  }, [conv]);
+
+  // Dictation: stream interim + final transcripts into the composer, appended to
+  // whatever the user had already typed. Stopping (button or end-of-speech)
+  // clears the ref so the next click starts a fresh recognition.
+  const toggleMic = useCallback(() => {
+    const SR = (window as unknown as { SpeechRecognition?: new () => any; webkitSpeechRecognition?: new () => any }).SpeechRecognition
+      ?? (window as unknown as { webkitSpeechRecognition?: new () => any }).webkitSpeechRecognition;
+    if (!SR) return;
+    if (recognitionRef.current) { recognitionRef.current.stop(); return; }
+    const rec = new SR();
+    rec.lang = navigator.language || 'en-US';
+    rec.interimResults = true;
+    rec.continuous = false;
+    const base = input.trim() ? `${input.replace(/\s*$/, '')} ` : '';
+    rec.onresult = (e: { results: ArrayLike<ArrayLike<{ transcript: string }>> }) => {
+      let text = '';
+      for (let i = 0; i < e.results.length; i++) text += e.results[i][0].transcript;
+      setInput(base + text);
+    };
+    const done = () => { setListening(false); recognitionRef.current = null; };
+    rec.onend = done;
+    rec.onerror = done;
+    recognitionRef.current = rec;
+    setListening(true);
+    try { rec.start(); } catch { done(); }
+  }, [input]);
+
+  // Stop any in-flight recognition if the panel unmounts.
+  useEffect(() => () => { try { recognitionRef.current?.stop(); } catch { /* noop */ } }, []);
 
   const onPaste = useCallback((e: React.ClipboardEvent) => {
     const imgs = Array.from(e.clipboardData.items)
@@ -451,19 +616,101 @@ function Chat({ init }: { init: InitData }) {
           onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submit(); } }}
         />
         <div className="bf-composer__actions">
-          <button className="bf-btn" title={t('app.attachImage', 'Attach image')} onClick={() => fileInputRef.current?.click()} disabled={conv.uploading}>
-            {conv.uploading ? '…' : '📎'}
-          </button>
           <input
             ref={fileInputRef}
             type="file"
-            accept="image/*"
             multiple
             hidden
             onChange={(e) => { attachFiles(e.target.files); e.target.value = ''; }}
           />
-          {init.model && <span className="bf-model">{init.model}</span>}
+
+          {/* + : add content to the message (upload, workspace context, or web). */}
+          <PopoverMenu align="left" title={t('app.add', 'Add')} trigger={<IconPlus />}>
+            {(close) => (
+              <>
+                <MenuItem
+                  icon="💻"
+                  label={conv.uploading ? t('app.uploading', 'Uploading…') : t('app.uploadFile', 'Upload from computer')}
+                  onClick={() => { close(); if (!conv.uploading) fileInputRef.current?.click(); }}
+                />
+                <MenuItem
+                  icon="◧"
+                  label={t('app.addContext', 'Add context')}
+                  onClick={() => { close(); void addContext(); }}
+                />
+                <MenuItem
+                  icon="🌐"
+                  label={t('app.browseWeb', 'Browse the web')}
+                  hint={webBrowsing ? t('app.on', 'On') : t('app.off', 'Off')}
+                  active={webBrowsing}
+                  onClick={() => setWebBrowsing((v) => !v)}
+                />
+              </>
+            )}
+          </PopoverMenu>
+
+          {/* / : effort, thinking, and account settings. */}
+          <PopoverMenu align="left" title={t('app.options', 'Options')} trigger={<IconSlash />}>
+            {(close) => (
+              <>
+                <div className="bf-menu__group">{t('app.effort', 'Effort')}</div>
+                <MenuItem icon="🏃" label={t('app.effortQuick', 'Quick')} active={effort === 'quick'} onClick={() => setEffort('quick')} />
+                <MenuItem icon="⚖️" label={t('app.effortBalanced', 'Balanced')} active={effort === 'balanced'} onClick={() => setEffort('balanced')} />
+                <MenuItem icon="🎯" label={t('app.effortThorough', 'Thorough')} active={effort === 'thorough'} onClick={() => setEffort('thorough')} />
+                <div className="bf-menu__sep" />
+                <MenuItem
+                  icon="💭"
+                  label={t('app.thinking', 'Thinking')}
+                  hint={thinking ? t('app.on', 'On') : t('app.off', 'Off')}
+                  active={thinking}
+                  onClick={() => setThinking((v) => !v)}
+                />
+                <div className="bf-menu__sep" />
+                <MenuItem icon="⚙" label={t('app.accountSettings', 'Account settings')} onClick={() => { close(); post('settings'); }} />
+              </>
+            )}
+          </PopoverMenu>
+
+          {/* Auto mode = auto-approve tool actions (same gate as the confirm dialog). */}
+          <button
+            type="button"
+            className={`bf-toggle${autoApprove ? ' is-on' : ''}`}
+            title={t('app.autoModeHint', 'Auto-approve tool actions without asking')}
+            aria-pressed={autoApprove}
+            onClick={() => setAutoApproveMode(!autoApprove)}
+          >
+            <IconBolt />
+            <span>{t('app.autoMode', 'Auto mode')}</span>
+          </button>
+
           <div className="bf-header__spacer" />
+
+          {init.model && (
+            <button
+              type="button"
+              className="bf-model bf-model--btn"
+              title={t('app.pickModel', 'Change model')}
+              onClick={() => post('pickModel')}
+            >
+              {init.model}
+            </button>
+          )}
+
+          {/* Speech-to-text — only where the runtime supports it, and never while a
+              run is streaming (the composer is otherwise showing Stop). */}
+          {speechSupported && !conv.sending && (
+            <button
+              type="button"
+              className={`bf-iconbtn${listening ? ' is-listening' : ''}`}
+              title={listening ? t('app.stopDictation', 'Stop dictation') : t('app.dictate', 'Dictate')}
+              aria-label={listening ? t('app.stopDictation', 'Stop dictation') : t('app.dictate', 'Dictate')}
+              aria-pressed={listening}
+              onClick={toggleMic}
+            >
+              <IconMic />
+            </button>
+          )}
+
           {/* While a run is in flight the primary action becomes Stop — it aborts
               the streaming LLM request and unwinds the agent loop (conv.stop). */}
           {conv.sending ? (
@@ -471,8 +718,14 @@ function Chat({ init }: { init: InitData }) {
               <span className="bf-stop-glyph" aria-hidden="true">■</span> {t('app.stop', 'Stop')}
             </button>
           ) : (
-            <button className="bf-btn bf-btn--primary" onClick={submit} disabled={!input.trim()}>
-              {t('app.send', 'Send')}
+            <button
+              className="bf-iconbtn bf-iconbtn--send"
+              onClick={submit}
+              disabled={!input.trim()}
+              title={t('app.send', 'Send')}
+              aria-label={t('app.send', 'Send')}
+            >
+              <IconSend />
             </button>
           )}
         </div>

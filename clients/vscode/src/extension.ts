@@ -14,7 +14,7 @@ import { getModels, getWebBaseUrl, SECRET_KEY } from "./gateway";
 import { InsightsController } from "./insights";
 import { clearPlatformToolsCache } from "./platformTools";
 import { setGroundingSummary } from "./grounding";
-import { setSelectedModel } from "./modelState";
+import { onModelChange, setSelectedModel } from "./modelState";
 import { getSelectedProject, initProjectState, onProjectChange, setSelectedProject } from "./projectState";
 import { invalidateProjectNames } from "./projectNames";
 import { ProjectsTreeProvider } from "./projectsTree";
@@ -305,6 +305,9 @@ export function activate(context: vscode.ExtensionContext): void {
       BrainWebview.refresh();
       sessionsView.description = getSelectedProject()?.name;
     }),
+    // A manual model pick re-pushes Brain init so an open chat switches immediately
+    // (parity with project change; the native participant re-resolves per turn).
+    onModelChange(() => BrainWebview.refresh()),
   );
 
   void maybeScan(context, false);

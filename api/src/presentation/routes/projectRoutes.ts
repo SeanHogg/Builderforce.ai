@@ -2,6 +2,8 @@ import { Hono, type Context } from 'hono';
 import { and, count, eq, inArray, max, min, sql } from 'drizzle-orm';
 import { ProjectService } from '../../application/project/ProjectService';
 import { ensureProjectTemplate } from '../../application/project/projectTemplate';
+import { KanbanTemplateService } from '../../application/kanban/kanbanTemplateService';
+import { DEFAULT_TEMPLATE_ID } from '../../application/kanban/templateCatalog';
 import type { HonoEnv } from '../../env';
 import type { Env } from '../../env';
 import { getCacheVersion, getOrSetCached, bumpCacheVersion } from '../../infrastructure/cache/readThroughCache';
@@ -646,6 +648,17 @@ export function createProjectRoutes(projectService: ProjectService, db: Db): Hon
       tenantId,
     });
     await ensureProjectTemplate(c.env.UPLOADS, project);
+    // Provision the project's board from a kanban template so its lanes carry role
+    // ownership + per-lane requirements from day one (the onboarding "recommended
+    // roster" reads from this). Defaults to the Standard SWE board; best-effort so a
+    // template failure never blocks project creation.
+    {
+      const plain = project.toPlain();
+      const templateId = (body as { kanbanTemplateId?: string }).kanbanTemplateId?.trim() || DEFAULT_TEMPLATE_ID;
+      await new KanbanTemplateService(db)
+        .applyToProject(c.env as Env, tenantId, plain.id, templateId, plain.name)
+        .catch(() => {});
+    }
     await invalidateProjectsList(c.env as Env, tenantId).catch(() => {});
     return c.json(project.toPlain(), 201);
   });

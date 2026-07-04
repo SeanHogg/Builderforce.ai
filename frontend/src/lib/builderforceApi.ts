@@ -135,6 +135,60 @@ export const toolsApi = {
 };
 
 // ---------------------------------------------------------------------------
+// Agentic Workforce Kanban — roles, templates, roster, per-ticket audit
+// ---------------------------------------------------------------------------
+
+import type {
+  JobRole, KanbanTemplate, TemplateSummary, RecommendedRoster, TicketAudit, FlaggedTicket, TemplateVisibility,
+} from './kanban';
+
+export const kanbanApi = {
+  // Roles
+  listRoles: (): Promise<JobRole[]> =>
+    request<{ roles: JobRole[] }>('/api/kanban/roles').then((r) => r.roles),
+  createRole: (body: { name: string; key?: string; description?: string; discipline?: string; color?: string; icon?: string }): Promise<JobRole> =>
+    request<{ role: JobRole }>('/api/kanban/roles', { method: 'POST', body: JSON.stringify(body) }).then((r) => r.role),
+  updateRole: (key: string, body: Partial<{ name: string; description: string; discipline: string; color: string; icon: string }>): Promise<void> =>
+    request<void>(`/api/kanban/roles/${encodeURIComponent(key)}`, { method: 'PATCH', body: JSON.stringify(body) }),
+  deleteRole: (key: string): Promise<void> =>
+    request<void>(`/api/kanban/roles/${encodeURIComponent(key)}`, { method: 'DELETE' }),
+
+  // Templates
+  listTemplates: (): Promise<TemplateSummary[]> =>
+    request<{ templates: TemplateSummary[] }>('/api/kanban/templates').then((r) => r.templates),
+  listPublicTemplates: (): Promise<TemplateSummary[]> =>
+    request<{ templates: TemplateSummary[] }>('/api/kanban/templates/public').then((r) => r.templates),
+  getTemplate: (id: string): Promise<KanbanTemplate> =>
+    request<{ template: KanbanTemplate }>(`/api/kanban/templates/${encodeURIComponent(id)}`).then((r) => r.template),
+  createTemplate: (body: Partial<KanbanTemplate> & { name: string; forkFrom?: string }): Promise<KanbanTemplate> =>
+    request<{ template: KanbanTemplate }>('/api/kanban/templates', { method: 'POST', body: JSON.stringify(body) }).then((r) => r.template),
+  updateTemplate: (id: string, body: Partial<KanbanTemplate>): Promise<KanbanTemplate> =>
+    request<{ template: KanbanTemplate }>(`/api/kanban/templates/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify(body) }).then((r) => r.template),
+  deleteTemplate: (id: string): Promise<void> =>
+    request<void>(`/api/kanban/templates/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+  publishTemplate: (id: string, body: { published: boolean; visibility?: TemplateVisibility; priceCents?: number | null }): Promise<void> =>
+    request<void>(`/api/kanban/templates/${encodeURIComponent(id)}/publish`, { method: 'POST', body: JSON.stringify(body) }),
+  installTemplate: (id: string): Promise<KanbanTemplate> =>
+    request<{ template: KanbanTemplate }>(`/api/kanban/templates/${encodeURIComponent(id)}/install`, { method: 'POST' }).then((r) => r.template),
+
+  // Apply + roster + audit (per project / ticket)
+  applyTemplate: (projectId: number, templateId: string): Promise<{ lanesApplied: number; requirementsApplied: number }> =>
+    request<{ lanesApplied: number; requirementsApplied: number }>(`/api/kanban/projects/${projectId}/apply`, { method: 'POST', body: JSON.stringify({ templateId }) }),
+  roster: (projectId: number): Promise<RecommendedRoster> =>
+    request<{ roster: RecommendedRoster }>(`/api/kanban/projects/${projectId}/roster`).then((r) => r.roster),
+  flaggedForProject: (projectId: number): Promise<FlaggedTicket[]> =>
+    request<{ flagged: FlaggedTicket[] }>(`/api/kanban/projects/${projectId}/flagged`).then((r) => r.flagged),
+  flagged: (): Promise<FlaggedTicket[]> =>
+    request<{ flagged: FlaggedTicket[] }>('/api/kanban/flagged').then((r) => r.flagged),
+  ticketAudit: (taskId: number): Promise<TicketAudit | null> =>
+    request<{ audit: TicketAudit | null }>(`/api/kanban/tasks/${taskId}/audit`).then((r) => r.audit),
+  recomputeAudit: (taskId: number): Promise<TicketAudit> =>
+    request<{ audit: TicketAudit }>(`/api/kanban/tasks/${taskId}/audit/recompute`, { method: 'POST' }).then((r) => r.audit),
+  signoff: (taskId: number, body: { roleKey: string; laneKey?: string; verdict?: 'approved' | 'changes_requested'; summary?: string }): Promise<TicketAudit> =>
+    request<{ audit: TicketAudit }>(`/api/kanban/tasks/${taskId}/signoff`, { method: 'POST', body: JSON.stringify(body) }).then((r) => r.audit),
+};
+
+// ---------------------------------------------------------------------------
 // Compile primitive — define a need (any modality) → AgentSpec → deploy plan
 // ---------------------------------------------------------------------------
 

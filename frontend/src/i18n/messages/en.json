@@ -4391,6 +4391,10 @@
       "rankTitle": "The AI Manager’s backlog rank for this ticket.",
       "editTitle": "Click to set a business value (0–100).",
       "unset": "Not set"
+    },
+    "audit": {
+      "flagged": "Flagged",
+      "flaggedTitle": "This ticket skipped a required role or diagnostic — review needed"
     }
   },
   "projectsContent": {
@@ -4716,7 +4720,11 @@
       "interviewing": "Interviewing",
       "active": "Active",
       "declined": "Declined",
-      "terminated": "Ended"
+      "terminated": "Ended",
+      "submitted": "Submitted",
+      "shortlisted": "Shortlisted",
+      "accepted": "Accepted",
+      "withdrawn": "Withdrawn"
     },
     "profile": {
       "title": "For-hire profile",
@@ -4752,7 +4760,12 @@
       "empty": "No engagements yet. Publish your profile so employers can hire you.",
       "workspace": "Workspace",
       "rate": "Rate",
-      "since": "Since"
+      "since": "Since",
+      "tabWork": "Open jobs",
+      "tabProposals": "My proposals",
+      "tabEngagements": "My engagements",
+      "accept": "Accept",
+      "decline": "Decline"
     },
     "timecard": {
       "title": "Timecard",
@@ -4799,6 +4812,19 @@
         "manual": "Manual",
         "meeting": "Meeting"
       }
+    },
+    "cancel": "Cancel",
+    "jobs": {
+      "bid": "Submit a proposal",
+      "submitBid": "Send proposal",
+      "coverNote": "Cover note (optional)",
+      "yourRate": "Your rate ($/hr)",
+      "alreadyBid": "Proposal submitted",
+      "emptyOpen": "No open jobs right now."
+    },
+    "proposals": {
+      "empty": "You haven’t submitted any proposals yet.",
+      "withdraw": "Withdraw"
     }
   },
   "talent": {
@@ -4827,6 +4853,18 @@
     "hero": {
       "blurb": "Hire vetted freelance developers, DBAs, designers and other specialists — browse résumés and skills, agree an hourly rate, interview, and track billable hours all in one place.",
       "ctaHire": "Post work & hire"
+    },
+    "reviews": "Reviews",
+    "filter": {
+      "search": "Search name or skill",
+      "discipline": "Discipline",
+      "allDisciplines": "All disciplines",
+      "sort": "Sort",
+      "sortRecent": "Most recent",
+      "sortRating": "Top rated",
+      "sortRateAsc": "Rate: low to high",
+      "sortRateDesc": "Rate: high to low",
+      "pageOf": "Page {page} of {pages}"
     }
   },
   "hires": {
@@ -4866,6 +4904,43 @@
       "auto": "Tracked",
       "manual": "Manual",
       "meeting": "Meeting"
+    },
+    "jobs": "Jobs",
+    "invoices": "Invoices",
+    "rate": "Rate",
+    "reviewComment": "Comment (optional)",
+    "submitReview": "Submit review",
+    "cancelBtn": "Cancel",
+    "job": {
+      "postNew": "+ Post a job",
+      "post": "Post job",
+      "titlePlaceholder": "Job title",
+      "descPlaceholder": "Describe the work…",
+      "discipline": "Discipline",
+      "rateMin": "Min $/hr",
+      "rateMax": "Max $/hr",
+      "skillsPlaceholder": "Skills (comma-separated)",
+      "empty": "No jobs posted yet.",
+      "proposals": "{count} proposals",
+      "viewProposals": "Proposals",
+      "close": "Close",
+      "noProposals": "No proposals yet.",
+      "accept": "Accept & hire",
+      "declineProposal": "Decline",
+      "status": {
+        "open": "Open",
+        "closed": "Closed",
+        "filled": "Filled"
+      }
+    },
+    "invoice": {
+      "empty": "No invoices yet.",
+      "pay": "Pay",
+      "status": {
+        "pending": "Pending",
+        "paid": "Paid",
+        "void": "Void"
+      }
     }
   },
   "register": {
@@ -4875,5 +4950,62 @@
     "hireTitle": "Get hired",
     "hireSub": "Freelance profile & gigs",
     "accountTypeAria": "Account type"
+  },
+  "notifications": {
+    "title": "Notifications",
+    "markAllRead": "Mark all read"
+  },
+  "kanban": {
+    "rosterTitle": "Recommended roster",
+    "rosterSubtitle": "Fill each role with a teammate or an AI agent",
+    "coverageSummary": "{filled}/{total} roles filled",
+    "templateLabel": "Board template",
+    "builtin": "Built-in",
+    "applying": "Applying…",
+    "required": "Required",
+    "optional": "Optional",
+    "filled": "Filled",
+    "gap": "Gap",
+    "createAgent": "Create agent",
+    "creating": "Creating…",
+    "noRoles": "This template defines no roles yet.",
+    "auditTitle": "Flagged tickets",
+    "noFlagged": "No tickets flagged — every required role and check is covered.",
+    "coverage": "{pct}% covered",
+    "templatesTitle": "Kanban templates",
+    "templatesSubtitle": "Build, switch, and share best-practice team boards.",
+    "tab_mine": "My templates",
+    "tab_marketplace": "Marketplace",
+    "tab_roles": "Roles",
+    "published": "Published",
+    "laneRoleCount": "{lanes} lanes · {roles} roles",
+    "fork": "Fork",
+    "edit": "Edit",
+    "delete": "Delete",
+    "free": "Free",
+    "installs": "{count} installs",
+    "install": "Install",
+    "roleNamePlaceholder": "New role name",
+    "addRole": "Add role",
+    "back": "Back",
+    "saving": "Saving…",
+    "save": "Save",
+    "gate": "Gate",
+    "gateAuto": "Auto",
+    "gateHuman": "Human",
+    "requirementGate": "Requirement gate",
+    "gateOff": "Off",
+    "gateSoft": "Soft",
+    "gateHard": "Hard",
+    "kindRole": "Role",
+    "kindReview": "Review",
+    "kindDiagnostic": "Diagnostic",
+    "respOwner": "Owner",
+    "respReviewer": "Reviewer",
+    "respContributor": "Contributor",
+    "addRequirement": "Add requirement",
+    "priceLabel": "Price (USD)",
+    "unpublish": "Unpublish",
+    "publishToMarketplace": "Publish to marketplace"
   }
 }

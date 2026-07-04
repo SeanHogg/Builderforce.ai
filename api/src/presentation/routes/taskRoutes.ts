@@ -20,6 +20,8 @@ import { RuntimeService } from '../../application/runtime/RuntimeService';
 import { dispatchCloudRunForTask } from './runtimeRoutes';
 import { recordCloudToolEvent } from '../../application/runtime/cloudAgentEngine';
 import { evaluateTaskAutoRun, type AutoRunReason } from '../../application/swimlane/evaluateAutoRun';
+import { enforceLaneRequirements } from '../../application/swimlane/laneRequirementGate';
+import { TicketAuditService } from '../../application/audit/ticketAuditService';
 import { executionTokenGate } from './executionTokenGate';
 import { broadcastProjectChanged } from '../../infrastructure/relay/broadcastRoom';
 
@@ -187,6 +189,20 @@ export async function maybeAutoRunOnLaneEntry(
       status:       args.status,
       originLaneKey: args.originLaneKey,
     });
+
+    // Pillar 2 — lane requirement gating: entering a lane recomputes the ticket's
+    // role/diagnostic audit and, when a required reviewer (e.g. the Architect) has
+    // not signed off, flags the ticket and dispatches that reviewer for a round-trip
+    // back to the Developer. When a reviewer run is owed this hop (or a 'hard' gate
+    // is unmet), the lane's NORMAL agent is suppressed until the review clears.
+    const gate = await enforceLaneRequirements(env, db, runtimeService, new TicketAuditService(db), {
+      tenantId:    args.tenantId,
+      projectId:   args.projectId,
+      taskId:      args.taskId,
+      status:      args.status,
+      submittedBy: args.submittedBy,
+    });
+    if (gate.blocked) return false;
 
     // A lane whose every candidate agent lacks its required capabilities is a
     // configuration error, not a silent no-op. Emit a `capability_mismatch` warning

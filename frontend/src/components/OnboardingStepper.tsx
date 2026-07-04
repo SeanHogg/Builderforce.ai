@@ -6,6 +6,7 @@ import { createTenant, completeOnboarding } from '@/lib/auth';
 import { createProject } from '@/lib/api';
 import { InstallBuilderForceAgents } from './InstallBuilderForceAgents';
 import { InviteTeamMembers } from './InviteTeamMembers';
+import { KanbanRosterCard } from './kanban/KanbanRosterCard';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -29,7 +30,7 @@ const INTENT_OPTIONS = [
   { value: 'learn', label: '📚 Learn and explore' },
 ];
 
-type StepId = 'workspace' | 'project' | 'install' | 'invite';
+type StepId = 'workspace' | 'project' | 'roster' | 'install' | 'invite';
 
 interface Step {
   id: StepId;
@@ -40,6 +41,7 @@ interface Step {
 const STEPS: Step[] = [
   { id: 'workspace', label: 'Create Workspace', description: 'Set up your organization' },
   { id: 'project',   label: 'Create a Project', description: 'Name your first project' },
+  { id: 'roster',    label: 'Recommended Roster', description: 'Staff your team of humans + agents' },
   { id: 'install',   label: 'Install BuilderForce Agents', description: 'Connect your AI agent' },
   { id: 'invite',    label: 'Invite Team',       description: 'Bring your teammates' },
 ];
@@ -81,6 +83,7 @@ export function OnboardingStepper({
   const [projectError, setProjectError] = useState<string | null>(null);
   const [projectLoading, setProjectLoading] = useState(false);
   const [projectCreated, setProjectCreated] = useState(false);
+  const [createdProjectId, setCreatedProjectId] = useState<number | null>(null);
 
   // Current workspace (may be passed in or created during step 1)
   const [currentTenant, setCurrentTenant] = useState<Tenant | null>(tenant);
@@ -123,7 +126,8 @@ export function OnboardingStepper({
       setProjectError(null);
       setProjectLoading(true);
       try {
-        await createProject({ name: projectName.trim(), description: projectDesc.trim() || undefined });
+        const created = await createProject({ name: projectName.trim(), description: projectDesc.trim() || undefined });
+        setCreatedProjectId((created as { id?: number })?.id ?? null);
         setProjectCreated(true);
         markComplete(1);
       } catch (err) {
@@ -537,7 +541,25 @@ export function OnboardingStepper({
             </div>
           )}
 
-          {/* ── Step 3: Install ── */}
+          {/* ── Step 3: Recommended Roster ── */}
+          {currentStepId === 'roster' && (
+            <div>
+              <p style={{ margin: '0 0 14px', fontSize: 13, color: 'var(--text-muted)' }}>
+                A great team has a deep roster. Your board applies a best-practice kanban whose lanes
+                need these roles — fill each with a teammate or spin up an AI agent. Gaps are flagged
+                on every ticket until they&apos;re staffed.
+              </p>
+              {createdProjectId != null ? (
+                <KanbanRosterCard projectId={createdProjectId} />
+              ) : (
+                <div style={{ fontSize: 13, color: 'var(--text-muted)', padding: '20px 0', textAlign: 'center' }}>
+                  Create a project first, then your recommended roster appears in project settings.
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ── Step 4: Install ── */}
           {currentStepId === 'install' && (
             <InstallBuilderForceAgents tenantToken={tenantToken} />
           )}

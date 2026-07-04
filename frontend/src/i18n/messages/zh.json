@@ -4391,6 +4391,10 @@
       "rankTitle": "AI 经理为此工单给出的待办排名。",
       "editTitle": "点击设置业务价值（0–100）。",
       "unset": "未设置"
+    },
+    "audit": {
+      "flagged": "已标记",
+      "flaggedTitle": "此工单跳过了必需的角色或诊断——需要复核"
     }
   },
   "projectsContent": {
@@ -4716,7 +4720,11 @@
       "interviewing": "面试中",
       "active": "进行中",
       "declined": "已拒绝",
-      "terminated": "已结束"
+      "terminated": "已结束",
+      "submitted": "已提交",
+      "shortlisted": "入围",
+      "accepted": "已接受",
+      "withdrawn": "已撤回"
     },
     "profile": {
       "title": "可雇佣资料",
@@ -4752,7 +4760,12 @@
       "empty": "暂无合作。发布您的资料，让雇主可以雇用您。",
       "workspace": "工作区",
       "rate": "费率",
-      "since": "始于"
+      "since": "始于",
+      "tabWork": "开放职位",
+      "tabProposals": "我的提案",
+      "tabEngagements": "我的合作",
+      "accept": "接受",
+      "decline": "拒绝"
     },
     "timecard": {
       "title": "工时卡",
@@ -4799,6 +4812,19 @@
         "manual": "手动",
         "meeting": "会议"
       }
+    },
+    "cancel": "取消",
+    "jobs": {
+      "bid": "提交提案",
+      "submitBid": "发送提案",
+      "coverNote": "附言（可选）",
+      "yourRate": "您的费率（每小时）",
+      "alreadyBid": "已提交提案",
+      "emptyOpen": "目前没有开放职位。"
+    },
+    "proposals": {
+      "empty": "您尚未提交任何提案。",
+      "withdraw": "撤回"
     }
   },
   "talent": {
@@ -4827,6 +4853,18 @@
     "hero": {
       "blurb": "雇用经过审核的自由职业开发者、数据库管理员、设计师及其他专家——浏览简历和技能、商定时薪、面试并在一处跟踪可计费工时。",
       "ctaHire": "发布工作并雇用"
+    },
+    "reviews": "评价",
+    "filter": {
+      "search": "搜索姓名或技能",
+      "discipline": "专业",
+      "allDisciplines": "所有专业",
+      "sort": "排序",
+      "sortRecent": "最新",
+      "sortRating": "评分最高",
+      "sortRateAsc": "费率：从低到高",
+      "sortRateDesc": "费率：从高到低",
+      "pageOf": "第 {page} 页，共 {pages} 页"
     }
   },
   "hires": {
@@ -4866,6 +4904,43 @@
       "auto": "已跟踪",
       "manual": "手动",
       "meeting": "会议"
+    },
+    "jobs": "职位",
+    "invoices": "发票",
+    "rate": "评分",
+    "reviewComment": "评论（可选）",
+    "submitReview": "提交评价",
+    "cancelBtn": "取消",
+    "job": {
+      "postNew": "+ 发布职位",
+      "post": "发布",
+      "titlePlaceholder": "职位名称",
+      "descPlaceholder": "描述工作…",
+      "discipline": "专业",
+      "rateMin": "最低时薪",
+      "rateMax": "最高时薪",
+      "skillsPlaceholder": "技能（逗号分隔）",
+      "empty": "尚未发布职位。",
+      "proposals": "{count} 份提案",
+      "viewProposals": "提案",
+      "close": "关闭",
+      "noProposals": "暂无提案。",
+      "accept": "接受并雇用",
+      "declineProposal": "拒绝",
+      "status": {
+        "open": "开放",
+        "closed": "已关闭",
+        "filled": "已填补"
+      }
+    },
+    "invoice": {
+      "empty": "暂无发票。",
+      "pay": "支付",
+      "status": {
+        "pending": "待处理",
+        "paid": "已支付",
+        "void": "作废"
+      }
     }
   },
   "register": {
@@ -4875,5 +4950,62 @@
     "hireTitle": "获得雇用",
     "hireSub": "自由职业资料和工作",
     "accountTypeAria": "账户类型"
+  },
+  "notifications": {
+    "title": "通知",
+    "markAllRead": "全部标为已读"
+  },
+  "kanban": {
+    "rosterTitle": "推荐团队配置",
+    "rosterSubtitle": "为每个角色配备队友或 AI 代理",
+    "coverageSummary": "已配备 {filled}/{total} 个角色",
+    "templateLabel": "看板模板",
+    "builtin": "内置",
+    "applying": "应用中…",
+    "required": "必需",
+    "optional": "可选",
+    "filled": "已配备",
+    "gap": "缺口",
+    "createAgent": "创建代理",
+    "creating": "创建中…",
+    "noRoles": "此模板尚未定义任何角色。",
+    "auditTitle": "被标记的工单",
+    "noFlagged": "没有工单被标记——所有必需角色和检查均已覆盖。",
+    "coverage": "覆盖率 {pct}%",
+    "templatesTitle": "看板模板",
+    "templatesSubtitle": "构建、切换并分享最佳实践团队看板。",
+    "tab_mine": "我的模板",
+    "tab_marketplace": "市场",
+    "tab_roles": "角色",
+    "published": "已发布",
+    "laneRoleCount": "{lanes} 个泳道 · {roles} 个角色",
+    "fork": "复刻",
+    "edit": "编辑",
+    "delete": "删除",
+    "free": "免费",
+    "installs": "{count} 次安装",
+    "install": "安装",
+    "roleNamePlaceholder": "新角色名称",
+    "addRole": "添加角色",
+    "back": "返回",
+    "saving": "保存中…",
+    "save": "保存",
+    "gate": "门控",
+    "gateAuto": "自动",
+    "gateHuman": "人工",
+    "requirementGate": "要求门控",
+    "gateOff": "关闭",
+    "gateSoft": "软性",
+    "gateHard": "强制",
+    "kindRole": "角色",
+    "kindReview": "评审",
+    "kindDiagnostic": "诊断",
+    "respOwner": "负责人",
+    "respReviewer": "评审者",
+    "respContributor": "贡献者",
+    "addRequirement": "添加要求",
+    "priceLabel": "价格（美元）",
+    "unpublish": "取消发布",
+    "publishToMarketplace": "发布到市场"
   }
 }

@@ -172,6 +172,7 @@ export function clearJwt(): void {
   rescopeUnsupported = false;
   workspaceCache = undefined;
   currentUserId = undefined;
+  evermindHeadCache.clear();
 }
 
 // The signed-in human's user id (from GET /api/vscode/me), cached for the session so
@@ -323,6 +324,58 @@ export async function diagnose(secrets: vscode.SecretStorage): Promise<string> {
 export async function listProjects(secrets: vscode.SecretStorage): Promise<BfProject[]> {
   const r = await authed<{ projects: BfProject[] }>(secrets, "/api/projects");
   return r?.projects ?? [];
+}
+
+/**
+ * The per-project Evermind head — the self-learning model assigned to a project.
+ * Mirrors the api `headCore` response (projectEvermindRoutes.ts). `inferenceEnabled`
+ * is the manager opt-in that governs whether the project's agent runs execute ON
+ * its Evermind; `seeded` is `version > 0`.
+ */
+export interface BfProjectEvermindHead {
+  version: number;
+  ref: string | null;
+  mode?: string;
+  name?: string | null;
+  contributions?: number;
+  inferenceEnabled: boolean;
+  seeded: boolean;
+}
+
+// Single-process, short-TTL cache (same shape as the tasks cache): the head is
+// slow-changing yet read on every chat turn's model resolution. Busted on
+// sign-out (clearJwt) and via invalidateProjectEvermind.
+const evermindHeadCache = new Map<number, { ts: number; head: BfProjectEvermindHead | undefined }>();
+const EVERMIND_HEAD_TTL = 60_000;
+
+/**
+ * The project's Evermind head (GET /api/projects/:id/evermind/head). Used to decide
+ * whether an editor chat turn should run on the project's Evermind — honoring the
+ * SAME `inferenceEnabled` opt-in the cloud/on-prem dispatcher uses. Degrades to
+ * undefined when the endpoint isn't reachable / project not owned, so chat always
+ * falls back to the default model.
+ */
+export async function getProjectEvermindHead(
+  secrets: vscode.SecretStorage,
+  projectId: number,
+  force = false,
+): Promise<BfProjectEvermindHead | undefined> {
+  const cached = evermindHeadCache.get(projectId);
+  if (!force && cached && Date.now() - cached.ts < EVERMIND_HEAD_TTL) return cached.head;
+  let head: BfProjectEvermindHead | undefined;
+  try {
+    head = await authed<BfProjectEvermindHead>(secrets, `/api/projects/${projectId}/evermind/head`);
+  } catch {
+    head = undefined; // not deployed / not owned / offline — chat falls back to default
+  }
+  evermindHeadCache.set(projectId, { ts: Date.now(), head });
+  return head;
+}
+
+/** Invalidate the cached Evermind head (e.g. after toggling inference in the web app). */
+export function invalidateProjectEvermind(projectId?: number): void {
+  if (projectId == null) evermindHeadCache.clear();
+  else evermindHeadCache.delete(projectId);
 }
 
 /** A workspace (tenant) the signed-in user belongs to. */

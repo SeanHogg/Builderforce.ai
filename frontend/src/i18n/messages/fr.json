@@ -4391,6 +4391,10 @@
       "rankTitle": "Le rang de backlog attribué à ce ticket par le Manager IA.",
       "editTitle": "Cliquez pour définir une valeur métier (0–100).",
       "unset": "Non défini"
+    },
+    "audit": {
+      "flagged": "Signalé",
+      "flaggedTitle": "Ce ticket a sauté un rôle ou diagnostic requis — révision nécessaire"
     }
   },
   "projectsContent": {
@@ -4716,7 +4720,11 @@
       "interviewing": "Entretien",
       "active": "Actif",
       "declined": "Refusé",
-      "terminated": "Terminé"
+      "terminated": "Terminé",
+      "submitted": "Envoyée",
+      "shortlisted": "Présélectionnée",
+      "accepted": "Acceptée",
+      "withdrawn": "Retirée"
     },
     "profile": {
       "title": "Profil à recruter",
@@ -4752,7 +4760,12 @@
       "empty": "Aucune mission pour l’instant. Publiez votre profil pour être recruté.",
       "workspace": "Espace",
       "rate": "Tarif",
-      "since": "Depuis"
+      "since": "Depuis",
+      "tabWork": "Offres ouvertes",
+      "tabProposals": "Mes propositions",
+      "tabEngagements": "Mes missions",
+      "accept": "Accepter",
+      "decline": "Refuser"
     },
     "timecard": {
       "title": "Feuille de temps",
@@ -4799,6 +4812,19 @@
         "manual": "Manuel",
         "meeting": "Réunion"
       }
+    },
+    "cancel": "Annuler",
+    "jobs": {
+      "bid": "Envoyer une proposition",
+      "submitBid": "Envoyer",
+      "coverNote": "Note (facultatif)",
+      "yourRate": "Votre tarif ($/h)",
+      "alreadyBid": "Proposition envoyée",
+      "emptyOpen": "Aucune offre ouverte pour le moment."
+    },
+    "proposals": {
+      "empty": "Vous n’avez encore envoyé aucune proposition.",
+      "withdraw": "Retirer"
     }
   },
   "talent": {
@@ -4827,6 +4853,18 @@
     "hero": {
       "blurb": "Recrutez des freelances vérifiés : développeurs, DBA, designers et autres spécialistes. Consultez les CV et compétences, convenez d’un tarif horaire, menez des entretiens et suivez les heures facturables au même endroit.",
       "ctaHire": "Publier une offre et recruter"
+    },
+    "reviews": "Avis",
+    "filter": {
+      "search": "Rechercher un nom ou une compétence",
+      "discipline": "Discipline",
+      "allDisciplines": "Toutes les disciplines",
+      "sort": "Trier",
+      "sortRecent": "Plus récents",
+      "sortRating": "Mieux notés",
+      "sortRateAsc": "Tarif : croissant",
+      "sortRateDesc": "Tarif : décroissant",
+      "pageOf": "Page {page} sur {pages}"
     }
   },
   "hires": {
@@ -4866,6 +4904,43 @@
       "auto": "Suivi",
       "manual": "Manuel",
       "meeting": "Réunion"
+    },
+    "jobs": "Offres",
+    "invoices": "Factures",
+    "rate": "Évaluer",
+    "reviewComment": "Commentaire (facultatif)",
+    "submitReview": "Envoyer l’avis",
+    "cancelBtn": "Annuler",
+    "job": {
+      "postNew": "+ Publier une offre",
+      "post": "Publier",
+      "titlePlaceholder": "Intitulé du poste",
+      "descPlaceholder": "Décrivez la mission…",
+      "discipline": "Discipline",
+      "rateMin": "Min $/h",
+      "rateMax": "Max $/h",
+      "skillsPlaceholder": "Compétences (séparées par des virgules)",
+      "empty": "Aucune offre publiée.",
+      "proposals": "{count} propositions",
+      "viewProposals": "Propositions",
+      "close": "Fermer",
+      "noProposals": "Aucune proposition.",
+      "accept": "Accepter et recruter",
+      "declineProposal": "Refuser",
+      "status": {
+        "open": "Ouverte",
+        "closed": "Fermée",
+        "filled": "Pourvue"
+      }
+    },
+    "invoice": {
+      "empty": "Aucune facture.",
+      "pay": "Payer",
+      "status": {
+        "pending": "En attente",
+        "paid": "Payée",
+        "void": "Annulée"
+      }
     }
   },
   "register": {
@@ -4875,5 +4950,62 @@
     "hireTitle": "Être recruté",
     "hireSub": "Profil freelance et missions",
     "accountTypeAria": "Type de compte"
+  },
+  "notifications": {
+    "title": "Notifications",
+    "markAllRead": "Tout marquer comme lu"
+  },
+  "kanban": {
+    "rosterTitle": "Effectif recommandé",
+    "rosterSubtitle": "Pourvoyez chaque rôle avec un coéquipier ou un agent IA",
+    "coverageSummary": "{filled}/{total} rôles pourvus",
+    "templateLabel": "Modèle de tableau",
+    "builtin": "Intégré",
+    "applying": "Application…",
+    "required": "Requis",
+    "optional": "Optionnel",
+    "filled": "Pourvu",
+    "gap": "Manque",
+    "createAgent": "Créer un agent",
+    "creating": "Création…",
+    "noRoles": "Ce modèle ne définit encore aucun rôle.",
+    "auditTitle": "Tickets signalés",
+    "noFlagged": "Aucun ticket signalé — chaque rôle et contrôle requis est couvert.",
+    "coverage": "{pct}% couvert",
+    "templatesTitle": "Modèles de kanban",
+    "templatesSubtitle": "Créez, changez et partagez des tableaux d’équipe de bonnes pratiques.",
+    "tab_mine": "Mes modèles",
+    "tab_marketplace": "Place de marché",
+    "tab_roles": "Rôles",
+    "published": "Publié",
+    "laneRoleCount": "{lanes} colonnes · {roles} rôles",
+    "fork": "Dupliquer",
+    "edit": "Modifier",
+    "delete": "Supprimer",
+    "free": "Gratuit",
+    "installs": "{count} installations",
+    "install": "Installer",
+    "roleNamePlaceholder": "Nom du nouveau rôle",
+    "addRole": "Ajouter un rôle",
+    "back": "Retour",
+    "saving": "Enregistrement…",
+    "save": "Enregistrer",
+    "gate": "Barrière",
+    "gateAuto": "Auto",
+    "gateHuman": "Humaine",
+    "requirementGate": "Barrière d’exigences",
+    "gateOff": "Désactivée",
+    "gateSoft": "Souple",
+    "gateHard": "Stricte",
+    "kindRole": "Rôle",
+    "kindReview": "Revue",
+    "kindDiagnostic": "Diagnostic",
+    "respOwner": "Responsable",
+    "respReviewer": "Relecteur",
+    "respContributor": "Contributeur",
+    "addRequirement": "Ajouter une exigence",
+    "priceLabel": "Prix (USD)",
+    "unpublish": "Dépublier",
+    "publishToMarketplace": "Publier sur la place de marché"
   }
 }
