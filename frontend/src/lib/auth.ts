@@ -385,18 +385,50 @@ export async function resolveAndSelectTenant(webToken: string): Promise<Tenant |
   }
 }
 
-/** Fetch the current user profile, including onboarding status + personality. */
-export async function getMe(webToken: string): Promise<{ onboardingCompletedAt: string | null; psychometric: PsychometricProfile | null }> {
+/** Fetch the current user profile, including onboarding status, role-selection
+ *  status, account type + personality. */
+export async function getMe(webToken: string): Promise<{
+  onboardingCompletedAt: string | null;
+  psychometric: PsychometricProfile | null;
+  accountType: 'standard' | 'freelancer';
+  accountTypeSelected: boolean;
+}> {
   const res = await fetch(`${AUTH_API_URL}/api/auth/me`, {
     headers: { Authorization: `Bearer ${webToken}` },
   });
   checkUnauthorizedAndRedirect(res, !!webToken);
-  if (!res.ok) return { onboardingCompletedAt: null, psychometric: null };
-  const data = await res.json() as { user?: { onboardingCompletedAt?: string | null; psychometric?: PsychometricProfile | null } };
+  if (!res.ok) return { onboardingCompletedAt: null, psychometric: null, accountType: 'standard', accountTypeSelected: true };
+  const data = await res.json() as { user?: { onboardingCompletedAt?: string | null; psychometric?: PsychometricProfile | null; accountType?: 'standard' | 'freelancer'; accountTypeSelected?: boolean } };
   return {
     onboardingCompletedAt: data.user?.onboardingCompletedAt ?? null,
     psychometric: data.user?.psychometric ?? null,
+    accountType: data.user?.accountType ?? 'standard',
+    // Default to true on a missing field so an older API shape never traps a user
+    // behind the role gate.
+    accountTypeSelected: data.user?.accountTypeSelected ?? true,
   };
+}
+
+/**
+ * Make the one-time account-type choice (Build vs Hired) for an OAuth/magic-link
+ * account that never picked on the /register form. Returns the updated user.
+ */
+export async function selectAccountType(
+  webToken: string,
+  accountType: 'standard' | 'freelancer',
+): Promise<AuthUser> {
+  const res = await fetch(`${AUTH_API_URL}/api/auth/me/account-type`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${webToken}` },
+    body: JSON.stringify({ accountType }),
+  });
+  checkUnauthorizedAndRedirect(res, !!webToken);
+  if (!res.ok) {
+    const body = (await res.json().catch(() => ({}))) as { error?: string };
+    throw new Error(body.error || `Request failed (${res.status})`);
+  }
+  const data = (await res.json()) as { user: AuthUser };
+  return data.user;
 }
 
 /** Update the signed-in user's OWN personality (psychometric profile). Pass null to

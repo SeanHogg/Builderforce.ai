@@ -710,6 +710,13 @@
     "reviewGaps": "Last review found gaps",
     "dismiss": "Dismiss"
   },
+  "legal": {
+    "termsTitle": "Terms of Use",
+    "privacyTitle": "Privacy Policy",
+    "published": "Published {date}",
+    "loading": "Loading…",
+    "close": "Close"
+  },
   "llmUsage": {
     "byUser": "By user · last 7 days",
     "byTeam": "By team · last 7 days",
@@ -5081,6 +5088,14 @@
     "hireSub": "Freelance profile & gigs",
     "accountTypeAria": "Account type",
     "commonQuestions": "Common Questions"
+  },
+  "welcomeRole": {
+    "eyebrow": "Welcome",
+    "title": "How will you use Builderforce?",
+    "subtitle": "Pick the workspace that fits how you'll work. This sets up your account — you can explore everything either way.",
+    "continue": "Continue",
+    "saving": "Setting up…",
+    "error": "Couldn't save your choice. Please try again."
   },
   "notifications": {
     "title": "Notifications",

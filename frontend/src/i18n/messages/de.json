@@ -710,6 +710,13 @@
     "reviewGaps": "Letzte Prüfung fand Lücken",
     "dismiss": "Schließen"
   },
+  "legal": {
+    "termsTitle": "Nutzungsbedingungen",
+    "privacyTitle": "Datenschutzrichtlinie",
+    "published": "Veröffentlicht am {date}",
+    "loading": "Wird geladen…",
+    "close": "Schließen"
+  },
   "llmUsage": {
     "byUser": "Nach Benutzer · letzte 7 Tage",
     "byTeam": "Nach Team · letzte 7 Tage",
@@ -5081,6 +5088,14 @@
     "hireSub": "Freelance-Profil & Jobs",
     "accountTypeAria": "Kontotyp",
     "commonQuestions": "Häufige Fragen"
+  },
+  "welcomeRole": {
+    "eyebrow": "Willkommen",
+    "title": "Wie wirst du Builderforce nutzen?",
+    "subtitle": "Wähle den Arbeitsbereich, der zu deiner Arbeitsweise passt. Damit wird dein Konto eingerichtet — erkunden kannst du ohnehin alles.",
+    "continue": "Weiter",
+    "saving": "Wird eingerichtet…",
+    "error": "Deine Auswahl konnte nicht gespeichert werden. Bitte versuche es erneut."
   },
   "notifications": {
     "title": "Benachrichtigungen",

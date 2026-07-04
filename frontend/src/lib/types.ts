@@ -14,6 +14,10 @@ export interface AuthUser {
    *  undefined) = the full builder app. Sourced from the web JWT `act` claim /
    *  /api/auth/me. */
   accountType?: 'standard' | 'freelancer';
+  /** True once the user has EXPLICITLY chosen Build vs Hired. False/undefined for an
+   *  OAuth/magic-link account that was auto-provisioned and hasn't picked a role yet —
+   *  the onboarding gate forces the one-time choice. From /api/auth/me. */
+  accountTypeSelected?: boolean;
   /** This user's OWN personality (same shape agents/personas use); null when unset. */
   psychometric?: import('./psychometric').PsychometricProfile | null;
 }

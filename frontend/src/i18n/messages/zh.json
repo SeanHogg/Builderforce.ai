@@ -710,6 +710,13 @@
     "reviewGaps": "上次审查发现缺口",
     "dismiss": "关闭"
   },
+  "legal": {
+    "termsTitle": "使用条款",
+    "privacyTitle": "隐私政策",
+    "published": "发布于 {date}",
+    "loading": "加载中…",
+    "close": "关闭"
+  },
   "llmUsage": {
     "byUser": "按用户 · 最近 7 天",
     "byTeam": "按团队 · 最近 7 天",
@@ -5081,6 +5088,14 @@
     "hireSub": "自由职业资料和工作",
     "accountTypeAria": "账户类型",
     "commonQuestions": "常见问题"
+  },
+  "welcomeRole": {
+    "eyebrow": "欢迎",
+    "title": "您将如何使用 Builderforce？",
+    "subtitle": "选择最适合您工作方式的工作区。这将设置您的账户——无论选择哪种，您都可以探索全部功能。",
+    "continue": "继续",
+    "saving": "正在设置…",
+    "error": "无法保存您的选择，请重试。"
   },
   "notifications": {
     "title": "通知",

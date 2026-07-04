@@ -14,19 +14,25 @@
  *
  * AUTH (tenant JWT):
  *   GET  /api/personas/psychometric/catalog            Framework catalog (Pro-aware)
- *   POST /api/personas/psychometric/score|import       (Pro)
+ *   POST /api/personas/psychometric/score|import       Pure scoring helpers (universal)
  *   GET  /api/personas/mine          This tenant's personas (any visibility)
  *   POST /api/personas               Publish / create a persona (tenant-scoped)
  *   POST /api/personas/:id/install   Record an install/use (bumps install_count)
  *
- * Pro gate: psychometric scoring/import require a paid plan — equivalent to
- * PlanLimits.psychometricPersona (false only on FREE). Mirrors the
- * `premiumOverride || effectivePlan !== 'free'` convention used in llmRoutes.
+ * Where the Pro gate lives: `score`/`import` are PURE, side-effect-free math
+ * (answers/JSON → trait vector) and are used by BOTH the Pro agent/persona editor
+ * AND every user's own personality test (universal, free — see the /settings page).
+ * So they are NOT gated. The paid-plan entitlement is enforced at the point a
+ * psychometric profile is ATTACHED to an agent/persona (the publish route here and
+ * the Workforce agent routes), via the shared feature gate
+ * (`tenantHasFeature(..., 'psychometricPersona')`) — superadmin- and
+ * premium-override-aware, defined once.
  */
 import { Hono } from 'hono';
 import { and, desc, eq, ilike, ne, or, sql as dsql } from 'drizzle-orm';
 import { authMiddleware } from '../middleware/authMiddleware';
-import { tenantHasPsychometricPersona } from './llmRoutes';
+import { tenantHasFeature } from '../middleware/featureGate';
+import { requiredPlanForFeature } from '../../domain/tenant/planFeatures';
 import {
   PSYCHOMETRIC_CATALOG,
   PSYCHOMETRIC_QUESTIONS,
@@ -160,9 +166,13 @@ export function createPersonaRoutes(db: Db): Hono<HonoEnv> {
   // -------------------------------------------------------------------------
   router.get('/psychometric/catalog', authMiddleware, async (c) => {
     const tenantId = c.get('tenantId') as number;
-    const entitled = await tenantHasPsychometricPersona(c.env, tenantId);
+    const userId = c.get('userId') as string | undefined;
+    // `entitled` here gates ATTACHING a profile to an agent/persona (the editor's
+    // locked state). Superadmin- and premium-override-aware via the shared gate.
+    const entitled = await tenantHasFeature(c.env, tenantId, userId, 'psychometricPersona');
     return c.json({
       entitled,
+      requiredPlan: requiredPlanForFeature('psychometricPersona'),
       frameworks: PSYCHOMETRIC_CATALOG,
       questions: PSYCHOMETRIC_QUESTIONS,
       enneagram: ENNEAGRAM_TYPES,
@@ -170,14 +180,15 @@ export function createPersonaRoutes(db: Db): Hono<HonoEnv> {
   });
 
   // -------------------------------------------------------------------------
-  // POST /api/personas/psychometric/score   (Pro)
+  // POST /api/personas/psychometric/score
   // Body: { answers: { [questionId]: 1..5 } } -> { vector }
+  //
+  // Pure, side-effect-free scoring. NOT plan-gated: this same endpoint powers
+  // every user's own (universal, free) personality test on /settings as well as
+  // the Pro agent/persona editor. The paid gate lives where a vector is ATTACHED
+  // to an agent/persona, not on the math.
   // -------------------------------------------------------------------------
   router.post('/psychometric/score', authMiddleware, async (c) => {
-    const tenantId = c.get('tenantId') as number;
-    if (!(await tenantHasPsychometricPersona(c.env, tenantId))) {
-      return c.json({ error: 'Psychometric personas require a Pro plan.', upgrade: true }, 403);
-    }
     const body = await c.req
       .json<{ answers?: Record<string, number> }>()
       .catch(() => ({ answers: {} as Record<string, number> }));
@@ -186,15 +197,13 @@ export function createPersonaRoutes(db: Db): Hono<HonoEnv> {
   });
 
   // -------------------------------------------------------------------------
-  // POST /api/personas/psychometric/import   (Pro)
+  // POST /api/personas/psychometric/import
   // Body: { vector: Record<string, number> } (e.g. a human's test results)
   // -> sanitised vector (unknown dimensions dropped, values clamped 0..100)
+  //
+  // Pure sanitiser — same rationale as `/score`: universal, not plan-gated.
   // -------------------------------------------------------------------------
   router.post('/psychometric/import', authMiddleware, async (c) => {
-    const tenantId = c.get('tenantId') as number;
-    if (!(await tenantHasPsychometricPersona(c.env, tenantId))) {
-      return c.json({ error: 'Psychometric personas require a Pro plan.', upgrade: true }, 403);
-    }
     const body = await c.req.json<{ vector?: unknown }>().catch(() => ({ vector: undefined }));
     const vector = sanitizeVector(body.vector);
     return c.json({ vector, source: 'imported' });
@@ -240,7 +249,7 @@ export function createPersonaRoutes(db: Db): Hono<HonoEnv> {
     // Psychometric profiles are a Pro feature — silently store none for free plans
     // (rather than failing the whole publish) so the persona still saves.
     const psychometric =
-      body.psychometric != null && (await tenantHasPsychometricPersona(c.env, tenantId))
+      body.psychometric != null && (await tenantHasFeature(c.env, tenantId, userId, 'psychometricPersona'))
         ? sanitizePsychometricProfile(body.psychometric)
         : null;
 
