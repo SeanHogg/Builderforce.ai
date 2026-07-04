@@ -7,6 +7,8 @@ import {
   useBrainConversation,
   useBrainConfig,
   useMcpExtensions,
+  consolidationMarkerContent,
+  consolidationMetadata,
   type BrainConfig,
   type BrainChat,
 } from '@seanhogg/builderforce-brain-embedded';
@@ -98,6 +100,14 @@ const IconSend = () => (
 );
 const IconBolt = () => (
   <svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M9.2 1 3.4 8.6h3.4L6 15l6.2-8.1H8.6L9.2 1z" /></svg>
+);
+/* Consolidate = collapse the conversation inward into a compact summary. */
+const IconConsolidate = () => (
+  <svg width="13" height="13" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M2 5.5 4.5 8 2 10.5M14 5.5 11.5 8 14 10.5M6.5 3v10M9.5 3v10" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" /></svg>
+);
+/* Fork = branch the conversation into a new one (git-branch glyph). */
+const IconFork = () => (
+  <svg width="13" height="13" viewBox="0 0 16 16" fill="none" aria-hidden="true"><circle cx="4" cy="3.5" r="1.5" fill="currentColor" /><circle cx="4" cy="12.5" r="1.5" fill="currentColor" /><circle cx="12" cy="3.5" r="1.5" fill="currentColor" /><path d="M4 5v6M4 8h4.5A3.5 3.5 0 0 0 12 4.5V5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" /></svg>
 );
 
 /**
@@ -272,6 +282,10 @@ function Chat({ init }: { init: InitData }) {
   const [inputFocused, setInputFocused] = useState(false);
   const [dragOver, setDragOver] = useState(false);
   const [copied, setCopied] = useState(false);
+  // Consolidate (summarize into a compact base context) / Fork (branch into a new
+  // chat from that summary) are async, so guard against double-clicks while in flight.
+  const [consolidating, setConsolidating] = useState(false);
+  const [forking, setForking] = useState(false);
   // Composer run-shaping toggles (the `/` menu + the `+` menu's web option).
   // They compile into `extraSystem` directives, so a toggle changes how the next
   // turn actually runs. 'balanced' is the neutral default.
@@ -499,6 +513,19 @@ function Chat({ init }: { init: InitData }) {
   // "No response" turn can be shared with its underlying system output, and run
   // the host's connection diagnostics. The host owns the clipboard + the
   // `builderforce.diagnose` command, reached over the bridge.
+  // The project this chat is associated with: an existing chat's own project,
+  // else (for a not-yet-created chat) the sidebar's active project it will be
+  // scoped to on first send. Names resolve from the host's `projectId → name`
+  // map, falling back to the active project's name.
+  const activeChat = useMemo(() => chats.find((c) => c.id === chatId) ?? null, [chats, chatId]);
+  const associatedProjectId = activeChat ? activeChat.projectId : (init.project?.id ?? null);
+  const associatedProject = useMemo<{ id: number; name: string } | null>(() => {
+    if (associatedProjectId == null) return null;
+    const name = init.projectNames?.[String(associatedProjectId)]
+      ?? (associatedProjectId === init.project?.id ? init.project?.name : undefined);
+    return { id: associatedProjectId, name: name ?? `#${associatedProjectId}` };
+  }, [associatedProjectId, init.projectNames, init.project?.id, init.project?.name]);
+
   const canCopy = hasTranscriptContent({ messages: conv.messages, trace: conv.trace, error: conv.error });
   const copyTranscript = useCallback(() => {
     post('copy', {
@@ -508,17 +535,86 @@ function Chat({ init }: { init: InitData }) {
         assistantName: 'BuilderForce',
         model: init.model,
         error: conv.error,
+        project: associatedProject,
+        chatTitle: activeChat?.title,
+        chatId,
       }),
     });
     setCopied(true);
     window.setTimeout(() => setCopied(false), 1500);
-  }, [conv.messages, conv.trace, conv.error, init.model]);
+  }, [conv.messages, conv.trace, conv.error, init.model, associatedProject, activeChat?.title, chatId]);
+
+  // Consolidate: summarize the whole chat into ONE compact assistant message tagged
+  // as a consolidation marker. It's shown back to the user (the "flag"), and the
+  // conversation loop seeds the next turn FROM this marker — so a long chat sends
+  // its summary as the base context instead of the full (large) history.
+  const canConsolidate = chatId != null && conv.messages.length >= 2 && !conv.sending;
+  const consolidate = useCallback(async () => {
+    if (chatId == null || consolidating) return;
+    setConsolidating(true);
+    conv.clearError();
+    try {
+      const result = await persistence.summarizeChat(chatId);
+      if ('error' in result || !result.summary) {
+        conv.setError(('error' in result && result.error) || t('app.nothingToConsolidate', 'Not enough conversation to consolidate yet.'));
+        return;
+      }
+      await persistence.sendMessages(chatId, [{
+        role: 'assistant',
+        content: consolidationMarkerContent(result.summary),
+        metadata: consolidationMetadata(),
+      }]);
+      conv.reloadMessages();
+      reloadChats();
+    } catch (e) {
+      conv.setError(e instanceof Error ? e.message : 'Consolidate failed');
+    } finally {
+      setConsolidating(false);
+    }
+  }, [chatId, consolidating, persistence, conv, reloadChats, t]);
+
+  // Fork: summarize this chat, then create a NEW chat (same project) seeded with
+  // that summary as its consolidation marker, and switch to it — continue a fresh,
+  // compact conversation without carrying the whole history.
+  const fork = useCallback(async () => {
+    if (chatId == null || forking) return;
+    setForking(true);
+    conv.clearError();
+    try {
+      const result = await persistence.summarizeChat(chatId);
+      if ('error' in result || !result.summary) {
+        conv.setError(('error' in result && result.error) || t('app.nothingToFork', 'Not enough conversation to fork yet.'));
+        return;
+      }
+      const sourceTitle = activeChat?.title || t('app.newChat', 'New chat');
+      const projectId = activeChat?.projectId ?? init.project?.id ?? null;
+      const forkTitle = t('app.forkTitle', 'Fork of {title}').replace('{title}', sourceTitle).slice(0, 80);
+      const chat = await persistence.createChat({ title: forkTitle, projectId });
+      await persistence.sendMessages(chat.id, [{
+        role: 'assistant',
+        content: consolidationMarkerContent(result.summary),
+        metadata: consolidationMetadata(),
+      }]);
+      setChatId(chat.id);
+      reloadChats();
+    } catch (e) {
+      conv.setError(e instanceof Error ? e.message : 'Fork failed');
+    } finally {
+      setForking(false);
+    }
+  }, [chatId, forking, persistence, conv, reloadChats, activeChat?.title, activeChat?.projectId, init.project?.id, t]);
 
   return (
     <div className="bf-app">
       <header className="bf-header">
-        <span className="bf-header__title">BuilderForce</span>
-        <span className="bf-header__beta">{t('app.beta', 'beta')}</span>
+        {/* The chat's associated project names the panel (falling back to the brand
+            when a chat has no project), so it's clear which project this chat is about. */}
+        <span className="bf-header__title" title={associatedProject ? associatedProject.name : 'BuilderForce'}>
+          {associatedProject ? associatedProject.name : 'BuilderForce'}
+        </span>
+        {associatedProject
+          ? <span className="bf-header__brand">BuilderForce</span>
+          : <span className="bf-header__beta">{t('app.beta', 'beta')}</span>}
         <div className="bf-header__spacer" />
         <select
           className="bf-select"
@@ -716,6 +812,31 @@ function Chat({ init }: { init: InitData }) {
           >
             <IconBolt />
             <span>{t('app.autoMode', 'Auto mode')}</span>
+          </button>
+
+          {/* Consolidate: compress the chat into a summary marker the rest of the
+              conversation builds on. Fork: branch that summary into a new chat. */}
+          <button
+            type="button"
+            className="bf-toggle"
+            title={t('app.consolidateHint', 'Summarize this chat into a compact context the rest of the conversation builds on')}
+            aria-label={t('app.consolidate', 'Consolidate')}
+            disabled={!canConsolidate || consolidating}
+            onClick={consolidate}
+          >
+            <IconConsolidate />
+            <span>{consolidating ? t('app.consolidating', 'Consolidating…') : t('app.consolidate', 'Consolidate')}</span>
+          </button>
+          <button
+            type="button"
+            className="bf-toggle"
+            title={t('app.forkHint', 'Summarize this chat and continue in a new one from that summary')}
+            aria-label={t('app.fork', 'Fork')}
+            disabled={!canConsolidate || forking}
+            onClick={fork}
+          >
+            <IconFork />
+            <span>{forking ? t('app.forking', 'Forking…') : t('app.fork', 'Fork')}</span>
           </button>
 
           <div className="bf-header__spacer" />

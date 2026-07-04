@@ -69,6 +69,18 @@ body {
 .bf-header__title {
   font-weight: 600;
   font-size: 13px;
+  max-width: 60%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* When a project names the header, keep a subtle brand tag beside it. */
+.bf-header__brand {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--bf-text-muted);
+  letter-spacing: 0.02em;
 }
 
 .bf-header__beta {
@@ -431,6 +443,15 @@ body {
   border-color: var(--bf-accent);
   color: var(--bf-accent);
   background: color-mix(in srgb, var(--bf-accent) 14%, transparent);
+}
+
+.bf-toggle:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.bf-toggle:disabled:hover {
+  background: transparent;
 }
 
 /* Popover menu (the + and / affordances). */

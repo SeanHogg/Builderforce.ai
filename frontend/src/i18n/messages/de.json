@@ -693,7 +693,15 @@
     "savedProject": "In diesem Projekt gespeichert.",
     "scoringProject": "Dieses Projekt wird bewertet – dieser Lauf wird in der Projektbewertung gespeichert.",
     "rollupTitle": "Bewertung Ihres Arbeitsbereichs",
-    "rollupDesc": "Durchschnittliche Diagnosebewertung über Ihre Projekte."
+    "rollupDesc": "Durchschnittliche Diagnosebewertung über Ihre Projekte.",
+    "profileTitle": "Ihr Profil",
+    "profileSubtitle": "Wie Sie in jeder Dimension abschneiden.",
+    "radarAria": "Netzdiagramm des Diagnoseprofils",
+    "welcomeBack": "Willkommen zurück",
+    "welcomeBackTool": "Hier ist das Ergebnis Ihres letzten Durchlaufs — registrieren Sie sich, um es zu speichern und Ihren Fortschritt zu verfolgen.",
+    "welcomeBackHub": "Sie haben {count} kostenlose Diagnosen durchgeführt — registrieren Sie sich, um Ihre Ergebnisse zu speichern.",
+    "saveMyResult": "Mein Ergebnis speichern",
+    "saveMyResults": "Meine Ergebnisse speichern"
   },
   "notFound": {
     "title": "Seite nicht gefunden",

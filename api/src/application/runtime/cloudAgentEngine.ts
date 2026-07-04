@@ -38,7 +38,7 @@ import {
   CONTAINER_MAX_STEPS, assertsUnrunVerification, hasNoCodeDeliverable, type RawToolCall,
 } from './cloudAgentTools';
 import {
-  CURRENT_ENGINE_ID, evaluatePolicyGate,
+  CURRENT_ENGINE_ID, evaluatePolicyGate, filterByGlob,
   appraiseTask, buildLimbicBlock, compileLimbicState, neutralState,
   applyDelta, appraiseAmygdala, homeostasis,
   type AgentEngine, type AgentRunInput, type AgentRunResult, type CapabilityProvider, type ToolContext, type ToolControl, type LimbicState, type LimbicEvent, type PolicyGate, type AgentExecParams,
@@ -1194,11 +1194,15 @@ function buildCloudProvider(args: {
   return {
     capabilities: CLOUD_SURFACE_CAPS,
     repoRead: {
-      async listFiles(sub) {
+      async listFiles(sub, glob) {
         if (!repoCtx) return { ok: false, error: noRepo() };
         const ref = readRef();
         const ls = await listRepoFiles({ ...repoCtx, ref }, sub);
-        return ls.ok ? { ok: true, ref, paths: ls.paths, truncated: ls.truncated } : { ok: false, error: ls.reason };
+        if (!ls.ok) return { ok: false, error: ls.reason };
+        // A glob is an explicit "find these files" — filter to matches (case-insensitive,
+        // bare name matches basename at any depth) so a named file is always surfaced.
+        const paths = glob ? filterByGlob(ls.paths, glob) : ls.paths;
+        return { ok: true, ref, paths, truncated: ls.truncated };
       },
       async readFile(path) {
         if (!repoCtx) return { ok: false, error: noRepo() };

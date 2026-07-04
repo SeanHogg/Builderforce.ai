@@ -693,7 +693,15 @@
     "savedProject": "已保存到此项目。",
     "scoringProject": "正在为此项目评分 — 此次运行将计入项目评分。",
     "rollupTitle": "您的工作区评分",
-    "rollupDesc": "您各项目的平均诊断评分。"
+    "rollupDesc": "您各项目的平均诊断评分。",
+    "profileTitle": "您的画像",
+    "profileSubtitle": "您在各个维度的得分情况。",
+    "radarAria": "诊断画像雷达图",
+    "welcomeBack": "欢迎回来",
+    "welcomeBackTool": "这是您上次运行的结果——注册即可保存并跟踪您的进度。",
+    "welcomeBackHub": "您已运行 {count} 项免费诊断——注册即可保存您的结果。",
+    "saveMyResult": "保存我的结果",
+    "saveMyResults": "保存我的结果"
   },
   "notFound": {
     "title": "页面未找到",

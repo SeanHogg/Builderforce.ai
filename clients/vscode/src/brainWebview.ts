@@ -7,6 +7,7 @@ import { getGroundingSummary } from "./grounding";
 import { getEditorContext, watchEditorContext } from "./editorContext";
 import { resolveEffectiveModel } from "./modelState";
 import { getSelectedProject } from "./projectState";
+import { getProjectNames } from "./projectNames";
 
 /** A host-driven request to the singleton Brain panel (mirror of the webview type). */
 export interface BrainIntent {
@@ -54,7 +55,16 @@ function buildLabels(): Record<string, string> {
     "app.beta": t("beta"),
     "app.newChat": t("New chat"),
     "app.conversation": t("Conversation"),
+    "app.noProject": t("No project"),
     "app.copyChat": t("Copy chat transcript (for triage)"),
+    // Consolidate + Fork composer actions
+    "app.consolidate": t("Consolidate"),
+    "app.consolidateHint": t("Summarize this chat into a compact context the rest of the conversation builds on"),
+    "app.consolidating": t("Consolidating…"),
+    "app.fork": t("Fork"),
+    "app.forkHint": t("Summarize this chat and continue in a new one from that summary"),
+    "app.forking": t("Forking…"),
+    "app.forkTitle": t("Fork of {title}"),
     "app.diagnostics": t("Run connection diagnostics"),
     "app.attachImage": t("Attach image"),
     "app.remove": t("Remove"),
@@ -295,6 +305,16 @@ export class BrainWebview {
     const signedIn = !!(await this.ctx.secrets.get(SECRET_KEY));
     const token = signedIn ? ((await getTenantJwt(this.ctx.secrets)) ?? null) : null;
     const root = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+    // `projectId → name` for every project, so the header can name the project an
+    // existing chat belongs to (best-effort; falls back to "No project").
+    const projectNames: Record<string, string> = {};
+    if (signedIn) {
+      try {
+        for (const [id, name] of await getProjectNames(this.ctx.secrets)) projectNames[String(id)] = name;
+      } catch {
+        /* names are best-effort */
+      }
+    }
     void this.panel.webview.postMessage({
       type: "init",
       baseUrl: getBaseUrl(),
@@ -313,6 +333,7 @@ export class BrainWebview {
       // Brain scopes platform tools without asking for a projectId) AND used to
       // scope newly-created chats. Re-pushed on project change via refresh().
       project: getSelectedProject(),
+      projectNames,
       // The local file tools, forwarded so the model can call them over the bridge.
       // (The shared platform catalog is fetched by the webview directly from the gateway.)
       tools: TOOL_DEFS.map((d) => ({

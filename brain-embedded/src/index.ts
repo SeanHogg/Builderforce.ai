@@ -67,5 +67,16 @@ export type { BrainTraceEvent, BuildBrainTriageOptions } from './brainTriage';
 // Landing-page → auth → replay handoff
 export { savePendingPrompt, takePendingPrompt } from './pendingPrompt';
 
+// Chat consolidation markers (compress a long chat into a summary base context)
+export {
+  CONSOLIDATION_META,
+  CONSOLIDATION_MARKER_PREFIX,
+  consolidationMetadata,
+  consolidationMarkerContent,
+  isConsolidationMarker,
+  lastConsolidationIndex,
+  scopeToConsolidation,
+} from './consolidation';
+
 // Shared data shapes
 export type { BrainChat, BrainMessage, BrainModality, ChatInputAttachment } from './types';

@@ -2,6 +2,13 @@
 
 All notable changes to the BuilderForce VS Code extension are documented here.
 
+## [2026.7.22] — Every chat knows its project, and long chats stay fast
+
+- **The chat is labelled with the project it's about.** Open a new conversation and the panel now shows the project name at the top instead of a generic badge — so at a glance you always know which project this chat belongs to, and existing chats show their own project too.
+- **Consolidate a long conversation into a clean summary.** A new **Consolidate** button sums up everything so far into one tidy recap the assistant shares back with you. From that point on the conversation carries just the summary forward — so a chat that's grown huge stays fast and focused instead of dragging its whole history along.
+- **Branch off into a fresh chat without losing the thread.** The new **Fork** button takes what you've discussed, summarizes it, and opens a brand-new conversation that picks up right from that summary — perfect for splitting one long thread into a new direction while keeping the context you built up.
+- **Copy a chat and get the full picture.** Copying a conversation now includes which project and model it used and the chat's name, so a shared transcript is traceable on its own — no guessing where it came from.
+
 ## [2026.7.21] — Big jobs get done, not dropped
 
 - **Ask for a big job and it gets handed to the team, not abandoned half-done.** When you ask the assistant to do something large — like "turn every open item in my roadmap into goals, epics, and tasks" — it now does the planning right there in chat, then creates a task with the full brief and hands it to a cloud agent to carry out end-to-end, and tells you where to watch it. No more stalling partway through a long job.

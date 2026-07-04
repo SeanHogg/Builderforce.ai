@@ -717,6 +717,34 @@ function useBrainChats(options = {}) {
 // src/useBrainConversation.ts
 import { useCallback as useCallback4, useEffect as useEffect5, useRef as useRef4, useState as useState5 } from "react";
 
+// src/consolidation.ts
+var CONSOLIDATION_META = { consolidation: true };
+function consolidationMetadata() {
+  return JSON.stringify(CONSOLIDATION_META);
+}
+function isConsolidationMarker(msg) {
+  if (!msg.metadata) return false;
+  try {
+    return JSON.parse(msg.metadata)?.consolidation === true;
+  } catch {
+    return false;
+  }
+}
+function lastConsolidationIndex(messages) {
+  for (let i = messages.length - 1; i >= 0; i--) {
+    if (isConsolidationMarker(messages[i])) return i;
+  }
+  return -1;
+}
+function scopeToConsolidation(messages) {
+  const idx = lastConsolidationIndex(messages);
+  return idx >= 0 ? messages.slice(idx) : messages;
+}
+var CONSOLIDATION_MARKER_PREFIX = "\u{1F4CC} **Consolidated summary** \u2014 context continues from here.\n\n";
+function consolidationMarkerContent(summary) {
+  return `${CONSOLIDATION_MARKER_PREFIX}${summary.trim()}`;
+}
+
 // src/brainTriage.ts
 function isFailedToolResult(result) {
   if (result == null) return false;
@@ -1210,7 +1238,7 @@ ${refs}`;
       try {
         const [userMsg] = await persistence.sendMessages(id, [{ role: "user", content: displayContent, metadata }]);
         setMessages((prev) => [...prev, userMsg]);
-        const seed = messages.map((m) => ({
+        const seed = scopeToConsolidation(messages).map((m) => ({
           role: m.role,
           content: m.content
         }));
@@ -1234,7 +1262,7 @@ ${refs}`;
     if (autoRepliedChatIdRef.current === chatId) return;
     autoRepliedChatIdRef.current = chatId;
     setLocalError("");
-    const seed = messages.slice(0, -1).map((m) => ({
+    const seed = scopeToConsolidation(messages.slice(0, -1)).map((m) => ({
       role: m.role,
       content: m.content
     }));
@@ -1360,12 +1388,19 @@ export {
   BrainActionsProvider,
   BrainContextProvider,
   BrainProvider,
+  CONSOLIDATION_MARKER_PREFIX,
+  CONSOLIDATION_META,
   buildBrainTriageReport,
+  consolidationMarkerContent,
+  consolidationMetadata,
+  isConsolidationMarker,
   isEvermindModel,
   isFailedToolResult,
+  lastConsolidationIndex,
   modelsUsedInTrace,
   prepareImageDataUrl,
   savePendingPrompt,
+  scopeToConsolidation,
   streamChatCompletion,
   takePendingPrompt,
   useBrainActions,

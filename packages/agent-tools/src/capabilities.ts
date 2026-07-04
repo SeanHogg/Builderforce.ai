@@ -74,7 +74,11 @@ export type Capability =
 
 /** List/read/search the working tree. Backed by git-over-HTTP (cloud) or disk (Node). */
 export interface RepoReadCapability {
-  listFiles(subdir?: string): Promise<RepoListResult>;
+  /** List working-tree files. `subdir` scopes to a folder; `glob` filters by name
+   *  (e.g. `ROADMAP.md`, `**\/*.test.ts`) — case-insensitive, and a slash-free glob
+   *  matches the basename at any depth. A `glob` also bypasses the big-repo directory
+   *  summary so a matched file is always returned in full. */
+  listFiles(subdir?: string, glob?: string): Promise<RepoListResult>;
   readFile(path: string): Promise<RepoReadResult>;
   searchCode(query: string): Promise<RepoSearchResult>;
 }
@@ -160,7 +164,15 @@ export interface RepoReadResult {
   ok: boolean;
   path?: string;
   content?: string;
+  /** True when `content` is only part of the file (a paginated line window, or the
+   *  provider hit its own byte cap) — more remains beyond what was returned. */
   truncated?: boolean;
+  /** Total line count of the file, so the model knows how far it has left to page. */
+  totalLines?: number;
+  /** 1-based line number `content` starts at (for the paginated `read_file` window). */
+  offset?: number;
+  /** Human/model-facing guidance, e.g. how to read the next chunk of a large file. */
+  note?: string;
   error?: string;
 }
 export interface RepoSearchResult {

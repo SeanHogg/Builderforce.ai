@@ -4,6 +4,21 @@
 
 ---
 
+### 🔎 VS Code agent couldn't locate a file by name — "cannot find ROADMAP.md" (2026-07-04) — ✅ RESOLVED
+
+**Reported:** the in-editor Brain flatly answered "I cannot find the Roadmap.md file" for `Builderforce.ai/ROADMAP.md` (exists at repo root, all-caps) — contradicting the "codebase-aware" promise. Root cause was several tool/grounding defects that made a top-level file invisible and gave the model no way to search by name. (The prior pass added copy-transcript **model + Evermind provenance** so which LLM produced such a turn is now visible — VSIX 2026.7.20; see [[project.vscode-extension.copy-transcript-model-provenance]].)
+
+**Fix (full vertical slice — VSIX 2026.7.22):**
+- **Find-a-file-by-name is now first-class across ALL four engines.** Added an optional `glob` to the shared `list_files` tool + the `RepoReadCapability.listFiles(subdir, glob)` contract (`packages/agent-tools`), backed by ONE dependency-free matcher `packages/agent-tools/src/glob.ts` (`globToRegExp`/`matchGlob`/`filterByGlob`): case-insensitive, `**` crosses dirs, and a slash-free pattern matches the basename at ANY depth — so `{glob:"Roadmap.md"}` finds `ROADMAP.md`. Wired into the VS Code (`localCapabilities.ts`), on-prem Node (`node-capability-provider.ts`), and cloud Worker (`cloudAgentEngine.ts`) providers via the shared matcher; the plain-ESM Container (`api/container/server.mjs`) mirrors it inline (no build step / package imports). A `glob` bypasses the big-repo directory summary so a match is always returned in full.
+- **`list_files` no longer buries root files.** The VS Code + Container walks were depth-first recursion with no sort, so a huge early subtree exhausted the `LIST_MAX_FILES` budget before sibling root files (like `ROADMAP.md`) were ever collected. Both are now **breadth-first + sorted** (matching the Node provider), so shallow files are always captured first.
+- **Grounding map now carries a file index.** `clients/vscode/src/codebaseScan.ts` `scanTree` discarded every non-manifest filename; it now indexes all root files + shallow docs (`*.md` one level down) into a "Top-level files" section (version-token aware), so a root doc is NAMED in the map, not just counted.
+- **Persona no longer over-trusts the map.** `idePersona.ts` `WORKSPACE_MAP_INTRO` softened from "trust it for locating files" to "not an exhaustive index — use `list_files` with a `glob` or `search_code` before concluding a file is missing," and `DISCOVERY_DIRECTIVE` now teaches the `glob` (with the exact `Roadmap.md`→`ROADMAP.md` case).
+- **`search_code` NUL-byte guard cleaned up.** `localCapabilities.ts:185` held a literal raw NUL byte embedded in source (`content.includes("<NUL>")`) — functionally correct binary-skip, but it made the file register as *binary* to grep/git and broke tooling; replaced with the clean escape `"\0"`. (The earlier "tests for a space" diagnosis was a mis-read of the raw NUL byte.)
+
+**Verified:** glob matcher unit-checked against the `Roadmap.md`→`ROADMAP.md` and `**`/segment cases (all pass); `api` `tsc` clean for the changed files; `agent-runtime` node-capability-provider tests 8/8 pass; VS Code host+webview typecheck clean; VSIX `builderforce-ai-2026.7.22.vsix` packaged.
+
+---
+
 ### 🔒 Paid-plan feature gating — centralized behind one evaluator (2026-07-04) — ✅ RESOLVED
 
 **Reported:** a superadmin on a free tenant hit `403 {"error":"Psychometric personas require a Pro plan.","upgrade":true}` when taking the (universal, free) personality test on /settings. Broader ask: all paid-plan gates should share one logic with a superadmin evaluator, not be a 403, and name what's required.
