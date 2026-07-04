@@ -55,10 +55,14 @@ export function getAgentRunContext(runId: string) {
 
 export function clearAgentRunContext(runId: string) {
   runContextById.delete(runId);
+  // Drop the per-run sequence counter too, else it leaks one entry per runId for
+  // the whole process lifetime (emitAgentEvent seeds seqByRun but never evicts).
+  seqByRun.delete(runId);
 }
 
 export function resetAgentRunContextForTest() {
   runContextById.clear();
+  seqByRun.clear();
 }
 
 export function emitAgentEvent(event: Omit<AgentEventPayload, "seq" | "ts">) {

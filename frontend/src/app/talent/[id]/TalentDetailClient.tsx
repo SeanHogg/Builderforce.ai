@@ -46,7 +46,7 @@ export default function TalentDetailClient() {
     return (
       <PageContainer width="readable" style={{ padding: '32px 40px' }}>
         <p style={{ color: 'var(--coral-bright)' }}>{error === 'AUTH_REQUIRED' || (error ?? '').includes('signed-in') ? t('signInForResume') : (error ?? t('private'))}</p>
-        <Link href="/talent" style={{ color: 'var(--coral-bright)', fontWeight: 600, textDecoration: 'none' }}>← {t('back')}</Link>
+        <Link href="/marketplace?category=talent" style={{ color: 'var(--coral-bright)', fontWeight: 600, textDecoration: 'none' }}>← {t('back')}</Link>
       </PageContainer>
     );
   }
@@ -55,7 +55,7 @@ export default function TalentDetailClient() {
 
   return (
     <PageContainer width="readable" style={{ padding: '32px 40px' }}>
-      <Link href="/talent" style={{ color: 'var(--text-muted)', fontSize: 13, textDecoration: 'none' }}>← {t('back')}</Link>
+      <Link href="/marketplace?category=talent" style={{ color: 'var(--text-muted)', fontSize: 13, textDecoration: 'none' }}>← {t('back')}</Link>
 
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 16, flexWrap: 'wrap', margin: '16px 0 20px' }}>
         <div>

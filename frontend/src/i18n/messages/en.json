@@ -4864,6 +4864,25 @@
       "withdraw": "Withdraw"
     }
   },
+  "marketplace": {
+    "title": "Talent & Workforce",
+    "blurb": "Hire freelancers and AI agents, and install personas, skills and content to supercharge your team.",
+    "searchPlaceholder": "Search marketplace...",
+    "categoryLabel": "Category",
+    "cat": {
+      "all": "All",
+      "personas": "Personas",
+      "skills": "Skills",
+      "content": "Content",
+      "workforce": "Workforce Agents",
+      "talent": "Talent",
+      "publish": "Publish"
+    },
+    "emptyItems": "No items match your search.",
+    "emptyAgentsSearch": "No workforce agents match your search.",
+    "emptyAgentsNone": "No published workforce agents yet. Publish an agent from a project to list it here.",
+    "talentError": "Could not load talent."
+  },
   "talent": {
     "title": "Talent marketplace",
     "subtitle": "Hire vetted freelancers — developers, DBAs, designers and more.",
@@ -4986,7 +5005,8 @@
     "buildSub": "Projects, agents & workspace",
     "hireTitle": "Get hired",
     "hireSub": "Freelance profile & gigs",
-    "accountTypeAria": "Account type"
+    "accountTypeAria": "Account type",
+    "commonQuestions": "Common Questions"
   },
   "notifications": {
     "title": "Notifications",

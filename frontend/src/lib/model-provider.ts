@@ -399,19 +399,6 @@ export function unregisterProvider(id: string): void {
 // ---------------------------------------------------------------------------
 
 /**
- * Create and initialise a MambaModelProvider.
- * Returns the provider regardless of whether init succeeded so callers can
- * check `isReady()` and fall back gracefully.
- */
-export async function createMambaProvider(
-  config?: MambaProviderConfig
-): Promise<MambaModelProvider> {
-  const provider = new MambaModelProvider(config);
-  await provider.init();
-  return provider;
-}
-
-/**
  * Create an ExternalLLMProvider backed by the BuilderForce worker API.
  */
 export function createExternalLLMProvider(

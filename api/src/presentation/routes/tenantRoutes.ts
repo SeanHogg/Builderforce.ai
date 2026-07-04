@@ -458,34 +458,43 @@ export function createTenantRoutes(tenantService: TenantService, db: Db): Hono<H
       ? rows.filter((row) => isAgentHostOnline(row))
       : rows;
 
-    const hostRows = await Promise.all(
-      filtered.map(async (row) => {
-        const associatedProjects = await db
-          .select({ projectId: agentHostProjects.projectId })
+    // Fetch every host's project links in ONE query (grouped in JS) instead of an
+    // N+1 per-host round-trip.
+    const hostIds = filtered.map((row) => row.id);
+    const projectLinks = hostIds.length
+      ? await db
+          .select({ agentHostId: agentHostProjects.agentHostId, projectId: agentHostProjects.projectId })
           .from(agentHostProjects)
-          .where(
-            and(
-              eq(agentHostProjects.tenantId, tenantId),
-              eq(agentHostProjects.agentHostId, row.id),
-            ),
-          );
-        const capabilities: string[] = row.capabilities
-          ? (JSON.parse(row.capabilities) as string[])
-          : [];
-        const online = isAgentHostOnline(row);
-        return {
-          ...row,
-          online,
-          capabilities,
-          capabilitySummary: {
-            distributed: online && associatedProjects.length > 1,
-            remoteDispatch: online && capabilities.includes('remote-dispatch'),
-            projectCount: associatedProjects.length,
-          },
-          projectIds: associatedProjects.map((p) => p.projectId),
-        };
-      }),
-    );
+          .where(and(
+            eq(agentHostProjects.tenantId, tenantId),
+            inArray(agentHostProjects.agentHostId, hostIds),
+          ))
+      : [];
+    const projectsByHost = new Map<number, number[]>();
+    for (const link of projectLinks) {
+      const list = projectsByHost.get(link.agentHostId) ?? [];
+      list.push(link.projectId);
+      projectsByHost.set(link.agentHostId, list);
+    }
+
+    const hostRows = filtered.map((row) => {
+      const associatedProjects = projectsByHost.get(row.id) ?? [];
+      const capabilities: string[] = row.capabilities
+        ? (JSON.parse(row.capabilities) as string[])
+        : [];
+      const online = isAgentHostOnline(row);
+      return {
+        ...row,
+        online,
+        capabilities,
+        capabilitySummary: {
+          distributed: online && associatedProjects.length > 1,
+          remoteDispatch: online && capabilities.includes('remote-dispatch'),
+          projectCount: associatedProjects.length,
+        },
+        projectIds: associatedProjects,
+      };
+    });
 
     return c.json({ agentHosts: hostRows });
   });

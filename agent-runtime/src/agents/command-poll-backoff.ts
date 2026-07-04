@@ -43,21 +43,6 @@ export function recordCommandPoll(
 }
 
 /**
- * Get current suggested backoff for a command without modifying state.
- * Useful for checking current backoff level.
- */
-export function getCommandPollSuggestion(
-  state: SessionState,
-  commandId: string,
-): number | undefined {
-  const pollData = state.commandPollCounts?.get(commandId);
-  if (!pollData) {
-    return undefined;
-  }
-  return calculateBackoffMs(pollData.count);
-}
-
-/**
  * Reset poll count for a command (e.g., when command completes).
  */
 export function resetCommandPollCount(state: SessionState, commandId: string): void {

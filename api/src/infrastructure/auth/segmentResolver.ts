@@ -15,7 +15,7 @@ import { segments } from '../database/schema';
  * the isolate to avoid a DB round-trip on every request. The cache is:
  *  - BOUNDED (FIFO eviction past MAX_CACHE_ENTRIES) so a long-lived isolate seeing
  *    many federated (account, company) pairs can't grow it without limit;
- *  - INVALIDATED on segment mutate/delete (see invalidateSegment / invalidateTenant)
+ *  - INVALIDATED on segment mutate/delete (see invalidateSegment)
  *    so a suspended/archived/erased segment stops resolving inside a warm isolate.
  */
 
@@ -45,14 +45,6 @@ function cacheSet(key: string, segmentId: string): void {
 export function invalidateSegment(segmentId: string): void {
   for (const [key, value] of cache) {
     if (value === segmentId) cache.delete(key);
-  }
-}
-
-/** Drop every cached mapping for a tenant (e.g. tenant-wide erasure). */
-export function invalidateTenant(tenantId: number): void {
-  const prefix = `${tenantId}|`;
-  for (const key of cache.keys()) {
-    if (key.startsWith(prefix)) cache.delete(key);
   }
 }
 

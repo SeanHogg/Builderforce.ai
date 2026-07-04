@@ -4864,6 +4864,25 @@
       "withdraw": "Retirar"
     }
   },
+  "marketplace": {
+    "title": "Talento y plantilla",
+    "blurb": "Contrata freelancers y agentes de IA, e instala personas, habilidades y contenido para potenciar tu equipo.",
+    "searchPlaceholder": "Buscar en el marketplace...",
+    "categoryLabel": "Categoría",
+    "cat": {
+      "all": "Todo",
+      "personas": "Personas",
+      "skills": "Habilidades",
+      "content": "Contenido",
+      "workforce": "Agentes",
+      "talent": "Talento",
+      "publish": "Publicar"
+    },
+    "emptyItems": "Ningún elemento coincide con tu búsqueda.",
+    "emptyAgentsSearch": "Ningún agente coincide con tu búsqueda.",
+    "emptyAgentsNone": "Aún no hay agentes publicados. Publica un agente desde un proyecto para listarlo aquí.",
+    "talentError": "No se pudo cargar el talento."
+  },
   "talent": {
     "title": "Mercado de talento",
     "subtitle": "Contrata freelancers verificados: desarrolladores, DBA, diseñadores y más.",

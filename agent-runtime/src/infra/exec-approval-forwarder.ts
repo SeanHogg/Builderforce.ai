@@ -334,10 +334,3 @@ export function createExecApprovalForwarder(
 
   return { handleRequested, handleResolved, stop };
 }
-
-export function shouldForwardExecApproval(params: {
-  config?: ExecApprovalForwardingConfig;
-  request: ExecApprovalRequest;
-}): boolean {
-  return shouldForward(params);
-}

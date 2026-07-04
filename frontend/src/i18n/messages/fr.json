@@ -4864,6 +4864,25 @@
       "withdraw": "Retirer"
     }
   },
+  "marketplace": {
+    "title": "Talents et main-d'œuvre",
+    "blurb": "Recrutez des freelances et des agents IA, et installez des personas, des compétences et du contenu pour booster votre équipe.",
+    "searchPlaceholder": "Rechercher dans la marketplace...",
+    "categoryLabel": "Catégorie",
+    "cat": {
+      "all": "Tout",
+      "personas": "Personas",
+      "skills": "Compétences",
+      "content": "Contenu",
+      "workforce": "Agents",
+      "talent": "Talents",
+      "publish": "Publier"
+    },
+    "emptyItems": "Aucun élément ne correspond à votre recherche.",
+    "emptyAgentsSearch": "Aucun agent ne correspond à votre recherche.",
+    "emptyAgentsNone": "Aucun agent publié pour le moment. Publiez un agent depuis un projet pour l'afficher ici.",
+    "talentError": "Impossible de charger les talents."
+  },
   "talent": {
     "title": "Place de marché de talents",
     "subtitle": "Recrutez des freelances vérifiés : développeurs, DBA, designers et plus.",

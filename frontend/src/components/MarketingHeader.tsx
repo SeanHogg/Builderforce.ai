@@ -33,8 +33,9 @@ const RESOURCE_LINKS: SimpleLink[] = [
 
 // Flat links that sit directly in the bar (no dropdown).
 const FLAT_LINKS: SimpleLink[] = [
-  { href: '/marketplace', label: 'Workforce' },
-  { href: '/talent', label: 'Talent' },
+  // Talent (freelancers) + Workforce (AI agents/skills/personas) are one merged
+  // marketplace surface now — a single nav entry, no separate /talent link.
+  { href: '/marketplace', label: 'Talent / Workforce' },
   { href: '/agents', label: 'Agents' },
   // Evermind intentionally NOT a top-level flat link — it lives under the Product
   // mega-menu and in the footer; keeping it out of the bar reduces nav clutter.

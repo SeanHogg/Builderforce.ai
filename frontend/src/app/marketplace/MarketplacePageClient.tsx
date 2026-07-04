@@ -2,6 +2,7 @@
 
 import { Select } from '@/components/Select';
 import Link from 'next/link';
+import { useTranslations } from 'next-intl';
 
 import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '@/lib/AuthContext';
@@ -36,8 +37,58 @@ import { AgentCard } from '@/components/workforce/AgentCard';
 import { AgentOwnerActions } from '@/components/workforce/AgentOwnerActions';
 import { CloudAgentSlideOutPanel, type CloudAgentPanelTab } from '@/components/workforce/CloudAgentSlideOutPanel';
 import { SkillTags } from '@/components/SkillTags';
+import { listFreelancers, type FreelancerProfile } from '@/lib/freelancerApi';
+import { RatingStars } from '@/components/freelance/RatingStars';
 
-type MarketplaceCategory = 'all' | 'personas' | 'skills' | 'content' | 'workforce' | 'publish';
+// Human freelancers ("Talent") are now a category of the marketplace rather than a
+// standalone /talent page — same search box, one merged surface.
+type MarketplaceCategory = 'all' | 'personas' | 'skills' | 'content' | 'workforce' | 'talent' | 'publish';
+
+const CATEGORY_IDS: MarketplaceCategory[] = ['all', 'personas', 'skills', 'content', 'workforce', 'talent', 'publish'];
+
+const TALENT_DISCIPLINES = ['developer', 'dba', 'designer', 'devops', 'qa', 'pm', 'data', 'security', 'other'] as const;
+
+const TALENT_PAGE_SIZE = 24;
+
+const talentCardStyle: React.CSSProperties = {
+  background: 'var(--bg-base)', border: '1px solid var(--border-subtle)', borderRadius: 12, padding: 18,
+  display: 'flex', flexDirection: 'column', gap: 10, textDecoration: 'none',
+};
+
+const filterControlStyle: React.CSSProperties = {
+  background: 'var(--bg-elevated)', color: 'var(--text)', border: '1px solid var(--border)',
+  borderRadius: 8, padding: '8px 12px', fontSize: 13, outline: 'none',
+};
+
+function talentInitials(name: string | null): string {
+  return (name ?? '?').trim().split(/\s+/).slice(0, 2).map((s) => s[0]?.toUpperCase() ?? '').join('') || '?';
+}
+
+/** Placeholder card grid shown while real cards lazy-load — the page shell + search
+ *  render instantly, then the cards stream in over these skeletons. */
+function SkeletonGrid({ count = 8 }: { count?: number }) {
+  return (
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 16 }} aria-hidden="true">
+      {Array.from({ length: count }).map((_, i) => (
+        <div key={i} className="card" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <div className="animate-pulse" style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            <div style={{ width: 40, height: 40, borderRadius: 10, background: 'var(--surface-2)', flexShrink: 0 }} />
+            <div style={{ flex: 1 }}>
+              <div style={{ height: 12, width: '60%', borderRadius: 6, background: 'var(--surface-2)', marginBottom: 6 }} />
+              <div style={{ height: 10, width: '40%', borderRadius: 6, background: 'var(--surface-2)' }} />
+            </div>
+          </div>
+          <div className="animate-pulse" style={{ height: 10, width: '100%', borderRadius: 6, background: 'var(--surface-2)' }} />
+          <div className="animate-pulse" style={{ height: 10, width: '85%', borderRadius: 6, background: 'var(--surface-2)' }} />
+          <div className="animate-pulse" style={{ display: 'flex', gap: 6, marginTop: 4 }}>
+            <div style={{ height: 18, width: 48, borderRadius: 999, background: 'var(--surface-2)' }} />
+            <div style={{ height: 18, width: 60, borderRadius: 999, background: 'var(--surface-2)' }} />
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
 
 interface ContentBlock {
   id: string;
@@ -169,6 +220,9 @@ export default function MarketplacePageClient() {
   const { tenant, user, webToken, isAuthenticated } = useAuth();
   const { addItem, hasItem } = useCart();
   const tenantId = tenant?.id ?? '';
+  const tm = useTranslations('marketplace');
+  const tt = useTranslations('talent');
+  const tdis = useTranslations('freelancer');
 
   const [search, setSearch] = useState('');
   const [category, setCategory] = useState<MarketplaceCategory>('all');
@@ -184,6 +238,17 @@ export default function MarketplacePageClient() {
   const [unhiringId, setUnhiringId] = useState<string | null>(null);
   // Agents this tenant has already hired — drives Hire vs Unhire on each listing.
   const [hiredIds, setHiredIds] = useState<Set<string>>(new Set());
+
+  // Talent (human freelancers) — lazy-loaded only when the Talent tab is opened, so
+  // the marketplace never pays for a freelancer round-trip up front.
+  const [talentRows, setTalentRows] = useState<FreelancerProfile[]>([]);
+  const [talentTotal, setTalentTotal] = useState(0);
+  const [talentLoading, setTalentLoading] = useState(false);
+  const [talentError, setTalentError] = useState(false);
+  const [talentDiscipline, setTalentDiscipline] = useState('');
+  const [talentSort, setTalentSort] = useState('');
+  const [talentPage, setTalentPage] = useState(1);
+  const talentPages = Math.max(1, Math.ceil(talentTotal / TALENT_PAGE_SIZE));
 
   // Owner-managed agent slide-out (edit / pricing) — owners manage their own
   // listings in place on the marketplace, same panel as the workforce directory.
@@ -318,6 +383,40 @@ export default function MarketplacePageClient() {
 
   useEffect(() => { loadHired(); }, [loadHired]);
 
+  // Deep-link support: /marketplace?category=talent (e.g. the retired /talent route
+  // redirects here) opens the right tab on first paint.
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const c = new URLSearchParams(window.location.search).get('category');
+    if (c && (CATEGORY_IDS as string[]).includes(c)) setCategory(c as MarketplaceCategory);
+  }, []);
+
+  // Any change to the talent filters (shared search box, discipline, sort) resets to
+  // page 1 so the viewer never lands on an out-of-range page.
+  useEffect(() => { setTalentPage(1); }, [search, talentDiscipline, talentSort]);
+
+  // Lazy talent fetch — runs only while the Talent tab is active, debounced so the
+  // shared search box does not fire a request per keystroke.
+  useEffect(() => {
+    if (category !== 'talent') return;
+    let cancelled = false;
+    const handle = setTimeout(() => {
+      setTalentLoading(true);
+      setTalentError(false);
+      listFreelancers({
+        q: search || undefined,
+        discipline: talentDiscipline || undefined,
+        sort: talentSort || undefined,
+        page: talentPage,
+        pageSize: TALENT_PAGE_SIZE,
+      })
+        .then((res) => { if (!cancelled) { setTalentRows(res.items); setTalentTotal(res.total); } })
+        .catch(() => { if (!cancelled) setTalentError(true); })
+        .finally(() => { if (!cancelled) setTalentLoading(false); });
+    }, 250);
+    return () => { cancelled = true; clearTimeout(handle); };
+  }, [category, search, talentDiscipline, talentSort, talentPage]);
+
   const toggleLike = async (item: MarketplaceListing) => {
     const k = key(item.type, item.artifactSlug);
     const prev = stats[k] ?? { likes: 0, installs: 0, liked: false };
@@ -439,34 +538,16 @@ export default function MarketplacePageClient() {
     }
   }, [loadAgents]);
 
-  const categories: { id: MarketplaceCategory; label: string }[] = [
-    { id: 'all', label: 'All' },
-    { id: 'personas', label: 'Personas' },
-    { id: 'skills', label: 'Skills' },
-    { id: 'content', label: 'Content' },
-    { id: 'workforce', label: 'Workforce Agents' },
-    { id: 'publish', label: 'Publish' },
-  ];
-
-  const loadingPage = category !== 'publish' && (loading || (category === 'workforce' && loadingAgents));
-  if (loadingPage) {
-    return (
-      <div className="page-inner">
-        <div style={{ color: 'var(--muted)', fontSize: 14 }}>
-          {category === 'workforce' ? 'Loading workforce agents…' : 'Loading marketplace…'}
-        </div>
-      </div>
-    );
-  }
+  const categories: { id: MarketplaceCategory }[] = CATEGORY_IDS.map((id) => ({ id }));
 
   return (
     <div className="page-inner">
       <div style={{ textAlign: 'center', marginBottom: 32 }}>
         <h1 style={{ fontSize: 'clamp(24px,4vw,36px)', fontWeight: 800, color: 'var(--text-strong)', margin: '0 0 8px' }}>
-          Marketplace
+          {tm('title')}
         </h1>
-        <p style={{ color: 'var(--muted)', fontSize: 14, maxWidth: 480, margin: '0 auto' }}>
-          Browse and install personas, skills, and content to supercharge your workforce.
+        <p style={{ color: 'var(--muted)', fontSize: 14, maxWidth: 520, margin: '0 auto' }}>
+          {tm('blurb')}
         </p>
       </div>
 
@@ -492,7 +573,7 @@ export default function MarketplacePageClient() {
       >
         <input
           type="search"
-          placeholder="Search marketplace..."
+          placeholder={category === 'talent' ? tt('filter.search') : tm('searchPlaceholder')}
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           style={{
@@ -506,10 +587,10 @@ export default function MarketplacePageClient() {
             color: 'var(--text)',
             fontSize: 13,
           }}
-          aria-label="Search marketplace"
+          aria-label={category === 'talent' ? tt('filter.search') : tm('searchPlaceholder')}
         />
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexShrink: 0 }} role="group" aria-label="Filter by type">
-          <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-strong)' }}>Category</span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexShrink: 0 }} role="group" aria-label={tm('categoryLabel')}>
+          <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-strong)' }}>{tm('categoryLabel')}</span>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
             {categories.map((c) => (
               <button
@@ -527,20 +608,37 @@ export default function MarketplacePageClient() {
                   cursor: 'pointer',
                 }}
               >
-                {c.label}
+                {c.id === 'talent' ? '👤 ' : ''}{tm(`cat.${c.id}`)}
               </button>
             ))}
-            {/* Cross-link to the human talent marketplace (freelancers for hire). */}
-            <Link
-              href="/talent"
-              className="btn btn-secondary"
-              style={{ padding: '8px 16px', borderRadius: 8, border: '1px solid var(--border)', fontWeight: 500, fontSize: 13, cursor: 'pointer', textDecoration: 'none' }}
-            >
-              👤 Talent
-            </Link>
           </div>
         </div>
-        {category !== 'publish' && (
+        {/* Talent-only sub-filters (discipline + sort) mirror the retired /talent page. */}
+        {category === 'talent' && (
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', flexShrink: 0 }}>
+            <select
+              style={filterControlStyle}
+              value={talentDiscipline}
+              onChange={(e) => setTalentDiscipline(e.target.value)}
+              aria-label={tt('filter.discipline')}
+            >
+              <option value="">{tt('filter.allDisciplines')}</option>
+              {TALENT_DISCIPLINES.map((d) => <option key={d} value={d}>{tdis(`discipline.${d}`)}</option>)}
+            </select>
+            <select
+              style={filterControlStyle}
+              value={talentSort}
+              onChange={(e) => setTalentSort(e.target.value)}
+              aria-label={tt('filter.sort')}
+            >
+              <option value="">{tt('filter.sortRecent')}</option>
+              <option value="rating">{tt('filter.sortRating')}</option>
+              <option value="rate_asc">{tt('filter.sortRateAsc')}</option>
+              <option value="rate_desc">{tt('filter.sortRateDesc')}</option>
+            </select>
+          </div>
+        )}
+        {category !== 'publish' && category !== 'talent' && (
           <div style={{ marginLeft: 'auto', flexShrink: 0 }}>
             <ViewToggle value={viewMode} onChange={setViewMode} />
           </div>
@@ -652,12 +750,61 @@ export default function MarketplacePageClient() {
             </div>
           )}
         </div>
+      ) : category === 'talent' ? (
+        talentLoading && talentRows.length === 0 ? (
+          <SkeletonGrid />
+        ) : talentError ? (
+          <div style={{ textAlign: 'center', padding: '48px 0', color: 'var(--muted)' }}>{tm('talentError')}</div>
+        ) : talentRows.length === 0 ? (
+          <div style={{ textAlign: 'center', padding: '48px 0', color: 'var(--muted)' }}>{tt('empty')}</div>
+        ) : (
+          <>
+            <div style={{ display: 'grid', gap: 14, gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 300px), 1fr))' }}>
+              {talentRows.map((f) => (
+                <Link key={f.userId} href={`/talent/${f.userId}`} style={talentCardStyle} className="hover-lift">
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                    <div style={{ width: 44, height: 44, borderRadius: '50%', background: 'var(--surface-interactive)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, color: 'var(--text-primary)', flexShrink: 0 }}>
+                      {talentInitials(f.displayName)}
+                    </div>
+                    <div style={{ minWidth: 0 }}>
+                      <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{f.displayName ?? '—'}</div>
+                      <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>{f.headline ?? f.discipline ?? ''}</div>
+                      <RatingStars rating={f.rating} count={f.ratingCount} />
+                    </div>
+                  </div>
+                  {f.skills.length > 0 && (
+                    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                      {f.skills.slice(0, 4).map((s) => (
+                        <span key={s} style={{ fontSize: 11, padding: '2px 8px', borderRadius: 999, background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', color: 'var(--text-secondary)' }}>{s}</span>
+                      ))}
+                    </div>
+                  )}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 'auto' }}>
+                    <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--coral-bright)' }}>
+                      {f.hourlyRateCents != null ? `${f.currency} ${(f.hourlyRateCents / 100).toFixed(0)}${tt('perHour')}` : ''}
+                    </span>
+                    <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{tt('viewProfile')} →</span>
+                  </div>
+                </Link>
+              ))}
+            </div>
+            {talentPages > 1 && (
+              <div style={{ display: 'flex', gap: 12, justifyContent: 'center', alignItems: 'center', marginTop: 24 }}>
+                <button type="button" disabled={talentPage <= 1} onClick={() => setTalentPage((p) => p - 1)}
+                  style={{ ...filterControlStyle, cursor: talentPage <= 1 ? 'default' : 'pointer', opacity: talentPage <= 1 ? 0.5 : 1 }}>←</button>
+                <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>{tt('filter.pageOf', { page: talentPage, pages: talentPages })}</span>
+                <button type="button" disabled={talentPage >= talentPages} onClick={() => setTalentPage((p) => p + 1)}
+                  style={{ ...filterControlStyle, cursor: talentPage >= talentPages ? 'default' : 'pointer', opacity: talentPage >= talentPages ? 0.5 : 1 }}>→</button>
+              </div>
+            )}
+          </>
+        )
       ) : category === 'workforce' ? (
-        filteredAgents.length === 0 ? (
+        loadingAgents ? (
+          <SkeletonGrid />
+        ) : filteredAgents.length === 0 ? (
           <div style={{ textAlign: 'center', padding: '48px 0', color: 'var(--muted)' }}>
-            {agents.length === 0
-              ? 'No published workforce agents yet. Publish an agent from a project to list it here.'
-              : 'No workforce agents match your search.'}
+            {agents.length === 0 ? tm('emptyAgentsNone') : tm('emptyAgentsSearch')}
           </div>
         ) : viewMode === 'table' ? (
           <div style={tableWrapStyle}>
@@ -742,9 +889,11 @@ export default function MarketplacePageClient() {
             ))}
           </div>
         )
+      ) : loading ? (
+        <SkeletonGrid />
       ) : filtered.length === 0 ? (
         <div style={{ textAlign: 'center', padding: '48px 0', color: 'var(--muted)' }}>
-          No items match your search.
+          {tm('emptyItems')}
         </div>
       ) : viewMode === 'table' ? (
         <div style={tableWrapStyle}>

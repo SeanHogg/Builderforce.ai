@@ -21,7 +21,7 @@
  *                           results have no board equivalent and are dropped).
  */
 
-import { and, eq } from 'drizzle-orm';
+import { and, eq, inArray } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import { keyResults, objectiveLinks, objectives, projects, tasks } from '../../infrastructure/database/schema';
@@ -201,8 +201,12 @@ export async function convertWorkItemType(
       .where(and(eq(objectiveLinks.objectiveId, obj.id), eq(objectiveLinks.tenantId, tenantId)));
     const taskLinks = links.filter((l) => l.taskId != null);
     const initiativeLinks = links.length - taskLinks.length;
-    for (const l of taskLinks) {
-      await db.update(tasks).set({ parentTaskId: newTaskId, updatedAt: new Date() }).where(eq(tasks.id, l.taskId as number));
+    // Re-parent every linked task in ONE statement (they all move under newTaskId) —
+    // a single batched UPDATE instead of an N+1 per-link round-trip.
+    if (taskLinks.length > 0) {
+      await db.update(tasks)
+        .set({ parentTaskId: newTaskId, updatedAt: new Date() })
+        .where(inArray(tasks.id, taskLinks.map((l) => l.taskId as number)));
     }
 
     const krRows = await db.select({ id: keyResults.id }).from(keyResults).where(eq(keyResults.objectiveId, obj.id));
