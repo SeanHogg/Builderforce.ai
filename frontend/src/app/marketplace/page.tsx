@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { Suspense } from 'react';
 import { pageMetadata } from '@/lib/seo';
 import JsonLd from '@/components/JsonLd';
 import { marketplaceAgentsSchema, talentMarketplaceSchema } from '@/lib/structured-data';
@@ -55,7 +56,10 @@ export default async function MarketplacePage() {
     <>
       {agents.length > 0 && <JsonLd data={marketplaceAgentsSchema(agents)} />}
       {freelancers.length > 0 && <JsonLd data={talentMarketplaceSchema(freelancers)} />}
-      <MarketplacePageClient />
+      {/* Suspense: MarketplacePageClient reads useSearchParams (?category=…). */}
+      <Suspense fallback={null}>
+        <MarketplacePageClient />
+      </Suspense>
     </>
   );
 }

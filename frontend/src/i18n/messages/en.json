@@ -4866,7 +4866,7 @@
   },
   "marketplace": {
     "title": "Talent & Workforce",
-    "blurb": "Hire freelancers and AI agents, and install personas, skills and content to supercharge your team.",
+    "blurb": "Hire freelancers and AI agents, install personas, skills and content, and route any model — all from one marketplace.",
     "searchPlaceholder": "Search marketplace...",
     "categoryLabel": "Category",
     "cat": {
@@ -4876,12 +4876,86 @@
       "content": "Content",
       "workforce": "Workforce Agents",
       "talent": "Talent",
+      "models": "Models",
       "publish": "Publish"
     },
     "emptyItems": "No items match your search.",
     "emptyAgentsSearch": "No workforce agents match your search.",
     "emptyAgentsNone": "No published workforce agents yet. Publish an agent from a project to list it here.",
     "talentError": "Could not load talent."
+  },
+  "models": {
+    "searchPlaceholder": "Search models, providers…",
+    "catalogUnavailable": "Live model catalog is unavailable right now — showing Builderforce.ai models only.",
+    "loadFailed": "Failed to load models.",
+    "empty": "No models match your search.",
+    "filter": {
+      "tierGroup": "Filter by tier",
+      "all": "All",
+      "free": "Free",
+      "paid": "Paid",
+      "builderforce": "Builderforce.ai",
+      "routableOnly": "Routable only",
+      "routableOnlyTitle": "Show only models the Builderforce Free/Pro cascade routes"
+    },
+    "price": {
+      "free": "Free",
+      "in": "in",
+      "out": "out"
+    },
+    "routableChip": {
+      "label": "Routable",
+      "title": "The Builderforce Free/Pro cascade routes this model"
+    },
+    "field": {
+      "provider": "Provider",
+      "inputPrice": "Input price",
+      "outputPrice": "Output price",
+      "contextWindow": "Context window",
+      "modality": "Modality",
+      "tools": "Tools / functions",
+      "reasoning": "Reasoning",
+      "imageInput": "Image input",
+      "routable": "Routable"
+    },
+    "detail": {
+      "supportedParameters": "Supported parameters",
+      "routedBlurb": "Routed through Builderforce.ai Pro at the same per-token price — one OpenAI-compatible endpoint, with failover, prompt caching and usage metering.",
+      "upgradeToPro": "Upgrade to Pro",
+      "getStartedFree": "Get started free",
+      "useViaPro": "Use via Builderforce.ai Pro"
+    },
+    "card": {
+      "noDescription": "No description available.",
+      "selectViewDetails": "Select & view details"
+    },
+    "table": {
+      "compareAria": "Compare",
+      "model": "Model",
+      "provider": "Provider",
+      "context": "Context",
+      "input": "Input / 1M",
+      "output": "Output / 1M",
+      "actions": "Actions",
+      "details": "Details"
+    },
+    "compare": {
+      "dialogLabel": "Compare models",
+      "comparingCount": "Comparing {count} models",
+      "close": "Close",
+      "closeAria": "Close comparison",
+      "attribute": "Attribute",
+      "selectedRegionLabel": "Models selected for comparison",
+      "title": "Compare",
+      "clear": "Clear",
+      "removeAria": "Remove {name}",
+      "needTwoTitle": "Select at least 2 models to compare",
+      "compareTitle": "Compare selected models",
+      "button": "Compare",
+      "maxTitle": "Up to {max} models can be compared",
+      "addTitle": "Add to comparison",
+      "compareAria": "Compare {name}"
+    }
   },
   "talent": {
     "title": "Talent marketplace",

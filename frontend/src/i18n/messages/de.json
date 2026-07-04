@@ -4866,7 +4866,7 @@
   },
   "marketplace": {
     "title": "Talente & Workforce",
-    "blurb": "Engagiere Freelancer und KI-Agenten und installiere Personas, Skills und Inhalte, um dein Team zu stärken.",
+    "blurb": "Engagiere Freelancer und KI-Agenten, installiere Personas, Skills und Inhalte und route jedes Modell — alles aus einem Marktplatz.",
     "searchPlaceholder": "Marktplatz durchsuchen...",
     "categoryLabel": "Kategorie",
     "cat": {
@@ -4876,12 +4876,86 @@
       "content": "Inhalte",
       "workforce": "Agenten",
       "talent": "Talente",
+      "models": "Modelle",
       "publish": "Veröffentlichen"
     },
     "emptyItems": "Keine Einträge entsprechen deiner Suche.",
     "emptyAgentsSearch": "Keine Agenten entsprechen deiner Suche.",
     "emptyAgentsNone": "Noch keine veröffentlichten Agenten. Veröffentliche einen Agenten aus einem Projekt, um ihn hier zu listen.",
     "talentError": "Talente konnten nicht geladen werden."
+  },
+  "models": {
+    "searchPlaceholder": "Modelle, Anbieter suchen…",
+    "catalogUnavailable": "Der Live-Modellkatalog ist gerade nicht verfügbar — es werden nur Builderforce.ai-Modelle angezeigt.",
+    "loadFailed": "Modelle konnten nicht geladen werden.",
+    "empty": "Keine Modelle entsprechen deiner Suche.",
+    "filter": {
+      "tierGroup": "Nach Stufe filtern",
+      "all": "Alle",
+      "free": "Kostenlos",
+      "paid": "Kostenpflichtig",
+      "builderforce": "Builderforce.ai",
+      "routableOnly": "Nur routbare",
+      "routableOnlyTitle": "Nur Modelle anzeigen, die die Builderforce Free/Pro-Kaskade routet"
+    },
+    "price": {
+      "free": "Kostenlos",
+      "in": "Eingabe",
+      "out": "Ausgabe"
+    },
+    "routableChip": {
+      "label": "Routbar",
+      "title": "Die Builderforce Free/Pro-Kaskade routet dieses Modell"
+    },
+    "field": {
+      "provider": "Anbieter",
+      "inputPrice": "Eingabepreis",
+      "outputPrice": "Ausgabepreis",
+      "contextWindow": "Kontextfenster",
+      "modality": "Modalität",
+      "tools": "Tools / Funktionen",
+      "reasoning": "Reasoning",
+      "imageInput": "Bildeingabe",
+      "routable": "Routbar"
+    },
+    "detail": {
+      "supportedParameters": "Unterstützte Parameter",
+      "routedBlurb": "Über Builderforce.ai Pro zum gleichen Preis pro Token geroutet — ein OpenAI-kompatibler Endpunkt, mit Failover, Prompt-Caching und Nutzungsmessung.",
+      "upgradeToPro": "Auf Pro upgraden",
+      "getStartedFree": "Kostenlos starten",
+      "useViaPro": "Über Builderforce.ai Pro nutzen"
+    },
+    "card": {
+      "noDescription": "Keine Beschreibung verfügbar.",
+      "selectViewDetails": "Auswählen & Details ansehen"
+    },
+    "table": {
+      "compareAria": "Vergleichen",
+      "model": "Modell",
+      "provider": "Anbieter",
+      "context": "Kontext",
+      "input": "Eingabe / 1M",
+      "output": "Ausgabe / 1M",
+      "actions": "Aktionen",
+      "details": "Details"
+    },
+    "compare": {
+      "dialogLabel": "Modelle vergleichen",
+      "comparingCount": "{count} Modelle werden verglichen",
+      "close": "Schließen",
+      "closeAria": "Vergleich schließen",
+      "attribute": "Attribut",
+      "selectedRegionLabel": "Zum Vergleich ausgewählte Modelle",
+      "title": "Vergleichen",
+      "clear": "Leeren",
+      "removeAria": "{name} entfernen",
+      "needTwoTitle": "Wähle mindestens 2 Modelle zum Vergleich",
+      "compareTitle": "Ausgewählte Modelle vergleichen",
+      "button": "Vergleichen",
+      "maxTitle": "Es können bis zu {max} Modelle verglichen werden",
+      "addTitle": "Zum Vergleich hinzufügen",
+      "compareAria": "{name} vergleichen"
+    }
   },
   "talent": {
     "title": "Talent-Marktplatz",
