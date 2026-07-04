@@ -177,6 +177,10 @@ export const users = pgTable('users', {
    *  'standard' = normal builder; 'freelancer' = restricted gig account (minimal
    *  shell: profile + gigs + timecard). Drives shell/nav gating. (0269) */
   accountType:            varchar('account_type', { length: 20 }).notNull().default('standard'),
+  /** When the user EXPLICITLY chose their account type (Build vs Hired). NULL for
+   *  OAuth/magic-link accounts that were auto-provisioned before picking a role —
+   *  the onboarding gate uses this to force a one-time role choice. (0278) */
+  accountTypeSelectedAt:  timestamp('account_type_selected_at'),
   sessionVersion:         integer('session_version').notNull().default(0),
   onboardingCompletedAt:  timestamp('onboarding_completed_at'),
   userIntent:             text('user_intent'), // JSON array of intent strings, set during onboarding

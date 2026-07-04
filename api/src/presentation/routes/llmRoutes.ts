@@ -273,20 +273,11 @@ export async function resolveTenantPlan(
   };
 }
 
-/**
- * True when the tenant's plan includes the psychometric-persona Pro feature (a
- * behaviour-bearing personality trait vector). THE single entitlement check —
- * shared by the persona editor scoring routes AND the per-agent personality on the
- * Workforce agent routes, so "who can set a personality" is defined once. A
- * superadmin premium override always grants it.
- */
-export async function tenantHasPsychometricPersona(
-  env: HonoEnv['Bindings'],
-  tenantId: number,
-): Promise<boolean> {
-  const access = await resolveTenantPlan(env, tenantId);
-  return access.premiumOverride || getLimits(toTenantPlan(access.effectivePlan)).psychometricPersona;
-}
+// The psychometric-persona entitlement check moved to the shared feature gate
+// (`presentation/middleware/featureGate.ts` → `tenantHasFeature(..., 'psychometricPersona')`)
+// so every paid-plan gate — plan grant, premium override, AND superadmin bypass —
+// runs through one evaluator. `resolveTenantPlan` (below/above) stays here as the
+// gateway's plan resolver; the gate imports it.
 
 /** What a passing {@link enforceTokenCaps} returns for the response headers/body. */
 interface TokenCapUsage {

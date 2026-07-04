@@ -1,5 +1,8 @@
 'use client';
 
+import { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
+import { useTranslations } from 'next-intl';
 import { LegalDocPreview } from '@/components/admin/LegalDocPreview';
 import type { LegalCurrent } from './useLegalDocs';
 
@@ -18,12 +21,23 @@ interface LegalDocModalProps {
  * legal menu so the markup lives in one place.
  */
 export default function LegalDocModal({ type, legal, onClose }: LegalDocModalProps) {
-  if (type === null) return null;
+  const t = useTranslations('legal');
+  // Portal to <body> so the fixed overlay escapes ancestor containing blocks.
+  // The sidebar (`.nav`) uses `backdrop-filter`, which — like `transform`/`filter`
+  // — makes it the containing block for `position: fixed` descendants; without the
+  // portal the overlay is clamped to the narrow sidebar box instead of the viewport,
+  // rendering as a slim left-docked panel rather than a centered modal.
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  if (type === null || !mounted) return null;
 
   const doc = type === 'terms' ? legal?.terms : legal?.privacy;
-  const modalTitle = type === 'terms' ? 'Terms of Use' : 'Privacy Policy';
+  const modalTitle = type === 'terms' ? t('termsTitle') : t('privacyTitle');
 
-  return (
+  return createPortal(
     <div
       role="dialog"
       aria-modal="true"
@@ -74,7 +88,7 @@ export default function LegalDocModal({ type, legal, onClose }: LegalDocModalPro
                 color: 'var(--text-muted)',
               }}
             >
-              Published {new Date(doc.publishedAt).toLocaleString()}
+              {t('published', { date: new Date(doc.publishedAt).toLocaleString() })}
             </p>
           )}
         </div>
@@ -88,7 +102,7 @@ export default function LegalDocModal({ type, legal, onClose }: LegalDocModalPro
           {doc?.content ? (
             <LegalDocPreview content={doc.content} />
           ) : (
-            <p style={{ margin: 0, color: 'var(--text-muted)' }}>Loading…</p>
+            <p style={{ margin: 0, color: 'var(--text-muted)' }}>{t('loading')}</p>
           )}
         </div>
         <div
@@ -115,10 +129,11 @@ export default function LegalDocModal({ type, legal, onClose }: LegalDocModalPro
               fontFamily: 'var(--font-display)',
             }}
           >
-            Close
+            {t('close')}
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }

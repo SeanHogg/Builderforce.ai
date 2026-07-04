@@ -40,11 +40,15 @@ export default function OAuthCallbackPage() {
     })
       .then((res) => {
         if (!res.ok) throw new Error('Failed to load profile');
-        return res.json() as Promise<AuthUser>;
+        return res.json() as Promise<{ user?: AuthUser } | AuthUser>;
       })
-      .then(async (user) => {
+      .then(async (data) => {
+        // /api/auth/me wraps the profile in { user }; tolerate a flat shape too.
+        const user = ((data as { user?: AuthUser }).user ?? data) as AuthUser;
         persistSession(token, user);
         await resolveAndSelectTenant(token);
+        // The onboarding gate (OnboardingGate) forces the Build-vs-Hired role
+        // choice for accounts that never picked one, so no special-casing here.
         window.location.href = redirect;
       })
       .catch(() => {

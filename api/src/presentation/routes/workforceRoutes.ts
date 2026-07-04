@@ -21,7 +21,7 @@ import { CURRENT_ENGINE_ID } from '@builderforce/agent-tools';
 import { authMiddleware } from '../middleware/authMiddleware';
 import { getOrSetCached, invalidateCached } from '../../infrastructure/cache/readThroughCache';
 import { runtimeHiredAgentsCacheKey } from './runtimeRoutes';
-import { tenantHasPsychometricPersona } from './llmRoutes';
+import { tenantHasFeature } from '../middleware/featureGate';
 import { sanitizePsychometricProfile } from '../../application/persona/psychometricCatalog';
 import type { Env, HonoEnv } from '../../env';
 
@@ -273,6 +273,7 @@ export function createWorkforceRoutes(): Hono<HonoEnv> {
 
   router.post('/agents', authMiddleware, async (c) => {
     const tenantId = c.get('tenantId') as number;
+    const userId = c.get('userId') as string | undefined;
     const body = await c.req.json<{
       name: string;
       title?: string;
@@ -304,7 +305,7 @@ export function createWorkforceRoutes(): Hono<HonoEnv> {
     const preferredRuntime = runtimeSupport === 'both' ? (body.preferredRuntime ?? null) : null;
     // Per-agent personality is a Pro feature — store none for free plans (rather than
     // failing the create) so the agent still saves.
-    const psychometric = body.psychometric != null && (await tenantHasPsychometricPersona(c.env, tenantId))
+    const psychometric = body.psychometric != null && (await tenantHasFeature(c.env, tenantId, userId, 'psychometricPersona'))
       ? sanitizePsychometricProfile(body.psychometric)
       : null;
 
@@ -329,6 +330,7 @@ export function createWorkforceRoutes(): Hono<HonoEnv> {
 
   router.patch('/agents/:id', authMiddleware, async (c) => {
     const tenantId = c.get('tenantId') as number;
+    const userId = c.get('userId') as string | undefined;
     const id = c.req.param('id');
     const body = await c.req.json<{
       name?: string;
@@ -357,7 +359,7 @@ export function createWorkforceRoutes(): Hono<HonoEnv> {
     // `null` = explicit clear; an object = set (Pro-gated, sanitized).
     let psychometric = existing.psychometric as string | null;
     if (body.psychometric !== undefined) {
-      psychometric = body.psychometric != null && (await tenantHasPsychometricPersona(c.env, tenantId))
+      psychometric = body.psychometric != null && (await tenantHasFeature(c.env, tenantId, userId, 'psychometricPersona'))
         ? sanitizePsychometricProfile(body.psychometric)
         : null;
     }

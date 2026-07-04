@@ -21,6 +21,7 @@ import {
   persistSession,
   persistTenantSession,
   register as apiRegister,
+  selectAccountType as apiSelectAccountType,
 } from './auth';
 
 // ---------------------------------------------------------------------------
@@ -36,6 +37,9 @@ interface AuthContextValue {
   hasTenant: boolean;
   login: (email: string, password: string) => Promise<void>;
   register: (email: string, password: string, name: string | undefined, agreeToTerms: boolean, accountType?: 'standard' | 'freelancer') => Promise<void>;
+  /** One-time account-type choice (Build vs Hired) for an OAuth/magic-link account
+   *  that hasn't picked a role yet. Updates the stored user in place. */
+  selectAccountType: (accountType: 'standard' | 'freelancer') => Promise<void>;
   selectTenant: (tenant: Tenant) => Promise<void>;
   fetchTenants: () => Promise<Tenant[]>;
   logout: () => void;
@@ -81,6 +85,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     []
   );
 
+  const selectAccountType = useCallback(
+    async (accountType: 'standard' | 'freelancer') => {
+      if (!webToken) throw new Error('Not authenticated');
+      const updated = await apiSelectAccountType(webToken, accountType);
+      setUser(updated);
+      persistSession(webToken, updated);
+    },
+    [webToken],
+  );
+
   const fetchTenants = useCallback(async (): Promise<Tenant[]> => {
     if (!webToken) throw new Error('Not authenticated');
     return getMyTenants(webToken);
@@ -115,6 +129,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       hasTenant: !!tenantToken,
       login,
       register,
+      selectAccountType,
       selectTenant,
       fetchTenants,
       logout,
@@ -126,6 +141,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       tenantToken,
       login,
       register,
+      selectAccountType,
       selectTenant,
       fetchTenants,
       logout,
