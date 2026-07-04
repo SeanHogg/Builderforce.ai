@@ -22,8 +22,8 @@
   },
   "repoContext": {
     "title": "Añadir contexto del repositorio",
-    "repo": "Repositorio",
-    "default": "predeterminado",
+    "source": "Origen",
+    "agentBranch": "Rama de trabajo del agente",
     "searchPlaceholder": "Buscar archivos…",
     "loading": "Cargando archivos…",
     "empty": "No se encontraron archivos",

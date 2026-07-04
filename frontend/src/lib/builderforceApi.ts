@@ -1622,6 +1622,22 @@ export interface TaskFileContent {
   baseTruncated?: boolean;
 }
 
+/**
+ * Files on a task's AGENT WORKING BRANCH (the ticket branch a run commits to),
+ * read server-side for the Brain composer's "Add context". Falls back to the base
+ * branch when the ticket branch doesn't exist yet. `ImportedRepoFile` is defined
+ * with the other repo types below.
+ */
+export interface TaskRepoFilesResult {
+  ok: boolean;
+  ref?: string;
+  branch?: string;
+  base?: string;
+  files: ImportedRepoFile[];
+  truncated?: boolean;
+  reason?: string;
+}
+
 /** One persisted turn of an execution's steering/chat thread (migration 0109). */
 export interface ExecutionMessage {
   role: 'user' | 'assistant';
@@ -1712,6 +1728,10 @@ export const runtimeApi = {
   /** Whether the agent can commit code for this task (repo bound + credential). */
   taskRepoStatus: (taskId: number): Promise<TaskRepoStatus> =>
     request<TaskRepoStatus>(`/api/runtime/tasks/${taskId}/repo-status`),
+
+  /** Files on the task's agent working branch (ticket branch), for "Add context". */
+  taskRepoFiles: (taskId: number): Promise<TaskRepoFilesResult> =>
+    request<TaskRepoFilesResult>(`/api/runtime/tasks/${taskId}/repo-files`),
 
   /** Cancel a running/queued execution. */
   cancel: (id: number): Promise<Execution> =>

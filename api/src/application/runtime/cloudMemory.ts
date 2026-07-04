@@ -18,6 +18,7 @@ import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import { agentMemory } from '../../infrastructure/database/schema';
 import { getOrSetCached } from '../../infrastructure/cache/readThroughCache';
+import { recallProjectFacts, upsertProjectFact } from '../llm/projectFacts';
 
 const RECALL_DEFAULT = 5;
 const RECALL_MAX = 20;
@@ -64,8 +65,35 @@ async function bumpVersion(env: Env, tenantId: number): Promise<void> {
  * `{ ok: false, error }` (never throw) so a missing table (pre-migration) or a transient
  * DB blip reports "unavailable" to the model instead of breaking the run.
  */
-export function buildCloudMemoryCapability(args: { db: Db; env: Env; tenantId: number }): MemoryCapability {
+export function buildCloudMemoryCapability(args: { db: Db; env: Env; tenantId: number; projectId?: number | null }): MemoryCapability {
   const { db, env, tenantId } = args;
+  const projectId = Number.isInteger(args.projectId) && (args.projectId as number) > 0 ? (args.projectId as number) : null;
+
+  // Project-scoped runs back their memory with the SHARED `project_facts` store
+  // (the SAME one VS Code + on-prem + web Brain read/write), so a belief the cloud
+  // agent forms is recalled by every surface on that project — one project memory.
+  // Un-scoped runs keep the tenant-wide `agent_memory` twin below.
+  if (projectId) {
+    return {
+      async remember(key, content): Promise<MemoryRememberResult> {
+        try {
+          await upsertProjectFact(env, db, tenantId, projectId, key, content, 'cloud');
+          return { ok: true, key };
+        } catch (e) {
+          return { ok: false, error: errMessage(e) };
+        }
+      },
+      async recall(query, limit): Promise<MemoryRecallResult> {
+        try {
+          const entries = await recallProjectFacts(env, db, tenantId, projectId, { query, ...(limit != null ? { limit } : {}) });
+          return { ok: true, query, entries };
+        } catch (e) {
+          return { ok: false, error: errMessage(e) };
+        }
+      },
+    };
+  }
+
   return {
     async remember(key, content, opts): Promise<MemoryRememberResult> {
       try {

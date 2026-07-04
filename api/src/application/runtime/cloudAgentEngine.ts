@@ -51,6 +51,7 @@ import { getRoutingTable, MIN_SAMPLES, type RoutingScope } from '../llm/routingT
 import type { ActionModelRankStat } from '../llm/LlmProxyService';
 import { resolveTenantModel } from '../llm/tenantModelService';
 import { dispatchProjectEvermindLearnText } from '../llm/projectEvermind';
+import { buildProjectFactsBlock } from '../llm/projectFacts';
 import { scoreRunOutcome } from './scoreRunOutcome';
 import { handleCloudRunCrash } from './cloudSelfHeal';
 import { cloudCrashReason } from './orphanReasons';
@@ -1172,6 +1173,7 @@ function buildCloudProvider(args: {
   env: Env;
   db: Db;
   tenantId: number;
+  projectId: number;
   executionId: number;
   taskRow: { id: number; title: string };
   agentLabel: string;
@@ -1181,7 +1183,7 @@ function buildCloudProvider(args: {
   /** Live set of paths written this run (mutated by write/delete). */
   writtenPaths: Set<string>;
 }): CapabilityProvider {
-  const { env, db, tenantId, executionId, taskRow, agentLabel, cloudAgentRef, repoCtx, repoMiss, writtenPaths } = args;
+  const { env, db, tenantId, projectId, executionId, taskRow, agentLabel, cloudAgentRef, repoCtx, repoMiss, writtenPaths } = args;
   // Read/list against the ticket branch only once it exists (created on the first
   // commit). Before any write, the branch ref 404s — read from `base` instead, so
   // the agent sees the real codebase rather than mistaking the missing branch for
@@ -1285,9 +1287,9 @@ function buildCloudProvider(args: {
         return { paused: true, approvalId, note: 'Question sent to a human. The run is paused until it is answered; you will resume with the answer.' };
       },
     },
-    // Durable cross-run memory (Postgres `agent_memory`, tenant-scoped). The Worker-safe
-    // twin of the on-prem SSM MemoryStore; lexical recall, read-through cached.
-    memory: buildCloudMemoryCapability({ db, env, tenantId }),
+    // Durable cross-run memory. Project-scoped runs use the SHARED `project_facts`
+    // store (recalled by every surface); else the tenant-wide `agent_memory` twin.
+    memory: buildCloudMemoryCapability({ db, env, tenantId, projectId }),
   };
 }
 
@@ -1474,7 +1476,7 @@ export async function runCloudToolLoop(
   // The provider closes over the LIVE `writtenPaths` set + `repoCtx`, so write/delete
   // bookkeeping and the base→branch read switch stay correct as the run progresses.
   const provider = buildCloudProvider({
-    env, db, tenantId, executionId, taskRow, agentLabel, cloudAgentRef, repoCtx, repoMiss, writtenPaths,
+    env, db, tenantId, projectId, executionId, taskRow, agentLabel, cloudAgentRef, repoCtx, repoMiss, writtenPaths,
   });
   const toolCtx: ToolContext = { caps: provider, signal: abortController.signal };
 
@@ -2074,7 +2076,7 @@ export async function prepareCloudRun(
   // The agent's OWN personality (independent of assigned personas) — folded into the
   // capability prompt block, the exec params, and (by the caller) the limbic setpoints.
   const agentPsychometric = await loadAgentPsychometric(env, tenantId, cloudAgentRef);
-  const [prd, governance, capabilities, workspace] = await Promise.all([
+  const [prd, governance, capabilities, workspace, factsBlock] = await Promise.all([
     ensureTaskPrd(env, db, executionId, taskRow, tenantId, projectId, taskRow.id, agentLabel, model),
     loadGovernanceContext(db, tenantId, projectId),
     loadCapabilityContext(env, db, artifacts, agentPsychometric),
@@ -2083,6 +2085,9 @@ export async function prepareCloudRun(
     // committed to this branch (so a re-run reconciles instead of blindly appending).
     // Best-effort: a clean first run / no repo yields an empty workspace.
     loadWorkspaceContext(env, db, gitSecret(env), tenantId, taskRow.id),
+    // Shared project memory — durable facts any surface (VS Code / on-prem / prior
+    // cloud run) wrote for this project, recalled by the task text. Best-effort '' .
+    buildProjectFactsBlock(env, db, tenantId, projectId, `${taskRow.title} ${taskRow.description ?? ''}`.trim()),
   ]);
   const priorChanges = workspace.priorChanges;
   const repoLabel = workspace.repo ? `${workspace.repo.owner}/${workspace.repo.repo}` : null;
@@ -2176,6 +2181,7 @@ export async function prepareCloudRun(
     shellLine + ' ' +
     'If no repository is bound, return the complete deliverable in your final summary instead. Make explicit, reasonable assumptions where specifics are unknown.',
     capabilities.promptBlock || null,
+    factsBlock || null,
   ].filter(Boolean).join('\n\n');
 
   return { systemPrompt, userContent, execParams: capabilities.execParams, agentPsychometric };

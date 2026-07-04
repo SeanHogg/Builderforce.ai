@@ -44,6 +44,12 @@ export interface ProjectEvermindHead {
    * their inference model to {@link ref} — see {@link resolveProjectInferenceModel}.
    */
   inferenceEnabled: boolean;
+  /**
+   * Optional frontier-LLM teacher (any gateway model id). When set, the coordinator
+   * distills: it adapts the SSM on that model's exemplar for each run instead of the
+   * raw run text. null = self-learning on raw text only. See {@link setProjectEvermindTeacher}.
+   */
+  teacherModel: string | null;
   /** Immutable ref usable by {@link loadEvermindModel}; null when unseeded. */
   ref: string | null;
 }
@@ -93,7 +99,7 @@ export async function getProjectEvermindHead(
         .where(and(eq(projectEvermind.tenantId, tenantId), eq(projectEvermind.projectId, projectId)))
         .limit(1);
       if (!row || row.version <= 0) {
-        return { tenantId, projectId, name: row?.name ?? 'Project Evermind', version: 0, mode: toMode(row?.mode), contributions: row?.contributions ?? 0, inferenceEnabled: row?.inferenceEnabled ?? false, ref: null };
+        return { tenantId, projectId, name: row?.name ?? 'Project Evermind', version: 0, mode: toMode(row?.mode), contributions: row?.contributions ?? 0, inferenceEnabled: row?.inferenceEnabled ?? false, teacherModel: row?.teacherModel ?? null, ref: null };
       }
       return {
         tenantId,
@@ -103,6 +109,7 @@ export async function getProjectEvermindHead(
         mode: toMode(row.mode),
         contributions: row.contributions,
         inferenceEnabled: row.inferenceEnabled,
+        teacherModel: row.teacherModel ?? null,
         ref: projectEvermindRef(tenantId, projectId, row.version),
       };
     },
@@ -365,6 +372,28 @@ export async function setProjectEvermindInference(
   await db
     .update(projectEvermind)
     .set({ inferenceEnabled: enabled, updatedAt: new Date() })
+    .where(and(eq(projectEvermind.tenantId, tenantId), eq(projectEvermind.projectId, projectId)));
+  await bumpCacheVersion(env, versionKey(tenantId, projectId));
+}
+
+/**
+ * Pin (or clear) the frontier-LLM TEACHER for a project's Evermind. A non-empty
+ * `model` (any gateway model id — Opus, Mistral, GLM, …) makes the coordinator
+ * distill: each run adapts the SSM on that model's exemplar instead of raw text.
+ * `null`/empty clears it (self-learning on raw text only). Bumps the head cache so
+ * the coordinator's next alarm reads the new teacher. Idempotent.
+ */
+export async function setProjectEvermindTeacher(
+  env: Env,
+  db: Db,
+  tenantId: number,
+  projectId: number,
+  model: string | null,
+): Promise<void> {
+  const teacherModel = model && model.trim() ? model.trim() : null;
+  await db
+    .update(projectEvermind)
+    .set({ teacherModel, updatedAt: new Date() })
     .where(and(eq(projectEvermind.tenantId, tenantId), eq(projectEvermind.projectId, projectId)));
   await bumpCacheVersion(env, versionKey(tenantId, projectId));
 }

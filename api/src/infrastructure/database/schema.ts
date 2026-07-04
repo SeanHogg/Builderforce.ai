@@ -2513,6 +2513,22 @@ export const agentMemory = pgTable('agent_memory', {
   updatedAt:  timestamp('updated_at').notNull().defaultNow(),
 });
 
+// Shared per-PROJECT write-through facts store (migration 0276) — the project-scoped
+// twin of agent_memory. Every surface (VS Code, web Brain, cloud, on-prem) reads +
+// writes the same project facts, so a fact one run learns is recalled by all. The
+// (tenant_id, project_id, key) uniqueness is enforced in the migration (upsert target).
+export const projectFacts = pgTable('project_facts', {
+  id:         uuid('id').primaryKey().defaultRandom(),
+  tenantId:   integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  projectId:  integer('project_id').notNull().references(() => projects.id, { onDelete: 'cascade' }),
+  key:        varchar('key', { length: 255 }).notNull(),
+  content:    text('content').notNull(),
+  source:     varchar('source', { length: 64 }).notNull().default('agent'),
+  importance: real('importance').notNull().default(0.5),
+  createdAt:  timestamp('created_at').notNull().defaultNow(),
+  updatedAt:  timestamp('updated_at').notNull().defaultNow(),
+});
+
 // ---------------------------------------------------------------------------
 // Prompt Library — versioned prompt templates with a public gallery
 // (Composite uniqueness/PKs are enforced in migration 0069. These tables use
@@ -4658,6 +4674,14 @@ export const projectEvermind = pgTable('project_evermind', {
    * `mode` (write-back): read without contributing, or contribute without reading.
    */
   inferenceEnabled: boolean('inference_enabled').notNull().default(false),
+  /**
+   * Optional frontier-LLM TEACHER (migration 0277). When set to a gateway model id
+   * (e.g. `claude-opus-4-8`, a Mistral/GLM id), the coordinator distills: it asks
+   * that model for the exemplary version of each run and adapts the SSM on the
+   * teacher's output instead of the raw run text (teacher→student). NULL = learn
+   * from raw run text only (no teacher call, no teacher token cost).
+   */
+  teacherModel:  text('teacher_model'),
   lastLearnedAt: timestamp('last_learned_at'),
   createdAt:     timestamp('created_at').notNull().defaultNow(),
   updatedAt:     timestamp('updated_at').notNull().defaultNow(),

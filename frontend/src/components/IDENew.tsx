@@ -29,6 +29,7 @@ import { getApiBaseUrl } from '@/lib/apiClient';
 import { useVoiceStudio } from '@/lib/voiceStudio';
 import { VoiceOutput } from './ide/VoiceOutput';
 import { VoiceConfigPanel } from './ide/VoiceConfigPanel';
+import { ProjectEvermindPanel } from './ide/ProjectEvermindPanel';
 import { StudioPanel } from '@seanhogg/builderforce-studio-embedded';
 import '@seanhogg/builderforce-studio-embedded/styles.css';
 
@@ -1192,6 +1193,13 @@ export function IDE({ project, initialFiles, onProjectUpdate, onOpenProjectDetai
                 onSaveVersion={videoVersions.onSaveVersion}
                 onLoadVersion={videoVersions.onLoadVersion}
               />
+              {/* The project's self-learning Evermind — parity with the other
+                  studios (self-gating, localized, theme-aware). */}
+              {projectIdNum != null && (
+                <div style={{ padding: '0 16px 16px' }}>
+                  <ProjectEvermindPanel projectId={projectIdNum} />
+                </div>
+              )}
             </div>
           ) : modality === 'voice' ? (
             <VoiceOutput
@@ -1351,7 +1359,7 @@ export function IDE({ project, initialFiles, onProjectUpdate, onOpenProjectDetai
           </div>
           <div style={{ flex: 1, overflow: 'hidden', position: 'relative' }}>
             <div style={{ position: 'absolute', inset: 0, visibility: rightTab === 'voice' ? 'visible' : 'hidden', pointerEvents: rightTab === 'voice' ? 'auto' : 'none' }}>
-              {modality === 'voice' && <VoiceConfigPanel voice={voice} />}
+              {modality === 'voice' && <VoiceConfigPanel voice={voice} projectId={projectIdNum} />}
             </div>
             <div style={{ position: 'absolute', inset: 0, visibility: rightTab === 'files' ? 'visible' : 'hidden', pointerEvents: rightTab === 'files' ? 'auto' : 'none' }}>
               <FileExplorer

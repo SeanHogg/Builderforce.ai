@@ -4,6 +4,7 @@ import path from "node:path";
 const DEFAULT_BUILDERFORCE_URL = "https://api.builderforce.ai";
 import { appendKnowledgeMemory } from "../builderforce/project-context.js";
 import { contributeProjectEvermindFromText, type ProjectEvermindSyncConfig } from "./project-evermind-sync.js";
+import { pushProjectFact, recallSharedProjectFacts } from "./project-facts-sync.js";
 import { logDebug } from "../logger.js";
 import { normalizeBaseUrl } from "../utils/normalize-base-url.js";
 import { onAgentEvent } from "./agent-events.js";
@@ -175,6 +176,16 @@ export class KnowledgeLoopService {
         lines.push(`- [${who}${when}] ${entry.summary ?? ""}`);
       }
       lines.push("[End Team Memory Context]");
+      // SHARED project facts — durable beliefs any surface (VS Code / cloud / prior
+      // on-prem run) wrote for this project, so on-prem recall sees them too.
+      const cfg = this.projectEvermindConfig();
+      if (cfg) {
+        const facts = await recallSharedProjectFacts(cfg, undefined, 6);
+        if (facts.length > 0) {
+          lines.push("[Project memory — durable facts recalled for this project]");
+          for (const f of facts) lines.push(`- ${f.content}`);
+        }
+      }
       return lines.join("\n") + "\n";
     });
     this.unsub = onAgentEvent((evt) => {
@@ -299,10 +310,15 @@ export class KnowledgeLoopService {
           ...edited.map((file) => ({ file, action: "edited" as const })),
         ]) {
           try {
-            await ssmSvc.commitFact(`file:${file}`, `${file} was ${action} — ${summary}`, {
+            const factContent = `${file} was ${action} — ${summary}`;
+            await ssmSvc.commitFact(`file:${file}`, factContent, {
               tags: ["file-state"],
               importance: 0.55,
             });
+            // Mirror the belief to the SHARED project store so cloud/editor runs
+            // recall it too (best-effort — the local commit is the source of truth).
+            const cfg = this.projectEvermindConfig();
+            if (cfg) void pushProjectFact(cfg, `file:${file}`, factContent);
           } catch (err) {
             logDebug(`[ssm-memory] commitFact() failed for ${file}: ${String(err)}`);
           }

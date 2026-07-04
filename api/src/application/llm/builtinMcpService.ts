@@ -45,6 +45,7 @@ import { buildRuntimeService } from '../../buildRuntimeService';
 import { ChatTicketService } from '../brain/ChatTicketService';
 import { WorkDeltaService, type DeltaKind } from '../delta/WorkDeltaService';
 import { ValidationService, type ReviewVerdict, type ReviewGapInput } from '../validation/ValidationService';
+import { recallProjectFacts, upsertProjectFact } from './projectFacts';
 import type { Task } from '../../domain/task/Task';
 
 /** Sentinel extensionId the gateway routes to this in-process catalog. */
@@ -196,6 +197,33 @@ const CATALOG: BuiltinTool[] = [
     }, ctx.tenantId).then((p) => p.toPlain()),
   },
   { tool: 'projects.delete', mutates: true, description: 'Delete a project permanently.', parameters: obj({ id: N }, ['id']), run: (ctx, a) => ctx.projects.deleteProject(num(a.id), ctx.tenantId).then(() => ({ deleted: num(a.id) })) },
+
+  // ---- Project memory (shared write-through facts, migration 0276) ----
+  // The SAME store VS Code, on-prem, and cloud runs read/write, so a belief one
+  // surface forms is recalled by all others on the project.
+  {
+    tool: 'project_facts.recall', mutates: false,
+    description: 'Recall durable facts remembered for a project — the shared memory every agent (cloud/on-prem/editor) reads. Optionally rank by a query.',
+    parameters: obj({ projectId: N, query: S, limit: N }, ['projectId']),
+    run: async (ctx, a) => {
+      if (!ctx.env) throw new Error('project memory unavailable');
+      const facts = await recallProjectFacts(ctx.env, ctx.db, ctx.tenantId, num(a.projectId), {
+        ...(a.query != null ? { query: str(a.query) } : {}),
+        ...(a.limit != null ? { limit: num(a.limit) } : {}),
+      });
+      return { facts };
+    },
+  },
+  {
+    tool: 'project_facts.remember', mutates: false,
+    description: 'Remember a durable fact about a project under a STABLE key (write-through: a new fact for the same key REPLACES the old one, never duplicates). Shared with every agent on the project — use for decisions, conventions, and locations worth recalling across runs and surfaces.',
+    parameters: obj({ projectId: N, key: S, content: S }, ['projectId', 'key', 'content']),
+    run: async (ctx, a) => {
+      if (!ctx.env) throw new Error('project memory unavailable');
+      const ok = await upsertProjectFact(ctx.env, ctx.db, ctx.tenantId, num(a.projectId), str(a.key), str(a.content), 'brain');
+      return { ok, key: str(a.key) };
+    },
+  },
 
   // ---- Tasks ----
   { tool: 'tasks.list', mutates: false, description: 'List tasks, optionally filtered by project.', parameters: obj({ projectId: N }), run: (ctx, a) => ctx.tasks.listTasks(ctx.tenantId, a.projectId != null ? num(a.projectId) : undefined).then((ts) => ts.map((t) => t.toPlain())) },
