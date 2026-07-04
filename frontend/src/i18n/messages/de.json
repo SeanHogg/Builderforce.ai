@@ -4391,6 +4391,10 @@
       "rankTitle": "Der Backlog-Rang, den der KI-Manager diesem Ticket gegeben hat.",
       "editTitle": "Klicken, um einen Geschäftswert festzulegen (0–100).",
       "unset": "Nicht gesetzt"
+    },
+    "audit": {
+      "flagged": "Markiert",
+      "flaggedTitle": "Dieses Ticket hat eine erforderliche Rolle oder Diagnose übersprungen – Prüfung nötig"
     }
   },
   "projectsContent": {
@@ -4716,7 +4720,11 @@
       "interviewing": "Im Gespräch",
       "active": "Aktiv",
       "declined": "Abgelehnt",
-      "terminated": "Beendet"
+      "terminated": "Beendet",
+      "submitted": "Eingereicht",
+      "shortlisted": "In engerer Wahl",
+      "accepted": "Angenommen",
+      "withdrawn": "Zurückgezogen"
     },
     "profile": {
       "title": "Verfügbares Profil",
@@ -4752,7 +4760,12 @@
       "empty": "Noch keine Engagements. Veröffentlichen Sie Ihr Profil, damit Sie eingestellt werden können.",
       "workspace": "Arbeitsbereich",
       "rate": "Satz",
-      "since": "Seit"
+      "since": "Seit",
+      "tabWork": "Offene Jobs",
+      "tabProposals": "Meine Angebote",
+      "tabEngagements": "Meine Engagements",
+      "accept": "Annehmen",
+      "decline": "Ablehnen"
     },
     "timecard": {
       "title": "Zeiterfassung",
@@ -4799,6 +4812,19 @@
         "manual": "Manuell",
         "meeting": "Meeting"
       }
+    },
+    "cancel": "Abbrechen",
+    "jobs": {
+      "bid": "Angebot abgeben",
+      "submitBid": "Angebot senden",
+      "coverNote": "Anschreiben (optional)",
+      "yourRate": "Ihr Satz ($/Std)",
+      "alreadyBid": "Angebot abgegeben",
+      "emptyOpen": "Derzeit keine offenen Jobs."
+    },
+    "proposals": {
+      "empty": "Sie haben noch keine Angebote abgegeben.",
+      "withdraw": "Zurückziehen"
     }
   },
   "talent": {
@@ -4827,6 +4853,18 @@
     "hero": {
       "blurb": "Stellen Sie geprüfte Freelancer ein – Entwickler, DBAs, Designer und weitere Spezialisten. Sehen Sie Lebensläufe und Fähigkeiten, vereinbaren Sie einen Stundensatz, führen Sie Interviews und erfassen Sie abrechenbare Stunden an einem Ort.",
       "ctaHire": "Auftrag ausschreiben & einstellen"
+    },
+    "reviews": "Bewertungen",
+    "filter": {
+      "search": "Name oder Fähigkeit suchen",
+      "discipline": "Fachgebiet",
+      "allDisciplines": "Alle Fachgebiete",
+      "sort": "Sortieren",
+      "sortRecent": "Neueste",
+      "sortRating": "Bestbewertet",
+      "sortRateAsc": "Satz: aufsteigend",
+      "sortRateDesc": "Satz: absteigend",
+      "pageOf": "Seite {page} von {pages}"
     }
   },
   "hires": {
@@ -4866,6 +4904,43 @@
       "auto": "Erfasst",
       "manual": "Manuell",
       "meeting": "Meeting"
+    },
+    "jobs": "Jobs",
+    "invoices": "Rechnungen",
+    "rate": "Bewerten",
+    "reviewComment": "Kommentar (optional)",
+    "submitReview": "Bewertung senden",
+    "cancelBtn": "Abbrechen",
+    "job": {
+      "postNew": "+ Job ausschreiben",
+      "post": "Ausschreiben",
+      "titlePlaceholder": "Jobtitel",
+      "descPlaceholder": "Beschreiben Sie die Arbeit…",
+      "discipline": "Fachgebiet",
+      "rateMin": "Min $/Std",
+      "rateMax": "Max $/Std",
+      "skillsPlaceholder": "Fähigkeiten (durch Kommas getrennt)",
+      "empty": "Noch keine Jobs ausgeschrieben.",
+      "proposals": "{count} Angebote",
+      "viewProposals": "Angebote",
+      "close": "Schließen",
+      "noProposals": "Noch keine Angebote.",
+      "accept": "Annehmen & einstellen",
+      "declineProposal": "Ablehnen",
+      "status": {
+        "open": "Offen",
+        "closed": "Geschlossen",
+        "filled": "Besetzt"
+      }
+    },
+    "invoice": {
+      "empty": "Noch keine Rechnungen.",
+      "pay": "Bezahlen",
+      "status": {
+        "pending": "Ausstehend",
+        "paid": "Bezahlt",
+        "void": "Storniert"
+      }
     }
   },
   "register": {
@@ -4875,5 +4950,62 @@
     "hireTitle": "Eingestellt werden",
     "hireSub": "Freelance-Profil & Jobs",
     "accountTypeAria": "Kontotyp"
+  },
+  "notifications": {
+    "title": "Benachrichtigungen",
+    "markAllRead": "Alle als gelesen markieren"
+  },
+  "kanban": {
+    "rosterTitle": "Empfohlene Besetzung",
+    "rosterSubtitle": "Besetze jede Rolle mit einem Teammitglied oder KI-Agenten",
+    "coverageSummary": "{filled}/{total} Rollen besetzt",
+    "templateLabel": "Board-Vorlage",
+    "builtin": "Integriert",
+    "applying": "Wird angewendet…",
+    "required": "Erforderlich",
+    "optional": "Optional",
+    "filled": "Besetzt",
+    "gap": "Lücke",
+    "createAgent": "Agent erstellen",
+    "creating": "Wird erstellt…",
+    "noRoles": "Diese Vorlage definiert noch keine Rollen.",
+    "auditTitle": "Markierte Tickets",
+    "noFlagged": "Keine Tickets markiert – jede erforderliche Rolle und Prüfung ist abgedeckt.",
+    "coverage": "{pct}% abgedeckt",
+    "templatesTitle": "Kanban-Vorlagen",
+    "templatesSubtitle": "Erstelle, wechsle und teile Team-Boards nach bewährten Methoden.",
+    "tab_mine": "Meine Vorlagen",
+    "tab_marketplace": "Marktplatz",
+    "tab_roles": "Rollen",
+    "published": "Veröffentlicht",
+    "laneRoleCount": "{lanes} Spalten · {roles} Rollen",
+    "fork": "Duplizieren",
+    "edit": "Bearbeiten",
+    "delete": "Löschen",
+    "free": "Kostenlos",
+    "installs": "{count} Installationen",
+    "install": "Installieren",
+    "roleNamePlaceholder": "Name der neuen Rolle",
+    "addRole": "Rolle hinzufügen",
+    "back": "Zurück",
+    "saving": "Wird gespeichert…",
+    "save": "Speichern",
+    "gate": "Gate",
+    "gateAuto": "Automatisch",
+    "gateHuman": "Mensch",
+    "requirementGate": "Anforderungs-Gate",
+    "gateOff": "Aus",
+    "gateSoft": "Weich",
+    "gateHard": "Hart",
+    "kindRole": "Rolle",
+    "kindReview": "Review",
+    "kindDiagnostic": "Diagnose",
+    "respOwner": "Verantwortlich",
+    "respReviewer": "Prüfer",
+    "respContributor": "Mitwirkender",
+    "addRequirement": "Anforderung hinzufügen",
+    "priceLabel": "Preis (USD)",
+    "unpublish": "Zurückziehen",
+    "publishToMarketplace": "Im Marktplatz veröffentlichen"
   }
 }

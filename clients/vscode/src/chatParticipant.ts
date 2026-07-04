@@ -2,6 +2,7 @@ import * as vscode from "vscode";
 import { runAgent } from "./agent";
 import { ChatMessage, SECRET_KEY, fetchLimbicBlock } from "./gateway";
 import { getGroundingSummary } from "./grounding";
+import { resolveEffectiveModel } from "./modelState";
 import { buildSystemMessages } from "./prompt";
 
 const PARTICIPANT_ID = "builderforce.agent";
@@ -22,7 +23,9 @@ export function createBuilderForceHandler(ctx: vscode.ExtensionContext): vscode.
 
     const root = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
     const cfg = vscode.workspace.getConfiguration("builderforce");
-    const model = cfg.get<string>("defaultModel") || undefined;
+    // Resolve per turn so an explicit pick, the active project's Evermind, or the
+    // configured default is honored the same way the Brain webview + cloud/on-prem do.
+    const model = await resolveEffectiveModel(ctx.secrets);
     const permissionMode = cfg.get<"ask" | "acceptEdits">("permissionMode") ?? "ask";
 
     // Limbic affective layer (gateway-injected) — parity with the webview chat

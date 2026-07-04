@@ -134,6 +134,7 @@ import { createEvermindModelRoutes }   from './presentation/routes/evermindModel
 import { createProjectEvermindRoutes, createProjectEvermindAgentRoutes }  from './presentation/routes/projectEvermindRoutes';
 // Cloud Agent Boards — agentic swimlanes, external board sync, PRD versioning, multi-repo PRs
 import { createBoardRoutes }           from './presentation/routes/boardRoutes';
+import { createKanbanRoutes }          from './presentation/routes/kanbanRoutes';
 import { createBoardConnectionRoutes } from './presentation/routes/boardConnectionRoutes';
 import { createMigrationRoutes } from './presentation/routes/migrationRoutes';
 import { createBoardWebhookRoutes }    from './presentation/routes/boardWebhookRoutes';
@@ -402,6 +403,7 @@ export function buildApp(env: Env): Hono<HonoEnv> {
   // Protected endpoints (JWT injected by authMiddleware inside each router)
   app.route('/api/projects', createProjectRoutes(projectService, db));
   app.route('/api/tasks',    createTaskRoutes(taskService, db, runtimeService));
+  app.route('/api/kanban',   createKanbanRoutes(db));
   app.route('/api/manager',  createManagerRoutes(db, runtimeService));
   app.route('/api/vscode',   createVscodeRoutes(db, tenantService));
   app.route('/api/members',  createMemberRoutes(db));

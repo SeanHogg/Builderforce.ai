@@ -778,6 +778,11 @@ export const projects = pgTable('projects', {
   description:     text('description'),
   /** IDE: template used to seed initial files (e.g. "vanilla"). */
   template:        varchar('template', { length: 50 }),
+  /** The KANBAN template selected for this project's board (migration 0274) — a
+   *  built-in slug ('standard-swe') or a kanban_templates.id. Distinct from
+   *  {@link template} (IDE file scaffold). Drives lane roles/requirements + the
+   *  recommended roster. Null = the legacy hardcoded default board. */
+  kanbanTemplateId: varchar('kanban_template_id', { length: 120 }),
   rootWorkingDirectory: text('root_working_directory'),
   status:          projectStatusEnum('status').notNull().default('active'),
   sourceControlIntegrationId: integer('source_control_integration_id').references(() => sourceControlIntegrations.id, { onDelete: 'set null' }),
@@ -952,6 +957,12 @@ export const tasks = pgTable('tasks', {
    *  Typed AnyPgColumn to break the self-reference inference cycle. ON DELETE SET
    *  NULL so deleting the origin keeps the gap as standalone work. */
   gapOriginTaskId:       integer('gap_origin_task_id').references((): AnyPgColumn => tasks.id, { onDelete: 'set null' }),
+  /** Denormalised ticket ROLE/DIAGNOSTIC audit verdict (migration 0275) — the
+   *  full result lives in {@link ticketAudits}; these render the board flag chip
+   *  without a join. auditStatus is null(unaudited) | 'pass' | 'flagged';
+   *  auditFlagCount is how many required lane requirements are unmet. */
+  auditStatus:           varchar('audit_status', { length: 12 }),
+  auditFlagCount:        integer('audit_flag_count').notNull().default(0),
   createdAt:         timestamp('created_at').notNull().defaultNow(),
   updatedAt:         timestamp('updated_at').notNull().defaultNow(),
 });
@@ -3704,6 +3715,10 @@ export const boards = pgTable('boards', {
    *  executes (see evaluateExecutionApprovalGate). A manager can set this FALSE to
    *  OVERRIDE the gate so high/urgent work runs without approval (migration 0257). */
   requireExecutionApproval: boolean('require_execution_approval').notNull().default(true),
+  /** The kanban template this board was provisioned from (migration 0274) — a
+   *  built-in slug ('standard-swe') or a kanban_templates.id. Null = the legacy
+   *  hardcoded default lanes. Records provenance; re-applying overwrites lanes. */
+  templateId:          varchar('template_id', { length: 120 }),
   createdAt:            timestamp('created_at').notNull().defaultNow(),
   updatedAt:            timestamp('updated_at').notNull().defaultNow(),
 });
@@ -3726,6 +3741,10 @@ export const swimlanes = pgTable('swimlanes', {
   actionTarget:     varchar('action_target', { length: 64 }), // target lane key (move_ticket) | workflow id (run_workflow)
   successPolicy:    varchar('success_policy', { length: 16 }).notNull().default('all'), // 'all' | 'any' | 'n_of_m'
   successThreshold: integer('success_threshold'),             // required when successPolicy='n_of_m'
+  // How strictly this lane's requirements (swimlane_requirements) gate entry
+  // (migration 0274): 'off' = audit-only, 'soft' = flag + round-trip the reviewer
+  // (default), 'hard' = block the auto-advance until required checks are satisfied.
+  requirementGate:  varchar('requirement_gate', { length: 8 }).notNull().default('soft'),
   createdAt:     timestamp('created_at').notNull().defaultNow(),
   updatedAt:     timestamp('updated_at').notNull().defaultNow(),
   // UNIQUE (board_id, key) enforced in migration 0064 (kept out of the pgTable
@@ -3786,6 +3805,119 @@ export const swimlaneTransitions = pgTable('swimlane_transitions', {
   workflowStatus: varchar('workflow_status', { length: 16 }),
   detail:         text('detail'),
   at:             timestamp('at').notNull().defaultNow(),
+});
+
+// ── Agentic Workforce Kanban: roles, templates & per-lane requirements (0274) ─
+// One primitive — a KanbanTemplate binding {roles, required checks, gate} to each
+// lane — powers the built-in Standard SWE board, custom kanbans, the recommended
+// roster, per-ticket auditing, and swimlane gating. Built-in roles/templates live
+// as TS constants; these tables hold only tenant-created/forked/published rows.
+
+/** Tenant-extensible tail of the job-function role taxonomy (canonical set in code). */
+export const jobRoles = pgTable('job_roles', {
+  id:          varchar('id', { length: 36 }).primaryKey(),
+  tenantId:    integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  key:         varchar('key', { length: 60 }).notNull(),
+  name:        varchar('name', { length: 120 }).notNull(),
+  description: text('description'),
+  discipline:  varchar('discipline', { length: 60 }).notNull().default('engineering'),
+  color:       varchar('color', { length: 24 }),
+  icon:        varchar('icon', { length: 16 }),
+  position:    integer('position').notNull().default(0),
+  createdAt:   timestamp('created_at').notNull().defaultNow(),
+  updatedAt:   timestamp('updated_at').notNull().defaultNow(),
+});
+
+/** A reusable / shareable / sellable kanban board definition (marketplace artifact). */
+export const kanbanTemplates = pgTable('kanban_templates', {
+  id:               varchar('id', { length: 36 }).primaryKey(),
+  tenantId:         integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  slug:             varchar('slug', { length: 120 }).notNull(),
+  name:             varchar('name', { length: 160 }).notNull(),
+  description:      text('description'),
+  category:         varchar('category', { length: 60 }).notNull().default('software'),
+  teamType:         varchar('team_type', { length: 80 }),
+  parentTemplateId: varchar('parent_template_id', { length: 120 }),
+  authorId:         varchar('author_id', { length: 36 }).references(() => users.id, { onDelete: 'set null' }),
+  published:        boolean('published').notNull().default(false),
+  visibility:       varchar('visibility', { length: 10 }).notNull().default('private'), // private|tenant|public
+  priceCents:       integer('price_cents'),
+  pricingModel:     varchar('pricing_model', { length: 20 }),
+  priceUnit:        varchar('price_unit', { length: 40 }),
+  installCount:     integer('install_count').notNull().default(0),
+  version:          integer('version').notNull().default(1),
+  createdAt:        timestamp('created_at').notNull().defaultNow(),
+  updatedAt:        timestamp('updated_at').notNull().defaultNow(),
+});
+
+/** A lane within a kanban template. */
+export const kanbanTemplateLanes = pgTable('kanban_template_lanes', {
+  id:              varchar('id', { length: 36 }).primaryKey(),
+  templateId:      varchar('template_id', { length: 36 }).notNull().references(() => kanbanTemplates.id, { onDelete: 'cascade' }),
+  key:             varchar('key', { length: 120 }).notNull(),
+  name:            varchar('name', { length: 255 }).notNull(),
+  position:        integer('position').notNull().default(0),
+  isTerminal:      boolean('is_terminal').notNull().default(false),
+  gate:            varchar('gate', { length: 16 }).notNull().default('auto'),
+  requirementGate: varchar('requirement_gate', { length: 8 }).notNull().default('soft'),
+  createdAt:       timestamp('created_at').notNull().defaultNow(),
+});
+
+/** Roles responsible + checks (role sign-off / diagnostic) required at a template lane. */
+export const kanbanTemplateLaneRequirements = pgTable('kanban_template_lane_requirements', {
+  id:             varchar('id', { length: 36 }).primaryKey(),
+  laneId:         varchar('lane_id', { length: 36 }).notNull().references(() => kanbanTemplateLanes.id, { onDelete: 'cascade' }),
+  kind:           varchar('kind', { length: 16 }).notNull(),   // role | diagnostic | review
+  ref:            varchar('ref', { length: 120 }).notNull(),   // role key | diagnostic tool id
+  responsibility: varchar('responsibility', { length: 16 }),   // owner | reviewer | contributor
+  isRequired:     boolean('is_required').notNull().default(true),
+  description:    text('description'),
+  position:       integer('position').notNull().default(0),
+  createdAt:      timestamp('created_at').notNull().defaultNow(),
+});
+
+/** LIVE per-lane requirements materialised onto a board's swimlanes when a template
+ *  is applied (and directly editable). Keeps the running board self-describing for
+ *  the audit + gating engines regardless of template provenance. */
+export const swimlaneRequirements = pgTable('swimlane_requirements', {
+  id:             varchar('id', { length: 36 }).primaryKey(),
+  tenantId:       integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  swimlaneId:     uuid('swimlane_id').notNull().references(() => swimlanes.id, { onDelete: 'cascade' }),
+  kind:           varchar('kind', { length: 16 }).notNull(),
+  ref:            varchar('ref', { length: 120 }).notNull(),
+  responsibility: varchar('responsibility', { length: 16 }),
+  isRequired:     boolean('is_required').notNull().default(true),
+  description:    text('description'),
+  position:       integer('position').notNull().default(0),
+  createdAt:      timestamp('created_at').notNull().defaultNow(),
+});
+
+/** Append-only ledger: a member acting AS a role approved / requested-changes on a
+ *  ticket at a lane. The audit engine reads this to satisfy role/review requirements. */
+export const ticketRoleSignoffs = pgTable('ticket_role_signoffs', {
+  id:         varchar('id', { length: 36 }).primaryKey(),
+  tenantId:   integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  taskId:     integer('task_id').notNull().references(() => tasks.id, { onDelete: 'cascade' }),
+  laneKey:    varchar('lane_key', { length: 120 }),
+  roleKey:    varchar('role_key', { length: 60 }).notNull(),
+  memberKind: varchar('member_kind', { length: 16 }),
+  memberRef:  varchar('member_ref', { length: 64 }),
+  verdict:    varchar('verdict', { length: 20 }).notNull().default('approved'), // approved | changes_requested
+  summary:    text('summary'),
+  createdAt:  timestamp('created_at').notNull().defaultNow(),
+});
+
+/** Computed per-ticket audit result (upserted; one row per task). */
+export const ticketAudits = pgTable('ticket_audits', {
+  taskId:         integer('task_id').primaryKey().references(() => tasks.id, { onDelete: 'cascade' }),
+  tenantId:       integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  boardId:        uuid('board_id').references(() => boards.id, { onDelete: 'set null' }),
+  status:         varchar('status', { length: 12 }).notNull().default('pass'), // pass | flagged
+  coverage:       integer('coverage').notNull().default(100),
+  requiredCount:  integer('required_count').notNull().default(0),
+  satisfiedCount: integer('satisfied_count').notNull().default(0),
+  missing:        text('missing'),  // JSON array of unmet requirements
+  computedAt:     timestamp('computed_at').notNull().defaultNow(),
 });
 
 // ── Slice 2: External board connections & bidirectional sync ────────────────
@@ -4595,6 +4727,10 @@ export const toolRuns = pgTable('tool_runs', {
   // When set, the run was scored AGAINST this project; it contributes to the
   // project's diagnostic rating (which rolls up to the tenant). Null = workspace.
   projectId:  integer('project_id').references(() => projects.id, { onDelete: 'cascade' }),
+  // When set, the diagnostic was scored against a single ticket (migration 0275) —
+  // the ticket audit engine checks kind='diagnostic' requirements by looking for a
+  // tool_run on the task. Null = project/workspace-scoped run.
+  taskId:     integer('task_id').references(() => tasks.id, { onDelete: 'set null' }),
   toolId:     varchar('tool_id', { length: 64 }).notNull(),
   kind:       varchar('kind', { length: 16 }).notNull().default('self'), // self | data
   input:      jsonb('input').notNull().default(sql`'{}'::jsonb`),

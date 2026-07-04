@@ -43,6 +43,7 @@ import { recommendTopAssignee } from '../metrics/assigneeRecommender';
 import { mergeRecordedPullRequest } from '../repos/mergeRecordedPr';
 import { dispatchTaskFinalize } from '../../presentation/routes/taskRoutes';
 import { maybeAutoRunOnLaneEntry } from '../../presentation/routes/taskRoutes';
+import { TicketAuditService } from '../audit/ticketAuditService';
 
 /** Non-terminal statuses whose tickets the manager grooms/ranks/assigns. */
 const NON_TERMINAL: string[] = [
@@ -64,6 +65,7 @@ const MAX_RANKED = 300;
 const MAX_ASSIGNMENTS_PER_RUN = 15;
 const MAX_PR_ACTIONS_PER_RUN = 20;
 const MAX_DISPATCHES_PER_RUN = 12;
+const MAX_AUDITS_PER_RUN = 40;
 
 export interface ManagerRunSummary {
   projectId: number;
@@ -75,6 +77,9 @@ export interface ManagerRunSummary {
   prsConducted: number;
   prsMerged: number;
   dispatched: number;
+  /** Tickets audited for role/diagnostic coverage, and how many were flagged. */
+  audited: number;
+  flagged: number;
 }
 
 // ── config store ────────────────────────────────────────────────────────────
@@ -239,6 +244,7 @@ export async function runManagerForProject(
   const submittedBy = args.submittedBy ?? 'system:manager';
   const summary: ManagerRunSummary = {
     projectId, skipped: false, scored: 0, ranked: 0, assigned: 0, prsConducted: 0, prsMerged: 0, dispatched: 0,
+    audited: 0, flagged: 0,
   };
 
   const policy = await getEffectiveManagerPolicy(db, tenantId, projectId);
@@ -347,6 +353,20 @@ export async function runManagerForProject(
         });
       }
     } catch { /* skip */ }
+  }
+
+  // 6. AUDIT — check each managed ticket for role/diagnostic coverage and flag any
+  // that skipped a required role or diagnostic (pillar 1). Recomputes the ticket
+  // audit ledger; flagged tickets already recorded a 'flag' manager action inside.
+  {
+    const auditService = new TicketAuditService(db);
+    for (const t of managed.slice(0, MAX_AUDITS_PER_RUN)) {
+      try {
+        const result = await auditService.computeAudit(env, tenantId, t.id);
+        summary.audited += 1;
+        if (result.status === 'flagged') summary.flagged += 1;
+      } catch { /* skip this ticket */ }
+    }
   }
 
   // Stamp the run so the surface + cadence can show "last managed …".

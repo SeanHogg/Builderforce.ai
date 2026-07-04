@@ -8,6 +8,7 @@ import { useTranslations } from 'next-intl';
 import { RoleGate } from '@/components/RoleGate';
 import {
   tasksApi,
+  kanbanApi,
   agentHosts,
   workflowDefinitions,
   approvalsApi,
@@ -171,6 +172,10 @@ export function TaskMgmtContent({
   // is hidden and the TopBar tenant→project selector drives scope instead.
   const globalScope = useOptionalProjectScope();
   const [tasks, setTasks] = useState<Task[]>([]);
+  // Ticket audit: ids of tickets flagged by the role/diagnostic audit (a required
+  // role or check was skipped). Fetched once per project (server-side cached) and
+  // rendered as a flag chip on the card — no per-card round-trip.
+  const [flaggedIds, setFlaggedIds] = useState<Set<number>>(new Set());
   const [projects, setProjects] = useState<Project[]>(projectsProp ?? globalScope?.projects ?? []);
   const [agentHostsList, setAgentHostsList] = useState<AgentHost[]>([]);
   const [cloudAgentsList, setCloudAgentsList] = useState<CloudAgentTarget[]>([]);
@@ -340,6 +345,16 @@ export function TaskMgmtContent({
   const effectiveProjectId = projectId ?? (filterProject ? Number(filterProject) : undefined);
   const effectiveProjectName =
     projectId != null ? projectName : projectNameById(effectiveProjectId);
+
+  // Load the flagged-ticket set for the current project's ticket audit.
+  useEffect(() => {
+    if (effectiveProjectId == null) { setFlaggedIds(new Set()); return; }
+    let alive = true;
+    kanbanApi.flaggedForProject(effectiveProjectId)
+      .then((rows) => { if (alive) setFlaggedIds(new Set(rows.map((r) => r.taskId))); })
+      .catch(() => { if (alive) setFlaggedIds(new Set()); });
+    return () => { alive = false; };
+  }, [effectiveProjectId, tasks]);
 
   // Swimlanes + their configured agents for the selected board, shown discretely
   // in each column header. Only fetched for the board view of a single project.
@@ -838,6 +853,18 @@ export function TaskMgmtContent({
               {tCommon('reviewedTimes', { count: task.reviewCount })}
             </span>
           ) : null}
+          {flaggedIds.has(task.id) && (
+            <span
+              title={tBoard('audit.flaggedTitle')}
+              style={{
+                display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: 10,
+                padding: '2px 6px', borderRadius: 4, background: 'var(--danger-bg, #fee2e2)',
+                color: 'var(--danger-text, #991b1b)', fontWeight: 700,
+              }}
+            >
+              ⚑ {tBoard('audit.flagged')}
+            </span>
+          )}
           {task.businessValue != null && (
             <span
               title={task.businessValueRationale ?? tBoard('businessValue.badgeTitle')}

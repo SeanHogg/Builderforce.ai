@@ -19,6 +19,7 @@ import { BoardConnectionsManager } from './integrations/BoardConnectionsManager'
 import { ProjectDiagnosticsTab } from './ProjectDiagnosticsTab';
 import { ProjectInitiativeLink } from './pm/ProjectInitiativeLink';
 import { ProjectHealthGauges } from './ProjectHealth';
+import { KanbanRosterCard } from './kanban/KanbanRosterCard';
 import { ProjectInspectionReport } from './ProjectInspection';
 import type { InspectionRecommendation } from '@/lib/projectInspection';
 
@@ -631,6 +632,8 @@ export function ProjectDetailsPanel({
                   <ProjectInitiativeLink projectId={project.id} />
                 </div>
               </div>
+
+              <KanbanRosterCard projectId={project.id} />
 
               <div style={cardStyle}>
                 <div style={{ fontWeight: 600, marginBottom: 10, fontSize: 14 }}>{t('workspaceActions')}</div>

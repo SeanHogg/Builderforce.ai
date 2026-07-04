@@ -3,7 +3,7 @@ import { getTenantJwt } from "./bfApi";
 import { TOOL_DEFS } from "./fileTools";
 import { getBaseUrl, SECRET_KEY } from "./gateway";
 import { getGroundingSummary } from "./grounding";
-import { getSelectedModel } from "./modelState";
+import { resolveEffectiveModel } from "./modelState";
 import { getSelectedProject } from "./projectState";
 
 /** A host-driven request to the singleton Brain panel (mirror of the webview type). */
@@ -56,6 +56,26 @@ function buildLabels(): Record<string, string> {
     "app.diagnostics": t("Run connection diagnostics"),
     "app.attachImage": t("Attach image"),
     "app.remove": t("Remove"),
+    // Composer toolbar (Claude-style + / menus, auto mode, dictation)
+    "app.add": t("Add"),
+    "app.options": t("Options"),
+    "app.uploadFile": t("Upload from computer"),
+    "app.uploading": t("Uploading…"),
+    "app.addContext": t("Add context"),
+    "app.browseWeb": t("Browse the web"),
+    "app.on": t("On"),
+    "app.off": t("Off"),
+    "app.effort": t("Effort"),
+    "app.effortQuick": t("Quick"),
+    "app.effortBalanced": t("Balanced"),
+    "app.effortThorough": t("Thorough"),
+    "app.thinking": t("Thinking"),
+    "app.accountSettings": t("Account settings"),
+    "app.autoMode": t("Auto mode"),
+    "app.autoModeHint": t("Auto-approve tool actions without asking"),
+    "app.pickModel": t("Change model"),
+    "app.dictate": t("Dictate"),
+    "app.stopDictation": t("Stop dictation"),
     "app.working": t("Working…"),
     "app.send": t("Send"),
     "app.stop": t("Stop"),
@@ -173,6 +193,70 @@ export class BrainWebview {
       case "diagnose":
         void vscode.commands.executeCommand("builderforce.diagnose");
         break;
+      // Composer `/` menu → account settings, and the model chip → model picker.
+      case "settings":
+        void vscode.commands.executeCommand("builderforce.openSettings");
+        break;
+      case "pickModel":
+        void vscode.commands.executeCommand("builderforce.pickModel");
+        break;
+      // Composer `+` menu → "Add context": pick a workspace file (or the active
+      // editor selection) and hand its text back so the webview attaches it.
+      case "context.pick": {
+        const picked = await this.pickContext();
+        this.respond(msg.id, true, picked);
+        break;
+      }
+    }
+  }
+
+  /**
+   * Let the user attach workspace context to a message: the active editor's
+   * selection, an already-open file, or any file chosen from disk. Returns the
+   * relative path + text (or null if cancelled) — the webview attaches it through
+   * the same upload pipeline as a dropped file, so the model gets the content.
+   */
+  private async pickContext(): Promise<{ path: string; text: string } | null> {
+    // Note: the discriminator is `ctxKind`, not `kind` — `QuickPickItem.kind` is
+    // reserved by VS Code (separator vs default), so reusing it collapses to never.
+    type Item = vscode.QuickPickItem & { ctxKind: "selection" | "doc" | "browse"; uri?: vscode.Uri };
+    const editor = vscode.window.activeTextEditor;
+    const items: Item[] = [];
+    if (editor && !editor.selection.isEmpty) {
+      items.push({
+        label: "$(selection) " + vscode.l10n.t("Active selection"),
+        description: vscode.workspace.asRelativePath(editor.document.uri),
+        ctxKind: "selection",
+      });
+    }
+    for (const doc of vscode.workspace.textDocuments) {
+      if (doc.uri.scheme !== "file" || doc.isUntitled) continue;
+      items.push({ label: "$(file) " + vscode.workspace.asRelativePath(doc.uri), ctxKind: "doc", uri: doc.uri });
+    }
+    items.push({ label: "$(search) " + vscode.l10n.t("Choose a file…"), ctxKind: "browse" });
+
+    const pick = await vscode.window.showQuickPick(items, {
+      placeHolder: vscode.l10n.t("Add context from your workspace"),
+    });
+    if (!pick) return null;
+
+    if (pick.ctxKind === "selection" && editor) {
+      return { path: vscode.workspace.asRelativePath(editor.document.uri), text: editor.document.getText(editor.selection) };
+    }
+    let uri = pick.uri;
+    if (!uri) {
+      const chosen = await vscode.window.showOpenDialog({
+        canSelectMany: false,
+        defaultUri: vscode.workspace.workspaceFolders?.[0]?.uri,
+      });
+      uri = chosen?.[0];
+    }
+    if (!uri) return null;
+    try {
+      const doc = await vscode.workspace.openTextDocument(uri);
+      return { path: vscode.workspace.asRelativePath(uri), text: doc.getText() };
+    } catch {
+      return null;
     }
   }
 
@@ -190,7 +274,10 @@ export class BrainWebview {
       type: "init",
       baseUrl: getBaseUrl(),
       token,
-      model: getSelectedModel(),
+      // Manual pick > active project's Evermind pin > configured default. Sending the
+      // `project_evermind:<id>` pin lets the gateway serve the project's CURRENT learned
+      // model on every completion (auto-following learning bumps mid-session).
+      model: await resolveEffectiveModel(this.ctx.secrets),
       grounding: root ? getGroundingSummary() : undefined,
       signedIn,
       hasWorkspace: !!root,

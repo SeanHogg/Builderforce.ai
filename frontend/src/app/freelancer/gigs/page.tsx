@@ -89,7 +89,7 @@ export default function FreelancerGigsPage() {
 
   const pill = (s: string) => {
     const c = STATUS_COLORS[s] ?? { bg: 'var(--bg-elevated)', fg: 'var(--text-muted)' };
-    return <span style={{ fontSize: 11, fontWeight: 700, padding: '3px 9px', borderRadius: 6, background: c.bg, color: c.fg, flexShrink: 0 }}>{t(`status.${s}`, {}) || s}</span>;
+    return <span style={{ fontSize: 11, fontWeight: 700, padding: '3px 9px', borderRadius: 6, background: c.bg, color: c.fg, flexShrink: 0 }}>{t(`status.${s}`)}</span>;
   };
 
   return (
