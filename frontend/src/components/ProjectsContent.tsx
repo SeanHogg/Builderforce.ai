@@ -63,7 +63,7 @@ export function ProjectsContent({ limit, viewAllHref, onCount }: ProjectsContent
   const [showForm, setShowForm] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [detailsProject, setDetailsProject] = useState<Project | null>(null);
-  const [detailsInitialTab, setDetailsInitialTab] = useState<ProjectPanelTab>('details');
+  const [detailsInitialTab, setDetailsInitialTab] = useState<ProjectPanelTab>('analytics');
   const [viewMode, setViewMode] = useState<ProjectsView>('card');
   const [selectedAgentHost, setSelectedAgentHost] = useState<AgentHost | null>(null);
   const [planError, setPlanError] = useState<PlanLimitError | null>(null);
@@ -140,7 +140,7 @@ export function ProjectsContent({ limit, viewAllHref, onCount }: ProjectsContent
   // Open the project Information panel on a given tab. Used by the Details button
   // (default tab) and the Architect button (PRDs to read the result, or
   // Integrations when a repo must be mapped before a run can start).
-  const openDetails = (project: Project, tab: ProjectPanelTab = 'details') => {
+  const openDetails = (project: Project, tab: ProjectPanelTab = 'analytics') => {
     setDetailsInitialTab(tab);
     setDetailsProject(project);
   };

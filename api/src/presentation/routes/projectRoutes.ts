@@ -805,6 +805,12 @@ export function createProjectRoutes(projectService: ProjectService, db: Db): Hon
       githubRepoUrl: assignment.value.githubRepoUrl,
     }, tenantId);
     await invalidateProjectsList(c.env as Env, tenantId).catch(() => {});
+    // A Project Key change re-keys every task (`<oldKey>-NNN` → `<newKey>-NNN`) in
+    // updateProject; bust the cached Epic trees for this project so they don't
+    // serve stale keys. Task-list reads are uncached, so they reflect it already.
+    if (project.key !== existing.key) {
+      await bumpCacheVersion(c.env as Env, `task-tree-version:project:${existing.id}`).catch(() => {});
+    }
     return c.json(project.toPlain());
   });
 

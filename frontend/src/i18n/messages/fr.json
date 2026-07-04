@@ -1687,7 +1687,8 @@
   },
   "projectDetails": {
     "tabs": {
-      "details": "Détails du projet",
+      "analytics": "Analytique",
+      "details": "Détails",
       "integrations": "Intégrations",
       "taskMgmt": "Gestion des tâches",
       "prds": "PRD",
@@ -4793,7 +4794,28 @@
       "currency": "Devise",
       "location": "Lieu",
       "visibility": "Visibilité",
-      "publish": "Me lister sur la place de marché"
+      "publish": "Me lister sur la place de marché",
+      "name": "Nom",
+      "namePlaceholder": "Jane Smith",
+      "alias": "Alias public",
+      "aliasPlaceholder": "jane-smith",
+      "aliasHint": "Utilisé dans le lien de votre profil public à la place d'un identifiant long.",
+      "aliasInvalid": "Utilisez 3 à 40 lettres minuscules, chiffres ou tirets.",
+      "aliasAvailable": "Disponible",
+      "aliasTaken": "Cet alias est déjà pris.",
+      "aliasTry": "Essayez :",
+      "avatarUpload": "Ajouter une photo",
+      "avatarChange": "Changer la photo",
+      "uploading": "Téléversement…",
+      "preview": "Aperçu",
+      "previewTitle": "Aperçu du profil",
+      "publicUrl": "Lien public",
+      "copyLink": "Copier",
+      "copied": "Copié !",
+      "fillFromResume": "Remplir depuis le CV",
+      "filling": "Lecture…",
+      "autofilled": "Rempli depuis votre CV — vérifiez et enregistrez.",
+      "autofillUnavailable": "Téléversez un CV texte ou connectez hired.video pour le remplissage automatique."
     },
     "resume": {
       "title": "CV",
@@ -4804,7 +4826,10 @@
       "viewerTitle": "Visionneuse de CV",
       "viewerPending": "Votre CV est en cours de traitement par hired.video.",
       "viewerNotConnected": "Connectez hired.video pour afficher votre CV intégré.",
-      "claimHiredVideo": "Revendiquez votre compte hired.video"
+      "claimHiredVideo": "Revendiquez votre compte hired.video",
+      "connectExisting": "Connecter un compte hired.video existant",
+      "connecting": "Connexion…",
+      "connectUnavailable": "hired.video n'est pas disponible pour le moment."
     },
     "gigs": {
       "title": "Trouver du travail",
@@ -5010,7 +5035,8 @@
       "sortRateAsc": "Tarif : croissant",
       "sortRateDesc": "Tarif : décroissant",
       "pageOf": "Page {page} sur {pages}"
-    }
+    },
+    "editProfile": "Modifier le profil"
   },
   "hires": {
     "title": "Recrutements",

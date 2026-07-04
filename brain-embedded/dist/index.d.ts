@@ -167,6 +167,19 @@ interface AssembledToolCall {
     /** Raw JSON argument string (parse with `JSON.parse`). */
     args: string;
 }
+/**
+ * Token accounting for one completion, as reported by the gateway's final
+ * `usage` chunk (OpenAI shape). Absent when the upstream didn't emit usage
+ * (some providers don't). Surfaced so the triage/diagnostics layer can tell a
+ * CONTEXT-EXHAUSTION death (prompt tokens climbing turn over turn until the
+ * model 413s / truncates) apart from a model-DEGRADATION death (an Evermind/SSM
+ * turn returning empty or garbage while token counts stay low).
+ */
+interface CompletionUsage {
+    prompt?: number;
+    completion?: number;
+    total?: number;
+}
 interface StreamChatResult {
     text: string;
     toolCalls: AssembledToolCall[];
@@ -180,6 +193,8 @@ interface StreamChatResult {
      * record which LLM (or which `evermind/…` artifact) produced a turn.
      */
     resolvedModel?: string;
+    /** Token usage for this completion, when the gateway reported it. */
+    usage?: CompletionUsage;
 }
 /**
  * Stream a chat completion. Resolves once the stream ends with the stitched
@@ -478,6 +493,24 @@ interface BrainTraceEvent {
     result?: unknown;
     /** True when this step represents a failure (thrown, or `{ ok: false }`). */
     isError?: boolean;
+    /** `llm` steps: token usage the gateway reported for this completion. */
+    usage?: {
+        prompt?: number;
+        completion?: number;
+        total?: number;
+    };
+    /** `llm` steps: OpenAI finish_reason (`stop` | `length` | `tool_calls` | …). */
+    finishReason?: string | null;
+    /** `llm` steps: length of the assistant text this turn produced. */
+    textChars?: number;
+    /**
+     * `tool` steps: byte length of the FULL result the tool returned, before any
+     * transcript trimming — so a diagnostics reader sees which tool flooded the
+     * context even though the model only ever saw a truncated copy.
+     */
+    resultBytes?: number;
+    /** `tool` steps: true when the result sent to the model was truncated. */
+    truncated?: boolean;
 }
 /**
  * Did a tool result represent a failure?
@@ -510,6 +543,64 @@ declare function isEvermindModel(model: string): boolean;
  * dropped so it never masquerades as a real model id.
  */
 declare function modelsUsedInTrace(events: BrainTraceEvent[]): string[];
+/**
+ * Structured run diagnostics derived from the trace — the numbers a reader needs
+ * to tell WHY a Brain run died, without eyeballing a wall of JSON.
+ *
+ * The two failure modes we discriminate:
+ *  - **context-exhaustion** (case A): prompt tokens climb turn over turn (big
+ *    tool dumps in the transcript), the gateway fails over to a smaller-window
+ *    model, and a turn ends on `finish_reason: length` or empty. The context
+ *    starved the model.
+ *  - **model-degradation** (case B): a tenant Evermind/SSM model answered and a
+ *    turn came back empty/failed while token counts stayed LOW — the model
+ *    itself produced nothing, not the context.
+ */
+interface BrainDiagnostics {
+    turns: number;
+    toolCalls: number;
+    errors: number;
+    loopExhausted: boolean;
+    /** True when at least one llm step reported token usage. */
+    tokensMeasured: boolean;
+    /** Largest prompt-token count seen on any single turn. */
+    promptTokenPeak: number;
+    /** Sum of completion tokens across turns. */
+    completionTokenTotal: number;
+    /** Prompt tokens on the LAST turn (the one nearest any overflow). */
+    lastPromptTokens: number;
+    /** Total bytes of tool results returned this run (pre-trim). */
+    toolResultBytes: number;
+    /** Count of tool results that were truncated before hitting the model. */
+    truncatedToolResults: number;
+    /** The single largest tool result (label + pre-trim bytes). */
+    largestToolResult: {
+        label: string;
+        bytes: number;
+    } | null;
+    /** Distinct models that actually answered, first-seen order. */
+    modelsUsed: string[];
+    /** Distinct Evermind/SSM artifacts among them. */
+    evermindUsed: string[];
+    /** Turns where the resolved model differed from what was requested. */
+    downgradeEvents: number;
+    /** Turns that ended on `length` or produced empty text. */
+    emptyOrLengthFinishes: number;
+    /** Best-effort verdict — the header a triager reads first. */
+    likelyCause: 'context-exhaustion' | 'model-degradation' | 'inconclusive';
+}
+/**
+ * Derive {@link BrainDiagnostics} from a recorded trace. Pure — no clock, no I/O
+ * — so both the web report and the VS Code transcript compute the identical
+ * block from the same events (single source of truth for A-vs-B triage).
+ */
+declare function computeBrainDiagnostics(events: BrainTraceEvent[], requestedModel?: string): BrainDiagnostics;
+/**
+ * Render {@link BrainDiagnostics} as transcript lines. Shared by both copy
+ * surfaces so the "Diagnostics" block is identical on web and in VS Code. Emits
+ * a leading `--- Diagnostics ---` header and returns the lines (caller joins).
+ */
+declare function formatBrainDiagnostics(d: BrainDiagnostics): string[];
 interface BuildBrainTriageOptions {
     /** ISO capture time (caller supplies it so the module stays clock-free). */
     capturedAt: string;
@@ -683,4 +774,4 @@ declare const CONSOLIDATION_MARKER_PREFIX = "\uD83D\uDCCC **Consolidated summary
 /** Wrap a raw summary as the marker's visible content (prefix + summary). */
 declare function consolidationMarkerContent(summary: string): string;
 
-export { type AssembledToolCall, type BrainAction, type BrainActionsContextValue, BrainActionsProvider, type BrainChat, type BrainConfig, BrainContextProvider, type BrainContextValue, type BrainMessage, type BrainModality, type BrainPageContext, type BrainPersistenceAdapter, BrainProvider, type BrainRuntime, type BrainToolSpec, type BrainTraceEvent, type BrainTransport, type BuildBrainTriageOptions, CONSOLIDATION_MARKER_PREFIX, CONSOLIDATION_META, type ChatCompletionMessage, type ChatInputAttachment, type ContentPart, type ImageUrlContentPart, type McpToolResultInfo, type PreparedImage, type StreamChatOptions, type StreamChatResult, type StreamHandlers, type TextContentPart, type UseBrainChats, type UseBrainChatsOptions, type UseBrainConversation, type UseBrainConversationOptions, type UseMcpExtensionsOptions, buildBrainTriageReport, consolidationMarkerContent, consolidationMetadata, isConsolidationMarker, isEvermindModel, isFailedToolResult, lastConsolidationIndex, modelsUsedInTrace, prepareImageDataUrl, savePendingPrompt, scopeToConsolidation, streamChatCompletion, takePendingPrompt, useBrainActions, useBrainChats, useBrainConfig, useBrainContext, useBrainConversation, useMcpExtensions, useOptionalBrainContext, useRegisterBrainActions };
+export { type AssembledToolCall, type BrainAction, type BrainActionsContextValue, BrainActionsProvider, type BrainChat, type BrainConfig, BrainContextProvider, type BrainContextValue, type BrainDiagnostics, type BrainMessage, type BrainModality, type BrainPageContext, type BrainPersistenceAdapter, BrainProvider, type BrainRuntime, type BrainToolSpec, type BrainTraceEvent, type BrainTransport, type BuildBrainTriageOptions, CONSOLIDATION_MARKER_PREFIX, CONSOLIDATION_META, type ChatCompletionMessage, type ChatInputAttachment, type ContentPart, type ImageUrlContentPart, type McpToolResultInfo, type PreparedImage, type StreamChatOptions, type StreamChatResult, type StreamHandlers, type TextContentPart, type UseBrainChats, type UseBrainChatsOptions, type UseBrainConversation, type UseBrainConversationOptions, type UseMcpExtensionsOptions, buildBrainTriageReport, computeBrainDiagnostics, consolidationMarkerContent, consolidationMetadata, formatBrainDiagnostics, isConsolidationMarker, isEvermindModel, isFailedToolResult, lastConsolidationIndex, modelsUsedInTrace, prepareImageDataUrl, savePendingPrompt, scopeToConsolidation, streamChatCompletion, takePendingPrompt, useBrainActions, useBrainChats, useBrainConfig, useBrainContext, useBrainConversation, useMcpExtensions, useOptionalBrainContext, useRegisterBrainActions };

@@ -195,7 +195,7 @@ function builtinSkillToListing(b: BuiltinSkill): MarketplaceListing {
 }
 
 export default function MarketplacePageClient() {
-  const { tenant, user, webToken, isAuthenticated } = useAuth();
+  const { tenant, user, webToken, isAuthenticated, hasTenant } = useAuth();
   const { addItem, hasItem } = useCart();
   const tenantId = tenant?.id ?? '';
   const tm = useTranslations('marketplace');
@@ -307,13 +307,14 @@ export default function MarketplacePageClient() {
     ];
     setListings(allListings);
 
-    // User-specific data (owned agentHosts + installed artifacts) is only fetched
-    // for authenticated users. Anonymous marketplace browsers see listings
-    // and stats but no install state.
-    if (isAuthenticated) {
+    // Owned agentHosts + installed artifacts are TENANT-scoped (require the tenant
+    // JWT). Only fetch them for a user with an active workspace — a freelancer/gig
+    // account (authenticated but tenantless) would otherwise 401 on both. Anonymous
+    // and tenantless browsers see listings + stats but no install state.
+    if (hasTenant && tenantNum) {
       const [agentHostList, assignList] = await Promise.all([
         agentHosts.list().catch(() => []),
-        tenantNum ? artifactAssignments.list('tenant', tenantNum).catch(() => []) : [],
+        artifactAssignments.list('tenant', tenantNum).catch(() => []),
       ]);
       setHasAgentHosts(agentHostList.length > 0);
       setInstalled(new Set(assignList.map((a) => key(a.artifactType, a.artifactSlug))));
@@ -335,7 +336,7 @@ export default function MarketplacePageClient() {
     for (const slug of Object.keys(personaStats)) merged[key('persona', slug)] = personaStats[slug]!;
     for (const slug of Object.keys(contentStats)) merged[key('content', slug)] = contentStats[slug]!;
     setStats(merged);
-  }, [tenantId, isAuthenticated]);
+  }, [tenantId, hasTenant]);
 
   useEffect(() => {
     refreshListings().finally(() => setLoading(false));
@@ -352,14 +353,15 @@ export default function MarketplacePageClient() {
 
   useEffect(() => { loadAgents(); }, [loadAgents]);
 
-  // Which listings has this tenant already hired? Only authenticated users have a
-  // purchase set; anonymous browsers see Hire on everything.
+  // Which listings has this tenant already hired? The purchased set is TENANT-scoped;
+  // only fetch it for a user with an active workspace (a tenantless freelancer would
+  // 401). Anonymous + tenantless browsers see Hire on everything.
   const loadHired = useCallback(() => {
-    if (!isAuthenticated) { setHiredIds(new Set()); return Promise.resolve(); }
+    if (!hasTenant) { setHiredIds(new Set()); return Promise.resolve(); }
     return listPurchasedAgents()
       .then((list) => setHiredIds(new Set(list.map((a) => a.id))))
       .catch(() => setHiredIds(new Set()));
-  }, [isAuthenticated]);
+  }, [hasTenant]);
 
   useEffect(() => { loadHired(); }, [loadHired]);
 

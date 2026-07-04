@@ -1687,7 +1687,8 @@
   },
   "projectDetails": {
     "tabs": {
-      "details": "Project details",
+      "analytics": "Analytics",
+      "details": "Details",
       "integrations": "Integrations",
       "taskMgmt": "Task Mgmt",
       "prds": "PRDs",
@@ -4793,7 +4794,28 @@
       "currency": "Currency",
       "location": "Location",
       "visibility": "Visibility",
-      "publish": "List me in the marketplace"
+      "publish": "List me in the marketplace",
+      "name": "Name",
+      "namePlaceholder": "Jane Smith",
+      "alias": "Public alias",
+      "aliasPlaceholder": "jane-smith",
+      "aliasHint": "Used in your public profile link instead of a long ID.",
+      "aliasInvalid": "Use 3–40 lowercase letters, numbers, or hyphens.",
+      "aliasAvailable": "Available",
+      "aliasTaken": "That alias is taken.",
+      "aliasTry": "Try:",
+      "avatarUpload": "Upload photo",
+      "avatarChange": "Change photo",
+      "uploading": "Uploading…",
+      "preview": "Preview",
+      "previewTitle": "Profile preview",
+      "publicUrl": "Public link",
+      "copyLink": "Copy",
+      "copied": "Copied!",
+      "fillFromResume": "Fill from résumé",
+      "filling": "Reading…",
+      "autofilled": "Filled from your résumé — review and save.",
+      "autofillUnavailable": "Upload a text résumé or connect hired.video to auto-fill."
     },
     "resume": {
       "title": "Résumé",
@@ -4804,7 +4826,10 @@
       "viewerTitle": "Résumé viewer",
       "viewerPending": "Your résumé is being processed by hired.video.",
       "viewerNotConnected": "Connect hired.video to show your embedded résumé.",
-      "claimHiredVideo": "Claim your hired.video account"
+      "claimHiredVideo": "Claim your hired.video account",
+      "connectExisting": "Connect existing hired.video account",
+      "connecting": "Connecting…",
+      "connectUnavailable": "hired.video isn't available right now."
     },
     "gigs": {
       "title": "Find work",
@@ -5010,7 +5035,8 @@
       "sortRateAsc": "Rate: low to high",
       "sortRateDesc": "Rate: high to low",
       "pageOf": "Page {page} of {pages}"
-    }
+    },
+    "editProfile": "Edit profile"
   },
   "hires": {
     "title": "Hires",

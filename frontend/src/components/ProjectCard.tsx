@@ -274,7 +274,7 @@ export function ProjectCard({
           prescriptive report in the details panel so the user knows what to target. */}
       <ProjectInspectionGrade
         project={project}
-        onOpen={onDetailsClick ? (p) => onDetailsClick(p, 'details') : undefined}
+        onOpen={onDetailsClick ? (p) => onDetailsClick(p, 'analytics') : undefined}
       />
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 'auto', flexWrap: 'wrap' }}>

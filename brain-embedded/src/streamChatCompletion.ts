@@ -187,6 +187,9 @@ export async function streamChatCompletion(
     temperature: opts.temperature ?? 0.3,
     max_tokens: opts.maxTokens ?? 4096,
     stream: true,
+    // Ask the gateway to emit a trailing `usage` chunk (OpenAI stream_options).
+    // Providers that ignore it simply omit usage — the parse below is tolerant.
+    stream_options: { include_usage: true },
   };
   if (opts.tools && opts.tools.length > 0) {
     body.tools = opts.tools;
@@ -211,6 +214,18 @@ export async function streamChatCompletion(
   let streamModel: string | null = null;
   const resolvedModel = (): string | undefined => headerModel ?? streamModel ?? undefined;
 
+  // Token usage from the trailing `usage` chunk (or a non-streaming body). Kept
+  // as the last non-empty usage seen so a mid-stream partial can't clobber the
+  // final totals.
+  let usage: CompletionUsage | undefined;
+  const readUsage = (u: unknown): void => {
+    if (!u || typeof u !== 'object') return;
+    const o = u as { prompt_tokens?: unknown; completion_tokens?: unknown; total_tokens?: unknown };
+    const num = (x: unknown): number | undefined => (typeof x === 'number' && Number.isFinite(x) ? x : undefined);
+    const next: CompletionUsage = { prompt: num(o.prompt_tokens), completion: num(o.completion_tokens), total: num(o.total_tokens) };
+    if (next.prompt != null || next.completion != null || next.total != null) usage = next;
+  };
+
   // Tool calls are accumulated by index across deltas.
   const toolAcc = new Map<number, { id: string; name: string; args: string }>();
   // Lifts inline `<tool_call>…` markup out of the text stream into structured
@@ -228,6 +243,7 @@ export async function streamChatCompletion(
       | { model?: string; choices?: Array<{ message?: { content?: string; tool_calls?: DeltaToolCall[] }; finish_reason?: string }> }
       | null;
     if (typeof data?.model === 'string' && data.model) streamModel = data.model;
+    readUsage((data as { usage?: unknown } | null)?.usage);
     const choice = data?.choices?.[0];
     const { text, toolCalls: xmlCalls } = extractXmlToolCalls(choice?.message?.content ?? '');
     if (text) handlers.onTextDelta?.(text);
@@ -237,7 +253,7 @@ export async function streamChatCompletion(
     });
     finishReason = choice?.finish_reason ?? null;
     handlers.onDone?.(finishReason);
-    return { text, toolCalls: [...assemble(toolAcc), ...xmlCalls], finishReason, resolvedModel: resolvedModel() };
+    return { text, toolCalls: [...assemble(toolAcc), ...xmlCalls], finishReason, resolvedModel: resolvedModel(), usage };
   }
 
   const decoder = new TextDecoder();
@@ -256,10 +272,11 @@ export async function streamChatCompletion(
         const tail = xml.flush();
         if (tail) handlers.onTextDelta?.(tail);
         handlers.onDone?.(finishReason);
-        return { text: xml.cleanText(), toolCalls: allToolCalls(), finishReason, resolvedModel: resolvedModel() };
+        return { text: xml.cleanText(), toolCalls: allToolCalls(), finishReason, resolvedModel: resolvedModel(), usage };
       }
       let parsed: {
         model?: string;
+        usage?: unknown;
         choices?: Array<{
           delta?: { content?: string; tool_calls?: DeltaToolCall[] };
           finish_reason?: string | null;
@@ -276,6 +293,9 @@ export async function streamChatCompletion(
         continue;
       }
       if (!streamModel && typeof parsed.model === 'string' && parsed.model) streamModel = parsed.model;
+      // The usage-bearing chunk (OpenAI stream_options) typically arrives last,
+      // often with an empty `choices` array — read it whenever present.
+      if (parsed.usage) readUsage(parsed.usage);
       const choice = parsed.choices?.[0];
       if (choice?.finish_reason) finishReason = choice.finish_reason;
 
@@ -313,7 +333,7 @@ export async function streamChatCompletion(
   const tail = xml.flush();
   if (tail) handlers.onTextDelta?.(tail);
   handlers.onDone?.(finishReason);
-  return { text: xml.cleanText(), toolCalls: allToolCalls(), finishReason, resolvedModel: resolvedModel() };
+  return { text: xml.cleanText(), toolCalls: allToolCalls(), finishReason, resolvedModel: resolvedModel(), usage };
 }
 
 function assemble(acc: Map<number, { id: string; name: string; args: string }>): AssembledToolCall[] {

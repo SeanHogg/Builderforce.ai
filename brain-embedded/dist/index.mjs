@@ -148,7 +148,10 @@ async function streamChatCompletion(opts, handlers = {}) {
     messages: opts.messages,
     temperature: opts.temperature ?? 0.3,
     max_tokens: opts.maxTokens ?? 4096,
-    stream: true
+    stream: true,
+    // Ask the gateway to emit a trailing `usage` chunk (OpenAI stream_options).
+    // Providers that ignore it simply omit usage — the parse below is tolerant.
+    stream_options: { include_usage: true }
   };
   if (opts.tools && opts.tools.length > 0) {
     body.tools = opts.tools;
@@ -171,6 +174,14 @@ async function streamChatCompletion(opts, handlers = {}) {
   }
   let streamModel = null;
   const resolvedModel = () => headerModel ?? streamModel ?? void 0;
+  let usage;
+  const readUsage = (u) => {
+    if (!u || typeof u !== "object") return;
+    const o = u;
+    const num = (x) => typeof x === "number" && Number.isFinite(x) ? x : void 0;
+    const next = { prompt: num(o.prompt_tokens), completion: num(o.completion_tokens), total: num(o.total_tokens) };
+    if (next.prompt != null || next.completion != null || next.total != null) usage = next;
+  };
   const toolAcc = /* @__PURE__ */ new Map();
   const xml = new XmlToolCallFilter();
   let finishReason = null;
@@ -179,6 +190,7 @@ async function streamChatCompletion(opts, handlers = {}) {
   if (!reader) {
     const data = await res.json().catch(() => null);
     if (typeof data?.model === "string" && data.model) streamModel = data.model;
+    readUsage(data?.usage);
     const choice = data?.choices?.[0];
     const { text, toolCalls: xmlCalls } = extractXmlToolCalls(choice?.message?.content ?? "");
     if (text) handlers.onTextDelta?.(text);
@@ -188,7 +200,7 @@ async function streamChatCompletion(opts, handlers = {}) {
     });
     finishReason = choice?.finish_reason ?? null;
     handlers.onDone?.(finishReason);
-    return { text, toolCalls: [...assemble(toolAcc), ...xmlCalls], finishReason, resolvedModel: resolvedModel() };
+    return { text, toolCalls: [...assemble(toolAcc), ...xmlCalls], finishReason, resolvedModel: resolvedModel(), usage };
   }
   const decoder = new TextDecoder();
   let buffer = "";
@@ -206,7 +218,7 @@ async function streamChatCompletion(opts, handlers = {}) {
         const tail2 = xml.flush();
         if (tail2) handlers.onTextDelta?.(tail2);
         handlers.onDone?.(finishReason);
-        return { text: xml.cleanText(), toolCalls: allToolCalls(), finishReason, resolvedModel: resolvedModel() };
+        return { text: xml.cleanText(), toolCalls: allToolCalls(), finishReason, resolvedModel: resolvedModel(), usage };
       }
       let parsed;
       try {
@@ -215,6 +227,7 @@ async function streamChatCompletion(opts, handlers = {}) {
         continue;
       }
       if (!streamModel && typeof parsed.model === "string" && parsed.model) streamModel = parsed.model;
+      if (parsed.usage) readUsage(parsed.usage);
       const choice = parsed.choices?.[0];
       if (choice?.finish_reason) finishReason = choice.finish_reason;
       const contentDelta = (typeof choice?.delta?.content === "string" ? choice.delta.content : null) || parsed.response || parsed.text || parsed.delta || "";
@@ -244,7 +257,7 @@ async function streamChatCompletion(opts, handlers = {}) {
   const tail = xml.flush();
   if (tail) handlers.onTextDelta?.(tail);
   handlers.onDone?.(finishReason);
-  return { text: xml.cleanText(), toolCalls: allToolCalls(), finishReason, resolvedModel: resolvedModel() };
+  return { text: xml.cleanText(), toolCalls: allToolCalls(), finishReason, resolvedModel: resolvedModel(), usage };
 }
 function assemble(acc) {
   return [...acc.entries()].sort((a, b) => a[0] - b[0]).map(([, v]) => ({ id: v.id, name: v.name, args: v.args })).filter((c) => c.name.length > 0);
@@ -775,6 +788,95 @@ function modelsUsedInTrace(events) {
   }
   return seen;
 }
+function byteLen(v) {
+  const s = typeof v === "string" ? v : JSON.stringify(v ?? "");
+  return s.length;
+}
+function computeBrainDiagnostics(events, requestedModel) {
+  const llm = events.filter((e) => e.category === "llm");
+  const toolEvents = events.filter((e) => e.category === "tool");
+  const errors = events.filter((e) => e.isError || e.category === "error");
+  const loopExhausted = events.some((e) => e.label === "agent.loop" && e.isError);
+  let promptTokenPeak = 0;
+  let completionTokenTotal = 0;
+  let lastPromptTokens = 0;
+  let tokensMeasured = false;
+  let emptyOrLengthFinishes = 0;
+  let downgradeEvents = 0;
+  const req = requestedModel && requestedModel !== "default" ? requestedModel : void 0;
+  for (const ev of llm) {
+    const u = ev.usage;
+    if (u) {
+      tokensMeasured = true;
+      if (typeof u.prompt === "number") {
+        promptTokenPeak = Math.max(promptTokenPeak, u.prompt);
+        lastPromptTokens = u.prompt;
+      }
+      if (typeof u.completion === "number") completionTokenTotal += u.completion;
+    }
+    const finish = ev.finishReason ?? null;
+    const emptyText = typeof ev.textChars === "number" && ev.textChars === 0;
+    const toolCallsThisTurn = ev.args?.toolCalls;
+    const askedNoTools = typeof toolCallsThisTurn === "number" ? toolCallsThisTurn === 0 : true;
+    if (finish === "length" || emptyText && askedNoTools) emptyOrLengthFinishes += 1;
+    const resolved = ev.args?.model;
+    if (req && typeof resolved === "string" && resolved && resolved !== "default" && resolved !== req) downgradeEvents += 1;
+  }
+  let toolResultBytes = 0;
+  let truncatedToolResults = 0;
+  let largestToolResult = null;
+  for (const ev of toolEvents) {
+    const bytes = typeof ev.resultBytes === "number" ? ev.resultBytes : byteLen(ev.result);
+    toolResultBytes += bytes;
+    if (ev.truncated) truncatedToolResults += 1;
+    if (!largestToolResult || bytes > largestToolResult.bytes) largestToolResult = { label: ev.label, bytes };
+  }
+  const modelsUsed = modelsUsedInTrace(events);
+  const evermindUsed = modelsUsed.filter(isEvermindModel);
+  const contextSignal = promptTokenPeak >= 24e3 || truncatedToolResults > 0 || downgradeEvents > 0 || largestToolResult != null && largestToolResult.bytes >= 2e4;
+  const degradationSignal = evermindUsed.length > 0 && emptyOrLengthFinishes > 0 && (!tokensMeasured || promptTokenPeak < 24e3) && truncatedToolResults === 0;
+  const likelyCause = contextSignal && !degradationSignal ? "context-exhaustion" : degradationSignal && !contextSignal ? "model-degradation" : "inconclusive";
+  return {
+    turns: llm.length,
+    toolCalls: toolEvents.length,
+    errors: errors.length,
+    loopExhausted,
+    tokensMeasured,
+    promptTokenPeak,
+    completionTokenTotal,
+    lastPromptTokens,
+    toolResultBytes,
+    truncatedToolResults,
+    largestToolResult,
+    modelsUsed,
+    evermindUsed,
+    downgradeEvents,
+    emptyOrLengthFinishes,
+    likelyCause
+  };
+}
+function kb(bytes) {
+  return bytes < 1024 ? `${bytes} B` : `${(bytes / 1024).toFixed(1)} KB`;
+}
+function formatBrainDiagnostics(d) {
+  const verdict = d.likelyCause === "context-exhaustion" ? "Likely CONTEXT EXHAUSTION (case A) \u2014 the transcript outgrew the model window." : d.likelyCause === "model-degradation" ? "Likely MODEL DEGRADATION (case B) \u2014 an Evermind/SSM turn returned empty while tokens stayed low." : "Inconclusive \u2014 not enough signal to separate context exhaustion from model degradation.";
+  const lines = ["--- Diagnostics ---", `Likely cause: ${verdict}`];
+  lines.push(`Turns: ${d.turns} \xB7 Tool calls: ${d.toolCalls} \xB7 Errors: ${d.errors}${d.loopExhausted ? " \xB7 LOOP EXHAUSTED" : ""}`);
+  if (d.tokensMeasured) {
+    lines.push(
+      `Tokens: prompt peak ${d.promptTokenPeak.toLocaleString()} \xB7 last-turn prompt ${d.lastPromptTokens.toLocaleString()} \xB7 completion total ${d.completionTokenTotal.toLocaleString()}`
+    );
+  } else {
+    lines.push("Tokens: not reported by the gateway for this run.");
+  }
+  lines.push(
+    `Tool results: ${kb(d.toolResultBytes)} total${d.largestToolResult ? ` \xB7 largest ${d.largestToolResult.label} (${kb(d.largestToolResult.bytes)})` : ""}${d.truncatedToolResults ? ` \xB7 ${d.truncatedToolResults} truncated before the model saw them` : ""}`
+  );
+  if (d.downgradeEvents > 0) lines.push(`Model downgrades: ${d.downgradeEvents} turn(s) answered by a different model than requested (gateway failover).`);
+  if (d.emptyOrLengthFinishes > 0) lines.push(`Degenerate turns: ${d.emptyOrLengthFinishes} ended on \`length\` or returned empty text.`);
+  if (d.evermindUsed.length) lines.push(`Evermind/SSM answered: ${d.evermindUsed.join(", ")}`);
+  return lines;
+}
 function buildBrainTriageReport(opts) {
   const { capturedAt, events, messages = [], chatId, chatTitle, agentLabel, configuredModel, error } = opts;
   const errors = events.filter((e) => e.isError || e.category === "error");
@@ -790,6 +892,7 @@ function buildBrainTriageReport(opts) {
   if (evermind.length) lines.push(`Evermind: yes \u2014 ${evermind.join(", ")}`);
   lines.push(`Steps: ${events.length} \xB7 Errors: ${errors.length} \xB7 Messages: ${messages.length}`);
   if (error) lines.push(`Last error: ${error}`);
+  lines.push("", ...formatBrainDiagnostics(computeBrainDiagnostics(events, configuredModel)));
   if (errors.length) {
     lines.push("", `--- Errors (${errors.length}) ---`);
     for (const ev of errors) {
@@ -822,6 +925,26 @@ function buildBrainTriageReport(opts) {
 // src/brainRunStore.ts
 var MAX_TOOL_ITERATIONS = 25;
 var HISTORY_WINDOW = 80;
+var HISTORY_TOKEN_BUDGET = 24e3;
+var MAX_TOOL_RESULT_CHARS = 6e3;
+function estimateTokens(chars) {
+  return Math.ceil(chars / 4);
+}
+function messageTokens(m) {
+  let chars = typeof m.content === "string" ? m.content.length : JSON.stringify(m.content ?? "").length;
+  if (m.tool_calls) chars += JSON.stringify(m.tool_calls).length;
+  return estimateTokens(chars) + 4;
+}
+function trimToolResult(out) {
+  const full = JSON.stringify(out ?? null);
+  const bytes = full.length;
+  if (bytes <= MAX_TOOL_RESULT_CHARS) return { content: full, bytes, truncated: false };
+  const itemNote = Array.isArray(out) ? ` The full result had ${out.length} items; re-call this tool with a narrower filter (e.g. status, projectId, or limit) to see specific ones.` : " The full result was large; re-call with a narrower query if you need the elided fields.";
+  const head = full.slice(0, MAX_TOOL_RESULT_CHARS);
+  const content = `${head}
+\u2026[truncated ${bytes - MAX_TOOL_RESULT_CHARS} of ${bytes} chars to protect the context window.${itemNote}]`;
+  return { content, bytes, truncated: true };
+}
 var MAX_CELLS = 50;
 var MAX_TRACE_EVENTS = 500;
 var MAX_APPENDED = 50;
@@ -915,7 +1038,20 @@ function windowed(convo) {
     const lastUser = convo.map((m) => m.role).lastIndexOf("user");
     w = lastUser >= 0 ? convo.slice(lastUser) : convo.slice();
   }
-  return w;
+  return tokenBounded(w);
+}
+function tokenBounded(w) {
+  let total = w.reduce((sum, m) => sum + messageTokens(m), 0);
+  if (total <= HISTORY_TOKEN_BUDGET) return w;
+  const lastUser = w.map((m) => m.role).lastIndexOf("user");
+  let start = 0;
+  while (total > HISTORY_TOKEN_BUDGET && start < lastUser) {
+    total -= messageTokens(w[start]);
+    start += 1;
+  }
+  let trimmed = w.slice(start);
+  while (trimmed.length > 1 && trimmed[0].role !== "user") trimmed = trimmed.slice(1);
+  return trimmed;
 }
 function subscribeRun(chatId, listener) {
   const c = getCell(chatId);
@@ -1020,6 +1156,17 @@ async function runLoop(chatId, c, req) {
       });
       throw e;
     }
+    const resolved = result.resolvedModel ?? model ?? "default";
+    const requested = model ?? "default";
+    if (requested !== "default" && resolved !== "default" && resolved !== requested) {
+      pushTrace(c, {
+        ts: nowIso(),
+        category: "message",
+        label: "llm.model_downgrade",
+        args: { requestedModel: requested, model: resolved, step: iter },
+        result: `Gateway answered with ${resolved} instead of the requested ${requested} (failover) \u2014 a smaller context window can truncate long transcripts.`
+      });
+    }
     pushTrace(c, {
       ts: nowIso(),
       category: "llm",
@@ -1030,12 +1177,16 @@ async function runLoop(chatId, c, req) {
       // keeps the caller's ask (empty/'default' ⇒ gateway auto-selects) so triage
       // can tell "what I asked for" from "what answered".
       args: {
-        model: result.resolvedModel ?? model ?? "default",
-        requestedModel: model ?? "default",
+        model: resolved,
+        requestedModel: requested,
         step: iter,
         toolCalls: result.toolCalls.length
       },
-      result: `${result.toolCalls.length} tool call(s) \xB7 ${result.text.length} chars \xB7 finish: ${result.finishReason ?? "\u2014"}`
+      // Structured diagnostics fields — the A-vs-B triage reads these directly.
+      usage: result.usage,
+      finishReason: result.finishReason,
+      textChars: result.text.length,
+      result: `${result.toolCalls.length} tool call(s) \xB7 ${result.text.length} chars \xB7 finish: ${result.finishReason ?? "\u2014"}${result.usage?.prompt != null ? ` \xB7 prompt ${result.usage.prompt} tok` : ""}`
     });
     if (result.text.trim()) {
       pushTrace(c, { ts: nowIso(), category: "message", label: "agent.message", args: { step: iter }, result: result.text });
@@ -1084,8 +1235,19 @@ async function runLoop(chatId, c, req) {
           pushTrace(c, { ts: nowIso(), category: "tool", label: tc.name, durationMs: nowMs2() - toolStart, args, result: out, isError: true });
           continue;
         }
-        convo.push({ role: "tool", tool_call_id: tc.id, content: JSON.stringify(out ?? null) });
-        pushTrace(c, { ts: nowIso(), category: "tool", label: tc.name, durationMs: nowMs2() - toolStart, args, result: out ?? null, isError: isFailedToolResult(out) });
+        const trimmedOut = trimToolResult(out ?? null);
+        convo.push({ role: "tool", tool_call_id: tc.id, content: trimmedOut.content });
+        pushTrace(c, {
+          ts: nowIso(),
+          category: "tool",
+          label: tc.name,
+          durationMs: nowMs2() - toolStart,
+          args,
+          result: out ?? null,
+          isError: isFailedToolResult(out),
+          resultBytes: trimmedOut.bytes,
+          truncated: trimmedOut.truncated
+        });
       }
       continue;
     }
@@ -1391,8 +1553,10 @@ export {
   CONSOLIDATION_MARKER_PREFIX,
   CONSOLIDATION_META,
   buildBrainTriageReport,
+  computeBrainDiagnostics,
   consolidationMarkerContent,
   consolidationMetadata,
+  formatBrainDiagnostics,
   isConsolidationMarker,
   isEvermindModel,
   isFailedToolResult,

@@ -45,8 +45,61 @@ import { isFailedToolResult, type BrainTraceEvent } from './brainTriage';
  * complete instead of dying with "kept calling tools without finishing".
  */
 const MAX_TOOL_ITERATIONS = 25;
-/** How much history we send to the model. */
+/** How much history we send to the model (message-count ceiling). */
 const HISTORY_WINDOW = 80;
+/**
+ * Token budget for the working transcript sent to the model each turn. This is
+ * the real backstop against the "Brain dies after several executions" failure:
+ * message-count windowing (HISTORY_WINDOW) alone does NOT bound context, because
+ * a single `tasks.list` tool result can be tens of thousands of tokens. We
+ * estimate tokens (≈4 chars/token) and drop the oldest turns — after the
+ * user-turn anchor — until the working set fits. Sized well under the smallest
+ * pool model's window so a mid-run gateway failover to a smaller model can't
+ * 413. See {@link windowed}.
+ */
+const HISTORY_TOKEN_BUDGET = 24_000;
+/**
+ * Per-tool-result cap (chars) for what we put into the MODEL transcript. The
+ * full result is still recorded in the trace (for the timeline + triage copy);
+ * only the copy the model re-reads every turn is trimmed. A `tasks.list`
+ * returning 352 full rows is what filled the window and killed the run — the
+ * model gets a truncated head plus a marker telling it to narrow the query.
+ */
+const MAX_TOOL_RESULT_CHARS = 6_000;
+
+/** Cheap token estimate from a char count — chars/4, the gateway's heuristic. */
+function estimateTokens(chars: number): number {
+  return Math.ceil(chars / 4);
+}
+
+/** Estimated tokens for one chat message (content + any tool-call payloads). */
+function messageTokens(m: ChatCompletionMessage): number {
+  let chars = typeof m.content === 'string' ? m.content.length : JSON.stringify(m.content ?? '').length;
+  if (m.tool_calls) chars += JSON.stringify(m.tool_calls).length;
+  return estimateTokens(chars) + 4; // +4 for role/framing overhead
+}
+
+/**
+ * Trim a tool result to what the model transcript can afford. Returns the
+ * (possibly truncated) string to store as the tool message plus diagnostics
+ * (original byte size + whether it was truncated) for the trace. Large results
+ * get a head slice and an explicit marker so the model knows data was elided and
+ * can re-call the tool with a narrower filter/limit instead of assuming it saw
+ * everything.
+ */
+function trimToolResult(out: unknown): { content: string; bytes: number; truncated: boolean } {
+  const full = JSON.stringify(out ?? null);
+  const bytes = full.length;
+  if (bytes <= MAX_TOOL_RESULT_CHARS) return { content: full, bytes, truncated: false };
+  // If the result is an array, tell the model how many items were dropped — that
+  // is the signal it needs to add a `limit`/`status`/`projectId` filter.
+  const itemNote = Array.isArray(out)
+    ? ` The full result had ${out.length} items; re-call this tool with a narrower filter (e.g. status, projectId, or limit) to see specific ones.`
+    : ' The full result was large; re-call with a narrower query if you need the elided fields.';
+  const head = full.slice(0, MAX_TOOL_RESULT_CHARS);
+  const content = `${head}\n…[truncated ${bytes - MAX_TOOL_RESULT_CHARS} of ${bytes} chars to protect the context window.${itemNote}]`;
+  return { content, bytes, truncated: true };
+}
 /**
  * Memory bounds. Run cells are session-lived (the transcript IS the cross-turn
  * grounding), so without a cap a long session touching many chats grows the
@@ -278,7 +331,34 @@ export function windowed(convo: ChatCompletionMessage[]): ChatCompletionMessage[
     const lastUser = convo.map((m) => m.role).lastIndexOf('user');
     w = lastUser >= 0 ? convo.slice(lastUser) : convo.slice();
   }
-  return w;
+  return tokenBounded(w);
+}
+
+/**
+ * Enforce the token budget on an already message-count-windowed slice. Drops the
+ * OLDEST turns first, then re-anchors on a user turn (a strict vendor like
+ * Gemini rejects a window that doesn't start on `user`, and dropping a turn can
+ * orphan a `tool` result whose `assistant` tool-call fell off the front — so we
+ * also drop leading `tool`/`assistant` turns after trimming). The most recent
+ * user turn is never dropped: correctness over the budget when a single turn is
+ * itself oversized (its tool results are already per-result trimmed on the way
+ * into the transcript, so this is rare).
+ */
+function tokenBounded(w: ChatCompletionMessage[]): ChatCompletionMessage[] {
+  let total = w.reduce((sum, m) => sum + messageTokens(m), 0);
+  if (total <= HISTORY_TOKEN_BUDGET) return w;
+  // The last user turn's index — never trim past it.
+  const lastUser = w.map((m) => m.role).lastIndexOf('user');
+  let start = 0;
+  while (total > HISTORY_TOKEN_BUDGET && start < lastUser) {
+    total -= messageTokens(w[start]!);
+    start += 1;
+  }
+  let trimmed = w.slice(start);
+  // Re-anchor: never begin on a tool result or an assistant tool-call turn whose
+  // partner was just dropped.
+  while (trimmed.length > 1 && trimmed[0].role !== 'user') trimmed = trimmed.slice(1);
+  return trimmed;
 }
 
 // ---------------------------------------------------------------------------
@@ -449,6 +529,21 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
       });
       throw e;
     }
+    // Silent-downgrade detection: the gateway can fail over mid-run to a
+    // different (often smaller-window) model than we requested. That's a prime
+    // context-exhaustion symptom, so surface it as its own warning step instead
+    // of leaving it buried in the model field — the diagnostics block counts it.
+    const resolved = result.resolvedModel ?? model ?? 'default';
+    const requested = model ?? 'default';
+    if (requested !== 'default' && resolved !== 'default' && resolved !== requested) {
+      pushTrace(c, {
+        ts: nowIso(),
+        category: 'message',
+        label: 'llm.model_downgrade',
+        args: { requestedModel: requested, model: resolved, step: iter },
+        result: `Gateway answered with ${resolved} instead of the requested ${requested} (failover) — a smaller context window can truncate long transcripts.`,
+      });
+    }
     pushTrace(c, {
       ts: nowIso(),
       category: 'llm',
@@ -459,12 +554,16 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
       // keeps the caller's ask (empty/'default' ⇒ gateway auto-selects) so triage
       // can tell "what I asked for" from "what answered".
       args: {
-        model: result.resolvedModel ?? model ?? 'default',
-        requestedModel: model ?? 'default',
+        model: resolved,
+        requestedModel: requested,
         step: iter,
         toolCalls: result.toolCalls.length,
       },
-      result: `${result.toolCalls.length} tool call(s) · ${result.text.length} chars · finish: ${result.finishReason ?? '—'}`,
+      // Structured diagnostics fields — the A-vs-B triage reads these directly.
+      usage: result.usage,
+      finishReason: result.finishReason,
+      textChars: result.text.length,
+      result: `${result.toolCalls.length} tool call(s) · ${result.text.length} chars · finish: ${result.finishReason ?? '—'}${result.usage?.prompt != null ? ` · prompt ${result.usage.prompt} tok` : ''}`,
     });
     if (result.text.trim()) {
       pushTrace(c, { ts: nowIso(), category: 'message', label: 'agent.message', args: { step: iter }, result: result.text });
@@ -519,12 +618,28 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
         } catch (e) {
           const message = e instanceof Error ? `${e.name}: ${e.message}` : String(e);
           out = { ok: false, error: message };
+          // Errors are small; push as-is (trimming a short error would only add noise).
           convo.push({ role: 'tool', tool_call_id: tc.id, content: JSON.stringify(out) });
           pushTrace(c, { ts: nowIso(), category: 'tool', label: tc.name, durationMs: nowMs() - toolStart, args, result: out, isError: true });
           continue;
         }
-        convo.push({ role: 'tool', tool_call_id: tc.id, content: JSON.stringify(out ?? null) });
-        pushTrace(c, { ts: nowIso(), category: 'tool', label: tc.name, durationMs: nowMs() - toolStart, args, result: out ?? null, isError: isFailedToolResult(out) });
+        // The MODEL transcript gets a size-capped copy so a big list result can't
+        // flood the context window; the TRACE keeps the full result (bounded by
+        // MAX_TRACE_EVENTS) for the timeline + triage copy, plus the pre-trim byte
+        // size and a truncation flag the diagnostics block reads.
+        const trimmedOut = trimToolResult(out ?? null);
+        convo.push({ role: 'tool', tool_call_id: tc.id, content: trimmedOut.content });
+        pushTrace(c, {
+          ts: nowIso(),
+          category: 'tool',
+          label: tc.name,
+          durationMs: nowMs() - toolStart,
+          args,
+          result: out ?? null,
+          isError: isFailedToolResult(out),
+          resultBytes: trimmedOut.bytes,
+          truncated: trimmedOut.truncated,
+        });
       }
       continue;
     }
