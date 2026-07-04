@@ -15,6 +15,7 @@ import type { HonoEnv, Env } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 import { authMiddleware } from '../middleware/authMiddleware';
 import { buildPlanLimitsGuard } from '../middleware/planLimitsGuard';
+import { resolveIsSuperadmin } from '../../infrastructure/auth/superadminFlag';
 import {
   ideProjects,
   studioVoiceCloneLicenses,
@@ -73,8 +74,12 @@ export function createStudioVoiceCloneRoutes(db: Db): Hono<HonoEnv> {
     const userId = c.get('userId');
     const env = c.env as Env;
 
+    // Superadmins never hit a plan wall (shared source of truth with the feature
+    // gate); otherwise a non-paid plan gets the standard 402 upgrade payload.
     const guard = buildPlanLimitsGuard(db);
-    const proCheck = await guard.checkProFeature(tenantId, 'Voice Cloning');
+    const proCheck = (await resolveIsSuperadmin(env, userId))
+      ? null
+      : await guard.checkProFeature(tenantId, 'Voice Cloning');
     if (proCheck) return c.json(proCheck, 402);
 
     const form = await c.req.formData();
