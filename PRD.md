@@ -1,44 +1,48 @@
-> **PRD** — drafted by Bob Developer (V2 (Container)) · task #89
+> **PRD** — drafted by Ada · task #352
 > _Each agent that updates this PRD signs its change below._
 
-# Product Requirements Document: Avatar Filter Row Placement
+# Product Requirements Document: BuilderForce.AI Backlog Grooming
 
-## 1. Problem & Goal
+## Problem & Goal
 
-**Problem:** The current placement of the avatar filter, separated from the priorities dropdown, disrupts the logical grouping of filtering options. Users must scan different areas of the UI to apply related filters, leading to a less efficient and intuitive user experience.
+**Problem:** The `BuilderForce.AI` project backlog suffers from significant technical debt related to task definition and estimation. Specifically, there are 150 tasks without story point estimates and 184 tasks lacking meaningful descriptions or acceptance criteria. This impedes accurate sprint planning, resource allocation, and team understanding, contributing to "150 backlog tasks unestimated" and "184 tasks lack detail" health gaps.
 
-**Goal:** To improve the user experience by consolidating related filtering options into a single, contiguous row, thereby enhancing discoverability, reducing cognitive load, and increasing the speed at which users can apply filters.
+**Goal:** Systematically groom all unestimated and under-detailed tasks within the `BuilderForce.AI` project (projectId 11). This involves assigning appropriate story point estimates and expanding task descriptions with essential context and acceptance criteria, thereby closing the identified health gaps and improving backlog readiness.
 
-## 2. Target Users / ICP Roles
+## Target Users / ICP Roles
 
-*   **Project Managers:** Need to quickly filter tasks by assignee (avatar) and priority to understand workload distribution and identify high-priority items.
-*   **Team Leads:** Require efficient filtering to monitor team progress and allocate resources based on task priority and individual contribution (avatar).
-*   **Individual Contributors:** Benefit from a cleaner interface to focus on their assigned tasks and understand their priority within the project context.
+*   **Product Owners:** To ensure a clear, estimable, and well-defined backlog for future planning.
+*   **Scrum Masters:** To facilitate efficient sprint planning and provide accurate progress reporting.
+*   **Development Teams:** To understand task scope, effort, and acceptance criteria clearly before commencing work.
 
-## 3. Scope
+## Scope
 
-This document covers the functional requirements and acceptance criteria for moving the existing avatar filter component to reside on the same UI row as the priorities dropdown. This includes adjustments to layout, styling, and ensuring the filter's functionality remains intact.
+This initiative targets all unestimated and/or under-detailed tasks within the `BuilderForce.AI` project (projectId 11). The work will involve identifying, estimating, and detailing these specific tasks.
 
-## 4. Functional Requirements
+## Functional Requirements
 
-*   **FR1: Layout Adjustment:** The avatar filter component shall be repositioned to occupy a space adjacent to the priorities dropdown within the primary filtering bar.
-*   **FR2: Visual Consistency:** The avatar filter shall maintain its current visual appearance and interaction patterns (e.g., dropdown behavior, selection indicators) after being moved.
-*   **FR3: Responsive Design:** The integrated avatar and priorities filter row shall adapt appropriately across different screen sizes and resolutions, maintaining usability.
-*   **FR4: Filter Functionality:** Applying a filter via the avatar selector shall continue to correctly filter the displayed data (e.g., tasks, issues), and this filtering shall be independent of or complementary to the priorities filter.
+1.  **Task Identification:** Identify all tasks within `BuilderForce.AI` (projectId 11) that meet one or both criteria:
+    *   `storyPoints` field is null or not set.
+    *   `description` field is null, empty, or contains a placeholder value (e.g., "TBD", "Description needed", "...")
+2.  **Prioritization:** Process identified tasks by their existing priority, addressing `High` and `Urgent` priority tasks first.
+3.  **Story Point Assignment:** For each task without a `storyPoints` value, assign a numerical estimate from the standard Fibonacci sequence (1, 2, 3, 5, 8, 13).
+4.  **Description Enrichment:** For each task with an insufficient `description`, expand it to include:
+    *   Sufficient context for the task's purpose.
+    *   Clear, actionable acceptance criteria.
 
-## 5. Acceptance Criteria
+## Acceptance Criteria
 
-*   **AC1: Avatar Filter Visible in Row:** The avatar filter is visibly present on the same horizontal line as the priorities dropdown.
-*   **AC2: Filter Functionality Preserved:** Selecting an avatar from the new location correctly filters the displayed items.
-*   **AC3: Priorities Filter Functionality Preserved:** Selecting a priority from its dropdown continues to filter the displayed items, and its interaction is unaffected by the avatar filter's new position.
-*   **AC4: Combined Filtering Works:** Applying both an avatar filter and a priorities filter simultaneously yields the correct, combined results.
-*   **AC5: No Visual Overlap or Distortion:** The avatar filter and priorities dropdown do not overlap each other or other UI elements in the filtering bar, and the overall layout remains clean and undistorted.
-*   **AC6: Responsiveness Verified:** On smaller screen sizes, the combined filter row is still usable, potentially with a different arrangement if necessary (e.g., stacking if horizontal space is too limited, though the primary goal is horizontal).
+*   All tasks within `BuilderForce.AI` (projectId 11) that were previously without a `storyPoints` value now have an assigned `storyPoints` value within the 1-13 Fibonacci scale.
+*   All tasks within `BuilderForce.AI` (projectId 11) that previously had null, empty, or placeholder descriptions now have a meaningful `description` that includes both context and acceptance criteria.
+*   The count of unestimated tasks in `BuilderForce.AI` is reduced to zero.
+*   The count of tasks lacking detail in `BuilderForce.AI` is reduced to zero.
+*   High and Urgent priority tasks are visibly addressed before lower priority tasks.
+*   No new tasks are introduced without estimates or descriptions as part of this process.
 
-## 6. Out of Scope
+## Out of Scope
 
-*   **New Avatar Filter Features:** Any enhancements or new functionalities to the avatar filter itself (e.g., search within avatars, multi-select avatars) are out of scope for this task.
-*   **New Priorities Filter Features:** Any enhancements or new functionalities to the priorities dropdown are out of scope.
-*   **Other Filter Components:** Moving or modifying any other filter components not explicitly mentioned (e.g., date filters, status filters) is out of scope.
-*   **Backend Changes:** Any backend changes related to how filters are processed or stored are out of scope, assuming the existing backend APIs can handle the current filtering logic.
-*   **Performance Optimization:** Significant performance optimizations related to filtering are out of scope, unless directly caused by the layout change.
+*   Creating new tasks for the `BuilderForce.AI` project.
+*   Revisiting or changing estimates/descriptions for tasks that already meet the definition of "estimated" and "detailed."
+*   Resolving, closing, or changing the status of any tasks.
+*   Addressing tasks in projects other than `BuilderForce.AI` (projectId 11).
+*   Any changes to existing task priorities or assignments.
