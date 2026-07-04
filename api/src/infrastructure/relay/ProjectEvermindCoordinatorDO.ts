@@ -30,7 +30,7 @@ import {
   projectEvermindRef,
 } from '../../application/llm/projectEvermind';
 import { mergeCheckpointDiffs } from '../../application/llm/evermindMerge';
-import { buildEvermindTrainingText } from '../../application/llm/evermindTeacher';
+import { buildEvermindTrainingText, resolveEvermindTeacherModel } from '../../application/llm/evermindTeacher';
 import type { Env } from '../../env';
 
 /** Debounce window — a burst of learns within this window folds into one merge. */
