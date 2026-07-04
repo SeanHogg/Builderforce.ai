@@ -4582,6 +4582,10 @@
     "connected": "Aprendiendo",
     "frozen": "Congelado",
     "contributions": "{count} contribuciones de aprendizaje hasta ahora",
+    "teacherLabel": "Enseñar desde un modelo de frontera",
+    "teacherHint": "Destila un modelo puntero (Opus, Mistral, GLM…) en el Evermind de este proyecto: cada ejecución aprende de la respuesta ideal del modelo de frontera en lugar del texto en bruto.",
+    "teacherNone": "Ninguno: aprender solo de las ejecuciones",
+    "teacherPaidOnly": "Disponible en planes de pago: enseñar consume tokens del modelo de frontera.",
     "errorGeneric": "Algo salió mal. Inténtalo de nuevo."
   },
   "manager": {

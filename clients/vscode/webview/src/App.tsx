@@ -401,6 +401,9 @@ function Chat({ init }: { init: InitData }) {
           model: init.model,
           error: conv.error,
         }),
+        // The run's initiating user message (the "ticket") so the project-Evermind
+        // teacher distils (task → answer), matching cloud + on-prem.
+        prompt: conv.messages.find((m) => m.role === 'user')?.content ?? '',
       });
     }
     prevSending.current = conv.sending;

@@ -58,6 +58,10 @@ interface PendingEntry {
   /** Raw run text (text-path) the coordinator adapts+diffs IN THE ALARM; the
    *  unified producer path so IDE/cloud/on-prem never pay training CPU themselves. */
   text?: string;
+  /** Optional task prompt (the ticket) the run addressed. When present AND a teacher
+   *  is pinned, the teacher ANSWERS this prompt so the SSM learns (task → ideal
+   *  answer) rather than refining the raw output. */
+  prompt?: string;
   /** Optional sample weight (e.g. tokens learned) for the FedAvg merge. */
   weight: number;
 }
@@ -89,6 +93,8 @@ interface LearnTextBody {
   tenantId: number;
   projectId: number;
   text: string;
+  /** Optional task prompt threaded for teacher distillation (task → ideal answer). */
+  prompt?: string;
   weight?: number;
 }
 
@@ -179,8 +185,10 @@ export class ProjectEvermindCoordinatorDO implements DurableObject {
     if (head.version === 0) return this.json({ ok: false, error: 'project Evermind not seeded — no base model to learn against' }, 409);
     if (head.mode === 'offline-frozen') return this.json({ ok: false, error: 'project Evermind is offline-frozen (read-only); learning disabled', mode: head.mode }, 423);
 
+    const prompt = typeof body.prompt === 'string' && body.prompt.trim() ? body.prompt.trim().slice(0, MAX_TEXT_CHARS) : undefined;
     const { queued, dropped } = await this.enqueue(body.tenantId, body.projectId, head.version, {
       text: text.slice(0, MAX_TEXT_CHARS),
+      ...(prompt ? { prompt } : {}),
       weight: typeof body.weight === 'number' && body.weight > 0 ? body.weight : 1,
     });
     return this.json({ ok: true, queued, baseVersion: head.version, ...(dropped ? { dropped } : {}) });
@@ -195,7 +203,7 @@ export class ProjectEvermindCoordinatorDO implements DurableObject {
     tenantId: number,
     projectId: number,
     baseVersion: number,
-    entry: { diffB64?: string; text?: string; weight: number },
+    entry: { diffB64?: string; text?: string; prompt?: string; weight: number },
   ): Promise<{ queued: number; dropped: number }> {
     await this.state.storage.put(META_KEY, { tenantId, projectId } satisfies CoordMeta);
     const seq = ((await this.state.storage.get<number>(SEQ_KEY)) ?? 0) + 1;
@@ -208,6 +216,7 @@ export class ProjectEvermindCoordinatorDO implements DurableObject {
       weight: entry.weight,
       ...(entry.diffB64 ? { diffB64: entry.diffB64 } : {}),
       ...(entry.text ? { text: entry.text } : {}),
+      ...(entry.prompt ? { prompt: entry.prompt } : {}),
     });
     // Cost guard: cap the queue, dropping the OLDEST contributions if a project is
     // firehosing learns faster than the debounce can merge them.
@@ -270,6 +279,12 @@ export class ProjectEvermindCoordinatorDO implements DurableObject {
       // Per-alarm fit cap — env-tunable (EVERMIND_MAX_FITS_PER_ALARM) so the DO's
       // per-alarm CPU envelope can be lowered without a code change.
       const maxFits = Math.max(1, Math.trunc(Number(this.env.EVERMIND_MAX_FITS_PER_ALARM)) || MAX_FITS_PER_ALARM);
+      // Resolve the effective (budget-gated) teacher ONCE per alarm — the token scan
+      // is a per-tenant aggregate constant across this batch, so it must not run per
+      // entry. null unless a teacher is pinned AND there's trainable text to distil.
+      const effectiveTeacher = (isLM && usable.some((e) => !e.diffB64 && !!e.text))
+        ? await resolveEvermindTeacherModel(this.db, tenantId, head.teacherModel)
+        : null;
       const diffs: ArrayBuffer[] = [];
       const weights: number[] = [];
       let textFits = 0;
@@ -281,12 +296,15 @@ export class ProjectEvermindCoordinatorDO implements DurableObject {
         } else if (e.text && isLM) {
           if (textFits >= maxFits) continue; // defer — leave queued for next alarm
           processedIds.push(e.id); // consumed even if it yields no trainable window
-          // Teacher distillation: when the project pins a frontier teacher model,
-          // adapt on that model's EXEMPLAR for this run (context → ideal answer)
-          // instead of the raw run text — feeding any frontier LLM back into the
-          // Evermind. Best-effort: a teacher failure falls back to the raw text so the
+          // Teacher distillation: when a (budget-gated) frontier teacher is in effect,
+          // adapt on that model's EXEMPLAR instead of the raw run text — feeding any
+          // frontier LLM back into the Evermind. With the run's TASK PROMPT threaded
+          // through, the teacher ANSWERS the task (task → ideal answer); otherwise it
+          // refines the output. A teacher failure falls back to the raw text so the
           // contribution is never lost. [[evermind-learning-architecture]]
-          const training = await buildEvermindTrainingText(this.env, head.teacherModel, e.text);
+          const training = await buildEvermindTrainingText(
+            this.env, effectiveTeacher, e.text, { prompt: e.prompt ?? null },
+          );
           const ids = tok.encode(training.text.slice(0, ADAPT_MAX_CHARS));
           const seqs = windows(ids, ADAPT_WINDOW_TOKENS);
           if (seqs.length === 0) continue;

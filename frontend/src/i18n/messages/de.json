@@ -4582,6 +4582,10 @@
     "connected": "Lernt",
     "frozen": "Eingefroren",
     "contributions": "Bisher {count} Lernbeiträge",
+    "teacherLabel": "Von einem Spitzenmodell lernen lassen",
+    "teacherHint": "Destillieren Sie ein Spitzenmodell (Opus, Mistral, GLM…) in das Evermind dieses Projekts – jeder Lauf lernt aus der idealen Antwort des Spitzenmodells statt aus dem Rohtext.",
+    "teacherNone": "Keins – nur aus Läufen lernen",
+    "teacherPaidOnly": "In kostenpflichtigen Tarifen verfügbar – das Lehren verbraucht Tokens des Spitzenmodells.",
     "errorGeneric": "Etwas ist schiefgelaufen. Bitte versuchen Sie es erneut."
   },
   "manager": {

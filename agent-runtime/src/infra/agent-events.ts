@@ -15,6 +15,10 @@ export type AgentRunContext = {
   sessionKey?: string;
   verboseLevel?: VerboseLevel;
   isHeartbeat?: boolean;
+  /** The run's initiating user prompt (the "ticket"). Captured at run start so any
+   *  post-run consumer (e.g. the project-Evermind teacher distillation) can learn
+   *  `(task → answer)` rather than only refining the output. */
+  prompt?: string;
 };
 
 // Keep per-run counters so streams stay strictly monotonic per runId.
@@ -39,6 +43,9 @@ export function registerAgentRunContext(runId: string, context: AgentRunContext)
   }
   if (context.isHeartbeat !== undefined && existing.isHeartbeat !== context.isHeartbeat) {
     existing.isHeartbeat = context.isHeartbeat;
+  }
+  if (context.prompt && existing.prompt !== context.prompt) {
+    existing.prompt = context.prompt;
   }
 }
 

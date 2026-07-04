@@ -18,6 +18,8 @@ export interface ProjectEvermindHead {
   name: string;
   contributions: number;
   inferenceEnabled: boolean;
+  /** Pinned frontier-LLM teacher model id, or null for self-learning on raw run text. */
+  teacherModel: string | null;
   seeded: boolean;
 }
 
@@ -52,6 +54,21 @@ export async function setProjectEvermindInference(
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ enabled }),
+    },
+  );
+}
+
+/** Pin (or clear with null) the frontier-LLM teacher the project distils runs through. */
+export async function setProjectEvermindTeacher(
+  projectId: number,
+  model: string | null,
+): Promise<{ ok: boolean; teacherModel: string | null }> {
+  return apiRequest<{ ok: boolean; teacherModel: string | null }>(
+    `/api/projects/${projectId}/evermind/teacher`,
+    {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model }),
     },
   );
 }
