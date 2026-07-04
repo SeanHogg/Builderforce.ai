@@ -39,12 +39,15 @@ import { CloudAgentSlideOutPanel, type CloudAgentPanelTab } from '@/components/w
 import { SkillTags } from '@/components/SkillTags';
 import { listFreelancers, type FreelancerProfile } from '@/lib/freelancerApi';
 import { RatingStars } from '@/components/freelance/RatingStars';
+import { SkeletonGrid } from './SkeletonGrid';
+import { ModelsExplorer } from './ModelsExplorer';
 
-// Human freelancers ("Talent") are now a category of the marketplace rather than a
-// standalone /talent page — same search box, one merged surface.
-type MarketplaceCategory = 'all' | 'personas' | 'skills' | 'content' | 'workforce' | 'talent' | 'publish';
+// Human freelancers ("Talent") and the live model catalog ("Models") are now
+// categories of the marketplace rather than standalone /talent and /models pages —
+// same search box, one merged surface.
+type MarketplaceCategory = 'all' | 'personas' | 'skills' | 'content' | 'workforce' | 'talent' | 'models' | 'publish';
 
-const CATEGORY_IDS: MarketplaceCategory[] = ['all', 'personas', 'skills', 'content', 'workforce', 'talent', 'publish'];
+const CATEGORY_IDS: MarketplaceCategory[] = ['all', 'personas', 'skills', 'content', 'workforce', 'talent', 'models', 'publish'];
 
 const TALENT_DISCIPLINES = ['developer', 'dba', 'designer', 'devops', 'qa', 'pm', 'data', 'security', 'other'] as const;
 
@@ -62,32 +65,6 @@ const filterControlStyle: React.CSSProperties = {
 
 function talentInitials(name: string | null): string {
   return (name ?? '?').trim().split(/\s+/).slice(0, 2).map((s) => s[0]?.toUpperCase() ?? '').join('') || '?';
-}
-
-/** Placeholder card grid shown while real cards lazy-load — the page shell + search
- *  render instantly, then the cards stream in over these skeletons. */
-function SkeletonGrid({ count = 8 }: { count?: number }) {
-  return (
-    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 16 }} aria-hidden="true">
-      {Array.from({ length: count }).map((_, i) => (
-        <div key={i} className="card" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-          <div className="animate-pulse" style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-            <div style={{ width: 40, height: 40, borderRadius: 10, background: 'var(--surface-2)', flexShrink: 0 }} />
-            <div style={{ flex: 1 }}>
-              <div style={{ height: 12, width: '60%', borderRadius: 6, background: 'var(--surface-2)', marginBottom: 6 }} />
-              <div style={{ height: 10, width: '40%', borderRadius: 6, background: 'var(--surface-2)' }} />
-            </div>
-          </div>
-          <div className="animate-pulse" style={{ height: 10, width: '100%', borderRadius: 6, background: 'var(--surface-2)' }} />
-          <div className="animate-pulse" style={{ height: 10, width: '85%', borderRadius: 6, background: 'var(--surface-2)' }} />
-          <div className="animate-pulse" style={{ display: 'flex', gap: 6, marginTop: 4 }}>
-            <div style={{ height: 18, width: 48, borderRadius: 999, background: 'var(--surface-2)' }} />
-            <div style={{ height: 18, width: 60, borderRadius: 999, background: 'var(--surface-2)' }} />
-          </div>
-        </div>
-      ))}
-    </div>
-  );
 }
 
 interface ContentBlock {
@@ -223,6 +200,7 @@ export default function MarketplacePageClient() {
   const tm = useTranslations('marketplace');
   const tt = useTranslations('talent');
   const tdis = useTranslations('freelancer');
+  const tmodels = useTranslations('models');
 
   const [search, setSearch] = useState('');
   const [category, setCategory] = useState<MarketplaceCategory>('all');
@@ -540,6 +518,11 @@ export default function MarketplacePageClient() {
 
   const categories: { id: MarketplaceCategory }[] = CATEGORY_IDS.map((id) => ({ id }));
 
+  const searchPlaceholder =
+    category === 'talent' ? tt('filter.search')
+    : category === 'models' ? tmodels('searchPlaceholder')
+    : tm('searchPlaceholder');
+
   return (
     <div className="page-inner">
       <div style={{ textAlign: 'center', marginBottom: 32 }}>
@@ -573,7 +556,7 @@ export default function MarketplacePageClient() {
       >
         <input
           type="search"
-          placeholder={category === 'talent' ? tt('filter.search') : tm('searchPlaceholder')}
+          placeholder={searchPlaceholder}
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           style={{
@@ -587,7 +570,7 @@ export default function MarketplacePageClient() {
             color: 'var(--text)',
             fontSize: 13,
           }}
-          aria-label={category === 'talent' ? tt('filter.search') : tm('searchPlaceholder')}
+          aria-label={searchPlaceholder}
         />
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexShrink: 0 }} role="group" aria-label={tm('categoryLabel')}>
           <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-strong)' }}>{tm('categoryLabel')}</span>
@@ -799,6 +782,8 @@ export default function MarketplacePageClient() {
             )}
           </>
         )
+      ) : category === 'models' ? (
+        <ModelsExplorer search={search} viewMode={viewMode} />
       ) : category === 'workforce' ? (
         loadingAgents ? (
           <SkeletonGrid />

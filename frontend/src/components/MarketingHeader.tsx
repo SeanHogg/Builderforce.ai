@@ -39,7 +39,8 @@ const FLAT_LINKS: SimpleLink[] = [
   { href: '/agents', label: 'Agents' },
   // Evermind intentionally NOT a top-level flat link — it lives under the Product
   // mega-menu and in the footer; keeping it out of the bar reduces nav clutter.
-  { href: '/models', label: 'Models' },
+  // Models is a prefilled filter into the one marketplace, same as Talent / Workforce.
+  { href: '/marketplace?category=models', label: 'Models' },
   { href: '/pricing', label: 'Pricing' },
 ];
 

@@ -173,7 +173,7 @@ const STATIC_ROUTES: Record<string, string> = {
   skills: '/skills',
   personas: '/personas',
   prompts: '/prompts',
-  models: '/models',
+  models: '/marketplace?category=models',
   approvals: '/workforce?tab=approvals',
   security: '/security',
   observability: '/workforce?tab=logs',
