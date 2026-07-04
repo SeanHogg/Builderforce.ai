@@ -29,7 +29,12 @@ export interface AgentDeps {
   policyGates?: PolicyGate[];
 }
 
-const MAX_ITERATIONS = 12;
+// The in-editor loop's tool-step budget. Kept modest on purpose — a genuinely large
+// job should be HANDED to the platform (persona's dispatch-handoff strategy: create a
+// task + assign a cloud agent), not ground through inline. 12 was too low for even
+// ordinary multi-file work; 40 covers real inline tasks while still capping runaway
+// loops, and the ceiling message points at dispatch rather than dead-ending.
+const MAX_ITERATIONS = 40;
 
 interface RawToolCall {
   id: string;
@@ -198,7 +203,15 @@ export async function runAgent(
     }
   }
 
-  events.onError(`Stopped after ${MAX_ITERATIONS} tool iterations.`);
+  // Hit the inline step budget without finishing — this is the signal the job is too
+  // large for an in-editor chat. Point at the dispatch path (persona's handoff
+  // strategy) instead of dead-ending, so the next turn can create + assign a task.
+  events.onError(
+    `Reached the in-editor step limit (${MAX_ITERATIONS} tool calls) before finishing. ` +
+      `This job is large for an inline chat — ask me to dispatch it to the platform ` +
+      `(I'll create a task with the full instructions and assign a cloud agent to run it to completion), ` +
+      `or narrow the scope.`,
+  );
 }
 
 /** One streamed turn: accumulates assistant text and any tool-call deltas. */

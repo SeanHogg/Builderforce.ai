@@ -24,7 +24,9 @@ __export(src_exports, {
   BrainContextProvider: () => BrainContextProvider,
   BrainProvider: () => BrainProvider,
   buildBrainTriageReport: () => buildBrainTriageReport,
+  isEvermindModel: () => isEvermindModel,
   isFailedToolResult: () => isFailedToolResult,
+  modelsUsedInTrace: () => modelsUsedInTrace,
   prepareImageDataUrl: () => prepareImageDataUrl,
   savePendingPrompt: () => savePendingPrompt,
   streamChatCompletion: () => streamChatCompletion,
@@ -205,6 +207,14 @@ async function streamChatCompletion(opts, handlers = {}) {
   });
   if (res.status === 401) transport.onUnauthorized?.(res, !!token);
   if (!res.ok) throw await (transport.mapError ?? defaultMapError)(res);
+  let headerModel = null;
+  try {
+    headerModel = res.headers?.get?.("x-builderforce-model") || null;
+  } catch {
+    headerModel = null;
+  }
+  let streamModel = null;
+  const resolvedModel = () => headerModel ?? streamModel ?? void 0;
   const toolAcc = /* @__PURE__ */ new Map();
   const xml = new XmlToolCallFilter();
   let finishReason = null;
@@ -212,6 +222,7 @@ async function streamChatCompletion(opts, handlers = {}) {
   const reader = res.body?.getReader();
   if (!reader) {
     const data = await res.json().catch(() => null);
+    if (typeof data?.model === "string" && data.model) streamModel = data.model;
     const choice = data?.choices?.[0];
     const { text, toolCalls: xmlCalls } = extractXmlToolCalls(choice?.message?.content ?? "");
     if (text) handlers.onTextDelta?.(text);
@@ -221,7 +232,7 @@ async function streamChatCompletion(opts, handlers = {}) {
     });
     finishReason = choice?.finish_reason ?? null;
     handlers.onDone?.(finishReason);
-    return { text, toolCalls: [...assemble(toolAcc), ...xmlCalls], finishReason };
+    return { text, toolCalls: [...assemble(toolAcc), ...xmlCalls], finishReason, resolvedModel: resolvedModel() };
   }
   const decoder = new TextDecoder();
   let buffer = "";
@@ -239,7 +250,7 @@ async function streamChatCompletion(opts, handlers = {}) {
         const tail2 = xml.flush();
         if (tail2) handlers.onTextDelta?.(tail2);
         handlers.onDone?.(finishReason);
-        return { text: xml.cleanText(), toolCalls: allToolCalls(), finishReason };
+        return { text: xml.cleanText(), toolCalls: allToolCalls(), finishReason, resolvedModel: resolvedModel() };
       }
       let parsed;
       try {
@@ -247,6 +258,7 @@ async function streamChatCompletion(opts, handlers = {}) {
       } catch {
         continue;
       }
+      if (!streamModel && typeof parsed.model === "string" && parsed.model) streamModel = parsed.model;
       const choice = parsed.choices?.[0];
       if (choice?.finish_reason) finishReason = choice.finish_reason;
       const contentDelta = (typeof choice?.delta?.content === "string" ? choice.delta.content : null) || parsed.response || parsed.text || parsed.delta || "";
@@ -276,7 +288,7 @@ async function streamChatCompletion(opts, handlers = {}) {
   const tail = xml.flush();
   if (tail) handlers.onTextDelta?.(tail);
   handlers.onDone?.(finishReason);
-  return { text: xml.cleanText(), toolCalls: allToolCalls(), finishReason };
+  return { text: xml.cleanText(), toolCalls: allToolCalls(), finishReason, resolvedModel: resolvedModel() };
 }
 function assemble(acc) {
   return [...acc.entries()].sort((a, b) => a[0] - b[0]).map(([, v]) => ({ id: v.id, name: v.name, args: v.args })).filter((c) => c.name.length > 0);
@@ -767,14 +779,31 @@ function cap(s, n = 2e3) {
   const str = typeof s === "string" ? s : JSON.stringify(s ?? "");
   return str.length > n ? str.slice(0, n) + `\u2026 (+${str.length - n} chars)` : str;
 }
+function isEvermindModel(model) {
+  return /(^|\/)evermind\b|^project_evermind:|^tenant_model:/i.test(model);
+}
+function modelsUsedInTrace(events) {
+  const seen = [];
+  for (const ev of events) {
+    if (ev.category !== "llm" && ev.category !== "error") continue;
+    const m = ev.args?.model;
+    if (typeof m === "string" && m && m !== "default" && !seen.includes(m)) seen.push(m);
+  }
+  return seen;
+}
 function buildBrainTriageReport(opts) {
-  const { capturedAt, events, messages = [], chatId, chatTitle, agentLabel, error } = opts;
+  const { capturedAt, events, messages = [], chatId, chatTitle, agentLabel, configuredModel, error } = opts;
   const errors = events.filter((e) => e.isError || e.category === "error");
   const lines = [];
   lines.push("=== BuilderForce Brain Triage ===");
   lines.push(`Captured:  ${capturedAt}`);
   if (chatId != null) lines.push(`Chat:      #${chatId}${chatTitle ? ` \u2014 ${chatTitle}` : ""}`);
   lines.push(`Brain:     ${agentLabel || "Brain (default)"}`);
+  lines.push(`Configured model: ${configuredModel || "(gateway auto-select)"}`);
+  const used = modelsUsedInTrace(events);
+  if (used.length) lines.push(`Models used: ${used.join(", ")}`);
+  const evermind = used.filter(isEvermindModel);
+  if (evermind.length) lines.push(`Evermind: yes \u2014 ${evermind.join(", ")}`);
   lines.push(`Steps: ${events.length} \xB7 Errors: ${errors.length} \xB7 Messages: ${messages.length}`);
   if (error) lines.push(`Last error: ${error}`);
   if (errors.length) {
@@ -1012,7 +1041,16 @@ async function runLoop(chatId, c, req) {
       category: "llm",
       label: "llm.complete",
       durationMs: nowMs2() - llmStart,
-      args: { model: model ?? "default", step: iter, toolCalls: result.toolCalls.length },
+      // `model` is the model the gateway ACTUALLY used (resolved), falling back to
+      // what we requested when the gateway didn't report one. `requestedModel`
+      // keeps the caller's ask (empty/'default' ⇒ gateway auto-selects) so triage
+      // can tell "what I asked for" from "what answered".
+      args: {
+        model: result.resolvedModel ?? model ?? "default",
+        requestedModel: model ?? "default",
+        step: iter,
+        toolCalls: result.toolCalls.length
+      },
       result: `${result.toolCalls.length} tool call(s) \xB7 ${result.text.length} chars \xB7 finish: ${result.finishReason ?? "\u2014"}`
     });
     if (result.text.trim()) {
@@ -1309,9 +1347,10 @@ ${refs}`;
       messages,
       chatId,
       agentLabel,
+      configuredModel: model,
       error: localError || snapshot.error
     }),
-    [chatId, messages, localError, snapshot.error]
+    [chatId, messages, localError, snapshot.error, model]
   );
   return {
     messages,
@@ -1367,7 +1406,9 @@ function takePendingPrompt() {
   BrainContextProvider,
   BrainProvider,
   buildBrainTriageReport,
+  isEvermindModel,
   isFailedToolResult,
+  modelsUsedInTrace,
   prepareImageDataUrl,
   savePendingPrompt,
   streamChatCompletion,

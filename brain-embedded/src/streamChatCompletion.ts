@@ -124,6 +124,15 @@ export interface StreamChatResult {
   text: string;
   toolCalls: AssembledToolCall[];
   finishReason: string | null;
+  /**
+   * The model the GATEWAY actually used for this completion — which can differ
+   * from the requested `model` (empty/absent means the gateway auto-selected
+   * from its pool, and failover may have swapped upstreams mid-cascade). Sourced
+   * from the `x-builderforce-model` response header when readable, else from the
+   * `model` field the OpenAI-shaped stream chunks carry. Surfaced so callers can
+   * record which LLM (or which `evermind/…` artifact) produced a turn.
+   */
+  resolvedModel?: string;
 }
 
 interface DeltaToolCall {
@@ -178,6 +187,14 @@ export async function streamChatCompletion(
   if (res.status === 401) transport.onUnauthorized?.(res, !!token);
   if (!res.ok) throw await (transport.mapError ?? defaultMapError)(res);
 
+  // The gateway echoes the model it actually routed to in this header. Readable
+  // same-origin and cross-origin only when CORS-exposed; the per-chunk `model`
+  // field below is the always-readable fallback. Header wins when both present.
+  let headerModel: string | null = null;
+  try { headerModel = res.headers?.get?.('x-builderforce-model') || null; } catch { headerModel = null; }
+  let streamModel: string | null = null;
+  const resolvedModel = (): string | undefined => headerModel ?? streamModel ?? undefined;
+
   // Tool calls are accumulated by index across deltas.
   const toolAcc = new Map<number, { id: string; name: string; args: string }>();
   // Lifts inline `<tool_call>…` markup out of the text stream into structured
@@ -192,8 +209,9 @@ export async function streamChatCompletion(
   if (!reader) {
     // Non-streaming fallback: some gateways may ignore `stream` and return JSON.
     const data = (await res.json().catch(() => null)) as
-      | { choices?: Array<{ message?: { content?: string; tool_calls?: DeltaToolCall[] }; finish_reason?: string }> }
+      | { model?: string; choices?: Array<{ message?: { content?: string; tool_calls?: DeltaToolCall[] }; finish_reason?: string }> }
       | null;
+    if (typeof data?.model === 'string' && data.model) streamModel = data.model;
     const choice = data?.choices?.[0];
     const { text, toolCalls: xmlCalls } = extractXmlToolCalls(choice?.message?.content ?? '');
     if (text) handlers.onTextDelta?.(text);
@@ -203,7 +221,7 @@ export async function streamChatCompletion(
     });
     finishReason = choice?.finish_reason ?? null;
     handlers.onDone?.(finishReason);
-    return { text, toolCalls: [...assemble(toolAcc), ...xmlCalls], finishReason };
+    return { text, toolCalls: [...assemble(toolAcc), ...xmlCalls], finishReason, resolvedModel: resolvedModel() };
   }
 
   const decoder = new TextDecoder();
@@ -222,9 +240,10 @@ export async function streamChatCompletion(
         const tail = xml.flush();
         if (tail) handlers.onTextDelta?.(tail);
         handlers.onDone?.(finishReason);
-        return { text: xml.cleanText(), toolCalls: allToolCalls(), finishReason };
+        return { text: xml.cleanText(), toolCalls: allToolCalls(), finishReason, resolvedModel: resolvedModel() };
       }
       let parsed: {
+        model?: string;
         choices?: Array<{
           delta?: { content?: string; tool_calls?: DeltaToolCall[] };
           finish_reason?: string | null;
@@ -240,6 +259,7 @@ export async function streamChatCompletion(
         // Never surface raw JSON; skip malformed chunks.
         continue;
       }
+      if (!streamModel && typeof parsed.model === 'string' && parsed.model) streamModel = parsed.model;
       const choice = parsed.choices?.[0];
       if (choice?.finish_reason) finishReason = choice.finish_reason;
 
@@ -277,7 +297,7 @@ export async function streamChatCompletion(
   const tail = xml.flush();
   if (tail) handlers.onTextDelta?.(tail);
   handlers.onDone?.(finishReason);
-  return { text: xml.cleanText(), toolCalls: allToolCalls(), finishReason };
+  return { text: xml.cleanText(), toolCalls: allToolCalls(), finishReason, resolvedModel: resolvedModel() };
 }
 
 function assemble(acc: Map<number, { id: string; name: string; args: string }>): AssembledToolCall[] {
