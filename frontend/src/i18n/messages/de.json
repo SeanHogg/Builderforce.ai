@@ -22,8 +22,8 @@
   },
   "repoContext": {
     "title": "Repository-Kontext hinzufügen",
-    "repo": "Repository",
-    "default": "Standard",
+    "source": "Quelle",
+    "agentBranch": "Arbeits-Branch des Agenten",
     "searchPlaceholder": "Dateien suchen…",
     "loading": "Dateien werden geladen…",
     "empty": "Keine Dateien gefunden",

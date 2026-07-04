@@ -31,6 +31,7 @@ import {
   seedProjectEvermind,
   setProjectEvermindMode,
   setProjectEvermindInference,
+  setProjectEvermindTeacher,
   dispatchProjectEvermindLearn,
   dispatchProjectEvermindLearnText,
   projectEvermindRef,
@@ -56,7 +57,7 @@ const json = (body: unknown, status = 200): Response =>
 async function headCore(env: Env, db: Db, tenantId: number, projectId: number): Promise<Response> {
   if (!(await ownsProject(db, tenantId, projectId))) return json({ error: 'project not found' }, 404);
   const head = await getProjectEvermindHead(env, db, tenantId, projectId);
-  return json({ version: head.version, ref: head.ref, mode: head.mode, name: head.name, contributions: head.contributions, inferenceEnabled: head.inferenceEnabled, seeded: head.version > 0 });
+  return json({ version: head.version, ref: head.ref, mode: head.mode, name: head.name, contributions: head.contributions, inferenceEnabled: head.inferenceEnabled, teacherModel: head.teacherModel, seeded: head.version > 0 });
 }
 
 async function artifactCore(env: Env, db: Db, tenantId: number, projectId: number, versionQ: string | undefined, file: 'model.evermind' | 'tokenizer.json'): Promise<Response> {

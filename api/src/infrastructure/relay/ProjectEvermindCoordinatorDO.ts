@@ -30,6 +30,7 @@ import {
   projectEvermindRef,
 } from '../../application/llm/projectEvermind';
 import { mergeCheckpointDiffs } from '../../application/llm/evermindMerge';
+import { buildEvermindTrainingText } from '../../application/llm/evermindTeacher';
 import type { Env } from '../../env';
 
 /** Debounce window — a burst of learns within this window folds into one merge. */
@@ -266,6 +267,9 @@ export class ProjectEvermindCoordinatorDO implements DurableObject {
       // Build the batch of weight deltas to FedAvg. Diff-path entries decode
       // directly; text-path entries are ADAPTED here (fresh base copy → fit → diff)
       // — the fit that IDE/cloud/on-prem deliberately don't run on their own.
+      // Per-alarm fit cap — env-tunable (EVERMIND_MAX_FITS_PER_ALARM) so the DO's
+      // per-alarm CPU envelope can be lowered without a code change.
+      const maxFits = Math.max(1, Math.trunc(Number(this.env.EVERMIND_MAX_FITS_PER_ALARM)) || MAX_FITS_PER_ALARM);
       const diffs: ArrayBuffer[] = [];
       const weights: number[] = [];
       let textFits = 0;
@@ -275,9 +279,15 @@ export class ProjectEvermindCoordinatorDO implements DurableObject {
           weights.push(e.weight);
           processedIds.push(e.id);
         } else if (e.text && isLM) {
-          if (textFits >= MAX_FITS_PER_ALARM) continue; // defer — leave queued for next alarm
+          if (textFits >= maxFits) continue; // defer — leave queued for next alarm
           processedIds.push(e.id); // consumed even if it yields no trainable window
-          const ids = tok.encode(e.text.slice(0, ADAPT_MAX_CHARS));
+          // Teacher distillation: when the project pins a frontier teacher model,
+          // adapt on that model's EXEMPLAR for this run (context → ideal answer)
+          // instead of the raw run text — feeding any frontier LLM back into the
+          // Evermind. Best-effort: a teacher failure falls back to the raw text so the
+          // contribution is never lost. [[evermind-learning-architecture]]
+          const training = await buildEvermindTrainingText(this.env, head.teacherModel, e.text);
+          const ids = tok.encode(training.text.slice(0, ADAPT_MAX_CHARS));
           const seqs = windows(ids, ADAPT_WINDOW_TOKENS);
           if (seqs.length === 0) continue;
           const lm = basePkg.loadLM();

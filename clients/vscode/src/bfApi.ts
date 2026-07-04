@@ -378,6 +378,55 @@ export function invalidateProjectEvermind(projectId?: number): void {
   else evermindHeadCache.delete(projectId);
 }
 
+/** One durable belief in the SHARED per-project facts store (server-side, not local disk). */
+export interface BfProjectFact {
+  key: string;
+  content: string;
+}
+
+/**
+ * Recall the project's shared facts (GET /api/projects/:id/facts). The SAME store the
+ * cloud + on-prem agents read, so the editor recalls beliefs any surface wrote.
+ * Degrades to [] when signed out / not deployed / project not owned.
+ */
+export async function recallProjectFacts(
+  secrets: vscode.SecretStorage,
+  projectId: number,
+  query?: string,
+  limit = 5,
+): Promise<BfProjectFact[]> {
+  try {
+    const qs = new URLSearchParams();
+    if (query) qs.set('query', query);
+    qs.set('limit', String(limit));
+    const r = await authed<{ facts: BfProjectFact[] }>(secrets, `/api/projects/${projectId}/facts?${qs.toString()}`);
+    return r?.facts ?? [];
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Write-through a belief to the project's SHARED facts store (POST …/facts). Replaces
+ * by stable key server-side, so cloud/on-prem/editor runs all see it. Best-effort.
+ */
+export async function rememberProjectFact(
+  secrets: vscode.SecretStorage,
+  projectId: number,
+  key: string,
+  content: string,
+): Promise<boolean> {
+  try {
+    const r = await authed<{ ok?: boolean }>(secrets, `/api/projects/${projectId}/facts`, {
+      method: 'POST',
+      body: JSON.stringify({ key, content, source: 'vscode' }),
+    });
+    return !!r?.ok;
+  } catch {
+    return false;
+  }
+}
+
 /** A workspace (tenant) the signed-in user belongs to. */
 export interface BfWorkspace {
   id: number;

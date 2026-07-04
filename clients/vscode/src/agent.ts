@@ -16,6 +16,8 @@ export interface AgentDeps {
   secrets: vscode.SecretStorage;
   /** Workspace root. When undefined, file tools are disabled (chat-only). */
   root?: string;
+  /** Active project. Scopes the shared write-through memory (recall + remember_fact). */
+  projectId?: number;
   model?: string;
   permissionMode: "ask" | "acceptEdits";
   /** Returns true if the user approves a mutating tool call. */
@@ -72,7 +74,12 @@ export async function runAgent(
   // platform catalog (projects, tasks, OKRs, specs, …) fetched from the gateway
   // MCP relay. The platform tools are the one source of truth — not copied here —
   // so the IDE chat can do everything the web Brain can, even with no folder open.
-  const localTools: ToolDef[] = deps.root ? [...TOOL_DEFS, ...cognitionToolDefs()] : [];
+  // File tools need a workspace; the shared-memory `remember_fact` needs only a
+  // project (works chat-only). Gate each on what it actually requires.
+  const localTools: ToolDef[] = [
+    ...(deps.root ? TOOL_DEFS : []),
+    ...(deps.projectId ? cognitionToolDefs(deps.secrets, deps.projectId) : []),
+  ];
   const platformTools = await listPlatformTools(deps.secrets);
   const toolDefs: ToolDef[] = [...localTools, ...platformTools];
   const tools = toolDefs.length ? toOpenAiTools(toolDefs) : undefined;
@@ -87,10 +94,10 @@ export async function runAgent(
   // Evermind recall: inject facts relevant to the latest user message as a
   // system block, before the first turn. Self-updating memory the agent reads
   // each request (write side is the `remember_fact` tool above). Best-effort.
-  if (deps.root) {
+  if (deps.projectId) {
     const lastUser = [...messages].reverse().find((m) => m.role === "user");
     if (lastUser?.content) {
-      const recalled = await recallSystemMessage(deps.root, String(lastUser.content));
+      const recalled = await recallSystemMessage(deps.secrets, deps.projectId, String(lastUser.content));
       if (recalled) {
         const firstNonSystem = messages.findIndex((m) => m.role !== "system");
         messages.splice(firstNonSystem < 0 ? messages.length : firstNonSystem, 0, recalled);

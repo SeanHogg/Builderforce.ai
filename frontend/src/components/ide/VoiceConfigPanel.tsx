@@ -13,6 +13,7 @@ import { useTranslations } from 'next-intl';
 import { MicRecorder, type PcmAudio } from '@/lib/captureAudio';
 import { hasWebGPU } from '@/lib/voiceEngine';
 import type { VoiceStudio } from '@/lib/voiceStudio';
+import { ProjectEvermindPanel } from '@/components/ide/ProjectEvermindPanel';
 
 const section: React.CSSProperties = {
   padding: '14px 14px 16px',
@@ -36,13 +37,22 @@ const ghostBtn: React.CSSProperties = {
   color: 'var(--text-secondary)', borderRadius: 8, padding: '6px 11px', cursor: 'pointer',
 };
 
-export function VoiceConfigPanel({ voice }: { voice: VoiceStudio }) {
+export function VoiceConfigPanel({ voice, projectId }: { voice: VoiceStudio; projectId?: number }) {
   const t = useTranslations('voicePanel');
   return (
     <div style={{ height: '100%', overflow: 'auto', display: 'flex', flexDirection: 'column' }}>
       <div style={{ ...section, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
         <EngineBadge onDevice={voice.onDevice} />
       </div>
+
+      {/* The project's self-learning Evermind — every project has one (seeded on
+          creation); self-gating (RBAC), localized, theme-aware. Parity with the
+          designer + llm studios. */}
+      {projectId != null && (
+        <div style={section}>
+          <ProjectEvermindPanel projectId={projectId} />
+        </div>
+      )}
 
       {voice.error && (
         <div style={{ ...section, background: 'rgba(239,68,68,0.12)', color: '#fca5a5' }}>

@@ -132,6 +132,7 @@ import { createPublicApiRoutes }       from './presentation/routes/publicApiRout
 import { createStudioRoutes }          from './presentation/routes/studioWeightRoutes';
 import { createEvermindModelRoutes }   from './presentation/routes/evermindModelRoutes';
 import { createProjectEvermindRoutes, createProjectEvermindAgentRoutes }  from './presentation/routes/projectEvermindRoutes';
+import { createProjectFactsRoutes, createProjectFactsAgentRoutes }  from './presentation/routes/projectFactsRoutes';
 // Cloud Agent Boards — agentic swimlanes, external board sync, PRD versioning, multi-repo PRs
 import { createBoardRoutes }           from './presentation/routes/boardRoutes';
 import { createKanbanRoutes }          from './presentation/routes/kanbanRoutes';
@@ -476,6 +477,8 @@ export function buildApp(env: Env): Hono<HonoEnv> {
   app.route('/api/studio/models', createEvermindModelRoutes(db));
   app.route('/api/projects',  createProjectEvermindRoutes(db));
   app.route('/api/agent/projects', createProjectEvermindAgentRoutes(db));
+  app.route('/api/projects',  createProjectFactsRoutes(db));
+  app.route('/api/agent/projects', createProjectFactsAgentRoutes(db));
   app.route('/api/studio',    createStudioRoutes());
 
   // Cloud Agent Boards

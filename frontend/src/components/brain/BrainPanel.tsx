@@ -17,7 +17,7 @@ import { ChatInput } from '@/components/ChatInput';
 import { ChatMessageContent } from '@/components/ChatMessageContent';
 import { ChatMessageActions } from '@/components/ChatMessageActions';
 import { ChatTicketsPanel } from '@/components/brain/ChatTicketsPanel';
-import { RepoContextPicker } from '@/components/brain/RepoContextPicker';
+import { RepoContextPicker, type RepoFileSource } from '@/components/brain/RepoContextPicker';
 import { ThemeSelect } from '@/components/ThemeSelect';
 import { Select } from '@/components/Select';
 import { fetchProjects, createProject } from '@/lib/api';
@@ -38,7 +38,7 @@ import {
   type BrainEffort,
 } from '@/lib/brain';
 import type { BrainChat, BrainMessage } from '@/lib/builderforceApi';
-import { agentAssignmentsApi, reposApi, type AgentAssignment, type ProjectRepository } from '@/lib/builderforceApi';
+import { agentAssignmentsApi, reposApi, runtimeApi, brain, type AgentAssignment, type ProjectRepository } from '@/lib/builderforceApi';
 import { loadAgentPool, type PoolAgent } from '@/lib/agentPool';
 import { MODALITIES, getModality } from '@/lib/modality';
 import { isBrainAutoApprove, setBrainAutoApprove } from '@/lib/brain/autoApprove';
@@ -88,6 +88,7 @@ export function BrainPanel({
   const isPage = variant === 'page';
   const tTimeline = useTranslations('brain.timeline');
   const tCommon = useTranslations('common');
+  const tRepo = useTranslations('repoContext');
 
   // Project scope follows the global TopBar tenant→project selector — one picker
   // for the whole app (see ProjectScopeContext). The Brain's filter dropdown
@@ -165,6 +166,7 @@ export function BrainPanel({
   // selection is attached as context. Same repo the agent clones from, so it
   // works both for planning chats and for chatting with a running agent.
   const [projectRepos, setProjectRepos] = useState<ProjectRepository[]>([]);
+  const [linkedTaskId, setLinkedTaskId] = useState<number | null>(null);
   const [repoPickerOpen, setRepoPickerOpen] = useState(false);
 
   // Brain agent/persona switcher: the user can run the Brain as the default
@@ -291,9 +293,54 @@ export function BrainPanel({
       .catch(() => { if (live) setProjectRepos([]); });
     return () => { live = false; };
   }, [repoProjectId]);
+
+  // The task this chat is tied to (if any) — so "Add context" can also list the
+  // AGENT WORKING BRANCH (the ticket branch a run commits to), which is the point
+  // of chatting with an agent: reference the file it's actually editing. A chat is
+  // linked to at most one task in practice; take the first live task link.
+  useEffect(() => {
+    const cid = chats.activeChatId;
+    if (cid == null) { setLinkedTaskId(null); return; }
+    let live = true;
+    brain.listChatTickets(cid)
+      .then((links) => {
+        if (!live) return;
+        const task = links.find((l) => l.kind === 'task' && l.exists);
+        setLinkedTaskId(task ? Number(task.ref) : null);
+      })
+      .catch(() => { if (live) setLinkedTaskId(null); });
+    return () => { live = false; };
+  }, [chats.activeChatId]);
+
+  // The file sources "Add context" can browse: the agent's working branch first
+  // (most relevant when chatting with a running agent), then each connected repo's
+  // default branch. Each source loads its manifest server-side (token stays there).
+  const contextSources = useMemo<RepoFileSource[]>(() => {
+    const list: RepoFileSource[] = [];
+    if (linkedTaskId != null) {
+      list.push({
+        id: `task:${linkedTaskId}`,
+        label: tRepo('agentBranch'),
+        load: async () => {
+          const r = await runtimeApi.taskRepoFiles(linkedTaskId);
+          if (!r.ok) throw new Error(r.reason || tRepo('error'));
+          return r.files;
+        },
+      });
+    }
+    for (const repo of projectRepos) {
+      list.push({
+        id: `repo:${repo.id}`,
+        label: `${repo.owner}/${repo.repo}`,
+        load: async () => (await reposApi.contents(repo.id)).files ?? [],
+      });
+    }
+    return list;
+  }, [linkedTaskId, projectRepos, tRepo]);
+
   // Presence of this callback IS the entitlement — ChatInput shows "Add context"
-  // only when a repo-backed project is in scope.
-  const onAddContext = projectRepos.length > 0 ? () => setRepoPickerOpen(true) : undefined;
+  // only when a repo-backed source is in scope.
+  const onAddContext = contextSources.length > 0 ? () => setRepoPickerOpen(true) : undefined;
   const attachRepoFile = useCallback(async (path: string, content: string) => {
     await conv.attach(new File([content], path, { type: 'text/plain' }));
     setRepoPickerOpen(false);
@@ -691,7 +738,7 @@ export function BrainPanel({
       )}
       {repoPickerOpen && (
         <RepoContextPicker
-          repos={projectRepos}
+          sources={contextSources}
           onPick={attachRepoFile}
           onClose={() => setRepoPickerOpen(false)}
         />

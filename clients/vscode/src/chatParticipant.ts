@@ -61,11 +61,13 @@ export function createBuilderForceHandler(ctx: vscode.ExtensionContext): vscode.
     // runs — best-effort, gated by `builderforce.evermindLearning`).
     let assistantText = "";
 
+    const activeProject = getSelectedProject();
     await runAgent(
       messages,
       {
         secrets: ctx.secrets,
         root,
+        ...(activeProject ? { projectId: activeProject.id } : {}),
         model,
         permissionMode,
         approve: async (summary) => {

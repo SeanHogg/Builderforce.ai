@@ -22,8 +22,8 @@
   },
   "repoContext": {
     "title": "添加仓库上下文",
-    "repo": "仓库",
-    "default": "默认",
+    "source": "来源",
+    "agentBranch": "智能体工作分支",
     "searchPlaceholder": "搜索文件…",
     "loading": "正在加载文件…",
     "empty": "未找到文件",

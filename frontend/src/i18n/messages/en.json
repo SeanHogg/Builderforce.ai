@@ -22,8 +22,8 @@
   },
   "repoContext": {
     "title": "Add repository context",
-    "repo": "Repository",
-    "default": "default",
+    "source": "Source",
+    "agentBranch": "Agent working branch",
     "searchPlaceholder": "Search files…",
     "loading": "Loading files…",
     "empty": "No files found",

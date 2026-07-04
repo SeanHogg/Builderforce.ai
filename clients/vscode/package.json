@@ -2,7 +2,7 @@
   "name": "builderforce-ai",
   "displayName": "BuilderForce.ai",
   "description": "%extension.description%",
-  "version": "2026.7.15",
+  "version": "2026.7.16",
   "publisher": "builderforce",
   "license": "MIT",
   "author": "Sean Hogg",
@@ -577,10 +577,7 @@
     "publish:openvsx": "ovsx publish",
     "typecheck:native": "tsgo --noEmit"
   },
-  "dependencies": {
-    "@seanhogg/builderforce-memory": "^2026.6.39",
-    "@seanhogg/builderforce-memory-engine": "^2026.6.39"
-  },
+  "dependencies": {},
   "devDependencies": {
     "@seanhogg/builderforce-brain-embedded": "link:../../brain-embedded",
     "@seanhogg/builderforce-brain-ui": "link:../../packages/brain-ui",

@@ -225,6 +225,11 @@ export interface Env {
    *    [[durable_objects.bindings]] name = "PROJECT_EVERMIND" class_name = "ProjectEvermindCoordinatorDO" */
   PROJECT_EVERMIND?: DurableObjectNamespace;
 
+  /** Max text-path adaptations (fits) the Evermind coordinator DO runs per alarm —
+   *  the per-alarm CPU knob. Overrides the code default (8); lower it if a busy
+   *  project's alarm approaches the DO CPU limit. Parsed as an int; invalid → default. */
+  EVERMIND_MAX_FITS_PER_ALARM?: string;
+
   /** Cloudflare Container runtime for a "Cloud Agent (Node/Container)" — a
    *  long-lived Node process with a real shell (the `container` runtime surface).
    *  One instance per execution (`idFromName('exec:<id>')`). Optional: when unset

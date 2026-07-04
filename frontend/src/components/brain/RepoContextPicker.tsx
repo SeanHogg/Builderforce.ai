@@ -2,50 +2,63 @@
 
 /**
  * Repo file picker for the Brain composer's "Add context" affordance. When the
- * active chat's project has one or more connected repositories, the user can
- * pick a file from the repo and attach its content as context for the next turn.
+ * active chat is in a repo-backed context, the user can pick a file and attach
+ * its content as context for the next turn.
  *
- * The file manifest comes from the SAME server-side, token-scoped endpoint the
- * IDE uses to hydrate its workspace (`reposApi.contents`), so the token never
- * reaches the browser. That endpoint returns every file WITH content in one
- * shot (and is metered as ingestion), so we cache the manifest per repo for the
- * lifetime of this picker — switching repos back and forth never re-pulls.
+ * Sources are pluggable so the picker stays DRY across contexts:
+ *   • a connected project repository (default branch), and
+ *   • the AGENT WORKING BRANCH (the ticket branch a live/finished run commits to)
+ *     when the chat is tied to a task — so "chatting with the agent" can reference
+ *     the file the agent is actually editing, not just the default branch.
+ *
+ * Each source loads its manifest server-side (the git token never reaches the
+ * browser). Manifests are cached per source for the picker's lifetime, so
+ * switching sources back and forth never re-pulls.
  */
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslations } from 'next-intl';
-import { reposApi, type ProjectRepository, type ImportedRepoFile } from '@/lib/builderforceApi';
+import type { ImportedRepoFile } from '@/lib/builderforceApi';
 
 const MAX_ROWS = 300;
 
-export function RepoContextPicker({ repos, onPick, onClose }: {
-  repos: ProjectRepository[];
+/** A place the picker can list files from (a connected repo, or a ticket branch). */
+export interface RepoFileSource {
+  id: string;
+  label: string;
+  load: () => Promise<ImportedRepoFile[]>;
+}
+
+export function RepoContextPicker({ sources, onPick, onClose }: {
+  sources: RepoFileSource[];
   /** Attach the chosen file (relative path + text content) as message context. */
   onPick: (path: string, content: string) => void | Promise<void>;
   onClose: () => void;
 }) {
   const t = useTranslations('repoContext');
-  const [repoId, setRepoId] = useState(repos.find((r) => r.isDefault)?.id ?? repos[0]?.id ?? '');
+  const [sourceId, setSourceId] = useState(sources[0]?.id ?? '');
   const [files, setFiles] = useState<ImportedRepoFile[] | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [query, setQuery] = useState('');
   const [attaching, setAttaching] = useState(false);
-  // Session cache: repoId → manifest files, so re-selecting a repo is free.
+  // Session cache: sourceId → manifest files, so re-selecting a source is free.
   const cacheRef = useRef<Record<string, ImportedRepoFile[]>>({});
 
+  const source = useMemo(() => sources.find((s) => s.id === sourceId) ?? sources[0], [sources, sourceId]);
+
   useEffect(() => {
-    if (!repoId) return;
-    const cached = cacheRef.current[repoId];
+    if (!source) return;
+    const cached = cacheRef.current[source.id];
     if (cached) { setFiles(cached); setError(''); setLoading(false); return; }
     let live = true;
     setLoading(true); setError(''); setFiles(null);
-    reposApi.contents(repoId)
-      .then((m) => { if (!live) return; const list = m.files ?? []; cacheRef.current[repoId] = list; setFiles(list); })
+    source.load()
+      .then((list) => { if (!live) return; cacheRef.current[source.id] = list; setFiles(list); })
       .catch((e) => { if (live) setError(e instanceof Error ? e.message : t('error')); })
       .finally(() => { if (live) setLoading(false); });
     return () => { live = false; };
-  }, [repoId, t]);
+  }, [source, t]);
 
   // Close on Escape.
   useEffect(() => {
@@ -54,15 +67,13 @@ export function RepoContextPicker({ repos, onPick, onClose }: {
     return () => document.removeEventListener('keydown', onKey);
   }, [onClose]);
 
-  const filtered = useMemo(() => {
+  const matches = useMemo(() => {
     const list = files ?? [];
     const q = query.trim().toLowerCase();
-    const base = q ? list.filter((f) => f.path.toLowerCase().includes(q)) : list;
-    return base.slice(0, MAX_ROWS);
+    return q ? list.filter((f) => f.path.toLowerCase().includes(q)) : list;
   }, [files, query]);
-
-  const total = files?.length ?? 0;
-  const hidden = Math.max(0, (query.trim() ? (files ?? []).filter((f) => f.path.toLowerCase().includes(query.trim().toLowerCase())).length : total) - filtered.length);
+  const filtered = matches.slice(0, MAX_ROWS);
+  const hidden = Math.max(0, matches.length - filtered.length);
 
   const pick = async (f: ImportedRepoFile) => {
     if (attaching) return;
@@ -105,16 +116,16 @@ export function RepoContextPicker({ repos, onPick, onClose }: {
         </div>
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8, padding: '10px 14px', borderBottom: '1px solid var(--border-subtle)' }}>
-          {repos.length > 1 && (
+          {sources.length > 1 && (
             <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 12, color: 'var(--text-muted)' }}>
-              {t('repo')}
+              {t('source')}
               <select
-                value={repoId}
-                onChange={(e) => setRepoId(e.target.value)}
+                value={source?.id ?? ''}
+                onChange={(e) => setSourceId(e.target.value)}
                 style={{ padding: '7px 9px', fontSize: 13, borderRadius: 8, border: '1px solid var(--border-subtle)', background: 'var(--bg-elevated)', color: 'var(--text-primary)' }}
               >
-                {repos.map((r) => (
-                  <option key={r.id} value={r.id}>{r.owner}/{r.repo}{r.isDefault ? ` (${t('default')})` : ''}</option>
+                {sources.map((s) => (
+                  <option key={s.id} value={s.id}>{s.label}</option>
                 ))}
               </select>
             </label>

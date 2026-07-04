@@ -22,8 +22,8 @@
   },
   "repoContext": {
     "title": "Ajouter le contexte du dépôt",
-    "repo": "Dépôt",
-    "default": "par défaut",
+    "source": "Source",
+    "agentBranch": "Branche de travail de l'agent",
     "searchPlaceholder": "Rechercher des fichiers…",
     "loading": "Chargement des fichiers…",
     "empty": "Aucun fichier trouvé",
