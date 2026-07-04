@@ -69,6 +69,68 @@ export function activeProjectDirective(project?: ActiveProject): string | undefi
 }
 
 /**
+ * The live editor context the host reads from VS Code (active file, cursor,
+ * selection, open tabs, workspace name). Pure data — no `vscode` types — so it can
+ * cross the webview bridge and be formatted by {@link editorContextDirective} on
+ * both surfaces without either importing the host API. The host reader lives in
+ * `src/editorContext.ts`.
+ */
+export interface EditorContext {
+  /** Open workspace folder name(s), comma-joined. */
+  workspaceName?: string;
+  /** The focused editor's file, workspace-relative. */
+  activeFile?: string;
+  /** The active file's VS Code language id (e.g. `typescript`, `markdown`). */
+  languageId?: string;
+  /** 1-based cursor position in the active file. */
+  cursor?: { line: number; column: number };
+  /** The current non-empty selection (the "corresponding code" the user means). */
+  selection?: { path: string; startLine: number; endLine: number; text: string; languageId?: string };
+  /** Other files open in editor tabs, workspace-relative (includes the active file). */
+  openFiles?: string[];
+}
+
+/**
+ * Render the live editor context into an ambient system directive — the missing
+ * piece that lets the agent resolve "this file" / "the open file" / "the selection"
+ * to what the user is actually looking at, instead of guessing a path (the
+ * `Roadmap.md` → not-found failure). Injected through the SAME `extraSystem` channel
+ * as {@link activeProjectDirective} on the webview, and as `extraContext` on the
+ * native participant, so BOTH surfaces are editor-aware and stay live as the user
+ * navigates. Returns undefined when nothing is open (chat-only). Pure — safe in the
+ * Vite webview bundle and the esbuild host bundle alike.
+ */
+export function editorContextDirective(ctx?: EditorContext): string | undefined {
+  if (!ctx) return undefined;
+  const parts: string[] = [];
+  if (ctx.workspaceName) parts.push(`Open workspace folder: ${ctx.workspaceName}.`);
+  if (ctx.activeFile) {
+    const pos = ctx.cursor ? ` (cursor at line ${ctx.cursor.line})` : "";
+    parts.push(`Active file (open and focused in the editor right now): \`${ctx.activeFile}\`${pos}.`);
+  }
+  const otherTabs = (ctx.openFiles ?? []).filter((f) => f !== ctx.activeFile);
+  if (otherTabs.length) {
+    parts.push(`Other open editor tabs: ${otherTabs.map((f) => `\`${f}\``).join(", ")}.`);
+  }
+  if (ctx.selection && ctx.selection.text.trim()) {
+    const lang = ctx.selection.languageId ?? "";
+    parts.push(
+      `The user's current selection is in \`${ctx.selection.path}\` (lines ${ctx.selection.startLine}–${ctx.selection.endLine}):\n\n` +
+        "```" + lang + "\n" + ctx.selection.text + "\n```",
+    );
+  }
+  if (!parts.length) return undefined;
+  return (
+    "Live editor context (this updates as the user switches files or changes their selection). " +
+    'When the user refers to "this file", "the current/open file", "this code", "the selection", "here", ' +
+    "or any similar phrase without naming an explicit path, resolve it to the ACTIVE file and selection " +
+    "below. Do not ask which file they mean, and do not substitute a differently-cased or similarly-named " +
+    "path (e.g. treat `Roadmap.md` as the active file if that is what is open).\n\n" +
+    parts.join("\n")
+  );
+}
+
+/**
  * The work-visibility directive — nudges the IDE agent to record code it adds or
  * changes as a board ticket via the server-side `builtin_tickets_from_delta`
  * platform tool, so IDE work shows up on the board like any other task. Injected

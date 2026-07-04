@@ -14,13 +14,16 @@ import { BrainTimeline, ChatTicketsPanel, DEFAULT_CHAT_TICKETS_LABELS, type Brai
 import { createChatTicketsAdapter } from './chatTicketsAdapter';
 import {
   getToken,
+  getEditorContext,
   onInit,
   onIntent,
+  onEditorContext,
   onTokenChange,
   post,
   request,
   refreshToken,
   type BrainIntent,
+  type EditorContext,
   type InitData,
   type LabelBundle,
 } from './vscodeBridge';
@@ -29,7 +32,7 @@ import { ProjectPageScreen } from './ProjectPageScreen';
 import { createPersistence } from './persistence';
 import { buildHostTools } from './hostTools';
 import { buildIdeSystemPrompt } from './systemPrompt';
-import { activeProjectDirective, deltaVisibilityDirective } from '../../src/idePersona';
+import { activeProjectDirective, deltaVisibilityDirective, editorContextDirective } from '../../src/idePersona';
 import { buildTranscript, hasTranscriptContent } from './transcript';
 
 /** Read a localized string from the host's bundle, falling back to English. */
@@ -315,13 +318,20 @@ function Chat({ init }: { init: InitData }) {
     [init.project?.id, init.project?.name],
   );
 
-  // Fold the composer toggles (effort / thinking / web) into the same system
-  // channel as the project context, so the next turn honors them.
+  // Live editor context (active file / selection / open tabs), pushed by the host as
+  // the user navigates, so the agent always knows what file is open and can resolve
+  // "this file" / "the selection" without guessing a path. Seeded from init.
+  const [editorCtx, setEditorCtx] = useState<EditorContext | undefined>(getEditorContext);
+  useEffect(() => onEditorContext(setEditorCtx), []);
+  const editorDirective = useMemo(() => editorContextDirective(editorCtx) ?? '', [editorCtx]);
+
+  // Fold the composer toggles (effort / thinking / web) and the live editor context
+  // into the same system channel as the project context, so the next turn honors them.
   const extraSystem = useMemo(
-    () => [projectDirective, buildComposerDirectives({ effort, thinking, web: webBrowsing })]
+    () => [projectDirective, editorDirective, buildComposerDirectives({ effort, thinking, web: webBrowsing })]
       .filter(Boolean)
       .join('\n\n'),
-    [projectDirective, effort, thinking, webBrowsing],
+    [projectDirective, editorDirective, effort, thinking, webBrowsing],
   );
 
   const conv = useBrainConversation({

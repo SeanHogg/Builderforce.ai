@@ -246,16 +246,6 @@ A parallel read-only audit swept api / frontend / agent-runtime / packages / vsc
 - **Remaining dead code (verified zero refs):** api `AgentHostService.updateDeclaredCapabilities`, `bindingResolver` `textReplacements`+`bindingsOf`; agent-runtime `resolveDiscordSenderLabel`, `formatThreadStarterEnvelope`, `buildModelPickerItems`, `buildAgentButtonCustomId`, `buildAgentSelectCustomId`, gateway `net.ts:246 isLocalGatewayAddress`; frontend `model-provider` registry surface (`register/get/list/unregisterProvider` — test-only). Test-only-referenced (decide delete-with-test): `presenceCacheSize`, `clearGateways`, `hasTemplateVariables`.
 - **i18n (frontend):** hardcoded English in `AgentPublishPanel` top form, `TaskMgmtContent` (many labels/placeholders), `BrainPanel` (Approve/Cancel/+New/Message Brain…/Search chats…), `ProjectTable` action `aria-label`/`title`s — route through the existing translators + add catalog keys ×5.
 
-### 🔒 Paid-plan feature gating — centralized + follow-ups CLOSED (2026-07-04)
-
-Unified paid-plan feature gating behind one evaluator (`domain/tenant/planFeatures.ts` `evaluateFeatureEntitlement` + `presentation/middleware/featureGate.ts` `requireFeature`/`tenantHasFeature`): **superadmin bypass** (DB-flag, cached via `resolveIsSuperadmin`), tenant `premiumOverride`, then plan grant — so platform operators never hit an upgrade wall. Standardized the miss payload on **402** naming `feature` + `requiredPlan`. Fixed the reported bug: `/api/personas/psychometric/score|import` are pure math shared by every user's **universal** personality test (/settings) — ungated; the Pro gate stays only where a profile is **attached** to an agent/persona.
-
-All three follow-ups **RESOLVED** this pass:
-
-- ✅ **Voice Cloning now a real `PlanLimits` feature.** Added `voiceCloning` boolean flag (FREE=false, PRO/TEAMS=true); `studioVoiceCloneRoutes` create routes through `requireFeature(c, 'voiceCloning')` — so superadmin AND `premiumOverride` both bypass. Deleted the now-dead `planLimitsGuard.checkProFeature`.
-- ✅ **`PsychometricEditor` fully localized + reads `requiredPlan`.** New `psychometricEditor` namespace across all 5 catalogs (real translations); the locked upsell interpolates the plan from the catalog's `requiredPlan`. `PsychometricCatalog` type carries `requiredPlan`.
-- ✅ **Gateway strict-model-pin now 402** (was 403) with `upgrade: true`, uniform with the portal standard; tests updated.
-
 ### 🧩 Agentic Workforce Kanban — spine shipped; follow-ups (2026-07-03) — open items (write-up in [DONE.md](./DONE.md))
 
 - **Custom lane keys don't render as distinct kanban columns** — the board columns are still driven by the hardcoded `frontend/src/lib/taskStatus.ts` `TASK_STATUSES`, not the board's swimlanes. A template that introduces a new lane key (beyond the 7 statuses) materialises the lane + its requirements (audit/gating use it) but the board UI shows no separate column for it. Unblocks: fully arbitrary custom kanbans. Fix = drive board columns from `swimlanes` (a board-render refactor).
