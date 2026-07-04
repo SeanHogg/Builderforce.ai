@@ -19,6 +19,10 @@ describe('planFeatures — requiredPlanForFeature is derived from PLAN_LIMITS', 
     expect(requiredPlanForFeature('seatCostControls')).toBe(TenantPlan.TEAMS);
   });
 
+  it('voice cloning is a paid feature unlocking at Pro', () => {
+    expect(requiredPlanForFeature('voiceCloning')).toBe(TenantPlan.PRO);
+  });
+
   it('every feature has a human label', () => {
     for (const f of ALL_FEATURES) {
       expect(PLAN_FEATURE_LABEL[f]).toBeTruthy();

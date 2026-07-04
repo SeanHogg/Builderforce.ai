@@ -5153,5 +5153,31 @@
     "priceLabel": "Price (USD)",
     "unpublish": "Unpublish",
     "publishToMarketplace": "Publish to marketplace"
+  },
+  "psychometricEditor": {
+    "loading": "Loading personality model…",
+    "lockedTitle": "Personality is a {plan} feature",
+    "lockedBody": "Give this agent a real psychological profile — HEXACO traits, decision style, moral foundations, conflict style and more — that changes how it reasons and executes, not just its tone. Upgrade to {plan} to unlock the personality editor.",
+    "heading": "Personality",
+    "traitsSet": "{count, plural, one {# trait set} other {# traits set}}",
+    "tabSliders": "Sliders",
+    "tabQuestionnaire": "Questionnaire",
+    "tabImport": "Import",
+    "noticeScored": "Scored — review and fine-tune the sliders.",
+    "noticeScoreFailed": "Scoring failed",
+    "noticeNoDimensions": "No recognised dimensions found in the imported data.",
+    "noticeImported": "{count, plural, one {Imported # dimension.} other {Imported # dimensions.}}",
+    "noticeParseError": "Could not parse the imported JSON.",
+    "enneagramLabel": "Enneagram core type",
+    "none": "None",
+    "mbtiLabel": "MBTI (optional)",
+    "mbtiPlaceholder": "e.g. INTJ",
+    "disagree": "Disagree",
+    "agree": "Agree",
+    "applyScores": "Apply scores",
+    "scoring": "Scoring…",
+    "importHelp": "Paste a JSON object mapping dimension ids to 0–100 scores (e.g. exported from the human this agent represents). Unknown dimensions are ignored.",
+    "importBtn": "Import",
+    "importing": "Importing…"
   }
 }

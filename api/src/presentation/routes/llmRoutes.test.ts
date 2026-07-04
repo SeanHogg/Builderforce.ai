@@ -388,7 +388,7 @@ describe('POST /v1/chat/completions strict-pin gate', () => {
     mocks.buildDatabase.mockReset();
   });
 
-  it('rejects free tenant without override with 403 strict_pin_not_allowed', async () => {
+  it('rejects free tenant without override with 402 strict_pin_not_allowed', async () => {
     mocks.hashSecret.mockResolvedValue('hash_of_bfk_test');
     const db = mockDb({
       keyRow:    { id: 'kid', tenantId: 1, revokedAt: null, allowedOrigins: null },
@@ -399,7 +399,7 @@ describe('POST /v1/chat/completions strict-pin gate', () => {
     const app = buildApp();
     const res = await app.request(strictPinRequest(), {}, baseEnv as Record<string, unknown>, fakeExecutionCtx);
 
-    expect(res.status).toBe(403);
+    expect(res.status).toBe(402);
     const body = await res.json() as { code?: string };
     expect(body.code).toBe('strict_pin_not_allowed');
   });
@@ -417,10 +417,10 @@ describe('POST /v1/chat/completions strict-pin gate', () => {
     const app = buildApp();
     const res = await app.request(strictPinRequest(), {}, baseEnv as Record<string, unknown>, fakeExecutionCtx);
 
-    // We don't reach 403 strict_pin_not_allowed; the request progresses past
+    // We don't reach 402 strict_pin_not_allowed; the request progresses past
     // the gate to the vendor-key check, which returns 503 (no OPENROUTER_API_KEY
     // in baseEnv). Proves the gate did not fire.
-    expect(res.status).not.toBe(403);
+    expect(res.status).not.toBe(402);
     expect(res.status).toBe(503);
   });
 
@@ -436,7 +436,7 @@ describe('POST /v1/chat/completions strict-pin gate', () => {
     const app = buildApp();
     const res = await app.request(strictPinRequest(), {}, baseEnv as Record<string, unknown>, fakeExecutionCtx);
 
-    expect(res.status).not.toBe(403);
+    expect(res.status).not.toBe(402);
     expect(res.status).toBe(503); // missing OPENROUTER_API_KEY_PRO
   });
 
@@ -461,7 +461,7 @@ describe('POST /v1/chat/completions strict-pin gate', () => {
     const app = buildApp();
     const res = await app.request(req, {}, baseEnv as Record<string, unknown>, fakeExecutionCtx);
 
-    expect(res.status).toBe(403);
+    expect(res.status).toBe(402);
     const body = await res.json() as { code?: string };
     expect(body.code).toBe('strict_pin_not_allowed');
   });
@@ -485,7 +485,7 @@ describe('POST /v1/chat/completions strict-pin gate', () => {
     const app = buildApp();
     const res = await app.request(req, {}, baseEnv as Record<string, unknown>, fakeExecutionCtx);
 
-    expect(res.status).toBe(403);
+    expect(res.status).toBe(402);
     const body = await res.json() as { code?: string };
     expect(body.code).toBe('strict_pin_not_allowed');
   });

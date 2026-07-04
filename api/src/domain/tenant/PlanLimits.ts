@@ -76,6 +76,12 @@ export interface PlanLimits {
   teamApprovalInbox: boolean;
   /** Whether per-seat cost controls are available */
   seatCostControls: boolean;
+  /**
+   * Whether voice cloning (enrol a cloned voice + synthesize with it) is available.
+   * Any paid plan. Gated at the create/enrol path in studioVoiceCloneRoutes via the
+   * shared feature gate.
+   */
+  voiceCloning: boolean;
 }
 
 export const PLAN_LIMITS: Record<TenantPlan, PlanLimits> = {
@@ -97,6 +103,7 @@ export const PLAN_LIMITS: Record<TenantPlan, PlanLimits> = {
     psychometricPersona: false,
     teamApprovalInbox: false,
     seatCostControls: false,
+    voiceCloning: false,
   },
   [TenantPlan.PRO]: {
     maxAgentHosts: 3,
@@ -116,6 +123,7 @@ export const PLAN_LIMITS: Record<TenantPlan, PlanLimits> = {
     psychometricPersona: true,
     teamApprovalInbox: false,
     seatCostControls: false,
+    voiceCloning: true,
   },
   [TenantPlan.TEAMS]: {
     maxAgentHosts: -1,
@@ -135,6 +143,7 @@ export const PLAN_LIMITS: Record<TenantPlan, PlanLimits> = {
     psychometricPersona: true,
     teamApprovalInbox: true,
     seatCostControls: true,
+    voiceCloning: true,
   },
 };
 

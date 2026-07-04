@@ -5153,5 +5153,31 @@
     "priceLabel": "Prix (USD)",
     "unpublish": "Dépublier",
     "publishToMarketplace": "Publier sur la place de marché"
+  },
+  "psychometricEditor": {
+    "loading": "Chargement du modèle de personnalité…",
+    "lockedTitle": "La personnalité est une fonctionnalité {plan}",
+    "lockedBody": "Donnez à cet agent un véritable profil psychologique — traits HEXACO, style de décision, fondements moraux, style de gestion des conflits, etc. — qui change sa façon de raisonner et d'agir, pas seulement son ton. Passez à {plan} pour débloquer l'éditeur de personnalité.",
+    "heading": "Personnalité",
+    "traitsSet": "{count, plural, one {# trait défini} other {# traits définis}}",
+    "tabSliders": "Curseurs",
+    "tabQuestionnaire": "Questionnaire",
+    "tabImport": "Importer",
+    "noticeScored": "Évalué — vérifiez et ajustez les curseurs.",
+    "noticeScoreFailed": "Échec de l'évaluation",
+    "noticeNoDimensions": "Aucune dimension reconnue trouvée dans les données importées.",
+    "noticeImported": "{count, plural, one {# dimension importée.} other {# dimensions importées.}}",
+    "noticeParseError": "Impossible d'analyser le JSON importé.",
+    "enneagramLabel": "Type principal de l'ennéagramme",
+    "none": "Aucun",
+    "mbtiLabel": "MBTI (facultatif)",
+    "mbtiPlaceholder": "p. ex. INTJ",
+    "disagree": "Pas d'accord",
+    "agree": "D'accord",
+    "applyScores": "Appliquer les scores",
+    "scoring": "Évaluation…",
+    "importHelp": "Collez un objet JSON associant des identifiants de dimension à des scores de 0 à 100 (p. ex. exporté depuis l'humain que cet agent représente). Les dimensions inconnues sont ignorées.",
+    "importBtn": "Importer",
+    "importing": "Importation…"
   }
 }

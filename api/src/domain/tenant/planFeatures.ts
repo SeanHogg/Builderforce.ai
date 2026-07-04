@@ -38,6 +38,7 @@ export const PLAN_FEATURE_LABEL: Record<PlanFeature, string> = {
   psychometricPersona: 'psychometric personas',
   teamApprovalInbox: 'the team approval inbox',
   seatCostControls: 'per-seat cost controls',
+  voiceCloning: 'voice cloning',
 };
 
 /** Plans in ascending order of entitlement. */

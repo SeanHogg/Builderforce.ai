@@ -14,6 +14,7 @@
  * persona modal never needs to know the plan).
  */
 import { useCallback, useMemo, useState } from 'react';
+import { useTranslations } from 'next-intl';
 import { Select } from '@/components/Select';
 import { psychometric as psychometricApi } from '@/lib/builderforceApi';
 import { usePsychometricCatalog } from '@/lib/usePsychometricCatalog';
@@ -24,6 +25,9 @@ import {
 } from '@/lib/psychometric';
 
 type Tab = 'sliders' | 'questionnaire' | 'import';
+
+/** Plan slug → display name (brand proper nouns; not translated). */
+const PLAN_LABEL: Record<string, string> = { free: 'Free', pro: 'Pro', teams: 'Teams' };
 
 interface Props {
   value?: PsychometricProfile;
@@ -37,9 +41,11 @@ interface Props {
 }
 
 export default function PsychometricEditor({ value, onChange, forceUnlocked = false }: Props) {
+  const t = useTranslations('psychometricEditor');
   // Shared, session-cached catalog (fetched once across the editor + summary).
   const { catalog, loading, error } = usePsychometricCatalog();
   const entitled = forceUnlocked || (catalog?.entitled ?? false);
+  const planLabel = PLAN_LABEL[catalog?.requiredPlan ?? 'pro'] ?? PLAN_LABEL.pro;
   const frameworks = catalog?.frameworks ?? [];
   const questions = catalog?.questions ?? [];
   const enneagram = catalog?.enneagram ?? [];
@@ -81,9 +87,9 @@ export default function PsychometricEditor({ value, onChange, forceUnlocked = fa
       setVector(next);
       emit({ vector: next, source: 'questionnaire' });
       setTab('sliders');
-      setNotice('Scored — review and fine-tune the sliders.');
+      setNotice(t('noticeScored'));
     } catch (e) {
-      setNotice(e instanceof Error ? e.message : 'Scoring failed');
+      setNotice(e instanceof Error ? e.message : t('noticeScoreFailed'));
     } finally {
       setBusy(false);
     }
@@ -96,16 +102,16 @@ export default function PsychometricEditor({ value, onChange, forceUnlocked = fa
       const parsed = JSON.parse(importText) as Record<string, number>;
       const { vector: imported } = await psychometricApi.import(parsed);
       if (Object.keys(imported).length === 0) {
-        setNotice('No recognised dimensions found in the imported data.');
+        setNotice(t('noticeNoDimensions'));
       } else {
         const next = { ...vector, ...imported };
         setVector(next);
         emit({ vector: next, source: 'imported' });
         setTab('sliders');
-        setNotice(`Imported ${Object.keys(imported).length} dimension(s).`);
+        setNotice(t('noticeImported', { count: Object.keys(imported).length }));
       }
     } catch {
-      setNotice('Could not parse the imported JSON.');
+      setNotice(t('noticeParseError'));
     } finally {
       setBusy(false);
     }
@@ -116,16 +122,15 @@ export default function PsychometricEditor({ value, onChange, forceUnlocked = fa
     [vector, enneagramType, mbti],
   );
 
-  if (loading) return <div style={{ color: 'var(--muted)', fontSize: 13 }}>Loading personality model…</div>;
+  if (loading) return <div style={{ color: 'var(--muted)', fontSize: 13 }}>{t('loading')}</div>;
   if (error) return <div style={{ color: 'var(--error-text)', fontSize: 13 }}>{error}</div>;
 
   if (!entitled) {
     return (
       <div style={{ border: '1px dashed var(--border)', borderRadius: 10, padding: 16, background: 'var(--surface-2)' }}>
-        <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 6 }}>🔒 Personality is a Pro feature</div>
+        <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 6 }}>🔒 {t('lockedTitle', { plan: planLabel })}</div>
         <div style={{ fontSize: 12, color: 'var(--muted)', lineHeight: 1.6 }}>
-          Give this agent a real psychological profile — HEXACO traits, decision style, moral foundations, conflict style and
-          more — that changes how it reasons and executes, not just its tone. Upgrade to Pro to unlock the personality editor.
+          {t('lockedBody', { plan: planLabel })}
         </div>
       </div>
     );
@@ -134,17 +139,17 @@ export default function PsychometricEditor({ value, onChange, forceUnlocked = fa
   return (
     <div style={{ border: '1px solid var(--border)', borderRadius: 10, padding: 14 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
-        <div style={{ fontWeight: 700, fontSize: 13 }}>Personality</div>
-        <span className="badge badge-gray">{signalCount} trait{signalCount === 1 ? '' : 's'} set</span>
+        <div style={{ fontWeight: 700, fontSize: 13 }}>{t('heading')}</div>
+        <span className="badge badge-gray">{t('traitsSet', { count: signalCount })}</span>
         <div style={{ marginLeft: 'auto', display: 'flex', gap: 4 }}>
-          {(['sliders', 'questionnaire', 'import'] as Tab[]).map((t) => (
+          {(['sliders', 'questionnaire', 'import'] as Tab[]).map((tabKey) => (
             <button
-              key={t}
+              key={tabKey}
               type="button"
-              className={`btn btn-sm ${tab === t ? 'btn-primary' : 'btn-secondary'}`}
-              onClick={() => setTab(t)}
+              className={`btn btn-sm ${tab === tabKey ? 'btn-primary' : 'btn-secondary'}`}
+              onClick={() => setTab(tabKey)}
             >
-              {t === 'sliders' ? 'Sliders' : t === 'questionnaire' ? 'Questionnaire' : 'Import'}
+              {tabKey === 'sliders' ? t('tabSliders') : tabKey === 'questionnaire' ? t('tabQuestionnaire') : t('tabImport')}
             </button>
           ))}
         </div>
@@ -191,17 +196,17 @@ export default function PsychometricEditor({ value, onChange, forceUnlocked = fa
 
           <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
             <div style={{ flex: 1, minWidth: 160 }}>
-              <label className="label">Enneagram core type</label>
+              <label className="label">{t('enneagramLabel')}</label>
               <Select
                 className="input"
                 value={enneagramType ?? ''}
                 onChange={(e) => {
-                  const t = e.target.value ? Number(e.target.value) : undefined;
-                  setEnneagramType(t);
-                  emit({ enneagramType: t });
+                  const val = e.target.value ? Number(e.target.value) : undefined;
+                  setEnneagramType(val);
+                  emit({ enneagramType: val });
                 }}
               >
-                <option value="">None</option>
+                <option value="">{t('none')}</option>
                 {enneagram.map((en) => (
                   <option key={en.type} value={en.type}>
                     {en.type} · {en.name} — {en.motivation}
@@ -210,11 +215,11 @@ export default function PsychometricEditor({ value, onChange, forceUnlocked = fa
               </Select>
             </div>
             <div style={{ flex: 1, minWidth: 120 }}>
-              <label className="label">MBTI (optional)</label>
+              <label className="label">{t('mbtiLabel')}</label>
               <input
                 className="input"
                 maxLength={4}
-                placeholder="e.g. INTJ"
+                placeholder={t('mbtiPlaceholder')}
                 value={mbti}
                 onChange={(e) => {
                   const v = e.target.value.toUpperCase();
@@ -234,7 +239,7 @@ export default function PsychometricEditor({ value, onChange, forceUnlocked = fa
               <div key={qn.id}>
                 <div style={{ fontSize: 12, marginBottom: 4 }}>{qn.text}</div>
                 <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-                  <span style={{ fontSize: 10, color: 'var(--muted)' }}>Disagree</span>
+                  <span style={{ fontSize: 10, color: 'var(--muted)' }}>{t('disagree')}</span>
                   {[1, 2, 3, 4, 5].map((n) => (
                     <label key={n} style={{ display: 'flex', alignItems: 'center', gap: 2, fontSize: 12 }}>
                       <input
@@ -246,7 +251,7 @@ export default function PsychometricEditor({ value, onChange, forceUnlocked = fa
                       {n}
                     </label>
                   ))}
-                  <span style={{ fontSize: 10, color: 'var(--muted)' }}>Agree</span>
+                  <span style={{ fontSize: 10, color: 'var(--muted)' }}>{t('agree')}</span>
                 </div>
               </div>
             ))}
@@ -258,7 +263,7 @@ export default function PsychometricEditor({ value, onChange, forceUnlocked = fa
             disabled={busy || Object.keys(answers).length === 0}
             onClick={applyQuestionnaire}
           >
-            {busy ? 'Scoring…' : 'Apply scores'}
+            {busy ? t('scoring') : t('applyScores')}
           </button>
         </div>
       )}
@@ -266,8 +271,7 @@ export default function PsychometricEditor({ value, onChange, forceUnlocked = fa
       {tab === 'import' && (
         <div>
           <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 8 }}>
-            Paste a JSON object mapping dimension ids to 0–100 scores (e.g. exported from the human this agent represents).
-            Unknown dimensions are ignored.
+            {t('importHelp')}
           </div>
           <textarea
             className="input"
@@ -284,7 +288,7 @@ export default function PsychometricEditor({ value, onChange, forceUnlocked = fa
             disabled={busy || !importText.trim()}
             onClick={applyImport}
           >
-            {busy ? 'Importing…' : 'Import'}
+            {busy ? t('importing') : t('importBtn')}
           </button>
         </div>
       )}

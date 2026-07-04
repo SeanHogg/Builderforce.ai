@@ -37,6 +37,8 @@ export interface EnneagramType {
 
 export interface PsychometricCatalog {
   entitled: boolean;
+  /** The lowest plan that unlocks the feature — advertised in the locked upsell. */
+  requiredPlan?: 'free' | 'pro' | 'teams';
   frameworks: CatalogFramework[];
   questions: CatalogQuestion[];
   enneagram: EnneagramType[];

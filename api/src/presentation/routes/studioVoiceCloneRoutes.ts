@@ -14,8 +14,7 @@ import { and, desc, eq, inArray } from 'drizzle-orm';
 import type { HonoEnv, Env } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 import { authMiddleware } from '../middleware/authMiddleware';
-import { buildPlanLimitsGuard } from '../middleware/planLimitsGuard';
-import { resolveIsSuperadmin } from '../../infrastructure/auth/superadminFlag';
+import { requireFeature } from '../middleware/featureGate';
 import {
   ideProjects,
   studioVoiceCloneLicenses,
@@ -74,13 +73,10 @@ export function createStudioVoiceCloneRoutes(db: Db): Hono<HonoEnv> {
     const userId = c.get('userId');
     const env = c.env as Env;
 
-    // Superadmins never hit a plan wall (shared source of truth with the feature
-    // gate); otherwise a non-paid plan gets the standard 402 upgrade payload.
-    const guard = buildPlanLimitsGuard(db);
-    const proCheck = (await resolveIsSuperadmin(env, userId))
-      ? null
-      : await guard.checkProFeature(tenantId, 'Voice Cloning');
-    if (proCheck) return c.json(proCheck, 402);
+    // One shared gate: superadmin → premiumOverride → plan grant, else a 402 upgrade
+    // payload naming the feature + required plan. Voice cloning is a paid feature.
+    const gate = await requireFeature(c, 'voiceCloning');
+    if (gate) return gate;
 
     const form = await c.req.formData();
     const name = String(form.get('name') ?? '').trim();

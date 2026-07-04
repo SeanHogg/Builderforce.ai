@@ -5153,5 +5153,31 @@
     "priceLabel": "价格（美元）",
     "unpublish": "取消发布",
     "publishToMarketplace": "发布到市场"
+  },
+  "psychometricEditor": {
+    "loading": "正在加载性格模型…",
+    "lockedTitle": "性格是 {plan} 版功能",
+    "lockedBody": "为该智能体赋予真实的心理画像——HEXACO 特质、决策风格、道德基础、冲突风格等——它们会改变智能体的推理与执行方式，而不仅仅是语气。升级到 {plan} 版即可解锁性格编辑器。",
+    "heading": "性格",
+    "traitsSet": "{count, plural, other {已设置 # 项特质}}",
+    "tabSliders": "滑块",
+    "tabQuestionnaire": "问卷",
+    "tabImport": "导入",
+    "noticeScored": "已评分——请查看并微调滑块。",
+    "noticeScoreFailed": "评分失败",
+    "noticeNoDimensions": "在导入的数据中未找到可识别的维度。",
+    "noticeImported": "{count, plural, other {已导入 # 个维度。}}",
+    "noticeParseError": "无法解析导入的 JSON。",
+    "enneagramLabel": "九型人格核心类型",
+    "none": "无",
+    "mbtiLabel": "MBTI（可选）",
+    "mbtiPlaceholder": "例如 INTJ",
+    "disagree": "不同意",
+    "agree": "同意",
+    "applyScores": "应用评分",
+    "scoring": "评分中…",
+    "importHelp": "粘贴一个将维度 id 映射到 0–100 分数的 JSON 对象（例如从该智能体所代表的真人导出）。未知维度将被忽略。",
+    "importBtn": "导入",
+    "importing": "导入中…"
   }
 }
