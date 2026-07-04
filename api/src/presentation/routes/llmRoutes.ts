@@ -1176,10 +1176,13 @@ export function createLlmRoutes(): Hono<HonoEnv> {
                          || access.effectivePlan !== 'free'
                          || access.tokenDailyLimitOverride !== null;
       if (!strictAllowed) {
+        // 402 Payment Required — uniform with the portal feature-gate standard
+        // (the caller is authenticated + authorized; they just need a higher plan).
         return c.json({
           error: 'Strict model pinning requires a paid plan (Pro/Teams) or a superadmin-issued daily-limit override.',
           code: 'strict_pin_not_allowed',
-        }, 403);
+          upgrade: true,
+        }, 402);
       }
       // Canonicalize: downstream (LlmProxyService.complete dispatch branch,
       // traceLogger) keys off `modelStrict`, so set it once here.
