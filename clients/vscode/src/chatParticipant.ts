@@ -3,6 +3,8 @@ import { runAgent } from "./agent";
 import { ChatMessage, SECRET_KEY, fetchLimbicBlock } from "./gateway";
 import { contributeProjectEvermind } from "./evermindLearn";
 import { getGroundingSummary } from "./grounding";
+import { getEditorContext } from "./editorContext";
+import { editorContextDirective } from "./idePersona";
 import { resolveEffectiveModel } from "./modelState";
 import { getSelectedProject } from "./projectState";
 import { buildSystemMessages } from "./prompt";
@@ -33,7 +35,10 @@ export function createBuilderForceHandler(ctx: vscode.ExtensionContext): vscode.
     // Limbic affective layer (gateway-injected) — parity with the webview chat
     // and the cloud (V3) / on-prem agents. Best-effort; '' at rest or offline.
     const limbicBlock = await fetchLimbicBlock(ctx.secrets, request.prompt);
-    const messages: ChatMessage[] = [...buildSystemMessages(root, getGroundingSummary(), undefined, limbicBlock)];
+    // Live editor context (active file / selection / open tabs) so the agent resolves
+    // "this file" / "the selection" to what's actually open — read fresh each turn.
+    const editorCtx = editorContextDirective(getEditorContext());
+    const messages: ChatMessage[] = [...buildSystemMessages(root, getGroundingSummary(), editorCtx, limbicBlock)];
     // Reconstruct prior turns from the native chat history.
     for (const turn of context.history) {
       if (turn instanceof vscode.ChatRequestTurn) {

@@ -9,8 +9,11 @@
  *
  *   webview → host : 'ready', 'tool.call'{id,name,args}, 'token.refresh'{id}, 'signin',
  *                    'chats.changed', 'platform.write'{name}
- *   host → webview : 'init'{…}, 'token'{token}, 'response'{id,ok,result|error}, 'intent'{intent}
+ *   host → webview : 'init'{…}, 'token'{token}, 'response'{id,ok,result|error}, 'intent'{intent},
+ *                    'editorContext'{editorContext}
  */
+
+import type { EditorContext } from '../../src/idePersona';
 
 export interface ToolSpecMsg {
   name: string;
@@ -51,6 +54,9 @@ export interface InitData {
   grounding?: string;
   signedIn: boolean;
   hasWorkspace: boolean;
+  /** The live editor context (active file / selection / open tabs) at init time.
+   *  Kept fresh afterwards via `editorContext` messages (see {@link onEditorContext}). */
+  editorContext?: EditorContext;
   /** Which screen this webview should render. The bundled React app is multi-screen:
    *  the host decides via `init` which surface this panel is — the Brain chat (default),
    *  Project 360, or a list-shaped project page (Backlog / PRDs) — same bundle, same
@@ -82,6 +88,22 @@ let initData: InitData | null = null;
 const initWaiters: Array<(d: InitData) => void> = [];
 const tokenWaiters: Array<() => void> = [];
 const intentWaiters: Array<(i: BrainIntent) => void> = [];
+
+// The latest editor context (active file / selection / open tabs), pushed live by the
+// host so the ambient system channel always reflects what the user is looking at.
+let editorContext: EditorContext | undefined;
+const editorContextWaiters: Array<(c: EditorContext | undefined) => void> = [];
+export type { EditorContext };
+export const getEditorContext = (): EditorContext | undefined => editorContext;
+
+/** Subscribe to live editor-context updates (active file / selection / open tabs). */
+export function onEditorContext(cb: (c: EditorContext | undefined) => void): () => void {
+  editorContextWaiters.push(cb);
+  return () => {
+    const i = editorContextWaiters.indexOf(cb);
+    if (i >= 0) editorContextWaiters.splice(i, 1);
+  };
+}
 // Buffer intents that arrive before a subscriber mounts (the host posts `intent`
 // right after `init`, but React's onIntent effect registers a tick later). Drained
 // on first subscribe so a first-open focus/task intent is never lost.
@@ -145,13 +167,19 @@ export async function refreshToken(): Promise<void> {
 }
 
 window.addEventListener('message', (e: MessageEvent) => {
-  const m = e.data as { type?: string; id?: string; ok?: boolean; result?: unknown; error?: string; token?: string | null; intent?: BrainIntent } & Partial<InitData>;
+  const m = e.data as { type?: string; id?: string; ok?: boolean; result?: unknown; error?: string; token?: string | null; intent?: BrainIntent; editorContext?: EditorContext } & Partial<InitData>;
   if (!m || typeof m !== 'object') return;
   if (m.type === 'init') {
     token = m.token ?? null;
     initData = m as InitData;
+    editorContext = initData.editorContext;
     for (const w of initWaiters.splice(0)) w(initData);
     for (const w of tokenWaiters) w();
+    return;
+  }
+  if (m.type === 'editorContext') {
+    editorContext = m.editorContext;
+    for (const w of editorContextWaiters) w(editorContext);
     return;
   }
   if (m.type === 'token') {

@@ -4,6 +4,7 @@ import { TOOL_DEFS } from "./fileTools";
 import { contributeProjectEvermind } from "./evermindLearn";
 import { getBaseUrl, SECRET_KEY } from "./gateway";
 import { getGroundingSummary } from "./grounding";
+import { getEditorContext, watchEditorContext } from "./editorContext";
 import { resolveEffectiveModel } from "./modelState";
 import { getSelectedProject } from "./projectState";
 
@@ -149,6 +150,10 @@ export class BrainWebview {
     this.panel.webview.html = this.html(this.panel.webview);
     this.panel.webview.onDidReceiveMessage((m) => void this.onMessage(m), undefined, this.disposables);
     this.panel.onDidDispose(() => this.dispose(), undefined, this.disposables);
+    // Keep the React app's editor context live: whenever the active file, selection,
+    // or open tabs change, push a fresh snapshot so the agent always knows what the
+    // user is looking at (the same context seeded in `init`).
+    this.disposables.push(watchEditorContext(() => this.pushEditorContext()));
   }
 
   private async onMessage(msg: {
@@ -279,6 +284,12 @@ export class BrainWebview {
     void this.panel.webview.postMessage({ type: "intent", intent });
   }
 
+  /** Push the current editor context (active file / selection / open tabs) to the
+   *  React app so its ambient system channel stays in sync as the user navigates. */
+  private pushEditorContext(): void {
+    void this.panel.webview.postMessage({ type: "editorContext", editorContext: getEditorContext() });
+  }
+
   /** Hand the React app its config: gateway URL, tenant token, model, grounding, tools, labels. */
   private async sendInit(): Promise<void> {
     const signedIn = !!(await this.ctx.secrets.get(SECRET_KEY));
@@ -293,6 +304,9 @@ export class BrainWebview {
       // model on every completion (auto-following learning bumps mid-session).
       model: await resolveEffectiveModel(this.ctx.secrets),
       grounding: root ? getGroundingSummary() : undefined,
+      // Live editor context (active file / selection / open tabs). Seeds the React
+      // app's ambient system channel; refreshed via `editorContext` messages below.
+      editorContext: getEditorContext(),
       signedIn,
       hasWorkspace: !!root,
       // The sidebar's active project — injected into the system prompt (so the
