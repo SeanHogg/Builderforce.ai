@@ -5536,6 +5536,8 @@ export const freelancerProfiles = pgTable('freelancer_profiles', {
   userId:                 varchar('user_id', { length: 36 }).primaryKey().references(() => users.id, { onDelete: 'cascade' }),
   headline:               varchar('headline', { length: 200 }),
   bio:                    text('bio'),
+  slug:                   varchar('slug', { length: 60 }),         // vanity alias for the public URL (/talent/:slug); unique, case-insensitive (0280)
+  avatarKey:              varchar('avatar_key', { length: 300 }),  // R2 key for uploaded profile picture; served at GET /:id/avatar (0280)
   discipline:             varchar('discipline', { length: 60 }),  // developer|dba|designer|... (card role)
   skills:                 text('skills'),                          // JSON string[]
   hourlyRateCents:        integer('hourly_rate_cents'),

@@ -55,6 +55,8 @@ function buildLabels(): Record<string, string> {
     "app.beta": t("beta"),
     "app.newChat": t("New chat"),
     "app.conversation": t("Conversation"),
+    "app.rename": t("Rename chat"),
+    "app.renamePlaceholder": t("Chat name"),
     "app.noProject": t("No project"),
     "app.copyChat": t("Copy chat transcript (for triage)"),
     // Consolidate + Fork composer actions

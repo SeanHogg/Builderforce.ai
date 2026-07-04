@@ -42,6 +42,15 @@ const RESUME_MIME = new Set([
 ]);
 const RESUME_MAX_BYTES = 10 * 1024 * 1024;
 
+const AVATAR_MIME = new Set(['image/png', 'image/jpeg', 'image/webp', 'image/gif']);
+const AVATAR_MAX_BYTES = 5 * 1024 * 1024;
+
+// Slugs a freelancer may NOT claim (collide with routes / reserved words).
+const RESERVED_SLUGS = new Set([
+  'me', 'admin', 'api', 'talent', 'freelancer', 'freelancers', 'new', 'edit',
+  'settings', 'login', 'register', 'about', 'help', 'support', 'search', 'null', 'undefined',
+]);
+
 /** Parse the stored skills JSON column into a string[]. */
 function parseSkills(raw: unknown): string[] {
   if (Array.isArray(raw)) return raw as string[];
@@ -51,10 +60,87 @@ function parseSkills(raw: unknown): string[] {
   return [];
 }
 
+/** Normalize a candidate slug to the canonical form (lowercase, hyphen-joined). */
+function normalizeSlug(raw: string): string {
+  return raw.toLowerCase().trim()
+    .replace(/[^a-z0-9]+/g, '-')   // non-alnum runs → single hyphen
+    .replace(/^-+|-+$/g, '')       // trim leading/trailing hyphens
+    .slice(0, 40);
+}
+
+/** A slug is valid when it's 3–40 chars, lowercase alnum + interior hyphens, not reserved. */
+function isValidSlug(slug: string): boolean {
+  return /^[a-z0-9](?:[a-z0-9-]{1,38}[a-z0-9])$/.test(slug) && !RESERVED_SLUGS.has(slug);
+}
+
+/** Map skills/headline keywords → a discipline for résumé auto-fill. First hit wins. */
+function inferDiscipline(text: string): string | null {
+  const t = text.toLowerCase();
+  const rules: [string, RegExp][] = [
+    ['security', /\b(security|infosec|penetration|appsec|ciso|vulnerab)/],
+    ['devops', /\b(devops|kubernetes|terraform|ci\/cd|sre|platform engineer)/],
+    ['dba', /\b(dba|database administrat|postgres admin|oracle dba|sql server admin)/],
+    ['data', /\b(data (engineer|scientist|analyst)|machine learning|\bml\b|analytics|etl)/],
+    ['designer', /\b(designer|ux|ui\/ux|figma|product design|graphic)/],
+    ['qa', /\b(qa|quality assurance|test engineer|sdet|automation test)/],
+    ['pm', /\b(product manager|project manager|scrum master|program manager)/],
+    ['developer', /\b(developer|engineer|full[- ]?stack|frontend|backend|software)/],
+  ];
+  for (const [discipline, re] of rules) if (re.test(t)) return discipline;
+  return null;
+}
+
+/** Best-effort heuristic extraction of {headline, summary, skills} from résumé TEXT.
+ *  The native fallback when hired.video isn't linked. Binary résumés (PDF/DOCX) have
+ *  no local text and yield nothing — those rely on hired.video parsing instead. */
+function parseResumeText(text: string): { headline: string | null; summary: string | null; skills: string[] } {
+  const lines = text.split(/\r?\n/).map((l) => l.trim());
+  const nonEmpty = lines.filter(Boolean);
+
+  // Headline: first line that looks like a role (has a role keyword), else the 2nd
+  // line (the 1st is usually the person's name).
+  const roleRe = /(engineer|developer|designer|manager|architect|analyst|consultant|specialist|administrator|scientist|lead|director)/i;
+  const headline = nonEmpty.find((l) => l.length <= 90 && roleRe.test(l)) ?? nonEmpty[1] ?? null;
+
+  // Section scan: collect lines under a Skills / Summary heading.
+  let section: 'skills' | 'summary' | null = null;
+  const skillLines: string[] = [];
+  const summaryLines: string[] = [];
+  for (const raw of lines) {
+    const l = raw.toLowerCase();
+    if (/^(technical )?skills?\s*:?$/.test(l) || /^(core )?competenc/.test(l) || /^technolog/.test(l)) { section = 'skills'; continue; }
+    if (/^(professional )?summary\s*:?$/.test(l) || /^(about|profile|objective)\s*:?$/.test(l)) { section = 'summary'; continue; }
+    if (/^(experience|education|employment|projects|work history|certifications)\b/.test(l)) { section = null; continue; }
+    if (!raw) { if (section === 'summary' && summaryLines.length) section = null; continue; }
+    if (section === 'skills') skillLines.push(raw);
+    else if (section === 'summary') summaryLines.push(raw);
+  }
+
+  // Split skill lines on common separators; also pick an inline "Skills: a, b, c".
+  const inline = nonEmpty.find((l) => /^(technical )?skills?\s*:/i.test(l));
+  const rawSkills = [...(inline ? [inline.replace(/^[^:]*:/, '')] : []), ...skillLines].join(',');
+  const skills = Array.from(new Set(
+    rawSkills.split(/[,•|/•\n]+/).map((s) => s.trim()).filter((s) => s.length >= 2 && s.length <= 40),
+  )).slice(0, 30);
+
+  const summary = summaryLines.join(' ').slice(0, 1200) || null;
+  return { headline: headline ? headline.slice(0, 200) : null, summary, skills };
+}
+
+/** Shape of a suggestion set the profile editor uses to prefill fields. */
+interface ResumeSuggestions {
+  available: boolean;
+  headline: string | null;
+  summary: string | null;
+  skills: string[];
+  discipline: string | null;
+}
+
 /** The PUBLIC projection — never leaks the R2 key or hired.video ids. */
 function mapPublicProfile(row: Record<string, unknown>): Record<string, unknown> {
   return {
     userId: row.user_id,
+    slug: row.slug ?? null,
     displayName: row.display_name ?? null,
     avatarUrl: row.avatar_url ?? null,
     headline: row.headline ?? null,
@@ -164,11 +250,15 @@ export function createFreelancerRoutes(): Hono<HonoEnv> {
       hiredVideoConnected: Boolean(row.hired_video_user_id),
       hiredVideoClaimUrl: row.hired_video_claim_url ?? null,
       resumeFilename: row.resume_filename ?? null,
+      // The résumé auto-fill button lights up when we have something to extract from:
+      // a linked hired.video account or a cached native/hired extract.
+      canAutofill: Boolean(row.hired_video_user_id) || Boolean(row.resume_extract),
       email: row.email,
     });
   });
 
-  // PATCH /me — update editable fields.
+  // PATCH /me — update editable fields. Also owns the freelancer's display name
+  // (users.display_name, since a freelancer is a global account) and vanity slug.
   router.patch('/me', webAuthMiddleware, async (c) => {
     const userId = c.get('userId') as string;
     const b = await c.req.json<Record<string, unknown>>();
@@ -184,6 +274,26 @@ export function createFreelancerRoutes(): Hono<HonoEnv> {
     const location = typeof b.location === 'string' ? b.location.slice(0, 120) : null;
     const timezone = typeof b.timezone === 'string' ? b.timezone.slice(0, 60) : null;
 
+    // Slug: validate + enforce case-insensitive uniqueness. Empty string clears it.
+    let slug: string | null | undefined;
+    if (typeof b.slug === 'string') {
+      const trimmed = b.slug.trim();
+      if (trimmed === '') { slug = null; }
+      else {
+        const norm = normalizeSlug(trimmed);
+        if (!isValidSlug(norm)) return c.json({ error: 'Invalid slug. Use 3–40 lowercase letters, numbers, or hyphens.', code: 'SLUG_INVALID' }, 400);
+        const [taken] = await sql(c.env)`SELECT user_id FROM freelancer_profiles WHERE lower(slug) = ${norm} AND user_id <> ${userId}`;
+        if (taken) return c.json({ error: 'That alias is already taken.', code: 'SLUG_TAKEN' }, 409);
+        slug = norm;
+      }
+    }
+
+    // Display name lives on the global users row (shown on the talent card).
+    if (typeof b.displayName === 'string') {
+      const name = b.displayName.trim().slice(0, 255) || null;
+      await sql(c.env)`UPDATE users SET display_name = ${name}, updated_at = NOW() WHERE id = ${userId}`;
+    }
+
     await sql(c.env)`
       INSERT INTO freelancer_profiles (user_id, headline, bio, discipline, skills, hourly_rate_cents, currency, visibility, availability, published, location, timezone, updated_at)
       VALUES (${userId}, ${headline}, ${bio}, ${discipline}, ${skills}, ${rate}, ${currency}, ${visibility}, ${availability}, ${published}, ${location}, ${timezone}, NOW())
@@ -193,8 +303,33 @@ export function createFreelancerRoutes(): Hono<HonoEnv> {
         visibility = EXCLUDED.visibility, availability = EXCLUDED.availability, published = EXCLUDED.published,
         location = EXCLUDED.location, timezone = EXCLUDED.timezone, updated_at = NOW()
     `;
+    // Slug is only touched when the caller sends the field (undefined = leave as-is).
+    if (slug !== undefined) {
+      await sql(c.env)`UPDATE freelancer_profiles SET slug = ${slug}, updated_at = NOW() WHERE user_id = ${userId}`;
+    }
     await invalidateCached(c.env as Env, FREELANCER_PUBLIC_LIST_CACHE_KEY);
-    return c.json({ ok: true });
+    return c.json({ ok: true, slug: slug === undefined ? undefined : slug });
+  });
+
+  // GET /me/slug-check?slug= — is this alias available? Returns validity + suggestions
+  // so the editor can guide the user to a free one before they save.
+  router.get('/me/slug-check', webAuthMiddleware, async (c) => {
+    const userId = c.get('userId') as string;
+    const raw = c.req.query('slug') ?? '';
+    const norm = normalizeSlug(raw);
+    if (!isValidSlug(norm)) {
+      return c.json({ slug: norm, valid: false, available: false, reason: 'invalid', suggestions: [] as string[] });
+    }
+    const [taken] = await sql(c.env)`SELECT user_id FROM freelancer_profiles WHERE lower(slug) = ${norm} AND user_id <> ${userId}`;
+    if (!taken) return c.json({ slug: norm, valid: true, available: true, suggestions: [] as string[] });
+    // Offer a few free variants.
+    const candidates = [`${norm}-1`, `${norm}-2`, `${norm}-dev`, `${norm}-io`, `${norm}-${userId.slice(0, 4)}`].filter(isValidSlug);
+    const rows = await sql(c.env)`
+      SELECT lower(slug) AS slug FROM freelancer_profiles WHERE lower(slug) = ANY(${candidates})
+    ` as unknown as Record<string, unknown>[];
+    const used = new Set(rows.map((r) => r.slug));
+    const suggestions = candidates.filter((s) => !used.has(s)).slice(0, 3);
+    return c.json({ slug: norm, valid: true, available: false, suggestions });
   });
 
   // POST /me/resume — upload a resume file. Stored in R2 (native fallback) AND,
@@ -241,12 +376,91 @@ export function createFreelancerRoutes(): Hono<HonoEnv> {
         if (prefill) await invalidateCached(c.env as Env, FREELANCER_PUBLIC_LIST_CACHE_KEY);
       }
     }
+    // Native fallback: when hired.video isn't linked but the résumé is text we can
+    // read, parse a local extract so the "Fill from résumé" button still works.
+    let nativeExtract: { native: true; headline: string | null; summary: string | null; skills: string[] } | null = null;
+    if (!hiredId && rawText) {
+      const parsed = parseResumeText(rawText);
+      nativeExtract = { native: true, ...parsed };
+    }
     await sql(c.env)`
       UPDATE freelancer_profiles
-      SET resume_key = ${key}, resume_filename = ${file.name}, hired_video_resume_id = COALESCE(${resumeId ?? null}, hired_video_resume_id), updated_at = NOW()
+      SET resume_key = ${key}, resume_filename = ${file.name},
+          hired_video_resume_id = COALESCE(${resumeId ?? null}, hired_video_resume_id),
+          resume_extract = COALESCE(${nativeExtract ? JSON.stringify(nativeExtract) : null}, resume_extract),
+          updated_at = NOW()
       WHERE user_id = ${userId}
     `;
-    return c.json({ ok: true, resumeFilename: file.name });
+    // Auto-fill is possible when we have a hired.video link OR any cached extract
+    // (this upload's native parse, a prior hired parse, …). Binary résumés without
+    // hired.video yield nothing locally — hired.video parses them on claim.
+    const canAutofill = Boolean(hiredId) || Boolean(nativeExtract) || Boolean(row?.resume_extract);
+    return c.json({ ok: true, resumeFilename: file.name, canAutofill });
+  });
+
+  // GET /me/resume/suggestions — extracted {headline, summary, skills, discipline}
+  // the editor uses to prefill fields (from hired.video when linked, else the cached
+  // native parse). Never writes — the user reviews + saves.
+  router.get('/me/resume/suggestions', webAuthMiddleware, async (c) => {
+    const userId = c.get('userId') as string;
+    const [row] = await sql(c.env)`SELECT hired_video_user_id, resume_extract FROM freelancer_profiles WHERE user_id = ${userId}`;
+    const empty: ResumeSuggestions = { available: false, headline: null, summary: null, skills: [], discipline: null };
+
+    const hiredId = await resolveHiredUserId(c.env, userId, row?.hired_video_user_id as string | undefined);
+    if (hiredId) {
+      const prof = await hiredGetProfile(c.env, hiredId);
+      if (prof.extract) {
+        const { headline, summary, skills } = prof.extract;
+        return c.json({
+          available: true, headline: headline ?? null, summary: summary ?? null, skills: skills ?? [],
+          discipline: inferDiscipline(`${headline ?? ''} ${(skills ?? []).join(' ')}`),
+        } satisfies ResumeSuggestions);
+      }
+    }
+    // Native cached extract (from a text résumé upload).
+    if (typeof row?.resume_extract === 'string') {
+      try {
+        const parsed = JSON.parse(row.resume_extract) as { native?: boolean; headline?: string | null; summary?: string | null; skills?: string[] };
+        if (parsed.native) {
+          const skills = Array.isArray(parsed.skills) ? parsed.skills : [];
+          return c.json({
+            available: true, headline: parsed.headline ?? null, summary: parsed.summary ?? null, skills,
+            discipline: inferDiscipline(`${parsed.headline ?? ''} ${skills.join(' ')}`),
+          } satisfies ResumeSuggestions);
+        }
+      } catch { /* not our native shape */ }
+    }
+    return c.json(empty);
+  });
+
+  // POST /me/avatar — upload a profile picture. Stored in R2; the public serve URL
+  // (GET /:id/avatar) is mirrored onto users.avatar_url so every talent surface that
+  // joins users renders it. Freelancer profiles are public, so the served object is too.
+  router.post('/me/avatar', webAuthMiddleware, async (c) => {
+    const userId = c.get('userId') as string;
+    const form = await c.req.formData();
+    const entry = form.get('file');
+    if (!entry || typeof entry === 'string') return c.json({ error: 'file is required' }, 400);
+    const file = entry as unknown as File;
+    if (file.size > AVATAR_MAX_BYTES) return c.json({ error: 'Image too large (max 5MB)' }, 413);
+    const type = file.type || 'application/octet-stream';
+    if (!AVATAR_MIME.has(type)) return c.json({ error: 'Unsupported image type (PNG, JPEG, WebP, or GIF)' }, 415);
+    if (!c.env.UPLOADS) return c.json({ error: 'Image storage not configured' }, 503);
+
+    const ext = type === 'image/png' ? 'png' : type === 'image/webp' ? 'webp' : type === 'image/gif' ? 'gif' : 'jpg';
+    const key = `avatars/${userId}/${crypto.randomUUID()}.${ext}`;
+    await c.env.UPLOADS.put(key, file.stream(), { httpMetadata: { contentType: type } });
+
+    // Absolute, cache-busted public URL → users.avatar_url (surfaced by the joins).
+    const origin = new URL(c.req.url).origin;
+    const avatarUrl = `${origin}/api/freelancers/${userId}/avatar?v=${Date.now()}`;
+    await sql(c.env)`
+      INSERT INTO freelancer_profiles (user_id, avatar_key, updated_at) VALUES (${userId}, ${key}, NOW())
+      ON CONFLICT (user_id) DO UPDATE SET avatar_key = ${key}, updated_at = NOW()
+    `;
+    await sql(c.env)`UPDATE users SET avatar_url = ${avatarUrl}, updated_at = NOW() WHERE id = ${userId}`;
+    await invalidateCached(c.env as Env, FREELANCER_PUBLIC_LIST_CACHE_KEY);
+    return c.json({ ok: true, avatarUrl });
   });
 
   // GET /me/embed-token — mint a short-lived hired.video embed URL for the
@@ -314,8 +528,25 @@ export function createFreelancerRoutes(): Hono<HonoEnv> {
     return c.json({ items: items.map(mapPublicProfile), total, page: filters.page, pageSize: filters.pageSize });
   });
 
-  // GET /:id — one freelancer's public detail (+ rating + recent reviews). Private
-  // profiles require auth.
+  // GET /:id/avatar — serve a freelancer's uploaded profile picture from R2. Public
+  // (profiles are public), so the talent card / detail / marketplace <img> all resolve
+  // without a token. Registered before /:id so it isn't swallowed by it.
+  router.get('/:id/avatar', async (c) => {
+    const id = c.req.param('id');
+    if (!c.env.UPLOADS) return c.json({ error: 'Not found' }, 404);
+    const [row] = await sql(c.env)`SELECT avatar_key FROM freelancer_profiles WHERE user_id = ${id} OR lower(slug) = ${id.toLowerCase()}`;
+    const key = row?.avatar_key as string | undefined;
+    if (!key) return c.json({ error: 'Not found' }, 404);
+    const obj = await c.env.UPLOADS.get(key);
+    if (!obj) return c.json({ error: 'Not found' }, 404);
+    const headers = new Headers();
+    headers.set('Content-Type', obj.httpMetadata?.contentType ?? 'image/jpeg');
+    headers.set('Cache-Control', 'public, max-age=86400');
+    return new Response(obj.body, { headers });
+  });
+
+  // GET /:id — one freelancer's public detail (+ rating + recent reviews). `:id` is
+  // EITHER the raw user guid OR the vanity slug. Private profiles require auth.
   router.get('/:id', async (c) => {
     const id = c.req.param('id');
     const viewer = await optionalUserId(c);
@@ -324,12 +555,13 @@ export function createFreelancerRoutes(): Hono<HonoEnv> {
         (SELECT ROUND(AVG(rating)::numeric, 2) FROM freelancer_reviews r WHERE r.freelancer_user_id = p.user_id) AS avg_rating,
         (SELECT COUNT(*) FROM freelancer_reviews r WHERE r.freelancer_user_id = p.user_id)::int AS rating_count
       FROM freelancer_profiles p JOIN users u ON u.id = p.user_id
-      WHERE p.user_id = ${id} AND p.published = true
+      WHERE (p.user_id = ${id} OR lower(p.slug) = ${id.toLowerCase()}) AND p.published = true
     `;
     if (!row) return c.json({ error: 'Not found' }, 404);
     if (row.visibility === 'private' && !viewer) {
       return c.json({ error: 'This profile is only visible to signed-in members', code: 'AUTH_REQUIRED' }, 401);
     }
+    const uid = row.user_id as string;
     // Give an authed viewer a hired.video embed URL for the in-page resume viewer.
     let embedUrl: string | null = null;
     if (viewer && row.hired_video_user_id) {
@@ -339,7 +571,7 @@ export function createFreelancerRoutes(): Hono<HonoEnv> {
     const reviews = await sql(c.env)`
       SELECT rv.rating, rv.comment, rv.created_at, ru.display_name AS reviewer_name
       FROM freelancer_reviews rv LEFT JOIN users ru ON ru.id = rv.reviewer_user_id
-      WHERE rv.freelancer_user_id = ${id} ORDER BY rv.created_at DESC LIMIT 20
+      WHERE rv.freelancer_user_id = ${uid} ORDER BY rv.created_at DESC LIMIT 20
     ` as unknown as Record<string, unknown>[];
     return c.json({
       ...mapPublicProfile(row),
