@@ -36,6 +36,16 @@ const notImageRow = notInArray(llmUsageLog.llmProduct, [...IMAGE_PRODUCT_NAMES])
 
 const toInt = (v: unknown): number => Math.max(0, Math.floor(Number(v ?? 0)));
 
+/**
+ * The "~4 chars per token" heuristic — the ONE definition shared by the
+ * cost-forecast estimate and the LlmProxy model-fit estimate. Cheap and for
+ * estimation only (NOT billing): accurate to ~15% for English/code and errs
+ * slightly high (JSON punctuation), the safe direction for a context-fit check.
+ */
+export function estimateTokensFromChars(charCount: number): number {
+  return Math.ceil(charCount / 4);
+}
+
 /** Start of the current UTC day — the daily-cap reset boundary. */
 export function utcDayStart(now: Date = new Date()): Date {
   const d = new Date(now);

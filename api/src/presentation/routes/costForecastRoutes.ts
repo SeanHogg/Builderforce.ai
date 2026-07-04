@@ -17,6 +17,7 @@ import { llmUsageLog, tenants } from '../../infrastructure/database/schema';
 import { getLimits } from '../../domain/tenant/PlanLimits';
 import { resolveEffectivePlan } from '../../domain/tenant/effectivePlan';
 import { TenantPlan, TenantBillingStatus } from '../../domain/shared/types';
+import { estimateTokensFromChars } from '../../application/llm/tokenUsage';
 import type { HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 
@@ -44,7 +45,7 @@ function estimateCostPerToken(plan: TenantPlan): number {
  * Accurate to within ~15% for typical English/code content.
  */
 function estimateTokens(text: string): number {
-  return Math.ceil(text.length / 4);
+  return estimateTokensFromChars(text.length);
 }
 
 /**

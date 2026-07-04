@@ -20,10 +20,10 @@
 import { and, eq, gte, sql } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import { llmUsageLog, runModelOutcomes } from '../../infrastructure/database/schema';
+import { MILLICENTS_PER_USD } from '../../domain/shared/money';
 
 const DAY_MS = 86_400_000;
 const WEEK_MS = 7 * DAY_MS;
-const MILLICENTS_PER_USD = 100_000;
 
 /** A usage row, pre-projected to just what the rollup needs. */
 export interface UsageRow {

@@ -28,6 +28,8 @@
  * alphabet across the candidate chain.
  */
 
+import { parseSseDataLine } from './sseFrames';
+
 const DOT_SENTINEL    = '__DOT__';
 const ESCAPE_SENTINEL = '__DOT_ESC__';
 
@@ -239,15 +241,12 @@ export function restoreStreamToolNames(source: ReadableStream<Uint8Array>): Read
   let pending = '';
 
   const rewriteLine = (line: string): string => {
-    // SSE data lines look like `data: {json}` (allow a missing space too).
-    const m = /^data:\s?(.*)$/.exec(line);
-    if (!m) return line;
-    const payload = m[1]!;
-    if (payload === '[DONE]' || payload.length === 0) return line;
-    let parsed: Record<string, unknown>;
-    try { parsed = JSON.parse(payload) as Record<string, unknown>; }
-    catch { return line; } // not JSON (e.g. a comment) — leave as-is
-    restorer.restoreChunk(parsed);
+    // SSE data lines look like `data: {json}` (allow a missing space too). Any
+    // non-data / `[DONE]` / non-JSON line passes through untouched (shared parser
+    // returns undefined for all of those).
+    const parsed = parseSseDataLine(line);
+    if (parsed === undefined) return line;
+    restorer.restoreChunk(parsed as Record<string, unknown>);
     return `data: ${JSON.stringify(parsed)}`;
   };
 

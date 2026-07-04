@@ -19,11 +19,17 @@ A codebase-aware BuilderForce AI coding agent in your editor sidebar.
 - **It knows your codebase** — scans the open folder once (cached) and grounds every answer in
   your project's real structure, so suggestions fit your code. Refresh with **Rescan
   Codebase**.
+- **Long chats keep going** — busy conversations that pull in big results (like a full task
+  list) used to fill up and stall the assistant part-way through. Now the chat keeps only what
+  matters as it works, so it stays responsive and finishes the job instead of dying after a
+  few steps.
 - **Show it a screenshot** — paste or attach an image of a bug, error, or design and the agent
   acts on what it sees.
-- **See exactly what it did** — every step (its reasoning, each tool call with input/output,
-  file edits, and errors) is visible, so you can trust and verify the work. One click copies
-  the whole transcript for a teammate or support; another runs connection diagnostics.
+- **See exactly what it did — and why it stopped** — every step (its reasoning, each tool call
+  with input/output, file edits, and errors) is visible, so you can trust and verify the work.
+  One click copies the whole transcript, now with a plain-English **Diagnostics** summary: if a
+  chat ever stalls, the copy tells you the likely reason at a glance — perfect to drop into a
+  bug report or hand to support. Another click runs connection diagnostics.
 - **Pick up anywhere** — your conversations are the same ones in the BuilderForce web app, so
   you can start in the editor and continue in the browser (or the reverse).
 - **Secure sign-in** — one-click browser login (or paste-key); your key lives in the OS

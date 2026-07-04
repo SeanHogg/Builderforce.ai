@@ -18,19 +18,22 @@ import {
 } from '../../infrastructure/database/schema';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
-import { getOrSetCached, invalidateCached } from '../../infrastructure/cache/readThroughCache';
+import { getOrSetCached, getCacheVersion, bumpCacheVersion } from '../../infrastructure/cache/readThroughCache';
 import { templateRosterRoles } from './types';
 import { DEFAULT_TEMPLATE_ID } from './templateCatalog';
 import { agentMatchesRole, normalizeRoleText } from './roleMatch';
 import type { JobRoleService } from './jobRoleService';
 import type { KanbanTemplateService } from './kanbanTemplateService';
+import type { RoleAssignmentService } from './roleAssignmentService';
 
 export interface RosterFiller {
-  kind: 'human' | 'agent';
+  kind: 'human' | 'agent' | 'hire';
   ref: string;
   name: string;
-  /** How we matched: staffed to a lane / matched by title-skill / discipline. */
-  via: 'lane' | 'agent-skill' | 'discipline';
+  /** How we matched: an explicit assignment / staffed to a lane / title-skill / discipline. */
+  via: 'assignment' | 'lane' | 'agent-skill' | 'discipline';
+  /** Present when `via === 'assignment'`: the assignment row id (so the UI can unassign). */
+  assignmentId?: string;
 }
 
 export interface RosterRole {
@@ -54,21 +57,27 @@ export interface RecommendedRoster {
   gapCount: number;
 }
 
-const rosterKey = (tenantId: number, projectId: number) => `kanban:roster:${tenantId}:${projectId}`;
+/** Bumping this per-tenant token orphans every project's roster at once — cheaper
+ *  than enumerating each `${tenantId}:${projectId}` key when a workspace-wide input
+ *  (template apply, role edit, a role assignment) changes. */
+const rosterVersionKey = (tenantId: number) => `kanban:roster:${tenantId}`;
 
 export class RosterService {
   constructor(
     private readonly db: Db,
     private readonly templates: KanbanTemplateService,
     private readonly roles: JobRoleService,
+    private readonly assignments: RoleAssignmentService,
   ) {}
 
   async getRecommendedRoster(env: Env, tenantId: number, projectId: number): Promise<RecommendedRoster> {
-    return getOrSetCached(env, rosterKey(tenantId, projectId), () => this.compute(env, tenantId, projectId));
+    const ver = await getCacheVersion(env, rosterVersionKey(tenantId));
+    return getOrSetCached(env, `kanban:roster:${tenantId}:${projectId}:v:${ver}`, () => this.compute(env, tenantId, projectId));
   }
 
-  invalidate(env: Env, tenantId: number, projectId: number): Promise<void> {
-    return invalidateCached(env, rosterKey(tenantId, projectId));
+  /** Invalidate every cached roster for the tenant (all projects). */
+  invalidate(env: Env, tenantId: number, _projectId?: number): Promise<void> {
+    return bumpCacheVersion(env, rosterVersionKey(tenantId));
   }
 
   private async compute(env: Env, tenantId: number, projectId: number): Promise<RecommendedRoster> {
@@ -82,6 +91,16 @@ export class RosterService {
       ?? (await this.templates.get(env, tenantId, DEFAULT_TEMPLATE_ID))!;
     const roleDefs = await this.roles.list(env, tenantId);
     const roleByKey = new Map(roleDefs.map((r) => [r.key, r]));
+
+    // Explicit role assignments (workspace-default + this project), grouped by role.
+    const explicit = await this.assignments.listForRoster(env, tenantId, projectId);
+    const explicitByRole = new Map<string, typeof explicit>();
+    for (const a of explicit) {
+      const nk = normalizeRoleText(a.roleKey);
+      const list = explicitByRole.get(nk) ?? [];
+      list.push(a);
+      explicitByRole.set(nk, list);
+    }
 
     // Workforce signals, loaded once.
     const [laneAssignments, agents, humans] = await Promise.all([
@@ -108,9 +127,20 @@ export class RosterService {
       const nk = normalizeRoleText(rr.roleKey);
       const filledBy: RosterFiller[] = [];
 
+      // 0) Explicit assignments — a manager pinned this agent/human/hire to the role.
+      //    These take precedence and always render (with an unassign affordance).
+      for (const a of explicitByRole.get(nk) ?? []) {
+        filledBy.push({
+          kind: a.assigneeKind === 'agent' ? 'agent' : a.assigneeKind === 'hire' ? 'hire' : 'human',
+          ref: a.assigneeRef,
+          name: a.assigneeName ?? a.assigneeRef,
+          via: 'assignment',
+          assignmentId: a.id,
+        });
+      }
       // 1) An agent explicitly staffed to a lane carrying this role.
       for (const a of laneAssignments) {
-        if (a.agentRef && normalizeRoleText(a.role) === nk) {
+        if (a.agentRef && normalizeRoleText(a.role) === nk && !filledBy.some((f) => f.ref === a.agentRef)) {
           filledBy.push({ kind: 'agent', ref: a.agentRef, name: a.name ?? roleName, via: 'lane' });
         }
       }
@@ -123,7 +153,7 @@ export class RosterService {
       // 3) A human whose discipline matches the role's discipline.
       if (def?.discipline) {
         for (const h of humans) {
-          if (h.discipline && normalizeRoleText(h.discipline) === normalizeRoleText(def.discipline)) {
+          if (h.discipline && normalizeRoleText(h.discipline) === normalizeRoleText(def.discipline) && !filledBy.some((f) => f.ref === h.ref)) {
             filledBy.push({ kind: 'human', ref: h.ref, name: h.ref, via: 'discipline' });
           }
         }

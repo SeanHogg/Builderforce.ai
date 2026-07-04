@@ -252,9 +252,11 @@ export function createJobRoutes(): Hono<HonoEnv> {
     const [job] = await sql(c.env)`SELECT id, tenant_id, title, created_by_user_id, status FROM job_postings WHERE id = ${id}`;
     if (!job) return c.json({ error: 'Not found' }, 404);
     if (job.status !== 'open') return c.json({ error: 'This job is no longer open' }, 409);
-    // Must be a freelancer account.
-    const [me] = await sql(c.env)`SELECT account_type, display_name FROM users WHERE id = ${userId}`;
-    if (!me || me.account_type !== 'freelancer') return c.json({ error: 'Only freelancers can bid' }, 403);
+    // Must be open to being hired — a dedicated freelancer account OR a builder who
+    // opted in (available_for_hire). Keyed on the opt-in flag, not the account type,
+    // so opted-in builders can bid too.
+    const [me] = await sql(c.env)`SELECT available_for_hire, display_name FROM users WHERE id = ${userId}`;
+    if (!me || !me.available_for_hire) return c.json({ error: 'Enable "Available for hire" to bid on gigs' }, 403);
     const pid = crypto.randomUUID();
     await sql(c.env)`
       INSERT INTO job_proposals (id, job_id, freelancer_user_id, cover_note, rate_cents)

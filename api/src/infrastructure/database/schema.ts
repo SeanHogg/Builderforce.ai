@@ -181,6 +181,11 @@ export const users = pgTable('users', {
    *  OAuth/magic-link accounts that were auto-provisioned before picking a role —
    *  the onboarding gate uses this to force a one-time role choice. (0278) */
   accountTypeSelectedAt:  timestamp('account_type_selected_at'),
+  /** Opt-in to being hired talent. INDEPENDENT of accountType: a 'standard' builder
+   *  can turn this on to publish a for-hire profile + bid on gigs while keeping the
+   *  full builder shell. Always true for 'freelancer' accounts. Discoverability is
+   *  still gated on a PUBLISHED profile; this drives the opt-in UX + bid gate. (0282) */
+  availableForHire:       boolean('available_for_hire').notNull().default(false),
   sessionVersion:         integer('session_version').notNull().default(0),
   onboardingCompletedAt:  timestamp('onboarding_completed_at'),
   userIntent:             text('user_intent'), // JSON array of intent strings, set during onboarding
@@ -3910,6 +3915,22 @@ export const swimlaneRequirements = pgTable('swimlane_requirements', {
   description:    text('description'),
   position:       integer('position').notNull().default(0),
   createdAt:      timestamp('created_at').notNull().defaultNow(),
+});
+
+/** Explicit roster role assignment — a manager pinning an existing agent / human
+ *  member / hired contractor to a role. `projectId` NULL = workspace-default (applies
+ *  to every project); set = project-specific. The roster merges these into each role's
+ *  `filledBy` (via='assignment'). */
+export const projectRoleAssignments = pgTable('project_role_assignments', {
+  id:           varchar('id', { length: 36 }).primaryKey(),
+  tenantId:     integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  projectId:    integer('project_id').references(() => projects.id, { onDelete: 'cascade' }),
+  roleKey:      varchar('role_key', { length: 120 }).notNull(),
+  assigneeKind: varchar('assignee_kind', { length: 16 }).notNull(), // agent | human | hire
+  assigneeRef:  varchar('assignee_ref', { length: 128 }).notNull(),
+  assigneeName: varchar('assignee_name', { length: 200 }),
+  createdBy:    varchar('created_by', { length: 36 }),
+  createdAt:    timestamp('created_at').notNull().defaultNow(),
 });
 
 /** Append-only ledger: a member acting AS a role approved / requested-changes on a

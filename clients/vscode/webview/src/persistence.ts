@@ -6,28 +6,14 @@
  */
 
 import type { BrainPersistenceAdapter, BrainChat, BrainMessage } from '@seanhogg/builderforce-brain-embedded';
+import { authedFetch } from './authedFetch';
 
 export function createPersistence(
   baseUrl: string,
   getToken: () => string | null,
   onUnauthorized: () => void,
 ): BrainPersistenceAdapter {
-  const req = async <T>(path: string, init?: RequestInit): Promise<T> => {
-    const token = getToken();
-    const headers: Record<string, string> = {
-      'Content-Type': 'application/json',
-      ...((init?.headers as Record<string, string>) ?? {}),
-    };
-    if (token) headers['Authorization'] = `Bearer ${token}`;
-    const res = await fetch(`${baseUrl}${path}`, { ...init, headers });
-    if (res.status === 401) onUnauthorized();
-    if (!res.ok) {
-      const body = await res.text().catch(() => '');
-      throw new Error(body || res.statusText || `HTTP ${res.status}`);
-    }
-    if (res.status === 204) return undefined as T;
-    return (await res.json()) as T;
-  };
+  const req = authedFetch(baseUrl, getToken, onUnauthorized);
 
   return {
     listChats: (p) => {

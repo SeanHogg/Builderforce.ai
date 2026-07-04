@@ -25,6 +25,7 @@ import {
   getByExternalUserId as hiredGetByExternalUserId,
 } from '../../application/integrations/hiredVideo';
 import { notify } from '../../application/notifications/notify';
+import { provisionForHireProfile } from '../../application/freelance/provisionForHire';
 import type { Env, HonoEnv } from '../../env';
 
 export const FREELANCER_PUBLIC_LIST_CACHE_KEY = 'fl:public:list';
@@ -487,6 +488,39 @@ export function createFreelancerRoutes(): Hono<HonoEnv> {
     return c.json({ configured: res.configured, consentUrl: res.consentUrl ?? null });
   });
 
+  // GET /me/availability — is the signed-in user opted in to being hired talent?
+  // Lets a builder's UI show the opt-in state without loading the whole profile.
+  router.get('/me/availability', webAuthMiddleware, async (c) => {
+    const userId = c.get('userId') as string;
+    const [row] = await sql(c.env)`SELECT available_for_hire FROM users WHERE id = ${userId}`;
+    return c.json({ availableForHire: Boolean(row?.available_for_hire) });
+  });
+
+  // POST /me/availability { available } — an EXISTING builder opts IN or OUT of being
+  // hired talent, WITHOUT changing their account type (they keep the full builder shell).
+  //  - opt IN  → flag the user + provision the for-hire profile stub (idempotent). The
+  //              profile starts private/unpublished; the profile editor publishes it.
+  //  - opt OUT → clear the flag + UNPUBLISH the profile so they drop out of the talent
+  //              marketplace and the hire gate (the profile row is kept, just hidden).
+  router.post('/me/availability', webAuthMiddleware, async (c) => {
+    const userId = c.get('userId') as string;
+    const b = await c.req.json<{ available?: boolean }>().catch(() => ({} as { available?: boolean }));
+    const available = b.available === true;
+
+    await sql(c.env)`UPDATE users SET available_for_hire = ${available}, updated_at = NOW() WHERE id = ${userId}`;
+    if (available) {
+      const [u] = await sql(c.env)`SELECT email, display_name FROM users WHERE id = ${userId}`;
+      if (u?.email) {
+        await provisionForHireProfile(c.env as Env, { id: userId, email: u.email as string, name: (u.display_name as string) ?? null });
+      }
+    } else {
+      // Hide them from browse + hire without discarding the profile they built.
+      await sql(c.env)`UPDATE freelancer_profiles SET published = false, updated_at = NOW() WHERE user_id = ${userId}`;
+      await invalidateCached(c.env as Env, FREELANCER_PUBLIC_LIST_CACHE_KEY);
+    }
+    return c.json({ availableForHire: available });
+  });
+
   // --------------------------------------------------------------- PUBLIC -----
 
   // GET / — browse the marketplace with search/filter/pagination. Public profiles
@@ -642,11 +676,14 @@ export function createEngagementRoutes(): Hono<HonoEnv> {
     const actor = c.get('userId') as string;
     const b = await c.req.json<{ freelancerUserId?: string; projectId?: number; rateCents?: number; title?: string; note?: string; status?: string }>();
     if (!b.freelancerUserId) return c.json({ error: 'freelancerUserId required' }, 400);
-    // Must be a real, published freelancer.
+    // Must be a PUBLISHED for-hire profile — the same gate the marketplace browse
+    // uses. This covers both dedicated 'freelancer' accounts AND standard builders
+    // who opted in to being hired (available_for_hire), so hiring never checks the
+    // account type directly.
     const [prof] = await sql(c.env)`
       SELECT p.user_id, p.hourly_rate_cents, p.currency FROM freelancer_profiles p
       JOIN users u ON u.id = p.user_id
-      WHERE p.user_id = ${b.freelancerUserId} AND u.account_type = 'freelancer'
+      WHERE p.user_id = ${b.freelancerUserId} AND p.published = true
     `;
     if (!prof) return c.json({ error: 'Freelancer not found' }, 404);
     const status = ['invited', 'interviewing', 'active'].includes(b.status ?? '') ? (b.status as string) : 'invited';

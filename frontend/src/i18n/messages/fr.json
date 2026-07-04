@@ -243,7 +243,7 @@
       "projects": "Projets",
       "ide": "IDE",
       "workflows": "Flux de travail",
-      "workforce": "Équipe",
+      "workforce": "Talents / Effectif",
       "insights": "Analyses",
       "library": "Bibliothèque",
       "settings": "Paramètres",
@@ -253,7 +253,6 @@
       "myProfile": "Mon profil",
       "findWork": "Trouver du travail",
       "timecard": "Feuille de temps",
-      "hires": "Recrutements",
       "kanbanTemplates": "Modèles kanban"
     },
     "tab": {
@@ -304,7 +303,9 @@
       "qa": "QA agentique",
       "home": "Accueil",
       "integrations": "Intégrations",
-      "manager": "Manager"
+      "manager": "Manager",
+      "roles": "Rôles",
+      "talent": "Talents"
     }
   },
   "alerts": {
@@ -792,7 +793,19 @@
     "error": "Erreur : {message}",
     "integrationsTitle": "Intégrations",
     "integrationsSubtitle": "Connectez le contrôle de code et des outils externes, et gérez les widgets intégrés de cet espace.",
-    "sourceControlKeys": "Clés de contrôle de code et d’intégration"
+    "sourceControlKeys": "Clés de contrôle de code et d’intégration",
+    "forHire": {
+      "title": "Se faire recruter",
+      "offBody": "Ouvert aux missions en freelance ou en contrat ? Activez votre disponibilité pour publier un profil à embaucher, apparaître dans la place de marché des talents et décrocher des missions rémunérées, sans quitter votre espace de travail.",
+      "offCta": "Me rendre disponible à l'embauche",
+      "onBody": "Vous êtes indiqué comme disponible à l'embauche. Gardez votre profil public à jour et parcourez les missions ouvertes pour y postuler.",
+      "editProfile": "Modifier le profil à embaucher",
+      "findWork": "Trouver des missions",
+      "turnOff": "Désactiver",
+      "enabling": "Activation…",
+      "disabling": "Désactivation…",
+      "error": "Impossible de mettre à jour votre disponibilité. Veuillez réessayer."
+    }
   },
   "pmo": {
     "title": "Portefeuille (PMO)",
@@ -1801,7 +1814,9 @@
         "approvals": "Traitez les approbations, questions et retours que vos agents remontent à un humain — validez des actions ou répondez à ce dont ils ont besoin pour continuer.",
         "contributors": "Découvrez qui — humain et agent — contribue dans votre espace de travail, et comment.",
         "logs": "Journaux des agents, chronologies d'exécution et diagnostics de votre espace de travail.",
-        "qa": "Automatisation QA par projet — flux, tests générés et exécutions CI."
+        "qa": "Automatisation QA par projet — flux, tests générés et exécutions CI.",
+        "roles": "Les rôles que votre équipe occupe — les rôles standard du modèle de tableau et vos rôles personnalisés — et qui couvre chacun : un agent, un employé ou un intervenant externe.",
+        "talent": "Gérez les freelances que vous avez recrutés — missions, offres, validation des feuilles de temps et factures."
       }
     },
     "discipline": "Discipline",
@@ -5186,7 +5201,18 @@
     "addRequirement": "Ajouter une exigence",
     "priceLabel": "Prix (USD)",
     "unpublish": "Dépublier",
-    "publishToMarketplace": "Publier sur la place de marché"
+    "publishToMarketplace": "Publier sur la place de marché",
+    "assign": "Affecter",
+    "unassign": "Retirer",
+    "assigneeAgent": "Agent",
+    "assigneeHuman": "Employé",
+    "assigneeHire": "Intervenant",
+    "assignPick": "Choisir un membre…",
+    "assignLoading": "Chargement…",
+    "assignNoneOfKind": "Aucun disponible",
+    "assignConfirm": "Affecter",
+    "assignSaving": "Affectation…",
+    "assignCancel": "Annuler"
   },
   "psychometricEditor": {
     "loading": "Chargement du modèle de personnalité…",
@@ -5213,5 +5239,30 @@
     "importHelp": "Collez un objet JSON associant des identifiants de dimension à des scores de 0 à 100 (p. ex. exporté depuis l'humain que cet agent représente). Les dimensions inconnues sont ignorées.",
     "importBtn": "Importer",
     "importing": "Importation…"
+  },
+  "workforceRoles": {
+    "title": "Rôles",
+    "subtitle": "Les rôles que votre équipe occupe et qui couvre chacun : un agent, un employé ou un intervenant externe.",
+    "templateLabel": "Modèle de tableau",
+    "newRole": "Nouveau rôle",
+    "roleNamePlaceholder": "Nom du rôle",
+    "addRole": "Ajouter le rôle",
+    "creating": "Création…",
+    "loading": "Chargement des rôles…",
+    "standard": "Standard",
+    "custom": "Personnalisé",
+    "delete": "Supprimer",
+    "deleteConfirm": "Supprimer le rôle « {name} » ?",
+    "noneAssigned": "Personne d'affecté pour l'instant",
+    "discipline": {
+      "engineering": "Ingénierie",
+      "product": "Produit",
+      "design": "Design",
+      "qa": "QA",
+      "devops": "DevOps",
+      "data": "Données",
+      "security": "Sécurité",
+      "other": "Autre"
+    }
   }
 }

@@ -36,8 +36,8 @@ import {
   tasks,
 } from '../../infrastructure/database/schema';
 import { rollupDora, type DeployRow, type DoraRollup } from '../metrics/workforceMetrics';
+import { MILLICENTS_PER_USD } from '../../domain/shared/money';
 
-const MILLICENTS_PER_USD = 100_000;
 const HOUR_MS = 3_600_000;
 const WEEK_MS = 7 * 24 * HOUR_MS;
 const DEFAULT_DORA_DAYS = 30;

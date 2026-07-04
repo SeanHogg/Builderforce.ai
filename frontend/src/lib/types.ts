@@ -18,6 +18,10 @@ export interface AuthUser {
    *  OAuth/magic-link account that was auto-provisioned and hasn't picked a role yet —
    *  the onboarding gate forces the one-time choice. From /api/auth/me. */
   accountTypeSelected?: boolean;
+  /** Opt-in to being hired talent. INDEPENDENT of accountType: a 'standard' builder can
+   *  turn this on to publish a for-hire profile + bid on gigs while keeping the full
+   *  builder shell. Always true for 'freelancer' accounts. From /api/auth/me. */
+  availableForHire?: boolean;
   /** This user's OWN personality (same shape agents/personas use); null when unset. */
   psychometric?: import('./psychometric').PsychometricProfile | null;
 }

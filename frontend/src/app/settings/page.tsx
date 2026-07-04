@@ -18,6 +18,7 @@ import {
 } from '@/lib/auth';
 import PsychometricEditor from '@/components/PsychometricEditor';
 import PersonalitySummary from '@/components/PersonalitySummary';
+import ForHireCard from '@/components/account/ForHireCard';
 import type { PsychometricProfile } from '@/lib/psychometric';
 
 /**
@@ -190,6 +191,9 @@ export default function SettingsPage() {
           </div>
         </div>
       </div>
+
+      {/* Get hired — opt in to being available for hire (builders only; self-gating). */}
+      <ForHireCard />
 
       {/* Workspace */}
       {tenant && (

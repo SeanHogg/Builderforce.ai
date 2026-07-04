@@ -4,6 +4,12 @@
 
 ---
 
+### 🧪 Evermind memory-package test suite ran 0 tests (TS6059) — now green (2026-07-04) — ✅ RESOLVED
+
+**Reported:** the `@seanhogg/builderforce-memory` jest config maps the engine to its SOURCE (`moduleNameMapper: …-engine → ../memory-engine/src/index.ts`), so ts-jest type-checked engine `src/**` under the memory package's `rootDir` and failed every file with `TS6059` ("not under rootDir") — the ENTIRE workflow/runtime suite reported **0 tests** regardless of edits, so none of the Evermind training/workflow logic could be validated in CI.
+
+**Fix:** added `"isolatedModules": true` to the memory package's ts-jest transform (`packages/memory/package.json`) — ts-jest now transpiles per-file and skips the cross-package type-check that tripped `TS6059`. The workflow / Teach-Code / warm-start (weight-port) suite runs green (**22 tests passing**). This is the unblocker that lets the Evermind training changes (WSLA freeze, trust region, rollback) and future real-backprop work be verified in CI. (The separate `SSMRuntime.create.test.ts` remains red — it needs an ESM barrel-mock repair + a WebGPU stub — tracked in the Evermind Consolidated Issue Register.)
+
 ### 🧠 "The Brain dies after several executions" — context-exhaustion fix + self-diagnosing copy button + Evermind stability rails (2026-07-04) — ✅ RESOLVED
 
 **Reported:** the Brain chat orchestrator "dies after several executions"; unclear whether the cause was **(A)** context-window exhaustion or **(B)** the Evermind SSM model degrading. Directive: improve the diagnostics captured via the chat **copy button** so the failure self-diagnoses A-vs-B, and fix **both** A and B.

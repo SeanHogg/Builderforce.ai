@@ -23,15 +23,14 @@
 
 import { getImageModule } from './registry';
 import {
-  VendorFatalError,
-  VendorRetryableError,
   type ImageVendorEnv,
   type ImageVendorId,
-  type ImageVendorModule,
 } from './types';
-import type {
-  ModelProbeResult,
-  VendorHealthStatus,
+import {
+  runCatalogProbe,
+  type ModelProbeResult,
+  type ProbeOutcome,
+  type VendorHealthStatus,
 } from '../vendorHealthProbe';
 
 /** The image vendors probed by the daily health cron, in registry order. */
@@ -58,42 +57,10 @@ export interface ImageVendorProbeResult {
 
 const PROBE_PROMPT = 'ping';
 
-/** One probe generation against a single image vendor + model. */
-async function probeImageModel(
-  env: ImageVendorEnv,
-  mod: ImageVendorModule,
-  modelId: string,
-): Promise<ModelProbeResult> {
-  const apiKey = mod.apiKeyFrom(env);
-  if (!apiKey) {
-    return { model: modelId, ok: false, status: 0, latencyMs: 0, error: 'no api key' };
-  }
-  const t0 = Date.now();
-  try {
-    const result = await mod.generate({
-      apiKey,
-      model: modelId,
-      prompt: PROBE_PROMPT,
-      size: '1024x1024',
-      n: 1,
-    });
-    const latencyMs = Date.now() - t0;
-    // ok = a usable image came back (at least one entry with a url or b64).
-    const usable = result.data.some((d) => (d.url && d.url.length > 0) || (d.b64_json && d.b64_json.length > 0));
-    return usable
-      ? { model: modelId, ok: true, status: 200, latencyMs }
-      : { model: modelId, ok: false, status: 502, latencyMs, error: 'no image in response' };
-  } catch (err) {
-    const latencyMs = Date.now() - t0;
-    if (err instanceof VendorRetryableError || err instanceof VendorFatalError) {
-      return { model: modelId, ok: false, status: err.status, latencyMs, error: err.message.slice(0, 240) };
-    }
-    const msg = err instanceof Error ? err.message : String(err);
-    return { model: modelId, ok: false, status: 0, latencyMs, error: msg.slice(0, 240) };
-  }
-}
-
-/** Probe every model in one image vendor's catalog in parallel. */
+/** Probe every model in one image vendor's catalog in parallel. Timing +
+ *  exception classification + the status ladder are owned by the shared
+ *  `runCatalogProbe`; only the per-model `mod.generate` call and the "usable
+ *  image" test are image-specific. */
 export async function probeImageVendor(
   env: ImageVendorEnv,
   vendor: ImageVendorId,
@@ -105,16 +72,17 @@ export async function probeImageVendor(
     return { vendor: label, status: 'unconfigured', probedCount: 0, okCount: 0, failedCount: 0, latencyMs: 0, models: [] };
   }
 
-  const models = await Promise.all(mod.catalog.map((entry) => probeImageModel(env, mod, entry.id)));
-  const okCount = models.filter((m) => m.ok).length;
-  const failedCount = models.length - okCount;
-  const latencyMs = models.reduce((acc, m) => Math.max(acc, m.latencyMs), 0);
-
-  let status: VendorHealthStatus;
-  if (models.length === 0) status = 'unconfigured';
-  else if (okCount === 0) status = 'down';
-  else if (failedCount === 0) status = 'ok';
-  else status = 'degraded';
+  const { models, okCount, failedCount, latencyMs, status } = await runCatalogProbe(
+    mod.catalog,
+    async (entry): Promise<ProbeOutcome> => {
+      const apiKey = mod.apiKeyFrom(env);
+      if (!apiKey) return { ok: false, status: 0, error: 'no api key' };
+      const result = await mod.generate({ apiKey, model: entry.id, prompt: PROBE_PROMPT, size: '1024x1024', n: 1 });
+      // ok = a usable image came back (at least one entry with a url or b64).
+      const usable = result.data.some((d) => (d.url && d.url.length > 0) || (d.b64_json && d.b64_json.length > 0));
+      return usable ? { ok: true, status: 200 } : { ok: false, status: 502, error: 'no image in response' };
+    },
+  );
 
   return { vendor: label, status, probedCount: models.length, okCount, failedCount, latencyMs, models };
 }

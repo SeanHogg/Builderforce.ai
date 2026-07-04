@@ -17,9 +17,7 @@ import { resolveTenantPlan } from '../../presentation/routes/llmRoutes';
 import { resolveTokenLimits } from '../../domain/tenant/PlanLimits';
 import { TenantPlan } from '../../domain/shared/types';
 import { getOrSetCached } from '../../infrastructure/cache/readThroughCache';
-
-/** millicents → USD (mirrors `mcToUsd` in dashboardRoutes). */
-const MILLICENTS_PER_USD = 100_000;
+import { MILLICENTS_PER_USD } from '../../domain/shared/money';
 
 /**
  * A few models that are notably more expensive than a free coder. When today's

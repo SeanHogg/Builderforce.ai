@@ -33,20 +33,19 @@
 
 // The setpoint derivation reads dimension ids from the single shared PSYCH_DIM map.
 import { PSYCH_DIM } from "./psychometric-dims.js";
+// The bullet-block renderer + the exec-param IR live in the shared spec (no cycle:
+// spec.ts imports nothing within this package).
+import { bulletBlock } from "./spec.js";
+import type { AgentThinkLevel, AgentReasoningLevel, AgentExecParams } from "./spec.js";
 
-// ── Minimal shared types (kept structurally identical to the runtime's) ─────────
+// ── Minimal shared types (sourced from the spec IR so they cannot drift) ─────────
 
-/** Reasoning depth ladder — identical union to agent-runtime's ThinkLevel. */
-export type LimbicThinkLevel = "off" | "minimal" | "low" | "medium" | "high" | "xhigh";
-/** Mirrors agent-runtime's ReasoningLevel (incl. "stream") for structural compat. */
-export type LimbicReasoningLevel = "on" | "off" | "stream";
-
-/** Structural mirror of the runtime's PsychometricExecParams (no import cycle). */
-export interface LimbicPsychExecParams {
-  thinkLevel?: LimbicThinkLevel;
-  reasoningLevel?: LimbicReasoningLevel;
-  temperature?: number;
-}
+/** Reasoning depth ladder — the spec IR's canonical ThinkLevel. */
+export type LimbicThinkLevel = AgentThinkLevel;
+/** The spec IR's canonical ReasoningLevel (incl. "stream"). */
+export type LimbicReasoningLevel = AgentReasoningLevel;
+/** The spec IR's canonical exec-params shape. */
+export type LimbicPsychExecParams = AgentExecParams;
 
 /** Structural mirror of the runtime's PsychometricProfile (vector + optional skins). */
 export interface LimbicPsychProfile {
@@ -143,12 +142,17 @@ export function arrayToState(arr: ArrayLike<number>): LimbicState {
 
 // ── Personality → setpoints (the static layer sets where dynamics settle) ───────
 
-const HI = 65;
-const LO = 35;
-const NEUTRAL = 50;
+export const HI = 65;
+export const LO = 35;
+export const NEUTRAL = 50;
 
-function score(profile: LimbicPsychProfile | undefined, id: string): number {
-  const raw = profile?.vector?.[id];
+/**
+ * Clamp a raw trait score to 0..100, mapping an absent/NaN value to NEUTRAL. The
+ * single shared scorer for both the limbic setpoint derivation and the
+ * psychometric compiler, so both read a trait vector identically.
+ */
+export function score(vector: Record<string, number> | undefined, id: string): number {
+  const raw = vector?.[id];
   if (typeof raw !== "number" || Number.isNaN(raw)) return NEUTRAL;
   return Math.max(0, Math.min(100, raw));
 }
@@ -161,14 +165,14 @@ export function deriveLimbicSetpoints(profile: LimbicPsychProfile | undefined): 
   const sp = neutralState();
   if (!profile) return sp;
 
-  const open = infl(score(profile, PSYCH_DIM.openness));
-  const emo = infl(score(profile, PSYCH_DIM.emotionality));
-  const consc = infl(score(profile, PSYCH_DIM.conscientiousness));
-  const extra = infl(score(profile, PSYCH_DIM.extraversion));
-  const reg = infl(score(profile, PSYCH_DIM.regulatoryFocus));
-  const risk = infl(score(profile, PSYCH_DIM.riskTolerance));
-  const grit = infl(score(profile, PSYCH_DIM.grit));
-  const stim = infl(score(profile, PSYCH_DIM.valStimulation));
+  const open = infl(score(profile.vector, PSYCH_DIM.openness));
+  const emo = infl(score(profile.vector, PSYCH_DIM.emotionality));
+  const consc = infl(score(profile.vector, PSYCH_DIM.conscientiousness));
+  const extra = infl(score(profile.vector, PSYCH_DIM.extraversion));
+  const reg = infl(score(profile.vector, PSYCH_DIM.regulatoryFocus));
+  const risk = infl(score(profile.vector, PSYCH_DIM.riskTolerance));
+  const grit = infl(score(profile.vector, PSYCH_DIM.grit));
+  const stim = infl(score(profile.vector, PSYCH_DIM.valStimulation));
 
   sp.driveCuriosity = clamp("driveCuriosity", 0.5 + 0.35 * open + 0.15 * stim);
   sp.exploration = clamp("exploration", 0.4 + 0.3 * open + 0.25 * risk + 0.15 * reg);
@@ -393,7 +397,7 @@ export function buildLimbicBlock(state: LimbicState | undefined): string {
   if (!state) return "";
   const { directives } = compileLimbicState(state);
   if (directives.length === 0) return "";
-  return ["Current affective state (execute accordingly):", ...directives.map((d) => `- ${d}`)].join("\n");
+  return bulletBlock("Current affective state (execute accordingly):", directives);
 }
 
 // ── Task appraisal — derive an initial affect from a task description ─────────────

@@ -52,6 +52,7 @@ import {
   recordFailure,
 } from '../../infrastructure/auth/cooldownStore';
 import { validateJsonSchema } from './jsonSchemaValidator';
+import { estimateTokensFromChars } from './tokenUsage';
 import type { ActionType } from './actionTypes';
 
 // ---------------------------------------------------------------------------
@@ -1853,7 +1854,7 @@ const CONTEXT_FIT_HEADROOM = 1.25;
  */
 export function estimateRequestTokens(messages: unknown, tools?: unknown): number {
   const chars = JSON.stringify(messages ?? '').length + (tools != null ? JSON.stringify(tools).length : 0);
-  return Math.ceil(chars / 4);
+  return estimateTokensFromChars(chars);
 }
 
 /**
