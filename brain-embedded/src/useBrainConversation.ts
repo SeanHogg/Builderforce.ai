@@ -407,9 +407,10 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
         messages,
         chatId,
         agentLabel,
+        configuredModel: model,
         error: localError || snapshot.error,
       }),
-    [chatId, messages, localError, snapshot.error],
+    [chatId, messages, localError, snapshot.error, model],
   );
 
   return {

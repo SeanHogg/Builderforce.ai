@@ -2,7 +2,11 @@
 
 All notable changes to the BuilderForce VS Code extension are documented here.
 
-## [2026.7.17] — A calmer, more capable chat box
+## [2026.7.21] — Big jobs get done, not dropped
+
+- **Ask for a big job and it gets handed to the team, not abandoned half-done.** When you ask the assistant to do something large — like "turn every open item in my roadmap into goals, epics, and tasks" — it now does the planning right there in chat, then creates a task with the full brief and hands it to a cloud agent to carry out end-to-end, and tells you where to watch it. No more stalling partway through a long job.
+- **It finds your files instead of giving up.** Ask about a document like your roadmap and the assistant now searches for it — even if the name is spelled a little differently or it lives in a subfolder — rather than saying it can't be found. And it no longer chokes on very large projects when looking around.
+- **More room to finish in one go.** Everyday multi-step work now runs comfortably to completion in a single chat instead of cutting off early.
 
 - **The chat box highlights as you type.** It lights up in BuilderForce blue while you're writing — so it's always clear where your focus is — and settles back to normal once it's empty.
 - **Everything you need in one tidy toolbar.** A new **＋** menu keeps your inputs together: upload a file from your computer, pull in a file from your workspace, or let the assistant reach the web. A new **/** menu lets you dial the assistant's effort — Quick, Balanced, or Thorough — turn step-by-step thinking on or off, and jump straight to your account settings.

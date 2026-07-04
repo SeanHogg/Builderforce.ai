@@ -454,7 +454,16 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
       category: 'llm',
       label: 'llm.complete',
       durationMs: nowMs() - llmStart,
-      args: { model: model ?? 'default', step: iter, toolCalls: result.toolCalls.length },
+      // `model` is the model the gateway ACTUALLY used (resolved), falling back to
+      // what we requested when the gateway didn't report one. `requestedModel`
+      // keeps the caller's ask (empty/'default' ⇒ gateway auto-selects) so triage
+      // can tell "what I asked for" from "what answered".
+      args: {
+        model: result.resolvedModel ?? model ?? 'default',
+        requestedModel: model ?? 'default',
+        step: iter,
+        toolCalls: result.toolCalls.length,
+      },
       result: `${result.toolCalls.length} tool call(s) · ${result.text.length} chars · finish: ${result.finishReason ?? '—'}`,
     });
     if (result.text.trim()) {

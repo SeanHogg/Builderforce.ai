@@ -71,6 +71,32 @@ function cap(s: unknown, n = 2000): string {
   return str.length > n ? str.slice(0, n) + `… (+${str.length - n} chars)` : str;
 }
 
+/**
+ * An `evermind/…` (or project-/tenant-pinned) model id means a tenant's own
+ * Evermind artifact answered the turn rather than a stock pool model. Matches the
+ * `evermind/` vendor prefix and the `project_evermind:` / `tenant_model:` pin refs.
+ */
+export function isEvermindModel(model: string): boolean {
+  return /(^|\/)evermind\b|^project_evermind:|^tenant_model:/i.test(model);
+}
+
+/**
+ * The distinct models the gateway ACTUALLY used across a run, read from the `llm`
+ * trace events (brainRunStore records the resolved model in `args.model`). First-
+ * seen order, so a mid-run failover swap stays visible. The placeholder `default`
+ * (caller pinned nothing ⇒ gateway auto-selected, and it reported no model) is
+ * dropped so it never masquerades as a real model id.
+ */
+export function modelsUsedInTrace(events: BrainTraceEvent[]): string[] {
+  const seen: string[] = [];
+  for (const ev of events) {
+    if (ev.category !== 'llm' && ev.category !== 'error') continue;
+    const m = (ev.args as { model?: unknown } | undefined)?.model;
+    if (typeof m === 'string' && m && m !== 'default' && !seen.includes(m)) seen.push(m);
+  }
+  return seen;
+}
+
 export interface BuildBrainTriageOptions {
   /** ISO capture time (caller supplies it so the module stays clock-free). */
   capturedAt: string;
@@ -83,6 +109,9 @@ export interface BuildBrainTriageOptions {
   chatTitle?: string;
   /** The persona / agent the Brain ran as. */
   agentLabel?: string;
+  /** The model this surface was CONFIGURED with (empty ⇒ gateway auto-selects).
+   *  Distinct from what actually answered, which is derived from the trace. */
+  configuredModel?: string;
   /** The current top-level error surfaced to the user, if any. */
   error?: string;
 }
@@ -92,7 +121,7 @@ export interface BuildBrainTriageOptions {
  * header → errors-first → full event log → derived log lines → transcript.
  */
 export function buildBrainTriageReport(opts: BuildBrainTriageOptions): string {
-  const { capturedAt, events, messages = [], chatId, chatTitle, agentLabel, error } = opts;
+  const { capturedAt, events, messages = [], chatId, chatTitle, agentLabel, configuredModel, error } = opts;
   const errors = events.filter((e) => e.isError || e.category === 'error');
   const lines: string[] = [];
 
@@ -100,6 +129,14 @@ export function buildBrainTriageReport(opts: BuildBrainTriageOptions): string {
   lines.push(`Captured:  ${capturedAt}`);
   if (chatId != null) lines.push(`Chat:      #${chatId}${chatTitle ? ` — ${chatTitle}` : ''}`);
   lines.push(`Brain:     ${agentLabel || 'Brain (default)'}`);
+  // Model provenance — which LLM actually produced these turns. `configuredModel`
+  // is what this surface was set to (blank ⇒ gateway auto-selects); the trace tells
+  // us what really answered, and whether a tenant's Evermind artifact was used.
+  lines.push(`Configured model: ${configuredModel || '(gateway auto-select)'}`);
+  const used = modelsUsedInTrace(events);
+  if (used.length) lines.push(`Models used: ${used.join(', ')}`);
+  const evermind = used.filter(isEvermindModel);
+  if (evermind.length) lines.push(`Evermind: yes — ${evermind.join(', ')}`);
   lines.push(`Steps: ${events.length} · Errors: ${errors.length} · Messages: ${messages.length}`);
   if (error) lines.push(`Last error: ${error}`);
 

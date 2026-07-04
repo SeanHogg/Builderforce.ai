@@ -171,6 +171,15 @@ interface StreamChatResult {
     text: string;
     toolCalls: AssembledToolCall[];
     finishReason: string | null;
+    /**
+     * The model the GATEWAY actually used for this completion — which can differ
+     * from the requested `model` (empty/absent means the gateway auto-selected
+     * from its pool, and failover may have swapped upstreams mid-cascade). Sourced
+     * from the `x-builderforce-model` response header when readable, else from the
+     * `model` field the OpenAI-shaped stream chunks carry. Surfaced so callers can
+     * record which LLM (or which `evermind/…` artifact) produced a turn.
+     */
+    resolvedModel?: string;
 }
 /**
  * Stream a chat completion. Resolves once the stream ends with the stitched
@@ -487,6 +496,20 @@ interface BrainTraceEvent {
  * failure.
  */
 declare function isFailedToolResult(result: unknown): boolean;
+/**
+ * An `evermind/…` (or project-/tenant-pinned) model id means a tenant's own
+ * Evermind artifact answered the turn rather than a stock pool model. Matches the
+ * `evermind/` vendor prefix and the `project_evermind:` / `tenant_model:` pin refs.
+ */
+declare function isEvermindModel(model: string): boolean;
+/**
+ * The distinct models the gateway ACTUALLY used across a run, read from the `llm`
+ * trace events (brainRunStore records the resolved model in `args.model`). First-
+ * seen order, so a mid-run failover swap stays visible. The placeholder `default`
+ * (caller pinned nothing ⇒ gateway auto-selected, and it reported no model) is
+ * dropped so it never masquerades as a real model id.
+ */
+declare function modelsUsedInTrace(events: BrainTraceEvent[]): string[];
 interface BuildBrainTriageOptions {
     /** ISO capture time (caller supplies it so the module stays clock-free). */
     capturedAt: string;
@@ -499,6 +522,9 @@ interface BuildBrainTriageOptions {
     chatTitle?: string;
     /** The persona / agent the Brain ran as. */
     agentLabel?: string;
+    /** The model this surface was CONFIGURED with (empty ⇒ gateway auto-selects).
+     *  Distinct from what actually answered, which is derived from the trace. */
+    configuredModel?: string;
     /** The current top-level error surfaced to the user, if any. */
     error?: string;
 }
@@ -609,4 +635,4 @@ declare function savePendingPrompt(text: string): void;
 /** Read and clear the saved prompt. Returns null when none is stored or on SSR. */
 declare function takePendingPrompt(): string | null;
 
-export { type AssembledToolCall, type BrainAction, type BrainActionsContextValue, BrainActionsProvider, type BrainChat, type BrainConfig, BrainContextProvider, type BrainContextValue, type BrainMessage, type BrainModality, type BrainPageContext, type BrainPersistenceAdapter, BrainProvider, type BrainRuntime, type BrainToolSpec, type BrainTraceEvent, type BrainTransport, type BuildBrainTriageOptions, type ChatCompletionMessage, type ChatInputAttachment, type ContentPart, type ImageUrlContentPart, type McpToolResultInfo, type PreparedImage, type StreamChatOptions, type StreamChatResult, type StreamHandlers, type TextContentPart, type UseBrainChats, type UseBrainChatsOptions, type UseBrainConversation, type UseBrainConversationOptions, type UseMcpExtensionsOptions, buildBrainTriageReport, isFailedToolResult, prepareImageDataUrl, savePendingPrompt, streamChatCompletion, takePendingPrompt, useBrainActions, useBrainChats, useBrainConfig, useBrainContext, useBrainConversation, useMcpExtensions, useOptionalBrainContext, useRegisterBrainActions };
+export { type AssembledToolCall, type BrainAction, type BrainActionsContextValue, BrainActionsProvider, type BrainChat, type BrainConfig, BrainContextProvider, type BrainContextValue, type BrainMessage, type BrainModality, type BrainPageContext, type BrainPersistenceAdapter, BrainProvider, type BrainRuntime, type BrainToolSpec, type BrainTraceEvent, type BrainTransport, type BuildBrainTriageOptions, type ChatCompletionMessage, type ChatInputAttachment, type ContentPart, type ImageUrlContentPart, type McpToolResultInfo, type PreparedImage, type StreamChatOptions, type StreamChatResult, type StreamHandlers, type TextContentPart, type UseBrainChats, type UseBrainChatsOptions, type UseBrainConversation, type UseBrainConversationOptions, type UseMcpExtensionsOptions, buildBrainTriageReport, isEvermindModel, isFailedToolResult, modelsUsedInTrace, prepareImageDataUrl, savePendingPrompt, streamChatCompletion, takePendingPrompt, useBrainActions, useBrainChats, useBrainConfig, useBrainContext, useBrainConversation, useMcpExtensions, useOptionalBrainContext, useRegisterBrainActions };

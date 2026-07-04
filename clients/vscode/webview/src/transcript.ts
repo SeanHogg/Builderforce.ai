@@ -9,6 +9,7 @@
  */
 
 import { buildTimeline, formatPayload, formatDuration } from '@seanhogg/builderforce-brain-ui';
+import { isEvermindModel, modelsUsedInTrace } from '@seanhogg/builderforce-brain-embedded';
 import type { BrainMessage, BrainTraceEvent } from '@seanhogg/builderforce-brain-embedded';
 
 export interface TranscriptInput {
@@ -33,7 +34,15 @@ function fenced(label: string, payload: string, lines: string[]): void {
 export function buildTranscript(input: TranscriptInput): string {
   const nodes = buildTimeline({ messages: input.messages, trace: input.trace, streamingText: '', isRunning: false });
   const lines: string[] = ['# BuilderForce chat transcript'];
-  if (input.model) lines.push(`Model: ${input.model}`);
+
+  // Model provenance — the whole point of triaging a bad turn is knowing which
+  // LLM produced it. `input.model` is what the editor was CONFIGURED with (blank
+  // when the gateway auto-selects); the trace tells us what actually answered.
+  lines.push(`Configured model: ${input.model || '(gateway auto-select)'}`);
+  const used = modelsUsedInTrace(input.trace);
+  if (used.length) lines.push(`Models used: ${used.join(', ')}`);
+  const evermind = used.filter(isEvermindModel);
+  if (evermind.length) lines.push(`Evermind: yes — ${evermind.join(', ')}`);
   lines.push('');
 
   for (const node of nodes) {
