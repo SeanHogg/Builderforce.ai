@@ -1,44 +1,48 @@
-> **PRD** — drafted by Bob Developer (V2 (Container)) · task #89
+> **PRD** — drafted by Validator · task #69
 > _Each agent that updates this PRD signs its change below._
 
-# Product Requirements Document: Avatar Filter Row Placement
+## Product Requirements Document: Agent Execution Indicator on Ticket Cards
 
-## 1. Problem & Goal
+### 1. Problem & Goal
 
-**Problem:** The current placement of the avatar filter, separated from the priorities dropdown, disrupts the logical grouping of filtering options. Users must scan different areas of the UI to apply related filters, leading to a less efficient and intuitive user experience.
+**Problem:** When a ticket is moved into a swimlane that has an autonomous agent configured, the agent triggers and begins execution, but the ticket card provides no visual feedback to the user that an agent is actively running. This lack of transparency can lead to user confusion, uncertainty about system state, and unnecessary delays as users wait for perceived "nothing" to happen.
 
-**Goal:** To improve the user experience by consolidating related filtering options into a single, contiguous row, thereby enhancing discoverability, reducing cognitive load, and increasing the speed at which users can apply filters.
+**Goal:** Implement a clear, real-time visual indicator directly on ticket cards to signify when an associated autonomous agent is actively executing. This will provide immediate feedback to users, improve transparency, and enhance the overall user experience on the board.
 
-## 2. Target Users / ICP Roles
+### 2. Target Users / ICP Roles
 
-*   **Project Managers:** Need to quickly filter tasks by assignee (avatar) and priority to understand workload distribution and identify high-priority items.
-*   **Team Leads:** Require efficient filtering to monitor team progress and allocate resources based on task priority and individual contribution (avatar).
-*   **Individual Contributors:** Benefit from a cleaner interface to focus on their assigned tasks and understand their priority within the project context.
+*   **Project Managers:** Overseeing workflows and needing to quickly ascertain ticket status.
+*   **Team Leads:** Monitoring team progress and agent automation.
+*   **Team Members:** Who interact with tickets and rely on agent-driven automations.
+*   **System Administrators / Agent Configurators:** Verifying that agents are triggering as expected.
 
-## 3. Scope
+### 3. Scope
 
-This document covers the functional requirements and acceptance criteria for moving the existing avatar filter component to reside on the same UI row as the priorities dropdown. This includes adjustments to layout, styling, and ensuring the filter's functionality remains intact.
+This PRD covers the implementation of a dynamic visual indicator on ticket cards within the board view. This indicator will reflect the active execution state of an autonomous agent that is triggered by a ticket entering a specific swimlane. The indicator's lifecycle will be tied directly to the agent's execution duration.
 
-## 4. Functional Requirements
+### 4. Functional Requirements
 
-*   **FR1: Layout Adjustment:** The avatar filter component shall be repositioned to occupy a space adjacent to the priorities dropdown within the primary filtering bar.
-*   **FR2: Visual Consistency:** The avatar filter shall maintain its current visual appearance and interaction patterns (e.g., dropdown behavior, selection indicators) after being moved.
-*   **FR3: Responsive Design:** The integrated avatar and priorities filter row shall adapt appropriately across different screen sizes and resolutions, maintaining usability.
-*   **FR4: Filter Functionality:** Applying a filter via the avatar selector shall continue to correctly filter the displayed data (e.g., tasks, issues), and this filtering shall be independent of or complementary to the priorities filter.
+*   **REQ-001: Triggering Condition:** When a ticket is moved into a swimlane configured with an autonomous agent, and that agent begins execution, a visual indicator MUST immediately appear on the ticket card.
+*   **REQ-002: Indicator Type:** The indicator MUST be a clear and easily recognizable visual element (e.g., a small loading spinner icon, an "Agent Running..." badge).
+*   **REQ-003: Persistence:** The indicator MUST remain visible on the ticket card for the entire duration of the agent's execution.
+*   **REQ-004: Success State:** Upon successful completion of the agent's task, the indicator MUST automatically disappear from the ticket card.
+*   **REQ-005: Failure State:** Upon failure of the agent's task, the indicator MUST automatically disappear from the ticket card. (Further error notification or logging is out of scope for this PRD).
+*   **REQ-006: Visibility:** The indicator MUST be prominently visible on the ticket card within the board view without obscuring critical ticket information (e.g., title, assignee).
+*   **REQ-007: Performance:** The appearance and disappearance of the indicator MUST be performant and not negatively impact board load times or responsiveness.
 
-## 5. Acceptance Criteria
+### 5. Acceptance Criteria
 
-*   **AC1: Avatar Filter Visible in Row:** The avatar filter is visibly present on the same horizontal line as the priorities dropdown.
-*   **AC2: Filter Functionality Preserved:** Selecting an avatar from the new location correctly filters the displayed items.
-*   **AC3: Priorities Filter Functionality Preserved:** Selecting a priority from its dropdown continues to filter the displayed items, and its interaction is unaffected by the avatar filter's new position.
-*   **AC4: Combined Filtering Works:** Applying both an avatar filter and a priorities filter simultaneously yields the correct, combined results.
-*   **AC5: No Visual Overlap or Distortion:** The avatar filter and priorities dropdown do not overlap each other or other UI elements in the filtering bar, and the overall layout remains clean and undistorted.
-*   **AC6: Responsiveness Verified:** On smaller screen sizes, the combined filter row is still usable, potentially with a different arrangement if necessary (e.g., stacking if horizontal space is too limited, though the primary goal is horizontal).
+*   **AC-001:** A user drags a ticket into a swimlane with an agent, and an agent running indicator appears on the ticket card within 1 second.
+*   **AC-002:** The agent running indicator remains visible for the entire duration the agent is processing the ticket.
+*   **AC-003:** Upon the agent completing its task (success or failure), the indicator disappears from the ticket card within 1 second.
+*   **AC-004:** The indicator is visually distinct, conveys "in progress" status, and does not conflict with other UI elements on the ticket card.
+*   **AC-005:** The solution functions correctly across all supported browsers and devices.
 
-## 6. Out of Scope
+### 6. Out of Scope
 
-*   **New Avatar Filter Features:** Any enhancements or new functionalities to the avatar filter itself (e.g., search within avatars, multi-select avatars) are out of scope for this task.
-*   **New Priorities Filter Features:** Any enhancements or new functionalities to the priorities dropdown are out of scope.
-*   **Other Filter Components:** Moving or modifying any other filter components not explicitly mentioned (e.g., date filters, status filters) is out of scope.
-*   **Backend Changes:** Any backend changes related to how filters are processed or stored are out of scope, assuming the existing backend APIs can handle the current filtering logic.
-*   **Performance Optimization:** Significant performance optimizations related to filtering are out of scope, unless directly caused by the layout change.
+*   Detailed status updates or progress bars for agents (e.g., "Agent is on step 3 of 5").
+*   Persistent notifications or alerts for agent completion or failure (beyond the on-card indicator's disappearance).
+*   Customization options for the indicator's appearance or behavior.
+*   Indicators for agents triggered by means other than a ticket entering an agent-configured swimlane (e.g., manual agent triggers, scheduled agents).
+*   Logging or historical records of agent runs on the ticket itself.
+*   Implementation of the agent logic or underlying infrastructure; this PRD focuses solely on the UI indicator.
