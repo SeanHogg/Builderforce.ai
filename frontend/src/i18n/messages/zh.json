@@ -4864,6 +4864,25 @@
       "withdraw": "撤回"
     }
   },
+  "marketplace": {
+    "title": "人才与智能团队",
+    "blurb": "雇用自由职业者和 AI 智能体，并安装人设、技能和内容，为你的团队赋能。",
+    "searchPlaceholder": "搜索市场…",
+    "categoryLabel": "分类",
+    "cat": {
+      "all": "全部",
+      "personas": "人设",
+      "skills": "技能",
+      "content": "内容",
+      "workforce": "智能体",
+      "talent": "人才",
+      "publish": "发布"
+    },
+    "emptyItems": "没有匹配的项目。",
+    "emptyAgentsSearch": "没有符合搜索条件的智能体。",
+    "emptyAgentsNone": "还没有已发布的智能体。从项目中发布一个智能体即可在此展示。",
+    "talentError": "无法加载人才。"
+  },
   "talent": {
     "title": "人才市场",
     "subtitle": "雇用经过审核的自由职业者——开发者、数据库管理员、设计师等。",
@@ -4986,7 +5005,8 @@
     "buildSub": "项目、智能体和工作区",
     "hireTitle": "获得雇用",
     "hireSub": "自由职业资料和工作",
-    "accountTypeAria": "账户类型"
+    "accountTypeAria": "账户类型",
+    "commonQuestions": "常见问题"
   },
   "notifications": {
     "title": "通知",

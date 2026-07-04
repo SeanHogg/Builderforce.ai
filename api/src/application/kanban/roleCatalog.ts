@@ -36,7 +36,3 @@ const BY_KEY = new Map(BUILTIN_ROLES.map((r) => [r.key, r]));
 export function isBuiltinRoleKey(key: string): boolean {
   return BY_KEY.has(key);
 }
-
-export function getBuiltinRole(key: string): JobRole | undefined {
-  return BY_KEY.get(key);
-}

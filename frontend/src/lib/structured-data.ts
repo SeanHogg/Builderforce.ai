@@ -226,7 +226,7 @@ export function talentMarketplaceSchema(
         '@type': 'CollectionPage',
         name: 'Talent Marketplace',
         description: 'Hire vetted freelance developers, DBAs, designers and other specialists on Builderforce.ai — with résumés, skills and hourly rates.',
-        url: `${BRAND.url}/talent`,
+        url: `${BRAND.url}/marketplace?category=talent`,
         publisher: { '@id': `${BRAND.url}/#organization` },
       },
       {
@@ -246,7 +246,7 @@ export function talentMarketplaceSchema(
       },
       breadcrumbs(
         { name: 'Home', url: BRAND.url },
-        { name: 'Talent', url: `${BRAND.url}/talent` },
+        { name: 'Talent', url: `${BRAND.url}/marketplace?category=talent` },
       ),
     ],
   };

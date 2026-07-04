@@ -148,15 +148,6 @@ export enum AssignmentScope {
   TASK    = 'task',
 }
 
-/** Precedence order for scope resolution (highest → lowest). */
-export const SCOPE_PRECEDENCE: AssignmentScope[] = [
-  AssignmentScope.AGENT,
-  AssignmentScope.TASK,
-  AssignmentScope.PROJECT,
-  AssignmentScope.HOST,
-  AssignmentScope.TENANT,
-];
-
 export type ResolvedArtifacts = {
   skills:   string[];
   personas: string[];

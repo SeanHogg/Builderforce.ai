@@ -837,6 +837,92 @@ export const REGISTER_FAQ: FaqItem[] = [
   },
 ];
 
+/**
+ * Register page — right-hand marketing panel, one variant per account type the
+ * chooser toggles between: `standard` (Build with AI) and `freelancer` (Get
+ * hired). Single source of truth so the panel copy stays consistent with the
+ * rest of the marketing site; the register client switches on `accountType`.
+ */
+export interface RegisterMarketingVariant {
+  /** Short eyebrow tag shown above the heading. */
+  eyebrow: string;
+  heading: string;
+  intro: string;
+  /** Four headline metrics rendered as stat cards. */
+  stats: { value: string; label: string }[];
+  /** Value-prop bullets (emoji + one line). */
+  bullets: { icon: string; title: string; desc: string }[];
+  /** Pull-quote reinforcing the differentiator. */
+  quote: string;
+  faq: FaqItem[];
+}
+
+export const REGISTER_MARKETING: Record<'standard' | 'freelancer', RegisterMarketingVariant> = {
+  standard: {
+    eyebrow: 'Build with AI',
+    heading: 'Your AI Agent Workspace Awaits',
+    intro:
+      'Train custom AI agents in your browser, put them to work on a live Kanban board alongside your team, and orchestrate the whole workforce without ever leaving VS Code.',
+    stats: [
+      { value: '$0', label: 'Free forever' },
+      { value: '14 days', label: 'Pro trial included' },
+      { value: '2B+', label: 'Params in-browser' },
+      { value: '0%', label: 'Agent commission' },
+    ],
+    bullets: [
+      { icon: '🧠', title: 'Evermind', desc: 'A self-updating model that learns as it works and never goes stale.' },
+      { icon: '🔁', title: 'Train & reuse agents', desc: 'WebGPU LoRA fine-tuning, then call your specialists from inside your agent.' },
+      { icon: '▦', title: 'Live Kanban workforce', desc: 'Humans and AI agents ship on the same board, backlog to done.' },
+      { icon: '🧩', title: 'Never leave VS Code', desc: 'Chat, assign, review, and approve — all inside your editor.' },
+      { icon: '🧪', title: 'Agentic Tester', desc: 'An autonomous QA agent that browser-tests your app and files bugs.' },
+      { icon: '🗺️', title: 'Planning Spine', desc: 'Portfolio → task on one dated, cost-bearing Gantt with CAPEX/OPEX rollup.' },
+    ],
+    quote:
+      'Unlike cloud training platforms that charge per GPU-hour, Builderforce runs training on your local WebGPU device at zero cost.',
+    faq: REGISTER_FAQ,
+  },
+  freelancer: {
+    eyebrow: 'Get hired',
+    heading: 'Get Hired. Get Paid for Every Hour.',
+    intro:
+      'Publish a for-hire profile with your hired.video résumé, get discovered across every team on the platform, and let your billable hours capture themselves as you work in the portal and VS Code.',
+    stats: [
+      { value: '0%', label: 'Commission on your rate' },
+      { value: 'Auto', label: 'Time tracked as you work' },
+      { value: 'Cross-tenant', label: 'Gigs from any team' },
+      { value: 'hired.video', label: 'Résumé built in' },
+    ],
+    bullets: [
+      { icon: '💼', title: 'For-hire profile', desc: 'Set your rate, showcase skills, go public or stay invite-only.' },
+      { icon: '🎬', title: 'hired.video résumé', desc: 'Your video résumé travels with your profile — no re-uploading.' },
+      { icon: '🔎', title: 'Find Work', desc: 'Browse and get matched to gigs across every tenant on Builderforce.' },
+      { icon: '⏱️', title: 'Automatic timecards', desc: 'Billable hours are captured from real activity — no manual logging.' },
+      { icon: '🤝', title: 'Work beside AI agents', desc: 'Sit on the same board as humans and agents on any project you join.' },
+      { icon: '✅', title: 'Approve-then-pay', desc: 'Every timecard is reviewed before payment, so billing stays clean.' },
+    ],
+    quote:
+      'Keep 100% of your rate — Builderforce takes zero commission, and every billable hour is captured automatically from the work you actually do.',
+    faq: [
+      {
+        question: 'Does Builderforce take a commission on my rate?',
+        answer: 'No. Builderforce charges zero commission on freelance engagements — you keep 100% of your hourly rate. Clients pay for tracked, approved hours only.',
+      },
+      {
+        question: 'How are my hours tracked?',
+        answer: 'Billable hours are captured automatically from the activity you generate in the portal and the VS Code extension. You never fill in a manual timesheet, and every timecard is yours (and the client\'s) to review before payment.',
+      },
+      {
+        question: 'Who can see my profile?',
+        answer: 'You choose. A for-hire profile can be public (discoverable by any team on the platform) or private (visible only to teams you share it with). Either way it carries your skills, hourly rate, and hired.video résumé.',
+      },
+      {
+        question: 'Do I need my own clients to start?',
+        answer: 'No. Once your profile is live you can browse Find Work and get matched to gigs from any tenant on Builderforce, then interview and get hired across projects — all without leaving the platform.',
+      },
+    ],
+  },
+};
+
 /** Blog index FAQ */
 export const BLOG_FAQ: FaqItem[] = [
   {

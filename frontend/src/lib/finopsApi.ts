@@ -82,10 +82,6 @@ export function getSocControls(): Promise<ControlCoverage> {
   return apiRequest<ControlCoverage>('/api/finops/soc/controls');
 }
 
-export function getSocCoverage(): Promise<ControlCoverage> {
-  return apiRequest<ControlCoverage>('/api/finops/soc/coverage');
-}
-
 export interface NewSocControl {
   controlRef: string;
   objective: string;

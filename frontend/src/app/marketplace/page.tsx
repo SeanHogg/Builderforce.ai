@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import { pageMetadata } from '@/lib/seo';
 import JsonLd from '@/components/JsonLd';
-import { marketplaceAgentsSchema } from '@/lib/structured-data';
+import { marketplaceAgentsSchema, talentMarketplaceSchema } from '@/lib/structured-data';
 import MarketplacePageClient from './MarketplacePageClient';
 
 // Server-side data fetch (published-agents JSON-LD) must run on the edge runtime
@@ -18,6 +18,7 @@ export const metadata: Metadata = pageMetadata({
 });
 
 interface PublicAgent { id: string | number; name: string; description?: string | null; skills?: string[] | null; published?: boolean }
+interface PublicFreelancer { userId: string; displayName?: string | null; headline?: string | null; discipline?: string | null; skills?: string[] | null }
 
 /** Fetch published marketplace agents server-side so their tags are crawlable as
  *  JSON-LD keywords [1241]. Best-effort; failure → no JSON-LD (the client page
@@ -34,11 +35,26 @@ async function fetchPublishedAgents(): Promise<PublicAgent[]> {
   }
 }
 
+/** Talent (freelancers) is now a category of this page, so its JSON-LD is emitted
+ *  here too — the standalone /talent route redirects in. Best-effort. */
+async function fetchPublicFreelancers(): Promise<PublicFreelancer[]> {
+  const apiBase = process.env.NEXT_PUBLIC_AUTH_API_URL || 'https://api.builderforce.ai';
+  try {
+    const res = await fetch(`${apiBase}/api/freelancers?pageSize=48`, { next: { revalidate: 3600 } });
+    if (!res.ok) return [];
+    const body = (await res.json()) as { items?: PublicFreelancer[] };
+    return Array.isArray(body.items) ? body.items : [];
+  } catch {
+    return [];
+  }
+}
+
 export default async function MarketplacePage() {
-  const agents = await fetchPublishedAgents();
+  const [agents, freelancers] = await Promise.all([fetchPublishedAgents(), fetchPublicFreelancers()]);
   return (
     <>
       {agents.length > 0 && <JsonLd data={marketplaceAgentsSchema(agents)} />}
+      {freelancers.length > 0 && <JsonLd data={talentMarketplaceSchema(freelancers)} />}
       <MarketplacePageClient />
     </>
   );
