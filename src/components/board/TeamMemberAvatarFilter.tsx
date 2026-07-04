@@ -15,11 +15,9 @@ interface TeamMemberAvatarFilterProps {
 
 const TeamMemberAvatarFilter: React.FC<TeamMemberAvatarFilterProps> = ({ members, tasks, onFilterChange }) => {
   const [selectedKeys, setSelectedKeys] = useState<string[]>([]);
-  const [allSelected, setAllSelected] = useState(false);
 
   useEffect(() => {
-    const selectedIds = selectedKeys.length > 0 ? selectedKeys : null;
-    onFilterChange(selectedIds);
+    onFilterChange(selectedKeys.length > 0 ? selectedKeys : null);
   }, [selectedKeys, onFilterChange]);
 
   const handleToggle = (id: string) => {
@@ -32,7 +30,6 @@ const TeamMemberAvatarFilter: React.FC<TeamMemberAvatarFilterProps> = ({ members
 
   const handleClear = () => {
     setSelectedKeys([]);
-    setAllSelected(false);
   };
 
   return (
@@ -55,11 +52,7 @@ const TeamMemberAvatarFilter: React.FC<TeamMemberAvatarFilterProps> = ({ members
         </div>
       ))}
       <div
-        className={`flex items-center px-3 py-1 rounded-full cursor-pointer transition-all ${
-          allSelected
-            ? 'bg-blue-500 text-white' 
-            : 'bg-gray-200 text-gray-800 hover:bg-gray-300'
-        }`}
+        className="flex items-center px-3 py-1 rounded-full cursor-pointer transition-all bg-gray-200 text-gray-800 hover:bg-gray-300"
         onClick={handleClear}
       >
         <span>All</span>
