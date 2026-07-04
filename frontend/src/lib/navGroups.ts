@@ -78,12 +78,17 @@ export const NAV_GROUPS: NavGroup[] = [
   { id: 'kanbanTemplates', labelKey: 'group.kanbanTemplates', icon: '🗂', href: '/kanban-templates', match: ['/kanban-templates'] },
   { id: 'workflows', labelKey: 'group.workflows', icon: '🔀', href: '/workflows', match: ['/workflows'] },
   {
+    // "Talent / Workforce": people + agents (Workforce) AND the roster of roles and
+    // external hires (Talent) share one destination. The Talent tab is the relocated
+    // /hires surface; the Roles tab is the workspace role roster with assignment.
     id: 'workforce', labelKey: 'group.workforce', icon: '👥', href: '/workforce',
-    match: ['/workforce'],
+    match: ['/workforce', '/hires'],
     tabKind: 'query', basePath: '/workforce',
     tabs: [
       { id: '', labelKey: 'tab.workforce', icon: '👥' },
+      { id: 'roles', labelKey: 'tab.roles', icon: '🎭' },
       { id: 'teams', labelKey: 'tab.teams', icon: '🧑‍🤝‍🧑' },
+      { id: 'talent', labelKey: 'tab.talent', icon: '🤝' },
       { id: 'performance', labelKey: 'tab.performance', icon: '📊' },
       { id: 'chats', labelKey: 'tab.chats', icon: '💬' },
       { id: 'approvals', labelKey: 'tab.approvals', icon: '✅' },
@@ -91,10 +96,6 @@ export const NAV_GROUPS: NavGroup[] = [
       { id: 'qa', labelKey: 'tab.qa', icon: '🧪' },
     ],
   },
-  // Employer-side management of hired freelancers (engagements + timecard approval).
-  // Its own destination so managing external hires doesn't crowd the agent-centric
-  // Workforce directory.
-  { id: 'hires', labelKey: 'group.hires', icon: '🤝', href: '/hires', match: ['/hires'] },
   {
     id: 'insights', labelKey: 'group.insights', icon: '📈', href: '/insights',
     // Surveys, custom Dashboards and DevFinOps are analytics/measurement surfaces,
@@ -178,10 +179,19 @@ export const NAV_GROUPS: NavGroup[] = [
  * their timecard, and account settings. Kept as its own list (not a filter of the
  * builder nav) because it is a deliberately different, minimal destination set.
  */
-export const FREELANCER_NAV_GROUPS: NavGroup[] = [
+/**
+ * The for-hire WORKER destinations: profile / find work / timecard. Shared so both
+ * the restricted freelancer shell AND an opted-in builder's nav surface the exact
+ * same set — never re-inlined in two places.
+ */
+export const FOR_HIRE_NAV_GROUPS: NavGroup[] = [
   { id: 'freelancer-profile', labelKey: 'group.myProfile', icon: '👤', href: '/freelancer/profile', match: ['/freelancer/profile'] },
   { id: 'freelancer-gigs', labelKey: 'group.findWork', icon: '🔎', href: '/freelancer/gigs', match: ['/freelancer/gigs'] },
   { id: 'freelancer-timecard', labelKey: 'group.timecard', icon: '⏱', href: '/freelancer/timecard', match: ['/freelancer/timecard'] },
+];
+
+export const FREELANCER_NAV_GROUPS: NavGroup[] = [
+  ...FOR_HIRE_NAV_GROUPS,
   {
     id: 'settings', labelKey: 'group.settings', icon: '⚙', href: '/security',
     match: ['/security'],
@@ -202,9 +212,12 @@ export const FREELANCER_ALLOWED_PREFIXES = ['/freelancer', '/security'];
 
 /** The nav destinations for the current account type — the ONE place the
  *  freelancer-vs-builder nav split is decided, so the Sidebar + SectionTabs and
- *  the route guard never drift. */
-export function navGroupsForAccountType(isFreelancer: boolean): NavGroup[] {
-  return isFreelancer ? FREELANCER_NAV_GROUPS : NAV_GROUPS;
+ *  the route guard never drift. A dedicated freelancer gets the restricted shell; a
+ *  builder who opted in to being hired (`availableForHire`) keeps the full builder
+ *  nav PLUS the for-hire worker destinations. */
+export function navGroupsForAccountType(isFreelancer: boolean, availableForHire = false): NavGroup[] {
+  if (isFreelancer) return FREELANCER_NAV_GROUPS;
+  return availableForHire ? [...NAV_GROUPS, ...FOR_HIRE_NAV_GROUPS] : NAV_GROUPS;
 }
 
 /** Whether a freelancer account may view this in-app path (else redirect). */

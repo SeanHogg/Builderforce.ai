@@ -19,7 +19,6 @@ import {
   userMfaRecoveryCodes,
   users,
   tenantApiKeys,
-  freelancerProfiles,
 } from '../../infrastructure/database/schema';
 import { hashPassword, hashSecret, verifyPassword } from '../../infrastructure/auth/HashService';
 import { decodeJwtPayload, signJwt, signWebJwt, verifyWebJwt } from '../../infrastructure/auth/JwtService';
@@ -38,7 +37,7 @@ import {
 } from '../../infrastructure/auth/MfaService';
 import { checkTermsAcceptance } from '../middleware/termsEnforcement';
 import { sanitizePsychometricProfile } from '../../application/persona/psychometricCatalog';
-import { provisionJobSeeker } from '../../application/integrations/hiredVideo';
+import { provisionForHireProfile } from '../../application/freelance/provisionForHire';
 
 /** Parse a stored psychometric JSON column into an object (null when unset/invalid). */
 function parsePsychometric(raw: string | null | undefined): unknown {
@@ -92,6 +91,9 @@ function toUserResponse(user: typeof users.$inferSelect) {
     // True once the user has EXPLICITLY picked Build vs Hired. False for an
     // OAuth/magic-link account that hasn't chosen — the gate forces the choice.
     accountTypeSelected: !!user.accountTypeSelectedAt,
+    // Opt-in to being hired talent (a builder can also be for-hire). Drives the
+    // for-hire nav destinations + Settings toggle on the client.
+    availableForHire: user.availableForHire ?? false,
     mfaEnabled: user.mfaEnabled,
   };
 }
@@ -99,26 +101,19 @@ function toUserResponse(user: typeof users.$inferSelect) {
 /**
  * Give a freelancer account its for-hire profile stub — a private, unpublished
  * profile plus a hired.video job-seeker provisioning (native résumé path when the
- * partner SDK isn't configured). Idempotent (onConflictDoNothing). Shared by the
- * password-register path and the post-OAuth role chooser so the two never drift.
+ * partner SDK isn't configured). Idempotent. Shared by the password-register path
+ * and the post-OAuth role chooser (and, via provisionForHireProfile, by a standard
+ * builder opting in) so the row shape never drifts.
  */
 async function provisionFreelancer(
   c: Context<HonoEnv>,
-  db: Db,
   user: typeof users.$inferSelect,
 ): Promise<void> {
-  const prov = await provisionJobSeeker(c.env, {
+  await provisionForHireProfile(c.env, {
+    id: user.id,
     email: user.email,
     name: user.displayName ?? user.username ?? undefined,
-    externalUserId: user.id,
   });
-  await db.insert(freelancerProfiles).values({
-    userId: user.id,
-    hiredVideoUserId: prov.hiredVideoUserId,
-    hiredVideoConnectionId: prov.connectionId,
-    hiredVideoClaimUrl: prov.claimUrl,
-    hiredVideoResumeId: prov.resumeId,
-  }).onConflictDoNothing();
 }
 
 function normalizeEmail(input: string): string {
@@ -731,6 +726,8 @@ export function createAuthRoutes(authService: AuthService, db: Db): Hono<HonoEnv
         passwordHash,
         apiKeyHash,
         accountType,
+        // A freelancer account is inherently for-hire.
+        availableForHire: accountType === 'freelancer',
         // The register form is an explicit role choice, so mark it selected now —
         // the onboarding gate must never re-prompt a password signup.
         accountTypeSelectedAt: sql`now()`,
@@ -749,7 +746,7 @@ export function createAuthRoutes(authService: AuthService, db: Db): Hono<HonoEnv
     // account when the partner SDK is configured — otherwise the native resume
     // path is used and hired.video linkage is filled in later on resume upload.
     if (accountType === 'freelancer') {
-      await provisionFreelancer(c, db, created);
+      await provisionFreelancer(c, created);
     }
 
     const sessionName = 'Current device';
@@ -944,7 +941,7 @@ export function createAuthRoutes(authService: AuthService, db: Db): Hono<HonoEnv
     const user = await authService.getMe(userId);
     if (!user) return c.json({ error: 'User not found' }, 404);
     const [full] = await db
-      .select({ mfaEnabled: users.mfaEnabled, onboardingCompletedAt: users.onboardingCompletedAt, psychometric: users.psychometric, accountType: users.accountType, accountTypeSelectedAt: users.accountTypeSelectedAt })
+      .select({ mfaEnabled: users.mfaEnabled, onboardingCompletedAt: users.onboardingCompletedAt, psychometric: users.psychometric, accountType: users.accountType, accountTypeSelectedAt: users.accountTypeSelectedAt, availableForHire: users.availableForHire })
       .from(users)
       .where(eq(users.id, userId))
       .limit(1);
@@ -958,6 +955,8 @@ export function createAuthRoutes(authService: AuthService, db: Db): Hono<HonoEnv
         // Hired). The onboarding gate forces the choice when not yet selected.
         accountType: full?.accountType ?? 'standard',
         accountTypeSelected: !!full?.accountTypeSelectedAt,
+        // Opt-in to being hired talent (independent of accountType).
+        availableForHire: full?.availableForHire ?? false,
       },
     });
   });
@@ -981,14 +980,20 @@ export function createAuthRoutes(authService: AuthService, db: Db): Hono<HonoEnv
 
     const [row] = await db
       .update(users)
-      .set({ accountType, accountTypeSelectedAt: sql`now()`, updatedAt: sql`now()` })
+      .set({
+        accountType,
+        // A freelancer account is inherently for-hire.
+        availableForHire: accountType === 'freelancer',
+        accountTypeSelectedAt: sql`now()`,
+        updatedAt: sql`now()`,
+      })
       .where(eq(users.id, userId))
       .returning();
     if (!row) return c.json({ error: 'Failed to update account type' }, 500);
 
     // Picking Hired provisions the same for-hire profile stub the register path creates.
     if (accountType === 'freelancer') {
-      await provisionFreelancer(c, db, row);
+      await provisionFreelancer(c, row);
     }
 
     return c.json({ user: toUserResponse(row) });

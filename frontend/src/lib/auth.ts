@@ -392,13 +392,14 @@ export async function getMe(webToken: string): Promise<{
   psychometric: PsychometricProfile | null;
   accountType: 'standard' | 'freelancer';
   accountTypeSelected: boolean;
+  availableForHire: boolean;
 }> {
   const res = await fetch(`${AUTH_API_URL}/api/auth/me`, {
     headers: { Authorization: `Bearer ${webToken}` },
   });
   checkUnauthorizedAndRedirect(res, !!webToken);
-  if (!res.ok) return { onboardingCompletedAt: null, psychometric: null, accountType: 'standard', accountTypeSelected: true };
-  const data = await res.json() as { user?: { onboardingCompletedAt?: string | null; psychometric?: PsychometricProfile | null; accountType?: 'standard' | 'freelancer'; accountTypeSelected?: boolean } };
+  if (!res.ok) return { onboardingCompletedAt: null, psychometric: null, accountType: 'standard', accountTypeSelected: true, availableForHire: false };
+  const data = await res.json() as { user?: { onboardingCompletedAt?: string | null; psychometric?: PsychometricProfile | null; accountType?: 'standard' | 'freelancer'; accountTypeSelected?: boolean; availableForHire?: boolean } };
   return {
     onboardingCompletedAt: data.user?.onboardingCompletedAt ?? null,
     psychometric: data.user?.psychometric ?? null,
@@ -406,7 +407,31 @@ export async function getMe(webToken: string): Promise<{
     // Default to true on a missing field so an older API shape never traps a user
     // behind the role gate.
     accountTypeSelected: data.user?.accountTypeSelected ?? true,
+    availableForHire: data.user?.availableForHire ?? false,
   };
+}
+
+/**
+ * Opt IN or OUT of being hired talent (independent of account type — a builder keeps
+ * the full builder shell). Opting in provisions a for-hire profile stub; opting out
+ * unpublishes it. Returns the new availability.
+ */
+export async function setAvailableForHire(
+  webToken: string,
+  available: boolean,
+): Promise<boolean> {
+  const res = await fetch(`${AUTH_API_URL}/api/freelancers/me/availability`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${webToken}` },
+    body: JSON.stringify({ available }),
+  });
+  checkUnauthorizedAndRedirect(res, !!webToken);
+  if (!res.ok) {
+    const body = (await res.json().catch(() => ({}))) as { error?: string };
+    throw new Error(body.error || `Request failed (${res.status})`);
+  }
+  const data = (await res.json()) as { availableForHire?: boolean };
+  return data.availableForHire ?? available;
 }
 
 /**

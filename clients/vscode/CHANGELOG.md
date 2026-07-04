@@ -2,6 +2,11 @@
 
 All notable changes to the BuilderForce VS Code extension are documented here.
 
+## [2026.7.24] — Chats keep going, and a copied chat tells you why one stopped
+
+- **Long chats no longer run out of room.** Big tool results (like a full task list) used to pile up until the assistant hit its limit and stopped mid-task. Now those results are trimmed to what matters as they go, and the conversation keeps only what fits — so a busy chat keeps working instead of dying after a few steps.
+- **Copy a chat and see exactly what happened.** Copying a conversation now adds a short **Diagnostics** section: a plain-English "likely cause" if something went wrong, plus the tokens used, which tool returned the most data, and whether the model was swapped mid-run. Paste it into a bug report and the reason is right there.
+
 ## [2026.7.22] — Every chat knows its project, and long chats stay fast
 
 - **The chat is labelled with the project it's about.** Open a new conversation and the panel now shows the project name at the top instead of a generic badge — so at a glance you always know which project this chat belongs to, and existing chats show their own project too.

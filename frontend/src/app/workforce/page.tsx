@@ -5,6 +5,8 @@ import { useSearchParams, useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import { useAuth } from '@/lib/AuthContext';
 import { WorkforceAgents } from '@/components/workforce/WorkforceAgents';
+import { RolesView } from '@/components/workforce/RolesView';
+import { TalentView } from '@/components/talent/TalentView';
 import { TeamsView } from '@/components/teams/TeamsView';
 import { ChatsView } from '@/components/chats/ChatsView';
 import { HumanRequestsView } from '@/components/humanRequests/HumanRequestsView';
@@ -17,10 +19,10 @@ import PageContainer from '@/components/PageContainer';
 // Workforce sub-views are declared as query tabs in navGroups; the shell
 // <SectionTabs> bar renders the tab bar. Here we just read `?tab=` to pick the
 // body and the per-tab sub-label, mirroring the /quality surface.
-type WorkforceTab = 'workforce' | 'teams' | 'performance' | 'chats' | 'approvals' | 'logs' | 'qa';
+type WorkforceTab = 'workforce' | 'roles' | 'teams' | 'talent' | 'performance' | 'chats' | 'approvals' | 'logs' | 'qa';
 
 const TAB_IDS: ReadonlyArray<WorkforceTab> = [
-  'workforce', 'teams', 'performance', 'chats', 'approvals', 'logs', 'qa',
+  'workforce', 'roles', 'teams', 'talent', 'performance', 'chats', 'approvals', 'logs', 'qa',
 ];
 
 function WorkforcePageInner() {
@@ -48,7 +50,11 @@ function WorkforcePageInner() {
         </div>
       </div>
 
-      {tab === 'teams' ? (
+      {tab === 'roles' ? (
+        <RolesView />
+      ) : tab === 'talent' ? (
+        <TalentView />
+      ) : tab === 'teams' ? (
         <TeamsView />
       ) : tab === 'performance' ? (
         <PerformanceView />

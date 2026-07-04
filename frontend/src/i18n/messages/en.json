@@ -243,7 +243,7 @@
       "projects": "Projects",
       "ide": "IDE",
       "workflows": "Workflows",
-      "workforce": "Workforce",
+      "workforce": "Talent / Workforce",
       "insights": "Insights",
       "library": "Library",
       "settings": "Settings",
@@ -253,7 +253,6 @@
       "myProfile": "My Profile",
       "findWork": "Find Work",
       "timecard": "Timecard",
-      "hires": "Hires",
       "kanbanTemplates": "Kanban Templates"
     },
     "tab": {
@@ -304,7 +303,9 @@
       "qa": "Agentic QA",
       "home": "Home",
       "integrations": "Integrations",
-      "manager": "Manager"
+      "manager": "Manager",
+      "roles": "Roles",
+      "talent": "Talent"
     }
   },
   "alerts": {
@@ -792,7 +793,19 @@
     "error": "Error: {message}",
     "integrationsTitle": "Integrations",
     "integrationsSubtitle": "Connect source control and external tools, and manage embedded widgets for this workspace.",
-    "sourceControlKeys": "Source control & integration keys"
+    "sourceControlKeys": "Source control & integration keys",
+    "forHire": {
+      "title": "Get hired",
+      "offBody": "Open to freelance or contract work? Turn on availability to publish a for-hire profile, appear in the talent marketplace, and pick up paid gigs — all without leaving your workspace.",
+      "offCta": "Make me available for hire",
+      "onBody": "You're listed as available for hire. Keep your public profile sharp and browse open gigs to bid on.",
+      "editProfile": "Edit for-hire profile",
+      "findWork": "Find work",
+      "turnOff": "Turn off",
+      "enabling": "Turning on…",
+      "disabling": "Turning off…",
+      "error": "Couldn't update your availability. Please try again."
+    }
   },
   "pmo": {
     "title": "Portfolio (PMO)",
@@ -1801,7 +1814,9 @@
         "approvals": "Resolve approvals, questions, and feedback your agents escalate for a human — sign off on actions or answer what they need to proceed.",
         "contributors": "See who — human and agent — is contributing across your workspace, and how.",
         "logs": "Agent logs, execution timelines, and diagnostics across your workspace.",
-        "qa": "Per-project QA automation — flows, generated tests, and CI runs."
+        "qa": "Per-project QA automation — flows, generated tests, and CI runs.",
+        "roles": "The roles your team fills — the board template's standard roles plus your custom ones — and who covers each: an agent, an employee, or a hire.",
+        "talent": "Manage the freelancers you've hired — engagements, job postings, timecard approvals, and invoices."
       }
     },
     "discipline": "Discipline",
@@ -5186,7 +5201,18 @@
     "addRequirement": "Add requirement",
     "priceLabel": "Price (USD)",
     "unpublish": "Unpublish",
-    "publishToMarketplace": "Publish to marketplace"
+    "publishToMarketplace": "Publish to marketplace",
+    "assign": "Assign",
+    "unassign": "Unassign",
+    "assigneeAgent": "Agent",
+    "assigneeHuman": "Employee",
+    "assigneeHire": "Hire",
+    "assignPick": "Select a teammate…",
+    "assignLoading": "Loading…",
+    "assignNoneOfKind": "None available",
+    "assignConfirm": "Assign",
+    "assignSaving": "Assigning…",
+    "assignCancel": "Cancel"
   },
   "psychometricEditor": {
     "loading": "Loading personality model…",
@@ -5213,5 +5239,30 @@
     "importHelp": "Paste a JSON object mapping dimension ids to 0–100 scores (e.g. exported from the human this agent represents). Unknown dimensions are ignored.",
     "importBtn": "Import",
     "importing": "Importing…"
+  },
+  "workforceRoles": {
+    "title": "Roles",
+    "subtitle": "The roles your team fills, and who covers each — an agent, an employee, or a hire.",
+    "templateLabel": "Board template",
+    "newRole": "New role",
+    "roleNamePlaceholder": "Role name",
+    "addRole": "Add role",
+    "creating": "Creating…",
+    "loading": "Loading roles…",
+    "standard": "Standard",
+    "custom": "Custom",
+    "delete": "Delete",
+    "deleteConfirm": "Delete role \"{name}\"?",
+    "noneAssigned": "No one assigned yet",
+    "discipline": {
+      "engineering": "Engineering",
+      "product": "Product",
+      "design": "Design",
+      "qa": "QA",
+      "devops": "DevOps",
+      "data": "Data",
+      "security": "Security",
+      "other": "Other"
+    }
   }
 }

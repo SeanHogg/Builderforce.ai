@@ -1,4 +1,4 @@
-import { MiddlewareHandler } from 'hono';
+import { MiddlewareHandler, type Context } from 'hono';
 import type { HonoEnv } from '../../env';
 import { TenantRole, hasMinRole } from '../../domain/shared/types';
 import { UnauthorizedError, ForbiddenError } from '../../domain/shared/errors';
@@ -143,6 +143,15 @@ export const authMiddleware: MiddlewareHandler<HonoEnv> = async (c, next) => {
 
   await next();
 };
+
+/**
+ * Predicate: does the request's caller hold MANAGER role or higher? The one
+ * spelling of the manager gate — use in a route body where `requireRole` (which
+ * throws) isn't the right shape, e.g. a per-field or "own-or-manager" check.
+ */
+export function isManager(c: Context<HonoEnv>): boolean {
+  return hasMinRole(c.get('role') as TenantRole, TenantRole.MANAGER);
+}
 
 /**
  * Role-gating middleware factory.

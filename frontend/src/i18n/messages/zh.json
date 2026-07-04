@@ -243,7 +243,7 @@
       "projects": "项目",
       "ide": "IDE",
       "workflows": "工作流",
-      "workforce": "团队",
+      "workforce": "人才 / 团队",
       "insights": "洞察",
       "library": "资源库",
       "settings": "设置",
@@ -253,7 +253,6 @@
       "myProfile": "我的资料",
       "findWork": "寻找工作",
       "timecard": "工时卡",
-      "hires": "雇员",
       "kanbanTemplates": "看板模板"
     },
     "tab": {
@@ -304,7 +303,9 @@
       "qa": "智能体 QA",
       "home": "主页",
       "integrations": "集成",
-      "manager": "经理"
+      "manager": "经理",
+      "roles": "角色",
+      "talent": "人才"
     }
   },
   "alerts": {
@@ -792,7 +793,19 @@
     "error": "错误：{message}",
     "integrationsTitle": "集成",
     "integrationsSubtitle": "连接源代码管理与外部工具，并管理本工作区的嵌入式组件。",
-    "sourceControlKeys": "源代码管理与集成密钥"
+    "sourceControlKeys": "源代码管理与集成密钥",
+    "forHire": {
+      "title": "接受聘用",
+      "offBody": "想接自由职业或合同工作？开启接单状态即可发布可受聘资料、出现在人才市场中，并在不离开工作区的情况下承接付费项目。",
+      "offCta": "开放接受聘用",
+      "onBody": "你已被列为可接受聘用。保持公开资料的完善，并浏览可投标的开放职位。",
+      "editProfile": "编辑受聘资料",
+      "findWork": "寻找工作",
+      "turnOff": "关闭",
+      "enabling": "正在开启…",
+      "disabling": "正在关闭…",
+      "error": "无法更新你的接单状态，请重试。"
+    }
   },
   "pmo": {
     "title": "项目组合（PMO）",
@@ -1801,7 +1814,9 @@
         "approvals": "处理智能体上报给人工的审批、提问与反馈——为操作签字或回答其推进所需的信息。",
         "contributors": "查看本工作区中谁——人员与智能体——在贡献，以及如何贡献。",
         "logs": "本工作区中的智能体日志、执行时间线与诊断信息。",
-        "qa": "按项目的 QA 自动化——流程、生成的测试与 CI 运行。"
+        "qa": "按项目的 QA 自动化——流程、生成的测试与 CI 运行。",
+        "roles": "你的团队需要担任的角色——看板模板的标准角色加上你的自定义角色——以及每个角色由谁担任：智能体、员工或外聘人员。",
+        "talent": "管理你聘用的自由职业者——合作关系、职位发布、工时审批与发票。"
       }
     },
     "discipline": "职能",
@@ -5186,7 +5201,18 @@
     "addRequirement": "添加要求",
     "priceLabel": "价格（美元）",
     "unpublish": "取消发布",
-    "publishToMarketplace": "发布到市场"
+    "publishToMarketplace": "发布到市场",
+    "assign": "指派",
+    "unassign": "取消指派",
+    "assigneeAgent": "智能体",
+    "assigneeHuman": "员工",
+    "assigneeHire": "外聘",
+    "assignPick": "选择成员…",
+    "assignLoading": "加载中…",
+    "assignNoneOfKind": "无可用项",
+    "assignConfirm": "指派",
+    "assignSaving": "指派中…",
+    "assignCancel": "取消"
   },
   "psychometricEditor": {
     "loading": "正在加载性格模型…",
@@ -5213,5 +5239,30 @@
     "importHelp": "粘贴一个将维度 id 映射到 0–100 分数的 JSON 对象（例如从该智能体所代表的真人导出）。未知维度将被忽略。",
     "importBtn": "导入",
     "importing": "导入中…"
+  },
+  "workforceRoles": {
+    "title": "角色",
+    "subtitle": "你的团队需要担任的角色，以及每个角色由谁担任——智能体、员工或外聘人员。",
+    "templateLabel": "看板模板",
+    "newRole": "新建角色",
+    "roleNamePlaceholder": "角色名称",
+    "addRole": "添加角色",
+    "creating": "创建中…",
+    "loading": "加载角色…",
+    "standard": "标准",
+    "custom": "自定义",
+    "delete": "删除",
+    "deleteConfirm": "删除角色“{name}”？",
+    "noneAssigned": "尚未指派任何人",
+    "discipline": {
+      "engineering": "工程",
+      "product": "产品",
+      "design": "设计",
+      "qa": "测试",
+      "devops": "DevOps",
+      "data": "数据",
+      "security": "安全",
+      "other": "其他"
+    }
   }
 }

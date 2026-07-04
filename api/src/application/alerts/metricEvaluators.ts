@@ -21,9 +21,9 @@ import { computeDora } from '../metrics/workforceMetrics';
 import { computeEngineeringInsights } from '../insights/engineeringInsights';
 import { buildConsumptionSnapshot } from '../consumption/meters';
 import { buildTenantDriftReport } from '../../presentation/routes/evalRoutes';
+import { millicentsToUsd } from '../../domain/shared/money';
 
 const HOUR_MS = 3_600_000;
-const MILLICENTS_PER_USD = 100_000;
 
 /** The full set of metric keys a rule may target (kept in lockstep with the
  *  migration's CHECK-list and the schema AlertMetric type). */
@@ -54,7 +54,7 @@ async function tokenSpendUsd(db: Db, tenantId: number, since: Date, projectId?: 
     .select({ mc: sql<string>`coalesce(sum(${llmUsageLog.costUsdMillicents}),0)` })
     .from(llmUsageLog)
     .where(and(...conds));
-  return Number(row?.mc ?? 0) / MILLICENTS_PER_USD;
+  return millicentsToUsd(Number(row?.mc ?? 0));
 }
 
 /** Cost-per-merged-PR (USD) = window spend / merged runs in the window. Null when

@@ -11,8 +11,7 @@
 import { and, eq, gte, lt, sql } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import { budgets, initiatives, llmUsageLog, projects, runModelOutcomes } from '../../infrastructure/database/schema';
-
-const MILLICENTS_PER_USD = 100_000;
+import { MILLICENTS_PER_USD } from '../../domain/shared/money';
 
 function num(v: unknown): number {
   const n = typeof v === 'number' ? v : Number(v);

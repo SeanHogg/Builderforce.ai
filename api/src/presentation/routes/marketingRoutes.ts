@@ -18,13 +18,17 @@ export function createMarketingRoutes(marketing: MarketingService): Hono<HonoEnv
 
   // Record one anonymous tool run (fire-and-forget from the client).
   router.post('/track', async (c) => {
-    const body = await c.req.json<{
+    type TrackBody = {
       visitorId?: string;
       toolId?: string;
       input?: Record<string, number>;
       result?: ToolResult;
       touch?: MarketingTouch;
-    }>().catch(() => ({}));
+    };
+    // Annotate the catch fallback so a malformed body resolves to `TrackBody`
+    // (all-optional) rather than widening the union to `TrackBody | {}`, which
+    // would block property access below.
+    const body = await c.req.json<TrackBody>().catch((): TrackBody => ({}));
 
     if (!isValidVisitorId(body.visitorId) || typeof body.toolId !== 'string' || !body.toolId || !body.result) {
       return c.json({ error: 'Invalid tracking payload' }, 400);
@@ -50,7 +54,7 @@ export function createMarketingRoutes(marketing: MarketingService): Hono<HonoEnv
   // Close the funnel: link the anonymous session to the now-authenticated user.
   router.post('/convert', authMiddleware, async (c) => {
     const userId = c.get('userId') as string;
-    const body = await c.req.json<{ visitorId?: string }>().catch(() => ({}));
+    const body = await c.req.json<{ visitorId?: string }>().catch((): { visitorId?: string } => ({}));
     if (!isValidVisitorId(body.visitorId)) return c.json({ error: 'Invalid visitor id' }, 400);
     await marketing.markConverted(c.env as Env, body.visitorId, userId);
     return c.body(null, 204);

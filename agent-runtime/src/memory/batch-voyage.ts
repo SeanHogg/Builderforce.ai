@@ -2,6 +2,7 @@ import { createInterface } from "node:readline";
 import { Readable } from "node:stream";
 import { extractBatchErrorMessage, formatUnavailableBatchError } from "./batch-error-utils.js";
 import { postJsonWithRetry } from "./batch-http.js";
+import { waitForBatch } from "./batch-poll.js";
 import { applyEmbeddingBatchOutputLine } from "./batch-output.js";
 import { runEmbeddingBatchGroups } from "./batch-runner.js";
 import { uploadBatchJsonlFile } from "./batch-upload.js";
@@ -75,21 +76,6 @@ async function submitVoyageBatch(params: {
   });
 }
 
-async function fetchVoyageBatchStatus(params: {
-  client: VoyageEmbeddingClient;
-  batchId: string;
-}): Promise<VoyageBatchStatus> {
-  const baseUrl = normalizeBatchBaseUrl(params.client);
-  const res = await fetch(`${baseUrl}/batches/${params.batchId}`, {
-    headers: buildBatchHeaders(params.client, { json: true }),
-  });
-  if (!res.ok) {
-    const text = await res.text();
-    throw new Error(`voyage batch status failed: ${res.status} ${text}`);
-  }
-  return (await res.json()) as VoyageBatchStatus;
-}
-
 async function readVoyageBatchError(params: {
   client: VoyageEmbeddingClient;
   errorFileId: string;
@@ -115,53 +101,6 @@ async function readVoyageBatchError(params: {
     return extractBatchErrorMessage(lines);
   } catch (err) {
     return formatUnavailableBatchError(err);
-  }
-}
-
-async function waitForVoyageBatch(params: {
-  client: VoyageEmbeddingClient;
-  batchId: string;
-  wait: boolean;
-  pollIntervalMs: number;
-  timeoutMs: number;
-  debug?: (message: string, data?: Record<string, unknown>) => void;
-  initial?: VoyageBatchStatus;
-}): Promise<{ outputFileId: string; errorFileId?: string }> {
-  const start = Date.now();
-  let current: VoyageBatchStatus | undefined = params.initial;
-  while (true) {
-    const status =
-      current ??
-      (await fetchVoyageBatchStatus({
-        client: params.client,
-        batchId: params.batchId,
-      }));
-    const state = status.status ?? "unknown";
-    if (state === "completed") {
-      if (!status.output_file_id) {
-        throw new Error(`voyage batch ${params.batchId} completed without output file`);
-      }
-      return {
-        outputFileId: status.output_file_id,
-        errorFileId: status.error_file_id ?? undefined,
-      };
-    }
-    if (["failed", "expired", "cancelled", "canceled"].includes(state)) {
-      const detail = status.error_file_id
-        ? await readVoyageBatchError({ client: params.client, errorFileId: status.error_file_id })
-        : undefined;
-      const suffix = detail ? `: ${detail}` : "";
-      throw new Error(`voyage batch ${params.batchId} ${state}${suffix}`);
-    }
-    if (!params.wait) {
-      throw new Error(`voyage batch ${params.batchId} still ${state}; wait disabled`);
-    }
-    if (Date.now() - start > params.timeoutMs) {
-      throw new Error(`voyage batch ${params.batchId} timed out after ${params.timeoutMs}ms`);
-    }
-    params.debug?.(`voyage batch ${params.batchId} ${state}; waiting ${params.pollIntervalMs}ms`);
-    await new Promise((resolve) => setTimeout(resolve, params.pollIntervalMs));
-    current = undefined;
   }
 }
 
@@ -214,14 +153,17 @@ export async function runVoyageEmbeddingBatches(params: {
               outputFileId: batchInfo.output_file_id ?? "",
               errorFileId: batchInfo.error_file_id ?? undefined,
             }
-          : await waitForVoyageBatch({
+          : await waitForBatch({
               client: params.client,
+              provider: "voyage",
               batchId: batchInfo.id,
               wait: params.wait,
               pollIntervalMs: params.pollIntervalMs,
               timeoutMs: params.timeoutMs,
               debug: params.debug,
               initial: batchInfo,
+              readBatchError: (errorFileId) =>
+                readVoyageBatchError({ client: params.client, errorFileId }),
             });
       if (!completed.outputFileId) {
         throw new Error(`voyage batch ${batchInfo.id} completed without output file`);

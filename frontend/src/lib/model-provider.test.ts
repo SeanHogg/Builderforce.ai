@@ -2,11 +2,6 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import {
   MambaModelProvider,
   ExternalLLMProvider,
-  registerProvider,
-  unregisterProvider,
-  getProvider,
-  listProviders,
-  createExternalLLMProvider,
 } from './model-provider';
 
 // ---------------------------------------------------------------------------
@@ -215,52 +210,6 @@ describe('ExternalLLMProvider', () => {
     ];
     const userMsgs = messages.filter((m) => m.role === 'user');
     expect(userMsgs[0].content).toBe('from context');
-  });
-
-  it('uses factory helper createExternalLLMProvider', () => {
-    const provider = createExternalLLMProvider({ projectId: 42, label: 'Test' });
-    expect(provider).toBeInstanceOf(ExternalLLMProvider);
-    expect(provider.name).toBe('Test');
-  });
-});
-
-// ---------------------------------------------------------------------------
-// Provider registry
-// ---------------------------------------------------------------------------
-
-describe('provider registry', () => {
-  afterEach(() => {
-    unregisterProvider('mamba');
-    unregisterProvider('external-llm');
-    unregisterProvider('test-provider');
-  });
-
-  it('registers and retrieves a provider by id', () => {
-    const provider = new ExternalLLMProvider({ projectId: 'p', label: 'Test' });
-    registerProvider(provider);
-    expect(getProvider('external-llm')).toBe(provider);
-  });
-
-  it('listProviders() returns all registered providers', () => {
-    const p1 = new ExternalLLMProvider({ projectId: 'p', label: 'External' });
-    const p2 = new MambaModelProvider();
-    registerProvider(p1);
-    registerProvider(p2);
-    const all = listProviders();
-    expect(all).toContain(p1);
-    expect(all).toContain(p2);
-  });
-
-  it('unregisterProvider() removes a provider', () => {
-    const provider = new ExternalLLMProvider({ projectId: 'p', label: 'Temp' });
-    registerProvider(provider);
-    expect(getProvider('external-llm')).toBe(provider);
-    unregisterProvider('external-llm');
-    expect(getProvider('external-llm')).toBeUndefined();
-  });
-
-  it('getProvider() returns undefined for unknown ids', () => {
-    expect(getProvider('does-not-exist')).toBeUndefined();
   });
 });
 

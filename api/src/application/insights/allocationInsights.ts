@@ -38,9 +38,9 @@ import {
   type AllocationCategory,
 } from '../llm/allocationCategories';
 import { loadTaskCostClassMap } from '../pmo/planningSpine';
+import { MILLICENTS_PER_USD } from '../../domain/shared/money';
 
 const HOUR_MS = 3_600_000;
-const MILLICENTS_PER_USD = 100_000;
 /** Bound on tasks scanned per window (mirrors workforceMetrics.MAX_METRIC_ROWS). */
 const MAX_METRIC_ROWS = 5_000;
 /** Cap per-task effort hours so a single long-lived/stale task can't dominate the

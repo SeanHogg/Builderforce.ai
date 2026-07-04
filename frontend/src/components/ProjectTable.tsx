@@ -115,7 +115,8 @@ export function ProjectTable({
                     <button
                       type="button"
                       onClick={() => onDetailsClick(project)}
-                      aria-label="Details"
+                      aria-label={t('details')}
+                      title={t('details')}
                       style={iconButtonStyle}
                     >
                       <svg viewBox="0 0 24 24" style={{ width: 18, height: 18, stroke: 'currentColor', fill: 'none', strokeWidth: 2 }}>
@@ -128,8 +129,8 @@ export function ProjectTable({
                   <button
                     type="button"
                     onClick={() => router.push(`/projects?tab=tasks&project=${project.id}`)}
-                    aria-label="Task board"
-                    title="Task board"
+                    aria-label={t('taskBoard')}
+                    title={t('taskBoard')}
                     style={iconButtonStyle}
                   >
                     <svg viewBox="0 0 24 24" style={{ width: 18, height: 18, stroke: 'currentColor', fill: 'none', strokeWidth: 2 }}>
@@ -141,8 +142,8 @@ export function ProjectTable({
                   <button
                     type="button"
                     onClick={() => router.push(`/workflows?project=${project.id}`)}
-                    aria-label="View workflows"
-                    title={`Workflows${project.workflowCount != null ? ` (${project.workflowCount})` : ''}`}
+                    aria-label={t('viewWorkflows')}
+                    title={project.workflowCount != null ? t('workflowsWithCount', { count: project.workflowCount }) : t('workflows')}
                     style={iconButtonStyle}
                   >
                     <span style={{ fontSize: 16 }} aria-hidden>🔀</span>
@@ -150,7 +151,8 @@ export function ProjectTable({
                   <button
                     type="button"
                     onClick={() => openIde(project)}
-                    aria-label="Open in IDE"
+                    aria-label={t('openIde')}
+                    title={t('openIde')}
                     style={iconButtonStyle}
                   >
                     <span style={{ fontSize: 18 }} aria-hidden>💻</span>
@@ -176,7 +178,7 @@ export function ProjectTable({
                         cursor: 'pointer',
                       }}
                     >
-                      Delete
+                      {t('delete')}
                     </button>
                   )}
                 </div>

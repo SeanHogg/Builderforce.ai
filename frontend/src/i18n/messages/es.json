@@ -243,7 +243,7 @@
       "projects": "Proyectos",
       "ide": "IDE",
       "workflows": "Flujos",
-      "workforce": "Equipo",
+      "workforce": "Talento / Plantilla",
       "insights": "Análisis",
       "library": "Biblioteca",
       "settings": "Ajustes",
@@ -253,7 +253,6 @@
       "myProfile": "Mi perfil",
       "findWork": "Buscar trabajo",
       "timecard": "Hoja de horas",
-      "hires": "Contrataciones",
       "kanbanTemplates": "Plantillas kanban"
     },
     "tab": {
@@ -304,7 +303,9 @@
       "qa": "QA agéntica",
       "home": "Inicio",
       "integrations": "Integraciones",
-      "manager": "Manager"
+      "manager": "Manager",
+      "roles": "Roles",
+      "talent": "Talento"
     }
   },
   "alerts": {
@@ -792,7 +793,19 @@
     "error": "Error: {message}",
     "integrationsTitle": "Integraciones",
     "integrationsSubtitle": "Conecta el control de código y herramientas externas, y gestiona los widgets integrados de este espacio.",
-    "sourceControlKeys": "Claves de control de código e integraciones"
+    "sourceControlKeys": "Claves de control de código e integraciones",
+    "forHire": {
+      "title": "Trabaja por encargo",
+      "offBody": "¿Abierto a trabajos freelance o por contrato? Activa tu disponibilidad para publicar un perfil de contratación, aparecer en el mercado de talento y aceptar encargos pagados, sin salir de tu espacio de trabajo.",
+      "offCta": "Ponerme disponible para contratación",
+      "onBody": "Apareces como disponible para contratación. Mantén tu perfil público al día y explora los encargos abiertos para presentar propuestas.",
+      "editProfile": "Editar perfil de contratación",
+      "findWork": "Buscar trabajo",
+      "turnOff": "Desactivar",
+      "enabling": "Activando…",
+      "disabling": "Desactivando…",
+      "error": "No se pudo actualizar tu disponibilidad. Inténtalo de nuevo."
+    }
   },
   "pmo": {
     "title": "Portafolio (PMO)",
@@ -1801,7 +1814,9 @@
         "approvals": "Resuelve aprobaciones, preguntas y comentarios que tus agentes escalan a una persona: aprueba acciones o responde lo que necesitan para continuar.",
         "contributors": "Mira quién —persona y agente— está contribuyendo en tu espacio de trabajo, y cómo.",
         "logs": "Registros de agentes, líneas de tiempo de ejecución y diagnósticos de tu espacio de trabajo.",
-        "qa": "Automatización de QA por proyecto: flujos, pruebas generadas y ejecuciones de CI."
+        "qa": "Automatización de QA por proyecto: flujos, pruebas generadas y ejecuciones de CI.",
+        "roles": "Los roles que cubre tu equipo —los roles estándar de la plantilla del tablero más los personalizados— y quién cubre cada uno: un agente, un empleado o un contratado.",
+        "talent": "Gestiona los freelancers que has contratado: colaboraciones, ofertas de trabajo, aprobaciones de horas y facturas."
       }
     },
     "discipline": "Disciplina",
@@ -5186,7 +5201,18 @@
     "addRequirement": "Añadir requisito",
     "priceLabel": "Precio (USD)",
     "unpublish": "Retirar",
-    "publishToMarketplace": "Publicar en el mercado"
+    "publishToMarketplace": "Publicar en el mercado",
+    "assign": "Asignar",
+    "unassign": "Quitar",
+    "assigneeAgent": "Agente",
+    "assigneeHuman": "Empleado",
+    "assigneeHire": "Contratado",
+    "assignPick": "Elige a alguien…",
+    "assignLoading": "Cargando…",
+    "assignNoneOfKind": "Ninguno disponible",
+    "assignConfirm": "Asignar",
+    "assignSaving": "Asignando…",
+    "assignCancel": "Cancelar"
   },
   "psychometricEditor": {
     "loading": "Cargando el modelo de personalidad…",
@@ -5213,5 +5239,30 @@
     "importHelp": "Pega un objeto JSON que asigne ids de dimensión a puntuaciones de 0 a 100 (p. ej. exportado del humano al que representa este agente). Las dimensiones desconocidas se ignoran.",
     "importBtn": "Importar",
     "importing": "Importando…"
+  },
+  "workforceRoles": {
+    "title": "Roles",
+    "subtitle": "Los roles que cubre tu equipo y quién cubre cada uno: un agente, un empleado o un contratado.",
+    "templateLabel": "Plantilla del tablero",
+    "newRole": "Nuevo rol",
+    "roleNamePlaceholder": "Nombre del rol",
+    "addRole": "Añadir rol",
+    "creating": "Creando…",
+    "loading": "Cargando roles…",
+    "standard": "Estándar",
+    "custom": "Personalizado",
+    "delete": "Eliminar",
+    "deleteConfirm": "¿Eliminar el rol «{name}»?",
+    "noneAssigned": "Nadie asignado todavía",
+    "discipline": {
+      "engineering": "Ingeniería",
+      "product": "Producto",
+      "design": "Diseño",
+      "qa": "QA",
+      "devops": "DevOps",
+      "data": "Datos",
+      "security": "Seguridad",
+      "other": "Otros"
+    }
   }
 }

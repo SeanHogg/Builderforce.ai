@@ -8,6 +8,7 @@ import {
   type ProjectListTone,
 } from '@seanhogg/builderforce-brain-ui';
 import { getToken, onIntent, post, refreshToken, type InitData, type LabelBundle } from './vscodeBridge';
+import { authedFetch } from './authedFetch';
 
 /**
  * The list-shaped project pages (Backlog, PRDs) — the thin transport wrapper around
@@ -308,6 +309,9 @@ export function ProjectPageScreen({ init, view }: { init: InitData; view: PageVi
   const [data, setData] = useState<ProjectListModel | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  // Shared bearer-fetch: attaches the host-minted token and, on a 401, re-mints via
+  // `refreshToken` and retries once (the promise-returning refresher opts into a retry).
+  const api = useMemo(() => authedFetch(init.baseUrl, getToken, refreshToken), [init.baseUrl]);
 
   const listLabels = useMemo<Partial<ProjectListLabels>>(
     () => ({
@@ -329,24 +333,14 @@ export function ProjectPageScreen({ init, view }: { init: InitData; view: PageVi
     }
     setLoading(true);
     setError(null);
-    const call = (token: string | null) =>
-      fetch(`${init.baseUrl}${cfg.endpoint(projectId ?? null)}`, {
-        headers: token ? { authorization: `Bearer ${token}` } : {},
-      });
     try {
-      let res = await call(getToken());
-      if (res.status === 401) {
-        await refreshToken();
-        res = await call(getToken());
-      }
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      setData(cfg.map(await res.json(), L));
+      setData(cfg.map(await api<unknown>(cfg.endpoint(projectId ?? null)), L));
     } catch (e) {
       setError((e as Error).message || 'Request failed');
     } finally {
       setLoading(false);
     }
-  }, [projectId, init.baseUrl, cfg, L]);
+  }, [projectId, api, cfg, L]);
 
   useEffect(() => { void load(); }, [load]);
   // Host re-pushes `revalidate` when the panel regains focus.

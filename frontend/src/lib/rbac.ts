@@ -161,3 +161,15 @@ export function useAccountType(): 'standard' | 'freelancer' | undefined {
 export function useIsFreelancer(): boolean {
   return useAccountType() === 'freelancer';
 }
+
+/**
+ * True when the signed-in user has opted IN to being hired talent. Independent of
+ * account type: a 'standard' builder can turn this on to publish a for-hire profile
+ * and pick up gigs while keeping the full builder shell (a dedicated 'freelancer'
+ * account is always for-hire). The ONE place this branch is decided, so the for-hire
+ * nav destinations + opt-in UI never drift.
+ */
+export function useAvailableForHire(): boolean {
+  const auth = useOptionalAuth();
+  return auth?.user?.accountType === 'freelancer' || !!auth?.user?.availableForHire;
+}

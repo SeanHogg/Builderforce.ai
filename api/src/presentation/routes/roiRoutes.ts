@@ -24,8 +24,8 @@ import {
 import type { Env, HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 import { scope } from './segmentTrackerRoutes';
+import { MILLICENTS_PER_USD } from '../../domain/shared/money';
 
-const MILLICENTS_PER_USD = 100_000;
 const HOUR_MS = 3_600_000;
 const WEEK_MS = 7 * 24 * HOUR_MS;
 

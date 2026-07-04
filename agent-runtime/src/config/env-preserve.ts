@@ -14,6 +14,8 @@
  * resolves to), the new value is kept as-is.
  */
 
+import { resolveEnvVarsInString } from "./env-substitution.js";
+
 const ENV_VAR_PATTERN = /\$\{[A-Z_][A-Z0-9_]*\}/;
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
@@ -30,58 +32,6 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
  */
 function hasEnvVarRef(value: string): boolean {
   return ENV_VAR_PATTERN.test(value);
-}
-
-/**
- * Resolve `${VAR}` references in a single string using the given env.
- * Returns null if any referenced var is missing (instead of throwing).
- *
- * Mirrors the substitution semantics of `substituteString` in env-substitution.ts:
- * - `${VAR}` → env value (returns null if missing)
- * - `$${VAR}` → literal `${VAR}` (escape sequence)
- */
-function tryResolveString(template: string, env: NodeJS.ProcessEnv): string | null {
-  const ENV_VAR_NAME = /^[A-Z_][A-Z0-9_]*$/;
-  const chunks: string[] = [];
-
-  for (let i = 0; i < template.length; i++) {
-    if (template[i] === "$") {
-      // Escaped: $${VAR} -> literal ${VAR}
-      if (template[i + 1] === "$" && template[i + 2] === "{") {
-        const start = i + 3;
-        const end = template.indexOf("}", start);
-        if (end !== -1) {
-          const name = template.slice(start, end);
-          if (ENV_VAR_NAME.test(name)) {
-            chunks.push(`\${${name}}`);
-            i = end;
-            continue;
-          }
-        }
-      }
-
-      // Substitution: ${VAR} -> env value
-      if (template[i + 1] === "{") {
-        const start = i + 2;
-        const end = template.indexOf("}", start);
-        if (end !== -1) {
-          const name = template.slice(start, end);
-          if (ENV_VAR_NAME.test(name)) {
-            const val = env[name];
-            if (val === undefined || val === "") {
-              return null;
-            }
-            chunks.push(val);
-            i = end;
-            continue;
-          }
-        }
-      }
-    }
-    chunks.push(template[i]);
-  }
-
-  return chunks.join("");
 }
 
 /**
@@ -106,7 +56,7 @@ export function restoreEnvVarRefs(
   // String leaf: check if parsed was a ${VAR} template that resolves to incoming
   if (typeof incoming === "string" && typeof parsed === "string") {
     if (hasEnvVarRef(parsed)) {
-      const resolved = tryResolveString(parsed, env);
+      const resolved = resolveEnvVarsInString(parsed, env, "null");
       if (resolved === incoming) {
         // The incoming value matches what the env var resolves to — restore the reference
         return parsed;

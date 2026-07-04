@@ -74,11 +74,26 @@ export interface TemplateSummary {
   roleCount: number;
 }
 
+export type AssigneeKind = 'agent' | 'human' | 'hire';
+
 export interface RosterFiller {
-  kind: 'human' | 'agent';
+  kind: AssigneeKind;
   ref: string;
   name: string;
-  via: 'lane' | 'agent-skill' | 'discipline';
+  via: 'assignment' | 'lane' | 'agent-skill' | 'discipline';
+  /** Set when `via === 'assignment'`: the assignment row id, so the UI can unassign. */
+  assignmentId?: string;
+}
+
+/** An explicit "pin an agent / human member / hire to a role" record. `projectId`
+ *  null = a workspace-default (Workforce → Roles); set = a project's roster. */
+export interface RoleAssignment {
+  id: string;
+  roleKey: string;
+  assigneeKind: AssigneeKind;
+  assigneeRef: string;
+  assigneeName: string | null;
+  projectId: number | null;
 }
 
 export interface RosterRole {

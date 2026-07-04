@@ -22,6 +22,7 @@ import {
   persistTenantSession,
   register as apiRegister,
   selectAccountType as apiSelectAccountType,
+  setAvailableForHire as apiSetAvailableForHire,
 } from './auth';
 
 // ---------------------------------------------------------------------------
@@ -40,6 +41,9 @@ interface AuthContextValue {
   /** One-time account-type choice (Build vs Hired) for an OAuth/magic-link account
    *  that hasn't picked a role yet. Updates the stored user in place. */
   selectAccountType: (accountType: 'standard' | 'freelancer') => Promise<void>;
+  /** Opt IN/OUT of being hired talent (independent of account type — the builder
+   *  shell is unaffected). Updates the stored user in place. */
+  setAvailableForHire: (available: boolean) => Promise<void>;
   selectTenant: (tenant: Tenant) => Promise<void>;
   fetchTenants: () => Promise<Tenant[]>;
   logout: () => void;
@@ -95,6 +99,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     [webToken],
   );
 
+  const setAvailableForHire = useCallback(
+    async (available: boolean) => {
+      if (!webToken) throw new Error('Not authenticated');
+      const next = await apiSetAvailableForHire(webToken, available);
+      setUser((prev) => {
+        if (!prev) return prev;
+        const updated = { ...prev, availableForHire: next };
+        persistSession(webToken, updated);
+        return updated;
+      });
+    },
+    [webToken],
+  );
+
   const fetchTenants = useCallback(async (): Promise<Tenant[]> => {
     if (!webToken) throw new Error('Not authenticated');
     return getMyTenants(webToken);
@@ -130,6 +148,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       login,
       register,
       selectAccountType,
+      setAvailableForHire,
       selectTenant,
       fetchTenants,
       logout,
@@ -142,6 +161,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       login,
       register,
       selectAccountType,
+      setAvailableForHire,
       selectTenant,
       fetchTenants,
       logout,

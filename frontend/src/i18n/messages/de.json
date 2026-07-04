@@ -243,7 +243,7 @@
       "projects": "Projekte",
       "ide": "IDE",
       "workflows": "Workflows",
-      "workforce": "Team",
+      "workforce": "Talente / Belegschaft",
       "insights": "Insights",
       "library": "Bibliothek",
       "settings": "Einstellungen",
@@ -253,7 +253,6 @@
       "myProfile": "Mein Profil",
       "findWork": "Arbeit finden",
       "timecard": "Zeiterfassung",
-      "hires": "Einstellungen",
       "kanbanTemplates": "Kanban-Vorlagen"
     },
     "tab": {
@@ -304,7 +303,9 @@
       "qa": "Agentische QA",
       "home": "Start",
       "integrations": "Integrationen",
-      "manager": "Manager"
+      "manager": "Manager",
+      "roles": "Rollen",
+      "talent": "Talente"
     }
   },
   "alerts": {
@@ -792,7 +793,19 @@
     "error": "Fehler: {message}",
     "integrationsTitle": "Integrationen",
     "integrationsSubtitle": "Verbinde Versionskontrolle und externe Tools und verwalte die eingebetteten Widgets dieses Arbeitsbereichs.",
-    "sourceControlKeys": "Versionskontroll- und Integrationsschlüssel"
+    "sourceControlKeys": "Versionskontroll- und Integrationsschlüssel",
+    "forHire": {
+      "title": "Beauftragt werden",
+      "offBody": "Offen für freiberufliche oder Vertragsarbeit? Aktiviere deine Verfügbarkeit, um ein Für-Hire-Profil zu veröffentlichen, im Talentmarkt zu erscheinen und bezahlte Aufträge anzunehmen – ohne deinen Arbeitsbereich zu verlassen.",
+      "offCta": "Mich für Aufträge verfügbar machen",
+      "onBody": "Du bist als verfügbar für Aufträge gelistet. Halte dein öffentliches Profil aktuell und durchsuche offene Aufträge, um dich zu bewerben.",
+      "editProfile": "Für-Hire-Profil bearbeiten",
+      "findWork": "Arbeit finden",
+      "turnOff": "Deaktivieren",
+      "enabling": "Wird aktiviert…",
+      "disabling": "Wird deaktiviert…",
+      "error": "Deine Verfügbarkeit konnte nicht aktualisiert werden. Bitte versuche es erneut."
+    }
   },
   "pmo": {
     "title": "Portfolio (PMO)",
@@ -1801,7 +1814,9 @@
         "approvals": "Bearbeite Freigaben, Fragen und Rückmeldungen, die deine Agenten an einen Menschen eskalieren — gib Aktionen frei oder beantworte, was sie zum Fortfahren benötigen.",
         "contributors": "Sieh, wer — Mensch und Agent — in deinem Arbeitsbereich beiträgt und wie.",
         "logs": "Agenten-Protokolle, Ausführungs-Zeitleisten und Diagnosen in deinem Arbeitsbereich.",
-        "qa": "Projektbezogene QA-Automatisierung — Abläufe, generierte Tests und CI-Läufe."
+        "qa": "Projektbezogene QA-Automatisierung — Abläufe, generierte Tests und CI-Läufe.",
+        "roles": "Die Rollen, die dein Team besetzt – die Standardrollen der Board-Vorlage plus deine eigenen – und wer sie jeweils abdeckt: ein Agent, ein Mitarbeiter oder eine externe Kraft.",
+        "talent": "Verwalte die von dir engagierten Freelancer – Engagements, Stellenausschreibungen, Zeiterfassungsfreigaben und Rechnungen."
       }
     },
     "discipline": "Disziplin",
@@ -5186,7 +5201,18 @@
     "addRequirement": "Anforderung hinzufügen",
     "priceLabel": "Preis (USD)",
     "unpublish": "Zurückziehen",
-    "publishToMarketplace": "Im Marktplatz veröffentlichen"
+    "publishToMarketplace": "Im Marktplatz veröffentlichen",
+    "assign": "Zuweisen",
+    "unassign": "Entfernen",
+    "assigneeAgent": "Agent",
+    "assigneeHuman": "Mitarbeiter",
+    "assigneeHire": "Externe Kraft",
+    "assignPick": "Teammitglied wählen…",
+    "assignLoading": "Wird geladen…",
+    "assignNoneOfKind": "Keine verfügbar",
+    "assignConfirm": "Zuweisen",
+    "assignSaving": "Wird zugewiesen…",
+    "assignCancel": "Abbrechen"
   },
   "psychometricEditor": {
     "loading": "Persönlichkeitsmodell wird geladen…",
@@ -5213,5 +5239,30 @@
     "importHelp": "Fügen Sie ein JSON-Objekt ein, das Dimensions-IDs auf Werte von 0–100 abbildet (z. B. exportiert von dem Menschen, den dieser Agent repräsentiert). Unbekannte Dimensionen werden ignoriert.",
     "importBtn": "Importieren",
     "importing": "Wird importiert…"
+  },
+  "workforceRoles": {
+    "title": "Rollen",
+    "subtitle": "Die Rollen, die dein Team besetzt, und wer sie jeweils abdeckt – ein Agent, ein Mitarbeiter oder eine externe Kraft.",
+    "templateLabel": "Board-Vorlage",
+    "newRole": "Neue Rolle",
+    "roleNamePlaceholder": "Rollenname",
+    "addRole": "Rolle hinzufügen",
+    "creating": "Wird erstellt…",
+    "loading": "Rollen werden geladen…",
+    "standard": "Standard",
+    "custom": "Benutzerdefiniert",
+    "delete": "Löschen",
+    "deleteConfirm": "Rolle „{name}“ löschen?",
+    "noneAssigned": "Noch niemand zugewiesen",
+    "discipline": {
+      "engineering": "Entwicklung",
+      "product": "Produkt",
+      "design": "Design",
+      "qa": "QA",
+      "devops": "DevOps",
+      "data": "Daten",
+      "security": "Sicherheit",
+      "other": "Sonstiges"
+    }
   }
 }

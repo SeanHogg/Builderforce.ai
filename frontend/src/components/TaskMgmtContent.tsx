@@ -123,6 +123,7 @@ function AssigneeSelect({
   onBlur?: () => void;
   style?: CSSProperties;
 }) {
+  const t = useTranslations('taskMgmt');
   return (
     <Select
       autoFocus={autoFocus}
@@ -132,23 +133,23 @@ function AssigneeSelect({
       onChange={(e) => onChange(parseAssigneeSelectValue(e.target.value))}
       style={style}
     >
-      <option value="">Unassigned</option>
+      <option value="">{t('unassigned')}</option>
       {members.length > 0 && (
-        <optgroup label="Team members">
+        <optgroup label={t('teamMembers')}>
           {members.map((m) => (
             <option key={`u:${m.id}`} value={`u:${m.id}`}>{m.name}</option>
           ))}
         </optgroup>
       )}
       {hosts.length > 0 && (
-        <optgroup label="Agent hosts">
+        <optgroup label={t('agentHosts')}>
           {hosts.map((h) => (
             <option key={`h:${h.id}`} value={`h:${h.id}`}>{h.name}</option>
           ))}
         </optgroup>
       )}
       {cloudAgents.length > 0 && (
-        <optgroup label="Cloud agents">
+        <optgroup label={t('cloudAgents')}>
           {cloudAgents.map((a) => (
             <option key={`c:${a.ref}`} value={`c:${a.ref}`}>{a.name}</option>
           ))}
@@ -167,6 +168,7 @@ export function TaskMgmtContent({
   const tApproval = useTranslations('boardConfig');
   const tBoard = useTranslations('board');
   const tCommon = useTranslations('common');
+  const tTask = useTranslations('taskMgmt');
   // Global project scope (present in the app shell, absent in embed/standalone).
   // When present it is the single project picker — the board's own project filter
   // is hidden and the TopBar tenant→project selector drives scope instead.
@@ -1109,7 +1111,7 @@ export function TaskMgmtContent({
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
           <input
             type="text"
-            placeholder="Search…"
+            placeholder={tTask('searchPlaceholder')}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             style={{
@@ -1137,7 +1139,7 @@ export function TaskMgmtContent({
               color: 'var(--text-primary)',
             }}
           >
-            <option value="">All statuses</option>
+            <option value="">{tTask('allStatuses')}</option>
             {statusChoices.map((s) => (
               <option key={s.value} value={s.value}>
                 {s.label}
@@ -1159,7 +1161,7 @@ export function TaskMgmtContent({
                 color: 'var(--text-primary)',
               }}
             >
-              <option value="">All projects</option>
+              <option value="">{tTask('allProjects')}</option>
               {projects.map((p) => (
                 <option key={p.id} value={String(p.id)}>
                   {p.name}
@@ -1181,7 +1183,7 @@ export function TaskMgmtContent({
               color: 'var(--text-primary)',
             }}
           >
-            <option value="">All priorities</option>
+            <option value="">{tTask('allPriorities')}</option>
             {PRIORITIES.map((p) => (
               <option key={p} value={p}>
                 {p}
@@ -1201,13 +1203,13 @@ export function TaskMgmtContent({
       )}
 
       {loading ? (
-        <div style={{ color: 'var(--text-muted)', fontSize: 13 }}>Loading…</div>
+        <div style={{ color: 'var(--text-muted)', fontSize: 13 }}>{tCommon('loading')}</div>
       ) : view === 'board' && groupByAssignee ? (
         // Standup pivot: one row per teammate/agent, board columns as stage cells.
         // Tasks stay draggable across stages (same renderTaskCard + drop targets).
         <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch', paddingBottom: 4 }}>
           {assigneeRows.length === 0 ? (
-            <div style={{ color: 'var(--text-muted)', fontSize: 13 }}>No tasks found</div>
+            <div style={{ color: 'var(--text-muted)', fontSize: 13 }}>{tTask('noTasks')}</div>
           ) : (
             <div
               style={{
@@ -1389,7 +1391,7 @@ export function TaskMgmtContent({
         <div style={cardStyle}>
           {filtered.length === 0 ? (
             <div style={{ textAlign: 'center', padding: 24, color: 'var(--text-muted)', fontSize: 13 }}>
-              No tasks found
+              {tTask('noTasks')}
             </div>
           ) : (
             <>
@@ -1634,16 +1636,16 @@ export function TaskMgmtContent({
             onClick={(e) => e.stopPropagation()}
           >
             <div style={{ fontWeight: 700, fontSize: 16, marginBottom: 16 }}>
-              {editTarget ? 'Edit task' : 'New task'}
+              {editTarget ? tTask('editTask') : tTask('newTask')}
             </div>
             <form onSubmit={handleSave} style={{ display: 'grid', gap: 14 }}>
               <div>
                 <label style={{ display: 'block', fontSize: 12, color: 'var(--text-muted)', marginBottom: 4 }}>
-                  Title
+                  {tTask('title')}
                 </label>
                 <input
                   required
-                  placeholder="What needs to be done?"
+                  placeholder={tTask('titlePlaceholder')}
                   value={form.title ?? ''}
                   onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))}
                   style={{
@@ -1659,10 +1661,10 @@ export function TaskMgmtContent({
               </div>
               <div>
                 <label style={{ display: 'block', fontSize: 12, color: 'var(--text-muted)', marginBottom: 4 }}>
-                  Description (optional)
+                  {tTask('descriptionOptional')}
                 </label>
                 <textarea
-                  placeholder="Additional context…"
+                  placeholder={tTask('descriptionPlaceholder')}
                   value={form.description ?? ''}
                   onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
                   rows={3}
@@ -1681,7 +1683,7 @@ export function TaskMgmtContent({
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
                 <div>
                   <label style={{ display: 'block', fontSize: 12, color: 'var(--text-muted)', marginBottom: 4 }}>
-                    Status
+                    {tTask('status')}
                   </label>
                   <Select
                     value={form.status ?? 'todo'}
@@ -1705,7 +1707,7 @@ export function TaskMgmtContent({
                 </div>
                 <div>
                   <label style={{ display: 'block', fontSize: 12, color: 'var(--text-muted)', marginBottom: 4 }}>
-                    Priority
+                    {tTask('priority')}
                   </label>
                   <Select
                     value={form.priority ?? 'medium'}
@@ -1731,7 +1733,7 @@ export function TaskMgmtContent({
               {!projectId && (
                 <div>
                   <label style={{ display: 'block', fontSize: 12, color: 'var(--text-muted)', marginBottom: 4 }}>
-                    Project
+                    {tTask('project')}
                   </label>
                   <Select
                     value={form.projectId ?? ''}
@@ -1748,7 +1750,7 @@ export function TaskMgmtContent({
                       color: 'var(--text-primary)',
                     }}
                   >
-                    <option value="">Select project</option>
+                    <option value="">{tTask('selectProject')}</option>
                     {projects.map((p) => (
                       <option key={p.id} value={p.id}>
                         {p.name}
@@ -1760,7 +1762,7 @@ export function TaskMgmtContent({
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
                 <div>
                   <label style={{ display: 'block', fontSize: 12, color: 'var(--text-muted)', marginBottom: 4 }}>
-                    Assign to team member
+                    {tTask('assignToMember')}
                   </label>
                   <AssigneeSelect
                     hosts={agentHostsList}

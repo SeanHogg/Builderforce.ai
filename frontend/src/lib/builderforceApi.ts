@@ -140,6 +140,7 @@ export const toolsApi = {
 
 import type {
   JobRole, KanbanTemplate, TemplateSummary, RecommendedRoster, TicketAudit, FlaggedTicket, TemplateVisibility,
+  RoleAssignment, AssigneeKind,
 } from './kanban';
 
 export const kanbanApi = {
@@ -152,6 +153,17 @@ export const kanbanApi = {
     request<void>(`/api/kanban/roles/${encodeURIComponent(key)}`, { method: 'PATCH', body: JSON.stringify(body) }),
   deleteRole: (key: string): Promise<void> =>
     request<void>(`/api/kanban/roles/${encodeURIComponent(key)}`, { method: 'DELETE' }),
+
+  // Role assignments — pin an existing agent / human member / hire to a role.
+  // projectId omitted → workspace-default (all projects); set → a project's roster.
+  listRoleAssignments: (projectId?: number): Promise<RoleAssignment[]> =>
+    request<{ assignments: RoleAssignment[] }>(
+      `/api/kanban/role-assignments${projectId != null ? `?projectId=${projectId}` : ''}`,
+    ).then((r) => r.assignments),
+  assignRole: (body: { roleKey: string; assigneeKind: AssigneeKind; assigneeRef: string; assigneeName?: string; projectId?: number | null }): Promise<RoleAssignment> =>
+    request<{ assignment: RoleAssignment }>('/api/kanban/role-assignments', { method: 'POST', body: JSON.stringify(body) }).then((r) => r.assignment),
+  unassignRole: (id: string): Promise<void> =>
+    request<void>(`/api/kanban/role-assignments/${encodeURIComponent(id)}`, { method: 'DELETE' }),
 
   // Templates
   listTemplates: (): Promise<TemplateSummary[]> =>

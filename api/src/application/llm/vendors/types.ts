@@ -12,6 +12,7 @@
  */
 
 import { applyPromptCaching } from '../promptCaching';
+import { parseSseDataLine } from '../sseFrames';
 
 export type VendorId =
   // ── Bespoke wire-format vendors (hand-rolled modules)
@@ -323,7 +324,10 @@ export function pickUsage(u: unknown): VendorUsage {
   return out;
 }
 
-function numOrUndef(v: unknown): number | undefined {
+/** Coerce an arbitrary value to a finite number, or `undefined` when it is
+ *  null/undefined/non-numeric. Shared by `pickUsage` (here) and the Ollama
+ *  vendor's native-usage parser so the "absent vs zero" boundary can't drift. */
+export function numOrUndef(v: unknown): number | undefined {
   if (v === null || v === undefined) return undefined;
   const n = Number(v);
   return Number.isFinite(n) ? n : undefined;
@@ -697,9 +701,105 @@ export function buildOpenAIChatBody(params: VendorCallParams, opts?: OpenAIChatB
   };
 }
 
+/**
+ * Forward the three optional per-call passthrough fields (`title`, `timeoutMs`,
+ * `signal`) as a spreadable object, omitting each when unset. Every OpenAI-shaped
+ * vendor module (openaiCompatible factory, googleai, cloudflare, openrouter,
+ * ollama) hand-rolled this identical triple-spread; this is the single source so
+ * a new passthrough field is added in ONE place.
+ */
+export function forwardCallOpts(params: VendorCallParams): {
+  title?: string;
+  timeoutMs?: number;
+  signal?: AbortSignal;
+} {
+  return {
+    ...(params.title ? { title: params.title } : {}),
+    ...(params.timeoutMs ? { timeoutMs: params.timeoutMs } : {}),
+    ...(params.signal ? { signal: params.signal } : {}),
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Shared HTTP transport for non-streaming requests
+//
+// `executeVendorPost` is the ONE POST-JSON-with-Bearer transport every
+// non-streaming surface rides: it does the fetch (with the per-vendor timeout +
+// abort classification), the optional 200-with-embedded-`{error}` guard, and the
+// CASCADE / AUTH / fatal status ladder. Each surface passes its own
+// `parseResponse`, its `logPrefix` + auth failover noun, an optional
+// `onEmbeddedError` (chat/embeddings check the embedded body; image does not),
+// and an `onFatal` (chat → `throwClassified4xx`; image/embeddings →
+// `VendorFatalError`). This preserves each surface's EXACT error classes and log
+// prefixes while collapsing three near-identical transports into one.
 // ---------------------------------------------------------------------------
+
+export async function executeVendorPost<T>(args: {
+  vendorId: string;
+  endpoint: string;
+  apiKey: string;
+  model: string;
+  body: Record<string, unknown>;
+  headers?: Record<string, string>;
+  timeoutMs?: number;
+  signal?: AbortSignal;
+  /** Console log prefix for the auth-failure line, e.g. `vendors` / `imageVendors`. */
+  logPrefix: string;
+  /** Noun in the "Failing over to next <noun>." auth message (`model` / `vendor`). */
+  authFailoverNoun: string;
+  parseResponse: (raw: unknown) => T;
+  /** Called (throws) when a 200 OK carries an embedded `{ error }`. Omit to skip
+   *  the embedded-error guard entirely (the image surface has none). */
+  onEmbeddedError?: (vendorId: string, model: string, msg: string) => never;
+  /** Called (throws) for a non-cascade, non-auth 4xx (400/422 etc.). */
+  onFatal: (vendorId: string, model: string, status: number, errText: string) => never;
+}): Promise<T> {
+  const {
+    vendorId, endpoint, apiKey, model, body, headers, timeoutMs, signal,
+    logPrefix, authFailoverNoun, parseResponse, onEmbeddedError, onFatal,
+  } = args;
+
+  // Per-vendor timeout — see fetchWithVendorTimeout for rationale. Throws
+  // VendorRetryableError on timeout/network, so there's no catch block here.
+  const resp = await fetchWithVendorTimeout(vendorId, model, endpoint, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      'Content-Type': 'application/json',
+      ...(headers ?? {}),
+    },
+    body: JSON.stringify(body),
+  }, timeoutMs, signal);
+
+  if (resp.ok) {
+    const raw = await resp.json();
+    // Some providers (notably OpenRouter) return 200 with { error: ... } embedded.
+    if (onEmbeddedError && raw && typeof raw === 'object' && 'error' in raw && (raw as Record<string, unknown>)['error'] != null) {
+      const errObj = (raw as Record<string, unknown>)['error'];
+      const msg = (errObj && typeof errObj === 'object' && 'message' in errObj
+        ? String((errObj as Record<string, unknown>)['message'])
+        : JSON.stringify(errObj)).slice(0, 240);
+      onEmbeddedError(vendorId, model, msg);
+    }
+    return parseResponse(raw);
+  }
+
+  const errText = (await resp.text()).slice(0, 400);
+
+  if (CASCADE_STATUSES.has(resp.status)) {
+    throw new VendorRetryableError(vendorId, model, resp.status, errText.slice(0, 240));
+  }
+
+  if (AUTH_STATUSES.has(resp.status)) {
+    console.error(
+      `[${logPrefix}] ${vendorId}/${model} auth ${resp.status} — check ${vendorId.toUpperCase()}_API_KEY. Failing over to next ${authFailoverNoun}.`,
+      errText.slice(0, 200),
+    );
+    throw new VendorRetryableError(vendorId, model, resp.status, `auth ${resp.status}: ${errText.slice(0, 200)}`);
+  }
+
+  return onFatal(vendorId, model, resp.status, errText);
+}
 
 export async function executeChatCompletion(args: {
   vendorId: VendorId;
@@ -716,57 +816,36 @@ export async function executeChatCompletion(args: {
   const { vendorId, endpoint, apiKey, model, body, headers, title, timeoutMs, signal } = args;
   const parseResponse = args.parseResponse ?? parseOpenAIResponse;
 
-  // Per-vendor timeout — see fetchWithVendorTimeout for rationale. Throws
-  // VendorRetryableError on timeout/network, so the catch block above is gone.
-  const resp = await fetchWithVendorTimeout(vendorId, model, endpoint, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      'Content-Type': 'application/json',
-      'X-Title': title ?? 'Builderforce.ai',
-      ...(headers ?? {}),
+  return executeVendorPost<VendorCallResult>({
+    vendorId,
+    endpoint,
+    apiKey,
+    model,
+    body,
+    // X-Title first so a caller-supplied `headers` entry still wins (spread last).
+    headers: { 'X-Title': title ?? 'Builderforce.ai', ...(headers ?? {}) },
+    ...(timeoutMs != null ? { timeoutMs } : {}),
+    ...(signal ? { signal } : {}),
+    logPrefix: 'vendors',
+    authFailoverNoun: 'model',
+    parseResponse: (raw): VendorCallResult => {
+      const parsed = parseResponse(raw);
+      return { raw, content: parsed.content, ...(parsed.usage ? { usage: parsed.usage } : {}) };
     },
-    body: JSON.stringify(body),
-  }, timeoutMs, signal);
-
-  if (resp.ok) {
-    const raw = await resp.json();
-    // Some providers (notably OpenRouter) return 200 with { error: ... } embedded.
-    if (raw && typeof raw === 'object' && 'error' in raw && (raw as Record<string, unknown>)['error'] != null) {
-      const errObj = (raw as Record<string, unknown>)['error'];
-      const msg = (errObj && typeof errObj === 'object' && 'message' in errObj
-        ? String((errObj as Record<string, unknown>)['message'])
-        : JSON.stringify(errObj)).slice(0, 240);
+    onEmbeddedError: (vId, m, msg): never => {
       // A schema-too-complex rejection from Gemini-family upstreams routinely
       // arrives HERE — a 200 OK with the real cause buried in an embedded error
       // body (the `code: 0` failovers hired.video's trace showed). Classify it
       // as `schema` so an all-schema cascade surfaces a terminal 4xx instead of
       // cascading as a generic embedded/network failure and collapsing into 429.
       if (isSchemaComplexityBody(msg)) {
-        throw new VendorSchemaError(vendorId, model, 200, msg);
+        throw new VendorSchemaError(vId, m, 200, msg);
       }
-      throw new VendorRetryableError(vendorId, model, 0, `embedded: ${msg}`);
-    }
-    const parsed = parseResponse(raw);
-    return { raw, content: parsed.content, ...(parsed.usage ? { usage: parsed.usage } : {}) };
-  }
-
-  const errText = (await resp.text()).slice(0, 400);
-
-  if (CASCADE_STATUSES.has(resp.status)) {
-    throw new VendorRetryableError(vendorId, model, resp.status, errText.slice(0, 240));
-  }
-
-  if (AUTH_STATUSES.has(resp.status)) {
-    console.error(
-      `[vendors] ${vendorId}/${model} auth ${resp.status} — check ${vendorId.toUpperCase()}_API_KEY. Failing over to next model.`,
-      errText.slice(0, 200),
-    );
-    throw new VendorRetryableError(vendorId, model, resp.status, `auth ${resp.status}: ${errText.slice(0, 200)}`);
-  }
-
-  // 400/422 → fatal, UNLESS the body is a capacity/billing limit (failover-able).
-  throwClassified4xx(vendorId, model, resp.status, errText);
+      throw new VendorRetryableError(vId, m, 0, `embedded: ${msg}`);
+    },
+    // 400/422 → fatal, UNLESS the body is a capacity/billing limit (failover-able).
+    onFatal: throwClassified4xx,
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -852,15 +931,17 @@ export async function executeChatCompletionStream(args: {
   };
 }
 
-/** Detect a provider error embedded in the first SSE chunk. */
+/** Detect a provider error embedded in the first SSE chunk. Uses the shared
+ *  `parseSseDataLine` (canonical `slice(5).trim()`) so a spaceless `data:{…}`
+ *  frame parses too — the old hand-rolled `slice(6)` here silently chopped a
+ *  character off such a frame and mis-fired the fallback. */
 function isChunkError(text: string): boolean {
   if (!text.includes('"error"')) return false;
-  const dataLine = text.split('\n').find((l) => l.startsWith('data: '));
-  if (!dataLine) return true; // mentions "error" without parseable line — be safe
-  try {
-    const parsed = JSON.parse(dataLine.slice(6)) as Record<string, unknown>;
-    return 'error' in parsed && parsed['error'] != null;
-  } catch {
-    return true; // unparseable but mentions "error" — treat as error
+  const dataLine = text.split('\n').find((l) => l.trim().startsWith('data:'));
+  if (!dataLine) return true; // mentions "error" without a data line — be safe
+  const parsed = parseSseDataLine(dataLine);
+  if (parsed === undefined || typeof parsed !== 'object' || parsed === null) {
+    return true; // unparseable / [DONE] but mentions "error" — treat as error
   }
+  return 'error' in parsed && (parsed as Record<string, unknown>)['error'] != null;
 }

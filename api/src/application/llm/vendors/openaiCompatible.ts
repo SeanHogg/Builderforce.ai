@@ -22,6 +22,7 @@ import {
   buildOpenAIChatBody,
   executeChatCompletion,
   executeChatCompletionStream,
+  forwardCallOpts,
   type AiModelTier,
   type VendorCallParams,
   type VendorCallResult,
@@ -114,9 +115,7 @@ export function createOpenAICompatibleVendor(opts: OpenAICompatibleVendorOptions
         model: params.model,
         body: { ...buildBody(params), stream: false },
         ...(headers ? { headers } : {}),
-        ...(params.title ? { title: params.title } : {}),
-        ...(params.timeoutMs ? { timeoutMs: params.timeoutMs } : {}),
-        ...(params.signal ? { signal: params.signal } : {}),
+        ...forwardCallOpts(params),
       });
     },
   };
@@ -130,9 +129,7 @@ export function createOpenAICompatibleVendor(opts: OpenAICompatibleVendorOptions
         model: params.model,
         body: buildBody(params),
         ...(headers ? { headers } : {}),
-        ...(params.title ? { title: params.title } : {}),
-        ...(params.timeoutMs ? { timeoutMs: params.timeoutMs } : {}),
-        ...(params.signal ? { signal: params.signal } : {}),
+        ...forwardCallOpts(params),
       });
   }
 

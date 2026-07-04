@@ -23,6 +23,7 @@ import {
   CASCADE_STATUSES,
   VendorFatalError,
   VendorRetryableError,
+  executeVendorPost,
   fetchWithVendorTimeout,
 } from '../vendors/types';
 
@@ -127,44 +128,25 @@ export async function executeEmbeddings(args: {
   parseResponse: (raw: unknown) => EmbeddingGenResult;
 }): Promise<EmbeddingGenResult> {
   const { vendorId, endpoint, apiKey, model, body, headers, timeoutMs, parseResponse } = args;
-  const resp = await fetchWithVendorTimeout(vendorId, model, endpoint, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      'Content-Type': 'application/json',
-      ...(headers ?? {}),
-    },
-    body: JSON.stringify(body),
-  }, embeddingVendorTimeoutMs(timeoutMs));
-
-  if (resp.ok) {
-    const raw = await resp.json();
+  return executeVendorPost<EmbeddingGenResult>({
+    vendorId,
+    endpoint,
+    apiKey,
+    model,
+    body,
+    ...(headers ? { headers } : {}),
+    timeoutMs: embeddingVendorTimeoutMs(timeoutMs),
+    logPrefix: 'embeddingVendors',
+    authFailoverNoun: 'vendor',
+    parseResponse,
     // Some providers (notably OpenRouter) return 200 with { error: ... } embedded.
-    if (raw && typeof raw === 'object' && 'error' in raw && (raw as Record<string, unknown>)['error'] != null) {
-      const errObj = (raw as Record<string, unknown>)['error'];
-      const msg = (errObj && typeof errObj === 'object' && 'message' in errObj
-        ? String((errObj as Record<string, unknown>)['message'])
-        : JSON.stringify(errObj)).slice(0, 240);
-      throw new VendorRetryableError(vendorId, model, 0, `embedded: ${msg}`);
-    }
-    return parseResponse(raw);
-  }
-
-  const errText = (await resp.text()).slice(0, 400);
-
-  if (CASCADE_STATUSES.has(resp.status)) {
-    throw new VendorRetryableError(vendorId, model, resp.status, errText.slice(0, 240));
-  }
-
-  if (AUTH_STATUSES.has(resp.status)) {
-    console.error(
-      `[embeddingVendors] ${vendorId}/${model} auth ${resp.status} — check ${vendorId.toUpperCase()}_API_KEY. Failing over to next vendor.`,
-      errText.slice(0, 200),
-    );
-    throw new VendorRetryableError(vendorId, model, resp.status, `auth ${resp.status}: ${errText.slice(0, 200)}`);
-  }
-
-  throw new VendorFatalError(vendorId, resp.status, errText);
+    onEmbeddedError: (vId, m, msg): never => {
+      throw new VendorRetryableError(vId, m, 0, `embedded: ${msg}`);
+    },
+    onFatal: (vId, _m, status, errText): never => {
+      throw new VendorFatalError(vId, status, errText);
+    },
+  });
 }
 
 /**

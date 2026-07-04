@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Project360View,
   DEFAULT_PROJECT360_LABELS,
@@ -7,6 +7,7 @@ import {
   type Project360Labels,
 } from '@seanhogg/builderforce-brain-ui';
 import { getToken, onIntent, post, refreshToken, type InitData, type LabelBundle } from './vscodeBridge';
+import { authedFetch } from './authedFetch';
 
 /**
  * The Project 360 screen — the thin transport wrapper around the shared
@@ -34,6 +35,9 @@ export function Project360Screen({ init }: { init: InitData }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const labels = labelsFrom(init.labels);
+  // Shared bearer-fetch: attaches the host-minted token and, on a 401, re-mints via
+  // `refreshToken` and retries once (the promise-returning refresher opts into a retry).
+  const api = useMemo(() => authedFetch(init.baseUrl, getToken, refreshToken), [init.baseUrl]);
 
   const load = useCallback(async (fresh = false) => {
     if (projectId == null) {
@@ -45,22 +49,15 @@ export function Project360Screen({ init }: { init: InitData }) {
     setError(null);
     // `fresh=1` bypasses the endpoint's short-TTL cache — used for an explicit refresh
     // or a focus revalidate, so "who's working" is guaranteed live on demand.
-    const url = `${init.baseUrl}/api/projects/${projectId}/360${fresh ? '?fresh=1' : ''}`;
-    const call = (token: string | null) => fetch(url, { headers: token ? { authorization: `Bearer ${token}` } : {} });
+    const path = `/api/projects/${projectId}/360${fresh ? '?fresh=1' : ''}`;
     try {
-      let res = await call(getToken());
-      if (res.status === 401) {
-        await refreshToken();
-        res = await call(getToken());
-      }
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      setData((await res.json()) as Project360);
+      setData(await api<Project360>(path));
     } catch (e) {
       setError((e as Error).message || 'Request failed');
     } finally {
       setLoading(false);
     }
-  }, [projectId, init.baseUrl]);
+  }, [projectId, api]);
 
   useEffect(() => { void load(); }, [load]);
 

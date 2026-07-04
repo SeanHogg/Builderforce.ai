@@ -113,9 +113,25 @@ export function onEditorContext(cb: (c: EditorContext | undefined) => void): () 
 // on first subscribe so a first-open focus/task intent is never lost.
 const pendingIntents: BrainIntent[] = [];
 
-type Pending = { resolve: (v: unknown) => void; reject: (e: Error) => void };
+type Pending = { resolve: (v: unknown) => void; reject: (e: Error) => void; timer: ReturnType<typeof setTimeout> };
 const pending = new Map<string, Pending>();
 let seq = 0;
+
+/** A never-answered request (the host dropped its response, or the panel was torn
+ *  down mid-flight) would otherwise leak its promise + Map entry for the life of the
+ *  webview. Reject + evict after this long so nothing accumulates. Generous, so a
+ *  legitimately slow round-trip (a file picker the user leaves open, a slow tool)
+ *  still resolves normally. */
+const REQUEST_TIMEOUT_MS = 300_000;
+
+/** Reject + evict a pending entry (timeout / teardown), clearing its timer. */
+function settlePending(id: string, error: Error): void {
+  const p = pending.get(id);
+  if (!p) return;
+  pending.delete(id);
+  clearTimeout(p.timer);
+  p.reject(error);
+}
 
 /** Fire-and-forget message to the host. */
 export function post(type: string, payload?: Record<string, unknown>): void {
@@ -126,10 +142,17 @@ export function post(type: string, payload?: Record<string, unknown>): void {
 export function request<T = unknown>(type: string, payload?: Record<string, unknown>): Promise<T> {
   const id = `r${++seq}`;
   return new Promise<T>((resolve, reject) => {
-    pending.set(id, { resolve: resolve as (v: unknown) => void, reject });
+    const timer = setTimeout(() => settlePending(id, new Error(`Request "${type}" timed out`)), REQUEST_TIMEOUT_MS);
+    pending.set(id, { resolve: resolve as (v: unknown) => void, reject, timer });
     api.postMessage({ type, id, ...(payload ?? {}) });
   });
 }
+
+// Reject every in-flight request when the webview is torn down (the panel was
+// disposed / navigated away), so no promise is left dangling.
+window.addEventListener('pagehide', () => {
+  for (const id of [...pending.keys()]) settlePending(id, new Error('webview closed'));
+});
 
 /** Resolve once the host has sent the initial config (token, baseUrl, tools…). */
 /**
@@ -214,6 +237,7 @@ window.addEventListener('message', (e: MessageEvent) => {
     const p = pending.get(m.id);
     if (p) {
       pending.delete(m.id);
+      clearTimeout(p.timer);
       if (m.ok) p.resolve(m.result);
       else p.reject(new Error(m.error || 'host error'));
     }

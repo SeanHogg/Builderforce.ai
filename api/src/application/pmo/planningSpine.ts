@@ -38,12 +38,12 @@ import {
   normalizeAllocationCategory,
   type AllocationCategory,
 } from '../llm/allocationCategories';
+import { MILLICENTS_PER_USD } from '../../domain/shared/money';
 
 export type CostClass = 'capex' | 'opex';
 export type CostClassSource = 'manual' | 'inherited' | 'agent';
 export type SpineNodeKind = 'portfolio' | 'objective' | 'initiative' | 'epic' | 'task' | 'roadmap';
 
-const MILLICENTS_PER_USD = 100_000;
 const HOUR_MS = 3_600_000;
 /** Labour-hours cap per task when estimating human cost from cycle time (no
  *  effort/time-tracking field exists yet — see the roadmap gap). */

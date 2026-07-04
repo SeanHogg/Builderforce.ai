@@ -11,6 +11,8 @@
 
 import {
   executeChatCompletion,
+  forwardCallOpts,
+  numOrUndef,
   type AiModelTier,
   type ResponseParser,
   type VendorCallParams,
@@ -42,8 +44,13 @@ function tierForOllamaModel(modelId: string): AiModelTier {
 const parseOllamaResponse: ResponseParser = (raw) => {
   const r = raw as { message?: { content?: unknown }; prompt_eval_count?: unknown; eval_count?: unknown };
   const content = String(r?.message?.content ?? '');
-  const promptTokens     = num(r?.prompt_eval_count);
-  const completionTokens = num(r?.eval_count);
+  // Ollama's native token fields (`prompt_eval_count` / `eval_count`) don't match
+  // the OpenAI/Anthropic aliases `pickUsage` reads, and it derives `total_tokens`
+  // by summing the two — so this stays a bespoke assembly. Only the numeric
+  // coercion is shared (`numOrUndef`), keeping the "absent vs zero" boundary
+  // identical to the OpenAI-shape parser.
+  const promptTokens     = numOrUndef(r?.prompt_eval_count);
+  const completionTokens = numOrUndef(r?.eval_count);
   const usage: VendorUsage = {};
   if (promptTokens     !== undefined) usage.prompt_tokens     = promptTokens;
   if (completionTokens !== undefined) usage.completion_tokens = completionTokens;
@@ -52,12 +59,6 @@ const parseOllamaResponse: ResponseParser = (raw) => {
   }
   return { content, ...(Object.keys(usage).length > 0 ? { usage } : {}) };
 };
-
-function num(v: unknown): number | undefined {
-  if (v === null || v === undefined) return undefined;
-  const n = Number(v);
-  return Number.isFinite(n) ? n : undefined;
-}
 
 export const ollamaModule: VendorModule = {
   id: 'ollama',
@@ -94,9 +95,7 @@ export const ollamaModule: VendorModule = {
       model: params.model,
       body,
       parseResponse: parseOllamaResponse,
-      ...(params.title ? { title: params.title } : {}),
-      ...(params.timeoutMs ? { timeoutMs: params.timeoutMs } : {}),
-      ...(params.signal ? { signal: params.signal } : {}),
+      ...forwardCallOpts(params),
     });
   },
   // No callStream — Ollama emits NDJSON not SSE; orchestrator will skip during streaming dispatch.

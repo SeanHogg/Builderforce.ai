@@ -33,22 +33,13 @@
  * the psychometric dimension-id strings in {@link PSYCH_DIM}.
  */
 import { PSYCH_DIM } from "./psychometric-dims.js";
-import { maxThink, type LimbicPsychProfile } from "./limbic.js";
-import type { AgentExecParams } from "./spec.js";
+// HI/LO/NEUTRAL thresholds + the trait scorer are the single shared source in limbic.
+import { maxThink, HI, LO, NEUTRAL, score, type LimbicPsychProfile } from "./limbic.js";
+import { bulletBlock, PERSONA_BLOCK_HEADER, type AgentExecParams } from "./spec.js";
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-
-const HI = 65; // score at/above which a "high" directive fires
-const LO = 35; // score at/below which a "low" directive fires
-const NEUTRAL = 50;
-
-function score(vector: Record<string, number>, id: string): number {
-  const raw = vector[id];
-  if (typeof raw !== "number" || Number.isNaN(raw)) return NEUTRAL;
-  return Math.max(0, Math.min(100, raw));
-}
 
 const ENNEAGRAM_MOTIVATION: Record<number, string> = {
   1: "Core drive: be correct and principled — avoid mistakes and sloppiness; hold work to a high standard.",
@@ -271,7 +262,7 @@ export function buildPsychometricBlock(profile: LimbicPsychProfile | undefined):
   if (!profile) return "";
   const { directives } = compilePsychometricProfile(profile);
   if (directives.length === 0) return "";
-  return ["Personality (execute under these traits):", ...directives.map((d) => `- ${d}`)].join("\n");
+  return bulletBlock(PERSONA_BLOCK_HEADER, directives);
 }
 
 /**

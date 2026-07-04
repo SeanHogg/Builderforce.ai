@@ -8,6 +8,7 @@
 import type {
   ChatTicketsAdapter, TicketKind, TicketOptionVM, TicketLinkVM, AgentOptionVM,
 } from '@seanhogg/builderforce-brain-ui';
+import { authedFetch } from './authedFetch';
 
 interface WorkforceAgent { id: string | number; name: string; title?: string; base_model?: string }
 interface RegisteredAgent { id: string | number; name: string; type: string; isActive: boolean }
@@ -19,22 +20,7 @@ export function createChatTicketsAdapter(
   getToken: () => string | null,
   onUnauthorized: () => void,
 ): ChatTicketsAdapter {
-  const req = async <T>(path: string, init?: RequestInit): Promise<T> => {
-    const token = getToken();
-    const headers: Record<string, string> = {
-      'Content-Type': 'application/json',
-      ...((init?.headers as Record<string, string>) ?? {}),
-    };
-    if (token) headers['Authorization'] = `Bearer ${token}`;
-    const res = await fetch(`${baseUrl}${path}`, { ...init, headers });
-    if (res.status === 401) onUnauthorized();
-    if (!res.ok) {
-      const body = await res.text().catch(() => '');
-      throw new Error(body || res.statusText || `HTTP ${res.status}`);
-    }
-    if (res.status === 204) return undefined as T;
-    return (await res.json()) as T;
-  };
+  const req = authedFetch(baseUrl, getToken, onUnauthorized);
 
   return {
     listTickets: (chatId) =>

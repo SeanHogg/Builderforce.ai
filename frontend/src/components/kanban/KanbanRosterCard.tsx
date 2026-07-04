@@ -12,7 +12,8 @@ import { useTranslations } from 'next-intl';
 import { kanbanApi } from '@/lib/builderforceApi';
 import { createCloudAgent } from '@/lib/api';
 import { usePermission } from '@/lib/rbac';
-import type { RecommendedRoster, TemplateSummary, FlaggedTicket, RosterRole } from '@/lib/kanban';
+import type { RecommendedRoster, TemplateSummary, FlaggedTicket, RosterRole, AssigneeKind } from '@/lib/kanban';
+import { RoleAssigneePicker, useAssignableWorkforce } from '@/components/workforce/RoleAssigneePicker';
 
 const chip = (bg: string, fg: string): React.CSSProperties => ({
   display: 'inline-flex', alignItems: 'center', gap: 4, padding: '1px 8px', borderRadius: 999,
@@ -27,7 +28,11 @@ export function KanbanRosterCard({ projectId }: { projectId: number }) {
   const [flagged, setFlagged] = useState<FlaggedTicket[]>([]);
   const [busy, setBusy] = useState(false);
   const [creating, setCreating] = useState<string | null>(null);
+  const [assigningRole, setAssigningRole] = useState<string | null>(null);
+  const [assignBusy, setAssignBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Only fetch the assignable pools once the manager actually opens a picker.
+  const workforce = useAssignableWorkforce(assigningRole != null);
 
   const load = useCallback(async () => {
     try {
@@ -63,6 +68,24 @@ export function KanbanRosterCard({ projectId }: { projectId: number }) {
       await load();
     } catch (e) { setError((e as Error).message); }
     finally { setCreating(null); }
+  };
+
+  const onAssign = async (roleKey: string, a: { assigneeKind: AssigneeKind; assigneeRef: string; assigneeName: string }) => {
+    setAssignBusy(true); setError(null);
+    try {
+      await kanbanApi.assignRole({ roleKey, ...a, projectId });
+      setAssigningRole(null);
+      await load();
+    } catch (e) { setError((e as Error).message); }
+    finally { setAssignBusy(false); }
+  };
+
+  const onUnassign = async (assignmentId: string) => {
+    setError(null);
+    try {
+      await kanbanApi.unassignRole(assignmentId);
+      await load();
+    } catch (e) { setError((e as Error).message); }
   };
 
   const cardStyle: React.CSSProperties = {
@@ -109,25 +132,39 @@ export function KanbanRosterCard({ projectId }: { projectId: number }) {
 
       {/* Roster */}
       <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 6 }}>
-        {roster?.roles.map((role) => (
+        {roster?.roles.map((role) => {
+          const assigned = role.filledBy.filter((f) => f.via === 'assignment' && f.assignmentId);
+          const kindLabel = (k: string) => t(k === 'agent' ? 'assigneeAgent' : k === 'hire' ? 'assigneeHire' : 'assigneeHuman');
+          return (
           <div key={role.roleKey} style={{
-            display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap',
+            display: 'flex', flexDirection: 'column', gap: 8,
             padding: '8px 10px', borderRadius: 8, background: 'var(--surface-2)',
           }}>
-            <span style={{ fontSize: 16 }} aria-hidden>{role.icon ?? '👤'}</span>
-            <span style={{ fontWeight: 600, fontSize: 13 }}>{role.name}</span>
-            {role.required
-              ? <span style={chip('var(--warning-bg, #fef3c7)', 'var(--warning-text, #92400e)')}>{t('required')}</span>
-              : <span style={chip('var(--surface)', 'var(--text-muted)')}>{t('optional')}</span>}
-            <span style={{ flex: 1 }} />
-            {role.status === 'filled'
-              ? <span style={chip('var(--success-bg, #dcfce7)', 'var(--success-text, #166534)')} title={role.filledBy.map((f) => f.name).join(', ')}>
-                  ✓ {t('filled')}
-                </span>
-              : (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+              <span style={{ fontSize: 16 }} aria-hidden>{role.icon ?? '👤'}</span>
+              <span style={{ fontWeight: 600, fontSize: 13 }}>{role.name}</span>
+              {role.required
+                ? <span style={chip('var(--warning-bg, #fef3c7)', 'var(--warning-text, #92400e)')}>{t('required')}</span>
+                : <span style={chip('var(--surface)', 'var(--text-muted)')}>{t('optional')}</span>}
+              <span style={{ flex: 1 }} />
+              {role.status === 'filled'
+                ? <span style={chip('var(--success-bg, #dcfce7)', 'var(--success-text, #166534)')} title={role.filledBy.map((f) => f.name).join(', ')}>
+                    ✓ {t('filled')}
+                  </span>
+                : <span style={chip('var(--danger-bg, #fee2e2)', 'var(--danger-text, #991b1b)')}>{t('gap')}</span>}
+              {canManage && (
                 <span style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}>
-                  <span style={chip('var(--danger-bg, #fee2e2)', 'var(--danger-text, #991b1b)')}>{t('gap')}</span>
-                  {canManage && (
+                  <button
+                    type="button"
+                    onClick={() => setAssigningRole(assigningRole === role.roleKey ? null : role.roleKey)}
+                    style={{
+                      fontSize: 12, padding: '4px 10px', borderRadius: 6, cursor: 'pointer',
+                      background: 'transparent', color: 'var(--accent, #2563eb)', border: '1px solid var(--accent, #2563eb)',
+                    }}
+                  >
+                    {t('assign')}
+                  </button>
+                  {role.status === 'gap' && (
                     <button
                       type="button"
                       onClick={() => onCreateAgent(role)}
@@ -142,8 +179,41 @@ export function KanbanRosterCard({ projectId }: { projectId: number }) {
                   )}
                 </span>
               )}
+            </div>
+
+            {/* Explicitly-assigned members — removable chips. */}
+            {assigned.length > 0 && (
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                {assigned.map((f) => (
+                  <span key={f.assignmentId} style={{ ...chip('var(--surface)', 'var(--text-secondary)'), border: '1px solid var(--border-subtle)' }}>
+                    <span aria-hidden>{f.kind === 'agent' ? '🤖' : f.kind === 'hire' ? '🤝' : '🧑'}</span>
+                    {f.name}
+                    <span style={{ color: 'var(--text-muted)', fontSize: 10 }}>· {kindLabel(f.kind)}</span>
+                    {canManage && (
+                      <button
+                        type="button"
+                        aria-label={t('unassign')}
+                        onClick={() => onUnassign(f.assignmentId!)}
+                        style={{ marginLeft: 2, background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontSize: 13, lineHeight: 1, padding: 0 }}
+                      >×</button>
+                    )}
+                  </span>
+                ))}
+              </div>
+            )}
+
+            {/* Inline assignee picker. */}
+            {canManage && assigningRole === role.roleKey && (
+              <RoleAssigneePicker
+                workforce={workforce}
+                busy={assignBusy}
+                onAssign={(a) => onAssign(role.roleKey, a)}
+                onCancel={() => setAssigningRole(null)}
+              />
+            )}
           </div>
-        ))}
+          );
+        })}
         {roster && roster.roles.length === 0 && (
           <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>{t('noRoles')}</div>
         )}

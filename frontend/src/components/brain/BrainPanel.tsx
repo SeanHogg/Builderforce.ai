@@ -89,6 +89,7 @@ export function BrainPanel({
   const tTimeline = useTranslations('brain.timeline');
   const tCommon = useTranslations('common');
   const tRepo = useTranslations('repoContext');
+  const tBrain = useTranslations('brain');
 
   // Project scope follows the global TopBar tenant→project selector — one picker
   // for the whole app (see ProjectScopeContext). The Brain's filter dropdown
@@ -632,7 +633,7 @@ export function BrainPanel({
               <button type="button" onClick={createProjectAndAssign} disabled={!newProjectName.trim() || creatingProject} style={{ padding: '8px 14px', fontSize: 13, fontWeight: 600, background: 'var(--accent, #3b82f6)', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer' }}>
                 {creatingProject ? '…' : 'Create & assign'}
               </button>
-              <button type="button" onClick={() => { setShowNewProject(false); setNewProjectName(''); }} style={{ padding: '8px 12px', fontSize: 13, background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', borderRadius: 8, cursor: 'pointer' }}>Cancel</button>
+              <button type="button" onClick={() => { setShowNewProject(false); setNewProjectName(''); }} style={{ padding: '8px 12px', fontSize: 13, background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', borderRadius: 8, cursor: 'pointer' }}>{tCommon('cancel')}</button>
             </div>
           )}
           <div className="bs-messages" style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
@@ -709,7 +710,7 @@ export function BrainPanel({
               value={input}
               onChange={setInput}
               onSubmit={handleSend}
-              placeholder="Message Brain…"
+              placeholder={tBrain('messagePlaceholder')}
               disabled={conv.sending}
               running={conv.sending}
               onStop={conv.stop}
@@ -758,7 +759,7 @@ export function BrainPanel({
               <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                 {captureButton}
                 <button type="button" onClick={() => chats.create()} style={{ padding: '4px 10px', fontSize: 12, fontWeight: 600, background: 'var(--accent)', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer' }}>
-                  + New
+                  {tBrain('newChat')}
                 </button>
               </div>
             </div>
@@ -777,7 +778,7 @@ export function BrainPanel({
                 style={{ marginTop: 4 }}
               />
             </label>
-            <input type="search" placeholder="Search chats…" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)}
+            <input type="search" placeholder={tBrain('searchChats')} value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)}
               style={{ width: '100%', padding: '6px 8px', fontSize: 12, borderRadius: 6, border: '1px solid var(--border)', background: 'var(--bg)', color: 'var(--text)' }} />
           </div>
           <div className="bs-chat-list">{chatRows}</div>
@@ -794,7 +795,7 @@ export function BrainPanel({
         <span style={{ fontWeight: 600, fontSize: 15, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: 6 }}>🧠 Brain</span>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
           {captureButton}
-          <button type="button" onClick={() => chats.create()} style={{ padding: '4px 10px', fontSize: 12, fontWeight: 600, background: 'var(--accent, #3b82f6)', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer' }}>+ New</button>
+          <button type="button" onClick={() => chats.create()} style={{ padding: '4px 10px', fontSize: 12, fontWeight: 600, background: 'var(--accent, #3b82f6)', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer' }}>{tBrain('newChat')}</button>
           <Link href="/brainstorm" title="Open full Brain Storm" style={{ fontSize: 12, color: 'var(--text-secondary)', textDecoration: 'none', padding: '4px 8px', borderRadius: 6, border: '1px solid var(--border-subtle)' }}>Expand ↗</Link>
           {onClose && (
             <button type="button" onClick={onClose} aria-label="Close Brain" style={{ background: 'transparent', border: 'none', color: 'var(--text-muted)', fontSize: 18, cursor: 'pointer', lineHeight: 1, padding: '0 4px' }}>×</button>
@@ -811,7 +812,7 @@ export function BrainPanel({
       {historyOpen && (
         <div style={{ flex: '0 1 35%', minHeight: 80, maxHeight: 240, overflow: 'auto', borderBottom: '1px solid var(--border-subtle)' }}>
           <div style={{ padding: '6px 12px' }}>
-            <input type="search" placeholder="Search chats…" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)}
+            <input type="search" placeholder={tBrain('searchChats')} value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)}
               style={{ width: '100%', padding: '6px 8px', fontSize: 12, borderRadius: 6, border: '1px solid var(--border-subtle)', background: 'var(--bg-base)', color: 'var(--text-primary)' }} />
           </div>
           {chatRows}
@@ -829,6 +830,8 @@ export function BrainPanel({
  * tool call; Approve runs it, Cancel feeds a declined result back to the model.
  */
 function ToolConfirmBar({ req, onDecide, onApproveAll }: { req: { name: string; args: unknown }; onDecide: (ok: boolean) => void; onApproveAll: () => void }) {
+  const tCommon = useTranslations('common');
+  const tBrain = useTranslations('brain');
   const label = req.name.replace(/_/g, ' ');
   let preview = '';
   try {
@@ -848,9 +851,9 @@ function ToolConfirmBar({ req, onDecide, onApproveAll }: { req: { name: string; 
         <div style={{ fontSize: 11, color: 'var(--text-muted)', fontFamily: 'monospace', wordBreak: 'break-all', marginBottom: 8 }}>{preview}</div>
       )}
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-        <button type="button" onClick={() => onDecide(true)} style={{ padding: '6px 14px', fontSize: 13, fontWeight: 600, background: 'var(--coral-bright, #f4726e)', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer' }}>Approve</button>
-        <button type="button" onClick={onApproveAll} title="Approve this and auto-approve every following action in this conversation" style={{ padding: '6px 14px', fontSize: 13, fontWeight: 600, background: 'var(--bg-base)', color: 'var(--coral-bright, #f4726e)', border: '1px solid var(--coral-bright, #f4726e)', borderRadius: 8, cursor: 'pointer' }}>Approve all</button>
-        <button type="button" onClick={() => onDecide(false)} style={{ padding: '6px 14px', fontSize: 13, background: 'var(--bg-base)', color: 'var(--text-primary)', border: '1px solid var(--border-subtle)', borderRadius: 8, cursor: 'pointer' }}>Cancel</button>
+        <button type="button" onClick={() => onDecide(true)} style={{ padding: '6px 14px', fontSize: 13, fontWeight: 600, background: 'var(--coral-bright, #f4726e)', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer' }}>{tCommon('approve')}</button>
+        <button type="button" onClick={onApproveAll} title="Approve this and auto-approve every following action in this conversation" style={{ padding: '6px 14px', fontSize: 13, fontWeight: 600, background: 'var(--bg-base)', color: 'var(--coral-bright, #f4726e)', border: '1px solid var(--coral-bright, #f4726e)', borderRadius: 8, cursor: 'pointer' }}>{tBrain('approveAll')}</button>
+        <button type="button" onClick={() => onDecide(false)} style={{ padding: '6px 14px', fontSize: 13, background: 'var(--bg-base)', color: 'var(--text-primary)', border: '1px solid var(--border-subtle)', borderRadius: 8, cursor: 'pointer' }}>{tCommon('cancel')}</button>
       </div>
     </div>
   );

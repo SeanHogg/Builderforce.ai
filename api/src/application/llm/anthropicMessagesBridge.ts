@@ -14,6 +14,8 @@
  * unit-testable without a live model.
  */
 
+import { parseSseDataLine } from './sseFrames';
+
 // ---------------------------------------------------------------------------
 // Request: Anthropic Messages → OpenAI Chat Completions
 // ---------------------------------------------------------------------------
@@ -338,11 +340,8 @@ export function pipeOpenAiSseToAnthropic(
       while ((nl = buffer.indexOf('\n')) >= 0) {
         const line = buffer.slice(0, nl).trim();
         buffer = buffer.slice(nl + 1);
-        if (!line.startsWith('data:')) continue;
-        const data = line.slice(5).trim();
-        if (!data || data === '[DONE]') continue;
-        let chunk: unknown;
-        try { chunk = JSON.parse(data); } catch { continue; }
+        const chunk = parseSseDataLine(line);
+        if (chunk === undefined) continue;
         const u = (chunk as { usage?: { prompt_tokens?: number; completion_tokens?: number } }).usage;
         if (u) {
           if (typeof u.prompt_tokens === 'number') prompt = u.prompt_tokens;

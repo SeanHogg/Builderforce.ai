@@ -10,6 +10,7 @@ import {
   buildOpenAIChatBody,
   executeChatCompletion,
   executeChatCompletionStream,
+  forwardCallOpts,
   type AiModelTier,
   type VendorCallParams,
   type VendorCallResult,
@@ -135,9 +136,7 @@ export const openRouterModule: VendorModule = {
       model: params.model,
       body: buildBody(params),
       headers: HEADERS,
-      ...(params.title ? { title: params.title } : {}),
-      ...(params.timeoutMs ? { timeoutMs: params.timeoutMs } : {}),
-      ...(params.signal ? { signal: params.signal } : {}),
+      ...forwardCallOpts(params),
     });
   },
   async callStream(params: VendorCallParams): Promise<VendorStreamResult> {
@@ -148,9 +147,7 @@ export const openRouterModule: VendorModule = {
       model: params.model,
       body: buildBody(params),
       headers: HEADERS,
-      ...(params.title ? { title: params.title } : {}),
-      ...(params.timeoutMs ? { timeoutMs: params.timeoutMs } : {}),
-      ...(params.signal ? { signal: params.signal } : {}),
+      ...forwardCallOpts(params),
     });
   },
 };

@@ -15,6 +15,7 @@ import type { Db } from '../../infrastructure/database/connection';
 import { JobRoleService } from '../../application/kanban/jobRoleService';
 import { KanbanTemplateService } from '../../application/kanban/kanbanTemplateService';
 import { RosterService } from '../../application/kanban/rosterService';
+import { RoleAssignmentService } from '../../application/kanban/roleAssignmentService';
 import { TicketAuditService } from '../../application/audit/ticketAuditService';
 
 export function createKanbanRoutes(db: Db): Hono<HonoEnv> {
@@ -23,7 +24,8 @@ export function createKanbanRoutes(db: Db): Hono<HonoEnv> {
 
   const roleService = new JobRoleService(db);
   const templateService = new KanbanTemplateService(db);
-  const rosterService = new RosterService(db, templateService, roleService);
+  const assignmentService = new RoleAssignmentService(db);
+  const rosterService = new RosterService(db, templateService, roleService, assignmentService);
   const auditService = new TicketAuditService(db);
 
   const isManager = (c: { get: (k: 'role') => unknown }) => hasMinRole(c.get('role') as TenantRole, TenantRole.MANAGER);
@@ -52,6 +54,35 @@ export function createKanbanRoutes(db: Db): Hono<HonoEnv> {
     if (!isManager(c)) return c.json({ error: 'manager role required' }, 403);
     try {
       await roleService.remove(env(c), c.get('tenantId') as number, c.req.param('key'));
+      return c.json({ ok: true });
+    } catch (e) { return c.json({ error: (e as Error).message }, 400); }
+  });
+
+  // ── Role assignments (pin an agent / human / hire to a role) ───────────────
+  // Scope: no ?projectId → workspace-default rows (Workforce → Roles); ?projectId=N
+  // → that project's roster (Recommended Roster card). Reads open; writes MANAGER.
+  router.get('/role-assignments', async (c) => {
+    const projectId = c.req.query('projectId');
+    const scope = projectId != null && projectId !== '' ? Number(projectId) : null;
+    return c.json({ assignments: await assignmentService.listForScope(env(c), c.get('tenantId') as number, scope) });
+  });
+
+  router.post('/role-assignments', async (c) => {
+    if (!isManager(c)) return c.json({ error: 'manager role required' }, 403);
+    const tenantId = c.get('tenantId') as number;
+    try {
+      const assignment = await assignmentService.create(env(c), tenantId, (c.get('userId') as string) ?? null, await c.req.json());
+      await rosterService.invalidate(env(c), tenantId);
+      return c.json({ assignment }, 201);
+    } catch (e) { return c.json({ error: (e as Error).message }, 400); }
+  });
+
+  router.delete('/role-assignments/:id', async (c) => {
+    if (!isManager(c)) return c.json({ error: 'manager role required' }, 403);
+    const tenantId = c.get('tenantId') as number;
+    try {
+      await assignmentService.remove(env(c), tenantId, c.req.param('id'));
+      await rosterService.invalidate(env(c), tenantId);
       return c.json({ ok: true });
     } catch (e) { return c.json({ error: (e as Error).message }, 400); }
   });
