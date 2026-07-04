@@ -12,7 +12,7 @@ vi.mock('./tenantTokenAvailability', () => ({
   getTenantTokenAvailability: (...args: unknown[]) => availabilityMock(...args),
 }));
 
-import { generateTeacherExemplar, buildEvermindTrainingText } from './evermindTeacher';
+import { generateTeacherExemplar, buildEvermindTrainingText, resolveEvermindTeacherModel } from './evermindTeacher';
 
 /** Build a minimal ProxyResult-shaped object with a chat-completion JSON body. */
 function gatewayResponse(content: unknown, status = 200, resolvedModel = 'claude-opus-4-8') {
@@ -79,22 +79,17 @@ describe('generateTeacherExemplar', () => {
 });
 
 describe('buildEvermindTrainingText', () => {
-  beforeEach(() => {
-    completeMock.mockReset();
-    availabilityMock.mockReset();
-    availabilityMock.mockResolvedValue({ hasTokens: true });
-  });
+  beforeEach(() => completeMock.mockReset());
 
-  it('with no teacher, returns raw run text unchanged and never checks tokens', async () => {
-    const r = await buildEvermindTrainingText(env, db, TENANT, null, RUN_TEXT);
+  it('with no teacher, returns raw run text unchanged', async () => {
+    const r = await buildEvermindTrainingText(env, null, RUN_TEXT);
     expect(r).toEqual({ text: RUN_TEXT, distilled: false, skipReason: 'no_teacher' });
-    expect(availabilityMock).not.toHaveBeenCalled();
     expect(completeMock).not.toHaveBeenCalled();
   });
 
   it('with a teacher + task prompt, distils (task → answer) via answer mode', async () => {
     completeMock.mockResolvedValue(gatewayResponse('The ideal, expert, fully-worked retry implementation.'));
-    const r = await buildEvermindTrainingText(env, db, TENANT, 'claude-opus-4-8', RUN_TEXT, { prompt: TASK_PROMPT });
+    const r = await buildEvermindTrainingText(env, 'claude-opus-4-8', RUN_TEXT, { prompt: TASK_PROMPT });
     expect(r.distilled).toBe(true);
     expect(r.teacherModel).toBe('claude-opus-4-8');
     // The teacher answers the TASK prompt (answer mode), and the training text pairs it.
@@ -105,30 +100,42 @@ describe('buildEvermindTrainingText', () => {
 
   it('with a teacher but no prompt, refines the run OUTPUT', async () => {
     completeMock.mockResolvedValue(gatewayResponse('The ideal, expert version of this task output text.'));
-    const r = await buildEvermindTrainingText(env, db, TENANT, 'claude-opus-4-8', RUN_TEXT);
+    const r = await buildEvermindTrainingText(env, 'claude-opus-4-8', RUN_TEXT);
     expect(r.distilled).toBe(true);
     expect((completeMock.mock.calls[0]![0] as { messages: Array<{ content: string }> }).messages[1]!.content).toBe(RUN_TEXT);
     expect(r.text.startsWith(RUN_TEXT.slice(0, 20))).toBe(true);
   });
 
-  it('skips the paid teacher when the tenant is out of token budget', async () => {
-    availabilityMock.mockResolvedValue({ hasTokens: false, reason: 'daily_exhausted' });
-    const r = await buildEvermindTrainingText(env, db, TENANT, 'claude-opus-4-8', RUN_TEXT, { prompt: TASK_PROMPT });
-    expect(r).toEqual({ text: RUN_TEXT, distilled: false, skipReason: 'token_cap' });
-    expect(completeMock).not.toHaveBeenCalled();
-  });
-
-  it('fails OPEN when the token scan throws (learning is not silently disabled)', async () => {
-    availabilityMock.mockRejectedValue(new Error('db down'));
-    completeMock.mockResolvedValue(gatewayResponse('The ideal, expert version of this task output text.'));
-    const r = await buildEvermindTrainingText(env, db, TENANT, 'claude-opus-4-8', RUN_TEXT);
-    expect(r.distilled).toBe(true);
-    expect(completeMock).toHaveBeenCalledOnce();
-  });
-
   it('falls back to raw text when the teacher call fails (contribution never lost)', async () => {
     completeMock.mockResolvedValue(gatewayResponse('too short', 500));
-    const r = await buildEvermindTrainingText(env, db, TENANT, 'claude-opus-4-8', RUN_TEXT);
+    const r = await buildEvermindTrainingText(env, 'claude-opus-4-8', RUN_TEXT);
     expect(r).toEqual({ text: RUN_TEXT, distilled: false, skipReason: 'teacher_failed' });
+  });
+});
+
+describe('resolveEvermindTeacherModel (once-per-alarm budget gate)', () => {
+  beforeEach(() => {
+    availabilityMock.mockReset();
+    availabilityMock.mockResolvedValue({ hasTokens: true });
+  });
+
+  it('returns null (no scan) when no teacher is pinned', async () => {
+    expect(await resolveEvermindTeacherModel(db, TENANT, null)).toBeNull();
+    expect(await resolveEvermindTeacherModel(db, TENANT, '   ')).toBeNull();
+    expect(availabilityMock).not.toHaveBeenCalled();
+  });
+
+  it('returns the model when the tenant has token budget', async () => {
+    expect(await resolveEvermindTeacherModel(db, TENANT, 'claude-opus-4-8')).toBe('claude-opus-4-8');
+  });
+
+  it('returns null when the tenant is out of token budget', async () => {
+    availabilityMock.mockResolvedValue({ hasTokens: false, reason: 'daily_exhausted' });
+    expect(await resolveEvermindTeacherModel(db, TENANT, 'claude-opus-4-8')).toBeNull();
+  });
+
+  it('fails OPEN (keeps the teacher) when the token scan throws', async () => {
+    availabilityMock.mockRejectedValue(new Error('db down'));
+    expect(await resolveEvermindTeacherModel(db, TENANT, 'claude-opus-4-8')).toBe('claude-opus-4-8');
   });
 });

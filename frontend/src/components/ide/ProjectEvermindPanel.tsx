@@ -191,14 +191,7 @@ export function ProjectEvermindPanel({ projectId }: { projectId: number }) {
               call bills frontier tokens); a teacher the plan can't reach simply fails
               closed to raw-text learning, so no run is ever blocked. */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-            <div>
-              <div style={{ fontSize: '0.82rem', fontWeight: 600, color: 'var(--text-primary)' }}>
-                {t('teacherLabel')}
-              </div>
-              <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', lineHeight: 1.4 }}>
-                {t('teacherHint')}
-              </div>
-            </div>
+            <FieldLabel label={t('teacherLabel')} hint={t('teacherHint')} />
             <RoleGate capability="project.manageEvermind">
               {isPaid ? (
                 <Select
@@ -249,6 +242,17 @@ function primaryBtn(disabled: boolean): React.CSSProperties {
   };
 }
 
+/** A label + hint pair — shared by the toggle rows and the teacher picker so the
+ *  two-line control heading is styled in exactly one place. */
+function FieldLabel({ label, hint }: { label: string; hint: string }) {
+  return (
+    <div>
+      <div style={{ fontSize: '0.82rem', fontWeight: 600, color: 'var(--text-primary)' }}>{label}</div>
+      <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', lineHeight: 1.4 }}>{hint}</div>
+    </div>
+  );
+}
+
 /** One labelled toggle row — self-gated to managers via RoleGate. */
 function ToggleRow({
   label, hint, on, busy, onToggle, onText, offText,
@@ -259,8 +263,7 @@ function ToggleRow({
   return (
     <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap' }}>
       <div style={{ flex: '1 1 200px', minWidth: 0 }}>
-        <div style={{ fontSize: '0.82rem', fontWeight: 600, color: 'var(--text-primary)' }}>{label}</div>
-        <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', lineHeight: 1.4 }}>{hint}</div>
+        <FieldLabel label={label} hint={hint} />
       </div>
       <RoleGate capability="project.manageEvermind">
         <button
