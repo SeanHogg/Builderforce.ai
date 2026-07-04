@@ -1,4 +1,36 @@
 {
+  "chatInput": {
+    "add": "Hinzufügen",
+    "upload": "Vom Computer hochladen",
+    "addContext": "Kontext hinzufügen",
+    "browseWeb": "Im Web suchen",
+    "on": "Ein",
+    "off": "Aus",
+    "options": "Optionen",
+    "effort": "Aufwand",
+    "effort_quick": "Schnell",
+    "effort_balanced": "Ausgewogen",
+    "effort_thorough": "Gründlich",
+    "thinking": "Nachdenken",
+    "accountSettings": "Kontoeinstellungen",
+    "autoMode": "Automatikmodus",
+    "autoModeHint": "Aktionen automatisch ohne Rückfrage genehmigen",
+    "dictate": "Diktieren",
+    "stopDictation": "Diktat beenden",
+    "removeAttachment": "Anhang entfernen",
+    "brainstorm": "Brainstorm (Ideenfindung)"
+  },
+  "repoContext": {
+    "title": "Repository-Kontext hinzufügen",
+    "repo": "Repository",
+    "default": "Standard",
+    "searchPlaceholder": "Dateien suchen…",
+    "loading": "Dateien werden geladen…",
+    "empty": "Keine Dateien gefunden",
+    "error": "Repository konnte nicht geladen werden",
+    "close": "Schließen",
+    "more": "+{count} weitere — Suche verfeinern"
+  },
   "boardConfig": {
     "approvalHeading": "Ausführungsfreigabe",
     "approvalToggle": "Freigabe durch Manager erforderlich, bevor hohe oder dringende Tickets ausgeführt werden",
@@ -221,7 +253,8 @@
       "myProfile": "Mein Profil",
       "findWork": "Arbeit finden",
       "timecard": "Zeiterfassung",
-      "hires": "Einstellungen"
+      "hires": "Einstellungen",
+      "kanbanTemplates": "Kanban-Vorlagen"
     },
     "tab": {
       "projects": "Projekte",

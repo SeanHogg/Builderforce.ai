@@ -47,6 +47,7 @@
   "config.webUrl.desc": "URL de base de l'app web BuilderForce (où se trouvent les pages intégrées comme le tableau). Laissez vide pour la déduire de `builderforce.baseUrl` (api.* → domaine racine).",
   "config.defaultModel.desc": "Id du modèle par défaut. Laissez vide pour laisser la passerelle choisir dans le pool de modèles de codage sélectionné.",
   "config.permissionMode.desc": "Comment l'agent applique les changements à votre espace de travail.",
+  "config.evermindLearning.desc": "Laissez vos discussions entraîner le modèle Evermind du projet. Après une discussion, ce qui a été appris est renvoyé au modèle partagé afin que les exécutions cloud, sur site et dans l'éditeur progressent ensemble. Désactivé par défaut (exécute une petite étape d'entraînement local après une discussion).",
   "config.permissionMode.ask": "Demander avant d'appliquer chaque modification de fichier ou commande (recommandé).",
   "config.permissionMode.acceptEdits": "Appliquer automatiquement les modifications de fichiers sans demander.",
   "view.inbox": "Boîte de réception",

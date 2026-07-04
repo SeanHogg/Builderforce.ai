@@ -32,6 +32,7 @@ import {
   setProjectEvermindMode,
   setProjectEvermindInference,
   dispatchProjectEvermindLearn,
+  dispatchProjectEvermindLearnText,
   projectEvermindRef,
   type ProjectEvermindMode,
 } from '../../application/llm/projectEvermind';
@@ -89,6 +90,20 @@ async function learnCore(env: Env, db: Db, tenantId: number, projectId: number, 
   return json(result.body, result.status);
 }
 
+/**
+ * Text-path learn — the UNIFIED producer door. A surface (IDE/cloud/on-prem) POSTs
+ * raw run text; the coordinator adapts+diffs it IN ITS ALARM, so no caller pays
+ * training CPU. `{ text, weight? }`.
+ */
+async function learnTextCore(env: Env, db: Db, tenantId: number, projectId: number, c: Context): Promise<Response> {
+  if (!(await ownsProject(db, tenantId, projectId))) return json({ error: 'project not found' }, 404);
+  const body = (await c.req.json<{ text?: unknown; weight?: unknown }>().catch(() => ({}))) as { text?: unknown; weight?: unknown };
+  const text = typeof body.text === 'string' ? body.text : '';
+  if (!text.trim()) return json({ error: 'text is required' }, 400);
+  const result = await dispatchProjectEvermindLearnText(env, tenantId, projectId, text, typeof body.weight === 'number' ? body.weight : undefined);
+  return json(result.body, result.status);
+}
+
 const pid = (c: Context): number => Number(c.req.param('projectId'));
 
 // ── JWT front door (web UI + internal JWT callers) ───────────────────────────
@@ -102,6 +117,7 @@ export function createProjectEvermindRoutes(db: Db): Hono<HonoEnv> {
   router.get('/:projectId/evermind/model', (c) => artifactCore(c.env as Env, db, t(c), pid(c), c.req.query('version'), 'model.evermind'));
   router.get('/:projectId/evermind/tokenizer', (c) => artifactCore(c.env as Env, db, t(c), pid(c), c.req.query('version'), 'tokenizer.json'));
   router.post('/:projectId/evermind/learn', (c) => learnCore(c.env as Env, db, t(c), pid(c), c));
+  router.post('/:projectId/evermind/learn-text', (c) => learnTextCore(c.env as Env, db, t(c), pid(c), c));
 
   /** Seed the base model (version 1) from a published `.evermind` blob (manager). */
   router.post('/:projectId/evermind/seed', requireRole(TenantRole.MANAGER), async (c) => {
@@ -252,6 +268,11 @@ export function createProjectEvermindAgentRoutes(db: Db): Hono<HonoEnv> {
     const tenantId = await auth(c);
     if (tenantId == null) return json({ error: 'unauthorized' }, 401);
     return learnCore(c.env as Env, db, tenantId, pid(c), c);
+  });
+  router.post('/:projectId/evermind/learn-text', async (c) => {
+    const tenantId = await auth(c);
+    if (tenantId == null) return json({ error: 'unauthorized' }, 401);
+    return learnTextCore(c.env as Env, db, tenantId, pid(c), c);
   });
 
   return router;

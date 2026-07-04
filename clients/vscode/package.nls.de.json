@@ -47,6 +47,7 @@
   "config.webUrl.desc": "Basis-URL der BuilderForce-Web-App (wo eingebettete Seiten wie das Board liegen). Leer lassen, um sie aus `builderforce.baseUrl` abzuleiten (api.* → Stammdomäne).",
   "config.defaultModel.desc": "Standard-Modell-Id. Leer lassen, damit das Gateway aus dem kuratierten Coding-Modell-Pool wählt.",
   "config.permissionMode.desc": "Wie der Agent Änderungen auf deinen Arbeitsbereich anwendet.",
+  "config.evermindLearning.desc": "Lass deine Chats das Evermind-Modell des Projekts trainieren. Nach einem Chat wird das Gelernte an das gemeinsame Modell zurückgegeben, damit Cloud-, On-Premise- und Editor-Läufe gemeinsam besser werden. Standardmäßig aus (führt nach einem Chat einen kleinen lokalen Trainingsschritt aus).",
   "config.permissionMode.ask": "Vor jeder Dateiänderung oder jedem Befehl nachfragen (empfohlen).",
   "config.permissionMode.acceptEdits": "Dateiänderungen automatisch ohne Nachfrage anwenden.",
   "view.inbox": "Posteingang",

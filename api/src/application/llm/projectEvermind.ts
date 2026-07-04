@@ -19,6 +19,7 @@
  * a stale head.
  */
 import { and, eq, sql } from 'drizzle-orm';
+import { EvermindLM, EvermindModelPackage, BPETokenizer } from '@seanhogg/builderforce-memory-engine';
 import { projectEvermind } from '../../infrastructure/database/schema';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
@@ -183,6 +184,92 @@ export async function seedProjectEvermind(
 }
 
 /**
+ * A tiny generic corpus the DEFAULT project Evermind's byte-BPE tokenizer trains
+ * on so it can round-trip code + English out of the box (the base vocab always
+ * covers all 256 bytes, so any input is representable regardless). Small on
+ * purpose — this is a learnable STARTER substrate that the project's runs then
+ * adapt, not a pretrained frontier model.
+ */
+const DEFAULT_EVERMIND_CORPUS = [
+  'function build(project) { return project.tasks.map(t => t.done); }',
+  'const value = await fetch(url).then(r => r.json());',
+  'export interface Config { name: string; version: number; }',
+  'The agent reviews the change, runs the tests, and opens a pull request.',
+  'if (error) { logger.warn(error.message); return null; }',
+  'class Service { constructor(private readonly repo: Repository) {} }',
+  'Summarize the run, list the files touched, and note any follow-ups.',
+].join('\n');
+
+/**
+ * Generate a fresh DEFAULT base Evermind (a small randomly-initialised EvermindLM
+ * + a self-contained byte-BPE tokenizer trained on {@link DEFAULT_EVERMIND_CORPUS}).
+ * This is what every project gets so it ALWAYS has a model to run/learn/edit even
+ * when the manager never seeds one from a published Studio model. Pure compute —
+ * the caller writes the bytes.
+ */
+export function generateDefaultEvermindBase(): { modelBlob: ArrayBuffer; tokenizer: { vocab: Record<string, number>; merges: string[] } } {
+  const tok = new BPETokenizer();
+  tok.train(DEFAULT_EVERMIND_CORPUS);
+  const lm = new EvermindLM({ vocabSize: tok.vocabSize });
+  const pkg = EvermindModelPackage.fromLM(lm, {
+    name: 'Project Evermind (starter)',
+    version: '1',
+    card: {
+      description: 'Default starter Evermind — a small self-learning base that adapts to this project as its agents run.',
+      trainingSummary: 'Randomly initialised EvermindLM with a byte-BPE tokenizer; learns from project runs.',
+      license: 'proprietary',
+      tags: ['evermind', 'starter', 'project'],
+    },
+  });
+  const vocab = Object.fromEntries(tok.vocab) as Record<string, number>;
+  const merges = [...tok.merges.entries()].sort((a, b) => a[1] - b[1]).map(([m]) => m);
+  return { modelBlob: pkg.toBlob(), tokenizer: { vocab, merges } };
+}
+
+/**
+ * Ensure a project has a base Evermind: if it's already seeded (version ≥ 1) this
+ * is a no-op returning the current head; otherwise it seeds a freshly-generated
+ * DEFAULT base ({@link generateDefaultEvermindBase}) as version 1. Idempotent and
+ * safe under concurrency (seedProjectEvermind's onConflictDoNothing). Inference
+ * stays OFF by default — a starter base is a learnable substrate, not something to
+ * silently run agents on until the manager opts in.
+ */
+export async function ensureProjectEvermindSeeded(
+  env: Env,
+  db: Db,
+  store: ArtifactWriteStore,
+  tenantId: number,
+  projectId: number,
+  name?: string,
+): Promise<ProjectEvermindHead> {
+  const head = await getProjectEvermindHead(env, db, tenantId, projectId);
+  if (head.version >= 1) return head;
+  const { modelBlob, tokenizer } = generateDefaultEvermindBase();
+  return seedProjectEvermind(env, db, store, { tenantId, projectId, ...(name ? { name } : {}), modelBlob, tokenizer });
+}
+
+/**
+ * Best-effort default-Evermind provisioning for the project-creation paths. Never
+ * throws and never blocks project creation on failure — a project without R2 or a
+ * transient error just has no starter model yet (the manager can seed later). Kept
+ * as a thin wrapper so every create route calls ONE thing.
+ */
+export async function provisionDefaultProjectEvermind(
+  env: Env,
+  db: Db,
+  tenantId: number,
+  projectId: number,
+  name?: string,
+): Promise<void> {
+  try {
+    if (!env.UPLOADS) return; // no artifact storage → nothing to seed
+    await ensureProjectEvermindSeeded(env, db, env.UPLOADS, tenantId, projectId, name);
+  } catch {
+    /* best-effort: project creation must succeed even if seeding fails */
+  }
+}
+
+/**
  * Record a merge the coordinator just wrote to R2: advance the DB version to
  * `newVersion`, increment contributions, stamp last_learned_at, and bump the
  * head cache. The R2 bytes for `newVersion` MUST already be durable. Guarded so
@@ -225,9 +312,12 @@ export const PROJECT_EVERMIND_MODEL_PREFIX = 'project_evermind:';
 /**
  * Expand a `project_evermind:<projectId>` model pin into the concrete
  * `evermind/<ref>` for the project's current head. Returns:
- *   - `evermind/<ref>` when seeded,
- *   - undefined when the pin is malformed or the model isn't seeded yet (caller
+ *   - `evermind/<ref>` when seeded AND the project opted into inference,
+ *   - undefined when the pin is malformed, unseeded, or inference is OFF (caller
  *     then falls back to the plan default rather than 500ing).
+ * Gated on `inferenceEnabled` — the SAME opt-in {@link resolveProjectInferenceModel}
+ * uses — so the manager's toggle is the single source of truth and a hand-crafted
+ * pin can't run a project's agents on its Evermind against that setting.
  * Any non-matching model string returns `passthrough` unchanged.
  */
 export async function resolveProjectEvermindModelPin(
@@ -239,8 +329,8 @@ export async function resolveProjectEvermindModelPin(
   if (!model.startsWith(PROJECT_EVERMIND_MODEL_PREFIX)) return { matched: false, model };
   const projectId = Number(model.slice(PROJECT_EVERMIND_MODEL_PREFIX.length).trim());
   if (!Number.isInteger(projectId) || projectId <= 0) return { matched: true, model: undefined };
-  const head = await getProjectEvermindHead(env, db, tenantId, projectId);
-  return { matched: true, model: head.ref ? `evermind/${head.ref}` : undefined };
+  const resolved = await resolveProjectInferenceModel(env, db, tenantId, projectId);
+  return { matched: true, model: resolved };
 }
 
 /**
@@ -319,6 +409,35 @@ export async function dispatchProjectEvermindLearn(
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ tenantId, projectId, diff: diffB64, baseVersion, ...(weight != null ? { weight } : {}) }),
+  });
+  const body = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+  return { ok: res.ok, status: res.status, body };
+}
+
+/**
+ * The UNIFIED producer entry point: push RAW RUN TEXT to a project's coordinator.
+ * The coordinator (single writer) adapts the base on the text and merges the delta
+ * IN ITS ALARM — off the request path — so every surface (IDE, cloud, on-prem) is a
+ * cheap text-poster and none pays training CPU on its own request/tick. This is why
+ * the cloud finalize (a CF Worker/DO with a tight CPU budget) can contribute at all.
+ * Best-effort: no-op (503) when the coordinator binding is unset; the DO gates
+ * seeded/frozen itself.
+ */
+export async function dispatchProjectEvermindLearnText(
+  env: Env,
+  tenantId: number,
+  projectId: number,
+  text: string,
+  weight?: number,
+): Promise<LearnDispatchResult> {
+  const trimmed = (text ?? '').trim();
+  if (trimmed.length < 20) return { ok: false, status: 400, body: { error: 'text too short' } };
+  const stub = coordinatorStub(env, tenantId, projectId);
+  if (!stub) return { ok: false, status: 503, body: { error: 'concurrent learning not configured (no coordinator binding)' } };
+  const res = await stub.fetch('https://coordinator/learn-text', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ tenantId, projectId, text: trimmed.slice(0, 8000), ...(weight != null ? { weight } : {}) }),
   });
   const body = (await res.json().catch(() => ({}))) as Record<string, unknown>;
   return { ok: res.ok, status: res.status, body };

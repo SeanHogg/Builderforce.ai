@@ -2,7 +2,7 @@
   "name": "builderforce-ai",
   "displayName": "BuilderForce.ai",
   "description": "%extension.description%",
-  "version": "2026.7.14",
+  "version": "2026.7.15",
   "publisher": "builderforce",
   "license": "MIT",
   "author": "Sean Hogg",
@@ -556,6 +556,11 @@
             "%config.permissionMode.acceptEdits%"
           ],
           "description": "%config.permissionMode.desc%"
+        },
+        "builderforce.evermindLearning": {
+          "type": "boolean",
+          "default": false,
+          "markdownDescription": "%config.evermindLearning.desc%"
         }
       }
     }

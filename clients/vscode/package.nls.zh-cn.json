@@ -47,6 +47,7 @@
   "config.webUrl.desc": "BuilderForce 网页应用的基础 URL（看板等内嵌页面所在处）。留空则从 `builderforce.baseUrl` 推导（api.* → 根域名）。",
   "config.defaultModel.desc": "要使用的默认模型 id。留空则让网关从精选的编程模型池中选择。",
   "config.permissionMode.desc": "代理如何将更改应用到你的工作区。",
+  "config.evermindLearning.desc": "让你的对话训练项目的 Evermind 模型。对话结束后，将学到的内容回传到共享模型，使云端、本地和编辑器中的运行共同进步。默认关闭（对话后会在本地执行一次小的训练步骤）。",
   "config.permissionMode.ask": "在应用每次文件编辑或命令前询问（推荐）。",
   "config.permissionMode.acceptEdits": "自动应用文件编辑，不再提示。",
   "view.inbox": "收件箱",

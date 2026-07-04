@@ -65,15 +65,26 @@ describe('getProjectEvermindHead', () => {
 });
 
 describe('resolveProjectEvermindModelPin (pull-on-boundary)', () => {
-  it('expands a project pin to the current evermind/<ref>', async () => {
+  it('expands a project pin to the current evermind/<ref> when inference is opted in', async () => {
     const out = await resolveProjectEvermindModelPin(
       env,
-      makeDb({ name: 'PM', version: 4, mode: 'connected', contributions: 0 }),
+      makeDb({ name: 'PM', version: 4, mode: 'connected', contributions: 0, inferenceEnabled: true }),
       7,
       `${PROJECT_EVERMIND_MODEL_PREFIX}42`,
     );
     expect(out.matched).toBe(true);
     expect(out.model).toBe('evermind/evermind/project/7/42/v4');
+  });
+
+  it('returns undefined for a seeded project with inference DISABLED (opt-in enforced server-side)', async () => {
+    const out = await resolveProjectEvermindModelPin(
+      env,
+      makeDb({ name: 'PM', version: 4, mode: 'connected', contributions: 0, inferenceEnabled: false }),
+      7,
+      `${PROJECT_EVERMIND_MODEL_PREFIX}42`,
+    );
+    expect(out.matched).toBe(true);
+    expect(out.model).toBeUndefined();
   });
 
   it('passes through a non-project model unchanged', async () => {

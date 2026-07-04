@@ -21,7 +21,7 @@
  * taken against a STALE base is dropped (the agent recomputes against the new
  * base on its next run) rather than corrupting the merge.
  */
-import { EvermindModelPackage } from '@seanhogg/builderforce-memory-engine';
+import { EvermindModelPackage, EvermindLMTrainer, BPETokenizer, diffCheckpoints } from '@seanhogg/builderforce-memory-engine';
 import { buildDatabase, type Db } from '../database/connection';
 import {
   getProjectEvermindHead,
@@ -38,15 +38,37 @@ const DEBOUNCE_MS = 15_000;
 const MAX_PENDING = 512;
 /** Max accepted serialized-delta size (~8 MB) — a runaway push is rejected up front. */
 const MAX_DIFF_BYTES = 8 * 1024 * 1024;
+/** Max accepted run-text length (chars) — a text-path push is capped up front. */
+const MAX_TEXT_CHARS = 8000;
+/** Chars of a text entry actually fed to one adaptation pass (rest is context). */
+const ADAPT_MAX_CHARS = 4000;
+/** Token window length for the adaptation training sequences. */
+const ADAPT_WINDOW_TOKENS = 64;
+/** Max text-path adaptations (fits) run in ONE alarm — bounds the DO's per-alarm
+ *  CPU; any beyond this stay queued and fold into the next debounced merge. */
+const MAX_FITS_PER_ALARM = 8;
 
 interface PendingEntry {
   id: number;
-  /** The head version this delta was diffed against (must match at merge time). */
+  /** The head version this delta/text was taken against (must match at merge time). */
   baseVersion: number;
-  /** base64 serialized RowDelta (from the engine's diffCheckpoints). */
-  diffB64: string;
+  /** base64 serialized RowDelta (diff-path); undefined for a text-path entry. */
+  diffB64?: string;
+  /** Raw run text (text-path) the coordinator adapts+diffs IN THE ALARM; the
+   *  unified producer path so IDE/cloud/on-prem never pay training CPU themselves. */
+  text?: string;
   /** Optional sample weight (e.g. tokens learned) for the FedAvg merge. */
   weight: number;
+}
+
+/** Chunk token ids into fixed-length training windows (min length 2). */
+function windows(ids: number[], size: number): number[][] {
+  const out: number[][] = [];
+  for (let i = 0; i + 1 < ids.length; i += size) {
+    const seq = ids.slice(i, i + size);
+    if (seq.length >= 2) out.push(seq);
+  }
+  return out;
 }
 
 interface CoordMeta {
@@ -59,6 +81,13 @@ interface LearnBody {
   projectId: number;
   baseVersion: number;
   diff: string; // base64 serialized RowDelta
+  weight?: number;
+}
+
+interface LearnTextBody {
+  tenantId: number;
+  projectId: number;
+  text: string;
   weight?: number;
 }
 
@@ -82,6 +111,7 @@ export class ProjectEvermindCoordinatorDO implements DurableObject {
 
   async fetch(request: Request): Promise<Response> {
     const url = new URL(request.url);
+    if (request.method === 'POST' && url.pathname.endsWith('/learn-text')) return this.handleLearnText(request);
     if (request.method === 'POST' && url.pathname.endsWith('/learn')) return this.handleLearn(request);
     if (request.method === 'GET' && url.pathname.endsWith('/head')) return this.handleHead();
     return new Response('not found', { status: 404 });
@@ -122,19 +152,64 @@ export class ProjectEvermindCoordinatorDO implements DurableObject {
       return this.json({ ok: false, error: 'stale base — rebase against current head', headVersion: head.version }, 409);
     }
 
-    await this.state.storage.put(META_KEY, { tenantId: body.tenantId, projectId: body.projectId } satisfies CoordMeta);
+    const { queued, dropped } = await this.enqueue(body.tenantId, body.projectId, head.version, {
+      diffB64: body.diff,
+      weight: typeof body.weight === 'number' && body.weight > 0 ? body.weight : 1,
+    });
+    return this.json({ ok: true, queued, baseVersion: head.version, ...(dropped ? { dropped } : {}) });
+  }
+
+  /**
+   * Text-path learn — the UNIFIED producer entry point. Enqueue raw run text; the
+   * ALARM adapts the base on it and merges the delta, so the fit runs HERE in the
+   * DO (off the caller's request/tick) and IDE/cloud/on-prem are all cheap text
+   * posters. No stale-base check: text is adapted against whatever the head is at
+   * alarm time, so it can never be rebased against the wrong version.
+   */
+  private async handleLearnText(request: Request): Promise<Response> {
+    const body = (await request.json().catch(() => null)) as LearnTextBody | null;
+    if (!body || typeof body.tenantId !== 'number' || typeof body.projectId !== 'number' || typeof body.text !== 'string') {
+      return this.json({ ok: false, error: 'tenantId, projectId, text required' }, 400);
+    }
+    const text = body.text.trim();
+    if (text.length < 20) return this.json({ ok: false, error: 'text too short' }, 400);
+
+    const head = await getProjectEvermindHead(this.env, this.db, body.tenantId, body.projectId);
+    if (head.version === 0) return this.json({ ok: false, error: 'project Evermind not seeded — no base model to learn against' }, 409);
+    if (head.mode === 'offline-frozen') return this.json({ ok: false, error: 'project Evermind is offline-frozen (read-only); learning disabled', mode: head.mode }, 423);
+
+    const { queued, dropped } = await this.enqueue(body.tenantId, body.projectId, head.version, {
+      text: text.slice(0, MAX_TEXT_CHARS),
+      weight: typeof body.weight === 'number' && body.weight > 0 ? body.weight : 1,
+    });
+    return this.json({ ok: true, queued, baseVersion: head.version, ...(dropped ? { dropped } : {}) });
+  }
+
+  /**
+   * Shared tail of /learn and /learn-text (DRY): stamp meta, assign a sequence id,
+   * append the entry, cap the queue (dropping oldest), and (re)arm the debounced
+   * merge alarm so a burst folds into one republish.
+   */
+  private async enqueue(
+    tenantId: number,
+    projectId: number,
+    baseVersion: number,
+    entry: { diffB64?: string; text?: string; weight: number },
+  ): Promise<{ queued: number; dropped: number }> {
+    await this.state.storage.put(META_KEY, { tenantId, projectId } satisfies CoordMeta);
     const seq = ((await this.state.storage.get<number>(SEQ_KEY)) ?? 0) + 1;
     await this.state.storage.put(SEQ_KEY, seq);
 
     const pending = (await this.state.storage.get<PendingEntry[]>(PENDING_KEY)) ?? [];
     pending.push({
       id: seq,
-      baseVersion: head.version,
-      diffB64: body.diff,
-      weight: typeof body.weight === 'number' && body.weight > 0 ? body.weight : 1,
+      baseVersion,
+      weight: entry.weight,
+      ...(entry.diffB64 ? { diffB64: entry.diffB64 } : {}),
+      ...(entry.text ? { text: entry.text } : {}),
     });
-    // Cost guard: cap the queue, dropping the OLDEST contributions if a project
-    // is firehosing learns faster than the debounce can merge them.
+    // Cost guard: cap the queue, dropping the OLDEST contributions if a project is
+    // firehosing learns faster than the debounce can merge them.
     const dropped = pending.length > MAX_PENDING ? pending.splice(0, pending.length - MAX_PENDING).length : 0;
     await this.state.storage.put(PENDING_KEY, pending);
 
@@ -142,8 +217,7 @@ export class ProjectEvermindCoordinatorDO implements DurableObject {
     // one merge DEBOUNCE_MS after the FIRST contribution.
     const existingAlarm = await this.state.storage.getAlarm();
     if (existingAlarm == null) await this.state.storage.setAlarm(Date.now() + DEBOUNCE_MS);
-
-    return this.json({ ok: true, queued: pending.length, baseVersion: head.version, ...(dropped ? { dropped } : {}) });
+    return { queued: pending.length, dropped };
   }
 
   async alarm(): Promise<void> {
@@ -170,9 +244,12 @@ export class ProjectEvermindCoordinatorDO implements DurableObject {
       return;
     }
 
+    // Only the entries we actually consume this alarm are cleared; text entries
+    // beyond MAX_FITS_PER_ALARM stay queued for the next debounced merge.
+    const processedIds: number[] = [];
     try {
       const store = this.env.UPLOADS;
-      if (!store) return; // no R2 → can't merge; leave pending for a later alarm
+      if (!store) return; // no R2 → can't merge; leave everything pending for a later alarm
       const baseObj = await store.get(`${head.ref}/model.evermind`);
       const tokObj = await store.get(`${head.ref}/tokenizer.json`);
       if (!baseObj || !tokObj) {
@@ -181,8 +258,40 @@ export class ProjectEvermindCoordinatorDO implements DurableObject {
       }
 
       const basePkg = EvermindModelPackage.fromBlob(await baseObj.arrayBuffer());
-      const diffs = usable.map((e) => decodeBase64(e.diffB64));
-      const weights = usable.map((e) => e.weight);
+      const tokenizer = JSON.parse(await tokObj.text()) as { vocab: Record<string, number>; merges: string[] };
+      const isLM = basePkg.manifest.modelType === 'evermind-lm';
+      const tok = new BPETokenizer();
+      if (isLM) tok.loadFromObjects(tokenizer.vocab, tokenizer.merges);
+
+      // Build the batch of weight deltas to FedAvg. Diff-path entries decode
+      // directly; text-path entries are ADAPTED here (fresh base copy → fit → diff)
+      // — the fit that IDE/cloud/on-prem deliberately don't run on their own.
+      const diffs: ArrayBuffer[] = [];
+      const weights: number[] = [];
+      let textFits = 0;
+      for (const e of usable) {
+        if (e.diffB64) {
+          diffs.push(decodeBase64(e.diffB64));
+          weights.push(e.weight);
+          processedIds.push(e.id);
+        } else if (e.text && isLM) {
+          if (textFits >= MAX_FITS_PER_ALARM) continue; // defer — leave queued for next alarm
+          processedIds.push(e.id); // consumed even if it yields no trainable window
+          const ids = tok.encode(e.text.slice(0, ADAPT_MAX_CHARS));
+          const seqs = windows(ids, ADAPT_WINDOW_TOKENS);
+          if (seqs.length === 0) continue;
+          const lm = basePkg.loadLM();
+          new EvermindLMTrainer(lm, { epochs: 1 }).fit(seqs);
+          diffs.push(diffCheckpoints(basePkg.checkpoint, lm.exportWeights()));
+          weights.push(e.weight);
+          textFits++;
+        } else {
+          processedIds.push(e.id); // unusable (e.g. text but base isn't an evermind-lm)
+        }
+      }
+
+      if (diffs.length === 0) return; // nothing merged this pass (finally drops what we consumed)
+
       const { checkpoint, contributors } = mergeCheckpointDiffs(basePkg.checkpoint, diffs, weights);
 
       // Repackage the merged weights as the next immutable version (recomputes the
@@ -196,7 +305,6 @@ export class ProjectEvermindCoordinatorDO implements DurableObject {
         card: basePkg.manifest.card,
       });
 
-      const tokenizer = JSON.parse(await tokObj.text()) as { vocab: Record<string, number>; merges: string[] };
       await putProjectEvermindVersion(store, tenantId, projectId, nextVersion, nextPkg.toBlob(), tokenizer);
       await recordProjectEvermindMerge(this.env, this.db, tenantId, projectId, nextVersion, contributors);
 
@@ -204,9 +312,9 @@ export class ProjectEvermindCoordinatorDO implements DurableObject {
       // — single DO — but a forward-only DB guard means we trust the row).
       void projectEvermindRef(tenantId, projectId, nextVersion);
     } finally {
-      // Clear only what we processed; if any /learn arrived during the merge it
-      // stays queued, and we re-arm so it gets folded into the next version.
-      await this.dropProcessed(snapshot.map((e) => e.id));
+      // Clear only what we consumed; anything that arrived mid-merge OR was deferred
+      // past the per-alarm fit cap stays queued, and we re-arm to fold it in next.
+      await this.dropProcessed(processedIds);
       const remaining = (await this.state.storage.get<PendingEntry[]>(PENDING_KEY)) ?? [];
       if (remaining.length > 0) await this.state.storage.setAlarm(Date.now() + DEBOUNCE_MS);
     }

@@ -1,4 +1,36 @@
 {
+  "chatInput": {
+    "add": "Ajouter",
+    "upload": "Téléverser depuis l'ordinateur",
+    "addContext": "Ajouter du contexte",
+    "browseWeb": "Parcourir le web",
+    "on": "Activé",
+    "off": "Désactivé",
+    "options": "Options",
+    "effort": "Effort",
+    "effort_quick": "Rapide",
+    "effort_balanced": "Équilibré",
+    "effort_thorough": "Approfondi",
+    "thinking": "Réflexion",
+    "accountSettings": "Paramètres du compte",
+    "autoMode": "Mode automatique",
+    "autoModeHint": "Approuver les actions automatiquement sans demander",
+    "dictate": "Dicter",
+    "stopDictation": "Arrêter la dictée",
+    "removeAttachment": "Supprimer la pièce jointe",
+    "brainstorm": "Brainstorming (idéation)"
+  },
+  "repoContext": {
+    "title": "Ajouter le contexte du dépôt",
+    "repo": "Dépôt",
+    "default": "par défaut",
+    "searchPlaceholder": "Rechercher des fichiers…",
+    "loading": "Chargement des fichiers…",
+    "empty": "Aucun fichier trouvé",
+    "error": "Impossible de charger le dépôt",
+    "close": "Fermer",
+    "more": "+{count} de plus — affinez votre recherche"
+  },
   "boardConfig": {
     "approvalHeading": "Approbation d'exécution",
     "approvalToggle": "Exiger l'approbation d'un responsable avant d'exécuter les tickets élevés ou urgents",
@@ -221,7 +253,8 @@
       "myProfile": "Mon profil",
       "findWork": "Trouver du travail",
       "timecard": "Feuille de temps",
-      "hires": "Recrutements"
+      "hires": "Recrutements",
+      "kanbanTemplates": "Modèles kanban"
     },
     "tab": {
       "projects": "Projets",

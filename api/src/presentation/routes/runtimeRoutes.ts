@@ -4,6 +4,7 @@ import { neon } from '@neondatabase/serverless';
 import { resolveDefaultRepoForTask } from '../../application/repos/resolveDefaultRepo';
 import { resolveTicketRepoContext } from '../../application/repos/commitFileAsPendingChange';
 import { readRepoFile } from '../../application/repos/readRepoContents';
+import { importRepoContents } from '../../application/repos/importRepoContents';
 import { getOrSetCached } from '../../infrastructure/cache/readThroughCache';
 import { and, desc, eq, gte, inArray, isNull } from 'drizzle-orm';
 import { RuntimeService } from '../../application/runtime/RuntimeService';
@@ -1893,6 +1894,65 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
     // "no credential" so the UI can point at the right fix.
     const noRepo = /no repo bound/i.test(r.reason);
     return c.json({ bound: !noRepo, hasCredential: false, reason: r.reason });
+  });
+
+  // GET /api/runtime/tasks/:taskId/repo-files
+  // List the files on the task's AGENT WORKING BRANCH (the ticket branch the run
+  // commits to), so the Brain composer's "Add context" can reference the agent's
+  // in-progress workspace — not just the repo's default branch. Reads server-side
+  // with the decrypted token via the SAME importRepoContents path the IDE hydrate
+  // uses; the token never reaches the browser. Falls back to the base branch when
+  // the ticket branch doesn't exist yet (a run that hasn't committed).
+  //
+  // Cached read-through keyed by a version token = the latest recorded file-change
+  // ts for the task: a fresh agent write bumps the token → next read is live; a
+  // settled run is served from cache, so re-opening the picker doesn't re-pull.
+  router.get('/tasks/:taskId/repo-files', async (c) => {
+    const taskId = Number(c.req.param('taskId'));
+    if (!Number.isFinite(taskId)) return c.json({ ok: false, reason: 'invalid task', files: [] }, 400);
+    const env = c.env as Env;
+    const tenantId = c.get('tenantId');
+
+    const repo = await resolveTicketRepoContext(db, gitSecret(env), tenantId, taskId);
+    if (!repo.ok) return c.json({ ok: false, reason: repo.reason, files: [] });
+    const ctx = repo.ctx;
+
+    const load = async () => {
+      const read = { provider: ctx.provider, host: ctx.host, owner: ctx.owner, repo: ctx.repo, token: ctx.token };
+      // Prefer the agent's working branch; a run that hasn't committed has no such
+      // branch yet, so fall back to the base so the picker still shows the repo.
+      let result = await importRepoContents({ ...read, ref: ctx.branch });
+      let ref = ctx.branch;
+      if (!result.ok) { result = await importRepoContents({ ...read, ref: ctx.base }); ref = ctx.base; }
+      return {
+        ok: result.ok,
+        ref,
+        branch: ctx.branch,
+        base: ctx.base,
+        files: result.files,
+        truncated: result.truncated,
+        ...(result.ok ? {} : { reason: result.error ?? 'Failed to read repository' }),
+      };
+    };
+
+    // Version token = newest change row for this task (null when the run hasn't
+    // written anything yet — then the branch content is stable at the base).
+    const sql = neon(env.NEON_DATABASE_URL);
+    const [ver] = (await sql`
+      SELECT created_at AS "ts"
+      FROM task_file_changes
+      WHERE task_id = ${taskId} AND tenant_id = ${tenantId}
+      ORDER BY created_at DESC
+      LIMIT 1
+    `) as Array<{ ts: string }>;
+
+    const body = await getOrSetCached(
+      env,
+      `task-repo-files:${tenantId}:${taskId}:${ctx.branch}:${ver?.ts ?? 'base'}`,
+      load,
+      { kvTtlSeconds: 300, l1TtlMs: 30_000 },
+    );
+    return c.json(body);
   });
 
   // Broadcast an existing task to all currently connected agentHosts in the tenant.
