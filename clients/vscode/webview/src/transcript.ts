@@ -18,6 +18,11 @@ export interface TranscriptInput {
   assistantName: string;
   model?: string;
   error?: string | null;
+  /** The project this chat is associated with (name + id), for provenance. */
+  project?: { id: number; name: string } | null;
+  /** The chat's title and server id, so a pasted transcript is traceable. */
+  chatTitle?: string;
+  chatId?: number | null;
 }
 
 /** True when there is something worth copying (any turn, trace step, or error). */
@@ -34,6 +39,14 @@ function fenced(label: string, payload: string, lines: string[]): void {
 export function buildTranscript(input: TranscriptInput): string {
   const nodes = buildTimeline({ messages: input.messages, trace: input.trace, streamingText: '', isRunning: false });
   const lines: string[] = ['# BuilderForce chat transcript'];
+
+  // Chat + project provenance — a pasted transcript should say WHICH conversation
+  // and project it came from, not just the turns.
+  if (input.chatTitle || input.chatId != null) {
+    const title = input.chatTitle?.trim() || 'Untitled chat';
+    lines.push(`Chat: ${title}${input.chatId != null ? ` (#${input.chatId})` : ''}`);
+  }
+  lines.push(`Project: ${input.project ? `${input.project.name} (#${input.project.id})` : 'No project'}`);
 
   // Model provenance — the whole point of triaging a bad turn is knowing which
   // LLM produced it. `input.model` is what the editor was CONFIGURED with (blank

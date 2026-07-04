@@ -8,6 +8,8 @@ import { Select } from '@/components/Select';
 import { toolsApi } from '@/lib/builderforceApi';
 import { ToolResultView } from '@/components/tools/ToolResultView';
 import { DataDrivenPanel } from '@/components/tools/DataDrivenPanel';
+import { ReturningVisitorBanner } from '@/components/tools/ReturningVisitorBanner';
+import { trackToolRun } from '@/lib/marketingApi';
 import { defaultInput, answersComplete, type ToolDefinition, type ToolResult } from '@/lib/tools';
 import { getStoredUser, getStoredTenantToken } from '@/lib/auth';
 import { useOptionalProjectScope } from '@/lib/ProjectScopeContext';
@@ -64,7 +66,11 @@ export default function ToolRunnerClient({ toolId }: { toolId: string }) {
     if (!def) return;
     setComputing(true); setError(null);
     try {
-      setResult(await toolsApi.compute(toolId, input));
+      const res = await toolsApi.compute(toolId, input);
+      setResult(res);
+      // Track anonymous runs as marketing leads so a returning visitor can re-see
+      // their result and we can target them with a sign-up. Authed users are known.
+      if (!isAuthed) trackToolRun(toolId, input, res);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to run');
     } finally {
@@ -104,6 +110,9 @@ export default function ToolRunnerClient({ toolId }: { toolId: string }) {
           <p style={{ fontSize: 13, fontWeight: 600, color: 'var(--accent)', margin: '6px 0 0' }}>{t('scoringProject')}</p>
         )}
       </header>
+
+      {/* Returning visitor — replay their prior result + a targeted sign-up CTA. */}
+      <ReturningVisitorBanner toolId={toolId} />
 
       {/* Mode toggle — only for tools that also have a "from your data" provider */}
       {def.hasDataDriven && (

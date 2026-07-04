@@ -29,6 +29,7 @@ import {
   writeFile as fsWriteFile,
 } from "node:fs/promises";
 import { isAbsolute, join, relative, resolve as resolvePath, sep } from "node:path";
+import { filterByGlob } from "@builderforce/agent-tools";
 import type {
   Capability,
   CapabilityProvider,
@@ -211,13 +212,13 @@ export function buildNodeCapabilityProvider(options: NodeProviderOptions): Capab
       },
     },
     repoRead: {
-      async listFiles(sub): Promise<RepoListResult> {
+      async listFiles(sub, glob): Promise<RepoListResult> {
         const scope = sub ? resolveInside(root, sub) : root;
         if (!scope) {
           return { ok: false, error: escaped(sub ?? "") };
         }
         const { paths, truncated } = await walkFiles(root, scope);
-        return { ok: true, paths, truncated };
+        return { ok: true, paths: glob ? filterByGlob(paths, glob) : paths, truncated };
       },
       async readFile(path): Promise<RepoReadResult> {
         const abs = resolveInside(root, path);

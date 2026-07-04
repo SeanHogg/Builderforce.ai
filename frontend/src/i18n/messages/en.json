@@ -693,7 +693,15 @@
     "savedProject": "Saved to this project.",
     "scoringProject": "Scoring this project — this run will be saved to the project's rating.",
     "rollupTitle": "Your workspace rating",
-    "rollupDesc": "Average diagnostic rating across your projects."
+    "rollupDesc": "Average diagnostic rating across your projects.",
+    "profileTitle": "Your profile",
+    "profileSubtitle": "How you score across each dimension.",
+    "radarAria": "Diagnostic profile radar chart",
+    "welcomeBack": "Welcome back",
+    "welcomeBackTool": "Here’s the result from your last run — sign up to save it and track your progress.",
+    "welcomeBackHub": "You’ve run {count} free diagnostics — sign up to save your results.",
+    "saveMyResult": "Save my result",
+    "saveMyResults": "Save my results"
   },
   "notFound": {
     "title": "Page not found",

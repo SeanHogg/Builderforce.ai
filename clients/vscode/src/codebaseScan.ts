@@ -14,10 +14,16 @@ const MANIFEST_FILES = new Set([
 ]);
 const MAX_DIRS = 3000;
 const MAX_DEPTH = 6;
+const MAX_ROOT_FILES = 200;
 
 interface ScanData {
   dirs: string[];
   manifests: string[];
+  /** Notable shallow files: every file at the workspace root plus docs (*.md) one
+   *  level down. Gives the grounding map an actual FILE index so a root-level doc
+   *  (ROADMAP.md, README, a PRD) is discoverable — without it the model can wrongly
+   *  conclude a file it was asked about does not exist. */
+  rootFiles: string[];
   extCounts: Map<string, number>;
   fileCount: number;
   truncated: boolean;
@@ -36,6 +42,7 @@ function isManifest(name: string): boolean {
 async function scanTree(root: string): Promise<ScanData> {
   const dirs: string[] = [];
   const manifests: string[] = [];
+  const rootFiles: string[] = [];
   const extCounts = new Map<string, number>();
   let fileCount = 0;
   let truncated = false;
@@ -62,12 +69,17 @@ async function scanTree(root: string): Promise<ScanData> {
         const ext = path.extname(e.name).toLowerCase() || "(none)";
         extCounts.set(ext, (extCounts.get(ext) ?? 0) + 1);
         if (isManifest(e.name)) manifests.push(rel ? `${rel}/${e.name}` : e.name);
+        // Index every root file, plus docs (*.md) one level down, so top-level
+        // documents are named in the map (not just counted).
+        if (rootFiles.length < MAX_ROOT_FILES && (depth === 0 || (depth === 1 && ext === ".md"))) {
+          rootFiles.push(rel ? `${rel}/${e.name}` : e.name);
+        }
       }
     }
   }
 
   await rec(root, "", 0);
-  return { dirs, manifests, extCounts, fileCount, truncated };
+  return { dirs, manifests, rootFiles, extCounts, fileCount, truncated };
 }
 
 /** Version token from the directory structure + manifest set (changes on structural edits). */
@@ -75,6 +87,7 @@ function computeToken(data: ScanData): string {
   const h = crypto.createHash("sha256");
   for (const d of [...data.dirs].sort()) h.update(`d:${d}\n`);
   for (const m of [...data.manifests].sort()) h.update(`m:${m}\n`);
+  for (const f of [...data.rootFiles].sort()) h.update(`f:${f}\n`);
   return h.digest("hex").slice(0, 32);
 }
 
@@ -103,7 +116,7 @@ function renderTree(dirs: string[], maxDepth: number, maxLines: number): string 
 function renderMap(
   data: ScanData,
   root: string,
-  opts: { treeDepth: number; treeLines: number; maxManifests: number },
+  opts: { treeDepth: number; treeLines: number; maxManifests: number; maxRootFiles: number },
 ): string {
   const out: string[] = [];
   out.push(`Workspace: ${path.basename(root)}`);
@@ -117,6 +130,16 @@ function renderMap(
     }
     if (data.manifests.length > opts.maxManifests) {
       out.push(`- … (${data.manifests.length - opts.maxManifests} more)`);
+    }
+  }
+  if (data.rootFiles.length) {
+    out.push("");
+    out.push("Top-level files (name a file directly with read_file; use list_files with a `glob` to find others):");
+    for (const f of [...data.rootFiles].sort().slice(0, opts.maxRootFiles)) {
+      out.push(`- ${f}`);
+    }
+    if (data.rootFiles.length > opts.maxRootFiles) {
+      out.push(`- … (${data.rootFiles.length - opts.maxRootFiles} more)`);
     }
   }
   out.push("");
@@ -167,9 +190,9 @@ export async function scanCodebase(
   }
 
   // Compact map = what we inject into the agent (token-bounded, high-signal).
-  const compactMap = renderMap(data, root, { treeDepth: 3, treeLines: 200, maxManifests: 120 });
+  const compactMap = renderMap(data, root, { treeDepth: 3, treeLines: 200, maxManifests: 120, maxRootFiles: 60 });
   // Full map = written to disk for the human.
-  const fullMap = renderMap(data, root, { treeDepth: MAX_DEPTH, treeLines: 2000, maxManifests: 400 });
+  const fullMap = renderMap(data, root, { treeDepth: MAX_DEPTH, treeLines: 2000, maxManifests: 400, maxRootFiles: MAX_ROOT_FILES });
 
   // Best-effort one-shot overview (skipped silently if the call fails, e.g. quota).
   let overview = "";

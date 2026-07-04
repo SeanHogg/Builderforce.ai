@@ -693,7 +693,15 @@
     "savedProject": "Guardado en este proyecto.",
     "scoringProject": "Puntuando este proyecto: esta ejecución se guardará en la calificación del proyecto.",
     "rollupTitle": "Calificación de tu espacio de trabajo",
-    "rollupDesc": "Calificación de diagnóstico promedio de tus proyectos."
+    "rollupDesc": "Calificación de diagnóstico promedio de tus proyectos.",
+    "profileTitle": "Tu perfil",
+    "profileSubtitle": "Tu puntuación en cada dimensión.",
+    "radarAria": "Gráfico de radar del perfil de diagnóstico",
+    "welcomeBack": "Bienvenido de nuevo",
+    "welcomeBackTool": "Este es el resultado de tu última ejecución: regístrate para guardarlo y seguir tu progreso.",
+    "welcomeBackHub": "Has realizado {count} diagnósticos gratuitos: regístrate para guardar tus resultados.",
+    "saveMyResult": "Guardar mi resultado",
+    "saveMyResults": "Guardar mis resultados"
   },
   "notFound": {
     "title": "Página no encontrada",

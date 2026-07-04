@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useTranslations } from 'next-intl';
 import { toolsApi } from '@/lib/builderforceApi';
 import { ToolResultView } from '@/components/tools/ToolResultView';
+import { ReturningVisitorBanner } from '@/components/tools/ReturningVisitorBanner';
 import { getStoredTenantToken } from '@/lib/auth';
 import type { ToolSummary, ToolCategory, TenantDiagnosticsRollup } from '@/lib/tools';
 
@@ -48,6 +49,9 @@ export default function ToolsHubClient() {
         <h1 style={{ fontSize: 30, fontWeight: 800, color: 'var(--text-strong)', margin: '8px 0' }}>{t('hubTitle')}</h1>
         <p style={{ fontSize: 15, color: 'var(--text-secondary)', maxWidth: 680 }}>{t('hubIntro')}</p>
       </header>
+
+      {/* Returning visitor — recap their diagnostics + a targeted sign-up CTA. */}
+      <ReturningVisitorBanner />
 
       {/* Workspace rating — project diagnostics rolled up to the tenant. */}
       {rollup && rollup.projects.length > 0 && (

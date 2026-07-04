@@ -4771,6 +4771,49 @@ export const toolRuns = pgTable('tool_runs', {
 }));
 
 /**
+ * Anonymous marketing session (migration 0279) — a logged-out visitor who runs a
+ * free Diagnostics & Tools diagnostic IS a lead. Keyed by a client-generated
+ * stable `visitorId`; tracks run volume + first-touch attribution and is stamped
+ * `converted` when the visitor creates an account. Not tenant-scoped (pre-signup).
+ */
+export const marketingSessions = pgTable('marketing_sessions', {
+  id:              uuid('id').primaryKey().defaultRandom(),
+  visitorId:       varchar('visitor_id', { length: 64 }).notNull(),
+  toolRuns:        integer('tool_runs').notNull().default(0),
+  lastToolId:      varchar('last_tool_id', { length: 64 }),
+  landingPath:     text('landing_path'),
+  referrer:        text('referrer'),
+  userAgent:       text('user_agent'),
+  utm:             jsonb('utm').notNull().default(sql`'{}'::jsonb`),
+  converted:       boolean('converted').notNull().default(false),
+  convertedUserId: varchar('converted_user_id', { length: 36 }).references(() => users.id, { onDelete: 'set null' }),
+  convertedAt:     timestamp('converted_at'),
+  firstSeenAt:     timestamp('first_seen_at').notNull().defaultNow(),
+  lastSeenAt:      timestamp('last_seen_at').notNull().defaultNow(),
+}, (t) => ({
+  byVisitor: uniqueIndex('uq_marketing_sessions_visitor').on(t.visitorId),
+  byLastSeen: index('idx_marketing_sessions_last_seen').on(t.lastSeenAt),
+}));
+
+/**
+ * Latest anonymous tool result per (visitor, tool) (migration 0279) — upserted on
+ * every free run so a returning visitor can see their diagnostics again and we can
+ * target them with a sign-up. Bounded (one row per visitor+tool) via upsert.
+ */
+export const marketingToolRuns = pgTable('marketing_tool_runs', {
+  id:         uuid('id').primaryKey().defaultRandom(),
+  visitorId:  varchar('visitor_id', { length: 64 }).notNull(),
+  toolId:     varchar('tool_id', { length: 64 }).notNull(),
+  input:      jsonb('input').notNull().default(sql`'{}'::jsonb`),
+  result:     jsonb('result').notNull().default(sql`'{}'::jsonb`),
+  createdAt:  timestamp('created_at').notNull().defaultNow(),
+  updatedAt:  timestamp('updated_at').notNull().defaultNow(),
+}, (t) => ({
+  byVisitorTool: uniqueIndex('uq_marketing_tool_runs').on(t.visitorId, t.toolId),
+  byVisitor: index('idx_marketing_tool_runs_visitor').on(t.visitorId, t.updatedAt),
+}));
+
+/**
  * Human-authored qualitative update stream on any deliverable (migration 0248) —
  * the narrative companion (EMP-11) to the delivery lens's quantitative status.
  * Polymorphic target via (scopeKind, scopeId); newest-first per deliverable.

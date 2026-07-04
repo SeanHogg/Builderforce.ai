@@ -11,7 +11,7 @@
 
 /** Standard preamble shown above the scanned workspace map. */
 export const WORKSPACE_MAP_INTRO =
-  'The following is the authoritative map of the open workspace. Trust it for locating files:';
+  'The following map of the open workspace lists its top-level files and directory structure. Use it to orient yourself — but it is NOT an exhaustive file index (deeper files are summarized), so when a file is not named here, find it with `list_files` (pass a `glob`) or `search_code` before concluding it does not exist:';
 
 /**
  * Autonomy directive — appended to BOTH persona branches. The agent was being
@@ -33,7 +33,7 @@ export const AUTONOMY_DIRECTIVE =
  * or scope instead of dumping the root.
  */
 export const DISCOVERY_DIRECTIVE =
-  "Finding files: to locate a file you cannot already see in the workspace map, use `search_code` (by a distinctive filename or string) or call `list_files` on a SPECIFIC subdirectory. Do NOT call `list_files` on the workspace root of a large or multi-project repo — it floods your context with thousands of paths; scope to a subfolder or search instead. Planning and doc files (roadmaps, specs, changelogs) usually live inside a subfolder, not the repo root, and filenames may differ in case (e.g. ROADMAP.md) — search rather than assuming a path, and never claim a file is missing until a search has come back empty.";
+  "Finding files: to locate a file you cannot already see in the workspace map, call `list_files` with a `glob` — e.g. `{ \"glob\": \"ROADMAP.md\" }` finds that filename at ANY depth, case-insensitively (so `Roadmap.md` still matches `ROADMAP.md`); use patterns like `*.md` or `src/**/*.ts` too. You can also `search_code` for a distinctive string inside files, or scope `list_files` to a subdirectory with `path`. Do NOT dump `list_files` on the root of a large repo without a `glob` (it summarizes to directories); prefer a glob or a scoped path. Never claim a file is missing until a `glob` search for its name has come back with zero matches.";
 
 /**
  * Dispatch-handoff strategy — the decisive fix for "the Brain can't finish a big job

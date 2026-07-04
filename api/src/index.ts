@@ -72,6 +72,8 @@ import { createAuditRoutes }       from './presentation/routes/auditRoutes';
 import { createMarketplaceRoutes } from './presentation/routes/marketplaceRoutes';
 import { createToolRoutes } from './presentation/routes/toolRoutes';
 import { ToolService } from './application/tools/ToolService';
+import { createMarketingRoutes } from './presentation/routes/marketingRoutes';
+import { MarketingService } from './application/marketing/MarketingService';
 import { createAgentHostRoutes }        from './presentation/routes/agentHostRoutes';
 import { AgentHostRepository }          from './infrastructure/repositories/AgentHostRepository';
 import { IAgentHostRepository }         from './domain/agentHost/IAgentHostRepository';
@@ -219,6 +221,7 @@ export function buildApp(env: Env): Hono<HonoEnv> {
     (projectId) => recommendTopAssignee(env, db, projectId));
   const tenantService   = new TenantService(tenantRepo, paymentProvider);
   const toolService     = new ToolService(db);
+  const marketingService = new MarketingService(db);
   const authService     = new AuthService(userRepo, tenantRepo, auditRepo, env.JWT_SECRET);
   const agentService    = new AgentService(agentRepo, skillRepo, auditRepo);
   // RuntimeService.update is the single canonical execution-status transition;
@@ -339,6 +342,7 @@ export function buildApp(env: Env): Hono<HonoEnv> {
   // Diagnostics & Tools — list/get/compute are public (free preview);
   // save/runs apply auth + manager role inside the router.
   app.route('/api/tools', createToolRoutes(toolService));
+  app.route('/api/marketing', createMarketingRoutes(marketingService));
 
   // Signed vision attachments — public, but each object is gated by a short-lived
   // HMAC (?exp&sig minted at /api/brain/uploads/sign). Lets an upstream LLM

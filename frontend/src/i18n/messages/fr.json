@@ -693,7 +693,15 @@
     "savedProject": "Enregistré dans ce projet.",
     "scoringProject": "Évaluation de ce projet — cette exécution sera enregistrée dans la note du projet.",
     "rollupTitle": "Note de votre espace de travail",
-    "rollupDesc": "Note de diagnostic moyenne de vos projets."
+    "rollupDesc": "Note de diagnostic moyenne de vos projets.",
+    "profileTitle": "Votre profil",
+    "profileSubtitle": "Votre score sur chaque dimension.",
+    "radarAria": "Graphique radar du profil de diagnostic",
+    "welcomeBack": "Bon retour",
+    "welcomeBackTool": "Voici le résultat de votre dernière exécution — inscrivez-vous pour l’enregistrer et suivre votre progression.",
+    "welcomeBackHub": "Vous avez réalisé {count} diagnostics gratuits — inscrivez-vous pour enregistrer vos résultats.",
+    "saveMyResult": "Enregistrer mon résultat",
+    "saveMyResults": "Enregistrer mes résultats"
   },
   "notFound": {
     "title": "Page introuvable",

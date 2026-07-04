@@ -28,6 +28,7 @@ import { useBrainConfig } from './config';
 import type { BrainMessage, BrainModality, ChatInputAttachment } from './types';
 import type { BrainToolSpec, ChatCompletionMessage, ContentPart } from './streamChatCompletion';
 import { prepareImageDataUrl } from './imagePrep';
+import { scopeToConsolidation } from './consolidation';
 import { buildBrainTriageReport, type BrainTraceEvent } from './brainTriage';
 import {
   startRun,
@@ -296,7 +297,9 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
         setMessages((prev) => [...prev, userMsg]);
         // Seed the rich transcript from the prior persisted history (the closure
         // `messages`, excluding the just-sent user turn), then append this turn.
-        const seed: ChatCompletionMessage[] = messages.map((m) => ({
+        // Scoped to the last consolidation marker: a consolidated chat sends the
+        // summary as its base context instead of the full (large) history.
+        const seed: ChatCompletionMessage[] = scopeToConsolidation(messages).map((m) => ({
           role: m.role as ChatCompletionMessage['role'],
           content: m.content,
         }));
@@ -328,7 +331,7 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
     if (autoRepliedChatIdRef.current === chatId) return;
     autoRepliedChatIdRef.current = chatId;
     setLocalError('');
-    const seed: ChatCompletionMessage[] = messages.slice(0, -1).map((m) => ({
+    const seed: ChatCompletionMessage[] = scopeToConsolidation(messages.slice(0, -1)).map((m) => ({
       role: m.role as ChatCompletionMessage['role'],
       content: m.content,
     }));

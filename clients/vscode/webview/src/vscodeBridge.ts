@@ -65,6 +65,10 @@ export interface InitData {
   /** The sidebar's active BuilderForce project — injected into the system prompt so
    *  the Brain scopes platform tools to it, and used to scope new chats. */
   project?: { id: number; name: string };
+  /** `projectId → name` for every known project, so the header can name the project
+   *  an EXISTING chat belongs to (not just the sidebar's active one). Keys are
+   *  stringified ids (JSON). Best-effort — an unknown id falls back to "No project". */
+  projectNames?: Record<string, string>;
   /** The host's local file tools, forwarded so the model can call them over the bridge. */
   tools: ToolSpecMsg[];
   /** Localized UI strings (see {@link LabelBundle}). */

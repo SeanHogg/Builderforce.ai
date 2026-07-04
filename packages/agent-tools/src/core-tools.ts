@@ -30,17 +30,27 @@ import { defineTool, type ToolDefinition, type ToolResult } from "./tool.js";
 export const listFilesTool: ToolDefinition = defineTool({
   name: "list_files",
   description:
-    'List repo files (recursively) on the ticket branch so you can discover the existing codebase before editing. Optionally pass a subdirectory to scope the listing.',
+    'List repo files (recursively) on the ticket branch so you can discover the existing codebase before editing. Optionally pass `path` to scope to a subdirectory. To FIND A FILE BY NAME, pass `glob` — e.g. `ROADMAP.md` (matches that filename at any depth, case-insensitive) or `src/**/*.test.ts`. Use `glob` instead of concluding a file is missing: a large repo\'s unfiltered listing is summarized to directories, but a `glob` always returns the matching files in full.',
   parameters: {
     type: "object",
     properties: {
       path: { type: "string", description: 'Optional repo-relative subdirectory to scope to, e.g. "src/components".' },
+      glob: { type: "string", description: 'Optional filename/glob filter, e.g. "ROADMAP.md", "*.md", or "src/**/*.ts". Case-insensitive; a name with no "/" matches the basename at any depth.' },
     },
   },
   requires: ["repo.read"],
   async execute(args, ctx): Promise<ToolResult> {
     const sub = typeof args.path === "string" ? args.path : undefined;
-    const r = (await ctx.caps.repoRead!.listFiles(sub)) as RepoListResult;
+    const glob = typeof args.glob === "string" && args.glob.trim() ? args.glob.trim() : undefined;
+    const r = (await ctx.caps.repoRead!.listFiles(sub, glob)) as RepoListResult;
+    if (glob && r.ok && (r.paths?.length ?? 0) === 0) {
+      return {
+        data: {
+          ...r,
+          note: `No file matches glob "${glob}". Try a broader pattern (e.g. "*${glob.replace(/[*?/]/g, "")}*"), or list_files without a glob to see the tree. 0 matches means no such file exists — do not claim one is missing without trying a broader glob first.`,
+        } as unknown as Record<string, unknown>,
+      };
+    }
     return { data: r as unknown as Record<string, unknown> };
   },
 });
@@ -73,14 +83,43 @@ export const searchCodeTool: ToolDefinition = defineTool({
   },
 });
 
+/** Default line window for `read_file` — a large file returns a bounded slice the
+ *  model pages through with `offset`/`limit`, instead of dumping (or failing) on it. */
+export const READ_DEFAULT_LINE_LIMIT = 2000;
+
+/**
+ * Window file content to a 1-based line range, reporting whether more remains. This
+ * is the SINGLE place large-file pagination lives, so every surface (cloud, on-prem,
+ * VS Code) behaves identically: `read_file` returns the requested slice plus a
+ * `truncated` flag + a "read the next chunk" note when the file is longer than the
+ * window. A provider only has to return the file's content (or its own truncated
+ * chunk); the windowing math is here, once.
+ */
+export function windowFileContent(
+  content: string,
+  opts?: { offset?: number; limit?: number },
+): { content: string; truncated: boolean; totalLines: number; offset: number; returnedLines: number } {
+  const lines = content.split("\n");
+  const totalLines = lines.length;
+  const start = opts?.offset && opts.offset > 1 ? Math.min(Math.floor(opts.offset), totalLines + 1) : 1;
+  const limit = opts?.limit && opts.limit > 0 ? Math.floor(opts.limit) : READ_DEFAULT_LINE_LIMIT;
+  const slice = lines.slice(start - 1, start - 1 + limit);
+  const end = start - 1 + slice.length; // last line number included
+  return { content: slice.join("\n"), truncated: end < totalLines, totalLines, offset: start, returnedLines: slice.length };
+}
+
 export const readFileTool: ToolDefinition = defineTool({
   name: "read_file",
   description:
-    "Read the FULL current contents of a repo file on the ticket branch. Always read a file before editing it so you preserve existing code and only change what is needed.",
+    "Read a repo file on the ticket branch. Returns up to " +
+    READ_DEFAULT_LINE_LIMIT +
+    " lines at a time: a large file comes back as a paginated line window (never a hard failure), and the result's `truncated`/`totalLines` tell you when more remains — read the next chunk by calling again with `offset`. Always read a file before editing it so you preserve existing code and only change what is needed.",
   parameters: {
     type: "object",
     properties: {
       path: { type: "string", description: 'Repo-relative path, e.g. "src/feature.ts".' },
+      offset: { type: "number", description: "1-based line to start reading from (for paging through a large file). Default 1." },
+      limit: { type: "number", description: `Max lines to return. Default ${READ_DEFAULT_LINE_LIMIT}. Read the next window with offset = previous offset + returned lines.` },
     },
     required: ["path"],
   },
@@ -88,8 +127,24 @@ export const readFileTool: ToolDefinition = defineTool({
   async execute(args, ctx): Promise<ToolResult> {
     const path = typeof args.path === "string" ? args.path : "";
     if (!path) return { data: { ok: false, error: "path is required" } };
+    const offset = typeof args.offset === "number" && args.offset > 0 ? Math.floor(args.offset) : undefined;
+    const limit = typeof args.limit === "number" && args.limit > 0 ? Math.floor(args.limit) : undefined;
     const r = (await ctx.caps.repoRead!.readFile(path)) as RepoReadResult;
-    return { data: r as unknown as Record<string, unknown> };
+    if (!r.ok) return { data: r as unknown as Record<string, unknown> };
+    const win = windowFileContent(r.content ?? "", { offset, limit });
+    const data: RepoReadResult = {
+      ok: true,
+      path: r.path ?? path,
+      content: win.content,
+      truncated: win.truncated || r.truncated === true,
+      totalLines: win.totalLines,
+      offset: win.offset,
+    };
+    if (win.truncated) {
+      const lastLine = win.offset + win.returnedLines - 1;
+      data.note = `Showing lines ${win.offset}–${lastLine} of ${win.totalLines}. To continue, call read_file again with offset ${lastLine + 1}.`;
+    }
+    return { data: data as unknown as Record<string, unknown> };
   },
 });
 
