@@ -32,6 +32,7 @@ import {
   vscodeConnections,
 } from '../../infrastructure/database/schema';
 import { clampScore as clamp } from '../../domain/shared/numbers';
+import { notSystemTask } from '../task/taskScope';
 
 const HOUR_MS = 3_600_000;
 
@@ -123,7 +124,7 @@ export async function computeTenantEngagement(db: Db, tenantId: number, days: nu
     .select({ userId: tasks.assignedUserId, c: sql<number>`count(*)::int` })
     .from(tasks)
     .innerJoin(projects, eq(projects.id, tasks.projectId))
-    .where(and(eq(projects.tenantId, tenantId), isNotNull(tasks.assignedUserId), isNotNull(tasks.completedAt), gte(tasks.completedAt, since)))
+    .where(and(eq(projects.tenantId, tenantId), isNotNull(tasks.assignedUserId), isNotNull(tasks.completedAt), gte(tasks.completedAt, since), notSystemTask))
     .groupBy(tasks.assignedUserId);
 
   const activityBy = new Map(activityRows.map((r) => [r.userId, Number(r.c)]));

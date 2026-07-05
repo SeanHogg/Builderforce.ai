@@ -252,7 +252,8 @@
       "quality": "质量",
       "myProfile": "我的资料",
       "findWork": "寻找工作",
-      "timecard": "工时卡"
+      "timecard": "工时卡",
+      "myDashboard": "我的仪表盘"
     },
     "tab": {
       "projects": "项目",
@@ -736,7 +737,8 @@
     "close": "关闭",
     "delete": "删除",
     "edit": "编辑",
-    "view": "查看"
+    "view": "查看",
+    "typeSecurity": "安全"
   },
   "legal": {
     "termsTitle": "使用条款",
@@ -761,6 +763,7 @@
     "title": "用量",
     "meter": {
       "ai_tokens": "AI 令牌",
+      "cloud_runs": "云端运行",
       "ingestion": "数据摄取",
       "error_events": "错误事件",
       "outbound_fetches": "网络请求"
@@ -2407,6 +2410,60 @@
       "minutesAgo": "{n} 分钟前",
       "hoursAgo": "{n} 小时前",
       "daysAgo": "{n} 天前"
+    },
+    "heading": "我们要构建什么？",
+    "subheading": "先在 <brainstorm>头脑风暴</brainstorm> 中构思，然后作为项目执行并在 IDE 中构建——或通过 <tasks>任务</tasks> 和 <workforce>人才团队</workforce> 代理分配工作。",
+    "promptPlaceholder": "用 Material UI 组件构建一个预算跟踪器……",
+    "brainStorm": "头脑风暴",
+    "agentsConnected": "{count, plural, other {已连接 # 个代理}}",
+    "noAgents": "未连接代理 —",
+    "setUpInWorkforce": "在人才团队中设置",
+    "pendingRequests": "{count, plural, other {# 个待处理请求}}",
+    "reviewNow": "立即查看",
+    "metric": {
+      "projects": "项目",
+      "projectsActive": "{count} 个进行中",
+      "tasks": "任务",
+      "tasksInProgress": "{count} 个进行中",
+      "agentsOnline": "在线代理",
+      "agentsRegistered": "已注册 {count} 个",
+      "pendingRequests": "待处理请求",
+      "requiresReview": "需要审核",
+      "allClear": "全部完成"
+    },
+    "tabs": {
+      "projects": "项目",
+      "workforce": "人才 / 团队",
+      "ide": "IDE",
+      "ideas": "想法 / 头脑风暴",
+      "quality": "质量",
+      "knowledge": "知识库"
+    },
+    "ideas": {
+      "loading": "正在加载对话……",
+      "empty": "还没有头脑风暴对话。",
+      "start": "开始头脑风暴",
+      "untitled": "未命名对话"
+    },
+    "quality": {
+      "newCollector": "新建采集器",
+      "createHint": "为采集器命名。你将获得一个采集密钥和用于接入应用的端点。",
+      "collectorName": "采集器名称",
+      "collectorNamePlaceholder": "例如 生产环境",
+      "create": "创建采集器",
+      "creating": "正在创建……",
+      "createFailed": "创建采集器失败"
+    },
+    "knowledge": {
+      "loading": "正在加载文档……",
+      "empty": "还没有知识文档。",
+      "create": "新建文档",
+      "viewAll": "查看全部",
+      "type": {
+        "sop": "SOP",
+        "process": "流程",
+        "doc": "文档"
+      }
     }
   },
   "dashboards": {
@@ -2863,7 +2920,37 @@
     "reason": "原因",
     "active": "活动",
     "ended": "已结束",
-    "writeBlocked": "已拦截 {count} 次写入尝试"
+    "writeBlocked": "已拦截 {count} 次写入尝试",
+    "saving": "保存中…",
+    "accessTitle": "安全工单可见性",
+    "accessSubtitle": "选择谁能查看安全智能体创建的受限“安全”工单。默认对所有人隐藏；所有者和管理员始终可见。",
+    "accessHumans": "团队成员",
+    "accessHumansHint": "本工作区的所有人类成员均可查看安全工单。",
+    "accessHired": "受雇智能体",
+    "accessHiredHint": "在本工作区工作的智能体可查看安全工单。",
+    "accessTalent": "外部人才",
+    "accessTalentHint": "受聘于本工作区的自由职业者可查看安全工单。",
+    "accessAllowUsers": "允许指定用户",
+    "accessAllowUsersPlaceholder": "每行一个用户 ID",
+    "accessAllowAgents": "允许指定智能体",
+    "accessAllowAgentsPlaceholder": "每行一个智能体 ID",
+    "accessSave": "保存访问设置",
+    "accessSaved": "已保存",
+    "auditTitle": "SOC 2 安全审计",
+    "auditSubtitle": "安全智能体会依据全部五项信任服务标准审计代码库，并将每项发现登记为安全工单。",
+    "auditRunNow": "立即运行审计",
+    "auditStarting": "启动中…",
+    "auditEmpty": "暂无审计。运行一次以依据 SOC 2 扫描代码库。",
+    "auditFindings": "{count, plural, =0 {无发现} other {# 项发现}}",
+    "auditNoFindings": "此次运行未记录任何发现。",
+    "auditStatus_running": "运行中",
+    "auditStatus_complete": "已完成",
+    "auditStatus_failed": "失败",
+    "tsc_security": "安全性",
+    "tsc_availability": "可用性",
+    "tsc_processing_integrity": "处理完整性",
+    "tsc_confidentiality": "保密性",
+    "tsc_privacy": "隐私"
   },
   "catalogInsights": {
     "total": {
@@ -4645,6 +4732,8 @@
       "linkFailed": "无法关联——请确认该工单存在。",
       "kindLabel": "工单类型",
       "pickTicket": "选择工单…",
+      "searchTicket": "搜索工单…",
+      "moreResults": "还有 {n} 个 — 请细化搜索",
       "linkTypeLabel": "关联类型",
       "linkTypeLinked": "关联",
       "linkTypeCreated": "由聊天创建",
@@ -5054,6 +5143,21 @@
       "dispatch": "已派发",
       "merge_pr": "已合并 PR",
       "flag": "已标记"
+    },
+    "runTasks": {
+      "title": "经理任务",
+      "caption": "经理运行过的每一次待办列表管理 — 待处理、进行中和已完成。",
+      "empty": "经理尚未运行任何管理。",
+      "statusCol": "状态",
+      "resultCol": "结果",
+      "whenCol": "更新时间",
+      "systemOwner": "系统服务",
+      "status": {
+        "in_progress": "进行中",
+        "done": "已完成",
+        "blocked": "需要关注",
+        "open": "待处理"
+      }
     },
     "activity": {
       "title": "最近活动",
@@ -5866,11 +5970,130 @@
         "created": "邀请了外部人才"
       },
       "member": {
-        "hired": "雇用了外部人才"
+        "invited": "邀请了成员",
+        "added": "添加了成员"
       },
       "doc": {
         "published": "发布了文档"
+      },
+      "pr": {
+        "merged": "合并了一个拉取请求"
+      },
+      "okr": {
+        "objective_created": "创建了目标",
+        "objective_updated": "更新了目标",
+        "objective_deleted": "删除了目标",
+        "kr_created": "添加了关键结果"
       }
     }
+  },
+  "freelancerDashboard": {
+    "heading": "工作概览",
+    "subheading": "跟踪你的合作、工时和收入。",
+    "loading": "加载中……",
+    "optIn": {
+      "title": "在 BuilderForce 上接单",
+      "body": "开启接单状态，即可发布可雇佣的档案、承接项目并在此跟踪你的工作。",
+      "cta": "开启接单"
+    },
+    "metric": {
+      "activeEngagements": "进行中的合作",
+      "totalEngagements": "共 {count} 个",
+      "billableHours": "计费工时",
+      "todayHours": "今日 {hours} 小时",
+      "paidEarnings": "已付收入",
+      "invoicesPaid": "{count} 张已付账单",
+      "pendingEarnings": "待付收入",
+      "invoicesPending": "{count} 张待付"
+    },
+    "tabs": {
+      "work": "我的工作",
+      "timecards": "我的工时单"
+    },
+    "work": {
+      "empty": "还没有合作。",
+      "findWork": "寻找工作",
+      "untitled": "未命名合作",
+      "status": {
+        "invited": "已邀请",
+        "interviewing": "面试中",
+        "active": "进行中",
+        "declined": "已拒绝",
+        "terminated": "已结束"
+      }
+    },
+    "timecards": {
+      "empty": "还没有工时单。",
+      "manage": "管理工时单",
+      "status": {
+        "draft": "草稿",
+        "submitted": "已提交",
+        "approved": "已批准",
+        "rejected": "已拒绝",
+        "paid": "已付款"
+      }
+    }
+  },
+  "contributors": {
+    "syncAgents": "同步 AI 智能体",
+    "syncing": "同步中…",
+    "loading": "正在加载活动…",
+    "wholeTeam": "整个团队",
+    "backToTeam": "← 返回团队",
+    "leaderboard": "排行榜",
+    "empty": "暂无贡献者。连接代码仓库集成以采集人员活动，或点击“同步 AI 智能体”以添加你的智能体。",
+    "calendarAria": "贡献日历",
+    "tileTitle": "{date}：{count} 次贡献",
+    "stat": {
+      "contributions": "贡献（365天）",
+      "teamMembers": "团队成员",
+      "humans": "人员",
+      "agents": "AI 智能体"
+    },
+    "col": {
+      "rank": "#",
+      "contributor": "贡献者",
+      "type": "类型",
+      "role": "角色",
+      "contributions": "贡献"
+    },
+    "badge": {
+      "agent": "智能体",
+      "human": "人员"
+    },
+    "legend": {
+      "less": "较少",
+      "more": "较多",
+      "agents": "智能体："
+    },
+    "tenant": {
+      "title": "租户活动",
+      "allProjects": "所有项目",
+      "events": "事件（{days}天）",
+      "activeContributors": "活跃贡献者",
+      "linesAdded": "新增行数",
+      "linesRemoved": "删除行数",
+      "dailyTrend": "每日趋势",
+      "byType": "按类型",
+      "topRepos": "热门仓库",
+      "byProject": "按项目",
+      "noActivity": "暂无活动。",
+      "noRepos": "未关联仓库。",
+      "noProjects": "暂无归属项目的活动。",
+      "dailyAria": "每日活动"
+    },
+    "type": {
+      "commit": "提交",
+      "pr_opened": "已开启的 PR",
+      "pr_merged": "已合并的 PR",
+      "pr_closed": "已关闭的 PR",
+      "pr_reviewed": "评审",
+      "issue_created": "已创建的问题",
+      "issue_resolved": "已解决的问题",
+      "issue_commented": "评论",
+      "ai_interaction": "AI 交互",
+      "code_change": "代码更改"
+    },
+    "syncFailed": "同步智能体失败"
   }
 }

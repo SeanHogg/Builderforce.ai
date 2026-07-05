@@ -29,6 +29,7 @@ import {
   users,
 } from '../../infrastructure/database/schema';
 import { identityOf, type MemberIdentityFields } from '../metrics/workforceMetrics';
+import { notSystemTask } from '../task/taskScope';
 import {
   ALLOCATION_CATEGORIES,
   allocationCategoryLabel,
@@ -364,6 +365,7 @@ export async function computeAllocationInsights(
     eq(projects.tenantId, tenantId),
     eq(tasks.archived, false),
     gte(tasks.updatedAt, since),
+    notSystemTask,
   ];
   if (scope.projectId != null) where.push(eq(tasks.projectId, scope.projectId));
 
@@ -525,6 +527,7 @@ export async function computeAllocationHistory(
     eq(projects.tenantId, tenantId),
     eq(tasks.archived, false),
     gte(tasks.updatedAt, since),
+    notSystemTask,
   ];
   if (scope.projectId != null) where.push(eq(tasks.projectId, scope.projectId));
 

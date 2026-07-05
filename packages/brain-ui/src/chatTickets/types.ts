@@ -118,6 +118,8 @@ export interface ChatTicketsLabels {
   linkFailed: string;
   kindLabel: string;
   pickTicket: string;
+  /** Placeholder for the ticket-picker search box. */
+  searchTicket: string;
   linkTypeLabel: string;
   linkTypeLinked: string;
   linkTypeCreated: string;
@@ -140,6 +142,8 @@ export interface ChatTicketsLabels {
   mergeNoOthers: string;
   kind: Record<TicketKind, string>;
   ringAria: (label: string, pct: number) => string;
+  /** "+N more — refine your search" hint under a capped ticket picker. */
+  moreResults: (n: number) => string;
   runStarted: (agent: string) => string;
   mergeAction: (n: number) => string;
   mergedN: (n: number) => string;
@@ -164,6 +168,7 @@ export const DEFAULT_CHAT_TICKETS_LABELS: ChatTicketsLabels = {
   linkFailed: 'Could not link — check the ticket exists.',
   kindLabel: 'Ticket type',
   pickTicket: 'Choose a ticket…',
+  searchTicket: 'Search tickets…',
   linkTypeLabel: 'Link type',
   linkTypeLinked: 'Linked',
   linkTypeCreated: 'Created from chat',
@@ -186,6 +191,7 @@ export const DEFAULT_CHAT_TICKETS_LABELS: ChatTicketsLabels = {
   mergeNoOthers: 'No other chats to merge.',
   kind: { task: 'Task', epic: 'Epic', gap: 'Gap', objective: 'Objective', initiative: 'Initiative', portfolio: 'Portfolio', roadmap: 'Roadmap', spec: 'Spec' },
   ringAria: (label, pct) => `${label}: ${pct}% done`,
+  moreResults: (n) => `+${n} more — refine your search`,
   runStarted: (agent) => `Started ${agent} on the ticket.`,
   mergeAction: (n) => `Merge ${n} here`,
   mergedN: (n) => `Merged ${n} chat(s).`,

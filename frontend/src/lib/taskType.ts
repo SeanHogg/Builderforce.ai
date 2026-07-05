@@ -7,12 +7,15 @@
  * from context and return no badge class.
  */
 
-export type TaskType = 'task' | 'epic' | 'gap';
+export type TaskType = 'task' | 'epic' | 'gap' | 'security';
 
 const TASK_TYPE_BADGE_CLASS: Record<string, string | null> = {
   task: null,
   epic: null,
   gap: 'badge-amber',
+  // A SECURITY ticket (Security agent, SOC 2 finding) reads as "attention/risk" —
+  // a distinct red badge. Access-restricted, so most users never see one.
+  security: 'badge-red',
 };
 
 /** Badge CSS class for a task type, or `null` to render no type badge. */
@@ -24,6 +27,7 @@ const TASK_TYPE_LABEL_KEY: Record<string, string> = {
   task: 'typeTask',
   epic: 'typeEpic',
   gap: 'typeGap',
+  security: 'typeSecurity',
 };
 
 /** i18n key (under the `common` namespace) for a task type's short label. */

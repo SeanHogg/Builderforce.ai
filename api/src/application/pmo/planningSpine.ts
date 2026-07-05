@@ -30,6 +30,7 @@ import {
   roadmapItems,
   tasks,
 } from '../../infrastructure/database/schema';
+import { notSystemTask } from '../task/taskScope';
 import { loggedMinutesByTask } from '../timeTracking/timeTracking';
 import {
   allocationCategoryLabel,
@@ -430,7 +431,7 @@ export async function loadPlanningSpine(db: Db, tenantId: number, segmentId: str
       startDate: tasks.startDate, dueDate: tasks.dueDate, createdAt: tasks.createdAt, completedAt: tasks.completedAt,
       assignedUserId: tasks.assignedUserId, costClass: tasks.costClass, costClassSource: tasks.costClassSource, costClassVerified: tasks.costClassVerified,
       actionType: tasks.actionType, source: tasks.source, allocationCategory: tasks.allocationCategory,
-    }).from(tasks).where(opts.projectId != null ? and(eq(tasks.segmentId, segmentId), eq(tasks.projectId, opts.projectId)) : eq(tasks.segmentId, segmentId)),
+    }).from(tasks).where(opts.projectId != null ? and(eq(tasks.segmentId, segmentId), eq(tasks.projectId, opts.projectId), notSystemTask) : and(eq(tasks.segmentId, segmentId), notSystemTask)),
     db.select({ objectiveId: objectiveLinks.objectiveId, linkKind: objectiveLinks.linkKind, initiativeId: objectiveLinks.initiativeId, taskId: objectiveLinks.taskId })
       .from(objectiveLinks).where(and(eq(objectiveLinks.tenantId, tenantId), eq(objectiveLinks.segmentId, segmentId))),
     db.select({ id: roadmapItems.id, title: roadmapItems.title, status: roadmapItems.status, targetDate: roadmapItems.targetDate, projectId: roadmapItems.projectId })
@@ -487,7 +488,7 @@ export async function loadTaskCostClassMap(db: Db, tenantId: number): Promise<Ma
       startDate: tasks.startDate, dueDate: tasks.dueDate, createdAt: tasks.createdAt, completedAt: tasks.completedAt,
       assignedUserId: tasks.assignedUserId, costClass: tasks.costClass, costClassSource: tasks.costClassSource, costClassVerified: tasks.costClassVerified,
       actionType: tasks.actionType, source: tasks.source, allocationCategory: tasks.allocationCategory,
-    }).from(tasks).innerJoin(projects, eq(projects.id, tasks.projectId)).where(eq(projects.tenantId, tenantId)),
+    }).from(tasks).innerJoin(projects, eq(projects.id, tasks.projectId)).where(and(eq(projects.tenantId, tenantId), notSystemTask)),
     db.select({ objectiveId: objectiveLinks.objectiveId, linkKind: objectiveLinks.linkKind, initiativeId: objectiveLinks.initiativeId, taskId: objectiveLinks.taskId })
       .from(objectiveLinks).where(eq(objectiveLinks.tenantId, tenantId)),
   ]);

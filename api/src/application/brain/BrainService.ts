@@ -11,10 +11,12 @@ import {
   agentAssignments,
   users,
   tenantMembers,
+  tenantInvitations,
 } from '../../infrastructure/database/schema';
 import { ideProxy } from '../llm/LlmProxyService';
 import { recordProxyUsage } from '../llm/usageLedger';
 import { resolveWorkforceModel, WORKFORCE_MODEL_REF_PREFIX } from '../agent/agentPrompt';
+import { listBuiltinTools, callBuiltinTool, CLOUD_AGENT_PLATFORM_TOOLS } from '../llm/builtinMcpService';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 
@@ -310,12 +312,12 @@ export class BrainService {
     return this.attachParticipants(tenantId, rows);
   }
 
-  /** Fold `participants: {ref, kind}[]` onto chat rows via one grouped assignment query. */
+  /** Fold `participants: {ref, kind, name?}[]` onto chat rows via one grouped query. */
   private async attachParticipants<T extends { id: number }>(
     tenantId: number,
     rows: T[],
-  ): Promise<Array<T & { participants: Array<{ ref: string; kind: string }> }>> {
-    const byChat = new Map<number, Array<{ ref: string; kind: string }>>();
+  ): Promise<Array<T & { participants: Array<{ ref: string; kind: string; name?: string }> }>> {
+    const byChat = new Map<number, Array<{ ref: string; kind: string; name?: string }>>();
     const ids = rows.map((r) => r.id);
     if (ids.length > 0) {
       try {
@@ -340,10 +342,12 @@ export class BrainService {
           }
         }
         // Human members (migration 0288) join the same roster with kind='human',
-        // ref = their user id — one grouped query over the same chat ids.
+        // ref = their user id, name = their display name (so a non-webview surface
+        // like the native SESSIONS tree can label them without a second lookup).
         const mem = await this.db
-          .select({ chatId: chatMembers.chatId, userId: chatMembers.userId })
+          .select({ chatId: chatMembers.chatId, userId: chatMembers.userId, name: users.displayName, email: users.email })
           .from(chatMembers)
+          .leftJoin(users, eq(users.id, chatMembers.userId))
           .where(and(
             eq(chatMembers.tenantId, tenantId),
             eq(chatMembers.status, 'active'),
@@ -352,7 +356,7 @@ export class BrainService {
         for (const m of mem) {
           if (!m.userId) continue;
           const list = byChat.get(m.chatId) ?? [];
-          list.push({ ref: m.userId, kind: 'human' });
+          list.push({ ref: m.userId, kind: 'human', name: m.name || m.email || undefined });
           byChat.set(m.chatId, list);
         }
       } catch {
@@ -534,10 +538,14 @@ export class BrainService {
    * addressed agent actually answers, grounded on its own persona + ingested
    * knowledge (via the shared {@link resolveWorkforceModel}) and on the transcript.
    *
-   * The whole conversation is fed as a readable script in one user message (like
-   * summarisation) so multi-party turns from other authors don't confuse the
-   * assistant/user role mapping. No file tools — this is a conversational reply,
-   * not a build run; the BRAIN still owns tool-executing runs.
+   * The agent runs a BOUNDED server-side tool loop over the curated, non-destructive
+   * platform tools (`CLOUD_AGENT_PLATFORM_TOOLS` — projects/tasks/specs/OKRs/knowledge
+   * reads + safe writes, NO deletes or control-plane), executed via `callBuiltinTool`
+   * with the TRIGGERING USER's role/token so the agent can never exceed the human's
+   * own permissions. So a teammate agent can actually DO things (create a follow-up
+   * task, update an OKR, read the board) when addressed — not just chat. Tool errors
+   * are fed back as tool results so the agent can recover or explain. File-editing is
+   * still the BRAIN/host loop's job; this is the platform-tool layer.
    */
   async agentReply(
     chatId: number,
@@ -545,6 +553,7 @@ export class BrainService {
     userId: string,
     input: { agentRef: string; agentName?: string },
     env: Env,
+    opts?: { role?: string; authToken?: string | null; executionCtx?: ExecutionContext },
   ) {
     const chat = await this.canAccessChat(chatId, tenantId, userId);
     if (!chat) return { error: 'Chat not found' as const };
@@ -578,25 +587,76 @@ export class BrainService {
       .map((m) => `${m.role === 'user' ? 'User' : authorName(m.metadata)}: ${m.content}`)
       .join('\n\n');
 
+    const projectHint = (chat as unknown as { projectId?: number | null }).projectId ?? null;
     const systemPrompt = [
       persona,
-      `You have been addressed directly in this multi-party team chat. Write your next reply AS ${agentName} — first person, concise, helpful, no preamble and no "${agentName}:" label. If the last message was not a question, contribute your perspective.`,
+      `You have been addressed directly in this multi-party team chat${projectHint != null ? ` (project #${projectHint})` : ''}. `,
+      `Reply AS ${agentName} — first person, concise, helpful, no preamble and no "${agentName}:" label. `,
+      `You may use the provided tools to read or update the team's work (projects, tasks, specs, OKRs, knowledge) when it helps answer or act on the request. After using tools, summarise what you found or did.`,
     ].join('');
 
-    const service = this.buildLlmService(apiKey);
-    const result = await service.complete({
-      model: resolved?.baseModel ?? undefined,
-      messages: [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: `Conversation so far:\n\n${transcript}` },
-      ],
-      temperature: 0.4,
-      max_tokens: 1000,
-    });
-    this.recordUsage(apiKey, tenantId, 'brain_agent_reply', result);
+    // Curated, non-destructive platform tools (same allowlist an autonomous cloud
+    // agent gets). Advertised name → tool id map for executing the model's calls.
+    const toolEntries = listBuiltinTools().filter((t) => CLOUD_AGENT_PLATFORM_TOOLS.includes(t.tool));
+    const nameToTool = new Map(toolEntries.map((t) => [t.name, t.tool]));
+    const tools = toolEntries.map((t) => ({ type: 'function', function: { name: t.name, description: t.description, parameters: t.parameters } }));
 
-    const response = result.response as { choices?: Array<{ message?: { content?: string } }> } | undefined;
-    const text = response?.choices?.[0]?.message?.content?.trim() ?? '';
+    const convo: Array<Record<string, unknown>> = [
+      { role: 'system', content: systemPrompt },
+      { role: 'user', content: `Conversation so far:\n\n${transcript}` },
+    ];
+
+    const service = this.buildLlmService(apiKey);
+    const MAX_ITERS = 6;
+    let text = '';
+    for (let i = 0; i < MAX_ITERS; i++) {
+      const result = await service.complete({
+        model: resolved?.baseModel ?? undefined,
+        messages: convo as never,
+        tools,
+        temperature: 0.4,
+        max_tokens: 1200,
+      });
+      this.recordUsage(apiKey, tenantId, 'brain_agent_reply', result);
+      const message = (result.response as { choices?: Array<{ message?: { content?: string; tool_calls?: Array<{ id: string; function: { name: string; arguments?: string } }> } }> } | undefined)
+        ?.choices?.[0]?.message;
+      const toolCalls = message?.tool_calls ?? [];
+
+      if (toolCalls.length === 0) {
+        text = message?.content?.trim() ?? '';
+        break;
+      }
+
+      // Echo the assistant tool-call turn, then execute each call and feed results.
+      convo.push({ role: 'assistant', content: message?.content ?? '', tool_calls: toolCalls });
+      for (const tc of toolCalls) {
+        const toolId = nameToTool.get(tc.function.name) ?? tc.function.name;
+        let out: unknown;
+        try {
+          const argObj = tc.function.arguments ? JSON.parse(tc.function.arguments) : {};
+          out = await callBuiltinTool(this.db, {
+            tenantId, tool: toolId, arguments: argObj, env,
+            userId, role: opts?.role as never, authToken: opts?.authToken, executionCtx: opts?.executionCtx,
+          });
+        } catch (e) {
+          out = { error: e instanceof Error ? e.message : 'tool call failed' };
+        }
+        convo.push({ role: 'tool', tool_call_id: tc.id, content: JSON.stringify(out ?? null).slice(0, 8000) });
+      }
+      // On the last allowed iteration, ask once more WITHOUT tools for a final answer.
+      if (i === MAX_ITERS - 1) {
+        const finalResult = await service.complete({
+          model: resolved?.baseModel ?? undefined,
+          messages: convo as never,
+          temperature: 0.4,
+          max_tokens: 1000,
+        });
+        this.recordUsage(apiKey, tenantId, 'brain_agent_reply', finalResult);
+        text = (finalResult.response as { choices?: Array<{ message?: { content?: string } }> } | undefined)
+          ?.choices?.[0]?.message?.content?.trim() ?? '';
+      }
+    }
+
     if (!text) return { error: 'Agent returned an empty reply' as const };
 
     const metadata = JSON.stringify({ authoredBy: { kind: 'agent', ref: input.agentRef, name: agentName } });
@@ -729,6 +789,19 @@ export class BrainService {
       await this.db.insert(chatMembers).values({
         chatId, tenantId, invitedEmail: email, status: 'pending', invitedBy: userId,
       });
+      // Also drop a pending TENANT invitation so the cold invitee actually gets a
+      // tenant account on signup (the existing tenant-invite auto-conversion adds
+      // them to tenant_members). Once in the tenant, syncPendingMemberships promotes
+      // their chat membership to active — completing the join with no extra step.
+      const [tinv] = await this.db.select({ id: tenantInvitations.id })
+        .from(tenantInvitations)
+        .where(and(eq(tenantInvitations.tenantId, tenantId), sql`lower(${tenantInvitations.email}) = ${email}`, eq(tenantInvitations.status, 'pending')))
+        .limit(1);
+      if (!tinv) {
+        await this.db.insert(tenantInvitations).values({
+          tenantId, email, status: 'pending', invitedByUserId: userId,
+        }).onConflictDoNothing();
+      }
     }
     return { status: 'pending', memberUserId: null, email, chatTitle: chat.title, already: !!dup };
   }

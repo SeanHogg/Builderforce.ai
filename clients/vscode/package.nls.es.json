@@ -3,6 +3,8 @@
   "view.sessions": "Sesiones",
   "view.project": "Proyecto y tareas",
   "view.insights": "Análisis",
+  "view.diagnostics": "Diagnósticos",
+  "welcome.diagnostics": "Inicia sesión y selecciona un proyecto para ejecutar diagnósticos de seguridad y cumplimiento (SOC 2, Arquitectura, Calidad, Privacidad y leyes de datos).\n[Iniciar sesión](command:builderforce.signIn)",
   "welcome.sessions": "Inicia una conversación con el BuilderForce Brain.\n[Nuevo chat](command:builderforce.newSession)\n\nEl Brain se abre en el editor: el mismo chat unificado que la app web, para que revises los cambios en paralelo.",
   "welcome.insights": "Inicia sesión para ver análisis en vivo (consumo de tokens, presupuesto, modelo principal, coste por PR fusionada).\n[Iniciar sesión](command:builderforce.signIn)",
   "command.openChat": "BuilderForce: Abrir chat",
@@ -55,5 +57,8 @@
   "command.fixErrors": "BuilderForce: Corregir errores de producción",
   "command.openPullRequest": "BuilderForce: Abrir un Pull Request",
   "command.reviewChanges": "BuilderForce: Revisar cambios",
-  "command.refreshInbox": "BuilderForce: Actualizar bandeja de entrada"
+  "command.refreshInbox": "BuilderForce: Actualizar bandeja de entrada",
+  "command.refreshDiagnostics": "BuilderForce: Actualizar diagnósticos",
+  "command.runDiagnostic": "BuilderForce: Ejecutar diagnóstico",
+  "command.openDiagnosticReport": "BuilderForce: Abrir informe de diagnóstico"
 }

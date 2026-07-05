@@ -369,6 +369,14 @@ export interface Env {
 
   MICROSOFT_CLIENT_ID?: string;
   MICROSOFT_CLIENT_SECRET?: string;
+
+  /** Optional TURN relay for meeting media (mesh WebRTC). Without it, calls fall
+   *  back to public STUN only, which fails for peers behind symmetric NATs.
+   *  TURN_URL may be comma-separated (e.g. "turn:host:3478,turns:host:5349").
+   *  Set via: wrangler secret put TURN_URL / TURN_USERNAME / TURN_CREDENTIAL */
+  TURN_URL?: string;
+  TURN_USERNAME?: string;
+  TURN_CREDENTIAL?: string;
 }
 
 /** Variables injected into Hono context by the auth middleware. */

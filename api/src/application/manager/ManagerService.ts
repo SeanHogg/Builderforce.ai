@@ -33,6 +33,7 @@ import {
   projectManagerConfigs, managerActions, projects,
 } from '../../infrastructure/database/schema';
 import { TaskStatus, TaskPriority } from '../../domain/shared/types';
+import { notSystemTask } from '../task/taskScope';
 import { rankBacklog, type RankableTask, type TaskPriorityTier } from './prioritize';
 import { heuristicBusinessValue } from './businessValue';
 import { scoreBusinessValueAI } from './businessValueAI';
@@ -294,6 +295,26 @@ export async function finalizeManagerRunTask(
 
 // ── the pass ────────────────────────────────────────────────────────────────
 
+/**
+ * Flush drizzle write statements in chunked batches. neon-http has no interactive
+ * transaction; `db.batch` is the unit that collapses many statements into few HTTP
+ * round-trips — turning a 200+ ticket grooming pass from 200+ sequential writes (which
+ * risks Worker eviction mid-pass) into a handful of batch calls. Best-effort per
+ * chunk: a failing batch falls back to individual writes so one bad row can't lose the
+ * rest, and the whole helper never throws (the pass result stands regardless).
+ */
+async function flushBatched(db: Db, ops: unknown[], chunkSize = 50): Promise<void> {
+  for (let i = 0; i < ops.length; i += chunkSize) {
+    const chunk = ops.slice(i, i + chunkSize);
+    if (chunk.length === 0) continue;
+    try {
+      await db.batch(chunk as unknown as Parameters<typeof db.batch>[0]);
+    } catch {
+      for (const op of chunk) { try { await (op as Promise<unknown>); } catch { /* skip this write */ } }
+    }
+  }
+}
+
 interface ManagedTaskRow {
   id: number;
   title: string;
@@ -326,8 +347,7 @@ async function loadManagedTasks(db: Db, projectId: number): Promise<ManagedTaskR
     .where(and(
       eq(tasks.projectId, projectId), eq(tasks.archived, false), inArray(tasks.status, NON_TERMINAL),
       // The manager never grooms/ranks/audits its OWN run tasks (source = 'manager').
-      // `is distinct from` keeps NULL-source tickets (the normal case) in the set.
-      sql`${tasks.source} is distinct from 'manager'`,
+      notSystemTask,
     ))
     .orderBy(asc(tasks.createdAt))
     .limit(MAX_RANKED);
@@ -371,9 +391,15 @@ export async function runManagerForProject(
   let managed = await loadManagedTasks(db, projectId);
 
   // 1. VALUE — backfill business value on unscored, non-manual tickets. ---------
+  // The scoring decision is sequential (AI for the first few, free heuristic for the
+  // rest) but the WRITES are collected and flushed in batches: a 200+ ticket backlog
+  // would otherwise fire 200+ sequential neon-http round-trips here and risk the
+  // Worker being evicted mid-pass. See flushBatched.
   if (policy.autoBusinessValue) {
     const unscored = managed.filter((t) => t.businessValue == null && t.businessValueSource !== 'manual');
     let aiBudget = MAX_AI_SCORES_PER_RUN;
+    const writeOps: unknown[] = [];
+    const stampedAt = new Date();
     for (const t of unscored) {
       try {
         const scored = aiBudget > 0
@@ -381,29 +407,30 @@ export async function runManagerForProject(
           : null;
         if (scored) aiBudget -= 1;
         const value = scored ?? heuristicBusinessValue(toRankable(t), now, t.storyPoints);
-        await db.update(tasks)
-          .set({ businessValue: value.score, businessValueRationale: value.rationale, businessValueSource: value.source, updatedAt: new Date() })
-          .where(eq(tasks.id, t.id));
+        writeOps.push(
+          db.update(tasks)
+            .set({ businessValue: value.score, businessValueRationale: value.rationale, businessValueSource: value.source, updatedAt: stampedAt })
+            .where(eq(tasks.id, t.id)),
+        );
+        writeOps.push(
+          db.insert(managerActions).values({
+            tenantId, projectId, taskId: t.id, runTaskId, actionType: 'score_value',
+            summary: `Scored business value ${value.score}/100 — ${value.rationale}`.slice(0, 500),
+            detail: JSON.stringify({ score: value.score, source: value.source }).slice(0, 4000),
+          }),
+        );
         // Reflect locally so ranking below sees the fresh score.
         t.businessValue = value.score;
         summary.scored += 1;
-        await recordManagerAction(db, {
-          tenantId, projectId, taskId: t.id, runTaskId, actionType: 'score_value',
-          summary: `Scored business value ${value.score}/100 — ${value.rationale}`,
-          detail: { score: value.score, source: value.source },
-        });
       } catch { /* skip this ticket */ }
     }
+    await flushBatched(db, writeOps);
   }
 
-  // 2. RANK — order the backlog and persist manager_rank. -----------------------
+  // 2. RANK — order the backlog and persist manager_rank (batched writes). -------
   if (policy.autoPrioritize && managed.length > 0) {
     const ranked = rankBacklog(managed.map(toRankable), now);
-    for (const r of ranked) {
-      try {
-        await db.update(tasks).set({ managerRank: r.rank }).where(eq(tasks.id, r.taskId));
-      } catch { /* skip */ }
-    }
+    await flushBatched(db, ranked.map((r) => db.update(tasks).set({ managerRank: r.rank }).where(eq(tasks.id, r.taskId))));
     summary.ranked = ranked.length;
     const top = ranked.slice(0, 5).map((r) => {
       const t = managed.find((m) => m.id === r.taskId);

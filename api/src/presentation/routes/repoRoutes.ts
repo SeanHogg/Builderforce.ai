@@ -26,6 +26,7 @@ import {
   projects,
 } from '../../infrastructure/database/schema';
 import type { HonoEnv, Env } from '../../env';
+import { recordActivity, resolveActorFromContext } from '../../application/activity/activityLog';
 import type { Db } from '../../infrastructure/database/connection';
 import type { AgentHostRelayDO } from '../../infrastructure/relay/AgentHostRelayDO';
 import { RepoService, type AgentHostDispatcher } from '../../application/repos/RepoService';
@@ -532,6 +533,23 @@ export function createRepoRoutes(db: Db): Hono<RepoHonoEnv> {
       return c.json({ error: result.error, code: result.code }, result.httpStatus as 409);
     }
     if (result.alreadyMerged) return c.json({ ok: true, alreadyMerged: true, pullRequest: result.pullRequest });
+
+    // Unified audit stream: a merge, attributed to whoever approved it.
+    const pr = result.pullRequest as { id?: string; number?: number | null; taskId?: number | null; projectId?: number | null } | null;
+    c.executionCtx.waitUntil((async () => {
+      const actor = await resolveActorFromContext(c.env as Env, db, c);
+      await recordActivity(c.env as Env, db, {
+        tenantId,
+        projectId: pr?.projectId ?? null,
+        actor,
+        verb: 'pr.merged',
+        targetType: 'pull_request',
+        targetId: pr?.id ?? id,
+        targetLabel: pr?.number != null ? `PR #${pr.number}` : 'Pull request',
+        summary: `Merged ${pr?.number != null ? `PR #${pr.number}` : 'a pull request'}`,
+        metadata: { taskId: pr?.taskId ?? null, sha: result.sha ?? null },
+      });
+    })().catch(() => {}));
     return c.json({ ok: true, merged: result.merged, sha: result.sha, pullRequest: result.pullRequest });
   });
 

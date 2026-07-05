@@ -58,7 +58,11 @@ export class SessionsTreeProvider implements vscode.TreeDataProvider<BfBrainChat
     // ICON becomes a composite avatar (up to two overlapping discs — a native
     // TreeItem takes only one iconPath), and the initials also read in the
     // description text (16px avatars are small), with full names in the tooltip.
-    const names = (chat.participants ?? []).map((p) => this.agentNames.get(p.ref) || p.ref).filter(Boolean);
+    // Agents resolve via the loaded agent-name pool; humans carry their display
+    // name inline (kind='human', `name` set server-side) so they never show a raw id.
+    const names = (chat.participants ?? [])
+      .map((p) => this.agentNames.get(p.ref) || (p as { name?: string }).name || p.ref)
+      .filter(Boolean);
     if (names.length > 0) {
       const badge = names.slice(0, 3).map(initials).join(" ");
       const extra = names.length > 3 ? ` +${names.length - 3}` : "";

@@ -3,6 +3,8 @@
   "view.sessions": "会话",
   "view.project": "项目与任务",
   "view.insights": "洞察",
+  "view.diagnostics": "诊断",
+  "welcome.diagnostics": "登录并选择一个项目，即可运行安全与合规诊断（SOC 2、架构、质量、隐私与数据法规）。\n[登录](command:builderforce.signIn)",
   "welcome.sessions": "开始与 BuilderForce Brain 对话。\n[新建对话](command:builderforce.newSession)\n\nBrain 在编辑器中打开 —— 与网页应用相同的统一对话，方便你并排查看更改。",
   "welcome.insights": "登录以查看实时的开发者洞察（令牌消耗、预算、热门模型、每个合并 PR 的成本）。\n[登录](command:builderforce.signIn)",
   "command.openChat": "BuilderForce：打开对话",
@@ -55,5 +57,8 @@
   "command.fixErrors": "BuilderForce：修复生产错误",
   "command.openPullRequest": "BuilderForce：创建拉取请求",
   "command.reviewChanges": "BuilderForce：审查更改",
-  "command.refreshInbox": "BuilderForce：刷新收件箱"
+  "command.refreshInbox": "BuilderForce：刷新收件箱",
+  "command.refreshDiagnostics": "BuilderForce：刷新诊断",
+  "command.runDiagnostic": "BuilderForce：运行诊断",
+  "command.openDiagnosticReport": "BuilderForce：打开诊断报告"
 }

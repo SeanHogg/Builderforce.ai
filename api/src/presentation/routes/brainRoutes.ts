@@ -354,12 +354,16 @@ export function createBrainRoutes(brainService: BrainService, db: Db): Hono<Hono
     if (!id) return c.json({ error: 'Invalid chat id' }, 400);
     const body = await c.req.json<{ agentRef?: string; agentName?: string }>().catch(() => ({} as { agentRef?: string; agentName?: string }));
     if (!body.agentRef) return c.json({ error: 'agentRef is required' }, 400);
+    // The agent runs its platform-tool loop with the TRIGGERING user's role/token,
+    // so it can never exceed the human's own permissions.
+    const authToken = c.req.header('authorization')?.replace(/^Bearer\s+/i, '') ?? null;
     const result = await brainService.agentReply(
       id,
       c.get('tenantId') as number,
       c.get('userId') as string,
       { agentRef: String(body.agentRef), agentName: body.agentName },
       c.env as Env,
+      { role: c.get('role') as string | undefined, authToken, executionCtx: c.executionCtx },
     );
     if ('error' in result) {
       const notFound = result.error === 'Chat not found';

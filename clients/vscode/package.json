@@ -2,7 +2,7 @@
   "name": "builderforce-ai",
   "displayName": "BuilderForce.ai",
   "description": "%extension.description%",
-  "version": "2026.7.32",
+  "version": "2026.7.33",
   "publisher": "builderforce",
   "license": "MIT",
   "author": "Sean Hogg",
@@ -59,16 +59,20 @@
           "name": "%view.sessions%"
         },
         {
-          "id": "builderforce.inbox",
-          "name": "%view.inbox%"
-        },
-        {
           "id": "builderforce.project",
           "name": "%view.project%"
         },
         {
+          "id": "builderforce.inbox",
+          "name": "%view.inbox%"
+        },
+        {
           "id": "builderforce.insights",
           "name": "%view.insights%"
+        },
+        {
+          "id": "builderforce.diagnostics",
+          "name": "%view.diagnostics%"
         }
       ]
     },
@@ -80,6 +84,10 @@
       {
         "view": "builderforce.insights",
         "contents": "%welcome.insights%"
+      },
+      {
+        "view": "builderforce.diagnostics",
+        "contents": "%welcome.diagnostics%"
       }
     ],
     "commands": [
@@ -300,6 +308,21 @@
         "command": "builderforce.refreshInbox",
         "title": "%command.refreshInbox%",
         "icon": "$(sync)"
+      },
+      {
+        "command": "builderforce.refreshDiagnostics",
+        "title": "%command.refreshDiagnostics%",
+        "icon": "$(sync)"
+      },
+      {
+        "command": "builderforce.runDiagnostic",
+        "title": "%command.runDiagnostic%",
+        "icon": "$(play)"
+      },
+      {
+        "command": "builderforce.openDiagnosticReport",
+        "title": "%command.openDiagnosticReport%",
+        "icon": "$(output)"
       }
     ],
     "menus": {
@@ -444,6 +467,11 @@
           "command": "builderforce.refreshInbox",
           "when": "view == builderforce.inbox",
           "group": "navigation@1"
+        },
+        {
+          "command": "builderforce.refreshDiagnostics",
+          "when": "view == builderforce.diagnostics",
+          "group": "navigation@1"
         }
       ],
       "view/item/context": [
@@ -476,6 +504,16 @@
           "command": "builderforce.convertTaskType",
           "when": "view == builderforce.project && viewItem == builderforceTask",
           "group": "9_modify@1"
+        },
+        {
+          "command": "builderforce.runDiagnostic",
+          "when": "view == builderforce.diagnostics && viewItem == builderforceDiagnostic",
+          "group": "inline@1"
+        },
+        {
+          "command": "builderforce.openDiagnosticReport",
+          "when": "view == builderforce.diagnostics && viewItem == builderforceDiagnostic",
+          "group": "inline@2"
         }
       ],
       "commandPalette": [
@@ -513,6 +551,14 @@
         },
         {
           "command": "builderforce.refreshInbox",
+          "when": "false"
+        },
+        {
+          "command": "builderforce.runDiagnostic",
+          "when": "false"
+        },
+        {
+          "command": "builderforce.openDiagnosticReport",
           "when": "false"
         }
       ]

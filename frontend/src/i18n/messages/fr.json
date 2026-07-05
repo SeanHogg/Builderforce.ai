@@ -252,7 +252,8 @@
       "quality": "Qualité",
       "myProfile": "Mon profil",
       "findWork": "Trouver du travail",
-      "timecard": "Feuille de temps"
+      "timecard": "Feuille de temps",
+      "myDashboard": "Mon tableau de bord"
     },
     "tab": {
       "projects": "Projets",
@@ -736,7 +737,8 @@
     "close": "Fermer",
     "delete": "Supprimer",
     "edit": "Modifier",
-    "view": "Voir"
+    "view": "Voir",
+    "typeSecurity": "Sécurité"
   },
   "legal": {
     "termsTitle": "Conditions d'utilisation",
@@ -761,6 +763,7 @@
     "title": "Utilisation",
     "meter": {
       "ai_tokens": "Jetons IA",
+      "cloud_runs": "Exécutions cloud",
       "ingestion": "Ingestion de données",
       "error_events": "Événements d’erreur",
       "outbound_fetches": "Requêtes web"
@@ -2407,6 +2410,60 @@
       "minutesAgo": "il y a {n} min",
       "hoursAgo": "il y a {n} h",
       "daysAgo": "il y a {n} j"
+    },
+    "heading": "Que devons-nous construire ?",
+    "subheading": "Commencez par le <brainstorm>Brainstorming</brainstorm> pour concevoir, puis exécutez en tant que projet et développez dans l’IDE — ou attribuez le travail via les agents <tasks>Tâches</tasks> et <workforce>Talents</workforce>.",
+    "promptPlaceholder": "Créez un suivi de budget avec des composants Material UI…",
+    "brainStorm": "Brainstorming",
+    "agentsConnected": "{count, plural, one {# agent connecté} other {# agents connectés}}",
+    "noAgents": "Aucun agent connecté —",
+    "setUpInWorkforce": "configurer dans Talents",
+    "pendingRequests": "{count, plural, one {# demande en attente} other {# demandes en attente}}",
+    "reviewNow": "examiner maintenant",
+    "metric": {
+      "projects": "Projets",
+      "projectsActive": "{count} actifs",
+      "tasks": "Tâches",
+      "tasksInProgress": "{count} en cours",
+      "agentsOnline": "Agents en ligne",
+      "agentsRegistered": "{count} enregistrés",
+      "pendingRequests": "Demandes en attente",
+      "requiresReview": "à examiner",
+      "allClear": "tout est en ordre"
+    },
+    "tabs": {
+      "projects": "Projets",
+      "workforce": "Talents / Équipe",
+      "ide": "IDE",
+      "ideas": "Idées / Brainstorming",
+      "quality": "Qualité",
+      "knowledge": "Connaissances"
+    },
+    "ideas": {
+      "loading": "Chargement des discussions…",
+      "empty": "Aucune discussion de brainstorming pour l’instant.",
+      "start": "Commencer un brainstorming",
+      "untitled": "Discussion sans titre"
+    },
+    "quality": {
+      "newCollector": "Nouveau collecteur",
+      "createHint": "Donnez un nom au collecteur. Vous obtiendrez une clé d’ingestion et des points de terminaison pour connecter votre application.",
+      "collectorName": "Nom du collecteur",
+      "collectorNamePlaceholder": "ex. Production",
+      "create": "Créer le collecteur",
+      "creating": "Création…",
+      "createFailed": "Échec de la création du collecteur"
+    },
+    "knowledge": {
+      "loading": "Chargement des documents…",
+      "empty": "Aucun document de connaissances pour l’instant.",
+      "create": "Nouveau document",
+      "viewAll": "Tout voir",
+      "type": {
+        "sop": "SOP",
+        "process": "Processus",
+        "doc": "Doc"
+      }
     }
   },
   "dashboards": {
@@ -2863,7 +2920,37 @@
     "reason": "Motif",
     "active": "Active",
     "ended": "Terminée",
-    "writeBlocked": "{count} tentatives d’écriture bloquées"
+    "writeBlocked": "{count} tentatives d’écriture bloquées",
+    "saving": "Enregistrement…",
+    "accessTitle": "Visibilité des tickets de sécurité",
+    "accessSubtitle": "Choisissez qui peut voir les tickets de SÉCURITÉ restreints créés par l'agent de Sécurité. Masqués pour tous par défaut ; les propriétaires et responsables les voient toujours.",
+    "accessHumans": "Membres de l'équipe",
+    "accessHumansHint": "Tous les membres humains de cet espace peuvent voir les tickets de sécurité.",
+    "accessHired": "Agents recrutés",
+    "accessHiredHint": "Les agents qui travaillent dans cet espace peuvent voir les tickets de sécurité.",
+    "accessTalent": "Talents",
+    "accessTalentHint": "Les freelances engagés sur cet espace peuvent voir les tickets de sécurité.",
+    "accessAllowUsers": "Autoriser des utilisateurs spécifiques",
+    "accessAllowUsersPlaceholder": "Un ID utilisateur par ligne",
+    "accessAllowAgents": "Autoriser des agents spécifiques",
+    "accessAllowAgentsPlaceholder": "Un ID agent par ligne",
+    "accessSave": "Enregistrer les paramètres d'accès",
+    "accessSaved": "Enregistré",
+    "auditTitle": "Audit de sécurité SOC 2",
+    "auditSubtitle": "L'agent de Sécurité audite votre code selon les cinq Critères de Services de Confiance et enregistre chaque constatation comme un ticket de sécurité.",
+    "auditRunNow": "Lancer l'audit",
+    "auditStarting": "Démarrage…",
+    "auditEmpty": "Aucun audit pour le moment. Lancez-en un pour analyser votre code selon SOC 2.",
+    "auditFindings": "{count, plural, =0 {Aucune constatation} one {# constatation} other {# constatations}}",
+    "auditNoFindings": "Aucune constatation enregistrée pour cette exécution.",
+    "auditStatus_running": "En cours",
+    "auditStatus_complete": "Terminé",
+    "auditStatus_failed": "Échoué",
+    "tsc_security": "Sécurité",
+    "tsc_availability": "Disponibilité",
+    "tsc_processing_integrity": "Intégrité du traitement",
+    "tsc_confidentiality": "Confidentialité",
+    "tsc_privacy": "Confidentialité des données"
   },
   "catalogInsights": {
     "total": {
@@ -4645,6 +4732,8 @@
       "linkFailed": "Impossible de lier — vérifiez que le ticket existe.",
       "kindLabel": "Type de ticket",
       "pickTicket": "Choisir un ticket…",
+      "searchTicket": "Rechercher des tickets…",
+      "moreResults": "+{n} de plus — affinez votre recherche",
       "linkTypeLabel": "Type de lien",
       "linkTypeLinked": "Lié",
       "linkTypeCreated": "Créé depuis le chat",
@@ -5054,6 +5143,21 @@
       "dispatch": "Envoyé",
       "merge_pr": "PR fusionnée",
       "flag": "Signalé"
+    },
+    "runTasks": {
+      "title": "Tâches du manager",
+      "caption": "Chaque passe de gestion du backlog exécutée par le manager — ouvertes, en cours et terminées.",
+      "empty": "Le manager n’a encore exécuté aucune passe.",
+      "statusCol": "Statut",
+      "resultCol": "Résultat",
+      "whenCol": "Mis à jour",
+      "systemOwner": "Service système",
+      "status": {
+        "in_progress": "En cours",
+        "done": "Terminé",
+        "blocked": "Attention requise",
+        "open": "Ouverte"
+      }
     },
     "activity": {
       "title": "Activité récente",
@@ -5866,11 +5970,130 @@
         "created": "a invité un talent externe"
       },
       "member": {
-        "hired": "a recruté un talent externe"
+        "invited": "a invité un membre",
+        "added": "a ajouté un membre"
       },
       "doc": {
         "published": "a publié un document"
+      },
+      "pr": {
+        "merged": "a fusionné une pull request"
+      },
+      "okr": {
+        "objective_created": "a créé un objectif",
+        "objective_updated": "a mis à jour un objectif",
+        "objective_deleted": "a supprimé un objectif",
+        "kr_created": "a ajouté un résultat clé"
       }
     }
+  },
+  "freelancerDashboard": {
+    "heading": "Votre travail en un coup d’œil",
+    "subheading": "Suivez vos missions, vos heures et vos revenus.",
+    "loading": "Chargement…",
+    "optIn": {
+      "title": "Faites-vous recruter sur BuilderForce",
+      "body": "Activez votre disponibilité pour publier un profil à recruter, décrocher des missions et suivre votre travail ici.",
+      "cta": "Activer la disponibilité"
+    },
+    "metric": {
+      "activeEngagements": "Missions actives",
+      "totalEngagements": "{count} au total",
+      "billableHours": "Heures facturables",
+      "todayHours": "{hours} h aujourd’hui",
+      "paidEarnings": "Revenus perçus",
+      "invoicesPaid": "{count} factures payées",
+      "pendingEarnings": "Revenus en attente",
+      "invoicesPending": "{count} en attente"
+    },
+    "tabs": {
+      "work": "Mon travail",
+      "timecards": "Mes feuilles de temps"
+    },
+    "work": {
+      "empty": "Aucune mission pour l’instant.",
+      "findWork": "Trouver du travail",
+      "untitled": "Mission sans titre",
+      "status": {
+        "invited": "Invité",
+        "interviewing": "En entretien",
+        "active": "Active",
+        "declined": "Refusée",
+        "terminated": "Terminée"
+      }
+    },
+    "timecards": {
+      "empty": "Aucune feuille de temps pour l’instant.",
+      "manage": "Gérer les feuilles de temps",
+      "status": {
+        "draft": "Brouillon",
+        "submitted": "Soumise",
+        "approved": "Approuvée",
+        "rejected": "Rejetée",
+        "paid": "Payée"
+      }
+    }
+  },
+  "contributors": {
+    "syncAgents": "Synchroniser les agents IA",
+    "syncing": "Synchronisation…",
+    "loading": "Chargement de l'activité…",
+    "wholeTeam": "Toute l'équipe",
+    "backToTeam": "← Retour à l'équipe",
+    "leaderboard": "Classement",
+    "empty": "Aucun contributeur pour l'instant. Connectez une intégration de dépôt pour collecter l'activité humaine, ou cliquez sur Synchroniser les agents IA pour ajouter vos agents.",
+    "calendarAria": "Calendrier des contributions",
+    "tileTitle": "{date} : {count} contributions",
+    "stat": {
+      "contributions": "Contributions (365 j)",
+      "teamMembers": "Membres de l'équipe",
+      "humans": "Personnes",
+      "agents": "Agents IA"
+    },
+    "col": {
+      "rank": "#",
+      "contributor": "Contributeur",
+      "type": "Type",
+      "role": "Rôle",
+      "contributions": "Contributions"
+    },
+    "badge": {
+      "agent": "Agent",
+      "human": "Personne"
+    },
+    "legend": {
+      "less": "Moins",
+      "more": "Plus",
+      "agents": "Agents :"
+    },
+    "tenant": {
+      "title": "Activité du locataire",
+      "allProjects": "tous les projets",
+      "events": "Événements ({days} j)",
+      "activeContributors": "Contributeurs actifs",
+      "linesAdded": "Lignes ajoutées",
+      "linesRemoved": "Lignes supprimées",
+      "dailyTrend": "Tendance quotidienne",
+      "byType": "Par type",
+      "topRepos": "Dépôts principaux",
+      "byProject": "Par projet",
+      "noActivity": "Aucune activité pour l'instant.",
+      "noRepos": "Aucun dépôt lié.",
+      "noProjects": "Aucune activité attribuée à un projet pour l'instant.",
+      "dailyAria": "Activité quotidienne"
+    },
+    "type": {
+      "commit": "Commits",
+      "pr_opened": "PR ouvertes",
+      "pr_merged": "PR fusionnées",
+      "pr_closed": "PR fermées",
+      "pr_reviewed": "Revues",
+      "issue_created": "Tickets ouverts",
+      "issue_resolved": "Tickets résolus",
+      "issue_commented": "Commentaires",
+      "ai_interaction": "Interactions IA",
+      "code_change": "Modifications de code"
+    },
+    "syncFailed": "Échec de la synchronisation des agents"
   }
 }

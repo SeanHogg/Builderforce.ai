@@ -147,3 +147,51 @@ export const reviewsRecordTool: AgentTool<typeof ReviewsRecordSchema, string> = 
     ) as AgentToolResult<string>;
   },
 };
+
+const SEVERITY = Type.Union([
+  Type.Literal("critical"),
+  Type.Literal("high"),
+  Type.Literal("medium"),
+  Type.Literal("low"),
+  Type.Literal("info"),
+]);
+const TSC = Type.Union([
+  Type.Literal("security"),
+  Type.Literal("availability"),
+  Type.Literal("processing_integrity"),
+  Type.Literal("confidentiality"),
+  Type.Literal("privacy"),
+]);
+
+const SecurityRecordSchema = Type.Object({
+  title: Type.String({ description: "Short, specific finding title." }),
+  detail: Type.Optional(Type.String({ description: "What the issue is and why it matters." })),
+  severity: Type.Optional(SEVERITY),
+  tsc: Type.Optional(TSC),
+  location: Type.Optional(Type.String({ description: "file:line or component." })),
+  recommendation: Type.Optional(Type.String({ description: "Concrete, actionable fix." })),
+  auditId: Type.Optional(Type.Number({ description: "The audit run to attach to (defaults to the current run)." })),
+});
+
+type SecurityRecordParams = {
+  title: string;
+  detail?: string;
+  severity?: "critical" | "high" | "medium" | "low" | "info";
+  tsc?: "security" | "availability" | "processing_integrity" | "confidentiality" | "privacy";
+  location?: string;
+  recommendation?: string;
+  auditId?: number;
+};
+
+export const securityRecordTool: AgentTool<typeof SecurityRecordSchema, string> = {
+  name: "security_record",
+  label: "Record Security Finding",
+  description:
+    "File ONE SOC 2 audit finding. Each call mints an access-restricted SECURITY ticket carrying the severity, the Trust Service Criterion (security|availability|processing_integrity|confidentiality|privacy), a location, and a recommendation.",
+  parameters: SecurityRecordSchema,
+  async execute(_toolCallId: string, params: SecurityRecordParams) {
+    return jsonResult(
+      await callBuiltinMcp("security.record_finding", params as Record<string, unknown>),
+    ) as AgentToolResult<string>;
+  },
+};

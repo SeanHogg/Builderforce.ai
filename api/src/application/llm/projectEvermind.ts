@@ -50,6 +50,8 @@ export interface ProjectEvermindHead {
    * raw run text. null = self-learning on raw text only. See {@link setProjectEvermindTeacher}.
    */
   teacherModel: string | null;
+  /** ISO timestamp of the last merged contribution, or null if never learned. */
+  lastLearnedAt: string | null;
   /** Immutable ref usable by {@link loadEvermindModel}; null when unseeded. */
   ref: string | null;
 }
@@ -99,7 +101,7 @@ export async function getProjectEvermindHead(
         .where(and(eq(projectEvermind.tenantId, tenantId), eq(projectEvermind.projectId, projectId)))
         .limit(1);
       if (!row || row.version <= 0) {
-        return { tenantId, projectId, name: row?.name ?? 'Project Evermind', version: 0, mode: toMode(row?.mode), contributions: row?.contributions ?? 0, inferenceEnabled: row?.inferenceEnabled ?? false, teacherModel: row?.teacherModel ?? null, ref: null };
+        return { tenantId, projectId, name: row?.name ?? 'Project Evermind', version: 0, mode: toMode(row?.mode), contributions: row?.contributions ?? 0, inferenceEnabled: row?.inferenceEnabled ?? false, teacherModel: row?.teacherModel ?? null, lastLearnedAt: row?.lastLearnedAt?.toISOString() ?? null, ref: null };
       }
       return {
         tenantId,
@@ -110,6 +112,7 @@ export async function getProjectEvermindHead(
         contributions: row.contributions,
         inferenceEnabled: row.inferenceEnabled,
         teacherModel: row.teacherModel ?? null,
+        lastLearnedAt: row.lastLearnedAt?.toISOString() ?? null,
         ref: projectEvermindRef(tenantId, projectId, row.version),
       };
     },
@@ -470,6 +473,112 @@ export async function dispatchProjectEvermindLearnText(
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ tenantId, projectId, text: trimmed.slice(0, 8000), ...(promptTrimmed ? { prompt: promptTrimmed.slice(0, 8000) } : {}), ...(weight != null ? { weight } : {}) }),
   });
+  const body = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+  return { ok: res.ok, status: res.status, body };
+}
+
+/** One inspectable contribution the coordinator merged (mirrors the DO's RecentEntry). */
+export interface ProjectEvermindRecentEntry {
+  kind: 'text' | 'delta';
+  version: number;
+  at: number;
+  weight: number;
+  prompt?: string;
+  text?: string;
+}
+
+/** The coordinator's live learning snapshot: queued count + recent merged contributions. */
+export interface ProjectEvermindActivity {
+  pending: number;
+  recent: ProjectEvermindRecentEntry[];
+}
+
+/**
+ * Read the project coordinator's live learning activity (pending queue depth +
+ * the recent-contributions ring). Read-only — never triggers a merge. Degrades to
+ * an empty snapshot when the coordinator binding is unset or the DO has no state
+ * yet, so a caller can always render the panel.
+ */
+export async function getProjectEvermindActivity(
+  env: Env,
+  tenantId: number,
+  projectId: number,
+): Promise<ProjectEvermindActivity> {
+  const stub = coordinatorStub(env, tenantId, projectId);
+  if (!stub) return { pending: 0, recent: [] };
+  try {
+    const res = await stub.fetch('https://coordinator/recent');
+    if (!res.ok) return { pending: 0, recent: [] };
+    const body = (await res.json().catch(() => ({}))) as Partial<ProjectEvermindActivity>;
+    return { pending: typeof body.pending === 'number' ? body.pending : 0, recent: Array.isArray(body.recent) ? body.recent : [] };
+  } catch {
+    return { pending: 0, recent: [] };
+  }
+}
+
+/**
+ * Force the coordinator to merge its queued contributions NOW ("Learn now" /
+ * distill), instead of waiting out the debounce window. Returns how many merged +
+ * the resulting version. No-op (503) when the coordinator binding is unset; the DO
+ * gates seeded/frozen itself, so a frozen model simply merges nothing.
+ */
+/** The Evermind console's read payload: the head summary + live learning activity. */
+export interface ProjectEvermindContributions {
+  version: number;
+  seeded: boolean;
+  mode: ProjectEvermindMode;
+  contributions: number;
+  inferenceEnabled: boolean;
+  teacherModel: string | null;
+  lastLearnedAt: string | null;
+  pending: number;
+  recent: ProjectEvermindRecentEntry[];
+}
+
+/**
+ * The combined read for the Evermind inspection console: the head summary plus the
+ * coordinator's live activity (pending depth + recent-contributions ring). Served
+ * through the read-through cache keyed by the per-project version token, so a busy
+ * poll doesn't hammer the DB or the coordinator DO, yet a seed/merge/toggle (all of
+ * which bump the token) invalidates it immediately.
+ */
+export async function getProjectEvermindContributions(
+  env: Env,
+  db: Db,
+  tenantId: number,
+  projectId: number,
+): Promise<ProjectEvermindContributions> {
+  const token = await getCacheVersion(env, versionKey(tenantId, projectId));
+  return getOrSetCached(
+    env,
+    `project_evermind:contrib:${tenantId}:${projectId}:v:${token}`,
+    async (): Promise<ProjectEvermindContributions> => {
+      const head = await getProjectEvermindHead(env, db, tenantId, projectId);
+      const activity = await getProjectEvermindActivity(env, tenantId, projectId);
+      return {
+        version: head.version,
+        seeded: head.version > 0,
+        mode: head.mode,
+        contributions: head.contributions,
+        inferenceEnabled: head.inferenceEnabled,
+        teacherModel: head.teacherModel,
+        lastLearnedAt: head.lastLearnedAt,
+        pending: activity.pending,
+        recent: activity.recent,
+      };
+    },
+    { kvTtlSeconds: 10 },
+  );
+}
+
+export async function flushProjectEvermind(
+  env: Env,
+  tenantId: number,
+  projectId: number,
+): Promise<LearnDispatchResult> {
+  const stub = coordinatorStub(env, tenantId, projectId);
+  if (!stub) return { ok: false, status: 503, body: { error: 'concurrent learning not configured (no coordinator binding)' } };
+  const res = await stub.fetch('https://coordinator/flush', { method: 'POST' });
   const body = (await res.json().catch(() => ({}))) as Record<string, unknown>;
   return { ok: res.ok, status: res.status, body };
 }

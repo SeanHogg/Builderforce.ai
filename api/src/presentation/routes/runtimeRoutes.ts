@@ -22,6 +22,7 @@ import {
   handleContainerOp, loadContainerRunContext, resolveCloudAgent, agentAllowsHostExecution, DEFAULT_CLOUD_REF,
 } from '../../application/runtime/cloudAgentEngine';
 import { CONTAINER_MAX_STEPS } from '../../application/runtime/cloudAgentTools';
+import { enforceCloudRunCap } from '../../application/runtime/cloudRunLedger';
 import { ExecutionStatus } from '../../domain/shared/types';
 import type { ResolvedArtifacts } from '../../domain/shared/types';
 import { millicentsToUsd } from '../../domain/shared/money';
@@ -599,6 +600,27 @@ async function startDispatchedExecution(
   };
 
   if (!delivered) {
+    // Cloud-compute gate: a cloud run executes on OUR infra (unlike on-prem/VSIX),
+    // so it consumes the monthly "Cloud runs" allowance even when the tenant brings
+    // their own model (BYO tokens are $0 to us, but the orchestration isn't). This
+    // is the ONE choke point every cloud entry funnels through (Run-now, board,
+    // autofix), so gating here covers them all. Over the cap → fail fast with an
+    // upgrade hint rather than start a run we'd have to run for free. Superadmin /
+    // unlimited plans pass; a metering error fails OPEN (never blocks a real run).
+    const cloudGate = await enforceCloudRunCap(db, tenantId);
+    if (!cloudGate.allowed) {
+      const msg = `Monthly cloud-run allowance reached (${cloudGate.used}/${cloudGate.limit} on the ${cloudGate.effectivePlan} plan). Upgrade at builderforce.ai/pricing to run more cloud agents — on-prem and VS Code runs stay unlimited.`;
+      await recordCloudToolEvent(db, {
+        tenantId, cloudAgentRef: agent.ref, executionId: execution.id,
+        toolName: 'runtime.route', category: 'planning',
+        detail: { reason: 'cloud_run_limit_exceeded', used: cloudGate.used, limit: cloudGate.limit, plan: cloudGate.effectivePlan },
+        result: msg,
+      }).catch(() => { /* best-effort telemetry */ });
+      await runtimeService.update(execution.id, { status: ExecutionStatus.FAILED, errorMessage: msg }).catch(() => { /* terminal already */ });
+      await notifyDone();
+      return runtimeService.getExecution(execution.id).then((e) => e.toPlain()).catch(() => ({ id: execution.id, status: ExecutionStatus.FAILED }));
+    }
+
     // Route a container-surface run to the REAL long-lived Cloudflare Container
     // (AgentContainerDO) when it's bound; everything else — a durable-surface run,
     // and a container run with no Container binding — runs on the durable executor

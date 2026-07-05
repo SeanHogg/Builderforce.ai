@@ -47,6 +47,7 @@ import { computeValueStream } from '../../application/pmo/valueStream';
 import { invalidateProjectsList, projectsListVersionKey } from './projectRoutes';
 import { convertWorkItemType, ConvertError } from '../../application/workitem/convertWorkItemType';
 import { TaskService } from '../../application/task/TaskService';
+import { notSystemTask } from '../../application/task/taskScope';
 import { TaskRepository } from '../../infrastructure/repositories/TaskRepository';
 import { ProjectRepository } from '../../infrastructure/repositories/ProjectRepository';
 import {
@@ -280,7 +281,7 @@ export function createPmoRoutes(db: Db): Hono<HonoEnv> {
     const apply = body.apply !== false;
     const taskRows = await db
       .select({ id: tasks.id, title: tasks.title, description: tasks.description, taskType: tasks.taskType, actionType: tasks.actionType, source: tasks.source, allocationCategory: tasks.allocationCategory, costClass: tasks.costClass, costClassSource: tasks.costClassSource, costClassVerified: tasks.costClassVerified })
-      .from(tasks).where(eq(tasks.segmentId, segmentId));
+      .from(tasks).where(and(eq(tasks.segmentId, segmentId), notSystemTask));
     const targets = taskRows.filter((t) => !t.costClassVerified && t.costClassSource !== 'manual');
     const suggestions = targets.map((t) => ({ id: t.id, title: t.title, suggestion: classifyCostClass(t) }));
     if (apply && suggestions.length) {

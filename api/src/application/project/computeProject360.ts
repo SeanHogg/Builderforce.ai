@@ -2,6 +2,7 @@ import { and, eq, inArray } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import { agentHosts, executions, ideAgents, memberProfiles, tasks, users } from '../../infrastructure/database/schema';
 import { clampScore } from '../../domain/shared/numbers';
+import { notSystemTask } from '../task/taskScope';
 
 /**
  * Project 360 — the single source of truth for a project's whole-picture health,
@@ -438,7 +439,7 @@ export async function computeProject360(
         assignedAgentRef: tasks.assignedAgentRef,
       })
       .from(tasks)
-      .where(and(eq(tasks.projectId, projectId), eq(tasks.archived, false))),
+      .where(and(eq(tasks.projectId, projectId), eq(tasks.archived, false), notSystemTask)),
     db
       .select({ taskId: executions.taskId, status: executions.status })
       .from(executions)

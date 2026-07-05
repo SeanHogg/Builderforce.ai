@@ -12,6 +12,7 @@ import {
 } from '../../infrastructure/database/schema';
 import { signWebJwt, verifyWebJwt } from '../../infrastructure/auth/JwtService';
 import { hashPassword } from '../../infrastructure/auth/HashService';
+import { signState, verifyState, exchangeCodeForTokens } from '../../infrastructure/auth/oauthState';
 import type { Db } from '../../infrastructure/database/connection';
 
 // ---------------------------------------------------------------------------
@@ -126,63 +127,18 @@ function getProviderCfg(name: string, env: Env): ProviderCfg | null {
 // ---------------------------------------------------------------------------
 
 async function createOAuthState(jwtSecret: string, redirect: string, linkUserId?: string): Promise<string> {
-  const nonce = Array.from(crypto.getRandomValues(new Uint8Array(16)))
-    .map((b) => b.toString(16).padStart(2, '0'))
-    .join('');
-  const payload = JSON.stringify({
-    nonce,
+  return signState(jwtSecret, {
     redirect: redirect || '/dashboard',
-    ts: Date.now(),
     ...(linkUserId ? { linkUserId } : {}),
   });
-  const key = await crypto.subtle.importKey(
-    'raw',
-    new TextEncoder().encode(jwtSecret),
-    { name: 'HMAC', hash: 'SHA-256' },
-    false,
-    ['sign'],
-  );
-  const sig = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(payload));
-  const sigHex = Array.from(new Uint8Array(sig))
-    .map((b) => b.toString(16).padStart(2, '0'))
-    .join('');
-  return btoa(payload + '|' + sigHex);
 }
 
 async function verifyOAuthState(
   jwtSecret: string,
   state: string,
 ): Promise<{ redirect: string; linkUserId?: string } | null> {
-  try {
-    const decoded = atob(state);
-    const sepIdx = decoded.lastIndexOf('|');
-    const payload = decoded.slice(0, sepIdx);
-    const sigHex = decoded.slice(sepIdx + 1);
-    const key = await crypto.subtle.importKey(
-      'raw',
-      new TextEncoder().encode(jwtSecret),
-      { name: 'HMAC', hash: 'SHA-256' },
-      false,
-      ['verify'],
-    );
-    const sigBytes = new Uint8Array(sigHex.match(/.{2}/g)!.map((b) => parseInt(b, 16)));
-    const valid = await crypto.subtle.verify(
-      'HMAC',
-      key,
-      sigBytes,
-      new TextEncoder().encode(payload),
-    );
-    if (!valid) return null;
-    const { redirect, ts, linkUserId } = JSON.parse(payload) as {
-      redirect: string;
-      ts: number;
-      linkUserId?: string;
-    };
-    if (Date.now() - ts > 10 * 60 * 1000) return null; // 10-minute window
-    return { redirect, linkUserId };
-  } catch {
-    return null;
-  }
+  const parsed = await verifyState<{ redirect: string; linkUserId?: string }>(jwtSecret, state);
+  return parsed ? { redirect: parsed.redirect, linkUserId: parsed.linkUserId } : null;
 }
 
 // ---------------------------------------------------------------------------
@@ -194,21 +150,7 @@ async function exchangeCode(
   code: string,
   callbackUrl: string,
 ): Promise<{ access_token: string; refresh_token?: string }> {
-  const res = await fetch(cfg.tokenUrl, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded', Accept: 'application/json' },
-    body: new URLSearchParams({
-      client_id: cfg.clientId,
-      client_secret: cfg.clientSecret,
-      code,
-      redirect_uri: callbackUrl,
-      grant_type: 'authorization_code',
-    }),
-  });
-  if (!res.ok) throw new Error(`Token exchange failed: ${res.status}`);
-  const data = (await res.json()) as { access_token?: string; refresh_token?: string };
-  if (!data.access_token) throw new Error('No access_token in response');
-  return { access_token: data.access_token, refresh_token: data.refresh_token };
+  return exchangeCodeForTokens(cfg, code, callbackUrl);
 }
 
 async function fetchUserInfo(

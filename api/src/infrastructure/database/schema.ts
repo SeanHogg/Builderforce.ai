@@ -58,7 +58,7 @@ export const agentTypeEnum = pgEnum('agent_type', [
 // per-board `status` lane key): a plain `task`, or an `epic` that decomposes
 // into child tasks (parent_task_id) — see migration 0112.
 export const taskTypeEnum = pgEnum('task_type', [
-  'task', 'epic', 'gap',
+  'task', 'epic', 'gap', 'security',
 ]);
 
 export const tenantStatusEnum = pgEnum('tenant_status', [
@@ -3445,6 +3445,67 @@ export const ceremonyParticipants = pgTable('ceremony_participants', {
   durationMs:  integer('duration_ms').notNull().default(0),
   createdAt:   timestamp('created_at').notNull().defaultNow(),
   updatedAt:   timestamp('updated_at').notNull().defaultNow(),
+});
+
+// ---------------------------------------------------------------------------
+// Live video/audio collaboration — scheduled meetings + calendar connections
+// (migration 0292). A meeting is a standup / planning / retro / ad-hoc / direct
+// call; peers exchange WebRTC media via the CeremonyRoomDO relay keyed off
+// `roomKey`. Calendars are per-user OAuth grants used to schedule + list events.
+// ---------------------------------------------------------------------------
+
+export const meetings = pgTable('meetings', {
+  id:               uuid('id').primaryKey().defaultRandom(),
+  tenantId:         integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  segmentId:        uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),
+  // Nullable: an ad-hoc / direct call need not belong to a project.
+  projectId:        integer('project_id').references(() => projects.id, { onDelete: 'set null' }),
+  kind:             varchar('kind', { length: 16 }).notNull().default('adhoc'),        // standup|planning|retrospective|adhoc|direct
+  title:            varchar('title', { length: 255 }).notNull(),
+  description:      text('description'),
+  scheduledAt:      timestamp('scheduled_at', { withTimezone: true }),                 // null = start-now
+  durationMinutes:  integer('duration_minutes').notNull().default(30),
+  status:           varchar('status', { length: 16 }).notNull().default('scheduled'),  // scheduled|live|ended|cancelled
+  createdBy:        varchar('created_by', { length: 64 }),
+  roomKey:          varchar('room_key', { length: 64 }).notNull(),                     // media relay room (media:<roomKey>)
+  videoEnabled:     boolean('video_enabled').notNull().default(true),
+  calendarProvider: varchar('calendar_provider', { length: 16 }),                      // google|microsoft
+  calendarEventId:  varchar('calendar_event_id', { length: 255 }),
+  calendarHtmlLink: text('calendar_html_link'),
+  startedAt:        timestamp('started_at', { withTimezone: true }),
+  endedAt:          timestamp('ended_at', { withTimezone: true }),
+  createdAt:        timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt:        timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const meetingAttendees = pgTable('meeting_attendees', {
+  id:          uuid('id').primaryKey().defaultRandom(),
+  tenantId:    integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  meetingId:   uuid('meeting_id').notNull().references(() => meetings.id, { onDelete: 'cascade' }),
+  memberKind:  varchar('member_kind', { length: 16 }).notNull().default('human'),      // human|cloud_agent|host_agent
+  memberRef:   varchar('member_ref', { length: 64 }).notNull(),
+  memberName:  varchar('member_name', { length: 255 }).notNull(),
+  email:       varchar('email', { length: 255 }),
+  role:        varchar('role', { length: 16 }).notNull().default('attendee'),          // host|attendee
+  response:    varchar('response', { length: 16 }).notNull().default('invited'),       // invited|accepted|declined|tentative
+  joinedAt:    timestamp('joined_at', { withTimezone: true }),
+  leftAt:      timestamp('left_at', { withTimezone: true }),
+  createdAt:   timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const calendarConnections = pgTable('calendar_connections', {
+  id:            uuid('id').primaryKey().defaultRandom(),
+  tenantId:      integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  userId:        varchar('user_id', { length: 64 }).notNull(),                         // users.id (the connector)
+  provider:      varchar('provider', { length: 16 }).notNull(),                        // google|microsoft
+  accountEmail:  varchar('account_email', { length: 255 }),
+  accessToken:   text('access_token').notNull(),
+  refreshToken:  text('refresh_token'),
+  expiresAt:     timestamp('expires_at', { withTimezone: true }),
+  scope:         text('scope'),
+  calendarId:    varchar('calendar_id', { length: 255 }).notNull().default('primary'),
+  createdAt:     timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt:     timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 });
 
 // ---------------------------------------------------------------------------

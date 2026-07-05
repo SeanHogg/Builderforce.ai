@@ -81,6 +81,7 @@ async function request<T>(path: string, opts: RequestInit = {}): Promise<T> {
 
 import type {
   ToolSummary, ToolDefinition, ToolResult, SavedToolRun, ProjectScore, TenantDiagnosticsRollup,
+  SystemAuditSummary, AuditRunOutcome,
 } from './tools';
 
 export const toolsApi = {
@@ -132,6 +133,18 @@ export const toolsApi = {
   /** Project diagnostic ratings rolled up to the workspace (manager+). */
   rollup: (): Promise<TenantDiagnosticsRollup> =>
     request<TenantDiagnosticsRollup>('/api/tools/rollup'),
+
+  /** List the system-level audit types (SOC 2, Architecture, Quality, PM Vision).
+   *  Public — powers the onboarding wizard + marketing. */
+  listAudits: (): Promise<SystemAuditSummary[]> =>
+    webRequest<{ audits: SystemAuditSummary[] }>('/api/tools/audits').then((r) => r.audits ?? []),
+
+  /** Run a system audit against a project (manager+): scores + records a report,
+   *  notifies the user, and files the agent remediation ticket. */
+  runAudit: (auditId: string, projectId: number): Promise<AuditRunOutcome> =>
+    request<AuditRunOutcome>(`/api/tools/audits/${encodeURIComponent(auditId)}/run`, {
+      method: 'POST', body: JSON.stringify({ projectId }),
+    }),
 };
 
 // ---------------------------------------------------------------------------
@@ -1551,6 +1564,22 @@ export interface ManagerAction {
   createdAt: string;
 }
 
+/** One "Backlog management pass" task the manager kicked off — a board task the
+ *  manager owns, moved in_progress→done with the run summary in `summary`. */
+export interface ManagerRunTask {
+  id: number;
+  key: string;
+  title: string;
+  status: string;
+  /** The run summary (task description), or the initial "grooming…" copy while open. */
+  summary: string | null;
+  assignedUserId: string | null;
+  assignedAgentRef: string | null;
+  assignedAgentHostId: number | null;
+  createdAt: string;
+  completedAt: string | null;
+}
+
 /** The full manager overview returned by GET /api/manager/:projectId. */
 export interface ManagerOverview {
   config: ManagerConfig | null;
@@ -1558,6 +1587,8 @@ export interface ManagerOverview {
   stats: ManagerStats;
   backlog: ManagerBacklogItem[];
   actions: ManagerAction[];
+  /** The manager's own run tasks (open / in-progress / done), newest first. */
+  runTasks: ManagerRunTask[];
 }
 
 /** Editable subset accepted by PUT /api/manager/:projectId. */
@@ -1876,8 +1907,8 @@ export const dashboardApi = {
 // powers the sidebar UsageMeter widget.
 // ---------------------------------------------------------------------------
 
-export type MeterKey = 'ai_tokens' | 'ingestion' | 'error_events' | 'outbound_fetches';
-export type MeterUnit = 'tokens' | 'bytes' | 'events' | 'fetches';
+export type MeterKey = 'ai_tokens' | 'cloud_runs' | 'ingestion' | 'error_events' | 'outbound_fetches';
+export type MeterUnit = 'tokens' | 'runs' | 'bytes' | 'events' | 'fetches';
 
 export interface MeterSnapshot {
   key: MeterKey;
@@ -2431,6 +2462,65 @@ export const securityApi = {
 
   revokeAllSessions: (tenantId: number, userId: string): Promise<void> =>
     request(`/api/tenants/${tenantId}/security/users/${userId}/sessions/revoke-all`, { method: 'POST' }).then(() => undefined),
+};
+
+// ---------------------------------------------------------------------------
+// Security agent — SOC 2 audit + access-restricted SECURITY tickets
+// ---------------------------------------------------------------------------
+
+/** Whole-population opt-ins for who can see SECURITY tickets (default all off). */
+export interface SecurityAudiences {
+  humans: boolean;
+  hired: boolean;
+  talent: boolean;
+}
+
+export interface SecurityAccessConfig {
+  audiences: SecurityAudiences;
+  allowUserIds: string[];
+  allowAgentRefs: string[];
+}
+
+export interface SecurityAudit {
+  id: number;
+  projectId: number | null;
+  status: 'running' | 'complete' | 'failed';
+  triggerSource: 'cron' | 'manual';
+  summary: string | null;
+  findingsCount: number;
+  countsBySeverity: Record<string, number> | null;
+  countsByTsc: Record<string, number> | null;
+  startedAt: string;
+  finishedAt: string | null;
+}
+
+export interface SecurityAuditFinding {
+  id: number;
+  title: string;
+  status: string;
+  priority: string;
+  severity: string | null;
+  tsc: string | null;
+}
+
+export const securityAgentApi = {
+  getAccess: (): Promise<SecurityAccessConfig> =>
+    request<SecurityAccessConfig>('/api/security/access'),
+
+  setAccess: (cfg: Partial<SecurityAccessConfig>): Promise<SecurityAccessConfig> =>
+    request<SecurityAccessConfig>('/api/security/access', { method: 'PUT', body: JSON.stringify(cfg) }),
+
+  listAudits: (): Promise<SecurityAudit[]> =>
+    request<{ audits: SecurityAudit[] }>('/api/security/audits').then((r) => r.audits ?? []),
+
+  getAudit: (id: number): Promise<{ audit: SecurityAudit; findings: SecurityAuditFinding[] }> =>
+    request<{ audit: SecurityAudit; findings: SecurityAuditFinding[] }>(`/api/security/audits/${id}`),
+
+  runAudit: (projectId?: number): Promise<{ auditId: number }> =>
+    request<{ auditId: number }>('/api/security/audits/run', {
+      method: 'POST',
+      body: JSON.stringify(projectId != null ? { projectId } : {}),
+    }),
 };
 
 // ---------------------------------------------------------------------------

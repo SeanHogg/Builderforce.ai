@@ -35,6 +35,7 @@ import {
   customerFeedback,
   portfolios,
 } from '../../infrastructure/database/schema';
+import { notSystemTask } from '../../application/task/taskScope';
 import { computePortfolioRollup } from '../../application/pmo/portfolioRollup';
 import { buildExecutiveSummary } from '../../application/reports/executiveSummary';
 import { TenantRole, TaskStatus } from '../../domain/shared/types';
@@ -507,6 +508,7 @@ async function generateCompletedByAssigneeReport(db: Db, tenantId: number, days:
       eq(tasks.archived, false),
       inArray(tasks.status, DONE_CLASS_STATUSES as string[]),
       gte(completedAtExpr, since),
+      notSystemTask,
     ));
 
   const assignees = groupCompletedByAssignee(rows as CompletedTaskRow[]);

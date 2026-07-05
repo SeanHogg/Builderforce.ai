@@ -1,12 +1,16 @@
 'use client';
 
 import { useState, useCallback } from 'react';
+import { useTranslations } from 'next-intl';
 import type { Tenant } from '@/lib/types';
 import { createTenant, completeOnboarding } from '@/lib/auth';
 import { createProject } from '@/lib/api';
 import { InstallBuilderForceAgents } from './InstallBuilderForceAgents';
 import { InviteTeamMembers } from './InviteTeamMembers';
 import { KanbanRosterCard } from './kanban/KanbanRosterCard';
+import { WizardTicketingStep } from './onboarding/WizardTicketingStep';
+import { WizardReposStep } from './onboarding/WizardReposStep';
+import { WizardAuditStep } from './onboarding/WizardAuditStep';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -30,21 +34,11 @@ const INTENT_OPTIONS = [
   { value: 'learn', label: '📚 Learn and explore' },
 ];
 
-type StepId = 'workspace' | 'project' | 'roster' | 'install' | 'invite';
+type StepId = 'workspace' | 'project' | 'ticketing' | 'repos' | 'audit' | 'roster' | 'install' | 'invite';
 
-interface Step {
-  id: StepId;
-  label: string;
-  description: string;
-}
-
-const STEPS: Step[] = [
-  { id: 'workspace', label: 'Create Workspace', description: 'Set up your organization' },
-  { id: 'project',   label: 'Create a Project', description: 'Name your first project' },
-  { id: 'roster',    label: 'Recommended Roster', description: 'Staff your team of humans + agents' },
-  { id: 'install',   label: 'Install BuilderForce Agents', description: 'Connect your AI agent' },
-  { id: 'invite',    label: 'Invite Team',       description: 'Bring your teammates' },
-];
+// Step order. Labels/descriptions are resolved through the `onboarding.steps.*`
+// i18n namespace at render time (single source; all 5 locales).
+const STEP_IDS: StepId[] = ['workspace', 'project', 'ticketing', 'repos', 'audit', 'roster', 'install', 'invite'];
 
 // ---------------------------------------------------------------------------
 // Component
@@ -59,6 +53,7 @@ export function OnboardingStepper({
   onComplete,
   onDismiss,
 }: OnboardingStepperProps) {
+  const t = useTranslations('onboarding');
   const workspaceAlreadyExists = !!tenant;
   const projectAlreadyExists = workspaceAlreadyExists && existingProjectsCount > 0;
 
@@ -175,7 +170,7 @@ export function OnboardingStepper({
 
   // ── Render ───────────────────────────────────────────────────────────────
 
-  const currentStepId = STEPS[activeStep]?.id;
+  const currentStepId = STEP_IDS[activeStep];
 
   return (
     <div
@@ -214,17 +209,17 @@ export function OnboardingStepper({
         >
           <div>
             <h2 style={{ margin: 0, fontSize: 20, fontWeight: 700, color: 'var(--text-primary)' }}>
-              Welcome to Builderforce
+              {t('welcome')}
             </h2>
             <p style={{ margin: '4px 0 0', fontSize: 13, color: 'var(--text-muted)' }}>
-              Let&apos;s get you set up in a few quick steps.
+              {t('subtitle')}
             </p>
           </div>
           <button
             type="button"
             onClick={handleDismiss}
             disabled={!canClose}
-            title={canClose ? 'Close setup' : 'Create a workspace first'}
+            title={canClose ? t('closeSetup') : t('createWorkspaceFirst')}
             style={{
               background: 'transparent',
               border: '1px solid var(--border-subtle)',
@@ -251,11 +246,11 @@ export function OnboardingStepper({
             alignItems: 'center',
           }}
         >
-          {STEPS.map((step, i) => {
+          {STEP_IDS.map((stepId, i) => {
             const done = completedSteps.has(i);
             const active = i === activeStep;
             return (
-              <div key={step.id} style={{ display: 'flex', alignItems: 'center', flex: i < STEPS.length - 1 ? 1 : undefined }}>
+              <div key={stepId} style={{ display: 'flex', alignItems: 'center', flex: i < STEP_IDS.length - 1 ? 1 : undefined }}>
                 <button
                   type="button"
                   onClick={() => done && setActiveStep(i)}
@@ -306,10 +301,10 @@ export function OnboardingStepper({
                       whiteSpace: 'nowrap',
                     }}
                   >
-                    {step.label}
+                    {t(`steps.${stepId}.label`)}
                   </span>
                 </button>
-                {i < STEPS.length - 1 && (
+                {i < STEP_IDS.length - 1 && (
                   <div
                     style={{
                       flex: 1,
@@ -541,6 +536,39 @@ export function OnboardingStepper({
             </div>
           )}
 
+          {/* ── Step: Connect ticketing ── */}
+          {currentStepId === 'ticketing' && (
+            createdProjectId != null ? (
+              <WizardTicketingStep projectId={createdProjectId} />
+            ) : (
+              <div style={{ fontSize: 13, color: 'var(--text-muted)', padding: '20px 0', textAlign: 'center' }}>
+                {t('needProject')}
+              </div>
+            )
+          )}
+
+          {/* ── Step: Connect repositories ── */}
+          {currentStepId === 'repos' && (
+            createdProjectId != null ? (
+              <WizardReposStep projectId={createdProjectId} />
+            ) : (
+              <div style={{ fontSize: 13, color: 'var(--text-muted)', padding: '20px 0', textAlign: 'center' }}>
+                {t('needProject')}
+              </div>
+            )
+          )}
+
+          {/* ── Step: Run audits (the SOC 2 adoption hook) ── */}
+          {currentStepId === 'audit' && (
+            createdProjectId != null ? (
+              <WizardAuditStep projectId={createdProjectId} />
+            ) : (
+              <div style={{ fontSize: 13, color: 'var(--text-muted)', padding: '20px 0', textAlign: 'center' }}>
+                {t('needProject')}
+              </div>
+            )
+          )}
+
           {/* ── Step 3: Recommended Roster ── */}
           {currentStepId === 'roster' && (
             <div>
@@ -595,14 +623,14 @@ export function OnboardingStepper({
               opacity: activeStep === 0 ? 0.4 : 1,
             }}
           >
-            ← Back
+            {t('back')}
           </button>
 
           <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
-            Step {activeStep + 1} of {STEPS.length}
+            {t('stepOf', { current: activeStep + 1, total: STEP_IDS.length })}
           </span>
 
-          {activeStep < STEPS.length - 1 ? (
+          {activeStep < STEP_IDS.length - 1 ? (
             (() => {
               const nextDisabled =
                 (currentStepId === 'workspace' && !completedSteps.has(0) && !workspaceAlreadyExists) ||
@@ -612,7 +640,7 @@ export function OnboardingStepper({
                   type="button"
                   onClick={handleNext}
                   disabled={nextDisabled}
-                  title={nextDisabled ? 'Complete this step first' : undefined}
+                  title={nextDisabled ? t('completeFirst') : undefined}
                   style={{
                     padding: '8px 20px',
                     fontSize: 14,

@@ -21,6 +21,7 @@ import { getOrSetCached, getCacheVersion } from '../../infrastructure/cache/read
 import {
   tasks, projects, sprints, costCalculations, featureRoi, llmUsageLog,
 } from '../../infrastructure/database/schema';
+import { notSystemTask } from '../../application/task/taskScope';
 import type { Env, HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 import { scope } from './segmentTrackerRoutes';
@@ -51,7 +52,7 @@ async function computeRollup(
   now: number,
 ): Promise<RoiRollup> {
   // ── tasks in scope (segment-bounded; optional single project) ──────────────
-  const taskConds = [eq(projects.tenantId, tenantId), eq(projects.segmentId, segmentId)];
+  const taskConds = [eq(projects.tenantId, tenantId), eq(projects.segmentId, segmentId), notSystemTask];
   if (projectId !== undefined) taskConds.push(eq(tasks.projectId, projectId));
   const taskRows = await db
     .select({

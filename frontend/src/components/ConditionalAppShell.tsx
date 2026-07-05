@@ -175,7 +175,7 @@ function FreelancerRouteGuard() {
   useEffect(() => {
     if (!isAuthenticated || !isFreelancer) return;
     if (classifyShell(pathname) === 'app' && !isFreelancerAllowedPath(pathname)) {
-      router.replace('/freelancer/profile');
+      router.replace('/freelancer/dashboard');
     }
   }, [isAuthenticated, isFreelancer, pathname, router]);
   return null;

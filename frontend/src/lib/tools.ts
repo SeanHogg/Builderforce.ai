@@ -107,6 +107,26 @@ export interface TenantDiagnosticsRollup {
   projects: TenantProjectScore[];
 }
 
+/** A system-level audit type (SOC 2, Architecture, Quality, PM Vision) — an
+ *  externally-scored diagnostic run against a project. Mirrors the backend
+ *  `SystemAuditSummary`. */
+export interface SystemAuditSummary {
+  id: string;
+  name: string;
+  category: ToolCategory;
+  icon: string;
+  blurb: string;
+}
+
+/** Outcome of kicking off an audit run. */
+export interface AuditRunOutcome {
+  started: true;
+  auditId: string;
+  mode: 'agent' | 'deterministic';
+  run: SavedToolRun;
+  agentTask?: { taskId: number; status: string };
+}
+
 /** Default input map for a definition (calculator defaults; questionnaires/quizzes start empty). */
 export function defaultInput(def: ToolDefinition): Record<string, number> {
   if (def.kind === 'calculator') {

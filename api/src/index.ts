@@ -46,6 +46,8 @@ import { createEmbedRoutes }       from './presentation/routes/embedRoutes';
 import { createGovernanceRoutes }  from './presentation/routes/governanceRoutes';
 import { createProductRoutes }     from './presentation/routes/productRoutes';
 import { createAgileRoutes }       from './presentation/routes/agileRoutes';
+import { createMeetingRoutes }     from './presentation/routes/meetingRoutes';
+import { createCalendarRoutes }    from './presentation/routes/calendarRoutes';
 import { createRoiRoutes }         from './presentation/routes/roiRoutes';
 import { createPmoRoutes }         from './presentation/routes/pmoRoutes';
 import { createTimeRoutes }        from './presentation/routes/timeRoutes';
@@ -72,6 +74,7 @@ import { createAuditRoutes }       from './presentation/routes/auditRoutes';
 import { createMarketplaceRoutes } from './presentation/routes/marketplaceRoutes';
 import { createToolRoutes } from './presentation/routes/toolRoutes';
 import { ToolService } from './application/tools/ToolService';
+import { AuditRunner } from './application/tools/AuditRunner';
 import { createMarketingRoutes } from './presentation/routes/marketingRoutes';
 import { MarketingService } from './application/marketing/MarketingService';
 import { createAgentHostRoutes }        from './presentation/routes/agentHostRoutes';
@@ -222,6 +225,7 @@ export function buildApp(env: Env): Hono<HonoEnv> {
     (projectId) => recommendTopAssignee(env, db, projectId));
   const tenantService   = new TenantService(tenantRepo, paymentProvider);
   const toolService     = new ToolService(db);
+  const auditRunner     = new AuditRunner(db, toolService, taskService);
   const marketingService = new MarketingService(db);
   const authService     = new AuthService(userRepo, tenantRepo, auditRepo, env.JWT_SECRET);
   const agentService    = new AgentService(agentRepo, skillRepo, auditRepo);
@@ -342,7 +346,7 @@ export function buildApp(env: Env): Hono<HonoEnv> {
 
   // Diagnostics & Tools — list/get/compute are public (free preview);
   // save/runs apply auth + manager role inside the router.
-  app.route('/api/tools', createToolRoutes(toolService));
+  app.route('/api/tools', createToolRoutes(toolService, auditRunner, db, runtimeService));
   app.route('/api/marketing', createMarketingRoutes(marketingService));
 
   // Signed vision attachments — public, but each object is gated by a short-lived
@@ -419,6 +423,10 @@ export function buildApp(env: Env): Hono<HonoEnv> {
   app.route('/api/governance', createGovernanceRoutes(db));
   app.route('/api/product',  createProductRoutes(db));
   app.route('/api/agile',    createAgileRoutes(db));
+  // Live video/audio collaboration: meetings (WebRTC mesh + scheduling) and the
+  // per-user calendar connections that back scheduling.
+  app.route('/api/meetings', createMeetingRoutes(db));
+  app.route('/api/calendar', createCalendarRoutes(db));
   app.route('/api/roi',      createRoiRoutes(db));
   app.route('/api/pmo',      createPmoRoutes(db));
   app.route('/api/time',     createTimeRoutes(db));

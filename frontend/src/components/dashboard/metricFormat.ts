@@ -58,6 +58,21 @@ export function seriesDelta(values: number[]): SeriesDelta | null {
 export type DeltaTone = 'good' | 'bad' | 'neutral';
 
 /**
+ * Build an InsightStat delta chip straight from a raw daily series — the one
+ * place the "series → {label, direction, tone}" derivation lives so every
+ * dashboard tile derives its trend chip identically. Returns null when the
+ * series is too short/flat to be meaningful (so the caller omits the chip).
+ */
+export function buildInsightDelta(
+  series: number[],
+  goodWhenUp?: boolean | null,
+): { label: string; direction: DeltaDirection; tone: DeltaTone } | null {
+  const d = seriesDelta(series);
+  if (!d) return null;
+  return { label: `${Math.abs(d.pct)}%`, direction: d.direction, tone: deltaTone(d.direction, goodWhenUp) };
+}
+
+/**
  * Colour a trend delta by the metric's polarity. `goodWhenUp` true → rising is
  * good (merge rate); false → rising is bad (errors, spend); null/undefined →
  * neutral (no inherent direction). A flat trend is always neutral.

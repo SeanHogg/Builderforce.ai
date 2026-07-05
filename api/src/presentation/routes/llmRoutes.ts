@@ -995,6 +995,15 @@ export function createLlmRoutes(): Hono<HonoEnv> {
     // still bring OpenAI/Google — overlay those so a translated turn landing on
     // their vendor rides the tenant's own account ($0 to us, metered byo).
     const tenantVendorKeys = await resolveTenantVendorKeys(c.env, access.tenantId);
+    // Determinism for non-Anthropic on-prem BYO: if the requested model belongs to
+    // a vendor the tenant has connected, HARD-PIN it (modelStrict) so the run rides
+    // their own account instead of the gateway silently cascading onto our free
+    // pool. Mirrors the Anthropic passthrough's "runs on the tenant's account, period"
+    // guarantee for OpenAI/Google. A bare/mismatched model just stays a soft hint.
+    const byoVendors = byoVendorIdSet((Object.keys(tenantVendorKeys) as LlmProvider[]).filter((p) => tenantVendorKeys[p]));
+    if (typeof parsed.model === 'string' && byoVendors.has(vendorForModel(parsed.model))) {
+      (openaiBody as { modelStrict?: boolean }).modelStrict = true;
+    }
     // Same routing path as /v1/chat/completions: a translated Anthropic request that
     // carried `tools` is an agentic turn and floors onto the paid coder backstop
     // rather than the lite general backstop. (BYO-Claude turns were served above.)

@@ -16,6 +16,7 @@ import {
   type ManagerAction,
   type ManagerActionType,
   type ManagerBacklogItem,
+  type ManagerRunTask,
   type PrMergePolicy,
   type TaskPriority,
   type AgentHost,
@@ -209,7 +210,7 @@ export function ManagerContent({ projectId }: ManagerContentProps) {
   }
   if (!data) return null;
 
-  const { policy, stats, backlog, actions } = data;
+  const { policy, stats, backlog, actions, runTasks } = data;
   const managerValue = policy.managerRef ?? '';
 
   const priorityChart: BarDatum[] = PRIORITIES.map((p) => ({
@@ -410,6 +411,41 @@ export function ManagerContent({ projectId }: ManagerContentProps) {
         )}
       </div>
 
+      {/* ── Manager tasks (the manager's own backlog-management passes) ── */}
+      <div>
+        <div style={{ ...sectionTitleStyle, marginBottom: 4 }}>{t('runTasks.title')}</div>
+        <div style={{ ...mutedStyle, marginBottom: 8 }}>{t('runTasks.caption')}</div>
+        {runTasks.length === 0 ? (
+          <div style={{ ...panelStyle, ...mutedStyle }}>{t('runTasks.empty')}</div>
+        ) : (
+          <div style={tableWrapStyle}>
+            <table style={tableStyle}>
+              <thead>
+                <tr style={theadRowStyle}>
+                  <th style={thStyle}>{t('backlog.key')}</th>
+                  <th style={{ ...thStyle, width: 130 }}>{t('runTasks.statusCol')}</th>
+                  <th style={thStyle}>{t('runTasks.resultCol')}</th>
+                  <th style={thStyle}>{t('backlog.assignee')}</th>
+                  <th style={{ ...thStyle, width: 120 }}>{t('runTasks.whenCol')}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {runTasks.map((rt) => (
+                  <RunTaskRow
+                    key={rt.id}
+                    task={rt}
+                    statusLabel={t(`runTasks.status.${runTaskStatusKey(rt.status)}`)}
+                    owner={memberName(rt.assignedUserId, rt.assignedAgentRef, rt.assignedAgentHostId)}
+                    systemOwnerLabel={t('runTasks.systemOwner')}
+                    when={relative(rt.completedAt ?? rt.createdAt)}
+                  />
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
       {/* ── Activity feed ── */}
       <div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8, flexWrap: 'wrap' }}>
@@ -529,6 +565,47 @@ function BacklogRow({ item, assignee, unassignedLabel, priorityLabel, bvTooltip 
         {item.dueDate ? new Date(item.dueDate).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : '—'}
       </td>
       <td style={{ ...tdMutedStyle }}>{unassigned ? unassignedLabel : assignee}</td>
+    </tr>
+  );
+}
+
+/** Map a run task's board status onto one of the four run-task status i18n keys. */
+function runTaskStatusKey(status: string): 'in_progress' | 'done' | 'blocked' | 'open' {
+  if (status === 'in_progress') return 'in_progress';
+  if (status === 'done') return 'done';
+  if (status === 'blocked') return 'blocked';
+  return 'open';
+}
+
+/** Status → theme tone for the run-task badge (light + dark safe via CSS vars). */
+const RUN_TASK_TONE: Record<'in_progress' | 'done' | 'blocked' | 'open', string> = {
+  in_progress: 'var(--accent, #2563eb)',
+  done: 'var(--success-fg, #15803d)',
+  blocked: 'var(--warning-fg, #b45309)',
+  open: 'var(--text-secondary)',
+};
+
+function RunTaskRow({ task, statusLabel, owner, systemOwnerLabel, when }: {
+  task: ManagerRunTask; statusLabel: string; owner: string; systemOwnerLabel: string; when: string;
+}) {
+  const key = runTaskStatusKey(task.status);
+  const tone = RUN_TASK_TONE[key];
+  const unowned = task.assignedUserId == null && task.assignedAgentRef == null && task.assignedAgentHostId == null;
+  return (
+    <tr style={trStyle}>
+      <td style={{ ...tdMutedStyle, fontFamily: 'var(--font-mono)', whiteSpace: 'nowrap' }}>{task.key}</td>
+      <td style={tdStyle}>
+        <span style={{
+          display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: '0.75rem', fontWeight: 600,
+          color: tone, border: `1px solid ${tone}`, borderRadius: 999, padding: '2px 9px',
+        }}>
+          <span aria-hidden style={{ width: 6, height: 6, borderRadius: '50%', background: 'currentColor' }} />
+          {statusLabel}
+        </span>
+      </td>
+      <td style={tdStyle}>{task.summary || task.title}</td>
+      <td style={tdMutedStyle}>{unowned ? systemOwnerLabel : owner}</td>
+      <td style={{ ...tdMutedStyle, whiteSpace: 'nowrap' }}>{when}</td>
     </tr>
   );
 }

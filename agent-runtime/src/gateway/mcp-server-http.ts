@@ -21,6 +21,7 @@ import { codebaseSearchTool } from "../builderforce/tools/codebase-search-tool.j
 import { gitHistoryTool } from "../builderforce/tools/git-history-tool.js";
 import {
   reviewsRecordTool,
+  securityRecordTool,
   ticketsFromDeltaTool,
 } from "../builderforce/tools/platform-ticket-tools.js";
 import { projectKnowledgeTool } from "../builderforce/tools/project-knowledge-tool.js";
@@ -51,6 +52,7 @@ const MCP_TOOLS = [
   agentFleetTool,
   ticketsFromDeltaTool, // relay: record a code delta on the board (builtin tickets.from_delta)
   reviewsRecordTool, // relay: record a Done-item review outcome (builtin reviews.record)
+  securityRecordTool, // relay: file a SOC 2 finding as a SECURITY ticket (builtin security.record_finding)
 ];
 
 /**
