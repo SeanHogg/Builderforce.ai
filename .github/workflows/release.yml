@@ -19,6 +19,11 @@ jobs:
   deploy-api:
     name: Deploy API (api.builderforce.ai)
     runs-on: ubuntu-latest
+    # Dogfood: the API consumes the PUBLISHED @seanhogg/builderforce-quality just
+    # like any customer, so the publish must land before its npm install resolves
+    # the pinned version. (Version-gated: a no-op publish on unchanged versions
+    # still succeeds, so this never permanently blocks a deploy.)
+    needs: publish-quality
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
@@ -61,6 +66,9 @@ jobs:
 
   build-and-deploy:
     runs-on: ubuntu-latest
+    # Dogfood: the frontend consumes the PUBLISHED @seanhogg/builderforce-quality
+    # (not a local link:), so the publish must land before pnpm install resolves it.
+    needs: publish-quality
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4

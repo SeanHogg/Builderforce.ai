@@ -104,5 +104,20 @@ jobs:
             echo "$PKG_NAME@$VERSION already on npm — skipping."
           else
             echo "$PKG_NAME@$VERSION is new — publishing."
-            npm publish --provenance --access public
+            if npm publish --provenance --access public; then
+              echo "Published $PKG_NAME@$VERSION."
+            else
+              # npm's fetch-retry hardening (NPM_CONFIG_FETCH_RETRIES) can re-PUT a
+              # version the first attempt already landed, yielding a 403 "cannot
+              # publish over previously published version". Re-check the registry:
+              # if the version is now present, the publish effectively succeeded and
+              # this is NOT a real failure (which would otherwise skip dependent
+              # deploy jobs via `needs:`).
+              if npm view "$PKG_NAME@$VERSION" version >/dev/null 2>&1; then
+                echo "Publish returned an error but $PKG_NAME@$VERSION is now on npm (retry race) — treating as success."
+              else
+                echo "Publish failed and $PKG_NAME@$VERSION is NOT on npm."
+                exit 1
+              fi
+            fi
           fi
