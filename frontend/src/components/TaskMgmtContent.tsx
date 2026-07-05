@@ -49,6 +49,8 @@ import { TaskPrdTab } from './task/TaskPrdTab';
 import { RunTaskButton } from './task/RunTaskButton';
 import { ApprovalResolveControl } from './humanRequests/ApprovalResolveControl';
 import { ChatMessageContent } from './ChatMessageContent';
+import { PublishToMarketplaceModal } from './PublishToMarketplaceModal';
+import { getTicketPosting, unpublishTicket, type TicketPosting } from '@/lib/freelancerApi';
 import { ViewToggle } from './ViewToggle';
 import { CeremonyStage, type CeremonyMode } from './ceremony/CeremonyStage';
 import { ScheduleCalendar } from './ScheduleCalendar';
@@ -170,6 +172,7 @@ export function TaskMgmtContent({
   const tBoard = useTranslations('board');
   const tCommon = useTranslations('common');
   const tTask = useTranslations('taskMgmt');
+  const tGigs = useTranslations('gigs');
   // Global project scope (present in the app shell, absent in embed/standalone).
   // When present it is the single project picker — the board's own project filter
   // is hidden and the TopBar tenant→project selector drives scope instead.
@@ -227,6 +230,12 @@ export function TaskMgmtContent({
   >(null);
   const [fieldDraft, setFieldDraft] = useState('');
   const [fieldSaving, setFieldSaving] = useState(false);
+  // Marketplace posting state for the open drawer ticket: `undefined` = not yet
+  // loaded, `null` = not published, else the live posting. Drives the "Publish to
+  // Marketplace" action + the "Published" badge / Unpublish control.
+  const [posting, setPosting] = useState<TicketPosting | null | undefined>(undefined);
+  const [publishOpen, setPublishOpen] = useState(false);
+  const [publishBusy, setPublishBusy] = useState(false);
 
   // Open a task drawer on a specific tab (defaults to Details). Used so clicking
   // a running-agent chip jumps straight to the Agent tab.
@@ -234,6 +243,26 @@ export function TaskMgmtContent({
     setDrawerTab(tab);
     setDrawerTask(t);
   }, []);
+
+  // Load whether the open ticket is already published to the marketplace, so the
+  // drawer can show a "Published" badge + Unpublish, or offer to publish. Best-effort:
+  // a tenantless/unauthorized viewer just sees the not-published state.
+  useEffect(() => {
+    const id = drawerTask?.id;
+    if (id == null || drawerTask?.restricted) { setPosting(undefined); return; }
+    let alive = true;
+    setPosting(undefined);
+    getTicketPosting(id).then((p) => { if (alive) setPosting(p); }).catch(() => { if (alive) setPosting(null); });
+    return () => { alive = false; };
+  }, [drawerTask?.id, drawerTask?.restricted]);
+
+  const unpublishDrawerTicket = async () => {
+    if (!drawerTask) return;
+    setPublishBusy(true);
+    try { await unpublishTicket(drawerTask.id); setPosting(null); }
+    catch { /* surfaced by leaving the badge; best-effort */ }
+    finally { setPublishBusy(false); }
+  };
 
   // A SECURITY ticket the viewer isn't cleared for arrives masked (`restricted`),
   // its title blanked server-side — everywhere a task title renders we show the

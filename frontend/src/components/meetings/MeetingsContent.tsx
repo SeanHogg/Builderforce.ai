@@ -10,6 +10,7 @@ import {
 import { CalendarConnectionsCard } from './CalendarConnectionsCard';
 import { ScheduleMeetingModal } from './ScheduleMeetingModal';
 import { MeetingRoom } from './MeetingRoom';
+import { TeamChatButton } from '@/components/brain/TeamChatButton';
 
 function KindBadge({ label }: { label: string }) {
   return (
@@ -106,9 +107,13 @@ export default function MeetingsContent() {
             {whenLabel(m.scheduledAt)} · {t('attendeeCount', { count: detail.attendees.length })}
           </span>
         </div>
-        <button type="button" onClick={() => setActiveMeetingId(m.id)} style={btn(true)}>
-          {isLive ? t('join') : t('joinEarly')}
-        </button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+          {/* The meeting IS a team chat — join the conversation; absentees post here too. */}
+          {m.chatId != null && <TeamChatButton chatId={m.chatId} variant="labeled" label={t('teamChat')} />}
+          <button type="button" onClick={() => setActiveMeetingId(m.id)} style={btn(true)}>
+            {isLive ? t('join') : t('joinEarly')}
+          </button>
+        </div>
       </div>
     );
   }

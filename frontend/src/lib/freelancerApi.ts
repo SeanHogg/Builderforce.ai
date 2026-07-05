@@ -64,6 +64,22 @@ export interface FreelancerReview {
   reviewerName: string | null;
 }
 
+/** How a job is posted: an open project bid, a design gig, or a full-time role. */
+export type PostingType = 'project_bid' | 'design' | 'fte';
+/** How the work is billed once hired. */
+export type EngagementType = 'fixed_bid' | 'hourly' | 'fte';
+
+/** RAG-style AI evaluation scores (0..1) plus a 0..100 headline the UI shows as a chip. */
+export interface EvalScores {
+  faithfulness: number;
+  answerRelevance: number;
+  contextRelevance: number;
+  hallucinationRate: number;
+  overall: number;
+  method: string;
+  overall100: number;
+}
+
 export interface JobPosting {
   id: string;
   tenantId: number;
@@ -81,6 +97,12 @@ export interface JobPosting {
   proposalCount?: number;
   createdAt: string | null;
   myProposal?: { id: string; status: string } | null;
+  /** Marketplace posting shape — returned by GET /api/jobs/mine and /:id. */
+  postingType?: PostingType | null;
+  engagementType?: EngagementType | null;
+  requirements?: string | null;
+  /** Work item this job was published from, when minted via /marketplace/publish. */
+  sourceTicketId?: number | null;
 }
 
 export interface JobProposal {
@@ -94,6 +116,60 @@ export interface JobProposal {
   currency: string;
   status: 'submitted' | 'shortlisted' | 'accepted' | 'declined' | 'withdrawn';
   createdAt: string | null;
+  /** Latest AI-evaluation headline score (0..100), or null when never evaluated. */
+  lastEvalOverall?: number | null;
+  /** Courteous note left when the proposal was declined. */
+  declineReason?: string | null;
+}
+
+/** A marketplace posting attached to a work item (from /marketplace/publish). */
+export interface TicketPosting {
+  jobId: string;
+  ticketId: number;
+  title: string;
+  status: 'open' | 'closed' | 'filled';
+  postingType: PostingType | null;
+  engagementType: EngagementType | null;
+  visibility: 'public' | 'private';
+  createdAt: string | null;
+}
+
+/** A freelancer-submitted deliverable against an engagement/job. */
+export interface Deliverable {
+  id: string;
+  engagementId: string | null;
+  jobId: string | null;
+  ticketId: number | null;
+  freelancerUserId: string;
+  freelancerName: string | null;
+  title: string;
+  body: string | null;
+  status: 'submitted' | 'in_review' | 'accepted' | 'changes_requested';
+  lastEvalOverall: number | null;
+  createdAt: string | null;
+}
+
+/** A hired freelancer's read view of an engagement's project board. */
+export interface EngagementBoard {
+  engagementId: string;
+  tenantId: number;
+  tenantName: string | null;
+  projectId: number | null;
+  projectName: string | null;
+  projectKey: string | null;
+  title: string | null;
+  accessScope: string;
+}
+
+/** A task on an engagement board (worker view). */
+export interface EngagementTask {
+  id: number;
+  key: string;
+  title: string;
+  description: string | null;
+  status: string;
+  priority: string;
+  taskType: string;
 }
 
 export interface Notification {
@@ -424,7 +500,7 @@ export async function listMyJobs(): Promise<JobPosting[]> {
   return jsonOrThrow<JobPosting[]>(res, 'Failed to load jobs');
 }
 
-export async function postJob(input: { title: string; description?: string; discipline?: string; skills?: string[]; rateMinCents?: number; rateMaxCents?: number; projectId?: number; visibility?: 'public' | 'private' }): Promise<{ id: string }> {
+export async function postJob(input: { title: string; description?: string; requirements?: string; discipline?: string; skills?: string[]; postingType?: PostingType; engagementType?: EngagementType; rateMinCents?: number; rateMaxCents?: number; projectId?: number; visibility?: 'public' | 'private' }): Promise<{ id: string }> {
   const res = await fetch(`${AUTH_API_URL}/api/jobs`, { method: 'POST', headers: tenantHeaders(), body: JSON.stringify(input) });
   return jsonOrThrow(res, 'Failed to post job');
 }
@@ -459,9 +535,100 @@ export async function acceptProposal(pid: string): Promise<{ engagementId: strin
   return jsonOrThrow(res, 'Failed to accept proposal');
 }
 
-export async function declineProposal(pid: string): Promise<void> {
-  const res = await fetch(`${AUTH_API_URL}/api/jobs/proposals/${pid}/decline`, { method: 'POST', headers: tenantHeaders(false) });
+export async function declineProposal(pid: string, reason?: string): Promise<void> {
+  const res = await fetch(`${AUTH_API_URL}/api/jobs/proposals/${pid}/decline`, { method: 'POST', headers: tenantHeaders(), body: JSON.stringify({ reason }) });
   await jsonOrThrow(res, 'Failed to decline proposal');
+}
+
+/** Run the AI evaluator over a proposal; returns RAG scores + a 0..100 headline. */
+export async function evaluateProposal(pid: string): Promise<EvalScores> {
+  const res = await fetch(`${AUTH_API_URL}/api/jobs/proposals/${pid}/evaluate`, { method: 'POST', headers: tenantHeaders(false) });
+  return jsonOrThrow<EvalScores>(res, 'Failed to evaluate proposal');
+}
+
+/** Move a proposal to the shortlist (candidate advances). */
+export async function shortlistProposal(pid: string): Promise<void> {
+  const res = await fetch(`${AUTH_API_URL}/api/jobs/proposals/${pid}/shortlist`, { method: 'POST', headers: tenantHeaders(false) });
+  await jsonOrThrow(res, 'Failed to shortlist proposal');
+}
+
+// ---- Marketplace: publish a work item -----------------------------------
+export async function publishTicket(input: {
+  ticketId: number; postingType?: PostingType; engagementType?: EngagementType;
+  requirements?: string; rateMinCents?: number; rateMaxCents?: number; visibility?: 'public' | 'private';
+}): Promise<{ jobId: string; posting: TicketPosting }> {
+  const res = await fetch(`${AUTH_API_URL}/api/marketplace/publish`, { method: 'POST', headers: tenantHeaders(), body: JSON.stringify(input) });
+  return jsonOrThrow(res, 'Failed to publish to marketplace');
+}
+
+export async function unpublishTicket(ticketId: number): Promise<void> {
+  const res = await fetch(`${AUTH_API_URL}/api/marketplace/unpublish`, { method: 'POST', headers: tenantHeaders(), body: JSON.stringify({ ticketId }) });
+  await jsonOrThrow(res, 'Failed to unpublish');
+}
+
+export async function getTicketPosting(taskId: number): Promise<TicketPosting | null> {
+  const res = await fetch(`${AUTH_API_URL}/api/marketplace/ticket/${taskId}/posting`, { headers: tenantHeaders(false) });
+  const { posting } = await jsonOrThrow<{ posting: TicketPosting | null }>(res, 'Failed to load posting');
+  return posting;
+}
+
+// ---- Worker: engagement board (delivering work) -------------------------
+export async function listEngagementBoard(): Promise<EngagementBoard[]> {
+  const res = await fetch(`${AUTH_API_URL}/api/engagement-board`, { headers: webHeaders(false) });
+  const { engagements } = await jsonOrThrow<{ engagements: EngagementBoard[] }>(res, 'Failed to load engagements');
+  return engagements;
+}
+
+export async function listEngagementTasks(engagementId: string): Promise<EngagementTask[]> {
+  const res = await fetch(`${AUTH_API_URL}/api/engagement-board/${engagementId}/tasks`, { headers: webHeaders(false) });
+  const { tasks } = await jsonOrThrow<{ tasks: EngagementTask[] }>(res, 'Failed to load tasks');
+  return tasks;
+}
+
+export async function requestReview(engagementId: string, taskId: number): Promise<void> {
+  const res = await fetch(`${AUTH_API_URL}/api/engagement-board/${engagementId}/tasks/${taskId}/request-review`, { method: 'POST', headers: webHeaders(false) });
+  await jsonOrThrow(res, 'Failed to request review');
+}
+
+// ---- Deliverables --------------------------------------------------------
+export async function submitDeliverable(input: { engagementId: string; title: string; body: string; ticketId?: number }): Promise<{ id: string }> {
+  const res = await fetch(`${AUTH_API_URL}/api/deliverables`, { method: 'POST', headers: webHeaders(), body: JSON.stringify(input) });
+  return jsonOrThrow(res, 'Failed to submit deliverable');
+}
+
+export async function listMyDeliverables(engagementId?: string): Promise<Deliverable[]> {
+  const qs = engagementId ? `?engagementId=${encodeURIComponent(engagementId)}` : '';
+  const res = await fetch(`${AUTH_API_URL}/api/deliverables/mine${qs}`, { headers: webHeaders(false) });
+  return jsonOrThrow<Deliverable[]>(res, 'Failed to load deliverables');
+}
+
+export async function listEngagementDeliverables(engagementId: string): Promise<Deliverable[]> {
+  const res = await fetch(`${AUTH_API_URL}/api/deliverables/for-engagement/${engagementId}`, { headers: tenantHeaders(false) });
+  return jsonOrThrow<Deliverable[]>(res, 'Failed to load deliverables');
+}
+
+export async function listJobDeliverables(jobId: string): Promise<Deliverable[]> {
+  const res = await fetch(`${AUTH_API_URL}/api/deliverables/for-job/${jobId}`, { headers: tenantHeaders(false) });
+  return jsonOrThrow<Deliverable[]>(res, 'Failed to load deliverables');
+}
+
+export async function evaluateDeliverable(id: string): Promise<EvalScores> {
+  const res = await fetch(`${AUTH_API_URL}/api/deliverables/${id}/evaluate`, { method: 'POST', headers: tenantHeaders(false) });
+  return jsonOrThrow<EvalScores>(res, 'Failed to evaluate deliverable');
+}
+
+export async function setDeliverableStatus(id: string, status: 'accepted' | 'changes_requested'): Promise<void> {
+  const res = await fetch(`${AUTH_API_URL}/api/deliverables/${id}/status`, { method: 'POST', headers: tenantHeaders(), body: JSON.stringify({ status }) });
+  await jsonOrThrow(res, 'Failed to update deliverable');
+}
+
+// ---- Meetings (employer schedules a review / interview) ------------------
+export async function scheduleMeeting(input: {
+  title: string; kind: 'review' | 'interview'; scheduledAt?: string; durationMinutes?: number;
+  ticketId?: number; jobId?: string; engagementId?: string; projectId?: number;
+}): Promise<{ id: string }> {
+  const res = await fetch(`${AUTH_API_URL}/api/meetings`, { method: 'POST', headers: tenantHeaders(), body: JSON.stringify(input) });
+  return jsonOrThrow(res, 'Failed to schedule meeting');
 }
 
 // ---- Invoices + payments -------------------------------------------------

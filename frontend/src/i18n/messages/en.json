@@ -322,7 +322,8 @@
       "adminCompliance": "Compliance",
       "adminGrowth": "Growth",
       "adminLogs": "Logs",
-      "adminDeveloper": "Developer"
+      "adminDeveloper": "Developer",
+      "calendar": "Calendar"
     }
   },
   "alerts": {
@@ -978,7 +979,8 @@
       "loading": "Loading initiatives…",
       "saved": "Linked"
     },
-    "unassignedPortfolio": "Unassigned"
+    "unassignedPortfolio": "Unassigned",
+    "meetingsHeading": "Meetings"
   },
   "insights": {
     "loading": "Loading…",
@@ -1891,7 +1893,8 @@
         "logs": "Agent logs, execution timelines, and diagnostics across your workspace.",
         "qa": "Per-project QA automation — flows, generated tests, and CI runs.",
         "roles": "The roles your team fills — the board template's standard roles plus your custom ones — and who covers each: an agent, an employee, or a hire.",
-        "talent": "Manage the freelancers you've hired — engagements, job postings, timecard approvals, and invoices."
+        "talent": "Manage the freelancers you've hired — engagements, job postings, timecard approvals, and invoices.",
+        "calendar": "Team availability and scheduled meetings"
       }
     },
     "discipline": "Discipline",
@@ -1955,6 +1958,8 @@
       "namePlaceholder": "e.g. Platform Squad",
       "description": "Description",
       "descriptionPlaceholder": "What this team is responsible for",
+      "avatarUrl": "Avatar",
+      "avatarUrlPlaceholder": "Image URL (optional)",
       "titleFallback": "Team",
       "loading": "Loading…",
       "loadingTeams": "Loading teams…",
@@ -5643,7 +5648,27 @@
     "hireTitle": "Get hired",
     "hireSub": "Freelance profile & gigs",
     "accountTypeAria": "Account type",
-    "commonQuestions": "Common Questions"
+    "commonQuestions": "Common Questions",
+    "navSignIn": "Sign in",
+    "heading": "Create your account",
+    "subtitle": "Start building custom AI agents — free forever",
+    "pillLora": "🧠 LoRA Training",
+    "pillRegistry": "🤖 Agent Registry",
+    "pillEval": "🔬 AI Evaluation",
+    "nameLabel": "Name",
+    "nameOptional": "(optional)",
+    "namePlaceholder": "Jane Smith",
+    "emailLabel": "Email",
+    "passwordLabel": "Password",
+    "passwordPlaceholder": "Min. 8 chars",
+    "confirmLabel": "Confirm",
+    "terms": "I agree to the Terms of Use and Privacy Policy (see footer links below)",
+    "passwordsMismatch": "Passwords do not match",
+    "registrationFailed": "Registration failed",
+    "creating": "Creating account…",
+    "submit": "Create Account →",
+    "haveAccount": "Already have an account?",
+    "signInLink": "Sign in"
   },
   "welcomeRole": {
     "eyebrow": "Welcome",
@@ -6975,6 +7000,13 @@
     },
     "relatedHeading": "Related reading"
   },
+  "teamChat": {
+    "open": {
+      "project": "Team chat",
+      "team": "Team chat",
+      "broader": "Message the team"
+    }
+  },
   "meetings": {
     "title": "Meetings",
     "subtitle": "Schedule and join live video and audio sessions with your team.",
@@ -6990,6 +7022,7 @@
     "liveNow": "Live",
     "join": "Join",
     "joinEarly": "Join early",
+    "teamChat": "Team chat",
     "joinWithCamera": "Join with camera",
     "cameraOn": "Cameras on",
     "cameraError": "Camera/microphone unavailable: {error}",
@@ -7029,7 +7062,32 @@
     "connecting": "Connecting…",
     "liveCount": "{count, plural, one {# person live} other {# people live}}",
     "participants": "Participants",
-    "endForAll": "End for all"
+    "endForAll": "End for all",
+    "prev": "Previous",
+    "next": "Next",
+    "today": "Today",
+    "calWeek": "Week",
+    "calMonth": "Month",
+    "myAvailability": "My availability",
+    "newMeeting": "New meeting",
+    "available": "Available",
+    "legendScheduled": "Scheduled",
+    "legendLive": "Live",
+    "legendCalendar": "Calendar",
+    "legendAvailable": "Your hours",
+    "availabilityTitle": "My availability",
+    "weekdayDefault": "Weekdays 9–5",
+    "availabilitySubtitle": "Set the hours teammates can book you. Times are in your timezone.",
+    "timezone": "Timezone",
+    "unavailable": "Unavailable",
+    "remove": "Remove",
+    "addWindow": "Add hours",
+    "save": "Save",
+    "finding": "Finding…",
+    "findATime": "Find a time",
+    "noSlots": "No open times for everyone in the next two weeks.",
+    "kind_interview": "Interview",
+    "kind_review": "Review"
   },
   "brainLauncher": {
     "open": "Open Brain assistant",
@@ -7040,5 +7098,34 @@
     "meetBody": "Your AI co-builder for planning projects, generating specs, and shipping faster. Sign in to start a conversation.",
     "signIn": "Sign in",
     "createAccount": "Create account"
+  },
+  "login": {
+    "navSignUp": "Sign up free",
+    "heading": "Welcome back",
+    "subtitle": "Sign in to your Builderforce.ai account",
+    "emailLabel": "Email",
+    "passwordLabel": "Password",
+    "loginFailed": "Login failed",
+    "enterEmailFirst": "Enter your email address above first.",
+    "magicLinkFailed": "Failed to send magic link",
+    "signingIn": "Signing in…",
+    "submit": "Sign In →",
+    "magicLinkSent": "Check your email — a sign-in link is on its way.",
+    "sending": "Sending…",
+    "magicLinkButton": "Email me a magic link instead",
+    "noAccount": "Don't have an account?",
+    "signUpLink": "Sign up free",
+    "marketingHeading": "Build, Train & Deploy AI Agents",
+    "statFreeLabel": "Free forever",
+    "statSetupLabel": "Setup time",
+    "statCommissionLabel": "Commission",
+    "statParamsLabel": "Params in-browser",
+    "featWebgpu": "WebGPU LoRA fine-tuning in-browser",
+    "featDataset": "Dataset generation from a single prompt",
+    "featEval": "AI evaluation with structured quality metrics",
+    "featRegistry": "Publish to the global Workforce Registry",
+    "featOauth": "OAuth sign-in (Google, GitHub, LinkedIn, Microsoft)",
+    "featFree": "No credit card required — free forever",
+    "commonQuestions": "Common Questions"
   }
 }

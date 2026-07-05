@@ -92,6 +92,7 @@ export const NAV_GROUPS: NavGroup[] = [
       { id: '', labelKey: 'tab.workforce', icon: '👥' },
       { id: 'roles', labelKey: 'tab.roles', icon: '🎭' },
       { id: 'teams', labelKey: 'tab.teams', icon: '🧑‍🤝‍🧑' },
+      { id: 'calendar', labelKey: 'tab.calendar', icon: '📅' },
       { id: 'talent', labelKey: 'tab.talent', icon: '🤝' },
       { id: 'performance', labelKey: 'tab.performance', icon: '📊' },
       { id: 'chats', labelKey: 'tab.chats', icon: '💬' },

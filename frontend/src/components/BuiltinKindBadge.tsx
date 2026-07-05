@@ -19,7 +19,7 @@ import { useTranslations } from 'next-intl';
  */
 
 /** Built-in kinds we ship a localized label for; others fall back to a title-cased slug. */
-const KNOWN_KINDS = new Set(['validator', 'security']);
+const KNOWN_KINDS = new Set(['validator', 'security', 'product_manager', 'designer']);
 
 export function BuiltinKindBadge({ kind }: { kind?: string | null }) {
   const t = useTranslations('workforce.builtinKind');
