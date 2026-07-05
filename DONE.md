@@ -4,6 +4,30 @@
 
 ---
 
+## ✅ RESOLVED 2026-07-05 — Cross-surface session/task live-status indicators (api `2026.7.35` · VSIX `2026.7.36`)
+
+Multitasking across concurrent runs now reads at a glance on every surface: a session/ticket shows **actively-executing** (coral/blue pulse) or **needs-your-answer** (amber flag), from ONE server-side signal, so a session's status follows it wherever it's shown — switching chats on the web never stops the agent executing in the background.
+
+- **One canonical signal.** New `GET /api/runtime/attention` ([runtimeRoutes.ts](./api/src/presentation/routes/runtimeRoutes.ts), after `/active`) returns per-task **and** per-Brain-chat state `{ running | awaiting_input }` + counts. `running` = an execution pending/submitted/running; `awaiting_input` = an execution `paused` on `ask_human` (a pending `question`/`feedback` approval) — most-severe wins. Attribution reuses existing joins (`executions.task_id`; chat via `chat_ticket_links`). Uncached live surface (3 bounded, indexed queries, no N+1 — same rationale as `/active`).
+- **Web.** `runtimeApi.attention()` + [`useAttention`](./frontend/src/lib/useAttention.ts) (adaptive poll + project-room WS backstop) + shared self-hiding [`<AttentionDot>`](./frontend/src/components/AttentionDot.tsx) (colours mirror `AgentChip`'s `EXECUTION_STATUS_COLOR`). Wired into the BrainPanel chat-list rows + a FloatingBrain launcher "needs you" amber count badge (visible with the drawer closed). The board already surfaced this via `AgentChip` (paused = amber). New `attention.*` namespace, all 5 catalogs.
+- **VS Code.** `bfApi.getAttention()` + singleton [`AttentionPoller`](./clients/vscode/src/attention.ts) feeding BOTH the Sessions and Project & Tasks trees (repaints only on state change; re-polls on project switch / platform write / chat change). Rows overlay a live status icon+glyph — `running` → blue `loading~spin`, `awaiting_input` → amber `comment-unresolved` + `❓` prefix (done tasks now render green). First `ThemeColor` usage in the extension; new `bundle.l10n` strings in all 5 locales.
+- **Also localized** the previously-hardcoded `FloatingBrain` launcher + `BrainSignInCTA` copy ("Open Brain assistant", "Meet Brain", the value-prop, "Sign in"/"Create account") via a new `brainLauncher.*` namespace in all 5 catalogs — closing the i18n gap this work opened.
+- Verified: api `tsc --noEmit`, frontend `tsgo`, and the VS Code host + webview typecheck all clean (0 errors); VSIX packaged. Board `AgentChip` reused, no parallel state.
+
+---
+
+## ✅ RESOLVED 2026-07-05 — Evermind is a first-class IDE sidebar surface: inspect + train (brain-ui `2026.7.10` · VSIX `2026.7.36`)
+
+The per-project self-learning model is now a menu option in the VS Code sidebar (beside Sessions / Project & Tasks / Inbox / Insights) where a user can inspect what it has learned and steer its training — and the SAME surface renders on the web (one component, two hosts). Also resolves the prior gap where `EvermindScreen.tsx` failed typecheck because brain-ui didn't export the console.
+
+- **Shared console (DRY seam).** New presentational `<EvermindConsole>` in [`packages/brain-ui`](./packages/brain-ui/src/evermind/EvermindConsole.tsx) — adapter + label-bundle pattern (like `ChatTicketsPanel`), themed via cascading `--bf-*` vars for light/dark in both hosts. Exposes status stats (version / learned / queued / last-learned), the manager-gated training controls (seed-from-published-model, run-on-Evermind, learning connected/frozen, teacher picker), a **teach-from-transcript** box (paste an exemplar → `learn-text`), a **Learn now** flush, and a **recently-learned** inspection list. Controls disable (never hide) for non-managers.
+- **Web host.** [`ProjectEvermindPanel`](./frontend/src/components/ide/ProjectEvermindPanel.tsx) is now a thin wrapper: a `projectEvermindApi` adapter + next-intl label bundle over the shared console (localized in all 5 catalogs, `projectEvermind.*`).
+- **VS Code host.** New sidebar **webview view** `builderforce.evermind` ([evermindView.ts](./clients/vscode/src/evermindView.ts) `WebviewViewProvider`) renders the same bundle via `init.view='evermind'` ([EvermindScreen.tsx](./clients/vscode/webview/src/EvermindScreen.tsx) + bearer-fetch adapter), project-scoped (re-pushes init on project switch / auth change), manager-gate from `canManageActiveWorkspace`. Localized via `vscode.l10n` `ev.*` bundle + `view.evermind` in all 5 `package.nls`.
+- **Backend (inspection + distill-now).** `ProjectEvermindCoordinatorDO` gained a recent-contributions ring (populated at merge time, since run text is otherwise consumed/dropped), a `GET /recent`, and a `POST /flush` that force-drains the debounce queue via a shared `drain()` (refactored out of `alarm()`). New service `getProjectEvermindContributions` (read-through cached by the per-project version token) + `flushProjectEvermind`; routes `GET …/evermind/contributions` and manager-gated `POST …/evermind/flush`; `lastLearnedAt` added to the head. Teach rides the existing unified `learn-text` producer door.
+- Verified: api `tsgo` 0 new errors (lone pre-existing `oauthState.ts KeyUsage` nit), 47 evermind vitest pass, brain-ui + extension + webview typecheck clean, frontend `tsc` 0 errors, VSIX packaged.
+
+---
+
 ## ✅ RESOLVED 2026-07-05 — Live video/audio collaboration: meetings, cameras, calendars (api `2026.7.36` · frontend `2026.7.29`)
 
 Teams can now see and hear each other, not just co-edit a board. Managers can turn cameras on for the whole round-table; anyone can start an ad-hoc or direct call, schedule a meeting, and connect their calendar — for standups, planning, retros or ad-hoc.

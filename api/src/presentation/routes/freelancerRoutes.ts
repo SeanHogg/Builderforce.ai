@@ -34,6 +34,69 @@ import type { Env, HonoEnv } from '../../env';
 export const FREELANCER_PUBLIC_LIST_CACHE_KEY = 'fl:public:list';
 const PUBLIC_LIST_TTL = 120;
 
+/** Cache key for a freelancer's reputation stat block. Exported so the engagement /
+ *  invoice writers invalidate the SAME key (one format, no drift). */
+export function freelancerStatsCacheKey(userId: string): string {
+  return `fl:stats:${userId}`;
+}
+// Stats are an aggregate over continuously-streaming activity signals, so they are
+// TTL-bounded (not per-write invalidated) — a signal-level bust would fire on every
+// heartbeat. The award/earnings/proposal counts ARE invalidated on their writes.
+const STATS_TTL = 180;
+
+/** The reputation numbers shown on a for-hire profile: how much the worker leans on
+ *  AI, how active they've been, work won vs. in-flight bids, and lifetime earnings. */
+export interface FreelancerStats {
+  aiActions: number;         // AI/agent-driven signals (trailing 90d)
+  activitySignals: number;   // all activity signals (trailing 90d)
+  activeDays: number;        // distinct days with activity (trailing 90d)
+  projectsAwarded: number;   // engagements ever hired (work won)
+  activeEngagements: number; // engagements currently active
+  proposalsActive: number;   // open bids (submitted | shortlisted)
+  earnedToDateCents: number; // lifetime paid earnings
+  currency: string;
+}
+
+/** Compute (and cache) a freelancer's stat block in ONE DB round-trip. Shared by the
+ *  owner's own profile (GET /me) and the public detail (GET /:id) so both render the
+ *  identical numbers. `fallbackCurrency` is used when the worker has no paid invoice yet. */
+async function computeFreelancerStats(env: HonoEnv['Bindings'], userId: string, fallbackCurrency: string): Promise<FreelancerStats> {
+  return getOrSetCached(env as Env, freelancerStatsCacheKey(userId), async () => {
+    const sql = neon(env.NEON_DATABASE_URL);
+    const [r] = await sql`
+      SELECT
+        (SELECT COUNT(*) FROM freelancer_engagements e
+           WHERE e.freelancer_user_id = ${userId} AND e.hired_at IS NOT NULL)::int AS awarded,
+        (SELECT COUNT(*) FROM freelancer_engagements e
+           WHERE e.freelancer_user_id = ${userId} AND e.status = 'active' AND e.terminated_at IS NULL)::int AS active_eng,
+        (SELECT COUNT(*) FROM job_proposals jp
+           WHERE jp.freelancer_user_id = ${userId} AND jp.status IN ('submitted', 'shortlisted'))::int AS proposals_active,
+        (SELECT COALESCE(SUM(amount_cents), 0) FROM freelancer_invoices i
+           WHERE i.freelancer_user_id = ${userId} AND i.status = 'paid')::bigint AS earned_cents,
+        (SELECT i.currency FROM freelancer_invoices i
+           WHERE i.freelancer_user_id = ${userId} AND i.status = 'paid'
+           ORDER BY i.paid_at DESC NULLS LAST LIMIT 1) AS earned_currency,
+        (SELECT COUNT(*) FROM activity_signals s
+           WHERE s.user_id = ${userId} AND s.occurred_at >= now() - interval '90 days')::int AS activity_signals,
+        (SELECT COUNT(DISTINCT date_trunc('day', s.occurred_at)) FROM activity_signals s
+           WHERE s.user_id = ${userId} AND s.occurred_at >= now() - interval '90 days')::int AS active_days,
+        (SELECT COUNT(*) FROM activity_signals s
+           WHERE s.user_id = ${userId} AND s.occurred_at >= now() - interval '90 days'
+             AND (s.source IN ('vscode', 'agent') OR s.kind IN ('agent_run', 'agent_message', 'tool_exec')))::int AS ai_actions
+    `;
+    return {
+      aiActions: Number(r?.ai_actions ?? 0),
+      activitySignals: Number(r?.activity_signals ?? 0),
+      activeDays: Number(r?.active_days ?? 0),
+      projectsAwarded: Number(r?.awarded ?? 0),
+      activeEngagements: Number(r?.active_eng ?? 0),
+      proposalsActive: Number(r?.proposals_active ?? 0),
+      earnedToDateCents: Number(r?.earned_cents ?? 0),
+      currency: (r?.earned_currency as string) ?? fallbackCurrency,
+    };
+  }, { kvTtlSeconds: STATS_TTL });
+}
+
 const DISCIPLINES = ['developer', 'dba', 'designer', 'devops', 'qa', 'pm', 'data', 'security', 'other'] as const;
 const VISIBILITIES = ['public', 'private'] as const;
 const AVAILABILITIES = ['open', 'limited', 'unavailable'] as const;
@@ -242,8 +305,10 @@ export function createFreelancerRoutes(): Hono<HonoEnv> {
         FROM freelancer_profiles p JOIN users u ON u.id = p.user_id WHERE p.user_id = ${userId}
       `;
       if (!fresh) return c.json({ error: 'Profile unavailable' }, 500);
-      return c.json({ ...mapPublicProfile(fresh), published: false, hiredVideoConnected: Boolean(fresh.hired_video_user_id), email: fresh.email });
+      const stats = await computeFreelancerStats(c.env, userId, (fresh.currency as string) ?? 'USD');
+      return c.json({ ...mapPublicProfile(fresh), published: false, hiredVideoConnected: Boolean(fresh.hired_video_user_id), email: fresh.email, stats });
     }
+    const stats = await computeFreelancerStats(c.env, userId, (row.currency as string) ?? 'USD');
     return c.json({
       ...mapPublicProfile(row),
       published: Boolean(row.published),
@@ -254,6 +319,7 @@ export function createFreelancerRoutes(): Hono<HonoEnv> {
       // a linked hired.video account or a cached native/hired extract.
       canAutofill: Boolean(row.hired_video_user_id) || Boolean(row.resume_extract),
       email: row.email,
+      stats,
     });
   });
 
@@ -598,9 +664,11 @@ export function createFreelancerRoutes(): Hono<HonoEnv> {
       FROM freelancer_reviews rv LEFT JOIN users ru ON ru.id = rv.reviewer_user_id
       WHERE rv.freelancer_user_id = ${uid} ORDER BY rv.created_at DESC LIMIT 20
     ` as unknown as Record<string, unknown>[];
+    const stats = await computeFreelancerStats(c.env, uid, (row.currency as string) ?? 'USD');
     return c.json({
       ...mapPublicProfile(row),
       embedUrl,
+      stats,
       reviews: reviews.map((r) => ({ rating: Number(r.rating), comment: r.comment ?? null, createdAt: r.created_at, reviewerName: r.reviewer_name ?? null })),
     });
   });
@@ -696,6 +764,7 @@ export function createEngagementRoutes(db: Db): Hono<HonoEnv> {
         WHERE id = ${existing.id}
       `;
       await notify(sql(c.env), c.env, { userId: b.freelancerUserId, tenantId, kind: notifyKind, title: `${tenantName} updated your engagement`, body: b.note ?? null, ref: existing.id as string });
+      await invalidateCached(c.env as Env, freelancerStatsCacheKey(b.freelancerUserId));
       return c.json({ id: existing.id, status, reused: true });
     }
     const id = crypto.randomUUID();
@@ -704,6 +773,7 @@ export function createEngagementRoutes(db: Db): Hono<HonoEnv> {
       VALUES (${id}, ${tenantId}, ${projectId}, ${b.freelancerUserId}, ${status}, ${rate}, ${prof.currency ?? 'USD'}, ${b.title ?? null}, ${b.note ?? null}, ${actor}, ${status === 'active' ? new Date().toISOString() : null})
     `;
     await notify(sql(c.env), c.env, { userId: b.freelancerUserId, tenantId, kind: notifyKind, title: status === 'active' ? `${tenantName} hired you` : `${tenantName} wants to ${status === 'interviewing' ? 'interview' : 'engage'} you`, body: b.title ?? b.note ?? null, ref: id });
+    await invalidateCached(c.env as Env, freelancerStatsCacheKey(b.freelancerUserId));
 
     // Unified audit stream: a hire / engagement decision, attributed to the
     // manager who made it. Target is the external talent + the new engagement.
@@ -740,10 +810,11 @@ export function createEngagementRoutes(db: Db): Hono<HonoEnv> {
         hired_at = CASE WHEN ${status} = 'active' AND hired_at IS NULL THEN NOW() ELSE hired_at END,
         updated_at = NOW()
       WHERE id = ${id} AND tenant_id = ${tenantId} AND terminated_at IS NULL
-      RETURNING id, status
+      RETURNING id, status, freelancer_user_id
     `;
     const updated = rows[0];
     if (!updated) return c.json({ error: 'Not found' }, 404);
+    await invalidateCached(c.env as Env, freelancerStatsCacheKey(updated.freelancer_user_id as string));
     return c.json({ id, status: updated.status });
   });
 
@@ -763,6 +834,7 @@ export function createEngagementRoutes(db: Db): Hono<HonoEnv> {
     if (rows[0]) {
       const [ten] = await sql(c.env)`SELECT name FROM tenants WHERE id = ${tenantId}`;
       await notify(sql(c.env), c.env, { userId: rows[0].freelancer_user_id as string, tenantId, kind: 'terminated', title: `${(ten?.name as string) ?? 'A workspace'} ended your engagement`, body: reason, ref: id });
+      await invalidateCached(c.env as Env, freelancerStatsCacheKey(rows[0].freelancer_user_id as string));
     }
     return c.json({ ok: true });
   });
@@ -785,6 +857,7 @@ export function createEngagementRoutes(db: Db): Hono<HonoEnv> {
     `;
     const row = rows[0];
     if (!row) return c.json({ error: 'Not found or not pending' }, 404);
+    await invalidateCached(c.env as Env, freelancerStatsCacheKey(userId));
     const [me] = await sql(c.env)`SELECT display_name FROM users WHERE id = ${userId}`;
     if (row.created_by_user_id) {
       await notify(sql(c.env), c.env, {

@@ -88,9 +88,11 @@ export function createMeetingRoutes(db: Db): Hono<HonoEnv> {
     if (view === 'upcoming') {
       // Upcoming or live: not ended/cancelled, and (no schedule OR scheduled in the
       // future OR still live).
-      const cutoff = new Date(Date.now() - 60 * 60 * 1000); // keep meetings that started within the last hour
+      // Keep every live meeting, plus scheduled ones that are undated or still in
+      // the future / within the last hour (grace for a just-started standup).
+      const cutoff = new Date(Date.now() - 60 * 60 * 1000);
       conds.push(inArray(meetings.status, ['scheduled', 'live']));
-      conds.push(or(isNull(meetings.scheduledAt), gte(meetings.scheduledAt, cutoff))!);
+      conds.push(or(eq(meetings.status, 'live'), isNull(meetings.scheduledAt), gte(meetings.scheduledAt, cutoff))!);
     }
     const rows = await db.select().from(meetings).where(and(...conds)).orderBy(desc(meetings.scheduledAt), desc(meetings.createdAt)).limit(100);
 

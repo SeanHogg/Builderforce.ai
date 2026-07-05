@@ -59,6 +59,10 @@ export const agentTypeEnum = pgEnum('agent_type', [
 // into child tasks (parent_task_id) — see migration 0112.
 export const taskTypeEnum = pgEnum('task_type', [
   'task', 'epic', 'gap', 'security',
+  // Hireable work-item kinds (migration 0293): a full product/scope brief a
+  // Product-Manager agent authors + publishes for a fixed-bid build, and a UI/UX
+  // design (or design-review) gig. Both are publishable to the Gig Marketplace.
+  'product', 'design',
 ]);
 
 export const tenantStatusEnum = pgEnum('tenant_status', [
@@ -930,6 +934,12 @@ export const tasks = pgTable('tasks', {
   // PRD/spec link moved to the task_specs junction (0098): a task references 1..N
   // project PRDs (one optional primary) — see `taskSpecs` below.
   archived:          boolean('archived').notNull().default(false),
+  /** Gig Marketplace (0293): this work item is published (or publishable) as a
+   *  hireable gig, and the back-ref to the published posting. Canonical link is
+   *  jobPostings.sourceTicketId; jobPostingId is a denormalized convenience kept in
+   *  sync on publish so the board can badge "Published" without a reverse scan. */
+  hireable:          boolean('hireable').notNull().default(false),
+  jobPostingId:      varchar('job_posting_id', { length: 36 }),
   /** Lifecycle metrics (migration 0117). completedAt is the REAL timestamp the
    *  task entered a done-class lane (replaces the updatedAt proxy); null once it
    *  leaves. lastWorkedAt is the latest "work stopped" signal (baseline for
@@ -3460,9 +3470,14 @@ export const meetings = pgTable('meetings', {
   segmentId:        uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),
   // Nullable: an ad-hoc / direct call need not belong to a project.
   projectId:        integer('project_id').references(() => projects.id, { onDelete: 'set null' }),
-  kind:             varchar('kind', { length: 16 }).notNull().default('adhoc'),        // standup|planning|retrospective|adhoc|direct
+  kind:             varchar('kind', { length: 16 }).notNull().default('adhoc'),        // standup|planning|retrospective|adhoc|direct|interview|review
   title:            varchar('title', { length: 255 }).notNull(),
   description:      text('description'),
+  /** Gig Marketplace (0293): track a review/interview meeting against the exact
+   *  work item, job posting, or engagement it concerns (all optional back-links). */
+  ticketId:         integer('ticket_id').references((): AnyPgColumn => tasks.id, { onDelete: 'set null' }),
+  jobId:            varchar('job_id', { length: 36 }),
+  engagementId:     varchar('engagement_id', { length: 36 }),
   scheduledAt:      timestamp('scheduled_at', { withTimezone: true }),                 // null = start-now
   durationMinutes:  integer('duration_minutes').notNull().default(30),
   status:           varchar('status', { length: 16 }).notNull().default('scheduled'),  // scheduled|live|ended|cancelled
@@ -5830,6 +5845,10 @@ export const freelancerEngagements = pgTable('freelancer_engagements', {
   projectId:          integer('project_id').references(() => projects.id, { onDelete: 'set null' }),
   freelancerUserId:   varchar('freelancer_user_id', { length: 36 }).notNull().references(() => users.id, { onDelete: 'cascade' }),
   status:             varchar('status', { length: 20 }).notNull().default('invited'), // invited|interviewing|active|declined|terminated
+  /** Gig Marketplace (0293): how much of the employer workspace an ACTIVE engagement
+   *  grants this freelancer — enforced by EngagementAccessService. Default 'project'
+   *  = view + work the engaged project's board (incl. moving a ticket to In Review). */
+  accessScope:        varchar('access_scope', { length: 20 }).notNull().default('project'), // project|board_readonly|tenant
   rateCents:          integer('rate_cents'),
   currency:           varchar('currency', { length: 3 }).notNull().default('USD'),
   title:              varchar('title', { length: 200 }),
@@ -5932,6 +5951,13 @@ export const jobPostings = pgTable('job_postings', {
   currency:         varchar('currency', { length: 3 }).notNull().default('USD'),
   status:           varchar('status', { length: 20 }).notNull().default('open'),      // open|closed|filled
   visibility:       varchar('visibility', { length: 10 }).notNull().default('public'), // public|private
+  /** Gig Marketplace (0293): the work item this gig was published FROM (one-click
+   *  "Publish to Marketplace"), the gig shape, the billing/engagement shape, and the
+   *  free-text acceptance criteria a proposal is AI-evaluated against. */
+  sourceTicketId:   integer('source_ticket_id').references(() => tasks.id, { onDelete: 'set null' }),
+  postingType:      varchar('posting_type', { length: 20 }).notNull().default('project_bid'), // project_bid|design|fte
+  engagementType:   varchar('engagement_type', { length: 20 }),                        // fixed_bid|hourly|fte
+  requirements:     text('requirements'),
   createdByUserId:  varchar('created_by_user_id', { length: 36 }).references(() => users.id, { onDelete: 'set null' }),
   closedAt:         timestamp('closed_at'),
   createdAt:        timestamp('created_at').notNull().defaultNow(),
@@ -5950,10 +5976,58 @@ export const jobProposals = pgTable('job_proposals', {
   rateCents:         integer('rate_cents'),
   currency:          varchar('currency', { length: 3 }).notNull().default('USD'),
   status:            varchar('status', { length: 20 }).notNull().default('submitted'), // submitted|shortlisted|accepted|declined|withdrawn
+  /** Gig Marketplace (0293): 0..100 cached overall from the latest AI proposal
+   *  evaluation (list display), and the courteous decline message shown to the
+   *  candidate when they aren't selected. */
+  lastEvalOverall:   integer('last_eval_overall'),
+  declineReason:     text('decline_reason'),
   createdAt:         timestamp('created_at').notNull().defaultNow(),
   updatedAt:         timestamp('updated_at').notNull().defaultNow(),
 }, (t) => ({
   byFreelancer: index('idx_proposals_freelancer').on(t.freelancerUserId),
+}));
+
+/** Polymorphic AI evaluation of a proposal (a bid) OR a deliverable proposal —
+ *  the LLM-as-judge (semanticEval) verdict scoring it against the posting's
+ *  requirements/acceptance criteria. History-preserving (one row per eval run). */
+export const proposalEvaluations = pgTable('proposal_evaluations', {
+  id:                 varchar('id', { length: 36 }).primaryKey(),
+  tenantId:           integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  subjectType:        varchar('subject_type', { length: 20 }).notNull(),   // job_proposal|deliverable
+  subjectId:          varchar('subject_id', { length: 36 }).notNull(),
+  jobId:              varchar('job_id', { length: 36 }).references(() => jobPostings.id, { onDelete: 'set null' }),
+  faithfulness:       real('faithfulness'),
+  answerRelevance:    real('answer_relevance'),
+  contextRelevance:   real('context_relevance'),
+  hallucinationRate:  real('hallucination_rate'),
+  overall:            real('overall').notNull().default(0),                // 0..1 composite
+  method:             varchar('method', { length: 10 }).notNull().default('lexical'), // llm|lexical
+  summary:            text('summary'),
+  evaluatedByUserId:  varchar('evaluated_by_user_id', { length: 36 }).references(() => users.id, { onDelete: 'set null' }),
+  createdAt:          timestamp('created_at').notNull().defaultNow(),
+}, (t) => ({
+  bySubject: index('idx_proposal_evals_subject').on(t.subjectType, t.subjectId),
+  byTenant:  index('idx_proposal_evals_tenant').on(t.tenantId, t.createdAt),
+}));
+
+/** A hired worker "presents a proposal" against the published scope — tied to the
+ *  engagement (+ optional ticket / posting). AI-evaluable via proposalEvaluations. */
+export const deliverableProposals = pgTable('deliverable_proposals', {
+  id:               varchar('id', { length: 36 }).primaryKey(),
+  tenantId:         integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  engagementId:     varchar('engagement_id', { length: 36 }).notNull().references(() => freelancerEngagements.id, { onDelete: 'cascade' }),
+  ticketId:         integer('ticket_id').references(() => tasks.id, { onDelete: 'set null' }),
+  jobId:            varchar('job_id', { length: 36 }).references(() => jobPostings.id, { onDelete: 'set null' }),
+  authorUserId:     varchar('author_user_id', { length: 36 }).notNull().references(() => users.id, { onDelete: 'cascade' }),
+  title:            varchar('title', { length: 200 }).notNull(),
+  body:             text('body'),
+  status:           varchar('status', { length: 20 }).notNull().default('submitted'), // submitted|accepted|changes_requested|withdrawn
+  lastEvalOverall:  integer('last_eval_overall'),
+  createdAt:        timestamp('created_at').notNull().defaultNow(),
+  updatedAt:        timestamp('updated_at').notNull().defaultNow(),
+}, (t) => ({
+  byEngagement: index('idx_deliverable_proposals_engagement').on(t.engagementId),
+  byTenant:     index('idx_deliverable_proposals_tenant').on(t.tenantId, t.createdAt),
 }));
 
 /** Employer's rating of a freelancer for an engagement (reputation). One per engagement. */
