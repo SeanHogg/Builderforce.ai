@@ -31,8 +31,9 @@ const REVIEW_LANE_KEY = '__validator_review__';
 
 /**
  * The tenant's Validator agent id, or null when the tenant has none. A Validator is
- * an active ide_agents row that is either the seeded/hired Validator (id ends
- * '-validator') or named 'Validator'. Cheap indexed lookup.
+ * an active ide_agents row marked `builtin_kind='validator'` (migration 0289) —
+ * a stable marker independent of the display name, so a team can rename the agent
+ * (e.g. to "Alice") without breaking auto-review. Cheap indexed lookup.
  */
 export async function findTenantValidatorRef(db: Db, tenantId: number): Promise<string | null> {
   const [row] = await db
@@ -41,7 +42,7 @@ export async function findTenantValidatorRef(db: Db, tenantId: number): Promise<
     .where(and(
       eq(ideAgents.tenantId, tenantId),
       eq(ideAgents.status, 'active'),
-      or(sql`${ideAgents.id} LIKE '%-validator'`, eq(ideAgents.name, 'Validator')),
+      eq(ideAgents.builtinKind, 'validator'),
     ))
     .limit(1);
   return row?.id ?? null;
@@ -110,7 +111,7 @@ export async function runValidatorReviewSweep(env: Env): Promise<ValidatorSweepR
     .from(ideAgents)
     .where(and(
       eq(ideAgents.status, 'active'),
-      or(sql`${ideAgents.id} LIKE '%-validator'`, eq(ideAgents.name, 'Validator')),
+      eq(ideAgents.builtinKind, 'validator'),
     ));
   const refByTenant = new Map<number, string>();
   for (const v of validators) if (!refByTenant.has(v.tenantId)) refByTenant.set(v.tenantId, v.id);

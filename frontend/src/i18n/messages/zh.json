@@ -831,8 +831,7 @@
     "subtitle": "将成本、交付、DORA、AI 效能和 OKR 达成情况从项目向上汇总到举措和项目组合。",
     "tabs": {
       "rollup": "汇总",
-      "structure": "结构",
-      "okrs": "OKR",
+      "structure": "项目组合与 OKR",
       "cost": "资本/运营支出"
     },
     "scope": {
@@ -840,18 +839,11 @@
       "workspace": "工作区（组织级）",
       "byProject": "按项目…"
     },
-    "scopeWord": {
-      "portfolio": "项目组合",
-      "initiative": "举措",
-      "project": "项目",
-      "workspace": "工作区"
-    },
     "loading": "加载中…",
     "loadingRollup": "正在加载汇总…",
     "loadingOkrs": "正在加载 OKR…",
     "loadingInitiatives": "正在加载举措…",
     "emptyRollup": "请在“结构”标签页创建项目组合以查看汇总。",
-    "emptyOkrs": "请在“结构”标签页创建项目组合以添加 OKR。",
     "stat": {
       "projects": "项目",
       "initiativesCount": "{count} 个举措",
@@ -889,7 +881,8 @@
       "byInitiative": "按举措",
       "criticalPath": "关键路径",
       "dependencies": "依赖关系",
-      "byPortfolio": "按项目组合"
+      "byPortfolio": "按项目组合",
+      "initiatives": "举措"
     },
     "col": {
       "initiative": "举措",
@@ -914,7 +907,6 @@
       "newInitiativeName": "新举措名称",
       "addInitiative": "添加举措",
       "noInitiatives": "尚无举措。",
-      "unassignedInitiatives": "未分配的举措",
       "noProjectsLinked": "尚未关联项目。",
       "unlink": "取消关联",
       "linkProject": "+ 关联项目…",
@@ -928,14 +920,14 @@
       "movePortfolio": "移动到其他项目组合",
       "unassignedOption": "— 未分配 —",
       "dragHint": "拖动到项目组合以重新分配",
-      "dropHere": "拖放到此处以分配到该项目组合"
+      "dropHere": "拖放到此处以分配到该项目组合",
+      "dropObjectiveHere": "将目标拖放到此处以分配到该项目组合",
+      "unassigned": "未分配",
+      "unassignedHint": "尚未归入任何项目组合的举措和目标——拖动到某个项目组合以分配，或使用下拉菜单。"
     },
     "okr": {
       "newObjective": "新建目标",
       "objectivePlaceholder": "目标",
-      "periodPlaceholder": "2026-Q3",
-      "add": "添加",
-      "objectiveHint": "目标关联到此{scope}。在下方添加可衡量的关键结果；进度会向上汇总到仪表板。",
       "noObjectives": "此范围尚无目标。",
       "newKeyResult": "新关键结果",
       "target": "目标值",
@@ -946,8 +938,6 @@
       "convertToEpic": "转换为史诗",
       "convertToEpicHint": "将此目标转换回看板史诗",
       "convertToEpicConfirm": "将此目标转换为看板史诗？其关键结果将被丢弃，任何已链接的任务将重新归属到新史诗下。",
-      "startDate": "开始日期",
-      "endDate": "结束日期",
       "costClass": "类别",
       "capex": "资本支出",
       "opex": "运营支出",
@@ -967,7 +957,8 @@
       "ownerWorkspace": "工作区（未分配）",
       "ownerPortfolio": "项目组合",
       "ownerInitiative": "举措",
-      "ownerProject": "项目"
+      "ownerProject": "项目",
+      "dragHint": "拖动到项目组合以重新分配"
     },
     "projectLink": {
       "title": "PMO 举措",
@@ -1938,6 +1929,10 @@
       "runtime": "编辑器",
       "online": "在线",
       "offline": "离线"
+    },
+    "builtinKind": {
+      "validator": "验证员",
+      "security": "安全"
     },
     "teams": {
       "heading": "团队",
@@ -5818,5 +5813,52 @@
     "confirmRevoke": "吊销此 API 密钥？使用它的应用将立即停止工作。",
     "errCreate": "创建密钥失败",
     "errRevoke": "吊销失败"
+  },
+  "audit": {
+    "title": "活动与审计记录",
+    "subtitle": "团队中的每一次变更——谁在何时对什么做了什么。",
+    "loading": "正在加载活动…",
+    "empty": "暂无活动。工作区中的操作将在发生时显示在此处。",
+    "loadMore": "加载更多",
+    "filter": {
+      "all": "全部"
+    },
+    "actor": {
+      "human": "团队成员",
+      "hire": "外部人才",
+      "cloud_agent": "云智能体",
+      "host_agent": "本地智能体",
+      "system": "系统",
+      "unknown": "未知"
+    },
+    "verb": {
+      "task": {
+        "created": "创建了工单",
+        "updated": "更新了工单",
+        "status_changed": "移动了工单",
+        "assigned": "重新分配了工单",
+        "moved": "将工单移动到其他项目",
+        "deleted": "删除了工单"
+      },
+      "code": {
+        "changed": "更改了代码"
+      },
+      "deploy": {
+        "recorded": "记录了一次部署",
+        "failed": "报告了一次失败的部署"
+      },
+      "role": {
+        "assigned": "分配了角色"
+      },
+      "engagement": {
+        "created": "邀请了外部人才"
+      },
+      "member": {
+        "hired": "雇用了外部人才"
+      },
+      "doc": {
+        "published": "发布了文档"
+      }
+    }
   }
 }

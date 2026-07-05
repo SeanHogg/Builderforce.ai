@@ -3,6 +3,7 @@
 import { useTranslations } from 'next-intl';
 import { WorkforceMetricsContent } from './WorkforceMetricsContent';
 import { ContributorsView } from '@/components/contributors/ContributorsView';
+import { AuditTrailPanel } from '@/components/contributors/AuditTrailPanel';
 
 /**
  * Performance tab — the merged effectiveness/engagement scorecards (formerly the
@@ -26,6 +27,10 @@ export function PerformanceView() {
         </h2>
         <p style={{ fontSize: 13, color: 'var(--muted)', margin: '0 0 16px' }}>{t('activitySub')}</p>
         <ContributorsView />
+      </section>
+
+      <section>
+        <AuditTrailPanel />
       </section>
     </div>
   );

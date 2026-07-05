@@ -38,6 +38,13 @@ export interface BrainPersistenceAdapter {
     messages: Array<{ role: string; content: string; metadata?: string }>,
   ): Promise<BrainMessage[]>;
   setMessageFeedback(messageId: number, feedback: 'up' | 'down' | null): Promise<unknown>;
+  /**
+   * Ask an invited agent participant to reply — a chat-scoped run that answers AS
+   * the addressed agent and returns the posted assistant turn (attributed to it via
+   * metadata.authoredBy). Called after a user directs a message to an @agent.
+   * Optional: when absent, directing to an agent just posts the turn (legacy).
+   */
+  requestAgentReply?(chatId: number, input: { agentRef: string; agentName?: string }): Promise<BrainMessage>;
   upload(file: File): Promise<{ key: string; name: string; type: string }>;
   uploadUrl(key: string): string;
   /**

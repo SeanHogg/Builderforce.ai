@@ -2,6 +2,11 @@
 
 All notable changes to the BuilderForce VS Code extension are documented here.
 
+## [2026.7.31] — Every kind of work links, and the assistant can create any of them
+
+- **Specs and PRDs now link to a chat too.** Open a spec from the PRDs page and it's pinned to the conversation with its live status — joining tasks, epics, gaps, OKRs, initiatives, portfolios, and roadmap items. Every kind of work you plan can now be attached to any chat, from its page or the link picker.
+- **Ask the assistant to create anything on your roadmap.** It can now add, update, and tick off roadmap items directly (e.g. "add a 'Billing v2' item to the Now column and mark the old one shipped"), and log a Gap as a first-class follow-up — no more leaving the editor to shape the plan. Whatever it creates shows up on your board and roadmap immediately.
+
 ## [2026.7.29] — Open an item, and the chat is already tied to it
 
 - **Click a roadmap item, task, epic, gap, or OKR and the chat knows exactly what it's about.** Opening a work item in a chat now links that item to the conversation automatically — you see it pinned at the top of the chat with its live progress, instead of a blank "no tickets linked yet". So every chat carries the context of the item that started it, the assistant works against the right thing, and you can jump from the item to every conversation about it.

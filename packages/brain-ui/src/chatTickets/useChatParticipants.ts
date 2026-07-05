@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { DirectedRecipient } from '@seanhogg/builderforce-brain-embedded';
-import type { ChatTicketsAdapter, AgentOptionVM, ChatAgentVM } from './types';
+import type { ChatTicketsAdapter, AgentOptionVM, ChatAgentVM, ChatMemberVM } from './types';
 
 /**
  * The invited participants of a chat, resolved to display names, as addressable
@@ -19,6 +19,7 @@ export function useChatParticipants(
 ): DirectedRecipient[] {
   const [pool, setPool] = useState<AgentOptionVM[]>([]);
   const [invited, setInvited] = useState<ChatAgentVM[]>([]);
+  const [members, setMembers] = useState<ChatMemberVM[]>([]);
 
   useEffect(() => {
     let ok = true;
@@ -27,18 +28,25 @@ export function useChatParticipants(
   }, [adapter]);
 
   useEffect(() => {
-    if (chatId == null) { setInvited([]); return; }
+    if (chatId == null) { setInvited([]); setMembers([]); return; }
     let ok = true;
     adapter.listAgents(chatId).then((a) => { if (ok) setInvited(a); }).catch(() => { if (ok) setInvited([]); });
+    adapter.listMembers(chatId).then((m) => { if (ok) setMembers(m); }).catch(() => { if (ok) setMembers([]); });
     return () => { ok = false; };
   }, [adapter, chatId, refreshSignal]);
 
   return useMemo(
-    () => invited.map((a) => ({
-      kind: 'agent' as const,
-      ref: a.agentRef,
-      name: pool.find((p) => p.ref === a.agentRef)?.name ?? a.agentRef,
-    })),
-    [invited, pool],
+    () => [
+      ...invited.map((a) => ({
+        kind: 'agent' as const,
+        ref: a.agentRef,
+        name: pool.find((p) => p.ref === a.agentRef)?.name ?? a.agentRef,
+      })),
+      // Active human members are addressable too (kind='human', ref=user id).
+      ...members
+        .filter((m) => m.status === 'active' && m.userId)
+        .map((m) => ({ kind: 'human' as const, ref: m.userId as string, name: m.name })),
+    ],
+    [invited, pool, members],
   );
 }

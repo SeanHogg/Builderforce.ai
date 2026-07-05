@@ -42,6 +42,16 @@ export interface ChatAgentVM {
   role: string;
 }
 
+/** A human participant of the chat (shared access / audience, migration 0288). */
+export interface ChatMemberVM {
+  id: number;
+  userId: string | null;
+  name: string;
+  email: string;
+  /** 'active' (joined) | 'pending' (email invite, not yet an account). */
+  status: string;
+}
+
 /** A selectable agent from the tenant pool. */
 export interface AgentOptionVM {
   ref: string;
@@ -77,6 +87,11 @@ export interface ChatTicketsAdapter {
   inviteAgent(chatId: number, input: { agentRef: string; agentKind: string }): Promise<void>;
   removeAgent(chatId: number, assignmentId: string): Promise<void>;
   loadAgentPool(): Promise<AgentOptionVM[]>;
+  /** Human participants of the chat (shared access, migration 0288). */
+  listMembers(chatId: number): Promise<ChatMemberVM[]>;
+  /** Invite a human by email; returns the resolution ('active' | 'pending'). */
+  inviteMember(chatId: number, email: string): Promise<{ status: string }>;
+  removeMember(chatId: number, memberId: number): Promise<void>;
   /** Pickable tickets per tier for the current project (all tenants tiers). */
   loadTicketOptions(projectId: number | null): Promise<Record<TicketKind, TicketOptionVM[]>>;
   /** Tag an agent to execute a runnable (task/epic) ticket. Returns whether a run
@@ -111,6 +126,13 @@ export interface ChatTicketsLabels {
   removeAgent: string;
   inviteAgent: string;
   agentsHint: string;
+  people: string;
+  noPeople: string;
+  invitePerson: string;
+  invitePersonHint: string;
+  removePerson: string;
+  inviteSent: string;
+  invitePending: string;
   mergeHint: string;
   mergeNoOthers: string;
   kind: Record<TicketKind, string>;
@@ -147,6 +169,13 @@ export const DEFAULT_CHAT_TICKETS_LABELS: ChatTicketsLabels = {
   removeAgent: 'Remove',
   inviteAgent: 'Invite an agent…',
   agentsHint: 'Invited agents can be tagged to execute a linked task or epic.',
+  people: 'People',
+  noPeople: 'No people invited yet.',
+  invitePerson: 'Invite by email…',
+  invitePersonHint: 'Invite a teammate to view and collaborate on this chat.',
+  removePerson: 'Remove',
+  inviteSent: 'Invitation sent.',
+  invitePending: 'Invite sent — they will join when they sign in.',
   mergeHint: 'Merge other chats into this one. Their messages, tickets and agents move here; the sources are archived.',
   mergeNoOthers: 'No other chats to merge.',
   kind: { task: 'Task', epic: 'Epic', gap: 'Gap', objective: 'Objective', initiative: 'Initiative', portfolio: 'Portfolio', roadmap: 'Roadmap', spec: 'Spec' },

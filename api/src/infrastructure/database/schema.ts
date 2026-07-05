@@ -1304,6 +1304,11 @@ export const ideAgents = pgTable('ide_agents', {
   tenantId:         integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
   projectId:        integer('project_id').references(() => projects.id, { onDelete: 'cascade' }),
   name:             varchar('name', { length: 255 }).notNull(),
+  /** Stable built-in-agent marker (e.g. 'validator', 'security'). NULL for ordinary
+   *  user/marketplace agents. Decouples a built-in's IDENTITY from its display name,
+   *  so `name` can be renamed freely (to feel like a teammate) while dispatch and the
+   *  card's type indicator key off this instead. See migration 0289. */
+  builtinKind:      varchar('builtin_kind', { length: 32 }),
   title:            varchar('title', { length: 255 }),
   bio:              text('bio'),
   skills:           text('skills'),              // JSON string[] as text

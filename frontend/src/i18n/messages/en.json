@@ -831,8 +831,7 @@
     "subtitle": "Roll cost, delivery, DORA, AI-effectiveness and OKR attainment up from projects to initiatives and portfolios.",
     "tabs": {
       "rollup": "Rollup",
-      "structure": "Structure",
-      "okrs": "OKRs",
+      "structure": "Portfolios & OKRs",
       "cost": "CAPEX/OPEX"
     },
     "scope": {
@@ -840,18 +839,11 @@
       "workspace": "Workspace (org-level)",
       "byProject": "By project…"
     },
-    "scopeWord": {
-      "portfolio": "portfolio",
-      "initiative": "initiative",
-      "project": "project",
-      "workspace": "workspace"
-    },
     "loading": "Loading…",
     "loadingRollup": "Loading rollup…",
     "loadingOkrs": "Loading OKRs…",
     "loadingInitiatives": "Loading initiatives…",
     "emptyRollup": "Create a portfolio in the Structure tab to see the rollup.",
-    "emptyOkrs": "Create a portfolio in the Structure tab to add OKRs.",
     "stat": {
       "projects": "Projects",
       "initiativesCount": "{count} initiatives",
@@ -889,7 +881,8 @@
       "byInitiative": "By initiative",
       "criticalPath": "Critical path",
       "dependencies": "Dependencies",
-      "byPortfolio": "By portfolio"
+      "byPortfolio": "By portfolio",
+      "initiatives": "Initiatives"
     },
     "col": {
       "initiative": "Initiative",
@@ -914,7 +907,6 @@
       "newInitiativeName": "New initiative name",
       "addInitiative": "Add initiative",
       "noInitiatives": "No initiatives yet.",
-      "unassignedInitiatives": "Unassigned initiatives",
       "noProjectsLinked": "No projects linked.",
       "unlink": "Unlink",
       "linkProject": "+ Link a project…",
@@ -928,14 +920,14 @@
       "movePortfolio": "Move to another portfolio",
       "unassignedOption": "— Unassigned —",
       "dragHint": "Drag to a portfolio to reassign",
-      "dropHere": "Drop here to assign to this portfolio"
+      "dropHere": "Drop here to assign to this portfolio",
+      "dropObjectiveHere": "Drop an objective here to assign it to this portfolio",
+      "unassigned": "Unassigned",
+      "unassignedHint": "Initiatives and objectives not under any portfolio — drag them onto a portfolio to assign, or use the dropdown."
     },
     "okr": {
       "newObjective": "New objective",
       "objectivePlaceholder": "Objective",
-      "periodPlaceholder": "2026-Q3",
-      "add": "Add",
-      "objectiveHint": "Objectives attach to this {scope}. Add measurable key results below; progress rolls up into the dashboard.",
       "noObjectives": "No objectives yet for this scope.",
       "newKeyResult": "New key result",
       "target": "Target",
@@ -946,8 +938,6 @@
       "convertToEpic": "Convert to epic",
       "convertToEpicHint": "Turn this objective back into a board epic",
       "convertToEpicConfirm": "Convert this objective to a board epic? Its key results will be dropped and any linked tasks will be re-parented under the new epic.",
-      "startDate": "Start date",
-      "endDate": "End date",
       "costClass": "Class",
       "capex": "CAPEX",
       "opex": "OPEX",
@@ -967,7 +957,8 @@
       "ownerWorkspace": "Workspace (unassigned)",
       "ownerPortfolio": "Portfolios",
       "ownerInitiative": "Initiatives",
-      "ownerProject": "Projects"
+      "ownerProject": "Projects",
+      "dragHint": "Drag onto a portfolio to reassign"
     },
     "projectLink": {
       "title": "PMO initiative",
@@ -1938,6 +1929,10 @@
       "runtime": "Editor",
       "online": "Online",
       "offline": "Offline"
+    },
+    "builtinKind": {
+      "validator": "Validator",
+      "security": "Security"
     },
     "teams": {
       "heading": "Teams",
@@ -5818,5 +5813,52 @@
     "confirmRevoke": "Revoke this API key? Apps using it will stop working immediately.",
     "errCreate": "Failed to create key",
     "errRevoke": "Revoke failed"
+  },
+  "audit": {
+    "title": "Activity & audit trail",
+    "subtitle": "Every change across your workforce — who did what, to what, and when.",
+    "loading": "Loading activity…",
+    "empty": "No activity yet. Actions across the workspace will appear here as they happen.",
+    "loadMore": "Load more",
+    "filter": {
+      "all": "All"
+    },
+    "actor": {
+      "human": "Team member",
+      "hire": "External talent",
+      "cloud_agent": "Cloud agent",
+      "host_agent": "On-prem agent",
+      "system": "System",
+      "unknown": "Unknown"
+    },
+    "verb": {
+      "task": {
+        "created": "created a ticket",
+        "updated": "updated a ticket",
+        "status_changed": "moved a ticket",
+        "assigned": "reassigned a ticket",
+        "moved": "moved a ticket to another project",
+        "deleted": "deleted a ticket"
+      },
+      "code": {
+        "changed": "changed code"
+      },
+      "deploy": {
+        "recorded": "recorded a deploy",
+        "failed": "reported a failed deploy"
+      },
+      "role": {
+        "assigned": "assigned a role"
+      },
+      "engagement": {
+        "created": "invited external talent"
+      },
+      "member": {
+        "hired": "hired external talent"
+      },
+      "doc": {
+        "published": "published a document"
+      }
+    }
   }
 }

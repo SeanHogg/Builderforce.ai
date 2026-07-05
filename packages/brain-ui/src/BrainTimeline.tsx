@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { parseDirectedRecipient, type BrainMessage, type BrainTraceEvent } from '@seanhogg/builderforce-brain-embedded';
+import { parseDirectedRecipient, parseMessageAuthor, type BrainMessage, type BrainTraceEvent } from '@seanhogg/builderforce-brain-embedded';
 import { Markdown } from './Markdown';
 import { Avatar } from './ParticipantBadge';
 import { buildSettledTimeline, formatDuration, formatPayload, streamingNode, type TimelineNode } from './timelineModel';
@@ -333,13 +333,17 @@ function BrainTimelineInner({
             );
           }
           if (node.kind === 'assistant') {
+            // An assistant turn produced by an invited agent (not the BRAIN) is
+            // attributed to it — show the agent's avatar + name in place of the
+            // default assistant label so multi-party replies read clearly.
+            const author = parseMessageAuthor(node.message);
             return (
               <li key={node.key} className="bf-tl__item bf-tl__item--assistant">
                 <span className="bf-tl__gutter">
-                  <span className="bf-tl__dot">{dotIcon('assistant')}</span>
+                  <span className="bf-tl__dot">{author ? <Avatar name={author.name} kind={author.kind} size={16} /> : dotIcon('assistant')}</span>
                 </span>
                 <div className="bf-tl__body">
-                  <div className="bf-tl__role">{assistant}</div>
+                  <div className="bf-tl__role">{author ? author.name : assistant}</div>
                   <div className="bf-tl__bubble">{renderMsg(node.message, 'assistant', node.text)}</div>
                   {renderAssistantActions && <div className="bf-tl__actions">{renderAssistantActions(node.message)}</div>}
                 </div>

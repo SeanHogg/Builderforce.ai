@@ -17,7 +17,7 @@ import { HealthRing } from '../HealthRing';
 import {
   RUNNABLE_KINDS, TICKET_KINDS,
   type ChatTicketsAdapter, type ChatTicketsLabels, type TicketKind,
-  type TicketLinkVM, type ChatAgentVM, type AgentOptionVM, type LineageVM, type TicketOptionVM, type ChatOptionVM, type LinkType,
+  type TicketLinkVM, type ChatAgentVM, type ChatMemberVM, type AgentOptionVM, type LineageVM, type TicketOptionVM, type ChatOptionVM, type LinkType,
 } from './types';
 
 export interface ChatTicketsPanelProps {
@@ -42,9 +42,10 @@ const RUNNABLE = new Set<TicketKind>(RUNNABLE_KINDS);
 function ChatTicketsPanelInner({ chatId, projectId, chatList, adapter, labels, onChanged, refreshSignal }: ChatTicketsPanelProps) {
   const [tickets, setTickets] = useState<TicketLinkVM[]>([]);
   const [agents, setAgents] = useState<ChatAgentVM[]>([]);
+  const [members, setMembers] = useState<ChatMemberVM[]>([]);
   const [pool, setPool] = useState<AgentOptionVM[]>([]);
   const [options, setOptions] = useState<Record<TicketKind, TicketOptionVM[]> | null>(null);
-  const [panel, setPanel] = useState<null | 'link' | 'agents' | 'merge'>(null);
+  const [panel, setPanel] = useState<null | 'link' | 'agents' | 'people' | 'merge'>(null);
   const [lineageKey, setLineageKey] = useState<string | null>(null);
   const [lineage, setLineage] = useState<LineageVM[]>([]);
   const [runKey, setRunKey] = useState<string | null>(null);
@@ -52,12 +53,14 @@ function ChatTicketsPanelInner({ chatId, projectId, chatList, adapter, labels, o
   const [busy, setBusy] = useState(false);
 
   const load = useCallback(async () => {
-    const [tk, ag] = await Promise.all([
+    const [tk, ag, mem] = await Promise.all([
       adapter.listTickets(chatId).catch(() => [] as TicketLinkVM[]),
       adapter.listAgents(chatId).catch(() => [] as ChatAgentVM[]),
+      adapter.listMembers(chatId).catch(() => [] as ChatMemberVM[]),
     ]);
     setTickets(tk);
     setAgents(ag);
+    setMembers(mem);
   }, [adapter, chatId]);
 
   useEffect(() => { void load(); }, [load, refreshSignal]);
@@ -147,6 +150,7 @@ function ChatTicketsPanelInner({ chatId, projectId, chatList, adapter, labels, o
       <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
         <button type="button" onClick={() => setPanel(panel === 'link' ? null : 'link')} style={S.pill(panel === 'link')}>＋ {labels.link}</button>
         <button type="button" onClick={() => setPanel(panel === 'agents' ? null : 'agents')} style={S.pill(panel === 'agents')}>👥 {labels.agents}{agents.length ? ` (${agents.length})` : ''}</button>
+        <button type="button" onClick={() => setPanel(panel === 'people' ? null : 'people')} style={S.pill(panel === 'people')}>👤 {labels.people}{members.length ? ` (${members.length})` : ''}</button>
         <button type="button" onClick={() => setPanel(panel === 'merge' ? null : 'merge')} style={S.pill(panel === 'merge')}>⧉ {labels.merge}</button>
         {msg && <span style={{ fontSize: 12, color: V.accent, alignSelf: 'center' }}>{msg}</span>}
       </div>
@@ -159,6 +163,11 @@ function ChatTicketsPanelInner({ chatId, projectId, chatList, adapter, labels, o
       {panel === 'agents' && <AgentsSection agents={agents} pool={pool} labels={labels}
         onInvite={async (ref, kind) => { setBusy(true); try { await adapter.inviteAgent(chatId, { agentRef: ref, agentKind: kind }); await load(); onChanged?.(); } finally { setBusy(false); } }}
         onRemove={async (id) => { setBusy(true); try { await adapter.removeAgent(chatId, id); await load(); onChanged?.(); } finally { setBusy(false); } }}
+        busy={busy} />}
+
+      {panel === 'people' && <PeopleSection members={members} labels={labels}
+        onInvite={async (email) => { setBusy(true); try { const r = await adapter.inviteMember(chatId, email); flash(r.status === 'pending' ? labels.invitePending : labels.inviteSent); await load(); onChanged?.(); } catch (e) { flash(e instanceof Error ? e.message : labels.linkFailed); } finally { setBusy(false); } }}
+        onRemove={async (id) => { setBusy(true); try { await adapter.removeMember(chatId, id); await load(); onChanged?.(); } finally { setBusy(false); } }}
         busy={busy} />}
 
       {panel === 'merge' && <MergeSection chatId={chatId} chatList={chatList} labels={labels}
@@ -233,6 +242,44 @@ function AgentsSection({ agents, pool, labels, onInvite, onRemove, busy }: {
         {uninvited.map((p) => <option key={p.ref} value={p.ref}>{p.name} — {p.meta}</option>)}
       </select>
       <span style={{ fontSize: 11, ...S.muted }}>{labels.agentsHint}</span>
+    </div>
+  );
+}
+
+// ── People in the chat (human members / audience) ────────────────────────────
+
+function PeopleSection({ members, labels, onInvite, onRemove, busy }: {
+  members: ChatMemberVM[]; labels: ChatTicketsLabels;
+  onInvite: (email: string) => Promise<void>; onRemove: (id: number) => Promise<void>; busy: boolean;
+}) {
+  const [email, setEmail] = useState('');
+  const submit = async () => {
+    const e = email.trim();
+    if (!e) return;
+    await onInvite(e);
+    setEmail('');
+  };
+  return (
+    <div style={{ ...S.section, flexDirection: 'column', alignItems: 'stretch' }}>
+      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+        {members.length === 0 ? <span style={S.muted}>{labels.noPeople}</span> : members.map((m) => (
+          <span key={m.id} style={S.agentChip}>
+            <span aria-hidden>{m.status === 'pending' ? '✉️' : '👤'}</span>{m.name}
+            <button type="button" title={labels.removePerson} disabled={busy} onClick={() => void onRemove(m.id)} style={{ ...S.icon, fontSize: 11 }}>✕</button>
+          </span>
+        ))}
+      </div>
+      <div style={{ display: 'flex', gap: 6 }}>
+        <input
+          type="email" value={email} disabled={busy}
+          onChange={(e) => setEmail(e.target.value)}
+          onKeyDown={(e) => { if (e.key === 'Enter') void submit(); }}
+          placeholder={labels.invitePerson} aria-label={labels.invitePerson}
+          style={{ ...S.select, flex: 1, maxWidth: 260 }}
+        />
+        <button type="button" disabled={busy || !email.trim()} onClick={() => void submit()} style={S.pill(false)}>＋</button>
+      </div>
+      <span style={{ fontSize: 11, ...S.muted }}>{labels.invitePersonHint}</span>
     </div>
   );
 }
