@@ -592,6 +592,36 @@ export interface BfBrainChat {
   origin?: string;
   createdAt?: string;
   updatedAt?: string;
+  /** Agents/humans invited into the chat (multi-party chat). Refs resolve to
+   *  display names via {@link listAgentPool}. Absent on older servers. */
+  participants?: Array<{ ref: string; kind: string }>;
+}
+
+/** An agent in the tenant's pool, id→display-name (for resolving participant refs). */
+export interface BfAgentPoolEntry {
+  ref: string;
+  name: string;
+}
+
+/**
+ * The tenant's agent pool (workforce owned/purchased + registered agents), so a
+ * chat's participant refs can be shown as names/initials. Stable tenant data —
+ * the caller should fetch once and cache. Degrades to [] when signed out.
+ */
+export async function listAgentPool(secrets: vscode.SecretStorage): Promise<BfAgentPoolEntry[]> {
+  try {
+    const [mine, purchased, registered] = await Promise.all([
+      authed<Array<{ id: string | number; name: string }>>(secrets, '/api/workforce/agents/mine').catch(() => undefined),
+      authed<Array<{ id: string | number; name: string }>>(secrets, '/api/workforce/agents/purchased').catch(() => undefined),
+      authed<Array<{ id: string | number; name: string; isActive?: boolean }>>(secrets, '/api/agents').catch(() => undefined),
+    ]);
+    const byRef = new Map<string, string>();
+    for (const a of [...(mine ?? []), ...(purchased ?? [])]) byRef.set(String(a.id), a.name);
+    for (const a of registered ?? []) if (a.isActive !== false) byRef.set(String(a.id), a.name);
+    return [...byRef.entries()].map(([ref, name]) => ({ ref, name }));
+  } catch {
+    return [];
+  }
 }
 
 /**

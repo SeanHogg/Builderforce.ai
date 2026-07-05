@@ -27,7 +27,9 @@ export interface ChatTicketsPanelProps {
   chatList: ChatOptionVM[];
   adapter: ChatTicketsAdapter;
   labels: ChatTicketsLabels;
-  /** Called after a merge (so the host can refresh its chat list). */
+  /** Called after a change to the chat's roster/lineage — a merge, or an agent
+   *  invite/removal — so the host can refresh its chat list (e.g. the sidebar's
+   *  per-session participant indicators). */
   onChanged?: () => void;
   /** Bump to force a reload of tickets + agents — the host raises this when the
    *  Brain mutates work items via MCP tools (link/merge/invite/task move) so the
@@ -155,8 +157,8 @@ function ChatTicketsPanelInner({ chatId, projectId, chatList, adapter, labels, o
       }} />}
 
       {panel === 'agents' && <AgentsSection agents={agents} pool={pool} labels={labels}
-        onInvite={async (ref, kind) => { setBusy(true); try { await adapter.inviteAgent(chatId, { agentRef: ref, agentKind: kind }); await load(); } finally { setBusy(false); } }}
-        onRemove={async (id) => { setBusy(true); try { await adapter.removeAgent(chatId, id); await load(); } finally { setBusy(false); } }}
+        onInvite={async (ref, kind) => { setBusy(true); try { await adapter.inviteAgent(chatId, { agentRef: ref, agentKind: kind }); await load(); onChanged?.(); } finally { setBusy(false); } }}
+        onRemove={async (id) => { setBusy(true); try { await adapter.removeAgent(chatId, id); await load(); onChanged?.(); } finally { setBusy(false); } }}
         busy={busy} />}
 
       {panel === 'merge' && <MergeSection chatId={chatId} chatList={chatList} labels={labels}

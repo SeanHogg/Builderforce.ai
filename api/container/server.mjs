@@ -163,6 +163,12 @@ async function execTool(spec, workdir, writtenPaths, name, parsed, proc) {
     if (!workdir) return { ok: false, error: 'no repository checked out — git tools need a bound repo' };
     return gitTool(spec, workdir, proc, name, parsed);
   }
+  // Platform (project-management) tools — the container holds no DB creds, so it
+  // relays each `builtin_*` call back to the Worker, which runs the curated,
+  // subset-guarded tool in-process (create task / update OKR / read remaining work).
+  if (name.startsWith('builtin_')) {
+    return op(spec, { op: 'platform_tool', args: { name, arguments: parsed } });
+  }
   return { ok: false, error: `unknown tool '${name}'` };
 }
 
