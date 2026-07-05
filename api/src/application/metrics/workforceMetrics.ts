@@ -26,6 +26,7 @@ import {
   taskStatusTransitions,
   users,
 } from '../../infrastructure/database/schema';
+import { clampScore as clamp } from '../../domain/shared/numbers';
 
 const HOUR_MS = 3_600_000;
 /** Hard cap on tasks scanned per scorecard window — guards the JS-side
@@ -89,7 +90,6 @@ export function identityOf(r: MemberIdentityFields): Identity | null {
   return null;
 }
 
-const clamp = (n: number) => Math.max(0, Math.min(100, n));
 const avg = (xs: number[]) => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : null);
 
 export interface MemberScorecard {

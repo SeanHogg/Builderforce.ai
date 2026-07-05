@@ -33,8 +33,7 @@
 import { Hono } from 'hono';
 import type { Context } from 'hono';
 import { and, asc, eq } from 'drizzle-orm';
-import { authMiddleware } from '../middleware/authMiddleware';
-import { TenantRole, hasMinRole } from '../../domain/shared/types';
+import { authMiddleware, isManager } from '../middleware/authMiddleware';
 import { ForbiddenError } from '../../domain/shared/errors';
 import {
   boards,
@@ -184,7 +183,7 @@ export function createBoardRoutes(db: Db): Hono<HonoEnv> {
     // override it (mirrors the <RoleGate capability="board.manageApproval"> UX
     // and the API's requireRole convention). Other board settings stay open to
     // any workspace member, so this is gated per-field rather than on the route.
-    if (body.requireExecutionApproval !== undefined && !hasMinRole(c.get('role') as TenantRole, TenantRole.MANAGER)) {
+    if (body.requireExecutionApproval !== undefined && !isManager(c)) {
       throw new ForbiddenError('Only a manager can change the approval requirement for this board');
     }
 

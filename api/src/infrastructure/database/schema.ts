@@ -4299,8 +4299,17 @@ export const runModelOutcomes = pgTable('run_model_outcomes', {
    *  so it is idempotent across the multiple terminal paths). No FK — executions is
    *  pruned independently and a scored outcome should survive the run row. The
    *  `.unique()` backs the scorer's `onConflictDoNothing({ target: executionId })`
-   *  (migration 0197 creates `run_model_outcomes_execution_id_key`). */
-  executionId:      integer('execution_id').notNull().unique(),
+   *  (migration 0197 creates `run_model_outcomes_execution_id_key`). NULLABLE since
+   *  migration 0283: client/IDE/on-prem runs have no cloud execution and instead
+   *  key on `clientRunId`. */
+  executionId:      integer('execution_id').unique(),
+  /** Where the outcome came from: 'cloud' (default) | 'onprem' | 'ide' | 'external'
+   *  (migration 0283). Lets analytics split learned-routing quality by surface. */
+  source:           varchar('source', { length: 16 }).notNull().default('cloud'),
+  /** The client's own idempotency key for a NON-cloud run (no execution id).
+   *  Partial-unique so client runs upsert on it while cloud rows (NULL) don't
+   *  collide (migration 0283). */
+  clientRunId:      varchar('client_run_id', { length: 128 }),
   cloudAgentRef:    varchar('cloud_agent_ref', { length: 64 }),
   /** The cached task action-type label at scoring time (defaults to 'other'). */
   actionType:       varchar('action_type', { length: 32 }).notNull().default('other'),

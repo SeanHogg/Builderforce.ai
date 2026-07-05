@@ -5,7 +5,7 @@
  * a warning, so the deck always renders and the user sees what data was missing.
  */
 
-import type { DeckData, TokenManifest, TokenBinding, ResolvedBindings, ResolvedValue, BindingFormat } from './types';
+import type { DeckData, TokenManifest, ResolvedBindings, ResolvedValue, BindingFormat } from './types';
 
 /** Walk a dot-path (`quality.uptimePct`) into a nested object; undefined if absent. */
 function dig(obj: unknown, path: string): unknown {
@@ -67,22 +67,4 @@ export function resolveBindings(manifest: TokenManifest, data: DeckData): Resolv
   }
 
   return { byToken, warnings };
-}
-
-/** The flat token→text map the in-place filler needs (tables stringified to their
- *  first cell are skipped; the filler handles tables separately via byToken). */
-export function textReplacements(resolved: ResolvedBindings): Record<string, string> {
-  const out: Record<string, string> = {};
-  for (const [token, v] of resolved.byToken) {
-    if (v.kind === 'text') out[token] = v.value;
-  }
-  return out;
-}
-
-/** Convenience used by manifests authored without a typed object. */
-export function bindingsOf(manifest: unknown): TokenBinding[] {
-  if (manifest && typeof manifest === 'object' && Array.isArray((manifest as TokenManifest).bindings)) {
-    return (manifest as TokenManifest).bindings;
-  }
-  return [];
 }

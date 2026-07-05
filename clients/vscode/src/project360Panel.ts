@@ -2,6 +2,12 @@ import * as vscode from "vscode";
 import { getTenantJwt } from "./bfApi";
 import { BrainWebview } from "./brainWebview";
 import { getBaseUrl, SECRET_KEY } from "./gateway";
+import { WebviewPanelBase, type WebviewInbound } from "./webviewShared";
+
+/** Inbound messages unique to the Project 360 panel (shared cases live in the base). */
+interface Project360Inbound extends WebviewInbound {
+  action?: Project360ActionMsg;
+}
 
 /**
  * Project 360 — the whole-picture project management view, rendered as a bundled
@@ -16,7 +22,7 @@ import { getBaseUrl, SECRET_KEY } from "./gateway";
  *   - executing the improve/workforce actions the view raises, by delegating to the
  *     commands it already has (Open Board, Human Requests, run/open a task, Brain seed)
  */
-export class Project360Panel {
+export class Project360Panel extends WebviewPanelBase<Project360Inbound> {
   private static readonly panels = new Map<number, Project360Panel>();
 
   static open(ctx: vscode.ExtensionContext, projectId: number, projectName: string): void {
@@ -29,49 +35,29 @@ export class Project360Panel {
     Project360Panel.panels.set(projectId, new Project360Panel(ctx, projectId, projectName));
   }
 
-  private readonly panel: vscode.WebviewPanel;
-  private readonly disposables: vscode.Disposable[] = [];
-
   private constructor(
-    private readonly ctx: vscode.ExtensionContext,
+    ctx: vscode.ExtensionContext,
     private readonly projectId: number,
     private readonly projectName: string,
   ) {
-    this.panel = vscode.window.createWebviewPanel(
-      "builderforce.project360",
-      `Project 360 — ${projectName}`,
-      vscode.ViewColumn.Active,
-      {
-        enableScripts: true,
-        retainContextWhenHidden: true,
-        localResourceRoots: [vscode.Uri.joinPath(ctx.extensionUri, "media")],
-      },
-    );
-    this.panel.iconPath = vscode.Uri.joinPath(ctx.extensionUri, "media", "icon.png");
-    this.panel.webview.html = this.html(this.panel.webview);
-    this.panel.webview.onDidReceiveMessage((m) => void this.onMessage(m), undefined, this.disposables);
+    super(ctx, {
+      viewType: "builderforce.project360",
+      title: `Project 360 — ${projectName}`,
+      htmlTitle: "Project 360",
+    });
     // When the panel regains focus, nudge the screen to re-pull — a run may have
     // started or work moved, so "who's working" and the counts stay live.
-    this.panel.onDidChangeViewState((e) => { if (e.webviewPanel.visible) this.revalidate(); }, undefined, this.disposables);
-    this.panel.onDidDispose(() => this.dispose(), undefined, this.disposables);
+    this.onDidBecomeVisible(() => this.revalidate());
   }
 
   private revalidate(): void {
-    void this.panel.webview.postMessage({ type: "intent", intent: { kind: "revalidate" } });
+    this.post({ type: "intent", intent: { kind: "revalidate" } });
   }
 
-  private async onMessage(msg: { type?: string; id?: string; action?: Project360ActionMsg }): Promise<void> {
+  protected async onMessage(msg: Project360Inbound): Promise<void> {
     switch (msg.type) {
       case "ready":
         await this.sendInit();
-        break;
-      case "token.refresh": {
-        const token = (await getTenantJwt(this.ctx.secrets)) ?? null;
-        if (msg.id) void this.panel.webview.postMessage({ type: "response", id: msg.id, ok: true, result: { token } });
-        break;
-      }
-      case "signin":
-        void vscode.commands.executeCommand("builderforce.signIn");
         break;
       case "p360.action":
         if (msg.action) this.runAction(msg.action);
@@ -104,7 +90,7 @@ export class Project360Panel {
   private async sendInit(): Promise<void> {
     const signedIn = !!(await this.ctx.secrets.get(SECRET_KEY));
     const token = signedIn ? ((await getTenantJwt(this.ctx.secrets)) ?? null) : null;
-    void this.panel.webview.postMessage({
+    this.post({
       type: "init",
       view: "project360",
       baseUrl: getBaseUrl(),
@@ -117,49 +103,8 @@ export class Project360Panel {
     });
   }
 
-  private dispose(): void {
+  protected onDispose(): void {
     Project360Panel.panels.delete(this.projectId);
-    for (const d of this.disposables) {
-      try {
-        d.dispose();
-      } catch {
-        /* noop */
-      }
-    }
-  }
-
-  private html(webview: vscode.Webview): string {
-    const nonce = makeNonce();
-    const asset = (f: string) =>
-      webview.asWebviewUri(vscode.Uri.joinPath(this.ctx.extensionUri, "media", "webview", f));
-    let apiOrigin = "https://api.builderforce.ai";
-    try {
-      apiOrigin = new URL(getBaseUrl()).origin;
-    } catch {
-      /* keep default */
-    }
-    const csp = [
-      `default-src 'none'`,
-      `img-src ${webview.cspSource} https: data: blob:`,
-      `style-src ${webview.cspSource} 'unsafe-inline'`,
-      `script-src 'nonce-${nonce}'`,
-      `font-src ${webview.cspSource} data:`,
-      `connect-src ${apiOrigin} https:`,
-    ].join("; ");
-    return `<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="UTF-8" />
-<meta http-equiv="Content-Security-Policy" content="${csp}" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<link rel="stylesheet" href="${asset("index.css")}" />
-<title>Project 360</title>
-</head>
-<body>
-<div id="root"></div>
-<script type="module" nonce="${nonce}" src="${asset("index.js")}"></script>
-</body>
-</html>`;
   }
 }
 

@@ -22,6 +22,7 @@ import type { Db } from '../../infrastructure/database/connection';
 import { listTemplates, createTemplateFromUpload, deleteTemplate } from '../../application/deck/TemplateLibraryService';
 import { generateDeck, loadGeneratedDeck } from '../../application/deck/DeckService';
 import type { DeckMode } from '../../application/deck/types';
+import { isKeyOwnedByTenant } from '../../domain/shared/r2Keys';
 
 const PPTX_CT = 'application/vnd.openxmlformats-officedocument.presentationml.presentation';
 
@@ -53,7 +54,7 @@ export function createDeckRoutes(db: Db): Hono<HonoEnv> {
     const userId = (c.get('userId') as string | undefined) ?? null;
     const body = await c.req.json<{ name?: string; description?: string; sourceKey?: string; archetype?: string }>();
     if (!body.name || !body.sourceKey) return c.json({ error: 'name and sourceKey are required' }, 400);
-    if (!body.sourceKey.startsWith(`${tenantId}/`)) return c.json({ error: 'sourceKey not owned by tenant' }, 403);
+    if (!isKeyOwnedByTenant(body.sourceKey, tenantId)) return c.json({ error: 'sourceKey not owned by tenant' }, 403);
     try {
       const rec = await createTemplateFromUpload(db, c.env as Env, tenantId, userId, {
         name: body.name,

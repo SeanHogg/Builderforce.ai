@@ -7,8 +7,7 @@
  */
 import { Hono } from 'hono';
 import { eq } from 'drizzle-orm';
-import { authMiddleware } from '../middleware/authMiddleware';
-import { TenantRole, hasMinRole } from '../../domain/shared/types';
+import { authMiddleware, isManager } from '../middleware/authMiddleware';
 import { projects } from '../../infrastructure/database/schema';
 import type { HonoEnv, Env } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
@@ -28,7 +27,6 @@ export function createKanbanRoutes(db: Db): Hono<HonoEnv> {
   const rosterService = new RosterService(db, templateService, roleService, assignmentService);
   const auditService = new TicketAuditService(db);
 
-  const isManager = (c: { get: (k: 'role') => unknown }) => hasMinRole(c.get('role') as TenantRole, TenantRole.MANAGER);
   const env = (c: { env: unknown }) => c.env as Env;
 
   // ── Roles ─────────────────────────────────────────────────────────────────

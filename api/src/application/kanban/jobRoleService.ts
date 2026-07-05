@@ -9,11 +9,12 @@ import type { Env } from '../../env';
 import { getOrSetCached, invalidateCached } from '../../infrastructure/cache/readThroughCache';
 import { BUILTIN_ROLES, isBuiltinRoleKey } from './roleCatalog';
 import type { Discipline, JobRole } from './types';
+import { slugify as slugifyBase } from '../../domain/shared/strings';
 
 const rolesKey = (tenantId: number) => `kanban:roles:${tenantId}`;
 
 function slugify(input: string): string {
-  return input.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '').slice(0, 60);
+  return slugifyBase(input, { maxLen: 60 });
 }
 
 export interface JobRoleWrite {

@@ -15,6 +15,8 @@ import type { Env, HonoEnv } from '../../env';
 import { superAdminMiddleware } from '../middleware/superAdminMiddleware';
 import { buildDatabase, type Db } from '../../infrastructure/database/connection';
 import { writeAdminAudit, type AdminAuditOpts } from '../../infrastructure/audit/adminAudit';
+import { parseJsonArray } from '../../domain/shared/json';
+import { countActiveSessionsAndTokens } from '../../application/security/sessionCounts';
 import {
   authTokens,
   authUserSessions,
@@ -95,11 +97,7 @@ import { sendAdminPasswordResetEmail } from '../../infrastructure/email/EmailSer
  * and null inputs uniformly so every read site stays one-liner safe.
  */
 function coercePermissions(value: unknown): string[] {
-  if (Array.isArray(value)) return value as string[];
-  if (typeof value === 'string' && value.length > 0) {
-    try { return JSON.parse(value) as string[]; } catch { return []; }
-  }
-  return [];
+  return parseJsonArray<string>(value);
 }
 
 /** Persist one health-probe run. Shared by the manual route and the cron handler.
@@ -125,11 +123,7 @@ export async function persistProbe(
  *  decodes JSONB to an array, but legacy rows written while the column was
  *  mis-handled as text may still come back as a JSON string. Accept both. */
 function coerceProbeModels(value: unknown): unknown[] {
-  if (Array.isArray(value)) return value;
-  if (typeof value === 'string' && value.length > 0) {
-    try { return JSON.parse(value) as unknown[]; } catch { return []; }
-  }
-  return [];
+  return parseJsonArray(value);
 }
 
 /** Status entry for one model in the admin LLM panel. Delegates to the proxy
@@ -815,33 +809,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
 
     const userIds = memberRows.map((row) => row.userId);
 
-    const sessionCounts = userIds.length
-      ? await db
-        .select({ userId: authUserSessions.userId, count: sql<number>`COUNT(*)` })
-        .from(authUserSessions)
-        .where(and(inArray(authUserSessions.userId, userIds), eq(authUserSessions.isActive, true)))
-        .groupBy(authUserSessions.userId)
-      : [];
-
-    const tokenCounts = userIds.length
-      ? await db
-        .select({ userId: authTokens.userId, count: sql<number>`COUNT(*)` })
-        .from(authTokens)
-        .where(
-          and(
-            inArray(authTokens.userId, userIds),
-            isNull(authTokens.revokedAt),
-            gt(authTokens.expiresAt, new Date()),
-          ),
-        )
-        .groupBy(authTokens.userId)
-      : [];
-
-    const sessionsByUser = new Map<string, number>();
-    for (const row of sessionCounts) sessionsByUser.set(row.userId, Number(row.count));
-
-    const tokensByUser = new Map<string, number>();
-    for (const row of tokenCounts) tokensByUser.set(row.userId, Number(row.count));
+    const { sessionsByUser, tokensByUser } = await countActiveSessionsAndTokens(db, userIds);
 
     return c.json({
       users: memberRows.map((row) => ({

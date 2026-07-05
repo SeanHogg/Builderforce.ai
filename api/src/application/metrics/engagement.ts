@@ -31,9 +31,9 @@ import {
   users,
   vscodeConnections,
 } from '../../infrastructure/database/schema';
+import { clampScore as clamp } from '../../domain/shared/numbers';
 
 const HOUR_MS = 3_600_000;
-const clamp = (n: number) => Math.max(0, Math.min(100, n));
 
 export interface EngagementSignals {
   /** External dev activity events (commits/PRs/issues) attributed to this person. */

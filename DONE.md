@@ -4,6 +4,20 @@
 
 ---
 
+### 🎯 Evermind held-out coding benchmark — `code-benchmark` pass@1 step (2026-07-04) — ✅ RESOLVED
+
+**Reported:** `benchmark` scored held-out *perplexity* but there was no held-out *coding* gate proving the student learned to GENERATE passing code — only a single `code-eval` smoke case against the last sample.
+
+**Fix (`builderforce-memory/packages/memory` 2026.7.0):** added a `code-benchmark` workflow step (`src/workflow/steps.ts`, auto-registered) — it prompts the trained model on N unseen `tasks:[{prompt,cases}]`, executes each generated solution via the existing `runJsCases` harness, and scores **strict pass@1** (a task passes only when ALL its cases pass), with an optional `minPass1` quality gate symmetric to `benchmark`'s `maxPerplexity`/`minTop1`. Wired into the **Teach-Code template** (ungated there so a demo-scale model reports the metric without failing the pipeline; real corpora set `minPass1`). Verified: new `tests/code-benchmark.step.test.ts` (3 tests, fake-model-driven so it tests the scoring/gate not tiny-model luck) + the Teach-Code end-to-end test updated for the new step — **25 tests green**.
+
+### 🧠 Project Evermind panel already on all four modalities (2026-07-04) — ✅ RESOLVED (stale register entry)
+
+The register claimed the Project Evermind manager panel was "only on the designer-modality agent tab." It isn't: `ProjectEvermindPanel` already renders on **designer** (`frontend/src/components/ide/IdeAgentPanel.tsx:61`), **voice** (`VoiceConfigPanel.tsx:53`), **llm** (`LlmStudioPanel.tsx:157`), and **video** (`IDENew.tsx:1200`, with a "parity with the other studios" comment). No code change needed; entry retired.
+
+### 🧠 Limbic experience embedding already uses the SSM hippocampus embedding (2026-07-04) — ✅ RESOLVED (stale register entry)
+
+The register listed `embedEvent` as still using a hashed-trigram fallback. It does not: `agent-runtime/src/infra/limbic-system-service.ts:355` already prefers `getSsmMemoryService().embed(text)` → `projectEmbedding(v, inputDim)` and falls back to `hashedEmbedding` only when the GPU/embedder is unavailable. No code change needed; entry was out of date and is retired.
+
 ### 🧪 Evermind memory-package test suite ran 0 tests (TS6059) — now green (2026-07-04) — ✅ RESOLVED
 
 **Reported:** the `@seanhogg/builderforce-memory` jest config maps the engine to its SOURCE (`moduleNameMapper: …-engine → ../memory-engine/src/index.ts`), so ts-jest type-checked engine `src/**` under the memory package's `rootDir` and failed every file with `TS6059` ("not under rootDir") — the ENTIRE workflow/runtime suite reported **0 tests** regardless of edits, so none of the Evermind training/workflow logic could be validated in CI.

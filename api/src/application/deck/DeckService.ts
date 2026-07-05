@@ -15,9 +15,10 @@ import { renderGenerativeDeck } from './render/GenerativeRenderer';
 import { fillTemplate } from './inPlaceFiller';
 import { getTemplate, getDefaultBoardTemplate, loadTemplateBytes } from './TemplateLibraryService';
 import type { GenerateDeckInput, GenerateDeckResult, DeckTemplateRecord, DeckData } from './types';
+import { slugify as slugifyBase } from '../../domain/shared/strings';
 
 function slugify(s: string): string {
-  return s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 60) || 'deck';
+  return slugifyBase(s, { maxLen: 60, fallback: 'deck' });
 }
 
 /** Render bytes for a resolved template + data (no persistence). Exposed for tests. */

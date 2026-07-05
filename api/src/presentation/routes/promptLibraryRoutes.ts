@@ -32,6 +32,8 @@ import {
 import { getOrSetCached, getCacheVersion, bumpCacheVersion } from '../../infrastructure/cache/readThroughCache';
 import type { Env, HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
+import { slugify as slugifyBase } from '../../domain/shared/strings';
+import { parseJsonArray } from '../../domain/shared/json';
 
 /** Version token for the public prompts-gallery keyspace. The gallery is
  *  searchable + paginated (q/category/tag/sort/limit/offset) → an unbounded
@@ -46,9 +48,7 @@ async function invalidatePromptsPublic(env: Env): Promise<void> {
 }
 
 function slugify(s: string): string {
-  return (
-    s.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 80) || 'prompt'
-  );
+  return slugifyBase(s, { maxLen: 80, fallback: 'prompt' });
 }
 
 /** A slug unique within the tenant (appends -2, -3, … on collision). */
@@ -427,8 +427,7 @@ function safeJson(s: string | null): unknown {
 }
 
 function safeTags(s: string | null): string[] {
-  const v = safeJson(s);
-  return Array.isArray(v) ? (v as string[]) : [];
+  return parseJsonArray<string>(s);
 }
 
 type EntryRow = typeof promptLibraryEntries.$inferSelect;

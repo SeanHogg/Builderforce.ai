@@ -15,15 +15,14 @@ import { webAuthMiddleware } from '../middleware/webAuthMiddleware';
 import { verifyWebJwt } from '../../infrastructure/auth/JwtService';
 import { getOrSetCached, invalidateCached } from '../../infrastructure/cache/readThroughCache';
 import { notify } from '../../application/notifications/notify';
+import { parseJsonArray } from '../../domain/shared/json';
 import type { Env, HonoEnv } from '../../env';
 
 const JOBS_PUBLIC_CACHE_KEY = 'jobs:public:open';
 const DISCIPLINES = ['developer', 'dba', 'designer', 'devops', 'qa', 'pm', 'data', 'security', 'other'];
 
 function parseSkills(raw: unknown): string[] {
-  if (Array.isArray(raw)) return raw as string[];
-  if (typeof raw === 'string') { try { const v = JSON.parse(raw); return Array.isArray(v) ? v : []; } catch { return []; } }
-  return [];
+  return parseJsonArray<string>(raw);
 }
 
 async function optionalUserId(c: { req: { header(n: string): string | undefined }; env: HonoEnv['Bindings'] }): Promise<string | null> {

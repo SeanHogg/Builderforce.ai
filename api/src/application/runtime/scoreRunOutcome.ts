@@ -85,6 +85,99 @@ export function computeOutcomeScore(inputs: OutcomeScoreInputs): OutcomeScore {
   return { score, terms: { merge, ci, completion, efficiency } };
 }
 
+export type OutcomeSource = 'cloud' | 'onprem' | 'ide' | 'external';
+
+export interface ClientRunOutcome {
+  /** Caller's idempotency key — one outcome per clientRunId (partial-unique). */
+  clientRunId: string;
+  /** Where the run executed. Anything non-'cloud' has no execution row. */
+  source: OutcomeSource;
+  /** The model the run actually used (the gateway's resolved model). */
+  model: string;
+  /** Terminal status of the run. Non-'completed' scores 0 (see computeOutcomeScore). */
+  terminalStatus: TerminalStatus;
+  actionType?: string;
+  projectId?: number | null;
+  taskId?: number | null;
+  /** Optional richer signals when the client has them (else conservative defaults). */
+  merged?: boolean;
+  ciGreen?: boolean;
+  degraded?: boolean;
+  steps?: number;
+  costMc?: number;
+  approved?: boolean;
+}
+
+/**
+ * Record ONE outcome for a NON-cloud run (IDE-native / on-prem / external SDK) —
+ * the runs that never create a cloud `executions` row and so were invisible to
+ * the learner. Same 0..1 {@link computeOutcomeScore} basis and the same
+ * `applyOutcomeToRoutingTable` fold as {@link scoreRunOutcome}, so a client run
+ * teaches the routing table exactly like a cloud run does. Idempotent on
+ * `client_run_id`. Best-effort — never throws (a reporting failure must not break
+ * the caller's run). Respects the learned-routing kill switch implicitly via
+ * `applyOutcomeToRoutingTable` (which no-ops when routing is disabled).
+ */
+export async function recordClientRunOutcome(env: Env, db: Db, tenantId: number, o: ClientRunOutcome): Promise<void> {
+  try {
+    const clientRunId = o.clientRunId?.trim();
+    if (!clientRunId || !o.model?.trim()) return;
+    const actionType = normalizeActionType(o.actionType);
+    const steps = Math.max(0, Math.floor(o.steps ?? 0));
+    const costMc = Math.max(0, Math.floor(o.costMc ?? 0));
+    const { score } = computeOutcomeScore({
+      terminalStatus: o.terminalStatus,
+      merged: !!o.merged,
+      ciGreen: !!o.ciGreen,
+      degraded: !!o.degraded,
+      steps,
+      costMc,
+      approved: !!o.approved,
+    });
+    const plan = await resolveTenantPlan(env, tenantId).then((p) => p.effectivePlan).catch(() => 'free' as const);
+
+    const inserted = await db
+      .insert(runModelOutcomes)
+      .values({
+        tenantId,
+        projectId: o.projectId ?? null,
+        taskId: o.taskId ?? null,
+        executionId: null,
+        source: o.source,
+        clientRunId,
+        actionType,
+        resolvedModel: o.model,
+        plan,
+        score,
+        merged: !!o.merged,
+        ciGreen: !!o.ciGreen,
+        degraded: !!o.degraded,
+        steps,
+        costUsdMillicents: costMc,
+        terminalStatus: o.terminalStatus,
+      })
+      .onConflictDoNothing({ target: runModelOutcomes.clientRunId })
+      .returning({ id: runModelOutcomes.id });
+
+    // Only a first-seen outcome folds into the routing blob (the fold is not
+    // idempotent; a duplicate report must not double-count). No PR/CI signal on a
+    // client run, but completion + efficiency still carry real reliability signal.
+    if (inserted.length > 0) {
+      await applyOutcomeToRoutingTable(env, db, {
+        tenantId,
+        projectId: o.projectId ?? null,
+        actionType,
+        model: o.model,
+        score,
+        costMc,
+        merged: !!o.merged,
+      });
+    }
+  } catch {
+    // Never let outcome reporting fail the caller.
+  }
+}
+
 /** Most-frequent llm_usage_log.model for an execution — the model the run actually
  *  locked onto (the truth of what ran). Empty when the run produced no LLM calls. */
 async function resolveRunModel(db: Db, executionId: number): Promise<{ model: string; steps: number; costMc: number }> {

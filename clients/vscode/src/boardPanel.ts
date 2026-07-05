@@ -1,5 +1,6 @@
 import * as vscode from "vscode";
 import { BfTask, DEFAULT_HIDE_DONE, invalidateTasks, listTasks, updateTaskStatus } from "./bfApi";
+import { makeNonce } from "./webviewShared";
 
 /**
  * Native Kanban board rendered directly in a webview panel — NOT the embedded web
@@ -324,11 +325,4 @@ function toCard(t: BfTask): { id: number; key?: string; title: string; status: s
     priority: t.priority,
     assignee: t.assignedUserId ?? undefined,
   };
-}
-
-function makeNonce(): string {
-  const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
-  let out = "";
-  for (let i = 0; i < 32; i++) out += chars[Math.floor(Math.random() * chars.length)];
-  return out;
 }

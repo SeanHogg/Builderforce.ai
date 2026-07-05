@@ -25,12 +25,13 @@ import { segments } from '../../infrastructure/database/schema';
 import { invalidateSegment } from '../../infrastructure/auth/segmentResolver';
 import type { HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
+import { slugify as slugifyBase } from '../../domain/shared/strings';
 
 const SEGMENT_STATUSES = ['active', 'suspended', 'archived'] as const;
 type SegmentStatus = (typeof SEGMENT_STATUSES)[number];
 
 function slugify(input: string): string {
-  return input.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 255);
+  return slugifyBase(input, { maxLen: 255 });
 }
 
 export function createSegmentRoutes(db: Db): Hono<HonoEnv> {

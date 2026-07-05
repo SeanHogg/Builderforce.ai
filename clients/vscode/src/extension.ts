@@ -324,18 +324,36 @@ async function heartbeat(context: vscode.ExtensionContext): Promise<void> {
   await bfApi.connect(context.secrets, os.hostname(), version);
 }
 
+/**
+ * Gate a command on being signed in. Prompts once (Sign In → runs the sign-in flow)
+ * and returns false when there's no stored editor key, so the caller can bail. The
+ * one shared guard for every command that needs the tenant JWT.
+ */
+async function ensureSignedIn(context: vscode.ExtensionContext): Promise<boolean> {
+  if (await context.secrets.get(SECRET_KEY)) return true;
+  const action = await vscode.window.showInformationMessage(
+    "Sign in to your BuilderForce workspace first.",
+    "Sign In",
+  );
+  if (action === "Sign In") void vscode.commands.executeCommand("builderforce.signIn");
+  return false;
+}
+
+/**
+ * The shared 402 plan-limit response: show the surface-specific `message` with an
+ * "Open BuilderForce" action that deep-links to workspace settings, where the upgrade
+ * lives (a web-app action).
+ */
+async function handlePlanLimit(message: string): Promise<void> {
+  const action = await vscode.window.showErrorMessage(message, "Open BuilderForce");
+  if (action) void vscode.env.openExternal(vscode.Uri.parse(`${getWebBaseUrl()}/settings`));
+}
+
 async function selectProject(
   context: vscode.ExtensionContext,
   projects: ProjectsTreeProvider,
 ): Promise<void> {
-  if (!(await context.secrets.get(SECRET_KEY))) {
-    const action = await vscode.window.showInformationMessage(
-      "Sign in to your BuilderForce workspace first.",
-      "Sign In",
-    );
-    if (action === "Sign In") void vscode.commands.executeCommand("builderforce.signIn");
-    return;
-  }
+  if (!(await ensureSignedIn(context))) return;
   let list: bfApi.BfProject[];
   try {
     list = await bfApi.listProjects(context.secrets);
@@ -377,14 +395,7 @@ async function createProject(
   context: vscode.ExtensionContext,
   projects: ProjectsTreeProvider,
 ): Promise<void> {
-  if (!(await context.secrets.get(SECRET_KEY))) {
-    const action = await vscode.window.showInformationMessage(
-      "Sign in to your BuilderForce workspace first.",
-      "Sign In",
-    );
-    if (action === "Sign In") void vscode.commands.executeCommand("builderforce.signIn");
-    return;
-  }
+  if (!(await ensureSignedIn(context))) return;
   const name = await vscode.window.showInputBox({
     title: "Create BuilderForce project",
     prompt: "Name your project",
@@ -404,11 +415,7 @@ async function createProject(
     const message = (e as Error).message;
     // 402 = plan project limit reached → upgrading is a web-app action.
     if (/HTTP 402/.test(message)) {
-      const action = await vscode.window.showErrorMessage(
-        "BuilderForce: your plan's project limit is reached. Upgrade your workspace to add more.",
-        "Open BuilderForce",
-      );
-      if (action) void vscode.env.openExternal(vscode.Uri.parse(`${getWebBaseUrl()}/settings`));
+      await handlePlanLimit("BuilderForce: your plan's project limit is reached. Upgrade your workspace to add more.");
       return;
     }
     vscode.window.showErrorMessage(`BuilderForce: could not create project (${message}).`);
@@ -594,14 +601,7 @@ async function runTask(
   task?: bfApi.BfTask,
 ): Promise<void> {
   if (!task) return;
-  if (!(await context.secrets.get(SECRET_KEY))) {
-    const action = await vscode.window.showInformationMessage(
-      "Sign in to your BuilderForce workspace first.",
-      "Sign In",
-    );
-    if (action === "Sign In") void vscode.commands.executeCommand("builderforce.signIn");
-    return;
-  }
+  if (!(await ensureSignedIn(context))) return;
 
   const label = task.key ?? task.title;
   try {
@@ -633,11 +633,7 @@ async function runTask(
     const message = (e as Error).message;
     const dispatchErr = e instanceof bfApi.BfDispatchError ? e : undefined;
     if (dispatchErr?.httpStatus === 402 || /HTTP 402/.test(message)) {
-      const action = await vscode.window.showErrorMessage(
-        "BuilderForce: your plan's run limit is reached. Upgrade your workspace to dispatch more runs.",
-        "Open BuilderForce",
-      );
-      if (action) void vscode.env.openExternal(vscode.Uri.parse(`${getWebBaseUrl()}/settings`));
+      await handlePlanLimit("BuilderForce: your plan's run limit is reached. Upgrade your workspace to dispatch more runs.");
       return;
     }
     // Token budget exhausted (HTTP 429). Show the API's plan-tailored reason (e.g.
@@ -678,14 +674,7 @@ async function reviewHumanRequests(
   context: vscode.ExtensionContext,
   projects: ProjectsTreeProvider,
 ): Promise<void> {
-  if (!(await context.secrets.get(SECRET_KEY))) {
-    const action = await vscode.window.showInformationMessage(
-      "Sign in to your BuilderForce workspace first.",
-      "Sign In",
-    );
-    if (action === "Sign In") void vscode.commands.executeCommand("builderforce.signIn");
-    return;
-  }
+  if (!(await ensureSignedIn(context))) return;
 
   let pending: bfApi.BfApproval[];
   try {

@@ -24,6 +24,8 @@ import {
 import { CONTAINER_MAX_STEPS } from '../../application/runtime/cloudAgentTools';
 import { ExecutionStatus } from '../../domain/shared/types';
 import type { ResolvedArtifacts } from '../../domain/shared/types';
+import { millicentsToUsd } from '../../domain/shared/money';
+import { parseJsonArray } from '../../domain/shared/json';
 import type { Execution } from '../../domain/execution/Execution';
 import type { Env, HonoEnv } from '../../env';
 import { authMiddleware } from '../middleware/authMiddleware';
@@ -71,11 +73,7 @@ function hiredAgentRoleKey(name: string | null | undefined, id: string): string 
 function projectHiredAgent(r: { id: string; name: string | null; bio: string | null; skills: unknown; base_model: string | null }): {
   id: string; name: string; roleKey: string; systemPrompt: string; skills: string[]; model?: string;
 } {
-  const skills = Array.isArray(r.skills)
-    ? (r.skills as unknown[]).map(String)
-    : typeof r.skills === 'string'
-      ? (() => { try { const v = JSON.parse(r.skills as string); return Array.isArray(v) ? v.map(String) : []; } catch { return []; } })()
-      : [];
+  const skills = parseJsonArray(r.skills).map(String);
   const rawModel = typeof r.base_model === 'string' ? r.base_model.trim() : '';
   const model = rawModel && rawModel !== AGENT_DEFAULT_MODEL_SENTINEL ? rawModel : undefined;
   return {
@@ -1781,7 +1779,7 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
         `) as Array<{ cost_mc: string; tokens: string; requests: number }>;
         const r = rows[0];
         return {
-          estimatedCostUsd: Number(r?.cost_mc ?? 0) / 100_000,
+          estimatedCostUsd: millicentsToUsd(Number(r?.cost_mc ?? 0)),
           totalTokens: Number(r?.tokens ?? 0),
           requests: Number(r?.requests ?? 0),
         };

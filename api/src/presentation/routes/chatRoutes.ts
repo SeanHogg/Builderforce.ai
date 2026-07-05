@@ -96,24 +96,28 @@ export function createChatRoutes(db: Db): Hono<HonoEnv> {
 
     if (!session) return c.json({ error: 'failed to upsert session' }, 500);
 
-    // Insert messages
+    // Insert messages — ONE multi-row insert (neon-http has no interactive tx).
+    // onConflictDoNothing keeps the idempotent "skip duplicates" behavior; the
+    // returned rows are exactly those actually inserted, so `inserted` is accurate.
     let inserted = 0;
-    for (const msg of messages) {
-      if (!msg.role || typeof msg.content !== 'string') continue;
-      try {
-        await db.insert(chatMessages).values({
-          tenantId: agentHost.tenantId,
-          agentHostId,
-          sessionId: session.id,
-          role: msg.role,
-          content: msg.content,
-          metadata: msg.metadata ?? null,
-          seq: msg.seq,
-        });
-        inserted++;
-      } catch {
-        // Skip duplicates (seq conflict) — idempotent
-      }
+    const rows = messages
+      .filter((msg) => msg.role && typeof msg.content === 'string')
+      .map((msg) => ({
+        tenantId: agentHost.tenantId,
+        agentHostId,
+        sessionId: session.id,
+        role: msg.role,
+        content: msg.content,
+        metadata: msg.metadata ?? null,
+        seq: msg.seq,
+      }));
+    if (rows.length > 0) {
+      const insertedRows = await db
+        .insert(chatMessages)
+        .values(rows)
+        .onConflictDoNothing()
+        .returning({ id: chatMessages.id });
+      inserted = insertedRows.length;
     }
 
     // Update session stats

@@ -26,6 +26,7 @@ import { TaskService } from '../task/TaskService';
 import { ProjectRepository } from '../../infrastructure/repositories/ProjectRepository';
 import { TaskRepository } from '../../infrastructure/repositories/TaskRepository';
 import { ProjectStatus, TaskPriority, TaskType, TenantRole } from '../../domain/shared/types';
+import { parseJsonObject } from '../../domain/shared/json';
 import { signJwt } from '../../infrastructure/auth/JwtService';
 import { workflows, workflowDefinitions, specs, promptLibraryEntries, promptLibraryVersions, approvalRules, approvals, brainChats, agents, projectAgents, agentAssignments, savedDashboards, dashboardWidgets, alerts, alertEvents, auditEvents, boards, cronJobs, portfolios, initiatives, objectives, objectiveLinks, keyResults, ideAgents, marketplaceSkills, artifactAssignments, socControls, socEvidence, pokerSessions, pokerStories, pokerVotes, retrospectives, retroItems, boardConnections, projectRepositories, pullRequests, chatSessions, chatMessages, swimlanes, swimlaneAgentAssignments, tenants, executions, usageSnapshots, toolAuditEvents, executionMessages, agentHosts, agentHostProjects, errorGroups } from '../../infrastructure/database/schema';
 import { resolveSegment } from '../../infrastructure/auth/segmentResolver';
@@ -154,10 +155,7 @@ const dt = (v: unknown): Date | undefined => {
   return Number.isNaN(d.getTime()) ? undefined : d;
 };
 /** Parse the `tenants.settings` JSON-as-text blob into a mutable object (embed lives at .embed). */
-const parseTenantSettings = (raw: string | null | undefined): Json => {
-  if (!raw) return {};
-  try { const v = JSON.parse(raw); return v && typeof v === 'object' && !Array.isArray(v) ? (v as Json) : {}; } catch { return {}; }
-};
+const parseTenantSettings = (raw: string | null | undefined): Json => parseJsonObject<Json>(raw);
 
 // ---------------------------------------------------------------------------
 // List projections — keep the Brain's context window bounded

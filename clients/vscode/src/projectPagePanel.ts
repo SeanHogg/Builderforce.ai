@@ -2,6 +2,12 @@ import * as vscode from "vscode";
 import { getTenantJwt } from "./bfApi";
 import { BrainWebview } from "./brainWebview";
 import { getBaseUrl, SECRET_KEY } from "./gateway";
+import { WebviewPanelBase, type WebviewInbound } from "./webviewShared";
+
+/** Inbound messages unique to a project-page panel (shared cases live in the base). */
+interface ProjectPageInbound extends WebviewInbound {
+  action?: ProjectPageActionMsg;
+}
 
 /** The list-shaped project pages rendered natively (bundled-React webview, NO iframe —
  *  the same reliable hosting model as the Brain chat + Project 360). Add a view here +
@@ -28,7 +34,7 @@ export function projectPageChoices(): { view: ProjectPageView; label: string }[]
  * renders the shared <ProjectListView>. Row actions (open a task, ask the Brain) are
  * forwarded to the commands the host already owns — the panel is a thin trigger.
  */
-export class ProjectPagePanel {
+export class ProjectPagePanel extends WebviewPanelBase<ProjectPageInbound> {
   private static readonly panels = new Map<string, ProjectPagePanel>();
 
   static open(ctx: vscode.ExtensionContext, view: ProjectPageView, projectId: number, projectName: string): void {
@@ -42,51 +48,30 @@ export class ProjectPagePanel {
     ProjectPagePanel.panels.set(keyId, new ProjectPagePanel(ctx, view, projectId, projectName, keyId));
   }
 
-  private readonly panel: vscode.WebviewPanel;
-  private readonly disposables: vscode.Disposable[] = [];
-
   private constructor(
-    private readonly ctx: vscode.ExtensionContext,
+    ctx: vscode.ExtensionContext,
     private readonly view: ProjectPageView,
     private readonly projectId: number,
     private readonly projectName: string,
     private readonly keyId: string,
   ) {
-    const title = `${titleForView(view)} — ${projectName}`;
-    this.panel = vscode.window.createWebviewPanel(
-      "builderforce.projectPage",
-      title,
-      vscode.ViewColumn.Active,
-      {
-        enableScripts: true,
-        retainContextWhenHidden: true,
-        localResourceRoots: [vscode.Uri.joinPath(ctx.extensionUri, "media")],
-      },
-    );
-    this.panel.iconPath = vscode.Uri.joinPath(ctx.extensionUri, "media", "icon.png");
-    this.panel.webview.html = this.html(this.panel.webview);
-    this.panel.webview.onDidReceiveMessage((m) => void this.onMessage(m), undefined, this.disposables);
+    super(ctx, {
+      viewType: "builderforce.projectPage",
+      title: `${titleForView(view)} — ${projectName}`,
+      htmlTitle: titleForView(view),
+    });
     // Re-pull when the panel regains focus — a task may have moved / a spec changed.
-    this.panel.onDidChangeViewState((e) => { if (e.webviewPanel.visible) this.revalidate(); }, undefined, this.disposables);
-    this.panel.onDidDispose(() => this.dispose(), undefined, this.disposables);
+    this.onDidBecomeVisible(() => this.revalidate());
   }
 
   private revalidate(): void {
-    void this.panel.webview.postMessage({ type: "intent", intent: { kind: "revalidate" } });
+    this.post({ type: "intent", intent: { kind: "revalidate" } });
   }
 
-  private async onMessage(msg: { type?: string; id?: string; action?: ProjectPageActionMsg }): Promise<void> {
+  protected async onMessage(msg: ProjectPageInbound): Promise<void> {
     switch (msg.type) {
       case "ready":
         await this.sendInit();
-        break;
-      case "token.refresh": {
-        const token = (await getTenantJwt(this.ctx.secrets)) ?? null;
-        if (msg.id) void this.panel.webview.postMessage({ type: "response", id: msg.id, ok: true, result: { token } });
-        break;
-      }
-      case "signin":
-        void vscode.commands.executeCommand("builderforce.signIn");
         break;
       case "page.action":
         if (msg.action) this.runAction(msg.action);
@@ -113,7 +98,7 @@ export class ProjectPagePanel {
   private async sendInit(): Promise<void> {
     const signedIn = !!(await this.ctx.secrets.get(SECRET_KEY));
     const token = signedIn ? ((await getTenantJwt(this.ctx.secrets)) ?? null) : null;
-    void this.panel.webview.postMessage({
+    this.post({
       type: "init",
       view: this.view,
       baseUrl: getBaseUrl(),
@@ -126,49 +111,8 @@ export class ProjectPagePanel {
     });
   }
 
-  private dispose(): void {
+  protected onDispose(): void {
     ProjectPagePanel.panels.delete(this.keyId);
-    for (const d of this.disposables) {
-      try {
-        d.dispose();
-      } catch {
-        /* noop */
-      }
-    }
-  }
-
-  private html(webview: vscode.Webview): string {
-    const nonce = makeNonce();
-    const asset = (f: string) =>
-      webview.asWebviewUri(vscode.Uri.joinPath(this.ctx.extensionUri, "media", "webview", f));
-    let apiOrigin = "https://api.builderforce.ai";
-    try {
-      apiOrigin = new URL(getBaseUrl()).origin;
-    } catch {
-      /* keep default */
-    }
-    const csp = [
-      `default-src 'none'`,
-      `img-src ${webview.cspSource} https: data: blob:`,
-      `style-src ${webview.cspSource} 'unsafe-inline'`,
-      `script-src 'nonce-${nonce}'`,
-      `font-src ${webview.cspSource} data:`,
-      `connect-src ${apiOrigin} https:`,
-    ].join("; ");
-    return `<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="UTF-8" />
-<meta http-equiv="Content-Security-Policy" content="${csp}" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<link rel="stylesheet" href="${asset("index.css")}" />
-<title>${titleForView(this.view)}</title>
-</head>
-<body>
-<div id="root"></div>
-<script type="module" nonce="${nonce}" src="${asset("index.js")}"></script>
-</body>
-</html>`;
   }
 }
 

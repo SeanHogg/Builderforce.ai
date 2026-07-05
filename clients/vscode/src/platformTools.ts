@@ -1,6 +1,7 @@
 import * as vscode from "vscode";
 import { getApiKey, getBaseUrl } from "./gateway";
 import type { ToolDef } from "./fileTools";
+import { ttlCache } from "./ttlCache";
 
 /**
  * Platform tools = the SHARED, server-side capability catalog (projects, tasks,
@@ -41,12 +42,12 @@ function stringifyResult(result: unknown): string {
 // The advertised catalog is stable; cache it briefly so the chat doesn't refetch
 // the tool list on every message. Keyed by base URL (busted on sign-out/URL change
 // via clearPlatformToolsCache); short TTL covers a freshly-deployed catalog.
-let catalogCache: { url: string; ts: number; tools: ToolDef[] } | undefined;
 const CATALOG_TTL = 60_000;
+const catalogCache = ttlCache<string, ToolDef[]>(CATALOG_TTL);
 
 /** Drop the cached catalog (call on sign-out / workspace change). */
 export function clearPlatformToolsCache(): void {
-  catalogCache = undefined;
+  catalogCache.invalidate();
 }
 
 /**
@@ -58,9 +59,8 @@ export async function listPlatformTools(secrets: vscode.SecretStorage): Promise<
   const key = await getApiKey(secrets);
   if (!key) return [];
   const url = getBaseUrl();
-  if (catalogCache && catalogCache.url === url && Date.now() - catalogCache.ts < CATALOG_TTL) {
-    return catalogCache.tools;
-  }
+  const cached = catalogCache.get(url);
+  if (cached) return cached.value;
   let entries: McpToolEntry[] = [];
   try {
     const res = await fetch(`${url}/llm/v1/mcp/tools`, {
@@ -83,7 +83,7 @@ export async function listPlatformTools(secrets: vscode.SecretStorage): Promise<
     remote: true,
     execute: (args) => callPlatformTool(secrets, e.extensionId, e.tool, args),
   }));
-  catalogCache = { url, ts: Date.now(), tools };
+  catalogCache.set(url, tools);
   return tools;
 }
 
