@@ -4,6 +4,19 @@
 
 ---
 
+## ✅ RESOLVED 2026-07-05 — Gig Marketplace: publish a work item as a hireable gig, MCP-first (api `2026.7.42` · frontend `2026.7.34` · mig `0293`)
+
+"Simplify publishing a project/scope for the Gigs." One coherent slice turning any work item into a bid-able gig, with AI proposal evaluation, meetings tracked against the item, a REAL engagement→project access grant, and the FTE Job-Posting flow — all driven by MCP tools so the Brain can ideate → publish → hire.
+
+- **New hireable work-item kinds + ticket→posting bridge** (mig `0293`): `task_type` gains `product` (a PM-authored product brief) and `design` (a UI/UX or design-review gig). `tasks.hireable` + `job_postings.source_ticket_id`/`posting_type`(project_bid|design|fte)/`engagement_type`/`requirements` link a ticket to its published gig. One-click **Publish to Marketplace** on a ticket ([PublishToMarketplaceModal.tsx](./frontend/src/components/PublishToMarketplaceModal.tsx) + the Marketplace section in [TaskMgmtContent.tsx](./frontend/src/components/TaskMgmtContent.tsx)); the server derives the scope from the ticket so the Brain can publish with just a ticketId ([gigMarketplaceRoutes.ts](./api/src/presentation/routes/gigMarketplaceRoutes.ts) `/api/marketplace/*`).
+- **MCP-first**: 11 new built-in MCP tools ([builtinMcpService.ts](./api/src/application/llm/builtinMcpService.ts)) — `marketplace.publish_ticket`/`unpublish_ticket`, `jobs.create`/`list_mine`/`proposals`, `proposals.evaluate`/`shortlist`/`decline`, `meetings.schedule`, `deliverables.evaluate`/`set_status` — all on the cloud-agent allowlist with friendly audit verbs. The Brain composes "project grounded in OKRs" from the existing `projects.create`+`objectives.create`+`key_results.create`. Two new seeded built-in agents (`builtin_kind` `product_manager`, `designer`) via [provisionBuiltinAgents.ts](./api/src/application/agent/provisionBuiltinAgents.ts) + mig backfill.
+- **AI proposal evaluation** ([proposalEval.ts](./api/src/application/marketplace/proposalEval.ts) reusing `semanticEval` + a DRY-extracted [gatewayJudge.ts](./api/src/application/eval/gatewayJudge.ts)): the employer AI-scores a bid OR a delivered proposal against the posting's requirements (LLM-as-judge, lexical fallback) → `proposal_evaluations`; 0..100 cached on the row. Bids get Evaluate / Shortlist / Decline-with-courteous-message in [TalentView.tsx](./frontend/src/components/talent/TalentView.tsx).
+- **Real engagement access grant** ([EngagementAccessService.ts](./api/src/application/marketplace/EngagementAccessService.ts)): an ACTIVE `freelancer_engagement` is now a scoped grant — the hired worker's [/freelancer/workspace](./frontend/src/app/freelancer/workspace/page.tsx) surface reads the engaged project's board, signals a ticket for review (`request-review` → In Review lane), and presents deliverable proposals (`deliverable_proposals`) the employer AI-evaluates.
+- **Meetings against an item** (mig `0293` `meetings.ticket_id`/`job_id`/`engagement_id` + `interview`/`review` kinds): schedule a review meeting (before accepting a bid) or an interview (for an FTE posting) tracked against the exact ticket/posting/engagement.
+- Fully localized (`gigs.*` namespace + `workforce.builtinKind.product_manager`/`designer` + nav, all 5 catalogs) + light/dark + responsive. Verified: api `tsc` 0 errors; frontend `tsc` 0 errors; all 5 i18n catalogs valid. Also cleared the transient `gigMarketplaceRoutes.ts` `c.req.json<T>()` narrowing + `Object possibly undefined` errors flagged mid-edit by the concurrent Team-Chat work.
+
+---
+
 ## ✅ RESOLVED 2026-07-05 — Meetings calendar, availability booking, scoped join & VS Code join (api `2026.7.41` · frontend `2026.7.33` · vsix `2026.7.37`)
 
 A team calendar on Workforce + Portfolio, bookable availability, authorization-scoped joining, and join-from-VS-Code — built on the live-meetings foundation.
