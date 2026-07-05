@@ -235,6 +235,14 @@ export function TaskMgmtContent({
     setDrawerTask(t);
   }, []);
 
+  // A SECURITY ticket the viewer isn't cleared for arrives masked (`restricted`),
+  // its title blanked server-side — everywhere a task title renders we show the
+  // localized "clearance needed" placeholder instead. One helper, used at every site.
+  const titleOf = useCallback(
+    (task: Task): string => (task.restricted ? tCommon('clearanceNeeded') : task.title),
+    [tCommon],
+  );
+
   // Fetch the gated approval so the banner can resolve it inline. Cleared with the gate.
   useEffect(() => {
     const approvalId = approvalGate?.approvalId;
@@ -793,8 +801,9 @@ export function TaskMgmtContent({
             </span>
           )}
         </div>
-        <div style={{ fontWeight: 500, fontSize: 13, color: 'var(--text-primary)' }}>
-          {task.title}
+        <div style={{ fontWeight: 500, fontSize: 13, color: task.restricted ? 'var(--text-muted)' : 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: 6 }}>
+          {task.restricted && <span aria-hidden style={{ flexShrink: 0 }}>🔒</span>}
+          <span style={task.restricted ? { fontStyle: 'italic' } : undefined}>{titleOf(task)}</span>
         </div>
         <div
           style={{
@@ -1385,9 +1394,9 @@ export function TaskMgmtContent({
           })}
         </div>
       ) : view === 'calendar' ? (
-        <ScheduleCalendar items={filtered} getLabel={(t) => t.title} onSelect={(t) => openTask(t)} />
+        <ScheduleCalendar items={filtered} getLabel={titleOf} onSelect={(t) => openTask(t)} />
       ) : view === 'gantt' ? (
-        <ScheduleGantt items={filtered} getLabel={(t) => t.title} onSelect={(t) => openTask(t)} noun="task" />
+        <ScheduleGantt items={filtered} getLabel={titleOf} onSelect={(t) => openTask(t)} noun="task" />
       ) : (
         <div style={cardStyle}>
           {filtered.length === 0 ? (
@@ -1481,7 +1490,9 @@ export function TaskMgmtContent({
                         />
                       </td>
                       <td style={{ padding: '10px 12px' }}>
-                        <div style={{ fontWeight: 500, color: 'var(--text-primary)' }}>{task.title}</div>
+                        <div style={{ fontWeight: 500, color: task.restricted ? 'var(--text-muted)' : 'var(--text-primary)', fontStyle: task.restricted ? 'italic' : undefined }}>
+                          {task.restricted && <span aria-hidden style={{ marginRight: 6 }}>🔒</span>}{titleOf(task)}
+                        </div>
                         <div style={{ fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--text-muted)' }}>
                           {task.key}
                         </div>
@@ -1901,6 +1912,10 @@ export function TaskMgmtContent({
                       color: 'var(--text-primary)',
                     }}
                   />
+                ) : drawerTask.restricted ? (
+                  <div style={{ fontWeight: 700, fontSize: 16, color: 'var(--text-muted)', fontStyle: 'italic', display: 'flex', alignItems: 'center', gap: 6, padding: '4px 6px', margin: '-4px -6px' }}>
+                    <span aria-hidden>🔒</span>{tCommon('clearanceNeeded')}
+                  </div>
                 ) : (
                   <div
                     role="button"
@@ -1918,6 +1933,7 @@ export function TaskMgmtContent({
                 </div>
               </div>
               <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
+              {!drawerTask.restricted && (
               <button
                 type="button"
                 onClick={(e) => removeTask(drawerTask, e)}
@@ -1943,6 +1959,7 @@ export function TaskMgmtContent({
                   <line x1="14" y1="11" x2="14" y2="17" />
                 </svg>
               </button>
+              )}
               <button
                 type="button"
                 onClick={() => setDrawerTask(null)}
@@ -1968,7 +1985,9 @@ export function TaskMgmtContent({
               </div>
             </div>
 
-            {/* Tabs */}
+            {/* Tabs — suppressed for a restricted (masked) ticket; the clearance
+                notice replaces all tab content. */}
+            {!drawerTask.restricted && (
             <div style={{ display: 'flex', borderBottom: '1px solid var(--border-subtle)', flexShrink: 0, overflowX: 'auto' }}>
               {([['details', tTask('details')], ['agent', tTask('tabAgent')], ['changes', tTask('tabChanges')], ['prd', tTask('tabPrd')]] as const).map(([id, label]) => (
                 <button
@@ -1986,8 +2005,18 @@ export function TaskMgmtContent({
                 </button>
               ))}
             </div>
+            )}
 
-            {drawerTab === 'agent' ? (
+            {drawerTask.restricted ? (
+              // Access-restricted SECURITY ticket the viewer isn't cleared for: its
+              // content is masked, and the detail/agent/changes tabs are suppressed
+              // (they fetch by id and would otherwise leak). Show a clearance notice.
+              <div style={{ flex: 1, overflow: 'auto', padding: 32, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center', gap: 12 }}>
+                <div aria-hidden style={{ fontSize: 40 }}>🔒</div>
+                <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--text-primary)' }}>{tCommon('clearanceNeeded')}</div>
+                <p style={{ fontSize: 13, color: 'var(--text-muted)', maxWidth: 360, margin: 0 }}>{tCommon('clearanceNeededBody')}</p>
+              </div>
+            ) : drawerTab === 'agent' ? (
               <div style={{ flex: 1, overflow: 'auto' }}>
                 <AgentTab task={drawerTask} projectId={drawerTask.projectId} agentHosts={agentHostsList} onTaskChanged={() => load({ background: true })} />
               </div>

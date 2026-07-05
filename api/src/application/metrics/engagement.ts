@@ -15,14 +15,14 @@
  * — including people who are engaged but carry no assigned tasks (whom the
  * task-only scorecard misses entirely).
  */
-import { and, eq, gte, isNotNull, sql } from 'drizzle-orm';
+import { and, eq, gte, inArray, isNotNull, sql } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import { getOrSetCached } from '../../infrastructure/cache/readThroughCache';
 import { readWorkforceMetricsVersion } from './workforceMetrics';
 import {
   activityEvents,
-  auditEvents,
+  activityLog,
   contributors,
   memberMetricsPeriod,
   projects,
@@ -105,12 +105,17 @@ export async function computeTenantEngagement(db: Db, tenantId: number, days: nu
     .where(and(eq(activityEvents.tenantId, tenantId), gte(activityEvents.occurredAt, since), isNotNull(contributors.userId)))
     .groupBy(contributors.userId);
 
-  // Platform actions per user (audit_events).
+  // Platform actions per user (unified activity_log — human/hire actors).
   const auditRows = await db
-    .select({ userId: auditEvents.userId, c: sql<number>`count(*)::int` })
-    .from(auditEvents)
-    .where(and(eq(auditEvents.tenantId, tenantId), isNotNull(auditEvents.userId), gte(auditEvents.createdAt, since)))
-    .groupBy(auditEvents.userId);
+    .select({ userId: activityLog.actorRef, c: sql<number>`count(*)::int` })
+    .from(activityLog)
+    .where(and(
+      eq(activityLog.tenantId, tenantId),
+      inArray(activityLog.actorType, ['human', 'hire']),
+      isNotNull(activityLog.actorRef),
+      gte(activityLog.occurredAt, since),
+    ))
+    .groupBy(activityLog.actorRef);
 
   // VS Code presence per user (most-recent heartbeat).
   const vscodeRows = await db

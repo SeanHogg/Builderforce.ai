@@ -2166,6 +2166,10 @@ export const brainChats = pgTable('brain_chats', {
    *  surviving chat's id. Set with isArchived=true so the source drops out of the
    *  list but any ticket still resolves to the one surviving conversation. */
   mergedIntoChatId: integer('merged_into_chat_id').references((): AnyPgColumn => brainChats.id, { onDelete: 'set null' }),
+  /** TEAM CHAT scope (0294): when origin='team', which workforce team this chat is
+   *  the group channel for. NULL (with projectId also NULL) = the tenant-wide
+   *  "broader team" chat; projectId set = the project team chat. */
+  teamId:     integer('team_id').references(() => teams.id, { onDelete: 'cascade' }),
   createdAt:  timestamp('created_at').notNull().defaultNow(),
   updatedAt:  timestamp('updated_at').notNull().defaultNow(),
 });
@@ -2581,6 +2585,9 @@ export const teams = pgTable('teams', {
   segmentId:   uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),  // DB NOT NULL via trigger (0056); optional in TS so single-mode writes need no change
   name:        varchar('name', { length: 255 }).notNull(),
   description: text('description'),
+  /** A team can give itself an avatar (0294) — shown on the team card + as the face
+   *  of its team chat. An /api/brain/upload R2 URL or any image URL. */
+  avatarUrl:   varchar('avatar_url', { length: 500 }),
   createdAt:   timestamp('created_at').notNull().defaultNow(),
   updatedAt:   timestamp('updated_at').notNull().defaultNow(),
 });
@@ -3463,6 +3470,10 @@ export const meetings = pgTable('meetings', {
   ticketId:         integer('ticket_id').references((): AnyPgColumn => tasks.id, { onDelete: 'set null' }),
   jobId:            varchar('job_id', { length: 36 }),
   engagementId:     varchar('engagement_id', { length: 36 }),
+  /** Team Chat backchannel (0294): the meeting IS a team chat — joining opens this
+   *  conversation, and people who can't attend still post their updates here so the
+   *  chat keeps going after the call. Resolved to the scope's canonical team chat. */
+  chatId:           integer('chat_id').references((): AnyPgColumn => brainChats.id, { onDelete: 'set null' }),
   scheduledAt:      timestamp('scheduled_at', { withTimezone: true }),                 // null = start-now
   durationMinutes:  integer('duration_minutes').notNull().default(30),
   status:           varchar('status', { length: 16 }).notNull().default('scheduled'),  // scheduled|live|ended|cancelled

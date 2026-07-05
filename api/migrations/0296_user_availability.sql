@@ -1,4 +1,4 @@
--- 0293_user_availability.sql
+-- 0296_user_availability.sql
 -- Per-user bookable availability windows (working hours) that back "find a time"
 -- and the calendar's free/busy shading. One row per (tenant, user).
 --

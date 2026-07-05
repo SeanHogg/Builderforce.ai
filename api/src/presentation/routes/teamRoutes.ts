@@ -111,7 +111,6 @@ export function createTeamRoutes(db: Db): Hono<HonoEnv> {
       .values({ tenantId, name, description: body.description?.trim() || null })
       .returning();
 
-    await invalidate(c, tenantId);
     return c.json(team, 201);
   });
 
@@ -224,7 +223,6 @@ export function createTeamRoutes(db: Db): Hono<HonoEnv> {
 
     // Rename changes what the by-project read returns for every attached project.
     await invalidateProjectsForTeam(c, c.get('tenantId') as number, id);
-    await invalidate(c, tenantId);
     return c.json(updated);
   });
 
@@ -242,7 +240,6 @@ export function createTeamRoutes(db: Db): Hono<HonoEnv> {
       .returning({ id: teams.id });
     if (!deleted) return c.json({ error: 'Team not found' }, 404);
 
-    await invalidate(c, tenantId);
     return c.json({ deleted: true });
   });
 
@@ -273,7 +270,6 @@ export function createTeamRoutes(db: Db): Hono<HonoEnv> {
 
     // Membership feeds the per-project assignable-workforce read.
     await invalidateProjectsForTeam(c, c.get('tenantId') as number, id);
-    await invalidate(c, tenantId);
     return c.json(member, 201);
   });
 
@@ -290,7 +286,6 @@ export function createTeamRoutes(db: Db): Hono<HonoEnv> {
       .where(and(eq(teamMembers.id, memberId), eq(teamMembers.teamId, id)));
 
     await invalidateProjectsForTeam(c, c.get('tenantId') as number, id);
-    await invalidate(c, tenantId);
     return c.json({ deleted: true });
   });
 
@@ -319,7 +314,6 @@ export function createTeamRoutes(db: Db): Hono<HonoEnv> {
       .returning();
 
     await invalidateProjectCaches(c, c.get('tenantId') as number, projectId);
-    await invalidate(c, tenantId);
     return c.json(link ?? { error: 'Project already attached' }, link ? 201 : 409);
   });
 
@@ -336,7 +330,6 @@ export function createTeamRoutes(db: Db): Hono<HonoEnv> {
       .where(and(eq(teamProjects.teamId, id), eq(teamProjects.projectId, projectId)));
 
     await invalidateProjectCaches(c, c.get('tenantId') as number, projectId);
-    await invalidate(c, tenantId);
     return c.json({ deleted: true });
   });
 
