@@ -120,6 +120,9 @@ jobs:
         working-directory: frontend
         env:
           NEXT_PUBLIC_WORKER_URL: https://worker.builderforce.ai
+          # Public bfq_ ingest key baked into the statically-rendered root layout so
+          # the web app self-reports browser errors to the Product Quality pillar.
+          NEXT_BUILDERFORCE_ERROR_API_KEY: ${{ secrets.BUILDERFORCE_ERROR_API_KEY }}
         run: pnpm exec next build
 
       - name: Generate Cloudflare Worker (next-on-pages)
