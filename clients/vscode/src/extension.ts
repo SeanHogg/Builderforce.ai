@@ -312,9 +312,15 @@ export function activate(context: vscode.ExtensionContext): void {
 
   void maybeScan(context, false);
 
-  // Track this VS Code coder-agent connection (human-in-the-loop) via heartbeat.
+  // Track this VS Code coder-agent connection (human-in-the-loop) via heartbeat, and
+  // on the same cadence poll for newly-assigned work so a ticket assigned on the web
+  // board is delivered to the editor (tracked HITL). One timer for both (DRY).
   void heartbeat(context);
-  const hb = setInterval(() => void heartbeat(context), 5 * 60_000);
+  void pollAssignedTasks(context, projects);
+  const hb = setInterval(() => {
+    void heartbeat(context);
+    void pollAssignedTasks(context, projects);
+  }, 5 * 60_000);
   context.subscriptions.push({ dispose: () => clearInterval(hb) });
 }
 
@@ -322,6 +328,45 @@ async function heartbeat(context: vscode.ExtensionContext): Promise<void> {
   if (!(await context.secrets.get(SECRET_KEY))) return;
   const version = (context.extension.packageJSON as { version?: string }).version ?? "0.0.0";
   await bfApi.connect(context.secrets, os.hostname(), version);
+}
+
+/** globalState key: the assigned-task ids we've already announced, so a poll only
+ *  notifies on newly-assigned work (and re-notifies if a task is unassigned then
+ *  reassigned). `undefined` = never polled on this machine → seed silently. */
+const ASSIGNED_SEEN_KEY = "builderforce.assignedTaskIdsSeen";
+
+/**
+ * Deliver assigned work to the editor: fetch the open tasks assigned to the signed-in
+ * user and raise a notification for any that appeared since the last poll. The FIRST
+ * poll on a machine seeds the seen-set silently so we don't announce the whole existing
+ * backlog. "Show my tasks" flips the Projects & Tasks tree to its assigned-to-me filter.
+ */
+async function pollAssignedTasks(
+  context: vscode.ExtensionContext,
+  projects: ProjectsTreeProvider,
+): Promise<void> {
+  if (!(await context.secrets.get(SECRET_KEY))) return;
+  const assigned = await bfApi.listAssignedTasks(context.secrets);
+  const currentIds = assigned.map((t) => t.id);
+  const prev = context.globalState.get<number[]>(ASSIGNED_SEEN_KEY);
+  await context.globalState.update(ASSIGNED_SEEN_KEY, currentIds);
+  if (prev === undefined) return; // first run — seed silently
+
+  const prevSet = new Set(prev);
+  const fresh = assigned.filter((t) => !prevSet.has(t.id));
+  if (fresh.length === 0) return;
+
+  projects.refresh();
+  const msg =
+    fresh.length === 1
+      ? vscode.l10n.t('BuilderForce: “{0}” was assigned to you.', fresh[0]!.title)
+      : vscode.l10n.t('BuilderForce: {0} tasks were assigned to you.', String(fresh.length));
+  const show = vscode.l10n.t('Show my tasks');
+  const action = await vscode.window.showInformationMessage(msg, show);
+  if (action === show) {
+    projects.setAssignedToMe(true);
+    await vscode.commands.executeCommand('builderforce.project.focus');
+  }
 }
 
 /**

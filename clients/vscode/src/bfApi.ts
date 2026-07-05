@@ -494,6 +494,37 @@ export function invalidateTasks(projectId?: number): void {
   taskCache.invalidate(projectId);
 }
 
+/** An OPEN work item assigned to the signed-in user, delivered by the API's
+ *  /api/vscode/tasks channel (mirrors that endpoint's row shape). This is how work
+ *  reaches the editor as an assignable runtime: assign a ticket to the user on the
+ *  web board and it surfaces here (tracked HITL). */
+export interface BfAssignedTask {
+  id: number;
+  key: string;
+  title: string;
+  status: string;
+  priority: string;
+  projectId: number;
+  projectPublicId: string;
+  projectName: string;
+  githubPrUrl: string | null;
+  updatedAt: string | null;
+}
+
+/**
+ * The open tasks assigned to the signed-in user (GET /api/vscode/tasks). Uncached —
+ * the caller polls it on the heartbeat cadence to detect newly-assigned work, so a
+ * stale cache would defeat the point. Degrades to [] when signed out / not deployed.
+ */
+export async function listAssignedTasks(secrets: vscode.SecretStorage): Promise<BfAssignedTask[]> {
+  try {
+    const r = await authed<{ tasks: BfAssignedTask[] }>(secrets, "/api/vscode/tasks");
+    return r?.tasks ?? [];
+  } catch {
+    return [];
+  }
+}
+
 // Project-scoped OKR objectives, cached briefly like tasks so the Hierarchy view's
 // top tier doesn't refetch on every expand. Keyed by project id.
 const objectiveCache = ttlCache<number, BfObjective[]>(TASKS_TTL);

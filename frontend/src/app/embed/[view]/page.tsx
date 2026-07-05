@@ -21,6 +21,7 @@ import { PmVisualizersContent } from '../../../components/pm/PmVisualizersConten
 import { DependencyGraph } from '../../../components/pm/DependencyGraph';
 import { RiceMatrix } from '../../../components/pm/RiceMatrix';
 import { RoiDashboard } from '../../../components/pm/RoiDashboard';
+import { WorkforceAgents } from '../../../components/workforce/WorkforceAgents';
 
 /**
  * The framed BuilderForce surface. ONE dynamic route serves every embeddable
@@ -183,6 +184,10 @@ function renderSurface(view: string, projectId: number | null): React.ReactNode 
       return <PokerSurface />;
     case 'retros':
       return <RetroSurface />;
+    case 'workforce':
+      // The unified workforce directory — same grid as /workforce (people + agents
+      // + remote hosts + VS Code editors). tenantId is resolved from the frame auth.
+      return <WorkforceAgents />;
     default: {
       // Every other governance tracker is the one generic CRUD surface (DRY).
       const cfg = TRACKER_CONFIGS[view];

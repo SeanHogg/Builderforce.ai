@@ -1909,6 +1909,12 @@
       "mergeFailed": "Zusammenführung fehlgeschlagen",
       "toolsTitle": "Alle Konsolidierungswerkzeuge",
       "toolsSub": "Vorgeschlagene Duplikate, manuelle Zusammenführung, Verknüpfung mit einem Arbeitsbereich-Benutzer und Zusammenführungsverlauf."
+    },
+    "vscode": {
+      "lastSeen": "Zuletzt gesehen {when}",
+      "runtime": "Editor",
+      "online": "Online",
+      "offline": "Offline"
     }
   },
   "knowledge": {
@@ -5577,6 +5583,13 @@
     "errSave": "Speichern fehlgeschlagen",
     "errDelete": "Löschen fehlgeschlagen",
     "errUpdate": "Aktualisierung fehlgeschlagen",
-    "errMove": "Verschieben fehlgeschlagen"
+    "errMove": "Verschieben fehlgeschlagen",
+    "tabChanges": "Änderungen"
+  },
+  "taskChanges": {
+    "allChanges": "Alle Änderungen",
+    "loading": "Änderungen werden geladen…",
+    "empty": "Keine Dateiänderungen aufgezeichnet.",
+    "viewInEditor": "Diese Änderung im Editor anzeigen"
   }
 }

@@ -1,4 +1,7 @@
 {
+  "BuilderForce: “{0}” was assigned to you.": "BuilderForce：“{0}”已指派给你。",
+  "BuilderForce: {0} tasks were assigned to you.": "BuilderForce：有 {0} 个任务已指派给你。",
+  "Show my tasks": "查看我的任务",
   "Thinking…": "思考中…",
   "Thought for {duration}": "思考了 {duration}",
   "You": "你",

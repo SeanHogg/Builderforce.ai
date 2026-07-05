@@ -658,6 +658,36 @@ export const agentHosts = {
   },
 };
 
+/** A connected VS Code editor (mig 0202 `vscode_connections`) — a per-user, per-machine
+ *  editor runtime that appears in the workforce/observability surfaces as a presence
+ *  entry. Mirrors the API's `GET /api/vscode/connections` row shape. */
+export interface VscodeConnection {
+  id: number;
+  tenantId: number;
+  userId: string | null;
+  machineName: string;
+  extensionVersion: string | null;
+  status: string;
+  connectedAt: string;
+  lastSeenAt: string;
+  createdAt: string;
+}
+
+export const vscodeConnections = {
+  list: () =>
+    request<{ connections: VscodeConnection[] }>('/api/vscode/connections').then((r) => r.connections),
+};
+
+/** A VS Code connection is "online" when it's active and its heartbeat (every 5 min)
+ *  is fresh. Single source of truth for VS Code liveness across workforce + observability
+ *  so the two surfaces never disagree. */
+export function isVscodeConnectionOnline(conn: Pick<VscodeConnection, 'status' | 'lastSeenAt'>): boolean {
+  if (conn.status !== 'active') return false;
+  const last = Date.parse(conn.lastSeenAt);
+  if (Number.isNaN(last)) return false;
+  return Date.now() - last < 11 * 60_000; // two missed 5-min heartbeats + slack
+}
+
 export interface ToolAuditEvent {
   id: number;
   runId?: string | null;

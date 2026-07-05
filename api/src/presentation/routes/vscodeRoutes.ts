@@ -1,9 +1,9 @@
 import { Hono } from 'hono';
-import { and, desc, eq, sql } from 'drizzle-orm';
+import { and, desc, eq, isNull, sql } from 'drizzle-orm';
 import type { HonoEnv } from '../../env';
 import { authMiddleware } from '../middleware/authMiddleware';
 import type { Db } from '../../infrastructure/database/connection';
-import { vscodeConnections } from '../../infrastructure/database/schema';
+import { projects, tasks, vscodeConnections } from '../../infrastructure/database/schema';
 import type { TenantService } from '../../application/tenant/TenantService';
 import { mintTenantSessionToken } from '../../infrastructure/auth/tenantSessionToken';
 import { TenantRole } from '../../domain/shared/types';
@@ -99,6 +99,43 @@ export function createVscodeRoutes(db: Db, tenantService: TenantService): Hono<H
     }
 
     return c.json({ ok: true });
+  });
+
+  // GET /api/vscode/tasks — the OPEN work items assigned to the signed-in user, so the
+  // editor can deliver assigned tasks (tracked HITL) and notify on newly-assigned work.
+  // A task is assigned to a human OR an agent (never both), so this is the "assigned to
+  // me" delivery channel that mirrors the web board's human-assignee lane. Bounded to 50
+  // and open-only (completedAt IS NULL). Intentionally uncached: a low-QPS interactive
+  // poll that MUST reflect a just-assigned task immediately — same posture as
+  // /api/vscode/tenants and /connections above.
+  router.get('/tasks', async (c) => {
+    const userId = c.get('userId') as string;
+    const tenantId = c.get('tenantId') as number;
+    const rows = await db
+      .select({
+        id: tasks.id,
+        key: tasks.key,
+        title: tasks.title,
+        status: tasks.status,
+        priority: tasks.priority,
+        projectId: tasks.projectId,
+        projectPublicId: projects.publicId,
+        projectName: projects.name,
+        githubPrUrl: tasks.githubPrUrl,
+        updatedAt: tasks.updatedAt,
+      })
+      .from(tasks)
+      .innerJoin(projects, eq(projects.id, tasks.projectId))
+      .where(
+        and(
+          eq(projects.tenantId, tenantId),
+          eq(tasks.assignedUserId, userId),
+          isNull(tasks.completedAt),
+        ),
+      )
+      .orderBy(desc(tasks.updatedAt))
+      .limit(50);
+    return c.json({ tasks: rows });
   });
 
   // GET /api/vscode/connections — list this tenant's VS Code connections (for the

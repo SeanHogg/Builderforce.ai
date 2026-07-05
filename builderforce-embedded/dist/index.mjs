@@ -91,6 +91,7 @@ var EMBED_VIEWS = {
   capacity: { key: "capacity", label: "Capacity & Risk", pillar: "agile", available: true },
   cost: { key: "cost", label: "Cost / Runway", pillar: "agile", available: true },
   "feature-scoring": { key: "feature-scoring", label: "Feature Scoring", pillar: "agile", available: true },
+  workforce: { key: "workforce", label: "Workforce", pillar: "agile", available: true },
   // Governance & Security — POSTURE ONLY (governance ⇒ 'security' capability)
   soc2: { key: "soc2", label: "SOC 2 Tracker", pillar: "governance", available: true },
   vendors: { key: "vendors", label: "Vendor Register", pillar: "governance", available: true },

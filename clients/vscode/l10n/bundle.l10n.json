@@ -1,4 +1,7 @@
 {
+  "BuilderForce: “{0}” was assigned to you.": "BuilderForce: “{0}” was assigned to you.",
+  "BuilderForce: {0} tasks were assigned to you.": "BuilderForce: {0} tasks were assigned to you.",
+  "Show my tasks": "Show my tasks",
   "Thinking…": "Thinking…",
   "Thought for {duration}": "Thought for {duration}",
   "You": "You",
