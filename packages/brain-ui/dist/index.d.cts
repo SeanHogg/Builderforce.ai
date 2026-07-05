@@ -348,6 +348,62 @@ declare const ChatTicketsPanel: React.MemoExoticComponent<typeof ChatTicketsPane
 declare function useChatParticipants(adapter: ChatTicketsAdapter, chatId: number | null, refreshSignal?: number): DirectedRecipient[];
 
 /**
+ * @-mention autocomplete — the shared composer typeahead that lets a user direct
+ * the next chat turn at an invited participant (an agent OR a person) by typing
+ * "@". The single source of truth for the interaction, rendered identically on the
+ * web app's <ChatInput> and inside the VS Code webview's composer.
+ *
+ * Headless-ish: {@link useMentionAutocomplete} owns the token/selection state and
+ * returns handlers you spread onto YOUR <textarea> plus a `popup` node you render
+ * inside a `position: relative` composer container. Picking a participant strips
+ * the "@query" fragment (the picked recipient is shown by the composer's "To:"
+ * chip, so it need not linger in the body) and calls `onPick` — wire that to the
+ * host's `setRecipientChoice`, reusing the whole directed-message routing spine.
+ *
+ * Theme-aware via the same CSS-var fallback chain the ChatTicketsPanel uses, so the
+ * popup reads in BOTH the web app (light/dark) and the editor's active theme.
+ */
+
+interface MentionLabels {
+    /** Heading above the list, e.g. "Direct to". */
+    title?: string;
+    /** Row sub-label for an invited agent, e.g. "Agent". */
+    agent?: string;
+    /** Row sub-label for an invited person, e.g. "Person". */
+    human?: string;
+}
+interface UseMentionAutocompleteOptions {
+    /** Ref to the composer's <textarea> — read for the live caret position. */
+    textareaRef: React__default.RefObject<HTMLTextAreaElement | null>;
+    /** Current composer text (controlled). */
+    value: string;
+    /** Setter for the composer text (same one the textarea's onChange calls). */
+    setValue: (v: string) => void;
+    /** The chat's invited participants (agents + humans) offered by the picker. */
+    participants: DirectedRecipient[];
+    /** Called with the participant the user picked — wire to `setRecipientChoice`. */
+    onPick: (r: DirectedRecipient) => void;
+    labels?: MentionLabels;
+    /** Suppress the picker entirely (e.g. while a run is streaming). */
+    disabled?: boolean;
+}
+interface MentionAutocomplete {
+    /**
+     * Attach to the textarea's onKeyDown BEFORE your own logic. Returns true when it
+     * consumed the key (nav / select / escape) — when true you must NOT also submit
+     * or insert a newline for that key.
+     */
+    onKeyDown: (e: React__default.KeyboardEvent<HTMLTextAreaElement>) => boolean;
+    /** Attach to the textarea's onSelect so a caret move re-detects the token. */
+    onSelect: () => void;
+    /** The popup element; render it inside a `position: relative` container. */
+    popup: React__default.ReactNode;
+    /** True while the picker is open (its nav keys are being intercepted). */
+    open: boolean;
+}
+declare function useMentionAutocomplete(opts: UseMentionAutocompleteOptions): MentionAutocomplete;
+
+/**
  * Pure transcript view-model — frame-work agnostic so the SAME logic drives the
  * web app and the VS Code webview. It merges the durable message list (user +
  * assistant turns) with the live execution trace (LLM turns → "thinking", tool
@@ -834,4 +890,4 @@ interface ProjectListViewProps {
 }
 declare function ProjectListView({ title, subtitle, data, loading, error, labels, onAction, onRefresh }: ProjectListViewProps): React.JSX.Element;
 
-export { type AgentOptionVM, Avatar, type AvatarProps, BrainTimeline, type BrainTimelineLabels, type BrainTimelineProps, type BuildTimelineInput, type ChatAgentVM, type ChatOptionVM, type ChatTicketsAdapter, type ChatTicketsLabels, ChatTicketsPanel, type ChatTicketsPanelProps, DEFAULT_CHAT_TICKETS_LABELS, DEFAULT_EVERMIND_LABELS, DEFAULT_PROJECT360_LABELS, DEFAULT_PROJECT_LIST_LABELS, DEFAULT_TIMELINE_LABELS, EvermindConsole, type EvermindConsoleAdapter, type EvermindConsoleData, type EvermindConsoleLabels, type EvermindConsoleProps, type EvermindMode, type EvermindRecentEntry, type EvermindSeedModel, type EvermindTeacherOptions, HealthRing, type HealthRingProps, type HealthTier, type LineageVM, type LinkType, Markdown, type MarkdownLabels, type MarkdownProps, ParticipantBadge, type Project360, type Project360Action, type Project360Dimension, type Project360Gap, type Project360Labels, type Project360Member, type Project360Pillar, Project360View, type Project360ViewProps, type ProjectListAction, type ProjectListBadge, type ProjectListGroup, type ProjectListItem, type ProjectListLabels, type ProjectListModel, type ProjectListTicketRef, type ProjectListTone, ProjectListView, type ProjectListViewProps, RUNNABLE_KINDS, Sunburst, type SunburstProps, TICKET_KINDS, type TicketKind, type TicketLinkVM, type TicketOptionVM, type TimelineImage, type TimelineNode, attachmentsOf, avatarColor, buildSettledTimeline, buildTimeline, formatDuration, formatPayload, healthRingColor, initialsOf, streamingNode, useChatParticipants };
+export { type AgentOptionVM, Avatar, type AvatarProps, BrainTimeline, type BrainTimelineLabels, type BrainTimelineProps, type BuildTimelineInput, type ChatAgentVM, type ChatOptionVM, type ChatTicketsAdapter, type ChatTicketsLabels, ChatTicketsPanel, type ChatTicketsPanelProps, DEFAULT_CHAT_TICKETS_LABELS, DEFAULT_EVERMIND_LABELS, DEFAULT_PROJECT360_LABELS, DEFAULT_PROJECT_LIST_LABELS, DEFAULT_TIMELINE_LABELS, EvermindConsole, type EvermindConsoleAdapter, type EvermindConsoleData, type EvermindConsoleLabels, type EvermindConsoleProps, type EvermindMode, type EvermindRecentEntry, type EvermindSeedModel, type EvermindTeacherOptions, HealthRing, type HealthRingProps, type HealthTier, type LineageVM, type LinkType, Markdown, type MarkdownLabels, type MarkdownProps, type MentionAutocomplete, type MentionLabels, ParticipantBadge, type Project360, type Project360Action, type Project360Dimension, type Project360Gap, type Project360Labels, type Project360Member, type Project360Pillar, Project360View, type Project360ViewProps, type ProjectListAction, type ProjectListBadge, type ProjectListGroup, type ProjectListItem, type ProjectListLabels, type ProjectListModel, type ProjectListTicketRef, type ProjectListTone, ProjectListView, type ProjectListViewProps, RUNNABLE_KINDS, Sunburst, type SunburstProps, TICKET_KINDS, type TicketKind, type TicketLinkVM, type TicketOptionVM, type TimelineImage, type TimelineNode, type UseMentionAutocompleteOptions, attachmentsOf, avatarColor, buildSettledTimeline, buildTimeline, formatDuration, formatPayload, healthRingColor, initialsOf, streamingNode, useChatParticipants, useMentionAutocomplete };

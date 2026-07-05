@@ -108,7 +108,8 @@ export interface MentionToken {
  */
 export function activeMentionToken(text: string, caret: number): MentionToken | null {
   const at = text.lastIndexOf('@', Math.max(0, caret - 1));
-  if (at < 0) return null;
+  // No '@', or the caret sits at/before it (nothing is being typed into a token).
+  if (at < 0 || at >= caret) return null;
   // Must start the text or follow whitespace, so an email address's "@" never triggers.
   if (at > 0 && !/\s/.test(text[at - 1])) return null;
   const query = text.slice(at + 1, caret);

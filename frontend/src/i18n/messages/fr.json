@@ -18,7 +18,10 @@
     "dictate": "Dicter",
     "stopDictation": "Arrêter la dictée",
     "removeAttachment": "Supprimer la pièce jointe",
-    "brainstorm": "Brainstorming (idéation)"
+    "brainstorm": "Brainstorming (idéation)",
+    "mentionTitle": "Adresser à",
+    "mentionAgent": "Agent",
+    "mentionHuman": "Personne"
   },
   "repoContext": {
     "title": "Ajouter le contexte du dépôt",

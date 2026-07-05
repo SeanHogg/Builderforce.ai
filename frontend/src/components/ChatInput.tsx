@@ -337,12 +337,28 @@ export function ChatInput({
   // The `/` options menu appears when the consumer wires any of its controls.
   const hasOptionsMenu = !!(onEffortChange || onThinkingChange || accountSettingsHref);
 
+  // @-mention typeahead — active only when the host supplies participants. Picking
+  // one routes the next turn (via onMention) and strips the "@query" from the text.
+  // Works in every modality: the participant set comes from the chat, not the persona.
+  const noopMention = useCallback(() => {}, []);
+  const mention = useMentionAutocomplete({
+    textareaRef,
+    value,
+    setValue: onChange,
+    participants: mentionables ?? [],
+    onPick: onMention ?? noopMention,
+    disabled,
+    labels: { title: t('mentionTitle'), agent: t('mentionAgent'), human: t('mentionHuman') },
+  });
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (canSubmit) onSubmit();
   };
 
-  const handleKeyDown = (e: React.KeyboardEvent) => {
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    // The @-mention picker gets first refusal on nav/select/escape keys.
+    if (mention.onKeyDown(e)) return;
     if (submitOnEnter && e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       if (canSubmit) onSubmit();
@@ -478,6 +494,7 @@ export function ChatInput({
         onDrop={onAttach ? handleDrop : undefined}
         onDragOver={onAttach ? (e) => e.preventDefault() : undefined}
         style={{
+          position: 'relative',
           display: 'flex',
           alignItems: 'flex-end',
           gap: 10,
@@ -489,6 +506,7 @@ export function ChatInput({
           boxShadow: 'var(--chat-input-shadow)',
         }}
       >
+        {mention.popup}
         {onAttach && (
           <>
             <input
@@ -579,9 +597,11 @@ export function ChatInput({
           </button>
         )}
         <textarea
+          ref={textareaRef}
           value={value}
           onChange={(e) => onChange(e.target.value)}
           onKeyDown={handleKeyDown}
+          onSelect={mention.onSelect}
           onPaste={onAttach ? handlePaste : undefined}
           placeholder={placeholder}
           disabled={disabled}

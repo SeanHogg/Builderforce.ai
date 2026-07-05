@@ -18,7 +18,10 @@
     "dictate": "语音输入",
     "stopDictation": "停止语音输入",
     "removeAttachment": "移除附件",
-    "brainstorm": "头脑风暴（构思）"
+    "brainstorm": "头脑风暴（构思）",
+    "mentionTitle": "指定给",
+    "mentionAgent": "智能体",
+    "mentionHuman": "成员"
   },
   "repoContext": {
     "title": "添加仓库上下文",
