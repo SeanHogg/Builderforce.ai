@@ -529,7 +529,6 @@ export default function MarketplacePageClient() {
   const searchPlaceholder =
     category === 'talent' ? tt('filter.search')
     : category === 'models' ? tmodels('searchPlaceholder')
-    : category === 'gigs' ? tdis('gigs.title')
     : tm('searchPlaceholder');
 
   return (

@@ -61,6 +61,7 @@ export type {
 
 // App-specific brain pieces (not part of the portable package).
 export { brainConfig } from './runtime';
+export { guestBrainConfig } from './guestRuntime';
 export {
   generatePrd,
   savePrd,
