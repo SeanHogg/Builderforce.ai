@@ -613,7 +613,7 @@ function BrainContextProvider({ children }) {
   const setContext = (0, import_react4.useCallback)((patch) => {
     setPageContext((prev) => {
       const next = { ...prev, ...patch };
-      if (next.projectId === prev.projectId && next.viewingProjectId === prev.viewingProjectId && next.modality === prev.modality && next.extraSystem === prev.extraSystem && next.initialChatId === prev.initialChatId) {
+      if (next.projectId === prev.projectId && next.viewingProjectId === prev.viewingProjectId && next.modality === prev.modality && next.extraSystem === prev.extraSystem && next.initialChatId === prev.initialChatId && next.initialPrompt === prev.initialPrompt) {
         return prev;
       }
       return next;

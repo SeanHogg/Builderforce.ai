@@ -1909,6 +1909,12 @@
       "mergeFailed": "La fusión falló",
       "toolsTitle": "Todas las herramientas de consolidación",
       "toolsSub": "Duplicados sugeridos, fusión manual, vinculación a un usuario del espacio y historial de fusiones."
+    },
+    "vscode": {
+      "lastSeen": "Visto por última vez {when}",
+      "runtime": "Editor",
+      "online": "En línea",
+      "offline": "Desconectado"
     }
   },
   "knowledge": {
@@ -5577,6 +5583,13 @@
     "errSave": "Error al guardar",
     "errDelete": "Error al eliminar",
     "errUpdate": "Error al actualizar",
-    "errMove": "Error al mover"
+    "errMove": "Error al mover",
+    "tabChanges": "Cambios"
+  },
+  "taskChanges": {
+    "allChanges": "Todos los cambios",
+    "loading": "Cargando cambios…",
+    "empty": "No se registraron cambios de archivos.",
+    "viewInEditor": "Ver este cambio en el editor"
   }
 }

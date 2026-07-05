@@ -1909,6 +1909,12 @@
       "mergeFailed": "Échec de la fusion",
       "toolsTitle": "Tous les outils de consolidation",
       "toolsSub": "Doublons suggérés, fusion manuelle, liaison à un utilisateur de l'espace et historique des fusions."
+    },
+    "vscode": {
+      "lastSeen": "Vu pour la dernière fois {when}",
+      "runtime": "Éditeur",
+      "online": "En ligne",
+      "offline": "Hors ligne"
     }
   },
   "knowledge": {
@@ -5577,6 +5583,13 @@
     "errSave": "Échec de l’enregistrement",
     "errDelete": "Échec de la suppression",
     "errUpdate": "Échec de la mise à jour",
-    "errMove": "Échec du déplacement"
+    "errMove": "Échec du déplacement",
+    "tabChanges": "Modifications"
+  },
+  "taskChanges": {
+    "allChanges": "Toutes les modifications",
+    "loading": "Chargement des modifications…",
+    "empty": "Aucune modification de fichier enregistrée.",
+    "viewInEditor": "Voir cette modification dans l’éditeur"
   }
 }

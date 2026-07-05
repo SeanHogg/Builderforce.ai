@@ -1909,6 +1909,12 @@
       "mergeFailed": "合并失败",
       "toolsTitle": "所有合并工具",
       "toolsSub": "建议的重复项、手动合并、关联到工作区用户以及合并历史。"
+    },
+    "vscode": {
+      "lastSeen": "最后活跃 {when}",
+      "runtime": "编辑器",
+      "online": "在线",
+      "offline": "离线"
     }
   },
   "knowledge": {
@@ -5577,6 +5583,13 @@
     "errSave": "保存失败",
     "errDelete": "删除失败",
     "errUpdate": "更新失败",
-    "errMove": "移动失败"
+    "errMove": "移动失败",
+    "tabChanges": "变更"
+  },
+  "taskChanges": {
+    "allChanges": "所有变更",
+    "loading": "正在加载变更…",
+    "empty": "未记录任何文件变更。",
+    "viewInEditor": "在编辑器中查看此变更"
   }
 }

@@ -20,8 +20,9 @@ import { getProject360 } from '@/lib/project360Api';
  * component across surfaces" payoff: one presentational component, two hosts.
  *
  * On the web the improve/workforce actions route into the project workspace (where
- * the Brain + board live) rather than firing a VS Code command; the one-click
- * agent-seed parity is a follow-up (needs an IDE seed deep-link — see ROADMAP).
+ * the Brain + board live) rather than firing a VS Code command. A `brain` action
+ * carries a ready-made seed prompt, which we forward as `/ide/:id?prompt=` so the
+ * IDE's Brain panel auto-sends it — one-click agent-seed parity with VS Code.
  */
 export function ProjectHealthPanel({ projectId }: { projectId: number }) {
   const t = useTranslations('project360');
@@ -57,9 +58,12 @@ export function ProjectHealthPanel({ projectId }: { projectId: number }) {
 
   const onAction = useCallback((action: Project360Action) => {
     // Every action lands the user in the project workspace, where the Brain and
-    // board can act on it. (VS Code fires the command inline; the web routes there.)
-    void action;
-    router.push(`/ide/${projectId}`);
+    // board can act on it. A `brain` action carries a seed prompt — forward it as
+    // ?prompt= so the IDE's Brain panel auto-sends it (one-click seed parity).
+    const qs = action.kind === 'brain' && action.text
+      ? `?prompt=${encodeURIComponent(action.text)}`
+      : '';
+    router.push(`/ide/${projectId}${qs}`);
   }, [router, projectId]);
 
   return (

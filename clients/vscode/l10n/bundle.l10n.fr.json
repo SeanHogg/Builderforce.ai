@@ -1,4 +1,7 @@
 {
+  "BuilderForce: “{0}” was assigned to you.": "BuilderForce : « {0} » vous a été attribué.",
+  "BuilderForce: {0} tasks were assigned to you.": "BuilderForce : {0} tâches vous ont été attribuées.",
+  "Show my tasks": "Afficher mes tâches",
   "Thinking…": "Réflexion…",
   "Thought for {duration}": "Réflexion pendant {duration}",
   "You": "Vous",

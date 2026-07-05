@@ -4,7 +4,7 @@
  * WorkforceAgents and its style object was also copy-pasted for the "Marketplace"
  * and "Agent" pills elsewhere.
  */
-export type AgentPillKind = 'cloud' | 'host' | 'marketplace' | 'human' | 'pending';
+export type AgentPillKind = 'cloud' | 'host' | 'marketplace' | 'human' | 'pending' | 'vscode';
 
 const LABELS: Record<AgentPillKind, string> = {
   cloud: 'Cloud',
@@ -12,6 +12,7 @@ const LABELS: Record<AgentPillKind, string> = {
   marketplace: 'Marketplace',
   human: 'Human',
   pending: 'Pending',
+  vscode: 'VS Code',
 };
 
 // Three palettes: coral accent (agents), amber (pending invite), neutral (human/host).
@@ -26,6 +27,7 @@ const PALETTES: Record<AgentPillKind, Palette> = {
   host: NEUTRAL,
   human: NEUTRAL,
   pending: AMBER,
+  vscode: NEUTRAL,
 };
 
 export function AgentTypePill({ kind, label }: { kind: AgentPillKind; label?: string }) {

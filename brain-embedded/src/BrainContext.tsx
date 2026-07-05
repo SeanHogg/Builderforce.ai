@@ -59,6 +59,10 @@ export interface BrainPageContext {
   extraSystem?: string;
   /** Deep-link: open the drawer on this chat. */
   initialChatId?: number | null;
+  /** Deep-link: one-shot prompt auto-sent when the drawer opens (e.g. the IDE
+   *  `?prompt=` seed). Distinct from a pending-prompt handoff — this is published
+   *  by a page effect, not read from storage. */
+  initialPrompt?: string;
 }
 
 export interface BrainContextValue extends BrainPageContext {
@@ -116,7 +120,8 @@ export function BrainContextProvider({ children }: { children: React.ReactNode }
         next.viewingProjectId === prev.viewingProjectId &&
         next.modality === prev.modality &&
         next.extraSystem === prev.extraSystem &&
-        next.initialChatId === prev.initialChatId
+        next.initialChatId === prev.initialChatId &&
+        next.initialPrompt === prev.initialPrompt
       ) {
         return prev;
       }

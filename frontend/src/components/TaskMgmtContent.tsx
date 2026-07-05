@@ -44,6 +44,7 @@ import { useRealtimeRoom } from '@/lib/embed/useRealtimeRoom';
 import { SlideOutPanel } from './SlideOutPanel';
 import { MoveToBoardControl } from './MoveToBoardControl';
 import { AgentTab } from './agent/AgentTab';
+import { TaskChangesPanel } from './agent/TaskChangesPanel';
 import { TaskPrdTab } from './task/TaskPrdTab';
 import { RunTaskButton } from './task/RunTaskButton';
 import { ApprovalResolveControl } from './humanRequests/ApprovalResolveControl';
@@ -218,7 +219,7 @@ export function TaskMgmtContent({
   // Live ceremony overlay (standup/planning round-table) for the selected board.
   const [ceremony, setCeremony] = useState<CeremonyMode | null>(null);
   const [prdOpen, setPrdOpen] = useState(false);
-  const [drawerTab, setDrawerTab] = useState<'details' | 'agent' | 'prd'>('details');
+  const [drawerTab, setDrawerTab] = useState<'details' | 'agent' | 'changes' | 'prd'>('details');
   // Inline per-field editing in the task drawer. Only one field is editable at a
   // time; `fieldDraft` holds the in-progress value (string for text/date inputs).
   const [editingField, setEditingField] = useState<
@@ -229,7 +230,7 @@ export function TaskMgmtContent({
 
   // Open a task drawer on a specific tab (defaults to Details). Used so clicking
   // a running-agent chip jumps straight to the Agent tab.
-  const openTask = useCallback((t: Task, tab: 'details' | 'agent' | 'prd' = 'details') => {
+  const openTask = useCallback((t: Task, tab: 'details' | 'agent' | 'changes' | 'prd' = 'details') => {
     setDrawerTab(tab);
     setDrawerTask(t);
   }, []);
@@ -1969,7 +1970,7 @@ export function TaskMgmtContent({
 
             {/* Tabs */}
             <div style={{ display: 'flex', borderBottom: '1px solid var(--border-subtle)', flexShrink: 0, overflowX: 'auto' }}>
-              {([['details', tTask('details')], ['agent', tTask('tabAgent')], ['prd', tTask('tabPrd')]] as const).map(([id, label]) => (
+              {([['details', tTask('details')], ['agent', tTask('tabAgent')], ['changes', tTask('tabChanges')], ['prd', tTask('tabPrd')]] as const).map(([id, label]) => (
                 <button
                   key={id}
                   type="button"
@@ -1989,6 +1990,10 @@ export function TaskMgmtContent({
             {drawerTab === 'agent' ? (
               <div style={{ flex: 1, overflow: 'auto' }}>
                 <AgentTab task={drawerTask} projectId={drawerTask.projectId} agentHosts={agentHostsList} onTaskChanged={() => load({ background: true })} />
+              </div>
+            ) : drawerTab === 'changes' ? (
+              <div style={{ flex: 1, overflow: 'auto', padding: 16 }}>
+                <TaskChangesPanel taskId={drawerTask.id} maxHeight={9999} />
               </div>
             ) : drawerTab === 'prd' ? (
               <div style={{ flex: 1, overflow: 'auto' }}>

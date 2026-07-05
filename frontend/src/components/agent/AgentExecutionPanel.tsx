@@ -25,7 +25,7 @@ import { EXECUTION_STATUS_COLOR as STATUS_COLOR } from '../board/AgentChip';
 import { ExecutionChip } from './ExecutionChip';
 import { useExecutionStream, type ExecutionFileChange } from './useExecutionStream';
 import { ObservabilityContent } from '../ObservabilityContent';
-import { FileChangeViewer } from './FileChangeViewer';
+import { TaskChangesPanel } from './TaskChangesPanel';
 import { PullRequestPanel } from './PullRequestPanel';
 
 /**
@@ -123,46 +123,6 @@ function runProvenance(toolEvents: ExecutionTraceToolEvent[]): {
   return { dispatch, models: [...models.entries()].map(([m, n]) => `${m} ×${n}`), repo };
 }
 
-const CHANGE_COLOR: Record<ExecutionFileChange['change'], string> = {
-  created: 'var(--success, #16a34a)',
-  modified: 'var(--coral-bright)',
-  deleted: 'var(--danger, #dc2626)',
-};
-
-/**
- * One row in the Changes list. A button so it reads as clickable — selecting it
- * opens the file's diff in the Monaco viewer. Optional `agent` shows attribution
- * for the durable per-agent change rows.
- */
-function ChangeRow({
-  path,
-  change,
-  agent,
-  onOpen,
-}: {
-  path: string;
-  change: ExecutionFileChange['change'];
-  agent?: string;
-  onOpen: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onOpen}
-      title="View this change in the editor"
-      style={{
-        display: 'flex', alignItems: 'center', gap: 8, width: '100%', textAlign: 'left',
-        padding: '6px 4px', borderTop: '1px solid var(--border-subtle)', border: 'none',
-        borderTopColor: 'var(--border-subtle)', background: 'none', cursor: 'pointer',
-      }}
-    >
-      <span style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', color: CHANGE_COLOR[change], width: 64, flexShrink: 0 }}>{change}</span>
-      <span style={{ flex: 1, fontSize: 12, fontFamily: 'var(--font-mono)', color: 'var(--coral-bright)', wordBreak: 'break-all' }}>{path}</span>
-      {agent && <span style={{ fontSize: 11, color: 'var(--text-muted)', flexShrink: 0 }} title="Agent that made this change">{agent}</span>}
-    </button>
-  );
-}
-
 type SubTab = 'output' | 'changes' | 'tools' | 'logs' | 'timeline' | 'pull-request';
 const card: React.CSSProperties = { border: '1px solid var(--border-subtle)', borderRadius: 10, padding: 14, marginBottom: 12 };
 const RUNNING = new Set(['pending', 'submitted', 'running']);
@@ -238,8 +198,6 @@ export function AgentExecutionPanel({ task, agentHosts, onTaskChanged }: { task:
   // inline instead of bouncing to the Workforce approvals queue.
   const [gateApproval, setGateApproval] = useState<Approval | null>(null);
   const [subTab, setSubTab] = useState<SubTab>('output');
-  // File whose diff is open in the Changes tab's Monaco viewer (null = list view).
-  const [openChange, setOpenChange] = useState<{ path: string; change: ExecutionFileChange['change'] } | null>(null);
   const [draft, setDraft] = useState('');
   const [sending, setSending] = useState(false);
   // Optimistic echoes of steering directions. The execution stream's subscriber
@@ -300,8 +258,8 @@ export function AgentExecutionPanel({ task, agentHosts, onTaskChanged }: { task:
   useEffect(() => { loadTaskChanges(); }, [loadTaskChanges]);
 
   // Switching runs resets per-execution view state: optimistic echoes belong to
-  // the prior run, and its changes are a different file set than the new run's.
-  useEffect(() => { setSentMessages([]); setOpenChange(null); }, [selectedId]);
+  // the prior run. (The Changes panel resets its own open-file view via resetKey.)
+  useEffect(() => { setSentMessages([]); }, [selectedId]);
 
   useEffect(() => {
     if (selectedId == null) { setTrace(null); return; }
@@ -789,52 +747,19 @@ export function AgentExecutionPanel({ task, agentHosts, onTaskChanged }: { task:
           )}
 
           {subTab === 'changes' && (
-            // List view scrolls within a capped pane (like Output); the open file
-            // diff renders at its natural height — FileChangeViewer owns its own
-            // scroll, so capping it here would nest a 420px editor in a 360px box.
-            <div style={openChange ? { minHeight: 80 } : { minHeight: 80, maxHeight: 360, overflow: 'auto' }}>
-              {openChange ? (
-                /* Detail: the selected file's diff in a read-only Monaco editor. */
-                <div>
-                  <button
-                    type="button"
-                    onClick={() => setOpenChange(null)}
-                    style={{ display: 'inline-flex', alignItems: 'center', gap: 6, marginBottom: 8, padding: '4px 8px', fontSize: 12, border: 'none', background: 'none', color: 'var(--coral-bright)', cursor: 'pointer' }}
-                  >
-                    ‹ All changes
-                  </button>
-                  <div style={{ fontSize: 12, fontFamily: 'var(--font-mono)', color: 'var(--text-primary)', wordBreak: 'break-all', marginBottom: 8 }}>
-                    <span style={{ fontWeight: 700, textTransform: 'uppercase', color: CHANGE_COLOR[openChange.change], marginRight: 8 }}>{openChange.change}</span>
-                    {openChange.path}
-                  </div>
-                  <FileChangeViewer taskId={task.id} path={openChange.path} />
-                </div>
-              ) : taskChanges.length > 0 ? (
-                /* Durable, per-agent attributed changes from the ticket workspace. */
-                taskChanges.map((f, i) => (
-                  <ChangeRow
-                    key={`${f.path}-${i}`}
-                    path={f.path}
-                    change={f.change}
-                    agent={f.agent}
-                    onOpen={() => setOpenChange({ path: f.path, change: f.change })}
-                  />
-                ))
-              ) : files.length === 0 ? (
-                <div style={{ fontSize: 13, color: 'var(--text-muted)', padding: 8 }}>
-                  {isRunning ? 'No file changes yet.' : 'This run did not record any file changes.'}
-                </div>
-              ) : (
-                files.map((f) => (
-                  <ChangeRow
-                    key={f.path}
-                    path={f.path}
-                    change={f.change}
-                    onOpen={() => setOpenChange({ path: f.path, change: f.change })}
-                  />
-                ))
-              )}
-            </div>
+            // Durable per-agent attributed changes from the ticket workspace, else
+            // the live execution file set. The shared panel owns the list + Monaco
+            // diff detail (same component as the first-class task Changes tab).
+            <TaskChangesPanel
+              taskId={task.id}
+              resetKey={selectedId ?? undefined}
+              changes={
+                taskChanges.length > 0
+                  ? taskChanges.map((f) => ({ path: f.path, change: f.change, agent: f.agent }))
+                  : files.map((f) => ({ path: f.path, change: f.change }))
+              }
+              emptyLabel={isRunning ? 'No file changes yet.' : 'This run did not record any file changes.'}
+            />
           )}
 
           {subTab === 'tools' && (

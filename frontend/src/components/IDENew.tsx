@@ -41,6 +41,8 @@ interface IDEProps {
   onOpenProjectDetails?: () => void;
   /** When opening from "Open in IDE" with a chat, select this project chat on load. */
   initialChatId?: number | null;
+  /** One-shot prompt auto-sent into the Brain panel on load (Project 360 seed). */
+  initialPrompt?: string;
 }
 
 type CenterView = 'preview' | 'code';
@@ -113,7 +115,7 @@ interface CheckResult {
   detail?: string;
 }
 
-export function IDE({ project, initialFiles, onProjectUpdate, onOpenProjectDetails, initialChatId }: IDEProps) {
+export function IDE({ project, initialFiles, onProjectUpdate, onOpenProjectDetails, initialChatId, initialPrompt }: IDEProps) {
   // The IDE is scoped to its project's type: modality is fixed at creation, not
   // switchable in-session, so it's derived (and clamped) rather than state.
   const modality: ProjectModality = getModality(project.modality).id;
@@ -856,10 +858,16 @@ export function IDE({ project, initialFiles, onProjectUpdate, onOpenProjectDetai
   // left panel, so we pop the floating drawer instead.
   const setBrainOpen = brainCtx.setOpen;
   useEffect(() => {
-    if (initialChatId == null) return;
-    setBrainContext({ initialChatId });
-    if (!hasDockedBrain) setBrainOpen(true);
-  }, [initialChatId, hasDockedBrain, setBrainContext, setBrainOpen]);
+    if (initialChatId == null && !initialPrompt) return;
+    // Only the non-docked path needs the context publish + drawer pop; the docked
+    // Brain receives initialChatId/initialPrompt as direct props below.
+    if (hasDockedBrain) {
+      if (initialChatId != null) setBrainContext({ initialChatId });
+      return;
+    }
+    setBrainContext({ ...(initialChatId != null ? { initialChatId } : {}), ...(initialPrompt ? { initialPrompt } : {}) });
+    setBrainOpen(true);
+  }, [initialChatId, initialPrompt, hasDockedBrain, setBrainContext, setBrainOpen]);
 
   const statusLabel = wcState.status === 'booting'
     ? '⏳ Booting…'
@@ -1175,6 +1183,7 @@ export function IDE({ project, initialFiles, onProjectUpdate, onOpenProjectDetai
                 modality={modality}
                 extraSystem={extraSystem}
                 initialChatId={initialChatId}
+                initialPrompt={initialPrompt}
               />
             </div>
           </div>

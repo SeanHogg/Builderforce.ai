@@ -17,6 +17,7 @@ import {
   codingModelsForPlan,
   resolveStrictPin,
   estimateRequestTokens,
+  CODING_BACKSTOP_MODELS,
   FREE_MODEL_POOL,
   PRO_MODEL_POOL,
   type ChatCompletionRequest,
@@ -708,6 +709,40 @@ function wrapStreamForUsage(
   return readable;
 }
 
+/** A completion whose body carries `tools` IS an agentic tool-loop (the VS Code
+ *  Brain chat, on-prem hosts, any tool-calling SDK caller) — as opposed to a plain
+ *  chat completion. This is the discriminator for the coding capability floor. */
+function isAgenticToolTurn(body: { tools?: unknown }): boolean {
+  const tools = (body as { tools?: unknown[] }).tools;
+  return Array.isArray(tools) && tools.length > 0;
+}
+
+/**
+ * Build the gateway completion proxy, applying the agentic capability floor when
+ * the turn carries tools. `codingOnly` keeps the failover cascade inside the
+ * curated coder pool and `CODING_BACKSTOP_MODELS` floors an exhausted cascade onto
+ * a PAID coder — never the general `gemini-flash-lite` guaranteed backstop, which
+ * "loops on search and ships no edits" for tool loops. That is the same
+ * "free coders first → funded paid floor" ladder the cloud coding agent uses, so
+ * an auto-select agentic turn (e.g. the Brain chat) never degrades onto a lite
+ * non-coder that narrates edits it never makes. `disablePaidOverflow` still caps
+ * paid spend. A plain (non-tool) chat completion keeps the plan-aware general pool
+ * (cost over capability) unchanged. Shared by /v1/chat/completions and the
+ * /v1/messages our-models branch so both honour the identical ladder.
+ */
+function proxyForCompletion(
+  env: Env,
+  access: TenantAccess,
+  body: ChatCompletionRequest,
+  opts: { disablePaidOverflow: boolean; anthropicOAuthToken?: string | null },
+): ReturnType<typeof llmProxyForPlan> {
+  return llmProxyForPlan(env, access.effectivePlan, access.premiumOverride, {
+    disablePaidOverflow: opts.disablePaidOverflow,
+    ...(isAgenticToolTurn(body as { tools?: unknown }) ? { codingOnly: true, backstopModels: CODING_BACKSTOP_MODELS } : {}),
+    ...(opts.anthropicOAuthToken ? { anthropicOAuthToken: opts.anthropicOAuthToken } : {}),
+  });
+}
+
 // ---------------------------------------------------------------------------
 // Routes
 // ---------------------------------------------------------------------------
@@ -924,7 +959,10 @@ export function createLlmRoutes(): Hono<HonoEnv> {
     const openaiBody = anthropicToOpenAiRequest(parsed);
     const traceId = newTraceId();
     const messageId = `msg_${traceId}`;
-    const service = llmProxyForPlan(c.env, access.effectivePlan, access.premiumOverride, { disablePaidOverflow });
+    // Same routing path as /v1/chat/completions: a translated Anthropic request that
+    // carried `tools` is an agentic turn and floors onto the paid coder backstop
+    // rather than the lite general backstop. (BYO-Claude turns were served above.)
+    const service = proxyForCompletion(c.env, access, openaiBody as unknown as ChatCompletionRequest, { disablePaidOverflow });
     const result = await service.complete(openaiBody as unknown as ChatCompletionRequest, undefined, traceId);
     logFailovers(c.env, c.executionCtx, result.failovers);
 
@@ -1279,7 +1317,10 @@ export function createLlmRoutes(): Hono<HonoEnv> {
     // resolution in the cascade rides it (Bearer + oauth) instead of our metered
     // key — and isn't metered as overflow. Null for everyone else (unchanged).
     const anthropicOAuthToken = await resolveAnthropicOAuthToken(c.env, access.tenantId);
-    const service = llmProxyForPlan(c.env, access.effectivePlan, access.premiumOverride, { disablePaidOverflow, ...(anthropicOAuthToken ? { anthropicOAuthToken } : {}) });
+    // Single routing path for every modality (chat + messages, VS Code Brain +
+    // on-prem + SDK): an agentic tool-loop turn floors onto the paid coder backstop,
+    // a plain chat keeps the general pool. See `proxyForCompletion`.
+    const service = proxyForCompletion(c.env, access, body, { disablePaidOverflow, anthropicOAuthToken });
     // Context-fit seeding: estimate the turn's tokens so the proxy drops
     // small-window models from the first-pass seed. This is the preventive half
     // of the Brain "dies after several executions" fix — the reactive 413

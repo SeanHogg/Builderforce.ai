@@ -1909,6 +1909,12 @@
       "mergeFailed": "Merge failed",
       "toolsTitle": "All consolidation tools",
       "toolsSub": "Suggested duplicates, manual merge, link to a workspace user, and merge history."
+    },
+    "vscode": {
+      "lastSeen": "Last seen {when}",
+      "runtime": "Editor",
+      "online": "Online",
+      "offline": "Offline"
     }
   },
   "knowledge": {
@@ -5577,6 +5583,13 @@
     "errSave": "Save failed",
     "errDelete": "Delete failed",
     "errUpdate": "Update failed",
-    "errMove": "Move failed"
+    "errMove": "Move failed",
+    "tabChanges": "Changes"
+  },
+  "taskChanges": {
+    "allChanges": "All changes",
+    "loading": "Loading changes…",
+    "empty": "No file changes recorded.",
+    "viewInEditor": "View this change in the editor"
   }
 }

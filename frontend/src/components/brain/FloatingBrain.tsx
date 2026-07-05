@@ -24,8 +24,16 @@ import { useModalDismiss } from '@/hooks/useModalDismiss';
 export function FloatingBrain() {
   const pathname = usePathname();
   const { hasTenant } = useAuth();
-  const { open, setOpen, projectId, viewingProjectId, modality, extraSystem, initialChatId } = useBrainContext();
-  const [initialPrompt, setInitialPrompt] = useState<string | undefined>(undefined);
+  const { open, setOpen, projectId, viewingProjectId, modality, extraSystem, initialChatId, initialPrompt: ctxInitialPrompt } = useBrainContext();
+  const [pendingPrompt, setPendingPrompt] = useState<string | undefined>(undefined);
+  // A page-published seed (e.g. the IDE `?prompt=`) wins over the sign-in handoff.
+  const initialPrompt = ctxInitialPrompt ?? pendingPrompt;
+
+  // A page that publishes an initialPrompt into the Brain context wants the drawer
+  // open so BrainPanel can auto-send it (parity with the pending-prompt handoff).
+  useEffect(() => {
+    if (ctxInitialPrompt) setOpen(true);
+  }, [ctxInitialPrompt, setOpen]);
 
   // Lock background scroll + close on Escape while the drawer is open. Shared
   // with the marketing mobile menu so every overlay dismisses the same way.
@@ -46,7 +54,7 @@ export function FloatingBrain() {
     if (pathname?.startsWith('/brainstorm')) return;
     const p = takePendingPrompt();
     if (p) {
-      setInitialPrompt(p);
+      setPendingPrompt(p);
       setOpen(true);
       return;
     }
@@ -55,7 +63,7 @@ export function FloatingBrain() {
     let cancelled = false;
     void pendingPromptsApi.claim().then((serverPrompt) => {
       if (!cancelled && serverPrompt) {
-        setInitialPrompt(serverPrompt);
+        setPendingPrompt(serverPrompt);
         setOpen(true);
       }
     });

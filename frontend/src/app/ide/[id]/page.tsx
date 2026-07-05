@@ -2,7 +2,7 @@
 
 export const runtime = 'edge';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import dynamic from 'next/dynamic';
 import { fetchProject, fetchFiles, updateProject, deleteProject } from '@/lib/api';
@@ -27,6 +27,19 @@ export default function IDEPage() {
   const id = idRaw;
   const chatIdParam = searchParams.get('chat');
   const initialChatId = chatIdParam ? (Number(chatIdParam) || null) : null;
+
+  // One-shot Brain seed via ?prompt= (e.g. Project 360 "Improve with Brain"). Captured
+  // once, then stripped from the URL so a refresh/share doesn't re-send it.
+  const [initialPrompt] = useState(() => searchParams.get('prompt') ?? undefined);
+  const promptStrippedRef = useRef(false);
+  useEffect(() => {
+    if (promptStrippedRef.current || !searchParams.get('prompt')) return;
+    promptStrippedRef.current = true;
+    const params = new URLSearchParams(searchParams.toString());
+    params.delete('prompt');
+    const qs = params.toString();
+    router.replace(qs ? `/ide/${idRaw}?${qs}` : `/ide/${idRaw}`);
+  }, [searchParams, router, idRaw]);
 
   const [project, setProject] = useState<Project | null>(null);
   const [files, setFiles] = useState<FileEntry[]>([]);
@@ -176,6 +189,7 @@ export default function IDEPage() {
           onProjectUpdate={setProject}
           onOpenProjectDetails={() => setProjectDetailsOpen(true)}
           initialChatId={initialChatId}
+          initialPrompt={initialPrompt}
         />
       </div>
       {project && (

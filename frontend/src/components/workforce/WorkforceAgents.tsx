@@ -6,10 +6,14 @@ import {
   agentHosts,
   tenantDefaultAgentHost,
   artifactAssignments,
+  vscodeConnections,
+  isVscodeConnectionOnline,
   type AgentHost,
   type AgentHostRegistration,
   type AgentManifest,
+  type VscodeConnection,
 } from '@/lib/builderforceApi';
+import { useTranslations } from 'next-intl';
 import {
   listMyAgents,
   listPurchasedAgents,
@@ -91,6 +95,7 @@ const cardStyle: React.CSSProperties = {
 
 export function WorkforceAgents({ tenantId }: { tenantId?: number }) {
   const { tenant, tenantToken } = useAuth();
+  const tWf = useTranslations('workforce');
 
   // --- "Connect a new agent" quickstart popover (caret on the split button) -
   const [quickstartOpen, setQuickstartOpen] = useState(false);
@@ -118,6 +123,11 @@ export function WorkforceAgents({ tenantId }: { tenantId?: number }) {
   const [loadingHosts, setLoadingHosts] = useState(true);
   const [defaultAgentHostId, setDefaultAgentHostId] = useState<number | null>(null);
   const [selectedHost, setSelectedHost] = useState<AgentHost | null>(null);
+
+  // --- VS Code editor connections (mig 0202) -------------------------------
+  // A per-user editor runtime that appears as a presence card in the workforce
+  // grid (like a remote host, but read-only — it has no management panel).
+  const [vscodeConns, setVscodeConns] = useState<VscodeConnection[]>([]);
 
   // --- Cloud agents --------------------------------------------------------
   const [cloudAgents, setCloudAgents] = useState<PublishedAgent[]>([]);
@@ -181,6 +191,10 @@ export function WorkforceAgents({ tenantId }: { tenantId?: number }) {
     return listPurchasedAgents().then(setPurchasedAgents).catch(() => setPurchasedAgents([]));
   }, []);
 
+  const loadVscode = useCallback(() => {
+    return vscodeConnections.list().then(setVscodeConns).catch(() => setVscodeConns([]));
+  }, []);
+
   const loadManifests = useCallback(() => {
     return artifactAssignments.agentManifests().then(setAgentManifests).catch(() => setAgentManifests({}));
   }, []);
@@ -205,7 +219,7 @@ export function WorkforceAgents({ tenantId }: { tenantId?: number }) {
     }
   }, [tenant, tenantToken]);
 
-  useEffect(() => { loadHosts(); loadCloud(); loadPurchased(); loadPeople(); loadManifests(); }, [loadHosts, loadCloud, loadPurchased, loadPeople, loadManifests]);
+  useEffect(() => { loadHosts(); loadCloud(); loadPurchased(); loadPeople(); loadManifests(); loadVscode(); }, [loadHosts, loadCloud, loadPurchased, loadPeople, loadManifests, loadVscode]);
 
   // Refetch the agent rosters when the Brain creates/updates/deletes a cloud
   // agent or hires a marketplace agent, so the grid stays live (no manual reload).
@@ -505,6 +519,25 @@ export function WorkforceAgents({ tenantId }: { tenantId?: number }) {
             );
           })}
 
+          {/* VS Code editor connections — read-only presence cards (no mgmt panel) */}
+          {vscodeConns.map((conn) => {
+            const online = isVscodeConnectionOnline(conn);
+            const lastSeen = conn.lastSeenAt ? new Date(conn.lastSeenAt).toLocaleString() : '—';
+            return (
+              <div key={`vscode-${conn.id}`} className="card" style={cardStyle}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                  <span style={{ fontSize: 15, fontWeight: 600, color: 'var(--text-strong)', flex: 1 }}>{conn.machineName}</span>
+                  <AgentTypePill kind="vscode" />
+                  <StatusBadge variant={online ? 'online' : 'offline'} />
+                </div>
+                {conn.extensionVersion && (
+                  <div style={{ fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--muted)' }}>{conn.extensionVersion}</div>
+                )}
+                <div style={{ fontSize: 12, color: 'var(--muted)' }}>{tWf('vscode.lastSeen', { when: lastSeen })}</div>
+              </div>
+            );
+          })}
+
           {/* Cloud agents the tenant owns — the card detects ownership from auth
               and renders the management actions. */}
           {cloudAgents.map((a) => (
@@ -621,6 +654,23 @@ export function WorkforceAgents({ tenantId }: { tenantId?: number }) {
                     <td style={tdStyle} onClick={(e) => e.stopPropagation()}>
                       <button type="button" onClick={() => setSelectedHost(host)} style={btnSubtle}>Open</button>
                     </td>
+                  </tr>
+                );
+              })}
+
+              {/* VS Code editor connections */}
+              {vscodeConns.map((conn) => {
+                const online = isVscodeConnectionOnline(conn);
+                return (
+                  <tr key={`vscode-${conn.id}`} style={trStyle}>
+                    {canConsolidate && <td style={tdStyle} />}
+                    <td style={tdStyle}>{conn.machineName}</td>
+                    <td style={tdStyle}><AgentTypePill kind="vscode" /></td>
+                    <td style={tdMutedStyle}>{online ? tWf('vscode.online') : tWf('vscode.offline')}</td>
+                    <td style={tdMutedStyle}>{tWf('vscode.runtime')}</td>
+                    <td style={tdMutedStyle}>—</td>
+                    <td style={tdMutedStyle}>{conn.extensionVersion ?? '—'}</td>
+                    <td style={tdStyle} />
                   </tr>
                 );
               })}
