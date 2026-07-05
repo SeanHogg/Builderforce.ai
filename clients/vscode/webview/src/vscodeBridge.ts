@@ -44,7 +44,13 @@ export interface BrainIntent {
   /** For 'task': the BuilderForce task to scope a new chat to. `dispatched` marks a
    *  task that was just handed to the platform runtime, so the seed nudges the Brain
    *  to monitor the run (via the `executions.*` platform tools) rather than start work. */
-  task?: { id: number; key?: string; title: string; projectId?: number; dispatched?: boolean };
+  task?: { id: number; key?: string; title: string; taskType?: 'task' | 'epic' | 'gap'; projectId?: number; dispatched?: boolean };
+  /** Auto-link this work item to the chat the intent opens (task/roadmap/spec/…), so
+   *  the conversation is tied to — and has context on — the item that spawned it. For a
+   *  'seed' intent a ticket also forces the chat to be created eagerly so the link lands
+   *  (a ticket-less editor 'seed' stays lazy until the first message). `kind` is a
+   *  ChatTicketService kind (task | epic | gap | objective | initiative | portfolio | roadmap). */
+  ticket?: { kind: string; ref: string; title?: string; projectId?: number };
 }
 
 export interface InitData {

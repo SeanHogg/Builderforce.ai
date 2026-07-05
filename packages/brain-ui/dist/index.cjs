@@ -53,7 +53,8 @@ __export(src_exports, {
   formatPayload: () => formatPayload,
   healthRingColor: () => healthRingColor,
   initialsOf: () => initialsOf,
-  streamingNode: () => streamingNode
+  streamingNode: () => streamingNode,
+  useChatParticipants: () => useChatParticipants
 });
 module.exports = __toCommonJS(src_exports);
 
@@ -631,8 +632,8 @@ function HealthRing({ percent, size = 40, stroke = 4, caption, muted = false, ar
 var import_react3 = require("react");
 
 // src/chatTickets/types.ts
-var TICKET_KINDS = ["task", "epic", "objective", "initiative", "portfolio"];
-var RUNNABLE_KINDS = ["task", "epic"];
+var TICKET_KINDS = ["task", "epic", "gap", "objective", "initiative", "portfolio", "roadmap"];
+var RUNNABLE_KINDS = ["task", "epic", "gap"];
 var DEFAULT_CHAT_TICKETS_LABELS = {
   none: "No tickets linked yet.",
   spawned: "spawned here",
@@ -661,7 +662,7 @@ var DEFAULT_CHAT_TICKETS_LABELS = {
   agentsHint: "Invited agents can be tagged to execute a linked task or epic.",
   mergeHint: "Merge other chats into this one. Their messages, tickets and agents move here; the sources are archived.",
   mergeNoOthers: "No other chats to merge.",
-  kind: { task: "Task", epic: "Epic", objective: "Objective", initiative: "Initiative", portfolio: "Portfolio" },
+  kind: { task: "Task", epic: "Epic", gap: "Gap", objective: "Objective", initiative: "Initiative", portfolio: "Portfolio", roadmap: "Roadmap" },
   ringAria: (label, pct) => `${label}: ${pct}% done`,
   runStarted: (agent) => `Started ${agent} on the ticket.`,
   mergeAction: (n) => `Merge ${n} here`,
@@ -965,8 +966,49 @@ var S = {
   })
 };
 
-// src/project360/Project360View.tsx
+// src/chatTickets/useChatParticipants.ts
 var import_react4 = require("react");
+function useChatParticipants(adapter, chatId, refreshSignal = 0) {
+  const [pool, setPool] = (0, import_react4.useState)([]);
+  const [invited, setInvited] = (0, import_react4.useState)([]);
+  (0, import_react4.useEffect)(() => {
+    let ok = true;
+    adapter.loadAgentPool().then((p) => {
+      if (ok) setPool(p);
+    }).catch(() => {
+      if (ok) setPool([]);
+    });
+    return () => {
+      ok = false;
+    };
+  }, [adapter]);
+  (0, import_react4.useEffect)(() => {
+    if (chatId == null) {
+      setInvited([]);
+      return;
+    }
+    let ok = true;
+    adapter.listAgents(chatId).then((a) => {
+      if (ok) setInvited(a);
+    }).catch(() => {
+      if (ok) setInvited([]);
+    });
+    return () => {
+      ok = false;
+    };
+  }, [adapter, chatId, refreshSignal]);
+  return (0, import_react4.useMemo)(
+    () => invited.map((a) => ({
+      kind: "agent",
+      ref: a.agentRef,
+      name: pool.find((p) => p.ref === a.agentRef)?.name ?? a.agentRef
+    })),
+    [invited, pool]
+  );
+}
+
+// src/project360/Project360View.tsx
+var import_react5 = require("react");
 
 // src/project360/Sunburst.tsx
 var import_jsx_runtime6 = require("react/jsx-runtime");
@@ -1133,9 +1175,9 @@ var DEFAULT_PROJECT360_LABELS = {
 var import_jsx_runtime7 = require("react/jsx-runtime");
 var STATUS_ORDER = ["working", "awaiting", "blocked", "idle", "available"];
 function Project360View({ data, loading, error, labels, onAction, onRefresh }) {
-  const L = (0, import_react4.useMemo)(() => ({ ...DEFAULT_PROJECT360_LABELS, ...labels ?? {} }), [labels]);
-  const [selected, setSelected] = (0, import_react4.useState)(null);
-  const sortedWorkforce = (0, import_react4.useMemo)(
+  const L = (0, import_react5.useMemo)(() => ({ ...DEFAULT_PROJECT360_LABELS, ...labels ?? {} }), [labels]);
+  const [selected, setSelected] = (0, import_react5.useState)(null);
+  const sortedWorkforce = (0, import_react5.useMemo)(
     () => [...data?.workforce ?? []].sort((a, b) => STATUS_ORDER.indexOf(a.status) - STATUS_ORDER.indexOf(b.status)),
     [data?.workforce]
   );
@@ -1302,7 +1344,7 @@ function MemberRow({ member, labels, onAction }) {
 }
 
 // src/projectList/ProjectListView.tsx
-var import_react5 = require("react");
+var import_react6 = require("react");
 
 // src/projectList/types.ts
 var DEFAULT_PROJECT_LIST_LABELS = {
@@ -1317,7 +1359,7 @@ var DEFAULT_PROJECT_LIST_LABELS = {
 // src/projectList/ProjectListView.tsx
 var import_jsx_runtime8 = require("react/jsx-runtime");
 function ProjectListView({ title, subtitle, data, loading, error, labels, onAction, onRefresh }) {
-  const L = (0, import_react5.useMemo)(() => ({ ...DEFAULT_PROJECT_LIST_LABELS, ...labels ?? {} }), [labels]);
+  const L = (0, import_react6.useMemo)(() => ({ ...DEFAULT_PROJECT_LIST_LABELS, ...labels ?? {} }), [labels]);
   const header = /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("header", { className: "bf-list-head", children: [
     /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("div", { className: "bf-list-head__id", children: [
       /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("span", { className: "bf-list-head__title", children: title }),
@@ -1417,6 +1459,7 @@ function Row({ item, onAction }) {
   formatPayload,
   healthRingColor,
   initialsOf,
-  streamingNode
+  streamingNode,
+  useChatParticipants
 });
 //# sourceMappingURL=index.cjs.map

@@ -92,6 +92,18 @@ export function computeCostMillicents(
 }
 
 /**
+ * Which agent modality produced a usage row. Set on every row so metering can
+ * apply the BYO exemption (own-machine on-prem/VSIX BYO usage is free; cloud BYO
+ * is charged) — see tokenUsage.ts.
+ *   • web      → the web app (Brain chat, dashboards) or an unattributed call.
+ *   • vsix     → the VS Code extension (own machine).
+ *   • on_prem  → a self-hosted agent host (own machine).
+ *   • cloud    → a cloud agent run (Durable Object / container) on our infra.
+ *   • sdk      → a direct SDK/API caller.
+ */
+export type UsageSurface = 'web' | 'vsix' | 'on_prem' | 'cloud' | 'sdk';
+
+/**
  * Who produced a usage row. Exactly one of the agent dimensions is set in
  * practice:
  *   • agentHostId      → a self-hosted (on-prem) agent host's gateway call.
@@ -129,6 +141,14 @@ export interface RecordUsageRow {
    *  fallback / backstop on Builderforce's key, not a plan-pool model). Metered
    *  against the per-tenant `paid_overflow_daily_cap`. See isPaidOverflowModel. */
   paidOverflow?: boolean | null;
+  /** True when the tenant's OWN provider credential (BYO key / connected
+   *  subscription) served the call. Forces `cost_usd_millicents = 0` (the
+   *  platform paid nothing) and, combined with an on-prem/VSIX `surface`, exempts
+   *  the row from the plan token allowance. See tokenUsage.ts. */
+  byo?: boolean | null;
+  /** Which modality produced the row — drives the BYO metering exemption.
+   *  Defaults to 'web' when unset. */
+  surface?: UsageSurface | null;
 }
 
 /** Minimal shape of a ProxyResult this helper needs — avoids importing the full type. */
@@ -180,12 +200,16 @@ export async function recordUsageRow(db: Db, env: Env, row: RecordUsageRow): Pro
     // Price the call at write time so the dashboard/billing sums a recorded
     // column instead of re-pricing tokens against a moving catalog. Catalog read
     // is L1+KV cached, so this is a cheap lookup on the hot logging path.
+    // BYO rows are served by the tenant's OWN provider account — the platform
+    // pays nothing — so their platform cost is always 0 (skip pricing entirely).
     let costUsdMillicents = 0;
-    try {
-      const catalog = await getCatalogCached(env);
-      const pricing = catalog.find((m) => m.id === row.model)?.pricing;
-      costUsdMillicents = computeCostMillicents(pricing, usage);
-    } catch { /* pricing unavailable — record tokens with cost 0 */ }
+    if (!row.byo) {
+      try {
+        const catalog = await getCatalogCached(env);
+        const pricing = catalog.find((m) => m.id === row.model)?.pricing;
+        costUsdMillicents = computeCostMillicents(pricing, usage);
+      } catch { /* pricing unavailable — record tokens with cost 0 */ }
+    }
 
     await db.insert(llmUsageLog).values({
       tenantId:            row.tenantId,
@@ -211,6 +235,8 @@ export async function recordUsageRow(db: Db, env: Env, row: RecordUsageRow): Pro
       costUsdMillicents,
       traceId:             row.traceId ?? null,
       paidOverflow:        row.paidOverflow ?? false,
+      byo:                 row.byo ?? false,
+      surface:             row.surface ?? 'web',
     });
   } catch { /* never let usage logging fail the request */ }
 }

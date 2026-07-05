@@ -779,6 +779,19 @@ function parseDirectedRecipient(msg) {
 function isDirectedToParticipant(msg) {
   return parseDirectedRecipient(msg) !== null;
 }
+function mentionRecipient(text, participants) {
+  const m = /^\s*@([^\s@]+)/.exec(text);
+  if (!m) return null;
+  const tag = m[1].toLowerCase();
+  return participants.find((p) => {
+    const name = p.name.toLowerCase();
+    return name === tag || name.split(/\s+/)[0] === tag || name.startsWith(tag);
+  }) ?? null;
+}
+function resolveRecipient(choice, mention) {
+  if (choice === "brain") return null;
+  return choice ?? mention;
+}
 
 // src/brainTriage.ts
 function isFailedToolResult(result) {
@@ -1601,9 +1614,11 @@ export {
   isEvermindModel,
   isFailedToolResult,
   lastConsolidationIndex,
+  mentionRecipient,
   modelsUsedInTrace,
   parseDirectedRecipient,
   prepareImageDataUrl,
+  resolveRecipient,
   savePendingPrompt,
   scopeToConsolidation,
   streamChatCompletion,

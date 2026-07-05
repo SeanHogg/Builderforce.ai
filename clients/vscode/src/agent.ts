@@ -233,7 +233,14 @@ async function streamTurn(
 
   const res = await fetch(`${getBaseUrl()}/llm/v1/chat/completions`, {
     method: "POST",
-    headers: { "content-type": "application/json", authorization: `Bearer ${key}` },
+    headers: {
+      "content-type": "application/json",
+      authorization: `Bearer ${key}`,
+      // Tag the surface so BYO usage from the extension (which runs on the user's
+      // own machine) is metered as free — never charged against the plan token
+      // allowance the way cloud-agent usage is. See the gateway's usage `surface`.
+      "x-builderforce-surface": "vsix",
+    },
     body: JSON.stringify(body),
     signal: deps.signal,
   });

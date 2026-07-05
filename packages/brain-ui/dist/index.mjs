@@ -572,8 +572,8 @@ function HealthRing({ percent, size = 40, stroke = 4, caption, muted = false, ar
 import { memo, useCallback, useEffect as useEffect2, useMemo as useMemo3, useState as useState3 } from "react";
 
 // src/chatTickets/types.ts
-var TICKET_KINDS = ["task", "epic", "objective", "initiative", "portfolio"];
-var RUNNABLE_KINDS = ["task", "epic"];
+var TICKET_KINDS = ["task", "epic", "gap", "objective", "initiative", "portfolio", "roadmap"];
+var RUNNABLE_KINDS = ["task", "epic", "gap"];
 var DEFAULT_CHAT_TICKETS_LABELS = {
   none: "No tickets linked yet.",
   spawned: "spawned here",
@@ -602,7 +602,7 @@ var DEFAULT_CHAT_TICKETS_LABELS = {
   agentsHint: "Invited agents can be tagged to execute a linked task or epic.",
   mergeHint: "Merge other chats into this one. Their messages, tickets and agents move here; the sources are archived.",
   mergeNoOthers: "No other chats to merge.",
-  kind: { task: "Task", epic: "Epic", objective: "Objective", initiative: "Initiative", portfolio: "Portfolio" },
+  kind: { task: "Task", epic: "Epic", gap: "Gap", objective: "Objective", initiative: "Initiative", portfolio: "Portfolio", roadmap: "Roadmap" },
   ringAria: (label, pct) => `${label}: ${pct}% done`,
   runStarted: (agent) => `Started ${agent} on the ticket.`,
   mergeAction: (n) => `Merge ${n} here`,
@@ -906,8 +906,49 @@ var S = {
   })
 };
 
+// src/chatTickets/useChatParticipants.ts
+import { useEffect as useEffect3, useMemo as useMemo4, useState as useState4 } from "react";
+function useChatParticipants(adapter, chatId, refreshSignal = 0) {
+  const [pool, setPool] = useState4([]);
+  const [invited, setInvited] = useState4([]);
+  useEffect3(() => {
+    let ok = true;
+    adapter.loadAgentPool().then((p) => {
+      if (ok) setPool(p);
+    }).catch(() => {
+      if (ok) setPool([]);
+    });
+    return () => {
+      ok = false;
+    };
+  }, [adapter]);
+  useEffect3(() => {
+    if (chatId == null) {
+      setInvited([]);
+      return;
+    }
+    let ok = true;
+    adapter.listAgents(chatId).then((a) => {
+      if (ok) setInvited(a);
+    }).catch(() => {
+      if (ok) setInvited([]);
+    });
+    return () => {
+      ok = false;
+    };
+  }, [adapter, chatId, refreshSignal]);
+  return useMemo4(
+    () => invited.map((a) => ({
+      kind: "agent",
+      ref: a.agentRef,
+      name: pool.find((p) => p.ref === a.agentRef)?.name ?? a.agentRef
+    })),
+    [invited, pool]
+  );
+}
+
 // src/project360/Project360View.tsx
-import { useMemo as useMemo4, useState as useState4 } from "react";
+import { useMemo as useMemo5, useState as useState5 } from "react";
 
 // src/project360/Sunburst.tsx
 import { jsx as jsx6, jsxs as jsxs6 } from "react/jsx-runtime";
@@ -1074,9 +1115,9 @@ var DEFAULT_PROJECT360_LABELS = {
 import { Fragment as Fragment3, jsx as jsx7, jsxs as jsxs7 } from "react/jsx-runtime";
 var STATUS_ORDER = ["working", "awaiting", "blocked", "idle", "available"];
 function Project360View({ data, loading, error, labels, onAction, onRefresh }) {
-  const L = useMemo4(() => ({ ...DEFAULT_PROJECT360_LABELS, ...labels ?? {} }), [labels]);
-  const [selected, setSelected] = useState4(null);
-  const sortedWorkforce = useMemo4(
+  const L = useMemo5(() => ({ ...DEFAULT_PROJECT360_LABELS, ...labels ?? {} }), [labels]);
+  const [selected, setSelected] = useState5(null);
+  const sortedWorkforce = useMemo5(
     () => [...data?.workforce ?? []].sort((a, b) => STATUS_ORDER.indexOf(a.status) - STATUS_ORDER.indexOf(b.status)),
     [data?.workforce]
   );
@@ -1243,7 +1284,7 @@ function MemberRow({ member, labels, onAction }) {
 }
 
 // src/projectList/ProjectListView.tsx
-import { useMemo as useMemo5 } from "react";
+import { useMemo as useMemo6 } from "react";
 
 // src/projectList/types.ts
 var DEFAULT_PROJECT_LIST_LABELS = {
@@ -1258,7 +1299,7 @@ var DEFAULT_PROJECT_LIST_LABELS = {
 // src/projectList/ProjectListView.tsx
 import { jsx as jsx8, jsxs as jsxs8 } from "react/jsx-runtime";
 function ProjectListView({ title, subtitle, data, loading, error, labels, onAction, onRefresh }) {
-  const L = useMemo5(() => ({ ...DEFAULT_PROJECT_LIST_LABELS, ...labels ?? {} }), [labels]);
+  const L = useMemo6(() => ({ ...DEFAULT_PROJECT_LIST_LABELS, ...labels ?? {} }), [labels]);
   const header = /* @__PURE__ */ jsxs8("header", { className: "bf-list-head", children: [
     /* @__PURE__ */ jsxs8("div", { className: "bf-list-head__id", children: [
       /* @__PURE__ */ jsx8("span", { className: "bf-list-head__title", children: title }),
@@ -1357,6 +1398,7 @@ export {
   formatPayload,
   healthRingColor,
   initialsOf,
-  streamingNode
+  streamingNode,
+  useChatParticipants
 };
 //# sourceMappingURL=index.mjs.map

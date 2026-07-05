@@ -4,9 +4,10 @@
  * consolidating (merging) chats. The HTTP routes (brainRoutes) AND the built-in
  * MCP tools (builtinMcpService) both delegate here so the rules live ONCE (DRY).
  *
- * A "ticket" is any tier of the planning spine, addressed as (kind, ref):
- *   kind ∈ portfolio | objective | initiative | epic | task
- *   ref  = tasks.id as text (epic/task) OR a UUID (portfolio/objective/initiative)
+ * A "ticket" is any planning/project work item, addressed as (kind, ref):
+ *   kind ∈ portfolio | objective | initiative | roadmap | epic | gap | task
+ *   ref  = tasks.id as text (epic/gap/task) OR a UUID
+ *          (portfolio/objective/initiative/roadmap)
  *
  * Health (% done) is derived from LIVE ticket state that mutates on the board
  * outside this service's write path, so it is deliberately NOT cached — a stale
@@ -24,6 +25,7 @@ import {
   keyResults,
   initiatives,
   portfolios,
+  roadmapItems,
 } from '../../infrastructure/database/schema';
 import { resolveSegment } from '../../infrastructure/auth/segmentResolver';
 import { keyResultProgress, objectiveProgress } from '../pmo/portfolioRollup';
@@ -34,8 +36,8 @@ import type { Env } from '../../env';
 const BRAIN_ORIGIN = 'brainstorm';
 const CHAT_SCOPE = 'chat';
 
-/** The work-item tiers a chat can be tied to (planning-spine node kinds). */
-export const TICKET_KINDS = ['portfolio', 'objective', 'initiative', 'epic', 'task'] as const;
+/** The work-item kinds a chat can be tied to (planning spine + roadmap + gap). */
+export const TICKET_KINDS = ['portfolio', 'objective', 'initiative', 'roadmap', 'epic', 'gap', 'task'] as const;
 export type TicketKind = (typeof TICKET_KINDS)[number];
 
 export type LinkType = 'linked' | 'created';
@@ -80,6 +82,9 @@ function isTicketKind(v: string): v is TicketKind {
 /** Task/epic statuses that count as complete when a ticket has no completed_at. */
 const DONE_STATUS = new Set(['done', 'completed', 'archived']);
 
+/** Roadmap-item statuses that count as delivered ('shipped' is the publish marker). */
+const ROADMAP_DONE = new Set(['shipped', 'done', 'complete', 'completed', 'released']);
+
 export class ChatTicketService {
   private readonly assignments: AgentAssignmentService;
 
@@ -112,7 +117,7 @@ export class ChatTicketService {
    *  display label + status, or null when it does not exist / is cross-tenant. */
   async resolveTicket(tenantId: number, kind: string, ref: string): Promise<{ label: string; status: string } | null> {
     if (!isTicketKind(kind)) return null;
-    if (kind === 'task' || kind === 'epic') {
+    if (kind === 'task' || kind === 'epic' || kind === 'gap') {
       const id = Number(ref);
       if (!Number.isInteger(id) || id <= 0) return null;
       const [row] = await this.db
@@ -120,6 +125,16 @@ export class ChatTicketService {
         .from(tasks)
         .innerJoin(projects, eq(projects.id, tasks.projectId))
         .where(and(eq(tasks.id, id), eq(projects.tenantId, tenantId)))
+        .limit(1);
+      return row ? { label: row.title, status: row.status } : null;
+    }
+    // Roadmap items are a standalone product artifact (their own uuid-keyed table),
+    // scoped by tenant — not part of the planning spine, so no segment filter.
+    if (kind === 'roadmap') {
+      const [row] = await this.db
+        .select({ title: roadmapItems.title, status: roadmapItems.status })
+        .from(roadmapItems)
+        .where(and(eq(roadmapItems.id, ref), eq(roadmapItems.tenantId, tenantId)))
         .limit(1);
       return row ? { label: row.title, status: row.status } : null;
     }
@@ -152,20 +167,24 @@ export class ChatTicketService {
 
     const taskIds = new Set<number>();
     const epicIds = new Set<number>();
+    const gapIds = new Set<number>();
     const objIds = new Set<string>();
     const initIds = new Set<string>();
     const pfIds = new Set<string>();
+    const roadmapIds = new Set<string>();
     for (const t of clean) {
       if (t.kind === 'task') { const n = Number(t.ref); if (Number.isInteger(n)) taskIds.add(n); }
       else if (t.kind === 'epic') { const n = Number(t.ref); if (Number.isInteger(n)) epicIds.add(n); }
+      else if (t.kind === 'gap') { const n = Number(t.ref); if (Number.isInteger(n)) gapIds.add(n); }
       else if (t.kind === 'objective') objIds.add(t.ref);
       else if (t.kind === 'initiative') initIds.add(t.ref);
       else if (t.kind === 'portfolio') pfIds.add(t.ref);
+      else if (t.kind === 'roadmap') roadmapIds.add(t.ref);
     }
 
-    // Tasks + epics share the tasks table: fetch self rows (title/status) for both,
-    // plus child rollups for epics.
-    const allTaskLike = [...taskIds, ...epicIds];
+    // Tasks + epics + gaps share the tasks table: fetch self rows (title/status) for
+    // all, plus child rollups for epics. Gaps are leaf work items (like tasks).
+    const allTaskLike = [...taskIds, ...epicIds, ...gapIds];
     if (allTaskLike.length > 0) {
       const rows = await this.db
         .select({ id: tasks.id, title: tasks.title, status: tasks.status, completedAt: tasks.completedAt })
@@ -174,15 +193,18 @@ export class ChatTicketService {
         .where(and(inArray(tasks.id, allTaskLike), eq(projects.tenantId, tenantId)));
       const selfById = new Map(rows.map((r) => [r.id, r]));
 
-      for (const id of taskIds) {
-        const r = selfById.get(id);
-        if (!r) { out.set(key('task', String(id)), missing('task', String(id))); continue; }
-        const done = r.completedAt != null || DONE_STATUS.has(r.status) ? 1 : 0;
-        out.set(key('task', String(id)), {
-          kind: 'task', ref: String(id), label: r.title, status: r.status,
-          progressPct: done ? 100 : (r.status === 'in_progress' || r.status === 'in_review' ? 50 : 0),
-          done, total: 1, exists: true,
-        });
+      // Tasks and gaps are both leaf work items — identical health derivation.
+      for (const kind of ['task', 'gap'] as const) {
+        for (const id of kind === 'task' ? taskIds : gapIds) {
+          const r = selfById.get(id);
+          if (!r) { out.set(key(kind, String(id)), missing(kind, String(id))); continue; }
+          const done = r.completedAt != null || DONE_STATUS.has(r.status) ? 1 : 0;
+          out.set(key(kind, String(id)), {
+            kind, ref: String(id), label: r.title, status: r.status,
+            progressPct: done ? 100 : (r.status === 'in_progress' || r.status === 'in_review' ? 50 : 0),
+            done, total: 1, exists: true,
+          });
+        }
       }
 
       if (epicIds.size > 0) {
@@ -271,6 +293,22 @@ export class ChatTicketService {
         const c = byPf.get(id) ?? { total: 0, done: 0 };
         const progressPct = c.total > 0 ? Math.round((c.done / c.total) * 100) : 0;
         out.set(key('portfolio', id), { kind: 'portfolio', ref: id, label: p.name, status: p.status, progressPct, done: c.done, total: c.total, exists: true });
+      }
+    }
+
+    if (roadmapIds.size > 0) {
+      const rmRows = await this.db.select({ id: roadmapItems.id, title: roadmapItems.title, status: roadmapItems.status })
+        .from(roadmapItems)
+        .where(and(inArray(roadmapItems.id, [...roadmapIds]), eq(roadmapItems.tenantId, tenantId)));
+      const rmById = new Map(rmRows.map((r) => [r.id, r]));
+      for (const id of roadmapIds) {
+        const r = rmById.get(id);
+        if (!r) { out.set(key('roadmap', id), missing('roadmap', id)); continue; }
+        // A roadmap item has no child rollup — derive progress from its own status.
+        const s = (r.status ?? '').toLowerCase();
+        const done = ROADMAP_DONE.has(s) ? 1 : 0;
+        const progressPct = done ? 100 : (s === 'in_progress' || s === 'active' ? 50 : 0);
+        out.set(key('roadmap', id), { kind: 'roadmap', ref: id, label: r.title, status: r.status, progressPct, done, total: done ? 1 : 0, exists: true });
       }
     }
 

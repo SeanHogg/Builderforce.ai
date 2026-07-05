@@ -4594,9 +4594,11 @@
       "kind": {
         "task": "任务",
         "epic": "史诗",
+        "gap": "差距",
         "objective": "目标",
         "initiative": "举措",
-        "portfolio": "组合"
+        "portfolio": "组合",
+        "roadmap": "路线图"
       }
     },
     "approveAll": "全部批准",
@@ -4628,6 +4630,10 @@
     "defaultBrain": "默认 Brain",
     "personas": "角色",
     "assignedAgents": "已分配的智能体",
+    "to": "发送给",
+    "brainRecipient": "BuilderForce",
+    "recipientPickerTitle": "发送至",
+    "messageParticipant": "给 {name} 发消息…",
     "uploading": "上传中…",
     "brainStorm": "Brain Storm",
     "projectLabel": "项目",

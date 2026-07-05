@@ -28,6 +28,7 @@ interface RawTask {
   title: string;
   status?: string;
   priority?: string;
+  taskType?: 'task' | 'epic' | 'gap';
   assignedUserId?: string | null;
 }
 interface RawSpec {
@@ -176,7 +177,7 @@ const PAGES: Record<PageView, PageConfig> = {
             action: {
               kind: 'open-task' as const,
               label: L('act.openTask', 'Open a working session for this task'),
-              task: { id: t.id, key: t.key, title: t.title || `#${t.id}` },
+              task: { id: t.id, key: t.key, title: t.title || `#${t.id}`, taskType: t.taskType },
             },
           };
         },
@@ -240,6 +241,8 @@ const PAGES: Record<PageView, PageConfig> = {
               kind: 'brain' as const,
               label: L('act.workRoadmap', 'Plan this roadmap item with the Brain'),
               text: L('roadmap.seed', 'Let\'s work on the roadmap item "{title}". Summarise it and help me plan the work to deliver it.').replace('{title}', title),
+              // Auto-link the roadmap item so the chat is tied to it (like a task session).
+              ticket: { kind: 'roadmap', ref: String(r.id), title },
             },
           };
         },

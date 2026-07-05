@@ -26,7 +26,7 @@ import {
 import { resolvePaidOverflowCapMillicents } from '../../application/llm/usageLedger';
 import { USAGE_KIND } from '../../application/llm/usageSource';
 import { logTrace, backfillTraceUsage } from '../../application/llm/traceLogger';
-import { recordUsageRow, type UsageAttribution, type RecordUsageRow } from '../../application/llm/usageLedger';
+import { recordUsageRow, type UsageAttribution, type RecordUsageRow, type UsageSurface } from '../../application/llm/usageLedger';
 import { pickUsage } from '../../application/llm/vendors';
 import {
   dispatchEmbeddingVendor,
@@ -153,6 +153,20 @@ function logUsage(
   row: RecordUsageRow,
 ): void {
   ctx.waitUntil(recordUsageRow(buildDatabase(env), env as Env, row));
+}
+
+/**
+ * Which modality produced a gateway call, for the usage row's `surface` (drives
+ * the BYO metering exemption — own-machine on-prem/VSIX BYO is free, cloud is
+ * charged). A client may hint via `X-Builderforce-Surface`; otherwise an
+ * agentHost-authenticated call is on-prem by definition, and everything else is
+ * treated as web. (Cloud runs never come through this HTTP path — they record via
+ * recordCloudUsage with surface 'cloud'.) */
+const KNOWN_SURFACES: readonly UsageSurface[] = ['web', 'vsix', 'on_prem', 'cloud', 'sdk'];
+function resolveUsageSurface(c: Context<HonoEnv>, access: TenantAccess): UsageSurface {
+  const hinted = (c.req.header('x-builderforce-surface') ?? '').toLowerCase();
+  if ((KNOWN_SURFACES as readonly string[]).includes(hinted)) return hinted as UsageSurface;
+  return access.agentHostId != null ? 'on_prem' : 'web';
 }
 
 /**
@@ -917,6 +931,7 @@ export function createLlmRoutes(): Hono<HonoEnv> {
             },
             metadata: { engine: 'agent' }, idempotencyKey, useCase: 'agent',
             tenantApiKeyId: access.tenantApiKeyId, attribution: { agentHostId: access.agentHostId },
+            byo: true, surface: resolveUsageSurface(c, access),
           });
         }
         return new Response(JSON.stringify(json ?? { error: 'upstream_error' }), {
@@ -935,6 +950,7 @@ export function createLlmRoutes(): Hono<HonoEnv> {
             retries: 0, streamed: true, usage: parseAnthropicSseUsage(text),
             metadata: { engine: 'agent' }, idempotencyKey, useCase: 'agent',
             tenantApiKeyId: access.tenantApiKeyId, attribution: { agentHostId: access.agentHostId },
+            byo: true, surface: resolveUsageSurface(c, access),
           });
         } catch { /* metering is best-effort */ }
       })());
@@ -976,6 +992,7 @@ export function createLlmRoutes(): Hono<HonoEnv> {
           useCase: 'agent', tenantApiKeyId: access.tenantApiKeyId,
           attribution: { agentHostId: access.agentHostId }, traceId,
           paidOverflow: result.paidOverflow,
+          byo: result.byoFunded ?? false, surface: resolveUsageSurface(c, access),
         });
       });
       return new Response(stream, {
@@ -993,6 +1010,7 @@ export function createLlmRoutes(): Hono<HonoEnv> {
       useCase: 'agent', tenantApiKeyId: access.tenantApiKeyId,
       attribution: { agentHostId: access.agentHostId }, traceId,
       paidOverflow: result.paidOverflow,
+      byo: result.byoFunded ?? false, surface: resolveUsageSurface(c, access),
     });
     return new Response(JSON.stringify(openAiToAnthropicMessage(openaiJson, result.resolvedModel, messageId)), {
       status: result.response.status,
@@ -1385,6 +1403,7 @@ export function createLlmRoutes(): Hono<HonoEnv> {
             metadata: callerMetadata, idempotencyKey, useCase: callerUseCase,
             tenantApiKeyId: access.tenantApiKeyId, attribution: { agentHostId: access.agentHostId }, traceId,
             paidOverflow: result.paidOverflow,
+            byo: result.byoFunded ?? false, surface: resolveUsageSurface(c, access),
           });
           // Back-fill the streamed trace row (logged above with 0 tokens) [1298].
           backfillTraceUsage(c.env, c.executionCtx, traceId, usage);
@@ -1409,6 +1428,7 @@ export function createLlmRoutes(): Hono<HonoEnv> {
       metadata: callerMetadata, idempotencyKey, useCase: callerUseCase,
       tenantApiKeyId: access.tenantApiKeyId, attribution: { agentHostId: access.agentHostId }, traceId,
       paidOverflow: result.paidOverflow,
+      byo: result.byoFunded ?? false, surface: resolveUsageSurface(c, access),
     });
 
     // Surface the trace id inside the error envelope too, so a consumer hitting

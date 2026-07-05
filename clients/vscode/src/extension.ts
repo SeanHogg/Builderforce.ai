@@ -183,9 +183,14 @@ export function activate(context: vscode.ExtensionContext): void {
       if (!t) return;
       // Open the unified Brain seeded for this task. The Brain has the shared platform
       // tools (tasks.get/update/…), so it can read + act on the task, not just chat.
+      // Auto-link the work item so the chat is tied to it (epics/gaps use their own
+      // ticket kind; everything else is a plain task).
+      const projectId = getSelectedProject()?.id;
+      const ticketKind = t.taskType === "epic" ? "epic" : t.taskType === "gap" ? "gap" : "task";
       BrainWebview.open(context, {
         kind: "task",
-        task: { id: t.id, key: t.key, title: t.title, projectId: getSelectedProject()?.id },
+        task: { id: t.id, key: t.key, title: t.title, taskType: t.taskType, projectId },
+        ticket: { kind: ticketKind, ref: String(t.id), title: t.title, projectId },
       });
     }),
     vscode.commands.registerCommand("builderforce.setTaskStatus", (node: TaskNode) =>
