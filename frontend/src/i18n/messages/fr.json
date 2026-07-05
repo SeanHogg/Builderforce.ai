@@ -259,7 +259,6 @@
       "findWork": "Trouver du travail",
       "timecard": "Feuille de temps",
       "myDashboard": "Mon tableau de bord",
-      "meetings": "Réunions",
       "myWorkspace": "Mon espace"
     },
     "tab": {
@@ -324,6 +323,7 @@
       "adminGrowth": "Croissance",
       "adminLogs": "Journaux",
       "adminDeveloper": "Développeur",
+      "meetings": "Réunions",
       "calendar": "Agenda"
     }
   },
@@ -844,7 +844,10 @@
       "enabling": "Activation…",
       "disabling": "Désactivation…",
       "error": "Impossible de mettre à jour votre disponibilité. Veuillez réessayer."
-    }
+    },
+    "accountTab": "Compte",
+    "sessionsTab": "Sessions",
+    "subnavLabel": "Sections des paramètres"
   },
   "pmo": {
     "title": "Portefeuille (PMO)",
@@ -1914,6 +1917,7 @@
         "qa": "Automatisation QA par projet — flux, tests générés et exécutions CI.",
         "roles": "Les rôles que votre équipe occupe — les rôles standard du modèle de tableau et vos rôles personnalisés — et qui couvre chacun : un agent, un employé ou un intervenant externe.",
         "talent": "Gérez les freelances que vous avez recrutés — missions, offres, validation des feuilles de temps et factures.",
+        "meetings": "Planifiez et rejoignez des sessions vidéo et audio en direct avec votre équipe — mêlées, planification, rétros, appels ad hoc et directs — et connectez votre agenda Google ou Microsoft.",
         "calendar": "Disponibilité de l’équipe et réunions planifiées"
       }
     },
@@ -2934,7 +2938,7 @@
   },
   "security": {
     "title": "Sécurité",
-    "subtitle": "Gérez vos sessions, consultez les accès administrateur et administrez les membres de l’espace.",
+    "subtitle": "Gérez les membres de l’espace de travail, les agents de sécurité et les audits SOC 2.",
     "refresh": "Actualiser",
     "loading": "Chargement…",
     "loadingMembers": "Chargement des membres…",
@@ -3004,7 +3008,11 @@
     "tsc_availability": "Disponibilité",
     "tsc_processing_integrity": "Intégrité du traitement",
     "tsc_confidentiality": "Confidentialité",
-    "tsc_privacy": "Confidentialité des données"
+    "tsc_privacy": "Confidentialité des données",
+    "membersTab": "Membres",
+    "agentsTab": "Agents",
+    "auditTab": "SOC 2",
+    "subnavLabel": "Sections de sécurité"
   },
   "catalogInsights": {
     "total": {
@@ -3032,6 +3040,7 @@
   "projectTable": {
     "name": "Nom",
     "health": "Santé",
+    "diagnostics": "Diagnostics",
     "description": "Description",
     "agent": "Agent",
     "actions": "Actions",
@@ -3042,6 +3051,14 @@
     "workflowsWithCount": "Workflows ({count})",
     "openIde": "Ouvrir dans l'IDE",
     "delete": "Supprimer"
+  },
+  "diagnosticsStrip": {
+    "title": "Diagnostics",
+    "notScored": "Non évalué",
+    "gaps": "{count, plural, one {# écart} other {# écarts}}",
+    "noGaps": "Aucun écart",
+    "more": "+{count}",
+    "itemAria": "{name} : {score}, {label}, {gaps}"
   },
   "marketing": {
     "ctaGetStartedFree": "Commencer gratuitement",

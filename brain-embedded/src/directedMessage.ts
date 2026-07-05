@@ -87,6 +87,51 @@ export function isDirectedToParticipant(msg: { metadata?: string | null }): bool
  */
 export type RecipientChoice = DirectedRecipient | 'brain' | null;
 
+/** An in-progress "@mention" being typed at the caret — what a composer typeahead
+ *  offers a picker for. */
+export interface MentionToken {
+  /** The text typed after '@' (before the caret); '' right after typing '@'. */
+  query: string;
+  /** Index of the '@' character in the text. */
+  start: number;
+  /** Index just past the query (the caret position). */
+  end: number;
+}
+
+/**
+ * Detect an in-progress "@mention" at the caret, for a composer typeahead. The
+ * token is an '@' at the start of the text or right after whitespace, followed by
+ * a run of non-whitespace, non-'@' characters, with the caret inside that run.
+ * Returns null when the caret is not in such a token (so no picker should show).
+ * Deliberately mirrors {@link mentionRecipient}'s `@([^\s@]+)` grammar so what the
+ * typeahead offers and what a leading mention resolves to stay consistent.
+ */
+export function activeMentionToken(text: string, caret: number): MentionToken | null {
+  const at = text.lastIndexOf('@', Math.max(0, caret - 1));
+  if (at < 0) return null;
+  // Must start the text or follow whitespace, so an email address's "@" never triggers.
+  if (at > 0 && !/\s/.test(text[at - 1])) return null;
+  const query = text.slice(at + 1, caret);
+  // The run from '@' to the caret must be one unbroken token (no space/@ inside).
+  if (/[\s@]/.test(query)) return null;
+  return { query, start: at, end: caret };
+}
+
+/**
+ * Filter + rank participants for a mention query — case-insensitive substring
+ * match, name-start matches first. An empty query returns every participant (so
+ * typing a bare '@' opens the full roster). Shared by every composer's typeahead.
+ */
+export function filterMentionCandidates(participants: DirectedRecipient[], query: string): DirectedRecipient[] {
+  const q = query.trim().toLowerCase();
+  if (!q) return participants;
+  return participants
+    .map((p) => ({ p, idx: p.name.toLowerCase().indexOf(q) }))
+    .filter((s) => s.idx >= 0)
+    .sort((a, b) => a.idx - b.idx || a.p.name.localeCompare(b.p.name))
+    .map((s) => s.p);
+}
+
 /** Resolve a leading "@name" in composer text to one of `participants`, if any. */
 export function mentionRecipient(text: string, participants: DirectedRecipient[]): DirectedRecipient | null {
   const m = /^\s*@([^\s@]+)/.exec(text);

@@ -7,7 +7,7 @@ import { TOOLS, getTool } from './toolDefinitions';
 import { TOOL_DATA_PROVIDERS, hasDataProvider } from './toolDataProviders';
 import { toSummary, toDefinition, type ToolSummary, type ToolDefinition, type ToolResult } from './toolTypes';
 
-import { ARCHITECTURE_DIAGNOSTIC_ID, EXTERNAL_DIAGNOSTIC_NAMES } from './auditIds';
+import { ARCHITECTURE_DIAGNOSTIC_ID, EXTERNAL_DIAGNOSTIC_NAMES, EXTERNAL_DIAGNOSTIC_ICONS } from './auditIds';
 
 /** Re-exported so existing importers (e.g. AnalysisRunnerDO) keep their import
  *  path. The canonical definition lives in `auditIds.ts` alongside the other
@@ -22,6 +22,13 @@ const levelName = (n: number): string => LEVEL_NAMES[clampLevel(n) - 1]!;
  *  externally-scored diagnostic like the architecture analysis. */
 export function diagnosticName(toolId: string): string {
   return getTool(toolId)?.name ?? EXTERNAL_DIAGNOSTIC_NAMES[toolId] ?? toolId;
+}
+
+/** Emoji icon for any diagnostic id — the system-audit icon, else the registered
+ *  tool's icon, else a neutral fallback. Lets every surface (project-card strip,
+ *  analytics gauges) label a diagnostic without re-deriving the mapping. */
+export function diagnosticIcon(toolId: string): string {
+  return EXTERNAL_DIAGNOSTIC_ICONS[toolId] ?? getTool(toolId)?.icon ?? '📊';
 }
 
 export interface SavedToolRun {
@@ -39,9 +46,14 @@ export interface SavedToolRun {
 export interface ProjectDiagnostic {
   toolId: string;
   name: string;
+  /** Emoji icon for the diagnostic (audit / tool). */
+  icon: string;
   score: number | null;
   scoreLabel: string | null;
   headline: string;
+  /** Number of open gaps (recommendations) the latest run flagged — the
+   *  "remediation outstanding" signal surfaced beside the score. */
+  gapCount: number;
   kind: string;
   createdAt: string;
   /** The full latest run result, for the per-diagnostic results view. */
@@ -54,6 +66,17 @@ export interface ProjectScore {
   diagnostics: ProjectDiagnostic[];
 }
 
+/** Compact per-diagnostic summary carried on a rollup row so the project-card
+ *  strip can render each diagnostic (SOC 2 etc.) without an N+1 score fetch. */
+export interface ProjectDiagnosticSummary {
+  toolId: string;
+  name: string;
+  icon: string;
+  score: number | null;
+  scoreLabel: string | null;
+  gapCount: number;
+}
+
 export interface TenantProjectScore {
   projectId: number;
   name: string;
@@ -61,6 +84,9 @@ export interface TenantProjectScore {
   scoreLabel: string | null;
   diagnosticCount: number;
   lastRunAt: string;
+  /** Per-diagnostic latest scores for this project (SOC 2, Quality, …), so the
+   *  project card can surface each one from the single cached rollup read. */
+  diagnostics: ProjectDiagnosticSummary[];
 }
 
 export interface TenantDiagnosticsRollup {
@@ -211,9 +237,11 @@ export class ToolService {
         return {
           toolId: r.toolId,
           name: diagnosticName(r.toolId),
+          icon: diagnosticIcon(r.toolId),
           score: result.score ?? null,
           scoreLabel: result.scoreLabel ?? null,
           headline: result.headline ?? '',
+          gapCount: result.recommendations?.length ?? 0,
           kind: r.kind,
           createdAt: r.createdAt.toISOString(),
           result,
@@ -277,6 +305,16 @@ export class ToolService {
       const projectScores: TenantProjectScore[] = projectIds.map((pid) => {
         const entry = byProject.get(pid)!;
         const score = meanScore([...entry.latest.values()].map((r) => r.score ?? null));
+        const diagnostics: ProjectDiagnosticSummary[] = [...entry.latest.entries()]
+          .map(([toolId, r]) => ({
+            toolId,
+            name: diagnosticName(toolId),
+            icon: diagnosticIcon(toolId),
+            score: r.score ?? null,
+            scoreLabel: r.scoreLabel ?? null,
+            gapCount: r.recommendations?.length ?? 0,
+          }))
+          .sort((a, b) => a.name.localeCompare(b.name));
         return {
           projectId: pid,
           name: nameById.get(pid) ?? `#${pid}`,
@@ -284,6 +322,7 @@ export class ToolService {
           scoreLabel: score != null ? levelName(score) : null,
           diagnosticCount: entry.latest.size,
           lastRunAt: entry.lastRunAt.toISOString(),
+          diagnostics,
         };
       });
       projectScores.sort((a, b) => (b.score ?? -1) - (a.score ?? -1) || a.name.localeCompare(b.name));

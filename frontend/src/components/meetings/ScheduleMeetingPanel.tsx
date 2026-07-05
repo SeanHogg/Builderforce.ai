@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { useAuth } from '@/lib/AuthContext';
 import { Select } from '@/components/Select';
+import { SlideOutPanel } from '@/components/SlideOutPanel';
 import { listWorkforceDirectory, type WorkforceOption } from '@/lib/teams';
 import { meetingsApi, type MeetingDetail, type MeetingKind, type TimeSlot } from '@/lib/builderforceApi';
 
@@ -22,14 +23,18 @@ function isoToLocalInput(iso: string): string {
  * time (blank = start now), duration, attendees, and whether cameras are enabled.
  * "Find a time" proposes slots where every invitee is free and within their
  * declared availability. A scheduled meeting mirrors to the organizer's calendar.
+ *
+ * Rendered as a slide-out side panel (not a modal): per the app convention, modals
+ * are reserved for terminal / destructive approvals — every other overlay is a
+ * SlideOutPanel, which behaves better on mobile and adaptive layouts.
  */
-export function ScheduleMeetingModal({
+export function ScheduleMeetingPanel({
   open, onClose, onCreated, startNow = false, presetAt = null, projectId = null,
 }: {
   open: boolean;
   onClose: () => void;
   onCreated: (detail: MeetingDetail, joinNow: boolean) => void;
-  /** Preset the modal for an instant ad-hoc call. */
+  /** Preset the panel for an instant ad-hoc call. */
   startNow?: boolean;
   /** ISO start time to prefill (from clicking a calendar slot). */
   presetAt?: string | null;
@@ -114,21 +119,13 @@ export function ScheduleMeetingModal({
     } finally { setBusy(false); }
   }, [others, selected, kind, title, projectId, scheduled, scheduledAt, durationMinutes, videoEnabled, user, onCreated, onClose]);
 
-  if (!open) return null;
-
   const field: React.CSSProperties = { fontSize: 13, padding: '8px 10px', borderRadius: 8, background: 'var(--bg-base)', color: 'var(--text-primary)', border: '1px solid var(--border-subtle)', width: '100%' };
   const label: React.CSSProperties = { fontSize: 12, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: 0.4, marginBottom: 6, display: 'block' };
   const slotFmt = new Intl.DateTimeFormat(undefined, { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
 
   return (
-    <div role="dialog" aria-modal="true" onClick={onClose}
-      style={{ position: 'fixed', inset: 0, zIndex: 1002, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: 16, overflow: 'auto' }}>
-      <div onClick={(e) => e.stopPropagation()}
-        style={{ marginTop: '5vh', width: '100%', maxWidth: 480, background: 'var(--surface-card)', border: '1px solid var(--border-subtle)', borderRadius: 16, padding: 20, display: 'flex', flexDirection: 'column', gap: 14 }}>
-        <h2 style={{ fontSize: 16, fontWeight: 700, color: 'var(--text-primary)', margin: 0 }}>
-          {startNow && !presetAt ? t('startNowTitle') : t('scheduleTitle')}
-        </h2>
-
+    <SlideOutPanel open={open} onClose={onClose} title={startNow && !presetAt ? t('startNowTitle') : t('scheduleTitle')}>
+      <div style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 14 }}>
         <div>
           <label style={label}>{t('kind')}</label>
           <Select value={kind} onChange={(e) => setKind(e.target.value as MeetingKind)} style={field}>
@@ -195,7 +192,7 @@ export function ScheduleMeetingModal({
 
         <div>
           <label style={label}>{t('invite')}</label>
-          <div style={{ maxHeight: 180, overflow: 'auto', border: '1px solid var(--border-subtle)', borderRadius: 8, padding: 6, display: 'flex', flexDirection: 'column', gap: 2 }}>
+          <div style={{ maxHeight: 240, overflow: 'auto', border: '1px solid var(--border-subtle)', borderRadius: 8, padding: 6, display: 'flex', flexDirection: 'column', gap: 2 }}>
             {others.length === 0 ? (
               <span style={{ fontSize: 12, color: 'var(--text-muted)', padding: 6 }}>{t('noTeammates')}</span>
             ) : others.map((o) => (
@@ -219,6 +216,6 @@ export function ScheduleMeetingModal({
           </button>
         </div>
       </div>
-    </div>
+    </SlideOutPanel>
   );
 }

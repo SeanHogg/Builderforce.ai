@@ -8,7 +8,6 @@ import { notSystemTask } from '../../application/task/taskScope';
 import type { TenantService } from '../../application/tenant/TenantService';
 import { provisionBuiltinAgents } from '../../application/agent/provisionBuiltinAgents';
 import { mintTenantSessionToken } from '../../infrastructure/auth/tenantSessionToken';
-import { TenantRole } from '../../domain/shared/types';
 
 /**
  * VS Code coder-agent connection tracking + in-editor workspace (tenant) management.
@@ -60,10 +59,11 @@ export function createVscodeRoutes(db: Db, tenantService: TenantService): Hono<H
     if (!Number.isFinite(tenantId) || tenantId <= 0) return c.json({ error: 'invalid tenant id' }, 400);
     const member = (await tenantService.listTenantsForUser(userId)).find((t) => t.id === tenantId);
     if (!member) return c.json({ error: 'Not a member of this workspace' }, 403);
+    // Role is resolved from the caller's active membership inside the minter, so an
+    // owner/manager switching workspaces keeps their real authority (not a flat dev token).
     const { token, expiresIn } = await mintTenantSessionToken(db, c.env.JWT_SECRET, {
       userId,
       tenantId,
-      role: TenantRole.DEVELOPER,
       userAgent: c.req.header('User-Agent') ?? null,
       ipAddress: c.req.header('CF-Connecting-IP') ?? null,
     });

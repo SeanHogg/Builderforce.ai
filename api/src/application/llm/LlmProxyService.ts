@@ -28,6 +28,7 @@ import {
   dispatchVendorStream,
   kindForStatus,
   autoRoutableModelsByTier,
+  parseVendorPrefix,
   tierForModel,
   vendorForModel,
   vendorKeyBound,
@@ -196,6 +197,61 @@ export const CODING_MODEL_POOL: readonly string[] = [
  */
 export const CODING_DEFAULT_MODEL: string =
   CODING_MODEL_POOL.find((m) => FREE_MODEL_POOL.includes(m)) ?? FREE_MODEL_POOL[0] ?? '';
+
+/**
+ * Preferred auto-select flagship for a tenant's OWN connected provider(s).
+ *
+ * When an account owner connects their frontier account (an Anthropic Pro/Max
+ * SUBSCRIPTION, or a BYO api-key for Anthropic/OpenAI/Google), an auto-select turn
+ * — one with NO explicit model — leads with THIS model so the owner's own account is
+ * used before the free/paid gateway tiers (the "connect your account → it gets used"
+ * guarantee the settings/api-keys UI implies). It is a SOFT seed: the plan pool stays
+ * behind it as fallback, so a transient provider error still resolves the turn.
+ *
+ * Anthropic wins when connected (the owner's frontier default) and splits by turn
+ * shape per the product decision: Opus drives agentic tool-loops (`agentic`), Sonnet
+ * drives plain chat. OpenAI/Google fall back to their direct-vendor flagship. Priority
+ * anthropic → openai → google mirrors the settings/api-keys ordering so Claude stays
+ * the default when several providers are connected.
+ *
+ * `byoVendors` is the gateway VENDOR-id set the tenant can serve from their own
+ * account (see `byoVendorIdSet` / the proxy's connected set). Returns null when
+ * nothing is connected — plan routing is then unchanged. This is the SINGLE source
+ * both the gateway completion seed ({@link LlmProxyService.complete}) and the
+ * cloud-agent pin ({@link pickCloudModel}) use, so the two surfaces never diverge on
+ * which model an owner's connected account leads with. Every returned id is a real
+ * catalog entry served by the matching direct vendor (so the resolution is stamped
+ * `byo` → $0), asserted in `LlmProxyService.codingPool.test`.
+ */
+export function byoAutoSeedModel(
+  byoVendors: ReadonlySet<string> | null | undefined,
+  opts: { agentic: boolean },
+): string | null {
+  if (!byoVendors || byoVendors.size === 0) return null;
+  if (byoVendors.has('anthropic')) return opts.agentic ? 'claude-opus-4-8' : 'claude-sonnet-4-6';
+  // The factory OpenAI-compatible vendor is reachable ONLY via the `direct/<vendor>/`
+  // prefix (a bare `openai/…` would hijack OpenRouter's `<org>/<slug>` namespace and
+  // re-route to the operator key — see VENDOR_PREFIXES). `googleai/` is a bespoke
+  // prefix, so its flagship carries it directly. Both strip to a real catalog id and
+  // resolve to the tenant's own key ($0 → byo).
+  if (byoVendors.has('openai')) return 'direct/openai/gpt-4.1';
+  if (byoVendors.has('googleai')) return 'googleai/gemini-2.5-pro';
+  return null;
+}
+
+/**
+ * A {@link byoAutoSeedModel} output is dispatchable when it's a known bare catalog id
+ * (the Anthropic direct ids `claude-*`) OR a vendor-prefixed id (`direct/openai/…`,
+ * `googleai/…`) whose PREFIX-STRIPPED model id is a real catalog entry — `isKnownModel`
+ * alone looks up the bare index and would false-negative the prefixed BYO seeds.
+ * Guards the cloud-agent pin against a drifted seed constant. Asserted in
+ * `LlmProxyService.codingPool.test`.
+ */
+export function isDispatchableSeed(id: string): boolean {
+  if (isKnownModel(id)) return true;
+  const parsed = parseVendorPrefix(id);
+  return !!parsed && isKnownModel(parsed.modelId);
+}
 
 /**
  * True when `model` is a real catalog id (any vendor, any tier). Callers that
@@ -770,6 +826,16 @@ export class LlmProxyService {
     return this.anthropicOAuthToken != null && result.resolvedVendor === 'anthropic';
   }
 
+  /** Gateway vendor ids the tenant can serve from their OWN connected account this
+   *  request — a BYO api-key (any provider, populated into {@link tenantFundedVendors}
+   *  by the constructor) OR a connected Anthropic subscription (OAuth). Drives the
+   *  auto-select BYO flagship seed in {@link complete} via {@link byoAutoSeedModel}. */
+  private get connectedByoVendors(): Set<string> {
+    const set = new Set<string>(this.tenantFundedVendors);
+    if (this.anthropicOAuthToken) set.add('anthropic');
+    return set;
+  }
+
   /** Vendors whose call was served with a tenant's OWN BYO credential this
    *  request (populated by {@link vendorEnv} when it overlays a per-tenant key on
    *  the operator env). Combined with the Anthropic-subscription case, this is the
@@ -867,9 +933,16 @@ export class LlmProxyService {
 
     // 2) Caller hint goes at the head; rest of the pool follows.
     //    `callerModel` was extracted at the top of this function for the
-    //    strict-pin branch; reuse it here for the chained path.
-    const seed: readonly string[] = (typeof callerModel === 'string' && callerModel.length > 0)
-      ? [callerModel, ...fittedPool.filter((m) => m !== callerModel)]
+    //    strict-pin branch; reuse it here for the chained path. With NO caller
+    //    model, a connected BYO provider's flagship leads the pool (soft seed) so
+    //    an auto-select turn uses the owner's OWN account before the free/paid
+    //    tiers — Opus for an agentic tool-loop, Sonnet for plain chat (see
+    //    byoAutoSeedModel); the plan pool stays behind it as fallback.
+    const seedModel = (typeof callerModel === 'string' && callerModel.length > 0)
+      ? callerModel
+      : byoAutoSeedModel(this.connectedByoVendors, { agentic: this.codingOnly }) ?? undefined;
+    const seed: readonly string[] = (typeof seedModel === 'string' && seedModel.length > 0)
+      ? [seedModel, ...fittedPool.filter((m) => m !== seedModel)]
       : fittedPool;
 
     // 3) Pre-fetch cooldown state for the leading seed slice + premium fallback
@@ -897,8 +970,12 @@ export class LlmProxyService {
     // (`anthropic/claude-3-haiku`) gets tried even when the same vendor's free
     // key has 429'd its way into vendor cooldown. Per-model cooldown still
     // applies — we won't retry a model that *itself* just failed.
-    const pinnedHint = typeof callerModel === 'string' && callerModel.length > 0
-      ? callerModel
+    // The seed's head (caller pin OR the connected-BYO flagship) bypasses vendor-level
+    // cooldown so the owner's own account is still tried even when that vendor's
+    // operator key has 429'd its way into vendor cooldown. Per-model cooldown still
+    // applies.
+    const pinnedHint = typeof seedModel === 'string' && seedModel.length > 0
+      ? seedModel
       : undefined;
     const candidates = this.buildCandidateChain(seed, cooledSet, cooledVendors, pinnedHint);
     if (candidates.length === 0) {
@@ -908,8 +985,9 @@ export class LlmProxyService {
       // cap, in which case we don't fund another paid call.
       const backstop = this.disablePaidOverflow ? null : await this.dispatchBackstop(body, requestHeaders);
       if (backstop) {
-        // Subscription-funded Claude is free to us → never meter it as overflow.
-        backstop.paidOverflow = !this.isSubscriptionFunded(backstop);
+        // Tenant-funded (a connected subscription OR a BYO api-key) is free to us →
+        // never meter it as overflow.
+        backstop.paidOverflow = !this.isTenantFunded(backstop);
         return this.finalize(backstop, tid, startedAt, [...this.backstopModels], 'success');
       }
       return this.finalize(
@@ -926,8 +1004,10 @@ export class LlmProxyService {
     if (primary.response.status < 400) {
       // Mark overflow when the primary cascade itself landed on an appended
       // premium-fallback model (vs a plan-pool model) so the route meters it —
-      // UNLESS a tenant subscription served it (free to us, see isSubscriptionFunded).
-      primary.paidOverflow = isPaidOverflowModel(primary.resolvedModel) && !this.isSubscriptionFunded(primary);
+      // UNLESS the tenant's OWN account served it (a connected subscription OR a BYO
+      // api-key — free to us; see isTenantFunded), e.g. an owner whose connected-BYO
+      // flagship (claude-*) seeded the head and served the turn on their own account.
+      primary.paidOverflow = isPaidOverflowModel(primary.resolvedModel) && !this.isTenantFunded(primary);
       return this.finalize(primary, tid, startedAt, candidates);
     }
 
@@ -962,7 +1042,7 @@ export class LlmProxyService {
       retry.attempts  = [...(primary.attempts ?? []), ...(retry.attempts ?? [])];
       retry.schemaDowngraded = true;
       if (retry.response.status < 400) {
-        retry.paidOverflow = isPaidOverflowModel(retry.resolvedModel) && !this.isSubscriptionFunded(retry);
+        retry.paidOverflow = isPaidOverflowModel(retry.resolvedModel) && !this.isTenantFunded(retry);
         return this.finalize(retry, tid, startedAt, candidates, 'success');
       }
       // Downgraded cascade still failed for a NON-schema reason (saturation, etc.)
@@ -981,7 +1061,7 @@ export class LlmProxyService {
       backstop.failovers = [...primary.failovers, ...backstop.failovers];
       backstop.retries   = primary.retries + backstop.retries;
       backstop.attempts  = [...(primary.attempts ?? []), ...(backstop.attempts ?? [])];
-      backstop.paidOverflow = !this.isSubscriptionFunded(backstop);
+      backstop.paidOverflow = !this.isTenantFunded(backstop);
       if (effectiveBody !== body) backstop.schemaDowngraded = true;
       return this.finalize(backstop, tid, startedAt, [...candidates, ...this.backstopModels], 'success');
     }
@@ -1951,6 +2031,16 @@ export function pickCloudModel(
   const canChooseModel = premiumOverride || effectivePlan !== 'free' || explicitIsByo;
   // Explicit-pin behaviour (paid plans + BYO pins) — byte-for-byte unchanged otherwise.
   if (canChooseModel && isKnownModel(explicit)) return { model: (explicit as string).trim(), strict: true };
+
+  // No explicit pin (or a free tenant's non-BYO pick was ignored above): when the
+  // tenant has connected their OWN provider, prefer that account's flagship as the
+  // soft seed so an auto-select cloud run uses the owner's account before the
+  // free/paid coding pool. A cloud run is always an agentic tool-loop → Opus for a
+  // connected Anthropic account (see byoAutoSeedModel — shared with the gateway
+  // completion seed so both surfaces agree). Soft (not strict) so a transient
+  // provider error still fails over into the plan pool.
+  const byoSeed = byoAutoSeedModel(opts?.byoVendors, { agentic: true });
+  if (byoSeed && isDispatchableSeed(byoSeed)) return { model: byoSeed, strict: false };
 
   // Soft-seed branch — the ONLY place learned routing changes anything. Reorder the
   // plan-reachable coding pool by the learned stats (+ optional bias) and seed the

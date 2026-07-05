@@ -3,6 +3,8 @@
 import { useRef, useState, useCallback, useEffect } from 'react';
 import Link from 'next/link';
 import { useTranslations } from 'next-intl';
+import { useMentionAutocomplete } from '@seanhogg/builderforce-brain-ui';
+import type { DirectedRecipient } from '@seanhogg/builderforce-brain-embedded';
 import type { BrainEffort } from '@/lib/brain';
 
 /** Browser Web Speech API (not in all TS libs). */
@@ -75,6 +77,14 @@ export interface ChatInputProps {
   onRemoveAttachment?: (key: string) => void;
   /** Optional content rendered right-aligned below the input row (e.g. agent-connection status). */
   secondaryContent?: React.ReactNode;
+  /**
+   * Invited chat participants (agents + humans). When non-empty the composer gets
+   * an @-mention typeahead: typing `@` opens a picker; choosing one calls
+   * {@link onMention} (wire to the recipient choice) and clears the `@query`.
+   */
+  mentionables?: DirectedRecipient[];
+  /** Called when a participant is picked from the @-mention typeahead. */
+  onMention?: (recipient: DirectedRecipient) => void;
   className?: string;
 }
 
@@ -311,10 +321,13 @@ export function ChatInput({
   pendingAttachments = [],
   onRemoveAttachment,
   secondaryContent,
+  mentionables,
+  onMention,
   className,
 }: ChatInputProps) {
   const t = useTranslations('chatInput');
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
   const recognitionRef = useRef<SpeechRecognitionInstance | null>(null);
   const valueRef = useRef(value);
   // eslint-disable-next-line react-hooks/refs

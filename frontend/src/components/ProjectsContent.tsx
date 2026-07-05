@@ -6,7 +6,9 @@ import { useTranslations } from 'next-intl';
 import { useBrainDataRefresh } from '@/lib/brain/useBrainDataRefresh';
 import { useRouter, useSearchParams } from 'next/navigation';
 import type { Project } from '@/lib/types';
+import type { ProjectDiagnosticSummary } from '@/lib/tools';
 import type { AgentHost } from '@/lib/builderforceApi';
+import { toolsApi } from '@/lib/builderforceApi';
 import { fetchProjects, createProject, deleteProject } from '@/lib/api';
 import { trackActivity } from '@/lib/activity/tracker';
 import { useOptionalProjectScope } from '@/lib/ProjectScopeContext';
@@ -56,6 +58,11 @@ export function ProjectsContent({ limit, viewAllHref, onCount }: ProjectsContent
 
   const [projects, setProjects] = useState<Project[]>([]);
   const [agentHostList, setAgentHostList] = useState<AgentHost[]>([]);
+  // Per-project latest diagnostic scores (SOC 2, Quality, …), from the single
+  // cached workspace rollup — so every card renders its diagnostics strip
+  // without an N+1 per-card score fetch. Manager-gated: a 403 leaves the map
+  // empty and the strips self-hide.
+  const [diagnosticsByProject, setDiagnosticsByProject] = useState<Map<number, ProjectDiagnosticSummary[]>>(new Map());
   const [isLoading, setIsLoading] = useState(true);
   const [isCreating, setIsCreating] = useState(false);
   const [newProjectName, setNewProjectName] = useState('');
@@ -74,6 +81,12 @@ export function ProjectsContent({ limit, viewAllHref, onCount }: ProjectsContent
   const scopedProjects = scopedProjectId != null ? projects.filter((p) => p.id === scopedProjectId) : projects;
   const visibleProjects = limit != null ? scopedProjects.slice(0, limit) : scopedProjects;
 
+  const loadRollup = useCallback(() => {
+    toolsApi.rollup()
+      .then((r) => setDiagnosticsByProject(new Map(r.projects.map((p) => [p.projectId, p.diagnostics]))))
+      .catch(() => setDiagnosticsByProject(new Map()));
+  }, []);
+
   useEffect(() => {
     Promise.all([
       fetchProjects().catch(() => {
@@ -85,6 +98,7 @@ export function ProjectsContent({ limit, viewAllHref, onCount }: ProjectsContent
       setProjects(projs);
       setAgentHostList(agentHostsData);
     }).finally(() => setIsLoading(false));
+    loadRollup();
     // Mount-only fetch; `t` (next-intl) is stable and only used in the error path.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -93,7 +107,8 @@ export function ProjectsContent({ limit, viewAllHref, onCount }: ProjectsContent
   // so this list stays live instead of going stale until a manual reload.
   const reloadProjects = useCallback(() => {
     fetchProjects().then(setProjects).catch(() => {});
-  }, []);
+    loadRollup();
+  }, [loadRollup]);
   useBrainDataRefresh(['projects'], reloadProjects);
 
   useEffect(() => {
@@ -340,6 +355,7 @@ export function ProjectsContent({ limit, viewAllHref, onCount }: ProjectsContent
             <ProjectCard
               key={project.id}
               project={project}
+              diagnostics={diagnosticsByProject.get(project.id)}
               onCardClick={(p) => openDetails(p)}
               onDetailsClick={openDetails}
               onOpenIde={(p) => router.push(`/ide/dashboard?project=${p.id}`)}
@@ -367,6 +383,7 @@ export function ProjectsContent({ limit, viewAllHref, onCount }: ProjectsContent
       ) : (
         <ProjectTable
           projects={visibleProjects}
+          diagnosticsByProject={diagnosticsByProject}
           onDetailsClick={openDetails}
           onOpenIde={(p) => router.push(`/ide/dashboard?project=${p.id}`)}
           onAssignedAgentClick={(ac) => {

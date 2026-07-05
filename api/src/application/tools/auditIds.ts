@@ -36,3 +36,15 @@ export const EXTERNAL_DIAGNOSTIC_NAMES: Record<string, string> = {
   [PM_VISION_AUDIT_ID]: 'Product Vision & Roadmap Audit',
   [PRIVACY_AUDIT_ID]: 'Privacy & Data-Law Compliance',
 };
+
+/** Canonical emoji icon per externally-scored diagnostic — the SINGLE source the
+ *  system-audit registry (`SYSTEM_AUDITS`) and the diagnostic summaries
+ *  (`ToolService.diagnosticIcon`) both read, so the icon can't drift between the
+ *  audit list and the project-card / analytics strips. */
+export const EXTERNAL_DIAGNOSTIC_ICONS: Record<string, string> = {
+  [ARCHITECTURE_DIAGNOSTIC_ID]: '🏛️',
+  [SOC2_AUDIT_ID]: '🛡️',
+  [QUALITY_AUDIT_ID]: '✅',
+  [PM_VISION_AUDIT_ID]: '🧭',
+  [PRIVACY_AUDIT_ID]: '⚖️',
+};

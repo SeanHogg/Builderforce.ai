@@ -77,9 +77,13 @@ export interface SavedToolRun {
 export interface ProjectDiagnostic {
   toolId: string;
   name: string;
+  /** Emoji icon for the diagnostic (audit / tool). */
+  icon: string;
   score: number | null;
   scoreLabel: string | null;
   headline: string;
+  /** Number of open gaps (recommendations) the latest run flagged. */
+  gapCount: number;
   kind: string;
   createdAt: string;
   /** The full latest run result, for the per-diagnostic results view. */
@@ -92,6 +96,18 @@ export interface ProjectScore {
   diagnostics: ProjectDiagnostic[];
 }
 
+/** Compact per-diagnostic summary carried on a rollup row (mirrors backend
+ *  `ProjectDiagnosticSummary`) — lets the project card render each diagnostic
+ *  from the single cached rollup read. */
+export interface ProjectDiagnosticSummary {
+  toolId: string;
+  name: string;
+  icon: string;
+  score: number | null;
+  scoreLabel: string | null;
+  gapCount: number;
+}
+
 export interface TenantProjectScore {
   projectId: number;
   name: string;
@@ -99,6 +115,7 @@ export interface TenantProjectScore {
   scoreLabel: string | null;
   diagnosticCount: number;
   lastRunAt: string;
+  diagnostics: ProjectDiagnosticSummary[];
 }
 
 /** Project diagnostic ratings rolled up to the workspace. */

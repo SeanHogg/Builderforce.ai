@@ -1,5 +1,17 @@
 'use client';
 
+/**
+ * SlideOutPanel — the canonical overlay for the app.
+ *
+ * CONVENTION (app-wide): a centered modal dialog is reserved for TERMINAL /
+ * DESTRUCTIVE approvals only — irreversible confirmations like "Delete", "Remove",
+ * "Disconnect", "Cancel subscription". EVERYTHING ELSE (forms, editors, detail
+ * views, creation flows, settings, pickers) uses this slide-out side panel: it
+ * adapts to mobile far better than a modal, doesn't trap the viewport, and keeps
+ * the underlying context visible. When you reach for a modal, ask "is this a
+ * terminal destructive approval?" — if not, use SlideOutPanel.
+ */
+
 import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 

@@ -259,7 +259,6 @@
       "findWork": "Arbeit finden",
       "timecard": "Zeiterfassung",
       "myDashboard": "Mein Dashboard",
-      "meetings": "Besprechungen",
       "myWorkspace": "Mein Bereich"
     },
     "tab": {
@@ -324,6 +323,7 @@
       "adminGrowth": "Wachstum",
       "adminLogs": "Protokolle",
       "adminDeveloper": "Entwickler",
+      "meetings": "Besprechungen",
       "calendar": "Kalender"
     }
   },
@@ -844,7 +844,10 @@
       "enabling": "Wird aktiviert…",
       "disabling": "Wird deaktiviert…",
       "error": "Deine Verfügbarkeit konnte nicht aktualisiert werden. Bitte versuche es erneut."
-    }
+    },
+    "accountTab": "Konto",
+    "sessionsTab": "Sitzungen",
+    "subnavLabel": "Einstellungsbereiche"
   },
   "pmo": {
     "title": "Portfolio (PMO)",
@@ -1914,6 +1917,7 @@
         "qa": "Projektbezogene QA-Automatisierung — Abläufe, generierte Tests und CI-Läufe.",
         "roles": "Die Rollen, die dein Team besetzt – die Standardrollen der Board-Vorlage plus deine eigenen – und wer sie jeweils abdeckt: ein Agent, ein Mitarbeiter oder eine externe Kraft.",
         "talent": "Verwalte die von dir engagierten Freelancer – Engagements, Stellenausschreibungen, Zeiterfassungsfreigaben und Rechnungen.",
+        "meetings": "Live-Video- und Audiositzungen mit deinem Team planen und beitreten – Standups, Planung, Retros sowie Ad-hoc- und Direktanrufe – und Google- oder Microsoft-Kalender verbinden.",
         "calendar": "Team-Verfügbarkeit und geplante Besprechungen"
       }
     },
@@ -2934,7 +2938,7 @@
   },
   "security": {
     "title": "Sicherheit",
-    "subtitle": "Verwalte deine Sitzungen, prüfe Admin-Zugriffe und steuere die Mitglieder des Arbeitsbereichs.",
+    "subtitle": "Verwalten Sie Workspace-Mitglieder, Sicherheitsagenten und SOC-2-Audits.",
     "refresh": "Aktualisieren",
     "loading": "Wird geladen…",
     "loadingMembers": "Mitglieder werden geladen…",
@@ -3004,7 +3008,11 @@
     "tsc_availability": "Verfügbarkeit",
     "tsc_processing_integrity": "Verarbeitungsintegrität",
     "tsc_confidentiality": "Vertraulichkeit",
-    "tsc_privacy": "Datenschutz"
+    "tsc_privacy": "Datenschutz",
+    "membersTab": "Mitglieder",
+    "agentsTab": "Agenten",
+    "auditTab": "SOC 2",
+    "subnavLabel": "Sicherheitsbereiche"
   },
   "catalogInsights": {
     "total": {
@@ -3032,6 +3040,7 @@
   "projectTable": {
     "name": "Name",
     "health": "Zustand",
+    "diagnostics": "Diagnosen",
     "description": "Beschreibung",
     "agent": "Agent",
     "actions": "Aktionen",
@@ -3042,6 +3051,14 @@
     "workflowsWithCount": "Workflows ({count})",
     "openIde": "Im IDE öffnen",
     "delete": "Löschen"
+  },
+  "diagnosticsStrip": {
+    "title": "Diagnosen",
+    "notScored": "Nicht bewertet",
+    "gaps": "{count, plural, one {# Lücke} other {# Lücken}}",
+    "noGaps": "Keine Lücken",
+    "more": "+{count}",
+    "itemAria": "{name}: {score}, {label}, {gaps}"
   },
   "marketing": {
     "ctaGetStartedFree": "Kostenlos starten",

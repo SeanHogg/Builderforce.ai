@@ -8,7 +8,7 @@ import {
   type MeetingDetail, type CalendarEventItem,
 } from '@/lib/builderforceApi';
 import { CalendarConnectionsCard } from './CalendarConnectionsCard';
-import { ScheduleMeetingModal } from './ScheduleMeetingModal';
+import { ScheduleMeetingPanel } from './ScheduleMeetingPanel';
 import { MeetingRoom } from './MeetingRoom';
 import { TeamChatButton } from '@/components/brain/TeamChatButton';
 
@@ -24,8 +24,18 @@ function KindBadge({ label }: { label: string }) {
  * Meetings — schedule, connect calendars, and join live video/audio sessions
  * (standups, planning, retros, ad-hoc or direct calls). Handles the calendar
  * OAuth return + the `?join=<id>` deep link from a calendar invite.
+ *
+ * Lives as the "Meetings" tab of Talent / Workforce; `embedded` hides the internal
+ * page header (the shell page-header already shows the title + sub) and `basePath`
+ * is the path the OAuth/deep-link cleanup redirects back to (so it keeps ?tab=).
  */
-export default function MeetingsContent() {
+export default function MeetingsContent({
+  embedded = false,
+  basePath = '/meetings',
+}: {
+  embedded?: boolean;
+  basePath?: string;
+} = {}) {
   const t = useTranslations('meetings');
   const router = useRouter();
   const params = useSearchParams();
@@ -60,7 +70,7 @@ export default function MeetingsContent() {
       if (cal === 'connected') reload();
     }
     if (join) setActiveMeetingId(join);
-    if (cal || join) router.replace('/meetings');
+    if (cal || join) router.replace(basePath);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [params]);
 
@@ -120,12 +130,15 @@ export default function MeetingsContent() {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20, maxWidth: 1000, margin: '0 auto', width: '100%' }}>
-      {/* Header */}
-      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap' }}>
-        <div>
-          <h1 style={{ fontSize: 22, fontWeight: 800, color: 'var(--text-primary)', margin: 0 }}>{t('title')}</h1>
-          <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: '4px 0 0' }}>{t('subtitle')}</p>
-        </div>
+      {/* Header — hidden when embedded (the shell page-header owns title + sub);
+          the primary actions still render, right-aligned. */}
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: embedded ? 'flex-end' : 'space-between', gap: 16, flexWrap: 'wrap' }}>
+        {!embedded && (
+          <div>
+            <h1 style={{ fontSize: 22, fontWeight: 800, color: 'var(--text-primary)', margin: 0 }}>{t('title')}</h1>
+            <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: '4px 0 0' }}>{t('subtitle')}</p>
+          </div>
+        )}
         <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
           <button type="button" onClick={() => openSchedule(true)} style={btn(true)}>{t('startNow')}</button>
           <button type="button" onClick={() => openSchedule(false)} style={btn(false)}>{t('schedule')}</button>
@@ -179,11 +192,11 @@ export default function MeetingsContent() {
 
         {/* Right: calendar connections */}
         <div style={{ flex: '1 1 260px', minWidth: 0 }}>
-          <CalendarConnectionsCard />
+          <CalendarConnectionsCard returnPath={basePath} />
         </div>
       </div>
 
-      <ScheduleMeetingModal open={scheduleOpen} startNow={startNowPreset} onClose={() => setScheduleOpen(false)} onCreated={onCreated} />
+      <ScheduleMeetingPanel open={scheduleOpen} startNow={startNowPreset} onClose={() => setScheduleOpen(false)} onCreated={onCreated} />
       {activeMeetingId && (
         <MeetingRoom meetingId={activeMeetingId} onClose={() => { setActiveMeetingId(null); reload(); }} />
       )}

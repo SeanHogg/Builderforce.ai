@@ -259,7 +259,6 @@
       "findWork": "寻找工作",
       "timecard": "工时卡",
       "myDashboard": "我的仪表盘",
-      "meetings": "会议",
       "myWorkspace": "我的工作台"
     },
     "tab": {
@@ -324,6 +323,7 @@
       "adminGrowth": "增长",
       "adminLogs": "日志",
       "adminDeveloper": "开发者",
+      "meetings": "会议",
       "calendar": "日历"
     }
   },
@@ -844,7 +844,10 @@
       "enabling": "正在开启…",
       "disabling": "正在关闭…",
       "error": "无法更新你的接单状态，请重试。"
-    }
+    },
+    "accountTab": "账户",
+    "sessionsTab": "会话",
+    "subnavLabel": "设置分区"
   },
   "pmo": {
     "title": "项目组合（PMO）",
@@ -1914,6 +1917,7 @@
         "qa": "按项目的 QA 自动化——流程、生成的测试与 CI 运行。",
         "roles": "你的团队需要担任的角色——看板模板的标准角色加上你的自定义角色——以及每个角色由谁担任：智能体、员工或外聘人员。",
         "talent": "管理你聘用的自由职业者——合作关系、职位发布、工时审批与发票。",
+        "meetings": "安排并加入团队的实时视频和音频会议——站会、规划、复盘、临时通话和一对一通话——并连接 Google 或 Microsoft 日历。",
         "calendar": "团队可用时间与已安排的会议"
       }
     },
@@ -2934,7 +2938,7 @@
   },
   "security": {
     "title": "安全",
-    "subtitle": "管理您的会话、查看管理员访问记录，并治理工作区成员。",
+    "subtitle": "管理工作区成员、安全智能体和 SOC 2 审计。",
     "refresh": "刷新",
     "loading": "加载中…",
     "loadingMembers": "正在加载成员…",
@@ -3004,7 +3008,11 @@
     "tsc_availability": "可用性",
     "tsc_processing_integrity": "处理完整性",
     "tsc_confidentiality": "保密性",
-    "tsc_privacy": "隐私"
+    "tsc_privacy": "隐私",
+    "membersTab": "成员",
+    "agentsTab": "智能体",
+    "auditTab": "SOC 2",
+    "subnavLabel": "安全分区"
   },
   "catalogInsights": {
     "total": {
@@ -3032,6 +3040,7 @@
   "projectTable": {
     "name": "名称",
     "health": "健康度",
+    "diagnostics": "诊断",
     "description": "描述",
     "agent": "代理",
     "actions": "操作",
@@ -3042,6 +3051,14 @@
     "workflowsWithCount": "工作流（{count}）",
     "openIde": "在 IDE 中打开",
     "delete": "删除"
+  },
+  "diagnosticsStrip": {
+    "title": "诊断",
+    "notScored": "未评分",
+    "gaps": "{count} 项差距",
+    "noGaps": "无差距",
+    "more": "+{count}",
+    "itemAria": "{name}：{score}，{label}，{gaps}"
   },
   "marketing": {
     "ctaGetStartedFree": "免费开始使用",
