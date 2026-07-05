@@ -103,6 +103,13 @@ jobs:
         working-directory: brain-embedded
         run: npm install --no-audit --no-fund
 
+      # Must follow brain-embedded — brain-ui link:-depends on it for its DTS.
+      # Its `prepare` script (tsup) builds dist/*.d.ts so the frontend `link:`
+      # dep (@seanhogg/builderforce-brain-ui) resolves types instead of `any`.
+      - name: Install + build Brain UI
+        working-directory: packages/brain-ui
+        run: npm install --no-audit --no-fund
+
       - name: Install dependencies
         working-directory: frontend
         run: pnpm install --frozen-lockfile || pnpm install
