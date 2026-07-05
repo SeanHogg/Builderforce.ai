@@ -21,6 +21,7 @@ import {
 } from '../../infrastructure/database/schema';
 import { readWorkforceMetricsVersion } from './workforceMetrics';
 import { TaskStatus } from '../../domain/shared/types';
+import { notSystemTask } from '../task/taskScope';
 import { clampScore as clamp } from '../../domain/shared/numbers';
 
 const DEFAULT_MAX_WIP = 5;
@@ -153,7 +154,7 @@ async function loadWip(db: Db, tenantId: number): Promise<Map<string, number>> {
     })
     .from(tasks)
     .innerJoin(projects, eq(projects.id, tasks.projectId))
-    .where(and(eq(projects.tenantId, tenantId), eq(tasks.archived, false), notInArray(tasks.status, [...DONE_CLASS])))
+    .where(and(eq(projects.tenantId, tenantId), eq(tasks.archived, false), notInArray(tasks.status, [...DONE_CLASS]), notSystemTask))
     .limit(10_000); // bound the WIP scan; open tasks per tenant is small in practice
   const wip = new Map<string, number>();
   for (const r of rows) {

@@ -48,6 +48,12 @@ const ADAPT_WINDOW_TOKENS = 64;
 /** Max text-path adaptations (fits) run in ONE alarm — bounds the DO's per-alarm
  *  CPU; any beyond this stay queued and fold into the next debounced merge. */
 const MAX_FITS_PER_ALARM = 8;
+/** How many recent merged contributions to retain for inspection (ring buffer). The
+ *  raw run text is otherwise consumed + dropped at merge time, so this is the ONLY
+ *  window into "what the model recently learned" the Evermind console can show. */
+const RECENT_MAX = 30;
+/** Chars of prompt/text kept per recent entry — a readable snippet, not the full run. */
+const RECENT_SNIPPET_CHARS = 240;
 
 interface PendingEntry {
   id: number;
@@ -98,9 +104,28 @@ interface LearnTextBody {
   weight?: number;
 }
 
+/** One inspectable record of a contribution the coordinator merged into a version.
+ *  The `text`/`prompt` are short snippets (the full run is not retained), so this is
+ *  a human-readable trail of what the model learned, not a replayable corpus. */
+interface RecentEntry {
+  /** 'text' = a run/exemplar adapted here; 'delta' = a pre-diffed weight delta. */
+  kind: 'text' | 'delta';
+  /** The version this contribution was merged INTO (head.version + 1 at merge time). */
+  version: number;
+  /** Epoch ms the merge landed. */
+  at: number;
+  /** FedAvg sample weight (tokens learned / caller-supplied). */
+  weight: number;
+  /** Readable snippet of the task prompt the run addressed (text-path only). */
+  prompt?: string;
+  /** Readable snippet of the run/exemplar text that was learned (text-path only). */
+  text?: string;
+}
+
 const PENDING_KEY = 'pending';
 const META_KEY = 'meta';
 const SEQ_KEY = 'seq';
+const RECENT_KEY = 'recent';
 
 function decodeBase64(b64: string): ArrayBuffer {
   const bin = atob(b64);
@@ -120,6 +145,8 @@ export class ProjectEvermindCoordinatorDO implements DurableObject {
     const url = new URL(request.url);
     if (request.method === 'POST' && url.pathname.endsWith('/learn-text')) return this.handleLearnText(request);
     if (request.method === 'POST' && url.pathname.endsWith('/learn')) return this.handleLearn(request);
+    if (request.method === 'POST' && url.pathname.endsWith('/flush')) return this.handleFlush();
+    if (request.method === 'GET' && url.pathname.endsWith('/recent')) return this.handleRecent();
     if (request.method === 'GET' && url.pathname.endsWith('/head')) return this.handleHead();
     return new Response('not found', { status: 404 });
   }
@@ -134,6 +161,41 @@ export class ProjectEvermindCoordinatorDO implements DurableObject {
     const head = await getProjectEvermindHead(this.env, this.db, meta.tenantId, meta.projectId);
     const pending = (await this.state.storage.get<PendingEntry[]>(PENDING_KEY)) ?? [];
     return this.json({ version: head.version, ref: head.ref, mode: head.mode, pending: pending.length });
+  }
+
+  /**
+   * Inspection surface for the Evermind console: the queued-but-not-yet-merged
+   * count plus the recent-contributions ring (what the model actually learned).
+   * Read-only and cheap — no merge is triggered. The route in front of this caches
+   * the payload behind the head version token, so a busy poll doesn't hit the DO.
+   */
+  private async handleRecent(): Promise<Response> {
+    const pending = (await this.state.storage.get<PendingEntry[]>(PENDING_KEY)) ?? [];
+    const recent = (await this.state.storage.get<RecentEntry[]>(RECENT_KEY)) ?? [];
+    return this.json({ pending: pending.length, recent });
+  }
+
+  /**
+   * Force a merge NOW ("Learn now" / distill), instead of waiting out the debounce
+   * window. Drains whatever is queued in the SAME code path the alarm uses, so the
+   * result is identical to a natural merge — just immediate. Returns how many
+   * contributions merged and the resulting version so the caller can report it.
+   */
+  private async handleFlush(): Promise<Response> {
+    const meta = await this.state.storage.get<CoordMeta>(META_KEY);
+    if (!meta) return this.json({ ok: true, merged: 0, version: 0, pending: 0 });
+    const { merged, newVersion } = await this.drain();
+    const head = await getProjectEvermindHead(this.env, this.db, meta.tenantId, meta.projectId);
+    const pending = (await this.state.storage.get<PendingEntry[]>(PENDING_KEY)) ?? [];
+    return this.json({ ok: true, merged, version: newVersion ?? head.version, pending: pending.length });
+  }
+
+  /** Append merged contributions to the inspection ring, newest first, capped. */
+  private async recordRecent(entries: RecentEntry[]): Promise<void> {
+    if (entries.length === 0) return;
+    const current = (await this.state.storage.get<RecentEntry[]>(RECENT_KEY)) ?? [];
+    const next = [...entries, ...current].slice(0, RECENT_MAX);
+    await this.state.storage.put(RECENT_KEY, next);
   }
 
   private async handleLearn(request: Request): Promise<Response> {
@@ -230,17 +292,28 @@ export class ProjectEvermindCoordinatorDO implements DurableObject {
     return { queued: pending.length, dropped };
   }
 
+  /** The debounced-merge entry point — drains the queue in the background. */
   async alarm(): Promise<void> {
+    await this.drain();
+  }
+
+  /**
+   * Drain the pending queue into ONE merged version and return what happened, so
+   * both the debounced {@link alarm} and the on-demand {@link handleFlush} share the
+   * exact merge path (DRY). `merged` is the number of contributions folded in;
+   * `newVersion` is the version they were merged into (null when nothing merged).
+   */
+  private async drain(): Promise<{ merged: number; newVersion: number | null }> {
     const meta = await this.state.storage.get<CoordMeta>(META_KEY);
     const pending = (await this.state.storage.get<PendingEntry[]>(PENDING_KEY)) ?? [];
-    if (!meta || pending.length === 0) return;
+    if (!meta || pending.length === 0) return { merged: 0, newVersion: null };
 
     const { tenantId, projectId } = meta;
     const head = await getProjectEvermindHead(this.env, this.db, tenantId, projectId);
     if (head.version === 0 || !head.ref) {
       // Lost its base somehow — drop the queue so it can't wedge.
       await this.state.storage.delete(PENDING_KEY);
-      return;
+      return { merged: 0, newVersion: null };
     }
 
     // Snapshot the entries we'll process by id, so a /learn that lands mid-merge
@@ -251,20 +324,23 @@ export class ProjectEvermindCoordinatorDO implements DurableObject {
     if (usable.length === 0) {
       // Everything queued is stale against the current head — discard and stop.
       await this.dropProcessed(snapshot.map((e) => e.id));
-      return;
+      return { merged: 0, newVersion: null };
     }
 
     // Only the entries we actually consume this alarm are cleared; text entries
     // beyond MAX_FITS_PER_ALARM stay queued for the next debounced merge.
     const processedIds: number[] = [];
+    // Per-entry provenance for the inspection ring, stamped with the merged version
+    // once the merge lands (parallel to `diffs`/`weights`).
+    const mergedMeta: Array<{ kind: 'text' | 'delta'; weight: number; prompt?: string; text?: string }> = [];
     try {
       const store = this.env.UPLOADS;
-      if (!store) return; // no R2 → can't merge; leave everything pending for a later alarm
+      if (!store) return { merged: 0, newVersion: null }; // no R2 → can't merge; leave everything pending for a later alarm
       const baseObj = await store.get(`${head.ref}/model.evermind`);
       const tokObj = await store.get(`${head.ref}/tokenizer.json`);
       if (!baseObj || !tokObj) {
         await this.dropProcessed(snapshot.map((e) => e.id));
-        return;
+        return { merged: 0, newVersion: null };
       }
 
       const basePkg = EvermindModelPackage.fromBlob(await baseObj.arrayBuffer());
@@ -293,6 +369,7 @@ export class ProjectEvermindCoordinatorDO implements DurableObject {
           diffs.push(decodeBase64(e.diffB64));
           weights.push(e.weight);
           processedIds.push(e.id);
+          mergedMeta.push({ kind: 'delta', weight: e.weight });
         } else if (e.text && isLM) {
           if (textFits >= maxFits) continue; // defer — leave queued for next alarm
           processedIds.push(e.id); // consumed even if it yields no trainable window
@@ -313,12 +390,21 @@ export class ProjectEvermindCoordinatorDO implements DurableObject {
           diffs.push(diffCheckpoints(basePkg.checkpoint, lm.exportWeights()));
           weights.push(e.weight);
           textFits++;
+          // Keep a readable snippet of WHAT was learned for the inspection ring. The
+          // raw run text (e.text) is what the model adapted on; the teacher's exemplar,
+          // if any, is training.text — we record the run/prompt the user recognizes.
+          mergedMeta.push({
+            kind: 'text',
+            weight: e.weight,
+            ...(e.prompt ? { prompt: e.prompt.slice(0, RECENT_SNIPPET_CHARS) } : {}),
+            text: e.text.slice(0, RECENT_SNIPPET_CHARS),
+          });
         } else {
           processedIds.push(e.id); // unusable (e.g. text but base isn't an evermind-lm)
         }
       }
 
-      if (diffs.length === 0) return; // nothing merged this pass (finally drops what we consumed)
+      if (diffs.length === 0) return { merged: 0, newVersion: null }; // nothing merged (finally drops what we consumed)
 
       const { checkpoint, contributors } = mergeCheckpointDiffs(basePkg.checkpoint, diffs, weights);
 
@@ -339,6 +425,11 @@ export class ProjectEvermindCoordinatorDO implements DurableObject {
       // Verify the new version is the one we wrote (a concurrent merge is impossible
       // — single DO — but a forward-only DB guard means we trust the row).
       void projectEvermindRef(tenantId, projectId, nextVersion);
+      // Record the merged contributions in the inspection ring, stamped with the
+      // version they landed in (newest first). Best-effort — never fail the merge.
+      const at = Date.now();
+      await this.recordRecent(mergedMeta.map((m) => ({ ...m, version: nextVersion, at })));
+      return { merged: mergedMeta.length, newVersion: nextVersion };
     } finally {
       // Clear only what we consumed; anything that arrived mid-merge OR was deferred
       // past the per-alarm fit cap stays queued, and we re-arm to fold it in next.
@@ -346,6 +437,9 @@ export class ProjectEvermindCoordinatorDO implements DurableObject {
       const remaining = (await this.state.storage.get<PendingEntry[]>(PENDING_KEY)) ?? [];
       if (remaining.length > 0) await this.state.storage.setAlarm(Date.now() + DEBOUNCE_MS);
     }
+    // Unreachable in practice (every path inside the try returns), but satisfies the
+    // compiler's control-flow analysis for the try/finally.
+    return { merged: 0, newVersion: null };
   }
 
   /** Remove processed entries by id, preserving any that arrived concurrently. */

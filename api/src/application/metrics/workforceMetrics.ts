@@ -27,6 +27,7 @@ import {
   users,
 } from '../../infrastructure/database/schema';
 import { clampScore as clamp } from '../../domain/shared/numbers';
+import { notSystemTask } from '../task/taskScope';
 
 const HOUR_MS = 3_600_000;
 /** Hard cap on tasks scanned per scorecard window — guards the JS-side
@@ -259,6 +260,7 @@ export async function computeMemberMetrics(db: Db, tenantId: number, days: numbe
       eq(projects.tenantId, tenantId),
       eq(tasks.archived, false),
       gte(tasks.updatedAt, since),
+      notSystemTask,
     ))
     .orderBy(desc(tasks.updatedAt))
     .limit(MAX_METRIC_ROWS)) as MemberTaskRow[];
@@ -344,6 +346,7 @@ export async function computeProjectDeliveryMetrics(db: Db, tenantId: number, pr
       eq(tasks.projectId, projectId),
       eq(tasks.archived, false),
       gte(tasks.updatedAt, since),
+      notSystemTask,
     ))
     .orderBy(desc(tasks.updatedAt))
     .limit(MAX_METRIC_ROWS)) as MemberTaskRow[];
@@ -475,6 +478,7 @@ export async function computeDora(db: Db, tenantId: number, days: number): Promi
       eq(tasks.archived, false),
       isNotNull(tasks.completedAt),
       gte(tasks.completedAt, since),
+      notSystemTask,
     ));
   const leads: LeadRow[] = leadRows
     .map((r) => ({ completedAt: r.completedAt!, leadTimeHrs: (r.completedAt!.getTime() - r.createdAt.getTime()) / HOUR_MS }))

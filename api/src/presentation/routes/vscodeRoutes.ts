@@ -4,6 +4,7 @@ import type { HonoEnv } from '../../env';
 import { authMiddleware } from '../middleware/authMiddleware';
 import type { Db } from '../../infrastructure/database/connection';
 import { projects, tasks, vscodeConnections } from '../../infrastructure/database/schema';
+import { notSystemTask } from '../../application/task/taskScope';
 import type { TenantService } from '../../application/tenant/TenantService';
 import { provisionBuiltinAgents } from '../../application/agent/provisionBuiltinAgents';
 import { mintTenantSessionToken } from '../../infrastructure/auth/tenantSessionToken';
@@ -133,6 +134,7 @@ export function createVscodeRoutes(db: Db, tenantService: TenantService): Hono<H
           eq(projects.tenantId, tenantId),
           eq(tasks.assignedUserId, userId),
           isNull(tasks.completedAt),
+          notSystemTask,
         ),
       )
       .orderBy(desc(tasks.updatedAt))

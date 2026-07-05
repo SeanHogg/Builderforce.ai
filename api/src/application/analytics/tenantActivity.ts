@@ -15,7 +15,7 @@ import { and, desc, eq, gte, inArray, sql } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import { getOrSetCached, invalidateCached } from '../../infrastructure/cache/readThroughCache';
-import { activityEvents, contributors, projects } from '../../infrastructure/database/schema';
+import { activityEvents, contributors, ideAgents, projects } from '../../infrastructure/database/schema';
 import { computeInteractionActivity } from './interactionActivity';
 
 const HOUR_MS = 3_600_000;
@@ -111,6 +111,7 @@ export async function computeTenantActivityRollup(db: Db, tenantId: number, days
   }
   for (const uid of interaction.distinctHumanUserIds) actorKeys.add(`u:${uid}`);
   for (const hid of interaction.distinctAgentHostIds) actorKeys.add(`h:${hid}`);
+  for (const ref of interaction.distinctCloudAgentRefs) actorKeys.add(`ca:${ref}`);
 
   // ── daily: git events + interactions, merged per day ────────────────────────
   const dailyMap = new Map<string, number>();
@@ -136,6 +137,19 @@ export async function computeTenantActivityRollup(db: Db, tenantId: number, days
   }
   for (const [hid, n] of interaction.agentTotalsByHostId) {
     const cr = byHostId.get(hid); if (cr) bumpTop(cr.id, cr.displayName, n);
+  }
+  // Cloud agents (ide_agents) have no contributors row — resolve names by ref and
+  // fold them in under synthetic negative ids so they rank on the top list too.
+  if (interaction.cloudAgentTotalsByRef.size > 0) {
+    const refs = [...interaction.cloudAgentTotalsByRef.keys()];
+    const agentRows = await db
+      .select({ id: ideAgents.id, name: ideAgents.name })
+      .from(ideAgents).where(and(eq(ideAgents.tenantId, tenantId), inArray(ideAgents.id, refs)));
+    const nameByRef = new Map(agentRows.map((r) => [r.id, r.name] as const));
+    let cloudSynth = 0;
+    for (const [ref, n] of interaction.cloudAgentTotalsByRef) {
+      bumpTop(-(1_000_000 + (++cloudSynth)), nameByRef.get(ref) ?? ref, n);
+    }
   }
   const topContributors = [...topIndex.entries()]
     .map(([contributorId, v]) => ({ contributorId, displayName: v.displayName, count: v.count }))

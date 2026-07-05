@@ -41,6 +41,7 @@ import { buildMigrationProviderFactory } from '../migration/buildProviderFactory
 import { BOARD_PROVIDERS, DISCOVERY_PROVIDER_IDS } from '../boardsync/providerCatalog';
 import { maybeAutoRunOnLaneEntry } from '../../presentation/routes/taskRoutes';
 import { invalidateProjectsList } from '../../presentation/routes/projectRoutes';
+import { recordActivity, resolveHumanActor, SYSTEM_ACTOR } from '../activity/activityLog';
 import { pmoVersionKey } from '../../presentation/routes/pmoRoutes';
 import { bumpCacheVersion, invalidateCached, trackerCacheKey } from '../../infrastructure/cache/readThroughCache';
 import { convertWorkItemType, ConvertError, type WorkItemKind } from '../workitem/convertWorkItemType';
@@ -2092,6 +2093,39 @@ export function resolveCloudAgentPlatformTool(advertised: string): string | unde
   return _cloudAgentPlatformNameMap.get(advertised);
 }
 
+/** Canonical verbs for the common mutating tools so an MCP-driven change reads the
+ *  same on the audit timeline as its HTTP-route twin; the rest fall back to the
+ *  dotted tool id (still readable, e.g. "portfolios.create"). */
+const MCP_VERB: Record<string, string> = {
+  'tasks.create': 'task.created', 'tasks.update': 'task.updated', 'tasks.move': 'task.moved', 'tasks.delete': 'task.deleted',
+  'objectives.create': 'okr.objective_created', 'objectives.update': 'okr.objective_updated', 'objectives.delete': 'okr.objective_deleted',
+  'key_results.create': 'okr.kr_created',
+};
+
+/** Best-effort audit emit for a mutating built-in tool — the ONE place every
+ *  MCP-/Brain-/agent-driven mutation (OKR, portfolio, brain-created ticket, …)
+ *  reaches the unified activity log. Never throws. */
+async function emitBuiltinToolActivity(env: Env, db: Db, tenantId: number, userId: string | null | undefined, tool: string, result: unknown): Promise<void> {
+  try {
+    const actor = userId ? await resolveHumanActor(env, db, tenantId, userId) : SYSTEM_ACTOR;
+    const r = (result && typeof result === 'object') ? (result as Record<string, unknown>) : null;
+    const targetId = r && (typeof r.id === 'string' || typeof r.id === 'number') ? r.id : null;
+    const label = r ? ((r.title ?? r.name ?? null) as string | null) : null;
+    const [domain] = tool.split('.');
+    await recordActivity(env, db, {
+      tenantId,
+      projectId: r && typeof r.projectId === 'number' ? r.projectId : null,
+      actor,
+      verb: MCP_VERB[tool] ?? tool,
+      targetType: domain ?? null,
+      targetId,
+      targetLabel: label,
+      summary: `${tool}${label ? `: ${label}` : ''}`.slice(0, 300),
+      metadata: { via: 'mcp', tool },
+    });
+  } catch { /* best-effort audit */ }
+}
+
 /** Run one built-in tool in-process, tenant-scoped. Throws on unknown tool. */
 export async function callBuiltinTool(
   db: Db,
@@ -2100,5 +2134,11 @@ export async function callBuiltinTool(
   const entry = CATALOG.find((t) => t.tool === args.tool);
   if (!entry) throw new Error(`Unknown built-in tool '${args.tool}'`);
   const ctx = buildCtx(db, args.tenantId, { env: args.env, userId: args.userId, role: args.role, authToken: args.authToken, executionCtx: args.executionCtx });
-  return entry.run(ctx, (args.arguments ?? {}) as Json);
+  const result = await entry.run(ctx, (args.arguments ?? {}) as Json);
+  // Unified audit stream: record any mutating tool run (best-effort, off the result).
+  if (entry.mutates && args.env) {
+    const emit = emitBuiltinToolActivity(args.env, db, args.tenantId, args.userId, args.tool, result);
+    if (args.executionCtx?.waitUntil) args.executionCtx.waitUntil(emit); else await emit.catch(() => {});
+  }
+  return result;
 }

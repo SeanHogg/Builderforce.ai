@@ -2,6 +2,10 @@
 
 All notable changes to the BuilderForce VS Code extension are documented here.
 
+## [2026.7.33] — Find the right ticket to link, even with thousands of them
+
+- **Search the ticket you want instead of scrolling forever.** The "Link ticket" picker now has a search box — start typing and it narrows to matching tickets as you go, so linking the right task, epic, spec, or roadmap item stays instant even when a project has thousands of them. When a search still has more matches than fit, it tells you how many more so you can refine.
+
 ## [2026.7.31] — Every kind of work links, and the assistant can create any of them
 
 - **Specs and PRDs now link to a chat too.** Open a spec from the PRDs page and it's pinned to the conversation with its live status — joining tasks, epics, gaps, OKRs, initiatives, portfolios, and roadmap items. Every kind of work you plan can now be attached to any chat, from its page or the link picker.

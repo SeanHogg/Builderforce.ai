@@ -18,6 +18,7 @@
 import { and, desc, eq, gte, inArray } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import { projects, tasks, taskStatusTransitions } from '../../infrastructure/database/schema';
+import { notSystemTask } from '../task/taskScope';
 import {
   avg, median, buildStageDurations,
   type StageDuration, type TransitionRow, type TaskRow,
@@ -147,6 +148,7 @@ export async function computeLifecycleInsights(db: Db, tenantId: number, days: n
       eq(projects.tenantId, tenantId),
       eq(tasks.archived, false),
       gte(tasks.updatedAt, since),
+      notSystemTask,
     ))
     .orderBy(desc(tasks.updatedAt))
     .limit(MAX_ROWS)) as TaskRow[];

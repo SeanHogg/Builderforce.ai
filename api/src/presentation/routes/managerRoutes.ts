@@ -12,7 +12,7 @@
  *   GET  /api/manager/:projectId/activity   the decision audit feed
  */
 import { Hono } from 'hono';
-import { and, eq, sql, asc, inArray } from 'drizzle-orm';
+import { and, eq, sql, asc, desc, inArray } from 'drizzle-orm';
 import { authMiddleware, requireRole } from '../middleware/authMiddleware';
 import { TenantRole, TaskStatus } from '../../domain/shared/types';
 import { projects, tasks, pullRequests } from '../../infrastructure/database/schema';
@@ -24,6 +24,7 @@ import {
   listManagerActions, runManagerForProject, createManagerRunTask, finalizeManagerRunTask,
 } from '../../application/manager/ManagerService';
 import { normalizePrMergePolicy } from '../../application/manager/managerPolicy';
+import { notSystemTask, SYSTEM_TASK_SOURCE_MANAGER } from '../../application/task/taskScope';
 
 const NON_TERMINAL: string[] = [
   TaskStatus.BACKLOG, TaskStatus.TODO, TaskStatus.READY,
@@ -58,10 +59,6 @@ export function createManagerRoutes(db: Db, runtimeService: RuntimeService): Hon
       getEffectiveManagerPolicy(db, tenantId, projectId),
     ]);
 
-    // The manager's OWN run tasks (source = 'manager') are board-visible history, not
-    // backlog the manager grooms — keep them out of its stats + ranked-backlog view.
-    const notManagerRunTask = sql`${tasks.source} is distinct from 'manager'`;
-
     // Coordination stats (small aggregate queries).
     const [counts] = await db
       .select({
@@ -71,7 +68,7 @@ export function createManagerRoutes(db: Db, runtimeService: RuntimeService): Hon
         unowned: sql<number>`count(*) filter (where ${tasks.assignedUserId} is null and ${tasks.assignedAgentRef} is null and ${tasks.assignedAgentHostId} is null)::int`,
       })
       .from(tasks)
-      .where(and(eq(tasks.projectId, projectId), eq(tasks.archived, false), inArray(tasks.status, NON_TERMINAL), notManagerRunTask));
+      .where(and(eq(tasks.projectId, projectId), eq(tasks.archived, false), inArray(tasks.status, NON_TERMINAL), notSystemTask));
 
     const [prCount] = await db
       .select({ open: sql<number>`count(*)::int` })
@@ -87,11 +84,25 @@ export function createManagerRoutes(db: Db, runtimeService: RuntimeService): Hon
         assignedUserId: tasks.assignedUserId, assignedAgentRef: tasks.assignedAgentRef, assignedAgentHostId: tasks.assignedAgentHostId,
       })
       .from(tasks)
-      .where(and(eq(tasks.projectId, projectId), eq(tasks.archived, false), inArray(tasks.status, NON_TERMINAL), notManagerRunTask))
+      .where(and(eq(tasks.projectId, projectId), eq(tasks.archived, false), inArray(tasks.status, NON_TERMINAL), notSystemTask))
       .orderBy(sql`${tasks.managerRank} asc nulls last`, asc(tasks.updatedAt))
       .limit(30);
 
     const actions = await listManagerActions(db, tenantId, projectId, 30);
+
+    // The manager's OWN run tasks (source = 'manager') — every "Backlog management
+    // pass" the manager kicked off, surfaced with its owner + status so a human can
+    // see the manager's open / in-progress / done work, not just its decisions.
+    const runTasks = await db
+      .select({
+        id: tasks.id, key: tasks.key, title: tasks.title, status: tasks.status, summary: tasks.description,
+        assignedUserId: tasks.assignedUserId, assignedAgentRef: tasks.assignedAgentRef, assignedAgentHostId: tasks.assignedAgentHostId,
+        createdAt: tasks.createdAt, completedAt: tasks.completedAt,
+      })
+      .from(tasks)
+      .where(and(eq(tasks.projectId, projectId), eq(tasks.archived, false), eq(tasks.source, SYSTEM_TASK_SOURCE_MANAGER)))
+      .orderBy(desc(tasks.createdAt))
+      .limit(20);
 
     return c.json({
       config: config ?? null,
@@ -106,6 +117,7 @@ export function createManagerRoutes(db: Db, runtimeService: RuntimeService): Hon
       },
       backlog,
       actions,
+      runTasks,
     });
   });
 

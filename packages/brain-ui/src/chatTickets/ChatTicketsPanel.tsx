@@ -185,6 +185,12 @@ function ChatTicketsPanelInner({ chatId, projectId, chatList, adapter, labels, o
 
 // ── Link a ticket ────────────────────────────────────────────────────────────
 
+/** Max ticket options rendered into the native <select> at once. A tenant can have
+ *  tens of thousands of tickets across all kinds, and a <select> with that many
+ *  <option>s janks the DOM — so the search box narrows the list and we only ever
+ *  render the first slice, nudging the user to type when there's more. */
+const TICKET_OPTION_CAP = 200;
+
 function LinkForm({ options, existing, labels, onLink }: {
   options: Record<TicketKind, TicketOptionVM[]> | null;
   existing: TicketLinkVM[];
@@ -193,6 +199,7 @@ function LinkForm({ options, existing, labels, onLink }: {
 }) {
   const [kind, setKind] = useState<TicketKind>('task');
   const [ref, setRef] = useState('');
+  const [query, setQuery] = useState('');
   const [linkType, setLinkType] = useState<LinkType>('linked');
   const [busy, setBusy] = useState(false);
 
@@ -201,21 +208,43 @@ function LinkForm({ options, existing, labels, onLink }: {
     return all.filter((o) => !existing.some((e) => e.kind === kind && e.ref === o.ref));
   }, [options, kind, existing]);
 
+  // Client-side substring filter over the loaded options for this kind (case-
+  // insensitive, matches the key/label). Keeps the picker usable at 20k+ tickets.
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return forKind;
+    return forKind.filter((o) => o.label.toLowerCase().includes(q));
+  }, [forKind, query]);
+  const shown = filtered.slice(0, TICKET_OPTION_CAP);
+  const overflow = filtered.length - shown.length;
+
+  // Drop a chosen ref once it's filtered out, so you can't Link a hidden option.
+  useEffect(() => { if (ref && !filtered.some((o) => o.ref === ref)) setRef(''); }, [filtered, ref]);
+
   const submit = async () => {
     if (!ref) return;
     setBusy(true);
-    try { await onLink(kind, ref, linkType); setRef(''); } finally { setBusy(false); }
+    try { await onLink(kind, ref, linkType); setRef(''); setQuery(''); } finally { setBusy(false); }
   };
 
   return (
     <div style={S.section}>
-      <select aria-label={labels.kindLabel} value={kind} onChange={(e) => { setKind(e.target.value as TicketKind); setRef(''); }} style={S.select}>
+      <select aria-label={labels.kindLabel} value={kind} onChange={(e) => { setKind(e.target.value as TicketKind); setRef(''); setQuery(''); }} style={S.select}>
         {TICKET_KINDS.map((k) => <option key={k} value={k}>{labels.kind[k]}</option>)}
       </select>
+      <input
+        type="search"
+        aria-label={labels.searchTicket}
+        placeholder={labels.searchTicket}
+        value={query}
+        onChange={(e) => setQuery(e.target.value)}
+        style={{ ...S.select, minWidth: 150 }}
+      />
       <select aria-label={labels.pickTicket} value={ref} onChange={(e) => setRef(e.target.value)} style={{ ...S.select, minWidth: 200 }}>
         <option value="">{labels.pickTicket}</option>
-        {forKind.map((o) => <option key={o.ref} value={o.ref}>{o.label}</option>)}
+        {shown.map((o) => <option key={o.ref} value={o.ref}>{o.label}</option>)}
       </select>
+      {overflow > 0 && <span style={S.muted}>{labels.moreResults(overflow)}</span>}
       <select aria-label={labels.linkTypeLabel} value={linkType} onChange={(e) => setLinkType(e.target.value as LinkType)} style={S.select}>
         <option value="linked">{labels.linkTypeLinked}</option>
         <option value="created">{labels.linkTypeCreated}</option>

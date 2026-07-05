@@ -14,15 +14,16 @@ import { eq } from 'drizzle-orm';
 import { tenants } from '../../infrastructure/database/schema';
 import type { Db } from '../../infrastructure/database/connection';
 import { resolveEffectivePlan } from '../../domain/tenant/effectivePlan';
-import { resolveTokenLimits, resolveIngestionMonthlyBytes, resolveErrorEventsMonthly, resolveOutboundFetchesMonthly } from '../../domain/tenant/PlanLimits';
+import { resolveTokenLimits, resolveIngestionMonthlyBytes, resolveErrorEventsMonthly, resolveOutboundFetchesMonthly, resolveCloudRunsMonthly } from '../../domain/tenant/PlanLimits';
 import { TenantPlan, TenantBillingStatus } from '../../domain/shared/types';
 import { dailyTenantTextTokens, utcDayStart } from '../llm/tokenUsage';
 import { dailyTenantIngestionBytes } from '../ingestion/ingestionLedger';
 import { dailyTenantErrorEvents } from '../quality/errorEventsLedger';
 import { dailyTenantOutboundFetches } from '../web/outboundFetchLedger';
+import { dailyTenantCloudRuns } from '../runtime/cloudRunLedger';
 
-export type MeterKey = 'ai_tokens' | 'ingestion' | 'error_events' | 'outbound_fetches';
-export type MeterUnit = 'tokens' | 'bytes' | 'events' | 'fetches';
+export type MeterKey = 'ai_tokens' | 'ingestion' | 'error_events' | 'outbound_fetches' | 'cloud_runs';
+export type MeterUnit = 'tokens' | 'bytes' | 'events' | 'fetches' | 'runs';
 
 export interface MeterSnapshot {
   key: MeterKey;
@@ -90,11 +91,12 @@ export async function buildConsumptionSnapshot(
   monthStart: Date,
   monthEnd: Date,
 ): Promise<ConsumptionSnapshot> {
-  const [tokensDaily, ingestionDaily, errorEventsDaily, outboundFetchesDaily, tenantRows] = await Promise.all([
+  const [tokensDaily, ingestionDaily, errorEventsDaily, outboundFetchesDaily, cloudRunsDaily, tenantRows] = await Promise.all([
     dailyTenantTextTokens(db, tenantId, monthStart),
     dailyTenantIngestionBytes(db, tenantId, monthStart),
     dailyTenantErrorEvents(db, tenantId, monthStart),
     dailyTenantOutboundFetches(db, tenantId, monthStart),
+    dailyTenantCloudRuns(db, tenantId, monthStart),
     db
       .select({
         plan: tenants.plan,
@@ -120,6 +122,7 @@ export async function buildConsumptionSnapshot(
   const ingestionLimit = resolveIngestionMonthlyBytes({ effectivePlan, tokenDailyLimitOverride: override });
   const errorEventsLimit = resolveErrorEventsMonthly({ effectivePlan, tokenDailyLimitOverride: override });
   const outboundFetchesLimit = resolveOutboundFetchesMonthly({ effectivePlan, tokenDailyLimitOverride: override });
+  const cloudRunsLimit = resolveCloudRunsMonthly({ effectivePlan, tokenDailyLimitOverride: override });
 
   // Every meter comes back per-day; the month-to-date total is the day sum (one
   // grouped scan per meter does the work of the old single-total query) and the
@@ -128,12 +131,14 @@ export async function buildConsumptionSnapshot(
   const [ingestionUsed, ingestionTrend] = densifyDaily(ingestionDaily, monthStart);
   const [errorEventsUsed, errorEventsTrend] = densifyDaily(errorEventsDaily, monthStart);
   const [outboundFetchesUsed, outboundFetchesTrend] = densifyDaily(outboundFetchesDaily, monthStart);
+  const [cloudRunsUsed, cloudRunsTrend] = densifyDaily(cloudRunsDaily, monthStart);
 
   return {
     period: { start: monthStart.toISOString(), resetsAt: monthEnd.toISOString() },
     plan: { effective: effectivePlan, billingStatus },
     meters: [
       makeMeter('ai_tokens', 'tokens', tokensUsed, tokenLimit, tokensTrend),
+      makeMeter('cloud_runs', 'runs', cloudRunsUsed, cloudRunsLimit, cloudRunsTrend),
       makeMeter('ingestion', 'bytes', ingestionUsed, ingestionLimit, ingestionTrend),
       makeMeter('error_events', 'events', errorEventsUsed, errorEventsLimit, errorEventsTrend),
       makeMeter('outbound_fetches', 'fetches', outboundFetchesUsed, outboundFetchesLimit, outboundFetchesTrend),

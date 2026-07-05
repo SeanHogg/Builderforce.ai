@@ -7,13 +7,12 @@ import { TOOLS, getTool } from './toolDefinitions';
 import { TOOL_DATA_PROVIDERS, hasDataProvider } from './toolDataProviders';
 import { toSummary, toDefinition, type ToolSummary, type ToolDefinition, type ToolResult } from './toolTypes';
 
-/** The architecture analysis ("Architect") is itself a diagnostic: when a run
- *  completes it records a project-scoped tool_run under this id, scored from the
- *  design-principles artifact. It has no self-assessment / compute form. */
-export const ARCHITECTURE_DIAGNOSTIC_ID = 'architecture-analysis';
-const EXTERNAL_DIAGNOSTIC_NAMES: Record<string, string> = {
-  [ARCHITECTURE_DIAGNOSTIC_ID]: 'Architecture Analysis',
-};
+import { ARCHITECTURE_DIAGNOSTIC_ID, EXTERNAL_DIAGNOSTIC_NAMES } from './auditIds';
+
+/** Re-exported so existing importers (e.g. AnalysisRunnerDO) keep their import
+ *  path. The canonical definition lives in `auditIds.ts` alongside the other
+ *  system-audit ids and their display names. */
+export { ARCHITECTURE_DIAGNOSTIC_ID };
 
 const LEVEL_NAMES = ['Initial', 'Managed', 'Defined', 'Quantitatively Managed', 'Optimizing'];
 const clampLevel = (n: number): number => Math.max(1, Math.min(5, Math.round(n)));

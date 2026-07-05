@@ -35,6 +35,7 @@ import {
   runModelOutcomes,
   tasks,
 } from '../../infrastructure/database/schema';
+import { notSystemTask } from '../task/taskScope';
 import { rollupDora, type DeployRow, type DoraRollup } from '../metrics/workforceMetrics';
 import { MILLICENTS_PER_USD } from '../../domain/shared/money';
 
@@ -511,7 +512,7 @@ export async function computePortfolioRollup(
     ? await db
         .select({ projectId: tasks.projectId, createdAt: tasks.createdAt, completedAt: tasks.completedAt })
         .from(tasks)
-        .where(inArray(tasks.projectId, projectIds))
+        .where(and(inArray(tasks.projectId, projectIds), notSystemTask))
     : [];
   const completed = taskRows.filter((t) => t.completedAt != null);
   const cycleHrs = completed

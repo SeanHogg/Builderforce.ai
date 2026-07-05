@@ -34,6 +34,8 @@ import {
   setProjectEvermindTeacher,
   dispatchProjectEvermindLearn,
   dispatchProjectEvermindLearnText,
+  getProjectEvermindContributions,
+  flushProjectEvermind,
   projectEvermindRef,
   type ProjectEvermindMode,
 } from '../../application/llm/projectEvermind';
@@ -57,7 +59,13 @@ const json = (body: unknown, status = 200): Response =>
 async function headCore(env: Env, db: Db, tenantId: number, projectId: number): Promise<Response> {
   if (!(await ownsProject(db, tenantId, projectId))) return json({ error: 'project not found' }, 404);
   const head = await getProjectEvermindHead(env, db, tenantId, projectId);
-  return json({ version: head.version, ref: head.ref, mode: head.mode, name: head.name, contributions: head.contributions, inferenceEnabled: head.inferenceEnabled, teacherModel: head.teacherModel, seeded: head.version > 0 });
+  return json({ version: head.version, ref: head.ref, mode: head.mode, name: head.name, contributions: head.contributions, inferenceEnabled: head.inferenceEnabled, teacherModel: head.teacherModel, lastLearnedAt: head.lastLearnedAt, seeded: head.version > 0 });
+}
+
+/** Read the inspection console payload: head summary + queued depth + recent-learned ring. */
+async function contributionsCore(env: Env, db: Db, tenantId: number, projectId: number): Promise<Response> {
+  if (!(await ownsProject(db, tenantId, projectId))) return json({ error: 'project not found' }, 404);
+  return json(await getProjectEvermindContributions(env, db, tenantId, projectId));
 }
 
 async function artifactCore(env: Env, db: Db, tenantId: number, projectId: number, versionQ: string | undefined, file: 'model.evermind' | 'tokenizer.json'): Promise<Response> {
@@ -116,6 +124,7 @@ export function createProjectEvermindRoutes(db: Db): Hono<HonoEnv> {
   const t = (c: Context) => c.get('tenantId') as number;
 
   router.get('/:projectId/evermind/head', (c) => headCore(c.env as Env, db, t(c), pid(c)));
+  router.get('/:projectId/evermind/contributions', (c) => contributionsCore(c.env as Env, db, t(c), pid(c)));
   router.get('/:projectId/evermind/model', (c) => artifactCore(c.env as Env, db, t(c), pid(c), c.req.query('version'), 'model.evermind'));
   router.get('/:projectId/evermind/tokenizer', (c) => artifactCore(c.env as Env, db, t(c), pid(c), c.req.query('version'), 'tokenizer.json'));
   router.post('/:projectId/evermind/learn', (c) => learnCore(c.env as Env, db, t(c), pid(c), c));
@@ -256,6 +265,17 @@ export function createProjectEvermindRoutes(db: Db): Hono<HonoEnv> {
     }
     await setProjectEvermindTeacher(c.env as Env, db, tenantId, projectId, model);
     return c.json({ ok: true, teacherModel: model });
+  });
+
+  /** Force a merge NOW ("Learn now" / distill) instead of waiting out the debounce
+   *  window (manager). The coordinator gates seeded/frozen itself, so a frozen model
+   *  simply merges nothing. Returns { merged, version, pending }. */
+  router.post('/:projectId/evermind/flush', requireRole(TenantRole.MANAGER), async (c) => {
+    const tenantId = t(c);
+    const projectId = pid(c);
+    if (!(await ownsProject(db, tenantId, projectId))) return c.json({ error: 'project not found' }, 404);
+    const result = await flushProjectEvermind(c.env as Env, tenantId, projectId);
+    return c.json(result.body, result.status as never);
   });
 
   return router;

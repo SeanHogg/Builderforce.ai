@@ -252,7 +252,8 @@
       "quality": "Quality",
       "myProfile": "My Profile",
       "findWork": "Find Work",
-      "timecard": "Timecard"
+      "timecard": "Timecard",
+      "myDashboard": "My Dashboard"
     },
     "tab": {
       "projects": "Projects",
@@ -736,7 +737,8 @@
     "close": "Close",
     "delete": "Delete",
     "edit": "Edit",
-    "view": "View"
+    "view": "View",
+    "typeSecurity": "Security"
   },
   "legal": {
     "termsTitle": "Terms of Use",
@@ -761,6 +763,7 @@
     "title": "Usage",
     "meter": {
       "ai_tokens": "AI tokens",
+      "cloud_runs": "Cloud runs",
       "ingestion": "Data ingestion",
       "error_events": "Error events",
       "outbound_fetches": "Web fetches"
@@ -2407,6 +2410,60 @@
       "minutesAgo": "{n}m ago",
       "hoursAgo": "{n}h ago",
       "daysAgo": "{n}d ago"
+    },
+    "heading": "What should we build?",
+    "subheading": "Start in <brainstorm>Brain Storm</brainstorm> to ideate, then execute as a project and build in the IDE—or assign work via <tasks>Tasks</tasks> and <workforce>Workforce</workforce> agents.",
+    "promptPlaceholder": "Build a budget tracker with Material UI components…",
+    "brainStorm": "Brain Storm",
+    "agentsConnected": "{count, plural, one {# agent connected} other {# agents connected}}",
+    "noAgents": "No agents connected —",
+    "setUpInWorkforce": "set up in Workforce",
+    "pendingRequests": "{count, plural, one {# pending request} other {# pending requests}}",
+    "reviewNow": "review now",
+    "metric": {
+      "projects": "Projects",
+      "projectsActive": "{count} active",
+      "tasks": "Tasks",
+      "tasksInProgress": "{count} in progress",
+      "agentsOnline": "Agents online",
+      "agentsRegistered": "{count} registered",
+      "pendingRequests": "Pending requests",
+      "requiresReview": "requires review",
+      "allClear": "all clear"
+    },
+    "tabs": {
+      "projects": "Projects",
+      "workforce": "Talent / Workforce",
+      "ide": "IDE",
+      "ideas": "Ideas / Brainstorm",
+      "quality": "Quality",
+      "knowledge": "Knowledge"
+    },
+    "ideas": {
+      "loading": "Loading chats…",
+      "empty": "No brainstorm chats yet.",
+      "start": "Start brainstorming",
+      "untitled": "Untitled chat"
+    },
+    "quality": {
+      "newCollector": "New collector",
+      "createHint": "Give the collector a name. You'll get an ingest key and endpoints to wire up your app.",
+      "collectorName": "Collector name",
+      "collectorNamePlaceholder": "e.g. Production",
+      "create": "Create collector",
+      "creating": "Creating…",
+      "createFailed": "Failed to create collector"
+    },
+    "knowledge": {
+      "loading": "Loading documents…",
+      "empty": "No knowledge documents yet.",
+      "create": "New document",
+      "viewAll": "View all",
+      "type": {
+        "sop": "SOP",
+        "process": "Process",
+        "doc": "Doc"
+      }
     }
   },
   "dashboards": {
@@ -2863,7 +2920,37 @@
     "reason": "Reason",
     "active": "Active",
     "ended": "Ended",
-    "writeBlocked": "{count} write attempts blocked"
+    "writeBlocked": "{count} write attempts blocked",
+    "saving": "Saving…",
+    "accessTitle": "Security ticket visibility",
+    "accessSubtitle": "Choose who can see the access-restricted SECURITY tickets the Security agent files. Hidden from everyone by default; owners and managers always see them.",
+    "accessHumans": "Team members",
+    "accessHumansHint": "All human members of this workspace can see security tickets.",
+    "accessHired": "Hired agents",
+    "accessHiredHint": "Agents working in this workspace can see security tickets.",
+    "accessTalent": "Talent",
+    "accessTalentHint": "Freelancers engaged with this workspace can see security tickets.",
+    "accessAllowUsers": "Allow specific users",
+    "accessAllowUsersPlaceholder": "One user ID per line",
+    "accessAllowAgents": "Allow specific agents",
+    "accessAllowAgentsPlaceholder": "One agent ID per line",
+    "accessSave": "Save access settings",
+    "accessSaved": "Saved",
+    "auditTitle": "SOC 2 security audit",
+    "auditSubtitle": "The Security agent audits your codebase across all five Trust Service Criteria and files each finding as a security ticket.",
+    "auditRunNow": "Run audit now",
+    "auditStarting": "Starting…",
+    "auditEmpty": "No audits yet. Run one to scan your codebase against SOC 2.",
+    "auditFindings": "{count, plural, =0 {No findings} one {# finding} other {# findings}}",
+    "auditNoFindings": "No findings recorded for this run.",
+    "auditStatus_running": "Running",
+    "auditStatus_complete": "Complete",
+    "auditStatus_failed": "Failed",
+    "tsc_security": "Security",
+    "tsc_availability": "Availability",
+    "tsc_processing_integrity": "Processing Integrity",
+    "tsc_confidentiality": "Confidentiality",
+    "tsc_privacy": "Privacy"
   },
   "catalogInsights": {
     "total": {
@@ -4645,6 +4732,8 @@
       "linkFailed": "Could not link — check the ticket exists.",
       "kindLabel": "Ticket type",
       "pickTicket": "Choose a ticket…",
+      "searchTicket": "Search tickets…",
+      "moreResults": "+{n} more — refine your search",
       "linkTypeLabel": "Link type",
       "linkTypeLinked": "Linked",
       "linkTypeCreated": "Created from chat",
@@ -5054,6 +5143,21 @@
       "dispatch": "Dispatched",
       "merge_pr": "Merged PR",
       "flag": "Flagged"
+    },
+    "runTasks": {
+      "title": "Manager tasks",
+      "caption": "Every backlog-management pass the manager has run — open, in progress, and done.",
+      "empty": "The manager hasn’t run any passes yet.",
+      "statusCol": "Status",
+      "resultCol": "Result",
+      "whenCol": "Updated",
+      "systemOwner": "System service",
+      "status": {
+        "in_progress": "In progress",
+        "done": "Done",
+        "blocked": "Needs attention",
+        "open": "Open"
+      }
     },
     "activity": {
       "title": "Recent activity",
@@ -5866,11 +5970,130 @@
         "created": "invited external talent"
       },
       "member": {
-        "hired": "hired external talent"
+        "invited": "invited a member",
+        "added": "added a member"
       },
       "doc": {
         "published": "published a document"
+      },
+      "pr": {
+        "merged": "merged a pull request"
+      },
+      "okr": {
+        "objective_created": "created an objective",
+        "objective_updated": "updated an objective",
+        "objective_deleted": "deleted an objective",
+        "kr_created": "added a key result"
       }
     }
+  },
+  "freelancerDashboard": {
+    "heading": "Your work at a glance",
+    "subheading": "Track your engagements, hours, and earnings.",
+    "loading": "Loading…",
+    "optIn": {
+      "title": "Get hired on BuilderForce",
+      "body": "Turn on availability to publish a for-hire profile, pick up gigs, and track your work here.",
+      "cta": "Enable availability"
+    },
+    "metric": {
+      "activeEngagements": "Active engagements",
+      "totalEngagements": "{count} total",
+      "billableHours": "Billable hours",
+      "todayHours": "{hours}h today",
+      "paidEarnings": "Paid earnings",
+      "invoicesPaid": "{count} invoices paid",
+      "pendingEarnings": "Pending earnings",
+      "invoicesPending": "{count} pending"
+    },
+    "tabs": {
+      "work": "My Work",
+      "timecards": "My Timecards"
+    },
+    "work": {
+      "empty": "No engagements yet.",
+      "findWork": "Find work",
+      "untitled": "Untitled engagement",
+      "status": {
+        "invited": "Invited",
+        "interviewing": "Interviewing",
+        "active": "Active",
+        "declined": "Declined",
+        "terminated": "Ended"
+      }
+    },
+    "timecards": {
+      "empty": "No timecards yet.",
+      "manage": "Manage timecards",
+      "status": {
+        "draft": "Draft",
+        "submitted": "Submitted",
+        "approved": "Approved",
+        "rejected": "Rejected",
+        "paid": "Paid"
+      }
+    }
+  },
+  "contributors": {
+    "syncAgents": "Sync AI agents",
+    "syncing": "Syncing…",
+    "loading": "Loading activity…",
+    "wholeTeam": "Whole team",
+    "backToTeam": "← Back to team",
+    "leaderboard": "Leaderboard",
+    "empty": "No contributors yet. Connect a repo integration to ingest human activity, or click Sync AI agents to add your agents.",
+    "calendarAria": "Contribution calendar",
+    "tileTitle": "{date}: {count} contributions",
+    "stat": {
+      "contributions": "Contributions (365d)",
+      "teamMembers": "Team members",
+      "humans": "Humans",
+      "agents": "AI agents"
+    },
+    "col": {
+      "rank": "#",
+      "contributor": "Contributor",
+      "type": "Type",
+      "role": "Role",
+      "contributions": "Contributions"
+    },
+    "badge": {
+      "agent": "Agent",
+      "human": "Human"
+    },
+    "legend": {
+      "less": "Less",
+      "more": "More",
+      "agents": "Agents:"
+    },
+    "tenant": {
+      "title": "Tenant activity",
+      "allProjects": "all projects",
+      "events": "Events ({days}d)",
+      "activeContributors": "Active contributors",
+      "linesAdded": "Lines added",
+      "linesRemoved": "Lines removed",
+      "dailyTrend": "Daily trend",
+      "byType": "By type",
+      "topRepos": "Top repositories",
+      "byProject": "By project",
+      "noActivity": "No activity yet.",
+      "noRepos": "No repos linked.",
+      "noProjects": "No project-attributed activity yet.",
+      "dailyAria": "Daily activity"
+    },
+    "type": {
+      "commit": "Commits",
+      "pr_opened": "PRs opened",
+      "pr_merged": "PRs merged",
+      "pr_closed": "PRs closed",
+      "pr_reviewed": "Reviews",
+      "issue_created": "Issues opened",
+      "issue_resolved": "Issues resolved",
+      "issue_commented": "Comments",
+      "ai_interaction": "AI interactions",
+      "code_change": "Code changes"
+    },
+    "syncFailed": "Failed to sync agents"
   }
 }

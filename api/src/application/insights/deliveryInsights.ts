@@ -27,6 +27,7 @@ import {
   tasks,
   timeEntries,
 } from '../../infrastructure/database/schema';
+import { notSystemTask } from '../task/taskScope';
 
 const DAY_MS = 86_400_000;
 const MAX_TASKS = 5_000;
@@ -308,7 +309,7 @@ export async function computeDeliveryInsights(
     .select({ id: tasks.id, createdAt: tasks.createdAt, completedAt: tasks.completedAt, assignedUserId: tasks.assignedUserId, storyPoints: tasks.storyPoints, status: tasks.status })
     .from(tasks)
     .innerJoin(projects, eq(projects.id, tasks.projectId))
-    .where(and(eq(projects.tenantId, tenantId), eq(tasks.archived, false), taskFilter))
+    .where(and(eq(projects.tenantId, tenantId), eq(tasks.archived, false), taskFilter, notSystemTask))
     .limit(MAX_TASKS);
   const rows = taskRows as DeliveryTaskRow[];
 

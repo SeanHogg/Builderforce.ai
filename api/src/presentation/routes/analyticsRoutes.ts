@@ -13,7 +13,7 @@
  */
 
 import { Hono } from 'hono';
-import { and, eq, gte, lte, sql } from 'drizzle-orm';
+import { and, eq, gte, inArray, lte, sql } from 'drizzle-orm';
 import { authMiddleware, requireRole } from '../middleware/authMiddleware';
 import {
   contributors,
@@ -21,6 +21,7 @@ import {
   telemetrySpans,
   toolAuditEvents,
   agentHosts,
+  ideAgents,
   tenantMembers,
   users,
 } from '../../infrastructure/database/schema';
@@ -74,7 +75,8 @@ async function buildActivityCalendar(
   if (onlyId) contribConds.push(eq(contributors.id, onlyId));
   const people = await db.select().from(contributors).where(and(...contribConds));
 
-  // Roster entry — a real contributor or a synthesised human member.
+  // Roster entry — a real contributor, a synthesised human member, or a synthesised
+  // cloud agent (which has no contributors row — it lives in ide_agents).
   type Entry = {
     id: number;
     displayName: string;
@@ -83,6 +85,7 @@ async function buildActivityCalendar(
     jobTitle: string | null;
     agentHostId: number | null;
     userId: string | null;
+    cloudAgentRef: string | null;
   };
   const roster: Entry[] = people.map((p) => ({
     id: p.id,
@@ -92,6 +95,7 @@ async function buildActivityCalendar(
     jobTitle: p.jobTitle,
     agentHostId: p.agentHostId,
     userId: p.userId,
+    cloudAgentRef: null,
   }));
 
   // 2. Surface every active human tenant member, even with no git activity — a
@@ -123,6 +127,7 @@ async function buildActivityCalendar(
         jobTitle: null,
         agentHostId: null,
         userId: m.userId,
+        cloudAgentRef: null,
       });
     }
   }
@@ -175,6 +180,31 @@ async function buildActivityCalendar(
   // 5. Usage/interaction ledgers (AI calls + code-change deltas).
   const interaction = await computeInteractionActivity(db, tenantId, fromFloor, toDate);
 
+  // 5b. Surface cloud agents (ide_agents) that have AI usage but no contributors
+  //     row — they're keyed by cloud_agent_ref, not agent_host_id. Synthesise an
+  //     agent entry per used ref so a purely-cloud agent shows on the leaderboard.
+  if (!onlyId && interaction.distinctCloudAgentRefs.size > 0) {
+    const refs = [...interaction.distinctCloudAgentRefs];
+    const agentRows = await db
+      .select({ id: ideAgents.id, name: ideAgents.name })
+      .from(ideAgents)
+      .where(and(eq(ideAgents.tenantId, tenantId), inArray(ideAgents.id, refs)));
+    const nameByRef = new Map(agentRows.map((r) => [r.id, r.name] as const));
+    let cloudSynth = 0;
+    for (const ref of refs) {
+      roster.push({
+        id: -(1_000_000 + (++cloudSynth)), // negative id space distinct from human synth
+        displayName: nameByRef.get(ref) ?? ref,
+        kind: 'agent',
+        avatarUrl: null,
+        jobTitle: null,
+        agentHostId: null,
+        userId: null,
+        cloudAgentRef: ref,
+      });
+    }
+  }
+
   // Index agent activity by agentHostId → (day → count): telemetry + AI usage.
   const agentByAgentHost = new Map<number, Map<string, number>>();
   const addAgent = (agentHostId: number | null, day: string, n: number) => {
@@ -212,8 +242,12 @@ async function buildActivityCalendar(
   let maxCount = 0;
 
   const perContributor = roster.map((p) => {
-    const map = p.kind === 'agent' && p.agentHostId != null
-      ? (agentByAgentHost.get(p.agentHostId) ?? new Map<string, number>())
+    const map = p.kind === 'agent'
+      ? (p.agentHostId != null
+          ? (agentByAgentHost.get(p.agentHostId) ?? new Map<string, number>())
+          : p.cloudAgentRef != null
+            ? (interaction.cloudAgentDaysByRef.get(p.cloudAgentRef) ?? new Map<string, number>())
+            : new Map<string, number>())
       : (humanByContributor.get(p.id) ?? new Map<string, number>());
 
     let total = 0;

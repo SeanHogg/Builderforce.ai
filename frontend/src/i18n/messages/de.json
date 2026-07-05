@@ -252,7 +252,8 @@
       "quality": "Qualität",
       "myProfile": "Mein Profil",
       "findWork": "Arbeit finden",
-      "timecard": "Zeiterfassung"
+      "timecard": "Zeiterfassung",
+      "myDashboard": "Mein Dashboard"
     },
     "tab": {
       "projects": "Projekte",
@@ -736,7 +737,8 @@
     "close": "Schließen",
     "delete": "Löschen",
     "edit": "Bearbeiten",
-    "view": "Ansehen"
+    "view": "Ansehen",
+    "typeSecurity": "Sicherheit"
   },
   "legal": {
     "termsTitle": "Nutzungsbedingungen",
@@ -761,6 +763,7 @@
     "title": "Nutzung",
     "meter": {
       "ai_tokens": "KI-Tokens",
+      "cloud_runs": "Cloud-Ausführungen",
       "ingestion": "Datenaufnahme",
       "error_events": "Fehlerereignisse",
       "outbound_fetches": "Webabrufe"
@@ -2407,6 +2410,60 @@
       "minutesAgo": "vor {n} Min.",
       "hoursAgo": "vor {n} Std.",
       "daysAgo": "vor {n} T"
+    },
+    "heading": "Was sollen wir bauen?",
+    "subheading": "Beginne im <brainstorm>Brainstorming</brainstorm>, um Ideen zu entwickeln, führe es dann als Projekt aus und baue es in der IDE – oder weise Arbeit über <tasks>Aufgaben</tasks> und <workforce>Talent</workforce>-Agenten zu.",
+    "promptPlaceholder": "Baue einen Budget-Tracker mit Material-UI-Komponenten…",
+    "brainStorm": "Brainstorming",
+    "agentsConnected": "{count, plural, one {# Agent verbunden} other {# Agenten verbunden}}",
+    "noAgents": "Keine Agenten verbunden —",
+    "setUpInWorkforce": "in Talent einrichten",
+    "pendingRequests": "{count, plural, one {# offene Anfrage} other {# offene Anfragen}}",
+    "reviewNow": "jetzt prüfen",
+    "metric": {
+      "projects": "Projekte",
+      "projectsActive": "{count} aktiv",
+      "tasks": "Aufgaben",
+      "tasksInProgress": "{count} in Bearbeitung",
+      "agentsOnline": "Agenten online",
+      "agentsRegistered": "{count} registriert",
+      "pendingRequests": "Offene Anfragen",
+      "requiresReview": "Prüfung erforderlich",
+      "allClear": "alles erledigt"
+    },
+    "tabs": {
+      "projects": "Projekte",
+      "workforce": "Talent / Team",
+      "ide": "IDE",
+      "ideas": "Ideen / Brainstorming",
+      "quality": "Qualität",
+      "knowledge": "Wissen"
+    },
+    "ideas": {
+      "loading": "Chats werden geladen…",
+      "empty": "Noch keine Brainstorming-Chats.",
+      "start": "Brainstorming starten",
+      "untitled": "Unbenannter Chat"
+    },
+    "quality": {
+      "newCollector": "Neuer Collector",
+      "createHint": "Gib dem Collector einen Namen. Du erhältst einen Ingest-Schlüssel und Endpunkte, um deine App anzubinden.",
+      "collectorName": "Collector-Name",
+      "collectorNamePlaceholder": "z. B. Produktion",
+      "create": "Collector erstellen",
+      "creating": "Wird erstellt…",
+      "createFailed": "Collector konnte nicht erstellt werden"
+    },
+    "knowledge": {
+      "loading": "Dokumente werden geladen…",
+      "empty": "Noch keine Wissensdokumente.",
+      "create": "Neues Dokument",
+      "viewAll": "Alle anzeigen",
+      "type": {
+        "sop": "SOP",
+        "process": "Prozess",
+        "doc": "Dok"
+      }
     }
   },
   "dashboards": {
@@ -2863,7 +2920,37 @@
     "reason": "Grund",
     "active": "Aktiv",
     "ended": "Beendet",
-    "writeBlocked": "{count} Schreibversuche blockiert"
+    "writeBlocked": "{count} Schreibversuche blockiert",
+    "saving": "Speichern…",
+    "accessTitle": "Sichtbarkeit von Sicherheitstickets",
+    "accessSubtitle": "Legen Sie fest, wer die zugriffsbeschränkten SICHERHEITS-Tickets des Sicherheits-Agenten sehen kann. Standardmäßig für alle verborgen; Eigentümer und Manager sehen sie immer.",
+    "accessHumans": "Teammitglieder",
+    "accessHumansHint": "Alle menschlichen Mitglieder dieses Arbeitsbereichs können Sicherheitstickets sehen.",
+    "accessHired": "Angeheuerte Agenten",
+    "accessHiredHint": "Agenten, die in diesem Arbeitsbereich arbeiten, können Sicherheitstickets sehen.",
+    "accessTalent": "Talente",
+    "accessTalentHint": "In diesem Arbeitsbereich beauftragte Freelancer können Sicherheitstickets sehen.",
+    "accessAllowUsers": "Bestimmte Benutzer zulassen",
+    "accessAllowUsersPlaceholder": "Eine Benutzer-ID pro Zeile",
+    "accessAllowAgents": "Bestimmte Agenten zulassen",
+    "accessAllowAgentsPlaceholder": "Eine Agenten-ID pro Zeile",
+    "accessSave": "Zugriffseinstellungen speichern",
+    "accessSaved": "Gespeichert",
+    "auditTitle": "SOC-2-Sicherheitsaudit",
+    "auditSubtitle": "Der Sicherheits-Agent auditiert Ihren Code über alle fünf Trust Service Criteria und legt jeden Befund als Sicherheitsticket an.",
+    "auditRunNow": "Audit jetzt ausführen",
+    "auditStarting": "Wird gestartet…",
+    "auditEmpty": "Noch keine Audits. Führen Sie eines aus, um Ihren Code gegen SOC 2 zu prüfen.",
+    "auditFindings": "{count, plural, =0 {Keine Befunde} one {# Befund} other {# Befunde}}",
+    "auditNoFindings": "Für diesen Lauf wurden keine Befunde erfasst.",
+    "auditStatus_running": "Läuft",
+    "auditStatus_complete": "Abgeschlossen",
+    "auditStatus_failed": "Fehlgeschlagen",
+    "tsc_security": "Sicherheit",
+    "tsc_availability": "Verfügbarkeit",
+    "tsc_processing_integrity": "Verarbeitungsintegrität",
+    "tsc_confidentiality": "Vertraulichkeit",
+    "tsc_privacy": "Datenschutz"
   },
   "catalogInsights": {
     "total": {
@@ -4645,6 +4732,8 @@
       "linkFailed": "Verknüpfung fehlgeschlagen – prüfe, ob das Ticket existiert.",
       "kindLabel": "Tickettyp",
       "pickTicket": "Ticket auswählen…",
+      "searchTicket": "Tickets suchen…",
+      "moreResults": "+{n} weitere — Suche verfeinern",
       "linkTypeLabel": "Verknüpfungsart",
       "linkTypeLinked": "Verknüpft",
       "linkTypeCreated": "Aus Chat erstellt",
@@ -5054,6 +5143,21 @@
       "dispatch": "Versandt",
       "merge_pr": "PR zusammengeführt",
       "flag": "Markiert"
+    },
+    "runTasks": {
+      "title": "Manager-Aufgaben",
+      "caption": "Jeder Backlog-Verwaltungslauf des Managers – offen, in Arbeit und erledigt.",
+      "empty": "Der Manager hat noch keinen Lauf ausgeführt.",
+      "statusCol": "Status",
+      "resultCol": "Ergebnis",
+      "whenCol": "Aktualisiert",
+      "systemOwner": "Systemdienst",
+      "status": {
+        "in_progress": "In Arbeit",
+        "done": "Erledigt",
+        "blocked": "Aufmerksamkeit nötig",
+        "open": "Offen"
+      }
     },
     "activity": {
       "title": "Letzte Aktivität",
@@ -5866,11 +5970,130 @@
         "created": "hat externe Fachkraft eingeladen"
       },
       "member": {
-        "hired": "hat externe Fachkraft eingestellt"
+        "invited": "hat ein Mitglied eingeladen",
+        "added": "hat ein Mitglied hinzugefügt"
       },
       "doc": {
         "published": "hat ein Dokument veröffentlicht"
+      },
+      "pr": {
+        "merged": "hat einen Pull Request zusammengeführt"
+      },
+      "okr": {
+        "objective_created": "hat ein Ziel erstellt",
+        "objective_updated": "hat ein Ziel aktualisiert",
+        "objective_deleted": "hat ein Ziel gelöscht",
+        "kr_created": "hat ein Key Result hinzugefügt"
       }
     }
+  },
+  "freelancerDashboard": {
+    "heading": "Deine Arbeit auf einen Blick",
+    "subheading": "Behalte deine Engagements, Stunden und Einnahmen im Blick.",
+    "loading": "Wird geladen…",
+    "optIn": {
+      "title": "Werde auf BuilderForce beauftragt",
+      "body": "Aktiviere deine Verfügbarkeit, um ein Profil zur Beauftragung zu veröffentlichen, Aufträge anzunehmen und deine Arbeit hier zu verfolgen.",
+      "cta": "Verfügbarkeit aktivieren"
+    },
+    "metric": {
+      "activeEngagements": "Aktive Engagements",
+      "totalEngagements": "{count} insgesamt",
+      "billableHours": "Abrechenbare Stunden",
+      "todayHours": "{hours} Std. heute",
+      "paidEarnings": "Bezahlte Einnahmen",
+      "invoicesPaid": "{count} bezahlte Rechnungen",
+      "pendingEarnings": "Ausstehende Einnahmen",
+      "invoicesPending": "{count} ausstehend"
+    },
+    "tabs": {
+      "work": "Meine Arbeit",
+      "timecards": "Meine Stundenzettel"
+    },
+    "work": {
+      "empty": "Noch keine Engagements.",
+      "findWork": "Arbeit finden",
+      "untitled": "Unbenanntes Engagement",
+      "status": {
+        "invited": "Eingeladen",
+        "interviewing": "Im Gespräch",
+        "active": "Aktiv",
+        "declined": "Abgelehnt",
+        "terminated": "Beendet"
+      }
+    },
+    "timecards": {
+      "empty": "Noch keine Stundenzettel.",
+      "manage": "Stundenzettel verwalten",
+      "status": {
+        "draft": "Entwurf",
+        "submitted": "Eingereicht",
+        "approved": "Genehmigt",
+        "rejected": "Abgelehnt",
+        "paid": "Bezahlt"
+      }
+    }
+  },
+  "contributors": {
+    "syncAgents": "KI-Agenten synchronisieren",
+    "syncing": "Synchronisierung…",
+    "loading": "Aktivität wird geladen…",
+    "wholeTeam": "Gesamtes Team",
+    "backToTeam": "← Zurück zum Team",
+    "leaderboard": "Rangliste",
+    "empty": "Noch keine Mitwirkenden. Verbinde eine Repository-Integration, um menschliche Aktivität zu erfassen, oder klicke auf KI-Agenten synchronisieren, um deine Agenten hinzuzufügen.",
+    "calendarAria": "Beitragskalender",
+    "tileTitle": "{date}: {count} Beiträge",
+    "stat": {
+      "contributions": "Beiträge (365 T)",
+      "teamMembers": "Teammitglieder",
+      "humans": "Personen",
+      "agents": "KI-Agenten"
+    },
+    "col": {
+      "rank": "#",
+      "contributor": "Mitwirkender",
+      "type": "Typ",
+      "role": "Rolle",
+      "contributions": "Beiträge"
+    },
+    "badge": {
+      "agent": "Agent",
+      "human": "Person"
+    },
+    "legend": {
+      "less": "Weniger",
+      "more": "Mehr",
+      "agents": "Agenten:"
+    },
+    "tenant": {
+      "title": "Mandanten-Aktivität",
+      "allProjects": "alle Projekte",
+      "events": "Ereignisse ({days} T)",
+      "activeContributors": "Aktive Mitwirkende",
+      "linesAdded": "Zeilen hinzugefügt",
+      "linesRemoved": "Zeilen entfernt",
+      "dailyTrend": "Täglicher Trend",
+      "byType": "Nach Typ",
+      "topRepos": "Top-Repositories",
+      "byProject": "Nach Projekt",
+      "noActivity": "Noch keine Aktivität.",
+      "noRepos": "Keine Repos verknüpft.",
+      "noProjects": "Noch keine projektbezogene Aktivität.",
+      "dailyAria": "Tägliche Aktivität"
+    },
+    "type": {
+      "commit": "Commits",
+      "pr_opened": "PRs geöffnet",
+      "pr_merged": "PRs zusammengeführt",
+      "pr_closed": "PRs geschlossen",
+      "pr_reviewed": "Reviews",
+      "issue_created": "Issues geöffnet",
+      "issue_resolved": "Issues gelöst",
+      "issue_commented": "Kommentare",
+      "ai_interaction": "KI-Interaktionen",
+      "code_change": "Codeänderungen"
+    },
+    "syncFailed": "Synchronisierung der Agenten fehlgeschlagen"
   }
 }

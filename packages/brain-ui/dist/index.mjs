@@ -593,6 +593,7 @@ var DEFAULT_CHAT_TICKETS_LABELS = {
   linkFailed: "Could not link \u2014 check the ticket exists.",
   kindLabel: "Ticket type",
   pickTicket: "Choose a ticket\u2026",
+  searchTicket: "Search tickets\u2026",
   linkTypeLabel: "Link type",
   linkTypeLinked: "Linked",
   linkTypeCreated: "Created from chat",
@@ -615,6 +616,7 @@ var DEFAULT_CHAT_TICKETS_LABELS = {
   mergeNoOthers: "No other chats to merge.",
   kind: { task: "Task", epic: "Epic", gap: "Gap", objective: "Objective", initiative: "Initiative", portfolio: "Portfolio", roadmap: "Roadmap", spec: "Spec" },
   ringAria: (label, pct) => `${label}: ${pct}% done`,
+  moreResults: (n) => `+${n} more \u2014 refine your search`,
   runStarted: (agent) => `Started ${agent} on the ticket.`,
   mergeAction: (n) => `Merge ${n} here`,
   mergedN: (n) => `Merged ${n} chat(s).`
@@ -846,21 +848,34 @@ function ChatTicketsPanelInner({ chatId, projectId, chatList, adapter, labels, o
     )
   ] });
 }
+var TICKET_OPTION_CAP = 200;
 function LinkForm({ options, existing, labels, onLink }) {
   const [kind, setKind] = useState3("task");
   const [ref, setRef] = useState3("");
+  const [query, setQuery] = useState3("");
   const [linkType, setLinkType] = useState3("linked");
   const [busy, setBusy] = useState3(false);
   const forKind = useMemo3(() => {
     const all = options?.[kind] ?? [];
     return all.filter((o) => !existing.some((e) => e.kind === kind && e.ref === o.ref));
   }, [options, kind, existing]);
+  const filtered = useMemo3(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return forKind;
+    return forKind.filter((o) => o.label.toLowerCase().includes(q));
+  }, [forKind, query]);
+  const shown = filtered.slice(0, TICKET_OPTION_CAP);
+  const overflow = filtered.length - shown.length;
+  useEffect2(() => {
+    if (ref && !filtered.some((o) => o.ref === ref)) setRef("");
+  }, [filtered, ref]);
   const submit = async () => {
     if (!ref) return;
     setBusy(true);
     try {
       await onLink(kind, ref, linkType);
       setRef("");
+      setQuery("");
     } finally {
       setBusy(false);
     }
@@ -869,11 +884,24 @@ function LinkForm({ options, existing, labels, onLink }) {
     /* @__PURE__ */ jsx5("select", { "aria-label": labels.kindLabel, value: kind, onChange: (e) => {
       setKind(e.target.value);
       setRef("");
+      setQuery("");
     }, style: S.select, children: TICKET_KINDS.map((k) => /* @__PURE__ */ jsx5("option", { value: k, children: labels.kind[k] }, k)) }),
+    /* @__PURE__ */ jsx5(
+      "input",
+      {
+        type: "search",
+        "aria-label": labels.searchTicket,
+        placeholder: labels.searchTicket,
+        value: query,
+        onChange: (e) => setQuery(e.target.value),
+        style: { ...S.select, minWidth: 150 }
+      }
+    ),
     /* @__PURE__ */ jsxs5("select", { "aria-label": labels.pickTicket, value: ref, onChange: (e) => setRef(e.target.value), style: { ...S.select, minWidth: 200 }, children: [
       /* @__PURE__ */ jsx5("option", { value: "", children: labels.pickTicket }),
-      forKind.map((o) => /* @__PURE__ */ jsx5("option", { value: o.ref, children: o.label }, o.ref))
+      shown.map((o) => /* @__PURE__ */ jsx5("option", { value: o.ref, children: o.label }, o.ref))
     ] }),
+    overflow > 0 && /* @__PURE__ */ jsx5("span", { style: S.muted, children: labels.moreResults(overflow) }),
     /* @__PURE__ */ jsxs5("select", { "aria-label": labels.linkTypeLabel, value: linkType, onChange: (e) => setLinkType(e.target.value), style: S.select, children: [
       /* @__PURE__ */ jsx5("option", { value: "linked", children: labels.linkTypeLinked }),
       /* @__PURE__ */ jsx5("option", { value: "created", children: labels.linkTypeCreated })

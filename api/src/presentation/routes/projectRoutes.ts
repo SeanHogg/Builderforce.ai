@@ -1,6 +1,7 @@
 import { Hono, type Context } from 'hono';
 import { and, count, eq, inArray, max, min, sql } from 'drizzle-orm';
 import { ProjectService } from '../../application/project/ProjectService';
+import { notSystemTask } from '../../application/task/taskScope';
 import { ensureProjectTemplate } from '../../application/project/projectTemplate';
 import { KanbanTemplateService } from '../../application/kanban/kanbanTemplateService';
 import { provisionDefaultProjectEvermind } from '../../application/llm/projectEvermind';
@@ -321,6 +322,7 @@ export function createProjectRoutes(projectService: ProjectService, db: Db): Hon
         and(
           inArray(tasks.projectId, projectIds),
           eq(tasks.archived, false),
+          notSystemTask,
         ),
       )
       .groupBy(tasks.projectId);
@@ -351,6 +353,7 @@ export function createProjectRoutes(projectService: ProjectService, db: Db): Hon
         and(
           inArray(tasks.projectId, projectIds),
           eq(tasks.archived, false),
+          notSystemTask,
         ),
       )
       .groupBy(tasks.projectId);

@@ -37,10 +37,16 @@ export interface InteractionActivity {
   humanTotalsByUserId: Map<string, number>;
   /** agentHostId → total interactions. */
   agentTotalsByHostId: Map<number, number>;
+  /** cloud_agent_ref (ide_agents.id) → (day → interaction count). */
+  cloudAgentDaysByRef: Map<string, Map<string, number>>;
+  /** cloud_agent_ref → total interactions. */
+  cloudAgentTotalsByRef: Map<string, number>;
   /** Distinct human actors with AI usage in-window (active-contributor count). */
   distinctHumanUserIds: Set<string>;
   /** Distinct on-prem agent actors with AI usage in-window. */
   distinctAgentHostIds: Set<number>;
+  /** Distinct cloud-agent actors (ide_agents.id) with AI usage in-window. */
+  distinctCloudAgentRefs: Set<string>;
   /** day → total interaction count (AI calls + code-change deltas). */
   daily: Map<string, number>;
   /** projectId → interaction count (cross-project attribution). */
@@ -73,7 +79,7 @@ export async function computeInteractionActivity(db: Db, tenantId: number, from:
   const deltaScope = and(eq(workDeltas.tenantId, tenantId), gte(workDeltas.createdAt, from), lte(workDeltas.createdAt, to));
 
   const [
-    llmUserRows, llmHostRows, llmProjRows, llmDailyRows,
+    llmUserRows, llmHostRows, llmCloudRows, llmProjRows, llmDailyRows,
     deltaUserRows, deltaProjRows, deltaDailyRows,
   ] = await Promise.all([
     // AI usage by human user + day.
@@ -84,6 +90,10 @@ export async function computeInteractionActivity(db: Db, tenantId: number, from:
     db.select({ hostId: llmUsageLog.agentHostId, day: dayCol(llmUsageLog.createdAt), c: sql<number>`count(*)::int` })
       .from(llmUsageLog).where(and(llmScope, isNotNull(llmUsageLog.agentHostId)))
       .groupBy(llmUsageLog.agentHostId, dayTrunc(llmUsageLog.createdAt)),
+    // AI usage by cloud agent (ide_agents.id via cloud_agent_ref) + day.
+    db.select({ ref: llmUsageLog.cloudAgentRef, day: dayCol(llmUsageLog.createdAt), c: sql<number>`count(*)::int` })
+      .from(llmUsageLog).where(and(llmScope, isNotNull(llmUsageLog.cloudAgentRef)))
+      .groupBy(llmUsageLog.cloudAgentRef, dayTrunc(llmUsageLog.createdAt)),
     // AI usage by project.
     db.select({ projectId: llmUsageLog.projectId, c: sql<number>`count(*)::int` })
       .from(llmUsageLog).where(and(llmScope, isNotNull(llmUsageLog.projectId)))
@@ -106,10 +116,13 @@ export async function computeInteractionActivity(db: Db, tenantId: number, from:
 
   const humanDaysByUserId = new Map<string, Map<string, number>>();
   const agentDaysByHostId = new Map<number, Map<string, number>>();
+  const cloudAgentDaysByRef = new Map<string, Map<string, number>>();
   const humanTotalsByUserId = new Map<string, number>();
   const agentTotalsByHostId = new Map<number, number>();
+  const cloudAgentTotalsByRef = new Map<string, number>();
   const distinctHumanUserIds = new Set<string>();
   const distinctAgentHostIds = new Set<number>();
+  const distinctCloudAgentRefs = new Set<string>();
   const byProject = new Map<number, number>();
 
   for (const r of llmUserRows) {
@@ -123,6 +136,12 @@ export async function computeInteractionActivity(db: Db, tenantId: number, from:
     addDay(agentDaysByHostId, hid, r.day, n);
     addTotal(agentTotalsByHostId, hid, n);
     distinctAgentHostIds.add(hid);
+  }
+  for (const r of llmCloudRows) {
+    const ref = r.ref as string; const n = Number(r.c);
+    addDay(cloudAgentDaysByRef, ref, r.day, n);
+    addTotal(cloudAgentTotalsByRef, ref, n);
+    distinctCloudAgentRefs.add(ref);
   }
   // Code-change deltas fold into human attribution when createdBy is a userId.
   // (An agent-ref createdBy simply won't match a contributor downstream — it's
@@ -144,10 +163,13 @@ export async function computeInteractionActivity(db: Db, tenantId: number, from:
   return {
     humanDaysByUserId,
     agentDaysByHostId,
+    cloudAgentDaysByRef,
     humanTotalsByUserId,
     agentTotalsByHostId,
+    cloudAgentTotalsByRef,
     distinctHumanUserIds,
     distinctAgentHostIds,
+    distinctCloudAgentRefs,
     daily,
     byProject,
     byType: { ai_interaction: aiInteractions, code_change: codeChanges },

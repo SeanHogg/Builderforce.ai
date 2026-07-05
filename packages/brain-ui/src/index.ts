@@ -46,6 +46,19 @@ export {
 } from './timelineModel';
 export type { TimelineNode, TimelineImage, BuildTimelineInput } from './timelineModel';
 
+export { EvermindConsole } from './evermind/EvermindConsole';
+export type { EvermindConsoleProps } from './evermind/EvermindConsole';
+export { DEFAULT_EVERMIND_LABELS } from './evermind/types';
+export type {
+  EvermindConsoleAdapter,
+  EvermindConsoleLabels,
+  EvermindConsoleData,
+  EvermindMode,
+  EvermindRecentEntry,
+  EvermindSeedModel,
+  EvermindTeacherOptions,
+} from './evermind/types';
+
 export { Project360View } from './project360/Project360View';
 export type { Project360ViewProps } from './project360/Project360View';
 export { Sunburst } from './project360/Sunburst';

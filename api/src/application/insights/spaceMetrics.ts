@@ -35,6 +35,7 @@ import {
   tasks,
 } from '../../infrastructure/database/schema';
 import { clampScore as clamp } from '../../domain/shared/numbers';
+import { notSystemTask } from '../task/taskScope';
 
 const HOUR_MS = 3_600_000;
 
@@ -189,6 +190,7 @@ export async function computeSpaceMetrics(db: Db, tenantId: number, days: number
       eq(tasks.archived, false),
       sql`${tasks.completedAt} is not null`,
       gte(tasks.completedAt, since),
+      notSystemTask,
     ));
 
   const totalRuns = num(runAgg?.total);

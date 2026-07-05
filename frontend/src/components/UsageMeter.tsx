@@ -43,6 +43,7 @@ function barColor(percent: number): string {
 
 const METER_ICON: Record<MeterSnapshot['key'], string> = {
   ai_tokens: '⚡',
+  cloud_runs: '☁️',
   ingestion: '🗄',
   error_events: '🐞',
   outbound_fetches: '🌐',
@@ -56,6 +57,7 @@ const METER_ICON: Record<MeterSnapshot['key'], string> = {
  */
 const METER_INSIGHT_HREF: Record<MeterSnapshot['key'], string> = {
   ai_tokens: '/insights/ai',
+  cloud_runs: '/insights/finance',
   ingestion: '/insights/finance',
   error_events: '/quality',
   outbound_fetches: '/insights/finance',

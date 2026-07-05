@@ -27,6 +27,30 @@ import {
 import { sendWorkspaceInviteEmail } from '../../infrastructure/email/EmailService';
 import { countActiveSessionsAndTokens } from '../../application/security/sessionCounts';
 import { provisionBuiltinAgents } from '../../application/agent/provisionBuiltinAgents';
+import { recordActivity, resolveActorFromContext } from '../../application/activity/activityLog';
+
+/** Best-effort audit emit for a membership mutation (invite / add), attributed to
+ *  the acting manager. Off the response path; never throws. */
+function emitMemberActivity(
+  c: Context<HonoEnv>,
+  db: Db,
+  verb: string,
+  o: { targetId: string; targetLabel: string; summary: string; metadata?: Record<string, unknown> },
+): void {
+  c.executionCtx.waitUntil((async () => {
+    const actor = await resolveActorFromContext(c.env as Env, db, c);
+    await recordActivity(c.env as Env, db, {
+      tenantId: c.get('tenantId') as number,
+      actor,
+      verb,
+      targetType: 'member',
+      targetId: o.targetId,
+      targetLabel: o.targetLabel,
+      summary: o.summary,
+      metadata: o.metadata ?? null,
+    });
+  })().catch(() => {}));
+}
 
 type SourceControlProvider = 'github' | 'bitbucket';
 
@@ -702,6 +726,10 @@ export function createTenantRoutes(tenantService: TenantService, db: Db): Hono<H
       const tenant = await tenantService.addMember(id, actorUserId, found.id, role);
       await invalidateTaskAssignees(c.env as Env, id);
       await invalidateJwtMembershipCache(c.env as Env, id, found.id).catch(() => {});
+      emitMemberActivity(c, db, 'member.added', {
+        targetId: found.id, targetLabel: found.email,
+        summary: `Added ${found.email} as ${role}`, metadata: { role, userId: found.id },
+      });
       return c.json({ ok: true, status: 'added', tenant: tenant.toPlain(), addedUser: { id: found.id, email: found.email } });
     }
 
@@ -729,6 +757,11 @@ export function createTenantRoutes(tenantService: TenantService, db: Db): Hono<H
     }
 
     await invalidateInvitations(c.env as Env, id);
+
+    emitMemberActivity(c, db, 'member.invited', {
+      targetId: email, targetLabel: email,
+      summary: `Invited ${email} as ${role}`, metadata: { role, email },
+    });
 
     // Tell the cold invitee they were invited (best-effort — no-ops without
     // RESEND_API_KEY). The signup link pre-fills the invited address so the

@@ -9,6 +9,8 @@ import {
 import { getStoredTenant, getStoredUser } from '@/lib/auth';
 import { AgentAssignmentPanel } from '@/components/AgentAssignmentPanel';
 import { SessionList } from '@/components/security/SessionList';
+import { SecurityTicketAccessCard } from '@/components/security/SecurityTicketAccessCard';
+import { SecurityAuditPanel } from '@/components/security/SecurityAuditPanel';
 import PageContainer from '@/components/PageContainer';
 
 const cardStyle: React.CSSProperties = {
@@ -237,6 +239,11 @@ export default function SecurityPage() {
               emptyHint={t('securityAgentsEmpty')}
             />
           </div>
+
+          {/* Security agent (SOC 2 auditor): its audit results + who can see the
+              access-restricted SECURITY tickets it files. */}
+          <SecurityAuditPanel />
+          <SecurityTicketAccessCard />
 
           {loading ? (
             <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>{t('loadingMembers')}</div>

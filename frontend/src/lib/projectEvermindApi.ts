@@ -20,11 +20,79 @@ export interface ProjectEvermindHead {
   inferenceEnabled: boolean;
   /** Pinned frontier-LLM teacher model id, or null for self-learning on raw run text. */
   teacherModel: string | null;
+  /** ISO timestamp of the last merged contribution, or null if never learned. */
+  lastLearnedAt: string | null;
   seeded: boolean;
+}
+
+/** One inspectable contribution the coordinator merged into a version. */
+export interface ProjectEvermindRecentEntry {
+  /** 'text' = a run/exemplar adapted here; 'delta' = a pre-diffed weight delta. */
+  kind: 'text' | 'delta';
+  /** The version this contribution was merged into. */
+  version: number;
+  /** Epoch ms the merge landed. */
+  at: number;
+  /** FedAvg sample weight. */
+  weight: number;
+  /** Readable snippet of the task prompt (text-path only). */
+  prompt?: string;
+  /** Readable snippet of the run/exemplar text learned (text-path only). */
+  text?: string;
+}
+
+/** The Evermind inspection console payload — head summary + live learning activity. */
+export interface ProjectEvermindContributions {
+  version: number;
+  seeded: boolean;
+  mode: ProjectEvermindMode;
+  contributions: number;
+  inferenceEnabled: boolean;
+  teacherModel: string | null;
+  lastLearnedAt: string | null;
+  /** Contributions queued but not yet merged (in the coordinator's debounce window). */
+  pending: number;
+  recent: ProjectEvermindRecentEntry[];
 }
 
 export async function getProjectEvermindHead(projectId: number): Promise<ProjectEvermindHead> {
   return apiRequest<ProjectEvermindHead>(`/api/projects/${projectId}/evermind/head`);
+}
+
+/** Read the inspection console payload (head summary + queued depth + recent-learned ring). */
+export async function getProjectEvermindContributions(projectId: number): Promise<ProjectEvermindContributions> {
+  return apiRequest<ProjectEvermindContributions>(`/api/projects/${projectId}/evermind/contributions`);
+}
+
+/**
+ * Teach the project's Evermind from raw text (a chat transcript / exemplar). The
+ * UNIFIED `/learn-text` producer door: the coordinator adapts + merges in its alarm,
+ * so this is a cheap POST. Optional `prompt` is the task the text answered (threaded
+ * to the teacher for task→ideal-answer distillation).
+ */
+export async function teachProjectEvermindFromText(
+  projectId: number,
+  text: string,
+  prompt?: string,
+): Promise<{ ok: boolean; queued?: number }> {
+  return apiRequest<{ ok: boolean; queued?: number }>(
+    `/api/projects/${projectId}/evermind/learn-text`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text, ...(prompt ? { prompt } : {}) }),
+    },
+  );
+}
+
+/** Force a merge NOW ("Learn now" / distill) instead of waiting out the debounce window. */
+export async function flushProjectEvermind(
+  projectId: number,
+): Promise<{ ok: boolean; merged: number; version: number; pending: number }> {
+  return apiRequest<{ ok: boolean; merged: number; version: number; pending: number }>(
+    `/api/projects/${projectId}/evermind/flush`,
+    { method: 'POST' },
+  );
 }
 
 /** Promote a published Studio Evermind model into the project base (server-side copy). */

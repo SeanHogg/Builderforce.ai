@@ -1,0 +1,406 @@
+/**
+ * <EvermindConsole> — the per-project Evermind inspect-and-train surface, rendered
+ * identically on the web app (embedded in the IDE agent panel) and in the VS Code
+ * sidebar webview. Presentational + self-managing: it loads through the injected
+ * {@link EvermindConsoleAdapter}, refreshes on a light poll, and drives the
+ * manager-gated training controls (seed / inference / learning mode / teacher),
+ * the "teach from a transcript" producer path, a "learn now" flush, and the
+ * recent-contributions inspection list. Themed via cascading `--bf-*` CSS variables
+ * so it reads natively in both light and dark, on the web and in the editor.
+ *
+ * All colours resolve through the injected host tokens; the write controls are
+ * disabled (not hidden) when `canManage` is false, mirroring the web RoleGate.
+ * See [[evermind-learning-architecture]].
+ */
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  DEFAULT_EVERMIND_LABELS,
+  type EvermindConsoleAdapter,
+  type EvermindConsoleData,
+  type EvermindConsoleLabels,
+  type EvermindMode,
+  type EvermindRecentEntry,
+  type EvermindSeedModel,
+  type EvermindTeacherOptions,
+} from './types';
+
+export interface EvermindConsoleProps {
+  adapter: EvermindConsoleAdapter;
+  /** Whether the viewer can change settings (manager). Controls are disabled, not hidden. */
+  canManage: boolean;
+  /** i18n overrides; unspecified keys fall back to English defaults. */
+  labels?: Partial<EvermindConsoleLabels>;
+  /** Poll interval (ms) for the live pending/recent readout. 0 disables. Default 20s. */
+  refreshMs?: number;
+}
+
+/* Cascading theme tokens: evermind-namespaced → host app tokens → VS Code tokens →
+   a legible literal, so the console themes in every host without per-host CSS. */
+const C = {
+  surface: 'var(--bf-ev-surface, var(--bg-surface, var(--bf-surface, var(--vscode-editorWidget-background, transparent))))',
+  surface2: 'var(--bf-ev-surface-2, var(--bg-elevated, var(--bf-surface-2, var(--vscode-textBlockQuote-background, rgba(148,163,184,0.08)))))',
+  border: 'var(--bf-ev-border, var(--border-subtle, var(--bf-border, var(--vscode-panel-border, rgba(148,163,184,0.3)))))',
+  text: 'var(--bf-ev-text, var(--text-primary, var(--bf-text, inherit)))',
+  text2: 'var(--bf-ev-text-2, var(--text-secondary, var(--bf-text-muted, #6b7280)))',
+  accent: 'var(--bf-ev-accent, var(--coral-bright, var(--accent, var(--bf-accent, #ff6b5e))))',
+  danger: 'var(--bf-ev-danger, var(--danger-text, #d9534f))',
+};
+
+export function EvermindConsole({ adapter, canManage, labels, refreshMs = 20_000 }: EvermindConsoleProps) {
+  const t = useMemo<EvermindConsoleLabels>(() => ({ ...DEFAULT_EVERMIND_LABELS, ...(labels ?? {}) }), [labels]);
+
+  const [data, setData] = useState<EvermindConsoleData | null>(null);
+  const [seedModels, setSeedModels] = useState<EvermindSeedModel[]>([]);
+  const [teacherOpts, setTeacherOpts] = useState<EvermindTeacherOptions | null>(null);
+  const [selectedSlug, setSelectedSlug] = useState('');
+  const [teachPrompt, setTeachPrompt] = useState('');
+  const [teachText, setTeachText] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [notice, setNotice] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [loaded, setLoaded] = useState(false);
+
+  const reload = useCallback(async () => {
+    try {
+      const d = await adapter.loadData();
+      setData(d);
+    } catch {
+      setData(null);
+    } finally {
+      setLoaded(true);
+    }
+  }, [adapter]);
+
+  // Initial load + adapter change (project switch re-provisions the adapter host-side).
+  useEffect(() => { setLoaded(false); void reload(); }, [reload]);
+
+  // Manager-only ancillary lists (seed candidates + teacher options). Fetched once
+  // per adapter — a non-manager never needs them.
+  useEffect(() => {
+    if (!canManage) return;
+    let cancelled = false;
+    void adapter.loadSeedModels().then((m) => { if (!cancelled) { setSeedModels(m); setSelectedSlug((cur) => cur || (m[0]?.slug ?? '')); } }).catch(() => {});
+    void adapter.loadTeacherOptions().then((o) => { if (!cancelled) setTeacherOpts(o); }).catch(() => {});
+    return () => { cancelled = true; };
+  }, [adapter, canManage]);
+
+  // Light poll so pending/recent stay live while learning happens. The read endpoint
+  // is server-cached, so this is cheap; paused while an action is in flight.
+  useEffect(() => {
+    if (!refreshMs) return;
+    const id = setInterval(() => { if (!busy) void reload(); }, refreshMs);
+    return () => clearInterval(id);
+  }, [refreshMs, busy, reload]);
+
+  const run = useCallback(async (op: () => Promise<void>, successNotice?: string) => {
+    setBusy(true); setError(null); setNotice(null);
+    try {
+      await op();
+      await reload();
+      if (successNotice) setNotice(successNotice);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : t.errorGeneric);
+    } finally {
+      setBusy(false);
+    }
+  }, [reload, t.errorGeneric]);
+
+  if (!loaded) return <Section aria-busy><p style={{ margin: 0, color: C.text2, fontSize: '0.82rem' }}>{t.loading}</p></Section>;
+
+  const seeded = !!data?.seeded;
+  const frozen = data?.mode === 'offline-frozen';
+
+  return (
+    <Section aria-label={t.title}>
+      <header style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+        <span aria-hidden style={{ fontSize: '1.05rem' }}>🧠</span>
+        <h3 style={{ margin: 0, fontSize: '0.95rem', fontWeight: 700, color: C.text }}>{t.title}</h3>
+        <span style={pill(seeded)}>{seeded ? t.statusSeeded(data?.version ?? 0) : t.statusUnseeded}</span>
+        <button type="button" onClick={() => void reload()} disabled={busy} style={ghostBtn} title={t.refresh} aria-label={t.refresh}>↻</button>
+      </header>
+
+      <p style={{ margin: 0, fontSize: '0.8rem', lineHeight: 1.5, color: C.text2 }}>{t.description}</p>
+      {!canManage && <p style={{ margin: 0, fontSize: '0.72rem', color: C.text2, fontStyle: 'italic' }}>{t.managerOnlyHint}</p>}
+
+      {!seeded ? (
+        <SeedControls
+          t={t} canManage={canManage} busy={busy} models={seedModels}
+          selectedSlug={selectedSlug} onSelect={setSelectedSlug}
+          onSeed={() => selectedSlug && run(() => adapter.seedFromModel(selectedSlug))}
+        />
+      ) : (
+        <>
+          <StatRow t={t} data={data!} />
+
+          <ToggleRow
+            label={t.inferenceLabel} hint={t.inferenceHint}
+            on={!!data?.inferenceEnabled} onText={t.on} offText={t.off}
+            disabled={!canManage || busy}
+            onToggle={() => run(() => adapter.setInference(!data?.inferenceEnabled))}
+          />
+          <ToggleRow
+            label={t.learningLabel} hint={t.learningHint}
+            on={!frozen} onText={t.connected} offText={t.frozen}
+            disabled={!canManage || busy}
+            onToggle={() => run(() => adapter.setMode(frozen ? 'connected' : 'offline-frozen'))}
+          />
+
+          <TeacherPicker
+            t={t} canManage={canManage} busy={busy} opts={teacherOpts}
+            value={data?.teacherModel ?? ''}
+            onChange={(m) => run(() => adapter.setTeacher(m || null))}
+          />
+
+          <TeachBox
+            t={t} busy={busy}
+            prompt={teachPrompt} text={teachText}
+            onPrompt={setTeachPrompt} onText={setTeachText}
+            onTeach={() => run(
+              async () => { await adapter.teach(teachText.trim(), teachPrompt.trim() || undefined); setTeachText(''); setTeachPrompt(''); },
+              t.taught,
+            )}
+          />
+
+          {canManage && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+              <button
+                type="button"
+                disabled={busy || frozen}
+                onClick={() => run(async () => {
+                  const r = await adapter.flush();
+                  setNotice(r.merged > 0 ? t.flushedN(r.merged, r.version) : t.flushedNone);
+                }, undefined)}
+                style={primaryBtn(busy || frozen)}
+              >
+                {busy ? t.flushing : t.flushCta}
+              </button>
+              {(data?.pending ?? 0) > 0 && (
+                <span style={{ fontSize: '0.74rem', color: C.text2 }}>{t.pendingLabel}: {data?.pending}</span>
+              )}
+            </div>
+          )}
+
+          <RecentList t={t} entries={data?.recent ?? []} />
+        </>
+      )}
+
+      {notice && <p style={{ margin: 0, fontSize: '0.74rem', color: C.accent }} role="status">{notice}</p>}
+      {error && <p style={{ margin: 0, fontSize: '0.76rem', color: C.danger }} role="alert">{error}</p>}
+    </Section>
+  );
+}
+
+/* ── Sub-sections ─────────────────────────────────────────────────────────── */
+
+function Section({ children, ...rest }: React.PropsWithChildren<React.HTMLAttributes<HTMLElement>>) {
+  return (
+    <section
+      {...rest}
+      style={{
+        border: `1px solid ${C.border}`,
+        borderRadius: 10,
+        background: C.surface,
+        padding: 14,
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 10,
+      }}
+    >
+      {children}
+    </section>
+  );
+}
+
+function SeedControls({
+  t, canManage, busy, models, selectedSlug, onSelect, onSeed,
+}: {
+  t: EvermindConsoleLabels; canManage: boolean; busy: boolean; models: EvermindSeedModel[];
+  selectedSlug: string; onSelect: (s: string) => void; onSeed: () => void;
+}) {
+  if (!canManage) return <p style={italic}>{t.notSetUp}</p>;
+  if (models.length === 0) return <p style={italic}>{t.noModels}</p>;
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+      <label style={fieldLabel}>{t.pickModelLabel}</label>
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+        <select value={selectedSlug} onChange={(e) => onSelect(e.target.value)} disabled={busy} style={{ ...select, flex: '1 1 200px' }}>
+          {models.map((m) => <option key={m.slug} value={m.slug}>{m.name}</option>)}
+        </select>
+        <button type="button" onClick={onSeed} disabled={busy || !selectedSlug} style={primaryBtn(busy || !selectedSlug)}>
+          {busy ? t.working : t.enableCta}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function StatRow({ t, data }: { t: EvermindConsoleLabels; data: EvermindConsoleData }) {
+  const last = data.lastLearnedAt ? t.formatWhen(new Date(data.lastLearnedAt).getTime()) : t.neverLearned;
+  const stats: Array<{ label: string; value: string }> = [
+    { label: t.versionLabel, value: `v${data.version}` },
+    { label: t.contributionsLabel, value: String(data.contributions) },
+    { label: t.pendingLabel, value: String(data.pending) },
+    { label: t.lastLearnedLabel, value: last },
+  ];
+  return (
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(88px, 1fr))', gap: 8 }}>
+      {stats.map((s) => (
+        <div key={s.label} style={{ background: C.surface2, border: `1px solid ${C.border}`, borderRadius: 8, padding: '8px 10px' }}>
+          <div style={{ fontSize: '0.66rem', textTransform: 'uppercase', letterSpacing: '0.04em', color: C.text2 }}>{s.label}</div>
+          <div style={{ fontSize: '0.9rem', fontWeight: 700, color: C.text, marginTop: 2, wordBreak: 'break-word' }}>{s.value}</div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function ToggleRow({
+  label, hint, on, disabled, onToggle, onText, offText,
+}: {
+  label: string; hint: string; on: boolean; disabled: boolean; onToggle: () => void; onText: string; offText: string;
+}) {
+  return (
+    <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap' }}>
+      <div style={{ flex: '1 1 200px', minWidth: 0 }}>
+        <div style={fieldTitle}>{label}</div>
+        <div style={fieldHint}>{hint}</div>
+      </div>
+      <button
+        type="button" onClick={onToggle} disabled={disabled} aria-pressed={on}
+        style={{
+          padding: '6px 14px', fontSize: '0.78rem', fontWeight: 700, borderRadius: 999,
+          border: `1px solid ${on ? C.accent : C.border}`,
+          background: on ? C.accent : C.surface2,
+          color: on ? '#fff' : C.text2,
+          cursor: disabled ? 'not-allowed' : 'pointer', whiteSpace: 'nowrap', opacity: disabled ? 0.7 : 1,
+        }}
+      >
+        {on ? onText : offText}
+      </button>
+    </div>
+  );
+}
+
+function TeacherPicker({
+  t, canManage, busy, opts, value, onChange,
+}: {
+  t: EvermindConsoleLabels; canManage: boolean; busy: boolean;
+  opts: EvermindTeacherOptions | null; value: string; onChange: (m: string) => void;
+}) {
+  // Keep a currently-pinned teacher visible even if it's no longer in the plan pool.
+  const models = opts?.models ?? [];
+  const options = value && !models.includes(value) ? [value, ...models] : models;
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+      <div>
+        <div style={fieldTitle}>{t.teacherLabel}</div>
+        <div style={fieldHint}>{t.teacherHint}</div>
+      </div>
+      {!canManage ? (
+        <div style={{ ...select, color: C.text2 }}>{value || t.teacherNone}</div>
+      ) : opts && !opts.isPaid ? (
+        <p style={italic}>{t.teacherPaidOnly}</p>
+      ) : (
+        <select value={value} onChange={(e) => onChange(e.target.value)} disabled={busy} aria-label={t.teacherLabel} style={{ ...select, maxWidth: 340 }}>
+          <option value="">{t.teacherNone}</option>
+          {options.map((m) => <option key={m} value={m}>{m}</option>)}
+        </select>
+      )}
+    </div>
+  );
+}
+
+function TeachBox({
+  t, busy, prompt, text, onPrompt, onText, onTeach,
+}: {
+  t: EvermindConsoleLabels; busy: boolean; prompt: string; text: string;
+  onPrompt: (s: string) => void; onText: (s: string) => void; onTeach: () => void;
+}) {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 6, borderTop: `1px solid ${C.border}`, paddingTop: 10 }}>
+      <div style={fieldTitle}>{t.teachTitle}</div>
+      <div style={fieldHint}>{t.teachHint}</div>
+      <input value={prompt} onChange={(e) => onPrompt(e.target.value)} disabled={busy} placeholder={t.teachPromptPlaceholder} style={{ ...select, width: '100%' }} />
+      <textarea value={text} onChange={(e) => onText(e.target.value)} disabled={busy} placeholder={t.teachTextPlaceholder} rows={3} style={{ ...select, width: '100%', resize: 'vertical', fontFamily: 'inherit' }} />
+      <div>
+        <button type="button" onClick={onTeach} disabled={busy || text.trim().length < 20} style={primaryBtn(busy || text.trim().length < 20)}>
+          {busy ? t.teaching : t.teachCta}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function RecentList({ t, entries }: { t: EvermindConsoleLabels; entries: EvermindRecentEntry[] }) {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 6, borderTop: `1px solid ${C.border}`, paddingTop: 10 }}>
+      <div style={fieldTitle}>{t.inspectTitle}</div>
+      {entries.length === 0 ? (
+        <p style={italic}>{t.inspectEmpty}</p>
+      ) : (
+        <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: 6 }}>
+          {entries.map((e, i) => <RecentRow key={`${e.version}-${e.at}-${i}`} t={t} entry={e} />)}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+function RecentRow({ t, entry }: { t: EvermindConsoleLabels; entry: EvermindRecentEntry }) {
+  const body = entry.kind === 'delta' ? t.deltaEntry : (entry.text ?? '');
+  return (
+    <li style={{ background: C.surface2, border: `1px solid ${C.border}`, borderRadius: 8, padding: '8px 10px', display: 'flex', flexDirection: 'column', gap: 3 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+        <span style={tag(entry.kind === 'delta')}>{entry.kind === 'delta' ? t.kindDelta : t.kindText}</span>
+        <span style={{ fontSize: '0.68rem', color: C.text2 }}>{t.versionTag(entry.version)}</span>
+        <span style={{ fontSize: '0.68rem', color: C.text2 }}>{t.weightTag(entry.weight)}</span>
+        <span style={{ marginLeft: 'auto', fontSize: '0.68rem', color: C.text2 }}>{t.formatWhen(entry.at)}</span>
+      </div>
+      {entry.prompt && <div style={{ fontSize: '0.76rem', fontWeight: 600, color: C.text, wordBreak: 'break-word' }}>{entry.prompt}</div>}
+      {body && <div style={{ fontSize: '0.74rem', color: C.text2, lineHeight: 1.45, wordBreak: 'break-word', whiteSpace: 'pre-wrap', maxHeight: 72, overflow: 'hidden' }}>{body}</div>}
+    </li>
+  );
+}
+
+/* ── Style atoms ──────────────────────────────────────────────────────────── */
+
+const italic: React.CSSProperties = { margin: 0, fontSize: '0.78rem', color: C.text2, fontStyle: 'italic' };
+const fieldLabel: React.CSSProperties = { fontSize: '0.78rem', fontWeight: 600, color: C.text2 };
+const fieldTitle: React.CSSProperties = { fontSize: '0.82rem', fontWeight: 600, color: C.text };
+const fieldHint: React.CSSProperties = { fontSize: '0.72rem', color: C.text2, lineHeight: 1.4 };
+const select: React.CSSProperties = {
+  padding: '7px 9px', fontSize: '0.8rem', borderRadius: 8,
+  border: `1px solid ${C.border}`, background: C.surface2, color: C.text, boxSizing: 'border-box',
+};
+
+function primaryBtn(disabled: boolean): React.CSSProperties {
+  return {
+    padding: '8px 14px', fontSize: '0.8rem', fontWeight: 600, borderRadius: 8,
+    border: '1px solid transparent',
+    background: disabled ? C.surface2 : C.accent,
+    color: disabled ? C.text2 : '#fff',
+    cursor: disabled ? 'not-allowed' : 'pointer', whiteSpace: 'nowrap',
+  };
+}
+
+const ghostBtn: React.CSSProperties = {
+  marginLeft: 'auto', padding: '2px 8px', fontSize: '0.9rem', lineHeight: 1,
+  borderRadius: 6, border: `1px solid ${C.border}`, background: 'transparent',
+  color: C.text2, cursor: 'pointer',
+};
+
+function pill(seeded: boolean): React.CSSProperties {
+  return {
+    fontSize: 11, fontWeight: 600, padding: '3px 10px', borderRadius: 999,
+    border: `1px solid ${C.border}`, background: C.surface2,
+    color: seeded ? C.accent : C.text2,
+  };
+}
+
+function tag(isDelta: boolean): React.CSSProperties {
+  return {
+    fontSize: '0.64rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em',
+    padding: '1px 6px', borderRadius: 5, border: `1px solid ${C.border}`,
+    color: isDelta ? C.text2 : C.accent, background: C.surface,
+  };
+}

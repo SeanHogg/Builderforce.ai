@@ -6,7 +6,7 @@ import { useTranslations } from 'next-intl';
 import { toolsApi } from '@/lib/builderforceApi';
 import { runArchitectureAnalysis } from '@/lib/api';
 import { DiagnosticsResultsPanel } from '@/components/DiagnosticsResultsPanel';
-import type { ProjectScore, ToolSummary } from '@/lib/tools';
+import type { ProjectScore, ToolSummary, SystemAuditSummary } from '@/lib/tools';
 
 /** The architecture analysis is just another diagnostic — a run-only one (it
  *  kicks off the repo analysis rather than navigating to the tool runner). */

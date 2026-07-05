@@ -272,6 +272,8 @@ interface ChatTicketsLabels {
     linkFailed: string;
     kindLabel: string;
     pickTicket: string;
+    /** Placeholder for the ticket-picker search box. */
+    searchTicket: string;
     linkTypeLabel: string;
     linkTypeLinked: string;
     linkTypeCreated: string;
@@ -294,6 +296,8 @@ interface ChatTicketsLabels {
     mergeNoOthers: string;
     kind: Record<TicketKind, string>;
     ringAria: (label: string, pct: number) => string;
+    /** "+N more — refine your search" hint under a capped ticket picker. */
+    moreResults: (n: number) => string;
     runStarted: (agent: string) => string;
     mergeAction: (n: number) => string;
     mergedN: (n: number) => string;
