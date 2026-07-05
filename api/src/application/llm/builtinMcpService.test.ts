@@ -77,6 +77,15 @@ describe('listBuiltinTools', () => {
     expect(byName('builtin_projects_list').mutates).toBe(false);
   });
 
+  it('advertises the attachment read/write tools (the write-back path for uploads)', () => {
+    const names = tools.map((t) => t.name);
+    expect(names).toContain('builtin_attachments_read');
+    expect(names).toContain('builtin_attachments_write');
+    const byName = (n: string) => tools.find((t) => t.name === n)!;
+    expect(byName('builtin_attachments_read').mutates).toBe(false);
+    expect(byName('builtin_attachments_write').mutates).toBe(true);
+  });
+
   it('advertises the migration / integration flow (Brain-callable)', () => {
     const names = tools.map((t) => t.name);
     for (const n of [
@@ -127,6 +136,14 @@ describe('callBuiltinTool', () => {
     expect(taskSvc.createTask).toHaveBeenCalledWith(expect.objectContaining({ projectId: 3, title: 'Do it' }), TENANT);
   });
 
+  it('tasks.create is idempotent — a same-title task on the project is returned, not duplicated', async () => {
+    // Existing board already has "Ship OKRs"; a re-run with different casing/spacing must dedup.
+    taskSvc.listTasks.mockResolvedValue([{ toPlain: () => ({ id: 42, title: 'Ship OKRs', projectId: 3 }) }]);
+    const res = await callBuiltinTool(db, { tenantId: TENANT, tool: 'tasks.create', arguments: { projectId: 3, title: '  ship   okrs ' } });
+    expect(taskSvc.createTask).not.toHaveBeenCalled();
+    expect(res).toMatchObject({ deduped: true, id: 42, title: 'Ship OKRs' });
+  });
+
   it('enforces tenant ownership on tasks.update (via the project lookup)', async () => {
     taskSvc.getTask.mockResolvedValue({ projectId: 4, toPlain: () => ({ id: 9 }) });
     projectSvc.getProject.mockResolvedValue({ id: 4 });
@@ -139,5 +156,40 @@ describe('callBuiltinTool', () => {
 
   it('throws on an unknown tool', async () => {
     await expect(callBuiltinTool(db, { tenantId: TENANT, tool: 'projects.nuke', arguments: {} })).rejects.toThrow(/Unknown built-in tool/);
+  });
+});
+
+describe('attachments tools (Brain uploads, R2-backed)', () => {
+  // A fake R2 bucket over an in-memory Map — get/head/put are all the tools use.
+  const fakeEnv = (store: Map<string, string>) => ({
+    UPLOADS: {
+      get: async (k: string) => (store.has(k) ? { text: async () => store.get(k)! } : null),
+      head: async (k: string) => (store.has(k) ? { httpMetadata: { contentType: 'text/markdown' }, customMetadata: { originalName: 'ROADMAP.md' } } : null),
+      put: async (k: string, v: string) => { store.set(k, String(v)); },
+    },
+  }) as never;
+
+  it('attachments.read returns a paginated window for a tenant-owned key', async () => {
+    const store = new Map([[`${TENANT}/u/rm.md`, 'HELLO WORLD']]);
+    const res = await callBuiltinTool(db, { tenantId: TENANT, tool: 'attachments.read', arguments: { key: `${TENANT}/u/rm.md`, offset: 0, limit: 5 }, env: fakeEnv(store) });
+    expect(res).toMatchObject({ key: `${TENANT}/u/rm.md`, content: 'HELLO', offset: 0, returned: 5, total: 11, truncated: true });
+  });
+
+  it('attachments.read refuses a key owned by another tenant', async () => {
+    const store = new Map([['99/u/secret.md', 'top secret']]);
+    await expect(callBuiltinTool(db, { tenantId: TENANT, tool: 'attachments.read', arguments: { key: '99/u/secret.md' }, env: fakeEnv(store) })).rejects.toThrow(/not found/);
+  });
+
+  it('attachments.write overwrites an owned attachment in place (the real write-back path)', async () => {
+    const store = new Map([[`${TENANT}/u/rm.md`, 'old body']]);
+    const res = await callBuiltinTool(db, { tenantId: TENANT, tool: 'attachments.write', arguments: { key: `${TENANT}/u/rm.md`, content: 'new body' }, env: fakeEnv(store) });
+    expect(res).toMatchObject({ key: `${TENANT}/u/rm.md`, size: 8, updated: true });
+    expect(store.get(`${TENANT}/u/rm.md`)).toBe('new body');
+  });
+
+  it('attachments.write will not create/overwrite a missing or foreign key', async () => {
+    const store = new Map<string, string>();
+    await expect(callBuiltinTool(db, { tenantId: TENANT, tool: 'attachments.write', arguments: { key: `${TENANT}/u/nope.md`, content: 'x' }, env: fakeEnv(store) })).rejects.toThrow(/not found/);
+    expect(store.size).toBe(0);
   });
 });

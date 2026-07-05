@@ -81,6 +81,31 @@ export function isFailedToolResult(result: unknown): boolean {
   return false;
 }
 
+/** Tool labels that PERSIST a file/attachment change. A "saved the file" claim is
+ *  only honest if one of these SUCCEEDED this run. Covers the client manifest
+ *  (`project_files.save`) and the gateway builtin catalog (`attachments.write`,
+ *  advertised `builtin_attachments_write` / `builtin_project_files_save`). */
+const FILE_WRITE_TOOL = /(attachments|files?|project_files)[._](write|save|update)/i;
+
+/** Assistant prose that CLAIMS a file/attachment was persisted. */
+const FILE_SAVE_CLAIM = /\b(saved|updated|wrote|written|edited|persisted|added)\b[^.!?\n]*\b(file|attachment|roadmap|document|upload|\.md|\.csv|\.txt|\.json)\b/i;
+
+/**
+ * Structural honesty check for the "it said it updated the file but didn't" failure:
+ * an assistant message that CLAIMS a file/attachment write while NO file-write tool
+ * call succeeded in the run. Pure over the recorded trace + visible messages, so the
+ * web report and the VS Code transcript flag it identically. The Brain system prompt
+ * tells the model not to fake a save; this makes a violation visible in every triage
+ * capture (and is reusable by a run-loop guard).
+ */
+export function detectUnbackedWriteClaim(events: BrainTraceEvent[], messages: BrainMessage[]): boolean {
+  const wroteOk = events.some(
+    (e) => e.category === 'tool' && FILE_WRITE_TOOL.test(e.label) && !e.isError && !isFailedToolResult(e.result),
+  );
+  if (wroteOk) return false;
+  return messages.some((m) => m.role === 'assistant' && typeof m.content === 'string' && FILE_SAVE_CLAIM.test(m.content));
+}
+
 function cap(s: unknown, n = 2000): string {
   const str = typeof s === 'string' ? s : JSON.stringify(s ?? '');
   return str.length > n ? str.slice(0, n) + `… (+${str.length - n} chars)` : str;
@@ -332,6 +357,12 @@ export function buildBrainTriageReport(opts: BuildBrainTriageOptions): string {
   // Diagnostics block — the A-vs-B verdict + the token/tool-payload/downgrade
   // numbers behind it. Same builder the VS Code transcript uses.
   lines.push('', ...formatBrainDiagnostics(computeBrainDiagnostics(events, configuredModel)));
+
+  // Structural honesty flag — a "saved the file" claim with no successful file-write
+  // tool call this run (the "it said it updated the file but didn't" failure mode).
+  if (detectUnbackedWriteClaim(events, messages)) {
+    lines.push('', '⚠ UNBACKED WRITE CLAIM — an assistant turn claimed it saved/updated a file, but no file-write tool (attachments.write / project_files.save) succeeded in this run. The file was NOT modified.');
+  }
 
   if (errors.length) {
     lines.push('', `--- Errors (${errors.length}) ---`);

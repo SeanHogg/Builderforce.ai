@@ -35,6 +35,7 @@ import {
   parseTokenTimeToDate,
   verifyTotpCode,
 } from '../../infrastructure/auth/MfaService';
+import { revokeTenantApiKeyByRawKey } from '../../application/llm/tenantApiKeyService';
 import { checkTermsAcceptance } from '../middleware/termsEnforcement';
 import { sanitizePsychometricProfile } from '../../application/persona/psychometricCatalog';
 import { provisionForHireProfile } from '../../application/freelance/provisionForHire';
@@ -620,6 +621,22 @@ export function createAuthRoutes(authService: AuthService, db: Db): Hono<HonoEnv
       case 'expired':
         return c.json({ error: 'expired_token' }, 410);
     }
+  });
+
+  // POST /api/auth/keys/revoke — self-service revoke of an editor key (bfk_*) by
+  // presenting the raw key. Possession of the key authorizes its own revocation,
+  // so no JWT is required. Editor clients (VS Code) call this on sign-out so the
+  // server-side key dies with the local session instead of being orphaned.
+  // Idempotent: unknown / malformed / already-revoked keys return { revoked: false }
+  // with 200, never leaking whether the key existed.
+  router.post('/keys/revoke', async (c) => {
+    const body = await c.req
+      .json<{ apiKey?: string; key?: string }>()
+      .catch(() => ({} as { apiKey?: string; key?: string }));
+    const rawKey = (body.apiKey ?? body.key ?? '').trim();
+    if (!rawKey) return c.json({ error: 'apiKey is required' }, 400);
+    const revoked = await revokeTenantApiKeyByRawKey(db, { rawKey, env: c.env });
+    return c.json({ revoked });
   });
 
   // POST /api/auth/tenant-api-key-token — exchange a tenant API key (bfk_*) for a

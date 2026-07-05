@@ -657,6 +657,7 @@ export function BrainPanel({
                 copied: tTimeline('copied'),
                 apply: tTimeline('apply'),
                 createFile: tTimeline('createFile'),
+                preview: tTimeline('preview'),
               }}
               onApplyCode={hasTool('apply_code_to_active_file') ? (code) => { void runTool('apply_code_to_active_file', { code }); } : undefined}
               onCreateFile={hasTool('create_file') ? (path, content) => { void runTool('create_file', { path, content }); } : undefined}

@@ -18,6 +18,8 @@ interface BrainTimelineLabels {
     copied: string;
     apply: string;
     createFile: string;
+    /** Heading for the change preview shown on an edit_file / write_file tool step. */
+    preview: string;
 }
 declare const DEFAULT_TIMELINE_LABELS: BrainTimelineLabels;
 interface BrainTimelineProps {
@@ -54,7 +56,14 @@ interface BrainTimelineProps {
  * Input/Output, or an error. Presentational and theme-driven (CSS variables), so
  * it renders identically in the web app and a VS Code webview.
  */
-declare function BrainTimeline({ messages, trace, streamingText, isRunning, loading, labels: labelOverrides, assistantName, emptyState, renderMessage, renderStreaming, renderAssistantActions, onInternalLink, onApplyCode, onCreateFile, autoScroll, }: BrainTimelineProps): React__default.JSX.Element;
+declare function BrainTimelineInner({ messages, trace, streamingText, isRunning, loading, labels: labelOverrides, assistantName, emptyState, renderMessage, renderStreaming, renderAssistantActions, onInternalLink, onApplyCode, onCreateFile, autoScroll, }: BrainTimelineProps): React__default.JSX.Element;
+/**
+ * Memoized so an unrelated re-render of the host (e.g. every keystroke in the
+ * composer, which lives in the same component tree) does not re-render the whole
+ * transcript and re-parse every message's markdown. Callers must pass referentially
+ * stable props (memoize `labels` and any `on*` callbacks) for this to take effect.
+ */
+declare const BrainTimeline: React__default.MemoExoticComponent<typeof BrainTimelineInner>;
 
 interface MarkdownLabels {
     copy: string;
@@ -78,7 +87,13 @@ interface MarkdownProps {
  * Self-contained so both the web app and the VS Code webview render assistant
  * replies identically.
  */
-declare function Markdown({ content, onInternalLink, onApplyCode, onCreateFile, labels }: MarkdownProps): React__default.JSX.Element;
+declare function MarkdownInner({ content, onInternalLink, onApplyCode, onCreateFile, labels }: MarkdownProps): React__default.JSX.Element;
+/**
+ * Memoized: parsing markdown through the remark pipeline is expensive, and the
+ * transcript re-renders on every streaming token / composer keystroke. Skipping the
+ * re-parse of settled messages (unchanged `content`/callbacks) keeps typing snappy.
+ */
+declare const Markdown: React__default.MemoExoticComponent<typeof MarkdownInner>;
 
 /**
  * HealthRing — a compact "% done" donut for a work item's health, rendered
@@ -242,7 +257,14 @@ interface ChatTicketsPanelProps {
      *  panel doesn't go stale after a change it didn't originate. */
     refreshSignal?: number;
 }
-declare function ChatTicketsPanel({ chatId, projectId, chatList, adapter, labels, onChanged, refreshSignal }: ChatTicketsPanelProps): React.JSX.Element;
+declare function ChatTicketsPanelInner({ chatId, projectId, chatList, adapter, labels, onChanged, refreshSignal }: ChatTicketsPanelProps): React.JSX.Element;
+/**
+ * Memoized: this panel sits directly under the composer, so it would otherwise
+ * reconcile its whole subtree (health-ring SVGs, selects, link/merge/agents forms)
+ * on every keystroke and streaming token. Callers must pass referentially stable
+ * props (memoize `chatList` and `onChanged`) for the memo to take effect.
+ */
+declare const ChatTicketsPanel: React.MemoExoticComponent<typeof ChatTicketsPanelInner>;
 
 /**
  * Pure transcript view-model — frame-work agnostic so the SAME logic drives the
@@ -320,6 +342,16 @@ declare function attachmentsOf(message: BrainMessage): ChatInputAttachment[];
  * sorted by timestamp with a per-kind tie-break, then a stable index tie-break.
  */
 declare function buildTimeline(input: BuildTimelineInput): TimelineNode[];
+/**
+ * The stable, settled portion of the timeline — everything derived from the durable
+ * `messages` and `trace` (the expensive map + sort). Split out from {@link buildTimeline}
+ * so a live streaming turn (whose text ticks on every token) can be appended cheaply
+ * without re-mapping and re-sorting the whole conversation per token.
+ */
+declare function buildSettledTimeline(messages: BrainMessage[], trace: BrainTraceEvent[]): TimelineNode[];
+/** The trailing live-streaming assistant bubble, or null when nothing is streaming.
+ *  Always sorts last (max timestamp), so callers append it after the settled nodes. */
+declare function streamingNode(streamingText: string, isRunning: boolean): TimelineNode | null;
 /** Compact human duration for a "Thought for …" label (e.g. 0s, 2s, 12s). */
 declare function formatDuration(ms: number | undefined): string;
 /** Pretty-print a tool arg/result payload for the IN/OUT panels. */
@@ -559,4 +591,4 @@ interface ProjectListViewProps {
 }
 declare function ProjectListView({ title, subtitle, data, loading, error, labels, onAction, onRefresh }: ProjectListViewProps): React.JSX.Element;
 
-export { type AgentOptionVM, BrainTimeline, type BrainTimelineLabels, type BrainTimelineProps, type BuildTimelineInput, type ChatAgentVM, type ChatOptionVM, type ChatTicketsAdapter, type ChatTicketsLabels, ChatTicketsPanel, type ChatTicketsPanelProps, DEFAULT_CHAT_TICKETS_LABELS, DEFAULT_PROJECT360_LABELS, DEFAULT_PROJECT_LIST_LABELS, DEFAULT_TIMELINE_LABELS, HealthRing, type HealthRingProps, type HealthTier, type LineageVM, type LinkType, Markdown, type MarkdownLabels, type MarkdownProps, type Project360, type Project360Action, type Project360Dimension, type Project360Gap, type Project360Labels, type Project360Member, type Project360Pillar, Project360View, type Project360ViewProps, type ProjectListAction, type ProjectListBadge, type ProjectListGroup, type ProjectListItem, type ProjectListLabels, type ProjectListModel, type ProjectListTone, ProjectListView, type ProjectListViewProps, RUNNABLE_KINDS, Sunburst, type SunburstProps, TICKET_KINDS, type TicketKind, type TicketLinkVM, type TicketOptionVM, type TimelineImage, type TimelineNode, attachmentsOf, buildTimeline, formatDuration, formatPayload, healthRingColor };
+export { type AgentOptionVM, BrainTimeline, type BrainTimelineLabels, type BrainTimelineProps, type BuildTimelineInput, type ChatAgentVM, type ChatOptionVM, type ChatTicketsAdapter, type ChatTicketsLabels, ChatTicketsPanel, type ChatTicketsPanelProps, DEFAULT_CHAT_TICKETS_LABELS, DEFAULT_PROJECT360_LABELS, DEFAULT_PROJECT_LIST_LABELS, DEFAULT_TIMELINE_LABELS, HealthRing, type HealthRingProps, type HealthTier, type LineageVM, type LinkType, Markdown, type MarkdownLabels, type MarkdownProps, type Project360, type Project360Action, type Project360Dimension, type Project360Gap, type Project360Labels, type Project360Member, type Project360Pillar, Project360View, type Project360ViewProps, type ProjectListAction, type ProjectListBadge, type ProjectListGroup, type ProjectListItem, type ProjectListLabels, type ProjectListModel, type ProjectListTone, ProjectListView, type ProjectListViewProps, RUNNABLE_KINDS, Sunburst, type SunburstProps, TICKET_KINDS, type TicketKind, type TicketLinkVM, type TicketOptionVM, type TimelineImage, type TimelineNode, attachmentsOf, buildSettledTimeline, buildTimeline, formatDuration, formatPayload, healthRingColor, streamingNode };

@@ -34,6 +34,12 @@ const STATUS_ORDER: Project360Member['status'][] = ['working', 'awaiting', 'bloc
 export function Project360View({ data, loading, error, labels, onAction, onRefresh }: Project360ViewProps) {
   const L = useMemo<Project360Labels>(() => ({ ...DEFAULT_PROJECT360_LABELS, ...(labels ?? {}) }), [labels]);
   const [selected, setSelected] = useState<string | null>(null);
+  // Sort the roster once per data change, not on every render (e.g. dimension clicks).
+  // Hoisted above the early returns below to keep hook order stable.
+  const sortedWorkforce = useMemo(
+    () => [...(data?.workforce ?? [])].sort((a, b) => STATUS_ORDER.indexOf(a.status) - STATUS_ORDER.indexOf(b.status)),
+    [data?.workforce],
+  );
 
   if (error) {
     return (
@@ -175,11 +181,9 @@ export function Project360View({ data, loading, error, labels, onAction, onRefre
               <p className="bf-360-empty">{L.noWorkforce}</p>
             ) : (
               <ul className="bf-360-people">
-                {[...workforce]
-                  .sort((a, b) => STATUS_ORDER.indexOf(a.status) - STATUS_ORDER.indexOf(b.status))
-                  .map((m) => (
-                    <MemberRow key={m.ref} member={m} labels={L} onAction={onAction} />
-                  ))}
+                {sortedWorkforce.map((m) => (
+                  <MemberRow key={m.ref} member={m} labels={L} onAction={onAction} />
+                ))}
               </ul>
             )}
           </section>

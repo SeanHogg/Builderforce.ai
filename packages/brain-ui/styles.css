@@ -236,12 +236,74 @@
 }
 
 .bf-tl__io-label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
   font-size: 0.66rem;
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.05em;
   color: var(--bf-text-muted, #8a8a8a);
   margin-bottom: 2px;
+}
+
+/* Copy button on a tool step's Input / Output / preview panel. */
+.bf-tl__copy {
+  flex: 0 0 auto;
+  font: inherit;
+  font-size: 0.62rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  cursor: pointer;
+  padding: 2px 8px;
+  border-radius: 5px;
+  border: 1px solid var(--bf-border, rgba(128, 128, 128, 0.3));
+  background: var(--bf-surface, rgba(128, 128, 128, 0.1));
+  color: var(--bf-text-muted, #8a8a8a);
+  transition: color 0.12s, border-color 0.12s, background 0.12s;
+}
+.bf-tl__copy:hover {
+  color: var(--bf-text, #e6e6e6);
+  border-color: var(--bf-accent, #7aa2f7);
+}
+
+/* edit_file / write_file change preview — a before/after diff. */
+.bf-tl__diff {
+  margin: 0;
+  max-height: 280px;
+  overflow: auto;
+  background: var(--bf-surface, rgba(0, 0, 0, 0.25));
+  border: 1px solid var(--bf-border, rgba(128, 128, 128, 0.2));
+  border-radius: 6px;
+  padding: 6px 0;
+  font-family: var(--bf-font-mono, ui-monospace, monospace);
+  font-size: 0.74rem;
+  line-height: 1.45;
+}
+.bf-tl__diff-line {
+  display: flex;
+  gap: 6px;
+  padding: 0 8px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.bf-tl__diff-sign {
+  flex: 0 0 auto;
+  user-select: none;
+  opacity: 0.7;
+}
+.bf-tl__diff-text {
+  flex: 1 1 auto;
+}
+.bf-tl__diff-del {
+  background: color-mix(in srgb, var(--bf-danger, #f7768e) 14%, transparent);
+  color: var(--bf-danger, #f7768e);
+}
+.bf-tl__diff-add {
+  background: color-mix(in srgb, var(--bf-success, #9ece6a) 16%, transparent);
+  color: var(--bf-success, #9ece6a);
 }
 
 .bf-tl__io-pre {

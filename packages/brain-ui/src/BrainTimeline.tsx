@@ -1,7 +1,7 @@
-import React, { useEffect, useMemo, useRef } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import type { BrainMessage, BrainTraceEvent } from '@seanhogg/builderforce-brain-embedded';
 import { Markdown } from './Markdown';
-import { buildTimeline, formatDuration, formatPayload, type TimelineNode } from './timelineModel';
+import { buildSettledTimeline, formatDuration, formatPayload, streamingNode, type TimelineNode } from './timelineModel';
 
 export interface BrainTimelineLabels {
   /** Shown on the live thinking node while a turn streams. */
@@ -19,6 +19,8 @@ export interface BrainTimelineLabels {
   copied: string;
   apply: string;
   createFile: string;
+  /** Heading for the change preview shown on an edit_file / write_file tool step. */
+  preview: string;
 }
 
 export const DEFAULT_TIMELINE_LABELS: BrainTimelineLabels = {
@@ -35,6 +37,7 @@ export const DEFAULT_TIMELINE_LABELS: BrainTimelineLabels = {
   copied: 'Copied',
   apply: 'Apply',
   createFile: 'Create file',
+  preview: 'Preview',
 };
 
 export interface BrainTimelineProps {
@@ -80,6 +83,66 @@ function dotIcon(kind: TimelineNode['kind'], isError?: boolean): string {
   }
 }
 
+/** Copy `text` to the clipboard, flashing a "Copied" confirmation. Shared by every
+ *  copyable panel on a tool step (Input / Output / preview). */
+function CopyButton({ text, labels }: { text: string; labels: BrainTimelineLabels }) {
+  const [copied, setCopied] = useState(false);
+  return (
+    <button
+      type="button"
+      className="bf-tl__copy"
+      title={labels.copy}
+      onClick={(e) => {
+        e.stopPropagation();
+        void navigator.clipboard?.writeText(text).then(
+          () => {
+            setCopied(true);
+            setTimeout(() => setCopied(false), 1500);
+          },
+          () => {},
+        );
+      }}
+    >
+      {copied ? labels.copied : labels.copy}
+    </button>
+  );
+}
+
+type ToolPreview =
+  | { kind: 'edit'; path: string; oldText: string; newText: string }
+  | { kind: 'write'; path: string; content: string };
+
+/** An edit_file / write_file tool call carries the change itself in its args, so we
+ *  can render a readable preview (a before/after diff for edits, the new content for
+ *  writes) instead of only the raw JSON — detected structurally so it works regardless
+ *  of the tool's display label. */
+function toolPreview(args: unknown): ToolPreview | null {
+  if (!args || typeof args !== 'object') return null;
+  const a = args as Record<string, unknown>;
+  const path = typeof a.path === 'string' ? a.path : '';
+  if (typeof a.old_string === 'string' && typeof a.new_string === 'string') {
+    return { kind: 'edit', path, oldText: a.old_string, newText: a.new_string };
+  }
+  if (path && typeof a.content === 'string') {
+    return { kind: 'write', path, content: a.content };
+  }
+  return null;
+}
+
+function DiffLines({ text, sign }: { text: string; sign: '+' | '-' }) {
+  const cls = sign === '+' ? 'bf-tl__diff-add' : 'bf-tl__diff-del';
+  return (
+    <>
+      {text.split('\n').map((line, i) => (
+        <div key={i} className={`bf-tl__diff-line ${cls}`}>
+          <span className="bf-tl__diff-sign" aria-hidden>{sign}</span>
+          <span className="bf-tl__diff-text">{line || ' '}</span>
+        </div>
+      ))}
+    </>
+  );
+}
+
 function ToolStep({
   node,
   labels,
@@ -89,6 +152,7 @@ function ToolStep({
 }) {
   const argsText = formatPayload(node.args);
   const resultText = formatPayload(node.result);
+  const preview = toolPreview(node.args);
   return (
     <details className={`bf-tl__tool${node.isError ? ' bf-tl__tool--error' : ''}`}>
       <summary className="bf-tl__tool-head">
@@ -102,9 +166,33 @@ function ToolStep({
         </span>
       </summary>
       <div className="bf-tl__tool-body">
+        {preview && (
+          <div className="bf-tl__io">
+            <div className="bf-tl__io-label">
+              <span>{labels.preview}{preview.path ? ` · ${preview.path}` : ''}</span>
+              <CopyButton
+                text={preview.kind === 'edit' ? preview.newText : preview.content}
+                labels={labels}
+              />
+            </div>
+            {preview.kind === 'edit' ? (
+              <div className="bf-tl__diff">
+                <DiffLines text={preview.oldText} sign="-" />
+                <DiffLines text={preview.newText} sign="+" />
+              </div>
+            ) : (
+              <pre className="bf-tl__io-pre">
+                <code>{preview.content}</code>
+              </pre>
+            )}
+          </div>
+        )}
         {argsText && (
           <div className="bf-tl__io">
-            <div className="bf-tl__io-label">{labels.input}</div>
+            <div className="bf-tl__io-label">
+              <span>{labels.input}</span>
+              <CopyButton text={argsText} labels={labels} />
+            </div>
             <pre className="bf-tl__io-pre">
               <code>{argsText}</code>
             </pre>
@@ -112,7 +200,10 @@ function ToolStep({
         )}
         {resultText && (
           <div className="bf-tl__io">
-            <div className="bf-tl__io-label">{labels.output}</div>
+            <div className="bf-tl__io-label">
+              <span>{labels.output}</span>
+              <CopyButton text={resultText} labels={labels} />
+            </div>
             <pre className="bf-tl__io-pre">
               <code>{resultText}</code>
             </pre>
@@ -130,7 +221,7 @@ function ToolStep({
  * Input/Output, or an error. Presentational and theme-driven (CSS variables), so
  * it renders identically in the web app and a VS Code webview.
  */
-export function BrainTimeline({
+function BrainTimelineInner({
   messages,
   trace,
   streamingText,
@@ -147,14 +238,21 @@ export function BrainTimeline({
   onCreateFile,
   autoScroll = true,
 }: BrainTimelineProps) {
-  const labels = { ...DEFAULT_TIMELINE_LABELS, ...labelOverrides };
+  // Stable across renders so the memoized <Markdown> children below keep their
+  // identity and don't re-parse when only streaming text ticks over.
+  const labels = useMemo(() => ({ ...DEFAULT_TIMELINE_LABELS, ...labelOverrides }), [labelOverrides]);
   const assistant = assistantName ?? labels.assistant;
-  const nodes = useMemo(
-    () => buildTimeline({ messages, trace, streamingText, isRunning }),
-    [messages, trace, streamingText, isRunning],
-  );
+  // The settled nodes (the expensive map + sort) depend only on the durable messages
+  // and trace, so they're memoized apart from the streaming text — which ticks on every
+  // token and would otherwise re-map + re-sort the whole conversation each time.
+  const settled = useMemo(() => buildSettledTimeline(messages, trace), [messages, trace]);
+  const nodes = useMemo(() => {
+    const streaming = streamingNode(streamingText, isRunning);
+    return streaming ? [...settled, streaming] : settled;
+  }, [settled, streamingText, isRunning]);
 
   const scrollRef = useRef<HTMLDivElement>(null);
+  const contentRef = useRef<HTMLOListElement>(null);
   const pinnedRef = useRef(true);
   // Track whether the user is pinned to the bottom so streaming doesn't yank them.
   const onScroll = () => {
@@ -162,11 +260,22 @@ export function BrainTimeline({
     if (!el) return;
     pinnedRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
   };
+  // Stay pinned to the newest node through EVERY height change — not just when the
+  // node list changes, but as late-loading images, code blocks, and streaming markdown
+  // reflow after render (the reason a plain `nodes`-keyed effect lands short of bottom).
   useEffect(() => {
-    if (!autoScroll || !pinnedRef.current) return;
-    const el = scrollRef.current;
-    if (el) el.scrollTop = el.scrollHeight;
-  }, [nodes, autoScroll]);
+    if (!autoScroll) return;
+    const scroller = scrollRef.current;
+    const content = contentRef.current;
+    if (!scroller || !content) return;
+    const stick = () => {
+      if (pinnedRef.current) scroller.scrollTop = scroller.scrollHeight;
+    };
+    stick();
+    const ro = new ResizeObserver(stick);
+    ro.observe(content);
+    return () => ro.disconnect();
+  }, [autoScroll]);
 
   const renderMsg = (msg: BrainMessage, role: 'user' | 'assistant', text: string) =>
     renderMessage ? (
@@ -188,7 +297,7 @@ export function BrainTimeline({
       {loading && <div className="bf-tl-status">{labels.loading}</div>}
       {isEmpty &&
         (emptyState ?? <div className="bf-tl-empty">{labels.empty}</div>)}
-      <ol className="bf-tl">
+      <ol className="bf-tl" ref={contentRef}>
         {nodes.map((node) => {
           if (node.kind === 'user') {
             return (
@@ -291,3 +400,11 @@ export function BrainTimeline({
     </div>
   );
 }
+
+/**
+ * Memoized so an unrelated re-render of the host (e.g. every keystroke in the
+ * composer, which lives in the same component tree) does not re-render the whole
+ * transcript and re-parse every message's markdown. Callers must pass referentially
+ * stable props (memoize `labels` and any `on*` callbacks) for this to take effect.
+ */
+export const BrainTimeline = React.memo(BrainTimelineInner);

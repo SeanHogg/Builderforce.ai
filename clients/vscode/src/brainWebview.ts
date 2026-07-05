@@ -58,6 +58,7 @@ function buildLabels(): Record<string, string> {
     "tl.copied": t("Copied"),
     "tl.apply": t("Apply"),
     "tl.createFile": t("Create file"),
+    "tl.preview": t("Preview"),
     // Composer + chrome
     "app.signInPrompt": t("Sign in to BuilderForce to start."),
     "app.signIn": t("Sign in"),

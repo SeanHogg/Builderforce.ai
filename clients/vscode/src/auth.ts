@@ -1,6 +1,24 @@
 import * as vscode from "vscode";
 import { getBaseUrl, SECRET_KEY } from "./gateway";
 
+/**
+ * Best-effort server-side revocation of an editor key (bfk_*) on sign-out, so the
+ * key dies with the local session instead of being left valid on the gateway.
+ * Possession of the key is the authorization, so no token is needed. Swallows all
+ * errors — a failed revoke must never block local sign-out.
+ */
+async function revokeKeyRemotely(key: string): Promise<void> {
+  try {
+    await fetch(`${getBaseUrl()}/api/auth/keys/revoke`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ apiKey: key }),
+    });
+  } catch {
+    // Offline / endpoint absent — local sign-out still proceeds.
+  }
+}
+
 const PROVIDER_ID = "builderforce";
 const PROVIDER_LABEL = "BuilderForce";
 
@@ -64,6 +82,7 @@ export class BuilderForceAuthProvider implements vscode.AuthenticationProvider {
     const key = await this.ctx.secrets.get(SECRET_KEY);
     await this.ctx.secrets.delete(SECRET_KEY);
     if (key) {
+      await revokeKeyRemotely(key);
       this._onDidChangeSessions.fire({ added: [], removed: [this.toSession(key)], changed: [] });
     }
   }

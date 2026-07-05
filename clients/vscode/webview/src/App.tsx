@@ -59,6 +59,7 @@ function timelineLabels(labels: LabelBundle): Partial<BrainTimelineLabels> {
     copied: t('tl.copied', 'Copied'),
     apply: t('tl.apply', 'Apply'),
     createFile: t('tl.createFile', 'Create file'),
+    preview: t('tl.preview', 'Preview'),
   };
 }
 
@@ -290,6 +291,10 @@ function Chat({ init }: { init: InitData }) {
   }, []);
   const [input, setInput] = useState('');
   const [inputFocused, setInputFocused] = useState(false);
+  // Stable reference so a keystroke (which re-renders this component) does not hand
+  // <BrainTimeline> a fresh `labels` object and defeat its React.memo — otherwise the
+  // whole transcript (and every message's markdown) re-parses on every character typed.
+  const tlLabels = useMemo(() => timelineLabels(init.labels), [init.labels]);
   const [dragOver, setDragOver] = useState(false);
   const [copied, setCopied] = useState(false);
   // Consolidate (summarize into a compact base context) / Fork (branch into a new
@@ -430,6 +435,10 @@ function Chat({ init }: { init: InitData }) {
     () => createChatTicketsAdapter(init.baseUrl, getToken, () => void refreshToken()),
     [init.baseUrl],
   );
+  // Stable references so a keystroke / streaming token doesn't hand the memoized
+  // <ChatTicketsPanel> fresh props and force its whole subtree to re-render.
+  const ticketChatList = useMemo(() => chats.map((c) => ({ id: c.id, title: c.title })), [chats]);
+  const onTicketsChanged = useCallback(() => { reloadChats(); conv.reloadMessages(); }, [reloadChats, conv.reloadMessages]);
   // Bumped when the Brain mutates work items via MCP tools, so the ticket panel
   // refreshes live (rings/links) rather than only on its own button actions.
   const [ticketRefresh, setTicketRefresh] = useState(0);
@@ -731,10 +740,10 @@ function Chat({ init }: { init: InitData }) {
           <ChatTicketsPanel
             chatId={chatId}
             projectId={init.project?.id ?? null}
-            chatList={chats.map((c) => ({ id: c.id, title: c.title }))}
+            chatList={ticketChatList}
             adapter={ticketAdapter}
             labels={DEFAULT_CHAT_TICKETS_LABELS}
-            onChanged={() => { reloadChats(); conv.reloadMessages(); }}
+            onChanged={onTicketsChanged}
             refreshSignal={ticketRefresh}
           />
         </div>
@@ -748,7 +757,7 @@ function Chat({ init }: { init: InitData }) {
           isRunning={conv.sending}
           loading={conv.loadingMessages}
           assistantName="BuilderForce"
-          labels={timelineLabels(init.labels)}
+          labels={tlLabels}
         />
       </div>
 

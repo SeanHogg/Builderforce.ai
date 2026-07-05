@@ -1,8 +1,8 @@
 // src/BrainTimeline.tsx
-import { useEffect, useMemo, useRef } from "react";
+import React2, { useEffect, useMemo as useMemo2, useRef, useState as useState2 } from "react";
 
 // src/Markdown.tsx
-import { useState } from "react";
+import React, { useMemo, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { Fragment, jsx, jsxs } from "react/jsx-runtime";
@@ -41,8 +41,8 @@ function CodeBlock({
     /* @__PURE__ */ jsx("pre", { children: /* @__PURE__ */ jsx("code", { children: code }) })
   ] });
 }
-function Markdown({ content, onInternalLink, onApplyCode, onCreateFile, labels }) {
-  const lab = { ...DEFAULT_LABELS, ...labels };
+function MarkdownInner({ content, onInternalLink, onApplyCode, onCreateFile, labels }) {
+  const lab = useMemo(() => ({ ...DEFAULT_LABELS, ...labels }), [labels]);
   return /* @__PURE__ */ jsx("div", { className: "bf-md", children: /* @__PURE__ */ jsx(
     ReactMarkdown,
     {
@@ -82,6 +82,7 @@ function Markdown({ content, onInternalLink, onApplyCode, onCreateFile, labels }
     }
   ) });
 }
+var Markdown = React.memo(MarkdownInner);
 
 // src/timelineModel.ts
 var ORDER = {
@@ -114,8 +115,14 @@ function stripImageRefs(text, imageNames) {
   }).join("\n").replace(/\n{3,}/g, "\n\n").trim();
 }
 function buildTimeline(input) {
+  const nodes = buildSettledTimeline(input.messages, input.trace);
+  const streaming = streamingNode(input.streamingText, input.isRunning);
+  if (streaming) nodes.push(streaming);
+  return nodes;
+}
+function buildSettledTimeline(messages, trace) {
   const nodes = [];
-  input.messages.forEach((message, i) => {
+  messages.forEach((message, i) => {
     const ts = parseTs(message.createdAt, i);
     if (message.role === "user") {
       const atts = attachmentsOf(message);
@@ -142,7 +149,7 @@ function buildTimeline(input) {
     }
   });
   let step = 0;
-  input.trace.forEach((ev, i) => {
+  trace.forEach((ev, i) => {
     const ts = parseTs(ev.ts, 1e15 + i);
     if (ev.category === "llm") {
       nodes.push({ key: `trace-${i}`, kind: "thinking", ts, order: ORDER.thinking, durationMs: ev.durationMs, step: step++ });
@@ -170,10 +177,11 @@ function buildTimeline(input) {
     }
   });
   nodes.sort((a, b) => a.ts - b.ts || a.order - b.order);
-  if (input.isRunning && input.streamingText.trim()) {
-    nodes.push({ key: "streaming", kind: "streaming", ts: Number.MAX_SAFE_INTEGER, order: ORDER.streaming, text: input.streamingText });
-  }
   return nodes;
+}
+function streamingNode(streamingText, isRunning) {
+  if (!isRunning || !streamingText.trim()) return null;
+  return { key: "streaming", kind: "streaming", ts: Number.MAX_SAFE_INTEGER, order: ORDER.streaming, text: streamingText };
 }
 function formatDuration(ms) {
   if (ms == null || !Number.isFinite(ms)) return "0s";
@@ -194,7 +202,7 @@ function formatPayload(value) {
 }
 
 // src/BrainTimeline.tsx
-import { jsx as jsx2, jsxs as jsxs2 } from "react/jsx-runtime";
+import { Fragment as Fragment2, jsx as jsx2, jsxs as jsxs2 } from "react/jsx-runtime";
 var DEFAULT_TIMELINE_LABELS = {
   thinking: "Thinking\u2026",
   thoughtFor: "Thought for {duration}",
@@ -208,7 +216,8 @@ var DEFAULT_TIMELINE_LABELS = {
   copy: "Copy",
   copied: "Copied",
   apply: "Apply",
-  createFile: "Create file"
+  createFile: "Create file",
+  preview: "Preview"
 };
 function dotIcon(kind, isError) {
   if (isError) return "\u2717";
@@ -227,12 +236,55 @@ function dotIcon(kind, isError) {
       return "\u2022";
   }
 }
+function CopyButton({ text, labels }) {
+  const [copied, setCopied] = useState2(false);
+  return /* @__PURE__ */ jsx2(
+    "button",
+    {
+      type: "button",
+      className: "bf-tl__copy",
+      title: labels.copy,
+      onClick: (e) => {
+        e.stopPropagation();
+        void navigator.clipboard?.writeText(text).then(
+          () => {
+            setCopied(true);
+            setTimeout(() => setCopied(false), 1500);
+          },
+          () => {
+          }
+        );
+      },
+      children: copied ? labels.copied : labels.copy
+    }
+  );
+}
+function toolPreview(args) {
+  if (!args || typeof args !== "object") return null;
+  const a = args;
+  const path = typeof a.path === "string" ? a.path : "";
+  if (typeof a.old_string === "string" && typeof a.new_string === "string") {
+    return { kind: "edit", path, oldText: a.old_string, newText: a.new_string };
+  }
+  if (path && typeof a.content === "string") {
+    return { kind: "write", path, content: a.content };
+  }
+  return null;
+}
+function DiffLines({ text, sign }) {
+  const cls = sign === "+" ? "bf-tl__diff-add" : "bf-tl__diff-del";
+  return /* @__PURE__ */ jsx2(Fragment2, { children: text.split("\n").map((line, i) => /* @__PURE__ */ jsxs2("div", { className: `bf-tl__diff-line ${cls}`, children: [
+    /* @__PURE__ */ jsx2("span", { className: "bf-tl__diff-sign", "aria-hidden": true, children: sign }),
+    /* @__PURE__ */ jsx2("span", { className: "bf-tl__diff-text", children: line || "\xA0" })
+  ] }, i)) });
+}
 function ToolStep({
   node,
   labels
 }) {
   const argsText = formatPayload(node.args);
   const resultText = formatPayload(node.result);
+  const preview = toolPreview(node.args);
   return /* @__PURE__ */ jsxs2("details", { className: `bf-tl__tool${node.isError ? " bf-tl__tool--error" : ""}`, children: [
     /* @__PURE__ */ jsxs2("summary", { className: "bf-tl__tool-head", children: [
       /* @__PURE__ */ jsx2("span", { className: "bf-tl__tool-status", "aria-hidden": true, children: node.isError ? "\u2717" : "\u2713" }),
@@ -241,18 +293,43 @@ function ToolStep({
       /* @__PURE__ */ jsx2("span", { className: "bf-tl__tool-caret", "aria-hidden": true, children: "\u25B8" })
     ] }),
     /* @__PURE__ */ jsxs2("div", { className: "bf-tl__tool-body", children: [
+      preview && /* @__PURE__ */ jsxs2("div", { className: "bf-tl__io", children: [
+        /* @__PURE__ */ jsxs2("div", { className: "bf-tl__io-label", children: [
+          /* @__PURE__ */ jsxs2("span", { children: [
+            labels.preview,
+            preview.path ? ` \xB7 ${preview.path}` : ""
+          ] }),
+          /* @__PURE__ */ jsx2(
+            CopyButton,
+            {
+              text: preview.kind === "edit" ? preview.newText : preview.content,
+              labels
+            }
+          )
+        ] }),
+        preview.kind === "edit" ? /* @__PURE__ */ jsxs2("div", { className: "bf-tl__diff", children: [
+          /* @__PURE__ */ jsx2(DiffLines, { text: preview.oldText, sign: "-" }),
+          /* @__PURE__ */ jsx2(DiffLines, { text: preview.newText, sign: "+" })
+        ] }) : /* @__PURE__ */ jsx2("pre", { className: "bf-tl__io-pre", children: /* @__PURE__ */ jsx2("code", { children: preview.content }) })
+      ] }),
       argsText && /* @__PURE__ */ jsxs2("div", { className: "bf-tl__io", children: [
-        /* @__PURE__ */ jsx2("div", { className: "bf-tl__io-label", children: labels.input }),
+        /* @__PURE__ */ jsxs2("div", { className: "bf-tl__io-label", children: [
+          /* @__PURE__ */ jsx2("span", { children: labels.input }),
+          /* @__PURE__ */ jsx2(CopyButton, { text: argsText, labels })
+        ] }),
         /* @__PURE__ */ jsx2("pre", { className: "bf-tl__io-pre", children: /* @__PURE__ */ jsx2("code", { children: argsText }) })
       ] }),
       resultText && /* @__PURE__ */ jsxs2("div", { className: "bf-tl__io", children: [
-        /* @__PURE__ */ jsx2("div", { className: "bf-tl__io-label", children: labels.output }),
+        /* @__PURE__ */ jsxs2("div", { className: "bf-tl__io-label", children: [
+          /* @__PURE__ */ jsx2("span", { children: labels.output }),
+          /* @__PURE__ */ jsx2(CopyButton, { text: resultText, labels })
+        ] }),
         /* @__PURE__ */ jsx2("pre", { className: "bf-tl__io-pre", children: /* @__PURE__ */ jsx2("code", { children: resultText }) })
       ] })
     ] })
   ] });
 }
-function BrainTimeline({
+function BrainTimelineInner({
   messages,
   trace,
   streamingText,
@@ -269,13 +346,15 @@ function BrainTimeline({
   onCreateFile,
   autoScroll = true
 }) {
-  const labels = { ...DEFAULT_TIMELINE_LABELS, ...labelOverrides };
+  const labels = useMemo2(() => ({ ...DEFAULT_TIMELINE_LABELS, ...labelOverrides }), [labelOverrides]);
   const assistant = assistantName ?? labels.assistant;
-  const nodes = useMemo(
-    () => buildTimeline({ messages, trace, streamingText, isRunning }),
-    [messages, trace, streamingText, isRunning]
-  );
+  const settled = useMemo2(() => buildSettledTimeline(messages, trace), [messages, trace]);
+  const nodes = useMemo2(() => {
+    const streaming = streamingNode(streamingText, isRunning);
+    return streaming ? [...settled, streaming] : settled;
+  }, [settled, streamingText, isRunning]);
   const scrollRef = useRef(null);
+  const contentRef = useRef(null);
   const pinnedRef = useRef(true);
   const onScroll = () => {
     const el = scrollRef.current;
@@ -283,10 +362,18 @@ function BrainTimeline({
     pinnedRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
   };
   useEffect(() => {
-    if (!autoScroll || !pinnedRef.current) return;
-    const el = scrollRef.current;
-    if (el) el.scrollTop = el.scrollHeight;
-  }, [nodes, autoScroll]);
+    if (!autoScroll) return;
+    const scroller = scrollRef.current;
+    const content = contentRef.current;
+    if (!scroller || !content) return;
+    const stick = () => {
+      if (pinnedRef.current) scroller.scrollTop = scroller.scrollHeight;
+    };
+    stick();
+    const ro = new ResizeObserver(stick);
+    ro.observe(content);
+    return () => ro.disconnect();
+  }, [autoScroll]);
   const renderMsg = (msg, role, text) => renderMessage ? renderMessage(msg, { role, text }) : /* @__PURE__ */ jsx2(
     Markdown,
     {
@@ -301,7 +388,7 @@ function BrainTimeline({
   return /* @__PURE__ */ jsxs2("div", { className: "bf-tl-scroll", ref: scrollRef, onScroll, children: [
     loading && /* @__PURE__ */ jsx2("div", { className: "bf-tl-status", children: labels.loading }),
     isEmpty && (emptyState ?? /* @__PURE__ */ jsx2("div", { className: "bf-tl-empty", children: labels.empty })),
-    /* @__PURE__ */ jsxs2("ol", { className: "bf-tl", children: [
+    /* @__PURE__ */ jsxs2("ol", { className: "bf-tl", ref: contentRef, children: [
       nodes.map((node) => {
         if (node.kind === "user") {
           return /* @__PURE__ */ jsxs2("li", { className: "bf-tl__item bf-tl__item--user", children: [
@@ -360,6 +447,7 @@ function BrainTimeline({
     ] })
   ] });
 }
+var BrainTimeline = React2.memo(BrainTimelineInner);
 
 // src/HealthRing.tsx
 import { jsx as jsx3, jsxs as jsxs3 } from "react/jsx-runtime";
@@ -423,7 +511,7 @@ function HealthRing({ percent, size = 40, stroke = 4, caption, muted = false, ar
 }
 
 // src/chatTickets/ChatTicketsPanel.tsx
-import { useCallback, useEffect as useEffect2, useMemo as useMemo2, useState as useState2 } from "react";
+import { memo, useCallback, useEffect as useEffect2, useMemo as useMemo3, useState as useState3 } from "react";
 
 // src/chatTickets/types.ts
 var TICKET_KINDS = ["task", "epic", "objective", "initiative", "portfolio"];
@@ -466,17 +554,17 @@ var DEFAULT_CHAT_TICKETS_LABELS = {
 // src/chatTickets/ChatTicketsPanel.tsx
 import { jsx as jsx4, jsxs as jsxs4 } from "react/jsx-runtime";
 var RUNNABLE = new Set(RUNNABLE_KINDS);
-function ChatTicketsPanel({ chatId, projectId, chatList, adapter, labels, onChanged, refreshSignal }) {
-  const [tickets, setTickets] = useState2([]);
-  const [agents, setAgents] = useState2([]);
-  const [pool, setPool] = useState2([]);
-  const [options, setOptions] = useState2(null);
-  const [panel, setPanel] = useState2(null);
-  const [lineageKey, setLineageKey] = useState2(null);
-  const [lineage, setLineage] = useState2([]);
-  const [runKey, setRunKey] = useState2(null);
-  const [msg, setMsg] = useState2(null);
-  const [busy, setBusy] = useState2(false);
+function ChatTicketsPanelInner({ chatId, projectId, chatList, adapter, labels, onChanged, refreshSignal }) {
+  const [tickets, setTickets] = useState3([]);
+  const [agents, setAgents] = useState3([]);
+  const [pool, setPool] = useState3([]);
+  const [options, setOptions] = useState3(null);
+  const [panel, setPanel] = useState3(null);
+  const [lineageKey, setLineageKey] = useState3(null);
+  const [lineage, setLineage] = useState3([]);
+  const [runKey, setRunKey] = useState3(null);
+  const [msg, setMsg] = useState3(null);
+  const [busy, setBusy] = useState3(false);
   const load = useCallback(async () => {
     const [tk, ag] = await Promise.all([
       adapter.listTickets(chatId).catch(() => []),
@@ -647,11 +735,11 @@ function ChatTicketsPanel({ chatId, projectId, chatList, adapter, labels, onChan
   ] });
 }
 function LinkForm({ options, existing, labels, onLink }) {
-  const [kind, setKind] = useState2("task");
-  const [ref, setRef] = useState2("");
-  const [linkType, setLinkType] = useState2("linked");
-  const [busy, setBusy] = useState2(false);
-  const forKind = useMemo2(() => {
+  const [kind, setKind] = useState3("task");
+  const [ref, setRef] = useState3("");
+  const [linkType, setLinkType] = useState3("linked");
+  const [busy, setBusy] = useState3(false);
+  const forKind = useMemo3(() => {
     const all = options?.[kind] ?? [];
     return all.filter((o) => !existing.some((e) => e.kind === kind && e.ref === o.ref));
   }, [options, kind, existing]);
@@ -705,7 +793,7 @@ function AgentsSection({ agents, pool, labels, onInvite, onRemove, busy }) {
   ] });
 }
 function MergeSection({ chatId, chatList, labels, onMerge, busy }) {
-  const [selected, setSelected] = useState2([]);
+  const [selected, setSelected] = useState3([]);
   const candidates = chatList.filter((c) => c.id !== chatId);
   const toggle = (id) => setSelected((s) => s.includes(id) ? s.filter((x) => x !== id) : [...s, id]);
   return /* @__PURE__ */ jsxs4("div", { style: { ...S.section, flexDirection: "column", alignItems: "stretch" }, children: [
@@ -719,6 +807,7 @@ function MergeSection({ chatId, chatList, labels, onMerge, busy }) {
     }, disabled: busy || selected.length === 0, style: S.pill(true), children: busy ? "\u2026" : labels.mergeAction(selected.length) })
   ] });
 }
+var ChatTicketsPanel = memo(ChatTicketsPanelInner);
 var S = {
   root: { margin: "4px 0 0", padding: "8px 10px", border: "1px solid var(--bf-ct-border, var(--border-subtle, rgba(148,163,184,0.3)))", borderRadius: 10, background: "var(--bf-ct-surface, var(--bg-elevated, transparent))", display: "flex", flexDirection: "column", gap: 8 },
   muted: { fontSize: 12, color: "var(--bf-ct-text-muted, var(--text-muted, #6b7280))" },
@@ -743,7 +832,7 @@ var S = {
 };
 
 // src/project360/Project360View.tsx
-import { useMemo as useMemo3, useState as useState3 } from "react";
+import { useMemo as useMemo4, useState as useState4 } from "react";
 
 // src/project360/Sunburst.tsx
 import { jsx as jsx5, jsxs as jsxs5 } from "react/jsx-runtime";
@@ -907,11 +996,15 @@ var DEFAULT_PROJECT360_LABELS = {
 };
 
 // src/project360/Project360View.tsx
-import { Fragment as Fragment2, jsx as jsx6, jsxs as jsxs6 } from "react/jsx-runtime";
+import { Fragment as Fragment3, jsx as jsx6, jsxs as jsxs6 } from "react/jsx-runtime";
 var STATUS_ORDER = ["working", "awaiting", "blocked", "idle", "available"];
 function Project360View({ data, loading, error, labels, onAction, onRefresh }) {
-  const L = useMemo3(() => ({ ...DEFAULT_PROJECT360_LABELS, ...labels ?? {} }), [labels]);
-  const [selected, setSelected] = useState3(null);
+  const L = useMemo4(() => ({ ...DEFAULT_PROJECT360_LABELS, ...labels ?? {} }), [labels]);
+  const [selected, setSelected] = useState4(null);
+  const sortedWorkforce = useMemo4(
+    () => [...data?.workforce ?? []].sort((a, b) => STATUS_ORDER.indexOf(a.status) - STATUS_ORDER.indexOf(b.status)),
+    [data?.workforce]
+  );
   if (error) {
     return /* @__PURE__ */ jsxs6("div", { className: "bf-360-state", children: [
       /* @__PURE__ */ jsx6("div", { className: "bf-360-state__title", children: L.loadError }),
@@ -1010,7 +1103,7 @@ ${lines}`
         ) }, d.key)) })
       ] })
     ] }),
-    hasData && /* @__PURE__ */ jsxs6(Fragment2, { children: [
+    hasData && /* @__PURE__ */ jsxs6(Fragment3, { children: [
       /* @__PURE__ */ jsxs6("section", { className: "bf-360-section", children: [
         /* @__PURE__ */ jsxs6("h3", { className: "bf-360-section__title", children: [
           L.missingItems,
@@ -1023,7 +1116,7 @@ ${lines}`
           L.workforce,
           workforce.length > 0 && /* @__PURE__ */ jsx6("span", { className: "bf-360-section__count", children: workforce.length })
         ] }),
-        workforce.length === 0 ? /* @__PURE__ */ jsx6("p", { className: "bf-360-empty", children: L.noWorkforce }) : /* @__PURE__ */ jsx6("ul", { className: "bf-360-people", children: [...workforce].sort((a, b) => STATUS_ORDER.indexOf(a.status) - STATUS_ORDER.indexOf(b.status)).map((m) => /* @__PURE__ */ jsx6(MemberRow, { member: m, labels: L, onAction }, m.ref)) })
+        workforce.length === 0 ? /* @__PURE__ */ jsx6("p", { className: "bf-360-empty", children: L.noWorkforce }) : /* @__PURE__ */ jsx6("ul", { className: "bf-360-people", children: sortedWorkforce.map((m) => /* @__PURE__ */ jsx6(MemberRow, { member: m, labels: L, onAction }, m.ref)) })
       ] })
     ] })
   ] });
@@ -1075,7 +1168,7 @@ function MemberRow({ member, labels, onAction }) {
 }
 
 // src/projectList/ProjectListView.tsx
-import { useMemo as useMemo4 } from "react";
+import { useMemo as useMemo5 } from "react";
 
 // src/projectList/types.ts
 var DEFAULT_PROJECT_LIST_LABELS = {
@@ -1090,7 +1183,7 @@ var DEFAULT_PROJECT_LIST_LABELS = {
 // src/projectList/ProjectListView.tsx
 import { jsx as jsx7, jsxs as jsxs7 } from "react/jsx-runtime";
 function ProjectListView({ title, subtitle, data, loading, error, labels, onAction, onRefresh }) {
-  const L = useMemo4(() => ({ ...DEFAULT_PROJECT_LIST_LABELS, ...labels ?? {} }), [labels]);
+  const L = useMemo5(() => ({ ...DEFAULT_PROJECT_LIST_LABELS, ...labels ?? {} }), [labels]);
   const header = /* @__PURE__ */ jsxs7("header", { className: "bf-list-head", children: [
     /* @__PURE__ */ jsxs7("div", { className: "bf-list-head__id", children: [
       /* @__PURE__ */ jsx7("span", { className: "bf-list-head__title", children: title }),
@@ -1180,9 +1273,11 @@ export {
   Sunburst,
   TICKET_KINDS,
   attachmentsOf,
+  buildSettledTimeline,
   buildTimeline,
   formatDuration,
   formatPayload,
-  healthRingColor
+  healthRingColor,
+  streamingNode
 };
 //# sourceMappingURL=index.mjs.map

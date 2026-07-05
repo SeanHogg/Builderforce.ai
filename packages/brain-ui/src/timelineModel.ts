@@ -83,9 +83,22 @@ function stripImageRefs(text: string, imageNames: Set<string>): string {
  * sorted by timestamp with a per-kind tie-break, then a stable index tie-break.
  */
 export function buildTimeline(input: BuildTimelineInput): TimelineNode[] {
+  const nodes = buildSettledTimeline(input.messages, input.trace);
+  const streaming = streamingNode(input.streamingText, input.isRunning);
+  if (streaming) nodes.push(streaming);
+  return nodes;
+}
+
+/**
+ * The stable, settled portion of the timeline — everything derived from the durable
+ * `messages` and `trace` (the expensive map + sort). Split out from {@link buildTimeline}
+ * so a live streaming turn (whose text ticks on every token) can be appended cheaply
+ * without re-mapping and re-sorting the whole conversation per token.
+ */
+export function buildSettledTimeline(messages: BrainMessage[], trace: BrainTraceEvent[]): TimelineNode[] {
   const nodes: TimelineNode[] = [];
 
-  input.messages.forEach((message, i) => {
+  messages.forEach((message, i) => {
     const ts = parseTs(message.createdAt, i);
     if (message.role === 'user') {
       const atts = attachmentsOf(message);
@@ -115,7 +128,7 @@ export function buildTimeline(input: BuildTimelineInput): TimelineNode[] {
   });
 
   let step = 0;
-  input.trace.forEach((ev, i) => {
+  trace.forEach((ev, i) => {
     const ts = parseTs(ev.ts, 1e15 + i); // unparseable trace sorts after dated content
     if (ev.category === 'llm') {
       nodes.push({ key: `trace-${i}`, kind: 'thinking', ts, order: ORDER.thinking, durationMs: ev.durationMs, step: step++ });
@@ -148,11 +161,14 @@ export function buildTimeline(input: BuildTimelineInput): TimelineNode[] {
   // Stable chronological sort: timestamp, then per-kind order, then insertion.
   nodes.sort((a, b) => a.ts - b.ts || a.order - b.order);
 
-  if (input.isRunning && input.streamingText.trim()) {
-    nodes.push({ key: 'streaming', kind: 'streaming', ts: Number.MAX_SAFE_INTEGER, order: ORDER.streaming, text: input.streamingText });
-  }
-
   return nodes;
+}
+
+/** The trailing live-streaming assistant bubble, or null when nothing is streaming.
+ *  Always sorts last (max timestamp), so callers append it after the settled nodes. */
+export function streamingNode(streamingText: string, isRunning: boolean): TimelineNode | null {
+  if (!isRunning || !streamingText.trim()) return null;
+  return { key: 'streaming', kind: 'streaming', ts: Number.MAX_SAFE_INTEGER, order: ORDER.streaming, text: streamingText };
 }
 
 /** Compact human duration for a "Thought for …" label (e.g. 0s, 2s, 12s). */
