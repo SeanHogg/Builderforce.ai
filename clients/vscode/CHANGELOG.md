@@ -2,6 +2,11 @@
 
 All notable changes to the BuilderForce VS Code extension are documented here.
 
+## [2026.7.29] — Open an item, and the chat is already tied to it
+
+- **Click a roadmap item, task, epic, gap, or OKR and the chat knows exactly what it's about.** Opening a work item in a chat now links that item to the conversation automatically — you see it pinned at the top of the chat with its live progress, instead of a blank "no tickets linked yet". So every chat carries the context of the item that started it, the assistant works against the right thing, and you can jump from the item to every conversation about it.
+- **Roadmap items and gaps are first-class now.** They join tasks, epics, OKRs, initiatives, and portfolios as things you can attach to any chat — from the roadmap page, the board, or the link picker — so nothing you plan is left un-trackable.
+
 ## [2026.7.24] — Chats keep going, and a copied chat tells you why one stopped
 
 - **Long chats no longer run out of room.** Big tool results (like a full task list) used to pile up until the assistant hit its limit and stopped mid-task. Now those results are trimmed to what matters as they go, and the conversation keeps only what fits — so a busy chat keeps working instead of dying after a few steps.

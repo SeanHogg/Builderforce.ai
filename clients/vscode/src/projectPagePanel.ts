@@ -87,7 +87,15 @@ export class ProjectPagePanel extends WebviewPanelBase<ProjectPageInbound> {
         if (action.task) void vscode.commands.executeCommand("builderforce.startTaskSession", { kind: "task", task: action.task });
         break;
       case "brain":
-        BrainWebview.open(this.ctx, { kind: "seed", text: action.text ?? "" });
+        // Seed a chat with the row's prompt, and (for a roadmap/spec/etc. row) auto-link
+        // the item so the conversation is tied to it — the same way a task session links.
+        BrainWebview.open(this.ctx, {
+          kind: "seed",
+          text: action.text ?? "",
+          ticket: action.ticket
+            ? { ...action.ticket, projectId: action.ticket.projectId ?? this.projectId }
+            : undefined,
+        });
         break;
       case "open-360":
         void vscode.commands.executeCommand("builderforce.openProject360");
@@ -119,7 +127,9 @@ export class ProjectPagePanel extends WebviewPanelBase<ProjectPageInbound> {
 interface ProjectPageActionMsg {
   kind: "open-task" | "brain" | "open-360";
   text?: string;
-  task?: { id: number; key?: string; title: string };
+  task?: { id: number; key?: string; title: string; taskType?: "task" | "epic" | "gap" };
+  /** For a `brain` row (roadmap/spec/…): the work item to auto-link to the chat. */
+  ticket?: { kind: string; ref: string; title?: string; projectId?: number };
 }
 
 function titleForView(view: ProjectPageView): string {

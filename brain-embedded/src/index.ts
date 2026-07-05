@@ -91,8 +91,10 @@ export {
   withDirectedMetadata,
   parseDirectedRecipient,
   isDirectedToParticipant,
+  mentionRecipient,
+  resolveRecipient,
 } from './directedMessage';
-export type { DirectedRecipient } from './directedMessage';
+export type { DirectedRecipient, RecipientChoice } from './directedMessage';
 
 // Shared data shapes
 export type { BrainChat, BrainMessage, BrainModality, ChatInputAttachment } from './types';

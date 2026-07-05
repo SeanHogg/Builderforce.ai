@@ -681,7 +681,7 @@ async function createCloudQuestion(
 export async function recordCloudUsage(
   env: Env,
   db: Db,
-  args: { tenantId: number; cloudAgentRef?: string; executionId: number; taskId: number; projectId?: number | null; model: string; inputTokens: number; outputTokens: number },
+  args: { tenantId: number; cloudAgentRef?: string; executionId: number; taskId: number; projectId?: number | null; model: string; inputTokens: number; outputTokens: number; byo?: boolean },
 ): Promise<void> {
   // Clamp at the boundary so a bad-usage turn (NaN/negative tokens) can't poison the
   // snapshot's context math or the billing ledger — same shared clamp recordUsageRow uses.
@@ -710,6 +710,10 @@ export async function recordCloudUsage(
     // Attribute the spend to the run's cloud agent + ticket + project so cost
     // rolls up ticket → project → account (0104 / 0103).
     attribution: { cloudAgentRef: args.cloudAgentRef ?? null, executionId: args.executionId, taskId: args.taskId, projectId: args.projectId ?? null },
+    // Cloud runs always execute on our infra: a BYO row here is $0 to us but STILL
+    // counts against the tenant's token allowance (free tenants are charged for
+    // cloud-agent usage), so surface is 'cloud' — never exempt. See tokenUsage.ts.
+    byo: args.byo ?? false, surface: 'cloud',
   });
 }
 
@@ -847,6 +851,7 @@ async function recordCloudLlmTurn(
     await recordCloudUsage(rc.env, rc.db, {
       ...evtBase, taskId: rc.taskId, projectId: rc.projectId, model: resolvedModel,
       inputTokens: result.usage.promptTokens ?? 0, outputTokens: result.usage.completionTokens ?? 0,
+      byo: result.byoFunded ?? false,
     });
   }
   const durationMs = Date.now() - opts.tGen0;

@@ -606,6 +606,12 @@ export interface ProxyResult {
    *  model. The route stamps this onto the usage row so overflow spend can be
    *  capped per tenant. See {@link isPaidOverflowModel}. */
   paidOverflow?: boolean;
+  /** True when the tenant's OWN provider credential (a connected subscription or
+   *  a BYO vendor key) served this call — so the platform pays nothing. The route
+   *  stamps it onto the usage row as `byo`, which forces cost 0 and (for on-prem /
+   *  VSIX surfaces) exempts the row from the plan token allowance. Stamped by
+   *  finalize() via {@link isTenantFunded}. */
+  byoFunded?: boolean;
   /** Number of times the gateway re-dispatched on non-conforming JSON output
    *  (only applies when `body.response_format.type` is `json_object`/`json_schema`). */
   schemaRetries?: number;
@@ -747,6 +753,20 @@ export class LlmProxyService {
    *  token is present, so vendor=anthropic + token bound ⇒ subscription-funded. */
   private isSubscriptionFunded(result: ProxyResult): boolean {
     return this.anthropicOAuthToken != null && result.resolvedVendor === 'anthropic';
+  }
+
+  /** Vendors whose call was served with a tenant's OWN BYO credential this
+   *  request (populated by {@link vendorEnv} when it overlays a per-tenant key on
+   *  the operator env). Combined with the Anthropic-subscription case, this is the
+   *  full "the tenant funded it" signal for any provider. */
+  private readonly tenantFundedVendors = new Set<VendorId>();
+
+  /** True when the tenant's OWN provider credential served the call — a connected
+   *  Claude subscription OR a BYO vendor key (OpenAI/Google/Anthropic). The single
+   *  source of truth for ProxyResult.byoFunded, generalizing isSubscriptionFunded
+   *  across every provider. */
+  private isTenantFunded(result: ProxyResult): boolean {
+    return this.isSubscriptionFunded(result) || this.tenantFundedVendors.has(result.resolvedVendor);
   }
 
   /** The premium fallback chain appended to every cascade — empty when the tenant
@@ -971,6 +991,9 @@ export class LlmProxyService {
     if (!result.classification) result.classification = classificationFromFailovers(result.failovers);
     if (outcomeOverride) result.outcome = outcomeOverride;
     else if (!result.outcome) result.outcome = result.response.status < 400 ? 'success' : 'cascade_exhausted';
+    // Stamp the tenant-funding signal once, on the single path every result
+    // leaves complete() through, so the route can mark the usage row `byo`.
+    if (result.byoFunded === undefined) result.byoFunded = this.isTenantFunded(result);
     return result;
   }
 

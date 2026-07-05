@@ -18,13 +18,28 @@ interface BrainInbound extends WebviewInbound {
   args?: Record<string, unknown>;
 }
 
+/** A work item to auto-link to the chat the intent opens, so the conversation is
+ *  tied to (and has context on) the item that spawned it. `kind` is a
+ *  ChatTicketService ticket kind (task | epic | gap | objective | initiative |
+ *  portfolio | roadmap); `ref` is the item id (task id as text, else a UUID). */
+export interface IntentTicket {
+  kind: string;
+  ref: string;
+  title?: string;
+  projectId?: number;
+}
+
 /** A host-driven request to the singleton Brain panel (mirror of the webview type). */
 export interface BrainIntent {
   kind: "new" | "focus" | "task" | "seed";
   chatId?: number;
   /** For 'seed': a prompt pre-filled into a fresh chat (editor entry points). */
   text?: string;
-  task?: { id: number; key?: string; title: string; projectId?: number; dispatched?: boolean };
+  task?: { id: number; key?: string; title: string; taskType?: "task" | "epic" | "gap"; projectId?: number; dispatched?: boolean };
+  /** Auto-link this work item to the chat once it's created (task/roadmap/etc.). For
+   *  a 'seed' intent this also forces the chat to be created eagerly so the link
+   *  lands (an editor-entry 'seed' with no ticket stays lazy). */
+  ticket?: IntentTicket;
 }
 
 /** Host callbacks so the Brain panel can keep the sidebar trees live. */

@@ -4594,9 +4594,11 @@
       "kind": {
         "task": "Tâche",
         "epic": "Épopée",
+        "gap": "Écart",
         "objective": "Objectif",
         "initiative": "Initiative",
-        "portfolio": "Portefeuille"
+        "portfolio": "Portefeuille",
+        "roadmap": "Feuille de route"
       }
     },
     "approveAll": "Tout approuver",
@@ -4628,6 +4630,10 @@
     "defaultBrain": "Brain par défaut",
     "personas": "Personas",
     "assignedAgents": "Agents attribués",
+    "to": "À",
+    "brainRecipient": "BuilderForce",
+    "recipientPickerTitle": "Envoyer à",
+    "messageParticipant": "Message à {name}…",
     "uploading": "Téléversement…",
     "brainStorm": "Brain Storm",
     "projectLabel": "Projet",

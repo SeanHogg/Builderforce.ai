@@ -6,7 +6,16 @@
  * handling is written once (DRY) and the per-view code is just a fetch + a mapper.
  */
 
+import type { TicketKind } from '../chatTickets/types';
+
 export type ProjectListTone = 'default' | 'accent' | 'ok' | 'warn' | 'danger' | 'muted';
+
+/** A work item to auto-link to the chat when the row's action opens one. */
+export interface ProjectListTicketRef {
+  kind: TicketKind;
+  ref: string;
+  title?: string;
+}
 
 export interface ProjectListBadge {
   label: string;
@@ -20,7 +29,10 @@ export interface ProjectListAction {
   /** For `brain`: the seed prompt. */
   text?: string;
   /** For `open-task`: the task to open a working session for. */
-  task?: { id: number; key?: string; title: string };
+  task?: { id: number; key?: string; title: string; taskType?: 'task' | 'epic' | 'gap' };
+  /** The work item this row represents — the host auto-links it to the opened chat
+   *  so the conversation is tied to (and has context on) the item that spawned it. */
+  ticket?: ProjectListTicketRef;
 }
 
 export interface ProjectListItem {

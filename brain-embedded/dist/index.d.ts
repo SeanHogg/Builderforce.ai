@@ -505,6 +505,20 @@ declare function parseDirectedRecipient(msg: {
 declare function isDirectedToParticipant(msg: {
     metadata?: string | null;
 }): boolean;
+/**
+ * A composer's recipient choice: `null` = auto (follow any leading @mention),
+ * `'brain'` = explicitly the BRAIN, or an explicit participant. An explicit
+ * choice always wins over a typed @mention.
+ */
+type RecipientChoice = DirectedRecipient | 'brain' | null;
+/** Resolve a leading "@name" in composer text to one of `participants`, if any. */
+declare function mentionRecipient(text: string, participants: DirectedRecipient[]): DirectedRecipient | null;
+/**
+ * The effective target of the next message: an explicit BRAIN pick wins (→ null,
+ * runs the BRAIN); else an explicit participant; else a leading @mention; else the
+ * BRAIN. Shared by every composer so routing is identical across surfaces.
+ */
+declare function resolveRecipient(choice: RecipientChoice, mention: DirectedRecipient | null): DirectedRecipient | null;
 
 /**
  * Brain execution triage — capture the Brain's run (LLM steps, tool chain,
@@ -822,4 +836,4 @@ declare const CONSOLIDATION_MARKER_PREFIX = "\uD83D\uDCCC **Consolidated summary
 /** Wrap a raw summary as the marker's visible content (prefix + summary). */
 declare function consolidationMarkerContent(summary: string): string;
 
-export { ADDRESSED_TO_META_KEY, type AssembledToolCall, type BrainAction, type BrainActionsContextValue, BrainActionsProvider, type BrainChat, type BrainConfig, BrainContextProvider, type BrainContextValue, type BrainDiagnostics, type BrainMessage, type BrainModality, type BrainPageContext, type BrainPersistenceAdapter, BrainProvider, type BrainRuntime, type BrainToolSpec, type BrainTraceEvent, type BrainTransport, type BuildBrainTriageOptions, CONSOLIDATION_MARKER_PREFIX, CONSOLIDATION_META, type ChatCompletionMessage, type ChatInputAttachment, type ContentPart, type DirectedRecipient, type ImageUrlContentPart, type McpToolResultInfo, type PreparedImage, type StreamChatOptions, type StreamChatResult, type StreamHandlers, type TextContentPart, type UseBrainChats, type UseBrainChatsOptions, type UseBrainConversation, type UseBrainConversationOptions, type UseMcpExtensionsOptions, buildBrainTriageReport, computeBrainDiagnostics, consolidationMarkerContent, consolidationMetadata, formatBrainDiagnostics, isConsolidationMarker, isDirectedToParticipant, isEvermindModel, isFailedToolResult, lastConsolidationIndex, modelsUsedInTrace, parseDirectedRecipient, prepareImageDataUrl, savePendingPrompt, scopeToConsolidation, streamChatCompletion, takePendingPrompt, useBrainActions, useBrainChats, useBrainConfig, useBrainContext, useBrainConversation, useMcpExtensions, useOptionalBrainContext, useRegisterBrainActions, withDirectedMetadata };
+export { ADDRESSED_TO_META_KEY, type AssembledToolCall, type BrainAction, type BrainActionsContextValue, BrainActionsProvider, type BrainChat, type BrainConfig, BrainContextProvider, type BrainContextValue, type BrainDiagnostics, type BrainMessage, type BrainModality, type BrainPageContext, type BrainPersistenceAdapter, BrainProvider, type BrainRuntime, type BrainToolSpec, type BrainTraceEvent, type BrainTransport, type BuildBrainTriageOptions, CONSOLIDATION_MARKER_PREFIX, CONSOLIDATION_META, type ChatCompletionMessage, type ChatInputAttachment, type ContentPart, type DirectedRecipient, type ImageUrlContentPart, type McpToolResultInfo, type PreparedImage, type RecipientChoice, type StreamChatOptions, type StreamChatResult, type StreamHandlers, type TextContentPart, type UseBrainChats, type UseBrainChatsOptions, type UseBrainConversation, type UseBrainConversationOptions, type UseMcpExtensionsOptions, buildBrainTriageReport, computeBrainDiagnostics, consolidationMarkerContent, consolidationMetadata, formatBrainDiagnostics, isConsolidationMarker, isDirectedToParticipant, isEvermindModel, isFailedToolResult, lastConsolidationIndex, mentionRecipient, modelsUsedInTrace, parseDirectedRecipient, prepareImageDataUrl, resolveRecipient, savePendingPrompt, scopeToConsolidation, streamChatCompletion, takePendingPrompt, useBrainActions, useBrainChats, useBrainConfig, useBrainContext, useBrainConversation, useMcpExtensions, useOptionalBrainContext, useRegisterBrainActions, withDirectedMetadata };

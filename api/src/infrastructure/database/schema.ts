@@ -367,6 +367,16 @@ export const llmUsageLog = pgTable('llm_usage_log', {
    *  `paid_overflow_daily_cap` so a Free tenant can't run up arbitrary spend on
    *  our keys via a tight retry loop. */
   paidOverflow:     boolean('paid_overflow').notNull().default(false),
+  /** True when this call was served by the tenant's OWN provider credential — a
+   *  BYO API key or a connected subscription (migration 0284). The platform pays
+   *  nothing for these tokens, so `cost_usd_millicents` is forced to 0, and a BYO
+   *  row on the on-prem / VSIX `surface` is EXEMPT from the plan token allowance
+   *  (see tokenUsage.ts). BYO cloud-agent rows still count (charged). */
+  byo:              boolean('byo').notNull().default(false),
+  /** Which agent modality produced this row (migration 0284): 'web' | 'vsix' |
+   *  'on_prem' | 'cloud' | 'sdk'. Drives the BYO metering exemption above so
+   *  own-machine (on-prem/VSIX) BYO usage is free while cloud BYO is charged. */
+  surface:          varchar('surface', { length: 16 }).notNull().default('web'),
   createdAt:        timestamp('created_at').notNull().defaultNow(),
 });
 

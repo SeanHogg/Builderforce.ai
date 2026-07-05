@@ -4594,9 +4594,11 @@
       "kind": {
         "task": "Aufgabe",
         "epic": "Epic",
+        "gap": "Lücke",
         "objective": "Objective",
         "initiative": "Initiative",
-        "portfolio": "Portfolio"
+        "portfolio": "Portfolio",
+        "roadmap": "Roadmap"
       }
     },
     "approveAll": "Alle genehmigen",
@@ -4628,6 +4630,10 @@
     "defaultBrain": "Standard-Brain",
     "personas": "Personas",
     "assignedAgents": "Zugewiesene Agenten",
+    "to": "An",
+    "brainRecipient": "BuilderForce",
+    "recipientPickerTitle": "Senden an",
+    "messageParticipant": "Nachricht an {name}…",
     "uploading": "Wird hochgeladen…",
     "brainStorm": "Brain Storm",
     "projectLabel": "Projekt",

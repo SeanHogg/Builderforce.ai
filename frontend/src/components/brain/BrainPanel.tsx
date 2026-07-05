@@ -11,7 +11,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import Link from 'next/link';
-import { BrainTimeline } from '@seanhogg/builderforce-brain-ui';
+import { BrainTimeline, Avatar } from '@seanhogg/builderforce-brain-ui';
 import '@seanhogg/builderforce-brain-ui/styles.css';
 import { ChatInput } from '@/components/ChatInput';
 import { ChatMessageContent } from '@/components/ChatMessageContent';
@@ -33,13 +33,17 @@ import {
   BRAIN_AUTO_APPROVE_DIRECTIVE,
   buildComposerDirectives,
   parseSuggestedActions,
+  mentionRecipient,
+  resolveRecipient,
   type SuggestedAction,
   type BrainModality,
   type BrainEffort,
+  type DirectedRecipient,
+  type RecipientChoice,
 } from '@/lib/brain';
 import type { BrainChat, BrainMessage } from '@/lib/builderforceApi';
-import { agentAssignmentsApi, reposApi, runtimeApi, brain, type AgentAssignment, type ProjectRepository } from '@/lib/builderforceApi';
-import { loadAgentPool, type PoolAgent } from '@/lib/agentPool';
+import { agentAssignmentsApi, reposApi, runtimeApi, brain, type AgentAssignment, type ProjectRepository, type ChatAgentInvite } from '@/lib/builderforceApi';
+import { loadAgentPoolCached, type PoolAgent } from '@/lib/agentPool';
 import { MODALITIES, getModality } from '@/lib/modality';
 import { isBrainAutoApprove, setBrainAutoApprove } from '@/lib/brain/autoApprove';
 
@@ -178,7 +182,7 @@ export function BrainPanel({
   const [agentPool, setAgentPool] = useState<PoolAgent[]>([]);
   useEffect(() => {
     let live = true;
-    Promise.all([agentAssignmentsApi.list('brain').catch(() => []), loadAgentPool().catch(() => [])])
+    Promise.all([agentAssignmentsApi.list('brain').catch(() => []), loadAgentPoolCached().catch(() => [])])
       .then(([a, p]) => { if (live) { setBrainAgents(a); setAgentPool(p); } });
     return () => { live = false; };
   }, []);
@@ -280,6 +284,36 @@ export function BrainPanel({
     setAutoApproveMode(true);
     resolveConfirm(true);
   }, [setAutoApproveMode, resolveConfirm]);
+
+  // Multi-party chat: the invited participants of the active chat, resolved to
+  // display names via the (already-loaded, cached) agent pool — so a message can
+  // be addressed to a teammate instead of the BRAIN. Bumped on invite/remove.
+  const activeChatId = chats.activeChat?.id ?? null;
+  const [invitedAgents, setInvitedAgents] = useState<ChatAgentInvite[]>([]);
+  const [participantsRefresh, setParticipantsRefresh] = useState(0);
+  useEffect(() => {
+    if (activeChatId == null) { setInvitedAgents([]); return; }
+    let live = true;
+    brain.listChatAgents(activeChatId).then((a) => { if (live) setInvitedAgents(a); }).catch(() => { if (live) setInvitedAgents([]); });
+    return () => { live = false; };
+  }, [activeChatId, participantsRefresh]);
+  const participants = useMemo<DirectedRecipient[]>(
+    () => invitedAgents.map((a) => ({
+      kind: 'agent' as const,
+      ref: a.agentRef,
+      name: agentPool.find((p) => p.ref === a.agentRef)?.name ?? a.agentRef,
+    })),
+    [invitedAgents, agentPool],
+  );
+  // Who the next message goes to: `null` = auto (follow @mention), `'brain'` =
+  // explicit BRAIN, or an explicit participant. Reset when switching chats; drop
+  // a pick that has since left the roster.
+  const [recipientChoice, setRecipientChoice] = useState<RecipientChoice>(null);
+  useEffect(() => { setRecipientChoice(null); }, [activeChatId]);
+  useEffect(() => {
+    setRecipientChoice((c) => (c && c !== 'brain' && !participants.some((p) => p.ref === c.ref) ? null : c));
+  }, [participants]);
+  const recipient = resolveRecipient(recipientChoice, mentionRecipient(input, participants));
 
   // The project whose repos back "Add context" — the active chat's project takes
   // precedence (a chat can be assigned to a different project than the viewport),
@@ -423,10 +457,11 @@ export function BrainPanel({
     // Audited engagement signal: interacting with the AI agent is billable activity.
     trackActivity('agent_message', { weight: 2 });
     // Restore the text if the send fails before it's persisted (e.g. an expired
-    // session) so the user's message is never silently lost.
-    const ok = await conv.send(text);
+    // session) so the user's message is never silently lost. `addressedTo` routes
+    // the turn: a participant is talked to (no BRAIN run); null runs the BRAIN.
+    const ok = await conv.send(text, { addressedTo: recipient });
     if (!ok) setInput((cur) => cur || text);
-  }, [input, conv]);
+  }, [input, conv, recipient]);
 
   // Capture execution: copy the Brain run's LLM/tool/error trace + transcript to
   // the clipboard — the Brain twin of the Observability/Logs "Copy triage info"
@@ -618,7 +653,7 @@ export function BrainPanel({
               chatId={chats.activeChat.id}
               projectId={chats.activeChat.projectId ?? pinnedProjectId ?? viewingProjectId ?? null}
               chatList={chats.chats}
-              onChanged={() => { void chats.reload(); conv.reloadMessages(); }}
+              onChanged={() => { void chats.reload(); conv.reloadMessages(); setParticipantsRefresh((n) => n + 1); }}
             />
           )}
           {showNewProject && (
@@ -706,12 +741,31 @@ export function BrainPanel({
                   </optgroup>
                 )}
               </Select>
+              {/* Recipient selector — only once the chat is multi-party. Routes the
+                  next message to the BRAIN (executes) or a participant (talked to). */}
+              {participants.length > 0 && (
+                <>
+                  <span style={{ fontSize: 11, color: 'var(--text-muted)', marginLeft: 4 }}>{tBrain('to')}</span>
+                  {recipient && <Avatar name={recipient.name} kind={recipient.kind} size={18} />}
+                  <Select
+                    value={recipient ? recipient.ref : 'brain'}
+                    onChange={(e) => setRecipientChoice(e.target.value === 'brain' ? 'brain' : (participants.find((p) => p.ref === e.target.value) ?? 'brain'))}
+                    aria-label={tBrain('recipientPickerTitle')}
+                    style={{ fontSize: 12, padding: '3px 8px', borderRadius: 6, border: '1px solid var(--border-subtle)', background: 'var(--bg-elevated)', color: 'var(--text-secondary)' }}
+                  >
+                    <option value="brain">{tBrain('brainRecipient')}</option>
+                    {participants.map((p) => (
+                      <option key={p.ref} value={p.ref}>{p.name}</option>
+                    ))}
+                  </Select>
+                </>
+              )}
             </div>
             <ChatInput
               value={input}
               onChange={setInput}
               onSubmit={handleSend}
-              placeholder={tBrain('messagePlaceholder')}
+              placeholder={recipient ? tBrain('messageParticipant', { name: recipient.name }) : tBrain('messagePlaceholder')}
               disabled={conv.sending}
               running={conv.sending}
               onStop={conv.stop}

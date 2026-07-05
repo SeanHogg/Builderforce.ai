@@ -26,6 +26,8 @@ export {
   useMcpExtensions,
   buildBrainTriageReport,
   isFailedToolResult,
+  mentionRecipient,
+  resolveRecipient,
 } from '@seanhogg/builderforce-brain-embedded';
 
 export type {
@@ -53,6 +55,8 @@ export type {
   ChatInputAttachment,
   BrainTraceEvent,
   BuildBrainTriageOptions,
+  DirectedRecipient,
+  RecipientChoice,
 } from '@seanhogg/builderforce-brain-embedded';
 
 // App-specific brain pieces (not part of the portable package).

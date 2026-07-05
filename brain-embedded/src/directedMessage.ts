@@ -60,3 +60,33 @@ export function parseDirectedRecipient(msg: { metadata?: string | null }): Direc
 export function isDirectedToParticipant(msg: { metadata?: string | null }): boolean {
   return parseDirectedRecipient(msg) !== null;
 }
+
+/**
+ * A composer's recipient choice: `null` = auto (follow any leading @mention),
+ * `'brain'` = explicitly the BRAIN, or an explicit participant. An explicit
+ * choice always wins over a typed @mention.
+ */
+export type RecipientChoice = DirectedRecipient | 'brain' | null;
+
+/** Resolve a leading "@name" in composer text to one of `participants`, if any. */
+export function mentionRecipient(text: string, participants: DirectedRecipient[]): DirectedRecipient | null {
+  const m = /^\s*@([^\s@]+)/.exec(text);
+  if (!m) return null;
+  const tag = m[1].toLowerCase();
+  return (
+    participants.find((p) => {
+      const name = p.name.toLowerCase();
+      return name === tag || name.split(/\s+/)[0] === tag || name.startsWith(tag);
+    }) ?? null
+  );
+}
+
+/**
+ * The effective target of the next message: an explicit BRAIN pick wins (→ null,
+ * runs the BRAIN); else an explicit participant; else a leading @mention; else the
+ * BRAIN. Shared by every composer so routing is identical across surfaces.
+ */
+export function resolveRecipient(choice: RecipientChoice, mention: DirectedRecipient | null): DirectedRecipient | null {
+  if (choice === 'brain') return null;
+  return choice ?? mention;
+}

@@ -54,21 +54,24 @@ export class SessionsTreeProvider implements vscode.TreeDataProvider<BfBrainChat
       const project = projectLabel(this.projectNameById, chat.projectId);
       description = project ? (time ? `${project} · ${time}` : project) : time;
     }
-    // Multi-party chat: append the participants' initials so a shared session reads
-    // at a glance (native TreeItems take only text + one icon, so initials go here).
+    // Multi-party chat: show the participants as coloured initial avatars. The row
+    // ICON becomes a composite avatar (up to two overlapping discs — a native
+    // TreeItem takes only one iconPath), and the initials also read in the
+    // description text (16px avatars are small), with full names in the tooltip.
     const names = (chat.participants ?? []).map((p) => this.agentNames.get(p.ref) || p.ref).filter(Boolean);
     if (names.length > 0) {
       const badge = names.slice(0, 3).map(initials).join(" ");
       const extra = names.length > 3 ? ` +${names.length - 3}` : "";
-      description = description ? `${description} · 👥 ${badge}${extra}` : `👥 ${badge}${extra}`;
+      description = description ? `${description} · ${badge}${extra}` : `${badge}${extra}`;
+      item.iconPath = participantAvatarUri(names);
       item.tooltip = new vscode.MarkdownString(
         `${chat.title}\n\n**${vscode.l10n.t("Participants")}:** ${names.join(", ")}`,
       );
     } else {
+      item.iconPath = new vscode.ThemeIcon("comment-discussion");
       item.tooltip = chat.title;
     }
     item.description = description;
-    item.iconPath = new vscode.ThemeIcon("comment-discussion");
     item.contextValue = "builderforceSession";
     item.command = { command: "builderforce.openSession", title: vscode.l10n.t("Open Chat"), arguments: [chat.id] };
     return item;
@@ -104,6 +107,40 @@ function initials(name: string): string {
   if (words.length === 0) return "?";
   if (words.length === 1) return words[0].slice(0, 2).toUpperCase();
   return (words[0][0] + words[1][0]).toUpperCase();
+}
+
+// KEEP IN SYNC with brain-ui `avatarColor` (packages/brain-ui/src/ParticipantBadge.tsx)
+// so the same participant is the same hue in the tree, the composer chip and the
+// transcript badge. WCAG-friendly discs; white text sits at ≥4.5:1 on each.
+const AVATAR_COLORS = ["#2563eb", "#7c3aed", "#db2777", "#dc2626", "#ea580c", "#0891b2", "#059669", "#4f46e5"];
+function avatarColor(seed: string): string {
+  let h = 0;
+  for (let i = 0; i < seed.length; i++) h = (h * 31 + seed.charCodeAt(i)) >>> 0;
+  return AVATAR_COLORS[h % AVATAR_COLORS.length];
+}
+function esc(s: string): string {
+  return s.replace(/[<>&]/g, (c) => (c === "<" ? "&lt;" : c === ">" ? "&gt;" : "&amp;"));
+}
+
+/**
+ * A composite avatar icon for a session row: up to two overlapping coloured discs
+ * with each participant's first initial (a native TreeItem takes only ONE icon).
+ * Returned as a `data:` SVG URI — the tree's supported way to render a custom icon.
+ */
+function participantAvatarUri(names: string[]): vscode.Uri {
+  const first = names.slice(0, 2);
+  const R = 8; // 16x16 canvas
+  const discs = first.map((name, i) => {
+    // One disc → centred; two → offset so they overlap (back one first for z-order).
+    const cx = first.length === 1 ? 8 : i === 0 ? 6 : 10;
+    const glyph = esc(initials(name).slice(0, 1));
+    return (
+      `<circle cx="${cx}" cy="8" r="${R - (first.length > 1 ? 0.5 : 0)}" fill="${avatarColor(name)}" stroke="#00000022" stroke-width="0.5"/>` +
+      `<text x="${cx}" y="11.2" font-family="system-ui,-apple-system,Segoe UI,sans-serif" font-size="8" font-weight="700" fill="#ffffff" text-anchor="middle">${glyph}</text>`
+    );
+  });
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16">${discs.join("")}</svg>`;
+  return vscode.Uri.parse(`data:image/svg+xml;base64,${Buffer.from(svg).toString("base64")}`);
 }
 
 function relativeTime(iso?: string): string {

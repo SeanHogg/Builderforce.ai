@@ -9,13 +9,16 @@ import {
   useMcpExtensions,
   consolidationMarkerContent,
   consolidationMetadata,
+  mentionRecipient,
+  resolveRecipient,
   type BrainConfig,
   type BrainChat,
   type DirectedRecipient,
+  type RecipientChoice,
 } from '@seanhogg/builderforce-brain-embedded';
 import {
-  BrainTimeline, ChatTicketsPanel, DEFAULT_CHAT_TICKETS_LABELS, Avatar,
-  type BrainTimelineLabels, type ChatTicketsAdapter, type AgentOptionVM, type ChatAgentVM,
+  BrainTimeline, ChatTicketsPanel, DEFAULT_CHAT_TICKETS_LABELS, Avatar, useChatParticipants,
+  type BrainTimelineLabels,
 } from '@seanhogg/builderforce-brain-ui';
 import { createChatTicketsAdapter } from './chatTicketsAdapter';
 import {
@@ -180,56 +183,6 @@ function MenuItem({ icon, label, hint, active, onClick }: {
     </button>
   );
 }
-
-/**
- * The invited participants of a chat, resolved to display names, as addressable
- * recipients. Reads the invited list (changes on invite/remove → keyed on
- * `refreshSignal`) and the stable agent pool (cached in the adapter, so this
- * shares the ChatTicketsPanel's fetch rather than duplicating it).
- */
-function useChatParticipants(adapter: ChatTicketsAdapter, chatId: number | null, refreshSignal: number): DirectedRecipient[] {
-  const [pool, setPool] = useState<AgentOptionVM[]>([]);
-  const [invited, setInvited] = useState<ChatAgentVM[]>([]);
-  useEffect(() => {
-    let ok = true;
-    adapter.loadAgentPool().then((p) => { if (ok) setPool(p); }).catch(() => { if (ok) setPool([]); });
-    return () => { ok = false; };
-  }, [adapter]);
-  useEffect(() => {
-    if (chatId == null) { setInvited([]); return; }
-    let ok = true;
-    adapter.listAgents(chatId).then((a) => { if (ok) setInvited(a); }).catch(() => { if (ok) setInvited([]); });
-    return () => { ok = false; };
-  }, [adapter, chatId, refreshSignal]);
-  return useMemo(
-    () => invited.map((a) => ({
-      kind: 'agent' as const,
-      ref: a.agentRef,
-      name: pool.find((p) => p.ref === a.agentRef)?.name ?? a.agentRef,
-    })),
-    [invited, pool],
-  );
-}
-
-/** Resolve a leading "@name" in the composer to an invited participant, if any. */
-function mentionRecipient(text: string, participants: DirectedRecipient[]): DirectedRecipient | null {
-  const m = /^\s*@([^\s@]+)/.exec(text);
-  if (!m) return null;
-  const tag = m[1].toLowerCase();
-  return (
-    participants.find((p) => {
-      const name = p.name.toLowerCase();
-      return name === tag || name.split(/\s+/)[0] === tag || name.startsWith(tag);
-    }) ?? null
-  );
-}
-
-/**
- * A composer's recipient choice: `null` = auto (follow any leading @mention),
- * `'brain'` = explicitly the BRAIN, or an explicit participant. An explicit
- * choice always wins over a typed @mention.
- */
-type RecipientChoice = DirectedRecipient | 'brain' | null;
 
 /** Root: wait for the host's init frame, then mount the brain providers. */
 export function App() {
@@ -452,18 +405,63 @@ function Chat({ init }: { init: InitData }) {
     onActivity: reloadChats,
   });
 
-  // Host-driven intents: the Sessions sidebar / task commands drive this singleton
-  // panel (open a fresh chat, focus an existing one, or seed a task-scoped chat).
+  // Chat↔ticket panel data adapter — same gateway endpoints as the web app's
+  // panel, over the webview's bearer fetch (see chatTicketsAdapter).
+  const ticketAdapter = useMemo(
+    () => createChatTicketsAdapter(init.baseUrl, getToken, () => void refreshToken()),
+    [init.baseUrl],
+  );
+  // Stable references so a keystroke / streaming token doesn't hand the memoized
+  // <ChatTicketsPanel> fresh props and force its whole subtree to re-render.
+  const ticketChatList = useMemo(() => chats.map((c) => ({ id: c.id, title: c.title })), [chats]);
+  const onTicketsChanged = useCallback(() => { reloadChats(); conv.reloadMessages(); }, [reloadChats, conv.reloadMessages]);
+  // Bumped when the Brain mutates work items via MCP tools, so the ticket panel
+  // refreshes live (rings/links) rather than only on its own button actions.
+  const [ticketRefresh, setTicketRefresh] = useState(0);
+
+  // Auto-link the work item that opened this chat (a task/epic/gap from the tree or
+  // board, a roadmap/spec row from a project page) so the chat is tied to it and the
+  // ticket panel shows it — the missing half of "open the item in a chat". Bumps the
+  // refresh signal so the just-mounted panel re-fetches and renders the new link.
+  const linkOpenedTicket = useCallback(
+    async (linkChatId: number, ticket: { kind: string; ref: string }) => {
+      try {
+        await ticketAdapter.linkTicket(linkChatId, { kind: ticket.kind as never, ref: ticket.ref, linkType: 'linked' });
+        setTicketRefresh((n) => n + 1);
+      } catch { /* linking is best-effort — a failed link never blocks the chat */ }
+    },
+    [ticketAdapter],
+  );
+
+  // Host-driven intents: the Sessions sidebar / task + project-page commands drive
+  // this singleton panel (open a fresh chat, focus an existing one, or open a chat
+  // scoped + linked to a work item).
   useEffect(() => {
     return onIntent((intent: BrainIntent) => {
       if (intent.kind === 'new') {
         setChatId(null);
         setInput('');
       } else if (intent.kind === 'seed') {
-        // Fresh chat pre-filled with an editor entry point's prompt (review PRs / fix
-        // errors / open a PR); the user can tweak before sending.
-        setChatId(null);
-        setInput(intent.text ?? '');
+        if (intent.ticket) {
+          // A project-page row (roadmap/spec/…): create the chat eagerly, seed the
+          // prompt, and link the item — the panel then shows the linked ticket.
+          const ticket = intent.ticket;
+          const seedTitle = (ticket.title ?? intent.text ?? t('app.newChat', 'New chat')).slice(0, 60);
+          persistence
+            .createChat({ title: seedTitle, projectId: ticket.projectId ?? init.project?.id ?? null })
+            .then((chat) => {
+              setChatId(chat.id);
+              setInput(intent.text ?? '');
+              reloadChats();
+              void linkOpenedTicket(chat.id, ticket);
+            })
+            .catch(() => {});
+        } else {
+          // Ticket-less editor entry point (review PRs / fix errors / open a PR): open a
+          // fresh chat with the prompt pre-filled; the user can tweak before sending.
+          setChatId(null);
+          setInput(intent.text ?? '');
+        }
       } else if (intent.kind === 'focus' && intent.chatId != null) {
         setChatId(intent.chatId);
       } else if (intent.kind === 'task' && intent.task) {
@@ -479,25 +477,16 @@ function Chat({ init }: { init: InitData }) {
               : t('app.taskSeed', "Let's work on {task}.");
             setInput(template.replace('{task}', taskLabel));
             reloadChats();
+            // Link the task/epic/gap it was opened for (a host-supplied ticket wins;
+            // else derive the kind from the task's own type).
+            const ticket = intent.ticket
+              ?? { kind: task.taskType === 'epic' ? 'epic' : task.taskType === 'gap' ? 'gap' : 'task', ref: String(task.id) };
+            void linkOpenedTicket(chat.id, ticket);
           })
           .catch(() => {});
       }
     });
-  }, [persistence, reloadChats, t]);
-
-  // Chat↔ticket panel data adapter — same gateway endpoints as the web app's
-  // panel, over the webview's bearer fetch (see chatTicketsAdapter).
-  const ticketAdapter = useMemo(
-    () => createChatTicketsAdapter(init.baseUrl, getToken, () => void refreshToken()),
-    [init.baseUrl],
-  );
-  // Stable references so a keystroke / streaming token doesn't hand the memoized
-  // <ChatTicketsPanel> fresh props and force its whole subtree to re-render.
-  const ticketChatList = useMemo(() => chats.map((c) => ({ id: c.id, title: c.title })), [chats]);
-  const onTicketsChanged = useCallback(() => { reloadChats(); conv.reloadMessages(); }, [reloadChats, conv.reloadMessages]);
-  // Bumped when the Brain mutates work items via MCP tools, so the ticket panel
-  // refreshes live (rings/links) rather than only on its own button actions.
-  const [ticketRefresh, setTicketRefresh] = useState(0);
+  }, [persistence, reloadChats, t, linkOpenedTicket, init.project?.id]);
   useEffect(() => {
     const h = () => setTicketRefresh((n) => n + 1);
     window.addEventListener('bf:mcp-write', h);
@@ -517,7 +506,7 @@ function Chat({ init }: { init: InitData }) {
   const mentioned = useMemo(() => mentionRecipient(input, participants), [input, participants]);
   // The effective target: an explicit BRAIN pick wins; else an explicit
   // participant; else a leading @mention; else the BRAIN (null).
-  const recipient: DirectedRecipient | null = recipientChoice === 'brain' ? null : (recipientChoice ?? mentioned);
+  const recipient: DirectedRecipient | null = resolveRecipient(recipientChoice, mentioned);
 
   // Feed the project's Evermind: when a run finishes (sending true→false) with
   // content, hand the host this exchange so it can contribute what was learned back

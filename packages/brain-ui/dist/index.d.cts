@@ -157,10 +157,10 @@ declare function HealthRing({ percent, size, stroke, caption, muted, ariaLabel }
  * presentational + self-managing; each host injects a {@link ChatTicketsAdapter}
  * (its own REST calls) and a {@link ChatTicketsLabels} bundle (its own i18n).
  */
-/** The work-item tiers a chat can be tied to (planning-spine node kinds). */
-type TicketKind = 'portfolio' | 'objective' | 'initiative' | 'epic' | 'task';
+/** The work-item kinds a chat can be tied to (planning spine + roadmap + gap). */
+type TicketKind = 'portfolio' | 'objective' | 'initiative' | 'roadmap' | 'epic' | 'gap' | 'task';
 declare const TICKET_KINDS: TicketKind[];
-/** Only these tiers are runnable (a real board ticket an agent can execute). */
+/** Only these kinds are runnable (a real board ticket an agent can execute). */
 declare const RUNNABLE_KINDS: TicketKind[];
 type LinkType = 'linked' | 'created';
 /** A chat↔ticket link with a live health summary. */
@@ -299,6 +299,18 @@ declare function ChatTicketsPanelInner({ chatId, projectId, chatList, adapter, l
  * props (memoize `chatList` and `onChanged`) for the memo to take effect.
  */
 declare const ChatTicketsPanel: React.MemoExoticComponent<typeof ChatTicketsPanelInner>;
+
+/**
+ * The invited participants of a chat, resolved to display names, as addressable
+ * recipients — the shared source for a composer's recipient picker and any
+ * participant roster. Reads the invited list (changes on invite/remove → keyed on
+ * `refreshSignal`) and the stable agent pool (the adapter caches it, so this
+ * shares the ChatTicketsPanel's fetch rather than duplicating it).
+ *
+ * Lives here (not in a host) so the web app and the VS Code webview derive the
+ * exact same participant set the same way.
+ */
+declare function useChatParticipants(adapter: ChatTicketsAdapter, chatId: number | null, refreshSignal?: number): DirectedRecipient[];
 
 /**
  * Pure transcript view-model — frame-work agnostic so the SAME logic drives the
@@ -555,7 +567,14 @@ declare function Sunburst({ pillars, dimensions, overall, selected, onSelect, ar
  * screen maps its API response into this model, so the transport/theme/empty-error
  * handling is written once (DRY) and the per-view code is just a fetch + a mapper.
  */
+
 type ProjectListTone = 'default' | 'accent' | 'ok' | 'warn' | 'danger' | 'muted';
+/** A work item to auto-link to the chat when the row's action opens one. */
+interface ProjectListTicketRef {
+    kind: TicketKind;
+    ref: string;
+    title?: string;
+}
 interface ProjectListBadge {
     label: string;
     tone?: ProjectListTone;
@@ -571,7 +590,11 @@ interface ProjectListAction {
         id: number;
         key?: string;
         title: string;
+        taskType?: 'task' | 'epic' | 'gap';
     };
+    /** The work item this row represents — the host auto-links it to the opened chat
+     *  so the conversation is tied to (and has context on) the item that spawned it. */
+    ticket?: ProjectListTicketRef;
 }
 interface ProjectListItem {
     id: string | number;
@@ -625,4 +648,4 @@ interface ProjectListViewProps {
 }
 declare function ProjectListView({ title, subtitle, data, loading, error, labels, onAction, onRefresh }: ProjectListViewProps): React.JSX.Element;
 
-export { type AgentOptionVM, Avatar, type AvatarProps, BrainTimeline, type BrainTimelineLabels, type BrainTimelineProps, type BuildTimelineInput, type ChatAgentVM, type ChatOptionVM, type ChatTicketsAdapter, type ChatTicketsLabels, ChatTicketsPanel, type ChatTicketsPanelProps, DEFAULT_CHAT_TICKETS_LABELS, DEFAULT_PROJECT360_LABELS, DEFAULT_PROJECT_LIST_LABELS, DEFAULT_TIMELINE_LABELS, HealthRing, type HealthRingProps, type HealthTier, type LineageVM, type LinkType, Markdown, type MarkdownLabels, type MarkdownProps, ParticipantBadge, type Project360, type Project360Action, type Project360Dimension, type Project360Gap, type Project360Labels, type Project360Member, type Project360Pillar, Project360View, type Project360ViewProps, type ProjectListAction, type ProjectListBadge, type ProjectListGroup, type ProjectListItem, type ProjectListLabels, type ProjectListModel, type ProjectListTone, ProjectListView, type ProjectListViewProps, RUNNABLE_KINDS, Sunburst, type SunburstProps, TICKET_KINDS, type TicketKind, type TicketLinkVM, type TicketOptionVM, type TimelineImage, type TimelineNode, attachmentsOf, avatarColor, buildSettledTimeline, buildTimeline, formatDuration, formatPayload, healthRingColor, initialsOf, streamingNode };
+export { type AgentOptionVM, Avatar, type AvatarProps, BrainTimeline, type BrainTimelineLabels, type BrainTimelineProps, type BuildTimelineInput, type ChatAgentVM, type ChatOptionVM, type ChatTicketsAdapter, type ChatTicketsLabels, ChatTicketsPanel, type ChatTicketsPanelProps, DEFAULT_CHAT_TICKETS_LABELS, DEFAULT_PROJECT360_LABELS, DEFAULT_PROJECT_LIST_LABELS, DEFAULT_TIMELINE_LABELS, HealthRing, type HealthRingProps, type HealthTier, type LineageVM, type LinkType, Markdown, type MarkdownLabels, type MarkdownProps, ParticipantBadge, type Project360, type Project360Action, type Project360Dimension, type Project360Gap, type Project360Labels, type Project360Member, type Project360Pillar, Project360View, type Project360ViewProps, type ProjectListAction, type ProjectListBadge, type ProjectListGroup, type ProjectListItem, type ProjectListLabels, type ProjectListModel, type ProjectListTicketRef, type ProjectListTone, ProjectListView, type ProjectListViewProps, RUNNABLE_KINDS, Sunburst, type SunburstProps, TICKET_KINDS, type TicketKind, type TicketLinkVM, type TicketOptionVM, type TimelineImage, type TimelineNode, attachmentsOf, avatarColor, buildSettledTimeline, buildTimeline, formatDuration, formatPayload, healthRingColor, initialsOf, streamingNode, useChatParticipants };

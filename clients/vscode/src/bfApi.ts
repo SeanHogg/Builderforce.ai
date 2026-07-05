@@ -17,9 +17,9 @@ export interface BfTask {
   priority?: string;
   description?: string | null;
   assignedUserId?: string | null;
-  /** 'task' (default) or 'epic' — an epic decomposes into child tasks. Drives the
-   *  sidebar Hierarchy view (mirrors the API's `taskType`). */
-  taskType?: "task" | "epic";
+  /** 'task' (default), 'epic' (decomposes into child tasks), or 'gap' (a validator-
+   *  minted follow-up). Drives the sidebar Hierarchy view (mirrors the API's `taskType`). */
+  taskType?: "task" | "epic" | "gap";
   /** Parent epic's id (null/undefined for top-level tasks) — the nesting edge for
    *  the Hierarchy view (mirrors the API's `parentTaskId`). */
   parentTaskId?: number | null;

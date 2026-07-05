@@ -12,8 +12,9 @@ import { authedFetch } from './authedFetch';
 
 interface WorkforceAgent { id: string | number; name: string; title?: string; base_model?: string }
 interface RegisteredAgent { id: string | number; name: string; type: string; isActive: boolean }
-interface TaskRow { id: number; key: string; title: string; taskType: 'task' | 'epic' }
+interface TaskRow { id: number; key: string; title: string; taskType: 'task' | 'epic' | 'gap' }
 interface StrategyRow { id: string; title?: string; name?: string }
+interface RoadmapRow { id: string; title?: string }
 
 export function createChatTicketsAdapter(
   baseUrl: string,
@@ -67,20 +68,26 @@ export function createChatTicketsAdapter(
     },
     loadTicketOptions: async (projectId): Promise<Record<TicketKind, TicketOptionVM[]>> => {
       const q = projectId != null ? `?project_id=${projectId}` : '';
-      const [tasks, objectives, initiatives, portfolios] = await Promise.all([
+      const [tasks, objectives, initiatives, portfolios, roadmap] = await Promise.all([
         req<{ tasks: TaskRow[] }>(`/api/tasks${q}`).then((r) => r.tasks ?? []).catch(() => [] as TaskRow[]),
         req<StrategyRow[]>('/api/pmo/objectives').catch(() => [] as StrategyRow[]),
         req<StrategyRow[]>('/api/pmo/initiatives').catch(() => [] as StrategyRow[]),
         req<StrategyRow[]>('/api/pmo/portfolios').catch(() => [] as StrategyRow[]),
+        req<RoadmapRow[]>(`/api/product/roadmap${projectId != null ? `?project=${projectId}` : ''}`).catch(() => [] as RoadmapRow[]),
       ]);
       const task: TicketOptionVM[] = [];
       const epic: TicketOptionVM[] = [];
-      for (const tk of tasks) (tk.taskType === 'epic' ? epic : task).push({ ref: String(tk.id), label: `${tk.key} — ${tk.title}` });
+      const gap: TicketOptionVM[] = [];
+      for (const tk of tasks) {
+        const bucket = tk.taskType === 'epic' ? epic : tk.taskType === 'gap' ? gap : task;
+        bucket.push({ ref: String(tk.id), label: `${tk.key} — ${tk.title}` });
+      }
       return {
-        task, epic,
+        task, epic, gap,
         objective: objectives.map((o) => ({ ref: o.id, label: o.title ?? o.id })),
         initiative: initiatives.map((i) => ({ ref: i.id, label: i.name ?? i.id })),
         portfolio: portfolios.map((p) => ({ ref: p.id, label: p.name ?? p.id })),
+        roadmap: roadmap.map((r) => ({ ref: r.id, label: r.title ?? r.id })),
       };
     },
     runTicket: async (_kind, ref, agentRef) => {

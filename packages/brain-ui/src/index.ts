@@ -21,6 +21,7 @@ export type { HealthRingProps } from './HealthRing';
 
 export { ChatTicketsPanel } from './chatTickets/ChatTicketsPanel';
 export type { ChatTicketsPanelProps } from './chatTickets/ChatTicketsPanel';
+export { useChatParticipants } from './chatTickets/useChatParticipants';
 export { DEFAULT_CHAT_TICKETS_LABELS, TICKET_KINDS, RUNNABLE_KINDS } from './chatTickets/types';
 export type {
   ChatTicketsAdapter,
@@ -70,6 +71,7 @@ export type {
   ProjectListItem,
   ProjectListBadge,
   ProjectListAction,
+  ProjectListTicketRef,
   ProjectListLabels,
   ProjectListTone,
 } from './projectList/types';
