@@ -995,6 +995,37 @@ export const REGISTER_MARKETING: Record<'standard' | 'freelancer', RegisterMarke
   },
 };
 
+/**
+ * Login page — right-hand marketing panel. Login has no account-type chooser, so
+ * it's a single variant (reusing the register panel's shape so the two auth
+ * surfaces stay visually identical). Copy is welcome-back framed but still sells
+ * the platform to logged-out visitors who land here. Uses the `standard`
+ * MarketingVisual (the agent-workforce graph).
+ */
+export const LOGIN_MARKETING: RegisterMarketingVariant = {
+  eyebrow: 'Welcome back',
+  heading: 'Pick Up Right Where You Left Off',
+  intro:
+    'Sign in to your AI agent workspace — your trained models, live Kanban board, and the whole agent workforce are exactly where you left them.',
+  stats: [
+    { value: '$0', label: 'Free forever' },
+    { value: '<60s', label: 'To sign in' },
+    { value: '2B+', label: 'Params in-browser' },
+    { value: '0%', label: 'Agent commission' },
+  ],
+  bullets: [
+    { icon: '🧠', title: 'Evermind', desc: 'A self-updating model that learns as it works and never goes stale.' },
+    { icon: '🔁', title: 'Your trained agents', desc: 'Call the specialists you fine-tuned with WebGPU LoRA, right where you left them.' },
+    { icon: '▦', title: 'Live Kanban workforce', desc: 'Humans and AI agents ship on the same board, backlog to done.' },
+    { icon: '🧩', title: 'Never leave VS Code', desc: 'Chat, assign, review, and approve — all inside your editor.' },
+    { icon: '🔑', title: 'Passwordless sign-in', desc: 'Magic links and OAuth with Google, GitHub, LinkedIn, and Microsoft.' },
+    { icon: '🧪', title: 'Agentic Tester', desc: 'An autonomous QA agent that browser-tests your app and files bugs.' },
+  ],
+  quote:
+    'Your work stays yours — Builderforce runs training on your local WebGPU device at zero cost, with no GPU bills and no vendor lock-in.',
+  faq: LOGIN_FAQ,
+};
+
 /** Blog index FAQ */
 export const BLOG_FAQ: FaqItem[] = [
   {

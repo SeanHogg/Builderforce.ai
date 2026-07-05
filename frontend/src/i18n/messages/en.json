@@ -776,9 +776,9 @@
     "meter": {
       "ai_tokens": "AI tokens",
       "cloud_runs": "Cloud runs",
-      "ingestion": "Data ingestion",
-      "error_events": "Error events",
-      "outbound_fetches": "Web fetches"
+      "ingestion": "Data",
+      "error_events": "Errors",
+      "outbound_fetches": "Uptime"
     },
     "unlimited": "Unlimited",
     "freePerMo": "{amount} free / mo",
@@ -788,7 +788,10 @@
     "seePlans": "See plans",
     "manage": "Manage",
     "trendAria": "Daily usage trend",
-    "openReport": "Open {meter} report"
+    "openReport": "Open {meter} report",
+    "configure": "Configure {meter}",
+    "expandSection": "Expand usage",
+    "collapseSection": "Collapse usage"
   },
   "aiUsageCard": {
     "title": "AI usage this month",
@@ -7120,18 +7123,10 @@
     "magicLinkButton": "Email me a magic link instead",
     "noAccount": "Don't have an account?",
     "signUpLink": "Sign up free",
-    "marketingHeading": "Build, Train & Deploy AI Agents",
-    "statFreeLabel": "Free forever",
-    "statSetupLabel": "Setup time",
-    "statCommissionLabel": "Commission",
-    "statParamsLabel": "Params in-browser",
-    "featWebgpu": "WebGPU LoRA fine-tuning in-browser",
-    "featDataset": "Dataset generation from a single prompt",
-    "featEval": "AI evaluation with structured quality metrics",
-    "featRegistry": "Publish to the global Workforce Registry",
-    "featOauth": "OAuth sign-in (Google, GitHub, LinkedIn, Microsoft)",
-    "featFree": "No credit card required — free forever",
-    "commonQuestions": "Common Questions"
+    "commonQuestions": "Common Questions",
+    "pillLora": "🧠 LoRA Training",
+    "pillRegistry": "🤖 Agent Registry",
+    "pillEval": "🔬 AI Evaluation"
   },
   "gigs": {
     "publish": {

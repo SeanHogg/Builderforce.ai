@@ -2,14 +2,15 @@
 
 import Link from 'next/link';
 import { useTranslations } from 'next-intl';
-import { useWorkforcePresence, type PresenceAgent } from '@/lib/useWorkforcePresence';
+import type { PresenceAgent, WorkforcePresence } from '@/lib/useWorkforcePresence';
 
 /**
  * "Who's online" — a live at-a-glance strip of the workforce present right now:
  * humans online (in the IDE or on the web) and agents (idle or actively working
- * a task). Self-contained (owns its data via useWorkforcePresence) so it can be
- * dropped anywhere; renders a compact empty state rather than hiding, since on
- * the dashboard "no one online" is itself useful information.
+ * a task). Presentation-only: it takes an already-fetched presence roster (from
+ * useWorkforcePresence) so a parent that already holds one reuses that single
+ * poll instead of starting a second. Renders a compact empty state rather than
+ * hiding, since on the dashboard "no one online" is itself useful information.
  */
 
 function elapsedLabel(ms: number | null | undefined): string | null {
@@ -46,10 +47,13 @@ function AgentRow({ a, tAgent }: { a: PresenceAgent; tAgent: (key: string, value
   );
 }
 
-export function WorkforcePresenceStrip() {
+/** Presentational strip — render from an already-fetched presence roster so the
+ *  parent that already holds one (the dashboard metric tile) reuses that single
+ *  hook instance instead of spinning up a second poll. */
+export function WorkforcePresenceStripView({ presence }: { presence: WorkforcePresence }) {
   const t = useTranslations('dashboard');
   const tAgent = (key: string, values?: Record<string, string | number>) => t(`presence.agent.${key}`, values);
-  const { people, agents, workingCount, onlineCount, loading } = useWorkforcePresence();
+  const { people, agents, workingCount, onlineCount, loading } = presence;
 
   return (
     <section

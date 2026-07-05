@@ -199,6 +199,15 @@ jobs:
     secrets:
       NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
 
+  publish-quality:
+    name: Publish Quality SDK (@seanhogg/builderforce-quality)
+    uses: ./.github/workflows/publish-npm-package.yml
+    with:
+      package-dir: browser-sdk
+      package-name: '@seanhogg/builderforce-quality'
+    secrets:
+      NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+
   deploy-docs:
     name: Deploy Docs (builderforce.ai/docs)
     runs-on: ubuntu-latest

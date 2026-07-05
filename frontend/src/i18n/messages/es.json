@@ -776,9 +776,9 @@
     "meter": {
       "ai_tokens": "Tokens de IA",
       "cloud_runs": "Ejecuciones en la nube",
-      "ingestion": "Ingesta de datos",
-      "error_events": "Eventos de error",
-      "outbound_fetches": "Solicitudes web"
+      "ingestion": "Datos",
+      "error_events": "Errores",
+      "outbound_fetches": "Disponibilidad"
     },
     "unlimited": "Ilimitado",
     "freePerMo": "{amount} gratis / mes",
@@ -788,7 +788,10 @@
     "seePlans": "Ver planes",
     "manage": "Gestionar",
     "trendAria": "Tendencia de uso diario",
-    "openReport": "Abrir el informe de {meter}"
+    "openReport": "Abrir el informe de {meter}",
+    "configure": "Configurar {meter}",
+    "expandSection": "Expandir uso",
+    "collapseSection": "Contraer uso"
   },
   "aiUsageCard": {
     "title": "Uso de IA este mes",
@@ -7120,18 +7123,10 @@
     "magicLinkButton": "Envíame un enlace mágico por correo",
     "noAccount": "¿No tienes una cuenta?",
     "signUpLink": "Regístrate gratis",
-    "marketingHeading": "Crea, entrena e implementa agentes de IA",
-    "statFreeLabel": "Gratis para siempre",
-    "statSetupLabel": "Tiempo de configuración",
-    "statCommissionLabel": "Comisión",
-    "statParamsLabel": "Parámetros en el navegador",
-    "featWebgpu": "Ajuste fino LoRA con WebGPU en el navegador",
-    "featDataset": "Generación de conjuntos de datos a partir de un solo prompt",
-    "featEval": "Evaluación de IA con métricas de calidad estructuradas",
-    "featRegistry": "Publica en el Registro global de fuerza laboral",
-    "featOauth": "Inicio de sesión con OAuth (Google, GitHub, LinkedIn, Microsoft)",
-    "featFree": "Sin tarjeta de crédito: gratis para siempre",
-    "commonQuestions": "Preguntas frecuentes"
+    "commonQuestions": "Preguntas frecuentes",
+    "pillLora": "🧠 Entrenamiento LoRA",
+    "pillRegistry": "🤖 Registro de agentes",
+    "pillEval": "🔬 Evaluación de IA"
   },
   "gigs": {
     "publish": {

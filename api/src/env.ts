@@ -10,6 +10,11 @@ export interface Env {
   ENVIRONMENT: string;
   /** Secret used to sign JWTs.  Set via `wrangler secret put JWT_SECRET`. */
   JWT_SECRET: string;
+  /** Quality ingest key (bfq_…) for DOGFOODING — the API ships its OWN unhandled
+   *  500s to the Product Quality pillar via the public /api/quality-ingest endpoint
+   *  (the same SDK path any customer uses). Unbound → self-reporting is skipped.
+   *  Set via `wrangler secret put BUILDERFORCE_ERROR_API_KEY`. */
+  BUILDERFORCE_ERROR_API_KEY?: string;
   /** OpenRouter API key — drives builderforceLLM (Free plan) and IDE chat. Required for /api/ai/chat.
    *  Set via `wrangler secret put OPENROUTER_API_KEY` (or api/.env + `npm run secrets:from-env`). */
   OPENROUTER_API_KEY?: string;
