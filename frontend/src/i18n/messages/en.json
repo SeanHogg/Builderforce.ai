@@ -2432,11 +2432,11 @@
       "projectsActive": "{count} active",
       "tasks": "Tasks",
       "tasksInProgress": "{count} in progress",
-      "agentsOnline": "Agents online",
-      "agentsRegistered": "{count} registered",
       "pendingRequests": "Pending requests",
       "requiresReview": "requires review",
-      "allClear": "all clear"
+      "allClear": "all clear",
+      "workforceOnline": "Talent / Workforce online",
+      "workingNow": "{count} working now"
     },
     "tabs": {
       "projects": "Projects",
@@ -2470,6 +2470,24 @@
         "sop": "SOP",
         "process": "Process",
         "doc": "Doc"
+      }
+    },
+    "presence": {
+      "title": "Who's online",
+      "loading": "Loading…",
+      "summary": "{online} online · {working} working",
+      "empty": "No one online right now.",
+      "peopleHeading": "People ({count})",
+      "agentsHeading": "Agents ({count})",
+      "noPeople": "No people online.",
+      "noAgents": "No agents online.",
+      "inIde": "In the IDE",
+      "activeSession": "Active session",
+      "manage": "Manage workforce",
+      "agent": {
+        "online": "Online",
+        "working": "Working",
+        "workingOn": "Working on {task}"
       }
     }
   },
@@ -5870,6 +5888,50 @@
       "audit": "Audit Log",
       "apiKeys": "API Keys",
       "token": "Superadmin Token"
+    },
+    "common": {
+      "loading": "Loading…",
+      "available": "Available",
+      "unavailable": "Unavailable (rate limit or error)",
+      "cooldownUntil": "Cooldown until {time}",
+      "cooldown": "cooldown",
+      "refresh": "Refresh",
+      "cancel": "Cancel",
+      "save": "Save",
+      "saving": "Saving…",
+      "create": "Create",
+      "creating": "Creating…",
+      "update": "Update",
+      "updating": "Updating…",
+      "remove": "Delete",
+      "edit": "Edit",
+      "close": "Close",
+      "search": "Search",
+      "searchRefresh": "Search / Refresh",
+      "filter": "Filter",
+      "exportCsv": "Export CSV",
+      "exporting": "Exporting…",
+      "prev": "← Prev",
+      "next": "Next →",
+      "noResults": "No results.",
+      "details": "Details",
+      "hideDetails": "Hide details",
+      "copy": "Copy",
+      "copied": "Copied!"
+    },
+    "emulate": {
+      "loadWorkspacesFailed": "Failed to load user workspaces",
+      "title": "Emulate User",
+      "intro": "Start an emulation session as <strong>{email}</strong> using their default workspace and assigned role. You will be taken to the dashboard with an amber emulation bar.",
+      "loadingWorkspace": "Loading workspace…",
+      "noWorkspaces": "This user has no active workspaces.",
+      "workspace": "Workspace:",
+      "role": "Role:",
+      "reason": "Reason",
+      "reasonPlaceholder": "Brief reason for this emulation session (required)…",
+      "debuggerOverlay": "Enable permission debugger overlay",
+      "start": "Start Emulation",
+      "starting": "Starting…"
     }
   },
   "providerKeys": {

@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
+import { useTranslations } from 'next-intl';
 import { adminApi, type LegalDocument } from '@/lib/adminApi';
 import { SlideOutPanel } from '@/components/SlideOutPanel';
 import { LegalDocPreview } from '@/components/admin/LegalDocPreview';
@@ -20,11 +21,6 @@ interface LegalEditorDrawerProps {
   onPublished: () => void | Promise<void>;
 }
 
-const DOC_LABEL: Record<LegalEditorContext['docType'], string> = {
-  terms: 'Terms of Use',
-  privacy: 'Privacy Policy',
-};
-
 /** Bump the trailing numeric segment of a semver-ish version (1.0.0 -> 1.0.1). */
 function bumpPatch(version: string): string {
   const parts = version.split('.');
@@ -36,6 +32,11 @@ function bumpPatch(version: string): string {
 }
 
 export function LegalEditorDrawer({ context, onClose, onPublished }: LegalEditorDrawerProps) {
+  const t = useTranslations('admin');
+  const DOC_LABEL: Record<LegalEditorContext['docType'], string> = {
+    terms: t('legal.editor.termsLabel'),
+    privacy: t('legal.editor.privacyLabel'),
+  };
   const [version, setVersion] = useState('');
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
@@ -68,7 +69,7 @@ export function LegalEditorDrawer({ context, onClose, onPublished }: LegalEditor
 
   const handleSave = async () => {
     if (!context || !canSave) {
-      setError('Version and content are required.');
+      setError(t('legal.editor.versionContentRequired'));
       return;
     }
     setSaving(true);
@@ -100,7 +101,7 @@ export function LegalEditorDrawer({ context, onClose, onPublished }: LegalEditor
     <SlideOutPanel
       open={!!context}
       onClose={onClose}
-      title={`${mode === 'edit' ? 'Edit' : 'New version'} · ${label}`}
+      title={`${mode === 'edit' ? t('common.edit') : t('legal.newVersion')} · ${label}`}
       width="min(680px, 96vw)"
       headerActions={
         <button
@@ -109,7 +110,7 @@ export function LegalEditorDrawer({ context, onClose, onPublished }: LegalEditor
           onClick={() => setPreview((p) => !p)}
           disabled={!content.trim()}
         >
-          {preview ? '✎ Edit' : '👁 Preview'}
+          {preview ? `✎ ${t('common.edit')}` : `👁 ${t('legal.editor.preview')}`}
         </button>
       }
     >
@@ -117,17 +118,17 @@ export function LegalEditorDrawer({ context, onClose, onPublished }: LegalEditor
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16, height: '100%' }}>
           <div className="text-muted" style={{ fontSize: 12 }}>
             {mode === 'edit'
-              ? 'Amend the active document in place (no new version is minted unless you change the version number).'
-              : 'Draft a new version. Publishing makes it the active document. Markdown is supported.'}
+              ? t('legal.editor.amendHint')
+              : t('legal.editor.newHint')}
           </div>
 
           {error && <div className="admin-error">{error}</div>}
 
           <div>
-            <div className="health-label" style={{ marginBottom: 4 }}>Version</div>
+            <div className="health-label" style={{ marginBottom: 4 }}>{t('legal.editor.versionLabel')}</div>
             <input
               type="text"
-              placeholder="e.g. 1.0.1"
+              placeholder={t('legal.editor.versionPlaceholder')}
               value={version}
               onChange={(e) => setVersion(e.target.value)}
               className="admin-select"
@@ -136,10 +137,10 @@ export function LegalEditorDrawer({ context, onClose, onPublished }: LegalEditor
           </div>
 
           <div>
-            <div className="health-label" style={{ marginBottom: 4 }}>Title</div>
+            <div className="health-label" style={{ marginBottom: 4 }}>{t('legal.editor.titleLabel')}</div>
             <input
               type="text"
-              placeholder="Title"
+              placeholder={t('legal.editor.titlePlaceholder')}
               value={title}
               onChange={(e) => setTitle(e.target.value)}
               className="admin-select"
@@ -149,7 +150,7 @@ export function LegalEditorDrawer({ context, onClose, onPublished }: LegalEditor
 
           <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 220 }}>
             <div className="health-label" style={{ marginBottom: 4 }}>
-              Content (Markdown){preview ? ' — preview' : ''}
+              {t('legal.editor.contentLabel')}{preview ? t('legal.editor.previewSuffix') : ''}
             </div>
             {preview ? (
               <div
@@ -166,7 +167,7 @@ export function LegalEditorDrawer({ context, onClose, onPublished }: LegalEditor
               </div>
             ) : (
               <textarea
-                placeholder="Full document text (Markdown supported)"
+                placeholder={t('legal.editor.contentPlaceholder')}
                 value={content}
                 onChange={(e) => setContent(e.target.value)}
                 className="admin-token-textarea"
@@ -177,7 +178,7 @@ export function LegalEditorDrawer({ context, onClose, onPublished }: LegalEditor
 
           <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
             <button type="button" className="btn-ghost" onClick={onClose} disabled={saving}>
-              Cancel
+              {t('common.cancel')}
             </button>
             <button
               type="button"
@@ -186,10 +187,10 @@ export function LegalEditorDrawer({ context, onClose, onPublished }: LegalEditor
               disabled={saving || !canSave}
             >
               {saving
-                ? 'Saving…'
+                ? t('common.saving')
                 : mode === 'edit'
-                  ? 'Save changes'
-                  : 'Publish as active'}
+                  ? t('legal.editor.saveChanges')
+                  : t('legal.editor.publishAsActive')}
             </button>
           </div>
         </div>

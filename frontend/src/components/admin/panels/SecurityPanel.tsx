@@ -11,6 +11,7 @@
  */
 
 import React, { useCallback, useEffect, useState } from 'react';
+import { useTranslations } from 'next-intl';
 import {
   adminApi,
   type AdminTenant,
@@ -21,6 +22,7 @@ import { Select } from '@/components/Select';
 import { AdminError, errText, fmtDateTime } from '../adminShared';
 
 export default function SecurityPanel() {
+  const t = useTranslations('admin');
   const [tenants, setTenants] = useState<AdminTenant[]>([]);
   const [securityTenantId, setSecurityTenantId] = useState<number | null>(null);
   const [securityUsers, setSecurityUsers] = useState<AdminSecurityUser[]>([]);
@@ -98,34 +100,34 @@ export default function SecurityPanel() {
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
       <AdminError message={errorMsg} />
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-        <label className="text-muted" style={{ fontSize: 14 }}>Workspace</label>
+        <label className="text-muted" style={{ fontSize: 14 }}>{t('security.workspace')}</label>
         <Select
           className="admin-select"
           value={securityTenantId ?? ''}
           onChange={(e) => handleSecurityTenantChange(Number(e.target.value) || null)}
         >
-          <option value="">Select…</option>
+          <option value="">{t('security.selectPlaceholder')}</option>
           {tenants.map((t) => (
             <option key={t.id} value={t.id}>{t.name}</option>
           ))}
         </Select>
         {securityTenantId && (
           <>
-            <label className="text-muted" style={{ fontSize: 14 }}>User</label>
+            <label className="text-muted" style={{ fontSize: 14 }}>{t('security.user')}</label>
             <Select
               className="admin-select"
               value={securityUserId ?? ''}
               onChange={(e) => handleSecurityUserSelect(e.target.value || null)}
               style={{ minWidth: 200 }}
             >
-              <option value="">Select user…</option>
+              <option value="">{t('security.selectUserPlaceholder')}</option>
               {securityUsers.map((u) => (
                 <option key={u.id} value={u.id}>{u.email}</option>
               ))}
             </Select>
           </>
         )}
-        <button type="button" className="btn-ghost" onClick={reload} disabled={loading}>↻ Refresh</button>
+        <button type="button" className="btn-ghost" onClick={reload} disabled={loading}>↻ {t('common.refresh')}</button>
       </div>
       {securityTenantId && (
         <>
@@ -133,10 +135,10 @@ export default function SecurityPanel() {
             <table className="data-table">
               <thead>
                 <tr>
-                  <th>Email</th>
-                  <th>MFA</th>
-                  <th>Sessions</th>
-                  <th>Tokens</th>
+                  <th>{t('security.colEmail')}</th>
+                  <th>{t('security.colMfa')}</th>
+                  <th>{t('security.colSessions')}</th>
+                  <th>{t('security.colTokens')}</th>
                   <th></th>
                 </tr>
               </thead>
@@ -153,7 +155,7 @@ export default function SecurityPanel() {
                         className="btn-ghost"
                         onClick={() => handleSecurityUserSelect(securityUserId === u.id ? null : u.id)}
                       >
-                        {securityUserId === u.id ? 'Hide details' : 'Details'}
+                        {securityUserId === u.id ? t('common.hideDetails') : t('common.details')}
                       </button>
                     </td>
                   </tr>
@@ -165,24 +167,24 @@ export default function SecurityPanel() {
             <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
               <div className="health-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 140px), 1fr))' }}>
                 <div className="health-card" style={{ padding: 12 }}>
-                  <div className="health-label">User</div>
+                  <div className="health-label">{t('security.cardUser')}</div>
                   <div style={{ fontSize: 14 }}>{securityDetails.user.email}</div>
                 </div>
                 <div className="health-card" style={{ padding: 12 }}>
-                  <div className="health-label">MFA</div>
-                  <div style={{ fontSize: 14 }}>{securityDetails.mfa.enabled ? 'Enabled' : 'Off'}</div>
+                  <div className="health-label">{t('security.cardMfa')}</div>
+                  <div style={{ fontSize: 14 }}>{securityDetails.mfa.enabled ? t('security.enabled') : t('security.off')}</div>
                 </div>
                 <div className="health-card" style={{ padding: 12 }}>
-                  <div className="health-label">Active sessions</div>
+                  <div className="health-label">{t('security.cardActiveSessions')}</div>
                   <div className="health-value">{securityDetails.sessions.length}</div>
                 </div>
                 <div className="health-card" style={{ padding: 12 }}>
-                  <div className="health-label">Active tokens</div>
+                  <div className="health-label">{t('security.cardActiveTokens')}</div>
                   <div className="health-value">{securityDetails.tokens.length}</div>
                 </div>
               </div>
               <div className="health-card" style={{ padding: 16 }}>
-                <div className="health-label" style={{ marginBottom: 12 }}>MFA</div>
+                <div className="health-label" style={{ marginBottom: 12 }}>{t('security.mfaHeading')}</div>
                 {!securityDetails.mfa.enabled && !securityDetails.mfa.setupPending && (
                   <button
                     type="button"
@@ -193,28 +195,28 @@ export default function SecurityPanel() {
                         const r = await adminApi.securityMfaSetup(securityTenantId!, securityUserId!);
                         setSecurityMfaManualKey(r.manualEntryKey ?? '');
                         window.open(r.otpauthUrl);
-                        setErrorMsg('Scan QR in the opened tab (or use manual key below). Enter 6-digit code and click Enable MFA.');
+                        setErrorMsg(t('security.scanQrInstruction'));
                         handleSecurityUserSelect(securityUserId);
                       } catch (e) {
                         setErrorMsg(e instanceof Error ? e.message : String(e));
                       }
                     }}
                   >
-                    Set up MFA
+                    {t('security.setUpMfa')}
                   </button>
                 )}
                 {!securityDetails.mfa.enabled && securityDetails.mfa.setupPending && (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                     {securityMfaManualKey && (
                       <div style={{ fontSize: 12 }}>
-                        <span className="text-muted">Manual entry key: </span>
+                        <span className="text-muted">{t('security.manualEntryKey')} </span>
                         <code style={{ background: 'var(--bg-elevated)', padding: '2px 6px', borderRadius: 4 }}>{securityMfaManualKey}</code>
                       </div>
                     )}
                     <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
                       <input
                         type="text"
-                        placeholder="6-digit code"
+                        placeholder={t('security.sixDigitCode')}
                         value={securityMfaCode}
                         onChange={(e) => setSecurityMfaCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
                         className="admin-select"
@@ -238,7 +240,7 @@ export default function SecurityPanel() {
                           }
                         }}
                       >
-                        Enable MFA
+                        {t('security.enableMfa')}
                       </button>
                     </div>
                   </div>
@@ -246,19 +248,19 @@ export default function SecurityPanel() {
                 {securityDetails.mfa.enabled && (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                     <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-                      <label className="text-muted" style={{ fontSize: 12 }}>Disable with:</label>
+                      <label className="text-muted" style={{ fontSize: 12 }}>{t('security.disableWith')}</label>
                       <Select
                         className="admin-select"
                         value={securityMfaMode}
                         onChange={(e) => setSecurityMfaMode(e.target.value as 'totp' | 'recovery')}
                         style={{ width: 100 }}
                       >
-                        <option value="totp">TOTP code</option>
-                        <option value="recovery">Recovery code</option>
+                        <option value="totp">{t('security.totpCode')}</option>
+                        <option value="recovery">{t('security.recoveryCode')}</option>
                       </Select>
                       <input
                         type="text"
-                        placeholder={securityMfaMode === 'totp' ? '6-digit code' : 'Recovery code'}
+                        placeholder={securityMfaMode === 'totp' ? t('security.sixDigitCode') : t('security.recoveryCode')}
                         value={securityMfaMode === 'totp' ? securityMfaCode : securityRecoveryCode}
                         onChange={(e) =>
                           securityMfaMode === 'totp'
@@ -283,14 +285,14 @@ export default function SecurityPanel() {
                           }
                         }}
                       >
-                        Disable MFA
+                        {t('security.disableMfa')}
                       </button>
                     </div>
                     <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-                      <span className="text-muted" style={{ fontSize: 12 }}>Regenerate recovery codes:</span>
+                      <span className="text-muted" style={{ fontSize: 12 }}>{t('security.regenerateRecoveryCodes')}</span>
                       <input
                         type="text"
-                        placeholder={securityMfaMode === 'totp' ? '6-digit code' : 'Recovery code'}
+                        placeholder={securityMfaMode === 'totp' ? t('security.sixDigitCode') : t('security.recoveryCode')}
                         value={securityMfaMode === 'totp' ? securityMfaCode : securityRecoveryCode}
                         onChange={(e) =>
                           securityMfaMode === 'totp'
@@ -314,12 +316,12 @@ export default function SecurityPanel() {
                           }
                         }}
                       >
-                        Regenerate
+                        {t('security.regenerate')}
                       </button>
                     </div>
                     {securityRecoveryCodes.length > 0 && (
                       <div style={{ fontSize: 12 }}>
-                        <div className="health-label">Recovery codes (save these)</div>
+                        <div className="health-label">{t('security.recoveryCodesSave')}</div>
                         <pre style={{ background: 'var(--bg-elevated)', padding: 12, borderRadius: 8, overflow: 'auto' }}>{securityRecoveryCodes.join('\n')}</pre>
                         <button
                           type="button"
@@ -334,7 +336,7 @@ export default function SecurityPanel() {
                             URL.revokeObjectURL(a.href);
                           }}
                         >
-                          Download recovery codes
+                          {t('security.downloadRecoveryCodes')}
                         </button>
                       </div>
                     )}
@@ -343,7 +345,7 @@ export default function SecurityPanel() {
               </div>
               <div className="health-card" style={{ padding: 16 }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-                  <div className="health-label">Sessions</div>
+                  <div className="health-label">{t('security.sessionsHeading')}</div>
                   <button
                     type="button"
                     className="btn-ghost"
@@ -357,18 +359,18 @@ export default function SecurityPanel() {
                       }
                     }}
                   >
-                    Revoke all sessions
+                    {t('security.revokeAllSessions')}
                   </button>
                 </div>
                 <div className="table-wrap">
                   <table className="data-table" style={{ fontSize: 13 }}>
                     <thead>
                       <tr>
-                        <th>Name</th>
-                        <th>User agent</th>
-                        <th>IP</th>
-                        <th>Tokens</th>
-                        <th>Last seen</th>
+                        <th>{t('security.colName')}</th>
+                        <th>{t('security.colUserAgent')}</th>
+                        <th>{t('security.colIp')}</th>
+                        <th>{t('security.colTokens')}</th>
+                        <th>{t('security.colLastSeen')}</th>
                         <th></th>
                       </tr>
                     </thead>
@@ -394,7 +396,7 @@ export default function SecurityPanel() {
                                 }
                               }}
                             >
-                              Revoke
+                              {t('security.revoke')}
                             </button>
                           </td>
                         </tr>
@@ -404,16 +406,16 @@ export default function SecurityPanel() {
                 </div>
               </div>
               <div className="health-card" style={{ padding: 16 }}>
-                <div className="health-label" style={{ marginBottom: 12 }}>JWT tokens</div>
+                <div className="health-label" style={{ marginBottom: 12 }}>{t('security.jwtTokensHeading')}</div>
                 <div className="table-wrap">
                   <table className="data-table" style={{ fontSize: 13 }}>
                     <thead>
                       <tr>
-                        <th>jti</th>
-                        <th>Type</th>
-                        <th>Tenant</th>
-                        <th>Expires</th>
-                        <th>Active</th>
+                        <th>{t('security.colJti')}</th>
+                        <th>{t('security.colType')}</th>
+                        <th>{t('security.colTenant')}</th>
+                        <th>{t('security.colExpires')}</th>
+                        <th>{t('security.colActive')}</th>
                         <th></th>
                       </tr>
                     </thead>
@@ -439,7 +441,7 @@ export default function SecurityPanel() {
                                 }
                               }}
                             >
-                              Revoke
+                              {t('security.revoke')}
                             </button>
                           </td>
                         </tr>

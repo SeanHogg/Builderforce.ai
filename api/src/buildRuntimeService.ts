@@ -33,7 +33,7 @@ export function buildRuntimeService(env: Env, db: Db): RuntimeService {
     new ExecutionRepository(db),
     new TaskRepository(db),
     new AgentRepository(db),
-    new AuditRepository(db),
+    new AuditRepository(db, env),
     (e) => recordRunFailureEvent(db, e),
     (info) => syncExecutionTaskLifecycle(env, db, info),
     async (e) => {

@@ -1,10 +1,12 @@
 'use client';
 
 import { useState } from 'react';
+import { useTranslations } from 'next-intl';
 import { adminApi } from '@/lib/adminApi';
 import { errText, useAdminData, AdminError, AdminLoading } from '@/components/admin/adminShared';
 
 export default function PermissionsPanel() {
+  const t = useTranslations('admin');
   const { data: permMatrix, loading, error, reload, setData, setError } = useAdminData(() => adminApi.permissionsMatrix(), []);
 
   const [permEditRole, setPermEditRole] = useState<string | null>(null);
@@ -19,7 +21,7 @@ export default function PermissionsPanel() {
       {permMatrix && (
         <>
           <div style={{ marginBottom: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
-            <h2 className="page-title" style={{ fontSize: 18, margin: 0 }}>Roles &amp; Permissions</h2>
+            <h2 className="page-title" style={{ fontSize: 18, margin: 0 }}>{t('permissions.title')}</h2>
             <div style={{ display: 'flex', gap: 8 }}>
               <button
                 type="button"
@@ -35,16 +37,16 @@ export default function PermissionsPanel() {
                   } catch (e) { setError(errText(e)); }
                 }}
               >
-                Export CSV
+                {t('common.exportCsv')}
               </button>
-              <button type="button" className="admin-tab" onClick={() => reload()}>↻ Refresh</button>
+              <button type="button" className="admin-tab" onClick={() => reload()}>↻ {t('common.refresh')}</button>
             </div>
           </div>
           <div style={{ overflowX: 'auto' }}>
             <table className="data-table" style={{ minWidth: 600 }}>
               <thead>
                 <tr>
-                  <th>Permission</th>
+                  <th>{t('permissions.colPermission')}</th>
                   {permMatrix.roles.map((r) => (
                     <th key={r} style={{ textAlign: 'center' }}>
                       {r}
@@ -67,7 +69,7 @@ export default function PermissionsPanel() {
                             finally { setPermSaving(false); }
                           }}
                         >
-                          {permSaving ? 'Saving…' : 'Save'}
+                          {permSaving ? t('common.saving') : t('common.save')}
                         </button>
                       ) : (
                         <button
@@ -83,7 +85,7 @@ export default function PermissionsPanel() {
                             setPermEditOverrides(current);
                           }}
                         >
-                          Edit
+                          {t('common.edit')}
                         </button>
                       )}
                     </th>
@@ -122,7 +124,7 @@ export default function PermissionsPanel() {
           {permEditRole && (
             <div style={{ marginTop: 8, display: 'flex', gap: 8 }}>
               <button type="button" className="admin-tab" onClick={() => { setPermEditRole(null); setPermEditOverrides({}); }}>
-                Cancel
+                {t('common.cancel')}
               </button>
             </div>
           )}

@@ -1,11 +1,13 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
+import { useTranslations } from 'next-intl';
 import { adminApi, type AdminPrivacyRequest } from '@/lib/adminApi';
 import { Select } from '@/components/Select';
 import { AdminError, AdminLoading, errText, fmtDateTime } from '@/components/admin/adminShared';
 
 export default function PrivacyPanel() {
+  const t = useTranslations('admin');
   const [privacyRequests, setPrivacyRequests] = useState<AdminPrivacyRequest[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -49,10 +51,10 @@ export default function PrivacyPanel() {
             reload();
           }}
         >
-          <option value="">All statuses</option>
-          <option value="pending">Pending</option>
-          <option value="completed">Completed</option>
-          <option value="closed">Closed</option>
+          <option value="">{t('privacy.allStatuses')}</option>
+          <option value="pending">{t('privacy.pending')}</option>
+          <option value="completed">{t('privacy.completed')}</option>
+          <option value="closed">{t('privacy.closed')}</option>
         </Select>
         <Select
           className="admin-select"
@@ -62,31 +64,31 @@ export default function PrivacyPanel() {
             reload();
           }}
         >
-          <option value="">All types</option>
+          <option value="">{t('privacy.allTypes')}</option>
           <option value="ccpa">CCPA</option>
           <option value="gdpr">GDPR</option>
         </Select>
         <input
           type="text"
-          placeholder="Search email"
+          placeholder={t('privacy.searchEmail')}
           value={privacySearch}
           onChange={(e) => setPrivacySearch(e.target.value)}
           className="admin-select"
           style={{ width: 180 }}
         />
-        <button type="button" className="btn-ghost" onClick={() => reload()}>Search / Refresh</button>
+        <button type="button" className="btn-ghost" onClick={() => reload()}>{t('common.searchRefresh')}</button>
       </div>
       <div className="table-wrap">
         <table className="data-table">
           <thead>
             <tr>
-              <th>Email</th>
-              <th>Type</th>
-              <th>Status</th>
-              <th>Requested</th>
-              <th>Details</th>
-              <th>Resolution</th>
-              <th>Action</th>
+              <th>{t('privacy.email')}</th>
+              <th>{t('privacy.type')}</th>
+              <th>{t('privacy.status')}</th>
+              <th>{t('privacy.requested')}</th>
+              <th>{t('privacy.details')}</th>
+              <th>{t('privacy.resolution')}</th>
+              <th>{t('privacy.action')}</th>
             </tr>
           </thead>
           <tbody>
@@ -122,7 +124,7 @@ export default function PrivacyPanel() {
                           }
                         }}
                       >
-                        Mark Resolved
+                        {t('privacy.markResolved')}
                       </button>
                       <button
                         type="button"
@@ -141,7 +143,7 @@ export default function PrivacyPanel() {
                           }
                         }}
                       >
-                        Reject
+                        {t('privacy.reject')}
                       </button>
                     </div>
                   )}

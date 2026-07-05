@@ -2,10 +2,12 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { useTranslations } from 'next-intl';
 import { adminApi, type AdminTenant, type AdminError as AdminErrorRow } from '@/lib/adminApi';
 import { AdminError, AdminLoading, composeMailto, errText, fmtDateTime } from '@/components/admin/adminShared';
 
 export default function BillingPanel() {
+  const t = useTranslations('admin');
   const router = useRouter();
 
   const [tenants, setTenants] = useState<AdminTenant[]>([]);
@@ -37,85 +39,85 @@ export default function BillingPanel() {
       <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
         <div className="health-grid">
           <div className="health-card">
-            <div className="health-label">Paid Workspaces</div>
+            <div className="health-label">{t('billing.paidWorkspaces')}</div>
             <div className="health-value">
               {tenants.filter((t) => t.billingStatus === 'active' && t.effectivePlan === 'pro').length}
             </div>
           </div>
           <div className="health-card">
-            <div className="health-label">Past Due</div>
+            <div className="health-label">{t('billing.pastDue')}</div>
             <div className="health-value">{tenants.filter((t) => t.billingStatus === 'past_due').length}</div>
           </div>
           <div className="health-card">
-            <div className="health-label">Pending Billing</div>
+            <div className="health-label">{t('billing.pendingBilling')}</div>
             <div className="health-value">{tenants.filter((t) => t.billingStatus === 'pending').length}</div>
           </div>
           <div className="health-card">
-            <div className="health-label">Upgrade Leads</div>
+            <div className="health-label">{t('billing.upgradeLeads')}</div>
             <div className="health-value">{tenants.filter((t) => t.effectivePlan === 'free').length}</div>
           </div>
         </div>
         <div>
           <div style={{ marginBottom: 12, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <span className="text-muted">
-              Invoice queue ({tenants.filter((t) => ['active', 'past_due', 'pending'].includes(t.billingStatus)).length})
+              {t('billing.invoiceQueue', { n: tenants.filter((tn) => ['active', 'past_due', 'pending'].includes(tn.billingStatus)).length })}
             </span>
-            <button type="button" className="btn-ghost" onClick={reload}>↻ Refresh</button>
+            <button type="button" className="btn-ghost" onClick={reload}>↻ {t('common.refresh')}</button>
           </div>
           <div className="table-wrap">
             <table className="data-table">
               <thead>
                 <tr>
-                  <th>Workspace</th>
-                  <th>Plan</th>
-                  <th>Billing</th>
-                  <th>Billing Email</th>
-                  <th>Updated</th>
+                  <th>{t('billing.workspace')}</th>
+                  <th>{t('billing.plan')}</th>
+                  <th>{t('billing.billing')}</th>
+                  <th>{t('billing.billingEmail')}</th>
+                  <th>{t('billing.updated')}</th>
                   <th></th>
                 </tr>
               </thead>
               <tbody>
                 {tenants
-                  .filter((t) => ['active', 'past_due', 'pending'].includes(t.billingStatus))
-                  .map((t) => (
-                    <tr key={t.id}>
-                      <td>{t.name}</td>
+                  .filter((tn) => ['active', 'past_due', 'pending'].includes(tn.billingStatus))
+                  .map((tn) => (
+                    <tr key={tn.id}>
+                      <td>{tn.name}</td>
                       <td>
-                        <span className={`badge ${t.effectivePlan === 'pro' ? 'badge-success' : 'badge-neutral'}`}>
-                          {t.effectivePlan}
+                        <span className={`badge ${tn.effectivePlan === 'pro' ? 'badge-success' : 'badge-neutral'}`}>
+                          {tn.effectivePlan}
                         </span>
                       </td>
-                      <td className="text-muted">{t.billingStatus}</td>
-                      <td className="text-muted">{t.billingEmail ?? '—'}</td>
+                      <td className="text-muted">{tn.billingStatus}</td>
+                      <td className="text-muted">{tn.billingEmail ?? '—'}</td>
                       <td className="text-muted">
-                        {t.billingUpdatedAt ? fmtDateTime(t.billingUpdatedAt) : '—'}
+                        {tn.billingUpdatedAt ? fmtDateTime(tn.billingUpdatedAt) : '—'}
                       </td>
                       <td>
-                        {t.billingEmail ? (
+                        {tn.billingEmail ? (
                           <>
                             <a
                               className="btn-ghost"
                               href={composeMailto(
-                                t.billingEmail,
-                                'Builderforce billing invoice',
-                                'Hi team,\n\nYour latest Builderforce invoice is ready.\n\nThanks,\nBuilderforce Billing'
+                                tn.billingEmail,
+                                t('billing.invoiceSubject'),
+                                t('billing.invoiceBody')
                               )}
                             >
-                              Send invoice
+                              {t('billing.sendInvoice')}
                             </a>
                             <a
                               className="btn-ghost"
                               href={composeMailto(
-                                t.billingEmail,
-                                'Action needed: billing update',
-                                'Hi team,\n\nPlease update payment details to keep Pro features active.\n\nThanks,\nBuilderforce Billing'
+                                tn.billingEmail,
+                                t('billing.reminderSubject'),
+                                t('billing.reminderBody')
                               )}
                             >
-                              Reminder
+                              {t('billing.reminder')}
                             </a>
                           </>
                         ) : (
-                          <span className="text-muted" style={{ fontSize: 12 }}>No billing email</span>
+                          <span className="text-muted" style={{ fontSize: 12 }}>{t('billing.noBillingEmail')}</span>
                         )}
                       </td>
                     </tr>
@@ -126,38 +128,38 @@ export default function BillingPanel() {
         </div>
         <div>
           <div style={{ marginBottom: 12 }}>
-            <span className="text-muted">Upgrade communications (free workspaces)</span>
+            <span className="text-muted">{t('billing.upgradeComms')}</span>
           </div>
           <div className="table-wrap">
             <table className="data-table">
               <thead>
                 <tr>
-                  <th>Workspace</th>
-                  <th>Billing Email</th>
+                  <th>{t('billing.workspace')}</th>
+                  <th>{t('billing.billingEmail')}</th>
                   <th></th>
                 </tr>
               </thead>
               <tbody>
                 {tenants
-                  .filter((t) => t.effectivePlan === 'free')
-                  .map((t) => (
-                    <tr key={t.id}>
-                      <td>{t.name}</td>
-                      <td className="text-muted">{t.billingEmail ?? '—'}</td>
+                  .filter((tn) => tn.effectivePlan === 'free')
+                  .map((tn) => (
+                    <tr key={tn.id}>
+                      <td>{tn.name}</td>
+                      <td className="text-muted">{tn.billingEmail ?? '—'}</td>
                       <td>
-                        {t.billingEmail ? (
+                        {tn.billingEmail ? (
                           <a
                             className="btn-ghost"
                             href={composeMailto(
-                              t.billingEmail,
-                              'Upgrade to Builderforce Pro',
-                              'Hi team,\n\nUpgrade to Pro for more capacity and features.\n\nThanks,\nBuilderforce'
+                              tn.billingEmail,
+                              t('billing.upgradeSubject'),
+                              t('billing.upgradeBody')
                             )}
                           >
-                            Send upgrade message
+                            {t('billing.sendUpgradeMessage')}
                           </a>
                         ) : (
-                          <span className="text-muted" style={{ fontSize: 12 }}>No billing email</span>
+                          <span className="text-muted" style={{ fontSize: 12 }}>{t('billing.noBillingEmail')}</span>
                         )}
                       </td>
                     </tr>
@@ -168,24 +170,24 @@ export default function BillingPanel() {
         </div>
         <div>
           <div style={{ marginBottom: 12 }}>
-            <span className="text-muted">Feedback & issues ({errors.slice(0, 20).length})</span>
+            <span className="text-muted">{t('billing.feedbackIssues', { n: errors.slice(0, 20).length })}</span>
             <button
               type="button"
               className="btn-ghost"
               style={{ marginLeft: 8 }}
               onClick={() => router.push('/admin?tab=logs')}
             >
-              Open full error log
+              {t('billing.openFullErrorLog')}
             </button>
           </div>
           <div className="table-wrap">
             <table className="data-table" style={{ fontSize: 13 }}>
               <thead>
                 <tr>
-                  <th>Method</th>
-                  <th>Path</th>
-                  <th>Message</th>
-                  <th>Time</th>
+                  <th>{t('billing.method')}</th>
+                  <th>{t('billing.path')}</th>
+                  <th>{t('billing.message')}</th>
+                  <th>{t('billing.time')}</th>
                 </tr>
               </thead>
               <tbody>

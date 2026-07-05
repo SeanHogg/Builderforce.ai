@@ -8,7 +8,7 @@ const denyAll: SecurityAccessConfig = {
   allowAgentRefs: [],
 };
 
-const { canView, filterTasks } = SecurityTicketAccessService;
+const { canView, applyVisibility } = SecurityTicketAccessService;
 
 describe('SecurityTicketAccessService.canView (the default-deny visibility gate)', () => {
   it('hides security tickets from an ordinary developer by default', () => {
@@ -50,21 +50,29 @@ describe('SecurityTicketAccessService.canView (the default-deny visibility gate)
   });
 });
 
-describe('SecurityTicketAccessService.filterTasks', () => {
+describe('SecurityTicketAccessService.applyVisibility (mask, do not hide)', () => {
   const rows = [
-    { id: 1, taskType: TaskType.TASK },
-    { id: 2, taskType: TaskType.SECURITY },
-    { id: 3, taskType: TaskType.GAP },
+    { id: 1, taskType: TaskType.TASK, title: 'Normal' },
+    { id: 2, taskType: TaskType.SECURITY, title: 'SQLi in login', securitySeverity: 'critical' },
+    { id: 3, taskType: TaskType.GAP, title: 'Gap' },
   ];
 
-  it('drops security tickets for a viewer who may not see them', () => {
+  it('masks (never drops) security tickets for a viewer without clearance', () => {
     const viewer: TicketViewer = { userId: 'u1', role: TenantRole.DEVELOPER, accountType: 'standard' };
-    const out = filterTasks(rows, viewer, denyAll);
-    expect(out.map((r) => r.id)).toEqual([1, 3]);
+    const out = applyVisibility(rows, viewer, denyAll);
+    // All three rows still present — the security row is masked, not removed.
+    expect(out.map((r) => r.id)).toEqual([1, 2, 3]);
+    const masked = out.find((r) => r.id === 2)!;
+    expect((masked as { restricted?: boolean }).restricted).toBe(true);
+    expect(masked.title).toBe('');
+    expect((masked as { securitySeverity?: unknown }).securitySeverity).toBeNull();
+    // Non-security rows are untouched.
+    expect(out.find((r) => r.id === 1)!.title).toBe('Normal');
   });
 
-  it('keeps the full list for a manager', () => {
-    const out = filterTasks(rows, { role: TenantRole.MANAGER }, denyAll);
-    expect(out.map((r) => r.id)).toEqual([1, 2, 3]);
+  it('returns the full unmasked list for a manager', () => {
+    const out = applyVisibility(rows, { role: TenantRole.MANAGER }, denyAll);
+    expect(out.find((r) => r.id === 2)!.title).toBe('SQLi in login');
+    expect((out.find((r) => r.id === 2) as { restricted?: boolean }).restricted).toBeUndefined();
   });
 });

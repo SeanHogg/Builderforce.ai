@@ -36,7 +36,8 @@ export interface ActorIdentity {
 }
 
 export interface ActivityInput {
-  tenantId: number;
+  /** null only for platform-global events (e.g. a pre-tenant login/registration). */
+  tenantId: number | null;
   segmentId?: string | null;
   projectId?: number | null;
   actor: ActorIdentity;
@@ -61,8 +62,8 @@ export function cloudAgentActor(agentRef: string, name: string): ActorIdentity {
   return { type: 'cloud_agent', ref: agentRef, name };
 }
 
-export function activityLogVersionKey(tenantId: number): string {
-  return `activity-log:tenant:${tenantId}`;
+export function activityLogVersionKey(tenantId: number | null): string {
+  return `activity-log:tenant:${tenantId ?? 'global'}`;
 }
 
 /**
@@ -70,10 +71,10 @@ export function activityLogVersionKey(tenantId: number): string {
  * fail because its audit write did. Bumps the read cache so the timeline reflects
  * the new event on the next read.
  */
-export async function recordActivity(env: Env, db: Db, input: ActivityInput): Promise<void> {
+export async function recordActivity(env: Env | undefined, db: Db, input: ActivityInput): Promise<void> {
   try {
     await db.insert(activityLog).values({
-      tenantId: input.tenantId,
+      tenantId: input.tenantId ?? null,
       segmentId: input.segmentId ?? null,
       projectId: input.projectId ?? null,
       actorType: input.actor.type,
@@ -98,7 +99,7 @@ export async function recordActivity(env: Env, db: Db, input: ActivityInput): Pr
  * Resolve the human/hire acting in this request into an ActorIdentity. Falls back
  * to the system actor for unauthenticated / agentHost-token paths (no user id).
  */
-export async function resolveActorFromContext(env: Env, db: Db, c: Context<HonoEnv>): Promise<ActorIdentity> {
+export async function resolveActorFromContext(env: Env | undefined, db: Db, c: Context<HonoEnv>): Promise<ActorIdentity> {
   const userId = c.get('userId') as string | undefined;
   const tenantId = c.get('tenantId') as number | undefined;
   if (!userId || !tenantId) return SYSTEM_ACTOR;
@@ -110,7 +111,7 @@ export async function resolveActorFromContext(env: Env, db: Db, c: Context<HonoE
  * external freelancer engaged in this tenant is 'hire' (with the engagement id).
  * Cached (300s) — membership and display names change rarely.
  */
-export async function resolveHumanActor(env: Env, db: Db, tenantId: number, userId: string): Promise<ActorIdentity> {
+export async function resolveHumanActor(env: Env | undefined, db: Db, tenantId: number, userId: string): Promise<ActorIdentity> {
   return getOrSetCached(env, `actor:tenant:${tenantId}:user:${userId}`, async (): Promise<ActorIdentity> => {
     const [u] = await db
       .select({ displayName: users.displayName, username: users.username, email: users.email, accountType: users.accountType })

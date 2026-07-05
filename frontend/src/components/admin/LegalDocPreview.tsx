@@ -1,5 +1,6 @@
 'use client';
 
+import { useTranslations } from 'next-intl';
 import { ChatMessageContent } from '@/components/ChatMessageContent';
 import { unwrapMarkdownFence } from '@/lib/utils';
 
@@ -19,7 +20,9 @@ export interface LegalDocPreviewProps {
  * lockstep. The container/layout (scroll height, borders) is the caller's
  * concern; the rendered output is always identical.
  */
-export function LegalDocPreview({ content, emptyText = '_Nothing to preview yet._' }: LegalDocPreviewProps) {
-  const clean = content?.trim() ? unwrapMarkdownFence(content) : emptyText;
+export function LegalDocPreview({ content, emptyText }: LegalDocPreviewProps) {
+  const t = useTranslations('admin');
+  const fallback = emptyText ?? t('legal.preview.nothingToPreview');
+  const clean = content?.trim() ? unwrapMarkdownFence(content) : fallback;
   return <ChatMessageContent content={clean} />;
 }

@@ -321,11 +321,12 @@ export function createTaskRoutes(taskService: TaskService, db: Db, runtimeServic
     // where the archive itself is the subject (e.g. the delete-project dialog).
     const includeArchived = c.req.query('include_archived') === 'true';
     const tasks = await taskService.listTasks(c.get('tenantId'), projectId, includeArchived);
-    // Drop the access-restricted SECURITY tickets this viewer may not see, via the
-    // one shared visibility gate (no-op unless the list actually holds security tickets).
+    // Mask (don't drop) the access-restricted SECURITY tickets this viewer may not
+    // see, via the one shared visibility gate — the item stays visible as a
+    // "clearance needed" placeholder. No-op unless the list holds security tickets.
     const viewer = await resolveTicketViewer(c, db);
     const plain = await new SecurityTicketAccessService(db, c.env as Env)
-      .filterForViewer(c.get('tenantId'), viewer, tasks.map(t => t.toPlain()));
+      .applyVisibilityForViewer(c.get('tenantId'), viewer, tasks.map(t => t.toPlain() as Record<string, unknown>));
     // Augment each card with its linked-PRD count [1266] — one grouped query (no
     // N+1), and best-effort so it no-ops where task_specs (migration 0098) isn't
     // applied yet (the board still renders, just with no PRD dots).
@@ -405,14 +406,15 @@ export function createTaskRoutes(taskService: TaskService, db: Db, runtimeServic
     const id = Number(c.req.param('id'));
     if (!(await loadTenantTask(id, c.get('tenantId')))) return c.json({ error: 'Task not found' }, 404);
     const task = await taskService.getTask(id);
-    const plain = task.toPlain();
-    // A SECURITY ticket is invisible (404, not 403 — don't reveal its existence) to a
-    // viewer the access config doesn't permit. Same shared gate as the list.
+    const plain = task.toPlain() as Record<string, unknown>;
+    // A SECURITY ticket the viewer isn't cleared for is returned MASKED (200) — its
+    // existence is surfaced, its content redacted with `restricted: true`. Same shared
+    // gate as the list.
     if (plain.taskType === TaskType.SECURITY) {
       const viewer = await resolveTicketViewer(c, db);
-      const visible = await new SecurityTicketAccessService(db, c.env as Env)
-        .filterForViewer(c.get('tenantId'), viewer, [plain]);
-      if (visible.length === 0) return c.json({ error: 'Task not found' }, 404);
+      const [masked] = await new SecurityTicketAccessService(db, c.env as Env)
+        .applyVisibilityForViewer(c.get('tenantId'), viewer, [plain]);
+      return c.json(masked ?? plain);
     }
     return c.json(plain);
   });

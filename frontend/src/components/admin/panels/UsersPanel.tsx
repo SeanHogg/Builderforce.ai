@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
+import { useTranslations } from 'next-intl';
 import { adminApi, type AdminUser, type AdminTenant } from '@/lib/adminApi';
 import { ViewToggle, type ViewMode } from '@/components/ViewToggle';
 import UserDetailDrawer from '@/components/UserDetailDrawer';
@@ -8,6 +9,7 @@ import { useEmulationLauncher } from '@/components/admin/EmulationLauncher';
 import { AdminError, AdminLoading, errText, fmtDate } from '@/components/admin/adminShared';
 
 export default function UsersPanel() {
+  const t = useTranslations('admin');
   const { startEmulation } = useEmulationLauncher();
 
   const [users, setUsers] = useState<AdminUser[]>([]);
@@ -40,26 +42,26 @@ export default function UsersPanel() {
     <div>
       <AdminError message={error} />
       <div style={{ marginBottom: 12, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
-        <span className="text-muted" style={{ fontSize: 14 }}>{users.length} users</span>
+        <span className="text-muted" style={{ fontSize: 14 }}>{t('users.count', { count: users.length })}</span>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <ViewToggle value={usersViewMode} onChange={setUsersViewMode} />
           <button type="button" className="btn-ghost" onClick={reload}>
-            ↻ Refresh
+            ↻ {t('common.refresh')}
           </button>
         </div>
       </div>
       {users.length === 0 ? (
-        <p className="text-muted" style={{ padding: 24 }}>No users found.</p>
+        <p className="text-muted" style={{ padding: 24 }}>{t('users.empty')}</p>
       ) : usersViewMode === 'table' ? (
         <div className="table-wrap">
           <table className="data-table">
             <thead>
               <tr>
-                <th>Email</th>
-                <th>Username</th>
-                <th>Workspaces</th>
-                <th>Joined</th>
-                <th>Role</th>
+                <th>{t('users.colEmail')}</th>
+                <th>{t('users.colUsername')}</th>
+                <th>{t('users.colWorkspaces')}</th>
+                <th>{t('users.colJoined')}</th>
+                <th>{t('users.colRole')}</th>
                 <th></th>
               </tr>
             </thead>
@@ -72,18 +74,18 @@ export default function UsersPanel() {
                   <td className="text-muted">{fmtDate(u.createdAt)}</td>
                   <td>
                     {u.isSuperadmin ? (
-                      <span className="badge badge-danger">superadmin</span>
+                      <span className="badge badge-danger">{t('users.roleSuperadmin')}</span>
                     ) : (
-                      <span className="badge badge-neutral">user</span>
+                      <span className="badge badge-neutral">{t('users.roleUser')}</span>
                     )}
                   </td>
                   <td style={{ display: 'flex', gap: 6 }}>
                     <button type="button" className="btn-ghost" onClick={() => setDrawerUser(u)}>
-                      Details
+                      {t('common.details')}
                     </button>
                     {!u.isSuperadmin && (
                       <button type="button" className="btn-ghost" onClick={() => startEmulation(u)}>
-                        Emulate
+                        {t('users.emulate')}
                       </button>
                     )}
                   </td>
@@ -110,25 +112,25 @@ export default function UsersPanel() {
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
                 <span style={{ fontWeight: 600, wordBreak: 'break-all' }}>{u.email}</span>
                 {u.isSuperadmin ? (
-                  <span className="badge badge-danger">superadmin</span>
+                  <span className="badge badge-danger">{t('users.roleSuperadmin')}</span>
                 ) : (
-                  <span className="badge badge-neutral">user</span>
+                  <span className="badge badge-neutral">{t('users.roleUser')}</span>
                 )}
               </div>
               <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>
                 {u.username ?? '—'}
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, color: 'var(--text-muted)' }}>
-                <span>{u.tenantCount} workspaces</span>
+                <span>{t('users.workspacesCount', { count: u.tenantCount })}</span>
                 <span>{fmtDate(u.createdAt)}</span>
               </div>
               <div style={{ display: 'flex', gap: 6, marginTop: 4 }}>
                 <button type="button" className="btn-ghost" onClick={() => setDrawerUser(u)}>
-                  Details
+                  {t('common.details')}
                 </button>
                 {!u.isSuperadmin && (
                   <button type="button" className="btn-ghost" onClick={() => startEmulation(u)}>
-                    Emulate
+                    {t('users.emulate')}
                   </button>
                 )}
               </div>

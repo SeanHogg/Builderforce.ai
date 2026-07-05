@@ -13,6 +13,7 @@
 
 import React, { createContext, useCallback, useContext, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { useTranslations } from 'next-intl';
 import { useEmulation } from '@/lib/EmulationContext';
 import { adminApi, type AdminUser, type UserWorkspace } from '@/lib/adminApi';
 import { errText } from './adminShared';
@@ -32,6 +33,7 @@ export function useEmulationLauncher(): EmulationLauncherValue {
 
 export function EmulationLauncherProvider({ children }: { children: React.ReactNode }) {
   const router = useRouter();
+  const t = useTranslations('admin');
   const { startEmulation: beginSession } = useEmulation();
 
   const [target, setTarget] = useState<AdminUser | null>(null);
@@ -51,9 +53,9 @@ export function EmulationLauncherProvider({ children }: { children: React.ReactN
     setWorkspacesLoading(true);
     adminApi.userWorkspaces(user.id)
       .then(setWorkspaces)
-      .catch(() => setError('Failed to load user workspaces'))
+      .catch(() => setError(t('emulate.loadWorkspacesFailed')))
       .finally(() => setWorkspacesLoading(false));
-  }, []);
+  }, [t]);
 
   const close = useCallback(() => {
     setTarget(null);
@@ -92,10 +94,9 @@ export function EmulationLauncherProvider({ children }: { children: React.ReactN
           aria-labelledby="emulate-title"
         >
           <div className="admin-modal" onClick={(e) => e.stopPropagation()}>
-            <h3 id="emulate-title" className="page-title" style={{ marginBottom: 4 }}>Emulate User</h3>
+            <h3 id="emulate-title" className="page-title" style={{ marginBottom: 4 }}>{t('emulate.title')}</h3>
             <p className="page-sub" style={{ marginBottom: 16 }}>
-              Start an emulation session as <strong>{target.email}</strong> using their default workspace and assigned role.
-              You will be taken to the dashboard with an amber emulation bar.
+              {t.rich('emulate.intro', { email: target.email, strong: (c) => <strong>{c}</strong> })}
             </p>
 
             {error && (
@@ -103,29 +104,29 @@ export function EmulationLauncherProvider({ children }: { children: React.ReactN
             )}
 
             {workspacesLoading ? (
-              <p className="text-muted" style={{ fontSize: 13, marginBottom: 14 }}>Loading workspace…</p>
+              <p className="text-muted" style={{ fontSize: 13, marginBottom: 14 }}>{t('emulate.loadingWorkspace')}</p>
             ) : workspaces.length === 0 ? (
               <p className="text-muted" style={{ fontSize: 13, marginBottom: 14, color: 'var(--error-text)' }}>
-                This user has no active workspaces.
+                {t('emulate.noWorkspaces')}
               </p>
             ) : (
               <div style={{ marginBottom: 14, padding: '8px 12px', background: 'var(--surface-alt, #1e1e2e)', borderRadius: 6, fontSize: 13 }}>
-                <span style={{ opacity: 0.6, marginRight: 8 }}>Workspace:</span>
+                <span style={{ opacity: 0.6, marginRight: 8 }}>{t('emulate.workspace')}</span>
                 <strong>{workspaces[0]!.name}</strong>
                 <span style={{ opacity: 0.5, margin: '0 8px' }}>·</span>
-                <span style={{ opacity: 0.6, marginRight: 8 }}>Role:</span>
+                <span style={{ opacity: 0.6, marginRight: 8 }}>{t('emulate.role')}</span>
                 <strong>{workspaces[0]!.role}</strong>
               </div>
             )}
 
             <label className="admin-label" style={{ display: 'block', marginBottom: 4 }}>
-              Reason <span style={{ color: 'var(--error-text)' }}>*</span>
+              {t('emulate.reason')} <span style={{ color: 'var(--error-text)' }}>*</span>
             </label>
             <textarea
               value={reason}
               onChange={(e) => setReason(e.target.value)}
               className="admin-token-textarea"
-              placeholder="Brief reason for this emulation session (required)…"
+              placeholder={t('emulate.reasonPlaceholder')}
               style={{ minHeight: 72, marginBottom: 14 }}
             />
 
@@ -135,18 +136,18 @@ export function EmulationLauncherProvider({ children }: { children: React.ReactN
                 checked={debuggerEnabled}
                 onChange={(e) => setDebuggerEnabled(e.target.checked)}
               />
-              Enable permission debugger overlay
+              {t('emulate.debuggerOverlay')}
             </label>
 
             <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-              <button type="button" className="admin-tab" onClick={close} disabled={busy}>Cancel</button>
+              <button type="button" className="admin-tab" onClick={close} disabled={busy}>{t('common.cancel')}</button>
               <button
                 type="button"
                 className="admin-tab active"
                 onClick={confirm}
                 disabled={workspaces.length === 0 || !reason.trim() || busy}
               >
-                {busy ? 'Starting…' : 'Start Emulation'}
+                {busy ? t('emulate.starting') : t('emulate.start')}
               </button>
             </div>
           </div>

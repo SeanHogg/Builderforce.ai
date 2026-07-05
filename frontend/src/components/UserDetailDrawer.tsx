@@ -3,6 +3,7 @@
 import { Select } from '@/components/Select';
 
 import { useState, useEffect, useCallback } from 'react';
+import { useTranslations } from 'next-intl';
 import {
   adminApi,
   type AdminUser,
@@ -25,6 +26,7 @@ function fmtDateTime(d: string) {
 }
 
 export default function UserDetailDrawer({ user, tenants, onClose, onStartImpersonate }: Props) {
+  const t = useTranslations('admin');
   const [tab, setTab] = useState<DrawerTab>('profile');
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
@@ -72,13 +74,13 @@ export default function UserDetailDrawer({ user, tenants, onClose, onStartImpers
   }, []);// eslint-disable-line react-hooks/exhaustive-deps
 
   async function doForceLogout() {
-    if (!confirm(`Force-logout all sessions for ${user.email}?`)) return;
+    if (!confirm(t('users.drawer.confirmForceLogout', { email: user.email }))) return;
     setForceLogoutBusy(true);
     setErrorMsg('');
     try {
       await adminApi.forceLogout(user.id);
       setErrorMsg('');
-      alert('All sessions have been invalidated.');
+      alert(t('users.drawer.forceLogoutDone'));
     } catch (e) {
       setErrorMsg(e instanceof Error ? e.message : String(e));
     } finally {
@@ -87,12 +89,12 @@ export default function UserDetailDrawer({ user, tenants, onClose, onStartImpers
   }
 
   async function doResetPassword() {
-    if (!confirm(`Send password reset email to ${user.email}?`)) return;
+    if (!confirm(t('users.drawer.confirmResetPassword', { email: user.email }))) return;
     setResetPwBusy(true);
     setErrorMsg('');
     try {
       await adminApi.resetPassword(user.id);
-      alert('Password reset email queued.');
+      alert(t('users.drawer.resetPasswordDone'));
     } catch (e) {
       setErrorMsg(e instanceof Error ? e.message : String(e));
     } finally {
@@ -101,12 +103,12 @@ export default function UserDetailDrawer({ user, tenants, onClose, onStartImpers
   }
 
   async function doSuspend(suspend: boolean) {
-    if (!confirm(`${suspend ? 'Suspend' : 'Unsuspend'} account for ${user.email}?`)) return;
+    if (!confirm(suspend ? t('users.drawer.confirmSuspend', { email: user.email }) : t('users.drawer.confirmUnsuspend', { email: user.email }))) return;
     setStatusBusy(true);
     setErrorMsg('');
     try {
       await adminApi.setUserStatus(user.id, suspend);
-      alert(`Account ${suspend ? 'suspended' : 'unsuspended'}.`);
+      alert(suspend ? t('users.drawer.suspendDone') : t('users.drawer.unsuspendDone'));
     } catch (e) {
       setErrorMsg(e instanceof Error ? e.message : String(e));
     } finally {
@@ -116,11 +118,11 @@ export default function UserDetailDrawer({ user, tenants, onClose, onStartImpers
 
   const TABS: DrawerTab[] = ['profile', 'permissions', 'sessions', 'security', 'access'];
   const TAB_LABELS: Record<DrawerTab, string> = {
-    profile: 'Profile',
-    permissions: 'Permissions',
-    sessions: 'Sessions',
-    security: 'Security',
-    access: 'Admin Access',
+    profile: t('users.drawer.tabProfile'),
+    permissions: t('users.drawer.tabPermissions'),
+    sessions: t('users.drawer.tabSessions'),
+    security: t('users.drawer.tabSecurity'),
+    access: t('users.drawer.tabAccess'),
   };
 
   return (
@@ -129,7 +131,7 @@ export default function UserDetailDrawer({ user, tenants, onClose, onStartImpers
       onClick={onClose}
       role="dialog"
       aria-modal="true"
-      aria-label={`User details: ${user.email}`}
+      aria-label={t('users.drawer.dialogLabel', { email: user.email })}
     >
       <div className="user-drawer" onClick={(e) => e.stopPropagation()}>
         {/* Header */}
@@ -146,10 +148,10 @@ export default function UserDetailDrawer({ user, tenants, onClose, onStartImpers
                 style={{ fontSize: 12 }}
                 onClick={() => { onClose(); onStartImpersonate(user); }}
               >
-                Emulate
+                {t('users.emulate')}
               </button>
             )}
-            <button type="button" className="admin-tab" style={{ fontSize: 18, padding: '2px 10px' }} onClick={onClose} aria-label="Close">×</button>
+            <button type="button" className="admin-tab" style={{ fontSize: 18, padding: '2px 10px' }} onClick={onClose} aria-label={t('common.close')}>×</button>
           </div>
         </div>
 
@@ -166,7 +168,7 @@ export default function UserDetailDrawer({ user, tenants, onClose, onStartImpers
               }}
               style={{ width: '100%' }}
             >
-              <option value="">Select workspace…</option>
+              <option value="">{t('users.drawer.selectWorkspacePlaceholder')}</option>
               {tenants.map((t) => (
                 <option key={t.id} value={t.id}>{t.name} ({t.slug})</option>
               ))}
@@ -197,36 +199,36 @@ export default function UserDetailDrawer({ user, tenants, onClose, onStartImpers
 
         <div className="user-drawer__body">
           {loading ? (
-            <p style={{ color: 'var(--text-muted)', padding: 16 }}>Loading…</p>
+            <p style={{ color: 'var(--text-muted)', padding: 16 }}>{t('common.loading')}</p>
           ) : (
             <>
               {/* Profile tab */}
               {tab === 'profile' && (
                 <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 12 }}>
                   <div className="user-drawer__field">
-                    <span className="user-drawer__field-label">User ID</span>
+                    <span className="user-drawer__field-label">{t('users.drawer.fieldUserId')}</span>
                     <code style={{ fontSize: 11 }}>{user.id}</code>
                   </div>
                   <div className="user-drawer__field">
-                    <span className="user-drawer__field-label">Username</span>
+                    <span className="user-drawer__field-label">{t('users.drawer.fieldUsername')}</span>
                     <span>{user.username ?? '—'}</span>
                   </div>
                   <div className="user-drawer__field">
-                    <span className="user-drawer__field-label">Display name</span>
+                    <span className="user-drawer__field-label">{t('users.drawer.fieldDisplayName')}</span>
                     <span>{user.displayName ?? '—'}</span>
                   </div>
                   <div className="user-drawer__field">
-                    <span className="user-drawer__field-label">Superadmin</span>
+                    <span className="user-drawer__field-label">{t('users.drawer.fieldSuperadmin')}</span>
                     <span style={{ color: user.isSuperadmin ? '#22c55e' : 'var(--text-muted)' }}>
-                      {user.isSuperadmin ? 'Yes' : 'No'}
+                      {user.isSuperadmin ? t('users.drawer.yes') : t('users.drawer.no')}
                     </span>
                   </div>
                   <div className="user-drawer__field">
-                    <span className="user-drawer__field-label">Workspaces</span>
+                    <span className="user-drawer__field-label">{t('users.drawer.fieldWorkspaces')}</span>
                     <span>{user.tenantCount}</span>
                   </div>
                   <div className="user-drawer__field">
-                    <span className="user-drawer__field-label">Member since</span>
+                    <span className="user-drawer__field-label">{t('users.drawer.fieldMemberSince')}</span>
                     <span>{fmtDateTime(user.createdAt)}</span>
                   </div>
 
@@ -237,7 +239,7 @@ export default function UserDetailDrawer({ user, tenants, onClose, onStartImpers
                       disabled={forceLogoutBusy}
                       onClick={doForceLogout}
                     >
-                      {forceLogoutBusy ? 'Logging out…' : 'Force Logout'}
+                      {forceLogoutBusy ? t('users.drawer.forceLogoutBusy') : t('users.drawer.forceLogout')}
                     </button>
                     <button
                       type="button"
@@ -245,7 +247,7 @@ export default function UserDetailDrawer({ user, tenants, onClose, onStartImpers
                       disabled={resetPwBusy}
                       onClick={doResetPassword}
                     >
-                      {resetPwBusy ? 'Sending…' : 'Reset Password'}
+                      {resetPwBusy ? t('users.drawer.resetPasswordBusy') : t('users.drawer.resetPassword')}
                     </button>
                     <button
                       type="button"
@@ -254,7 +256,7 @@ export default function UserDetailDrawer({ user, tenants, onClose, onStartImpers
                       disabled={statusBusy}
                       onClick={() => doSuspend(true)}
                     >
-                      {statusBusy ? 'Suspending…' : 'Suspend Account'}
+                      {statusBusy ? t('users.drawer.suspendBusy') : t('users.drawer.suspendAccount')}
                     </button>
                   </div>
                 </div>
@@ -264,20 +266,20 @@ export default function UserDetailDrawer({ user, tenants, onClose, onStartImpers
               {tab === 'permissions' && (
                 <div style={{ padding: 16 }}>
                   {!selectedTenantId ? (
-                    <p style={{ color: 'var(--text-muted)' }}>Select a workspace above.</p>
+                    <p style={{ color: 'var(--text-muted)' }}>{t('users.drawer.selectWorkspaceAbove')}</p>
                   ) : !effectivePerms ? (
-                    <p style={{ color: 'var(--text-muted)' }}>No permission data.</p>
+                    <p style={{ color: 'var(--text-muted)' }}>{t('users.drawer.noPermissionData')}</p>
                   ) : (
                     <>
                       <div style={{ marginBottom: 12, fontSize: 13 }}>
-                        Role: <strong>{effectivePerms.role}</strong>
+                        {t('users.drawer.roleLabel')} <strong>{effectivePerms.role}</strong>
                         &nbsp;·&nbsp;
-                        <span style={{ color: '#22c55e' }}>{effectivePerms.permissions.length} effective permissions</span>
+                        <span style={{ color: '#22c55e' }}>{t('users.drawer.effectivePermissionsCount', { count: effectivePerms.permissions.length })}</span>
                         {effectivePerms.userGrants.length > 0 && (
-                          <span style={{ marginLeft: 8, color: '#3b82f6' }}>+{effectivePerms.userGrants.length} user grants</span>
+                          <span style={{ marginLeft: 8, color: '#3b82f6' }}>+{t('users.drawer.userGrantsCount', { count: effectivePerms.userGrants.length })}</span>
                         )}
                         {effectivePerms.userRevocations.length > 0 && (
-                          <span style={{ marginLeft: 8, color: '#ef4444' }}>-{effectivePerms.userRevocations.length} revocations</span>
+                          <span style={{ marginLeft: 8, color: '#ef4444' }}>-{t('users.drawer.revocationsCount', { count: effectivePerms.userRevocations.length })}</span>
                         )}
                       </div>
                       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
@@ -307,18 +309,18 @@ export default function UserDetailDrawer({ user, tenants, onClose, onStartImpers
               {tab === 'sessions' && (
                 <div style={{ padding: 16 }}>
                   {!selectedTenantId ? (
-                    <p style={{ color: 'var(--text-muted)' }}>Select a workspace above.</p>
+                    <p style={{ color: 'var(--text-muted)' }}>{t('users.drawer.selectWorkspaceAbove')}</p>
                   ) : !secDetails ? (
-                    <p style={{ color: 'var(--text-muted)' }}>No session data.</p>
+                    <p style={{ color: 'var(--text-muted)' }}>{t('users.drawer.noSessionData')}</p>
                   ) : (
                     <table className="data-table" style={{ fontSize: 12 }}>
                       <thead>
                         <tr>
-                          <th>Session</th>
-                          <th>IP</th>
-                          <th>Last seen</th>
-                          <th>Status</th>
-                          <th>Tokens</th>
+                          <th>{t('users.drawer.colSession')}</th>
+                          <th>{t('users.drawer.colIp')}</th>
+                          <th>{t('users.drawer.colLastSeen')}</th>
+                          <th>{t('users.drawer.colStatus')}</th>
+                          <th>{t('users.drawer.colTokens')}</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -329,14 +331,14 @@ export default function UserDetailDrawer({ user, tenants, onClose, onStartImpers
                             <td>{fmtDateTime(s.lastSeenAt)}</td>
                             <td>
                               <span style={{ color: s.isActive ? '#22c55e' : 'var(--text-muted)' }}>
-                                {s.isActive ? 'Active' : 'Revoked'}
+                                {s.isActive ? t('users.drawer.statusActive') : t('users.drawer.statusRevoked')}
                               </span>
                             </td>
                             <td>{s.activeTokens}</td>
                           </tr>
                         ))}
                         {secDetails.sessions.length === 0 && (
-                          <tr><td colSpan={5} style={{ color: 'var(--text-muted)', textAlign: 'center', padding: 12 }}>No sessions.</td></tr>
+                          <tr><td colSpan={5} style={{ color: 'var(--text-muted)', textAlign: 'center', padding: 12 }}>{t('users.drawer.noSessions')}</td></tr>
                         )}
                       </tbody>
                     </table>
@@ -348,29 +350,29 @@ export default function UserDetailDrawer({ user, tenants, onClose, onStartImpers
               {tab === 'security' && (
                 <div style={{ padding: 16 }}>
                   {!selectedTenantId ? (
-                    <p style={{ color: 'var(--text-muted)' }}>Select a workspace above.</p>
+                    <p style={{ color: 'var(--text-muted)' }}>{t('users.drawer.selectWorkspaceAbove')}</p>
                   ) : !secDetails ? (
-                    <p style={{ color: 'var(--text-muted)' }}>No data. Select workspace and refresh.</p>
+                    <p style={{ color: 'var(--text-muted)' }}>{t('users.drawer.noDataRefresh')}</p>
                   ) : (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                       <div className="user-drawer__field">
-                        <span className="user-drawer__field-label">MFA</span>
+                        <span className="user-drawer__field-label">{t('users.drawer.fieldMfa')}</span>
                         <span style={{ color: secDetails.mfa.enabled ? '#22c55e' : '#ef4444' }}>
-                          {secDetails.mfa.enabled ? 'Enabled' : 'Disabled'}
+                          {secDetails.mfa.enabled ? t('users.drawer.mfaEnabled') : t('users.drawer.mfaDisabled')}
                         </span>
                       </div>
                       {secDetails.mfa.enabledAt && (
                         <div className="user-drawer__field">
-                          <span className="user-drawer__field-label">MFA enabled</span>
+                          <span className="user-drawer__field-label">{t('users.drawer.fieldMfaEnabledAt')}</span>
                           <span>{fmtDateTime(secDetails.mfa.enabledAt)}</span>
                         </div>
                       )}
                       <div className="user-drawer__field">
-                        <span className="user-drawer__field-label">Active sessions</span>
+                        <span className="user-drawer__field-label">{t('users.drawer.fieldActiveSessions')}</span>
                         <span>{secDetails.sessions.filter((s) => s.isActive).length}</span>
                       </div>
                       <div className="user-drawer__field">
-                        <span className="user-drawer__field-label">Active tokens</span>
+                        <span className="user-drawer__field-label">{t('users.drawer.fieldActiveTokens')}</span>
                         <span>{secDetails.tokens.filter((t) => t.isActive).length}</span>
                       </div>
                       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', paddingTop: 8, borderTop: '1px solid var(--border-color)' }}>
@@ -387,7 +389,7 @@ export default function UserDetailDrawer({ user, tenants, onClose, onStartImpers
                               .finally(() => setLoading(false));
                           }}
                         >
-                          Revoke All Sessions
+                          {t('users.drawer.revokeAllSessions')}
                         </button>
                       </div>
                     </div>
@@ -399,16 +401,16 @@ export default function UserDetailDrawer({ user, tenants, onClose, onStartImpers
               {tab === 'access' && (
                 <div style={{ padding: 16 }}>
                   {adminAccess.length === 0 ? (
-                    <p style={{ color: 'var(--text-muted)' }}>No admin impersonation sessions for this user.</p>
+                    <p style={{ color: 'var(--text-muted)' }}>{t('users.drawer.noAdminAccess')}</p>
                   ) : (
                     <table className="data-table" style={{ fontSize: 12 }}>
                       <thead>
                         <tr>
-                          <th>Admin</th>
-                          <th>Workspace</th>
-                          <th>Role</th>
-                          <th>When</th>
-                          <th>Duration</th>
+                          <th>{t('users.drawer.colAdmin')}</th>
+                          <th>{t('users.drawer.colWorkspace')}</th>
+                          <th>{t('users.drawer.colRole')}</th>
+                          <th>{t('users.drawer.colWhen')}</th>
+                          <th>{t('users.drawer.colDuration')}</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -422,7 +424,7 @@ export default function UserDetailDrawer({ user, tenants, onClose, onStartImpers
                               <td>{s.tenantName}</td>
                               <td>{s.roleOverride}</td>
                               <td>{fmtDateTime(s.startedAt)}</td>
-                              <td>{dur != null ? `${Math.floor(dur / 60)}m ${dur % 60}s` : 'Active'}</td>
+                              <td>{dur != null ? `${Math.floor(dur / 60)}m ${dur % 60}s` : t('users.drawer.durationActive')}</td>
                             </tr>
                           );
                         })}

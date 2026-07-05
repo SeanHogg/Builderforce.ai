@@ -128,16 +128,6 @@ export const executionStatusEnum = pgEnum('execution_status', [
   'paused',
 ]);
 
-export const auditEventTypeEnum = pgEnum('audit_event_type', [
-  'user_registered', 'user_login',
-  'task_submitted', 'task_cancelled',
-  'execution_started', 'execution_completed', 'execution_failed',
-  'agent_registered',
-  'member_added', 'member_removed',
-  'project_created', 'project_updated',
-  'task_created', 'task_updated',
-]);
-
 export const agentHostStatusEnum = pgEnum('agent_host_status', ['active', 'inactive', 'suspended']);
 export const agentHostDirectoryStatusEnum = pgEnum('agent_host_directory_status', ['pending', 'synced', 'error']);
 
@@ -1480,17 +1470,6 @@ export const executionMessages = pgTable('execution_messages', {
   createdAt:   timestamp('created_at').notNull().defaultNow(),
 });
 
-export const auditEvents = pgTable('audit_events', {
-  id:           serial('id').primaryKey(),
-  tenantId:     integer('tenant_id').references(() => tenants.id),
-  userId:       varchar('user_id', { length: 36 }),
-  eventType:    auditEventTypeEnum('event_type').notNull(),
-  resourceType: varchar('resource_type', { length: 100 }),
-  resourceId:   varchar('resource_id', { length: 100 }),
-  metadata:     text('metadata'),
-  createdAt:    timestamp('created_at').notNull().defaultNow(),
-});
-
 /**
  * Unified activity / audit log (migration 0287) — the ONE canonical, append-only
  * stream of "who did what, to what, when" across the whole workforce: team
@@ -1505,7 +1484,10 @@ export const auditEvents = pgTable('audit_events', {
  */
 export const activityLog = pgTable('activity_log', {
   id:           bigserial('id', { mode: 'number' }).primaryKey(),
-  tenantId:     integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  /** Nullable ONLY for platform-global events (pre-tenant login/registration),
+   *  absorbed from the retired audit_events table (mig 0295). Tenant-scoped reads
+   *  filter on tenantId, so a global row is simply invisible to any one tenant. */
+  tenantId:     integer('tenant_id').references(() => tenants.id, { onDelete: 'cascade' }),
   segmentId:    uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),
   projectId:    integer('project_id').references(() => projects.id, { onDelete: 'set null' }),
   /** human | hire | cloud_agent | host_agent | system */
@@ -2158,8 +2140,11 @@ export const projectMemories = pgTable('project_memories', {
 // ---------------------------------------------------------------------------
 // Brain chats (unified, all-modality) — Brain Storm, IDE, and project-level chat
 // in ONE table (this is the store the live Brain reads/writes on every surface —
-// web, VS Code, on-prem). origin = 'brainstorm' | 'ide' | 'project' tells the page
-// which tools/actions to load. Named `ide_project_chats` until migration 0272
+// web, VS Code, on-prem). origin = 'brainstorm' | 'ide' | 'project' | 'team' tells
+// the page which tools/actions to load. origin='team' is the canonical, always-there
+// GROUP chat for a whole team — ONE per (tenant, projectId), projectId NULL for the
+// tenant-wide team chat (see migration 0294's uq_team_chat_scope). Named
+// `ide_project_chats` until migration 0272
 // renamed it `brain_chats` (the `ide_` prefix was a historical artifact — it
 // started IDE-only, then 0026 generalized it via the origin column).
 // ---------------------------------------------------------------------------
@@ -3506,6 +3491,17 @@ export const meetingAttendees = pgTable('meeting_attendees', {
   joinedAt:    timestamp('joined_at', { withTimezone: true }),
   leftAt:      timestamp('left_at', { withTimezone: true }),
   createdAt:   timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const userAvailability = pgTable('user_availability', {
+  id:         uuid('id').primaryKey().defaultRandom(),
+  tenantId:   integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  userId:     varchar('user_id', { length: 64 }).notNull(),
+  timezone:   varchar('timezone', { length: 64 }).notNull().default('UTC'),
+  // Weekly recurring windows: [{ day: 0-6 (0=Sun), start: minutesFromMidnight, end: minutes }]
+  windows:    jsonb('windows').notNull().default('[]'),
+  updatedAt:  timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  createdAt:  timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 });
 
 export const calendarConnections = pgTable('calendar_connections', {

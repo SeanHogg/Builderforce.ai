@@ -11,6 +11,7 @@
  */
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { useTranslations } from 'next-intl';
 import type { LlmModelStatus } from '@/lib/adminApi';
 
 /** Normalize any thrown value to a display string. */
@@ -92,7 +93,8 @@ export function AdminError({ message }: { message?: string | null }) {
 
 /** Muted "Loading…" line shared by every panel. */
 export function AdminLoading() {
-  return <p style={{ color: 'var(--text-muted)' }}>Loading…</p>;
+  const t = useTranslations('admin');
+  return <p style={{ color: 'var(--text-muted)' }}>{t('common.loading')}</p>;
 }
 
 /**
@@ -155,6 +157,7 @@ export function ModelPoolBadges({
   keyPrefix: string;
   models: ReadonlyArray<LlmModelStatus>;
 }) {
+  const t = useTranslations('admin');
   if (models.length === 0) return null;
   return (
     <div>
@@ -170,10 +173,10 @@ export function ModelPoolBadges({
               background: m.available ? 'var(--success-bg, #d1fae5)' : 'var(--error-bg, #fee2e2)',
               color: m.available ? 'var(--success-text)' : 'var(--error-text)',
             }}
-            title={m.cooldownUntil ? `Cooldown until ${new Date(m.cooldownUntil).toLocaleString()}` : m.available ? 'Available' : 'Unavailable (rate limit or error)'}
+            title={m.cooldownUntil ? t('common.cooldownUntil', { time: new Date(m.cooldownUntil).toLocaleString() }) : m.available ? t('common.available') : t('common.unavailable')}
           >
             {m.preferred ? '★ ' : ''}{m.model}
-            {m.cooldownUntil && !m.available ? ' (cooldown)' : ''}
+            {m.cooldownUntil && !m.available ? ` (${t('common.cooldown')})` : ''}
           </span>
         ))}
       </div>

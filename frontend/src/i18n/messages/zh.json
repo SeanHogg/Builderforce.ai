@@ -2432,11 +2432,11 @@
       "projectsActive": "{count} 个进行中",
       "tasks": "任务",
       "tasksInProgress": "{count} 个进行中",
-      "agentsOnline": "在线代理",
-      "agentsRegistered": "已注册 {count} 个",
       "pendingRequests": "待处理请求",
       "requiresReview": "需要审核",
-      "allClear": "全部完成"
+      "allClear": "全部完成",
+      "workforceOnline": "在线人才 / 团队",
+      "workingNow": "{count} 个正在工作"
     },
     "tabs": {
       "projects": "项目",
@@ -2470,6 +2470,24 @@
         "sop": "SOP",
         "process": "流程",
         "doc": "文档"
+      }
+    },
+    "presence": {
+      "title": "谁在线",
+      "loading": "加载中…",
+      "summary": "{online} 在线 · {working} 工作中",
+      "empty": "当前无人在线。",
+      "peopleHeading": "成员（{count}）",
+      "agentsHeading": "代理（{count}）",
+      "noPeople": "没有成员在线。",
+      "noAgents": "没有代理在线。",
+      "inIde": "在 IDE 中",
+      "activeSession": "活动会话",
+      "manage": "管理团队",
+      "agent": {
+        "online": "在线",
+        "working": "工作中",
+        "workingOn": "正在处理 {task}"
       }
     }
   },
@@ -5870,6 +5888,50 @@
       "audit": "审计日志",
       "apiKeys": "API 密钥",
       "token": "超级管理员令牌"
+    },
+    "common": {
+      "loading": "加载中…",
+      "available": "可用",
+      "unavailable": "不可用（速率限制或错误）",
+      "cooldownUntil": "冷却至 {time}",
+      "cooldown": "冷却中",
+      "refresh": "刷新",
+      "cancel": "取消",
+      "save": "保存",
+      "saving": "保存中…",
+      "create": "创建",
+      "creating": "创建中…",
+      "update": "更新",
+      "updating": "更新中…",
+      "remove": "删除",
+      "edit": "编辑",
+      "close": "关闭",
+      "search": "搜索",
+      "searchRefresh": "搜索 / 刷新",
+      "filter": "筛选",
+      "exportCsv": "导出 CSV",
+      "exporting": "导出中…",
+      "prev": "← 上一页",
+      "next": "下一页 →",
+      "noResults": "无结果。",
+      "details": "详情",
+      "hideDetails": "隐藏详情",
+      "copy": "复制",
+      "copied": "已复制！"
+    },
+    "emulate": {
+      "loadWorkspacesFailed": "加载用户工作区失败",
+      "title": "模拟用户",
+      "intro": "以 <strong>{email}</strong> 的身份、使用其默认工作区和分配的角色开始模拟会话。您将被带到仪表板，并显示琥珀色模拟条。",
+      "loadingWorkspace": "正在加载工作区…",
+      "noWorkspaces": "该用户没有活动的工作区。",
+      "workspace": "工作区：",
+      "role": "角色：",
+      "reason": "原因",
+      "reasonPlaceholder": "本次模拟会话的简要原因（必填）…",
+      "debuggerOverlay": "启用权限调试器覆盖层",
+      "start": "开始模拟",
+      "starting": "正在开始…"
     }
   },
   "providerKeys": {

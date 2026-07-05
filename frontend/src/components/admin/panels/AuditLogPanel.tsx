@@ -1,10 +1,12 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { useTranslations } from 'next-intl';
 import { adminApi, type AuditLogEntry } from '@/lib/adminApi';
 import { AdminError, AdminLoading, errText, fmtDateTime } from '@/components/admin/adminShared';
 
 export default function AuditLogPanel() {
+  const t = useTranslations('admin');
   const [auditEntries, setAuditEntries] = useState<AuditLogEntry[]>([]);
   const [auditTotal, setAuditTotal] = useState(0);
   const [auditEventFilter, setAuditEventFilter] = useState('');
@@ -42,19 +44,19 @@ export default function AuditLogPanel() {
       <AdminError message={error} />
       <div style={{ marginBottom: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
         <h2 className="page-title" style={{ fontSize: 18, margin: 0 }}>
-          Audit Log
-          <span style={{ marginLeft: 8, fontSize: 13, fontWeight: 400, color: 'var(--text-muted)' }}>{auditTotal} total</span>
+          {t('auditlog.title')}
+          <span style={{ marginLeft: 8, fontSize: 13, fontWeight: 400, color: 'var(--text-muted)' }}>{t('auditlog.total', { n: auditTotal })}</span>
         </h2>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
           <input
             className="admin-select"
             value={auditEventFilter}
             onChange={(e) => setAuditEventFilter(e.target.value)}
-            placeholder="Filter by event…"
+            placeholder={t('auditlog.filterByEvent')}
             style={{ width: 200 }}
             onKeyDown={(e) => { if (e.key === 'Enter') { setAuditOffset(0); reload(); } }}
           />
-          <button type="button" className="admin-tab" onClick={() => { setAuditOffset(0); reload(); }}>Filter</button>
+          <button type="button" className="admin-tab" onClick={() => { setAuditOffset(0); reload(); }}>{t('common.filter')}</button>
           <button
             type="button"
             className="admin-tab"
@@ -73,20 +75,20 @@ export default function AuditLogPanel() {
               finally { setAuditExporting(false); }
             }}
           >
-            {auditExporting ? 'Exporting…' : 'Export CSV'}
+            {auditExporting ? t('common.exporting') : t('common.exportCsv')}
           </button>
-          <button type="button" className="admin-tab" onClick={() => { setAuditOffset(0); reload(); }}>↻ Refresh</button>
+          <button type="button" className="admin-tab" onClick={() => { setAuditOffset(0); reload(); }}>↻ {t('common.refresh')}</button>
         </div>
       </div>
       <table className="data-table">
         <thead>
           <tr>
-            <th>Event</th>
-            <th>Actor</th>
-            <th>Target</th>
-            <th>Workspace</th>
-            <th>IP</th>
-            <th>Time</th>
+            <th>{t('auditlog.event')}</th>
+            <th>{t('auditlog.actor')}</th>
+            <th>{t('auditlog.target')}</th>
+            <th>{t('auditlog.workspace')}</th>
+            <th>{t('auditlog.ip')}</th>
+            <th>{t('auditlog.time')}</th>
           </tr>
         </thead>
         <tbody>
@@ -101,7 +103,7 @@ export default function AuditLogPanel() {
             </tr>
           ))}
           {auditEntries.length === 0 && (
-            <tr><td colSpan={6} style={{ textAlign: 'center', color: 'var(--text-muted)', padding: 20 }}>No audit log entries found.</td></tr>
+            <tr><td colSpan={6} style={{ textAlign: 'center', color: 'var(--text-muted)', padding: 20 }}>{t('auditlog.noneFound')}</td></tr>
           )}
         </tbody>
       </table>
@@ -113,16 +115,16 @@ export default function AuditLogPanel() {
             disabled={auditOffset === 0}
             onClick={() => { setAuditOffset(Math.max(0, auditOffset - 50)); }}
           >
-            ← Prev
+            {t('common.prev')}
           </button>
-          <span style={{ fontSize: 13 }}>{auditOffset + 1}–{Math.min(auditOffset + 50, auditTotal)} of {auditTotal}</span>
+          <span style={{ fontSize: 13 }}>{t('auditlog.pagination', { from: auditOffset + 1, to: Math.min(auditOffset + 50, auditTotal), total: auditTotal })}</span>
           <button
             type="button"
             className="admin-tab"
             disabled={auditOffset + 50 >= auditTotal}
             onClick={() => { setAuditOffset(auditOffset + 50); }}
           >
-            Next →
+            {t('common.next')}
           </button>
         </div>
       )}
