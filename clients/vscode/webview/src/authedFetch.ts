@@ -38,7 +38,11 @@ export function authedFetch(
     }
     if (!res.ok) {
       const body = await res.text().catch(() => '');
-      throw new Error(body || res.statusText || `HTTP ${res.status}`);
+      // Prefer a structured `{ error }` / `{ message }` payload so a server diagnostic
+      // (e.g. an agent that couldn't reply) surfaces as a sentence, not raw JSON.
+      let msg = body;
+      try { const j = JSON.parse(body) as { error?: string; message?: string }; msg = j?.error || j?.message || body; } catch { /* not JSON — use the text */ }
+      throw new Error(msg || res.statusText || `HTTP ${res.status}`);
     }
     if (res.status === 204) return undefined as T;
     return (await res.json()) as T;

@@ -13,11 +13,15 @@ import {
   users,
   tenantMembers,
   tenantInvitations,
+  tenants,
 } from '../../infrastructure/database/schema';
-import { ideProxy } from '../llm/LlmProxyService';
+import { ideProxy, llmProxyForPlan, CODING_BACKSTOP_MODELS } from '../llm/LlmProxyService';
+import { resolveTenantLlmCredentials } from '../llm/tenantProviderKeyService';
 import { recordProxyUsage } from '../llm/usageLedger';
 import { resolveWorkforceModel, WORKFORCE_MODEL_REF_PREFIX } from '../agent/agentPrompt';
 import { listBuiltinTools, callBuiltinTool, CLOUD_AGENT_PLATFORM_TOOLS } from '../llm/builtinMcpService';
+import { resolveEffectivePlan } from '../../domain/tenant/effectivePlan';
+import { TenantPlan, TenantBillingStatus } from '../../domain/shared/types';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 
@@ -256,6 +260,36 @@ export class BrainService {
   // single-vendor on purpose.
   private buildLlmService(apiKey: string) {
     return ideProxy({ OPENROUTER_API_KEY: apiKey });
+  }
+
+  /** Resolve a tenant's effective plan + premium override for gateway routing —
+   *  the SAME derivation the LLM gateway uses (`resolveTenantPlan`), but from this
+   *  service's db so an addressed-agent run picks the tenant's real plan pool.
+   *  Best-effort: any failure degrades to the free plan (never blocks the reply). */
+  private async resolveTenantRouting(
+    tenantId: number,
+  ): Promise<{ effectivePlan: 'free' | 'pro' | 'teams'; premiumOverride: boolean }> {
+    try {
+      const [row] = await this.db
+        .select({
+          plan: tenants.plan,
+          billingStatus: tenants.billingStatus,
+          trialEndsAt: tenants.trialEndsAt,
+          premiumOverride: tenants.premiumOverride,
+        })
+        .from(tenants)
+        .where(eq(tenants.id, tenantId))
+        .limit(1);
+      if (!row) return { effectivePlan: 'free', premiumOverride: false };
+      const effectivePlan = resolveEffectivePlan({
+        plan: (row.plan ?? 'free') as TenantPlan,
+        billingStatus: (row.billingStatus ?? 'none') as TenantBillingStatus,
+        trialEndsAt: row.trialEndsAt ?? null,
+      }) as 'free' | 'pro' | 'teams';
+      return { effectivePlan, premiumOverride: row.premiumOverride === true };
+    } catch {
+      return { effectivePlan: 'free', premiumOverride: false };
+    }
   }
 
   /** Record a Brain summarization call in the usage ledger [1310] (best-effort,
@@ -728,18 +762,42 @@ export class BrainService {
       { role: 'user', content: `Conversation so far:\n\n${transcript}` },
     ];
 
-    const service = this.buildLlmService(apiKey);
+    // Run the addressed agent on the TENANT's OWN connected frontier account when
+    // they have one (BYO Claude subscription / api-key), leading the same BYO-first
+    // auto-select the Brain chat uses — NOT a weak operator-key model that returns
+    // empty turns. This is an agentic tool turn, so failover is restricted to the
+    // curated coding pool (with the paid coding backstop), never a lite non-coder.
+    const [{ effectivePlan, premiumOverride }, byo] = await Promise.all([
+      this.resolveTenantRouting(tenantId),
+      resolveTenantLlmCredentials(env, tenantId).catch(() => ({ anthropicOAuthToken: null, vendorKeys: {} as Record<string, string> })),
+    ]);
+    const service = llmProxyForPlan(env, effectivePlan, premiumOverride, {
+      codingOnly: true,
+      backstopModels: CODING_BACKSTOP_MODELS,
+      anthropicOAuthToken: byo.anthropicOAuthToken,
+      tenantVendorKeys: byo.vendorKeys,
+    });
+    // An agent with its OWN base model keeps that explicit pin; otherwise leave the
+    // model unset so the proxy seeds the tenant's BYO flagship (else the coding pool).
+    const pinnedModel = resolved?.baseModel ?? undefined;
+    const readModel = (r: unknown): string => (r as { resolvedModel?: string } | undefined)?.resolvedModel ?? '';
+
     const MAX_ITERS = 6;
     let text = '';
+    let toolCallCount = 0;
+    let iterations = 0;
+    let lastModel = pinnedModel ?? '';
     for (let i = 0; i < MAX_ITERS; i++) {
+      iterations = i + 1;
       const result = await service.complete({
-        model: resolved?.baseModel ?? undefined,
+        model: pinnedModel,
         messages: convo as never,
         tools,
         temperature: 0.4,
         max_tokens: 1200,
       });
       this.recordUsage(apiKey, tenantId, 'brain_agent_reply', result);
+      lastModel = readModel(result) || lastModel;
       const message = (result.response as { choices?: Array<{ message?: { content?: string; tool_calls?: Array<{ id: string; function: { name: string; arguments?: string } }> } }> } | undefined)
         ?.choices?.[0]?.message;
       const toolCalls = message?.tool_calls ?? [];
@@ -750,6 +808,7 @@ export class BrainService {
       }
 
       // Echo the assistant tool-call turn, then execute each call and feed results.
+      toolCallCount += toolCalls.length;
       convo.push({ role: 'assistant', content: message?.content ?? '', tool_calls: toolCalls });
       for (const tc of toolCalls) {
         const toolId = nameToTool.get(tc.function.name) ?? tc.function.name;
@@ -765,21 +824,39 @@ export class BrainService {
         }
         convo.push({ role: 'tool', tool_call_id: tc.id, content: JSON.stringify(out ?? null).slice(0, 8000) });
       }
-      // On the last allowed iteration, ask once more WITHOUT tools for a final answer.
-      if (i === MAX_ITERS - 1) {
-        const finalResult = await service.complete({
-          model: resolved?.baseModel ?? undefined,
-          messages: convo as never,
-          temperature: 0.4,
-          max_tokens: 1000,
-        });
-        this.recordUsage(apiKey, tenantId, 'brain_agent_reply', finalResult);
-        text = (finalResult.response as { choices?: Array<{ message?: { content?: string } }> } | undefined)
-          ?.choices?.[0]?.message?.content?.trim() ?? '';
-      }
     }
 
-    if (!text) return { error: 'Agent returned an empty reply' as const };
+    // The tool loop ended with no prose (only tool calls across every iteration, or a
+    // model that returned an empty turn): force ONE final synthesis WITHOUT tools so
+    // the agent always speaks — a bounded extra call, not another tool round.
+    if (!text) {
+      const finalResult = await service.complete({
+        model: pinnedModel,
+        messages: [...convo, { role: 'user', content: `Now write your reply to the team AS ${agentName}: plain prose, first person, no tool calls. Summarise what you found or did.` }] as never,
+        temperature: 0.4,
+        max_tokens: 1000,
+      });
+      this.recordUsage(apiKey, tenantId, 'brain_agent_reply', finalResult);
+      lastModel = readModel(finalResult) || lastModel;
+      text = (finalResult.response as { choices?: Array<{ message?: { content?: string } }> } | undefined)
+        ?.choices?.[0]?.message?.content?.trim() ?? '';
+    }
+
+    if (!text) {
+      // Actionable diagnostics beat a bare "empty reply": name the account the run
+      // used, the model it resolved to, and how much tool work happened — so the user
+      // can tell a transient empty turn from a misconfigured agent/account.
+      const via = byo.anthropicOAuthToken ? 'your connected Claude subscription'
+        : Object.keys(byo.vendorKeys).length > 0 ? 'your connected provider key'
+        : 'the shared model pool';
+      const modelNote = lastModel ? ` (model: ${lastModel})` : '';
+      const toolNote = toolCallCount
+        ? ` after ${toolCallCount} tool call${toolCallCount === 1 ? '' : 's'} over ${iterations} step${iterations === 1 ? '' : 's'}`
+        : '';
+      return {
+        error: `${agentName} ran on ${via}${modelNote} but produced no reply${toolNote}. The model returned an empty turn — this usually clears on a retry. If it persists, set a stronger base model for this agent in Workforce, or confirm your connected account is active.` as const,
+      };
+    }
 
     const metadata = JSON.stringify({ authoredBy: { kind: 'agent', ref: input.agentRef, name: agentName } });
     const [posted] = await this.appendRaw(chatId, [{ role: 'assistant', content: text, metadata }]);

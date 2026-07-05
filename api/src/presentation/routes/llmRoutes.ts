@@ -95,7 +95,9 @@ import type { FailoverEvent } from '../../application/llm/LlmProxyService';
 import { verifyJwt, signJwt } from '../../infrastructure/auth/JwtService';
 import { hashSecret } from '../../infrastructure/auth/HashService';
 import { TenantRole, TenantPlan, TenantBillingStatus } from '../../domain/shared/types';
-import { getLimits, resolveImageCreditsDailyLimit, resolveTokenLimits } from '../../domain/tenant/PlanLimits';
+import { getLimits, resolveImageCreditsDailyLimit, resolveTokenLimits, GUEST_CHAT_LIMITS } from '../../domain/tenant/PlanLimits';
+import { GuestChatService } from '../../application/guest/GuestChatService';
+import { verifyGuestToken, guestBrainEnabled, GUEST_TOKEN_PREFIX } from '../../application/guest/guestToken';
 import { resolveEffectivePlan } from '../../domain/tenant/effectivePlan';
 import {
   utcDayStart,
@@ -773,6 +775,104 @@ function proxyForCompletion(
   });
 }
 
+/**
+ * Guest (logged-out) chat handler for `POST /v1/chat/completions`.
+ *
+ * A LOGGED-OUT visitor can try the Brain before signing up. Their request
+ * carries a `bfguest_*` token (minted at `/api/guest/session`) instead of a
+ * tenant JWT, so the main handler routes here BEFORE `requireTenantAccess` — the
+ * tenant auth/metering path never sees anonymous traffic. Deliberately minimal
+ * and isolated from the tenant machinery:
+ *   • cheapest FREE pool, no tool loop, small max_tokens (cost containment);
+ *   • metered per visitorId AND per IP (GuestChatService) with a tiny cap;
+ *   • NO tenant usage rows written (a guest has no tenant), so guest spend never
+ *     touches `llm_usage_log` or any tenant meter.
+ * Cap exhaustion returns a 402 the UI turns into a "sign up free to keep going"
+ * wall — the whole point of the funnel.
+ */
+async function handleGuestChat(c: Context<HonoEnv>): Promise<Response> {
+  if (!guestBrainEnabled(c.env)) {
+    return c.json({ error: 'Guest chat is disabled.', code: 'guest_brain_disabled' }, 503);
+  }
+  const authHeader = c.req.header('Authorization') ?? '';
+  const token = authHeader.slice(7); // strip "Bearer "
+  const visitorId = await verifyGuestToken(token, c.env.JWT_SECRET);
+  if (!visitorId) {
+    return c.json({ error: 'Invalid or expired guest session.', code: 'guest_token_invalid' }, 401);
+  }
+
+  const body = await c.req.json<ChatCompletionRequest>().catch(() => null);
+  if (!body || !Array.isArray(body.messages) || body.messages.length === 0) {
+    return c.json({ error: 'messages array is required' }, 400);
+  }
+
+  const ip = c.req.header('cf-connecting-ip') ?? c.req.header('x-forwarded-for') ?? null;
+  const guest = new GuestChatService(buildDatabase(c.env));
+
+  const cap = await guest.checkCap(c.env as Env, visitorId, ip);
+  if (!cap.allowed) {
+    // 429 (not 402) — a guest has no plan to upgrade, so this must NOT trip the
+    // paid-plan upgrade modal. The UI shows a "sign up free to keep going" wall,
+    // keyed off code `guest_limit_reached`. `terminal` so the client stops.
+    return c.json({
+      error: cap.reason === 'ip'
+        ? 'This device has reached its free guest limit for today. Sign up free to keep going.'
+        : `You've used your ${cap.limit} free guest messages for today. Sign up free to keep going.`,
+      code: 'guest_limit_reached',
+      reason: cap.reason,
+      limit: cap.limit,
+      terminal: true,
+    }, 429);
+  }
+
+  // ── Cost containment: cheapest FREE pool, plain chat, clamped output ──────
+  const bodyAny = body as Record<string, unknown>;
+  delete bodyAny.tools;         // no agentic tool loop for guests (plain chat only)
+  delete bodyAny.tool_choice;
+  delete bodyAny.model;         // let the FREE pool pick its cheapest cascade
+  delete bodyAny.modelStrict;
+  if (typeof body.max_tokens !== 'number' || body.max_tokens > GUEST_CHAT_LIMITS.maxTokensPerRequest) {
+    body.max_tokens = GUEST_CHAT_LIMITS.maxTokensPerRequest;
+  }
+
+  // Consume one message up-front so an aborted/streamed request still counts
+  // (an abuser can't dodge the cap by killing the stream mid-flight).
+  const remaining = await guest.consumeMessage(c.env as Env, visitorId, ip);
+
+  const requiredKey = c.env.OPENROUTER_API_KEY;
+  if (!requiredKey) {
+    return c.json({ error: 'LLM proxy not configured (missing OPENROUTER_API_KEY)' }, 503);
+  }
+
+  const service = llmProxyForPlan(c.env, 'free');
+  const traceId = newTraceId();
+  const estimatedTokens = estimateRequestTokens(body.messages, undefined);
+  const result = await service.complete(body, undefined, traceId, undefined, { estimatedTokens });
+
+  const headers = new Headers();
+  const contentType = result.response.headers.get('content-type');
+  if (contentType) headers.set('content-type', contentType);
+  headers.set('x-builderforce-model', result.resolvedModel);
+  headers.set('x-builderforce-guest', 'true');
+  headers.set('x-builderforce-guest-remaining', String(remaining));
+  headers.set('x-builderforce-guest-limit', String(cap.limit));
+
+  if (body.stream && result.response.body) {
+    headers.set('cache-control', 'no-cache');
+    headers.set('connection', 'keep-alive');
+    logFailovers(c.env, c.executionCtx, result.failovers);
+    const instrumented = wrapStreamForUsage(result.response.body, (usage) => {
+      c.executionCtx.waitUntil(guest.addTokens(visitorId, usage.totalTokens ?? 0));
+    });
+    return new Response(instrumented, { status: result.response.status, headers });
+  }
+
+  const upstream = await result.response.json() as Record<string, unknown>;
+  logFailovers(c.env, c.executionCtx, result.failovers);
+  c.executionCtx.waitUntil(guest.addTokens(visitorId, result.usage?.totalTokens ?? 0));
+  return c.json({ ...upstream, _builderforce: { guest: true, remaining, limit: cap.limit } }, result.response.status as 200);
+}
+
 // ---------------------------------------------------------------------------
 // Routes
 // ---------------------------------------------------------------------------
@@ -1156,6 +1256,12 @@ export function createLlmRoutes(): Hono<HonoEnv> {
   // POST /v1/chat/completions
   // -----------------------------------------------------------------------
   router.post('/v1/chat/completions', async (c) => {
+    // Logged-out guest chat: a `bfguest_*` bearer routes to the isolated guest
+    // handler BEFORE the tenant auth path ever runs (see handleGuestChat).
+    if ((c.req.header('Authorization') ?? '').startsWith(`Bearer ${GUEST_TOKEN_PREFIX}`)) {
+      return handleGuestChat(c);
+    }
+
     let access: TenantAccess;
     try {
       access = await requireTenantAccess(c);

@@ -68,7 +68,7 @@ export default function ForHireCard() {
             <Link href="/freelancer/profile" style={{ ...linkBtn, background: 'var(--surface-interactive)', color: 'var(--text-primary)' }}>
               {t('forHire.editProfile')} →
             </Link>
-            <Link href="/freelancer/gigs" style={linkBtn}>
+            <Link href="/marketplace?category=gigs" style={linkBtn}>
               {t('forHire.findWork')} →
             </Link>
             <button

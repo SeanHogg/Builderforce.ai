@@ -10,6 +10,11 @@ export interface Env {
   ENVIRONMENT: string;
   /** Secret used to sign JWTs.  Set via `wrangler secret put JWT_SECRET`. */
   JWT_SECRET: string;
+  /** Kill switch for the logged-out guest Brain/Ideas chat. Guests can try the
+   *  Brain before signing up (metered per visitor + IP, tiny cap). Set to the
+   *  string "false" to hard-disable anonymous gateway traffic; any other value
+   *  (or unset) leaves it ON. Toggle via `wrangler secret put GUEST_BRAIN_ENABLED`. */
+  GUEST_BRAIN_ENABLED?: string;
   /** Quality ingest key (bfq_…) for DOGFOODING — the API ships its OWN unhandled
    *  500s to the Product Quality pillar via the public /api/quality-ingest endpoint
    *  (the same SDK path any customer uses). Unbound → self-reporting is skipped.

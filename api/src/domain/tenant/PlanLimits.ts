@@ -161,6 +161,26 @@ export const PLAN_LIMITS: Record<TenantPlan, PlanLimits> = {
   },
 };
 
+/**
+ * Anonymous guest (logged-out) chat allowance — the "try the Brain before you
+ * sign up" tier. Deliberately TINY: a logged-out visitor has no account we can
+ * ban and their visitorId/IP are spoofable, so this is a taste, not a free ride.
+ * Signing up unlocks the real FREE tier ({@link PLAN_LIMITS}.free — 10K
+ * tokens/day). Metered per visitorId AND per source IP (the spoof backstop) —
+ * see application/guest/GuestChatService. NOT part of the TenantPlan enum: a
+ * guest has no tenant row, so this never flows through resolveTokenLimits.
+ */
+export const GUEST_CHAT_LIMITS = {
+  /** Max assistant turns per visitorId per UTC day. */
+  messagesDailyLimit: 5,
+  /** Max assistant turns per source IP per UTC day — an abuser rotating
+   *  visitorIds still hits this. Higher than the per-visitor cap so a shared
+   *  office/NAT IP doesn't lock out honest visitors too soon. */
+  ipMessagesDailyLimit: 25,
+  /** Output-token ceiling per guest request (clamped down, never rejected). */
+  maxTokensPerRequest: 700,
+} as const;
+
 /** Returns the limits for the tenant's effective plan. */
 export function getLimits(plan: TenantPlan): PlanLimits {
   return PLAN_LIMITS[plan];

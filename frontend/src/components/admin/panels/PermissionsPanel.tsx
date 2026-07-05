@@ -18,7 +18,7 @@ export default function PermissionsPanel() {
   return (
     <div>
       <AdminError message={error} />
-      {permMatrix && (
+      {permMatrix && Array.isArray(permMatrix.roles) && Array.isArray(permMatrix.permissions) && (
         <>
           <div style={{ marginBottom: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
             <h2 className="page-title" style={{ fontSize: 18, margin: 0 }}>{t('permissions.title')}</h2>

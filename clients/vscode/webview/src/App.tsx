@@ -984,7 +984,11 @@ function Chat({ init }: { init: InitData }) {
                       key={p.ref}
                       icon={<Avatar name={p.name} kind={p.kind} size={16} />}
                       label={p.name}
-                      hint={t('app.chatRecipientHint', 'Chat')}
+                      // An invited AGENT actually answers (and can use platform tools);
+                      // a person is just notified. Make the affordance say which.
+                      hint={p.kind === 'agent'
+                        ? t('app.agentRecipientHint', 'Replies & acts')
+                        : t('app.humanRecipientHint', 'Notified')}
                       active={recipient?.ref === p.ref}
                       onClick={() => { setRecipientChoice(p); close(); }}
                     />
