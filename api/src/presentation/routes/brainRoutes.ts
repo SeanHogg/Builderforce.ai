@@ -67,6 +67,26 @@ export function createBrainRoutes(brainService: BrainService, db: Db): Hono<Hono
     return c.json(result, 201);
   });
 
+  // GET /team-chat?projectId=  — resolve-or-create the canonical TEAM chat for a
+  // scope (a project when projectId is set, otherwise the whole tenant/team). The
+  // chat icon on the Project and Team surfaces hits this, then opens the returned
+  // chat id through the normal /chats/:id/messages endpoints. Idempotent: everyone
+  // on the team lands in the SAME conversation.
+  router.get('/team-chat', async (c) => {
+    const raw = c.req.query('projectId');
+    const projectId = raw != null && raw !== '' && raw !== 'none' ? parseId(raw) : null;
+    if (raw != null && raw !== '' && raw !== 'none' && projectId == null) {
+      return c.json({ error: 'Invalid project id' }, 400);
+    }
+    const result = await brainService.getOrCreateTeamChat(
+      c.get('tenantId') as number,
+      c.get('userId') as string,
+      projectId,
+    );
+    if ('error' in result) return c.json({ error: result.error }, result.error === 'Project not found in tenant' ? 404 : 400);
+    return c.json(result);
+  });
+
   // GET /chats/:id
   router.get('/chats/:id', async (c) => {
     const id = parseId(c.req.param('id'));

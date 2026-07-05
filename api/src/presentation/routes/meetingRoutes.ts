@@ -13,17 +13,21 @@
  * manager.
  */
 import { Hono, type Context } from 'hono';
-import { and, desc, eq, inArray, gte, or, isNull } from 'drizzle-orm';
+import { and, desc, eq, inArray, gte, lte, or, isNull } from 'drizzle-orm';
 import type { Env, HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 import { authMiddleware, isManager } from '../middleware/authMiddleware';
 import { scope } from './segmentTrackerRoutes';
-import { meetings, meetingAttendees } from '../../infrastructure/database/schema';
+import { meetings, meetingAttendees, userAvailability } from '../../infrastructure/database/schema';
 import { relayToRoom } from './realtimeRelay';
 import { pushMeetingEvent, deleteMeetingEvent } from '../../application/calendar/calendarService';
 import type { CalendarProviderName } from '../../application/calendar/calendarProviders';
+import { loadProjectTeamMembers } from '../../application/metrics/assigneeRecommender';
+import {
+  suggestSlots, normalizeWindows, type Availability, type BusyInterval,
+} from '../../application/calendar/availabilitySolver';
 
-const KINDS = new Set(['standup', 'planning', 'retrospective', 'adhoc', 'direct']);
+const KINDS = new Set(['standup', 'planning', 'retrospective', 'adhoc', 'direct', 'interview', 'review']);
 
 interface AttendeeInput { kind?: string; ref: string; name: string; email?: string; role?: string; }
 
@@ -76,6 +80,29 @@ export function createMeetingRoutes(db: Db): Hono<HonoEnv> {
     return { meeting: m };
   }
 
+  /**
+   * Authorization to VIEW/JOIN a meeting. Cross-tenant is already blocked (rows are
+   * fetched by tenantId). Within the tenant a caller may access a meeting when they
+   * are: a manager, the organizer, a listed attendee, or — for a project meeting —
+   * a member of that project's team. A tenant-wide meeting (no project) is open to
+   * any authenticated tenant member holding the link.
+   */
+  async function canAccess(
+    c: Context<HonoEnv>,
+    meeting: typeof meetings.$inferSelect,
+    attendees: Array<typeof meetingAttendees.$inferSelect>,
+  ): Promise<boolean> {
+    const userId = (c.get('userId') as string) ?? '';
+    if (isManager(c)) return true;
+    if (meeting.createdBy === userId) return true;
+    if (attendees.some((a) => a.memberRef === userId)) return true;
+    if (meeting.projectId != null) {
+      const members = await loadProjectTeamMembers(db, meeting.projectId, scope(c).tenantId);
+      return members.some((m) => m.memberRef === userId);
+    }
+    return true; // tenant-wide meeting: any tenant member with the link
+  }
+
   // ── List ─────────────────────────────────────────────────────────────────────
   // GET /?projectId=&scope=upcoming|all
   r.get('/', async (c) => {
@@ -85,6 +112,14 @@ export function createMeetingRoutes(db: Db): Hono<HonoEnv> {
 
     const conds = [eq(meetings.tenantId, tenantId), eq(meetings.segmentId, segmentId)];
     if (projectId) conds.push(eq(meetings.projectId, Number(projectId)));
+    // Gig Marketplace (0293): a review/interview meeting is tracked against the exact
+    // work item, posting, or engagement — filter the agenda to one of them.
+    const ticketId = c.req.query('ticketId');
+    const jobId = c.req.query('jobId');
+    const engagementId = c.req.query('engagementId');
+    if (ticketId) conds.push(eq(meetings.ticketId, Number(ticketId)));
+    if (jobId) conds.push(eq(meetings.jobId, jobId));
+    if (engagementId) conds.push(eq(meetings.engagementId, engagementId));
     if (view === 'upcoming') {
       // Upcoming or live: not ended/cancelled, and (no schedule OR scheduled in the
       // future OR still live).
@@ -119,6 +154,11 @@ export function createMeetingRoutes(db: Db): Hono<HonoEnv> {
       attendees?: AttendeeInput[];
       organizerName?: string;
       organizerEmail?: string;
+      // Gig Marketplace (0293): optional back-links so this meeting is tracked against
+      // a work item / job posting / engagement (e.g. a review or interview).
+      ticketId?: number | null;
+      jobId?: string | null;
+      engagementId?: string | null;
     }>();
 
     const kind = body.kind && KINDS.has(body.kind) ? body.kind : 'adhoc';
@@ -138,6 +178,9 @@ export function createMeetingRoutes(db: Db): Hono<HonoEnv> {
       createdBy: userId,
       roomKey,
       videoEnabled: body.videoEnabled ?? true,
+      ticketId: body.ticketId ?? null,
+      jobId: body.jobId ?? null,
+      engagementId: body.engagementId ?? null,
     }).returning();
     if (!meeting) return c.json({ error: 'Failed to create meeting' }, 500);
 
@@ -181,7 +224,9 @@ export function createMeetingRoutes(db: Db): Hono<HonoEnv> {
   r.get('/:id', async (c) => {
     const { tenantId } = scope(c);
     const detail = await hydrate(tenantId, c.req.param('id'));
-    return detail ? c.json(detail) : c.json({ error: 'Not found' }, 404);
+    if (!detail) return c.json({ error: 'Not found' }, 404);
+    if (!(await canAccess(c, detail.meeting, detail.attendees))) return c.json({ error: 'Not authorized for this meeting' }, 403);
+    return c.json(detail);
   });
 
   // ── Join — returns the room key + ICE config; marks presence + goes live ──────
@@ -194,6 +239,11 @@ export function createMeetingRoutes(db: Db): Hono<HonoEnv> {
     const [m] = await db.select().from(meetings).where(and(eq(meetings.id, id), eq(meetings.tenantId, tenantId)));
     if (!m) return c.json({ error: 'Not found' }, 404);
     if (m.status === 'cancelled' || m.status === 'ended') return c.json({ error: `Meeting has ${m.status}` }, 409);
+
+    // Only an authorized member (organizer / attendee / manager / project member)
+    // may join — the "meeting link" alone is not enough.
+    const existingAttendees = await db.select().from(meetingAttendees).where(eq(meetingAttendees.meetingId, id));
+    if (!(await canAccess(c, m, existingAttendees))) return c.json({ error: 'Not authorized for this meeting' }, 403);
 
     const now = new Date();
     // First join flips a scheduled meeting live.
@@ -284,6 +334,111 @@ export function createMeetingRoutes(db: Db): Hono<HonoEnv> {
     return c.json(await hydrate(tenantId, res.meeting.id));
   });
 
+  // ── Availability windows (bookable working hours) ─────────────────────────────
+  const DEFAULT_TZ = 'UTC';
+
+  /** Load availability for a set of user refs (missing = "available anytime"). */
+  async function loadAvailability(tenantId: number, refs: string[]): Promise<Availability[]> {
+    if (refs.length === 0) return [];
+    const rows = await db.select().from(userAvailability).where(and(
+      eq(userAvailability.tenantId, tenantId), inArray(userAvailability.userId, refs),
+    ));
+    const byUser = new Map(rows.map((r) => [r.userId, r]));
+    return refs.map((userId) => {
+      const row = byUser.get(userId);
+      return { userId, timezone: row?.timezone ?? DEFAULT_TZ, windows: normalizeWindows(row?.windows) };
+    });
+  }
+
+  /** Busy intervals (epoch-ms) for each ref from scheduled/live meetings in a window. */
+  async function loadBusy(tenantId: number, refs: string[], fromMs: number, toMs: number): Promise<Map<string, BusyInterval[]>> {
+    const out = new Map<string, BusyInterval[]>();
+    if (refs.length === 0) return out;
+    const rows = await db
+      .select({ ref: meetingAttendees.memberRef, scheduledAt: meetings.scheduledAt, duration: meetings.durationMinutes })
+      .from(meetingAttendees)
+      .innerJoin(meetings, eq(meetings.id, meetingAttendees.meetingId))
+      .where(and(
+        eq(meetings.tenantId, tenantId),
+        inArray(meetingAttendees.memberRef, refs),
+        inArray(meetings.status, ['scheduled', 'live']),
+        gte(meetings.scheduledAt, new Date(fromMs)),
+        lte(meetings.scheduledAt, new Date(toMs)),
+      ));
+    for (const row of rows) {
+      if (!row.scheduledAt) continue;
+      const start = row.scheduledAt.getTime();
+      const list = out.get(row.ref) ?? [];
+      list.push({ start, end: start + (row.duration ?? 30) * 60_000 });
+      out.set(row.ref, list);
+    }
+    return out;
+  }
+
+  // GET /availability/me — my declared windows + timezone.
+  r.get('/availability/me', async (c) => {
+    const { tenantId } = scope(c);
+    const userId = (c.get('userId') as string) ?? '';
+    const [row] = await db.select().from(userAvailability)
+      .where(and(eq(userAvailability.tenantId, tenantId), eq(userAvailability.userId, userId)));
+    return c.json({ timezone: row?.timezone ?? DEFAULT_TZ, windows: normalizeWindows(row?.windows) });
+  });
+
+  // PUT /availability/me — upsert my windows.
+  r.put('/availability/me', async (c) => {
+    const { tenantId } = scope(c);
+    const userId = (c.get('userId') as string) ?? '';
+    const body = await c.req.json<{ timezone?: string; windows?: unknown }>();
+    const timezone = (body.timezone && body.timezone.length <= 64) ? body.timezone : DEFAULT_TZ;
+    const windows = normalizeWindows(body.windows);
+    await db.insert(userAvailability).values({ tenantId, userId, timezone, windows })
+      .onConflictDoUpdate({
+        target: [userAvailability.tenantId, userAvailability.userId],
+        set: { timezone, windows, updatedAt: new Date() },
+      });
+    return c.json({ timezone, windows });
+  });
+
+  // GET /availability?refs=a,b,c — windows for multiple users (find-a-time inputs).
+  r.get('/availability', async (c) => {
+    const { tenantId } = scope(c);
+    const refs = (c.req.query('refs') ?? '').split(',').map((s) => s.trim()).filter(Boolean).slice(0, 50);
+    return c.json({ availability: await loadAvailability(tenantId, refs) });
+  });
+
+  // GET /freebusy?refs=&from=&to= — declared windows + busy blocks per attendee.
+  r.get('/freebusy', async (c) => {
+    const { tenantId } = scope(c);
+    const refs = (c.req.query('refs') ?? '').split(',').map((s) => s.trim()).filter(Boolean).slice(0, 50);
+    const fromMs = Date.parse(c.req.query('from') ?? '') || Date.now();
+    const toMs = Date.parse(c.req.query('to') ?? '') || (fromMs + 14 * 86_400_000);
+    const [availability, busy] = await Promise.all([
+      loadAvailability(tenantId, refs),
+      loadBusy(tenantId, refs, fromMs, toMs),
+    ]);
+    return c.json({
+      availability,
+      busy: refs.map((userId) => ({ userId, intervals: (busy.get(userId) ?? []).map((b) => ({ startISO: new Date(b.start).toISOString(), endISO: new Date(b.end).toISOString() })) })),
+    });
+  });
+
+  // GET /suggest?refs=&durationMinutes=&from=&to=&count= — proposed slots for all.
+  r.get('/suggest', async (c) => {
+    const { tenantId } = scope(c);
+    const refs = (c.req.query('refs') ?? '').split(',').map((s) => s.trim()).filter(Boolean).slice(0, 50);
+    if (refs.length === 0) return c.json({ slots: [] });
+    const durationMinutes = Math.min(480, Math.max(5, Number(c.req.query('durationMinutes') ?? 30)));
+    const fromMs = Date.parse(c.req.query('from') ?? '') || Date.now();
+    const toMs = Date.parse(c.req.query('to') ?? '') || (fromMs + 14 * 86_400_000);
+    const count = Math.min(20, Math.max(1, Number(c.req.query('count') ?? 6)));
+    const [availability, busy] = await Promise.all([
+      loadAvailability(tenantId, refs),
+      loadBusy(tenantId, refs, fromMs, toMs),
+    ]);
+    const slots = suggestSlots(availability, busy, { fromMs, toMs, durationMinutes, count });
+    return c.json({ slots });
+  });
+
   return r;
 }
 
@@ -293,6 +448,8 @@ function defaultTitle(kind: string): string {
     case 'planning': return 'Planning Session';
     case 'retrospective': return 'Retrospective';
     case 'direct': return 'Direct Call';
+    case 'interview': return 'Interview';
+    case 'review': return 'Review';
     default: return 'Meeting';
   }
 }

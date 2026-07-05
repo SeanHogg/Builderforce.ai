@@ -1,10 +1,12 @@
 'use client';
 
 import { useState } from 'react';
+import { useTranslations } from 'next-intl';
 import { adminApi } from '@/lib/adminApi';
 import { errText, fmtDateTime, useAdminData, AdminError, AdminLoading } from '@/components/admin/adminShared';
 
 export default function GovernancePanel() {
+  const t = useTranslations('admin');
   const { data, loading, error, reload, setError } = useAdminData(() => adminApi.adminProjects(), []);
   const governanceProjects = data ?? [];
 
@@ -19,28 +21,28 @@ export default function GovernancePanel() {
       <AdminError message={error} />
       <div style={{ marginBottom: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
         <div>
-          <h2 style={{ fontSize: 18, fontWeight: 700, margin: '0 0 4px' }}>Governance</h2>
+          <h2 style={{ fontSize: 18, fontWeight: 700, margin: '0 0 4px' }}>{t('governance.title')}</h2>
           <p className="text-muted" style={{ fontSize: 12 }}>
-            View and edit project governance rules (markdown) across all workspaces.
+            {t('governance.description')}
           </p>
-          <span className="text-muted" style={{ fontSize: 13 }}>{governanceProjects.length} projects</span>
+          <span className="text-muted" style={{ fontSize: 13 }}>{t('governance.count', { n: governanceProjects.length })}</span>
         </div>
-        <button type="button" className="btn-ghost" onClick={() => reload()}>↻ Refresh</button>
+        <button type="button" className="btn-ghost" onClick={() => reload()}>↻ {t('common.refresh')}</button>
       </div>
       <div className="table-wrap">
         <table className="data-table">
           <thead>
             <tr>
-              <th>Workspace</th>
-              <th>Project</th>
-              <th>Governance (preview)</th>
-              <th>Updated</th>
+              <th>{t('governance.colWorkspace')}</th>
+              <th>{t('governance.colProject')}</th>
+              <th>{t('governance.colGovernancePreview')}</th>
+              <th>{t('governance.colUpdated')}</th>
               <th></th>
             </tr>
           </thead>
           <tbody>
             {governanceProjects.length === 0 ? (
-              <tr><td colSpan={5} className="text-muted" style={{ padding: 24 }}>No projects yet.</td></tr>
+              <tr><td colSpan={5} className="text-muted" style={{ padding: 24 }}>{t('governance.empty')}</td></tr>
             ) : (
               governanceProjects.map((proj) => (
                 <tr key={proj.id}>
@@ -59,7 +61,7 @@ export default function GovernancePanel() {
                         setGovernanceEditContent(proj.governance ?? '');
                       }}
                     >
-                      Edit
+                      {t('common.edit')}
                     </button>
                   </td>
                 </tr>
@@ -77,16 +79,16 @@ export default function GovernancePanel() {
           onClick={() => { setGovernanceEditId(null); setGovernanceEditContent(''); }}
         >
           <div className="health-card" style={{ padding: 24, maxWidth: 640, width: '100%', maxHeight: '90vh', overflow: 'auto' }} onClick={(e) => e.stopPropagation()}>
-            <div className="page-title" style={{ marginBottom: 12 }}>Edit governance</div>
+            <div className="page-title" style={{ marginBottom: 12 }}>{t('governance.editGovernance')}</div>
             <p className="text-muted" style={{ fontSize: 12, marginBottom: 12 }}>
-              Project: {governanceProjects.find((p) => p.id === governanceEditId)?.name ?? governanceEditId}
+              {t('governance.projectLabel', { name: governanceProjects.find((p) => p.id === governanceEditId)?.name ?? governanceEditId })}
             </p>
             <textarea
               className="admin-token-textarea"
               value={governanceEditContent}
               onChange={(e) => setGovernanceEditContent(e.target.value)}
               style={{ minHeight: 280, width: '100%', marginBottom: 16 }}
-              placeholder="Governance rules (markdown)"
+              placeholder={t('governance.rulesPlaceholder')}
             />
             <div style={{ display: 'flex', gap: 8 }}>
               <button
@@ -108,9 +110,9 @@ export default function GovernancePanel() {
                   }
                 }}
               >
-                {governanceSaving ? 'Saving…' : 'Save'}
+                {governanceSaving ? t('common.saving') : t('common.save')}
               </button>
-              <button type="button" className="btn-ghost" onClick={() => { setGovernanceEditId(null); setGovernanceEditContent(''); }}>Cancel</button>
+              <button type="button" className="btn-ghost" onClick={() => { setGovernanceEditId(null); setGovernanceEditContent(''); }}>{t('common.cancel')}</button>
             </div>
           </div>
         </div>

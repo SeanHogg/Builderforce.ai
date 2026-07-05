@@ -2432,11 +2432,11 @@
       "projectsActive": "{count} aktiv",
       "tasks": "Aufgaben",
       "tasksInProgress": "{count} in Bearbeitung",
-      "agentsOnline": "Agenten online",
-      "agentsRegistered": "{count} registriert",
       "pendingRequests": "Offene Anfragen",
       "requiresReview": "Prüfung erforderlich",
-      "allClear": "alles erledigt"
+      "allClear": "alles erledigt",
+      "workforceOnline": "Talent / Team online",
+      "workingNow": "{count} arbeiten gerade"
     },
     "tabs": {
       "projects": "Projekte",
@@ -2470,6 +2470,24 @@
         "sop": "SOP",
         "process": "Prozess",
         "doc": "Dok"
+      }
+    },
+    "presence": {
+      "title": "Wer ist online",
+      "loading": "Wird geladen…",
+      "summary": "{online} online · {working} arbeiten",
+      "empty": "Gerade ist niemand online.",
+      "peopleHeading": "Personen ({count})",
+      "agentsHeading": "Agenten ({count})",
+      "noPeople": "Keine Personen online.",
+      "noAgents": "Keine Agenten online.",
+      "inIde": "In der IDE",
+      "activeSession": "Aktive Sitzung",
+      "manage": "Team verwalten",
+      "agent": {
+        "online": "Online",
+        "working": "Arbeitet",
+        "workingOn": "Arbeitet an {task}"
       }
     }
   },
@@ -5870,6 +5888,50 @@
       "audit": "Prüfprotokoll",
       "apiKeys": "API-Schlüssel",
       "token": "Superadmin-Token"
+    },
+    "common": {
+      "loading": "Wird geladen…",
+      "available": "Verfügbar",
+      "unavailable": "Nicht verfügbar (Ratenbegrenzung oder Fehler)",
+      "cooldownUntil": "Abkühlung bis {time}",
+      "cooldown": "Abkühlung",
+      "refresh": "Aktualisieren",
+      "cancel": "Abbrechen",
+      "save": "Speichern",
+      "saving": "Wird gespeichert…",
+      "create": "Erstellen",
+      "creating": "Wird erstellt…",
+      "update": "Aktualisieren",
+      "updating": "Wird aktualisiert…",
+      "remove": "Löschen",
+      "edit": "Bearbeiten",
+      "close": "Schließen",
+      "search": "Suchen",
+      "searchRefresh": "Suchen / Aktualisieren",
+      "filter": "Filtern",
+      "exportCsv": "CSV exportieren",
+      "exporting": "Wird exportiert…",
+      "prev": "← Zurück",
+      "next": "Weiter →",
+      "noResults": "Keine Ergebnisse.",
+      "details": "Details",
+      "hideDetails": "Details ausblenden",
+      "copy": "Kopieren",
+      "copied": "Kopiert!"
+    },
+    "emulate": {
+      "loadWorkspacesFailed": "Benutzer-Arbeitsbereiche konnten nicht geladen werden",
+      "title": "Benutzer emulieren",
+      "intro": "Starte eine Emulationssitzung als <strong>{email}</strong> mit dem Standard-Arbeitsbereich und der zugewiesenen Rolle. Du wirst mit einer bernsteinfarbenen Emulationsleiste zum Dashboard geleitet.",
+      "loadingWorkspace": "Arbeitsbereich wird geladen…",
+      "noWorkspaces": "Dieser Benutzer hat keine aktiven Arbeitsbereiche.",
+      "workspace": "Arbeitsbereich:",
+      "role": "Rolle:",
+      "reason": "Grund",
+      "reasonPlaceholder": "Kurzer Grund für diese Emulationssitzung (erforderlich)…",
+      "debuggerOverlay": "Berechtigungs-Debugger-Overlay aktivieren",
+      "start": "Emulation starten",
+      "starting": "Wird gestartet…"
     }
   },
   "providerKeys": {

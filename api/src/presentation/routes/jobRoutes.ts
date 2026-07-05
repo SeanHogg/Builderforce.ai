@@ -16,10 +16,16 @@ import { verifyWebJwt } from '../../infrastructure/auth/JwtService';
 import { getOrSetCached, invalidateCached } from '../../infrastructure/cache/readThroughCache';
 import { notify } from '../../application/notifications/notify';
 import { parseJsonArray } from '../../domain/shared/json';
+import { resolveTenantPlan } from './llmRoutes';
+import { gatewayJudge } from '../../application/eval/gatewayJudge';
+import { evaluateProposal, evalPercent } from '../../application/marketplace/proposalEval';
+import type { EvalJudge } from '../../application/eval/semanticEval';
 import type { Env, HonoEnv } from '../../env';
 
 const JOBS_PUBLIC_CACHE_KEY = 'jobs:public:open';
 const DISCIPLINES = ['developer', 'dba', 'designer', 'devops', 'qa', 'pm', 'data', 'security', 'other'];
+const POSTING_TYPES = ['project_bid', 'design', 'fte'];
+const ENGAGEMENT_TYPES = ['fixed_bid', 'hourly', 'fte'];
 
 function parseSkills(raw: unknown): string[] {
   return parseJsonArray<string>(raw);
@@ -45,6 +51,10 @@ const mapJob = (r: Record<string, unknown>) => ({
   currency: r.currency ?? 'USD',
   status: r.status,
   visibility: r.visibility ?? 'public',
+  postingType: r.posting_type ?? 'project_bid',
+  engagementType: r.engagement_type ?? null,
+  requirements: r.requirements ?? null,
+  sourceTicketId: r.source_ticket_id == null ? null : Number(r.source_ticket_id),
   proposalCount: r.proposal_count == null ? undefined : Number(r.proposal_count),
   createdAt: r.created_at ?? null,
 });
@@ -59,6 +69,8 @@ const mapProposal = (r: Record<string, unknown>) => ({
   rateCents: r.rate_cents == null ? null : Number(r.rate_cents),
   currency: r.currency ?? 'USD',
   status: r.status,
+  lastEvalOverall: r.last_eval_overall == null ? null : Number(r.last_eval_overall),
+  declineReason: r.decline_reason ?? null,
   createdAt: r.created_at ?? null,
 });
 
@@ -125,19 +137,64 @@ export function createJobRoutes(): Hono<HonoEnv> {
     return c.json({ ok: true, engagementId });
   });
 
-  // POST /proposals/:pid/decline — EMPLOYER declines a proposal.
+  // POST /proposals/:pid/decline — EMPLOYER declines a proposal, with an optional
+  // courteous "not selected this time" message surfaced to the candidate.
   router.post('/proposals/:pid/decline', authMiddleware, async (c) => {
     const tenantId = c.get('tenantId') as number;
     const pid = c.req.param('pid');
+    const b = await c.req.json<{ reason?: string }>().catch(() => ({} as { reason?: string }));
+    const reason = typeof b.reason === 'string' && b.reason.trim() ? b.reason.slice(0, 2000) : null;
     const rows = await sql(c.env)`
-      UPDATE job_proposals pr SET status = 'declined', updated_at = NOW()
+      UPDATE job_proposals pr SET status = 'declined', decline_reason = ${reason}, updated_at = NOW()
       FROM job_postings j WHERE pr.job_id = j.id AND pr.id = ${pid} AND j.tenant_id = ${tenantId} AND pr.status IN ('submitted', 'shortlisted')
       RETURNING pr.freelancer_user_id, pr.job_id
     `;
     const declined = rows[0];
     if (!declined) return c.json({ error: 'Not found' }, 404);
-    await notify(sql(c.env), c.env, { userId: declined.freelancer_user_id as string, tenantId, kind: 'declined', title: 'A proposal was declined', ref: declined.job_id as string });
+    await notify(sql(c.env), c.env, { userId: declined.freelancer_user_id as string, tenantId, kind: 'declined', title: 'A proposal was declined', body: reason, ref: declined.job_id as string });
     return c.json({ ok: true });
+  });
+
+  // POST /proposals/:pid/shortlist — EMPLOYER shortlists a candidate's bid.
+  router.post('/proposals/:pid/shortlist', authMiddleware, async (c) => {
+    const tenantId = c.get('tenantId') as number;
+    const pid = c.req.param('pid');
+    const rows = await sql(c.env)`
+      UPDATE job_proposals pr SET status = 'shortlisted', updated_at = NOW()
+      FROM job_postings j WHERE pr.job_id = j.id AND pr.id = ${pid} AND j.tenant_id = ${tenantId} AND pr.status IN ('submitted', 'shortlisted')
+      RETURNING pr.freelancer_user_id, pr.job_id, j.title AS job_title
+    `;
+    const pr = rows[0];
+    if (!pr) return c.json({ error: 'Not found' }, 404);
+    await notify(sql(c.env), c.env, { userId: pr.freelancer_user_id as string, tenantId, kind: 'shortlisted', title: `You were shortlisted for "${pr.job_title}"`, ref: pr.job_id as string });
+    return c.json({ ok: true });
+  });
+
+  // POST /proposals/:pid/evaluate — EMPLOYER AI-scores a bid against the posting's
+  // requirements (LLM-as-judge via the metered gateway; lexical fallback). One row
+  // per eval run in proposal_evaluations; the 0..100 overall is cached on the proposal.
+  router.post('/proposals/:pid/evaluate', authMiddleware, async (c) => {
+    const tenantId = c.get('tenantId') as number;
+    const actor = c.get('userId') as string;
+    const pid = c.req.param('pid');
+    const [pr] = await sql(c.env)`
+      SELECT pr.id, pr.cover_note, pr.job_id, j.tenant_id AS job_tenant, j.title AS job_title, j.description, j.requirements
+      FROM job_proposals pr JOIN job_postings j ON j.id = pr.job_id WHERE pr.id = ${pid}
+    `;
+    if (!pr || Number(pr.job_tenant) !== Number(tenantId)) return c.json({ error: 'Not found' }, 404);
+    const requirements = (pr.requirements as string) || (pr.description as string) || '';
+    const proposal = (pr.cover_note as string) || '';
+    let judge: EvalJudge | undefined;
+    const plan = await resolveTenantPlan(c.env as Env, tenantId).catch(() => null);
+    if (plan) judge = gatewayJudge(c.env as Env, plan.effectivePlan, plan.premiumOverride);
+    const scores = await evaluateProposal({ requirements, scope: (pr.description as string) ?? undefined, proposal }, { judge });
+    const overall100 = evalPercent(scores.overall);
+    await sql(c.env)`
+      INSERT INTO proposal_evaluations (id, tenant_id, subject_type, subject_id, job_id, faithfulness, answer_relevance, context_relevance, hallucination_rate, overall, method, summary, evaluated_by_user_id)
+      VALUES (${crypto.randomUUID()}, ${tenantId}, 'job_proposal', ${pid}, ${pr.job_id}, ${scores.faithfulness}, ${scores.answerRelevance}, ${scores.contextRelevance}, ${scores.hallucinationRate}, ${scores.overall}, ${scores.method}, ${null}, ${actor})
+    `;
+    await sql(c.env)`UPDATE job_proposals SET last_eval_overall = ${overall100}, updated_at = NOW() WHERE id = ${pid}`;
+    return c.json({ ...scores, overall100 });
   });
 
   // ---- Employer: my jobs ----
@@ -172,13 +229,22 @@ export function createJobRoutes(): Hono<HonoEnv> {
     if (!title) return c.json({ error: 'title required' }, 400);
     const discipline = DISCIPLINES.includes(b.discipline as string) ? (b.discipline as string) : null;
     const skills = Array.isArray(b.skills) ? JSON.stringify((b.skills as unknown[]).filter((s) => typeof s === 'string').slice(0, 30)) : null;
+    const postingType = POSTING_TYPES.includes(b.postingType as string) ? (b.postingType as string) : 'project_bid';
+    const engagementType = ENGAGEMENT_TYPES.includes(b.engagementType as string) ? (b.engagementType as string) : null;
+    const requirements = typeof b.requirements === 'string' ? b.requirements.slice(0, 8000) : null;
+    const sourceTicketId = typeof b.sourceTicketId === 'number' ? Math.round(b.sourceTicketId) : null;
     const id = crypto.randomUUID();
     await sql(c.env)`
-      INSERT INTO job_postings (id, tenant_id, project_id, title, description, discipline, skills, rate_min_cents, rate_max_cents, currency, visibility, created_by_user_id)
+      INSERT INTO job_postings (id, tenant_id, project_id, title, description, discipline, skills, rate_min_cents, rate_max_cents, currency, visibility, posting_type, engagement_type, requirements, source_ticket_id, created_by_user_id)
       VALUES (${id}, ${tenantId}, ${typeof b.projectId === 'number' ? b.projectId : null}, ${title}, ${typeof b.description === 'string' ? b.description.slice(0, 5000) : null},
         ${discipline}, ${skills}, ${typeof b.rateMinCents === 'number' ? Math.round(b.rateMinCents) : null}, ${typeof b.rateMaxCents === 'number' ? Math.round(b.rateMaxCents) : null},
-        ${typeof b.currency === 'string' ? (b.currency as string).slice(0, 3).toUpperCase() : 'USD'}, ${b.visibility === 'private' ? 'private' : 'public'}, ${actor})
+        ${typeof b.currency === 'string' ? (b.currency as string).slice(0, 3).toUpperCase() : 'USD'}, ${b.visibility === 'private' ? 'private' : 'public'},
+        ${postingType}, ${engagementType}, ${requirements}, ${sourceTicketId}, ${actor})
     `;
+    // Keep the ticket's hireable back-ref in sync when a posting is created FROM a ticket.
+    if (sourceTicketId != null) {
+      await sql(c.env)`UPDATE tasks SET hireable = TRUE, job_posting_id = ${id} WHERE id = ${sourceTicketId}`;
+    }
     await invalidateCached(c.env as Env, JOBS_PUBLIC_CACHE_KEY);
     return c.json({ id }, 201);
   });
@@ -187,13 +253,18 @@ export function createJobRoutes(): Hono<HonoEnv> {
   router.patch('/:id', authMiddleware, async (c) => {
     const tenantId = c.get('tenantId') as number;
     const id = c.req.param('id');
-    const b = await c.req.json<{ status?: string; title?: string; description?: string }>();
+    const b = await c.req.json<{ status?: string; title?: string; description?: string; requirements?: string; postingType?: string; engagementType?: string }>();
     const status = ['open', 'closed', 'filled'].includes(b.status ?? '') ? (b.status as string) : null;
+    const postingType = POSTING_TYPES.includes(b.postingType ?? '') ? (b.postingType as string) : null;
+    const engagementType = ENGAGEMENT_TYPES.includes(b.engagementType ?? '') ? (b.engagementType as string) : null;
     const rows = await sql(c.env)`
       UPDATE job_postings SET
         status = COALESCE(${status}, status),
         title = COALESCE(${typeof b.title === 'string' ? b.title.slice(0, 200) : null}, title),
         description = COALESCE(${typeof b.description === 'string' ? b.description.slice(0, 5000) : null}, description),
+        requirements = COALESCE(${typeof b.requirements === 'string' ? b.requirements.slice(0, 8000) : null}, requirements),
+        posting_type = COALESCE(${postingType}, posting_type),
+        engagement_type = COALESCE(${engagementType}, engagement_type),
         closed_at = CASE WHEN ${status} IN ('closed', 'filled') THEN NOW() ELSE closed_at END,
         updated_at = NOW()
       WHERE id = ${id} AND tenant_id = ${tenantId} RETURNING id

@@ -1,5 +1,6 @@
 'use client';
 
+import { useTranslations } from 'next-intl';
 import { adminApi } from '@/lib/adminApi';
 import { TenantIntegerOverrideEditor } from './TenantIntegerOverrideEditor';
 
@@ -15,25 +16,26 @@ interface Props {
 }
 
 export function TenantTokenLimitOverrideEditor({ tenantId, value, onChange }: Props) {
+  const t = useTranslations('admin');
   return (
     <TenantIntegerOverrideEditor
       tenantId={tenantId}
       value={value}
       onChange={onChange}
       config={{
-        label: 'Daily token cap',
+        label: t('tenants.tokenOverride.label'),
         fieldKey: 'tdlo',
         summary: (v) =>
-          v === null ? 'Using plan default'
-          : v === -1 ? 'Unlimited (gate skipped)'
-          : `${v.toLocaleString()} tokens / day`,
+          v === null ? t('tenants.tokenOverride.summaryPlanDefault')
+          : v === -1 ? t('tenants.tokenOverride.summaryUnlimited')
+          : t('tenants.tokenOverride.summaryCustom', { value: v.toLocaleString() }),
         toInput: (stored) => String(stored),
         fromInput: (input) => {
           const n = Number(input);
           return Number.isInteger(n) && n >= 0 ? n : null;
         },
-        customSuffix: 'tokens / day',
-        placeholder: 'e.g. 250000',
+        customSuffix: t('tenants.tokenOverride.suffix'),
+        placeholder: t('tenants.tokenOverride.placeholder'),
         step: 1000,
         save: async (id, next) => (await adminApi.setTenantTokenLimitOverride(id, next)).tokenDailyLimitOverride,
       }}

@@ -34,10 +34,6 @@ import type { Db } from '../../infrastructure/database/connection';
 const MEMBER_KINDS = ['human', 'cloud_agent', 'host_agent'] as const;
 type MemberKind = (typeof MEMBER_KINDS)[number];
 
-/** Cached team list (membership/projects change rarely). Invalidated on every
- *  write below so a change is reflected immediately; the KV TTL is the backstop. */
-const teamsCacheKey = (tenantId: number): string => `teams:tenant:${tenantId}`;
-
 /** Cached "teams attached to this project" (read by the Board-config Teams tab).
  *  Reflects team_projects rows + each team's name/description, so it is
  *  invalidated by attach/detach AND by a team rename/delete. */
@@ -53,9 +49,6 @@ export function createTeamRoutes(db: Db): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
   router.use('*', authMiddleware);
   router.use('*', requireRole(TenantRole.MANAGER));
-
-  const invalidate = (c: { env: unknown }, tenantId: number) =>
-    invalidateCached(c.env as Env, teamsCacheKey(tenantId));
 
   // Both project-scoped reads (attached-teams + assignable-workforce) for one project.
   const invalidateProjectCaches = (c: { env: unknown }, tenantId: number, projectId: number) =>
@@ -76,32 +69,33 @@ export function createTeamRoutes(db: Db): Hono<HonoEnv> {
   };
 
   // GET /api/teams — list with member + project counts (single grouped query,
-  // no per-team fan-out). Cached read-through.
+  // no per-team fan-out).
+  //
+  // Deliberately NOT read-through cached. The per-card member/project counts must
+  // be strongly consistent with the (uncached, authoritative) detail view — a
+  // cached list drifted from the detail is the exact "card says 1 member, panel
+  // shows 6" bug, because cache invalidation on write is only eventually
+  // consistent across isolates (L1 is per-isolate; KV delete propagates with a
+  // lag). This is a tiny tenant-scoped indexed read (a handful of team rows + two
+  // correlated COUNTs over team_id-indexed junction tables), so serving it fresh
+  // costs microseconds and carries no fan-out. The hot, cache-worthy reads — the
+  // by-project attached-teams and assignable-workforce lookups the assignee picker
+  // hits — remain cached below.
   router.get('/', async (c) => {
     const tenantId = c.get('tenantId') as number;
-    const rows = await getOrSetCached(
-      c.env as Env,
-      teamsCacheKey(tenantId),
-      async () =>
-        db
-          .select({
-            id:           teams.id,
-            name:         teams.name,
-            description:  teams.description,
-            createdAt:    teams.createdAt,
-            updatedAt:    teams.updatedAt,
-            memberCount:  sql<number>`(SELECT COUNT(*)::int FROM ${teamMembers} WHERE ${teamMembers.teamId} = ${teams.id})`,
-            projectCount: sql<number>`(SELECT COUNT(*)::int FROM ${teamProjects} WHERE ${teamProjects.teamId} = ${teams.id})`,
-          })
-          .from(teams)
-          .where(eq(teams.tenantId, tenantId))
-          .orderBy(teams.name),
-      // These counts are mutation-sensitive (a member add on isolate B invalidates
-      // KV, but isolate A keeps serving its own L1 until it expires). Keep a short
-      // L1 window so the card counts converge to the (always-fresh) detail view
-      // within seconds instead of the 30s default. KV stays the cross-isolate SoT.
-      { l1TtlMs: 5_000 },
-    );
+    const rows = await db
+      .select({
+        id:           teams.id,
+        name:         teams.name,
+        description:  teams.description,
+        createdAt:    teams.createdAt,
+        updatedAt:    teams.updatedAt,
+        memberCount:  sql<number>`(SELECT COUNT(*)::int FROM ${teamMembers} WHERE ${teamMembers.teamId} = ${teams.id})`,
+        projectCount: sql<number>`(SELECT COUNT(*)::int FROM ${teamProjects} WHERE ${teamProjects.teamId} = ${teams.id})`,
+      })
+      .from(teams)
+      .where(eq(teams.tenantId, tenantId))
+      .orderBy(teams.name);
     return c.json({ teams: rows });
   });
 

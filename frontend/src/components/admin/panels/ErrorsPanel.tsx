@@ -1,10 +1,12 @@
 'use client';
 
 import React, { useState } from 'react';
+import { useTranslations } from 'next-intl';
 import { adminApi } from '@/lib/adminApi';
 import { AdminError, AdminLoading, fmtDateTime, useAdminData } from '../adminShared';
 
 export default function ErrorsPanel() {
+  const t = useTranslations('admin');
   const { data: errors, loading, error, reload } = useAdminData(() => adminApi.errors(), []);
   const [expandedErrorId, setExpandedErrorId] = useState<number | null>(null);
 
@@ -16,23 +18,23 @@ export default function ErrorsPanel() {
     <div>
       <AdminError message={error} />
       <div style={{ marginBottom: 12, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <span className="text-muted" style={{ fontSize: 14 }}>Last 200 errors</span>
+        <span className="text-muted" style={{ fontSize: 14 }}>{t('errors.lastN', { n: 200 })}</span>
         <button type="button" className="btn-ghost" onClick={() => reload()}>
-          ↻ Refresh
+          ↻ {t('common.refresh')}
         </button>
       </div>
       {rows.length === 0 ? (
-        <p className="text-muted" style={{ padding: 24 }}>No errors recorded.</p>
+        <p className="text-muted" style={{ padding: 24 }}>{t('errors.noErrorsRecorded')}</p>
       ) : (
         <div className="table-wrap">
           <table className="data-table" style={{ fontSize: 13 }}>
             <thead>
               <tr>
                 <th style={{ width: 24 }}></th>
-                <th>Time</th>
-                <th>Method</th>
-                <th>Path</th>
-                <th>Message</th>
+                <th>{t('errors.time')}</th>
+                <th>{t('errors.method')}</th>
+                <th>{t('errors.path')}</th>
+                <th>{t('errors.message')}</th>
               </tr>
             </thead>
             <tbody>

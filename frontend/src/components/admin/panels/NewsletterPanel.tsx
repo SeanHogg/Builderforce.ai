@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
+import { useTranslations } from 'next-intl';
 import {
   adminApi,
   type AdminNewsletterSubscriber,
@@ -11,6 +12,7 @@ import { errText, fmtDate, fmtDateTime, fmtNum, AdminError, AdminLoading } from 
 import { Select } from '@/components/Select';
 
 export default function NewsletterPanel() {
+  const t = useTranslations('admin');
   const [newsletterStatusFilter, setNewsletterStatusFilter] = useState<'all' | 'subscribed' | 'unsubscribed' | 'suppressed'>('subscribed');
   const [newsletterSearch, setNewsletterSearch] = useState('');
 
@@ -65,15 +67,15 @@ export default function NewsletterPanel() {
       <AdminError message={error} />
       <div className="health-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 150px), 1fr))' }}>
         <div className="health-card">
-          <div className="health-label">Subscribers</div>
+          <div className="health-label">{t('newsletter.subscribers')}</div>
           <div className="health-value">{fmtNum(newsletterSubscribers.length)}</div>
         </div>
         <div className="health-card">
-          <div className="health-label">Templates</div>
+          <div className="health-label">{t('newsletter.templates')}</div>
           <div className="health-value">{newsletterTemplates.length}</div>
         </div>
         <div className="health-card">
-          <div className="health-label">Tracked events</div>
+          <div className="health-label">{t('newsletter.trackedEvents')}</div>
           <div className="health-value">{fmtNum(newsletterEvents.length)}</div>
         </div>
       </div>
@@ -85,31 +87,31 @@ export default function NewsletterPanel() {
             setNewsletterStatusFilter(e.target.value as typeof newsletterStatusFilter);
           }}
         >
-          <option value="all">All</option>
-          <option value="subscribed">Subscribed</option>
-          <option value="unsubscribed">Unsubscribed</option>
-          <option value="suppressed">Suppressed</option>
+          <option value="all">{t('newsletter.statusAll')}</option>
+          <option value="subscribed">{t('newsletter.statusSubscribed')}</option>
+          <option value="unsubscribed">{t('newsletter.statusUnsubscribed')}</option>
+          <option value="suppressed">{t('newsletter.statusSuppressed')}</option>
         </Select>
         <input
           type="text"
-          placeholder="Search email"
+          placeholder={t('newsletter.searchEmail')}
           value={newsletterSearch}
           onChange={(e) => setNewsletterSearch(e.target.value)}
           className="admin-select"
           style={{ width: 180 }}
         />
-        <button type="button" className="btn-ghost" onClick={() => reload()}>↻ Refresh</button>
+        <button type="button" className="btn-ghost" onClick={() => reload()}>↻ {t('common.refresh')}</button>
       </div>
       <div className="table-wrap">
         <table className="data-table">
           <thead>
             <tr>
-              <th>Email</th>
-              <th>Status</th>
-              <th>Source</th>
-              <th>User</th>
-              <th>Subscribed</th>
-              <th>Unsubscribed</th>
+              <th>{t('newsletter.thEmail')}</th>
+              <th>{t('newsletter.thStatus')}</th>
+              <th>{t('newsletter.thSource')}</th>
+              <th>{t('newsletter.thUser')}</th>
+              <th>{t('newsletter.thSubscribed')}</th>
+              <th>{t('newsletter.thUnsubscribed')}</th>
             </tr>
           </thead>
           <tbody>
@@ -131,18 +133,18 @@ export default function NewsletterPanel() {
         </table>
       </div>
       <div className="health-card" style={{ padding: 16 }}>
-        <div className="health-label" style={{ marginBottom: 12 }}>Create template</div>
+        <div className="health-label" style={{ marginBottom: 12 }}>{t('newsletter.createTemplate')}</div>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 8 }}>
           <input
             type="text"
-            placeholder="Name"
+            placeholder={t('newsletter.phName')}
             value={newsletterTemplateName}
             onChange={(e) => setNewsletterTemplateName(e.target.value)}
             className="admin-select"
           />
           <input
             type="text"
-            placeholder="Subject"
+            placeholder={t('newsletter.phSubject')}
             value={newsletterTemplateSubject}
             onChange={(e) => setNewsletterTemplateSubject(e.target.value)}
             className="admin-select"
@@ -150,14 +152,14 @@ export default function NewsletterPanel() {
         </div>
         <input
           type="text"
-          placeholder="Preheader"
+          placeholder={t('newsletter.phPreheader')}
           value={newsletterTemplatePreheader}
           onChange={(e) => setNewsletterTemplatePreheader(e.target.value)}
           className="admin-select"
           style={{ width: '100%', marginBottom: 8 }}
         />
         <textarea
-          placeholder="Body (Markdown)"
+          placeholder={t('newsletter.phBody')}
           value={newsletterTemplateBody}
           onChange={(e) => setNewsletterTemplateBody(e.target.value)}
           className="admin-token-textarea"
@@ -189,11 +191,11 @@ export default function NewsletterPanel() {
             }
           }}
         >
-          {newsletterTemplateBusy ? 'Saving…' : 'Save template'}
+          {newsletterTemplateBusy ? t('common.saving') : t('newsletter.saveTemplate')}
         </button>
       </div>
       <div className="health-card" style={{ padding: 16 }}>
-        <div className="health-label" style={{ marginBottom: 12 }}>Track send</div>
+        <div className="health-label" style={{ marginBottom: 12 }}>{t('newsletter.trackSend')}</div>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
           <Select
             className="admin-select"
@@ -201,14 +203,14 @@ export default function NewsletterPanel() {
             onChange={(e) => setNewsletterTrackTemplateId(e.target.value)}
             style={{ minWidth: 180 }}
           >
-            <option value="">Select template</option>
+            <option value="">{t('newsletter.selectTemplate')}</option>
             {newsletterTemplates.map((t) => (
               <option key={t.id} value={String(t.id)}>{t.name}</option>
             ))}
           </Select>
           <input
             type="email"
-            placeholder="Subscriber email"
+            placeholder={t('newsletter.subscriberEmail')}
             value={newsletterTrackEmail}
             onChange={(e) => setNewsletterTrackEmail(e.target.value)}
             className="admin-select"
@@ -236,21 +238,21 @@ export default function NewsletterPanel() {
               }
             }}
           >
-            {newsletterTrackBusy ? 'Sending…' : 'Track send'}
+            {newsletterTrackBusy ? t('newsletter.sending') : t('newsletter.trackSend')}
           </button>
         </div>
       </div>
       <div>
-        <div className="health-label" style={{ marginBottom: 8 }}>Templates ({newsletterTemplates.length})</div>
+        <div className="health-label" style={{ marginBottom: 8 }}>{t('newsletter.templatesCount', { count: newsletterTemplates.length })}</div>
         <div className="table-wrap">
           <table className="data-table">
             <thead>
               <tr>
-                <th>Name</th>
-                <th>Slug</th>
-                <th>Subject</th>
-                <th>Active</th>
-                <th>Updated</th>
+                <th>{t('newsletter.thName')}</th>
+                <th>{t('newsletter.thSlug')}</th>
+                <th>{t('newsletter.thSubject')}</th>
+                <th>{t('newsletter.thActive')}</th>
+                <th>{t('newsletter.thUpdated')}</th>
               </tr>
             </thead>
             <tbody>
@@ -268,15 +270,15 @@ export default function NewsletterPanel() {
         </div>
       </div>
       <div>
-        <div className="health-label" style={{ marginBottom: 8 }}>Recent events ({newsletterEvents.length})</div>
+        <div className="health-label" style={{ marginBottom: 8 }}>{t('newsletter.recentEventsCount', { count: newsletterEvents.length })}</div>
         <div className="table-wrap">
           <table className="data-table" style={{ fontSize: 13 }}>
             <thead>
               <tr>
-                <th>Time</th>
-                <th>Email</th>
-                <th>Event</th>
-                <th>Template</th>
+                <th>{t('newsletter.thTime')}</th>
+                <th>{t('newsletter.thEmail')}</th>
+                <th>{t('newsletter.thEvent')}</th>
+                <th>{t('newsletter.thTemplate')}</th>
               </tr>
             </thead>
             <tbody>

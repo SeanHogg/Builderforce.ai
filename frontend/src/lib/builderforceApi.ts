@@ -381,6 +381,19 @@ export const brain = {
   createChat: (body: { title?: string; projectId?: number | null }) =>
     request<BrainChat>('/api/brain/chats', { method: 'POST', body: JSON.stringify(body) }),
 
+  /** Resolve-or-create the canonical TEAM chat for a scope: a project when
+   *  `projectId` is set, a named workforce team when `teamId` is set, otherwise
+   *  the tenant-wide "broader team" chat. Everyone lands in the SAME conversation. */
+  getTeamChat: (scope?: { projectId?: number | null; teamId?: number | null }) => {
+    const q = new URLSearchParams();
+    if (scope?.projectId != null) q.set('projectId', String(scope.projectId));
+    if (scope?.teamId != null) q.set('teamId', String(scope.teamId));
+    const query = q.toString();
+    return request<BrainChat & { isTeamChat: true; isOwner: boolean; visibility: 'shared' | 'locked' }>(
+      `/api/brain/team-chat${query ? `?${query}` : ''}`,
+    );
+  },
+
   getChat: (id: number) => request<BrainChat>(`/api/brain/chats/${id}`),
 
   updateChat: (id: number, body: { title?: string; projectId?: number | null; visibility?: 'shared' | 'locked' }) =>
@@ -1257,7 +1270,11 @@ export interface Task {
   /** Fixed type dimension: a plain task, an Epic (planning container with
    *  children), or a GAP (minted by the Validator when a Done item is reviewed
    *  and found incomplete). */
-  taskType: 'task' | 'epic' | 'gap';
+  taskType: 'task' | 'epic' | 'gap' | 'security';
+  /** True when this is a SECURITY ticket the current viewer isn't cleared to see:
+   *  its content is redacted server-side and the UI shows a "clearance needed"
+   *  placeholder. Present only on masked rows. */
+  restricted?: boolean;
   /** Parent Epic's id (null for top-level tasks). Set when grouped under an Epic. */
   parentTaskId: number | null;
   /** How many times a Validator has reviewed this item (0 = never reviewed). */

@@ -1,10 +1,12 @@
 'use client';
 
 import { useState } from 'react';
+import { useTranslations } from 'next-intl';
 import { getStoredWebToken } from '@/lib/auth';
 import { AdminError, errText } from '../adminShared';
 
 export default function TokenPanel() {
+  const t = useTranslations('admin');
   const [error, setError] = useState('');
   const [showToken, setShowToken] = useState(false);
   const [copiedToken, setCopiedToken] = useState(false);
@@ -15,7 +17,7 @@ export default function TokenPanel() {
 
   const copyToken = async () => {
     if (!webToken) {
-      setError('No superadmin web token found for this session.');
+      setError(t('token.noTokenSession'));
       return;
     }
     try {
@@ -40,7 +42,7 @@ export default function TokenPanel() {
 
   const copyEnvTemplate = async () => {
     if (!webToken) {
-      setError('No superadmin web token found for this session.');
+      setError(t('token.noTokenSession'));
       return;
     }
     try {
@@ -54,7 +56,7 @@ export default function TokenPanel() {
 
   const downloadEnvTemplate = () => {
     if (!webToken) {
-      setError('No superadmin web token found for this session.');
+      setError(t('token.noTokenSession'));
       return;
     }
     try {
@@ -79,7 +81,7 @@ export default function TokenPanel() {
     <div className="admin-token-card">
       <AdminError message={error} />
       <p className="page-sub" style={{ marginBottom: 12 }}>
-        This web token grants superadmin API access for your current session. Share only with trusted tooling.
+        {t('token.shareWarning')}
       </p>
       <div className="admin-token-actions">
         <button
@@ -87,7 +89,7 @@ export default function TokenPanel() {
           className="admin-tab"
           onClick={() => setShowToken(!showToken)}
         >
-          {showToken ? 'Hide token' : 'Show token'}
+          {showToken ? t('token.hideToken') : t('token.showToken')}
         </button>
         <button
           type="button"
@@ -95,7 +97,7 @@ export default function TokenPanel() {
           onClick={copyToken}
           disabled={!webToken}
         >
-          {copiedToken ? 'Copied!' : 'Copy token'}
+          {copiedToken ? t('common.copied') : t('token.copyToken')}
         </button>
         <button
           type="button"
@@ -103,7 +105,7 @@ export default function TokenPanel() {
           onClick={copyEnvTemplate}
           disabled={!webToken}
         >
-          {copiedEnv ? 'Env copied!' : 'Copy env template'}
+          {copiedEnv ? t('token.envCopied') : t('token.copyEnvTemplate')}
         </button>
         <button
           type="button"
@@ -111,18 +113,18 @@ export default function TokenPanel() {
           onClick={downloadEnvTemplate}
           disabled={!webToken}
         >
-          {downloadedEnv ? 'Downloaded!' : 'Download .env file'}
+          {downloadedEnv ? t('token.downloaded') : t('token.downloadEnvFile')}
         </button>
       </div>
       {showToken ? (
         <textarea
           readOnly
-          value={webToken || 'No superadmin web token found'}
+          value={webToken || t('token.noTokenFound')}
           className="admin-token-textarea"
         />
       ) : (
         <div className="text-muted" style={{ fontSize: 12, fontFamily: 'var(--mono)' }}>
-          {webToken ? '••••••••••••••••••••••••••••' : 'No superadmin web token found'}
+          {webToken ? '••••••••••••••••••••••••••••' : t('token.noTokenFound')}
         </div>
       )}
     </div>

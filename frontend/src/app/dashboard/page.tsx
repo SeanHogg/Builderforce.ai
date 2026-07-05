@@ -23,6 +23,8 @@ import { IdeProjectsContent } from '@/components/ide/IdeProjectsContent';
 import { DashboardIdeasTab } from '@/components/dashboard/DashboardIdeasTab';
 import { DashboardQualityTab } from '@/components/dashboard/DashboardQualityTab';
 import { DashboardKnowledgeTab } from '@/components/dashboard/DashboardKnowledgeTab';
+import { WorkforcePresenceStrip } from '@/components/workforce/WorkforcePresenceStrip';
+import { useWorkforcePresence } from '@/lib/useWorkforcePresence';
 import { agentHosts, tasksApi, approvalsApi, type AgentHost } from '@/lib/builderforceApi';
 
 const ONBOARDING_DISMISSED_KEY = 'bf_onboarding_dismissed';
@@ -169,6 +171,9 @@ export default function DashboardPage() {
   };
 
   const connectedAgentHosts = agentHostList.filter((c) => c.online);
+  // Live "who's online / what's working" across humans AND agents — powers the
+  // renamed "Talent / Workforce online" tile and the presence strip below.
+  const presence = useWorkforcePresence();
   // Project stats follow the global scope: a selected project narrows the count
   // and the grid (the grid filter lives in ProjectsContent) to just that project.
   const scopedProjects = currentProjectId != null ? projects.filter((p) => p.id === currentProjectId) : projects;
@@ -182,7 +187,6 @@ export default function DashboardPage() {
     [scopedProjects],
   );
   const taskSeries = useMemo(() => cumulativeDailySeries(taskDates), [taskDates]);
-  const agentSeries = useMemo(() => cumulativeDailySeries(agentHostList.map((c) => c.createdAt)), [agentHostList]);
   const approvalSeries = useMemo(() => dailyCounts(approvalDates), [approvalDates]);
 
   if (!isAuthenticated) return null;
@@ -298,13 +302,13 @@ export default function DashboardPage() {
               color="var(--cyan-bright, #00e5cc)"
             />
             <InsightStat
-              label={t('metric.agentsOnline')}
-              value={String(connectedAgentHosts.length)}
-              sub={t('metric.agentsRegistered', { count: agentHostList.length })}
-              series={agentSeries}
-              delta={buildInsightDelta(agentSeries, null)}
+              label={t('metric.workforceOnline')}
+              value={String(presence.onlineCount)}
+              sub={t('metric.workingNow', { count: presence.workingCount })}
+              series={presence.activitySeries}
+              delta={buildInsightDelta(presence.activitySeries, null)}
               href="/workforce"
-              color={connectedAgentHosts.length > 0 ? 'rgba(34,197,94,0.9)' : 'var(--text-muted)'}
+              color={presence.onlineCount > 0 ? 'rgba(34,197,94,0.9)' : 'var(--text-muted)'}
             />
             <InsightStat
               label={t('metric.pendingRequests')}
@@ -320,6 +324,9 @@ export default function DashboardPage() {
 
         {/* AI usage (month-to-date) — self-gating, all-members consumption card. */}
         {!loading && <AiUsageCard />}
+
+        {/* Who's online — live presence: people online + agents working right now. */}
+        {!loading && <WorkforcePresenceStrip />}
 
         {/* Tabs — at-a-glance across the whole workspace. Counts are shown only
             where the dashboard actually knows the total; the shared tab

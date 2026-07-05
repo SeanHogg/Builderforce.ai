@@ -21,6 +21,13 @@ import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 
 const BRAIN_ORIGIN = 'brainstorm';
+/** The canonical always-there team GROUP chat (migration 0294). Reuses the whole
+ *  Brain chat stack; one per (tenant, projectId), projectId NULL = tenant-wide. */
+const TEAM_ORIGIN = 'team';
+/** Origins reachable through the shared chat access/message endpoints. Team chats
+ *  ride the exact same read/post path as brainstorm chats (only owner-only ADMIN —
+ *  rename/archive/lock — stays brainstorm-only via {@link verifyChatOwnership}). */
+const ACCESSIBLE_ORIGINS = [BRAIN_ORIGIN, TEAM_ORIGIN] as const;
 
 // ---------------------------------------------------------------------------
 // DTOs
@@ -145,7 +152,7 @@ export class BrainService {
       .where(and(
         eq(brainChats.id, chatId),
         eq(brainChats.tenantId, tenantId),
-        eq(brainChats.origin, BRAIN_ORIGIN),
+        inArray(brainChats.origin, ACCESSIBLE_ORIGINS as unknown as string[]),
       ))
       .limit(1);
     if (!chat) return null;
@@ -386,6 +393,97 @@ export class BrainService {
       .returning(chatColumns);
 
     return chat;
+  }
+
+  // -----------------------------------------------------------------------
+  // Team Chat — the canonical, always-there group chat (migration 0294)
+  // -----------------------------------------------------------------------
+
+  /** Resolve the ONE team chat for a scope, creating it on first access. Scope is
+   *  the project (`projectId`) or the whole tenant (`projectId` null). Race-safe:
+   *  the unique `uq_team_chat_scope` index means a concurrent create just re-selects
+   *  the winner. `userId` may be null (an unattended agent resolving it). */
+  private async findTeamChat(tenantId: number, projectId: number | null) {
+    const [row] = await this.db
+      .select(chatDetailColumns)
+      .from(brainChats)
+      .where(and(
+        eq(brainChats.tenantId, tenantId),
+        eq(brainChats.origin, TEAM_ORIGIN),
+        eq(brainChats.isArchived, false),
+        projectId != null ? eq(brainChats.projectId, projectId) : isNull(brainChats.projectId),
+      ))
+      .limit(1);
+    return row ?? null;
+  }
+
+  async getOrCreateTeamChat(tenantId: number, userId: string | null, projectId: number | null) {
+    let projName: string | null = null;
+    if (projectId != null) {
+      const proj = await this.verifyProjectInTenant(projectId, tenantId);
+      if (!proj) return { error: 'Project not found in tenant' as const };
+      projName = proj.name;
+    }
+
+    let chat = await this.findTeamChat(tenantId, projectId);
+    if (!chat) {
+      const title = projName ? `${projName} — Team` : 'Team Chat';
+      try {
+        const [created] = await this.db
+          .insert(brainChats)
+          .values({ tenantId, userId: userId ?? null, origin: TEAM_ORIGIN, projectId: projectId ?? null, title, visibility: 'shared' })
+          .returning(chatDetailColumns);
+        chat = created ?? null;
+      } catch {
+        // Lost the create race (unique index) — the winner is now selectable.
+        chat = await this.findTeamChat(tenantId, projectId);
+      }
+    }
+    if (!chat) return { error: 'Chat not found' as const };
+
+    const { ownerId, ...rest } = chat as unknown as Record<string, unknown> & { ownerId: string | null };
+    return {
+      ...rest,
+      id: (chat as unknown as { id: number }).id,
+      isOwner: ownerId != null && ownerId === userId,
+      visibility: (rest as { visibility?: string }).visibility ?? 'shared',
+      isTeamChat: true as const,
+    };
+  }
+
+  /** Read the recent transcript of a team chat (agent-facing — server picks the
+   *  tenant's own canonical chat, so there is no cross-tenant id to guard). */
+  async readTeamChat(tenantId: number, projectId: number | null, limit = 30) {
+    const resolved = await this.getOrCreateTeamChat(tenantId, null, projectId);
+    if ('error' in resolved) return resolved;
+    const msgs = await this.db
+      .select(messageColumns)
+      .from(brainChatMessages)
+      .where(eq(brainChatMessages.chatId, resolved.id as number))
+      .orderBy(desc(brainChatMessages.seq))
+      .limit(Math.min(Math.max(1, limit), 100));
+    return { chatId: resolved.id, messages: msgs.reverse() };
+  }
+
+  /** Post a message INTO a team chat as an agent (agent-facing — no human userId
+   *  gate; the server resolves the tenant's own canonical chat). Attribution rides
+   *  metadata.authoredBy, mirroring {@link agentReply}. */
+  async postToTeamChat(
+    tenantId: number,
+    projectId: number | null,
+    content: string,
+    opts?: { fromName?: string; fromRef?: string },
+  ) {
+    const text = content?.trim();
+    if (!text) return { error: 'content is required' as const };
+    const resolved = await this.getOrCreateTeamChat(tenantId, null, projectId);
+    if ('error' in resolved) return resolved;
+    const metadata = JSON.stringify({
+      via: 'team_chat.post',
+      authoredBy: { kind: 'agent', ref: opts?.fromRef ?? 'agent', ...(opts?.fromName ? { name: opts.fromName } : {}) },
+    });
+    const [msg] = await this.appendRaw(resolved.id as number, [{ role: 'assistant', content: text, metadata }]);
+    return { chatId: resolved.id, message: msg ?? null };
   }
 
   async getChat(chatId: number, tenantId: number, userId: string) {

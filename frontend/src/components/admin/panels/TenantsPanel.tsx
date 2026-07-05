@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useCallback, useEffect, useState } from 'react';
+import { useTranslations } from 'next-intl';
 import { adminApi, type AdminTenant, type AdminUser, type TenantMember } from '@/lib/adminApi';
 import { ViewToggle, type ViewMode } from '@/components/ViewToggle';
 import { useEmulationLauncher } from '@/components/admin/EmulationLauncher';
@@ -11,6 +12,7 @@ import { TenantImageCreditsEditor } from '@/components/admin/TenantImageCreditsE
 import { TenantPremiumOverrideEditor } from '@/components/admin/TenantPremiumOverrideEditor';
 
 export default function TenantsPanel() {
+  const t = useTranslations('admin');
   const { startEmulation } = useEmulationLauncher();
 
   const [tenants, setTenants] = useState<AdminTenant[]>([]);
@@ -40,49 +42,49 @@ export default function TenantsPanel() {
     <div>
       <AdminError message={error} />
       <div style={{ marginBottom: 12, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
-        <span className="text-muted" style={{ fontSize: 14 }}>{tenants.length} workspaces</span>
+        <span className="text-muted" style={{ fontSize: 14 }}>{t('tenants.workspaceCount', { count: tenants.length })}</span>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <ViewToggle value={tenantsViewMode} onChange={setTenantsViewMode} />
           <button type="button" className="btn-ghost" onClick={reload}>
-            ↻ Refresh
+            ↻ {t('common.refresh')}
           </button>
         </div>
       </div>
       {tenants.length === 0 ? (
-        <p className="text-muted" style={{ padding: 24 }}>No workspaces found.</p>
+        <p className="text-muted" style={{ padding: 24 }}>{t('tenants.empty')}</p>
       ) : tenantsViewMode === 'table' ? (
       <div className="table-wrap">
         <table className="data-table">
           <thead>
             <tr>
               <th style={{ width: 24 }}></th>
-              <th>Name</th>
-              <th>Slug</th>
-              <th>Status</th>
-              <th>Plan</th>
-              <th>Billing</th>
-              <th>Members</th>
-              <th>AgentHosts</th>
-              <th>Created</th>
+              <th>{t('tenants.colName')}</th>
+              <th>{t('tenants.colSlug')}</th>
+              <th>{t('tenants.colStatus')}</th>
+              <th>{t('tenants.colPlan')}</th>
+              <th>{t('tenants.colBilling')}</th>
+              <th>{t('tenants.colMembers')}</th>
+              <th>{t('tenants.colAgentHosts')}</th>
+              <th>{t('tenants.colCreated')}</th>
             </tr>
           </thead>
           <tbody>
-            {tenants.map((t) => (
-              <React.Fragment key={t.id}>
+            {tenants.map((tenant) => (
+              <React.Fragment key={tenant.id}>
                 <tr
                   role="button"
                   tabIndex={0}
                   style={{ cursor: 'pointer' }}
                   onClick={async () => {
-                    if (expandedTenantId === t.id) {
+                    if (expandedTenantId === tenant.id) {
                       setExpandedTenantId(null);
                       return;
                     }
-                    setExpandedTenantId(t.id);
-                    if (!tenantMembersMap[t.id]) {
+                    setExpandedTenantId(tenant.id);
+                    if (!tenantMembersMap[tenant.id]) {
                       try {
-                        const members = await adminApi.tenantMembers(t.id);
-                        setTenantMembersMap((prev) => ({ ...prev, [t.id]: members }));
+                        const members = await adminApi.tenantMembers(tenant.id);
+                        setTenantMembersMap((prev) => ({ ...prev, [tenant.id]: members }));
                       } catch (e) {
                         setError(errText(e));
                       }
@@ -91,65 +93,65 @@ export default function TenantsPanel() {
                   onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.currentTarget.click(); } }}
                 >
                   <td style={{ verticalAlign: 'middle' }}>
-                    <span style={{ display: 'inline-block', transition: 'transform 0.2s', transform: expandedTenantId === t.id ? 'rotate(90deg)' : 'none' }}>▶</span>
+                    <span style={{ display: 'inline-block', transition: 'transform 0.2s', transform: expandedTenantId === tenant.id ? 'rotate(90deg)' : 'none' }}>▶</span>
                   </td>
-                  <td>{t.name}</td>
-                  <td style={{ fontFamily: 'var(--mono)', fontSize: 13 }}>{t.slug}</td>
+                  <td>{tenant.name}</td>
+                  <td style={{ fontFamily: 'var(--mono)', fontSize: 13 }}>{tenant.slug}</td>
                   <td>
-                    <span className={`badge ${t.status === 'active' ? 'badge-success' : 'badge-neutral'}`}>
-                      {t.status}
+                    <span className={`badge ${tenant.status === 'active' ? 'badge-success' : 'badge-neutral'}`}>
+                      {tenant.status}
                     </span>
                   </td>
                   <td>
-                    <span className={`badge ${t.effectivePlan === 'pro' ? 'badge-danger' : 'badge-neutral'}`}>
-                      {t.effectivePlan}
+                    <span className={`badge ${tenant.effectivePlan === 'pro' ? 'badge-danger' : 'badge-neutral'}`}>
+                      {tenant.effectivePlan}
                     </span>
                   </td>
-                  <td className="text-muted">{t.billingStatus}</td>
-                  <td>{t.memberCount}</td>
-                  <td>{t.agentHostCount}</td>
-                  <td className="text-muted">{fmtDate(t.createdAt)}</td>
+                  <td className="text-muted">{tenant.billingStatus}</td>
+                  <td>{tenant.memberCount}</td>
+                  <td>{tenant.agentHostCount}</td>
+                  <td className="text-muted">{fmtDate(tenant.createdAt)}</td>
                 </tr>
-                {expandedTenantId === t.id && (
+                {expandedTenantId === tenant.id && (
                   <tr>
                     <td colSpan={9} style={{ padding: 0, background: 'var(--bg-elevated)' }}>
                       <div style={{ padding: '8px 16px 12px 40px' }} onClick={(e) => e.stopPropagation()}>
                         <TenantTokenLimitOverrideEditor
-                          tenantId={t.id}
-                          value={t.tokenDailyLimitOverride ?? null}
-                          onChange={(next) => setTenants((prev) => prev.map((x) => x.id === t.id ? { ...x, tokenDailyLimitOverride: next } : x))}
+                          tenantId={tenant.id}
+                          value={tenant.tokenDailyLimitOverride ?? null}
+                          onChange={(next) => setTenants((prev) => prev.map((x) => x.id === tenant.id ? { ...x, tokenDailyLimitOverride: next } : x))}
                         />
                         <TenantPaidOverflowCapEditor
-                          tenantId={t.id}
-                          value={t.paidOverflowDailyCap ?? null}
-                          onChange={(next) => setTenants((prev) => prev.map((x) => x.id === t.id ? { ...x, paidOverflowDailyCap: next } : x))}
+                          tenantId={tenant.id}
+                          value={tenant.paidOverflowDailyCap ?? null}
+                          onChange={(next) => setTenants((prev) => prev.map((x) => x.id === tenant.id ? { ...x, paidOverflowDailyCap: next } : x))}
                         />
                         <TenantImageCreditsEditor
-                          tenantId={t.id}
-                          value={t.imageCreditsDailyLimit ?? null}
-                          onChange={(next) => setTenants((prev) => prev.map((x) => x.id === t.id ? { ...x, imageCreditsDailyLimit: next } : x))}
+                          tenantId={tenant.id}
+                          value={tenant.imageCreditsDailyLimit ?? null}
+                          onChange={(next) => setTenants((prev) => prev.map((x) => x.id === tenant.id ? { ...x, imageCreditsDailyLimit: next } : x))}
                         />
                         <TenantPremiumOverrideEditor
-                          tenantId={t.id}
-                          value={t.premiumOverride === true}
-                          onChange={(next) => setTenants((prev) => prev.map((x) => x.id === t.id ? { ...x, premiumOverride: next } : x))}
+                          tenantId={tenant.id}
+                          value={tenant.premiumOverride === true}
+                          onChange={(next) => setTenants((prev) => prev.map((x) => x.id === tenant.id ? { ...x, premiumOverride: next } : x))}
                         />
-                        {!tenantMembersMap[t.id] ? (
-                          <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>Loading members…</span>
-                        ) : tenantMembersMap[t.id].length === 0 ? (
-                          <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>No members.</span>
+                        {!tenantMembersMap[tenant.id] ? (
+                          <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{t('tenants.loadingMembers')}</span>
+                        ) : tenantMembersMap[tenant.id].length === 0 ? (
+                          <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{t('tenants.noMembers')}</span>
                         ) : (
                           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
                             <thead>
                               <tr>
-                                <th style={{ textAlign: 'left', padding: '4px 8px', color: 'var(--text-muted)', fontWeight: 600 }}>Email</th>
-                                <th style={{ textAlign: 'left', padding: '4px 8px', color: 'var(--text-muted)', fontWeight: 600 }}>Role</th>
-                                <th style={{ textAlign: 'left', padding: '4px 8px', color: 'var(--text-muted)', fontWeight: 600 }}>Joined</th>
+                                <th style={{ textAlign: 'left', padding: '4px 8px', color: 'var(--text-muted)', fontWeight: 600 }}>{t('tenants.memberEmail')}</th>
+                                <th style={{ textAlign: 'left', padding: '4px 8px', color: 'var(--text-muted)', fontWeight: 600 }}>{t('tenants.memberRole')}</th>
+                                <th style={{ textAlign: 'left', padding: '4px 8px', color: 'var(--text-muted)', fontWeight: 600 }}>{t('tenants.memberJoined')}</th>
                                 <th style={{ padding: '4px 8px' }}></th>
                               </tr>
                             </thead>
                             <tbody>
-                              {tenantMembersMap[t.id].map((m) => (
+                              {tenantMembersMap[tenant.id].map((m) => (
                                 <tr key={m.id}>
                                   <td style={{ padding: '4px 8px' }}>{m.email}</td>
                                   <td style={{ padding: '4px 8px' }}>
@@ -176,7 +178,7 @@ export default function TenantsPanel() {
                                         startEmulation(adminUser);
                                       }}
                                     >
-                                      Emulate
+                                      {t('tenants.emulate')}
                                     </button>
                                   </td>
                                 </tr>
@@ -195,18 +197,18 @@ export default function TenantsPanel() {
       </div>
       ) : (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 16 }}>
-          {tenants.map((t) => {
-            const expanded = expandedTenantId === t.id;
+          {tenants.map((tenant) => {
+            const expanded = expandedTenantId === tenant.id;
             const toggleExpand = async () => {
               if (expanded) {
                 setExpandedTenantId(null);
                 return;
               }
-              setExpandedTenantId(t.id);
-              if (!tenantMembersMap[t.id]) {
+              setExpandedTenantId(tenant.id);
+              if (!tenantMembersMap[tenant.id]) {
                 try {
-                  const members = await adminApi.tenantMembers(t.id);
-                  setTenantMembersMap((prev) => ({ ...prev, [t.id]: members }));
+                  const members = await adminApi.tenantMembers(tenant.id);
+                  setTenantMembersMap((prev) => ({ ...prev, [tenant.id]: members }));
                 } catch (e) {
                   setError(errText(e));
                 }
@@ -214,7 +216,7 @@ export default function TenantsPanel() {
             };
             return (
               <div
-                key={t.id}
+                key={tenant.id}
                 style={{
                   background: 'var(--bg-elevated)',
                   border: '1px solid var(--border-subtle)',
@@ -235,61 +237,61 @@ export default function TenantsPanel() {
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
                     <span style={{ fontWeight: 600 }}>
                       <span style={{ display: 'inline-block', marginRight: 6, transition: 'transform 0.2s', transform: expanded ? 'rotate(90deg)' : 'none' }}>▶</span>
-                      {t.name}
+                      {tenant.name}
                     </span>
-                    <span className={`badge ${t.effectivePlan === 'pro' ? 'badge-danger' : 'badge-neutral'}`}>
-                      {t.effectivePlan}
+                    <span className={`badge ${tenant.effectivePlan === 'pro' ? 'badge-danger' : 'badge-neutral'}`}>
+                      {tenant.effectivePlan}
                     </span>
                   </div>
-                  <div style={{ fontFamily: 'var(--mono)', fontSize: 13, color: 'var(--text-muted)' }}>{t.slug}</div>
+                  <div style={{ fontFamily: 'var(--mono)', fontSize: 13, color: 'var(--text-muted)' }}>{tenant.slug}</div>
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center', fontSize: 13 }}>
-                    <span className={`badge ${t.status === 'active' ? 'badge-success' : 'badge-neutral'}`}>{t.status}</span>
-                    <span className="text-muted">{t.billingStatus}</span>
+                    <span className={`badge ${tenant.status === 'active' ? 'badge-success' : 'badge-neutral'}`}>{tenant.status}</span>
+                    <span className="text-muted">{tenant.billingStatus}</span>
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, color: 'var(--text-muted)' }}>
-                    <span>{t.memberCount} members</span>
-                    <span>{t.agentHostCount} agenthosts</span>
+                    <span>{t('tenants.memberCount', { count: tenant.memberCount })}</span>
+                    <span>{t('tenants.agentHostCount', { count: tenant.agentHostCount })}</span>
                   </div>
-                  <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>Created {fmtDate(t.createdAt)}</div>
+                  <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>{t('tenants.createdOn', { date: fmtDate(tenant.createdAt) })}</div>
                 </div>
                 {expanded && (
                   <div onClick={(e) => e.stopPropagation()} style={{ borderTop: '1px solid var(--border-subtle)', paddingTop: 10 }}>
                     <TenantTokenLimitOverrideEditor
-                      tenantId={t.id}
-                      value={t.tokenDailyLimitOverride ?? null}
-                      onChange={(next) => setTenants((prev) => prev.map((x) => x.id === t.id ? { ...x, tokenDailyLimitOverride: next } : x))}
+                      tenantId={tenant.id}
+                      value={tenant.tokenDailyLimitOverride ?? null}
+                      onChange={(next) => setTenants((prev) => prev.map((x) => x.id === tenant.id ? { ...x, tokenDailyLimitOverride: next } : x))}
                     />
                     <TenantPaidOverflowCapEditor
-                      tenantId={t.id}
-                      value={t.paidOverflowDailyCap ?? null}
-                      onChange={(next) => setTenants((prev) => prev.map((x) => x.id === t.id ? { ...x, paidOverflowDailyCap: next } : x))}
+                      tenantId={tenant.id}
+                      value={tenant.paidOverflowDailyCap ?? null}
+                      onChange={(next) => setTenants((prev) => prev.map((x) => x.id === tenant.id ? { ...x, paidOverflowDailyCap: next } : x))}
                     />
                     <TenantImageCreditsEditor
-                      tenantId={t.id}
-                      value={t.imageCreditsDailyLimit ?? null}
-                      onChange={(next) => setTenants((prev) => prev.map((x) => x.id === t.id ? { ...x, imageCreditsDailyLimit: next } : x))}
+                      tenantId={tenant.id}
+                      value={tenant.imageCreditsDailyLimit ?? null}
+                      onChange={(next) => setTenants((prev) => prev.map((x) => x.id === tenant.id ? { ...x, imageCreditsDailyLimit: next } : x))}
                     />
                     <TenantPremiumOverrideEditor
-                      tenantId={t.id}
-                      value={t.premiumOverride === true}
-                      onChange={(next) => setTenants((prev) => prev.map((x) => x.id === t.id ? { ...x, premiumOverride: next } : x))}
+                      tenantId={tenant.id}
+                      value={tenant.premiumOverride === true}
+                      onChange={(next) => setTenants((prev) => prev.map((x) => x.id === tenant.id ? { ...x, premiumOverride: next } : x))}
                     />
-                    {!tenantMembersMap[t.id] ? (
-                      <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>Loading members…</span>
-                    ) : tenantMembersMap[t.id].length === 0 ? (
-                      <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>No members.</span>
+                    {!tenantMembersMap[tenant.id] ? (
+                      <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{t('tenants.loadingMembers')}</span>
+                    ) : tenantMembersMap[tenant.id].length === 0 ? (
+                      <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{t('tenants.noMembers')}</span>
                     ) : (
                       <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
                         <thead>
                           <tr>
-                            <th style={{ textAlign: 'left', padding: '4px 8px', color: 'var(--text-muted)', fontWeight: 600 }}>Email</th>
-                            <th style={{ textAlign: 'left', padding: '4px 8px', color: 'var(--text-muted)', fontWeight: 600 }}>Role</th>
-                            <th style={{ textAlign: 'left', padding: '4px 8px', color: 'var(--text-muted)', fontWeight: 600 }}>Joined</th>
+                            <th style={{ textAlign: 'left', padding: '4px 8px', color: 'var(--text-muted)', fontWeight: 600 }}>{t('tenants.memberEmail')}</th>
+                            <th style={{ textAlign: 'left', padding: '4px 8px', color: 'var(--text-muted)', fontWeight: 600 }}>{t('tenants.memberRole')}</th>
+                            <th style={{ textAlign: 'left', padding: '4px 8px', color: 'var(--text-muted)', fontWeight: 600 }}>{t('tenants.memberJoined')}</th>
                             <th style={{ padding: '4px 8px' }}></th>
                           </tr>
                         </thead>
                         <tbody>
-                          {tenantMembersMap[t.id].map((m) => (
+                          {tenantMembersMap[tenant.id].map((m) => (
                             <tr key={m.id}>
                               <td style={{ padding: '4px 8px' }}>{m.email}</td>
                               <td style={{ padding: '4px 8px' }}>
@@ -315,7 +317,7 @@ export default function TenantsPanel() {
                                     startEmulation(adminUser);
                                   }}
                                 >
-                                  Emulate
+                                  {t('tenants.emulate')}
                                 </button>
                               </td>
                             </tr>

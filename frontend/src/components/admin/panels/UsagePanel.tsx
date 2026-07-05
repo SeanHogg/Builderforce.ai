@@ -12,6 +12,7 @@
  */
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { useTranslations } from 'next-intl';
 import {
   adminApi,
   type LlmUsageStats,
@@ -25,6 +26,7 @@ import { llmChat } from '@/lib/builderforceApi';
 import { errText, fmtDateTime, fmtNum, AdminError, AdminLoading } from '../adminShared';
 
 export default function UsagePanel() {
+  const t = useTranslations('admin');
   const [usageDays, setUsageDays] = useState(30);
   const [llmUsage, setLlmUsage] = useState<LlmUsageStats | null>(null);
   const [loading, setLoading] = useState(true);
@@ -398,8 +400,11 @@ export default function UsagePanel() {
         const retryAfter = err.body.retryAfter as number | undefined;
         const hours = retryAfter != null ? Math.ceil(retryAfter / 3600) : null;
         setUsageAiError(
-          `LLM daily token limit reached (${used?.toLocaleString() ?? '?'} / ${limit?.toLocaleString() ?? '?'} tokens used today).` +
-          (hours != null ? ` Resets in ~${hours}h.` : '')
+          t('usage.dailyTokenLimit', {
+            used: used?.toLocaleString() ?? '?',
+            limit: limit?.toLocaleString() ?? '?',
+          }) +
+          (hours != null ? t('usage.dailyTokenLimitReset', { hours }) : '')
         );
       } else if (err.code === 'agent_host_token_limit_exceeded') {
         setUsageAiError(err.message);
@@ -435,9 +440,9 @@ export default function UsagePanel() {
               className="btn-primary"
               onClick={runUsageAiAnalysis}
               disabled={usageAiLoading}
-              title="Send this period's usage data to the LLM and generate a Claude Code prompt to improve the AI endpoint"
+              title={t('usage.aiAnalyzeTooltip')}
             >
-              {usageAiLoading ? 'Analyzing…' : 'AI Analyze'}
+              {usageAiLoading ? t('usage.analyzing') : t('usage.aiAnalyze')}
             </button>
           </div>
           {usageAiError && (
@@ -446,9 +451,9 @@ export default function UsagePanel() {
           {usageAiPrompt && (
             <div className="health-card" style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <div className="health-label">Claude Code prompt — paste this to fix the AI endpoint</div>
+                <div className="health-label">{t('usage.claudePromptLabel')}</div>
                 <button type="button" className="btn-ghost" onClick={copyUsageAiPrompt}>
-                  {usageAiCopied ? '✓ Copied' : 'Copy'}
+                  {usageAiCopied ? `✓ ${t('common.copied')}` : t('common.copy')}
                 </button>
               </div>
               <textarea
@@ -471,26 +476,26 @@ export default function UsagePanel() {
           )}
           <div className="health-grid" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))' }}>
             <div className="health-card">
-              <div className="health-label">Requests</div>
+              <div className="health-label">{t('usage.requests')}</div>
               <div className="health-value">{fmtNum(llmUsage.totals.requests)}</div>
             </div>
             <div className="health-card">
-              <div className="health-label">Total tokens</div>
+              <div className="health-label">{t('usage.totalTokens')}</div>
               <div className="health-value">{fmtNum(llmUsage.totals.totalTokens)}</div>
             </div>
             <div className="health-card">
-              <div className="health-label">Models</div>
+              <div className="health-label">{t('usage.models')}</div>
               <div className="health-value">{llmUsage.totals.modelCount}</div>
             </div>
             <div className="health-card">
-              <div className="health-label">Spend</div>
+              <div className="health-label">{t('usage.spend')}</div>
               <div className="health-value">$0</div>
-              <div style={{ fontSize: 12 }}>free tier</div>
+              <div style={{ fontSize: 12 }}>{t('usage.freeTier')}</div>
             </div>
           </div>
           {llmUsage.daily.length > 0 && (
             <div>
-              <div className="health-label" style={{ marginBottom: 8 }}>Daily requests</div>
+              <div className="health-label" style={{ marginBottom: 8 }}>{t('usage.dailyRequests')}</div>
               <div style={{ display: 'flex', alignItems: 'flex-end', gap: 4, minHeight: 120 }}>
                 {llmUsage.daily.slice(-30).map((d) => {
                   const maxReq = Math.max(1, ...llmUsage!.daily.map((x) => x.requests));
@@ -498,7 +503,7 @@ export default function UsagePanel() {
                   return (
                     <div
                       key={d.day}
-                      title={`${d.day}: ${d.requests} requests`}
+                      title={t('usage.dailyBarTooltip', { day: d.day, requests: d.requests })}
                       style={{
                         flex: 1,
                         minWidth: 8,
@@ -518,7 +523,7 @@ export default function UsagePanel() {
           )}
           {byVendor.length > 0 && (
             <div>
-              <div className="health-label" style={{ marginBottom: 8 }}>By vendor</div>
+              <div className="health-label" style={{ marginBottom: 8 }}>{t('usage.byVendor')}</div>
               <div className="health-grid" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))' }}>
                 {byVendor.map((v) => {
                   const fresh = vendorHealthResult[v.vendor];
@@ -542,23 +547,23 @@ export default function UsagePanel() {
                           style={{ fontSize: 11, padding: '2px 8px', opacity: running ? 0.6 : 1 }}
                           disabled={running}
                           onClick={() => runVendorHealthCheck(v.vendor)}
-                          title="Probe every model in this vendor's catalog"
+                          title={t('usage.checkTooltip')}
                         >
-                          {running ? 'Checking…' : 'Check'}
+                          {running ? t('usage.checking') : t('usage.check')}
                         </button>
                       </div>
                       <div className="health-value">{fmtNum(v.requests)}</div>
                       <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
-                        {v.modelCount} model{v.modelCount === 1 ? '' : 's'} · {fmtNum(v.totalTokens)} tokens
+                        {t('usage.vendorModelsTokens', { models: v.modelCount, tokens: fmtNum(v.totalTokens) })}
                       </div>
                       <div style={{ fontSize: 12, color: v.failoverCount > 0 ? 'var(--error-text)' : 'var(--text-muted)', fontWeight: v.failoverCount > 0 ? 600 : 400 }}>
-                        {fmtNum(v.failoverCount)} failover{v.failoverCount === 1 ? '' : 's'} · {fmtNum(v.retries)} retries
+                        {t('usage.vendorFailoversRetries', { failovers: v.failoverCount, failoverDisplay: fmtNum(v.failoverCount), retries: fmtNum(v.retries) })}
                       </div>
                       {probeErr ? (
                         <div style={{ fontSize: 11, color: 'var(--error-text)', marginTop: 6 }}>{probeErr}</div>
                       ) : health ? (
                         <div style={{ marginTop: 6, fontSize: 12, color: statusColor[health.status] ?? 'var(--text-muted)', fontWeight: 600 }}>
-                          {health.status} · {health.okCount}/{health.probedCount} ok
+                          {t('usage.vendorStatus', { status: health.status, ok: health.okCount, probed: health.probedCount })}
                           {health.latencyMs > 0 && (
                             <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}> · {health.latencyMs}ms</span>
                           )}
@@ -575,7 +580,7 @@ export default function UsagePanel() {
           )}
           <div>
             <div style={{ marginBottom: 8, display: 'flex', alignItems: 'center', gap: 8 }}>
-              <span className="text-muted" style={{ fontSize: 14 }}>By model — last</span>
+              <span className="text-muted" style={{ fontSize: 14 }}>{t('usage.byModelLast')}</span>
               <Select
                 value={usageDays}
                 onChange={async (e) => {
@@ -594,7 +599,7 @@ export default function UsagePanel() {
                 className="admin-select"
               >
                 {[7, 14, 30, 60, 90].map((d) => (
-                  <option key={d} value={d}>{d} days</option>
+                  <option key={d} value={d}>{t('usage.daysOption', { d })}</option>
                 ))}
               </Select>
             </div>
@@ -602,19 +607,19 @@ export default function UsagePanel() {
               <table className="data-table">
                 <thead>
                   <tr>
-                    <th>Vendor</th>
-                    <th>Model</th>
-                    <th style={{ textAlign: 'right' }}>Requests</th>
-                    <th style={{ textAlign: 'right' }}>Retries</th>
-                    <th style={{ textAlign: 'right' }}>Streamed</th>
-                    <th style={{ textAlign: 'right' }}>Prompt tokens</th>
-                    <th style={{ textAlign: 'right' }}>Completion tokens</th>
-                    <th style={{ textAlign: 'right' }}>Total tokens</th>
+                    <th>{t('usage.vendor')}</th>
+                    <th>{t('usage.model')}</th>
+                    <th style={{ textAlign: 'right' }}>{t('usage.requests')}</th>
+                    <th style={{ textAlign: 'right' }}>{t('usage.retries')}</th>
+                    <th style={{ textAlign: 'right' }}>{t('usage.streamed')}</th>
+                    <th style={{ textAlign: 'right' }}>{t('usage.promptTokens')}</th>
+                    <th style={{ textAlign: 'right' }}>{t('usage.completionTokens')}</th>
+                    <th style={{ textAlign: 'right' }}>{t('usage.totalTokens')}</th>
                   </tr>
                 </thead>
                 <tbody>
                   {byModelSorted.length === 0 ? (
-                    <tr><td colSpan={8} className="text-muted" style={{ padding: 24 }}>No usage in this period.</td></tr>
+                    <tr><td colSpan={8} className="text-muted" style={{ padding: 24 }}>{t('usage.noUsage')}</td></tr>
                   ) : (
                     byModelSorted.map((m, i) => {
                       const prevVendor = i > 0 ? byModelSorted[i - 1].vendor : null;
@@ -638,7 +643,7 @@ export default function UsagePanel() {
                   {llmUsage.byModel.length > 0 && (
                     <tr style={{ fontWeight: 600 }}>
                       <td></td>
-                      <td>Total</td>
+                      <td>{t('usage.total')}</td>
                       <td style={{ textAlign: 'right' }}>{fmtNum(llmUsage.totals.requests)}</td>
                       <td style={{ textAlign: 'right' }}>{fmtNum(llmUsage.byModel.reduce((s, m) => s + m.retries, 0))}</td>
                       <td style={{ textAlign: 'right' }}>{fmtNum(llmUsage.byModel.reduce((s, m) => s + m.streamed_requests, 0))}</td>
@@ -653,24 +658,24 @@ export default function UsagePanel() {
           </div>
           <div>
             <div className="health-label" style={{ marginBottom: 8 }}>
-              Failover events
+              {t('usage.failoverEvents')}
               {llmUsage.failovers.some((f) => f.errorCode === 429) && (
                 <span style={{ marginLeft: 8, fontSize: 11, color: 'var(--error-text)', fontWeight: 600 }}>
-                  — {fmtNum(llmUsage.failovers.filter((f) => f.errorCode === 429).reduce((s, f) => s + f.count, 0))} rate-limit hits
+                  {t('usage.rateLimitHits', { count: fmtNum(llmUsage.failovers.filter((f) => f.errorCode === 429).reduce((s, f) => s + f.count, 0)) })}
                 </span>
               )}
             </div>
             {failoversSorted.length === 0 ? (
-              <p className="text-muted" style={{ fontSize: 13 }}>No failover events in this period.</p>
+              <p className="text-muted" style={{ fontSize: 13 }}>{t('usage.noFailovers')}</p>
             ) : (
               <div className="table-wrap">
                 <table className="data-table" style={{ fontSize: 13 }}>
                   <thead>
                     <tr>
-                      <th>Vendor</th>
-                      <th>Model</th>
-                      <th style={{ textAlign: 'right' }}>HTTP code</th>
-                      <th style={{ textAlign: 'right' }}>Count</th>
+                      <th>{t('usage.vendor')}</th>
+                      <th>{t('usage.model')}</th>
+                      <th style={{ textAlign: 'right' }}>{t('usage.httpCode')}</th>
+                      <th style={{ textAlign: 'right' }}>{t('usage.count')}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -684,7 +689,7 @@ export default function UsagePanel() {
                             ...(f.errorCode === 429 ? { background: 'var(--error-bg, #fee2e2)' } : {}),
                             ...(isVendorBreak && i > 0 ? { borderTop: '2px solid var(--border-subtle, #2a2a2a)' } : {}),
                           }}
-                          title={f.errorCode === 429 ? 'Upstream rate-limited this model — cooldown should keep it out of rotation for ~5 min after each hit' : undefined}
+                          title={f.errorCode === 429 ? t('usage.rateLimitTooltip') : undefined}
                         >
                           <td style={{ textTransform: 'uppercase', fontSize: 11, color: 'var(--text-muted)' }}>{isVendorBreak ? f.vendor : ''}</td>
                           <td>{f.model}</td>

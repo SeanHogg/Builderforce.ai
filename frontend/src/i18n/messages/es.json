@@ -2432,11 +2432,11 @@
       "projectsActive": "{count} activos",
       "tasks": "Tareas",
       "tasksInProgress": "{count} en curso",
-      "agentsOnline": "Agentes en línea",
-      "agentsRegistered": "{count} registrados",
       "pendingRequests": "Solicitudes pendientes",
       "requiresReview": "requiere revisión",
-      "allClear": "todo en orden"
+      "allClear": "todo en orden",
+      "workforceOnline": "Talento / Equipo en línea",
+      "workingNow": "{count} trabajando ahora"
     },
     "tabs": {
       "projects": "Proyectos",
@@ -2470,6 +2470,24 @@
         "sop": "SOP",
         "process": "Proceso",
         "doc": "Doc"
+      }
+    },
+    "presence": {
+      "title": "Quién está en línea",
+      "loading": "Cargando…",
+      "summary": "{online} en línea · {working} trabajando",
+      "empty": "Nadie en línea en este momento.",
+      "peopleHeading": "Personas ({count})",
+      "agentsHeading": "Agentes ({count})",
+      "noPeople": "No hay personas en línea.",
+      "noAgents": "No hay agentes en línea.",
+      "inIde": "En el IDE",
+      "activeSession": "Sesión activa",
+      "manage": "Gestionar equipo",
+      "agent": {
+        "online": "En línea",
+        "working": "Trabajando",
+        "workingOn": "Trabajando en {task}"
       }
     }
   },
@@ -5870,6 +5888,50 @@
       "audit": "Registro de auditoría",
       "apiKeys": "Claves API",
       "token": "Token de superadmin"
+    },
+    "common": {
+      "loading": "Cargando…",
+      "available": "Disponible",
+      "unavailable": "No disponible (límite de tasa o error)",
+      "cooldownUntil": "Enfriamiento hasta {time}",
+      "cooldown": "enfriamiento",
+      "refresh": "Actualizar",
+      "cancel": "Cancelar",
+      "save": "Guardar",
+      "saving": "Guardando…",
+      "create": "Crear",
+      "creating": "Creando…",
+      "update": "Actualizar",
+      "updating": "Actualizando…",
+      "remove": "Eliminar",
+      "edit": "Editar",
+      "close": "Cerrar",
+      "search": "Buscar",
+      "searchRefresh": "Buscar / Actualizar",
+      "filter": "Filtrar",
+      "exportCsv": "Exportar CSV",
+      "exporting": "Exportando…",
+      "prev": "← Anterior",
+      "next": "Siguiente →",
+      "noResults": "Sin resultados.",
+      "details": "Detalles",
+      "hideDetails": "Ocultar detalles",
+      "copy": "Copiar",
+      "copied": "¡Copiado!"
+    },
+    "emulate": {
+      "loadWorkspacesFailed": "No se pudieron cargar los espacios del usuario",
+      "title": "Emular usuario",
+      "intro": "Inicia una sesión de emulación como <strong>{email}</strong> usando su espacio predeterminado y rol asignado. Se te llevará al panel con una barra de emulación ámbar.",
+      "loadingWorkspace": "Cargando espacio…",
+      "noWorkspaces": "Este usuario no tiene espacios activos.",
+      "workspace": "Espacio:",
+      "role": "Rol:",
+      "reason": "Motivo",
+      "reasonPlaceholder": "Motivo breve de esta sesión de emulación (obligatorio)…",
+      "debuggerOverlay": "Activar la superposición del depurador de permisos",
+      "start": "Iniciar emulación",
+      "starting": "Iniciando…"
     }
   },
   "providerKeys": {

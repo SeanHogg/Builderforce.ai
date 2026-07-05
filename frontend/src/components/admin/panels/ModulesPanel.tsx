@@ -1,10 +1,12 @@
 'use client';
 
 import { useState } from 'react';
+import { useTranslations } from 'next-intl';
 import { adminApi } from '@/lib/adminApi';
 import { errText, fmtDate, useAdminData, AdminError, AdminLoading } from '@/components/admin/adminShared';
 
 export default function ModulesPanel() {
+  const t = useTranslations('admin');
   const { data, loading, error, reload, setData, setError } = useAdminData(() => adminApi.modules(), []);
   const platformModules = data ?? [];
 
@@ -17,47 +19,47 @@ export default function ModulesPanel() {
     <div>
       <AdminError message={error} />
       <div style={{ marginBottom: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
-        <h2 className="page-title" style={{ fontSize: 18, margin: 0 }}>Platform Modules</h2>
+        <h2 className="page-title" style={{ fontSize: 18, margin: 0 }}>{t('modules.title')}</h2>
         <div style={{ display: 'flex', gap: 8 }}>
           <button
             type="button"
             className="admin-tab active"
             onClick={() => setModuleForm({ name: '', description: '', permissions: '' })}
           >
-            + New Module
+            {t('modules.newModuleButton')}
           </button>
-          <button type="button" className="admin-tab" onClick={() => reload()}>↻ Refresh</button>
+          <button type="button" className="admin-tab" onClick={() => reload()}>↻ {t('common.refresh')}</button>
         </div>
       </div>
       {moduleForm && (
         <div className="health-card" style={{ marginBottom: 16, padding: 16 }}>
-          <h3 style={{ margin: '0 0 12px', fontSize: 15 }}>New Module</h3>
-          <label className="admin-label" style={{ display: 'block', marginBottom: 4 }}>Name *</label>
+          <h3 style={{ margin: '0 0 12px', fontSize: 15 }}>{t('modules.newModuleTitle')}</h3>
+          <label className="admin-label" style={{ display: 'block', marginBottom: 4 }}>{t('modules.nameLabel')}</label>
           <input
             className="admin-select"
             value={moduleForm.name}
             onChange={(e) => setModuleForm((f) => f ? { ...f, name: e.target.value } : f)}
-            placeholder="e.g. Reporting Access"
+            placeholder={t('modules.namePlaceholder')}
             style={{ width: '100%', marginBottom: 10 }}
           />
-          <label className="admin-label" style={{ display: 'block', marginBottom: 4 }}>Description</label>
+          <label className="admin-label" style={{ display: 'block', marginBottom: 4 }}>{t('modules.descriptionLabel')}</label>
           <input
             className="admin-select"
             value={moduleForm.description}
             onChange={(e) => setModuleForm((f) => f ? { ...f, description: e.target.value } : f)}
-            placeholder="Optional description"
+            placeholder={t('modules.descriptionPlaceholder')}
             style={{ width: '100%', marginBottom: 10 }}
           />
-          <label className="admin-label" style={{ display: 'block', marginBottom: 4 }}>Permissions (comma-separated)</label>
+          <label className="admin-label" style={{ display: 'block', marginBottom: 4 }}>{t('modules.permissionsLabel')}</label>
           <input
             className="admin-select"
             value={moduleForm.permissions}
             onChange={(e) => setModuleForm((f) => f ? { ...f, permissions: e.target.value } : f)}
-            placeholder="e.g. report:read,report:export"
+            placeholder={t('modules.permissionsPlaceholder')}
             style={{ width: '100%', marginBottom: 12 }}
           />
           <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-            <button type="button" className="admin-tab" onClick={() => setModuleForm(null)}>Cancel</button>
+            <button type="button" className="admin-tab" onClick={() => setModuleForm(null)}>{t('common.cancel')}</button>
             <button
               type="button"
               className="admin-tab active"
@@ -78,7 +80,7 @@ export default function ModulesPanel() {
                 finally { setModuleFormBusy(false); }
               }}
             >
-              {moduleFormBusy ? 'Creating…' : 'Create'}
+              {moduleFormBusy ? t('common.creating') : t('common.create')}
             </button>
           </div>
         </div>
@@ -86,11 +88,11 @@ export default function ModulesPanel() {
       <table className="data-table">
         <thead>
           <tr>
-            <th>Name</th>
-            <th>Slug</th>
-            <th>Permissions</th>
-            <th>Default</th>
-            <th>Created</th>
+            <th>{t('modules.colName')}</th>
+            <th>{t('modules.colSlug')}</th>
+            <th>{t('modules.colPermissions')}</th>
+            <th>{t('modules.colDefault')}</th>
+            <th>{t('modules.colCreated')}</th>
             <th></th>
           </tr>
         </thead>
@@ -100,7 +102,7 @@ export default function ModulesPanel() {
               <td>{m.name}</td>
               <td style={{ fontFamily: 'monospace', fontSize: 12 }}>{m.slug}</td>
               <td style={{ fontSize: 12, maxWidth: 280 }}>{m.permissions.join(', ') || '—'}</td>
-              <td>{m.defaultEnabled ? 'Yes' : 'No'}</td>
+              <td>{m.defaultEnabled ? t('modules.yes') : t('modules.no')}</td>
               <td>{fmtDate(m.createdAt)}</td>
               <td>
                 <button
@@ -108,7 +110,7 @@ export default function ModulesPanel() {
                   className="admin-tab"
                   style={{ padding: '3px 10px', fontSize: 12, color: '#ef4444' }}
                   onClick={async () => {
-                    if (!confirm(`Delete module "${m.name}"?`)) return;
+                    if (!confirm(t('modules.confirmDelete', { name: m.name }))) return;
                     setError('');
                     try {
                       await adminApi.deleteModule(m.id);
@@ -116,13 +118,13 @@ export default function ModulesPanel() {
                     } catch (e) { setError(errText(e)); }
                   }}
                 >
-                  Delete
+                  {t('common.remove')}
                 </button>
               </td>
             </tr>
           ))}
           {platformModules.length === 0 && (
-            <tr><td colSpan={6} style={{ textAlign: 'center', color: 'var(--text-muted)', padding: 20 }}>No modules configured.</td></tr>
+            <tr><td colSpan={6} style={{ textAlign: 'center', color: 'var(--text-muted)', padding: 20 }}>{t('modules.empty')}</td></tr>
           )}
         </tbody>
       </table>

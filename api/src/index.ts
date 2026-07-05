@@ -88,6 +88,7 @@ import { createWorkforceRoutes }        from './presentation/routes/workforceRou
 import { createFreelancerRoutes, createEngagementRoutes } from './presentation/routes/freelancerRoutes';
 import { createActivityRoutes, createTimecardRoutes } from './presentation/routes/activityRoutes';
 import { createJobRoutes, createNotificationRoutes } from './presentation/routes/jobRoutes';
+import { createGigMarketplaceRoutes, createEngagementBoardRoutes, createDeliverableRoutes } from './presentation/routes/gigMarketplaceRoutes';
 import { createLimbicRoutes }           from './presentation/routes/limbicRoutes';
 import { createPersonaRoutes }          from './presentation/routes/personaRoutes';
 import { createLlmRoutes }          from './presentation/routes/llmRoutes';
@@ -213,7 +214,7 @@ export function buildApp(env: Env): Hono<HonoEnv> {
   const userRepo      = new UserRepository(db);
   const agentRepo     = new AgentRepository(db);
   const skillRepo      = new SkillRepository(db);
-  const auditRepo     = new AuditRepository(db);
+  const auditRepo     = new AuditRepository(db, env);
   const agentHostRepo      = new AgentHostRepository(db);
 
   // --- Payment provider (selected by PAYMENT_PROVIDER env var, defaults to "manual") ---
@@ -339,6 +340,11 @@ export function buildApp(env: Env): Hono<HonoEnv> {
   // Two-sided marketplace: job postings + proposals (bidding) and the in-app feed.
   app.route('/api/jobs', createJobRoutes());
   app.route('/api/notifications', createNotificationRoutes());
+  // Gig Marketplace (0293): publish a ticket as a gig, a hired freelancer's scoped
+  // board access, and deliverable proposals the employer AI-evaluates.
+  app.route('/api/marketplace', createGigMarketplaceRoutes(db));
+  app.route('/api/engagement-board', createEngagementBoardRoutes(db));
+  app.route('/api/deliverables', createDeliverableRoutes(db));
 
   // Limbic affective layer — serves the shared compiler's directive block to
   // clients that can't bundle it (the VS Code built-in agent).

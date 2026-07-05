@@ -1,12 +1,14 @@
 'use client';
 
 import { useState } from 'react';
+import { useTranslations } from 'next-intl';
 import { adminApi } from '@/lib/adminApi';
 import { fmtDateTime, useAdminData, AdminError, AdminLoading } from '@/components/admin/adminShared';
 import { LegalDocPreview } from '@/components/admin/LegalDocPreview';
 import { LegalEditorDrawer, type LegalEditorContext } from '@/components/admin/LegalEditorDrawer';
 
 export default function LegalPanel() {
+  const t = useTranslations('admin');
   const { data: legalCurrent, loading, error, reload } = useAdminData(() => adminApi.legalCurrent(), []);
   const [legalEditor, setLegalEditor] = useState<LegalEditorContext | null>(null);
 
@@ -26,18 +28,18 @@ export default function LegalPanel() {
               const doc = legalCurrent[dt];
               return (
                 <div key={dt} className="health-card" style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 6 }}>
-                  <div className="health-label">{dt === 'terms' ? 'Terms version' : 'Privacy version'}</div>
+                  <div className="health-label">{dt === 'terms' ? t('legal.termsVersion') : t('legal.privacyVersion')}</div>
                   <div className="health-value" style={{ fontSize: 16 }}>v{doc.version}</div>
                   <div style={{ fontSize: 12 }}>{doc.title}</div>
                   <div className="text-muted" style={{ fontSize: 11 }}>
-                    Published {doc.publishedAt ? fmtDateTime(doc.publishedAt) : '—'}
+                    {t('legal.published', { date: doc.publishedAt ? fmtDateTime(doc.publishedAt) : '—' })}
                   </div>
                   <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
                     <button type="button" className="btn-ghost" onClick={() => openLegalEditor(dt, 'edit')}>
-                      ✎ Edit
+                      ✎ {t('common.edit')}
                     </button>
                     <button type="button" className="admin-tab active" onClick={() => openLegalEditor(dt, 'new')}>
-                      + New version
+                      + {t('legal.newVersion')}
                     </button>
                   </div>
                 </div>
@@ -47,7 +49,9 @@ export default function LegalPanel() {
           {(['terms', 'privacy'] as const).map((dt) => (
             <div key={dt} className="health-card" style={{ padding: 16 }}>
               <div className="health-label" style={{ marginBottom: 8 }}>
-                Current {dt === 'terms' ? 'Terms' : 'Privacy'} · v{legalCurrent[dt].version}
+                {dt === 'terms'
+                  ? t('legal.currentTerms', { version: legalCurrent[dt].version })
+                  : t('legal.currentPrivacy', { version: legalCurrent[dt].version })}
               </div>
               <div style={{ maxHeight: 360, overflowY: 'auto' }}>
                 <LegalDocPreview content={legalCurrent[dt].content} />

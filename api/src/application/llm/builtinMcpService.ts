@@ -47,6 +47,7 @@ import { bumpCacheVersion, invalidateCached, trackerCacheKey } from '../../infra
 import { convertWorkItemType, ConvertError, type WorkItemKind } from '../workitem/convertWorkItemType';
 import { buildRuntimeService } from '../../buildRuntimeService';
 import { ChatTicketService } from '../brain/ChatTicketService';
+import { BrainService } from '../brain/BrainService';
 import { WorkDeltaService, type DeltaKind } from '../delta/WorkDeltaService';
 import { ValidationService, type ReviewVerdict, type ReviewGapInput } from '../validation/ValidationService';
 import { SecurityAuditService, type FindingSeverity, type TrustCriterion } from '../security/SecurityAuditService';
@@ -226,6 +227,8 @@ const TASK_LIST_FIELDS = [
   'id', 'projectId', 'key', 'title', 'status', 'priority', 'taskType',
   'parentTaskId', 'assignedUserId', 'assignedAgentRef', 'assignedAgentHostId',
   'storyPoints', 'dueDate', 'archived',
+  // Present + true on a SECURITY ticket masked for a viewer without clearance.
+  'restricted',
 ] as const;
 function compactTask(plain: Record<string, unknown>): Record<string, unknown> {
   const out: Record<string, unknown> = {};
@@ -326,6 +329,40 @@ const CATALOG: BuiltinTool[] = [
     },
   },
 
+  // ---- Team Chat (the always-there group chat, migration 0294) ----
+  // The ONE conversation the whole team shares — humans AND agents post into it.
+  // A PM/manager agent uses team_chat.post to ask the team for status updates or to
+  // share a burndown, and team_chat.read to catch up on what the team has said.
+  // Scope: pass projectId for that project's team chat; omit it for the tenant-wide
+  // team chat. Everyone lands in the SAME thread (idempotent get-or-create).
+  {
+    tool: 'team_chat.read', mutates: false,
+    description: 'Read the recent transcript of the team chat — the shared group conversation for the whole team. Pass projectId for that project\'s team chat; omit it for the tenant-wide team chat. Returns { chatId, messages } (oldest→newest), capped by limit (default 30, max 100).',
+    parameters: obj({ projectId: N, limit: N }),
+    run: async (ctx, a) => {
+      const svc = new BrainService(ctx.db);
+      const res = await svc.readTeamChat(ctx.tenantId, a.projectId != null ? num(a.projectId) : null, a.limit != null ? num(a.limit) : 30);
+      if ('error' in res) throw new Error(res.error);
+      return res;
+    },
+  },
+  {
+    tool: 'team_chat.post', mutates: true,
+    description: 'Post a message INTO the team chat so the whole team sees it — e.g. ask everyone for a status update on their tickets, or share a burndown / summary. Pass projectId for that project\'s team chat; omit it for the tenant-wide team chat. `fromName` is your display name (e.g. "Project Manager") for attribution. Returns { chatId, message }.',
+    parameters: obj({ message: S, projectId: N, fromName: S }, ['message']),
+    run: async (ctx, a) => {
+      const svc = new BrainService(ctx.db);
+      const res = await svc.postToTeamChat(
+        ctx.tenantId,
+        a.projectId != null ? num(a.projectId) : null,
+        str(a.message),
+        { fromName: a.fromName != null ? str(a.fromName) : undefined, fromRef: ctx.userId ?? undefined },
+      );
+      if ('error' in res) throw new Error(res.error);
+      return res;
+    },
+  },
+
   // ---- Attachments (files the user uploaded into the chat) ----
   // A Brain upload lives in R2 read-only-by-signature; before these tools there
   // was NO way to write one back, so a model asked to "update the attached file"
@@ -381,18 +418,18 @@ const CATALOG: BuiltinTool[] = [
       const status = a.status != null ? str(a.status) : undefined;
       let rows = all.map((t) => t.toPlain() as unknown as Record<string, unknown>);
       if (status) rows = rows.filter((r) => r.status === status);
-      // Access-restricted SECURITY tickets are never surfaced through the agent-facing
-      // task projection — they are a human-configured, need-to-know surface (read them
-      // via the board / security panel, governed by security_ticket_access).
-      rows = rows.filter((r) => r.taskType !== TaskType.SECURITY);
+      // SECURITY tickets are included but MASKED for a caller without clearance
+      // (surfaced-not-hidden; governed by security_ticket_access).
+      rows = await maskSecurityTasks(ctx, rows);
       return listEnvelope('tasks', rows.map(compactTask), clampLimit(a.limit));
     },
   },
   { tool: 'tasks.get', mutates: false, description: 'Get a task by id.', parameters: obj({ id: N }, ['id']), run: async (ctx, a) => {
-    const plain = (await getTenantTask(ctx, num(a.id))).toPlain();
-    // Never surface an access-restricted SECURITY ticket through the agent tool.
-    if ((plain as { taskType?: string }).taskType === TaskType.SECURITY) throw new Error(`Task ${num(a.id)} not found`);
-    return plain;
+    const plain = (await getTenantTask(ctx, num(a.id))).toPlain() as Record<string, unknown>;
+    // A SECURITY ticket is returned MASKED (restricted: true) for a caller without
+    // clearance — surfaced, not hidden. Same shared gate as the board.
+    const [masked] = await maskSecurityTasks(ctx, [plain]);
+    return masked ?? plain;
   } },
   {
     tool: 'tasks.create', mutates: true,
@@ -1993,6 +2030,18 @@ function advertisedName(tool: string): string {
   return `builtin_${tool.replace(/[^a-zA-Z0-9]+/g, '_')}`;
 }
 
+/**
+ * Mask (don't drop) the access-restricted SECURITY tickets the MCP caller isn't
+ * cleared for — the same surfaced-not-hidden model the HTTP board uses. The caller's
+ * role rides in from ctx (a cloud agent runs as MANAGER and sees everything; a human
+ * via Brain carries their real role), so this reuses the ONE shared visibility gate.
+ */
+async function maskSecurityTasks<T extends Record<string, unknown>>(ctx: BuiltinCtx, rows: T[]): Promise<T[]> {
+  if (!rows.some((r) => r.taskType === TaskType.SECURITY)) return rows;
+  const viewer = { userId: ctx.userId ?? null, role: ctx.role, isAgent: false };
+  return new SecurityTicketAccessService(ctx.db, ctx.env).applyVisibilityForViewer(ctx.tenantId, viewer, rows);
+}
+
 function buildCtx(
   db: Db,
   tenantId: number,
@@ -2050,6 +2099,8 @@ export const CLOUD_AGENT_PLATFORM_TOOLS: readonly string[] = [
   'objectives.list', 'objectives.create', 'objectives.update', 'objectives.add_link', 'objectives.remove_link',
   'key_results.list', 'key_results.create', 'key_results.update',
   'work_items.convert_type', 'pmo.tree', 'pmo.rollup', 'pmo.link_project', 'pmo.add_dependency',
+  // Team chat — a PM/manager agent asks the team for status or shares a burndown.
+  'team_chat.read', 'team_chat.post',
   // Project knowledge, files, review
   'project_facts.recall', 'project_facts.remember',
   'project_files.list', 'project_files.read', 'project_files.save',

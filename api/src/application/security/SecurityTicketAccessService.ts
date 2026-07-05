@@ -9,9 +9,15 @@
  * administer access), independent of the config. Everyone else sees a security
  * ticket only if their audience is enabled or they are explicitly allowlisted.
  *
- * DRY: `canView` is the single predicate; `filterTasks` is the single list filter.
- * HTTP task routes and the built-in MCP `tasks.*` tools both call these — a caller
- * who is not permitted simply never receives the row.
+ * Surface-not-hide: a security ticket is NEVER removed from a list. A viewer without
+ * clearance still sees that the item EXISTS (its lane, position, type badge) but its
+ * sensitive content — title, description, finding metadata, assignees — is redacted
+ * and the row is flagged `restricted: true` so the UI can render a "clearance needed"
+ * placeholder. Only a cleared viewer receives the real content.
+ *
+ * DRY: `canView` is the single predicate; `maskTask` is the single redactor;
+ * `applyVisibility` is the single list transform. HTTP task routes and the built-in
+ * MCP `tasks.*` tools all call these.
  */
 import { eq } from 'drizzle-orm';
 import { securityTicketAccess } from '../../infrastructure/database/schema';
@@ -147,19 +153,51 @@ export class SecurityTicketAccessService {
     return cfg.audiences.humans;
   }
 
-  /** Drop the security tickets `viewer` may not see; every other task passes through. */
-  static filterTasks<T extends { taskType?: string | null }>(
+  /**
+   * Redact a security ticket for a viewer without clearance: keep the identity +
+   * board-placement fields (so the item still shows as "something is here"), blank
+   * the sensitive content, and flag `restricted` so the UI renders a clearance-needed
+   * placeholder. Priority is kept (drives lane colour/sort) — it buckets urgency, not
+   * the finding's content.
+   */
+  static maskTask<T extends Record<string, unknown>>(task: T): T & { restricted: true } {
+    return {
+      ...task,
+      title: '',
+      description: null,
+      descriptionSnippet: undefined,
+      securitySeverity: null,
+      securityTsc: null,
+      securityAuditId: null,
+      assignedUserId: null,
+      assignedAgentRef: null,
+      assignedAgentHostId: null,
+      businessValue: null,
+      businessValueRationale: null,
+      gitBranch: null,
+      githubPrUrl: null,
+      restricted: true,
+    };
+  }
+
+  /**
+   * Return the list with every security ticket the viewer can't see replaced by its
+   * masked twin (surfaced, not removed). Non-security tasks pass through untouched.
+   */
+  static applyVisibility<T extends Record<string, unknown>>(
     tasks: T[],
     viewer: TicketViewer,
     cfg: SecurityAccessConfig,
   ): T[] {
-    // Fast path: a viewer who may see security tickets keeps the full list.
+    // Fast path: a cleared viewer keeps the full, unmasked list.
     if (SecurityTicketAccessService.canView(viewer, cfg)) return tasks;
-    return tasks.filter((t) => t.taskType !== TaskType.SECURITY);
+    return tasks.map((t) =>
+      t.taskType === TaskType.SECURITY ? SecurityTicketAccessService.maskTask(t) : t,
+    );
   }
 
-  /** Convenience: load config + filter in one call (the shape routes use). */
-  async filterForViewer<T extends { taskType?: string | null }>(
+  /** Convenience: load config + apply masking in one call (the shape routes use). */
+  async applyVisibilityForViewer<T extends Record<string, unknown>>(
     tenantId: number,
     viewer: TicketViewer,
     tasks: T[],
@@ -167,6 +205,6 @@ export class SecurityTicketAccessService {
     // Skip the config read entirely when the list holds no security tickets.
     if (!tasks.some((t) => t.taskType === TaskType.SECURITY)) return tasks;
     const cfg = await this.getConfig(tenantId);
-    return SecurityTicketAccessService.filterTasks(tasks, viewer, cfg);
+    return SecurityTicketAccessService.applyVisibility(tasks, viewer, cfg);
   }
 }
