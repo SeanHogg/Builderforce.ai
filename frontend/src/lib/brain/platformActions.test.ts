@@ -74,6 +74,18 @@ describe('platform capability manifest', () => {
   });
 });
 
+describe('create tools are idempotent (client-manifest dedup twin of the builtin catalog)', () => {
+  it('tasks.create returns the existing same-title task instead of duplicating', async () => {
+    // Mocked tasksApi.list resolves a task titled "Fix login error"; a re-run with
+    // different casing/spacing must dedup to it, not mint a second task.
+    const createSpy = vi.spyOn(tasksApi, 'create').mockResolvedValue({ id: 999 } as never);
+    const create = buildPlatformCapabilities(makeCtx().ctx).find((c) => c.domain === 'tasks' && c.method === 'create')!;
+    const res = await create.run({ projectId: 9, title: '  fix   LOGIN error ' });
+    expect(createSpy).not.toHaveBeenCalled();
+    expect(res).toMatchObject({ deduped: true, id: 1, title: 'Fix login error' });
+  });
+});
+
 describe('buildPlatformActions', () => {
   it('exposes navigation, dispatcher, and the Tier-1 promoted tools', () => {
     const names = buildPlatformActions(makeCtx().ctx).map((a) => a.name);

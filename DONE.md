@@ -4,6 +4,28 @@
 
 ---
 
+## ✅ RESOLVED 2026-07-05 — Brain roadmap-reconciliation: duplicate items + phantom file "save"
+
+Root-caused from a failed Brain run (attach a ROADMAP.md → "transition outstanding items to OKRs/Epics/Tasks and write the IDs back"): it created duplicate items and claimed it updated the attached file when it could not. Shipped: api `2026.7.13`, frontend `2026.7.13`, brain-embedded `2026.7.7`.
+
+- **Idempotent creates (no more duplicates)** — `tasks.create` / `objectives.create` / `key_results.create` in the gateway builtin catalog (`api/src/application/llm/builtinMcpService.ts`) now dedup by normalized title in-scope (task→project, objective→workspace/segment, KR→objective) and return the existing record as `{ deduped: true, … }` instead of a second row — so a re-run yields the existing id for traceability. Mirrored in the frontend client-manifest fallback via a shared `dedupedCreate` helper (`frontend/src/lib/brain/platformActions.ts`), so the web Brain never duplicates whether it runs the server `builtin_*` tool or the client fallback.
+- **Real attachment write-back (no more phantom saves)** — new `attachments.read` (paginated — fixes "file too large to read") and `attachments.write` (overwrites the R2 upload in place, tenant-scoped by key prefix, metadata-preserving) builtin tools. Uploads were previously served read-only by signature with no write path, so a "saved the file" claim was structurally impossible to honor.
+- **Honesty guard** — the shared Brain system prompt (`frontend/src/lib/brain/platformPrompt.ts`) now instructs: edit an attachment via read→edit→`attachments.write`, and NEVER claim a save/update/write unless a write tool returned success this turn. Backed by a structural detector `detectUnbackedWriteClaim(events, messages)` in the shared triage module (`brain-embedded/src/brainTriage.ts`) that surfaces a `⚠ UNBACKED WRITE CLAIM` line in every triage capture when an assistant turn claims a file write with no successful write tool call.
+- Tests: builtin dedup + attachment read/write/tenant-scope (`builtinMcpService.test.ts`), client-manifest dedup (`platformActions.test.ts`), unbacked-write-claim detector (`brainTriage.test.ts`).
+
+---
+
+## ✅ RESOLVED 2026-07-05 — VS Code extension auth/token residuals
+
+Confirmation pass over the "VS Code extension" roadmap section. Fixed the genuinely-broken items; confirmed the rest already resolved. Shipped: api `2026.7.13`, extension VSIX `2026.7.26`.
+
+- **`/api/auth/agentHost-token` signed a jti it never persisted** (latent auth bug). A machine token's `authTokens.userId` FK cannot resolve to a real user, so the token would be rejected by `authMiddleware`'s jti-revocation check. Fixed by exempting `agentHost:` subjects from that check (`api/src/presentation/middleware/authMiddleware.ts`), mirroring the existing terms-check exemption — machine tokens are short-lived and API-key-gated by design.
+- **Key-revoke endpoint implemented** — `POST /api/auth/keys/revoke` (`authRoutes.ts`) + `revokeTenantApiKeyByRawKey()` (`application/llm/tenantApiKeyService.ts`): self-service revoke of a `bfk_*` editor key by presenting the raw key (possession = authorization, no JWT), idempotent, invalidates the auth cache. The VS Code extension now calls it on sign-out (`clients/vscode/src/auth.ts removeSession`) so the server-side key dies with the local session instead of being orphaned. Guard test added.
+- **Confirmed already-resolved** (no code change needed): 429 free-plan-cap upsell in the extension (`extension.ts:630-647`, "Upgrade to Pro" → /pricing); superadmin free-plan token-cap bypass (`PlanLimits.ts:199-201`, returns structured 429/402 not 500); VS Code webview l10n bundles fully translated for de/es/fr/zh (`clients/vscode/l10n/`); the "OpenAgentHost" vs "openclaw" acknowledgements copy drift is no longer present anywhere in `clients/vscode`.
+- **Confirmed still-open** (left in roadmap): `agent_type` has no `'vscode'` value + no task-poll/dispatch path (assigning tasks to a VS Code runtime is a full feature, not a residual); no dedicated workforce/observability card enumerating `vscode_connections`; no per-task diff panel; no `workforce` embed view; `/ide/:id?prompt=` one-click Brain seed.
+
+---
+
 ## Completed Features (Consolidated Feature Register)
 
 | Feature | Area | Done |
