@@ -709,8 +709,8 @@ export function BrainPanel({
                 createFile: tTimeline('createFile'),
                 preview: tTimeline('preview'),
               }}
-              onApplyCode={hasTool('apply_code_to_active_file') ? (code) => { void runTool('apply_code_to_active_file', { code }); } : undefined}
-              onCreateFile={hasTool('create_file') ? (path, content) => { void runTool('create_file', { path, content }); } : undefined}
+              onApplyCode={hasTool('apply_code_to_active_file') ? (code: string) => { void runTool('apply_code_to_active_file', { code }); } : undefined}
+              onCreateFile={hasTool('create_file') ? (path: string, content: string) => { void runTool('create_file', { path, content }); } : undefined}
               // Reuse the web's rich markdown (mermaid, router links, code-apply) so
               // no feature is lost; the model-authored "next step" JSON is lifted out.
               renderMessage={(msg, ctx) => (
