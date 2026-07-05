@@ -27,6 +27,10 @@ export interface SystemAudit {
   blurb: string;
   /** Which agent workflow runs the deep pass when a run can be dispatched. */
   agentWorkflow: AuditAgentWorkflow;
+  /** File ONE remediation ticket per gap (each recommendation), instead of a single
+   *  bundled ticket — so every obligation is independently assigned + resolved,
+   *  matching the Security agent's per-finding model. */
+  ticketPerFinding?: boolean;
   /** Deterministic scan — the instant report + score backstop. */
   scan: (ctx: AuditScanContext) => ToolResult;
 }
@@ -75,6 +79,7 @@ export const SYSTEM_AUDITS: SystemAudit[] = [
     icon: '⚖️',
     blurb: 'Scans your repos for GDPR, CCPA/CPRA, and CAN-SPAM readiness — privacy policy, cookie consent, unsubscribe, data export & erasure, and retention — and tells you exactly what to close next.',
     agentWorkflow: 'privacy_audit',
+    ticketPerFinding: true,
     scan: privacyScan,
   },
 ];

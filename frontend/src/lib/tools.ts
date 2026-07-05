@@ -125,6 +125,8 @@ export interface AuditRunOutcome {
   mode: 'agent' | 'deterministic';
   run: SavedToolRun;
   agentTask?: { taskId: number; status: string };
+  /** All remediation tickets filed (one per gap for ticketPerFinding audits). */
+  agentTasks?: Array<{ taskId: number; status: string }>;
 }
 
 /** Default input map for a definition (calculator defaults; questionnaires/quizzes start empty). */
