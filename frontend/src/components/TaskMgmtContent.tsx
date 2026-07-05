@@ -290,7 +290,7 @@ export function TaskMgmtContent({
         setProjects(projs);
       }
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to load');
+      setError(e instanceof Error ? e.message : tTask('errLoad'));
     } finally {
       if (!opts?.background) setLoading(false);
     }
@@ -573,7 +573,7 @@ export function TaskMgmtContent({
       } else {
         const projectIdToUse = projectId ?? (form.projectId as number);
         if (projectIdToUse == null) {
-          setError('Select a project');
+          setError(tTask('errSelectProject'));
           return;
         }
         const created = await tasksApi.create({
@@ -595,7 +595,7 @@ export function TaskMgmtContent({
       }
       setShowModal(false);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Save failed');
+      setError(e instanceof Error ? e.message : tTask('errSave'));
     } finally {
       setSaving(false);
     }
@@ -610,7 +610,7 @@ export function TaskMgmtContent({
       setTasks((prev) => prev.filter((i) => i.id !== t.id));
       if (drawerTask?.id === t.id) setDrawerTask(null);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Delete failed');
+      setError(e instanceof Error ? e.message : tTask('errDelete'));
     }
   };
 
@@ -627,7 +627,7 @@ export function TaskMgmtContent({
       setDrawerTask(updated);
       setEditingField(null);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Save failed');
+      setError(e instanceof Error ? e.message : tTask('errSave'));
     } finally {
       setFieldSaving(false);
     }
@@ -665,7 +665,7 @@ export function TaskMgmtContent({
       // the run-feed poll as the dropped-socket backstop; no client-side trigger.
       refreshRuns();
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Update failed');
+      setError(e instanceof Error ? e.message : tTask('errUpdate'));
     }
   };
 
@@ -701,7 +701,7 @@ export function TaskMgmtContent({
       setTasks((prev) => prev.map((t) => (t.id === moved.id ? moved : t)));
       if (drawerTask?.id === id) setDrawerTask(null);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Move failed');
+      setError(e instanceof Error ? e.message : tTask('errMove'));
     }
   };
 
@@ -1012,7 +1012,7 @@ export function TaskMgmtContent({
                 textDecoration: 'none',
               }}
             >
-              Open approvals
+              {tTask('openApprovals')}
             </Link>
           </span>
         </div>
@@ -1022,7 +1022,7 @@ export function TaskMgmtContent({
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
           <div>
             <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>
-              {filtered.length} task{filtered.length !== 1 ? 's' : ''}
+              {tTask('taskCount', { count: filtered.length })}
               {projectName ? ` · ${projectName}` : ''}
             </span>
           </div>
@@ -1035,13 +1035,13 @@ export function TaskMgmtContent({
                 value={groupByAssignee ? 'people' : 'stage'}
                 onChange={(m) => setGroupByAssignee(m === 'people')}
                 options={[
-                  { value: 'stage', label: 'By stage' },
-                  { value: 'people', label: 'By assignee' },
+                  { value: 'stage', label: tTask('byStage') },
+                  { value: 'people', label: tTask('byAssignee') },
                 ]}
               />
             )}
             <button type="button" onClick={openCreate} style={buttonPrimary}>
-              New task
+              {tTask('newTask')}
             </button>
             {effectiveProjectId != null && (
               // Launch the live round-table ceremony as a full-screen overlay over
@@ -1049,10 +1049,10 @@ export function TaskMgmtContent({
               // onto seats / Epics / a sprint.
               <>
                 <button type="button" onClick={() => setCeremony('standup')} style={buttonTertiary}>
-                  Start standup
+                  {tTask('startStandup')}
                 </button>
                 <button type="button" onClick={() => setCeremony('planning')} style={buttonTertiary}>
-                  Start planning
+                  {tTask('startPlanning')}
                 </button>
               </>
             )}
@@ -1077,8 +1077,8 @@ export function TaskMgmtContent({
                     onClick={() => canConfigure && setPrdOpen(true)}
                     disabled={!canConfigure}
                     style={iconBtn}
-                    aria-label="View PRD"
-                    title={canConfigure ? 'View the PRD (shared by every agent on this board)' : 'Select a single project to view its PRD'}
+                    aria-label={tTask('viewPrdAria')}
+                    title={canConfigure ? tTask('viewPrdTitle') : tTask('viewPrdDisabledTitle')}
                   >
                     <svg viewBox="0 0 24 24" style={{ width: 18, height: 18, stroke: 'currentColor', fill: 'none', strokeWidth: 2 }}>
                       <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
@@ -1092,8 +1092,8 @@ export function TaskMgmtContent({
                     onClick={() => { if (canConfigure) { setBoardConfigTab('lanes'); setBoardConfigOpen(true); } }}
                     disabled={!canConfigure}
                     style={iconBtn}
-                    aria-label="Configure board"
-                    title={canConfigure ? 'Configure swimlanes & agents' : 'Select a single project to configure its board'}
+                    aria-label={tTask('configureBoardAria')}
+                    title={canConfigure ? tTask('configureBoardTitle') : tTask('configureBoardDisabledTitle')}
                   >
                     <svg viewBox="0 0 24 24" style={{ width: 18, height: 18, stroke: 'currentColor', fill: 'none', strokeWidth: 2 }}>
                       <circle cx="12" cy="12" r="3" />
@@ -1336,7 +1336,7 @@ export function TaskMgmtContent({
                   {column.agents.length > 0 && (
                     <div
                       style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 6 }}
-                      title="Agents configured on this swimlane"
+                      title={tTask('swimlaneAgentsTitle')}
                     >
                       {column.agents.map((a) => {
                         const disp = latestDispatchByAssignment.get(a.id);
@@ -1434,24 +1434,24 @@ export function TaskMgmtContent({
                         />
                       </th>
                       <th style={{ textAlign: 'left', padding: '8px 12px', color: 'var(--text-muted)', fontWeight: 600 }}>
-                        Task
+                        {tTask('colTask')}
                       </th>
                     <th style={{ textAlign: 'left', padding: '8px 12px', color: 'var(--text-muted)', fontWeight: 600 }}>
-                      Status
+                      {tTask('status')}
                     </th>
                     <th style={{ textAlign: 'left', padding: '8px 12px', color: 'var(--text-muted)', fontWeight: 600 }}>
-                      Priority
+                      {tTask('priority')}
                     </th>
                     {!projectId && (
                       <th style={{ textAlign: 'left', padding: '8px 12px', color: 'var(--text-muted)', fontWeight: 600 }}>
-                        Project
+                        {tTask('project')}
                       </th>
                     )}
                     <th style={{ textAlign: 'left', padding: '8px 12px', color: 'var(--text-muted)', fontWeight: 600 }}>
-                      Assignee
+                      {tTask('colAssignee')}
                     </th>
                     <th style={{ textAlign: 'left', padding: '8px 12px', color: 'var(--text-muted)', fontWeight: 600 }}>
-                      Due
+                      {tTask('colDue')}
                     </th>
                     <th style={{ width: 1 }} />
                   </tr>
@@ -1566,20 +1566,20 @@ export function TaskMgmtContent({
                             style={{ ...buttonTertiary, padding: '4px 8px', fontSize: 12 }}
                             onClick={() => openTask(task)}
                           >
-                            View
+                            {tCommon('view')}
                           </button>
                           <button
                             type="button"
                             style={{ ...buttonTertiary, padding: '4px 8px', fontSize: 12 }}
                             onClick={(e) => openEdit(task, e)}
                           >
-                            Edit
+                            {tCommon('edit')}
                           </button>
                           <MoveToBoardControl
                             projects={projects}
                             currentProjectId={task.projectId}
                             onMove={(projectId) => moveTask(task.id, projectId)}
-                            label="Move…"
+                            label={tTask('move')}
                             style={{ padding: '4px 6px', fontSize: 12 }}
                           />
                           <button
@@ -1593,7 +1593,7 @@ export function TaskMgmtContent({
                             }}
                             onClick={(e) => removeTask(task, e)}
                           >
-                            Delete
+                            {tCommon('delete')}
                           </button>
                         </div>
                       </td>
@@ -1906,7 +1906,7 @@ export function TaskMgmtContent({
                     tabIndex={0}
                     onClick={() => { setFieldDraft(drawerTask.title); setEditingField('title'); }}
                     onKeyDown={(e) => { if (e.key === 'Enter') { setFieldDraft(drawerTask.title); setEditingField('title'); } }}
-                    title="Click to edit title"
+                    title={tTask('editTitleTitle')}
                     style={{ fontWeight: 700, fontSize: 16, cursor: 'text', borderRadius: 6, padding: '4px 6px', margin: '-4px -6px' }}
                   >
                     {drawerTask.title}
@@ -1932,8 +1932,8 @@ export function TaskMgmtContent({
                   color: 'var(--error-text)',
                   cursor: 'pointer',
                 }}
-                aria-label="Delete task"
-                title="Delete task"
+                aria-label={tTask('deleteTask')}
+                title={tTask('deleteTask')}
               >
                 <svg viewBox="0 0 24 24" style={{ width: 18, height: 18, stroke: 'currentColor', fill: 'none', strokeWidth: 2, strokeLinecap: 'round', strokeLinejoin: 'round' }}>
                   <polyline points="3 6 5 6 21 6" />
@@ -1957,7 +1957,7 @@ export function TaskMgmtContent({
                   color: 'var(--text-secondary)',
                   cursor: 'pointer',
                 }}
-                aria-label="Close"
+                aria-label={tCommon('close')}
               >
                 <svg viewBox="0 0 24 24" style={{ width: 18, height: 18, stroke: 'currentColor', fill: 'none', strokeWidth: 2 }}>
                   <line x1="18" y1="6" x2="6" y2="18" />
@@ -1969,7 +1969,7 @@ export function TaskMgmtContent({
 
             {/* Tabs */}
             <div style={{ display: 'flex', borderBottom: '1px solid var(--border-subtle)', flexShrink: 0, overflowX: 'auto' }}>
-              {([['details', 'Details'], ['agent', 'Agent / Capabilities'], ['prd', 'PRD']] as const).map(([id, label]) => (
+              {([['details', tTask('details')], ['agent', tTask('tabAgent')], ['prd', tTask('tabPrd')]] as const).map(([id, label]) => (
                 <button
                   key={id}
                   type="button"
@@ -2023,7 +2023,7 @@ export function TaskMgmtContent({
                     tabIndex={0}
                     onClick={() => setEditingField('status')}
                     onKeyDown={(e) => { if (e.key === 'Enter') setEditingField('status'); }}
-                    title="Click to change status"
+                    title={tTask('changeStatusTitle')}
                     className={taskStatusBadgeClass(drawerTask.status)}
                     style={{ fontSize: 11, padding: '4px 8px', borderRadius: 6, cursor: 'pointer' }}
                   >
@@ -2056,7 +2056,7 @@ export function TaskMgmtContent({
                     tabIndex={0}
                     onClick={() => setEditingField('priority')}
                     onKeyDown={(e) => { if (e.key === 'Enter') setEditingField('priority'); }}
-                    title="Click to change priority"
+                    title={tTask('changePriorityTitle')}
                     className={PRIORITY_CLASS[drawerTask.priority]}
                     style={{ fontSize: 11, padding: '4px 8px', borderRadius: 6, cursor: 'pointer' }}
                   >
@@ -2078,7 +2078,7 @@ export function TaskMgmtContent({
                         href={drawerTask.githubPrUrl}
                         target="_blank"
                         rel="noopener noreferrer"
-                        title="View the code changes on GitHub"
+                        title={tTask('viewCodeChangesTitle')}
                         style={{
                           fontSize: 12,
                           fontWeight: 600,
@@ -2346,11 +2346,11 @@ export function TaskMgmtContent({
               }}
             >
               <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
-                Runs as <strong style={{ color: 'var(--text-secondary)' }}>{taskAssigneeName(drawerTask)}</strong>. Change the runtime in the Agent tab.
+                {tTask.rich('runsAs', { name: taskAssigneeName(drawerTask), b: (chunks) => <strong style={{ color: 'var(--text-secondary)' }}>{chunks}</strong> })}
               </span>
               <RunTaskButton
                 task={drawerTask}
-                label="Run this task"
+                label={tTask('runThisTask')}
                 // The lane move is SERVER-SIDE: the runtime transitions the ticket to
                 // in_progress when the run reports RUNNING, and the change arrives over
                 // the project realtime socket. The client no longer writes the status

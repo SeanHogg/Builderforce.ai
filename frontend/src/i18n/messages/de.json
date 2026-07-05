@@ -722,7 +722,11 @@
     "cancel": "Abbrechen",
     "save": "Speichern",
     "saving": "Wird gespeichert…",
-    "loading": "Wird geladen…"
+    "loading": "Wird geladen…",
+    "close": "Schließen",
+    "delete": "Löschen",
+    "edit": "Bearbeiten",
+    "view": "Ansehen"
   },
   "legal": {
     "termsTitle": "Nutzungsbedingungen",
@@ -2986,6 +2990,10 @@
       {
         "question": "Hat Evermind Benchmarks — woher weiß ich, dass ein von mir trainiertes Modell etwas taugt?",
         "answer": "Ja. Jedes Modell, das Sie im Studio trainieren, wird vor der Veröffentlichung direkt auf dem Gerät bewertet. Die integrierte Benchmarking-Umgebung hält einen Ausschnitt Ihres Korpus zurück, auf dem das Modell nie trainiert, und meldet dann die Standard-Kennzahlen für Sprachmodelle — zurückgehaltene Perplexität, Bits pro Token, Top-1- und Top-k-Next-Token-Genauigkeit sowie Generierungsdurchsatz — und kann zwei Checkpoints per A/B vergleichen, sodass Sie sehen, ob eine frische Anpassung tatsächlich besser ist als die vorherige. Sie läuft vollständig in Ihrem Browser, ohne GPU-Rechnung und ohne dass Daten Ihren Rechner verlassen, sodass Sie auf Basis von Belegen veröffentlichen, nicht auf Bauchgefühl. Dieselbe Umgebung ist das offene Messinstrument hinter dem technischen Bericht zu Evermind."
+      },
+      {
+        "question": "Kann Evermind von einem Frontier-Modell wie Opus oder Mistral lernen?",
+        "answer": "Ja — durch Lehrer-Destillation. Sie können ein beliebiges Frontier-LLM (Opus, Mistral, GLM und mehr) als Lehrer für das Evermind eines Projekts anheften. Für jede echte Aufgabe, die Ihr Team liefert, wird der Lehrer über das gemessene Gateway um die ideale Antwort gebeten, und das SSM passt sich am Paar (Aufgabenkontext → Lehrer-Beispiel) an statt am Rohtext des Laufs. Mit der Zeit nimmt Ihr eigenes kleines Modell auf dem Gerät die Qualität eines viel größeren auf, während Sie Eigentum und Aktualität behalten. Der Lehreraufruf ist auf Ihr Token-Budget gedeckelt und nach bestem Bemühen — ein Fehlschlag fällt auf das Lernen aus der Roharbeit zurück —, sodass die Destillation die Lernschleife nie zum Stillstand bringt."
       }
     ],
     "adoption": {
@@ -3018,6 +3026,36 @@
       "longDesc": "Evermind ist das Gehirn der Plattform – ein selbstaktualisierendes Modell, gesteuert durch Write-Through Cognition: Neues Wissen wird direkt durchgeschrieben, sodass eine Aktualisierung das Vorherige ersetzt, ganz ohne Abgleichschritt. Ein hybrider Generator mit gemeinsam genutzten Experten (dichtes Backbone + geroutete SSM-Experten) lernt online und läuft auf WebGPU, sodass er bei Aktualität, Footprint und Eigentum punktet statt bei reiner Größe – im Browser, auf dem Gerät oder in jedem Agenten."
     },
     {
+      "title": "Destillieren Sie ein Frontier-Modell in Ihr eigenes",
+      "shortDesc": "Heften Sie ein beliebiges Frontier-Modell als Lehrer an und trainieren Sie Ihr eigenes privates Modell mit seinen besten Antworten.",
+      "longDesc": "Heften Sie ein beliebiges Frontier-LLM — Opus, Mistral, GLM und mehr — als Lehrer für das Evermind eines Projekts an. Für jede echte Arbeit, die Ihr Team liefert, erzeugt der Lehrer die ideale Antwort auf diese Aufgabe, und Ihr eigenes Modell lernt daraus — es nimmt nach und nach Frontier-Qualität in ein kleines Modell auf, das Sie besitzen und auf dem Gerät ausführen. Es ist kostengedeckelt und nach bestem Bemühen: Es gibt nur aus, wenn Token-Budget vorhanden ist, und ein Fehlschlag des Lehrers fällt auf das Lernen aus der Roharbeit zurück, sodass eine Lektion nie verloren geht."
+    },
+    {
+      "title": "Ein lernendes Gehirn für jedes Projekt",
+      "shortDesc": "Jedes Projekt erhält sein eigenes selbstaktualisierendes Modell, das aus der Arbeit Ihres Teams lernt.",
+      "longDesc": "Jedes Projekt wird vom ersten Tag an mit einem eigenen Evermind ausgestattet — einem selbstaktualisierenden Modell, das aus jedem Lauf in allen vier Studios lernt: Design, Sprache, LLM und Video. Korrekturen bleiben über Sitzungen hinweg dank eines gemeinsamen Write-Through-Faktenspeichers erhalten, sodass das Gehirn, das gestern half, heute klüger ist. Die Inferenz bleibt aus, bis Sie sie aktivieren, und das Modell ist direkt im LLM Studio bearbeitbar."
+    },
+    {
+      "title": "Agentisches Workforce-Kanban",
+      "shortDesc": "Besetzen Sie ein tiefes Rollenaufgebot aus Menschen und KI-Agenten auf einem freigabepflichtigen Board.",
+      "longDesc": "Gehen Sie über eine To-do-Liste hinaus: Besetzen Sie jedes Projekt aus einer erstklassigen Jobrollen-Taxonomie — Menschen und KI-Agenten im selben Aufgebot — ausgehend von einem für Ihr Team empfohlenen Satz. Swimlanes können den richtigen Prüfer verlangen, bevor ein Ticket weitergeht, und jedes „Fertig“ trägt ein Rollen- und Diagnose-Freigabeaudit pro Ticket, sodass Qualität am Board erzwungen und nicht im Nachhinein erhofft wird."
+    },
+    {
+      "title": "Kanban-Vorlagen-Marktplatz",
+      "shortDesc": "Kaufen, verkaufen und installieren Sie fertige Board-Vorlagen mit Lanes, Rollen und Gates.",
+      "longDesc": "Verpacken Sie einen Lieferprozess — Lanes, erforderliche Rollen, Prüf-Gates und ein empfohlenes Aufgebot — als Kanban-Vorlage und veröffentlichen Sie sie auf dem Marktplatz zum Verkauf oder Teilen. Installieren Sie eine bewährte Vorlage mit einem Klick in jedes Projekt, sodass ein Team einen gesteuerten, rollengeschützten Workflow erbt, statt ihn von Grund auf zusammenzustellen."
+    },
+    {
+      "title": "Validator-Agent — Nachweis der Fertigstellung",
+      "shortDesc": "Ein Agent, der prüft, ob „Fertig“ wirklich fertig ist, und die gefundenen Lücken erfasst.",
+      "longDesc": "Ad-hoc-Chatarbeit wird automatisch zu sichtbaren Tickets, und ein integrierter Validator-Agent prüft jedes als Fertig markierte Element — hält ein Urteil fest und öffnet GAP-Aufgaben für alles, was zu kurz kommt. Ein gemeinsamer Merge-zu-Fertig-Pfad deckt menschliche Freigabe, grüne CI und Post-Deploy ab, sodass nichts ohne Nachweis als „fertig“ durchgeht."
+    },
+    {
+      "title": "Erlerntes Modell-Routing",
+      "shortDesc": "Die Plattform lernt, welches Modell für jede Art von Aufgabe am besten — und am günstigsten — ist.",
+      "longDesc": "Jeder Lauf wird nach seinem Ergebnis bewertet, und ein lernender Router ordnet entsprechend neu, welches Modell welchen Aktionstyp bearbeitet — günstigere Modelle übernehmen die Arbeit, die sie gut können, Premium-Modelle bleiben für das reserviert, wo sie sich lohnen. In Kombination mit dem semantischen Cache sinkt Ihre Token-Rechnung, während die Plattform Ihre Arbeitslast lernt — mit einem Ein-Flag-Killschalter, wann immer Sie manuelle Kontrolle wollen."
+    },
+    {
       "title": "Kanban-Board & Projektmanagement",
       "shortDesc": "Arbeit auf einem Live-Agenten-Kanban-Board planen, zuweisen & verfolgen.",
       "longDesc": "Eine vollständige Projektmanagement-Oberfläche: Organisieren Sie Arbeit in Projekten und planen, weisen und verfolgen Sie dann jede Aufgabe auf einem Live-Kanban-Board – Swimlanes pro Status oder pro Agent, dazu Tabellen-, Kalender- und Gantt-Ansichten. Menschen und KI-Agenten sitzen auf demselben Board, und Arbeit fließt in Echtzeit vom Backlog bis zur Fertigstellung."
@@ -3036,6 +3074,11 @@
       "title": "Agentic Tester – Autonome QA",
       "shortDesc": "Ein KI-Agent, der Ihre App planmäßig im Browser testet.",
       "longDesc": "Der Agentic Tester ist ein einstellbarer QA-Agent. Richten Sie ihn auf die URL Ihres Projekts, hinterlegen Sie die zu verwendenden Logins, und er steuert einen echten Browser durch Ihre meistgenutzten Abläufe – priorisiert anhand realer Nutzungs-Heatmaps, was getestet wird, meldet sich als jede Persona an und erfasst Konsolenfehler, fehlgeschlagene Anfragen und Abstürze. Führen Sie ihn bei Bedarf aus oder planen Sie ihn als Teil eines Workflows ein; jeder gefundene Fehler landet direkt auf Ihrem Kanban-Board."
+    },
+    {
+      "title": "Menschliche Talente anheuern",
+      "shortDesc": "Holen Sie freiberufliche Entwickler, DBAs und Designer ins Team — und zahlen Sie nur für erfasste Zeit.",
+      "longDesc": "Über KI-Agenten hinaus stellen Sie echte Menschen ein: Der Talent-Marktplatz listet geprüfte freiberufliche Entwickler, DBAs, Designer und Spezialisten mit Lebensläufen (unterstützt von hired.video), Fähigkeiten und Stundensätzen. Führen Sie Interviews, engagieren Sie über jedes Projekt hinweg und sehen Sie abrechenbare Stunden automatisch aus der Arbeit erfasst, die sie im Portal und in VS Code leisten — jede Stundenkarte gehört Ihnen zur Freigabe, bevor Sie zahlen. Menschen und Agenten arbeiten Seite an Seite auf demselben Board."
     },
     {
       "title": "AI CTO",
@@ -3299,6 +3342,83 @@
           {
             "feature": "MCP — als Server bereitstellen",
             "note": "/mcp-Endpunkt",
+            "values": {
+              "builderforce": "✅",
+              "copilot": "❌",
+              "cursor": "❌",
+              "claudeCode": "❌",
+              "devin": "❌",
+              "openhands": "❌",
+              "aider": "❌",
+              "continueDev": "❌"
+            }
+          }
+        ]
+      },
+      {
+        "id": "self-improving",
+        "title": "Selbstverbessernde Modelle & Nachweis der Fertigstellung",
+        "blurb": "Modelle, die aus Ihrer Arbeit lernen, sich nach Ergebnis selbst routen und beweisen, dass „Fertig“ wirklich fertig ist — Fähigkeiten, die eingefrorenen Einzelagenten-Tools strukturell fehlen.",
+        "rows": [
+          {
+            "feature": "Trainiert Ihr eigenes Modell mit Ihrer Arbeit",
+            "note": "Frontier-Modell-Lehrer-Destillation",
+            "values": {
+              "builderforce": "✅",
+              "copilot": "❌",
+              "cursor": "❌",
+              "claudeCode": "❌",
+              "devin": "❌",
+              "openhands": "❌",
+              "aider": "❌",
+              "continueDev": "❌"
+            }
+          },
+          {
+            "feature": "Selbstaktualisierendes Modell pro Projekt",
+            "note": "Evermind, läuft auf dem Gerät",
+            "values": {
+              "builderforce": "✅",
+              "copilot": "❌",
+              "cursor": "❌",
+              "claudeCode": "❌",
+              "devin": "❌",
+              "openhands": "❌",
+              "aider": "❌",
+              "continueDev": "❌"
+            }
+          },
+          {
+            "feature": "Erlerntes, ergebnisbasiertes Modell-Routing",
+            "note": "bewertet Läufe, ordnet Modelle neu",
+            "values": {
+              "builderforce": "✅",
+              "copilot": "❌",
+              "cursor": "❌",
+              "claudeCode": "❌",
+              "devin": "❌",
+              "openhands": "❌",
+              "aider": "❌",
+              "continueDev": "❌"
+            }
+          },
+          {
+            "feature": "Validator-Agent — Nachweis der Fertigstellung",
+            "note": "öffnet GAP-Aufgaben bei Defiziten",
+            "values": {
+              "builderforce": "✅",
+              "copilot": "❌",
+              "cursor": "❌",
+              "claudeCode": "❌",
+              "devin": "❌",
+              "openhands": "❌",
+              "aider": "❌",
+              "continueDev": "❌"
+            }
+          },
+          {
+            "feature": "Rollengeschütztes Board mit Freigabeaudit",
+            "note": "Rolle + Diagnose pro Ticket",
             "values": {
               "builderforce": "✅",
               "copilot": "❌",
@@ -4003,6 +4123,26 @@
       {
         "question": "Kann ich Builderforce-Agenten mit BuilderForce Agents integrieren?",
         "answer": "Ja – auf Builderforce trainierte Modelle können als Evermind-Modelle exportiert und veröffentlicht werden, die Ihr selbstgehostetes BuilderForce Agents-Gateway direkt als Modell aufruft, nicht nur als Memory-Schicht. Die Plattform unterstützt die gesamte Pipeline: Trainieren Sie ein eigenes SSM im Browser, veröffentlichen Sie es und leiten Sie Live-Traffic über die OpenAI-kompatible API darauf."
+      },
+      {
+        "question": "Kann ich mein eigenes Modell mit den Antworten eines Frontier-Modells trainieren?",
+        "answer": "Ja — das ist Lehrer-Destillation. Heften Sie ein beliebiges Frontier-LLM (Opus, Mistral, GLM und mehr) als Lehrer für das Evermind eines Projekts an. Für jede echte Arbeit, die Ihr Team liefert, erzeugt der Lehrer die ideale Antwort auf diese Aufgabe, und Ihr eigenes Modell lernt aus diesem Beispiel statt aus dem Rohtext — so nimmt es nach und nach Frontier-Qualität in ein kleines Modell auf, das Sie besitzen und auf dem Gerät ausführen. Es ist kostengedeckelt (es gibt nur aus, wenn Sie Token-Budget haben) und nach bestem Bemühen (ein Fehlschlag des Lehrers fällt auf das Lernen aus der Roharbeit zurück), sodass eine Lektion nie verloren geht."
+      },
+      {
+        "question": "Erhält jedes Projekt sein eigenes Modell?",
+        "answer": "Ja. Jedes Projekt wird bei der Erstellung mit einem eigenen Evermind ausgestattet — einem selbstaktualisierenden Modell, das über einen gemeinsamen Lernmechanismus aus jedem Lauf in allen vier Studios (Design, Sprache, LLM und Video) lernt. Korrigierte Fakten bleiben über Sitzungen hinweg in einem Write-Through-Faktenspeicher erhalten, der von der Web-App, VS Code, der Cloud und On-Prem-Agenten geteilt wird, sodass das Gehirn, das gestern half, heute klüger ist. Die Inferenz bleibt aus, bis Sie sie aktivieren, und das Modell ist im LLM Studio bearbeitbar."
+      },
+      {
+        "question": "Kann ich mein Board so absichern, dass nur die richtige Rolle ein Ticket abschließt?",
+        "answer": "Ja — das ist das Agentische Workforce-Kanban. Besetzen Sie jedes Projekt aus einer erstklassigen Jobrollen-Taxonomie aus Menschen und KI-Agenten und konfigurieren Sie Swimlanes so, dass der richtige Prüfer erforderlich ist, bevor ein Ticket weitergehen kann. Jedes als Fertig markierte Element trägt ein Rollen- und Diagnose-Freigabeaudit pro Ticket, und eine Rollenabdeckungs-Diagnose markiert Lücken auf dem Board, sodass Qualität erzwungen und nicht angenommen wird."
+      },
+      {
+        "question": "Wie prüft Builderforce, dass als Fertig markierte Arbeit wirklich fertig ist?",
+        "answer": "Ein integrierter Validator-Agent prüft jedes als Fertig markierte Element, hält ein Urteil fest und öffnet GAP-Aufgaben für alles, was zu kurz kommt. Ad-hoc-Chatarbeit wird ebenfalls automatisch als sichtbare Tickets erfasst, und ein gemeinsamer Merge-zu-Fertig-Pfad deckt menschliche Freigabe, grüne CI und Post-Deploy ab — sodass nichts ohne Nachweis als fertig gemeldet wird."
+      },
+      {
+        "question": "Kann ich eine Kanban-Board-Vorlage kaufen oder verkaufen?",
+        "answer": "Ja. Verpacken Sie einen Lieferprozess — Lanes, erforderliche Rollen, Prüf-Gates und ein empfohlenes Aufgebot — als Kanban-Vorlage und veröffentlichen Sie sie auf dem Marktplatz zum Verkauf oder Teilen. Jedes Team kann eine bewährte Vorlage mit einem Klick in ein Projekt installieren und einen gesteuerten, rollengeschützten Workflow erben, statt einen von Grund auf zu bauen."
       }
     ]
   },
@@ -4173,6 +4313,10 @@
           {
             "title": "Chats",
             "desc": "Sprechen Sie direkt mit Ihren Agenten oder beobachten Sie, wie sie in gemeinsamen Konversationen zusammenarbeiten."
+          },
+          {
+            "title": "Workforce-Kanban & Vorlagen",
+            "desc": "Besetzen Sie ein Projekt aus einem Rollenaufgebot aus Menschen und KI-Agenten auf einem freigabepflichtigen Board und kaufen, verkaufen oder installieren Sie dann fertige Board-Vorlagen — Lanes, erforderliche Rollen, Prüf-Gates und ein empfohlenes Aufgebot — vom Marktplatz."
           }
         ]
       },
@@ -4451,7 +4595,50 @@
     "approveAll": "Alle genehmigen",
     "newChat": "+ Neu",
     "messagePlaceholder": "Nachricht an Brain…",
-    "searchChats": "Chats durchsuchen…"
+    "searchChats": "Chats durchsuchen…",
+    "confirmActionAria": "Aktion bestätigen",
+    "wantsTo": "Brain möchte <b>{action}</b>. Zum Ausführen genehmigen.",
+    "approveAllTitle": "Diese Aktion genehmigen und alle folgenden Aktionen in dieser Unterhaltung automatisch genehmigen",
+    "captureHasTrace": "Diesen Lauf (LLM-Schritte, Tool-Kette, Fehler und Transkript) in die Zwischenablage kopieren",
+    "captureNoTrace": "Noch keine Ausführung erfasst – sende zuerst eine Nachricht",
+    "captureExecutionAria": "Ausführung erfassen",
+    "brainDefault": "Brain (Standard)",
+    "noChatsYet": "Noch keine Chats. Klicke auf + Neu, um zu beginnen.",
+    "noChatsMatch": "Keine Chats entsprechen deiner Suche.",
+    "rename": "Umbenennen",
+    "summarize": "Zusammenfassen",
+    "addTo": "Hinzufügen zu:",
+    "addChatToProjectAria": "Chat zum Projekt hinzufügen",
+    "addToProject": "Zum Projekt hinzufügen…",
+    "createNewProject": "+ Neues Projekt erstellen",
+    "brainTitle": "Brain",
+    "emptyHint": "Starte einen neuen Chat oder wähle einen aus, um zu beginnen.",
+    "startNewChat": "Neuen Chat starten",
+    "newProjectPlaceholder": "Name des neuen Projekts",
+    "createAndAssign": "Erstellen und zuweisen",
+    "actingAs": "Handelt als",
+    "personaAria": "Brain-Agent oder -Persona",
+    "defaultBrain": "Standard-Brain",
+    "personas": "Personas",
+    "assignedAgents": "Zugewiesene Agenten",
+    "uploading": "Wird hochgeladen…",
+    "brainStorm": "Brain Storm",
+    "projectLabel": "Projekt",
+    "newChatsHint": "Neue Chats werden dem ausgewählten Projekt hinzugefügt.",
+    "filterByProjectAria": "Nach Projekt filtern",
+    "allProjects": "Alle",
+    "noProject": "Kein Projekt",
+    "openFullBrainStorm": "Vollständiges Brain Storm öffnen",
+    "expand": "Erweitern ↗",
+    "closeBrain": "Brain schließen",
+    "assignToProject": "Projekt zuweisen:",
+    "assignChatToProjectAria": "Chat einem Projekt zuweisen",
+    "addProject": "+ Projekt",
+    "workflowsArrow": "Workflows →",
+    "openInIde": "In der IDE öffnen →",
+    "brainModality": "Brain — {modality}",
+    "brainAs": "Brain als {name}",
+    "chatHistory": "Chat-Verlauf"
   },
   "modelExport": {
     "subtitle": "Exportieren Sie ein veröffentlichtes Modell in ein portables Artefakt – ein Hugging-Face-Repo, ONNX, safetensors oder GGUF – und laden Sie es herunter. Das Modell wird serverseitig erzeugt; es ist kein Token erforderlich.",
@@ -5357,6 +5544,38 @@
     "dueDate": "Fälligkeitsdatum",
     "setDueDateTitle": "Klicken, um ein Fälligkeitsdatum festzulegen",
     "none": "Keine",
-    "created": "Erstellt"
+    "created": "Erstellt",
+    "openApprovals": "Freigaben öffnen",
+    "taskCount": "{count, plural, one {# Aufgabe} other {# Aufgaben}}",
+    "byStage": "Nach Phase",
+    "byAssignee": "Nach Zuständigem",
+    "startStandup": "Standup starten",
+    "startPlanning": "Planung starten",
+    "viewPrdAria": "PRD ansehen",
+    "viewPrdTitle": "Das PRD ansehen (von allen Agenten auf diesem Board gemeinsam genutzt)",
+    "viewPrdDisabledTitle": "Wähle ein einzelnes Projekt aus, um dessen PRD anzusehen",
+    "configureBoardAria": "Board konfigurieren",
+    "configureBoardTitle": "Swimlanes und Agenten konfigurieren",
+    "configureBoardDisabledTitle": "Wähle ein einzelnes Projekt aus, um dessen Board zu konfigurieren",
+    "swimlaneAgentsTitle": "Auf dieser Swimlane konfigurierte Agenten",
+    "colTask": "Aufgabe",
+    "colAssignee": "Zuständig",
+    "colDue": "Fällig",
+    "move": "Verschieben…",
+    "editTitleTitle": "Zum Bearbeiten des Titels klicken",
+    "deleteTask": "Aufgabe löschen",
+    "tabAgent": "Agent / Fähigkeiten",
+    "tabPrd": "PRD",
+    "changeStatusTitle": "Zum Ändern des Status klicken",
+    "changePriorityTitle": "Zum Ändern der Priorität klicken",
+    "viewCodeChangesTitle": "Die Code-Änderungen auf GitHub ansehen",
+    "runsAs": "Läuft als <b>{name}</b>. Ändere die Laufzeitumgebung im Tab „Agent“.",
+    "runThisTask": "Diese Aufgabe ausführen",
+    "errLoad": "Laden fehlgeschlagen",
+    "errSelectProject": "Wähle ein Projekt aus",
+    "errSave": "Speichern fehlgeschlagen",
+    "errDelete": "Löschen fehlgeschlagen",
+    "errUpdate": "Aktualisierung fehlgeschlagen",
+    "errMove": "Verschieben fehlgeschlagen"
   }
 }

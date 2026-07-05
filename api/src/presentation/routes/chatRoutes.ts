@@ -14,30 +14,12 @@ import {
   chatSessions,
   chatMessages,
 } from '../../infrastructure/database/schema';
-import { verifySecret } from '../../infrastructure/auth/HashService';
+import { verifyAgentHostApiKey } from '../../infrastructure/auth/agentHostAuth';
 import type { HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 
 export function createChatRoutes(db: Db): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
-
-  // ---------------------------------------------------------------------------
-  // Helper: verify agentHost API key (same pattern as agentHostRoutes)
-  // ---------------------------------------------------------------------------
-  const verifyAgentHostApiKey = async (id: number, key?: string) => {
-    if (!key) return null;
-    const [agentHost] = await db
-      .select({
-        id: agentHosts.id,
-        tenantId: agentHosts.tenantId,
-        apiKeyHash: agentHosts.apiKeyHash,
-      })
-      .from(agentHosts)
-      .where(eq(agentHosts.id, id));
-    if (!agentHost) return null;
-    const valid = await verifySecret(key, agentHost.apiKeyHash);
-    return valid ? agentHost : null;
-  };
 
   // ---------------------------------------------------------------------------
   // POST /api/agent-hosts/:agentHostId/messages?key=<agentHostApiKey>
@@ -52,7 +34,7 @@ export function createChatRoutes(db: Db): Hono<HonoEnv> {
       return c.json({ error: 'invalid agentHostId' }, 400);
     }
 
-    const agentHost = await verifyAgentHostApiKey(agentHostId, key);
+    const agentHost = await verifyAgentHostApiKey(db, agentHostId, key);
     if (!agentHost) return c.text('Unauthorized', 401);
 
     let body: { sessionKey: string; projectId?: number; messages: Array<{ role: string; content: string; metadata?: string; seq: number }> };

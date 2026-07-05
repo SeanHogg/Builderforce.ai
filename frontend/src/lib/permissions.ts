@@ -6,6 +6,12 @@
  * Server-side overrides from role_permission_overrides are not applied here;
  * the Permission Debugger fetches the resolved matrix from /api/admin/permissions/matrix
  * for an accurate view.
+ *
+ * DRIFT GUARD: this is a mirror of the authoritative server matrix in
+ * `api/src/domain/permissions/permissionRegistry.ts`. The two MUST stay identical;
+ * equality is asserted at test time by that package's `permissionMatrixDrift.test.ts`
+ * (api and frontend are separate build roots and can't share a module directly).
+ * Change both together.
  */
 
 export const PERMISSIONS = {

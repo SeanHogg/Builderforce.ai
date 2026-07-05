@@ -722,7 +722,11 @@
     "cancel": "Cancelar",
     "save": "Guardar",
     "saving": "Guardando…",
-    "loading": "Cargando…"
+    "loading": "Cargando…",
+    "close": "Cerrar",
+    "delete": "Eliminar",
+    "edit": "Editar",
+    "view": "Ver"
   },
   "legal": {
     "termsTitle": "Términos de uso",
@@ -2986,6 +2990,10 @@
       {
         "question": "¿Tiene Evermind benchmarks? ¿Cómo sé si un modelo que entreno es bueno?",
         "answer": "Sí. Cada modelo que entrenas en el Studio se puntúa en el dispositivo antes de publicarlo. El arnés de benchmarking integrado reserva una porción de tu corpus con la que el modelo nunca se entrena, y luego informa de las medidas estándar de los modelos de lenguaje —perplejidad sobre datos reservados, bits por token, precisión top-1 y top-k del siguiente token, y rendimiento de generación— y puede hacer pruebas A/B entre dos checkpoints para que veas si una adaptación reciente realmente mejoró respecto de la anterior. Se ejecuta por completo en tu navegador, sin factura de GPU y sin que ningún dato salga de tu máquina, así que publicas con base en la evidencia, no en intuiciones. Ese mismo arnés es el instrumento de medición abierto que respalda el informe técnico de Evermind."
+      },
+      {
+        "question": "¿Puede Evermind aprender de un modelo frontera como Opus o Mistral?",
+        "answer": "Sí, mediante la destilación con profesor. Puedes fijar cualquier LLM frontera (Opus, Mistral, GLM y más) como profesor del Evermind de un proyecto. Por cada tarea real que entrega tu equipo, se le pide al profesor la respuesta ideal a través de la pasarela medida, y el SSM se adapta sobre el par (contexto de la tarea → ejemplo del profesor) en lugar del texto en bruto de la ejecución. Con el tiempo, tu propio modelo pequeño en el dispositivo absorbe la calidad de uno mucho mayor, mientras conservas la propiedad y la actualidad. La llamada al profesor está limitada por tu presupuesto de tokens y es de mejor esfuerzo —un fallo recurre a aprender del trabajo en bruto—, así que la destilación nunca detiene el bucle de aprendizaje."
       }
     ],
     "adoption": {
@@ -3018,6 +3026,36 @@
       "longDesc": "Evermind es el cerebro de la plataforma: un modelo que se actualiza solo, regido por Write-Through Cognition: el conocimiento nuevo se escribe directamente, de modo que una actualización reemplaza lo anterior sin ningún paso de reconciliación. Un generador híbrido de expertos compartidos (núcleo denso + expertos SSM enrutados) aprende en línea y se ejecuta sobre WebGPU, de modo que gana en actualidad, huella y propiedad en lugar de escala bruta: en el navegador, en el dispositivo o dentro de cada agente."
     },
     {
+      "title": "Destila un modelo frontera en el tuyo propio",
+      "shortDesc": "Fija cualquier modelo frontera como profesor y entrena tu propio modelo privado con sus mejores respuestas.",
+      "longDesc": "Fija cualquier LLM frontera —Opus, Mistral, GLM y más— como profesor del Evermind de un proyecto. Por cada trabajo real que entrega tu equipo, el profesor produce la respuesta ideal a esa tarea y tu propio modelo aprende de ella, absorbiendo poco a poco la calidad de nivel frontera en un modelo pequeño que posees y ejecutas en el dispositivo. Está limitado por coste y es de mejor esfuerzo: solo gasta cuando hay presupuesto de tokens, y si el profesor falla recurre a aprender del trabajo en bruto, de modo que nunca se pierde una lección."
+    },
+    {
+      "title": "Un cerebro que aprende para cada proyecto",
+      "shortDesc": "Cada proyecto obtiene su propio modelo autoactualizable que aprende del trabajo de tu equipo.",
+      "longDesc": "Cada proyecto se aprovisiona con su propio Evermind desde el primer día: un modelo autoactualizable que aprende de cada ejecución en los cuatro estudios: diseño, voz, LLM y vídeo. Las correcciones perduran entre sesiones mediante un almacén de hechos de escritura directa compartido, así que el cerebro que ayudó ayer hoy es más inteligente. La inferencia permanece desactivada hasta que la habilitas, y el modelo es editable directamente en el LLM Studio."
+    },
+    {
+      "title": "Kanban de plantilla de trabajo agéntica",
+      "shortDesc": "Dota un plantel amplio de roles de humanos y agentes de IA en un tablero con aprobación obligatoria.",
+      "longDesc": "Ve más allá de una lista de tareas: dota cada proyecto desde una taxonomía de roles de primera clase —humanos y agentes de IA en el mismo plantel— partiendo de un conjunto recomendado para tu equipo. Los carriles pueden exigir al revisor adecuado antes de que un ticket avance, y cada \"Hecho\" lleva una auditoría de firma por rol y diagnóstico por ticket, de modo que la calidad se controla en el tablero en lugar de confiarse después."
+    },
+    {
+      "title": "Mercado de plantillas Kanban",
+      "shortDesc": "Compra, vende e instala plantillas de tablero listas con carriles, roles y controles.",
+      "longDesc": "Empaqueta un proceso de entrega —carriles, roles requeridos, controles de revisión y un plantel recomendado— como una plantilla Kanban y publícala en el mercado para venderla o compartirla. Instala una plantilla probada en cualquier proyecto con un clic, para que un equipo herede un flujo gobernado y con roles en lugar de montarlo desde cero."
+    },
+    {
+      "title": "Agente Validador — prueba de terminado",
+      "shortDesc": "Un agente que comprueba que \"Hecho\" está realmente hecho y registra las brechas que encuentra.",
+      "longDesc": "El trabajo de chat improvisado se convierte automáticamente en tickets visibles, y un agente Validador integrado revisa cada elemento marcado como Hecho, registrando un veredicto y abriendo tareas GAP para todo lo que se quede corto. Una única ruta compartida de fusión a Hecho cubre la aprobación humana, el CI en verde y el post-despliegue, para que nada pase como \"terminado\" sin prueba."
+    },
+    {
+      "title": "Enrutamiento de modelos aprendido",
+      "shortDesc": "La plataforma aprende qué modelo es mejor —y más barato— para cada tipo de tarea.",
+      "longDesc": "Cada ejecución se puntúa por su resultado, y un enrutador que aprende reordena qué modelo gestiona cada tipo de acción en consecuencia: los modelos más baratos toman el trabajo que hacen bien y los premium se reservan para donde lo merecen. Combinado con la caché semántica, tu factura de tokens baja a medida que la plataforma aprende tu carga de trabajo, con un interruptor de un solo indicador cuando quieras control manual."
+    },
+    {
       "title": "Tablero Kanban y gestión de proyectos",
       "shortDesc": "Planifica, asigna y haz seguimiento del trabajo en un tablero Kanban de agentes en vivo.",
       "longDesc": "Una superficie completa de gestión de proyectos: organiza el trabajo en proyectos y luego planifica, asigna y haz seguimiento de cada tarea en un tablero Kanban en vivo, con carriles por estado o por agente, además de vistas de tabla, calendario y Gantt. Las personas y los agentes de IA comparten el mismo tablero, y el trabajo fluye del backlog a terminado en tiempo real."
@@ -3036,6 +3074,11 @@
       "title": "Tester Agéntico: QA autónomo",
       "shortDesc": "Un agente de IA que prueba tu aplicación en el navegador de forma programada.",
       "longDesc": "El Tester Agéntico es un agente de QA que puedes contratar. Apúntalo a la URL de tu proyecto, guarda los inicios de sesión que debe usar y conducirá un navegador real a través de tus flujos de mayor tráfico, priorizando qué probar a partir de mapas de calor de uso real, iniciando sesión como cada persona y capturando errores de consola, solicitudes fallidas y caídas. Ejecútalo a demanda o prográmalo como parte de un flujo de trabajo; cada error que encuentra aterriza directamente en tu tablero Kanban."
+    },
+    {
+      "title": "Contrata talento humano",
+      "shortDesc": "Incorpora desarrolladores, DBA y diseñadores freelance, y paga solo por el tiempo registrado.",
+      "longDesc": "Más allá de los agentes de IA, contrata a personas reales: el Mercado de Talento lista desarrolladores, DBA, diseñadores y especialistas freelance verificados, con currículums (con tecnología de hired.video), habilidades y tarifas por hora. Entrevista, contrata en cualquier proyecto y ve las horas facturables capturadas automáticamente del trabajo que hacen en el portal y en VS Code: cada parte de horas es tuyo para aprobar antes de pagar. Humanos y agentes trabajan codo a codo en el mismo tablero."
     },
     {
       "title": "CTO de IA",
@@ -3299,6 +3342,83 @@
           {
             "feature": "MCP — exponer como servidor",
             "note": "Endpoint /mcp",
+            "values": {
+              "builderforce": "✅",
+              "copilot": "❌",
+              "cursor": "❌",
+              "claudeCode": "❌",
+              "devin": "❌",
+              "openhands": "❌",
+              "aider": "❌",
+              "continueDev": "❌"
+            }
+          }
+        ]
+      },
+      {
+        "id": "self-improving",
+        "title": "Modelos que se mejoran solos y prueba de terminado",
+        "blurb": "Modelos que aprenden de tu trabajo, se enrutan solos según el resultado y prueban que \"Hecho\" está realmente hecho: capacidades de las que las herramientas de un solo agente y congeladas carecen estructuralmente.",
+        "rows": [
+          {
+            "feature": "Entrena tu propio modelo con tu trabajo",
+            "note": "Destilación con profesor de modelo frontera",
+            "values": {
+              "builderforce": "✅",
+              "copilot": "❌",
+              "cursor": "❌",
+              "claudeCode": "❌",
+              "devin": "❌",
+              "openhands": "❌",
+              "aider": "❌",
+              "continueDev": "❌"
+            }
+          },
+          {
+            "feature": "Modelo autoactualizable por proyecto",
+            "note": "Evermind, se ejecuta en el dispositivo",
+            "values": {
+              "builderforce": "✅",
+              "copilot": "❌",
+              "cursor": "❌",
+              "claudeCode": "❌",
+              "devin": "❌",
+              "openhands": "❌",
+              "aider": "❌",
+              "continueDev": "❌"
+            }
+          },
+          {
+            "feature": "Enrutamiento de modelos aprendido por resultado",
+            "note": "puntúa ejecuciones, reordena modelos",
+            "values": {
+              "builderforce": "✅",
+              "copilot": "❌",
+              "cursor": "❌",
+              "claudeCode": "❌",
+              "devin": "❌",
+              "openhands": "❌",
+              "aider": "❌",
+              "continueDev": "❌"
+            }
+          },
+          {
+            "feature": "Agente Validador: prueba de terminado",
+            "note": "abre tareas GAP ante carencias",
+            "values": {
+              "builderforce": "✅",
+              "copilot": "❌",
+              "cursor": "❌",
+              "claudeCode": "❌",
+              "devin": "❌",
+              "openhands": "❌",
+              "aider": "❌",
+              "continueDev": "❌"
+            }
+          },
+          {
+            "feature": "Tablero con roles y auditoría de firma",
+            "note": "rol + diagnóstico por ticket",
             "values": {
               "builderforce": "✅",
               "copilot": "❌",
@@ -4003,6 +4123,26 @@
       {
         "question": "¿Puedo integrar los agentes de Builderforce con BuilderForce Agents?",
         "answer": "Sí: los modelos entrenados en Builderforce pueden exportarse y publicarse como modelos Evermind que tu gateway autoalojado de BuilderForce Agents invoca directamente como el modelo, no solo como una capa de memoria. La plataforma admite la canalización completa: entrena un SSM personalizado en el navegador, publícalo y enruta tráfico en vivo hacia él a través de la API compatible con OpenAI."
+      },
+      {
+        "question": "¿Puedo entrenar mi propio modelo con las respuestas de un modelo frontera?",
+        "answer": "Sí, eso es la destilación con profesor. Fija cualquier LLM frontera (Opus, Mistral, GLM y más) como profesor del Evermind de un proyecto. Por cada trabajo real que entrega tu equipo, el profesor produce la respuesta ideal a esa tarea y tu propio modelo aprende de ese ejemplo en lugar del texto en bruto, absorbiendo poco a poco la calidad de nivel frontera en un modelo pequeño que posees y ejecutas en el dispositivo. Está limitado por coste (solo gasta cuando tienes presupuesto de tokens) y es de mejor esfuerzo (si el profesor falla, recurre a aprender del trabajo en bruto), así que nunca se pierde una lección."
+      },
+      {
+        "question": "¿Cada proyecto obtiene su propio modelo?",
+        "answer": "Sí. Cada proyecto se aprovisiona con su propio Evermind al crearse: un modelo autoactualizable que aprende de cada ejecución en los cuatro estudios (diseño, voz, LLM y vídeo) mediante un único mecanismo de aprendizaje compartido. Los hechos corregidos persisten entre sesiones en un almacén de hechos de escritura directa compartido por la app web, VS Code, la nube y los agentes on-prem, así que el cerebro que ayudó ayer hoy es más inteligente. La inferencia permanece desactivada hasta que la habilitas, y el modelo es editable en el LLM Studio."
+      },
+      {
+        "question": "¿Puedo restringir mi tablero para que solo el rol adecuado termine un ticket?",
+        "answer": "Sí, eso es el Kanban de plantilla de trabajo agéntica. Dota cada proyecto desde una taxonomía de roles de primera clase de humanos y agentes de IA, y configura los carriles para exigir al revisor adecuado antes de que un ticket avance. Cada elemento marcado como Hecho lleva una auditoría de firma por rol y diagnóstico por ticket, y un diagnóstico de cobertura de roles señala brechas en el tablero, de modo que la calidad se exige en lugar de suponerse."
+      },
+      {
+        "question": "¿Cómo comprueba Builderforce que el trabajo marcado como Hecho realmente lo está?",
+        "answer": "Un agente Validador integrado revisa cada elemento marcado como Hecho, registra un veredicto y abre tareas GAP para todo lo que se quede corto. El trabajo de chat improvisado también se captura automáticamente como tickets visibles, y una única ruta compartida de fusión a Hecho cubre la aprobación humana, el CI en verde y el post-despliegue, de modo que nada se reporta como terminado sin prueba."
+      },
+      {
+        "question": "¿Puedo comprar o vender una plantilla de tablero Kanban?",
+        "answer": "Sí. Empaqueta un proceso de entrega —carriles, roles requeridos, controles de revisión y un plantel recomendado— como una plantilla Kanban y publícala en el mercado para venderla o compartirla. Cualquier equipo puede instalar una plantilla probada en un proyecto con un clic y heredar un flujo gobernado y con roles en lugar de construir uno desde cero."
       }
     ]
   },
@@ -4173,6 +4313,10 @@
           {
             "title": "Chats",
             "desc": "Habla directamente con tus agentes u observa cómo colaboran en conversaciones compartidas."
+          },
+          {
+            "title": "Kanban de trabajo y plantillas",
+            "desc": "Dota un proyecto desde un plantel de roles de humanos y agentes de IA en un tablero con aprobación obligatoria, y luego compra, vende o instala plantillas de tablero listas —carriles, roles requeridos, controles de revisión y un plantel recomendado— desde el mercado."
           }
         ]
       },
@@ -4451,7 +4595,50 @@
     "approveAll": "Aprobar todo",
     "newChat": "+ Nuevo",
     "messagePlaceholder": "Enviar mensaje a Brain…",
-    "searchChats": "Buscar chats…"
+    "searchChats": "Buscar chats…",
+    "confirmActionAria": "Confirmar acción",
+    "wantsTo": "Brain quiere <b>{action}</b>. Apruébalo para ejecutarlo.",
+    "approveAllTitle": "Aprobar esta acción y aprobar automáticamente todas las siguientes en esta conversación",
+    "captureHasTrace": "Copiar esta ejecución (pasos del LLM, cadena de herramientas, errores y transcripción) al portapapeles",
+    "captureNoTrace": "Aún no se ha capturado ninguna ejecución: envía primero un mensaje",
+    "captureExecutionAria": "Capturar ejecución",
+    "brainDefault": "Brain (predeterminado)",
+    "noChatsYet": "Aún no hay chats. Haz clic en + Nuevo para empezar.",
+    "noChatsMatch": "Ningún chat coincide con tu búsqueda.",
+    "rename": "Cambiar nombre",
+    "summarize": "Resumir",
+    "addTo": "Añadir a:",
+    "addChatToProjectAria": "Añadir chat al proyecto",
+    "addToProject": "Añadir al proyecto…",
+    "createNewProject": "+ Crear nuevo proyecto",
+    "brainTitle": "Brain",
+    "emptyHint": "Inicia un nuevo chat o elige uno para empezar.",
+    "startNewChat": "Iniciar nuevo chat",
+    "newProjectPlaceholder": "Nombre del nuevo proyecto",
+    "createAndAssign": "Crear y asignar",
+    "actingAs": "Actuando como",
+    "personaAria": "Agente o persona de Brain",
+    "defaultBrain": "Brain predeterminado",
+    "personas": "Personas",
+    "assignedAgents": "Agentes asignados",
+    "uploading": "Subiendo…",
+    "brainStorm": "Brain Storm",
+    "projectLabel": "Proyecto",
+    "newChatsHint": "Los nuevos chats se añaden al proyecto seleccionado.",
+    "filterByProjectAria": "Filtrar por proyecto",
+    "allProjects": "Todos",
+    "noProject": "Sin proyecto",
+    "openFullBrainStorm": "Abrir Brain Storm completo",
+    "expand": "Expandir ↗",
+    "closeBrain": "Cerrar Brain",
+    "assignToProject": "Asignar al proyecto:",
+    "assignChatToProjectAria": "Asignar chat al proyecto",
+    "addProject": "+ Proyecto",
+    "workflowsArrow": "Flujos de trabajo →",
+    "openInIde": "Abrir en el IDE →",
+    "brainModality": "Brain — {modality}",
+    "brainAs": "Brain como {name}",
+    "chatHistory": "Historial de chats"
   },
   "modelExport": {
     "subtitle": "Exporta un modelo publicado a un artefacto portátil —un repositorio de Hugging Face, ONNX, safetensors o GGUF— y descárgalo. El modelo se genera en el servidor; no se necesita ningún token.",
@@ -5357,6 +5544,38 @@
     "dueDate": "Fecha de vencimiento",
     "setDueDateTitle": "Haz clic para establecer una fecha de vencimiento",
     "none": "Ninguno",
-    "created": "Creado"
+    "created": "Creado",
+    "openApprovals": "Abrir aprobaciones",
+    "taskCount": "{count, plural, one {# tarea} other {# tareas}}",
+    "byStage": "Por etapa",
+    "byAssignee": "Por responsable",
+    "startStandup": "Iniciar standup",
+    "startPlanning": "Iniciar planificación",
+    "viewPrdAria": "Ver PRD",
+    "viewPrdTitle": "Ver el PRD (compartido por todos los agentes de este tablero)",
+    "viewPrdDisabledTitle": "Selecciona un solo proyecto para ver su PRD",
+    "configureBoardAria": "Configurar tablero",
+    "configureBoardTitle": "Configurar carriles y agentes",
+    "configureBoardDisabledTitle": "Selecciona un solo proyecto para configurar su tablero",
+    "swimlaneAgentsTitle": "Agentes configurados en este carril",
+    "colTask": "Tarea",
+    "colAssignee": "Responsable",
+    "colDue": "Vencimiento",
+    "move": "Mover…",
+    "editTitleTitle": "Haz clic para editar el título",
+    "deleteTask": "Eliminar tarea",
+    "tabAgent": "Agente / Capacidades",
+    "tabPrd": "PRD",
+    "changeStatusTitle": "Haz clic para cambiar el estado",
+    "changePriorityTitle": "Haz clic para cambiar la prioridad",
+    "viewCodeChangesTitle": "Ver los cambios de código en GitHub",
+    "runsAs": "Se ejecuta como <b>{name}</b>. Cambia el entorno de ejecución en la pestaña Agente.",
+    "runThisTask": "Ejecutar esta tarea",
+    "errLoad": "Error al cargar",
+    "errSelectProject": "Selecciona un proyecto",
+    "errSave": "Error al guardar",
+    "errDelete": "Error al eliminar",
+    "errUpdate": "Error al actualizar",
+    "errMove": "Error al mover"
   }
 }

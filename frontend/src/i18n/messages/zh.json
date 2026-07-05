@@ -722,7 +722,11 @@
     "cancel": "取消",
     "save": "保存",
     "saving": "保存中…",
-    "loading": "加载中…"
+    "loading": "加载中…",
+    "close": "关闭",
+    "delete": "删除",
+    "edit": "编辑",
+    "view": "查看"
   },
   "legal": {
     "termsTitle": "使用条款",
@@ -2986,6 +2990,10 @@
       {
         "question": "Evermind 有基准测试吗——我怎么知道自己训练的模型是否够好？",
         "answer": "有。你在 Studio 中训练的每一个模型，在发布之前都会在设备端被评分。内置的基准测试框架会预留出模型从未训练过的语料切片，然后报告标准的语言模型衡量指标——预留困惑度、每 token 比特数、top-1 与 top-k 下一个 token 准确率，以及生成吞吐量——并且可以对两个检查点进行 A/B 对比，让你看清一次全新的适配是否真的比上一次有所改进。它完全在你的浏览器中运行，没有 GPU 账单，也没有任何数据离开你的机器，因此你是基于证据而非感觉来发布。同一套框架也是 Evermind 技术报告背后的开放测量工具。"
+      },
+      {
+        "question": "Evermind 能向 Opus 或 Mistral 这样的前沿模型学习吗？",
+        "answer": "能——通过老师蒸馏。你可以将任何前沿 LLM（Opus、Mistral、GLM 等）设为项目 Evermind 的老师。团队交付的每个真实任务，都会通过计量网关向老师索取理想答案，SSM 则在（任务上下文 → 老师范例）这一配对上适应，而非在原始运行文本上。随着时间推移，你自己在本地运行的小模型会吸收更大模型的质量，同时你保留所有权与时效性。老师调用受 token 预算控制且尽力而为——失败时回退到从原始工作学习——因此蒸馏绝不会阻滞学习循环。"
       }
     ],
     "adoption": {
@@ -3018,6 +3026,36 @@
       "longDesc": "Evermind 是平台的大脑——一个由 Write-Through Cognition（写穿认知）治理的自我更新模型：新知识被直接写穿进去，因此一次更新会替换此前的内容，无需任何对账步骤。一个共享专家混合生成器（稠密骨干网络 + 路由式 SSM 专家）在线学习并在 WebGPU 上运行，因此它依靠时效性、占用空间和所有权取胜，而非单纯依赖规模——无论是在浏览器中、设备本地，还是嵌入每一个智能体之内。"
     },
     {
+      "title": "将前沿模型蒸馏为你自己的模型",
+      "shortDesc": "将任何前沿模型设为“老师”，用它的最优答案训练你自己的私有模型。",
+      "longDesc": "将任何前沿 LLM——Opus、Mistral、GLM 等——设为项目 Evermind 的“老师”。团队交付的每一项真实工作，老师都会给出该任务的理想答案，你自己的模型从中学习，不断将前沿级质量吸收进你拥有并在本地运行的小模型。它受成本控制且尽力而为：仅在有 token 预算时才花费，老师调用失败时则回退到从原始工作中学习，确保每一课都不会丢失。"
+    },
+    {
+      "title": "为每个项目配备一个学习大脑",
+      "shortDesc": "每个项目都拥有自己的自更新模型，从团队的工作中学习。",
+      "longDesc": "每个项目从创建之日起就拥有自己的 Evermind——一个自更新模型，从四个工作室（设计、语音、LLM 和视频）的每次运行中学习。通过共享的写穿式事实存储，修正会跨会话保留，所以昨天帮过你的大脑今天更聪明。推理在你选择启用前保持关闭，而且模型可直接在 LLM Studio 中编辑。"
+    },
+    {
+      "title": "智能体工作队看板",
+      "shortDesc": "在需要签字放行的看板上编排人类与 AI 智能体的深度角色名单。",
+      "longDesc": "超越待办清单：从一套头等公民般的岗位角色体系为每个项目配员——人类和 AI 智能体同处一份名单——从为你团队定制的推荐名单开始。泳道可以要求在工单推进前由合适的审阅者把关，每个“完成”都附带逐单的角色与诊断签字审计，从而在看板上把控质量，而非事后碍幸。"
+    },
+    {
+      "title": "看板模板市场",
+      "shortDesc": "购买、出售并安装包含泳道、角色和关卡的现成看板模板。",
+      "longDesc": "将一套交付流程——泳道、必需角色、审阅关卡和推荐名单——打包为看板模板，然后发布到市场出售或共享。一键将经过验证的模板安装到任何项目中，团队即可继承一套受治理、按角色放行的工作流，而无需从零搭建。"
+    },
+    {
+      "title": "验证智能体——完成的凭证",
+      "shortDesc": "一个检查“完成”是否真的完成并记录所发现缺口的智能体。",
+      "longDesc": "临时聊天中的工作会自动变为可见的工单，内置的验证智能体会审查每一项标记为完成的项目——记录结论并为任何不达标之处开启 GAP 任务。一条共享的“合并至完成”路径涵盖人工审批、CI 绿灯和部署后验证，确保没有任何东西在无凭证的情况下被当作“已完成”。"
+    },
+    {
+      "title": "学习型模型路由",
+      "shortDesc": "平台会学习哪个模型对每类任务最优——也最便宜。",
+      "longDesc": "每次运行都会根据结果评分，学习型路由器据此重新排序每类动作由哪个模型处理——便宜模型承担它们擅长的工作，高端模型则留给真正需要它们的任务。结合语义缓存，随着平台了解你的工作负载，token 账单会逐渐下降，并提供一个开关供你随时手动控制。"
+    },
+    {
       "title": "看板与项目管理",
       "shortDesc": "在实时智能体看板上规划、分配并跟踪工作。",
       "longDesc": "一个完整的项目管理界面：把工作组织成项目，然后在实时看板上规划、分配并跟踪每一项任务——按状态或按智能体划分泳道，另有表格、日历和甘特图视图。人类与 AI 智能体处于同一块看板上，工作从待办流转到完成，全程实时。"
@@ -3036,6 +3074,11 @@
       "title": "Agentic Tester —— 自主 QA",
       "shortDesc": "一个按计划对你的应用进行浏览器测试的 AI 智能体。",
       "longDesc": "Agentic Tester 是一个可雇用的 QA 智能体。把它指向你项目的 URL，保存它应使用的登录凭据，它就会驱动真实浏览器走完你流量最高的流程——根据真实使用热力图对测试优先级排序、以每个角色身份登录，并捕获控制台错误、失败请求和崩溃。可按需运行，也可作为工作流的一部分进行排程；它发现的每个 bug 都会直接落到你的看板上。"
+    },
+    {
+      "title": "雇用人类人才",
+      "shortDesc": "引入自由职业开发者、DBA 和设计师——只为已记录的工时付费。",
+      "longDesc": "除了 AI 智能体，还能雇用真人：人才市场列出经过审核的自由职业开发者、DBA、设计师和专家，附带简历（由 hired.video 提供支持）、技能和时薪。面试、在任何项目中雇用，并看到计费工时从他们在门户和 VS Code 中的工作自动捕捉——每张工时单都由你在付款前审批。人类与智能体在同一看板上并肩协作。"
     },
     {
       "title": "AI CTO",
@@ -3299,6 +3342,83 @@
           {
             "feature": "MCP — 作为服务端暴露",
             "note": "/mcp 端点",
+            "values": {
+              "builderforce": "✅",
+              "copilot": "❌",
+              "cursor": "❌",
+              "claudeCode": "❌",
+              "devin": "❌",
+              "openhands": "❌",
+              "aider": "❌",
+              "continueDev": "❌"
+            }
+          }
+        ]
+      },
+      {
+        "id": "self-improving",
+        "title": "自我改进的模型与完成凭证",
+        "blurb": "从你的工作中学习、按结果自我路由、并证明“完成”确实完成的模型——这些能力是冻结的单智能体工具在结构上所缺乏的。",
+        "rows": [
+          {
+            "feature": "用你的工作训练你自己的模型",
+            "note": "前沿模型老师蒸馏",
+            "values": {
+              "builderforce": "✅",
+              "copilot": "❌",
+              "cursor": "❌",
+              "claudeCode": "❌",
+              "devin": "❌",
+              "openhands": "❌",
+              "aider": "❌",
+              "continueDev": "❌"
+            }
+          },
+          {
+            "feature": "每个项目一个自更新模型",
+            "note": "Evermind，本地运行",
+            "values": {
+              "builderforce": "✅",
+              "copilot": "❌",
+              "cursor": "❌",
+              "claudeCode": "❌",
+              "devin": "❌",
+              "openhands": "❌",
+              "aider": "❌",
+              "continueDev": "❌"
+            }
+          },
+          {
+            "feature": "基于结果的学习型模型路由",
+            "note": "为运行评分、重排模型",
+            "values": {
+              "builderforce": "✅",
+              "copilot": "❌",
+              "cursor": "❌",
+              "claudeCode": "❌",
+              "devin": "❌",
+              "openhands": "❌",
+              "aider": "❌",
+              "continueDev": "❌"
+            }
+          },
+          {
+            "feature": "验证智能体——完成的凭证",
+            "note": "不达标时开启 GAP 任务",
+            "values": {
+              "builderforce": "✅",
+              "copilot": "❌",
+              "cursor": "❌",
+              "claudeCode": "❌",
+              "devin": "❌",
+              "openhands": "❌",
+              "aider": "❌",
+              "continueDev": "❌"
+            }
+          },
+          {
+            "feature": "按角色放行、带签字审计的看板",
+            "note": "逐单角色 + 诊断",
             "values": {
               "builderforce": "✅",
               "copilot": "❌",
@@ -4003,6 +4123,26 @@
       {
         "question": "我能把 Builderforce 智能体与 BuilderForce Agents 集成吗？",
         "answer": "可以——在 Builderforce 上训练的模型可被导出并发布为 Evermind 模型，由你自托管的 BuilderForce Agents 网关直接作为模型调用，而不仅仅是作为记忆层。该平台支持完整流水线：在浏览器中训练一个定制 SSM、发布它，并通过兼容 OpenAI 的 API 将实时流量路由到它。"
+      },
+      {
+        "question": "我能用前沿模型的答案训练自己的模型吗？",
+        "answer": "能——这就是老师蒸馏。将任何前沿 LLM（Opus、Mistral、GLM 等）设为项目 Evermind 的老师。团队交付的每一项真实工作，老师都会给出该任务的理想答案，你自己的模型从这个范例而非原始文本中学习——从而不断将前沿级质量吸收进你拥有并在本地运行的小模型。它受成本控制（仅在有 token 预算时花费）且尽力而为（老师失败时回退到从原始工作学习），因此每一课都不会丢失。"
+      },
+      {
+        "question": "每个项目都有自己的模型吗？",
+        "answer": "是的。每个项目在创建时都会配备自己的 Evermind——一个自更新模型，通过一套共享的学习机制从四个工作室（设计、语音、LLM 和视频）的每次运行中学习。修正后的事实通过由 Web 应用、VS Code、云端和本地智能体共享的写穿式事实存储跨会话保留，所以昨天帮过你的大脑今天更聪明。推理在你选择启用前保持关闭，模型可在 LLM Studio 中编辑。"
+      },
+      {
+        "question": "我能让看板只允许合适的角色完成工单吗？",
+        "answer": "能——这就是智能体工作队看板。从人类与 AI 智能体的头等岗位角色体系为每个项目配员，并配置泳道在工单推进前要求合适的审阅者把关。每个标记为完成的项目都附带逐单的角色与诊断签字审计，角色覆盖诊断会在看板上标出缺口，因此质量是强制的而非假设的。"
+      },
+      {
+        "question": "Builderforce 如何检查标记为完成的工作确实完成？",
+        "answer": "内置的验证智能体会审查每个标记为完成的项目，记录结论，并为任何不达标之处开启 GAP 任务。临时聊天工作也会自动被捕捉为可见工单，一条共享的“合并至完成”路径涵盖人工审批、CI 绿灯和部署后验证——因此没有任何东西会在无凭证的情况下被报告为已完成。"
+      },
+      {
+        "question": "我能购买或出售看板模板吗？",
+        "answer": "可以。将一套交付流程——泳道、必需角色、审阅关卡和推荐名单——打包为看板模板并发布到市场出售或共享。任何团队都可以一键将经过验证的模板安装到项目中，继承一套受治理、按角色放行的工作流，而无需从零构建。"
       }
     ]
   },
@@ -4173,6 +4313,10 @@
           {
             "title": "聊天",
             "desc": "直接与你的智能体对话，或观看它们在共享会话中协作。"
+          },
+          {
+            "title": "工作队看板与模板",
+            "desc": "在需要签字放行的看板上从人类与 AI 智能体的角色名单为项目配员，然后从市场购买、出售或安装现成的看板模板——包含泳道、必需角色、审阅关卡和推荐名单。"
           }
         ]
       },
@@ -4451,7 +4595,50 @@
     "approveAll": "全部批准",
     "newChat": "+ 新建",
     "messagePlaceholder": "给 Brain 发消息…",
-    "searchChats": "搜索对话…"
+    "searchChats": "搜索对话…",
+    "confirmActionAria": "确认操作",
+    "wantsTo": "Brain 想要<b>{action}</b>。批准后即可执行。",
+    "approveAllTitle": "批准此操作，并自动批准本次对话中后续的所有操作",
+    "captureHasTrace": "将本次运行（大模型步骤、工具链、错误和会话记录）复制到剪贴板",
+    "captureNoTrace": "尚未捕获任何执行——请先发送一条消息",
+    "captureExecutionAria": "捕获执行",
+    "brainDefault": "Brain（默认）",
+    "noChatsYet": "还没有会话。点击“+ 新建”开始。",
+    "noChatsMatch": "没有匹配搜索的会话。",
+    "rename": "重命名",
+    "summarize": "总结",
+    "addTo": "添加到：",
+    "addChatToProjectAria": "将会话添加到项目",
+    "addToProject": "添加到项目…",
+    "createNewProject": "+ 创建新项目",
+    "brainTitle": "Brain",
+    "emptyHint": "开始一个新会话，或选择一个已有会话。",
+    "startNewChat": "开始新会话",
+    "newProjectPlaceholder": "新项目名称",
+    "createAndAssign": "创建并分配",
+    "actingAs": "身份",
+    "personaAria": "Brain 智能体或角色",
+    "defaultBrain": "默认 Brain",
+    "personas": "角色",
+    "assignedAgents": "已分配的智能体",
+    "uploading": "上传中…",
+    "brainStorm": "Brain Storm",
+    "projectLabel": "项目",
+    "newChatsHint": "新会话将添加到所选项目。",
+    "filterByProjectAria": "按项目筛选",
+    "allProjects": "全部",
+    "noProject": "无项目",
+    "openFullBrainStorm": "打开完整的 Brain Storm",
+    "expand": "展开 ↗",
+    "closeBrain": "关闭 Brain",
+    "assignToProject": "分配到项目：",
+    "assignChatToProjectAria": "将会话分配到项目",
+    "addProject": "+ 项目",
+    "workflowsArrow": "工作流 →",
+    "openInIde": "在 IDE 中打开 →",
+    "brainModality": "Brain — {modality}",
+    "brainAs": "以 {name} 身份运行的 Brain",
+    "chatHistory": "会话历史"
   },
   "modelExport": {
     "subtitle": "将已发布的模型导出为可移植产物——Hugging Face 仓库、ONNX、safetensors 或 GGUF——并下载。模型在服务器端生成，无需令牌。",
@@ -5357,6 +5544,38 @@
     "dueDate": "截止日期",
     "setDueDateTitle": "点击设置截止日期",
     "none": "无",
-    "created": "创建时间"
+    "created": "创建时间",
+    "openApprovals": "打开审批",
+    "taskCount": "{count, plural, other {# 个任务}}",
+    "byStage": "按阶段",
+    "byAssignee": "按负责人",
+    "startStandup": "开始站会",
+    "startPlanning": "开始规划",
+    "viewPrdAria": "查看 PRD",
+    "viewPrdTitle": "查看 PRD（本看板上所有智能体共享）",
+    "viewPrdDisabledTitle": "请选择单个项目以查看其 PRD",
+    "configureBoardAria": "配置看板",
+    "configureBoardTitle": "配置泳道和智能体",
+    "configureBoardDisabledTitle": "请选择单个项目以配置其看板",
+    "swimlaneAgentsTitle": "在此泳道上配置的智能体",
+    "colTask": "任务",
+    "colAssignee": "负责人",
+    "colDue": "截止",
+    "move": "移动…",
+    "editTitleTitle": "点击编辑标题",
+    "deleteTask": "删除任务",
+    "tabAgent": "智能体 / 能力",
+    "tabPrd": "PRD",
+    "changeStatusTitle": "点击更改状态",
+    "changePriorityTitle": "点击更改优先级",
+    "viewCodeChangesTitle": "在 GitHub 上查看代码更改",
+    "runsAs": "以<b>{name}</b>身份运行。可在“智能体”选项卡中更改运行时。",
+    "runThisTask": "运行此任务",
+    "errLoad": "加载失败",
+    "errSelectProject": "请选择一个项目",
+    "errSave": "保存失败",
+    "errDelete": "删除失败",
+    "errUpdate": "更新失败",
+    "errMove": "移动失败"
   }
 }

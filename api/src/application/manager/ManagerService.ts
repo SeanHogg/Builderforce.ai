@@ -32,7 +32,7 @@ import {
   tasks, boards, swimlanes, swimlaneAgentAssignments, pullRequests,
   projectManagerConfigs, managerActions,
 } from '../../infrastructure/database/schema';
-import { TaskStatus, ExecutionStatus } from '../../domain/shared/types';
+import { TaskStatus } from '../../domain/shared/types';
 import { rankBacklog, type RankableTask, type TaskPriorityTier } from './prioritize';
 import { heuristicBusinessValue } from './businessValue';
 import { scoreBusinessValueAI } from './businessValueAI';
@@ -55,9 +55,6 @@ const RUNNABLE: string[] = [
   TaskStatus.BACKLOG, TaskStatus.TODO, TaskStatus.READY,
   TaskStatus.IN_PROGRESS, TaskStatus.IN_REVIEW,
 ];
-const ACTIVE_EXEC = new Set<string>([
-  ExecutionStatus.PENDING, ExecutionStatus.SUBMITTED, ExecutionStatus.RUNNING, ExecutionStatus.PAUSED,
-]);
 
 /** Per-run bounds (cost + storm guards). The backlog paces itself across runs. */
 const MAX_AI_SCORES_PER_RUN = 8;   // LLM calls — the rest fall back to the free heuristic
@@ -402,11 +399,17 @@ async function coordinatePullRequests(
     const reviewReady = managed
       .filter((t) => t.status === TaskStatus.IN_REVIEW && t.assignedAgentRef && t.gitBranch && !t.githubPrUrl)
       .slice(0, MAX_PR_ACTIONS_PER_RUN);
+    // One scan for in-flight runs across ALL review-ready tasks instead of a
+    // listByTask() round-trip per task (N+1). listActiveByTasks already filters
+    // to the non-terminal statuses (the former ACTIVE_EXEC set), so any task with
+    // a returned execution still has a live run.
+    const liveExecs = reviewReady.length
+      ? await runtimeService.listActiveByTasks(reviewReady.map((t) => t.id))
+      : [];
+    const liveTaskIds = new Set<number>(liveExecs.map((e) => e.taskId as unknown as number));
     for (const t of reviewReady) {
       try {
-        const execs = await runtimeService.listByTask(t.id);
-        const hasLive = execs.map((e) => e.toPlain()).some((e) => ACTIVE_EXEC.has(e.status));
-        if (hasLive) continue; // still working — leave it
+        if (liveTaskIds.has(t.id)) continue; // still working — leave it
         await db.update(tasks)
           .set({ status: TaskStatus.DONE, completedAt: new Date(), updatedAt: new Date() })
           .where(eq(tasks.id, t.id));

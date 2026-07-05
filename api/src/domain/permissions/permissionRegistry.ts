@@ -6,6 +6,11 @@
  *
  * The matrix can be overridden per-role via `role_permission_overrides` in the DB.
  * Per-user grants/revocations are stored in `user_permission_overrides`.
+ *
+ * DRIFT GUARD: the client-side mirror `frontend/src/lib/permissions.ts` MUST stay
+ * identical to {@link DEFAULT_ROLE_PERMISSIONS} here. api and frontend are separate
+ * build roots with no shared package, so equality is enforced at test time by
+ * `permissionMatrixDrift.test.ts` (this directory). Change both together.
  */
 
 export const PERMISSIONS = {

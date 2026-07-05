@@ -13,25 +13,11 @@
 import { Hono } from 'hono';
 import { and, desc, eq, gte, lte } from 'drizzle-orm';
 import { authMiddleware } from '../middleware/authMiddleware';
-import { agentHosts, telemetrySpans } from '../../infrastructure/database/schema';
-import { verifySecret } from '../../infrastructure/auth/HashService';
+import { telemetrySpans } from '../../infrastructure/database/schema';
+import { verifyAgentHostApiKey } from '../../infrastructure/auth/agentHostAuth';
 import type { HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 import { MILLICENTS_PER_USD } from '../../domain/shared/money';
-
-async function verifyAgentHostApiKey(
-  db: Db,
-  agentHostId: number,
-  key: string,
-): Promise<{ id: number; tenantId: number } | null> {
-  const [agentHost] = await db
-    .select({ id: agentHosts.id, tenantId: agentHosts.tenantId, apiKeyHash: agentHosts.apiKeyHash })
-    .from(agentHosts)
-    .where(eq(agentHosts.id, agentHostId));
-  if (!agentHost) return null;
-  const valid = await verifySecret(key, agentHost.apiKeyHash);
-  return valid ? agentHost : null;
-}
 
 export function createTelemetryRoutes(db: Db): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();

@@ -16,6 +16,7 @@ import { superAdminMiddleware } from '../middleware/superAdminMiddleware';
 import { buildDatabase, type Db } from '../../infrastructure/database/connection';
 import { writeAdminAudit, type AdminAuditOpts } from '../../infrastructure/audit/adminAudit';
 import { parseJsonArray } from '../../domain/shared/json';
+import { slugify } from '../../domain/shared/strings';
 import { countActiveSessionsAndTokens } from '../../application/security/sessionCounts';
 import {
   authTokens,
@@ -214,12 +215,7 @@ function parsePositiveInt(raw: string | undefined, fallback: number): number {
 }
 
 function slugifyName(input: string): string {
-  return input
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-    .slice(0, 180);
+  return slugify(input, { maxLen: 180 });
 }
 
 async function assertTenantMember(db: Db, tenantId: number, userId: string): Promise<boolean> {
