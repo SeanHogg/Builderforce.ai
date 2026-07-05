@@ -259,7 +259,8 @@
       "findWork": "Arbeit finden",
       "timecard": "Zeiterfassung",
       "myDashboard": "Mein Dashboard",
-      "meetings": "Besprechungen"
+      "meetings": "Besprechungen",
+      "myWorkspace": "Mein Bereich"
     },
     "tab": {
       "projects": "Projekte",
@@ -747,7 +748,9 @@
     "view": "Ansehen",
     "typeSecurity": "Sicherheit",
     "clearanceNeeded": "Freigabe erforderlich",
-    "clearanceNeededBody": "Dies ist ein eingeschränktes Sicherheitselement. Sie haben keine Freigabe, die Details zu sehen. Bitten Sie einen Workspace-Eigentümer oder Manager um Zugriff."
+    "clearanceNeededBody": "Dies ist ein eingeschränktes Sicherheitselement. Sie haben keine Freigabe, die Details zu sehen. Bitten Sie einen Workspace-Eigentümer oder Manager um Zugriff.",
+    "typeProduct": "Produkt",
+    "typeDesign": "Design"
   },
   "legal": {
     "termsTitle": "Nutzungsbedingungen",
@@ -1947,7 +1950,9 @@
     },
     "builtinKind": {
       "validator": "Prüfer",
-      "security": "Sicherheit"
+      "security": "Sicherheit",
+      "product_manager": "Produkt",
+      "designer": "Designer"
     },
     "teams": {
       "heading": "Teams",
@@ -7127,5 +7132,96 @@
     "featOauth": "OAuth-Anmeldung (Google, GitHub, LinkedIn, Microsoft)",
     "featFree": "Keine Kreditkarte erforderlich – für immer kostenlos",
     "commonQuestions": "Häufige Fragen"
+  },
+  "gigs": {
+    "publish": {
+      "section": "Marktplatz",
+      "action": "Auf dem Marktplatz veröffentlichen",
+      "published": "Veröffentlicht",
+      "publishedHint": "Auf dem Marktplatz zur Vergabe offen.",
+      "unpublish": "Zurückziehen",
+      "unpublishing": "Wird zurückgezogen…",
+      "modalTitle": "Auf dem Marktplatz veröffentlichen",
+      "modalSubtitle": "Öffnen Sie dieses Arbeitspaket für Angebote von Freelancern und Agenturen.",
+      "postingType": "Ausschreibungstyp",
+      "engagementType": "Vertragsart",
+      "requirements": "Anforderungen",
+      "requirementsPlaceholder": "Beschreiben Sie, was ein starkes Angebot abdecken muss…",
+      "rateMin": "Min. Satz",
+      "rateMax": "Max. Satz",
+      "rateHint": "Optionaler Budgetrahmen (pro Stunde oder fest).",
+      "visibility": "Sichtbarkeit",
+      "publishBtn": "Veröffentlichen",
+      "publishing": "Wird veröffentlicht…",
+      "cancel": "Abbrechen",
+      "publishError": "Dieses Arbeitspaket konnte nicht veröffentlicht werden."
+    },
+    "postingType": {
+      "project_bid": "Projektausschreibung",
+      "design": "Design",
+      "fte": "Vollzeitstelle"
+    },
+    "engagementType": {
+      "fixed_bid": "Festpreis",
+      "hourly": "Stündlich",
+      "fte": "Vollzeit"
+    },
+    "visibility": {
+      "public": "Öffentlich",
+      "private": "Privat"
+    },
+    "proposal": {
+      "evaluate": "Mit KI bewerten",
+      "evaluating": "Wird bewertet…",
+      "shortlist": "In Auswahl",
+      "shortlisted": "In Auswahl",
+      "decline": "Ablehnen",
+      "declineSend": "Absage senden",
+      "declineReasonPlaceholder": "Fügen Sie eine höfliche Notiz hinzu (optional)…"
+    },
+    "candidate": {
+      "shortlist": "Kandidat weiterführen",
+      "shortlisted": "Wird weitergeführt",
+      "reject": "Kandidat ablehnen"
+    },
+    "meeting": {
+      "scheduleReview": "Review planen",
+      "scheduleInterview": "Interview planen",
+      "reviewTitle": "Auftrags-Review",
+      "interviewTitle": "Kandidateninterview"
+    },
+    "deliverables": {
+      "heading": "Ergebnisse",
+      "empty": "Noch keine Ergebnisse eingereicht.",
+      "evaluate": "Mit KI bewerten",
+      "accept": "Annehmen",
+      "requestChanges": "Änderungen anfordern",
+      "status": {
+        "submitted": "Eingereicht",
+        "in_review": "In Prüfung",
+        "accepted": "Angenommen",
+        "changes_requested": "Änderungen angefordert"
+      }
+    },
+    "workspace": {
+      "title": "Mein Arbeitsbereich",
+      "subtitle": "Liefern Sie Arbeit für die Teams, die Sie engagiert haben.",
+      "selectEngagement": "Engagement auswählen",
+      "noEngagements": "Sie haben noch keinen Board-Zugriff. Sobald ein Kunde Zugriff gewährt, erscheinen Ihre Engagements hier.",
+      "tasks": "Aufgaben",
+      "noTasks": "Noch keine Aufgaben auf diesem Board.",
+      "requestReview": "Review anfordern",
+      "requestingReview": "Wird angefordert…",
+      "reviewRequested": "Review angefordert",
+      "presentProposal": "Vorschlag einreichen",
+      "proposalTitle": "Titel",
+      "proposalBodyPlaceholder": "Beschreiben Sie Ihr Ergebnis oder Ihren Ansatz…",
+      "submit": "Absenden",
+      "submitting": "Wird gesendet…",
+      "myDeliverables": "Meine Ergebnisse",
+      "noDeliverables": "Sie haben noch keine Ergebnisse eingereicht.",
+      "loadError": "Arbeitsbereich konnte nicht geladen werden.",
+      "loading": "Wird geladen…"
+    }
   }
 }

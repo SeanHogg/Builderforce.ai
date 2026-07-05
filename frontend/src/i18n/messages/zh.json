@@ -259,7 +259,8 @@
       "findWork": "寻找工作",
       "timecard": "工时卡",
       "myDashboard": "我的仪表盘",
-      "meetings": "会议"
+      "meetings": "会议",
+      "myWorkspace": "我的工作台"
     },
     "tab": {
       "projects": "项目",
@@ -747,7 +748,9 @@
     "view": "查看",
     "typeSecurity": "安全",
     "clearanceNeeded": "需要权限",
-    "clearanceNeededBody": "这是一个受限的安全事项。您没有查看其详情的权限。请向工作区所有者或管理员申请访问权限。"
+    "clearanceNeededBody": "这是一个受限的安全事项。您没有查看其详情的权限。请向工作区所有者或管理员申请访问权限。",
+    "typeProduct": "产品",
+    "typeDesign": "设计"
   },
   "legal": {
     "termsTitle": "使用条款",
@@ -1947,7 +1950,9 @@
     },
     "builtinKind": {
       "validator": "验证员",
-      "security": "安全"
+      "security": "安全",
+      "product_manager": "产品",
+      "designer": "设计师"
     },
     "teams": {
       "heading": "团队",
@@ -7127,5 +7132,96 @@
     "featOauth": "OAuth 登录（Google、GitHub、LinkedIn、Microsoft）",
     "featFree": "无需信用卡 — 永久免费",
     "commonQuestions": "常见问题"
+  },
+  "gigs": {
+    "publish": {
+      "section": "人才市场",
+      "action": "发布到人才市场",
+      "published": "已发布",
+      "publishedHint": "已在人才市场开放招募。",
+      "unpublish": "取消发布",
+      "unpublishing": "正在取消发布…",
+      "modalTitle": "发布到人才市场",
+      "modalSubtitle": "开放此工作项，供自由职业者和机构投标。",
+      "postingType": "招募类型",
+      "engagementType": "合作方式",
+      "requirements": "要求",
+      "requirementsPlaceholder": "描述一份优秀提案需要涵盖的内容…",
+      "rateMin": "最低费率",
+      "rateMax": "最高费率",
+      "rateHint": "可选预算范围（按小时或固定）。",
+      "visibility": "可见性",
+      "publishBtn": "发布",
+      "publishing": "正在发布…",
+      "cancel": "取消",
+      "publishError": "无法发布此工作项。"
+    },
+    "postingType": {
+      "project_bid": "项目投标",
+      "design": "设计",
+      "fte": "全职岗位"
+    },
+    "engagementType": {
+      "fixed_bid": "固定报价",
+      "hourly": "按小时",
+      "fte": "全职"
+    },
+    "visibility": {
+      "public": "公开",
+      "private": "私密"
+    },
+    "proposal": {
+      "evaluate": "用 AI 评估",
+      "evaluating": "评估中…",
+      "shortlist": "加入候选",
+      "shortlisted": "已入围",
+      "decline": "婉拒",
+      "declineSend": "发送婉拒",
+      "declineReasonPlaceholder": "添加一条礼貌说明（可选）…"
+    },
+    "candidate": {
+      "shortlist": "推进候选人",
+      "shortlisted": "推进中",
+      "reject": "淘汰候选人"
+    },
+    "meeting": {
+      "scheduleReview": "安排评审",
+      "scheduleInterview": "安排面试",
+      "reviewTitle": "任务评审",
+      "interviewTitle": "候选人面试"
+    },
+    "deliverables": {
+      "heading": "交付物",
+      "empty": "尚未提交任何交付物。",
+      "evaluate": "用 AI 评估",
+      "accept": "接受",
+      "requestChanges": "要求修改",
+      "status": {
+        "submitted": "已提交",
+        "in_review": "评审中",
+        "accepted": "已接受",
+        "changes_requested": "要求修改"
+      }
+    },
+    "workspace": {
+      "title": "我的工作台",
+      "subtitle": "为聘用你的团队交付工作。",
+      "selectEngagement": "选择一项合作",
+      "noEngagements": "你还没有任何看板访问权限。客户授予权限后，你的合作会显示在此处。",
+      "tasks": "任务",
+      "noTasks": "此看板暂无任务。",
+      "requestReview": "请求评审",
+      "requestingReview": "请求中…",
+      "reviewRequested": "已请求评审",
+      "presentProposal": "提交提案",
+      "proposalTitle": "标题",
+      "proposalBodyPlaceholder": "描述你的交付物或方案…",
+      "submit": "提交",
+      "submitting": "提交中…",
+      "myDeliverables": "我的交付物",
+      "noDeliverables": "你还没有提交任何交付物。",
+      "loadError": "加载工作台失败。",
+      "loading": "加载中…"
+    }
   }
 }
