@@ -78,6 +78,10 @@
         {
           "id": "builderforce.diagnostics",
           "name": "%view.diagnostics%"
+        },
+        {
+          "id": "builderforce.meetings",
+          "name": "%view.meetings%"
         }
       ]
     },
@@ -100,6 +104,29 @@
         "command": "builderforce.openChat",
         "title": "%command.openChat%",
         "icon": "$(comment-discussion)"
+      },
+      {
+        "command": "builderforce.refreshMeetings",
+        "title": "%command.refreshMeetings%",
+        "icon": "$(sync)"
+      },
+      {
+        "command": "builderforce.scheduleMeeting",
+        "title": "%command.scheduleMeeting%",
+        "category": "BuilderForce",
+        "icon": "$(add)"
+      },
+      {
+        "command": "builderforce.joinMeetingBrowser",
+        "title": "%command.joinMeetingBrowser%",
+        "category": "BuilderForce",
+        "icon": "$(link-external)"
+      },
+      {
+        "command": "builderforce.joinMeetingNative",
+        "title": "%command.joinMeetingNative%",
+        "category": "BuilderForce",
+        "icon": "$(device-camera-video)"
       },
       {
         "command": "builderforce.logMeeting",
@@ -339,6 +366,16 @@
       ],
       "view/title": [
         {
+          "command": "builderforce.scheduleMeeting",
+          "when": "view == builderforce.meetings",
+          "group": "navigation@1"
+        },
+        {
+          "command": "builderforce.refreshMeetings",
+          "when": "view == builderforce.meetings",
+          "group": "navigation@2"
+        },
+        {
           "command": "builderforce.refreshInsights",
           "when": "view == builderforce.insights",
           "group": "navigation@1"
@@ -480,6 +517,16 @@
         }
       ],
       "view/item/context": [
+        {
+          "command": "builderforce.joinMeetingNative",
+          "when": "view == builderforce.meetings && viewItem == bfMeeting",
+          "group": "inline@1"
+        },
+        {
+          "command": "builderforce.joinMeetingBrowser",
+          "when": "view == builderforce.meetings && viewItem == bfMeeting",
+          "group": "inline@2"
+        },
         {
           "command": "builderforce.renameSession",
           "when": "view == builderforce.sessions && viewItem == builderforceSession",

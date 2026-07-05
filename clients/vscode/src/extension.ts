@@ -147,6 +147,17 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.commands.registerCommand("builderforce.openDiagnosticReport", (row) => diagnostics?.openReport(row)),
   );
 
+  // Meetings sidebar — upcoming/live video calls for the workspace. Join in the
+  // browser (reliable camera) or natively in a VS Code webview.
+  meetings = new MeetingsController(context);
+  context.subscriptions.push(
+    meetings,
+    vscode.commands.registerCommand("builderforce.refreshMeetings", () => meetings?.refresh()),
+    vscode.commands.registerCommand("builderforce.joinMeetingBrowser", (item: MeetingItem) => joinMeetingInBrowser(item)),
+    vscode.commands.registerCommand("builderforce.joinMeetingNative", (item: MeetingItem) => joinMeetingNative(context, item)),
+    vscode.commands.registerCommand("builderforce.scheduleMeeting", () => openMeetingsWeb()),
+  );
+
   // Editor activity capture — heartbeats + file-open navigation feed the billable
   // timecard pipeline (source 'vscode'). Best-effort; no-op when signed out.
   context.subscriptions.push(initActivity(context.secrets));
@@ -871,6 +882,7 @@ async function signIn(context: vscode.ExtensionContext): Promise<void> {
   void maybeScan(context, false);
   void insights?.start();
   void diagnostics?.refresh();
+  meetings?.refresh();
 }
 
 async function signOut(
@@ -892,6 +904,7 @@ async function signOut(
   void vscode.commands.executeCommand("builderforce.refreshProjects");
   void insights?.start();
   void diagnostics?.refresh();
+  meetings?.refresh();
 }
 
 async function pickModel(context: vscode.ExtensionContext): Promise<void> {

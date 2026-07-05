@@ -4,6 +4,17 @@
 
 ---
 
+## ✅ RESOLVED 2026-07-05 — Register/Login page bodies fully localized
+
+The pre-existing hardcoded English in `RegisterPageClient.tsx` / `LoginPageClient.tsx` (which previously only had the `emailVerify.*` verification step localized) is now routed through next-intl. All literal form copy is localized in all 5 catalogs (`en/zh/es/fr/de`):
+
+- **Register** (`register.*`, 20 new keys): nav "Sign in", heading + subtitle, the three feature pills, Name/Email/Password/Confirm labels + Name/password placeholders, the terms checkbox, the "passwords do not match" / "registration failed" errors, the submit button (idle + "Creating account…"), and the "Already have an account?" footer.
+- **Login** (`login.*`, 27 new keys — namespace was previously empty): nav "Sign up free", heading + subtitle, Email/Password labels, the login/magic-link errors, the submit button (idle + "Signing in…"), the magic-link toggle + sent/sending states, the "Don't have an account?" footer, **and** the marketing panel literals (heading, four stat labels, six feature bullets, "Common Questions").
+
+`LoginPageClient` gained the `useTranslations('login')` hook + import. Marketing copy still sourced from `content.ts` (login intro sentence, `LOGIN_FAQ`, `REGISTER_MARKETING` variants) remains English — logged as a distinct roadmap gap (shared 1591-line marketing data module, not per-page copy).
+
+---
+
 ## ✅ RESOLVED 2026-07-05 — ONE unified audit/activity subsystem (api `2026.7.39`, mig 0295)
 
 Collapsed the two overlapping audit trails into a single store. `activity_log` (mig 0287) is now the ONLY audit/activity table; the legacy `audit_events` table + `audit_event_type` enum are DROPPED (mig 0295 migrates existing rows over first: `event_type` → dotted `verb`, `user_id` → human/system actor, `resource_*` → `target_*`, metadata preserved under `{raw}`).

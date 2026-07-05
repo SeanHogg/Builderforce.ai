@@ -203,6 +203,7 @@ export const FOR_HIRE_NAV_GROUPS: NavGroup[] = [
   { id: 'freelancer-dashboard', labelKey: 'group.myDashboard', icon: '🏠', href: '/freelancer/dashboard', match: ['/freelancer/dashboard'] },
   { id: 'freelancer-profile', labelKey: 'group.myProfile', icon: '👤', href: '/freelancer/profile', match: ['/freelancer/profile'] },
   { id: 'freelancer-gigs', labelKey: 'group.findWork', icon: '🔎', href: '/freelancer/gigs', match: ['/freelancer/gigs'] },
+  { id: 'freelancer-workspace', labelKey: 'group.myWorkspace', icon: '🛠', href: '/freelancer/workspace', match: ['/freelancer/workspace'] },
   { id: 'freelancer-timecard', labelKey: 'group.timecard', icon: '⏱', href: '/freelancer/timecard', match: ['/freelancer/timecard'] },
 ];
 
