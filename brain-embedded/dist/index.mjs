@@ -791,6 +791,19 @@ function parseDirectedRecipient(msg) {
 function isDirectedToParticipant(msg) {
   return parseDirectedRecipient(msg) !== null;
 }
+function activeMentionToken(text, caret) {
+  const at = text.lastIndexOf("@", Math.max(0, caret - 1));
+  if (at < 0 || at >= caret) return null;
+  if (at > 0 && !/\s/.test(text[at - 1])) return null;
+  const query = text.slice(at + 1, caret);
+  if (/[\s@]/.test(query)) return null;
+  return { query, start: at, end: caret };
+}
+function filterMentionCandidates(participants, query) {
+  const q = query.trim().toLowerCase();
+  if (!q) return participants;
+  return participants.map((p) => ({ p, idx: p.name.toLowerCase().indexOf(q) })).filter((s) => s.idx >= 0).sort((a, b) => a.idx - b.idx || a.p.name.localeCompare(b.p.name)).map((s) => s.p);
+}
 function mentionRecipient(text, participants) {
   const m = /^\s*@([^\s@]+)/.exec(text);
   if (!m) return null;
@@ -1628,10 +1641,12 @@ export {
   BrainProvider,
   CONSOLIDATION_MARKER_PREFIX,
   CONSOLIDATION_META,
+  activeMentionToken,
   buildBrainTriageReport,
   computeBrainDiagnostics,
   consolidationMarkerContent,
   consolidationMetadata,
+  filterMentionCandidates,
   formatBrainDiagnostics,
   isConsolidationMarker,
   isDirectedToParticipant,

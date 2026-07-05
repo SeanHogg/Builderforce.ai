@@ -18,6 +18,7 @@ import {
 } from '@seanhogg/builderforce-brain-embedded';
 import {
   BrainTimeline, ChatTicketsPanel, DEFAULT_CHAT_TICKETS_LABELS, Avatar, useChatParticipants,
+  useMentionAutocomplete,
   type BrainTimelineLabels,
 } from '@seanhogg/builderforce-brain-ui';
 import { createChatTicketsAdapter } from './chatTicketsAdapter';
@@ -302,6 +303,7 @@ function Chat({ init }: { init: InitData }) {
   }, []);
   const [input, setInput] = useState('');
   const [inputFocused, setInputFocused] = useState(false);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
   // Stable reference so a keystroke (which re-renders this component) does not hand
   // <BrainTimeline> a fresh `labels` object and defeat its React.memo — otherwise the
   // whole transcript (and every message's markdown) re-parses on every character typed.
@@ -524,6 +526,24 @@ function Chat({ init }: { init: InitData }) {
   // The effective target: an explicit BRAIN pick wins; else an explicit
   // participant; else a leading @mention; else the BRAIN (null).
   const recipient: DirectedRecipient | null = resolveRecipient(recipientChoice, mentioned);
+
+  // @-mention typeahead: typing `@` in the composer opens a picker of the chat's
+  // participants (agents + humans); choosing one directs the next turn to them.
+  // The same interaction the web Brain uses (shared brain-ui hook) — modality-
+  // agnostic, since participants come from the chat, not the persona.
+  const mention = useMentionAutocomplete({
+    textareaRef: inputRef,
+    value: input,
+    setValue: setInput,
+    participants,
+    onPick: setRecipientChoice,
+    disabled: conv.sending,
+    labels: {
+      title: t('app.mentionTitle', 'Direct to'),
+      agent: t('app.mentionAgent', 'Agent'),
+      human: t('app.mentionHuman', 'Person'),
+    },
+  });
 
   // Feed the project's Evermind: when a run finishes (sending true→false) with
   // content, hand the host this exchange so it can contribute what was learned back
@@ -888,10 +908,12 @@ function Chat({ init }: { init: InitData }) {
 
       <div
         className={`bf-composer${dragOver ? ' bf-composer--drag' : ''}${(inputFocused || input.trim().length > 0) ? ' bf-composer--active' : ''}`}
+        style={{ position: 'relative' }}
         onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
         onDragLeave={() => setDragOver(false)}
         onDrop={(e) => { e.preventDefault(); setDragOver(false); attachFiles(e.dataTransfer.files); }}
       >
+        {mention.popup}
         {conv.pendingAttachments.length > 0 && (
           <div className="bf-attachments">
             {conv.pendingAttachments.map((a) => (
@@ -904,6 +926,7 @@ function Chat({ init }: { init: InitData }) {
           </div>
         )}
         <textarea
+          ref={inputRef}
           className="bf-input"
           rows={2}
           placeholder={recipient
@@ -914,7 +937,12 @@ function Chat({ init }: { init: InitData }) {
           onFocus={() => setInputFocused(true)}
           onBlur={() => setInputFocused(false)}
           onPaste={onPaste}
-          onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submit(); } }}
+          onSelect={mention.onSelect}
+          onKeyDown={(e) => {
+            // The @-mention picker consumes nav/select/escape first.
+            if (mention.onKeyDown(e)) return;
+            if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submit(); }
+          }}
         />
         <div className="bf-composer__actions">
           <input

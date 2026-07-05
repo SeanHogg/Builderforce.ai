@@ -12,11 +12,11 @@ import {
   codingDefaultForPlan,
   pickCloudModel,
   rankModelsForAction,
-  byoAutoSeedModel,
+  byoAutoSeedModels,
   isDispatchableSeed,
   type ActionModelRankStat,
 } from './LlmProxyService';
-import { catalogEntry, vendorForModel, autoRoutableModelsByTier, modelsByTier } from './vendors';
+import { catalogEntry, vendorForModel, autoRoutableModelsByTier, modelsByTier, tierForModel } from './vendors';
 
 // ---------------------------------------------------------------------------
 // Drift guard for the curated coding pool. The capability-reorder + the cloud-
@@ -163,6 +163,97 @@ describe('direct-Anthropic coding floor', () => {
     expect(cf).toBeGreaterThanOrEqual(0);
     expect(cf).toBeLessThan(sonnetDirect);   // Cloudflare surfaces before direct Claude
     expect(sonnetDirect).toBeLessThan(opusDirect);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// BYO auto-select preference — the connected owner account(s) lead the auto pool.
+// When an account owner connects their OWN frontier account(s), an auto-select turn
+// (no explicit model) must lead with those accounts' premium frontier model(s) so
+// they're used before the free/paid tiers. It is REGISTRATION-DRIVEN (reflects
+// exactly what the tenant connected — no hardcoded vendor) and multi-provider (all
+// connected flagships lead, strongest catalog tier first). Anthropic contributes Opus
+// for agentic tool-loops, Sonnet for chat. Every seed id must resolve to the DIRECT
+// (tenant-keyed) vendor so the call is $0 → byo — the `direct/openai/` prefix must
+// not drift back to a bare `openai/…` that hijacks OpenRouter (operator key).
+// ---------------------------------------------------------------------------
+describe('byoAutoSeedModels (connected-account auto seed)', () => {
+  it('returns [] when the tenant has connected nothing (plan routing unchanged)', () => {
+    expect(byoAutoSeedModels(undefined, { agentic: true })).toEqual([]);
+    expect(byoAutoSeedModels(new Set(), { agentic: false })).toEqual([]);
+  });
+
+  it('Anthropic connected → Opus for agentic tool-loops, Sonnet for plain chat', () => {
+    const s = new Set(['anthropic']);
+    expect(byoAutoSeedModels(s, { agentic: true })).toEqual(['claude-opus-4-8']);
+    expect(byoAutoSeedModels(s, { agentic: false })).toEqual(['claude-sonnet-4-6']);
+  });
+
+  it('OpenAI-only → the DIRECT (tenant-keyed) flagship, never the bare OpenRouter slug', () => {
+    const seeds = byoAutoSeedModels(new Set(['openai']), { agentic: true });
+    expect(seeds).toEqual(['direct/openai/gpt-4.1']);
+    // The bare `openai/gpt-4.1` resolves to OpenRouter (operator key) — the direct
+    // prefix must route to the tenant's OWN OpenAI key instead.
+    expect(vendorForModel(seeds[0]!)).toBe('openai');
+    expect(vendorForModel('openai/gpt-4.1')).toBe('openrouter');
+  });
+
+  it('Google-only → the direct googleai flagship', () => {
+    const seeds = byoAutoSeedModels(new Set(['googleai']), { agentic: true });
+    expect(seeds).toEqual(['googleai/gemini-2.5-pro']);
+    expect(vendorForModel(seeds[0]!)).toBe('googleai');
+  });
+
+  it('all three connected → every provider flagship leads, ordered by frontier tier (no hardcoded vendor)', () => {
+    const seeds = byoAutoSeedModels(new Set(['googleai', 'openai', 'anthropic']), { agentic: true });
+    // One flagship per connected provider — the owner's OWN premium frontier models.
+    expect([...seeds].sort()).toEqual(
+      ['claude-opus-4-8', 'direct/openai/gpt-4.1', 'googleai/gemini-2.5-pro'].sort(),
+    );
+    // Ordered strongest-tier-first from catalog data: Opus (ULTRA) leads; every id
+    // sorts by its catalog tier, so the ordering is monotonic and vendor-agnostic.
+    const tiers = seeds.map((m) => tierForModel(m));
+    const rank: Record<string, number> = { ULTRA: 0, PREMIUM: 1, STANDARD: 2, FREE: 3 };
+    const ranks = tiers.map((t) => rank[t] ?? 4);
+    expect(ranks).toEqual([...ranks].sort((a, b) => a - b));
+    expect(seeds[0]).toBe('claude-opus-4-8'); // ULTRA leads
+  });
+
+  it('every seed output is dispatchable (prefix-stripped id is a real catalog entry)', () => {
+    const seeds = [
+      ...byoAutoSeedModels(new Set(['anthropic']), { agentic: true }),
+      ...byoAutoSeedModels(new Set(['anthropic']), { agentic: false }),
+      ...byoAutoSeedModels(new Set(['openai']), { agentic: true }),
+      ...byoAutoSeedModels(new Set(['googleai']), { agentic: true }),
+    ];
+    for (const s of seeds) expect(isDispatchableSeed(s), `${s} must be dispatchable`).toBe(true);
+    expect(isDispatchableSeed('made/up-model')).toBe(false);
+  });
+});
+
+describe('pickCloudModel with a connected BYO account', () => {
+  it('no explicit pin + Anthropic connected → soft Opus seed, even on the free plan', () => {
+    const byoVendors = new Set(['anthropic']);
+    const free = pickCloudModel(undefined, 'free', false, { byoVendors });
+    expect(free).toEqual({ model: 'claude-opus-4-8', strict: false });
+    const pro = pickCloudModel(undefined, 'pro', false, { byoVendors });
+    expect(pro.model).toBe('claude-opus-4-8');
+    expect(pro.strict).toBe(false);
+  });
+
+  it('OpenAI-only connected → the cloud pin leads with the owner GPT account (not Anthropic)', () => {
+    const pick = pickCloudModel(undefined, 'free', false, { byoVendors: new Set(['openai']) });
+    expect(pick).toEqual({ model: 'direct/openai/gpt-4.1', strict: false });
+  });
+
+  it('an explicit real pin still wins over the BYO auto seed', () => {
+    const byoVendors = new Set(['anthropic']);
+    expect(pickCloudModel('openai/gpt-4.1', 'pro', false, { byoVendors }))
+      .toEqual({ model: 'openai/gpt-4.1', strict: true });
+  });
+
+  it('no connected account → unchanged plan default (no BYO seed)', () => {
+    expect(pickCloudModel(undefined, 'free').model).toBe(codingDefaultForPlan('free'));
   });
 });
 

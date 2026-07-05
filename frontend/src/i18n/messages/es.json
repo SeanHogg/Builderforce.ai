@@ -18,7 +18,10 @@
     "dictate": "Dictar",
     "stopDictation": "Detener dictado",
     "removeAttachment": "Quitar adjunto",
-    "brainstorm": "Lluvia de ideas (ideación)"
+    "brainstorm": "Lluvia de ideas (ideación)",
+    "mentionTitle": "Dirigir a",
+    "mentionAgent": "Agente",
+    "mentionHuman": "Persona"
   },
   "repoContext": {
     "title": "Añadir contexto del repositorio",

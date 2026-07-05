@@ -18,7 +18,10 @@
     "dictate": "Diktieren",
     "stopDictation": "Diktat beenden",
     "removeAttachment": "Anhang entfernen",
-    "brainstorm": "Brainstorm (Ideenfindung)"
+    "brainstorm": "Brainstorm (Ideenfindung)",
+    "mentionTitle": "Richten an",
+    "mentionAgent": "Agent",
+    "mentionHuman": "Person"
   },
   "repoContext": {
     "title": "Repository-Kontext hinzufügen",

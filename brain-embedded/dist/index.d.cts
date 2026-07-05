@@ -530,6 +530,31 @@ declare function isDirectedToParticipant(msg: {
  * choice always wins over a typed @mention.
  */
 type RecipientChoice = DirectedRecipient | 'brain' | null;
+/** An in-progress "@mention" being typed at the caret — what a composer typeahead
+ *  offers a picker for. */
+interface MentionToken {
+    /** The text typed after '@' (before the caret); '' right after typing '@'. */
+    query: string;
+    /** Index of the '@' character in the text. */
+    start: number;
+    /** Index just past the query (the caret position). */
+    end: number;
+}
+/**
+ * Detect an in-progress "@mention" at the caret, for a composer typeahead. The
+ * token is an '@' at the start of the text or right after whitespace, followed by
+ * a run of non-whitespace, non-'@' characters, with the caret inside that run.
+ * Returns null when the caret is not in such a token (so no picker should show).
+ * Deliberately mirrors {@link mentionRecipient}'s `@([^\s@]+)` grammar so what the
+ * typeahead offers and what a leading mention resolves to stay consistent.
+ */
+declare function activeMentionToken(text: string, caret: number): MentionToken | null;
+/**
+ * Filter + rank participants for a mention query — case-insensitive substring
+ * match, name-start matches first. An empty query returns every participant (so
+ * typing a bare '@' opens the full roster). Shared by every composer's typeahead.
+ */
+declare function filterMentionCandidates(participants: DirectedRecipient[], query: string): DirectedRecipient[];
 /** Resolve a leading "@name" in composer text to one of `participants`, if any. */
 declare function mentionRecipient(text: string, participants: DirectedRecipient[]): DirectedRecipient | null;
 /**
@@ -855,4 +880,4 @@ declare const CONSOLIDATION_MARKER_PREFIX = "\uD83D\uDCCC **Consolidated summary
 /** Wrap a raw summary as the marker's visible content (prefix + summary). */
 declare function consolidationMarkerContent(summary: string): string;
 
-export { ADDRESSED_TO_META_KEY, AUTHORED_BY_META_KEY, type AssembledToolCall, type BrainAction, type BrainActionsContextValue, BrainActionsProvider, type BrainChat, type BrainConfig, BrainContextProvider, type BrainContextValue, type BrainDiagnostics, type BrainMessage, type BrainModality, type BrainPageContext, type BrainPersistenceAdapter, BrainProvider, type BrainRuntime, type BrainToolSpec, type BrainTraceEvent, type BrainTransport, type BuildBrainTriageOptions, CONSOLIDATION_MARKER_PREFIX, CONSOLIDATION_META, type ChatCompletionMessage, type ChatInputAttachment, type ContentPart, type DirectedRecipient, type ImageUrlContentPart, type McpToolResultInfo, type PreparedImage, type RecipientChoice, type StreamChatOptions, type StreamChatResult, type StreamHandlers, type TextContentPart, type UseBrainChats, type UseBrainChatsOptions, type UseBrainConversation, type UseBrainConversationOptions, type UseMcpExtensionsOptions, buildBrainTriageReport, computeBrainDiagnostics, consolidationMarkerContent, consolidationMetadata, formatBrainDiagnostics, isConsolidationMarker, isDirectedToParticipant, isEvermindModel, isFailedToolResult, lastConsolidationIndex, mentionRecipient, modelsUsedInTrace, parseDirectedRecipient, parseMessageAuthor, prepareImageDataUrl, resolveRecipient, savePendingPrompt, scopeToConsolidation, streamChatCompletion, takePendingPrompt, useBrainActions, useBrainChats, useBrainConfig, useBrainContext, useBrainConversation, useMcpExtensions, useOptionalBrainContext, useRegisterBrainActions, withDirectedMetadata };
+export { ADDRESSED_TO_META_KEY, AUTHORED_BY_META_KEY, type AssembledToolCall, type BrainAction, type BrainActionsContextValue, BrainActionsProvider, type BrainChat, type BrainConfig, BrainContextProvider, type BrainContextValue, type BrainDiagnostics, type BrainMessage, type BrainModality, type BrainPageContext, type BrainPersistenceAdapter, BrainProvider, type BrainRuntime, type BrainToolSpec, type BrainTraceEvent, type BrainTransport, type BuildBrainTriageOptions, CONSOLIDATION_MARKER_PREFIX, CONSOLIDATION_META, type ChatCompletionMessage, type ChatInputAttachment, type ContentPart, type DirectedRecipient, type ImageUrlContentPart, type McpToolResultInfo, type MentionToken, type PreparedImage, type RecipientChoice, type StreamChatOptions, type StreamChatResult, type StreamHandlers, type TextContentPart, type UseBrainChats, type UseBrainChatsOptions, type UseBrainConversation, type UseBrainConversationOptions, type UseMcpExtensionsOptions, activeMentionToken, buildBrainTriageReport, computeBrainDiagnostics, consolidationMarkerContent, consolidationMetadata, filterMentionCandidates, formatBrainDiagnostics, isConsolidationMarker, isDirectedToParticipant, isEvermindModel, isFailedToolResult, lastConsolidationIndex, mentionRecipient, modelsUsedInTrace, parseDirectedRecipient, parseMessageAuthor, prepareImageDataUrl, resolveRecipient, savePendingPrompt, scopeToConsolidation, streamChatCompletion, takePendingPrompt, useBrainActions, useBrainChats, useBrainConfig, useBrainContext, useBrainConversation, useMcpExtensions, useOptionalBrainContext, useRegisterBrainActions, withDirectedMetadata };

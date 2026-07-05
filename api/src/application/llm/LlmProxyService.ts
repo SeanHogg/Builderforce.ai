@@ -199,52 +199,77 @@ export const CODING_DEFAULT_MODEL: string =
   CODING_MODEL_POOL.find((m) => FREE_MODEL_POOL.includes(m)) ?? FREE_MODEL_POOL[0] ?? '';
 
 /**
- * Preferred auto-select flagship for a tenant's OWN connected provider(s).
+ * The frontier flagship a single connected provider leads auto-select with — the
+ * "premium" model the owner's OWN account serves. NOT a value judgement between
+ * vendors: it just maps a connected vendor id → its best in-catalog frontier model,
+ * on the DIRECT tenant-keyed route so a resolution is $0 → byo. Anthropic splits by
+ * turn shape per the product decision (Opus drives agentic tool-loops, Sonnet drives
+ * plain chat). Returns null for a vendor with no mapped flagship. Extend here (one
+ * place) when a new BYO provider is added.
  *
- * When an account owner connects their frontier account (an Anthropic Pro/Max
- * SUBSCRIPTION, or a BYO api-key for Anthropic/OpenAI/Google), an auto-select turn
- * — one with NO explicit model — leads with THIS model so the owner's own account is
- * used before the free/paid gateway tiers (the "connect your account → it gets used"
- * guarantee the settings/api-keys UI implies). It is a SOFT seed: the plan pool stays
- * behind it as fallback, so a transient provider error still resolves the turn.
- *
- * Anthropic wins when connected (the owner's frontier default) and splits by turn
- * shape per the product decision: Opus drives agentic tool-loops (`agentic`), Sonnet
- * drives plain chat. OpenAI/Google fall back to their direct-vendor flagship. Priority
- * anthropic → openai → google mirrors the settings/api-keys ordering so Claude stays
- * the default when several providers are connected.
- *
- * `byoVendors` is the gateway VENDOR-id set the tenant can serve from their own
- * account (see `byoVendorIdSet` / the proxy's connected set). Returns null when
- * nothing is connected — plan routing is then unchanged. This is the SINGLE source
- * both the gateway completion seed ({@link LlmProxyService.complete}) and the
- * cloud-agent pin ({@link pickCloudModel}) use, so the two surfaces never diverge on
- * which model an owner's connected account leads with. Every returned id is a real
- * catalog entry served by the matching direct vendor (so the resolution is stamped
- * `byo` → $0), asserted in `LlmProxyService.codingPool.test`.
+ * The OpenAI flagship uses the `direct/<vendor>/` prefix on purpose: a bare
+ * `openai/…` id belongs to OpenRouter's `<org>/<slug>` namespace (operator-keyed) —
+ * `direct/openai/…` is the only route to the tenant's OWN OpenAI key. `googleai/` is
+ * a bespoke prefix already bound to the tenant Google key.
  */
-export function byoAutoSeedModel(
-  byoVendors: ReadonlySet<string> | null | undefined,
-  opts: { agentic: boolean },
-): string | null {
-  if (!byoVendors || byoVendors.size === 0) return null;
-  if (byoVendors.has('anthropic')) return opts.agentic ? 'claude-opus-4-8' : 'claude-sonnet-4-6';
-  // The factory OpenAI-compatible vendor is reachable ONLY via the `direct/<vendor>/`
-  // prefix (a bare `openai/…` would hijack OpenRouter's `<org>/<slug>` namespace and
-  // re-route to the operator key — see VENDOR_PREFIXES). `googleai/` is a bespoke
-  // prefix, so its flagship carries it directly. Both strip to a real catalog id and
-  // resolve to the tenant's own key ($0 → byo).
-  if (byoVendors.has('openai')) return 'direct/openai/gpt-4.1';
-  if (byoVendors.has('googleai')) return 'googleai/gemini-2.5-pro';
-  return null;
+function providerFrontierFlagship(vendor: string, agentic: boolean): string | null {
+  switch (vendor) {
+    case 'anthropic': return agentic ? 'claude-opus-4-8' : 'claude-sonnet-4-6';
+    case 'openai':    return 'direct/openai/gpt-4.1';
+    case 'googleai':  return 'googleai/gemini-2.5-pro';
+    default:          return null;
+  }
+}
+
+/** Best-first rank of a model's catalog tier (ULTRA → PREMIUM → STANDARD → FREE),
+ *  used to order the connected providers' flagships by frontier strength from catalog
+ *  DATA rather than a hardcoded vendor hierarchy. Unknown tier sorts last. */
+function frontierTierRank(model: string): number {
+  const order: Record<string, number> = { ULTRA: 0, PREMIUM: 1, STANDARD: 2, FREE: 3 };
+  return order[tierForModel(model)] ?? 4;
 }
 
 /**
- * A {@link byoAutoSeedModel} output is dispatchable when it's a known bare catalog id
+ * The connected owner's OWN premium frontier models to lead auto-select with — ONE
+ * flagship per connected provider, so an auto-select turn (no explicit model) uses the
+ * owner's account(s) before the free/paid gateway tiers (the "connect your account →
+ * it gets used" guarantee the settings/api-keys UI implies).
+ *
+ * Purely REGISTRATION-DRIVEN and multi-provider: it reflects exactly what the tenant
+ * connected — connect only OpenAI → GPT leads; connect all three → all three frontier
+ * flagships lead, ordered by catalog TIER (ULTRA → PREMIUM → STANDARD) so the
+ * strongest frontier model is tried first and the cascade then fails over across the
+ * owner's OTHER connected accounts before ever touching a free/paid pool model. There
+ * is NO hardcoded vendor preference — a tie in tier keeps the vendor set's iteration
+ * order. It is a SOFT seed: the plan pool stays behind the list as fallback.
+ *
+ * `byoVendors` is the gateway VENDOR-id set the tenant can serve from their own
+ * account (see `byoVendorIdSet` / the proxy's connected set). Returns `[]` when
+ * nothing is connected — plan routing is then unchanged. Single source both the
+ * gateway completion seed ({@link LlmProxyService.complete}) and the cloud-agent pin
+ * ({@link pickCloudModel}, which leads with `[0]`) use, so the surfaces never diverge.
+ * Every id is a real catalog entry on its direct vendor (`byo` → $0), asserted in
+ * `LlmProxyService.codingPool.test`.
+ */
+export function byoAutoSeedModels(
+  byoVendors: ReadonlySet<string> | null | undefined,
+  opts: { agentic: boolean },
+): string[] {
+  if (!byoVendors || byoVendors.size === 0) return [];
+  const flagships = [...byoVendors]
+    .map((v) => providerFrontierFlagship(v, opts.agentic))
+    .filter((m): m is string => m !== null && isDispatchableSeed(m));
+  // Stable sort by frontier tier (strongest first); Array.prototype.sort is stable in
+  // V8, so same-tier flagships keep the connected-set order (no vendor value judgement).
+  return flagships.sort((a, b) => frontierTierRank(a) - frontierTierRank(b));
+}
+
+/**
+ * A {@link byoAutoSeedModels} output is dispatchable when it's a known bare catalog id
  * (the Anthropic direct ids `claude-*`) OR a vendor-prefixed id (`direct/openai/…`,
  * `googleai/…`) whose PREFIX-STRIPPED model id is a real catalog entry — `isKnownModel`
  * alone looks up the bare index and would false-negative the prefixed BYO seeds.
- * Guards the cloud-agent pin against a drifted seed constant. Asserted in
+ * Guards the seed list against a drifted flagship constant. Asserted in
  * `LlmProxyService.codingPool.test`.
  */
 export function isDispatchableSeed(id: string): boolean {
@@ -829,7 +854,7 @@ export class LlmProxyService {
   /** Gateway vendor ids the tenant can serve from their OWN connected account this
    *  request — a BYO api-key (any provider, populated into {@link tenantFundedVendors}
    *  by the constructor) OR a connected Anthropic subscription (OAuth). Drives the
-   *  auto-select BYO flagship seed in {@link complete} via {@link byoAutoSeedModel}. */
+   *  auto-select BYO flagship seed in {@link complete} via {@link byoAutoSeedModels}. */
   private get connectedByoVendors(): Set<string> {
     const set = new Set<string>(this.tenantFundedVendors);
     if (this.anthropicOAuthToken) set.add('anthropic');
@@ -932,17 +957,22 @@ export class LlmProxyService {
     const fittedPool = modelsFittingContext(routedPool, opts?.estimatedTokens);
 
     // 2) Caller hint goes at the head; rest of the pool follows.
-    //    `callerModel` was extracted at the top of this function for the
-    //    strict-pin branch; reuse it here for the chained path. With NO caller
-    //    model, a connected BYO provider's flagship leads the pool (soft seed) so
-    //    an auto-select turn uses the owner's OWN account before the free/paid
-    //    tiers — Opus for an agentic tool-loop, Sonnet for plain chat (see
-    //    byoAutoSeedModel); the plan pool stays behind it as fallback.
-    const seedModel = (typeof callerModel === 'string' && callerModel.length > 0)
-      ? callerModel
-      : byoAutoSeedModel(this.connectedByoVendors, { agentic: this.codingOnly }) ?? undefined;
-    const seed: readonly string[] = (typeof seedModel === 'string' && seedModel.length > 0)
-      ? [seedModel, ...fittedPool.filter((m) => m !== seedModel)]
+    //    `callerModel` was extracted at the top of this function for the strict-pin
+    //    branch; reuse it here for the chained path. With NO caller model, the
+    //    owner's connected accounts lead the pool (soft seed) so an auto-select turn
+    //    uses the tenant's OWN premium frontier model(s) before the free/paid tiers —
+    //    registration-driven (one flagship per connected provider, strongest tier
+    //    first), NOT a fixed vendor; Opus/Sonnet for Anthropic per turn shape. The
+    //    cascade then fails over across the owner's other connected accounts, and the
+    //    plan pool stays behind them all as final fallback. See byoAutoSeedModels.
+    const byoSeeds = (typeof callerModel === 'string' && callerModel.length > 0)
+      ? []
+      : byoAutoSeedModels(this.connectedByoVendors, { agentic: this.codingOnly });
+    const seedHead: readonly string[] = (typeof callerModel === 'string' && callerModel.length > 0)
+      ? [callerModel]
+      : byoSeeds;
+    const seed: readonly string[] = seedHead.length > 0
+      ? [...seedHead, ...fittedPool.filter((m) => !seedHead.includes(m))]
       : fittedPool;
 
     // 3) Pre-fetch cooldown state for the leading seed slice + premium fallback
@@ -970,13 +1000,11 @@ export class LlmProxyService {
     // (`anthropic/claude-3-haiku`) gets tried even when the same vendor's free
     // key has 429'd its way into vendor cooldown. Per-model cooldown still
     // applies — we won't retry a model that *itself* just failed.
-    // The seed's head (caller pin OR the connected-BYO flagship) bypasses vendor-level
-    // cooldown so the owner's own account is still tried even when that vendor's
-    // operator key has 429'd its way into vendor cooldown. Per-model cooldown still
-    // applies.
-    const pinnedHint = typeof seedModel === 'string' && seedModel.length > 0
-      ? seedModel
-      : undefined;
+    // The seed's head (caller pin OR the strongest connected-BYO flagship) bypasses
+    // vendor-level cooldown so the owner's own account is still tried even when that
+    // vendor's operator key has 429'd its way into vendor cooldown. Per-model cooldown
+    // still applies.
+    const pinnedHint = seedHead.length > 0 ? seedHead[0] : undefined;
     const candidates = this.buildCandidateChain(seed, cooledSet, cooledVendors, pinnedHint);
     if (candidates.length === 0) {
       // Every model in the seed + premium fallback list is on cooldown. The
@@ -2033,14 +2061,15 @@ export function pickCloudModel(
   if (canChooseModel && isKnownModel(explicit)) return { model: (explicit as string).trim(), strict: true };
 
   // No explicit pin (or a free tenant's non-BYO pick was ignored above): when the
-  // tenant has connected their OWN provider, prefer that account's flagship as the
-  // soft seed so an auto-select cloud run uses the owner's account before the
-  // free/paid coding pool. A cloud run is always an agentic tool-loop → Opus for a
-  // connected Anthropic account (see byoAutoSeedModel — shared with the gateway
-  // completion seed so both surfaces agree). Soft (not strict) so a transient
-  // provider error still fails over into the plan pool.
-  const byoSeed = byoAutoSeedModel(opts?.byoVendors, { agentic: true });
-  if (byoSeed && isDispatchableSeed(byoSeed)) return { model: byoSeed, strict: false };
+  // tenant has connected their OWN provider(s), lead with the strongest connected
+  // frontier flagship as the soft seed so an auto-select cloud run uses the owner's
+  // account before the free/paid coding pool. Registration-driven (byoAutoSeedModels
+  // orders the connected providers' flagships by tier — a cloud run is always an
+  // agentic tool-loop, so Anthropic contributes Opus); the run locks onto whatever
+  // this seed resolves on turn 1. Shared with the gateway completion seed so both
+  // surfaces agree. Soft (not strict) so a transient provider error still fails over.
+  const byoSeed = byoAutoSeedModels(opts?.byoVendors, { agentic: true })[0];
+  if (byoSeed) return { model: byoSeed, strict: false };
 
   // Soft-seed branch — the ONLY place learned routing changes anything. Reorder the
   // plan-reachable coding pool by the learned stats (+ optional bias) and seed the

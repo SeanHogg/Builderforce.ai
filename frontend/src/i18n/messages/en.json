@@ -18,7 +18,10 @@
     "dictate": "Dictate",
     "stopDictation": "Stop dictation",
     "removeAttachment": "Remove attachment",
-    "brainstorm": "Brain Storm (ideation)"
+    "brainstorm": "Brain Storm (ideation)",
+    "mentionTitle": "Direct to",
+    "mentionAgent": "Agent",
+    "mentionHuman": "Person"
   },
   "repoContext": {
     "title": "Add repository context",

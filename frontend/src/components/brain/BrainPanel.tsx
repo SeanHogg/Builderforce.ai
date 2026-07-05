@@ -802,6 +802,8 @@ export function BrainPanel({
               showVoice
               pendingAttachments={conv.pendingAttachments}
               onRemoveAttachment={conv.removeAttachment}
+              mentionables={participants}
+              onMention={setRecipientChoice}
             />
             {conv.uploading && <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 4 }}>{tBrain('uploading')}</div>}
           </div>
