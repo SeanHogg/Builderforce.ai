@@ -28,7 +28,7 @@ import { TaskRepository } from '../../infrastructure/repositories/TaskRepository
 import { ProjectStatus, TaskPriority, TaskType, TenantRole } from '../../domain/shared/types';
 import { parseJsonObject } from '../../domain/shared/json';
 import { signJwt } from '../../infrastructure/auth/JwtService';
-import { workflows, workflowDefinitions, specs, promptLibraryEntries, promptLibraryVersions, approvalRules, approvals, brainChats, agents, projectAgents, agentAssignments, savedDashboards, dashboardWidgets, alerts, alertEvents, auditEvents, boards, cronJobs, portfolios, initiatives, objectives, objectiveLinks, keyResults, ideAgents, marketplaceSkills, artifactAssignments, socControls, socEvidence, pokerSessions, pokerStories, pokerVotes, retrospectives, retroItems, boardConnections, projectRepositories, pullRequests, chatSessions, chatMessages, swimlanes, swimlaneAgentAssignments, tenants, executions, usageSnapshots, toolAuditEvents, executionMessages, agentHosts, agentHostProjects, errorGroups, roadmapItems } from '../../infrastructure/database/schema';
+import { workflows, workflowDefinitions, specs, promptLibraryEntries, promptLibraryVersions, approvalRules, approvals, brainChats, agents, projectAgents, agentAssignments, savedDashboards, dashboardWidgets, alerts, alertEvents, activityLog, boards, cronJobs, portfolios, initiatives, objectives, objectiveLinks, keyResults, ideAgents, marketplaceSkills, artifactAssignments, socControls, socEvidence, pokerSessions, pokerStories, pokerVotes, retrospectives, retroItems, boardConnections, projectRepositories, pullRequests, chatSessions, chatMessages, swimlanes, swimlaneAgentAssignments, tenants, executions, usageSnapshots, toolAuditEvents, executionMessages, agentHosts, agentHostProjects, errorGroups, roadmapItems } from '../../infrastructure/database/schema';
 import { resolveSegment } from '../../infrastructure/auth/segmentResolver';
 import type { McpToolEntry } from './mcpExtensionService';
 import type { Env } from '../../env';
@@ -333,28 +333,33 @@ const CATALOG: BuiltinTool[] = [
   // The ONE conversation the whole team shares — humans AND agents post into it.
   // A PM/manager agent uses team_chat.post to ask the team for status updates or to
   // share a burndown, and team_chat.read to catch up on what the team has said.
-  // Scope: pass projectId for that project's team chat; omit it for the tenant-wide
-  // team chat. Everyone lands in the SAME thread (idempotent get-or-create).
+  // Scope: pass projectId for that project's team chat, teamId for a named workforce
+  // team's chat, or omit both for the tenant-wide "broader team" chat. Everyone lands
+  // in the SAME thread (idempotent get-or-create).
   {
     tool: 'team_chat.read', mutates: false,
-    description: 'Read the recent transcript of the team chat — the shared group conversation for the whole team. Pass projectId for that project\'s team chat; omit it for the tenant-wide team chat. Returns { chatId, messages } (oldest→newest), capped by limit (default 30, max 100).',
-    parameters: obj({ projectId: N, limit: N }),
+    description: 'Read the recent transcript of the team chat — the shared group conversation for a team. Scope it: pass projectId for that project\'s team chat, teamId for a named workforce team\'s chat, or omit both for the tenant-wide "broader team" chat. Returns { chatId, messages } (oldest→newest), capped by limit (default 30, max 100).',
+    parameters: obj({ projectId: N, teamId: N, limit: N }),
     run: async (ctx, a) => {
       const svc = new BrainService(ctx.db);
-      const res = await svc.readTeamChat(ctx.tenantId, a.projectId != null ? num(a.projectId) : null, a.limit != null ? num(a.limit) : 30);
+      const res = await svc.readTeamChat(
+        ctx.tenantId,
+        { projectId: a.projectId != null ? num(a.projectId) : null, teamId: a.teamId != null ? num(a.teamId) : null },
+        a.limit != null ? num(a.limit) : 30,
+      );
       if ('error' in res) throw new Error(res.error);
       return res;
     },
   },
   {
     tool: 'team_chat.post', mutates: true,
-    description: 'Post a message INTO the team chat so the whole team sees it — e.g. ask everyone for a status update on their tickets, or share a burndown / summary. Pass projectId for that project\'s team chat; omit it for the tenant-wide team chat. `fromName` is your display name (e.g. "Project Manager") for attribution. Returns { chatId, message }.',
-    parameters: obj({ message: S, projectId: N, fromName: S }, ['message']),
+    description: 'Post a message INTO the team chat so the whole team sees it — e.g. ask everyone for a status update on their tickets, or share a burndown / summary. Scope it: pass projectId for that project\'s team chat, teamId for a named workforce team\'s chat, or omit both for the tenant-wide "broader team" chat. `fromName` is your display name (e.g. "Project Manager") for attribution. Returns { chatId, message }.',
+    parameters: obj({ message: S, projectId: N, teamId: N, fromName: S }, ['message']),
     run: async (ctx, a) => {
       const svc = new BrainService(ctx.db);
       const res = await svc.postToTeamChat(
         ctx.tenantId,
-        a.projectId != null ? num(a.projectId) : null,
+        { projectId: a.projectId != null ? num(a.projectId) : null, teamId: a.teamId != null ? num(a.teamId) : null },
         str(a.message),
         { fromName: a.fromName != null ? str(a.fromName) : undefined, fromRef: ctx.userId ?? undefined },
       );
@@ -1225,8 +1230,8 @@ const CATALOG: BuiltinTool[] = [
   { tool: 'alerts.events', mutates: false, description: 'List recent alert firings (events), optionally filtered by status (triggered|acknowledged|resolved).', parameters: obj({ limit: N, status: { type: 'string', enum: ['triggered', 'acknowledged', 'resolved'] } }), run: (ctx, a) => { const where = a.status != null ? and(eq(alertEvents.tenantId, ctx.tenantId), eq(alertEvents.status, str(a.status))) : eq(alertEvents.tenantId, ctx.tenantId); return ctx.db.select().from(alertEvents).where(where).orderBy(desc(alertEvents.createdAt)).limit(a.limit != null ? num(a.limit) : 100); } },
   { tool: 'alerts.acknowledge', mutates: true, description: 'Acknowledge an alert firing (event).', parameters: obj({ id: S }, ['id']), run: async (ctx, a) => { const [row] = await ctx.db.update(alertEvents).set({ status: 'acknowledged', acknowledgedAt: new Date() }).where(and(eq(alertEvents.id, str(a.id)), eq(alertEvents.tenantId, ctx.tenantId))).returning(); if (!row) throw new Error('alert event not found'); return row; } },
 
-  // ---- Audit (read; auditEvents is tenant-scoped, no segment_id) ----
-  { tool: 'audit.list', mutates: false, description: 'List audit events for the workspace, optionally filtered by eventType / resourceType.', parameters: obj({ limit: N, eventType: S, resourceType: S }), run: (ctx, a) => { const conds: SQL[] = [eq(auditEvents.tenantId, ctx.tenantId)]; if (a.eventType != null) conds.push(eq(auditEvents.eventType, str(a.eventType) as never)); if (a.resourceType != null) conds.push(eq(auditEvents.resourceType, str(a.resourceType))); return ctx.db.select().from(auditEvents).where(and(...conds)).orderBy(desc(auditEvents.createdAt)).limit(a.limit != null ? num(a.limit) : 100); } },
+  // ---- Audit / activity (read from the unified activity_log stream) ----
+  { tool: 'audit.list', mutates: false, description: 'List activity/audit events for the workspace (who did what, to what, when), optionally filtered by verb (e.g. "task.created", "user.login") / targetType (e.g. "task", "deployment").', parameters: obj({ limit: N, verb: S, targetType: S }), run: (ctx, a) => { const conds: SQL[] = [eq(activityLog.tenantId, ctx.tenantId)]; if (a.verb != null) conds.push(eq(activityLog.verb, str(a.verb))); if (a.targetType != null) conds.push(eq(activityLog.targetType, str(a.targetType))); return ctx.db.select().from(activityLog).where(and(...conds)).orderBy(desc(activityLog.id)).limit(a.limit != null ? num(a.limit) : 100); } },
 
   // ---- Workflow DEFINITIONS (design-time graphs) — distinct from the `workflows` (RUNS) table the
   //       workflows.list/get tools above read. New `workflow_definitions` domain to avoid name collision.

@@ -4,13 +4,12 @@ import { TaskService, type UpdateTaskDto } from '../../application/task/TaskServ
 import { TaskPriority, AgentType, TaskStatus, TaskType } from '../../domain/shared/types';
 import type { Env, HonoEnv } from '../../env';
 import { authMiddleware } from '../middleware/authMiddleware';
-import { auditEvents, projects, specs, taskSpecs, tasks, tenantMembers, users } from '../../infrastructure/database/schema';
+import { projects, specs, taskSpecs, tasks, tenantMembers, users } from '../../infrastructure/database/schema';
 import { getOrSetCached, getCacheVersion, bumpCacheVersion } from '../../infrastructure/cache/readThroughCache';
 import { addDependency, deleteDependency, listProjectDependencies, isDepType } from '../../application/task/taskDependencies';
 import { invalidateCompletedByAssignee } from './reportRoutes';
 import { invalidateProjectsList } from './projectRoutes';
 import { convertWorkItemType, ConvertError, type WorkItemKind } from '../../application/workitem/convertWorkItemType';
-import { AuditEventType } from '../../domain/shared/types';
 import type { Db } from '../../infrastructure/database/connection';
 import { resolveDefaultRepoForTask } from '../../application/repos/resolveDefaultRepo';
 import { openTaskPullRequest } from '../../application/repos/openTaskPullRequest';
@@ -697,20 +696,6 @@ export function createTaskRoutes(taskService: TaskService, db: Db, runtimeServic
       );
     }
 
-    // record audit event for the status of this task change
-    try {
-      await db.insert(auditEvents).values({
-        tenantId: c.get('tenantId'),
-        userId:   (c as any).get('userId') ?? null,
-        eventType: AuditEventType.TASK_UPDATED,
-        resourceType: 'task',
-        resourceId: String(id),
-        metadata: JSON.stringify(body),
-      });
-    } catch {
-      // ignore failures to avoid blocking the main flow
-    }
-
     // Unified audit stream: classify the edit so the timeline reads meaningfully.
     const assignmentTouched = body.assignedUserId !== undefined || body.assignedAgentRef !== undefined || body.assignedAgentHostId !== undefined;
     const plainPatched = task.toPlain();
@@ -744,19 +729,6 @@ export function createTaskRoutes(taskService: TaskService, db: Db, runtimeServic
     // The card leaves one project's board and joins another's — push both.
     c.executionCtx.waitUntil(broadcastProjectChanged(c.env?.SESSION_ROOM, before?.projectId));
     c.executionCtx.waitUntil(broadcastProjectChanged(c.env?.SESSION_ROOM, body.projectId));
-
-    try {
-      await db.insert(auditEvents).values({
-        tenantId: c.get('tenantId'),
-        userId:   (c as any).get('userId') ?? null,
-        eventType: AuditEventType.TASK_UPDATED,
-        resourceType: 'task',
-        resourceId: String(id),
-        metadata: JSON.stringify({ movedToProjectId: body.projectId, key: task.key }),
-      });
-    } catch {
-      // ignore failures to avoid blocking the main flow
-    }
 
     emitTaskActivity(c, 'task.moved', {
       taskId: id, projectId: body.projectId, title: task.toPlain().title,
@@ -899,19 +871,12 @@ export function createTaskRoutes(taskService: TaskService, db: Db, runtimeServic
     const task = await taskService.dequeueNextReady(c.get('tenantId'));
     if (task) {
       const plain = task.toPlain();
-      // record that the task was claimed
-      try {
-        await db.insert(auditEvents).values({
-          tenantId: c.get('tenantId'),
-          userId: null,
-          eventType: AuditEventType.TASK_UPDATED,
-          resourceType: 'task',
-          resourceId: String(task.id),
-          metadata: JSON.stringify({ claimed: true, status: task.status }),
-        });
-      } catch {
-        // ignore errors
-      }
+      // record that the task was claimed (unified activity stream)
+      emitTaskActivity(c, 'task.claimed', {
+        taskId: plain.id, projectId: plain.projectId, title: plain.title,
+        summary: `Claimed ${plain.key ?? `#${plain.id}`}`,
+        metadata: { claimed: true, status: task.status },
+      });
       // dequeue moved the ticket ready → in_progress without a PATCH; record the
       // lane transition so pickup-latency / cycle metrics see the claim.
       c.executionCtx.waitUntil(

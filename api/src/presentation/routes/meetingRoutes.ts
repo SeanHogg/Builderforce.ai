@@ -23,11 +23,15 @@ import { relayToRoom } from './realtimeRelay';
 import { pushMeetingEvent, deleteMeetingEvent } from '../../application/calendar/calendarService';
 import type { CalendarProviderName } from '../../application/calendar/calendarProviders';
 import { loadProjectTeamMembers } from '../../application/metrics/assigneeRecommender';
+import { BrainService } from '../../application/brain/BrainService';
 import {
   suggestSlots, normalizeWindows, type Availability, type BusyInterval,
 } from '../../application/calendar/availabilitySolver';
 
 const KINDS = new Set(['standup', 'planning', 'retrospective', 'adhoc', 'direct', 'interview', 'review']);
+/** Team ceremonies default to being backed by a team chat — "the meeting IS the
+ *  team chat": joining opens it, and absentees still post their update there. */
+const TEAM_CEREMONY_KINDS = new Set(['standup', 'planning', 'retrospective', 'review']);
 
 interface AttendeeInput { kind?: string; ref: string; name: string; email?: string; role?: string; }
 
@@ -159,6 +163,10 @@ export function createMeetingRoutes(db: Db): Hono<HonoEnv> {
       ticketId?: number | null;
       jobId?: string | null;
       engagementId?: string | null;
+      // Team Chat (0294): scope the backing team chat to a named workforce team, and
+      // opt in/out of linking one (defaults on for team ceremonies).
+      teamId?: number | null;
+      linkTeamChat?: boolean;
     }>();
 
     const kind = body.kind && KINDS.has(body.kind) ? body.kind : 'adhoc';
@@ -183,6 +191,22 @@ export function createMeetingRoutes(db: Db): Hono<HonoEnv> {
       engagementId: body.engagementId ?? null,
     }).returning();
     if (!meeting) return c.json({ error: 'Failed to create meeting' }, 500);
+
+    // The meeting IS a team chat (0294): back a team ceremony with the canonical team
+    // chat for its scope so joining opens the conversation and absentees can still post
+    // their update. Best-effort — a chat-resolve failure must never fail the meeting.
+    const linkChat = body.linkTeamChat ?? TEAM_CEREMONY_KINDS.has(kind);
+    if (linkChat) {
+      try {
+        const resolved = await new BrainService(db).getOrCreateTeamChat(
+          tenantId, userId || null,
+          { projectId: body.projectId ?? null, teamId: body.teamId ?? null },
+        );
+        if (!('error' in resolved)) {
+          await db.update(meetings).set({ chatId: resolved.id as number, updatedAt: new Date() }).where(eq(meetings.id, meeting.id));
+        }
+      } catch { /* team chat is a nice-to-have on a meeting; never block creation */ }
+    }
 
     // Organizer is always attendee #0 (host, auto-accepted). De-dupe by ref.
     const invited: AttendeeInput[] = [

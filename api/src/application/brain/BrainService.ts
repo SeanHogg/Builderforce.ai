@@ -8,6 +8,7 @@ import {
   chatMessages,
   projectMemories,
   projects,
+  teams,
   agentAssignments,
   users,
   tenantMembers,
@@ -49,6 +50,13 @@ export interface UpdateChatDto {
 
 export interface AppendMessagesDto {
   messages: Array<{ role: string; content: string; metadata?: string }>;
+}
+
+/** Which team chat to resolve. A project team chat (`projectId`), a named workforce
+ *  team's chat (`teamId`), or — both omitted — the tenant-wide "broader team" chat. */
+export interface TeamChatScope {
+  projectId?: number | null;
+  teamId?: number | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -400,10 +408,11 @@ export class BrainService {
   // -----------------------------------------------------------------------
 
   /** Resolve the ONE team chat for a scope, creating it on first access. Scope is
-   *  the project (`projectId`) or the whole tenant (`projectId` null). Race-safe:
-   *  the unique `uq_team_chat_scope` index means a concurrent create just re-selects
-   *  the winner. `userId` may be null (an unattended agent resolving it). */
-  private async findTeamChat(tenantId: number, projectId: number | null) {
+   *  a project (`projectId`), a named workforce team (`teamId`), or — when both are
+   *  null — the tenant-wide "broader team". Race-safe: the unique `uq_team_chat_scope`
+   *  index means a concurrent create just re-selects the winner. `userId` may be null
+   *  (an unattended agent resolving it). */
+  private async findTeamChat(tenantId: number, scope: TeamChatScope) {
     const [row] = await this.db
       .select(chatDetailColumns)
       .from(brainChats)
@@ -411,32 +420,47 @@ export class BrainService {
         eq(brainChats.tenantId, tenantId),
         eq(brainChats.origin, TEAM_ORIGIN),
         eq(brainChats.isArchived, false),
-        projectId != null ? eq(brainChats.projectId, projectId) : isNull(brainChats.projectId),
+        scope.projectId != null ? eq(brainChats.projectId, scope.projectId) : isNull(brainChats.projectId),
+        scope.teamId != null ? eq(brainChats.teamId, scope.teamId) : isNull(brainChats.teamId),
       ))
       .limit(1);
     return row ?? null;
   }
 
-  async getOrCreateTeamChat(tenantId: number, userId: string | null, projectId: number | null) {
-    let projName: string | null = null;
+  private async verifyTeamInTenant(teamId: number, tenantId: number) {
+    const [team] = await this.db
+      .select({ id: teams.id, name: teams.name })
+      .from(teams)
+      .where(and(eq(teams.id, teamId), eq(teams.tenantId, tenantId)))
+      .limit(1);
+    return team ?? null;
+  }
+
+  async getOrCreateTeamChat(tenantId: number, userId: string | null, scope: TeamChatScope = {}) {
+    const projectId = scope.projectId ?? null;
+    const teamId = scope.teamId ?? null;
+    let title = 'Team Chat';
     if (projectId != null) {
       const proj = await this.verifyProjectInTenant(projectId, tenantId);
       if (!proj) return { error: 'Project not found in tenant' as const };
-      projName = proj.name;
+      title = `${proj.name} — Team`;
+    } else if (teamId != null) {
+      const team = await this.verifyTeamInTenant(teamId, tenantId);
+      if (!team) return { error: 'Team not found in tenant' as const };
+      title = `${team.name}`;
     }
 
-    let chat = await this.findTeamChat(tenantId, projectId);
+    let chat = await this.findTeamChat(tenantId, { projectId, teamId });
     if (!chat) {
-      const title = projName ? `${projName} — Team` : 'Team Chat';
       try {
         const [created] = await this.db
           .insert(brainChats)
-          .values({ tenantId, userId: userId ?? null, origin: TEAM_ORIGIN, projectId: projectId ?? null, title, visibility: 'shared' })
+          .values({ tenantId, userId: userId ?? null, origin: TEAM_ORIGIN, projectId, teamId, title, visibility: 'shared' })
           .returning(chatDetailColumns);
         chat = created ?? null;
       } catch {
         // Lost the create race (unique index) — the winner is now selectable.
-        chat = await this.findTeamChat(tenantId, projectId);
+        chat = await this.findTeamChat(tenantId, { projectId, teamId });
       }
     }
     if (!chat) return { error: 'Chat not found' as const };
@@ -453,8 +477,8 @@ export class BrainService {
 
   /** Read the recent transcript of a team chat (agent-facing — server picks the
    *  tenant's own canonical chat, so there is no cross-tenant id to guard). */
-  async readTeamChat(tenantId: number, projectId: number | null, limit = 30) {
-    const resolved = await this.getOrCreateTeamChat(tenantId, null, projectId);
+  async readTeamChat(tenantId: number, scope: TeamChatScope, limit = 30) {
+    const resolved = await this.getOrCreateTeamChat(tenantId, null, scope);
     if ('error' in resolved) return resolved;
     const msgs = await this.db
       .select(messageColumns)
@@ -470,13 +494,13 @@ export class BrainService {
    *  metadata.authoredBy, mirroring {@link agentReply}. */
   async postToTeamChat(
     tenantId: number,
-    projectId: number | null,
+    scope: TeamChatScope,
     content: string,
     opts?: { fromName?: string; fromRef?: string },
   ) {
     const text = content?.trim();
     if (!text) return { error: 'content is required' as const };
-    const resolved = await this.getOrCreateTeamChat(tenantId, null, projectId);
+    const resolved = await this.getOrCreateTeamChat(tenantId, null, scope);
     if ('error' in resolved) return resolved;
     const metadata = JSON.stringify({
       via: 'team_chat.post',
