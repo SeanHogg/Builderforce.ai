@@ -30,14 +30,15 @@ import type { Env } from '../../env';
 import type { RuntimeService } from '../runtime/RuntimeService';
 import {
   tasks, boards, swimlanes, swimlaneAgentAssignments, pullRequests,
-  projectManagerConfigs, managerActions,
+  projectManagerConfigs, managerActions, projects,
 } from '../../infrastructure/database/schema';
-import { TaskStatus } from '../../domain/shared/types';
+import { TaskStatus, TaskPriority } from '../../domain/shared/types';
 import { rankBacklog, type RankableTask, type TaskPriorityTier } from './prioritize';
 import { heuristicBusinessValue } from './businessValue';
 import { scoreBusinessValueAI } from './businessValueAI';
 import {
-  resolveEffectiveManagerPolicy, type EffectiveManagerPolicy, type ManagerConfigRow,
+  resolveEffectiveManagerPolicy, resolveManagerAssignee,
+  type EffectiveManagerPolicy, type ManagerConfigRow,
 } from './managerPolicy';
 import { recommendTopAssignee } from '../metrics/assigneeRecommender';
 import { mergeRecordedPullRequest } from '../repos/mergeRecordedPr';
@@ -146,16 +147,18 @@ export async function upsertManagerConfig(
   return (await getManagerConfigRow(db, tenantId, projectId))!;
 }
 
-/** Append a manager decision to the audit feed. Best-effort. */
+/** Append a manager decision to the audit feed. Best-effort. `runTaskId` links the
+ *  decision to the board task representing a manual run (null for cron sweeps). */
 export async function recordManagerAction(
   db: Db,
-  a: { tenantId: number; projectId: number; taskId?: number | null; actionType: string; summary: string; detail?: unknown },
+  a: { tenantId: number; projectId: number; taskId?: number | null; runTaskId?: number | null; actionType: string; summary: string; detail?: unknown },
 ): Promise<void> {
   try {
     await db.insert(managerActions).values({
       tenantId: a.tenantId,
       projectId: a.projectId,
       taskId: a.taskId ?? null,
+      runTaskId: a.runTaskId ?? null,
       actionType: a.actionType,
       summary: a.summary.slice(0, 500),
       detail: a.detail !== undefined ? JSON.stringify(a.detail).slice(0, 4000) : null,
@@ -178,6 +181,115 @@ export async function listManagerActions(
     .where(and(eq(managerActions.tenantId, tenantId), eq(managerActions.projectId, projectId)))
     .orderBy(desc(managerActions.createdAt))
     .limit(Math.min(200, Math.max(1, limit)));
+}
+
+// ── run task (board visibility for a manual run) ─────────────────────────────
+
+/**
+ * Mint the board task that REPRESENTS a manual "Run manager now" pass — assigned to
+ * the designated manager, opened in-progress. The manager's decisions this pass link
+ * back to it (`manager_actions.run_task_id`) and {@link finalizeManagerRunTask} closes
+ * it with the run summary, so a human can see what the manager did, by whom, and when.
+ *
+ * A controlled raw insert on purpose (NOT `TaskService.createTask`): this is a
+ * coordination chore, so it must skip the on-assign Epic-decompose / agent
+ * auto-dispatch hooks that would otherwise try to "execute" it as codeable work. The
+ * `source = 'manager'` marker also short-circuits the shared auto-run evaluator, so
+ * no dispatcher ever picks it up. Best-effort: a miss returns null and the pass still
+ * runs (just without a board card).
+ */
+export async function createManagerRunTask(
+  db: Db,
+  args: { tenantId: number; projectId: number; policy: EffectiveManagerPolicy },
+): Promise<number | null> {
+  const { tenantId, projectId, policy } = args;
+  try {
+    const [project] = await db
+      .select({ key: projects.key })
+      .from(projects)
+      .where(and(eq(projects.id, projectId), eq(projects.tenantId, tenantId)))
+      .limit(1);
+    if (!project) return null;
+
+    // Next gap-safe key sequence (mirrors TaskRepository.maxKeySeqByProject).
+    const [seqRow] = await db
+      .select({
+        value: sql<number>`COALESCE(MAX(CASE WHEN regexp_replace(${tasks.key}, '^.*-', '') ~ '^[0-9]+$'
+          THEN CAST(regexp_replace(${tasks.key}, '^.*-', '') AS INTEGER) END), 0)`,
+      })
+      .from(tasks)
+      .where(eq(tasks.projectId, projectId));
+    const baseSeq = Number(seqRow?.value ?? 0) + 1;
+    const assignee = resolveManagerAssignee(policy.managerRef);
+    const now = new Date();
+
+    // Retry on a key collision (a concurrent create) by walking the sequence forward.
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const key = `${project.key}-${String(baseSeq + attempt).padStart(3, '0')}`;
+      try {
+        const [row] = await db
+          .insert(tasks)
+          .values({
+            projectId,
+            key,
+            title: 'Backlog management pass',
+            description:
+              'The AI Manager is grooming this backlog — scoring business value, ranking the work, assigning owners, and shepherding pull requests. Its decisions stream to the Manager activity feed.',
+            status: TaskStatus.IN_PROGRESS,
+            priority: TaskPriority.LOW,
+            // `source = 'manager'` marks this a coordination chore: excluded from the
+            // manager's own grooming set and from every auto-run dispatcher.
+            source: 'manager',
+            // KTLO keeps it off the innovation-allocation lens; it is operational upkeep.
+            allocationCategory: 'ktlo',
+            allocationCategorySource: 'agent',
+            assignedUserId: assignee.assignedUserId,
+            assignedAgentRef: assignee.assignedAgentRef,
+            assignedAgentHostId: assignee.assignedAgentHostId,
+            startDate: now,
+            lastWorkedAt: now,
+            updatedAt: now,
+          })
+          .returning({ id: tasks.id });
+        return row?.id ?? null;
+      } catch {
+        /* likely a unique-key collision — try the next sequence number */
+      }
+    }
+    return null;
+  } catch {
+    return null; // a run-task miss must never block the pass
+  }
+}
+
+/** Close a manager run task with the pass summary (done on success, blocked on a
+ *  hard failure). Best-effort — the pass result stands regardless. */
+export async function finalizeManagerRunTask(
+  db: Db,
+  args: { taskId: number; summary: ManagerRunSummary; ok: boolean },
+): Promise<void> {
+  const { taskId, summary, ok } = args;
+  try {
+    const now = new Date();
+    const line =
+      `Scored ${summary.scored} · ranked ${summary.ranked} · assigned ${summary.assigned} · ` +
+      `PRs ${summary.prsConducted + summary.prsMerged} · dispatched ${summary.dispatched} · ` +
+      `audited ${summary.audited}${summary.flagged ? ` (${summary.flagged} flagged)` : ''}.`;
+    await db
+      .update(tasks)
+      .set({
+        status: ok ? TaskStatus.DONE : TaskStatus.BLOCKED,
+        description: ok
+          ? `Backlog management pass complete. ${line}`
+          : `Backlog management pass ended early. ${line}`,
+        completedAt: ok ? now : null,
+        lastWorkedAt: now,
+        updatedAt: now,
+      })
+      .where(eq(tasks.id, taskId));
+  } catch {
+    /* best-effort */
+  }
 }
 
 // ── the pass ────────────────────────────────────────────────────────────────
@@ -211,7 +323,12 @@ async function loadManagedTasks(db: Db, projectId: number): Promise<ManagedTaskR
       createdAt: tasks.createdAt,
     })
     .from(tasks)
-    .where(and(eq(tasks.projectId, projectId), eq(tasks.archived, false), inArray(tasks.status, NON_TERMINAL)))
+    .where(and(
+      eq(tasks.projectId, projectId), eq(tasks.archived, false), inArray(tasks.status, NON_TERMINAL),
+      // The manager never grooms/ranks/audits its OWN run tasks (source = 'manager').
+      // `is distinct from` keeps NULL-source tickets (the normal case) in the set.
+      sql`${tasks.source} is distinct from 'manager'`,
+    ))
     .orderBy(asc(tasks.createdAt))
     .limit(MAX_RANKED);
 }
@@ -235,10 +352,13 @@ export async function runManagerForProject(
   env: Env,
   db: Db,
   runtimeService: RuntimeService,
-  args: { tenantId: number; projectId: number; submittedBy?: string },
+  args: { tenantId: number; projectId: number; submittedBy?: string; runTaskId?: number | null },
 ): Promise<ManagerRunSummary> {
   const { tenantId, projectId } = args;
   const submittedBy = args.submittedBy ?? 'system:manager';
+  // The board task representing this run (manual runs only) — every decision below
+  // links to it so the run task shows exactly what this pass changed.
+  const runTaskId = args.runTaskId ?? null;
   const summary: ManagerRunSummary = {
     projectId, skipped: false, scored: 0, ranked: 0, assigned: 0, prsConducted: 0, prsMerged: 0, dispatched: 0,
     audited: 0, flagged: 0,
@@ -268,7 +388,7 @@ export async function runManagerForProject(
         t.businessValue = value.score;
         summary.scored += 1;
         await recordManagerAction(db, {
-          tenantId, projectId, taskId: t.id, actionType: 'score_value',
+          tenantId, projectId, taskId: t.id, runTaskId, actionType: 'score_value',
           summary: `Scored business value ${value.score}/100 — ${value.rationale}`,
           detail: { score: value.score, source: value.source },
         });
@@ -290,7 +410,7 @@ export async function runManagerForProject(
       return { rank: r.rank, taskId: r.taskId, title: t?.title ?? '', score: r.score };
     });
     await recordManagerAction(db, {
-      tenantId, projectId, actionType: 'prioritize',
+      tenantId, projectId, runTaskId, actionType: 'prioritize',
       summary: `Ranked ${ranked.length} tickets by priority × value × urgency.`,
       detail: { top },
     });
@@ -314,7 +434,7 @@ export async function runManagerForProject(
         await db.update(tasks).set(set).where(eq(tasks.id, t.id));
         summary.assigned += 1;
         await recordManagerAction(db, {
-          tenantId, projectId, taskId: t.id, actionType: 'assign',
+          tenantId, projectId, taskId: t.id, runTaskId, actionType: 'assign',
           summary: `Assigned "${t.title}" to ${label}.`,
           detail: { memberKind: pick.memberKind, memberRef: pick.memberRef },
         });
@@ -323,7 +443,7 @@ export async function runManagerForProject(
   }
 
   // 4. PR — conduct (open) PRs for finished work, then merge/close per policy. ---
-  await coordinatePullRequests(env, db, runtimeService, { tenantId, projectId, policy, managed, summary });
+  await coordinatePullRequests(env, db, runtimeService, { tenantId, projectId, policy, managed, summary, runTaskId });
 
   // 5. DISPATCH — kick the top-ranked runnable tickets NOW, in priority order. ---
   // Re-read so rank + fresh assignments are reflected; the dispatcher (idempotent)
@@ -345,7 +465,7 @@ export async function runManagerForProject(
       if (started) {
         summary.dispatched += 1;
         await recordManagerAction(db, {
-          tenantId, projectId, taskId: t.id, actionType: 'dispatch',
+          tenantId, projectId, taskId: t.id, runTaskId, actionType: 'dispatch',
           summary: `Started work on ticket #${t.id} (rank ${t.managerRank ?? '—'}).`,
         });
       }
@@ -389,10 +509,10 @@ async function coordinatePullRequests(
   runtimeService: RuntimeService,
   ctx: {
     tenantId: number; projectId: number; policy: EffectiveManagerPolicy;
-    managed: ManagedTaskRow[]; summary: ManagerRunSummary;
+    managed: ManagedTaskRow[]; summary: ManagerRunSummary; runTaskId: number | null;
   },
 ): Promise<void> {
-  const { tenantId, projectId, policy, managed, summary } = ctx;
+  const { tenantId, projectId, policy, managed, summary, runTaskId } = ctx;
 
   // CONDUCT: open PRs for review-complete cloud tickets (skip under 'queue').
   if (policy.prMergePolicy !== 'queue') {
@@ -422,7 +542,7 @@ async function coordinatePullRequests(
         });
         summary.prsConducted += 1;
         await recordManagerAction(db, {
-          tenantId, projectId, taskId: t.id, actionType: 'flag',
+          tenantId, projectId, taskId: t.id, runTaskId, actionType: 'flag',
           summary: `Review complete — opened PR for "${t.title}".`,
         });
       } catch { /* skip */ }
@@ -446,7 +566,7 @@ async function coordinatePullRequests(
       });
       if (!result.ok) {
         await recordManagerAction(db, {
-          tenantId, projectId, taskId: pr.taskId, actionType: 'flag',
+          tenantId, projectId, taskId: pr.taskId, runTaskId, actionType: 'flag',
           summary: `Could not merge PR #${pr.number ?? '?'}: ${result.error}`,
           detail: { code: result.code },
         });
@@ -458,7 +578,7 @@ async function coordinatePullRequests(
       // auto-merge all complete the ticket via the ONE completeTaskOnMerge path —
       // which also records the lifecycle transition/DORA the old direct update skipped.
       await recordManagerAction(db, {
-        tenantId, projectId, taskId: pr.taskId, actionType: 'merge_pr',
+        tenantId, projectId, taskId: pr.taskId, runTaskId, actionType: 'merge_pr',
         summary: `Merged & closed PR #${pr.number ?? '?'}${result.merged ? '' : ' (already up to date)'} — ticket done.`,
         detail: { sha: result.sha },
       });

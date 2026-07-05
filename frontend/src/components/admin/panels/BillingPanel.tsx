@@ -173,7 +173,7 @@ export default function BillingPanel() {
               type="button"
               className="btn-ghost"
               style={{ marginLeft: 8 }}
-              onClick={() => router.push('/admin?tab=errors')}
+              onClick={() => router.push('/admin?tab=logs')}
             >
               Open full error log
             </button>

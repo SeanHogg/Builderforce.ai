@@ -1276,7 +1276,8 @@ export type AutoRunReason =
   | 'human_gate'
   | 'no_agent'
   | 'capability_mismatch'
-  | 'already_running';
+  | 'already_running'
+  | 'not_executable';
 
 export interface AutoRunDiagnostic {
   status: string;
@@ -3283,7 +3284,8 @@ export interface KeyResultProgress {
 export interface ObjectiveLinkRef { id: string; kind: 'initiative' | 'epic' | 'task'; refId: string; label: string }
 export interface ObjectiveProgress {
   id: string; title: string; period: string | null; status: string;
-  initiativeId: string | null; startDate: string | null; endDate: string | null; costClass: CostClass | null;
+  portfolioId: string | null; initiativeId: string | null; projectId: number | null;
+  startDate: string | null; endDate: string | null; costClass: CostClass | null;
   progress: number; keyResults: KeyResultProgress[]; links: ObjectiveLinkRef[];
 }
 export interface PmoRollup {
@@ -3299,6 +3301,7 @@ export interface PmoRollup {
   outcomes: { runs: number; avgScore: number; mergedRatePct: number | null };
   okr: { objectives: ObjectiveProgress[]; avgProgress: number };
   byInitiative: Array<{ initiativeId: string; name: string; status: string; projectCount: number; completedCount: number; agentLlmCostUsd: number; avgProgress: number; isBlocked: boolean; blockedBy: string[] }>;
+  byPortfolio: Array<{ portfolioId: string | null; name: string; initiativeCount: number; projectCount: number; completedCount: number; agentLlmCostUsd: number; avgProgress: number }>;
   criticalPath: InitiativeRef[];
   cycleDetected: boolean;
   blockedBy: InitiativeRef[];

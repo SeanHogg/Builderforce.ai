@@ -306,25 +306,16 @@
       "manager": "经理",
       "roles": "角色",
       "talent": "人才",
-      "adminHealth": "运行状况",
-      "adminBilling": "账单",
-      "adminUsage": "用量",
+      "adminOverview": "概览",
       "adminUsers": "用户",
-      "adminTenants": "租户",
-      "adminApiKeys": "API 密钥",
-      "adminSecurity": "安全",
-      "adminLegal": "法律",
-      "adminNewsletter": "邮件通讯",
-      "adminPrivacy": "隐私",
-      "adminPersonas": "角色",
-      "adminGovernance": "治理",
-      "adminPermissions": "权限",
-      "adminModules": "模块",
-      "adminImpSessions": "模拟会话",
-      "adminAuditLog": "审计日志",
-      "adminErrors": "错误",
-      "adminTraces": "LLM 追踪",
-      "adminToken": "令牌"
+      "adminWorkspaces": "工作区",
+      "adminAccess": "访问控制",
+      "adminLlm": "LLM",
+      "adminContent": "内容",
+      "adminCompliance": "合规",
+      "adminGrowth": "增长",
+      "adminLogs": "日志",
+      "adminDeveloper": "开发者"
     }
   },
   "alerts": {
@@ -897,14 +888,17 @@
       "objectives": "目标",
       "byInitiative": "按举措",
       "criticalPath": "关键路径",
-      "dependencies": "依赖关系"
+      "dependencies": "依赖关系",
+      "byPortfolio": "按项目组合"
     },
     "col": {
       "initiative": "举措",
       "projects": "项目",
       "completed": "已完成",
       "agentSpend": "智能体 LLM 支出",
-      "okrProgress": "OKR 进度"
+      "okrProgress": "OKR 进度",
+      "portfolio": "项目组合",
+      "initiatives": "举措"
     },
     "blocked": "受阻",
     "blockedBy": "受阻于",
@@ -930,7 +924,11 @@
       "delete": "删除",
       "confirmDeletePortfolio": "删除此项目组合？其举措将变为未分配。",
       "confirmDeleteInitiative": "删除此举措？已关联的项目将被取消关联。",
-      "confirmDeleteObjective": "删除此目标及其关键结果？"
+      "confirmDeleteObjective": "删除此目标及其关键结果？",
+      "movePortfolio": "移动到其他项目组合",
+      "unassignedOption": "— 未分配 —",
+      "dragHint": "拖动到项目组合以重新分配",
+      "dropHere": "拖放到此处以分配到该项目组合"
     },
     "okr": {
       "newObjective": "新建目标",
@@ -964,7 +962,12 @@
         "initiative": "举措",
         "epic": "史诗",
         "task": "任务"
-      }
+      },
+      "owner": "所属",
+      "ownerWorkspace": "工作区（未分配）",
+      "ownerPortfolio": "项目组合",
+      "ownerInitiative": "举措",
+      "ownerProject": "项目"
     },
     "projectLink": {
       "title": "PMO 举措",
@@ -972,7 +975,8 @@
       "hint": "将此项目关联到某个 PMO 举措，使其成本与交付向上汇总。",
       "loading": "正在加载举措…",
       "saved": "已关联"
-    }
+    },
+    "unassignedPortfolio": "未分配"
   },
   "insights": {
     "loading": "加载中…",
@@ -4720,7 +4724,8 @@
         "no_agent": "未分配智能体",
         "no_board": "未配置看板",
         "no_lane": "泳道未配置",
-        "terminal_lane": "已完成 — 无需运行"
+        "terminal_lane": "已完成 — 无需运行",
+        "not_executable": "系统任务 — 不由智能体运行"
       }
     },
     "businessValue": {
@@ -5636,5 +5641,28 @@
     "errTooMany": "尝试次数过多，请重新获取验证码。",
     "errNone": "没有有效的验证码，请重新获取。",
     "errGeneric": "出现问题，请重试。"
+  },
+  "admin": {
+    "sub": {
+      "health": "运行状况",
+      "directory": "目录",
+      "security": "安全",
+      "emulation": "模拟会话",
+      "tenants": "工作区",
+      "permissions": "权限",
+      "modules": "模块",
+      "usage": "用量",
+      "traces": "追踪",
+      "personas": "角色",
+      "governance": "治理",
+      "legal": "法律",
+      "privacy": "隐私请求",
+      "billing": "账单",
+      "newsletter": "邮件通讯",
+      "errors": "错误",
+      "audit": "审计日志",
+      "apiKeys": "API 密钥",
+      "token": "超级管理员令牌"
+    }
   }
 }

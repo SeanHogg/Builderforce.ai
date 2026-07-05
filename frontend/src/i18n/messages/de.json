@@ -306,25 +306,16 @@
       "manager": "Manager",
       "roles": "Rollen",
       "talent": "Talente",
-      "adminHealth": "Zustand",
-      "adminBilling": "Abrechnung",
-      "adminUsage": "Nutzung",
+      "adminOverview": "Übersicht",
       "adminUsers": "Benutzer",
-      "adminTenants": "Mandanten",
-      "adminApiKeys": "API-Schlüssel",
-      "adminSecurity": "Sicherheit",
-      "adminLegal": "Rechtliches",
-      "adminNewsletter": "Newsletter",
-      "adminPrivacy": "Datenschutz",
-      "adminPersonas": "Personas",
-      "adminGovernance": "Governance",
-      "adminPermissions": "Berechtigungen",
-      "adminModules": "Module",
-      "adminImpSessions": "Imitationssitzungen",
-      "adminAuditLog": "Prüfprotokoll",
-      "adminErrors": "Fehler",
-      "adminTraces": "LLM-Traces",
-      "adminToken": "Token"
+      "adminWorkspaces": "Arbeitsbereiche",
+      "adminAccess": "Zugriff",
+      "adminLlm": "LLM",
+      "adminContent": "Inhalt",
+      "adminCompliance": "Compliance",
+      "adminGrowth": "Wachstum",
+      "adminLogs": "Protokolle",
+      "adminDeveloper": "Entwickler"
     }
   },
   "alerts": {
@@ -897,14 +888,17 @@
       "objectives": "Ziele",
       "byInitiative": "Nach Initiative",
       "criticalPath": "Kritischer Pfad",
-      "dependencies": "Abhängigkeiten"
+      "dependencies": "Abhängigkeiten",
+      "byPortfolio": "Nach Portfolio"
     },
     "col": {
       "initiative": "Initiative",
       "projects": "Projekte",
       "completed": "Abgeschlossen",
       "agentSpend": "Agenten-LLM-Ausgaben",
-      "okrProgress": "OKR-Fortschritt"
+      "okrProgress": "OKR-Fortschritt",
+      "portfolio": "Portfolio",
+      "initiatives": "Initiativen"
     },
     "blocked": "Blockiert",
     "blockedBy": "Blockiert von",
@@ -930,7 +924,11 @@
       "delete": "Löschen",
       "confirmDeletePortfolio": "Dieses Portfolio löschen? Seine Initiativen werden nicht zugewiesen.",
       "confirmDeleteInitiative": "Diese Initiative löschen? Verknüpfte Projekte werden getrennt.",
-      "confirmDeleteObjective": "Dieses Ziel und seine Schlüsselergebnisse löschen?"
+      "confirmDeleteObjective": "Dieses Ziel und seine Schlüsselergebnisse löschen?",
+      "movePortfolio": "In anderes Portfolio verschieben",
+      "unassignedOption": "— Nicht zugewiesen —",
+      "dragHint": "Zum Neuzuweisen auf ein Portfolio ziehen",
+      "dropHere": "Hier ablegen, um diesem Portfolio zuzuweisen"
     },
     "okr": {
       "newObjective": "Neues Ziel",
@@ -964,7 +962,12 @@
         "initiative": "Initiative",
         "epic": "Epic",
         "task": "Aufgabe"
-      }
+      },
+      "owner": "Zugehörigkeit",
+      "ownerWorkspace": "Arbeitsbereich (nicht zugewiesen)",
+      "ownerPortfolio": "Portfolios",
+      "ownerInitiative": "Initiativen",
+      "ownerProject": "Projekte"
     },
     "projectLink": {
       "title": "PMO-Initiative",
@@ -972,7 +975,8 @@
       "hint": "Verknüpfen Sie dieses Projekt mit einer PMO-Initiative, damit Kosten und Lieferung aggregiert werden.",
       "loading": "Initiativen werden geladen…",
       "saved": "Verknüpft"
-    }
+    },
+    "unassignedPortfolio": "Nicht zugewiesen"
   },
   "insights": {
     "loading": "Lädt…",
@@ -4720,7 +4724,8 @@
         "no_agent": "Kein Agent zugewiesen",
         "no_board": "Kein Board konfiguriert",
         "no_lane": "Spur nicht konfiguriert",
-        "terminal_lane": "Fertig — kein Lauf nötig"
+        "terminal_lane": "Fertig — kein Lauf nötig",
+        "not_executable": "Systemaufgabe – wird nicht von einem Agenten ausgeführt"
       }
     },
     "businessValue": {
@@ -5636,5 +5641,28 @@
     "errTooMany": "Zu viele Versuche. Fordere einen neuen Code an.",
     "errNone": "Kein aktiver Code. Fordere einen neuen an.",
     "errGeneric": "Etwas ist schiefgelaufen. Bitte versuche es erneut."
+  },
+  "admin": {
+    "sub": {
+      "health": "Zustand",
+      "directory": "Verzeichnis",
+      "security": "Sicherheit",
+      "emulation": "Emulation",
+      "tenants": "Arbeitsbereiche",
+      "permissions": "Berechtigungen",
+      "modules": "Module",
+      "usage": "Nutzung",
+      "traces": "Traces",
+      "personas": "Personas",
+      "governance": "Governance",
+      "legal": "Rechtliches",
+      "privacy": "Datenschutzanfragen",
+      "billing": "Abrechnung",
+      "newsletter": "Newsletter",
+      "errors": "Fehler",
+      "audit": "Prüfprotokoll",
+      "apiKeys": "API-Schlüssel",
+      "token": "Superadmin-Token"
+    }
   }
 }

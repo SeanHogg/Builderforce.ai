@@ -2,11 +2,13 @@
 
 import { useMemo, useState } from 'react';
 import { useTranslations } from 'next-intl';
+import { Select } from '@/components/Select';
 import {
   pmoApi,
   type PmoRollup as PmoRollupData,
   type PmoScopeKind,
-  type Initiative,
+  type PmoTree,
+  type ObjectiveProgress,
   type SpineResult,
   type CostClass,
 } from '@/lib/builderforceApi';
@@ -53,8 +55,11 @@ export function PmoOkrs({ scope }: { scope: { kind: PmoScopeKind; id: string } }
     () => pmoApi.rollup(scope.kind, scope.id),
     [scope.kind, scope.id],
   );
-  const { data: initiatives } = usePmData<Initiative[]>(() => pmoApi.initiatives.list(), []);
+  const { data: tree } = usePmData<PmoTree>(() => pmoApi.tree(), []);
   const { data: spine } = usePmData<SpineResult>(() => pmoApi.spine(), []);
+  const portfolios = tree?.portfolios ?? [];
+  const initiatives = tree?.initiatives ?? [];
+  const projects = tree?.projects ?? [];
 
   const [busy, setBusy] = useState(false);
   const [newObjective, setNewObjective] = useState('');
@@ -90,6 +95,23 @@ export function PmoOkrs({ scope }: { scope: { kind: PmoScopeKind; id: string } }
         ...attach,
       });
       setNewObjective(''); setNewStart(''); setNewEnd('');
+    });
+
+  // Reassign an objective's owner (the parent scope axis). Exactly one of
+  // portfolio / initiative / project is set; '' clears it back to the org level.
+  const ownerValue = (o: ObjectiveProgress): string =>
+    o.portfolioId ? `portfolio:${o.portfolioId}`
+      : o.initiativeId ? `initiative:${o.initiativeId}`
+        : o.projectId != null ? `project:${o.projectId}`
+          : '';
+  const assignObjective = (objectiveId: string, sel: string) =>
+    run(async () => {
+      const [kind, id] = sel.split(':');
+      await pmoApi.objectives.update(objectiveId, {
+        portfolioId: kind === 'portfolio' ? id : null,
+        initiativeId: kind === 'initiative' ? id : null,
+        projectId: kind === 'project' ? Number(id) : null,
+      });
     });
 
   const addLink = (objectiveId: string) =>
@@ -136,6 +158,30 @@ export function PmoOkrs({ scope }: { scope: { kind: PmoScopeKind; id: string } }
             title={o.title}
             action={
               <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                <Select
+                  style={{ ...inputStyle, minWidth: 190 }}
+                  value={ownerValue(o)}
+                  disabled={busy}
+                  title={t('okr.owner')}
+                  onChange={(e) => assignObjective(o.id, e.target.value)}
+                >
+                  <option value="">{t('okr.ownerWorkspace')}</option>
+                  {portfolios.length > 0 && (
+                    <optgroup label={t('okr.ownerPortfolio')}>
+                      {portfolios.map((p) => <option key={p.id} value={`portfolio:${p.id}`}>{p.name}</option>)}
+                    </optgroup>
+                  )}
+                  {initiatives.length > 0 && (
+                    <optgroup label={t('okr.ownerInitiative')}>
+                      {initiatives.map((i) => <option key={i.id} value={`initiative:${i.id}`}>{i.name}</option>)}
+                    </optgroup>
+                  )}
+                  {projects.length > 0 && (
+                    <optgroup label={t('okr.ownerProject')}>
+                      {projects.map((p) => <option key={p.id} value={`project:${p.id}`}>{p.name}</option>)}
+                    </optgroup>
+                  )}
+                </Select>
                 <span style={{ fontSize: '0.74rem', color: 'var(--text-muted)' }}>{span}</span>
                 {o.period && <span style={{ fontSize: '0.74rem', color: 'var(--text-muted)' }}>{o.period}</span>}
                 <button type="button" style={ghostBtn} disabled={busy}

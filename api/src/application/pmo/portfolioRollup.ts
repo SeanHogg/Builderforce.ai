@@ -20,7 +20,7 @@
  * unit-testable without a DB.
  */
 
-import { and, eq, gte, inArray, isNull, or, sql } from 'drizzle-orm';
+import { and, eq, gte, inArray, or, sql } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import {
   deploymentEvents,
@@ -152,6 +152,82 @@ export function computeDependencyAnalysis(inits: DepInitiative[], edges: DepEdge
   return { blockedBy, criticalPath, cycleDetected: cycle };
 }
 
+// ── Pure org-rollup fold (unit-tested) ───────────────────────────────────────
+
+export interface InitiativeRollupRow {
+  initiativeId: string;
+  projectCount: number;
+  completedCount: number;
+  agentLlmCostUsd: number;
+}
+export interface PortfolioRow {
+  portfolioId: string | null;
+  name: string;
+  initiativeCount: number;
+  projectCount: number;
+  completedCount: number;
+  agentLlmCostUsd: number;
+  avgProgress: number;
+}
+export interface FoldObjective {
+  portfolioId: string | null;
+  initiativeId: string | null;
+  projectId: number | null;
+  progress: number;
+}
+
+/**
+ * Fold per-initiative rollup rows up to their portfolio (the org-level "By
+ * portfolio" breakdown). Each initiative's numbers land in its portfolio's
+ * bucket, initiatives with no portfolio go to a synthetic "Unassigned" bucket,
+ * and OKR progress averages every objective owned by the portfolio directly OR by
+ * one of its initiatives (project-only goals aren't a portfolio row). Every named
+ * portfolio is seeded so an empty one still shows; an Unassigned bucket that
+ * carries nothing is dropped. Named portfolios sort alphabetically, Unassigned last.
+ */
+export function foldPortfolioBreakdown(
+  portfolios: Array<{ id: string; name: string }>,
+  byInitiative: InitiativeRollupRow[],
+  portfolioOfInitiative: Map<string, string | null>,
+  objectives: FoldObjective[],
+): PortfolioRow[] {
+  type Agg = { name: string; initiativeCount: number; projectCount: number; completedCount: number; agentLlmCostUsd: number; progresses: number[] };
+  const agg = new Map<string | null, Agg>();
+  const bucket = (pid: string | null): Agg => {
+    let a = agg.get(pid);
+    if (!a) {
+      a = { name: pid ? (portfolios.find((p) => p.id === pid)?.name ?? pid) : 'Unassigned', initiativeCount: 0, projectCount: 0, completedCount: 0, agentLlmCostUsd: 0, progresses: [] };
+      agg.set(pid, a);
+    }
+    return a;
+  };
+  for (const p of portfolios) bucket(p.id);
+  for (const bi of byInitiative) {
+    const a = bucket(portfolioOfInitiative.get(bi.initiativeId) ?? null);
+    a.initiativeCount += 1;
+    a.projectCount += bi.projectCount;
+    a.completedCount += bi.completedCount;
+    a.agentLlmCostUsd += bi.agentLlmCostUsd;
+  }
+  for (const o of objectives) {
+    const pid = o.portfolioId ?? (o.initiativeId ? portfolioOfInitiative.get(o.initiativeId) ?? null : null);
+    if (pid == null && o.projectId != null) continue; // project-only goal, not a portfolio row
+    bucket(pid).progresses.push(o.progress);
+  }
+  return [...agg.entries()]
+    .filter(([portfolioId, a]) => portfolioId != null || a.initiativeCount > 0 || a.progresses.length > 0)
+    .map(([portfolioId, a]) => ({
+      portfolioId,
+      name: a.name,
+      initiativeCount: a.initiativeCount,
+      projectCount: a.projectCount,
+      completedCount: a.completedCount,
+      agentLlmCostUsd: a.agentLlmCostUsd,
+      avgProgress: a.progresses.length ? a.progresses.reduce((x, y) => x + y, 0) / a.progresses.length : 0,
+    }))
+    .sort((x, y) => (x.portfolioId == null ? 1 : y.portfolioId == null ? -1 : x.name.localeCompare(y.name)));
+}
+
 // ── Rollup shapes ────────────────────────────────────────────────────────────
 
 export type PmoScopeKind = 'portfolio' | 'initiative' | 'project' | 'workspace';
@@ -221,6 +297,16 @@ export interface PmoRollup {
     isBlocked: boolean;
     blockedBy: string[];
   }>;
+  /** Org-level breakdown, one row per portfolio (workspace scope only). */
+  byPortfolio: Array<{
+    portfolioId: string | null;
+    name: string;
+    initiativeCount: number;
+    projectCount: number;
+    completedCount: number;
+    agentLlmCostUsd: number;
+    avgProgress: number;
+  }>;
   /** Longest incomplete dependency chain (portfolio/workspace scope). */
   criticalPath: InitiativeRef[];
   cycleDetected: boolean;
@@ -243,7 +329,18 @@ async function resolveScope(
   const base = and(eq(projects.tenantId, tenantId), eq(projects.segmentId, segmentId));
 
   if (scope.kind === 'workspace') {
-    return { name: 'Workspace', initiatives: [], projects: [] };
+    // Org-level rollup = the whole segment: every initiative and every project,
+    // so delivery / spend / DORA / by-initiative / by-portfolio all light up
+    // (not just the org-level unattached OKRs).
+    const inits = await db
+      .select({ id: initiatives.id, name: initiatives.name, status: initiatives.status })
+      .from(initiatives)
+      .where(and(eq(initiatives.tenantId, tenantId), eq(initiatives.segmentId, segmentId)));
+    const projRows = await db
+      .select({ id: projects.id, initiativeId: projects.initiativeId })
+      .from(projects)
+      .where(base);
+    return { name: 'Workspace', initiatives: inits, projects: projRows };
   }
 
   if (scope.kind === 'project') {
@@ -298,11 +395,12 @@ async function loadOkrs(
   initiativeIds: string[],
 ): Promise<ObjectiveProgress[]> {
   const conds = [eq(objectives.tenantId, tenantId), eq(objectives.segmentId, segmentId)];
+  // Workspace = the org master list (every objective, whatever its parent) so it
+  // doubles as the place to see and (re)assign each OKR's owner. Narrower scopes
+  // filter to their own axis.
   const scopeFilter =
     scope.kind === 'workspace'
-      // Org-level = attached to NO scope axis (a project-scoped goal belongs to its
-      // project's OKR view, not the workspace bucket).
-      ? and(isNull(objectives.portfolioId), isNull(objectives.initiativeId), isNull(objectives.projectId))
+      ? undefined
       : scope.kind === 'project'
         ? eq(objectives.projectId, Number(scope.id))
         : scope.kind === 'initiative'
@@ -313,7 +411,7 @@ async function loadOkrs(
   const objRows = await db
     .select()
     .from(objectives)
-    .where(and(...conds, scopeFilter));
+    .where(scopeFilter ? and(...conds, scopeFilter) : and(...conds));
   if (objRows.length === 0) return [];
 
   const objIds = objRows.map((o) => o.id);
@@ -375,7 +473,9 @@ async function loadOkrs(
       title: o.title,
       period: o.period ?? null,
       status: o.status,
+      portfolioId: o.portfolioId ?? null,
       initiativeId: o.initiativeId ?? null,
+      projectId: o.projectId ?? null,
       startDate: o.startDate ? new Date(o.startDate).toISOString() : null,
       endDate: o.endDate ? new Date(o.endDate).toISOString() : null,
       costClass: o.costClass ?? null,
@@ -483,15 +583,21 @@ export async function computePortfolioRollup(
   // ── dependencies / critical path ────────────────────────────────────────────
   // Load the tenant/segment initiative graph once; resolve names for any edge
   // endpoint (a blocker may live outside the scoped set).
-  const [allInits, allEdges] = await Promise.all([
-    db.select({ id: initiatives.id, name: initiatives.name, status: initiatives.status })
+  const [allInits, allEdges, allPortfolios] = await Promise.all([
+    db.select({ id: initiatives.id, name: initiatives.name, status: initiatives.status, portfolioId: initiatives.portfolioId })
       .from(initiatives)
       .where(and(eq(initiatives.tenantId, tenantId), eq(initiatives.segmentId, segmentId))),
     db.select({ fromInitiativeId: pmoDependencies.fromInitiativeId, toInitiativeId: pmoDependencies.toInitiativeId })
       .from(pmoDependencies)
       .where(and(eq(pmoDependencies.tenantId, tenantId), eq(pmoDependencies.segmentId, segmentId))),
+    scope.kind === 'workspace'
+      ? db.select({ id: portfolios.id, name: portfolios.name })
+          .from(portfolios)
+          .where(and(eq(portfolios.tenantId, tenantId), eq(portfolios.segmentId, segmentId)))
+      : Promise.resolve([] as Array<{ id: string; name: string }>),
   ]);
   const initMeta = new Map(allInits.map((i) => [i.id, i]));
+  const portfolioOfInitiative = new Map(allInits.map((i) => [i.id, i.portfolioId ?? null]));
   const ref = (id: string): InitiativeRef => {
     const m = initMeta.get(id);
     return { initiativeId: id, name: m?.name ?? id, status: m?.status ?? 'unknown' };
@@ -512,9 +618,13 @@ export async function computePortfolioRollup(
     blocks = allEdges.filter((e) => e.fromInitiativeId === scope.id).map((e) => ref(e.toInitiativeId));
   }
 
-  // ── byInitiative breakdown (portfolio scope) ────────────────────────────────
+  // ── byInitiative + byPortfolio breakdown (portfolio + workspace scope) ───────
+  // The per-initiative maps are cheap and feed both breakdowns, so build them
+  // whenever the scope spans initiatives (portfolio = its own; workspace = all).
   let byInitiative: PmoRollup['byInitiative'] = [];
-  if (scope.kind === 'portfolio' && resolved.initiatives.length) {
+  let byPortfolio: PmoRollup['byPortfolio'] = [];
+  const breakdownScope = scope.kind === 'portfolio' || scope.kind === 'workspace';
+  if (breakdownScope && resolved.initiatives.length) {
     const projectInitiative = new Map<number, string | null>(projectRows.map((p) => [p.id, p.initiativeId]));
     const completedByInitiative = new Map<string, number>();
     for (const t of completed) {
@@ -554,12 +664,19 @@ export async function computePortfolioRollup(
         blockedBy: blockers,
       };
     });
+
+    // Org rollup: fold the per-initiative numbers up to their portfolio (pure,
+    // unit-tested) — includes a synthetic "Unassigned" bucket and OKR progress
+    // rolled up by each objective's portfolio (own, or its initiative's).
+    if (scope.kind === 'workspace') {
+      byPortfolio = foldPortfolioBreakdown(allPortfolios, byInitiative, portfolioOfInitiative, okrObjectives);
+    }
   }
 
   return {
     scope: { kind: scope.kind, id: scope.id, name: resolved.name },
     projectCount: projectIds.length,
-    initiativeCount: scope.kind === 'portfolio' ? resolved.initiatives.length : 0,
+    initiativeCount: scope.kind === 'portfolio' || scope.kind === 'workspace' ? resolved.initiatives.length : 0,
     delivery: {
       totalTasks: taskRows.length,
       completedCount: completed.length,
@@ -572,6 +689,7 @@ export async function computePortfolioRollup(
     outcomes,
     okr: { objectives: okrObjectives, avgProgress: okrAvg },
     byInitiative,
+    byPortfolio,
     criticalPath: analysis.criticalPath.map(ref),
     cycleDetected: analysis.cycleDetected,
     blockedBy,

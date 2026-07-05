@@ -12,10 +12,9 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { kanbanApi } from '@/lib/builderforceApi';
 import { usePermission } from '@/lib/rbac';
+import { ROLE_DISCIPLINES, useRoles } from '@/lib/useRoles';
 import type { JobRole, TemplateSummary, RoleAssignment, AssigneeKind, Discipline } from '@/lib/kanban';
 import { RoleAssigneePicker, useAssignableWorkforce } from './RoleAssigneePicker';
-
-const DISCIPLINES: Discipline[] = ['engineering', 'product', 'design', 'qa', 'devops', 'data', 'security', 'other'];
 
 const card: React.CSSProperties = { background: 'var(--surface)', border: '1px solid var(--border-subtle)', borderRadius: 12, padding: 16 };
 const chip = (bg: string, fg: string): React.CSSProperties => ({
@@ -29,7 +28,6 @@ export function RolesView() {
   const canManage = usePermission('agents.create').allowed;
   const workforce = useAssignableWorkforce();
 
-  const [roles, setRoles] = useState<JobRole[]>([]);
   const [templates, setTemplates] = useState<TemplateSummary[]>([]);
   const [templateId, setTemplateId] = useState<string>('');
   const [standardKeys, setStandardKeys] = useState<Set<string>>(new Set());
@@ -37,27 +35,27 @@ export function RolesView() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  const { roles, creating, reloadRoles, createRole, deleteRole } = useRoles({ onError: setError });
+
   const [assigningRole, setAssigningRole] = useState<string | null>(null);
   const [assignBusy, setAssignBusy] = useState(false);
-  const [creating, setCreating] = useState(false);
   const [showNew, setShowNew] = useState(false);
   const [form, setForm] = useState<{ name: string; discipline: Discipline }>({ name: '', discipline: 'engineering' });
 
   const load = useCallback(async () => {
     setLoading(true); setError(null);
     try {
-      const [rs, tpls, asg] = await Promise.all([
-        kanbanApi.listRoles(),
+      const [, tpls, asg] = await Promise.all([
+        reloadRoles(),
         kanbanApi.listTemplates().catch(() => [] as TemplateSummary[]),
         kanbanApi.listRoleAssignments().catch(() => [] as RoleAssignment[]),
       ]);
-      setRoles(rs);
       setTemplates(tpls);
       setAssignments(asg);
       if (!templateId && tpls.length > 0) setTemplateId(tpls[0].id);
     } catch (e) { setError((e as Error).message); }
     finally { setLoading(false); }
-  }, [templateId]);
+  }, [templateId, reloadRoles]);
 
   useEffect(() => { void load(); }, [load]);
 
@@ -118,25 +116,18 @@ export function RolesView() {
   };
 
   const onCreate = async () => {
-    if (!form.name.trim()) return;
-    setCreating(true); setError(null);
-    try {
-      await kanbanApi.createRole({ name: form.name.trim(), discipline: form.discipline });
+    setError(null);
+    if (await createRole(form.name, form.discipline)) {
       setForm({ name: '', discipline: 'engineering' });
       setShowNew(false);
-      setRoles(await kanbanApi.listRoles());
-    } catch (e) { setError((e as Error).message); }
-    finally { setCreating(false); }
+    }
   };
 
   const onDeleteRole = async (role: JobRole) => {
     if (role.builtin) return;
     if (!confirm(t('deleteConfirm', { name: role.name }))) return;
     setError(null);
-    try {
-      await kanbanApi.deleteRole(role.key);
-      setRoles((prev) => prev.filter((r) => r.key !== role.key));
-    } catch (e) { setError((e as Error).message); }
+    await deleteRole(role);
   };
 
   const kindLabel = (k: string) => tk(k === 'agent' ? 'assigneeAgent' : k === 'hire' ? 'assigneeHire' : 'assigneeHuman');
@@ -167,7 +158,7 @@ export function RolesView() {
         <div style={{ ...card, marginBottom: 12, display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
           <input style={{ ...input, flex: '1 1 200px' }} placeholder={t('roleNamePlaceholder')} value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} />
           <select style={input} value={form.discipline} onChange={(e) => setForm((f) => ({ ...f, discipline: e.target.value as Discipline }))}>
-            {DISCIPLINES.map((d) => <option key={d} value={d}>{t(`discipline.${d}`)}</option>)}
+            {ROLE_DISCIPLINES.map((d) => <option key={d} value={d}>{t(`discipline.${d}`)}</option>)}
           </select>
           <button type="button" disabled={creating || !form.name.trim()} onClick={onCreate} style={{ fontSize: 13, fontWeight: 600, padding: '7px 14px', borderRadius: 8, cursor: 'pointer', background: 'var(--accent, #2563eb)', color: '#fff', border: 'none', opacity: creating || !form.name.trim() ? 0.6 : 1 }}>
             {creating ? t('creating') : t('addRole')}

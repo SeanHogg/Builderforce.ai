@@ -35,6 +35,12 @@ export function PmoStructure({ tree, onChange }: { tree: PmoTree; onChange: () =
   const [err, setErr] = useState<string | null>(null);
   const [newPortfolio, setNewPortfolio] = useState('');
   const [newInitiative, setNewInitiative] = useState<Record<string, string>>({});
+  // Drag-and-drop: the initiative being dragged, and the portfolio drop-zone under
+  // the pointer ('' = the Unassigned zone). Native HTML5 DnD is a progressive
+  // enhancement — the per-initiative portfolio <Select> is the accessible / touch
+  // fallback and shares the SAME moveInitiative handler (no divergent logic).
+  const [dragInitId, setDragInitId] = useState<string | null>(null);
+  const [dropZone, setDropZone] = useState<string | null>(null);
 
   const run = async (fn: () => Promise<unknown>) => {
     setBusy(true);
@@ -42,6 +48,34 @@ export function PmoStructure({ tree, onChange }: { tree: PmoTree; onChange: () =
     try { await fn(); onChange(); }
     catch (e) { setErr(e instanceof Error ? e.message : String(e)); }
     finally { setBusy(false); }
+  };
+
+  /** Single source for "put this initiative under this portfolio" (null = unassign);
+   *  used by both the dropdown and the drag-drop path. No-op when already there. */
+  const moveInitiative = (id: string, portfolioId: string | null) => {
+    const current = tree.initiatives.find((i) => i.id === id)?.portfolioId ?? null;
+    if (current === portfolioId) return;
+    run(() => pmoApi.initiatives.update(id, { portfolioId }));
+  };
+
+  /** Drop-zone props for a portfolio card (portfolioId=null = the Unassigned card).
+   *  Highlights while a compatible initiative hovers; commits the move on drop. */
+  const dropZoneProps = (portfolioId: string | null) => {
+    const zoneKey = portfolioId ?? '';
+    const active = dragInitId != null && dropZone === zoneKey;
+    return {
+      onDragOver: (e: React.DragEvent) => { if (dragInitId != null) { e.preventDefault(); setDropZone(zoneKey); } },
+      onDragLeave: (e: React.DragEvent) => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setDropZone((z) => (z === zoneKey ? null : z)); },
+      onDrop: (e: React.DragEvent) => {
+        e.preventDefault();
+        const id = dragInitId ?? e.dataTransfer.getData('text/plain');
+        if (id) moveInitiative(id, portfolioId);
+        setDragInitId(null); setDropZone(null);
+      },
+      style: active
+        ? { outline: '2px dashed var(--accent, #2563eb)', outlineOffset: 2, borderRadius: 12 }
+        : undefined,
+    };
   };
 
   const initiativeName = (id: string) => tree.initiatives.find((i) => i.id === id)?.name ?? id;
@@ -58,11 +92,31 @@ export function PmoStructure({ tree, onChange }: { tree: PmoTree; onChange: () =
     const blockerIds = new Set(blockers.map((b) => b.fromInitiativeId));
     // Candidate blockers: any other initiative not already blocking this one.
     const candidates = tree.initiatives.filter((i) => i.id !== init.id && !blockerIds.has(i.id));
+    const dragging = dragInitId === init.id;
     return (
-      <div key={init.id} style={{ border: '1px solid var(--border-subtle)', borderRadius: 10, padding: 12, marginTop: 10 }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-          <strong style={{ fontSize: '0.9rem' }}>{init.name}</strong>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+      <div
+        key={init.id}
+        draggable={!busy}
+        onDragStart={(e) => { setDragInitId(init.id); e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', init.id); }}
+        onDragEnd={() => { setDragInitId(null); setDropZone(null); }}
+        style={{ border: '1px solid var(--border-subtle)', borderRadius: 10, padding: 12, marginTop: 10, opacity: dragging ? 0.5 : 1, cursor: busy ? 'default' : 'grab' }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
+          <strong style={{ fontSize: '0.9rem', display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+            <span aria-hidden="true" title={t('structure.dragHint')} style={{ color: 'var(--text-muted)', cursor: busy ? 'default' : 'grab', userSelect: 'none' }}>⠿</span>
+            {init.name}
+          </strong>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+            <Select
+              disabled={busy}
+              value={init.portfolioId ?? ''}
+              title={t('structure.movePortfolio')}
+              onChange={(e) => run(() => pmoApi.initiatives.update(init.id, { portfolioId: e.target.value || null }))}
+              style={{ ...inputStyle, flex: 'none', minWidth: 170 }}
+            >
+              <option value="">{t('structure.unassignedOption')}</option>
+              {tree.portfolios.map((pf) => <option key={pf.id} value={pf.id}>{pf.name}</option>)}
+            </Select>
             <StatusPill value={init.status} />
             <button type="button" disabled={busy} style={dangerBtn}
               onClick={() => { if (window.confirm(t('structure.confirmDeleteInitiative'))) run(() => pmoApi.initiatives.remove(init.id)); }}>
@@ -146,8 +200,8 @@ export function PmoStructure({ tree, onChange }: { tree: PmoTree; onChange: () =
       )}
 
       {tree.portfolios.map((pf) => (
+        <div key={pf.id} {...dropZoneProps(pf.id)}>
         <PmCard
-          key={pf.id}
           title={pf.name}
           action={
             <div style={{ display: 'flex', gap: 8, minWidth: 360, alignItems: 'center' }}>
@@ -172,15 +226,20 @@ export function PmoStructure({ tree, onChange }: { tree: PmoTree; onChange: () =
           }
         >
           {initiativesByPortfolio(pf.id).length === 0
-            ? <span style={{ fontSize: '0.82rem', color: 'var(--text-muted)' }}>{t('structure.noInitiatives')}</span>
+            ? <span style={{ fontSize: '0.82rem', color: 'var(--text-muted)' }}>{dragInitId ? t('structure.dropHere') : t('structure.noInitiatives')}</span>
             : initiativesByPortfolio(pf.id).map(renderInitiative)}
         </PmCard>
+        </div>
       ))}
 
-      {initiativesByPortfolio(null).length > 0 && (
-        <PmCard title={t('structure.unassignedInitiatives')}>
-          {initiativesByPortfolio(null).map(renderInitiative)}
-        </PmCard>
+      {(initiativesByPortfolio(null).length > 0 || (dragInitId != null && tree.initiatives.find((i) => i.id === dragInitId)?.portfolioId != null)) && (
+        <div {...dropZoneProps(null)}>
+          <PmCard title={t('structure.unassignedInitiatives')}>
+            {initiativesByPortfolio(null).length > 0
+              ? initiativesByPortfolio(null).map(renderInitiative)
+              : <span style={{ fontSize: '0.82rem', color: 'var(--text-muted)' }}>{t('structure.dropHere')}</span>}
+          </PmCard>
+        </div>
       )}
     </div>
   );

@@ -41,6 +41,8 @@ import { buildMigrationProviderFactory } from '../migration/buildProviderFactory
 import { BOARD_PROVIDERS, DISCOVERY_PROVIDER_IDS } from '../boardsync/providerCatalog';
 import { maybeAutoRunOnLaneEntry } from '../../presentation/routes/taskRoutes';
 import { invalidateProjectsList } from '../../presentation/routes/projectRoutes';
+import { pmoVersionKey } from '../../presentation/routes/pmoRoutes';
+import { bumpCacheVersion } from '../../infrastructure/cache/readThroughCache';
 import { convertWorkItemType, ConvertError, type WorkItemKind } from '../workitem/convertWorkItemType';
 import { buildRuntimeService } from '../../buildRuntimeService';
 import { ChatTicketService } from '../brain/ChatTicketService';
@@ -74,12 +76,18 @@ interface BuiltinCtx {
   executionCtx?: ExecutionContext;
 }
 
-/** Best-effort bust of the tenant's projects-list cache (the source the Project 360
- *  reads). OKR writes change a project's linked-goal count / Direction dimension, so
- *  a create/update/delete/(un)link must orphan that cache or the 360 stays stale until
- *  its short TTL lapses. No-op when the caller didn't thread the Worker env. */
-async function bumpProjects(ctx: BuiltinCtx): Promise<void> {
-  if (ctx.env) await invalidateProjectsList(ctx.env, ctx.tenantId).catch(() => {});
+/** Best-effort invalidation after a strategy write (portfolio / initiative /
+ *  objective / key-result). Bumps BOTH caches these rows feed:
+ *   - the tenant PMO version token → orphans the (version-keyed) `pmo.tree` +
+ *     `pmo.rollup` caches, so a structure/OKR change is visible on the next read
+ *     (without this, an MCP-created portfolio never appeared in the tree — its
+ *     cache is version-keyed with no TTL, and only the HTTP CRUD path bumped it);
+ *   - the projects-list cache the Project 360 reads (linked-goal count / Direction).
+ *  No-op when the caller didn't thread the Worker env. */
+async function bumpPmo(ctx: BuiltinCtx): Promise<void> {
+  if (!ctx.env) return;
+  await bumpCacheVersion(ctx.env, pmoVersionKey(ctx.tenantId)).catch(() => {});
+  await invalidateProjectsList(ctx.env, ctx.tenantId).catch(() => {});
 }
 
 /**
@@ -364,8 +372,8 @@ const CATALOG: BuiltinTool[] = [
   { tool: 'tasks.get', mutates: false, description: 'Get a task by id.', parameters: obj({ id: N }, ['id']), run: async (ctx, a) => (await getTenantTask(ctx, num(a.id))).toPlain() },
   {
     tool: 'tasks.create', mutates: true,
-    description: 'Create a task on a project board. Set taskType="epic" to create a planning Epic (a DELIVERY container for other tasks), or pass parentTaskId to nest the new task under an existing Epic. An Epic is NOT an OKR/Objective — for OKRs/goals use objectives.create + key_results.create. Assign by passing exactly one of assignedUserId (human member), assignedAgentRef (cloud agent) or assignedAgentHostId (self-hosted runner). Idempotent: if a task with the same title already exists on that project, the existing task is returned ({ deduped: true, … }) instead of creating a duplicate — so you can safely (re)run a reconciliation and use the returned id for traceability.',
-    parameters: obj({ projectId: N, title: S, description: S, priority: { type: 'string', enum: ['low', 'medium', 'high', 'urgent'] }, dueDate: S, taskType: { type: 'string', enum: ['task', 'epic'] }, parentTaskId: N, assignedUserId: S, assignedAgentRef: S, assignedAgentHostId: N }, ['projectId', 'title']),
+    description: 'Create a task on a project board. Set taskType="epic" to create a planning Epic (a DELIVERY container for other tasks), "gap" to log a follow-up gap (a validator-style missing-work item), or pass parentTaskId to nest the new task under an existing Epic. An Epic is NOT an OKR/Objective — for OKRs/goals use objectives.create + key_results.create. Assign by passing exactly one of assignedUserId (human member), assignedAgentRef (cloud agent) or assignedAgentHostId (self-hosted runner). Idempotent: if a task with the same title already exists on that project, the existing task is returned ({ deduped: true, … }) instead of creating a duplicate — so you can safely (re)run a reconciliation and use the returned id for traceability.',
+    parameters: obj({ projectId: N, title: S, description: S, priority: { type: 'string', enum: ['low', 'medium', 'high', 'urgent'] }, dueDate: S, taskType: { type: 'string', enum: ['task', 'epic', 'gap'] }, parentTaskId: N, assignedUserId: S, assignedAgentRef: S, assignedAgentHostId: N }, ['projectId', 'title']),
     run: async (ctx, a) => {
       const title = str(a.title).trim(); if (!title) throw new Error('title is required');
       const projectId = num(a.projectId);
@@ -517,6 +525,7 @@ const CATALOG: BuiltinTool[] = [
       const name = str(a.name).trim(); if (!name) throw new Error('name is required');
       const seg = await resolveSegment(ctx.db, ctx.tenantId);
       const [row] = await ctx.db.insert(portfolios).values({ tenantId: ctx.tenantId, segmentId: seg, name, description: a.description != null ? str(a.description) : null, ...(a.status != null ? { status: str(a.status) } : {}), targetDate: dt(a.targetDate) }).returning();
+      await bumpPmo(ctx);
       return row;
     },
   },
@@ -533,10 +542,11 @@ const CATALOG: BuiltinTool[] = [
       if (a.targetDate != null) patch.targetDate = dt(a.targetDate);
       const [row] = await ctx.db.update(portfolios).set(patch).where(and(eq(portfolios.id, str(a.id)), eq(portfolios.tenantId, ctx.tenantId), eq(portfolios.segmentId, seg))).returning();
       if (!row) throw new Error('portfolio not found');
+      await bumpPmo(ctx);
       return row;
     },
   },
-  { tool: 'portfolios.delete', mutates: true, description: 'Delete a portfolio.', parameters: obj({ id: S }, ['id']), run: async (ctx, a) => { const seg = await resolveSegment(ctx.db, ctx.tenantId); const rows = await ctx.db.delete(portfolios).where(and(eq(portfolios.id, str(a.id)), eq(portfolios.tenantId, ctx.tenantId), eq(portfolios.segmentId, seg))).returning({ id: portfolios.id }); return { deleted: rows.length > 0 ? str(a.id) : null }; } },
+  { tool: 'portfolios.delete', mutates: true, description: 'Delete a portfolio.', parameters: obj({ id: S }, ['id']), run: async (ctx, a) => { const seg = await resolveSegment(ctx.db, ctx.tenantId); const rows = await ctx.db.delete(portfolios).where(and(eq(portfolios.id, str(a.id)), eq(portfolios.tenantId, ctx.tenantId), eq(portfolios.segmentId, seg))).returning({ id: portfolios.id }); await bumpPmo(ctx); return { deleted: rows.length > 0 ? str(a.id) : null }; } },
 
   { tool: 'initiatives.list', mutates: false, description: 'List initiatives (programs of work under a portfolio).', parameters: obj({}), run: async (ctx) => { const seg = await resolveSegment(ctx.db, ctx.tenantId); return ctx.db.select().from(initiatives).where(and(eq(initiatives.tenantId, ctx.tenantId), eq(initiatives.segmentId, seg))).orderBy(desc(initiatives.updatedAt)).limit(200); } },
   {
@@ -547,28 +557,30 @@ const CATALOG: BuiltinTool[] = [
       const name = str(a.name).trim(); if (!name) throw new Error('name is required');
       const seg = await resolveSegment(ctx.db, ctx.tenantId);
       const [row] = await ctx.db.insert(initiatives).values({ tenantId: ctx.tenantId, segmentId: seg, name, description: a.description != null ? str(a.description) : null, ...(a.status != null ? { status: str(a.status) } : {}), portfolioId: a.portfolioId != null ? str(a.portfolioId) : null, startDate: dt(a.startDate), targetDate: dt(a.targetDate) }).returning();
+      await bumpPmo(ctx);
       return row;
     },
   },
   {
     tool: 'initiatives.update', mutates: true,
-    description: 'Update an initiative (name/description/status/portfolioId/dates).',
-    parameters: obj({ id: S, name: S, description: S, status: S, portfolioId: S, startDate: S, targetDate: S }, ['id']),
+    description: 'Update an initiative (name/description/status/portfolioId/dates). Pass portfolioId to MOVE the initiative into that portfolio, or portfolioId=null to unassign it (make it a top-level initiative under no portfolio).',
+    parameters: obj({ id: S, name: S, description: S, status: S, portfolioId: { type: ['string', 'null'] }, startDate: S, targetDate: S }, ['id']),
     run: async (ctx, a) => {
       const seg = await resolveSegment(ctx.db, ctx.tenantId);
       const patch: Json = { updatedAt: new Date() };
       if (a.name != null) patch.name = str(a.name);
       if (a.description != null) patch.description = str(a.description);
       if (a.status != null) patch.status = str(a.status);
-      if (a.portfolioId != null) patch.portfolioId = str(a.portfolioId);
+      if ('portfolioId' in a) patch.portfolioId = a.portfolioId != null ? str(a.portfolioId) : null;
       if (a.startDate != null) patch.startDate = dt(a.startDate);
       if (a.targetDate != null) patch.targetDate = dt(a.targetDate);
       const [row] = await ctx.db.update(initiatives).set(patch).where(and(eq(initiatives.id, str(a.id)), eq(initiatives.tenantId, ctx.tenantId), eq(initiatives.segmentId, seg))).returning();
       if (!row) throw new Error('initiative not found');
+      await bumpPmo(ctx);
       return row;
     },
   },
-  { tool: 'initiatives.delete', mutates: true, description: 'Delete an initiative.', parameters: obj({ id: S }, ['id']), run: async (ctx, a) => { const seg = await resolveSegment(ctx.db, ctx.tenantId); const rows = await ctx.db.delete(initiatives).where(and(eq(initiatives.id, str(a.id)), eq(initiatives.tenantId, ctx.tenantId), eq(initiatives.segmentId, seg))).returning({ id: initiatives.id }); return { deleted: rows.length > 0 ? str(a.id) : null }; } },
+  { tool: 'initiatives.delete', mutates: true, description: 'Delete an initiative.', parameters: obj({ id: S }, ['id']), run: async (ctx, a) => { const seg = await resolveSegment(ctx.db, ctx.tenantId); const rows = await ctx.db.delete(initiatives).where(and(eq(initiatives.id, str(a.id)), eq(initiatives.tenantId, ctx.tenantId), eq(initiatives.segmentId, seg))).returning({ id: initiatives.id }); await bumpPmo(ctx); return { deleted: rows.length > 0 ? str(a.id) : null }; } },
 
   { tool: 'objectives.list', mutates: false, description: 'List OKR objectives — the strategic goals on the Portfolio ▸ OKRs tab, NOT board Epics.', parameters: obj({}), run: async (ctx) => { const seg = await resolveSegment(ctx.db, ctx.tenantId); return ctx.db.select().from(objectives).where(and(eq(objectives.tenantId, ctx.tenantId), eq(objectives.segmentId, seg))).orderBy(desc(objectives.updatedAt)).limit(200); } },
   {
@@ -593,14 +605,14 @@ const CATALOG: BuiltinTool[] = [
         initiativeId: a.initiativeId != null ? str(a.initiativeId) : null,
         startDate: dt(a.startDate), endDate: dt(a.endDate),
       }).returning();
-      await bumpProjects(ctx);
+      await bumpPmo(ctx);
       return row;
     },
   },
   {
     tool: 'objectives.update', mutates: true,
-    description: 'Update an OKR objective (title/description/status/period/scope/dates). Pass projectId to (re)scope the objective to a project, or projectId=null to clear the project scope.',
-    parameters: obj({ id: S, title: S, description: S, period: S, status: { type: 'string', enum: ['active', 'achieved', 'missed', 'archived'] }, projectId: N, portfolioId: S, initiativeId: S, startDate: S, endDate: S }, ['id']),
+    description: 'Update an OKR objective (title/description/status/period/OWNER/dates). REASSIGN the objective\'s owner (the parent scope shown on the Portfolio ▸ OKRs tab) by passing exactly ONE of portfolioId / initiativeId / projectId and setting the other two to null — e.g. { portfolioId: "pf_123", initiativeId: null, projectId: null } attaches it to that portfolio. Pass all three null to make it an org-level (workspace) objective owned by nothing. Omit a field entirely to leave it unchanged.',
+    parameters: obj({ id: S, title: S, description: S, period: S, status: { type: 'string', enum: ['active', 'achieved', 'missed', 'archived'] }, projectId: { type: ['number', 'null'] }, portfolioId: { type: ['string', 'null'] }, initiativeId: { type: ['string', 'null'] }, startDate: S, endDate: S }, ['id']),
     run: async (ctx, a) => {
       const seg = await resolveSegment(ctx.db, ctx.tenantId);
       const patch: Json = { updatedAt: new Date() };
@@ -609,17 +621,17 @@ const CATALOG: BuiltinTool[] = [
       if (a.period != null) patch.period = str(a.period);
       if (a.status != null) patch.status = str(a.status);
       if ('projectId' in a) patch.projectId = a.projectId != null ? num(a.projectId) : null;
-      if (a.portfolioId != null) patch.portfolioId = str(a.portfolioId);
-      if (a.initiativeId != null) patch.initiativeId = str(a.initiativeId);
+      if ('portfolioId' in a) patch.portfolioId = a.portfolioId != null ? str(a.portfolioId) : null;
+      if ('initiativeId' in a) patch.initiativeId = a.initiativeId != null ? str(a.initiativeId) : null;
       if (a.startDate != null) patch.startDate = dt(a.startDate);
       if (a.endDate != null) patch.endDate = dt(a.endDate);
       const [row] = await ctx.db.update(objectives).set(patch).where(and(eq(objectives.id, str(a.id)), eq(objectives.tenantId, ctx.tenantId), eq(objectives.segmentId, seg))).returning();
       if (!row) throw new Error('objective not found');
-      await bumpProjects(ctx);
+      await bumpPmo(ctx);
       return row;
     },
   },
-  { tool: 'objectives.delete', mutates: true, description: 'Delete an OKR objective (and its key results).', parameters: obj({ id: S }, ['id']), run: async (ctx, a) => { const seg = await resolveSegment(ctx.db, ctx.tenantId); const rows = await ctx.db.delete(objectives).where(and(eq(objectives.id, str(a.id)), eq(objectives.tenantId, ctx.tenantId), eq(objectives.segmentId, seg))).returning({ id: objectives.id }); await bumpProjects(ctx); return { deleted: rows.length > 0 ? str(a.id) : null }; } },
+  { tool: 'objectives.delete', mutates: true, description: 'Delete an OKR objective (and its key results).', parameters: obj({ id: S }, ['id']), run: async (ctx, a) => { const seg = await resolveSegment(ctx.db, ctx.tenantId); const rows = await ctx.db.delete(objectives).where(and(eq(objectives.id, str(a.id)), eq(objectives.tenantId, ctx.tenantId), eq(objectives.segmentId, seg))).returning({ id: objectives.id }); await bumpPmo(ctx); return { deleted: rows.length > 0 ? str(a.id) : null }; } },
   {
     tool: 'objectives.add_link', mutates: true,
     description: 'Link a delivery work-item to an OKR objective — the lineage edge. linkKind="initiative" needs initiativeId; "epic"/"task" needs the numeric taskId (an Epic IS a task with taskType="epic"). Connects board work to the objective it advances.',
@@ -634,11 +646,11 @@ const CATALOG: BuiltinTool[] = [
         initiativeId: linkKind === 'initiative' && a.initiativeId != null ? str(a.initiativeId) : null,
         taskId: (linkKind === 'epic' || linkKind === 'task') && a.taskId != null ? num(a.taskId) : null,
       }).returning();
-      await bumpProjects(ctx);
+      await bumpPmo(ctx);
       return row;
     },
   },
-  { tool: 'objectives.remove_link', mutates: true, description: 'Remove an objective ▸ work-item link by linkId.', parameters: obj({ objectiveId: S, linkId: S }, ['objectiveId', 'linkId']), run: async (ctx, a) => { const seg = await resolveSegment(ctx.db, ctx.tenantId); const rows = await ctx.db.delete(objectiveLinks).where(and(eq(objectiveLinks.id, str(a.linkId)), eq(objectiveLinks.objectiveId, str(a.objectiveId)), eq(objectiveLinks.tenantId, ctx.tenantId), eq(objectiveLinks.segmentId, seg))).returning({ id: objectiveLinks.id }); await bumpProjects(ctx); return { deleted: rows.length > 0 ? str(a.linkId) : null }; } },
+  { tool: 'objectives.remove_link', mutates: true, description: 'Remove an objective ▸ work-item link by linkId.', parameters: obj({ objectiveId: S, linkId: S }, ['objectiveId', 'linkId']), run: async (ctx, a) => { const seg = await resolveSegment(ctx.db, ctx.tenantId); const rows = await ctx.db.delete(objectiveLinks).where(and(eq(objectiveLinks.id, str(a.linkId)), eq(objectiveLinks.objectiveId, str(a.objectiveId)), eq(objectiveLinks.tenantId, ctx.tenantId), eq(objectiveLinks.segmentId, seg))).returning({ id: objectiveLinks.id }); await bumpPmo(ctx); return { deleted: rows.length > 0 ? str(a.linkId) : null }; } },
   {
     tool: 'work_items.convert_type', mutates: true,
     description: 'Change a work-item\'s TYPE across the board ⇄ OKR boundary. Use this to fix items modelled as the wrong type — e.g. an Epic named "OKR 1 …" that should be a real OKR Objective (so it appears on the OKRs tab + satisfies the project 360 "Direction"). fromKind = what it is now (task|epic = a board task; objective = an OKR); id = the numeric task id, or the objective uuid; toKind = what to make it. Promoting a board item to an objective re-links its child tasks to the new objective and scopes it to the item\'s project; demoting an objective to a task/epic re-parents its linked tasks and DROPS its key results. For objective → task/epic on an objective with no project, pass projectId.',
@@ -688,6 +700,7 @@ const CATALOG: BuiltinTool[] = [
         unit: a.unit != null ? str(a.unit) : null,
         ...(a.status != null ? { status: str(a.status) } : {}),
       }).returning();
+      await bumpPmo(ctx);
       return row;
     },
   },
@@ -707,10 +720,11 @@ const CATALOG: BuiltinTool[] = [
       if (a.status != null) patch.status = str(a.status);
       const [row] = await ctx.db.update(keyResults).set(patch).where(and(eq(keyResults.id, str(a.id)), eq(keyResults.tenantId, ctx.tenantId), eq(keyResults.segmentId, seg))).returning();
       if (!row) throw new Error('key result not found');
+      await bumpPmo(ctx);
       return row;
     },
   },
-  { tool: 'key_results.delete', mutates: true, description: 'Delete a key result.', parameters: obj({ id: S }, ['id']), run: async (ctx, a) => { const seg = await resolveSegment(ctx.db, ctx.tenantId); const rows = await ctx.db.delete(keyResults).where(and(eq(keyResults.id, str(a.id)), eq(keyResults.tenantId, ctx.tenantId), eq(keyResults.segmentId, seg))).returning({ id: keyResults.id }); return { deleted: rows.length > 0 ? str(a.id) : null }; } },
+  { tool: 'key_results.delete', mutates: true, description: 'Delete a key result.', parameters: obj({ id: S }, ['id']), run: async (ctx, a) => { const seg = await resolveSegment(ctx.db, ctx.tenantId); const rows = await ctx.db.delete(keyResults).where(and(eq(keyResults.id, str(a.id)), eq(keyResults.tenantId, ctx.tenantId), eq(keyResults.segmentId, seg))).returning({ id: keyResults.id }); await bumpPmo(ctx); return { deleted: rows.length > 0 ? str(a.id) : null }; } },
 
   // ---- Prompt library (read) ----
   { tool: 'prompts.list', mutates: false, description: 'List prompt-library entries in the workspace.', parameters: obj({}), run: (ctx) => ctx.db.select().from(promptLibraryEntries).where(eq(promptLibraryEntries.tenantId, ctx.tenantId)).orderBy(desc(promptLibraryEntries.updatedAt)).limit(200) },
@@ -1742,7 +1756,12 @@ const CATALOG: BuiltinTool[] = [
 
   // ---- PMO: structure tree + composed rollup (computed reads) ----
   { tool: 'pmo.tree', mutates: false, description: 'The portfolio structure: portfolios ▸ initiatives ▸ linked projects (+ initiative dependency edges).', parameters: obj({}), run: (ctx) => replayRoute(ctx, 'GET', '/api/pmo/tree') },
-  { tool: 'pmo.rollup', mutates: false, description: 'Composed rollup (delivery + cost + DORA + OKR progress) for one scope. kind="workspace" is the whole org (ignores id); kind="portfolio"|"initiative" needs that id.', parameters: obj({ kind: { type: 'string', enum: ['workspace', 'portfolio', 'initiative'] }, id: S }, ['kind']), run: (ctx, a) => { const kind = str(a.kind); const idPart = kind !== 'workspace' && a.id != null ? `&id=${encodeURIComponent(str(a.id))}` : ''; return replayRoute(ctx, 'GET', `/api/pmo/rollup?kind=${encodeURIComponent(kind)}${idPart}`); } },
+  { tool: 'pmo.rollup', mutates: false, description: 'Composed rollup (delivery + cost + DORA + OKR progress + per-portfolio / per-initiative breakdown) for one scope. kind="workspace" is the whole org (ignores id, returns byPortfolio + byInitiative); kind="portfolio"|"initiative"|"project" needs that id.', parameters: obj({ kind: { type: 'string', enum: ['workspace', 'portfolio', 'initiative', 'project'] }, id: S }, ['kind']), run: (ctx, a) => { const kind = str(a.kind); const idPart = kind !== 'workspace' && a.id != null ? `&id=${encodeURIComponent(str(a.id))}` : ''; return replayRoute(ctx, 'GET', `/api/pmo/rollup?kind=${encodeURIComponent(kind)}${idPart}`); } },
+  // ---- PMO: structure writes (Structure tab) — replay the real routes so the
+  //       cycle check + cache-version bump + manager gate are the single source. ----
+  { tool: 'pmo.link_project', mutates: true, description: 'Link a project to a PMO initiative so its cost + delivery roll up under that initiative (pass initiativeId=null to UNLINK). This is the Structure-tab "link a project" action.', parameters: obj({ projectId: N, initiativeId: { type: ['string', 'null'] } }, ['projectId']), run: (ctx, a) => replayRoute(ctx, 'PATCH', `/api/pmo/projects/${num(a.projectId)}/link`, { initiativeId: a.initiativeId != null ? str(a.initiativeId) : null }) },
+  { tool: 'pmo.add_dependency', mutates: true, description: 'Add an initiative dependency edge: fromInitiativeId BLOCKS toInitiativeId (feeds the critical path). Rejected if it would create a cycle.', parameters: obj({ fromInitiativeId: S, toInitiativeId: S }, ['fromInitiativeId', 'toInitiativeId']), run: (ctx, a) => replayRoute(ctx, 'POST', '/api/pmo/dependencies', { fromInitiativeId: str(a.fromInitiativeId), toInitiativeId: str(a.toInitiativeId) }) },
+  { tool: 'pmo.remove_dependency', mutates: true, description: 'Remove an initiative dependency edge by its id.', parameters: obj({ id: S }, ['id']), run: (ctx, a) => replayRoute(ctx, 'DELETE', `/api/pmo/dependencies/${encodeURIComponent(str(a.id))}`) },
 
   // ---- Governance SOC 2: seed (bulk control-set generation) ----
   { tool: 'governance_soc2.seed', mutates: true, description: 'Seed the SOC 2 control set.', parameters: obj({}), run: (ctx) => replayRoute(ctx, 'POST', '/api/governance/soc2/seed', {}) },
@@ -1897,7 +1916,7 @@ export const CLOUD_AGENT_PLATFORM_TOOLS: readonly string[] = [
   'initiatives.list', 'initiatives.create', 'initiatives.update',
   'objectives.list', 'objectives.create', 'objectives.update', 'objectives.add_link', 'objectives.remove_link',
   'key_results.list', 'key_results.create', 'key_results.update',
-  'work_items.convert_type', 'pmo.tree', 'pmo.rollup',
+  'work_items.convert_type', 'pmo.tree', 'pmo.rollup', 'pmo.link_project', 'pmo.add_dependency',
   // Project knowledge, files, review
   'project_facts.recall', 'project_facts.remember',
   'project_files.list', 'project_files.read', 'project_files.save',

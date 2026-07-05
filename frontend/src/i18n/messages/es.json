@@ -306,25 +306,16 @@
       "manager": "Manager",
       "roles": "Roles",
       "talent": "Talento",
-      "adminHealth": "Estado",
-      "adminBilling": "Facturación",
-      "adminUsage": "Uso",
+      "adminOverview": "Resumen",
       "adminUsers": "Usuarios",
-      "adminTenants": "Inquilinos",
-      "adminApiKeys": "Claves API",
-      "adminSecurity": "Seguridad",
-      "adminLegal": "Legal",
-      "adminNewsletter": "Boletín",
-      "adminPrivacy": "Privacidad",
-      "adminPersonas": "Perfiles",
-      "adminGovernance": "Gobernanza",
-      "adminPermissions": "Permisos",
-      "adminModules": "Módulos",
-      "adminImpSessions": "Sesiones de suplantación",
-      "adminAuditLog": "Registro de auditoría",
-      "adminErrors": "Errores",
-      "adminTraces": "Trazas LLM",
-      "adminToken": "Token"
+      "adminWorkspaces": "Espacios",
+      "adminAccess": "Acceso",
+      "adminLlm": "LLM",
+      "adminContent": "Contenido",
+      "adminCompliance": "Cumplimiento",
+      "adminGrowth": "Crecimiento",
+      "adminLogs": "Registros",
+      "adminDeveloper": "Desarrollador"
     }
   },
   "alerts": {
@@ -897,14 +888,17 @@
       "objectives": "Objetivos",
       "byInitiative": "Por iniciativa",
       "criticalPath": "Ruta crítica",
-      "dependencies": "Dependencias"
+      "dependencies": "Dependencias",
+      "byPortfolio": "Por portafolio"
     },
     "col": {
       "initiative": "Iniciativa",
       "projects": "Proyectos",
       "completed": "Completadas",
       "agentSpend": "Gasto en LLM del agente",
-      "okrProgress": "Progreso de OKR"
+      "okrProgress": "Progreso de OKR",
+      "portfolio": "Portafolio",
+      "initiatives": "Iniciativas"
     },
     "blocked": "Bloqueada",
     "blockedBy": "Bloqueada por",
@@ -930,7 +924,11 @@
       "delete": "Eliminar",
       "confirmDeletePortfolio": "¿Eliminar este portafolio? Sus iniciativas quedarán sin asignar.",
       "confirmDeleteInitiative": "¿Eliminar esta iniciativa? Los proyectos vinculados se desvincularán.",
-      "confirmDeleteObjective": "¿Eliminar este objetivo y sus resultados clave?"
+      "confirmDeleteObjective": "¿Eliminar este objetivo y sus resultados clave?",
+      "movePortfolio": "Mover a otro portafolio",
+      "unassignedOption": "— Sin asignar —",
+      "dragHint": "Arrastra a un portafolio para reasignar",
+      "dropHere": "Suelta aquí para asignar a este portafolio"
     },
     "okr": {
       "newObjective": "Nuevo objetivo",
@@ -964,7 +962,12 @@
         "initiative": "Iniciativa",
         "epic": "Épica",
         "task": "Tarea"
-      }
+      },
+      "owner": "Propietario",
+      "ownerWorkspace": "Espacio de trabajo (sin asignar)",
+      "ownerPortfolio": "Portafolios",
+      "ownerInitiative": "Iniciativas",
+      "ownerProject": "Proyectos"
     },
     "projectLink": {
       "title": "Iniciativa de PMO",
@@ -972,7 +975,8 @@
       "hint": "Vincula este proyecto a una iniciativa de PMO para que su coste y entrega se consoliden.",
       "loading": "Cargando iniciativas…",
       "saved": "Vinculado"
-    }
+    },
+    "unassignedPortfolio": "Sin asignar"
   },
   "insights": {
     "loading": "Cargando…",
@@ -4720,7 +4724,8 @@
         "no_agent": "Sin agente asignado",
         "no_board": "Sin tablero configurado",
         "no_lane": "Carril no configurado",
-        "terminal_lane": "Hecho — no requiere ejecución"
+        "terminal_lane": "Hecho — no requiere ejecución",
+        "not_executable": "Tarea del sistema — no la ejecuta un agente"
       }
     },
     "businessValue": {
@@ -5636,5 +5641,28 @@
     "errTooMany": "Demasiados intentos. Solicita un nuevo código.",
     "errNone": "No hay ningún código activo. Solicita uno nuevo.",
     "errGeneric": "Algo salió mal. Inténtalo de nuevo."
+  },
+  "admin": {
+    "sub": {
+      "health": "Estado",
+      "directory": "Directorio",
+      "security": "Seguridad",
+      "emulation": "Emulación",
+      "tenants": "Espacios",
+      "permissions": "Permisos",
+      "modules": "Módulos",
+      "usage": "Uso",
+      "traces": "Trazas",
+      "personas": "Perfiles",
+      "governance": "Gobernanza",
+      "legal": "Legal",
+      "privacy": "Solicitudes de privacidad",
+      "billing": "Facturación",
+      "newsletter": "Boletín",
+      "errors": "Errores",
+      "audit": "Registro de auditoría",
+      "apiKeys": "Claves API",
+      "token": "Token de superadmin"
+    }
   }
 }

@@ -5,6 +5,8 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuth } from '@/lib/AuthContext';
 import PageContainer from '@/components/PageContainer';
 import { EmulationLauncherProvider } from '@/components/admin/EmulationLauncher';
+import AdminGroupNav from '@/components/admin/AdminGroupNav';
+import { resolveAdminRoute } from '@/lib/adminGroups';
 import { TenantApiKeysAdminTab } from '@/components/admin/TenantApiKeysAdminTab';
 import { LlmTracesPanel } from './LlmTracesPanel';
 import HealthPanel from '@/components/admin/panels/HealthPanel';
@@ -26,38 +28,36 @@ import ErrorsPanel from '@/components/admin/panels/ErrorsPanel';
 import TokenPanel from '@/components/admin/panels/TokenPanel';
 
 /**
- * Platform Admin shell — now a THIN router.
+ * Platform Admin shell — a THIN router.
  *
- * The 19 admin sub-views are TABS in the shared shell <SectionTabs> bar (see the
- * `admin` group in navGroups) — this page no longer renders an in-page tab strip
- * or a 3.5k-line god component. It reads the active tab from `?tab=` (the shell
- * bar owns navigation) and renders the matching self-fetching panel. Each panel
- * (`components/admin/panels/*`) loads its own data and manages its own
- * loading/error, so there is no shared state to thread through here.
+ * The 19 admin capabilities are consolidated into 10 top-level GROUPS (see
+ * `ADMIN_GROUP_META`); each group's sub-views are the shared shell <SectionTabs>
+ * bar's tabs, and within a group an inner <AdminGroupNav> switches sub-views via
+ * `?sub=`. This page owns no state: it resolves `?tab=`/`?sub=` to a group + sub
+ * and renders the matching self-fetching panel (`components/admin/panels/*`).
  */
 
-// `?tab=` value → its panel. Default (Health) is the empty id so a bare /admin
-// resolves to it (matching the nav group's default tab).
-const PANELS: Record<string, () => React.JSX.Element> = {
-  '': HealthPanel,
+// subKey → its panel. subKeys are globally unique across all groups (see
+// ADMIN_GROUP_META), so one flat registry covers every sub-view.
+const ADMIN_PANELS: Record<string, () => React.JSX.Element> = {
   health: HealthPanel,
-  billing: BillingPanel,
-  usage: UsagePanel,
-  users: UsersPanel,
-  tenants: TenantsPanel,
-  apikeys: () => <TenantApiKeysAdminTab active />,
+  directory: UsersPanel,
   security: SecurityPanel,
-  legal: LegalPanel,
-  newsletter: NewsletterPanel,
-  privacy: PrivacyPanel,
-  personas: PersonasPanel,
-  governance: GovernancePanel,
+  emulation: ImpersonationSessionsPanel,
+  tenants: TenantsPanel,
   permissions: PermissionsPanel,
   modules: ModulesPanel,
-  impsessions: ImpersonationSessionsPanel,
-  auditlog: AuditLogPanel,
-  errors: ErrorsPanel,
+  usage: UsagePanel,
   traces: LlmTracesPanel,
+  personas: PersonasPanel,
+  governance: GovernancePanel,
+  legal: LegalPanel,
+  privacy: PrivacyPanel,
+  billing: BillingPanel,
+  newsletter: NewsletterPanel,
+  errors: ErrorsPanel,
+  audit: AuditLogPanel,
+  apiKeys: () => <TenantApiKeysAdminTab active />,
   token: TokenPanel,
 };
 
@@ -79,7 +79,8 @@ export default function AdminPage() {
 
   if (!isAuthenticated || !isSuperadmin) return null;
 
-  const Panel = PANELS[searchParams?.get('tab') ?? ''] ?? HealthPanel;
+  const { group, sub } = resolveAdminRoute(searchParams?.get('tab') ?? '', searchParams?.get('sub') ?? '');
+  const Panel = ADMIN_PANELS[sub.subKey] ?? HealthPanel;
 
   return (
     <PageContainer>
@@ -90,6 +91,7 @@ export default function AdminPage() {
         {/* One provider owns the emulate flow so Users / Tenants / the user drawer
             can launch it without prop-drilling a callback + modal state. */}
         <EmulationLauncherProvider>
+          <AdminGroupNav group={group} activeSubId={sub.id} />
           <Panel />
         </EmulationLauncherProvider>
       </div>
