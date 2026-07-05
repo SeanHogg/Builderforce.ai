@@ -5524,7 +5524,21 @@
       "sortRateDesc": "Rate: high to low",
       "pageOf": "Page {page} of {pages}"
     },
-    "editProfile": "Edit profile"
+    "editProfile": "Edit profile",
+    "stats": {
+      "title": "Track record",
+      "aiUsage": "AI usage",
+      "aiUsageSub": "AI actions · 90d",
+      "activity": "Activity",
+      "activitySub": "{signals} signals · 90d",
+      "daysSuffix": "d",
+      "awarded": "Projects awarded",
+      "awardedSub": "{count} active now",
+      "inProposal": "In proposal",
+      "inProposalSub": "open bids",
+      "earned": "Earned to date",
+      "earnedSub": "lifetime"
+    }
   },
   "hires": {
     "title": "Hires",
@@ -6415,5 +6429,15 @@
     "liveCount": "{count, plural, one {# person live} other {# people live}}",
     "participants": "Participants",
     "endForAll": "End for all"
+  },
+  "brainLauncher": {
+    "open": "Open Brain assistant",
+    "title": "Brain assistant",
+    "close": "Close Brain",
+    "brand": "Brain",
+    "meetTitle": "Meet Brain",
+    "meetBody": "Your AI co-builder for planning projects, generating specs, and shipping faster. Sign in to start a conversation.",
+    "signIn": "Sign in",
+    "createAccount": "Create account"
   }
 }

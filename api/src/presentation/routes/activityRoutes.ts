@@ -17,6 +17,8 @@ import { resolveActiveMinutes, type ResolvableSignal } from '../../application/a
 import { notify } from '../../application/notifications/notify';
 import { isPayoutsConfigured, createPayout } from '../../application/integrations/payments';
 import { getActivityLog } from '../../application/activity/activityLog';
+import { invalidateCached } from '../../infrastructure/cache/readThroughCache';
+import { freelancerStatsCacheKey } from './freelancerRoutes';
 import { TenantRole } from '../../domain/shared/types';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env, HonoEnv } from '../../env';
@@ -474,6 +476,8 @@ async function markInvoicePaid(sql: NeonQueryFunction<false, false>, env: Parame
   const inv = rows[0];
   if (!inv) return;
   await sql`UPDATE timecards SET status = 'paid', updated_at = NOW() WHERE id = ${inv.timecard_id}`;
+  // Lifetime-earnings stat on the worker's for-hire profile just changed.
+  await invalidateCached(env as Env, freelancerStatsCacheKey(inv.freelancer_user_id as string));
   await notify(sql, env, { userId: inv.freelancer_user_id as string, tenantId: Number(inv.tenant_id), kind: 'paid', title: 'You were paid', body: `${inv.currency ?? 'USD'} ${((Number(inv.amount_cents) || 0) / 100).toFixed(2)}`, ref: inv.timecard_id as string });
 }
 

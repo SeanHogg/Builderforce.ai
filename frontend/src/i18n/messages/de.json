@@ -5524,7 +5524,21 @@
       "sortRateDesc": "Satz: absteigend",
       "pageOf": "Seite {page} von {pages}"
     },
-    "editProfile": "Profil bearbeiten"
+    "editProfile": "Profil bearbeiten",
+    "stats": {
+      "title": "Erfolgsbilanz",
+      "aiUsage": "KI-Nutzung",
+      "aiUsageSub": "KI-Aktionen · 90 T",
+      "activity": "Aktivität",
+      "activitySub": "{signals} Signale · 90 T",
+      "daysSuffix": " T",
+      "awarded": "Vergebene Projekte",
+      "awardedSub": "{count} aktiv",
+      "inProposal": "In Angebot",
+      "inProposalSub": "offene Gebote",
+      "earned": "Bisher verdient",
+      "earnedSub": "gesamt"
+    }
   },
   "hires": {
     "title": "Einstellungen",
@@ -6415,5 +6429,15 @@
     "liveCount": "{count, plural, one {# Person live} other {# Personen live}}",
     "participants": "Teilnehmer",
     "endForAll": "Für alle beenden"
+  },
+  "brainLauncher": {
+    "open": "Brain-Assistent öffnen",
+    "title": "Brain-Assistent",
+    "close": "Brain schließen",
+    "brand": "Brain",
+    "meetTitle": "Brain kennenlernen",
+    "meetBody": "Ihr KI-Mitgestalter zum Planen von Projekten, Erstellen von Spezifikationen und schnelleren Ausliefern. Melden Sie sich an, um ein Gespräch zu beginnen.",
+    "signIn": "Anmelden",
+    "createAccount": "Konto erstellen"
   }
 }

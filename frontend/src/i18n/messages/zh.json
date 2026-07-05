@@ -5524,7 +5524,21 @@
       "sortRateDesc": "费率：从高到低",
       "pageOf": "第 {page} 页，共 {pages} 页"
     },
-    "editProfile": "编辑资料"
+    "editProfile": "编辑资料",
+    "stats": {
+      "title": "业绩记录",
+      "aiUsage": "AI 使用",
+      "aiUsageSub": "AI 操作 · 90 天",
+      "activity": "活跃度",
+      "activitySub": "{signals} 次活动 · 90 天",
+      "daysSuffix": " 天",
+      "awarded": "已获项目",
+      "awardedSub": "当前 {count} 个进行中",
+      "inProposal": "投标中",
+      "inProposalSub": "未决投标",
+      "earned": "累计收入",
+      "earnedSub": "全部"
+    }
   },
   "hires": {
     "title": "雇员",
@@ -6415,5 +6429,15 @@
     "liveCount": "{count, plural, other {# 人在线}}",
     "participants": "参与者",
     "endForAll": "为所有人结束"
+  },
+  "brainLauncher": {
+    "open": "打开 Brain 助手",
+    "title": "Brain 助手",
+    "close": "关闭 Brain",
+    "brand": "Brain",
+    "meetTitle": "认识 Brain",
+    "meetBody": "您的 AI 协作伙伴，助您规划项目、生成规格并更快交付。登录即可开始对话。",
+    "signIn": "登录",
+    "createAccount": "创建账户"
   }
 }

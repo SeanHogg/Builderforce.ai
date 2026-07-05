@@ -5524,7 +5524,21 @@
       "sortRateDesc": "Tarif : décroissant",
       "pageOf": "Page {page} sur {pages}"
     },
-    "editProfile": "Modifier le profil"
+    "editProfile": "Modifier le profil",
+    "stats": {
+      "title": "Historique",
+      "aiUsage": "Usage de l'IA",
+      "aiUsageSub": "actions IA · 90 j",
+      "activity": "Activité",
+      "activitySub": "{signals} signaux · 90 j",
+      "daysSuffix": " j",
+      "awarded": "Projets attribués",
+      "awardedSub": "{count} actifs",
+      "inProposal": "En proposition",
+      "inProposalSub": "offres en cours",
+      "earned": "Gains à ce jour",
+      "earnedSub": "cumul"
+    }
   },
   "hires": {
     "title": "Recrutements",
@@ -6415,5 +6429,15 @@
     "liveCount": "{count, plural, one {# personne en direct} other {# personnes en direct}}",
     "participants": "Participants",
     "endForAll": "Terminer pour tous"
+  },
+  "brainLauncher": {
+    "open": "Ouvrir l’assistant Brain",
+    "title": "Assistant Brain",
+    "close": "Fermer Brain",
+    "brand": "Brain",
+    "meetTitle": "Découvrez Brain",
+    "meetBody": "Votre copilote IA pour planifier des projets, générer des spécifications et livrer plus vite. Connectez-vous pour démarrer une conversation.",
+    "signIn": "Se connecter",
+    "createAccount": "Créer un compte"
   }
 }

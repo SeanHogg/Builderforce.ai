@@ -34,7 +34,27 @@ export interface FreelancerProfile {
   rating?: number | null;
   ratingCount?: number;
   reviews?: FreelancerReview[];
+  stats?: FreelancerStats;
   updatedAt?: string | null;
+}
+
+/** Reputation numbers shown on a for-hire profile (server-computed + cached). */
+export interface FreelancerStats {
+  /** AI/agent-driven activity signals in the trailing 90 days. */
+  aiActions: number;
+  /** All activity signals in the trailing 90 days. */
+  activitySignals: number;
+  /** Distinct days with any activity in the trailing 90 days. */
+  activeDays: number;
+  /** Engagements ever hired (work won). */
+  projectsAwarded: number;
+  /** Engagements currently active. */
+  activeEngagements: number;
+  /** Open bids (proposals in submitted | shortlisted). */
+  proposalsActive: number;
+  /** Lifetime paid earnings, in cents. */
+  earnedToDateCents: number;
+  currency: string;
 }
 
 export interface FreelancerReview {

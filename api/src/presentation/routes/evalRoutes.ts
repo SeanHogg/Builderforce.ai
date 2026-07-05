@@ -19,35 +19,13 @@ import { Hono } from 'hono';
 import { and, desc, eq, gte, isNotNull } from 'drizzle-orm';
 import { authMiddleware } from '../middleware/authMiddleware';
 import { evaluateResponse, type EvalJudge } from '../../application/eval/semanticEval';
+import { gatewayJudge } from '../../application/eval/gatewayJudge';
 import { detectGroupDrift, type ScoredSample } from '../../application/eval/driftMonitor';
-import { llmProxyForPlan } from '../../application/llm/LlmProxyService';
 import { resolveTenantPlan } from './llmRoutes';
 import { runModelOutcomes } from '../../infrastructure/database/schema';
 import type { Env, HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 import { getOrSetCached } from '../../infrastructure/cache/readThroughCache';
-
-/** Builds an LLM-as-judge bound to the tenant's plan + metered gateway. A judge
- *  failure returns '' so evaluateResponse degrades to the lexical backend. */
-function gatewayJudge(env: Env, effectivePlan: 'free' | 'pro' | 'teams', premiumOverride: boolean): EvalJudge {
-  return async (prompt: string): Promise<string> => {
-    const service = llmProxyForPlan(env, effectivePlan, premiumOverride);
-    const result = await service.complete({
-      // temperature 0 → deterministic, repeatable verdicts.
-      messages: [{ role: 'user', content: prompt }],
-      temperature: 0,
-      max_tokens: 200,
-    } as never);
-    try {
-      const body = (await result.response.json()) as {
-        choices?: Array<{ message?: { content?: string } }>;
-      };
-      return body.choices?.[0]?.message?.content ?? '';
-    } catch {
-      return '';
-    }
-  };
-}
 
 export function createEvalRoutes(db: Db): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();

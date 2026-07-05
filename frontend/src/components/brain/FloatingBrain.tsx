@@ -26,6 +26,7 @@ import { useModalDismiss } from '@/hooks/useModalDismiss';
 export function FloatingBrain() {
   const pathname = usePathname();
   const tAttn = useTranslations('attention');
+  const tLauncher = useTranslations('brainLauncher');
   const { hasTenant } = useAuth();
   const { open, setOpen, projectId, viewingProjectId, modality, extraSystem, initialChatId, initialPrompt: ctxInitialPrompt } = useBrainContext();
   // Tenant-wide "needs you" signal for the launcher badge — only while the drawer
@@ -97,8 +98,8 @@ export function FloatingBrain() {
           <button
             type="button"
             onClick={() => setOpen(true)}
-            aria-label="Open Brain assistant"
-            title="Brain assistant"
+            aria-label={tLauncher('open')}
+            title={tLauncher('title')}
             className="brain-launcher"
           >
             🧠
@@ -197,7 +198,7 @@ export function FloatingBrain() {
           <div
             role="dialog"
             aria-modal="true"
-            aria-label="Brain assistant"
+            aria-label={tLauncher('title')}
             className="brain-drawer"
           >
             {hasTenant ? (
@@ -262,6 +263,7 @@ export function FloatingBrain() {
  * input means no anonymous gateway traffic.
  */
 function BrainSignInCTA({ onClose }: { onClose: () => void }) {
+  const t = useTranslations('brainLauncher');
   return (
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column', background: 'var(--bg-base)' }}>
       <div
@@ -276,12 +278,12 @@ function BrainSignInCTA({ onClose }: { onClose: () => void }) {
         }}
       >
         <span style={{ fontWeight: 600, fontSize: 15, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: 6 }}>
-          🧠 Brain
+          🧠 {t('brand')}
         </span>
         <button
           type="button"
           onClick={onClose}
-          aria-label="Close Brain"
+          aria-label={t('close')}
           style={{ background: 'transparent', border: 'none', color: 'var(--text-muted)', fontSize: 18, cursor: 'pointer', lineHeight: 1, padding: '0 4px' }}
         >
           ×
@@ -301,22 +303,22 @@ function BrainSignInCTA({ onClose }: { onClose: () => void }) {
         }}
       >
         <div style={{ fontSize: 44 }}>🧠</div>
-        <div style={{ fontSize: 17, fontWeight: 600, color: 'var(--text-primary)' }}>Meet Brain</div>
+        <div style={{ fontSize: 17, fontWeight: 600, color: 'var(--text-primary)' }}>{t('meetTitle')}</div>
         <div style={{ fontSize: 14, color: 'var(--text-muted)', maxWidth: 280, lineHeight: 1.5 }}>
-          Your AI co-builder for planning projects, generating specs, and shipping faster. Sign in to start a conversation.
+          {t('meetBody')}
         </div>
         <div style={{ display: 'flex', gap: 10, marginTop: 4 }}>
           <Link
             href="/login"
             style={{ padding: '10px 18px', fontSize: 14, fontWeight: 600, background: 'var(--accent, #3b82f6)', color: '#fff', borderRadius: 10, textDecoration: 'none' }}
           >
-            Sign in
+            {t('signIn')}
           </Link>
           <Link
             href="/register"
             style={{ padding: '10px 18px', fontSize: 14, fontWeight: 600, background: 'var(--bg-elevated)', color: 'var(--text-primary)', border: '1px solid var(--border-subtle)', borderRadius: 10, textDecoration: 'none' }}
           >
-            Create account
+            {t('createAccount')}
           </Link>
         </div>
       </div>

@@ -2,7 +2,7 @@
 
 import { useTranslations } from 'next-intl';
 import { RatingStars } from '@/components/freelance/RatingStars';
-import type { FreelancerProfile } from '@/lib/freelancerApi';
+import type { FreelancerProfile, FreelancerStats } from '@/lib/freelancerApi';
 
 /**
  * Presentational render of a for-hire profile — the SINGLE source of truth for how a
@@ -39,6 +39,41 @@ export function TalentAvatar({ profile, size = 64 }: { profile: Pick<FreelancerP
   );
 }
 
+/** Compact reputation stat row: how much this worker leans on AI, how active they've
+ *  been, work won vs. bids in flight, and lifetime earnings. Rendered on the public
+ *  detail page and the editor Preview (both pass a profile carrying `stats`). */
+function TalentStats({ stats }: { stats: FreelancerStats }) {
+  const t = useTranslations('talent');
+  const num = (n: number) => n.toLocaleString();
+  const money = (cents: number, cur: string) => `${cur} ${(cents / 100).toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
+
+  const tiles: { key: string; value: string; label: string; sub: string; accent: string }[] = [
+    { key: 'aiUsage', value: num(stats.aiActions), label: t('stats.aiUsage'), sub: t('stats.aiUsageSub'), accent: 'var(--cyan-bright, #00e5cc)' },
+    { key: 'activity', value: `${num(stats.activeDays)}${t('stats.daysSuffix')}`, label: t('stats.activity'), sub: t('stats.activitySub', { signals: num(stats.activitySignals) }), accent: 'var(--coral-bright, #f4726e)' },
+    { key: 'awarded', value: num(stats.projectsAwarded), label: t('stats.awarded'), sub: t('stats.awardedSub', { count: stats.activeEngagements }), accent: 'rgba(34,197,94,0.9)' },
+    { key: 'inProposal', value: num(stats.proposalsActive), label: t('stats.inProposal'), sub: t('stats.inProposalSub'), accent: 'rgba(245,158,11,0.95)' },
+    { key: 'earned', value: money(stats.earnedToDateCents, stats.currency), label: t('stats.earned'), sub: t('stats.earnedSub'), accent: 'var(--text-primary)' },
+  ];
+
+  return (
+    <div style={card}>
+      <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 12 }}>{t('stats.title')}</div>
+      <div style={{ display: 'grid', gap: 10, gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 140px), 1fr))' }}>
+        {tiles.map((tile) => (
+          <div key={tile.key} style={{
+            background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', borderRadius: 10,
+            padding: '12px 14px', borderTop: `2px solid ${tile.accent}`,
+          }}>
+            <div style={{ fontSize: 20, fontWeight: 800, color: 'var(--text-primary)', lineHeight: 1.1, wordBreak: 'break-word' }}>{tile.value}</div>
+            <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', marginTop: 4 }}>{tile.label}</div>
+            <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>{tile.sub}</div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export interface TalentProfileViewProps {
   profile: FreelancerProfile;
   /** Header-right slot (hire buttons, an Edit button, …). */
@@ -67,6 +102,8 @@ export function TalentProfileView({ profile, actions, resumeEmptyNote }: TalentP
         </div>
         {actions && <div style={{ display: 'flex', gap: 10, flexShrink: 0 }}>{actions}</div>}
       </div>
+
+      {profile.stats && <TalentStats stats={profile.stats} />}
 
       {profile.bio && (
         <div style={card}>

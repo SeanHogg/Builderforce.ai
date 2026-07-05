@@ -1,7 +1,8 @@
 /**
- * Provision a tenant's built-in agents (Validator + Security) at tenant-creation
- * time — the ONE helper every tenant-creation path calls so a new workspace gets its
- * seeded agents, not just the ones backfilled by migrations 0271 / 0291.
+ * Provision a tenant's built-in agents (Validator + Security + Product Manager +
+ * Designer) at tenant-creation time — the ONE helper every tenant-creation path calls
+ * so a new workspace gets its seeded agents, not just the ones backfilled by
+ * migrations 0271 / 0291 / 0293.
  *
  * Built-in agents are ordinary, assignable cloud agents (ide_agents rows) identified
  * by a stable `builtin_kind` marker (migration 0289) so dispatch keeps finding them
@@ -21,8 +22,9 @@ interface BuiltinAgentSeed {
   skills: string[];
 }
 
-/** The seeded built-in workforce — kept in sync with migrations 0271 (Validator) and
- *  0291 (Security) so an existing-tenant backfill and a new-tenant provision agree. */
+/** The seeded built-in workforce — kept in sync with migrations 0271 (Validator),
+ *  0291 (Security) and 0293 (Product Manager + Designer) so an existing-tenant
+ *  backfill and a new-tenant provision agree. */
 const BUILTIN_AGENTS: BuiltinAgentSeed[] = [
   {
     kind: 'validator',
@@ -39,6 +41,22 @@ const BUILTIN_AGENTS: BuiltinAgentSeed[] = [
     title: 'Security — SOC 2 Auditor (all Trust Service Criteria)',
     bio: 'Audits the codebase against SOC 2 across all five Trust Service Criteria — Security (Common Criteria), Availability, Processing Integrity, Confidentiality, and Privacy. Reads the real code, dependencies, config, and data flows; for every issue it files an access-restricted SECURITY ticket carrying the severity, the criterion it maps to, and a concrete recommendation, plus an audit-summary result. Its findings are visible only to the people you allow.',
     skills: ['security-audit', 'soc2', 'appsec', 'compliance'],
+  },
+  {
+    kind: 'product_manager',
+    idPrefix: 'product-manager-t',
+    name: 'Product Manager',
+    title: 'Product Manager — turns an idea into a shippable, biddable brief',
+    bio: 'Brainstorms and shapes an idea into a product brief with scope, user stories, acceptance criteria and diagrams, then publishes it to the Marketplace as a project-bid gig so freelancers can estimate, bid, and be hired.',
+    skills: ['product-management', 'discovery', 'requirements', 'roadmapping'],
+  },
+  {
+    kind: 'designer',
+    idPrefix: 'designer-t',
+    name: 'Designer',
+    title: 'Designer — UI/UX design and design review',
+    bio: "Shapes UI/UX work — new product design or a review of an existing system's UX — into a design gig published to the Marketplace, and reviews delivered designs against the brief.",
+    skills: ['ui-design', 'ux', 'design-review', 'prototyping'],
   },
 ];
 
