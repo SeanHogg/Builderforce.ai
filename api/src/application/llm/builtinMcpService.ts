@@ -28,7 +28,7 @@ import { TaskRepository } from '../../infrastructure/repositories/TaskRepository
 import { ProjectStatus, TaskPriority, TaskType, TenantRole } from '../../domain/shared/types';
 import { parseJsonObject } from '../../domain/shared/json';
 import { signJwt } from '../../infrastructure/auth/JwtService';
-import { workflows, workflowDefinitions, specs, promptLibraryEntries, promptLibraryVersions, approvalRules, approvals, brainChats, agents, projectAgents, agentAssignments, savedDashboards, dashboardWidgets, alerts, alertEvents, auditEvents, boards, cronJobs, portfolios, initiatives, objectives, objectiveLinks, keyResults, ideAgents, marketplaceSkills, artifactAssignments, socControls, socEvidence, pokerSessions, pokerStories, pokerVotes, retrospectives, retroItems, boardConnections, projectRepositories, pullRequests, chatSessions, chatMessages, swimlanes, swimlaneAgentAssignments, tenants, executions, usageSnapshots, toolAuditEvents, executionMessages, agentHosts, agentHostProjects, errorGroups } from '../../infrastructure/database/schema';
+import { workflows, workflowDefinitions, specs, promptLibraryEntries, promptLibraryVersions, approvalRules, approvals, brainChats, agents, projectAgents, agentAssignments, savedDashboards, dashboardWidgets, alerts, alertEvents, auditEvents, boards, cronJobs, portfolios, initiatives, objectives, objectiveLinks, keyResults, ideAgents, marketplaceSkills, artifactAssignments, socControls, socEvidence, pokerSessions, pokerStories, pokerVotes, retrospectives, retroItems, boardConnections, projectRepositories, pullRequests, chatSessions, chatMessages, swimlanes, swimlaneAgentAssignments, tenants, executions, usageSnapshots, toolAuditEvents, executionMessages, agentHosts, agentHostProjects, errorGroups, roadmapItems } from '../../infrastructure/database/schema';
 import { resolveSegment } from '../../infrastructure/auth/segmentResolver';
 import type { McpToolEntry } from './mcpExtensionService';
 import type { Env } from '../../env';
@@ -42,7 +42,7 @@ import { BOARD_PROVIDERS, DISCOVERY_PROVIDER_IDS } from '../boardsync/providerCa
 import { maybeAutoRunOnLaneEntry } from '../../presentation/routes/taskRoutes';
 import { invalidateProjectsList } from '../../presentation/routes/projectRoutes';
 import { pmoVersionKey } from '../../presentation/routes/pmoRoutes';
-import { bumpCacheVersion } from '../../infrastructure/cache/readThroughCache';
+import { bumpCacheVersion, invalidateCached, trackerCacheKey } from '../../infrastructure/cache/readThroughCache';
 import { convertWorkItemType, ConvertError, type WorkItemKind } from '../workitem/convertWorkItemType';
 import { buildRuntimeService } from '../../buildRuntimeService';
 import { ChatTicketService } from '../brain/ChatTicketService';
@@ -88,6 +88,18 @@ async function bumpPmo(ctx: BuiltinCtx): Promise<void> {
   if (!ctx.env) return;
   await bumpCacheVersion(ctx.env, pmoVersionKey(ctx.tenantId)).catch(() => {});
   await invalidateProjectsList(ctx.env, ctx.tenantId).catch(() => {});
+}
+
+/** Invalidate the roadmap tracker cache (the portfolio `:all` key + the row's project
+ *  key) so a Brain-driven roadmap write is visible on the next /api/product/roadmap
+ *  read — the SAME keys segmentTrackerRoutes caches (via trackerCacheKey). No-op when
+ *  the caller didn't thread the Worker env. */
+async function invalidateRoadmap(ctx: BuiltinCtx, segmentId: string, projectId: number | null): Promise<void> {
+  if (!ctx.env) return;
+  await invalidateCached(ctx.env, trackerCacheKey('roadmap', ctx.tenantId, segmentId)).catch(() => {});
+  if (projectId != null) {
+    await invalidateCached(ctx.env, trackerCacheKey('roadmap', ctx.tenantId, segmentId, projectId)).catch(() => {});
+  }
 }
 
 /**
@@ -509,6 +521,68 @@ const CATALOG: BuiltinTool[] = [
   },
   { tool: 'specs.delete', mutates: true, description: 'Delete a spec / PRD by id.', parameters: obj({ id: S }, ['id']), run: async (ctx, a) => { const rows = await ctx.db.delete(specs).where(and(eq(specs.id, str(a.id)), eq(specs.tenantId, ctx.tenantId))).returning({ id: specs.id }); return { deleted: rows.length > 0 ? str(a.id) : null }; } },
 
+  // ---- Product roadmap (roadmap_items — a project/segment-scoped product artifact) ----
+  // NOT a planning-spine node: its own uuid-keyed table. A chat can be tied to a roadmap
+  // item (chats.link_ticket kind='roadmap'); these tools let the Brain read + create +
+  // maintain them. Writes invalidate the SAME tracker cache the /api/product/roadmap
+  // route serves (one key format via trackerCacheKey — no drift, no stale page reads).
+  { tool: 'roadmap.list', mutates: false, description: 'List product roadmap items, optionally for one project (pass projectId). The UI groups them by horizon (now / next / later).', parameters: obj({ projectId: N }), run: async (ctx, a) => {
+      const seg = await resolveSegment(ctx.db, ctx.tenantId);
+      const conds = [eq(roadmapItems.tenantId, ctx.tenantId), eq(roadmapItems.segmentId, seg)];
+      if (a.projectId != null) conds.push(eq(roadmapItems.projectId, num(a.projectId)));
+      return ctx.db.select().from(roadmapItems).where(and(...conds)).orderBy(desc(roadmapItems.updatedAt)).limit(200);
+    } },
+  { tool: 'roadmap.get', mutates: false, description: 'Get one roadmap item by id (uuid).', parameters: obj({ id: S }, ['id']), run: async (ctx, a) => (await ctx.db.select().from(roadmapItems).where(and(eq(roadmapItems.id, str(a.id)), eq(roadmapItems.tenantId, ctx.tenantId))).limit(1))[0] ?? null },
+  {
+    tool: 'roadmap.create', mutates: true,
+    description: 'Create a product roadmap item. title is required; horizon = now|next|later (default now); status defaults to "planned" (set "shipped" to mark it delivered). Optionally attach to a project (projectId) and set theme / priority / targetDate (ISO) / notes.',
+    parameters: obj({ title: S, horizon: S, status: S, theme: S, priority: S, targetDate: S, notes: S, projectId: N }, ['title']),
+    run: async (ctx, a) => {
+      const title = str(a.title).trim(); if (!title) throw new Error('title is required');
+      const seg = await resolveSegment(ctx.db, ctx.tenantId);
+      const projectId = a.projectId != null ? num(a.projectId) : null;
+      if (projectId != null) await ctx.projects.getProject(projectId, ctx.tenantId); // tenant-ownership guard (no cross-tenant attach)
+      const [row] = await ctx.db.insert(roadmapItems).values({
+        tenantId: ctx.tenantId, segmentId: seg, projectId, title,
+        ...(a.horizon != null ? { horizon: str(a.horizon) } : {}),
+        ...(a.status != null ? { status: str(a.status) } : {}),
+        theme: a.theme != null ? str(a.theme) : null,
+        priority: a.priority != null ? str(a.priority) : null,
+        targetDate: dt(a.targetDate) ?? null,
+        notes: a.notes != null ? str(a.notes) : null,
+      }).returning();
+      await invalidateRoadmap(ctx, seg, projectId);
+      return row;
+    },
+  },
+  {
+    tool: 'roadmap.update', mutates: true,
+    description: 'Update a roadmap item (title / horizon / status / theme / priority / targetDate / notes / projectId). Set status="shipped" to mark it delivered.',
+    parameters: obj({ id: S, title: S, horizon: S, status: S, theme: S, priority: S, targetDate: S, notes: S, projectId: N }, ['id']),
+    run: async (ctx, a) => {
+      const seg = await resolveSegment(ctx.db, ctx.tenantId);
+      const patch: Json = { updatedAt: new Date() };
+      if (a.title != null) patch.title = str(a.title);
+      if (a.horizon != null) patch.horizon = str(a.horizon);
+      if (a.status != null) patch.status = str(a.status);
+      if (a.theme != null) patch.theme = str(a.theme);
+      if (a.priority != null) patch.priority = str(a.priority);
+      if (a.targetDate != null) patch.targetDate = dt(a.targetDate) ?? null;
+      if (a.notes != null) patch.notes = str(a.notes);
+      if (a.projectId != null) patch.projectId = num(a.projectId);
+      const [row] = await ctx.db.update(roadmapItems).set(patch).where(and(eq(roadmapItems.id, str(a.id)), eq(roadmapItems.tenantId, ctx.tenantId), eq(roadmapItems.segmentId, seg))).returning();
+      if (!row) throw new Error('roadmap item not found');
+      await invalidateRoadmap(ctx, seg, (row as { projectId?: number | null }).projectId ?? null);
+      return row;
+    },
+  },
+  { tool: 'roadmap.delete', mutates: true, description: 'Delete a roadmap item by id.', parameters: obj({ id: S }, ['id']), run: async (ctx, a) => {
+      const seg = await resolveSegment(ctx.db, ctx.tenantId);
+      const rows = await ctx.db.delete(roadmapItems).where(and(eq(roadmapItems.id, str(a.id)), eq(roadmapItems.tenantId, ctx.tenantId), eq(roadmapItems.segmentId, seg))).returning({ id: roadmapItems.id, projectId: roadmapItems.projectId });
+      if (rows[0]) await invalidateRoadmap(ctx, seg, rows[0].projectId ?? null);
+      return { deleted: rows.length > 0 ? str(a.id) : null };
+    } },
+
   // ---- Strategy: Portfolios ▸ Initiatives ▸ OKRs (objectives + key results) ----
   // OKRs live in their OWN tables (segment-scoped), NOT on the task board. A board
   // Epic is a delivery container; an Objective is a strategic goal whose progress
@@ -894,8 +968,8 @@ const CATALOG: BuiltinTool[] = [
   // chat↔ticket lineage; merge chats into one; invite/tag agents to execute.
   // All logic lives in ChatTicketService (shared with the HTTP routes).
   { tool: 'chats.get_messages', mutates: false, description: "Read a Brain chat's message transcript (role + content, in order). Use to REVIEW a conversation's history — e.g. before deciding which chats to merge/consolidate, or to see what a chat produced.", parameters: obj({ chatId: N, limit: N }, ['chatId']), run: async (ctx, a) => { const svc = new ChatTicketService(ctx.db, ctx.env as Env); const r = await svc.listMessages(ctx.tenantId, num(a.chatId), ctx.userId ?? null, a.limit != null ? num(a.limit) : 200); if (!Array.isArray(r)) throw new Error(r.error); return r; } },
-  { tool: 'chats.list_tickets', mutates: false, description: "List the work items (portfolio/objective/initiative/roadmap/epic/gap/task) a Brain chat is tied to, each with a health summary (% done). Use to show a chat's ticket status.", parameters: obj({ chatId: N }, ['chatId']), run: async (ctx, a) => { const svc = new ChatTicketService(ctx.db, ctx.env as Env); const r = await svc.listTicketsForChat(ctx.tenantId, num(a.chatId), ctx.userId ?? null); if (!Array.isArray(r)) throw new Error(r.error); return r; } },
-  { tool: 'chats.link_ticket', mutates: true, description: "Tie a Brain chat to a work item. kind = portfolio|objective|initiative|roadmap|epic|gap|task; ref = the task/epic/gap id (number) or the portfolio/objective/initiative/roadmap UUID. linkType='created' records that this chat SPAWNED the ticket (lineage); 'linked' (default) attaches an existing one.", parameters: obj({ chatId: N, kind: { type: 'string', enum: ['portfolio', 'objective', 'initiative', 'roadmap', 'epic', 'gap', 'task'] }, ref: S, linkType: { type: 'string', enum: ['linked', 'created'] } }, ['chatId', 'kind', 'ref']), run: async (ctx, a) => { const svc = new ChatTicketService(ctx.db, ctx.env as Env); const r = await svc.linkTicket(ctx.tenantId, num(a.chatId), ctx.userId ?? null, { kind: str(a.kind), ref: str(a.ref), linkType: a.linkType === 'created' ? 'created' : 'linked' }); if ('error' in r) throw new Error(r.error); return r; } },
+  { tool: 'chats.list_tickets', mutates: false, description: "List the work items (portfolio/objective/initiative/roadmap/spec/epic/gap/task) a Brain chat is tied to, each with a health summary (% done). Use to show a chat's ticket status.", parameters: obj({ chatId: N }, ['chatId']), run: async (ctx, a) => { const svc = new ChatTicketService(ctx.db, ctx.env as Env); const r = await svc.listTicketsForChat(ctx.tenantId, num(a.chatId), ctx.userId ?? null); if (!Array.isArray(r)) throw new Error(r.error); return r; } },
+  { tool: 'chats.link_ticket', mutates: true, description: "Tie a Brain chat to a work item. kind = portfolio|objective|initiative|roadmap|spec|epic|gap|task; ref = the task/epic/gap id (number) or the portfolio/objective/initiative/roadmap/spec UUID. linkType='created' records that this chat SPAWNED the ticket (lineage); 'linked' (default) attaches an existing one.", parameters: obj({ chatId: N, kind: { type: 'string', enum: ['portfolio', 'objective', 'initiative', 'roadmap', 'spec', 'epic', 'gap', 'task'] }, ref: S, linkType: { type: 'string', enum: ['linked', 'created'] } }, ['chatId', 'kind', 'ref']), run: async (ctx, a) => { const svc = new ChatTicketService(ctx.db, ctx.env as Env); const r = await svc.linkTicket(ctx.tenantId, num(a.chatId), ctx.userId ?? null, { kind: str(a.kind), ref: str(a.ref), linkType: a.linkType === 'created' ? 'created' : 'linked' }); if ('error' in r) throw new Error(r.error); return r; } },
   { tool: 'chats.unlink_ticket', mutates: true, description: 'Remove a chat ↔ ticket link.', parameters: obj({ chatId: N, kind: S, ref: S }, ['chatId', 'kind', 'ref']), run: async (ctx, a) => { const svc = new ChatTicketService(ctx.db, ctx.env as Env); const r = await svc.unlinkTicket(ctx.tenantId, num(a.chatId), ctx.userId ?? null, str(a.kind), str(a.ref)); if ('error' in r) throw new Error(r.error); return r; } },
   { tool: 'chats.ticket_lineage', mutates: false, description: 'List every Brain chat that references a work item — the lineage (which conversations shaped it, and which SPAWNED it). kind/ref identify the ticket.', parameters: obj({ kind: S, ref: S }, ['kind', 'ref']), run: async (ctx, a) => { const svc = new ChatTicketService(ctx.db, ctx.env as Env); return svc.listChatsForTicket(ctx.tenantId, str(a.kind), str(a.ref)); } },
   { tool: 'chats.consolidate', mutates: true, description: 'Merge one or more source Brain chats INTO a target chat: source messages are appended in time order, their ticket links + agent invites move to the target, and each source is archived and redirected to the target (so any ticket still resolves to the one surviving chat). Use to de-duplicate scattered conversations about the same work.', parameters: obj({ targetChatId: N, sourceChatIds: { type: 'array', items: N } }, ['targetChatId', 'sourceChatIds']), run: async (ctx, a) => { const svc = new ChatTicketService(ctx.db, ctx.env as Env); const ids = Array.isArray(a.sourceChatIds) ? (a.sourceChatIds as unknown[]).map((x) => num(x)) : []; const r = await svc.consolidate(ctx.tenantId, ctx.userId ?? null, { targetChatId: num(a.targetChatId), sourceChatIds: ids }); if ('error' in r) throw new Error(r.error); return r; } },

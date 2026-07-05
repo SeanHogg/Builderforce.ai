@@ -1938,6 +1938,54 @@
       "runtime": "Editor",
       "online": "En línea",
       "offline": "Desconectado"
+    },
+    "teams": {
+      "heading": "Equipos",
+      "new": "Nuevo equipo",
+      "creating": "Creando…",
+      "create": "Crear equipo",
+      "name": "Nombre",
+      "namePlaceholder": "p. ej. Escuadrón de Plataforma",
+      "description": "Descripción",
+      "descriptionPlaceholder": "De qué se encarga este equipo",
+      "titleFallback": "Equipo",
+      "loading": "Cargando…",
+      "loadingTeams": "Cargando equipos…",
+      "empty": "Aún no hay equipos. Usa «{action}» para agrupar agentes y personas, y luego vincula el equipo a un proyecto.",
+      "noDescription": "Sin descripción",
+      "manage": "Gestionar",
+      "manageTeam": "Gestionar equipo {name}",
+      "memberCount": "{count, plural, one {<b>#</b> miembro} other {<b>#</b> miembros}}",
+      "projectCount": "{count, plural, one {<b>#</b> proyecto} other {<b>#</b> proyectos}}",
+      "colTeam": "Equipo",
+      "colDescription": "Descripción",
+      "colMembers": "Miembros",
+      "colProjects": "Proyectos",
+      "saveChanges": "Guardar cambios",
+      "savingChanges": "Guardando…",
+      "membersSection": "Miembros ({count})",
+      "addMemberPlaceholder": "Añadir un miembro…",
+      "allAdded": "Todos ya están en este equipo",
+      "add": "Añadir",
+      "noMembers": "Aún no hay miembros.",
+      "remove": "Quitar",
+      "projectsSection": "Proyectos ({count})",
+      "attachPlaceholder": "Vincular un proyecto…",
+      "noMoreProjects": "No hay más proyectos para vincular",
+      "attach": "Vincular",
+      "noProjects": "No está vinculado a ningún proyecto.",
+      "detach": "Desvincular",
+      "deleteConfirm": "¿Eliminar el equipo «{name}»? Se eliminan los miembros y los vínculos con proyectos. Los agentes, las personas y los proyectos en sí no se ven afectados.",
+      "kind": {
+        "human": "Persona",
+        "cloud_agent": "Agente en la nube",
+        "host_agent": "Host remoto"
+      },
+      "memberOption": "{name} — {kind}",
+      "errLoadTeams": "No se pudieron cargar los equipos",
+      "errLoadTeam": "No se pudo cargar el equipo",
+      "errCreate": "No se pudo crear el equipo",
+      "errDelete": "No se pudo eliminar el equipo"
     }
   },
   "knowledge": {
@@ -4621,7 +4669,8 @@
         "objective": "Objetivo",
         "initiative": "Iniciativa",
         "portfolio": "Portafolio",
-        "roadmap": "Hoja de ruta"
+        "roadmap": "Hoja de ruta",
+        "spec": "Especificación"
       }
     },
     "approveAll": "Aprobar todo",
@@ -5664,5 +5713,110 @@
       "apiKeys": "Claves API",
       "token": "Token de superadmin"
     }
+  },
+  "providerKeys": {
+    "title": "Usa tus propios modelos",
+    "subtitle": "Conecta tu propia cuenta de Anthropic, OpenAI o Google. Los proveedores conectados impulsan tus agentes con tu propia cuenta y determinan las opciones de modelo en cada selector: el uso en tu máquina (local y VS Code) es gratuito; el uso de agentes en la nube se sigue facturando. Las credenciales se almacenan cifradas y no se vuelven a mostrar.",
+    "loading": "Cargando…",
+    "errorPrefix": "Error: {message}",
+    "status": {
+      "connected": "● {subscription} conectada",
+      "keyConfigured": "● Clave de API de {label} configurada",
+      "notConnected": "○ Sin conectar"
+    },
+    "disconnect": "Desconectar",
+    "remove": "Eliminar",
+    "connect": "Conectar {subscription}",
+    "reconnect": "Reconectar {subscription}",
+    "working": "Procesando…",
+    "pastePrompt": "¿Aprobado en la pestaña de Claude? Pega el código que te muestra (el valor completo <code>code#state</code>) abajo.",
+    "pastePlaceholder": "Pega el código de Claude…",
+    "finish": "Finalizar",
+    "connecting": "Conectando…",
+    "cancel": "Cancelar",
+    "ownAccountNote": "Conecta solo tu <b>propia</b> cuenta: una credencial de suscripción es personal y no debe compartirse entre espacios de trabajo.",
+    "orUseApiKey": "O USA UNA CLAVE DE API",
+    "keyPlaceholderReplace": "Reemplazar clave ({placeholder})",
+    "save": "Guardar",
+    "replace": "Reemplazar",
+    "saving": "Guardando…",
+    "confirmRemoveSubscription": "¿Desconectar tu {subscription}? Los agentes que la usan recurrirán a los modelos gestionados de Builderforce.",
+    "confirmRemoveKey": "¿Eliminar tu clave de API de {label}? Los agentes que la usan recurrirán a los modelos gestionados de Builderforce.",
+    "errSaveKey": "No se pudo guardar la clave",
+    "errStartConnect": "No se pudo iniciar la conexión",
+    "errConnectSubscription": "No se pudo conectar la suscripción",
+    "errRemove": "No se pudo eliminar la credencial",
+    "provider": {
+      "anthropic": {
+        "blurb": "Conecta tu suscripción a Claude Pro/Max (sin facturación por token) o pega una clave de API de Anthropic.",
+        "subscription": "suscripción de Claude"
+      },
+      "openai": {
+        "blurb": "Pega una clave de API de OpenAI para ejecutar modelos GPT en tu propia cuenta de OpenAI."
+      },
+      "google": {
+        "blurb": "Pega una clave de API de Google AI (Gemini) para ejecutar modelos Gemini en tu propia cuenta de Google."
+      }
+    }
+  },
+  "modelSelect": {
+    "yourLlms": "Tus LLM",
+    "connectedProviders": "Proveedores conectados",
+    "models": "Modelos",
+    "current": "{model} (actual)"
+  },
+  "runAgentControl": {
+    "agentTitle": "Agente",
+    "autoAnyAgent": "Automático (cualquier agente)",
+    "cloudAgents": "Agentes en la nube",
+    "assignedAgent": "Agente asignado",
+    "selfHostedAgents": "Agentes autoalojados",
+    "agentOffline": "{name} (sin conexión)",
+    "defaultModel": "builderforce.ai (predeterminado)",
+    "bestCodingModel": "builderforce.ai (mejor modelo de programación)",
+    "modelChoiceLocked": "Seleccionar modelo requiere un plan de pago o un proveedor conectado: las ejecuciones gratuitas usan el modelo gestionado de Builderforce",
+    "proBadge": "PRO",
+    "modelTitle": "Modelo LLM",
+    "repositoryTitle": "Repositorio",
+    "autoDefaultRepo": "Automático (repositorio predeterminado)",
+    "defaultParen": "(predeterminado)",
+    "run": "Ejecutar",
+    "running": "Ejecutando…",
+    "noWritableRepo": "Sin repositorio con permiso de escritura.",
+    "repoNoCredential": "El repositorio de esta tarea no tiene una credencial utilizable, por lo que el agente no puede confirmar ni publicar código: solo devolverá un resumen de texto.",
+    "repoUnbound": "No hay ningún repositorio vinculado a esta tarea, por lo que el agente no puede confirmar ni publicar código: solo devolverá un resumen de texto.",
+    "openProjectSourceControl": "Abrir proyecto → Integraciones → Control de código fuente →"
+  },
+  "apiKeys": {
+    "title": "Claves de API",
+    "selectWorkspace": "Selecciona un espacio de trabajo para gestionar las claves de API.",
+    "ownerOnly": "Solo el <strong>propietario</strong> del espacio de trabajo puede crear o revocar claves de API de inquilino (estas credenciales pueden gastar el presupuesto diario de tokens del espacio de trabajo).",
+    "subtitle": "Claves <code>bfk_*</code> con ámbito de inquilino para la puerta de enlace <strong>builderforceLLM</strong>. Úsalas en aplicaciones de inquilino (del lado del servidor) para llamar a <code>/llm/v1/chat/completions</code>. Los límites diarios de tokens del plan siguen aplicándose.",
+    "createTitle": "Crear una nueva clave",
+    "createNamePlaceholder": "p. ej. hired.video production",
+    "browserAccess": "Acceso desde el navegador",
+    "creating": "Creando…",
+    "createKey": "Crear clave",
+    "activeAndRevoked": "Claves activas y revocadas",
+    "errorPrefix": "Error: {message}",
+    "loading": "Cargando…",
+    "noKeys": "Aún no hay claves. Crea una arriba.",
+    "revoked": "Revocada",
+    "createdLastUsed": "Creada el {created} · Último uso {lastUsed}",
+    "revokedOnSuffix": " · Revocada el {revoked}",
+    "hideActivity": "Ocultar actividad",
+    "viewActivity": "Ver actividad",
+    "edit": "Editar",
+    "revoke": "Revocar",
+    "colName": "Nombre",
+    "colStatus": "Estado",
+    "colCreated": "Creada",
+    "colLastUsed": "Último uso",
+    "colActions": "Acciones",
+    "revokedOn": "Revocada el {revoked}",
+    "active": "Activa",
+    "confirmRevoke": "¿Revocar esta clave de API? Las aplicaciones que la usan dejarán de funcionar de inmediato.",
+    "errCreate": "No se pudo crear la clave",
+    "errRevoke": "Error al revocar"
   }
 }

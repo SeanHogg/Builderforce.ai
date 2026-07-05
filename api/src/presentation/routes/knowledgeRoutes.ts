@@ -38,6 +38,7 @@ import {
   type KnowledgeNotifierEnv,
 } from '../../application/knowledge/knowledgeNotifier';
 import { STANDARD_LIBRARY, standardItem, computeCoverage } from '../../application/knowledge/standardLibrary';
+import { recordActivity, resolveActorFromContext } from '../../application/activity/activityLog';
 import type { Env, HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 
@@ -537,6 +538,21 @@ export function createKnowledgeRoutes(db: Db): Hono<HonoEnv> {
       .where(and(eq(knowledgeDocuments.id, id), eq(knowledgeDocuments.tenantId, tenantId)));
 
     await bumpCacheVersion(c.env as Env, knowledgeVersionKey(tenantId));
+
+    // Unified audit stream: a knowledge/doc publish, attributed to its author.
+    c.executionCtx.waitUntil((async () => {
+      const actor = await resolveActorFromContext(c.env as Env, db, c);
+      await recordActivity(c.env as Env, db, {
+        tenantId,
+        actor,
+        verb: 'doc.published',
+        targetType: 'document',
+        targetId: id,
+        targetLabel: doc.title,
+        summary: `Published "${doc.title}" v${nextVersion}`,
+        metadata: { versionNumber: nextVersion, changeNote: body.changeNote?.trim() || null },
+      });
+    })().catch(() => {}));
     return c.json(await loadDoc(tenantId, id));
   });
 

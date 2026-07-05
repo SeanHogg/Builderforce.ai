@@ -1,6 +1,7 @@
 'use client';
 
 import { Fragment, useEffect, useState } from 'react';
+import { useTranslations } from 'next-intl';
 import { tenantApiKeysApi, type TenantApiKey } from '@/lib/builderforceApi';
 import { getStoredTenant } from '@/lib/auth';
 import { MintedTenantApiKeyDisplay } from '@/components/MintedTenantApiKeyDisplay';
@@ -55,6 +56,7 @@ function fmtDate(iso: string | null | undefined): string {
 }
 
 export default function ApiKeysPage() {
+  const t = useTranslations('apiKeys');
   const tenant = getStoredTenant();
   const tenantId = tenant ? Number(tenant.id) : NaN;
   const isOwner = tenant?.role === 'owner';
@@ -85,9 +87,9 @@ export default function ApiKeysPage() {
   if (!tenant) {
     return (
       <PageContainer width="narrow" style={{ padding: '32px 40px' }}>
-        <h1 style={{ fontSize: 22, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 16 }}>API Keys</h1>
+        <h1 style={{ fontSize: 22, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 16 }}>{t('title')}</h1>
         <div style={cardStyle}>
-          <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>Select a workspace to manage API keys.</p>
+          <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>{t('selectWorkspace')}</p>
         </div>
       </PageContainer>
     );
@@ -96,11 +98,10 @@ export default function ApiKeysPage() {
   if (!isOwner) {
     return (
       <PageContainer width="narrow" style={{ padding: '32px 40px' }}>
-        <h1 style={{ fontSize: 22, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 16 }}>API Keys</h1>
+        <h1 style={{ fontSize: 22, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 16 }}>{t('title')}</h1>
         <div style={cardStyle}>
           <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>
-            Only the workspace <strong style={{ color: 'var(--text-primary)' }}>owner</strong> can mint or revoke
-            tenant API keys (these credentials can spend the workspace&apos;s daily token budget).
+            {t.rich('ownerOnly', { strong: (chunks) => <strong style={{ color: 'var(--text-primary)' }}>{chunks}</strong> })}
           </p>
         </div>
       </PageContainer>
@@ -122,7 +123,7 @@ export default function ApiKeysPage() {
       setNewName('');
       setNewAllowedOrigins(null);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to create key');
+      setError(e instanceof Error ? e.message : t('errCreate'));
     } finally {
       setCreating(false);
     }
@@ -140,14 +141,14 @@ export default function ApiKeysPage() {
   };
 
   const handleRevoke = async (keyId: string) => {
-    if (!confirm('Revoke this API key? Apps using it will stop working immediately.')) return;
+    if (!confirm(t('confirmRevoke'))) return;
     setRevoking(keyId);
     setError(null);
     try {
       await tenantApiKeysApi.revoke(tenantId, keyId);
       setKeys((prev) => prev.map((k) => k.id === keyId ? { ...k, revokedAt: new Date().toISOString() } : k));
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Revoke failed');
+      setError(e instanceof Error ? e.message : t('errRevoke'));
     } finally {
       setRevoking(null);
     }
@@ -155,12 +156,12 @@ export default function ApiKeysPage() {
 
   return (
     <PageContainer width="narrow" style={{ padding: '32px 40px' }}>
-      <h1 style={{ fontSize: 22, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 8 }}>API Keys</h1>
+      <h1 style={{ fontSize: 22, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 8 }}>{t('title')}</h1>
       <p style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 24 }}>
-        Tenant-scoped <code style={{ fontFamily: 'var(--font-mono)', fontSize: 12 }}>bfk_*</code> keys for the{' '}
-        <strong style={{ color: 'var(--text-primary)' }}>builderforceLLM</strong> gateway. Use them in tenant apps
-        (server-side) to call <code style={{ fontFamily: 'var(--font-mono)', fontSize: 12 }}>/llm/v1/chat/completions</code>.
-        Plan-level daily token caps still apply.
+        {t.rich('subtitle', {
+          code: (chunks) => <code style={{ fontFamily: 'var(--font-mono)', fontSize: 12 }}>{chunks}</code>,
+          strong: (chunks) => <strong style={{ color: 'var(--text-primary)' }}>{chunks}</strong>,
+        })}
       </p>
 
       {revealedKey && (
@@ -178,12 +179,12 @@ export default function ApiKeysPage() {
       </div>
 
       <div style={{ ...cardStyle, marginBottom: 20 }}>
-        <div style={sectionTitle}>Create a new key</div>
+        <div style={sectionTitle}>{t('createTitle')}</div>
         <input
           type="text"
           value={newName}
           onChange={(e) => setNewName(e.target.value)}
-          placeholder="e.g. hired.video production"
+          placeholder={t('createNamePlaceholder')}
           disabled={creating}
           style={{
             width: '100%', padding: '8px 12px', fontSize: 13, marginBottom: 14,
@@ -194,7 +195,7 @@ export default function ApiKeysPage() {
         />
 
         <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-muted)', marginBottom: 8 }}>
-          Browser access
+          {t('browserAccess')}
         </div>
         <AllowedOriginsField
           value={newAllowedOrigins}
@@ -208,23 +209,23 @@ export default function ApiKeysPage() {
           disabled={creating || !newName.trim()}
           style={{ ...buttonPrimary, opacity: creating || !newName.trim() ? 0.5 : 1, marginTop: 8 }}
         >
-          {creating ? 'Creating…' : 'Create key'}
+          {creating ? t('creating') : t('createKey')}
         </button>
       </div>
 
       <div style={cardStyle}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
-          <div style={{ ...sectionTitle, marginBottom: 0 }}>Active and revoked keys</div>
+          <div style={{ ...sectionTitle, marginBottom: 0 }}>{t('activeAndRevoked')}</div>
           <ViewToggle value={viewMode} onChange={setViewMode} />
         </div>
         <div style={{ marginBottom: 14 }} />
         {error && (
-          <div style={{ fontSize: 12, color: 'var(--coral-bright)', marginBottom: 10 }}>Error: {error}</div>
+          <div style={{ fontSize: 12, color: 'var(--coral-bright)', marginBottom: 10 }}>{t('errorPrefix', { message: error })}</div>
         )}
         {loading ? (
-          <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>Loading…</div>
+          <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>{t('loading')}</div>
         ) : keys.length === 0 ? (
-          <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>No keys yet. Create one above.</div>
+          <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>{t('noKeys')}</div>
         ) : viewMode === 'card' ? (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             {keys.map((k) => {
@@ -253,13 +254,13 @@ export default function ApiKeysPage() {
                         <AllowedOriginsBadge allowedOrigins={k.allowedOrigins} />
                         {revoked && (
                           <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 6px', borderRadius: 4, background: 'var(--bg-surface)', color: 'var(--text-muted)' }}>
-                            Revoked
+                            {t('revoked')}
                           </span>
                         )}
                       </div>
                       <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>
-                        Created {fmtDate(k.createdAt)} · Last used {fmtDate(k.lastUsedAt)}
-                        {revoked && ` · Revoked ${fmtDate(k.revokedAt)}`}
+                        {t('createdLastUsed', { created: fmtDate(k.createdAt), lastUsed: fmtDate(k.lastUsedAt) })}
+                        {revoked && t('revokedOnSuffix', { revoked: fmtDate(k.revokedAt) })}
                       </div>
                     </div>
                     {!isEditing && (
@@ -269,7 +270,7 @@ export default function ApiKeysPage() {
                           onClick={() => setExpandedKeyId(expandedKeyId === k.id ? null : k.id)}
                           style={{ ...buttonPrimary, padding: '4px 10px', fontSize: 11, background: 'none' }}
                         >
-                          {expandedKeyId === k.id ? 'Hide activity' : 'View activity'}
+                          {expandedKeyId === k.id ? t('hideActivity') : t('viewActivity')}
                         </button>
                         {!revoked && (
                           <>
@@ -278,7 +279,7 @@ export default function ApiKeysPage() {
                               onClick={() => setEditingKeyId(k.id)}
                               style={{ ...buttonPrimary, padding: '4px 10px', fontSize: 11 }}
                             >
-                              Edit
+                              {t('edit')}
                             </button>
                             <button
                               type="button"
@@ -286,7 +287,7 @@ export default function ApiKeysPage() {
                               disabled={revoking === k.id}
                               style={buttonDanger}
                             >
-                              {revoking === k.id ? '…' : 'Revoke'}
+                              {revoking === k.id ? '…' : t('revoke')}
                             </button>
                           </>
                         )}
@@ -315,11 +316,11 @@ export default function ApiKeysPage() {
             <table style={tableStyle}>
               <thead>
                 <tr style={theadRowStyle}>
-                  <th style={thStyle}>Name</th>
-                  <th style={thStyle}>Status</th>
-                  <th style={thStyle}>Created</th>
-                  <th style={thStyle}>Last used</th>
-                  <th style={thStyle}>Actions</th>
+                  <th style={thStyle}>{t('colName')}</th>
+                  <th style={thStyle}>{t('colStatus')}</th>
+                  <th style={thStyle}>{t('colCreated')}</th>
+                  <th style={thStyle}>{t('colLastUsed')}</th>
+                  <th style={thStyle}>{t('colActions')}</th>
                 </tr>
               </thead>
               <tbody>
@@ -343,7 +344,7 @@ export default function ApiKeysPage() {
                           </div>
                         </td>
                         <td style={tdMutedStyle}>
-                          {revoked ? `Revoked ${fmtDate(k.revokedAt)}` : 'Active'}
+                          {revoked ? t('revokedOn', { revoked: fmtDate(k.revokedAt) }) : t('active')}
                         </td>
                         <td style={tdMutedStyle}>{fmtDate(k.createdAt)}</td>
                         <td style={tdMutedStyle}>{fmtDate(k.lastUsedAt)}</td>
@@ -355,7 +356,7 @@ export default function ApiKeysPage() {
                                 onClick={() => setExpandedKeyId(expandedKeyId === k.id ? null : k.id)}
                                 style={{ ...buttonPrimary, padding: '4px 10px', fontSize: 11, background: 'none' }}
                               >
-                                {expandedKeyId === k.id ? 'Hide activity' : 'View activity'}
+                                {expandedKeyId === k.id ? t('hideActivity') : t('viewActivity')}
                               </button>
                               {!revoked && (
                                 <>
@@ -364,7 +365,7 @@ export default function ApiKeysPage() {
                                     onClick={() => setEditingKeyId(k.id)}
                                     style={{ ...buttonPrimary, padding: '4px 10px', fontSize: 11 }}
                                   >
-                                    Edit
+                                    {t('edit')}
                                   </button>
                                   <button
                                     type="button"
@@ -372,7 +373,7 @@ export default function ApiKeysPage() {
                                     disabled={revoking === k.id}
                                     style={buttonDanger}
                                   >
-                                    {revoking === k.id ? '…' : 'Revoke'}
+                                    {revoking === k.id ? '…' : t('revoke')}
                                   </button>
                                 </>
                               )}

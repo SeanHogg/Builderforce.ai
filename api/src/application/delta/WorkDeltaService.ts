@@ -27,6 +27,7 @@ import { ProjectService } from '../project/ProjectService';
 import { TaskRepository } from '../../infrastructure/repositories/TaskRepository';
 import { ProjectRepository } from '../../infrastructure/repositories/ProjectRepository';
 import { ChatTicketService } from '../brain/ChatTicketService';
+import { recordActivity, resolveActorByRef } from '../activity/activityLog';
 import { TaskPriority, TaskStatus } from '../../domain/shared/types';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
@@ -162,6 +163,22 @@ export class WorkDeltaService {
       files: files ?? undefined,
       createdBy: createdBy ?? undefined,
     }).returning({ id: workDeltas.id });
+
+    // Unified audit stream: a code change, attributed to its author (human, hire,
+    // or agent — resolved from the createdBy ref). Best-effort, never throws.
+    const actor = await resolveActorByRef(this.env, this.db, tenantId, createdBy);
+    await recordActivity(this.env, this.db, {
+      tenantId,
+      segmentId: seg ?? null,
+      projectId: input.projectId,
+      actor,
+      verb: 'code.changed',
+      targetType: taskId != null ? 'task' : 'project',
+      targetId: taskId ?? input.projectId,
+      targetLabel: summary.slice(0, 300),
+      summary: `${kind}: ${summary.slice(0, 200)}`,
+      metadata: { kind, modality, files: files ?? [], deltaId: row!.id, taskKey },
+    });
 
     return { deltaId: row!.id, kind, taskId, taskKey };
   }

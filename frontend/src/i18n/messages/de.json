@@ -1938,6 +1938,54 @@
       "runtime": "Editor",
       "online": "Online",
       "offline": "Offline"
+    },
+    "teams": {
+      "heading": "Teams",
+      "new": "Neues Team",
+      "creating": "Wird erstellt…",
+      "create": "Team erstellen",
+      "name": "Name",
+      "namePlaceholder": "z. B. Plattform-Team",
+      "description": "Beschreibung",
+      "descriptionPlaceholder": "Wofür dieses Team verantwortlich ist",
+      "titleFallback": "Team",
+      "loading": "Wird geladen…",
+      "loadingTeams": "Teams werden geladen…",
+      "empty": "Noch keine Teams. Nutze „{action}“, um Agenten und Personen zu gruppieren, und verknüpfe das Team dann mit einem Projekt.",
+      "noDescription": "Keine Beschreibung",
+      "manage": "Verwalten",
+      "manageTeam": "Team {name} verwalten",
+      "memberCount": "{count, plural, one {<b>#</b> Mitglied} other {<b>#</b> Mitglieder}}",
+      "projectCount": "{count, plural, one {<b>#</b> Projekt} other {<b>#</b> Projekte}}",
+      "colTeam": "Team",
+      "colDescription": "Beschreibung",
+      "colMembers": "Mitglieder",
+      "colProjects": "Projekte",
+      "saveChanges": "Änderungen speichern",
+      "savingChanges": "Wird gespeichert…",
+      "membersSection": "Mitglieder ({count})",
+      "addMemberPlaceholder": "Mitglied hinzufügen…",
+      "allAdded": "Alle sind bereits in diesem Team",
+      "add": "Hinzufügen",
+      "noMembers": "Noch keine Mitglieder.",
+      "remove": "Entfernen",
+      "projectsSection": "Projekte ({count})",
+      "attachPlaceholder": "Projekt verknüpfen…",
+      "noMoreProjects": "Keine weiteren Projekte zum Verknüpfen",
+      "attach": "Verknüpfen",
+      "noProjects": "Mit keinem Projekt verknüpft.",
+      "detach": "Trennen",
+      "deleteConfirm": "Team „{name}“ löschen? Mitglieder und Projektverknüpfungen werden entfernt. Die Agenten, Personen und Projekte selbst sind nicht betroffen.",
+      "kind": {
+        "human": "Person",
+        "cloud_agent": "Cloud-Agent",
+        "host_agent": "Remote-Host"
+      },
+      "memberOption": "{name} — {kind}",
+      "errLoadTeams": "Teams konnten nicht geladen werden",
+      "errLoadTeam": "Team konnte nicht geladen werden",
+      "errCreate": "Team konnte nicht erstellt werden",
+      "errDelete": "Team konnte nicht gelöscht werden"
     }
   },
   "knowledge": {
@@ -4621,7 +4669,8 @@
         "objective": "Objective",
         "initiative": "Initiative",
         "portfolio": "Portfolio",
-        "roadmap": "Roadmap"
+        "roadmap": "Roadmap",
+        "spec": "Spezifikation"
       }
     },
     "approveAll": "Alle genehmigen",
@@ -5664,5 +5713,110 @@
       "apiKeys": "API-Schlüssel",
       "token": "Superadmin-Token"
     }
+  },
+  "providerKeys": {
+    "title": "Eigene Modelle verwenden",
+    "subtitle": "Verbinden Sie Ihr eigenes Anthropic-, OpenAI- oder Google-Konto. Verbundene Anbieter betreiben Ihre Agenten mit Ihrem eigenen Konto und bestimmen die Modellauswahl in jedem Auswahlmenü – die Nutzung auf Ihrem Rechner (On-Premises und VS Code) ist kostenlos; die Nutzung von Cloud-Agenten wird weiterhin berechnet. Zugangsdaten werden verschlüsselt gespeichert und nie wieder angezeigt.",
+    "loading": "Wird geladen…",
+    "errorPrefix": "Fehler: {message}",
+    "status": {
+      "connected": "● {subscription} verbunden",
+      "keyConfigured": "● {label}-API-Schlüssel konfiguriert",
+      "notConnected": "○ Nicht verbunden"
+    },
+    "disconnect": "Trennen",
+    "remove": "Entfernen",
+    "connect": "{subscription} verbinden",
+    "reconnect": "{subscription} erneut verbinden",
+    "working": "Wird verarbeitet…",
+    "pastePrompt": "Im Claude-Tab genehmigt? Fügen Sie den angezeigten Code (den vollständigen <code>code#state</code>-Wert) unten ein.",
+    "pastePlaceholder": "Code von Claude einfügen…",
+    "finish": "Fertigstellen",
+    "connecting": "Wird verbunden…",
+    "cancel": "Abbrechen",
+    "ownAccountNote": "Verbinden Sie nur Ihr <b>eigenes</b> Konto – ein Abo-Zugang ist persönlich und darf nicht zwischen Arbeitsbereichen geteilt werden.",
+    "orUseApiKey": "ODER API-SCHLÜSSEL VERWENDEN",
+    "keyPlaceholderReplace": "Schlüssel ersetzen ({placeholder})",
+    "save": "Speichern",
+    "replace": "Ersetzen",
+    "saving": "Wird gespeichert…",
+    "confirmRemoveSubscription": "Ihr {subscription} trennen? Agenten, die es verwenden, greifen auf die verwalteten Modelle von Builderforce zurück.",
+    "confirmRemoveKey": "Ihren {label}-API-Schlüssel entfernen? Agenten, die ihn verwenden, greifen auf die verwalteten Modelle von Builderforce zurück.",
+    "errSaveKey": "Schlüssel konnte nicht gespeichert werden",
+    "errStartConnect": "Verbindung konnte nicht gestartet werden",
+    "errConnectSubscription": "Abo konnte nicht verbunden werden",
+    "errRemove": "Zugangsdaten konnten nicht entfernt werden",
+    "provider": {
+      "anthropic": {
+        "blurb": "Verbinden Sie Ihr Claude-Pro/Max-Abo (keine Abrechnung pro Token) oder fügen Sie einen Anthropic-API-Schlüssel ein.",
+        "subscription": "Claude-Abo"
+      },
+      "openai": {
+        "blurb": "Fügen Sie einen OpenAI-API-Schlüssel ein, um GPT-Modelle mit Ihrem eigenen OpenAI-Konto auszuführen."
+      },
+      "google": {
+        "blurb": "Fügen Sie einen Google-AI-(Gemini-)API-Schlüssel ein, um Gemini-Modelle mit Ihrem eigenen Google-Konto auszuführen."
+      }
+    }
+  },
+  "modelSelect": {
+    "yourLlms": "Ihre LLMs",
+    "connectedProviders": "Verbundene Anbieter",
+    "models": "Modelle",
+    "current": "{model} (aktuell)"
+  },
+  "runAgentControl": {
+    "agentTitle": "Agent",
+    "autoAnyAgent": "Automatisch (beliebiger Agent)",
+    "cloudAgents": "Cloud-Agenten",
+    "assignedAgent": "Zugewiesener Agent",
+    "selfHostedAgents": "Selbst gehostete Agenten",
+    "agentOffline": "{name} (offline)",
+    "defaultModel": "builderforce.ai (Standard)",
+    "bestCodingModel": "builderforce.ai (bestes Coding-Modell)",
+    "modelChoiceLocked": "Die Modellauswahl erfordert einen kostenpflichtigen Tarif oder einen verbundenen Anbieter – kostenlose Ausführungen verwenden das verwaltete Standardmodell von Builderforce",
+    "proBadge": "PRO",
+    "modelTitle": "LLM-Modell",
+    "repositoryTitle": "Repository",
+    "autoDefaultRepo": "Automatisch (Standard-Repository)",
+    "defaultParen": "(Standard)",
+    "run": "Ausführen",
+    "running": "Wird ausgeführt…",
+    "noWritableRepo": "Kein beschreibbares Repository.",
+    "repoNoCredential": "Das Repository dieser Aufgabe hat keine nutzbaren Zugangsdaten, daher kann der Agent keinen Code committen oder ausliefern – er gibt nur eine Textzusammenfassung zurück.",
+    "repoUnbound": "Dieser Aufgabe ist kein Repository zugeordnet, daher kann der Agent keinen Code committen oder ausliefern – er gibt nur eine Textzusammenfassung zurück.",
+    "openProjectSourceControl": "Projekt öffnen → Integrationen → Versionsverwaltung →"
+  },
+  "apiKeys": {
+    "title": "API-Schlüssel",
+    "selectWorkspace": "Wählen Sie einen Arbeitsbereich aus, um API-Schlüssel zu verwalten.",
+    "ownerOnly": "Nur der <strong>Eigentümer</strong> des Arbeitsbereichs kann Mandanten-API-Schlüssel erstellen oder widerrufen (diese Zugangsdaten können das tägliche Token-Budget des Arbeitsbereichs verbrauchen).",
+    "subtitle": "Mandantenspezifische <code>bfk_*</code>-Schlüssel für das <strong>builderforceLLM</strong>-Gateway. Verwenden Sie sie in Mandanten-Apps (serverseitig), um <code>/llm/v1/chat/completions</code> aufzurufen. Die täglichen Token-Obergrenzen des Tarifs gelten weiterhin.",
+    "createTitle": "Neuen Schlüssel erstellen",
+    "createNamePlaceholder": "z. B. hired.video production",
+    "browserAccess": "Browser-Zugriff",
+    "creating": "Wird erstellt…",
+    "createKey": "Schlüssel erstellen",
+    "activeAndRevoked": "Aktive und widerrufene Schlüssel",
+    "errorPrefix": "Fehler: {message}",
+    "loading": "Wird geladen…",
+    "noKeys": "Noch keine Schlüssel. Erstellen Sie oben einen.",
+    "revoked": "Widerrufen",
+    "createdLastUsed": "Erstellt am {created} · Zuletzt verwendet {lastUsed}",
+    "revokedOnSuffix": " · Widerrufen am {revoked}",
+    "hideActivity": "Aktivität ausblenden",
+    "viewActivity": "Aktivität anzeigen",
+    "edit": "Bearbeiten",
+    "revoke": "Widerrufen",
+    "colName": "Name",
+    "colStatus": "Status",
+    "colCreated": "Erstellt",
+    "colLastUsed": "Zuletzt verwendet",
+    "colActions": "Aktionen",
+    "revokedOn": "Widerrufen am {revoked}",
+    "active": "Aktiv",
+    "confirmRevoke": "Diesen API-Schlüssel widerrufen? Apps, die ihn verwenden, funktionieren sofort nicht mehr.",
+    "errCreate": "Schlüssel konnte nicht erstellt werden",
+    "errRevoke": "Widerruf fehlgeschlagen"
   }
 }

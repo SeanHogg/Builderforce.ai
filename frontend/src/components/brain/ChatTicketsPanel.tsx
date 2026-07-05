@@ -16,9 +16,9 @@ import {
   type ChatTicketsAdapter, type ChatTicketsLabels, type TicketKind, type TicketOptionVM,
 } from '@seanhogg/builderforce-brain-ui';
 import {
-  brain, tasksApi, pmoApi, segmentTrackerClient,
+  brain, tasksApi, pmoApi, specsApi, segmentTrackerClient,
   type BrainChat, type ChatTicketLink, type ChatAgentInvite, type Task,
-  type Objective, type Initiative, type Portfolio, type TrackerRow,
+  type Objective, type Initiative, type Portfolio, type TrackerRow, type Spec,
 } from '@/lib/builderforceApi';
 
 /** Roadmap items are a project-scoped tracker (their own uuid-keyed table). */
@@ -47,7 +47,7 @@ export function ChatTicketsPanel({ chatId, projectId, chatList, onChanged }: {
     linkTypeLinked: t('linkTypeLinked'), linkTypeCreated: t('linkTypeCreated'), linkAction: t('linkAction'),
     noAgents: t('noAgents'), removeAgent: t('removeAgent'), inviteAgent: t('inviteAgent'), agentsHint: t('agentsHint'),
     mergeHint: t('mergeHint'), mergeNoOthers: t('mergeNoOthers'),
-    kind: { task: t('kind.task'), epic: t('kind.epic'), gap: t('kind.gap'), objective: t('kind.objective'), initiative: t('kind.initiative'), portfolio: t('kind.portfolio'), roadmap: t('kind.roadmap') },
+    kind: { task: t('kind.task'), epic: t('kind.epic'), gap: t('kind.gap'), objective: t('kind.objective'), initiative: t('kind.initiative'), portfolio: t('kind.portfolio'), roadmap: t('kind.roadmap'), spec: t('kind.spec') },
     ringAria: (label, pct) => t('ringAria', { label, pct }),
     runStarted: (agent) => t('runStarted', { agent }),
     mergeAction: (n) => t('mergeAction', { n }),
@@ -68,12 +68,13 @@ export function ChatTicketsPanel({ chatId, projectId, chatList, onChanged }: {
       // task/epic/gap from the board (project-scoped when known); the strategy tiers
       // (OKR objective / initiative / portfolio) are tenant-wide via the PMO API;
       // roadmap items are the project's product roadmap tracker.
-      const [tasks, objectives, initiatives, portfolios, roadmap] = await Promise.all([
+      const [tasks, objectives, initiatives, portfolios, roadmap, specs] = await Promise.all([
         tasksApi.list(pid ?? undefined).catch(() => [] as Task[]),
         pmoApi.objectives.list().catch(() => [] as Objective[]),
         pmoApi.initiatives.list().catch(() => [] as Initiative[]),
         pmoApi.portfolios.list().catch(() => [] as Portfolio[]),
         roadmapTracker.list(pid ?? undefined).catch(() => [] as TrackerRow[]),
+        specsApi.list(pid ?? undefined).catch(() => [] as Spec[]),
       ]);
       const taskOpts: TicketOptionVM[] = [];
       const epicOpts: TicketOptionVM[] = [];
@@ -90,6 +91,7 @@ export function ChatTicketsPanel({ chatId, projectId, chatList, onChanged }: {
         initiative: initiatives.map((i) => ({ ref: i.id, label: i.name })),
         portfolio: portfolios.map((p) => ({ ref: p.id, label: p.name })),
         roadmap: roadmap.map((r) => ({ ref: r.id, label: String(r.title ?? r.id) })),
+        spec: specs.map((s) => ({ ref: s.id, label: s.goal })),
       } as Record<TicketKind, TicketOptionVM[]>;
     },
     runTicket: async (kind, ref, agentRef) => {

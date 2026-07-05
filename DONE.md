@@ -4,6 +4,17 @@
 
 ---
 
+## ✅ RESOLVED 2026-07-05 — Workforce → Teams: card affordance, card/panel count consistency, full i18n
+
+Fixed the two reported Teams-tab bugs and closed the localization gap the fix exposed.
+
+- **Card affordance.** The team card was a bare `<button>` with no cue it opened the manage panel. Added a persistent pencil/"manage" glyph (`ManageIcon`, always visible so it reads on touch too, coral tint on hover), hover elevation (coral border + shadow + lift) on cards, a row-highlight + trailing action column in the List view, and an `aria-label` on both.
+- **"1 member" vs "6 in panel".** The list read (`GET /api/teams`) is cached while the detail read (`GET /:id`) is uncached/authoritative, so a membership add could leave the card's count stale (cross-isolate L1). `loadDetail` now reconciles the matching card/row in the summary list from the authoritative detail, and `refreshAfterMutation` no longer refetches the whole list (which could clobber the reconciled count with a stale cached value). Backend: dropped the list read's L1 TTL to 5s (`teamRoutes.ts`) so cross-isolate staleness converges fast; KV stays the source of truth and is invalidated on every write.
+- **Full localization.** `TeamsView.tsx` migrated off hardcoded English to `useTranslations` under a new `workforce.teams.*` namespace (42 keys, ICU plurals with rich `<b>` for the counts, `common.*` reused for cancel/delete); real zh/es/fr/de added to all five catalogs. Kind labels (Human / Cloud agent / Remote host) localized via dynamic `kind.*` keys.
+- Verified: frontend `tsgo --noEmit` 0 errors, `eslint TeamsView.tsx` clean, all five catalogs parse.
+
+---
+
 ## ✅ RESOLVED 2026-07-05 — Kanban Templates folded into Projects tab + shared roles-CRUD hook
 
 Consolidated the standalone `/kanban-templates` page into Projects as a **Templates** tab and removed the top-level menu item, then closed the roles-CRUD duplication the move exposed.
@@ -22,8 +33,8 @@ Enterprise tenants can now connect their OWN Anthropic, OpenAI, and/or Google ac
 - **Multi-provider credential layer.** `tenantProviderKeyService` widened `SUPPORTED_PROVIDERS = ['anthropic','openai','google']` with `PROVIDER_VENDOR_MAP`, `resolveTenantVendorKeys` (one-query decrypt of BYO api-keys), and `resolveTenantLlmCredentials` (subscription token + vendor keys in one parallel round-trip). `LlmProxyService.vendorEnv()` overlays tenant keys onto the operator env per request and marks those vendors tenant-funded → `ProxyResult.byoFunded` (stamped in `finalize` via `isTenantFunded`).
 - **Connected-providers drive model choice.** `/llm/v1/models` returns `byo:{providers,models}` + `canChooseModel`; `useLlmModels`/`ModelSelect` render a "Connected providers" model group and gate the picker on `canChooseModel` (paid **or** BYO). The free-plan model-choice gates (`pickCloudModel` `canChooseModel`, the `strict_pin_not_allowed` 402) now lift for a model whose vendor the tenant has connected — shared `byoVendorIdSet`/`providersFromCredentials`.
 - **All three modalities.** VSIX = zero client change beyond the surface header (gateway resolves BYO). Cloud = both `cloudAgentEngine` proxy sites thread `tenantVendorKeys` + `byoVendors`. On-prem (Claude Agent SDK → `/v1/messages`): BYO-Anthropic passes through to `api.anthropic.com`; a non-Anthropic model rides the cascade branch which now overlays the tenant's OpenAI/Google key, stamped `byo`+`on_prem` (free).
-- **Web UI.** `ProviderKeysSettings` rewritten as a responsive 3-card grid via one shared DRY `ProviderConnectionCard` (Anthropic keeps subscription OAuth; OpenAI/Google are API-key).
-- Verified: api + frontend + VS Code typecheck 0 errors; 140 affected api tests pass (llmRoutes, LlmProxyService, tokenUsage, tenantTokenAvailability, cloudTelemetry). Follow-up (localizing the whole `/settings/api-keys` surface incl. the new cards) logged to ROADMAP.
+- **Web UI (fully localized).** `ProviderKeysSettings` rewritten as a responsive 3-card grid via one shared DRY `ProviderConnectionCard` (Anthropic keeps subscription OAuth; OpenAI/Google are API-key). Full next-intl coverage across four namespaces with real translations in all 5 catalogs (`en/zh/es/fr/de`): `providerKeys` (the cards, incl. `t.rich` for `<code>`/`<b>`), `modelSelect` (picker group labels), `runAgentControl` (the whole run control — agent/model/repo pickers, PRO gate, run button, no-writable-repo warnings), and `apiKeys` (the entire `/settings/api-keys` page shell — heading, subtitle, create form, key list, table headers, revoke confirm). Theme-token colors + responsive layouts (light/dark, mobile-safe). No hardcoded user-facing English remains on any surface this feature touched.
+- Verified: api + frontend + VS Code typecheck 0 errors; 140 affected api tests pass (llmRoutes, LlmProxyService, tokenUsage, tenantTokenAvailability, cloudTelemetry).
 
 ---
 

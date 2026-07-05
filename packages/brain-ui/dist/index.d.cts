@@ -157,8 +157,8 @@ declare function HealthRing({ percent, size, stroke, caption, muted, ariaLabel }
  * presentational + self-managing; each host injects a {@link ChatTicketsAdapter}
  * (its own REST calls) and a {@link ChatTicketsLabels} bundle (its own i18n).
  */
-/** The work-item kinds a chat can be tied to (planning spine + roadmap + gap). */
-type TicketKind = 'portfolio' | 'objective' | 'initiative' | 'roadmap' | 'epic' | 'gap' | 'task';
+/** The work-item kinds a chat can be tied to (planning spine + roadmap + spec + gap). */
+type TicketKind = 'portfolio' | 'objective' | 'initiative' | 'roadmap' | 'spec' | 'epic' | 'gap' | 'task';
 declare const TICKET_KINDS: TicketKind[];
 /** Only these kinds are runnable (a real board ticket an agent can execute). */
 declare const RUNNABLE_KINDS: TicketKind[];

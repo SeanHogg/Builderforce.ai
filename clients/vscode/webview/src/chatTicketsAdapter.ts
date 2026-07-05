@@ -15,6 +15,7 @@ interface RegisteredAgent { id: string | number; name: string; type: string; isA
 interface TaskRow { id: number; key: string; title: string; taskType: 'task' | 'epic' | 'gap' }
 interface StrategyRow { id: string; title?: string; name?: string }
 interface RoadmapRow { id: string; title?: string }
+interface SpecRow { id: string; goal?: string }
 
 export function createChatTicketsAdapter(
   baseUrl: string,
@@ -68,12 +69,13 @@ export function createChatTicketsAdapter(
     },
     loadTicketOptions: async (projectId): Promise<Record<TicketKind, TicketOptionVM[]>> => {
       const q = projectId != null ? `?project_id=${projectId}` : '';
-      const [tasks, objectives, initiatives, portfolios, roadmap] = await Promise.all([
+      const [tasks, objectives, initiatives, portfolios, roadmap, specs] = await Promise.all([
         req<{ tasks: TaskRow[] }>(`/api/tasks${q}`).then((r) => r.tasks ?? []).catch(() => [] as TaskRow[]),
         req<StrategyRow[]>('/api/pmo/objectives').catch(() => [] as StrategyRow[]),
         req<StrategyRow[]>('/api/pmo/initiatives').catch(() => [] as StrategyRow[]),
         req<StrategyRow[]>('/api/pmo/portfolios').catch(() => [] as StrategyRow[]),
         req<RoadmapRow[]>(`/api/product/roadmap${projectId != null ? `?project=${projectId}` : ''}`).catch(() => [] as RoadmapRow[]),
+        req<{ specs: SpecRow[] }>(`/api/specs${projectId != null ? `?projectId=${projectId}` : ''}`).then((r) => r.specs ?? []).catch(() => [] as SpecRow[]),
       ]);
       const task: TicketOptionVM[] = [];
       const epic: TicketOptionVM[] = [];
@@ -88,6 +90,7 @@ export function createChatTicketsAdapter(
         initiative: initiatives.map((i) => ({ ref: i.id, label: i.name ?? i.id })),
         portfolio: portfolios.map((p) => ({ ref: p.id, label: p.name ?? p.id })),
         roadmap: roadmap.map((r) => ({ ref: r.id, label: r.title ?? r.id })),
+        spec: specs.map((s) => ({ ref: s.id, label: s.goal ?? s.id })),
       };
     },
     runTicket: async (_kind, ref, agentRef) => {

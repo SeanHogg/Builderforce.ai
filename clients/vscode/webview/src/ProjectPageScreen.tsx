@@ -208,6 +208,8 @@ const PAGES: Record<PageView, PageConfig> = {
               kind: 'brain' as const,
               label: L('act.workPrd', 'Work on this spec with the Brain'),
               text: L('prd.seed', 'Let\'s work on the spec "{title}". Summarise it, then help me move it forward.').replace('{title}', title),
+              // Auto-link the spec so the chat is tied to it (like a task session).
+              ticket: { kind: 'spec', ref: String(s.id), title },
             },
           };
         },

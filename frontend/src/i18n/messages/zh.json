@@ -1938,6 +1938,54 @@
       "runtime": "编辑器",
       "online": "在线",
       "offline": "离线"
+    },
+    "teams": {
+      "heading": "团队",
+      "new": "新建团队",
+      "creating": "创建中…",
+      "create": "创建团队",
+      "name": "名称",
+      "namePlaceholder": "例如：平台小队",
+      "description": "描述",
+      "descriptionPlaceholder": "该团队负责的内容",
+      "titleFallback": "团队",
+      "loading": "加载中…",
+      "loadingTeams": "正在加载团队…",
+      "empty": "还没有团队。使用“{action}”将智能体和成员分组，然后将团队关联到项目。",
+      "noDescription": "暂无描述",
+      "manage": "管理",
+      "manageTeam": "管理团队 {name}",
+      "memberCount": "{count, plural, other {<b>#</b> 名成员}}",
+      "projectCount": "{count, plural, other {<b>#</b> 个项目}}",
+      "colTeam": "团队",
+      "colDescription": "描述",
+      "colMembers": "成员",
+      "colProjects": "项目",
+      "saveChanges": "保存更改",
+      "savingChanges": "保存中…",
+      "membersSection": "成员（{count}）",
+      "addMemberPlaceholder": "添加成员…",
+      "allAdded": "所有人都已在此团队中",
+      "add": "添加",
+      "noMembers": "暂无成员。",
+      "remove": "移除",
+      "projectsSection": "项目（{count}）",
+      "attachPlaceholder": "关联项目…",
+      "noMoreProjects": "没有更多可关联的项目",
+      "attach": "关联",
+      "noProjects": "未关联任何项目。",
+      "detach": "取消关联",
+      "deleteConfirm": "删除团队“{name}”？成员和项目关联将被移除。智能体、成员和项目本身不受影响。",
+      "kind": {
+        "human": "成员",
+        "cloud_agent": "云智能体",
+        "host_agent": "远程主机"
+      },
+      "memberOption": "{name} — {kind}",
+      "errLoadTeams": "加载团队失败",
+      "errLoadTeam": "加载团队失败",
+      "errCreate": "创建团队失败",
+      "errDelete": "删除团队失败"
     }
   },
   "knowledge": {
@@ -4621,7 +4669,8 @@
         "objective": "目标",
         "initiative": "举措",
         "portfolio": "组合",
-        "roadmap": "路线图"
+        "roadmap": "路线图",
+        "spec": "规格"
       }
     },
     "approveAll": "全部批准",
@@ -5664,5 +5713,110 @@
       "apiKeys": "API 密钥",
       "token": "超级管理员令牌"
     }
+  },
+  "providerKeys": {
+    "title": "使用您自己的模型",
+    "subtitle": "连接您自己的 Anthropic、OpenAI 或 Google 账户。已连接的提供商将使用您自己的账户为智能体提供支持，并决定每个选择器中的模型选项——在您本机上的使用（本地部署和 VS Code）免费；云端智能体的使用仍会计费。凭据将加密存储，且不会再次显示。",
+    "loading": "加载中…",
+    "errorPrefix": "错误：{message}",
+    "status": {
+      "connected": "● 已连接 {subscription}",
+      "keyConfigured": "● 已配置 {label} API 密钥",
+      "notConnected": "○ 未连接"
+    },
+    "disconnect": "断开连接",
+    "remove": "移除",
+    "connect": "连接 {subscription}",
+    "reconnect": "重新连接 {subscription}",
+    "working": "处理中…",
+    "pastePrompt": "已在 Claude 标签页中批准？请在下方粘贴它显示的代码（完整的 <code>code#state</code> 值）。",
+    "pastePlaceholder": "粘贴来自 Claude 的代码…",
+    "finish": "完成",
+    "connecting": "连接中…",
+    "cancel": "取消",
+    "ownAccountNote": "只能连接您<b>自己</b>的账户——订阅凭据属于个人，不得在多个工作区之间共享。",
+    "orUseApiKey": "或使用 API 密钥",
+    "keyPlaceholderReplace": "替换密钥（{placeholder}）",
+    "save": "保存",
+    "replace": "替换",
+    "saving": "保存中…",
+    "confirmRemoveSubscription": "断开您的 {subscription}？使用它的智能体将回退到 Builderforce 的托管模型。",
+    "confirmRemoveKey": "移除您的 {label} API 密钥？使用它的智能体将回退到 Builderforce 的托管模型。",
+    "errSaveKey": "保存密钥失败",
+    "errStartConnect": "启动连接失败",
+    "errConnectSubscription": "连接订阅失败",
+    "errRemove": "移除凭据失败",
+    "provider": {
+      "anthropic": {
+        "blurb": "连接您的 Claude Pro/Max 订阅（无需按令牌计费），或粘贴 Anthropic API 密钥。",
+        "subscription": "Claude 订阅"
+      },
+      "openai": {
+        "blurb": "粘贴 OpenAI API 密钥，在您自己的 OpenAI 账户上运行 GPT 模型。"
+      },
+      "google": {
+        "blurb": "粘贴 Google AI (Gemini) API 密钥，在您自己的 Google 账户上运行 Gemini 模型。"
+      }
+    }
+  },
+  "modelSelect": {
+    "yourLlms": "您的 LLM",
+    "connectedProviders": "已连接的提供商",
+    "models": "模型",
+    "current": "{model}（当前）"
+  },
+  "runAgentControl": {
+    "agentTitle": "智能体",
+    "autoAnyAgent": "自动（任意智能体）",
+    "cloudAgents": "云端智能体",
+    "assignedAgent": "已指派的智能体",
+    "selfHostedAgents": "自托管智能体",
+    "agentOffline": "{name}（离线）",
+    "defaultModel": "builderforce.ai（默认）",
+    "bestCodingModel": "builderforce.ai（最佳编码模型）",
+    "modelChoiceLocked": "选择模型需要付费套餐或已连接的提供商——免费运行使用 Builderforce 的托管默认模型",
+    "proBadge": "PRO",
+    "modelTitle": "LLM 模型",
+    "repositoryTitle": "代码库",
+    "autoDefaultRepo": "自动（默认代码库）",
+    "defaultParen": "（默认）",
+    "run": "运行",
+    "running": "运行中…",
+    "noWritableRepo": "没有可写代码库。",
+    "repoNoCredential": "此任务的代码库没有可用凭据，因此智能体无法提交或发布代码——只会返回文本摘要。",
+    "repoUnbound": "此任务未绑定任何代码库，因此智能体无法提交或发布代码——只会返回文本摘要。",
+    "openProjectSourceControl": "打开项目 → 集成 → 源代码管理 →"
+  },
+  "apiKeys": {
+    "title": "API 密钥",
+    "selectWorkspace": "请选择一个工作区来管理 API 密钥。",
+    "ownerOnly": "只有工作区<strong>所有者</strong>才能创建或吊销租户 API 密钥（这些凭据会消耗工作区的每日令牌预算）。",
+    "subtitle": "用于 <strong>builderforceLLM</strong> 网关的租户级 <code>bfk_*</code> 密钥。在租户应用（服务器端）中使用它们来调用 <code>/llm/v1/chat/completions</code>。套餐级别的每日令牌上限仍然适用。",
+    "createTitle": "创建新密钥",
+    "createNamePlaceholder": "例如 hired.video production",
+    "browserAccess": "浏览器访问",
+    "creating": "创建中…",
+    "createKey": "创建密钥",
+    "activeAndRevoked": "有效和已吊销的密钥",
+    "errorPrefix": "错误：{message}",
+    "loading": "加载中…",
+    "noKeys": "暂无密钥。请在上方创建一个。",
+    "revoked": "已吊销",
+    "createdLastUsed": "创建于 {created} · 最后使用 {lastUsed}",
+    "revokedOnSuffix": " · 已于 {revoked} 吊销",
+    "hideActivity": "隐藏活动",
+    "viewActivity": "查看活动",
+    "edit": "编辑",
+    "revoke": "吊销",
+    "colName": "名称",
+    "colStatus": "状态",
+    "colCreated": "创建时间",
+    "colLastUsed": "最后使用",
+    "colActions": "操作",
+    "revokedOn": "已于 {revoked} 吊销",
+    "active": "有效",
+    "confirmRevoke": "吊销此 API 密钥？使用它的应用将立即停止工作。",
+    "errCreate": "创建密钥失败",
+    "errRevoke": "吊销失败"
   }
 }

@@ -27,6 +27,8 @@ import {
 import { notify } from '../../application/notifications/notify';
 import { provisionForHireProfile } from '../../application/freelance/provisionForHire';
 import { parseJsonArray } from '../../domain/shared/json';
+import { recordActivity, resolveActorFromContext } from '../../application/activity/activityLog';
+import type { Db } from '../../infrastructure/database/connection';
 import type { Env, HonoEnv } from '../../env';
 
 export const FREELANCER_PUBLIC_LIST_CACHE_KEY = 'fl:public:list';
@@ -611,7 +613,7 @@ export function createFreelancerRoutes(): Hono<HonoEnv> {
  * Employer actions require the tenant JWT; a worker viewing their own
  * engagements uses the web JWT.
  */
-export function createEngagementRoutes(): Hono<HonoEnv> {
+export function createEngagementRoutes(db: Db): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
   const sql = (env: HonoEnv['Bindings']) => neon(env.NEON_DATABASE_URL);
 
@@ -702,6 +704,23 @@ export function createEngagementRoutes(): Hono<HonoEnv> {
       VALUES (${id}, ${tenantId}, ${projectId}, ${b.freelancerUserId}, ${status}, ${rate}, ${prof.currency ?? 'USD'}, ${b.title ?? null}, ${b.note ?? null}, ${actor}, ${status === 'active' ? new Date().toISOString() : null})
     `;
     await notify(sql(c.env), c.env, { userId: b.freelancerUserId, tenantId, kind: notifyKind, title: status === 'active' ? `${tenantName} hired you` : `${tenantName} wants to ${status === 'interviewing' ? 'interview' : 'engage'} you`, body: b.title ?? b.note ?? null, ref: id });
+
+    // Unified audit stream: a hire / engagement decision, attributed to the
+    // manager who made it. Target is the external talent + the new engagement.
+    c.executionCtx.waitUntil((async () => {
+      const actorIdentity = await resolveActorFromContext(c.env as Env, db, c);
+      await recordActivity(c.env as Env, db, {
+        tenantId,
+        projectId,
+        actor: actorIdentity,
+        verb: status === 'active' ? 'member.hired' : 'engagement.created',
+        targetType: 'engagement',
+        targetId: id,
+        targetLabel: b.title ?? 'Engagement',
+        summary: status === 'active' ? `Hired external talent (${status})` : `Invited external talent (${status})`,
+        metadata: { engagementId: id, freelancerUserId: b.freelancerUserId, status, projectId },
+      });
+    })().catch(() => {}));
     return c.json({ id, status }, 201);
   });
 

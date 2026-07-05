@@ -13,6 +13,7 @@ import { projectRoleAssignments } from '../../infrastructure/database/schema';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import { getOrSetCached, invalidateCached } from '../../infrastructure/cache/readThroughCache';
+import { recordActivity, resolveActorByRef } from '../activity/activityLog';
 
 export type AssigneeKind = 'agent' | 'human' | 'hire';
 
@@ -96,6 +97,21 @@ export class RoleAssignmentService {
       createdAt: new Date(),
     });
     await invalidateCached(env, assignmentsKey(tenantId));
+
+    // Unified audit stream: a roster staffing decision (who covers which role),
+    // attributed to the manager who made it.
+    const actor = await resolveActorByRef(env, this.db, tenantId, createdBy);
+    await recordActivity(env, this.db, {
+      tenantId,
+      projectId,
+      actor,
+      verb: 'role.assigned',
+      targetType: 'role',
+      targetId: roleKey,
+      targetLabel: body.assigneeName?.trim() || assigneeRef,
+      summary: `Assigned ${body.assigneeName?.trim() || assigneeRef} to ${roleKey}`,
+      metadata: { assigneeKind: body.assigneeKind, assigneeRef, projectId },
+    });
     return { id, roleKey, assigneeKind: body.assigneeKind, assigneeRef, assigneeName: body.assigneeName?.trim() || null, projectId };
   }
 

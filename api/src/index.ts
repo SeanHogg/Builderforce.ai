@@ -328,8 +328,8 @@ export function buildApp(env: Env): Hono<HonoEnv> {
   // login for public profiles), cross-tenant engagements (hire/interview/terminate),
   // and the activity-signal → billable-timecard pipeline.
   app.route('/api/freelancers', createFreelancerRoutes());
-  app.route('/api/engagements', createEngagementRoutes());
-  app.route('/api/activity', createActivityRoutes());
+  app.route('/api/engagements', createEngagementRoutes(db));
+  app.route('/api/activity', createActivityRoutes(db));
   app.route('/api/timecards', createTimecardRoutes());
   // Two-sided marketplace: job postings + proposals (bidding) and the in-app feed.
   app.route('/api/jobs', createJobRoutes());

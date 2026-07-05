@@ -1938,6 +1938,54 @@
       "runtime": "Editor",
       "online": "Online",
       "offline": "Offline"
+    },
+    "teams": {
+      "heading": "Teams",
+      "new": "New team",
+      "creating": "Creating…",
+      "create": "Create team",
+      "name": "Name",
+      "namePlaceholder": "e.g. Platform Squad",
+      "description": "Description",
+      "descriptionPlaceholder": "What this team is responsible for",
+      "titleFallback": "Team",
+      "loading": "Loading…",
+      "loadingTeams": "Loading teams…",
+      "empty": "No teams yet. Use “{action}” to group agents and humans, then attach the team to a project.",
+      "noDescription": "No description",
+      "manage": "Manage",
+      "manageTeam": "Manage team {name}",
+      "memberCount": "{count, plural, one {<b>#</b> member} other {<b>#</b> members}}",
+      "projectCount": "{count, plural, one {<b>#</b> project} other {<b>#</b> projects}}",
+      "colTeam": "Team",
+      "colDescription": "Description",
+      "colMembers": "Members",
+      "colProjects": "Projects",
+      "saveChanges": "Save changes",
+      "savingChanges": "Saving…",
+      "membersSection": "Members ({count})",
+      "addMemberPlaceholder": "Add a member…",
+      "allAdded": "Everyone is already on this team",
+      "add": "Add",
+      "noMembers": "No members yet.",
+      "remove": "Remove",
+      "projectsSection": "Projects ({count})",
+      "attachPlaceholder": "Attach a project…",
+      "noMoreProjects": "No more projects to attach",
+      "attach": "Attach",
+      "noProjects": "Not attached to any project.",
+      "detach": "Detach",
+      "deleteConfirm": "Delete team “{name}”? Members and project links are removed. The agents, humans, and projects themselves are not affected.",
+      "kind": {
+        "human": "Human",
+        "cloud_agent": "Cloud agent",
+        "host_agent": "Remote host"
+      },
+      "memberOption": "{name} — {kind}",
+      "errLoadTeams": "Failed to load teams",
+      "errLoadTeam": "Failed to load team",
+      "errCreate": "Failed to create team",
+      "errDelete": "Failed to delete team"
     }
   },
   "knowledge": {
@@ -4621,7 +4669,8 @@
         "objective": "Objective",
         "initiative": "Initiative",
         "portfolio": "Portfolio",
-        "roadmap": "Roadmap"
+        "roadmap": "Roadmap",
+        "spec": "Spec"
       }
     },
     "approveAll": "Approve all",
@@ -5664,5 +5713,110 @@
       "apiKeys": "API Keys",
       "token": "Superadmin Token"
     }
+  },
+  "providerKeys": {
+    "title": "Bring your own models",
+    "subtitle": "Connect your own Anthropic, OpenAI, or Google account. Connected providers power your agents on your own account and drive the model choices in every picker — usage on your machine (on-prem & VS Code) is free; cloud-agent usage is still billed. Credentials are stored encrypted and never shown again.",
+    "loading": "Loading…",
+    "errorPrefix": "Error: {message}",
+    "status": {
+      "connected": "● {subscription} connected",
+      "keyConfigured": "● {label} API key configured",
+      "notConnected": "○ Not connected"
+    },
+    "disconnect": "Disconnect",
+    "remove": "Remove",
+    "connect": "Connect {subscription}",
+    "reconnect": "Reconnect {subscription}",
+    "working": "Working…",
+    "pastePrompt": "Approved in the Claude tab? Paste the code it shows you (the full <code>code#state</code> value) below.",
+    "pastePlaceholder": "Paste code from Claude…",
+    "finish": "Finish",
+    "connecting": "Connecting…",
+    "cancel": "Cancel",
+    "ownAccountNote": "Connect only your <b>own</b> account — a subscription credential is personal and must not be shared across workspaces.",
+    "orUseApiKey": "OR USE AN API KEY",
+    "keyPlaceholderReplace": "Replace key ({placeholder})",
+    "save": "Save",
+    "replace": "Replace",
+    "saving": "Saving…",
+    "confirmRemoveSubscription": "Disconnect your {subscription}? Agents using it will fall back to Builderforce's managed models.",
+    "confirmRemoveKey": "Remove your {label} API key? Agents using it will fall back to Builderforce's managed models.",
+    "errSaveKey": "Failed to save key",
+    "errStartConnect": "Failed to start connect",
+    "errConnectSubscription": "Failed to connect subscription",
+    "errRemove": "Failed to remove credential",
+    "provider": {
+      "anthropic": {
+        "blurb": "Connect your Claude Pro/Max subscription (no per-token billing) or paste an Anthropic API key.",
+        "subscription": "Claude subscription"
+      },
+      "openai": {
+        "blurb": "Paste an OpenAI API key to run GPT models on your own OpenAI account."
+      },
+      "google": {
+        "blurb": "Paste a Google AI (Gemini) API key to run Gemini models on your own Google account."
+      }
+    }
+  },
+  "modelSelect": {
+    "yourLlms": "Your LLMs",
+    "connectedProviders": "Connected providers",
+    "models": "Models",
+    "current": "{model} (current)"
+  },
+  "runAgentControl": {
+    "agentTitle": "Agent",
+    "autoAnyAgent": "Auto (any agent)",
+    "cloudAgents": "Cloud agents",
+    "assignedAgent": "Assigned agent",
+    "selfHostedAgents": "Self-hosted agents",
+    "agentOffline": "{name} (offline)",
+    "defaultModel": "builderforce.ai (default)",
+    "bestCodingModel": "builderforce.ai (best coding model)",
+    "modelChoiceLocked": "Model selection needs a paid plan or a connected provider — free runs use Builderforce's managed default",
+    "proBadge": "PRO",
+    "modelTitle": "LLM model",
+    "repositoryTitle": "Repository",
+    "autoDefaultRepo": "Auto (default repo)",
+    "defaultParen": "(default)",
+    "run": "Run",
+    "running": "Running…",
+    "noWritableRepo": "No writable repo.",
+    "repoNoCredential": "This task's repo has no usable credential, so the agent can't commit or ship code — it will only return a text summary.",
+    "repoUnbound": "No repository is bound to this task, so the agent can't commit or ship code — it will only return a text summary.",
+    "openProjectSourceControl": "Open project → Integrations → Source Control →"
+  },
+  "apiKeys": {
+    "title": "API Keys",
+    "selectWorkspace": "Select a workspace to manage API keys.",
+    "ownerOnly": "Only the workspace <strong>owner</strong> can mint or revoke tenant API keys (these credentials can spend the workspace's daily token budget).",
+    "subtitle": "Tenant-scoped <code>bfk_*</code> keys for the <strong>builderforceLLM</strong> gateway. Use them in tenant apps (server-side) to call <code>/llm/v1/chat/completions</code>. Plan-level daily token caps still apply.",
+    "createTitle": "Create a new key",
+    "createNamePlaceholder": "e.g. hired.video production",
+    "browserAccess": "Browser access",
+    "creating": "Creating…",
+    "createKey": "Create key",
+    "activeAndRevoked": "Active and revoked keys",
+    "errorPrefix": "Error: {message}",
+    "loading": "Loading…",
+    "noKeys": "No keys yet. Create one above.",
+    "revoked": "Revoked",
+    "createdLastUsed": "Created {created} · Last used {lastUsed}",
+    "revokedOnSuffix": " · Revoked {revoked}",
+    "hideActivity": "Hide activity",
+    "viewActivity": "View activity",
+    "edit": "Edit",
+    "revoke": "Revoke",
+    "colName": "Name",
+    "colStatus": "Status",
+    "colCreated": "Created",
+    "colLastUsed": "Last used",
+    "colActions": "Actions",
+    "revokedOn": "Revoked {revoked}",
+    "active": "Active",
+    "confirmRevoke": "Revoke this API key? Apps using it will stop working immediately.",
+    "errCreate": "Failed to create key",
+    "errRevoke": "Revoke failed"
   }
 }

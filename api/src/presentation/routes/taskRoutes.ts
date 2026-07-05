@@ -16,6 +16,7 @@ import { resolveDefaultRepoForTask } from '../../application/repos/resolveDefaul
 import { openTaskPullRequest } from '../../application/repos/openTaskPullRequest';
 import { ensureTaskPrdRecord, linkSpecToTask } from '../../application/prd/taskPrd';
 import { recordStatusTransition } from '../../application/task/taskLifecycle';
+import { recordActivity, resolveActorFromContext } from '../../application/activity/activityLog';
 import { RuntimeService } from '../../application/runtime/RuntimeService';
 import { dispatchCloudRunForTask } from './runtimeRoutes';
 import { recordCloudToolEvent } from '../../application/runtime/cloudAgentEngine';
@@ -266,6 +267,33 @@ export function createTaskRoutes(taskService: TaskService, db: Db, runtimeServic
         submittedBy: (c as { get(k: 'userId'): string | undefined }).get('userId') ?? 'system:lane-auto',
       }),
     );
+  };
+
+  // Emit a ticket mutation onto the unified activity/audit stream, attributed to
+  // whoever made the request (team member, external hire, or — for agent-token
+  // paths — the system). Best-effort, off the response path (recordActivity never
+  // throws). The ONE place ticket events reach the audit log, so create/update/
+  // move/delete stay in lockstep.
+  const emitTaskActivity = (
+    c: Context<HonoEnv>,
+    verb: string,
+    o: { taskId: number; projectId?: number | null; title?: string | null; summary?: string | null; metadata?: Record<string, unknown> | null },
+  ): void => {
+    c.executionCtx.waitUntil((async () => {
+      const actor = await resolveActorFromContext(c.env as Env, db, c);
+      await recordActivity(c.env as Env, db, {
+        tenantId:   c.get('tenantId'),
+        segmentId:  (c as { get(k: 'segmentId'): string | undefined }).get('segmentId') ?? null,
+        projectId:  o.projectId ?? null,
+        actor,
+        verb,
+        targetType: 'task',
+        targetId:   o.taskId,
+        targetLabel: o.title ?? null,
+        summary:    o.summary ?? null,
+        metadata:   o.metadata ?? null,
+      });
+    })().catch(() => {}));
   };
 
   // Bump the project's epic-tree cache version so the next /:id/tree read reloads.
@@ -532,6 +560,10 @@ export function createTaskRoutes(taskService: TaskService, db: Db, runtimeServic
     // cloud agent (e.g. the brain drops a task into an agent-owned lane) must
     // auto-run just like one dragged in. Best-effort, off the response path.
     fireLaneAutoRun(c, { projectId: created.projectId, taskId: created.id, status: created.status });
+    emitTaskActivity(c, 'task.created', {
+      taskId: created.id, projectId: created.projectId, title: created.title,
+      summary: `Created ${created.key ?? `#${created.id}`}`,
+    });
     return c.json(created, 201);
   });
 
@@ -662,6 +694,22 @@ export function createTaskRoutes(taskService: TaskService, db: Db, runtimeServic
       // ignore failures to avoid blocking the main flow
     }
 
+    // Unified audit stream: classify the edit so the timeline reads meaningfully.
+    const assignmentTouched = body.assignedUserId !== undefined || body.assignedAgentRef !== undefined || body.assignedAgentHostId !== undefined;
+    const plainPatched = task.toPlain();
+    const verb = statusChanged ? 'task.status_changed' : assignmentTouched ? 'task.assigned' : 'task.updated';
+    emitTaskActivity(c, verb, {
+      taskId: id,
+      projectId: plainPatched.projectId,
+      title: plainPatched.title,
+      summary: statusChanged
+        ? `Moved ${plainPatched.key ?? `#${id}`}: ${prevStatus?.status} → ${body.status}`
+        : assignmentTouched
+          ? `Reassigned ${plainPatched.key ?? `#${id}`}`
+          : `Updated ${plainPatched.key ?? `#${id}`}`,
+      metadata: statusChanged ? { fromStatus: prevStatus?.status, toStatus: body.status } : { fields: Object.keys(body) },
+    });
+
     return c.json(task.toPlain());
   });
 
@@ -693,6 +741,12 @@ export function createTaskRoutes(taskService: TaskService, db: Db, runtimeServic
       // ignore failures to avoid blocking the main flow
     }
 
+    emitTaskActivity(c, 'task.moved', {
+      taskId: id, projectId: body.projectId, title: task.toPlain().title,
+      summary: `Moved ${task.key ?? `#${id}`} to another project`,
+      metadata: { fromProjectId: before?.projectId ?? null, toProjectId: body.projectId },
+    });
+
     return c.json(task.toPlain());
   });
 
@@ -707,6 +761,10 @@ export function createTaskRoutes(taskService: TaskService, db: Db, runtimeServic
     await invalidateProjectsList(c.env as Env, c.get('tenantId')).catch(() => {});
     // Drop the card from every client viewing this project's live board.
     c.executionCtx.waitUntil(broadcastProjectChanged(c.env?.SESSION_ROOM, before?.projectId));
+    emitTaskActivity(c, 'task.deleted', {
+      taskId: id, projectId: before.projectId, title: before.title,
+      summary: `Deleted task #${id}`,
+    });
     return c.body(null, 204);
   });
 

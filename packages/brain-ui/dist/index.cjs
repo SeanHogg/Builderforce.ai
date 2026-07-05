@@ -632,7 +632,7 @@ function HealthRing({ percent, size = 40, stroke = 4, caption, muted = false, ar
 var import_react3 = require("react");
 
 // src/chatTickets/types.ts
-var TICKET_KINDS = ["task", "epic", "gap", "objective", "initiative", "portfolio", "roadmap"];
+var TICKET_KINDS = ["task", "epic", "gap", "objective", "initiative", "portfolio", "roadmap", "spec"];
 var RUNNABLE_KINDS = ["task", "epic", "gap"];
 var DEFAULT_CHAT_TICKETS_LABELS = {
   none: "No tickets linked yet.",
@@ -662,7 +662,7 @@ var DEFAULT_CHAT_TICKETS_LABELS = {
   agentsHint: "Invited agents can be tagged to execute a linked task or epic.",
   mergeHint: "Merge other chats into this one. Their messages, tickets and agents move here; the sources are archived.",
   mergeNoOthers: "No other chats to merge.",
-  kind: { task: "Task", epic: "Epic", gap: "Gap", objective: "Objective", initiative: "Initiative", portfolio: "Portfolio", roadmap: "Roadmap" },
+  kind: { task: "Task", epic: "Epic", gap: "Gap", objective: "Objective", initiative: "Initiative", portfolio: "Portfolio", roadmap: "Roadmap", spec: "Spec" },
   ringAria: (label, pct) => `${label}: ${pct}% done`,
   runStarted: (agent) => `Started ${agent} on the ticket.`,
   mergeAction: (n) => `Merge ${n} here`,

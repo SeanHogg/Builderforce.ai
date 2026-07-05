@@ -12,6 +12,7 @@ import {
   varchar,
   smallint,
   bigint,
+  bigserial,
   date,
   real,
   jsonb,
@@ -1419,6 +1420,47 @@ export const auditEvents = pgTable('audit_events', {
   createdAt:    timestamp('created_at').notNull().defaultNow(),
 });
 
+/**
+ * Unified activity / audit log (migration 0287) — the ONE canonical, append-only
+ * stream of "who did what, to what, when" across the whole workforce: team
+ * members, external talent / hires, and AI agents alike. Replaces the fragmented
+ * per-domain event tables as the single trace surface; written through the
+ * `recordActivity()` emitter (application/activity/activityLog.ts).
+ *
+ * Actor is polymorphic via (actorType, actorRef) — see the migration header for
+ * the per-type ref mapping. actorName is denormalised so the timeline renders
+ * without a heterogeneous fan-join. `verb` is free-form so new event kinds need
+ * no migration.
+ */
+export const activityLog = pgTable('activity_log', {
+  id:           bigserial('id', { mode: 'number' }).primaryKey(),
+  tenantId:     integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  segmentId:    uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),
+  projectId:    integer('project_id').references(() => projects.id, { onDelete: 'set null' }),
+  /** human | hire | cloud_agent | host_agent | system */
+  actorType:    varchar('actor_type', { length: 16 }).notNull(),
+  /** Id into the per-type table (users.id / ide_agents.id / agent_hosts.id); null for system. */
+  actorRef:     varchar('actor_ref', { length: 64 }),
+  /** Denormalised display label — avoids a per-row fan-join across actor tables. */
+  actorName:    varchar('actor_name', { length: 255 }),
+  /** freelancer_engagements.id — binds a cross-tenant hire action; nullable. */
+  engagementId: varchar('engagement_id', { length: 36 }),
+  /** Free-form action verb: 'task.created', 'comment.added', 'deploy.recorded', … */
+  verb:         varchar('verb', { length: 64 }).notNull(),
+  targetType:   varchar('target_type', { length: 32 }),
+  targetId:     varchar('target_id', { length: 64 }),
+  targetLabel:  varchar('target_label', { length: 300 }),
+  summary:      text('summary'),
+  metadata:     jsonb('metadata'),
+  occurredAt:   timestamp('occurred_at').notNull().defaultNow(),
+  createdAt:    timestamp('created_at').notNull().defaultNow(),
+}, (t) => [
+  index('idx_activity_log_tenant_time').on(t.tenantId, t.occurredAt),
+  index('idx_activity_log_actor').on(t.tenantId, t.actorType, t.actorRef, t.occurredAt),
+  index('idx_activity_log_target').on(t.tenantId, t.targetType, t.targetId),
+  index('idx_activity_log_project').on(t.tenantId, t.projectId, t.occurredAt),
+]);
+
 // ---------------------------------------------------------------------------
 // Skill assignments
 // A skill from the marketplace can be assigned to an entire tenant (all agentHosts
@@ -2061,6 +2103,9 @@ export const brainChats = pgTable('brain_chats', {
   title:      varchar('title', { length: 500 }).notNull().default('New chat'),
   summary:    text('summary'),
   isArchived: boolean('is_archived').notNull().default(false),
+  /** LOCK primitive (0288): 'shared' = visible/joinable by any tenant teammate
+   *  (chats are global to project+tenant); 'locked' = private to owner + members. */
+  visibility: varchar('visibility', { length: 16 }).notNull().default('shared'),
   /** Consolidation pointer (0266): when this chat was merged into another, the
    *  surviving chat's id. Set with isArchived=true so the source drops out of the
    *  list but any ticket still resolves to the one surviving conversation. */
@@ -2068,6 +2113,35 @@ export const brainChats = pgTable('brain_chats', {
   createdAt:  timestamp('created_at').notNull().defaultNow(),
   updatedAt:  timestamp('updated_at').notNull().defaultNow(),
 });
+
+// ---------------------------------------------------------------------------
+// Human chat participants (migration 0288) — the shared-access model. Until now a
+// brain_chats row had a single owner (user_id) and every access check filtered by
+// it, so a chat was strictly single-owner. This table is the human equivalent of
+// an agent invite (agent_assignments scope='chat'): a member (active user_id, or a
+// pending invited_email that converts on next access) may open, read, and post in a
+// chat they do not own. Owner-only admin (rename/archive/invite) stays on user_id.
+// ---------------------------------------------------------------------------
+
+export const chatMembers = pgTable('chat_members', {
+  id:           serial('id').primaryKey(),
+  chatId:       integer('chat_id').notNull().references(() => brainChats.id, { onDelete: 'cascade' }),
+  tenantId:     integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  segmentId:    uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),
+  /** Resolved member (an existing account); NULL while the invite is pending. */
+  userId:       varchar('user_id', { length: 36 }).references(() => users.id, { onDelete: 'cascade' }),
+  /** Lower-cased; set for a cold invite whose email has no account yet. */
+  invitedEmail: varchar('invited_email', { length: 255 }),
+  role:         varchar('role', { length: 24 }).notNull().default('participant'),
+  /** 'active' (has access now) | 'pending' (email invite, converts on access). */
+  status:       varchar('status', { length: 16 }).notNull().default('active'),
+  invitedBy:    varchar('invited_by', { length: 36 }).references(() => users.id, { onDelete: 'set null' }),
+  createdAt:    timestamp('created_at').notNull().defaultNow(),
+  updatedAt:    timestamp('updated_at').notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex('uq_chat_members_user').on(t.chatId, t.userId),
+  index('idx_chat_members_user').on(t.tenantId, t.userId),
+]);
 
 // ---------------------------------------------------------------------------
 // Chat <-> ticket links (0266) — a many-to-many, lineage-aware edge between a
@@ -2083,9 +2157,9 @@ export const chatTicketLinks = pgTable('chat_ticket_links', {
   tenantId:   integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
   segmentId:  uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),
   chatId:     integer('chat_id').notNull().references(() => brainChats.id, { onDelete: 'cascade' }),
-  /** 'portfolio'|'objective'|'initiative'|'roadmap'|'epic'|'gap'|'task' (spine + roadmap + gap). */
+  /** 'portfolio'|'objective'|'initiative'|'roadmap'|'spec'|'epic'|'gap'|'task' (spine + roadmap + spec + gap). */
   ticketKind: varchar('ticket_kind', { length: 12 }).notNull(),
-  /** Target id as text — tasks.id (epic/gap/task) or a UUID (portfolio/objective/initiative/roadmap). */
+  /** Target id as text — tasks.id (epic/gap/task) or a UUID (portfolio/objective/initiative/roadmap/spec). */
   ticketRef:  varchar('ticket_ref', { length: 64 }).notNull(),
   /** Lineage: 'created' (ticket spawned from this chat) | 'linked' (attached later). */
   linkType:   varchar('link_type', { length: 16 }).notNull().default('linked'),

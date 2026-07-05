@@ -11,12 +11,15 @@
  */
 import { Hono } from 'hono';
 import { neon, type NeonQueryFunction } from '@neondatabase/serverless';
-import { authMiddleware } from '../middleware/authMiddleware';
+import { authMiddleware, requireRole } from '../middleware/authMiddleware';
 import { webAuthMiddleware } from '../middleware/webAuthMiddleware';
 import { resolveActiveMinutes, type ResolvableSignal } from '../../application/activity/resolveTime';
 import { notify } from '../../application/notifications/notify';
 import { isPayoutsConfigured, createPayout } from '../../application/integrations/payments';
-import type { HonoEnv } from '../../env';
+import { getActivityLog } from '../../application/activity/activityLog';
+import { TenantRole } from '../../domain/shared/types';
+import type { Db } from '../../infrastructure/database/connection';
+import type { Env, HonoEnv } from '../../env';
 
 const SIGNAL_SOURCES = ['portal', 'vscode', 'agent', 'meeting', 'system'] as const;
 const MAX_BATCH = 100;
@@ -94,9 +97,30 @@ async function recomputeTimecard(
   return { totalMinutes: total, billableMinutes: billable, amountCents: amount };
 }
 
-export function createActivityRoutes(): Hono<HonoEnv> {
+export function createActivityRoutes(db: Db): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
   const sql = (env: HonoEnv['Bindings']) => neon(env.NEON_DATABASE_URL);
+
+  // ── GET /log — the unified activity / audit timeline (MANAGER+, tenant JWT) ──
+  // "Who did what, to what, when" across the whole workforce — team members,
+  // external talent / hires, and AI agents — from the canonical activity_log.
+  // Version-token cached; keyset-paginated via `beforeId`.
+  router.get('/log', authMiddleware, requireRole(TenantRole.MANAGER), async (c) => {
+    const tenantId = c.get('tenantId') as number;
+    const q = c.req.query.bind(c.req);
+    const num = (v: string | undefined) => (v != null && v !== '' && Number.isFinite(Number(v)) ? Number(v) : undefined);
+    const page = await getActivityLog(c.env as Env, db, tenantId, {
+      actorType: q('actorType') || undefined,
+      actorRef: q('actorRef') || undefined,
+      targetType: q('targetType') || undefined,
+      targetId: q('targetId') || undefined,
+      verb: q('verb') || undefined,
+      projectId: num(q('projectId')),
+      beforeId: num(q('beforeId')),
+      limit: num(q('limit')),
+    });
+    return c.json(page);
+  });
 
   // POST /signals — batch-ingest for the signed-in worker (WEB JWT; the portal).
   router.post('/signals', webAuthMiddleware, async (c) => {
