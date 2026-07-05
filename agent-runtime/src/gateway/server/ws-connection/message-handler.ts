@@ -147,9 +147,7 @@ export function attachGatewayWsMessageHandler(params: {
   const remoteIsTrustedProxy = isTrustedProxyAddress(remoteAddr, trustedProxies);
   const hasUntrustedProxyHeaders = hasProxyHeaders && !remoteIsTrustedProxy;
   const hostName = resolveHostName(requestHost);
-  const hostIsLocal = hostName === "localhost" || hostName === "127.0.0.1" || hostName === "::1";
-  const hostIsTailscaleServe = hostName.endsWith(".ts.net");
-  const hostIsLocalish = hostIsLocal || hostIsTailscaleServe;
+  const hostIsLocalish = isLoopbackHost(hostName) || hostName.endsWith(".ts.net");
   const isLocalClient = isLocalDirectRequest(upgradeReq, trustedProxies);
   const reportedClientIp =
     isLocalClient || hasUntrustedProxyHeaders

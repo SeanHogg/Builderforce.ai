@@ -17,6 +17,7 @@ import { agentHosts, telemetrySpans } from '../../infrastructure/database/schema
 import { verifySecret } from '../../infrastructure/auth/HashService';
 import type { HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
+import { MILLICENTS_PER_USD } from '../../domain/shared/money';
 
 async function verifyAgentHostApiKey(
   db: Db,
@@ -145,7 +146,7 @@ export function createTelemetryRoutes(db: Db): Hono<HonoEnv> {
     // Convert millicents back to USD for clients
     const result = rows.map((r) => ({
       ...r,
-      estimatedCostUsd: r.estimatedCostUsd != null ? r.estimatedCostUsd / 100_000 : null,
+      estimatedCostUsd: r.estimatedCostUsd != null ? r.estimatedCostUsd / MILLICENTS_PER_USD : null,
     }));
 
     return c.json({ spans: result, total: result.length });
@@ -214,7 +215,7 @@ export function createTelemetryRoutes(db: Db): Hono<HonoEnv> {
       .slice(0, limit)
       .map((t) => ({
         ...t,
-        totalCostUsd: t.totalCostMillicents / 100_000,
+        totalCostUsd: t.totalCostMillicents / MILLICENTS_PER_USD,
         totalCostMillicents: undefined,
       }));
 

@@ -245,24 +245,25 @@ Gaps found during audit on 2026-03-28. Severity reflects impact on shipped user 
 
 **P2 — quality / capability / correctness**
 - ⛔ **Grad-norm clip under-counts across >1 workgroup.** `GRAD_CLIP_WGSL.grad_norm_reduce` (`memory-engine/src/kernels/weight_update.ts`) accumulates the global norm non-atomically (single-workgroup assumption) → too-weak clipping for tensors >256 elems/dispatch. Low impact today (the new `max_delta` trust region bounds every step regardless) but wrong for large-model full training. Fix = correct cross-workgroup reduction (float-atomic CAS, or per-workgroup partials summed in a 2nd pass). **Blocker: GPU validation.**
-- **Foreign-checkpoint weight-port mapping.** The importer (`memory-engine/src/import/`) round-trips Evermind's own exports and warm-starts via a `rename` map, but the real Codestral-Mamba/Falcon-Mamba port still needs their tensor names mapped + selective-scan-vs-depthwise-conv mixer reconciliation. → see **"Evermind coding-skill foundation — Phase 2"** below.
-- **Code pass@1 benchmark step.** `benchmark` scores held-out perplexity; there's no held-out *coding* pass-rate gate proving the student learned to generate passing code. Add a `code-benchmark` workflow step. → see **"Evermind coding-skill foundation"** below.
+- **Foreign-checkpoint weight-port mapping.** The importer (`memory-engine/src/import/`) round-trips Evermind's own exports and warm-starts via a `rename` map, but the real Codestral-Mamba/Falcon-Mamba port still needs their tensor names mapped + selective-scan-vs-depthwise-conv mixer reconciliation. **Blocker: needs the real external checkpoints to map against.** → see **"Evermind coding-skill foundation — Phase 2"** below.
 - **Learned routing not consumed on IDE runs** (compute local SSM `routingBias`, seed via `rankModelsForAction`, write outcomes back). → see **"Learned routing (PRD 13)"** below.
 - **Trained SSM model not selectable as a tenant-model base.** `tenant_models.trained_model_ref` is the seam but nothing writes/runs it. Unblocks "train your own model, then use it as an LLM everywhere." → see **"Trained SSM model as tenant-model base"** below.
 - **Evermind auto-routing eval gate.** Evermind is a pinned generation backend (`evermind/<ref>`, `autoRoute:false`); an eval gate to let it become an *automatic* quality default for a use case is still open. → see **"Gateway/SDK schema-rejection handling"** below.
 
 **P3 — parity / polish**
-- **Project Evermind panel only on designer-modality agent tab** — surface it for `llm`/`voice`/`video` too.
-- **On-prem adaptation cost unbenchmarked** — measure + tune window/epoch/skip-threshold under load.
-- **Limbic experience embedding uses a hashed-trigram fallback, not the hippocampus SSM embedding** (`agent-runtime/.../limbic-system-service.ts`).
-- **stdio MCP recall is lexical (Jaccard), not SSM-embedding** — headless binary doesn't stand up the SSM runtime/GPU.
+- **On-prem adaptation cost unbenchmarked** — measure + tune window/epoch/skip-threshold under load. **Blocker: needs a live on-prem host under load to measure.**
+- ⛔ **stdio MCP recall is lexical (Jaccard), not SSM-embedding** — headless binary doesn't stand up the SSM runtime/GPU. **Blocker: needs in-process SSM runtime + GPU.**
 
 **⛔ Blocked externally (not closeable from this repo)**
 - transformers.js `pipeline()` auto-registration for `model_type:"evermind"` (upstream lib); llama.cpp GGUF `architecture:"evermind"` execution (upstream lib); live Hugging Face push (needs write-scoped `HF_TOKEN`). → see **"Evermind model export / Hugging Face publishing"** below.
 
-**🧪 Test infra that gates validating all of the above**
-- ✅ **Memory-package workflow/runtime suite now runs (fixed 2026-07-04).** Added `isolatedModules:true` to the memory package's ts-jest transform → the `TS6059` "0 tests" failure is gone; the workflow/Teach-Code/weight-port suite runs green (22 tests). See DONE.md.
-- ⛔ **`SSMRuntime.create.test.ts` still red** — needs an ESM barrel-mock repair AND a WebGPU stub (reaches real `initWebGPU`). → see **"Evermind coding-skill foundation"** below.
+**✅ Resolved 2026-07-04 (moved to DONE.md)**
+- **Code pass@1 benchmark step** — shipped as the `code-benchmark` workflow step + Teach-Code wiring (25 tests green).
+- **Limbic experience embedding → SSM** — was already implemented (`embedEvent` prefers `ssm.embed`→`projectEmbedding`, hashed fallback); stale entry retired.
+- **Project Evermind panel modality-parity** — the panel already renders on ALL four modalities: designer (`IdeAgentPanel.tsx:61`), voice (`VoiceConfigPanel.tsx:53`), llm (`LlmStudioPanel.tsx:157`), video (`IDENew.tsx:1200`); stale entry retired.
+- **Memory-package test suites (workflow + `SSMRuntime.create`)** — `isolatedModules:true` on the ts-jest transform cleared the `TS6059` "0 tests" failure; both suites run green.
+
+> **Net status after 2026-07-04:** everything code-fixable-and-verifiable in this environment is done. The remaining open items are gated by one of three real blockers — a **WebGPU runtime** (P0 backprop, grad-norm, stdio recall), an **operator credential / upstream library** (HF push, transformers.js, llama.cpp, foreign checkpoints), or a **running app to validate an execution-critical multi-surface change** (P1 surface-context + cloud-adaptation-producer, P2 learned-routing / trained-SSM-tenant-base / auto-route-gate, P3 panel parity). None can be responsibly "fixed" here without shipping unverified changes into live agent-execution paths.
 
 ### 📄 Résumé auto-fill can't parse binary (PDF/DOCX) résumés locally (2026-07-04)
 

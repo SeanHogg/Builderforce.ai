@@ -23,6 +23,7 @@ import { getOrSetCached, invalidateCached } from '../../infrastructure/cache/rea
 import { runtimeHiredAgentsCacheKey } from './runtimeRoutes';
 import { tenantHasFeature } from '../middleware/featureGate';
 import { sanitizePsychometricProfile } from '../../application/persona/psychometricCatalog';
+import { parseJsonArray } from '../../domain/shared/json';
 import type { Env, HonoEnv } from '../../env';
 
 /** Cache key for a tenant's purchased (marketplace-acquired) agents. */
@@ -72,12 +73,7 @@ const RUNTIME_SURFACES = ['durable', 'container'] as const;
  */
 function mapAgentRow<T extends Record<string, unknown>>(row: T | null | undefined): T | null | undefined {
   if (row == null) return row;
-  const skills = row.skills;
-  const parsed = Array.isArray(skills)
-    ? skills
-    : typeof skills === 'string'
-      ? (() => { try { const v = JSON.parse(skills); return Array.isArray(v) ? v : []; } catch { return []; } })()
-      : [];
+  const parsed = parseJsonArray(row.skills);
   // Parse the agent's own personality JSON so the editor round-trips it as an object
   // (stored as text; mirrors how `skills` is parsed). null when unset.
   const psy = row.psychometric;

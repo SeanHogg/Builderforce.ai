@@ -21,6 +21,7 @@ import {
 } from '../../infrastructure/database/schema';
 import { readWorkforceMetricsVersion } from './workforceMetrics';
 import { TaskStatus } from '../../domain/shared/types';
+import { clampScore as clamp } from '../../domain/shared/numbers';
 
 const DEFAULT_MAX_WIP = 5;
 /** Open lanes a task counts as WIP for (everything not done-class). */
@@ -46,7 +47,6 @@ export interface Recommendation extends Candidate {
   reasons: string[];
 }
 
-const clamp = (n: number) => Math.max(0, Math.min(100, n));
 const AVAIL_WEIGHT: Record<string, number> = { available: 1, on_call: 0.8, focus: 0.6, busy: 0.5, ooo: 0 };
 const EXP_WEIGHT: Record<string, number> = { junior: 0.4, mid: 0.6, senior: 0.8, staff: 0.9, principal: 1 };
 

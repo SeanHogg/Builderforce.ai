@@ -24,6 +24,8 @@
  * provider and us cannot cause double-apply or mis-ordering.
  */
 
+import { fnv1a32 } from '../../domain/shared/strings';
+
 /** Sync state stored on an external_ticket_links row. */
 export type SyncState = 'synced' | 'dirty_local' | 'dirty_remote' | 'conflict';
 
@@ -239,11 +241,5 @@ function stableStringify(value: unknown): string {
 
 /** FNV-1a 32-bit hash → 8-char hex. Deterministic, no crypto/IO. */
 function fnv1a32Hex(input: string): string {
-  let h = 0x811c9dc5;
-  for (let i = 0; i < input.length; i++) {
-    h ^= input.charCodeAt(i);
-    h = Math.imul(h, 0x01000193);
-  }
-  // >>> 0 to get unsigned, then pad to 8 hex chars.
-  return (h >>> 0).toString(16).padStart(8, '0');
+  return fnv1a32(input).toString(16).padStart(8, '0');
 }

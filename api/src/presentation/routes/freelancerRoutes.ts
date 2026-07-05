@@ -26,6 +26,7 @@ import {
 } from '../../application/integrations/hiredVideo';
 import { notify } from '../../application/notifications/notify';
 import { provisionForHireProfile } from '../../application/freelance/provisionForHire';
+import { parseJsonArray } from '../../domain/shared/json';
 import type { Env, HonoEnv } from '../../env';
 
 export const FREELANCER_PUBLIC_LIST_CACHE_KEY = 'fl:public:list';
@@ -54,11 +55,7 @@ const RESERVED_SLUGS = new Set([
 
 /** Parse the stored skills JSON column into a string[]. */
 function parseSkills(raw: unknown): string[] {
-  if (Array.isArray(raw)) return raw as string[];
-  if (typeof raw === 'string') {
-    try { const v = JSON.parse(raw); return Array.isArray(v) ? v : []; } catch { return []; }
-  }
-  return [];
+  return parseJsonArray<string>(raw);
 }
 
 /** Normalize a candidate slug to the canonical form (lowercase, hyphen-joined). */
@@ -486,14 +483,6 @@ export function createFreelancerRoutes(): Hono<HonoEnv> {
     if (!email) return c.json({ error: 'email required' }, 400);
     const res = await hiredConnectExisting(c.env, { email, externalUserId: userId, redirectUrl: b.redirectUrl });
     return c.json({ configured: res.configured, consentUrl: res.consentUrl ?? null });
-  });
-
-  // GET /me/availability — is the signed-in user opted in to being hired talent?
-  // Lets a builder's UI show the opt-in state without loading the whole profile.
-  router.get('/me/availability', webAuthMiddleware, async (c) => {
-    const userId = c.get('userId') as string;
-    const [row] = await sql(c.env)`SELECT available_for_hire FROM users WHERE id = ${userId}`;
-    return c.json({ availableForHire: Boolean(row?.available_for_hire) });
   });
 
   // POST /me/availability { available } — an EXISTING builder opts IN or OUT of being

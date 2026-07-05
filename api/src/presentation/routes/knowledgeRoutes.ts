@@ -12,7 +12,7 @@
 import { Hono } from 'hono';
 import type { Context } from 'hono';
 import { and, eq, desc, inArray, sql } from 'drizzle-orm';
-import { authMiddleware, requireRole } from '../middleware/authMiddleware';
+import { authMiddleware, requireRole, isManager } from '../middleware/authMiddleware';
 import { TenantRole, hasMinRole } from '../../domain/shared/types';
 import {
   knowledgeDocuments,
@@ -496,11 +496,10 @@ export function createKnowledgeRoutes(db: Db): Hono<HonoEnv> {
   router.delete('/documents/:id', async (c) => {
     const tenantId = c.get('tenantId') as number;
     const userId = c.get('userId') as string;
-    const role = c.get('role') as TenantRole;
     const id = c.req.param('id');
     const doc = await loadDoc(tenantId, id);
     if (!doc) return c.json({ error: 'Document not found' }, 404);
-    if (!hasMinRole(role, TenantRole.MANAGER) && doc.createdBy !== userId) {
+    if (!isManager(c) && doc.createdBy !== userId) {
       return c.json({ error: 'Only a manager or the creator can delete this document' }, 403);
     }
     await db

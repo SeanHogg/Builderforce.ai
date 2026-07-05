@@ -13,6 +13,7 @@ import { fetchWebDocument } from '../../application/web/webFetch';
 import { recordOutboundFetch, enforceOutboundFetchCap } from '../../application/web/outboundFetchLedger';
 import { agentHosts } from '../../infrastructure/database/schema';
 import { ChatTicketService } from '../../application/brain/ChatTicketService';
+import { isKeyOwnedByTenant } from '../../domain/shared/r2Keys';
 import type { Env, HonoEnv } from '../../env';
 import type { BrainService } from '../../application/brain/BrainService';
 import type { Db } from '../../infrastructure/database/connection';
@@ -399,7 +400,7 @@ export function createBrainRoutes(brainService: BrainService, db: Db): Hono<Hono
   router.post('/uploads/sign', async (c) => {
     const tenantId = c.get('tenantId') as number;
     const { key } = await c.req.json<{ key?: string }>();
-    if (!key || !key.startsWith(`${tenantId}/`)) {
+    if (!isKeyOwnedByTenant(key, tenantId)) {
       return c.json({ error: 'Not found' }, 404);
     }
     const secret = (c.env as { JWT_SECRET?: string }).JWT_SECRET;
@@ -417,7 +418,7 @@ export function createBrainRoutes(brainService: BrainService, db: Db): Hono<Hono
     const key = c.req.path.replace('/uploads/', '');
 
     // Scope: files must belong to this tenant
-    if (!key.startsWith(`${tenantId}/`)) {
+    if (!isKeyOwnedByTenant(key, tenantId)) {
       return c.json({ error: 'Not found' }, 404);
     }
 

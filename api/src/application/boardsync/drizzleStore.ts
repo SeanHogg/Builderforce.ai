@@ -28,6 +28,7 @@ import type {
 } from './SyncEngine';
 import type { SyncState } from './reconciler';
 import type { ChangeSet } from './providers';
+import { parseJsonObject } from '../../domain/shared/json';
 
 /**
  * Coerce a stored `fields` jsonb value back into a plain object. The driver may
@@ -281,11 +282,7 @@ export function createDrizzleStore(db: Db): BoardSyncStore {
 }
 
 function safeParse(raw: string): Record<string, unknown> {
-  try {
-    return JSON.parse(raw) as Record<string, unknown>;
-  } catch {
-    return {};
-  }
+  return parseJsonObject(raw);
 }
 
 // ---------------------------------------------------------------------------

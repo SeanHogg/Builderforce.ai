@@ -1,5 +1,6 @@
 import * as vscode from "vscode";
 import { getApiKey, getBaseUrl } from "./gateway";
+import { ttlCache } from "./ttlCache";
 
 export interface BfProject {
   id: number;
@@ -172,7 +173,7 @@ export function clearJwt(): void {
   rescopeUnsupported = false;
   workspaceCache = undefined;
   currentUserId = undefined;
-  evermindHeadCache.clear();
+  evermindHeadCache.invalidate();
 }
 
 // The signed-in human's user id (from GET /api/vscode/me), cached for the session so
@@ -342,11 +343,11 @@ export interface BfProjectEvermindHead {
   seeded: boolean;
 }
 
-// Single-process, short-TTL cache (same shape as the tasks cache): the head is
-// slow-changing yet read on every chat turn's model resolution. Busted on
-// sign-out (clearJwt) and via invalidateProjectEvermind.
-const evermindHeadCache = new Map<number, { ts: number; head: BfProjectEvermindHead | undefined }>();
-const EVERMIND_HEAD_TTL = 60_000;
+// Single-process, short-TTL cache (shared ttlCache): the head is slow-changing yet
+// read on every chat turn's model resolution. Caches a negative (undefined) head too,
+// so an unreachable/unowned project isn't refetched every turn. Busted on sign-out
+// (clearJwt) and via invalidateProjectEvermind.
+const evermindHeadCache = ttlCache<number, BfProjectEvermindHead | undefined>(60_000);
 
 /**
  * The project's Evermind head (GET /api/projects/:id/evermind/head). Used to decide
@@ -361,21 +362,20 @@ export async function getProjectEvermindHead(
   force = false,
 ): Promise<BfProjectEvermindHead | undefined> {
   const cached = evermindHeadCache.get(projectId);
-  if (!force && cached && Date.now() - cached.ts < EVERMIND_HEAD_TTL) return cached.head;
+  if (!force && cached) return cached.value;
   let head: BfProjectEvermindHead | undefined;
   try {
     head = await authed<BfProjectEvermindHead>(secrets, `/api/projects/${projectId}/evermind/head`);
   } catch {
     head = undefined; // not deployed / not owned / offline — chat falls back to default
   }
-  evermindHeadCache.set(projectId, { ts: Date.now(), head });
+  evermindHeadCache.set(projectId, head);
   return head;
 }
 
 /** Invalidate the cached Evermind head (e.g. after toggling inference in the web app). */
 export function invalidateProjectEvermind(projectId?: number): void {
-  if (projectId == null) evermindHeadCache.clear();
-  else evermindHeadCache.delete(projectId);
+  evermindHeadCache.invalidate(projectId);
 }
 
 /** One durable belief in the SHARED per-project facts store (server-side, not local disk). */
@@ -474,8 +474,8 @@ export async function createProject(
 }
 
 // Tasks cache: single-process, short TTL, busted by refresh / status change.
-const taskCache = new Map<number, { ts: number; tasks: BfTask[] }>();
 const TASKS_TTL = 30_000;
+const taskCache = ttlCache<number, BfTask[]>(TASKS_TTL);
 
 export async function listTasks(
   secrets: vscode.SecretStorage,
@@ -483,21 +483,20 @@ export async function listTasks(
   force = false,
 ): Promise<BfTask[]> {
   const cached = taskCache.get(projectId);
-  if (!force && cached && Date.now() - cached.ts < TASKS_TTL) return cached.tasks;
+  if (!force && cached) return cached.value;
   const r = await authed<{ tasks: BfTask[] }>(secrets, `/api/tasks?project_id=${projectId}`);
   const tasks = r?.tasks ?? [];
-  taskCache.set(projectId, { ts: Date.now(), tasks });
+  taskCache.set(projectId, tasks);
   return tasks;
 }
 
 export function invalidateTasks(projectId?: number): void {
-  if (projectId == null) taskCache.clear();
-  else taskCache.delete(projectId);
+  taskCache.invalidate(projectId);
 }
 
 // Project-scoped OKR objectives, cached briefly like tasks so the Hierarchy view's
 // top tier doesn't refetch on every expand. Keyed by project id.
-const objectiveCache = new Map<number, { ts: number; objectives: BfObjective[] }>();
+const objectiveCache = ttlCache<number, BfObjective[]>(TASKS_TTL);
 
 /**
  * The project's OKR Objectives + their delivery links — the top tier of the
@@ -511,7 +510,7 @@ export async function listProjectObjectives(
   force = false,
 ): Promise<BfObjective[]> {
   const cached = objectiveCache.get(projectId);
-  if (!force && cached && Date.now() - cached.ts < TASKS_TTL) return cached.objectives;
+  if (!force && cached) return cached.value;
   try {
     const r = await authed<{
       okr?: { objectives?: Array<{ id: string; title: string; progress: number; status?: string; links?: Array<{ kind: string; refId: string }> }> };
@@ -526,7 +525,7 @@ export async function listProjectObjectives(
         .map((l) => Number(l.refId))
         .filter((n) => Number.isFinite(n)),
     }));
-    objectiveCache.set(projectId, { ts: Date.now(), objectives });
+    objectiveCache.set(projectId, objectives);
     return objectives;
   } catch {
     return [];
@@ -534,8 +533,7 @@ export async function listProjectObjectives(
 }
 
 export function invalidateObjectives(projectId?: number): void {
-  if (projectId == null) objectiveCache.clear();
-  else objectiveCache.delete(projectId);
+  objectiveCache.invalidate(projectId);
 }
 
 /** Change a board item's type — task⇄epic, or promote it to an OKR Objective

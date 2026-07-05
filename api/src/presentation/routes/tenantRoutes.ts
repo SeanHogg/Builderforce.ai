@@ -25,6 +25,7 @@ import {
   users,
 } from '../../infrastructure/database/schema';
 import { sendWorkspaceInviteEmail } from '../../infrastructure/email/EmailService';
+import { countActiveSessionsAndTokens } from '../../application/security/sessionCounts';
 
 type SourceControlProvider = 'github' | 'bitbucket';
 
@@ -851,33 +852,7 @@ export function createTenantRoutes(tenantService: TenantService, db: Db): Hono<H
 
     const userIds = memberRows.map((row) => row.userId);
 
-    const sessionCounts = userIds.length
-      ? await db
-        .select({ userId: authUserSessions.userId, count: sql<number>`COUNT(*)` })
-        .from(authUserSessions)
-        .where(and(inArray(authUserSessions.userId, userIds), eq(authUserSessions.isActive, true)))
-        .groupBy(authUserSessions.userId)
-      : [];
-
-    const tokenCounts = userIds.length
-      ? await db
-        .select({ userId: authTokens.userId, count: sql<number>`COUNT(*)` })
-        .from(authTokens)
-        .where(
-          and(
-            inArray(authTokens.userId, userIds),
-            isNull(authTokens.revokedAt),
-            gt(authTokens.expiresAt, new Date()),
-          ),
-        )
-        .groupBy(authTokens.userId)
-      : [];
-
-    const sessionsByUser = new Map<string, number>();
-    for (const row of sessionCounts) sessionsByUser.set(row.userId, Number(row.count));
-
-    const tokensByUser = new Map<string, number>();
-    for (const row of tokenCounts) tokensByUser.set(row.userId, Number(row.count));
+    const { sessionsByUser, tokensByUser } = await countActiveSessionsAndTokens(db, userIds);
 
     return c.json({
       users: memberRows.map((row) => ({

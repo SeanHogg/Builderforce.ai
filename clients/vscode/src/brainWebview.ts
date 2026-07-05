@@ -8,6 +8,15 @@ import { getEditorContext, watchEditorContext } from "./editorContext";
 import { resolveEffectiveModel } from "./modelState";
 import { getSelectedProject } from "./projectState";
 import { getProjectNames } from "./projectNames";
+import { WebviewPanelBase, type WebviewInbound } from "./webviewShared";
+
+/** Inbound messages unique to the Brain panel (the shared cases live in the base). */
+interface BrainInbound extends WebviewInbound {
+  name?: string;
+  text?: string;
+  prompt?: string;
+  args?: Record<string, unknown>;
+}
 
 /** A host-driven request to the singleton Brain panel (mirror of the webview type). */
 export interface BrainIntent {
@@ -118,7 +127,7 @@ function buildLabels(): Record<string, string> {
  *   - local file tools (read/list/write/edit/delete) run here against the workspace
  *   - the tenant token is minted/refreshed here from the stored editor key
  */
-export class BrainWebview {
+export class BrainWebview extends WebviewPanelBase<BrainInbound> {
   private static current: BrainWebview | undefined;
   private static hooks: BrainWebviewHooks = {};
 
@@ -141,41 +150,19 @@ export class BrainWebview {
     void BrainWebview.current?.sendInit();
   }
 
-  private readonly panel: vscode.WebviewPanel;
-  private readonly disposables: vscode.Disposable[] = [];
   /** Intent captured at construction, flushed once the webview signals `ready`. */
   private pendingIntent?: BrainIntent;
 
-  private constructor(private readonly ctx: vscode.ExtensionContext, intent?: BrainIntent) {
+  private constructor(ctx: vscode.ExtensionContext, intent?: BrainIntent) {
+    super(ctx, { viewType: "builderforce.brain", title: "BuilderForce", htmlTitle: "BuilderForce" });
     this.pendingIntent = intent;
-    this.panel = vscode.window.createWebviewPanel(
-      "builderforce.brain",
-      "BuilderForce",
-      vscode.ViewColumn.Active,
-      {
-        enableScripts: true,
-        retainContextWhenHidden: true,
-        localResourceRoots: [vscode.Uri.joinPath(ctx.extensionUri, "media")],
-      },
-    );
-    this.panel.iconPath = vscode.Uri.joinPath(ctx.extensionUri, "media", "icon.png");
-    this.panel.webview.html = this.html(this.panel.webview);
-    this.panel.webview.onDidReceiveMessage((m) => void this.onMessage(m), undefined, this.disposables);
-    this.panel.onDidDispose(() => this.dispose(), undefined, this.disposables);
     // Keep the React app's editor context live: whenever the active file, selection,
     // or open tabs change, push a fresh snapshot so the agent always knows what the
     // user is looking at (the same context seeded in `init`).
     this.disposables.push(watchEditorContext(() => this.pushEditorContext()));
   }
 
-  private async onMessage(msg: {
-    type?: string;
-    id?: string;
-    name?: string;
-    text?: string;
-    prompt?: string;
-    args?: Record<string, unknown>;
-  }): Promise<void> {
+  protected async onMessage(msg: BrainInbound): Promise<void> {
     switch (msg.type) {
       case "ready":
         await this.sendInit();
@@ -186,14 +173,6 @@ export class BrainWebview {
         break;
       case "tool.call":
         await this.runTool(msg.id, msg.name, msg.args);
-        break;
-      case "token.refresh": {
-        const token = (await getTenantJwt(this.ctx.secrets)) ?? null;
-        this.respond(msg.id, true, { token });
-        break;
-      }
-      case "signin":
-        void vscode.commands.executeCommand("builderforce.signIn");
         break;
       case "chats.changed":
         BrainWebview.hooks.onChatsChanged?.();
@@ -396,61 +375,7 @@ export class BrainWebview {
     }
   }
 
-  private respond(id: string | undefined, ok: boolean, result?: unknown, error?: string): void {
-    if (!id) return;
-    void this.panel.webview.postMessage({ type: "response", id, ok, result, error });
-  }
-
-  private dispose(): void {
+  protected onDispose(): void {
     BrainWebview.current = undefined;
-    for (const d of this.disposables) {
-      try {
-        d.dispose();
-      } catch {
-        /* noop */
-      }
-    }
   }
-
-  private html(webview: vscode.Webview): string {
-    const nonce = makeNonce();
-    const asset = (f: string) =>
-      webview.asWebviewUri(vscode.Uri.joinPath(this.ctx.extensionUri, "media", "webview", f));
-    // The React app fetches the gateway/API directly; allow that origin in connect-src.
-    let apiOrigin = "https://api.builderforce.ai";
-    try {
-      apiOrigin = new URL(getBaseUrl()).origin;
-    } catch {
-      /* keep default */
-    }
-    const csp = [
-      `default-src 'none'`,
-      `img-src ${webview.cspSource} https: data: blob:`,
-      `style-src ${webview.cspSource} 'unsafe-inline'`,
-      `script-src 'nonce-${nonce}'`,
-      `font-src ${webview.cspSource} data:`,
-      `connect-src ${apiOrigin} https:`,
-    ].join("; ");
-    return `<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="UTF-8" />
-<meta http-equiv="Content-Security-Policy" content="${csp}" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<link rel="stylesheet" href="${asset("index.css")}" />
-<title>BuilderForce</title>
-</head>
-<body>
-<div id="root"></div>
-<script type="module" nonce="${nonce}" src="${asset("index.js")}"></script>
-</body>
-</html>`;
-  }
-}
-
-function makeNonce(): string {
-  const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
-  let out = "";
-  for (let i = 0; i < 32; i++) out += chars[Math.floor(Math.random() * chars.length)];
-  return out;
 }

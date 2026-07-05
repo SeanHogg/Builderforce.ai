@@ -382,24 +382,6 @@ export type AgentComponentContext = {
 };
 
 /**
- * Build agent button custom ID: agent:componentId=<id>
- * The channelId is NOT embedded in customId - we use interaction.rawData.channel_id instead
- * to prevent channel spoofing attacks.
- *
- * Carbon's customIdParser parses "key:arg1=value1;arg2=value2" into { arg1: value1, arg2: value2 }
- */
-export function buildAgentButtonCustomId(componentId: string): string {
-  return `${AGENT_BUTTON_KEY}:componentId=${encodeURIComponent(componentId)}`;
-}
-
-/**
- * Build agent select menu custom ID: agentsel:componentId=<id>
- */
-export function buildAgentSelectCustomId(componentId: string): string {
-  return `${AGENT_SELECT_KEY}:componentId=${encodeURIComponent(componentId)}`;
-}
-
-/**
  * Parse agent component data from Carbon's parsed ComponentData
  * Carbon parses "key:componentId=xxx" into { componentId: "xxx" }
  */

@@ -26,13 +26,14 @@ import { getOrSetCached, invalidateCached } from '../../infrastructure/cache/rea
 import { findOrCreateBoard } from '../swimlane/findOrCreateBoard';
 import { BUILTIN_TEMPLATES, getBuiltinTemplate, isBuiltinTemplateId } from './templateCatalog';
 import type { KanbanTemplate, TemplateLane, TemplateVisibility } from './types';
+import { slugify as slugifyBase } from '../../domain/shared/strings';
 
 const listKey = (tenantId: number) => `kanban:templates:${tenantId}`;
 const publicKey = () => `kanban:templates:public`;
 const oneKey = (tenantId: number, id: string) => `kanban:template:${tenantId}:${id}`;
 
 function slugify(input: string): string {
-  return input.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '').slice(0, 110) || 'template';
+  return slugifyBase(input, { maxLen: 110, fallback: 'template' });
 }
 
 /** A lightweight card for list views (no lanes). */

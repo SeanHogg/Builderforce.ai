@@ -1785,7 +1785,7 @@ export function TaskMgmtContent({
                 </div>
                 <div>
                   <label style={{ display: 'block', fontSize: 12, color: 'var(--text-muted)', marginBottom: 4 }}>
-                    Due date (optional)
+                    {tTask('dueDateOptional')}
                   </label>
                   <input
                     type="date"
@@ -1805,7 +1805,7 @@ export function TaskMgmtContent({
               </div>
               <div>
                 <label style={{ display: 'block', fontSize: 12, color: 'var(--text-muted)', marginBottom: 4 }}>
-                  GitHub PR URL (optional)
+                  {tTask('githubPrUrl')}
                 </label>
                 <input
                   type="url"
@@ -1826,10 +1826,10 @@ export function TaskMgmtContent({
               </div>
               <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 8 }}>
                 <button type="button" style={buttonTertiary} onClick={() => setShowModal(false)}>
-                  Cancel
+                  {tCommon('cancel')}
                 </button>
                 <button type="submit" disabled={saving} style={{ ...buttonPrimary, opacity: saving ? 0.7 : 1 }}>
-                  {saving ? 'Saving…' : editTarget ? 'Save changes' : 'Create task'}
+                  {saving ? tCommon('saving') : editTarget ? tTask('saveChanges') : tTask('createTask')}
                 </button>
               </div>
             </form>
@@ -2099,7 +2099,7 @@ export function TaskMgmtContent({
                 </div>
               )}
               <div style={{ marginBottom: 16 }}>
-                <div style={{ fontWeight: 600, marginBottom: 8, fontSize: 14 }}>Description</div>
+                <div style={{ fontWeight: 600, marginBottom: 8, fontSize: 14 }}>{tTask('description')}</div>
                 {editingField === 'description' ? (
                   <div style={{ display: 'grid', gap: 8 }}>
                     <textarea
@@ -2108,7 +2108,7 @@ export function TaskMgmtContent({
                       onChange={(e) => setFieldDraft(e.target.value)}
                       onKeyDown={(e) => { if (e.key === 'Escape') setEditingField(null); }}
                       rows={6}
-                      placeholder="Markdown supported…"
+                      placeholder={tTask('markdownPlaceholder')}
                       style={{
                         width: '100%',
                         padding: '8px 10px',
@@ -2124,7 +2124,7 @@ export function TaskMgmtContent({
                     />
                     <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
                       <button type="button" style={buttonTertiary} onClick={() => setEditingField(null)}>
-                        Cancel
+                        {tCommon('cancel')}
                       </button>
                       <button
                         type="button"
@@ -2132,7 +2132,7 @@ export function TaskMgmtContent({
                         style={{ ...buttonPrimary, opacity: fieldSaving ? 0.7 : 1 }}
                         onClick={() => saveTaskField({ description: fieldDraft.trim() || null })}
                       >
-                        {fieldSaving ? 'Saving…' : 'Save'}
+                        {fieldSaving ? tCommon('saving') : tCommon('save')}
                       </button>
                     </div>
                   </div>
@@ -2142,7 +2142,7 @@ export function TaskMgmtContent({
                     tabIndex={0}
                     onClick={() => { setFieldDraft(drawerTask.description ?? ''); setEditingField('description'); }}
                     onKeyDown={(e) => { if (e.key === 'Enter') { setFieldDraft(drawerTask.description ?? ''); setEditingField('description'); } }}
-                    title="Click to edit description (Markdown)"
+                    title={tTask('editDescriptionTitle')}
                     style={{
                       fontSize: 13,
                       color: drawerTask.description ? 'var(--text-secondary)' : 'var(--text-muted)',
@@ -2156,15 +2156,15 @@ export function TaskMgmtContent({
                   >
                     {drawerTask.description
                       ? <ChatMessageContent content={drawerTask.description} />
-                      : 'Add a description…'}
+                      : tTask('addDescription')}
                   </div>
                 )}
               </div>
               <div style={{ marginBottom: 16 }}>
-                <div style={{ fontWeight: 600, marginBottom: 10, fontSize: 14 }}>Details</div>
+                <div style={{ fontWeight: 600, marginBottom: 10, fontSize: 14 }}>{tTask('details')}</div>
                 <div style={{ display: 'grid', gap: 8 }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 13, minHeight: 28 }}>
-                    <span style={{ color: 'var(--text-muted)' }}>Project</span>
+                    <span style={{ color: 'var(--text-muted)' }}>{tTask('project')}</span>
                     {editingField === 'project' ? (
                       <MoveToBoardControl
                         projects={projects}
@@ -2179,7 +2179,7 @@ export function TaskMgmtContent({
                         tabIndex={0}
                         onClick={() => setEditingField('project')}
                         onKeyDown={(e) => { if (e.key === 'Enter') setEditingField('project'); }}
-                        title="Click to move this task to another board"
+                        title={tTask('moveBoardTitle')}
                         style={{ color: 'var(--text-primary)', cursor: 'pointer', borderBottom: '1px dashed var(--border-subtle)' }}
                       >
                         {projectNameById(drawerTask.projectId)}
@@ -2187,7 +2187,7 @@ export function TaskMgmtContent({
                     )}
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 13, minHeight: 28 }}>
-                    <span style={{ color: 'var(--text-muted)' }}>Assignee / Owner</span>
+                    <span style={{ color: 'var(--text-muted)' }}>{tTask('assigneeOwner')}</span>
                     {editingField === 'assignee' ? (
                       <AssigneeSelect
                         autoFocus
@@ -2215,7 +2215,7 @@ export function TaskMgmtContent({
                         tabIndex={0}
                         onClick={() => setEditingField('assignee')}
                         onKeyDown={(e) => { if (e.key === 'Enter') setEditingField('assignee'); }}
-                        title="Click to change assignee"
+                        title={tTask('changeAssigneeTitle')}
                         style={{ color: 'var(--text-primary)', cursor: 'pointer', borderBottom: '1px dashed var(--border-subtle)' }}
                       >
                         {taskAssigneeName(drawerTask)}
@@ -2223,7 +2223,7 @@ export function TaskMgmtContent({
                     )}
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 13, minHeight: 28 }}>
-                    <span style={{ color: 'var(--text-muted)' }}>Due date</span>
+                    <span style={{ color: 'var(--text-muted)' }}>{tTask('dueDate')}</span>
                     {editingField === 'dueDate' ? (
                       <input
                         type="date"
@@ -2248,14 +2248,14 @@ export function TaskMgmtContent({
                         tabIndex={0}
                         onClick={() => setEditingField('dueDate')}
                         onKeyDown={(e) => { if (e.key === 'Enter') setEditingField('dueDate'); }}
-                        title="Click to set a due date"
+                        title={tTask('setDueDateTitle')}
                         style={{
                           color: drawerTask.dueDate ? 'var(--text-primary)' : 'var(--text-muted)',
                           cursor: 'pointer',
                           borderBottom: '1px dashed var(--border-subtle)',
                         }}
                       >
-                        {formatDate(drawerTask.dueDate) || 'None'}
+                        {formatDate(drawerTask.dueDate) || tTask('none')}
                       </span>
                     )}
                   </div>
@@ -2323,7 +2323,7 @@ export function TaskMgmtContent({
                     </div>
                   )}
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 13, minHeight: 28 }}>
-                    <span style={{ color: 'var(--text-muted)' }}>Created</span>
+                    <span style={{ color: 'var(--text-muted)' }}>{tTask('created')}</span>
                     <span style={{ color: 'var(--text-primary)' }}>{formatDate(drawerTask.createdAt)}</span>
                   </div>
                 </div>

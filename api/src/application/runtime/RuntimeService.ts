@@ -163,6 +163,18 @@ export class RuntimeService {
     return Promise.all(list.map((e) => this.reapIfOrphaned(e)));
   }
 
+  /** Non-terminal executions across MANY tasks in one scan (reaped for orphans),
+   *  so a coordinator can decide "does this ticket still have a live run?" without
+   *  a listByTask() round-trip per task. */
+  async listActiveByTasks(taskIds: number[]): Promise<Execution[]> {
+    if (taskIds.length === 0) return [];
+    const list = await this.executions.findByTasksAndStatuses(
+      taskIds.map(asTaskId),
+      RuntimeService.NON_TERMINAL_STATUSES,
+    );
+    return Promise.all(list.map((e) => this.reapIfOrphaned(e)));
+  }
+
   /**
    * Cloud runs execute in a `waitUntil` background task; if that isolate is
    * evicted (or an update throws) before writing a terminal status, the row is

@@ -34,9 +34,9 @@ import {
   runModelOutcomes,
   tasks,
 } from '../../infrastructure/database/schema';
+import { clampScore as clamp } from '../../domain/shared/numbers';
 
 const HOUR_MS = 3_600_000;
-const clamp = (n: number) => Math.max(0, Math.min(100, n));
 
 export interface SpaceDimension {
   /** 0..100, or null when there is no signal for the dimension. */

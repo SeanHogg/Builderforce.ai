@@ -46,6 +46,8 @@ import { invalidateCapabilityCache } from '../../application/artifact/capability
 import { getOrSetCached, getCacheVersion, bumpCacheVersion } from '../../infrastructure/cache/readThroughCache';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env, HonoEnv } from '../../env';
+import { slugify as slugifyBase } from '../../domain/shared/strings';
+import { parseJsonArray } from '../../domain/shared/json';
 
 /** Version key for the public personas keyspace — bumped on any publish so the
  *  searchable (q/category/sort) cached browse results all age out at once. */
@@ -53,13 +55,11 @@ const PERSONA_PUBLIC_VERSION_KEY = 'personas:public';
 const PERSONA_PUBLIC_CACHE_TTL_SECONDS = 120;
 
 function slugify(s: string): string {
-  return s.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 80) || 'persona';
+  return slugifyBase(s, { maxLen: 80, fallback: 'persona' });
 }
 
 function safeTags(v: unknown): string[] {
-  if (Array.isArray(v)) return v as string[];
-  if (typeof v === 'string') { try { const p = JSON.parse(v); return Array.isArray(p) ? p : []; } catch { return []; } }
-  return [];
+  return parseJsonArray<string>(v);
 }
 
 /**

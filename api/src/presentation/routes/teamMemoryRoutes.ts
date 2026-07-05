@@ -15,6 +15,7 @@ import { agentHosts, teamMemory } from '../../infrastructure/database/schema';
 import { verifySecret } from '../../infrastructure/auth/HashService';
 import type { HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
+import { parseJsonArray } from '../../domain/shared/json';
 
 async function verifyAgentHostApiKey(
   db: Db,
@@ -113,7 +114,7 @@ export function createTeamMemoryRoutes(db: Db): Hono<HonoEnv> {
 
     const entries = rows.map((r) => ({
       ...r,
-      tags: (() => { try { return JSON.parse(r.tags) as string[]; } catch { return [] as string[]; } })(),
+      tags: parseJsonArray<string>(r.tags),
     }));
 
     return c.json({ entries, total: entries.length });
