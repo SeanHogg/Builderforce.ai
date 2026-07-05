@@ -3,6 +3,7 @@
   "view.sessions": "Sitzungen",
   "view.project": "Projekt & Aufgaben",
   "view.insights": "Einblicke",
+  "view.evermind": "Evermind",
   "view.diagnostics": "Diagnostik",
   "welcome.diagnostics": "Melde dich an und wähle ein Projekt, um Sicherheits- und Compliance-Diagnosen auszuführen (SOC 2, Architektur, Qualität, Datenschutz & Datenrecht).\n[Anmelden](command:builderforce.signIn)",
   "welcome.sessions": "Starte ein Gespräch mit dem BuilderForce Brain.\n[Neuer Chat](command:builderforce.newSession)\n\nDer Brain öffnet sich im Editor — derselbe einheitliche Chat wie in der Web-App, sodass du Änderungen nebeneinander prüfen kannst.",

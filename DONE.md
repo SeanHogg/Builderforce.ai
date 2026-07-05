@@ -4,6 +4,19 @@
 
 ---
 
+## ✅ RESOLVED 2026-07-05 — Live video/audio collaboration: meetings, cameras, calendars (api `2026.7.36` · frontend `2026.7.29`)
+
+Teams can now see and hear each other, not just co-edit a board. Managers can turn cameras on for the whole round-table; anyone can start an ad-hoc or direct call, schedule a meeting, and connect their calendar — for standups, planning, retros or ad-hoc.
+
+- **Meetings backend** (mig 0292: `meetings` · `meeting_attendees` · `calendar_connections`). `POST /api/meetings` schedules or starts a meeting (standup/planning/retrospective/adhoc/direct); join/leave stamp presence + flip a scheduled meeting live; RSVP; organizer/manager-gated start/end/cancel/patch ([meetingRoutes.ts](./api/src/presentation/routes/meetingRoutes.ts)). Create + join are open to any member (anyone can start a call).
+- **WebRTC media, mesh P2P.** Camera/mic exchange rides the EXISTING `CeremonyRoomDO` fan-out relay, keyed `media:<roomKey>` — SDP offers/answers + ICE candidates flow client→client with zero DO changes; media never touches the server. `GET /api/meetings/ice` serves STUN (+ TURN when configured). Glare-free negotiation (greater peer-id offers). Frontend hook [useMediaRoom.ts](./frontend/src/lib/useMediaRoom.ts) manages `getUserMedia`, per-peer `RTCPeerConnection`, and camera/mic toggle.
+- **Cameras in the round-table.** [CeremonyStage](./frontend/src/components/ceremony/CeremonyStage.tsx) gained a "Join with camera" toggle → a live gallery ([VideoGrid](./frontend/src/components/video/VideoGrid.tsx)/[VideoTile](./frontend/src/components/video/VideoTile.tsx)) + [MediaControls](./frontend/src/components/video/MediaControls.tsx) over the standup/planning ceremony (one media room per project).
+- **Meetings surface** at `/meetings` (new nav destination): schedule modal, start-now, live/upcoming list, join → full-screen [MeetingRoom](./frontend/src/components/meetings/MeetingRoom.tsx), and a `?join=<id>` deep link from calendar invites.
+- **Calendar connections** (Google Calendar + Microsoft Graph). Per-user OAuth ([calendarRoutes.ts](./api/src/presentation/routes/calendarRoutes.ts) + provider adapters/[calendarService.ts](./api/src/application/calendar/calendarService.ts)); scheduled meetings are mirrored as calendar events (invites to attendee emails), upcoming events surface on `/meetings`. OAuth state/token crypto extracted to shared [oauthState.ts](./api/src/infrastructure/auth/oauthState.ts) (DRY — `oauthRoutes` now delegates to it). New env: `TURN_URL`/`TURN_USERNAME`/`TURN_CREDENTIAL` (optional).
+- Fully localized (`meetings.*` + `nav.group.meetings`, all 5 catalogs, 54 keys each) + light/dark + responsive. Verified: api + frontend `tsc --noEmit` 0 errors; all 5 catalogs parse at key parity.
+
+---
+
 ## ✅ RESOLVED 2026-07-05 — AI Manager runs are first-class tasks: surfaced, metric-clean, eviction-safe
 
 Closed both residuals logged when the AI Manager "run = a board task" feature shipped, and surfaced the manager's own tasks.

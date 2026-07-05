@@ -32,7 +32,7 @@ import type { Env, HonoEnv } from '../../env';
 import { authMiddleware } from '../middleware/authMiddleware';
 import type { Db } from '../../infrastructure/database/connection';
 import { agentHosts, boards, executions, projectInsightEvents, projectRepositories, projects, specs, tasks, toolAuditEvents, usageSnapshots } from '../../infrastructure/database/schema';
-import { approvals } from '../../infrastructure/database/schema';
+import { approvals, chatTicketLinks } from '../../infrastructure/database/schema';
 import type { AgentHostRelayDO } from '../../infrastructure/relay/AgentHostRelayDO';
 import { resolveProjectInferenceModel } from '../../application/llm/projectEvermind';
 import { executionTokenGate } from './executionTokenGate';
@@ -1219,6 +1219,109 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
       };
     });
     return c.json({ active, runningCloudRefs: [...new Set(active.filter((a) => a.kind === 'cloud').map((a) => a.cloudAgentRef))] });
+  });
+
+  // GET /api/runtime/attention  — the ONE cross-surface "what's live / what needs me"
+  // aggregator. Every surface (web Brain chat list + FloatingBrain badge, the board,
+  // the VS Code sessions/tasks trees, any modality) reads this SAME signal so a
+  // session's status follows it everywhere the user multitasks — switching chats on
+  // the web never changes whether the agent keeps executing in the background.
+  //
+  // Two derived states per work item, most-severe wins:
+  //   'awaiting_input' — an execution is PAUSED on ask_human (a pending question/feedback
+  //                      approval): a person must answer before it resumes.  [amber flag]
+  //   'running'        — an execution is pending/submitted/running: actively executing. [blue/pulse]
+  // (idle items are omitted entirely to keep the payload bounded.)
+  //
+  // Attribution: directly to the task via executions.task_id, and to a Brain chat via
+  // chat_ticket_links (chat → task/epic/gap). Intentionally uncached — a live operational
+  // surface that must reflect state this instant, same rationale as /active; it is three
+  // indexed, bounded queries with no N+1, and every consumer polls it adaptively.
+  router.get('/attention', async (c) => {
+    const tenantId = c.get('tenantId') as number;
+    const projectIdRaw = c.req.query('projectId');
+    const projectId = projectIdRaw ? Number(projectIdRaw) : undefined;
+    const LIMIT = 500;
+
+    // 1) Every non-terminal execution for the tenant (optionally one project), with its task.
+    const execWhere = [eq(executions.tenantId, tenantId), inArray(executions.status, ['pending', 'submitted', 'running', 'paused'])];
+    if (projectId != null && Number.isFinite(projectId)) execWhere.push(eq(tasks.projectId, projectId));
+    const execRows = await db
+      .select({ id: executions.id, taskId: executions.taskId, status: executions.status })
+      .from(executions)
+      .innerJoin(tasks, eq(tasks.id, executions.taskId))
+      .where(and(...execWhere))
+      .orderBy(desc(executions.createdAt))
+      .limit(LIMIT);
+
+    // 2) Pending human questions (ask_human) — the authoritative "needs an answer" rows.
+    const approvalRows = await db
+      .select({ id: approvals.id, executionId: approvals.executionId })
+      .from(approvals)
+      .where(and(
+        eq(approvals.tenantId, tenantId),
+        eq(approvals.status, 'pending'),
+        inArray(approvals.kind, ['question', 'feedback']),
+      ))
+      .limit(LIMIT);
+
+    // execId → taskId (only executions we actually surfaced above, so already project-scoped).
+    const execTask = new Map<number, number>();
+    for (const e of execRows) if (e.taskId != null) execTask.set(e.id, e.taskId);
+    const approvalByExec = new Map<number, string>();
+    for (const a of approvalRows) if (a.executionId != null) approvalByExec.set(a.executionId, a.id);
+
+    // 3) Fold into per-task state (awaiting_input wins over running).
+    type Item = { state: 'running' | 'awaiting_input'; executionId?: number; approvalId?: string };
+    const taskState = new Map<number, Item>();
+    const setState = (taskId: number, next: Item) => {
+      const cur = taskState.get(taskId);
+      if (!cur || (next.state === 'awaiting_input' && cur.state !== 'awaiting_input')) taskState.set(taskId, next);
+      else if (cur.state === next.state && !cur.approvalId && next.approvalId) taskState.set(taskId, next);
+    };
+    for (const e of execRows) {
+      if (e.taskId == null) continue;
+      const approvalId = approvalByExec.get(e.id);
+      // A paused run, or any run carrying a pending question, is awaiting a person.
+      if (e.status === 'paused' || approvalId) setState(e.taskId, { state: 'awaiting_input', executionId: e.id, approvalId });
+      else setState(e.taskId, { state: 'running', executionId: e.id });
+    }
+
+    // 4) Propagate task state onto the Brain chats linked to those tasks (chat_ticket_links).
+    const taskIds = [...taskState.keys()];
+    const chatState: Record<number, Item & { taskId: number }> = {};
+    if (taskIds.length > 0) {
+      const linkRows = await db
+        .select({ chatId: chatTicketLinks.chatId, ticketRef: chatTicketLinks.ticketRef })
+        .from(chatTicketLinks)
+        .where(and(
+          eq(chatTicketLinks.tenantId, tenantId),
+          inArray(chatTicketLinks.ticketKind, ['task', 'epic', 'gap']),
+          inArray(chatTicketLinks.ticketRef, taskIds.map(String)),
+        ))
+        .limit(LIMIT);
+      for (const l of linkRows) {
+        const taskId = Number(l.ticketRef);
+        const item = taskState.get(taskId);
+        if (!item) continue;
+        const cur = chatState[l.chatId];
+        if (!cur || (item.state === 'awaiting_input' && cur.state !== 'awaiting_input')) {
+          chatState[l.chatId] = { ...item, taskId };
+        }
+      }
+    }
+
+    const tasksOut: Record<number, Item> = {};
+    for (const [taskId, item] of taskState) tasksOut[taskId] = item;
+
+    return c.json({
+      tasks: tasksOut,
+      chats: chatState,
+      counts: {
+        running: [...taskState.values()].filter((i) => i.state === 'running').length,
+        awaiting: [...taskState.values()].filter((i) => i.state === 'awaiting_input').length,
+      },
+    });
   });
 
   // GET /api/runtime/hired-agents

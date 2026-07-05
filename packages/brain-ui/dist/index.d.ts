@@ -439,6 +439,157 @@ declare function formatDuration(ms: number | undefined): string;
 declare function formatPayload(value: unknown): string;
 
 /**
+ * Shared types for the <EvermindConsole> — the per-project Evermind inspect-and-train
+ * surface rendered identically on the web app and inside the VS Code sidebar webview.
+ * The console is presentational + self-managing; each host injects an
+ * {@link EvermindConsoleAdapter} (its own REST calls) and an {@link EvermindConsoleLabels}
+ * bundle (its own i18n). See [[evermind-learning-architecture]].
+ */
+type EvermindMode = 'connected' | 'offline-frozen';
+/** One inspectable contribution the coordinator merged into a version. */
+interface EvermindRecentEntry {
+    /** 'text' = a run/exemplar adapted here; 'delta' = a pre-diffed weight delta. */
+    kind: 'text' | 'delta';
+    /** The version this contribution was merged into. */
+    version: number;
+    /** Epoch ms the merge landed. */
+    at: number;
+    /** FedAvg sample weight. */
+    weight: number;
+    /** Readable snippet of the task prompt the run addressed (text-path only). */
+    prompt?: string;
+    /** Readable snippet of the run/exemplar text learned (text-path only). */
+    text?: string;
+}
+/** The head summary + live learning activity for a project's Evermind. */
+interface EvermindConsoleData {
+    version: number;
+    seeded: boolean;
+    mode: EvermindMode;
+    contributions: number;
+    inferenceEnabled: boolean;
+    teacherModel: string | null;
+    lastLearnedAt: string | null;
+    /** Contributions queued but not yet merged (in the coordinator's debounce window). */
+    pending: number;
+    recent: EvermindRecentEntry[];
+}
+/** A published Studio Evermind model that can seed a project's learnable base. */
+interface EvermindSeedModel {
+    slug: string;
+    name: string;
+}
+/** The teacher picker's options: the plan's coding models + whether teachers are allowed. */
+interface EvermindTeacherOptions {
+    models: string[];
+    isPaid: boolean;
+}
+/**
+ * Host-provided data access + mutations — the only coupling to a backend. The web
+ * app wires this to its `projectEvermindApi` client; the VS Code webview wires it to
+ * its bearer-fetch REST client. Same console, same endpoints, different host.
+ */
+interface EvermindConsoleAdapter {
+    /** Read the console payload (head summary + queued depth + recent-learned ring). */
+    loadData(): Promise<EvermindConsoleData>;
+    /** Publishable Evermind models for the unseeded seed picker (managers only). */
+    loadSeedModels(): Promise<EvermindSeedModel[]>;
+    /** The teacher picker's model list + plan gate (managers only). */
+    loadTeacherOptions(): Promise<EvermindTeacherOptions>;
+    seedFromModel(slug: string): Promise<void>;
+    setInference(enabled: boolean): Promise<void>;
+    setMode(mode: EvermindMode): Promise<void>;
+    setTeacher(model: string | null): Promise<void>;
+    /** Teach from raw text (a transcript / exemplar); `prompt` is the task it answered. */
+    teach(text: string, prompt?: string): Promise<void>;
+    /** Force a merge now; returns how many merged + the resulting version. */
+    flush(): Promise<{
+        merged: number;
+        version: number;
+    }>;
+}
+/** Every visible string. Parametric ones are functions the host localizes. */
+interface EvermindConsoleLabels {
+    title: string;
+    description: string;
+    loading: string;
+    managerOnlyHint: string;
+    statusSeeded: (version: number) => string;
+    statusUnseeded: string;
+    pickModelLabel: string;
+    noModels: string;
+    notSetUp: string;
+    enableCta: string;
+    working: string;
+    versionLabel: string;
+    contributionsLabel: string;
+    pendingLabel: string;
+    lastLearnedLabel: string;
+    neverLearned: string;
+    formatWhen: (atMs: number) => string;
+    inferenceLabel: string;
+    inferenceHint: string;
+    learningLabel: string;
+    learningHint: string;
+    on: string;
+    off: string;
+    connected: string;
+    frozen: string;
+    teacherLabel: string;
+    teacherHint: string;
+    teacherNone: string;
+    teacherPaidOnly: string;
+    teachTitle: string;
+    teachHint: string;
+    teachPromptPlaceholder: string;
+    teachTextPlaceholder: string;
+    teachCta: string;
+    teaching: string;
+    taught: string;
+    flushCta: string;
+    flushing: string;
+    flushedNone: string;
+    flushedN: (merged: number, version: number) => string;
+    inspectTitle: string;
+    inspectEmpty: string;
+    kindText: string;
+    kindDelta: string;
+    deltaEntry: string;
+    versionTag: (version: number) => string;
+    weightTag: (weight: number) => string;
+    refresh: string;
+    errorGeneric: string;
+}
+/** English defaults — the VS Code webview seeds these; the web app overrides via next-intl. */
+declare const DEFAULT_EVERMIND_LABELS: EvermindConsoleLabels;
+
+/**
+ * <EvermindConsole> — the per-project Evermind inspect-and-train surface, rendered
+ * identically on the web app (embedded in the IDE agent panel) and in the VS Code
+ * sidebar webview. Presentational + self-managing: it loads through the injected
+ * {@link EvermindConsoleAdapter}, refreshes on a light poll, and drives the
+ * manager-gated training controls (seed / inference / learning mode / teacher),
+ * the "teach from a transcript" producer path, a "learn now" flush, and the
+ * recent-contributions inspection list. Themed via cascading `--bf-*` CSS variables
+ * so it reads natively in both light and dark, on the web and in the editor.
+ *
+ * All colours resolve through the injected host tokens; the write controls are
+ * disabled (not hidden) when `canManage` is false, mirroring the web RoleGate.
+ * See [[evermind-learning-architecture]].
+ */
+
+interface EvermindConsoleProps {
+    adapter: EvermindConsoleAdapter;
+    /** Whether the viewer can change settings (manager). Controls are disabled, not hidden. */
+    canManage: boolean;
+    /** i18n overrides; unspecified keys fall back to English defaults. */
+    labels?: Partial<EvermindConsoleLabels>;
+    /** Poll interval (ms) for the live pending/recent readout. 0 disables. Default 20s. */
+    refreshMs?: number;
+}
+declare function EvermindConsole({ adapter, canManage, labels, refreshMs }: EvermindConsoleProps): React__default.JSX.Element;
+
+/**
  * Project 360 model — the shape returned by `GET /api/projects/:id/360` and
  * consumed by <Project360View>. Kept in the shared UI package so every surface
  * (the VS Code webview today, the web app next) renders the SAME contract.
@@ -683,4 +834,4 @@ interface ProjectListViewProps {
 }
 declare function ProjectListView({ title, subtitle, data, loading, error, labels, onAction, onRefresh }: ProjectListViewProps): React.JSX.Element;
 
-export { type AgentOptionVM, Avatar, type AvatarProps, BrainTimeline, type BrainTimelineLabels, type BrainTimelineProps, type BuildTimelineInput, type ChatAgentVM, type ChatOptionVM, type ChatTicketsAdapter, type ChatTicketsLabels, ChatTicketsPanel, type ChatTicketsPanelProps, DEFAULT_CHAT_TICKETS_LABELS, DEFAULT_PROJECT360_LABELS, DEFAULT_PROJECT_LIST_LABELS, DEFAULT_TIMELINE_LABELS, HealthRing, type HealthRingProps, type HealthTier, type LineageVM, type LinkType, Markdown, type MarkdownLabels, type MarkdownProps, ParticipantBadge, type Project360, type Project360Action, type Project360Dimension, type Project360Gap, type Project360Labels, type Project360Member, type Project360Pillar, Project360View, type Project360ViewProps, type ProjectListAction, type ProjectListBadge, type ProjectListGroup, type ProjectListItem, type ProjectListLabels, type ProjectListModel, type ProjectListTicketRef, type ProjectListTone, ProjectListView, type ProjectListViewProps, RUNNABLE_KINDS, Sunburst, type SunburstProps, TICKET_KINDS, type TicketKind, type TicketLinkVM, type TicketOptionVM, type TimelineImage, type TimelineNode, attachmentsOf, avatarColor, buildSettledTimeline, buildTimeline, formatDuration, formatPayload, healthRingColor, initialsOf, streamingNode, useChatParticipants };
+export { type AgentOptionVM, Avatar, type AvatarProps, BrainTimeline, type BrainTimelineLabels, type BrainTimelineProps, type BuildTimelineInput, type ChatAgentVM, type ChatOptionVM, type ChatTicketsAdapter, type ChatTicketsLabels, ChatTicketsPanel, type ChatTicketsPanelProps, DEFAULT_CHAT_TICKETS_LABELS, DEFAULT_EVERMIND_LABELS, DEFAULT_PROJECT360_LABELS, DEFAULT_PROJECT_LIST_LABELS, DEFAULT_TIMELINE_LABELS, EvermindConsole, type EvermindConsoleAdapter, type EvermindConsoleData, type EvermindConsoleLabels, type EvermindConsoleProps, type EvermindMode, type EvermindRecentEntry, type EvermindSeedModel, type EvermindTeacherOptions, HealthRing, type HealthRingProps, type HealthTier, type LineageVM, type LinkType, Markdown, type MarkdownLabels, type MarkdownProps, ParticipantBadge, type Project360, type Project360Action, type Project360Dimension, type Project360Gap, type Project360Labels, type Project360Member, type Project360Pillar, Project360View, type Project360ViewProps, type ProjectListAction, type ProjectListBadge, type ProjectListGroup, type ProjectListItem, type ProjectListLabels, type ProjectListModel, type ProjectListTicketRef, type ProjectListTone, ProjectListView, type ProjectListViewProps, RUNNABLE_KINDS, Sunburst, type SunburstProps, TICKET_KINDS, type TicketKind, type TicketLinkVM, type TicketOptionVM, type TimelineImage, type TimelineNode, attachmentsOf, avatarColor, buildSettledTimeline, buildTimeline, formatDuration, formatPayload, healthRingColor, initialsOf, streamingNode, useChatParticipants };

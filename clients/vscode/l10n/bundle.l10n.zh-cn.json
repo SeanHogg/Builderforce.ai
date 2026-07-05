@@ -130,5 +130,7 @@
   "Active selection": "当前选区",
   "Choose a file…": "选择文件…",
   "Add context from your workspace": "从工作区添加上下文",
-  "Chat name": "对话名称"
+  "Chat name": "对话名称",
+  "Waiting on your answer": "等待您的回答",
+  "Agent is working…": "代理正在工作…"
 }

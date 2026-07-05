@@ -1778,6 +1778,23 @@ export interface ActiveRunsResponse {
   runningCloudRefs: string[];
 }
 
+/** Cross-surface "needs attention" state for a work item, most-severe wins.
+ *  `awaiting_input` = an agent paused on ask_human and a person must answer;
+ *  `running` = actively executing. Idle items are omitted from the response. */
+export type AttentionState = 'running' | 'awaiting_input';
+export interface AttentionItem {
+  state: AttentionState;
+  executionId?: number;
+  approvalId?: string;
+}
+export interface AttentionResponse {
+  /** Keyed by task id. */
+  tasks: Record<number, AttentionItem>;
+  /** Keyed by Brain chat id (a chat inherits the state of its linked task). */
+  chats: Record<number, AttentionItem & { taskId?: number }>;
+  counts: { running: number; awaiting: number };
+}
+
 export const runtimeApi = {
   /** Submit a task for execution. Dispatches to assigned agentHost or all connected agentHosts. */
   submitExecution: (body: {
@@ -1810,6 +1827,12 @@ export const runtimeApi = {
    *  the UI mark a cloud agent as actively running. */
   listActive: (): Promise<ActiveRunsResponse> =>
     request<ActiveRunsResponse>(`/api/runtime/active`),
+
+  /** The ONE cross-surface "what's live / what needs me" signal: per-task and
+   *  per-Brain-chat attention state (running / awaiting_input). Poll this and
+   *  render an indicator wherever sessions or tickets are listed. */
+  attention: (projectId?: number): Promise<AttentionResponse> =>
+    request<AttentionResponse>(`/api/runtime/attention${projectId != null ? `?projectId=${projectId}` : ''}`),
 
   get: (id: number): Promise<Execution> =>
     request<Execution>(`/api/runtime/executions/${id}`),
@@ -3614,6 +3637,109 @@ export const ceremonySessionsApi = {
 
 // Member metrics & profiles (the workforce scorecard system) live in `membersApi`
 // (declared earlier in this file) — the ceremony UI consumes those directly.
+
+// ---------------------------------------------------------------------------
+// Meetings — live video/audio (WebRTC mesh) + scheduling. /api/meetings/*
+// ---------------------------------------------------------------------------
+export type MeetingKind = 'standup' | 'planning' | 'retrospective' | 'adhoc' | 'direct';
+export type MeetingStatus = 'scheduled' | 'live' | 'ended' | 'cancelled';
+
+export interface Meeting {
+  id: string;
+  projectId: number | null;
+  kind: MeetingKind;
+  title: string;
+  description: string | null;
+  scheduledAt: string | null;
+  durationMinutes: number;
+  status: MeetingStatus;
+  createdBy: string | null;
+  roomKey: string;
+  videoEnabled: boolean;
+  calendarProvider: string | null;
+  calendarEventId: string | null;
+  calendarHtmlLink: string | null;
+  startedAt: string | null;
+  endedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+export interface MeetingAttendee {
+  id: string;
+  meetingId: string;
+  memberKind: string;
+  memberRef: string;
+  memberName: string;
+  email: string | null;
+  role: string;
+  response: 'invited' | 'accepted' | 'declined' | 'tentative';
+  joinedAt: string | null;
+  leftAt: string | null;
+}
+export interface MeetingDetail { meeting: Meeting; attendees: MeetingAttendee[]; }
+export interface MeetingJoinInfo {
+  roomKey: string;
+  videoEnabled: boolean;
+  iceServers: unknown[];
+  meeting: MeetingDetail;
+}
+export interface MeetingCreate {
+  title?: string;
+  kind?: MeetingKind;
+  projectId?: number | null;
+  scheduledAt?: string | null;
+  durationMinutes?: number;
+  videoEnabled?: boolean;
+  attendees?: Array<{ kind?: string; ref: string; name: string; email?: string; role?: string }>;
+  organizerName?: string;
+  organizerEmail?: string;
+}
+
+const MEETINGS_BASE = '/api/meetings';
+export const meetingsApi = {
+  list: (opts?: { projectId?: number; scope?: 'upcoming' | 'all' }): Promise<{ meetings: MeetingDetail[] }> => {
+    const qs = new URLSearchParams();
+    if (opts?.projectId) qs.set('projectId', String(opts.projectId));
+    if (opts?.scope) qs.set('scope', opts.scope);
+    const s = qs.toString();
+    return request(`${MEETINGS_BASE}${s ? `?${s}` : ''}`);
+  },
+  get: (id: string): Promise<MeetingDetail> => request(`${MEETINGS_BASE}/${id}`),
+  create: (body: MeetingCreate): Promise<MeetingDetail> =>
+    request(MEETINGS_BASE, { method: 'POST', body: JSON.stringify(body) }),
+  patch: (id: string, body: Partial<Pick<MeetingCreate, 'title' | 'scheduledAt' | 'durationMinutes' | 'videoEnabled'>>): Promise<MeetingDetail> =>
+    request(`${MEETINGS_BASE}/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
+  join: (id: string, body?: { name?: string; email?: string }): Promise<MeetingJoinInfo> =>
+    request(`${MEETINGS_BASE}/${id}/join`, { method: 'POST', body: JSON.stringify(body ?? {}) }),
+  leave: (id: string): Promise<void> => request(`${MEETINGS_BASE}/${id}/leave`, { method: 'POST' }),
+  rsvp: (id: string, response: 'accepted' | 'declined' | 'tentative'): Promise<MeetingDetail> =>
+    request(`${MEETINGS_BASE}/${id}/rsvp`, { method: 'POST', body: JSON.stringify({ response }) }),
+  start: (id: string): Promise<MeetingDetail> => request(`${MEETINGS_BASE}/${id}/start`, { method: 'POST' }),
+  end: (id: string): Promise<MeetingDetail> => request(`${MEETINGS_BASE}/${id}/end`, { method: 'POST' }),
+  cancel: (id: string): Promise<MeetingDetail> => request(`${MEETINGS_BASE}/${id}/cancel`, { method: 'POST' }),
+  ice: (): Promise<{ iceServers: unknown[] }> => request(`${MEETINGS_BASE}/ice`),
+};
+
+// ---------------------------------------------------------------------------
+// Calendar connections (per-user Google / Microsoft OAuth). /api/calendar/*
+// ---------------------------------------------------------------------------
+export interface CalendarConnectionInfo { id: string; provider: string; accountEmail: string | null; calendarId: string; }
+export interface CalendarEventItem {
+  id: string; title: string; startISO: string; endISO: string;
+  htmlLink?: string; location?: string; organizer?: string; provider: string;
+}
+
+const CALENDAR_BASE = '/api/calendar';
+export const calendarApi = {
+  providers: (): Promise<{ providers: string[]; connections: CalendarConnectionInfo[] }> =>
+    request(`${CALENDAR_BASE}/providers`),
+  connectUrl: (provider: string, returnTo = '/meetings'): Promise<{ authUrl: string }> =>
+    request(`${CALENDAR_BASE}/connect/${provider}?returnTo=${encodeURIComponent(returnTo)}`),
+  disconnect: (id: string): Promise<void> =>
+    request(`${CALENDAR_BASE}/connections/${id}`, { method: 'DELETE' }),
+  events: (days = 14): Promise<{ events: CalendarEventItem[] }> =>
+    request(`${CALENDAR_BASE}/events?days=${days}`),
+};
 
 const sprintTracker = segmentTrackerClient('/api/agile/sprints');
 export const sprintsApi = {

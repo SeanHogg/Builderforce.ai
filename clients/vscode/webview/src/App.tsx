@@ -38,6 +38,7 @@ import {
 } from './vscodeBridge';
 import { Project360Screen } from './Project360Screen';
 import { ProjectPageScreen } from './ProjectPageScreen';
+import { EvermindScreen } from './EvermindScreen';
 import { createPersistence } from './persistence';
 import { buildHostTools } from './hostTools';
 import { buildIdeSystemPrompt } from './systemPrompt';
@@ -214,6 +215,7 @@ export function App() {
   // screens — no Brain providers needed, they fetch their data directly like the
   // chat fetches /api/brain.
   if (init.view === 'project360') return <Project360Screen init={init} />;
+  if (init.view === 'evermind') return <EvermindScreen init={init} />;
   if (init.view === 'backlog' || init.view === 'prd' || init.view === 'roadmap' || init.view === 'retros' || init.view === 'poker')
     return <ProjectPageScreen init={init} view={init.view} />;
   return <ConfiguredApp init={init} />;

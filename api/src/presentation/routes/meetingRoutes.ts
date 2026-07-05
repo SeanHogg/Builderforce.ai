@@ -12,7 +12,7 @@
  * a meeting's lifecycle (start/end/cancel/patch) is limited to the organizer or a
  * manager.
  */
-import { Hono } from 'hono';
+import { Hono, type Context } from 'hono';
 import { and, desc, eq, inArray, gte, or, isNull } from 'drizzle-orm';
 import type { Env, HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
@@ -27,9 +27,13 @@ const KINDS = new Set(['standup', 'planning', 'retrospective', 'adhoc', 'direct'
 
 interface AttendeeInput { kind?: string; ref: string; name: string; email?: string; role?: string; }
 
+/** WebRTC ICE server descriptor (the DOM `RTCIceServer` type is absent in the
+ *  Workers lib, so declare the shape we serialize to the client). */
+interface IceServer { urls: string | string[]; username?: string; credential?: string; }
+
 /** ICE servers for mesh P2P — public STUN, plus a TURN relay when configured. */
-function iceServers(env: Env): RTCIceServer[] {
-  const servers: RTCIceServer[] = [
+function iceServers(env: Env): IceServer[] {
+  const servers: IceServer[] = [
     { urls: ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302'] },
   ];
   if (env.TURN_URL) {
@@ -63,7 +67,7 @@ export function createMeetingRoutes(db: Db): Hono<HonoEnv> {
   }
 
   /** Load a meeting the caller may mutate (organizer or manager), else null + status. */
-  async function loadForMutation(c: Parameters<Parameters<typeof r.post>[1]>[0], id: string) {
+  async function loadForMutation(c: Context<HonoEnv>, id: string) {
     const { tenantId } = scope(c);
     const [m] = await db.select().from(meetings).where(and(eq(meetings.id, id), eq(meetings.tenantId, tenantId)));
     if (!m) return { error: 'Not found' as const, code: 404 as const };

@@ -12,6 +12,8 @@ import { registerChatSessions } from "./chatSessions";
 import { scanCodebase } from "./codebaseScan";
 import { getModels, getWebBaseUrl, SECRET_KEY } from "./gateway";
 import { InsightsController } from "./insights";
+import { EvermindViewProvider } from "./evermindView";
+import { DiagnosticsController } from "./diagnostics";
 import { clearPlatformToolsCache } from "./platformTools";
 import { setGroundingSummary } from "./grounding";
 import { onModelChange, setSelectedModel } from "./modelState";
@@ -20,6 +22,7 @@ import { invalidateProjectNames } from "./projectNames";
 import { ProjectsTreeProvider } from "./projectsTree";
 import { SessionsTreeProvider } from "./sessionsTree";
 import { InboxTreeProvider } from "./inboxTree";
+import { AttentionPoller } from "./attention";
 
 /** Pull a numeric Brain chat id out of a Sessions tree item or a raw id argument. */
 function chatIdOf(item: bfApi.BfBrainChat | number | string | undefined): number | undefined {
@@ -40,6 +43,12 @@ let projectView: (vscode.Disposable & { description?: string }) | undefined;
 
 /** Live builder-insights surface (status bar + tree); restarted on auth change. */
 let insights: InsightsController | undefined;
+
+/** The Evermind sidebar console; re-pushed init on project switch + auth change. */
+let evermindView: EvermindViewProvider | undefined;
+
+/** Security & compliance Diagnostics sidebar; re-fetched on auth/project change. */
+let diagnostics: DiagnosticsController | undefined;
 
 /** Show the active workspace (tenant) name next to the Project & Tasks view title. */
 async function refreshWorkspaceHeader(context: vscode.ExtensionContext): Promise<void> {
@@ -62,14 +71,29 @@ export function activate(context: vscode.ExtensionContext): void {
   const projects = new ProjectsTreeProvider(context);
   const inbox = new InboxTreeProvider(context.secrets);
 
+  // Cross-surface live-status poller: one fetch of `GET /api/runtime/attention`
+  // feeds BOTH the Sessions and Project trees so a running / question-blocked
+  // session lights up in lockstep with the web app and the board. Repaints the
+  // two trees only when the surfaced state actually changes.
+  const attention = new AttentionPoller(context.secrets);
+  context.subscriptions.push(
+    attention,
+    attention.onDidChange(() => { tree.refresh(); projects.refresh(); }),
+    // Switching the active project re-scopes the attention query.
+    onProjectChange(() => attention.refresh()),
+  );
+  attention.start();
+
   // The Brain panel is the ONE chat surface — keep the sidebars live as it writes:
   // a new/renamed conversation refreshes the Sessions list; a platform-catalog write
-  // (task/project/OKR) refreshes Project & Tasks.
+  // (task/project/OKR) refreshes Project & Tasks; either may have started/answered a
+  // run, so re-poll attention immediately rather than waiting for the next tick.
   BrainWebview.configure({
-    onChatsChanged: () => tree.refresh(),
+    onChatsChanged: () => { tree.refresh(); attention.refresh(); },
     onPlatformWrite: () => {
       bfApi.invalidateTasks();
       projects.refresh();
+      attention.refresh();
       void refreshWorkspaceHeader(context);
     },
   });
@@ -98,6 +122,26 @@ export function activate(context: vscode.ExtensionContext): void {
   // stream. Self-starts; auto-reconnects; hides itself when signed out.
   insights = new InsightsController(context);
   context.subscriptions.push(insights);
+
+  // Evermind sidebar console — inspect what the active project's self-learning model
+  // has learned and steer its training (seed / inference / learning / teacher / teach
+  // from a transcript / learn-now), from the activity-bar sidebar.
+  evermindView = new EvermindViewProvider(context);
+  context.subscriptions.push(
+    vscode.window.registerWebviewViewProvider(EvermindViewProvider.viewType, evermindView, {
+      webviewOptions: { retainContextWhenHidden: true },
+    }),
+  );
+
+  // Security & compliance Diagnostics — SOC 2, Architecture, Quality, and Privacy
+  // & Data-Law audits run against the active project's repos, from the sidebar.
+  diagnostics = new DiagnosticsController(context);
+  context.subscriptions.push(
+    diagnostics,
+    vscode.commands.registerCommand("builderforce.refreshDiagnostics", () => diagnostics?.refresh()),
+    vscode.commands.registerCommand("builderforce.runDiagnostic", (row) => diagnostics?.run(row)),
+    vscode.commands.registerCommand("builderforce.openDiagnosticReport", (row) => diagnostics?.openReport(row)),
+  );
 
   // Editor activity capture — heartbeats + file-open navigation feed the billable
   // timecard pipeline (source 'vscode'). Best-effort; no-op when signed out.
@@ -308,6 +352,7 @@ export function activate(context: vscode.ExtensionContext): void {
     // re-labels the Sessions header to show which project's chats are in view.
     onProjectChange(() => {
       BrainWebview.refresh();
+      evermindView?.refresh();
       sessionsView.description = getSelectedProject()?.name;
     }),
     // A manual model pick re-pushes Brain init so an open chat switches immediately
@@ -814,12 +859,14 @@ async function signIn(context: vscode.ExtensionContext): Promise<void> {
   bfApi.clearJwt();
   clearPlatformToolsCache();
   BrainWebview.refresh();
+  evermindView?.refresh();
   void vscode.commands.executeCommand("builderforce.refreshSessions");
   void vscode.commands.executeCommand("builderforce.refreshInbox");
   void heartbeat(context);
   void vscode.commands.executeCommand("builderforce.refreshProjects");
   void maybeScan(context, false);
   void insights?.start();
+  void diagnostics?.refresh();
 }
 
 async function signOut(
@@ -835,10 +882,12 @@ async function signOut(
   setSelectedProject(undefined);
   vscode.window.showInformationMessage("BuilderForce: signed out.");
   BrainWebview.refresh();
+  evermindView?.refresh();
   void vscode.commands.executeCommand("builderforce.refreshSessions");
   void vscode.commands.executeCommand("builderforce.refreshInbox");
   void vscode.commands.executeCommand("builderforce.refreshProjects");
   void insights?.start();
+  void diagnostics?.refresh();
 }
 
 async function pickModel(context: vscode.ExtensionContext): Promise<void> {

@@ -237,6 +237,11 @@
     "expandSidebar": "Expand sidebar",
     "collapseSidebar": "Collapse sidebar",
     "closeMenu": "Close menu",
+    "bottom": {
+      "product": "Product",
+      "pricing": "Pricing",
+      "signIn": "Sign In"
+    },
     "group": {
       "dashboard": "Dashboard",
       "brainstorm": "Brain Storm",
@@ -253,7 +258,8 @@
       "myProfile": "My Profile",
       "findWork": "Find Work",
       "timecard": "Timecard",
-      "myDashboard": "My Dashboard"
+      "myDashboard": "My Dashboard",
+      "meetings": "Meetings"
     },
     "tab": {
       "projects": "Projects",
@@ -1762,7 +1768,8 @@
     "closeResults": "Close results",
     "noResults": "No results yet.",
     "overall": "Overall rating",
-    "architectureNeedsRepo": "Map a repository to this project first."
+    "architectureNeedsRepo": "Map a repository to this project first.",
+    "auditRunning": "Running…"
   },
   "projectDetails": {
     "tabs": {
@@ -5035,12 +5042,38 @@
     "off": "Off",
     "connected": "Learning",
     "frozen": "Frozen",
-    "contributions": "{count} learning contributions so far",
     "teacherLabel": "Teach from a frontier model",
     "teacherHint": "Distil a top model (Opus, Mistral, GLM…) into this project's Evermind — every run learns from the frontier model's ideal answer instead of the raw run.",
     "teacherNone": "None — learn from runs only",
     "teacherPaidOnly": "Available on paid plans — teaching uses frontier-model tokens.",
-    "errorGeneric": "Something went wrong. Please try again."
+    "errorGeneric": "Something went wrong. Please try again.",
+    "loading": "Loading…",
+    "managerOnlyHint": "Only a project manager can change these settings.",
+    "notSetUp": "This project's Evermind isn't set up yet. A project manager can enable it.",
+    "versionLabel": "Version",
+    "contributionsLabel": "Learned",
+    "pendingLabel": "Queued",
+    "lastLearnedLabel": "Last learned",
+    "neverLearned": "Never",
+    "teachTitle": "Teach from a transcript",
+    "teachHint": "Paste a chat transcript or exemplar to contribute it to the model now.",
+    "teachPromptPlaceholder": "Task this answered (optional)…",
+    "teachTextPlaceholder": "Paste the transcript or exemplar text…",
+    "teachCta": "Teach",
+    "teaching": "Teaching…",
+    "taught": "Queued for learning.",
+    "flushCta": "Learn now",
+    "flushing": "Learning…",
+    "flushedNone": "Nothing queued to learn yet.",
+    "flushedN": "Merged {merged} contribution(s) into v{version}.",
+    "inspectTitle": "Recently learned",
+    "inspectEmpty": "Nothing learned yet. Runs and teaching will appear here.",
+    "kindText": "Run",
+    "kindDelta": "Delta",
+    "deltaEntry": "Weight delta contributed by an agent run.",
+    "versionTag": "v{version}",
+    "weightTag": "×{weight}",
+    "refresh": "Refresh"
   },
   "manager": {
     "title": "AI Manager",
@@ -6095,5 +6128,292 @@
       "code_change": "Code changes"
     },
     "syncFailed": "Failed to sync agents"
+  },
+  "attention": {
+    "running": "Running",
+    "awaiting": "Needs answer",
+    "needsYou": "{count} awaiting your answer",
+    "runningCount": "{count} running"
+  },
+  "onboarding": {
+    "welcome": "Welcome to Builderforce",
+    "subtitle": "Let's get you set up in a few quick steps.",
+    "closeSetup": "Close setup",
+    "createWorkspaceFirst": "Create a workspace first",
+    "needProject": "Create a project first, then this step applies to it.",
+    "back": "← Back",
+    "stepOf": "Step {current} of {total}",
+    "completeFirst": "Complete this step first",
+    "steps": {
+      "workspace": {
+        "label": "Create Workspace"
+      },
+      "project": {
+        "label": "Create a Project"
+      },
+      "ticketing": {
+        "label": "Connect Ticketing"
+      },
+      "repos": {
+        "label": "Connect Repos"
+      },
+      "audit": {
+        "label": "Run Audits"
+      },
+      "roster": {
+        "label": "Recommended Roster"
+      },
+      "install": {
+        "label": "Install Agents"
+      },
+      "invite": {
+        "label": "Invite Team"
+      }
+    },
+    "ticketing": {
+      "intro": "Connect your work-tracking system so tickets sync both ways. You can finish authentication in Integrations later.",
+      "loading": "Loading providers…",
+      "errLoad": "Couldn't load providers.",
+      "errConnect": "Couldn't connect that provider.",
+      "connected": "Connected",
+      "connecting": "Connecting…",
+      "connect": "Connect",
+      "finishLater": "Optional — you can connect or change this anytime in Integrations."
+    },
+    "repos": {
+      "intro": "Attach one or more repositories to audit and build against. Private-repo access is finished in Integrations.",
+      "errAdd": "Couldn't attach that repository.",
+      "default": "Default",
+      "makeDefault": "Make default",
+      "remove": "Remove",
+      "provider": "Provider",
+      "owner": "Owner or organization",
+      "ownerPlaceholder": "owner",
+      "repo": "Repository",
+      "repoPlaceholder": "repo",
+      "add": "Attach",
+      "adding": "Attaching…",
+      "privateHint": "For private repositories, connect a credential in Integrations so the audit can read the code."
+    },
+    "audit": {
+      "intro": "Run a system audit against your project. Each audit scores an instant report, files a ticket for the security agent, and notifies you when the deep pass is done. SOC 2 is selected to start.",
+      "running": "Running…",
+      "started": "Started",
+      "failed": "Failed",
+      "runningAll": "Running audits…",
+      "run": "Run selected audits",
+      "viewReports": "View reports",
+      "notifyHint": "We'll notify you when each report is ready. You can leave this page — the audits keep running."
+    }
+  },
+  "soc2": {
+    "seo": {
+      "title": "SOC 2 Readiness Audit — Automated, During Onboarding | Builderforce",
+      "description": "Run an automated SOC 2 readiness audit across your GitHub, GitLab, Bitbucket and Azure DevOps repos during signup. Get a scored report mapped to the Common Criteria (CC1–CC9) and an agent-opened remediation PR.",
+      "ogTitle": "Automated SOC 2 Readiness Audit"
+    },
+    "eyebrow": "SOC 2 · System Audits",
+    "titleLead": "A full SOC 2 audit,",
+    "titleAccent": "the moment you sign up",
+    "sub": "Create a project, connect your ticket system and repos, and Builderforce files a ticket for the security agent to audit your code against the SOC 2 Common Criteria — then opens a remediation PR. You get a scored report, not a checklist.",
+    "ctaPrimary": "Start your audit",
+    "ctaSecondary": "See the free diagnostics",
+    "visualSection": {
+      "title": "What your report looks like",
+      "sub": "An overall readiness score, every Common-Criteria family graded pass / partial / gap, the concrete findings, and a remediation pull request already opened."
+    },
+    "visual": {
+      "title": "SOC 2 Readiness",
+      "scoreLabel": "Defined",
+      "criteriaHeading": "Common Criteria",
+      "cc": {
+        "cc1": "Control environment",
+        "cc2": "Communication & policies",
+        "cc6": "Access & secrets hygiene",
+        "cc7": "System operations",
+        "cc8": "Change management"
+      },
+      "state": {
+        "pass": "Pass",
+        "partial": "Partial",
+        "gap": "Gap"
+      },
+      "findingsHeading": "Findings",
+      "findings": [
+        "3 repos scanned",
+        "2 secrets flagged",
+        "Branch protection missing on 1 repo",
+        "No SECURITY.md on 2 repos"
+      ],
+      "prBadge": "Remediation PR opened"
+    },
+    "criteria": {
+      "title": "Mapped to the Common Criteria",
+      "sub": "Every finding rolls up to a SOC 2 Common-Criteria family, so your report reads the way an auditor thinks.",
+      "items": [
+        {
+          "ref": "CC1",
+          "label": "Control environment — ownership and CODEOWNERS across every repo."
+        },
+        {
+          "ref": "CC2",
+          "label": "Communication & policies — SECURITY.md and contributor guidelines."
+        },
+        {
+          "ref": "CC3–CC5",
+          "label": "Risk assessment & control activities — CI gates on the default branch."
+        },
+        {
+          "ref": "CC6",
+          "label": "Logical access & secrets hygiene — no committed keys or credentials."
+        },
+        {
+          "ref": "CC7",
+          "label": "System operations — pinned dependencies and reproducible builds."
+        },
+        {
+          "ref": "CC8",
+          "label": "Change management — tests plus mandatory review before merge."
+        },
+        {
+          "ref": "CC9",
+          "label": "Vendor & risk mitigation — a documented security disclosure process."
+        }
+      ]
+    },
+    "how": {
+      "title": "How the audit runs",
+      "sub": "The onboarding wizard turns signup into a delivered report.",
+      "steps": [
+        {
+          "title": "Create a project",
+          "desc": "Name your project in the setup wizard — it becomes the home for your audit reports."
+        },
+        {
+          "title": "Connect repos & tickets",
+          "desc": "Attach GitHub, GitLab, Bitbucket or Azure DevOps repos and your Jira / Monday board."
+        },
+        {
+          "title": "Run the audit",
+          "desc": "A ticket is filed for the security agent, which scans your repos and opens a remediation PR."
+        },
+        {
+          "title": "Read your report",
+          "desc": "You're notified when it's ready — open the scored SOC 2 report on your project."
+        }
+      ]
+    },
+    "family": {
+      "title": "One flow, five system audits",
+      "sub": "The same one-click audit runs across every dimension of your engineering org.",
+      "items": [
+        {
+          "icon": "🛡️",
+          "name": "SOC 2 Readiness",
+          "desc": "Repos and controls mapped to the Common Criteria (CC1–CC9)."
+        },
+        {
+          "icon": "🏛️",
+          "name": "Architecture",
+          "desc": "Design-principle adherence: DRY, SOLID, DDD, and patterns."
+        },
+        {
+          "icon": "✅",
+          "name": "Quality",
+          "desc": "Testing, CI, and build-integrity signals across your repos."
+        },
+        {
+          "icon": "🧭",
+          "name": "Product Vision & Roadmap",
+          "desc": "Objectives, key results, roadmap, and a documented vision."
+        },
+        {
+          "icon": "⚖️",
+          "name": "Privacy & Data-Law",
+          "desc": "GDPR, CCPA/CPRA, and CAN-SPAM readiness from your code."
+        }
+      ]
+    },
+    "faqTitle": "Frequently asked questions",
+    "faq": [
+      {
+        "question": "Is this a SOC 2 certification?",
+        "answer": "No — it's a readiness audit. It produces an automated, evidence-backed report mapped to the SOC 2 Common Criteria so you know exactly what to close before a formal Type I or Type II examination."
+      },
+      {
+        "question": "How does the audit run during signup?",
+        "answer": "The onboarding wizard creates a project, connects your ticket system and repositories, then files a ticket for the security agent. The audit scores an instant report and dispatches the agent to open a remediation pull request — you're notified when it's ready."
+      },
+      {
+        "question": "Which repositories can it scan?",
+        "answer": "GitHub, GitLab, Bitbucket and Azure DevOps — one or many per project. Tokens stay server-side; the audit reads the repository tree to derive its signals."
+      },
+      {
+        "question": "What other audits are included?",
+        "answer": "The same flow runs an Architecture analysis, a Quality audit, a Product Vision & Roadmap audit, and a Privacy & Data-Law (GDPR / CCPA / CAN-SPAM) audit — each a scored project report."
+      }
+    ],
+    "finalCta": {
+      "title": "Get your SOC 2 report today",
+      "sub": "Sign up, connect a repo, and your first readiness report lands in minutes.",
+      "button": "Start free"
+    },
+    "relatedHeading": "Related reading"
+  },
+  "meetings": {
+    "title": "Meetings",
+    "subtitle": "Schedule and join live video and audio sessions with your team.",
+    "startNow": "Start now",
+    "startNowTitle": "Start a meeting now",
+    "schedule": "Schedule",
+    "scheduleTitle": "Schedule a meeting",
+    "loading": "Loading…",
+    "liveAndUpcoming": "Live & upcoming",
+    "noMeetings": "No meetings yet. Start one now or schedule one.",
+    "fromYourCalendar": "From your calendar",
+    "anytime": "Anytime",
+    "liveNow": "Live",
+    "join": "Join",
+    "joinEarly": "Join early",
+    "joinWithCamera": "Join with camera",
+    "cameraOn": "Cameras on",
+    "cameraError": "Camera/microphone unavailable: {error}",
+    "attendeeCount": "{count, plural, one {# participant} other {# participants}}",
+    "calendarConnected": "Calendar connected.",
+    "calendarConnectFailed": "Could not connect the calendar.",
+    "calendarsTitle": "Calendars",
+    "calendarsSubtitle": "Connect a calendar to schedule meetings and see upcoming events.",
+    "noCalendarProviders": "No calendar providers are configured.",
+    "connected": "Connected",
+    "disconnect": "Disconnect",
+    "connectProvider": "Connect {provider}",
+    "kind": "Type",
+    "kind_standup": "Standup",
+    "kind_planning": "Planning",
+    "kind_retrospective": "Retrospective",
+    "kind_adhoc": "Ad-hoc",
+    "kind_direct": "Direct call",
+    "titleLabel": "Title",
+    "scheduleForLater": "Schedule for later",
+    "camerasEnabled": "Cameras enabled",
+    "startTime": "Start time",
+    "duration": "Duration",
+    "minutes": "{count} min",
+    "invite": "Invite",
+    "noTeammates": "No teammates to invite yet.",
+    "agent": "Agent",
+    "cancel": "Cancel",
+    "you": "You",
+    "noOneOnCamera": "No one is on camera yet.",
+    "muteMic": "Mute microphone",
+    "unmuteMic": "Unmute microphone",
+    "stopCamera": "Stop camera",
+    "startCamera": "Start camera",
+    "leave": "Leave",
+    "joining": "Joining…",
+    "connecting": "Connecting…",
+    "liveCount": "{count, plural, one {# person live} other {# people live}}",
+    "participants": "Participants",
+    "endForAll": "End for all"
   }
 }

@@ -17,6 +17,8 @@ import { ChatInput } from '@/components/ChatInput';
 import { ChatMessageContent } from '@/components/ChatMessageContent';
 import { ChatMessageActions } from '@/components/ChatMessageActions';
 import { ChatTicketsPanel } from '@/components/brain/ChatTicketsPanel';
+import { AttentionDot } from '@/components/AttentionDot';
+import { useAttention } from '@/lib/useAttention';
 import { RepoContextPicker, type RepoFileSource } from '@/components/brain/RepoContextPicker';
 import { ThemeSelect } from '@/components/ThemeSelect';
 import { Select } from '@/components/Select';
@@ -248,6 +250,10 @@ export function BrainPanel({
   // the model the numeric id. Resolve the name from the loaded projects list
   // when available; the id is what the tools actually need.
   const ctxProjectId = viewingProjectId ?? pinnedProjectId;
+  // Cross-surface "what's live / what needs me" — decorates each chat row with a
+  // status dot (running / needs-answer) that stays live even when another chat is
+  // focused. Scoped when a project is in context, tenant-wide on the Brain Storm page.
+  const attn = useAttention(ctxProjectId ?? undefined);
   const ambientSystem = useMemo(() => {
     const parts: string[] = [];
     if (extraSystem) parts.push(extraSystem);
@@ -589,6 +595,7 @@ export function BrainPanel({
                 </span>
               )}
               {formatTime(chat.updatedAt)}
+              <AttentionDot state={attn.chats[chat.id]?.state} />
             </div>
             {active && renamingId !== chat.id && (
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 6 }} onClick={(e) => e.stopPropagation()}>
