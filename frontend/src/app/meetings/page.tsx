@@ -8,14 +8,15 @@ export const runtime = 'edge';
  * — redirect through to the tab, carrying any `?calendar=`/`?join=` params so the
  * connect/deep-link cleanup still fires there.
  */
-export default function MeetingsPage({
+export default async function MeetingsPage({
   searchParams,
 }: {
-  searchParams?: Record<string, string | string[] | undefined>;
+  searchParams?: Promise<Record<string, string | string[] | undefined>>;
 }) {
+  const resolved = await searchParams;
   const params = new URLSearchParams({ tab: 'meetings' });
   for (const key of ['calendar', 'join'] as const) {
-    const v = searchParams?.[key];
+    const v = resolved?.[key];
     if (typeof v === 'string') params.set(key, v);
   }
   redirect(`/workforce?${params.toString()}`);
