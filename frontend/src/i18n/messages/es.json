@@ -7142,6 +7142,26 @@
     "signIn": "Iniciar sesión",
     "createAccount": "Crear cuenta"
   },
+  "guestBrain": {
+    "brand": "Brain",
+    "signUpFree": "Regístrate gratis",
+    "close": "Cerrar",
+    "signIn": "Iniciar sesión",
+    "createFreeAccount": "Crear una cuenta gratis",
+    "emptyTitle": "¿Qué vamos a construir?",
+    "emptyBody": "Describe una idea, una función o un problema: Brain te ayudará a desarrollarlo. No necesitas cuenta para empezar.",
+    "placeholder": "Pregúntale lo que sea a Brain…",
+    "loading": "Iniciando Brain…",
+    "send": "Enviar",
+    "sending": "Pensando…",
+    "remaining": "{count, plural, =0 {No quedan mensajes gratis} one {# mensaje gratis restante} other {# mensajes gratis restantes}}",
+    "tagline": "Prueba Brain gratis, sin registrarte",
+    "newChatTitle": "Chat de invitado",
+    "wallTitle": "¡Vas muy bien!",
+    "wallBody": "Has usado tus {count} mensajes de invitado gratis de hoy. Crea una cuenta gratis para continuar y guardar tu trabajo.",
+    "meetTitle": "Te presentamos a Brain",
+    "meetBody": "Tu copiloto de IA para planificar proyectos, generar especificaciones y entregar más rápido."
+  },
   "login": {
     "navSignUp": "Regístrate gratis",
     "heading": "Bienvenido de nuevo",

@@ -7,7 +7,8 @@ import PublicShell from './PublicShell';
 import MarketingShell from './MarketingShell';
 import OnboardingGate from './OnboardingGate';
 import RouteMarketing from './RouteMarketing';
-import { BrainActionsProvider, BrainContextProvider, BrainProvider, brainConfig } from '@/lib/brain';
+import { BrainActionsProvider, BrainContextProvider, BrainProvider, brainConfig, guestBrainConfig } from '@/lib/brain';
+import { GuestBrainstormPage } from './brain/GuestBrainstormPage';
 import { PinsProvider } from '@/lib/widgets/PinsProvider';
 import { AiInsightPanelProvider } from './insights/AiInsightPanelProvider';
 import { AiInsightPanelBrainBridge } from './insights/AiInsightPanelBrainBridge';
@@ -110,6 +111,17 @@ function useShellContent(children: React.ReactNode): React.ReactNode {
   // ever a dead end (the real page never mounts, so its own auth-redirect won't
   // fire). Signed in → AppShell behind the onboarding/terms gate.
   if (!isAuthenticated) {
+    // Guests can try the Brain/Ideas chat before signing up (top-of-funnel
+    // adoption). On /brainstorm we render the guest chat in place of the marketing
+    // teaser; it runs inside the guest-configured BrainProvider (see AppBrainShell).
+    // Every other app route still shows the per-route teaser + login CTA.
+    if (pathname.startsWith('/brainstorm')) {
+      return (
+        <MarketingShell>
+          <GuestBrainstormPage />
+        </MarketingShell>
+      );
+    }
     return (
       <MarketingShell>
         <RouteMarketing pathname={pathname} />
@@ -192,9 +204,14 @@ function AppBrainShell({ children }: { children: React.ReactNode }) {
   // blog, and app pages alike. The providers wrap the whole app so any page can
   // register actions / publish context; the floating launcher mounts once and
   // decides its own visibility and auth-gated content (full panel when signed
-  // in, a sign-in CTA otherwise). See FloatingBrain.
+  // in, the guest chat otherwise). See FloatingBrain.
+  //
+  // Logged-out visitors get the GUEST brain config (guest token + localStorage
+  // persistence) so the Brain works anonymously with a tiny metered allowance;
+  // signed-in users get the full tenant-authed config. Both are module constants,
+  // so the provider's memoized runtime stays stable per auth state.
   return (
-    <BrainProvider config={brainConfig}>
+    <BrainProvider config={hasTenant ? brainConfig : guestBrainConfig}>
       {/* App-wide pin state: any widget anywhere can show a pin control that
           reflects/updates the user's personal /insights home dashboard. */}
       <PinsProvider>

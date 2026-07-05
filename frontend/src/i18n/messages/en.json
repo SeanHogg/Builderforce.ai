@@ -7142,6 +7142,26 @@
     "signIn": "Sign in",
     "createAccount": "Create account"
   },
+  "guestBrain": {
+    "brand": "Brain",
+    "signUpFree": "Sign up free",
+    "close": "Close",
+    "signIn": "Sign in",
+    "createFreeAccount": "Create a free account",
+    "emptyTitle": "What should we build?",
+    "emptyBody": "Describe an idea, a feature, or a problem — Brain will help you think it through. No account needed to start.",
+    "placeholder": "Ask Brain anything…",
+    "loading": "Starting Brain…",
+    "send": "Send",
+    "sending": "Thinking…",
+    "remaining": "{count, plural, =0 {No free messages left} one {# free message left} other {# free messages left}}",
+    "tagline": "Try Brain free — no sign-up needed",
+    "newChatTitle": "Guest chat",
+    "wallTitle": "You're on a roll!",
+    "wallBody": "You've used your {count} free guest messages for today. Create a free account to keep going — and to save your work.",
+    "meetTitle": "Meet Brain",
+    "meetBody": "Your AI co-builder for planning projects, generating specs, and shipping faster."
+  },
   "login": {
     "navSignUp": "Sign up free",
     "heading": "Welcome back",

@@ -14,6 +14,7 @@ import {
   rankModelsForAction,
   byoAutoSeedModels,
   isDispatchableSeed,
+  explicitModelPreemptsByo,
   type ActionModelRankStat,
 } from './LlmProxyService';
 import { catalogEntry, vendorForModel, autoRoutableModelsByTier, modelsByTier, tierForModel } from './vendors';
@@ -231,6 +232,38 @@ describe('byoAutoSeedModels (connected-account auto seed)', () => {
   });
 });
 
+// The single branching rule shared by the cloud pin AND the Brain addressed-reply
+// path — a connected account beats a NON-BYO explicit model (e.g. a default agent
+// base model), which is the exact bug that let Ada run on `@cf/qwen` despite a live
+// Claude subscription. Testing it here is what would have caught that regression.
+describe('explicitModelPreemptsByo (explicit-vs-connected-account rule)', () => {
+  it('no explicit model → never preempts (the connected flagship leads)', () => {
+    expect(explicitModelPreemptsByo(undefined, new Set(['anthropic']))).toBe(false);
+    expect(explicitModelPreemptsByo('', new Set(['anthropic']))).toBe(false);
+    expect(explicitModelPreemptsByo('  ', new Set(['anthropic']))).toBe(false);
+  });
+
+  it('nothing connected → any explicit model is honored (normal plan routing)', () => {
+    expect(explicitModelPreemptsByo('@cf/qwen/qwen3-30b-a3b-fp8', new Set())).toBe(true);
+    expect(explicitModelPreemptsByo('openai/gpt-4.1', undefined)).toBe(true);
+  });
+
+  it('connected account + NON-BYO explicit model → does NOT preempt (connected account wins)', () => {
+    const byo = new Set(['anthropic']);
+    // A default agent base model of `@cf/qwen` (Cloudflare, operator-keyed) must NOT
+    // shadow the connected Claude subscription — the reported bug.
+    expect(explicitModelPreemptsByo('@cf/qwen/qwen3-30b-a3b-fp8', byo)).toBe(false);
+    // A bare `openai/gpt-4.1` is OpenRouter (operator-keyed), not the tenant's account.
+    expect(explicitModelPreemptsByo('openai/gpt-4.1', byo)).toBe(false);
+  });
+
+  it('connected account + explicit model ON that account → preempts (a deliberate BYO pick)', () => {
+    expect(explicitModelPreemptsByo('claude-opus-4-8', new Set(['anthropic']))).toBe(true);
+    expect(explicitModelPreemptsByo('direct/openai/gpt-4.1', new Set(['openai']))).toBe(true);
+    expect(explicitModelPreemptsByo('googleai/gemini-2.5-pro', new Set(['googleai']))).toBe(true);
+  });
+});
+
 describe('pickCloudModel with a connected BYO account', () => {
   it('no explicit pin + Anthropic connected → soft Opus seed, even on the free plan', () => {
     const byoVendors = new Set(['anthropic']);
@@ -246,10 +279,22 @@ describe('pickCloudModel with a connected BYO account', () => {
     expect(pick).toEqual({ model: 'direct/openai/gpt-4.1', strict: false });
   });
 
-  it('an explicit real pin still wins over the BYO auto seed', () => {
+  it("a weak default base model does NOT shadow a connected account — the reported bug", () => {
+    // Ada (Sr PM) seeded with `@cf/qwen` + a Pro tenant who connected Claude: the pin
+    // must NOT win; the connected Opus flagship leads instead of the empty-turning coder.
     const byoVendors = new Set(['anthropic']);
-    expect(pickCloudModel('openai/gpt-4.1', 'pro', false, { byoVendors }))
-      .toEqual({ model: 'openai/gpt-4.1', strict: true });
+    const pick = pickCloudModel('@cf/qwen/qwen3-30b-a3b-fp8', 'pro', false, { byoVendors });
+    expect(pick).toEqual({ model: 'claude-opus-4-8', strict: false });
+  });
+
+  it('a deliberate BYO-served pin still wins over the auto seed', () => {
+    const byoVendors = new Set(['anthropic']);
+    expect(pickCloudModel('claude-opus-4-8', 'pro', false, { byoVendors }))
+      .toEqual({ model: 'claude-opus-4-8', strict: true });
+  });
+
+  it('a non-BYO explicit pin on a Pro tenant with NO connected account is still honored (no regression)', () => {
+    expect(pickCloudModel('openai/gpt-4.1', 'pro')).toEqual({ model: 'openai/gpt-4.1', strict: true });
   });
 
   it('no connected account → unchanged plan default (no BYO seed)', () => {

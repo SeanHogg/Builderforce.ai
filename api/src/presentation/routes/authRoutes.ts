@@ -10,7 +10,6 @@ import {
   authTokens,
   authUserSessions,
   agentHosts,
-  legalDocuments,
   newsletterEvents,
   newsletterSubscribers,
   privacyRequests,
@@ -38,6 +37,7 @@ import {
 import { revokeTenantApiKeyByRawKey } from '../../application/llm/tenantApiKeyService';
 import { issueVerificationCode, verifyVerificationCode, type VerifyResult } from '../../application/auth/EmailVerificationService';
 import { checkTermsAcceptance } from '../middleware/termsEnforcement';
+import { getActiveLegalDoc } from '../../application/legal/legalDocsService';
 import { sanitizePsychometricProfile } from '../../application/persona/psychometricCatalog';
 import { provisionForHireProfile } from '../../application/freelance/provisionForHire';
 
@@ -120,58 +120,6 @@ async function provisionFreelancer(
 
 function normalizeEmail(input: string): string {
   return input.trim().toLowerCase();
-}
-
-type LegalDocResponse = {
-  documentType: 'terms' | 'privacy';
-  version: string;
-  title: string;
-  content: string;
-  publishedAt: string;
-};
-
-const DEFAULT_LEGAL: Record<'terms' | 'privacy', Omit<LegalDocResponse, 'documentType'>> = {
-  terms: {
-    version: '1.0.0',
-    title: 'Terms of Use',
-    content: 'By using BuilderForce Link, you agree to these Terms of Use. Continued use of the service indicates acceptance of current terms.',
-    publishedAt: new Date(0).toISOString(),
-  },
-  privacy: {
-    version: '1.0.0',
-    title: 'Privacy Policy',
-    content: 'BuilderForce Link processes account, usage, and operational metadata to provide and secure the service.',
-    publishedAt: new Date(0).toISOString(),
-  },
-};
-
-async function getActiveLegalDoc(db: Db, documentType: 'terms' | 'privacy'): Promise<LegalDocResponse> {
-  const [doc] = await db
-    .select({
-      version: legalDocuments.version,
-      title: legalDocuments.title,
-      content: legalDocuments.content,
-      publishedAt: legalDocuments.publishedAt,
-    })
-    .from(legalDocuments)
-    .where(and(eq(legalDocuments.documentType, documentType), eq(legalDocuments.isActive, true)))
-    .orderBy(desc(legalDocuments.publishedAt))
-    .limit(1);
-
-  if (!doc) {
-    return {
-      documentType,
-      ...DEFAULT_LEGAL[documentType],
-    };
-  }
-
-  return {
-    documentType,
-    version: doc.version,
-    title: doc.title,
-    content: doc.content,
-    publishedAt: doc.publishedAt ? doc.publishedAt.toISOString() : new Date().toISOString(),
-  };
 }
 
 async function ensureSession(

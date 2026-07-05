@@ -7142,6 +7142,26 @@
     "signIn": "登录",
     "createAccount": "创建账户"
   },
+  "guestBrain": {
+    "brand": "Brain",
+    "signUpFree": "免费注册",
+    "close": "关闭",
+    "signIn": "登录",
+    "createFreeAccount": "创建免费账户",
+    "emptyTitle": "我们来打造什么？",
+    "emptyBody": "描述一个想法、一项功能或一个问题——Brain 会帮你理清思路。无需账户即可开始。",
+    "placeholder": "向 Brain 提问……",
+    "loading": "正在启动 Brain……",
+    "send": "发送",
+    "sending": "思考中……",
+    "remaining": "{count, plural, =0 {没有剩余的免费消息} other {还剩 # 条免费消息}}",
+    "tagline": "免费试用 Brain——无需注册",
+    "newChatTitle": "访客对话",
+    "wallTitle": "势头正好！",
+    "wallBody": "你今天已用完 {count} 条免费访客消息。创建免费账户即可继续——并保存你的成果。",
+    "meetTitle": "认识 Brain",
+    "meetBody": "你的 AI 共建伙伴，助你规划项目、生成规格并更快交付。"
+  },
   "login": {
     "navSignUp": "免费注册",
     "heading": "欢迎回来",

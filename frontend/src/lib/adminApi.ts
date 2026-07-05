@@ -661,6 +661,16 @@ export const adminApi = {
       body: JSON.stringify(data),
     });
   },
+  /** AI-draft or improve a legal document; returns clean Markdown (nothing is saved). */
+  async enhanceLegal(
+    docType: 'terms' | 'privacy',
+    data: { content: string; instruction?: string; title?: string },
+  ): Promise<{ content: string }> {
+    return adminRequest(`/api/admin/legal/${docType}/enhance`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  },
 
   // Newsletter
   async newsletterSubscribers(params?: {
