@@ -19,7 +19,7 @@
  */
 
 import { and, eq, desc, sql, type SQL } from 'drizzle-orm';
-import { CURRENT_ENGINE_ID } from '@builderforce/agent-tools';
+import { CURRENT_ENGINE_ID, type ToolSchema } from '@builderforce/agent-tools';
 import type { Db } from '../../infrastructure/database/connection';
 import { ProjectService } from '../project/ProjectService';
 import { TaskService } from '../task/TaskService';
@@ -1871,6 +1871,70 @@ export function listBuiltinTools(): McpToolEntry[] {
     parameters: t.parameters,
     mutates: t.mutates,
   }));
+}
+
+/**
+ * The curated subset of platform tools an AUTONOMOUS cloud coding agent may call
+ * mid-run — the "work" surface so a run can create follow-up tasks for gaps it
+ * finds, update OKR/objective progress, and read what's remaining, instead of
+ * silently dropping out-of-scope work. It deliberately EXCLUDES every admin or
+ * destructive tool: no deletes, no execution control-plane mutations
+ * (executions.submit/cancel/post_message), and nothing under
+ * api_keys/security/provider_keys/migrations/agent_hosts/board_connections/cron/…
+ * An explicit allowlist is safe-by-default: a newly-added CATALOG tool is NOT
+ * granted to an unattended agent until it is listed here. Kept honest by a
+ * CATALOG-membership test (every id below must exist in CATALOG).
+ */
+export const CLOUD_AGENT_PLATFORM_TOOLS: readonly string[] = [
+  // Projects — read + write (no delete)
+  'projects.list', 'projects.get', 'projects.create', 'projects.update', 'projects.check_key',
+  // Tasks — read + write + move + assignees (no delete). "create other tasks for gaps".
+  'tasks.list', 'tasks.get', 'tasks.create', 'tasks.update', 'tasks.move', 'tasks.assignees',
+  // Specs / PRDs — read + write (no delete)
+  'specs.list', 'specs.get', 'specs.create', 'specs.patch',
+  // Strategy / OKRs — read + write (no delete). "update project related items (OKR)".
+  'portfolios.list', 'portfolios.create', 'portfolios.update',
+  'initiatives.list', 'initiatives.create', 'initiatives.update',
+  'objectives.list', 'objectives.create', 'objectives.update', 'objectives.add_link', 'objectives.remove_link',
+  'key_results.list', 'key_results.create', 'key_results.update',
+  'work_items.convert_type', 'pmo.tree', 'pmo.rollup',
+  // Project knowledge, files, review
+  'project_facts.recall', 'project_facts.remember',
+  'project_files.list', 'project_files.read', 'project_files.save',
+  'attachments.read', 'attachments.write',
+  'reviews.record', 'tickets.from_delta',
+  // Executions — READ ONLY (accurate "what's remaining"; no submit/cancel/post_message)
+  'executions.get', 'executions.list_active', 'executions.list_for_task', 'executions.list_recent',
+  'executions.task_file_changes', 'executions.trace',
+];
+
+const CLOUD_AGENT_PLATFORM_SET: ReadonlySet<string> = new Set(CLOUD_AGENT_PLATFORM_TOOLS);
+
+let _cloudAgentPlatformSchemas: ToolSchema[] | undefined;
+/** OpenAI-shape tool schemas for the curated cloud-agent platform subset, named with
+ *  the gateway-safe `builtin_*` prefix (dots are invalid in tool-call names). Concats
+ *  directly onto CLOUD_AGENT_TOOLS in the cloud loop. Memoized (static metadata). */
+export function cloudAgentPlatformToolSchemas(): ToolSchema[] {
+  if (!_cloudAgentPlatformSchemas) {
+    _cloudAgentPlatformSchemas = CATALOG
+      .filter((t) => CLOUD_AGENT_PLATFORM_SET.has(t.tool))
+      .map((t) => ({
+        type: 'function',
+        function: { name: advertisedName(t.tool), description: t.description, parameters: t.parameters as ToolSchema['function']['parameters'] },
+      }));
+  }
+  return _cloudAgentPlatformSchemas;
+}
+
+let _cloudAgentPlatformNameMap: Map<string, string> | undefined;
+/** Reverse an advertised `builtin_*` name to its dotted CATALOG id — but ONLY for the
+ *  curated subset (undefined otherwise), so the cloud agent can never reach an off-list
+ *  platform tool even if the model hallucinates one. Memoized. */
+export function resolveCloudAgentPlatformTool(advertised: string): string | undefined {
+  if (!_cloudAgentPlatformNameMap) {
+    _cloudAgentPlatformNameMap = new Map(CLOUD_AGENT_PLATFORM_TOOLS.map((t) => [advertisedName(t), t]));
+  }
+  return _cloudAgentPlatformNameMap.get(advertised);
 }
 
 /** Run one built-in tool in-process, tenant-scoped. Throws on unknown tool. */

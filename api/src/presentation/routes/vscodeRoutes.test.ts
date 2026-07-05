@@ -36,6 +36,14 @@ function makeTenantService() {
   };
 }
 
+/** A chainable drizzle-select stub whose terminal `.limit()` resolves to `rows`. */
+function makeDb(rows: unknown[]) {
+  const qb: Record<string, unknown> = {};
+  for (const m of ['select', 'from', 'innerJoin', 'where', 'orderBy']) qb[m] = () => qb;
+  qb.limit = () => Promise.resolve(rows);
+  return qb;
+}
+
 const ENV = { JWT_SECRET: 'test-secret' } as any;
 const postJson = (body?: unknown) => ({
   method: 'POST',
@@ -96,5 +104,20 @@ describe('vscodeRoutes — workspace (tenant) management', () => {
     expect(res.status).toBe(400);
     expect(ts.listTenantsForUser).not.toHaveBeenCalled();
     expect(mintTenantSessionToken).not.toHaveBeenCalled();
+  });
+
+  it('GET /tasks returns the open tasks assigned to the signed-in user', async () => {
+    const rows = [
+      { id: 1, key: 'ACME-1', title: 'Fix bug', status: 'todo', priority: 'high', projectId: 3, projectPublicId: 'pub-3', projectName: 'Acme', githubPrUrl: null, updatedAt: '2026-07-05T00:00:00.000Z' },
+    ];
+    const res = await createVscodeRoutes(makeDb(rows) as any, makeTenantService() as any).request('/tasks', undefined, ENV);
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ tasks: rows });
+  });
+
+  it('GET /tasks returns an empty list when nothing is assigned', async () => {
+    const res = await createVscodeRoutes(makeDb([]) as any, makeTenantService() as any).request('/tasks', undefined, ENV);
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ tasks: [] });
   });
 });

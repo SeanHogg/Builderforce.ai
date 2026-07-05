@@ -27,6 +27,13 @@ vi.mock('../../application/llm/LlmProxyService', async (orig) => ({
   ...(await orig<typeof import('../../application/llm/LlmProxyService')>()),
   llmProxyForPlan: mocks.llmProxyForPlan,
 }));
+// Partial mock — keep the real provider-key exports and only stub the OAuth
+// resolver (it makes a raw neon() call the db mock doesn't cover) so the
+// completion path reaches proxyForCompletion.
+vi.mock('../../application/llm/tenantProviderKeyService', async (orig) => ({
+  ...(await orig<typeof import('../../application/llm/tenantProviderKeyService')>()),
+  resolveAnthropicOAuthToken: async () => null,
+}));
 
 // Imports must follow the vi.mock calls above so the mocks are in place.
 const { requireTenantAccess } = await import('./llmRoutes');
@@ -488,6 +495,67 @@ describe('POST /v1/chat/completions strict-pin gate', () => {
     expect(res.status).toBe(402);
     const body = await res.json() as { code?: string };
     expect(body.code).toBe('strict_pin_not_allowed');
+  });
+});
+
+describe('POST /v1/chat/completions agentic-turn capability floor', () => {
+  beforeEach(() => {
+    mocks.hashSecret.mockReset();
+    mocks.buildDatabase.mockReset();
+    mocks.llmProxyForPlan.mockReset();
+  });
+
+  function fakeProxyService() {
+    return {
+      complete: vi.fn(async () => ({
+        response: new Response('data: [DONE]\n\n', { headers: { 'content-type': 'text/event-stream' } }),
+        resolvedModel: 'x', resolvedVendor: 'v', retries: 0, failovers: [], paidOverflow: false,
+      })),
+    };
+  }
+
+  function chatRequest(body: Record<string, unknown>, token = 'bfk_tool') {
+    return new Request('http://test.local/v1/chat/completions', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+  }
+
+  const toolEnv = { ...(baseEnv as Record<string, unknown>), OPENROUTER_API_KEY: 'x' };
+
+  async function routeArgsFor(body: Record<string, unknown>) {
+    mocks.hashSecret.mockResolvedValue('hash_of_bfk_test');
+    mocks.buildDatabase.mockReturnValue(mockDb({
+      keyRow:    { id: 'kid', tenantId: 1, revokedAt: null, allowedOrigins: null },
+      tenantRow: { id: 1, plan: 'free', billingStatus: 'none', tokenDailyLimitOverride: null },
+      usageRow:  { used: 0, day: 0, month: 0 },
+    }));
+    mocks.llmProxyForPlan.mockReturnValue(fakeProxyService());
+    await buildApp().request(chatRequest(body), {}, toolEnv, fakeExecutionCtx);
+    // 4th positional arg to llmProxyForPlan is the routing options object.
+    return mocks.llmProxyForPlan.mock.calls.at(-1)?.[3] as
+      | { codingOnly?: boolean; backstopModels?: readonly string[] } | undefined;
+  }
+
+  it('floors an agentic (tools) turn onto the coder pool + paid coding backstop', async () => {
+    const { CODING_BACKSTOP_MODELS } = await import('../../application/llm/LlmProxyService');
+    const opts = await routeArgsFor({
+      messages: [{ role: 'user', content: 'edit the roadmap' }],
+      stream: true,
+      tools: [{ type: 'function', function: { name: 'write_file', parameters: { type: 'object' } } }],
+    });
+    expect(opts?.codingOnly).toBe(true);
+    expect(opts?.backstopModels).toEqual(CODING_BACKSTOP_MODELS);
+  });
+
+  it('keeps the general pool for a plain (no-tools) chat turn', async () => {
+    const opts = await routeArgsFor({
+      messages: [{ role: 'user', content: 'hello' }],
+      stream: true,
+    });
+    expect(opts?.codingOnly).toBeUndefined();
+    expect(opts?.backstopModels).toBeUndefined();
   });
 });
 

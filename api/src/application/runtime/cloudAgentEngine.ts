@@ -24,6 +24,8 @@ import { scanWrittenForPlaceholders } from '../repos/scanForPlaceholders';
 import { CODING_BACKSTOP_MODELS, CODING_MODEL_POOL, codingModelsForPlan, estimateRequestTokens, llmProxyForPlan, pickCloudModel, type ChatMessage, type EffectivePlan } from '../llm/LlmProxyService';
 import { compactMessages, buildGatewaySummarizer, CLOUD_COMPACT_DEFAULTS } from '../llm/compactMessages';
 import { resolveAnthropicOAuthToken } from '../llm/tenantProviderKeyService';
+import { cloudAgentPlatformToolSchemas, resolveCloudAgentPlatformTool, callBuiltinTool } from '../llm/builtinMcpService';
+import { TenantRole } from '../../domain/shared/types';
 import { resolveTenantPlan } from '../../presentation/routes/llmRoutes';
 import { recordUsageRow, clampTokenCount } from '../llm/usageLedger';
 import { ensureTaskPrdRecord, appendTaskPrdRevision } from '../prd/taskPrd';
@@ -1338,9 +1340,25 @@ export async function runCloudToolLoop(
   // Unknown/non-tenant refs resolve to null and pass through unchanged.
   const tenantModel = await resolveTenantModel(env, db, tenantId, model);
   const effectiveModel = tenantModel ? (tenantModel.baseModel ?? undefined) : model;
-  const effectiveSystemPrompt = tenantModel?.directives
-    ? `${tenantModel.directives}\n\n${systemPrompt}`
-    : systemPrompt;
+  // Curated platform tools give this run the SAME work-management reach the Brain
+  // has (create follow-up tasks, update OKRs, read what's remaining) — advertised
+  // alongside the repo/file tools and dispatched in-process below. The container
+  // surface runs its own image loop and doesn't wire these, so they live here on
+  // the durable/Worker loop only.
+  const platformTools = cloudAgentPlatformToolSchemas();
+  const cloudTools = [...CLOUD_AGENT_TOOLS, ...platformTools];
+  const platformToolsGuidance =
+    'You also have PLATFORM tools (prefixed `builtin_`) to manage the project as you work: '
+    + '`builtin_tasks_list`/`builtin_tasks_get` to see what is already tracked, '
+    + '`builtin_tasks_create` to file a NEW task for any gap or follow-up work you find that is OUT OF SCOPE for THIS task (do not silently drop it — capture it as a task so it is not lost), '
+    + '`builtin_tasks_update` to reflect progress, and `builtin_objectives_update`/`builtin_key_results_update` to update OKR/objective progress your work advances. '
+    + 'They default to THIS run\'s project; pass an explicit projectId only to target another. '
+    + 'When you finish, base your summary of "what remains" on real state (the tasks you created + `builtin_tasks_list`), not a guess.';
+  const effectiveSystemPrompt = [
+    tenantModel?.directives || null,
+    systemPrompt,
+    platformToolsGuidance,
+  ].filter(Boolean).join('\n\n');
 
   // Project Evermind consumer. The dispatcher (runtimeRoutes `withDefaultModel`)
   // emits a concrete `evermind/<ref>` as the run's model when the project is
@@ -1412,7 +1430,7 @@ export async function runCloudToolLoop(
         actionStats: learned.actionStats,
         bias: opts?.routingBias,
         // Context-aware seed: don't pick a small-window model for a big first turn.
-        estimatedTokens: estimateRequestTokens(messages, CLOUD_AGENT_TOOLS),
+        estimatedTokens: estimateRequestTokens(messages, cloudTools),
       });
   // Mutable: a 429 on the pinned model drops the strict pin so the proxy cascades
   // (see the per-turn cascade below); the run then stays unpinned for later turns.
@@ -1543,7 +1561,7 @@ export async function runCloudToolLoop(
         result = await proxy.complete(
           {
             messages: requestMessages as unknown as ChatMessage[],
-            tools: CLOUD_AGENT_TOOLS,
+            tools: cloudTools,
             tool_choice: 'auto',
             ...(activeModel ? { model: activeModel, ...(strictPin ? { modelStrict: true } : {}) } : {}),
             // Personality temperature (compiled from the agent's/personas' traits).
@@ -1637,15 +1655,33 @@ export async function runCloudToolLoop(
         awaitingInput = { approvalId, question };
         toolResult = { ok: false, error: `Paused for human approval of "${name}" (governance gate ${gate.gateId}).` };
       } else {
-        // allow — or a require-approval gate already asked + answered. Dispatch through
-        // the ONE capability-gated registry. Each tool reaches the repo / static-check /
-        // human ONLY via the injected provider (so the same definition runs on-prem
-        // against a disk/shell provider). `finish` and `ask_human` come back as CONTROL
-        // signals the loop interprets below — the finish honesty/anti-stub gates and the
-        // pause/park are loop policy, not a tool's concern, so they stay here.
-        const dispatched = await cloudToolRegistry.dispatch(name, parsed, toolCtx);
-        toolResult = dispatched.data;
-        control = dispatched.control;
+        // allow — or a require-approval gate already asked + answered.
+        const platformTool = resolveCloudAgentPlatformTool(name);
+        if (platformTool) {
+          // Curated platform tool (create task / update OKR / read remaining work) —
+          // run in-process, tenant-scoped, defaulting the project to THIS run's so a
+          // follow-up task lands on the right project unless the model names another.
+          // MANAGER role so the OKR/task writes the user asked for are permitted; the
+          // subset is admin/destructive-free so this can't reach keys/security/etc.
+          try {
+            const data = await callBuiltinTool(db, {
+              tenantId, tool: platformTool,
+              arguments: { projectId, ...parsed },
+              env, userId: cloudAgentRef ?? null, role: TenantRole.MANAGER,
+            });
+            toolResult = data && typeof data === 'object' ? (data as Record<string, unknown>) : { ok: true, result: data };
+          } catch (e) {
+            toolResult = { ok: false, error: e instanceof Error ? e.message : String(e) };
+          }
+        } else {
+          // Repo/file/static-check/human tools. Dispatch through the ONE capability-gated
+          // registry — each reaches the repo / static-check / human ONLY via the injected
+          // provider (so the same definition runs on-prem against a disk/shell provider).
+          // `finish` and `ask_human` come back as CONTROL signals the loop interprets below.
+          const dispatched = await cloudToolRegistry.dispatch(name, parsed, toolCtx);
+          toolResult = dispatched.data;
+          control = dispatched.control;
+        }
       }
 
       if (control?.kind === 'finish') {

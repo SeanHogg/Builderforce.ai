@@ -126,13 +126,13 @@ function ChatTicketsPanelInner({ chatId, projectId, chatList, adapter, labels, o
       {/* Lineage drawer */}
       {lineageKey && (
         <div style={S.drawer}>
-          <strong style={{ color: 'var(--bf-ct-text, var(--text-primary, inherit))' }}>{labels.lineageTitle}</strong>
+          <strong style={{ color: V.text }}>{labels.lineageTitle}</strong>
           {lineage.length === 0 ? <span style={{ marginLeft: 8, ...S.muted }}>{labels.lineageEmpty}</span> : (
             <ul style={{ margin: '4px 0 0', paddingLeft: 18 }}>
               {lineage.map((c) => (
                 <li key={c.chatId} style={{ marginBottom: 2 }}>
                   <span style={{ fontWeight: c.chatId === chatId ? 700 : 400 }}>{c.title}</span>
-                  {c.linkType === 'created' ? <em style={{ color: 'var(--bf-ct-accent, var(--accent, #3b82f6))', marginLeft: 6 }}>{labels.spawned}</em> : null}
+                  {c.linkType === 'created' ? <em style={{ color: V.accent, marginLeft: 6 }}>{labels.spawned}</em> : null}
                   {c.isArchived ? <span style={{ marginLeft: 6, ...S.muted }}>({labels.merged})</span> : null}
                 </li>
               ))}
@@ -146,7 +146,7 @@ function ChatTicketsPanelInner({ chatId, projectId, chatList, adapter, labels, o
         <button type="button" onClick={() => setPanel(panel === 'link' ? null : 'link')} style={S.pill(panel === 'link')}>＋ {labels.link}</button>
         <button type="button" onClick={() => setPanel(panel === 'agents' ? null : 'agents')} style={S.pill(panel === 'agents')}>👥 {labels.agents}{agents.length ? ` (${agents.length})` : ''}</button>
         <button type="button" onClick={() => setPanel(panel === 'merge' ? null : 'merge')} style={S.pill(panel === 'merge')}>⧉ {labels.merge}</button>
-        {msg && <span style={{ fontSize: 12, color: 'var(--bf-ct-accent, var(--accent, #3b82f6))', alignSelf: 'center' }}>{msg}</span>}
+        {msg && <span style={{ fontSize: 12, color: V.accent, alignSelf: 'center' }}>{msg}</span>}
       </div>
 
       {panel === 'link' && <LinkForm options={options} existing={tickets} labels={labels} onLink={async (kind, ref, linkType) => {
@@ -246,7 +246,7 @@ function MergeSection({ chatId, chatList, labels, onMerge, busy }: {
   const toggle = (id: number) => setSelected((s) => s.includes(id) ? s.filter((x) => x !== id) : [...s, id]);
   return (
     <div style={{ ...S.section, flexDirection: 'column', alignItems: 'stretch' }}>
-      <span style={{ fontSize: 12, color: 'var(--bf-ct-text-2, var(--text-secondary, inherit))' }}>{labels.mergeHint}</span>
+      <span style={{ fontSize: 12, color: V.text2 }}>{labels.mergeHint}</span>
       <div style={{ maxHeight: 160, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 2 }}>
         {candidates.length === 0 ? <span style={S.muted}>{labels.mergeNoOthers}</span> : candidates.map((c) => (
           <label key={c.id} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, padding: '3px 4px', cursor: 'pointer' }}>
@@ -270,24 +270,45 @@ function MergeSection({ chatId, chatList, labels, onMerge, busy }: {
  */
 export const ChatTicketsPanel = memo(ChatTicketsPanelInner);
 
-// ── styles (CSS-var driven; --bf-ct-* with app-token fallbacks so it themes in
-//    both the web app and the VS Code webview, light AND dark) ────────────────
+// ── theme tokens ──────────────────────────────────────────────────────────────
+// Each value is a CSS-var fallback CHAIN read left→right: first the web app's
+// semantic tokens (--bf-ct-* / --bg-base / --text-primary …), then the VS Code
+// webview's tokens (--vscode-* / --bf-*), then a literal. The webview does NOT
+// define the --bf-ct-*/--bg-base names, so before this chain the native <select>s
+// fell through to `transparent`/`inherit` with no color-scheme and Chromium drew
+// them as default LIGHT controls (white popup) in a dark editor. Resolving to the
+// editor's --vscode-dropdown-* tokens fixes them in BOTH hosts, light AND dark.
+const V = {
+  border: 'var(--bf-ct-border, var(--border-subtle, var(--bf-border, var(--vscode-panel-border, rgba(148,163,184,0.3)))))',
+  surface: 'var(--bf-ct-surface, var(--bg-elevated, var(--bf-surface, var(--vscode-editorWidget-background, transparent))))',
+  surface2: 'var(--bf-ct-surface-2, var(--bg-base, var(--bf-surface-2, var(--vscode-textBlockQuote-background, transparent))))',
+  // Form controls specifically prefer the editor's dropdown/input tokens so the
+  // native <select> and its option list match VS Code's own dropdowns.
+  field: 'var(--bf-ct-surface-2, var(--bg-base, var(--vscode-dropdown-background, var(--bf-surface, transparent))))',
+  fieldText: 'var(--bf-ct-text, var(--text-primary, var(--vscode-dropdown-foreground, var(--bf-text, inherit))))',
+  text: 'var(--bf-ct-text, var(--text-primary, var(--bf-text, inherit)))',
+  text2: 'var(--bf-ct-text-2, var(--text-secondary, var(--bf-text, inherit)))',
+  muted: 'var(--bf-ct-text-muted, var(--text-muted, var(--bf-text-muted, #6b7280)))',
+  accent: 'var(--bf-ct-accent, var(--accent, var(--bf-accent, #3b82f6)))',
+};
 
 const S = {
-  root: { margin: '4px 0 0', padding: '8px 10px', border: '1px solid var(--bf-ct-border, var(--border-subtle, rgba(148,163,184,0.3)))', borderRadius: 10, background: 'var(--bf-ct-surface, var(--bg-elevated, transparent))', display: 'flex', flexDirection: 'column', gap: 8 } as React.CSSProperties,
-  muted: { fontSize: 12, color: 'var(--bf-ct-text-muted, var(--text-muted, #6b7280))' } as React.CSSProperties,
-  chip: { display: 'flex', alignItems: 'center', gap: 6, padding: '2px 6px', border: '1px solid var(--bf-ct-border, var(--border-subtle, rgba(148,163,184,0.3)))', borderRadius: 8 } as React.CSSProperties,
-  ticketLabel: { fontSize: 12, fontWeight: 600, color: 'var(--bf-ct-text, var(--text-primary, inherit))', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } as React.CSSProperties,
-  ticketMeta: { fontSize: 10, color: 'var(--bf-ct-text-muted, var(--text-muted, #6b7280))', textTransform: 'uppercase', letterSpacing: 0.4 } as React.CSSProperties,
-  drawer: { fontSize: 12, color: 'var(--bf-ct-text-2, var(--text-secondary, inherit))', borderTop: '1px dashed var(--bf-ct-border, var(--border-subtle, rgba(148,163,184,0.3)))', paddingTop: 6 } as React.CSSProperties,
-  section: { display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap', borderTop: '1px dashed var(--bf-ct-border, var(--border-subtle, rgba(148,163,184,0.3)))', paddingTop: 8 } as React.CSSProperties,
-  agentChip: { display: 'inline-flex', alignItems: 'center', gap: 6, padding: '3px 8px', borderRadius: 999, background: 'var(--bf-ct-surface-2, var(--bg-base, transparent))', border: '1px solid var(--bf-ct-border, var(--border-subtle, rgba(148,163,184,0.3)))', fontSize: 12 } as React.CSSProperties,
-  select: { minWidth: 120, padding: '4px 8px', fontSize: 12, borderRadius: 8, border: '1px solid var(--bf-ct-border, var(--border-subtle, rgba(148,163,184,0.3)))', background: 'var(--bf-ct-surface-2, var(--bg-base, transparent))', color: 'var(--bf-ct-text, var(--text-primary, inherit))' } as React.CSSProperties,
-  icon: { fontSize: 12, lineHeight: 1, padding: '2px 4px', cursor: 'pointer', background: 'transparent', border: 'none', color: 'var(--bf-ct-text-muted, var(--text-muted, #6b7280))' } as React.CSSProperties,
+  root: { margin: '4px 0 0', padding: '8px 10px', border: `1px solid ${V.border}`, borderRadius: 10, background: V.surface, display: 'flex', flexDirection: 'column', gap: 8 } as React.CSSProperties,
+  muted: { fontSize: 12, color: V.muted } as React.CSSProperties,
+  chip: { display: 'flex', alignItems: 'center', gap: 6, padding: '2px 6px', border: `1px solid ${V.border}`, borderRadius: 8 } as React.CSSProperties,
+  ticketLabel: { fontSize: 12, fontWeight: 600, color: V.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } as React.CSSProperties,
+  ticketMeta: { fontSize: 10, color: V.muted, textTransform: 'uppercase', letterSpacing: 0.4 } as React.CSSProperties,
+  drawer: { fontSize: 12, color: V.text2, borderTop: `1px dashed ${V.border}`, paddingTop: 6 } as React.CSSProperties,
+  section: { display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap', borderTop: `1px dashed ${V.border}`, paddingTop: 8 } as React.CSSProperties,
+  agentChip: { display: 'inline-flex', alignItems: 'center', gap: 6, padding: '3px 8px', borderRadius: 999, background: V.surface2, border: `1px solid ${V.border}`, fontSize: 12, color: V.text } as React.CSSProperties,
+  // `colorScheme` makes the browser draw the native <select> (and its OS/UA popup)
+  // in the editor's active scheme even where the token background doesn't reach.
+  select: { minWidth: 120, padding: '4px 8px', fontSize: 12, borderRadius: 8, border: `1px solid ${V.border}`, background: V.field, color: V.fieldText, colorScheme: 'inherit' } as React.CSSProperties,
+  icon: { fontSize: 12, lineHeight: 1, padding: '2px 4px', cursor: 'pointer', background: 'transparent', border: 'none', color: V.muted } as React.CSSProperties,
   pill: (active: boolean): React.CSSProperties => ({
     fontSize: 12, fontWeight: 600, padding: '4px 10px', borderRadius: 999, cursor: 'pointer',
-    border: `1px solid ${active ? 'var(--bf-ct-accent, var(--accent, #3b82f6))' : 'var(--bf-ct-border, var(--border-subtle, rgba(148,163,184,0.3)))'}`,
-    background: active ? 'var(--bf-ct-accent, var(--accent, #3b82f6))' : 'var(--bf-ct-surface-2, var(--bg-base, transparent))',
-    color: active ? '#fff' : 'var(--bf-ct-text-2, var(--text-secondary, inherit))',
+    border: `1px solid ${active ? V.accent : V.border}`,
+    background: active ? V.accent : V.surface2,
+    color: active ? '#fff' : V.text2,
   }),
 };
