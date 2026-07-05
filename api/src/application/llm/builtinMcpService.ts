@@ -157,6 +157,16 @@ const dt = (v: unknown): Date | undefined => {
 /** Parse the `tenants.settings` JSON-as-text blob into a mutable object (embed lives at .embed). */
 const parseTenantSettings = (raw: string | null | undefined): Json => parseJsonObject<Json>(raw);
 
+/** Normalize a title for idempotent-create dedup: whitespace-collapsed, trimmed, lowercased. */
+const normTitle = (v: unknown): string => str(v).replace(/\s+/g, ' ').trim().toLowerCase();
+
+/** True when an uploads R2 key belongs to this tenant. Upload keys are minted as
+ *  `${tenantId}/${userId}/${file}` (see brainRoutes `/uploads`), so the leading path
+ *  segment is the owning tenant; also rejects traversal. Mirrors the route's own
+ *  `isKeyOwnedByTenant` so the attachment tools can't read/write across tenants. */
+const keyOwnedByTenant = (key: string, tenantId: number): boolean =>
+  typeof key === 'string' && key.length > 0 && !key.includes('..') && key.split('/')[0] === String(tenantId);
+
 // ---------------------------------------------------------------------------
 // List projections — keep the Brain's context window bounded
 // ---------------------------------------------------------------------------
@@ -293,6 +303,51 @@ const CATALOG: BuiltinTool[] = [
     },
   },
 
+  // ---- Attachments (files the user uploaded into the chat) ----
+  // A Brain upload lives in R2 read-only-by-signature; before these tools there
+  // was NO way to write one back, so a model asked to "update the attached file"
+  // could only hallucinate success. attachments.write is the real persistence
+  // path; attachments.read paginates so a large doc no longer reports "too large".
+  {
+    tool: 'attachments.read', mutates: false,
+    description: 'Read the text of a file the user ATTACHED to this chat (a Brain upload — e.g. a roadmap/spec .md, .txt, .csv, .json). `key` is the path AFTER `/uploads/` in the attachment URL (e.g. "12/ab.../1699-x.md"). Large files are paginated: `offset` is a character index (default 0), `limit` caps returned chars (default 20000, max 100000). Returns { key, content, offset, returned, total, truncated }; when `truncated`, call again with offset = offset + returned. Use this to actually READ an attachment instead of guessing — including when a direct fetch reported the file "too large".',
+    parameters: obj({ key: S, offset: N, limit: N }, ['key']),
+    run: async (ctx, a) => {
+      const uploads = ctx.env?.UPLOADS;
+      if (!uploads) throw new Error('file storage unavailable in this context');
+      const key = str(a.key);
+      if (!keyOwnedByTenant(key, ctx.tenantId)) throw new Error('attachment not found');
+      const object = await uploads.get(key);
+      if (!object) throw new Error('attachment not found');
+      const full = await object.text();
+      const offset = Math.max(0, a.offset != null ? num(a.offset) : 0);
+      const limit = Math.max(1, Math.min(a.limit != null ? num(a.limit) : 20000, 100000));
+      const content = full.slice(offset, offset + limit);
+      return { key, content, offset, returned: content.length, total: full.length, truncated: offset + content.length < full.length };
+    },
+  },
+  {
+    tool: 'attachments.write', mutates: true,
+    description: 'Overwrite the text of an attached file (Brain upload) IN PLACE — e.g. to write traceability IDs back into a roadmap the user attached. `key` is the path after `/uploads/` in the attachment URL; `content` is the FULL new document (this REPLACES the file — it is NOT a patch, so read it first with attachments.read, edit the whole thing in memory, then write it all back). Text files only. Returns { key, size, updated }. This is the ONLY way to persist a change to an attached file — there is no other "save" / "update the file" path for an upload, so never tell the user you saved or updated an attachment unless an attachments.write call has actually succeeded.',
+    parameters: obj({ key: S, content: S }, ['key', 'content']),
+    run: async (ctx, a) => {
+      const uploads = ctx.env?.UPLOADS;
+      if (!uploads) throw new Error('file storage unavailable in this context');
+      const key = str(a.key);
+      if (!keyOwnedByTenant(key, ctx.tenantId)) throw new Error('attachment not found');
+      // head() both proves the object exists (no create-by-write of a foreign key)
+      // and lets us preserve its content-type + custom metadata across the overwrite.
+      const head = await uploads.head(key);
+      if (!head) throw new Error('attachment not found');
+      const content = str(a.content);
+      await uploads.put(key, content, {
+        httpMetadata: { contentType: head.httpMetadata?.contentType ?? 'text/plain; charset=utf-8' },
+        customMetadata: head.customMetadata,
+      });
+      return { key, size: content.length, updated: true };
+    },
+  },
+
   // ---- Tasks ----
   {
     tool: 'tasks.list', mutates: false,
@@ -309,12 +364,20 @@ const CATALOG: BuiltinTool[] = [
   { tool: 'tasks.get', mutates: false, description: 'Get a task by id.', parameters: obj({ id: N }, ['id']), run: async (ctx, a) => (await getTenantTask(ctx, num(a.id))).toPlain() },
   {
     tool: 'tasks.create', mutates: true,
-    description: 'Create a task on a project board. Set taskType="epic" to create a planning Epic (a DELIVERY container for other tasks), or pass parentTaskId to nest the new task under an existing Epic. An Epic is NOT an OKR/Objective — for OKRs/goals use objectives.create + key_results.create. Assign by passing exactly one of assignedUserId (human member), assignedAgentRef (cloud agent) or assignedAgentHostId (self-hosted runner).',
+    description: 'Create a task on a project board. Set taskType="epic" to create a planning Epic (a DELIVERY container for other tasks), or pass parentTaskId to nest the new task under an existing Epic. An Epic is NOT an OKR/Objective — for OKRs/goals use objectives.create + key_results.create. Assign by passing exactly one of assignedUserId (human member), assignedAgentRef (cloud agent) or assignedAgentHostId (self-hosted runner). Idempotent: if a task with the same title already exists on that project, the existing task is returned ({ deduped: true, … }) instead of creating a duplicate — so you can safely (re)run a reconciliation and use the returned id for traceability.',
     parameters: obj({ projectId: N, title: S, description: S, priority: { type: 'string', enum: ['low', 'medium', 'high', 'urgent'] }, dueDate: S, taskType: { type: 'string', enum: ['task', 'epic'] }, parentTaskId: N, assignedUserId: S, assignedAgentRef: S, assignedAgentHostId: N }, ['projectId', 'title']),
     run: async (ctx, a) => {
+      const title = str(a.title).trim(); if (!title) throw new Error('title is required');
+      const projectId = num(a.projectId);
+      // Idempotent create: a task with this title already on the board is returned
+      // (flagged `deduped`) rather than duplicated — the caller (e.g. the Brain
+      // reconciling a roadmap, often across retries) gets the existing id back.
+      const existingTasks = (await ctx.tasks.listTasks(ctx.tenantId, projectId)) ?? [];
+      const dupeTask = existingTasks.find((t) => normTitle((t.toPlain() as { title?: unknown }).title) === normTitle(title));
+      if (dupeTask) return { deduped: true, ...(dupeTask.toPlain() as object) };
       const created = await ctx.tasks.createTask({
-        projectId: num(a.projectId),
-        title: str(a.title),
+        projectId,
+        title,
         description: a.description != null ? str(a.description) : null,
         priority: a.priority != null ? (str(a.priority) as TaskPriority) : undefined,
         dueDate: a.dueDate != null ? str(a.dueDate) : null,
@@ -510,11 +573,16 @@ const CATALOG: BuiltinTool[] = [
   { tool: 'objectives.list', mutates: false, description: 'List OKR objectives — the strategic goals on the Portfolio ▸ OKRs tab, NOT board Epics.', parameters: obj({}), run: async (ctx) => { const seg = await resolveSegment(ctx.db, ctx.tenantId); return ctx.db.select().from(objectives).where(and(eq(objectives.tenantId, ctx.tenantId), eq(objectives.segmentId, seg))).orderBy(desc(objectives.updatedAt)).limit(200); } },
   {
     tool: 'objectives.create', mutates: true,
-    description: 'Create an OKR Objective — a strategic, qualitative goal (e.g. "Unlock recurring revenue"). This populates the Portfolio ▸ OKRs tab. Do NOT model OKRs as board Epics. SCOPE the objective by passing exactly one of projectId (a goal FOR a specific project — this is what satisfies that project\'s "Direction" / "goal or OKR linked" health check), initiativeId, or portfolioId (omit all three for a workspace/org-level objective). Then add measurable targets with key_results.create and link the delivering epics/initiatives with objectives.add_link. status: active|achieved|missed|archived; period is an optional label like "2026-Q2".',
+    description: 'Create an OKR Objective — a strategic, qualitative goal (e.g. "Unlock recurring revenue"). This populates the Portfolio ▸ OKRs tab. Do NOT model OKRs as board Epics. SCOPE the objective by passing exactly one of projectId (a goal FOR a specific project — this is what satisfies that project\'s "Direction" / "goal or OKR linked" health check), initiativeId, or portfolioId (omit all three for a workspace/org-level objective). Then add measurable targets with key_results.create and link the delivering epics/initiatives with objectives.add_link. status: active|achieved|missed|archived; period is an optional label like "2026-Q2". Idempotent: an objective with the same title already in this workspace is returned ({ deduped: true, … }) instead of duplicated.',
     parameters: obj({ title: S, description: S, period: S, status: { type: 'string', enum: ['active', 'achieved', 'missed', 'archived'] }, projectId: N, portfolioId: S, initiativeId: S, startDate: S, endDate: S }, ['title']),
     run: async (ctx, a) => {
       const title = str(a.title).trim(); if (!title) throw new Error('title is required');
       const seg = await resolveSegment(ctx.db, ctx.tenantId);
+      // Idempotent create — a same-title objective in this tenant/segment is returned
+      // rather than duplicated (guards roadmap-reconciliation reruns).
+      const existingObjectives = await ctx.db.select().from(objectives).where(and(eq(objectives.tenantId, ctx.tenantId), eq(objectives.segmentId, seg)));
+      const dupeObjective = (existingObjectives as Array<{ title?: unknown }>).find((o) => normTitle(o.title) === normTitle(title));
+      if (dupeObjective) return { deduped: true, ...(dupeObjective as object) };
       const [row] = await ctx.db.insert(objectives).values({
         tenantId: ctx.tenantId, segmentId: seg, title,
         description: a.description != null ? str(a.description) : null,
@@ -599,13 +667,18 @@ const CATALOG: BuiltinTool[] = [
   { tool: 'key_results.list', mutates: false, description: 'List key results (the measurable targets under OKR objectives).', parameters: obj({}), run: async (ctx) => { const seg = await resolveSegment(ctx.db, ctx.tenantId); return ctx.db.select().from(keyResults).where(and(eq(keyResults.tenantId, ctx.tenantId), eq(keyResults.segmentId, seg))).orderBy(desc(keyResults.updatedAt)).limit(500); } },
   {
     tool: 'key_results.create', mutates: true,
-    description: 'Create a measurable Key Result under an Objective (objectiveId). A KR moves startValue→targetValue; progress rolls up into the objective and the OKR dashboard. metricType: number|percent|currency|boolean; status: on_track|at_risk|off_track|done. Give each objective 2–5.',
+    description: 'Create a measurable Key Result under an Objective (objectiveId). A KR moves startValue→targetValue; progress rolls up into the objective and the OKR dashboard. metricType: number|percent|currency|boolean; status: on_track|at_risk|off_track|done. Give each objective 2–5. Idempotent: a KR with the same title already under that objective is returned ({ deduped: true, … }) instead of duplicated.',
     parameters: obj({ objectiveId: S, title: S, metricType: { type: 'string', enum: ['number', 'percent', 'currency', 'boolean'] }, startValue: N, targetValue: N, currentValue: N, unit: S, status: { type: 'string', enum: ['on_track', 'at_risk', 'off_track', 'done'] } }, ['objectiveId', 'title']),
     run: async (ctx, a) => {
       const title = str(a.title).trim(); if (!title) throw new Error('title is required');
       const seg = await resolveSegment(ctx.db, ctx.tenantId);
       const [own] = await ctx.db.select({ id: objectives.id }).from(objectives).where(and(eq(objectives.id, str(a.objectiveId)), eq(objectives.tenantId, ctx.tenantId), eq(objectives.segmentId, seg))).limit(1);
       if (!own) throw new Error('objective not found');
+      // Idempotent create — a same-title KR already under this objective is returned
+      // rather than duplicated.
+      const existingKrs = await ctx.db.select().from(keyResults).where(and(eq(keyResults.tenantId, ctx.tenantId), eq(keyResults.segmentId, seg), eq(keyResults.objectiveId, str(a.objectiveId))));
+      const dupeKr = (existingKrs as Array<{ title?: unknown }>).find((k) => normTitle(k.title) === normTitle(title));
+      if (dupeKr) return { deduped: true, ...(dupeKr as object) };
       const [row] = await ctx.db.insert(keyResults).values({
         tenantId: ctx.tenantId, segmentId: seg, objectiveId: str(a.objectiveId), title,
         ...(a.metricType != null ? { metricType: str(a.metricType) } : {}),

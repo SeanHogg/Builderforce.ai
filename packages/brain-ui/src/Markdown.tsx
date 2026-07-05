@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 
@@ -84,8 +84,8 @@ function CodeBlock({
  * Self-contained so both the web app and the VS Code webview render assistant
  * replies identically.
  */
-export function Markdown({ content, onInternalLink, onApplyCode, onCreateFile, labels }: MarkdownProps) {
-  const lab = { ...DEFAULT_LABELS, ...labels };
+function MarkdownInner({ content, onInternalLink, onApplyCode, onCreateFile, labels }: MarkdownProps) {
+  const lab = useMemo(() => ({ ...DEFAULT_LABELS, ...labels }), [labels]);
   return (
     <div className="bf-md">
       <ReactMarkdown
@@ -136,3 +136,10 @@ export function Markdown({ content, onInternalLink, onApplyCode, onCreateFile, l
     </div>
   );
 }
+
+/**
+ * Memoized: parsing markdown through the remark pipeline is expensive, and the
+ * transcript re-renders on every streaming token / composer keystroke. Skipping the
+ * re-parse of settled messages (unchanged `content`/callbacks) keeps typing snappy.
+ */
+export const Markdown = React.memo(MarkdownInner);

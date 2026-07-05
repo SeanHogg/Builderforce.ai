@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { buildBrainTriageReport, isFailedToolResult, type BrainTraceEvent } from './brainTriage';
+import { buildBrainTriageReport, isFailedToolResult, detectUnbackedWriteClaim, type BrainTraceEvent } from './brainTriage';
+import type { BrainMessage } from './types';
 
 describe('isFailedToolResult', () => {
   it('flags { ok: false } and error fields', () => {

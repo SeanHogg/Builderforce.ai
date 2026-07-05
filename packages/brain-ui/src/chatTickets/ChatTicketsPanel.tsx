@@ -12,7 +12,7 @@
  * strings come from an injected {@link ChatTicketsLabels} bundle. Native <select>s
  * keep it dependency-free so both hosts render it identically.
  */
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useState } from 'react';
 import { HealthRing } from '../HealthRing';
 import {
   RUNNABLE_KINDS, TICKET_KINDS,
@@ -37,7 +37,7 @@ export interface ChatTicketsPanelProps {
 
 const RUNNABLE = new Set<TicketKind>(RUNNABLE_KINDS);
 
-export function ChatTicketsPanel({ chatId, projectId, chatList, adapter, labels, onChanged, refreshSignal }: ChatTicketsPanelProps) {
+function ChatTicketsPanelInner({ chatId, projectId, chatList, adapter, labels, onChanged, refreshSignal }: ChatTicketsPanelProps) {
   const [tickets, setTickets] = useState<TicketLinkVM[]>([]);
   const [agents, setAgents] = useState<ChatAgentVM[]>([]);
   const [pool, setPool] = useState<AgentOptionVM[]>([]);
@@ -261,6 +261,14 @@ function MergeSection({ chatId, chatList, labels, onMerge, busy }: {
     </div>
   );
 }
+
+/**
+ * Memoized: this panel sits directly under the composer, so it would otherwise
+ * reconcile its whole subtree (health-ring SVGs, selects, link/merge/agents forms)
+ * on every keystroke and streaming token. Callers must pass referentially stable
+ * props (memoize `chatList` and `onChanged`) for the memo to take effect.
+ */
+export const ChatTicketsPanel = memo(ChatTicketsPanelInner);
 
 // ── styles (CSS-var driven; --bf-ct-* with app-token fallbacks so it themes in
 //    both the web app and the VS Code webview, light AND dark) ────────────────

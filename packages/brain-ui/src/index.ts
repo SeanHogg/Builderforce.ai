@@ -34,6 +34,8 @@ export type {
 
 export {
   buildTimeline,
+  buildSettledTimeline,
+  streamingNode,
   attachmentsOf,
   formatDuration,
   formatPayload,

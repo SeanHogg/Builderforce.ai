@@ -58,7 +58,11 @@ export const authMiddleware: MiddlewareHandler<HonoEnv> = async (c, next) => {
     }
   }
 
-  if (payload.jti) {
+  // Machine tokens (sub `agentHost:<id>`) are minted by the API-key exchange and
+  // carry a jti but intentionally have no `authTokens`/session row — their
+  // userId FK would not resolve to a real user. Skip the jti-revocation check for
+  // them; they are already bounded by a short TTL and gated on an active API key.
+  if (payload.jti && !payload.sub.startsWith('agentHost:')) {
     const db = buildDatabase(c.env);
     const [activeToken] = await db
       .select({

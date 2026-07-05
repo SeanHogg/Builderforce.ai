@@ -34,7 +34,9 @@ export function Project360Screen({ init }: { init: InitData }) {
   const [data, setData] = useState<Project360 | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const labels = labelsFrom(init.labels);
+  // Memoized so its identity is stable across renders — otherwise it invalidates
+  // <Project360View>'s own labels memo on every state change (matches ProjectPageScreen).
+  const labels = useMemo(() => labelsFrom(init.labels), [init.labels]);
   // Shared bearer-fetch: attaches the host-minted token and, on a 401, re-mints via
   // `refreshToken` and retries once (the promise-returning refresher opts into a retry).
   const api = useMemo(() => authedFetch(init.baseUrl, getToken, refreshToken), [init.baseUrl]);

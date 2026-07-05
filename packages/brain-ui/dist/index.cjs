@@ -44,18 +44,20 @@ __export(src_exports, {
   Sunburst: () => Sunburst,
   TICKET_KINDS: () => TICKET_KINDS,
   attachmentsOf: () => attachmentsOf,
+  buildSettledTimeline: () => buildSettledTimeline,
   buildTimeline: () => buildTimeline,
   formatDuration: () => formatDuration,
   formatPayload: () => formatPayload,
-  healthRingColor: () => healthRingColor
+  healthRingColor: () => healthRingColor,
+  streamingNode: () => streamingNode
 });
 module.exports = __toCommonJS(src_exports);
 
 // src/BrainTimeline.tsx
-var import_react2 = require("react");
+var import_react2 = __toESM(require("react"), 1);
 
 // src/Markdown.tsx
-var import_react = require("react");
+var import_react = __toESM(require("react"), 1);
 var import_react_markdown = __toESM(require("react-markdown"), 1);
 var import_remark_gfm = __toESM(require("remark-gfm"), 1);
 var import_jsx_runtime = require("react/jsx-runtime");
@@ -94,8 +96,8 @@ function CodeBlock({
     /* @__PURE__ */ (0, import_jsx_runtime.jsx)("pre", { children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("code", { children: code }) })
   ] });
 }
-function Markdown({ content, onInternalLink, onApplyCode, onCreateFile, labels }) {
-  const lab = { ...DEFAULT_LABELS, ...labels };
+function MarkdownInner({ content, onInternalLink, onApplyCode, onCreateFile, labels }) {
+  const lab = (0, import_react.useMemo)(() => ({ ...DEFAULT_LABELS, ...labels }), [labels]);
   return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "bf-md", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
     import_react_markdown.default,
     {
@@ -135,6 +137,7 @@ function Markdown({ content, onInternalLink, onApplyCode, onCreateFile, labels }
     }
   ) });
 }
+var Markdown = import_react.default.memo(MarkdownInner);
 
 // src/timelineModel.ts
 var ORDER = {
@@ -167,8 +170,14 @@ function stripImageRefs(text, imageNames) {
   }).join("\n").replace(/\n{3,}/g, "\n\n").trim();
 }
 function buildTimeline(input) {
+  const nodes = buildSettledTimeline(input.messages, input.trace);
+  const streaming = streamingNode(input.streamingText, input.isRunning);
+  if (streaming) nodes.push(streaming);
+  return nodes;
+}
+function buildSettledTimeline(messages, trace) {
   const nodes = [];
-  input.messages.forEach((message, i) => {
+  messages.forEach((message, i) => {
     const ts = parseTs(message.createdAt, i);
     if (message.role === "user") {
       const atts = attachmentsOf(message);
@@ -195,7 +204,7 @@ function buildTimeline(input) {
     }
   });
   let step = 0;
-  input.trace.forEach((ev, i) => {
+  trace.forEach((ev, i) => {
     const ts = parseTs(ev.ts, 1e15 + i);
     if (ev.category === "llm") {
       nodes.push({ key: `trace-${i}`, kind: "thinking", ts, order: ORDER.thinking, durationMs: ev.durationMs, step: step++ });
@@ -223,10 +232,11 @@ function buildTimeline(input) {
     }
   });
   nodes.sort((a, b) => a.ts - b.ts || a.order - b.order);
-  if (input.isRunning && input.streamingText.trim()) {
-    nodes.push({ key: "streaming", kind: "streaming", ts: Number.MAX_SAFE_INTEGER, order: ORDER.streaming, text: input.streamingText });
-  }
   return nodes;
+}
+function streamingNode(streamingText, isRunning) {
+  if (!isRunning || !streamingText.trim()) return null;
+  return { key: "streaming", kind: "streaming", ts: Number.MAX_SAFE_INTEGER, order: ORDER.streaming, text: streamingText };
 }
 function formatDuration(ms) {
   if (ms == null || !Number.isFinite(ms)) return "0s";
@@ -261,7 +271,8 @@ var DEFAULT_TIMELINE_LABELS = {
   copy: "Copy",
   copied: "Copied",
   apply: "Apply",
-  createFile: "Create file"
+  createFile: "Create file",
+  preview: "Preview"
 };
 function dotIcon(kind, isError) {
   if (isError) return "\u2717";
@@ -280,12 +291,55 @@ function dotIcon(kind, isError) {
       return "\u2022";
   }
 }
+function CopyButton({ text, labels }) {
+  const [copied, setCopied] = (0, import_react2.useState)(false);
+  return /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(
+    "button",
+    {
+      type: "button",
+      className: "bf-tl__copy",
+      title: labels.copy,
+      onClick: (e) => {
+        e.stopPropagation();
+        void navigator.clipboard?.writeText(text).then(
+          () => {
+            setCopied(true);
+            setTimeout(() => setCopied(false), 1500);
+          },
+          () => {
+          }
+        );
+      },
+      children: copied ? labels.copied : labels.copy
+    }
+  );
+}
+function toolPreview(args) {
+  if (!args || typeof args !== "object") return null;
+  const a = args;
+  const path = typeof a.path === "string" ? a.path : "";
+  if (typeof a.old_string === "string" && typeof a.new_string === "string") {
+    return { kind: "edit", path, oldText: a.old_string, newText: a.new_string };
+  }
+  if (path && typeof a.content === "string") {
+    return { kind: "write", path, content: a.content };
+  }
+  return null;
+}
+function DiffLines({ text, sign }) {
+  const cls = sign === "+" ? "bf-tl__diff-add" : "bf-tl__diff-del";
+  return /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(import_jsx_runtime2.Fragment, { children: text.split("\n").map((line, i) => /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("div", { className: `bf-tl__diff-line ${cls}`, children: [
+    /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("span", { className: "bf-tl__diff-sign", "aria-hidden": true, children: sign }),
+    /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("span", { className: "bf-tl__diff-text", children: line || "\xA0" })
+  ] }, i)) });
+}
 function ToolStep({
   node,
   labels
 }) {
   const argsText = formatPayload(node.args);
   const resultText = formatPayload(node.result);
+  const preview = toolPreview(node.args);
   return /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("details", { className: `bf-tl__tool${node.isError ? " bf-tl__tool--error" : ""}`, children: [
     /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("summary", { className: "bf-tl__tool-head", children: [
       /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("span", { className: "bf-tl__tool-status", "aria-hidden": true, children: node.isError ? "\u2717" : "\u2713" }),
@@ -294,18 +348,43 @@ function ToolStep({
       /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("span", { className: "bf-tl__tool-caret", "aria-hidden": true, children: "\u25B8" })
     ] }),
     /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("div", { className: "bf-tl__tool-body", children: [
+      preview && /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("div", { className: "bf-tl__io", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("div", { className: "bf-tl__io-label", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("span", { children: [
+            labels.preview,
+            preview.path ? ` \xB7 ${preview.path}` : ""
+          ] }),
+          /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(
+            CopyButton,
+            {
+              text: preview.kind === "edit" ? preview.newText : preview.content,
+              labels
+            }
+          )
+        ] }),
+        preview.kind === "edit" ? /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("div", { className: "bf-tl__diff", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(DiffLines, { text: preview.oldText, sign: "-" }),
+          /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(DiffLines, { text: preview.newText, sign: "+" })
+        ] }) : /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("pre", { className: "bf-tl__io-pre", children: /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("code", { children: preview.content }) })
+      ] }),
       argsText && /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("div", { className: "bf-tl__io", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("div", { className: "bf-tl__io-label", children: labels.input }),
+        /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("div", { className: "bf-tl__io-label", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("span", { children: labels.input }),
+          /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(CopyButton, { text: argsText, labels })
+        ] }),
         /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("pre", { className: "bf-tl__io-pre", children: /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("code", { children: argsText }) })
       ] }),
       resultText && /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("div", { className: "bf-tl__io", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("div", { className: "bf-tl__io-label", children: labels.output }),
+        /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("div", { className: "bf-tl__io-label", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("span", { children: labels.output }),
+          /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(CopyButton, { text: resultText, labels })
+        ] }),
         /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("pre", { className: "bf-tl__io-pre", children: /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("code", { children: resultText }) })
       ] })
     ] })
   ] });
 }
-function BrainTimeline({
+function BrainTimelineInner({
   messages,
   trace,
   streamingText,
@@ -322,13 +401,15 @@ function BrainTimeline({
   onCreateFile,
   autoScroll = true
 }) {
-  const labels = { ...DEFAULT_TIMELINE_LABELS, ...labelOverrides };
+  const labels = (0, import_react2.useMemo)(() => ({ ...DEFAULT_TIMELINE_LABELS, ...labelOverrides }), [labelOverrides]);
   const assistant = assistantName ?? labels.assistant;
-  const nodes = (0, import_react2.useMemo)(
-    () => buildTimeline({ messages, trace, streamingText, isRunning }),
-    [messages, trace, streamingText, isRunning]
-  );
+  const settled = (0, import_react2.useMemo)(() => buildSettledTimeline(messages, trace), [messages, trace]);
+  const nodes = (0, import_react2.useMemo)(() => {
+    const streaming = streamingNode(streamingText, isRunning);
+    return streaming ? [...settled, streaming] : settled;
+  }, [settled, streamingText, isRunning]);
   const scrollRef = (0, import_react2.useRef)(null);
+  const contentRef = (0, import_react2.useRef)(null);
   const pinnedRef = (0, import_react2.useRef)(true);
   const onScroll = () => {
     const el = scrollRef.current;
@@ -336,10 +417,18 @@ function BrainTimeline({
     pinnedRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
   };
   (0, import_react2.useEffect)(() => {
-    if (!autoScroll || !pinnedRef.current) return;
-    const el = scrollRef.current;
-    if (el) el.scrollTop = el.scrollHeight;
-  }, [nodes, autoScroll]);
+    if (!autoScroll) return;
+    const scroller = scrollRef.current;
+    const content = contentRef.current;
+    if (!scroller || !content) return;
+    const stick = () => {
+      if (pinnedRef.current) scroller.scrollTop = scroller.scrollHeight;
+    };
+    stick();
+    const ro = new ResizeObserver(stick);
+    ro.observe(content);
+    return () => ro.disconnect();
+  }, [autoScroll]);
   const renderMsg = (msg, role, text) => renderMessage ? renderMessage(msg, { role, text }) : /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(
     Markdown,
     {
@@ -354,7 +443,7 @@ function BrainTimeline({
   return /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("div", { className: "bf-tl-scroll", ref: scrollRef, onScroll, children: [
     loading && /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("div", { className: "bf-tl-status", children: labels.loading }),
     isEmpty && (emptyState ?? /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("div", { className: "bf-tl-empty", children: labels.empty })),
-    /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("ol", { className: "bf-tl", children: [
+    /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("ol", { className: "bf-tl", ref: contentRef, children: [
       nodes.map((node) => {
         if (node.kind === "user") {
           return /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("li", { className: "bf-tl__item bf-tl__item--user", children: [
@@ -413,6 +502,7 @@ function BrainTimeline({
     ] })
   ] });
 }
+var BrainTimeline = import_react2.default.memo(BrainTimelineInner);
 
 // src/HealthRing.tsx
 var import_jsx_runtime3 = require("react/jsx-runtime");
@@ -519,7 +609,7 @@ var DEFAULT_CHAT_TICKETS_LABELS = {
 // src/chatTickets/ChatTicketsPanel.tsx
 var import_jsx_runtime4 = require("react/jsx-runtime");
 var RUNNABLE = new Set(RUNNABLE_KINDS);
-function ChatTicketsPanel({ chatId, projectId, chatList, adapter, labels, onChanged, refreshSignal }) {
+function ChatTicketsPanelInner({ chatId, projectId, chatList, adapter, labels, onChanged, refreshSignal }) {
   const [tickets, setTickets] = (0, import_react3.useState)([]);
   const [agents, setAgents] = (0, import_react3.useState)([]);
   const [pool, setPool] = (0, import_react3.useState)([]);
@@ -772,6 +862,7 @@ function MergeSection({ chatId, chatList, labels, onMerge, busy }) {
     }, disabled: busy || selected.length === 0, style: S.pill(true), children: busy ? "\u2026" : labels.mergeAction(selected.length) })
   ] });
 }
+var ChatTicketsPanel = (0, import_react3.memo)(ChatTicketsPanelInner);
 var S = {
   root: { margin: "4px 0 0", padding: "8px 10px", border: "1px solid var(--bf-ct-border, var(--border-subtle, rgba(148,163,184,0.3)))", borderRadius: 10, background: "var(--bf-ct-surface, var(--bg-elevated, transparent))", display: "flex", flexDirection: "column", gap: 8 },
   muted: { fontSize: 12, color: "var(--bf-ct-text-muted, var(--text-muted, #6b7280))" },
@@ -965,6 +1056,10 @@ var STATUS_ORDER = ["working", "awaiting", "blocked", "idle", "available"];
 function Project360View({ data, loading, error, labels, onAction, onRefresh }) {
   const L = (0, import_react4.useMemo)(() => ({ ...DEFAULT_PROJECT360_LABELS, ...labels ?? {} }), [labels]);
   const [selected, setSelected] = (0, import_react4.useState)(null);
+  const sortedWorkforce = (0, import_react4.useMemo)(
+    () => [...data?.workforce ?? []].sort((a, b) => STATUS_ORDER.indexOf(a.status) - STATUS_ORDER.indexOf(b.status)),
+    [data?.workforce]
+  );
   if (error) {
     return /* @__PURE__ */ (0, import_jsx_runtime6.jsxs)("div", { className: "bf-360-state", children: [
       /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("div", { className: "bf-360-state__title", children: L.loadError }),
@@ -1076,7 +1171,7 @@ ${lines}`
           L.workforce,
           workforce.length > 0 && /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("span", { className: "bf-360-section__count", children: workforce.length })
         ] }),
-        workforce.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("p", { className: "bf-360-empty", children: L.noWorkforce }) : /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("ul", { className: "bf-360-people", children: [...workforce].sort((a, b) => STATUS_ORDER.indexOf(a.status) - STATUS_ORDER.indexOf(b.status)).map((m) => /* @__PURE__ */ (0, import_jsx_runtime6.jsx)(MemberRow, { member: m, labels: L, onAction }, m.ref)) })
+        workforce.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("p", { className: "bf-360-empty", children: L.noWorkforce }) : /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("ul", { className: "bf-360-people", children: sortedWorkforce.map((m) => /* @__PURE__ */ (0, import_jsx_runtime6.jsx)(MemberRow, { member: m, labels: L, onAction }, m.ref)) })
       ] })
     ] })
   ] });
@@ -1234,9 +1329,11 @@ function Row({ item, onAction }) {
   Sunburst,
   TICKET_KINDS,
   attachmentsOf,
+  buildSettledTimeline,
   buildTimeline,
   formatDuration,
   formatPayload,
-  healthRingColor
+  healthRingColor,
+  streamingNode
 });
 //# sourceMappingURL=index.cjs.map
