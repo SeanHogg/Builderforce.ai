@@ -417,9 +417,11 @@
       "healthy": "Healthy",
       "watch": "Watch",
       "at_risk": "At risk",
-      "critical": "Critical"
+      "critical": "Critical",
+      "noData": "No data"
     },
     "healthAria": "Project health {score} of 100 — {tier}",
+    "healthNoDataAria": "Project health — no delivery data yet",
     "doneAria": "{pct}% done — {completed} of {total} tasks complete",
     "donePct": "{pct}% done",
     "health360": "Project 360"
@@ -1678,7 +1680,19 @@
     "baseModelDefault": "builderforce.ai default (best coding model)",
     "baseModelHelp": "The tool-calling + coding model this agent runs on — pick one of your LLMs or a model from the pool. A run pins one model for the whole task; leave default to use the plan's best coding model.",
     "personality": "Personality",
-    "personalityHelp": "Give this agent a personality with a trait test or sliders. It shapes how the agent reasons, how carefully it works, and how it communicates on every run."
+    "personalityHelp": "Give this agent a personality with a trait test or sliders. It shapes how the agent reasons, how carefully it works, and how it communicates on every run.",
+    "tab": {
+      "details": "Details",
+      "runtime": "Runtime",
+      "personality": "Personality",
+      "capabilities": "Capabilities",
+      "pricing": "Pricing",
+      "performance": "Performance"
+    },
+    "save": "Save",
+    "saving": "Saving…",
+    "roleLabel": "Role",
+    "roleNone": "Not assigned"
   },
   "personalitySummary": {
     "title": "Personality",

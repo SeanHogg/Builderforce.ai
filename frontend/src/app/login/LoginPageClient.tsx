@@ -166,9 +166,9 @@ export default function LoginPageClient() {
 
       {/* Split-panel layout: form left, marketing right */}
       <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', WebkitOverflowScrolling: 'touch' }}>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr', minHeight: 'calc(100vh - 60px)' }} className="auth-split-grid">
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr', minHeight: 'calc(100vh - 60px)', alignItems: 'start' }} className="auth-split-grid">
         {/* LEFT PANEL — form */}
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '48px 20px' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '48px 20px', minHeight: 'calc(100vh - 60px)' }}>
         <div style={{ width: '100%', maxWidth: 400 }}>
           {/* Heading */}
           <div style={{ textAlign: 'center', marginBottom: 32 }}>

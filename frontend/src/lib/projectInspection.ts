@@ -111,8 +111,9 @@ export function computeProjectInspection(project: Project): ProjectInspection {
     (hasOwner ? 40 : 0) + (hasWorkflows ? 30 : 0) + (hasMomentum ? 30 : 0),
   );
 
-  // Health + progress are only meaningful once the project has tasks.
-  const healthScore = health.hasData ? health.healthScore : null;
+  // Health is the shared delivery verdict (null until there's delivery data);
+  // progress is only meaningful once the project has tasks.
+  const healthScore = health.healthScore;
   const progressScore = health.hasData ? health.progressPct : null;
 
   const mk = (key: InspectionKey, score: number | null, weight: number): InspectionDimension => {

@@ -417,9 +417,11 @@
       "healthy": "Gesund",
       "watch": "Beobachten",
       "at_risk": "Gefährdet",
-      "critical": "Kritisch"
+      "critical": "Kritisch",
+      "noData": "Keine Daten"
     },
     "healthAria": "Projektzustand {score} von 100 — {tier}",
+    "healthNoDataAria": "Projektzustand — noch keine Lieferdaten",
     "doneAria": "{pct}% erledigt — {completed} von {total} Aufgaben abgeschlossen",
     "donePct": "{pct} % erledigt",
     "health360": "Projekt 360"
@@ -1678,7 +1680,19 @@
     "baseModelDefault": "builderforce.ai-Standard (bestes Coding-Modell)",
     "baseModelHelp": "Das Tool-Calling- und Coding-Modell, auf dem dieser Agent läuft – wähle eines deiner LLMs oder ein Modell aus dem Pool. Ein Lauf legt ein Modell für die gesamte Aufgabe fest; lass den Standard, um das beste Coding-Modell deines Tarifs zu verwenden.",
     "personality": "Persönlichkeit",
-    "personalityHelp": "Gib diesem Agenten mit einem Eigenschaftstest oder Reglern eine Persönlichkeit. Sie prägt, wie der Agent denkt, wie sorgfältig er arbeitet und wie er bei jedem Lauf kommuniziert."
+    "personalityHelp": "Gib diesem Agenten mit einem Eigenschaftstest oder Reglern eine Persönlichkeit. Sie prägt, wie der Agent denkt, wie sorgfältig er arbeitet und wie er bei jedem Lauf kommuniziert.",
+    "tab": {
+      "details": "Details",
+      "runtime": "Laufzeit",
+      "personality": "Persönlichkeit",
+      "capabilities": "Fähigkeiten",
+      "pricing": "Preise",
+      "performance": "Leistung"
+    },
+    "save": "Speichern",
+    "saving": "Speichern…",
+    "roleLabel": "Rolle",
+    "roleNone": "Nicht zugewiesen"
   },
   "personalitySummary": {
     "title": "Persönlichkeit",

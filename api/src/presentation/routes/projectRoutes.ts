@@ -10,6 +10,7 @@ import type { HonoEnv } from '../../env';
 import type { Env } from '../../env';
 import { getCacheVersion, getOrSetCached, bumpCacheVersion } from '../../infrastructure/cache/readThroughCache';
 import { computeProject360, type Project360Aggregate } from '../../application/project/computeProject360';
+import { computeProjectDeliverySignals } from '../../application/insights/projectDeliverySignals';
 import { authMiddleware, requireRole } from '../middleware/authMiddleware';
 import { ProjectStatus, TenantRole } from '../../domain/shared/types';
 import { isAgentHostOnline } from '../../domain/agentHost/onlineStatus';
@@ -291,6 +292,10 @@ export function createProjectRoutes(projectService: ProjectService, db: Db): Hon
     return c.json({ projects });
   });
 
+  /** Window for the per-project delivery-health signals — matches the delivery
+   *  tab's default so the card and the tab agree for a single-project tenant. */
+  const DELIVERY_SIGNAL_WINDOW_DAYS = 30;
+
   /** Compute the full projects-list payload (base rows + all card aggregates). */
   async function buildProjectsList(tenantId: number) {
     const projectList = await projectService.listProjects(tenantId);
@@ -473,6 +478,13 @@ export function createProjectRoutes(projectService: ProjectService, db: Db): Hon
       [...goalObjectivesByProject].map(([projectId, set]) => [projectId, set.size]),
     );
 
+    // Per-project delivery signals (DORA + cycle time + flow) over the standard
+    // 30-day window — the compact inputs the frontend runs through the SAME
+    // computeDeliveryVerdict the /insights/delivery banner uses, so a project's
+    // health score is identical on its card and on the delivery tab. One bounded
+    // grouped pass (no N+1); the whole list payload is version-token cached.
+    const deliverySignalsByProject = await computeProjectDeliverySignals(db, tenantId, DELIVERY_SIGNAL_WINDOW_DAYS);
+
     return plainProjects.map((project) => {
       const b = taskBreakdownByProject.get(project.id);
       return {
@@ -484,6 +496,10 @@ export function createProjectRoutes(projectService: ProjectService, db: Db): Hon
         openTaskCount: b ? Math.max(0, b.total - b.done - b.cancelled) : 0,
         blockedTaskCount: b?.blocked ?? 0,
         overdueTaskCount: b?.overdue ?? 0,
+        // Delivery-health inputs — the frontend fuses these via the shared verdict
+        // so the card's health matches the /insights/delivery gauge (null = no
+        // deploys/throughput yet → the card shows a neutral "no data" health).
+        deliverySignals: deliverySignalsByProject.get(project.id) ?? null,
         workflowCount: workflowCountByProject.get(project.id) ?? 0,
         hasArchitecturePrd: hasArchByProject.has(project.id),
         // Goal/OKR linkage + planning-spine membership — the inspection Direction

@@ -29,6 +29,11 @@ export function ProjectHealthGauges({ project, size = 104 }: ProjectHealthGauges
   const health = computeProjectHealth(project);
   if (!health.hasData) return null;
 
+  const tierLabel = health.tier ? t(`tier.${health.tier}`) : t('tier.noData');
+  const healthAria = health.healthScore != null
+    ? t('healthAria', { score: health.healthScore, tier: tierLabel })
+    : t('healthNoDataAria');
+
   const donutSize = Math.round(size * 0.8);
   return (
     <div
@@ -39,12 +44,12 @@ export function ProjectHealthGauges({ project, size = 104 }: ProjectHealthGauges
       }}
     >
       <GaugeChart
-        value={health.healthScore}
+        value={health.healthScore ?? 0}
         color={health.color}
         size={size}
-        centerValue={String(health.healthScore)}
+        centerValue={health.healthScore != null ? String(health.healthScore) : '—'}
         centerLabel={t('health')}
-        ariaLabel={t('healthAria', { score: health.healthScore, tier: t(`tier.${health.tier}`) })}
+        ariaLabel={healthAria}
       />
       <DonutChart
         size={donutSize}
@@ -78,11 +83,16 @@ export function ProjectHealthBadge({ project }: ProjectHealthBadgeProps) {
     return <span style={{ color: 'var(--text-muted)', fontSize: 12 }}>—</span>;
   }
 
+  const tierLabel = health.tier ? t(`tier.${health.tier}`) : t('tier.noData');
+  const healthAria = health.healthScore != null
+    ? t('healthAria', { score: health.healthScore, tier: tierLabel })
+    : t('healthNoDataAria');
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 6, minWidth: 120 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
         <span
-          title={t('healthAria', { score: health.healthScore, tier: t(`tier.${health.tier}`) })}
+          title={healthAria}
           style={{
             display: 'inline-flex', alignItems: 'center', gap: 6,
             fontSize: 12, fontWeight: 700, color: health.color,
@@ -91,10 +101,10 @@ export function ProjectHealthBadge({ project }: ProjectHealthBadgeProps) {
           }}
         >
           <span style={{ width: 8, height: 8, borderRadius: '50%', background: health.color, flexShrink: 0 }} aria-hidden />
-          {health.healthScore}
+          {health.healthScore ?? '—'}
         </span>
         <span style={{ fontSize: 11, color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
-          {t('tier.' + health.tier)}
+          {tierLabel}
         </span>
       </div>
       <div

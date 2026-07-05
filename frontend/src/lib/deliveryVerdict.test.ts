@@ -1,21 +1,16 @@
 import { describe, it, expect } from 'vitest';
-import { computeDeliveryVerdict } from './DeliveryVerdict';
-import type { DoraInsights, BottleneckInsights, LifecycleInsights } from '@/lib/builderforceApi';
+import { computeDeliveryVerdict, type VerdictDoraSignal, type VerdictLifecycleSignal, type VerdictBottleneckSignal } from './deliveryVerdict';
 
 /** Minimal fixtures — only the fields the verdict reads. */
-const dora = (o: Partial<DoraInsights> = {}): DoraInsights => ({
-  windowDays: 30, deploymentFrequencyPerDay: 0, totalDeployments: 0,
-  leadTimeHours: null, changeFailureRatePct: null, mttrHours: null, series: [], ...o,
+const dora = (o: Partial<VerdictDoraSignal> = {}): VerdictDoraSignal => ({
+  deploymentFrequencyPerDay: 0, totalDeployments: 0,
+  leadTimeHours: null, changeFailureRatePct: null, mttrHours: null, ...o,
 });
-const life = (o: Partial<LifecycleInsights> = {}): LifecycleInsights =>
-  ({ windowDays: 30, sampleSize: 0, totalAvgHours: 0, byPhase: [], trend: [], ...o });
-const bott = (o: Partial<BottleneckInsights> = {}): BottleneckInsights => ({
-  windowDays: 30,
-  sampleSize: 0,
-  byStage: [],
-  slowestStage: null,
-  rework: { reworkedTasks: 0, totalReopens: 0, totalRedos: 0, reworkRate: 0 },
-  agingWip: { stuckCount: 0, thresholdHours: 72, oldest: [] },
+const life = (o: Partial<VerdictLifecycleSignal> = {}): VerdictLifecycleSignal =>
+  ({ sampleSize: 0, totalAvgHours: 0, ...o });
+const bott = (o: Partial<VerdictBottleneckSignal> = {}): VerdictBottleneckSignal => ({
+  rework: { reworkRate: 0 },
+  agingWip: { stuckCount: 0 },
   ...o,
 });
 
@@ -41,7 +36,7 @@ describe('computeDeliveryVerdict', () => {
     const r = computeDeliveryVerdict(
       dora({ deploymentFrequencyPerDay: 0.01, totalDeployments: 1, leadTimeHours: 900, changeFailureRatePct: 45, mttrHours: 300 }),
       life({ totalAvgHours: 720, sampleSize: 30 }),
-      bott({ rework: { reworkedTasks: 9, totalReopens: 9, totalRedos: 0, reworkRate: 0.4 }, agingWip: { stuckCount: 8, thresholdHours: 72, oldest: [] } }),
+      bott({ rework: { reworkRate: 0.4 }, agingWip: { stuckCount: 8 } }),
     );
     expect(r.verdict).toBe('no');
     expect(r.score).toBeLessThan(45);

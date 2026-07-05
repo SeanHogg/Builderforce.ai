@@ -47,6 +47,10 @@ import agenticWorkforce from '@/content/blog/transitioning-to-an-agentic-workfor
 import aiDevMaturity from '@/content/blog/ai-development-maturity-diagnostic.md';
 import migrateAndIntegrate from '@/content/blog/migrate-and-integrate-jira-monday-rally-gitlab-bitbucket.md';
 import agenticEmployee from '@/content/blog/everything-an-agentic-employee-can-do.md';
+import realtimeCollaboration from '@/content/blog/real-time-collaboration-humans-and-agents.md';
+import videoMeetings from '@/content/blog/video-meetings-standups-and-shared-calendars.md';
+import multiPartyChat from '@/content/blog/multi-party-team-chat-humans-and-agents.md';
+import vsCodeCommandCenter from '@/content/blog/vs-code-command-center-for-your-agentic-workforce.md';
 
 export interface BlogPost {
   slug: string;
@@ -148,6 +152,10 @@ export const BLOG_POSTS: BlogPost[] = [
   buildPost('ai-development-maturity-diagnostic', aiDevMaturity),
   buildPost('migrate-and-integrate-jira-monday-rally-gitlab-bitbucket', migrateAndIntegrate),
   buildPost('everything-an-agentic-employee-can-do', agenticEmployee),
+  buildPost('real-time-collaboration-humans-and-agents', realtimeCollaboration),
+  buildPost('video-meetings-standups-and-shared-calendars', videoMeetings),
+  buildPost('multi-party-team-chat-humans-and-agents', multiPartyChat),
+  buildPost('vs-code-command-center-for-your-agentic-workforce', vsCodeCommandCenter),
 ].sort((a, b) => (a.date < b.date ? 1 : -1));
 
 export function getPostBySlug(slug: string): BlogPost | undefined {

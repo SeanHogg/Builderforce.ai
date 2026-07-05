@@ -417,9 +417,11 @@
       "healthy": "Sain",
       "watch": "À surveiller",
       "at_risk": "À risque",
-      "critical": "Critique"
+      "critical": "Critique",
+      "noData": "Aucune donnée"
     },
     "healthAria": "Santé du projet {score} sur 100 — {tier}",
+    "healthNoDataAria": "Santé du projet — aucune donnée de livraison pour l'instant",
     "doneAria": "{pct}% terminé — {completed} sur {total} tâches terminées",
     "donePct": "{pct} % terminé",
     "health360": "Projet 360"
@@ -1678,7 +1680,19 @@
     "baseModelDefault": "Par défaut builderforce.ai (meilleur modèle de codage)",
     "baseModelHelp": "Le modèle d'appel d'outils et de codage sur lequel cet agent s'exécute — choisissez l'un de vos LLM ou un modèle du pool. Une exécution fixe un modèle pour toute la tâche ; laissez par défaut pour utiliser le meilleur modèle de codage de votre forfait.",
     "personality": "Personnalité",
-    "personalityHelp": "Donnez une personnalité à cet agent grâce à un test de traits ou à des curseurs. Elle façonne la manière dont l'agent raisonne, le soin qu'il apporte à son travail et sa façon de communiquer à chaque exécution."
+    "personalityHelp": "Donnez une personnalité à cet agent grâce à un test de traits ou à des curseurs. Elle façonne la manière dont l'agent raisonne, le soin qu'il apporte à son travail et sa façon de communiquer à chaque exécution.",
+    "tab": {
+      "details": "Détails",
+      "runtime": "Exécution",
+      "personality": "Personnalité",
+      "capabilities": "Capacités",
+      "pricing": "Tarification",
+      "performance": "Performance"
+    },
+    "save": "Enregistrer",
+    "saving": "Enregistrement…",
+    "roleLabel": "Rôle",
+    "roleNone": "Non attribué"
   },
   "personalitySummary": {
     "title": "Personnalité",
