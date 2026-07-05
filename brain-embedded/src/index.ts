@@ -85,5 +85,14 @@ export {
   scopeToConsolidation,
 } from './consolidation';
 
+// Directed messages (address a chat turn to a participant instead of the BRAIN)
+export {
+  ADDRESSED_TO_META_KEY,
+  withDirectedMetadata,
+  parseDirectedRecipient,
+  isDirectedToParticipant,
+} from './directedMessage';
+export type { DirectedRecipient } from './directedMessage';
+
 // Shared data shapes
 export type { BrainChat, BrainMessage, BrainModality, ChatInputAttachment } from './types';

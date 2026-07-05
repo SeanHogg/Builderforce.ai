@@ -430,6 +430,57 @@ body {
   50% { opacity: 0.55; }
 }
 
+/* Recipient selector pill — "To: <avatar> <name> ▾" in the composer toolbar.
+   Reuses the PopoverMenu trigger slot; themed via the editor tokens so it reads
+   in light AND dark. */
+.bf-recipient {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 30px;
+  padding: 0 10px;
+  border-radius: 999px;
+  border: 1px solid var(--bf-border);
+  background: transparent;
+  color: var(--bf-text);
+  cursor: pointer;
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 55%;
+}
+
+.bf-recipient:hover {
+  background: var(--vscode-toolbar-hoverBackground, rgba(128, 128, 128, 0.15));
+}
+
+.bf-recipient.is-active {
+  border-color: var(--bf-accent);
+}
+
+.bf-recipient__inner {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.bf-recipient__to {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--bf-text-muted);
+  flex: 0 0 auto;
+}
+
+.bf-recipient__name {
+  font-size: 12px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
 /* Auto-mode pill toggle. */
 .bf-toggle {
   display: inline-flex;

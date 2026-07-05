@@ -465,6 +465,48 @@ interface UseBrainChats {
 declare function useBrainChats(options?: UseBrainChatsOptions): UseBrainChats;
 
 /**
+ * Directed messages — addressing a chat turn to a participant, not the BRAIN.
+ *
+ * A BuilderForce chat is multi-party: alongside the BRAIN (the agent that
+ * executes build/change requests) a chat can have other participants — invited
+ * teammate agents and (in future) humans. Not every message is a directive for
+ * the BRAIN to run: a user can @-tag a participant and simply talk to them. Such
+ * a turn is a normal `user` message tagged with `{ addressedTo: {...} }` in its
+ * metadata; the conversation loop reads that flag and does NOT start a BRAIN run
+ * for it, while the transcript still shows who it was addressed to. An untagged
+ * message (or one addressed to the BRAIN) runs the agent loop as before.
+ *
+ * This is the single source of truth for the convention, shared by the send path
+ * (which skips the run), the auto-reply guard, and any surface that renders the
+ * "→ recipient" badge.
+ */
+/** A non-BRAIN participant a message can be addressed to. */
+interface DirectedRecipient {
+    /** 'agent' = an invited teammate agent; 'human' = an invited person. */
+    kind: 'agent' | 'human';
+    /** Stable id/ref of the participant (an agentRef, or a user id/handle). */
+    ref: string;
+    /** Display name shown in the composer chip + the transcript badge. */
+    name: string;
+}
+/** The metadata key that flags a user message as addressed to a participant. */
+declare const ADDRESSED_TO_META_KEY = "addressedTo";
+/**
+ * Merge an `addressedTo` flag into a message's metadata object (preserving any
+ * other keys, e.g. `attachments`). Returns a serialized string, or `undefined`
+ * when there is nothing to store — ready to hand to `persistence.sendMessages`.
+ */
+declare function withDirectedMetadata(recipient: DirectedRecipient | null | undefined, base?: Record<string, unknown>): string | undefined;
+/** The recipient a persisted message was addressed to, or `null` for the BRAIN. */
+declare function parseDirectedRecipient(msg: {
+    metadata?: string | null;
+}): DirectedRecipient | null;
+/** True when a message is addressed to a participant (so the BRAIN should NOT run for it). */
+declare function isDirectedToParticipant(msg: {
+    metadata?: string | null;
+}): boolean;
+
+/**
  * Brain execution triage — capture the Brain's run (LLM steps, tool chain,
  * intermediate assistant messages, and errors) as a single paste-able report.
  *
@@ -678,7 +720,9 @@ interface UseBrainConversation {
      * `false` if it failed before persisting (e.g. the token expired mid-send) —
      * so a composer can restore the text the user typed instead of dropping it.
      */
-    send(text: string): Promise<boolean>;
+    send(text: string, opts?: {
+        addressedTo?: DirectedRecipient | null;
+    }): Promise<boolean>;
     /**
      * Stop the in-flight run for the active chat: aborts the streaming LLM request
      * and unwinds the agent loop (no error surfaced). No-op when nothing is
@@ -778,4 +822,4 @@ declare const CONSOLIDATION_MARKER_PREFIX = "\uD83D\uDCCC **Consolidated summary
 /** Wrap a raw summary as the marker's visible content (prefix + summary). */
 declare function consolidationMarkerContent(summary: string): string;
 
-export { type AssembledToolCall, type BrainAction, type BrainActionsContextValue, BrainActionsProvider, type BrainChat, type BrainConfig, BrainContextProvider, type BrainContextValue, type BrainDiagnostics, type BrainMessage, type BrainModality, type BrainPageContext, type BrainPersistenceAdapter, BrainProvider, type BrainRuntime, type BrainToolSpec, type BrainTraceEvent, type BrainTransport, type BuildBrainTriageOptions, CONSOLIDATION_MARKER_PREFIX, CONSOLIDATION_META, type ChatCompletionMessage, type ChatInputAttachment, type ContentPart, type ImageUrlContentPart, type McpToolResultInfo, type PreparedImage, type StreamChatOptions, type StreamChatResult, type StreamHandlers, type TextContentPart, type UseBrainChats, type UseBrainChatsOptions, type UseBrainConversation, type UseBrainConversationOptions, type UseMcpExtensionsOptions, buildBrainTriageReport, computeBrainDiagnostics, consolidationMarkerContent, consolidationMetadata, formatBrainDiagnostics, isConsolidationMarker, isEvermindModel, isFailedToolResult, lastConsolidationIndex, modelsUsedInTrace, prepareImageDataUrl, savePendingPrompt, scopeToConsolidation, streamChatCompletion, takePendingPrompt, useBrainActions, useBrainChats, useBrainConfig, useBrainContext, useBrainConversation, useMcpExtensions, useOptionalBrainContext, useRegisterBrainActions };
+export { ADDRESSED_TO_META_KEY, type AssembledToolCall, type BrainAction, type BrainActionsContextValue, BrainActionsProvider, type BrainChat, type BrainConfig, BrainContextProvider, type BrainContextValue, type BrainDiagnostics, type BrainMessage, type BrainModality, type BrainPageContext, type BrainPersistenceAdapter, BrainProvider, type BrainRuntime, type BrainToolSpec, type BrainTraceEvent, type BrainTransport, type BuildBrainTriageOptions, CONSOLIDATION_MARKER_PREFIX, CONSOLIDATION_META, type ChatCompletionMessage, type ChatInputAttachment, type ContentPart, type DirectedRecipient, type ImageUrlContentPart, type McpToolResultInfo, type PreparedImage, type StreamChatOptions, type StreamChatResult, type StreamHandlers, type TextContentPart, type UseBrainChats, type UseBrainChatsOptions, type UseBrainConversation, type UseBrainConversationOptions, type UseMcpExtensionsOptions, buildBrainTriageReport, computeBrainDiagnostics, consolidationMarkerContent, consolidationMetadata, formatBrainDiagnostics, isConsolidationMarker, isDirectedToParticipant, isEvermindModel, isFailedToolResult, lastConsolidationIndex, modelsUsedInTrace, parseDirectedRecipient, prepareImageDataUrl, savePendingPrompt, scopeToConsolidation, streamChatCompletion, takePendingPrompt, useBrainActions, useBrainChats, useBrainConfig, useBrainContext, useBrainConversation, useMcpExtensions, useOptionalBrainContext, useRegisterBrainActions, withDirectedMetadata };

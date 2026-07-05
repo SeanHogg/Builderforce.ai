@@ -1,6 +1,6 @@
 import * as React from 'react';
 import React__default from 'react';
-import { BrainMessage, BrainTraceEvent, ChatInputAttachment } from '@seanhogg/builderforce-brain-embedded';
+import { BrainMessage, BrainTraceEvent, DirectedRecipient, ChatInputAttachment } from '@seanhogg/builderforce-brain-embedded';
 
 interface BrainTimelineLabels {
     /** Shown on the live thinking node while a turn streams. */
@@ -94,6 +94,38 @@ declare function MarkdownInner({ content, onInternalLink, onApplyCode, onCreateF
  * re-parse of settled messages (unchanged `content`/callbacks) keeps typing snappy.
  */
 declare const Markdown: React__default.MemoExoticComponent<typeof MarkdownInner>;
+
+/**
+ * Participant avatars — the shared way a chat renders WHO a participant is.
+ *
+ * A BuilderForce chat is multi-party (the BRAIN + invited agents/humans). Wherever
+ * a participant appears — the "→ recipient" badge on a directed message, the
+ * composer's recipient chip — it shows a compact colored avatar of their initials
+ * so the roster reads at a glance. Presentational and dependency-free; the colored
+ * disc reads in BOTH light and dark themes (fixed palette + white text), so it
+ * needs no theme tokens.
+ */
+/** Up to two initials from a display name (e.g. "Bob Developer" → "BD"). */
+declare function initialsOf(name: string): string;
+/** Deterministic colour for a name, so the same participant is always the same hue. */
+declare function avatarColor(seed: string): string;
+interface AvatarProps {
+    name: string;
+    /** 'human' gets a round disc; 'agent' a rounded square, so the two read apart. */
+    kind?: DirectedRecipient['kind'];
+    /** Diameter in px (default 18). */
+    size?: number;
+    title?: string;
+    style?: React__default.CSSProperties;
+}
+/** A single participant avatar: initials on a deterministic coloured disc/tile. */
+declare function Avatar({ name, kind, size, title, style }: AvatarProps): React__default.JSX.Element;
+/** Avatar + name — the "→ recipient" badge shown on a directed message / composer chip. */
+declare function ParticipantBadge({ recipient, prefix, size }: {
+    recipient: DirectedRecipient;
+    prefix?: string;
+    size?: number;
+}): React__default.JSX.Element;
 
 /**
  * HealthRing — a compact "% done" donut for a work item's health, rendered
@@ -591,4 +623,4 @@ interface ProjectListViewProps {
 }
 declare function ProjectListView({ title, subtitle, data, loading, error, labels, onAction, onRefresh }: ProjectListViewProps): React.JSX.Element;
 
-export { type AgentOptionVM, BrainTimeline, type BrainTimelineLabels, type BrainTimelineProps, type BuildTimelineInput, type ChatAgentVM, type ChatOptionVM, type ChatTicketsAdapter, type ChatTicketsLabels, ChatTicketsPanel, type ChatTicketsPanelProps, DEFAULT_CHAT_TICKETS_LABELS, DEFAULT_PROJECT360_LABELS, DEFAULT_PROJECT_LIST_LABELS, DEFAULT_TIMELINE_LABELS, HealthRing, type HealthRingProps, type HealthTier, type LineageVM, type LinkType, Markdown, type MarkdownLabels, type MarkdownProps, type Project360, type Project360Action, type Project360Dimension, type Project360Gap, type Project360Labels, type Project360Member, type Project360Pillar, Project360View, type Project360ViewProps, type ProjectListAction, type ProjectListBadge, type ProjectListGroup, type ProjectListItem, type ProjectListLabels, type ProjectListModel, type ProjectListTone, ProjectListView, type ProjectListViewProps, RUNNABLE_KINDS, Sunburst, type SunburstProps, TICKET_KINDS, type TicketKind, type TicketLinkVM, type TicketOptionVM, type TimelineImage, type TimelineNode, attachmentsOf, buildSettledTimeline, buildTimeline, formatDuration, formatPayload, healthRingColor, streamingNode };
+export { type AgentOptionVM, Avatar, type AvatarProps, BrainTimeline, type BrainTimelineLabels, type BrainTimelineProps, type BuildTimelineInput, type ChatAgentVM, type ChatOptionVM, type ChatTicketsAdapter, type ChatTicketsLabels, ChatTicketsPanel, type ChatTicketsPanelProps, DEFAULT_CHAT_TICKETS_LABELS, DEFAULT_PROJECT360_LABELS, DEFAULT_PROJECT_LIST_LABELS, DEFAULT_TIMELINE_LABELS, HealthRing, type HealthRingProps, type HealthTier, type LineageVM, type LinkType, Markdown, type MarkdownLabels, type MarkdownProps, ParticipantBadge, type Project360, type Project360Action, type Project360Dimension, type Project360Gap, type Project360Labels, type Project360Member, type Project360Pillar, Project360View, type Project360ViewProps, type ProjectListAction, type ProjectListBadge, type ProjectListGroup, type ProjectListItem, type ProjectListLabels, type ProjectListModel, type ProjectListTone, ProjectListView, type ProjectListViewProps, RUNNABLE_KINDS, Sunburst, type SunburstProps, TICKET_KINDS, type TicketKind, type TicketLinkVM, type TicketOptionVM, type TimelineImage, type TimelineNode, attachmentsOf, avatarColor, buildSettledTimeline, buildTimeline, formatDuration, formatPayload, healthRingColor, initialsOf, streamingNode };

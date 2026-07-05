@@ -11,8 +11,12 @@ import {
   consolidationMetadata,
   type BrainConfig,
   type BrainChat,
+  type DirectedRecipient,
 } from '@seanhogg/builderforce-brain-embedded';
-import { BrainTimeline, ChatTicketsPanel, DEFAULT_CHAT_TICKETS_LABELS, type BrainTimelineLabels } from '@seanhogg/builderforce-brain-ui';
+import {
+  BrainTimeline, ChatTicketsPanel, DEFAULT_CHAT_TICKETS_LABELS, Avatar,
+  type BrainTimelineLabels, type ChatTicketsAdapter, type AgentOptionVM, type ChatAgentVM,
+} from '@seanhogg/builderforce-brain-ui';
 import { createChatTicketsAdapter } from './chatTicketsAdapter';
 import {
   getToken,
@@ -121,11 +125,13 @@ const IconRename = () => (
  * dismiss the menu after acting. Shared by both composer menus (DRY).
  */
 function PopoverMenu({
-  trigger, title, align = 'left', children,
+  trigger, title, align = 'left', triggerClassName, children,
 }: {
   trigger: React.ReactNode;
   title: string;
   align?: 'left' | 'right';
+  /** Override the trigger's class (defaults to the square icon button). */
+  triggerClassName?: string;
   children: (close: () => void) => React.ReactNode;
 }) {
   const [open, setOpen] = useState(false);
@@ -143,7 +149,7 @@ function PopoverMenu({
     <div className="bf-menu" ref={ref}>
       <button
         type="button"
-        className={`bf-iconbtn${open ? ' is-active' : ''}`}
+        className={`${triggerClassName ?? 'bf-iconbtn'}${open ? ' is-active' : ''}`}
         aria-haspopup="menu"
         aria-expanded={open}
         title={title}
@@ -174,6 +180,56 @@ function MenuItem({ icon, label, hint, active, onClick }: {
     </button>
   );
 }
+
+/**
+ * The invited participants of a chat, resolved to display names, as addressable
+ * recipients. Reads the invited list (changes on invite/remove → keyed on
+ * `refreshSignal`) and the stable agent pool (cached in the adapter, so this
+ * shares the ChatTicketsPanel's fetch rather than duplicating it).
+ */
+function useChatParticipants(adapter: ChatTicketsAdapter, chatId: number | null, refreshSignal: number): DirectedRecipient[] {
+  const [pool, setPool] = useState<AgentOptionVM[]>([]);
+  const [invited, setInvited] = useState<ChatAgentVM[]>([]);
+  useEffect(() => {
+    let ok = true;
+    adapter.loadAgentPool().then((p) => { if (ok) setPool(p); }).catch(() => { if (ok) setPool([]); });
+    return () => { ok = false; };
+  }, [adapter]);
+  useEffect(() => {
+    if (chatId == null) { setInvited([]); return; }
+    let ok = true;
+    adapter.listAgents(chatId).then((a) => { if (ok) setInvited(a); }).catch(() => { if (ok) setInvited([]); });
+    return () => { ok = false; };
+  }, [adapter, chatId, refreshSignal]);
+  return useMemo(
+    () => invited.map((a) => ({
+      kind: 'agent' as const,
+      ref: a.agentRef,
+      name: pool.find((p) => p.ref === a.agentRef)?.name ?? a.agentRef,
+    })),
+    [invited, pool],
+  );
+}
+
+/** Resolve a leading "@name" in the composer to an invited participant, if any. */
+function mentionRecipient(text: string, participants: DirectedRecipient[]): DirectedRecipient | null {
+  const m = /^\s*@([^\s@]+)/.exec(text);
+  if (!m) return null;
+  const tag = m[1].toLowerCase();
+  return (
+    participants.find((p) => {
+      const name = p.name.toLowerCase();
+      return name === tag || name.split(/\s+/)[0] === tag || name.startsWith(tag);
+    }) ?? null
+  );
+}
+
+/**
+ * A composer's recipient choice: `null` = auto (follow any leading @mention),
+ * `'brain'` = explicitly the BRAIN, or an explicit participant. An explicit
+ * choice always wins over a typed @mention.
+ */
+type RecipientChoice = DirectedRecipient | 'brain' | null;
 
 /** Root: wait for the host's init frame, then mount the brain providers. */
 export function App() {
@@ -448,6 +504,21 @@ function Chat({ init }: { init: InitData }) {
     return () => window.removeEventListener('bf:mcp-write', h);
   }, []);
 
+  // Multi-party chat: who a message goes to. The BRAIN (default) executes; an
+  // invited agent/human is just talked to. The selector only appears once a chat
+  // actually has participants, so a solo chat is unchanged (everything → BRAIN).
+  const participants = useChatParticipants(ticketAdapter, chatId, ticketRefresh);
+  const [recipientChoice, setRecipientChoice] = useState<RecipientChoice>(null);
+  // Reset to auto when switching chats; drop an explicit pick that's since left.
+  useEffect(() => { setRecipientChoice(null); }, [chatId]);
+  useEffect(() => {
+    setRecipientChoice((c) => (c && c !== 'brain' && !participants.some((p) => p.ref === c.ref) ? null : c));
+  }, [participants]);
+  const mentioned = useMemo(() => mentionRecipient(input, participants), [input, participants]);
+  // The effective target: an explicit BRAIN pick wins; else an explicit
+  // participant; else a leading @mention; else the BRAIN (null).
+  const recipient: DirectedRecipient | null = recipientChoice === 'brain' ? null : (recipientChoice ?? mentioned);
+
   // Feed the project's Evermind: when a run finishes (sending true→false) with
   // content, hand the host this exchange so it can contribute what was learned back
   // to the shared model — the same loop cloud/on-prem run. The host gates it behind
@@ -536,9 +607,10 @@ function Chat({ init }: { init: InitData }) {
     // Restore the typed text if the send fails before it's persisted (e.g. the
     // token expired) so the user's message is never silently lost — they can
     // just hit Send again once reconnected. Guard against clobbering anything
-    // they've started typing in the meantime.
-    void conv.send(text).then((ok) => { if (!ok) setInput((cur) => cur || text); });
-  }, [input, conv]);
+    // they've started typing in the meantime. `addressedTo` routes the turn: a
+    // participant is talked to (no BRAIN run); null (the default) runs the BRAIN.
+    void conv.send(text, { addressedTo: recipient }).then((ok) => { if (!ok) setInput((cur) => cur || text); });
+  }, [input, conv, recipient]);
 
   // An expired/invalid session surfaces as a 401 whose body mentions the token.
   // We offer an explicit "Reconnect" affordance for it (re-exchange the token),
@@ -826,7 +898,9 @@ function Chat({ init }: { init: InitData }) {
         <textarea
           className="bf-input"
           rows={2}
-          placeholder={t('app.placeholder', 'Ask BuilderForce to build or change something…')}
+          placeholder={recipient
+            ? t('app.messageParticipant', 'Message {name}…').replace('{name}', recipient.name)
+            : t('app.placeholder', 'Ask BuilderForce to build or change something…')}
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onFocus={() => setInputFocused(true)}
@@ -842,6 +916,47 @@ function Chat({ init }: { init: InitData }) {
             hidden
             onChange={(e) => { attachFiles(e.target.files); e.target.value = ''; }}
           />
+
+          {/* Recipient selector — only once the chat is multi-party. Routes the
+              next message to the BRAIN (executes) or a participant (talked to). */}
+          {participants.length > 0 && (
+            <PopoverMenu
+              align="left"
+              triggerClassName={`bf-recipient${recipient ? ' is-active' : ''}`}
+              title={t('app.recipientPickerTitle', 'Send to')}
+              trigger={
+                <span className="bf-recipient__inner">
+                  <span className="bf-recipient__to">{t('app.to', 'To')}</span>
+                  {recipient ? <Avatar name={recipient.name} kind={recipient.kind} size={16} /> : <IconBolt />}
+                  <span className="bf-recipient__name">{recipient ? recipient.name : t('app.brainRecipient', 'BuilderForce')}</span>
+                  <span aria-hidden>▾</span>
+                </span>
+              }
+            >
+              {(close) => (
+                <>
+                  <div className="bf-menu__group">{t('app.recipientPickerTitle', 'Send to')}</div>
+                  <MenuItem
+                    icon={<IconBolt />}
+                    label={t('app.brainRecipient', 'BuilderForce')}
+                    hint={t('app.brainRecipientHint', 'Runs it')}
+                    active={!recipient}
+                    onClick={() => { setRecipientChoice('brain'); close(); }}
+                  />
+                  {participants.map((p) => (
+                    <MenuItem
+                      key={p.ref}
+                      icon={<Avatar name={p.name} kind={p.kind} size={16} />}
+                      label={p.name}
+                      hint={t('app.chatRecipientHint', 'Chat')}
+                      active={recipient?.ref === p.ref}
+                      onClick={() => { setRecipientChoice(p); close(); }}
+                    />
+                  ))}
+                </>
+              )}
+            </PopoverMenu>
+          )}
 
           {/* + : add content to the message (upload, workspace context, or web). */}
           <PopoverMenu align="left" title={t('app.add', 'Add')} trigger={<IconPlus />}>
