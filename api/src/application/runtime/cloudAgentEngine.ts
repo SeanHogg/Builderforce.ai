@@ -938,6 +938,35 @@ export async function handleContainerOp(
     return { status: 200, body: { ok: true } };
   }
 
+  // Curated platform tool relayed from the container (it holds no DB creds). Same
+  // dispatch as the durable loop: subset-only resolver refuses off-list names, run
+  // in-process tenant-scoped, project defaulted to THIS run's. Records a tool event
+  // so container platform actions show on the timeline like the Worker loop's.
+  if (op === 'platform_tool') {
+    const name = typeof args.name === 'string' ? args.name : '';
+    const toolArgs = args.arguments && typeof args.arguments === 'object' ? (args.arguments as Record<string, unknown>) : {};
+    const platformTool = resolveCloudAgentPlatformTool(name);
+    if (!platformTool) return { status: 200, body: { ok: false, error: `unknown or disallowed platform tool '${name}'` } };
+    const tStart = Date.now();
+    let result: Record<string, unknown>;
+    try {
+      const data = await callBuiltinTool(db, {
+        tenantId, tool: platformTool,
+        arguments: { projectId, ...toolArgs },
+        env, userId: cloudAgentRef ?? null, role: TenantRole.MANAGER,
+      });
+      result = data && typeof data === 'object' ? (data as Record<string, unknown>) : { ok: true, result: data };
+    } catch (e) {
+      result = { ok: false, error: e instanceof Error ? e.message : String(e) };
+    }
+    await recordCloudToolEvent(db, {
+      tenantId, cloudAgentRef, executionId,
+      toolName: name, category: 'tool', detail: toolArgs,
+      result: JSON.stringify(result).slice(0, 300), durationMs: Date.now() - tStart,
+    });
+    return { status: 200, body: result };
+  }
+
   if (op === 'llm') {
     const messages = Array.isArray(args.messages) ? (args.messages as unknown as Array<Record<string, unknown>>) : ([] as Array<Record<string, unknown>>);
     // Mid-run steering for the long-lived container: drain user follow-ups posted
@@ -975,16 +1004,20 @@ export async function handleContainerOp(
     // the shared cloud model rule: explicit pick = hard pin, else the plan's best
     // coding model. The container holds its own loop state, so per-op pinning is
     // the caller's explicit `model`; the default lands on a strong coding model.
+    // Repo/shell tools + the curated platform subset (create tasks / update OKRs /
+    // read remaining) — parity with the durable loop. The container relays each
+    // `builtin_*` call back via the `platform_tool` op below (it has no DB).
+    const containerTools = [...CONTAINER_AGENT_TOOLS, ...cloudAgentPlatformToolSchemas()];
     const pick = pickCloudModel(model, ctx.effectivePlan, ctx.premiumOverride, {
       // Context-aware seed: a small-window model isn't picked for a big container turn.
-      estimatedTokens: estimateRequestTokens(sendMessages, CONTAINER_AGENT_TOOLS),
+      estimatedTokens: estimateRequestTokens(sendMessages, containerTools),
     });
     // A connected Claude subscription powers a direct-Claude container turn. One
     // PK-indexed read per turn, alongside the turn's existing DB writes — cheap and
     // not a fan-out; null (operator-key floor) when no subscription is connected.
     const anthropicOAuthToken = await resolveAnthropicOAuthToken(env, tenantId);
     const result = await llmProxyForPlan(env, ctx.effectivePlan, ctx.premiumOverride, { backstopModels: CODING_BACKSTOP_MODELS, codingOnly: true, ...(anthropicOAuthToken ? { anthropicOAuthToken } : {}) }).complete({
-      messages: sendMessages as unknown as ChatMessage[], tools: CONTAINER_AGENT_TOOLS, tool_choice: 'auto',
+      messages: sendMessages as unknown as ChatMessage[], tools: containerTools, tool_choice: 'auto',
       ...(pick.model ? { model: pick.model, ...(pick.strict ? { modelStrict: true } : {}) } : {}),
       // Personality temperature — parity with the Worker/DO loop.
       ...(ctx.execParams.temperature != null ? { temperature: ctx.execParams.temperature } : {}),
@@ -1342,23 +1375,13 @@ export async function runCloudToolLoop(
   const effectiveModel = tenantModel ? (tenantModel.baseModel ?? undefined) : model;
   // Curated platform tools give this run the SAME work-management reach the Brain
   // has (create follow-up tasks, update OKRs, read what's remaining) — advertised
-  // alongside the repo/file tools and dispatched in-process below. The container
-  // surface runs its own image loop and doesn't wire these, so they live here on
-  // the durable/Worker loop only.
-  const platformTools = cloudAgentPlatformToolSchemas();
-  const cloudTools = [...CLOUD_AGENT_TOOLS, ...platformTools];
-  const platformToolsGuidance =
-    'You also have PLATFORM tools (prefixed `builtin_`) to manage the project as you work: '
-    + '`builtin_tasks_list`/`builtin_tasks_get` to see what is already tracked, '
-    + '`builtin_tasks_create` to file a NEW task for any gap or follow-up work you find that is OUT OF SCOPE for THIS task (do not silently drop it — capture it as a task so it is not lost), '
-    + '`builtin_tasks_update` to reflect progress, and `builtin_objectives_update`/`builtin_key_results_update` to update OKR/objective progress your work advances. '
-    + 'They default to THIS run\'s project; pass an explicit projectId only to target another. '
-    + 'When you finish, base your summary of "what remains" on real state (the tasks you created + `builtin_tasks_list`), not a guess.';
-  const effectiveSystemPrompt = [
-    tenantModel?.directives || null,
-    systemPrompt,
-    platformToolsGuidance,
-  ].filter(Boolean).join('\n\n');
+  // alongside the repo/file tools and dispatched in-process below. The prompt
+  // guidance that makes the agent USE them lives in prepareCloudRun so every
+  // surface (Worker/DO durable + the container) gets it once (DRY).
+  const cloudTools = [...CLOUD_AGENT_TOOLS, ...cloudAgentPlatformToolSchemas()];
+  const effectiveSystemPrompt = tenantModel?.directives
+    ? `${tenantModel.directives}\n\n${systemPrompt}`
+    : systemPrompt;
 
   // Project Evermind consumer. The dispatcher (runtimeRoutes `withDefaultModel`)
   // emits a concrete `evermind/<ref>` as the run's model when the project is
@@ -2222,6 +2245,15 @@ export async function prepareCloudRun(
     'When you finish, your committed changes are opened as a PULL REQUEST for human review (a person approves the merge in-product); they are NOT auto-deployed — so the PR must contain the COMPLETE, working change, not a partial scaffold. Call finish with a summary only once everything the task requires has been written. ' +
     shellLine + ' ' +
     'If no repository is bound, return the complete deliverable in your final summary instead. Make explicit, reasonable assumptions where specifics are unknown.',
+    // Platform (project-management) tools — advertised alongside the repo tools on
+    // every cloud surface (durable + container). This is what lets a run manage the
+    // project as it works instead of silently dropping out-of-scope findings.
+    'You ALSO have PLATFORM tools (prefixed `builtin_`) to manage the project as you work — they act on the SAME project boards the humans use, not the repo. '
+    + 'Use `builtin_tasks_list` / `builtin_tasks_get` to see what is already tracked; '
+    + '`builtin_tasks_create` to file a NEW task for any gap, bug, or follow-up work you find that is OUT OF SCOPE for THIS task — do NOT silently drop it, capture it as a task so it is not lost; '
+    + '`builtin_tasks_update` to reflect progress; and `builtin_objectives_update` / `builtin_key_results_update` to update the OKR/objective progress your work advances. '
+    + "They default to THIS run's project; pass an explicit projectId only to target another. "
+    + 'When you finish, base any "what remains" statement on real state — the tasks you actually created plus `builtin_tasks_list` — never a guess.',
     capabilities.promptBlock || null,
     factsBlock || null,
   ].filter(Boolean).join('\n\n');

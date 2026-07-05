@@ -813,6 +813,7 @@ function ChatTicketsPanelInner({ chatId, projectId, chatList, adapter, labels, o
           try {
             await adapter.inviteAgent(chatId, { agentRef: ref, agentKind: kind });
             await load();
+            onChanged?.();
           } finally {
             setBusy(false);
           }
@@ -822,6 +823,7 @@ function ChatTicketsPanelInner({ chatId, projectId, chatList, adapter, labels, o
           try {
             await adapter.removeAgent(chatId, id);
             await load();
+            onChanged?.();
           } finally {
             setBusy(false);
           }

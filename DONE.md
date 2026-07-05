@@ -4,6 +4,29 @@
 
 ---
 
+## ✅ RESOLVED 2026-07-05 — Multi-party chat: address messages to participants, not just the BRAIN (+ dropdown theme fix, session participant indicators)
+
+Collaboration is the purpose of the VSIX chat, but every message ran the BRAIN — there was no way to invite a teammate into a chat and just talk to them, and the agent-invite dropdown rendered with default light colours in a dark editor. Shipped: brain-embedded `2026.7.9`, brain-ui `2026.7.5`, api `2026.7.16`, VS Code `2026.7.28` (`builderforce-ai-2026.7.28.vsix`).
+
+- **Dropdown theme fix** — the shared `ChatTicketsPanel`'s native `<select>`s (invite-agent, run-agent, link pickers) used web-app-only CSS vars (`--bf-ct-*`/`--bg-base`) absent in the webview, so they fell through to `transparent`/`inherit` and Chromium drew them as light controls. Fix = a `V` token map whose fallback chains resolve in BOTH hosts (web `--bf-ct-*` → editor `--vscode-dropdown-*`/`--bf-*` → literal) + `colorScheme:'inherit'` (`packages/brain-ui/src/chatTickets/ChatTicketsPanel.tsx`).
+- **Directed-message routing** — `brain-embedded/src/directedMessage.ts` (new): a `user` turn tagged `{addressedTo:{kind,ref,name}}` in metadata is a message FOR that participant, not a BRAIN directive. `useBrainConversation.send(text,{addressedTo})` persists it but skips `startRun`, and the trailing-user auto-reply effect skips directed turns — so the agent loop stays idle. `DirectedRecipient.kind` is `'agent'|'human'` (human-ready).
+- **Composer recipient picker + `@mention`** — the VS Code composer gains a "To: <avatar> <name> ▾" selector (only once a chat has participants; solo chats unchanged, everything → BRAIN). Explicit pick or a leading `@name` routes the turn; placeholder switches to "Message {name}…". Participants come from the invited agents resolved against the (now adapter-cached, dedup'd) agent pool.
+- **Timeline + avatars** — `brain-ui` `<Avatar>`/`<ParticipantBadge>` (deterministic-colour initials disc, theme-agnostic); the timeline renders a `→ Name` badge on directed user turns.
+- **SESSIONS tree participant indicators** — `BrainService.listChats` folds `participants:[{ref,kind}]` via ONE guarded grouped `agent_assignments` query (no N+1, additive — a failure never breaks the list); `bfApi.listAgentPool` resolves refs→names (cached); the native tree appends `· 👥 BK MQ +N` initials to the row description + a full-name tooltip. Refreshes live on invite/remove (`ChatTicketsPanel.onChanged` now fires on invite/remove → `chats.changed` → `tree.refresh()`).
+- Verified: brain-embedded 51 tests + api 1851 tests pass; brain-embedded/brain-ui/host/webview typecheck clean; VSIX packaged. Follow-ups (human invite + delivery, `@agent` reply-trigger, web/other-modality composer parity, true tree avatars) logged to ROADMAP ▸ Brain / chat.
+
+---
+
+## ✅ RESOLVED 2026-07-05 — VSIX↔cloud tool-catalog unification finished (container parity + web-Brain manifest retired)
+
+The two follow-ups from the durable-surface parity work below. Shipped: api `2026.7.16`, frontend `2026.7.15`.
+
+- **Container surface reaches parity.** The long-lived Container runs its own image loop (`api/container/server.mjs`) and previously had no platform tools. Now: the Worker-controlled container `llm` op advertises `[...CONTAINER_AGENT_TOOLS, ...cloudAgentPlatformToolSchemas()]`; `server.mjs execTool` relays any `builtin_*` call back via a new `platform_tool` container-op; `handleContainerOp` runs it through the same subset-guarded `callBuiltinTool` (MANAGER role, project-defaulted) and records a tool event. The prompt guidance that makes the agent USE these tools was moved from `runCloudToolLoop` into the shared `prepareCloudRun` so ALL surfaces (Worker/DO durable + container) get it once (DRY) — no duplication.
+- **Legacy web-Brain manifest retired.** `frontend/src/lib/brain/platformActions.ts` was a client-side manifest that re-declared ~210 data capabilities also in the server `builtinMcpService.CATALOG`. Verified every one of the 210 was covered by the catalog (0 uncovered), so the whole data layer was dead (already excluded at runtime by `excludeToolKeys`). Removed it — the file now holds ONLY the 3 client-only actions the server structurally can't do (`navigate_to`, `open_project`, `open_migration_panel` — browser navigation + a UI window event). `McpExtensionsBridge` (gateway `/llm/v1/mcp/tools`) is now the SINGLE source of the platform data tools, shared with the VS Code chat. `PlatformActionsBridge` simplified (no more catalog-exclude fetch / route-focus); `index.ts` exports + the test trimmed. Net: platform tools live in exactly TWO shared sources — `core-tools.ts` (dev tools) + `builtinMcpService.CATALOG` (platform tools) — reachable from every surface.
+- Tests: api engine + builtin subset tests (27) green; frontend `platformActions.test.ts` rewritten to the client-only surface (13) green. tsgo clean on both packages.
+
+---
+
 ## ✅ RESOLVED 2026-07-05 — Cloud agent gets the curated platform toolset (VSIX↔cloud work-management parity)
 
 The cloud coding agent could only edit repo files — it couldn't create a task, update an OKR, or read what's remaining, while the VS Code / web Brain had the full ~245-tool platform catalog. (Developer/file tools were already single-sourced via `packages/agent-tools/core-tools.ts` — no duplication there.) Shipped: api `2026.7.15`.

@@ -69,9 +69,6 @@ export {
 // the platform co-pilot persona that drives it.
 export {
   buildPlatformActions,
-  buildPlatformCapabilities,
-  focusDomainsForPath,
-  type PlatformCapability,
   type PlatformActionContext,
 } from './platformActions';
 export { PLATFORM_BRAIN_SYSTEM_PROMPT, BRAIN_AUTO_APPROVE_DIRECTIVE, buildComposerDirectives, type BrainEffort } from './platformPrompt';

@@ -6,12 +6,12 @@
  * catalog (projects/tasks/OKRs/…). This is the SAME source the VS Code chat
  * consumes, so the two brains share one tool catalog (no duplicated lists).
  *
- * The first-party `builtin` tools used to be skipped here because the browser
- * Brain registered them natively via PlatformActionsBridge. That native manifest
- * is being collapsed into the catalog: PlatformActionsBridge now DROPS every
- * capability the catalog already owns (see its excludeToolKeys), so registering
- * `builtin` here is what actually surfaces those — each capability lives in
- * exactly one place. Writes are announced on the brain-data bus so views refetch.
+ * The first-party `builtin` tools used to be mirrored by a native client manifest
+ * (platformActions.ts); that data manifest was retired (every capability was
+ * covered by this catalog), so registering `builtin` here is now the ONLY source
+ * of the platform data tools — each capability lives in exactly one place, shared
+ * with the VS Code chat. Writes are announced on the brain-data bus so views
+ * refetch. (PlatformActionsBridge now registers only client-only navigation.)
  */
 
 import { useMcpExtensions } from '@/lib/brain';

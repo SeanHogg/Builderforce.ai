@@ -1,4 +1,4 @@
-import { eq, and, desc, isNull, sql } from 'drizzle-orm';
+import { eq, and, desc, isNull, inArray, sql } from 'drizzle-orm';
 import {
   brainChats,
   brainChatMessages,
@@ -7,6 +7,7 @@ import {
   chatMessages,
   projectMemories,
   projects,
+  agentAssignments,
 } from '../../infrastructure/database/schema';
 import { ideProxy } from '../llm/LlmProxyService';
 import { recordProxyUsage } from '../llm/usageLedger';
@@ -158,13 +159,56 @@ export class BrainService {
     const limit = Math.min(opts?.limit ?? 50, 200);
     const offset = opts?.offset ?? 0;
 
-    return this.db
+    const rows = await this.db
       .select(chatColumns)
       .from(brainChats)
       .where(and(...conditions))
       .orderBy(desc(brainChats.updatedAt))
       .limit(limit)
       .offset(offset);
+
+    // Attach each chat's invited participants (multi-party chat) so a surface can
+    // show a participant roster / avatars on the row. ONE extra grouped query over
+    // the just-returned chat ids (no N+1), scoped to this user's chats. Additive
+    // and guarded: participants are a nice-to-have, so a failure here must never
+    // break the chat list itself.
+    return this.attachParticipants(tenantId, rows);
+  }
+
+  /** Fold `participants: {ref, kind}[]` onto chat rows via one grouped assignment query. */
+  private async attachParticipants<T extends { id: number }>(
+    tenantId: number,
+    rows: T[],
+  ): Promise<Array<T & { participants: Array<{ ref: string; kind: string }> }>> {
+    const byChat = new Map<number, Array<{ ref: string; kind: string }>>();
+    const ids = rows.map((r) => r.id);
+    if (ids.length > 0) {
+      try {
+        const asg = await this.db
+          .select({
+            scopeId: agentAssignments.scopeId,
+            agentRef: agentAssignments.agentRef,
+            agentKind: agentAssignments.agentKind,
+          })
+          .from(agentAssignments)
+          .where(and(
+            eq(agentAssignments.tenantId, tenantId),
+            eq(agentAssignments.scope, 'chat'),
+            inArray(agentAssignments.scopeId, ids.map(String)),
+          ));
+        for (const a of asg) {
+          const cid = Number(a.scopeId);
+          if (!Number.isNaN(cid)) {
+            const list = byChat.get(cid) ?? [];
+            list.push({ ref: a.agentRef, kind: a.agentKind });
+            byChat.set(cid, list);
+          }
+        }
+      } catch {
+        /* participants are non-critical — the chat list must survive their absence */
+      }
+    }
+    return rows.map((r) => ({ ...r, participants: byChat.get(r.id) ?? [] }));
   }
 
   async createChat(dto: CreateChatDto) {
