@@ -20,6 +20,7 @@
 import { Hono } from 'hono';
 import { authMiddleware, requireRole } from '../middleware/authMiddleware';
 import { TenantRole } from '../../domain/shared/types';
+import { clamp, clampScore } from '../../domain/shared/numbers';
 import { mountTrackers, scope } from './segmentTrackerRoutes';
 import { getOrSetCached, getCacheVersion } from '../../infrastructure/cache/readThroughCache';
 import { and, desc, eq } from 'drizzle-orm';
@@ -235,9 +236,9 @@ export function createInsightsRoutes(db: Db): Hono<HonoEnv> {
     if (!baseline) return c.json({ error: 'deliverable not found' }, 404);
 
     const num = (raw: string | undefined, def: number) => { const n = Number(raw); return Number.isFinite(n) ? n : def; };
-    const developers = Math.max(0, Math.min(100, num(c.req.query('developers'), Math.max(1, baseline.activeContributors))));
-    const attentionPct = Math.max(0, Math.min(100, num(c.req.query('attentionPct'), 100)));
-    const scopeDelta = Math.max(-100_000, Math.min(100_000, num(c.req.query('scopeDelta'), 0)));
+    const developers = clampScore(num(c.req.query('developers'), Math.max(1, baseline.activeContributors)));
+    const attentionPct = clampScore(num(c.req.query('attentionPct'), 100));
+    const scopeDelta = clamp(num(c.req.query('scopeDelta'), 0), -100_000, 100_000);
 
     const scenario = buildScenario(
       { openTasks: baseline.openTasks, throughputPerWeek: baseline.throughputPerWeek, activeContributors: baseline.activeContributors, targetDate: baseline.targetDate, now },

@@ -1,6 +1,7 @@
 import { and, eq, inArray } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import { agentHosts, executions, ideAgents, memberProfiles, tasks, users } from '../../infrastructure/database/schema';
+import { clampScore } from '../../domain/shared/numbers';
 
 /**
  * Project 360 — the single source of truth for a project's whole-picture health,
@@ -43,7 +44,7 @@ export function healthTier(score: number): HealthTier {
 }
 
 const scored = (score: number): { score: number; tier: HealthTier; color: string } => {
-  const s = Math.max(0, Math.min(100, Math.round(score)));
+  const s = clampScore(Math.round(score));
   const tier = healthTier(s);
   return { score: s, tier, color: TIER_COLOR[tier] };
 };

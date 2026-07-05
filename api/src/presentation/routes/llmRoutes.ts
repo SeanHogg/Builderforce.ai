@@ -45,6 +45,7 @@ import {
 import { buildDatabase } from '../../infrastructure/database/connection';
 import { resolveTenantModel, TENANT_MODEL_REF_PREFIX } from '../../application/llm/tenantModelService';
 import { resolveProjectEvermindModelPin, PROJECT_EVERMIND_MODEL_PREFIX } from '../../application/llm/projectEvermind';
+import { recordClientRunOutcome, type OutcomeSource, type TerminalStatus } from '../../application/runtime/scoreRunOutcome';
 import { resolveWorkforceModel, WORKFORCE_MODEL_REF_PREFIX } from '../../application/agent/agentPrompt';
 import { llmUsageLog, llmFailoverLog, tenants, tenantMembers, agentHosts, tenantApiKeys, users, projects, tasks, runModelOutcomes } from '../../infrastructure/database/schema';
 import { getRoutingTable, parseScopeToken, scopeToken } from '../../application/llm/routingTable';
@@ -1609,6 +1610,57 @@ export function createLlmRoutes(): Hono<HonoEnv> {
       { kvTtlSeconds: 120, l1TtlMs: 30_000 },
     );
     return c.json({ memories: seed });
+  });
+
+  // -----------------------------------------------------------------------
+  // POST /v1/run-outcome
+  // -----------------------------------------------------------------------
+  // Learned Model Routing (PRD 13) write-back for NON-cloud runs. IDE-native,
+  // on-prem, and external-SDK runs go through the gateway but never create a
+  // cloud `executions` row, so their (action_type, model)→success signal never
+  // reached the learner. This lets such a client report its terminal outcome so
+  // the same routing table that cloud runs teach also learns from them.
+  // Idempotent on `clientRunId`; best-effort (never blocks the caller).
+  router.post('/v1/run-outcome', async (c) => {
+    let access: TenantAccess;
+    try {
+      access = await requireTenantAccess(c);
+    } catch (err) {
+      return respondToAccessError(c, err);
+    }
+    const body = (await c.req.json().catch(() => ({}))) as Record<string, unknown>;
+
+    const clientRunId = typeof body.clientRunId === 'string' ? body.clientRunId.trim() : '';
+    const model = typeof body.model === 'string' ? body.model.trim() : '';
+    if (!clientRunId || !model) {
+      return c.json({ error: 'clientRunId and model are required' }, 400);
+    }
+    // `terminalStatus` wins; `success:boolean` is a friendly alias.
+    const terminalStatus: TerminalStatus =
+      body.terminalStatus === 'completed' || body.terminalStatus === 'failed' || body.terminalStatus === 'cancelled'
+        ? body.terminalStatus
+        : body.success === true ? 'completed' : body.success === false ? 'failed' : 'completed';
+    const source: OutcomeSource =
+      body.source === 'onprem' || body.source === 'ide' || body.source === 'external' ? body.source : 'external';
+    const num = (v: unknown): number | undefined => (typeof v === 'number' && Number.isFinite(v) ? v : undefined);
+
+    const db = buildDatabase(c.env);
+    await recordClientRunOutcome(c.env, db, access.tenantId, {
+      clientRunId,
+      source,
+      model,
+      terminalStatus,
+      ...(typeof body.actionType === 'string' ? { actionType: body.actionType } : {}),
+      ...(num(body.projectId) != null ? { projectId: num(body.projectId) } : {}),
+      ...(num(body.taskId) != null ? { taskId: num(body.taskId) } : {}),
+      ...(typeof body.merged === 'boolean' ? { merged: body.merged } : {}),
+      ...(typeof body.ciGreen === 'boolean' ? { ciGreen: body.ciGreen } : {}),
+      ...(typeof body.degraded === 'boolean' ? { degraded: body.degraded } : {}),
+      ...(num(body.steps) != null ? { steps: num(body.steps) } : {}),
+      ...(num(body.costMc) != null ? { costMc: num(body.costMc) } : {}),
+      ...(typeof body.approved === 'boolean' ? { approved: body.approved } : {}),
+    });
+    return c.json({ ok: true });
   });
 
   // -----------------------------------------------------------------------

@@ -72,11 +72,13 @@ export interface WebviewInbound {
 export abstract class WebviewPanelBase<M extends WebviewInbound = WebviewInbound> {
   protected readonly panel: vscode.WebviewPanel;
   protected readonly disposables: vscode.Disposable[] = [];
+  private readonly htmlTitle: string;
 
   protected constructor(
     protected readonly ctx: vscode.ExtensionContext,
-    init: { viewType: string; title: string; htmlTitle: string },
+    init: { viewType: string; title: string; htmlTitle: string; localResourceRoots?: vscode.Uri[] },
   ) {
+    this.htmlTitle = init.htmlTitle;
     this.panel = vscode.window.createWebviewPanel(
       init.viewType,
       init.title,
@@ -84,13 +86,20 @@ export abstract class WebviewPanelBase<M extends WebviewInbound = WebviewInbound
       {
         enableScripts: true,
         retainContextWhenHidden: true,
-        localResourceRoots: [vscode.Uri.joinPath(ctx.extensionUri, "media")],
+        localResourceRoots: init.localResourceRoots ?? [vscode.Uri.joinPath(ctx.extensionUri, "media")],
       },
     );
     this.panel.iconPath = vscode.Uri.joinPath(ctx.extensionUri, "media", "icon.png");
-    this.panel.webview.html = renderWebviewHtml(this.panel.webview, ctx, { title: init.htmlTitle });
+    this.panel.webview.html = this.renderHtml(this.panel.webview);
     this.panel.webview.onDidReceiveMessage((m) => void this.dispatchMessage(m as M), undefined, this.disposables);
     this.panel.onDidDispose(() => this.teardown(), undefined, this.disposables);
+  }
+
+  /** The panel's HTML. Defaults to the shared bundled-React shell (Brain / Project 360 /
+   *  project pages); panels with a bespoke self-contained UI — the native Kanban board —
+   *  override this to supply their own document while still sharing the lifecycle above. */
+  protected renderHtml(webview: vscode.Webview): string {
+    return renderWebviewHtml(webview, this.ctx, { title: this.htmlTitle });
   }
 
   /** Re-pull the screen when the panel regains focus (Project 360 / project pages). */

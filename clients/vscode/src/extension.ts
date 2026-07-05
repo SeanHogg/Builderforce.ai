@@ -431,16 +431,7 @@ async function manageWorkspace(
   context: vscode.ExtensionContext,
   projects: ProjectsTreeProvider,
 ): Promise<void> {
-  if (!(await context.secrets.get(SECRET_KEY))) {
-    const action = await vscode.window.showInformationMessage(
-      "Sign in first, or create a workspace on the web.",
-      "Sign In",
-      "Open BuilderForce",
-    );
-    if (action === "Sign In") void vscode.commands.executeCommand("builderforce.signIn");
-    else if (action === "Open BuilderForce") void openWorkspaceWeb();
-    return;
-  }
+  if (!(await ensureSignedIn(context))) return;
 
   let workspaces: bfApi.BfWorkspace[];
   try {

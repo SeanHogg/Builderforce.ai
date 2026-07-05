@@ -50,12 +50,3 @@ export function clearPresences(accountId?: string): void {
   }
   presenceCache.clear();
 }
-
-/** Get the number of cached presence entries. */
-export function presenceCacheSize(): number {
-  let total = 0;
-  for (const accountCache of presenceCache.values()) {
-    total += accountCache.size;
-  }
-  return total;
-}

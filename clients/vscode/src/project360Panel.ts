@@ -154,10 +154,3 @@ function buildProject360Labels(): Record<string, string> {
     "p360.improveSeedIntro": t("Here is my project's Project 360 health check. Help me work through these gaps, highest impact first."),
   };
 }
-
-function makeNonce(): string {
-  const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
-  let out = "";
-  for (let i = 0; i < 32; i++) out += chars[Math.floor(Math.random() * chars.length)];
-  return out;
-}

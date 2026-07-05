@@ -31,8 +31,10 @@
  * psychometrics `DIM` and the `api` psychometricCatalog `DIM`.
  */
 
-// The setpoint derivation reads dimension ids from the single shared PSYCH_DIM map.
-import { PSYCH_DIM } from "./psychometric-dims.js";
+// The setpoint derivation reads dimension ids from the single shared PSYCH_DIM map,
+// and the trait-scoring primitives (HI/LO/NEUTRAL + score) from the same neutral
+// module — one home for the 0..100 trait scale, shared with the psychometric compiler.
+import { PSYCH_DIM, NEUTRAL, score } from "./psychometric-dims.js";
 // The bullet-block renderer + the exec-param IR live in the shared spec (no cycle:
 // spec.ts imports nothing within this package).
 import { bulletBlock } from "./spec.js";
@@ -141,21 +143,9 @@ export function arrayToState(arr: ArrayLike<number>): LimbicState {
 }
 
 // ── Personality → setpoints (the static layer sets where dynamics settle) ───────
-
-export const HI = 65;
-export const LO = 35;
-export const NEUTRAL = 50;
-
-/**
- * Clamp a raw trait score to 0..100, mapping an absent/NaN value to NEUTRAL. The
- * single shared scorer for both the limbic setpoint derivation and the
- * psychometric compiler, so both read a trait vector identically.
- */
-export function score(vector: Record<string, number> | undefined, id: string): number {
-  const raw = vector?.[id];
-  if (typeof raw !== "number" || Number.isNaN(raw)) return NEUTRAL;
-  return Math.max(0, Math.min(100, raw));
-}
+// HI/LO/NEUTRAL + score() are the shared trait-scoring primitives, now in the
+// neutral `psychometric-dims.js` module (imported above), so limbic and the
+// psychometric compiler read a trait vector identically without either owning them.
 
 function infl(s: number): number {
   return (s - NEUTRAL) / NEUTRAL;
