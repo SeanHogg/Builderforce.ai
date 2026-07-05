@@ -13,10 +13,14 @@ import {
 } from '@/lib/api';
 import type { PublishedAgent } from '@/lib/types';
 import { canDeleteAgent, isAgentOwner } from '@/lib/agentPermissions';
+import { useTranslations } from 'next-intl';
 import { CapabilitiesContent } from '@/components/CapabilitiesContent';
 import PersonalitySummary from '@/components/PersonalitySummary';
+import { useAssignedRoles } from '@/lib/useAssignedRoles';
 import {
-  CloudAgentFormFields,
+  CloudAgentDetailsFields,
+  CloudAgentRuntimeFields,
+  CloudAgentPersonalityFields,
   cloudAgentFormToInput,
   inputStyle,
   labelStyle,
@@ -31,15 +35,13 @@ import {
  * follow it into any context — IDE, Workflow, on-prem or cloud.
  */
 
-export type CloudAgentPanelTab = 'details' | 'capabilities' | 'pricing' | 'performance';
+export type CloudAgentPanelTab = 'details' | 'runtime' | 'personality' | 'capabilities' | 'pricing' | 'performance';
 
-const BASE_TABS: { id: CloudAgentPanelTab; label: string }[] = [
-  { id: 'details', label: 'Details' },
-  { id: 'capabilities', label: 'Capabilities' },
-  { id: 'pricing', label: 'Pricing' },
-];
+/** Tabs shown to everyone. Details/Runtime/Personality split the old crowded
+ *  "Details" tab into three focused sections. Labels resolve via `cloudAgentForm.tab.*`. */
+const BASE_TAB_IDS: CloudAgentPanelTab[] = ['details', 'runtime', 'personality', 'capabilities', 'pricing'];
 /** Owner-only insight tab (gap [1247]) — appended only when the viewer owns the agent. */
-const OWNER_PERF_TAB: { id: CloudAgentPanelTab; label: string } = { id: 'performance', label: 'Performance' };
+const OWNER_PERF_TAB_ID: CloudAgentPanelTab = 'performance';
 
 const panelOverlayStyle: React.CSSProperties = { position: 'fixed', inset: 0, zIndex: 9998 };
 const panelDrawerStyle: React.CSSProperties = {
@@ -100,10 +102,15 @@ export function CloudAgentSlideOutPanel({
   onSaved,
   onDeleted,
 }: CloudAgentSlideOutPanelProps) {
+  const t = useTranslations('cloudAgentForm');
   const [activeTab, setActiveTab] = useState<CloudAgentPanelTab>(initialTab);
   const [form, setForm] = useState<CloudAgentFormState>(() => formFromAgent(agent));
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+
+  // The workspace job-role(s) this agent is pinned to (Workforce → Roles). Shown
+  // in the header so the panel surfaces the assignment, not just its identity.
+  const assignedRoles = useAssignedRoles(agent.id);
 
   // Canonical (project-less) identity id — the scopeId for per-agent capabilities.
   const [bridgeId, setBridgeId] = useState<number | null>(null);
@@ -118,7 +125,8 @@ export function CloudAgentSlideOutPanel({
   // shared isAgentOwner rule (no prop-drilled canSeePerf) and only fetches/renders
   // the rollup for the agent's owner — the backend 404s for anyone else anyway.
   const owner = isAgentOwner(agent, tenantId);
-  const TABS = owner ? [...BASE_TABS, OWNER_PERF_TAB] : BASE_TABS;
+  const TABS: { id: CloudAgentPanelTab; label: string }[] = (owner ? [...BASE_TAB_IDS, OWNER_PERF_TAB_ID] : BASE_TAB_IDS)
+    .map((id) => ({ id, label: t(`tab.${id}`) }));
   const [perf, setPerf] = useState<AgentPerfRollup | null>(null);
   const [perfError, setPerfError] = useState('');
 
@@ -200,6 +208,17 @@ export function CloudAgentSlideOutPanel({
     }
   }, [agent.id, agent.name, onDeleted, onClose]);
 
+  // Details/Runtime/Personality all edit one form and persist through the same
+  // save — one shared patch handler + footer keeps the three tabs identical.
+  const patchForm = useCallback((patch: Partial<CloudAgentFormState>) => setForm((f) => ({ ...f, ...patch })), []);
+  const saveFooter = (
+    <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 18 }}>
+      <button type="button" onClick={saveDetails} disabled={saving || !form.name.trim()} style={btnPrimary}>
+        {saving ? t('saving') : t('save')}
+      </button>
+    </div>
+  );
+
   if (!open) return null;
 
   return (
@@ -219,6 +238,19 @@ export function CloudAgentSlideOutPanel({
             {agent.title && agent.title !== agent.name && (
               <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 2 }}>{agent.title}</div>
             )}
+            {/* Assigned workspace role(s) — surfaces the roster pin right in the header. */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginTop: 6 }}>
+              <span style={{ fontSize: 11, color: 'var(--muted)' }}>{t('roleLabel')}</span>
+              {assignedRoles.length === 0 ? (
+                <span style={{ fontSize: 11, color: 'var(--muted)', fontStyle: 'italic' }}>{t('roleNone')}</span>
+              ) : (
+                assignedRoles.map((r) => (
+                  <span key={r.assignmentId} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 9999, background: 'var(--surface-coral-soft)', color: 'var(--coral-bright)' }}>
+                    {r.icon && <span aria-hidden>{r.icon}</span>}{r.name}
+                  </span>
+                ))
+              )}
+            </div>
           </div>
           {agent.published
             ? <span className="badge-green">PUBLISHED</span>
@@ -243,17 +275,26 @@ export function CloudAgentSlideOutPanel({
 
           {activeTab === 'details' && (
             <>
-              {/* At-a-glance personality readout (self-hides when none is set); the
-                  editable fields + personality editor follow below. */}
+              <CloudAgentDetailsFields form={form} onChange={patchForm} />
+              {saveFooter}
+            </>
+          )}
+
+          {activeTab === 'runtime' && (
+            <>
+              <CloudAgentRuntimeFields form={form} onChange={patchForm} />
+              {saveFooter}
+            </>
+          )}
+
+          {activeTab === 'personality' && (
+            <>
+              {/* At-a-glance readout (self-hides when none is set) above the editor. */}
               <div style={{ marginBottom: 16 }}>
                 <PersonalitySummary profile={form.psychometric} />
               </div>
-              <CloudAgentFormFields form={form} onChange={(patch) => setForm((f) => ({ ...f, ...patch }))} />
-              <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 18 }}>
-                <button type="button" onClick={saveDetails} disabled={saving || !form.name.trim()} style={btnPrimary}>
-                  {saving ? 'Saving…' : 'Save'}
-                </button>
-              </div>
+              <CloudAgentPersonalityFields form={form} onChange={patchForm} />
+              {saveFooter}
             </>
           )}
 

@@ -417,9 +417,11 @@
       "healthy": "Saludable",
       "watch": "Vigilar",
       "at_risk": "En riesgo",
-      "critical": "Crítico"
+      "critical": "Crítico",
+      "noData": "Sin datos"
     },
     "healthAria": "Salud del proyecto {score} de 100 — {tier}",
+    "healthNoDataAria": "Salud del proyecto — aún sin datos de entrega",
     "doneAria": "{pct}% completado — {completed} de {total} tareas completadas",
     "donePct": "{pct}% completado",
     "health360": "Proyecto 360"
@@ -1678,7 +1680,19 @@
     "baseModelDefault": "Predeterminado de builderforce.ai (mejor modelo de programación)",
     "baseModelHelp": "El modelo de llamada a herramientas y programación con el que se ejecuta este agente: elige uno de tus LLM o un modelo del grupo. Una ejecución fija un modelo para toda la tarea; deja el predeterminado para usar el mejor modelo de programación de tu plan.",
     "personality": "Personalidad",
-    "personalityHelp": "Dale una personalidad a este agente con un test de rasgos o controles deslizantes. Determina cómo razona el agente, con cuánto cuidado trabaja y cómo se comunica en cada ejecución."
+    "personalityHelp": "Dale una personalidad a este agente con un test de rasgos o controles deslizantes. Determina cómo razona el agente, con cuánto cuidado trabaja y cómo se comunica en cada ejecución.",
+    "tab": {
+      "details": "Detalles",
+      "runtime": "Tiempo de ejecución",
+      "personality": "Personalidad",
+      "capabilities": "Capacidades",
+      "pricing": "Precios",
+      "performance": "Rendimiento"
+    },
+    "save": "Guardar",
+    "saving": "Guardando…",
+    "roleLabel": "Rol",
+    "roleNone": "Sin asignar"
   },
   "personalitySummary": {
     "title": "Personalidad",

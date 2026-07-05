@@ -18,7 +18,7 @@ export const BRAND = {
   ogImageWidth: 1200,
   ogImageHeight: 630,
   /** ISO 8601 — update on each content deploy */
-  dateModified: '2026-07-04T00:00:00Z',
+  dateModified: '2026-07-05T00:00:00Z',
 } as const;
 
 /* ════════════════════ STATS ════════════════════ */
@@ -44,6 +44,10 @@ export const STATS = {
     aiExecutiveTeam: 'Builderforce.ai acts as your AI CTO, CIO and Security Officer — building your AI agent workforce, connecting your systems, and governing every action with approvals and an audit trail.',
     freeForever: 'Free plan is $0/month forever, no credit card required.',
     agenticTester: 'The Agentic Tester is an autonomous QA agent: point it at your app, give it logins, and it drives a real browser through your highest-traffic flows on a schedule — filing the bugs it finds straight onto your board.',
+    collaboration: 'Builderforce.ai is a real-time collaboration platform for a mixed workforce of humans and AI agents: they share one Kanban board, chat in multi-party threads addressable to a person or an @agent, meet over live WebRTC video, and coordinate on shared calendars — from the web or inside VS Code.',
+    teamChat: 'Builderforce.ai team chat is multi-party: threads are shared across a project, you invite humans by email and AI agents into the room, and you address each message to a specific participant — a message to a human just talks to them, while an @agent mention makes that agent reply and act on the board within your own permissions.',
+    meetings: 'Builderforce.ai runs live video meetings over mesh WebRTC directly on your project board — cameras in standups and retros, a bookable team calendar with per-user availability and "Find a time", and Google/Microsoft calendar sync — joinable from the web or natively inside VS Code, with media flowing peer-to-peer and never through the server.',
+    vsCodeCommandCenter: 'The BuilderForce VS Code extension is a command center for a workforce of humans and AI agents: multi-party team chat, live session status showing which runs are executing or need your answer, native video meetings, an Evermind training console, and human-in-the-loop approvals — all without leaving the editor.',
     zeroGpuBills: 'All training runs on your local WebGPU device — zero cloud GPU bills.',
     browserNative: 'Fine-tune models up to 2 billion parameters directly in Chrome with WebGPU.',
     datasetSpeed: 'Generate an instruction-tuning dataset in under 30 seconds from a single capability prompt.',
@@ -181,6 +185,18 @@ export const FEATURES: Feature[] = [
     title: 'Never Leave VS Code',
     shortDesc: 'Run your whole workforce from the VS Code extension.',
     longDesc: 'The BuilderForce VS Code extension brings the entire platform into your editor: chat with agents, assign and run tasks, review and validate their work, and manage your whole agent workforce — all without leaving VS Code. Human-in-the-loop approvals happen right where you code.',
+  },
+  {
+    icon: '🎥',
+    title: 'Live Meetings, Standups & Shared Calendars',
+    shortDesc: 'Video standups, retros and calls — right on your board.',
+    longDesc: 'See and hear your team, not just co-edit a board. Turn on cameras for the whole round-table during a standup, planning, or retro; start ad-hoc or direct calls; and run it all over mesh WebRTC so media flows peer-to-peer and never touches the server. A shared team calendar overlays your meetings and connected Google/Microsoft events, shades each person\'s availability, and "Find a time" proposes slots where every invitee is genuinely free. Join from the web or natively inside VS Code.',
+  },
+  {
+    icon: '💬',
+    title: 'Multi-Party Team Chat — Humans + Agents',
+    shortDesc: 'Shared threads you can address to a person or an @agent.',
+    longDesc: 'Chat is real collaboration, not a solo prompt box. Threads are shared across your project, you invite humans by email and AI agents into the room, and you address each message to a specific participant. Talk to a teammate and the agent loop stays idle; @-mention an agent and it replies as itself — running a bounded, permission-scoped tool loop to create a task, update an OKR, or read the board, never exceeding your own access. The same conversation works on the web and in VS Code.',
   },
   {
     icon: '🧪',
@@ -712,6 +728,14 @@ export const HOMEPAGE_FAQ: FaqItem[] = [
   {
     question: 'Can Builderforce fix the errors it monitors?',
     answer: 'Yes. The Quality pillar ingests runtime errors from a browser SDK, OpenTelemetry, Sentry, PostHog, or LogRocket, groups them by fingerprint into deduplicated error groups, then turns any group into a fix task a cloud agent picks up and ships as a pull request. Unlike a monitoring dashboard that ends at a stack trace, the same platform that surfaces the crash assigns it, fixes it, and opens the PR.',
+  },
+  {
+    question: 'Can my team meet over video in Builderforce?',
+    answer: 'Yes. Builderforce runs live video and audio meetings over mesh WebRTC directly on your project board — turn on cameras for a standup, planning, or retro round-table, or start ad-hoc and direct calls. Media flows peer-to-peer and never touches the server. A shared team calendar overlays your meetings and connected Google or Microsoft Calendar events, shades each person\'s availability, and "Find a time" proposes slots where every invitee is genuinely free. You can join a meeting from the web or natively inside VS Code.',
+  },
+  {
+    question: 'Can I chat with both humans and AI agents in the same thread?',
+    answer: 'Yes — that is multi-party team chat. Threads are shared across your project, you invite humans by email and AI agents into the room, and you address each message to a specific participant. A message to a human just talks to them (the agent loop stays idle); an @agent mention makes that agent reply as itself and run a bounded, permission-scoped tool loop to create a task, update an OKR, or read the board — never exceeding your own access. The same conversation works on the web and in VS Code.',
   },
   {
     question: 'Do I have to migrate off Jira or Linear to use Builderforce?',
@@ -1566,6 +1590,7 @@ export const INTEGRATION_SLUG_MAP: Record<string, IntegrationSeo> = Object.fromE
 export const RELATED_ARTICLES: Record<string, string[]> = {
   product: [
     'transitioning-to-an-agentic-workforce',
+    'real-time-collaboration-humans-and-agents',
     'define-a-need-the-agentic-system-solves-it',
     'agent-tech-stack-all-seven-layers',
     'evermind-self-updating-model',
@@ -1601,18 +1626,19 @@ export const RELATED_ARTICLES: Record<string, string[]> = {
   // Feature routes — associated blog content shown on each logged-out feature
   // teaser (RouteMarketing). Keyed by the route path minus its leading slash.
   brainstorm: ['product-ideation-with-builderforce', 'specs-and-planning-with-ai', 'getting-started-with-ai-agents'],
-  ide: ['in-browser-ide-and-collaboration', 'product-ideation-with-builderforce', 'getting-started-with-ai-agents'],
+  ide: ['vs-code-command-center-for-your-agentic-workforce', 'in-browser-ide-and-collaboration', 'product-ideation-with-builderforce'],
   training: ['webgpu-lora-explained', 'inside-evermind-architecture', 'evermind-self-updating-model', 'ai-dataset-generation-best-practices'],
   workflows: ['define-a-need-the-agentic-system-solves-it', 'multi-agent-orchestration', 'autonomous-swimlane-execution'],
   projects: ['planning-spine-cost-bearing-delivery', 'autonomous-swimlane-execution', 'task-execution-and-observability'],
-  workforce: ['fleet-management-and-agent-routing', 'autonomous-swimlane-execution', 'multi-agent-orchestration'],
+  workforce: ['real-time-collaboration-humans-and-agents', 'multi-party-team-chat-humans-and-agents', 'fleet-management-and-agent-routing'],
+  meetings: ['video-meetings-standups-and-shared-calendars', 'real-time-collaboration-humans-and-agents', 'multi-party-team-chat-humans-and-agents'],
   skills: ['skills-assignment-and-the-marketplace', 'builderforce-agents-and-agent-integration', 'best-ai-coding-agents-compared'],
   personas: ['builderforce-agents-and-agent-integration', 'multi-agent-orchestration', 'skills-assignment-and-the-marketplace'],
   'content-manager': ['skills-assignment-and-the-marketplace', 'product-ideation-with-builderforce'],
   security: ['every-role-operating-picture', 'security-and-multi-tenant-architecture', 'knowledge-management-sops-and-compliance'],
   soc2: ['security-and-multi-tenant-architecture', 'knowledge-management-sops-and-compliance', 'system-of-record-for-agentic-work'],
   contributors: ['every-role-operating-picture', 'task-execution-and-observability', 'multi-agent-orchestration'],
-  dashboard: ['system-of-record-for-agentic-work', 'every-role-operating-picture', 'introduction-and-overview'],
+  dashboard: ['system-of-record-for-agentic-work', 'real-time-collaboration-humans-and-agents', 'every-role-operating-picture'],
   agents: ['builderforce-agents-and-agent-integration', 'fleet-management-and-agent-routing', 'single-pane-board-connectors'],
   prompts: ['specs-and-planning-with-ai', 'product-ideation-with-builderforce', 'getting-started-with-ai-agents'],
   diagnostics: ['ai-development-maturity-diagnostic', 'system-of-record-for-agentic-work', 'every-role-operating-picture'],

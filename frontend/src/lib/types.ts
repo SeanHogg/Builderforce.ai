@@ -1,3 +1,5 @@
+import type { DeliverySignals } from '@/lib/deliveryVerdict';
+
 // ---------------------------------------------------------------------------
 // Authentication & Multi-tenant
 // ---------------------------------------------------------------------------
@@ -73,6 +75,10 @@ export interface Project {
   blockedTaskCount?: number;
   /** From list endpoint: open tasks whose due date has passed. */
   overdueTaskCount?: number;
+  /** From list endpoint: compact DORA + cycle-time + flow signals for this project
+   *  over the last 30 days. Fed to the shared computeDeliveryVerdict so the card's
+   *  health score matches the /insights/delivery gauge. Null = no data yet. */
+  deliverySignals?: DeliverySignals | null;
   /** From list endpoint: number of workflows associated with this project */
   workflowCount?: number;
   /** From list endpoint: true once an architecture PRD (Architect analysis output) exists. */

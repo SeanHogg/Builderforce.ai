@@ -417,9 +417,11 @@
       "healthy": "健康",
       "watch": "关注",
       "at_risk": "有风险",
-      "critical": "严重"
+      "critical": "严重",
+      "noData": "暂无数据"
     },
     "healthAria": "项目健康度 {score}/100 — {tier}",
+    "healthNoDataAria": "项目健康度 — 暂无交付数据",
     "doneAria": "已完成 {pct}% — {total} 个任务中已完成 {completed} 个",
     "donePct": "完成 {pct}%",
     "health360": "项目 360"
@@ -1678,7 +1680,19 @@
     "baseModelDefault": "builderforce.ai 默认（最佳编码模型）",
     "baseModelHelp": "该智能体运行所用的工具调用 + 编码模型——选择你的某个 LLM 或模型池中的模型。一次运行会为整个任务固定一个模型；保留默认则使用套餐的最佳编码模型。",
     "personality": "性格",
-    "personalityHelp": "通过性格测试或滑块为该智能体设定性格。它会影响智能体在每次运行中的推理方式、工作严谨程度以及沟通风格。"
+    "personalityHelp": "通过性格测试或滑块为该智能体设定性格。它会影响智能体在每次运行中的推理方式、工作严谨程度以及沟通风格。",
+    "tab": {
+      "details": "详情",
+      "runtime": "运行时",
+      "personality": "个性",
+      "capabilities": "能力",
+      "pricing": "定价",
+      "performance": "性能"
+    },
+    "save": "保存",
+    "saving": "保存中…",
+    "roleLabel": "角色",
+    "roleNone": "未分配"
   },
   "personalitySummary": {
     "title": "性格",

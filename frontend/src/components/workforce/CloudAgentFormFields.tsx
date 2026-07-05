@@ -70,15 +70,15 @@ export const labelStyle: React.CSSProperties = {
   display: 'block', fontSize: 12, fontWeight: 500, color: 'var(--text-strong)', marginBottom: 6,
 };
 
-export function CloudAgentFormFields({
-  form,
-  onChange,
-  autoFocus,
-}: {
+interface FieldGroupProps {
   form: CloudAgentFormState;
   onChange: (patch: Partial<CloudAgentFormState>) => void;
   autoFocus?: boolean;
-}) {
+}
+
+/** Identity fields: name, title, description, discovery tags. The slide-out panel
+ *  renders this alone on its "Details" tab. */
+export function CloudAgentDetailsFields({ form, onChange, autoFocus }: FieldGroupProps) {
   const t = useTranslations('cloudAgentForm');
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
@@ -99,6 +99,17 @@ export function CloudAgentFormFields({
         <input style={inputStyle} value={form.skills} onChange={(e) => onChange({ skills: e.target.value })} placeholder={t('tagsPlaceholder')} />
         <p style={{ fontSize: 11, color: 'var(--muted)', margin: '6px 0 0' }}>{t('tagsHelp')}</p>
       </div>
+    </div>
+  );
+}
+
+/** Runtime fields: where + how the agent executes (support, preferred runtime,
+ *  cloud surface, base model). The slide-out panel renders this on its own
+ *  "Runtime" tab. */
+export function CloudAgentRuntimeFields({ form, onChange }: FieldGroupProps) {
+  const t = useTranslations('cloudAgentForm');
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
       <div>
         <label style={labelStyle}>{t('runtimeSupport')}</label>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
@@ -140,12 +151,35 @@ export function CloudAgentFormFields({
         />
         <p style={{ fontSize: 11, color: 'var(--muted)', margin: '6px 0 0' }}>{t('baseModelHelp')}</p>
       </div>
-      <div>
-        <label style={labelStyle}>{t('personality')}</label>
-        <p style={{ fontSize: 11, color: 'var(--muted)', margin: '0 0 8px' }}>{t('personalityHelp')}</p>
-        {/* Self-gates on the Pro entitlement (renders a locked upsell when not entitled). */}
-        <PsychometricEditor value={form.psychometric} onChange={(p) => onChange({ psychometric: p })} />
-      </div>
+    </div>
+  );
+}
+
+/** Personality field: this agent's own psychometric profile. The slide-out panel
+ *  renders this on its own "Personality" tab. */
+export function CloudAgentPersonalityFields({ form, onChange }: FieldGroupProps) {
+  const t = useTranslations('cloudAgentForm');
+  return (
+    <div>
+      <label style={labelStyle}>{t('personality')}</label>
+      <p style={{ fontSize: 11, color: 'var(--muted)', margin: '0 0 8px' }}>{t('personalityHelp')}</p>
+      {/* Self-gates on the Pro entitlement (renders a locked upsell when not entitled). */}
+      <PsychometricEditor value={form.psychometric} onChange={(p) => onChange({ psychometric: p })} />
+    </div>
+  );
+}
+
+/**
+ * The full field set (Details + Runtime + Personality) stacked in one column —
+ * used by the "Add agent" create modal, where everything is captured at once. The
+ * slide-out panel instead renders the three groups above as separate tabs.
+ */
+export function CloudAgentFormFields({ form, onChange, autoFocus }: FieldGroupProps) {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+      <CloudAgentDetailsFields form={form} onChange={onChange} autoFocus={autoFocus} />
+      <CloudAgentRuntimeFields form={form} onChange={onChange} />
+      <CloudAgentPersonalityFields form={form} onChange={onChange} />
     </div>
   );
 }

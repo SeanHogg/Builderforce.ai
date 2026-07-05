@@ -2,6 +2,12 @@
 
 All notable changes to the BuilderForce VS Code extension are documented here.
 
+## [2026.7.38] — Meetings and Diagnostics, right in your sidebar
+
+- **Fixed: the sidebar no longer errors on start-up.** A stale package could pop "No view is registered with id: builderforce.meetings / builderforce.diagnostics" because the new views were wired in code before the manifest declared them. The two views now ship together, so the BuilderForce panel loads clean on a fresh install — no red toasts.
+- **Meetings live in the editor now.** A new **Meetings** view lists your scheduled meetings in the BuilderForce sidebar. Each one gives you **Join Here** to drop straight into the call inside VS Code, or **Join in Browser** — plus **Schedule Meeting** and a refresh right from the view's toolbar. No more tab-hopping to see what's next.
+- **Run security & compliance checks without leaving your code.** A new **Diagnostics** view lets you sign in, pick a project, and run SOC 2, Architecture, Quality, and Privacy & Data-Law diagnostics on the spot — then open the full report in the editor. The checks that used to live only on the web are now one click away in the sidebar.
+
 ## [2026.7.33] — Find the right ticket to link, even with thousands of them
 
 - **Search the ticket you want instead of scrolling forever.** The "Link ticket" picker now has a search box — start typing and it narrows to matching tickets as you go, so linking the right task, epic, spec, or roadmap item stays instant even when a project has thousands of them. When a search still has more matches than fit, it tells you how many more so you can refine.
