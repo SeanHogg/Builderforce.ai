@@ -112,6 +112,7 @@
 ### 🧪 Test health
 
 - **P2 — `AgentExecutionPanel.test.tsx` "opens a changed file in the Monaco diff viewer" fails.** `frontend/src/components/agent/AgentExecutionPanel.test.tsx:170` — after clicking a file-change row the test cannot find the `/All changes/` back-control (Monaco diff viewer path). Pre-existing / concurrent-work regression (the component + test are at committed HEAD, untouched by the activity-log work; the test automocks `@/lib/builderforceApi`), surfaced while running the frontend suite 2026-07-05. Fix = verify the Changes-tab file-viewer back button still renders "All changes" after the recent AgentExecutionPanel "fixes"/"V2" commits, or update the test to the new label. Unblocks: green frontend suite.
+- **P2 — 6 pre-existing API `tsgo --noEmit` errors (unrelated to Teams).** Surfaced while typechecking the `teamRoutes` cache change 2026-07-05; none are in `teamRoutes.ts`. (1) `application/activity/activityLog.ts:92,115` pass `Env | undefined` where `Env` is required; (2) `application/llm/builtinMcpService.ts:433` + `presentation/routes/taskRoutes.ts:329,409` cast `TaskProps` → `Record<string, unknown>` (insufficient overlap — go via `unknown`); (3) `presentation/routes/taskRoutes.ts:7` imports `auditEvents` which the schema no longer exports (schema drift — the table was renamed/removed). Fix = narrow the `Env` args, route the casts through `unknown`, and repoint the `auditEvents` import to the current activity/audit table. Unblocks: clean API typecheck.
 
 ### 🧠 Evermind / SSM — prioritized index
 

@@ -744,7 +744,9 @@
     "delete": "Delete",
     "edit": "Edit",
     "view": "View",
-    "typeSecurity": "Security"
+    "typeSecurity": "Security",
+    "clearanceNeeded": "Clearance needed",
+    "clearanceNeededBody": "This is a restricted security item. You don’t have clearance to view its details. Ask a workspace owner or manager for access."
   },
   "legal": {
     "termsTitle": "Terms of Use",

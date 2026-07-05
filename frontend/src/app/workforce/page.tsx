@@ -14,6 +14,7 @@ import { ObservabilityContent } from '@/components/ObservabilityContent';
 import { PerformanceView } from '@/components/workforce/PerformanceView';
 import { QaContent } from '@/components/QaContent';
 import { ActiveRunsPanel } from '@/components/ActiveRunsPanel';
+import { TeamChatButton } from '@/components/brain/TeamChatButton';
 import PageContainer from '@/components/PageContainer';
 
 // Workforce sub-views are declared as query tabs in navGroups; the shell
@@ -43,11 +44,13 @@ function WorkforcePageInner() {
 
   return (
     <PageContainer>
-      <div className="page-header" style={{ marginBottom: 16 }}>
+      <div className="page-header" style={{ marginBottom: 16, display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
         <div>
           <h1 className="page-title" style={{ margin: 0 }}>{t('title')}</h1>
           <p className="page-sub" style={{ fontSize: 13, color: 'var(--muted)', margin: '4px 0 0' }}>{t(`sub.${tab}`)}</p>
         </div>
+        {/* Message the broader team — the tenant-wide team chat (humans + agents). */}
+        <TeamChatButton variant="labeled" />
       </div>
 
       {tab === 'roles' ? (

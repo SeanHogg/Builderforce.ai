@@ -325,7 +325,7 @@ export function createTaskRoutes(taskService: TaskService, db: Db, runtimeServic
     // "clearance needed" placeholder. No-op unless the list holds security tickets.
     const viewer = await resolveTicketViewer(c, db);
     const plain = await new SecurityTicketAccessService(db, c.env as Env)
-      .applyVisibilityForViewer(c.get('tenantId'), viewer, tasks.map(t => t.toPlain() as Record<string, unknown>));
+      .applyVisibilityForViewer(c.get('tenantId'), viewer, tasks.map(t => t.toPlain() as unknown as Record<string, unknown>));
     // Augment each card with its linked-PRD count [1266] — one grouped query (no
     // N+1), and best-effort so it no-ops where task_specs (migration 0098) isn't
     // applied yet (the board still renders, just with no PRD dots).
@@ -405,7 +405,7 @@ export function createTaskRoutes(taskService: TaskService, db: Db, runtimeServic
     const id = Number(c.req.param('id'));
     if (!(await loadTenantTask(id, c.get('tenantId')))) return c.json({ error: 'Task not found' }, 404);
     const task = await taskService.getTask(id);
-    const plain = task.toPlain() as Record<string, unknown>;
+    const plain = task.toPlain() as unknown as Record<string, unknown>;
     // A SECURITY ticket the viewer isn't cleared for is returned MASKED (200) — its
     // existence is surfaced, its content redacted with `restricted: true`. Same shared
     // gate as the list.

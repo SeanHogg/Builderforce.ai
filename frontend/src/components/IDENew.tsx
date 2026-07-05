@@ -12,6 +12,7 @@ import { LlmStudioPanel } from './LlmStudioPanel';
 import { PreviewFrame } from './PreviewFrame';
 import { ProjectsSlideOutPanel } from './ProjectsSlideOutPanel';
 import { BrainPanel } from './brain/BrainPanel';
+import { TeamChatButton } from './brain/TeamChatButton';
 import { IdeSettingsPanel } from './IdeSettingsPanel';
 import { IdeAgentPanel } from './ide/IdeAgentPanel';
 import { useWebContainer } from '@/hooks/useWebContainer';
@@ -1005,6 +1006,9 @@ export function IDE({ project, initialFiles, onProjectUpdate, onOpenProjectDetai
         >
           ⚙️
         </button>
+
+        {/* Team Chat — the project's group conversation (humans + agents) */}
+        {Number.isFinite(projectIdNum) && <TeamChatButton projectId={projectIdNum} />}
 
         {/* Modality label — the IDE is scoped to this project's type (set at
             creation), so it's shown, not switchable. */}
