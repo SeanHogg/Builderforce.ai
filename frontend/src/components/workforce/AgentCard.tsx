@@ -5,6 +5,7 @@ import { formatAgentPrice } from '@/lib/agentPresentation';
 import { isAgentOwner } from '@/lib/agentPermissions';
 import { useAuth } from '@/lib/AuthContext';
 import { StatusBadge } from '@/components/StatusBadge';
+import { BuiltinKindBadge } from '@/components/BuiltinKindBadge';
 import { SkillTags } from '@/components/SkillTags';
 import { WorkforceCard } from './WorkforceCard';
 import { RUNTIME_LABELS } from './CloudAgentFormFields';
@@ -87,7 +88,14 @@ export function AgentCard({
       name={agent.name}
       subtitle={subtitle}
       pill={{ kind: owner ? 'cloud' : 'marketplace', label: 'Agent' }}
-      badges={owner ? <StatusBadge variant={agent.published ? 'published' : 'draft'} /> : undefined}
+      badges={
+        <>
+          {/* Type indicator for built-in agents — stays visible next to whatever
+              name the team renamed the agent to. Renders null for ordinary agents. */}
+          <BuiltinKindBadge kind={agent.builtin_kind} />
+          {owner ? <StatusBadge variant={agent.published ? 'published' : 'draft'} /> : null}
+        </>
+      }
       body={
         <>
           {agent.bio && <div style={{ fontSize: 13, color: 'var(--muted)', lineHeight: 1.5, flex: 1 }}>{agent.bio}</div>}

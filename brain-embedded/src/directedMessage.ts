@@ -28,6 +28,25 @@ export interface DirectedRecipient {
 /** The metadata key that flags a user message as addressed to a participant. */
 export const ADDRESSED_TO_META_KEY = 'addressedTo';
 
+/** The metadata key that attributes an assistant turn to a specific participant
+ *  (an invited agent that replied), rather than the default BRAIN. Mirrors
+ *  {@link ADDRESSED_TO_META_KEY} on the answering side. */
+export const AUTHORED_BY_META_KEY = 'authoredBy';
+
+/** The participant that authored an assistant turn, or `null` for the BRAIN. */
+export function parseMessageAuthor(msg: { metadata?: string | null }): DirectedRecipient | null {
+  if (!msg.metadata) return null;
+  try {
+    const a = (JSON.parse(msg.metadata) as { authoredBy?: Partial<DirectedRecipient> }).authoredBy;
+    if (a && typeof a.ref === 'string' && typeof a.name === 'string' && (a.kind === 'agent' || a.kind === 'human')) {
+      return { kind: a.kind, ref: a.ref, name: a.name };
+    }
+  } catch {
+    /* not an attributed message */
+  }
+  return null;
+}
+
 /**
  * Merge an `addressedTo` flag into a message's metadata object (preserving any
  * other keys, e.g. `attachments`). Returns a serialized string, or `undefined`

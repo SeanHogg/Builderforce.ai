@@ -831,8 +831,7 @@
     "subtitle": "Consolida coste, entrega, DORA, eficacia de la IA y cumplimiento de OKR desde los proyectos hasta las iniciativas y los portafolios.",
     "tabs": {
       "rollup": "Resumen",
-      "structure": "Estructura",
-      "okrs": "OKR",
+      "structure": "Portafolios y OKR",
       "cost": "CAPEX/OPEX"
     },
     "scope": {
@@ -840,18 +839,11 @@
       "workspace": "Espacio de trabajo (nivel organización)",
       "byProject": "Por proyecto…"
     },
-    "scopeWord": {
-      "portfolio": "portafolio",
-      "initiative": "iniciativa",
-      "project": "proyecto",
-      "workspace": "espacio de trabajo"
-    },
     "loading": "Cargando…",
     "loadingRollup": "Cargando resumen…",
     "loadingOkrs": "Cargando OKR…",
     "loadingInitiatives": "Cargando iniciativas…",
     "emptyRollup": "Crea un portafolio en la pestaña Estructura para ver el resumen.",
-    "emptyOkrs": "Crea un portafolio en la pestaña Estructura para añadir OKR.",
     "stat": {
       "projects": "Proyectos",
       "initiativesCount": "{count} iniciativas",
@@ -889,7 +881,8 @@
       "byInitiative": "Por iniciativa",
       "criticalPath": "Ruta crítica",
       "dependencies": "Dependencias",
-      "byPortfolio": "Por portafolio"
+      "byPortfolio": "Por portafolio",
+      "initiatives": "Iniciativas"
     },
     "col": {
       "initiative": "Iniciativa",
@@ -914,7 +907,6 @@
       "newInitiativeName": "Nombre de la nueva iniciativa",
       "addInitiative": "Añadir iniciativa",
       "noInitiatives": "Aún no hay iniciativas.",
-      "unassignedInitiatives": "Iniciativas sin asignar",
       "noProjectsLinked": "No hay proyectos vinculados.",
       "unlink": "Desvincular",
       "linkProject": "+ Vincular un proyecto…",
@@ -928,14 +920,14 @@
       "movePortfolio": "Mover a otro portafolio",
       "unassignedOption": "— Sin asignar —",
       "dragHint": "Arrastra a un portafolio para reasignar",
-      "dropHere": "Suelta aquí para asignar a este portafolio"
+      "dropHere": "Suelta aquí para asignar a este portafolio",
+      "dropObjectiveHere": "Suelta un objetivo aquí para asignarlo a este portafolio",
+      "unassigned": "Sin asignar",
+      "unassignedHint": "Iniciativas y objetivos que no están bajo ningún portafolio: arrástralos a un portafolio para asignarlos o usa el menú desplegable."
     },
     "okr": {
       "newObjective": "Nuevo objetivo",
       "objectivePlaceholder": "Objetivo",
-      "periodPlaceholder": "2026-T3",
-      "add": "Añadir",
-      "objectiveHint": "Los objetivos se asocian a este/a {scope}. Añade resultados clave medibles abajo; el progreso se consolida en el panel.",
       "noObjectives": "Aún no hay objetivos para este alcance.",
       "newKeyResult": "Nuevo resultado clave",
       "target": "Meta",
@@ -946,8 +938,6 @@
       "convertToEpic": "Convertir en épica",
       "convertToEpicHint": "Convertir este objetivo de nuevo en una épica del tablero",
       "convertToEpicConfirm": "¿Convertir este objetivo en una épica del tablero? Sus resultados clave se descartarán y las tareas vinculadas se reasignarán bajo la nueva épica.",
-      "startDate": "Fecha de inicio",
-      "endDate": "Fecha de fin",
       "costClass": "Clase",
       "capex": "CAPEX",
       "opex": "OPEX",
@@ -967,7 +957,8 @@
       "ownerWorkspace": "Espacio de trabajo (sin asignar)",
       "ownerPortfolio": "Portafolios",
       "ownerInitiative": "Iniciativas",
-      "ownerProject": "Proyectos"
+      "ownerProject": "Proyectos",
+      "dragHint": "Arrastra a un portafolio para reasignar"
     },
     "projectLink": {
       "title": "Iniciativa de PMO",
@@ -1938,6 +1929,10 @@
       "runtime": "Editor",
       "online": "En línea",
       "offline": "Desconectado"
+    },
+    "builtinKind": {
+      "validator": "Validador",
+      "security": "Seguridad"
     },
     "teams": {
       "heading": "Equipos",
@@ -5818,5 +5813,52 @@
     "confirmRevoke": "¿Revocar esta clave de API? Las aplicaciones que la usan dejarán de funcionar de inmediato.",
     "errCreate": "No se pudo crear la clave",
     "errRevoke": "Error al revocar"
+  },
+  "audit": {
+    "title": "Actividad y auditoría",
+    "subtitle": "Cada cambio en tu equipo: quién hizo qué, sobre qué y cuándo.",
+    "loading": "Cargando actividad…",
+    "empty": "Aún no hay actividad. Las acciones en el espacio de trabajo aparecerán aquí a medida que ocurran.",
+    "loadMore": "Cargar más",
+    "filter": {
+      "all": "Todos"
+    },
+    "actor": {
+      "human": "Miembro del equipo",
+      "hire": "Talento externo",
+      "cloud_agent": "Agente en la nube",
+      "host_agent": "Agente local",
+      "system": "Sistema",
+      "unknown": "Desconocido"
+    },
+    "verb": {
+      "task": {
+        "created": "creó un ticket",
+        "updated": "actualizó un ticket",
+        "status_changed": "movió un ticket",
+        "assigned": "reasignó un ticket",
+        "moved": "movió un ticket a otro proyecto",
+        "deleted": "eliminó un ticket"
+      },
+      "code": {
+        "changed": "cambió código"
+      },
+      "deploy": {
+        "recorded": "registró un despliegue",
+        "failed": "informó un despliegue fallido"
+      },
+      "role": {
+        "assigned": "asignó un rol"
+      },
+      "engagement": {
+        "created": "invitó a talento externo"
+      },
+      "member": {
+        "hired": "contrató talento externo"
+      },
+      "doc": {
+        "published": "publicó un documento"
+      }
+    }
   }
 }

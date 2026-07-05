@@ -273,6 +273,45 @@ export async function sendWorkspaceInviteEmail(
   await provider.send({ to, subject, html });
 }
 
+const CHAT_INVITE_BODY = `
+      <p>Hi,</p>
+      <p><strong>{{InviterName}}</strong> invited you to collaborate on the chat
+         <strong>{{ChatTitle}}</strong> in Builderforce.</p>
+      <p>Open Builderforce to join the conversation, share ideas and work together
+         with the team and its AI agents.</p>
+      <p style="text-align:center; margin: 28px 0;">
+        <a href="{{ChatUrl}}" class="button">Open the chat</a>
+      </p>
+      <p style="font-size:13px; color:#64748b;">
+        Sign in with this email address ({{Email}}) to join. If you were not
+        expecting this, you can ignore this email.
+      </p>`;
+
+/**
+ * Chat-invite email: tells someone they were invited to collaborate on a Brain
+ * chat. Best-effort — no-ops when RESEND_API_KEY is unset, like the other senders.
+ */
+export async function sendChatInviteEmail(
+  env: EmailEnv,
+  to: string,
+  opts: { chatTitle: string; inviterName: string; chatUrl: string },
+): Promise<void> {
+  const provider = getEmailProvider(env);
+  if (!provider) return;
+
+  const subject = `${opts.inviterName} invited you to a chat on Builderforce`;
+  const html = render(HEADER + CHAT_INVITE_BODY + FOOTER, {
+    Subject: subject,
+    InviterName: opts.inviterName,
+    ChatTitle: opts.chatTitle,
+    ChatUrl: opts.chatUrl,
+    Email: to,
+    Year: String(new Date().getFullYear()),
+  });
+
+  await provider.send({ to, subject, html });
+}
+
 // ---------------------------------------------------------------------------
 // LLM vendor health alert — sent by the scheduled() cron when one or more
 // vendors' status differs from the previous run. Plain string template (no

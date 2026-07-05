@@ -302,10 +302,24 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
         setMessages((prev) => [...prev, userMsg]);
         onActivity?.(id);
         // Addressed to a participant, not the BRAIN: the turn is posted to the
-        // chat (visible to everyone) but the agent loop stays idle. The auto-reply
+        // chat (visible to everyone) and the BRAIN loop stays idle. The auto-reply
         // guard was already claimed above, and the effect below also skips it, so
         // a later reload won't answer it either.
-        if (addressedTo) return true;
+        if (addressedTo) {
+          // An @agent participant actually answers: a chat-scoped run replies AS
+          // that agent and posts an assistant turn attributed to it. A @human just
+          // gets the posted turn (they'll be notified out-of-band).
+          if (addressedTo.kind === 'agent' && persistence.requestAgentReply) {
+            try {
+              const reply = await persistence.requestAgentReply(id, { agentRef: addressedTo.ref, agentName: addressedTo.name });
+              setMessages((prev) => [...prev, reply]);
+              onActivity?.(id);
+            } catch (e) {
+              setLocalError(e instanceof Error ? e.message : 'The agent could not reply.');
+            }
+          }
+          return true;
+        }
         // Seed the rich transcript from the prior persisted history (the closure
         // `messages`, excluding the just-sent user turn), then append this turn.
         // Scoped to the last consolidation marker: a consolidated chat sends the

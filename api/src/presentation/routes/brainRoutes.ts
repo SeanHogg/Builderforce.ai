@@ -6,13 +6,16 @@
  */
 import { Hono } from 'hono';
 import { eq } from 'drizzle-orm';
+import { neon } from '@neondatabase/serverless';
 import { authMiddleware } from '../middleware/authMiddleware';
 import { rateLimitMiddleware } from '../middleware/rateLimitMiddleware';
 import { signUpload } from '../../infrastructure/auth/uploadSign';
 import { fetchWebDocument } from '../../application/web/webFetch';
 import { recordOutboundFetch, enforceOutboundFetchCap } from '../../application/web/outboundFetchLedger';
-import { agentHosts } from '../../infrastructure/database/schema';
+import { agentHosts, users } from '../../infrastructure/database/schema';
 import { ChatTicketService } from '../../application/brain/ChatTicketService';
+import { notify } from '../../application/notifications/notify';
+import { sendChatInviteEmail } from '../../infrastructure/email/EmailService';
 import { isKeyOwnedByTenant } from '../../domain/shared/r2Keys';
 import type { Env, HonoEnv } from '../../env';
 import type { BrainService } from '../../application/brain/BrainService';
@@ -79,7 +82,7 @@ export function createBrainRoutes(brainService: BrainService, db: Db): Hono<Hono
     const id = parseId(c.req.param('id'));
     if (!id) return c.json({ error: 'Invalid chat id' }, 400);
 
-    const body = await c.req.json<{ title?: string; projectId?: number | null }>();
+    const body = await c.req.json<{ title?: string; projectId?: number | null; visibility?: 'shared' | 'locked' }>();
     const result = await brainService.updateChat(
       id,
       c.get('tenantId') as number,
@@ -120,15 +123,41 @@ export function createBrainRoutes(brainService: BrainService, db: Db): Hono<Hono
     if (!id) return c.json({ error: 'Invalid chat id' }, 400);
 
     const body = await c.req.json<{ messages: Array<{ role: string; content: string; metadata?: string }> }>();
+    const tenantId = c.get('tenantId') as number;
     const result = await brainService.appendMessages(
       id,
-      c.get('tenantId') as number,
+      tenantId,
       c.get('userId') as string,
       body,
     );
     if ('error' in result) {
       const status = result.error === 'Chat not found' ? 404 : 400;
       return c.json({ error: result.error }, status);
+    }
+
+    // Notify any HUMAN addressed in these turns (directed @human message) so an
+    // offline teammate learns they were pinged — in-app + optional email.
+    const mentioned = new Set<string>();
+    for (const m of body.messages ?? []) {
+      if (!m.metadata) continue;
+      try {
+        const a = (JSON.parse(m.metadata) as { addressedTo?: { kind?: string; ref?: string } }).addressedTo;
+        if (a?.kind === 'human' && a.ref) mentioned.add(a.ref);
+      } catch { /* not directed */ }
+    }
+    if (mentioned.size > 0) {
+      c.executionCtx.waitUntil((async () => {
+        for (const uid of mentioned) {
+          try {
+            await notify(neon((c.env as Env).NEON_DATABASE_URL), c.env as Env, {
+              userId: uid, tenantId, kind: 'chat_mention',
+              title: 'You were mentioned in a chat',
+              body: 'A teammate addressed you in a Builderforce chat.',
+              ref: String(id),
+            });
+          } catch { /* best-effort */ }
+        }
+      })());
     }
     return c.json({ messages: result }, 201);
   });
@@ -251,6 +280,92 @@ export function createBrainRoutes(brainService: BrainService, db: Db): Hono<Hono
     const result = await svc.removeAgent(c.get('tenantId') as number, id, c.get('userId') as string, c.req.param('assignmentId'));
     if ('error' in result) return c.json({ error: result.error }, 404);
     return c.json(result);
+  });
+
+  // -------------------------------------------------------------------------
+  // Human members (shared access + invite, migration 0288). A chat is global to
+  // its project+tenant; these endpoints manage the human roster (the audience)
+  // and invite teammates who then collaborate. Delivery goes through the shared
+  // notify() (in-app + optional email) for existing users, or a chat-invite email
+  // for a not-yet-account address (converts on their next access).
+  // -------------------------------------------------------------------------
+
+  // GET /chats/:id/members — human participants of this chat.
+  router.get('/chats/:id/members', async (c) => {
+    const id = parseId(c.req.param('id'));
+    if (!id) return c.json({ error: 'Invalid chat id' }, 400);
+    const result = await brainService.listMembers(id, c.get('tenantId') as number, c.get('userId') as string);
+    if ('error' in result) return c.json({ error: result.error }, 404);
+    return c.json({ members: result });
+  });
+
+  // POST /chats/:id/members — invite a human by email (owner only). { email }
+  router.post('/chats/:id/members', async (c) => {
+    const id = parseId(c.req.param('id'));
+    if (!id) return c.json({ error: 'Invalid chat id' }, 400);
+    const tenantId = c.get('tenantId') as number;
+    const userId = c.get('userId') as string;
+    const body = await c.req.json<{ email?: string }>().catch(() => ({} as { email?: string }));
+    if (!body.email) return c.json({ error: 'email is required' }, 400);
+
+    const result = await brainService.inviteHuman(id, tenantId, userId, { email: String(body.email) });
+    if ('error' in result) return c.json({ error: result.error }, result.error === 'Chat not found' ? 404 : 400);
+
+    // Deliver the invite (best-effort — never fails the invite itself).
+    if (!result.already) {
+      c.executionCtx.waitUntil((async () => {
+        try {
+          const [inviter] = await db.select({ name: users.displayName, email: users.email }).from(users).where(eq(users.id, userId)).limit(1);
+          const inviterName = inviter?.name || inviter?.email || 'A teammate';
+          const appUrl = (c.env as { APP_URL?: string }).APP_URL || 'https://builderforce.ai';
+          const chatUrl = `${appUrl}/ide/dashboard?chat=${id}`;
+          if (result.status === 'active' && result.memberUserId) {
+            await notify(neon((c.env as Env).NEON_DATABASE_URL), c.env as Env, {
+              userId: result.memberUserId, tenantId, kind: 'chat_invite',
+              title: `${inviterName} invited you to a chat`,
+              body: `You've been added to "${result.chatTitle}". Open Builderforce to join the conversation.`,
+              ref: String(id),
+            });
+          } else {
+            await sendChatInviteEmail(c.env as Env, result.email, { chatTitle: result.chatTitle, inviterName, chatUrl });
+          }
+        } catch { /* delivery is best-effort */ }
+      })());
+    }
+    return c.json(result, 201);
+  });
+
+  // DELETE /chats/:id/members/:memberId — remove a human member (owner only).
+  router.delete('/chats/:id/members/:memberId', async (c) => {
+    const id = parseId(c.req.param('id'));
+    const memberId = parseId(c.req.param('memberId'));
+    if (!id || !memberId) return c.json({ error: 'Invalid id' }, 400);
+    const result = await brainService.removeMember(id, c.get('tenantId') as number, c.get('userId') as string, memberId);
+    if ('error' in result) return c.json({ error: result.error }, 404);
+    return c.json(result);
+  });
+
+  // POST /chats/:id/agent-reply — the addressed agent answers. { agentRef, agentName? }
+  // Produces a chat-scoped reply AS the invited agent, posted as an assistant turn
+  // attributed to it (metadata.authoredBy). Called after a user directs a message
+  // to an @agent participant.
+  router.post('/chats/:id/agent-reply', async (c) => {
+    const id = parseId(c.req.param('id'));
+    if (!id) return c.json({ error: 'Invalid chat id' }, 400);
+    const body = await c.req.json<{ agentRef?: string; agentName?: string }>().catch(() => ({} as { agentRef?: string; agentName?: string }));
+    if (!body.agentRef) return c.json({ error: 'agentRef is required' }, 400);
+    const result = await brainService.agentReply(
+      id,
+      c.get('tenantId') as number,
+      c.get('userId') as string,
+      { agentRef: String(body.agentRef), agentName: body.agentName },
+      c.env as Env,
+    );
+    if ('error' in result) {
+      const notFound = result.error === 'Chat not found';
+      return c.json({ error: result.error }, notFound ? 404 : result.error === 'LLM not configured' ? 503 : 400);
+    }
+    return c.json({ message: result }, 201);
   });
 
   // POST /fetch-url — fetch an external URL/file/website server-side (CORS-free)

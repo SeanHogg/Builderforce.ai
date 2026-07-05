@@ -34,6 +34,8 @@ export interface CreateChatDto {
 export interface UpdateChatDto {
   title?: string;
   projectId?: number | null;
+  /** LOCK toggle (owner only): 'shared' = teammate-visible, 'locked' = private. */
+  visibility?: 'shared' | 'locked';
 }
 
 export interface AppendMessagesDto {
@@ -49,6 +51,8 @@ const chatColumns = {
   projectId: brainChats.projectId,
   origin: brainChats.origin,
   title: brainChats.title,
+  ownerId: brainChats.userId,
+  visibility: brainChats.visibility,
   createdAt: brainChats.createdAt,
   updatedAt: brainChats.updatedAt,
 } as const;
@@ -109,12 +113,17 @@ export class BrainService {
   }
 
   /**
-   * Shared-access guard: returns the chat when `userId` is its OWNER **or** an
-   * active human member (migration 0288). This is the read/participate gate — used
-   * by open/read/post/summarize. Owner-only admin (rename/archive/invite) keeps
-   * using {@link verifyChatOwnership}. Before denying, it lazily converts any
-   * pending email-invite for this user so a freshly-invited person can deep-link
-   * straight into the chat without first loading their list.
+   * Shared-access guard (migration 0288). Brain chats are global to their
+   * project+tenant, so access depends on the chat's VISIBILITY:
+   *   • 'shared' (default) → any teammate in the tenant may open/read/post; the
+   *     first time a non-owner contributes they are auto-recorded as a member so
+   *     the roster reflects the chat's live audience.
+   *   • 'locked'           → only the OWNER or an active member may access.
+   * Before denying a locked chat it lazily converts any pending email-invite for
+   * this user, so a freshly-invited person can deep-link straight in.
+   *
+   * Owner-only admin (rename/archive/invite/remove/lock) keeps using
+   * {@link verifyChatOwnership}.
    */
   private async canAccessChat(
     chatId: number,
@@ -122,9 +131,28 @@ export class BrainService {
     userId: string,
     selectExtra?: Record<string, unknown>,
   ) {
-    const owned = await this.verifyChatOwnership(chatId, tenantId, userId, selectExtra);
-    if (owned) return owned;
+    const columns = {
+      id: brainChats.id,
+      ownerId: brainChats.userId,
+      visibility: brainChats.visibility,
+      ...(selectExtra ?? {}),
+    };
+    const [chat] = await this.db
+      .select(columns as typeof columns & { id: typeof brainChats.id })
+      .from(brainChats)
+      .where(and(
+        eq(brainChats.id, chatId),
+        eq(brainChats.tenantId, tenantId),
+        eq(brainChats.origin, BRAIN_ORIGIN),
+      ))
+      .limit(1);
+    if (!chat) return null;
 
+    const c = chat as unknown as { ownerId: string | null; visibility: string };
+    if (c.ownerId === userId) return chat;           // owner
+    if (c.visibility !== 'locked') return chat;       // shared → any teammate
+
+    // Locked: owner or active member only.
     const isMember = async () => {
       const [m] = await this.db
         .select({ id: chatMembers.id })
@@ -138,27 +166,30 @@ export class BrainService {
         .limit(1);
       return !!m;
     };
+    if (await isMember()) return chat;
+    // Maybe a pending invite addressed this user's email — convert then re-check.
+    await this.syncPendingMemberships(tenantId, userId);
+    if (await isMember()) return chat;
+    return null;
+  }
 
-    let member = await isMember();
-    if (!member) {
-      // Maybe a pending invite addressed this user's email — convert then re-check.
-      await this.syncPendingMemberships(tenantId, userId);
-      member = await isMember();
+  /** Record a contributing non-owner as an active member (the chat's audience),
+   *  idempotent. Owners are skipped. Best-effort — a race just no-ops on the
+   *  unique (chat_id, user_id) index. */
+  private async ensureMembership(chatId: number, tenantId: number, userId: string, ownerId: string | null): Promise<void> {
+    if (!userId || userId === ownerId) return;
+    try {
+      const [existing] = await this.db
+        .select({ id: chatMembers.id })
+        .from(chatMembers)
+        .where(and(eq(chatMembers.chatId, chatId), eq(chatMembers.userId, userId)))
+        .limit(1);
+      if (existing) return;
+      await this.db.insert(chatMembers)
+        .values({ chatId, tenantId, userId, status: 'active', role: 'participant' });
+    } catch {
+      /* audience tracking is non-critical — never fail a post over it */
     }
-    if (!member) return null;
-
-    // A member gets the chat row scoped by tenant (not by owner user_id).
-    const columns = { id: brainChats.id, ...(selectExtra ?? {}) };
-    const [chat] = await this.db
-      .select(columns as typeof columns & { id: typeof brainChats.id })
-      .from(brainChats)
-      .where(and(
-        eq(brainChats.id, chatId),
-        eq(brainChats.tenantId, tenantId),
-        eq(brainChats.origin, BRAIN_ORIGIN),
-      ))
-      .limit(1);
-    return chat ?? null;
   }
 
   /** The user's email (for pending-invite matching). */
@@ -240,11 +271,15 @@ export class BrainService {
       ));
     const memberChatIds = memberRows.map((r) => r.chatId);
 
+    // Visible chats: ones you OWN, ones you're an active member of, and every
+    // SHARED chat in this tenant (chats are global to project+tenant). Locked chats
+    // only surface to their owner/members.
+    const visible = memberChatIds.length > 0
+      ? or(eq(brainChats.userId, userId), eq(brainChats.visibility, 'shared'), inArray(brainChats.id, memberChatIds))!
+      : or(eq(brainChats.userId, userId), eq(brainChats.visibility, 'shared'))!;
     const conditions = [
       eq(brainChats.tenantId, tenantId),
-      memberChatIds.length > 0
-        ? or(eq(brainChats.userId, userId), inArray(brainChats.id, memberChatIds))!
-        : eq(brainChats.userId, userId),
+      visible,
       eq(brainChats.origin, BRAIN_ORIGIN),
       eq(brainChats.isArchived, false),
     ];
@@ -350,7 +385,7 @@ export class BrainService {
   }
 
   async getChat(chatId: number, tenantId: number, userId: string) {
-    // Owner OR active member may open the chat (shared access, migration 0288).
+    // Owner, member, or (shared) any teammate may open the chat — migration 0288.
     const chat = await this.canAccessChat(chatId, tenantId, userId, {
       projectId: brainChats.projectId,
       origin: brainChats.origin,
@@ -359,7 +394,10 @@ export class BrainService {
       updatedAt: brainChats.updatedAt,
       isArchived: brainChats.isArchived,
     });
-    return chat ?? null;
+    if (!chat) return null;
+    // Surface ownership + lock state so the client can gate owner-only controls.
+    const { ownerId, ...rest } = chat as unknown as Record<string, unknown> & { ownerId: string | null };
+    return { ...rest, isOwner: ownerId === userId, visibility: (rest as { visibility?: string }).visibility ?? 'shared' };
   }
 
   async updateChat(
@@ -379,6 +417,7 @@ export class BrainService {
     const updates: Record<string, unknown> = { updatedAt: new Date() };
     if (dto.title !== undefined) updates.title = dto.title.trim() || 'New chat';
     if (dto.projectId !== undefined) updates.projectId = dto.projectId;
+    if (dto.visibility === 'shared' || dto.visibility === 'locked') updates.visibility = dto.visibility;
 
     const [updated] = await this.db
       .update(brainChats)
@@ -425,13 +464,16 @@ export class BrainService {
     userId: string,
     dto: AppendMessagesDto,
   ) {
-    // Owner OR active member may post turns (shared access, migration 0288).
+    // Owner, member, or (for shared chats) any teammate may post — migration 0288.
     const chat = await this.canAccessChat(chatId, tenantId, userId);
     if (!chat) return { error: 'Chat not found' as const };
 
     if (!Array.isArray(dto.messages) || dto.messages.length === 0) {
       return { error: 'messages array is required' as const };
     }
+
+    // Contributing to a shared chat joins you to it (records the live audience).
+    await this.ensureMembership(chatId, tenantId, userId, (chat as unknown as { ownerId: string | null }).ownerId);
 
     return this.appendRaw(chatId, dto.messages);
   }

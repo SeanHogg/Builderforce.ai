@@ -278,6 +278,10 @@ export interface PublishedAgent {
   r2_artifact_key?: string;
   resume_md?: string;
   status: 'active' | 'inactive';
+  /** Stable built-in-agent marker (e.g. 'validator', 'security'); null/absent for
+   *  ordinary agents. Drives the type indicator shown beside a (renameable) built-in
+   *  agent's name. Backend column ide_agents.builtin_kind (migration 0289). */
+  builtin_kind?: string | null;
   hire_count: number;
   eval_score?: number;
   /** Public eval score (0-1) from the AI evaluation engine; null when not yet scored.

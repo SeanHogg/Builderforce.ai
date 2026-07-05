@@ -451,7 +451,7 @@ export const brain = {
   listChatTickets: (chatId: number) =>
     request<{ tickets: ChatTicketLink[] }>(`/api/brain/chats/${chatId}/tickets`).then((r) => r.tickets),
 
-  /** Tie a chat to a ticket. kind = portfolio|objective|initiative|epic|task. */
+  /** Tie a chat to a ticket. kind = portfolio|objective|initiative|roadmap|spec|epic|gap|task. */
   linkChatTicket: (chatId: number, body: { kind: TicketKind; ref: string; linkType?: 'linked' | 'created' }) =>
     request<ChatTicketLink>(`/api/brain/chats/${chatId}/tickets`, { method: 'POST', body: JSON.stringify(body) }),
 
@@ -479,6 +479,29 @@ export const brain = {
   /** Remove an agent from a chat. */
   removeChatAgent: (chatId: number, assignmentId: string) =>
     request<{ removed: boolean }>(`/api/brain/chats/${chatId}/agents/${assignmentId}`, { method: 'DELETE' }),
+
+  // --- Human members (shared access + invite, migration 0288) ---
+
+  /** Human participants of a chat (the live audience). */
+  listChatMembers: (chatId: number) =>
+    request<{ members: ChatMemberInfo[] }>(`/api/brain/chats/${chatId}/members`).then((r) => r.members),
+
+  /** Invite a human by email. Returns 'active' (existing teammate) | 'pending' (cold invite). */
+  inviteChatMember: (chatId: number, email: string) =>
+    request<{ status: 'active' | 'pending' }>(`/api/brain/chats/${chatId}/members`, { method: 'POST', body: JSON.stringify({ email }) }),
+
+  /** Remove a human member from a chat. */
+  removeChatMember: (chatId: number, memberId: number) =>
+    request<{ removed: boolean }>(`/api/brain/chats/${chatId}/members/${memberId}`, { method: 'DELETE' }),
+
+  /**
+   * Ask an invited agent participant to reply — a chat-scoped run that answers AS
+   * the agent, returning the posted assistant turn (attributed via metadata.authoredBy).
+   * Wired into BrainPersistenceAdapter so `useBrainConversation` calls it after a
+   * user directs a message to an @agent.
+   */
+  requestAgentReply: (chatId: number, input: { agentRef: string; agentName?: string }) =>
+    request<{ message: BrainMessage }>(`/api/brain/chats/${chatId}/agent-reply`, { method: 'POST', body: JSON.stringify(input) }).then((r) => r.message),
 };
 
 /** A work-item kind a chat can be tied to (planning spine + roadmap + spec + gap). */
@@ -510,6 +533,16 @@ export interface LinkedChatRef {
   updatedAt: string;
   isArchived: boolean;
   mergedIntoChatId: number | null;
+}
+
+/** A human member of a chat (shared access / audience, migration 0288). */
+export interface ChatMemberInfo {
+  id: number;
+  userId: string | null;
+  name: string;
+  email: string;
+  status: string;
+  role: string;
 }
 
 /** An agent invited into a chat (an agent_assignments row, scope='chat'). */
@@ -3586,6 +3619,57 @@ export const analyticsApi = {
   /** Owner-facing cross-project activity rollup for the whole tenant. */
   tenantRollup: (days = 30): Promise<TenantActivityRollup> =>
     request<TenantActivityRollup>(`/api/analytics/tenant-rollup?days=${days}`),
+};
+
+// ---------------------------------------------------------------------------
+// Unified activity / audit log — "who did what, to what, when" across the whole
+// workforce (team members, external talent / hires, AI agents).
+// ---------------------------------------------------------------------------
+
+export type ActivityActorType = 'human' | 'hire' | 'cloud_agent' | 'host_agent' | 'system';
+
+export interface ActivityLogEvent {
+  id: number;
+  actorType: ActivityActorType;
+  actorRef: string | null;
+  actorName: string | null;
+  engagementId: string | null;
+  verb: string;
+  targetType: string | null;
+  targetId: string | null;
+  targetLabel: string | null;
+  summary: string | null;
+  projectId: number | null;
+  occurredAt: string;
+  metadata: unknown;
+}
+
+export interface ActivityLogPage {
+  events: ActivityLogEvent[];
+  nextCursor: number | null;
+}
+
+export interface ActivityLogFilter {
+  actorType?: string;
+  actorRef?: string;
+  targetType?: string;
+  targetId?: string;
+  verb?: string;
+  projectId?: number;
+  beforeId?: number;
+  limit?: number;
+}
+
+export const activityApi = {
+  /** The unified activity / audit timeline (MANAGER+). Keyset-paginated via nextCursor→beforeId. */
+  log: (params: ActivityLogFilter = {}): Promise<ActivityLogPage> => {
+    const q = new URLSearchParams();
+    for (const [k, v] of Object.entries(params)) {
+      if (v != null && v !== '') q.set(k, String(v));
+    }
+    const query = q.toString();
+    return request<ActivityLogPage>(`/api/activity/log${query ? `?${query}` : ''}`);
+  },
 };
 
 // ---------------------------------------------------------------------------

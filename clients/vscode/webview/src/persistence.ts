@@ -38,6 +38,11 @@ export function createPersistence(
       }).then((r) => r.messages),
     setMessageFeedback: (mid, fb) =>
       req(`/api/brain/messages/${mid}/feedback`, { method: 'PATCH', body: JSON.stringify({ feedback: fb }) }),
+    requestAgentReply: (id, input) =>
+      req<{ message: BrainMessage }>(`/api/brain/chats/${id}/agent-reply`, {
+        method: 'POST',
+        body: JSON.stringify(input),
+      }).then((r) => r.message),
     upload: async (file) => {
       const token = getToken();
       const form = new FormData();

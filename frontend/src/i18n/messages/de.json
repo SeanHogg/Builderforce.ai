@@ -831,8 +831,7 @@
     "subtitle": "Aggregieren Sie Kosten, Lieferung, DORA, KI-Effektivität und OKR-Erreichung von Projekten auf Initiativen und Portfolios.",
     "tabs": {
       "rollup": "Übersicht",
-      "structure": "Struktur",
-      "okrs": "OKR",
+      "structure": "Portfolios & OKRs",
       "cost": "CAPEX/OPEX"
     },
     "scope": {
@@ -840,18 +839,11 @@
       "workspace": "Arbeitsbereich (Organisationsebene)",
       "byProject": "Nach Projekt…"
     },
-    "scopeWord": {
-      "portfolio": "Portfolio",
-      "initiative": "Initiative",
-      "project": "Projekt",
-      "workspace": "Arbeitsbereich"
-    },
     "loading": "Wird geladen…",
     "loadingRollup": "Übersicht wird geladen…",
     "loadingOkrs": "OKR werden geladen…",
     "loadingInitiatives": "Initiativen werden geladen…",
     "emptyRollup": "Erstellen Sie im Tab „Struktur“ ein Portfolio, um die Übersicht zu sehen.",
-    "emptyOkrs": "Erstellen Sie im Tab „Struktur“ ein Portfolio, um OKR hinzuzufügen.",
     "stat": {
       "projects": "Projekte",
       "initiativesCount": "{count} Initiativen",
@@ -889,7 +881,8 @@
       "byInitiative": "Nach Initiative",
       "criticalPath": "Kritischer Pfad",
       "dependencies": "Abhängigkeiten",
-      "byPortfolio": "Nach Portfolio"
+      "byPortfolio": "Nach Portfolio",
+      "initiatives": "Initiativen"
     },
     "col": {
       "initiative": "Initiative",
@@ -914,7 +907,6 @@
       "newInitiativeName": "Name der neuen Initiative",
       "addInitiative": "Initiative hinzufügen",
       "noInitiatives": "Noch keine Initiativen.",
-      "unassignedInitiatives": "Nicht zugewiesene Initiativen",
       "noProjectsLinked": "Keine Projekte verknüpft.",
       "unlink": "Verknüpfung lösen",
       "linkProject": "+ Projekt verknüpfen…",
@@ -928,14 +920,14 @@
       "movePortfolio": "In anderes Portfolio verschieben",
       "unassignedOption": "— Nicht zugewiesen —",
       "dragHint": "Zum Neuzuweisen auf ein Portfolio ziehen",
-      "dropHere": "Hier ablegen, um diesem Portfolio zuzuweisen"
+      "dropHere": "Hier ablegen, um diesem Portfolio zuzuweisen",
+      "dropObjectiveHere": "Ein Ziel hier ablegen, um es diesem Portfolio zuzuweisen",
+      "unassigned": "Nicht zugewiesen",
+      "unassignedHint": "Initiativen und Ziele, die keinem Portfolio zugeordnet sind – ziehen Sie sie auf ein Portfolio oder verwenden Sie das Dropdown-Menü."
     },
     "okr": {
       "newObjective": "Neues Ziel",
       "objectivePlaceholder": "Ziel",
-      "periodPlaceholder": "2026-Q3",
-      "add": "Hinzufügen",
-      "objectiveHint": "Ziele werden diesem/dieser {scope} zugeordnet. Fügen Sie unten messbare Schlüsselergebnisse hinzu; der Fortschritt wird im Dashboard aggregiert.",
       "noObjectives": "Noch keine Ziele für diesen Bereich.",
       "newKeyResult": "Neues Schlüsselergebnis",
       "target": "Zielwert",
@@ -946,8 +938,6 @@
       "convertToEpic": "In Epic umwandeln",
       "convertToEpicHint": "Dieses Ziel zurück in ein Board-Epic umwandeln",
       "convertToEpicConfirm": "Dieses Ziel in ein Board-Epic umwandeln? Seine Key Results werden verworfen und verknüpfte Aufgaben werden dem neuen Epic untergeordnet.",
-      "startDate": "Startdatum",
-      "endDate": "Enddatum",
       "costClass": "Klasse",
       "capex": "CAPEX",
       "opex": "OPEX",
@@ -967,7 +957,8 @@
       "ownerWorkspace": "Arbeitsbereich (nicht zugewiesen)",
       "ownerPortfolio": "Portfolios",
       "ownerInitiative": "Initiativen",
-      "ownerProject": "Projekte"
+      "ownerProject": "Projekte",
+      "dragHint": "Auf ein Portfolio ziehen, um neu zuzuweisen"
     },
     "projectLink": {
       "title": "PMO-Initiative",
@@ -1938,6 +1929,10 @@
       "runtime": "Editor",
       "online": "Online",
       "offline": "Offline"
+    },
+    "builtinKind": {
+      "validator": "Prüfer",
+      "security": "Sicherheit"
     },
     "teams": {
       "heading": "Teams",
@@ -5818,5 +5813,52 @@
     "confirmRevoke": "Diesen API-Schlüssel widerrufen? Apps, die ihn verwenden, funktionieren sofort nicht mehr.",
     "errCreate": "Schlüssel konnte nicht erstellt werden",
     "errRevoke": "Widerruf fehlgeschlagen"
+  },
+  "audit": {
+    "title": "Aktivität & Audit-Verlauf",
+    "subtitle": "Jede Änderung in Ihrem Team – wer hat was, woran und wann getan.",
+    "loading": "Aktivität wird geladen…",
+    "empty": "Noch keine Aktivität. Aktionen im Arbeitsbereich erscheinen hier, sobald sie geschehen.",
+    "loadMore": "Mehr laden",
+    "filter": {
+      "all": "Alle"
+    },
+    "actor": {
+      "human": "Teammitglied",
+      "hire": "Externe Fachkraft",
+      "cloud_agent": "Cloud-Agent",
+      "host_agent": "Lokaler Agent",
+      "system": "System",
+      "unknown": "Unbekannt"
+    },
+    "verb": {
+      "task": {
+        "created": "hat ein Ticket erstellt",
+        "updated": "hat ein Ticket aktualisiert",
+        "status_changed": "hat ein Ticket verschoben",
+        "assigned": "hat ein Ticket neu zugewiesen",
+        "moved": "hat ein Ticket in ein anderes Projekt verschoben",
+        "deleted": "hat ein Ticket gelöscht"
+      },
+      "code": {
+        "changed": "hat Code geändert"
+      },
+      "deploy": {
+        "recorded": "hat ein Deployment erfasst",
+        "failed": "hat ein fehlgeschlagenes Deployment gemeldet"
+      },
+      "role": {
+        "assigned": "hat eine Rolle zugewiesen"
+      },
+      "engagement": {
+        "created": "hat externe Fachkraft eingeladen"
+      },
+      "member": {
+        "hired": "hat externe Fachkraft eingestellt"
+      },
+      "doc": {
+        "published": "hat ein Dokument veröffentlicht"
+      }
+    }
   }
 }

@@ -52,6 +52,7 @@ import { WorkforceMetricsProvider } from './WorkforceMetricsContext';
 import { MemberConsolidationPanel } from '@/components/contributors/MemberConsolidationPanel';
 import { AgentOwnerActions } from './AgentOwnerActions';
 import { AgentTypePill } from '@/components/AgentTypePill';
+import { BuiltinKindBadge } from '@/components/BuiltinKindBadge';
 import { StatusBadge } from '@/components/StatusBadge';
 import { formatAgentPrice } from '@/lib/agentPresentation';
 import { isAgentOwner } from '@/lib/agentPermissions';
@@ -679,7 +680,12 @@ export function WorkforceAgents({ tenantId }: { tenantId?: number }) {
               {cloudAgents.map((a) => (
                 <tr key={`cloud-${a.id}`} style={trStyle}>
                   {canConsolidate && <td style={tdStyle} />}
-                  <td style={tdStyle}>{a.name}</td>
+                  <td style={tdStyle}>
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                      {a.name}
+                      <BuiltinKindBadge kind={a.builtin_kind} />
+                    </span>
+                  </td>
                   <td style={tdStyle}><AgentTypePill kind="cloud" /></td>
                   <td style={tdMutedStyle}>{a.published ? 'Published' : 'Draft'}</td>
                   <td style={tdMutedStyle}>{RUNTIME_LABELS[a.runtime_support ?? 'cloud']}</td>
@@ -702,7 +708,12 @@ export function WorkforceAgents({ tenantId }: { tenantId?: number }) {
               {visiblePurchased.map((a) => (
                 <tr key={`purchased-${a.id}`} style={trStyle}>
                   {canConsolidate && <td style={tdStyle} />}
-                  <td style={tdStyle}>{a.name}</td>
+                  <td style={tdStyle}>
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                      {a.name}
+                      <BuiltinKindBadge kind={a.builtin_kind} />
+                    </span>
+                  </td>
                   <td style={tdStyle}><AgentTypePill kind="marketplace" /></td>
                   <td style={tdMutedStyle}>—</td>
                   <td style={tdMutedStyle}>{RUNTIME_LABELS[a.runtime_support ?? 'cloud']}</td>

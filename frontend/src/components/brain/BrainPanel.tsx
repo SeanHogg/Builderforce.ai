@@ -290,20 +290,28 @@ export function BrainPanel({
   // be addressed to a teammate instead of the BRAIN. Bumped on invite/remove.
   const activeChatId = chats.activeChat?.id ?? null;
   const [invitedAgents, setInvitedAgents] = useState<ChatAgentInvite[]>([]);
+  const [chatMembers, setChatMembers] = useState<ChatMemberInfo[]>([]);
   const [participantsRefresh, setParticipantsRefresh] = useState(0);
   useEffect(() => {
-    if (activeChatId == null) { setInvitedAgents([]); return; }
+    if (activeChatId == null) { setInvitedAgents([]); setChatMembers([]); return; }
     let live = true;
     brain.listChatAgents(activeChatId).then((a) => { if (live) setInvitedAgents(a); }).catch(() => { if (live) setInvitedAgents([]); });
+    brain.listChatMembers(activeChatId).then((m) => { if (live) setChatMembers(m); }).catch(() => { if (live) setChatMembers([]); });
     return () => { live = false; };
   }, [activeChatId, participantsRefresh]);
   const participants = useMemo<DirectedRecipient[]>(
-    () => invitedAgents.map((a) => ({
-      kind: 'agent' as const,
-      ref: a.agentRef,
-      name: agentPool.find((p) => p.ref === a.agentRef)?.name ?? a.agentRef,
-    })),
-    [invitedAgents, agentPool],
+    () => [
+      ...invitedAgents.map((a) => ({
+        kind: 'agent' as const,
+        ref: a.agentRef,
+        name: agentPool.find((p) => p.ref === a.agentRef)?.name ?? a.agentRef,
+      })),
+      // Human members are addressable too (kind='human', ref = user id).
+      ...chatMembers
+        .filter((m) => m.status === 'active' && m.userId)
+        .map((m) => ({ kind: 'human' as const, ref: m.userId as string, name: m.name })),
+    ],
+    [invitedAgents, chatMembers, agentPool],
   );
   // Who the next message goes to: `null` = auto (follow @mention), `'brain'` =
   // explicit BRAIN, or an explicit participant. Reset when switching chats; drop

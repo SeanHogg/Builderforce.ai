@@ -63,6 +63,13 @@ export function createChatTicketsAdapter(
       req(`/api/brain/chats/${chatId}/agents`, { method: 'POST', body: JSON.stringify(input) }).then(() => undefined),
     removeAgent: (chatId, assignmentId) =>
       req(`/api/brain/chats/${chatId}/agents/${assignmentId}`, { method: 'DELETE' }).then(() => undefined),
+    listMembers: (chatId) =>
+      req<{ members: Array<{ id: number; userId: string | null; name: string; email: string; status: string }> }>(`/api/brain/chats/${chatId}/members`)
+        .then((r) => r.members),
+    inviteMember: (chatId, email) =>
+      req<{ status: string }>(`/api/brain/chats/${chatId}/members`, { method: 'POST', body: JSON.stringify({ email }) }).then((r) => ({ status: r.status })),
+    removeMember: (chatId, memberId) =>
+      req(`/api/brain/chats/${chatId}/members/${memberId}`, { method: 'DELETE' }).then(() => undefined),
     loadAgentPool: (): Promise<AgentOptionVM[]> => {
       if (!poolPromise) poolPromise = fetchAgentPool().catch((e) => { poolPromise = null; throw e; });
       return poolPromise;

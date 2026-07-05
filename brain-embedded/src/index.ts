@@ -88,8 +88,10 @@ export {
 // Directed messages (address a chat turn to a participant instead of the BRAIN)
 export {
   ADDRESSED_TO_META_KEY,
+  AUTHORED_BY_META_KEY,
   withDirectedMetadata,
   parseDirectedRecipient,
+  parseMessageAuthor,
   isDirectedToParticipant,
   mentionRecipient,
   resolveRecipient,

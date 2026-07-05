@@ -4,6 +4,17 @@
 
 ---
 
+## ✅ RESOLVED 2026-07-05 — Chat↔ticket: every planning/project kind is linkable, referenceable & MCP-creatable
+
+Followed the chat↔ticket auto-link work (open an item → the chat is tied to it) by making the FULL set of planning/project kinds first-class across **link + reference + create**. Kinds are now `portfolio | objective | initiative | roadmap | spec | epic | gap | task`.
+
+- **New linkable ticket kinds.** Added `roadmap` (own `roadmap_items` table, status-based health — `shipped`=done), `gap` (a `task_type`, tasks-table leaf), and `spec`/PRD (own table, `complete`=done) to `ChatTicketService` (`TICKET_KINDS` + `resolveTicket` + `ticketHealthBatch`), the shared `@seanhogg/builderforce-brain-ui` (`TicketKind`/labels/`RUNNABLE_KINDS`; +gap runnable), the web `builderforceApi.TicketKind` + `ChatTicketsPanel` adapter (`loadTicketOptions` now fetches roadmap + specs + buckets gaps), the VS Code webview adapter, and all five `brain.tickets.kind.*` locale catalogs. `chat_ticket_links.ticketKind` is `varchar(12)` — **no migration**.
+- **Auto-link on open for every page kind.** Roadmap-page rows carry a `roadmap` ticket and PRD-page rows a `spec` ticket through the `seed`+`ticket` intent (`ProjectListAction.ticket` in brain-ui → `projectPagePanel` → webview `linkOpenedTicket`); tree/board/360/backlog task/epic/gap link through `startTaskSession`.
+- **Creatable via MCP.** Added `roadmap.list/get/create/update/delete` built-in MCP tools (direct insert + cache invalidation via the shared `trackerCacheKey`, moved to `infrastructure/cache/readThroughCache` so route + MCP writers share one key format), and added `gap` to the `tasks.create` `taskType` enum. `chats.link_ticket`/`chats.list_tickets` enums + descriptions updated for `roadmap`/`spec`/`gap`. Portfolio/objective/initiative/spec create tools already existed.
+- Versions: api `2026.7.22` · frontend `2026.7.22` · brain-ui `2026.7.7` · VSIX `builderforce-ai-2026.7.31.vsix`. Verified: api type-clean on all changed files, frontend `tsgo` 0 errors, VS Code host+webview `tsc` clean, brain-ui + webview rebuilt.
+
+---
+
 ## ✅ RESOLVED 2026-07-05 — Workforce → Teams: card affordance, card/panel count consistency, full i18n
 
 Fixed the two reported Teams-tab bugs and closed the localization gap the fix exposed.
