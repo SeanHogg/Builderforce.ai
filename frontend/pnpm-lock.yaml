@@ -40,6 +40,9 @@ importers:
       '@seanhogg/builderforce-memory-engine':
         specifier: ^2026.6.39
         version: 2026.6.39
+      '@seanhogg/builderforce-quality':
+        specifier: ^2026.7.5
+        version: 2026.7.5
       '@seanhogg/builderforce-sdk':
         specifier: link:../sdk
         version: link:../sdk
@@ -1264,6 +1267,10 @@ packages:
     engines: {node: '>=18.0.0'}
     peerDependencies:
       '@seanhogg/builderforce-memory-engine': ^2026.6.39
+
+  '@seanhogg/builderforce-quality@2026.7.5':
+    resolution: {integrity: sha512-TPI+SVch4YxgaYuIGSupP3RlvdB2N1kYbxFH5e1cdGsrYJZunR5wN2PYcj4WtanThy28kLSWXVsU+I9XQ9iiiA==}
+    engines: {node: '>=18'}
 
   '@sinclair/typebox@0.25.24':
     resolution: {integrity: sha512-XJfwUVUKDHF5ugKwIcxEgc9k8b7HbznCp6eUfWgu710hMPNIO4aw4/zB5RogDQz8nd6gyCDpU9O/m6qYEWY6yQ==}
@@ -6355,6 +6362,8 @@ snapshots:
   '@seanhogg/builderforce-memory@2026.6.39(@seanhogg/builderforce-memory-engine@2026.6.39)':
     dependencies:
       '@seanhogg/builderforce-memory-engine': 2026.6.39
+
+  '@seanhogg/builderforce-quality@2026.7.5': {}
 
   '@sinclair/typebox@0.25.24': {}
 
