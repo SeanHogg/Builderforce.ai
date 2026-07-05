@@ -27,6 +27,36 @@ describe('isFailedToolResult', () => {
   });
 });
 
+describe('detectUnbackedWriteClaim', () => {
+  const msg = (role: string, content: string): BrainMessage => ({ role, content } as BrainMessage);
+  const toolEv = (label: string, result: unknown, isError = false): BrainTraceEvent =>
+    ({ ts: '', category: 'tool', label, result, isError });
+
+  it('flags a "I updated the roadmap" claim with no successful write tool call', () => {
+    const events = [toolEv('attachments.read', { content: '…' })];
+    const messages = [msg('assistant', "I've updated the roadmap file with the new IDs.")];
+    expect(detectUnbackedWriteClaim(events, messages)).toBe(true);
+  });
+
+  it('does NOT flag when a write tool actually succeeded this run', () => {
+    const events = [toolEv('attachments.write', { key: '1/u/rm.md', updated: true })];
+    const messages = [msg('assistant', 'Saved the updated ROADMAP.md.')];
+    expect(detectUnbackedWriteClaim(events, messages)).toBe(false);
+  });
+
+  it('does NOT count a FAILED write as backing the claim', () => {
+    const events = [toolEv('builtin_attachments_write', { ok: false, error: 'attachment not found' }, false)];
+    const messages = [msg('assistant', 'Done — I wrote the changes back to the file.')];
+    expect(detectUnbackedWriteClaim(events, messages)).toBe(true);
+  });
+
+  it('ignores assistant prose that is not a file-save claim', () => {
+    const events: BrainTraceEvent[] = [];
+    const messages = [msg('assistant', 'I created 3 tasks and 2 objectives on the board.')];
+    expect(detectUnbackedWriteClaim(events, messages)).toBe(false);
+  });
+});
+
 describe('buildBrainTriageReport', () => {
   const events: BrainTraceEvent[] = [
     { ts: '2026-06-13T00:00:00.000Z', category: 'llm', label: 'llm.complete', durationMs: 1200, args: { model: 'x', step: 0, toolCalls: 1 }, result: '1 tool call(s)' },

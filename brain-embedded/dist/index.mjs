@@ -772,6 +772,15 @@ function isFailedToolResult(result) {
   }
   return false;
 }
+var FILE_WRITE_TOOL = /(attachments|files?|project_files)[._](write|save|update)/i;
+var FILE_SAVE_CLAIM = /\b(saved|updated|wrote|written|edited|persisted|added)\b[^.!?\n]*\b(file|attachment|roadmap|document|upload|\.md|\.csv|\.txt|\.json)\b/i;
+function detectUnbackedWriteClaim(events, messages) {
+  const wroteOk = events.some(
+    (e) => e.category === "tool" && FILE_WRITE_TOOL.test(e.label) && !e.isError && !isFailedToolResult(e.result)
+  );
+  if (wroteOk) return false;
+  return messages.some((m) => m.role === "assistant" && typeof m.content === "string" && FILE_SAVE_CLAIM.test(m.content));
+}
 function cap(s, n = 2e3) {
   const str = typeof s === "string" ? s : JSON.stringify(s ?? "");
   return str.length > n ? str.slice(0, n) + `\u2026 (+${str.length - n} chars)` : str;
@@ -893,6 +902,9 @@ function buildBrainTriageReport(opts) {
   lines.push(`Steps: ${events.length} \xB7 Errors: ${errors.length} \xB7 Messages: ${messages.length}`);
   if (error) lines.push(`Last error: ${error}`);
   lines.push("", ...formatBrainDiagnostics(computeBrainDiagnostics(events, configuredModel)));
+  if (detectUnbackedWriteClaim(events, messages)) {
+    lines.push("", "\u26A0 UNBACKED WRITE CLAIM \u2014 an assistant turn claimed it saved/updated a file, but no file-write tool (attachments.write / project_files.save) succeeded in this run. The file was NOT modified.");
+  }
   if (errors.length) {
     lines.push("", `--- Errors (${errors.length}) ---`);
     for (const ev of errors) {
