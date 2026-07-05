@@ -45,8 +45,13 @@ describe('cloud-agent curated platform tool subset', () => {
 
   it('grants NO admin/destructive tools to an unattended agent', () => {
     const forbiddenPrefixes = ['api_keys.', 'security.', 'provider_keys.', 'migrations.', 'agent_hosts.', 'board_connections.', 'cron.', 'integrations.'];
+    // The ONE safe exception under `security.`: the Security agent files its SOC 2
+    // findings via this tool mid-run. security.configure_access / security.get_access
+    // stay forbidden (deciding who can SEE security tickets is an admin action).
+    const allowedUnderForbidden = new Set(['security.record_finding']);
     const forbiddenExact = ['executions.submit', 'executions.cancel', 'executions.post_message'];
     for (const tool of CLOUD_AGENT_PLATFORM_TOOLS) {
+      if (allowedUnderForbidden.has(tool)) continue;
       expect(forbiddenPrefixes.some((p) => tool.startsWith(p)), `curated tool '${tool}' is admin-surface`).toBe(false);
       expect(forbiddenExact.includes(tool), `curated tool '${tool}' is an execution control-plane mutation`).toBe(false);
       expect(tool.endsWith('.delete'), `curated tool '${tool}' is a delete`).toBe(false);

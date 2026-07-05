@@ -989,6 +989,14 @@ export const tasks = pgTable('tasks', {
    *  auditFlagCount is how many required lane requirements are unmet. */
   auditStatus:           varchar('audit_status', { length: 12 }),
   auditFlagCount:        integer('audit_flag_count').notNull().default(0),
+  /** Security-finding metadata (migration 0290) — set on a SECURITY-typed task the
+   *  Security agent mints for a SOC 2 finding. severity is
+   *  'critical'|'high'|'medium'|'low'|'info'; tsc is the Trust Service Criterion the
+   *  finding maps to; securityAuditId links back to the {@link securityAudits} run.
+   *  Null on ordinary task/epic/gap rows. */
+  securitySeverity:      varchar('security_severity', { length: 12 }),
+  securityTsc:           varchar('security_tsc', { length: 32 }),
+  securityAuditId:       integer('security_audit_id'),
   createdAt:         timestamp('created_at').notNull().defaultNow(),
   updatedAt:         timestamp('updated_at').notNull().defaultNow(),
 });
@@ -1013,6 +1021,54 @@ export const taskReviews = pgTable('task_reviews', {
   summary:     text('summary'),
   gapsCount:   integer('gaps_count').notNull().default(0),
   createdAt:   timestamp('created_at').notNull().defaultNow(),
+});
+
+// ---------------------------------------------------------------------------
+// Security agent: ticket-access config + audit runs (migration 0291)
+// ---------------------------------------------------------------------------
+
+/**
+ * Per-tenant setup configuration deciding WHO can see the access-restricted
+ * SECURITY tickets the Security agent files. Default-DENY: every audience toggle
+ * off + empty allowlists ⇒ only tenant Owner/Admin see them. A tenant opts whole
+ * audiences in (humans / hired agents / talent) and/or names specific users/agents.
+ * Read + enforced by SecurityTicketAccessService on every task read surface.
+ */
+export const securityTicketAccess = pgTable('security_ticket_access', {
+  tenantId:       integer('tenant_id').primaryKey().references(() => tenants.id, { onDelete: 'cascade' }),
+  /** { humans:boolean, hired:boolean, talent:boolean } — whole-population opt-ins. */
+  audiences:      jsonb('audiences').notNull().default(sql`'{"humans":false,"hired":false,"talent":false}'::jsonb`),
+  /** Explicit per-user grants (users.id values). */
+  allowUserIds:   jsonb('allow_user_ids').notNull().default(sql`'[]'::jsonb`),
+  /** Explicit per-agent grants (ide_agents.id values). */
+  allowAgentRefs: jsonb('allow_agent_refs').notNull().default(sql`'[]'::jsonb`),
+  updatedAt:      timestamp('updated_at').notNull().defaultNow(),
+  updatedBy:      varchar('updated_by', { length: 64 }),
+});
+
+/**
+ * One row per Security-agent audit RUN — the surfaced "Security Audit result".
+ * Goes running → complete|failed; on finish it carries the one-paragraph summary
+ * and the rollups (counts by severity, counts by Trust Service Criterion). Each
+ * finding it produces is a SECURITY task linked back via tasks.security_audit_id.
+ */
+export const securityAudits = pgTable('security_audits', {
+  id:               serial('id').primaryKey(),
+  tenantId:         integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  /** The project (repo) the audit ran against; its findings are filed into it. */
+  projectId:        integer('project_id').references(() => projects.id, { onDelete: 'set null' }),
+  /** The transient anchor task the cloud run hangs on (dispatch is task-centric). */
+  anchorTaskId:     integer('anchor_task_id'),
+  /** ide_agents.id of the Security agent that ran the audit (or 'system'). */
+  agentRef:         varchar('agent_ref', { length: 64 }),
+  status:           varchar('status', { length: 16 }).notNull().default('running'), // 'running'|'complete'|'failed'
+  triggerSource:    varchar('trigger_source', { length: 16 }).notNull().default('cron'), // 'cron'|'manual'
+  summary:          text('summary'),
+  findingsCount:    integer('findings_count').notNull().default(0),
+  countsBySeverity: jsonb('counts_by_severity'),
+  countsByTsc:      jsonb('counts_by_tsc'),
+  startedAt:        timestamp('started_at').notNull().defaultNow(),
+  finishedAt:       timestamp('finished_at'),
 });
 
 /**

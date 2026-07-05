@@ -370,7 +370,7 @@ export const brain = {
 
   getChat: (id: number) => request<BrainChat>(`/api/brain/chats/${id}`),
 
-  updateChat: (id: number, body: { title?: string; projectId?: number | null }) =>
+  updateChat: (id: number, body: { title?: string; projectId?: number | null; visibility?: 'shared' | 'locked' }) =>
     request<BrainChat>(`/api/brain/chats/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
 
   deleteChat: (id: number) =>

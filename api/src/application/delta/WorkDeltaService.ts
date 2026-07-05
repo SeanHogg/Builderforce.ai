@@ -165,20 +165,23 @@ export class WorkDeltaService {
     }).returning({ id: workDeltas.id });
 
     // Unified audit stream: a code change, attributed to its author (human, hire,
-    // or agent — resolved from the createdBy ref). Best-effort, never throws.
-    const actor = await resolveActorByRef(this.env, this.db, tenantId, createdBy);
-    await recordActivity(this.env, this.db, {
-      tenantId,
-      segmentId: seg ?? null,
-      projectId: input.projectId,
-      actor,
-      verb: 'code.changed',
-      targetType: taskId != null ? 'task' : 'project',
-      targetId: taskId ?? input.projectId,
-      targetLabel: summary.slice(0, 300),
-      summary: `${kind}: ${summary.slice(0, 200)}`,
-      metadata: { kind, modality, files: files ?? [], deltaId: row!.id, taskKey },
-    });
+    // or agent — resolved from the createdBy ref). Fully best-effort: a failure in
+    // actor resolution or the audit write must never fail the delta.
+    try {
+      const actor = await resolveActorByRef(this.env, this.db, tenantId, createdBy);
+      await recordActivity(this.env, this.db, {
+        tenantId,
+        segmentId: seg ?? null,
+        projectId: input.projectId,
+        actor,
+        verb: 'code.changed',
+        targetType: taskId != null ? 'task' : 'project',
+        targetId: taskId ?? input.projectId,
+        targetLabel: summary.slice(0, 300),
+        summary: `${kind}: ${summary.slice(0, 200)}`,
+        metadata: { kind, modality, files: files ?? [], deltaId: row!.id, taskKey },
+      });
+    } catch { /* audit is best-effort — never fail the delta on it */ }
 
     return { deltaId: row!.id, kind, taskId, taskKey };
   }

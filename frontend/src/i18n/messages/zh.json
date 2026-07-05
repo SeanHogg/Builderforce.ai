@@ -4653,6 +4653,16 @@
       "removeAgent": "移除",
       "inviteAgent": "邀请代理…",
       "agentsHint": "被邀请的代理可被指派去执行关联的任务或史诗。",
+      "people": "成员",
+      "noPeople": "尚未邀请任何成员。",
+      "invitePerson": "通过邮箱邀请…",
+      "invitePersonHint": "邀请队友查看并协作此聊天。",
+      "removePerson": "移除",
+      "inviteSent": "邀请已发送。",
+      "invitePending": "邀请已发送——他们登录后即会加入。",
+      "visibilityShared": "共享",
+      "visibilityLocked": "已锁定",
+      "lockHint": "共享聊天对整个团队可见；锁定后仅其成员可见。",
       "mergeHint": "将其他聊天合并到此聊天。其消息、工单和代理都会转移到这里；来源聊天将被归档。",
       "mergeNoOthers": "没有可合并的其他聊天。",
       "mergeAction": "将 {n} 个合并到此处",
@@ -5474,7 +5484,9 @@
   },
   "notifications": {
     "title": "通知",
-    "markAllRead": "全部标为已读"
+    "markAllRead": "全部标为已读",
+    "empty": "没有新的通知。",
+    "bellUnread": "通知，{count} 条未读"
   },
   "kanban": {
     "rosterTitle": "推荐团队配置",

@@ -760,6 +760,18 @@ function consolidationMarkerContent(summary) {
 
 // src/directedMessage.ts
 var ADDRESSED_TO_META_KEY = "addressedTo";
+var AUTHORED_BY_META_KEY = "authoredBy";
+function parseMessageAuthor(msg) {
+  if (!msg.metadata) return null;
+  try {
+    const a = JSON.parse(msg.metadata).authoredBy;
+    if (a && typeof a.ref === "string" && typeof a.name === "string" && (a.kind === "agent" || a.kind === "human")) {
+      return { kind: a.kind, ref: a.ref, name: a.name };
+    }
+  } catch {
+  }
+  return null;
+}
 function withDirectedMetadata(recipient, base) {
   const meta = { ...base ?? {} };
   if (recipient) meta[ADDRESSED_TO_META_KEY] = recipient;
@@ -1449,7 +1461,18 @@ ${refs}`;
         const [userMsg] = await persistence.sendMessages(id, [{ role: "user", content: displayContent, metadata }]);
         setMessages((prev) => [...prev, userMsg]);
         onActivity?.(id);
-        if (addressedTo) return true;
+        if (addressedTo) {
+          if (addressedTo.kind === "agent" && persistence.requestAgentReply) {
+            try {
+              const reply = await persistence.requestAgentReply(id, { agentRef: addressedTo.ref, agentName: addressedTo.name });
+              setMessages((prev) => [...prev, reply]);
+              onActivity?.(id);
+            } catch (e) {
+              setLocalError(e instanceof Error ? e.message : "The agent could not reply.");
+            }
+          }
+          return true;
+        }
         const seed = scopeToConsolidation(messages).map((m) => ({
           role: m.role,
           content: m.content
@@ -1599,6 +1622,7 @@ function takePendingPrompt() {
 }
 export {
   ADDRESSED_TO_META_KEY,
+  AUTHORED_BY_META_KEY,
   BrainActionsProvider,
   BrainContextProvider,
   BrainProvider,
@@ -1617,6 +1641,7 @@ export {
   mentionRecipient,
   modelsUsedInTrace,
   parseDirectedRecipient,
+  parseMessageAuthor,
   prepareImageDataUrl,
   resolveRecipient,
   savePendingPrompt,

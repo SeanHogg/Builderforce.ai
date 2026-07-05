@@ -10,6 +10,7 @@ import { useRolePreview, type PreviewRole } from '@/lib/RolePreviewContext';
 import { useEmulation } from '@/lib/EmulationContext';
 import { useCart } from '@/lib/CartContext';
 import ShoppingCart from './ShoppingCart';
+import NotificationBell from './NotificationBell';
 import { TenantProjectSwitcher } from './TenantProjectSwitcher';
 
 const PREVIEW_ROLES: PreviewRole[] = ['owner', 'manager', 'developer', 'viewer'];
@@ -158,6 +159,8 @@ export default function TopBar({ onMenuClick }: { onMenuClick?: () => void }) {
             )}
           </div>
         )}
+
+        {isAuthenticated && <NotificationBell />}
 
         <CartButton />
 

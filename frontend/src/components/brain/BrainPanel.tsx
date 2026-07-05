@@ -42,7 +42,7 @@ import {
   type RecipientChoice,
 } from '@/lib/brain';
 import type { BrainChat, BrainMessage } from '@/lib/builderforceApi';
-import { agentAssignmentsApi, reposApi, runtimeApi, brain, type AgentAssignment, type ProjectRepository, type ChatAgentInvite } from '@/lib/builderforceApi';
+import { agentAssignmentsApi, reposApi, runtimeApi, brain, type AgentAssignment, type ProjectRepository, type ChatAgentInvite, type ChatMemberInfo } from '@/lib/builderforceApi';
 import { loadAgentPoolCached, type PoolAgent } from '@/lib/agentPool';
 import { MODALITIES, getModality } from '@/lib/modality';
 import { isBrainAutoApprove, setBrainAutoApprove } from '@/lib/brain/autoApprove';

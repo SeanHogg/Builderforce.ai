@@ -5,6 +5,7 @@ import { authMiddleware } from '../middleware/authMiddleware';
 import type { Db } from '../../infrastructure/database/connection';
 import { projects, tasks, vscodeConnections } from '../../infrastructure/database/schema';
 import type { TenantService } from '../../application/tenant/TenantService';
+import { provisionBuiltinAgents } from '../../application/agent/provisionBuiltinAgents';
 import { mintTenantSessionToken } from '../../infrastructure/auth/tenantSessionToken';
 import { TenantRole } from '../../domain/shared/types';
 
@@ -45,6 +46,7 @@ export function createVscodeRoutes(db: Db, tenantService: TenantService): Hono<H
     const name = body.name?.trim();
     if (!name) return c.json({ error: 'name is required' }, 400);
     const tenant = await tenantService.createTenant({ name, ownerUserId: userId });
+    await provisionBuiltinAgents(db, tenant.id).catch(() => {});   // seed Validator + Security
     return c.json(tenant.toPlain(), 201);
   });
 

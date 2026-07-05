@@ -58,6 +58,11 @@ export enum TaskType {
    *  (migration 0270). A first-class, schedulable board item that carries a
    *  gapOriginTaskId back to the Done item it was found in. */
   GAP = 'gap',
+  /** Minted by the Security agent for a SOC 2 audit finding (migration 0290). A
+   *  first-class, schedulable board item carrying the finding's severity + Trust
+   *  Service Criterion, and access-restricted via security_ticket_access — visible
+   *  only to allowlisted/opted-in audiences plus Owner/Admin. */
+  SECURITY = 'security',
 }
 
 export enum AgentType {

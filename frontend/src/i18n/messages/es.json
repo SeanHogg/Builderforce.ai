@@ -4653,6 +4653,16 @@
       "removeAgent": "Quitar",
       "inviteAgent": "Invitar a un agente…",
       "agentsHint": "A los agentes invitados se les puede etiquetar para ejecutar una tarea o épica vinculada.",
+      "people": "Personas",
+      "noPeople": "Aún no se ha invitado a nadie.",
+      "invitePerson": "Invitar por correo…",
+      "invitePersonHint": "Invita a un compañero a ver y colaborar en este chat.",
+      "removePerson": "Quitar",
+      "inviteSent": "Invitación enviada.",
+      "invitePending": "Invitación enviada: se unirán cuando inicien sesión.",
+      "visibilityShared": "Compartido",
+      "visibilityLocked": "Bloqueado",
+      "lockHint": "Los chats compartidos son visibles para todo el equipo; bloquéalo para que solo lo vean sus miembros.",
       "mergeHint": "Fusiona otros chats en este. Sus mensajes, tickets y agentes se trasladan aquí; los orígenes se archivan.",
       "mergeNoOthers": "No hay otros chats para fusionar.",
       "mergeAction": "Fusionar {n} aquí",
@@ -5474,7 +5484,9 @@
   },
   "notifications": {
     "title": "Notificaciones",
-    "markAllRead": "Marcar todo como leído"
+    "markAllRead": "Marcar todo como leído",
+    "empty": "Estás al día.",
+    "bellUnread": "Notificaciones, {count} sin leer"
   },
   "kanban": {
     "rosterTitle": "Plantel recomendado",
