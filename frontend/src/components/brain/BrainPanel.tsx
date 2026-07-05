@@ -709,19 +709,19 @@ export function BrainPanel({
                 createFile: tTimeline('createFile'),
                 preview: tTimeline('preview'),
               }}
-              onApplyCode={hasTool('apply_code_to_active_file') ? (code: string) => { void runTool('apply_code_to_active_file', { code }); } : undefined}
-              onCreateFile={hasTool('create_file') ? (path: string, content: string) => { void runTool('create_file', { path, content }); } : undefined}
+              onApplyCode={hasTool('apply_code_to_active_file') ? (code) => { void runTool('apply_code_to_active_file', { code }); } : undefined}
+              onCreateFile={hasTool('create_file') ? (path, content) => { void runTool('create_file', { path, content }); } : undefined}
               // Reuse the web's rich markdown (mermaid, router links, code-apply) so
               // no feature is lost; the model-authored "next step" JSON is lifted out.
-              renderMessage={(msg: BrainMessage, ctx: { role: 'user' | 'assistant'; text: string }) => (
+              renderMessage={(msg, ctx) => (
                 <ChatMessageContent
                   content={ctx.role === 'assistant' ? parseSuggestedActions(msg.content).content : ctx.text}
-                  onApplyCode={ctx.role === 'assistant' && hasTool('apply_code_to_active_file') ? (code: string) => { void runTool('apply_code_to_active_file', { code }); } : undefined}
-                  onCreateFile={ctx.role === 'assistant' && hasTool('create_file') ? (path: string, content: string) => { void runTool('create_file', { path, content }); } : undefined}
+                  onApplyCode={ctx.role === 'assistant' && hasTool('apply_code_to_active_file') ? (code) => { void runTool('apply_code_to_active_file', { code }); } : undefined}
+                  onCreateFile={ctx.role === 'assistant' && hasTool('create_file') ? (path, content) => { void runTool('create_file', { path, content }); } : undefined}
                 />
               )}
-              renderStreaming={(text: string) => <ChatMessageContent content={parseSuggestedActions(text).content} />}
-              renderAssistantActions={(msg: BrainMessage) => (
+              renderStreaming={(text) => <ChatMessageContent content={parseSuggestedActions(text).content} />}
+              renderAssistantActions={(msg) => (
                 <MessageActions
                   msg={msg}
                   conv={conv}
