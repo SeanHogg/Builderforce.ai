@@ -84,7 +84,7 @@ export default function HealthPanel() {
                 type="button"
                 className="btn-ghost"
                 style={{ marginTop: 4, fontSize: 12 }}
-                onClick={() => router.push('/admin?tab=errors')}
+                onClick={() => router.push('/admin?tab=logs')}
               >
                 View errors →
               </button>

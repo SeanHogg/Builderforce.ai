@@ -41,7 +41,8 @@ export type AutoRunReason =
   | 'human_gate'          // the lane gate is 'human' — waits for explicit approval / Run now
   | 'no_agent'            // no lane-staffed agent AND no owner agent — nothing to run as
   | 'capability_mismatch' // every candidate agent lacks the lane's required capabilities
-  | 'already_running';    // a live run already exists (or a same-lane re-entry loop guard)
+  | 'already_running'     // a live run already exists (or a same-lane re-entry loop guard)
+  | 'not_executable';     // a system/coordination chore (e.g. an AI Manager run task) — never dispatched to an agent
 
 export interface AutoRunEvaluation {
   status: string;
@@ -107,7 +108,7 @@ export async function evaluateTaskAutoRun(
   args: { tenantId: number; projectId: number; taskId: number; status: string; originLaneKey?: string },
 ): Promise<AutoRunEvaluation> {
   const [taskRow] = await db
-    .select({ assignedAgentRef: tasks.assignedAgentRef })
+    .select({ assignedAgentRef: tasks.assignedAgentRef, source: tasks.source })
     .from(tasks)
     .where(eq(tasks.id, args.taskId))
     .limit(1);
@@ -126,6 +127,13 @@ export async function evaluateTaskAutoRun(
     canRunNow: false,
     ...over,
   });
+
+  // System/coordination chores (e.g. an AI Manager "Backlog management pass" task)
+  // are assigned to the manager agent for board VISIBILITY, but they are not codeable
+  // work — a coding agent must never pick one up and try to "execute" it. This single
+  // guard covers every dispatch entry point (lane trigger, mechanical sweep, manager
+  // dispatch pass, manual Run-now) since they all resolve through here.
+  if (taskRow?.source === 'manager') return base({ reason: 'not_executable' });
 
   // Done / terminal status: the ticket is finalized (commit + PR), never auto-run.
   if (args.status === TaskStatus.DONE) return base({ reason: 'terminal_lane', isTerminalLane: true });

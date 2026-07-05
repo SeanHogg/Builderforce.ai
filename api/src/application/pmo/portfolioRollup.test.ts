@@ -4,6 +4,7 @@ import {
   objectiveProgress,
   computeDependencyAnalysis,
   wouldCreateCycle,
+  foldPortfolioBreakdown,
 } from './portfolioRollup';
 
 describe('keyResultProgress', () => {
@@ -89,6 +90,66 @@ describe('computeDependencyAnalysis', () => {
       ],
     );
     expect(a.cycleDetected).toBe(true);
+  });
+});
+
+describe('foldPortfolioBreakdown', () => {
+  const portfolios = [{ id: 'pfB', name: 'Beta' }, { id: 'pfA', name: 'Alpha' }];
+  const initiativeRow = (initiativeId: string, projectCount: number, completedCount: number, agentLlmCostUsd: number) =>
+    ({ initiativeId, projectCount, completedCount, agentLlmCostUsd });
+  const ofInit = (pairs: Array<[string, string | null]>) => new Map<string, string | null>(pairs);
+
+  it('folds initiatives into their portfolio and sums projects/completed/cost', () => {
+    const rows = foldPortfolioBreakdown(
+      portfolios,
+      [initiativeRow('i1', 2, 3, 10), initiativeRow('i2', 1, 1, 5)],
+      ofInit([['i1', 'pfA'], ['i2', 'pfA']]),
+      [],
+    );
+    const alpha = rows.find((r) => r.portfolioId === 'pfA')!;
+    expect(alpha.initiativeCount).toBe(2);
+    expect(alpha.projectCount).toBe(3);
+    expect(alpha.completedCount).toBe(4);
+    expect(alpha.agentLlmCostUsd).toBe(15);
+  });
+
+  it('seeds every portfolio (empty ones show as zero rows) and sorts alphabetically', () => {
+    const rows = foldPortfolioBreakdown(portfolios, [], ofInit([]), []);
+    expect(rows.map((r) => r.name)).toEqual(['Alpha', 'Beta']);
+    expect(rows.every((r) => r.initiativeCount === 0 && r.avgProgress === 0)).toBe(true);
+  });
+
+  it('buckets portfolio-less initiatives under Unassigned, placed last', () => {
+    const rows = foldPortfolioBreakdown(
+      portfolios,
+      [initiativeRow('i1', 1, 0, 0), initiativeRow('iOrphan', 4, 2, 9)],
+      ofInit([['i1', 'pfA'], ['iOrphan', null]]),
+      [],
+    );
+    expect(rows[rows.length - 1]!.portfolioId).toBeNull();
+    const unassigned = rows.find((r) => r.portfolioId === null)!;
+    expect(unassigned.projectCount).toBe(4);
+    expect(unassigned.completedCount).toBe(2);
+  });
+
+  it('drops an Unassigned bucket that carries nothing', () => {
+    const rows = foldPortfolioBreakdown(portfolios, [initiativeRow('i1', 1, 0, 0)], ofInit([['i1', 'pfA']]), []);
+    expect(rows.some((r) => r.portfolioId === null)).toBe(false);
+  });
+
+  it('averages OKR progress by the objective portfolio (own or via its initiative)', () => {
+    const rows = foldPortfolioBreakdown(
+      portfolios,
+      [initiativeRow('i1', 1, 0, 0)],
+      ofInit([['i1', 'pfA']]),
+      [
+        { portfolioId: 'pfA', initiativeId: null, projectId: null, progress: 1 }, // direct
+        { portfolioId: null, initiativeId: 'i1', projectId: null, progress: 0 }, // via initiative → pfA
+        { portfolioId: null, initiativeId: null, projectId: 42, progress: 0.5 }, // project-only → ignored
+      ],
+    );
+    const alpha = rows.find((r) => r.portfolioId === 'pfA')!;
+    expect(alpha.avgProgress).toBeCloseTo(0.5); // mean of 1 and 0; project-only excluded
   });
 });
 

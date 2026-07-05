@@ -18,6 +18,7 @@
  */
 
 import { isNavItemActive } from './nav';
+import { ADMIN_GROUP_META } from './adminGroups';
 
 /** Count-badge key for the Projects tab (published by the Projects page, read by
  *  <SectionTabs>). Lives here so the config + publisher share one constant. */
@@ -170,33 +171,15 @@ export const NAV_GROUPS: NavGroup[] = [
     ],
   },
   {
-    // Platform Admin: superadmin-only. Its 19 sub-views are TABS in the shared
-    // <SectionTabs> bar (query kind, ?tab=…), matching every other multi-view
-    // destination — the page no longer renders its own in-page tab strip. The
-    // default tab (Health) uses id '' so a bare /admin highlights it.
+    // Platform Admin: superadmin-only. The 19 capabilities are consolidated into
+    // 10 top-level GROUPS (ADMIN_GROUP_META — the single source of truth, shared
+    // with the admin page). Each group is a TAB in the shared <SectionTabs> bar
+    // (query kind, ?tab=…); a group's sub-views are an inner <AdminGroupNav>
+    // (?sub=…) on the page. The default group (Overview) uses id '' so a bare
+    // /admin highlights it.
     id: 'admin', labelKey: 'group.admin', icon: '⚙', href: '/admin', match: ['/admin'], superadminOnly: true,
     tabKind: 'query', basePath: '/admin',
-    tabs: [
-      { id: '', labelKey: 'tab.adminHealth', icon: '🩺' },
-      { id: 'billing', labelKey: 'tab.adminBilling', icon: '💳' },
-      { id: 'usage', labelKey: 'tab.adminUsage', icon: '📊' },
-      { id: 'users', labelKey: 'tab.adminUsers', icon: '👤' },
-      { id: 'tenants', labelKey: 'tab.adminTenants', icon: '🏢' },
-      { id: 'apikeys', labelKey: 'tab.adminApiKeys', icon: '🔑' },
-      { id: 'security', labelKey: 'tab.adminSecurity', icon: '🔒' },
-      { id: 'legal', labelKey: 'tab.adminLegal', icon: '📜' },
-      { id: 'newsletter', labelKey: 'tab.adminNewsletter', icon: '✉️' },
-      { id: 'privacy', labelKey: 'tab.adminPrivacy', icon: '🛡' },
-      { id: 'personas', labelKey: 'tab.adminPersonas', icon: '🎭' },
-      { id: 'governance', labelKey: 'tab.adminGovernance', icon: '⚖️' },
-      { id: 'permissions', labelKey: 'tab.adminPermissions', icon: '🔐' },
-      { id: 'modules', labelKey: 'tab.adminModules', icon: '🧩' },
-      { id: 'impsessions', labelKey: 'tab.adminImpSessions', icon: '🕵️' },
-      { id: 'auditlog', labelKey: 'tab.adminAuditLog', icon: '📋' },
-      { id: 'errors', labelKey: 'tab.adminErrors', icon: '🐞' },
-      { id: 'traces', labelKey: 'tab.adminTraces', icon: '🔎' },
-      { id: 'token', labelKey: 'tab.adminToken', icon: '🎟' },
-    ],
+    tabs: ADMIN_GROUP_META.map((g) => ({ id: g.id, labelKey: g.labelKey, icon: g.icon })),
   },
 ];
 

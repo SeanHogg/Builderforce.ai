@@ -306,25 +306,16 @@
       "manager": "Manager",
       "roles": "Rôles",
       "talent": "Talents",
-      "adminHealth": "État",
-      "adminBilling": "Facturation",
-      "adminUsage": "Utilisation",
+      "adminOverview": "Vue d’ensemble",
       "adminUsers": "Utilisateurs",
-      "adminTenants": "Locataires",
-      "adminApiKeys": "Clés API",
-      "adminSecurity": "Sécurité",
-      "adminLegal": "Mentions légales",
-      "adminNewsletter": "Infolettre",
-      "adminPrivacy": "Confidentialité",
-      "adminPersonas": "Personas",
-      "adminGovernance": "Gouvernance",
-      "adminPermissions": "Permissions",
-      "adminModules": "Modules",
-      "adminImpSessions": "Sessions d’emprunt",
-      "adminAuditLog": "Journal d’audit",
-      "adminErrors": "Erreurs",
-      "adminTraces": "Traces LLM",
-      "adminToken": "Jeton"
+      "adminWorkspaces": "Espaces",
+      "adminAccess": "Accès",
+      "adminLlm": "LLM",
+      "adminContent": "Contenu",
+      "adminCompliance": "Conformité",
+      "adminGrowth": "Croissance",
+      "adminLogs": "Journaux",
+      "adminDeveloper": "Développeur"
     }
   },
   "alerts": {
@@ -897,14 +888,17 @@
       "objectives": "Objectifs",
       "byInitiative": "Par initiative",
       "criticalPath": "Chemin critique",
-      "dependencies": "Dépendances"
+      "dependencies": "Dépendances",
+      "byPortfolio": "Par portefeuille"
     },
     "col": {
       "initiative": "Initiative",
       "projects": "Projets",
       "completed": "Terminées",
       "agentSpend": "Dépense LLM de l’agent",
-      "okrProgress": "Progression des OKR"
+      "okrProgress": "Progression des OKR",
+      "portfolio": "Portefeuille",
+      "initiatives": "Initiatives"
     },
     "blocked": "Bloquée",
     "blockedBy": "Bloquée par",
@@ -930,7 +924,11 @@
       "delete": "Supprimer",
       "confirmDeletePortfolio": "Supprimer ce portefeuille ? Ses initiatives deviendront non assignées.",
       "confirmDeleteInitiative": "Supprimer cette initiative ? Les projets liés seront dissociés.",
-      "confirmDeleteObjective": "Supprimer cet objectif et ses résultats clés ?"
+      "confirmDeleteObjective": "Supprimer cet objectif et ses résultats clés ?",
+      "movePortfolio": "Déplacer vers un autre portefeuille",
+      "unassignedOption": "— Non assigné —",
+      "dragHint": "Faites glisser vers un portefeuille pour réassigner",
+      "dropHere": "Déposez ici pour assigner à ce portefeuille"
     },
     "okr": {
       "newObjective": "Nouvel objectif",
@@ -964,7 +962,12 @@
         "initiative": "Initiative",
         "epic": "Epic",
         "task": "Tâche"
-      }
+      },
+      "owner": "Propriétaire",
+      "ownerWorkspace": "Espace de travail (non assigné)",
+      "ownerPortfolio": "Portefeuilles",
+      "ownerInitiative": "Initiatives",
+      "ownerProject": "Projets"
     },
     "projectLink": {
       "title": "Initiative PMO",
@@ -972,7 +975,8 @@
       "hint": "Liez ce projet à une initiative PMO pour que son coût et sa livraison soient consolidés.",
       "loading": "Chargement des initiatives…",
       "saved": "Lié"
-    }
+    },
+    "unassignedPortfolio": "Non assigné"
   },
   "insights": {
     "loading": "Chargement…",
@@ -4720,7 +4724,8 @@
         "no_agent": "Aucun agent assigné",
         "no_board": "Aucun tableau configuré",
         "no_lane": "Voie non configurée",
-        "terminal_lane": "Terminé — aucune exécution"
+        "terminal_lane": "Terminé — aucune exécution",
+        "not_executable": "Tâche système — non exécutée par un agent"
       }
     },
     "businessValue": {
@@ -5636,5 +5641,28 @@
     "errTooMany": "Trop de tentatives. Demandez un nouveau code.",
     "errNone": "Aucun code actif. Demandez-en un nouveau.",
     "errGeneric": "Une erreur s’est produite. Veuillez réessayer."
+  },
+  "admin": {
+    "sub": {
+      "health": "État",
+      "directory": "Annuaire",
+      "security": "Sécurité",
+      "emulation": "Émulation",
+      "tenants": "Espaces",
+      "permissions": "Permissions",
+      "modules": "Modules",
+      "usage": "Utilisation",
+      "traces": "Traces",
+      "personas": "Personas",
+      "governance": "Gouvernance",
+      "legal": "Mentions légales",
+      "privacy": "Demandes de confidentialité",
+      "billing": "Facturation",
+      "newsletter": "Infolettre",
+      "errors": "Erreurs",
+      "audit": "Journal d’audit",
+      "apiKeys": "Clés API",
+      "token": "Jeton superadmin"
+    }
   }
 }

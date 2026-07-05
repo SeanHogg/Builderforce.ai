@@ -21,7 +21,7 @@ import type { Db } from '../../infrastructure/database/connection';
 import type { RuntimeService } from '../../application/runtime/RuntimeService';
 import {
   getManagerConfigRow, getEffectiveManagerPolicy, upsertManagerConfig,
-  listManagerActions, runManagerForProject,
+  listManagerActions, runManagerForProject, createManagerRunTask, finalizeManagerRunTask,
 } from '../../application/manager/ManagerService';
 import { normalizePrMergePolicy } from '../../application/manager/managerPolicy';
 
@@ -58,6 +58,10 @@ export function createManagerRoutes(db: Db, runtimeService: RuntimeService): Hon
       getEffectiveManagerPolicy(db, tenantId, projectId),
     ]);
 
+    // The manager's OWN run tasks (source = 'manager') are board-visible history, not
+    // backlog the manager grooms — keep them out of its stats + ranked-backlog view.
+    const notManagerRunTask = sql`${tasks.source} is distinct from 'manager'`;
+
     // Coordination stats (small aggregate queries).
     const [counts] = await db
       .select({
@@ -67,7 +71,7 @@ export function createManagerRoutes(db: Db, runtimeService: RuntimeService): Hon
         unowned: sql<number>`count(*) filter (where ${tasks.assignedUserId} is null and ${tasks.assignedAgentRef} is null and ${tasks.assignedAgentHostId} is null)::int`,
       })
       .from(tasks)
-      .where(and(eq(tasks.projectId, projectId), eq(tasks.archived, false), inArray(tasks.status, NON_TERMINAL)));
+      .where(and(eq(tasks.projectId, projectId), eq(tasks.archived, false), inArray(tasks.status, NON_TERMINAL), notManagerRunTask));
 
     const [prCount] = await db
       .select({ open: sql<number>`count(*)::int` })
@@ -83,7 +87,7 @@ export function createManagerRoutes(db: Db, runtimeService: RuntimeService): Hon
         assignedUserId: tasks.assignedUserId, assignedAgentRef: tasks.assignedAgentRef, assignedAgentHostId: tasks.assignedAgentHostId,
       })
       .from(tasks)
-      .where(and(eq(tasks.projectId, projectId), eq(tasks.archived, false), inArray(tasks.status, NON_TERMINAL)))
+      .where(and(eq(tasks.projectId, projectId), eq(tasks.archived, false), inArray(tasks.status, NON_TERMINAL), notManagerRunTask))
       .orderBy(sql`${tasks.managerRank} asc nulls last`, asc(tasks.updatedAt))
       .limit(30);
 
@@ -154,13 +158,31 @@ export function createManagerRoutes(db: Db, runtimeService: RuntimeService): Hon
       return c.json({ started: false, reason: 'disabled' as const });
     }
     c.executionCtx.waitUntil((async () => {
+      // A manual run is a first-class, owned, status-tracked board task: mint it
+      // in-progress, run the pass (its decisions link back to the task), then close
+      // it with the summary. Cron sweeps pass no run task (feed-only) to avoid one
+      // card per project per tick.
+      const runTaskId = await createManagerRunTask(db, { tenantId, projectId, policy });
+      let summary: Awaited<ReturnType<typeof runManagerForProject>> | null = null;
+      let ok = false;
       try {
-        await runManagerForProject(c.env as Env, db, runtimeService, {
-          tenantId, projectId, submittedBy: `manager:${userId ?? 'human'}`,
+        summary = await runManagerForProject(c.env as Env, db, runtimeService, {
+          tenantId, projectId, submittedBy: `manager:${userId ?? 'human'}`, runTaskId,
         });
+        ok = true;
       } catch {
         /* the pass is best-effort + idempotent; a failure just means the next run
            (manual or cron) resumes where this left off. */
+      }
+      if (runTaskId != null) {
+        await finalizeManagerRunTask(db, {
+          taskId: runTaskId,
+          ok,
+          summary: summary ?? {
+            projectId, skipped: !ok, scored: 0, ranked: 0, assigned: 0,
+            prsConducted: 0, prsMerged: 0, dispatched: 0, audited: 0, flagged: 0,
+          },
+        });
       }
     })());
     return c.json({ started: true });

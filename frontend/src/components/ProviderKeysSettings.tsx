@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useTranslations } from 'next-intl';
 import { providerKeysApi, type ProviderAuthType, type LlmProvider } from '@/lib/builderforceApi';
 
 /**
@@ -14,50 +15,24 @@ import { providerKeysApi, type ProviderAuthType, type LlmProvider } from '@/lib/
  * ONE shared {@link ProviderConnectionCard} renders each provider — the provider
  * config drives the differences (Anthropic also offers a Pro/Max SUBSCRIPTION via
  * OAuth; OpenAI/Google are API-key only). Secrets are write-only: we only show
- * whether/how a credential is configured, never the value.
- *
- * NOTE: this surface (the /settings/api-keys page) is not yet wired to next-intl;
- * strings stay in English to match the surrounding page. Localization of the whole
- * api-keys surface is tracked in the roadmap.
+ * whether/how a credential is configured, never the value. Fully localized under
+ * the `providerKeys` namespace; brand names + key formats stay literal.
  */
 
 interface ProviderConfig {
   id: LlmProvider;
-  /** Display name of the provider. */
+  /** Display name of the provider — a brand, kept literal (not translated). */
   label: string;
-  /** What the user's own account powers, shown in the card blurb. */
-  blurb: string;
-  /** Placeholder / format hint for the API-key input. */
+  /** Placeholder / format hint for the API-key input — literal. */
   keyPlaceholder: string;
   /** Anthropic also supports connecting a Pro/Max subscription via OAuth. */
   supportsOauth: boolean;
-  /** Label for the connected-subscription state (OAuth providers only). */
-  subscriptionLabel?: string;
 }
 
 const PROVIDERS: ProviderConfig[] = [
-  {
-    id: 'anthropic',
-    label: 'Anthropic (Claude)',
-    blurb: 'Connect your Claude Pro/Max subscription (no per-token billing) or paste an Anthropic API key.',
-    keyPlaceholder: 'sk-ant-…',
-    supportsOauth: true,
-    subscriptionLabel: 'Claude subscription',
-  },
-  {
-    id: 'openai',
-    label: 'OpenAI',
-    blurb: 'Paste an OpenAI API key to run GPT models on your own OpenAI account.',
-    keyPlaceholder: 'sk-…',
-    supportsOauth: false,
-  },
-  {
-    id: 'google',
-    label: 'Google (Gemini)',
-    blurb: 'Paste a Google AI (Gemini) API key to run Gemini models on your own Google account.',
-    keyPlaceholder: 'AIza…',
-    supportsOauth: false,
-  },
+  { id: 'anthropic', label: 'Anthropic (Claude)', keyPlaceholder: 'sk-ant-…', supportsOauth: true },
+  { id: 'openai',    label: 'OpenAI',             keyPlaceholder: 'sk-…',     supportsOauth: false },
+  { id: 'google',    label: 'Google (Gemini)',    keyPlaceholder: 'AIza…',   supportsOauth: false },
 ];
 
 const cardStyle: React.CSSProperties = {
@@ -87,6 +62,8 @@ const dividerRow: React.CSSProperties = {
 };
 const dividerLine: React.CSSProperties = { flex: 1, height: 1, background: 'var(--border-subtle)' };
 
+type TFn = ReturnType<typeof useTranslations>;
+
 /**
  * One provider's connect card. Owns its own draft/busy/connect state and decides
  * its own UI from the provider config (OAuth block only when supported). Reports
@@ -96,10 +73,12 @@ function ProviderConnectionCard({
   config,
   authType,
   onChange,
+  t,
 }: {
   config: ProviderConfig;
   authType: ProviderAuthType | null; // null = nothing configured
   onChange: (authType: ProviderAuthType | null) => void;
+  t: TFn;
 }) {
   const [draft, setDraft] = useState('');
   const [busy, setBusy] = useState(false);
@@ -108,6 +87,8 @@ function ProviderConnectionCard({
   const [pastedCode, setPastedCode] = useState('');
 
   const configured = authType !== null;
+  const blurb = t(`provider.${config.id}.blurb`);
+  const subscription = config.supportsOauth ? t(`provider.${config.id}.subscription`) : '';
 
   const saveKey = async () => {
     const apiKey = draft.trim();
@@ -118,7 +99,7 @@ function ProviderConnectionCard({
       onChange('api_key');
       setDraft('');
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to save key');
+      setError(e instanceof Error ? e.message : t('errSaveKey'));
     } finally {
       setBusy(false);
     }
@@ -131,7 +112,7 @@ function ProviderConnectionCard({
       window.open(authorizeUrl, '_blank', 'noopener,noreferrer');
       setConnecting(true);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to start connect');
+      setError(e instanceof Error ? e.message : t('errStartConnect'));
     } finally {
       setBusy(false);
     }
@@ -147,45 +128,45 @@ function ProviderConnectionCard({
       setConnecting(false);
       setPastedCode('');
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to connect subscription');
+      setError(e instanceof Error ? e.message : t('errConnectSubscription'));
     } finally {
       setBusy(false);
     }
   };
 
   const remove = async () => {
-    const what = authType === 'oauth'
-      ? `Disconnect your ${config.subscriptionLabel ?? config.label}`
-      : `Remove your ${config.label} API key`;
-    if (!confirm(`${what}? Agents using it will fall back to Builderforce's managed models.`)) return;
+    const msg = authType === 'oauth'
+      ? t('confirmRemoveSubscription', { subscription })
+      : t('confirmRemoveKey', { label: config.label });
+    if (!confirm(msg)) return;
     setBusy(true); setError(null);
     try {
       await providerKeysApi.remove(config.id);
       onChange(null);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to remove credential');
+      setError(e instanceof Error ? e.message : t('errRemove'));
     } finally {
       setBusy(false);
     }
   };
 
   const statusLabel =
-    authType === 'oauth' ? `● ${config.subscriptionLabel ?? config.label} connected`
-    : authType === 'api_key' ? `● ${config.label} API key configured`
-    : `○ Not connected`;
+    authType === 'oauth' ? t('status.connected', { subscription })
+    : authType === 'api_key' ? t('status.keyConfigured', { label: config.label })
+    : t('status.notConnected');
 
   return (
     <div style={cardStyle}>
       <div style={sectionTitle}>{config.label}</div>
-      <p style={{ fontSize: 12.5, color: 'var(--text-muted)', margin: '0 0 12px' }}>{config.blurb}</p>
+      <p style={{ fontSize: 12.5, color: 'var(--text-muted)', margin: '0 0 12px' }}>{blurb}</p>
 
-      {error && <div style={{ fontSize: 12, color: 'var(--coral-bright)', marginBottom: 10 }}>Error: {error}</div>}
+      {error && <div style={{ fontSize: 12, color: 'var(--coral-bright)', marginBottom: 10 }}>{t('errorPrefix', { message: error })}</div>}
 
       <div style={{ fontSize: 12, fontWeight: 600, color: configured ? 'rgba(34,197,94,0.9)' : 'var(--text-muted)', marginBottom: 12, display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
         <span>{statusLabel}</span>
         {configured && (
           <button type="button" onClick={remove} disabled={busy} style={{ ...buttonDanger, padding: '2px 10px' }}>
-            {authType === 'oauth' ? 'Disconnect' : 'Remove'}
+            {authType === 'oauth' ? t('disconnect') : t('remove')}
           </button>
         )}
       </div>
@@ -195,36 +176,35 @@ function ProviderConnectionCard({
         <>
           {!connecting ? (
             <button type="button" onClick={startConnect} disabled={busy} style={{ ...buttonPrimary, opacity: busy ? 0.5 : 1 }}>
-              {busy ? 'Working…' : authType === 'oauth' ? `Reconnect ${config.subscriptionLabel}` : `Connect ${config.subscriptionLabel}`}
+              {busy ? t('working') : authType === 'oauth' ? t('reconnect', { subscription }) : t('connect', { subscription })}
             </button>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
               <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: 0 }}>
-                Approved in the Claude tab? Paste the code it shows you (the full <code>code#state</code> value) below.
+                {t.rich('pastePrompt', { code: (chunks) => <code>{chunks}</code> })}
               </p>
               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                 <input
                   type="text"
                   value={pastedCode}
                   onChange={(e) => setPastedCode(e.target.value)}
-                  placeholder="Paste code from Claude…"
+                  placeholder={t('pastePlaceholder')}
                   disabled={busy}
                   style={{ ...inputStyle, flex: '1 1 180px' }}
                 />
                 <button type="button" onClick={finishConnect} disabled={busy || !pastedCode.trim()} style={{ ...buttonPrimary, opacity: busy || !pastedCode.trim() ? 0.5 : 1, flexShrink: 0 }}>
-                  {busy ? 'Connecting…' : 'Finish'}
+                  {busy ? t('connecting') : t('finish')}
                 </button>
                 <button type="button" onClick={() => { setConnecting(false); setPastedCode(''); }} disabled={busy} style={{ ...buttonDanger, flexShrink: 0 }}>
-                  Cancel
+                  {t('cancel')}
                 </button>
               </div>
             </div>
           )}
           <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: '8px 0 0' }}>
-            Connect only your <strong style={{ color: 'var(--text-primary)' }}>own</strong> account — a subscription
-            credential is personal and must not be shared across workspaces.
+            {t.rich('ownAccountNote', { b: (chunks) => <strong style={{ color: 'var(--text-primary)' }}>{chunks}</strong> })}
           </p>
-          <div style={dividerRow}><div style={dividerLine} /> OR USE AN API KEY <div style={dividerLine} /></div>
+          <div style={dividerRow}><div style={dividerLine} /> {t('orUseApiKey')} <div style={dividerLine} /></div>
         </>
       )}
 
@@ -234,12 +214,12 @@ function ProviderConnectionCard({
           type="password"
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
-          placeholder={authType === 'api_key' ? `Replace key (${config.keyPlaceholder})` : config.keyPlaceholder}
+          placeholder={authType === 'api_key' ? t('keyPlaceholderReplace', { placeholder: config.keyPlaceholder }) : config.keyPlaceholder}
           disabled={busy}
           style={{ ...inputStyle, flex: '1 1 180px' }}
         />
         <button type="button" onClick={saveKey} disabled={busy || !draft.trim()} style={{ ...buttonPrimary, opacity: busy || !draft.trim() ? 0.5 : 1, flexShrink: 0 }}>
-          {busy ? 'Saving…' : authType === 'api_key' ? 'Replace' : 'Save'}
+          {busy ? t('saving') : authType === 'api_key' ? t('replace') : t('save')}
         </button>
       </div>
     </div>
@@ -247,6 +227,7 @@ function ProviderConnectionCard({
 }
 
 export function ProviderKeysSettings() {
+  const t = useTranslations('providerKeys');
   const [authByProvider, setAuthByProvider] = useState<Partial<Record<LlmProvider, ProviderAuthType>>>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -265,17 +246,13 @@ export function ProviderKeysSettings() {
 
   return (
     <div>
-      <div style={{ ...sectionTitle, fontSize: 15, marginBottom: 4 }}>Bring your own models</div>
-      <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: '0 0 14px' }}>
-        Connect your own Anthropic, OpenAI, or Google account. Connected providers power your agents on your own
-        account and drive the model choices in every picker — usage on your machine (on-prem &amp; VS Code) is free;
-        cloud-agent usage is still billed. Credentials are stored encrypted and never shown again.
-      </p>
+      <div style={{ ...sectionTitle, fontSize: 15, marginBottom: 4 }}>{t('title')}</div>
+      <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: '0 0 14px' }}>{t('subtitle')}</p>
 
-      {error && <div style={{ fontSize: 12, color: 'var(--coral-bright)', marginBottom: 10 }}>Error: {error}</div>}
+      {error && <div style={{ fontSize: 12, color: 'var(--coral-bright)', marginBottom: 10 }}>{t('errorPrefix', { message: error })}</div>}
 
       {loading ? (
-        <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>Loading…</div>
+        <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>{t('loading')}</div>
       ) : (
         <div style={wrapStyle}>
           {PROVIDERS.map((p) => (
@@ -283,6 +260,7 @@ export function ProviderKeysSettings() {
               key={p.id}
               config={p}
               authType={authByProvider[p.id] ?? null}
+              t={t}
               onChange={(authType) =>
                 setAuthByProvider((prev) => {
                   const next = { ...prev };

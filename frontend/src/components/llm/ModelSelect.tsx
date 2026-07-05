@@ -1,5 +1,6 @@
 'use client';
 
+import { useTranslations } from 'next-intl';
 import { Select } from '@/components/Select';
 import { useLlmModels } from '@/lib/useLlmModels';
 
@@ -39,6 +40,7 @@ export function ModelSelect({
   title,
   disabled,
 }: ModelSelectProps) {
+  const t = useTranslations('modelSelect');
   const { models, codingModels, tenantModels, byoModels } = useLlmModels();
   const pool = variant === 'coding' && codingModels.length > 0 ? codingModels : models;
   const known = preserveValue
@@ -50,7 +52,7 @@ export function ModelSelect({
     <Select value={value} onChange={(e) => onChange(e.target.value)} style={style} title={title} disabled={disabled}>
       {includeDefault && <option value="">{defaultLabel}</option>}
       {tenantModels.length > 0 && (
-        <optgroup label="Your LLMs">
+        <optgroup label={t('yourLlms')}>
           {tenantModels.map((m) => (
             <option key={m.id} value={m.ref}>{m.name}</option>
           ))}
@@ -59,16 +61,16 @@ export function ModelSelect({
       {/* Models the tenant's OWN connected providers (BYO) can serve — the model
           choices follow the connected providers, and run on the tenant's account. */}
       {byoModels.length > 0 && (
-        <optgroup label="Connected providers">
+        <optgroup label={t('connectedProviders')}>
           {byoModels.map((m) => <option key={m} value={m}>{m}</option>)}
         </optgroup>
       )}
       {pool.length > 0 && (
-        <optgroup label="Models">
+        <optgroup label={t('models')}>
           {pool.map((m) => <option key={m} value={m}>{m}</option>)}
         </optgroup>
       )}
-      {known && preserveValue && <option value={preserveValue}>{preserveValue} (current)</option>}
+      {known && preserveValue && <option value={preserveValue}>{t('current', { model: preserveValue })}</option>}
     </Select>
   );
 }

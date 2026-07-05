@@ -15,8 +15,9 @@ import { useCallback, useEffect, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { kanbanApi } from '@/lib/builderforceApi';
 import { usePermission } from '@/lib/rbac';
+import { ROLE_DISCIPLINES, useRoles, type UseRoles } from '@/lib/useRoles';
 import type {
-  JobRole, KanbanTemplate, TemplateSummary, TemplateLane, LaneRequirement, RequirementKind, RequirementGate,
+  Discipline, JobRole, KanbanTemplate, TemplateSummary, TemplateLane, LaneRequirement, RequirementKind, RequirementGate,
 } from '@/lib/kanban';
 
 type Tab = 'mine' | 'marketplace' | 'roles';
@@ -44,20 +45,23 @@ export function KanbanTemplatesContent() {
   const [tab, setTab] = useState<Tab>('mine');
   const [mine, setMine] = useState<TemplateSummary[]>([]);
   const [market, setMarket] = useState<TemplateSummary[]>([]);
-  const [roles, setRoles] = useState<JobRole[]>([]);
   const [editing, setEditing] = useState<KanbanTemplate | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // Roles list + create/delete come from the ONE shared roles-CRUD hook so this
+  // and the Workforce → Roles tab can never drift apart.
+  const rolesCrud = useRoles({ onError: setError });
+  const { roles, reloadRoles } = rolesCrud;
 
   const reload = useCallback(async () => {
     try {
-      const [m, mk, r] = await Promise.all([
+      const [m, mk] = await Promise.all([
         kanbanApi.listTemplates(),
         kanbanApi.listPublicTemplates(),
-        kanbanApi.listRoles(),
       ]);
-      setMine(m); setMarket(mk); setRoles(r);
+      setMine(m); setMarket(mk);
+      await reloadRoles();
     } catch (e) { setError((e as Error).message); }
-  }, []);
+  }, [reloadRoles]);
 
   useEffect(() => { void reload(); }, [reload]);
 
@@ -157,24 +161,23 @@ export function KanbanTemplatesContent() {
           ))}
         </div>
       ) : (
-        <RolesTab roles={roles} canManage={canManage} onChange={reload} onError={setError} />
+        <RolesTab roles={roles} canManage={canManage} rolesCrud={rolesCrud} />
       )}
     </div>
   );
 }
 
 // ── Roles tab ──────────────────────────────────────────────────────────────────
-function RolesTab({ roles, canManage, onChange, onError }: {
-  roles: JobRole[]; canManage: boolean; onChange: () => Promise<void>; onError: (e: string) => void;
+function RolesTab({ roles, canManage, rolesCrud }: {
+  roles: JobRole[]; canManage: boolean; rolesCrud: UseRoles;
 }) {
   const t = useTranslations('kanban');
+  const { creating, createRole, deleteRole } = rolesCrud;
   const [name, setName] = useState('');
-  const [discipline, setDiscipline] = useState('engineering');
+  const [discipline, setDiscipline] = useState<Discipline>('engineering');
 
   const add = async () => {
-    if (!name.trim()) return;
-    try { await kanbanApi.createRole({ name: name.trim(), discipline }); setName(''); await onChange(); }
-    catch (e) { onError((e as Error).message); }
+    if (await createRole(name, discipline)) setName('');
   };
 
   return (
@@ -188,17 +191,17 @@ function RolesTab({ roles, canManage, onChange, onError }: {
             <span style={{ flex: 1 }} />
             {r.builtin
               ? <span style={chip('var(--surface)', 'var(--text-muted)')}>{t('builtin')}</span>
-              : canManage && <button type="button" style={btn()} onClick={async () => { try { await kanbanApi.deleteRole(r.key); await onChange(); } catch (e) { onError((e as Error).message); } }}>{t('delete')}</button>}
+              : canManage && <button type="button" style={btn()} onClick={() => deleteRole(r)}>{t('delete')}</button>}
           </div>
         ))}
       </div>
       {canManage && (
         <div style={{ display: 'flex', gap: 8, marginTop: 12, flexWrap: 'wrap' }}>
           <input style={{ ...input, flex: '1 1 160px' }} placeholder={t('roleNamePlaceholder')} value={name} onChange={(e) => setName(e.target.value)} />
-          <select style={input} value={discipline} onChange={(e) => setDiscipline(e.target.value)}>
-            {['engineering', 'product', 'design', 'qa', 'devops', 'data', 'security', 'other'].map((d) => <option key={d} value={d}>{d}</option>)}
+          <select style={input} value={discipline} onChange={(e) => setDiscipline(e.target.value as Discipline)}>
+            {ROLE_DISCIPLINES.map((d) => <option key={d} value={d}>{d}</option>)}
           </select>
-          <button type="button" style={btn(true)} onClick={add}>{t('addRole')}</button>
+          <button type="button" style={btn(true)} disabled={creating} onClick={add}>{t('addRole')}</button>
         </div>
       )}
     </div>

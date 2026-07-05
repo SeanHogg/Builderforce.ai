@@ -306,25 +306,16 @@
       "manager": "Manager",
       "roles": "Roles",
       "talent": "Talent",
-      "adminHealth": "Health",
-      "adminBilling": "Billing",
-      "adminUsage": "Usage",
+      "adminOverview": "Overview",
       "adminUsers": "Users",
-      "adminTenants": "Tenants",
-      "adminApiKeys": "API Keys",
-      "adminSecurity": "Security",
-      "adminLegal": "Legal",
-      "adminNewsletter": "Newsletter",
-      "adminPrivacy": "Privacy",
-      "adminPersonas": "Personas",
-      "adminGovernance": "Governance",
-      "adminPermissions": "Permissions",
-      "adminModules": "Modules",
-      "adminImpSessions": "Imp. Sessions",
-      "adminAuditLog": "Audit Log",
-      "adminErrors": "Errors",
-      "adminTraces": "LLM Traces",
-      "adminToken": "Token"
+      "adminWorkspaces": "Workspaces",
+      "adminAccess": "Access",
+      "adminLlm": "LLM",
+      "adminContent": "Content",
+      "adminCompliance": "Compliance",
+      "adminGrowth": "Growth",
+      "adminLogs": "Logs",
+      "adminDeveloper": "Developer"
     }
   },
   "alerts": {
@@ -897,14 +888,17 @@
       "objectives": "Objectives",
       "byInitiative": "By initiative",
       "criticalPath": "Critical path",
-      "dependencies": "Dependencies"
+      "dependencies": "Dependencies",
+      "byPortfolio": "By portfolio"
     },
     "col": {
       "initiative": "Initiative",
       "projects": "Projects",
       "completed": "Completed",
       "agentSpend": "Agent LLM spend",
-      "okrProgress": "OKR progress"
+      "okrProgress": "OKR progress",
+      "portfolio": "Portfolio",
+      "initiatives": "Initiatives"
     },
     "blocked": "Blocked",
     "blockedBy": "Blocked by",
@@ -930,7 +924,11 @@
       "delete": "Delete",
       "confirmDeletePortfolio": "Delete this portfolio? Its initiatives become unassigned.",
       "confirmDeleteInitiative": "Delete this initiative? Linked projects are unlinked.",
-      "confirmDeleteObjective": "Delete this objective and its key results?"
+      "confirmDeleteObjective": "Delete this objective and its key results?",
+      "movePortfolio": "Move to another portfolio",
+      "unassignedOption": "— Unassigned —",
+      "dragHint": "Drag to a portfolio to reassign",
+      "dropHere": "Drop here to assign to this portfolio"
     },
     "okr": {
       "newObjective": "New objective",
@@ -964,7 +962,12 @@
         "initiative": "Initiative",
         "epic": "Epic",
         "task": "Task"
-      }
+      },
+      "owner": "Owner",
+      "ownerWorkspace": "Workspace (unassigned)",
+      "ownerPortfolio": "Portfolios",
+      "ownerInitiative": "Initiatives",
+      "ownerProject": "Projects"
     },
     "projectLink": {
       "title": "PMO initiative",
@@ -972,7 +975,8 @@
       "hint": "Link this project to a PMO initiative so its cost & delivery roll up.",
       "loading": "Loading initiatives…",
       "saved": "Linked"
-    }
+    },
+    "unassignedPortfolio": "Unassigned"
   },
   "insights": {
     "loading": "Loading…",
@@ -4720,7 +4724,8 @@
         "no_agent": "No agent assigned",
         "no_board": "No board configured",
         "no_lane": "Lane not configured",
-        "terminal_lane": "Done — no run needed"
+        "terminal_lane": "Done — no run needed",
+        "not_executable": "System task — not run by an agent"
       }
     },
     "businessValue": {
@@ -5636,5 +5641,28 @@
     "errTooMany": "Too many attempts. Request a new code.",
     "errNone": "No active code. Request a new one.",
     "errGeneric": "Something went wrong. Please try again."
+  },
+  "admin": {
+    "sub": {
+      "health": "Health",
+      "directory": "Directory",
+      "security": "Security",
+      "emulation": "Emulation",
+      "tenants": "Workspaces",
+      "permissions": "Permissions",
+      "modules": "Modules",
+      "usage": "Usage",
+      "traces": "Traces",
+      "personas": "Personas",
+      "governance": "Governance",
+      "legal": "Legal",
+      "privacy": "Privacy Requests",
+      "billing": "Billing",
+      "newsletter": "Newsletter",
+      "errors": "Errors",
+      "audit": "Audit Log",
+      "apiKeys": "API Keys",
+      "token": "Superadmin Token"
+    }
   }
 }

@@ -71,6 +71,34 @@ export function resolveManagerKind(managerRef: string | null | undefined): Manag
   return 'system';
 }
 
+/** A manager designation decoded into the three task-owner columns (exactly one is
+ *  set, or none for the system service). Mirrors the 'u:'/'c:'/'h:' assignee encoding
+ *  so a manager run task is owned by the same human/agent that runs the backlog. */
+export interface ManagerAssignee {
+  assignedUserId: string | null;
+  assignedAgentRef: string | null;
+  assignedAgentHostId: number | null;
+}
+
+/** Decode a manager designation ref into task-owner columns. Unknown/blank → none. */
+export function resolveManagerAssignee(managerRef: string | null | undefined): ManagerAssignee {
+  const none: ManagerAssignee = { assignedUserId: null, assignedAgentRef: null, assignedAgentHostId: null };
+  const ref = managerRef?.trim();
+  if (!ref) return none;
+  const sep = ref.indexOf(':');
+  if (sep < 1) return none;
+  const kind = ref.slice(0, sep);
+  const val = ref.slice(sep + 1).trim();
+  if (!val) return none;
+  if (kind === 'u') return { ...none, assignedUserId: val };
+  if (kind === 'c') return { ...none, assignedAgentRef: val };
+  if (kind === 'h') {
+    const hostId = Number(val);
+    return Number.isFinite(hostId) ? { ...none, assignedAgentHostId: hostId } : none;
+  }
+  return none;
+}
+
 /** Fold an optional config row over the tenant default into one effective policy. */
 export function resolveEffectiveManagerPolicy(row: ManagerConfigRow | null | undefined): EffectiveManagerPolicy {
   if (!row) return { ...DEFAULT_MANAGER_POLICY };

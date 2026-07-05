@@ -4,6 +4,16 @@
 
 ---
 
+## ✅ RESOLVED 2026-07-05 — Kanban Templates folded into Projects tab + shared roles-CRUD hook
+
+Consolidated the standalone `/kanban-templates` page into Projects as a **Templates** tab and removed the top-level menu item, then closed the roles-CRUD duplication the move exposed.
+
+- **Consolidation.** Extracted the templates UI into `components/KanbanTemplatesContent.tsx` (a `*Content` component like `CeremoniesContent`), rendered by `app/projects/page.tsx` under `?tab=templates`; added the `templates` tab to the Projects group in `lib/navGroups.ts` and deleted the `kanbanTemplates` nav group. `/kanban-templates` now `redirect()`s to `/projects?tab=templates` (same pattern as `/pmo` + `/ceremonies`). Feature link in `lib/content.ts` repointed; `group.kanbanTemplates` removed and `tab.templates` added across all five i18n catalogs.
+- **Shared roles-CRUD hook (`Roster/roles` gap).** `RolesView` (Workforce → Roles) and the templates Roles sub-tab both hand-rolled `listRoles`/`createRole`/`deleteRole` + the discipline list and could drift. New `lib/useRoles.ts` owns the list state, `reloadRoles`/`createRole`/`deleteRole` (optimistic), and the canonical `ROLE_DISCIPLINES` constant; both surfaces consume it. Deleted the duplicated `DISCIPLINES` array and inline CRUD.
+- Verified: frontend `tsgo --noEmit` 0 errors; all five message catalogs parse.
+
+---
+
 ## ✅ RESOLVED 2026-07-05 — Bring-your-own frontier models (Anthropic + OpenAI + Google), modality-aware BYO billing
 
 Enterprise tenants can now connect their OWN Anthropic, OpenAI, and/or Google accounts; connected providers drive the model choices and the tenant's own account serves the calls. Shipped end-to-end across the gateway, all three modalities, and billing. api `2026.7.19`, frontend `2026.7.19`, VS Code `2026.7.30`. Migration **0284**.

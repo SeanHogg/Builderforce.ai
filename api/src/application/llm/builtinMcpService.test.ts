@@ -114,6 +114,22 @@ describe('listBuiltinTools', () => {
     }
   });
 
+  it('advertises the PMO structure + rollup tools (portfolio section is agent-operable)', () => {
+    const names = tools.map((t) => t.name);
+    for (const n of ['builtin_pmo_tree', 'builtin_pmo_rollup', 'builtin_pmo_link_project', 'builtin_pmo_add_dependency', 'builtin_pmo_remove_dependency']) {
+      expect(names).toContain(n);
+    }
+    const byName = (n: string) => tools.find((t) => t.name === n)!;
+    expect(byName('builtin_pmo_tree').mutates).toBe(false);
+    expect(byName('builtin_pmo_rollup').mutates).toBe(false);
+    expect(byName('builtin_pmo_link_project').mutates).toBe(true);
+    // Reassigning an objective's owner clears the other axes → each owner field must accept null.
+    const objUpdate = byName('builtin_objectives_update').parameters as { properties: Record<string, { type?: unknown }> };
+    for (const f of ['portfolioId', 'initiativeId', 'projectId']) {
+      expect(objUpdate.properties[f].type).toContain('null');
+    }
+  });
+
   it('advertises the mutates flag so any client can gate writes off one source', () => {
     const byName = (n: string) => tools.find((t) => t.name === n)!;
     expect(byName('builtin_objectives_create').mutates).toBe(true);

@@ -1086,6 +1086,10 @@ export const managerActions = pgTable('manager_actions', {
   projectId:  integer('project_id').notNull().references(() => projects.id, { onDelete: 'cascade' }),
   /** The ticket the action was about (null for project-wide actions like a re-rank). */
   taskId:     integer('task_id').references(() => tasks.id, { onDelete: 'set null' }),
+  /** The board task that REPRESENTS the manual manager run this decision belongs to
+   *  (0286). Set for actions taken during a "Run manager now" pass so the run task can
+   *  show exactly what it changed; null for cron-sweep decisions (feed-only). */
+  runTaskId:  integer('run_task_id').references(() => tasks.id, { onDelete: 'set null' }),
   /** 'prioritize' | 'assign' | 'score_value' | 'dispatch' | 'merge_pr' | 'close_pr' | 'flag'. */
   actionType: varchar('action_type', { length: 24 }).notNull(),
   summary:    text('summary').notNull(),
@@ -1094,6 +1098,7 @@ export const managerActions = pgTable('manager_actions', {
   createdAt:  timestamp('created_at').notNull().defaultNow(),
 }, (t) => ({
   byFeed: index('idx_manager_actions_feed').on(t.tenantId, t.projectId, t.createdAt),
+  byRunTask: index('idx_manager_actions_run_task').on(t.runTaskId),
 }));
 
 // ---------------------------------------------------------------------------
