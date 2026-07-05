@@ -4,15 +4,20 @@ import { useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { useRouter } from 'next/navigation';
 import type { Project } from '@/lib/types';
+import type { ProjectDiagnosticSummary } from '@/lib/tools';
 import { ProjectOriginBadge } from './ProjectOriginBadge';
 import { ProjectHealthBadge } from './ProjectHealth';
 import type { ProjectPanelTab } from './ProjectDetailsPanel';
 import { DeleteProjectDialog } from './DeleteProjectDialog';
 import { RunDiagnosticsButton } from './RunDiagnosticsButton';
+import { ProjectDiagnosticsStrip } from './ProjectDiagnosticsStrip';
 import { tableWrapStyle, tableStyle } from './dataTableStyles';
 
 export interface ProjectTableProps {
   projects: Project[];
+  /** Per-project latest diagnostic scores (SOC 2, Quality, …), keyed by project
+   *  id, from the workspace rollup. Rendered as a compact strip; empty hides it. */
+  diagnosticsByProject?: Map<number, ProjectDiagnosticSummary[]>;
   /** Open the project Information panel. The Details button opens the default tab;
    *  the Architecture button opens 'prds' / 'integrations'. A row that can open
    *  details gets the Architecture button — same rule as {@link ProjectCard}. */
@@ -50,6 +55,7 @@ const iconButtonStyle: React.CSSProperties = {
  */
 export function ProjectTable({
   projects,
+  diagnosticsByProject,
   onDetailsClick,
   onOpenIde,
   onAssignedAgentClick,
@@ -67,6 +73,7 @@ export function ProjectTable({
           <tr style={{ borderBottom: '1px solid var(--border-subtle)', textAlign: 'left' }}>
             <th style={headStyle}>{t('name')}</th>
             <th style={headStyle}>{t('health')}</th>
+            <th style={headStyle}>{t('diagnostics')}</th>
             <th style={headStyle}>{t('description')}</th>
             <th style={headStyle}>{t('agent')}</th>
             <th style={headStyle}>{t('actions')}</th>
@@ -83,6 +90,19 @@ export function ProjectTable({
               </td>
               <td style={cellStyle}>
                 <ProjectHealthBadge project={project} />
+              </td>
+              <td style={cellStyle}>
+                {(() => {
+                  const diags = diagnosticsByProject?.get(project.id) ?? [];
+                  return diags.length > 0 ? (
+                    <ProjectDiagnosticsStrip
+                      diagnostics={diags}
+                      onOpen={onDetailsClick ? () => onDetailsClick(project, 'diagnostics') : undefined}
+                    />
+                  ) : (
+                    <span style={{ color: 'var(--text-muted)', fontSize: 12 }}>—</span>
+                  );
+                })()}
               </td>
               <td style={{ ...cellStyle, color: 'var(--text-secondary)', maxWidth: 280, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                 {project.description ?? '—'}

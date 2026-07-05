@@ -11,8 +11,10 @@ import {
   type InspectionRecommendation,
 } from '@/lib/projectInspection';
 import type { HealthTier } from '@/lib/projectHealth';
+import { diagnosticScoreColor } from '@/lib/diagnosticScore';
 import type { ProjectPanelTab } from './ProjectDetailsPanel';
 import { BandedMetricBar, type MetricTier } from './charts/BandedMetricBar';
+import { ProjectDiagnosticsStrip } from './ProjectDiagnosticsStrip';
 
 /**
  * Shared "project inspection" visuals — the single source of truth for the PM
@@ -186,14 +188,6 @@ export function ProjectInspectionSummary({ project }: { project: Project }) {
   );
 }
 
-/** Map a 1–5 maturity score to one of the shared tier colours. */
-function maturityColor(score: number): string {
-  if (score >= 4) return TIER_HEX.healthy;
-  if (score >= 3) return TIER_HEX.watch;
-  if (score >= 2) return TIER_HEX.at_risk;
-  return TIER_HEX.critical;
-}
-
 export function ProjectInspectionReport({ project, onNavigate, onTargetRecommendation, showSummary = true }: ProjectInspectionReportProps) {
   const t = useTranslations('projectInspection');
   const insp = computeProjectInspection(project);
@@ -253,7 +247,7 @@ export function ProjectInspectionReport({ project, onNavigate, onTargetRecommend
             <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-primary)' }}>{t('maturity.title')}</span>
             {maturity?.result.scoreLabel && (
               <span style={{
-                fontSize: '0.7rem', fontWeight: 700, color: '#fff', background: maturityColor(maturityScore),
+                fontSize: '0.7rem', fontWeight: 700, color: '#fff', background: diagnosticScoreColor(maturityScore),
                 padding: '1px 8px', borderRadius: 999,
               }}>
                 {maturity.result.scoreLabel}
@@ -264,7 +258,7 @@ export function ProjectInspectionReport({ project, onNavigate, onTargetRecommend
             </span>
           </div>
           <div style={{ height: 8, borderRadius: 999, background: 'var(--border-subtle)', overflow: 'hidden' }}>
-            <div style={{ width: `${(maturityScore / 5) * 100}%`, height: '100%', background: maturityColor(maturityScore), borderRadius: 999 }} />
+            <div style={{ width: `${(maturityScore / 5) * 100}%`, height: '100%', background: diagnosticScoreColor(maturityScore), borderRadius: 999 }} />
           </div>
           <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: 0, lineHeight: 1.5 }}>{t('maturity.subtitle')}</p>
           {onNavigate && (
@@ -277,6 +271,18 @@ export function ProjectInspectionReport({ project, onNavigate, onTargetRecommend
             </button>
           )}
         </div>
+      )}
+
+      {/* Per-diagnostic breakdown — each diagnostic run against this project (SOC 2
+          readiness, Quality, …) as a score gauge + remediation status. Shares the
+          projectScore fetch above so there's no extra round-trip; self-hides when
+          none have been run. Clicking a gauge jumps to the Diagnostics tab. */}
+      {maturity && maturity.diagnostics.length > 0 && (
+        <ProjectDiagnosticsStrip
+          diagnostics={maturity.diagnostics}
+          variant="gauges"
+          onOpen={onNavigate ? () => onNavigate('diagnostics') : undefined}
+        />
       )}
 
       {/* Prescriptive "what to target" */}

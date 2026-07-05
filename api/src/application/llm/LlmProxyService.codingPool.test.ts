@@ -12,6 +12,8 @@ import {
   codingDefaultForPlan,
   pickCloudModel,
   rankModelsForAction,
+  byoAutoSeedModel,
+  isDispatchableSeed,
   type ActionModelRankStat,
 } from './LlmProxyService';
 import { catalogEntry, vendorForModel, autoRoutableModelsByTier, modelsByTier } from './vendors';

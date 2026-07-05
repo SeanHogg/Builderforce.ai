@@ -8,7 +8,7 @@ import {
   type MeetingDetail, type CalendarEventItem, type AvailabilityProfile,
 } from '@/lib/builderforceApi';
 import { ViewToggle } from '@/components/ViewToggle';
-import { ScheduleMeetingModal } from './ScheduleMeetingModal';
+import { ScheduleMeetingPanel } from './ScheduleMeetingPanel';
 import { AvailabilityEditor } from './AvailabilityEditor';
 import { MeetingRoom } from './MeetingRoom';
 
@@ -183,7 +183,7 @@ export function MeetingsCalendar({
         <Legend color="var(--success-bg, rgba(52,211,153,0.18))" label={t('legendAvailable')} border />
       </div>
 
-      <ScheduleMeetingModal
+      <ScheduleMeetingPanel
         open={bookOpen}
         onClose={() => setBookOpen(false)}
         onCreated={(detail, joinNow) => { setMeetings((prev) => [detail, ...prev]); if (joinNow) setActiveMeetingId(detail.meeting.id); reload(); }}

@@ -78,20 +78,21 @@ export const NAV_GROUPS: NavGroup[] = [
   // sub-tabs here — Voice opens as a Voice IDE project, not a separate menu item.
   { id: 'ide', labelKey: 'group.ide', icon: '💻', href: '/ide/dashboard', match: ['/ide'] },
   { id: 'workflows', labelKey: 'group.workflows', icon: '🔀', href: '/workflows', match: ['/workflows'] },
-  // Live video/audio collaboration: schedule + join standups, planning, retros,
-  // ad-hoc and direct calls; connect Google/Microsoft calendars.
-  { id: 'meetings', labelKey: 'group.meetings', icon: '📹', href: '/meetings', match: ['/meetings'] },
   {
     // "Talent / Workforce": people + agents (Workforce) AND the roster of roles and
     // external hires (Talent) share one destination. The Talent tab is the relocated
     // /hires surface; the Roles tab is the workspace role roster with assignment.
+    // Live video/audio collaboration (Meetings) is a tab here too — schedule + join
+    // standups, planning, retros, ad-hoc and direct calls; connect Google/Microsoft
+    // calendars. `/meetings` redirects into ?tab=meetings.
     id: 'workforce', labelKey: 'group.workforce', icon: '👥', href: '/workforce',
-    match: ['/workforce', '/hires'],
+    match: ['/workforce', '/hires', '/meetings'],
     tabKind: 'query', basePath: '/workforce',
     tabs: [
       { id: '', labelKey: 'tab.workforce', icon: '👥' },
       { id: 'roles', labelKey: 'tab.roles', icon: '🎭' },
       { id: 'teams', labelKey: 'tab.teams', icon: '🧑‍🤝‍🧑' },
+      { id: 'meetings', labelKey: 'tab.meetings', icon: '📹' },
       { id: 'calendar', labelKey: 'tab.calendar', icon: '📅' },
       { id: 'talent', labelKey: 'tab.talent', icon: '🤝' },
       { id: 'performance', labelKey: 'tab.performance', icon: '📊' },
@@ -210,22 +211,30 @@ export const FOR_HIRE_NAV_GROUPS: NavGroup[] = [
 export const FREELANCER_NAV_GROUPS: NavGroup[] = [
   ...FOR_HIRE_NAV_GROUPS,
   {
-    id: 'settings', labelKey: 'group.settings', icon: '⚙', href: '/security',
-    match: ['/security'],
+    // A gig account's personal settings live on /settings (Account / Personality /
+    // Sessions sub-tabs) — the same place a builder manages their own account. The
+    // Workspace sub-tab self-hides without a tenant, and the tenant-only sub-routes
+    // (integrations / api-keys) are never linked here.
+    id: 'settings', labelKey: 'group.settings', icon: '⚙', href: '/settings',
+    match: ['/settings'],
     tabKind: 'route',
     tabs: [
-      { id: '/security', labelKey: 'tab.security', icon: '🔒' },
+      { id: '/settings', labelKey: 'tab.settings', icon: '⚙' },
     ],
   },
 ];
 
 /** Route prefixes a freelancer account is allowed to reach in the app shell. Used
  *  by both the nav (which groups to show) and the route guard (redirect away from
- *  anything else). Public/marketing routes are handled separately by the shell.
- *  NOTE: `/settings/*` is deliberately EXCLUDED — those pages (integrations, tenant,
- *  billing, API keys) are tenant/builder features that 401 for a tenantless gig
- *  account; a freelancer's account controls live under `/security`. */
-export const FREELANCER_ALLOWED_PREFIXES = ['/freelancer', '/security'];
+ *  anything else). Public/marketing routes are handled separately by the shell. */
+export const FREELANCER_ALLOWED_PREFIXES = ['/freelancer'];
+
+/** Paths a freelancer may reach by EXACT match only — the settings root holds their
+ *  personal account controls, but the tenant-scoped `/settings/*` sub-routes
+ *  (integrations, api-keys) stay off-limits (they 401 for a tenantless account), so
+ *  we intentionally do not allow the `/settings` prefix. `/security` is kept
+ *  reachable for old deep links; it degrades to a "no workspace" state. */
+export const FREELANCER_ALLOWED_EXACT = ['/settings', '/security'];
 
 /** The nav destinations for the current account type — the ONE place the
  *  freelancer-vs-builder nav split is decided, so the Sidebar + SectionTabs and
@@ -239,6 +248,7 @@ export function navGroupsForAccountType(isFreelancer: boolean, availableForHire 
 
 /** Whether a freelancer account may view this in-app path (else redirect). */
 export function isFreelancerAllowedPath(pathname: string): boolean {
+  if (FREELANCER_ALLOWED_EXACT.includes(pathname)) return true;
   return FREELANCER_ALLOWED_PREFIXES.some((p) => pathname === p || pathname.startsWith(`${p}/`));
 }
 

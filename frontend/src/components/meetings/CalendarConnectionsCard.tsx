@@ -14,7 +14,7 @@ const PROVIDER_LABEL: Record<string, string> = {
  * redirects to the provider's consent screen; on return, scheduled meetings are
  * pushed to the calendar and upcoming events are surfaced.
  */
-export function CalendarConnectionsCard() {
+export function CalendarConnectionsCard({ returnPath = '/meetings' }: { returnPath?: string } = {}) {
   const t = useTranslations('meetings');
   const [providers, setProviders] = useState<string[]>([]);
   const [connections, setConnections] = useState<CalendarConnectionInfo[]>([]);
@@ -34,10 +34,10 @@ export function CalendarConnectionsCard() {
   const connect = useCallback(async (provider: string) => {
     setBusy(provider);
     try {
-      const { authUrl } = await calendarApi.connectUrl(provider, '/meetings');
+      const { authUrl } = await calendarApi.connectUrl(provider, returnPath);
       window.location.href = authUrl;
     } catch { setBusy(null); }
-  }, []);
+  }, [returnPath]);
 
   const disconnect = useCallback(async (id: string) => {
     await calendarApi.disconnect(id).catch(() => {});

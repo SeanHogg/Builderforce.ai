@@ -8,7 +8,7 @@
  * with no new tables, routes, or pages.
  */
 import type { ToolCategory, ToolResult } from './toolTypes';
-import { ARCHITECTURE_DIAGNOSTIC_ID, SOC2_AUDIT_ID, QUALITY_AUDIT_ID, PM_VISION_AUDIT_ID, PRIVACY_AUDIT_ID } from './auditIds';
+import { ARCHITECTURE_DIAGNOSTIC_ID, SOC2_AUDIT_ID, QUALITY_AUDIT_ID, PM_VISION_AUDIT_ID, PRIVACY_AUDIT_ID, EXTERNAL_DIAGNOSTIC_ICONS } from './auditIds';
 import { soc2Scan, architectureScan, qualityScan, pmVisionScan, privacyScan, type AuditScanContext } from './auditScanners';
 
 /** The agent workflow the deep audit dispatches — matches a key in the
@@ -40,7 +40,7 @@ export const SYSTEM_AUDITS: SystemAudit[] = [
     id: SOC2_AUDIT_ID,
     name: 'SOC 2 Readiness Audit',
     category: 'governance',
-    icon: '🛡️',
+    icon: EXTERNAL_DIAGNOSTIC_ICONS[SOC2_AUDIT_ID]!,
     blurb: 'Scans your repos and controls against the SOC 2 Common Criteria (CC1–CC9) and tells you exactly what to close next.',
     agentWorkflow: 'security_audit',
     scan: soc2Scan,
@@ -49,7 +49,7 @@ export const SYSTEM_AUDITS: SystemAudit[] = [
     id: ARCHITECTURE_DIAGNOSTIC_ID,
     name: 'Architecture Analysis',
     category: 'quality',
-    icon: '🏛️',
+    icon: EXTERNAL_DIAGNOSTIC_ICONS[ARCHITECTURE_DIAGNOSTIC_ID]!,
     blurb: 'Rates design-principle adherence (DRY, SOLID, DDD, patterns) across your codebase.',
     agentWorkflow: 'architecture',
     scan: architectureScan,
@@ -58,7 +58,7 @@ export const SYSTEM_AUDITS: SystemAudit[] = [
     id: QUALITY_AUDIT_ID,
     name: 'Quality Audit',
     category: 'quality',
-    icon: '✅',
+    icon: EXTERNAL_DIAGNOSTIC_ICONS[QUALITY_AUDIT_ID]!,
     blurb: 'Checks testing, CI, and build-integrity signals across your repositories.',
     agentWorkflow: 'quality_audit',
     scan: qualityScan,
@@ -67,7 +67,7 @@ export const SYSTEM_AUDITS: SystemAudit[] = [
     id: PM_VISION_AUDIT_ID,
     name: 'Product Vision & Roadmap Audit',
     category: 'delivery',
-    icon: '🧭',
+    icon: EXTERNAL_DIAGNOSTIC_ICONS[PM_VISION_AUDIT_ID]!,
     blurb: 'Measures product direction: objectives, key results, roadmap, and a documented vision.',
     agentWorkflow: 'pm_vision_audit',
     scan: pmVisionScan,
@@ -76,7 +76,7 @@ export const SYSTEM_AUDITS: SystemAudit[] = [
     id: PRIVACY_AUDIT_ID,
     name: 'Privacy & Data-Law Compliance',
     category: 'governance',
-    icon: '⚖️',
+    icon: EXTERNAL_DIAGNOSTIC_ICONS[PRIVACY_AUDIT_ID]!,
     blurb: 'Scans your repos for GDPR, CCPA/CPRA, and CAN-SPAM readiness — privacy policy, cookie consent, unsubscribe, data export & erasure, and retention — and tells you exactly what to close next.',
     agentWorkflow: 'privacy_audit',
     ticketPerFinding: true,

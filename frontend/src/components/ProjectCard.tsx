@@ -3,12 +3,14 @@
 import { useState } from 'react';
 import { useTranslations } from 'next-intl';
 import type { Project } from '@/lib/types';
+import type { ProjectDiagnosticSummary } from '@/lib/tools';
 import { ProjectHealthGauges } from './ProjectHealth';
 import { ProjectInspectionGrade } from './ProjectInspection';
 import { ProjectOriginBadge } from './ProjectOriginBadge';
 import type { ProjectPanelTab } from './ProjectDetailsPanel';
 import { DeleteProjectDialog } from './DeleteProjectDialog';
 import { RunDiagnosticsButton } from './RunDiagnosticsButton';
+import { ProjectDiagnosticsStrip } from './ProjectDiagnosticsStrip';
 
 export interface ProjectCardProps {
   project: Project;
@@ -30,6 +32,9 @@ export interface ProjectCardProps {
    *  editor (`/ide/<id>`); the Projects page overrides this to route through the
    *  IDE dashboard scoped to the project. */
   onOpenIde?: (project: Project) => void;
+  /** Latest per-diagnostic scores (SOC 2, Quality, …) for this project, from the
+   *  workspace rollup. Rendered as a compact score strip; omit/empty hides it. */
+  diagnostics?: ProjectDiagnosticSummary[];
 }
 
 const createdDate = (project: Project): string => {
@@ -47,6 +52,7 @@ export function ProjectCard({
   onDelete,
   showDeleteButton = !!onDelete,
   onOpenIde,
+  diagnostics,
 }: ProjectCardProps) {
   const t = useTranslations('projectCard');
   const openIde = onOpenIde ?? ((p: Project) => { window.location.href = `/ide/${p.publicId ?? p.id}`; });
@@ -275,6 +281,14 @@ export function ProjectCard({
       <ProjectInspectionGrade
         project={project}
         onOpen={onDetailsClick ? (p) => onDetailsClick(p, 'analytics') : undefined}
+      />
+
+      {/* Diagnostics run against this project (SOC 2 readiness, Quality, …) — the
+          latest score per diagnostic, straight from the workspace rollup so the
+          card can show them without a per-card fetch. Self-hides when none. */}
+      <ProjectDiagnosticsStrip
+        diagnostics={diagnostics ?? []}
+        onOpen={onDetailsClick ? () => onDetailsClick(project, 'diagnostics') : undefined}
       />
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 'auto', flexWrap: 'wrap' }}>

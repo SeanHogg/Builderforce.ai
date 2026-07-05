@@ -19,7 +19,6 @@ import { BoardConnectionsManager } from './integrations/BoardConnectionsManager'
 import { ProjectDiagnosticsTab } from './ProjectDiagnosticsTab';
 import { ProjectInitiativeLink } from './pm/ProjectInitiativeLink';
 import { ProjectHealthGauges } from './ProjectHealth';
-import { KanbanRosterCard } from './kanban/KanbanRosterCard';
 import { ProjectInspectionReport, ProjectInspectionSummary } from './ProjectInspection';
 import type { InspectionRecommendation } from '@/lib/projectInspection';
 
@@ -420,66 +419,6 @@ export function ProjectDetailsPanel({
                 />
               </div>
 
-              {/* Workspace actions — first column. */}
-              <div style={cardStyle}>
-                <div style={{ fontWeight: 600, marginBottom: 10, fontSize: 14 }}>{t('workspaceActions')}</div>
-                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                  <button
-                    type="button"
-                    onClick={() => setActiveTab('taskMgmt')}
-                    style={{
-                      padding: '8px 14px',
-                      fontSize: 13,
-                      fontWeight: 600,
-                      background: 'var(--surface-interactive)',
-                      color: 'var(--text-primary)',
-                      border: '1px solid var(--border-subtle)',
-                      borderRadius: 8,
-                      cursor: 'pointer',
-                    }}
-                  >
-                    {t('createTask')}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setActiveTab('brainChat')}
-                    style={{
-                      padding: '8px 14px',
-                      fontSize: 13,
-                      fontWeight: 600,
-                      background: 'var(--surface-interactive)',
-                      color: 'var(--text-primary)',
-                      border: '1px solid var(--border-subtle)',
-                      borderRadius: 8,
-                      cursor: 'pointer',
-                    }}
-                  >
-                    {t('planWithBrain')}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setActiveTab('prds')}
-                    style={{
-                      padding: '8px 14px',
-                      fontSize: 13,
-                      fontWeight: 600,
-                      background: 'var(--surface-interactive)',
-                      color: 'var(--text-primary)',
-                      border: '1px solid var(--border-subtle)',
-                      borderRadius: 8,
-                      cursor: 'pointer',
-                    }}
-                  >
-                    {t('draftPrd')}
-                  </button>
-                </div> {/* end workspace actions button row */}
-                <div style={{ marginTop: 12, fontSize: 12, color: 'var(--text-muted)' }}>
-                  {t('brainHint')}
-                </div>
-              </div>
-
-              {/* Recommended roster — next column. */}
-              <KanbanRosterCard projectId={project.id} />
             </div>
           )}
 
@@ -744,14 +683,75 @@ export function ProjectDetailsPanel({
           )}
 
           {activeTab === 'workspace' && (
-            <div style={cardStyle}>
-              <div style={{ fontWeight: 600, marginBottom: 10 }}>{t('workspaceTitle')}</div>
-              <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>
-                {t('workspaceDesc')}
-              </p>
-              <Link href={`/ide/${project.publicId ?? project.id}`} style={{ fontSize: 13, color: 'var(--coral-bright)', marginTop: 8, display: 'inline-block' }}>
-                {t('openInIde')} →
-              </Link>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 16 }}>
+              {/* Workspace actions — moved here from the Analytics tab. */}
+              <div style={cardStyle}>
+                <div style={{ fontWeight: 600, marginBottom: 10, fontSize: 14 }}>{t('workspaceActions')}</div>
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab('taskMgmt')}
+                    style={{
+                      padding: '8px 14px',
+                      fontSize: 13,
+                      fontWeight: 600,
+                      background: 'var(--surface-interactive)',
+                      color: 'var(--text-primary)',
+                      border: '1px solid var(--border-subtle)',
+                      borderRadius: 8,
+                      cursor: 'pointer',
+                    }}
+                  >
+                    {t('createTask')}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab('brainChat')}
+                    style={{
+                      padding: '8px 14px',
+                      fontSize: 13,
+                      fontWeight: 600,
+                      background: 'var(--surface-interactive)',
+                      color: 'var(--text-primary)',
+                      border: '1px solid var(--border-subtle)',
+                      borderRadius: 8,
+                      cursor: 'pointer',
+                    }}
+                  >
+                    {t('planWithBrain')}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab('prds')}
+                    style={{
+                      padding: '8px 14px',
+                      fontSize: 13,
+                      fontWeight: 600,
+                      background: 'var(--surface-interactive)',
+                      color: 'var(--text-primary)',
+                      border: '1px solid var(--border-subtle)',
+                      borderRadius: 8,
+                      cursor: 'pointer',
+                    }}
+                  >
+                    {t('draftPrd')}
+                  </button>
+                </div>
+                <div style={{ marginTop: 12, fontSize: 12, color: 'var(--text-muted)' }}>
+                  {t('brainHint')}
+                </div>
+              </div>
+
+              {/* Open in the full IDE workspace. */}
+              <div style={cardStyle}>
+                <div style={{ fontWeight: 600, marginBottom: 10 }}>{t('workspaceTitle')}</div>
+                <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>
+                  {t('workspaceDesc')}
+                </p>
+                <Link href={`/ide/${project.publicId ?? project.id}`} style={{ fontSize: 13, color: 'var(--coral-bright)', marginTop: 8, display: 'inline-block' }}>
+                  {t('openInIde')} →
+                </Link>
+              </div>
             </div>
           )}
 

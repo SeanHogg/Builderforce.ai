@@ -259,7 +259,6 @@
       "findWork": "Find Work",
       "timecard": "Timecard",
       "myDashboard": "My Dashboard",
-      "meetings": "Meetings",
       "myWorkspace": "My Workspace"
     },
     "tab": {
@@ -324,6 +323,7 @@
       "adminGrowth": "Growth",
       "adminLogs": "Logs",
       "adminDeveloper": "Developer",
+      "meetings": "Meetings",
       "calendar": "Calendar"
     }
   },
@@ -844,7 +844,10 @@
       "enabling": "Turning on…",
       "disabling": "Turning off…",
       "error": "Couldn't update your availability. Please try again."
-    }
+    },
+    "accountTab": "Account",
+    "sessionsTab": "Sessions",
+    "subnavLabel": "Settings sections"
   },
   "pmo": {
     "title": "Portfolio (PMO)",
@@ -1914,6 +1917,7 @@
         "qa": "Per-project QA automation — flows, generated tests, and CI runs.",
         "roles": "The roles your team fills — the board template's standard roles plus your custom ones — and who covers each: an agent, an employee, or a hire.",
         "talent": "Manage the freelancers you've hired — engagements, job postings, timecard approvals, and invoices.",
+        "meetings": "Schedule and join live video and audio sessions with your team — standups, planning, retros, ad-hoc and direct calls — and connect Google or Microsoft calendars.",
         "calendar": "Team availability and scheduled meetings"
       }
     },
@@ -2934,7 +2938,7 @@
   },
   "security": {
     "title": "Security",
-    "subtitle": "Manage your sessions, review admin access, and govern workspace members.",
+    "subtitle": "Govern workspace members, security agents, and SOC 2 audits.",
     "refresh": "Refresh",
     "loading": "Loading…",
     "loadingMembers": "Loading members…",
@@ -3004,7 +3008,11 @@
     "tsc_availability": "Availability",
     "tsc_processing_integrity": "Processing Integrity",
     "tsc_confidentiality": "Confidentiality",
-    "tsc_privacy": "Privacy"
+    "tsc_privacy": "Privacy",
+    "membersTab": "Members",
+    "agentsTab": "Agents",
+    "auditTab": "SOC 2",
+    "subnavLabel": "Security sections"
   },
   "catalogInsights": {
     "total": {
@@ -3032,6 +3040,7 @@
   "projectTable": {
     "name": "Name",
     "health": "Health",
+    "diagnostics": "Diagnostics",
     "description": "Description",
     "agent": "Agent",
     "actions": "Actions",
@@ -3042,6 +3051,14 @@
     "workflowsWithCount": "Workflows ({count})",
     "openIde": "Open in IDE",
     "delete": "Delete"
+  },
+  "diagnosticsStrip": {
+    "title": "Diagnostics",
+    "notScored": "Not scored",
+    "gaps": "{count, plural, one {# gap} other {# gaps}}",
+    "noGaps": "No gaps",
+    "more": "+{count}",
+    "itemAria": "{name}: {score}, {label}, {gaps}"
   },
   "marketing": {
     "ctaGetStartedFree": "Get Started Free",

@@ -259,7 +259,6 @@
       "findWork": "Buscar trabajo",
       "timecard": "Hoja de horas",
       "myDashboard": "Mi panel",
-      "meetings": "Reuniones",
       "myWorkspace": "Mi espacio"
     },
     "tab": {
@@ -324,6 +323,7 @@
       "adminGrowth": "Crecimiento",
       "adminLogs": "Registros",
       "adminDeveloper": "Desarrollador",
+      "meetings": "Reuniones",
       "calendar": "Calendario"
     }
   },
@@ -844,7 +844,10 @@
       "enabling": "Activando…",
       "disabling": "Desactivando…",
       "error": "No se pudo actualizar tu disponibilidad. Inténtalo de nuevo."
-    }
+    },
+    "accountTab": "Cuenta",
+    "sessionsTab": "Sesiones",
+    "subnavLabel": "Secciones de configuración"
   },
   "pmo": {
     "title": "Portafolio (PMO)",
@@ -1914,6 +1917,7 @@
         "qa": "Automatización de QA por proyecto: flujos, pruebas generadas y ejecuciones de CI.",
         "roles": "Los roles que cubre tu equipo —los roles estándar de la plantilla del tablero más los personalizados— y quién cubre cada uno: un agente, un empleado o un contratado.",
         "talent": "Gestiona los freelancers que has contratado: colaboraciones, ofertas de trabajo, aprobaciones de horas y facturas.",
+        "meetings": "Programa y únete a sesiones de vídeo y audio en directo con tu equipo: dailies, planificación, retros, llamadas ad-hoc y directas, y conecta tu calendario de Google o Microsoft.",
         "calendar": "Disponibilidad del equipo y reuniones programadas"
       }
     },
@@ -2934,7 +2938,7 @@
   },
   "security": {
     "title": "Seguridad",
-    "subtitle": "Gestiona tus sesiones, revisa el acceso de administradores y administra los miembros del espacio.",
+    "subtitle": "Gestiona los miembros del espacio de trabajo, los agentes de seguridad y las auditorías SOC 2.",
     "refresh": "Actualizar",
     "loading": "Cargando…",
     "loadingMembers": "Cargando miembros…",
@@ -3004,7 +3008,11 @@
     "tsc_availability": "Disponibilidad",
     "tsc_processing_integrity": "Integridad de procesamiento",
     "tsc_confidentiality": "Confidencialidad",
-    "tsc_privacy": "Privacidad"
+    "tsc_privacy": "Privacidad",
+    "membersTab": "Miembros",
+    "agentsTab": "Agentes",
+    "auditTab": "SOC 2",
+    "subnavLabel": "Secciones de seguridad"
   },
   "catalogInsights": {
     "total": {
@@ -3032,6 +3040,7 @@
   "projectTable": {
     "name": "Nombre",
     "health": "Estado",
+    "diagnostics": "Diagnósticos",
     "description": "Descripción",
     "agent": "Agente",
     "actions": "Acciones",
@@ -3042,6 +3051,14 @@
     "workflowsWithCount": "Flujos de trabajo ({count})",
     "openIde": "Abrir en el IDE",
     "delete": "Eliminar"
+  },
+  "diagnosticsStrip": {
+    "title": "Diagnósticos",
+    "notScored": "Sin puntuar",
+    "gaps": "{count, plural, one {# brecha} other {# brechas}}",
+    "noGaps": "Sin brechas",
+    "more": "+{count}",
+    "itemAria": "{name}: {score}, {label}, {gaps}"
   },
   "marketing": {
     "ctaGetStartedFree": "Comienza gratis",

@@ -95,8 +95,10 @@ export {
   isDirectedToParticipant,
   mentionRecipient,
   resolveRecipient,
+  activeMentionToken,
+  filterMentionCandidates,
 } from './directedMessage';
-export type { DirectedRecipient, RecipientChoice } from './directedMessage';
+export type { DirectedRecipient, RecipientChoice, MentionToken } from './directedMessage';
 
 // Shared data shapes
 export type { BrainChat, BrainMessage, BrainModality, ChatInputAttachment } from './types';
