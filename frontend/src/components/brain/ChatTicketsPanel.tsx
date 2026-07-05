@@ -39,6 +39,20 @@ export function ChatTicketsPanel({ chatId, projectId, chatList, onChanged }: {
   const [refreshSignal, setRefreshSignal] = useState(0);
   useEffect(() => onBrainDataChanged(['chats', 'brain', 'tasks'], () => setRefreshSignal((n) => n + 1)), []);
 
+  // LOCK state — owner-only toggle. Read once per chat (also picks up ownership).
+  const [visibility, setVisibility] = useState<'shared' | 'locked'>('shared');
+  const [isOwner, setIsOwner] = useState(false);
+  useEffect(() => {
+    let live = true;
+    brain.getChat(chatId).then((c) => {
+      if (!live) return;
+      const meta = c as unknown as { visibility?: 'shared' | 'locked'; isOwner?: boolean };
+      setVisibility(meta.visibility ?? 'shared');
+      setIsOwner(!!meta.isOwner);
+    }).catch(() => {});
+    return () => { live = false; };
+  }, [chatId, refreshSignal]);
+
   const labels = useMemo<ChatTicketsLabels>(() => ({
     none: t('none'), spawned: t('spawned'), run: t('run'), lineage: t('lineage'), unlink: t('unlink'),
     pickAgent: t('pickAgent'), lineageTitle: t('lineageTitle'), lineageEmpty: t('lineageEmpty'), merged: t('merged'),
@@ -46,6 +60,9 @@ export function ChatTicketsPanel({ chatId, projectId, chatList, onChanged }: {
     linkFailed: t('linkFailed'), kindLabel: t('kindLabel'), pickTicket: t('pickTicket'), linkTypeLabel: t('linkTypeLabel'),
     linkTypeLinked: t('linkTypeLinked'), linkTypeCreated: t('linkTypeCreated'), linkAction: t('linkAction'),
     noAgents: t('noAgents'), removeAgent: t('removeAgent'), inviteAgent: t('inviteAgent'), agentsHint: t('agentsHint'),
+    people: t('people'), noPeople: t('noPeople'), invitePerson: t('invitePerson'), invitePersonHint: t('invitePersonHint'),
+    removePerson: t('removePerson'), inviteSent: t('inviteSent'), invitePending: t('invitePending'),
+    visibilityShared: t('visibilityShared'), visibilityLocked: t('visibilityLocked'), lockHint: t('lockHint'),
     mergeHint: t('mergeHint'), mergeNoOthers: t('mergeNoOthers'),
     kind: { task: t('kind.task'), epic: t('kind.epic'), gap: t('kind.gap'), objective: t('kind.objective'), initiative: t('kind.initiative'), portfolio: t('kind.portfolio'), roadmap: t('kind.roadmap'), spec: t('kind.spec') },
     ringAria: (label, pct) => t('ringAria', { label, pct }),
@@ -63,6 +80,9 @@ export function ChatTicketsPanel({ chatId, projectId, chatList, onChanged }: {
     listAgents: (id) => brain.listChatAgents(id).then((rows) => rows.map((a: ChatAgentInvite) => ({ id: a.id, agentRef: a.agentRef, role: a.role }))),
     inviteAgent: (id, input) => brain.inviteChatAgent(id, input).then(() => undefined),
     removeAgent: (id, assignmentId) => brain.removeChatAgent(id, assignmentId).then(() => undefined),
+    listMembers: (id) => brain.listChatMembers(id),
+    inviteMember: (id, email) => brain.inviteChatMember(id, email).then((r) => ({ status: r.status })),
+    removeMember: (id, memberId) => brain.removeChatMember(id, memberId).then(() => undefined),
     loadAgentPool: () => loadAgentPool().then((ps) => ps.map((p) => ({ ref: p.ref, name: p.name, meta: p.meta, kind: p.kind }))),
     loadTicketOptions: async (pid) => {
       // task/epic/gap from the board (project-scoped when known); the strategy tiers
@@ -114,6 +134,8 @@ export function ChatTicketsPanel({ chatId, projectId, chatList, onChanged }: {
         labels={labels}
         onChanged={onChanged}
         refreshSignal={refreshSignal}
+        visibility={visibility}
+        onSetVisibility={isOwner ? async (v) => { await brain.updateChat(chatId, { visibility: v }); setVisibility(v); } : undefined}
       />
     </div>
   );

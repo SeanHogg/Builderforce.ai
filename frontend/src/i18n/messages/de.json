@@ -4653,6 +4653,16 @@
       "removeAgent": "Entfernen",
       "inviteAgent": "Agent einladen…",
       "agentsHint": "Eingeladene Agenten können markiert werden, um eine verknüpfte Aufgabe oder ein Epic auszuführen.",
+      "people": "Personen",
+      "noPeople": "Noch niemand eingeladen.",
+      "invitePerson": "Per E-Mail einladen…",
+      "invitePersonHint": "Lade einen Teamkollegen ein, diesen Chat anzusehen und mitzuarbeiten.",
+      "removePerson": "Entfernen",
+      "inviteSent": "Einladung gesendet.",
+      "invitePending": "Einladung gesendet – sie treten bei, sobald sie sich anmelden.",
+      "visibilityShared": "Geteilt",
+      "visibilityLocked": "Gesperrt",
+      "lockHint": "Geteilte Chats sind für das ganze Team sichtbar; sperren, um ihn nur den Mitgliedern vorzubehalten.",
       "mergeHint": "Andere Chats in diesen zusammenführen. Ihre Nachrichten, Tickets und Agenten wandern hierher; die Quellen werden archiviert.",
       "mergeNoOthers": "Keine anderen Chats zum Zusammenführen.",
       "mergeAction": "{n} hier zusammenführen",
@@ -5474,7 +5484,9 @@
   },
   "notifications": {
     "title": "Benachrichtigungen",
-    "markAllRead": "Alle als gelesen markieren"
+    "markAllRead": "Alle als gelesen markieren",
+    "empty": "Alles erledigt.",
+    "bellUnread": "Benachrichtigungen, {count} ungelesen"
   },
   "kanban": {
     "rosterTitle": "Empfohlene Besetzung",

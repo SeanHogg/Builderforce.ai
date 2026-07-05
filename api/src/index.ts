@@ -171,6 +171,7 @@ import { runBoardSyncSweep } from './application/boardsync/runBoardSyncSweep';
 import { runParkedWorkflowSweep } from './application/swimlane/resumeParkedWorkflows';
 import { runQaExplorationSweep } from './application/qa/runQaExplorationSweep';
 import { runValidatorReviewSweep } from './application/validation/validationDispatch';
+import { runSecurityAuditSweep } from './application/security/securityDispatch';
 import { runDueReports } from './application/reports/runDueReports';
 import { handleInboundEmail } from './application/workflow/inboundEmail';
 
@@ -583,9 +584,25 @@ export default {
           }),
       );
     }
+    // Weekly Security-agent SOC 2 audit sweep — for every tenant that has a Security
+    // agent and no audit in flight, dispatch one audit against its most-recently-active
+    // repo-linked project. Findings become access-restricted SECURITY tasks. No-op for
+    // tenants without a Security agent.
+    if (event.cron === '0 8 * * 1') {
+      ctx.waitUntil(
+        runSecurityAuditSweep(env)
+          .then((r) => {
+            if (r.dispatched > 0) console.log(`[cron:security] tenantsWithSecurityAgent=${r.tenantsWithSecurityAgent} dispatched=${r.dispatched}`);
+          })
+          .catch((err) => {
+            console.error('[cron:security] failed', err);
+          }),
+      );
+    }
     // Trigger sweep + cloud executor run on the frequent tick. (Also run when no
-    // cron string is supplied, e.g. a manual `wrangler` invocation.)
-    if (event.cron !== '0 9 * * *') {
+    // cron string is supplied, e.g. a manual `wrangler` invocation.) The daily and
+    // weekly ticks are handled above, so exclude them here.
+    if (event.cron !== '0 9 * * *' && event.cron !== '0 8 * * 1') {
       ctx.waitUntil(
         runDueTriggers(env)
           .then(() => processPendingCloudWorkflows(env))

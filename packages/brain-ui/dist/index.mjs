@@ -1,6 +1,6 @@
 // src/BrainTimeline.tsx
 import React2, { useEffect, useMemo as useMemo2, useRef, useState as useState2 } from "react";
-import { parseDirectedRecipient } from "@seanhogg/builderforce-brain-embedded";
+import { parseDirectedRecipient, parseMessageAuthor } from "@seanhogg/builderforce-brain-embedded";
 
 // src/Markdown.tsx
 import React, { useMemo, useState } from "react";
@@ -459,10 +459,11 @@ function BrainTimelineInner({
           ] }, node.key);
         }
         if (node.kind === "assistant") {
+          const author = parseMessageAuthor(node.message);
           return /* @__PURE__ */ jsxs3("li", { className: "bf-tl__item bf-tl__item--assistant", children: [
-            /* @__PURE__ */ jsx3("span", { className: "bf-tl__gutter", children: /* @__PURE__ */ jsx3("span", { className: "bf-tl__dot", children: dotIcon("assistant") }) }),
+            /* @__PURE__ */ jsx3("span", { className: "bf-tl__gutter", children: /* @__PURE__ */ jsx3("span", { className: "bf-tl__dot", children: author ? /* @__PURE__ */ jsx3(Avatar, { name: author.name, kind: author.kind, size: 16 }) : dotIcon("assistant") }) }),
             /* @__PURE__ */ jsxs3("div", { className: "bf-tl__body", children: [
-              /* @__PURE__ */ jsx3("div", { className: "bf-tl__role", children: assistant }),
+              /* @__PURE__ */ jsx3("div", { className: "bf-tl__role", children: author ? author.name : assistant }),
               /* @__PURE__ */ jsx3("div", { className: "bf-tl__bubble", children: renderMsg(node.message, "assistant", node.text) }),
               renderAssistantActions && /* @__PURE__ */ jsx3("div", { className: "bf-tl__actions", children: renderAssistantActions(node.message) })
             ] })
@@ -600,6 +601,16 @@ var DEFAULT_CHAT_TICKETS_LABELS = {
   removeAgent: "Remove",
   inviteAgent: "Invite an agent\u2026",
   agentsHint: "Invited agents can be tagged to execute a linked task or epic.",
+  people: "People",
+  noPeople: "No people invited yet.",
+  invitePerson: "Invite by email\u2026",
+  invitePersonHint: "Invite a teammate to view and collaborate on this chat.",
+  removePerson: "Remove",
+  inviteSent: "Invitation sent.",
+  invitePending: "Invite sent \u2014 they will join when they sign in.",
+  visibilityShared: "Shared",
+  visibilityLocked: "Locked",
+  lockHint: "Shared chats are visible to the whole team; lock to keep this chat to its members only.",
   mergeHint: "Merge other chats into this one. Their messages, tickets and agents move here; the sources are archived.",
   mergeNoOthers: "No other chats to merge.",
   kind: { task: "Task", epic: "Epic", gap: "Gap", objective: "Objective", initiative: "Initiative", portfolio: "Portfolio", roadmap: "Roadmap", spec: "Spec" },
@@ -612,9 +623,10 @@ var DEFAULT_CHAT_TICKETS_LABELS = {
 // src/chatTickets/ChatTicketsPanel.tsx
 import { jsx as jsx5, jsxs as jsxs5 } from "react/jsx-runtime";
 var RUNNABLE = new Set(RUNNABLE_KINDS);
-function ChatTicketsPanelInner({ chatId, projectId, chatList, adapter, labels, onChanged, refreshSignal }) {
+function ChatTicketsPanelInner({ chatId, projectId, chatList, adapter, labels, onChanged, refreshSignal, visibility, onSetVisibility }) {
   const [tickets, setTickets] = useState3([]);
   const [agents, setAgents] = useState3([]);
+  const [members, setMembers] = useState3([]);
   const [pool, setPool] = useState3([]);
   const [options, setOptions] = useState3(null);
   const [panel, setPanel] = useState3(null);
@@ -624,12 +636,14 @@ function ChatTicketsPanelInner({ chatId, projectId, chatList, adapter, labels, o
   const [msg, setMsg] = useState3(null);
   const [busy, setBusy] = useState3(false);
   const load = useCallback(async () => {
-    const [tk, ag] = await Promise.all([
+    const [tk, ag, mem] = await Promise.all([
       adapter.listTickets(chatId).catch(() => []),
-      adapter.listAgents(chatId).catch(() => [])
+      adapter.listAgents(chatId).catch(() => []),
+      adapter.listMembers(chatId).catch(() => [])
     ]);
     setTickets(tk);
     setAgents(ag);
+    setMembers(mem);
   }, [adapter, chatId]);
   useEffect2(() => {
     void load();
@@ -729,6 +743,11 @@ function ChatTicketsPanelInner({ chatId, projectId, chatList, adapter, labels, o
         labels.agents,
         agents.length ? ` (${agents.length})` : ""
       ] }),
+      /* @__PURE__ */ jsxs5("button", { type: "button", onClick: () => setPanel(panel === "people" ? null : "people"), style: S.pill(panel === "people"), children: [
+        "\u{1F464} ",
+        labels.people,
+        members.length ? ` (${members.length})` : ""
+      ] }),
       /* @__PURE__ */ jsxs5("button", { type: "button", onClick: () => setPanel(panel === "merge" ? null : "merge"), style: S.pill(panel === "merge"), children: [
         "\u29C9 ",
         labels.merge
@@ -763,6 +782,39 @@ function ChatTicketsPanelInner({ chatId, projectId, chatList, adapter, labels, o
           setBusy(true);
           try {
             await adapter.removeAgent(chatId, id);
+            await load();
+            onChanged?.();
+          } finally {
+            setBusy(false);
+          }
+        },
+        busy
+      }
+    ),
+    panel === "people" && /* @__PURE__ */ jsx5(
+      PeopleSection,
+      {
+        members,
+        labels,
+        visibility,
+        onSetVisibility,
+        onInvite: async (email) => {
+          setBusy(true);
+          try {
+            const r = await adapter.inviteMember(chatId, email);
+            flash(r.status === "pending" ? labels.invitePending : labels.inviteSent);
+            await load();
+            onChanged?.();
+          } catch (e) {
+            flash(e instanceof Error ? e.message : labels.linkFailed);
+          } finally {
+            setBusy(false);
+          }
+        },
+        onRemove: async (id) => {
+          setBusy(true);
+          try {
+            await adapter.removeMember(chatId, id);
             await load();
             onChanged?.();
           } finally {
@@ -852,6 +904,46 @@ function AgentsSection({ agents, pool, labels, onInvite, onRemove, busy }) {
     /* @__PURE__ */ jsx5("span", { style: { fontSize: 11, ...S.muted }, children: labels.agentsHint })
   ] });
 }
+function PeopleSection({ members, labels, visibility, onSetVisibility, onInvite, onRemove, busy }) {
+  const [email, setEmail] = useState3("");
+  const submit = async () => {
+    const e = email.trim();
+    if (!e) return;
+    await onInvite(e);
+    setEmail("");
+  };
+  const locked = visibility === "locked";
+  return /* @__PURE__ */ jsxs5("div", { style: { ...S.section, flexDirection: "column", alignItems: "stretch" }, children: [
+    visibility && onSetVisibility && /* @__PURE__ */ jsxs5("div", { style: { display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }, children: [
+      /* @__PURE__ */ jsx5("button", { type: "button", disabled: busy, onClick: () => void onSetVisibility(locked ? "shared" : "locked"), style: S.pill(locked), children: locked ? `\u{1F512} ${labels.visibilityLocked}` : `\u{1F513} ${labels.visibilityShared}` }),
+      /* @__PURE__ */ jsx5("span", { style: { fontSize: 11, ...S.muted }, children: labels.lockHint })
+    ] }),
+    /* @__PURE__ */ jsx5("div", { style: { display: "flex", gap: 6, flexWrap: "wrap" }, children: members.length === 0 ? /* @__PURE__ */ jsx5("span", { style: S.muted, children: labels.noPeople }) : members.map((m) => /* @__PURE__ */ jsxs5("span", { style: S.agentChip, children: [
+      /* @__PURE__ */ jsx5("span", { "aria-hidden": true, children: m.status === "pending" ? "\u2709\uFE0F" : "\u{1F464}" }),
+      m.name,
+      /* @__PURE__ */ jsx5("button", { type: "button", title: labels.removePerson, disabled: busy, onClick: () => void onRemove(m.id), style: { ...S.icon, fontSize: 11 }, children: "\u2715" })
+    ] }, m.id)) }),
+    /* @__PURE__ */ jsxs5("div", { style: { display: "flex", gap: 6 }, children: [
+      /* @__PURE__ */ jsx5(
+        "input",
+        {
+          type: "email",
+          value: email,
+          disabled: busy,
+          onChange: (e) => setEmail(e.target.value),
+          onKeyDown: (e) => {
+            if (e.key === "Enter") void submit();
+          },
+          placeholder: labels.invitePerson,
+          "aria-label": labels.invitePerson,
+          style: { ...S.select, flex: 1, maxWidth: 260 }
+        }
+      ),
+      /* @__PURE__ */ jsx5("button", { type: "button", disabled: busy || !email.trim(), onClick: () => void submit(), style: S.pill(false), children: "\uFF0B" })
+    ] }),
+    /* @__PURE__ */ jsx5("span", { style: { fontSize: 11, ...S.muted }, children: labels.invitePersonHint })
+  ] });
+}
 function MergeSection({ chatId, chatList, labels, onMerge, busy }) {
   const [selected, setSelected] = useState3([]);
   const candidates = chatList.filter((c) => c.id !== chatId);
@@ -911,6 +1003,7 @@ import { useEffect as useEffect3, useMemo as useMemo4, useState as useState4 } f
 function useChatParticipants(adapter, chatId, refreshSignal = 0) {
   const [pool, setPool] = useState4([]);
   const [invited, setInvited] = useState4([]);
+  const [members, setMembers] = useState4([]);
   useEffect3(() => {
     let ok = true;
     adapter.loadAgentPool().then((p) => {
@@ -925,6 +1018,7 @@ function useChatParticipants(adapter, chatId, refreshSignal = 0) {
   useEffect3(() => {
     if (chatId == null) {
       setInvited([]);
+      setMembers([]);
       return;
     }
     let ok = true;
@@ -933,17 +1027,26 @@ function useChatParticipants(adapter, chatId, refreshSignal = 0) {
     }).catch(() => {
       if (ok) setInvited([]);
     });
+    adapter.listMembers(chatId).then((m) => {
+      if (ok) setMembers(m);
+    }).catch(() => {
+      if (ok) setMembers([]);
+    });
     return () => {
       ok = false;
     };
   }, [adapter, chatId, refreshSignal]);
   return useMemo4(
-    () => invited.map((a) => ({
-      kind: "agent",
-      ref: a.agentRef,
-      name: pool.find((p) => p.ref === a.agentRef)?.name ?? a.agentRef
-    })),
-    [invited, pool]
+    () => [
+      ...invited.map((a) => ({
+        kind: "agent",
+        ref: a.agentRef,
+        name: pool.find((p) => p.ref === a.agentRef)?.name ?? a.agentRef
+      })),
+      // Active human members are addressable too (kind='human', ref=user id).
+      ...members.filter((m) => m.status === "active" && m.userId).map((m) => ({ kind: "human", ref: m.userId, name: m.name }))
+    ],
+    [invited, pool, members]
   );
 }
 

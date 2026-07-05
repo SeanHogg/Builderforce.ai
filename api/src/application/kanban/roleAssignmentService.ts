@@ -99,19 +99,21 @@ export class RoleAssignmentService {
     await invalidateCached(env, assignmentsKey(tenantId));
 
     // Unified audit stream: a roster staffing decision (who covers which role),
-    // attributed to the manager who made it.
-    const actor = await resolveActorByRef(env, this.db, tenantId, createdBy);
-    await recordActivity(env, this.db, {
-      tenantId,
-      projectId,
-      actor,
-      verb: 'role.assigned',
-      targetType: 'role',
-      targetId: roleKey,
-      targetLabel: body.assigneeName?.trim() || assigneeRef,
-      summary: `Assigned ${body.assigneeName?.trim() || assigneeRef} to ${roleKey}`,
-      metadata: { assigneeKind: body.assigneeKind, assigneeRef, projectId },
-    });
+    // attributed to the manager who made it. Best-effort — never fail the assignment.
+    try {
+      const actor = await resolveActorByRef(env, this.db, tenantId, createdBy);
+      await recordActivity(env, this.db, {
+        tenantId,
+        projectId,
+        actor,
+        verb: 'role.assigned',
+        targetType: 'role',
+        targetId: roleKey,
+        targetLabel: body.assigneeName?.trim() || assigneeRef,
+        summary: `Assigned ${body.assigneeName?.trim() || assigneeRef} to ${roleKey}`,
+        metadata: { assigneeKind: body.assigneeKind, assigneeRef, projectId },
+      });
+    } catch { /* best-effort audit */ }
     return { id, roleKey, assigneeKind: body.assigneeKind, assigneeRef, assigneeName: body.assigneeName?.trim() || null, projectId };
   }
 

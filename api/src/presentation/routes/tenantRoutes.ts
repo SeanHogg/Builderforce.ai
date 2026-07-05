@@ -26,6 +26,7 @@ import {
 } from '../../infrastructure/database/schema';
 import { sendWorkspaceInviteEmail } from '../../infrastructure/email/EmailService';
 import { countActiveSessionsAndTokens } from '../../application/security/sessionCounts';
+import { provisionBuiltinAgents } from '../../application/agent/provisionBuiltinAgents';
 
 type SourceControlProvider = 'github' | 'bitbucket';
 
@@ -177,6 +178,7 @@ export function createTenantRoutes(tenantService: TenantService, db: Db): Hono<H
     const body   = await c.req.json<{ name: string }>();
     if (!body.name?.trim()) return c.json({ error: 'name is required' }, 400);
     const tenant = await tenantService.createTenant({ name: body.name, ownerUserId: userId });
+    await provisionBuiltinAgents(db, tenant.id).catch(() => {});   // seed Validator + Security
     return c.json(tenant.toPlain(), 201);
   });
 
@@ -646,6 +648,7 @@ export function createTenantRoutes(tenantService: TenantService, db: Db): Hono<H
     const body   = await c.req.json<{ name: string }>();
     if (!body.name?.trim()) return c.json({ error: 'name is required' }, 400);
     const tenant = await tenantService.createTenant({ name: body.name, ownerUserId: userId });
+    await provisionBuiltinAgents(db, tenant.id).catch(() => {});   // seed Validator + Security
     return c.json(tenant.toPlain(), 201);
   });
 

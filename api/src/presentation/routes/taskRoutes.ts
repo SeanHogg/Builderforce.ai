@@ -23,6 +23,8 @@ import { recordCloudToolEvent } from '../../application/runtime/cloudAgentEngine
 import { evaluateTaskAutoRun, type AutoRunReason } from '../../application/swimlane/evaluateAutoRun';
 import { enforceLaneRequirements } from '../../application/swimlane/laneRequirementGate';
 import { TicketAuditService } from '../../application/audit/ticketAuditService';
+import { SecurityTicketAccessService } from '../../application/security/SecurityTicketAccessService';
+import { resolveTicketViewer } from '../../application/security/resolveTicketViewer';
 import { executionTokenGate } from './executionTokenGate';
 import { broadcastProjectChanged } from '../../infrastructure/relay/broadcastRoom';
 
@@ -319,7 +321,11 @@ export function createTaskRoutes(taskService: TaskService, db: Db, runtimeServic
     // where the archive itself is the subject (e.g. the delete-project dialog).
     const includeArchived = c.req.query('include_archived') === 'true';
     const tasks = await taskService.listTasks(c.get('tenantId'), projectId, includeArchived);
-    const plain = tasks.map(t => t.toPlain());
+    // Drop the access-restricted SECURITY tickets this viewer may not see, via the
+    // one shared visibility gate (no-op unless the list actually holds security tickets).
+    const viewer = await resolveTicketViewer(c, db);
+    const plain = await new SecurityTicketAccessService(db, c.env as Env)
+      .filterForViewer(c.get('tenantId'), viewer, tasks.map(t => t.toPlain()));
     // Augment each card with its linked-PRD count [1266] — one grouped query (no
     // N+1), and best-effort so it no-ops where task_specs (migration 0098) isn't
     // applied yet (the board still renders, just with no PRD dots).
@@ -399,7 +405,16 @@ export function createTaskRoutes(taskService: TaskService, db: Db, runtimeServic
     const id = Number(c.req.param('id'));
     if (!(await loadTenantTask(id, c.get('tenantId')))) return c.json({ error: 'Task not found' }, 404);
     const task = await taskService.getTask(id);
-    return c.json(task.toPlain());
+    const plain = task.toPlain();
+    // A SECURITY ticket is invisible (404, not 403 — don't reveal its existence) to a
+    // viewer the access config doesn't permit. Same shared gate as the list.
+    if (plain.taskType === TaskType.SECURITY) {
+      const viewer = await resolveTicketViewer(c, db);
+      const visible = await new SecurityTicketAccessService(db, c.env as Env)
+        .filterForViewer(c.get('tenantId'), viewer, [plain]);
+      if (visible.length === 0) return c.json({ error: 'Task not found' }, 404);
+    }
+    return c.json(plain);
   });
 
   // GET /api/tasks/:id/autorun-diagnostics — the board TRIAGE read: explains, for a

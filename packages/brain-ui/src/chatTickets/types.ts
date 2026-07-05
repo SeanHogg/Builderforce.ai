@@ -133,6 +133,9 @@ export interface ChatTicketsLabels {
   removePerson: string;
   inviteSent: string;
   invitePending: string;
+  visibilityShared: string;
+  visibilityLocked: string;
+  lockHint: string;
   mergeHint: string;
   mergeNoOthers: string;
   kind: Record<TicketKind, string>;
@@ -176,6 +179,9 @@ export const DEFAULT_CHAT_TICKETS_LABELS: ChatTicketsLabels = {
   removePerson: 'Remove',
   inviteSent: 'Invitation sent.',
   invitePending: 'Invite sent — they will join when they sign in.',
+  visibilityShared: 'Shared',
+  visibilityLocked: 'Locked',
+  lockHint: 'Shared chats are visible to the whole team; lock to keep this chat to its members only.',
   mergeHint: 'Merge other chats into this one. Their messages, tickets and agents move here; the sources are archived.',
   mergeNoOthers: 'No other chats to merge.',
   kind: { task: 'Task', epic: 'Epic', gap: 'Gap', objective: 'Objective', initiative: 'Initiative', portfolio: 'Portfolio', roadmap: 'Roadmap', spec: 'Spec' },

@@ -48,6 +48,8 @@ import { buildRuntimeService } from '../../buildRuntimeService';
 import { ChatTicketService } from '../brain/ChatTicketService';
 import { WorkDeltaService, type DeltaKind } from '../delta/WorkDeltaService';
 import { ValidationService, type ReviewVerdict, type ReviewGapInput } from '../validation/ValidationService';
+import { SecurityAuditService, type FindingSeverity, type TrustCriterion } from '../security/SecurityAuditService';
+import { SecurityTicketAccessService } from '../security/SecurityTicketAccessService';
 import { recallProjectFacts, upsertProjectFact } from './projectFacts';
 import type { Task } from '../../domain/task/Task';
 
@@ -378,10 +380,19 @@ const CATALOG: BuiltinTool[] = [
       const status = a.status != null ? str(a.status) : undefined;
       let rows = all.map((t) => t.toPlain() as unknown as Record<string, unknown>);
       if (status) rows = rows.filter((r) => r.status === status);
+      // Access-restricted SECURITY tickets are never surfaced through the agent-facing
+      // task projection — they are a human-configured, need-to-know surface (read them
+      // via the board / security panel, governed by security_ticket_access).
+      rows = rows.filter((r) => r.taskType !== TaskType.SECURITY);
       return listEnvelope('tasks', rows.map(compactTask), clampLimit(a.limit));
     },
   },
-  { tool: 'tasks.get', mutates: false, description: 'Get a task by id.', parameters: obj({ id: N }, ['id']), run: async (ctx, a) => (await getTenantTask(ctx, num(a.id))).toPlain() },
+  { tool: 'tasks.get', mutates: false, description: 'Get a task by id.', parameters: obj({ id: N }, ['id']), run: async (ctx, a) => {
+    const plain = (await getTenantTask(ctx, num(a.id))).toPlain();
+    // Never surface an access-restricted SECURITY ticket through the agent tool.
+    if ((plain as { taskType?: string }).taskType === TaskType.SECURITY) throw new Error(`Task ${num(a.id)} not found`);
+    return plain;
+  } },
   {
     tool: 'tasks.create', mutates: true,
     description: 'Create a task on a project board. Set taskType="epic" to create a planning Epic (a DELIVERY container for other tasks), "gap" to log a follow-up gap (a validator-style missing-work item), or pass parentTaskId to nest the new task under an existing Epic. An Epic is NOT an OKR/Objective — for OKRs/goals use objectives.create + key_results.create. Assign by passing exactly one of assignedUserId (human member), assignedAgentRef (cloud agent) or assignedAgentHostId (self-hosted runner). Idempotent: if a task with the same title already exists on that project, the existing task is returned ({ deduped: true, … }) instead of creating a duplicate — so you can safely (re)run a reconciliation and use the returned id for traceability.',
@@ -491,6 +502,53 @@ const CATALOG: BuiltinTool[] = [
         reviewerRef: a.reviewerRef != null ? str(a.reviewerRef) : (ctx.userId ?? null),
         gaps,
       });
+    },
+  },
+
+  // ---- Security agent (SOC 2 audit) ----
+  {
+    tool: 'security.record_finding', mutates: true,
+    description: 'File ONE SOC 2 audit finding (Security agent). Each call mints an access-restricted SECURITY ticket in the audited project carrying the severity, the Trust Service Criterion the finding maps to, a location, and a concrete recommendation. severity: critical|high|medium|low|info. tsc: security (Common Criteria) | availability | processing_integrity | confidentiality | privacy. Pass auditId to attach to the current run (else it attaches to the tenant\'s latest running audit).',
+    parameters: obj({
+      title: S,
+      detail: S,
+      severity: { type: 'string', enum: ['critical', 'high', 'medium', 'low', 'info'] },
+      tsc: { type: 'string', enum: ['security', 'availability', 'processing_integrity', 'confidentiality', 'privacy'] },
+      location: S,
+      recommendation: S,
+      auditId: N,
+    }, ['title']),
+    run: (ctx, a) => new SecurityAuditService(ctx.db).recordFinding(ctx.tenantId, {
+      auditId: a.auditId != null ? num(a.auditId) : null,
+      title: str(a.title),
+      detail: a.detail != null ? str(a.detail) : null,
+      severity: a.severity != null ? (str(a.severity) as FindingSeverity) : undefined,
+      tsc: a.tsc != null ? (str(a.tsc) as TrustCriterion) : undefined,
+      location: a.location != null ? str(a.location) : null,
+      recommendation: a.recommendation != null ? str(a.recommendation) : null,
+    }),
+  },
+  {
+    tool: 'security.get_access', mutates: false,
+    description: 'Read who can see this workspace\'s access-restricted SECURITY tickets: the audience toggles (humans/hired/talent) and the explicit user/agent allowlists.',
+    parameters: obj({}),
+    run: (ctx) => new SecurityTicketAccessService(ctx.db, ctx.env).getConfig(ctx.tenantId),
+  },
+  {
+    tool: 'security.configure_access', mutates: true,
+    description: 'Configure who can see the access-restricted SECURITY tickets (setup). audiences toggles whole populations on/off (humans = team members, hired = agents, talent = freelancers); allowUserIds / allowAgentRefs grant specific users/agents. Default is deny-all (only Owner/Manager see them). Admin action — not available to unattended cloud agents.',
+    parameters: obj({
+      audiences: obj({ humans: B, hired: B, talent: B }),
+      allowUserIds: { type: 'array', items: S },
+      allowAgentRefs: { type: 'array', items: S },
+    }),
+    run: async (ctx, a) => {
+      const aud = (a.audiences ?? undefined) as { humans?: unknown; hired?: unknown; talent?: unknown } | undefined;
+      return new SecurityTicketAccessService(ctx.db, ctx.env).setConfig(ctx.tenantId, {
+        audiences: aud ? { humans: !!aud.humans, hired: !!aud.hired, talent: !!aud.talent } : undefined,
+        allowUserIds: Array.isArray(a.allowUserIds) ? (a.allowUserIds as unknown[]).map((x) => str(x)) : undefined,
+        allowAgentRefs: Array.isArray(a.allowAgentRefs) ? (a.allowAgentRefs as unknown[]).map((x) => str(x)) : undefined,
+      }, ctx.userId ?? null);
     },
   },
 
@@ -1996,6 +2054,10 @@ export const CLOUD_AGENT_PLATFORM_TOOLS: readonly string[] = [
   'project_files.list', 'project_files.read', 'project_files.save',
   'attachments.read', 'attachments.write',
   'reviews.record', 'tickets.from_delta',
+  // Security agent: file SOC 2 findings mid-run. NOT security.configure_access —
+  // deciding who can see security tickets is an admin action, never an unattended
+  // agent reconfiguring its own findings' visibility.
+  'security.record_finding',
   // Executions — READ ONLY (accurate "what's remaining"; no submit/cancel/post_message)
   'executions.get', 'executions.list_active', 'executions.list_for_task', 'executions.list_recent',
   'executions.task_file_changes', 'executions.trace',

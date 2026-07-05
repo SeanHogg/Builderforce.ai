@@ -257,12 +257,12 @@ export function PmoStructure({ tree, onChange }: { tree: PmoTree; onChange: () =
     <div style={{ fontSize: '0.78rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.4, color: 'var(--text-muted)', margin: '18px 0 4px' }}>{text}</div>
   );
 
-  if (objectivesError) return <PmError message={objectivesError} />;
-  if (rollup == null) return <PmEmpty message={t('loading')} />;
+  // First-ever load (no cached objectives yet, none arrived): show a light gate.
+  if (rollup == null && lastObjectives.current.length === 0 && !objectivesError) return <PmEmpty message={t('loading')} />;
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-      {err && <PmError message={err} />}
+      {(err || objectivesError) && <PmError message={err ?? objectivesError!} />}
 
       <PmCard
         title={t('structure.newPortfolio')}

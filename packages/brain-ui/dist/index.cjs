@@ -519,10 +519,11 @@ function BrainTimelineInner({
           ] }, node.key);
         }
         if (node.kind === "assistant") {
+          const author = (0, import_builderforce_brain_embedded.parseMessageAuthor)(node.message);
           return /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)("li", { className: "bf-tl__item bf-tl__item--assistant", children: [
-            /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("span", { className: "bf-tl__gutter", children: /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("span", { className: "bf-tl__dot", children: dotIcon("assistant") }) }),
+            /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("span", { className: "bf-tl__gutter", children: /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("span", { className: "bf-tl__dot", children: author ? /* @__PURE__ */ (0, import_jsx_runtime3.jsx)(Avatar, { name: author.name, kind: author.kind, size: 16 }) : dotIcon("assistant") }) }),
             /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)("div", { className: "bf-tl__body", children: [
-              /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("div", { className: "bf-tl__role", children: assistant }),
+              /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("div", { className: "bf-tl__role", children: author ? author.name : assistant }),
               /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("div", { className: "bf-tl__bubble", children: renderMsg(node.message, "assistant", node.text) }),
               renderAssistantActions && /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("div", { className: "bf-tl__actions", children: renderAssistantActions(node.message) })
             ] })
@@ -660,6 +661,16 @@ var DEFAULT_CHAT_TICKETS_LABELS = {
   removeAgent: "Remove",
   inviteAgent: "Invite an agent\u2026",
   agentsHint: "Invited agents can be tagged to execute a linked task or epic.",
+  people: "People",
+  noPeople: "No people invited yet.",
+  invitePerson: "Invite by email\u2026",
+  invitePersonHint: "Invite a teammate to view and collaborate on this chat.",
+  removePerson: "Remove",
+  inviteSent: "Invitation sent.",
+  invitePending: "Invite sent \u2014 they will join when they sign in.",
+  visibilityShared: "Shared",
+  visibilityLocked: "Locked",
+  lockHint: "Shared chats are visible to the whole team; lock to keep this chat to its members only.",
   mergeHint: "Merge other chats into this one. Their messages, tickets and agents move here; the sources are archived.",
   mergeNoOthers: "No other chats to merge.",
   kind: { task: "Task", epic: "Epic", gap: "Gap", objective: "Objective", initiative: "Initiative", portfolio: "Portfolio", roadmap: "Roadmap", spec: "Spec" },
@@ -672,9 +683,10 @@ var DEFAULT_CHAT_TICKETS_LABELS = {
 // src/chatTickets/ChatTicketsPanel.tsx
 var import_jsx_runtime5 = require("react/jsx-runtime");
 var RUNNABLE = new Set(RUNNABLE_KINDS);
-function ChatTicketsPanelInner({ chatId, projectId, chatList, adapter, labels, onChanged, refreshSignal }) {
+function ChatTicketsPanelInner({ chatId, projectId, chatList, adapter, labels, onChanged, refreshSignal, visibility, onSetVisibility }) {
   const [tickets, setTickets] = (0, import_react3.useState)([]);
   const [agents, setAgents] = (0, import_react3.useState)([]);
+  const [members, setMembers] = (0, import_react3.useState)([]);
   const [pool, setPool] = (0, import_react3.useState)([]);
   const [options, setOptions] = (0, import_react3.useState)(null);
   const [panel, setPanel] = (0, import_react3.useState)(null);
@@ -684,12 +696,14 @@ function ChatTicketsPanelInner({ chatId, projectId, chatList, adapter, labels, o
   const [msg, setMsg] = (0, import_react3.useState)(null);
   const [busy, setBusy] = (0, import_react3.useState)(false);
   const load = (0, import_react3.useCallback)(async () => {
-    const [tk, ag] = await Promise.all([
+    const [tk, ag, mem] = await Promise.all([
       adapter.listTickets(chatId).catch(() => []),
-      adapter.listAgents(chatId).catch(() => [])
+      adapter.listAgents(chatId).catch(() => []),
+      adapter.listMembers(chatId).catch(() => [])
     ]);
     setTickets(tk);
     setAgents(ag);
+    setMembers(mem);
   }, [adapter, chatId]);
   (0, import_react3.useEffect)(() => {
     void load();
@@ -789,6 +803,11 @@ function ChatTicketsPanelInner({ chatId, projectId, chatList, adapter, labels, o
         labels.agents,
         agents.length ? ` (${agents.length})` : ""
       ] }),
+      /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("button", { type: "button", onClick: () => setPanel(panel === "people" ? null : "people"), style: S.pill(panel === "people"), children: [
+        "\u{1F464} ",
+        labels.people,
+        members.length ? ` (${members.length})` : ""
+      ] }),
       /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("button", { type: "button", onClick: () => setPanel(panel === "merge" ? null : "merge"), style: S.pill(panel === "merge"), children: [
         "\u29C9 ",
         labels.merge
@@ -823,6 +842,39 @@ function ChatTicketsPanelInner({ chatId, projectId, chatList, adapter, labels, o
           setBusy(true);
           try {
             await adapter.removeAgent(chatId, id);
+            await load();
+            onChanged?.();
+          } finally {
+            setBusy(false);
+          }
+        },
+        busy
+      }
+    ),
+    panel === "people" && /* @__PURE__ */ (0, import_jsx_runtime5.jsx)(
+      PeopleSection,
+      {
+        members,
+        labels,
+        visibility,
+        onSetVisibility,
+        onInvite: async (email) => {
+          setBusy(true);
+          try {
+            const r = await adapter.inviteMember(chatId, email);
+            flash(r.status === "pending" ? labels.invitePending : labels.inviteSent);
+            await load();
+            onChanged?.();
+          } catch (e) {
+            flash(e instanceof Error ? e.message : labels.linkFailed);
+          } finally {
+            setBusy(false);
+          }
+        },
+        onRemove: async (id) => {
+          setBusy(true);
+          try {
+            await adapter.removeMember(chatId, id);
             await load();
             onChanged?.();
           } finally {
@@ -912,6 +964,46 @@ function AgentsSection({ agents, pool, labels, onInvite, onRemove, busy }) {
     /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("span", { style: { fontSize: 11, ...S.muted }, children: labels.agentsHint })
   ] });
 }
+function PeopleSection({ members, labels, visibility, onSetVisibility, onInvite, onRemove, busy }) {
+  const [email, setEmail] = (0, import_react3.useState)("");
+  const submit = async () => {
+    const e = email.trim();
+    if (!e) return;
+    await onInvite(e);
+    setEmail("");
+  };
+  const locked = visibility === "locked";
+  return /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("div", { style: { ...S.section, flexDirection: "column", alignItems: "stretch" }, children: [
+    visibility && onSetVisibility && /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("button", { type: "button", disabled: busy, onClick: () => void onSetVisibility(locked ? "shared" : "locked"), style: S.pill(locked), children: locked ? `\u{1F512} ${labels.visibilityLocked}` : `\u{1F513} ${labels.visibilityShared}` }),
+      /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("span", { style: { fontSize: 11, ...S.muted }, children: labels.lockHint })
+    ] }),
+    /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("div", { style: { display: "flex", gap: 6, flexWrap: "wrap" }, children: members.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("span", { style: S.muted, children: labels.noPeople }) : members.map((m) => /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("span", { style: S.agentChip, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("span", { "aria-hidden": true, children: m.status === "pending" ? "\u2709\uFE0F" : "\u{1F464}" }),
+      m.name,
+      /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("button", { type: "button", title: labels.removePerson, disabled: busy, onClick: () => void onRemove(m.id), style: { ...S.icon, fontSize: 11 }, children: "\u2715" })
+    ] }, m.id)) }),
+    /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("div", { style: { display: "flex", gap: 6 }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime5.jsx)(
+        "input",
+        {
+          type: "email",
+          value: email,
+          disabled: busy,
+          onChange: (e) => setEmail(e.target.value),
+          onKeyDown: (e) => {
+            if (e.key === "Enter") void submit();
+          },
+          placeholder: labels.invitePerson,
+          "aria-label": labels.invitePerson,
+          style: { ...S.select, flex: 1, maxWidth: 260 }
+        }
+      ),
+      /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("button", { type: "button", disabled: busy || !email.trim(), onClick: () => void submit(), style: S.pill(false), children: "\uFF0B" })
+    ] }),
+    /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("span", { style: { fontSize: 11, ...S.muted }, children: labels.invitePersonHint })
+  ] });
+}
 function MergeSection({ chatId, chatList, labels, onMerge, busy }) {
   const [selected, setSelected] = (0, import_react3.useState)([]);
   const candidates = chatList.filter((c) => c.id !== chatId);
@@ -971,6 +1063,7 @@ var import_react4 = require("react");
 function useChatParticipants(adapter, chatId, refreshSignal = 0) {
   const [pool, setPool] = (0, import_react4.useState)([]);
   const [invited, setInvited] = (0, import_react4.useState)([]);
+  const [members, setMembers] = (0, import_react4.useState)([]);
   (0, import_react4.useEffect)(() => {
     let ok = true;
     adapter.loadAgentPool().then((p) => {
@@ -985,6 +1078,7 @@ function useChatParticipants(adapter, chatId, refreshSignal = 0) {
   (0, import_react4.useEffect)(() => {
     if (chatId == null) {
       setInvited([]);
+      setMembers([]);
       return;
     }
     let ok = true;
@@ -993,17 +1087,26 @@ function useChatParticipants(adapter, chatId, refreshSignal = 0) {
     }).catch(() => {
       if (ok) setInvited([]);
     });
+    adapter.listMembers(chatId).then((m) => {
+      if (ok) setMembers(m);
+    }).catch(() => {
+      if (ok) setMembers([]);
+    });
     return () => {
       ok = false;
     };
   }, [adapter, chatId, refreshSignal]);
   return (0, import_react4.useMemo)(
-    () => invited.map((a) => ({
-      kind: "agent",
-      ref: a.agentRef,
-      name: pool.find((p) => p.ref === a.agentRef)?.name ?? a.agentRef
-    })),
-    [invited, pool]
+    () => [
+      ...invited.map((a) => ({
+        kind: "agent",
+        ref: a.agentRef,
+        name: pool.find((p) => p.ref === a.agentRef)?.name ?? a.agentRef
+      })),
+      // Active human members are addressable too (kind='human', ref=user id).
+      ...members.filter((m) => m.status === "active" && m.userId).map((m) => ({ kind: "human", ref: m.userId, name: m.name }))
+    ],
+    [invited, pool, members]
   );
 }
 

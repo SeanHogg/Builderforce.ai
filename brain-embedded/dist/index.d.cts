@@ -220,6 +220,7 @@ interface BrainPersistenceAdapter {
     updateChat(id: number, body: {
         title?: string;
         projectId?: number | null;
+        visibility?: 'shared' | 'locked';
     }): Promise<BrainChat>;
     deleteChat(id: number): Promise<unknown>;
     summarizeChat(id: number): Promise<{
@@ -234,6 +235,16 @@ interface BrainPersistenceAdapter {
         metadata?: string;
     }>): Promise<BrainMessage[]>;
     setMessageFeedback(messageId: number, feedback: 'up' | 'down' | null): Promise<unknown>;
+    /**
+     * Ask an invited agent participant to reply — a chat-scoped run that answers AS
+     * the addressed agent and returns the posted assistant turn (attributed to it via
+     * metadata.authoredBy). Called after a user directs a message to an @agent.
+     * Optional: when absent, directing to an agent just posts the turn (legacy).
+     */
+    requestAgentReply?(chatId: number, input: {
+        agentRef: string;
+        agentName?: string;
+    }): Promise<BrainMessage>;
     upload(file: File): Promise<{
         key: string;
         name: string;
@@ -491,6 +502,14 @@ interface DirectedRecipient {
 }
 /** The metadata key that flags a user message as addressed to a participant. */
 declare const ADDRESSED_TO_META_KEY = "addressedTo";
+/** The metadata key that attributes an assistant turn to a specific participant
+ *  (an invited agent that replied), rather than the default BRAIN. Mirrors
+ *  {@link ADDRESSED_TO_META_KEY} on the answering side. */
+declare const AUTHORED_BY_META_KEY = "authoredBy";
+/** The participant that authored an assistant turn, or `null` for the BRAIN. */
+declare function parseMessageAuthor(msg: {
+    metadata?: string | null;
+}): DirectedRecipient | null;
 /**
  * Merge an `addressedTo` flag into a message's metadata object (preserving any
  * other keys, e.g. `attachments`). Returns a serialized string, or `undefined`
@@ -836,4 +855,4 @@ declare const CONSOLIDATION_MARKER_PREFIX = "\uD83D\uDCCC **Consolidated summary
 /** Wrap a raw summary as the marker's visible content (prefix + summary). */
 declare function consolidationMarkerContent(summary: string): string;
 
-export { ADDRESSED_TO_META_KEY, type AssembledToolCall, type BrainAction, type BrainActionsContextValue, BrainActionsProvider, type BrainChat, type BrainConfig, BrainContextProvider, type BrainContextValue, type BrainDiagnostics, type BrainMessage, type BrainModality, type BrainPageContext, type BrainPersistenceAdapter, BrainProvider, type BrainRuntime, type BrainToolSpec, type BrainTraceEvent, type BrainTransport, type BuildBrainTriageOptions, CONSOLIDATION_MARKER_PREFIX, CONSOLIDATION_META, type ChatCompletionMessage, type ChatInputAttachment, type ContentPart, type DirectedRecipient, type ImageUrlContentPart, type McpToolResultInfo, type PreparedImage, type RecipientChoice, type StreamChatOptions, type StreamChatResult, type StreamHandlers, type TextContentPart, type UseBrainChats, type UseBrainChatsOptions, type UseBrainConversation, type UseBrainConversationOptions, type UseMcpExtensionsOptions, buildBrainTriageReport, computeBrainDiagnostics, consolidationMarkerContent, consolidationMetadata, formatBrainDiagnostics, isConsolidationMarker, isDirectedToParticipant, isEvermindModel, isFailedToolResult, lastConsolidationIndex, mentionRecipient, modelsUsedInTrace, parseDirectedRecipient, prepareImageDataUrl, resolveRecipient, savePendingPrompt, scopeToConsolidation, streamChatCompletion, takePendingPrompt, useBrainActions, useBrainChats, useBrainConfig, useBrainContext, useBrainConversation, useMcpExtensions, useOptionalBrainContext, useRegisterBrainActions, withDirectedMetadata };
+export { ADDRESSED_TO_META_KEY, AUTHORED_BY_META_KEY, type AssembledToolCall, type BrainAction, type BrainActionsContextValue, BrainActionsProvider, type BrainChat, type BrainConfig, BrainContextProvider, type BrainContextValue, type BrainDiagnostics, type BrainMessage, type BrainModality, type BrainPageContext, type BrainPersistenceAdapter, BrainProvider, type BrainRuntime, type BrainToolSpec, type BrainTraceEvent, type BrainTransport, type BuildBrainTriageOptions, CONSOLIDATION_MARKER_PREFIX, CONSOLIDATION_META, type ChatCompletionMessage, type ChatInputAttachment, type ContentPart, type DirectedRecipient, type ImageUrlContentPart, type McpToolResultInfo, type PreparedImage, type RecipientChoice, type StreamChatOptions, type StreamChatResult, type StreamHandlers, type TextContentPart, type UseBrainChats, type UseBrainChatsOptions, type UseBrainConversation, type UseBrainConversationOptions, type UseMcpExtensionsOptions, buildBrainTriageReport, computeBrainDiagnostics, consolidationMarkerContent, consolidationMetadata, formatBrainDiagnostics, isConsolidationMarker, isDirectedToParticipant, isEvermindModel, isFailedToolResult, lastConsolidationIndex, mentionRecipient, modelsUsedInTrace, parseDirectedRecipient, parseMessageAuthor, prepareImageDataUrl, resolveRecipient, savePendingPrompt, scopeToConsolidation, streamChatCompletion, takePendingPrompt, useBrainActions, useBrainChats, useBrainConfig, useBrainContext, useBrainConversation, useMcpExtensions, useOptionalBrainContext, useRegisterBrainActions, withDirectedMetadata };

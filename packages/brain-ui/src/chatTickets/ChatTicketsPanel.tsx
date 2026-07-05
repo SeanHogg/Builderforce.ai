@@ -35,11 +35,16 @@ export interface ChatTicketsPanelProps {
    *  Brain mutates work items via MCP tools (link/merge/invite/task move) so the
    *  panel doesn't go stale after a change it didn't originate. */
   refreshSignal?: number;
+  /** Current LOCK state of the chat. When provided (with {@link onSetVisibility})
+   *  the People section shows a shared/locked toggle. Owner-gated by the host. */
+  visibility?: 'shared' | 'locked';
+  /** Flip the chat's LOCK state (owner only). Omit to hide the toggle. */
+  onSetVisibility?: (v: 'shared' | 'locked') => Promise<void>;
 }
 
 const RUNNABLE = new Set<TicketKind>(RUNNABLE_KINDS);
 
-function ChatTicketsPanelInner({ chatId, projectId, chatList, adapter, labels, onChanged, refreshSignal }: ChatTicketsPanelProps) {
+function ChatTicketsPanelInner({ chatId, projectId, chatList, adapter, labels, onChanged, refreshSignal, visibility, onSetVisibility }: ChatTicketsPanelProps) {
   const [tickets, setTickets] = useState<TicketLinkVM[]>([]);
   const [agents, setAgents] = useState<ChatAgentVM[]>([]);
   const [members, setMembers] = useState<ChatMemberVM[]>([]);
@@ -166,6 +171,7 @@ function ChatTicketsPanelInner({ chatId, projectId, chatList, adapter, labels, o
         busy={busy} />}
 
       {panel === 'people' && <PeopleSection members={members} labels={labels}
+        visibility={visibility} onSetVisibility={onSetVisibility}
         onInvite={async (email) => { setBusy(true); try { const r = await adapter.inviteMember(chatId, email); flash(r.status === 'pending' ? labels.invitePending : labels.inviteSent); await load(); onChanged?.(); } catch (e) { flash(e instanceof Error ? e.message : labels.linkFailed); } finally { setBusy(false); } }}
         onRemove={async (id) => { setBusy(true); try { await adapter.removeMember(chatId, id); await load(); onChanged?.(); } finally { setBusy(false); } }}
         busy={busy} />}
@@ -248,8 +254,9 @@ function AgentsSection({ agents, pool, labels, onInvite, onRemove, busy }: {
 
 // ── People in the chat (human members / audience) ────────────────────────────
 
-function PeopleSection({ members, labels, onInvite, onRemove, busy }: {
+function PeopleSection({ members, labels, visibility, onSetVisibility, onInvite, onRemove, busy }: {
   members: ChatMemberVM[]; labels: ChatTicketsLabels;
+  visibility?: 'shared' | 'locked'; onSetVisibility?: (v: 'shared' | 'locked') => Promise<void>;
   onInvite: (email: string) => Promise<void>; onRemove: (id: number) => Promise<void>; busy: boolean;
 }) {
   const [email, setEmail] = useState('');
@@ -259,8 +266,17 @@ function PeopleSection({ members, labels, onInvite, onRemove, busy }: {
     await onInvite(e);
     setEmail('');
   };
+  const locked = visibility === 'locked';
   return (
     <div style={{ ...S.section, flexDirection: 'column', alignItems: 'stretch' }}>
+      {visibility && onSetVisibility && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+          <button type="button" disabled={busy} onClick={() => void onSetVisibility(locked ? 'shared' : 'locked')} style={S.pill(locked)}>
+            {locked ? `🔒 ${labels.visibilityLocked}` : `🔓 ${labels.visibilityShared}`}
+          </button>
+          <span style={{ fontSize: 11, ...S.muted }}>{labels.lockHint}</span>
+        </div>
+      )}
       <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
         {members.length === 0 ? <span style={S.muted}>{labels.noPeople}</span> : members.map((m) => (
           <span key={m.id} style={S.agentChip}>

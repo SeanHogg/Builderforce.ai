@@ -352,6 +352,21 @@ function Chat({ init }: { init: InitData }) {
     [orphanChat, chatId, chats],
   );
 
+  // LOCK state for the open chat (owner-only toggle in the People section).
+  const [chatVisibility, setChatVisibility] = useState<'shared' | 'locked'>('shared');
+  const [chatIsOwner, setChatIsOwner] = useState(false);
+  useEffect(() => {
+    if (chatId == null) { setChatVisibility('shared'); setChatIsOwner(false); return; }
+    let cancelled = false;
+    persistence.getChat(chatId).then((c) => {
+      if (cancelled) return;
+      const meta = c as unknown as { visibility?: 'shared' | 'locked'; isOwner?: boolean };
+      setChatVisibility(meta.visibility ?? 'shared');
+      setChatIsOwner(!!meta.isOwner);
+    }).catch(() => {});
+    return () => { cancelled = true; };
+  }, [chatId, persistence]);
+
   const needsConfirm = useCallback(
     (req: { name: string; args: unknown }) => !autoApproveRef.current && isMutating(req.name, req.args),
     [isMutating],
@@ -806,6 +821,8 @@ function Chat({ init }: { init: InitData }) {
             labels={DEFAULT_CHAT_TICKETS_LABELS}
             onChanged={onTicketsChanged}
             refreshSignal={ticketRefresh}
+            visibility={chatVisibility}
+            onSetVisibility={chatIsOwner ? async (v) => { await persistence.updateChat(chatId, { visibility: v }); setChatVisibility(v); } : undefined}
           />
         </div>
       )}

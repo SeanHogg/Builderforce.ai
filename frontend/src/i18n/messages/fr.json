@@ -4653,6 +4653,16 @@
       "removeAgent": "Retirer",
       "inviteAgent": "Inviter un agent…",
       "agentsHint": "Les agents invités peuvent être mentionnés pour exécuter une tâche ou une épopée liée.",
+      "people": "Personnes",
+      "noPeople": "Personne n’a encore été invité.",
+      "invitePerson": "Inviter par e-mail…",
+      "invitePersonHint": "Invitez un coéquipier à consulter et collaborer sur ce chat.",
+      "removePerson": "Retirer",
+      "inviteSent": "Invitation envoyée.",
+      "invitePending": "Invitation envoyée — ils rejoindront à leur connexion.",
+      "visibilityShared": "Partagé",
+      "visibilityLocked": "Verrouillé",
+      "lockHint": "Les chats partagés sont visibles par toute l’équipe ; verrouillez pour le réserver à ses membres.",
       "mergeHint": "Fusionnez d’autres chats dans celui-ci. Leurs messages, tickets et agents sont déplacés ici ; les sources sont archivées.",
       "mergeNoOthers": "Aucun autre chat à fusionner.",
       "mergeAction": "Fusionner {n} ici",
@@ -5474,7 +5484,9 @@
   },
   "notifications": {
     "title": "Notifications",
-    "markAllRead": "Tout marquer comme lu"
+    "markAllRead": "Tout marquer comme lu",
+    "empty": "Vous êtes à jour.",
+    "bellUnread": "Notifications, {count} non lues"
   },
   "kanban": {
     "rosterTitle": "Effectif recommandé",

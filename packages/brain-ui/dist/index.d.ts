@@ -189,6 +189,15 @@ interface ChatAgentVM {
     agentRef: string;
     role: string;
 }
+/** A human participant of the chat (shared access / audience, migration 0288). */
+interface ChatMemberVM {
+    id: number;
+    userId: string | null;
+    name: string;
+    email: string;
+    /** 'active' (joined) | 'pending' (email invite, not yet an account). */
+    status: string;
+}
 /** A selectable agent from the tenant pool. */
 interface AgentOptionVM {
     ref: string;
@@ -228,6 +237,13 @@ interface ChatTicketsAdapter {
     }): Promise<void>;
     removeAgent(chatId: number, assignmentId: string): Promise<void>;
     loadAgentPool(): Promise<AgentOptionVM[]>;
+    /** Human participants of the chat (shared access, migration 0288). */
+    listMembers(chatId: number): Promise<ChatMemberVM[]>;
+    /** Invite a human by email; returns the resolution ('active' | 'pending'). */
+    inviteMember(chatId: number, email: string): Promise<{
+        status: string;
+    }>;
+    removeMember(chatId: number, memberId: number): Promise<void>;
     /** Pickable tickets per tier for the current project (all tenants tiers). */
     loadTicketOptions(projectId: number | null): Promise<Record<TicketKind, TicketOptionVM[]>>;
     /** Tag an agent to execute a runnable (task/epic) ticket. Returns whether a run
@@ -264,6 +280,16 @@ interface ChatTicketsLabels {
     removeAgent: string;
     inviteAgent: string;
     agentsHint: string;
+    people: string;
+    noPeople: string;
+    invitePerson: string;
+    invitePersonHint: string;
+    removePerson: string;
+    inviteSent: string;
+    invitePending: string;
+    visibilityShared: string;
+    visibilityLocked: string;
+    lockHint: string;
     mergeHint: string;
     mergeNoOthers: string;
     kind: Record<TicketKind, string>;
@@ -290,8 +316,13 @@ interface ChatTicketsPanelProps {
      *  Brain mutates work items via MCP tools (link/merge/invite/task move) so the
      *  panel doesn't go stale after a change it didn't originate. */
     refreshSignal?: number;
+    /** Current LOCK state of the chat. When provided (with {@link onSetVisibility})
+     *  the People section shows a shared/locked toggle. Owner-gated by the host. */
+    visibility?: 'shared' | 'locked';
+    /** Flip the chat's LOCK state (owner only). Omit to hide the toggle. */
+    onSetVisibility?: (v: 'shared' | 'locked') => Promise<void>;
 }
-declare function ChatTicketsPanelInner({ chatId, projectId, chatList, adapter, labels, onChanged, refreshSignal }: ChatTicketsPanelProps): React.JSX.Element;
+declare function ChatTicketsPanelInner({ chatId, projectId, chatList, adapter, labels, onChanged, refreshSignal, visibility, onSetVisibility }: ChatTicketsPanelProps): React.JSX.Element;
 /**
  * Memoized: this panel sits directly under the composer, so it would otherwise
  * reconcile its whole subtree (health-ring SVGs, selects, link/merge/agents forms)

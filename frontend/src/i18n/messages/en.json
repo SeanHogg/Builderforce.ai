@@ -4653,6 +4653,16 @@
       "removeAgent": "Remove",
       "inviteAgent": "Invite an agent…",
       "agentsHint": "Invited agents can be tagged to execute a linked task or epic.",
+      "people": "People",
+      "noPeople": "No people invited yet.",
+      "invitePerson": "Invite by email…",
+      "invitePersonHint": "Invite a teammate to view and collaborate on this chat.",
+      "removePerson": "Remove",
+      "inviteSent": "Invitation sent.",
+      "invitePending": "Invite sent — they will join when they sign in.",
+      "visibilityShared": "Shared",
+      "visibilityLocked": "Locked",
+      "lockHint": "Shared chats are visible to the whole team; lock to keep this chat to its members only.",
       "mergeHint": "Merge other chats into this one. Their messages, tickets and agents move here; the sources are archived.",
       "mergeNoOthers": "No other chats to merge.",
       "mergeAction": "Merge {n} here",
@@ -5474,7 +5484,9 @@
   },
   "notifications": {
     "title": "Notifications",
-    "markAllRead": "Mark all read"
+    "markAllRead": "Mark all read",
+    "empty": "You're all caught up.",
+    "bellUnread": "Notifications, {count} unread"
   },
   "kanban": {
     "rosterTitle": "Recommended roster",

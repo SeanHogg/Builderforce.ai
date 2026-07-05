@@ -175,8 +175,11 @@ new_sqlite_classes = ["ProjectEvermindCoordinatorDO"]
 #                 pending cloud-runtime workflows; reap stale runs; AND run the always-on
 #                 autonomous executor (start every agent-owned pending ticket across all
 #                 tenants, token-gated). Schedules finer than 5 min coalesce to it.
+#   "0 8 * * 1" weekly (Mon 08:00 UTC): Security-agent SOC 2 audit sweep — one audit
+#                 per tenant that has a Security agent (heavier than the daily passes,
+#                 so weekly). No-op for tenants without a Security agent.
 [triggers]
-crons = ["0 9 * * *", "*/5 * * * *"]
+crons = ["0 9 * * *", "0 8 * * 1", "*/5 * * * *"]
 
 # Inbound-email workflow trigger (the `inbound-email` trigger type) is delivered to
 # the email() handler in src/index.ts. It requires Cloudflare Email Routing to be
