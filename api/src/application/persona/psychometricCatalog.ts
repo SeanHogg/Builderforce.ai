@@ -8,6 +8,7 @@
  * PSYCH_DIM), re-exported here as `DIM` so existing api consumers are unchanged.
  */
 import { PSYCH_DIM } from '@builderforce/agent-tools';
+import { clampScore } from '../../domain/shared/numbers';
 
 // Dimension ids — the single shared map (was duplicated here + in agent-runtime).
 export const DIM = PSYCH_DIM;
@@ -241,7 +242,7 @@ export function sanitizeVector(raw: unknown): Record<string, number> {
     if (!VALID_DIMENSION_IDS.has(key)) continue;
     const n = Number(value);
     if (Number.isNaN(n)) continue;
-    out[key] = Math.max(0, Math.min(100, Math.round(n)));
+    out[key] = clampScore(Math.round(n));
   }
   return out;
 }

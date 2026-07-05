@@ -4,6 +4,13 @@
 
 ---
 
+### 🧭 Learned-routing write-back for non-cloud runs + trained-SSM tenant base (2026-07-04) — ✅ RESOLVED (server-side; on-prem consumer tracked in register)
+
+Two Evermind register items closed on the server side (api 2026.7.11), verified by schema-drift + migration checks + typecheck:
+
+- **Learned-routing write-back path (PRD 13).** IDE-native / on-prem / external-SDK runs go through the gateway but never create a cloud `executions` row, so their (action, model)→outcome was invisible to the learner. Added `POST /llm/v1/run-outcome` (`llmRoutes.ts`) + `recordClientRunOutcome` (`scoreRunOutcome.ts`) — same `computeOutcomeScore` basis and same `applyOutcomeToRoutingTable` fold as cloud runs, idempotent on `client_run_id`. Migration **0283** adds `source` + `client_run_id` and makes `execution_id` nullable (partial-unique on `client_run_id`); schema updated to match. The endpoint is the write counterpart to the existing read-only `GET /v1/recall-seed`. *(Remaining: the in-repo on-prem CONSUMER — Node host computing a bias + calling the endpoint at run completion — is tracked in the Evermind register as it needs a running host to validate.)*
+- **Trained SSM as a tenant-model base — dead seam made live.** `trained_model_ref` was written by the publish route but never read. `resolveTenantModel` (`tenantModelService.ts`) now falls back to `evermind/${trainedModelRef}` when `baseModel` is blank, so a trained model is a live LLM base off the trained ref alone (the capability already worked when publish mirrored the ref into `baseModel`).
+
 ### 🎯 Evermind held-out coding benchmark — `code-benchmark` pass@1 step (2026-07-04) — ✅ RESOLVED
 
 **Reported:** `benchmark` scored held-out *perplexity* but there was no held-out *coding* gate proving the student learned to GENERATE passing code — only a single `code-eval` smoke case against the last sample.

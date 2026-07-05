@@ -32,9 +32,11 @@
  * Worker, Node, and a VS Code extension alike. The only cross-system contract is
  * the psychometric dimension-id strings in {@link PSYCH_DIM}.
  */
-import { PSYCH_DIM } from "./psychometric-dims.js";
-// HI/LO/NEUTRAL thresholds + the trait scorer are the single shared source in limbic.
-import { maxThink, HI, LO, NEUTRAL, score, type LimbicPsychProfile } from "./limbic.js";
+// PSYCH_DIM ids + the HI/LO/NEUTRAL thresholds and trait scorer are the single
+// shared source in the neutral psychometric-dims module.
+import { PSYCH_DIM, HI, LO, NEUTRAL, score } from "./psychometric-dims.js";
+// maxThink (think-level ladder) + the profile shape stay with the limbic compiler.
+import { maxThink, type LimbicPsychProfile } from "./limbic.js";
 import { bulletBlock, PERSONA_BLOCK_HEADER, type AgentExecParams } from "./spec.js";
 
 // ---------------------------------------------------------------------------

@@ -19,6 +19,7 @@
 import { and, eq } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import { industryBenchmarks, tenantBenchmarkProfiles } from '../../infrastructure/database/schema';
+import { clampScore } from '../../domain/shared/numbers';
 import { computeDora } from '../metrics/workforceMetrics';
 import { computeEngineeringInsights } from './engineeringInsights';
 
@@ -132,7 +133,7 @@ export function rankPercentile(
   // ascPercentile = "share of the cohort with a SMALLER raw value". When higher is
   // better that IS the standing; when lower is better, invert it.
   const percentile = higherIsBetter ? ascPercentile : 100 - ascPercentile;
-  return Math.round(Math.max(0, Math.min(100, percentile)));
+  return Math.round(clampScore(percentile));
 }
 
 /** Build one metric row from its live value + the seeded distribution row. */

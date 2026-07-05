@@ -18,6 +18,7 @@
 
 import { and, eq, inArray, or } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
+import { clampScore } from '../../domain/shared/numbers';
 import {
   initiatives,
   productReleases,
@@ -115,7 +116,6 @@ export interface DeliveryInsights {
 }
 
 function iso(d: Date): string { return d.toISOString().slice(0, 10); }
-function clampPct(n: number): number { return Math.max(0, Math.min(100, n)); }
 
 /** On-track verdict for a projected completion vs a target: on by the date, at_risk
  *  within a 7-day grace, else late. Shared by the delivery rollup and the scenario
@@ -254,7 +254,7 @@ export function summarizeDelivery(rows: DeliveryTaskRow[], opts: SummarizeOpts):
   return {
     scope, scopeId, name,
     totalTasks: total, completedTasks: completed, openTasks: open,
-    completionPct: total > 0 ? clampPct((completed / total) * 100) : 0,
+    completionPct: total > 0 ? clampScore((completed / total) * 100) : 0,
     throughputPerWeek,
     activeContributors,
     forecastDate, forecastDateOptimistic: optimistic, forecastDatePessimistic: pessimistic,

@@ -16,8 +16,6 @@
 
 import { resolveEnvVarsInString } from "./env-substitution.js";
 
-const ENV_VAR_PATTERN = /\$\{[A-Z_][A-Z0-9_]*\}/;
-
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   return (
     typeof value === "object" &&
@@ -25,13 +23,6 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
     !Array.isArray(value) &&
     Object.prototype.toString.call(value) === "[object Object]"
   );
-}
-
-/**
- * Check if a string contains any `${VAR}` env var references.
- */
-function hasEnvVarRef(value: string): boolean {
-  return ENV_VAR_PATTERN.test(value);
 }
 
 /**
@@ -53,14 +44,16 @@ export function restoreEnvVarRefs(
     return incoming;
   }
 
-  // String leaf: check if parsed was a ${VAR} template that resolves to incoming
+  // String leaf: check if parsed was a ${VAR} template that resolves to incoming.
+  // Delegate `${VAR}` parsing to env-substitution's resolver (the single source of
+  // truth for the syntax): if resolving the pre-substitution string reproduces the
+  // incoming value, the reference (or `$${VAR}` escape) is restored. Non-template
+  // strings resolve to themselves, so this is a no-op unless a reference matched.
   if (typeof incoming === "string" && typeof parsed === "string") {
-    if (hasEnvVarRef(parsed)) {
-      const resolved = resolveEnvVarsInString(parsed, env, "null");
-      if (resolved === incoming) {
-        // The incoming value matches what the env var resolves to — restore the reference
-        return parsed;
-      }
+    const resolved = resolveEnvVarsInString(parsed, env, "null");
+    if (resolved === incoming) {
+      // The incoming value matches what the env var resolves to — restore the reference
+      return parsed;
     }
     return incoming;
   }

@@ -438,8 +438,8 @@ export function BrainPanel({
       const a = brainAgents.find((x) => `agent:${x.agentKind}:${x.agentRef}` === personaSel);
       return a ? `Brain as ${agentName(a)}` : 'Brain';
     }
-    return 'Brain (default)';
-  }, [personaSel, brainAgents, agentName]);
+    return tBrain('brainDefault');
+  }, [personaSel, brainAgents, agentName, tBrain]);
   const captureExecution = useCallback(async () => {
     try {
       await navigator.clipboard.writeText(conv.buildTriageReport(personaLabel));
@@ -457,9 +457,9 @@ export function BrainPanel({
       onClick={captureExecution}
       disabled={!conv.hasTrace}
       title={conv.hasTrace
-        ? 'Copy this run — LLM steps, tool chain, errors, and transcript — to the clipboard'
-        : 'No execution captured yet — send a message first'}
-      aria-label="Capture execution"
+        ? tBrain('captureHasTrace')
+        : tBrain('captureNoTrace')}
+      aria-label={tBrain('captureExecutionAria')}
       style={{
         display: 'inline-flex',
         alignItems: 'center',
@@ -841,18 +841,18 @@ function ToolConfirmBar({ req, onDecide, onApproveAll }: { req: { name: string; 
   return (
     <div
       role="alertdialog"
-      aria-label="Confirm action"
+      aria-label={tBrain('confirmActionAria')}
       style={{ marginBottom: 8, padding: '10px 12px', borderRadius: 8, border: '1px solid var(--coral-bright, #f4726e)', background: 'var(--bg-elevated)' }}
     >
       <div style={{ fontSize: 13, color: 'var(--text-primary)', marginBottom: 6 }}>
-        ⚠️ Brain wants to <strong>{label}</strong>. Approve to run it.
+        ⚠️ {tBrain.rich('wantsTo', { action: label, b: (chunks) => <strong>{chunks}</strong> })}
       </div>
       {preview && preview !== '{}' && (
         <div style={{ fontSize: 11, color: 'var(--text-muted)', fontFamily: 'monospace', wordBreak: 'break-all', marginBottom: 8 }}>{preview}</div>
       )}
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
         <button type="button" onClick={() => onDecide(true)} style={{ padding: '6px 14px', fontSize: 13, fontWeight: 600, background: 'var(--coral-bright, #f4726e)', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer' }}>{tCommon('approve')}</button>
-        <button type="button" onClick={onApproveAll} title="Approve this and auto-approve every following action in this conversation" style={{ padding: '6px 14px', fontSize: 13, fontWeight: 600, background: 'var(--bg-base)', color: 'var(--coral-bright, #f4726e)', border: '1px solid var(--coral-bright, #f4726e)', borderRadius: 8, cursor: 'pointer' }}>{tBrain('approveAll')}</button>
+        <button type="button" onClick={onApproveAll} title={tBrain('approveAllTitle')} style={{ padding: '6px 14px', fontSize: 13, fontWeight: 600, background: 'var(--bg-base)', color: 'var(--coral-bright, #f4726e)', border: '1px solid var(--coral-bright, #f4726e)', borderRadius: 8, cursor: 'pointer' }}>{tBrain('approveAll')}</button>
         <button type="button" onClick={() => onDecide(false)} style={{ padding: '6px 14px', fontSize: 13, background: 'var(--bg-base)', color: 'var(--text-primary)', border: '1px solid var(--border-subtle)', borderRadius: 8, cursor: 'pointer' }}>{tCommon('cancel')}</button>
       </div>
     </div>
