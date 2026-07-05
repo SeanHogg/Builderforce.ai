@@ -15,8 +15,11 @@ import {
   listEngagements, terminateEngagement, reviewFreelancer,
   listEmployerTimecards, approveTimecard, rejectTimecard, getTimecardReview,
   listMyJobs, postJob, updateJob, listJobProposals, acceptProposal, declineProposal,
+  evaluateProposal, shortlistProposal, scheduleMeeting,
+  listEngagementDeliverables, evaluateDeliverable, setDeliverableStatus,
   listEmployerInvoices, payInvoice,
   type Engagement, type Timecard, type TimecardEntry, type JobPosting, type JobProposal, type Invoice,
+  type Deliverable, type PostingType, type EngagementType,
 } from '@/lib/freelancerApi';
 
 const card: React.CSSProperties = { background: 'var(--bg-base)', border: '1px solid var(--border-subtle)', borderRadius: 12, padding: 18 };
@@ -30,12 +33,27 @@ const btn = (v: 'primary' | 'ghost' | 'danger'): React.CSSProperties => ({
 const fmtHrs = (m: number) => `${(m / 60).toFixed(1)}h`;
 const money = (c: number, cur: string) => `${cur} ${(c / 100).toFixed(2)}`;
 const DISCIPLINES = ['developer', 'dba', 'designer', 'devops', 'qa', 'pm', 'data', 'security', 'other'] as const;
+const POSTING_TYPES: PostingType[] = ['project_bid', 'design', 'fte'];
+const ENGAGEMENT_TYPES: EngagementType[] = ['fixed_bid', 'hourly', 'fte'];
+
+/** AI eval headline (0..100) as a translucent chip — mirrors the eval-score chip
+ *  convention (translucent bg + saturated text, readable in both themes). */
+function ScoreChip({ score }: { score: number }) {
+  const hue = score >= 75 ? '34,197,94' : score >= 50 ? '245,158,11' : '239,68,68';
+  const fg = score >= 75 ? '#22c55e' : score >= 50 ? '#f59e0b' : '#f87171';
+  return (
+    <span style={{ fontSize: 11, fontWeight: 800, padding: '3px 9px', borderRadius: 6, background: `rgba(${hue},0.16)`, color: fg, flexShrink: 0 }}>
+      {Math.round(score)}
+    </span>
+  );
+}
 
 type Tab = 'team' | 'jobs' | 'timecards' | 'invoices';
 
 export function TalentView() {
   const t = useTranslations('hires');
   const td = useTranslations('freelancer');
+  const tg = useTranslations('gigs');
   // getStoredTenant() JSON.parses localStorage and returns a NEW object every
   // call — memoize it so `load` (and its effect) keep a stable identity and
   // don't re-fire on every render (which otherwise loops via setState).

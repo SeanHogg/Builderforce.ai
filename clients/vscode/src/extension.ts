@@ -23,6 +23,7 @@ import { ProjectsTreeProvider } from "./projectsTree";
 import { SessionsTreeProvider } from "./sessionsTree";
 import { InboxTreeProvider } from "./inboxTree";
 import { AttentionPoller } from "./attention";
+import { MeetingsController, joinMeetingInBrowser, joinMeetingNative, openMeetingsWeb, type MeetingItem } from "./meetings";
 
 /** Pull a numeric Brain chat id out of a Sessions tree item or a raw id argument. */
 function chatIdOf(item: bfApi.BfBrainChat | number | string | undefined): number | undefined {
@@ -49,6 +50,9 @@ let evermindView: EvermindViewProvider | undefined;
 
 /** Security & compliance Diagnostics sidebar; re-fetched on auth/project change. */
 let diagnostics: DiagnosticsController | undefined;
+
+/** Meetings sidebar (upcoming/live video calls); refreshed on auth change. */
+let meetings: MeetingsController | undefined;
 
 /** Show the active workspace (tenant) name next to the Project & Tasks view title. */
 async function refreshWorkspaceHeader(context: vscode.ExtensionContext): Promise<void> {

@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useTranslations } from 'next-intl';
 import Link from 'next/link';
 import Image from 'next/image';
 import { useRouter, useSearchParams } from 'next/navigation';
@@ -16,6 +17,7 @@ import { LOGIN_FAQ, STATS } from '@/lib/content';
 
 export default function LoginPageClient() {
   const router = useRouter();
+  const t = useTranslations('login');
   const searchParams = useSearchParams();
   const { login, isAuthenticated, hasTenant } = useAuth();
 
@@ -70,14 +72,14 @@ export default function LoginPageClient() {
       }
       await finishAndRedirect();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Login failed');
+      setError(err instanceof Error ? err.message : t('loginFailed'));
     } finally {
       setIsLoading(false);
     }
   };
 
   const handleMagicLink = async () => {
-    if (!email) { setError('Enter your email address above first.'); return; }
+    if (!email) { setError(t('enterEmailFirst')); return; }
     setError(null);
     setMagicLinkLoading(true);
     try {
@@ -85,7 +87,7 @@ export default function LoginPageClient() {
       await requestMagicLink(email, next);
       setMagicLinkSent(true);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to send magic link');
+      setError(err instanceof Error ? err.message : t('magicLinkFailed'));
     } finally {
       setMagicLinkLoading(false);
     }
@@ -144,7 +146,7 @@ export default function LoginPageClient() {
               color: '#fff', textDecoration: 'none',
               fontFamily: 'var(--font-display)', fontWeight: 600, fontSize: '0.875rem',
             }}>
-              Sign up free
+              {t('navSignUp')}
             </Link>
           </div>
         </div>
@@ -159,10 +161,10 @@ export default function LoginPageClient() {
           {/* Heading */}
           <div style={{ textAlign: 'center', marginBottom: 32 }}>
             <h1 style={{ fontFamily: 'var(--font-display)', fontSize: '1.75rem', fontWeight: 700, marginBottom: 6, color: 'var(--text-primary)' }}>
-              Welcome back
+              {t('heading')}
             </h1>
             <p style={{ fontSize: '0.9rem', color: 'var(--text-secondary)' }}>
-              Sign in to your Builderforce.ai account
+              {t('subtitle')}
             </p>
           </div>
 
@@ -185,7 +187,7 @@ export default function LoginPageClient() {
           }}>
             <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
               <div>
-                <label htmlFor="email" style={labelStyle}>Email</label>
+                <label htmlFor="email" style={labelStyle}>{t('emailLabel')}</label>
                 <input
                   id="email"
                   type="email"
@@ -201,7 +203,7 @@ export default function LoginPageClient() {
                 />
               </div>
               <div>
-                <label htmlFor="password" style={labelStyle}>Password</label>
+                <label htmlFor="password" style={labelStyle}>{t('passwordLabel')}</label>
                 <PasswordInput
                   id="password"
                   autoComplete="current-password"
@@ -239,7 +241,7 @@ export default function LoginPageClient() {
                   letterSpacing: '0.02em',
                 }}
               >
-                {isLoading ? 'Signing in…' : 'Sign In →'}
+                {isLoading ? t('signingIn') : t('submit')}
               </button>
             </form>
 
@@ -249,7 +251,7 @@ export default function LoginPageClient() {
             <div style={{ marginTop: 16, textAlign: 'center' }}>
               {magicLinkSent ? (
                 <p style={{ fontSize: '0.875rem', color: 'var(--coral-bright)', fontWeight: 600 }}>
-                  Check your email — a sign-in link is on its way.
+                  {t('magicLinkSent')}
                 </p>
               ) : (
                 <button
@@ -267,7 +269,7 @@ export default function LoginPageClient() {
                     fontFamily: 'var(--font-body)',
                   }}
                 >
-                  {magicLinkLoading ? 'Sending…' : 'Email me a magic link instead'}
+                  {magicLinkLoading ? t('sending') : t('magicLinkButton')}
                 </button>
               )}
             </div>
@@ -276,9 +278,9 @@ export default function LoginPageClient() {
           )}
 
           <p style={{ textAlign: 'center', fontSize: '0.875rem', color: 'var(--text-muted)', marginTop: 20 }}>
-            Don&apos;t have an account?{' '}
+            {t('noAccount')}{' '}
             <Link href="/register" style={{ color: 'var(--coral-bright)', textDecoration: 'none', fontWeight: 600 }}>
-              Sign up free
+              {t('signUpLink')}
             </Link>
           </p>
         </div>
@@ -294,7 +296,7 @@ export default function LoginPageClient() {
           borderLeft: '1px solid var(--border-subtle)',
         }}>
           <h2 style={{ fontFamily: 'var(--font-display)', fontSize: '1.5rem', fontWeight: 700, color: 'var(--text-primary)', marginBottom: 12 }}>
-            Build, Train & Deploy AI Agents
+            {t('marketingHeading')}
           </h2>
           <p style={{ fontSize: '0.92rem', color: 'var(--text-secondary)', lineHeight: 1.7, marginBottom: 24 }}>
             {STATS.quotable.browserNative} {STATS.quotable.zeroGpuBills} {STATS.quotable.freeForever}
@@ -303,10 +305,10 @@ export default function LoginPageClient() {
           {/* Stat cards */}
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 24 }}>
             {[
-              { value: '$0', label: 'Free forever' },
-              { value: '<60s', label: 'Setup time' },
-              { value: '0%', label: 'Commission' },
-              { value: '2B+', label: 'Params in-browser' },
+              { value: '$0', label: t('statFreeLabel') },
+              { value: '<60s', label: t('statSetupLabel') },
+              { value: '0%', label: t('statCommissionLabel') },
+              { value: '2B+', label: t('statParamsLabel') },
             ].map(s => (
               <div key={s.label} style={{ padding: '14px 12px', background: 'var(--bg-elevated)', borderRadius: 12, textAlign: 'center', border: '1px solid var(--border-subtle)' }}>
                 <div style={{ fontFamily: 'var(--font-display)', fontSize: '1.3rem', fontWeight: 700, color: 'var(--coral-bright)' }}>{s.value}</div>
@@ -317,7 +319,7 @@ export default function LoginPageClient() {
 
           {/* Feature bullets */}
           <ul style={{ listStyle: 'none', padding: 0, margin: '0 0 24px', display: 'flex', flexDirection: 'column', gap: 8 }}>
-            {['WebGPU LoRA fine-tuning in-browser', 'Dataset generation from a single prompt', 'AI evaluation with structured quality metrics', 'Publish to the global Workforce Registry', 'OAuth sign-in (Google, GitHub, LinkedIn, Microsoft)', 'No credit card required — free forever'].map(f => (
+            {[t('featWebgpu'), t('featDataset'), t('featEval'), t('featRegistry'), t('featOauth'), t('featFree')].map(f => (
               <li key={f} style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', display: 'flex', gap: 8, alignItems: 'flex-start' }}>
                 <span style={{ color: 'var(--coral-bright)', fontWeight: 700, flexShrink: 0 }}>✓</span> {f}
               </li>
@@ -327,7 +329,7 @@ export default function LoginPageClient() {
           {/* FAQ section for GEO citability */}
           <div style={{ borderTop: '1px solid var(--border-subtle)', paddingTop: 20 }}>
             <h3 style={{ fontFamily: 'var(--font-display)', fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-primary)', marginBottom: 12, textTransform: 'uppercase', letterSpacing: '0.08em' }}>
-              Common Questions
+              {t('commonQuestions')}
             </h3>
             {LOGIN_FAQ.map(faq => (
               <details key={faq.question} style={{ marginBottom: 8 }}>

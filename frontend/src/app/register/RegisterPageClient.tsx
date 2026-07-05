@@ -242,7 +242,7 @@ export default function RegisterPageClient() {
                   onChange={e => setAgreeToTerms(e.target.checked)}
                   style={{ marginTop: 3, accentColor: 'var(--coral-bright)' }}
                 />
-                <span>I agree to the Terms of Use and Privacy Policy (see footer links below)</span>
+                <span>{tr('terms')}</span>
               </label>
 
               {error && (
@@ -266,7 +266,7 @@ export default function RegisterPageClient() {
                   letterSpacing: '0.02em',
                 }}
               >
-                {isLoading ? 'Creating account…' : 'Create Account →'}
+                {isLoading ? tr('creating') : tr('submit')}
               </button>
             </form>
 
@@ -276,9 +276,9 @@ export default function RegisterPageClient() {
           )}
 
           <p style={{ textAlign: 'center', fontSize: '0.875rem', color: 'var(--text-muted)', marginTop: 20 }}>
-            Already have an account?{' '}
+            {tr('haveAccount')}{' '}
             <Link href="/login" style={{ color: 'var(--coral-bright)', textDecoration: 'none', fontWeight: 600 }}>
-              Sign in
+              {tr('signInLink')}
             </Link>
           </p>
         </div>

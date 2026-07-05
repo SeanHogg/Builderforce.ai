@@ -2223,6 +2223,43 @@ export function TaskMgmtContent({
                   </div>
                 )}
               </div>
+              {/* Publish-to-Marketplace: open this work item for hire, or manage the
+                  live posting. Hidden until we know the posting state (undefined). */}
+              {posting !== undefined && (
+                <div style={{ marginBottom: 16 }}>
+                  <div style={{ fontWeight: 600, marginBottom: 8, fontSize: 14 }}>{tGigs('publish.section')}</div>
+                  {posting ? (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                      <span className="badge-green">{tGigs('publish.published')}</span>
+                      <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{tGigs('publish.publishedHint')}</span>
+                      <button
+                        type="button"
+                        disabled={publishBusy}
+                        onClick={unpublishDrawerTicket}
+                        style={{ marginLeft: 'auto', padding: '6px 12px', borderRadius: 8, border: '1px solid var(--border-subtle)', background: 'var(--bg-elevated)', color: 'var(--text-muted)', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}
+                      >
+                        {publishBusy ? tGigs('publish.unpublishing') : tGigs('publish.unpublish')}
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => setPublishOpen(true)}
+                      style={{ padding: '7px 16px', borderRadius: 8, border: '1px solid var(--coral-bright)', background: 'var(--surface-coral-soft)', color: 'var(--coral-bright)', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}
+                    >
+                      {tGigs('publish.action')}
+                    </button>
+                  )}
+                </div>
+              )}
+              {publishOpen && (
+                <PublishToMarketplaceModal
+                  ticketId={drawerTask.id}
+                  defaultRequirements={drawerTask.description ?? ''}
+                  onClose={() => setPublishOpen(false)}
+                  onPublished={(p) => { setPosting(p); setPublishOpen(false); }}
+                />
+              )}
               <div style={{ marginBottom: 16 }}>
                 <div style={{ fontWeight: 600, marginBottom: 10, fontSize: 14 }}>{tTask('details')}</div>
                 <div style={{ display: 'grid', gap: 8 }}>
