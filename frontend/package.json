@@ -24,6 +24,7 @@
     "@seanhogg/builderforce-embedded": "link:../builderforce-embedded",
     "@seanhogg/builderforce-memory": "^2026.6.39",
     "@seanhogg/builderforce-memory-engine": "^2026.6.39",
+    "@seanhogg/builderforce-quality": "^2026.7.5",
     "@seanhogg/builderforce-sdk": "link:../sdk",
     "@seanhogg/builderforce-studio": "link:../studio",
     "@seanhogg/builderforce-studio-embedded": "link:../studio-embedded",

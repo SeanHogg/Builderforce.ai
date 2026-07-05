@@ -6,10 +6,34 @@ import {
   ForbiddenError,
   UnauthorizedError,
 } from '../../domain/shared/errors';
+import { createServerCapture } from '@seanhogg/builderforce-quality/server';
 import { buildDatabase } from '../../infrastructure/database/connection';
 import { apiErrorLog } from '../../infrastructure/database/schema';
-import type { HonoEnv } from '../../env';
+import type { Env, HonoEnv } from '../../env';
+import { API_VERSION } from '../../version';
 import { addCorsToResponse } from './cors';
+
+/**
+ * Dogfood: ship an unhandled API 500 to our OWN Product Quality pillar via the
+ * public /api/quality-ingest endpoint — the exact keyed SDK path a customer uses
+ * (@seanhogg/builderforce-quality). Fire-and-forget and never throws; a missing
+ * key or transport failure is a silent no-op so it can't mask the real response.
+ * Skipped for ingest paths themselves to avoid a self-feeding error loop.
+ */
+async function reportToQuality(env: Env, err: Error, method: string, path: string): Promise<void> {
+  const key = env.BUILDERFORCE_ERROR_API_KEY;
+  if (!key || path.startsWith('/api/quality-ingest')) return;
+  const base = env.INTERNAL_API_BASE_URL ?? 'https://api.builderforce.ai';
+  try {
+    const quality = createServerCapture({
+      key,
+      endpoint: `${base.replace(/\/$/, '')}/api/quality-ingest`,
+      environment: env.ENVIRONMENT || 'production',
+      release: API_VERSION,
+    });
+    await quality.captureException(err, { tags: { surface: 'api', method, path } });
+  } catch { /* never let self-reporting mask the real error response */ }
+}
 
 /**
  * Global error handler for the Hono application.
@@ -43,6 +67,9 @@ export async function errorHandler(err: Error, c: Context): Promise<Response> {
         });
       }
     } catch { /* never let logging failures mask the real error response */ }
+
+    // Dogfood: ship this 500 to our own Product Quality pillar (keyed SDK path).
+    await reportToQuality(c.env as Env, err, c.req.method, new URL(c.req.url).pathname);
 
     res = c.json({ error: message }, 500);
   }

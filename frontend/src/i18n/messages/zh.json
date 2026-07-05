@@ -776,9 +776,9 @@
     "meter": {
       "ai_tokens": "AI 令牌",
       "cloud_runs": "云端运行",
-      "ingestion": "数据摄取",
-      "error_events": "错误事件",
-      "outbound_fetches": "网络请求"
+      "ingestion": "数据",
+      "error_events": "错误",
+      "outbound_fetches": "在线率"
     },
     "unlimited": "无限制",
     "freePerMo": "每月免费 {amount}",
@@ -788,7 +788,10 @@
     "seePlans": "查看套餐",
     "manage": "管理",
     "trendAria": "每日用量趋势",
-    "openReport": "打开{meter}报告"
+    "openReport": "打开{meter}报告",
+    "configure": "配置{meter}",
+    "expandSection": "展开用量",
+    "collapseSection": "收起用量"
   },
   "aiUsageCard": {
     "title": "本月 AI 用量",
@@ -7120,18 +7123,10 @@
     "magicLinkButton": "改为向我发送登录链接",
     "noAccount": "还没有账户？",
     "signUpLink": "免费注册",
-    "marketingHeading": "构建、训练并部署 AI 智能体",
-    "statFreeLabel": "永久免费",
-    "statSetupLabel": "设置时间",
-    "statCommissionLabel": "佣金",
-    "statParamsLabel": "浏览器内参数",
-    "featWebgpu": "在浏览器中进行 WebGPU LoRA 微调",
-    "featDataset": "通过单条提示词生成数据集",
-    "featEval": "使用结构化质量指标进行 AI 评估",
-    "featRegistry": "发布到全球劳动力注册库",
-    "featOauth": "OAuth 登录（Google、GitHub、LinkedIn、Microsoft）",
-    "featFree": "无需信用卡 — 永久免费",
-    "commonQuestions": "常见问题"
+    "commonQuestions": "常见问题",
+    "pillLora": "🧠 LoRA 训练",
+    "pillRegistry": "🤖 智能体注册库",
+    "pillEval": "🔬 AI 评估"
   },
   "gigs": {
     "publish": {

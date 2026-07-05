@@ -776,9 +776,9 @@
     "meter": {
       "ai_tokens": "KI-Tokens",
       "cloud_runs": "Cloud-Ausführungen",
-      "ingestion": "Datenaufnahme",
-      "error_events": "Fehlerereignisse",
-      "outbound_fetches": "Webabrufe"
+      "ingestion": "Daten",
+      "error_events": "Fehler",
+      "outbound_fetches": "Verfügbarkeit"
     },
     "unlimited": "Unbegrenzt",
     "freePerMo": "{amount} kostenlos / Mon.",
@@ -788,7 +788,10 @@
     "seePlans": "Tarife ansehen",
     "manage": "Verwalten",
     "trendAria": "Täglicher Nutzungsverlauf",
-    "openReport": "{meter}-Bericht öffnen"
+    "openReport": "{meter}-Bericht öffnen",
+    "configure": "{meter} konfigurieren",
+    "expandSection": "Nutzung einblenden",
+    "collapseSection": "Nutzung ausblenden"
   },
   "aiUsageCard": {
     "title": "KI-Nutzung diesen Monat",
@@ -7120,18 +7123,10 @@
     "magicLinkButton": "Stattdessen einen Magic-Link per E-Mail senden",
     "noAccount": "Sie haben noch kein Konto?",
     "signUpLink": "Kostenlos registrieren",
-    "marketingHeading": "KI-Agenten erstellen, trainieren und bereitstellen",
-    "statFreeLabel": "Für immer kostenlos",
-    "statSetupLabel": "Einrichtungszeit",
-    "statCommissionLabel": "Provision",
-    "statParamsLabel": "Parameter im Browser",
-    "featWebgpu": "WebGPU-LoRA-Feinabstimmung im Browser",
-    "featDataset": "Datensatzerstellung aus einem einzigen Prompt",
-    "featEval": "KI-Bewertung mit strukturierten Qualitätsmetriken",
-    "featRegistry": "Im globalen Workforce-Registry veröffentlichen",
-    "featOauth": "OAuth-Anmeldung (Google, GitHub, LinkedIn, Microsoft)",
-    "featFree": "Keine Kreditkarte erforderlich – für immer kostenlos",
-    "commonQuestions": "Häufige Fragen"
+    "commonQuestions": "Häufige Fragen",
+    "pillLora": "🧠 LoRA-Training",
+    "pillRegistry": "🤖 Agenten-Registry",
+    "pillEval": "🔬 KI-Bewertung"
   },
   "gigs": {
     "publish": {

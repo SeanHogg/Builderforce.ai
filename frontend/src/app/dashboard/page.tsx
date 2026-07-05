@@ -23,7 +23,7 @@ import { IdeProjectsContent } from '@/components/ide/IdeProjectsContent';
 import { DashboardIdeasTab } from '@/components/dashboard/DashboardIdeasTab';
 import { DashboardQualityTab } from '@/components/dashboard/DashboardQualityTab';
 import { DashboardKnowledgeTab } from '@/components/dashboard/DashboardKnowledgeTab';
-import { WorkforcePresenceStrip } from '@/components/workforce/WorkforcePresenceStrip';
+import { WorkforcePresenceStripView } from '@/components/workforce/WorkforcePresenceStrip';
 import { useWorkforcePresence } from '@/lib/useWorkforcePresence';
 import { agentHosts, tasksApi, approvalsApi, type AgentHost } from '@/lib/builderforceApi';
 
@@ -275,12 +275,13 @@ export default function DashboardPage() {
           )}
         </div>
 
-        {/* Stats strip — every tile carries a 14-day trend sparkline + delta chip
-            (InsightStat). 2 columns on mobile (4 are unreadably cramped on a
-            phone), 4 from the small breakpoint up. */}
+        {/* Stats strip — five compact tiles in one row (incl. AI usage), each with
+            a 14-day trend sparkline + delta chip (InsightStat). 2 columns on
+            mobile, 3 from the small breakpoint, all 5 from large up. minWidth:0
+            lets the tiles shrink to the narrow columns without overflowing. */}
         {!loading && (
           <div
-            className="grid grid-cols-2 sm:grid-cols-4 gap-3"
+            className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3"
             style={{ marginBottom: 32 }}
           >
             <InsightStat
@@ -291,6 +292,7 @@ export default function DashboardPage() {
               delta={buildInsightDelta(projectSeries, true)}
               href="/projects"
               color="var(--coral-bright, #f4726e)"
+              style={{ minWidth: 0 }}
             />
             <InsightStat
               label={t('metric.tasks')}
@@ -300,6 +302,7 @@ export default function DashboardPage() {
               delta={buildInsightDelta(taskSeries, null)}
               href="/projects?tab=tasks"
               color="var(--cyan-bright, #00e5cc)"
+              style={{ minWidth: 0 }}
             />
             <InsightStat
               label={t('metric.workforceOnline')}
@@ -309,6 +312,7 @@ export default function DashboardPage() {
               delta={buildInsightDelta(presence.activitySeries, null)}
               href="/workforce"
               color={presence.onlineCount > 0 ? 'rgba(34,197,94,0.9)' : 'var(--text-muted)'}
+              style={{ minWidth: 0 }}
             />
             <InsightStat
               label={t('metric.pendingRequests')}
@@ -318,15 +322,13 @@ export default function DashboardPage() {
               delta={buildInsightDelta(approvalSeries, false)}
               href="/workforce?tab=approvals"
               color={pendingApprovalsCount > 0 ? 'rgba(245,158,11,0.9)' : 'var(--text-muted)'}
+              style={{ minWidth: 0 }}
             />
+            {/* AI usage (month-to-date) — self-gating peer tile; renders null until
+                there's trend data, so the row simply shows 4 tiles until then. */}
+            <AiUsageCard style={{ minWidth: 0 }} />
           </div>
         )}
-
-        {/* AI usage (month-to-date) — self-gating, all-members consumption card. */}
-        {!loading && <AiUsageCard />}
-
-        {/* Who's online — live presence: people online + agents working right now. */}
-        {!loading && <WorkforcePresenceStrip />}
 
         {/* Tabs — at-a-glance across the whole workspace. Counts are shown only
             where the dashboard actually knows the total; the shared tab
@@ -383,9 +385,14 @@ export default function DashboardPage() {
           </section>
         )}
 
-        {/* Talent / Workforce tab — reuses the same component as /workforce so the
-            dashboard shows cloud agents AND remote hosts, not just hosts. */}
-        {activeTab === 'workforce' && <WorkforceAgents tenantId={tenantId} />}
+        {/* Talent / Workforce tab — live "who's online" presence strip on top of
+            the shared /workforce roster (cloud agents AND remote hosts). */}
+        {activeTab === 'workforce' && (
+          <>
+            <WorkforcePresenceStripView presence={presence} />
+            <WorkforceAgents tenantId={tenantId} />
+          </>
+        )}
 
         {/* IDE tab — reuses IdeProjectCard via the shared IdeProjectsContent. */}
         {activeTab === 'ide' && (

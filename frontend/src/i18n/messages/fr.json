@@ -776,9 +776,9 @@
     "meter": {
       "ai_tokens": "Jetons IA",
       "cloud_runs": "Exécutions cloud",
-      "ingestion": "Ingestion de données",
-      "error_events": "Événements d’erreur",
-      "outbound_fetches": "Requêtes web"
+      "ingestion": "Données",
+      "error_events": "Erreurs",
+      "outbound_fetches": "Disponibilité"
     },
     "unlimited": "Illimité",
     "freePerMo": "{amount} gratuit / mois",
@@ -788,7 +788,10 @@
     "seePlans": "Voir les forfaits",
     "manage": "Gérer",
     "trendAria": "Tendance d’usage quotidien",
-    "openReport": "Ouvrir le rapport {meter}"
+    "openReport": "Ouvrir le rapport {meter}",
+    "configure": "Configurer {meter}",
+    "expandSection": "Développer l’utilisation",
+    "collapseSection": "Réduire l’utilisation"
   },
   "aiUsageCard": {
     "title": "Usage de l’IA ce mois-ci",
@@ -7120,18 +7123,10 @@
     "magicLinkButton": "M’envoyer plutôt un lien magique par e-mail",
     "noAccount": "Vous n’avez pas de compte ?",
     "signUpLink": "Inscription gratuite",
-    "marketingHeading": "Créez, entraînez et déployez des agents IA",
-    "statFreeLabel": "Gratuit pour toujours",
-    "statSetupLabel": "Temps d’installation",
-    "statCommissionLabel": "Commission",
-    "statParamsLabel": "Paramètres dans le navigateur",
-    "featWebgpu": "Fine-tuning LoRA WebGPU dans le navigateur",
-    "featDataset": "Génération de jeux de données à partir d’un seul prompt",
-    "featEval": "Évaluation IA avec des métriques de qualité structurées",
-    "featRegistry": "Publiez dans le Registre mondial de la main-d’œuvre",
-    "featOauth": "Connexion OAuth (Google, GitHub, LinkedIn, Microsoft)",
-    "featFree": "Aucune carte bancaire requise — gratuit pour toujours",
-    "commonQuestions": "Questions fréquentes"
+    "commonQuestions": "Questions fréquentes",
+    "pillLora": "🧠 Entraînement LoRA",
+    "pillRegistry": "🤖 Registre d’agents",
+    "pillEval": "🔬 Évaluation IA"
   },
   "gigs": {
     "publish": {

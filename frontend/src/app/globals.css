@@ -1136,6 +1136,31 @@ html[data-theme='light'] .nebula {
 .usage-meter {
   margin-bottom: 10px;
 }
+/* Collapsible "USAGE" section header — full-width toggle with a chevron. */
+.usage-meter .usage-meter-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  padding: 2px 10px 6px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--muted);
+  text-align: left;
+}
+.usage-meter .usage-meter-head:hover,
+.usage-meter .usage-meter-head:focus-visible {
+  color: var(--text-primary, var(--fg));
+  outline: none;
+}
+/* A card's title routes to that resource's configuration / key entry point. */
+.usage-meter .usage-meter-title-link:hover,
+.usage-meter .usage-meter-title-link:focus-visible {
+  text-decoration: underline;
+  outline: none;
+}
 .usage-meter .usage-meter-link {
   text-decoration: none;
 }

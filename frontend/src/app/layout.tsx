@@ -20,10 +20,19 @@ import ConditionalAppShell from '@/components/ConditionalAppShell';
 import { PwaUpdateBanner } from '@/components/PwaUpdateBanner';
 import { PwaInstallPrompt } from '@/components/PwaInstallPrompt';
 import { GlobalErrorHandler } from '@/components/GlobalErrorHandler';
+import { QualityErrorReporter } from '@/components/QualityErrorReporter';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { EMBED_ERROR_REPORTER } from '@/lib/embed/embedErrorReporter';
+import { AUTH_API_URL } from '@/lib/auth';
 
 const BASE_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://builderforce.ai';
+
+// Dogfood: our own web errors flow to the Product Quality pillar. The public
+// bfq_ ingest key is read server-side (no NEXT_PUBLIC_ needed) and handed to the
+// client island; the endpoint tracks whatever API origin auth uses.
+const QUALITY_ERROR_KEY = process.env.NEXT_BUILDERFORCE_ERROR_API_KEY || '';
+const QUALITY_ENDPOINT = `${AUTH_API_URL}/api/quality-ingest`;
+const QUALITY_ENVIRONMENT = process.env.NODE_ENV === 'production' ? 'production' : 'development';
 
 export const metadata: Metadata = {
   metadataBase: new URL(BASE_URL),
@@ -180,6 +189,13 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             </AuthProvider>
 
             <GlobalErrorHandler />
+            {QUALITY_ERROR_KEY && (
+              <QualityErrorReporter
+                apiKey={QUALITY_ERROR_KEY}
+                endpoint={QUALITY_ENDPOINT}
+                environment={QUALITY_ENVIRONMENT}
+              />
+            )}
           </ErrorBoundary>
 
           <PwaUpdateBanner />
