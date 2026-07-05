@@ -189,31 +189,42 @@ export function checkUnauthorizedAndRedirect(
 // API calls to api.builderforce.ai
 // ---------------------------------------------------------------------------
 
-export interface LoginResponse {
+export interface AuthSession {
   token: string;
   user: AuthUser;
 }
 
-export interface RegisterResponse {
-  token: string;
-  user: AuthUser;
-}
+/**
+ * Result of a login / register attempt. Either the caller is fully authenticated
+ * (`needsVerification: false` + a session), or the account's email must be verified
+ * first (`needsVerification: true` — flip the UI to the code-entry step for `email`).
+ */
+export type AuthStepResult =
+  | { needsVerification: true; email: string }
+  | ({ needsVerification: false } & AuthSession);
 
 export interface TenantTokenResponse {
   token: string;
 }
 
-export async function login(email: string, password: string): Promise<LoginResponse> {
+export async function login(email: string, password: string): Promise<AuthStepResult> {
   const res = await fetch(`${AUTH_API_URL}/api/auth/web/login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ email, password }),
   });
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({})) as { message?: string };
-    throw new Error(body.message ?? 'Login failed');
+  const body = await res.json().catch(() => ({})) as {
+    token?: string; user?: AuthUser; error?: string; message?: string;
+    verificationRequired?: boolean; email?: string;
+  };
+  // 403 + verificationRequired: the account exists but its email isn't verified.
+  if (body.verificationRequired) {
+    return { needsVerification: true, email: body.email ?? email };
   }
-  return res.json() as Promise<LoginResponse>;
+  if (!res.ok || !body.token || !body.user) {
+    throw new Error(body.error ?? body.message ?? 'Login failed');
+  }
+  return { needsVerification: false, token: body.token, user: body.user };
 }
 
 export async function register(
@@ -222,17 +233,62 @@ export async function register(
   name: string | undefined,
   agreeToTerms: boolean,
   accountType?: 'standard' | 'freelancer'
-): Promise<RegisterResponse> {
+): Promise<AuthStepResult> {
   const res = await fetch(`${AUTH_API_URL}/api/auth/web/register`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ email, password, name, agreeToTerms, accountType }),
   });
+  const body = await res.json().catch(() => ({})) as {
+    token?: string; user?: AuthUser; error?: string; message?: string;
+    verificationRequired?: boolean; email?: string;
+  };
   if (!res.ok) {
-    const body = await res.json().catch(() => ({})) as { message?: string };
-    throw new Error(body.message ?? 'Registration failed');
+    throw new Error(body.error ?? body.message ?? 'Registration failed');
   }
-  return res.json() as Promise<RegisterResponse>;
+  // Normal path: registration never returns a session — the email must be verified.
+  if (body.verificationRequired || !body.token || !body.user) {
+    return { needsVerification: true, email: body.email ?? email };
+  }
+  return { needsVerification: false, token: body.token, user: body.user };
+}
+
+/**
+ * Exchange the emailed OTP for a session. `trustDevice` extends the session to 30
+ * days so the user isn't asked to sign in again on this device for a month.
+ * On failure the thrown Error carries a `.reason` code ('invalid' | 'expired' |
+ * 'too_many' | 'none') so the UI can show a localized message.
+ */
+export async function verifyEmailCode(
+  email: string,
+  code: string,
+  trustDevice: boolean,
+): Promise<AuthSession> {
+  const res = await fetch(`${AUTH_API_URL}/api/auth/web/register/verify`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email, code, trustDevice }),
+  });
+  const body = await res.json().catch(() => ({})) as {
+    token?: string; user?: AuthUser; error?: string; reason?: string;
+  };
+  if (!res.ok || !body.token || !body.user) {
+    const err = new Error(body.error ?? 'Verification failed') as Error & { reason?: string };
+    err.reason = body.reason;
+    throw err;
+  }
+  return { token: body.token, user: body.user };
+}
+
+/** Re-send a verification code. Returns a cooldown (seconds) when throttled. */
+export async function resendVerificationCode(email: string): Promise<{ cooldownSeconds?: number }> {
+  const res = await fetch(`${AUTH_API_URL}/api/auth/web/register/resend`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email }),
+  });
+  const body = await res.json().catch(() => ({})) as { cooldownSeconds?: number };
+  return { cooldownSeconds: body.cooldownSeconds };
 }
 
 /** API returns { tenants: [...] }; normalizes to Tenant[]. */

@@ -50,10 +50,11 @@ export function RunAgentControl({ task, agentHosts, onRan, onAwaitingApproval }:
   const [target, setTarget] = useState<string>(defaultRunTarget(task));
   const [model, setModel] = useState<string>('');
   // Full plan pool + the curated tool-calling/coding subset, from the shared loader.
-  // `isPaid` gates the model picker — only paid plans may choose the model; free
-  // plans run Builderforce's managed default (the server enforces this too, in
-  // pickCloudModel, so a free run never honours an explicit pick).
-  const { isPaid } = useLlmModels();
+  // `canChooseModel` gates the model picker — a paid plan OR a connected provider
+  // (BYO) may choose the model; a free plan with nothing connected runs
+  // Builderforce's managed default (the server enforces this too, in pickCloudModel
+  // + the strict-pin gate, so such a run never honours an explicit pick).
+  const { canChooseModel } = useLlmModels();
   // Single shared submit path (also powers the one-click RunTaskButton). It owns
   // the run state + cloud-agent pool; we drive it with the picker's target/model.
   const { run, running, error, cloudAgents } = useTaskRunner({ task, onRan, onAwaitingApproval });
@@ -112,11 +113,11 @@ export function RunAgentControl({ task, agentHosts, onRan, onAwaitingApproval }:
           // for the whole run). A self-hosted/auto run keeps the full pool.
           const isCloud = target.startsWith('cloud:');
           const defaultLabel = isCloud ? 'builderforce.ai (best coding model)' : DEFAULT_MODEL_LABEL;
-          // Free plans don't choose the model — Builderforce manages it. Show a
-          // static, non-interactive managed-default label instead of the picker
-          // (the server ignores an explicit free-plan pick regardless). Paid plans
-          // get the full dropdown.
-          if (!isPaid) {
+          // No model choice (free plan, nothing connected) — Builderforce manages
+          // it. Show a static, non-interactive managed-default label instead of the
+          // picker (the server ignores an explicit pick regardless). Paid plans OR
+          // a connected provider (BYO) get the full dropdown.
+          if (!canChooseModel) {
             return (
               <div
                 style={{ ...selectStyle, flex: '1 1 0', minWidth: 0, border: 'none', borderRight: '1px solid var(--border-subtle)', cursor: 'default', display: 'flex', alignItems: 'center', gap: 6, color: 'var(--text-secondary)' }}

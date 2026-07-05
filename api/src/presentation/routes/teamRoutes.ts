@@ -96,6 +96,11 @@ export function createTeamRoutes(db: Db): Hono<HonoEnv> {
           .from(teams)
           .where(eq(teams.tenantId, tenantId))
           .orderBy(teams.name),
+      // These counts are mutation-sensitive (a member add on isolate B invalidates
+      // KV, but isolate A keeps serving its own L1 until it expires). Keep a short
+      // L1 window so the card counts converge to the (always-fresh) detail view
+      // within seconds instead of the 30s default. KV stays the cross-isolate SoT.
+      { l1TtlMs: 5_000 },
     );
     return c.json({ teams: rows });
   });

@@ -252,8 +252,7 @@
       "quality": "质量",
       "myProfile": "我的资料",
       "findWork": "寻找工作",
-      "timecard": "工时卡",
-      "kanbanTemplates": "看板模板"
+      "timecard": "工时卡"
     },
     "tab": {
       "projects": "项目",
@@ -261,6 +260,7 @@
       "planning": "规划",
       "portfolio": "项目组合",
       "ceremonies": "仪式",
+      "templates": "模板",
       "dora": "DORA",
       "finops": "FinOps",
       "funnel": "创新漏斗",
@@ -305,7 +305,26 @@
       "integrations": "集成",
       "manager": "经理",
       "roles": "角色",
-      "talent": "人才"
+      "talent": "人才",
+      "adminHealth": "运行状况",
+      "adminBilling": "账单",
+      "adminUsage": "用量",
+      "adminUsers": "用户",
+      "adminTenants": "租户",
+      "adminApiKeys": "API 密钥",
+      "adminSecurity": "安全",
+      "adminLegal": "法律",
+      "adminNewsletter": "邮件通讯",
+      "adminPrivacy": "隐私",
+      "adminPersonas": "角色",
+      "adminGovernance": "治理",
+      "adminPermissions": "权限",
+      "adminModules": "模块",
+      "adminImpSessions": "模拟会话",
+      "adminAuditLog": "审计日志",
+      "adminErrors": "错误",
+      "adminTraces": "LLM 追踪",
+      "adminToken": "令牌"
     }
   },
   "alerts": {
@@ -4882,6 +4901,7 @@
     "neverManaged": "此待办列表尚未被管理。",
     "runNow": "立即运行经理",
     "running": "管理中…",
+    "disabledNotice": "管理已暂停。开启“保持此待办列表处于管理状态”以运行经理。",
     "loading": "正在加载经理…",
     "noProject": {
       "title": "选择一个项目",
@@ -4978,6 +4998,7 @@
     },
     "activity": {
       "title": "最近活动",
+      "working": "经理正在工作 — 正在实时流式显示决策…",
       "empty": "经理尚未采取任何操作。"
     }
   },
@@ -5597,5 +5618,23 @@
     "loading": "正在加载变更…",
     "empty": "未记录任何文件变更。",
     "viewInEditor": "在编辑器中查看此变更"
+  },
+  "emailVerify": {
+    "title": "验证您的邮箱",
+    "subtitle": "请输入我们刚刚发送到以下邮箱的 6 位验证码",
+    "codeLabel": "验证码",
+    "verifyButton": "验证并继续",
+    "verifying": "验证中…",
+    "trustDevice": "在此设备上保持登录 30 天",
+    "resend": "没有收到？重新发送验证码",
+    "resending": "发送中…",
+    "resent": "新的验证码正在发送中。",
+    "resendCooldown": "请等待 {seconds} 秒后再重新获取验证码。",
+    "wrongEmail": "使用其他邮箱",
+    "errInvalid": "验证码不正确，请检查后重试。",
+    "errExpired": "验证码已过期，请重新获取。",
+    "errTooMany": "尝试次数过多，请重新获取验证码。",
+    "errNone": "没有有效的验证码，请重新获取。",
+    "errGeneric": "出现问题，请重试。"
   }
 }

@@ -10,6 +10,7 @@ import { ThemeToggleButton } from '@/app/ThemeProvider';
 import JsonLd from '@/components/JsonLd';
 import OAuthButtons from '@/components/OAuthButtons';
 import PasswordInput from '@/components/PasswordInput';
+import EmailVerificationStep from '@/components/account/EmailVerificationStep';
 import { loginSchema } from '@/lib/structured-data';
 import { LOGIN_FAQ, STATS } from '@/lib/content';
 
@@ -24,6 +25,21 @@ export default function LoginPageClient() {
   const [error, setError] = useState<string | null>(null);
   const [magicLinkSent, setMagicLinkSent] = useState(false);
   const [magicLinkLoading, setMagicLinkLoading] = useState(false);
+  // Set when an unverified account tries to sign in — swaps the form for the
+  // email-OTP step (a fresh code is emailed by the login endpoint).
+  const [pendingEmail, setPendingEmail] = useState<string | null>(null);
+
+  const finishAndRedirect = async () => {
+    const next = searchParams.get('next') || '/dashboard';
+    const token = getStoredWebToken();
+    if (!token) { router.push('/tenants'); return; }
+    const selected = await resolveAndSelectTenant(token);
+    if (selected) {
+      window.location.href = next;
+    } else {
+      router.push('/tenants' + (next !== '/dashboard' ? `?next=${encodeURIComponent(next)}` : ''));
+    }
+  };
 
   // Redirect when already authenticated (e.g. landed on /login with valid session).
   // Do NOT redirect during form submission — handleSubmit does tenant resolution and redirect.
@@ -47,16 +63,12 @@ export default function LoginPageClient() {
     setError(null);
     setIsLoading(true);
     try {
-      await login(email, password);
-      const next = searchParams.get('next') || '/dashboard';
-      const token = getStoredWebToken();
-      if (!token) { router.push('/tenants'); return; }
-      const selected = await resolveAndSelectTenant(token);
-      if (selected) {
-        window.location.href = next;
-      } else {
-        router.push('/tenants' + (next !== '/dashboard' ? `?next=${encodeURIComponent(next)}` : ''));
+      const res = await login(email, password);
+      if (res.needsVerification) {
+        setPendingEmail(res.email);
+        return;
       }
+      await finishAndRedirect();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Login failed');
     } finally {
@@ -154,6 +166,14 @@ export default function LoginPageClient() {
             </p>
           </div>
 
+          {pendingEmail ? (
+            <EmailVerificationStep
+              email={pendingEmail}
+              onVerified={finishAndRedirect}
+              onChangeEmail={() => setPendingEmail(null)}
+            />
+          ) : (
+          <>
           {/* Glass card form */}
           <div style={{
             background: 'var(--surface-card)',
@@ -252,6 +272,8 @@ export default function LoginPageClient() {
               )}
             </div>
           </div>
+          </>
+          )}
 
           <p style={{ textAlign: 'center', fontSize: '0.875rem', color: 'var(--text-muted)', marginTop: 20 }}>
             Don&apos;t have an account?{' '}

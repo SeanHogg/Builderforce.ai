@@ -135,6 +135,13 @@ export function createManagerRoutes(db: Db, runtimeService: RuntimeService): Hon
   });
 
   // POST /api/manager/:projectId/run — run the manager pass now (managers only).
+  // The pass is heavy: LLM business-value scoring plus hundreds of sequential
+  // neon-http round-trips across ranking, assignment, PR coordination and per-ticket
+  // audits. Running it inside the request blows the Worker wall-time budget and the
+  // request is evicted before it can respond — the UI hangs on "Managing…" forever.
+  // Instead we kick it off in the background and acknowledge immediately; the pass
+  // journals each decision to `manager_actions` as it goes, which the surface polls
+  // (via GET /:projectId + /:projectId/activity) to stream live activity.
   router.post('/:projectId/run', requireRole(TenantRole.MANAGER), async (c) => {
     const tenantId = c.get('tenantId');
     const userId = (c as { get(k: 'userId'): string | undefined }).get('userId');
@@ -142,10 +149,21 @@ export function createManagerRoutes(db: Db, runtimeService: RuntimeService): Hon
     if (!Number.isFinite(projectId) || !(await ownProject(tenantId, projectId))) {
       return c.json({ error: 'Project not found' }, 404);
     }
-    const summary = await runManagerForProject(c.env as Env, db, runtimeService, {
-      tenantId, projectId, submittedBy: `manager:${userId ?? 'human'}`,
-    });
-    return c.json({ summary });
+    const policy = await getEffectiveManagerPolicy(db, tenantId, projectId);
+    if (!policy.enabled) {
+      return c.json({ started: false, reason: 'disabled' as const });
+    }
+    c.executionCtx.waitUntil((async () => {
+      try {
+        await runManagerForProject(c.env as Env, db, runtimeService, {
+          tenantId, projectId, submittedBy: `manager:${userId ?? 'human'}`,
+        });
+      } catch {
+        /* the pass is best-effort + idempotent; a failure just means the next run
+           (manual or cron) resumes where this left off. */
+      }
+    })());
+    return c.json({ started: true });
   });
 
   // GET /api/manager/:projectId/activity — the decision audit feed.

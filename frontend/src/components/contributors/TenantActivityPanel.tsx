@@ -16,6 +16,7 @@ const cardStyle: React.CSSProperties = {
 const TYPE_LABEL: Record<string, string> = {
   commit: 'Commits', pr_opened: 'PRs opened', pr_merged: 'PRs merged', pr_closed: 'PRs closed',
   pr_reviewed: 'Reviews', issue_created: 'Issues opened', issue_resolved: 'Issues resolved', issue_commented: 'Comments',
+  ai_interaction: 'AI interactions', code_change: 'Code changes',
 };
 
 function Stat({ label, value, accent }: { label: string; value: string; accent?: string }) {

@@ -14,6 +14,7 @@ import { registerSchema } from '@/lib/structured-data';
 import { REGISTER_MARKETING } from '@/lib/content';
 import MarketingVisual from '@/components/account/MarketingVisual';
 import AccountTypeChooser from '@/components/account/AccountTypeChooser';
+import EmailVerificationStep from '@/components/account/EmailVerificationStep';
 
 export default function RegisterPageClient() {
   const router = useRouter();
@@ -28,9 +29,16 @@ export default function RegisterPageClient() {
   const [accountType, setAccountType] = useState<'standard' | 'freelancer'>('standard');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Set once the account is created but its email needs verifying — swaps the form
+  // for the code-entry step.
+  const [pendingEmail, setPendingEmail] = useState<string | null>(null);
 
   // Right-hand marketing panel follows the Build/Hired chooser.
   const marketing = REGISTER_MARKETING[accountType];
+
+  // Freelancers land on their for-hire profile (the restricted gig shell); standard
+  // accounts go to the builder dashboard.
+  const destination = accountType === 'freelancer' ? '/freelancer/profile' : '/dashboard';
 
   useEffect(() => {
     if (isAuthenticated) router.replace('/dashboard');
@@ -42,10 +50,12 @@ export default function RegisterPageClient() {
     setError(null);
     setIsLoading(true);
     try {
-      await register(email, password, name.trim() || undefined, agreeToTerms, accountType);
-      // Freelancers land on their for-hire profile (the restricted gig shell);
-      // standard accounts go to the builder dashboard.
-      router.push(accountType === 'freelancer' ? '/freelancer/profile' : '/dashboard');
+      const res = await register(email, password, name.trim() || undefined, agreeToTerms, accountType);
+      if (res.needsVerification) {
+        setPendingEmail(res.email);
+      } else {
+        router.push(destination);
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Registration failed');
     } finally {
@@ -153,6 +163,16 @@ export default function RegisterPageClient() {
             ))}
           </div>
 
+          {/* Email-verification step — shown after the account is created; the user
+              enters the emailed 6-digit code to activate the account and sign in. */}
+          {pendingEmail ? (
+            <EmailVerificationStep
+              email={pendingEmail}
+              onVerified={() => router.push(destination)}
+              onChangeEmail={() => setPendingEmail(null)}
+            />
+          ) : (
+          <>
           {/* Glass card form */}
           <div style={{
             background: 'var(--surface-card)',
@@ -252,6 +272,8 @@ export default function RegisterPageClient() {
 
             <OAuthButtons />
           </div>
+          </>
+          )}
 
           <p style={{ textAlign: 'center', fontSize: '0.875rem', color: 'var(--text-muted)', marginTop: 20 }}>
             Already have an account?{' '}

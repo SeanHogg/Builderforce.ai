@@ -1537,18 +1537,6 @@ export type ManagerConfigPatch = Partial<{
   autoPrioritize: boolean;
 }>;
 
-/** What one manager run did (POST /api/manager/:projectId/run). */
-export interface ManagerRunSummary {
-  projectId: number;
-  skipped: boolean;
-  scored: number;
-  ranked: number;
-  assigned: number;
-  prsConducted: number;
-  prsMerged: number;
-  dispatched: number;
-}
-
 export const managerApi = {
   /** Full manager overview for a project (config, effective policy, stats, backlog, activity). */
   get: (projectId: number): Promise<ManagerOverview> =>
@@ -1561,9 +1549,15 @@ export const managerApi = {
       body: JSON.stringify(patch),
     }),
 
-  /** Run the manager now (manager-role only). Returns a summary of what it did. */
-  run: (projectId: number): Promise<{ summary: ManagerRunSummary }> =>
-    request<{ summary: ManagerRunSummary }>(`/api/manager/${projectId}/run`, { method: 'POST' }),
+  /**
+   * Start a manager pass now (manager-role only). Non-blocking: the server kicks the
+   * (heavy) pass off in the background and acknowledges immediately with
+   * `{ started: true }`, then journals each decision to the activity feed as it runs.
+   * `started` is false with `reason: 'disabled'` when managing is paused. Poll `get`
+   * / `activity` after starting to stream the live decisions.
+   */
+  run: (projectId: number): Promise<{ started: boolean; reason?: 'disabled' }> =>
+    request<{ started: boolean; reason?: 'disabled' }>(`/api/manager/${projectId}/run`, { method: 'POST' }),
 
   /** Recent manager actions (activity feed), newest first. */
   activity: (projectId: number, limit?: number): Promise<ManagerAction[]> => {
@@ -2026,7 +2020,7 @@ export interface CalendarSyncResult {
  * and meters them. The key is write-only: we only ever read which providers are
  * configured, never the secret.
  */
-export type LlmProvider = 'anthropic';
+export type LlmProvider = 'anthropic' | 'openai' | 'google';
 
 /** How a configured provider authenticates: a pasted API key, or a connected
  *  Claude Pro/Max subscription via OAuth. */
@@ -2640,9 +2634,17 @@ type EffectivePlanLabel = 'free' | 'pro' | 'teams';
  *  `codingModels` is the curated tool-calling + coding subset the plan can reach —
  *  the list a cloud-agent run should pick from. `premium` is set when a superadmin
  *  premium override is active (treats a free plan as paid for model selection). */
+/** One BYO (bring-your-own-provider) model a tenant's connected account can serve,
+ *  as a pinnable `<vendor>/<id>` ref. */
+export interface ByoModel { id: string; vendor: string; tier: string; contextWindow?: number }
+/** The tenant's connected providers + the models they unlock. `canChooseModel` is
+ *  true when the tenant may pick a model at all — a paid plan OR at least one
+ *  connected provider (BYO), so the model choices follow the connected providers. */
+export interface ByoModelInfo { providers: string[]; models: ByoModel[] }
+
 export type LlmModelsResponse =
-  | { configured: false; product: string; effectivePlan: EffectivePlanLabel; premium?: boolean; models: string[]; codingModels?: string[] }
-  | { configured: true;  product: string; effectivePlan: EffectivePlanLabel; premium?: boolean; object: 'list'; data: LlmModelStatus[]; codingModels?: string[] };
+  | { configured: false; product: string; effectivePlan: EffectivePlanLabel; premium?: boolean; models: string[]; codingModels?: string[]; canChooseModel?: boolean; byo?: ByoModelInfo }
+  | { configured: true;  product: string; effectivePlan: EffectivePlanLabel; premium?: boolean; object: 'list'; data: LlmModelStatus[]; codingModels?: string[]; canChooseModel?: boolean; byo?: ByoModelInfo };
 
 /** Learned Model Routing (PRD 13) — closed action-type taxonomy. MIRRORS
  *  `api/src/application/llm/actionTypes.ts` (the api is the source of truth). */

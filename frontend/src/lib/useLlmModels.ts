@@ -20,13 +20,19 @@ export interface LlmModelLists {
   /** The tenant's named model configs ("LLMs"). */
   tenantModels: TenantModel[];
   /** True when the tenant is on a paid plan (Pro/Teams) or has a premium override.
-   *  Drives whether the run-time model picker is offered: only paid plans may
-   *  choose the model (free plans run Builderforce's managed default). The server
-   *  enforces this independently in `pickCloudModel` — this is the UI gate. */
+   *  Kept for callers that specifically mean "is on a paid plan". For the model
+   *  picker gate use {@link canChooseModel} instead (BYO also unlocks choice). */
   isPaid: boolean;
+  /** Pinnable models the tenant's connected providers (BYO) can serve, as
+   *  `<vendor>/<id>` refs — the model choices follow the connected providers. */
+  byoModels: string[];
+  /** True when the tenant may pick a model at all: a paid plan OR at least one
+   *  connected provider (BYO). The authoritative gate the server enforces in
+   *  `pickCloudModel` / the strict-pin gate — this is the UI mirror. */
+  canChooseModel: boolean;
 }
 
-const EMPTY: LlmModelLists = { models: [], codingModels: [], tenantModels: [], isPaid: false };
+const EMPTY: LlmModelLists = { models: [], codingModels: [], tenantModels: [], isPaid: false, byoModels: [], canChooseModel: false };
 
 let cache: LlmModelLists | null = null;
 let inflight: Promise<LlmModelLists> | null = null;
@@ -42,7 +48,10 @@ function load(): Promise<LlmModelLists> {
       .then(([res, tenantModels]) => {
         const models = 'data' in res ? res.data.map((m) => m.model) : res.models;
         const isPaid = res.premium === true || res.effectivePlan !== 'free';
-        cache = { models: models ?? [], codingModels: res.codingModels ?? [], tenantModels, isPaid };
+        const byoModels = res.byo?.models.map((m) => m.id) ?? [];
+        // Server sends canChooseModel; fall back to isPaid || has-BYO for older payloads.
+        const canChooseModel = res.canChooseModel ?? (isPaid || byoModels.length > 0);
+        cache = { models: models ?? [], codingModels: res.codingModels ?? [], tenantModels, isPaid, byoModels, canChooseModel };
         return cache;
       })
       .catch(() => {

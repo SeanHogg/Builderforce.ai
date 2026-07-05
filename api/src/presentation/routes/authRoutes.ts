@@ -36,6 +36,7 @@ import {
   verifyTotpCode,
 } from '../../infrastructure/auth/MfaService';
 import { revokeTenantApiKeyByRawKey } from '../../application/llm/tenantApiKeyService';
+import { issueVerificationCode, verifyVerificationCode, type VerifyResult } from '../../application/auth/EmailVerificationService';
 import { checkTermsAcceptance } from '../middleware/termsEnforcement';
 import { sanitizePsychometricProfile } from '../../application/persona/psychometricCatalog';
 import { provisionForHireProfile } from '../../application/freelance/provisionForHire';
@@ -766,37 +767,105 @@ export function createAuthRoutes(authService: AuthService, db: Db): Hono<HonoEnv
       await provisionFreelancer(c, created);
     }
 
-    const sessionName = 'Current device';
-    const userAgent = getUserAgent(c);
-    const ipAddress = getClientIp(c);
+    // Email-ownership gate: the account exists but is UNVERIFIED — no session is
+    // issued until the user enters the 6-digit code we email now. This is what
+    // stops fake / unowned-email signups. The client flips to the code-entry step
+    // on `verificationRequired` and calls /web/register/verify to obtain a session.
+    await issueVerificationCode(db, c.env, created, { force: true });
 
+    return c.json({
+      verificationRequired: true,
+      email: created.email,
+    }, 201);
+  });
+
+  // POST /api/auth/web/register/verify — exchange the emailed OTP for a session.
+  // `trustDevice` extends the session to 30 days (vs 24h) so a verified user isn't
+  // asked to sign in again on this device for a month.
+  router.post('/web/register/verify', async (c) => {
+    const body = await c.req.json<{
+      email?: string;
+      code?: string;
+      trustDevice?: boolean;
+      sessionName?: string;
+    }>();
+    const email = normalizeEmail(body.email ?? '');
+    const code = (body.code ?? '').trim();
+    if (!email || !code) return c.json({ error: 'email and code are required' }, 400);
+
+    const [user] = await db.select().from(users).where(eq(users.email, email)).limit(1);
+    // Don't reveal whether the address exists — same generic failure either way.
+    if (!user) return c.json({ error: 'Invalid or expired code', reason: 'invalid' }, 401);
+    if (user.isSuspended) return c.json({ error: 'Account suspended. Contact support.' }, 403);
+
+    // Only require a code when still unverified. A double-submit / returning tab on an
+    // already-verified account just mints a session (idempotent).
+    if (!user.emailVerifiedAt) {
+      const result = await verifyVerificationCode(db, user.id, code);
+      if (result !== 'ok') {
+        const messages: Record<Exclude<VerifyResult, 'ok'>, string> = {
+          invalid: 'Invalid or expired code',
+          expired: 'This code has expired. Request a new one.',
+          too_many: 'Too many attempts. Request a new code.',
+          none: 'No active code. Request a new one.',
+        };
+        return c.json(
+          { error: messages[result], reason: result },
+          result === 'invalid' ? 401 : 400,
+        );
+      }
+      await db
+        .update(users)
+        .set({ emailVerifiedAt: sql`now()`, updatedAt: sql`now()` })
+        .where(eq(users.id, user.id));
+    }
+
+    const expiresIn = body.trustDevice === true ? 30 * 86_400 : 86_400;
     const token = await signWebJwt(
       {
-        sub: created.id,
-        email: created.email,
-        username: created.username ?? '',
-        act: accountType === 'freelancer' ? 'freelancer' : undefined,
+        sub: user.id,
+        email: user.email,
+        username: user.username ?? '',
+        act: user.accountType === 'freelancer' ? 'freelancer' : undefined,
         mfa: false,
-        amr: ['pwd'],
+        amr: ['pwd', 'email'],
       },
       c.env.JWT_SECRET,
-      86_400,
+      expiresIn,
     );
 
     await persistToken(db, token, {
-      userId: created.id,
+      userId: user.id,
       tokenType: 'web',
-      sessionName,
-      userAgent,
-      ipAddress,
+      sessionName: body.sessionName ?? 'Current device',
+      userAgent: getUserAgent(c),
+      ipAddress: getClientIp(c),
     });
 
     return c.json({
       token,
-      expiresIn: 86_400,
-      user: toUserResponse(created),
+      expiresIn,
+      user: toUserResponse({ ...user, emailVerifiedAt: user.emailVerifiedAt ?? new Date() }),
       mfaRequired: false,
-    }, 201);
+    });
+  });
+
+  // POST /api/auth/web/register/resend — re-send a verification code (cooldown-guarded).
+  // Always 200 with no detail so it can't be used to probe which emails exist / are
+  // unverified.
+  router.post('/web/register/resend', async (c) => {
+    const body = await c.req.json<{ email?: string }>().catch(() => ({} as { email?: string }));
+    const email = normalizeEmail(body.email ?? '');
+    if (email) {
+      const [user] = await db.select().from(users).where(eq(users.email, email)).limit(1);
+      if (user && !user.emailVerifiedAt && !user.isSuspended) {
+        const res = await issueVerificationCode(db, c.env, user);
+        if (!res.sent && res.cooldownSeconds) {
+          return c.json({ ok: true, cooldownSeconds: res.cooldownSeconds });
+        }
+      }
+    }
+    return c.json({ ok: true });
   });
 
   // POST /api/auth/web/login
@@ -823,6 +892,14 @@ export function createAuthRoutes(authService: AuthService, db: Db): Hono<HonoEnv
     const ok = await verifyPassword(body.password, user.passwordHash);
     if (!ok) {
       return c.json({ error: 'Invalid email or password' }, 401);
+    }
+
+    // Unverified email — the account was created but never activated. Re-send a code
+    // (cooldown-guarded) and route the client into the same code-entry step instead
+    // of issuing a session. Keeps a half-finished fake signup from ever logging in.
+    if (!user.emailVerifiedAt) {
+      await issueVerificationCode(db, c.env, user);
+      return c.json({ verificationRequired: true, email: user.email }, 403);
     }
 
     if (user.mfaEnabled) {

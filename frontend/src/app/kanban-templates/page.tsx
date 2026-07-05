@@ -1,13 +1,11 @@
-import { pageMetadata } from '@/lib/seo';
-import KanbanTemplatesClient from './KanbanTemplatesClient';
+import { redirect } from 'next/navigation';
 
-export const metadata = pageMetadata({
-  title: 'Kanban Templates — roles, lanes & the marketplace',
-  description:
-    'Build, switch, and share best-practice kanban templates. Every lane declares the roles and diagnostics required before a ticket advances — the spine of the agentic workforce board.',
-  path: '/kanban-templates',
-});
+export const runtime = 'edge';
 
-export default function KanbanTemplatesPage() {
-  return <KanbanTemplatesClient />;
+/**
+ * Kanban Templates is a project sub-view — it now lives as the "Templates" tab of
+ * Projects. Preserve the old URL.
+ */
+export default function KanbanTemplatesRedirect() {
+  redirect('/projects?tab=templates');
 }

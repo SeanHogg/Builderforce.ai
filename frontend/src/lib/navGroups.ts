@@ -60,7 +60,7 @@ export const NAV_GROUPS: NavGroup[] = [
   { id: 'brainstorm', labelKey: 'group.brainstorm', icon: '💡', href: '/brainstorm', match: ['/brainstorm'] },
   {
     id: 'projects', labelKey: 'group.projects', icon: '▦', href: '/projects',
-    match: ['/projects', '/tasks', '/pmo', '/ceremonies'],
+    match: ['/projects', '/tasks', '/pmo', '/ceremonies', '/kanban-templates'],
     tabKind: 'query', basePath: '/projects',
     tabs: [
       { id: '', labelKey: 'tab.projects', icon: '▦', countKey: PROJECTS_COUNT_KEY },
@@ -69,13 +69,13 @@ export const NAV_GROUPS: NavGroup[] = [
       { id: 'pm', labelKey: 'tab.planning', icon: '🗺' },
       { id: 'portfolio', labelKey: 'tab.portfolio', icon: '📊' },
       { id: 'ceremonies', labelKey: 'tab.ceremonies', icon: '🎯' },
+      { id: 'templates', labelKey: 'tab.templates', icon: '🗂' },
     ],
   },
   // IDE is one destination scoped to its project type. Each project IS typed by
   // modality (designer/video/llm/voice) at creation, so there are no modality
   // sub-tabs here — Voice opens as a Voice IDE project, not a separate menu item.
   { id: 'ide', labelKey: 'group.ide', icon: '💻', href: '/ide/dashboard', match: ['/ide'] },
-  { id: 'kanbanTemplates', labelKey: 'group.kanbanTemplates', icon: '🗂', href: '/kanban-templates', match: ['/kanban-templates'] },
   { id: 'workflows', labelKey: 'group.workflows', icon: '🔀', href: '/workflows', match: ['/workflows'] },
   {
     // "Talent / Workforce": people + agents (Workforce) AND the roster of roles and
@@ -169,7 +169,35 @@ export const NAV_GROUPS: NavGroup[] = [
       { id: '/settings/api-keys', labelKey: 'tab.apiKeys', icon: '🔑', ownerOnly: true },
     ],
   },
-  { id: 'admin', labelKey: 'group.admin', icon: '⚙', href: '/admin', match: ['/admin'], superadminOnly: true },
+  {
+    // Platform Admin: superadmin-only. Its 19 sub-views are TABS in the shared
+    // <SectionTabs> bar (query kind, ?tab=…), matching every other multi-view
+    // destination — the page no longer renders its own in-page tab strip. The
+    // default tab (Health) uses id '' so a bare /admin highlights it.
+    id: 'admin', labelKey: 'group.admin', icon: '⚙', href: '/admin', match: ['/admin'], superadminOnly: true,
+    tabKind: 'query', basePath: '/admin',
+    tabs: [
+      { id: '', labelKey: 'tab.adminHealth', icon: '🩺' },
+      { id: 'billing', labelKey: 'tab.adminBilling', icon: '💳' },
+      { id: 'usage', labelKey: 'tab.adminUsage', icon: '📊' },
+      { id: 'users', labelKey: 'tab.adminUsers', icon: '👤' },
+      { id: 'tenants', labelKey: 'tab.adminTenants', icon: '🏢' },
+      { id: 'apikeys', labelKey: 'tab.adminApiKeys', icon: '🔑' },
+      { id: 'security', labelKey: 'tab.adminSecurity', icon: '🔒' },
+      { id: 'legal', labelKey: 'tab.adminLegal', icon: '📜' },
+      { id: 'newsletter', labelKey: 'tab.adminNewsletter', icon: '✉️' },
+      { id: 'privacy', labelKey: 'tab.adminPrivacy', icon: '🛡' },
+      { id: 'personas', labelKey: 'tab.adminPersonas', icon: '🎭' },
+      { id: 'governance', labelKey: 'tab.adminGovernance', icon: '⚖️' },
+      { id: 'permissions', labelKey: 'tab.adminPermissions', icon: '🔐' },
+      { id: 'modules', labelKey: 'tab.adminModules', icon: '🧩' },
+      { id: 'impsessions', labelKey: 'tab.adminImpSessions', icon: '🕵️' },
+      { id: 'auditlog', labelKey: 'tab.adminAuditLog', icon: '📋' },
+      { id: 'errors', labelKey: 'tab.adminErrors', icon: '🐞' },
+      { id: 'traces', labelKey: 'tab.adminTraces', icon: '🔎' },
+      { id: 'token', labelKey: 'tab.adminToken', icon: '🎟' },
+    ],
+  },
 ];
 
 /**
