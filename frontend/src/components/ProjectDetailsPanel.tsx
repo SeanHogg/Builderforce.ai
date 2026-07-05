@@ -54,6 +54,9 @@ export interface ProjectDetailsPanelProps {
   onClose: () => void;
   /** Initial tab when panel opens. */
   initialTab?: ProjectPanelTab;
+  /** When opening on the diagnostics tab from a notification deep-link, the audit
+   *  whose results should auto-open. */
+  initialAuditId?: string | null;
   /** Called when project is updated (e.g. name, description). */
   onProjectUpdate?: (project: Project) => void;
   /** Called when the user deletes the project. Component will prompt for confirmation. */
@@ -132,6 +135,7 @@ export function ProjectDetailsPanel({
   open,
   onClose,
   initialTab = 'analytics',
+  initialAuditId,
   onProjectUpdate,
   onDelete,
 }: ProjectDetailsPanelProps) {
@@ -730,7 +734,7 @@ export function ProjectDetailsPanel({
           )}
 
           {activeTab === 'diagnostics' && (
-            <ProjectDiagnosticsTab projectId={project.id} />
+            <ProjectDiagnosticsTab projectId={project.id} initialAuditId={initialAuditId} />
           )}
 
           {activeTab === 'brainChat' && (

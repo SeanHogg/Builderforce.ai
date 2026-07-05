@@ -34,4 +34,23 @@ describe('MobileBottomNav itemsFor (role-aware) [1335]', () => {
     expect(itemsFor(true, false, 'owner')).toHaveLength(5);
     expect(itemsFor(true, false, 'developer')).toHaveLength(5);
   });
+
+  it('a freelancer (job seeker) gets the restricted for-hire destinations, not the builder app', () => {
+    const items = itemsFor(true, false, undefined, true);
+    expect(hrefs(items)).toEqual([
+      '/freelancer/dashboard',
+      '/freelancer/gigs',
+      '/freelancer/timecard',
+      '/freelancer/profile',
+      '/security',
+    ]);
+    // No builder destinations leak in, and no CTA accent in-app.
+    expect(items.some((i) => i.href.startsWith('/workforce') || i.href === '/admin')).toBe(false);
+    expect(items.some((i) => i.accent)).toBe(false);
+  });
+
+  it('freelancer flag overrides superadmin/role (account type wins the shell split)', () => {
+    // Even a superadmin freelancer stays in the for-hire shell — no Admin slot.
+    expect(hrefs(itemsFor(true, true, 'owner', true))).not.toContain('/admin');
+  });
 });

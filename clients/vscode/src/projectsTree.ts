@@ -11,6 +11,7 @@ import {
 } from "./bfApi";
 import { SECRET_KEY } from "./gateway";
 import { getSelectedProject, onProjectChange } from "./projectState";
+import { attentionFor, attentionIcon, attentionDescriptionPrefix } from "./attention";
 
 const HIDE_DONE_KEY = "builderforce.hideDoneTasks";
 const CONFIG_KEY = "builderforce.projectTreeConfig";
@@ -282,9 +283,20 @@ export class ProjectsTreeProvider implements vscode.TreeDataProvider<Node> {
       : vscode.TreeItemCollapsibleState.None;
     const item = new vscode.TreeItem(`${t.key ? `${t.key} ` : ""}${t.title}`, collapsible);
     const attention = taskNeedsAttention(t, Date.now());
-    item.description = `${attention ? "⚠ " : ""}${t.status ?? ""}`;
+    // Live execution state (running / awaiting a human answer), layered over the
+    // stale/blocked "⚠" risk badge and the status label. A pending question ("❓")
+    // is the most urgent signal, so it leads.
+    const live = attentionFor("task", t.id);
+    const livePrefix = live ? attentionDescriptionPrefix(live) : "";
+    item.description = `${livePrefix}${attention ? "⚠ " : ""}${t.status ?? ""}`;
     item.tooltip = t.description ?? t.title;
-    item.iconPath = new vscode.ThemeIcon(t.taskType === "epic" ? "type-hierarchy" : iconForStatus(t.status));
+    item.iconPath = live
+      ? attentionIcon(live)
+      : t.taskType === "epic"
+        ? new vscode.ThemeIcon("type-hierarchy")
+        : isDoneStatus(t.status)
+          ? new vscode.ThemeIcon("pass-filled", new vscode.ThemeColor("testing.iconPassed"))
+          : new vscode.ThemeIcon(iconForStatus(t.status));
     item.contextValue = "builderforceTask";
     item.command = { command: "builderforce.startTaskSession", title: "Start Session", arguments: [node] };
     return item;

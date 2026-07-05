@@ -10,7 +10,7 @@ function toHex(bytes: Uint8Array): string {
   return Array.from(bytes).map((b) => b.toString(16).padStart(2, '0')).join('');
 }
 
-async function hmacKey(secret: string, usage: KeyUsage[]): Promise<CryptoKey> {
+async function hmacKey(secret: string, usage: ('sign' | 'verify')[]): Promise<CryptoKey> {
   return crypto.subtle.importKey(
     'raw',
     new TextEncoder().encode(secret),

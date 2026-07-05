@@ -237,6 +237,11 @@
     "expandSidebar": "Développer la barre latérale",
     "collapseSidebar": "Réduire la barre latérale",
     "closeMenu": "Fermer le menu",
+    "bottom": {
+      "product": "Produit",
+      "pricing": "Tarifs",
+      "signIn": "Se connecter"
+    },
     "group": {
       "dashboard": "Tableau de bord",
       "brainstorm": "Brainstorming",
@@ -253,7 +258,8 @@
       "myProfile": "Mon profil",
       "findWork": "Trouver du travail",
       "timecard": "Feuille de temps",
-      "myDashboard": "Mon tableau de bord"
+      "myDashboard": "Mon tableau de bord",
+      "meetings": "Réunions"
     },
     "tab": {
       "projects": "Projets",
@@ -1762,7 +1768,8 @@
     "closeResults": "Fermer les résultats",
     "noResults": "Aucun résultat pour le moment.",
     "overall": "Note globale",
-    "architectureNeedsRepo": "Associez d'abord un dépôt à ce projet."
+    "architectureNeedsRepo": "Associez d'abord un dépôt à ce projet.",
+    "auditRunning": "En cours…"
   },
   "projectDetails": {
     "tabs": {
@@ -5035,12 +5042,38 @@
     "off": "Désactivé",
     "connected": "Apprentissage",
     "frozen": "Gelé",
-    "contributions": "{count} contributions d'apprentissage à ce jour",
     "teacherLabel": "Enseigner depuis un modèle de pointe",
     "teacherHint": "Distillez un modèle de premier plan (Opus, Mistral, GLM…) dans l'Evermind de ce projet — chaque exécution apprend de la réponse idéale du modèle de pointe plutôt que du texte brut.",
     "teacherNone": "Aucun — apprendre uniquement des exécutions",
     "teacherPaidOnly": "Disponible sur les offres payantes — l'enseignement consomme des tokens du modèle de pointe.",
-    "errorGeneric": "Une erreur s'est produite. Veuillez réessayer."
+    "errorGeneric": "Une erreur s'est produite. Veuillez réessayer.",
+    "loading": "Chargement…",
+    "managerOnlyHint": "Seul un gestionnaire de projet peut modifier ces paramètres.",
+    "notSetUp": "L'Evermind de ce projet n'est pas encore configuré. Un gestionnaire de projet peut l'activer.",
+    "versionLabel": "Version",
+    "contributionsLabel": "Appris",
+    "pendingLabel": "En file",
+    "lastLearnedLabel": "Dernier apprentissage",
+    "neverLearned": "Jamais",
+    "teachTitle": "Enseigner depuis une transcription",
+    "teachHint": "Collez une transcription de discussion ou un exemple pour le contribuer au modèle maintenant.",
+    "teachPromptPlaceholder": "Tâche à laquelle cela répondait (facultatif)…",
+    "teachTextPlaceholder": "Collez la transcription ou le texte d'exemple…",
+    "teachCta": "Enseigner",
+    "teaching": "Enseignement…",
+    "taught": "Mis en file pour apprentissage.",
+    "flushCta": "Apprendre maintenant",
+    "flushing": "Apprentissage…",
+    "flushedNone": "Rien en file à apprendre pour l'instant.",
+    "flushedN": "{merged} contribution(s) fusionnée(s) dans v{version}.",
+    "inspectTitle": "Appris récemment",
+    "inspectEmpty": "Rien d'appris pour l'instant. Les exécutions et l'enseignement apparaîtront ici.",
+    "kindText": "Exécution",
+    "kindDelta": "Delta",
+    "deltaEntry": "Delta de poids apporté par l'exécution d'un agent.",
+    "versionTag": "v{version}",
+    "weightTag": "×{weight}",
+    "refresh": "Actualiser"
   },
   "manager": {
     "title": "Manager IA",
@@ -6095,5 +6128,292 @@
       "code_change": "Modifications de code"
     },
     "syncFailed": "Échec de la synchronisation des agents"
+  },
+  "attention": {
+    "running": "En cours",
+    "awaiting": "Réponse requise",
+    "needsYou": "{count} en attente de votre réponse",
+    "runningCount": "{count} en cours"
+  },
+  "onboarding": {
+    "welcome": "Bienvenue sur Builderforce",
+    "subtitle": "Configurons votre compte en quelques étapes rapides.",
+    "closeSetup": "Fermer la configuration",
+    "createWorkspaceFirst": "Créez d'abord un espace de travail",
+    "needProject": "Créez d'abord un projet, puis cette étape s'y appliquera.",
+    "back": "← Retour",
+    "stepOf": "Étape {current} sur {total}",
+    "completeFirst": "Terminez d'abord cette étape",
+    "steps": {
+      "workspace": {
+        "label": "Créer un espace de travail"
+      },
+      "project": {
+        "label": "Créer un projet"
+      },
+      "ticketing": {
+        "label": "Connecter la billetterie"
+      },
+      "repos": {
+        "label": "Connecter les dépôts"
+      },
+      "audit": {
+        "label": "Lancer les audits"
+      },
+      "roster": {
+        "label": "Équipe recommandée"
+      },
+      "install": {
+        "label": "Installer les agents"
+      },
+      "invite": {
+        "label": "Inviter l'équipe"
+      }
+    },
+    "ticketing": {
+      "intro": "Connectez votre système de suivi du travail pour que les tickets se synchronisent dans les deux sens. Vous pourrez terminer l’authentification dans Intégrations plus tard.",
+      "loading": "Chargement des fournisseurs…",
+      "errLoad": "Impossible de charger les fournisseurs.",
+      "errConnect": "Impossible de connecter ce fournisseur.",
+      "connected": "Connecté",
+      "connecting": "Connexion…",
+      "connect": "Connecter",
+      "finishLater": "Facultatif — vous pouvez le connecter ou le modifier à tout moment dans Intégrations."
+    },
+    "repos": {
+      "intro": "Attachez un ou plusieurs dépôts à auditer et sur lesquels développer. L’accès aux dépôts privés se termine dans Intégrations.",
+      "errAdd": "Impossible d’attacher ce dépôt.",
+      "default": "Par défaut",
+      "makeDefault": "Définir par défaut",
+      "remove": "Retirer",
+      "provider": "Fournisseur",
+      "owner": "Propriétaire ou organisation",
+      "ownerPlaceholder": "propriétaire",
+      "repo": "Dépôt",
+      "repoPlaceholder": "dépôt",
+      "add": "Attacher",
+      "adding": "Attachement…",
+      "privateHint": "Pour les dépôts privés, connectez une identifiant dans Intégrations afin que l’audit puisse lire le code."
+    },
+    "audit": {
+      "intro": "Lancez un audit système sur votre projet. Chaque audit génère un rapport instantané, crée un ticket pour l’agent de sécurité et vous avertit lorsque l’analyse approfondie est terminée. SOC 2 est sélectionné pour commencer.",
+      "running": "En cours…",
+      "started": "Lancé",
+      "failed": "Échec",
+      "runningAll": "Audits en cours…",
+      "run": "Lancer les audits sélectionnés",
+      "viewReports": "Voir les rapports",
+      "notifyHint": "Nous vous préviendrons dès que chaque rapport sera prêt. Vous pouvez quitter cette page — les audits continuent."
+    }
+  },
+  "soc2": {
+    "seo": {
+      "title": "Audit de préparation SOC 2 — automatisé, dès l’inscription | Builderforce",
+      "description": "Lancez un audit automatisé de préparation SOC 2 sur vos dépôts GitHub, GitLab, Bitbucket et Azure DevOps dès l’inscription. Obtenez un rapport noté selon les Critères communs (CC1–CC9) et une PR de remédiation ouverte par l’agent.",
+      "ogTitle": "Audit automatisé de préparation SOC 2"
+    },
+    "eyebrow": "SOC 2 · Audits système",
+    "titleLead": "Un audit SOC 2 complet,",
+    "titleAccent": "dès votre inscription",
+    "sub": "Créez un projet, connectez votre système de tickets et vos dépôts, et Builderforce crée un ticket pour que l’agent de sécurité audite votre code selon les Critères communs SOC 2, puis ouvre une PR de remédiation. Vous obtenez un rapport noté, pas une simple liste.",
+    "ctaPrimary": "Lancez votre audit",
+    "ctaSecondary": "Voir les diagnostics gratuits",
+    "visualSection": {
+      "title": "À quoi ressemble votre rapport",
+      "sub": "Un score global de préparation, chaque famille de Critères communs notée réussi / partiel / lacune, les constats concrets et une pull request de remédiation déjà ouverte."
+    },
+    "visual": {
+      "title": "Préparation SOC 2",
+      "scoreLabel": "Défini",
+      "criteriaHeading": "Critères communs",
+      "cc": {
+        "cc1": "Environnement de contrôle",
+        "cc2": "Communication et politiques",
+        "cc6": "Accès et hygiène des secrets",
+        "cc7": "Opérations système",
+        "cc8": "Gestion des changements"
+      },
+      "state": {
+        "pass": "Réussi",
+        "partial": "Partiel",
+        "gap": "Lacune"
+      },
+      "findingsHeading": "Constats",
+      "findings": [
+        "3 dépôts analysés",
+        "2 secrets signalés",
+        "Protection de branche absente sur 1 dépôt",
+        "Pas de SECURITY.md sur 2 dépôts"
+      ],
+      "prBadge": "PR de remédiation ouverte"
+    },
+    "criteria": {
+      "title": "Rattaché aux Critères communs",
+      "sub": "Chaque constat est rattaché à une famille de Critères communs SOC 2, pour que votre rapport se lise comme le pense un auditeur.",
+      "items": [
+        {
+          "ref": "CC1",
+          "label": "Environnement de contrôle — responsabilité et CODEOWNERS sur chaque dépôt."
+        },
+        {
+          "ref": "CC2",
+          "label": "Communication et politiques — SECURITY.md et guides de contribution."
+        },
+        {
+          "ref": "CC3–CC5",
+          "label": "Évaluation des risques et activités de contrôle — contrôles CI sur la branche par défaut."
+        },
+        {
+          "ref": "CC6",
+          "label": "Accès logique et hygiène des secrets — aucune clé ni identifiant dans le code."
+        },
+        {
+          "ref": "CC7",
+          "label": "Opérations système — dépendances figées et builds reproductibles."
+        },
+        {
+          "ref": "CC8",
+          "label": "Gestion des changements — tests et revue obligatoire avant fusion."
+        },
+        {
+          "ref": "CC9",
+          "label": "Atténuation des risques et fournisseurs — un processus documenté de divulgation de sécurité."
+        }
+      ]
+    },
+    "how": {
+      "title": "Comment l’audit se déroule",
+      "sub": "L’assistant d’intégration transforme l’inscription en un rapport livré.",
+      "steps": [
+        {
+          "title": "Créez un projet",
+          "desc": "Nommez votre projet dans l’assistant — il devient le foyer de vos rapports d’audit."
+        },
+        {
+          "title": "Connectez dépôts et tickets",
+          "desc": "Attachez des dépôts GitHub, GitLab, Bitbucket ou Azure DevOps et votre tableau Jira / Monday."
+        },
+        {
+          "title": "Lancez l’audit",
+          "desc": "Un ticket est créé pour l’agent de sécurité, qui analyse vos dépôts et ouvre une PR de remédiation."
+        },
+        {
+          "title": "Lisez votre rapport",
+          "desc": "Vous êtes averti dès qu’il est prêt — ouvrez le rapport SOC 2 noté sur votre projet."
+        }
+      ]
+    },
+    "family": {
+      "title": "Un flux, cinq audits système",
+      "sub": "Le même audit en un clic parcourt chaque dimension de votre organisation d’ingénierie.",
+      "items": [
+        {
+          "icon": "🛡️",
+          "name": "Préparation SOC 2",
+          "desc": "Dépôts et contrôles rattachés aux Critères communs (CC1–CC9)."
+        },
+        {
+          "icon": "🏛️",
+          "name": "Architecture",
+          "desc": "Respect des principes de conception : DRY, SOLID, DDD et patterns."
+        },
+        {
+          "icon": "✅",
+          "name": "Qualité",
+          "desc": "Signaux de tests, CI et intégrité des builds dans vos dépôts."
+        },
+        {
+          "icon": "🧭",
+          "name": "Vision et feuille de route produit",
+          "desc": "Objectifs, résultats clés, feuille de route et une vision documentée."
+        },
+        {
+          "icon": "⚖️",
+          "name": "Confidentialité et droit des données",
+          "desc": "Préparation RGPD, CCPA/CPRA et CAN-SPAM à partir de votre code."
+        }
+      ]
+    },
+    "faqTitle": "Questions fréquentes",
+    "faq": [
+      {
+        "question": "Est-ce une certification SOC 2 ?",
+        "answer": "Non — c’est un audit de préparation. Il produit un rapport automatisé et étayé par des preuves, rattaché aux Critères communs SOC 2, pour savoir exactement quoi corriger avant un examen formel de Type I ou Type II."
+      },
+      {
+        "question": "Comment l’audit se déroule-t-il à l’inscription ?",
+        "answer": "L’assistant crée un projet, connecte votre système de tickets et vos dépôts, puis crée un ticket pour l’agent de sécurité. L’audit produit un rapport instantané et envoie l’agent ouvrir une pull request de remédiation — vous êtes averti dès qu’il est prêt."
+      },
+      {
+        "question": "Quels dépôts peut-il analyser ?",
+        "answer": "GitHub, GitLab, Bitbucket et Azure DevOps — un ou plusieurs par projet. Les jetons restent côté serveur ; l’audit lit l’arborescence du dépôt pour en déduire ses signaux."
+      },
+      {
+        "question": "Quels autres audits sont inclus ?",
+        "answer": "Le même flux exécute une analyse d’Architecture, un audit de Qualité, un audit de Vision et feuille de route produit et un audit de Confidentialité et droit des données (RGPD / CCPA / CAN-SPAM) — chacun un rapport de projet noté."
+      }
+    ],
+    "finalCta": {
+      "title": "Obtenez votre rapport SOC 2 aujourd’hui",
+      "sub": "Inscrivez-vous, connectez un dépôt, et votre premier rapport de préparation arrive en quelques minutes.",
+      "button": "Commencer gratuitement"
+    },
+    "relatedHeading": "Lectures associées"
+  },
+  "meetings": {
+    "title": "Réunions",
+    "subtitle": "Planifiez et rejoignez des sessions vidéo et audio en direct avec votre équipe.",
+    "startNow": "Démarrer maintenant",
+    "startNowTitle": "Démarrer une réunion maintenant",
+    "schedule": "Planifier",
+    "scheduleTitle": "Planifier une réunion",
+    "loading": "Chargement…",
+    "liveAndUpcoming": "En direct et à venir",
+    "noMeetings": "Aucune réunion pour l’instant. Démarrez-en une ou planifiez-la.",
+    "fromYourCalendar": "Depuis votre agenda",
+    "anytime": "À tout moment",
+    "liveNow": "En direct",
+    "join": "Rejoindre",
+    "joinEarly": "Rejoindre en avance",
+    "joinWithCamera": "Rejoindre avec la caméra",
+    "cameraOn": "Caméras activées",
+    "cameraError": "Caméra/microphone indisponible : {error}",
+    "attendeeCount": "{count, plural, one {# participant} other {# participants}}",
+    "calendarConnected": "Agenda connecté.",
+    "calendarConnectFailed": "Impossible de connecter l’agenda.",
+    "calendarsTitle": "Agendas",
+    "calendarsSubtitle": "Connectez un agenda pour planifier des réunions et voir les événements à venir.",
+    "noCalendarProviders": "Aucun fournisseur d’agenda n’est configuré.",
+    "connected": "Connecté",
+    "disconnect": "Déconnecter",
+    "connectProvider": "Connecter {provider}",
+    "kind": "Type",
+    "kind_standup": "Mêlée",
+    "kind_planning": "Planification",
+    "kind_retrospective": "Rétrospective",
+    "kind_adhoc": "Ponctuelle",
+    "kind_direct": "Appel direct",
+    "titleLabel": "Titre",
+    "scheduleForLater": "Planifier pour plus tard",
+    "camerasEnabled": "Caméras activées",
+    "startTime": "Heure de début",
+    "duration": "Durée",
+    "minutes": "{count} min",
+    "invite": "Inviter",
+    "noTeammates": "Aucun coéquipier à inviter pour l’instant.",
+    "agent": "Agent",
+    "cancel": "Annuler",
+    "you": "Vous",
+    "noOneOnCamera": "Personne n’est encore à la caméra.",
+    "muteMic": "Couper le micro",
+    "unmuteMic": "Réactiver le micro",
+    "stopCamera": "Arrêter la caméra",
+    "startCamera": "Démarrer la caméra",
+    "leave": "Quitter",
+    "joining": "Connexion…",
+    "connecting": "Connexion…",
+    "liveCount": "{count, plural, one {# personne en direct} other {# personnes en direct}}",
+    "participants": "Participants",
+    "endForAll": "Terminer pour tous"
   }
 }

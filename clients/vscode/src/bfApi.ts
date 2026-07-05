@@ -237,6 +237,28 @@ export function getTenantJwt(secrets: vscode.SecretStorage): Promise<string | un
   return exchangeJwt(secrets);
 }
 
+/** Tenant roles that can change project settings (mirrors the API's requireRole(MANAGER)). */
+const MANAGER_ROLES = new Set(["owner", "admin", "manager"]);
+
+/**
+ * Whether the signed-in user can manage the active workspace (owner/admin/manager) —
+ * a best-effort UX gate for the Evermind console's write controls. Resolved from the
+ * workspace list's `role`; the API enforces authoritatively regardless, so a false
+ * negative just shows disabled controls (never a security hole). Degrades to false
+ * when the role can't be resolved (signed out / older API).
+ */
+export async function canManageActiveWorkspace(secrets: vscode.SecretStorage): Promise<boolean> {
+  try {
+    const token = await exchangeJwt(secrets);
+    if (!token || !baseJwt) return false;
+    const id = selectedTenantId ?? baseJwt.tenantId;
+    const role = (await listWorkspaces(secrets)).find((w) => w.id === id)?.role;
+    return role != null && MANAGER_ROLES.has(role.toLowerCase());
+  } catch {
+    return false;
+  }
+}
+
 async function authed<T>(
   secrets: vscode.SecretStorage,
   path: string,
@@ -642,6 +664,44 @@ export async function listBrainChats(
   }
 }
 
+/** Cross-surface "needs attention" state for a work item (GET /api/runtime/attention).
+ *  `awaiting_input` = an agent paused on ask_human and a person must answer;
+ *  `running` = actively executing. Idle items are omitted. */
+export type BfAttentionState = "running" | "awaiting_input";
+export interface BfAttentionItem {
+  state: BfAttentionState;
+  executionId?: number;
+  approvalId?: string;
+}
+export interface BfAttention {
+  /** Keyed by task id. */
+  tasks: Record<number, BfAttentionItem>;
+  /** Keyed by Brain chat id (a chat inherits the state of its linked task). */
+  chats: Record<number, BfAttentionItem & { taskId?: number }>;
+  counts: { running: number; awaiting: number };
+}
+
+const EMPTY_ATTENTION: BfAttention = { tasks: {}, chats: {}, counts: { running: 0, awaiting: 0 } };
+
+/**
+ * Fetch the tenant's live "what's running / what needs a human answer" map — the
+ * SAME signal the web app renders, so the Sessions and Project trees light up in
+ * lockstep with the board and the browser. Scoped to `projectId` when given.
+ * Degrades to an empty map when signed out / unreachable (never throws).
+ */
+export async function getAttention(
+  secrets: vscode.SecretStorage,
+  projectId?: number,
+): Promise<BfAttention> {
+  try {
+    const q = projectId != null ? `?projectId=${projectId}` : "";
+    const r = await authed<BfAttention>(secrets, `/api/runtime/attention${q}`);
+    return r ?? EMPTY_ATTENTION;
+  } catch {
+    return EMPTY_ATTENTION;
+  }
+}
+
 /** Rename a Brain conversation (PATCH /api/brain/chats/:id). */
 export async function renameBrainChat(
   secrets: vscode.SecretStorage,
@@ -855,4 +915,90 @@ export async function connect(
   } catch {
     return false;
   }
+}
+
+// ── Diagnostics (security & compliance system audits) ─────────────────────────
+// The same `/api/tools` diagnostics engine the web app uses: a data-driven list of
+// system audits (SOC 2, Architecture, Quality, Privacy & Data-Law) that run against
+// a project's connected repos and record a per-project rating that rolls up to the
+// workspace. See api/src/application/tools/systemAudits.ts.
+
+/** A system-level audit type (mirrors the api `SystemAuditSummary`). */
+export interface BfSystemAudit {
+  id: string;
+  name: string;
+  category: string;
+  icon: string;
+  blurb: string;
+}
+
+/** One diagnostic's latest result for a project (mirrors the api `ProjectDiagnostic`). */
+export interface BfProjectDiagnostic {
+  toolId: string;
+  name: string;
+  score: number | null;
+  scoreLabel: string | null;
+  headline: string;
+  createdAt: string;
+  result?: {
+    headline: string;
+    summary?: string;
+    metrics?: Array<{ label: string; value: string; hint?: string }>;
+    recommendations?: Array<{ title: string; detail: string }>;
+  };
+}
+
+/** A project's diagnostic rating (mirrors the api `ProjectScore`). */
+export interface BfProjectScore {
+  result: { headline: string; summary?: string; score: number | null; scoreLabel: string | null };
+  diagnostics: BfProjectDiagnostic[];
+}
+
+/**
+ * The catalog of system audit types (GET /api/tools/audits). Public data — powers
+ * the Diagnostics sidebar. Degrades to [] when signed out / unreachable.
+ */
+export async function listSystemAudits(secrets: vscode.SecretStorage): Promise<BfSystemAudit[]> {
+  try {
+    const r = await authed<{ audits: BfSystemAudit[] }>(secrets, "/api/tools/audits");
+    return r?.audits ?? [];
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * A project's diagnostic rating + each diagnostic's latest run (GET
+ * /api/tools/projects/:id/score, manager+). Degrades to undefined when not a
+ * manager / not deployed / project not owned, so the tree still lists the audit
+ * types without scores.
+ */
+export async function getProjectDiagnostics(
+  secrets: vscode.SecretStorage,
+  projectId: number,
+): Promise<BfProjectScore | undefined> {
+  try {
+    return await authed<BfProjectScore>(secrets, `/api/tools/projects/${projectId}/score`);
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Run a system audit against a project (POST /api/tools/audits/:id/run, manager+):
+ * scores + records a report, notifies the user, and files the agent remediation
+ * ticket. Returns true on success (202/201). Throws on non-2xx so the command layer
+ * can surface WHY (e.g. 403 not a manager, 400 no repo).
+ */
+export async function runAudit(
+  secrets: vscode.SecretStorage,
+  auditId: string,
+  projectId: number,
+): Promise<boolean> {
+  const r = await authed<{ started?: boolean }>(
+    secrets,
+    `/api/tools/audits/${encodeURIComponent(auditId)}/run`,
+    { method: "POST", body: JSON.stringify({ projectId }) },
+  );
+  return !!r;
 }

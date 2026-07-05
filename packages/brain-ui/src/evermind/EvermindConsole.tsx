@@ -12,13 +12,12 @@
  * disabled (not hidden) when `canManage` is false, mirroring the web RoleGate.
  * See [[evermind-learning-architecture]].
  */
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   DEFAULT_EVERMIND_LABELS,
   type EvermindConsoleAdapter,
   type EvermindConsoleData,
   type EvermindConsoleLabels,
-  type EvermindMode,
   type EvermindRecentEntry,
   type EvermindSeedModel,
   type EvermindTeacherOptions,

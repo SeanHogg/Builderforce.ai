@@ -109,7 +109,7 @@ export function WizardAuditStep({ projectId }: { projectId: number }) {
             cursor: running || selected.size === 0 ? 'not-allowed' : 'pointer', opacity: running || selected.size === 0 ? 0.6 : 1,
           }}
         >
-          {running ? t('runningAll') : t('run', { count: selected.size })}
+          {running ? t('runningAll') : t('run')}
         </button>
         {ranAny && (
           <button type="button" onClick={viewReports} style={{

@@ -1,7 +1,11 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useTranslations } from 'next-intl';
 import { Select } from '@/components/Select';
+import { useMediaRoom } from '@/lib/useMediaRoom';
+import { VideoGrid } from '@/components/video/VideoGrid';
+import { MediaControls } from '@/components/video/MediaControls';
 import {
   tasksApi, sprintsApi, runtimeApi, ceremonySessionsApi, membersApi,
   type Task, type Sprint, type Execution, type CeremonySession, type CeremonySessionDetail, type CeremonyParticipant, type MemberProfile,
@@ -73,6 +77,8 @@ export function CeremonyStage({
   onClose?: () => void;
 }) {
   const { user } = useAuth();
+  const tMeet = useTranslations('meetings');
+  const [camerasOn, setCamerasOn] = useState(false);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [members, setMembers] = useState<CeremonyMember[]>([]);
   const [sprints, setSprints] = useState<Sprint[]>([]);
@@ -135,6 +141,14 @@ export function CeremonyStage({
     }
   }, []);
   const { peers, connected, send } = useCeremonyRoom(projectId, me, { onChange: reload, onFrame });
+
+  // Live cameras/mics for the round-table — one media room per project ceremony.
+  // Mesh P2P; joins only while the user turns cameras on (no forced capture).
+  const media = useMediaRoom(
+    camerasOn ? `ceremony-${projectId}` : null,
+    { name: me.name, ref: me.ref },
+    { enabled: camerasOn },
+  );
 
   // Seats that are "live": connected peers matched by identity, plus myself.
   const presentKeys = useMemo(() => {
@@ -365,6 +379,23 @@ export function CeremonyStage({
           </span>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+          <button
+            type="button"
+            onClick={() => setCamerasOn((v) => !v)}
+            aria-pressed={camerasOn}
+            style={{
+              display: 'inline-flex', alignItems: 'center', gap: 6,
+              padding: '6px 12px', fontSize: 13, fontWeight: 600, borderRadius: 8, cursor: 'pointer',
+              background: camerasOn ? 'var(--coral-bright)' : 'var(--bg-deep)',
+              color: camerasOn ? 'var(--bg-deep)' : 'var(--text-secondary)',
+              border: `1px solid ${camerasOn ? 'var(--coral-bright)' : 'var(--border-subtle)'}`,
+            }}
+          >
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M23 7l-7 5 7 5V7z" /><rect x="1" y="5" width="15" height="14" rx="2" ry="2" />
+            </svg>
+            {camerasOn ? tMeet('cameraOn') : tMeet('joinWithCamera')}
+          </button>
           {members.length > 0 && (
             <StandupControls
               session={session}
@@ -400,6 +431,29 @@ export function CeremonyStage({
       {error && (
         <div style={{ padding: '8px 12px', borderRadius: 8, background: 'var(--error-bg)', border: '1px solid var(--error-border)', color: 'var(--error-text)', fontSize: 13 }}>
           {error}
+        </div>
+      )}
+
+      {camerasOn && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, padding: 10, borderRadius: 12, background: 'var(--bg-deep)', border: '1px solid var(--border-subtle)' }}>
+          {media.mediaError ? (
+            <div style={{ fontSize: 12, color: 'var(--error-text)' }}>{tMeet('cameraError', { error: media.mediaError })}</div>
+          ) : (
+            <VideoGrid
+              self={{ name: me.name, stream: media.localStream, camOn: media.camOn, micOn: media.micOn }}
+              tiles={media.tiles}
+              compact
+            />
+          )}
+          <div style={{ display: 'flex', justifyContent: 'center' }}>
+            <MediaControls
+              camOn={media.camOn}
+              micOn={media.micOn}
+              onToggleCam={media.toggleCam}
+              onToggleMic={media.toggleMic}
+              onLeave={() => setCamerasOn(false)}
+            />
+          </div>
         </div>
       )}
 

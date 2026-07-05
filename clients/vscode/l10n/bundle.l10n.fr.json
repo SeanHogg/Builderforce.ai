@@ -130,5 +130,7 @@
   "Active selection": "Sélection active",
   "Choose a file…": "Choisir un fichier…",
   "Add context from your workspace": "Ajouter du contexte depuis votre espace de travail",
-  "Chat name": "Nom de la conversation"
+  "Chat name": "Nom de la conversation",
+  "Waiting on your answer": "En attente de votre réponse",
+  "Agent is working…": "L’agent travaille…"
 }

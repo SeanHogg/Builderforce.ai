@@ -78,6 +78,9 @@ export const NAV_GROUPS: NavGroup[] = [
   // sub-tabs here — Voice opens as a Voice IDE project, not a separate menu item.
   { id: 'ide', labelKey: 'group.ide', icon: '💻', href: '/ide/dashboard', match: ['/ide'] },
   { id: 'workflows', labelKey: 'group.workflows', icon: '🔀', href: '/workflows', match: ['/workflows'] },
+  // Live video/audio collaboration: schedule + join standups, planning, retros,
+  // ad-hoc and direct calls; connect Google/Microsoft calendars.
+  { id: 'meetings', labelKey: 'group.meetings', icon: '📹', href: '/meetings', match: ['/meetings'] },
   {
     // "Talent / Workforce": people + agents (Workforce) AND the roster of roles and
     // external hires (Talent) share one destination. The Talent tab is the relocated

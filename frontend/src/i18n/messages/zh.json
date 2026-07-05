@@ -237,6 +237,11 @@
     "expandSidebar": "展开侧边栏",
     "collapseSidebar": "收起侧边栏",
     "closeMenu": "关闭菜单",
+    "bottom": {
+      "product": "产品",
+      "pricing": "价格",
+      "signIn": "登录"
+    },
     "group": {
       "dashboard": "仪表板",
       "brainstorm": "头脑风暴",
@@ -253,7 +258,8 @@
       "myProfile": "我的资料",
       "findWork": "寻找工作",
       "timecard": "工时卡",
-      "myDashboard": "我的仪表盘"
+      "myDashboard": "我的仪表盘",
+      "meetings": "会议"
     },
     "tab": {
       "projects": "项目",
@@ -1762,7 +1768,8 @@
     "closeResults": "关闭结果",
     "noResults": "尚无结果。",
     "overall": "总体评分",
-    "architectureNeedsRepo": "请先为此项目关联一个代码仓库。"
+    "architectureNeedsRepo": "请先为此项目关联一个代码仓库。",
+    "auditRunning": "正在运行…"
   },
   "projectDetails": {
     "tabs": {
@@ -5035,12 +5042,38 @@
     "off": "关",
     "connected": "学习中",
     "frozen": "已冻结",
-    "contributions": "目前已有 {count} 次学习贡献",
     "teacherLabel": "用前沿大模型来教",
     "teacherHint": "将顶尖模型（Opus、Mistral、GLM…）蒸馏进本项目的 Evermind——每次运行都从前沿模型的理想答案中学习，而不是原始运行文本。",
     "teacherNone": "无——仅从运行中学习",
     "teacherPaidOnly": "仅限付费套餐——教学会消耗前沿模型的 tokens。",
-    "errorGeneric": "出了点问题，请重试。"
+    "errorGeneric": "出了点问题，请重试。",
+    "loading": "加载中…",
+    "managerOnlyHint": "只有项目管理员可以更改这些设置。",
+    "notSetUp": "该项目的 Evermind 尚未设置。项目管理员可以启用它。",
+    "versionLabel": "版本",
+    "contributionsLabel": "已学习",
+    "pendingLabel": "排队中",
+    "lastLearnedLabel": "最近学习",
+    "neverLearned": "从未",
+    "teachTitle": "从对话记录中教学",
+    "teachHint": "粘贴对话记录或范例，立即将其贡献给模型。",
+    "teachPromptPlaceholder": "此内容回答的任务（可选）…",
+    "teachTextPlaceholder": "粘贴对话记录或范例文本…",
+    "teachCta": "教学",
+    "teaching": "教学中…",
+    "taught": "已加入学习队列。",
+    "flushCta": "立即学习",
+    "flushing": "学习中…",
+    "flushedNone": "暂无排队等待学习的内容。",
+    "flushedN": "已将 {merged} 项贡献合并到 v{version}。",
+    "inspectTitle": "最近学习内容",
+    "inspectEmpty": "尚无学习内容。运行和教学将显示在此处。",
+    "kindText": "运行",
+    "kindDelta": "增量",
+    "deltaEntry": "由智能体运行贡献的权重增量。",
+    "versionTag": "v{version}",
+    "weightTag": "×{weight}",
+    "refresh": "刷新"
   },
   "manager": {
     "title": "AI 经理",
@@ -6095,5 +6128,292 @@
       "code_change": "代码更改"
     },
     "syncFailed": "同步智能体失败"
+  },
+  "attention": {
+    "running": "运行中",
+    "awaiting": "待回答",
+    "needsYou": "{count} 项待您回答",
+    "runningCount": "{count} 项运行中"
+  },
+  "onboarding": {
+    "welcome": "欢迎使用 Builderforce",
+    "subtitle": "只需几个简单步骤即可完成设置。",
+    "closeSetup": "关闭设置",
+    "createWorkspaceFirst": "请先创建工作区",
+    "needProject": "请先创建项目，然后此步骤才会应用于该项目。",
+    "back": "← 返回",
+    "stepOf": "第 {current} 步，共 {total} 步",
+    "completeFirst": "请先完成此步骤",
+    "steps": {
+      "workspace": {
+        "label": "创建工作区"
+      },
+      "project": {
+        "label": "创建项目"
+      },
+      "ticketing": {
+        "label": "连接工单系统"
+      },
+      "repos": {
+        "label": "连接代码库"
+      },
+      "audit": {
+        "label": "运行审计"
+      },
+      "roster": {
+        "label": "推荐团队"
+      },
+      "install": {
+        "label": "安装代理"
+      },
+      "invite": {
+        "label": "邀请团队"
+      }
+    },
+    "ticketing": {
+      "intro": "连接你的工作跟踪系统，让工单双向同步。你可以稍后在“集成”中完成身份验证。",
+      "loading": "正在加载提供商…",
+      "errLoad": "无法加载提供商。",
+      "errConnect": "无法连接该提供商。",
+      "connected": "已连接",
+      "connecting": "连接中…",
+      "connect": "连接",
+      "finishLater": "可选 — 你随时可以在“集成”中连接或更改。"
+    },
+    "repos": {
+      "intro": "附加一个或多个代码库以进行审计和构建。私有库的访问将在“集成”中完成。",
+      "errAdd": "无法附加该代码库。",
+      "default": "默认",
+      "makeDefault": "设为默认",
+      "remove": "移除",
+      "provider": "提供商",
+      "owner": "所有者或组织",
+      "ownerPlaceholder": "所有者",
+      "repo": "代码库",
+      "repoPlaceholder": "仓库",
+      "add": "附加",
+      "adding": "正在附加…",
+      "privateHint": "对于私有代码库，请在“集成”中连接凭据，以便审计可以读取代码。"
+    },
+    "audit": {
+      "intro": "对你的项目运行系统审计。每项审计都会即时生成报告、为安全代理创建工单，并在深度审查完成后通知你。默认已选择 SOC 2。",
+      "running": "运行中…",
+      "started": "已开始",
+      "failed": "失败",
+      "runningAll": "正在运行审计…",
+      "run": "运行所选审计",
+      "viewReports": "查看报告",
+      "notifyHint": "每份报告准备就绪时我们会通知你。你可以离开此页面 — 审计会继续运行。"
+    }
+  },
+  "soc2": {
+    "seo": {
+      "title": "SOC 2 就绪审计 — 注册时自动运行 | Builderforce",
+      "description": "在注册时对你的 GitHub、GitLab、Bitbucket 和 Azure DevOps 代码库自动运行 SOC 2 就绪审计。获得映射到通用准则（CC1–CC9）的评分报告，以及由代理自动创建的修复 PR。",
+      "ogTitle": "自动化 SOC 2 就绪审计"
+    },
+    "eyebrow": "SOC 2 · 系统审计",
+    "titleLead": "一次完整的 SOC 2 审计，",
+    "titleAccent": "就在你注册的那一刻",
+    "sub": "创建项目，连接你的工单系统和代码库，Builderforce 就会为安全代理创建工单，依据 SOC 2 通用准则审计你的代码，然后开启修复 PR。你得到的是评分报告，而不是一张清单。",
+    "ctaPrimary": "开始审计",
+    "ctaSecondary": "查看免费诊断",
+    "visualSection": {
+      "title": "你的报告长什么样",
+      "sub": "一个总体就绪评分，每个通用准则族被评为通过 / 部分 / 缺口，具体的发现，以及一个已经开启的修复拉取请求。"
+    },
+    "visual": {
+      "title": "SOC 2 就绪度",
+      "scoreLabel": "已定义",
+      "criteriaHeading": "通用准则",
+      "cc": {
+        "cc1": "控制环境",
+        "cc2": "沟通与政策",
+        "cc6": "访问与密钥卫生",
+        "cc7": "系统运营",
+        "cc8": "变更管理"
+      },
+      "state": {
+        "pass": "通过",
+        "partial": "部分",
+        "gap": "缺口"
+      },
+      "findingsHeading": "发现",
+      "findings": [
+        "已扫描 3 个代码库",
+        "标记 2 处密钥",
+        "1 个代码库缺少分支保护",
+        "2 个代码库缺少 SECURITY.md"
+      ],
+      "prBadge": "已开启修复 PR"
+    },
+    "criteria": {
+      "title": "映射到通用准则",
+      "sub": "每一处发现都会归入某个 SOC 2 通用准则族，让你的报告以审计师的思维方式呈现。",
+      "items": [
+        {
+          "ref": "CC1",
+          "label": "控制环境 — 每个代码库的责任归属和 CODEOWNERS。"
+        },
+        {
+          "ref": "CC2",
+          "label": "沟通与政策 — SECURITY.md 和贡献者指南。"
+        },
+        {
+          "ref": "CC3–CC5",
+          "label": "风险评估与控制活动 — 默认分支上的 CI 关卡。"
+        },
+        {
+          "ref": "CC6",
+          "label": "逻辑访问与密钥卫生 — 不提交任何密钥或凭据。"
+        },
+        {
+          "ref": "CC7",
+          "label": "系统运营 — 固定依赖版本和可复现构建。"
+        },
+        {
+          "ref": "CC8",
+          "label": "变更管理 — 合并前的测试和强制评审。"
+        },
+        {
+          "ref": "CC9",
+          "label": "供应商与风险缓解 — 有文档记录的安全披露流程。"
+        }
+      ]
+    },
+    "how": {
+      "title": "审计如何运行",
+      "sub": "入门向导把注册变成一份交付的报告。",
+      "steps": [
+        {
+          "title": "创建项目",
+          "desc": "在设置向导中为项目命名 — 它将成为审计报告的归属。"
+        },
+        {
+          "title": "连接代码库和工单",
+          "desc": "附加 GitHub、GitLab、Bitbucket 或 Azure DevOps 代码库，以及你的 Jira / Monday 看板。"
+        },
+        {
+          "title": "运行审计",
+          "desc": "为安全代理创建工单，它会扫描你的代码库并开启修复 PR。"
+        },
+        {
+          "title": "阅读报告",
+          "desc": "报告就绪时会通知你 — 在你的项目上打开评分的 SOC 2 报告。"
+        }
+      ]
+    },
+    "family": {
+      "title": "一个流程，五项系统审计",
+      "sub": "同一个一键审计覆盖你工程组织的每个维度。",
+      "items": [
+        {
+          "icon": "🛡️",
+          "name": "SOC 2 就绪度",
+          "desc": "代码库和控制项映射到通用准则（CC1–CC9）。"
+        },
+        {
+          "icon": "🏛️",
+          "name": "架构",
+          "desc": "设计原则遵循度：DRY、SOLID、DDD 和模式。"
+        },
+        {
+          "icon": "✅",
+          "name": "质量",
+          "desc": "跨代码库的测试、CI 和构建完整性信号。"
+        },
+        {
+          "icon": "🧭",
+          "name": "产品愿景与路线图",
+          "desc": "目标、关键结果、路线图和有文档的愿景。"
+        },
+        {
+          "icon": "⚖️",
+          "name": "隐私与数据法",
+          "desc": "从代码得出的 GDPR、CCPA/CPRA 和 CAN-SPAM 就绪度。"
+        }
+      ]
+    },
+    "faqTitle": "常见问题",
+    "faq": [
+      {
+        "question": "这是 SOC 2 认证吗？",
+        "answer": "不是 — 这是就绪审计。它生成一份自动、有证据支撑的报告，映射到 SOC 2 通用准则，让你在正式的 Type I 或 Type II 审查之前清楚知道要补齐什么。"
+      },
+      {
+        "question": "审计如何在注册时运行？",
+        "answer": "入门向导会创建项目、连接你的工单系统和代码库，然后为安全代理创建工单。审计即时生成报告，并派发代理开启修复拉取请求 — 就绪时会通知你。"
+      },
+      {
+        "question": "它能扫描哪些代码库？",
+        "answer": "GitHub、GitLab、Bitbucket 和 Azure DevOps — 每个项目一个或多个。令牌保留在服务器端；审计读取代码库树以得出其信号。"
+      },
+      {
+        "question": "还包含哪些审计？",
+        "answer": "同一流程还会运行架构分析、质量审计、产品愿景与路线图审计，以及隐私与数据法（GDPR / CCPA / CAN-SPAM）审计 — 每个都是评分的项目报告。"
+      }
+    ],
+    "finalCta": {
+      "title": "今天就获取你的 SOC 2 报告",
+      "sub": "注册、连接一个代码库，你的第一份就绪报告几分钟内就会送达。",
+      "button": "免费开始"
+    },
+    "relatedHeading": "相关阅读"
+  },
+  "meetings": {
+    "title": "会议",
+    "subtitle": "安排并加入与团队的实时视频和音频会话。",
+    "startNow": "立即开始",
+    "startNowTitle": "立即开始会议",
+    "schedule": "安排",
+    "scheduleTitle": "安排会议",
+    "loading": "加载中…",
+    "liveAndUpcoming": "进行中和即将开始",
+    "noMeetings": "暂无会议。立即开始或安排一场会议。",
+    "fromYourCalendar": "来自你的日历",
+    "anytime": "随时",
+    "liveNow": "进行中",
+    "join": "加入",
+    "joinEarly": "提前加入",
+    "joinWithCamera": "开启摄像头加入",
+    "cameraOn": "摄像头已开启",
+    "cameraError": "摄像头/麦克风不可用：{error}",
+    "attendeeCount": "{count, plural, other {# 位参与者}}",
+    "calendarConnected": "日历已连接。",
+    "calendarConnectFailed": "无法连接日历。",
+    "calendarsTitle": "日历",
+    "calendarsSubtitle": "连接日历以安排会议并查看即将到来的事件。",
+    "noCalendarProviders": "未配置任何日历服务。",
+    "connected": "已连接",
+    "disconnect": "断开连接",
+    "connectProvider": "连接 {provider}",
+    "kind": "类型",
+    "kind_standup": "站会",
+    "kind_planning": "规划",
+    "kind_retrospective": "回顾",
+    "kind_adhoc": "临时",
+    "kind_direct": "直接通话",
+    "titleLabel": "标题",
+    "scheduleForLater": "安排到稍后",
+    "camerasEnabled": "启用摄像头",
+    "startTime": "开始时间",
+    "duration": "时长",
+    "minutes": "{count} 分钟",
+    "invite": "邀请",
+    "noTeammates": "暂无可邀请的队友。",
+    "agent": "智能体",
+    "cancel": "取消",
+    "you": "你",
+    "noOneOnCamera": "还没有人开启摄像头。",
+    "muteMic": "静音麦克风",
+    "unmuteMic": "取消静音",
+    "stopCamera": "关闭摄像头",
+    "startCamera": "开启摄像头",
+    "leave": "离开",
+    "joining": "正在加入…",
+    "connecting": "连接中…",
+    "liveCount": "{count, plural, other {# 人在线}}",
+    "participants": "参与者",
+    "endForAll": "为所有人结束"
   }
 }

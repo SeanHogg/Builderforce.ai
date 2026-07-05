@@ -32,21 +32,28 @@ const ghostBtn: React.CSSProperties = {
   background: 'transparent', color: 'var(--accent)', border: '1px solid var(--accent)', whiteSpace: 'nowrap', cursor: 'pointer',
 };
 
-interface DiagnosticRow { id: string; name: string; tagline: string; icon: string; isArchitecture: boolean }
+type RowKind = 'architecture' | 'audit' | 'tool';
+interface DiagnosticRow { id: string; name: string; tagline: string; icon: string; kind: RowKind }
 
 /**
- * Project diagnostics: one list of diagnostics (architecture analysis is just
- * another row), each runnable against the project, with a Results button that
- * opens the shared slide-out — combined at the top, or filtered to one row.
+ * Project diagnostics: one list of diagnostics (architecture analysis + the
+ * system audits — SOC 2, Quality, PM Vision, Privacy — are run-only rows; the
+ * registered questionnaire tools link to the runner), each runnable against the
+ * project, with a Results button that opens the shared slide-out.
+ *
+ * `initialAuditId` (from a notification deep-link) auto-opens that diagnostic's
+ * results on mount.
  */
-export function ProjectDiagnosticsTab({ projectId }: { projectId: number }) {
+export function ProjectDiagnosticsTab({ projectId, initialAuditId }: { projectId: number; initialAuditId?: string | null }) {
   const t = useTranslations('projectDiagnostics');
   const [score, setScore] = useState<ProjectScore | null>(null);
   const [tools, setTools] = useState<ToolSummary[]>([]);
+  const [audits, setAudits] = useState<SystemAuditSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [archState, setArchState] = useState<'idle' | 'running' | 'started' | 'error'>('idle');
   const [archMsg, setArchMsg] = useState('');
+  const [auditState, setAuditState] = useState<Record<string, 'idle' | 'running' | 'started' | 'error'>>({});
   const [results, setResults] = useState<{ open: boolean; filterToolId: string | null }>({ open: false, filterToolId: null });
 
   const loadScore = useCallback(async () => {
@@ -59,9 +66,17 @@ export function ProjectDiagnosticsTab({ projectId }: { projectId: number }) {
 
   useEffect(() => {
     setLoading(true);
-    Promise.all([loadScore(), toolsApi.list().then(setTools).catch(() => {})])
-      .finally(() => setLoading(false));
+    Promise.all([
+      loadScore(),
+      toolsApi.list().then(setTools).catch(() => {}),
+      toolsApi.listAudits().then(setAudits).catch(() => {}),
+    ]).finally(() => setLoading(false));
   }, [loadScore]);
+
+  // Deep-link: a notification "View report" opens that audit's results directly.
+  useEffect(() => {
+    if (initialAuditId) setResults({ open: true, filterToolId: initialAuditId });
+  }, [initialAuditId]);
 
   const runArchitecture = async () => {
     setArchState('running');
@@ -77,11 +92,25 @@ export function ProjectDiagnosticsTab({ projectId }: { projectId: number }) {
     }
   };
 
-  // Architecture first, then the registered tools — one uniform list.
+  const runAudit = async (auditId: string) => {
+    setAuditState((s) => ({ ...s, [auditId]: 'running' }));
+    try {
+      await toolsApi.runAudit(auditId, projectId);
+      setAuditState((s) => ({ ...s, [auditId]: 'started' }));
+      await loadScore();
+    } catch {
+      setAuditState((s) => ({ ...s, [auditId]: 'error' }));
+    }
+  };
+
+  // Architecture first, then the other system audits, then the registered tools —
+  // one uniform list. Architecture is registered as an audit too, but keeps its
+  // dedicated repo-analysis run path, so it's excluded from the generic audit rows.
   const rows = useMemo<DiagnosticRow[]>(() => [
-    { id: ARCHITECTURE_DIAGNOSTIC_ID, name: t('architectureTitle'), tagline: t('architectureDesc'), icon: '📐', isArchitecture: true },
-    ...tools.map((tool) => ({ id: tool.id, name: tool.name, tagline: tool.tagline, icon: tool.icon, isArchitecture: false })),
-  ], [tools, t]);
+    { id: ARCHITECTURE_DIAGNOSTIC_ID, name: t('architectureTitle'), tagline: t('architectureDesc'), icon: '📐', kind: 'architecture' },
+    ...audits.filter((a) => a.id !== ARCHITECTURE_DIAGNOSTIC_ID).map((a) => ({ id: a.id, name: a.name, tagline: a.blurb, icon: a.icon, kind: 'audit' as RowKind })),
+    ...tools.map((tool) => ({ id: tool.id, name: tool.name, tagline: tool.tagline, icon: tool.icon, kind: 'tool' as RowKind })),
+  ], [audits, tools, t]);
 
   const hasRun = useCallback((toolId: string) => score?.diagnostics.some((d) => d.toolId === toolId) ?? false, [score]);
   const anyRun = (score?.diagnostics.length ?? 0) > 0;
@@ -132,7 +161,7 @@ export function ProjectDiagnosticsTab({ projectId }: { projectId: number }) {
                     {t('results')}
                   </button>
                 )}
-                {row.isArchitecture ? (
+                {row.kind === 'architecture' ? (
                   <button
                     type="button"
                     onClick={runArchitecture}
@@ -140,6 +169,15 @@ export function ProjectDiagnosticsTab({ projectId }: { projectId: number }) {
                     style={{ ...primaryBtn, opacity: archState === 'running' ? 0.6 : 1, cursor: archState === 'running' ? 'not-allowed' : 'pointer' }}
                   >
                     {archState === 'running' ? t('architectureRunning') : t('run')} →
+                  </button>
+                ) : row.kind === 'audit' ? (
+                  <button
+                    type="button"
+                    onClick={() => runAudit(row.id)}
+                    disabled={auditState[row.id] === 'running'}
+                    style={{ ...primaryBtn, opacity: auditState[row.id] === 'running' ? 0.6 : 1, cursor: auditState[row.id] === 'running' ? 'not-allowed' : 'pointer' }}
+                  >
+                    {auditState[row.id] === 'running' ? t('auditRunning') : t('run')} →
                   </button>
                 ) : (
                   <Link href={`/tools/${row.id}?project=${projectId}`} style={primaryBtn}>{t('run')} →</Link>

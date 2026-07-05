@@ -3,6 +3,7 @@ import { BfBrainChat, listBrainChats, listAgentPool } from "./bfApi";
 import { SECRET_KEY } from "./gateway";
 import { getSelectedProject, onProjectChange } from "./projectState";
 import { getProjectNames, projectLabel } from "./projectNames";
+import { attentionFor, attentionIcon, attentionDescriptionPrefix } from "./attention";
 
 /**
  * The sidebar history list (Activity Bar → BuilderForce → Sessions). Each item is a
@@ -74,6 +75,18 @@ export class SessionsTreeProvider implements vscode.TreeDataProvider<BfBrainChat
     } else {
       item.iconPath = new vscode.ThemeIcon("comment-discussion");
       item.tooltip = chat.title;
+    }
+    // Live state wins the icon slot: a running or question-blocked session should
+    // read at a glance while the user multitasks across many open sessions. The
+    // participant initials stay in the description, so no roster context is lost.
+    const attn = attentionFor("chat", chat.id);
+    if (attn) {
+      item.iconPath = attentionIcon(attn);
+      description = `${attentionDescriptionPrefix(attn)}${description}`;
+      const state = attn === "awaiting_input"
+        ? vscode.l10n.t("Waiting on your answer")
+        : vscode.l10n.t("Agent is working…");
+      item.tooltip = new vscode.MarkdownString(`${chat.title}\n\n**${state}**`);
     }
     item.description = description;
     item.contextValue = "builderforceSession";

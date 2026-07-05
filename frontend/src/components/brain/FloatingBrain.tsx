@@ -13,18 +13,25 @@
 
 import { useEffect, useState } from 'react';
 import { usePathname } from 'next/navigation';
+import { useTranslations } from 'next-intl';
 import Link from 'next/link';
 import { BrainPanel } from './BrainPanel';
 import { MigrationPanelHost } from '@/components/integrations/MigrationPanelHost';
 import { useBrainContext, takePendingPrompt } from '@/lib/brain';
 import { pendingPromptsApi } from '@/lib/builderforceApi';
+import { useAttention } from '@/lib/useAttention';
 import { useAuth } from '@/lib/AuthContext';
 import { useModalDismiss } from '@/hooks/useModalDismiss';
 
 export function FloatingBrain() {
   const pathname = usePathname();
+  const tAttn = useTranslations('attention');
   const { hasTenant } = useAuth();
   const { open, setOpen, projectId, viewingProjectId, modality, extraSystem, initialChatId, initialPrompt: ctxInitialPrompt } = useBrainContext();
+  // Tenant-wide "needs you" signal for the launcher badge — only while the drawer
+  // is closed (when open, BrainPanel's own useAttention drives the chat-row dots,
+  // so we never run two pollers at once).
+  const { counts } = useAttention(undefined, hasTenant && !open);
   const [pendingPrompt, setPendingPrompt] = useState<string | undefined>(undefined);
   // A page-published seed (e.g. the IDE `?prompt=`) wins over the sign-in handoff.
   const initialPrompt = ctxInitialPrompt ?? pendingPrompt;
@@ -95,6 +102,23 @@ export function FloatingBrain() {
             className="brain-launcher"
           >
             🧠
+            {counts.awaiting > 0 ? (
+              <span
+                className="brain-launcher-badge"
+                role="status"
+                aria-label={tAttn('needsYou', { count: counts.awaiting })}
+                title={tAttn('needsYou', { count: counts.awaiting })}
+              >
+                {counts.awaiting}
+              </span>
+            ) : counts.running > 0 ? (
+              <span
+                className="brain-launcher-dot"
+                role="status"
+                aria-label={tAttn('runningCount', { count: counts.running })}
+                title={tAttn('runningCount', { count: counts.running })}
+              />
+            ) : null}
           </button>
           <style>{`
             .brain-launcher {
@@ -114,6 +138,41 @@ export function FloatingBrain() {
               display: flex;
               align-items: center;
               justify-content: center;
+            }
+            /* "A person must answer" — amber count badge, pulsing so it's noticed
+               even when the drawer is closed and you're multitasking elsewhere. */
+            .brain-launcher-badge {
+              position: absolute;
+              top: -2px;
+              right: -2px;
+              min-width: 20px;
+              height: 20px;
+              padding: 0 5px;
+              border-radius: 10px;
+              background: var(--warning, #d97706);
+              color: #fff;
+              font-size: 11px;
+              font-weight: 700;
+              line-height: 20px;
+              text-align: center;
+              box-shadow: 0 0 0 2px var(--bg-base, #0b0b0b);
+              animation: agentPulse 1.4s ease-in-out infinite;
+            }
+            /* Background activity (something running, nothing blocked) — a quiet
+               coral dot, no count. */
+            .brain-launcher-dot {
+              position: absolute;
+              top: 2px;
+              right: 2px;
+              width: 12px;
+              height: 12px;
+              border-radius: 50%;
+              background: var(--coral-bright, #f4726e);
+              box-shadow: 0 0 0 2px var(--bg-base, #0b0b0b);
+              animation: agentPulse 1.4s ease-in-out infinite;
+            }
+            @media (prefers-reduced-motion: reduce) {
+              .brain-launcher-badge, .brain-launcher-dot { animation: none; }
             }
             /* The mobile bottom nav is a fixed 56px bar (shown <768px). Lift the
                launcher above it so it never covers the menu, and clear the iOS

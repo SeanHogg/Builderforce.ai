@@ -67,10 +67,14 @@ export interface InitData {
    *  the host decides via `init` which surface this panel is — the Brain chat (default),
    *  Project 360, or a list-shaped project page (Backlog / PRDs) — same bundle, same
    *  transport, one code path. */
-  view?: 'brain' | 'project360' | 'backlog' | 'prd' | 'roadmap' | 'retros' | 'poker';
+  view?: 'brain' | 'project360' | 'backlog' | 'prd' | 'roadmap' | 'retros' | 'poker' | 'evermind';
   /** The sidebar's active BuilderForce project — injected into the system prompt so
    *  the Brain scopes platform tools to it, and used to scope new chats. */
   project?: { id: number; name: string };
+  /** Whether the signed-in user can change project settings (manager) — gates the
+   *  Evermind console's write controls (disabled, not hidden). Best-effort from the
+   *  host's workspace role; the API enforces authoritatively regardless. */
+  canManage?: boolean;
   /** `projectId → name` for every known project, so the header can name the project
    *  an EXISTING chat belongs to (not just the sidebar's active one). Keys are
    *  stringified ids (JSON). Best-effort — an unknown id falls back to "No project". */

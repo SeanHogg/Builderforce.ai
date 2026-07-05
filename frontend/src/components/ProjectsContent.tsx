@@ -64,6 +64,7 @@ export function ProjectsContent({ limit, viewAllHref, onCount }: ProjectsContent
   const [error, setError] = useState<string | null>(null);
   const [detailsProject, setDetailsProject] = useState<Project | null>(null);
   const [detailsInitialTab, setDetailsInitialTab] = useState<ProjectPanelTab>('analytics');
+  const [detailsInitialAudit, setDetailsInitialAudit] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<ProjectsView>('card');
   const [selectedAgentHost, setSelectedAgentHost] = useState<AgentHost | null>(null);
   const [planError, setPlanError] = useState<PlanLimitError | null>(null);
@@ -98,6 +99,20 @@ export function ProjectsContent({ limit, viewAllHref, onCount }: ProjectsContent
   useEffect(() => {
     if (searchParams.get('create') === '1') setShowForm(true);
   }, [searchParams]);
+
+  // Deep-link (e.g. an audit-complete notification): ?project=<id>&panel=diagnostics&audit=<id>
+  // opens that project's details panel on the given tab with the audit result
+  // pre-opened. Runs once the list is loaded so the project can be resolved.
+  useEffect(() => {
+    const pid = searchParams.get('project');
+    const panel = searchParams.get('panel');
+    if (!pid || !panel || projects.length === 0) return;
+    const proj = projects.find((p) => String(p.id) === pid);
+    if (!proj) return;
+    setDetailsInitialTab(panel as ProjectPanelTab);
+    setDetailsInitialAudit(searchParams.get('audit'));
+    setDetailsProject(proj);
+  }, [searchParams, projects]);
 
   // Surface the count to the parent (tab badge) instead of rendering it here.
   // Reports the SCOPED count so the badge matches what is shown; re-fires on
@@ -367,7 +382,8 @@ export function ProjectsContent({ limit, viewAllHref, onCount }: ProjectsContent
           project={detailsProject}
           open={!!detailsProject}
           initialTab={detailsInitialTab}
-          onClose={() => setDetailsProject(null)}
+          initialAuditId={detailsInitialAudit}
+          onClose={() => { setDetailsProject(null); setDetailsInitialAudit(null); }}
           onProjectUpdate={(updated) => {
             // The PATCH response carries only the editable domain fields, so MERGE
             // it over the list row instead of replacing it — otherwise the derived

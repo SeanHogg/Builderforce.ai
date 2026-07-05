@@ -3,6 +3,7 @@
   "view.sessions": "会话",
   "view.project": "项目与任务",
   "view.insights": "洞察",
+  "view.evermind": "Evermind",
   "view.diagnostics": "诊断",
   "welcome.diagnostics": "登录并选择一个项目，即可运行安全与合规诊断（SOC 2、架构、质量、隐私与数据法规）。\n[登录](command:builderforce.signIn)",
   "welcome.sessions": "开始与 BuilderForce Brain 对话。\n[新建对话](command:builderforce.newSession)\n\nBrain 在编辑器中打开 —— 与网页应用相同的统一对话，方便你并排查看更改。",

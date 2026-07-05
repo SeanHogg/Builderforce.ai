@@ -144,7 +144,7 @@ export function OnboardingStepper({
 
   const handleNext = () => {
     markComplete(activeStep);
-    if (activeStep < STEPS.length - 1) {
+    if (activeStep < STEP_IDS.length - 1) {
       setActiveStep((s) => s + 1);
     }
   };

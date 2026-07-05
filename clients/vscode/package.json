@@ -2,7 +2,7 @@
   "name": "builderforce-ai",
   "displayName": "BuilderForce.ai",
   "description": "%extension.description%",
-  "version": "2026.7.33",
+  "version": "2026.7.36",
   "publisher": "builderforce",
   "license": "MIT",
   "author": "Sean Hogg",
@@ -69,6 +69,11 @@
         {
           "id": "builderforce.insights",
           "name": "%view.insights%"
+        },
+        {
+          "id": "builderforce.evermind",
+          "type": "webview",
+          "name": "%view.evermind%"
         },
         {
           "id": "builderforce.diagnostics",
