@@ -259,7 +259,8 @@
       "findWork": "Trouver du travail",
       "timecard": "Feuille de temps",
       "myDashboard": "Mon tableau de bord",
-      "meetings": "Réunions"
+      "meetings": "Réunions",
+      "myWorkspace": "Mon espace"
     },
     "tab": {
       "projects": "Projets",
@@ -747,7 +748,9 @@
     "view": "Voir",
     "typeSecurity": "Sécurité",
     "clearanceNeeded": "Autorisation requise",
-    "clearanceNeededBody": "Ceci est un élément de sécurité restreint. Vous n'avez pas l'autorisation d'en voir les détails. Demandez l'accès à un propriétaire ou responsable de l'espace."
+    "clearanceNeededBody": "Ceci est un élément de sécurité restreint. Vous n'avez pas l'autorisation d'en voir les détails. Demandez l'accès à un propriétaire ou responsable de l'espace.",
+    "typeProduct": "Produit",
+    "typeDesign": "Design"
   },
   "legal": {
     "termsTitle": "Conditions d'utilisation",
@@ -1947,7 +1950,9 @@
     },
     "builtinKind": {
       "validator": "Validateur",
-      "security": "Sécurité"
+      "security": "Sécurité",
+      "product_manager": "Produit",
+      "designer": "Designer"
     },
     "teams": {
       "heading": "Équipes",
@@ -7127,5 +7132,96 @@
     "featOauth": "Connexion OAuth (Google, GitHub, LinkedIn, Microsoft)",
     "featFree": "Aucune carte bancaire requise — gratuit pour toujours",
     "commonQuestions": "Questions fréquentes"
+  },
+  "gigs": {
+    "publish": {
+      "section": "Place de marché",
+      "action": "Publier sur la place de marché",
+      "published": "Publié",
+      "publishedHint": "Ouvert au recrutement sur la place de marché.",
+      "unpublish": "Retirer",
+      "unpublishing": "Retrait…",
+      "modalTitle": "Publier sur la place de marché",
+      "modalSubtitle": "Ouvrez cet élément de travail aux offres des freelances et agences.",
+      "postingType": "Type de publication",
+      "engagementType": "Type de mission",
+      "requirements": "Exigences",
+      "requirementsPlaceholder": "Décrivez ce qu’une bonne proposition doit couvrir…",
+      "rateMin": "Tarif min.",
+      "rateMax": "Tarif max.",
+      "rateHint": "Fourchette de budget facultative (horaire ou forfait).",
+      "visibility": "Visibilité",
+      "publishBtn": "Publier",
+      "publishing": "Publication…",
+      "cancel": "Annuler",
+      "publishError": "Impossible de publier cet élément de travail."
+    },
+    "postingType": {
+      "project_bid": "Appel d’offres",
+      "design": "Design",
+      "fte": "Poste à temps plein"
+    },
+    "engagementType": {
+      "fixed_bid": "Forfait",
+      "hourly": "À l’heure",
+      "fte": "Temps plein"
+    },
+    "visibility": {
+      "public": "Public",
+      "private": "Privé"
+    },
+    "proposal": {
+      "evaluate": "Évaluer avec l’IA",
+      "evaluating": "Évaluation…",
+      "shortlist": "Présélectionner",
+      "shortlisted": "Présélectionné",
+      "decline": "Refuser",
+      "declineSend": "Envoyer le refus",
+      "declineReasonPlaceholder": "Ajoutez un mot courtois (facultatif)…"
+    },
+    "candidate": {
+      "shortlist": "Faire avancer le candidat",
+      "shortlisted": "En progression",
+      "reject": "Écarter le candidat"
+    },
+    "meeting": {
+      "scheduleReview": "Planifier une revue",
+      "scheduleInterview": "Planifier un entretien",
+      "reviewTitle": "Revue de mission",
+      "interviewTitle": "Entretien de candidat"
+    },
+    "deliverables": {
+      "heading": "Livrables",
+      "empty": "Aucun livrable soumis pour le moment.",
+      "evaluate": "Évaluer avec l’IA",
+      "accept": "Accepter",
+      "requestChanges": "Demander des modifications",
+      "status": {
+        "submitted": "Soumis",
+        "in_review": "En revue",
+        "accepted": "Accepté",
+        "changes_requested": "Modifications demandées"
+      }
+    },
+    "workspace": {
+      "title": "Mon espace de travail",
+      "subtitle": "Livrez le travail pour les équipes qui vous ont recruté.",
+      "selectEngagement": "Sélectionnez une mission",
+      "noEngagements": "Vous n’avez pas encore accès à un tableau. Dès qu’un client vous donne accès, vos missions apparaissent ici.",
+      "tasks": "Tâches",
+      "noTasks": "Aucune tâche sur ce tableau pour l’instant.",
+      "requestReview": "Demander une revue",
+      "requestingReview": "Demande…",
+      "reviewRequested": "Revue demandée",
+      "presentProposal": "Présenter une proposition",
+      "proposalTitle": "Titre",
+      "proposalBodyPlaceholder": "Décrivez votre livrable ou votre approche…",
+      "submit": "Envoyer",
+      "submitting": "Envoi…",
+      "myDeliverables": "Mes livrables",
+      "noDeliverables": "Vous n’avez encore soumis aucun livrable.",
+      "loadError": "Échec du chargement de votre espace de travail.",
+      "loading": "Chargement…"
+    }
   }
 }

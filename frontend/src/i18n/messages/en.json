@@ -259,7 +259,8 @@
       "findWork": "Find Work",
       "timecard": "Timecard",
       "myDashboard": "My Dashboard",
-      "meetings": "Meetings"
+      "meetings": "Meetings",
+      "myWorkspace": "My Workspace"
     },
     "tab": {
       "projects": "Projects",
@@ -747,7 +748,9 @@
     "view": "View",
     "typeSecurity": "Security",
     "clearanceNeeded": "Clearance needed",
-    "clearanceNeededBody": "This is a restricted security item. You don’t have clearance to view its details. Ask a workspace owner or manager for access."
+    "clearanceNeededBody": "This is a restricted security item. You don’t have clearance to view its details. Ask a workspace owner or manager for access.",
+    "typeProduct": "Product",
+    "typeDesign": "Design"
   },
   "legal": {
     "termsTitle": "Terms of Use",
@@ -1947,7 +1950,9 @@
     },
     "builtinKind": {
       "validator": "Validator",
-      "security": "Security"
+      "security": "Security",
+      "product_manager": "Product",
+      "designer": "Designer"
     },
     "teams": {
       "heading": "Teams",
@@ -7127,5 +7132,96 @@
     "featOauth": "OAuth sign-in (Google, GitHub, LinkedIn, Microsoft)",
     "featFree": "No credit card required — free forever",
     "commonQuestions": "Common Questions"
+  },
+  "gigs": {
+    "publish": {
+      "section": "Marketplace",
+      "action": "Publish to Marketplace",
+      "published": "Published",
+      "publishedHint": "Open for hire on the marketplace.",
+      "unpublish": "Unpublish",
+      "unpublishing": "Unpublishing…",
+      "modalTitle": "Publish to Marketplace",
+      "modalSubtitle": "Open this work item for freelancers and agencies to bid on.",
+      "postingType": "Posting type",
+      "engagementType": "Engagement type",
+      "requirements": "Requirements",
+      "requirementsPlaceholder": "Describe what a strong proposal must cover…",
+      "rateMin": "Min rate",
+      "rateMax": "Max rate",
+      "rateHint": "Optional budget range (per hour or fixed).",
+      "visibility": "Visibility",
+      "publishBtn": "Publish",
+      "publishing": "Publishing…",
+      "cancel": "Cancel",
+      "publishError": "Could not publish this work item."
+    },
+    "postingType": {
+      "project_bid": "Project bid",
+      "design": "Design",
+      "fte": "Full-time role"
+    },
+    "engagementType": {
+      "fixed_bid": "Fixed bid",
+      "hourly": "Hourly",
+      "fte": "Full-time"
+    },
+    "visibility": {
+      "public": "Public",
+      "private": "Private"
+    },
+    "proposal": {
+      "evaluate": "Evaluate with AI",
+      "evaluating": "Evaluating…",
+      "shortlist": "Shortlist",
+      "shortlisted": "Shortlisted",
+      "decline": "Decline",
+      "declineSend": "Send decline",
+      "declineReasonPlaceholder": "Add a courteous note (optional)…"
+    },
+    "candidate": {
+      "shortlist": "Advance candidate",
+      "shortlisted": "Advancing",
+      "reject": "Reject candidate"
+    },
+    "meeting": {
+      "scheduleReview": "Schedule review",
+      "scheduleInterview": "Schedule interview",
+      "reviewTitle": "Gig review",
+      "interviewTitle": "Candidate interview"
+    },
+    "deliverables": {
+      "heading": "Deliverables",
+      "empty": "No deliverables submitted yet.",
+      "evaluate": "Evaluate with AI",
+      "accept": "Accept",
+      "requestChanges": "Request changes",
+      "status": {
+        "submitted": "Submitted",
+        "in_review": "In review",
+        "accepted": "Accepted",
+        "changes_requested": "Changes requested"
+      }
+    },
+    "workspace": {
+      "title": "My Workspace",
+      "subtitle": "Deliver work for the teams that hired you.",
+      "selectEngagement": "Select an engagement",
+      "noEngagements": "You have no board access yet. Once a client grants access, your engagements appear here.",
+      "tasks": "Tasks",
+      "noTasks": "No tasks on this board yet.",
+      "requestReview": "Request review",
+      "requestingReview": "Requesting…",
+      "reviewRequested": "Review requested",
+      "presentProposal": "Present a proposal",
+      "proposalTitle": "Title",
+      "proposalBodyPlaceholder": "Describe your deliverable or approach…",
+      "submit": "Submit",
+      "submitting": "Submitting…",
+      "myDeliverables": "My deliverables",
+      "noDeliverables": "You haven't submitted any deliverables yet.",
+      "loadError": "Failed to load your workspace.",
+      "loading": "Loading…"
+    }
   }
 }

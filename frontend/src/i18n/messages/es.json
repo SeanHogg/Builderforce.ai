@@ -259,7 +259,8 @@
       "findWork": "Buscar trabajo",
       "timecard": "Hoja de horas",
       "myDashboard": "Mi panel",
-      "meetings": "Reuniones"
+      "meetings": "Reuniones",
+      "myWorkspace": "Mi espacio"
     },
     "tab": {
       "projects": "Proyectos",
@@ -747,7 +748,9 @@
     "view": "Ver",
     "typeSecurity": "Seguridad",
     "clearanceNeeded": "Se requiere autorización",
-    "clearanceNeededBody": "Este es un elemento de seguridad restringido. No tienes autorización para ver sus detalles. Solicita acceso a un propietario o gerente del espacio."
+    "clearanceNeededBody": "Este es un elemento de seguridad restringido. No tienes autorización para ver sus detalles. Solicita acceso a un propietario o gerente del espacio.",
+    "typeProduct": "Producto",
+    "typeDesign": "Diseño"
   },
   "legal": {
     "termsTitle": "Términos de uso",
@@ -1947,7 +1950,9 @@
     },
     "builtinKind": {
       "validator": "Validador",
-      "security": "Seguridad"
+      "security": "Seguridad",
+      "product_manager": "Producto",
+      "designer": "Diseñador"
     },
     "teams": {
       "heading": "Equipos",
@@ -7127,5 +7132,96 @@
     "featOauth": "Inicio de sesión con OAuth (Google, GitHub, LinkedIn, Microsoft)",
     "featFree": "Sin tarjeta de crédito: gratis para siempre",
     "commonQuestions": "Preguntas frecuentes"
+  },
+  "gigs": {
+    "publish": {
+      "section": "Mercado",
+      "action": "Publicar en el mercado",
+      "published": "Publicado",
+      "publishedHint": "Disponible para contratar en el mercado.",
+      "unpublish": "Retirar",
+      "unpublishing": "Retirando…",
+      "modalTitle": "Publicar en el mercado",
+      "modalSubtitle": "Abre este elemento de trabajo para que freelancers y agencias presenten ofertas.",
+      "postingType": "Tipo de publicación",
+      "engagementType": "Tipo de contrato",
+      "requirements": "Requisitos",
+      "requirementsPlaceholder": "Describe lo que debe cubrir una buena propuesta…",
+      "rateMin": "Tarifa mínima",
+      "rateMax": "Tarifa máxima",
+      "rateHint": "Rango de presupuesto opcional (por hora o fijo).",
+      "visibility": "Visibilidad",
+      "publishBtn": "Publicar",
+      "publishing": "Publicando…",
+      "cancel": "Cancelar",
+      "publishError": "No se pudo publicar este elemento de trabajo."
+    },
+    "postingType": {
+      "project_bid": "Oferta de proyecto",
+      "design": "Diseño",
+      "fte": "Puesto a tiempo completo"
+    },
+    "engagementType": {
+      "fixed_bid": "Precio fijo",
+      "hourly": "Por hora",
+      "fte": "Tiempo completo"
+    },
+    "visibility": {
+      "public": "Público",
+      "private": "Privado"
+    },
+    "proposal": {
+      "evaluate": "Evaluar con IA",
+      "evaluating": "Evaluando…",
+      "shortlist": "Preseleccionar",
+      "shortlisted": "Preseleccionado",
+      "decline": "Rechazar",
+      "declineSend": "Enviar rechazo",
+      "declineReasonPlaceholder": "Añade una nota cortés (opcional)…"
+    },
+    "candidate": {
+      "shortlist": "Avanzar candidato",
+      "shortlisted": "Avanzando",
+      "reject": "Descartar candidato"
+    },
+    "meeting": {
+      "scheduleReview": "Programar revisión",
+      "scheduleInterview": "Programar entrevista",
+      "reviewTitle": "Revisión del encargo",
+      "interviewTitle": "Entrevista de candidato"
+    },
+    "deliverables": {
+      "heading": "Entregables",
+      "empty": "Aún no se han enviado entregables.",
+      "evaluate": "Evaluar con IA",
+      "accept": "Aceptar",
+      "requestChanges": "Solicitar cambios",
+      "status": {
+        "submitted": "Enviado",
+        "in_review": "En revisión",
+        "accepted": "Aceptado",
+        "changes_requested": "Cambios solicitados"
+      }
+    },
+    "workspace": {
+      "title": "Mi espacio de trabajo",
+      "subtitle": "Entrega trabajo para los equipos que te contrataron.",
+      "selectEngagement": "Selecciona un contrato",
+      "noEngagements": "Aún no tienes acceso a ningún tablero. Cuando un cliente te dé acceso, tus contratos aparecerán aquí.",
+      "tasks": "Tareas",
+      "noTasks": "Aún no hay tareas en este tablero.",
+      "requestReview": "Solicitar revisión",
+      "requestingReview": "Solicitando…",
+      "reviewRequested": "Revisión solicitada",
+      "presentProposal": "Presentar una propuesta",
+      "proposalTitle": "Título",
+      "proposalBodyPlaceholder": "Describe tu entregable o enfoque…",
+      "submit": "Enviar",
+      "submitting": "Enviando…",
+      "myDeliverables": "Mis entregables",
+      "noDeliverables": "Aún no has enviado ningún entregable.",
+      "loadError": "No se pudo cargar tu espacio de trabajo.",
+      "loading": "Cargando…"
+    }
   }
 }

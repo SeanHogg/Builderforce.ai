@@ -4,6 +4,18 @@
 
 ---
 
+## ✅ RESOLVED 2026-07-05 — Meetings calendar, availability booking, scoped join & VS Code join (api `2026.7.41` · frontend `2026.7.33` · vsix `2026.7.37`)
+
+A team calendar on Workforce + Portfolio, bookable availability, authorization-scoped joining, and join-from-VS-Code — built on the live-meetings foundation.
+
+- **Shared meetings calendar** ([MeetingsCalendar.tsx](./frontend/src/components/meetings/MeetingsCalendar.tsx)) — month overview + bookable week grid; overlays app meetings + connected-calendar events, shades your availability hours, click an open slot (week) or day (month) to book, click a meeting to join. One component surfaced BOTH on **Workforce ▸ Calendar** (new tab) and **Projects ▸ Portfolio** (project-scoped panel) — DRY, self-drives its own booking modal / availability editor / join overlay.
+- **Bookable availability** (mig **0296** `user_availability`) — weekly working-hours windows + timezone per user ([AvailabilityEditor.tsx](./frontend/src/components/meetings/AvailabilityEditor.tsx)); `GET/PUT /api/meetings/availability/me`. **"Find a time"** ([availabilitySolver.ts](./api/src/application/calendar/availabilitySolver.ts) + `/api/meetings/suggest`, `/freebusy`) proposes slots where every invitee is free (no conflicting meeting) AND inside their declared windows — timezone-correct via `Intl`. Wired into the schedule modal.
+- **Authorization-scoped join** — `POST /api/meetings/:id/join` + `GET /:id` now enforce `canAccess` (organizer / listed attendee / manager / project-team member for a project meeting; any tenant member for a tenant-wide meeting). The invite link (`/meetings?join=<id>`) is login-gated and cross-tenant is blocked by tenant-scoped fetch — so "only members of the tenant/project with the link can join" holds. Reuses `loadProjectTeamMembers`.
+- **Join via VS Code** — a **Meetings** sidebar tree ([clients/vscode/src/meetings.ts](./clients/vscode/src/meetings.ts) + [bfApi.ts](./clients/vscode/src/bfApi.ts) `listMeetings`/`joinMeeting`) lists upcoming/live meetings; **Join in browser** opens the authenticated web meeting; **Join here** runs the mesh WebRTC call natively in a VS Code webview. Reuses the existing editor-key→tenant-JWT exchange (`/api/auth/tenant-api-key-token`) — no new auth. Commands + view + menus + NLS in all 5 bundles.
+- Fully localized (`meetings.*` now 80 keys + `nav.tab.calendar` + `workforce.page.sub.calendar` + `pmo.meetingsHeading`, all 5 catalogs) + light/dark + responsive (calendar grids scroll horizontally on mobile). Verified: api `tsc` 0 errors + migrations + schema-drift pass; frontend `tsc` 0 errors; extension `tsc -p ./` 0 errors.
+
+---
+
 ## ✅ RESOLVED 2026-07-05 — Register/Login page bodies fully localized
 
 The pre-existing hardcoded English in `RegisterPageClient.tsx` / `LoginPageClient.tsx` (which previously only had the `emailVerify.*` verification step localized) is now routed through next-intl. All literal form copy is localized in all 5 catalogs (`en/zh/es/fr/de`):
