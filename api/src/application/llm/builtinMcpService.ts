@@ -54,6 +54,14 @@ import { SecurityAuditService, type FindingSeverity, type TrustCriterion } from 
 import { SecurityTicketAccessService } from '../security/SecurityTicketAccessService';
 import { recallProjectFacts, upsertProjectFact } from './projectFacts';
 import type { Task } from '../../domain/task/Task';
+import {
+  amendActiveLegalDoc,
+  getActiveLegalDoc,
+  getLegalCurrent,
+  isLegalDocType,
+  publishLegalDoc,
+} from '../legal/legalDocsService';
+import { resolveIsSuperadmin } from '../../infrastructure/auth/superadminFlag';
 
 /** Sentinel extensionId the gateway routes to this in-process catalog. */
 export const BUILTIN_EXTENSION_ID = 'builtin';
@@ -92,6 +100,15 @@ async function bumpPmo(ctx: BuiltinCtx): Promise<void> {
   if (!ctx.env) return;
   await bumpCacheVersion(ctx.env, pmoVersionKey(ctx.tenantId)).catch(() => {});
   await invalidateProjectsList(ctx.env, ctx.tenantId).catch(() => {});
+}
+
+/** Guard a legal-document WRITE: the rows are platform-global, so only a verified
+ *  platform superadmin may change them (a tenant-scoped caller must not be able to
+ *  rewrite every tenant's Terms/Privacy). Reads stay open (public info). */
+async function assertLegalWrite(ctx: BuiltinCtx): Promise<void> {
+  if (!ctx.env) throw new Error('Legal documents can only be changed with the platform environment available.');
+  const ok = await resolveIsSuperadmin(ctx.env, ctx.userId);
+  if (!ok) throw new Error('Legal documents are platform-global — only a platform superadmin may change them.');
 }
 
 /** Invalidate the roadmap tracker cache (the portfolio `:all` key + the row's project
@@ -683,6 +700,50 @@ const CATALOG: BuiltinTool[] = [
       if (rows[0]) await invalidateRoadmap(ctx, seg, rows[0].projectId ?? null);
       return { deleted: rows.length > 0 ? str(a.id) : null };
     } },
+
+  // ---- Legal documents (platform Terms of Use / Privacy Policy) ----
+  //  These rows are PLATFORM-GLOBAL (no tenant scope): one active `terms` and one
+  //  active `privacy` for the whole platform. Reading is public info; WRITES are
+  //  gated to a platform superadmin (assertLegalWrite) because a single row backs
+  //  every tenant's legal pages. Writes go through the SAME service the admin UI
+  //  and public /legal endpoints use — no logic drift. The Brain, being an LLM,
+  //  drafts/improves the Markdown itself and passes it to legal.set / legal.publish.
+  { tool: 'legal.get', mutates: false, description: 'Get the active platform legal documents (Terms of Use + Privacy Policy) — version, title and full Markdown content. Pass docType ("terms" | "privacy") for just one.', parameters: obj({ docType: S }), run: async (ctx, a) => {
+      if (a.docType != null) {
+        if (!isLegalDocType(a.docType)) throw new Error('docType must be "terms" or "privacy"');
+        return getActiveLegalDoc(ctx.db, a.docType);
+      }
+      return getLegalCurrent(ctx.db);
+    } },
+  {
+    tool: 'legal.set', mutates: true,
+    description: 'Amend the ACTIVE legal document in place (no new version unless you change `version`). Use this to edit the current Terms of Use or Privacy Policy. docType and content (full Markdown) are required; title and version are optional. Superadmin only.',
+    parameters: obj({ docType: S, content: S, title: S, version: S }, ['docType', 'content']),
+    run: async (ctx, a) => {
+      await assertLegalWrite(ctx);
+      if (!isLegalDocType(a.docType)) throw new Error('docType must be "terms" or "privacy"');
+      return amendActiveLegalDoc(ctx.db, a.docType, {
+        content: str(a.content),
+        title: a.title != null ? str(a.title) : undefined,
+        version: a.version != null ? str(a.version) : undefined,
+      });
+    },
+  },
+  {
+    tool: 'legal.publish', mutates: true,
+    description: 'Publish a NEW version of a legal document and make it the active one (the old version is retired). docType, version (must be new, e.g. "1.1.0") and content (full Markdown) are required; title optional. Superadmin only.',
+    parameters: obj({ docType: S, version: S, content: S, title: S }, ['docType', 'version', 'content']),
+    run: async (ctx, a) => {
+      await assertLegalWrite(ctx);
+      if (!isLegalDocType(a.docType)) throw new Error('docType must be "terms" or "privacy"');
+      return publishLegalDoc(
+        ctx.db,
+        a.docType,
+        { version: str(a.version), content: str(a.content), title: a.title != null ? str(a.title) : undefined },
+        ctx.userId ?? null,
+      );
+    },
+  },
 
   // ---- Strategy: Portfolios ▸ Initiatives ▸ OKRs (objectives + key results) ----
   // OKRs live in their OWN tables (segment-scoped), NOT on the task board. A board

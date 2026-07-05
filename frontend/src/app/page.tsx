@@ -36,11 +36,13 @@ export default function LandingPage() {
     e.preventDefault();
     const text = prompt.trim();
     if (!text) return;
-    // Stash the prompt, send the visitor through auth; the Brain replays it
-    // once they're inside the app (see lib/brain/pendingPrompt + FloatingBrain).
+    // Answer the prompt immediately as a GUEST — no login wall. /brainstorm renders
+    // the guest chat for logged-out visitors and auto-sends ?prompt=. We still stash
+    // it (durable, cross-device) so if they later sign up mid-thought the authed
+    // Brain can replay it. See GuestBrainstormPage + lib/brain/pendingPrompt.
     savePendingPrompt(text);
-    pendingPromptsApi.save(text, '/'); // durable, cross-device fallback
-    router.push('/register');
+    pendingPromptsApi.save(text, '/');
+    router.push(`/brainstorm?prompt=${encodeURIComponent(text)}`);
   }
 
   async function handleNewsletterSubmit(e: React.FormEvent) {

@@ -265,6 +265,32 @@ export function byoAutoSeedModels(
 }
 
 /**
+ * Does an explicit model choice preempt the tenant's connected-BYO auto-seed?
+ *
+ * Connecting your own frontier account is a strong "use MY account" signal, so it
+ * leads auto-select UNLESS the explicit model is a deliberate choice ON that account.
+ * Returns true (honor the explicit model) when:
+ *   • the tenant connected nothing (`byoVendors` empty) — normal plan routing, OR
+ *   • the explicit model is itself served by a connected BYO vendor (a deliberate pick
+ *     on the owner's own account — e.g. they connected Claude AND pinned claude-opus).
+ * Returns false (let the connected flagship lead) for a NON-BYO explicit model while an
+ * account is connected — e.g. a default agent base model of `@cf/qwen` must NOT shadow
+ * a connected Claude subscription (the exact bug where Ada ran on `@cf/qwen` despite a
+ * live subscription). This is the SINGLE branching rule the gateway cloud pin
+ * ({@link pickCloudModel}) and the Brain addressed-reply path share, so "the connected
+ * account wins over a non-BYO pin" can never drift between the two surfaces again.
+ */
+export function explicitModelPreemptsByo(
+  explicit: string | undefined | null,
+  byoVendors: ReadonlySet<string> | null | undefined,
+): boolean {
+  const trimmed = typeof explicit === 'string' ? explicit.trim() : '';
+  if (!trimmed) return false;
+  if (!byoVendors || byoVendors.size === 0) return true;
+  return byoVendors.has(vendorForModel(trimmed));
+}
+
+/**
  * A {@link byoAutoSeedModels} output is dispatchable when it's a known bare catalog id
  * (the Anthropic direct ids `claude-*`) OR a vendor-prefixed id (`direct/openai/…`,
  * `googleai/…`) whose PREFIX-STRIPPED model id is a real catalog entry — `isKnownModel`
@@ -2053,21 +2079,27 @@ export function pickCloudModel(
   premiumOverride = false,
   opts?: PickCloudModelOptions,
 ): PickCloudModelResult {
-  // A free tenant may pin a model their OWN connected provider serves (BYO) — they
-  // fund it, so the budget-drain rationale for the free-plan gate doesn't apply.
+  // An explicit pin is honored (strict) ONLY when it PREEMPTS the connected-BYO seed
+  // (shared rule — see explicitModelPreemptsByo): nothing connected, or the pin is on
+  // the tenant's OWN account. A non-BYO pin while an account is connected (e.g. a
+  // default agent base model of `@cf/qwen`) does NOT shadow it — the connected flagship
+  // leads instead. Within the honored branch the free-plan gate still applies: a free
+  // tenant may pin ONLY a model their own connected provider serves; paid / premium /
+  // override may pin anything.
   const explicitIsByo = !!explicit && !!opts?.byoVendors?.has(vendorForModel(explicit.trim()));
-  const canChooseModel = premiumOverride || effectivePlan !== 'free' || explicitIsByo;
-  // Explicit-pin behaviour (paid plans + BYO pins) — byte-for-byte unchanged otherwise.
-  if (canChooseModel && isKnownModel(explicit)) return { model: (explicit as string).trim(), strict: true };
+  if (explicitModelPreemptsByo(explicit, opts?.byoVendors)) {
+    const canChooseModel = premiumOverride || effectivePlan !== 'free' || explicitIsByo;
+    if (canChooseModel && isKnownModel(explicit)) return { model: (explicit as string).trim(), strict: true };
+  }
 
-  // No explicit pin (or a free tenant's non-BYO pick was ignored above): when the
-  // tenant has connected their OWN provider(s), lead with the strongest connected
-  // frontier flagship as the soft seed so an auto-select cloud run uses the owner's
-  // account before the free/paid coding pool. Registration-driven (byoAutoSeedModels
-  // orders the connected providers' flagships by tier — a cloud run is always an
-  // agentic tool-loop, so Anthropic contributes Opus); the run locks onto whatever
-  // this seed resolves on turn 1. Shared with the gateway completion seed so both
-  // surfaces agree. Soft (not strict) so a transient provider error still fails over.
+  // No honored explicit pin: when the tenant has connected their OWN provider(s), lead
+  // with the strongest connected frontier flagship as the soft seed so an auto-select
+  // cloud run uses the owner's account before the free/paid coding pool.
+  // Registration-driven (byoAutoSeedModels orders the connected providers' flagships by
+  // tier — a cloud run is always an agentic tool-loop, so Anthropic contributes Opus);
+  // the run locks onto whatever this seed resolves on turn 1. Shared with the gateway
+  // completion seed so both surfaces agree. Soft (not strict) so a transient provider
+  // error still fails over.
   const byoSeed = byoAutoSeedModels(opts?.byoVendors, { agentic: true })[0];
   if (byoSeed) return { model: byoSeed, strict: false };
 

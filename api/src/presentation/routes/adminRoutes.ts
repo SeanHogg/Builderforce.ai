@@ -21,7 +21,6 @@ import { countActiveSessionsAndTokens } from '../../application/security/session
 import {
   authTokens,
   authUserSessions,
-  legalDocuments,
   privacyRequests,
   newsletterEvents,
   newsletterSubscribers,
@@ -74,6 +73,13 @@ import {
   updateTenantApiKey,
 } from '../../application/llm/tenantApiKeyService';
 import { normalizeOrigins } from './tenantApiKeyRoutes';
+import {
+  amendActiveLegalDoc,
+  enhanceLegalContent,
+  getLegalCurrent,
+  LegalDocError,
+  publishLegalDoc,
+} from '../../application/legal/legalDocsService';
 import {
   buildOtpAuthUrl,
   decryptSecretFromStorage,
@@ -139,14 +145,6 @@ async function poolStatus(
   return adminPoolProxy(env, pool, productName).status();
 }
 
-type LegalDocResponse = {
-  documentType: 'terms' | 'privacy';
-  version: string;
-  title: string;
-  content: string;
-  publishedAt: string;
-};
-
 type PrivacyRequestStatus = 'pending' | 'completed' | 'closed';
 type PrivacyRequestType = 'ccpa' | 'gdpr';
 
@@ -156,50 +154,6 @@ function isPrivacyRequestStatus(value: string): value is PrivacyRequestStatus {
 
 function isPrivacyRequestType(value: string): value is PrivacyRequestType {
   return value === 'ccpa' || value === 'gdpr';
-}
-
-const DEFAULT_LEGAL: Record<'terms' | 'privacy', Omit<LegalDocResponse, 'documentType'>> = {
-  terms: {
-    version: '1.0.0',
-    title: 'Terms of Use',
-    content: 'By using Builderforce.ai, you agree to these Terms of Use. Continued use of the service indicates acceptance of current terms.',
-    publishedAt: new Date(0).toISOString(),
-  },
-  privacy: {
-    version: '1.0.0',
-    title: 'Privacy Policy',
-    content: 'Builderforce.ai processes account, usage, and operational metadata to provide and secure the service.',
-    publishedAt: new Date(0).toISOString(),
-  },
-};
-
-async function getActiveLegalDoc(db: Db, documentType: 'terms' | 'privacy'): Promise<LegalDocResponse> {
-  const [doc] = await db
-    .select({
-      version: legalDocuments.version,
-      title: legalDocuments.title,
-      content: legalDocuments.content,
-      publishedAt: legalDocuments.publishedAt,
-    })
-    .from(legalDocuments)
-    .where(and(eq(legalDocuments.documentType, documentType), eq(legalDocuments.isActive, true)))
-    .orderBy(desc(legalDocuments.publishedAt))
-    .limit(1);
-
-  if (!doc) {
-    return {
-      documentType,
-      ...DEFAULT_LEGAL[documentType],
-    };
-  }
-
-  return {
-    documentType,
-    version: doc.version,
-    title: doc.title,
-    content: doc.content,
-    publishedAt: doc.publishedAt ? doc.publishedAt.toISOString() : new Date().toISOString(),
-  };
 }
 
 function parseTenantId(raw: string | undefined): number | null {
@@ -297,11 +251,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
   // -------------------------------------------------------------------------
   router.get('/legal/current', async (c) => {
     const db = buildDatabase(c.env);
-    const [terms, privacy] = await Promise.all([
-      getActiveLegalDoc(db, 'terms'),
-      getActiveLegalDoc(db, 'privacy'),
-    ]);
-    return c.json({ terms, privacy });
+    return c.json(await getLegalCurrent(db));
   });
 
   // -------------------------------------------------------------------------
@@ -314,47 +264,14 @@ export function createAdminRoutes(): Hono<HonoEnv> {
     if (docType !== 'terms' && docType !== 'privacy') {
       return c.json({ error: 'docType must be "terms" or "privacy"' }, 400);
     }
-    const docLabel = docType === 'terms' ? 'Terms of Use' : 'Privacy Policy';
     const body = await c.req.json<{ version: string; title?: string; content: string }>();
-
-    const version = body.version?.trim();
-    const content = body.content?.trim();
-    const title = body.title?.trim() || docLabel;
-
-    if (!version) return c.json({ error: 'version is required' }, 400);
-    if (!content) return c.json({ error: 'content is required' }, 400);
-
-    const [existing] = await db
-      .select({ id: legalDocuments.id })
-      .from(legalDocuments)
-      .where(
-        and(
-          eq(legalDocuments.documentType, docType),
-          eq(legalDocuments.version, version),
-        ),
-      )
-      .limit(1);
-
-    if (existing) {
-      return c.json({ error: `${docLabel} version ${version} already exists` }, 409);
+    try {
+      const document = await publishLegalDoc(db, docType, body, actorUserId);
+      return c.json({ document }, 201);
+    } catch (e) {
+      if (e instanceof LegalDocError) return c.json({ error: e.message }, e.status as 400);
+      throw e;
     }
-
-    await db
-      .update(legalDocuments)
-      .set({ isActive: false, updatedAt: sql`now()` })
-      .where(and(eq(legalDocuments.documentType, docType), eq(legalDocuments.isActive, true)));
-
-    await db.insert(legalDocuments).values({
-      documentType: docType,
-      version,
-      title,
-      content,
-      isActive: true,
-      publishedBy: actorUserId,
-    });
-
-    const document = await getActiveLegalDoc(db, docType);
-    return c.json({ document }, 201);
   });
 
   // -------------------------------------------------------------------------
@@ -367,44 +284,44 @@ export function createAdminRoutes(): Hono<HonoEnv> {
     if (docType !== 'terms' && docType !== 'privacy') {
       return c.json({ error: 'docType must be "terms" or "privacy"' }, 400);
     }
-    const docLabel = docType === 'terms' ? 'Terms of Use' : 'Privacy Policy';
     const body = await c.req.json<{ version?: string; title?: string; content: string }>();
-    const version = body.version?.trim();
-    const content = body.content?.trim();
-    const title = body.title?.trim() || docLabel;
-
-    if (!content) return c.json({ error: 'content is required' }, 400);
-
-    const [active] = await db
-      .select({ id: legalDocuments.id, version: legalDocuments.version })
-      .from(legalDocuments)
-      .where(and(eq(legalDocuments.documentType, docType), eq(legalDocuments.isActive, true)))
-      .orderBy(desc(legalDocuments.publishedAt))
-      .limit(1);
-
-    if (!active) {
-      return c.json({ error: `No active ${docLabel} to amend` }, 404);
+    try {
+      const document = await amendActiveLegalDoc(db, docType, body);
+      return c.json({ document });
+    } catch (e) {
+      if (e instanceof LegalDocError) return c.json({ error: e.message }, e.status as 400);
+      throw e;
     }
+  });
 
-    // If the version is being changed, make sure it doesn't collide with another row.
-    if (version && version !== active.version) {
-      const [clash] = await db
-        .select({ id: legalDocuments.id })
-        .from(legalDocuments)
-        .where(and(eq(legalDocuments.documentType, docType), eq(legalDocuments.version, version)))
-        .limit(1);
-      if (clash) {
-        return c.json({ error: `${docLabel} version ${version} already exists` }, 409);
-      }
+  // -------------------------------------------------------------------------
+  // POST /api/admin/legal/:docType/enhance — AI-draft or improve the document.
+  // Returns { content } (clean Markdown); the editor previews it before saving,
+  // so nothing is persisted here. Metered through the shared LLM gateway.
+  // -------------------------------------------------------------------------
+  router.post('/legal/:docType/enhance', async (c) => {
+    const actorUserId = c.get('userId') as string;
+    const docType = c.req.param('docType');
+    if (docType !== 'terms' && docType !== 'privacy') {
+      return c.json({ error: 'docType must be "terms" or "privacy"' }, 400);
     }
-
-    await db
-      .update(legalDocuments)
-      .set({ title, content, version: version || active.version, updatedAt: sql`now()` })
-      .where(eq(legalDocuments.id, active.id));
-
-    const document = await getActiveLegalDoc(db, docType);
-    return c.json({ document });
+    const body = await c.req.json<{ content?: string; instruction?: string; title?: string }>();
+    try {
+      const content = await enhanceLegalContent(c.env, c.executionCtx, {
+        docType,
+        content: body.content ?? '',
+        instruction: body.instruction,
+        title: body.title,
+        userId: actorUserId,
+        requestIp: c.req.header('cf-connecting-ip') ?? null,
+        origin: c.req.header('Origin') ?? null,
+        userAgent: c.req.header('User-Agent') ?? null,
+      });
+      return c.json({ content });
+    } catch (e) {
+      if (e instanceof LegalDocError) return c.json({ error: e.message }, e.status as 400);
+      throw e;
+    }
   });
 
   // -------------------------------------------------------------------------

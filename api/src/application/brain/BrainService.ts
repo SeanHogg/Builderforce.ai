@@ -15,8 +15,9 @@ import {
   tenantInvitations,
   tenants,
 } from '../../infrastructure/database/schema';
-import { ideProxy, llmProxyForPlan, CODING_BACKSTOP_MODELS } from '../llm/LlmProxyService';
-import { resolveTenantLlmCredentials } from '../llm/tenantProviderKeyService';
+import { ideProxy, llmProxyForPlan, CODING_BACKSTOP_MODELS, explicitModelPreemptsByo } from '../llm/LlmProxyService';
+import { resolveTenantLlmCredentials, byoVendorIdSet, providersFromCredentials } from '../llm/tenantProviderKeyService';
+import { vendorForModel } from '../llm/vendors';
 import { recordProxyUsage } from '../llm/usageLedger';
 import { resolveWorkforceModel, WORKFORCE_MODEL_REF_PREFIX } from '../agent/agentPrompt';
 import { listBuiltinTools, callBuiltinTool, CLOUD_AGENT_PLATFORM_TOOLS } from '../llm/builtinMcpService';
@@ -777,9 +778,20 @@ export class BrainService {
       anthropicOAuthToken: byo.anthropicOAuthToken,
       tenantVendorKeys: byo.vendorKeys,
     });
-    // An agent with its OWN base model keeps that explicit pin; otherwise leave the
-    // model unset so the proxy seeds the tenant's BYO flagship (else the coding pool).
-    const pinnedModel = resolved?.baseModel ?? undefined;
+    // The tenant's connected account beats a weak/default agent base model. Honor an
+    // explicit base model ONLY when it's a real choice the tenant funds — the tenant
+    // has no connected account, OR the base model is itself served by a connected BYO
+    // vendor. Otherwise leave the model unset so complete() seeds the tenant's BYO
+    // flagship (Opus for this agentic turn) instead of a free operator-keyed coder
+    // (e.g. a default `@cf/*` model) that returns empty turns and never touches the
+    // connected account — the exact bug where a connected Claude subscription still ran
+    // Ada on `@cf/qwen/...`.
+    const byoVendors = byoVendorIdSet(providersFromCredentials({
+      anthropicOAuthToken: byo.anthropicOAuthToken,
+      vendorKeys: byo.vendorKeys,
+    }));
+    const baseModel = resolved?.baseModel ?? undefined;
+    const pinnedModel = explicitModelPreemptsByo(baseModel, byoVendors) ? baseModel : undefined;
     const readModel = (r: unknown): string => (r as { resolvedModel?: string } | undefined)?.resolvedModel ?? '';
 
     const MAX_ITERS = 6;
@@ -846,8 +858,17 @@ export class BrainService {
       // Actionable diagnostics beat a bare "empty reply": name the account the run
       // used, the model it resolved to, and how much tool work happened — so the user
       // can tell a transient empty turn from a misconfigured agent/account.
-      const via = byo.anthropicOAuthToken ? 'your connected Claude subscription'
-        : Object.keys(byo.vendorKeys).length > 0 ? 'your connected provider key'
+      // Name the account HONESTLY from the model that ACTUALLY ran — a connected token
+      // being present does NOT mean the run used it (a cascade or a base-model pin can
+      // land on the shared pool). Reflect the resolved vendor so "connected account not
+      // used" is surfaced instead of a false "ran on your Claude subscription".
+      const ranVendor = lastModel ? vendorForModel(lastModel) : null;
+      const via = ranVendor && byoVendors.has(ranVendor)
+        ? ranVendor === 'anthropic' ? 'your connected Claude account'
+          : ranVendor === 'openai' ? 'your connected OpenAI account'
+          : ranVendor === 'googleai' ? 'your connected Google account'
+          : 'your connected provider account'
+        : byoVendors.size > 0 ? 'the shared model pool (your connected account was NOT used for this run)'
         : 'the shared model pool';
       const modelNote = lastModel ? ` (model: ${lastModel})` : '';
       const toolNote = toolCallCount

@@ -14,8 +14,8 @@
 import { useEffect, useState } from 'react';
 import { usePathname } from 'next/navigation';
 import { useTranslations } from 'next-intl';
-import Link from 'next/link';
 import { BrainPanel } from './BrainPanel';
+import { GuestBrainPanel } from './GuestBrainPanel';
 import { MigrationPanelHost } from '@/components/integrations/MigrationPanelHost';
 import { useBrainContext, takePendingPrompt } from '@/lib/brain';
 import { pendingPromptsApi } from '@/lib/builderforceApi';
@@ -213,7 +213,9 @@ export function FloatingBrain() {
                 onClose={() => setOpen(false)}
               />
             ) : (
-              <BrainSignInCTA onClose={() => setOpen(false)} />
+              // Logged-out: a real, metered guest chat (not a dead-end sign-in
+              // wall) so a visitor can try the Brain before creating an account.
+              <GuestBrainPanel variant="docked" initialPrompt={initialPrompt} onClose={() => setOpen(false)} />
             )}
           </div>
           <style>{`
@@ -253,75 +255,5 @@ export function FloatingBrain() {
         </>
       )}
     </>
-  );
-}
-
-/**
- * Gated panel shown when the visitor isn't signed in (no workspace token). The
- * Brain is visible everywhere, but it can't call the gateway without auth, so
- * instead of a chat input we surface a sign-in / sign-up call to action. No
- * input means no anonymous gateway traffic.
- */
-function BrainSignInCTA({ onClose }: { onClose: () => void }) {
-  const t = useTranslations('brainLauncher');
-  return (
-    <div style={{ height: '100%', display: 'flex', flexDirection: 'column', background: 'var(--bg-base)' }}>
-      <div
-        style={{
-          flexShrink: 0,
-          padding: '10px 14px',
-          borderBottom: '1px solid var(--border-subtle)',
-          background: 'var(--bg-elevated)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-        }}
-      >
-        <span style={{ fontWeight: 600, fontSize: 15, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: 6 }}>
-          🧠 {t('brand')}
-        </span>
-        <button
-          type="button"
-          onClick={onClose}
-          aria-label={t('close')}
-          style={{ background: 'transparent', border: 'none', color: 'var(--text-muted)', fontSize: 18, cursor: 'pointer', lineHeight: 1, padding: '0 4px' }}
-        >
-          ×
-        </button>
-      </div>
-      <div
-        style={{
-          flex: 1,
-          minHeight: 0,
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-          justifyContent: 'center',
-          gap: 14,
-          padding: 24,
-          textAlign: 'center',
-        }}
-      >
-        <div style={{ fontSize: 44 }}>🧠</div>
-        <div style={{ fontSize: 17, fontWeight: 600, color: 'var(--text-primary)' }}>{t('meetTitle')}</div>
-        <div style={{ fontSize: 14, color: 'var(--text-muted)', maxWidth: 280, lineHeight: 1.5 }}>
-          {t('meetBody')}
-        </div>
-        <div style={{ display: 'flex', gap: 10, marginTop: 4 }}>
-          <Link
-            href="/login"
-            style={{ padding: '10px 18px', fontSize: 14, fontWeight: 600, background: 'var(--accent, #3b82f6)', color: '#fff', borderRadius: 10, textDecoration: 'none' }}
-          >
-            {t('signIn')}
-          </Link>
-          <Link
-            href="/register"
-            style={{ padding: '10px 18px', fontSize: 14, fontWeight: 600, background: 'var(--bg-elevated)', color: 'var(--text-primary)', border: '1px solid var(--border-subtle)', borderRadius: 10, textDecoration: 'none' }}
-          >
-            {t('createAccount')}
-          </Link>
-        </div>
-      </div>
-    </div>
   );
 }

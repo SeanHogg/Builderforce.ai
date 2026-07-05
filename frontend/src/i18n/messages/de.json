@@ -7142,6 +7142,26 @@
     "signIn": "Anmelden",
     "createAccount": "Konto erstellen"
   },
+  "guestBrain": {
+    "brand": "Brain",
+    "signUpFree": "Kostenlos registrieren",
+    "close": "Schließen",
+    "signIn": "Anmelden",
+    "createFreeAccount": "Kostenloses Konto erstellen",
+    "emptyTitle": "Was sollen wir bauen?",
+    "emptyBody": "Beschreibe eine Idee, eine Funktion oder ein Problem — Brain hilft dir, sie zu durchdenken. Zum Starten ist kein Konto nötig.",
+    "placeholder": "Frag Brain alles…",
+    "loading": "Brain wird gestartet…",
+    "send": "Senden",
+    "sending": "Denkt nach…",
+    "remaining": "{count, plural, =0 {Keine kostenlosen Nachrichten übrig} one {# kostenlose Nachricht übrig} other {# kostenlose Nachrichten übrig}}",
+    "tagline": "Brain kostenlos testen — ohne Registrierung",
+    "newChatTitle": "Gast-Chat",
+    "wallTitle": "Du bist in Fahrt!",
+    "wallBody": "Du hast deine {count} kostenlosen Gast-Nachrichten für heute aufgebraucht. Erstelle ein kostenloses Konto, um weiterzumachen — und deine Arbeit zu speichern.",
+    "meetTitle": "Das ist Brain",
+    "meetBody": "Dein KI-Mitbauer zum Planen von Projekten, Erstellen von Spezifikationen und schnelleren Ausliefern."
+  },
   "login": {
     "navSignUp": "Kostenlos registrieren",
     "heading": "Willkommen zurück",
