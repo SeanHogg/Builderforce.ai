@@ -132,5 +132,9 @@
   "Add context from your workspace": "从工作区添加上下文",
   "Chat name": "对话名称",
   "Waiting on your answer": "等待您的回答",
-  "Agent is working…": "代理正在工作…"
+  "Agent is working…": "代理正在工作…",
+  "Anytime": "随时",
+  "● Live": "● 进行中",
+  "participants": "位参与者",
+  "Sign in to BuilderForce first.": "请先登录 BuilderForce。"
 }

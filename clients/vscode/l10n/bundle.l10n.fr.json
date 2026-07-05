@@ -132,5 +132,9 @@
   "Add context from your workspace": "Ajouter du contexte depuis votre espace de travail",
   "Chat name": "Nom de la conversation",
   "Waiting on your answer": "En attente de votre réponse",
-  "Agent is working…": "L’agent travaille…"
+  "Agent is working…": "L’agent travaille…",
+  "Anytime": "À tout moment",
+  "● Live": "● En direct",
+  "participants": "participants",
+  "Sign in to BuilderForce first.": "Connectez-vous d’abord à BuilderForce."
 }
