@@ -34,6 +34,7 @@ import {
 } from '../../application/metrics/workforceMetrics';
 import { recommendAssignee } from '../../application/metrics/assigneeRecommender';
 import { getTenantEngagement, persistTenantEngagement } from '../../application/metrics/engagement';
+import { recordActivity, resolveActorFromContext } from '../../application/activity/activityLog';
 import type { Env, HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 
@@ -284,6 +285,21 @@ export function createMemberRoutes(db: Db): Hono<HonoEnv> {
       })
       .returning();
     await bumpWorkforceMetricsVersion(c.env as Env, tenantId).catch(() => {});
+    c.executionCtx.waitUntil((async () => {
+      const actor = await resolveActorFromContext(c.env as Env, db, c);
+      await recordActivity(c.env as Env, db, {
+        tenantId,
+        segmentId: (c as { get(k: 'segmentId'): string | undefined }).get('segmentId') ?? null,
+        projectId: body.projectId ?? null,
+        actor,
+        verb: (row?.isFailure) ? 'deploy.failed' : 'deploy.recorded',
+        targetType: 'deployment',
+        targetId: row?.id ?? body.externalRef ?? null,
+        targetLabel: body.environment ?? 'production',
+        summary: `Deploy to ${body.environment ?? 'production'}: ${row?.status ?? body.status ?? 'success'}`,
+        metadata: { environment: body.environment ?? 'production', status: row?.status, taskId: body.taskId ?? null, externalRef: body.externalRef ?? null },
+      });
+    })().catch(() => {}));
     return c.json({ deployment: row }, 201);
   });
 

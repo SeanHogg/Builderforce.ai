@@ -481,8 +481,8 @@ export const brain = {
     request<{ removed: boolean }>(`/api/brain/chats/${chatId}/agents/${assignmentId}`, { method: 'DELETE' }),
 };
 
-/** A work-item kind a chat can be tied to (planning spine + roadmap + gap). */
-export type TicketKind = 'portfolio' | 'objective' | 'initiative' | 'roadmap' | 'epic' | 'gap' | 'task';
+/** A work-item kind a chat can be tied to (planning spine + roadmap + spec + gap). */
+export type TicketKind = 'portfolio' | 'objective' | 'initiative' | 'roadmap' | 'spec' | 'epic' | 'gap' | 'task';
 
 /** A chat ↔ ticket link with a live health summary. */
 export interface ChatTicketLink {

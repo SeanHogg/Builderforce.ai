@@ -5,9 +5,9 @@
  * (its own REST calls) and a {@link ChatTicketsLabels} bundle (its own i18n).
  */
 
-/** The work-item kinds a chat can be tied to (planning spine + roadmap + gap). */
-export type TicketKind = 'portfolio' | 'objective' | 'initiative' | 'roadmap' | 'epic' | 'gap' | 'task';
-export const TICKET_KINDS: TicketKind[] = ['task', 'epic', 'gap', 'objective', 'initiative', 'portfolio', 'roadmap'];
+/** The work-item kinds a chat can be tied to (planning spine + roadmap + spec + gap). */
+export type TicketKind = 'portfolio' | 'objective' | 'initiative' | 'roadmap' | 'spec' | 'epic' | 'gap' | 'task';
+export const TICKET_KINDS: TicketKind[] = ['task', 'epic', 'gap', 'objective', 'initiative', 'portfolio', 'roadmap', 'spec'];
 /** Only these kinds are runnable (a real board ticket an agent can execute). */
 export const RUNNABLE_KINDS: TicketKind[] = ['task', 'epic', 'gap'];
 
@@ -149,7 +149,7 @@ export const DEFAULT_CHAT_TICKETS_LABELS: ChatTicketsLabels = {
   agentsHint: 'Invited agents can be tagged to execute a linked task or epic.',
   mergeHint: 'Merge other chats into this one. Their messages, tickets and agents move here; the sources are archived.',
   mergeNoOthers: 'No other chats to merge.',
-  kind: { task: 'Task', epic: 'Epic', gap: 'Gap', objective: 'Objective', initiative: 'Initiative', portfolio: 'Portfolio', roadmap: 'Roadmap' },
+  kind: { task: 'Task', epic: 'Epic', gap: 'Gap', objective: 'Objective', initiative: 'Initiative', portfolio: 'Portfolio', roadmap: 'Roadmap', spec: 'Spec' },
   ringAria: (label, pct) => `${label}: ${pct}% done`,
   runStarted: (agent) => `Started ${agent} on the ticket.`,
   mergeAction: (n) => `Merge ${n} here`,

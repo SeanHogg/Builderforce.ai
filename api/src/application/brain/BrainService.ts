@@ -1,16 +1,20 @@
-import { eq, and, desc, isNull, inArray, sql } from 'drizzle-orm';
+import { eq, and, or, desc, isNull, inArray, sql } from 'drizzle-orm';
 import {
   brainChats,
   brainChatMessages,
   chatMemories,
+  chatMembers,
   chatSessions,
   chatMessages,
   projectMemories,
   projects,
   agentAssignments,
+  users,
+  tenantMembers,
 } from '../../infrastructure/database/schema';
 import { ideProxy } from '../llm/LlmProxyService';
 import { recordProxyUsage } from '../llm/usageLedger';
+import { resolveWorkforceModel, WORKFORCE_MODEL_REF_PREFIX } from '../agent/agentPrompt';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 
@@ -104,6 +108,87 @@ export class BrainService {
     return chat ?? null;
   }
 
+  /**
+   * Shared-access guard: returns the chat when `userId` is its OWNER **or** an
+   * active human member (migration 0288). This is the read/participate gate — used
+   * by open/read/post/summarize. Owner-only admin (rename/archive/invite) keeps
+   * using {@link verifyChatOwnership}. Before denying, it lazily converts any
+   * pending email-invite for this user so a freshly-invited person can deep-link
+   * straight into the chat without first loading their list.
+   */
+  private async canAccessChat(
+    chatId: number,
+    tenantId: number,
+    userId: string,
+    selectExtra?: Record<string, unknown>,
+  ) {
+    const owned = await this.verifyChatOwnership(chatId, tenantId, userId, selectExtra);
+    if (owned) return owned;
+
+    const isMember = async () => {
+      const [m] = await this.db
+        .select({ id: chatMembers.id })
+        .from(chatMembers)
+        .where(and(
+          eq(chatMembers.chatId, chatId),
+          eq(chatMembers.tenantId, tenantId),
+          eq(chatMembers.userId, userId),
+          eq(chatMembers.status, 'active'),
+        ))
+        .limit(1);
+      return !!m;
+    };
+
+    let member = await isMember();
+    if (!member) {
+      // Maybe a pending invite addressed this user's email — convert then re-check.
+      await this.syncPendingMemberships(tenantId, userId);
+      member = await isMember();
+    }
+    if (!member) return null;
+
+    // A member gets the chat row scoped by tenant (not by owner user_id).
+    const columns = { id: brainChats.id, ...(selectExtra ?? {}) };
+    const [chat] = await this.db
+      .select(columns as typeof columns & { id: typeof brainChats.id })
+      .from(brainChats)
+      .where(and(
+        eq(brainChats.id, chatId),
+        eq(brainChats.tenantId, tenantId),
+        eq(brainChats.origin, BRAIN_ORIGIN),
+      ))
+      .limit(1);
+    return chat ?? null;
+  }
+
+  /** The user's email (for pending-invite matching). */
+  private async getUserEmail(userId: string): Promise<string | null> {
+    const [u] = await this.db.select({ email: users.email }).from(users).where(eq(users.id, userId)).limit(1);
+    return u?.email?.toLowerCase() ?? null;
+  }
+
+  /**
+   * Activate any pending chat-member invites whose `invited_email` matches this
+   * user's address — the auto-conversion that mirrors tenant_invitations. Single
+   * bounded UPDATE keyed on the indexed lower(invited_email); a no-op (0 rows) when
+   * the user has no pending invites. Returns the chat ids that just converted.
+   */
+  private async syncPendingMemberships(tenantId: number, userId: string): Promise<number[]> {
+    const email = await this.getUserEmail(userId);
+    if (!email) return [];
+    const rows = await this.db
+      .update(chatMembers)
+      .set({ userId, status: 'active', invitedEmail: null, updatedAt: new Date() })
+      .where(and(
+        eq(chatMembers.tenantId, tenantId),
+        isNull(chatMembers.userId),
+        eq(chatMembers.status, 'pending'),
+        sql`lower(${chatMembers.invitedEmail}) = ${email}`,
+      ))
+      .returning({ chatId: chatMembers.chatId });
+    return rows.map((r) => r.chatId);
+  }
+
   private async verifyProjectInTenant(projectId: number, tenantId: number) {
     const [proj] = await this.db
       .select({ id: projects.id, name: projects.name })
@@ -142,9 +227,24 @@ export class BrainService {
     userId: string,
     opts?: { projectId?: string; limit?: number; offset?: number },
   ) {
+    // Activate any pending email-invites for this user, then list chats they OWN
+    // or are an active MEMBER of (shared access, migration 0288).
+    await this.syncPendingMemberships(tenantId, userId);
+    const memberRows = await this.db
+      .select({ chatId: chatMembers.chatId })
+      .from(chatMembers)
+      .where(and(
+        eq(chatMembers.tenantId, tenantId),
+        eq(chatMembers.userId, userId),
+        eq(chatMembers.status, 'active'),
+      ));
+    const memberChatIds = memberRows.map((r) => r.chatId);
+
     const conditions = [
       eq(brainChats.tenantId, tenantId),
-      eq(brainChats.userId, userId),
+      memberChatIds.length > 0
+        ? or(eq(brainChats.userId, userId), inArray(brainChats.id, memberChatIds))!
+        : eq(brainChats.userId, userId),
       eq(brainChats.origin, BRAIN_ORIGIN),
       eq(brainChats.isArchived, false),
     ];
@@ -200,9 +300,25 @@ export class BrainService {
           const cid = Number(a.scopeId);
           if (!Number.isNaN(cid)) {
             const list = byChat.get(cid) ?? [];
-            list.push({ ref: a.agentRef, kind: a.agentKind });
+            list.push({ ref: a.agentRef, kind: 'agent' });
             byChat.set(cid, list);
           }
+        }
+        // Human members (migration 0288) join the same roster with kind='human',
+        // ref = their user id — one grouped query over the same chat ids.
+        const mem = await this.db
+          .select({ chatId: chatMembers.chatId, userId: chatMembers.userId })
+          .from(chatMembers)
+          .where(and(
+            eq(chatMembers.tenantId, tenantId),
+            eq(chatMembers.status, 'active'),
+            inArray(chatMembers.chatId, ids),
+          ));
+        for (const m of mem) {
+          if (!m.userId) continue;
+          const list = byChat.get(m.chatId) ?? [];
+          list.push({ ref: m.userId, kind: 'human' });
+          byChat.set(m.chatId, list);
         }
       } catch {
         /* participants are non-critical — the chat list must survive their absence */
@@ -234,18 +350,15 @@ export class BrainService {
   }
 
   async getChat(chatId: number, tenantId: number, userId: string) {
-    const [chat] = await this.db
-      .select(chatDetailColumns)
-      .from(brainChats)
-      .where(
-        and(
-          eq(brainChats.id, chatId),
-          eq(brainChats.tenantId, tenantId),
-          eq(brainChats.userId, userId),
-          eq(brainChats.origin, BRAIN_ORIGIN),
-        ),
-      )
-      .limit(1);
+    // Owner OR active member may open the chat (shared access, migration 0288).
+    const chat = await this.canAccessChat(chatId, tenantId, userId, {
+      projectId: brainChats.projectId,
+      origin: brainChats.origin,
+      title: brainChats.title,
+      createdAt: brainChats.createdAt,
+      updatedAt: brainChats.updatedAt,
+      isArchived: brainChats.isArchived,
+    });
     return chat ?? null;
   }
 
@@ -293,7 +406,7 @@ export class BrainService {
   // -----------------------------------------------------------------------
 
   async getMessages(chatId: number, tenantId: number, userId: string, limit = 100) {
-    const chat = await this.verifyChatOwnership(chatId, tenantId, userId);
+    const chat = await this.canAccessChat(chatId, tenantId, userId);
     if (!chat) return { error: 'Chat not found' as const };
 
     const msgs = await this.db
@@ -312,14 +425,21 @@ export class BrainService {
     userId: string,
     dto: AppendMessagesDto,
   ) {
-    const chat = await this.verifyChatOwnership(chatId, tenantId, userId);
+    // Owner OR active member may post turns (shared access, migration 0288).
+    const chat = await this.canAccessChat(chatId, tenantId, userId);
     if (!chat) return { error: 'Chat not found' as const };
 
     if (!Array.isArray(dto.messages) || dto.messages.length === 0) {
       return { error: 'messages array is required' as const };
     }
 
-    // Get current max seq
+    return this.appendRaw(chatId, dto.messages);
+  }
+
+  /** Append messages to a chat (seq-managed insert + touch), NO access check —
+   *  callers must have already verified access. Shared by {@link appendMessages}
+   *  and {@link agentReply} so the write path lives once. */
+  private async appendRaw(chatId: number, messages: Array<{ role: string; content: string; metadata?: string | null }>) {
     const [maxRow] = await this.db
       .select({ maxSeq: sql<number>`COALESCE(MAX(${brainChatMessages.seq}), 0)` })
       .from(brainChatMessages)
@@ -335,7 +455,7 @@ export class BrainService {
       createdAt: Date;
     }> = [];
 
-    for (const msg of dto.messages) {
+    for (const msg of messages) {
       if (!msg.role || typeof msg.content !== 'string') continue;
       seq += 1;
       const [row] = await this.db
@@ -361,6 +481,88 @@ export class BrainService {
   }
 
   // -----------------------------------------------------------------------
+  // Addressed-agent reply — a chat-scoped run that answers AS an invited agent
+  // -----------------------------------------------------------------------
+
+  /**
+   * Produce a reply AS an invited agent participant and post it as an assistant
+   * turn attributed to that agent (metadata `authoredBy: {kind:'agent', ref, name}`,
+   * mirroring the `addressedTo` convention). This is the "next layer" over directed
+   * messages: `@agent`-ing a participant used to only post the user's turn; now the
+   * addressed agent actually answers, grounded on its own persona + ingested
+   * knowledge (via the shared {@link resolveWorkforceModel}) and on the transcript.
+   *
+   * The whole conversation is fed as a readable script in one user message (like
+   * summarisation) so multi-party turns from other authors don't confuse the
+   * assistant/user role mapping. No file tools — this is a conversational reply,
+   * not a build run; the BRAIN still owns tool-executing runs.
+   */
+  async agentReply(
+    chatId: number,
+    tenantId: number,
+    userId: string,
+    input: { agentRef: string; agentName?: string },
+    env: Env,
+  ) {
+    const chat = await this.canAccessChat(chatId, tenantId, userId);
+    if (!chat) return { error: 'Chat not found' as const };
+    const apiKey = env.OPENROUTER_API_KEY;
+    if (!apiKey) return { error: 'LLM not configured' as const };
+
+    const msgs = await this.db
+      .select({ role: brainChatMessages.role, content: brainChatMessages.content, metadata: brainChatMessages.metadata })
+      .from(brainChatMessages)
+      .where(eq(brainChatMessages.chatId, chatId))
+      .orderBy(brainChatMessages.seq)
+      .limit(80);
+    if (msgs.length === 0) return { error: 'Nothing to reply to' as const };
+
+    // Persona + own-knowledge grounding for a workforce agent (ref = ide_agents.id).
+    const lastUser = [...msgs].reverse().find((m) => m.role === 'user')?.content ?? '';
+    const resolved = await resolveWorkforceModel(env, WORKFORCE_MODEL_REF_PREFIX + input.agentRef, lastUser).catch(() => null);
+    const agentName = input.agentName?.trim() || 'the agent';
+    const persona = resolved?.directives
+      ? `${resolved.directives}\n\n`
+      : `You are ${agentName}, a member of this team's chat.\n\n`;
+
+    const authorName = (label: string | null): string => {
+      if (!label) return 'BuilderForce';
+      try {
+        const a = (JSON.parse(label) as { authoredBy?: { name?: string } }).authoredBy;
+        return a?.name || 'BuilderForce';
+      } catch { return 'BuilderForce'; }
+    };
+    const transcript = msgs
+      .map((m) => `${m.role === 'user' ? 'User' : authorName(m.metadata)}: ${m.content}`)
+      .join('\n\n');
+
+    const systemPrompt = [
+      persona,
+      `You have been addressed directly in this multi-party team chat. Write your next reply AS ${agentName} — first person, concise, helpful, no preamble and no "${agentName}:" label. If the last message was not a question, contribute your perspective.`,
+    ].join('');
+
+    const service = this.buildLlmService(apiKey);
+    const result = await service.complete({
+      model: resolved?.baseModel ?? undefined,
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: `Conversation so far:\n\n${transcript}` },
+      ],
+      temperature: 0.4,
+      max_tokens: 1000,
+    });
+    this.recordUsage(apiKey, tenantId, 'brain_agent_reply', result);
+
+    const response = result.response as { choices?: Array<{ message?: { content?: string } }> } | undefined;
+    const text = response?.choices?.[0]?.message?.content?.trim() ?? '';
+    if (!text) return { error: 'Agent returned an empty reply' as const };
+
+    const metadata = JSON.stringify({ authoredBy: { kind: 'agent', ref: input.agentRef, name: agentName } });
+    const [posted] = await this.appendRaw(chatId, [{ role: 'assistant', content: text, metadata }]);
+    return posted ?? { error: 'Failed to post reply' as const };
+  }
+
+  // -----------------------------------------------------------------------
   // Message feedback
   // -----------------------------------------------------------------------
 
@@ -381,8 +583,8 @@ export class BrainService {
       .where(eq(brainChatMessages.id, messageId));
     if (!msg) return { error: 'Message not found' as const };
 
-    // Verify ownership of the parent chat
-    const chat = await this.verifyChatOwnership(msg.chatId, tenantId, userId);
+    // Verify access to the parent chat (owner or member).
+    const chat = await this.canAccessChat(msg.chatId, tenantId, userId);
     if (!chat) return { error: 'Message not found' as const };
 
     // Merge feedback into existing metadata JSON
@@ -399,11 +601,113 @@ export class BrainService {
   }
 
   // -----------------------------------------------------------------------
+  // Human members (shared access, migration 0288)
+  // -----------------------------------------------------------------------
+
+  /** Active human members of a chat (owner or any member may read the roster). */
+  async listMembers(chatId: number, tenantId: number, userId: string) {
+    const chat = await this.canAccessChat(chatId, tenantId, userId);
+    if (!chat) return { error: 'Chat not found' as const };
+    const rows = await this.db
+      .select({
+        id: chatMembers.id,
+        userId: chatMembers.userId,
+        email: chatMembers.invitedEmail,
+        status: chatMembers.status,
+        name: users.displayName,
+        userEmail: users.email,
+        role: chatMembers.role,
+      })
+      .from(chatMembers)
+      .leftJoin(users, eq(users.id, chatMembers.userId))
+      .where(and(eq(chatMembers.chatId, chatId), eq(chatMembers.tenantId, tenantId)))
+      .orderBy(chatMembers.createdAt);
+    return rows.map((r) => ({
+      id: r.id,
+      userId: r.userId,
+      status: r.status,
+      role: r.role,
+      email: (r.userEmail ?? r.email ?? '').toLowerCase(),
+      name: r.name || r.userEmail || r.email || 'Invited',
+    }));
+  }
+
+  /**
+   * Invite a human to a chat by email (owner only). If the email belongs to an
+   * existing member of this tenant the invite is ACTIVE immediately (they get
+   * access + a notification); otherwise a PENDING row is written that converts on
+   * their next access. Idempotent per (chat, user) / (chat, email). Returns the
+   * resolution the route needs to fire the in-app + email notification.
+   */
+  async inviteHuman(
+    chatId: number,
+    tenantId: number,
+    userId: string,
+    input: { email: string },
+  ): Promise<
+    | { error: string }
+    | { status: 'active' | 'pending'; memberUserId: string | null; email: string; chatTitle: string; already: boolean }
+  > {
+    const chat = await this.verifyChatOwnership(chatId, tenantId, userId, { title: brainChats.title }) as
+      | { id: number; title: string }
+      | null;
+    if (!chat) return { error: 'Chat not found' };
+    const email = input.email?.trim().toLowerCase();
+    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return { error: 'A valid email is required' };
+
+    // Resolve the email to an existing active member of THIS tenant (so their
+    // tenant-scoped token can actually reach the chat).
+    const [existingUser] = await this.db
+      .select({ id: users.id })
+      .from(users)
+      .innerJoin(tenantMembers, and(eq(tenantMembers.userId, users.id), eq(tenantMembers.tenantId, tenantId), eq(tenantMembers.isActive, true)))
+      .where(sql`lower(${users.email}) = ${email}`)
+      .limit(1);
+
+    if (existingUser) {
+      if (existingUser.id === userId) return { error: 'You already own this chat' };
+      const [dup] = await this.db.select({ id: chatMembers.id })
+        .from(chatMembers)
+        .where(and(eq(chatMembers.chatId, chatId), eq(chatMembers.userId, existingUser.id)))
+        .limit(1);
+      if (!dup) {
+        await this.db.insert(chatMembers).values({
+          chatId, tenantId, userId: existingUser.id, status: 'active', invitedBy: userId,
+        });
+      }
+      return { status: 'active', memberUserId: existingUser.id, email, chatTitle: chat.title, already: !!dup };
+    }
+
+    // Cold invite — pending row keyed on the email, converts on first access.
+    const [dup] = await this.db.select({ id: chatMembers.id })
+      .from(chatMembers)
+      .where(and(eq(chatMembers.chatId, chatId), sql`lower(${chatMembers.invitedEmail}) = ${email}`))
+      .limit(1);
+    if (!dup) {
+      await this.db.insert(chatMembers).values({
+        chatId, tenantId, invitedEmail: email, status: 'pending', invitedBy: userId,
+      });
+    }
+    return { status: 'pending', memberUserId: null, email, chatTitle: chat.title, already: !!dup };
+  }
+
+  /** Remove a human member from a chat (owner only). */
+  async removeMember(chatId: number, tenantId: number, userId: string, memberId: number) {
+    const chat = await this.verifyChatOwnership(chatId, tenantId, userId);
+    if (!chat) return { error: 'Chat not found' as const };
+    const rows = await this.db
+      .delete(chatMembers)
+      .where(and(eq(chatMembers.id, memberId), eq(chatMembers.chatId, chatId), eq(chatMembers.tenantId, tenantId)))
+      .returning({ id: chatMembers.id });
+    return { removed: rows.length > 0 };
+  }
+
+  // -----------------------------------------------------------------------
   // Summarisation
   // -----------------------------------------------------------------------
 
   async summarizeChat(chatId: number, tenantId: number, userId: string, apiKey: string) {
-    const chat = await this.verifyChatOwnership(chatId, tenantId, userId, {
+    const chat = await this.canAccessChat(chatId, tenantId, userId, {
       projectId: brainChats.projectId,
     }) as { id: number; projectId: number | null } | null;
     if (!chat) return { error: 'Chat not found' as const };

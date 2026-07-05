@@ -5,9 +5,9 @@
  * MCP tools (builtinMcpService) both delegate here so the rules live ONCE (DRY).
  *
  * A "ticket" is any planning/project work item, addressed as (kind, ref):
- *   kind ∈ portfolio | objective | initiative | roadmap | epic | gap | task
+ *   kind ∈ portfolio | objective | initiative | roadmap | spec | epic | gap | task
  *   ref  = tasks.id as text (epic/gap/task) OR a UUID
- *          (portfolio/objective/initiative/roadmap)
+ *          (portfolio/objective/initiative/roadmap/spec)
  *
  * Health (% done) is derived from LIVE ticket state that mutates on the board
  * outside this service's write path, so it is deliberately NOT cached — a stale
@@ -26,6 +26,7 @@ import {
   initiatives,
   portfolios,
   roadmapItems,
+  specs,
 } from '../../infrastructure/database/schema';
 import { resolveSegment } from '../../infrastructure/auth/segmentResolver';
 import { keyResultProgress, objectiveProgress } from '../pmo/portfolioRollup';
@@ -36,8 +37,8 @@ import type { Env } from '../../env';
 const BRAIN_ORIGIN = 'brainstorm';
 const CHAT_SCOPE = 'chat';
 
-/** The work-item kinds a chat can be tied to (planning spine + roadmap + gap). */
-export const TICKET_KINDS = ['portfolio', 'objective', 'initiative', 'roadmap', 'epic', 'gap', 'task'] as const;
+/** The work-item kinds a chat can be tied to (planning spine + roadmap + spec + gap). */
+export const TICKET_KINDS = ['portfolio', 'objective', 'initiative', 'roadmap', 'spec', 'epic', 'gap', 'task'] as const;
 export type TicketKind = (typeof TICKET_KINDS)[number];
 
 export type LinkType = 'linked' | 'created';
@@ -138,6 +139,15 @@ export class ChatTicketService {
         .limit(1);
       return row ? { label: row.title, status: row.status } : null;
     }
+    // Specs / PRDs — tenant-scoped product artifact (the goal is the label).
+    if (kind === 'spec') {
+      const [row] = await this.db
+        .select({ goal: specs.goal, status: specs.status })
+        .from(specs)
+        .where(and(eq(specs.id, ref), eq(specs.tenantId, tenantId)))
+        .limit(1);
+      return row ? { label: row.goal, status: row.status } : null;
+    }
     const seg = await resolveSegment(this.db, tenantId);
     if (kind === 'objective') {
       const [row] = await this.db.select({ title: objectives.title, status: objectives.status }).from(objectives)
@@ -172,6 +182,7 @@ export class ChatTicketService {
     const initIds = new Set<string>();
     const pfIds = new Set<string>();
     const roadmapIds = new Set<string>();
+    const specIds = new Set<string>();
     for (const t of clean) {
       if (t.kind === 'task') { const n = Number(t.ref); if (Number.isInteger(n)) taskIds.add(n); }
       else if (t.kind === 'epic') { const n = Number(t.ref); if (Number.isInteger(n)) epicIds.add(n); }
@@ -180,6 +191,7 @@ export class ChatTicketService {
       else if (t.kind === 'initiative') initIds.add(t.ref);
       else if (t.kind === 'portfolio') pfIds.add(t.ref);
       else if (t.kind === 'roadmap') roadmapIds.add(t.ref);
+      else if (t.kind === 'spec') specIds.add(t.ref);
     }
 
     // Tasks + epics + gaps share the tasks table: fetch self rows (title/status) for
@@ -309,6 +321,22 @@ export class ChatTicketService {
         const done = ROADMAP_DONE.has(s) ? 1 : 0;
         const progressPct = done ? 100 : (s === 'in_progress' || s === 'active' ? 50 : 0);
         out.set(key('roadmap', id), { kind: 'roadmap', ref: id, label: r.title, status: r.status, progressPct, done, total: done ? 1 : 0, exists: true });
+      }
+    }
+
+    if (specIds.size > 0) {
+      const specRows = await this.db.select({ id: specs.id, goal: specs.goal, status: specs.status })
+        .from(specs)
+        .where(and(inArray(specs.id, [...specIds]), eq(specs.tenantId, tenantId)));
+      const specById = new Map(specRows.map((r) => [r.id, r]));
+      for (const id of specIds) {
+        const s = specById.get(id);
+        if (!s) { out.set(key('spec', id), missing('spec', id)); continue; }
+        // A spec has no child rollup — derive progress from its own lifecycle status.
+        const st = (s.status ?? '').toLowerCase();
+        const done = st === 'complete' ? 1 : 0;
+        const progressPct = done ? 100 : (st === 'in_progress' || st === 'ready' ? 50 : 0);
+        out.set(key('spec', id), { kind: 'spec', ref: id, label: s.goal, status: s.status, progressPct, done, total: done ? 1 : 0, exists: true });
       }
     }
 

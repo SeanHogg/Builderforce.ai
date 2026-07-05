@@ -159,6 +159,14 @@ export function __clearL1CacheForTests(): void {
   l1.clear();
 }
 
+/** Cache key for a segment-tracker list at a given scope; projectId omitted =
+ *  portfolio (`all`). Lives here (not in the route factory) so every writer — the
+ *  route CRUD AND non-route writers like the built-in MCP roadmap tools — invalidate
+ *  the SAME keys, one format, no drift. */
+export function trackerCacheKey(ns: string, tenantId: number, segmentId: string, projectId?: number): string {
+  return `tracker:${ns}:t:${tenantId}:s:${segmentId}:p:${projectId ?? 'all'}`;
+}
+
 /** Invalidate both cache layers for `key`. Call from every mutation that
  *  changes the cached data so the next read re-loads. */
 export async function invalidateCached(env: Env, key: string): Promise<void> {

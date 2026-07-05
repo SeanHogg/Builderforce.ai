@@ -126,7 +126,7 @@ describe('listBuiltinTools', () => {
     // Reassigning an objective's owner clears the other axes → each owner field must accept null.
     const objUpdate = byName('builtin_objectives_update').parameters as { properties: Record<string, { type?: unknown }> };
     for (const f of ['portfolioId', 'initiativeId', 'projectId']) {
-      expect(objUpdate.properties[f].type).toContain('null');
+      expect(objUpdate.properties[f]?.type).toContain('null');
     }
   });
 
