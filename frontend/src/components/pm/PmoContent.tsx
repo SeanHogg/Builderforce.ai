@@ -9,6 +9,7 @@ import { PmEmpty, PmError } from './pmShared';
 import { PmoRollup } from './PmoRollup';
 import { PmoStructure } from './PmoStructure';
 import { PmoCostReconciliation } from './PmoCostReconciliation';
+import { MeetingsCalendar } from '@/components/meetings/MeetingsCalendar';
 
 /**
  * PMO lens — the portfolio/initiative/OKR cockpit. Tabs: Rollup (the dashboard,
@@ -118,6 +119,17 @@ export function PmoContent() {
       {tab === 'structure' && <PmoStructure tree={tree} onChange={reload} />}
       {tab === 'rollup' && (scope ? <PmoRollup scope={scope} /> : <PmEmpty message={t('emptyRollup')} />)}
       {tab === 'cost' && <PmoCostReconciliation />}
+
+      {/* Meetings calendar for the portfolio — scoped to the chosen project when one
+          is selected, else the whole workspace. A compact month overview + booking. */}
+      {tab === 'rollup' && (
+        <div style={{ background: 'var(--surface-card)', border: '1px solid var(--border-subtle)', borderRadius: 12, padding: 16 }}>
+          <h3 style={{ fontSize: 13, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.4, color: 'var(--text-muted)', margin: '0 0 12px' }}>
+            {t('meetingsHeading')}
+          </h3>
+          <MeetingsCalendar projectId={projectScoped ? Number(projectSel) : null} defaultView="month" compact />
+        </div>
+      )}
     </div>
   );
 }

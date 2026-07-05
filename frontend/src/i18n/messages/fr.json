@@ -322,7 +322,8 @@
       "adminCompliance": "Conformité",
       "adminGrowth": "Croissance",
       "adminLogs": "Journaux",
-      "adminDeveloper": "Développeur"
+      "adminDeveloper": "Développeur",
+      "calendar": "Agenda"
     }
   },
   "alerts": {
@@ -978,7 +979,8 @@
       "loading": "Chargement des initiatives…",
       "saved": "Lié"
     },
-    "unassignedPortfolio": "Non assigné"
+    "unassignedPortfolio": "Non assigné",
+    "meetingsHeading": "Réunions"
   },
   "insights": {
     "loading": "Chargement…",
@@ -1891,7 +1893,8 @@
         "logs": "Journaux des agents, chronologies d'exécution et diagnostics de votre espace de travail.",
         "qa": "Automatisation QA par projet — flux, tests générés et exécutions CI.",
         "roles": "Les rôles que votre équipe occupe — les rôles standard du modèle de tableau et vos rôles personnalisés — et qui couvre chacun : un agent, un employé ou un intervenant externe.",
-        "talent": "Gérez les freelances que vous avez recrutés — missions, offres, validation des feuilles de temps et factures."
+        "talent": "Gérez les freelances que vous avez recrutés — missions, offres, validation des feuilles de temps et factures.",
+        "calendar": "Disponibilité de l’équipe et réunions planifiées"
       }
     },
     "discipline": "Discipline",
@@ -1955,6 +1958,8 @@
       "namePlaceholder": "ex. Escouade Plateforme",
       "description": "Description",
       "descriptionPlaceholder": "Ce dont cette équipe est responsable",
+      "avatarUrl": "Avatar",
+      "avatarUrlPlaceholder": "URL de l’image (facultatif)",
       "titleFallback": "Équipe",
       "loading": "Chargement…",
       "loadingTeams": "Chargement des équipes…",
@@ -5643,7 +5648,27 @@
     "hireTitle": "Être recruté",
     "hireSub": "Profil freelance et missions",
     "accountTypeAria": "Type de compte",
-    "commonQuestions": "Questions fréquentes"
+    "commonQuestions": "Questions fréquentes",
+    "navSignIn": "Se connecter",
+    "heading": "Créez votre compte",
+    "subtitle": "Commencez à créer des agents IA personnalisés — gratuit pour toujours",
+    "pillLora": "🧠 Entraînement LoRA",
+    "pillRegistry": "🤖 Registre d’agents",
+    "pillEval": "🔬 Évaluation IA",
+    "nameLabel": "Nom",
+    "nameOptional": "(facultatif)",
+    "namePlaceholder": "Marie Dupont",
+    "emailLabel": "E-mail",
+    "passwordLabel": "Mot de passe",
+    "passwordPlaceholder": "Min. 8 caractères",
+    "confirmLabel": "Confirmer",
+    "terms": "J’accepte les Conditions d’utilisation et la Politique de confidentialité (voir les liens en bas de page)",
+    "passwordsMismatch": "Les mots de passe ne correspondent pas",
+    "registrationFailed": "Échec de l’inscription",
+    "creating": "Création du compte…",
+    "submit": "Créer un compte →",
+    "haveAccount": "Vous avez déjà un compte ?",
+    "signInLink": "Se connecter"
   },
   "welcomeRole": {
     "eyebrow": "Bienvenue",
@@ -6975,6 +7000,13 @@
     },
     "relatedHeading": "Lectures associées"
   },
+  "teamChat": {
+    "open": {
+      "project": "Chat d’équipe",
+      "team": "Chat d’équipe",
+      "broader": "Message à l’équipe"
+    }
+  },
   "meetings": {
     "title": "Réunions",
     "subtitle": "Planifiez et rejoignez des sessions vidéo et audio en direct avec votre équipe.",
@@ -6990,6 +7022,7 @@
     "liveNow": "En direct",
     "join": "Rejoindre",
     "joinEarly": "Rejoindre en avance",
+    "teamChat": "Chat d’équipe",
     "joinWithCamera": "Rejoindre avec la caméra",
     "cameraOn": "Caméras activées",
     "cameraError": "Caméra/microphone indisponible : {error}",
@@ -7029,7 +7062,32 @@
     "connecting": "Connexion…",
     "liveCount": "{count, plural, one {# personne en direct} other {# personnes en direct}}",
     "participants": "Participants",
-    "endForAll": "Terminer pour tous"
+    "endForAll": "Terminer pour tous",
+    "prev": "Précédent",
+    "next": "Suivant",
+    "today": "Aujourd’hui",
+    "calWeek": "Semaine",
+    "calMonth": "Mois",
+    "myAvailability": "Mes disponibilités",
+    "newMeeting": "Nouvelle réunion",
+    "available": "Disponible",
+    "legendScheduled": "Planifiée",
+    "legendLive": "En direct",
+    "legendCalendar": "Agenda",
+    "legendAvailable": "Vos horaires",
+    "availabilityTitle": "Mes disponibilités",
+    "weekdayDefault": "En semaine 9h–17h",
+    "availabilitySubtitle": "Définissez les heures où vos collègues peuvent vous réserver. Les heures sont dans votre fuseau.",
+    "timezone": "Fuseau horaire",
+    "unavailable": "Indisponible",
+    "remove": "Supprimer",
+    "addWindow": "Ajouter des heures",
+    "save": "Enregistrer",
+    "finding": "Recherche…",
+    "findATime": "Trouver un créneau",
+    "noSlots": "Aucun créneau commun dans les deux prochaines semaines.",
+    "kind_interview": "Entretien",
+    "kind_review": "Revue"
   },
   "brainLauncher": {
     "open": "Ouvrir l’assistant Brain",
@@ -7040,5 +7098,34 @@
     "meetBody": "Votre copilote IA pour planifier des projets, générer des spécifications et livrer plus vite. Connectez-vous pour démarrer une conversation.",
     "signIn": "Se connecter",
     "createAccount": "Créer un compte"
+  },
+  "login": {
+    "navSignUp": "Inscription gratuite",
+    "heading": "Bon retour",
+    "subtitle": "Connectez-vous à votre compte Builderforce.ai",
+    "emailLabel": "E-mail",
+    "passwordLabel": "Mot de passe",
+    "loginFailed": "Échec de la connexion",
+    "enterEmailFirst": "Saisissez d’abord votre adresse e-mail ci-dessus.",
+    "magicLinkFailed": "Échec de l’envoi du lien magique",
+    "signingIn": "Connexion…",
+    "submit": "Se connecter →",
+    "magicLinkSent": "Vérifiez votre e-mail — un lien de connexion arrive.",
+    "sending": "Envoi…",
+    "magicLinkButton": "M’envoyer plutôt un lien magique par e-mail",
+    "noAccount": "Vous n’avez pas de compte ?",
+    "signUpLink": "Inscription gratuite",
+    "marketingHeading": "Créez, entraînez et déployez des agents IA",
+    "statFreeLabel": "Gratuit pour toujours",
+    "statSetupLabel": "Temps d’installation",
+    "statCommissionLabel": "Commission",
+    "statParamsLabel": "Paramètres dans le navigateur",
+    "featWebgpu": "Fine-tuning LoRA WebGPU dans le navigateur",
+    "featDataset": "Génération de jeux de données à partir d’un seul prompt",
+    "featEval": "Évaluation IA avec des métriques de qualité structurées",
+    "featRegistry": "Publiez dans le Registre mondial de la main-d’œuvre",
+    "featOauth": "Connexion OAuth (Google, GitHub, LinkedIn, Microsoft)",
+    "featFree": "Aucune carte bancaire requise — gratuit pour toujours",
+    "commonQuestions": "Questions fréquentes"
   }
 }

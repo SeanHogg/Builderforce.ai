@@ -46,7 +46,7 @@ export default function RegisterPageClient() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (password !== confirmPassword) { setError('Passwords do not match'); return; }
+    if (password !== confirmPassword) { setError(tr('passwordsMismatch')); return; }
     setError(null);
     setIsLoading(true);
     try {
@@ -57,7 +57,7 @@ export default function RegisterPageClient() {
         router.push(destination);
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Registration failed');
+      setError(err instanceof Error ? err.message : tr('registrationFailed'));
     } finally {
       setIsLoading(false);
     }
@@ -127,7 +127,7 @@ export default function RegisterPageClient() {
               fontFamily: 'var(--font-display)', fontWeight: 600, fontSize: '0.875rem',
               backdropFilter: 'blur(8px)',
             }}>
-              Sign in
+              {tr('navSignIn')}
             </Link>
           </div>
         </div>
@@ -142,16 +142,16 @@ export default function RegisterPageClient() {
           {/* Heading */}
           <div style={{ textAlign: 'center', marginBottom: 28 }}>
             <h1 style={{ fontFamily: 'var(--font-display)', fontSize: '1.75rem', fontWeight: 700, marginBottom: 6, color: 'var(--text-primary)' }}>
-              Create your account
+              {tr('heading')}
             </h1>
             <p style={{ fontSize: '0.9rem', color: 'var(--text-secondary)' }}>
-              Start building custom AI agents — free forever
+              {tr('subtitle')}
             </p>
           </div>
 
           {/* Feature pills */}
           <div style={{ display: 'flex', gap: 8, justifyContent: 'center', flexWrap: 'wrap', marginBottom: 28 }}>
-            {['🧠 LoRA Training', '🤖 Agent Registry', '🔬 AI Evaluation'].map(f => (
+            {[tr('pillLora'), tr('pillRegistry'), tr('pillEval')].map(f => (
               <span key={f} style={{
                 fontSize: '0.75rem', fontWeight: 600,
                 background: 'var(--surface-coral-soft)',
@@ -191,16 +191,16 @@ export default function RegisterPageClient() {
               </div>
               <div>
                 <label htmlFor="name" style={labelStyle}>
-                  Name <span style={{ color: 'var(--text-muted)', fontWeight: 400, textTransform: 'none', letterSpacing: 0 }}>(optional)</span>
+                  {tr('nameLabel')} <span style={{ color: 'var(--text-muted)', fontWeight: 400, textTransform: 'none', letterSpacing: 0 }}>{tr('nameOptional')}</span>
                 </label>
                 <input id="name" type="text" autoComplete="name" autoFocus
                   value={name} onChange={e => setName(e.target.value)}
-                  placeholder="Jane Smith" style={inputStyle}
+                  placeholder={tr('namePlaceholder')} style={inputStyle}
                   onFocus={focusIn} onBlur={focusOut}
                 />
               </div>
               <div>
-                <label htmlFor="email" style={labelStyle}>Email</label>
+                <label htmlFor="email" style={labelStyle}>{tr('emailLabel')}</label>
                 <input id="email" type="email" autoComplete="email"
                   value={email} onChange={e => setEmail(e.target.value)}
                   placeholder="you@example.com" style={inputStyle}
@@ -209,20 +209,20 @@ export default function RegisterPageClient() {
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
                 <div>
-                  <label htmlFor="password" style={labelStyle}>Password</label>
+                  <label htmlFor="password" style={labelStyle}>{tr('passwordLabel')}</label>
                   <PasswordInput
                     id="password"
                     autoComplete="new-password"
                     value={password}
                     onChange={e => setPassword(e.target.value)}
-                    placeholder="Min. 8 chars"
+                    placeholder={tr('passwordPlaceholder')}
                     required
                     minLength={8}
                     style={inputStyle}
                   />
                 </div>
                 <div>
-                  <label htmlFor="confirm" style={labelStyle}>Confirm</label>
+                  <label htmlFor="confirm" style={labelStyle}>{tr('confirmLabel')}</label>
                   <PasswordInput
                     id="confirm"
                     autoComplete="new-password"

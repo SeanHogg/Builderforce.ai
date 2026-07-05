@@ -3672,6 +3672,9 @@ export interface Meeting {
   status: MeetingStatus;
   createdBy: string | null;
   roomKey: string;
+  /** Team Chat backchannel (0294): the meeting's persistent group chat — joining
+   *  opens it, and absentees still post their update there. Null when unlinked. */
+  chatId: number | null;
   videoEnabled: boolean;
   calendarProvider: string | null;
   calendarEventId: string | null;
@@ -3710,6 +3713,10 @@ export interface MeetingCreate {
   attendees?: Array<{ kind?: string; ref: string; name: string; email?: string; role?: string }>;
   organizerName?: string;
   organizerEmail?: string;
+  /** Team Chat (0294): scope the meeting's backing team chat to a named workforce
+   *  team, and opt in/out of linking one (defaults on for team ceremonies). */
+  teamId?: number | null;
+  linkTeamChat?: boolean;
 }
 
 const MEETINGS_BASE = '/api/meetings';

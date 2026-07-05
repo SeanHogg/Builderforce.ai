@@ -15,15 +15,16 @@ import { PerformanceView } from '@/components/workforce/PerformanceView';
 import { QaContent } from '@/components/QaContent';
 import { ActiveRunsPanel } from '@/components/ActiveRunsPanel';
 import { TeamChatButton } from '@/components/brain/TeamChatButton';
+import { MeetingsCalendar } from '@/components/meetings/MeetingsCalendar';
 import PageContainer from '@/components/PageContainer';
 
 // Workforce sub-views are declared as query tabs in navGroups; the shell
 // <SectionTabs> bar renders the tab bar. Here we just read `?tab=` to pick the
 // body and the per-tab sub-label, mirroring the /quality surface.
-type WorkforceTab = 'workforce' | 'roles' | 'teams' | 'talent' | 'performance' | 'chats' | 'approvals' | 'logs' | 'qa';
+type WorkforceTab = 'workforce' | 'roles' | 'teams' | 'calendar' | 'talent' | 'performance' | 'chats' | 'approvals' | 'logs' | 'qa';
 
 const TAB_IDS: ReadonlyArray<WorkforceTab> = [
-  'workforce', 'roles', 'teams', 'talent', 'performance', 'chats', 'approvals', 'logs', 'qa',
+  'workforce', 'roles', 'teams', 'calendar', 'talent', 'performance', 'chats', 'approvals', 'logs', 'qa',
 ];
 
 function WorkforcePageInner() {
@@ -59,6 +60,8 @@ function WorkforcePageInner() {
         <TalentView />
       ) : tab === 'teams' ? (
         <TeamsView />
+      ) : tab === 'calendar' ? (
+        <MeetingsCalendar />
       ) : tab === 'performance' ? (
         <PerformanceView />
       ) : tab === 'chats' ? (

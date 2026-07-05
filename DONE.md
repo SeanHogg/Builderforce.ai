@@ -4,6 +4,26 @@
 
 ---
 
+## ✅ RESOLVED 2026-07-05 — ONE unified audit/activity subsystem (api `2026.7.39`, mig 0295)
+
+Collapsed the two overlapping audit trails into a single store. `activity_log` (mig 0287) is now the ONLY audit/activity table; the legacy `audit_events` table + `audit_event_type` enum are DROPPED (mig 0295 migrates existing rows over first: `event_type` → dotted `verb`, `user_id` → human/system actor, `resource_*` → `target_*`, metadata preserved under `{raw}`).
+
+- **The DDD seam is preserved, storage unified.** `AuditRepository` (still implementing `IAuditRepository`) is now an ADAPTER over `activity_log`: `save()` maps an `AuditEvent` → `recordActivity()`, `query()` reads `activity_log` and maps rows back to the `AuditEvent` shape. So its callers (`AuthService` logins/registrations, `AgentService`, `RuntimeService` execution events) and the `/api/audit` endpoint + the `/logs` page keep working unchanged — no route/frontend edits needed. `env` is threaded into `AuditRepository` (index + buildRuntimeService) for cached actor resolution.
+- **Readers repointed.** The `audit.list` MCP tool now reads `activity_log` (filters by `verb`/`targetType`); `engagement.ts` counts `activity_log` human/hire actor rows. The 3 hand-rolled `db.insert(auditEvents)` dual-writes in `taskRoutes` are DELETED (the `/next` claim now emits `task.claimed` on the unified stream).
+- **Schema.** `activity_log.tenant_id` is now nullable (absorbs the platform-global pre-tenant events `audit_events` allowed); tenant-scoped reads filter on it so a global row is invisible to any one tenant.
+- Verified: api typecheck 0 errors, schema-drift + migration-sequence checks pass, api suite **1880 pass** (incl. `RuntimeService.laneChaining` which exercises the audit save path). Also fixed 3 compiler-suggested `as unknown as` casts in concurrent security-ticket WIP that were reddening the whole-program typecheck.
+
+---
+
+## ✅ RESOLVED 2026-07-05 — Platform Admin refactor: consolidation + full localization
+
+The superadmin `/admin` area was refactored to match the rest of the app and then fully localized in all 5 locales.
+
+- **Same UX as other pages.** The 3,566-line monolith became a **98-line thin router** ([app/admin/page.tsx](./frontend/src/app/admin/page.tsx)) wrapped in `PageContainer`; the in-page tab strip was replaced by the shared shell `<SectionTabs>` bar. Each tab body became a **self-fetching panel** under [frontend/src/components/admin/panels/](./frontend/src/components/admin/panels/) (17 panels) sharing one [`adminShared.tsx`](./frontend/src/components/admin/adminShared.tsx) contract (`useAdminData` hook, `AdminPanelHeader`, `AdminError`/`AdminLoading`, `ModelPoolBadges`) + a single [`EmulationLauncher`](./frontend/src/components/admin/EmulationLauncher.tsx) provider owning the emulate flow (no prop-drilling).
+- **Consolidated 19 tabs → 10 domain groups** via [lib/adminGroups.ts](./frontend/src/lib/adminGroups.ts) (single source of truth for nav + panel routing): Overview · Users (Directory/Security/Emulation) · Workspaces · Access (Permissions/Modules) · LLM (Usage/Traces) · Content (Personas/Governance) · Compliance (Legal/Privacy) · Growth (Billing/Newsletter) · Logs (Errors/Audit) · Developer (API Keys/Token). URL scheme `?tab=<group>&sub=<view>` with a reusable inner [`AdminGroupNav`](./frontend/src/components/admin/AdminGroupNav.tsx) pill bar; `LEGACY_ADMIN_TAB` keeps every old deep link working. No capability removed.
+- **Full localization.** Every admin panel + leaf component (UserDetailDrawer, the 4 Tenant override editors, TenantApiKeysAdminTab, LegalEditorDrawer/Preview, LlmTracesPanel) now routes visible strings through `useTranslations('admin')`. New `admin.*` namespace = **542 keys** (common/emulate/sub + per-panel), added with real translations to ALL 5 catalogs (en/zh/es/fr/de) — 0 missing / 0 extra key parity. ICU plurals + placeholders throughout; the Usage tab's LLM prompt payload was deliberately left literal (not UI). Group + sub-tab nav labels localized too (`nav.tab.admin*`, `admin.sub.*`).
+- Verified: `tsc --noEmit` clean, ESLint clean, no residual hardcoded English in the admin tree. Dead `.admin-tabs` / `.admin-content` CSS removed.
+
 ## ✅ RESOLVED 2026-07-05 — Cross-surface session/task live-status indicators (api `2026.7.35` · VSIX `2026.7.36`)
 
 Multitasking across concurrent runs now reads at a glance on every surface: a session/ticket shows **actively-executing** (coral/blue pulse) or **needs-your-answer** (amber flag), from ONE server-side signal, so a session's status follows it wherever it's shown — switching chats on the web never stops the agent executing in the background.

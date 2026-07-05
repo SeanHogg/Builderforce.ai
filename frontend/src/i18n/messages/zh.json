@@ -322,7 +322,8 @@
       "adminCompliance": "合规",
       "adminGrowth": "增长",
       "adminLogs": "日志",
-      "adminDeveloper": "开发者"
+      "adminDeveloper": "开发者",
+      "calendar": "日历"
     }
   },
   "alerts": {
@@ -978,7 +979,8 @@
       "loading": "正在加载举措…",
       "saved": "已关联"
     },
-    "unassignedPortfolio": "未分配"
+    "unassignedPortfolio": "未分配",
+    "meetingsHeading": "会议"
   },
   "insights": {
     "loading": "加载中…",
@@ -1891,7 +1893,8 @@
         "logs": "本工作区中的智能体日志、执行时间线与诊断信息。",
         "qa": "按项目的 QA 自动化——流程、生成的测试与 CI 运行。",
         "roles": "你的团队需要担任的角色——看板模板的标准角色加上你的自定义角色——以及每个角色由谁担任：智能体、员工或外聘人员。",
-        "talent": "管理你聘用的自由职业者——合作关系、职位发布、工时审批与发票。"
+        "talent": "管理你聘用的自由职业者——合作关系、职位发布、工时审批与发票。",
+        "calendar": "团队可用时间与已安排的会议"
       }
     },
     "discipline": "职能",
@@ -1955,6 +1958,8 @@
       "namePlaceholder": "例如：平台小队",
       "description": "描述",
       "descriptionPlaceholder": "该团队负责的内容",
+      "avatarUrl": "头像",
+      "avatarUrlPlaceholder": "图片网址（可选）",
       "titleFallback": "团队",
       "loading": "加载中…",
       "loadingTeams": "正在加载团队…",
@@ -5643,7 +5648,27 @@
     "hireTitle": "获得雇用",
     "hireSub": "自由职业资料和工作",
     "accountTypeAria": "账户类型",
-    "commonQuestions": "常见问题"
+    "commonQuestions": "常见问题",
+    "navSignIn": "登录",
+    "heading": "创建您的账户",
+    "subtitle": "开始构建定制 AI 智能体 — 永久免费",
+    "pillLora": "🧠 LoRA 训练",
+    "pillRegistry": "🤖 智能体注册库",
+    "pillEval": "🔬 AI 评估",
+    "nameLabel": "姓名",
+    "nameOptional": "（可选）",
+    "namePlaceholder": "张伟",
+    "emailLabel": "电子邮箱",
+    "passwordLabel": "密码",
+    "passwordPlaceholder": "至少 8 个字符",
+    "confirmLabel": "确认",
+    "terms": "我同意《使用条款》和《隐私政策》（见下方页脚链接）",
+    "passwordsMismatch": "两次输入的密码不一致",
+    "registrationFailed": "注册失败",
+    "creating": "正在创建账户…",
+    "submit": "创建账户 →",
+    "haveAccount": "已有账户？",
+    "signInLink": "登录"
   },
   "welcomeRole": {
     "eyebrow": "欢迎",
@@ -6975,6 +7000,13 @@
     },
     "relatedHeading": "相关阅读"
   },
+  "teamChat": {
+    "open": {
+      "project": "团队聊天",
+      "team": "团队聊天",
+      "broader": "给团队发消息"
+    }
+  },
   "meetings": {
     "title": "会议",
     "subtitle": "安排并加入与团队的实时视频和音频会话。",
@@ -6990,6 +7022,7 @@
     "liveNow": "进行中",
     "join": "加入",
     "joinEarly": "提前加入",
+    "teamChat": "团队聊天",
     "joinWithCamera": "开启摄像头加入",
     "cameraOn": "摄像头已开启",
     "cameraError": "摄像头/麦克风不可用：{error}",
@@ -7029,7 +7062,32 @@
     "connecting": "连接中…",
     "liveCount": "{count, plural, other {# 人在线}}",
     "participants": "参与者",
-    "endForAll": "为所有人结束"
+    "endForAll": "为所有人结束",
+    "prev": "上一个",
+    "next": "下一个",
+    "today": "今天",
+    "calWeek": "周",
+    "calMonth": "月",
+    "myAvailability": "我的可用时间",
+    "newMeeting": "新建会议",
+    "available": "可用",
+    "legendScheduled": "已安排",
+    "legendLive": "进行中",
+    "legendCalendar": "日历",
+    "legendAvailable": "你的时段",
+    "availabilityTitle": "我的可用时间",
+    "weekdayDefault": "工作日 9–17 点",
+    "availabilitySubtitle": "设置队友可预约你的时间。时间以你的时区显示。",
+    "timezone": "时区",
+    "unavailable": "不可用",
+    "remove": "删除",
+    "addWindow": "添加时段",
+    "save": "保存",
+    "finding": "查找中…",
+    "findATime": "查找时间",
+    "noSlots": "未来两周内没有大家都空闲的时间。",
+    "kind_interview": "面试",
+    "kind_review": "评审"
   },
   "brainLauncher": {
     "open": "打开 Brain 助手",
@@ -7040,5 +7098,34 @@
     "meetBody": "您的 AI 协作伙伴，助您规划项目、生成规格并更快交付。登录即可开始对话。",
     "signIn": "登录",
     "createAccount": "创建账户"
+  },
+  "login": {
+    "navSignUp": "免费注册",
+    "heading": "欢迎回来",
+    "subtitle": "登录您的 Builderforce.ai 账户",
+    "emailLabel": "电子邮箱",
+    "passwordLabel": "密码",
+    "loginFailed": "登录失败",
+    "enterEmailFirst": "请先在上方输入您的电子邮箱地址。",
+    "magicLinkFailed": "发送登录链接失败",
+    "signingIn": "正在登录…",
+    "submit": "登录 →",
+    "magicLinkSent": "请查看您的邮箱 — 登录链接即将送达。",
+    "sending": "正在发送…",
+    "magicLinkButton": "改为向我发送登录链接",
+    "noAccount": "还没有账户？",
+    "signUpLink": "免费注册",
+    "marketingHeading": "构建、训练并部署 AI 智能体",
+    "statFreeLabel": "永久免费",
+    "statSetupLabel": "设置时间",
+    "statCommissionLabel": "佣金",
+    "statParamsLabel": "浏览器内参数",
+    "featWebgpu": "在浏览器中进行 WebGPU LoRA 微调",
+    "featDataset": "通过单条提示词生成数据集",
+    "featEval": "使用结构化质量指标进行 AI 评估",
+    "featRegistry": "发布到全球劳动力注册库",
+    "featOauth": "OAuth 登录（Google、GitHub、LinkedIn、Microsoft）",
+    "featFree": "无需信用卡 — 永久免费",
+    "commonQuestions": "常见问题"
   }
 }

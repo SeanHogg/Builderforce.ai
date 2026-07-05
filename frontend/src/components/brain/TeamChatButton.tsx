@@ -23,6 +23,9 @@ import { useOptionalBrainContext } from '@/lib/brain';
 import { brain } from '@/lib/builderforceApi';
 
 export interface TeamChatButtonProps {
+  /** Open an already-resolved chat directly (e.g. a meeting's linked chat) — skips
+   *  the scope resolve. Takes precedence over projectId/teamId. */
+  chatId?: number | null;
   projectId?: number | null;
   teamId?: number | null;
   /** 'icon' = compact glyph button; 'labeled' = glyph + text. */
@@ -34,6 +37,7 @@ export interface TeamChatButtonProps {
 }
 
 export function TeamChatButton({
+  chatId = null,
   projectId = null,
   teamId = null,
   variant = 'icon',
@@ -52,16 +56,17 @@ export function TeamChatButton({
     if (!brainCtx || loading) return;
     setLoading(true);
     try {
-      const chat = await brain.getTeamChat({ projectId, teamId });
-      brainCtx.setActiveChatId(chat.id);
-      brainCtx.setContext({ initialChatId: chat.id });
+      // A pre-resolved chatId opens directly; otherwise resolve-or-create by scope.
+      const id = chatId ?? (await brain.getTeamChat({ projectId, teamId })).id;
+      brainCtx.setActiveChatId(id);
+      brainCtx.setContext({ initialChatId: id });
       brainCtx.setOpen(true);
     } catch {
       /* The drawer surfaces load errors; the button just re-enables. */
     } finally {
       setLoading(false);
     }
-  }, [brainCtx, loading, projectId, teamId]);
+  }, [brainCtx, loading, chatId, projectId, teamId]);
 
   // No Brain drawer to open → nothing to render.
   if (!brainCtx) return null;
