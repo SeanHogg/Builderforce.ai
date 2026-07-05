@@ -433,10 +433,10 @@ export function BrainPanel({
   // button, so a misbehaving run can be dropped straight into a bug report.
   const [captureState, setCaptureState] = useState<'idle' | 'copied' | 'error'>('idle');
   const personaLabel = useMemo(() => {
-    if (personaSel.startsWith('modality:')) return `Brain — ${getModality(personaSel.slice('modality:'.length)).label}`;
+    if (personaSel.startsWith('modality:')) return tBrain('brainModality', { modality: getModality(personaSel.slice('modality:'.length)).label });
     if (personaSel.startsWith('agent:')) {
       const a = brainAgents.find((x) => `agent:${x.agentKind}:${x.agentRef}` === personaSel);
-      return a ? `Brain as ${agentName(a)}` : 'Brain';
+      return a ? tBrain('brainAs', { name: agentName(a) }) : tBrain('brainTitle');
     }
     return tBrain('brainDefault');
   }, [personaSel, brainAgents, agentName, tBrain]);
@@ -504,10 +504,10 @@ export function BrainPanel({
 
   const chatRows = (
     <>
-      {chats.loading && <div style={{ padding: 12, fontSize: 13, color: 'var(--text-muted)' }}>Loading…</div>}
+      {chats.loading && <div style={{ padding: 12, fontSize: 13, color: 'var(--text-muted)' }}>{tCommon('loading')}</div>}
       {!chats.loading && filteredChats.length === 0 && (
         <div style={{ padding: 12, fontSize: 13, color: 'var(--text-muted)', textAlign: 'center' }}>
-          {chats.chats.length === 0 ? 'No chats yet. Click + New to start.' : 'No chats match your search.'}
+          {chats.chats.length === 0 ? tBrain('noChatsYet') : tBrain('noChatsMatch')}
         </div>
       )}
       {filteredChats.map((chat) => {
@@ -549,19 +549,19 @@ export function BrainPanel({
             </div>
             {active && renamingId !== chat.id && (
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 6 }} onClick={(e) => e.stopPropagation()}>
-                <button type="button" onClick={() => { setRenamingId(chat.id); setRenameValue(chat.title); }} style={{ fontSize: 11, padding: '2px 6px', cursor: 'pointer' }}>Rename</button>
-                <button type="button" onClick={() => onSummarize(chat.id)} disabled={summarizingId === chat.id} style={{ fontSize: 11, padding: '2px 6px', cursor: 'pointer' }}>{summarizingId === chat.id ? '…' : 'Summarize'}</button>
-                <button type="button" onClick={() => onDelete(chat)} disabled={deletingId === chat.id} style={{ fontSize: 11, padding: '2px 6px', cursor: 'pointer', color: 'var(--coral-bright)' }}>{deletingId === chat.id ? '…' : 'Delete'}</button>
+                <button type="button" onClick={() => { setRenamingId(chat.id); setRenameValue(chat.title); }} style={{ fontSize: 11, padding: '2px 6px', cursor: 'pointer' }}>{tBrain('rename')}</button>
+                <button type="button" onClick={() => onSummarize(chat.id)} disabled={summarizingId === chat.id} style={{ fontSize: 11, padding: '2px 6px', cursor: 'pointer' }}>{summarizingId === chat.id ? '…' : tBrain('summarize')}</button>
+                <button type="button" onClick={() => onDelete(chat)} disabled={deletingId === chat.id} style={{ fontSize: 11, padding: '2px 6px', cursor: 'pointer', color: 'var(--coral-bright)' }}>{deletingId === chat.id ? '…' : tCommon('delete')}</button>
                 {chat.projectId == null && pinnedProjectId == null && (
                   <label style={{ fontSize: 11, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                    Add to:
+                    {tBrain('addTo')}
                     <ThemeSelect
-                      ariaLabel="Add chat to project"
+                      ariaLabel={tBrain('addChatToProjectAria')}
                       value=""
                       onChange={(val) => { if (val === '__new__') setShowNewProject(true); else if (val !== '') onAssign(chat.id, Number(val)); }}
                       options={[
-                        { value: '', label: 'Add to project…' },
-                        { value: '__new__', label: '+ Create new project' },
+                        { value: '', label: tBrain('addToProject') },
+                        { value: '__new__', label: tBrain('createNewProject') },
                         ...projects.map((p) => ({ value: String(p.id), label: p.name })),
                       ]}
                       style={{ marginLeft: 0, minWidth: 120, padding: '2px 6px', fontSize: 11 }}
@@ -596,10 +596,10 @@ export function BrainPanel({
       {chats.activeChatId == null ? (
         <div className={isPage ? 'bs-empty' : undefined} style={isPage ? undefined : { flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 8, color: 'var(--text-muted)', padding: 24, textAlign: 'center' }}>
           <div style={{ fontSize: 40 }}>🧠</div>
-          <div style={{ fontSize: 16, fontWeight: 500, color: 'var(--text-primary)' }}>Brain</div>
-          <div style={{ fontSize: 13 }}>Start a new chat or pick one to begin.</div>
+          <div style={{ fontSize: 16, fontWeight: 500, color: 'var(--text-primary)' }}>{tBrain('brainTitle')}</div>
+          <div style={{ fontSize: 13 }}>{tBrain('emptyHint')}</div>
           <button type="button" onClick={() => chats.create()} style={{ padding: '10px 18px', fontSize: 14, fontWeight: 600, background: 'var(--accent, #3b82f6)', color: '#fff', border: 'none', borderRadius: 10, cursor: 'pointer' }}>
-            Start new chat
+            {tBrain('startNewChat')}
           </button>
         </div>
       ) : (
@@ -624,14 +624,14 @@ export function BrainPanel({
           {showNewProject && (
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '8px 12px', padding: '8px 0', borderBottom: '1px solid var(--border-subtle)' }}>
               <input
-                placeholder="New project name"
+                placeholder={tBrain('newProjectPlaceholder')}
                 value={newProjectName}
                 onChange={(e) => setNewProjectName(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && createProjectAndAssign()}
                 style={{ flex: 1, padding: '8px 10px', fontSize: 13, borderRadius: 8, border: '1px solid var(--border-subtle)', background: 'var(--bg-base)', color: 'var(--text-primary)' }}
               />
               <button type="button" onClick={createProjectAndAssign} disabled={!newProjectName.trim() || creatingProject} style={{ padding: '8px 14px', fontSize: 13, fontWeight: 600, background: 'var(--accent, #3b82f6)', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer' }}>
-                {creatingProject ? '…' : 'Create & assign'}
+                {creatingProject ? '…' : tBrain('createAndAssign')}
               </button>
               <button type="button" onClick={() => { setShowNewProject(false); setNewProjectName(''); }} style={{ padding: '8px 12px', fontSize: 13, background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', borderRadius: 8, cursor: 'pointer' }}>{tCommon('cancel')}</button>
             </div>
@@ -684,21 +684,21 @@ export function BrainPanel({
           <div className="bs-input-area" style={{ flexShrink: 0, padding: isPage ? undefined : '12px 16px', borderTop: isPage ? undefined : '1px solid var(--border-subtle)' }}>
             {pendingConfirm && <ToolConfirmBar req={pendingConfirm} onDecide={resolveConfirm} onApproveAll={approveAll} />}
             <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8, flexWrap: 'wrap' }}>
-              <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>Acting as</span>
+              <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{tBrain('actingAs')}</span>
               <Select
                 value={personaSel}
                 onChange={(e) => setPersonaSel(e.target.value)}
-                aria-label="Brain agent or persona"
+                aria-label={tBrain('personaAria')}
                 style={{ fontSize: 12, padding: '3px 8px', borderRadius: 6, border: '1px solid var(--border-subtle)', background: 'var(--bg-elevated)', color: 'var(--text-secondary)' }}
               >
-                <option value="default">Default Brain</option>
-                <optgroup label="Personas">
+                <option value="default">{tBrain('defaultBrain')}</option>
+                <optgroup label={tBrain('personas')}>
                   {MODALITIES.map((m) => (
                     <option key={m.id} value={`modality:${m.id}`}>{m.label ?? m.id}</option>
                   ))}
                 </optgroup>
                 {brainAgents.length > 0 && (
-                  <optgroup label="Assigned agents">
+                  <optgroup label={tBrain('assignedAgents')}>
                     {brainAgents.map((a) => (
                       <option key={a.id} value={`agent:${a.agentKind}:${a.agentRef}`}>{agentName(a)}</option>
                     ))}
@@ -733,7 +733,7 @@ export function BrainPanel({
               pendingAttachments={conv.pendingAttachments}
               onRemoveAttachment={conv.removeAttachment}
             />
-            {conv.uploading && <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 4 }}>Uploading…</div>}
+            {conv.uploading && <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 4 }}>{tBrain('uploading')}</div>}
           </div>
         </>
       )}
@@ -755,7 +755,7 @@ export function BrainPanel({
         <div className="bs-sidebar">
           <div className="bs-sidebar-header">
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-              <span style={{ fontWeight: 600, fontSize: 15, color: 'var(--text-strong)' }}>Brain Storm</span>
+              <span style={{ fontWeight: 600, fontSize: 15, color: 'var(--text-strong)' }}>{tBrain('brainStorm')}</span>
               <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                 {captureButton}
                 <button type="button" onClick={() => chats.create()} style={{ padding: '4px 10px', fontSize: 12, fontWeight: 600, background: 'var(--accent)', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer' }}>
@@ -764,15 +764,15 @@ export function BrainPanel({
               </div>
             </div>
             <label style={{ display: 'block', marginBottom: 6, fontSize: 12, color: 'var(--muted)' }}>
-              Project
-              <span style={{ display: 'block', fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>New chats are added to the selected project.</span>
+              {tBrain('projectLabel')}
+              <span style={{ display: 'block', fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>{tBrain('newChatsHint')}</span>
               <ThemeSelect
-                ariaLabel="Filter by project"
+                ariaLabel={tBrain('filterByProjectAria')}
                 value={filterProjectId ?? ''}
                 onChange={(v) => setFilterProjectId(v)}
                 options={[
-                  { value: '', label: 'All' },
-                  { value: 'none', label: 'No project' },
+                  { value: '', label: tBrain('allProjects') },
+                  { value: 'none', label: tBrain('noProject') },
                   ...projects.map((p) => ({ value: String(p.id), label: p.name })),
                 ]}
                 style={{ marginTop: 4 }}
@@ -792,20 +792,20 @@ export function BrainPanel({
   return (
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column', background: 'var(--bg-base)' }}>
       <div style={{ flexShrink: 0, padding: '10px 14px', borderBottom: '1px solid var(--border-subtle)', background: 'var(--bg-elevated)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <span style={{ fontWeight: 600, fontSize: 15, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: 6 }}>🧠 Brain</span>
+        <span style={{ fontWeight: 600, fontSize: 15, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: 6 }}>🧠 {tBrain('brainTitle')}</span>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
           {captureButton}
           <button type="button" onClick={() => chats.create()} style={{ padding: '4px 10px', fontSize: 12, fontWeight: 600, background: 'var(--accent, #3b82f6)', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer' }}>{tBrain('newChat')}</button>
-          <Link href="/brainstorm" title="Open full Brain Storm" style={{ fontSize: 12, color: 'var(--text-secondary)', textDecoration: 'none', padding: '4px 8px', borderRadius: 6, border: '1px solid var(--border-subtle)' }}>Expand ↗</Link>
+          <Link href="/brainstorm" title={tBrain('openFullBrainStorm')} style={{ fontSize: 12, color: 'var(--text-secondary)', textDecoration: 'none', padding: '4px 8px', borderRadius: 6, border: '1px solid var(--border-subtle)' }}>{tBrain('expand')}</Link>
           {onClose && (
-            <button type="button" onClick={onClose} aria-label="Close Brain" style={{ background: 'transparent', border: 'none', color: 'var(--text-muted)', fontSize: 18, cursor: 'pointer', lineHeight: 1, padding: '0 4px' }}>×</button>
+            <button type="button" onClick={onClose} aria-label={tBrain('closeBrain')} style={{ background: 'transparent', border: 'none', color: 'var(--text-muted)', fontSize: 18, cursor: 'pointer', lineHeight: 1, padding: '0 4px' }}>×</button>
           )}
         </div>
       </div>
       <div style={{ flexShrink: 0, padding: '8px 12px', borderBottom: historyOpen ? '1px solid var(--border-subtle)' : 'none' }}>
         <button type="button" onClick={() => setHistoryOpen((o) => !o)} aria-expanded={historyOpen}
           style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', padding: '6px 8px', fontSize: 12, borderRadius: 6, border: '1px solid var(--border-subtle)', background: 'var(--bg-base)', color: 'var(--text-primary)', cursor: 'pointer' }}>
-          <span style={{ color: 'var(--text-muted)' }}>Chat history</span>
+          <span style={{ color: 'var(--text-muted)' }}>{tBrain('chatHistory')}</span>
           <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{historyOpen ? '▼' : '▶'}</span>
         </button>
       </div>
@@ -918,6 +918,7 @@ function ConversationHeader({ chat, projects, projectName, onAssign, onNewProjec
   onAssign: (chatId: number, projectId: number | null) => void;
   onNewProject: () => void;
 }) {
+  const tBrain = useTranslations('brain');
   if (!chat) return null;
   return (
     <div className="bs-chat-header" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
@@ -926,26 +927,26 @@ function ConversationHeader({ chat, projects, projectName, onAssign, onNewProjec
         {chat.projectId == null ? (
           <>
             <label style={{ fontSize: 12, color: 'var(--muted)', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-              Assign to project:
+              {tBrain('assignToProject')}
               <ThemeSelect
-                ariaLabel="Assign chat to project"
+                ariaLabel={tBrain('assignChatToProjectAria')}
                 value=""
                 onChange={(val) => { if (val === '__new__') onNewProject(); else if (val !== '') onAssign(chat.id, Number(val)); }}
                 options={[
-                  { value: '', label: 'No project' },
-                  { value: '__new__', label: '+ Create new project' },
+                  { value: '', label: tBrain('noProject') },
+                  { value: '__new__', label: tBrain('createNewProject') },
                   ...projects.map((p) => ({ value: String(p.id), label: p.name })),
                 ]}
                 style={{ minWidth: 140, padding: '4px 8px', fontSize: 12 }}
               />
             </label>
-            <button type="button" onClick={onNewProject} style={{ fontSize: 12, padding: '4px 8px', cursor: 'pointer', fontWeight: 600, color: 'var(--accent)' }}>+ Project</button>
+            <button type="button" onClick={onNewProject} style={{ fontSize: 12, padding: '4px 8px', cursor: 'pointer', fontWeight: 600, color: 'var(--accent)' }}>{tBrain('addProject')}</button>
           </>
         ) : (
           <>
             <span style={{ fontSize: 12, color: 'var(--muted)' }}>{projectName(chat.projectId)}</span>
-            <Link href={`/workflows?project=${chat.projectId}`} style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', textDecoration: 'none', padding: '4px 8px', borderRadius: 6, border: '1px solid var(--border-subtle)' }}>Workflows →</Link>
-            <Link href={`/ide/${chat.projectId}?chat=${chat.id}`} style={{ fontSize: 12, fontWeight: 600, color: 'var(--coral-bright)', textDecoration: 'none', padding: '4px 8px', borderRadius: 6, border: '1px solid var(--coral-bright)' }}>Open in IDE →</Link>
+            <Link href={`/workflows?project=${chat.projectId}`} style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', textDecoration: 'none', padding: '4px 8px', borderRadius: 6, border: '1px solid var(--border-subtle)' }}>{tBrain('workflowsArrow')}</Link>
+            <Link href={`/ide/${chat.projectId}?chat=${chat.id}`} style={{ fontSize: 12, fontWeight: 600, color: 'var(--coral-bright)', textDecoration: 'none', padding: '4px 8px', borderRadius: 6, border: '1px solid var(--coral-bright)' }}>{tBrain('openInIde')}</Link>
           </>
         )}
       </div>

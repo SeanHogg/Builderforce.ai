@@ -722,7 +722,11 @@
     "cancel": "Annuler",
     "save": "Enregistrer",
     "saving": "Enregistrement…",
-    "loading": "Chargement…"
+    "loading": "Chargement…",
+    "close": "Fermer",
+    "delete": "Supprimer",
+    "edit": "Modifier",
+    "view": "Voir"
   },
   "legal": {
     "termsTitle": "Conditions d'utilisation",
@@ -2986,6 +2990,10 @@
       {
         "question": "Evermind dispose-t-il de benchmarks — comment savoir si un modèle que j'entraîne est bon ?",
         "answer": "Oui. Chaque modèle que vous entraînez dans le Studio est évalué sur l'appareil avant que vous ne le publiiez. Le harnais de benchmarking intégré réserve une tranche de votre corpus sur laquelle le modèle ne s'entraîne jamais, puis rapporte les indicateurs standard des modèles de langage — perplexité sur données réservées, bits par token, précision top-1 et top-k du token suivant, et débit de génération — et peut comparer deux checkpoints en A/B pour que vous puissiez voir si une nouvelle adaptation a réellement amélioré la précédente. Il s'exécute entièrement dans votre navigateur, sans facture GPU et sans qu'aucune donnée ne quitte votre machine, de sorte que vous publiez sur preuves, et non au feeling. Ce même harnais est l'instrument de mesure ouvert qui sous-tend le rapport technique d'Evermind."
+      },
+      {
+        "question": "Evermind peut-il apprendre d’un modèle de pointe comme Opus ou Mistral ?",
+        "answer": "Oui, grâce à la distillation par enseignant. Vous pouvez épingler n’importe quel LLM de pointe (Opus, Mistral, GLM et autres) comme enseignant de l’Evermind d’un projet. Pour chaque tâche réelle livrée par votre équipe, on demande à l’enseignant la réponse idéale via la passerelle comptée, et le SSM s’adapte sur la paire (contexte de la tâche → exemple de l’enseignant) plutôt que sur le texte brut de l’exécution. Au fil du temps, votre propre petit modèle sur l’appareil absorbe la qualité d’un modèle bien plus grand, tout en gardant la propriété et l’actualité. L’appel à l’enseignant est plafonné par votre budget de tokens et au mieux — un échec se rabat sur l’apprentissage à partir du travail brut — de sorte que la distillation ne bloque jamais la boucle d’apprentissage."
       }
     ],
     "adoption": {
@@ -3018,6 +3026,36 @@
       "longDesc": "Evermind est le cerveau de la plateforme — un modèle auto-actualisé régi par la Write-Through Cognition : les nouvelles connaissances sont écrites directement, de sorte qu'une mise à jour remplace ce qui précédait sans étape de réconciliation. Un générateur hybride à experts partagés (dorsale dense + experts SSM routés) apprend en ligne et s'exécute sur WebGPU : il l'emporte ainsi par sa fraîcheur, son empreinte et la maîtrise qu'il offre, plutôt que par l'échelle brute — dans le navigateur, sur l'appareil ou au cœur de chaque agent."
     },
     {
+      "title": "Distillez un modèle de pointe dans le vôtre",
+      "shortDesc": "Épinglez n’importe quel modèle de pointe comme enseignant et entraînez votre propre modèle privé sur ses meilleures réponses.",
+      "longDesc": "Épinglez n’importe quel LLM de pointe — Opus, Mistral, GLM et autres — comme enseignant de l’Evermind d’un projet. Pour chaque travail réel livré par votre équipe, l’enseignant produit la réponse idéale à cette tâche et votre propre modèle apprend d’elle, absorbant peu à peu une qualité de niveau frontier dans un petit modèle que vous possédez et exécutez sur l’appareil. C’est plafonné par le coût et au mieux : il ne dépense que lorsqu’il y a du budget de tokens, et un échec de l’enseignant se rabat sur l’apprentissage à partir du travail brut, de sorte qu’une leçon n’est jamais perdue."
+    },
+    {
+      "title": "Un cerveau apprenant pour chaque projet",
+      "shortDesc": "Chaque projet obtient son propre modèle auto-actualisé qui apprend du travail de votre équipe.",
+      "longDesc": "Chaque projet est doté de son propre Evermind dès le premier jour — un modèle auto-actualisé qui apprend de chaque exécution dans les quatre studios : design, voix, LLM et vidéo. Les corrections persistent d’une session à l’autre grâce à un magasin de faits en écriture directe partagé, si bien que le cerveau qui a aidé hier est plus intelligent aujourd’hui. L’inférence reste désactivée jusqu’à ce que vous l’activiez, et le modèle est modifiable directement dans le LLM Studio."
+    },
+    {
+      "title": "Kanban de main-d’œuvre agéntique",
+      "shortDesc": "Dotez un large répertoire de rôles d’humains et d’agents IA sur un tableau à validation obligatoire.",
+      "longDesc": "Allez au-delà d’une liste de tâches : dotez chaque projet à partir d’une taxonomie de rôles de premier ordre — humains et agents IA dans le même répertoire — en partant d’un ensemble recommandé conçu pour votre équipe. Les couloirs peuvent exiger le bon relecteur avant qu’un ticket n’avance, et chaque « Terminé » porte un audit de validation par rôle et diagnostic pour chaque ticket, de sorte que la qualité est verrouillée sur le tableau plutôt qu’espérée après coup."
+    },
+    {
+      "title": "Marché de modèles Kanban",
+      "shortDesc": "Achetez, vendez et installez des modèles de tableau prêts à l’emploi avec couloirs, rôles et contrôles.",
+      "longDesc": "Empaquetez un processus de livraison — couloirs, rôles requis, contrôles de relecture et répertoire recommandé — sous forme de modèle Kanban, puis publiez-le sur le marché pour le vendre ou le partager. Installez un modèle éprouvé dans n’importe quel projet en un clic, afin qu’une équipe hérite d’un flux gouverné et régi par les rôles au lieu de le monter de zéro."
+    },
+    {
+      "title": "Agent Validateur — preuve de achèvement",
+      "shortDesc": "Un agent qui vérifie que « Terminé » l’est vraiment et consigne les écarts qu’il trouve.",
+      "longDesc": "Le travail de chat ad hoc devient automatiquement des tickets visibles, et un agent Validateur intégré examine chaque élément marqué Terminé — consignant un verdict et ouvrant des tâches GAP pour tout ce qui ne suffit pas. Un unique chemin partagé de fusion-vers-Terminé couvre l’approbation humaine, la CI au vert et le post-déploiement, de sorte que rien ne passe pour « terminé » sans preuve."
+    },
+    {
+      "title": "Routage de modèles appris",
+      "shortDesc": "La plateforme apprend quel modèle est le meilleur — et le moins cher — pour chaque type de tâche.",
+      "longDesc": "Chaque exécution est notée sur son résultat, et un routeur apprenant réordonne en conséquence quel modèle traite chaque type d’action — les modèles moins chers prennent le travail qu’ils font bien, les modèles premium sont réservés là où ils le méritent. Combiné au cache sémantique, votre facture de tokens fléchit à mesure que la plateforme apprend votre charge de travail, avec un interrupteur à bascule unique dès que vous voulez un contrôle manuel."
+    },
+    {
       "title": "Tableau Kanban et gestion de projet",
       "shortDesc": "Planifiez, attribuez et suivez le travail sur un tableau Kanban d'agents en direct.",
       "longDesc": "Une surface complète de gestion de projet : organisez le travail en projets, puis planifiez, attribuez et suivez chaque tâche sur un tableau Kanban en direct — couloirs par statut ou par agent, ainsi que des vues tableau, calendrier et Gantt. Humains et agents IA cohabitent sur le même tableau, et le travail circule du backlog au terminé en temps réel."
@@ -3036,6 +3074,11 @@
       "title": "Testeur agentique — assurance qualité autonome",
       "shortDesc": "Un agent IA qui teste votre application dans le navigateur, de façon planifiée.",
       "longDesc": "Le testeur agentique est un agent d'assurance qualité recrutable. Pointez-le vers l'URL de votre projet, enregistrez les identifiants qu'il doit utiliser, et il pilote un véritable navigateur à travers vos parcours les plus fréquentés — classant les tests à mener à partir des cartes de chaleur d'usage réel, se connectant sous chaque persona, et capturant les erreurs de console, les requêtes échouées et les plantages. Lancez-le à la demande ou planifiez-le dans un workflow ; chaque bogue qu'il découvre arrive directement sur votre tableau Kanban."
+    },
+    {
+      "title": "Recrutez des talents humains",
+      "shortDesc": "Faites appel à des développeurs, DBA et designers freelance — et ne payez que le temps suivi.",
+      "longDesc": "Au-delà des agents IA, recrutez de vraies personnes : la Place de marché des talents répertorie des développeurs, DBA, designers et spécialistes freelance vérifiés, avec CV (propulsés par hired.video), compétences et tarifs horaires. Faites passer des entretiens, recrutez sur n’importe quel projet et voyez les heures facturables capturées automatiquement à partir du travail qu’ils réalisent dans le portail et VS Code — chaque feuille de temps vous revient à approuver avant de payer. Humains et agents travaillent côte à côte sur le même tableau."
     },
     {
       "title": "CTO IA",
@@ -3299,6 +3342,83 @@
           {
             "feature": "MCP — exposer comme serveur",
             "note": "Point d'accès /mcp",
+            "values": {
+              "builderforce": "✅",
+              "copilot": "❌",
+              "cursor": "❌",
+              "claudeCode": "❌",
+              "devin": "❌",
+              "openhands": "❌",
+              "aider": "❌",
+              "continueDev": "❌"
+            }
+          }
+        ]
+      },
+      {
+        "id": "self-improving",
+        "title": "Modèles auto-améliorants et preuve de achèvement",
+        "blurb": "Des modèles qui apprennent de votre travail, se routent selon le résultat et prouvent que « Terminé » l’est vraiment — des capacités qui manquent structurellement aux outils figés à agent unique.",
+        "rows": [
+          {
+            "feature": "Entraîne votre propre modèle sur votre travail",
+            "note": "Distillation par enseignant de modèle de pointe",
+            "values": {
+              "builderforce": "✅",
+              "copilot": "❌",
+              "cursor": "❌",
+              "claudeCode": "❌",
+              "devin": "❌",
+              "openhands": "❌",
+              "aider": "❌",
+              "continueDev": "❌"
+            }
+          },
+          {
+            "feature": "Modèle auto-actualisé par projet",
+            "note": "Evermind, s’exécute sur l’appareil",
+            "values": {
+              "builderforce": "✅",
+              "copilot": "❌",
+              "cursor": "❌",
+              "claudeCode": "❌",
+              "devin": "❌",
+              "openhands": "❌",
+              "aider": "❌",
+              "continueDev": "❌"
+            }
+          },
+          {
+            "feature": "Routage de modèles appris par résultat",
+            "note": "note les exécutions, réordonne les modèles",
+            "values": {
+              "builderforce": "✅",
+              "copilot": "❌",
+              "cursor": "❌",
+              "claudeCode": "❌",
+              "devin": "❌",
+              "openhands": "❌",
+              "aider": "❌",
+              "continueDev": "❌"
+            }
+          },
+          {
+            "feature": "Agent Validateur — preuve de achèvement",
+            "note": "ouvre des tâches GAP en cas de manque",
+            "values": {
+              "builderforce": "✅",
+              "copilot": "❌",
+              "cursor": "❌",
+              "claudeCode": "❌",
+              "devin": "❌",
+              "openhands": "❌",
+              "aider": "❌",
+              "continueDev": "❌"
+            }
+          },
+          {
+            "feature": "Tableau régi par rôle avec audit de validation",
+            "note": "rôle + diagnostic par ticket",
             "values": {
               "builderforce": "✅",
               "copilot": "❌",
@@ -4003,6 +4123,26 @@
       {
         "question": "Puis-je intégrer les agents Builderforce avec BuilderForce Agents ?",
         "answer": "Oui — les modèles entraînés sur Builderforce peuvent être exportés et publiés en tant que modèles Evermind que votre passerelle BuilderForce Agents auto-hébergée appelle directement comme modèle, et pas seulement comme couche de mémoire. La plateforme prend en charge le pipeline complet : entraînez un SSM personnalisé dans le navigateur, publiez-le et routez-y du trafic en direct via l'API compatible OpenAI."
+      },
+      {
+        "question": "Puis-je entraîner mon propre modèle sur les réponses d’un modèle de pointe ?",
+        "answer": "Oui, c’est la distillation par enseignant. Épinglez n’importe quel LLM de pointe (Opus, Mistral, GLM et autres) comme enseignant de l’Evermind d’un projet. Pour chaque travail réel livré par votre équipe, l’enseignant produit la réponse idéale à cette tâche, et votre propre modèle apprend de cet exemple plutôt que du texte brut, absorbant peu à peu une qualité de niveau frontier dans un petit modèle que vous possédez et exécutez sur l’appareil. C’est plafonné par le coût (il ne dépense que lorsque vous avez du budget de tokens) et au mieux (un échec de l’enseignant se rabat sur l’apprentissage à partir du travail brut), de sorte qu’une leçon n’est jamais perdue."
+      },
+      {
+        "question": "Chaque projet obtient-il son propre modèle ?",
+        "answer": "Oui. Chaque projet est doté de son propre Evermind à la création — un modèle auto-actualisé qui apprend de chaque exécution dans les quatre studios (design, voix, LLM et vidéo) via un unique mécanisme d’apprentissage partagé. Les faits corrigés persistent d’une session à l’autre dans un magasin de faits en écriture directe partagé par l’application web, VS Code, le cloud et les agents on-prem, si bien que le cerveau qui a aidé hier est plus intelligent aujourd’hui. L’inférence reste désactivée jusqu’à ce que vous l’activiez, et le modèle est modifiable dans le LLM Studio."
+      },
+      {
+        "question": "Puis-je verrouiller mon tableau pour que seul le bon rôle termine un ticket ?",
+        "answer": "Oui, c’est le Kanban de main-d’œuvre agéntique. Dotez chaque projet à partir d’une taxonomie de rôles de premier ordre d’humains et d’agents IA, et configurez les couloirs pour exiger le bon relecteur avant qu’un ticket n’avance. Chaque élément marqué Terminé porte un audit de validation par rôle et diagnostic pour chaque ticket, et un diagnostic de couverture des rôles signale les écarts sur le tableau, de sorte que la qualité est imposée plutôt que supposée."
+      },
+      {
+        "question": "Comment Builderforce vérifie-t-il que le travail marqué Terminé l’est vraiment ?",
+        "answer": "Un agent Validateur intégré examine chaque élément marqué Terminé, consigne un verdict et ouvre des tâches GAP pour tout ce qui ne suffit pas. Le travail de chat ad hoc est aussi capturé automatiquement sous forme de tickets visibles, et un unique chemin partagé de fusion-vers-Terminé couvre l’approbation humaine, la CI au vert et le post-déploiement — de sorte que rien n’est signalé comme terminé sans preuve."
+      },
+      {
+        "question": "Puis-je acheter ou vendre un modèle de tableau Kanban ?",
+        "answer": "Oui. Empaquetez un processus de livraison — couloirs, rôles requis, contrôles de relecture et répertoire recommandé — sous forme de modèle Kanban et publiez-le sur le marché pour le vendre ou le partager. N’importe quelle équipe peut installer un modèle éprouvé dans un projet en un clic et hériter d’un flux gouverné et régi par les rôles au lieu d’en construire un de zéro."
       }
     ]
   },
@@ -4173,6 +4313,10 @@
           {
             "title": "Chats",
             "desc": "Discutez directement avec vos agents, ou regardez-les collaborer dans des conversations partagées."
+          },
+          {
+            "title": "Kanban de main-d’œuvre et modèles",
+            "desc": "Dotez un projet à partir d’un répertoire de rôles d’humains et d’agents IA sur un tableau à validation obligatoire, puis achetez, vendez ou installez des modèles de tableau prêts à l’emploi — couloirs, rôles requis, contrôles de relecture et répertoire recommandé — depuis le marché."
           }
         ]
       },
@@ -4451,7 +4595,50 @@
     "approveAll": "Tout approuver",
     "newChat": "+ Nouveau",
     "messagePlaceholder": "Envoyer un message à Brain…",
-    "searchChats": "Rechercher des discussions…"
+    "searchChats": "Rechercher des discussions…",
+    "confirmActionAria": "Confirmer l'action",
+    "wantsTo": "Brain veut <b>{action}</b>. Approuvez pour exécuter.",
+    "approveAllTitle": "Approuver cette action et approuver automatiquement toutes les suivantes dans cette conversation",
+    "captureHasTrace": "Copier cette exécution (étapes du LLM, chaîne d'outils, erreurs et transcription) dans le presse-papiers",
+    "captureNoTrace": "Aucune exécution capturée pour l'instant — envoyez d'abord un message",
+    "captureExecutionAria": "Capturer l'exécution",
+    "brainDefault": "Brain (par défaut)",
+    "noChatsYet": "Aucune discussion pour le moment. Cliquez sur + Nouveau pour commencer.",
+    "noChatsMatch": "Aucune discussion ne correspond à votre recherche.",
+    "rename": "Renommer",
+    "summarize": "Résumer",
+    "addTo": "Ajouter à :",
+    "addChatToProjectAria": "Ajouter la discussion au projet",
+    "addToProject": "Ajouter au projet…",
+    "createNewProject": "+ Créer un nouveau projet",
+    "brainTitle": "Brain",
+    "emptyHint": "Démarrez une nouvelle discussion ou choisissez-en une pour commencer.",
+    "startNewChat": "Démarrer une nouvelle discussion",
+    "newProjectPlaceholder": "Nom du nouveau projet",
+    "createAndAssign": "Créer et attribuer",
+    "actingAs": "En tant que",
+    "personaAria": "Agent ou persona Brain",
+    "defaultBrain": "Brain par défaut",
+    "personas": "Personas",
+    "assignedAgents": "Agents attribués",
+    "uploading": "Téléversement…",
+    "brainStorm": "Brain Storm",
+    "projectLabel": "Projet",
+    "newChatsHint": "Les nouvelles discussions sont ajoutées au projet sélectionné.",
+    "filterByProjectAria": "Filtrer par projet",
+    "allProjects": "Tous",
+    "noProject": "Aucun projet",
+    "openFullBrainStorm": "Ouvrir Brain Storm en entier",
+    "expand": "Développer ↗",
+    "closeBrain": "Fermer Brain",
+    "assignToProject": "Attribuer au projet :",
+    "assignChatToProjectAria": "Attribuer la discussion au projet",
+    "addProject": "+ Projet",
+    "workflowsArrow": "Flux de travail →",
+    "openInIde": "Ouvrir dans l'IDE →",
+    "brainModality": "Brain — {modality}",
+    "brainAs": "Brain en tant que {name}",
+    "chatHistory": "Historique des discussions"
   },
   "modelExport": {
     "subtitle": "Exportez un modèle publié vers un artefact portable — un dépôt Hugging Face, ONNX, safetensors ou GGUF — et téléchargez-le. Le modèle est produit sur le serveur ; aucun jeton n’est nécessaire.",
@@ -5357,6 +5544,38 @@
     "dueDate": "Date d'échéance",
     "setDueDateTitle": "Cliquez pour définir une date d'échéance",
     "none": "Aucune",
-    "created": "Créé"
+    "created": "Créé",
+    "openApprovals": "Ouvrir les approbations",
+    "taskCount": "{count, plural, one {# tâche} other {# tâches}}",
+    "byStage": "Par étape",
+    "byAssignee": "Par responsable",
+    "startStandup": "Démarrer le stand-up",
+    "startPlanning": "Démarrer la planification",
+    "viewPrdAria": "Voir le PRD",
+    "viewPrdTitle": "Voir le PRD (partagé par tous les agents de ce tableau)",
+    "viewPrdDisabledTitle": "Sélectionnez un seul projet pour voir son PRD",
+    "configureBoardAria": "Configurer le tableau",
+    "configureBoardTitle": "Configurer les couloirs et les agents",
+    "configureBoardDisabledTitle": "Sélectionnez un seul projet pour configurer son tableau",
+    "swimlaneAgentsTitle": "Agents configurés sur ce couloir",
+    "colTask": "Tâche",
+    "colAssignee": "Responsable",
+    "colDue": "Échéance",
+    "move": "Déplacer…",
+    "editTitleTitle": "Cliquez pour modifier le titre",
+    "deleteTask": "Supprimer la tâche",
+    "tabAgent": "Agent / Capacités",
+    "tabPrd": "PRD",
+    "changeStatusTitle": "Cliquez pour changer le statut",
+    "changePriorityTitle": "Cliquez pour changer la priorité",
+    "viewCodeChangesTitle": "Voir les modifications de code sur GitHub",
+    "runsAs": "S'exécute en tant que <b>{name}</b>. Changez le runtime dans l'onglet Agent.",
+    "runThisTask": "Exécuter cette tâche",
+    "errLoad": "Échec du chargement",
+    "errSelectProject": "Sélectionnez un projet",
+    "errSave": "Échec de l’enregistrement",
+    "errDelete": "Échec de la suppression",
+    "errUpdate": "Échec de la mise à jour",
+    "errMove": "Échec du déplacement"
   }
 }

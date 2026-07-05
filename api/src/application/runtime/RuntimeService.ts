@@ -48,6 +48,16 @@ function parseLaneKey(payload: string | null): string | undefined {
  *   submit → dispatch to agent → track state → complete / fail / cancel
  */
 export class RuntimeService {
+  /** Executions still in flight — anything not COMPLETED/FAILED/CANCELLED.
+   *  The status set {@link listActiveByTasks} scans to answer "does this ticket
+   *  still have a live run?" in one query across many tasks. */
+  static readonly NON_TERMINAL_STATUSES: ExecutionStatus[] = [
+    ExecutionStatus.PENDING,
+    ExecutionStatus.SUBMITTED,
+    ExecutionStatus.RUNNING,
+    ExecutionStatus.PAUSED,
+  ];
+
   constructor(
     private readonly executions: IExecutionRepository,
     private readonly tasks:      ITaskRepository,

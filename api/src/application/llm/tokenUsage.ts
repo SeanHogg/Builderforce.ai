@@ -15,7 +15,7 @@
 import { and, eq, gte, notInArray, sql, type SQL } from 'drizzle-orm';
 import { llmUsageLog } from '../../infrastructure/database/schema';
 import type { Db } from '../../infrastructure/database/connection';
-import { CACHE_READ_MULTIPLIER, CACHE_CREATION_MULTIPLIER } from './usageLedger';
+import { CACHE_READ_MULTIPLIER, CACHE_CREATION_MULTIPLIER, clampTokenCount } from './usageLedger';
 import { IMAGE_PRODUCT_NAMES } from './ImageProxyService';
 
 /**
@@ -34,7 +34,12 @@ const rowWeight: SQL = sql`(
  *  rows never consume the text-token cap (and vice-versa). */
 const notImageRow = notInArray(llmUsageLog.llmProduct, [...IMAGE_PRODUCT_NAMES]);
 
-const toInt = (v: unknown): number => Math.max(0, Math.floor(Number(v ?? 0)));
+// Coerce a SQL SUM result (number, or a numeric string from pg/drizzle, or null
+// from an empty window) to a non-negative integer via the SAME clamp the billing
+// ledger uses ({@link clampTokenCount}) — one definition of "token count floor" so
+// the meter and the ledger can't drift. `Number(v ?? 0)` handles the string/null
+// coercion clampTokenCount's numeric signature doesn't.
+const toInt = (v: unknown): number => clampTokenCount(Number(v ?? 0));
 
 /**
  * The "~4 chars per token" heuristic — the ONE definition shared by the

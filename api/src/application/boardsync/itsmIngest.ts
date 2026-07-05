@@ -87,9 +87,11 @@ export async function syncItsmConnection(
     const page = await provider.fetchTicketsSince(conn.pollCursor);
     const now = new Date();
 
-    for (const ticket of page.tickets) {
+    // One batched upsert for the whole page instead of an INSERT round-trip per
+    // ticket (neon-http has no interactive tx — db.batch pipelines the statements).
+    const upserts = page.tickets.map((ticket) => {
       const row = mapTicketToSupportRow(conn, ticket, now);
-      await db.insert(supportTickets)
+      return db.insert(supportTickets)
         .values({ ...row, openedAt: now, updatedAt: now })
         .onConflictDoUpdate({
           target: [supportTickets.tenantId, supportTickets.source, supportTickets.externalRef],
@@ -98,6 +100,9 @@ export async function syncItsmConnection(
             status: row.status, customerRef: row.customerRef, resolvedAt: row.resolvedAt, updatedAt: now,
           },
         });
+    });
+    if (upserts.length > 0) {
+      await db.batch(upserts as unknown as Parameters<typeof db.batch>[0]);
     }
 
     await store.advanceCursor(conn.id, page.nextCursor);

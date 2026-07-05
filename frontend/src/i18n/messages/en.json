@@ -722,7 +722,11 @@
     "cancel": "Cancel",
     "save": "Save",
     "saving": "Saving…",
-    "loading": "Loading…"
+    "loading": "Loading…",
+    "close": "Close",
+    "delete": "Delete",
+    "edit": "Edit",
+    "view": "View"
   },
   "legal": {
     "termsTitle": "Terms of Use",
@@ -2986,6 +2990,10 @@
       {
         "question": "Does Evermind have benchmarks — how do I know a model I train is any good?",
         "answer": "Yes. Every model you train in the Studio is scored on-device before you publish it. The built-in benchmarking harness holds out a slice of your corpus the model never trains on, then reports the standard language-model yardsticks — held-out perplexity, bits-per-token, top-1 and top-k next-token accuracy, and generation throughput — and can A/B two checkpoints so you can see whether a fresh adaptation actually improved on the last one. It runs entirely in your browser with no GPU bill and no data leaving your machine, so you publish on evidence, not vibes. The same harness is the open measurement instrument behind the Evermind technical report."
+      },
+      {
+        "question": "Can Evermind learn from a frontier model like Opus or Mistral?",
+        "answer": "Yes — through teacher distillation. You can pin any frontier LLM (Opus, Mistral, GLM and more) as a teacher for a project’s Evermind. For each real task your team ships, the teacher is asked for the ideal answer through the metered gateway, and the SSM adapts on the pair of (task context → teacher exemplar) rather than on the raw run text. Over time your own small, on-device model absorbs the quality of a much larger one, while you keep ownership and currency. The teacher call is cost-gated to your token budget and best-effort — a miss falls back to learning from the raw work — so distillation never stalls the learning loop."
       }
     ],
     "adoption": {
@@ -3018,6 +3026,36 @@
       "longDesc": "Evermind is the brain of the platform — a self-updating model governed by Write-Through Cognition: new knowledge is written straight through, so an update replaces what came before with no reconciliation step. A shared-expert hybrid generator (dense backbone + routed SSM experts) learns online and runs on WebGPU, so it wins on currency, footprint, and ownership rather than raw scale — in the browser, on-device, or inside every agent."
     },
     {
+      "title": "Distill a Frontier Model Into Your Own",
+      "shortDesc": "Pin any frontier model as a teacher and train your own private model on its best answers.",
+      "longDesc": "Pin any frontier LLM — Opus, Mistral, GLM and more — as a teacher for a project’s Evermind. For every real piece of work your team ships, the teacher produces the ideal answer to that task and your own model learns from it, steadily absorbing frontier-level quality into a small model you own and run on-device. It’s cost-gated and best-effort: it only spends when there’s token budget, and a teacher miss falls back to learning from the raw work so a lesson is never lost."
+    },
+    {
+      "title": "A Learning Brain for Every Project",
+      "shortDesc": "Every project gets its own self-updating model that learns from your team’s work.",
+      "longDesc": "Each project is provisioned with its own Evermind on day one — a self-updating model that learns from every run across all four studios: design, voice, LLM, and video. Corrections stick across sessions through a shared write-through fact store, so the brain that helped yesterday is smarter today. Inference stays off until you opt in, and the model is editable right in the LLM Studio."
+    },
+    {
+      "title": "Agentic Workforce Kanban",
+      "shortDesc": "Staff a deep role roster of humans and AI agents on a sign-off-gated board.",
+      "longDesc": "Go beyond a to-do list: staff each project from a first-class job-role taxonomy — humans and AI agents in the same roster — starting from a recommended set built for your team. Swimlanes can require the right reviewer before a ticket advances, and every \"Done\" carries a per-ticket role and diagnostic sign-off audit, so quality is gated at the board rather than hoped for after the fact."
+    },
+    {
+      "title": "Kanban Template Marketplace",
+      "shortDesc": "Buy, sell, and install ready-made board templates with lanes, roles, and gates.",
+      "longDesc": "Package a delivery process — lanes, required roles, review gates, and a recommended roster — as a Kanban template, then publish it to the marketplace to sell or share. Install a proven template into any project in one click, so a team inherits a governed, role-gated workflow instead of assembling one from scratch."
+    },
+    {
+      "title": "Validator Agent — Proof of Done",
+      "shortDesc": "An agent that checks \"Done\" really is done and files the gaps it finds.",
+      "longDesc": "Ad-hoc chat work becomes visible tickets automatically, and a built-in Validator agent reviews every item marked Done — recording a verdict and opening GAP tasks for anything that falls short. One shared merge-to-Done path covers human approval, green CI, and post-deploy, so nothing slips through as \"finished\" without proof."
+    },
+    {
+      "title": "Learned Model Routing",
+      "shortDesc": "The platform learns which model is best — and cheapest — for each kind of task.",
+      "longDesc": "Every run is scored on its outcome, and a learned router reorders which model handles each action type accordingly — cheaper models take the work they do well, premium models are reserved for where they earn it. Combined with the semantic cache, your token bill bends down as the platform learns your workload, with a one-flag kill switch whenever you want manual control."
+    },
+    {
       "title": "Kanban Board & Project Management",
       "shortDesc": "Plan, assign & track work on a live agent Kanban board.",
       "longDesc": "A full project-management surface: organize work into projects, then plan, assign, and track every task on a live Kanban board — swimlanes per status or per agent, plus table, calendar, and Gantt views. Humans and AI agents sit on the same board, and work flows from backlog to done in real time."
@@ -3036,6 +3074,11 @@
       "title": "Agentic Tester — Autonomous QA",
       "shortDesc": "An AI agent that browser-tests your app on a schedule.",
       "longDesc": "The Agentic Tester is a hireable QA agent. Point it at your project's URL, save the logins it should use, and it drives a real browser through your highest-traffic flows — ranking what to test from real usage heatmaps, logging in as each persona, and capturing console errors, failed requests, and crashes. Run it on demand or schedule it as part of a workflow; every bug it finds lands straight on your Kanban board."
+    },
+    {
+      "title": "Hire Human Talent",
+      "shortDesc": "Bring on freelance developers, DBAs and designers — and pay only for tracked time.",
+      "longDesc": "Beyond AI agents, hire real people: the Talent Marketplace lists vetted freelance developers, DBAs, designers and specialists with résumés (powered by hired.video), skills and hourly rates. Interview, hire across any project, and see billable hours captured automatically from the work they do in the portal and VS Code — every timecard is yours to approve before you pay. Humans and agents work side by side on the same board."
     },
     {
       "title": "AI CTO",
@@ -3299,6 +3342,83 @@
           {
             "feature": "MCP — expose as server",
             "note": "/mcp endpoint",
+            "values": {
+              "builderforce": "✅",
+              "copilot": "❌",
+              "cursor": "❌",
+              "claudeCode": "❌",
+              "devin": "❌",
+              "openhands": "❌",
+              "aider": "❌",
+              "continueDev": "❌"
+            }
+          }
+        ]
+      },
+      {
+        "id": "self-improving",
+        "title": "Self-Improving Models & Proof of Done",
+        "blurb": "Models that learn from your work, route themselves by outcome, and prove that \"Done\" is really done — capabilities frozen single-agent tools structurally lack.",
+        "rows": [
+          {
+            "feature": "Trains your own model on your work",
+            "note": "Frontier-model teacher distillation",
+            "values": {
+              "builderforce": "✅",
+              "copilot": "❌",
+              "cursor": "❌",
+              "claudeCode": "❌",
+              "devin": "❌",
+              "openhands": "❌",
+              "aider": "❌",
+              "continueDev": "❌"
+            }
+          },
+          {
+            "feature": "Self-updating model per project",
+            "note": "Evermind, runs on-device",
+            "values": {
+              "builderforce": "✅",
+              "copilot": "❌",
+              "cursor": "❌",
+              "claudeCode": "❌",
+              "devin": "❌",
+              "openhands": "❌",
+              "aider": "❌",
+              "continueDev": "❌"
+            }
+          },
+          {
+            "feature": "Learned, outcome-based model routing",
+            "note": "scores runs, reorders models",
+            "values": {
+              "builderforce": "✅",
+              "copilot": "❌",
+              "cursor": "❌",
+              "claudeCode": "❌",
+              "devin": "❌",
+              "openhands": "❌",
+              "aider": "❌",
+              "continueDev": "❌"
+            }
+          },
+          {
+            "feature": "Validator agent — proof of Done",
+            "note": "opens GAP tasks on shortfall",
+            "values": {
+              "builderforce": "✅",
+              "copilot": "❌",
+              "cursor": "❌",
+              "claudeCode": "❌",
+              "devin": "❌",
+              "openhands": "❌",
+              "aider": "❌",
+              "continueDev": "❌"
+            }
+          },
+          {
+            "feature": "Role-gated board with sign-off audit",
+            "note": "per-ticket role + diagnostic",
             "values": {
               "builderforce": "✅",
               "copilot": "❌",
@@ -4003,6 +4123,26 @@
       {
         "question": "Can I integrate Builderforce agents with BuilderForce Agents?",
         "answer": "Yes — models trained on Builderforce can be exported and published as Evermind models that your self-hosted BuilderForce Agents gateway calls directly as the model, not just as a memory layer. The platform supports the full pipeline: train a custom SSM in the browser, publish it, and route live traffic to it over the OpenAI-compatible API."
+      },
+      {
+        "question": "Can I train my own model on a frontier model’s answers?",
+        "answer": "Yes — that is teacher distillation. Pin any frontier LLM (Opus, Mistral, GLM and more) as a teacher for a project’s Evermind. For each real piece of work your team ships, the teacher produces the ideal answer to that task, and your own model learns from that exemplar instead of the raw text — so it steadily absorbs frontier-level quality into a small model you own and run on-device. It is cost-gated (it only spends when you have token budget) and best-effort (a teacher miss falls back to learning from the raw work), so a lesson is never lost."
+      },
+      {
+        "question": "Does each project get its own model?",
+        "answer": "Yes. Every project is provisioned with its own Evermind on creation — a self-updating model that learns from every run across all four studios (design, voice, LLM, and video) through one shared learning mechanism. Corrected facts persist across sessions in a write-through fact store shared by the web app, VS Code, cloud, and on-prem agents, so the brain that helped yesterday is smarter today. Inference stays off until you opt in, and the model is editable in the LLM Studio."
+      },
+      {
+        "question": "Can I gate my board so only the right role can finish a ticket?",
+        "answer": "Yes — that is the Agentic Workforce Kanban. Staff each project from a first-class job-role taxonomy of humans and AI agents, and configure swimlanes to require the right reviewer before a ticket can advance. Every item marked Done carries a per-ticket role and diagnostic sign-off audit, and a role-coverage diagnostic flags gaps on the board, so quality is enforced rather than assumed."
+      },
+      {
+        "question": "How does Builderforce check that work marked Done is really done?",
+        "answer": "A built-in Validator agent reviews every item marked Done, records a verdict, and opens GAP tasks for anything that falls short. Ad-hoc chat work is also captured as visible tickets automatically, and one shared merge-to-Done path covers human approval, green CI, and post-deploy — so nothing is reported as finished without proof."
+      },
+      {
+        "question": "Can I buy or sell a Kanban board template?",
+        "answer": "Yes. Package a delivery process — lanes, required roles, review gates, and a recommended roster — as a Kanban template and publish it to the marketplace to sell or share. Any team can install a proven template into a project in one click and inherit a governed, role-gated workflow instead of building one from scratch."
       }
     ]
   },
@@ -4173,6 +4313,10 @@
           {
             "title": "Chats",
             "desc": "Talk to your agents directly, or watch them collaborate in shared conversations."
+          },
+          {
+            "title": "Workforce Kanban & Templates",
+            "desc": "Staff a project from a role roster of humans and AI agents on a sign-off-gated board, then buy, sell, or install ready-made board templates — lanes, required roles, review gates, and a recommended roster — from the marketplace."
           }
         ]
       },
@@ -4451,7 +4595,50 @@
     "approveAll": "Approve all",
     "newChat": "+ New",
     "messagePlaceholder": "Message Brain…",
-    "searchChats": "Search chats…"
+    "searchChats": "Search chats…",
+    "confirmActionAria": "Confirm action",
+    "wantsTo": "Brain wants to <b>{action}</b>. Approve to run it.",
+    "approveAllTitle": "Approve this and auto-approve every following action in this conversation",
+    "captureHasTrace": "Copy this run — LLM steps, tool chain, errors, and transcript — to the clipboard",
+    "captureNoTrace": "No execution captured yet — send a message first",
+    "captureExecutionAria": "Capture execution",
+    "brainDefault": "Brain (default)",
+    "noChatsYet": "No chats yet. Click + New to start.",
+    "noChatsMatch": "No chats match your search.",
+    "rename": "Rename",
+    "summarize": "Summarize",
+    "addTo": "Add to:",
+    "addChatToProjectAria": "Add chat to project",
+    "addToProject": "Add to project…",
+    "createNewProject": "+ Create new project",
+    "brainTitle": "Brain",
+    "emptyHint": "Start a new chat or pick one to begin.",
+    "startNewChat": "Start new chat",
+    "newProjectPlaceholder": "New project name",
+    "createAndAssign": "Create & assign",
+    "actingAs": "Acting as",
+    "personaAria": "Brain agent or persona",
+    "defaultBrain": "Default Brain",
+    "personas": "Personas",
+    "assignedAgents": "Assigned agents",
+    "uploading": "Uploading…",
+    "brainStorm": "Brain Storm",
+    "projectLabel": "Project",
+    "newChatsHint": "New chats are added to the selected project.",
+    "filterByProjectAria": "Filter by project",
+    "allProjects": "All",
+    "noProject": "No project",
+    "openFullBrainStorm": "Open full Brain Storm",
+    "expand": "Expand ↗",
+    "closeBrain": "Close Brain",
+    "assignToProject": "Assign to project:",
+    "assignChatToProjectAria": "Assign chat to project",
+    "addProject": "+ Project",
+    "workflowsArrow": "Workflows →",
+    "openInIde": "Open in IDE →",
+    "brainModality": "Brain — {modality}",
+    "brainAs": "Brain as {name}",
+    "chatHistory": "Chat history"
   },
   "modelExport": {
     "subtitle": "Export a published model to a portable artifact — a Hugging Face repo, ONNX, safetensors, or GGUF — and download it. The model is produced on the server; no token is needed.",
@@ -5357,6 +5544,38 @@
     "dueDate": "Due date",
     "setDueDateTitle": "Click to set a due date",
     "none": "None",
-    "created": "Created"
+    "created": "Created",
+    "openApprovals": "Open approvals",
+    "taskCount": "{count, plural, one {# task} other {# tasks}}",
+    "byStage": "By stage",
+    "byAssignee": "By assignee",
+    "startStandup": "Start standup",
+    "startPlanning": "Start planning",
+    "viewPrdAria": "View PRD",
+    "viewPrdTitle": "View the PRD (shared by every agent on this board)",
+    "viewPrdDisabledTitle": "Select a single project to view its PRD",
+    "configureBoardAria": "Configure board",
+    "configureBoardTitle": "Configure swimlanes & agents",
+    "configureBoardDisabledTitle": "Select a single project to configure its board",
+    "swimlaneAgentsTitle": "Agents configured on this swimlane",
+    "colTask": "Task",
+    "colAssignee": "Assignee",
+    "colDue": "Due",
+    "move": "Move…",
+    "editTitleTitle": "Click to edit title",
+    "deleteTask": "Delete task",
+    "tabAgent": "Agent / Capabilities",
+    "tabPrd": "PRD",
+    "changeStatusTitle": "Click to change status",
+    "changePriorityTitle": "Click to change priority",
+    "viewCodeChangesTitle": "View the code changes on GitHub",
+    "runsAs": "Runs as <b>{name}</b>. Change the runtime in the Agent tab.",
+    "runThisTask": "Run this task",
+    "errLoad": "Failed to load",
+    "errSelectProject": "Select a project",
+    "errSave": "Save failed",
+    "errDelete": "Delete failed",
+    "errUpdate": "Update failed",
+    "errMove": "Move failed"
   }
 }
