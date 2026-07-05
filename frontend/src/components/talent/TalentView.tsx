@@ -73,7 +73,15 @@ export function TalentView() {
   const [rateFor, setRateFor] = useState<string | null>(null);
   const [reviewForm, setReviewForm] = useState<{ rating: number; comment: string }>({ rating: 5, comment: '' });
   const [showPost, setShowPost] = useState(false);
-  const [job, setJob] = useState<{ title: string; description: string; discipline: string; skills: string; rateMin: string; rateMax: string }>({ title: '', description: '', discipline: '', skills: '', rateMin: '', rateMax: '' });
+  const [job, setJob] = useState<{ title: string; description: string; requirements: string; discipline: string; skills: string; postingType: PostingType; engagementType: EngagementType; rateMin: string; rateMax: string }>({ title: '', description: '', requirements: '', discipline: '', skills: '', postingType: 'project_bid', engagementType: 'fixed_bid', rateMin: '', rateMax: '' });
+  // Per-proposal AI eval headline (0..100) + the open decline composer.
+  const [propScores, setPropScores] = useState<Record<string, number>>({});
+  const [declineFor, setDeclineFor] = useState<string | null>(null);
+  const [declineMsg, setDeclineMsg] = useState('');
+  // Per-engagement deliverables review.
+  const [openDeliv, setOpenDeliv] = useState<string | null>(null);
+  const [deliverables, setDeliverables] = useState<Record<string, Deliverable[]>>({});
+  const [delivScores, setDelivScores] = useState<Record<string, number>>({});
 
   const load = useCallback(async () => {
     if (!tenant) { setLoading(false); return; }
@@ -107,6 +115,37 @@ export function TalentView() {
     setOpenJob(id);
     if (!proposals[id]) { try { const rows = await listJobProposals(id); setProposals((p) => ({ ...p, [id]: rows })); } catch { /* noop */ } }
   };
+  const toggleDeliverables = async (id: string) => {
+    if (openDeliv === id) { setOpenDeliv(null); return; }
+    setOpenDeliv(id);
+    if (!deliverables[id]) { try { const rows = await listEngagementDeliverables(id); setDeliverables((p) => ({ ...p, [id]: rows })); } catch { /* noop */ } }
+  };
+
+  const evalProposal = async (pid: string) => {
+    setBusy(`ev:${pid}`); setError(null);
+    try { const s = await evaluateProposal(pid); setPropScores((m) => ({ ...m, [pid]: s.overall100 })); }
+    catch (e) { setError(e instanceof Error ? e.message : 'Failed'); } finally { setBusy(null); }
+  };
+  const submitDecline = async (pid: string) => {
+    setBusy(`pd:${pid}`); setError(null);
+    try { await declineProposal(pid, declineMsg.trim() || undefined); setDeclineFor(null); setDeclineMsg(''); await load(); if (openJob) { const rows = await listJobProposals(openJob).catch(() => null); if (rows) setProposals((p) => ({ ...p, [openJob]: rows })); } }
+    catch (e) { setError(e instanceof Error ? e.message : 'Failed'); } finally { setBusy(null); }
+  };
+  const doSchedule = async (input: { title: string; kind: 'review' | 'interview'; jobId?: string; engagementId?: string }) => {
+    setBusy(`mt:${input.jobId ?? input.engagementId}`); setError(null);
+    try { await scheduleMeeting(input); }
+    catch (e) { setError(e instanceof Error ? e.message : 'Failed'); } finally { setBusy(null); }
+  };
+  const evalDeliverable = async (id: string) => {
+    setBusy(`de:${id}`); setError(null);
+    try { const s = await evaluateDeliverable(id); setDelivScores((m) => ({ ...m, [id]: s.overall100 })); }
+    catch (e) { setError(e instanceof Error ? e.message : 'Failed'); } finally { setBusy(null); }
+  };
+  const decideDeliverable = async (engagementId: string, id: string, status: 'accepted' | 'changes_requested') => {
+    setBusy(`ds:${id}`); setError(null);
+    try { await setDeliverableStatus(id, status); const rows = await listEngagementDeliverables(engagementId).catch(() => null); if (rows) setDeliverables((p) => ({ ...p, [engagementId]: rows })); }
+    catch (e) { setError(e instanceof Error ? e.message : 'Failed'); } finally { setBusy(null); }
+  };
 
   const submitReview = async (engagementId: string) => {
     setBusy(`rev:${engagementId}`); setError(null);
@@ -119,12 +158,13 @@ export function TalentView() {
     setBusy('postjob'); setError(null);
     try {
       await postJob({
-        title: job.title.trim(), description: job.description || undefined, discipline: job.discipline || undefined,
+        title: job.title.trim(), description: job.description || undefined, requirements: job.requirements || undefined,
+        discipline: job.discipline || undefined, postingType: job.postingType, engagementType: job.engagementType,
         skills: job.skills ? job.skills.split(',').map((s) => s.trim()).filter(Boolean) : undefined,
         rateMinCents: job.rateMin ? Math.round(parseFloat(job.rateMin) * 100) : undefined,
         rateMaxCents: job.rateMax ? Math.round(parseFloat(job.rateMax) * 100) : undefined,
       });
-      setShowPost(false); setJob({ title: '', description: '', discipline: '', skills: '', rateMin: '', rateMax: '' });
+      setShowPost(false); setJob({ title: '', description: '', requirements: '', discipline: '', skills: '', postingType: 'project_bid', engagementType: 'fixed_bid', rateMin: '', rateMax: '' });
       await load();
     } catch (e) { setError(e instanceof Error ? e.message : 'Failed'); } finally { setBusy(null); }
   };
@@ -168,12 +208,40 @@ export function TalentView() {
                     <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-primary)' }}>{e.freelancerName ?? e.freelancerUserId}</div>
                     <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>{t(`status.${e.status}`)}{e.rateCents != null ? ` · ${e.currency} ${(e.rateCents / 100).toFixed(0)}${t('perHour')}` : ''}</div>
                   </div>
-                  <div style={{ display: 'flex', gap: 8 }}>
+                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                    <button type="button" style={btn('ghost')} onClick={() => toggleDeliverables(e.id)}>{openDeliv === e.id ? t('hide') : tg('deliverables.heading')}</button>
                     <button type="button" style={btn('ghost')} onClick={() => { setRateFor(rateFor === e.id ? null : e.id); setReviewForm({ rating: 5, comment: '' }); }}>{t('rate')}</button>
                     <button type="button" style={btn('danger')} disabled={busy === e.id}
                       onClick={() => { if (confirm(t('terminateConfirm'))) void act(e.id, () => terminateEngagement(e.id)); }}>{busy === e.id ? '…' : t('terminate')}</button>
                   </div>
                 </div>
+                {openDeliv === e.id && (
+                  <div style={{ marginTop: 12, borderTop: '1px solid var(--border-subtle)', paddingTop: 12, display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    {(deliverables[e.id] ?? []).length === 0 ? <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>{tg('deliverables.empty')}</div> : (deliverables[e.id] ?? []).map((d) => {
+                      const score = delivScores[d.id] ?? d.lastEvalOverall ?? null;
+                      const decided = d.status === 'accepted' || d.status === 'changes_requested';
+                      return (
+                        <div key={d.id} style={{ display: 'flex', flexDirection: 'column', gap: 6, padding: '8px 10px', background: 'var(--bg-elevated)', borderRadius: 8 }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+                              <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>{d.title}</span>
+                              {score != null && <ScoreChip score={score} />}
+                              {statusPill(d.status, tg(`deliverables.status.${d.status}`))}
+                            </div>
+                            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                              <button type="button" style={btn('ghost')} disabled={busy === `de:${d.id}`} onClick={() => evalDeliverable(d.id)}>{busy === `de:${d.id}` ? tg('proposal.evaluating') : tg('deliverables.evaluate')}</button>
+                              {!decided && <>
+                                <button type="button" style={btn('primary')} disabled={busy === `ds:${d.id}`} onClick={() => decideDeliverable(e.id, d.id, 'accepted')}>{tg('deliverables.accept')}</button>
+                                <button type="button" style={btn('ghost')} disabled={busy === `ds:${d.id}`} onClick={() => decideDeliverable(e.id, d.id, 'changes_requested')}>{tg('deliverables.requestChanges')}</button>
+                              </>}
+                            </div>
+                          </div>
+                          {d.body && <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>{d.body}</div>}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
                 {rateFor === e.id && (
                   <div style={{ marginTop: 12, borderTop: '1px solid var(--border-subtle)', paddingTop: 12, display: 'flex', flexDirection: 'column', gap: 8 }}>
                     <div style={{ display: 'flex', gap: 4 }}>
@@ -200,6 +268,15 @@ export function TalentView() {
               <div style={{ ...card, display: 'flex', flexDirection: 'column', gap: 10 }}>
                 <input style={input} placeholder={t('job.titlePlaceholder')} value={job.title} onChange={(e) => setJob((j) => ({ ...j, title: e.target.value }))} />
                 <textarea style={{ ...input, minHeight: 70, resize: 'vertical' }} placeholder={t('job.descPlaceholder')} value={job.description} onChange={(e) => setJob((j) => ({ ...j, description: e.target.value }))} />
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 8 }}>
+                  <select style={input} value={job.postingType} onChange={(e) => setJob((j) => { const postingType = e.target.value as PostingType; return { ...j, postingType, engagementType: postingType === 'fte' ? 'fte' : (j.engagementType === 'fte' ? 'fixed_bid' : j.engagementType) }; })}>
+                    {POSTING_TYPES.map((v) => <option key={v} value={v}>{tg(`postingType.${v}`)}</option>)}
+                  </select>
+                  <select style={input} value={job.engagementType} disabled={job.postingType === 'fte'} onChange={(e) => setJob((j) => ({ ...j, engagementType: e.target.value as EngagementType }))}>
+                    {ENGAGEMENT_TYPES.map((v) => <option key={v} value={v}>{tg(`engagementType.${v}`)}</option>)}
+                  </select>
+                </div>
+                <textarea style={{ ...input, minHeight: 60, resize: 'vertical' }} placeholder={tg('publish.requirementsPlaceholder')} value={job.requirements} onChange={(e) => setJob((j) => ({ ...j, requirements: e.target.value }))} />
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 8 }}>
                   <select style={input} value={job.discipline} onChange={(e) => setJob((j) => ({ ...j, discipline: e.target.value }))}>
                     <option value="">{t('job.discipline')}</option>
@@ -234,20 +311,44 @@ export function TalentView() {
                   </div>
                   {openJob === j.id && (
                     <div style={{ marginTop: 12, borderTop: '1px solid var(--border-subtle)', paddingTop: 12, display: 'flex', flexDirection: 'column', gap: 8 }}>
-                      {(proposals[j.id] ?? []).length === 0 ? <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>{t('job.noProposals')}</div> : (proposals[j.id] ?? []).map((p) => (
-                        <div key={p.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, flexWrap: 'wrap', padding: '8px 10px', background: 'var(--bg-elevated)', borderRadius: 8 }}>
-                          <div>
-                            <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>{p.freelancerName}{p.rateCents != null ? ` · ${p.currency} ${(p.rateCents / 100).toFixed(0)}${t('perHour')}` : ''}</div>
-                            {p.coverNote && <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>{p.coverNote}</div>}
-                          </div>
-                          {p.status === 'submitted' || p.status === 'shortlisted' ? (
-                            <div style={{ display: 'flex', gap: 6 }}>
-                              <button type="button" style={btn('primary')} disabled={busy === `pa:${p.id}`} onClick={() => act(`pa:${p.id}`, () => acceptProposal(p.id).then(() => undefined))}>{t('job.accept')}</button>
-                              <button type="button" style={btn('ghost')} disabled={busy === `pd:${p.id}`} onClick={() => act(`pd:${p.id}`, () => declineProposal(p.id))}>{t('job.declineProposal')}</button>
+                      {(proposals[j.id] ?? []).length === 0 ? <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>{t('job.noProposals')}</div> : (proposals[j.id] ?? []).map((p) => {
+                        const isFte = j.postingType === 'fte';
+                        const score = propScores[p.id] ?? p.lastEvalOverall ?? null;
+                        const actionable = p.status === 'submitted' || p.status === 'shortlisted';
+                        return (
+                        <div key={p.id} style={{ display: 'flex', flexDirection: 'column', gap: 8, padding: '8px 10px', background: 'var(--bg-elevated)', borderRadius: 8 }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                            <div>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>{p.freelancerName}{p.rateCents != null ? ` · ${p.currency} ${(p.rateCents / 100).toFixed(0)}${t('perHour')}` : ''}</span>
+                                {score != null && <ScoreChip score={score} />}
+                                {p.status === 'shortlisted' && statusPill(p.status, tg(isFte ? 'candidate.shortlisted' : 'proposal.shortlisted'))}
+                              </div>
+                              {p.coverNote && <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>{p.coverNote}</div>}
+                              {p.status === 'declined' && p.declineReason && <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2, fontStyle: 'italic' }}>{p.declineReason}</div>}
                             </div>
-                          ) : statusPill(p.status, td(`status.${p.status}`))}
+                            {actionable ? (
+                              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                                <button type="button" style={btn('ghost')} disabled={busy === `ev:${p.id}`} onClick={() => evalProposal(p.id)}>{busy === `ev:${p.id}` ? tg('proposal.evaluating') : tg('proposal.evaluate')}</button>
+                                {p.status === 'submitted' && <button type="button" style={btn('ghost')} disabled={busy === `sl:${p.id}`} onClick={() => act(`sl:${p.id}`, () => shortlistProposal(p.id))}>{tg(isFte ? 'candidate.shortlist' : 'proposal.shortlist')}</button>}
+                                <button type="button" style={btn('ghost')} disabled={busy === `mt:${j.id}`} onClick={() => doSchedule({ title: tg(isFte ? 'meeting.interviewTitle' : 'meeting.reviewTitle'), kind: isFte ? 'interview' : 'review', jobId: j.id })}>{tg(isFte ? 'meeting.scheduleInterview' : 'meeting.scheduleReview')}</button>
+                                <button type="button" style={btn('primary')} disabled={busy === `pa:${p.id}`} onClick={() => act(`pa:${p.id}`, () => acceptProposal(p.id).then(() => undefined))}>{t('job.accept')}</button>
+                                <button type="button" style={btn('ghost')} onClick={() => { setDeclineFor(declineFor === p.id ? null : p.id); setDeclineMsg(''); }}>{tg(isFte ? 'candidate.reject' : 'proposal.decline')}</button>
+                              </div>
+                            ) : statusPill(p.status, td(`status.${p.status}`))}
+                          </div>
+                          {declineFor === p.id && (
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: 8, borderTop: '1px solid var(--border-subtle)', paddingTop: 8 }}>
+                              <textarea style={{ ...input, minHeight: 56, resize: 'vertical' }} placeholder={tg('proposal.declineReasonPlaceholder')} value={declineMsg} onChange={(e) => setDeclineMsg(e.target.value)} />
+                              <div style={{ display: 'flex', gap: 8 }}>
+                                <button type="button" style={btn('danger')} disabled={busy === `pd:${p.id}`} onClick={() => submitDecline(p.id)}>{busy === `pd:${p.id}` ? '…' : tg('proposal.declineSend')}</button>
+                                <button type="button" style={btn('ghost')} onClick={() => setDeclineFor(null)}>{t('cancelBtn')}</button>
+                              </div>
+                            </div>
+                          )}
                         </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   )}
                 </div>

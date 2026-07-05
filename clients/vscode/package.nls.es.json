@@ -61,5 +61,10 @@
   "command.refreshInbox": "BuilderForce: Actualizar bandeja de entrada",
   "command.refreshDiagnostics": "BuilderForce: Actualizar diagnósticos",
   "command.runDiagnostic": "BuilderForce: Ejecutar diagnóstico",
-  "command.openDiagnosticReport": "BuilderForce: Abrir informe de diagnóstico"
+  "command.openDiagnosticReport": "BuilderForce: Abrir informe de diagnóstico",
+  "view.meetings": "Reuniones",
+  "command.refreshMeetings": "BuilderForce: Actualizar reuniones",
+  "command.scheduleMeeting": "BuilderForce: Programar reunión",
+  "command.joinMeetingBrowser": "Unirse en el navegador",
+  "command.joinMeetingNative": "Unirse aquí"
 }

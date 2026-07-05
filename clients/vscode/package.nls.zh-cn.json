@@ -61,5 +61,10 @@
   "command.refreshInbox": "BuilderForce：刷新收件箱",
   "command.refreshDiagnostics": "BuilderForce：刷新诊断",
   "command.runDiagnostic": "BuilderForce：运行诊断",
-  "command.openDiagnosticReport": "BuilderForce：打开诊断报告"
+  "command.openDiagnosticReport": "BuilderForce：打开诊断报告",
+  "view.meetings": "会议",
+  "command.refreshMeetings": "BuilderForce：刷新会议",
+  "command.scheduleMeeting": "BuilderForce：安排会议",
+  "command.joinMeetingBrowser": "在浏览器中加入",
+  "command.joinMeetingNative": "在此加入"
 }
