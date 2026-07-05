@@ -163,6 +163,42 @@ export async function sendMagicLinkEmail(
   await provider.send({ to, subject: 'Your Builderforce sign-in link', html });
 }
 
+const VERIFICATION_CODE_BODY = `
+      <p>Hi {{RecipientName}},</p>
+      <p>Welcome to Builderforce! Enter this code to confirm your email address
+         and activate your account:</p>
+      <p style="text-align:center; margin: 28px 0;">
+        <span style="display:inline-block; font-family: 'Courier New', monospace;
+                     font-size: 34px; font-weight: 700; letter-spacing: 10px;
+                     color: #0f172a; background: #f1f5f9; border: 1px solid #e2e8f0;
+                     border-radius: 10px; padding: 16px 28px;">{{Code}}</span>
+      </p>
+      <p>This code expires in <strong>15 minutes</strong>.</p>
+      <p style="font-size:13px; color:#64748b;">
+        If you did not create a Builderforce account, you can safely ignore this
+        email — no account will be activated without this code.
+      </p>`;
+
+export async function sendVerificationCodeEmail(
+  env: EmailEnv,
+  to: string,
+  name: string,
+  code: string,
+): Promise<void> {
+  const provider = getEmailProvider(env);
+  if (!provider) return;
+
+  const subject = `Your Builderforce verification code: ${code}`;
+  const html = render(HEADER + VERIFICATION_CODE_BODY + FOOTER, {
+    Subject: subject,
+    RecipientName: name || to,
+    Code: code,
+    Year: String(new Date().getFullYear()),
+  });
+
+  await provider.send({ to, subject, html });
+}
+
 const ADMIN_RESET_BODY = `
       <p>Hi,</p>
       <p>An administrator has reset access for your Builderforce account (<strong>{{Email}}</strong>).</p>

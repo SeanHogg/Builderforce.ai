@@ -23,7 +23,7 @@ import { verifyWrittenFiles } from '../repos/verifyWrittenFiles';
 import { scanWrittenForPlaceholders } from '../repos/scanForPlaceholders';
 import { CODING_BACKSTOP_MODELS, CODING_MODEL_POOL, codingModelsForPlan, estimateRequestTokens, llmProxyForPlan, pickCloudModel, type ChatMessage, type EffectivePlan } from '../llm/LlmProxyService';
 import { compactMessages, buildGatewaySummarizer, CLOUD_COMPACT_DEFAULTS } from '../llm/compactMessages';
-import { resolveAnthropicOAuthToken } from '../llm/tenantProviderKeyService';
+import { resolveTenantLlmCredentials, byoVendorIdSet, providersFromCredentials, type TenantVendorKeys } from '../llm/tenantProviderKeyService';
 import { cloudAgentPlatformToolSchemas, resolveCloudAgentPlatformTool, callBuiltinTool } from '../llm/builtinMcpService';
 import { TenantRole } from '../../domain/shared/types';
 import { resolveTenantPlan } from '../../presentation/routes/llmRoutes';
@@ -722,6 +722,12 @@ export async function recordCloudUsage(
  *  Observability timeline. Shared with the frontend via the cloud-agents list. */
 export const DEFAULT_CLOUD_REF = '__default__';
 
+/** True when a tenant brought at least one BYO api-key — so we only thread the
+ *  overlay (and mark vendors tenant-funded) when there's actually a key. */
+function hasVendorKeys(keys: TenantVendorKeys): boolean {
+  return Object.values(keys).some((v) => !!v);
+}
+
 /** A cloud run's LLM routing — which model pool / vendor key its tenant's plan
  *  unlocks. Resolved once per run and reused, never recomputed per turn. */
 export type CloudRouting = { effectivePlan: EffectivePlan; premiumOverride: boolean };
@@ -1013,15 +1019,19 @@ export async function handleContainerOp(
     // read remaining) — parity with the durable loop. The container relays each
     // `builtin_*` call back via the `platform_tool` op below (it has no DB).
     const containerTools = [...CONTAINER_AGENT_TOOLS, ...cloudAgentPlatformToolSchemas()];
+    // A connected Claude subscription powers a direct-Claude container turn; BYO
+    // OpenAI/Google/Anthropic api-keys override the operator keys for their vendors
+    // (tenant-funded → byo). One round-trip (parallel reads); empty (operator-key
+    // floor) when the tenant has connected nothing. Resolved BEFORE model pick so a
+    // free tenant may pin a BYO model (byoVendors lifts the free-plan choice gate).
+    const containerCreds = await resolveTenantLlmCredentials(env, tenantId);
+    const { anthropicOAuthToken, vendorKeys: tenantVendorKeys } = containerCreds;
     const pick = pickCloudModel(model, ctx.effectivePlan, ctx.premiumOverride, {
       // Context-aware seed: a small-window model isn't picked for a big container turn.
       estimatedTokens: estimateRequestTokens(sendMessages, containerTools),
+      byoVendors: byoVendorIdSet(providersFromCredentials(containerCreds)),
     });
-    // A connected Claude subscription powers a direct-Claude container turn. One
-    // PK-indexed read per turn, alongside the turn's existing DB writes — cheap and
-    // not a fan-out; null (operator-key floor) when no subscription is connected.
-    const anthropicOAuthToken = await resolveAnthropicOAuthToken(env, tenantId);
-    const result = await llmProxyForPlan(env, ctx.effectivePlan, ctx.premiumOverride, { backstopModels: CODING_BACKSTOP_MODELS, codingOnly: true, ...(anthropicOAuthToken ? { anthropicOAuthToken } : {}) }).complete({
+    const result = await llmProxyForPlan(env, ctx.effectivePlan, ctx.premiumOverride, { backstopModels: CODING_BACKSTOP_MODELS, codingOnly: true, ...(anthropicOAuthToken ? { anthropicOAuthToken } : {}), ...(hasVendorKeys(tenantVendorKeys) ? { tenantVendorKeys } : {}) }).complete({
       messages: sendMessages as unknown as ChatMessage[], tools: containerTools, tool_choice: 'auto',
       ...(pick.model ? { model: pick.model, ...(pick.strict ? { modelStrict: true } : {}) } : {}),
       // Personality temperature — parity with the Worker/DO loop.
@@ -1422,14 +1432,16 @@ export async function runCloudToolLoop(
   // so DO ticks don't re-query the plan).
   const routing = opts?.resume?.routing ?? await resolveCloudRouting(env, tenantId);
   // A connected Claude subscription powers any direct-Claude turn in the cascade
-  // (Bearer + oauth, free to us). Resolved once per loop/tick (NOT per turn) and
-  // re-resolved fresh each DO tick so a rotated token stays valid. Null when the
-  // tenant didn't connect one — cascade keeps its operator-key floor (unchanged).
-  const anthropicOAuthToken = await resolveAnthropicOAuthToken(env, tenantId);
+  // (Bearer + oauth, free to us); BYO OpenAI/Google/Anthropic api-keys override the
+  // operator keys for their vendors (tenant-funded → byo). Resolved once per
+  // loop/tick (NOT per turn) and re-resolved fresh each DO tick so a rotated token
+  // stays valid. Empty when the tenant connected nothing — operator-key floor.
+  const loopCreds = await resolveTenantLlmCredentials(env, tenantId);
+  const { anthropicOAuthToken, vendorKeys: tenantVendorKeys } = loopCreds;
   // `codingOnly` keeps the failover cascade inside the curated coding pool, so an
   // exhausted free run escalates to the paid coding backstop instead of degrading
   // onto a non-coder (gemini-flash-lite) or a tool-unreliable vendor (Ollama).
-  const proxy = llmProxyForPlan(env, routing.effectivePlan, routing.premiumOverride, { backstopModels: CODING_BACKSTOP_MODELS, codingOnly: true, ...(anthropicOAuthToken ? { anthropicOAuthToken } : {}) });
+  const proxy = llmProxyForPlan(env, routing.effectivePlan, routing.premiumOverride, { backstopModels: CODING_BACKSTOP_MODELS, codingOnly: true, ...(anthropicOAuthToken ? { anthropicOAuthToken } : {}), ...(hasVendorKeys(tenantVendorKeys) ? { tenantVendorKeys } : {}) });
 
   // Per-run model pin. A coding agent must drive the WHOLE task on one model, not
   // hop between pool models per turn (the gateway's round-robin cursor would
@@ -1459,6 +1471,8 @@ export async function runCloudToolLoop(
         bias: opts?.routingBias,
         // Context-aware seed: don't pick a small-window model for a big first turn.
         estimatedTokens: estimateRequestTokens(messages, cloudTools),
+        // A free tenant may pin a model their connected provider (BYO) serves.
+        byoVendors: byoVendorIdSet(providersFromCredentials(loopCreds)),
       });
   // Mutable: a 429 on the pinned model drops the strict pin so the proxy cascades
   // (see the per-turn cascade below); the run then stays unpinned for later turns.

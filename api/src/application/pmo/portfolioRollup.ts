@@ -179,7 +179,11 @@ export interface ObjectiveProgress {
   title: string;
   period: string | null;
   status: string;
+  /** Parent scope axis (exactly one, or all null = org-level workspace). Surfaced
+   *  so the OKR UI can show + reassign an objective's owner in place. */
+  portfolioId: string | null;
   initiativeId: string | null;
+  projectId: number | null;
   startDate: string | null;
   endDate: string | null;
   costClass: string | null;

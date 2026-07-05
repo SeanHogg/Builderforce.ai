@@ -21,8 +21,10 @@ import {
   persistSession,
   persistTenantSession,
   register as apiRegister,
+  verifyEmailCode as apiVerifyEmailCode,
   selectAccountType as apiSelectAccountType,
   setAvailableForHire as apiSetAvailableForHire,
+  type AuthStepResult,
 } from './auth';
 
 // ---------------------------------------------------------------------------
@@ -36,8 +38,14 @@ interface AuthContextValue {
   tenantToken: string | null;
   isAuthenticated: boolean;
   hasTenant: boolean;
-  login: (email: string, password: string) => Promise<void>;
-  register: (email: string, password: string, name: string | undefined, agreeToTerms: boolean, accountType?: 'standard' | 'freelancer') => Promise<void>;
+  /** Resolves to `{ needsVerification: true, email }` when the account's email must
+   *  be verified first — the caller flips to the code-entry step. Otherwise the
+   *  session is set and it resolves to `{ needsVerification: false, ... }`. */
+  login: (email: string, password: string) => Promise<AuthStepResult>;
+  register: (email: string, password: string, name: string | undefined, agreeToTerms: boolean, accountType?: 'standard' | 'freelancer') => Promise<AuthStepResult>;
+  /** Exchange the emailed OTP for a session (sets the session in place). `trustDevice`
+   *  keeps the user signed in on this device for 30 days. */
+  verifyEmail: (email: string, code: string, trustDevice: boolean) => Promise<void>;
   /** One-time account-type choice (Build vs Hired) for an OAuth/magic-link account
    *  that hasn't picked a role yet. Updates the stored user in place. */
   selectAccountType: (accountType: 'standard' | 'freelancer') => Promise<void>;
@@ -72,16 +80,34 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setInitialized(true);
   }, []);
 
-  const login = useCallback(async (email: string, password: string) => {
+  const login = useCallback(async (email: string, password: string): Promise<AuthStepResult> => {
     const res = await apiLogin(email, password);
-    setWebToken(res.token);
-    setUser(res.user);
-    persistSession(res.token, res.user);
+    if (!res.needsVerification) {
+      setWebToken(res.token);
+      setUser(res.user);
+      persistSession(res.token, res.user);
+    }
+    return res;
   }, []);
 
   const register = useCallback(
-    async (email: string, password: string, name: string | undefined, agreeToTerms: boolean, accountType?: 'standard' | 'freelancer') => {
+    async (email: string, password: string, name: string | undefined, agreeToTerms: boolean, accountType?: 'standard' | 'freelancer'): Promise<AuthStepResult> => {
       const res = await apiRegister(email, password, name, agreeToTerms, accountType);
+      // Registration returns no session — the email must be verified first — but keep
+      // the session-setting branch for forward-compat if that ever changes.
+      if (!res.needsVerification) {
+        setWebToken(res.token);
+        setUser(res.user);
+        persistSession(res.token, res.user);
+      }
+      return res;
+    },
+    []
+  );
+
+  const verifyEmail = useCallback(
+    async (email: string, code: string, trustDevice: boolean) => {
+      const res = await apiVerifyEmailCode(email, code, trustDevice);
       setWebToken(res.token);
       setUser(res.user);
       persistSession(res.token, res.user);
@@ -147,6 +173,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       hasTenant: !!tenantToken,
       login,
       register,
+      verifyEmail,
       selectAccountType,
       setAvailableForHire,
       selectTenant,
@@ -160,6 +187,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       tenantToken,
       login,
       register,
+      verifyEmail,
       selectAccountType,
       setAvailableForHire,
       selectTenant,

@@ -7,7 +7,7 @@
  * alongside the rest of the workforce. Renders its own inner sub-tab bar; the outer
  * page owns the section title. Keeps the `hires`/`freelancer` i18n namespaces.
  */
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useMemo } from 'react';
 import { useTranslations } from 'next-intl';
 import NotificationsPanel from '@/components/freelance/NotificationsPanel';
 import { getStoredTenant } from '@/lib/auth';
@@ -36,7 +36,10 @@ type Tab = 'team' | 'jobs' | 'timecards' | 'invoices';
 export function TalentView() {
   const t = useTranslations('hires');
   const td = useTranslations('freelancer');
-  const tenant = getStoredTenant();
+  // getStoredTenant() JSON.parses localStorage and returns a NEW object every
+  // call — memoize it so `load` (and its effect) keep a stable identity and
+  // don't re-fire on every render (which otherwise loops via setState).
+  const tenant = useMemo(() => getStoredTenant(), []);
   const [tab, setTab] = useState<Tab>('team');
   const [engagements, setEngagements] = useState<Engagement[]>([]);
   const [cards, setCards] = useState<Timecard[]>([]);

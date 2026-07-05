@@ -2,10 +2,14 @@
 
 /**
  * Kanban Templates — author, switch, publish, and shop team-board templates.
- * Three tabs: My Templates (list + fork + lane/requirement editor + publish/delete),
+ * Three sub-tabs: My Templates (list + fork + lane/requirement editor + publish/delete),
  * Marketplace (install public templates), and Roles (the job-function taxonomy).
  * The spine of the Agentic Workforce Kanban: each lane declares the roles +
  * diagnostics required before a ticket advances.
+ *
+ * Extracted from the old standalone /kanban-templates page so it can render as the
+ * "Templates" tab of Projects (its conceptual home). The page-level auth guard +
+ * container live in the Projects page that hosts it; the old route redirects here.
  */
 import { useCallback, useEffect, useState } from 'react';
 import { useTranslations } from 'next-intl';
@@ -34,7 +38,7 @@ const input: React.CSSProperties = {
   color: 'var(--text-primary)', border: '1px solid var(--border)',
 };
 
-export default function KanbanTemplatesClient() {
+export function KanbanTemplatesContent() {
   const t = useTranslations('kanban');
   const canManage = usePermission('agents.create').allowed;
   const [tab, setTab] = useState<Tab>('mine');
@@ -86,7 +90,7 @@ export default function KanbanTemplatesClient() {
   };
 
   return (
-    <div style={{ maxWidth: 900, margin: '0 auto', padding: '24px 16px', display: 'flex', flexDirection: 'column', gap: 16 }}>
+    <div style={{ maxWidth: 900, margin: '0 auto', display: 'flex', flexDirection: 'column', gap: 16 }}>
       <div>
         <h1 style={{ fontSize: 22, fontWeight: 700, margin: 0 }}>{t('templatesTitle')}</h1>
         <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: '4px 0 0' }}>{t('templatesSubtitle')}</p>

@@ -21,11 +21,15 @@ import {
   telemetrySpans,
   toolAuditEvents,
   agentHosts,
+  tenantMembers,
+  users,
 } from '../../infrastructure/database/schema';
 import { TenantRole } from '../../domain/shared/types';
 import type { Env, HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 import { getTenantActivityRollup } from '../../application/analytics/tenantActivity';
+import { computeInteractionActivity } from '../../application/analytics/interactionActivity';
+import { getOrSetCached } from '../../infrastructure/cache/readThroughCache';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -49,6 +53,209 @@ function levelFor(count: number, max: number): number {
   return 1;
 }
 
+/**
+ * Assemble the whole-team contribution calendar from all activity sources:
+ *   - human git/PR intensity (contributor_daily_metrics),
+ *   - agent telemetry (task spans + tool-audit events),
+ *   - the usage/interaction ledgers (AI calls + code-change deltas).
+ * Every active human tenant member is surfaced as a contributor — those without
+ * a git-derived contributors row get a synthetic (negative-id) entry so their
+ * usage/interaction footprint is visible on the roster and heatmap.
+ */
+async function buildActivityCalendar(
+  db: Db,
+  tenantId: number,
+  fromFloor: Date,
+  toDate: Date,
+  onlyId: number | null,
+) {
+  // 1. Git-derived contributors in scope (humans + agents).
+  const contribConds = [eq(contributors.tenantId, tenantId), eq(contributors.isActive, true)];
+  if (onlyId) contribConds.push(eq(contributors.id, onlyId));
+  const people = await db.select().from(contributors).where(and(...contribConds));
+
+  // Roster entry — a real contributor or a synthesised human member.
+  type Entry = {
+    id: number;
+    displayName: string;
+    kind: 'human' | 'agent';
+    avatarUrl: string | null;
+    jobTitle: string | null;
+    agentHostId: number | null;
+    userId: string | null;
+  };
+  const roster: Entry[] = people.map((p) => ({
+    id: p.id,
+    displayName: p.displayName,
+    kind: (p.kind === 'agent' ? 'agent' : 'human'),
+    avatarUrl: p.avatarUrl,
+    jobTitle: p.jobTitle,
+    agentHostId: p.agentHostId,
+    userId: p.userId,
+  }));
+
+  // 2. Surface every active human tenant member, even with no git activity — a
+  //    teammate who only works through the product still belongs on the roster.
+  //    Skip when scoped to a single contributor (server-side drill-down).
+  if (!onlyId) {
+    const coveredUserIds = new Set(roster.filter((r) => r.userId).map((r) => r.userId as string));
+    const memberRows = await db
+      .select({
+        userId: tenantMembers.userId,
+        displayName: users.displayName,
+        username: users.username,
+        email: users.email,
+        avatarUrl: users.avatarUrl,
+      })
+      .from(tenantMembers)
+      .innerJoin(users, eq(users.id, tenantMembers.userId))
+      .where(and(eq(tenantMembers.tenantId, tenantId), eq(tenantMembers.isActive, true)));
+
+    let synth = 0;
+    for (const m of memberRows) {
+      if (coveredUserIds.has(m.userId)) continue;
+      coveredUserIds.add(m.userId);
+      roster.push({
+        id: -(++synth), // synthetic, stable within this response; used only as a key
+        displayName: m.displayName || m.username || m.email,
+        kind: 'human',
+        avatarUrl: m.avatarUrl,
+        jobTitle: null,
+        agentHostId: null,
+        userId: m.userId,
+      });
+    }
+  }
+
+  // 3. Human git activity — daily aggregated metrics (activityScore = intensity),
+  //    keyed by contributor id.
+  const humanRows = await db
+    .select({
+      contributorId: contributorDailyMetrics.contributorId,
+      date: contributorDailyMetrics.date,
+      score: contributorDailyMetrics.activityScore,
+    })
+    .from(contributorDailyMetrics)
+    .where(and(
+      eq(contributorDailyMetrics.tenantId, tenantId),
+      gte(contributorDailyMetrics.date, fromFloor),
+      lte(contributorDailyMetrics.date, toDate),
+    ));
+
+  // 4. Agent activity — task spans + tool-audit events, grouped by agentHost + day.
+  const spanRows = await db
+    .select({
+      agentHostId: telemetrySpans.agentHostId,
+      day: sql<string>`to_char(date_trunc('day', ${telemetrySpans.ts}), 'YYYY-MM-DD')`,
+      c: sql<number>`count(*)::int`,
+    })
+    .from(telemetrySpans)
+    .where(and(
+      eq(telemetrySpans.tenantId, tenantId),
+      gte(telemetrySpans.ts, fromFloor),
+      lte(telemetrySpans.ts, toDate),
+      sql`${telemetrySpans.kind} like 'task.%'`,
+    ))
+    .groupBy(telemetrySpans.agentHostId, sql`date_trunc('day', ${telemetrySpans.ts})`);
+
+  const toolRows = await db
+    .select({
+      agentHostId: toolAuditEvents.agentHostId,
+      day: sql<string>`to_char(date_trunc('day', ${toolAuditEvents.ts}), 'YYYY-MM-DD')`,
+      c: sql<number>`count(*)::int`,
+    })
+    .from(toolAuditEvents)
+    .where(and(
+      eq(toolAuditEvents.tenantId, tenantId),
+      gte(toolAuditEvents.ts, fromFloor),
+      lte(toolAuditEvents.ts, toDate),
+    ))
+    .groupBy(toolAuditEvents.agentHostId, sql`date_trunc('day', ${toolAuditEvents.ts})`);
+
+  // 5. Usage/interaction ledgers (AI calls + code-change deltas).
+  const interaction = await computeInteractionActivity(db, tenantId, fromFloor, toDate);
+
+  // Index agent activity by agentHostId → (day → count): telemetry + AI usage.
+  const agentByAgentHost = new Map<number, Map<string, number>>();
+  const addAgent = (agentHostId: number | null, day: string, n: number) => {
+    if (agentHostId == null) return;
+    let m = agentByAgentHost.get(agentHostId);
+    if (!m) { m = new Map(); agentByAgentHost.set(agentHostId, m); }
+    m.set(day, (m.get(day) ?? 0) + n);
+  };
+  for (const r of spanRows) addAgent(r.agentHostId, r.day, Number(r.c));
+  for (const r of toolRows) addAgent(r.agentHostId, r.day, Number(r.c));
+  for (const [hostId, days] of interaction.agentDaysByHostId) {
+    for (const [day, n] of days) addAgent(hostId, day, n);
+  }
+
+  // Index human activity by contributor id → (day → count): git intensity +
+  // interaction counts (mapped from userId onto the roster entry).
+  const humanByContributor = new Map<number, Map<string, number>>();
+  const addHuman = (contributorId: number, day: string, n: number) => {
+    let m = humanByContributor.get(contributorId);
+    if (!m) { m = new Map(); humanByContributor.set(contributorId, m); }
+    m.set(day, (m.get(day) ?? 0) + n);
+  };
+  for (const r of humanRows) addHuman(r.contributorId, fmtDay(r.date as Date), r.score ?? 0);
+
+  const entryByUserId = new Map<string, number>();
+  for (const r of roster) if (r.kind === 'human' && r.userId) entryByUserId.set(r.userId, r.id);
+  for (const [userId, days] of interaction.humanDaysByUserId) {
+    const cid = entryByUserId.get(userId);
+    if (cid == null) continue; // author isn't a roster member (e.g. an agent ref)
+    for (const [day, n] of days) addHuman(cid, day, n);
+  }
+
+  // 6. Build per-contributor day cells + a merged team calendar.
+  const merged = new Map<string, number>();
+  let maxCount = 0;
+
+  const perContributor = roster.map((p) => {
+    const map = p.kind === 'agent' && p.agentHostId != null
+      ? (agentByAgentHost.get(p.agentHostId) ?? new Map<string, number>())
+      : (humanByContributor.get(p.id) ?? new Map<string, number>());
+
+    let total = 0;
+    const days = [...map.entries()]
+      .map(([date, count]) => {
+        total += count;
+        merged.set(date, (merged.get(date) ?? 0) + count);
+        if (count > maxCount) maxCount = count;
+        return { date, count };
+      })
+      .sort((a, b) => a.date.localeCompare(b.date));
+
+    return {
+      id: p.id,
+      displayName: p.displayName,
+      kind: p.kind,
+      avatarUrl: p.avatarUrl,
+      jobTitle: p.jobTitle,
+      agentHostId: p.agentHostId,
+      total,
+      days: days.map((d) => ({ ...d, level: 0 })), // levels filled below (need maxCount)
+    };
+  });
+
+  // Second pass: assign intensity levels now that maxCount is known.
+  for (const pc of perContributor) {
+    for (const d of pc.days) d.level = levelFor(d.count, maxCount);
+  }
+  const calendar = [...merged.entries()]
+    .map(([date, count]) => ({ date, count, level: levelFor(count, maxCount) }))
+    .sort((a, b) => a.date.localeCompare(b.date));
+
+  perContributor.sort((a, b) => b.total - a.total);
+
+  return {
+    range: { from: fromFloor.toISOString(), to: toDate.toISOString() },
+    maxCount,
+    contributors: perContributor,
+    calendar,
+  };
+}
+
 export function createAnalyticsRoutes(db: Db): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
 
@@ -56,8 +263,12 @@ export function createAnalyticsRoutes(db: Db): Hono<HonoEnv> {
   router.use('*', requireRole(TenantRole.MANAGER));
 
   // ── GET /api/analytics/activity-calendar ──────────────────────────────────
-  // Merges human daily metrics with agent telemetry into one per-contributor +
-  // team-wide contribution calendar.
+  // The whole-team contribution calendar: git/PR daily metrics + agent telemetry
+  // + the usage/interaction ledgers (AI calls, code-change deltas), so a teammate
+  // who works through the product (Brain/IDE/CLI/cloud) shows up even with zero
+  // git activity. Every human tenant member is surfaced as a contributor so the
+  // roster is the real team, not just those who landed a commit. Cached (120s)
+  // since it fans out across several aggregate queries.
   router.get('/activity-calendar', async (c) => {
     const tenantId = c.get('tenantId') as number;
 
@@ -68,122 +279,15 @@ export function createAnalyticsRoutes(db: Db): Hono<HonoEnv> {
     const fromFloor = dayFloorUTC(fromDate);
     const onlyId = c.req.query('contributorId') ? Number(c.req.query('contributorId')) : null;
 
-    // 1. Contributors in scope (humans + agents).
-    const contribConds = [eq(contributors.tenantId, tenantId), eq(contributors.isActive, true)];
-    if (onlyId) contribConds.push(eq(contributors.id, onlyId));
-    const people = await db.select().from(contributors).where(and(...contribConds));
-
-    // 2. Human activity — daily aggregated metrics (activityScore = intensity).
-    const humanRows = await db
-      .select({
-        contributorId: contributorDailyMetrics.contributorId,
-        date: contributorDailyMetrics.date,
-        score: contributorDailyMetrics.activityScore,
-      })
-      .from(contributorDailyMetrics)
-      .where(and(
-        eq(contributorDailyMetrics.tenantId, tenantId),
-        gte(contributorDailyMetrics.date, fromFloor),
-        lte(contributorDailyMetrics.date, toDate),
-      ));
-
-    // 3. Agent activity — task spans + tool-audit events, grouped by agentHost + day.
-    const spanRows = await db
-      .select({
-        agentHostId: telemetrySpans.agentHostId,
-        day: sql<string>`to_char(date_trunc('day', ${telemetrySpans.ts}), 'YYYY-MM-DD')`,
-        c: sql<number>`count(*)::int`,
-      })
-      .from(telemetrySpans)
-      .where(and(
-        eq(telemetrySpans.tenantId, tenantId),
-        gte(telemetrySpans.ts, fromFloor),
-        lte(telemetrySpans.ts, toDate),
-        sql`${telemetrySpans.kind} like 'task.%'`,
-      ))
-      .groupBy(telemetrySpans.agentHostId, sql`date_trunc('day', ${telemetrySpans.ts})`);
-
-    const toolRows = await db
-      .select({
-        agentHostId: toolAuditEvents.agentHostId,
-        day: sql<string>`to_char(date_trunc('day', ${toolAuditEvents.ts}), 'YYYY-MM-DD')`,
-        c: sql<number>`count(*)::int`,
-      })
-      .from(toolAuditEvents)
-      .where(and(
-        eq(toolAuditEvents.tenantId, tenantId),
-        gte(toolAuditEvents.ts, fromFloor),
-        lte(toolAuditEvents.ts, toDate),
-      ))
-      .groupBy(toolAuditEvents.agentHostId, sql`date_trunc('day', ${toolAuditEvents.ts})`);
-
-    // Index agent activity by agentHostId → (day → count).
-    const agentByAgentHost = new Map<number, Map<string, number>>();
-    const addAgent = (agentHostId: number | null, day: string, n: number) => {
-      if (agentHostId == null) return;
-      let m = agentByAgentHost.get(agentHostId);
-      if (!m) { m = new Map(); agentByAgentHost.set(agentHostId, m); }
-      m.set(day, (m.get(day) ?? 0) + n);
-    };
-    for (const r of spanRows) addAgent(r.agentHostId, r.day, Number(r.c));
-    for (const r of toolRows) addAgent(r.agentHostId, r.day, Number(r.c));
-
-    // Index human activity by contributorId → (day → score).
-    const humanByContributor = new Map<number, Map<string, number>>();
-    for (const r of humanRows) {
-      let m = humanByContributor.get(r.contributorId);
-      if (!m) { m = new Map(); humanByContributor.set(r.contributorId, m); }
-      const day = fmtDay(r.date as Date);
-      m.set(day, (m.get(day) ?? 0) + (r.score ?? 0));
-    }
-
-    // 4. Build per-contributor day cells + a merged team calendar.
-    const merged = new Map<string, number>();
-    let maxCount = 0;
-
-    const perContributor = people.map((p) => {
-      const map = p.kind === 'agent' && p.agentHostId != null
-        ? (agentByAgentHost.get(p.agentHostId) ?? new Map<string, number>())
-        : (humanByContributor.get(p.id) ?? new Map<string, number>());
-
-      let total = 0;
-      const days = [...map.entries()]
-        .map(([date, count]) => {
-          total += count;
-          merged.set(date, (merged.get(date) ?? 0) + count);
-          if (count > maxCount) maxCount = count;
-          return { date, count };
-        })
-        .sort((a, b) => a.date.localeCompare(b.date));
-
-      return {
-        id: p.id,
-        displayName: p.displayName,
-        kind: p.kind,
-        avatarUrl: p.avatarUrl,
-        jobTitle: p.jobTitle,
-        agentHostId: p.agentHostId,
-        total,
-        days: days.map((d) => ({ ...d, level: 0 })), // levels filled below (need maxCount)
-      };
-    });
-
-    // Second pass: assign intensity levels now that maxCount is known.
-    for (const pc of perContributor) {
-      for (const d of pc.days) d.level = levelFor(d.count, maxCount);
-    }
-    const calendar = [...merged.entries()]
-      .map(([date, count]) => ({ date, count, level: levelFor(count, maxCount) }))
-      .sort((a, b) => a.date.localeCompare(b.date));
-
-    perContributor.sort((a, b) => b.total - a.total);
-
-    return c.json({
-      range: { from: fromFloor.toISOString(), to: toDate.toISOString() },
-      maxCount,
-      contributors: perContributor,
-      calendar,
-    });
+    const cacheKey =
+      `activity-calendar:tenant:${tenantId}:from:${fmtDay(fromFloor)}:to:${fmtDay(dayFloorUTC(toDate))}:only:${onlyId ?? 'all'}`;
+    const payload = await getOrSetCached(
+      c.env as Env,
+      cacheKey,
+      () => buildActivityCalendar(db, tenantId, fromFloor, toDate, onlyId),
+      { kvTtlSeconds: 120 },
+    );
+    return c.json(payload);
   });
 
   // ── GET /api/analytics/tenant-rollup ──────────────────────────────────────

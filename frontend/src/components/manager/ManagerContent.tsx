@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState, type CSSProperties, type ReactNode } from 'react';
+import { useCallback, useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { useTranslations, useFormatter } from 'next-intl';
 import { Select } from '@/components/Select';
 import { RoleGate } from '@/components/RoleGate';
@@ -146,18 +146,50 @@ export function ManagerContent({ projectId }: ManagerContentProps) {
     }
   }, [projectId, load, t]);
 
+  // The manager pass now runs in the background on the server (it is far too heavy to
+  // finish inside one request). We poll the overview while it runs so every decision
+  // it journals streams into the activity feed + stats live. The pass stamps
+  // `lastRunAt` when it finishes; we stop once that advances past the baseline, or
+  // after a hard cap (an evicted run leaves the partial actions we already streamed
+  // in place, and the next run resumes). Cancels on unmount.
+  const pollingRef = useRef(false);
+  useEffect(() => () => { pollingRef.current = false; }, []);
+
+  const streamUntilDone = useCallback(async (baseline: string | null) => {
+    pollingRef.current = true;
+    const startedAt = Date.now();
+    const MAX_MS = 120_000;
+    const INTERVAL_MS = 3000;
+    while (pollingRef.current && projectId != null) {
+      await new Promise((r) => setTimeout(r, INTERVAL_MS));
+      if (!pollingRef.current) break;
+      try {
+        const overview = await managerApi.get(projectId);
+        setData(overview);
+        if (overview.stats.lastRunAt && overview.stats.lastRunAt !== baseline) break;
+      } catch { /* transient — keep polling */ }
+      if (Date.now() - startedAt > MAX_MS) break;
+    }
+    pollingRef.current = false;
+    setRunning(false);
+  }, [projectId]);
+
   const runNow = useCallback(async () => {
-    if (projectId == null) return;
+    if (projectId == null || running) return;
+    setError(null);
     setRunning(true);
+    const baseline = data?.stats.lastRunAt ?? null;
+    let started = false;
     try {
-      await managerApi.run(projectId);
-      await load();
+      const res = await managerApi.run(projectId);
+      started = res.started;
+      if (!started) setError(t('disabledNotice'));
     } catch (e) {
       setError(e instanceof Error ? e.message : t('error.body'));
-    } finally {
-      setRunning(false);
     }
-  }, [projectId, load, t]);
+    if (started) void streamUntilDone(baseline);
+    else setRunning(false);
+  }, [projectId, running, data, streamUntilDone, t]);
 
   const memberName = useCallback(
     (userId: string | null, ref: string | null, hostId: number | null) =>
@@ -380,7 +412,16 @@ export function ManagerContent({ projectId }: ManagerContentProps) {
 
       {/* ── Activity feed ── */}
       <div>
-        <div style={{ ...sectionTitleStyle, marginBottom: 8 }}>{t('activity.title')}</div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8, flexWrap: 'wrap' }}>
+          <span style={sectionTitleStyle}>{t('activity.title')}</span>
+          {running && (
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: '0.78rem', fontWeight: 600, color: 'var(--accent, #2563eb)' }}>
+              <span aria-hidden style={{ width: 8, height: 8, borderRadius: '50%', background: 'currentColor', animation: 'bf-pulse 1.2s ease-in-out infinite' }} />
+              {t('activity.working')}
+            </span>
+          )}
+        </div>
+        <style>{'@keyframes bf-pulse{0%,100%{opacity:.35}50%{opacity:1}}'}</style>
         {actions.length === 0 ? (
           <div style={{ ...panelStyle, ...mutedStyle }}>{t('activity.empty')}</div>
         ) : (

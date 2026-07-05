@@ -27,7 +27,7 @@ import { resolvePaidOverflowCapMillicents } from '../../application/llm/usageLed
 import { USAGE_KIND } from '../../application/llm/usageSource';
 import { logTrace, backfillTraceUsage } from '../../application/llm/traceLogger';
 import { recordUsageRow, type UsageAttribution, type RecordUsageRow, type UsageSurface } from '../../application/llm/usageLedger';
-import { pickUsage } from '../../application/llm/vendors';
+import { pickUsage, vendorForModel, getCatalog } from '../../application/llm/vendors';
 import {
   dispatchEmbeddingVendor,
   EmbeddingCascadeExhaustedError,
@@ -63,10 +63,15 @@ import {
   setTenantProviderKey,
   setTenantProviderOAuth,
   resolveAnthropicAuth,
-  resolveAnthropicOAuthToken,
+  resolveTenantVendorKeys,
+  resolveTenantLlmCredentials,
   listTenantProviderKeys,
   deleteTenantProviderKey,
   isSupportedProvider,
+  byoVendorIdSet,
+  providersFromCredentials,
+  type TenantVendorKeys,
+  type LlmProvider,
 } from '../../application/llm/tenantProviderKeyService';
 import {
   generatePkce,
@@ -167,6 +172,16 @@ function resolveUsageSurface(c: Context<HonoEnv>, access: TenantAccess): UsageSu
   const hinted = (c.req.header('x-builderforce-surface') ?? '').toLowerCase();
   if ((KNOWN_SURFACES as readonly string[]).includes(hinted)) return hinted as UsageSurface;
   return access.agentHostId != null ? 'on_prem' : 'web';
+}
+
+/** A tenant's connected-provider list → the pinnable BYO models (best-effort
+ *  catalog projection) their picker should offer, as `<vendor>/<id>` refs. */
+export function byoModelsFor(providers: readonly LlmProvider[]): Array<{ id: string; vendor: string; tier: string; contextWindow?: number }> {
+  const vendorIds = byoVendorIdSet(providers);
+  if (vendorIds.size === 0) return [];
+  return getCatalog()
+    .filter((e) => vendorIds.has(e.vendor))
+    .map((e) => ({ id: `${e.vendor}/${e.id}`, vendor: e.vendor, tier: e.tier, ...(e.contextWindow ? { contextWindow: e.contextWindow } : {}) }));
 }
 
 /**
@@ -748,12 +763,13 @@ function proxyForCompletion(
   env: Env,
   access: TenantAccess,
   body: ChatCompletionRequest,
-  opts: { disablePaidOverflow: boolean; anthropicOAuthToken?: string | null },
+  opts: { disablePaidOverflow: boolean; anthropicOAuthToken?: string | null; tenantVendorKeys?: TenantVendorKeys | null },
 ): ReturnType<typeof llmProxyForPlan> {
   return llmProxyForPlan(env, access.effectivePlan, access.premiumOverride, {
     disablePaidOverflow: opts.disablePaidOverflow,
     ...(isAgenticToolTurn(body as { tools?: unknown }) ? { codingOnly: true, backstopModels: CODING_BACKSTOP_MODELS } : {}),
     ...(opts.anthropicOAuthToken ? { anthropicOAuthToken: opts.anthropicOAuthToken } : {}),
+    ...(opts.tenantVendorKeys ? { tenantVendorKeys: opts.tenantVendorKeys } : {}),
   });
 }
 
@@ -975,10 +991,14 @@ export function createLlmRoutes(): Hono<HonoEnv> {
     const openaiBody = anthropicToOpenAiRequest(parsed);
     const traceId = newTraceId();
     const messageId = `msg_${traceId}`;
+    // The tenant has no BYO Anthropic credential here (handled above), but may
+    // still bring OpenAI/Google — overlay those so a translated turn landing on
+    // their vendor rides the tenant's own account ($0 to us, metered byo).
+    const tenantVendorKeys = await resolveTenantVendorKeys(c.env, access.tenantId);
     // Same routing path as /v1/chat/completions: a translated Anthropic request that
     // carried `tools` is an agentic turn and floors onto the paid coder backstop
     // rather than the lite general backstop. (BYO-Claude turns were served above.)
-    const service = proxyForCompletion(c.env, access, openaiBody as unknown as ChatCompletionRequest, { disablePaidOverflow });
+    const service = proxyForCompletion(c.env, access, openaiBody as unknown as ChatCompletionRequest, { disablePaidOverflow, tenantVendorKeys });
     const result = await service.complete(openaiBody as unknown as ChatCompletionRequest, undefined, traceId);
     logFailovers(c.env, c.executionCtx, result.failovers);
 
@@ -1227,17 +1247,32 @@ export function createLlmRoutes(): Hono<HonoEnv> {
     // Free tenants can't strict-pin — a single misbehaving model would otherwise
     // drain their daily budget with retries. Paid plans, superadmin-issued
     // daily-limit overrides, and superadmin callers bypass.
+    // Resolve the tenant's Claude subscription token AND BYO api-keys up front (one
+    // round-trip) — needed both for the strict-pin gate below and for the proxy.
+    // The subscription powers direct-Claude; the BYO keys override the operator
+    // keys for their vendors so the tenant's own account serves the call ($0 to us,
+    // metered byo). The connected vendors also unlock free-plan model choice.
+    const tenantCreds = await resolveTenantLlmCredentials(c.env, access.tenantId);
+    const { anthropicOAuthToken, vendorKeys: tenantVendorKeys } = tenantCreds;
+    const byoVendors = byoVendorIdSet(providersFromCredentials(tenantCreds));
+
     const queryStrict = c.req.query('strict') === 'true';
     const wantsStrict = resolveStrictPin(bodyAny, queryStrict);
     if (wantsStrict) {
+      // A free tenant may strict-pin a model their OWN connected provider serves —
+      // they pay their provider directly, so the "a bad model drains the budget"
+      // concern doesn't apply. Any other free-plan strict pin still needs a paid plan.
+      const pinnedVendor = typeof bodyAny.model === 'string' ? vendorForModel(bodyAny.model) : null;
+      const pinnedIsByo = pinnedVendor != null && byoVendors.has(pinnedVendor);
       const strictAllowed = access.isSuperadmin
                          || access.effectivePlan !== 'free'
-                         || access.tokenDailyLimitOverride !== null;
+                         || access.tokenDailyLimitOverride !== null
+                         || pinnedIsByo;
       if (!strictAllowed) {
         // 402 Payment Required — uniform with the portal feature-gate standard
         // (the caller is authenticated + authorized; they just need a higher plan).
         return c.json({
-          error: 'Strict model pinning requires a paid plan (Pro/Teams) or a superadmin-issued daily-limit override.',
+          error: 'Strict model pinning requires a paid plan (Pro/Teams), a connected provider (BYO), or a superadmin-issued daily-limit override.',
           code: 'strict_pin_not_allowed',
           upgrade: true,
         }, 402);
@@ -1331,14 +1366,12 @@ export function createLlmRoutes(): Hono<HonoEnv> {
     // $ cap — the primary pool still runs, only the paid fallback/backstop is
     // disabled. Hard ceiling on what a tight retry loop can spend on our keys.
     const disablePaidOverflow = await isPaidOverflowExhausted(c, access);
-    // If the tenant connected their own Claude subscription, any direct-Claude
-    // resolution in the cascade rides it (Bearer + oauth) instead of our metered
-    // key — and isn't metered as overflow. Null for everyone else (unchanged).
-    const anthropicOAuthToken = await resolveAnthropicOAuthToken(c.env, access.tenantId);
     // Single routing path for every modality (chat + messages, VS Code Brain +
     // on-prem + SDK): an agentic tool-loop turn floors onto the paid coder backstop,
-    // a plain chat keeps the general pool. See `proxyForCompletion`.
-    const service = proxyForCompletion(c.env, access, body, { disablePaidOverflow, anthropicOAuthToken });
+    // a plain chat keeps the general pool. Reuses the credentials resolved above so
+    // any direct-Claude resolution rides the tenant subscription and BYO vendors
+    // serve from the tenant's own account.
+    const service = proxyForCompletion(c.env, access, body, { disablePaidOverflow, anthropicOAuthToken, tenantVendorKeys });
     // Context-fit seeding: estimate the turn's tokens so the proxy drops
     // small-window models from the first-pass seed. This is the preventive half
     // of the Brain "dies after several executions" fix — the reactive 413
@@ -1547,6 +1580,14 @@ export function createLlmRoutes(): Hono<HonoEnv> {
     // coding models, Pro tenants also see the premium ones).
     const codingModels = codingModelsForPlan(effectivePlan, premiumOverride);
 
+    // BYO: the tenant's connected providers drive an additional pinnable model set
+    // (their own account serves them, $0 to us). Connecting a provider ALSO unlocks
+    // model choice on the free plan — "LLM choices are based on the connected
+    // providers." Resolved only for an authenticated tenant.
+    const byoProviders = access ? (await listTenantProviderKeys(c.env, access.tenantId)).map((d) => d.provider) : [];
+    const byoModels = byoModelsFor(byoProviders);
+    const canChooseModel = premiumOverride || effectivePlan !== 'free' || byoModels.length > 0;
+
     const requiredKey = isPro ? c.env.OPENROUTER_API_KEY_PRO ?? c.env.OPENROUTER_API_KEY : c.env.OPENROUTER_API_KEY;
     if (!requiredKey) {
       return c.json({
@@ -1556,6 +1597,8 @@ export function createLlmRoutes(): Hono<HonoEnv> {
         ...(premiumOverride ? { premium: true } : {}),
         models: modelPoolForPlan(effectivePlan, premiumOverride),
         codingModels,
+        canChooseModel,
+        byo: { providers: byoProviders, models: byoModels },
       });
     }
 
@@ -1568,6 +1611,8 @@ export function createLlmRoutes(): Hono<HonoEnv> {
       ...(premiumOverride ? { premium: true } : {}),
       data: await service.status(),
       codingModels,
+      canChooseModel,
+      byo: { providers: byoProviders, models: byoModels },
     });
   });
 

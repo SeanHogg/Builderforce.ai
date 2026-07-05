@@ -54,6 +54,7 @@ import {
 import { validateJsonSchema } from './jsonSchemaValidator';
 import { estimateTokensFromChars } from './tokenUsage';
 import type { ActionType } from './actionTypes';
+import { PROVIDER_VENDOR_MAP, type TenantVendorKeys } from './tenantProviderKeyService';
 
 // ---------------------------------------------------------------------------
 // Pool composition (derived from vendor catalogs — single source of truth)
@@ -718,6 +719,12 @@ export interface LlmProxyOptions {
    *  tenant's own subscription — and is NOT metered as paid-overflow (it's $0 to
    *  us). Resolved per request from `resolveAnthropicOAuthToken`. */
   anthropicOAuthToken?: string | null;
+  /** A tenant's BYO api-key credentials (OpenAI / Google / Anthropic) keyed by
+   *  provider. When set, vendorEnv overrides the matching operator env key with
+   *  the tenant's key for that vendor and marks the vendor tenant-funded (byo) —
+   *  so its usage is $0 to us and metered per the BYO rules. Resolved per request
+   *  from {@link resolveTenantVendorKeys}. */
+  tenantVendorKeys?: TenantVendorKeys | null;
 }
 
 export class LlmProxyService {
@@ -732,6 +739,7 @@ export class LlmProxyService {
   private readonly codingOnly: boolean;
   private readonly freeBudget: number;
   private readonly anthropicOAuthToken: string | null;
+  private readonly tenantVendorKeys: TenantVendorKeys;
 
   constructor(env: ProxyEnv, options?: LlmProxyOptions) {
     this.env = env;
@@ -745,6 +753,13 @@ export class LlmProxyService {
     this.codingOnly = options?.codingOnly ?? false;
     this.freeBudget = options?.freeBudget && options.freeBudget > 0 ? options.freeBudget : FREE_ATTEMPT_BUDGET;
     this.anthropicOAuthToken = options?.anthropicOAuthToken ?? null;
+    this.tenantVendorKeys = options?.tenantVendorKeys ?? {};
+    // Mark every vendor a BYO key overrides as tenant-funded up front, so any
+    // resolution landing on that vendor this request is stamped byo (cost 0,
+    // on-prem/VSIX exempt). vendorEnv() applies the matching key override.
+    for (const provider of Object.keys(this.tenantVendorKeys) as Array<keyof TenantVendorKeys>) {
+      if (this.tenantVendorKeys[provider]) this.tenantFundedVendors.add(PROVIDER_VENDOR_MAP[provider].vendorId as VendorId);
+    }
   }
 
   /** True when this result was served by the tenant's connected Claude SUBSCRIPTION
@@ -1106,10 +1121,14 @@ export class LlmProxyService {
       CEREBRAS_API_KEY:         this.env.CEREBRAS_API_KEY         ?? null,
       NVIDIA_API_KEY:           this.env.NVIDIA_API_KEY           ?? null,
       OLLAMA_API_KEY:           this.env.OLLAMA_API_KEY           ?? null,
-      GOOGLE_API_KEY:           this.env.GOOGLE_API_KEY           ?? null,
+      // A tenant BYO Google key overrides the operator key for the `googleai`
+      // vendor (marked tenant-funded in the constructor → byo, $0 to us).
+      GOOGLE_API_KEY:           this.tenantVendorKeys.google      ?? this.env.GOOGLE_API_KEY ?? null,
       // Direct-Anthropic floor key. Flows through creditedVendorEnv() too (which
       // spreads this) so the coding backstop can reach Claude regardless of plan.
-      CLAUDE_API_KEY:           this.env.CLAUDE_API_KEY           ?? null,
+      // A tenant BYO Anthropic api-key overrides it (the subscription/OAuth path
+      // is separate, via CLAUDE_OAUTH_TOKEN below).
+      CLAUDE_API_KEY:           this.tenantVendorKeys.anthropic   ?? this.env.CLAUDE_API_KEY ?? null,
       // A connected tenant's Claude subscription token — when present the anthropic
       // vendor prefers it over CLAUDE_API_KEY (tenant-funded, $0 to us). Spread into
       // creditedVendorEnv() too, so a backstop landing on Claude also uses it.
@@ -1124,6 +1143,9 @@ export class LlmProxyService {
       // list is derived from `OPENAI_COMPATIBLE_VENDOR_KEYS` so it can't drift
       // from the registered vendors.
       ...passthroughVendorKeys(this.env),
+      // A tenant BYO OpenAI key overrides the operator OpenAI key (spread above)
+      // for the `openai` vendor — marked tenant-funded → byo, $0 to us.
+      ...(this.tenantVendorKeys.openai ? { OPENAI_API_KEY: this.tenantVendorKeys.openai } : {}),
     };
   }
 
@@ -1716,7 +1738,7 @@ export function llmProxyForPlan(
   env: ProxyEnv,
   effectivePlan: EffectivePlan,
   premiumOverride = false,
-  opts?: { backstopModels?: readonly string[]; disablePaidOverflow?: boolean; codingOnly?: boolean; anthropicOAuthToken?: string | null },
+  opts?: { backstopModels?: readonly string[]; disablePaidOverflow?: boolean; codingOnly?: boolean; anthropicOAuthToken?: string | null; tenantVendorKeys?: TenantVendorKeys | null },
 ): LlmProxyService {
   const { productName, modelPool, vendorCallTimeoutMs } = resolveRouting(effectivePlan, premiumOverride);
   // A CODING run restricts its failover cascade to the curated coding pool, so an
@@ -1740,6 +1762,9 @@ export function llmProxyForPlan(
       : { freeBudget: freeAttemptBudgetForPlan(effectivePlan) }),
     // A connected tenant subscription token powers any direct-Claude resolution.
     ...(opts?.anthropicOAuthToken ? { anthropicOAuthToken: opts.anthropicOAuthToken } : {}),
+    // BYO api-keys (OpenAI/Google/Anthropic) override the operator keys for their
+    // vendors and mark those calls tenant-funded (byo).
+    ...(opts?.tenantVendorKeys ? { tenantVendorKeys: opts.tenantVendorKeys } : {}),
   });
 }
 
@@ -1863,6 +1888,10 @@ export interface PickCloudModelOptions {
    *  into a context it would 413 on — the 97K-into-32K bug. Composes with the SSM
    *  learned ranking: fit FIRST, then rank the fitting set. */
   estimatedTokens?: number;
+  /** Gateway vendor ids the tenant can serve from their OWN connected providers
+   *  (BYO). A free tenant may pin a model owned by one of these — they pay their
+   *  own provider — so the free-plan "can't choose a model" gate is lifted for it. */
+  byoVendors?: ReadonlySet<string>;
 }
 
 /** Headroom over the prompt estimate to reserve for the model's OUTPUT tokens +
@@ -1916,8 +1945,11 @@ export function pickCloudModel(
   premiumOverride = false,
   opts?: PickCloudModelOptions,
 ): PickCloudModelResult {
-  const canChooseModel = premiumOverride || effectivePlan !== 'free';
-  // Explicit-pin behaviour (paid plans) — byte-for-byte unchanged.
+  // A free tenant may pin a model their OWN connected provider serves (BYO) — they
+  // fund it, so the budget-drain rationale for the free-plan gate doesn't apply.
+  const explicitIsByo = !!explicit && !!opts?.byoVendors?.has(vendorForModel(explicit.trim()));
+  const canChooseModel = premiumOverride || effectivePlan !== 'free' || explicitIsByo;
+  // Explicit-pin behaviour (paid plans + BYO pins) — byte-for-byte unchanged otherwise.
   if (canChooseModel && isKnownModel(explicit)) return { model: (explicit as string).trim(), strict: true };
 
   // Soft-seed branch — the ONLY place learned routing changes anything. Reorder the

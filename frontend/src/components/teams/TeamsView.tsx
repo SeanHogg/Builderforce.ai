@@ -65,6 +65,28 @@ const labelStyle: React.CSSProperties = {
 };
 const sectionTitle: React.CSSProperties = { fontSize: 13, fontWeight: 700, margin: '0 0 10px' };
 
+/** Pencil-in-square "manage" glyph. Kept always-visible (not hover-only) so the
+ *  card reads as interactive on touch devices too; it tints coral on hover. */
+function ManageIcon({ active }: { active: boolean }) {
+  return (
+    <svg
+      width={16}
+      height={16}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke={active ? 'var(--coral-bright)' : 'var(--text-muted)'}
+      strokeWidth={2}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+      style={{ flexShrink: 0, transition: 'stroke 120ms' }}
+    >
+      <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+      <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+    </svg>
+  );
+}
+
 function MemberPill({ kind }: { kind: TeamMemberKind }) {
   return (
     <span
@@ -86,6 +108,7 @@ export function TeamsView() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<ViewMode>('card');
+  const [hoveredId, setHoveredId] = useState<number | null>(null);
 
   // Create slide-out
   const [createOpen, setCreateOpen] = useState(false);
@@ -129,6 +152,15 @@ export function TeamsView() {
       setDetail(d);
       setWorkforce(wf);
       setProjects(projs);
+      // The detail read is uncached and therefore authoritative. Reconcile the
+      // matching card/row in the (cached, possibly-stale) summary list from it so
+      // the count on the card can never diverge from the panel the user is
+      // looking at — this is what fixed "card says 1 member, panel shows 6".
+      setTeams((prev) =>
+        prev.map((t) =>
+          t.id === d.id ? { ...t, memberCount: d.members.length, projectCount: d.projects.length } : t,
+        ),
+      );
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to load team');
     } finally {
@@ -166,8 +198,13 @@ export function TeamsView() {
   };
 
   // --- member / project mutations operate on the open detail, then refresh ---
+  // A membership/project change only affects THIS team's counts, so reloading the
+  // authoritative detail (which reconciles its own card in the summary list) is
+  // enough. We deliberately do NOT refetch the whole list here: that cached read
+  // can lag the just-written value on another isolate and would clobber the
+  // reconciled count back to a stale number.
   const refreshAfterMutation = async (id: number) => {
-    await Promise.all([loadDetail(id), loadTeams()]);
+    await loadDetail(id);
   };
 
   const handleAddMember = async (opt: WorkforceOption) => {
@@ -304,12 +341,23 @@ export function TeamsView() {
                 key={t.id}
                 type="button"
                 onClick={() => openTeam(t.id)}
+                onMouseEnter={() => setHoveredId(t.id)}
+                onMouseLeave={() => setHoveredId((h) => (h === t.id ? null : h))}
+                aria-label={`Manage team ${t.name}`}
                 style={{
                   textAlign: 'left', padding: 16, display: 'flex', flexDirection: 'column', gap: 8,
-                  background: 'var(--bg-base)', border: '1px solid var(--border-subtle)', borderRadius: 12, cursor: 'pointer',
+                  background: 'var(--bg-base)',
+                  border: `1px solid ${hoveredId === t.id ? 'var(--coral-bright)' : 'var(--border-subtle)'}`,
+                  borderRadius: 12, cursor: 'pointer',
+                  boxShadow: hoveredId === t.id ? '0 4px 14px rgba(0,0,0,0.10)' : 'none',
+                  transform: hoveredId === t.id ? 'translateY(-1px)' : 'none',
+                  transition: 'border-color 120ms, box-shadow 120ms, transform 120ms',
                 }}
               >
-                <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-primary)' }}>{t.name}</div>
+                <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8 }}>
+                  <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-primary)' }}>{t.name}</div>
+                  <ManageIcon active={hoveredId === t.id} />
+                </div>
                 <div style={{ fontSize: 12, color: 'var(--text-muted)', minHeight: 32, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
                   {t.description || 'No description'}
                 </div>
@@ -329,15 +377,25 @@ export function TeamsView() {
                   <th style={thStyle}>Description</th>
                   <th style={thStyle}>Members</th>
                   <th style={thStyle}>Projects</th>
+                  <th style={{ ...thStyle, width: 40 }} aria-label="Manage" />
                 </tr>
               </thead>
               <tbody>
                 {teams.map((t) => (
-                  <tr key={t.id} style={{ ...trStyle, cursor: 'pointer' }} onClick={() => openTeam(t.id)}>
+                  <tr
+                    key={t.id}
+                    style={{ ...trStyle, cursor: 'pointer', background: hoveredId === t.id ? 'var(--bg-hover, rgba(127,127,127,0.06))' : undefined }}
+                    onClick={() => openTeam(t.id)}
+                    onMouseEnter={() => setHoveredId(t.id)}
+                    onMouseLeave={() => setHoveredId((h) => (h === t.id ? null : h))}
+                  >
                     <td style={{ ...tdStyle, fontWeight: 600 }}>{t.name}</td>
                     <td style={tdMutedStyle}>{t.description || '—'}</td>
                     <td style={tdStyle}>{t.memberCount}</td>
                     <td style={tdStyle}>{t.projectCount}</td>
+                    <td style={{ ...tdStyle, textAlign: 'right', width: 40 }}>
+                      <ManageIcon active={hoveredId === t.id} />
+                    </td>
                   </tr>
                 ))}
               </tbody>

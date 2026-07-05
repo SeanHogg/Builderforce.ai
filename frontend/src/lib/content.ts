@@ -1222,7 +1222,7 @@ export const PRODUCT_SECTIONS: ProductSection[] = [
       { icon: '🔗', title: 'Board Connectors', desc: 'Two-way sync with Jira, Linear, monday, Asana, ClickUp, ServiceNow, Freshservice, Sentry, PagerDuty, and GitHub — orchestrate across the trackers you already run, with no migration.', href: '/projects?tab=connections' },
       { icon: '🕸️', title: 'Workforce Mesh', desc: 'Discover and dispatch work across local and remote AgentHosts — capacity sharing across machines and tenants.', href: '/workforce' },
       { icon: '💬', title: 'Chats', desc: 'Talk to your agents directly, or watch them collaborate in shared conversations.', href: '/workforce?tab=chats' },
-      { icon: '🧑‍🏭', title: 'Workforce Kanban & Templates', desc: 'Staff a project from a role roster of humans and AI agents on a sign-off-gated board, then buy, sell, or install ready-made board templates — lanes, required roles, review gates, and a recommended roster — from the marketplace.', href: '/kanban-templates' },
+      { icon: '🧑‍🏭', title: 'Workforce Kanban & Templates', desc: 'Staff a project from a role roster of humans and AI agents on a sign-off-gated board, then buy, sell, or install ready-made board templates — lanes, required roles, review gates, and a recommended roster — from the marketplace.', href: '/projects?tab=templates' },
     ],
   },
   {

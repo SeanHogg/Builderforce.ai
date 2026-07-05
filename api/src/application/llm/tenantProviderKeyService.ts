@@ -24,10 +24,26 @@ import { refreshAnthropicToken, type AnthropicOAuthTokens } from './anthropicOAu
 
 type Env = HonoEnv['Bindings'];
 
-export type LlmProvider = 'anthropic';
-export const SUPPORTED_PROVIDERS: readonly LlmProvider[] = ['anthropic'];
+export type LlmProvider = 'anthropic' | 'openai' | 'google';
+export const SUPPORTED_PROVIDERS: readonly LlmProvider[] = ['anthropic', 'openai', 'google'];
 
 export type ProviderAuthType = 'api_key' | 'oauth';
+
+/** A BYO provider → the gateway vendor id + operator env-var name its tenant key
+ *  overrides. `oauth` marks the provider that ALSO supports a connected
+ *  subscription (Anthropic today) — the OAuth path is resolved separately via
+ *  {@link resolveAnthropicOAuthToken}, so it isn't part of the api-key overlay. */
+export const PROVIDER_VENDOR_MAP: Record<LlmProvider, { vendorId: string; envKey: 'CLAUDE_API_KEY' | 'OPENAI_API_KEY' | 'GOOGLE_API_KEY'; oauth: boolean }> = {
+  anthropic: { vendorId: 'anthropic', envKey: 'CLAUDE_API_KEY', oauth: true },
+  openai:    { vendorId: 'openai',    envKey: 'OPENAI_API_KEY', oauth: false },
+  google:    { vendorId: 'googleai',  envKey: 'GOOGLE_API_KEY', oauth: false },
+};
+
+/** A tenant's resolved BYO API keys keyed by provider (decrypted, api_key mode
+ *  only — the Anthropic subscription/OAuth token is resolved separately). Passed
+ *  into the LLM proxy so vendorEnv overlays them onto the operator env and marks
+ *  the vendor tenant-funded (byo). */
+export type TenantVendorKeys = Partial<Record<LlmProvider, string>>;
 
 /** A tenant's resolved Anthropic credential — discriminated by auth type. */
 export type AnthropicAuth =
@@ -42,6 +58,23 @@ export interface ProviderKeySummary {
 
 export function isSupportedProvider(p: string): p is LlmProvider {
   return (SUPPORTED_PROVIDERS as readonly string[]).includes(p);
+}
+
+/** The gateway vendor ids a tenant can serve from their OWN connected providers.
+ *  A free tenant may freely pick / strict-pin any model owned by one of these
+ *  (they pay their own provider) — the single source both the models endpoint and
+ *  the model-choice gates use so "connected providers ⇒ model choice" stays
+ *  consistent across surfaces. */
+export function byoVendorIdSet(providers: readonly LlmProvider[]): Set<string> {
+  return new Set(providers.map((p) => PROVIDER_VENDOR_MAP[p].vendorId));
+}
+
+/** The connected providers implied by a resolved credential set — the api-keys
+ *  present plus a live Anthropic subscription. */
+export function providersFromCredentials(creds: TenantLlmCredentials): LlmProvider[] {
+  const set = new Set<LlmProvider>((Object.keys(creds.vendorKeys) as LlmProvider[]).filter((p) => creds.vendorKeys[p]));
+  if (creds.anthropicOAuthToken) set.add('anthropic');
+  return [...set];
 }
 
 /** Store (or replace) a tenant's provider API key, encrypted at rest. */
@@ -161,6 +194,59 @@ export async function resolveAnthropicAuth(
 export async function resolveAnthropicOAuthToken(env: Env, tenantId: number): Promise<string | null> {
   const auth = await resolveAnthropicAuth(env, tenantId);
   return auth?.mode === 'oauth' ? auth.accessToken : null;
+}
+
+/**
+ * Resolve ALL of a tenant's BYO api-key credentials in ONE query — decrypted and
+ * keyed by provider — for the LLM proxy's vendorEnv overlay. Only `api_key`-mode
+ * rows are returned; the Anthropic subscription (oauth) is threaded separately as
+ * the OAuth token. Best-effort: a DB/decrypt error degrades to "no BYO keys" (the
+ * cascade keeps its operator-key floor), never throws on the hot completion path.
+ *
+ * Secrets are decrypted per call (cheap AES-GCM) and never cached to KV — the one
+ * PK-indexed read here replaces what would otherwise be a per-provider fan-out.
+ */
+export async function resolveTenantVendorKeys(env: Env, tenantId: number): Promise<TenantVendorKeys> {
+  let rows: Array<{ provider?: string; key_enc?: string; auth_type?: string }> = [];
+  try {
+    const sql = neon(env.NEON_DATABASE_URL);
+    rows = (await sql`
+      SELECT provider, key_enc, auth_type FROM tenant_llm_provider_keys WHERE tenant_id = ${tenantId}
+    `) as typeof rows;
+  } catch {
+    return {};
+  }
+  const out: TenantVendorKeys = {};
+  for (const row of rows) {
+    if (!row.provider || !isSupportedProvider(row.provider)) continue;
+    if ((row.auth_type ?? 'api_key') !== 'api_key' || !row.key_enc) continue;
+    try {
+      out[row.provider] = await decryptSecretFromStorage(row.key_enc, env.JWT_SECRET);
+    } catch { /* skip an undecryptable row — never fail the batch */ }
+  }
+  return out;
+}
+
+/** A tenant's full LLM credential set, resolved together for the completion path:
+ *  the Anthropic subscription token (OAuth, auto-refreshed) AND the BYO api-keys
+ *  (OpenAI/Google/Anthropic). */
+export interface TenantLlmCredentials {
+  anthropicOAuthToken: string | null;
+  vendorKeys: TenantVendorKeys;
+}
+
+/**
+ * Resolve BOTH the Anthropic subscription token and the BYO api-keys in ONE
+ * round-trip (the two reads run in parallel). The single entry point for the
+ * gateway + cloud completion paths so they don't each duplicate the pair of
+ * lookups. Best-effort — each half independently degrades to null/empty.
+ */
+export async function resolveTenantLlmCredentials(env: Env, tenantId: number): Promise<TenantLlmCredentials> {
+  const [anthropicOAuthToken, vendorKeys] = await Promise.all([
+    resolveAnthropicOAuthToken(env, tenantId),
+    resolveTenantVendorKeys(env, tenantId),
+  ]);
+  return { anthropicOAuthToken, vendorKeys };
 }
 
 /** List which providers a tenant has configured + how each authenticates (no secrets). */

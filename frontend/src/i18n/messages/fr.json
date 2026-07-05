@@ -252,8 +252,7 @@
       "quality": "Qualité",
       "myProfile": "Mon profil",
       "findWork": "Trouver du travail",
-      "timecard": "Feuille de temps",
-      "kanbanTemplates": "Modèles kanban"
+      "timecard": "Feuille de temps"
     },
     "tab": {
       "projects": "Projets",
@@ -261,6 +260,7 @@
       "planning": "Planification",
       "portfolio": "Portefeuille",
       "ceremonies": "Cérémonies",
+      "templates": "Modèles",
       "dora": "DORA",
       "finops": "FinOps",
       "funnel": "Entonnoir d’innovation",
@@ -305,7 +305,26 @@
       "integrations": "Intégrations",
       "manager": "Manager",
       "roles": "Rôles",
-      "talent": "Talents"
+      "talent": "Talents",
+      "adminHealth": "État",
+      "adminBilling": "Facturation",
+      "adminUsage": "Utilisation",
+      "adminUsers": "Utilisateurs",
+      "adminTenants": "Locataires",
+      "adminApiKeys": "Clés API",
+      "adminSecurity": "Sécurité",
+      "adminLegal": "Mentions légales",
+      "adminNewsletter": "Infolettre",
+      "adminPrivacy": "Confidentialité",
+      "adminPersonas": "Personas",
+      "adminGovernance": "Gouvernance",
+      "adminPermissions": "Permissions",
+      "adminModules": "Modules",
+      "adminImpSessions": "Sessions d’emprunt",
+      "adminAuditLog": "Journal d’audit",
+      "adminErrors": "Erreurs",
+      "adminTraces": "Traces LLM",
+      "adminToken": "Jeton"
     }
   },
   "alerts": {
@@ -4882,6 +4901,7 @@
     "neverManaged": "Ce backlog n’a pas encore été géré.",
     "runNow": "Lancer le manager",
     "running": "Gestion en cours…",
+    "disabledNotice": "La gestion est en pause. Activez « Continuer à gérer ce backlog » pour lancer le manager.",
     "loading": "Chargement du manager…",
     "noProject": {
       "title": "Choisissez un projet",
@@ -4978,6 +4998,7 @@
     },
     "activity": {
       "title": "Activité récente",
+      "working": "Le manager travaille — diffusion des décisions en direct…",
       "empty": "Le manager n’a encore effectué aucune action."
     }
   },
@@ -5597,5 +5618,23 @@
     "loading": "Chargement des modifications…",
     "empty": "Aucune modification de fichier enregistrée.",
     "viewInEditor": "Voir cette modification dans l’éditeur"
+  },
+  "emailVerify": {
+    "title": "Vérifiez votre e-mail",
+    "subtitle": "Saisissez le code à 6 chiffres que nous venons d’envoyer à",
+    "codeLabel": "Code de vérification",
+    "verifyButton": "Vérifier et continuer",
+    "verifying": "Vérification…",
+    "trustDevice": "Rester connecté sur cet appareil pendant 30 jours",
+    "resend": "Pas reçu ? Renvoyer le code",
+    "resending": "Envoi…",
+    "resent": "Un nouveau code est en route.",
+    "resendCooldown": "Veuillez patienter {seconds} s avant de demander un autre code.",
+    "wrongEmail": "Utiliser une autre adresse e-mail",
+    "errInvalid": "Ce code est incorrect. Vérifiez-le et réessayez.",
+    "errExpired": "Ce code a expiré. Demandez-en un nouveau.",
+    "errTooMany": "Trop de tentatives. Demandez un nouveau code.",
+    "errNone": "Aucun code actif. Demandez-en un nouveau.",
+    "errGeneric": "Une erreur s’est produite. Veuillez réessayer."
   }
 }

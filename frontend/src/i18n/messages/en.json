@@ -252,8 +252,7 @@
       "quality": "Quality",
       "myProfile": "My Profile",
       "findWork": "Find Work",
-      "timecard": "Timecard",
-      "kanbanTemplates": "Kanban Templates"
+      "timecard": "Timecard"
     },
     "tab": {
       "projects": "Projects",
@@ -261,6 +260,7 @@
       "planning": "Planning",
       "portfolio": "Portfolio",
       "ceremonies": "Ceremonies",
+      "templates": "Templates",
       "dora": "DORA",
       "finops": "FinOps",
       "funnel": "Innovation Funnel",
@@ -305,7 +305,26 @@
       "integrations": "Integrations",
       "manager": "Manager",
       "roles": "Roles",
-      "talent": "Talent"
+      "talent": "Talent",
+      "adminHealth": "Health",
+      "adminBilling": "Billing",
+      "adminUsage": "Usage",
+      "adminUsers": "Users",
+      "adminTenants": "Tenants",
+      "adminApiKeys": "API Keys",
+      "adminSecurity": "Security",
+      "adminLegal": "Legal",
+      "adminNewsletter": "Newsletter",
+      "adminPrivacy": "Privacy",
+      "adminPersonas": "Personas",
+      "adminGovernance": "Governance",
+      "adminPermissions": "Permissions",
+      "adminModules": "Modules",
+      "adminImpSessions": "Imp. Sessions",
+      "adminAuditLog": "Audit Log",
+      "adminErrors": "Errors",
+      "adminTraces": "LLM Traces",
+      "adminToken": "Token"
     }
   },
   "alerts": {
@@ -4882,6 +4901,7 @@
     "neverManaged": "This backlog hasn’t been managed yet.",
     "runNow": "Run manager now",
     "running": "Managing…",
+    "disabledNotice": "Managing is paused. Turn on “Keep this backlog managed” to run the manager.",
     "loading": "Loading the manager…",
     "noProject": {
       "title": "Pick a project",
@@ -4978,6 +4998,7 @@
     },
     "activity": {
       "title": "Recent activity",
+      "working": "Manager is working — streaming decisions live…",
       "empty": "The manager hasn’t taken any actions yet."
     }
   },
@@ -5597,5 +5618,23 @@
     "loading": "Loading changes…",
     "empty": "No file changes recorded.",
     "viewInEditor": "View this change in the editor"
+  },
+  "emailVerify": {
+    "title": "Verify your email",
+    "subtitle": "Enter the 6-digit code we just sent to",
+    "codeLabel": "Verification code",
+    "verifyButton": "Verify & continue",
+    "verifying": "Verifying…",
+    "trustDevice": "Keep me signed in on this device for 30 days",
+    "resend": "Didn’t get it? Resend code",
+    "resending": "Sending…",
+    "resent": "A new code is on its way.",
+    "resendCooldown": "Please wait {seconds}s before requesting another code.",
+    "wrongEmail": "Use a different email",
+    "errInvalid": "That code isn’t right. Check it and try again.",
+    "errExpired": "This code has expired. Request a new one.",
+    "errTooMany": "Too many attempts. Request a new code.",
+    "errNone": "No active code. Request a new one.",
+    "errGeneric": "Something went wrong. Please try again."
   }
 }

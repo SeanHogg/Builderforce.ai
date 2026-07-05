@@ -252,8 +252,7 @@
       "quality": "Calidad",
       "myProfile": "Mi perfil",
       "findWork": "Buscar trabajo",
-      "timecard": "Hoja de horas",
-      "kanbanTemplates": "Plantillas kanban"
+      "timecard": "Hoja de horas"
     },
     "tab": {
       "projects": "Proyectos",
@@ -261,6 +260,7 @@
       "planning": "Planificación",
       "portfolio": "Portafolio",
       "ceremonies": "Ceremonias",
+      "templates": "Plantillas",
       "dora": "DORA",
       "finops": "FinOps",
       "funnel": "Embudo de innovación",
@@ -305,7 +305,26 @@
       "integrations": "Integraciones",
       "manager": "Manager",
       "roles": "Roles",
-      "talent": "Talento"
+      "talent": "Talento",
+      "adminHealth": "Estado",
+      "adminBilling": "Facturación",
+      "adminUsage": "Uso",
+      "adminUsers": "Usuarios",
+      "adminTenants": "Inquilinos",
+      "adminApiKeys": "Claves API",
+      "adminSecurity": "Seguridad",
+      "adminLegal": "Legal",
+      "adminNewsletter": "Boletín",
+      "adminPrivacy": "Privacidad",
+      "adminPersonas": "Perfiles",
+      "adminGovernance": "Gobernanza",
+      "adminPermissions": "Permisos",
+      "adminModules": "Módulos",
+      "adminImpSessions": "Sesiones de suplantación",
+      "adminAuditLog": "Registro de auditoría",
+      "adminErrors": "Errores",
+      "adminTraces": "Trazas LLM",
+      "adminToken": "Token"
     }
   },
   "alerts": {
@@ -4882,6 +4901,7 @@
     "neverManaged": "Este backlog aún no se ha gestionado.",
     "runNow": "Ejecutar manager ahora",
     "running": "Gestionando…",
+    "disabledNotice": "La gestión está en pausa. Activa «Mantener este backlog gestionado» para ejecutar el manager.",
     "loading": "Cargando el manager…",
     "noProject": {
       "title": "Elige un proyecto",
@@ -4978,6 +4998,7 @@
     },
     "activity": {
       "title": "Actividad reciente",
+      "working": "El manager está trabajando: transmitiendo decisiones en vivo…",
       "empty": "El manager aún no ha realizado ninguna acción."
     }
   },
@@ -5597,5 +5618,23 @@
     "loading": "Cargando cambios…",
     "empty": "No se registraron cambios de archivos.",
     "viewInEditor": "Ver este cambio en el editor"
+  },
+  "emailVerify": {
+    "title": "Verifica tu correo",
+    "subtitle": "Introduce el código de 6 dígitos que acabamos de enviar a",
+    "codeLabel": "Código de verificación",
+    "verifyButton": "Verificar y continuar",
+    "verifying": "Verificando…",
+    "trustDevice": "Mantener la sesión iniciada en este dispositivo durante 30 días",
+    "resend": "¿No lo recibiste? Reenviar código",
+    "resending": "Enviando…",
+    "resent": "Un nuevo código está en camino.",
+    "resendCooldown": "Espera {seconds} s antes de solicitar otro código.",
+    "wrongEmail": "Usar otro correo",
+    "errInvalid": "Ese código no es correcto. Revísalo e inténtalo de nuevo.",
+    "errExpired": "Este código ha caducado. Solicita uno nuevo.",
+    "errTooMany": "Demasiados intentos. Solicita un nuevo código.",
+    "errNone": "No hay ningún código activo. Solicita uno nuevo.",
+    "errGeneric": "Algo salió mal. Inténtalo de nuevo."
   }
 }

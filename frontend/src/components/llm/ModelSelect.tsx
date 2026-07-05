@@ -39,10 +39,11 @@ export function ModelSelect({
   title,
   disabled,
 }: ModelSelectProps) {
-  const { models, codingModels, tenantModels } = useLlmModels();
+  const { models, codingModels, tenantModels, byoModels } = useLlmModels();
   const pool = variant === 'coding' && codingModels.length > 0 ? codingModels : models;
   const known = preserveValue
     && !pool.includes(preserveValue)
+    && !byoModels.includes(preserveValue)
     && !tenantModels.some((m) => m.ref === preserveValue);
 
   return (
@@ -53,6 +54,13 @@ export function ModelSelect({
           {tenantModels.map((m) => (
             <option key={m.id} value={m.ref}>{m.name}</option>
           ))}
+        </optgroup>
+      )}
+      {/* Models the tenant's OWN connected providers (BYO) can serve — the model
+          choices follow the connected providers, and run on the tenant's account. */}
+      {byoModels.length > 0 && (
+        <optgroup label="Connected providers">
+          {byoModels.map((m) => <option key={m} value={m}>{m}</option>)}
         </optgroup>
       )}
       {pool.length > 0 && (

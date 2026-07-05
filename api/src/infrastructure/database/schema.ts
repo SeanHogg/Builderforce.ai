@@ -164,6 +164,12 @@ export const users = pgTable('users', {
   avatarUrl:     varchar('avatar_url', { length: 500 }),
   bio:           text('bio'),
   passwordHash:  varchar('password_hash', { length: 255 }),
+  /** When the user proved they own this email address — set by OTP verification on
+   *  password signup, or immediately for OAuth/magic-link (the provider/inbox vouches).
+   *  NULL = unverified: the account exists but cannot obtain a session until a code is
+   *  entered. Backfilled to created_at for every pre-existing account (mig 0285) so the
+   *  gate only ever traps NEW password signups. Stops fake/unowned-email accounts. */
+  emailVerifiedAt: timestamp('email_verified_at'),
   mfaEnabled:    boolean('mfa_enabled').notNull().default(false),
   mfaSecretEnc:  text('mfa_secret_enc'),
   mfaTempSecretEnc: text('mfa_temp_secret_enc'),
@@ -2072,9 +2078,9 @@ export const chatTicketLinks = pgTable('chat_ticket_links', {
   tenantId:   integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
   segmentId:  uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),
   chatId:     integer('chat_id').notNull().references(() => brainChats.id, { onDelete: 'cascade' }),
-  /** 'portfolio' | 'objective' | 'initiative' | 'epic' | 'task' (spine node kinds). */
+  /** 'portfolio'|'objective'|'initiative'|'roadmap'|'epic'|'gap'|'task' (spine + roadmap + gap). */
   ticketKind: varchar('ticket_kind', { length: 12 }).notNull(),
-  /** Target id as text — tasks.id (epic/task) or a UUID (portfolio/objective/initiative). */
+  /** Target id as text — tasks.id (epic/gap/task) or a UUID (portfolio/objective/initiative/roadmap). */
   ticketRef:  varchar('ticket_ref', { length: 64 }).notNull(),
   /** Lineage: 'created' (ticket spawned from this chat) | 'linked' (attached later). */
   linkType:   varchar('link_type', { length: 16 }).notNull().default('linked'),
@@ -2154,6 +2160,21 @@ export const magicLinkTokens = pgTable('magic_link_tokens', {
   used:      boolean('used').notNull().default(false),
   redirect:  varchar('redirect', { length: 500 }).notNull().default('/dashboard'),
   createdAt: timestamp('created_at').notNull().defaultNow(),
+});
+
+/** One-time 6-digit email-ownership codes issued at password signup (and re-issued when
+ *  an unverified account tries to sign in). The code itself is never stored — only its
+ *  SHA-256 hash. A row is consumed on success, superseded when a newer code is issued,
+ *  and rejected once `attempts` hits the cap or `expiresAt` passes. (mig 0285) */
+export const emailVerificationCodes = pgTable('email_verification_codes', {
+  id:         uuid('id').primaryKey().defaultRandom(),
+  userId:     varchar('user_id', { length: 36 }).notNull().references(() => users.id, { onDelete: 'cascade' }),
+  email:      varchar('email', { length: 255 }).notNull(),
+  codeHash:   varchar('code_hash', { length: 64 }).notNull(),
+  expiresAt:  timestamp('expires_at').notNull(),
+  attempts:   integer('attempts').notNull().default(0),
+  consumedAt: timestamp('consumed_at'),
+  createdAt:  timestamp('created_at').notNull().defaultNow(),
 });
 
 // ===========================================================================

@@ -495,6 +495,9 @@ export function createOAuthRoutes(db: Db): Hono<HonoEnv> {
           avatarUrl: providerUser.avatar ?? null,
           passwordHash: null,
           apiKeyHash: null,
+          // OAuth vouches for the address — the account is verified on creation, so it
+          // never hits the password-signup OTP gate.
+          emailVerifiedAt: sql`now()`,
         });
         userId = newId;
       }

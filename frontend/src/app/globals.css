@@ -1552,13 +1552,6 @@ textarea.input { resize: vertical; line-height: 1.5; }
   color: var(--text);
 }
 
-.admin-tabs {
-  display: flex;
-  gap: 4px;
-  margin-bottom: 24px;
-  flex-wrap: wrap;
-}
-
 .admin-tab {
   padding: 8px 14px;
   border-radius: var(--radius-md);
@@ -1581,10 +1574,6 @@ textarea.input { resize: vertical; line-height: 1.5; }
   background: var(--accent-subtle);
   color: var(--text-strong);
   border-color: rgba(77, 158, 255, 0.2);
-}
-
-.admin-content {
-  min-height: 200px;
 }
 
 /* Alerts */
