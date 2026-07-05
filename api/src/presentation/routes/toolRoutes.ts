@@ -57,12 +57,14 @@ export function createToolRoutes(
     const outcome = await auditRunner.runAudit(c.env as Env, sql(c.env), { tenantId, projectId, auditId, userId, secret });
     if (!outcome) return c.json({ error: 'Unknown audit' }, 404);
 
-    // Fire the existing lane-autorun trigger for the remediation ticket (kept
-    // alive past the response via waitUntil, exactly like taskRoutes).
-    if (outcome.agentTask) {
+    // Fire the existing lane-autorun trigger for every remediation ticket filed
+    // (one per gap when the audit is ticketPerFinding, else the single bundled
+    // ticket). Kept alive past the response via waitUntil, exactly like taskRoutes.
+    const remediationTasks = outcome.agentTasks ?? (outcome.agentTask ? [outcome.agentTask] : []);
+    for (const task of remediationTasks) {
       c.executionCtx.waitUntil(
         maybeAutoRunOnLaneEntry(c.env as Env, db, runtimeService, {
-          tenantId, projectId, taskId: outcome.agentTask.taskId, status: outcome.agentTask.status, submittedBy: userId,
+          tenantId, projectId, taskId: task.taskId, status: task.status, submittedBy: userId,
         }).catch(() => false),
       );
     }

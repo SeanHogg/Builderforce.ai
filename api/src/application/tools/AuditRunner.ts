@@ -50,9 +50,14 @@ export interface AuditRunOutcome {
    *  'deterministic' (scan-only). Either way a report is produced. */
   mode: 'agent' | 'deterministic';
   run: SavedToolRun;
-  /** Present when an agent remediation ticket was filed — the route fires lane
-   *  autorun for it. */
+  /** The primary remediation ticket filed (the first, for back-compat) — the route
+   *  fires lane autorun for it. */
   agentTask?: { taskId: number; status: string };
+  /** All remediation tickets filed this run. One per gap when the audit is
+   *  `ticketPerFinding` (each independently assignable/resolvable, like the
+   *  Security agent's per-finding tickets); otherwise the single bundled ticket.
+   *  The route fires lane autorun for every entry. */
+  agentTasks?: Array<{ taskId: number; status: string }>;
 }
 
 // ── path-signal heuristics (cheap, no file-content reads) ─────────────────────
@@ -76,8 +81,10 @@ const DATA_EXPORT_RE = /(data[-_]?export|export[-_]?data|download[-_]?(my[-_]?)?
 const DATA_DELETION_RE = /(delete[-_]?account|account[-_]?deletion|right[-_]?to[-_]?(be[-_]?forgotten|erasure)|erasure|gdpr[-_]?delete|data[-_]?deletion|forget[-_]?me)/i;
 const RETENTION_RE = /(retention|purge|data[-_]?ttl|expire[-_]?(records|data)|prune[-_]?(logs|data)|cleanup[-_]?(job|cron))/i;
 
-/** Reduce a repo's file path list to the boolean/scalar signals a scan needs. */
-function signalsFromPaths(paths: string[]): Omit<ScannedRepo, 'provider' | 'owner' | 'repo' | 'defaultBranch' | 'read'> {
+/** Reduce a repo's file path list to the boolean/scalar signals a scan needs.
+ *  Exported (pure) so the exact prod extraction can be reused/tested against a
+ *  real repo tree without a live git connection. */
+export function signalsFromPaths(paths: string[]): Omit<ScannedRepo, 'provider' | 'owner' | 'repo' | 'defaultBranch' | 'read'> {
   const lower = paths.map((p) => p.toLowerCase());
   const suspectedSecrets = lower.filter((p) => SECRET_RE.test(p) && !/\.example$|\.sample$|\.env\.example/i.test(p) && !p.endsWith('.pub')).length;
   return {
@@ -208,31 +215,50 @@ export class AuditRunner {
       ref: `/projects?project=${args.projectId}&panel=diagnostics&audit=${encodeURIComponent(audit.id)}`,
     }).catch(() => {});
 
-    // Best-effort: file the deep-remediation ticket for the audit agent.
-    let agentTask: { taskId: number; status: string } | undefined;
+    // Best-effort: file the remediation ticket(s) for the audit agent. Left
+    // unassigned — the board's lane-autorun trigger + owner-agent fallback
+    // dispatches whichever security/audit agent is staffed on the lane; `persona`
+    // carries the workflow hint.
+    const agentTasks: Array<{ taskId: number; status: string }> = [];
     try {
-      const task = await this.taskService.createTask({
-        projectId: args.projectId,
-        title: `${audit.name} — ${ctx.projectName}`,
-        description:
-          `Run the ${audit.agentWorkflow} workflow across the connected repositories and this project, ` +
-          `then open a remediation PR for the highest-priority findings.\n\n` +
-          `First-pass automated report: ${result.headline}.\n` +
-          (result.recommendations.length
-            ? `Top gaps:\n${result.recommendations.slice(0, 5).map((r) => `- ${r.title}: ${r.detail}`).join('\n')}`
-            : 'No automated gaps flagged — verify manually.'),
-        taskType: TaskType.TASK,
-        // Left unassigned: the board's lane-autorun trigger + owner-agent
-        // fallback dispatches whichever security/audit agent is staffed on the
-        // lane. `persona` carries the workflow hint.
-        persona: audit.agentWorkflow,
-      }, args.tenantId);
-      agentTask = { taskId: Number(task.id), status: task.status };
+      if (audit.ticketPerFinding && result.recommendations.length) {
+        // One independently-resolvable ticket per gap (like the Security agent's
+        // per-finding tickets), so each obligation is assigned + closed on its own.
+        for (const rec of result.recommendations) {
+          const task = await this.taskService.createTask({
+            projectId: args.projectId,
+            title: `${audit.name}: ${rec.title}`.slice(0, 500),
+            description:
+              `${rec.detail}\n\n` +
+              `Filed by the ${audit.name} diagnostic against ${ctx.projectName} (${result.headline}). ` +
+              `Fix this gap and open a remediation PR.`,
+            taskType: TaskType.TASK,
+            persona: audit.agentWorkflow,
+          }, args.tenantId);
+          agentTasks.push({ taskId: Number(task.id), status: task.status });
+        }
+      } else {
+        const task = await this.taskService.createTask({
+          projectId: args.projectId,
+          title: `${audit.name} — ${ctx.projectName}`,
+          description:
+            `Run the ${audit.agentWorkflow} workflow across the connected repositories and this project, ` +
+            `then open a remediation PR for the highest-priority findings.\n\n` +
+            `First-pass automated report: ${result.headline}.\n` +
+            (result.recommendations.length
+              ? `Top gaps:\n${result.recommendations.slice(0, 5).map((r) => `- ${r.title}: ${r.detail}`).join('\n')}`
+              : 'No automated gaps flagged — verify manually.'),
+          taskType: TaskType.TASK,
+          persona: audit.agentWorkflow,
+        }, args.tenantId);
+        agentTasks.push({ taskId: Number(task.id), status: task.status });
+      }
     } catch {
       // No board/agent available — the deterministic report already landed.
     }
 
-    return { started: true, auditId: audit.id, mode: agentTask ? 'agent' : 'deterministic', run, agentTask };
+    const agentTask = agentTasks[0];
+    return { started: true, auditId: audit.id, mode: agentTasks.length ? 'agent' : 'deterministic', run, agentTask, agentTasks };
   }
 }
 
