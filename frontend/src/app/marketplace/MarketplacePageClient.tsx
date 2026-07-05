@@ -42,13 +42,14 @@ import { listFreelancers, type FreelancerProfile } from '@/lib/freelancerApi';
 import { RatingStars } from '@/components/freelance/RatingStars';
 import { SkeletonGrid } from './SkeletonGrid';
 import { ModelsExplorer } from './ModelsExplorer';
+import MarketplaceGigsSection from './MarketplaceGigsSection';
 
-// Human freelancers ("Talent") and the live model catalog ("Models") are now
-// categories of the marketplace rather than standalone /talent and /models pages —
-// same search box, one merged surface.
-type MarketplaceCategory = 'all' | 'personas' | 'skills' | 'content' | 'workforce' | 'talent' | 'models' | 'publish';
+// Human freelancers ("Talent"), the live model catalog ("Models"), and open work to
+// bid on ("Gigs") are now categories of the marketplace rather than standalone
+// /talent, /models, and /freelancer/gigs pages — same search box, one merged surface.
+type MarketplaceCategory = 'all' | 'personas' | 'skills' | 'content' | 'workforce' | 'talent' | 'models' | 'gigs' | 'publish';
 
-const CATEGORY_IDS: MarketplaceCategory[] = ['all', 'personas', 'skills', 'content', 'workforce', 'talent', 'models', 'publish'];
+const CATEGORY_IDS: MarketplaceCategory[] = ['all', 'personas', 'skills', 'content', 'workforce', 'talent', 'models', 'gigs', 'publish'];
 
 const TALENT_DISCIPLINES = ['developer', 'dba', 'designer', 'devops', 'qa', 'pm', 'data', 'security', 'other'] as const;
 
@@ -528,10 +529,13 @@ export default function MarketplacePageClient() {
   const searchPlaceholder =
     category === 'talent' ? tt('filter.search')
     : category === 'models' ? tmodels('searchPlaceholder')
+    : category === 'gigs' ? tdis('gigs.title')
     : tm('searchPlaceholder');
 
   return (
-    <div className="page-inner">
+    // Full-width surface: the marketplace is a browse-heavy grid, so it overrides the
+    // shared 1100px `.page-inner` cap and runs to 100% of the shell width.
+    <div className="page-inner" style={{ maxWidth: '100%' }}>
       <div style={{ textAlign: 'center', marginBottom: 32 }}>
         <h1 style={{ fontSize: 'clamp(24px,4vw,36px)', fontWeight: 800, color: 'var(--text-strong)', margin: '0 0 8px' }}>
           {tm('title')}
@@ -598,7 +602,7 @@ export default function MarketplacePageClient() {
                   cursor: 'pointer',
                 }}
               >
-                {c.id === 'talent' ? '👤 ' : c.id === 'models' ? '🧠 ' : ''}{tm(`cat.${c.id}`)}
+                {c.id === 'talent' ? '👤 ' : c.id === 'models' ? '🧠 ' : c.id === 'gigs' ? '💼 ' : ''}{tm(`cat.${c.id}`)}
               </button>
             ))}
           </div>
@@ -628,7 +632,7 @@ export default function MarketplacePageClient() {
             </select>
           </div>
         )}
-        {category !== 'publish' && category !== 'talent' && (
+        {category !== 'publish' && category !== 'talent' && category !== 'gigs' && (
           <div style={{ marginLeft: 'auto', flexShrink: 0 }}>
             <ViewToggle value={viewMode} onChange={setViewMode} />
           </div>
@@ -791,6 +795,8 @@ export default function MarketplacePageClient() {
         )
       ) : category === 'models' ? (
         <ModelsExplorer search={search} viewMode={viewMode} />
+      ) : category === 'gigs' ? (
+        <MarketplaceGigsSection search={search} />
       ) : category === 'workforce' ? (
         loadingAgents ? (
           <SkeletonGrid />

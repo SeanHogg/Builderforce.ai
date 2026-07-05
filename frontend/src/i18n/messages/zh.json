@@ -4815,7 +4815,7 @@
       "noAgents": "此聊天中还没有代理。",
       "removeAgent": "移除",
       "inviteAgent": "邀请代理…",
-      "agentsHint": "被邀请的代理可被指派去执行关联的任务或史诗。",
+      "agentsHint": "在消息框中输入 @ 即可标记受邀代理——它会在聊天中回复，并可处理团队的工作——也可让其执行上方关联的任务/史诗。",
       "people": "成员",
       "noPeople": "尚未邀请任何成员。",
       "invitePerson": "通过邮箱邀请…",
@@ -5472,6 +5472,7 @@
       "workforce": "智能体",
       "talent": "人才",
       "models": "模型",
+      "gigs": "零工",
       "publish": "发布"
     },
     "emptyItems": "没有匹配的项目。",

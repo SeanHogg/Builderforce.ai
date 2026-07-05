@@ -49,7 +49,7 @@ export function itemsFor(
   if (isFreelancer) {
     return [
       { href: '/freelancer/dashboard', labelKey: 'tab.home', icon: '🏠' },
-      { href: '/freelancer/gigs', labelKey: 'group.findWork', icon: '🔎' },
+      { href: '/marketplace?category=gigs', labelKey: 'group.findWork', icon: '🔎' },
       { href: '/freelancer/timecard', labelKey: 'group.timecard', icon: '⏱' },
       { href: '/freelancer/profile', labelKey: 'group.myProfile', icon: '👤' },
       { href: '/security', labelKey: 'tab.security', icon: '🔒' },

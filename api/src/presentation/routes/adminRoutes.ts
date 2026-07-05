@@ -2456,7 +2456,12 @@ export function createAdminRoutes(): Hono<HonoEnv> {
       const roleOverrides = overrides.filter((o) => o.role === role);
       matrix[role] = resolveRolePermissions(role, roleOverrides);
     }
-    return c.json({ matrix, permissions: ALL_PERMISSIONS });
+    return c.json({
+      roles,
+      permissions: ALL_PERMISSIONS,
+      matrix,
+      overrides: overrides.map((o) => ({ tenantId: null, role: o.role, permission: o.permission, granted: o.granted })),
+    });
   });
 
   // PUT /api/admin/permissions/roles/:role — update permission overrides for a role

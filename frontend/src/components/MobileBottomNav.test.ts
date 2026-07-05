@@ -39,7 +39,7 @@ describe('MobileBottomNav itemsFor (role-aware) [1335]', () => {
     const items = itemsFor(true, false, undefined, true);
     expect(hrefs(items)).toEqual([
       '/freelancer/dashboard',
-      '/freelancer/gigs',
+      '/marketplace?category=gigs',
       '/freelancer/timecard',
       '/freelancer/profile',
       '/security',

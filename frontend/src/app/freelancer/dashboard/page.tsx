@@ -146,7 +146,7 @@ export default function FreelancerDashboardPage() {
               sub={t('metric.totalEngagements', { count: engagements.length })}
               series={engagementSeries}
               delta={buildInsightDelta(engagementSeries, true)}
-              href="/freelancer/gigs"
+              href="/marketplace?category=gigs"
               color="var(--coral-bright, #f4726e)"
             />
             <InsightStat
@@ -209,7 +209,7 @@ export default function FreelancerDashboardPage() {
         {/* My Work — engagements */}
         {!loading && activeTab === 'work' && (
           engagements.length === 0 ? (
-            <EmptyState message={t('work.empty')} ctaHref="/freelancer/gigs" ctaLabel={t('work.findWork')} />
+            <EmptyState message={t('work.empty')} ctaHref="/marketplace?category=gigs" ctaLabel={t('work.findWork')} />
           ) : (
             <div style={{ display: 'grid', gap: 10 }}>
               {engagements.map((e) => (

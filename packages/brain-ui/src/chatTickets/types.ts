@@ -176,7 +176,7 @@ export const DEFAULT_CHAT_TICKETS_LABELS: ChatTicketsLabels = {
   noAgents: 'No agents in this chat yet.',
   removeAgent: 'Remove',
   inviteAgent: 'Invite an agent…',
-  agentsHint: 'Invited agents can be tagged to execute a linked task or epic.',
+  agentsHint: 'Type @ in the message box to tag an invited agent — it replies in the chat and can act on the team\'s work — or run it on a linked task/epic above.',
   people: 'People',
   noPeople: 'No people invited yet.',
   invitePerson: 'Invite by email…',
