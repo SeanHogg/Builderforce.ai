@@ -430,7 +430,7 @@ const CATALOG: BuiltinTool[] = [
     },
   },
   { tool: 'tasks.get', mutates: false, description: 'Get a task by id.', parameters: obj({ id: N }, ['id']), run: async (ctx, a) => {
-    const plain = (await getTenantTask(ctx, num(a.id))).toPlain() as Record<string, unknown>;
+    const plain = (await getTenantTask(ctx, num(a.id))).toPlain() as unknown as Record<string, unknown>;
     // A SECURITY ticket is returned MASKED (restricted: true) for a caller without
     // clearance — surfaced, not hidden. Same shared gate as the board.
     const [masked] = await maskSecurityTasks(ctx, [plain]);
@@ -1965,6 +1965,23 @@ const CATALOG: BuiltinTool[] = [
   { tool: 'api_keys.list', mutates: false, description: 'List the workspace’s gateway API keys (bfk_*).', parameters: obj({}), run: (ctx) => replayRoute(ctx, 'GET', `/api/tenants/${ctx.tenantId}/api-keys`) },
   { tool: 'api_keys.mint', mutates: true, description: 'Mint a new gateway API key. The raw key is returned once — show it carefully.', parameters: obj({ name: S, allowedOrigins: { type: 'array', items: S } }, ['name']), run: (ctx, a) => replayRoute(ctx, 'POST', `/api/tenants/${ctx.tenantId}/api-keys`, { name: str(a.name), allowedOrigins: Array.isArray(a.allowedOrigins) ? a.allowedOrigins.map(str) : undefined }) },
   { tool: 'api_keys.revoke', mutates: true, description: 'Revoke a gateway API key.', parameters: obj({ keyId: S }, ['keyId']), run: (ctx, a) => replayRoute(ctx, 'DELETE', `/api/tenants/${ctx.tenantId}/api-keys/${encodeURIComponent(str(a.keyId))}`) },
+
+  // ---- Gig Marketplace (0293): publish a work item as a hireable gig, evaluate
+  //      proposals with AI, schedule review/interview meetings, and run the FTE
+  //      Job-Posting flow. The Brain IDEATES in a chat, then publishes; it composes a
+  //      "project grounded in OKRs" from projects.create + objectives.create +
+  //      key_results.create (no dedicated tool needed for those). ----
+  { tool: 'marketplace.publish_ticket', mutates: true, description: 'Publish a work item (a board ticket — e.g. a Product brief or a Design gig authored by the Product Manager / Designer agent) to the Gig Marketplace so freelancers can estimate, bid, and be hired. The scope (title/description → requirements) is derived from the ticket, so you can publish with just a ticketId. Optional: postingType (project_bid|design|fte), engagementType (fixed_bid|hourly|fte), a requirements override, rate range in cents, visibility (public|private). Returns { jobId }.', parameters: obj({ ticketId: N, postingType: S, engagementType: S, requirements: S, rateMinCents: N, rateMaxCents: N, visibility: S }, ['ticketId']), run: (ctx, a) => replayRoute(ctx, 'POST', '/api/marketplace/publish', { ticketId: num(a.ticketId), postingType: a.postingType != null ? str(a.postingType) : undefined, engagementType: a.engagementType != null ? str(a.engagementType) : undefined, requirements: a.requirements != null ? str(a.requirements) : undefined, rateMinCents: a.rateMinCents != null ? num(a.rateMinCents) : undefined, rateMaxCents: a.rateMaxCents != null ? num(a.rateMaxCents) : undefined, visibility: a.visibility != null ? str(a.visibility) : undefined }) },
+  { tool: 'marketplace.unpublish_ticket', mutates: true, description: 'Remove a ticket’s gig from the Marketplace (closes its open posting and clears the hireable flag).', parameters: obj({ ticketId: N }, ['ticketId']), run: (ctx, a) => replayRoute(ctx, 'POST', '/api/marketplace/unpublish', { ticketId: num(a.ticketId) }) },
+  { tool: 'jobs.create', mutates: true, description: 'Create a Marketplace job posting directly (not tied to a board ticket) — e.g. an FTE Job Posting (postingType:"fte") candidates interview for, or a standalone gig. For a gig derived from an existing work item, prefer marketplace.publish_ticket. requirements = the acceptance criteria a proposal is AI-evaluated against.', parameters: obj({ title: S, description: S, requirements: S, discipline: S, skills: { type: 'array', items: S }, postingType: S, engagementType: S, projectId: N, rateMinCents: N, rateMaxCents: N, visibility: S }, ['title']), run: (ctx, a) => replayRoute(ctx, 'POST', '/api/jobs', { title: str(a.title), description: a.description != null ? str(a.description) : undefined, requirements: a.requirements != null ? str(a.requirements) : undefined, discipline: a.discipline != null ? str(a.discipline) : undefined, skills: Array.isArray(a.skills) ? a.skills.map(str) : undefined, postingType: a.postingType != null ? str(a.postingType) : undefined, engagementType: a.engagementType != null ? str(a.engagementType) : undefined, projectId: a.projectId != null ? num(a.projectId) : undefined, rateMinCents: a.rateMinCents != null ? num(a.rateMinCents) : undefined, rateMaxCents: a.rateMaxCents != null ? num(a.rateMaxCents) : undefined, visibility: a.visibility != null ? str(a.visibility) : undefined }) },
+  { tool: 'jobs.list_mine', mutates: false, description: 'List the Marketplace job postings this workspace created (with proposal counts).', parameters: obj({}), run: (ctx) => replayRoute(ctx, 'GET', '/api/jobs/mine') },
+  { tool: 'jobs.proposals', mutates: false, description: 'List the bids/proposals submitted on one of this workspace’s job postings.', parameters: obj({ jobId: S }, ['jobId']), run: (ctx, a) => replayRoute(ctx, 'GET', `/api/jobs/${encodeURIComponent(str(a.jobId))}/proposals`) },
+  { tool: 'proposals.evaluate', mutates: true, description: 'Use AI to evaluate a submitted bid against the posting’s requirements (LLM-as-judge — grounded/faithfulness + relevance scoring), so you can compare bids objectively before shortlisting or hiring. Caches a 0..100 overall on the proposal and returns the full scores.', parameters: obj({ proposalId: S }, ['proposalId']), run: (ctx, a) => replayRoute(ctx, 'POST', `/api/jobs/proposals/${encodeURIComponent(str(a.proposalId))}/evaluate`, {}) },
+  { tool: 'proposals.shortlist', mutates: true, description: 'Shortlist a candidate’s bid (moves it to the shortlisted stage and notifies them).', parameters: obj({ proposalId: S }, ['proposalId']), run: (ctx, a) => replayRoute(ctx, 'POST', `/api/jobs/proposals/${encodeURIComponent(str(a.proposalId))}/shortlist`, {}) },
+  { tool: 'proposals.decline', mutates: true, description: 'Decline a bid/candidate with an optional courteous message (e.g. "we appreciate your time, but you weren’t selected this time"). The reason is sent to the candidate.', parameters: obj({ proposalId: S, reason: S }, ['proposalId']), run: (ctx, a) => replayRoute(ctx, 'POST', `/api/jobs/proposals/${encodeURIComponent(str(a.proposalId))}/decline`, { reason: a.reason != null ? str(a.reason) : undefined }) },
+  { tool: 'meetings.schedule', mutates: true, description: 'Schedule a meeting — including a REVIEW (go over a gig worker’s effort/estimate/understanding before accepting a bid) or an INTERVIEW (for an FTE Job Posting candidate) — tracked against the exact work item, posting, or engagement. kind: standup|planning|retrospective|adhoc|direct|interview|review. Pass scheduledAt (ISO) for a future meeting and ONE of ticketId / jobId / engagementId to link it.', parameters: obj({ title: S, kind: S, scheduledAt: S, durationMinutes: N, ticketId: N, jobId: S, engagementId: S, projectId: N }, ['title']), run: (ctx, a) => replayRoute(ctx, 'POST', '/api/meetings', { title: str(a.title), kind: a.kind != null ? str(a.kind) : undefined, scheduledAt: a.scheduledAt != null ? str(a.scheduledAt) : undefined, durationMinutes: a.durationMinutes != null ? num(a.durationMinutes) : undefined, ticketId: a.ticketId != null ? num(a.ticketId) : undefined, jobId: a.jobId != null ? str(a.jobId) : undefined, engagementId: a.engagementId != null ? str(a.engagementId) : undefined, projectId: a.projectId != null ? num(a.projectId) : undefined }) },
+  { tool: 'deliverables.evaluate', mutates: true, description: 'Use AI to evaluate a hired worker’s presented proposal/deliverable against the published requirements (same LLM-as-judge as proposals.evaluate). Caches a 0..100 overall and returns the scores.', parameters: obj({ deliverableId: S }, ['deliverableId']), run: (ctx, a) => replayRoute(ctx, 'POST', `/api/deliverables/${encodeURIComponent(str(a.deliverableId))}/evaluate`, {}) },
+  { tool: 'deliverables.set_status', mutates: true, description: 'Accept or request changes on a hired worker’s deliverable proposal. status: accepted|changes_requested.', parameters: obj({ deliverableId: S, status: S }, ['deliverableId', 'status']), run: (ctx, a) => replayRoute(ctx, 'POST', `/api/deliverables/${encodeURIComponent(str(a.deliverableId))}/status`, { status: str(a.status) }) },
 ];
 
 /** Assert the worker env was threaded (tools that decrypt credentials / reach
@@ -2115,6 +2132,12 @@ export const CLOUD_AGENT_PLATFORM_TOOLS: readonly string[] = [
   // deciding who can see security tickets is an admin action, never an unattended
   // agent reconfiguring its own findings' visibility.
   'security.record_finding',
+  // Gig Marketplace: a Product-Manager/Designer agent may publish work, run the hiring
+  // funnel, evaluate proposals with AI, and schedule review/interview meetings.
+  'marketplace.publish_ticket', 'marketplace.unpublish_ticket',
+  'jobs.create', 'jobs.list_mine', 'jobs.proposals',
+  'proposals.evaluate', 'proposals.shortlist', 'proposals.decline',
+  'meetings.schedule', 'deliverables.evaluate', 'deliverables.set_status',
   // Executions — READ ONLY (accurate "what's remaining"; no submit/cancel/post_message)
   'executions.get', 'executions.list_active', 'executions.list_for_task', 'executions.list_recent',
   'executions.task_file_changes', 'executions.trace',
@@ -2156,6 +2179,10 @@ const MCP_VERB: Record<string, string> = {
   'tasks.create': 'task.created', 'tasks.update': 'task.updated', 'tasks.move': 'task.moved', 'tasks.delete': 'task.deleted',
   'objectives.create': 'okr.objective_created', 'objectives.update': 'okr.objective_updated', 'objectives.delete': 'okr.objective_deleted',
   'key_results.create': 'okr.kr_created',
+  'marketplace.publish_ticket': 'gig.published', 'marketplace.unpublish_ticket': 'gig.unpublished',
+  'jobs.create': 'job.posted', 'proposals.evaluate': 'proposal.evaluated', 'proposals.shortlist': 'proposal.shortlisted',
+  'proposals.decline': 'proposal.declined', 'meetings.schedule': 'meeting.scheduled',
+  'deliverables.evaluate': 'deliverable.evaluated', 'deliverables.set_status': 'deliverable.updated',
 };
 
 /** Best-effort audit emit for a mutating built-in tool — the ONE place every

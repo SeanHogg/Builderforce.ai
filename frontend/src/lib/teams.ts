@@ -14,6 +14,8 @@ export interface TeamSummary {
   id: number;
   name: string;
   description: string | null;
+  /** Optional team avatar (image URL) shown on the team card + as the chat's face. */
+  avatarUrl: string | null;
   createdAt: string;
   updatedAt: string;
   memberCount: number;
@@ -87,7 +89,7 @@ export async function createTeam(data: { name: string; description?: string }): 
 
 export async function updateTeam(
   id: number,
-  data: { name?: string; description?: string | null },
+  data: { name?: string; description?: string | null; avatarUrl?: string | null },
 ): Promise<TeamSummary> {
   return apiRequest<TeamSummary>(`/api/teams/${id}`, { method: 'PATCH', ...json(data) });
 }

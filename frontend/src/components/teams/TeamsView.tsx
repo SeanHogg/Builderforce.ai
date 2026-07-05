@@ -25,6 +25,7 @@ import type { Project } from '@/lib/types';
 import { SlideOutPanel } from '@/components/SlideOutPanel';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { ViewToggle, type ViewMode } from '@/components/ViewToggle';
+import { TeamChatButton } from '@/components/brain/TeamChatButton';
 import { tableWrapStyle, tableStyle, theadRowStyle, thStyle, trStyle, tdStyle, tdMutedStyle } from '@/components/dataTableStyles';
 
 /**
@@ -79,6 +80,27 @@ function ManageIcon({ active }: { active: boolean }) {
       <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
       <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
     </svg>
+  );
+}
+
+/** A team's avatar — the uploaded image, or its initials on a tinted disc when
+ *  none is set. Shared by the card, the list row, and the manage panel. */
+function TeamAvatar({ name, url, size = 30 }: { name: string; url?: string | null; size?: number }) {
+  const initials = name.trim().split(/\s+/).slice(0, 2).map((w) => w[0]?.toUpperCase() ?? '').join('') || '?';
+  const box: React.CSSProperties = {
+    width: size, height: size, flexShrink: 0, borderRadius: '50%',
+    display: 'inline-flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden',
+  };
+  if (url) {
+    // eslint-disable-next-line @next/next/no-img-element
+    return <img src={url} alt="" style={{ ...box, objectFit: 'cover', border: '1px solid var(--border-subtle)' }} />;
+  }
+  return (
+    <span style={{
+      ...box,
+      background: 'color-mix(in srgb, var(--coral-bright) 18%, transparent)',
+      color: 'var(--coral-bright)', fontSize: size * 0.4, fontWeight: 700, letterSpacing: 0.2,
+    }}>{initials}</span>
   );
 }
 
@@ -273,13 +295,17 @@ export function TeamsView() {
         title={detail?.name ?? t('titleFallback')}
         headerActions={
           detail ? (
-            <button
-              type="button"
-              onClick={() => setConfirmDelete(detail)}
-              style={{ ...btnSubtle, color: '#ef4444', borderColor: '#ef4444' }}
-            >
-              {tc('delete')}
-            </button>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              {/* This team's group chat (humans + agents). */}
+              <TeamChatButton teamId={detail.id} variant="labeled" />
+              <button
+                type="button"
+                onClick={() => setConfirmDelete(detail)}
+                style={{ ...btnSubtle, color: '#ef4444', borderColor: '#ef4444' }}
+              >
+                {tc('delete')}
+              </button>
+            </div>
           ) : undefined
         }
       >
@@ -291,8 +317,8 @@ export function TeamsView() {
             detail={detail}
             workforce={workforce}
             projects={projects}
-            onSaveMeta={async (name, description) => {
-              await updateTeam(detail.id, { name, description });
+            onSaveMeta={async (name, description, avatarUrl) => {
+              await updateTeam(detail.id, { name, description, avatarUrl });
               await refreshAfterMutation(detail.id);
             }}
             onAddMember={handleAddMember}
@@ -353,7 +379,10 @@ export function TeamsView() {
                 }}
               >
                 <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8 }}>
-                  <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-primary)' }}>{team.name}</div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
+                    <TeamAvatar name={team.name} url={team.avatarUrl} />
+                    <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{team.name}</div>
+                  </div>
                   <ManageIcon active={hoveredId === team.id} />
                 </div>
                 <div style={{ fontSize: 12, color: 'var(--text-muted)', minHeight: 32, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
@@ -387,7 +416,12 @@ export function TeamsView() {
                     onMouseEnter={() => setHoveredId(team.id)}
                     onMouseLeave={() => setHoveredId((h) => (h === team.id ? null : h))}
                   >
-                    <td style={{ ...tdStyle, fontWeight: 600 }}>{team.name}</td>
+                    <td style={{ ...tdStyle, fontWeight: 600 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                        <TeamAvatar name={team.name} url={team.avatarUrl} size={24} />
+                        {team.name}
+                      </div>
+                    </td>
                     <td style={tdMutedStyle}>{team.description || '—'}</td>
                     <td style={tdStyle}>{team.memberCount}</td>
                     <td style={tdStyle}>{team.projectCount}</td>
@@ -430,7 +464,7 @@ function TeamDetailPanel({
   detail: TeamDetail;
   workforce: WorkforceOption[];
   projects: Project[];
-  onSaveMeta: (name: string, description: string | null) => Promise<void>;
+  onSaveMeta: (name: string, description: string | null, avatarUrl: string | null) => Promise<void>;
   onAddMember: (opt: WorkforceOption) => Promise<void>;
   onRemoveMember: (memberId: number) => Promise<void>;
   onAddProject: (projectId: number) => Promise<void>;
@@ -440,6 +474,7 @@ function TeamDetailPanel({
   const tc = useTranslations('common');
   const [name, setName] = useState(detail.name);
   const [description, setDescription] = useState(detail.description ?? '');
+  const [avatarUrl, setAvatarUrl] = useState(detail.avatarUrl ?? '');
   const [savingMeta, setSavingMeta] = useState(false);
   const [busy, setBusy] = useState(false);
   const [memberPick, setMemberPick] = useState('');
@@ -448,7 +483,10 @@ function TeamDetailPanel({
   // Local edit state is seeded from props at mount. The parent remounts this
   // panel (key={detail.id}) when a different team is opened, so no reset effect
   // is needed — and a re-render after a save re-seeds from the refreshed detail.
-  const metaDirty = name.trim() !== detail.name || (description.trim() || '') !== (detail.description ?? '');
+  const metaDirty =
+    name.trim() !== detail.name ||
+    (description.trim() || '') !== (detail.description ?? '') ||
+    (avatarUrl.trim() || '') !== (detail.avatarUrl ?? '');
 
   // Already-added entities are excluded from the picker (a workforce entity can
   // be in many teams, but not the same team twice).
@@ -471,6 +509,18 @@ function TeamDetailPanel({
     <div style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 22 }}>
       {/* Meta */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <TeamAvatar name={name || detail.name} url={avatarUrl.trim() || null} size={44} />
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <label style={labelStyle}>{t('avatarUrl')}</label>
+            <input
+              style={inputStyle}
+              value={avatarUrl}
+              onChange={(e) => setAvatarUrl(e.target.value)}
+              placeholder={t('avatarUrlPlaceholder')}
+            />
+          </div>
+        </div>
         <div>
           <label style={labelStyle}>{t('name')}</label>
           <input style={inputStyle} value={name} onChange={(e) => setName(e.target.value)} />
@@ -491,7 +541,7 @@ function TeamDetailPanel({
               disabled={savingMeta || !name.trim()}
               onClick={() => void wrap(async () => {
                 setSavingMeta(true);
-                try { await onSaveMeta(name.trim(), description.trim() || null); }
+                try { await onSaveMeta(name.trim(), description.trim() || null, avatarUrl.trim() || null); }
                 finally { setSavingMeta(false); }
               })}
             >

@@ -3658,7 +3658,7 @@ export const ceremonySessionsApi = {
 // ---------------------------------------------------------------------------
 // Meetings — live video/audio (WebRTC mesh) + scheduling. /api/meetings/*
 // ---------------------------------------------------------------------------
-export type MeetingKind = 'standup' | 'planning' | 'retrospective' | 'adhoc' | 'direct';
+export type MeetingKind = 'standup' | 'planning' | 'retrospective' | 'adhoc' | 'direct' | 'interview' | 'review';
 export type MeetingStatus = 'scheduled' | 'live' | 'ended' | 'cancelled';
 
 export interface Meeting {
@@ -3735,7 +3735,27 @@ export const meetingsApi = {
   end: (id: string): Promise<MeetingDetail> => request(`${MEETINGS_BASE}/${id}/end`, { method: 'POST' }),
   cancel: (id: string): Promise<MeetingDetail> => request(`${MEETINGS_BASE}/${id}/cancel`, { method: 'POST' }),
   ice: (): Promise<{ iceServers: unknown[] }> => request(`${MEETINGS_BASE}/ice`),
+
+  // Availability (bookable working hours) + "find a time".
+  myAvailability: (): Promise<AvailabilityProfile> => request(`${MEETINGS_BASE}/availability/me`),
+  setMyAvailability: (body: AvailabilityProfile): Promise<AvailabilityProfile> =>
+    request(`${MEETINGS_BASE}/availability/me`, { method: 'PUT', body: JSON.stringify(body) }),
+  availability: (refs: string[]): Promise<{ availability: Array<AvailabilityProfile & { userId: string }> }> =>
+    request(`${MEETINGS_BASE}/availability?refs=${encodeURIComponent(refs.join(','))}`),
+  freeBusy: (refs: string[], fromISO: string, toISO: string): Promise<FreeBusy> =>
+    request(`${MEETINGS_BASE}/freebusy?refs=${encodeURIComponent(refs.join(','))}&from=${encodeURIComponent(fromISO)}&to=${encodeURIComponent(toISO)}`),
+  suggest: (refs: string[], durationMinutes: number, fromISO: string, toISO: string, count = 6): Promise<{ slots: TimeSlot[] }> =>
+    request(`${MEETINGS_BASE}/suggest?refs=${encodeURIComponent(refs.join(','))}&durationMinutes=${durationMinutes}&from=${encodeURIComponent(fromISO)}&to=${encodeURIComponent(toISO)}&count=${count}`),
 };
+
+/** A weekly recurring availability window. day 0=Sun..6=Sat; start/end minutes from midnight. */
+export interface AvailabilityWindow { day: number; start: number; end: number; }
+export interface AvailabilityProfile { timezone: string; windows: AvailabilityWindow[]; }
+export interface TimeSlot { startISO: string; endISO: string; }
+export interface FreeBusy {
+  availability: Array<AvailabilityProfile & { userId: string }>;
+  busy: Array<{ userId: string; intervals: TimeSlot[] }>;
+}
 
 // ---------------------------------------------------------------------------
 // Calendar connections (per-user Google / Microsoft OAuth). /api/calendar/*

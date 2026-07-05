@@ -88,6 +88,7 @@ export function createTeamRoutes(db: Db): Hono<HonoEnv> {
         id:           teams.id,
         name:         teams.name,
         description:  teams.description,
+        avatarUrl:    teams.avatarUrl,
         createdAt:    teams.createdAt,
         updatedAt:    teams.updatedAt,
         memberCount:  sql<number>`(SELECT COUNT(*)::int FROM ${teamMembers} WHERE ${teamMembers.teamId} = ${teams.id})`,
@@ -203,7 +204,7 @@ export function createTeamRoutes(db: Db): Hono<HonoEnv> {
     const tenantId = c.get('tenantId') as number;
     const id = Number(c.req.param('id'));
 
-    const body = await c.req.json<{ name?: string; description?: string | null }>();
+    const body = await c.req.json<{ name?: string; description?: string | null; avatarUrl?: string | null }>();
     const patch: Partial<typeof teams.$inferInsert> = { updatedAt: new Date() };
     if (body.name !== undefined) {
       const name = body.name.trim();
@@ -212,6 +213,9 @@ export function createTeamRoutes(db: Db): Hono<HonoEnv> {
     }
     if (body.description !== undefined) {
       patch.description = body.description?.trim() || null;
+    }
+    if (body.avatarUrl !== undefined) {
+      patch.avatarUrl = body.avatarUrl?.trim() || null;
     }
 
     const [updated] = await db

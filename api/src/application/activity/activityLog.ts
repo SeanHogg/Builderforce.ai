@@ -89,7 +89,7 @@ export async function recordActivity(env: Env | undefined, db: Db, input: Activi
       metadata: (input.metadata ?? null) as Record<string, unknown> | null,
       occurredAt: input.occurredAt ?? new Date(),
     });
-    await bumpCacheVersion(env, activityLogVersionKey(input.tenantId));
+    await bumpCacheVersion(env as Env, activityLogVersionKey(input.tenantId));
   } catch {
     // Best-effort — audit failures must not break the mutation.
   }
@@ -112,7 +112,7 @@ export async function resolveActorFromContext(env: Env | undefined, db: Db, c: C
  * Cached (300s) — membership and display names change rarely.
  */
 export async function resolveHumanActor(env: Env | undefined, db: Db, tenantId: number, userId: string): Promise<ActorIdentity> {
-  return getOrSetCached(env, `actor:tenant:${tenantId}:user:${userId}`, async (): Promise<ActorIdentity> => {
+  return getOrSetCached(env as Env, `actor:tenant:${tenantId}:user:${userId}`, async (): Promise<ActorIdentity> => {
     const [u] = await db
       .select({ displayName: users.displayName, username: users.username, email: users.email, accountType: users.accountType })
       .from(users).where(eq(users.id, userId)).limit(1);
