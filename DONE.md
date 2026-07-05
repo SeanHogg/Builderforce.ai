@@ -4,6 +4,18 @@
 
 ---
 
+## ✅ RESOLVED 2026-07-05 — Cloud agent gets the curated platform toolset (VSIX↔cloud work-management parity)
+
+The cloud coding agent could only edit repo files — it couldn't create a task, update an OKR, or read what's remaining, while the VS Code / web Brain had the full ~245-tool platform catalog. (Developer/file tools were already single-sourced via `packages/agent-tools/core-tools.ts` — no duplication there.) Shipped: api `2026.7.15`.
+
+- **Curated, safe-by-default subset** — `CLOUD_AGENT_PLATFORM_TOOLS` in `api/src/application/llm/builtinMcpService.ts`: projects/tasks/specs/objectives(OKR)/key_results/initiatives/portfolios read+write, `work_items.convert_type`, `pmo.tree/rollup`, `project_facts`, `project_files`, `attachments`, `reviews.record`, `tickets.from_delta`, and **read-only** executions. Explicit allowlist EXCLUDES all admin/destructive surface (no deletes, no `executions.submit/cancel/post_message`, nothing under `api_keys`/`security`/`provider_keys`/`migrations`/`agent_hosts`/…) so an unattended agent can't reach it. New `cloudAgentPlatformToolSchemas()` (memoized `builtin_*` OpenAI schemas) + `resolveCloudAgentPlatformTool()` (subset-only reverse lookup — refuses off-list names even if the model hallucinates one).
+- **Wired into the durable/Worker loop** — `cloudAgentEngine.ts runCloudToolLoop` advertises `[...CLOUD_AGENT_TOOLS, ...platformTools]` and dispatches `builtin_*` calls via `callBuiltinTool` in-process (tenant-scoped, `TenantRole.MANAGER`, project defaulted to the run's project so follow-up tasks land correctly). Governance policy gate + tool-event recording apply to platform tools too (they route through the same dispatch branch).
+- **Made live in the prompt** — the cloud system prompt now instructs the agent to file a NEW task for any out-of-scope gap it finds (don't silently drop it), update OKR/objective progress its work advances, and base its "what remains" summary on real state (`builtin_tasks_list` + the tasks it created), not a guess.
+- Tests: allowlist membership + admin/destructive exclusion + `builtin_*` schema shape + subset-only resolver (`builtinMcpService.test.ts`). tsgo clean; 90 tests pass across the affected files.
+- Follow-up (ROADMAP): the long-lived **Container** surface runs its own image loop and doesn't yet advertise these; and the legacy web-Brain `frontend/src/lib/brain/platformActions.ts` manifest should be retired onto the one server catalog.
+
+---
+
 ## ✅ RESOLVED 2026-07-05 — Brain agentic turns floored onto a weak non-coder model (root cause of "claimed a write, no changes")
 
 Complement to the same-day attachment/honesty fix below. That fix caught the *symptom* (phantom-save claim); this fixes the *root cause* — the model doing it. The VS Code Brain streams to `POST /llm/v1/chat/completions`, which auto-selected over the general `FREE_MODEL_POOL` and floored onto `GUARANTEED_BACKSTOP_MODEL` = `google/gemini-2.5-flash-lite` — the model the coding path's own comment says "loops on search and ships no edits." The coders-only floor (`CODING_MODEL_POOL` / `CODING_BACKSTOP_MODELS` / `pickCloudModel`) existed **only** on the cloud coding-agent path; the Brain (and every gateway completion) bypassed it, because failover is error-gated, not capability-gated.

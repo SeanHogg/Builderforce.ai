@@ -758,6 +758,28 @@ function consolidationMarkerContent(summary) {
   return `${CONSOLIDATION_MARKER_PREFIX}${summary.trim()}`;
 }
 
+// src/directedMessage.ts
+var ADDRESSED_TO_META_KEY = "addressedTo";
+function withDirectedMetadata(recipient, base) {
+  const meta = { ...base ?? {} };
+  if (recipient) meta[ADDRESSED_TO_META_KEY] = recipient;
+  return Object.keys(meta).length > 0 ? JSON.stringify(meta) : void 0;
+}
+function parseDirectedRecipient(msg) {
+  if (!msg.metadata) return null;
+  try {
+    const a = JSON.parse(msg.metadata).addressedTo;
+    if (a && typeof a.ref === "string" && typeof a.name === "string" && (a.kind === "agent" || a.kind === "human")) {
+      return { kind: a.kind, ref: a.ref, name: a.name };
+    }
+  } catch {
+  }
+  return null;
+}
+function isDirectedToParticipant(msg) {
+  return parseDirectedRecipient(msg) !== null;
+}
+
 // src/brainTriage.ts
 function isFailedToolResult(result) {
   if (result == null) return false;
@@ -1375,9 +1397,10 @@ ${extraSystem}` : resolvedSystemPrompt;
     [fullSystemPrompt, toolSpecs, model, runTool, needsConfirm, stream, persistence, onActivity]
   );
   const send = useCallback4(
-    async (text) => {
+    async (text, opts) => {
       const trimmed = text.trim();
       if (!trimmed || localSending || isRunning(chatId)) return false;
+      const addressedTo = opts?.addressedTo ?? null;
       let id = chatId;
       if (id == null) {
         id = await ensureChatId?.() ?? null;
@@ -1398,7 +1421,7 @@ ${extraSystem}` : resolvedSystemPrompt;
 
 ${refs}`;
       }
-      const metadata = attachments.length > 0 ? JSON.stringify({ attachments }) : void 0;
+      const metadata = withDirectedMetadata(addressedTo, attachments.length > 0 ? { attachments } : void 0);
       const imageAtts = attachments.filter((a) => a.imageUrl);
       let modelContent = displayContent;
       if (imageAtts.length > 0) {
@@ -1412,6 +1435,8 @@ ${refs}`;
       try {
         const [userMsg] = await persistence.sendMessages(id, [{ role: "user", content: displayContent, metadata }]);
         setMessages((prev) => [...prev, userMsg]);
+        onActivity?.(id);
+        if (addressedTo) return true;
         const seed = scopeToConsolidation(messages).map((m) => ({
           role: m.role,
           content: m.content
@@ -1426,13 +1451,14 @@ ${refs}`;
         setLocalSending(false);
       }
     },
-    [persistence, chatId, localSending, pendingAttachments, messages, ensureChatId, buildRequest]
+    [persistence, chatId, localSending, pendingAttachments, messages, ensureChatId, buildRequest, onActivity]
   );
   useEffect5(() => {
     if (chatId == null || loadingMessages || localSending || messages.length === 0) return;
     if (isRunning(chatId)) return;
     const last = messages[messages.length - 1];
     if (last.role !== "user") return;
+    if (isDirectedToParticipant(last)) return;
     if (autoRepliedChatIdRef.current === chatId) return;
     autoRepliedChatIdRef.current = chatId;
     setLocalError("");
@@ -1559,6 +1585,7 @@ function takePendingPrompt() {
   }
 }
 export {
+  ADDRESSED_TO_META_KEY,
   BrainActionsProvider,
   BrainContextProvider,
   BrainProvider,
@@ -1570,10 +1597,12 @@ export {
   consolidationMetadata,
   formatBrainDiagnostics,
   isConsolidationMarker,
+  isDirectedToParticipant,
   isEvermindModel,
   isFailedToolResult,
   lastConsolidationIndex,
   modelsUsedInTrace,
+  parseDirectedRecipient,
   prepareImageDataUrl,
   savePendingPrompt,
   scopeToConsolidation,
@@ -1586,6 +1615,7 @@ export {
   useBrainConversation,
   useMcpExtensions,
   useOptionalBrainContext,
-  useRegisterBrainActions
+  useRegisterBrainActions,
+  withDirectedMetadata
 };
 //# sourceMappingURL=index.mjs.map

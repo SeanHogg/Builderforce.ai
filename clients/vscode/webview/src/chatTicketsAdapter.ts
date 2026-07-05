@@ -22,6 +22,25 @@ export function createChatTicketsAdapter(
 ): ChatTicketsAdapter {
   const req = authedFetch(baseUrl, getToken, onUnauthorized);
 
+  // The agent pool is stable tenant data (which agents EXIST), unchanged by
+  // invite/remove — so cache the fan-out (3 endpoints) once for the adapter's
+  // lifetime. Both the ChatTicketsPanel and the composer's recipient picker read
+  // it, so this dedups what would otherwise be a duplicate 3-request fetch. Reset
+  // on failure so a transient error can be retried.
+  let poolPromise: Promise<AgentOptionVM[]> | null = null;
+  const fetchAgentPool = async (): Promise<AgentOptionVM[]> => {
+    const [mine, purchased, registered] = await Promise.all([
+      req<WorkforceAgent[]>('/api/workforce/agents/mine').catch(() => [] as WorkforceAgent[]),
+      req<WorkforceAgent[]>('/api/workforce/agents/purchased').catch(() => [] as WorkforceAgent[]),
+      req<RegisteredAgent[]>('/api/agents').catch(() => [] as RegisteredAgent[]),
+    ]);
+    const wfById = new Map<string, WorkforceAgent>();
+    for (const a of [...mine, ...purchased]) wfById.set(String(a.id), a);
+    const wf: AgentOptionVM[] = [...wfById.values()].map((a) => ({ kind: 'workforce', ref: String(a.id), name: a.name, meta: a.title || a.base_model || '' }));
+    const reg: AgentOptionVM[] = registered.filter((a) => a.isActive).map((a) => ({ kind: 'registered', ref: String(a.id), name: a.name, meta: a.type }));
+    return [...wf, ...reg];
+  };
+
   return {
     listTickets: (chatId) =>
       req<{ tickets: TicketLinkVM[] }>(`/api/brain/chats/${chatId}/tickets`).then((r) => r.tickets),
@@ -42,17 +61,9 @@ export function createChatTicketsAdapter(
       req(`/api/brain/chats/${chatId}/agents`, { method: 'POST', body: JSON.stringify(input) }).then(() => undefined),
     removeAgent: (chatId, assignmentId) =>
       req(`/api/brain/chats/${chatId}/agents/${assignmentId}`, { method: 'DELETE' }).then(() => undefined),
-    loadAgentPool: async (): Promise<AgentOptionVM[]> => {
-      const [mine, purchased, registered] = await Promise.all([
-        req<WorkforceAgent[]>('/api/workforce/agents/mine').catch(() => [] as WorkforceAgent[]),
-        req<WorkforceAgent[]>('/api/workforce/agents/purchased').catch(() => [] as WorkforceAgent[]),
-        req<RegisteredAgent[]>('/api/agents').catch(() => [] as RegisteredAgent[]),
-      ]);
-      const wfById = new Map<string, WorkforceAgent>();
-      for (const a of [...mine, ...purchased]) wfById.set(String(a.id), a);
-      const wf: AgentOptionVM[] = [...wfById.values()].map((a) => ({ kind: 'workforce', ref: String(a.id), name: a.name, meta: a.title || a.base_model || '' }));
-      const reg: AgentOptionVM[] = registered.filter((a) => a.isActive).map((a) => ({ kind: 'registered', ref: String(a.id), name: a.name, meta: a.type }));
-      return [...wf, ...reg];
+    loadAgentPool: (): Promise<AgentOptionVM[]> => {
+      if (!poolPromise) poolPromise = fetchAgentPool().catch((e) => { poolPromise = null; throw e; });
+      return poolPromise;
     },
     loadTicketOptions: async (projectId): Promise<Record<TicketKind, TicketOptionVM[]>> => {
       const q = projectId != null ? `?project_id=${projectId}` : '';

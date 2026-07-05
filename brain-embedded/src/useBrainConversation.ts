@@ -278,7 +278,7 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
         const refs = attachments.map((a) => `[Attached: ${a.name}](${persistence.uploadUrl(a.key)})`).join('\n');
         displayContent = `${trimmed}\n\n${refs}`;
       }
-      const metadata = attachments.length > 0 ? JSON.stringify({ attachments }) : undefined;
+      const metadata = withDirectedMetadata(addressedTo, attachments.length > 0 ? { attachments } : undefined);
 
       // Model-visible content: inline images as `image_url` vision parts (the
       // gateway routes these to a vision model), keeping any non-image
@@ -300,6 +300,12 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
       try {
         const [userMsg] = await persistence.sendMessages(id, [{ role: 'user', content: displayContent, metadata }]);
         setMessages((prev) => [...prev, userMsg]);
+        onActivity?.(id);
+        // Addressed to a participant, not the BRAIN: the turn is posted to the
+        // chat (visible to everyone) but the agent loop stays idle. The auto-reply
+        // guard was already claimed above, and the effect below also skips it, so
+        // a later reload won't answer it either.
+        if (addressedTo) return true;
         // Seed the rich transcript from the prior persisted history (the closure
         // `messages`, excluding the just-sent user turn), then append this turn.
         // Scoped to the last consolidation marker: a consolidated chat sends the
@@ -321,7 +327,7 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
         setLocalSending(false);
       }
     },
-    [persistence, chatId, localSending, pendingAttachments, messages, ensureChatId, buildRequest],
+    [persistence, chatId, localSending, pendingAttachments, messages, ensureChatId, buildRequest, onActivity],
   );
 
   // Auto-reply when a chat loads with a trailing unanswered user message
@@ -333,6 +339,9 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
     if (isRunning(chatId)) return;
     const last = messages[messages.length - 1];
     if (last.role !== 'user') return;
+    // A trailing message addressed to a participant is NOT a directive for the
+    // BRAIN — leave it unanswered (the participant owns the reply).
+    if (isDirectedToParticipant(last)) return;
     if (autoRepliedChatIdRef.current === chatId) return;
     autoRepliedChatIdRef.current = chatId;
     setLocalError('');

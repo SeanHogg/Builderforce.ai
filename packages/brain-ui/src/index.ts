@@ -13,6 +13,9 @@ export type { BrainTimelineProps, BrainTimelineLabels } from './BrainTimeline';
 export { Markdown } from './Markdown';
 export type { MarkdownProps, MarkdownLabels } from './Markdown';
 
+export { Avatar, ParticipantBadge, initialsOf, avatarColor } from './ParticipantBadge';
+export type { AvatarProps } from './ParticipantBadge';
+
 export { HealthRing, healthRingColor } from './HealthRing';
 export type { HealthRingProps } from './HealthRing';
 
