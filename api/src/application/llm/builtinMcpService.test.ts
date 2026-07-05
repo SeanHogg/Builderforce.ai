@@ -24,12 +24,57 @@ vi.mock('../task/TaskService', () => ({ TaskService: function () { return taskSv
 vi.mock('../../infrastructure/repositories/ProjectRepository', () => ({ ProjectRepository: function () { /* stub */ } }));
 vi.mock('../../infrastructure/repositories/TaskRepository', () => ({ TaskRepository: function () { /* stub */ } }));
 
-import { listBuiltinTools, callBuiltinTool, BUILTIN_EXTENSION_ID } from './builtinMcpService';
+import {
+  listBuiltinTools, callBuiltinTool, BUILTIN_EXTENSION_ID,
+  CLOUD_AGENT_PLATFORM_TOOLS, cloudAgentPlatformToolSchemas, resolveCloudAgentPlatformTool,
+} from './builtinMcpService';
 
 const db = {} as never;
 const TENANT = 7;
 
 beforeEach(() => vi.clearAllMocks());
+
+describe('cloud-agent curated platform tool subset', () => {
+  const allToolIds = new Set(listBuiltinTools().map((t) => t.tool));
+
+  it('every curated tool exists in the CATALOG (no typos / stale ids)', () => {
+    for (const tool of CLOUD_AGENT_PLATFORM_TOOLS) {
+      expect(allToolIds.has(tool), `curated tool '${tool}' not in CATALOG`).toBe(true);
+    }
+  });
+
+  it('grants NO admin/destructive tools to an unattended agent', () => {
+    const forbiddenPrefixes = ['api_keys.', 'security.', 'provider_keys.', 'migrations.', 'agent_hosts.', 'board_connections.', 'cron.', 'integrations.'];
+    const forbiddenExact = ['executions.submit', 'executions.cancel', 'executions.post_message'];
+    for (const tool of CLOUD_AGENT_PLATFORM_TOOLS) {
+      expect(forbiddenPrefixes.some((p) => tool.startsWith(p)), `curated tool '${tool}' is admin-surface`).toBe(false);
+      expect(forbiddenExact.includes(tool), `curated tool '${tool}' is an execution control-plane mutation`).toBe(false);
+      expect(tool.endsWith('.delete'), `curated tool '${tool}' is a delete`).toBe(false);
+    }
+  });
+
+  it('advertises curated tools as builtin_* OpenAI function schemas', () => {
+    const schemas = cloudAgentPlatformToolSchemas();
+    expect(schemas.length).toBe(CLOUD_AGENT_PLATFORM_TOOLS.length);
+    for (const s of schemas) {
+      expect(s.type).toBe('function');
+      expect(s.function.name).toMatch(/^builtin_/);
+      expect(s.function.parameters.type).toBe('object');
+    }
+  });
+
+  it('resolves advertised names back to the dotted id ONLY for the curated subset', () => {
+    // Round-trips every curated tool…
+    for (const s of cloudAgentPlatformToolSchemas()) {
+      const resolved = resolveCloudAgentPlatformTool(s.function.name);
+      expect(CLOUD_AGENT_PLATFORM_TOOLS.includes(resolved!)).toBe(true);
+    }
+    // …and refuses an off-list platform tool even if the model names it.
+    expect(resolveCloudAgentPlatformTool('builtin_api_keys_create')).toBeUndefined();
+    expect(resolveCloudAgentPlatformTool('builtin_tasks_delete')).toBeUndefined();
+    expect(resolveCloudAgentPlatformTool('not_a_tool')).toBeUndefined();
+  });
+});
 
 describe('listBuiltinTools', () => {
   const tools = listBuiltinTools();

@@ -4,6 +4,16 @@
 
 ---
 
+## ✅ RESOLVED 2026-07-05 — Brain agentic turns floored onto a weak non-coder model (root cause of "claimed a write, no changes")
+
+Complement to the same-day attachment/honesty fix below. That fix caught the *symptom* (phantom-save claim); this fixes the *root cause* — the model doing it. The VS Code Brain streams to `POST /llm/v1/chat/completions`, which auto-selected over the general `FREE_MODEL_POOL` and floored onto `GUARANTEED_BACKSTOP_MODEL` = `google/gemini-2.5-flash-lite` — the model the coding path's own comment says "loops on search and ships no edits." The coders-only floor (`CODING_MODEL_POOL` / `CODING_BACKSTOP_MODELS` / `pickCloudModel`) existed **only** on the cloud coding-agent path; the Brain (and every gateway completion) bypassed it, because failover is error-gated, not capability-gated.
+
+- **One shared routing path for all modalities** — new `proxyForCompletion(env, access, body, opts)` in `api/src/presentation/routes/llmRoutes.ts`. When the body carries `tools` (an agentic tool-loop turn — Brain, on-prem, any tool-calling SDK) it passes `{ codingOnly: true, backstopModels: CODING_BACKSTOP_MODELS }`, mirroring `cloudAgentEngine`. Agentic turns now walk free coders → paid coder backstop → funded Anthropic floor, never the lite non-coder. Plain (no-tools) chat keeps the plan-aware general pool.
+- **Wired into BOTH** `/v1/chat/completions` and the `/v1/messages` our-models branch (user directive: "same path for all modalities, consolidate"), so the OpenAI-shape and Anthropic-shape (Claude Agent SDK) endpoints can no longer drift onto different model ladders. `/v1/messages` stays as a required protocol shim — it's the path `@anthropic-ai/claude-agent-sdk` (the V2 runner) hard-codes; deleting it would kill the cloud+on-prem coding runtime.
+- Tests: 2 new regression tests in `llmRoutes.test.ts` (tools → `codingOnly:true` + `CODING_BACKSTOP_MODELS`; no-tools → general pool). tsgo clean; 28 llmRoutes tests pass.
+
+---
+
 ## ✅ RESOLVED 2026-07-05 — Brain roadmap-reconciliation: duplicate items + phantom file "save"
 
 Root-caused from a failed Brain run (attach a ROADMAP.md → "transition outstanding items to OKRs/Epics/Tasks and write the IDs back"): it created duplicate items and claimed it updated the attached file when it could not. Shipped: api `2026.7.13`, frontend `2026.7.13`, brain-embedded `2026.7.7`.
@@ -12,6 +22,18 @@ Root-caused from a failed Brain run (attach a ROADMAP.md → "transition outstan
 - **Real attachment write-back (no more phantom saves)** — new `attachments.read` (paginated — fixes "file too large to read") and `attachments.write` (overwrites the R2 upload in place, tenant-scoped by key prefix, metadata-preserving) builtin tools. Uploads were previously served read-only by signature with no write path, so a "saved the file" claim was structurally impossible to honor.
 - **Honesty guard** — the shared Brain system prompt (`frontend/src/lib/brain/platformPrompt.ts`) now instructs: edit an attachment via read→edit→`attachments.write`, and NEVER claim a save/update/write unless a write tool returned success this turn. Backed by a structural detector `detectUnbackedWriteClaim(events, messages)` in the shared triage module (`brain-embedded/src/brainTriage.ts`) that surfaces a `⚠ UNBACKED WRITE CLAIM` line in every triage capture when an assistant turn claims a file write with no successful write tool call.
 - Tests: builtin dedup + attachment read/write/tenant-scope (`builtinMcpService.test.ts`), client-manifest dedup (`platformActions.test.ts`), unbacked-write-claim detector (`brainTriage.test.ts`).
+
+---
+
+## ✅ RESOLVED 2026-07-05 — VS Code extension: 5 "real features" (assignable runtime, workforce/observability card, per-task diff, workforce embed, IDE Brain seed)
+
+The larger VS Code roadmap items, built end-to-end. Shipped: api `2026.7.14`, frontend `2026.7.14`, builderforce-embedded `2026.6.30`, brain-embedded `2026.7.8`, extension VSIX `2026.7.27`.
+
+- **VS Code as an assignable runtime (assigned-task delivery, tracked HITL).** The roadmap framed this as "add `'vscode'` to `agent_type`", but that enum is the LLM-provider axis (`claude|openai|ollama|http`) — the *assignee* axis is host/cloud/**human**. Assigning to a VS Code runtime is correctly modeled as assign-to-human + deliver-to-editor (a bare enum value would be a dead seam). Built the missing delivery loop: `GET /api/vscode/tasks` (open tasks assigned to the signed-in user, tenant-scoped via the project join, bounded 50, uncached like its `/tenants` sibling since it must reflect a just-assigned task) + `bfApi.listAssignedTasks` + an extension poll folded into the existing 5-min heartbeat (`pollAssignedTasks`) that notifies on newly-assigned work (first poll seeds silently so it doesn't announce the backlog) and "Show my tasks" flips the Projects & Tasks tree to its assigned-to-me filter. Status flows back through the existing `PATCH /api/tasks/:id`. Tests: `vscodeRoutes.test.ts` (+2). l10n in all 5 VS Code bundles.
+- **Workforce + Observability VS Code presence.** New `vscodeConnections.list()` client + `isVscodeConnectionOnline()` (single liveness source: active + heartbeat < 11 min). Added a `'vscode'` kind to the shared `AgentTypePill`; `WorkforceAgents` now renders VS Code editors as read-only presence cards + table rows (mirroring the remote-host block); `ObservabilityContent` lists them as directory/presence chips (no timeline — VS Code emits no tool-audit telemetry). No new backend route (reused `GET /api/vscode/connections`). New strings under the `workforce.vscode` i18n namespace in all 5 catalogs.
+- **First-class per-task diff panel.** Extracted the agent panel's Changes sub-tab into a shared `TaskChangesPanel` (owns the file-change list + Monaco diff detail; self-fetches `runtimeApi.taskFileChanges` when no execution-scoped list is passed). `AgentExecutionPanel` now delegates to it (DRY — removed its local `ChangeRow`/`CHANGE_COLOR`/`openChange`), and a new first-class **Changes** tab in the task drawer (`TaskMgmtContent`) renders it. New `taskChanges` i18n namespace + `taskMgmt.tabChanges` in all 5 catalogs.
+- **`workforce` embed view.** Registered in `EMBED_VIEWS` (`builderforce-embedded`, pillar `agile`) + a `case 'workforce'` in `embed/[view]/page.tsx` rendering the existing `WorkforceAgents` grid (auth via the frame session; root layout provides `AuthProvider`). Rebuilt the package dist.
+- **Web Project 360 "Improve with Brain" → one-click seed.** `BrainPanel` already had `initialPrompt` + auto-send; threaded a `?prompt=` param from `/ide/[id]` → `IDE` → `IDENew` into the docked `BrainPanel` and (for non-docked modalities) published it through `BrainContext` (new `initialPrompt` field in `brain-embedded`, consumed by `FloatingBrain`). `ProjectHealthPanel` now deep-links the `brain` action's ready-made seed text as `/ide/:id?prompt=`. Tests: FloatingBrain + brain-embedded suites green.
 
 ---
 

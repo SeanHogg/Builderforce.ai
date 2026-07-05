@@ -1,0 +1,62 @@
+/**
+ * Directed messages — addressing a chat turn to a participant, not the BRAIN.
+ *
+ * A BuilderForce chat is multi-party: alongside the BRAIN (the agent that
+ * executes build/change requests) a chat can have other participants — invited
+ * teammate agents and (in future) humans. Not every message is a directive for
+ * the BRAIN to run: a user can @-tag a participant and simply talk to them. Such
+ * a turn is a normal `user` message tagged with `{ addressedTo: {...} }` in its
+ * metadata; the conversation loop reads that flag and does NOT start a BRAIN run
+ * for it, while the transcript still shows who it was addressed to. An untagged
+ * message (or one addressed to the BRAIN) runs the agent loop as before.
+ *
+ * This is the single source of truth for the convention, shared by the send path
+ * (which skips the run), the auto-reply guard, and any surface that renders the
+ * "→ recipient" badge.
+ */
+
+/** A non-BRAIN participant a message can be addressed to. */
+export interface DirectedRecipient {
+  /** 'agent' = an invited teammate agent; 'human' = an invited person. */
+  kind: 'agent' | 'human';
+  /** Stable id/ref of the participant (an agentRef, or a user id/handle). */
+  ref: string;
+  /** Display name shown in the composer chip + the transcript badge. */
+  name: string;
+}
+
+/** The metadata key that flags a user message as addressed to a participant. */
+export const ADDRESSED_TO_META_KEY = 'addressedTo';
+
+/**
+ * Merge an `addressedTo` flag into a message's metadata object (preserving any
+ * other keys, e.g. `attachments`). Returns a serialized string, or `undefined`
+ * when there is nothing to store — ready to hand to `persistence.sendMessages`.
+ */
+export function withDirectedMetadata(
+  recipient: DirectedRecipient | null | undefined,
+  base?: Record<string, unknown>,
+): string | undefined {
+  const meta: Record<string, unknown> = { ...(base ?? {}) };
+  if (recipient) meta[ADDRESSED_TO_META_KEY] = recipient;
+  return Object.keys(meta).length > 0 ? JSON.stringify(meta) : undefined;
+}
+
+/** The recipient a persisted message was addressed to, or `null` for the BRAIN. */
+export function parseDirectedRecipient(msg: { metadata?: string | null }): DirectedRecipient | null {
+  if (!msg.metadata) return null;
+  try {
+    const a = (JSON.parse(msg.metadata) as { addressedTo?: Partial<DirectedRecipient> }).addressedTo;
+    if (a && typeof a.ref === 'string' && typeof a.name === 'string' && (a.kind === 'agent' || a.kind === 'human')) {
+      return { kind: a.kind, ref: a.ref, name: a.name };
+    }
+  } catch {
+    /* not a directed message */
+  }
+  return null;
+}
+
+/** True when a message is addressed to a participant (so the BRAIN should NOT run for it). */
+export function isDirectedToParticipant(msg: { metadata?: string | null }): boolean {
+  return parseDirectedRecipient(msg) !== null;
+}

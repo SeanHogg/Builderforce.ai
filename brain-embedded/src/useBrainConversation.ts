@@ -29,6 +29,7 @@ import type { BrainMessage, BrainModality, ChatInputAttachment } from './types';
 import type { BrainToolSpec, ChatCompletionMessage, ContentPart } from './streamChatCompletion';
 import { prepareImageDataUrl } from './imagePrep';
 import { scopeToConsolidation } from './consolidation';
+import { withDirectedMetadata, isDirectedToParticipant, type DirectedRecipient } from './directedMessage';
 import { buildBrainTriageReport, type BrainTraceEvent } from './brainTriage';
 import {
   startRun,
@@ -88,7 +89,7 @@ export interface UseBrainConversation {
    * `false` if it failed before persisting (e.g. the token expired mid-send) —
    * so a composer can restore the text the user typed instead of dropping it.
    */
-  send(text: string): Promise<boolean>;
+  send(text: string, opts?: { addressedTo?: DirectedRecipient | null }): Promise<boolean>;
   /**
    * Stop the in-flight run for the active chat: aborts the streaming LLM request
    * and unwinds the agent loop (no error surfaced). No-op when nothing is
@@ -245,9 +246,13 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
   );
 
   const send = useCallback(
-    async (text: string): Promise<boolean> => {
+    async (text: string, opts?: { addressedTo?: DirectedRecipient | null }): Promise<boolean> => {
       const trimmed = text.trim();
       if (!trimmed || localSending || isRunning(chatId)) return false;
+      // A message addressed to a participant (an invited agent/human) is a chat
+      // turn for THEM, not a directive for the BRAIN — persist it, but don't run
+      // the agent loop. `null`/omitted means the BRAIN (existing behavior).
+      const addressedTo = opts?.addressedTo ?? null;
 
       let id = chatId;
       if (id == null) {
