@@ -1,8 +1,11 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 
 // Stub the premium proxy so the teacher is exercised without a real gateway call.
+// Spread the ACTUAL module so real exports (readProxyChoice) keep working — only the
+// proxy factory is overridden.
 const completeMock = vi.fn();
-vi.mock('./LlmProxyService', () => ({
+vi.mock('./LlmProxyService', async (importActual) => ({
+  ...(await importActual<typeof import('./LlmProxyService')>()),
   llmProxyForPlan: () => ({ complete: completeMock }),
 }));
 
@@ -14,9 +17,13 @@ vi.mock('./tenantTokenAvailability', () => ({
 
 import { generateTeacherExemplar, buildEvermindTrainingText, resolveEvermindTeacherModel } from './evermindTeacher';
 
-/** Build a minimal ProxyResult-shaped object with a chat-completion JSON body. */
+/** Build a minimal ProxyResult-shaped object with a chat-completion JSON body.
+ *  Uses a REAL Response so `readProxyChoice`'s `.clone().json()` works as in production. */
 function gatewayResponse(content: unknown, status = 200, resolvedModel = 'claude-opus-4-8') {
-  return { response: { status, json: async () => ({ choices: [{ message: { content } }] }) }, resolvedModel };
+  return {
+    response: new Response(JSON.stringify({ choices: [{ message: { content } }] }), { status, headers: { 'content-type': 'application/json' } }),
+    resolvedModel,
+  };
 }
 
 const env = {} as never;
