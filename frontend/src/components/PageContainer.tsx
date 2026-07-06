@@ -28,7 +28,7 @@ type PageContainerProps = {
  * Full-bleed routes (the IDE, the Brain page, the workflow builder canvas) manage
  * their own layout and intentionally do NOT use this.
  */
-export default function PageContainer({ width = 'full', style, className, children }: PageContainerProps) {
+export default function PageContainer({ width = 'full' // Ensure 100% width on all devices, style, className, children }: PageContainerProps) {
   return (
     <div
       // `.page-container` owns the padding so it can shrink on mobile (a media
