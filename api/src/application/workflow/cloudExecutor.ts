@@ -27,7 +27,7 @@
 import { and, eq, inArray } from 'drizzle-orm';
 import { buildDatabase } from '../../infrastructure/database/connection';
 import { workflows, workflowTasks } from '../../infrastructure/database/schema';
-import { ideProxy } from '../llm/LlmProxyService';
+import { ideProxy, readProxyChoice } from '../llm/LlmProxyService';
 import { tenantProxyForPlan, byoAwareModel } from '../llm/tenantProxy';
 import { recordProxyUsage } from '../llm/usageLedger';
 import { contextFromInput, evaluateBool, renderTransform } from '../../domain/workflowExpr';
@@ -109,10 +109,7 @@ async function executeCloudNode(env: CloudExecutorEnv, node: NodeInput, inputTex
       if (!result.response.ok) {
         throw new Error(`llm call failed (${result.response.status})`);
       }
-      const json = (await result.response.json()) as {
-        choices?: Array<{ message?: { content?: string } }>;
-      };
-      return { output: json.choices?.[0]?.message?.content ?? '' };
+      return { output: (await readProxyChoice(result)).content };
     }
 
     // ETL kinds — evaluated cloud-side via the sandbox-safe expression engine

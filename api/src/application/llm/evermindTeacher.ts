@@ -21,7 +21,7 @@
  */
 import type { Env } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
-import { llmProxyForPlan } from './LlmProxyService';
+import { llmProxyForPlan, readProxyChoice } from './LlmProxyService';
 import { getTenantTokenAvailability } from './tenantTokenAvailability';
 
 /** Max chars of task/run text handed to the teacher (bounds prompt/token cost). */
@@ -95,12 +95,7 @@ export async function generateTeacherExemplar(
       signal,
     );
     if (result.response.status >= 400) return null;
-    const raw = (await result.response.json().catch(() => null)) as
-      | { choices?: Array<{ message?: { content?: unknown } }> }
-      | null;
-    const content = raw?.choices?.[0]?.message?.content;
-    if (typeof content !== 'string') return null;
-    const output = content.trim();
+    const { content: output } = await readProxyChoice(result);
     if (output.length < TEACHER_MIN_OUTPUT_CHARS) return null;
     return { model: result.resolvedModel || model, output };
   } catch {

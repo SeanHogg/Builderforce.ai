@@ -14,7 +14,7 @@ import {
   tenantMembers,
   tenantInvitations,
 } from '../../infrastructure/database/schema';
-import { ideProxy, explicitModelPreemptsByo } from '../llm/LlmProxyService';
+import { ideProxy, explicitModelPreemptsByo, readProxyChoice } from '../llm/LlmProxyService';
 import { tenantProxyForPlan } from '../llm/tenantProxy';
 import { vendorForModel } from '../llm/vendors';
 import { recordProxyUsage } from '../llm/usageLedger';
@@ -763,6 +763,7 @@ export class BrainService {
     let toolCallCount = 0;
     let iterations = 0;
     let lastModel = pinnedModel ?? '';
+    let lastFinish = '';
     for (let i = 0; i < MAX_ITERS; i++) {
       iterations = i + 1;
       const result = await service.complete({
@@ -775,12 +776,13 @@ export class BrainService {
       this.recordUsage(apiKey, tenantId, 'brain_agent_reply', result);
       lastModel = readModel(result) || lastModel;
       noteByoFailure(result);
-      const message = (result.response as { choices?: Array<{ message?: { content?: string; tool_calls?: Array<{ id: string; function: { name: string; arguments?: string } }> } }> } | undefined)
-        ?.choices?.[0]?.message;
-      const toolCalls = message?.tool_calls ?? [];
+      // ProxyResult.response is an HTTP Response — the body MUST be parsed (readProxyChoice),
+      // NOT read as if it were the choices envelope (that silently empties every reply).
+      const { message, content, toolCalls, finishReason } = await readProxyChoice(result);
+      lastFinish = finishReason || lastFinish;
 
       if (toolCalls.length === 0) {
-        text = message?.content?.trim() ?? '';
+        text = content;
         break;
       }
 
@@ -816,8 +818,9 @@ export class BrainService {
       this.recordUsage(apiKey, tenantId, 'brain_agent_reply', finalResult);
       lastModel = readModel(finalResult) || lastModel;
       noteByoFailure(finalResult);
-      text = (finalResult.response as { choices?: Array<{ message?: { content?: string } }> } | undefined)
-        ?.choices?.[0]?.message?.content?.trim() ?? '';
+      const finalChoice = await readProxyChoice(finalResult);
+      lastFinish = finalChoice.finishReason || lastFinish;
+      text = finalChoice.content;
     }
 
     if (!text) {
@@ -840,6 +843,11 @@ export class BrainService {
       const toolNote = toolCallCount
         ? ` after ${toolCallCount} tool call${toolCallCount === 1 ? '' : 's'} over ${iterations} step${iterations === 1 ? '' : 's'}`
         : '';
+      // Surface the model's finish_reason so a genuinely-empty completion is self-describing:
+      // `length` ⇒ the token budget was exhausted (e.g. a reasoning model spent it thinking);
+      // `stop`/`end_turn` ⇒ the model chose to say nothing. Distinguishes a config/prompt
+      // problem from a transient blank.
+      const finishNote = lastFinish && lastFinish !== 'stop' ? ` (finish_reason: ${lastFinish})` : '';
       // If the connected account was TRIED and failed (cascading to the shared pool),
       // say so with its status — an expired/revoked subscription 401s, a bad request
       // 400s. This turns a mystifying "empty reply" into a fix ("reconnect your Claude
@@ -860,7 +868,7 @@ export class BrainService {
         ? ` Your connected ${bf.vendor === 'anthropic' ? 'Claude' : bf.vendor === 'openai' ? 'OpenAI' : bf.vendor === 'googleai' ? 'Google' : bf.vendor} account was tried first but errored (${bf.code || 'no response'})${bfCause}, so the run fell back to the shared pool.`
         : '';
       return {
-        error: `${agentName} ran on ${via}${modelNote} but produced no reply${toolNote}.${byoNote} The model returned an empty turn — this usually clears on a retry. If it persists, set a stronger base model for this agent in Workforce, or confirm your connected account is active.` as const,
+        error: `${agentName} ran on ${via}${modelNote} but produced no reply${toolNote}${finishNote}.${byoNote} The model returned an empty turn — this usually clears on a retry. If it persists, set a stronger base model for this agent in Workforce, or confirm your connected account is active.` as const,
       };
     }
 
@@ -1063,8 +1071,7 @@ export class BrainService {
     });
     this.recordUsage(apiKey, tenantId, 'brain_summary', result);
 
-    const response = result.response as { choices?: Array<{ message?: { content?: string } }> } | undefined;
-    const summary = response?.choices?.[0]?.message?.content?.trim() ?? '';
+    const { content: summary } = await readProxyChoice(result);
 
     if (!summary) {
       return { summary: null, reason: 'LLM returned empty response' };
@@ -1169,8 +1176,7 @@ export class BrainService {
     });
     this.recordUsage(apiKey, tenantId, 'brain_project_memory', result);
 
-    const response = result.response as { choices?: Array<{ message?: { content?: string } }> } | undefined;
-    const consolidatedSummary = response?.choices?.[0]?.message?.content?.trim() ?? '';
+    const { content: consolidatedSummary } = await readProxyChoice(result);
 
     if (!consolidatedSummary) {
       return { consolidatedSummary: null, reason: 'LLM returned empty response' };
@@ -1236,8 +1242,7 @@ export class BrainService {
     });
     this.recordUsage(apiKey, tenantId, 'brain_summary', result);
 
-    const response = result.response as { choices?: Array<{ message?: { content?: string } }> } | undefined;
-    const summary = response?.choices?.[0]?.message?.content?.trim() ?? '';
+    const { content: summary } = await readProxyChoice(result);
 
     if (!summary) {
       return { summary: null, reason: 'LLM returned empty response' };

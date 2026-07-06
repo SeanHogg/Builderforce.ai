@@ -4,7 +4,7 @@
  * a judge call is billed/capped exactly like any other completion — no out-of-band
  * model access, no duplicated wiring.
  */
-import { llmProxyForPlan } from '../llm/LlmProxyService';
+import { llmProxyForPlan, readProxyChoice } from '../llm/LlmProxyService';
 import type { EvalJudge } from './semanticEval';
 import type { Env } from '../../env';
 
@@ -23,13 +23,6 @@ export function gatewayJudge(
       temperature: 0,
       max_tokens: 200,
     } as never);
-    try {
-      const body = (await result.response.json()) as {
-        choices?: Array<{ message?: { content?: string } }>;
-      };
-      return body.choices?.[0]?.message?.content ?? '';
-    } catch {
-      return '';
-    }
+    return (await readProxyChoice(result)).content;
   };
 }

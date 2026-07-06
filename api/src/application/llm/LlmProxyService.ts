@@ -757,6 +757,57 @@ export interface ProxyResult {
   attempts?: DispatchAttempt[];
 }
 
+/** Assistant message shape carried in a chat-completion choice. */
+export interface ProxyChoiceMessage {
+  role?: string;
+  content?: string | null;
+  tool_calls?: Array<{ id: string; type?: string; function: { name: string; arguments?: string } }>;
+}
+
+/** The unwrapped first choice of a {@link ProxyResult}. */
+export interface ProxyChoice {
+  /** The raw assistant message (undefined on a non-JSON / error body). */
+  message: ProxyChoiceMessage | undefined;
+  /** Trimmed assistant text — `''` when the turn was tool-only, genuinely empty, or the
+   *  body was a non-2xx/non-JSON envelope. */
+  content: string;
+  /** Tool calls the model requested (empty array when none). */
+  toolCalls: NonNullable<ProxyChoiceMessage['tool_calls']>;
+  /** OpenAI `finish_reason` (`stop` | `tool_calls` | `length` | …), `''` when absent. */
+  finishReason: string;
+  /** Full parsed OpenAI-shaped body, for callers that also need `usage`/`error`/etc. */
+  body: Record<string, unknown> | null;
+}
+
+/**
+ * THE single place a {@link ProxyResult}'s HTTP Response body is unwrapped into its first
+ * chat choice. `ProxyResult.response` is an HTTP `Response` (a JSON body), NOT the parsed
+ * object — every consumer MUST `await` its `.json()`. Reading `.choices` straight off the
+ * Response (as several call sites historically did) silently yields `undefined` and
+ * empties EVERY reply regardless of what the model returned. Centralising the unwrap here
+ * kills that whole class of bug and the extraction duplication that let it hide in one
+ * surface while working in others.
+ *
+ * The Response is CLONED, so callers may still read `result.response` (`.status` / `.ok`)
+ * and background metering may re-read the original body. A non-2xx or non-JSON body yields
+ * empty fields (never throws), so a caller can gate on `result.response.status` first and
+ * treat `content === ''` as "no usable output".
+ */
+export async function readProxyChoice(result: { response: Response }): Promise<ProxyChoice> {
+  const body = (await result.response.clone().json().catch(() => null)) as
+    | { choices?: Array<{ message?: ProxyChoiceMessage; finish_reason?: string }> }
+    | null;
+  const choice = body?.choices?.[0];
+  const message = choice?.message;
+  return {
+    message,
+    content: (typeof message?.content === 'string' ? message.content : '').trim(),
+    toolCalls: message?.tool_calls ?? [],
+    finishReason: choice?.finish_reason ?? '',
+    body: body as Record<string, unknown> | null,
+  };
+}
+
 export type ProductName = 'builderforceLLM' | 'builderforceLLMPro' | 'builderforceLLMTeams';
 
 export interface ProxyEnv extends VendorEnv {

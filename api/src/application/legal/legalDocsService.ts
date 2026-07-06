@@ -12,7 +12,7 @@ import { and, desc, eq, sql } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import { legalDocuments } from '../../infrastructure/database/schema';
 import type { Env } from '../../env';
-import { ideProxy, newTraceId } from '../llm/LlmProxyService';
+import { ideProxy, newTraceId, readProxyChoice } from '../llm/LlmProxyService';
 import { logTrace } from '../llm/traceLogger';
 
 export const LEGAL_DOC_TYPES = ['terms', 'privacy'] as const;
@@ -263,11 +263,7 @@ export async function enhanceLegalContent(
     });
   }
 
-  const json = (await result.response.json().catch(() => null)) as
-    | { choices?: Array<{ message?: { content?: string } }> }
-    | null;
-  const raw = json?.choices?.[0]?.message?.content ?? '';
-  const cleaned = stripMarkdownFence(raw);
+  const cleaned = stripMarkdownFence((await readProxyChoice(result)).content);
   if (!cleaned) throw new LegalDocError('AI returned an empty document', 502);
   return cleaned;
 }

@@ -12,7 +12,7 @@
  * spec that at least navigates the flow and asserts each route renders.
  */
 
-import { ideProxy } from '../llm/LlmProxyService';
+import { ideProxy, readProxyChoice } from '../llm/LlmProxyService';
 import { TenantAiService } from '../llm/tenantProxy';
 import type { Env } from '../../env';
 import type { QaStep } from './qaTypes';
@@ -50,12 +50,6 @@ Hard requirements for the spec you output:
 
 Output ONLY a JSON object: {"spec": "<full .ts source>", "steps": [<normalized QaStep array you actually exercised>]}.
 Do not wrap the JSON in markdown fences.`;
-
-function extractContent(raw: unknown): string | null {
-  const choices = (raw as { choices?: Array<{ message?: { content?: unknown } }> } | null)?.choices;
-  const content = choices?.[0]?.message?.content;
-  return typeof content === 'string' ? content : null;
-}
 
 /** Strip ```...``` fences and pull the first balanced JSON object out of a string. */
 function parseModelJson(content: string): { spec?: string; steps?: QaStep[] } | null {
@@ -210,8 +204,7 @@ export class QaGeneratorService extends TenantAiService {
       if (result.response.status >= 400) {
         return { spec: fallbackSpec(input), steps: input.steps, model: result.resolvedModel ?? null };
       }
-      const raw = await result.response.json().catch(() => null);
-      const content = extractContent(raw);
+      const { content } = await readProxyChoice(result);
       const parsed = content ? parseModelJson(content) : null;
       // Validate the model output against the import allowlist + escape-hatch
       // denylist before accepting it [1067]. Any failure → deterministic
