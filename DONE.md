@@ -4,6 +4,17 @@
 
 ---
 
+## ✅ RESOLVED 2026-07-05 — "produced no reply / empty turn" on EVERY model: agent replies never read the response body (+ DRY'd ProxyResult extraction into one primitive) (api `2026.7.52`)
+
+Once the cascade fix (2026.7.51) put the run on the connected account, the reply was STILL empty — now attributed to `claude-opus-4-8`. Root cause, found by re-reading the extraction code: [`BrainService.agentReply`](./api/src/application/brain/BrainService.ts) read `result.response.choices?.[0]?.message` — but `ProxyResult.response` is an **HTTP `Response`** (a JSON body), which has no `.choices`. So `message` was **always `undefined`**, `toolCalls` always `[]`, `text` always `''` — every reply was blank *regardless of the model*. The whole model-routing saga was downstream of this: qwen, then Opus, both "empty" because the code never actually parsed either response. Every other consumer correctly did `await result.response.json()`; only Brain's copies (5 of them) got it wrong.
+
+**Why it existed in 5 places** (the real lesson, per the operator): ProxyResult-body extraction was never a shared primitive — ~12 consumers each hand-rolled `await result.response.json()` + `choices[0].message`, plus THREE separate `extractContent` helpers. Duplication is exactly how one surface rots while others work.
+
+- **One primitive**: [`readProxyChoice(result)`](./api/src/application/llm/LlmProxyService.ts) — THE single unwrap of a ProxyResult's Response body → `{ message, content, toolCalls, finishReason, body }`. Clones the Response (so a forwarded/streamed body stays intact), never throws on a bad body. Its doc-comment calls out the `Response`-is-not-the-body trap so it can't be reintroduced.
+- **Migrated ALL 12 consumers** onto it and DELETED the three duplicate `extractContent` helpers (QaGenerator, ArchitectAnalysis, SecurityReview): BrainService ×5 (agent reply loop + synthesis, chat/session summary, project-memory), gatewayJudge, cloudExecutor, businessValueAI, evermindTeacher, classifyTask, compactMessages, SecurityReviewService, taskPrd, legalDocsService, QaGeneratorService, ArchitectAnalysisService. (The dispatch-internal `extractAssistantContent` + cloud-loop `parseLlmChoice` operate on an already-parsed body — a different layer — and are left.)
+- **Bonus diagnostic**: the empty-turn message now includes the model's `finish_reason` (e.g. `length` ⇒ token budget spent with no text) so a genuinely-empty completion is self-describing.
+- **Regression coverage**: [readProxyChoice.test.ts](./api/src/application/llm/readProxyChoice.test.ts) pins body-parsing (vs reading off the Response), tool-only turns, `finish_reason`, non-JSON safety, and that the clone leaves the original body readable. Verified: `tsgo` 0 new errors; **1655 application + llm-routes tests pass** (two teacher/classifier mocks updated to return a real `Response` + spread the actual module so `readProxyChoice` stays real).
+
 ## ✅ RESOLVED 2026-07-05 — THE ROOT CAUSE: the connected account was buried BEHIND the free pool in the cascade composer, so it ran last/never (api `2026.7.51`)
 
 Found by driving the REAL proxy in a unit test (not more speculation, and not the live-API poking that preceded it — that only confirmed the token + request shape are valid, HTTP 200). The reproduction: build the proxy exactly as `BrainService.agentReply` does (free plan + connected `anthropicOAuthToken`, codingOnly, no explicit model) and assert the FIRST model dispatched. It was `minimax/…:free` — **`claude-opus-4-8` was never tried first**.
