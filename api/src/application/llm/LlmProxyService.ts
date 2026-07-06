@@ -1872,9 +1872,15 @@ export function llmProxyForPlan(
   env: ProxyEnv,
   effectivePlan: EffectivePlan,
   premiumOverride = false,
-  opts?: { backstopModels?: readonly string[]; disablePaidOverflow?: boolean; codingOnly?: boolean; anthropicOAuthToken?: string | null; tenantVendorKeys?: TenantVendorKeys | null },
+  opts?: { backstopModels?: readonly string[]; disablePaidOverflow?: boolean; codingOnly?: boolean; anthropicOAuthToken?: string | null; tenantVendorKeys?: TenantVendorKeys | null; vendorCallTimeoutMs?: number },
 ): LlmProxyService {
-  const { productName, modelPool, vendorCallTimeoutMs } = resolveRouting(effectivePlan, premiumOverride);
+  const routing = resolveRouting(effectivePlan, premiumOverride);
+  const { productName, modelPool } = routing;
+  // A caller may override the per-vendor timeout — used to lift the free plan's 15s
+  // fast-fail budget for a tenant's CONNECTED BYO account, whose (non-streaming) call
+  // is the primary path and worth waiting for (a frontier completion routinely exceeds
+  // 15s). Override wins over the plan-resolved value.
+  const vendorCallTimeoutMs = opts?.vendorCallTimeoutMs ?? routing.vendorCallTimeoutMs;
   // A CODING run restricts its failover cascade to the curated coding pool, so an
   // exhausted/failed primary escalates to the paid CODING backstop (deepseek-v4-flash)
   // — NOT to a random free non-coder (gemini-flash-lite) or a tool-unreliable vendor.
