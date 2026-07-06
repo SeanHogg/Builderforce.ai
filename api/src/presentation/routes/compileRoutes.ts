@@ -28,6 +28,7 @@ import { deploy, DEPLOY_SURFACES } from '../../application/deploy';
 import { deployAndDispatch, type CloudRunDispatcher } from '../../application/deploy/dispatch';
 import { dispatchCloudRunForTask } from './runtimeRoutes';
 import { ideProxy } from '../../application/llm/LlmProxyService';
+import { completeForTenant } from '../../application/llm/tenantProxy';
 import { MODALITIES } from '../../application/compile';
 
 /** A gateway-backed {@link LlmComplete} for the modality adapters (free pool). */
@@ -155,16 +156,18 @@ export function createCompileRoutes(db: Db, runtimeService: RuntimeService): Hon
 
     const sample = (typeof body.sample === 'string' && body.sample.trim()) || 'Briefly introduce yourself and what you can do for me.';
     try {
-      const result = await ideProxy(c.env).complete({
+      // The compiled agent's first real turn → run on the tenant's connected BYO
+      // account when present; the compiled `runInput.model` is honored only when it
+      // preempts the BYO seed (its own account), else the connected flagship leads.
+      const result = await completeForTenant(c.env, tenantId, {
         messages: [
           { role: 'system', content: plan.runInput.systemPrompt },
           { role: 'user', content: sample },
         ],
-        ...(plan.runInput.model ? { model: plan.runInput.model } : {}),
         temperature: plan.execParams.temperature ?? 0.5,
         max_tokens: 600,
         useCase: 'agent_compile_run',
-      });
+      }, { meterUseCase: 'agent_compile_run', explicitModel: plan.runInput.model });
       if (result.response.status >= 400) return c.json({ spec, plan, error: `gateway ${result.response.status}` }, 502);
       const raw = (await result.response.json().catch(() => null)) as
         | { choices?: Array<{ message?: { content?: unknown } }> }

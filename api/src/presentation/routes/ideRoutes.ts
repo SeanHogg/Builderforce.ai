@@ -25,6 +25,7 @@ import {
   ideProxy,
   type ChatCompletionRequest,
 } from '../../application/llm/LlmProxyService';
+import { tenantProxyForPlan } from '../../application/llm/tenantProxy';
 import {
   IDE_PREFIX,
   ensureProjectTemplate,
@@ -462,7 +463,9 @@ export function createIdeRoutes(): Hono<HonoEnv> {
             controller.close();
             return;
           }
-          const service = ideProxy(c.env);
+          // Dataset generation is the tenant's own training work → prefer their
+          // connected BYO account (connected flagship leads), else the operator pool.
+          const { proxy: service } = await tenantProxyForPlan(c.env, c.get('tenantId') as number);
           const systemPrompt = `You are an expert AI trainer. Generate instruction-tuning examples. Return ONLY a valid JSON array of objects: {"instruction":"...","input":"...","output":"..."}. No other text.`;
           const userPrompt = `Generate ${exampleCount} diverse examples for: ${body.capabilityPrompt}. Return ONLY the JSON array.`;
           const result = await service.complete({
@@ -828,7 +831,10 @@ export function createIdeRoutes(): Hono<HonoEnv> {
 
     const logId = generateId();
     const startMs = Date.now();
-    const service = ideProxy(c.env);
+    // Workforce/hired-agent inference is the tenant's agent doing its job → run on the
+    // tenant's connected BYO account when present (connected flagship leads), else the
+    // operator pool. No explicit model here, so complete() seeds the BYO flagship.
+    const { proxy: service } = await tenantProxyForPlan(c.env, c.get('tenantId') as number);
     let status = 'ok';
     let errorMessage: string | null = null;
     try {

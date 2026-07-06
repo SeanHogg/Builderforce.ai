@@ -68,7 +68,7 @@ const DEFAULT_LEGAL: Record<LegalDocType, Omit<LegalDocResponse, 'documentType'>
 export function stripMarkdownFence(raw: string): string {
   const s = raw.trim();
   const fence = /^```(?:markdown|md)?\s*\n([\s\S]*?)\n?```$/i.exec(s);
-  return (fence ? fence[1] : s).trim();
+  return (fence ? fence[1] ?? s : s).trim();
 }
 
 export async function getActiveLegalDoc(db: Db, documentType: LegalDocType): Promise<LegalDocResponse> {
