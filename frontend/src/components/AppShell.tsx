@@ -26,6 +26,9 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   // IDE/project pages force icon-only mode; otherwise the user's stored choice.
   const routeCollapsed = isProjectIdPage(pathname) || isIdePage(pathname);
   const { collapsed: navCollapsed, toggle: toggleNav } = useSidebarCollapse(routeCollapsed);
+  // Ensure sidebar is not collapsed when mobile menu is open
+  const isMobile = window.innerWidth <= 768;
+  const shouldCollapse = isMobile ? false : navCollapsed;
   const { open: navOpen, openNav, closeNav } = useMobileNav();
 
   return (
