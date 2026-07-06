@@ -9,6 +9,7 @@
  * json_object) so even a weak model yields a clean, structured finding list.
  */
 import { TenantAiService } from '../llm/tenantProxy';
+import { readProxyChoice } from '../llm/LlmProxyService';
 import { AgentAssignmentService } from '../agent/AgentAssignmentService';
 import { resolveAssignedAgent, type AgentKind } from '../swimlane/resolveAssignedAgent';
 import type { Env } from '../../env';
@@ -85,8 +86,7 @@ export class SecurityReviewService extends TenantAiService {
       useCase: 'security_review',
     }, { meterUseCase: 'security_review', explicitModel: preferredModel });
 
-    const raw = await result.response.json().catch(() => null);
-    const content = extractContent(raw);
+    const { content } = await readProxyChoice(result);
     const parsed = content ? safeParse(content) : null;
     const findings = normalizeFindings(parsed?.findings);
     const summary =
@@ -103,11 +103,6 @@ export class SecurityReviewService extends TenantAiService {
   }
 }
 
-function extractContent(raw: unknown): string | null {
-  const choice = (raw as { choices?: Array<{ message?: { content?: unknown } }> } | null)?.choices?.[0];
-  const content = choice?.message?.content;
-  return typeof content === 'string' ? content : null;
-}
 
 function safeParse(text: string): { summary?: unknown; findings?: unknown } | null {
   try {

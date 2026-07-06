@@ -9,7 +9,7 @@
  * backfill must always complete and never block the sweep on model availability.
  */
 import type { Env } from '../../env';
-import { ideProxy } from '../llm/LlmProxyService';
+import { ideProxy, readProxyChoice } from '../llm/LlmProxyService';
 import { deriveRiceScore, type ScoredValue } from './businessValue';
 
 const SYSTEM_PROMPT =
@@ -64,11 +64,8 @@ export async function scoreBusinessValueAI(
     });
 
     if (result.response.status >= 400) return null;
-    const raw = (await result.response.json().catch(() => null)) as
-      | { choices?: Array<{ message?: { content?: unknown } }> }
-      | null;
-    const content = raw?.choices?.[0]?.message?.content;
-    if (typeof content !== 'string') return null;
+    const { content } = await readProxyChoice(result);
+    if (!content) return null;
 
     let obj: Record<string, unknown>;
     try {

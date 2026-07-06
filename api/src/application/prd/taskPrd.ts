@@ -9,6 +9,7 @@
  */
 import { and, desc, eq } from 'drizzle-orm';
 import { completeForTenant } from '../llm/tenantProxy';
+import { readProxyChoice } from '../llm/LlmProxyService';
 import type { Env } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 import { specs, taskSpecs } from '../../infrastructure/database/schema';
@@ -53,10 +54,7 @@ export async function draftTaskPrd(
       useCase: 'prd_generation',
     }, { meterUseCase: 'prd_generation', explicitModel: model });
     if (gen.response.status < 400) {
-      const raw = await gen.response.json().catch(() => null);
-      const content = (raw as { choices?: Array<{ message?: { content?: unknown } }> } | null)
-        ?.choices?.[0]?.message?.content;
-      return stripPrdMarkdownFence(typeof content === 'string' ? content : '');
+      return stripPrdMarkdownFence((await readProxyChoice(gen)).content);
     }
   } catch { /* generation failed — caller treats '' as "no PRD" */ }
   return '';

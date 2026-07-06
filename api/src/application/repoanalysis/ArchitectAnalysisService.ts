@@ -10,7 +10,7 @@
  * out in each system prompt; output is parsed defensively and rendered into
  * deterministic Markdown so even a weak model produces a clean artifact.
  */
-import { ideProxy } from '../llm/LlmProxyService';
+import { ideProxy, readProxyChoice } from '../llm/LlmProxyService';
 import type { Env } from '../../env';
 import type {
   ArtifactKind,
@@ -294,8 +294,7 @@ export class ArchitectAnalysisService {
     if (result.response.status >= 400) {
       throw new ArtifactGenerationError(kind, `gateway returned ${result.response.status}`);
     }
-    const raw = await result.response.json().catch(() => null);
-    const content = extractContent(raw);
+    const { content } = await readProxyChoice(result);
     const json = content ? parseJsonObject(content) : null;
     if (!json) throw new ArtifactGenerationError(kind, 'model returned unparseable JSON');
     return { json, model: result.resolvedModel ?? null, tokens: result.usage?.totalTokens ?? 0 };
@@ -340,11 +339,6 @@ export class ArchitectAnalysisService {
 
 const VALID_MODALITY = new Set(['designer', 'architect', 'developer']);
 
-function extractContent(raw: unknown): string | null {
-  const choices = (raw as { choices?: Array<{ message?: { content?: unknown } }> } | null)?.choices;
-  const content = choices?.[0]?.message?.content;
-  return typeof content === 'string' ? content : null;
-}
 
 /** Strip ```...``` fences and parse the first balanced JSON object. */
 function parseJsonObject(content: string): Record<string, unknown> | null {
