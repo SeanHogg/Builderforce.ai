@@ -1036,7 +1036,10 @@ export class LlmProxyService {
     // vendor's operator key has 429'd its way into vendor cooldown. Per-model cooldown
     // still applies.
     const pinnedHint = seedHead.length > 0 ? seedHead[0] : undefined;
-    const candidates = this.buildCandidateChain(seed, cooledSet, cooledVendors, pinnedHint);
+    // Pass seedHead as the cascade HEAD so a deliberately-seeded connected-BYO flagship
+    // (or explicit pin) leads verbatim — otherwise a PREMIUM/ULTRA seed falls behind the
+    // free pool and the connected account is tried last (or never). See composeFreeCappedCascade.
+    const candidates = this.buildCandidateChain(seed, cooledSet, cooledVendors, pinnedHint, seedHead);
     if (candidates.length === 0) {
       // Every model in the seed + premium fallback list is on cooldown. The
       // guaranteed paid backstop (credited key) is the last chance before we
@@ -1235,9 +1238,11 @@ export class LlmProxyService {
     cooledSet: Set<string>,
     cooledVendors: Set<VendorId>,
     pinnedModel?: string,
+    head?: readonly string[],
   ): string[] {
     return composeFreeCappedCascade({
       seed,
+      ...(head && head.length ? { head } : {}),
       premiumFallback: this.premiumFallback,
       freeBudget: this.freeBudget,
       tierOf: tierForModel,
