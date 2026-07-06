@@ -272,7 +272,23 @@ function prepareAnthropicRequest(
   const req = toAnthropicRequest(params);
   // Subscription (OAuth) vs API key: decode the sentinel `apiKeyFrom` encoded.
   const isOAuth = params.apiKey.startsWith(OAUTH_APIKEY_PREFIX);
-  const credential = isOAuth ? params.apiKey.slice(OAUTH_APIKEY_PREFIX.length) : params.apiKey;
+  // TRIM the credential: an OAuth access token or api key that carries a stray
+  // newline / trailing whitespace (e.g. from a copy-paste or an over-eager store)
+  // makes `fetch()` throw `TypeError: invalid header value` SYNCHRONOUSLY — which the
+  // cascade records as a `code: 0` "network" failure with no HTTP status, the exact
+  // mystifying "connected account errored (no response)" symptom. Trimming kills that
+  // class outright; an empty credential is surfaced as a clear auth error below.
+  const credential = (isOAuth ? params.apiKey.slice(OAUTH_APIKEY_PREFIX.length) : params.apiKey).trim();
+  if (!credential) {
+    throw new VendorRetryableError(
+      'anthropic',
+      params.model,
+      401,
+      isOAuth
+        ? 'connected Claude subscription token is empty — reconnect it in Settings ▸ API Keys'
+        : 'CLAUDE_API_KEY is empty',
+    );
+  }
   const maxTokens = Math.min(Math.max(1, params.maxTokens ?? DEFAULT_MAX_TOKENS), MAX_OUTPUT_TOKENS);
   // Cache the large STABLE prefix (tools + system instructions/repo context) so a
   // multi-turn run pays ~0.1x for it after the first turn. `{type:'ephemeral'}` is the
