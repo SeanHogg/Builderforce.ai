@@ -24,6 +24,7 @@
 import {
   llmProxyForPlan,
   CODING_BACKSTOP_MODELS,
+  PREMIUM_VENDOR_CALL_TIMEOUT_MS,
   explicitModelPreemptsByo,
   type LlmProxyService,
   type ChatCompletionRequest,
@@ -85,14 +86,20 @@ export async function tenantProxyForPlan(
     })),
   ]);
 
+  const byoVendors = byoVendorIdSet(providersFromCredentials(creds));
+
   const proxy = llmProxyForPlan(env, plan.effectivePlan, plan.premiumOverride, {
     ...(opts?.codingOnly ? { codingOnly: true, backstopModels: CODING_BACKSTOP_MODELS } : {}),
     ...(opts?.disablePaidOverflow ? { disablePaidOverflow: true } : {}),
     ...(creds.anthropicOAuthToken ? { anthropicOAuthToken: creds.anthropicOAuthToken } : {}),
     ...(hasVendorKeys(creds.vendorKeys) ? { tenantVendorKeys: creds.vendorKeys } : {}),
+    // A connected BYO account is the PRIMARY path — lift the free plan's 15s fast-fail
+    // budget so a (non-streaming) frontier completion on the tenant's own account isn't
+    // aborted (`code 0 / no response`) and silently cascaded to the shared pool.
+    ...(byoVendors.size > 0 ? { vendorCallTimeoutMs: PREMIUM_VENDOR_CALL_TIMEOUT_MS } : {}),
   });
 
-  return { proxy, byoVendors: byoVendorIdSet(providersFromCredentials(creds)) };
+  return { proxy, byoVendors };
 }
 
 /**

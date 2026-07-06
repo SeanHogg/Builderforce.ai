@@ -12,6 +12,17 @@ A Kanban board tells you *what* is happening. A face-to-face conversation tells 
 
 > Builderforce.ai runs live video meetings over mesh WebRTC directly on your project board: cameras in standups and retros, ad-hoc and direct calls, a bookable team calendar with per-user availability, and Google/Microsoft calendar sync — joinable from the web or inside VS Code, with media flowing peer-to-peer and never through the server.
 
+![Three peers connected in a WebRTC mesh exchanging audio and video directly; the server relays only signaling and STUN, so media never passes through it](/blog/meetings-webrtc-mesh.svg)
+
+## Meeting types at a glance
+
+| Type | When you use it | Who can start it |
+| --- | --- | --- |
+| **Standup / Planning / Retro** | Recurring ceremonies, with cameras on the round-table | Manager turns on cameras; any member joins |
+| **Ad-hoc** | A quick, unplanned sync | Anyone |
+| **Direct** | A one-to-one call | Anyone |
+| **Scheduled** | Booked ahead, mirrored to calendars as invites | Organizer |
+
 ## Cameras on the round-table
 
 Builderforce already runs ceremonies — standups, planning, retrospectives — as a structured round-table anchored to the project. Now those ceremonies can turn on **cameras and microphones**. A manager can start video for the whole team, or anyone can flip on "Join with camera" to add themselves to a live gallery over the standup. Because the meeting lives on the ceremony, everyone is looking at the same board while they talk.
@@ -32,6 +43,8 @@ Meetings are only useful at a time people can actually make. Builderforce adds a
 - Click an open slot to book, click a meeting to join.
 
 Set your **weekly working-hours windows and timezone** once, and the **"Find a time"** solver proposes slots where *every* invitee is free — no conflicting meeting, and inside each person's own working windows, computed timezone-correct. No more email ping-pong to find a slot.
+
+![A week grid across timezones showing three people's working-hour windows and busy blocks, with the solver highlighting the one slot where everyone is free](/blog/meetings-find-a-time.svg)
 
 ## Bring your own calendar
 

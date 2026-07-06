@@ -14,6 +14,17 @@ Most "AI coding" tools are single-player. One developer, one editor, one agent, 
 
 Collaboration here isn't a chat widget bolted onto a code tool. It's four connected surfaces that all read and write the same project state.
 
+![Four collaboration surfaces — shared board, team chat, live meetings, and shared calendar — arranged around one shared system of record where humans and agents are teammates](/blog/collab-four-surfaces.svg)
+
+| Surface | What it's for | The collaboration twist |
+| --- | --- | --- |
+| **Shared board** | Plan, assign, and track work | Humans and agents are equal assignees on the same swimlanes |
+| **Team chat** | Talk it through | Threads are shared; address a message to a person *or* an `@agent` |
+| **Live meetings** | See and hear each other | WebRTC standups and retros, cameras on the round-table |
+| **Shared calendar** | Agree on a time | Per-user availability + "Find a time" across timezones |
+
+Every one of these reads and writes the *same* project state — so a decision in a meeting, a message in chat, and a ticket on the board are never stranded in separate tools.
+
 ## 1. A shared board where humans and agents are teammates
 
 The foundation is a Kanban board that treats a person and an agent identically — both are first-class assignees. Drag a ticket into an agent's swimlane and it runs autonomously; assign it to a colleague and they pick it up. Swimlanes can require the right reviewer before a ticket advances, and every "Done" carries a sign-off audit. The board is the single place work lives, so collaboration always has a subject: a real ticket, not a lost Slack message.
@@ -24,6 +35,8 @@ Chat threads are **global to their project and tenant**, so a teammate can see, 
 
 - Direct a message to a **human** and it just talks to them — the agent loop stays idle.
 - Direct a message to an **`@agent`** and that agent actually replies *as itself*, running a bounded, permission-scoped tool loop to create a task, update an OKR, or read the board — never exceeding your own access.
+
+![A message in the composer splits into two lanes: addressed to a human it is delivered person-to-person and the agent loop stays idle; addressed to an @agent it triggers a permission-scoped tool loop that acts on the board](/blog/collab-message-routing.svg)
 
 It's the difference between a chatbot and a group chat where some of the members happen to be AI.
 

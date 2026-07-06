@@ -12,7 +12,18 @@ Developers live in their editor. So instead of asking you to leave it, Builderfo
 
 > The BuilderForce VS Code extension runs the whole platform in your editor: multi-party team chat, live session status, native video meetings, an Evermind training console, project and task trees, and human-in-the-loop approvals — so you manage an entire agentic workforce without leaving VS Code.
 
-Here's what the sidebar gives you.
+![The BuilderForce VS Code sidebar showing its surfaces — Sessions team chat, Project & Tasks with live status, Meetings, Evermind, Inbox approvals, and Insights — beside an editor pane listing the governance guarantees](/blog/vscode-command-center.svg)
+
+Here's what each sidebar surface gives you.
+
+| Sidebar surface | What it does |
+| --- | --- |
+| **Sessions** | Multi-party team chat — humans + `@agents`, directed messages, avatars |
+| **Project & Tasks** | Your board and assigned work, with a live status overlay per row |
+| **Meetings** | Upcoming and live calls — join in browser or natively in a webview |
+| **Evermind** | Inspect and train your project's self-updating model |
+| **Inbox** | Human-in-the-loop approvals and decisions |
+| **Insights & Diagnostics** | The operating picture and one-click scans |
 
 ## See what needs you — at a glance
 
@@ -21,6 +32,8 @@ When you're running several agents at once, the hardest question is "which one n
 - **Executing** — a blue spinner: the agent is actively working (and it keeps working even when you switch chats).
 - **Needs your answer** — an amber marker with a `❓`: the run paused on a question and is waiting for you.
 - **Done** — a green check.
+
+![Three live-status rows — a blue spinner for executing, an amber question mark for needs-your-answer, and a green check for done — the one signal that follows a session across every surface](/blog/vscode-live-status.svg)
 
 The status follows a session wherever it's shown, so multitasking across concurrent runs reads instantly.
 

@@ -1,0 +1,70 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900">
+  <defs>
+    <radialGradient id="bgGlow" cx="50%" cy="0%" r="120%">
+      <stop offset="0%" stop-color="#1B1F46"/>
+      <stop offset="55%" stop-color="#13152F"/>
+      <stop offset="100%" stop-color="#0A0B1E"/>
+    </radialGradient>
+    <linearGradient id="violetGrad" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#A98BFF"/><stop offset="100%" stop-color="#6A4DF0"/>
+    </linearGradient>
+    <linearGradient id="mintGrad" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#5BF0BC"/><stop offset="100%" stop-color="#23B987"/>
+    </linearGradient>
+    <linearGradient id="hairline" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="rgba(139,108,255,0)"/>
+      <stop offset="50%" stop-color="rgba(139,108,255,0.55)"/>
+      <stop offset="100%" stop-color="rgba(61,214,245,0)"/>
+    </linearGradient>
+  </defs>
+  <rect width="1600" height="900" fill="url(#bgGlow)"/>
+
+  <text x="80" y="92" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="20" letter-spacing="3" font-weight="700" fill="#5BF0BC">FIND A TIME</text>
+  <text x="80" y="146" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="46" font-weight="800" fill="#EEF0FA">A slot where everyone is genuinely free</text>
+  <rect x="82" y="170" width="120" height="4" rx="2" fill="url(#hairline)"/>
+
+  <!-- hour axis -->
+  <g font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="18" fill="#8891AE">
+    <text x="360" y="250">9</text><text x="510" y="250">10</text><text x="660" y="250">11</text><text x="810" y="250">12</text><text x="960" y="250">1</text><text x="1110" y="250">2</text><text x="1260" y="250">3</text><text x="1410" y="250">4</text>
+  </g>
+  <g stroke="rgba(255,255,255,0.06)" stroke-width="1">
+    <line x1="360" y1="270" x2="360" y2="640"/><line x1="510" y1="270" x2="510" y2="640"/><line x1="660" y1="270" x2="660" y2="640"/><line x1="810" y1="270" x2="810" y2="640"/><line x1="960" y1="270" x2="960" y2="640"/><line x1="1110" y1="270" x2="1110" y2="640"/><line x1="1260" y1="270" x2="1260" y2="640"/><line x1="1410" y1="270" x2="1410" y2="640"/>
+  </g>
+
+  <!-- Person rows: label + availability window (light) + busy blocks (filled) -->
+  <!-- Person A -->
+  <text x="120" y="312" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="22" font-weight="700" fill="#EEF0FA">Ana · UTC+1</text>
+  <rect x="360" y="288" width="900" height="44" rx="10" fill="rgba(91,240,188,0.10)" stroke="rgba(91,240,188,0.30)"/>
+  <rect x="360" y="288" width="150" height="44" rx="8" fill="rgba(255,143,122,0.55)"/>
+  <rect x="960" y="288" width="150" height="44" rx="8" fill="rgba(255,143,122,0.55)"/>
+
+  <!-- Person B -->
+  <text x="120" y="402" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="22" font-weight="700" fill="#EEF0FA">Ben · UTC-5</text>
+  <rect x="510" y="378" width="900" height="44" rx="10" fill="rgba(91,240,188,0.10)" stroke="rgba(91,240,188,0.30)"/>
+  <rect x="1110" y="378" width="150" height="44" rx="8" fill="rgba(255,143,122,0.55)"/>
+
+  <!-- Person C -->
+  <text x="120" y="492" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="22" font-weight="700" fill="#EEF0FA">Cai · UTC+8</text>
+  <rect x="360" y="468" width="750" height="44" rx="10" fill="rgba(91,240,188,0.10)" stroke="rgba(91,240,188,0.30)"/>
+  <rect x="660" y="468" width="150" height="44" rx="8" fill="rgba(255,143,122,0.55)"/>
+
+  <!-- suggested slot -->
+  <rect x="810" y="270" width="150" height="330" rx="12" fill="rgba(91,240,188,0.16)" stroke="url(#mintGrad)" stroke-width="3"/>
+  <text x="885" y="560" text-anchor="middle" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="19" font-weight="800" fill="#5BF0BC">Proposed</text>
+
+  <!-- legend -->
+  <g font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="19" fill="#A6ADC8">
+    <rect x="360" y="660" width="30" height="20" rx="5" fill="rgba(91,240,188,0.10)" stroke="rgba(91,240,188,0.30)"/><text x="402" y="677">Working hours (their timezone)</text>
+    <rect x="820" y="660" width="30" height="20" rx="5" fill="rgba(255,143,122,0.55)"/><text x="862" y="677">Busy — existing meeting</text>
+    <rect x="1160" y="660" width="30" height="20" rx="5" fill="rgba(91,240,188,0.16)" stroke="url(#mintGrad)"/><text x="1202" y="677">Everyone free</text>
+  </g>
+
+  <rect x="120" y="740" width="1360" height="70" rx="16" fill="rgba(169,139,255,0.08)" stroke="rgba(169,139,255,0.35)"/>
+  <text x="150" y="783" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="22" fill="#EEF0FA">✔ The solver proposes only slots inside <tspan font-weight="800" fill="#A98BFF">every invitee's own working windows</tspan> — computed timezone-correct.</text>
+
+  <g opacity="0.85">
+    <circle cx="1336" cy="852" r="9" fill="url(#violetGrad)"/>
+    <text x="1354" y="859" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="20" font-weight="700" fill="#A6ADC8">Builderforce.ai</text>
+  </g>
+  <text x="80" y="858" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="17" fill="#717892">No email ping-pong to schedule</text>
+</svg>

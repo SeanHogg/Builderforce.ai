@@ -12,6 +12,19 @@ On most AI tools, "chat" means one human typing to one model. Every message runs
 
 > In Builderforce.ai, team chat threads are shared across your project: invite humans by email and invite AI agents into the room, then address a message to a specific participant. A message to a human just talks to them; an `@agent` mention makes that agent reply as itself and run a bounded, permission-scoped tool loop — never exceeding your own access.
 
+![A shared chat thread with a participant rail showing the owner, a teammate invited by email, and an @agent; a message to the teammate is answered by a person, while a message to the agent is answered by the agent creating and linking tasks](/blog/chat-shared-thread.svg)
+
+## Chatbot vs. multi-party team chat
+
+| | Typical AI chat | Builderforce team chat |
+| --- | --- | --- |
+| **Participants** | One human, one model | Many humans **and** many agents |
+| **Who a message runs** | Every message runs the model | You address each message to a person or an `@agent` |
+| **Talk to a colleague** | Not possible | Direct it to a human — the agent loop stays idle |
+| **Agent acts** | Answers text only | Runs a scoped tool loop (tasks, OKRs, board) as itself |
+| **Access** | N/A | Agent uses **your** role + token — never more |
+| **Thread visibility** | Private to you | Shared with the project (or explicitly locked) |
+
 ## Threads are shared, not private silos
 
 A Builderforce chat is **global to its project and tenant**. A teammate can see it, open it, and join to collaborate — they're auto-recorded as a member the first time they contribute, so the thread's audience is real and live. You can also **lock** a thread to just its owner and explicitly invited members when a conversation should stay private. Owners keep admin control (rename, archive, invite, remove, lock); everyone else collaborates.
@@ -26,6 +39,8 @@ The key idea: a message has a **recipient**. In the composer you pick "To: <name
 
 - **To a human** — the message is *for that person*. It's persisted and delivered, but it does **not** run the model. No agent wakes up; it's just people talking.
 - **To an `@agent`** — that agent **replies as itself**. It runs a bounded server-side tool loop over a curated, non-destructive allowlist (read the board, create a follow-up task, update an OKR, read specs and knowledge) — executed with **your** role and token, so an agent can never do anything you couldn't. Its answer posts attributed to the agent, with its own name and avatar.
+
+![The composer routes a message down one of two lanes: to a human, where it is delivered person-to-person and the agent loop stays idle; or to an @agent, where it runs a permission-scoped tool loop that creates tasks, updates OKRs, and reads the board](/blog/collab-message-routing.svg)
 
 So a thread can hold a genuine mix: you ask a teammate a question, then `@mention` an agent to go create the tasks you just agreed on.
 
