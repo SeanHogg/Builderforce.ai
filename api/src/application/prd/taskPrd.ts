@@ -8,7 +8,7 @@
  * primary PRD (the canonical one the agent reads/writes for that task).
  */
 import { and, desc, eq } from 'drizzle-orm';
-import { ideProxy } from '../llm/LlmProxyService';
+import { completeForTenant } from '../llm/tenantProxy';
 import type { Env } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 import { specs, taskSpecs } from '../../infrastructure/database/schema';
@@ -35,21 +35,23 @@ export function stripPrdMarkdownFence(content: string): string {
   return m ? (m[2] ?? '').trim() : text;
 }
 
-/** Draft a PRD body for a task via the gateway. Returns trimmed markdown, or '' on failure. Never throws. */
+/** Draft a PRD body for a task via the gateway, on the tenant's connected BYO account
+ *  when they have one (the compiled/agent `model` is honored only when it preempts the
+ *  BYO seed). Returns trimmed markdown, or '' on failure. Never throws. */
 export async function draftTaskPrd(
   env: Env,
+  tenantId: number,
   task: { title: string; description: string | null },
   model?: string,
 ): Promise<string> {
   try {
-    const gen = await ideProxy(env).complete({
+    const gen = await completeForTenant(env, tenantId, {
       messages: [
         { role: 'system', content: PRD_SYSTEM_PROMPT },
         { role: 'user', content: `Task: ${task.title}\n\n${task.description ?? ''}`.trim() },
       ],
-      ...(model ? { model } : {}),
       useCase: 'prd_generation',
-    });
+    }, { meterUseCase: 'prd_generation', explicitModel: model });
     if (gen.response.status < 400) {
       const raw = await gen.response.json().catch(() => null);
       const content = (raw as { choices?: Array<{ message?: { content?: unknown } }> } | null)
@@ -157,7 +159,7 @@ export async function ensureTaskPrdRecord(
   const existing = await findTaskPrimarySpec(db, args.taskId);
   if (existing?.prd?.trim()) return { specId: existing.id, prd: existing.prd.trim(), status: 'reused' };
 
-  const body = await draftTaskPrd(env, { title: args.title, description: args.description }, args.model);
+  const body = await draftTaskPrd(env, args.tenantId, { title: args.title, description: args.description }, args.model);
   if (!body) return null;
   const prd = buildPrdWithAttribution(body, args.agentLabel, args.taskId);
 

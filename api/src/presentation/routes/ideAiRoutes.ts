@@ -9,6 +9,7 @@ import type { HonoEnv } from '../../env';
 import type { ProjectService } from '../../application/project/ProjectService';
 import { authMiddleware } from '../middleware/authMiddleware';
 import { ideProxy, newTraceId } from '../../application/llm/LlmProxyService';
+import { tenantProxyForPlan } from '../../application/llm/tenantProxy';
 import { logTrace } from '../../application/llm/traceLogger';
 
 const IDE_PREFIX = 'ide/';
@@ -101,7 +102,14 @@ export function createIdeAiRoutes(projectService: ProjectService): Hono<HonoEnv>
 
     const traceId = newTraceId();
     const requestBody = { messages, stream: true } as const;
-    const result = await ideProxy(c.env).complete(requestBody, undefined, traceId);
+    // Tenant-facing IDE assistant chat → run on the tenant's connected BYO account when
+    // they have one (the connected flagship leads; plain chat → Sonnet for Anthropic),
+    // falling back to the operator pool otherwise. Not a tool loop, so no codingOnly.
+    const ideChatTenantId = c.get('tenantId');
+    const { proxy: ideChatProxy } = ideChatTenantId != null
+      ? await tenantProxyForPlan(c.env, ideChatTenantId)
+      : { proxy: ideProxy(c.env) };
+    const result = await ideChatProxy.complete(requestBody, undefined, traceId);
 
     // Full diagnostic trace (builder-side only). Surface is `ide-chat` so the
     // superadmin trace view can tell in-IDE assistant calls apart from gateway

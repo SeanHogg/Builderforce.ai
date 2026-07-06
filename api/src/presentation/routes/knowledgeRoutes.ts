@@ -31,6 +31,7 @@ import {
   bumpCacheVersion,
 } from '../../infrastructure/cache/readThroughCache';
 import { ideProxy, newTraceId } from '../../application/llm/LlmProxyService';
+import { tenantProxyForPlan } from '../../application/llm/tenantProxy';
 import { logTrace } from '../../application/llm/traceLogger';
 import {
   notifyCollaboratorInvited,
@@ -949,9 +950,12 @@ export function createKnowledgeRoutes(db: Db): Hono<HonoEnv> {
       temperature: 0.6,
     };
 
+    // Knowledge authoring is the tenant's own doc work → prefer their connected BYO
+    // account (connected flagship leads), else the operator pool.
+    const { proxy: draftProxy } = await tenantProxyForPlan(c.env, c.get('tenantId') as number);
     let result;
     try {
-      result = await ideProxy(c.env).complete(requestBody, undefined, traceId);
+      result = await draftProxy.complete(requestBody, undefined, traceId);
     } catch (err) {
       return c.json({ error: err instanceof Error ? err.message : 'AI generation failed' }, 502);
     }
@@ -1015,9 +1019,11 @@ export function createKnowledgeRoutes(db: Db): Hono<HonoEnv> {
       temperature: 0.4,
     };
 
+    // Document analysis is the tenant's own doc work → prefer their connected BYO account.
+    const { proxy: analyzeProxy } = await tenantProxyForPlan(c.env, c.get('tenantId') as number);
     let result;
     try {
-      result = await ideProxy(c.env).complete(requestBody, undefined, traceId);
+      result = await analyzeProxy.complete(requestBody, undefined, traceId);
     } catch (err) {
       return c.json({ error: err instanceof Error ? err.message : 'Analysis failed' }, 502);
     }

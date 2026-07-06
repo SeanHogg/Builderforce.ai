@@ -28,6 +28,7 @@ import { and, eq, inArray } from 'drizzle-orm';
 import { buildDatabase } from '../../infrastructure/database/connection';
 import { workflows, workflowTasks } from '../../infrastructure/database/schema';
 import { ideProxy } from '../llm/LlmProxyService';
+import { tenantProxyForPlan, byoAwareModel } from '../llm/tenantProxy';
 import { recordProxyUsage } from '../llm/usageLedger';
 import { contextFromInput, evaluateBool, renderTransform } from '../../domain/workflowExpr';
 import type { ProxyEnv } from '../llm/LlmProxyService';
@@ -86,9 +87,17 @@ async function executeCloudNode(env: CloudExecutorEnv, node: NodeInput, inputTex
         ...(system ? [{ role: 'system' as const, content: renderTemplate(system, inputText) }] : []),
         { role: 'user' as const, content: renderTemplate(prompt || '{{input}}', inputText) },
       ];
-      const proxy = ideProxy(env);
+      // The tenant's workflow LLM node → run on their connected BYO account when they
+      // have one; the node's configured `cfg.model` is a deliberate choice, so it's
+      // honored only when it preempts the BYO seed (nothing connected, or it's on their
+      // own account) — otherwise the connected flagship leads. Without a tenant (should
+      // not happen for a real workflow) fall back to the operator pool.
+      const nodeModel = typeof cfg.model === 'string' ? cfg.model : undefined;
+      const { proxy, byoVendors } = usageCtx
+        ? await tenantProxyForPlan(env as unknown as Env, usageCtx.tenantId)
+        : { proxy: ideProxy(env), byoVendors: new Set<string>() };
       const result = await proxy.complete({
-        model: typeof cfg.model === 'string' ? cfg.model : undefined,
+        model: byoAwareModel(nodeModel, byoVendors),
         messages,
         ...(typeof cfg.temperature === 'number' ? { temperature: cfg.temperature } : {}),
       });

@@ -13,8 +13,7 @@
  */
 
 import { ideProxy } from '../llm/LlmProxyService';
-import { recordProxyUsage } from '../llm/usageLedger';
-import { buildDatabase } from '../../infrastructure/database/connection';
+import { TenantAiService } from '../llm/tenantProxy';
 import type { Env } from '../../env';
 import type { QaStep } from './qaTypes';
 
@@ -166,8 +165,10 @@ export function fallbackSpec(input: GenerateInput): string {
   return lines.join('\n');
 }
 
-export class QaGeneratorService {
-  constructor(private readonly env: Env, private readonly tenantId?: number) {}
+export class QaGeneratorService extends TenantAiService {
+  constructor(private readonly env: Env, private readonly tenantId?: number) {
+    super(env);
+  }
 
   async generate(input: GenerateInput): Promise<GenerateResult> {
     // No LLM key configured → deterministic spec, no model.
@@ -189,26 +190,22 @@ export class QaGeneratorService {
       `Write the Playwright smoke test for this flow.`;
 
     try {
-      const result = await ideProxy(this.env).complete({
+      const request = {
         messages: [
-          { role: 'system', content: SYSTEM_PROMPT },
-          { role: 'user', content: userPrompt },
+          { role: 'system' as const, content: SYSTEM_PROMPT },
+          { role: 'user' as const, content: userPrompt },
         ],
         temperature: 0.2,
         max_tokens: 2000,
-        response_format: { type: 'json_object' },
+        response_format: { type: 'json_object' as const },
         useCase: 'qa_test_generation',
-      });
-
-      // Record this background generation in the usage ledger [1310] (best-effort,
-      // no-ops without a tenantId or usage). Was previously invisible to billing.
-      if (this.tenantId != null) {
-        void recordProxyUsage(buildDatabase(this.env), this.env, {
-          tenantId: this.tenantId,
-          useCase: 'qa_test_generation',
-          result,
-        });
-      }
+      };
+      // The tenant's own QA generation → base class runs it on their connected BYO
+      // account + meters usage. Without a tenant (should not happen in the product
+      // path) fall back to the operator pool.
+      const result = this.tenantId != null
+        ? await this.completeForTenant(this.tenantId, request, { meterUseCase: 'qa_test_generation' })
+        : await ideProxy(this.env).complete(request);
 
       if (result.response.status >= 400) {
         return { spec: fallbackSpec(input), steps: input.steps, model: result.resolvedModel ?? null };

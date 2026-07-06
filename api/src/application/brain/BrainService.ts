@@ -13,16 +13,13 @@ import {
   users,
   tenantMembers,
   tenantInvitations,
-  tenants,
 } from '../../infrastructure/database/schema';
-import { ideProxy, llmProxyForPlan, CODING_BACKSTOP_MODELS, explicitModelPreemptsByo } from '../llm/LlmProxyService';
-import { resolveTenantLlmCredentials, byoVendorIdSet, providersFromCredentials } from '../llm/tenantProviderKeyService';
+import { ideProxy, explicitModelPreemptsByo } from '../llm/LlmProxyService';
+import { tenantProxyForPlan } from '../llm/tenantProxy';
 import { vendorForModel } from '../llm/vendors';
 import { recordProxyUsage } from '../llm/usageLedger';
 import { resolveWorkforceModel, WORKFORCE_MODEL_REF_PREFIX } from '../agent/agentPrompt';
 import { listBuiltinTools, callBuiltinTool, CLOUD_AGENT_PLATFORM_TOOLS } from '../llm/builtinMcpService';
-import { resolveEffectivePlan } from '../../domain/tenant/effectivePlan';
-import { TenantPlan, TenantBillingStatus } from '../../domain/shared/types';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 
@@ -261,36 +258,6 @@ export class BrainService {
   // single-vendor on purpose.
   private buildLlmService(apiKey: string) {
     return ideProxy({ OPENROUTER_API_KEY: apiKey });
-  }
-
-  /** Resolve a tenant's effective plan + premium override for gateway routing —
-   *  the SAME derivation the LLM gateway uses (`resolveTenantPlan`), but from this
-   *  service's db so an addressed-agent run picks the tenant's real plan pool.
-   *  Best-effort: any failure degrades to the free plan (never blocks the reply). */
-  private async resolveTenantRouting(
-    tenantId: number,
-  ): Promise<{ effectivePlan: 'free' | 'pro' | 'teams'; premiumOverride: boolean }> {
-    try {
-      const [row] = await this.db
-        .select({
-          plan: tenants.plan,
-          billingStatus: tenants.billingStatus,
-          trialEndsAt: tenants.trialEndsAt,
-          premiumOverride: tenants.premiumOverride,
-        })
-        .from(tenants)
-        .where(eq(tenants.id, tenantId))
-        .limit(1);
-      if (!row) return { effectivePlan: 'free', premiumOverride: false };
-      const effectivePlan = resolveEffectivePlan({
-        plan: (row.plan ?? 'free') as TenantPlan,
-        billingStatus: (row.billingStatus ?? 'none') as TenantBillingStatus,
-        trialEndsAt: row.trialEndsAt ?? null,
-      }) as 'free' | 'pro' | 'teams';
-      return { effectivePlan, premiumOverride: row.premiumOverride === true };
-    } catch {
-      return { effectivePlan: 'free', premiumOverride: false };
-    }
   }
 
   /** Record a Brain summarization call in the usage ledger [1310] (best-effort,
@@ -763,36 +730,33 @@ export class BrainService {
       { role: 'user', content: `Conversation so far:\n\n${transcript}` },
     ];
 
-    // Run the addressed agent on the TENANT's OWN connected frontier account when
-    // they have one (BYO Claude subscription / api-key), leading the same BYO-first
-    // auto-select the Brain chat uses — NOT a weak operator-key model that returns
-    // empty turns. This is an agentic tool turn, so failover is restricted to the
-    // curated coding pool (with the paid coding backstop), never a lite non-coder.
-    const [{ effectivePlan, premiumOverride }, byo] = await Promise.all([
-      this.resolveTenantRouting(tenantId),
-      resolveTenantLlmCredentials(env, tenantId).catch(() => ({ anthropicOAuthToken: null, vendorKeys: {} as Record<string, string> })),
-    ]);
-    const service = llmProxyForPlan(env, effectivePlan, premiumOverride, {
-      codingOnly: true,
-      backstopModels: CODING_BACKSTOP_MODELS,
-      anthropicOAuthToken: byo.anthropicOAuthToken,
-      tenantVendorKeys: byo.vendorKeys,
-    });
+    // ONE builder: the tenant's connected frontier account (BYO Claude subscription /
+    // api-key) threaded + plan resolved together, so the addressed agent runs on the
+    // tenant's OWN account when they have one — NOT a weak operator-key model that
+    // empty-turns. `codingOnly` restricts failover to the curated coding pool + paid
+    // coding backstop (agentic tool turn), never a lite non-coder.
+    const { proxy: service, byoVendors } = await tenantProxyForPlan(env, tenantId, { codingOnly: true });
     // The tenant's connected account beats a weak/default agent base model. Honor an
-    // explicit base model ONLY when it's a real choice the tenant funds — the tenant
-    // has no connected account, OR the base model is itself served by a connected BYO
-    // vendor. Otherwise leave the model unset so complete() seeds the tenant's BYO
-    // flagship (Opus for this agentic turn) instead of a free operator-keyed coder
-    // (e.g. a default `@cf/*` model) that returns empty turns and never touches the
-    // connected account — the exact bug where a connected Claude subscription still ran
-    // Ada on `@cf/qwen/...`.
-    const byoVendors = byoVendorIdSet(providersFromCredentials({
-      anthropicOAuthToken: byo.anthropicOAuthToken,
-      vendorKeys: byo.vendorKeys,
-    }));
+    // explicit base model ONLY when it preempts the BYO seed — the tenant has no
+    // connected account, OR the base model is itself served by a connected BYO vendor.
+    // Otherwise leave the model unset so complete() seeds the tenant's BYO flagship
+    // (Opus for this agentic turn) instead of a free operator-keyed coder (e.g. a default
+    // `@cf/*` model) that returns empty turns and never touches the connected account —
+    // the exact bug where a connected Claude subscription still ran Ada on `@cf/qwen/...`.
     const baseModel = resolved?.baseModel ?? undefined;
     const pinnedModel = explicitModelPreemptsByo(baseModel, byoVendors) ? baseModel : undefined;
     const readModel = (r: unknown): string => (r as { resolvedModel?: string } | undefined)?.resolvedModel ?? '';
+
+    // Track the connected-account attempt's failure so a silent cascade off the tenant's
+    // OWN account is SURFACED (e.g. an expired subscription token 401s → the run falls to
+    // a weak coder that empty-turns). The proxy records each failed attempt in
+    // `failovers` with its vendor + upstream status; capture the one on a connected vendor.
+    let byoFailure: { vendor: string; code: number } | null = null;
+    const noteByoFailure = (r: unknown): void => {
+      const failovers = (r as { failovers?: Array<{ vendor?: string; code?: number }> } | undefined)?.failovers;
+      const f = failovers?.find((x) => x.vendor && byoVendors.has(x.vendor));
+      if (f?.vendor) byoFailure = { vendor: f.vendor, code: f.code ?? 0 };
+    };
 
     const MAX_ITERS = 6;
     let text = '';
@@ -810,6 +774,7 @@ export class BrainService {
       });
       this.recordUsage(apiKey, tenantId, 'brain_agent_reply', result);
       lastModel = readModel(result) || lastModel;
+      noteByoFailure(result);
       const message = (result.response as { choices?: Array<{ message?: { content?: string; tool_calls?: Array<{ id: string; function: { name: string; arguments?: string } }> } }> } | undefined)
         ?.choices?.[0]?.message;
       const toolCalls = message?.tool_calls ?? [];
@@ -850,6 +815,7 @@ export class BrainService {
       });
       this.recordUsage(apiKey, tenantId, 'brain_agent_reply', finalResult);
       lastModel = readModel(finalResult) || lastModel;
+      noteByoFailure(finalResult);
       text = (finalResult.response as { choices?: Array<{ message?: { content?: string } }> } | undefined)
         ?.choices?.[0]?.message?.content?.trim() ?? '';
     }
@@ -874,8 +840,16 @@ export class BrainService {
       const toolNote = toolCallCount
         ? ` after ${toolCallCount} tool call${toolCallCount === 1 ? '' : 's'} over ${iterations} step${iterations === 1 ? '' : 's'}`
         : '';
+      // If the connected account was TRIED and failed (cascading to the shared pool),
+      // say so with its status — an expired/revoked subscription 401s, a bad request
+      // 400s. This turns a mystifying "empty reply" into a fix ("reconnect your Claude
+      // account"). `byoFailure` is null when the connected account served fine (or none).
+      const bf = byoFailure as { vendor: string; code: number } | null;
+      const byoNote = bf
+        ? ` Your connected ${bf.vendor === 'anthropic' ? 'Claude' : bf.vendor === 'openai' ? 'OpenAI' : bf.vendor === 'googleai' ? 'Google' : bf.vendor} account was tried first but errored (${bf.code || 'no response'})${bf.code === 401 || bf.code === 403 ? ' — the token looks expired or revoked; reconnect it in Settings ▸ API Keys' : ''}, so the run fell back to the shared pool.`
+        : '';
       return {
-        error: `${agentName} ran on ${via}${modelNote} but produced no reply${toolNote}. The model returned an empty turn — this usually clears on a retry. If it persists, set a stronger base model for this agent in Workforce, or confirm your connected account is active.` as const,
+        error: `${agentName} ran on ${via}${modelNote} but produced no reply${toolNote}.${byoNote} The model returned an empty turn — this usually clears on a retry. If it persists, set a stronger base model for this agent in Workforce, or confirm your connected account is active.` as const,
       };
     }
 
