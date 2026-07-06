@@ -2,6 +2,10 @@
 
 All notable changes to the BuilderForce VS Code extension are documented here.
 
+## [2026.7.43] — Answer the assistant's questions with a click
+
+- **When the assistant needs a decision, it now asks with buttons.** Previously, when the assistant needed you to choose — who owns this initiative, which approach to take, create under project X or a new one — it buried the question in a paragraph and you had to re-type the answer, which the chat couldn't reliably interpret. Now those questions render as a clean card with clickable options (single-choice sends on click; multi-choice lets you tick several and hit Send). Your pick posts straight back as your next message, so the conversation keeps moving without ambiguity.
+
 ## [2026.7.42] — The assistant can find your code again (no more search dead-ends)
 
 - **Fixed: code search stopped giving up early on big projects.** In a large workspace, asking the assistant to find something (a component, a function, a symbol) could come back "no matches" even when the code was right there — so it fell back to opening file after file, ballooning the conversation and never quite landing the change. The search now sweeps your project breadth-first instead of diving into the first big folder and running out of budget, so a symbol that lives deeper in the tree is actually found. When a search genuinely can't cover everything, it now says so honestly ("truncated — narrow it down") instead of claiming the term doesn't exist.

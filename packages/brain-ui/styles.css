@@ -155,6 +155,97 @@
   margin-top: 6px;
 }
 
+/* ---- ask_user question card ---- */
+.bf-qcard {
+  margin-top: 8px;
+  border: 1px solid var(--bf-border, rgba(128, 128, 128, 0.3));
+  border-left: 3px solid var(--bf-accent, #4f80ff);
+  border-radius: 8px;
+  background: var(--bf-surface-2, rgba(128, 128, 128, 0.08));
+  padding: 10px 12px;
+}
+.bf-qcard__q {
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: var(--bf-text, #e6e6e6);
+  margin-bottom: 8px;
+  line-height: 1.4;
+}
+.bf-qcard__opts {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.bf-qcard__opt {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  width: 100%;
+  text-align: left;
+  border: 1px solid var(--bf-border, rgba(128, 128, 128, 0.3));
+  border-radius: 6px;
+  background: var(--bf-surface, #1e1e1e);
+  color: var(--bf-text, #e6e6e6);
+  padding: 8px 10px;
+  font: inherit;
+  cursor: pointer;
+  transition: border-color 0.12s ease, background 0.12s ease;
+}
+.bf-qcard__opt--btn:hover:not(:disabled),
+.bf-qcard__opt--check:hover {
+  border-color: var(--bf-accent, #4f80ff);
+  background: var(--bf-accent-soft, rgba(79, 128, 255, 0.12));
+}
+.bf-qcard__opt.is-checked {
+  border-color: var(--bf-accent, #4f80ff);
+  background: var(--bf-accent-soft, rgba(79, 128, 255, 0.12));
+}
+.bf-qcard__opt:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+.bf-qcard__cb {
+  margin-top: 2px;
+  accent-color: var(--bf-accent, #4f80ff);
+  flex-shrink: 0;
+}
+.bf-qcard__opt-body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.bf-qcard__opt-label {
+  font-size: 0.85rem;
+  font-weight: 500;
+}
+.bf-qcard__opt-desc {
+  font-size: 0.78rem;
+  color: var(--bf-text-muted, #8a8a8a);
+  line-height: 1.35;
+}
+.bf-qcard__submit {
+  margin-top: 8px;
+  border: 1px solid var(--bf-accent, #4f80ff);
+  border-radius: 6px;
+  background: var(--bf-accent, #4f80ff);
+  color: var(--bf-accent-contrast, #ffffff);
+  padding: 6px 14px;
+  font: inherit;
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+.bf-qcard__submit:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.bf-qcard__answered {
+  margin-top: 8px;
+  font-size: 0.8rem;
+  color: var(--bf-text-muted, #8a8a8a);
+  font-style: italic;
+}
+
 /* ---- images ---- */
 .bf-tl__images {
   display: flex;

@@ -20,6 +20,9 @@ interface BrainTimelineLabels {
     createFile: string;
     /** Heading for the change preview shown on an edit_file / write_file tool step. */
     preview: string;
+    /** <QuestionCard> copy (ask_user) — carried here so a host passes ONE label bundle. */
+    askSubmit: string;
+    askAnswered: string;
 }
 declare const DEFAULT_TIMELINE_LABELS: BrainTimelineLabels;
 interface BrainTimelineProps {
@@ -46,6 +49,10 @@ interface BrainTimelineProps {
     onInternalLink?: (href: string) => void;
     onApplyCode?: (code: string) => void;
     onCreateFile?: (path: string, content: string) => void;
+    /** Post the user's answer to an agent's `ask_user` question as their next turn.
+     *  When set, an assistant message carrying an ask-user block renders a clickable
+     *  <QuestionCard>; without it the block degrades to plain text. */
+    onAnswerQuestion?: (answer: string) => void;
     /** Auto-scroll to the newest node while near the bottom (default true). */
     autoScroll?: boolean;
 }
@@ -56,7 +63,7 @@ interface BrainTimelineProps {
  * Input/Output, or an error. Presentational and theme-driven (CSS variables), so
  * it renders identically in the web app and a VS Code webview.
  */
-declare function BrainTimelineInner({ messages, trace, streamingText, isRunning, loading, labels: labelOverrides, assistantName, emptyState, renderMessage, renderStreaming, renderAssistantActions, onInternalLink, onApplyCode, onCreateFile, autoScroll, }: BrainTimelineProps): React__default.JSX.Element;
+declare function BrainTimelineInner({ messages, trace, streamingText, isRunning, loading, labels: labelOverrides, assistantName, emptyState, renderMessage, renderStreaming, renderAssistantActions, onInternalLink, onApplyCode, onCreateFile, onAnswerQuestion, autoScroll, }: BrainTimelineProps): React__default.JSX.Element;
 /**
  * Memoized so an unrelated re-render of the host (e.g. every keystroke in the
  * composer, which lives in the same component tree) does not re-render the whole
@@ -94,6 +101,61 @@ declare function MarkdownInner({ content, onInternalLink, onApplyCode, onCreateF
  * re-parse of settled messages (unchanged `content`/callbacks) keeps typing snappy.
  */
 declare const Markdown: React__default.MemoExoticComponent<typeof MarkdownInner>;
+
+/**
+ * The "ask the user a question" protocol — shared by the web app and the VS Code
+ * webview so a clarifying question renders identically as a clickable card on both.
+ *
+ * The agent emits its question as a fenced ```ask-user block carrying a small JSON
+ * payload (produced server-side when the model calls the `ask_user` tool — a
+ * schema-validated call is far more reliable than asking a weak model to hand-format
+ * JSON in prose). {@link parseAskUser} lifts that payload out of an assistant message
+ * and {@link stripAskUser} removes the raw block so the surrounding prose still reads
+ * cleanly; <BrainTimeline> renders the payload with <QuestionCard>. If the block is
+ * absent or malformed, both degrade gracefully (no card; the fenced block just shows
+ * as normal code), so a question is never lost.
+ */
+interface AskUserOption {
+    label: string;
+    description?: string;
+}
+interface AskUserPayload {
+    question: string;
+    options: AskUserOption[];
+    /** Allow more than one option to be chosen (checkboxes + submit) instead of a
+     *  single click. */
+    multiSelect?: boolean;
+}
+/** Copy for <QuestionCard> — defaulted in English, overridable per host for i18n. */
+interface AskUserLabels {
+    /** Submit button for a multi-select card. */
+    askSubmit: string;
+    /** Shown on the card once the user has answered (buttons disabled). */
+    askAnswered: string;
+}
+declare const DEFAULT_ASK_USER_LABELS: AskUserLabels;
+/** Extract the ask-user payload from an assistant message, or null if none/invalid. */
+declare function parseAskUser(text: string): AskUserPayload | null;
+/** Remove the raw ask-user fenced block so the message's prose reads cleanly beside
+ *  the rendered card. Collapses the whitespace the removed block leaves behind. */
+declare function stripAskUser(text: string): string;
+/**
+ * Serialize a payload into the canonical fenced block the agent runtime emits and
+ * {@link parseAskUser} reads. Shared so the producer (server) and consumer (UI) can
+ * never drift on the format.
+ */
+declare function serializeAskUser(payload: AskUserPayload): string;
+/**
+ * A clarifying question rendered as clickable options. Single-select sends the
+ * chosen label on click; multi-select collects checkboxes behind a submit button.
+ * The chosen label(s) are handed to `onAnswer`, which the host posts as the user's
+ * next turn — so the model's question and the user's answer stay in the transcript.
+ */
+declare function QuestionCard({ payload, labels, onAnswer, }: {
+    payload: AskUserPayload;
+    labels?: Partial<AskUserLabels>;
+    onAnswer: (answer: string) => void;
+}): React.JSX.Element;
 
 /**
  * Participant avatars — the shared way a chat renders WHO a participant is.
@@ -890,4 +952,4 @@ interface ProjectListViewProps {
 }
 declare function ProjectListView({ title, subtitle, data, loading, error, labels, onAction, onRefresh }: ProjectListViewProps): React.JSX.Element;
 
-export { type AgentOptionVM, Avatar, type AvatarProps, BrainTimeline, type BrainTimelineLabels, type BrainTimelineProps, type BuildTimelineInput, type ChatAgentVM, type ChatOptionVM, type ChatTicketsAdapter, type ChatTicketsLabels, ChatTicketsPanel, type ChatTicketsPanelProps, DEFAULT_CHAT_TICKETS_LABELS, DEFAULT_EVERMIND_LABELS, DEFAULT_PROJECT360_LABELS, DEFAULT_PROJECT_LIST_LABELS, DEFAULT_TIMELINE_LABELS, EvermindConsole, type EvermindConsoleAdapter, type EvermindConsoleData, type EvermindConsoleLabels, type EvermindConsoleProps, type EvermindMode, type EvermindRecentEntry, type EvermindSeedModel, type EvermindTeacherOptions, HealthRing, type HealthRingProps, type HealthTier, type LineageVM, type LinkType, Markdown, type MarkdownLabels, type MarkdownProps, type MentionAutocomplete, type MentionLabels, ParticipantBadge, type Project360, type Project360Action, type Project360Dimension, type Project360Gap, type Project360Labels, type Project360Member, type Project360Pillar, Project360View, type Project360ViewProps, type ProjectListAction, type ProjectListBadge, type ProjectListGroup, type ProjectListItem, type ProjectListLabels, type ProjectListModel, type ProjectListTicketRef, type ProjectListTone, ProjectListView, type ProjectListViewProps, RUNNABLE_KINDS, Sunburst, type SunburstProps, TICKET_KINDS, type TicketKind, type TicketLinkVM, type TicketOptionVM, type TimelineImage, type TimelineNode, type UseMentionAutocompleteOptions, attachmentsOf, avatarColor, buildSettledTimeline, buildTimeline, formatDuration, formatPayload, healthRingColor, initialsOf, streamingNode, useChatParticipants, useMentionAutocomplete };
+export { type AgentOptionVM, type AskUserLabels, type AskUserOption, type AskUserPayload, Avatar, type AvatarProps, BrainTimeline, type BrainTimelineLabels, type BrainTimelineProps, type BuildTimelineInput, type ChatAgentVM, type ChatOptionVM, type ChatTicketsAdapter, type ChatTicketsLabels, ChatTicketsPanel, type ChatTicketsPanelProps, DEFAULT_ASK_USER_LABELS, DEFAULT_CHAT_TICKETS_LABELS, DEFAULT_EVERMIND_LABELS, DEFAULT_PROJECT360_LABELS, DEFAULT_PROJECT_LIST_LABELS, DEFAULT_TIMELINE_LABELS, EvermindConsole, type EvermindConsoleAdapter, type EvermindConsoleData, type EvermindConsoleLabels, type EvermindConsoleProps, type EvermindMode, type EvermindRecentEntry, type EvermindSeedModel, type EvermindTeacherOptions, HealthRing, type HealthRingProps, type HealthTier, type LineageVM, type LinkType, Markdown, type MarkdownLabels, type MarkdownProps, type MentionAutocomplete, type MentionLabels, ParticipantBadge, type Project360, type Project360Action, type Project360Dimension, type Project360Gap, type Project360Labels, type Project360Member, type Project360Pillar, Project360View, type Project360ViewProps, type ProjectListAction, type ProjectListBadge, type ProjectListGroup, type ProjectListItem, type ProjectListLabels, type ProjectListModel, type ProjectListTicketRef, type ProjectListTone, ProjectListView, type ProjectListViewProps, QuestionCard, RUNNABLE_KINDS, Sunburst, type SunburstProps, TICKET_KINDS, type TicketKind, type TicketLinkVM, type TicketOptionVM, type TimelineImage, type TimelineNode, type UseMentionAutocompleteOptions, attachmentsOf, avatarColor, buildSettledTimeline, buildTimeline, formatDuration, formatPayload, healthRingColor, initialsOf, parseAskUser, serializeAskUser, streamingNode, stripAskUser, useChatParticipants, useMentionAutocomplete };

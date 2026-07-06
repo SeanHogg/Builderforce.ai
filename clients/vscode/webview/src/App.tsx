@@ -69,6 +69,8 @@ function timelineLabels(labels: LabelBundle): Partial<BrainTimelineLabels> {
     apply: t('tl.apply', 'Apply'),
     createFile: t('tl.createFile', 'Create file'),
     preview: t('tl.preview', 'Preview'),
+    askSubmit: t('tl.askSubmit', 'Send'),
+    askAnswered: t('tl.askAnswered', 'Answered'),
   };
 }
 
@@ -638,6 +640,12 @@ function Chat({ init }: { init: InitData }) {
     void conv.send(text, { addressedTo: recipient }).then((ok) => { if (!ok) setInput((cur) => cur || text); });
   }, [input, conv, recipient]);
 
+  // Answering an agent's ask_user card posts the chosen option(s) as the user's next
+  // turn — same send path as the composer, so the question and answer stay in order.
+  const answerQuestion = useCallback((answer: string) => {
+    void conv.send(answer, { addressedTo: recipient });
+  }, [conv, recipient]);
+
   // An expired/invalid session surfaces as a 401 whose body mentions the token.
   // We offer an explicit "Reconnect" affordance for it (re-exchange the token),
   // on top of the always-available dismiss.
@@ -858,6 +866,7 @@ function Chat({ init }: { init: InitData }) {
           loading={conv.loadingMessages}
           assistantName="BuilderForce"
           labels={tlLabels}
+          onAnswerQuestion={answerQuestion}
         />
       </div>
 

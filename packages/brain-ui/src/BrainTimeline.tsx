@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { parseDirectedRecipient, parseMessageAuthor, type BrainMessage, type BrainTraceEvent } from '@seanhogg/builderforce-brain-embedded';
 import { Markdown } from './Markdown';
 import { Avatar } from './ParticipantBadge';
+import { parseAskUser, stripAskUser, QuestionCard, DEFAULT_ASK_USER_LABELS } from './askUser';
 import { buildSettledTimeline, formatDuration, formatPayload, streamingNode, type TimelineNode } from './timelineModel';
 
 export interface BrainTimelineLabels {
@@ -22,6 +23,9 @@ export interface BrainTimelineLabels {
   createFile: string;
   /** Heading for the change preview shown on an edit_file / write_file tool step. */
   preview: string;
+  /** <QuestionCard> copy (ask_user) — carried here so a host passes ONE label bundle. */
+  askSubmit: string;
+  askAnswered: string;
 }
 
 export const DEFAULT_TIMELINE_LABELS: BrainTimelineLabels = {
@@ -39,6 +43,8 @@ export const DEFAULT_TIMELINE_LABELS: BrainTimelineLabels = {
   apply: 'Apply',
   createFile: 'Create file',
   preview: 'Preview',
+  askSubmit: DEFAULT_ASK_USER_LABELS.askSubmit,
+  askAnswered: DEFAULT_ASK_USER_LABELS.askAnswered,
 };
 
 export interface BrainTimelineProps {
@@ -62,6 +68,10 @@ export interface BrainTimelineProps {
   onInternalLink?: (href: string) => void;
   onApplyCode?: (code: string) => void;
   onCreateFile?: (path: string, content: string) => void;
+  /** Post the user's answer to an agent's `ask_user` question as their next turn.
+   *  When set, an assistant message carrying an ask-user block renders a clickable
+   *  <QuestionCard>; without it the block degrades to plain text. */
+  onAnswerQuestion?: (answer: string) => void;
   /** Auto-scroll to the newest node while near the bottom (default true). */
   autoScroll?: boolean;
 }
@@ -237,6 +247,7 @@ function BrainTimelineInner({
   onInternalLink,
   onApplyCode,
   onCreateFile,
+  onAnswerQuestion,
   autoScroll = true,
 }: BrainTimelineProps) {
   // Stable across renders so the memoized <Markdown> children below keep their
@@ -337,6 +348,12 @@ function BrainTimelineInner({
             // attributed to it — show the agent's avatar + name in place of the
             // default assistant label so multi-party replies read clearly.
             const author = parseMessageAuthor(node.message);
+            // An `ask_user` question rides in the assistant text as a fenced ask-user
+            // block. Lift it out to a clickable <QuestionCard> (whichever body renderer
+            // the host uses) and render only the surrounding prose through renderMsg, so
+            // the model's options are answerable in one click instead of by free-typing.
+            const card = onAnswerQuestion ? parseAskUser(node.text) : null;
+            const bodyText = card ? stripAskUser(node.text) : node.text;
             return (
               <li key={node.key} className="bf-tl__item bf-tl__item--assistant">
                 <span className="bf-tl__gutter">
@@ -344,7 +361,14 @@ function BrainTimelineInner({
                 </span>
                 <div className="bf-tl__body">
                   <div className="bf-tl__role">{author ? author.name : assistant}</div>
-                  <div className="bf-tl__bubble">{renderMsg(node.message, 'assistant', node.text)}</div>
+                  {bodyText && <div className="bf-tl__bubble">{renderMsg(node.message, 'assistant', bodyText)}</div>}
+                  {card && onAnswerQuestion && (
+                    <QuestionCard
+                      payload={card}
+                      labels={{ askSubmit: labels.askSubmit, askAnswered: labels.askAnswered }}
+                      onAnswer={onAnswerQuestion}
+                    />
+                  )}
                   {renderAssistantActions && <div className="bf-tl__actions">{renderAssistantActions(node.message)}</div>}
                 </div>
               </li>

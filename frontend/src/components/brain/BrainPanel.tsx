@@ -708,9 +708,13 @@ export function BrainPanel({
                 apply: tTimeline('apply'),
                 createFile: tTimeline('createFile'),
                 preview: tTimeline('preview'),
+                askSubmit: tTimeline('askSubmit'),
+                askAnswered: tTimeline('askAnswered'),
               }}
               onApplyCode={hasTool('apply_code_to_active_file') ? (code) => { void runTool('apply_code_to_active_file', { code }); } : undefined}
               onCreateFile={hasTool('create_file') ? (path, content) => { void runTool('create_file', { path, content }); } : undefined}
+              // Answering an ask_user card posts the choice as the next user turn.
+              onAnswerQuestion={(answer) => { void conv.send(answer, { addressedTo: recipient }); }}
               // Reuse the web's rich markdown (mermaid, router links, code-apply) so
               // no feature is lost; the model-authored "next step" JSON is lifted out.
               renderMessage={(msg, ctx) => (

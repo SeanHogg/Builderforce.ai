@@ -4784,6 +4784,8 @@
       "apply": "应用",
       "createFile": "创建文件",
       "preview": "预览",
+      "askSubmit": "发送",
+      "askAnswered": "已回答",
       "stop": "停止"
     },
     "tickets": {

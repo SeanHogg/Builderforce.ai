@@ -32,6 +32,73 @@ const TEAM_ORIGIN = 'team';
  *  rename/archive/lock — stays brainstorm-only via {@link verifyChatOwnership}). */
 const ACCESSIBLE_ORIGINS = [BRAIN_ORIGIN, TEAM_ORIGIN] as const;
 
+/**
+ * A conversational-only tool: when the agent needs the USER to make a decision to
+ * proceed, it calls `ask_user` with labelled options instead of asking in prose.
+ * The reply's shared <QuestionCard> (brain-ui) renders the options as clickable
+ * buttons and the user's choice comes back as their next message. A schema-validated
+ * tool call is far more reliable than asking a weak model to hand-format the JSON in
+ * prose — the exact failure the operator hit (questions rendered as unactionable text).
+ *
+ * NOT a platform action (autonomous cloud agents have no live user), so it is injected
+ * only here in the Brain reply loop and intercepted as a TERMINAL turn — the loop stops
+ * and the reply carries the canonical ```ask-user block {@link askUserBlock} builds.
+ */
+const ASK_USER_TOOL = 'ask_user';
+const ASK_USER_TOOL_SPEC = {
+  type: 'function',
+  function: {
+    name: ASK_USER_TOOL,
+    description:
+      'Ask the user to choose between options when you genuinely cannot proceed without their decision (e.g. who owns this, which approach, create under X or Y). Prefer this over asking in prose — the UI renders your options as clickable buttons and the choice returns as the user\'s next message. Do NOT use it for questions you can answer yourself from the code or context.',
+    parameters: {
+      type: 'object',
+      properties: {
+        question: { type: 'string', description: 'The single, specific question to ask.' },
+        options: {
+          type: 'array',
+          description: '2–6 distinct, mutually-exclusive choices (unless multiSelect).',
+          items: {
+            type: 'object',
+            properties: {
+              label: { type: 'string', description: 'Short choice text (1–5 words).' },
+              description: { type: 'string', description: 'Optional one-line explanation of this choice.' },
+            },
+            required: ['label'],
+          },
+        },
+        multiSelect: { type: 'boolean', description: 'Allow choosing more than one option. Default false.' },
+      },
+      required: ['question', 'options'],
+    },
+  },
+} as const;
+
+/** Build the canonical fenced block the shared brain-ui `parseAskUser` reads. Kept in
+ *  sync with `serializeAskUser` in @seanhogg/builderforce-brain-ui (no UI dep here). */
+function askUserBlock(args: unknown): string | null {
+  const o = (args ?? {}) as Record<string, unknown>;
+  const question = typeof o.question === 'string' ? o.question.trim() : '';
+  const optionsIn = Array.isArray(o.options) ? o.options : [];
+  const options = optionsIn
+    .map((it) => {
+      if (typeof it === 'string') return it.trim() ? { label: it.trim() } : null;
+      if (it && typeof it === 'object') {
+        const rec = it as Record<string, unknown>;
+        const label = typeof rec.label === 'string' ? rec.label.trim() : '';
+        const description = typeof rec.description === 'string' ? rec.description.trim() : undefined;
+        return label ? { label, ...(description ? { description } : {}) } : null;
+      }
+      return null;
+    })
+    .filter((x): x is { label: string; description?: string } => !!x);
+  // Needs a prompt + at least two choices to be a meaningful card; else let the caller
+  // fall back to normal prose so the question is never swallowed.
+  if (!question || options.length < 2) return null;
+  const payload = { question, options, multiSelect: o.multiSelect === true };
+  return ['```ask-user', JSON.stringify(payload), '```'].join('\n');
+}
+
 // ---------------------------------------------------------------------------
 // DTOs
 // ---------------------------------------------------------------------------
@@ -716,14 +783,20 @@ export class BrainService {
       persona,
       `You have been addressed directly in this multi-party team chat${projectHint != null ? ` (project #${projectHint})` : ''}. `,
       `Reply AS ${agentName} — first person, concise, helpful, no preamble and no "${agentName}:" label. `,
-      `You may use the provided tools to read or update the team's work (projects, tasks, specs, OKRs, knowledge) when it helps answer or act on the request. After using tools, summarise what you found or did.`,
+      `You may use the provided tools to read or update the team's work (projects, tasks, specs, OKRs, knowledge) when it helps answer or act on the request. After using tools, summarise what you found or did. `,
+      `When you need the user to make a decision before you can proceed (an owner, an approach, one target vs another), call the ask_user tool with labelled options INSTEAD of asking in prose — do not end your reply with unanswered questions when ask_user would let the user just click a choice.`,
     ].join('');
 
     // Curated, non-destructive platform tools (same allowlist an autonomous cloud
     // agent gets). Advertised name → tool id map for executing the model's calls.
     const toolEntries = listBuiltinTools().filter((t) => CLOUD_AGENT_PLATFORM_TOOLS.includes(t.tool));
     const nameToTool = new Map(toolEntries.map((t) => [t.name, t.tool]));
-    const tools = toolEntries.map((t) => ({ type: 'function', function: { name: t.name, description: t.description, parameters: t.parameters } }));
+    // Advertise the platform tools PLUS the conversational `ask_user` tool (injected
+    // here, intercepted below as a terminal turn — see ASK_USER_TOOL_SPEC).
+    const tools = [
+      ...toolEntries.map((t) => ({ type: 'function', function: { name: t.name, description: t.description, parameters: t.parameters } })),
+      ASK_USER_TOOL_SPEC,
+    ];
 
     const convo: Array<Record<string, unknown>> = [
       { role: 'system', content: systemPrompt },
@@ -786,10 +859,35 @@ export class BrainService {
         break;
       }
 
+      // `ask_user` is a TERMINAL turn: the agent is blocked on the user's decision, so
+      // stop the loop and return the question (any lead-in prose + the canonical
+      // ```ask-user block the UI renders as a clickable card). Falls through to prose
+      // when the args are malformed, so a question is never swallowed.
+      const askCall = toolCalls.find((tc) => tc.function.name === ASK_USER_TOOL);
+      if (askCall) {
+        let block: string | null = null;
+        try { block = askUserBlock(JSON.parse(askCall.function.arguments || '{}')); } catch { block = null; }
+        if (block) {
+          const lead = (message?.content ?? '').trim();
+          text = lead ? `${lead}\n\n${block}` : block;
+          break;
+        }
+        // Malformed ask_user → keep any prose the model wrote and stop asking so we
+        // don't loop; the empty-turn synthesis below covers a bare call.
+        if (message?.content?.trim()) { text = message.content.trim(); break; }
+      }
+
       // Echo the assistant tool-call turn, then execute each call and feed results.
       toolCallCount += toolCalls.length;
       convo.push({ role: 'assistant', content: message?.content ?? '', tool_calls: toolCalls });
       for (const tc of toolCalls) {
+        if (tc.function.name === ASK_USER_TOOL) {
+          // Reached only when ask_user args were malformed AND the model wrote no prose.
+          // Emit a corrective tool result (so the call isn't left unanswered) telling it
+          // to retry with a valid question + options, or just answer in prose.
+          convo.push({ role: 'tool', tool_call_id: tc.id, content: JSON.stringify({ error: 'ask_user needs { question, options:[{label}] } with 2+ options. Retry or answer in prose.' }) });
+          continue;
+        }
         const toolId = nameToTool.get(tc.function.name) ?? tc.function.name;
         let out: unknown;
         try {

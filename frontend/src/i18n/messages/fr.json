@@ -4784,6 +4784,8 @@
       "apply": "Appliquer",
       "createFile": "Créer un fichier",
       "preview": "Aperçu",
+      "askSubmit": "Envoyer",
+      "askAnswered": "Répondu",
       "stop": "Arrêter"
     },
     "tickets": {
