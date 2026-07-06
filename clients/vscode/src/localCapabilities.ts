@@ -172,26 +172,45 @@ export function buildLocalCapabilityProvider(root: string): CapabilityProvider {
         await handle.close();
       }
     },
-    async searchCode(query: string): Promise<RepoSearchResult> {
+    async searchCode(query: string, scope?: string): Promise<RepoSearchResult> {
       let re: RegExp;
       try {
         re = new RegExp(query, "i");
       } catch (e) {
         return { ok: false, query, error: `invalid regex: ${e instanceof Error ? e.message : String(e)}` };
       }
+      // Optional subdirectory scope: on a big monorepo an unscoped walk can hit the
+      // file cap before it reaches the relevant subtree, so the model can narrow here.
+      let start = rootResolved;
+      if (scope && scope.trim()) {
+        try {
+          start = resolveInRoot(rootResolved, scope.trim());
+        } catch (e) {
+          return { ok: false, query, error: e instanceof Error ? e.message : String(e) };
+        }
+      }
       const matches: Array<{ path: string; line: number; text: string }> = [];
       let filesScanned = 0;
       let truncated = false;
-      const walk = async (dir: string): Promise<void> => {
-        if (matches.length >= SEARCH_MAX_MATCHES || filesScanned >= SEARCH_MAX_FILES) { truncated = true; return; }
+      // BREADTH-FIRST (a directory queue), NOT depth-first recursion — the same fix
+      // `walkFiles` (list_files) already carries. Depth-first plunged into the first
+      // large subtree and exhausted SEARCH_MAX_FILES before reaching later packages,
+      // so a symbol that lived deeper (e.g. under packages/) came back `total:0,
+      // truncated:true` — a false "not found" that sent the agent into read_file
+      // spirals. BFS scans shallow files across the whole tree first, so the cap (if
+      // hit at all) truncates evenly instead of skipping entire subtrees.
+      const queue: string[] = [start];
+      while (queue.length > 0) {
+        if (matches.length >= SEARCH_MAX_MATCHES || filesScanned >= SEARCH_MAX_FILES) { truncated = true; break; }
+        const dir = queue.shift()!;
         let entries: import("fs").Dirent[];
-        try { entries = await fs.readdir(dir, { withFileTypes: true }); } catch { return; }
+        try { entries = await fs.readdir(dir, { withFileTypes: true }); } catch { continue; }
         for (const entry of entries) {
-          if (matches.length >= SEARCH_MAX_MATCHES || filesScanned >= SEARCH_MAX_FILES) { truncated = true; return; }
+          if (matches.length >= SEARCH_MAX_MATCHES || filesScanned >= SEARCH_MAX_FILES) { truncated = true; break; }
           const abs = path.join(dir, entry.name);
           if (entry.isDirectory()) {
             if (SKIP_DIRS.has(entry.name) || entry.name.startsWith(".")) continue;
-            await walk(abs);
+            queue.push(abs);
           } else if (entry.isFile()) {
             const stat = await fs.stat(abs).catch(() => null);
             if (!stat || stat.size > SEARCH_MAX_FILE_BYTES) continue;
@@ -208,8 +227,7 @@ export function buildLocalCapabilityProvider(root: string): CapabilityProvider {
             }
           }
         }
-      };
-      await walk(rootResolved);
+      }
       return { ok: true, query, total: matches.length, truncated, matches };
     },
   };

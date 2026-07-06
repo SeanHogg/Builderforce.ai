@@ -58,11 +58,12 @@ export const listFilesTool: ToolDefinition = defineTool({
 export const searchCodeTool: ToolDefinition = defineTool({
   name: "search_code",
   description:
-    'Search the ENTIRE repo for a string/symbol in one call (indexed code search) — use this FIRST to find where something is referenced instead of reading files one by one. Returns matching file paths with line fragments. 0 results means the term does not appear in the indexed codebase (so "remove all references to X" with 0 results means there is nothing to remove — say so, do not invent a change). Recently-pushed code may lag the index; confirm a specific file with read_file. Then read_file the matches you intend to edit.',
+    'Search the repo for a string/symbol in one call — use this FIRST to find where something is referenced instead of reading files one by one. Returns matching file paths with line fragments. Pass `query` as an EXACT substring/regex (a symbol, import path, or config key), NOT a natural-language phrase — a multi-word phrase rarely appears verbatim on one line and will match nothing. On a large monorepo, scope the search with `path` (a subdirectory) to search just that subtree. 0 results with `truncated:false` means the term does not appear (so "remove all references to X" then means there is nothing to remove — say so, do not invent a change); 0 results with `truncated:true` means the search was cut short before scanning everything — narrow it with `path` or a more specific `query` and try again, do NOT conclude the term is absent. Then read_file the matches you intend to edit.',
   parameters: {
     type: "object",
     properties: {
-      query: { type: "string", description: "Exact text or symbol to find, e.g. a model id, function name, import path, or config key." },
+      query: { type: "string", description: "Exact text or symbol to find, e.g. a model id, function name, import path, or config key. NOT a natural-language phrase." },
+      path: { type: "string", description: 'Optional repo-relative subdirectory to restrict the search to, e.g. "packages/brain-ui". Use this to avoid truncation on a big repo.' },
     },
     required: ["query"],
   },
@@ -70,14 +71,16 @@ export const searchCodeTool: ToolDefinition = defineTool({
   async execute(args, ctx): Promise<ToolResult> {
     const query = typeof args.query === "string" ? args.query : "";
     if (!query.trim()) return { data: { ok: false, error: "query is required" } };
-    const r = (await ctx.caps.repoRead!.searchCode(query)) as RepoSearchResult;
+    const scope = typeof args.path === "string" && args.path.trim() ? args.path.trim() : undefined;
+    const r = (await ctx.caps.repoRead!.searchCode(query, scope)) as RepoSearchResult;
     if (r.ok && r.total === 0) {
-      return {
-        data: {
-          ...r,
-          note: "No matches in the indexed codebase — the term is not referenced. If the task was to remove/replace it, there is nothing to change; say so instead of inventing an edit.",
-        },
-      };
+      // A truncated 0-result is NOT a "not found" — the search hit its scan budget
+      // before covering the whole tree. Saying "the term is not referenced" here is
+      // the false negative that sent the agent reading files blind; be honest instead.
+      const note = r.truncated
+        ? `Search was truncated before scanning the whole${scope ? " subtree" : " repo"} — this is NOT proof the term is absent. Re-run scoped to a subdirectory via \`path\`${scope ? " (a narrower one)" : ""}, or use a more specific \`query\`.`
+        : `No matches${scope ? ` under "${scope}"` : ""} — the term is not referenced${scope ? " there (try without `path` to search the whole repo)" : ""}. If the task was to remove/replace it, there is nothing to change; say so instead of inventing an edit.`;
+      return { data: { ...r, note } };
     }
     return { data: r as unknown as Record<string, unknown> };
   },

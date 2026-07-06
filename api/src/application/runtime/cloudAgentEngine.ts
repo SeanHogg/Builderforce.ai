@@ -1259,10 +1259,18 @@ function buildCloudProvider(args: {
         const rf = await readRepoFile({ ...repoCtx, ref: readRef() }, path);
         return rf.ok ? { ok: true, path: rf.path, content: rf.content, truncated: rf.truncated } : { ok: false, error: rf.reason };
       },
-      async searchCode(query) {
+      async searchCode(query, scope) {
         if (!repoCtx) return { ok: false, error: noRepo() };
         const sr = await searchRepoCode({ ...repoCtx, ref: readRef() }, query, { maxResults: 30 });
-        return sr.ok ? { ok: true, query, total: sr.total, truncated: sr.truncated, matches: sr.matches } : { ok: false, error: sr.reason };
+        if (!sr.ok) return { ok: false, error: sr.reason };
+        // Honor an optional subdirectory scope by prefix-filtering the index hits, so
+        // `search_code`'s `path` argument narrows results on the cloud surface too.
+        let matches = sr.matches;
+        if (scope && scope.trim() && matches) {
+          const prefix = scope.trim().replace(/^[./]+|\/+$/g, "");
+          matches = matches.filter((m) => typeof m.path === "string" && m.path.startsWith(`${prefix}/`));
+        }
+        return { ok: true, query, total: matches?.length ?? sr.total, truncated: sr.truncated, matches };
       },
     },
     repoWrite: {
