@@ -1,0 +1,85 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900">
+  <defs>
+    <radialGradient id="bgGlow" cx="50%" cy="0%" r="120%">
+      <stop offset="0%" stop-color="#1B1F46"/><stop offset="55%" stop-color="#13152F"/><stop offset="100%" stop-color="#0A0B1E"/>
+    </radialGradient>
+    <linearGradient id="violetGrad" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#A98BFF"/><stop offset="100%" stop-color="#6A4DF0"/></linearGradient>
+    <linearGradient id="coolGrad" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#3DD6F5"/><stop offset="100%" stop-color="#4F8BFF"/></linearGradient>
+    <linearGradient id="mintGrad" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#5BF0BC"/><stop offset="100%" stop-color="#23B987"/></linearGradient>
+    <linearGradient id="coralGrad" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#FF8F7A"/><stop offset="100%" stop-color="#F0574A"/></linearGradient>
+    <linearGradient id="amberGrad" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#FFCE6B"/><stop offset="100%" stop-color="#F5A623"/></linearGradient>
+    <linearGradient id="hairline" x1="0" y1="0" x2="1" y2="0"><stop offset="0%" stop-color="rgba(139,108,255,0)"/><stop offset="50%" stop-color="rgba(139,108,255,0.55)"/><stop offset="100%" stop-color="rgba(61,214,245,0)"/></linearGradient>
+    <marker id="arwup" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#5BF0BC"/></marker>
+  </defs>
+  <rect width="1600" height="900" fill="url(#bgGlow)"/>
+  <text x="80" y="92" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="20" letter-spacing="3" font-weight="700" fill="#A98BFF">THE PLANNING SPINE</text>
+  <text x="80" y="146" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="46" font-weight="800" fill="#EEF0FA">One dated hierarchy, cost rolls to every level</text>
+  <rect x="82" y="170" width="120" height="4" rx="2" fill="url(#hairline)"/>
+
+  <!-- Nested hierarchy bars -->
+  <rect x="100" y="240" width="860" height="64" rx="12" fill="rgba(169,139,255,0.12)" stroke="rgba(169,139,255,0.35)" stroke-width="1.5"/>
+  <rect x="100" y="240" width="6" height="64" rx="3" fill="url(#violetGrad)"/>
+  <text x="132" y="280" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="22" font-weight="800" fill="#EEF0FA">Portfolio</text>
+  <text x="928" y="280" text-anchor="end" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="21" font-weight="800" fill="#A98BFF">$ rolled total</text>
+
+  <rect x="150" y="318" width="810" height="60" rx="12" fill="rgba(61,214,245,0.10)" stroke="rgba(61,214,245,0.30)" stroke-width="1.5"/>
+  <rect x="150" y="318" width="6" height="60" rx="3" fill="url(#coolGrad)"/>
+  <text x="182" y="356" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="21" font-weight="800" fill="#EEF0FA">Initiative</text>
+  <text x="928" y="356" text-anchor="end" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="19" fill="#8891AE">initiative dependencies → critical path</text>
+
+  <rect x="200" y="392" width="760" height="58" rx="12" fill="rgba(91,240,188,0.10)" stroke="rgba(91,240,188,0.30)" stroke-width="1.5"/>
+  <rect x="200" y="392" width="6" height="58" rx="3" fill="url(#mintGrad)"/>
+  <text x="232" y="428" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="20" font-weight="800" fill="#EEF0FA">Epic</text>
+
+  <!-- Leaf tasks -->
+  <rect x="250" y="464" width="228" height="60" rx="12" fill="rgba(255,255,255,0.04)" stroke="rgba(91,240,188,0.30)" stroke-width="1.5"/>
+  <text x="272" y="490" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="18" font-weight="700" fill="#EEF0FA">Task · $</text>
+  <rect x="272" y="498" width="86" height="20" rx="10" fill="rgba(91,240,188,0.14)"/><text x="315" y="513" text-anchor="middle" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="13" font-weight="700" fill="#5BF0BC">CAPEX</text>
+
+  <rect x="494" y="464" width="228" height="60" rx="12" fill="rgba(255,255,255,0.04)" stroke="rgba(245,166,35,0.30)" stroke-width="1.5"/>
+  <text x="516" y="490" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="18" font-weight="700" fill="#EEF0FA">Task · $</text>
+  <rect x="516" y="498" width="76" height="20" rx="10" fill="rgba(245,166,35,0.14)"/><text x="554" y="513" text-anchor="middle" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="13" font-weight="700" fill="#FFCE6B">OPEX</text>
+
+  <rect x="738" y="464" width="222" height="60" rx="12" fill="rgba(255,255,255,0.04)" stroke="rgba(240,87,74,0.35)" stroke-width="1.5"/>
+  <text x="760" y="490" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="18" font-weight="700" fill="#EEF0FA">Task · $</text>
+  <rect x="760" y="498" width="76" height="20" rx="10" fill="rgba(240,87,74,0.14)"/><text x="798" y="513" text-anchor="middle" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="13" font-weight="700" fill="#FF8F7A">OPEX</text>
+  <text x="852" y="500" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="24">⚠️</text>
+
+  <!-- Rollup arrow -->
+  <path d="M935 500 L935 272" fill="none" stroke="#5BF0BC" stroke-width="2" stroke-dasharray="6 6" marker-end="url(#arwup)"/>
+  <text x="948" y="392" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="16" font-weight="700" fill="#5BF0BC" transform="rotate(-90 948 392)" text-anchor="middle">cost rolls up</text>
+
+  <text x="200" y="576" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="18" fill="#A6ADC8"><tspan x="200" dy="0">Leaf cost rolls up to every ancestor — a real number at any</tspan><tspan x="200" dy="26">altitude, no parallel finance system, no backfill. One Gantt,</tspan><tspan x="200" dy="26">all levels dated on the same axis, color-coded by cost class.</tspan></text>
+
+  <!-- Right: CAPEX/OPEX resolution -->
+  <rect x="1010" y="240" width="490" height="256" rx="20" fill="rgba(255,255,255,0.035)" stroke="rgba(255,255,255,0.10)" stroke-width="1.5"/>
+  <rect x="1010" y="240" width="6" height="256" rx="3" fill="url(#amberGrad)"/>
+  <text x="1050" y="292" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="24" font-weight="800" fill="#EEF0FA">CAPEX vs OPEX, resolved</text>
+  <text x="1050" y="330" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="18" fill="#8891AE">each node carries a cost_class, in priority order:</text>
+  <text x="1050" y="372" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="19" fill="#A6ADC8"><tspan x="1050" dy="0">1 · explicit declaration wins</tspan><tspan x="1050" dy="30">2 · inherit from the parent</tspan><tspan x="1050" dy="30">3 · agent classifier by investment category</tspan><tspan x="1050" dy="30">4 · GAAP-conservative default as the floor</tspan></text>
+
+  <!-- Anomaly -->
+  <rect x="1010" y="516" width="490" height="102" rx="20" fill="rgba(255,255,255,0.035)" stroke="rgba(240,87,74,0.30)" stroke-width="1.5"/>
+  <rect x="1010" y="516" width="6" height="102" rx="3" fill="url(#coralGrad)"/>
+  <text x="1050" y="562" font-size="26">⚠️</text>
+  <text x="1094" y="562" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="22" font-weight="800" fill="#EEF0FA">Anomaly flag</text>
+  <text x="1050" y="598" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="18" fill="#A6ADC8">child class contradicts parent → sign-off, not silent inherit</text>
+
+  <!-- CSV export -->
+  <rect x="1010" y="636" width="490" height="92" rx="20" fill="rgba(255,255,255,0.035)" stroke="rgba(91,240,188,0.30)" stroke-width="1.5"/>
+  <rect x="1010" y="636" width="6" height="92" rx="3" fill="url(#mintGrad)"/>
+  <text x="1050" y="678" font-size="26">📤</text>
+  <text x="1094" y="678" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="22" font-weight="800" fill="#EEF0FA">CSV export</text>
+  <text x="1050" y="712" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="18" fill="#A6ADC8">the whole spine, any date range — same figures, ready for close</text>
+
+  <!-- Bottom strip -->
+  <rect x="100" y="748" width="1400" height="52" rx="14" fill="rgba(255,255,255,0.035)" stroke="rgba(139,108,255,0.30)" stroke-width="1.5"/>
+  <rect x="100" y="748" width="6" height="52" rx="3" fill="url(#violetGrad)"/>
+  <text x="140" y="781" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="19" fill="#A6ADC8">Plan, deliver, and account for the same work in the same place — engineering plans, PMO rolls up, finance closes the books</text>
+
+  <g opacity="0.85">
+    <circle cx="1336" cy="852" r="9" fill="url(#violetGrad)"/>
+    <text x="1354" y="859" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="20" font-weight="700" fill="#A6ADC8">Builderforce.ai</text>
+  </g>
+  <text x="80" y="858" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="17" fill="#717892">One hierarchy, one set of numbers, no reconciliation step</text>
+</svg>

@@ -1,0 +1,142 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900">
+  <defs>
+    <radialGradient id="bgGlow" cx="50%" cy="0%" r="120%">
+      <stop offset="0%" stop-color="#1B1F46"/><stop offset="55%" stop-color="#13152F"/><stop offset="100%" stop-color="#0A0B1E"/>
+    </radialGradient>
+    <linearGradient id="violetGrad" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#A98BFF"/><stop offset="100%" stop-color="#6A4DF0"/></linearGradient>
+    <linearGradient id="coolGrad" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#3DD6F5"/><stop offset="100%" stop-color="#4F8BFF"/></linearGradient>
+    <linearGradient id="mintGrad" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#5BF0BC"/><stop offset="100%" stop-color="#23B987"/></linearGradient>
+    <linearGradient id="coralGrad" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#FF8F7A"/><stop offset="100%" stop-color="#F0574A"/></linearGradient>
+    <linearGradient id="amberGrad" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#FFCE6B"/><stop offset="100%" stop-color="#F5A623"/></linearGradient>
+    <linearGradient id="hairline" x1="0" y1="0" x2="1" y2="0"><stop offset="0%" stop-color="rgba(139,108,255,0)"/><stop offset="50%" stop-color="rgba(139,108,255,0.55)"/><stop offset="100%" stop-color="rgba(61,214,245,0)"/></linearGradient>
+    <marker id="arw" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#8891AE"/></marker>
+  </defs>
+  <rect width="1600" height="900" fill="url(#bgGlow)"/>
+  <text x="80" y="92" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="20" letter-spacing="3" font-weight="700" fill="#A98BFF">MIGRATE &amp; INTEGRATE</text>
+  <text x="80" y="146" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="46" font-weight="800" fill="#EEF0FA">Stage before it lands</text>
+  <rect x="82" y="170" width="120" height="4" rx="2" fill="url(#hairline)"/>
+
+  <!-- left: source providers with migration badge -->
+  <text x="80" y="230" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="16" letter-spacing="2" font-weight="700" fill="#FFCE6B">MIGRATION-WIZARD PROVIDERS</text>
+  <g font-family="Segoe UI, Helvetica Neue, Arial, sans-serif">
+    <g>
+      <rect x="80" y="252" width="360" height="50" rx="13" fill="rgba(255,255,255,0.035)" stroke="rgba(255,255,255,0.10)"/>
+      <rect x="82" y="254" width="6" height="46" rx="3" fill="url(#amberGrad)"/>
+      <text x="106" y="283" font-size="19" font-weight="700" fill="#EEF0FA">Jira</text>
+      <rect x="330" y="266" width="96" height="22" rx="11" fill="rgba(255,206,107,0.16)"/>
+      <text x="378" y="282" text-anchor="middle" font-size="12" font-weight="700" fill="#FFCE6B">MIGRATION</text>
+    </g>
+    <g>
+      <rect x="80" y="312" width="360" height="50" rx="13" fill="rgba(255,255,255,0.035)" stroke="rgba(255,255,255,0.10)"/>
+      <rect x="82" y="314" width="6" height="46" rx="3" fill="url(#amberGrad)"/>
+      <text x="106" y="343" font-size="19" font-weight="700" fill="#EEF0FA">monday.com</text>
+      <rect x="330" y="326" width="96" height="22" rx="11" fill="rgba(255,206,107,0.16)"/>
+      <text x="378" y="342" text-anchor="middle" font-size="12" font-weight="700" fill="#FFCE6B">MIGRATION</text>
+    </g>
+    <g>
+      <rect x="80" y="372" width="360" height="50" rx="13" fill="rgba(255,255,255,0.035)" stroke="rgba(255,255,255,0.10)"/>
+      <rect x="82" y="374" width="6" height="46" rx="3" fill="url(#amberGrad)"/>
+      <text x="106" y="403" font-size="19" font-weight="700" fill="#EEF0FA">Rally (CA Agile Central)</text>
+      <rect x="330" y="386" width="96" height="22" rx="11" fill="rgba(255,206,107,0.16)"/>
+      <text x="378" y="402" text-anchor="middle" font-size="12" font-weight="700" fill="#FFCE6B">MIGRATION</text>
+    </g>
+    <g>
+      <rect x="80" y="432" width="360" height="50" rx="13" fill="rgba(255,255,255,0.035)" stroke="rgba(255,255,255,0.10)"/>
+      <rect x="82" y="434" width="6" height="46" rx="3" fill="url(#amberGrad)"/>
+      <text x="106" y="463" font-size="19" font-weight="700" fill="#EEF0FA">GitLab</text>
+      <rect x="330" y="446" width="96" height="22" rx="11" fill="rgba(255,206,107,0.16)"/>
+      <text x="378" y="462" text-anchor="middle" font-size="12" font-weight="700" fill="#FFCE6B">MIGRATION</text>
+    </g>
+    <g>
+      <rect x="80" y="492" width="360" height="50" rx="13" fill="rgba(255,255,255,0.035)" stroke="rgba(255,255,255,0.10)"/>
+      <rect x="82" y="494" width="6" height="46" rx="3" fill="url(#amberGrad)"/>
+      <text x="106" y="523" font-size="19" font-weight="700" fill="#EEF0FA">Bitbucket</text>
+      <rect x="330" y="506" width="96" height="22" rx="11" fill="rgba(255,206,107,0.16)"/>
+      <text x="378" y="522" text-anchor="middle" font-size="12" font-weight="700" fill="#FFCE6B">MIGRATION</text>
+    </g>
+    <g>
+      <rect x="80" y="552" width="360" height="50" rx="13" fill="rgba(255,255,255,0.035)" stroke="rgba(255,255,255,0.10)"/>
+      <rect x="82" y="554" width="6" height="46" rx="3" fill="url(#amberGrad)"/>
+      <text x="106" y="583" font-size="19" font-weight="700" fill="#EEF0FA">GitHub</text>
+      <rect x="330" y="566" width="96" height="22" rx="11" fill="rgba(255,206,107,0.16)"/>
+      <text x="378" y="582" text-anchor="middle" font-size="12" font-weight="700" fill="#FFCE6B">MIGRATION</text>
+    </g>
+    <g>
+      <rect x="80" y="612" width="360" height="66" rx="13" fill="rgba(255,255,255,0.035)" stroke="rgba(255,255,255,0.10)"/>
+      <rect x="82" y="614" width="6" height="62" rx="3" fill="url(#coolGrad)"/>
+      <text x="106" y="640" font-size="15" font-weight="700" fill="#8891AE">SYNC-ONLY</text>
+      <text x="106" y="663" font-size="14" fill="#A6ADC8">Linear, Asana, ClickUp, ServiceNow,</text>
+      <text x="106" y="681" font-size="14" fill="#A6ADC8">Freshservice, Sentry, PagerDuty</text>
+    </g>
+  </g>
+
+  <!-- converging arrows into wizard -->
+  <g fill="none" stroke="#8891AE" stroke-width="2.5">
+    <line x1="440" y1="337" x2="556" y2="420" marker-end="url(#arw)"/>
+    <line x1="440" y1="457" x2="556" y2="470" marker-end="url(#arw)"/>
+    <line x1="440" y1="577" x2="556" y2="520" marker-end="url(#arw)"/>
+  </g>
+
+  <!-- center: staged wizard -->
+  <rect x="560" y="240" width="470" height="500" rx="20" fill="rgba(169,139,255,0.10)" stroke="url(#violetGrad)" stroke-width="2"/>
+  <text x="586" y="286" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="25" font-weight="800" fill="#EEF0FA">Migration wizard</text>
+  <text x="586" y="312" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="15" fill="#8891AE">Reversible until you commit &#8212; nothing touches your real</text>
+  <text x="586" y="332" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="15" fill="#8891AE">projects, tasks or members until you press Import.</text>
+  <!-- mode chips -->
+  <g font-family="Segoe UI, Helvetica Neue, Arial, sans-serif">
+    <rect x="586" y="348" width="112" height="30" rx="15" fill="rgba(91,240,188,0.14)"/>
+    <text x="642" y="368" text-anchor="middle" font-size="14" font-weight="700" fill="#5BF0BC">Migrate</text>
+    <rect x="706" y="348" width="92" height="30" rx="15" fill="rgba(61,214,245,0.14)"/>
+    <text x="752" y="368" text-anchor="middle" font-size="14" font-weight="700" fill="#3DD6F5">Sync</text>
+    <rect x="806" y="348" width="86" height="30" rx="15" fill="rgba(169,139,255,0.16)"/>
+    <text x="849" y="368" text-anchor="middle" font-size="14" font-weight="700" fill="#A98BFF">Both</text>
+  </g>
+  <!-- steps -->
+  <g font-family="Segoe UI, Helvetica Neue, Arial, sans-serif">
+    <g><circle cx="600" cy="410" r="13" fill="url(#violetGrad)"/><text x="600" y="416" text-anchor="middle" font-size="14" font-weight="800" fill="#12132B">1</text>
+      <text x="626" y="410" font-size="17" font-weight="700" fill="#EEF0FA">Connect</text><text x="626" y="430" font-size="14" fill="#8891AE">pick credential + mode</text></g>
+    <g><circle cx="600" cy="458" r="13" fill="url(#violetGrad)"/><text x="600" y="464" text-anchor="middle" font-size="14" font-weight="800" fill="#12132B">2</text>
+      <text x="626" y="458" font-size="17" font-weight="700" fill="#EEF0FA">Discover</text><text x="626" y="478" font-size="14" fill="#8891AE">stage projects, types, users &#8212; no writes yet</text></g>
+    <g><circle cx="600" cy="506" r="13" fill="url(#violetGrad)"/><text x="600" y="512" text-anchor="middle" font-size="14" font-weight="800" fill="#12132B">3</text>
+      <text x="626" y="506" font-size="17" font-weight="700" fill="#EEF0FA">Map &amp; combine projects</text><text x="626" y="526" font-size="14" fill="#8891AE">five Jira projects onto one product</text></g>
+    <g><circle cx="600" cy="554" r="13" fill="url(#violetGrad)"/><text x="600" y="560" text-anchor="middle" font-size="14" font-weight="800" fill="#12132B">4</text>
+      <text x="626" y="554" font-size="17" font-weight="700" fill="#EEF0FA">Map item types</text><text x="626" y="574" font-size="14" fill="#8891AE">Story / Bug / Epic &#8594; task type + status</text></g>
+    <g><circle cx="600" cy="602" r="13" fill="url(#violetGrad)"/><text x="600" y="608" text-anchor="middle" font-size="14" font-weight="800" fill="#12132B">5</text>
+      <text x="626" y="602" font-size="17" font-weight="700" fill="#EEF0FA">Map users</text><text x="626" y="622" font-size="14" fill="#8891AE">invite, or map to existing members</text></g>
+    <g><circle cx="600" cy="650" r="13" fill="url(#violetGrad)"/><text x="600" y="656" text-anchor="middle" font-size="14" font-weight="800" fill="#12132B">6</text>
+      <text x="626" y="650" font-size="17" font-weight="700" fill="#EEF0FA">Review</text><text x="626" y="670" font-size="14" fill="#8891AE">uncheck anything to leave behind</text></g>
+    <g><circle cx="600" cy="698" r="13" fill="url(#mintGrad)"/><text x="600" y="704" text-anchor="middle" font-size="14" font-weight="800" fill="#12132B">7</text>
+      <text x="626" y="698" font-size="17" font-weight="700" fill="#5BF0BC">Import</text><text x="626" y="718" font-size="14" fill="#8891AE">create or combine, import tasks, invite users</text></g>
+  </g>
+
+  <!-- wizard -> outputs -->
+  <g fill="none" stroke="#8891AE" stroke-width="2.5">
+    <line x1="1030" y1="400" x2="1116" y2="400" marker-end="url(#arw)"/>
+    <line x1="1030" y1="600" x2="1116" y2="600" marker-end="url(#arw)"/>
+  </g>
+
+  <!-- right outputs -->
+  <g font-family="Segoe UI, Helvetica Neue, Arial, sans-serif">
+    <rect x="1120" y="300" width="400" height="200" rx="16" fill="rgba(255,255,255,0.035)" stroke="rgba(255,255,255,0.10)"/>
+    <rect x="1122" y="302" width="6" height="196" rx="3" fill="url(#mintGrad)"/>
+    <text x="1150" y="350" font-size="22" font-weight="800" fill="#EEF0FA">One BuilderForce board</text>
+    <text x="1150" y="386" font-size="15.5" fill="#A6ADC8">Projects created &#8212; or several combined</text>
+    <text x="1150" y="410" font-size="15.5" fill="#A6ADC8">into one. Tasks imported with type,</text>
+    <text x="1150" y="434" font-size="15.5" fill="#A6ADC8">status, story points and assignee.</text>
+    <text x="1150" y="470" font-size="14.5" fill="#8891AE">People and history preserved; agents</text>
+    <text x="1150" y="490" font-size="14.5" fill="#8891AE">and dashboards act on your real data.</text>
+
+    <rect x="1120" y="520" width="400" height="160" rx="16" fill="rgba(255,255,255,0.035)" stroke="rgba(255,255,255,0.10)"/>
+    <rect x="1122" y="522" width="6" height="156" rx="3" fill="url(#coolGrad)"/>
+    <text x="1150" y="568" font-size="22" font-weight="800" fill="#EEF0FA">Live sync connection</text>
+    <text x="1150" y="604" font-size="15.5" fill="#A6ADC8">If you chose sync, the board keeps</text>
+    <text x="1150" y="628" font-size="15.5" fill="#A6ADC8">itself current &#8212; never leave your tracker.</text>
+    <text x="1150" y="662" font-size="14.5" fill="#8891AE">Items linked to source, so the first sync</text>
+  </g>
+
+  <g opacity="0.85">
+    <circle cx="1336" cy="852" r="9" fill="url(#violetGrad)"/>
+    <text x="1354" y="859" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="20" font-weight="700" fill="#A6ADC8">Builderforce.ai</text>
+  </g>
+  <text x="80" y="858" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="17" fill="#717892">Let the Brain do it &#8212; connect, validate, reconcile, import, conversationally. Change your mind until you commit.</text>
+</svg>

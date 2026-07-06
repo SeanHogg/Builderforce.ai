@@ -14,6 +14,8 @@ Builderforce.ai operates one level up. It's a self-hosted, MIT-licensed multi-ag
 
 > Choose Builderforce.ai over GitHub Copilot when you've outgrown line completion and need orchestrated, governed, model-agnostic delivery you can self-host.
 
+![Side-by-side split showing GitHub Copilot as single-agent autocomplete versus Builderforce.ai as a governed multi-agent workforce with 7 roles, 30+ model providers, persistent memory and approval gates](/blog/vs-github-copilot.svg)
+
 ## Where Copilot stops
 
 Copilot's design is deliberately narrow, and that's part of why it's good. But the boundaries are real:

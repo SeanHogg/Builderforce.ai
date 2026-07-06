@@ -1,0 +1,76 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900">
+  <defs>
+    <radialGradient id="bgGlow" cx="50%" cy="0%" r="120%">
+      <stop offset="0%" stop-color="#1B1F46"/>
+      <stop offset="55%" stop-color="#13152F"/>
+      <stop offset="100%" stop-color="#0A0B1E"/>
+    </radialGradient>
+    <linearGradient id="violetGrad" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#A98BFF"/><stop offset="100%" stop-color="#6A4DF0"/>
+    </linearGradient>
+    <linearGradient id="coolGrad" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#3DD6F5"/><stop offset="100%" stop-color="#4F8BFF"/>
+    </linearGradient>
+    <linearGradient id="mintGrad" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#5BF0BC"/><stop offset="100%" stop-color="#23B987"/>
+    </linearGradient>
+    <linearGradient id="barTrack" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#A98BFF"/><stop offset="100%" stop-color="#3DD6F5"/>
+    </linearGradient>
+    <linearGradient id="hairline" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="rgba(139,108,255,0)"/>
+      <stop offset="50%" stop-color="rgba(139,108,255,0.55)"/>
+      <stop offset="100%" stop-color="rgba(61,214,245,0)"/>
+    </linearGradient>
+  </defs>
+  <rect width="1600" height="900" fill="url(#bgGlow)"/>
+
+  <text x="80" y="92" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="20" letter-spacing="3" font-weight="700" fill="#A98BFF">PSYCHOMETRIC PERSONAS</text>
+  <text x="80" y="146" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="46" font-weight="800" fill="#EEF0FA">A trait vector compiled into behavior</text>
+  <rect x="82" y="170" width="120" height="4" rx="2" fill="url(#hairline)"/>
+
+  <!-- Left: trait sliders -->
+  <text x="120" y="252" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="22" font-weight="800" fill="#EEF0FA">1 · Trait vector (0–100)</text>
+  <g font-family="Segoe UI, Helvetica Neue, Arial, sans-serif">
+    <!-- rows: label, track, fill -->
+    <text x="120" y="316" font-size="19" fill="#A6ADC8">Caution</text>
+    <rect x="120" y="328" width="520" height="16" rx="8" fill="rgba(255,255,255,0.07)"/><rect x="120" y="328" width="430" height="16" rx="8" fill="url(#barTrack)"/><circle cx="550" cy="336" r="13" fill="#EEF0FA"/>
+    <text x="120" y="384" font-size="19" fill="#A6ADC8">Rigor / detail</text>
+    <rect x="120" y="396" width="520" height="16" rx="8" fill="rgba(255,255,255,0.07)"/><rect x="120" y="396" width="470" height="16" rx="8" fill="url(#barTrack)"/><circle cx="590" cy="404" r="13" fill="#EEF0FA"/>
+    <text x="120" y="452" font-size="19" fill="#A6ADC8">Assertiveness</text>
+    <rect x="120" y="464" width="520" height="16" rx="8" fill="rgba(255,255,255,0.07)"/><rect x="120" y="464" width="180" height="16" rx="8" fill="url(#barTrack)"/><circle cx="300" cy="472" r="13" fill="#EEF0FA"/>
+    <text x="120" y="520" font-size="19" fill="#A6ADC8">Risk tolerance</text>
+    <rect x="120" y="532" width="520" height="16" rx="8" fill="rgba(255,255,255,0.07)"/><rect x="120" y="532" width="140" height="16" rx="8" fill="url(#barTrack)"/><circle cx="260" cy="540" r="13" fill="#EEF0FA"/>
+    <text x="120" y="588" font-size="19" fill="#A6ADC8">Warmth</text>
+    <rect x="120" y="600" width="520" height="16" rx="8" fill="rgba(255,255,255,0.07)"/><rect x="120" y="600" width="330" height="16" rx="8" fill="url(#barTrack)"/><circle cx="450" cy="608" r="13" fill="#EEF0FA"/>
+  </g>
+  <text x="120" y="672" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="17" fill="#717892">Set by a short questionnaire or by sliders — HEXACO, Enneagram, MBTI and more.</text>
+
+  <!-- arrow -->
+  <g>
+    <path d="M700,470 L860,470" stroke="url(#coolGrad)" stroke-width="5" fill="none"/>
+    <path d="M852,458 L878,470 L852,482 Z" fill="#3DD6F5"/>
+    <text x="780" y="452" text-anchor="middle" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="16" fill="#3DD6F5">compiled</text>
+  </g>
+
+  <!-- Right: outputs -->
+  <text x="920" y="252" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="22" font-weight="800" fill="#EEF0FA">2 · Runtime behavior</text>
+
+  <rect x="920" y="284" width="560" height="180" rx="20" fill="rgba(169,139,255,0.08)" stroke="rgba(169,139,255,0.30)"/>
+  <text x="952" y="330" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="22" font-weight="800" fill="#A98BFF">Prompt directives</text>
+  <text x="952" y="368" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="18" fill="#A6ADC8"><tspan x="952" dy="0">"Double-check edge cases before you claim done."</tspan><tspan x="952" dy="30">"State assumptions; ask before irreversible actions."</tspan><tspan x="952" dy="30">"Be concise and direct; lead with the recommendation."</tspan></text>
+
+  <rect x="920" y="490" width="560" height="180" rx="20" fill="rgba(61,214,245,0.08)" stroke="rgba(61,214,245,0.30)"/>
+  <text x="952" y="536" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="22" font-weight="800" fill="#3DD6F5">Execution parameters</text>
+  <text x="952" y="574" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="18" fill="#A6ADC8"><tspan x="952" dy="0">temperature · verbosity · retry patience</tspan><tspan x="952" dy="30">approval-seeking threshold · exploration vs. focus</tspan><tspan x="952" dy="30">how readily it escalates to a human</tspan></text>
+
+  <!-- setpoints note -->
+  <rect x="120" y="740" width="1360" height="70" rx="16" fill="rgba(91,240,188,0.08)" stroke="rgba(91,240,188,0.35)"/>
+  <text x="150" y="783" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="22" fill="#EEF0FA">✔ Personality is the <tspan font-weight="800" fill="#5BF0BC">setpoint</tspan>; the trainable limbic layer supplies the <tspan font-weight="800" fill="#5BF0BC">dynamics</tspan> — so a persona behaves consistently, run after run.</text>
+
+  <g opacity="0.85">
+    <circle cx="1336" cy="852" r="9" fill="url(#violetGrad)"/>
+    <text x="1354" y="859" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="20" font-weight="700" fill="#A6ADC8">Builderforce.ai</text>
+  </g>
+  <text x="80" y="858" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="17" fill="#717892">A cautious reviewer and a fast prototyper genuinely behave differently</text>
+</svg>

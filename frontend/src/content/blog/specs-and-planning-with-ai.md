@@ -12,6 +12,8 @@ Most AI coding tools start at the code. They assume you already know what to bui
 
 The best engineering work starts with clear thinking: what is the problem, what does the solution look like architecturally, and what are the discrete units of work needed to get there. Builderforce gives you AI-assisted tools for each stage, and a structured **spec** that carries your thinking all the way through to executing agents.
 
+![The planning stack narrowing from idea to PRD to architecture spec to a JSON task list to executable agent tasks](/blog/specs-planning.svg)
+
 ---
 
 ## The Planning Stack

@@ -12,6 +12,8 @@ For thirty years, the enterprise software stack has been a reconciliation proble
 
 The agentic era breaks that constraint, and most teams haven't noticed yet.
 
+![Diagram of the system of record for agentic work: an idea to build to ship to learn pipeline where the learn stage feeds routing back into the next run, cost priced at write time and rolled up ticket to project to initiative to tenant, and humans and agents sharing one instrumented board](/blog/system-of-record.svg)
+
 ## Half your workforce is now fully instrumented
 
 When an AI agent does a unit of work, it emits a perfect record by construction. Every tool it called, every token it spent, every model it chose, every step it took, whether the build passed, whether the pull request merged — all of it is captured because the runtime *is* the worker. There is no gap between the work and the record of the work.

@@ -10,6 +10,8 @@ author: Sean Hogg
 
 The single biggest reason teams stay on a tool they've outgrown is the move itself. Years of tickets, a project taxonomy everyone has memorized, assignees, sprints, story points — the fear isn't the new tool, it's losing the old one's history in the switch. So BuilderForce treats migration as a first-class, reversible-until-you-commit workflow, not a one-shot import button you cross your fingers on.
 
+![Funnel diagram: migration-badge providers Jira, monday, Rally, GitLab, Bitbucket and GitHub plus sync-only sources feed a staged seven-step migration wizard that outputs one BuilderForce board and a live sync connection](/blog/migrate-integrate.svg)
+
 ## Two ways to adopt: migrate, sync, or both
 
 Not every team wants to leave. Some want to move wholesale; some never want to leave Jira and just want the data flowing into BuilderForce so their agents and dashboards can act on it. Every integration supports both, chosen per run:

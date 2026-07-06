@@ -1,0 +1,66 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900">
+  <defs>
+    <radialGradient id="bgGlow" cx="50%" cy="0%" r="120%">
+      <stop offset="0%" stop-color="#1B1F46"/><stop offset="55%" stop-color="#13152F"/><stop offset="100%" stop-color="#0A0B1E"/>
+    </radialGradient>
+    <linearGradient id="violetGrad" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#A98BFF"/><stop offset="100%" stop-color="#6A4DF0"/></linearGradient>
+    <linearGradient id="coolGrad" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#3DD6F5"/><stop offset="100%" stop-color="#4F8BFF"/></linearGradient>
+    <linearGradient id="mintGrad" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#5BF0BC"/><stop offset="100%" stop-color="#23B987"/></linearGradient>
+    <linearGradient id="coralGrad" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#FF8F7A"/><stop offset="100%" stop-color="#F0574A"/></linearGradient>
+    <linearGradient id="amberGrad" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#FFCE6B"/><stop offset="100%" stop-color="#F5A623"/></linearGradient>
+    <linearGradient id="hairline" x1="0" y1="0" x2="1" y2="0"><stop offset="0%" stop-color="rgba(139,108,255,0)"/><stop offset="50%" stop-color="rgba(139,108,255,0.55)"/><stop offset="100%" stop-color="rgba(61,214,245,0)"/></linearGradient>
+  </defs>
+  <rect width="1600" height="900" fill="url(#bgGlow)"/>
+  <text x="80" y="92" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="20" letter-spacing="3" font-weight="700" fill="#A98BFF">GETTING STARTED</text>
+  <text x="80" y="146" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="46" font-weight="800" fill="#EEF0FA">Zero to published agent in five steps</text>
+  <rect x="82" y="170" width="120" height="4" rx="2" fill="url(#hairline)"/>
+
+  <!-- connecting spine between step badges -->
+  <line x1="266" y1="290" x2="266" y2="712" stroke="rgba(255,255,255,0.10)" stroke-width="2"/>
+
+  <!-- STEP 1 -->
+  <rect x="200" y="230" width="1220" height="90" rx="16" fill="rgba(255,255,255,0.035)" stroke="rgba(255,255,255,0.10)" stroke-width="1.5"/>
+  <rect x="200" y="230" width="6" height="90" rx="3" fill="url(#violetGrad)"/>
+  <circle cx="266" cy="275" r="30" fill="url(#violetGrad)"/>
+  <text x="266" y="285" text-anchor="middle" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="30" font-weight="900" fill="#0A0B1E">1</text>
+  <text x="330" y="268" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="26" font-weight="800" fill="#EEF0FA">Create a project</text>
+  <text x="330" y="300" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="19" fill="#A6ADC8">A Monaco IDE workspace with terminal, files, and AI chat</text>
+
+  <!-- STEP 2 -->
+  <rect x="200" y="338" width="1220" height="90" rx="16" fill="rgba(255,255,255,0.035)" stroke="rgba(255,255,255,0.10)" stroke-width="1.5"/>
+  <rect x="200" y="338" width="6" height="90" rx="3" fill="url(#coolGrad)"/>
+  <circle cx="266" cy="383" r="30" fill="url(#coolGrad)"/>
+  <text x="266" y="393" text-anchor="middle" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="30" font-weight="900" fill="#0A0B1E">2</text>
+  <text x="330" y="376" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="26" font-weight="800" fill="#EEF0FA">Generate a training dataset</text>
+  <text x="330" y="408" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="19" fill="#A6ADC8">A capability prompt becomes instruction-response pairs</text>
+
+  <!-- STEP 3 -->
+  <rect x="200" y="446" width="1220" height="90" rx="16" fill="rgba(255,255,255,0.035)" stroke="rgba(255,255,255,0.10)" stroke-width="1.5"/>
+  <rect x="200" y="446" width="6" height="90" rx="3" fill="url(#mintGrad)"/>
+  <circle cx="266" cy="491" r="30" fill="url(#mintGrad)"/>
+  <text x="266" y="501" text-anchor="middle" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="30" font-weight="900" fill="#0A0B1E">3</text>
+  <text x="330" y="484" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="26" font-weight="800" fill="#EEF0FA">Run LoRA training</text>
+  <text x="330" y="516" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="19" fill="#A6ADC8">WebGPU fine-tunes the adapter weights in your browser tab</text>
+
+  <!-- STEP 4 -->
+  <rect x="200" y="554" width="1220" height="90" rx="16" fill="rgba(255,255,255,0.035)" stroke="rgba(255,255,255,0.10)" stroke-width="1.5"/>
+  <rect x="200" y="554" width="6" height="90" rx="3" fill="url(#amberGrad)"/>
+  <circle cx="266" cy="599" r="30" fill="url(#amberGrad)"/>
+  <text x="266" y="609" text-anchor="middle" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="30" font-weight="900" fill="#0A0B1E">4</text>
+  <text x="330" y="592" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="26" font-weight="800" fill="#EEF0FA">Evaluate with an AI judge</text>
+  <text x="330" y="624" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="19" fill="#A6ADC8">Scores for correctness, reasoning quality, and hallucination</text>
+
+  <!-- STEP 5 -->
+  <rect x="200" y="662" width="1220" height="90" rx="16" fill="rgba(255,255,255,0.035)" stroke="rgba(255,255,255,0.10)" stroke-width="1.5"/>
+  <rect x="200" y="662" width="6" height="90" rx="3" fill="url(#coralGrad)"/>
+  <circle cx="266" cy="707" r="30" fill="url(#coralGrad)"/>
+  <text x="266" y="717" text-anchor="middle" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="30" font-weight="900" fill="#0A0B1E">5</text>
+  <text x="330" y="700" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="26" font-weight="800" fill="#EEF0FA">Publish to the Workforce Registry</text>
+  <text x="330" y="732" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="19" fill="#A6ADC8">Your agent appears instantly, ready to discover and hire</text>
+
+  <g opacity="0.85">
+    <circle cx="1336" cy="852" r="9" fill="url(#violetGrad)"/>
+    <text x="1354" y="859" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="20" font-weight="700" fill="#A6ADC8">Builderforce.ai</text>
+  </g>
+  <text x="80" y="858" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="17" fill="#717892">Train and ship a custom agent entirely in your browser — no cloud GPU</text>
+</svg>

@@ -1,0 +1,109 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900">
+  <defs>
+    <radialGradient id="bgGlow" cx="50%" cy="0%" r="120%">
+      <stop offset="0%" stop-color="#1B1F46"/><stop offset="55%" stop-color="#13152F"/><stop offset="100%" stop-color="#0A0B1E"/>
+    </radialGradient>
+    <linearGradient id="violetGrad" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#A98BFF"/><stop offset="100%" stop-color="#6A4DF0"/></linearGradient>
+    <linearGradient id="coolGrad" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#3DD6F5"/><stop offset="100%" stop-color="#4F8BFF"/></linearGradient>
+    <linearGradient id="mintGrad" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#5BF0BC"/><stop offset="100%" stop-color="#23B987"/></linearGradient>
+    <linearGradient id="coralGrad" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#FF8F7A"/><stop offset="100%" stop-color="#F0574A"/></linearGradient>
+    <linearGradient id="amberGrad" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#FFCE6B"/><stop offset="100%" stop-color="#F5A623"/></linearGradient>
+    <linearGradient id="hairline" x1="0" y1="0" x2="1" y2="0"><stop offset="0%" stop-color="rgba(139,108,255,0)"/><stop offset="50%" stop-color="rgba(139,108,255,0.55)"/><stop offset="100%" stop-color="rgba(61,214,245,0)"/></linearGradient>
+    <marker id="arw" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#8891AE"/></marker>
+  </defs>
+  <rect width="1600" height="900" fill="url(#bgGlow)"/>
+  <text x="80" y="92" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="20" letter-spacing="3" font-weight="700" fill="#A98BFF">THE AGENTIC TESTER</text>
+  <text x="80" y="146" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="46" font-weight="800" fill="#EEF0FA">An autonomous QA agent that files its own bugs</text>
+  <rect x="82" y="170" width="120" height="4" rx="2" fill="url(#hairline)"/>
+
+  <text x="80" y="248" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="19" fill="#8891AE">Point it at a URL, save the logins &#8212; it ranks, writes, drives, and files, end to end.</text>
+
+  <!-- stage 1 heatmap (amber) -->
+  <g font-family="Segoe UI, Helvetica Neue, Arial, sans-serif">
+    <rect x="80" y="300" width="252" height="240" rx="16" fill="rgba(255,255,255,0.035)" stroke="rgba(255,255,255,0.10)"/>
+    <rect x="82" y="302" width="6" height="236" rx="3" fill="url(#amberGrad)"/>
+    <text x="108" y="352" font-size="22" font-weight="800" fill="#EEF0FA">Usage heatmap</text>
+    <line x1="108" y1="368" x2="308" y2="368" stroke="rgba(255,255,255,0.10)"/>
+    <text x="108" y="402" font-size="15.5" fill="#A6ADC8">Journey events ranked into</text>
+    <text x="108" y="426" font-size="15.5" fill="#A6ADC8">route + element zones,</text>
+    <text x="108" y="450" font-size="15.5" fill="#A6ADC8">recency-weighted.</text>
+    <text x="108" y="486" font-size="14.5" fill="#8891AE">Plans pull the hottest zones</text>
+    <text x="108" y="508" font-size="14.5" fill="#8891AE">first, within a budget you set.</text>
+    <text x="108" y="530" font-size="14.5" fill="#8891AE">Tests what users actually do.</text>
+  </g>
+  <!-- stage 2 spec (violet) -->
+  <g font-family="Segoe UI, Helvetica Neue, Arial, sans-serif">
+    <rect x="364" y="300" width="252" height="240" rx="16" fill="rgba(255,255,255,0.035)" stroke="rgba(255,255,255,0.10)"/>
+    <rect x="366" y="302" width="6" height="236" rx="3" fill="url(#violetGrad)"/>
+    <text x="392" y="352" font-size="22" font-weight="800" fill="#EEF0FA">Playwright spec</text>
+    <line x1="392" y1="368" x2="592" y2="368" stroke="rgba(255,255,255,0.10)"/>
+    <text x="392" y="402" font-size="15.5" fill="#A6ADC8">An LLM generates executable</text>
+    <text x="392" y="426" font-size="15.5" fill="#A6ADC8">browser code and resolves the</text>
+    <text x="392" y="450" font-size="15.5" fill="#A6ADC8">persona to log in as.</text>
+    <text x="392" y="486" font-size="14.5" fill="#8891AE">Or a deterministic plan from</text>
+    <text x="392" y="508" font-size="14.5" fill="#8891AE">the heatmap, no model cost.</text>
+    <text x="392" y="530" font-size="14.5" fill="#8891AE">Stored + versioned per project.</text>
+  </g>
+  <!-- stage 3 drive browser (cool) -->
+  <g font-family="Segoe UI, Helvetica Neue, Arial, sans-serif">
+    <rect x="648" y="300" width="252" height="240" rx="16" fill="rgba(255,255,255,0.035)" stroke="rgba(255,255,255,0.10)"/>
+    <rect x="650" y="302" width="6" height="236" rx="3" fill="url(#coolGrad)"/>
+    <text x="676" y="352" font-size="22" font-weight="800" fill="#EEF0FA">Drive a browser</text>
+    <line x1="676" y1="368" x2="876" y2="368" stroke="rgba(255,255,255,0.10)"/>
+    <text x="676" y="402" font-size="15.5" fill="#A6ADC8">A containerized harness logs</text>
+    <text x="676" y="426" font-size="15.5" fill="#A6ADC8">in as a real user &#8212; typing</text>
+    <text x="676" y="450" font-size="15.5" fill="#A6ADC8">creds, not bypassing auth.</text>
+    <text x="676" y="486" font-size="14.5" fill="#8891AE">Walks the plan; captures</text>
+    <text x="676" y="508" font-size="14.5" fill="#8891AE">console, page, network errors,</text>
+    <text x="676" y="530" font-size="14.5" fill="#8891AE">assertions and crashes.</text>
+    <rect x="762" y="312" width="126" height="24" rx="12" fill="rgba(61,214,245,0.16)"/>
+    <text x="825" y="329" text-anchor="middle" font-size="12.5" font-weight="700" fill="#3DD6F5">cron: nightly</text>
+  </g>
+  <!-- stage 4 file bug (coral) -->
+  <g font-family="Segoe UI, Helvetica Neue, Arial, sans-serif">
+    <rect x="932" y="300" width="252" height="240" rx="16" fill="rgba(255,255,255,0.035)" stroke="rgba(255,255,255,0.10)"/>
+    <rect x="934" y="302" width="6" height="236" rx="3" fill="url(#coralGrad)"/>
+    <text x="960" y="352" font-size="22" font-weight="800" fill="#EEF0FA">File the bug</text>
+    <line x1="960" y1="368" x2="1160" y2="368" stroke="rgba(255,255,255,0.10)"/>
+    <text x="960" y="402" font-size="15.5" fill="#A6ADC8">Findings deduped by</text>
+    <text x="960" y="426" font-size="15.5" fill="#A6ADC8">fingerprint, ranked by the</text>
+    <text x="960" y="450" font-size="15.5" fill="#A6ADC8">heat of the zone.</text>
+    <text x="960" y="486" font-size="14.5" fill="#8891AE">At/above your severity</text>
+    <text x="960" y="508" font-size="14.5" fill="#8891AE">threshold &#8594; a board task,</text>
+    <text x="960" y="530" font-size="14.5" fill="#8891AE">dropped into a fix lane.</text>
+  </g>
+  <!-- stage 5 fix agent PR (mint) -->
+  <g font-family="Segoe UI, Helvetica Neue, Arial, sans-serif">
+    <rect x="1216" y="300" width="252" height="240" rx="16" fill="rgba(255,255,255,0.035)" stroke="rgba(255,255,255,0.10)"/>
+    <rect x="1218" y="302" width="6" height="236" rx="3" fill="url(#mintGrad)"/>
+    <text x="1244" y="352" font-size="22" font-weight="800" fill="#EEF0FA">Fix agent &#8594; PR</text>
+    <line x1="1244" y1="368" x2="1444" y2="368" stroke="rgba(255,255,255,0.10)"/>
+    <text x="1244" y="402" font-size="15.5" fill="#A6ADC8">The fix lane fires the same</text>
+    <text x="1244" y="426" font-size="15.5" fill="#A6ADC8">auto-run trigger a human</text>
+    <text x="1244" y="450" font-size="15.5" fill="#A6ADC8">board drag would.</text>
+    <text x="1244" y="486" font-size="14.5" fill="#8891AE">A fix agent reads the task,</text>
+    <text x="1244" y="508" font-size="14.5" fill="#8891AE">fixes the code, opens a PR.</text>
+    <text x="1244" y="530" font-size="14.5" fill="#8891AE">Finding resolved on close.</text>
+  </g>
+
+  <!-- arrows -->
+  <g stroke="#8891AE" stroke-width="2.5" fill="none">
+    <line x1="336" y1="420" x2="360" y2="420" marker-end="url(#arw)"/>
+    <line x1="620" y1="420" x2="644" y2="420" marker-end="url(#arw)"/>
+    <line x1="904" y1="420" x2="928" y2="420" marker-end="url(#arw)"/>
+    <line x1="1188" y1="420" x2="1212" y2="420" marker-end="url(#arw)"/>
+  </g>
+
+  <!-- quality trend note -->
+  <rect x="80" y="600" width="1388" height="150" rx="16" fill="rgba(255,255,255,0.035)" stroke="rgba(255,255,255,0.10)"/>
+  <rect x="82" y="602" width="6" height="146" rx="3" fill="url(#mintGrad)"/>
+  <text x="112" y="650" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="22" font-weight="800" fill="#EEF0FA">Quality you can actually see</text>
+  <text x="112" y="690" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="17" fill="#A6ADC8">Findings (escaped defects) and CI failures (caught defects) both land on the platform, so the tester rolls up into a real quality</text>
+  <text x="112" y="718" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="17" fill="#A6ADC8">trend with model and agent attribution. The loop runs end to end without a human in the middle &#8212; but every step is on the board.</text>
+
+  <g opacity="0.85">
+    <circle cx="1336" cy="852" r="9" fill="url(#violetGrad)"/>
+    <text x="1354" y="859" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="20" font-weight="700" fill="#A6ADC8">Builderforce.ai</text>
+  </g>
+  <text x="80" y="858" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="17" fill="#717892">It closes the gap between what we test and what users do &#8212; on its own.</text>
+</svg>
