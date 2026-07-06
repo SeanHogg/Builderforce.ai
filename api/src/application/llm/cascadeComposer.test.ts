@@ -35,6 +35,51 @@ describe('composeFreeCappedCascade', () => {
     expect(chain).toEqual(['free-a', 'free-b', 'paid-1', 'paid-2', 'premium-x']);
   });
 
+  it('leads with the HEAD (connected-BYO flagship) BEFORE the free slice — the buried-account bug', () => {
+    // Regression for the production symptom: a connected Claude subscription seeded
+    // `claude-opus-4-8` (PREMIUM), but the composer put all FREE models first, so the
+    // account was tried LAST (or never) and the run "produced no reply" on an @cf/* coder.
+    // With `head`, the deliberately-seeded flagship must lead verbatim.
+    const chain = composeFreeCappedCascade({
+      head: ['claude-opus-4-8'],
+      seed: ['claude-opus-4-8', 'free-a', 'free-b', 'free-c'], // seed still contains the head
+      premiumFallback: ['premium-x'],
+      freeBudget: 2,
+      tierOf: tierMap({ 'free-a': 'FREE', 'free-b': 'FREE', 'free-c': 'FREE' }), // claude-* defaults PREMIUM
+      isUnavailable: () => false,
+      cursor: { value: 0 },
+    });
+    // Connected account FIRST, then the (capped) free slice, then premium fallback.
+    expect(chain).toEqual(['claude-opus-4-8', 'free-a', 'free-b', 'premium-x']);
+    expect(chain[0]).toBe('claude-opus-4-8');
+  });
+
+  it('drops a HEAD entry that is unavailable (cooled) rather than forcing a known-broken model', () => {
+    const chain = composeFreeCappedCascade({
+      head: ['claude-opus-4-8'],
+      seed: ['claude-opus-4-8', 'free-a'],
+      premiumFallback: [],
+      freeBudget: 2,
+      tierOf: tierMap({ 'free-a': 'FREE' }),
+      isUnavailable: (m) => m === 'claude-opus-4-8', // connected flagship on cooldown this moment
+      cursor: { value: 0 },
+    });
+    expect(chain).toEqual(['free-a']);
+  });
+
+  it('with no head, behaviour is unchanged (paid seed still trails the free slice)', () => {
+    const chain = composeFreeCappedCascade({
+      seed: ['paid-1', 'free-a', 'free-b'],
+      premiumFallback: [],
+      freeBudget: 2,
+      tierOf: tierMap({ 'free-a': 'FREE', 'free-b': 'FREE' }), // paid-1 defaults PREMIUM
+      isUnavailable: () => false,
+      cursor: { value: 0 },
+    });
+    // No head passed → the legacy "free first, paid trails" ordering is preserved.
+    expect(chain).toEqual(['free-a', 'free-b', 'paid-1']);
+  });
+
   it('round-robins within the FREE slice across calls', () => {
     const cursor = { value: 0 };
     const seed   = ['free-a', 'free-b'];
