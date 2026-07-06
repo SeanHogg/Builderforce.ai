@@ -1,0 +1,65 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900">
+  <defs>
+    <radialGradient id="bgGlow" cx="50%" cy="0%" r="120%">
+      <stop offset="0%" stop-color="#1B1F46"/><stop offset="55%" stop-color="#13152F"/><stop offset="100%" stop-color="#0A0B1E"/>
+    </radialGradient>
+    <linearGradient id="violetGrad" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#A98BFF"/><stop offset="100%" stop-color="#6A4DF0"/></linearGradient>
+    <linearGradient id="coolGrad" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#3DD6F5"/><stop offset="100%" stop-color="#4F8BFF"/></linearGradient>
+    <linearGradient id="mintGrad" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#5BF0BC"/><stop offset="100%" stop-color="#23B987"/></linearGradient>
+    <linearGradient id="coralGrad" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#FF8F7A"/><stop offset="100%" stop-color="#F0574A"/></linearGradient>
+    <linearGradient id="amberGrad" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#FFCE6B"/><stop offset="100%" stop-color="#F5A623"/></linearGradient>
+    <linearGradient id="hairline" x1="0" y1="0" x2="1" y2="0"><stop offset="0%" stop-color="rgba(139,108,255,0)"/><stop offset="50%" stop-color="rgba(139,108,255,0.55)"/><stop offset="100%" stop-color="rgba(61,214,245,0)"/></linearGradient>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="7" refY="5" orient="auto"><path d="M0,0 L9,5 L0,10 Z" fill="rgba(255,255,255,0.35)"/></marker>
+  </defs>
+  <rect width="1600" height="900" fill="url(#bgGlow)"/>
+  <text x="80" y="92" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="20" letter-spacing="3" font-weight="700" fill="#A98BFF">PRODUCT IDEATION</text>
+  <text x="80" y="146" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="46" font-weight="800" fill="#EEF0FA">From a raw idea to an executed plan</text>
+  <rect x="82" y="170" width="120" height="4" rx="2" fill="url(#hairline)"/>
+
+  <!-- arrows between stages at y=470 -->
+  <line x1="326" y1="470" x2="372" y2="470" stroke="rgba(255,255,255,0.35)" stroke-width="2.5" marker-end="url(#arrow)"/>
+  <line x1="626" y1="470" x2="672" y2="470" stroke="rgba(255,255,255,0.35)" stroke-width="2.5" marker-end="url(#arrow)"/>
+  <line x1="926" y1="470" x2="972" y2="470" stroke="rgba(255,255,255,0.35)" stroke-width="2.5" marker-end="url(#arrow)"/>
+  <line x1="1226" y1="470" x2="1272" y2="470" stroke="rgba(255,255,255,0.35)" stroke-width="2.5" marker-end="url(#arrow)"/>
+
+  <!-- STAGE 1: Brainstorm -->
+  <rect x="80" y="300" width="240" height="330" rx="18" fill="rgba(255,255,255,0.035)" stroke="rgba(255,255,255,0.10)" stroke-width="1.5"/>
+  <rect x="80" y="300" width="240" height="6" rx="3" fill="url(#violetGrad)"/>
+  <text x="200" y="390" text-anchor="middle" font-size="44">💡</text>
+  <text x="200" y="448" text-anchor="middle" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="24" font-weight="800" fill="#EEF0FA">Brainstorm</text>
+  <text x="200" y="500" text-anchor="middle" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="17" fill="#A6ADC8"><tspan x="200" dy="0">AI expands your seed</tspan><tspan x="200" dy="26">idea into a problem</tspan><tspan x="200" dy="26">statement, features,</tspan><tspan x="200" dy="26">and user stories</tspan></text>
+
+  <!-- STAGE 2: IDE -->
+  <rect x="380" y="300" width="240" height="330" rx="18" fill="rgba(255,255,255,0.035)" stroke="rgba(255,255,255,0.10)" stroke-width="1.5"/>
+  <rect x="380" y="300" width="240" height="6" rx="3" fill="url(#coolGrad)"/>
+  <text x="500" y="390" text-anchor="middle" font-size="44">📝</text>
+  <text x="500" y="448" text-anchor="middle" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="24" font-weight="800" fill="#EEF0FA">Structure in IDE</text>
+  <text x="500" y="500" text-anchor="middle" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="17" fill="#A6ADC8"><tspan x="500" dy="0">AI chat drafts a PRD,</tspan><tspan x="500" dy="26">architecture sketch,</tspan><tspan x="500" dy="26">and a prioritised</tspan><tspan x="500" dy="26">backlog</tspan></text>
+
+  <!-- STAGE 3: Timeline -->
+  <rect x="680" y="300" width="240" height="330" rx="18" fill="rgba(255,255,255,0.035)" stroke="rgba(255,255,255,0.10)" stroke-width="1.5"/>
+  <rect x="680" y="300" width="240" height="6" rx="3" fill="url(#mintGrad)"/>
+  <text x="800" y="390" text-anchor="middle" font-size="44">📅</text>
+  <text x="800" y="448" text-anchor="middle" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="24" font-weight="800" fill="#EEF0FA">Timeline</text>
+  <text x="800" y="500" text-anchor="middle" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="17" fill="#A6ADC8"><tspan x="800" dy="0">Map milestones on a</tspan><tspan x="800" dy="26">Gantt-style plan —</tspan><tspan x="800" dy="26">your single source of</tspan><tspan x="800" dy="26">delivery truth</tspan></text>
+
+  <!-- STAGE 4: Hire Agents -->
+  <rect x="980" y="300" width="240" height="330" rx="18" fill="rgba(255,255,255,0.035)" stroke="rgba(255,255,255,0.10)" stroke-width="1.5"/>
+  <rect x="980" y="300" width="240" height="6" rx="3" fill="url(#amberGrad)"/>
+  <text x="1100" y="390" text-anchor="middle" font-size="44">👥</text>
+  <text x="1100" y="448" text-anchor="middle" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="24" font-weight="800" fill="#EEF0FA">Hire Agents</text>
+  <text x="1100" y="500" text-anchor="middle" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="17" fill="#A6ADC8"><tspan x="1100" dy="0">Pull UX research,</tspan><tspan x="1100" dy="26">frontend, and copy</tspan><tspan x="1100" dy="26">specialists from the</tspan><tspan x="1100" dy="26">Workforce Registry</tspan></text>
+
+  <!-- STAGE 5: Ship -->
+  <rect x="1280" y="300" width="240" height="330" rx="18" fill="rgba(255,255,255,0.035)" stroke="rgba(255,255,255,0.10)" stroke-width="1.5"/>
+  <rect x="1280" y="300" width="240" height="6" rx="3" fill="url(#coralGrad)"/>
+  <text x="1400" y="390" text-anchor="middle" font-size="44">🚀</text>
+  <text x="1400" y="448" text-anchor="middle" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="24" font-weight="800" fill="#EEF0FA">Review &amp; Ship</text>
+  <text x="1400" y="500" text-anchor="middle" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="17" fill="#A6ADC8"><tspan x="1400" dy="0">Coordinate work in the</tspan><tspan x="1400" dy="26">Task Panel, iterate,</tspan><tspan x="1400" dy="26">and deliver — all in</tspan><tspan x="1400" dy="26">one project</tspan></text>
+
+  <g opacity="0.85">
+    <circle cx="1336" cy="852" r="9" fill="url(#violetGrad)"/>
+    <text x="1354" y="859" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="20" font-weight="700" fill="#A6ADC8">Builderforce.ai</text>
+  </g>
+  <text x="80" y="858" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="17" fill="#717892">Ideate, plan, assign, build, and review inside a single project — no tool-switching</text>
+</svg>

@@ -10,6 +10,8 @@ author: Sean Hogg
 
 On most platforms an "AI agent" is a chat box with some tools bolted on. On BuilderForce an **agentic employee (EMP)** is a member of your workforce — it has an identity, a skill set, a personality, an owner, a place on the board, and a paper trail. This is the full picture of what one can do.
 
+![The lifecycle of an agentic employee: hired from the marketplace, skilled with knowledge and personality, assigned on the same board as people, executing across surfaces, governed by approval gates, and trained into your own Evermind model](/blog/agentic-employee.svg)
+
 ## It's hired, not configured
 
 An EMP starts as a hire. Browse the Workforce/marketplace, pick a specialist, and hire it — it appears on your roster alongside your people. You can also stand up your own: define a need in plain language, from a process chart, from a dataset, or from diagnostic findings, and the platform compiles it into an agent. Unhiring is a soft delete, so history is never lost.

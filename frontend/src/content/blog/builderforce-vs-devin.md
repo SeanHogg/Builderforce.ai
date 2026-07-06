@@ -14,6 +14,8 @@ Builderforce.ai chases the same outcome — autonomous engineering — but on te
 
 > Choose Builderforce.ai over Devin when you want self-hosted, auditable, model-agnostic autonomous engineering without a proprietary cloud or a $500/mo floor.
 
+![Side-by-side comparison of Devin's proprietary cloud-only single agent at 500 dollars per month versus Builderforce.ai's free MIT-licensed self-hosted multi-agent workforce with model freedom, approval gates and self-healing recovery](/blog/vs-devin.svg)
+
 ## Proprietary cloud vs. self-hosted and open
 
 The single biggest difference is *where it runs and who owns it.*

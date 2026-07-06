@@ -14,6 +14,8 @@ Builderforce.ai's **Quality pillar** closes that loop. It ingests errors like an
 
 > Builderforce.ai ingests runtime errors from many sources, groups them by fingerprint into deduplicated error groups, and turns any group into a one-click fix task a cloud agent picks up and ships as a pull request — crash to PR on one surface.
 
+![Left-to-right pipeline showing a runtime error flowing into a fingerprinted error group, the /quality board, a one-click fix task, and a cloud agent shipping a pull request on one thread](/blog/quality-observability.svg)
+
 ## Ingest from wherever your errors already live
 
 You don't have to rip out what you have. Quality normalizes five sources behind one canonical event shape:

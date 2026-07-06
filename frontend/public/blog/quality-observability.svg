@@ -1,0 +1,104 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900">
+  <defs>
+    <radialGradient id="bgGlow" cx="50%" cy="0%" r="120%">
+      <stop offset="0%" stop-color="#1B1F46"/><stop offset="55%" stop-color="#13152F"/><stop offset="100%" stop-color="#0A0B1E"/>
+    </radialGradient>
+    <linearGradient id="violetGrad" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#A98BFF"/><stop offset="100%" stop-color="#6A4DF0"/></linearGradient>
+    <linearGradient id="coolGrad" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#3DD6F5"/><stop offset="100%" stop-color="#4F8BFF"/></linearGradient>
+    <linearGradient id="mintGrad" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#5BF0BC"/><stop offset="100%" stop-color="#23B987"/></linearGradient>
+    <linearGradient id="coralGrad" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#FF8F7A"/><stop offset="100%" stop-color="#F0574A"/></linearGradient>
+    <linearGradient id="amberGrad" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#FFCE6B"/><stop offset="100%" stop-color="#F5A623"/></linearGradient>
+    <linearGradient id="hairline" x1="0" y1="0" x2="1" y2="0"><stop offset="0%" stop-color="rgba(139,108,255,0)"/><stop offset="50%" stop-color="rgba(139,108,255,0.55)"/><stop offset="100%" stop-color="rgba(61,214,245,0)"/></linearGradient>
+    <marker id="arw" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#8891AE"/></marker>
+  </defs>
+  <rect width="1600" height="900" fill="url(#bgGlow)"/>
+  <text x="80" y="92" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="20" letter-spacing="3" font-weight="700" fill="#A98BFF">QUALITY PILLAR</text>
+  <text x="80" y="146" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="46" font-weight="800" fill="#EEF0FA">From stack trace to pull request</text>
+  <rect x="82" y="170" width="120" height="4" rx="2" fill="url(#hairline)"/>
+
+  <!-- pipeline label -->
+  <text x="80" y="248" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="19" fill="#8891AE">The loop: crash &#8594; grouped error &#8594; one-click fix task &#8594; pull request</text>
+
+  <!-- stage cards -->
+  <!-- 1 Runtime error (coral) -->
+  <g>
+    <rect x="80" y="300" width="252" height="228" rx="16" fill="rgba(255,255,255,0.035)" stroke="rgba(255,255,255,0.10)"/>
+    <rect x="82" y="302" width="6" height="224" rx="3" fill="url(#coralGrad)"/>
+    <text x="108" y="352" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="23" font-weight="800" fill="#EEF0FA">Runtime error</text>
+    <line x1="108" y1="368" x2="308" y2="368" stroke="rgba(255,255,255,0.10)"/>
+    <text x="108" y="402" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="15.5" fill="#A6ADC8">window.onerror + unhandled</text>
+    <text x="108" y="426" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="15.5" fill="#A6ADC8">rejections, flushed on page-hide.</text>
+    <text x="108" y="462" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="14.5" fill="#8891AE">Native SDK, OTLP, Sentry,</text>
+    <text x="108" y="484" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="14.5" fill="#8891AE">PostHog, LogRocket &#8594; one</text>
+    <text x="108" y="506" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="14.5" fill="#8891AE">NormalizedErrorEvent.</text>
+  </g>
+  <!-- 2 Fingerprint group (violet) -->
+  <g>
+    <rect x="364" y="300" width="252" height="228" rx="16" fill="rgba(255,255,255,0.035)" stroke="rgba(255,255,255,0.10)"/>
+    <rect x="366" y="302" width="6" height="224" rx="3" fill="url(#violetGrad)"/>
+    <text x="392" y="352" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="23" font-weight="800" fill="#EEF0FA">Fingerprint group</text>
+    <line x1="392" y1="368" x2="592" y2="368" stroke="rgba(255,255,255,0.10)"/>
+    <text x="392" y="402" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="15.5" fill="#A6ADC8">Dedup by (tenant, project,</text>
+    <text x="392" y="426" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="15.5" fill="#A6ADC8">fingerprint).</text>
+    <text x="392" y="462" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="14.5" fill="#8891AE">Literals, hex, UUIDs and</text>
+    <text x="392" y="484" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="14.5" fill="#8891AE">numbers stripped so one bug</text>
+    <text x="392" y="506" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="14.5" fill="#8891AE">stays one group.</text>
+  </g>
+  <!-- 3 /quality dashboard (cool) -->
+  <g>
+    <rect x="648" y="300" width="252" height="228" rx="16" fill="rgba(255,255,255,0.035)" stroke="rgba(255,255,255,0.10)"/>
+    <rect x="650" y="302" width="6" height="224" rx="3" fill="url(#coolGrad)"/>
+    <text x="676" y="352" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="23" font-weight="800" fill="#EEF0FA">/quality board</text>
+    <line x1="676" y1="368" x2="876" y2="368" stroke="rgba(255,255,255,0.10)"/>
+    <text x="676" y="402" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="15.5" fill="#A6ADC8">Groups ranked by status</text>
+    <text x="676" y="426" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="15.5" fill="#A6ADC8">and level.</text>
+    <text x="676" y="462" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="14.5" fill="#8891AE">14-day trend + affected-user</text>
+    <text x="676" y="484" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="14.5" fill="#8891AE">count on each. Triage what</text>
+    <text x="676" y="506" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="14.5" fill="#8891AE">actually hurts users.</text>
+  </g>
+  <!-- 4 Fix with agent (amber) -->
+  <g>
+    <rect x="932" y="300" width="252" height="228" rx="16" fill="rgba(255,255,255,0.035)" stroke="rgba(255,255,255,0.10)"/>
+    <rect x="934" y="302" width="6" height="224" rx="3" fill="url(#amberGrad)"/>
+    <text x="960" y="352" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="23" font-weight="800" fill="#EEF0FA">Fix with agent</text>
+    <line x1="960" y1="368" x2="1160" y2="368" stroke="rgba(255,255,255,0.10)"/>
+    <text x="960" y="402" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="15.5" fill="#A6ADC8">One click &#8594; a board task.</text>
+    <text x="960" y="438" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="14.5" fill="#8891AE">Prioritised from level:</text>
+    <text x="960" y="460" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="14.5" fill="#8891AE">fatal &#8594; urgent, error &#8594; high.</text>
+    <text x="960" y="496" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="14.5" fill="#8891AE">Briefed with trace, env, URL,</text>
+    <text x="960" y="518" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="14.5" fill="#8891AE">occurrence &amp; user counts.</text>
+  </g>
+  <!-- 5 Pull request (mint) -->
+  <g>
+    <rect x="1216" y="300" width="252" height="228" rx="16" fill="rgba(255,255,255,0.035)" stroke="rgba(255,255,255,0.10)"/>
+    <rect x="1218" y="302" width="6" height="224" rx="3" fill="url(#mintGrad)"/>
+    <text x="1244" y="352" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="23" font-weight="800" fill="#EEF0FA">Pull request</text>
+    <line x1="1244" y1="368" x2="1444" y2="368" stroke="rgba(255,255,255,0.10)"/>
+    <text x="1244" y="402" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="15.5" fill="#A6ADC8">A cloud agent reads the brief,</text>
+    <text x="1244" y="426" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="15.5" fill="#A6ADC8">finds the code, writes the fix.</text>
+    <text x="1244" y="462" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="14.5" fill="#8891AE">Opens a PR and links it back.</text>
+    <text x="1244" y="484" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="14.5" fill="#8891AE">The group reopens if the bug</text>
+    <text x="1244" y="506" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="14.5" fill="#8891AE">ever recurs.</text>
+  </g>
+
+  <!-- arrows between stages -->
+  <g stroke="#8891AE" stroke-width="2.5" fill="none">
+    <line x1="336" y1="414" x2="360" y2="414" marker-end="url(#arw)"/>
+    <line x1="620" y1="414" x2="644" y2="414" marker-end="url(#arw)"/>
+    <line x1="904" y1="414" x2="928" y2="414" marker-end="url(#arw)"/>
+    <line x1="1188" y1="414" x2="1212" y2="414" marker-end="url(#arw)"/>
+  </g>
+
+  <!-- one-thread note -->
+  <rect x="80" y="596" width="1388" height="150" rx="16" fill="rgba(255,255,255,0.035)" stroke="rgba(255,255,255,0.10)"/>
+  <rect x="82" y="598" width="6" height="146" rx="3" fill="url(#coolGrad)"/>
+  <text x="112" y="646" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="22" font-weight="800" fill="#EEF0FA">One surface, one thread</text>
+  <text x="112" y="686" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="17" fill="#A6ADC8">The error group links to the task &#8212; the crash, the fix and the PR all live on one thread. Every source is source-agnostic downstream,</text>
+  <text x="112" y="714" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="17" fill="#A6ADC8">and error_events is a metered resource that rolls into the same consumption view as tokens and ingestion.</text>
+
+  <g opacity="0.85">
+    <circle cx="1336" cy="852" r="9" fill="url(#violetGrad)"/>
+    <text x="1354" y="859" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="20" font-weight="700" fill="#A6ADC8">Builderforce.ai</text>
+  </g>
+  <text x="80" y="858" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="17" fill="#717892">Observability wired into an agent workforce makes errors go away, not just visible.</text>
+</svg>

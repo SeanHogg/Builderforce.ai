@@ -16,6 +16,8 @@ Builderforce.ai is built around a different unit of work. It's IDE-independent, 
 
 > Choose Builderforce.ai over Cursor or Windsurf when you want IDE-independent multi-agent orchestration, model freedom, and self-hosting rather than a single editor fork.
 
+![Diagram contrasting Cursor and Windsurf as single-agent, editor-locked tools with Builderforce.ai's IDE-independent multi-agent workforce, plus an MCP bridge showing the two used together](/blog/vs-cursor-windsurf.svg)
+
 ## Single-agent editor vs. multi-agent workforce
 
 Cursor's Composer is powerful, but it's one agent reasoning over your repo. Builderforce.ai runs a **team**: a planner breaks the work down, builders implement, a reviewer runs an adversarial pass, and tests get written — coordinated through a dependency graph, not a single prompt. The work lives on a Kanban board where humans and agents share lanes, not in a chat transcript.

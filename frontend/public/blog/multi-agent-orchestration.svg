@@ -1,0 +1,79 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900">
+  <defs>
+    <radialGradient id="bgGlow" cx="50%" cy="0%" r="120%">
+      <stop offset="0%" stop-color="#1B1F46"/><stop offset="55%" stop-color="#13152F"/><stop offset="100%" stop-color="#0A0B1E"/>
+    </radialGradient>
+    <linearGradient id="violetGrad" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#A98BFF"/><stop offset="100%" stop-color="#6A4DF0"/></linearGradient>
+    <linearGradient id="coolGrad" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#3DD6F5"/><stop offset="100%" stop-color="#4F8BFF"/></linearGradient>
+    <linearGradient id="mintGrad" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#5BF0BC"/><stop offset="100%" stop-color="#23B987"/></linearGradient>
+    <linearGradient id="coralGrad" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#FF8F7A"/><stop offset="100%" stop-color="#F0574A"/></linearGradient>
+    <linearGradient id="amberGrad" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#FFCE6B"/><stop offset="100%" stop-color="#F5A623"/></linearGradient>
+    <linearGradient id="hairline" x1="0" y1="0" x2="1" y2="0"><stop offset="0%" stop-color="rgba(139,108,255,0)"/><stop offset="50%" stop-color="rgba(139,108,255,0.55)"/><stop offset="100%" stop-color="rgba(61,214,245,0)"/></linearGradient>
+    <marker id="arw" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#8891AE"/></marker>
+  </defs>
+  <rect width="1600" height="900" fill="url(#bgGlow)"/>
+  <text x="80" y="92" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="20" letter-spacing="3" font-weight="700" fill="#A98BFF">MULTI-AGENT ORCHESTRATION</text>
+  <text x="80" y="146" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="46" font-weight="800" fill="#EEF0FA">Specialist agents, one coordinated mesh</text>
+  <rect x="82" y="170" width="120" height="4" rx="2" fill="url(#hairline)"/>
+
+  <!-- connectors from orchestrator to specialists -->
+  <g fill="none" stroke="rgba(169,139,255,0.42)" stroke-width="2.5">
+    <path d="M324,498 C445,498 445,290 560,290" marker-end="url(#arw)"/>
+    <path d="M324,498 C445,498 445,420 560,420" marker-end="url(#arw)"/>
+    <path d="M324,498 C445,498 445,550 560,550" marker-end="url(#arw)"/>
+    <path d="M324,498 C445,498 445,680 560,680" marker-end="url(#arw)"/>
+  </g>
+  <line x1="810" y1="420" x2="924" y2="420" stroke="rgba(91,240,188,0.55)" stroke-width="2.5" marker-end="url(#arw)"/>
+
+  <!-- orchestrator -->
+  <rect x="110" y="452" width="214" height="92" rx="16" fill="rgba(169,139,255,0.10)" stroke="rgba(169,139,255,0.45)" stroke-width="1.5"/>
+  <rect x="110" y="452" width="6" height="92" rx="3" fill="url(#violetGrad)"/>
+  <text x="136" y="492" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="23" font-weight="800" fill="#EEF0FA">Orchestrator</text>
+  <text x="136" y="516" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="14.5" fill="#A6ADC8">Decomposes the goal,</text>
+  <text x="136" y="534" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="14.5" fill="#A6ADC8">routes each sub-task</text>
+
+  <!-- planner -->
+  <rect x="560" y="250" width="250" height="80" rx="14" fill="rgba(255,255,255,0.035)" stroke="rgba(255,255,255,0.10)" stroke-width="1.5"/>
+  <rect x="560" y="250" width="6" height="80" rx="3" fill="url(#coolGrad)"/>
+  <text x="586" y="288" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="21" font-weight="800" fill="#EEF0FA">Planner</text>
+  <text x="586" y="312" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="15" fill="#A6ADC8">&#8594; Task breakdown</text>
+
+  <!-- coder -->
+  <rect x="560" y="380" width="250" height="80" rx="14" fill="rgba(255,255,255,0.035)" stroke="rgba(255,255,255,0.10)" stroke-width="1.5"/>
+  <rect x="560" y="380" width="6" height="80" rx="3" fill="url(#mintGrad)"/>
+  <text x="586" y="418" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="21" font-weight="800" fill="#EEF0FA">Coder</text>
+  <text x="586" y="442" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="15" fill="#A6ADC8">&#8594; Implementation</text>
+
+  <!-- reviewer -->
+  <rect x="924" y="380" width="250" height="80" rx="14" fill="rgba(255,255,255,0.035)" stroke="rgba(255,255,255,0.10)" stroke-width="1.5"/>
+  <rect x="924" y="380" width="6" height="80" rx="3" fill="url(#violetGrad)"/>
+  <text x="950" y="418" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="21" font-weight="800" fill="#EEF0FA">Reviewer</text>
+  <text x="950" y="442" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="15" fill="#A6ADC8">&#8594; Code review</text>
+
+  <!-- tester -->
+  <rect x="560" y="510" width="250" height="80" rx="14" fill="rgba(255,255,255,0.035)" stroke="rgba(255,255,255,0.10)" stroke-width="1.5"/>
+  <rect x="560" y="510" width="6" height="80" rx="3" fill="url(#amberGrad)"/>
+  <text x="586" y="548" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="21" font-weight="800" fill="#EEF0FA">Tester</text>
+  <text x="586" y="572" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="15" fill="#A6ADC8">&#8594; Unit tests</text>
+
+  <!-- deployer -->
+  <rect x="560" y="640" width="250" height="80" rx="14" fill="rgba(255,255,255,0.035)" stroke="rgba(255,255,255,0.10)" stroke-width="1.5"/>
+  <rect x="560" y="640" width="6" height="80" rx="3" fill="url(#coralGrad)"/>
+  <text x="586" y="678" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="21" font-weight="800" fill="#EEF0FA">Deployer</text>
+  <text x="586" y="702" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="15" fill="#A6ADC8">&#8594; Deploy manifest</text>
+
+  <!-- handoff info card -->
+  <rect x="924" y="500" width="496" height="220" rx="16" fill="rgba(255,255,255,0.035)" stroke="rgba(255,255,255,0.10)" stroke-width="1.5"/>
+  <rect x="924" y="500" width="6" height="220" rx="3" fill="url(#coolGrad)"/>
+  <text x="954" y="542" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="20" font-weight="800" fill="#A98BFF">Structured handoffs</text>
+  <text x="954" y="580" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="16" fill="#A6ADC8">&#8226; JSON payloads carry task state &amp; prior output</text>
+  <text x="954" y="612" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="16" fill="#A6ADC8">&#8226; Large artefacts pinned to R2, referenced by ID</text>
+  <text x="954" y="644" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="16" fill="#A6ADC8">&#8226; Every hop shows on the Observability timeline</text>
+  <text x="954" y="676" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="16" fill="#A6ADC8">&#8226; Each agent evaluated &amp; versioned on its own</text>
+
+  <g opacity="0.85">
+    <circle cx="1336" cy="852" r="9" fill="url(#violetGrad)"/>
+    <text x="1354" y="859" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="20" font-weight="700" fill="#A6ADC8">Builderforce.ai</text>
+  </g>
+  <text x="80" y="858" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="17" fill="#717892">One orchestrator decomposes the goal and routes each sub-task to its best specialist</text>
+</svg>

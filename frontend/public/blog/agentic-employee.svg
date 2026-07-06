@@ -1,0 +1,75 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900">
+  <defs>
+    <radialGradient id="bgGlow" cx="50%" cy="0%" r="120%">
+      <stop offset="0%" stop-color="#1B1F46"/><stop offset="55%" stop-color="#13152F"/><stop offset="100%" stop-color="#0A0B1E"/>
+    </radialGradient>
+    <linearGradient id="violetGrad" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#A98BFF"/><stop offset="100%" stop-color="#6A4DF0"/></linearGradient>
+    <linearGradient id="coolGrad" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#3DD6F5"/><stop offset="100%" stop-color="#4F8BFF"/></linearGradient>
+    <linearGradient id="mintGrad" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#5BF0BC"/><stop offset="100%" stop-color="#23B987"/></linearGradient>
+    <linearGradient id="coralGrad" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#FF8F7A"/><stop offset="100%" stop-color="#F0574A"/></linearGradient>
+    <linearGradient id="amberGrad" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#FFCE6B"/><stop offset="100%" stop-color="#F5A623"/></linearGradient>
+    <linearGradient id="hairline" x1="0" y1="0" x2="1" y2="0"><stop offset="0%" stop-color="rgba(139,108,255,0)"/><stop offset="50%" stop-color="rgba(139,108,255,0.55)"/><stop offset="100%" stop-color="rgba(61,214,245,0)"/></linearGradient>
+    <marker id="arw" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#8891AE"/></marker>
+  </defs>
+  <rect width="1600" height="900" fill="url(#bgGlow)"/>
+  <text x="80" y="92" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="20" letter-spacing="3" font-weight="700" fill="#A98BFF">THE AGENTIC EMPLOYEE</text>
+  <text x="80" y="146" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="46" font-weight="800" fill="#EEF0FA">A workforce member, not a chatbot</text>
+  <rect x="82" y="170" width="120" height="4" rx="2" fill="url(#hairline)"/>
+
+  <!-- lifecycle connector -->
+  <line x1="270" y1="450" x2="1344" y2="450" stroke="rgba(169,139,255,0.3)" stroke-width="2.5"/>
+  <g fill="none" stroke="rgba(169,139,255,0.5)" stroke-width="2.5">
+    <line x1="330" y1="450" x2="382" y2="450" marker-end="url(#arw)"/>
+    <line x1="568" y1="450" x2="620" y2="450" marker-end="url(#arw)"/>
+    <line x1="806" y1="450" x2="858" y2="450" marker-end="url(#arw)"/>
+    <line x1="1044" y1="450" x2="1096" y2="450" marker-end="url(#arw)"/>
+    <line x1="1282" y1="450" x2="1334" y2="450" marker-end="url(#arw)"/>
+  </g>
+
+  <!-- Stage 1 Hired -->
+  <text x="210" y="352" text-anchor="middle" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="22" font-weight="800" fill="#EEF0FA">Hired</text>
+  <circle cx="210" cy="450" r="52" fill="rgba(169,139,255,0.15)" stroke="url(#violetGrad)" stroke-width="3"/>
+  <text x="210" y="462" text-anchor="middle" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="34" font-weight="900" fill="#A98BFF">1</text>
+  <text x="210" y="540" text-anchor="middle" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="14.5" fill="#A6ADC8"><tspan x="210" dy="0">From the marketplace,</tspan><tspan x="210" dy="21">onto your roster</tspan></text>
+
+  <!-- Stage 2 Skilled -->
+  <text x="448" y="352" text-anchor="middle" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="22" font-weight="800" fill="#EEF0FA">Skilled</text>
+  <circle cx="448" cy="450" r="52" fill="rgba(61,214,245,0.15)" stroke="url(#coolGrad)" stroke-width="3"/>
+  <text x="448" y="462" text-anchor="middle" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="34" font-weight="900" fill="#3DD6F5">2</text>
+  <text x="448" y="540" text-anchor="middle" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="14.5" fill="#A6ADC8"><tspan x="448" dy="0">Skills, knowledge,</tspan><tspan x="448" dy="21">personality, limbic</tspan></text>
+
+  <!-- Stage 3 Assigned -->
+  <text x="686" y="352" text-anchor="middle" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="22" font-weight="800" fill="#EEF0FA">Assigned</text>
+  <circle cx="686" cy="450" r="52" fill="rgba(91,240,188,0.15)" stroke="url(#mintGrad)" stroke-width="3"/>
+  <text x="686" y="462" text-anchor="middle" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="34" font-weight="900" fill="#5BF0BC">3</text>
+  <text x="686" y="540" text-anchor="middle" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="14.5" fill="#A6ADC8"><tspan x="686" dy="0">Same Kanban board</tspan><tspan x="686" dy="21">as your people</tspan></text>
+
+  <!-- Stage 4 Executes -->
+  <text x="924" y="352" text-anchor="middle" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="22" font-weight="800" fill="#EEF0FA">Executes</text>
+  <circle cx="924" cy="450" r="52" fill="rgba(245,166,35,0.15)" stroke="url(#amberGrad)" stroke-width="3"/>
+  <text x="924" y="462" text-anchor="middle" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="34" font-weight="900" fill="#F5A623">4</text>
+  <text x="924" y="540" text-anchor="middle" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="14.5" fill="#A6ADC8"><tspan x="924" dy="0">IDE &#183; on-prem &#183; cloud</tspan><tspan x="924" dy="21">&#183; workflow step</tspan></text>
+
+  <!-- Stage 5 Governed -->
+  <text x="1162" y="352" text-anchor="middle" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="22" font-weight="800" fill="#EEF0FA">Governed</text>
+  <circle cx="1162" cy="450" r="52" fill="rgba(240,87,74,0.15)" stroke="url(#coralGrad)" stroke-width="3"/>
+  <text x="1162" y="462" text-anchor="middle" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="34" font-weight="900" fill="#FF8F7A">5</text>
+  <text x="1162" y="540" text-anchor="middle" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="14.5" fill="#A6ADC8"><tspan x="1162" dy="0">Approval gates, asks,</tspan><tspan x="1162" dy="21">a full audit trail</tspan></text>
+
+  <!-- Stage 6 Trained -->
+  <text x="1400" y="352" text-anchor="middle" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="22" font-weight="800" fill="#EEF0FA">Trained</text>
+  <circle cx="1400" cy="450" r="52" fill="rgba(169,139,255,0.15)" stroke="url(#violetGrad)" stroke-width="3"/>
+  <text x="1400" y="462" text-anchor="middle" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="34" font-weight="900" fill="#A98BFF">6</text>
+  <text x="1400" y="540" text-anchor="middle" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="14.5" fill="#A6ADC8"><tspan x="1400" dy="0">Becomes your own</tspan><tspan x="1400" dy="21">Evermind model</tspan></text>
+
+  <!-- caption band -->
+  <rect x="80" y="638" width="1440" height="88" rx="16" fill="rgba(169,139,255,0.08)" stroke="rgba(169,139,255,0.3)" stroke-width="1.5"/>
+  <text x="112" y="680" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="20" font-weight="800" fill="#A98BFF">Humans manage; agents do the work</text>
+  <text x="112" y="709" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="16" fill="#A6ADC8">Hire it &#183; skill it &#183; give it a personality &#183; assign it &#183; supervise it &#183; govern it &#183; grow it into a model of your own.</text>
+
+  <g opacity="0.85">
+    <circle cx="1336" cy="852" r="9" fill="url(#violetGrad)"/>
+    <text x="1354" y="859" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="20" font-weight="700" fill="#A6ADC8">Builderforce.ai</text>
+  </g>
+  <text x="80" y="858" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="17" fill="#717892">An EMP has an identity, a skill set, a place on the board, and a paper trail</text>
+</svg>

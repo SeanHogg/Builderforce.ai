@@ -496,9 +496,22 @@ export const anthropicModule: VendorModule = {
   },
   async call(params: VendorCallParams): Promise<VendorCallResult> {
     const { headers, body, isOAuth } = prepareAnthropicRequest(params, false);
-    const resp = await fetchWithVendorTimeout('anthropic', params.model, ENDPOINT, {
-      method: 'POST', headers, body: JSON.stringify(body),
-    }, params.timeoutMs, params.signal);
+    let resp: Response;
+    try {
+      resp = await fetchWithVendorTimeout('anthropic', params.model, ENDPOINT, {
+        method: 'POST', headers, body: JSON.stringify(body),
+      }, params.timeoutMs, params.signal);
+    } catch (err) {
+      // A THROW here (vs a non-OK Response) is the `code 0 / no response` case — the
+      // fetch never got an HTTP status (transport error, timeout, or a synchronous
+      // invalid-request throw). Log the EXACT cause server-side so a connected-account
+      // failure is diagnosable from `wrangler tail` even when the UI failover plumbing
+      // reduces it to "no response". Never logs the credential (only the message).
+      console.error(
+        `[vendors] anthropic/${params.model} ${isOAuth ? 'OAuth(subscription)' : 'api-key'} call THREW before any HTTP response: ${err instanceof Error ? `${err.name}: ${err.message}` : String(err)}`,
+      );
+      throw err;
+    }
     if (resp.ok) {
       const raw = await resp.json();
       const oai = toOpenAIResponse(raw, params.model);

@@ -14,6 +14,8 @@ The **Agentic Tester** is a hireable QA agent built to close that gap on its own
 
 > The Agentic Tester is an autonomous QA agent: it ranks what to test from real usage heatmaps, generates Playwright specs, drives a real authenticated browser through your hottest flows on a schedule, and files the bugs it finds onto your board for a fix agent to pick up.
 
+![Left-to-right pipeline: a usage heatmap ranks hot flows, an LLM generates a Playwright spec, a containerized browser logs in and drives the flow on a nightly cron, findings are filed as prioritized board tasks, and a fix agent opens a pull request](/blog/agentic-tester-qa.svg)
+
 ## It tests what users actually do
 
 Most test suites are a guess about what's important. The Agentic Tester doesn't guess — it watches. Journey events captured from your app are ranked into a **usage heatmap** of the route-and-element zones people interact with most, recency-weighted. When it plans an exploration, it pulls from the hottest zones first, within a budget you set. The flows that get the most coverage are the flows your users live in.

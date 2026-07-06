@@ -1,0 +1,63 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900">
+  <defs>
+    <radialGradient id="bgGlow" cx="50%" cy="0%" r="120%">
+      <stop offset="0%" stop-color="#1B1F46"/><stop offset="55%" stop-color="#13152F"/><stop offset="100%" stop-color="#0A0B1E"/>
+    </radialGradient>
+    <linearGradient id="violetGrad" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#A98BFF"/><stop offset="100%" stop-color="#6A4DF0"/></linearGradient>
+    <linearGradient id="coolGrad" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#3DD6F5"/><stop offset="100%" stop-color="#4F8BFF"/></linearGradient>
+    <linearGradient id="mintGrad" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#5BF0BC"/><stop offset="100%" stop-color="#23B987"/></linearGradient>
+    <linearGradient id="coralGrad" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#FF8F7A"/><stop offset="100%" stop-color="#F0574A"/></linearGradient>
+    <linearGradient id="hairline" x1="0" y1="0" x2="1" y2="0"><stop offset="0%" stop-color="rgba(139,108,255,0)"/><stop offset="50%" stop-color="rgba(139,108,255,0.55)"/><stop offset="100%" stop-color="rgba(61,214,245,0)"/></linearGradient>
+  </defs>
+  <rect width="1600" height="900" fill="url(#bgGlow)"/>
+  <text x="80" y="92" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="20" letter-spacing="3" font-weight="700" fill="#A98BFF">BEYOND THE AI-NATIVE EDITOR</text>
+  <text x="80" y="146" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="46" font-weight="800" fill="#EEF0FA">Single-agent editor vs. IDE-independent workforce</text>
+  <rect x="82" y="170" width="120" height="4" rx="2" fill="url(#hairline)"/>
+
+  <!-- Left card: Cursor / Windsurf -->
+  <rect x="80" y="210" width="680" height="384" rx="24" fill="rgba(255,255,255,0.035)" stroke="rgba(255,255,255,0.10)" stroke-width="1.5"/>
+  <rect x="80" y="210" width="6" height="384" rx="3" fill="url(#coolGrad)"/>
+  <text x="118" y="256" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="18" letter-spacing="2" font-weight="700" fill="#4F8BFF">CURSOR / WINDSURF</text>
+  <text x="118" y="298" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="30" font-weight="900" fill="#EEF0FA">One agent, one editor</text>
+  <text x="120" y="358" font-size="24" fill="#F0574A">&#10007;</text>
+  <text x="160" y="358" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="21" fill="#A6ADC8">Single agent per task</text>
+  <text x="120" y="416" font-size="24" fill="#F0574A">&#10007;</text>
+  <text x="160" y="416" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="21" fill="#A6ADC8">Editor fork required to adopt</text>
+  <text x="120" y="474" font-size="24" fill="#F0574A">&#10007;</text>
+  <text x="160" y="474" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="21" fill="#A6ADC8">Curated vendor model list</text>
+  <text x="120" y="532" font-size="24" fill="#F0574A">&#10007;</text>
+  <text x="160" y="532" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="21" fill="#A6ADC8">Vendor cloud, no self-hosting</text>
+
+  <!-- Right card: Builderforce -->
+  <rect x="840" y="210" width="680" height="384" rx="24" fill="rgba(91,240,188,0.07)" stroke="rgba(91,240,188,0.40)" stroke-width="1.5"/>
+  <rect x="840" y="210" width="6" height="384" rx="3" fill="url(#mintGrad)"/>
+  <text x="878" y="256" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="18" letter-spacing="2" font-weight="700" fill="#5BF0BC">BUILDERFORCE.AI</text>
+  <text x="878" y="298" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="30" font-weight="900" fill="#EEF0FA">A team, anywhere you work</text>
+  <text x="880" y="358" font-size="24" fill="#5BF0BC">&#10003;</text>
+  <text x="920" y="358" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="21" fill="#EEF0FA">Multiple specialist roles + DAG</text>
+  <text x="880" y="416" font-size="24" fill="#5BF0BC">&#10003;</text>
+  <text x="920" y="416" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="21" fill="#EEF0FA">IDE-independent: CLI, board, channels</text>
+  <text x="880" y="474" font-size="24" fill="#5BF0BC">&#10003;</text>
+  <text x="920" y="474" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="21" fill="#EEF0FA">30+ providers incl. local Ollama</text>
+  <text x="880" y="532" font-size="24" fill="#5BF0BC">&#10003;</text>
+  <text x="920" y="532" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="21" fill="#EEF0FA">Self-hosted, MIT, air-gapped</text>
+
+  <!-- MCP bridge band -->
+  <rect x="80" y="624" width="1440" height="152" rx="20" fill="rgba(169,139,255,0.09)" stroke="rgba(169,139,255,0.35)" stroke-width="1.5"/>
+  <text x="112" y="662" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="17" letter-spacing="2" font-weight="700" fill="#A98BFF">THE MCP TWIST &#8212; USE THEM TOGETHER</text>
+  <rect x="112" y="684" width="250" height="60" rx="14" fill="rgba(61,214,245,0.12)" stroke="rgba(61,214,245,0.45)" stroke-width="1.5"/>
+  <text x="237" y="721" text-anchor="middle" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="21" font-weight="700" fill="#3DD6F5">Cursor / Windsurf</text>
+  <text x="405" y="702" text-anchor="middle" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="14" letter-spacing="1" font-weight="700" fill="#8891AE">MCP</text>
+  <line x1="372" y1="714" x2="452" y2="714" stroke="#A98BFF" stroke-width="2.5"/>
+  <path d="M452 714 l-12 -6 v12 z" fill="#A98BFF"/>
+  <rect x="462" y="684" width="290" height="60" rx="14" fill="rgba(91,240,188,0.12)" stroke="rgba(91,240,188,0.45)" stroke-width="1.5"/>
+  <text x="607" y="721" text-anchor="middle" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="21" font-weight="700" fill="#5BF0BC">Builderforce /mcp</text>
+  <text x="800" y="708" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="21" fill="#A6ADC8">Builderforce consumes <tspan font-weight="800" fill="#EEF0FA">and</tspan> exposes an /mcp server &#8212; keep your</text>
+  <text x="800" y="738" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="21" fill="#A6ADC8">editor, layer orchestration + memory behind it. Not rip-and-replace.</text>
+
+  <g opacity="0.85">
+    <circle cx="1336" cy="852" r="9" fill="url(#violetGrad)"/>
+    <text x="1354" y="859" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="20" font-weight="700" fill="#A6ADC8">Builderforce.ai</text>
+  </g>
+  <text x="80" y="858" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="17" fill="#717892">When the unit of work grows from &#8220;this edit&#8221; to &#8220;this ticket&#8221;</text>
+</svg>

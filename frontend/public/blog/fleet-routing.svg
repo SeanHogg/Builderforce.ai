@@ -1,0 +1,88 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900">
+  <defs>
+    <radialGradient id="bgGlow" cx="50%" cy="0%" r="120%">
+      <stop offset="0%" stop-color="#1B1F46"/><stop offset="55%" stop-color="#13152F"/><stop offset="100%" stop-color="#0A0B1E"/>
+    </radialGradient>
+    <linearGradient id="violetGrad" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#A98BFF"/><stop offset="100%" stop-color="#6A4DF0"/></linearGradient>
+    <linearGradient id="coolGrad" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#3DD6F5"/><stop offset="100%" stop-color="#4F8BFF"/></linearGradient>
+    <linearGradient id="mintGrad" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#5BF0BC"/><stop offset="100%" stop-color="#23B987"/></linearGradient>
+    <linearGradient id="coralGrad" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#FF8F7A"/><stop offset="100%" stop-color="#F0574A"/></linearGradient>
+    <linearGradient id="amberGrad" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#FFCE6B"/><stop offset="100%" stop-color="#F5A623"/></linearGradient>
+    <linearGradient id="hairline" x1="0" y1="0" x2="1" y2="0"><stop offset="0%" stop-color="rgba(139,108,255,0)"/><stop offset="50%" stop-color="rgba(139,108,255,0.55)"/><stop offset="100%" stop-color="rgba(61,214,245,0)"/></linearGradient>
+    <marker id="arw" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#8891AE"/></marker>
+    <marker id="arwMint" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#5BF0BC"/></marker>
+  </defs>
+  <rect width="1600" height="900" fill="url(#bgGlow)"/>
+  <text x="80" y="92" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="20" letter-spacing="3" font-weight="700" fill="#A98BFF">FLEET MANAGEMENT &amp; ROUTING</text>
+  <text x="80" y="146" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="46" font-weight="800" fill="#EEF0FA">Route each task to the best-matched host</text>
+  <rect x="82" y="170" width="120" height="4" rx="2" fill="url(#hairline)"/>
+
+  <!-- task -->
+  <rect x="80" y="398" width="300" height="150" rx="16" fill="rgba(255,255,255,0.035)" stroke="rgba(255,255,255,0.10)" stroke-width="1.5"/>
+  <rect x="80" y="398" width="6" height="150" rx="3" fill="url(#amberGrad)"/>
+  <text x="106" y="436" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="14" letter-spacing="2" font-weight="700" fill="#F5A623">INCOMING TASK</text>
+  <text x="106" y="470" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="20" font-weight="800" fill="#EEF0FA">Implement UI components</text>
+  <text x="106" y="504" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="15.5" fill="#A6ADC8">requires: typescript, react</text>
+  <text x="106" y="528" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="13.5" fill="#8891AE">remote:auto[typescript,react]</text>
+
+  <!-- router -->
+  <rect x="470" y="410" width="220" height="126" rx="16" fill="rgba(169,139,255,0.10)" stroke="rgba(169,139,255,0.45)" stroke-width="1.5"/>
+  <rect x="470" y="410" width="6" height="126" rx="3" fill="url(#violetGrad)"/>
+  <text x="580" y="452" text-anchor="middle" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="21" font-weight="800" fill="#EEF0FA">Fleet Router</text>
+  <text x="580" y="480" text-anchor="middle" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="13.5" fill="#A6ADC8">scores online hosts</text>
+  <text x="580" y="508" text-anchor="middle" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="13" fill="#8891AE">GET /fleet/route</text>
+
+  <line x1="380" y1="473" x2="464" y2="473" stroke="rgba(169,139,255,0.5)" stroke-width="2.5" marker-end="url(#arw)"/>
+
+  <!-- router to hosts -->
+  <g fill="none" stroke="rgba(136,145,174,0.4)" stroke-width="2" stroke-dasharray="5 5">
+    <path d="M690,473 C750,473 750,296 810,296" marker-end="url(#arw)"/>
+    <path d="M690,473 C750,473 750,530 810,530" marker-end="url(#arw)"/>
+    <path d="M690,473 C750,473 750,640 810,640" marker-end="url(#arw)"/>
+  </g>
+  <path d="M690,473 C750,473 750,410 810,410" fill="none" stroke="#5BF0BC" stroke-width="3" marker-end="url(#arwMint)"/>
+
+  <!-- host 1: partial -->
+  <rect x="810" y="256" width="610" height="80" rx="14" fill="rgba(255,255,255,0.035)" stroke="rgba(255,255,255,0.10)" stroke-width="1.5"/>
+  <rect x="810" y="256" width="6" height="80" rx="3" fill="url(#coolGrad)"/>
+  <circle cx="842" cy="296" r="6" fill="#5BF0BC"/>
+  <text x="864" y="290" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="19" font-weight="800" fill="#EEF0FA">backend-sean-mbp</text>
+  <text x="864" y="314" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="14" fill="#A6ADC8">caps: python, refactor</text>
+  <text x="1400" y="302" text-anchor="end" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="15" font-weight="700" fill="#8891AE">no match</text>
+
+  <!-- host 2: BEST MATCH -->
+  <rect x="810" y="370" width="610" height="80" rx="14" fill="rgba(91,240,188,0.10)" stroke="rgba(91,240,188,0.5)" stroke-width="2"/>
+  <rect x="810" y="370" width="6" height="80" rx="3" fill="url(#mintGrad)"/>
+  <circle cx="842" cy="410" r="6" fill="#5BF0BC"/>
+  <text x="864" y="404" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="19" font-weight="800" fill="#EEF0FA">frontend-ci-worker</text>
+  <text x="864" y="428" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="14" fill="#A6ADC8">caps: typescript, react, testing</text>
+  <text x="1400" y="416" text-anchor="end" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="15" font-weight="800" fill="#5BF0BC">BEST MATCH &#8594;</text>
+
+  <!-- host 3: partial -->
+  <rect x="810" y="490" width="610" height="80" rx="14" fill="rgba(255,255,255,0.035)" stroke="rgba(255,255,255,0.10)" stroke-width="1.5"/>
+  <rect x="810" y="490" width="6" height="80" rx="3" fill="url(#coolGrad)"/>
+  <circle cx="842" cy="530" r="6" fill="#5BF0BC"/>
+  <text x="864" y="524" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="19" font-weight="800" fill="#EEF0FA">refactor-server</text>
+  <text x="864" y="548" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="14" fill="#A6ADC8">caps: typescript, refactor</text>
+  <text x="1400" y="536" text-anchor="end" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="15" font-weight="700" fill="#8891AE">partial &#8212; fallback</text>
+
+  <!-- host 4: offline -->
+  <rect x="810" y="600" width="610" height="80" rx="14" fill="rgba(255,255,255,0.02)" stroke="rgba(255,255,255,0.07)" stroke-width="1.5"/>
+  <rect x="810" y="600" width="6" height="80" rx="3" fill="#474C63"/>
+  <circle cx="842" cy="640" r="6" fill="#717892"/>
+  <text x="864" y="634" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="19" font-weight="800" fill="#8891AE">old-laptop</text>
+  <text x="864" y="658" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="14" fill="#717892">caps: typescript, react</text>
+  <text x="1400" y="646" text-anchor="end" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="15" font-weight="700" fill="#717892">OFFLINE &#8212; skipped</text>
+
+  <!-- relay note -->
+  <rect x="80" y="600" width="620" height="120" rx="14" fill="rgba(61,214,245,0.07)" stroke="rgba(61,214,245,0.28)" stroke-width="1.5"/>
+  <text x="108" y="638" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="18" font-weight="800" fill="#3DD6F5">Host-to-host mesh</text>
+  <text x="108" y="668" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="15" fill="#A6ADC8">HMAC-signed &#183; Bearer-authenticated &#183; relayed through</text>
+  <text x="108" y="692" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="15" fill="#A6ADC8">AgentHostRelayDO &#8212; no direct network path required.</text>
+
+  <g opacity="0.85">
+    <circle cx="1336" cy="852" r="9" fill="url(#violetGrad)"/>
+    <text x="1354" y="859" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="20" font-weight="700" fill="#A6ADC8">Builderforce.ai</text>
+  </g>
+  <text x="80" y="858" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="17" fill="#717892">remote:auto picks the best online host by capability &#183; offline hosts fail fast, no silent fallback</text>
+</svg>

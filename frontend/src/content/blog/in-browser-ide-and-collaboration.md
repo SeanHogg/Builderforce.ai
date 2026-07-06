@@ -12,6 +12,8 @@ Setting up a development environment is one of those tasks that takes anywhere f
 
 Builderforce's in-browser IDE eliminates all of it. Open a browser, open a project, and you are running a real Node.js environment — with a file system, a package manager, a dev server, a terminal, and an AI pair programmer — without installing anything.
 
+![Three-pane browser IDE mock showing a file explorer, the Monaco code editor, and a right panel toggling between Preview, Terminal, and AI Chat](/blog/in-browser-ide.svg)
+
 ---
 
 ## How It Works: WebContainers

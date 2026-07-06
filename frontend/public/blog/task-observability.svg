@@ -1,0 +1,100 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900">
+  <defs>
+    <radialGradient id="bgGlow" cx="50%" cy="0%" r="120%">
+      <stop offset="0%" stop-color="#1B1F46"/><stop offset="55%" stop-color="#13152F"/><stop offset="100%" stop-color="#0A0B1E"/>
+    </radialGradient>
+    <linearGradient id="violetGrad" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#A98BFF"/><stop offset="100%" stop-color="#6A4DF0"/></linearGradient>
+    <linearGradient id="coolGrad" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#3DD6F5"/><stop offset="100%" stop-color="#4F8BFF"/></linearGradient>
+    <linearGradient id="mintGrad" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#5BF0BC"/><stop offset="100%" stop-color="#23B987"/></linearGradient>
+    <linearGradient id="coralGrad" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#FF8F7A"/><stop offset="100%" stop-color="#F0574A"/></linearGradient>
+    <linearGradient id="amberGrad" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#FFCE6B"/><stop offset="100%" stop-color="#F5A623"/></linearGradient>
+    <linearGradient id="hairline" x1="0" y1="0" x2="1" y2="0"><stop offset="0%" stop-color="rgba(139,108,255,0)"/><stop offset="50%" stop-color="rgba(139,108,255,0.55)"/><stop offset="100%" stop-color="rgba(61,214,245,0)"/></linearGradient>
+    <marker id="arw" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#8891AE"/></marker>
+  </defs>
+  <rect width="1600" height="900" fill="url(#bgGlow)"/>
+  <text x="80" y="92" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="20" letter-spacing="3" font-weight="700" fill="#A98BFF">TASK EXECUTION &amp; OBSERVABILITY</text>
+  <text x="80" y="146" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="46" font-weight="800" fill="#EEF0FA">Every execution, every tool call, on the record</text>
+  <rect x="82" y="170" width="120" height="4" rx="2" fill="url(#hairline)"/>
+
+  <!-- state machine -->
+  <text x="80" y="236" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="15" letter-spacing="2" font-weight="700" fill="#8891AE">EXECUTION LIFECYCLE</text>
+  <g>
+    <rect x="80" y="256" width="170" height="52" rx="12" fill="rgba(255,255,255,0.04)" stroke="rgba(255,255,255,0.12)"/>
+    <text x="165" y="289" text-anchor="middle" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="18" font-weight="700" fill="#A6ADC8">pending</text>
+    <rect x="300" y="256" width="180" height="52" rx="12" fill="rgba(255,255,255,0.04)" stroke="rgba(255,255,255,0.12)"/>
+    <text x="390" y="289" text-anchor="middle" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="18" font-weight="700" fill="#A6ADC8">submitted</text>
+    <rect x="530" y="256" width="170" height="52" rx="12" fill="rgba(61,214,245,0.12)" stroke="rgba(61,214,245,0.5)"/>
+    <text x="615" y="289" text-anchor="middle" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="18" font-weight="800" fill="#3DD6F5">running</text>
+    <rect x="750" y="256" width="180" height="52" rx="12" fill="rgba(91,240,188,0.12)" stroke="rgba(91,240,188,0.5)"/>
+    <text x="840" y="289" text-anchor="middle" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="18" font-weight="800" fill="#5BF0BC">completed</text>
+    <rect x="750" y="330" width="180" height="48" rx="12" fill="rgba(240,87,74,0.12)" stroke="rgba(240,87,74,0.5)"/>
+    <text x="840" y="360" text-anchor="middle" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="17" font-weight="800" fill="#FF8F7A">failed</text>
+  </g>
+  <g fill="none" stroke="rgba(136,145,174,0.55)" stroke-width="2.5">
+    <line x1="250" y1="282" x2="296" y2="282" marker-end="url(#arw)"/>
+    <line x1="480" y1="282" x2="526" y2="282" marker-end="url(#arw)"/>
+    <line x1="700" y1="282" x2="746" y2="282" marker-end="url(#arw)"/>
+    <path d="M700,296 C726,296 726,354 746,354" marker-end="url(#arw)"/>
+  </g>
+  <text x="990" y="288" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="15" fill="#A6ADC8">Each transition streams live to the</text>
+  <text x="990" y="312" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="15" fill="#A6ADC8">Timeline over a WebSocket &#8212; no polling.</text>
+
+  <!-- tool span timeline -->
+  <text x="80" y="432" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="15" letter-spacing="2" font-weight="700" fill="#8891AE">PER-TOOL SPANS (ONE EXECUTION)</text>
+  <line x1="80" y1="540" x2="1440" y2="540" stroke="rgba(255,255,255,0.12)" stroke-width="1.5"/>
+
+  <rect x="80" y="452" width="150" height="72" rx="10" fill="rgba(91,240,188,0.14)" stroke="rgba(91,240,188,0.5)"/>
+  <text x="98" y="484" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="16" font-weight="700" fill="#EEF0FA">read_file</text>
+  <text x="98" y="508" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="14" fill="#5BF0BC">42ms &#183; ok</text>
+
+  <rect x="246" y="452" width="320" height="72" rx="10" fill="rgba(61,214,245,0.14)" stroke="rgba(61,214,245,0.5)"/>
+  <text x="264" y="484" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="16" font-weight="700" fill="#EEF0FA">bash</text>
+  <text x="264" y="508" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="14" fill="#3DD6F5">1.2s &#183; ok</text>
+
+  <rect x="582" y="452" width="150" height="72" rx="10" fill="rgba(91,240,188,0.14)" stroke="rgba(91,240,188,0.5)"/>
+  <text x="600" y="484" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="16" font-weight="700" fill="#EEF0FA">write_file</text>
+  <text x="600" y="508" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="14" fill="#5BF0BC">38ms &#183; ok</text>
+
+  <rect x="748" y="452" width="440" height="72" rx="10" fill="rgba(240,87,74,0.16)" stroke="rgba(240,87,74,0.6)"/>
+  <text x="766" y="484" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="16" font-weight="700" fill="#EEF0FA">bash</text>
+  <text x="766" y="508" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="14" font-weight="700" fill="#FF8F7A">3.4s &#183; error &#8212; non-zero exit</text>
+
+  <text x="80" y="566" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="13.5" fill="#717892">time &#8594;</text>
+  <text x="1188" y="497" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="15" fill="#A6ADC8">the failing call is</text>
+  <text x="1188" y="519" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="15" fill="#A6ADC8">right there in the log</text>
+
+  <!-- stat tiles -->
+  <text x="80" y="618" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="15" letter-spacing="2" font-weight="700" fill="#8891AE">EXECUTION DASHBOARD</text>
+  <g>
+    <rect x="80" y="636" width="272" height="104" rx="14" fill="rgba(255,255,255,0.035)" stroke="rgba(255,255,255,0.10)"/>
+    <rect x="80" y="636" width="6" height="104" rx="3" fill="url(#violetGrad)"/>
+    <text x="104" y="676" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="34" font-weight="900" fill="#EEF0FA">1,284</text>
+    <text x="104" y="712" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="15" fill="#A6ADC8">Total executions</text>
+
+    <rect x="372" y="636" width="272" height="104" rx="14" fill="rgba(255,255,255,0.035)" stroke="rgba(255,255,255,0.10)"/>
+    <rect x="372" y="636" width="6" height="104" rx="3" fill="url(#mintGrad)"/>
+    <text x="396" y="676" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="34" font-weight="900" fill="#EEF0FA">1,190</text>
+    <text x="396" y="712" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="15" fill="#A6ADC8">Completed</text>
+
+    <rect x="664" y="636" width="272" height="104" rx="14" fill="rgba(255,255,255,0.035)" stroke="rgba(255,255,255,0.10)"/>
+    <rect x="664" y="636" width="6" height="104" rx="3" fill="url(#coralGrad)"/>
+    <text x="688" y="676" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="34" font-weight="900" fill="#EEF0FA">41</text>
+    <text x="688" y="712" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="15" fill="#A6ADC8">Failed</text>
+
+    <rect x="956" y="636" width="272" height="104" rx="14" fill="rgba(255,255,255,0.035)" stroke="rgba(255,255,255,0.10)"/>
+    <rect x="956" y="636" width="6" height="104" rx="3" fill="url(#coolGrad)"/>
+    <text x="980" y="676" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="34" font-weight="900" fill="#EEF0FA">3.2s</text>
+    <text x="980" y="712" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="15" fill="#A6ADC8">Avg duration</text>
+
+    <rect x="1248" y="636" width="272" height="104" rx="14" fill="rgba(255,255,255,0.035)" stroke="rgba(255,255,255,0.10)"/>
+    <rect x="1248" y="636" width="6" height="104" rx="3" fill="url(#amberGrad)"/>
+    <text x="1272" y="676" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="34" font-weight="900" fill="#EEF0FA">8.6M</text>
+    <text x="1272" y="712" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="15" fill="#A6ADC8">Tokens used</text>
+  </g>
+
+  <g opacity="0.85">
+    <circle cx="1336" cy="852" r="9" fill="url(#violetGrad)"/>
+    <text x="1354" y="859" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="20" font-weight="700" fill="#A6ADC8">Builderforce.ai</text>
+  </g>
+  <text x="80" y="858" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="17" fill="#717892">Tasks, executions, workflow spans, and tool audit &#8212; a live view of what every agent is doing</text>
+</svg>

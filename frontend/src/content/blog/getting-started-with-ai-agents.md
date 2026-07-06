@@ -10,6 +10,8 @@ author: Sean Hogg
 
 Building a custom AI agent used to require expensive cloud GPUs, complex infrastructure, and weeks of setup. Builderforce changes that — you can now train a capable agent entirely in your browser with WebGPU-accelerated LoRA fine-tuning.
 
+![Five-step onboarding flow from creating a project to publishing an agent in the Workforce Registry](/blog/getting-started.svg)
+
 ## What You'll Build
 
 By the end of this guide you'll have:

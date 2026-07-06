@@ -14,6 +14,8 @@ The **Planning Spine** collapses those three layers into one. It is a single dat
 
 > Builderforce.ai's Planning Spine is one dated, cost-bearing hierarchy — portfolio, initiative, epic and task on a single Gantt — where leaf cost rolls up to every ancestor and is split CAPEX vs OPEX, so finance and delivery read from the same source of truth.
 
+![Diagram of the Planning Spine: a nested portfolio to initiative to epic to task hierarchy on one Gantt where leaf task cost rolls up to every ancestor, each node classified CAPEX or OPEX by a priority-ordered resolver, with anomaly flags where a child contradicts its parent and CSV export for finance close](/blog/planning-spine.svg)
+
 ## Cost is a property of the work, not a separate ledger
 
 Because every task on Builderforce.ai is already instrumented — LLM spend is priced at write time from the usage log, human effort from each member's cost rate — the Planning Spine doesn't need a parallel finance system. Leaf cost simply **rolls up** to every ancestor: a task's cost flows to its epic, the epic's to its initiative, the initiative's to its portfolio. You get a real number at any altitude without a backfill.
