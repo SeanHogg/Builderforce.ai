@@ -22,9 +22,13 @@
  * is OpenAI-shaped, so the dispatcher's parser, the empty-200 guard, the cloud
  * loop's `parseLlmChoice`, and the SDK consumer all work unchanged).
  *
- * Streaming is intentionally NOT implemented (`callStream` omitted): the only path
- * that reaches this vendor — the cloud coding tool loop — is non-streaming, so the
- * streaming dispatcher cleanly skips Anthropic. See the Consolidated Gap Register.
+ * Streaming IS implemented (`callStream`): a tenant's connected BYO account is now the
+ * PRIMARY path for streaming surfaces too (IDE chat, knowledge authoring, agent replies),
+ * so this vendor must stream — otherwise the streaming dispatcher would skip it and the
+ * connected account would never serve those. `callStream` translates Anthropic's SSE
+ * Messages event stream → OpenAI `chat.completion.chunk` SSE frames (the pure per-event
+ * mapper `anthropicEventToOpenAiChunks` is unit-tested), so downstream consumers are
+ * unchanged. The non-streaming `call()` remains for tool loops that need the whole turn.
  */
 
 import {
@@ -39,6 +43,7 @@ import {
   type VendorCallResult,
   type VendorModelEntry,
   type VendorModule,
+  type VendorStreamResult,
 } from './types';
 import { ANTHROPIC_OAUTH_BETA, CLAUDE_CODE_SYSTEM_PROMPT } from '../anthropicOAuth';
 
@@ -253,102 +258,251 @@ function toOpenAIResponse(raw: unknown, model: string): Record<string, unknown> 
 // Vendor module
 // ---------------------------------------------------------------------------
 
+/**
+ * Build the Anthropic Messages request (headers + body) shared by `call` (non-stream)
+ * and `callStream`. `stream` flips the `stream: true` flag; everything else — the OAuth
+ * vs api-key auth, the Claude-Code identity system block OAuth requires, prompt caching
+ * on the stable prefix, thinking disabled, structured-output passthrough — is identical,
+ * so the two surfaces can never drift on request shape.
+ */
+function prepareAnthropicRequest(
+  params: VendorCallParams,
+  stream: boolean,
+): { headers: Record<string, string>; body: Record<string, unknown>; isOAuth: boolean } {
+  const req = toAnthropicRequest(params);
+  // Subscription (OAuth) vs API key: decode the sentinel `apiKeyFrom` encoded.
+  const isOAuth = params.apiKey.startsWith(OAUTH_APIKEY_PREFIX);
+  const credential = isOAuth ? params.apiKey.slice(OAUTH_APIKEY_PREFIX.length) : params.apiKey;
+  const maxTokens = Math.min(Math.max(1, params.maxTokens ?? DEFAULT_MAX_TOKENS), MAX_OUTPUT_TOKENS);
+  // Cache the large STABLE prefix (tools + system instructions/repo context) so a
+  // multi-turn run pays ~0.1x for it after the first turn. `{type:'ephemeral'}` is the
+  // GA 5-minute cache. A SUBSCRIPTION (OAuth) token REQUIRES the Claude Code identity as
+  // the first system block — Anthropic 401s an OAuth Messages call without it.
+  const CACHE = { type: 'ephemeral' as const };
+  const systemBlocks: Array<Record<string, unknown>> = [];
+  if (isOAuth) systemBlocks.push({ type: 'text', text: CLAUDE_CODE_SYSTEM_PROMPT });
+  if (req.system) systemBlocks.push({ type: 'text', text: req.system, cache_control: CACHE });
+  const system = systemBlocks.length ? systemBlocks : undefined;
+  const tools = req.tools && req.tools.length
+    ? req.tools.map((t, i) => (i === req.tools!.length - 1 ? { ...t, cache_control: CACHE } : t))
+    : undefined;
+  const body: Record<string, unknown> = {
+    model: params.model,
+    max_tokens: maxTokens,
+    messages: req.messages,
+    ...(system ? { system } : {}),
+    ...(tools ? { tools } : {}),
+    ...(req.tool_choice ? { tool_choice: req.tool_choice } : {}),
+    // Extended thinking OFF: the gateway round-trips assistant turns through the OpenAI
+    // shape, which can't carry `thinking` blocks; both catalog models accept disabled.
+    thinking: { type: 'disabled' },
+    ...(stream ? { stream: true } : {}),
+  };
+  const rf = (params.extraBody ?? {}).response_format as { type?: string; json_schema?: { schema?: unknown } } | undefined;
+  if (rf?.type === 'json_schema' && rf.json_schema?.schema) {
+    body.output_config = { format: { type: 'json_schema', schema: rf.json_schema.schema } };
+  }
+  const headers: Record<string, string> = {
+    // Subscription tokens use Bearer + the oauth beta; API keys use x-api-key.
+    ...(isOAuth
+      ? { authorization: `Bearer ${credential}`, 'anthropic-beta': ANTHROPIC_OAUTH_BETA }
+      : { 'x-api-key': credential }),
+    'anthropic-version': ANTHROPIC_VERSION,
+    'content-type': 'application/json',
+  };
+  return { headers, body, isOAuth };
+}
+
+/** Classify a non-OK Anthropic HTTP response into the cascade's error taxonomy — shared
+ *  by `call` + `callStream` so both surfaces fail over identically. Always throws. */
+async function throwAnthropicHttpError(resp: Response, model: string, isOAuth: boolean): Promise<never> {
+  const errText = (await resp.text()).slice(0, 400);
+  if (resp.status === OVERLOADED_STATUS || CASCADE_STATUSES.has(resp.status)) {
+    throw new VendorRetryableError('anthropic', model, resp.status, errText.slice(0, 240));
+  }
+  if (AUTH_STATUSES.has(resp.status)) {
+    console.error(
+      `[vendors] anthropic/${model} auth ${resp.status} — ${isOAuth ? 'tenant Claude subscription token rejected (expired/revoked — reconnect)' : 'check CLAUDE_API_KEY'}. Failing over to next model.`,
+      errText.slice(0, 200),
+    );
+    throw new VendorRetryableError('anthropic', model, resp.status, `auth ${resp.status}: ${errText.slice(0, 200)}`);
+  }
+  // 400/422 (and other 4xx) fatal — the dispatcher advances past them — UNLESS the 400
+  // is a usage-cap / credit-balance limit (Anthropic returns those as 400s), which is a
+  // capacity condition another vendor can serve: fail over + cool instead of dying.
+  throwClassified4xx('anthropic', model, resp.status, errText);
+}
+
+// ---------------------------------------------------------------------------
+// Streaming translation: Anthropic Messages SSE → OpenAI chat.completion.chunk SSE
+// ---------------------------------------------------------------------------
+
+/** Cross-event streaming state (mutated as events arrive). */
+export interface AnthropicStreamState {
+  id: string;
+  model: string;
+  sentRole: boolean;
+  toolIdxByBlock: Map<number, number>;
+  nextToolIdx: number;
+  finishReason: string;
+  inputTokens: number;
+  outputTokens: number;
+}
+
+export function newAnthropicStreamState(model: string): AnthropicStreamState {
+  return {
+    id: 'chatcmpl-anthropic', model, sentRole: false,
+    toolIdxByBlock: new Map(), nextToolIdx: 0, finishReason: 'stop',
+    inputTokens: 0, outputTokens: 0,
+  };
+}
+
+/**
+ * Translate ONE Anthropic Messages SSE event → zero or more OpenAI
+ * `chat.completion.chunk` objects, mutating `st` for cross-event bookkeeping (role
+ * once, tool-block → tool_calls index, stop reason, token usage). Pure and
+ * unit-tested (`anthropic.stream.test.ts`) so the streaming translation is verified
+ * without a live Anthropic endpoint. Mapping:
+ *   message_start            → capture input tokens
+ *   content_block_start(tool)→ tool_calls delta {index,id,name,arguments:''}
+ *   content_block_delta      → text_delta → {content}; input_json_delta → {tool_calls[].function.arguments}
+ *   message_delta            → capture stop_reason + output tokens
+ *   message_stop             → final finish_reason chunk + a usage-only chunk
+ */
+export function anthropicEventToOpenAiChunks(
+  ev: Record<string, unknown>,
+  st: AnthropicStreamState,
+): Array<Record<string, unknown>> {
+  const type = ev?.type as string | undefined;
+  const out: Array<Record<string, unknown>> = [];
+  const mk = (delta: Record<string, unknown>, finish: string | null = null): Record<string, unknown> => {
+    const d = st.sentRole ? delta : { role: 'assistant', ...delta };
+    st.sentRole = true;
+    return { id: st.id, object: 'chat.completion.chunk', model: st.model, choices: [{ index: 0, delta: d, finish_reason: finish }] };
+  };
+  switch (type) {
+    case 'message_start': {
+      const usage = (ev.message as { usage?: { input_tokens?: number } } | undefined)?.usage;
+      if (usage?.input_tokens != null) st.inputTokens = usage.input_tokens;
+      break;
+    }
+    case 'content_block_start': {
+      const cb = ev.content_block as { type?: string; id?: string; name?: string } | undefined;
+      if (cb?.type === 'tool_use') {
+        const oi = st.nextToolIdx++;
+        st.toolIdxByBlock.set(ev.index as number, oi);
+        out.push(mk({ tool_calls: [{ index: oi, id: cb.id ?? '', type: 'function', function: { name: cb.name ?? '', arguments: '' } }] }));
+      }
+      break;
+    }
+    case 'content_block_delta': {
+      const delta = ev.delta as { type?: string; text?: string; partial_json?: string } | undefined;
+      if (delta?.type === 'text_delta' && delta.text) {
+        out.push(mk({ content: delta.text }));
+      } else if (delta?.type === 'input_json_delta') {
+        const oi = st.toolIdxByBlock.get(ev.index as number) ?? 0;
+        out.push(mk({ tool_calls: [{ index: oi, function: { arguments: delta.partial_json ?? '' } }] }));
+      }
+      break;
+    }
+    case 'message_delta': {
+      const delta = ev.delta as { stop_reason?: unknown } | undefined;
+      if (delta?.stop_reason) st.finishReason = mapStopReason(delta.stop_reason);
+      const usage = ev.usage as { output_tokens?: number } | undefined;
+      if (usage?.output_tokens != null) st.outputTokens = usage.output_tokens;
+      break;
+    }
+    case 'message_stop': {
+      out.push(mk({}, st.finishReason));
+      out.push({ id: st.id, object: 'chat.completion.chunk', model: st.model, choices: [], usage: { prompt_tokens: st.inputTokens, completion_tokens: st.outputTokens, total_tokens: st.inputTokens + st.outputTokens } });
+      break;
+    }
+    // 'ping' / 'content_block_stop' → nothing; 'error' handled by the wrapper.
+  }
+  return out;
+}
+
+/** Wrap an Anthropic SSE body in a ReadableStream that emits OpenAI SSE frames. */
+function streamAnthropicToOpenAi(body: ReadableStream<Uint8Array>, model: string): ReadableStream<Uint8Array> {
+  const encoder = new TextEncoder();
+  const decoder = new TextDecoder();
+  const reader = body.getReader();
+  const state = newAnthropicStreamState(model);
+  let buffer = '';
+  const frame = (obj: Record<string, unknown>) => encoder.encode(`data: ${JSON.stringify(obj)}\n\n`);
+  return new ReadableStream<Uint8Array>({
+    async pull(controller) {
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) {
+          controller.enqueue(encoder.encode('data: [DONE]\n\n'));
+          controller.close();
+          return;
+        }
+        buffer += decoder.decode(value, { stream: true });
+        let emitted = false;
+        let sep: number;
+        while ((sep = buffer.indexOf('\n\n')) !== -1) {
+          const rawEvent = buffer.slice(0, sep);
+          buffer = buffer.slice(sep + 2);
+          const dataLine = rawEvent.split('\n').find((l) => l.startsWith('data:'));
+          if (!dataLine) continue;
+          let ev: Record<string, unknown>;
+          try { ev = JSON.parse(dataLine.slice(5).trim()) as Record<string, unknown>; } catch { continue; }
+          if ((ev.type as string) === 'error') {
+            controller.enqueue(encoder.encode('data: [DONE]\n\n'));
+            controller.close();
+            return;
+          }
+          for (const chunk of anthropicEventToOpenAiChunks(ev, state)) {
+            controller.enqueue(frame(chunk));
+            emitted = true;
+          }
+        }
+        if (emitted) return; // yield to the consumer; pull() is called again for more
+      }
+    },
+    cancel() { reader.cancel().catch(() => { /* ignore */ }); },
+  });
+}
+
 export const anthropicModule: VendorModule = {
   id: 'anthropic',
   catalog: CATALOG,
   tierFor: tierForAnthropicModel,
-  autoRoute: false, // floor-only: never auto-selected; reached via the coding fallback chain or an explicit pin.
+  autoRoute: false, // floor-only: never auto-selected; reached via the coding fallback chain, an explicit pin, or a tenant's connected-BYO seed.
   // Prefer a connected tenant SUBSCRIPTION (OAuth) over the operator's metered API
   // key — a tenant's own subscription is free to us, so when present it wins. The
-  // `oauth:` sentinel tells `call()` which auth header to use (it never sees env).
+  // `oauth:` sentinel tells `call`/`callStream` which auth header to use (never sees env).
   apiKeyFrom(env) {
     if (env.CLAUDE_OAUTH_TOKEN) return `${OAUTH_APIKEY_PREFIX}${env.CLAUDE_OAUTH_TOKEN}`;
     return env.CLAUDE_API_KEY ?? null;
   },
   async call(params: VendorCallParams): Promise<VendorCallResult> {
-    const req = toAnthropicRequest(params);
-    // Subscription (OAuth) vs API key: decode the sentinel `apiKeyFrom` encoded.
-    const isOAuth = params.apiKey.startsWith(OAUTH_APIKEY_PREFIX);
-    const credential = isOAuth ? params.apiKey.slice(OAUTH_APIKEY_PREFIX.length) : params.apiKey;
-    const maxTokens = Math.min(Math.max(1, params.maxTokens ?? DEFAULT_MAX_TOKENS), MAX_OUTPUT_TOKENS);
-    // Cache the large STABLE prefix (tools + system instructions/repo context) so a
-    // multi-turn coding run pays ~0.1x for it after the first turn instead of full
-    // price on the METERED key. `{type:'ephemeral'}` is the GA 5-minute cache (no beta
-    // header); turns are seconds apart so it stays warm. Marking the system block (and
-    // the last tool) caches everything up to and including them. Sub-1024-token
-    // prefixes are silently ignored by Anthropic, so this is safe for tiny requests.
-    const CACHE = { type: 'ephemeral' as const };
-    // A SUBSCRIPTION (OAuth) token REQUIRES the Claude Code identity as the first
-    // system block — Anthropic 401s an OAuth Messages call without it. Prepend an
-    // (uncached) identity block, keeping the cache breakpoint on the real system
-    // text so the stable prefix is still cached. API-key calls are unchanged.
-    const systemBlocks: Array<Record<string, unknown>> = [];
-    if (isOAuth) systemBlocks.push({ type: 'text', text: CLAUDE_CODE_SYSTEM_PROMPT });
-    if (req.system) systemBlocks.push({ type: 'text', text: req.system, cache_control: CACHE });
-    const system = systemBlocks.length ? systemBlocks : undefined;
-    const tools = req.tools && req.tools.length
-      ? req.tools.map((t, i) => (i === req.tools!.length - 1 ? { ...t, cache_control: CACHE } : t))
-      : undefined;
-    const body: Record<string, unknown> = {
-      model: params.model,
-      max_tokens: maxTokens,
-      messages: req.messages,
-      ...(system ? { system } : {}),
-      ...(tools ? { tools } : {}),
-      ...(req.tool_choice ? { tool_choice: req.tool_choice } : {}),
-      // Extended thinking is OFF on purpose. The gateway round-trips assistant
-      // turns through the OpenAI shape, which cannot carry Anthropic `thinking`
-      // blocks — replaying a tool-use turn without its thinking block 400s. Both
-      // catalog models accept `{type:'disabled'}`; keeping thinking off makes the
-      // multi-turn tool loop valid. (Sampling params are intentionally dropped:
-      // claude-opus-4-8 rejects temperature/top_p, and the coding loop doesn't set them.)
-      thinking: { type: 'disabled' },
-    };
-    // Best-effort structured-output passthrough: map a strict json_schema request
-    // to Anthropic's output_config. json_object (no schema) has no direct
-    // equivalent and is left to the gateway's conformance retry to handle.
-    const rf = (params.extraBody ?? {}).response_format as { type?: string; json_schema?: { schema?: unknown } } | undefined;
-    if (rf?.type === 'json_schema' && rf.json_schema?.schema) {
-      body.output_config = { format: { type: 'json_schema', schema: rf.json_schema.schema } };
-    }
-
+    const { headers, body, isOAuth } = prepareAnthropicRequest(params, false);
     const resp = await fetchWithVendorTimeout('anthropic', params.model, ENDPOINT, {
-      method: 'POST',
-      headers: {
-        // Subscription tokens use Bearer + the oauth beta; API keys use x-api-key.
-        ...(isOAuth
-          ? { authorization: `Bearer ${credential}`, 'anthropic-beta': ANTHROPIC_OAUTH_BETA }
-          : { 'x-api-key': credential }),
-        'anthropic-version': ANTHROPIC_VERSION,
-        'content-type': 'application/json',
-      },
-      body: JSON.stringify(body),
+      method: 'POST', headers, body: JSON.stringify(body),
     }, params.timeoutMs, params.signal);
-
     if (resp.ok) {
       const raw = await resp.json();
       const oai = toOpenAIResponse(raw, params.model);
       const parsed = parseOpenAIResponse(oai);
       return { raw: oai, content: parsed.content, ...(parsed.usage ? { usage: parsed.usage } : {}) };
     }
-
-    const errText = (await resp.text()).slice(0, 400);
-    if (resp.status === OVERLOADED_STATUS || CASCADE_STATUSES.has(resp.status)) {
-      throw new VendorRetryableError('anthropic', params.model, resp.status, errText.slice(0, 240));
-    }
-    if (AUTH_STATUSES.has(resp.status)) {
-      console.error(
-        `[vendors] anthropic/${params.model} auth ${resp.status} — ${isOAuth ? 'tenant Claude subscription token rejected (expired/revoked — reconnect)' : 'check CLAUDE_API_KEY'}. Failing over to next model.`,
-        errText.slice(0, 200),
-      );
-      throw new VendorRetryableError('anthropic', params.model, resp.status, `auth ${resp.status}: ${errText.slice(0, 200)}`);
-    }
-    // 400/422 (and other 4xx) are surfaced as fatal — the dispatcher advances past
-    // a 400/422 to the next candidate rather than hard-failing the whole cascade —
-    // UNLESS the 400 is actually a usage-cap / credit-balance limit (Anthropic
-    // returns these as `invalid_request_error` 400s), in which case it's a
-    // capacity condition that another vendor can serve: fail over AND cool the
-    // vendor instead of dying with a misleading 400.
-    throwClassified4xx('anthropic', params.model, resp.status, errText);
+    return throwAnthropicHttpError(resp, params.model, isOAuth);
+  },
+  async callStream(params: VendorCallParams): Promise<VendorStreamResult> {
+    const { headers, body, isOAuth } = prepareAnthropicRequest(params, true);
+    const resp = await fetchWithVendorTimeout('anthropic', params.model, ENDPOINT, {
+      method: 'POST', headers, body: JSON.stringify(body),
+    }, params.timeoutMs, params.signal);
+    if (!resp.ok) return throwAnthropicHttpError(resp, params.model, isOAuth);
+    if (!resp.body) throw new VendorRetryableError('anthropic', params.model, 0, 'empty stream body');
+    return {
+      response: new Response(streamAnthropicToOpenAi(resp.body, params.model), {
+        status: 200,
+        headers: { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache' },
+      }),
+    };
   },
 };
