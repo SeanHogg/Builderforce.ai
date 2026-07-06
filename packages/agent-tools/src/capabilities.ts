@@ -80,7 +80,10 @@ export interface RepoReadCapability {
    *  summary so a matched file is always returned in full. */
   listFiles(subdir?: string, glob?: string): Promise<RepoListResult>;
   readFile(path: string): Promise<RepoReadResult>;
-  searchCode(query: string): Promise<RepoSearchResult>;
+  /** Search the tree for `query`. Pass `scope` (a repo-relative subdirectory) to
+   *  restrict the search — essential on a large monorepo where an unscoped walk can
+   *  be truncated before it reaches the relevant subtree. */
+  searchCode(query: string, scope?: string): Promise<RepoSearchResult>;
 }
 
 /** Mutate the working tree. The provider owns the side effects of a write —

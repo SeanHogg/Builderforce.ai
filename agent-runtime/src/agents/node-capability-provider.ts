@@ -232,7 +232,7 @@ export function buildNodeCapabilityProvider(options: NodeProviderOptions): Capab
           return { ok: false, error: err instanceof Error ? err.message : String(err) };
         }
       },
-      async searchCode(query): Promise<RepoSearchResult> {
+      async searchCode(query, scope): Promise<RepoSearchResult> {
         const r = (await runCodebaseSearch(root, { query })) as {
           error?: string;
           results?: Array<{ filePath: string } & Record<string, unknown>>;
@@ -240,7 +240,14 @@ export function buildNodeCapabilityProvider(options: NodeProviderOptions): Capab
         if (r.error) {
           return { ok: false, error: r.error };
         }
-        const matches = (r.results ?? []).map((m) => ({ path: m.filePath, ...m }));
+        let matches = (r.results ?? []).map((m) => ({ path: m.filePath, ...m }));
+        // Honor an optional subdirectory scope by prefix-filtering the ripgrep hits,
+        // so `search_code`'s `path` argument narrows results here too (parity with the
+        // editor provider that scopes its walk natively).
+        if (scope && scope.trim()) {
+          const prefix = scope.trim().replace(/^[./]+|\/+$/g, "");
+          matches = matches.filter((m) => typeof m.path === "string" && m.path.split("\\").join("/").startsWith(`${prefix}/`));
+        }
         return { ok: true, query, total: matches.length, matches };
       },
     },

@@ -2,6 +2,11 @@
 
 All notable changes to the BuilderForce VS Code extension are documented here.
 
+## [2026.7.42] — The assistant can find your code again (no more search dead-ends)
+
+- **Fixed: code search stopped giving up early on big projects.** In a large workspace, asking the assistant to find something (a component, a function, a symbol) could come back "no matches" even when the code was right there — so it fell back to opening file after file, ballooning the conversation and never quite landing the change. The search now sweeps your project breadth-first instead of diving into the first big folder and running out of budget, so a symbol that lives deeper in the tree is actually found. When a search genuinely can't cover everything, it now says so honestly ("truncated — narrow it down") instead of claiming the term doesn't exist.
+- **New: scope a search to a folder.** Code search now takes an optional path, so the assistant can look inside just `packages/brain-ui` (for example) instead of the whole repo — faster, more relevant results, and far less chat bloat on large monorepos.
+
 ## [2026.7.39] — Run diagnostics with the authority you actually have
 
 - **Fixed: owners and managers can run diagnostics again.** Signing in from the editor used to hand you a plain-member session no matter who you were, so running a SOC 2, Architecture, Quality, or Privacy check bounced back with "You need a manager role to run diagnostics" — even when you own the workspace. Your editor session now carries the same authority you hold on the web, so the checks you're entitled to just run.
