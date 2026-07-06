@@ -751,11 +751,11 @@ export class BrainService {
     // OWN account is SURFACED (e.g. an expired subscription token 401s → the run falls to
     // a weak coder that empty-turns). The proxy records each failed attempt in
     // `failovers` with its vendor + upstream status; capture the one on a connected vendor.
-    let byoFailure: { vendor: string; code: number } | null = null;
+    let byoFailure: { vendor: string; code: number; detail?: string } | null = null;
     const noteByoFailure = (r: unknown): void => {
-      const failovers = (r as { failovers?: Array<{ vendor?: string; code?: number }> } | undefined)?.failovers;
+      const failovers = (r as { failovers?: Array<{ vendor?: string; code?: number; detail?: string }> } | undefined)?.failovers;
       const f = failovers?.find((x) => x.vendor && byoVendors.has(x.vendor));
-      if (f?.vendor) byoFailure = { vendor: f.vendor, code: f.code ?? 0 };
+      if (f?.vendor) byoFailure = { vendor: f.vendor, code: f.code ?? 0, ...(f.detail ? { detail: f.detail } : {}) };
     };
 
     const MAX_ITERS = 6;
@@ -844,9 +844,20 @@ export class BrainService {
       // say so with its status — an expired/revoked subscription 401s, a bad request
       // 400s. This turns a mystifying "empty reply" into a fix ("reconnect your Claude
       // account"). `byoFailure` is null when the connected account served fine (or none).
-      const bf = byoFailure as { vendor: string; code: number } | null;
+      const bf = byoFailure as { vendor: string; code: number; detail?: string } | null;
+      // `code: 0` means the vendor `fetch()` threw before any HTTP response — the status
+      // alone ("no response") hides the cause, so surface the thrown detail (e.g.
+      // `network: <cause>`) which is the ONLY thing that distinguishes a transport/request
+      // failure from an auth rejection. Auth statuses keep their reconnect hint.
+      const bfCause = bf
+        ? bf.code === 401 || bf.code === 403
+          ? ` — the token looks expired or revoked; reconnect it in Settings ▸ API Keys`
+          : bf.code === 0 && bf.detail
+            ? ` — ${bf.detail}`
+            : ''
+        : '';
       const byoNote = bf
-        ? ` Your connected ${bf.vendor === 'anthropic' ? 'Claude' : bf.vendor === 'openai' ? 'OpenAI' : bf.vendor === 'googleai' ? 'Google' : bf.vendor} account was tried first but errored (${bf.code || 'no response'})${bf.code === 401 || bf.code === 403 ? ' — the token looks expired or revoked; reconnect it in Settings ▸ API Keys' : ''}, so the run fell back to the shared pool.`
+        ? ` Your connected ${bf.vendor === 'anthropic' ? 'Claude' : bf.vendor === 'openai' ? 'OpenAI' : bf.vendor === 'googleai' ? 'Google' : bf.vendor} account was tried first but errored (${bf.code || 'no response'})${bfCause}, so the run fell back to the shared pool.`
         : '';
       return {
         error: `${agentName} ran on ${via}${modelNote} but produced no reply${toolNote}.${byoNote} The model returned an empty turn — this usually clears on a retry. If it persists, set a stronger base model for this agent in Workforce, or confirm your connected account is active.` as const,

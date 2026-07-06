@@ -62,6 +62,24 @@ describe('anthropic vendor — subscription (OAuth) call', () => {
   });
 });
 
+describe('anthropic vendor — credential hygiene (code-0 root cause)', () => {
+  it('TRIMS a subscription token carrying a stray newline so the Authorization header is valid', async () => {
+    // A raw `Bearer <token\n>` value makes fetch() throw `invalid header value`
+    // SYNCHRONOUSLY — the cascade records that as a code-0 "no response" network
+    // failure. Trimming is what keeps the connected account usable.
+    const cap = capture();
+    await anthropicModule.call({ apiKey: 'oauth:sk-ant-oat-123\n', model: 'claude-sonnet-4-6', messages: baseMessages });
+    expect(cap.headers()['authorization']).toBe('Bearer sk-ant-oat-123');
+  });
+
+  it('surfaces an EMPTY subscription token as a clear auth error (not a mystifying network throw)', async () => {
+    capture();
+    await expect(
+      anthropicModule.call({ apiKey: 'oauth:   ', model: 'claude-sonnet-4-6', messages: baseMessages }),
+    ).rejects.toMatchObject({ status: 401, vendorId: 'anthropic' });
+  });
+});
+
 describe('anthropic vendor — operator API-key call (unchanged)', () => {
   it('uses x-api-key, no Bearer/oauth beta, and no identity injection', async () => {
     const cap = capture();

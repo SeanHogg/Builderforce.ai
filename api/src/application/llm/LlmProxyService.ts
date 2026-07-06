@@ -692,6 +692,11 @@ export interface FailoverEvent {
    *  failure class (e.g. a Gemini schema 400 normalized to the 422 request-error
    *  class records `upstreamStatus: 400`). Absent when `code` IS the upstream status. */
   upstreamStatus?: number;
+  /** Human-readable failure detail (the vendor error message / thrown `Error.message`,
+   *  truncated). Critical for the `code: 0` case, where the status alone ("no response")
+   *  hides WHY the vendor `fetch()` threw — e.g. `network: <cause>` or a rejected body.
+   *  Surfaced in diagnostics so a connected-account failure names its own cause. */
+  detail?: string;
 }
 
 export interface ProxyResult {
@@ -1791,7 +1796,7 @@ function attemptsToFailovers(attempts: DispatchAttempt[]): FailoverEvent[] {
 /** One {@link DispatchAttempt} → {@link FailoverEvent}, carrying the structured
  *  `reason`/`upstreamStatus` when present so consumers branch on data, not prose.
  *  Single source for both `attemptsToFailovers` and `exhaustedResponse`'s mapper. */
-function attemptToFailover(a: DispatchAttempt): FailoverEvent {
+export function attemptToFailover(a: DispatchAttempt): FailoverEvent {
   return {
     model: a.model,
     vendor: a.vendor,
@@ -1800,6 +1805,7 @@ function attemptToFailover(a: DispatchAttempt): FailoverEvent {
     ...(a.kind ? { kind: a.kind } : {}),
     ...(a.reason ? { reason: a.reason } : {}),
     ...(a.upstreamStatus != null ? { upstreamStatus: a.upstreamStatus } : {}),
+    ...(a.error ? { detail: a.error.slice(0, 240) } : {}),
   };
 }
 
