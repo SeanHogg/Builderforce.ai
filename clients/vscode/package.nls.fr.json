@@ -46,7 +46,7 @@
   "command.editorChat": "BuilderForce : Conversation",
   "command.openBrain": "BuilderForce : Ouvrir la conversation Brain",
   "chatParticipant.description": "Agent de codage BuilderForce connaissant la base de code",
-  "config.baseUrl.desc": "URL de base de la passerelle BuilderForce. Le point de terminaison compatible OpenAI `/llm/v1/chat/completions` est ajouté automatiquement. À remplacer pour les déploiements auto-hébergés.",
+  "config.baseUrl.desc": "URL de base de la passerelle BuilderForce. Par défaut, utilise le domaine principal (`https://builderforce.ai/gateway`), qui fonctionne sur les réseaux d'entreprise autorisant le site principal mais bloquant le sous-domaine `api.`. Le point de terminaison compatible OpenAI `/llm/v1/chat/completions` est ajouté automatiquement. À remplacer pour les déploiements auto-hébergés ou pour appeler directement `https://api.builderforce.ai`.",
   "config.webUrl.desc": "URL de base de l'app web BuilderForce (où se trouvent les pages intégrées comme le tableau). Laissez vide pour la déduire de `builderforce.baseUrl` (api.* → domaine racine).",
   "config.defaultModel.desc": "Id du modèle par défaut. Laissez vide pour laisser la passerelle choisir dans le pool de modèles de codage sélectionné.",
   "config.permissionMode.desc": "Comment l'agent applique les changements à votre espace de travail.",

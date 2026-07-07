@@ -150,6 +150,9 @@
   --bf-error-text: var(--error-text);
   --bf-error-bg: var(--error-bg);
   --bf-success: var(--success);
+  --bf-success-bg: var(--success-bg);
+  --bf-warning: var(--warning);
+  --bf-warning-bg: var(--warning-bg);
   --bf-font-mono: var(--font-mono);
 }
 

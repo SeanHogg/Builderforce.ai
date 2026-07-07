@@ -279,7 +279,10 @@ export function buildApp(env: Env): Hono<HonoEnv> {
     const doc = {
       openapi: OPENAPI_VERSION,
       info: { title: OPENAPI_TITLE, description: OPENAPI_DESCRIPTION, version: API_VERSION },
-      servers: [{ url: 'https://api.builderforce.ai', description: 'Production' }],
+      servers: [
+        { url: 'https://builderforce.ai/gateway', description: 'Production (primary domain — one whitelisted host for all traffic; prefer this)' },
+        { url: 'https://api.builderforce.ai', description: 'Production (direct API subdomain)' },
+      ],
       paths: {
         '/api/agent-hosts': {
           post: { summary: 'Register a BuilderForce Agents instance', operationId: 'registerAgentHost', tags: ['AgentHosts'] },
@@ -541,6 +544,29 @@ interface ForwardableEmailLike {
   readonly raw?: unknown;
 }
 
+/**
+ * Same-origin gateway prefix. Requests that arrive via `builderforce.ai/gateway/*`
+ * (a Cloudflare route pointing the primary apex at this worker — see wrangler.toml)
+ * carry a `/gateway` path prefix that we strip here, BEFORE any routing or CORS
+ * handling, so the entire API surface is byte-identical whether a caller reached us
+ * on api.builderforce.ai or on the whitelisted primary domain. Corporate firewalls
+ * that block the `api.` subdomain but allow the apex use this path. Requests that
+ * arrive directly on api.builderforce.ai have no prefix and pass through untouched.
+ */
+const GATEWAY_PATH_PREFIX = '/gateway';
+
+function stripGatewayPrefix(request: Request): Request {
+  const url = new URL(request.url);
+  if (url.pathname === GATEWAY_PATH_PREFIX) {
+    url.pathname = '/';
+  } else if (url.pathname.startsWith(`${GATEWAY_PATH_PREFIX}/`)) {
+    url.pathname = url.pathname.slice(GATEWAY_PATH_PREFIX.length);
+  } else {
+    return request;
+  }
+  return new Request(url.toString(), request);
+}
+
 function optionCorsAllowOrigin(origin: string | null, corsOrigins: string | undefined): string {
   if (!origin) return '*';
   if (corsOrigins === '*') return '*';
@@ -743,7 +769,11 @@ export default {
       })().catch((err) => console.error('[email:wf-trigger] failed', err)),
     );
   },
-  fetch(request: Request, env: Env, ctx: ExecutionContext): Response | Promise<Response> {
+  fetch(rawRequest: Request, env: Env, ctx: ExecutionContext): Response | Promise<Response> {
+    // Normalize the same-origin gateway path (builderforce.ai/gateway/*) → the bare
+    // API surface before anything else looks at the request. No-op for direct
+    // api.builderforce.ai traffic.
+    const request = stripGatewayPrefix(rawRequest);
     // Handle OPTIONS without building the app so we never require NEON_DATABASE_URL for preflight.
     if (request.method === 'OPTIONS') {
       const origin = request.headers.get('Origin');
@@ -760,7 +790,7 @@ export default {
           'Access-Control-Allow-Headers': 'Content-Type,Authorization,Idempotency-Key,X-Emulation-Token,X-AgentHost-Signature',
           // Echo the daily-budget snapshot headers so SDK consumers in the
           // browser can pre-emptively throttle without a second fetch.
-          'Access-Control-Expose-Headers': 'x-request-id,x-builderforce-model,x-builderforce-retries,x-builderforce-product,x-builderforce-effective-plan,x-builderforce-daily-tokens-used,x-builderforce-daily-tokens-limit,x-builderforce-daily-tokens-remaining',
+          'Access-Control-Expose-Headers': 'x-request-id,x-builderforce-model,x-builderforce-account,x-builderforce-retries,x-builderforce-product,x-builderforce-effective-plan,x-builderforce-daily-tokens-used,x-builderforce-daily-tokens-limit,x-builderforce-daily-tokens-remaining',
           'Access-Control-Max-Age': '86400',
           Vary: 'Origin',
         },

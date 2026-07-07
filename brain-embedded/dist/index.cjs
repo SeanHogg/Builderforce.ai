@@ -27,6 +27,7 @@ __export(src_exports, {
   BrainProvider: () => BrainProvider,
   CONSOLIDATION_MARKER_PREFIX: () => CONSOLIDATION_MARKER_PREFIX,
   CONSOLIDATION_META: () => CONSOLIDATION_META,
+  PROVENANCE_META_KEY: () => PROVENANCE_META_KEY,
   activeMentionToken: () => activeMentionToken,
   buildBrainTriageReport: () => buildBrainTriageReport,
   computeBrainDiagnostics: () => computeBrainDiagnostics,
@@ -34,6 +35,7 @@ __export(src_exports, {
   consolidationMetadata: () => consolidationMetadata,
   filterMentionCandidates: () => filterMentionCandidates,
   formatBrainDiagnostics: () => formatBrainDiagnostics,
+  isConnectedAccountUnused: () => isConnectedAccountUnused,
   isConsolidationMarker: () => isConsolidationMarker,
   isDirectedToParticipant: () => isDirectedToParticipant,
   isEvermindModel: () => isEvermindModel,
@@ -43,6 +45,7 @@ __export(src_exports, {
   modelsUsedInTrace: () => modelsUsedInTrace,
   parseDirectedRecipient: () => parseDirectedRecipient,
   parseMessageAuthor: () => parseMessageAuthor,
+  parseMessageProvenance: () => parseMessageProvenance,
   prepareImageDataUrl: () => prepareImageDataUrl,
   resolveRecipient: () => resolveRecipient,
   savePendingPrompt: () => savePendingPrompt,
@@ -57,7 +60,8 @@ __export(src_exports, {
   useMcpExtensions: () => useMcpExtensions,
   useOptionalBrainContext: () => useOptionalBrainContext,
   useRegisterBrainActions: () => useRegisterBrainActions,
-  withDirectedMetadata: () => withDirectedMetadata
+  withDirectedMetadata: () => withDirectedMetadata,
+  withProvenanceMetadata: () => withProvenanceMetadata
 });
 module.exports = __toCommonJS(src_exports);
 
@@ -237,6 +241,13 @@ async function streamChatCompletion(opts, handlers = {}) {
   }
   let streamModel = null;
   const resolvedModel = () => headerModel ?? streamModel ?? void 0;
+  let headerAccount = null;
+  try {
+    headerAccount = res.headers?.get?.("x-builderforce-account") || null;
+  } catch {
+    headerAccount = null;
+  }
+  const account = () => headerAccount ?? void 0;
   let usage;
   const readUsage = (u) => {
     if (!u || typeof u !== "object") return;
@@ -263,7 +274,7 @@ async function streamChatCompletion(opts, handlers = {}) {
     });
     finishReason = choice?.finish_reason ?? null;
     handlers.onDone?.(finishReason);
-    return { text, toolCalls: [...assemble(toolAcc), ...xmlCalls], finishReason, resolvedModel: resolvedModel(), usage };
+    return { text, toolCalls: [...assemble(toolAcc), ...xmlCalls], finishReason, resolvedModel: resolvedModel(), account: account(), usage };
   }
   const decoder = new TextDecoder();
   let buffer = "";
@@ -281,7 +292,7 @@ async function streamChatCompletion(opts, handlers = {}) {
         const tail2 = xml.flush();
         if (tail2) handlers.onTextDelta?.(tail2);
         handlers.onDone?.(finishReason);
-        return { text: xml.cleanText(), toolCalls: allToolCalls(), finishReason, resolvedModel: resolvedModel(), usage };
+        return { text: xml.cleanText(), toolCalls: allToolCalls(), finishReason, resolvedModel: resolvedModel(), account: account(), usage };
       }
       let parsed;
       try {
@@ -320,7 +331,7 @@ async function streamChatCompletion(opts, handlers = {}) {
   const tail = xml.flush();
   if (tail) handlers.onTextDelta?.(tail);
   handlers.onDone?.(finishReason);
-  return { text: xml.cleanText(), toolCalls: allToolCalls(), finishReason, resolvedModel: resolvedModel(), usage };
+  return { text: xml.cleanText(), toolCalls: allToolCalls(), finishReason, resolvedModel: resolvedModel(), account: account(), usage };
 }
 function assemble(acc) {
   return [...acc.entries()].sort((a, b) => a[0] - b[0]).map(([, v]) => ({ id: v.id, name: v.name, args: v.args })).filter((c) => c.name.length > 0);
@@ -1057,7 +1068,35 @@ function buildBrainTriageReport(opts) {
   return lines.join("\n");
 }
 
+// src/provenance.ts
+var PROVENANCE_META_KEY = "provenance";
+function isConnectedAccountUnused(prov) {
+  return prov?.account === "shared_byo_unused";
+}
+function parseMessageProvenance(msg) {
+  if (!msg.metadata) return null;
+  try {
+    const p = JSON.parse(msg.metadata).provenance;
+    if (p && typeof p.model === "string" && p.model.length > 0 && (p.account === "own" || p.account === "shared" || p.account === "shared_byo_unused")) {
+      return { model: p.model, account: p.account, ...typeof p.vendor === "string" ? { vendor: p.vendor } : {} };
+    }
+  } catch {
+  }
+  return null;
+}
+function withProvenanceMetadata(provenance, base) {
+  const meta = { ...base ?? {} };
+  if (provenance) meta[PROVENANCE_META_KEY] = provenance;
+  return Object.keys(meta).length > 0 ? JSON.stringify(meta) : void 0;
+}
+
 // src/brainRunStore.ts
+function provenanceMetadata(result) {
+  const model = result.resolvedModel;
+  const account = result.account;
+  if (!model || account !== "own" && account !== "shared" && account !== "shared_byo_unused") return void 0;
+  return withProvenanceMetadata({ model, account });
+}
 var MAX_TOOL_ITERATIONS = 25;
 var HISTORY_WINDOW = 80;
 var HISTORY_TOKEN_BUDGET = 24e3;
@@ -1340,7 +1379,8 @@ async function runLoop(chatId, c, req) {
       });
       const narration = result.text.trim();
       if (narration) {
-        const [narrationMsg] = await persistence.sendMessages(chatId, [{ role: "assistant", content: result.text }]);
+        const meta = provenanceMetadata(result);
+        const [narrationMsg] = await persistence.sendMessages(chatId, [{ role: "assistant", content: result.text, ...meta ? { metadata: meta } : {} }]);
         recordAppended(c, narrationMsg);
       }
       c.streamingText = "";
@@ -1388,7 +1428,8 @@ async function runLoop(chatId, c, req) {
     }
     const finalText = result.text.trim() || "No response.";
     convo.push({ role: "assistant", content: finalText });
-    const [assistantMsg] = await persistence.sendMessages(chatId, [{ role: "assistant", content: finalText }]);
+    const finalMeta = provenanceMetadata(result);
+    const [assistantMsg] = await persistence.sendMessages(chatId, [{ role: "assistant", content: finalText, ...finalMeta ? { metadata: finalMeta } : {} }]);
     c.streamingText = "";
     recordAppended(c, assistantMsg);
     emit(c);
@@ -1705,6 +1746,7 @@ function takePendingPrompt() {
   BrainProvider,
   CONSOLIDATION_MARKER_PREFIX,
   CONSOLIDATION_META,
+  PROVENANCE_META_KEY,
   activeMentionToken,
   buildBrainTriageReport,
   computeBrainDiagnostics,
@@ -1712,6 +1754,7 @@ function takePendingPrompt() {
   consolidationMetadata,
   filterMentionCandidates,
   formatBrainDiagnostics,
+  isConnectedAccountUnused,
   isConsolidationMarker,
   isDirectedToParticipant,
   isEvermindModel,
@@ -1721,6 +1764,7 @@ function takePendingPrompt() {
   modelsUsedInTrace,
   parseDirectedRecipient,
   parseMessageAuthor,
+  parseMessageProvenance,
   prepareImageDataUrl,
   resolveRecipient,
   savePendingPrompt,
@@ -1735,6 +1779,7 @@ function takePendingPrompt() {
   useMcpExtensions,
   useOptionalBrainContext,
   useRegisterBrainActions,
-  withDirectedMetadata
+  withDirectedMetadata,
+  withProvenanceMetadata
 });
 //# sourceMappingURL=index.cjs.map

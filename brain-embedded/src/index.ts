@@ -100,5 +100,14 @@ export {
 } from './directedMessage';
 export type { DirectedRecipient, RecipientChoice, MentionToken } from './directedMessage';
 
+// Per-reply model/account provenance (the "which LLM / whose account" chip)
+export {
+  PROVENANCE_META_KEY,
+  parseMessageProvenance,
+  withProvenanceMetadata,
+  isConnectedAccountUnused,
+} from './provenance';
+export type { MessageProvenance, ProvenanceAccount } from './provenance';
+
 // Shared data shapes
 export type { BrainChat, BrainMessage, BrainModality, ChatInputAttachment } from './types';

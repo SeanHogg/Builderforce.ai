@@ -36,6 +36,22 @@ import type {
   StreamChatResult,
 } from './streamChatCompletion';
 import { isFailedToolResult, type BrainTraceEvent } from './brainTriage';
+import { withProvenanceMetadata, type ProvenanceAccount } from './provenance';
+
+/**
+ * Build the provenance metadata for a persisted assistant turn from the stream
+ * result — the resolved model + which account served it (`x-builderforce-account`,
+ * captured as `result.account`). Returns `undefined` when the gateway reported no
+ * account (older gateway / header not exposed), so the message simply carries no
+ * provenance rather than a half-populated blob. Shared by both the mid-run
+ * narration and the final-answer persist so the chip shows on every durable turn.
+ */
+function provenanceMetadata(result: StreamChatResult): string | undefined {
+  const model = result.resolvedModel;
+  const account = result.account;
+  if (!model || (account !== 'own' && account !== 'shared' && account !== 'shared_byo_unused')) return undefined;
+  return withProvenanceMetadata({ model, account: account as ProvenanceAccount });
+}
 
 /**
  * Max agent-loop iterations before we stop chaining tool calls (runaway guard).
@@ -589,7 +605,8 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
       // empty (pure tool-call) turns persist nothing.
       const narration = result.text.trim();
       if (narration) {
-        const [narrationMsg] = await persistence.sendMessages(chatId, [{ role: 'assistant', content: result.text }]);
+        const meta = provenanceMetadata(result);
+        const [narrationMsg] = await persistence.sendMessages(chatId, [{ role: 'assistant', content: result.text, ...(meta ? { metadata: meta } : {}) }]);
         recordAppended(c, narrationMsg);
       }
       c.streamingText = '';
@@ -647,7 +664,8 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
     // Final text — record in the transcript, persist, broadcast to mounted views.
     const finalText = result.text.trim() || 'No response.';
     convo.push({ role: 'assistant', content: finalText });
-    const [assistantMsg] = await persistence.sendMessages(chatId, [{ role: 'assistant', content: finalText }]);
+    const finalMeta = provenanceMetadata(result);
+    const [assistantMsg] = await persistence.sendMessages(chatId, [{ role: 'assistant', content: finalText, ...(finalMeta ? { metadata: finalMeta } : {}) }]);
     c.streamingText = '';
     recordAppended(c, assistantMsg);
     emit(c);

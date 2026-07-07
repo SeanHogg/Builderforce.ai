@@ -2204,6 +2204,18 @@ export const CLOUD_AGENT_PLATFORM_TOOLS: readonly string[] = [
   'executions.task_file_changes', 'executions.trace',
 ];
 
+/** Chat-scoped tools an agent gets ONLY when it is replying INSIDE a Brain chat (the
+ *  `@agent` addressed-reply loop) — where a current `chatId` exists to act on. Read the
+ *  conversation's linked work + tie/untie tickets to THIS chat, so an agent asked to
+ *  "link these tickets to the chat" actually can. Deliberately NOT part of
+ *  CLOUD_AGENT_PLATFORM_TOOLS: an autonomous cloud run has no chat context, and the
+ *  escalation/destructive members (dispatch_agent = start a run, invite_agent, consolidate
+ *  = archive+merge chats) stay off — same restraint as excluding executions.submit. */
+export const CHAT_SCOPED_AGENT_TOOLS: readonly string[] = [
+  'chats.get_messages', 'chats.list_tickets', 'chats.link_ticket', 'chats.unlink_ticket',
+  'chats.ticket_lineage', 'chats.list_agents',
+];
+
 const CLOUD_AGENT_PLATFORM_SET: ReadonlySet<string> = new Set(CLOUD_AGENT_PLATFORM_TOOLS);
 
 let _cloudAgentPlatformSchemas: ToolSchema[] | undefined;

@@ -25,7 +25,7 @@ import { TenantRole } from '../../domain/shared/types';
 import { projects } from '../../infrastructure/database/schema';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env, HonoEnv } from '../../env';
-import { resolveTenantModel, TENANT_MODEL_REF_PREFIX } from '../../application/llm/tenantModelService';
+import { seedProjectEvermindFromPublished } from '../../application/llm/evermindRecipes';
 import {
   getProjectEvermindHead,
   seedProjectEvermind,
@@ -186,34 +186,17 @@ export function createProjectEvermindRoutes(db: Db): Hono<HonoEnv> {
     const slug = typeof body.slug === 'string' ? body.slug.trim() : '';
     if (!slug) return c.json({ error: 'slug (a published Evermind model) is required' }, 400);
 
-    // Resolve the published model → its immutable R2 ref (tenant-scoped, so no IDOR).
-    const tm = await resolveTenantModel(env, db, tenantId, `${TENANT_MODEL_REF_PREFIX}${slug}`);
-    if (!tm || !tm.baseModel?.startsWith('evermind/')) {
-      return c.json({ error: 'no published Evermind model with that slug' }, 404);
+    // Shared server-side R2 copy → project base (same path the create-time recipe uses).
+    const seeded = await seedProjectEvermindFromPublished(
+      env, db, tenantId, projectId, slug,
+      typeof body.name === 'string' ? body.name : undefined,
+    );
+    if (!seeded.ok) {
+      // "no published model with that slug" is a 404; malformed artifacts are 400.
+      const status = /no published/i.test(seeded.error ?? '') ? 404 : 400;
+      return c.json({ error: seeded.error ?? 'could not seed from model' }, status);
     }
-    const ref = tm.baseModel.slice('evermind/'.length);
-
-    const [modelObj, tokObj] = await Promise.all([
-      env.UPLOADS.get(`${ref}/model.evermind`),
-      env.UPLOADS.get(`${ref}/tokenizer.json`),
-    ]);
-    if (!modelObj) return c.json({ error: 'published model artifact not found in storage' }, 404);
-    if (!tokObj) return c.json({ error: 'published model tokenizer not found in storage' }, 404);
-
-    const modelBlob = await modelObj.arrayBuffer();
-    const verdict = EvermindModelPackage.fromBlob(modelBlob).validate();
-    if (!verdict.ok) return c.json({ error: `invalid .evermind artifact: ${verdict.errors.join('; ')}` }, 400);
-    const tokenizer = (await tokObj.json().catch(() => null)) as { vocab?: unknown; merges?: unknown } | null;
-    if (!tokenizer || typeof tokenizer.vocab !== 'object' || !Array.isArray(tokenizer.merges)) {
-      return c.json({ error: 'published model tokenizer is malformed' }, 400);
-    }
-
-    const head = await seedProjectEvermind(env, db, env.UPLOADS, {
-      tenantId, projectId,
-      name: typeof body.name === 'string' && body.name.trim() ? body.name.trim() : (tm.name ?? undefined),
-      modelBlob,
-      tokenizer: { vocab: tokenizer.vocab as Record<string, number>, merges: tokenizer.merges as string[] },
-    });
+    const head = await getProjectEvermindHead(env, db, tenantId, projectId);
     return c.json({ seeded: true, version: head.version, ref: head.ref, mode: head.mode, inferenceEnabled: head.inferenceEnabled }, 201);
   });
 

@@ -710,6 +710,9 @@ export function BrainPanel({
                 preview: tTimeline('preview'),
                 askSubmit: tTimeline('askSubmit'),
                 askAnswered: tTimeline('askAnswered'),
+                accountOwn: tTimeline('accountOwn'),
+                accountShared: tTimeline('accountShared'),
+                accountByoUnused: tTimeline('accountByoUnused'),
               }}
               onApplyCode={hasTool('apply_code_to_active_file') ? (code) => { void runTool('apply_code_to_active_file', { code }); } : undefined}
               onCreateFile={hasTool('create_file') ? (path, content) => { void runTool('create_file', { path, content }); } : undefined}

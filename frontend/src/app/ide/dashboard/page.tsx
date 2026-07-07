@@ -12,9 +12,11 @@ import {
   deleteIdeProject,
   listIdeContainers,
 } from '@/lib/api';
-import { workflowDefinitions, type WorkflowDefinitionSummary } from '@/lib/builderforceApi';
 import { isPlanLimitError, type PlanLimitError } from '@/lib/planLimitError';
 import { MODALITIES, getModality, type ProjectModality } from '@/lib/modality';
+import { EVERMIND_RECIPES, DEFAULT_EVERMIND_RECIPE, getEvermindRecipe, type EvermindRecipeId } from '@/lib/evermindRecipes';
+import { useLlmModels } from '@/lib/useLlmModels';
+import { listEvermindModels, type PublishedEvermindModel } from '@/lib/studioModelsApi';
 import type { IdeProject, IdeContainerOption } from '@/lib/types';
 import { IdeProjectCard } from '@/components/IdeProjectCard';
 import { IdeProjectDetailsModal } from '@/components/IdeProjectDetailsModal';
@@ -60,12 +62,16 @@ export default function IDEDashboardPage() {
   const [createType, setCreateType] = useState<ProjectModality | null>(null);
   const [newName, setNewName] = useState('');
   const [newParent, setNewParent] = useState<number | null>(null);
-  const [newWorkflow, setNewWorkflow] = useState<string | null>(null);
+  // LLM modality: the one-click Evermind recipe (+ optional published model to seed from).
+  const [recipe, setRecipe] = useState<EvermindRecipeId>(DEFAULT_EVERMIND_RECIPE);
+  const [seedModelSlug, setSeedModelSlug] = useState<string | null>(null);
+  const [publishedModels, setPublishedModels] = useState<PublishedEvermindModel[]>([]);
+  const [publishedLoaded, setPublishedLoaded] = useState(false);
   const [containers, setContainers] = useState<IdeContainerOption[]>([]);
-  const [workflows, setWorkflows] = useState<WorkflowDefinitionSummary[]>([]);
-  const [workflowsLoaded, setWorkflowsLoaded] = useState(false);
   const [creating, setCreating] = useState(false);
   const [planError, setPlanError] = useState<PlanLimitError | null>(null);
+  // Model list is used only to preset a coding recipe's teacher (free plans self-learn).
+  const { codingModels, canChooseModel } = useLlmModels();
 
   // Details (rename + reassign) modal state
   const [detailsFor, setDetailsFor] = useState<IdeProject | null>(null);
@@ -97,14 +103,16 @@ export default function IDEDashboardPage() {
     if (!createType) return;
     setNewParent(currentProjectId ?? null);
     listIdeContainers().then(setContainers).catch(() => setContainers([]));
-    // LLM projects must run a workflow — load the tenant's definitions to pick from.
+    // LLM projects pick an Evermind recipe. Reset to the default, and load the
+    // tenant's published models so the "seed from a published model" recipe can offer them.
     if (createType === 'llm') {
-      setNewWorkflow(null);
-      setWorkflowsLoaded(false);
-      workflowDefinitions.list()
-        .then(setWorkflows)
-        .catch(() => setWorkflows([]))
-        .finally(() => setWorkflowsLoaded(true));
+      setRecipe(DEFAULT_EVERMIND_RECIPE);
+      setSeedModelSlug(null);
+      setPublishedLoaded(false);
+      listEvermindModels()
+        .then(setPublishedModels)
+        .catch(() => setPublishedModels([]))
+        .finally(() => setPublishedLoaded(true));
     }
   }, [createType, currentProjectId]);
 
@@ -123,19 +131,30 @@ export default function IDEDashboardPage() {
     }
   };
 
-  const llmNeedsWorkflow = createType === 'llm' && !newWorkflow;
+  const activeRecipe = getEvermindRecipe(recipe);
+  // The only LLM blocker left: the "seed from a published model" recipe needs a model.
+  const llmNeedsSeed = createType === 'llm' && !!activeRecipe.needsSeedModel && !seedModelSlug;
 
   const submitCreate = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!createType || !newName.trim() || creating || llmNeedsWorkflow) return;
+    if (!createType || !newName.trim() || creating || llmNeedsSeed) return;
     setCreating(true);
     setError(null);
     try {
+      // Preset a coding recipe's teacher to the tenant's top coding model, but only
+      // when the plan may pick a model at all (free plans self-learn on raw text).
+      const teacherModel = activeRecipe.teacher === 'coding' && canChooseModel ? (codingModels[0] ?? null) : null;
       const created = await createIdeProject({
         name: newName.trim(),
         modality: createType,
         containerProjectId: newParent,
-        ...(createType === 'llm' ? { workflowDefinitionId: newWorkflow } : {}),
+        ...(createType === 'llm'
+          ? {
+              evermindRecipe: recipe,
+              evermindTeacherModel: teacherModel,
+              evermindSeedModelSlug: activeRecipe.needsSeedModel ? seedModelSlug : null,
+            }
+          : {}),
       });
       persistLastProjectId(String(created.storageProjectId));
       router.push(`/ide/${created.storageProjectPublicId}`);
@@ -350,27 +369,66 @@ export default function IDEDashboardPage() {
               </div>
               {createType === 'llm' && (
                 <div>
-                  <label className="block text-sm mb-1" style={{ color: 'var(--text-secondary)' }}>{t('workflowRequired')}</label>
-                  {workflowsLoaded && workflows.length === 0 ? (
-                    <div style={{ fontSize: 13, color: 'var(--text-secondary)', background: 'var(--bg-deep)', border: '1px solid var(--border-subtle)', borderRadius: 10, padding: '10px 14px' }}>
-                      {t('noWorkflowsYet')}{' '}
-                      <a href="/workflows" style={{ color: 'var(--coral-bright)', fontWeight: 600 }}>{t('goToWorkflows')}</a>
+                  <label className="block text-sm mb-1" style={{ color: 'var(--text-secondary)' }}>{t('recipeLabel')}</label>
+                  <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '0 0 8px' }}>{t('recipeHint')}</p>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    {EVERMIND_RECIPES.map((r) => {
+                      const selected = recipe === r.id;
+                      const noModels = !!r.needsSeedModel && publishedLoaded && publishedModels.length === 0;
+                      return (
+                        <button
+                          key={r.id}
+                          type="button"
+                          disabled={noModels}
+                          aria-pressed={selected}
+                          onClick={() => { setRecipe(r.id); if (!r.needsSeedModel) setSeedModelSlug(null); }}
+                          style={{
+                            display: 'flex', alignItems: 'flex-start', gap: 10, textAlign: 'left', width: '100%',
+                            padding: '10px 12px', borderRadius: 10, cursor: noModels ? 'not-allowed' : 'pointer',
+                            background: selected ? 'var(--surface-interactive)' : 'var(--bg-deep)',
+                            border: `1px solid ${selected ? 'var(--coral-bright)' : 'var(--border-subtle)'}`,
+                            opacity: noModels ? 0.55 : 1,
+                          }}
+                        >
+                          <span aria-hidden style={{ fontSize: 20, lineHeight: 1 }}>{r.icon}</span>
+                          <span style={{ flex: 1, minWidth: 0 }}>
+                            <span style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                              <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)' }}>{t(r.nameKey)}</span>
+                              {r.recommended && (
+                                <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--coral-bright)', border: '1px solid var(--coral-bright)', borderRadius: 6, padding: '0 6px' }}>
+                                  {t('recipeRecommended')}
+                                </span>
+                              )}
+                            </span>
+                            <span style={{ display: 'block', fontSize: 12, color: 'var(--text-secondary)', marginTop: 2, lineHeight: 1.4 }}>
+                              {t(r.descKey)}{noModels ? ` — ${t('recipeSeedNoModels')}` : ''}
+                            </span>
+                          </span>
+                          <span aria-hidden style={{ fontSize: 14, color: selected ? 'var(--coral-bright)' : 'var(--text-muted)', flexShrink: 0 }}>
+                            {selected ? '●' : '○'}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  {activeRecipe.needsSeedModel && publishedModels.length > 0 && (
+                    <div style={{ marginTop: 10 }}>
+                      <label className="block text-sm mb-1" style={{ color: 'var(--text-secondary)' }}>{t('recipeSeedModelLabel')}</label>
+                      <select value={seedModelSlug ?? ''} onChange={(e) => setSeedModelSlug(e.target.value || null)} required style={inputStyle}>
+                        <option value="">{t('recipeSeedSelect')}</option>
+                        {publishedModels.map((m) => (<option key={m.slug} value={m.slug}>{m.name}</option>))}
+                      </select>
                     </div>
-                  ) : (
-                    <select value={newWorkflow ?? ''} onChange={(e) => setNewWorkflow(e.target.value || null)} required style={inputStyle}>
-                      <option value="">{t('selectWorkflow')}</option>
-                      {workflows.map((w) => (<option key={w.id} value={w.id}>{w.name}</option>))}
-                    </select>
                   )}
-                  <p style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 6 }}>{t('workflowHint')}</p>
                 </div>
               )}
               <div className="flex gap-3 justify-end">
                 <button type="button" onClick={() => setCreateType(null)} style={{ fontSize: '0.875rem', color: 'var(--text-secondary)', background: 'none', border: 'none', cursor: 'pointer' }}>{t('cancel')}</button>
                 <button
                   type="submit"
-                  disabled={creating || !newName.trim() || llmNeedsWorkflow}
-                  style={{ padding: '8px 18px', fontSize: '0.875rem', fontWeight: 600, background: 'linear-gradient(135deg, var(--coral-bright), var(--coral-dark))', color: '#fff', border: 'none', borderRadius: 10, cursor: creating || !newName.trim() || llmNeedsWorkflow ? 'not-allowed' : 'pointer', opacity: creating || !newName.trim() || llmNeedsWorkflow ? 0.7 : 1 }}
+                  disabled={creating || !newName.trim() || llmNeedsSeed}
+                  style={{ padding: '8px 18px', fontSize: '0.875rem', fontWeight: 600, background: 'linear-gradient(135deg, var(--coral-bright), var(--coral-dark))', color: '#fff', border: 'none', borderRadius: 10, cursor: creating || !newName.trim() || llmNeedsSeed ? 'not-allowed' : 'pointer', opacity: creating || !newName.trim() || llmNeedsSeed ? 0.7 : 1 }}
                 >
                   {creating ? t('creating') : t('createOpen')}
                 </button>

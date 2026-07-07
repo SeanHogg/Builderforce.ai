@@ -5,7 +5,6 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import { useAuth } from '@/lib/AuthContext';
-import { getStoredTenant } from '@/lib/auth';
 import { useIsFreelancer } from '@/lib/rbac';
 import { isNavItemActive, type NavMatch } from '@/lib/nav';
 import MascotIcon from './MascotIcon';
@@ -22,15 +21,16 @@ interface BottomItem extends NavMatch {
 // destinations; the full menu lives in the hamburger drawer. Uses the same
 // isNavItemActive matcher as the Sidebar so both surfaces agree on active state.
 //
-// Account-type aware, mirroring the sidebar's navGroupsForAccountType so the two
-// surfaces never drift: a freelancer / gig ("job seeker") account sees the
-// restricted for-hire destinations (Home / Find Work / Timecard / Profile /
-// Security); a builder sees the builder destinations with a privilege-tuned last
-// slot. Labels are i18n keys, resolved by the component.
+// Account-type aware so the bottom bar mirrors the correct shell:
+//   - Builder (IDE creator):  Home / Projects / Workforce / Insights / account slot
+//   - Job seeker (freelancer): Home / Profile / Marketplace / Timecard / account slot
+// The final "account slot" is privilege-gated and shared by both bars (DRY): a
+// platform superadmin gets Admin; everyone else gets their own account Settings
+// (the "admin" of their own account) — we never surface a /admin link to a viewer
+// who can't reach it. Labels are i18n keys, resolved by the component.
 export function itemsFor(
   isAuthenticated: boolean,
   isSuperadmin: boolean,
-  role?: string,
   isFreelancer = false,
 ): BottomItem[] {
   if (!isAuthenticated) {
@@ -42,35 +42,29 @@ export function itemsFor(
       { href: '/login', labelKey: 'bottom.signIn', icon: '🔑', accent: true },
     ];
   }
+  // Shared final slot: superadmins manage the platform (Admin), everyone else
+  // manages their own account (Settings). One definition, used by both bars.
+  const accountSlot: BottomItem = isSuperadmin
+    ? { href: '/admin', labelKey: 'group.admin', icon: '⚙' }
+    : { href: '/settings', labelKey: 'group.settings', icon: '⚙', exactMatch: true };
   // Job seeker (freelancer / gig account): the restricted for-hire shell — never
-  // the builder app. Mirrors FREELANCER_NAV_GROUPS (Dashboard / Profile / Find
-  // Work / Timecard / Security) with Home first, so the bottom bar matches the
-  // sidebar exactly.
+  // the builder app.
   if (isFreelancer) {
     return [
       { href: '/freelancer/dashboard', labelKey: 'tab.home', icon: '🏠' },
-      { href: '/marketplace?category=gigs', labelKey: 'group.findWork', icon: '🔎' },
-      { href: '/freelancer/timecard', labelKey: 'group.timecard', icon: '⏱' },
       { href: '/freelancer/profile', labelKey: 'group.myProfile', icon: '👤' },
-      { href: '/security', labelKey: 'tab.security', icon: '🔒' },
+      { href: '/marketplace', labelKey: 'group.marketplace', icon: <MascotIcon size={22} /> },
+      { href: '/freelancer/timecard', labelKey: 'group.timecard', icon: '⏱' },
+      accountSlot,
     ];
   }
-  // Last slot is privilege-tuned [1335]: superadmins get Admin; workspace
-  // managers (owner/manager — who actually use billing/members/keys) get
-  // Settings; individual contributors (developer/viewer) get a work-focused
-  // Projects entry instead, since Settings is rarely theirs.
-  const canManage = role === 'owner' || role === 'manager';
-  const last: BottomItem = isSuperadmin
-    ? { href: '/admin', labelKey: 'group.admin', icon: '⚙' }
-    : canManage
-      ? { href: '/settings', labelKey: 'group.settings', icon: '⚙', exactMatch: true }
-      : { href: '/projects', labelKey: 'group.projects', icon: '📁', activePaths: ['/projects'] };
+  // Builder (IDE creator): the four primary work destinations + the account slot.
   return [
     { href: '/dashboard', labelKey: 'tab.home', icon: '🏠' },
+    { href: '/projects', labelKey: 'group.projects', icon: '📁' },
     { href: '/workforce', labelKey: 'tab.workforce', icon: <MascotIcon size={22} /> },
-    { href: '/workflows/builder', labelKey: 'group.workflows', icon: '🔀', activePaths: ['/workflows'] },
-    { href: '/workforce?tab=chats', labelKey: 'tab.chats', icon: '💬' },
-    last,
+    { href: '/insights', labelKey: 'group.insights', icon: '📈' },
+    accountSlot,
   ];
 }
 
@@ -84,7 +78,7 @@ export default function MobileBottomNav() {
   const { isAuthenticated, user } = useAuth();
   const isFreelancer = useIsFreelancer();
   const t = useTranslations('nav');
-  const items = itemsFor(isAuthenticated, !!user?.isSuperadmin, getStoredTenant()?.role, isFreelancer);
+  const items = itemsFor(isAuthenticated, !!user?.isSuperadmin, isFreelancer);
 
   return (
     <nav className="mobile-bottom-nav" aria-label="Primary">

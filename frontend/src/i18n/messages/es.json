@@ -262,7 +262,8 @@
       "findWork": "Buscar trabajo",
       "timecard": "Hoja de horas",
       "myDashboard": "Mi panel",
-      "myWorkspace": "Mi espacio"
+      "myWorkspace": "Mi espacio",
+      "marketplace": "Mercado"
     },
     "tab": {
       "projects": "Proyectos",
@@ -653,16 +654,28 @@
     "workflowLabel": "Flujo de trabajo",
     "noWorkflow": "Sin flujo de trabajo",
     "workflowHint": "Los proyectos LLM ejecutan un flujo de trabajo. Asigna uno compartido o crea uno personalizado en Flujos de trabajo.",
-    "workflowRequired": "Flujo de trabajo (obligatorio)",
-    "selectWorkflow": "Selecciona un flujo de trabajo…",
     "customTag": "personalizado",
     "customizeWorkflow": "Personalizar",
     "runWorkflow": "Ejecutar flujo de trabajo",
     "working": "Procesando…",
     "workflowForked": "Bifurcado en un flujo de trabajo personalizado para este proyecto.",
     "workflowRunStarted": "Ejecución del flujo de trabajo iniciada.",
-    "noWorkflowsYet": "Aún no tienes flujos de trabajo.",
-    "goToWorkflows": "Crea uno en Flujos de trabajo →"
+    "recipeLabel": "Empezar con una receta",
+    "recipeHint": "Elige un punto de partida: tu proyecto se abre con un Evermind funcional que puedes entrenar, evaluar y publicar.",
+    "recipeRecommended": "Recomendado",
+    "recipeCodingName": "Evermind de programación",
+    "recipeCodingDesc": "Aprende tu código y tu estilo de programación mientras trabajan tus agentes.",
+    "recipeAssistantName": "Evermind asistente",
+    "recipeAssistantDesc": "Un modelo de chat y soporte que se adapta a tu producto y tono.",
+    "recipeDocsName": "Evermind basado en documentos",
+    "recipeDocsDesc": "Fundamenta las respuestas en tus documentos: enséñale tus documentos tras la configuración.",
+    "recipeSeedName": "Inicializar desde un modelo publicado",
+    "recipeSeedDesc": "Empieza desde uno de tus modelos Evermind publicados.",
+    "recipeBlankName": "Inicio en blanco",
+    "recipeBlankDesc": "Un modelo mínimo que entrenas desde cero en el Studio.",
+    "recipeSeedModelLabel": "Modelo publicado para inicializar",
+    "recipeSeedSelect": "Selecciona un modelo…",
+    "recipeSeedNoModels": "aún no hay modelos publicados"
   },
   "tools": {
     "outOf5": "de 5,0",
@@ -4786,6 +4799,9 @@
       "preview": "Vista previa",
       "askSubmit": "Enviar",
       "askAnswered": "Respondido",
+      "accountOwn": "Tu cuenta",
+      "accountShared": "Grupo compartido",
+      "accountByoUnused": "No se usó tu cuenta conectada",
       "stop": "Detener"
     },
     "tickets": {

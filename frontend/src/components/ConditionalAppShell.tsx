@@ -24,6 +24,7 @@ import { FloatingBrain } from './brain/FloatingBrain';
 import ActivityTracker from './ActivityTracker';
 import { McpExtensionsBridge } from './brain/McpExtensionsBridge';
 import { PlatformActionsBridge } from './brain/PlatformActionsBridge';
+import { ProjectScopeProvider } from '@/lib/ProjectScopeContext';
 import { useAuth } from '@/lib/AuthContext';
 import { useIsFreelancer } from '@/lib/rbac';
 import { findActiveGroup, isFreelancerAllowedPath } from '@/lib/navGroups';
@@ -211,6 +212,12 @@ function AppBrainShell({ children }: { children: React.ReactNode }) {
   // signed-in users get the full tenant-authed config. Both are module constants,
   // so the provider's memoized runtime stays stable per auth state.
   return (
+    // Global project scope wraps BOTH the shell content AND the FloatingBrain
+    // launcher (a sibling of `content`). AppShell used to own this provider, but
+    // the floating Brain drawer is mounted outside AppShell — so it read a null
+    // scope and its chat history / new-chat scoping ignored the TopBar project
+    // filter. Hoisting it here gives the switcher and the Brain ONE shared scope.
+    <ProjectScopeProvider>
     <BrainProvider config={hasTenant ? brainConfig : guestBrainConfig}>
       {/* App-wide pin state: any widget anywhere can show a pin control that
           reflects/updates the user's personal /insights home dashboard. */}
@@ -257,6 +264,7 @@ function AppBrainShell({ children }: { children: React.ReactNode }) {
       </AiInsightPanelProvider>
       </PinsProvider>
     </BrainProvider>
+    </ProjectScopeProvider>
   );
 }
 

@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import type { Task } from '@/lib/builderforceApi';
+import { useIsMobile } from '@/lib/useIsMobile';
 import { CeremonyTaskCard } from './CeremonyTaskCard';
 import { DRAG_TASK } from './types';
 
@@ -24,6 +25,7 @@ export function BacklogRail({
   onReturn?: (taskId: number) => void;
 }) {
   const [over, setOver] = useState(false);
+  const isMobile = useIsMobile();
   return (
     <div
       onDragOver={onReturn ? (e) => { e.preventDefault(); setOver(true); } : undefined}
@@ -35,7 +37,7 @@ export function BacklogRail({
         if (id) onReturn(id);
       } : undefined}
       style={{
-        width: 240,
+        width: isMobile ? '100%' : 240,
         flexShrink: 0,
         display: 'flex',
         flexDirection: 'column',
@@ -44,7 +46,7 @@ export function BacklogRail({
         borderRadius: 12,
         background: over ? 'var(--surface-coral-soft)' : 'var(--bg-deep)',
         border: `1px ${over ? 'dashed var(--coral-bright)' : 'solid var(--border-subtle)'}`,
-        maxHeight: '100%',
+        maxHeight: isMobile ? 260 : '100%',
         overflowY: 'auto',
       }}
     >

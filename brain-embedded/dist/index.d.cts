@@ -193,6 +193,15 @@ interface StreamChatResult {
      * record which LLM (or which `evermind/…` artifact) produced a turn.
      */
     resolvedModel?: string;
+    /**
+     * Which account served this turn, from the gateway's `x-builderforce-account`
+     * response header: `own` (the tenant's connected frontier account), `shared`
+     * (the shared pool, no connected account), or `shared_byo_unused` (the shared
+     * pool despite a connected account existing). Undefined when the gateway didn't
+     * report one (older gateway, or the header wasn't CORS-exposed). Feeds the
+     * per-reply provenance chip so a successful turn shows whose account ran it.
+     */
+    account?: string;
     /** Token usage for this completion, when the gateway reported it. */
     usage?: CompletionUsage;
 }
@@ -880,4 +889,63 @@ declare const CONSOLIDATION_MARKER_PREFIX = "\uD83D\uDCCC **Consolidated summary
 /** Wrap a raw summary as the marker's visible content (prefix + summary). */
 declare function consolidationMarkerContent(summary: string): string;
 
-export { ADDRESSED_TO_META_KEY, AUTHORED_BY_META_KEY, type AssembledToolCall, type BrainAction, type BrainActionsContextValue, BrainActionsProvider, type BrainChat, type BrainConfig, BrainContextProvider, type BrainContextValue, type BrainDiagnostics, type BrainMessage, type BrainModality, type BrainPageContext, type BrainPersistenceAdapter, BrainProvider, type BrainRuntime, type BrainToolSpec, type BrainTraceEvent, type BrainTransport, type BuildBrainTriageOptions, CONSOLIDATION_MARKER_PREFIX, CONSOLIDATION_META, type ChatCompletionMessage, type ChatInputAttachment, type ContentPart, type DirectedRecipient, type ImageUrlContentPart, type McpToolResultInfo, type MentionToken, type PreparedImage, type RecipientChoice, type StreamChatOptions, type StreamChatResult, type StreamHandlers, type TextContentPart, type UseBrainChats, type UseBrainChatsOptions, type UseBrainConversation, type UseBrainConversationOptions, type UseMcpExtensionsOptions, activeMentionToken, buildBrainTriageReport, computeBrainDiagnostics, consolidationMarkerContent, consolidationMetadata, filterMentionCandidates, formatBrainDiagnostics, isConsolidationMarker, isDirectedToParticipant, isEvermindModel, isFailedToolResult, lastConsolidationIndex, mentionRecipient, modelsUsedInTrace, parseDirectedRecipient, parseMessageAuthor, prepareImageDataUrl, resolveRecipient, savePendingPrompt, scopeToConsolidation, streamChatCompletion, takePendingPrompt, useBrainActions, useBrainChats, useBrainConfig, useBrainContext, useBrainConversation, useMcpExtensions, useOptionalBrainContext, useRegisterBrainActions, withDirectedMetadata };
+/**
+ * Per-reply model/account provenance — the durable "which LLM, and whose account,
+ * produced this turn" signal shown as a small chip under an assistant message.
+ *
+ * Motivation: a SUCCESSFUL Brain turn used to reveal nothing about how it was
+ * served, so "why didn't it use my paid Claude?" was invisible until a turn came
+ * back empty (the only case the diagnostic note fired). This attaches the resolved
+ * model + whether the tenant's OWN connected frontier account served it — or the
+ * shared pool did despite a connected account existing — to every assistant turn,
+ * so the confirmation is always on screen.
+ *
+ * Single source of truth for the convention, shared by the writers (server-side
+ * `agentReply` metadata + the streaming gateway's `x-builderforce-account` header,
+ * captured client-side and persisted) and the renderer (the BrainTimeline chip).
+ * The `account` string values are the wire contract with the server — the api's
+ * `classifyReplyAccount()` MUST emit these exact literals.
+ */
+/** The metadata key under which a message's provenance rides. */
+declare const PROVENANCE_META_KEY = "provenance";
+/**
+ * Which account served a completed turn:
+ * - `own`               — the tenant's OWN connected frontier account (a Claude
+ *                         subscription or a BYO vendor key) served it; the platform
+ *                         paid nothing and the user is on the model they connected.
+ * - `shared`            — the shared model pool served it AND the tenant has no
+ *                         connected account (nothing else was possible).
+ * - `shared_byo_unused` — the shared pool served it EVEN THOUGH the tenant has a
+ *                         connected account — the case worth flagging inline
+ *                         ("your connected account wasn't used for this turn").
+ */
+type ProvenanceAccount = 'own' | 'shared' | 'shared_byo_unused';
+/** Durable provenance for one assistant turn. */
+interface MessageProvenance {
+    /** The model the gateway ACTUALLY used (resolved, post-failover). */
+    model: string;
+    /** Which account served it — see {@link ProvenanceAccount}. */
+    account: ProvenanceAccount;
+    /** Vendor that owns `model` (e.g. `anthropic`), when known — names the account
+     *  in tooltips ("your connected Claude account"). */
+    vendor?: string;
+}
+/** True when a turn ran on the shared pool despite a connected account existing —
+ *  the only state the chip flags inline. Shared by the chip and any host that
+ *  wants to nudge the user to check their connection. */
+declare function isConnectedAccountUnused(prov: MessageProvenance | null | undefined): boolean;
+/** Parse a message's persisted provenance, or `null` when it carries none (older
+ *  turns, or turns whose gateway didn't report an account). Defensive: a malformed
+ *  or partial blob yields `null` rather than throwing. */
+declare function parseMessageProvenance(msg: {
+    metadata?: string | null;
+}): MessageProvenance | null;
+/**
+ * Merge a provenance object into a message's metadata (preserving any other keys,
+ * e.g. `authoredBy` on an agent's reply). Returns a serialized string, or
+ * `undefined` when there is nothing to store — ready to hand to
+ * `persistence.sendMessages`. Mirrors `withDirectedMetadata`.
+ */
+declare function withProvenanceMetadata(provenance: MessageProvenance | null | undefined, base?: Record<string, unknown>): string | undefined;
+
+export { ADDRESSED_TO_META_KEY, AUTHORED_BY_META_KEY, type AssembledToolCall, type BrainAction, type BrainActionsContextValue, BrainActionsProvider, type BrainChat, type BrainConfig, BrainContextProvider, type BrainContextValue, type BrainDiagnostics, type BrainMessage, type BrainModality, type BrainPageContext, type BrainPersistenceAdapter, BrainProvider, type BrainRuntime, type BrainToolSpec, type BrainTraceEvent, type BrainTransport, type BuildBrainTriageOptions, CONSOLIDATION_MARKER_PREFIX, CONSOLIDATION_META, type ChatCompletionMessage, type ChatInputAttachment, type ContentPart, type DirectedRecipient, type ImageUrlContentPart, type McpToolResultInfo, type MentionToken, type MessageProvenance, PROVENANCE_META_KEY, type PreparedImage, type ProvenanceAccount, type RecipientChoice, type StreamChatOptions, type StreamChatResult, type StreamHandlers, type TextContentPart, type UseBrainChats, type UseBrainChatsOptions, type UseBrainConversation, type UseBrainConversationOptions, type UseMcpExtensionsOptions, activeMentionToken, buildBrainTriageReport, computeBrainDiagnostics, consolidationMarkerContent, consolidationMetadata, filterMentionCandidates, formatBrainDiagnostics, isConnectedAccountUnused, isConsolidationMarker, isDirectedToParticipant, isEvermindModel, isFailedToolResult, lastConsolidationIndex, mentionRecipient, modelsUsedInTrace, parseDirectedRecipient, parseMessageAuthor, parseMessageProvenance, prepareImageDataUrl, resolveRecipient, savePendingPrompt, scopeToConsolidation, streamChatCompletion, takePendingPrompt, useBrainActions, useBrainChats, useBrainConfig, useBrainContext, useBrainConversation, useMcpExtensions, useOptionalBrainContext, useRegisterBrainActions, withDirectedMetadata, withProvenanceMetadata };

@@ -262,7 +262,8 @@
       "findWork": "Trouver du travail",
       "timecard": "Feuille de temps",
       "myDashboard": "Mon tableau de bord",
-      "myWorkspace": "Mon espace"
+      "myWorkspace": "Mon espace",
+      "marketplace": "Marché"
     },
     "tab": {
       "projects": "Projets",
@@ -653,16 +654,28 @@
     "workflowLabel": "Workflow",
     "noWorkflow": "Aucun workflow",
     "workflowHint": "Les projets LLM exécutent un workflow. Attribuez-en un partagé ou créez-en un personnalisé dans Workflows.",
-    "workflowRequired": "Workflow (obligatoire)",
-    "selectWorkflow": "Sélectionnez un workflow…",
     "customTag": "personnalisé",
     "customizeWorkflow": "Personnaliser",
     "runWorkflow": "Exécuter le workflow",
     "working": "Traitement…",
     "workflowForked": "Dupliqué en workflow personnalisé pour ce projet.",
     "workflowRunStarted": "Exécution du workflow lancée.",
-    "noWorkflowsYet": "Vous n’avez pas encore de workflow.",
-    "goToWorkflows": "Créez-en un dans Workflows →"
+    "recipeLabel": "Partir d'une recette",
+    "recipeHint": "Choisissez un point de départ : votre projet s'ouvre avec un Evermind fonctionnel que vous pouvez entraîner, évaluer et publier.",
+    "recipeRecommended": "Recommandé",
+    "recipeCodingName": "Evermind de code",
+    "recipeCodingDesc": "Apprend votre base de code et votre style de programmation au fil du travail de vos agents.",
+    "recipeAssistantName": "Evermind assistant",
+    "recipeAssistantDesc": "Un modèle de chat et de support qui s'adapte à votre produit et à votre ton.",
+    "recipeDocsName": "Evermind ancré dans vos documents",
+    "recipeDocsDesc": "Ancre les réponses dans vos documents — apprenez-lui vos documents après la configuration.",
+    "recipeSeedName": "Initialiser depuis un modèle publié",
+    "recipeSeedDesc": "Partez de l'un de vos modèles Evermind publiés.",
+    "recipeBlankName": "Démarrage vierge",
+    "recipeBlankDesc": "Un modèle minimal que vous entraînez de zéro dans le Studio.",
+    "recipeSeedModelLabel": "Modèle publié pour l'initialisation",
+    "recipeSeedSelect": "Sélectionnez un modèle…",
+    "recipeSeedNoModels": "aucun modèle publié pour l'instant"
   },
   "tools": {
     "outOf5": "sur 5,0",
@@ -4786,6 +4799,9 @@
       "preview": "Aperçu",
       "askSubmit": "Envoyer",
       "askAnswered": "Répondu",
+      "accountOwn": "Votre compte",
+      "accountShared": "Pool partagé",
+      "accountByoUnused": "Votre compte connecté n'a pas été utilisé",
       "stop": "Arrêter"
     },
     "tickets": {

@@ -46,7 +46,7 @@
   "command.editorChat": "BuilderForce：对话",
   "command.openBrain": "BuilderForce：打开 Brain 对话",
   "chatParticipant.description": "了解代码库的 BuilderForce 编程代理",
-  "config.baseUrl.desc": "BuilderForce 网关的基础 URL。会自动追加 OpenAI 兼容端点 `/llm/v1/chat/completions`。自托管部署时可覆盖。",
+  "config.baseUrl.desc": "BuilderForce 网关的基础 URL。默认使用主域名（`https://builderforce.ai/gateway`），可在仅将主站点加入白名单、却屏蔽 `api.` 子域名的企业网络中正常工作。会自动追加 OpenAI 兼容端点 `/llm/v1/chat/completions`。自托管部署或需直接调用 `https://api.builderforce.ai` 时可覆盖。",
   "config.webUrl.desc": "BuilderForce 网页应用的基础 URL（看板等内嵌页面所在处）。留空则从 `builderforce.baseUrl` 推导（api.* → 根域名）。",
   "config.defaultModel.desc": "要使用的默认模型 id。留空则让网关从精选的编程模型池中选择。",
   "config.permissionMode.desc": "代理如何将更改应用到你的工作区。",

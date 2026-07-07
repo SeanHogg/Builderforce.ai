@@ -71,6 +71,9 @@ function timelineLabels(labels: LabelBundle): Partial<BrainTimelineLabels> {
     preview: t('tl.preview', 'Preview'),
     askSubmit: t('tl.askSubmit', 'Send'),
     askAnswered: t('tl.askAnswered', 'Answered'),
+    accountOwn: t('tl.accountOwn', 'Your account'),
+    accountShared: t('tl.accountShared', 'Shared pool'),
+    accountByoUnused: t('tl.accountByoUnused', "Your connected account wasn't used"),
   };
 }
 

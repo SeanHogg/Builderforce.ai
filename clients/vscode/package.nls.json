@@ -46,7 +46,7 @@
   "command.editorChat": "BuilderForce: Chat",
   "command.openBrain": "BuilderForce: Open Brain Chat",
   "chatParticipant.description": "Codebase-aware BuilderForce coding agent",
-  "config.baseUrl.desc": "Base URL of the BuilderForce gateway. The OpenAI-compatible endpoint `/llm/v1/chat/completions` is appended automatically. Override for self-hosted deployments.",
+  "config.baseUrl.desc": "Base URL of the BuilderForce gateway. Defaults to the primary domain (`https://builderforce.ai/gateway`), which works on corporate networks that whitelist the main site but block the `api.` subdomain. The OpenAI-compatible endpoint `/llm/v1/chat/completions` is appended automatically. Override for self-hosted deployments or to call `https://api.builderforce.ai` directly.",
   "config.webUrl.desc": "Base URL of the BuilderForce web app (where embedded pages like the board live). Leave empty to derive it from `builderforce.baseUrl` (api.* → root domain).",
   "config.defaultModel.desc": "Default model id to use. Leave empty to let the gateway pick from the curated coding pool.",
   "config.permissionMode.desc": "How the agent applies changes to your workspace.",

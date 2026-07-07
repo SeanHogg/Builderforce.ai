@@ -20,6 +20,7 @@ import { getOrSetCached, invalidateCached } from '../../infrastructure/cache/rea
 import { ideProjects, projects, workflowDefinitions } from '../../infrastructure/database/schema';
 import { ProjectService } from '../../application/project/ProjectService';
 import { ensureProjectTemplate } from '../../application/project/projectTemplate';
+import { applyEvermindRecipe, toEvermindRecipeId } from '../../application/llm/evermindRecipes';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -149,6 +150,11 @@ export function createIdeProjectRoutes(projectService: ProjectService, db: Db): 
       containerProjectId?: number | null;
       template?: string | null;
       workflowDefinitionId?: string | null;
+      // LLM modality: the one-click Evermind recipe (+ its optional inputs) that
+      // provisions the new project's model. See application/llm/evermindRecipes.
+      evermindRecipe?: string | null;
+      evermindTeacherModel?: string | null;
+      evermindSeedModelSlug?: string | null;
     }>();
     const name = body.name?.trim();
     if (!name) return c.json({ error: 'name is required' }, 400);
@@ -160,15 +166,14 @@ export function createIdeProjectRoutes(projectService: ProjectService, db: Db): 
       if (containerProjectId === null) return c.json({ error: 'Invalid container project' }, 400);
     }
 
-    // LLM projects run a workflow — one must be assigned at creation. Other
-    // modalities ignore it. Validate tenant ownership when supplied.
+    // An automation workflow is OPTIONAL for any modality (advanced users can attach
+    // one later via the details modal). LLM projects instead pick an Evermind RECIPE
+    // at creation, which provisions the project's model (applied below). Validate
+    // tenant ownership of a workflow when one is supplied.
     let workflowDefinitionId: string | null = null;
     if (body.workflowDefinitionId) {
       if (!(await ownsWorkflow(tenantId, body.workflowDefinitionId))) return c.json({ error: 'Invalid workflow' }, 400);
       workflowDefinitionId = body.workflowDefinitionId;
-    }
-    if (modality === 'llm' && !workflowDefinitionId) {
-      return c.json({ error: 'An LLM project requires a workflow' }, 400);
     }
 
     // Backing storage project — reuses the proven project create + template seed.
@@ -207,6 +212,20 @@ export function createIdeProjectRoutes(projectService: ProjectService, db: Db): 
         workflowDefinitionId,
       })
       .returning({ id: ideProjects.id });
+
+    // LLM projects: provision the project's Evermind from the chosen recipe so it
+    // opens with a working, learnable model (no automation-workflow gate). Keyed on
+    // the BACKING storage project — the id the Evermind panel + routes operate on.
+    // Best-effort inside applyEvermindRecipe: creation succeeds even if seeding does not.
+    if (modality === 'llm') {
+      await applyEvermindRecipe(c.env as Env, db, tenantId, storage.id, {
+        recipe: toEvermindRecipeId(body.evermindRecipe),
+        teacherModel: typeof body.evermindTeacherModel === 'string' ? body.evermindTeacherModel : null,
+        seedModelSlug: typeof body.evermindSeedModelSlug === 'string' ? body.evermindSeedModelSlug : null,
+        name,
+      });
+    }
+
     await invalidateCached(c.env as Env, listCacheKey(tenantId));
     const view = await fetchOne(tenantId, String(created!.id));
     return c.json(view, 201);

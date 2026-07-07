@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { parseDirectedRecipient, parseMessageAuthor, type BrainMessage, type BrainTraceEvent } from '@seanhogg/builderforce-brain-embedded';
+import { parseDirectedRecipient, parseMessageAuthor, parseMessageProvenance, type BrainMessage, type BrainTraceEvent, type MessageProvenance } from '@seanhogg/builderforce-brain-embedded';
 import { Markdown } from './Markdown';
 import { Avatar } from './ParticipantBadge';
 import { parseAskUser, stripAskUser, QuestionCard, DEFAULT_ASK_USER_LABELS } from './askUser';
@@ -26,6 +26,14 @@ export interface BrainTimelineLabels {
   /** <QuestionCard> copy (ask_user) — carried here so a host passes ONE label bundle. */
   askSubmit: string;
   askAnswered: string;
+  /** Provenance chip: the badge shown when the tenant's OWN connected frontier
+   *  account served the turn. */
+  accountOwn: string;
+  /** Provenance chip: the badge for a turn served by the shared model pool. */
+  accountShared: string;
+  /** Provenance chip: the badge for a shared-pool turn when the tenant HAS a
+   *  connected account that wasn't used — the case worth flagging. */
+  accountByoUnused: string;
 }
 
 export const DEFAULT_TIMELINE_LABELS: BrainTimelineLabels = {
@@ -45,7 +53,31 @@ export const DEFAULT_TIMELINE_LABELS: BrainTimelineLabels = {
   preview: 'Preview',
   askSubmit: DEFAULT_ASK_USER_LABELS.askSubmit,
   askAnswered: DEFAULT_ASK_USER_LABELS.askAnswered,
+  accountOwn: 'Your account',
+  accountShared: 'Shared pool',
+  accountByoUnused: "Your connected account wasn't used",
 };
+
+/**
+ * The per-reply provenance chip: which model actually served this turn, and whose
+ * account paid for it. A positive confirmation on EVERY assistant turn that the
+ * tenant is (or is not) on their own connected frontier account — so "why didn't it
+ * use my paid Claude?" is answered inline instead of only surfacing on an empty
+ * reply. The `shared_byo_unused` state is styled as a warning because it's the one
+ * the user most wants to catch (a connected account that silently wasn't used).
+ */
+function ProvenanceChip({ prov, labels }: { prov: MessageProvenance; labels: BrainTimelineLabels }) {
+  const unused = prov.account === 'shared_byo_unused';
+  const badge = prov.account === 'own' ? labels.accountOwn : unused ? labels.accountByoUnused : labels.accountShared;
+  const variant = prov.account === 'own' ? 'bf-tl__prov--own' : unused ? 'bf-tl__prov--unused' : 'bf-tl__prov--shared';
+  const modelTitle = prov.vendor ? `${prov.model} · ${prov.vendor}` : prov.model;
+  return (
+    <div className={`bf-tl__prov ${variant}`}>
+      <span className="bf-tl__prov-model" title={modelTitle}>{prov.model}</span>
+      <span className="bf-tl__prov-badge">{badge}</span>
+    </div>
+  );
+}
 
 export interface BrainTimelineProps {
   messages: BrainMessage[];
@@ -354,6 +386,11 @@ function BrainTimelineInner({
             // the model's options are answerable in one click instead of by free-typing.
             const card = onAnswerQuestion ? parseAskUser(node.text) : null;
             const bodyText = card ? stripAskUser(node.text) : node.text;
+            // Which model + account produced this turn (persisted on the message by
+            // both the streaming Brain path and an agent's addressed reply). Shown as
+            // a small chip so the user can always see whether their own connected
+            // account ran it — not only when a turn comes back empty.
+            const prov = parseMessageProvenance(node.message);
             return (
               <li key={node.key} className="bf-tl__item bf-tl__item--assistant">
                 <span className="bf-tl__gutter">
@@ -370,6 +407,7 @@ function BrainTimelineInner({
                     />
                   )}
                   {renderAssistantActions && <div className="bf-tl__actions">{renderAssistantActions(node.message)}</div>}
+                  {prov && <ProvenanceChip prov={prov} labels={labels} />}
                 </div>
               </li>
             );

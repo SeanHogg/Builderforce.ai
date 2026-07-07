@@ -21,6 +21,9 @@
   --bf-error-text: var(--vscode-errorForeground, #f3a39d);
   --bf-error-bg: var(--vscode-inputValidation-errorBackground, rgba(229, 83, 75, 0.12));
   --bf-success: var(--vscode-charts-green, #3fb950);
+  --bf-success-bg: color-mix(in srgb, var(--vscode-charts-green, #3fb950) 14%, transparent);
+  --bf-warning: var(--vscode-charts-yellow, #b7791f);
+  --bf-warning-bg: color-mix(in srgb, var(--vscode-charts-yellow, #b7791f) 14%, transparent);
   --bf-font-mono: var(--vscode-editor-font-family, ui-monospace, monospace);
 }
 

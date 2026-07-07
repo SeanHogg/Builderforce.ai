@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import type { Task } from '@/lib/builderforceApi';
+import { useIsMobile } from '@/lib/useIsMobile';
 import { DRAG_TASK } from './types';
 
 /** One Epic container — a drop target that nests the dropped task under the Epic. */
@@ -79,10 +80,11 @@ export function EpicRail({
   onCreateEpic: () => void;
   onOpen: (task: Task) => void;
 }) {
+  const isMobile = useIsMobile();
   return (
     <div
       style={{
-        width: 240,
+        width: isMobile ? '100%' : 240,
         flexShrink: 0,
         display: 'flex',
         flexDirection: 'column',
@@ -91,7 +93,7 @@ export function EpicRail({
         borderRadius: 12,
         background: 'var(--bg-deep)',
         border: '1px solid var(--border-subtle)',
-        maxHeight: '100%',
+        maxHeight: isMobile ? 260 : '100%',
         overflowY: 'auto',
       }}
     >

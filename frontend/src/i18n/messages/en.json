@@ -262,7 +262,8 @@
       "findWork": "Find Work",
       "timecard": "Timecard",
       "myDashboard": "My Dashboard",
-      "myWorkspace": "My Workspace"
+      "myWorkspace": "My Workspace",
+      "marketplace": "Marketplace"
     },
     "tab": {
       "projects": "Projects",
@@ -653,16 +654,28 @@
     "workflowLabel": "Workflow",
     "noWorkflow": "No workflow",
     "workflowHint": "LLM projects run a workflow. Assign a shared one, or build a custom one in Workflows.",
-    "workflowRequired": "Workflow (required)",
-    "selectWorkflow": "Select a workflow…",
     "customTag": "custom",
     "customizeWorkflow": "Customize",
     "runWorkflow": "Run workflow",
     "working": "Working…",
     "workflowForked": "Forked into a custom workflow for this project.",
     "workflowRunStarted": "Workflow run started.",
-    "noWorkflowsYet": "You have no workflows yet.",
-    "goToWorkflows": "Build one in Workflows →"
+    "recipeLabel": "Start from a recipe",
+    "recipeHint": "Pick a starting point — your project opens with a working Evermind you can teach, benchmark, and publish.",
+    "recipeRecommended": "Recommended",
+    "recipeCodingName": "Coding Evermind",
+    "recipeCodingDesc": "Learns your codebase and coding style as your agents work.",
+    "recipeAssistantName": "Assistant Evermind",
+    "recipeAssistantDesc": "A chat & support model that adapts to your product and tone.",
+    "recipeDocsName": "Docs-grounded Evermind",
+    "recipeDocsDesc": "Grounds answers in your documents — teach it your docs after setup.",
+    "recipeSeedName": "Seed from a published model",
+    "recipeSeedDesc": "Start from one of your published Evermind models.",
+    "recipeBlankName": "Blank starter",
+    "recipeBlankDesc": "A minimal model you train from scratch in the Studio.",
+    "recipeSeedModelLabel": "Published model to seed from",
+    "recipeSeedSelect": "Select a model…",
+    "recipeSeedNoModels": "no published models yet"
   },
   "tools": {
     "outOf5": "out of 5.0",
@@ -4786,6 +4799,9 @@
       "preview": "Preview",
       "askSubmit": "Send",
       "askAnswered": "Answered",
+      "accountOwn": "Your account",
+      "accountShared": "Shared pool",
+      "accountByoUnused": "Your connected account wasn't used",
       "stop": "Stop"
     },
     "tickets": {
