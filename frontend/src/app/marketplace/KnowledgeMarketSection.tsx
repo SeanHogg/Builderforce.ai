@@ -8,10 +8,11 @@ import { knowledgeApi, type KnowledgeListing, type DocType } from '@/lib/knowled
 
 /**
  * Marketplace section for KNOWLEDGE listings (SOPs / processes / docs / canvases
- * a tenant published for sale). Self-contained + self-gating: it fetches the
- * public listings with the tenant token, so it renders nothing for logged-out
- * visitors or when there are no listings. "Add to my Knowledge" installs a copy
- * into the caller's workspace and opens it.
+ * a tenant published for sale). Browses the PUBLIC listings feed, so it renders
+ * for logged-out visitors too (they can see what is for sale). "Add to my
+ * Knowledge" installs a copy into the caller's workspace and opens it; a paid
+ * listing is purchased first (checkout), and a logged-out visitor is sent to
+ * sign in.
  */
 
 const TYPE_LABEL: Record<DocType, string> = { sop: 'type_sop', process: 'type_process', doc: 'type_doc' };
@@ -23,20 +24,37 @@ export function KnowledgeMarketSection() {
   const { hasTenant } = useAuth();
   const [listings, setListings] = useState<KnowledgeListing[]>([]);
   const [installing, setInstalling] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!hasTenant) return;
-    knowledgeApi.listings().then(setListings).catch(() => setListings([]));
-  }, [hasTenant]);
+    // Public feed — no tenant token needed, so logged-out visitors browse too.
+    knowledgeApi.publicListings().then(setListings).catch(() => setListings([]));
+  }, []);
 
-  if (!hasTenant || listings.length === 0) return null;
+  if (listings.length === 0) return null;
 
-  async function install(id: string) {
-    setInstalling(id);
+  async function acquire(listing: KnowledgeListing) {
+    // Buying/installing writes into a workspace — a logged-out visitor signs in first.
+    if (!hasTenant) {
+      router.push('/login?next=/marketplace');
+      return;
+    }
+    setInstalling(listing.id);
+    setError(null);
     try {
-      const { documentId } = await knowledgeApi.installListing(id);
+      if (listing.priceCents > 0) {
+        const res = await knowledgeApi.checkoutListing(listing.id);
+        if (res.requiresConfig) {
+          setError(t('checkoutUnavailable'));
+          setInstalling(null);
+          return;
+        }
+        // res.purchased (paid, recorded) or res.free — both allow install below.
+      }
+      const { documentId } = await knowledgeApi.installListing(listing.id);
       router.push(`/knowledge/${documentId}`);
     } catch {
+      setError(t('installFailed'));
       setInstalling(null);
     }
   }
@@ -45,6 +63,9 @@ export function KnowledgeMarketSection() {
     <section style={{ marginBottom: 32 }}>
       <h2 style={{ fontSize: 18, fontWeight: 700, color: 'var(--text-strong)', margin: '0 0 4px' }}>{t('marketTitle')}</h2>
       <p style={{ color: 'var(--muted)', fontSize: 13, margin: '0 0 16px' }}>{t('marketSubtitle')}</p>
+      {error && (
+        <p role="alert" style={{ color: 'var(--danger, #ef4444)', fontSize: 13, margin: '0 0 12px' }}>{error}</p>
+      )}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 16 }}>
         {listings.map((l) => (
           <div key={l.id} className="card" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
@@ -70,8 +91,14 @@ export function KnowledgeMarketSection() {
             </div>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
               <span style={{ fontWeight: 700 }}>{l.priceCents > 0 ? `$${(l.priceCents / 100).toFixed(2)}` : t('free')}</span>
-              <button type="button" className="btn btn-primary btn-sm" disabled={installing === l.id} onClick={() => install(l.id)}>
-                {installing === l.id ? t('installing') : t('addToKnowledge')}
+              <button type="button" className="btn btn-primary btn-sm" disabled={installing === l.id} onClick={() => acquire(l)}>
+                {installing === l.id
+                  ? t('installing')
+                  : !hasTenant
+                    ? t('signInToGet')
+                    : l.priceCents > 0
+                      ? t('buy')
+                      : t('addToKnowledge')}
               </button>
             </div>
           </div>

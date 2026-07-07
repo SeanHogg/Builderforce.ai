@@ -31,6 +31,29 @@ const HOUR_START = 6;   // week grid spans 06:00
 const HOUR_END = 22;    // …to 22:00
 const SLOT_MIN = 30;
 
+/**
+ * Local weekday (0=Sun) + minutes-from-midnight of an instant in a given IANA
+ * timezone — mirrors the server solver's projection so the availability shading
+ * matches "find a time". Falls back to browser-local on an invalid/unknown tz.
+ */
+function localPartsInTz(instantMs: number, timezone: string | undefined): { day: number; minutes: number } {
+  if (timezone) {
+    try {
+      const parts = new Intl.DateTimeFormat('en-US', {
+        timeZone: timezone, weekday: 'short', hour: '2-digit', minute: '2-digit', hour12: false,
+      }).formatToParts(new Date(instantMs));
+      const DAYS: Record<string, number> = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 };
+      const wd = parts.find((p) => p.type === 'weekday')?.value ?? 'Sun';
+      let hour = Number(parts.find((p) => p.type === 'hour')?.value ?? '0');
+      if (hour === 24) hour = 0;
+      const minute = Number(parts.find((p) => p.type === 'minute')?.value ?? '0');
+      return { day: DAYS[wd] ?? 0, minutes: hour * 60 + minute };
+    } catch { /* fall through to browser-local */ }
+  }
+  const d = new Date(instantMs);
+  return { day: d.getDay(), minutes: d.getHours() * 60 + d.getMinutes() };
+}
+
 function startOfDay(d: Date): Date { const x = new Date(d); x.setHours(0, 0, 0, 0); return x; }
 function startOfWeek(d: Date): Date { const x = startOfDay(d); x.setDate(x.getDate() - x.getDay()); return x; }
 function addDays(d: Date, n: number): Date { const x = new Date(d); x.setDate(x.getDate() + n); return x; }
@@ -135,7 +158,11 @@ export function MeetingsCalendar({
         return `${new Intl.DateTimeFormat(locale, { month: 'short', day: 'numeric' }).format(ws)} – ${new Intl.DateTimeFormat(locale, { month: 'short', day: 'numeric' }).format(we)}`;
       })();
 
-  // Availability lookup: is (day,minutes) inside a declared window? (local browser time)
+  // Availability lookup. Windows are stored in the owner's DECLARED timezone
+  // (availability.timezone), so a week-grid cell — a viewer-local wall-clock
+  // instant — must be projected into that timezone before testing the windows.
+  // Otherwise the shading is offset whenever the viewer's browser tz ≠ the
+  // owner's declared tz (the server solver already does this projection).
   const availByDay = useMemo(() => {
     const map = new Map<number, Array<{ start: number; end: number }>>();
     for (const w of availability?.windows ?? []) {
@@ -143,8 +170,12 @@ export function MeetingsCalendar({
     }
     return map;
   }, [availability]);
-  const isAvailable = useCallback((day: number, minutes: number) =>
-    (availByDay.get(day) ?? []).some((w) => minutes >= w.start && minutes < w.end), [availByDay]);
+  const availTz = availability?.timezone;
+  const isAvailable = useCallback((instantMs: number) => {
+    if (availByDay.size === 0) return false;
+    const { day, minutes } = localPartsInTz(instantMs, availTz);
+    return (availByDay.get(day) ?? []).some((w) => minutes >= w.start && minutes < w.end);
+  }, [availByDay, availTz]);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12, minWidth: 0 }}>
@@ -259,7 +290,7 @@ function MonthGrid({ anchor, items, dayFmt, locale, onPickDay, onJoin }: {
 // ── Week grid ─────────────────────────────────────────────────────────────────
 function WeekGrid({ anchor, items, dayFmt, timeFmt, isAvailable, onPickSlot, onJoin, availableLabel }: {
   anchor: Date; items: CalItem[]; dayFmt: Intl.DateTimeFormat; timeFmt: Intl.DateTimeFormat;
-  isAvailable: (day: number, minutes: number) => boolean;
+  isAvailable: (instantMs: number) => boolean;
   onPickSlot: (at: Date) => void; onJoin: (id: string) => void; availableLabel: string;
 }) {
   const weekStart = startOfWeek(anchor);
@@ -293,7 +324,7 @@ function WeekGrid({ anchor, items, dayFmt, timeFmt, isAvailable, onPickSlot, onJ
               </div>
               {days.map((d, di) => {
                 const slotStart = new Date(d.getFullYear(), d.getMonth(), d.getDate(), Math.floor(mins / 60), mins % 60);
-                const avail = isAvailable(d.getDay(), mins);
+                const avail = isAvailable(slotStart.getTime());
                 return (
                   <div key={di}
                     onClick={() => onPickSlot(slotStart)}

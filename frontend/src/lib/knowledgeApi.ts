@@ -242,6 +242,19 @@ export const knowledgeApi = {
   listings: () =>
     apiRequest<{ listings: KnowledgeListing[] }>(`${BASE}/listings`).then((r) => r.listings),
 
+  /** PUBLIC browse — works logged-out (no tenant token required). */
+  publicListings: () =>
+    apiRequest<{ listings: KnowledgeListing[] }>(`/api/knowledge-market/listings`).then((r) => r.listings),
+
+  /** Purchase a paid listing (records the purchase that unlocks install). Free
+   *  listings return `{ free: true }`; hosted-card deployments not yet configured
+   *  return `{ requiresConfig: true }`. */
+  checkoutListing: (id: string) =>
+    apiRequest<{ purchased?: boolean; free?: boolean; requiresConfig?: boolean }>(
+      `${BASE}/listings/${id}/checkout`,
+      { method: 'POST' },
+    ),
+
   docListing: (id: string) =>
     apiRequest<{ listing: MyKnowledgeListing | null }>(`${BASE}/documents/${id}/listing`).then((r) => r.listing),
 

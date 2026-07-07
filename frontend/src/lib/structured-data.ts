@@ -160,7 +160,10 @@ export function blogIndexSchema(posts: { slug: string; title: string; date: stri
       },
       {
         '@type': 'ItemList',
-        itemListElement: posts.slice(0, 20).map((post, i) => ({
+        // Emit every published post (the index has 40+; a former 20-item cap
+        // dropped over half of them from the crawlable graph) [1596].
+        numberOfItems: posts.length,
+        itemListElement: posts.map((post, i) => ({
           '@type': 'ListItem',
           position: i + 1,
           url: `${BRAND.url}/blog/${post.slug}`,

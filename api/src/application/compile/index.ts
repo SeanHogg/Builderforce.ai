@@ -53,4 +53,4 @@ export async function compile(need: Need | Need[], deps: CompileDeps = {}): Prom
 }
 
 export { mergeSpecs };
-export type { CompileDeps, LlmComplete, Modality, Need } from './types';
+export type { CompileDeps, KnowledgeRecallHit, LlmComplete, Modality, Need, RecallKnowledge } from './types';

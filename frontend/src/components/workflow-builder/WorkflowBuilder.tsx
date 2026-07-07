@@ -4,6 +4,7 @@ import { Select } from '@/components/Select';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { useTranslations } from 'next-intl';
 import {
   ReactFlow,
   Background,
@@ -31,7 +32,9 @@ import { fetchProjects } from '@/lib/api';
 import type { Project } from '@/lib/types';
 import { BuilderNode, type BuilderNodeData } from './BuilderNode';
 import { NodeConfigPanel } from './NodeConfigPanel';
+import { EvermindBuildPanel } from './EvermindBuildPanel';
 import { NODE_GROUPS, NODE_KINDS, NODE_KIND_MAP } from './nodeKinds';
+import { hasBuildNodes, loadTemplateGraph, EVERMIND_BUILD_TEMPLATES } from '@/lib/evermindBuild';
 import {
   INTEGRATIONS, INTEGRATION_CATEGORIES, integrationAccent, integrationIcon, presetConfig,
   type Integration,
@@ -119,6 +122,7 @@ interface Props {
 
 export function WorkflowBuilder({ definitionId, initialProjectId = null }: Props) {
   const router = useRouter();
+  const t = useTranslations('evermindBuild');
   const [nodes, setNodes, onNodesChange] = useNodesState<Node<BuilderNodeData>>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -132,6 +136,7 @@ export function WorkflowBuilder({ definitionId, initialProjectId = null }: Props
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
   const [loading, setLoading] = useState(!!definitionId);
+  const [buildOpen, setBuildOpen] = useState(false);
 
   useEffect(() => { workflowDefinitions.runTargets().then(setRunTargets).catch(() => {}); }, []);
   // Projects power the binding selector — a workflow runs under a project, or is
@@ -315,6 +320,32 @@ export function WorkflowBuilder({ definitionId, initialProjectId = null }: Props
     }
   }, [runTarget, nodes.length, save, router]);
 
+  // Load a one-click Evermind BUILD template onto the canvas (replaces the graph)
+  // as an editable, wired step chain — then the user runs it with "🧠 Build".
+  const loadTemplate = useCallback(
+    async (id: 'train-llm' | 'teach-code') => {
+      if (nodes.length > 0 && !window.confirm(t('replaceConfirm'))) return;
+      setBusy(true);
+      setStatus(null);
+      try {
+        const g = await loadTemplateGraph(id);
+        setNodes(g.nodes.map((n) => ({ id: n.id, type: 'builder', position: n.position, data: { kind: n.kind, label: n.label, config: n.config } })));
+        setEdges(g.edges.map((e) => ({ id: e.id, source: e.source, target: e.target })));
+        setSelectedId(null);
+        if (!name.trim() || name === 'Untitled workflow') {
+          setName(id === 'train-llm' ? t('templateTrainLlm') : t('templateTeachCode'));
+        }
+      } catch (e) {
+        setStatus(e instanceof Error ? e.message : t('templateLoadFailed'));
+      } finally {
+        setBusy(false);
+      }
+    },
+    [nodes.length, name, setNodes, setEdges, t],
+  );
+
+  const hasBuild = useMemo(() => hasBuildNodes(nodes.map((n) => ({ kind: n.data.kind }))), [nodes]);
+
   // Save (if needed), then download the definition as YAML.
   const exportYaml = useCallback(async () => {
     setBusy(true);
@@ -410,6 +441,17 @@ export function WorkflowBuilder({ definitionId, initialProjectId = null }: Props
             <option key={p.id} value={p.id}>{p.name}</option>
           ))}
         </Select>
+        <Select
+          value=""
+          onChange={(e) => { const v = e.target.value; if (v) void loadTemplate(v as 'train-llm' | 'teach-code'); }}
+          style={fieldStyle}
+          title={t('templatesTitle')}
+        >
+          <option value="">{t('templatePlaceholder')}</option>
+          {EVERMIND_BUILD_TEMPLATES.map((tpl) => (
+            <option key={tpl.id} value={tpl.id}>{t(tpl.nameKey)}</option>
+          ))}
+        </Select>
         <button type="button" style={btnSubtle} disabled={busy} onClick={() => void save()}>{busy ? 'Saving…' : 'Save'}</button>
         <button type="button" style={btnSubtle} disabled={busy} onClick={() => void exportYaml()} title="Download as YAML">Export</button>
         <button type="button" style={btnSubtle} disabled={busy} onClick={() => fileInputRef.current?.click()} title="Import a YAML/JSON workflow">Import</button>
@@ -420,9 +462,20 @@ export function WorkflowBuilder({ definitionId, initialProjectId = null }: Props
           style={{ display: 'none' }}
           onChange={(e) => { const f = e.target.files?.[0]; if (f) void importYaml(f); e.target.value = ''; }}
         />
-        <button type="button" style={btnPrimary} disabled={busy} onClick={() => void run()}>▶ Run</button>
+        {hasBuild && (
+          <button type="button" style={btnPrimary} disabled={busy} onClick={() => setBuildOpen(true)} title={t('builderBuildTitle')}>🧠 {t('builderBuild')}</button>
+        )}
+        <button type="button" style={hasBuild ? btnSubtle : btnPrimary} disabled={busy} onClick={() => void run()}>▶ Run</button>
         {status && <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{status}</span>}
       </div>
+
+      <EvermindBuildPanel
+        open={buildOpen}
+        onClose={() => setBuildOpen(false)}
+        graph={toGraph()}
+        workflowName={name.trim() || 'Evermind build'}
+        projectId={projectId}
+      />
 
       <div style={{ display: 'flex', flex: 1, minHeight: 0 }}>
         {/* Palette */}

@@ -44,6 +44,8 @@ interface IDEProps {
   initialChatId?: number | null;
   /** One-shot prompt auto-sent into the Brain panel on load (Project 360 seed). */
   initialPrompt?: string;
+  /** One-shot work item to auto-link the opened chat to (`?ticket=<kind>:<ref>`). */
+  initialTicket?: { kind: string; ref: string };
 }
 
 type CenterView = 'preview' | 'code';
@@ -116,7 +118,7 @@ interface CheckResult {
   detail?: string;
 }
 
-export function IDE({ project, initialFiles, onProjectUpdate, onOpenProjectDetails, initialChatId, initialPrompt }: IDEProps) {
+export function IDE({ project, initialFiles, onProjectUpdate, onOpenProjectDetails, initialChatId, initialPrompt, initialTicket }: IDEProps) {
   // The IDE is scoped to its project's type: modality is fixed at creation, not
   // switchable in-session, so it's derived (and clamped) rather than state.
   const modality: ProjectModality = getModality(project.modality).id;
@@ -859,16 +861,20 @@ export function IDE({ project, initialFiles, onProjectUpdate, onOpenProjectDetai
   // left panel, so we pop the floating drawer instead.
   const setBrainOpen = brainCtx.setOpen;
   useEffect(() => {
-    if (initialChatId == null && !initialPrompt) return;
+    if (initialChatId == null && !initialPrompt && !initialTicket) return;
     // Only the non-docked path needs the context publish + drawer pop; the docked
-    // Brain receives initialChatId/initialPrompt as direct props below.
+    // Brain receives initialChatId/initialPrompt/initialTicket as direct props below.
     if (hasDockedBrain) {
       if (initialChatId != null) setBrainContext({ initialChatId });
       return;
     }
-    setBrainContext({ ...(initialChatId != null ? { initialChatId } : {}), ...(initialPrompt ? { initialPrompt } : {}) });
+    setBrainContext({
+      ...(initialChatId != null ? { initialChatId } : {}),
+      ...(initialPrompt ? { initialPrompt } : {}),
+      ...(initialTicket ? { initialTicket } : {}),
+    });
     setBrainOpen(true);
-  }, [initialChatId, initialPrompt, hasDockedBrain, setBrainContext, setBrainOpen]);
+  }, [initialChatId, initialPrompt, initialTicket, hasDockedBrain, setBrainContext, setBrainOpen]);
 
   const statusLabel = wcState.status === 'booting'
     ? '⏳ Booting…'
@@ -1188,6 +1194,7 @@ export function IDE({ project, initialFiles, onProjectUpdate, onOpenProjectDetai
                 extraSystem={extraSystem}
                 initialChatId={initialChatId}
                 initialPrompt={initialPrompt}
+                initialTicket={initialTicket}
               />
             </div>
           </div>

@@ -232,7 +232,7 @@ function MemberRow({ member, labels, onAction }: { member: Project360Member; lab
     idle: labels.status_idle,
     available: labels.status_available,
   } as const)[member.status];
-  const task = member.taskId != null ? { id: member.taskId, key: member.taskKey, title: member.taskTitle ?? '' } : undefined;
+  const task = member.taskId != null ? { id: member.taskId, key: member.taskKey, title: member.taskTitle ?? '', taskType: member.taskType } : undefined;
   return (
     <li className="bf-360-person">
       <span className={`bf-360-dot bf-360-dot--${member.status}`} title={statusLabel} aria-label={statusLabel} />

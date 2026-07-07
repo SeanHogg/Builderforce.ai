@@ -11,7 +11,9 @@ export interface Project360Action {
   kind: 'board' | 'approvals' | 'brain' | 'run-task' | 'open-task';
   label: string;
   text?: string;
-  task?: { id: number; key?: string; title: string };
+  /** `taskType` lets the host open a chat tied to the RIGHT ticket kind — an epic
+   *  or gap links to its own kind rather than a generic task. */
+  task?: { id: number; key?: string; title: string; taskType?: 'task' | 'epic' | 'gap' };
 }
 
 export interface Project360Gap {
@@ -51,6 +53,9 @@ export interface Project360Member {
   taskId?: number;
   taskKey?: string;
   taskTitle?: string;
+  /** Work-item type of the assigned task — threaded into open/run actions so a
+   *  chat opened from a person card links to the correct ticket kind. */
+  taskType?: 'task' | 'epic' | 'gap';
 }
 
 export interface Project360 {

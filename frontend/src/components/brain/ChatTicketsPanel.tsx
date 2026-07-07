@@ -4,25 +4,21 @@
  * ChatTicketsPanel (web) — a thin host wrapper around the SHARED
  * `@seanhogg/builderforce-brain-ui` ChatTicketsPanel. All the UI lives in the
  * shared package (rendered identically in the VS Code webview); here we only:
- *   1. build the data `adapter` from the web's `brain.*` / `pmoApi` / `tasksApi`
- *      / `loadAgentPool` clients (this is also where the strategy-tier — OKR /
- *      initiative / portfolio — picker options come from), and
+ *   1. build the data `adapter` from the web's `brain.*` / `tasksApi` /
+ *      `loadAgentPool` clients (the link-picker typeahead is served by the shared
+ *      `brain.searchTickets` → `GET /api/brain/tickets/search`), and
  *   2. map the next-intl `brain.tickets` catalog into the shared labels bundle.
  */
 import { useEffect, useMemo, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import {
   ChatTicketsPanel as SharedChatTicketsPanel,
-  type ChatTicketsAdapter, type ChatTicketsLabels, type TicketKind, type TicketOptionVM,
+  type ChatTicketsAdapter, type ChatTicketsLabels,
 } from '@seanhogg/builderforce-brain-ui';
 import {
-  brain, tasksApi, pmoApi, specsApi, segmentTrackerClient,
-  type BrainChat, type ChatTicketLink, type ChatAgentInvite, type Task,
-  type Objective, type Initiative, type Portfolio, type TrackerRow, type Spec,
+  brain, tasksApi,
+  type BrainChat, type ChatTicketLink, type ChatAgentInvite,
 } from '@/lib/builderforceApi';
-
-/** Roadmap items are a project-scoped tracker (their own uuid-keyed table). */
-const roadmapTracker = segmentTrackerClient('/api/product/roadmap');
 import { loadAgentPool } from '@/lib/agentPool';
 import { onBrainDataChanged } from '@/lib/brain/brainDataEvent';
 
@@ -57,7 +53,8 @@ export function ChatTicketsPanel({ chatId, projectId, chatList, onChanged }: {
     none: t('none'), spawned: t('spawned'), run: t('run'), lineage: t('lineage'), unlink: t('unlink'),
     pickAgent: t('pickAgent'), lineageTitle: t('lineageTitle'), lineageEmpty: t('lineageEmpty'), merged: t('merged'),
     runNoAgent: t('runNoAgent'), runFailed: t('runFailed'), link: t('link'), agents: t('agents'), merge: t('merge'),
-    linkFailed: t('linkFailed'), kindLabel: t('kindLabel'), pickTicket: t('pickTicket'), searchTicket: t('searchTicket'), linkTypeLabel: t('linkTypeLabel'),
+    linkFailed: t('linkFailed'), kindLabel: t('kindLabel'), pickTicket: t('pickTicket'), searchTicket: t('searchTicket'),
+    searching: t('searching'), noMatches: t('noMatches'), refine: t('refine'), linkTypeLabel: t('linkTypeLabel'),
     linkTypeLinked: t('linkTypeLinked'), linkTypeCreated: t('linkTypeCreated'), linkAction: t('linkAction'),
     noAgents: t('noAgents'), removeAgent: t('removeAgent'), inviteAgent: t('inviteAgent'), agentsHint: t('agentsHint'),
     people: t('people'), noPeople: t('noPeople'), invitePerson: t('invitePerson'), invitePersonHint: t('invitePersonHint'),
@@ -66,7 +63,6 @@ export function ChatTicketsPanel({ chatId, projectId, chatList, onChanged }: {
     mergeHint: t('mergeHint'), mergeNoOthers: t('mergeNoOthers'),
     kind: { task: t('kind.task'), epic: t('kind.epic'), gap: t('kind.gap'), objective: t('kind.objective'), initiative: t('kind.initiative'), portfolio: t('kind.portfolio'), roadmap: t('kind.roadmap'), spec: t('kind.spec') },
     ringAria: (label, pct) => t('ringAria', { label, pct }),
-    moreResults: (n) => t('moreResults', { n }),
     runStarted: (agent) => t('runStarted', { agent }),
     mergeAction: (n) => t('mergeAction', { n }),
     mergedN: (n) => t('mergedN', { n }),
@@ -85,36 +81,9 @@ export function ChatTicketsPanel({ chatId, projectId, chatList, onChanged }: {
     inviteMember: (id, email) => brain.inviteChatMember(id, email).then((r) => ({ status: r.status })),
     removeMember: (id, memberId) => brain.removeChatMember(id, memberId).then(() => undefined),
     loadAgentPool: () => loadAgentPool().then((ps) => ps.map((p) => ({ ref: p.ref, name: p.name, meta: p.meta, kind: p.kind }))),
-    loadTicketOptions: async (pid) => {
-      // task/epic/gap from the board (project-scoped when known); the strategy tiers
-      // (OKR objective / initiative / portfolio) are tenant-wide via the PMO API;
-      // roadmap items are the project's product roadmap tracker.
-      const [tasks, objectives, initiatives, portfolios, roadmap, specs] = await Promise.all([
-        tasksApi.list(pid ?? undefined).catch(() => [] as Task[]),
-        pmoApi.objectives.list().catch(() => [] as Objective[]),
-        pmoApi.initiatives.list().catch(() => [] as Initiative[]),
-        pmoApi.portfolios.list().catch(() => [] as Portfolio[]),
-        roadmapTracker.list(pid ?? undefined).catch(() => [] as TrackerRow[]),
-        specsApi.list(pid ?? undefined).catch(() => [] as Spec[]),
-      ]);
-      const taskOpts: TicketOptionVM[] = [];
-      const epicOpts: TicketOptionVM[] = [];
-      const gapOpts: TicketOptionVM[] = [];
-      for (const tk of tasks) {
-        const bucket = tk.taskType === 'epic' ? epicOpts : tk.taskType === 'gap' ? gapOpts : taskOpts;
-        bucket.push({ ref: String(tk.id), label: `${tk.key} — ${tk.title}` });
-      }
-      return {
-        task: taskOpts,
-        epic: epicOpts,
-        gap: gapOpts,
-        objective: objectives.map((o) => ({ ref: o.id, label: o.title })),
-        initiative: initiatives.map((i) => ({ ref: i.id, label: i.name })),
-        portfolio: portfolios.map((p) => ({ ref: p.id, label: p.name })),
-        roadmap: roadmap.map((r) => ({ ref: r.id, label: String(r.title ?? r.id) })),
-        spec: specs.map((s) => ({ ref: s.id, label: s.goal })),
-      } as Record<TicketKind, TicketOptionVM[]>;
-    },
+    // Server-side typeahead per tier (debounced by the shared LinkForm) — replaces
+    // the old "fetch every task/objective/initiative/portfolio/roadmap/spec up front".
+    searchTickets: (kind, query, pid) => brain.searchTickets(kind, query, pid),
     runTicket: async (kind, ref, agentRef) => {
       // "Tag to execute": ensure the agent participates, assign it to the ticket,
       // then start a run — reuses the board's dispatch (assignee + run-now).

@@ -28,7 +28,7 @@ export function FloatingBrain() {
   const tAttn = useTranslations('attention');
   const tLauncher = useTranslations('brainLauncher');
   const { hasTenant } = useAuth();
-  const { open, setOpen, projectId, viewingProjectId, modality, extraSystem, initialChatId, initialPrompt: ctxInitialPrompt } = useBrainContext();
+  const { open, setOpen, projectId, viewingProjectId, modality, extraSystem, initialChatId, initialPrompt: ctxInitialPrompt, initialTicket } = useBrainContext();
   // Tenant-wide "needs you" signal for the launcher badge — only while the drawer
   // is closed (when open, BrainPanel's own useAttention drives the chat-row dots,
   // so we never run two pollers at once).
@@ -37,11 +37,11 @@ export function FloatingBrain() {
   // A page-published seed (e.g. the IDE `?prompt=`) wins over the sign-in handoff.
   const initialPrompt = ctxInitialPrompt ?? pendingPrompt;
 
-  // A page that publishes an initialPrompt into the Brain context wants the drawer
-  // open so BrainPanel can auto-send it (parity with the pending-prompt handoff).
+  // A page that publishes an initialPrompt OR an auto-link ticket into the Brain
+  // context wants the drawer open so BrainPanel can act on it.
   useEffect(() => {
-    if (ctxInitialPrompt) setOpen(true);
-  }, [ctxInitialPrompt, setOpen]);
+    if (ctxInitialPrompt || initialTicket) setOpen(true);
+  }, [ctxInitialPrompt, initialTicket, setOpen]);
 
   // Lock background scroll + close on Escape while the drawer is open. Shared
   // with the marketing mobile menu so every overlay dismisses the same way.
@@ -210,6 +210,7 @@ export function FloatingBrain() {
                 extraSystem={extraSystem}
                 initialChatId={initialChatId}
                 initialPrompt={initialPrompt}
+                initialTicket={initialTicket}
                 onClose={() => setOpen(false)}
               />
             ) : (

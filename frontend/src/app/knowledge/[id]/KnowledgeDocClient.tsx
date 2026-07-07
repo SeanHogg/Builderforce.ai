@@ -3,8 +3,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import ReactMarkdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
+import { DocumentMarkdown } from '@/components/DocumentMarkdown';
 import { useTranslations } from 'next-intl';
 import PageContainer from '@/components/PageContainer';
 import { usePermission } from '@/lib/rbac';
@@ -318,10 +317,9 @@ export default function KnowledgeDocClient({ docId }: { docId: string }) {
             background: 'var(--surface, #1a1a1a)',
             minHeight: 200,
           }}
-          className="markdown-body"
         >
           {content.trim() ? (
-            <ReactMarkdown remarkPlugins={[remarkGfm]}>{content}</ReactMarkdown>
+            <DocumentMarkdown content={content} />
           ) : (
             <span style={{ color: 'var(--text-muted, #9ca3af)' }}>{t('emptyContent')}</span>
           )}
@@ -746,9 +744,8 @@ function AiAssist({
                   maxHeight: 260,
                   overflow: 'auto',
                 }}
-                className="markdown-body"
               >
-                <ReactMarkdown remarkPlugins={[remarkGfm]}>{result}</ReactMarkdown>
+                <DocumentMarkdown content={result} />
               </div>
               <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
                 <button type="button" onClick={() => { onApply(result, true); setResult(null); }} style={btnPrimary}>
@@ -870,9 +867,8 @@ function AnalyzePanel({
                       maxHeight: 220,
                       overflow: 'auto',
                     }}
-                    className="markdown-body"
                   >
-                    <ReactMarkdown remarkPlugins={[remarkGfm]}>{result.improvedFlow}</ReactMarkdown>
+                    <DocumentMarkdown content={result.improvedFlow} />
                   </div>
                   <button
                     type="button"

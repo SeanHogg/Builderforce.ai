@@ -105,6 +105,22 @@ export async function joinMeetingNative(ctx: vscode.ExtensionContext, item: Meet
         method: "POST", headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
       }).catch(() => undefined);
       panel.dispose();
+    } else if (msg?.type === "open-browser") {
+      // The webview's in-error "Join in browser" button — hand off to the reliable path.
+      void joinMeetingInBrowser(id);
+      panel.dispose();
+    } else if (msg?.type === "media-denied") {
+      // getUserMedia was denied by the OS/VS Code — proactively offer the browser
+      // handoff (the webview already shows an inline button; this surfaces it as a
+      // native toast too, since a denied webview can be easy to miss).
+      void vscode.window
+        .showWarningMessage(
+          vscode.l10n.t("Camera/microphone couldn't start in the editor. Join in your browser for reliable audio/video."),
+          vscode.l10n.t("Join in browser"),
+        )
+        .then((choice) => {
+          if (choice) { void joinMeetingInBrowser(id); panel.dispose(); }
+        });
     }
   });
 }
@@ -203,7 +219,15 @@ async function start(){
     local = await navigator.mediaDevices.getUserMedia({ video: CFG.videoEnabled, audio: true });
     selfVideo.srcObject = local;
   } catch (e) {
-    showError('Camera/microphone unavailable in the editor: ' + (e && e.message ? e.message : e) + ' — use "Join in browser" instead.');
+    const msg = (e && e.message ? e.message : String(e));
+    showError('Camera/microphone unavailable in the editor: ' + msg + ' — join in your browser for reliable audio/video.');
+    const b = document.createElement('button');
+    b.textContent = '↗ Join in browser';
+    b.style.marginLeft = '10px';
+    b.onclick = () => vscodeApi.postMessage({ type: 'open-browser' });
+    errEl.appendChild(b);
+    // Tell the host so it can also surface a native prompt (a denied webview is easy to miss).
+    vscodeApi.postMessage({ type: 'media-denied', message: msg });
   }
   ws = new WebSocket(CFG.wsUrl);
   ws.onopen = () => send({ type:'join', name: CFG.me.name, kind:'human', ref: CFG.me.ref });

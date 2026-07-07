@@ -1,4 +1,10 @@
 {
+  "contentManager": {
+    "migrate": {
+      "moving": "Deine Inhalte werden nach Wissen verschoben…",
+      "done": "Weiterleitung zu Wissen…"
+    }
+  },
   "chatInput": {
     "add": "Hinzufügen",
     "upload": "Vom Computer hochladen",
@@ -2360,6 +2366,10 @@
     "marketSubtitle": "Installieren Sie fertige SOPs, Prozesse und Dokumente in Ihrem Arbeitsbereich.",
     "free": "Kostenlos",
     "addToKnowledge": "Zu meinem Wissen hinzufügen",
+    "buy": "Kaufen",
+    "signInToGet": "Anmelden zum Abrufen",
+    "installFailed": "Konnte nicht zu deinem Wissen hinzugefügt werden. Bitte erneut versuchen.",
+    "checkoutUnavailable": "Bezahlvorgang ist auf dieser Instanz noch nicht verfügbar.",
     "installing": "Installation…",
     "by": "von {author}"
   },
@@ -5129,7 +5139,9 @@
       "kindLabel": "Tickettyp",
       "pickTicket": "Ticket auswählen…",
       "searchTicket": "Tickets suchen…",
-      "moreResults": "+{n} weitere — Suche verfeinern",
+      "searching": "Suche…",
+      "noMatches": "Keine passenden Tickets.",
+      "refine": "Zeige die besten Treffer — tippen, um einzugrenzen.",
       "linkTypeLabel": "Verknüpfungsart",
       "linkTypeLinked": "Verknüpft",
       "linkTypeCreated": "Aus Chat erstellt",
@@ -5178,6 +5190,8 @@
     "noChatsMatch": "Keine Chats entsprechen deiner Suche.",
     "rename": "Umbenennen",
     "summarize": "Zusammenfassen",
+    "deleteChatConfirm": "„{title}“ löschen? Dies kann nicht rückgängig gemacht werden.",
+    "thisChat": "diesen Chat",
     "addTo": "Hinzufügen zu:",
     "addChatToProjectAria": "Chat zum Projekt hinzufügen",
     "addToProject": "Zum Projekt hinzufügen…",
@@ -5808,7 +5822,72 @@
     "emptyItems": "Keine Einträge entsprechen deiner Suche.",
     "emptyAgentsSearch": "Keine Agenten entsprechen deiner Suche.",
     "emptyAgentsNone": "Noch keine veröffentlichten Agenten. Veröffentliche einen Agenten aus einem Projekt, um ihn hier zu listen.",
-    "talentError": "Talente konnten nicht geladen werden."
+    "talentError": "Talente konnten nicht geladen werden.",
+    "free": "Kostenlos",
+    "installed": "Installiert",
+    "by": "von",
+    "defaultPriceUnit": "Nutzung",
+    "publish": {
+      "becomePublisher": "Werde Anbieter",
+      "publisherBlurb": "Jedes Builderforce.ai-Konto kann Skills, Personas und Agenten im Marktplatz veröffentlichen. Erstelle ein Konto oder melde dich an, um zu starten.",
+      "createAccount": "Konto erstellen",
+      "signIn": "Anmelden",
+      "publishingAs": "Veröffentlichung als",
+      "heading": "Skill veröffentlichen",
+      "success": "Skill veröffentlicht! Er erscheint nach der Prüfung im Marktplatz.",
+      "name": "Name",
+      "namePlaceholder": "Mein Skill",
+      "slug": "Slug",
+      "slugHint": "(eindeutige ID)",
+      "slugPlaceholder": "mein-skill",
+      "description": "Beschreibung",
+      "descriptionPlaceholder": "Was macht dieser Skill?",
+      "category": "Kategorie",
+      "categoryPlaceholder": "coding",
+      "version": "Version",
+      "repoUrl": "Repo-URL",
+      "repoPlaceholder": "https://github.com/…",
+      "price": "Preis (USD)",
+      "pricePlaceholder": "0.00",
+      "pricingModel": "Preismodell",
+      "flatFee": "Pauschale",
+      "consumption": "Nach Verbrauch",
+      "priceUnit": "Preiseinheit",
+      "priceUnitPlaceholder": "pro Anfrage",
+      "submitting": "Veröffentlichen…",
+      "submit": "Skill veröffentlichen",
+      "failed": "Veröffentlichung fehlgeschlagen"
+    },
+    "table": {
+      "name": "Name",
+      "title": "Titel",
+      "tags": "Tags",
+      "price": "Preis",
+      "hires": "Engagements",
+      "eval": "Bewertung",
+      "actions": "Aktionen",
+      "type": "Typ",
+      "author": "Autor",
+      "stats": "Statistiken"
+    },
+    "action": {
+      "hire": "Engagieren",
+      "hiring": "Wird engagiert…",
+      "unhire": "Entlassen",
+      "unhiring": "Wird entlassen…",
+      "workforceAgent": "Workforce-Agent",
+      "install": "Installieren",
+      "uninstall": "Deinstallieren",
+      "registerHost": "AgentHost registrieren",
+      "inCart": "✓ Im Warenkorb",
+      "addCart": "+ Warenkorb",
+      "inCartTitle": "Im Warenkorb",
+      "addCartTitle": "In den Warenkorb",
+      "like": "Gefällt mir",
+      "unlike": "Gefällt mir nicht mehr",
+      "installsTitle": "Installationen",
+      "deleteConfirm": "Agent \"{name}\" löschen? Dies entfernt ihn und seine agent-eigenen Skills/Personas dauerhaft. Kann nicht rückgängig gemacht werden."
+    }
   },
   "models": {
     "searchPlaceholder": "Modelle, Anbieter suchen…",
@@ -6646,6 +6725,14 @@
       },
       "preview": {
         "nothingToPreview": "_Noch nichts zur Vorschau._"
+      },
+      "history": {
+        "button": "Verlauf",
+        "title": "Versionsverlauf",
+        "loading": "Verlauf wird geladen…",
+        "empty": "Noch keine Versionen.",
+        "publish": "Veröffentlicht",
+        "amend": "Geändert"
       }
     },
     "newsletter": {
@@ -7507,7 +7594,13 @@
     "findATime": "Zeit finden",
     "noSlots": "In den nächsten zwei Wochen kein gemeinsamer freier Termin.",
     "kind_interview": "Interview",
-    "kind_review": "Review"
+    "kind_review": "Review",
+    "chatPanel": "Chat",
+    "linkTeamChat": "Mit Team-Chat verknüpfen",
+    "teamChatScope": "Team-Chat",
+    "teamChatProject": "Projekt-Team-Chat",
+    "teamChatTenant": "Workspace-Team-Chat",
+    "teamChatHint": "Wählen Sie, mit welcher Unterhaltung dieses Meeting verknüpft ist – der Chat eines bestimmten Teams oder der Standard für seinen Bereich."
   },
   "brainLauncher": {
     "open": "Brain-Assistent öffnen",
@@ -7936,5 +8029,36 @@
     "logMambaEpoch": "  📊 Epoche {epoch}: Verlust={loss}",
     "logMambaComplete": "✅ Mamba-Training abgeschlossen — Endverlust: {loss}",
     "logMambaFailed": "❌ Mamba-Training fehlgeschlagen: {error}"
+  },
+  "evermindBuild": {
+    "title": "Evermind-Build",
+    "subtitle": "Führe diese Pipeline im Browser aus, um ein .evermind-Modell zu trainieren, zu validieren und zu packen – ohne Server.",
+    "noBuildNodes": "Füge Evermind-Build-Schritte hinzu (oder lade eine Vorlage), um einen Build auszuführen.",
+    "stepsReady": "{count, plural, one {# Build-Schritt} other {# Build-Schritte}} bereit",
+    "run": "Build ausführen",
+    "running": "Wird gebaut…",
+    "rerun": "Erneut ausführen",
+    "timelineTitle": "Ausführungs-Zeitleiste",
+    "durationMs": "{ms} ms",
+    "okAll": "Build bestanden – alle {count} Schritte grün.",
+    "failed": "Build wurde bei „{label}“ gestoppt.",
+    "artifactTitle": "Modell-Artefakt",
+    "artifactReady": "Ein .evermind-Modell wurde erzeugt.",
+    "artifactNone": "Diese Pipeline hat kein .evermind-Artefakt erzeugt – füge einen Package-Schritt (Round-trip) hinzu.",
+    "seed": "Projekt-Evermind seeden",
+    "seeding": "Wird geseedet…",
+    "seeded": "Projekt-Evermind geseedet (v{version}).",
+    "seedNeedsProject": "Binde diesen Workflow an ein Projekt, um dessen Evermind zu seeden.",
+    "seedFailed": "Seeding fehlgeschlagen: {error}",
+    "download": ".evermind herunterladen",
+    "errUnknown": "Unbekannter Fehler",
+    "templatesTitle": "Lade eine fertige Evermind-Build-Pipeline",
+    "templatePlaceholder": "Evermind-Vorlage…",
+    "templateTrainLlm": "Ein LLM erstellen",
+    "templateTeachCode": "Evermind das Programmieren beibringen",
+    "templateLoadFailed": "Vorlage konnte nicht geladen werden.",
+    "replaceConfirm": "Aktuelle Arbeitsfläche durch diese Vorlage ersetzen?",
+    "builderBuild": "Build",
+    "builderBuildTitle": "Führe die Evermind-Build-Pipeline im Browser aus"
   }
 }

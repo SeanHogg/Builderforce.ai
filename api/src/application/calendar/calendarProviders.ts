@@ -46,6 +46,13 @@ export interface CalendarProvider {
   createEvent: (accessToken: string, calendarId: string, input: CalendarEventInput) => Promise<{ id: string; htmlLink?: string }>;
   listUpcoming: (accessToken: string, calendarId: string, opts: { maxResults: number; timeMinISO: string; timeMaxISO: string }) => Promise<CalendarEvent[]>;
   deleteEvent: (accessToken: string, calendarId: string, eventId: string) => Promise<void>;
+  /**
+   * Read the connected account's busy blocks in a window — the free/busy view
+   * (opaque busy intervals, not event details) used by the meeting scheduler so
+   * a teammate booked on their own external calendar is never proposed. Returns
+   * ISO (UTC) intervals; an empty array means "no busy blocks / not readable".
+   */
+  freeBusy: (accessToken: string, calendarId: string, opts: { accountEmail?: string; timeMinISO: string; timeMaxISO: string }) => Promise<Array<{ startISO: string; endISO: string }>>;
 }
 
 async function jsonFetch(url: string, init: RequestInit): Promise<Record<string, unknown>> {
@@ -123,6 +130,20 @@ const google: CalendarProvider = {
       { method: 'DELETE', headers: { Authorization: `Bearer ${accessToken}` } },
     );
   },
+
+  async freeBusy(accessToken, calendarId, opts) {
+    const d = await jsonFetch('https://www.googleapis.com/calendar/v3/freeBusy', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ timeMin: opts.timeMinISO, timeMax: opts.timeMaxISO, items: [{ id: calendarId }] }),
+    });
+    const cals = (d.calendars as Record<string, unknown> | undefined) ?? {};
+    const cal = (cals[calendarId] ?? Object.values(cals)[0]) as Record<string, unknown> | undefined;
+    const busy = Array.isArray(cal?.busy) ? (cal!.busy as Record<string, unknown>[]) : [];
+    return busy
+      .map((b) => ({ startISO: String(b.start ?? ''), endISO: String(b.end ?? '') }))
+      .filter((b) => b.startISO && b.endISO);
+  },
 };
 
 // ── Microsoft Graph ─────────────────────────────────────────────────────────
@@ -186,6 +207,33 @@ const microsoft: CalendarProvider = {
     await jsonFetch(`https://graph.microsoft.com/v1.0/me/events/${encodeURIComponent(eventId)}`, {
       method: 'DELETE', headers: { Authorization: `Bearer ${accessToken}` },
     });
+  },
+
+  async freeBusy(accessToken, _calendarId, opts) {
+    // Graph getSchedule keys on the calendar owner's address; the connection's
+    // account email is that address. Without it we can't query free/busy.
+    const address = opts.accountEmail;
+    if (!address) return [];
+    // getSchedule wants naive datetimes paired with an explicit timeZone.
+    const strip = (iso: string) => iso.replace(/Z$/, '');
+    const d = await jsonFetch('https://graph.microsoft.com/v1.0/me/calendar/getSchedule', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        schedules: [address],
+        startTime: { dateTime: strip(opts.timeMinISO), timeZone: 'UTC' },
+        endTime: { dateTime: strip(opts.timeMaxISO), timeZone: 'UTC' },
+        availabilityViewInterval: 30,
+      }),
+    });
+    const value = Array.isArray(d.value) ? (d.value as Record<string, unknown>[]) : [];
+    const items = Array.isArray(value[0]?.scheduleItems) ? (value[0].scheduleItems as Record<string, unknown>[]) : [];
+    // Graph returns local-naive dateTimes; we requested UTC, so append Z.
+    const toIso = (v: unknown) => { const s = String((v as Record<string, unknown> | undefined)?.dateTime ?? ''); return s && !/[Z+]/.test(s) ? `${s}Z` : s; };
+    return items
+      .filter((it) => String(it.status ?? 'busy') !== 'free')
+      .map((it) => ({ startISO: toIso(it.start), endISO: toIso(it.end) }))
+      .filter((b) => b.startISO && b.endISO);
   },
 };
 

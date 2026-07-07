@@ -15,6 +15,20 @@ import { ProjectDetailsPanel } from '@/components/ProjectDetailsPanel';
 // editor/WebGPU bundles only ship when a project is actually opened.
 const IDE = dynamic(() => import('@/components/IDE').then((m) => m.IDE), { ssr: false });
 
+/** Work-item kinds a chat can be auto-linked to (mirror ChatTicketService.TICKET_KINDS). */
+const TICKET_PARAM_KINDS = new Set(['portfolio', 'objective', 'initiative', 'roadmap', 'spec', 'epic', 'gap', 'task']);
+
+/** Parse a `?ticket=<kind>:<ref>` deep link into { kind, ref }, or undefined. Split on
+ *  the FIRST ':' only — a uuid ref never contains one, and kinds are colon-free. */
+function parseTicketParam(raw: string | null): { kind: string; ref: string } | undefined {
+  if (!raw) return undefined;
+  const i = raw.indexOf(':');
+  if (i <= 0) return undefined;
+  const kind = raw.slice(0, i);
+  const ref = raw.slice(i + 1);
+  return kind && ref && TICKET_PARAM_KINDS.has(kind) ? { kind, ref } : undefined;
+}
+
 /**
  * IDE page — opens a project in the IDE. Use ?chat= to open with a specific project chat active
  * (e.g. from Brain Storm "Open in IDE" with the current chat).
@@ -28,15 +42,19 @@ export default function IDEPage() {
   const chatIdParam = searchParams.get('chat');
   const initialChatId = chatIdParam ? (Number(chatIdParam) || null) : null;
 
-  // One-shot Brain seed via ?prompt= (e.g. Project 360 "Improve with Brain"). Captured
-  // once, then stripped from the URL so a refresh/share doesn't re-send it.
+  // One-shot Brain seed via ?prompt= (e.g. Project 360 "Improve with Brain") and/or an
+  // auto-link via ?ticket=<kind>:<ref> (click an item → open a chat already tied to it,
+  // parity with the VS Code "open task" flow). Both captured once, then stripped from
+  // the URL so a refresh/share doesn't re-fire them.
   const [initialPrompt] = useState(() => searchParams.get('prompt') ?? undefined);
-  const promptStrippedRef = useRef(false);
+  const [initialTicket] = useState(() => parseTicketParam(searchParams.get('ticket')));
+  const oneShotStrippedRef = useRef(false);
   useEffect(() => {
-    if (promptStrippedRef.current || !searchParams.get('prompt')) return;
-    promptStrippedRef.current = true;
+    if (oneShotStrippedRef.current || (!searchParams.get('prompt') && !searchParams.get('ticket'))) return;
+    oneShotStrippedRef.current = true;
     const params = new URLSearchParams(searchParams.toString());
     params.delete('prompt');
+    params.delete('ticket');
     const qs = params.toString();
     router.replace(qs ? `/ide/${idRaw}?${qs}` : `/ide/${idRaw}`);
   }, [searchParams, router, idRaw]);
@@ -190,6 +208,7 @@ export default function IDEPage() {
           onOpenProjectDetails={() => setProjectDetailsOpen(true)}
           initialChatId={initialChatId}
           initialPrompt={initialPrompt}
+          initialTicket={initialTicket}
         />
       </div>
       {project && (

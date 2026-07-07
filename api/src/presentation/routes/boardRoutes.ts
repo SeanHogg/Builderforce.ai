@@ -529,6 +529,7 @@ export function createBoardRoutes(db: Db): Hono<HonoEnv> {
     const tenantId = c.get('tenantId') as number;
     const boardId = c.req.param('boardId');
     const laneId = c.req.param('laneId');
+    if (!boardId || !laneId) return c.json({ error: 'Swimlane not found' }, 404);
     if (!(await assertLane(tenantId, boardId, laneId))) return c.json({ error: 'Swimlane not found' }, 404);
     const body = await c.req.json<{ kind: string; ref: string; responsibility?: string; isRequired?: boolean; description?: string; position?: number }>();
     const kind = ['role', 'diagnostic', 'review'].includes(body.kind) ? body.kind : null;
@@ -556,6 +557,7 @@ export function createBoardRoutes(db: Db): Hono<HonoEnv> {
     const boardId = c.req.param('boardId');
     const laneId = c.req.param('laneId');
     const reqId = c.req.param('reqId');
+    if (!boardId || !laneId || !reqId) return c.json({ error: 'Requirement not found' }, 404);
     if (!(await assertLane(tenantId, boardId, laneId))) return c.json({ error: 'Swimlane not found' }, 404);
     const body = await c.req.json<{ ref?: string; responsibility?: string; isRequired?: boolean; description?: string; position?: number }>();
     await db
@@ -578,6 +580,7 @@ export function createBoardRoutes(db: Db): Hono<HonoEnv> {
     const tenantId = c.get('tenantId') as number;
     const laneId = c.req.param('laneId');
     const reqId = c.req.param('reqId');
+    if (!laneId || !reqId) return c.body(null, 204);
     await db
       .delete(swimlaneRequirements)
       .where(and(eq(swimlaneRequirements.id, reqId), eq(swimlaneRequirements.swimlaneId, laneId), eq(swimlaneRequirements.tenantId, tenantId)));

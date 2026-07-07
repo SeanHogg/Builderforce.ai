@@ -7,6 +7,8 @@ import { meetingsApi, type MeetingDetail } from '@/lib/builderforceApi';
 import { useMediaRoom } from '@/lib/useMediaRoom';
 import { VideoGrid } from '@/components/video/VideoGrid';
 import { MediaControls } from '@/components/video/MediaControls';
+import { BrainPanel } from '@/components/brain/BrainPanel';
+import { useIsMobile } from '@/lib/useIsMobile';
 
 /**
  * Full-screen live meeting room. Joins the meeting (marking presence + flipping
@@ -20,6 +22,8 @@ export function MeetingRoom({ meetingId, onClose }: { meetingId: string; onClose
   const [roomKey, setRoomKey] = useState<string | null>(null);
   const [videoEnabled, setVideoEnabled] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [chatOpen, setChatOpen] = useState(false);
+  const isMobile = useIsMobile();
 
   const me = { name: user?.name ?? user?.email ?? 'You', ref: user?.id ?? '' };
 
@@ -52,6 +56,9 @@ export function MeetingRoom({ meetingId, onClose }: { meetingId: string; onClose
   const m = detail?.meeting;
   const isHost = !!m && (m.createdBy === user?.id);
   const present = new Set(media.tiles.map((x) => x.ref));
+  // The meeting IS the team chat: its linked chat (meetings.chat_id) rides along
+  // in-room so absentees' posts and the ongoing thread live on the same surface.
+  const chatId = m?.chatId ?? null;
 
   return (
     <div
@@ -72,52 +79,87 @@ export function MeetingRoom({ meetingId, onClose }: { meetingId: string; onClose
             {media.connected ? t('liveCount', { count: media.tiles.length + 1 }) : t('connecting')}
           </span>
         </div>
-        <button
-          type="button"
-          onClick={leave}
-          style={{ padding: '6px 12px', fontSize: 13, fontWeight: 600, borderRadius: 8, cursor: 'pointer', background: 'var(--bg-deep)', color: 'var(--text-secondary)', border: '1px solid var(--border-subtle)' }}
-        >
-          {t('leave')}
-        </button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          {chatId != null && (
+            <button
+              type="button"
+              onClick={() => setChatOpen((o) => !o)}
+              aria-pressed={chatOpen}
+              style={{
+                display: 'inline-flex', alignItems: 'center', gap: 6, padding: '6px 12px', fontSize: 13, fontWeight: 600, borderRadius: 8, cursor: 'pointer',
+                background: chatOpen ? 'var(--bg-elevated)' : 'var(--bg-deep)',
+                color: chatOpen ? 'var(--text-primary)' : 'var(--text-secondary)',
+                border: `1px solid ${chatOpen ? 'var(--border-strong, #555)' : 'var(--border-subtle)'}`,
+              }}
+            >
+              <span aria-hidden>💬</span>{t('chatPanel')}
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={leave}
+            style={{ padding: '6px 12px', fontSize: 13, fontWeight: 600, borderRadius: 8, cursor: 'pointer', background: 'var(--bg-deep)', color: 'var(--text-secondary)', border: '1px solid var(--border-subtle)' }}
+          >
+            {t('leave')}
+          </button>
+        </div>
       </div>
 
-      {/* Stage */}
-      <div style={{ flex: 1, overflow: 'auto', padding: 16, minHeight: 0 }}>
-        {error ? (
-          <div style={{ color: 'var(--error-text)', fontSize: 14 }}>{error}</div>
-        ) : media.mediaError ? (
-          <div style={{ color: 'var(--error-text)', fontSize: 14, marginBottom: 12 }}>{t('cameraError', { error: media.mediaError })}</div>
-        ) : null}
-        {!error && (
-          <VideoGrid
-            self={{ name: me.name, stream: media.localStream, camOn: media.camOn, micOn: media.micOn }}
-            tiles={media.tiles}
-          />
-        )}
+      {/* Stage + in-room team chat pane */}
+      <div style={{ flex: 1, display: 'flex', minHeight: 0, position: 'relative' }}>
+        <div style={{ flex: 1, overflow: 'auto', padding: 16, minHeight: 0 }}>
+          {error ? (
+            <div style={{ color: 'var(--error-text)', fontSize: 14 }}>{error}</div>
+          ) : media.mediaError ? (
+            <div style={{ color: 'var(--error-text)', fontSize: 14, marginBottom: 12 }}>{t('cameraError', { error: media.mediaError })}</div>
+          ) : null}
+          {!error && (
+            <VideoGrid
+              self={{ name: me.name, stream: media.localStream, camOn: media.camOn, micOn: media.micOn }}
+              tiles={media.tiles}
+            />
+          )}
 
-        {/* Roster (who's invited + who's live) */}
-        {detail && detail.attendees.length > 0 && (
-          <div style={{ marginTop: 16 }}>
-            <div style={{ fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.4, color: 'var(--text-muted)', marginBottom: 8 }}>
-              {t('participants')}
+          {/* Roster (who's invited + who's live) */}
+          {detail && detail.attendees.length > 0 && (
+            <div style={{ marginTop: 16 }}>
+              <div style={{ fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.4, color: 'var(--text-muted)', marginBottom: 8 }}>
+                {t('participants')}
+              </div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                {detail.attendees.map((a) => (
+                  <span
+                    key={a.id}
+                    style={{
+                      fontSize: 12, padding: '3px 10px', borderRadius: 999,
+                      background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)',
+                      color: present.has(a.memberRef) || a.memberRef === me.ref ? 'var(--text-primary)' : 'var(--text-muted)',
+                      display: 'inline-flex', alignItems: 'center', gap: 6,
+                    }}
+                  >
+                    <span style={{ width: 7, height: 7, borderRadius: '50%', background: present.has(a.memberRef) || a.memberRef === me.ref ? 'var(--cyan-bright)' : 'var(--border-strong, #555)' }} />
+                    {a.memberName}
+                  </span>
+                ))}
+              </div>
             </div>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-              {detail.attendees.map((a) => (
-                <span
-                  key={a.id}
-                  style={{
-                    fontSize: 12, padding: '3px 10px', borderRadius: 999,
-                    background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)',
-                    color: present.has(a.memberRef) || a.memberRef === me.ref ? 'var(--text-primary)' : 'var(--text-muted)',
-                    display: 'inline-flex', alignItems: 'center', gap: 6,
-                  }}
-                >
-                  <span style={{ width: 7, height: 7, borderRadius: '50%', background: present.has(a.memberRef) || a.memberRef === me.ref ? 'var(--cyan-bright)' : 'var(--border-strong, #555)' }} />
-                  {a.memberName}
-                </span>
-              ))}
-            </div>
-          </div>
+          )}
+        </div>
+
+        {/* Team chat, keyed on the meeting's linked chat. On mobile it overlays
+            the stage; on wider viewports it docks as a right-hand column. */}
+        {chatOpen && chatId != null && (
+          <aside
+            style={{
+              display: 'flex', flexDirection: 'column', minHeight: 0,
+              background: 'var(--surface-card)',
+              ...(isMobile
+                ? { position: 'absolute', inset: 0, zIndex: 5 }
+                : { flex: '0 0 380px', maxWidth: '100%', borderLeft: '1px solid var(--border-subtle)' }),
+            }}
+          >
+            <BrainPanel variant="docked" initialChatId={chatId} onClose={() => setChatOpen(false)} />
+          </aside>
         )}
       </div>
 

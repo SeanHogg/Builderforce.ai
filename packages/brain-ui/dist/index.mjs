@@ -729,6 +729,9 @@ var DEFAULT_CHAT_TICKETS_LABELS = {
   kindLabel: "Ticket type",
   pickTicket: "Choose a ticket\u2026",
   searchTicket: "Search tickets\u2026",
+  searching: "Searching\u2026",
+  noMatches: "No matching tickets.",
+  refine: "Showing the top matches \u2014 type to narrow.",
   linkTypeLabel: "Link type",
   linkTypeLinked: "Linked",
   linkTypeCreated: "Created from chat",
@@ -751,7 +754,6 @@ var DEFAULT_CHAT_TICKETS_LABELS = {
   mergeNoOthers: "No other chats to merge.",
   kind: { task: "Task", epic: "Epic", gap: "Gap", objective: "Objective", initiative: "Initiative", portfolio: "Portfolio", roadmap: "Roadmap", spec: "Spec" },
   ringAria: (label, pct) => `${label}: ${pct}% done`,
-  moreResults: (n) => `+${n} more \u2014 refine your search`,
   runStarted: (agent) => `Started ${agent} on the ticket.`,
   mergeAction: (n) => `Merge ${n} here`,
   mergedN: (n) => `Merged ${n} chat(s).`
@@ -765,7 +767,6 @@ function ChatTicketsPanelInner({ chatId, projectId, chatList, adapter, labels, o
   const [agents, setAgents] = useState4([]);
   const [members, setMembers] = useState4([]);
   const [pool, setPool] = useState4([]);
-  const [options, setOptions] = useState4(null);
   const [panel, setPanel] = useState4(null);
   const [lineageKey, setLineageKey] = useState4(null);
   const [lineage, setLineage] = useState4([]);
@@ -788,9 +789,6 @@ function ChatTicketsPanelInner({ chatId, projectId, chatList, adapter, labels, o
   useEffect2(() => {
     adapter.loadAgentPool().then(setPool).catch(() => setPool([]));
   }, [adapter]);
-  useEffect2(() => {
-    adapter.loadTicketOptions(projectId).then(setOptions).catch(() => setOptions(null));
-  }, [adapter, projectId]);
   const flash = (m) => {
     setMsg(m);
     if (typeof window !== "undefined") window.setTimeout(() => setMsg(null), 3500);
@@ -891,7 +889,7 @@ function ChatTicketsPanelInner({ chatId, projectId, chatList, adapter, labels, o
       ] }),
       msg && /* @__PURE__ */ jsx6("span", { style: { fontSize: 12, color: V.accent, alignSelf: "center" }, children: msg })
     ] }),
-    panel === "link" && /* @__PURE__ */ jsx6(LinkForm, { options, existing: tickets, labels, onLink: async (kind, ref, linkType) => {
+    panel === "link" && /* @__PURE__ */ jsx6(LinkForm, { search: adapter.searchTickets, projectId, existing: tickets, labels, onLink: async (kind, ref, linkType) => {
       try {
         await adapter.linkTicket(chatId, { kind, ref, linkType });
         await load();
@@ -983,27 +981,40 @@ function ChatTicketsPanelInner({ chatId, projectId, chatList, adapter, labels, o
     )
   ] });
 }
-var TICKET_OPTION_CAP = 200;
-function LinkForm({ options, existing, labels, onLink }) {
+var SEARCH_LIMIT = 40;
+function LinkForm({ search, projectId, existing, labels, onLink }) {
   const [kind, setKind] = useState4("task");
   const [ref, setRef] = useState4("");
   const [query, setQuery] = useState4("");
   const [linkType, setLinkType] = useState4("linked");
   const [busy, setBusy] = useState4(false);
-  const forKind = useMemo4(() => {
-    const all = options?.[kind] ?? [];
-    return all.filter((o) => !existing.some((e) => e.kind === kind && e.ref === o.ref));
-  }, [options, kind, existing]);
-  const filtered = useMemo4(() => {
-    const q = query.trim().toLowerCase();
-    if (!q) return forKind;
-    return forKind.filter((o) => o.label.toLowerCase().includes(q));
-  }, [forKind, query]);
-  const shown = filtered.slice(0, TICKET_OPTION_CAP);
-  const overflow = filtered.length - shown.length;
+  const [results, setResults] = useState4([]);
+  const [loading, setLoading] = useState4(false);
   useEffect2(() => {
-    if (ref && !filtered.some((o) => o.ref === ref)) setRef("");
-  }, [filtered, ref]);
+    let live = true;
+    setLoading(true);
+    const h = setTimeout(() => {
+      search(kind, query, projectId).then((r) => {
+        if (live) setResults(r);
+      }).catch(() => {
+        if (live) setResults([]);
+      }).finally(() => {
+        if (live) setLoading(false);
+      });
+    }, 250);
+    return () => {
+      live = false;
+      clearTimeout(h);
+    };
+  }, [search, kind, query, projectId]);
+  const shown = useMemo4(
+    () => results.filter((o) => !existing.some((e) => e.kind === kind && e.ref === o.ref)),
+    [results, existing, kind]
+  );
+  const atCap = results.length >= SEARCH_LIMIT;
+  useEffect2(() => {
+    if (ref && !shown.some((o) => o.ref === ref)) setRef("");
+  }, [shown, ref]);
   const submit = async () => {
     if (!ref) return;
     setBusy(true);
@@ -1036,7 +1047,7 @@ function LinkForm({ options, existing, labels, onLink }) {
       /* @__PURE__ */ jsx6("option", { value: "", children: labels.pickTicket }),
       shown.map((o) => /* @__PURE__ */ jsx6("option", { value: o.ref, children: o.label }, o.ref))
     ] }),
-    overflow > 0 && /* @__PURE__ */ jsx6("span", { style: S.muted, children: labels.moreResults(overflow) }),
+    loading ? /* @__PURE__ */ jsx6("span", { style: S.muted, children: labels.searching }) : shown.length === 0 ? /* @__PURE__ */ jsx6("span", { style: S.muted, children: labels.noMatches }) : atCap ? /* @__PURE__ */ jsx6("span", { style: S.muted, children: labels.refine }) : null,
     /* @__PURE__ */ jsxs6("select", { "aria-label": labels.linkTypeLabel, value: linkType, onChange: (e) => setLinkType(e.target.value), style: S.select, children: [
       /* @__PURE__ */ jsx6("option", { value: "linked", children: labels.linkTypeLinked }),
       /* @__PURE__ */ jsx6("option", { value: "created", children: labels.linkTypeCreated })
@@ -2123,7 +2134,7 @@ function MemberRow({ member, labels, onAction }) {
     idle: labels.status_idle,
     available: labels.status_available
   }[member.status];
-  const task = member.taskId != null ? { id: member.taskId, key: member.taskKey, title: member.taskTitle ?? "" } : void 0;
+  const task = member.taskId != null ? { id: member.taskId, key: member.taskKey, title: member.taskTitle ?? "", taskType: member.taskType } : void 0;
   return /* @__PURE__ */ jsxs10("li", { className: "bf-360-person", children: [
     /* @__PURE__ */ jsx10("span", { className: `bf-360-dot bf-360-dot--${member.status}`, title: statusLabel, "aria-label": statusLabel }),
     /* @__PURE__ */ jsxs10("div", { className: "bf-360-person__body", children: [

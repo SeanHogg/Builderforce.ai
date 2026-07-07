@@ -24,6 +24,8 @@ import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import type { RuntimeService } from '../../application/runtime/RuntimeService';
 import { compile, type LlmComplete, type Need } from '../../application/compile';
+import type { RecallKnowledge } from '../../application/compile';
+import { recallSops } from '../../application/knowledge/recallSops';
 import { deploy, DEPLOY_SURFACES } from '../../application/deploy';
 import { deployAndDispatch, type CloudRunDispatcher } from '../../application/deploy/dispatch';
 import { dispatchCloudRunForTask } from './runtimeRoutes';
@@ -47,6 +49,12 @@ function gatewayExtractor(env: HonoEnv['Bindings']): LlmComplete {
     const content = raw?.choices?.[0]?.message?.content;
     return typeof content === 'string' ? content : '';
   };
+}
+
+/** A tenant-scoped {@link RecallKnowledge} that grounds the diagnostic adapter in
+ *  the tenant's own published SOPs/processes. */
+function knowledgeRecaller(db: Db, tenantId: number): RecallKnowledge {
+  return (query, topK) => recallSops(db, tenantId, query, topK);
 }
 
 function isModality(m: unknown): m is Need['modality'] {
@@ -83,7 +91,10 @@ export function createCompileRoutes(db: Db, runtimeService: RuntimeService): Hon
 
     let spec;
     try {
-      spec = await compile(needs, { llm: gatewayExtractor(c.env) });
+      spec = await compile(needs, {
+        llm: gatewayExtractor(c.env),
+        recallKnowledge: knowledgeRecaller(db, c.get('tenantId') as number),
+      });
     } catch (err) {
       return c.json({ error: err instanceof Error ? err.message : 'compile failed' }, 502);
     }
@@ -123,14 +134,17 @@ export function createCompileRoutes(db: Db, runtimeService: RuntimeService): Hon
     const needs = readNeeds(body);
     if ('error' in needs) return c.json(needs, 400);
 
+    const tenantId = c.get('tenantId') as number;
+
     let spec;
     try {
-      spec = await compile(needs, { llm: gatewayExtractor(c.env) });
+      spec = await compile(needs, {
+        llm: gatewayExtractor(c.env),
+        recallKnowledge: knowledgeRecaller(db, tenantId),
+      });
     } catch (err) {
       return c.json({ error: err instanceof Error ? err.message : 'compile failed' }, 502);
     }
-
-    const tenantId = c.get('tenantId') as number;
 
     // A step-bearing spec (a process chart / a diagnostic's improvement flow) is a
     // RUNNABLE workflow — instantiate it for real on the workflow surface, rather than

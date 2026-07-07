@@ -6,11 +6,13 @@ import { adminApi } from '@/lib/adminApi';
 import { fmtDateTime, useAdminData, AdminError, AdminLoading } from '@/components/admin/adminShared';
 import { LegalDocPreview } from '@/components/admin/LegalDocPreview';
 import { LegalEditorDrawer, type LegalEditorContext } from '@/components/admin/LegalEditorDrawer';
+import { LegalHistoryDrawer, type LegalHistoryContext } from '@/components/admin/LegalHistoryDrawer';
 
 export default function LegalPanel() {
   const t = useTranslations('admin');
   const { data: legalCurrent, loading, error, reload } = useAdminData(() => adminApi.legalCurrent(), []);
   const [legalEditor, setLegalEditor] = useState<LegalEditorContext | null>(null);
+  const [legalHistory, setLegalHistory] = useState<LegalHistoryContext | null>(null);
 
   const openLegalEditor = (docType: 'terms' | 'privacy', mode: 'edit' | 'new') => {
     setLegalEditor({ docType, mode, current: legalCurrent ? legalCurrent[docType] : null });
@@ -34,12 +36,15 @@ export default function LegalPanel() {
                   <div className="text-muted" style={{ fontSize: 11 }}>
                     {t('legal.published', { date: doc.publishedAt ? fmtDateTime(doc.publishedAt) : '—' })}
                   </div>
-                  <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+                  <div style={{ display: 'flex', gap: 8, marginTop: 8, flexWrap: 'wrap' }}>
                     <button type="button" className="btn-ghost" onClick={() => openLegalEditor(dt, 'edit')}>
                       ✎ {t('common.edit')}
                     </button>
                     <button type="button" className="admin-tab active" onClick={() => openLegalEditor(dt, 'new')}>
                       + {t('legal.newVersion')}
+                    </button>
+                    <button type="button" className="btn-ghost" onClick={() => setLegalHistory({ docType: dt })}>
+                      🕑 {t('legal.history.button')}
                     </button>
                   </div>
                 </div>
@@ -65,6 +70,11 @@ export default function LegalPanel() {
         context={legalEditor}
         onClose={() => setLegalEditor(null)}
         onPublished={reload}
+      />
+      {/* Version-history slide-out */}
+      <LegalHistoryDrawer
+        context={legalHistory}
+        onClose={() => setLegalHistory(null)}
       />
     </div>
   );

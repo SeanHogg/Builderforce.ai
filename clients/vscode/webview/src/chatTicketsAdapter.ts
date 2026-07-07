@@ -6,16 +6,12 @@
  * panel calls — one unified surface, two hosts.
  */
 import type {
-  ChatTicketsAdapter, TicketKind, TicketOptionVM, TicketLinkVM, AgentOptionVM,
+  ChatTicketsAdapter, TicketOptionVM, TicketLinkVM, AgentOptionVM,
 } from '@seanhogg/builderforce-brain-ui';
 import { authedFetch } from './authedFetch';
 
 interface WorkforceAgent { id: string | number; name: string; title?: string; base_model?: string }
 interface RegisteredAgent { id: string | number; name: string; type: string; isActive: boolean }
-interface TaskRow { id: number; key: string; title: string; taskType: 'task' | 'epic' | 'gap' }
-interface StrategyRow { id: string; title?: string; name?: string }
-interface RoadmapRow { id: string; title?: string }
-interface SpecRow { id: string; goal?: string }
 
 export function createChatTicketsAdapter(
   baseUrl: string,
@@ -74,31 +70,13 @@ export function createChatTicketsAdapter(
       if (!poolPromise) poolPromise = fetchAgentPool().catch((e) => { poolPromise = null; throw e; });
       return poolPromise;
     },
-    loadTicketOptions: async (projectId): Promise<Record<TicketKind, TicketOptionVM[]>> => {
-      const q = projectId != null ? `?project_id=${projectId}` : '';
-      const [tasks, objectives, initiatives, portfolios, roadmap, specs] = await Promise.all([
-        req<{ tasks: TaskRow[] }>(`/api/tasks${q}`).then((r) => r.tasks ?? []).catch(() => [] as TaskRow[]),
-        req<StrategyRow[]>('/api/pmo/objectives').catch(() => [] as StrategyRow[]),
-        req<StrategyRow[]>('/api/pmo/initiatives').catch(() => [] as StrategyRow[]),
-        req<StrategyRow[]>('/api/pmo/portfolios').catch(() => [] as StrategyRow[]),
-        req<RoadmapRow[]>(`/api/product/roadmap${projectId != null ? `?project=${projectId}` : ''}`).catch(() => [] as RoadmapRow[]),
-        req<{ specs: SpecRow[] }>(`/api/specs${projectId != null ? `?projectId=${projectId}` : ''}`).then((r) => r.specs ?? []).catch(() => [] as SpecRow[]),
-      ]);
-      const task: TicketOptionVM[] = [];
-      const epic: TicketOptionVM[] = [];
-      const gap: TicketOptionVM[] = [];
-      for (const tk of tasks) {
-        const bucket = tk.taskType === 'epic' ? epic : tk.taskType === 'gap' ? gap : task;
-        bucket.push({ ref: String(tk.id), label: `${tk.key} — ${tk.title}` });
-      }
-      return {
-        task, epic, gap,
-        objective: objectives.map((o) => ({ ref: o.id, label: o.title ?? o.id })),
-        initiative: initiatives.map((i) => ({ ref: i.id, label: i.name ?? i.id })),
-        portfolio: portfolios.map((p) => ({ ref: p.id, label: p.name ?? p.id })),
-        roadmap: roadmap.map((r) => ({ ref: r.id, label: r.title ?? r.id })),
-        spec: specs.map((s) => ({ ref: s.id, label: s.goal ?? s.id })),
-      };
+    // Server-side typeahead per tier (the shared LinkForm debounces). Replaces the
+    // old fan-out that fetched EVERY task/objective/initiative/portfolio/roadmap/spec.
+    searchTickets: async (kind, query, projectId): Promise<TicketOptionVM[]> => {
+      const qs = new URLSearchParams({ kind, q: query });
+      if (projectId != null) qs.set('project_id', String(projectId));
+      const r = await req<{ results: TicketOptionVM[] }>(`/api/brain/tickets/search?${qs.toString()}`).catch(() => ({ results: [] as TicketOptionVM[] }));
+      return r.results ?? [];
     },
     runTicket: async (_kind, ref, agentRef) => {
       const id = Number(ref);
