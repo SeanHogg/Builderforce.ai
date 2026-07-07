@@ -13,6 +13,7 @@ import { useAuth } from '@/lib/AuthContext';
 import { listMyAgents, listPurchasedAgents } from '@/lib/api';
 import { listTenantMembers } from '@/lib/auth';
 import { listEngagements } from '@/lib/freelancerApi';
+import { kanbanApi } from '@/lib/builderforceApi';
 import type { AssigneeKind } from '@/lib/kanban';
 
 export interface AssigneeCandidate { ref: string; name: string }
@@ -38,6 +39,17 @@ export function useAssignableWorkforce(enabled = true): AssignableWorkforce {
   const load = useCallback(async () => {
     setLoading(true);
     try {
+      // Prefer the ONE cached server-side union (agents incl. marketplace-hired,
+      // members, active hires). Fall back to the legacy client fan-out only if the
+      // endpoint is unavailable, so the picker never breaks on an older backend.
+      try {
+        const w = await kanbanApi.assignable();
+        setAgents(w.agents);
+        setHumans(w.humans);
+        setHires(w.hires);
+        return;
+      } catch { /* fall through to the client fan-out */ }
+
       const [mine, purchased] = await Promise.all([
         listMyAgents().catch(() => []),
         listPurchasedAgents().catch(() => []),

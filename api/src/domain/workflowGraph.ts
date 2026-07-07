@@ -23,7 +23,7 @@ export type WorkflowNodeKind =
   | 'mcp'        // invoke an MCP-server / SaaS integration tool
   | 'memory'     // read/write the SSM hippocampus memory
   | 'knowledge'  // ingest into / query a knowledge base
-  | 'train'      // kick a MambaKit/SSMjs training run → hippocampus model
+  | 'train'      // train an Evermind model (builderforce-memory engine) → hippocampus model
   | 'transform'  // ETL: map/shape the payload
   | 'filter'     // ETL: drop the payload unless a predicate holds
   | 'branch'     // ETL: conditional fan-out

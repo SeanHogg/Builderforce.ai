@@ -23,8 +23,8 @@ composing your own workflows from a node palette:
 
 - **Trigger** — manual, webhook, schedule, or board-event entry point
 - **LLM-logic nodes** — **Memory** (recall / write the SSM hippocampus),
-  **Knowledge Base** (query / ingest), and **Train** (kick a MambaKit/SSMjs
-  training run)
+  **Knowledge Base** (query / ingest), and **Train** (train an Evermind model
+  via the builderforce-memory engine)
 - **Agent Run** — run one of your agents (role + runtime + model)
 - **ETL** — transform, filter, branch
 - **Output** — write artifact, open a PR, notify, or push to a board

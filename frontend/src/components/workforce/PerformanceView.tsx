@@ -2,6 +2,7 @@
 
 import { useTranslations } from 'next-intl';
 import { WorkforceMetricsContent } from './WorkforceMetricsContent';
+import { EmpMetricsView } from './EmpMetricsView';
 import { ContributorsView } from '@/components/contributors/ContributorsView';
 import { AuditTrailPanel } from '@/components/contributors/AuditTrailPanel';
 
@@ -19,6 +20,11 @@ export function PerformanceView() {
     <div style={{ display: 'flex', flexDirection: 'column', gap: 32 }}>
       <section>
         <WorkforceMetricsContent />
+      </section>
+
+      {/* Extended member / EMP metrics lenses (EMP-12..19). */}
+      <section>
+        <EmpMetricsView />
       </section>
 
       <section>

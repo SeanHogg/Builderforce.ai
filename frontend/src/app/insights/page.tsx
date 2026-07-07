@@ -20,7 +20,7 @@ import { useAuth } from '@/lib/AuthContext';
 import PageContainer from '@/components/PageContainer';
 import { RoleGate } from '@/components/RoleGate';
 import { DaysWindowSelect } from '@/components/insights/LensShell';
-import { WidgetGrid } from '@/components/widgets/WidgetGrid';
+import { ReorderableWidgetGrid } from '@/components/widgets/ReorderableWidgetGrid';
 import { WidgetCard } from '@/components/widgets/WidgetCard';
 import { AddWidgetPicker } from '@/components/widgets/AddWidgetPicker';
 import { usePins } from '@/lib/widgets/PinsProvider';
@@ -219,7 +219,7 @@ export default function InsightsHomePage() {
             {!pinsLoading && <button type="button" style={primaryBtn} onClick={() => setPicker(true)}>＋ {t('home.addWidgets')}</button>}
           </div>
         ) : (
-          <WidgetGrid ids={pinned} days={days} />
+          <ReorderableWidgetGrid ids={pinned} days={days} />
         )
       )}
 

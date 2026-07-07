@@ -55,6 +55,32 @@ export interface FreelancerStats {
   proposalsActive: number;   // open bids (submitted | shortlisted)
   earnedToDateCents: number; // lifetime paid earnings
   currency: string;
+  // Reputation (two-way reviews / JSS / badges — 0299):
+  avgReceivedRating: number | null; // AVG of employer→freelancer ratings, or null
+  reviewCount: number;              // number of received reviews
+  jss: number | null;               // Job Success Score 0..100, null until 2+ reviews
+  badge: 'top_rated' | 'rising_talent' | null; // derived trust badge
+}
+
+/** Derive a Job Success Score (0..100) + trust badge from the freelancer's received
+ *  reviews, re-hire signals and client loyalty. Explainable blend: rating dominates,
+ *  with an explicit "would work again" signal and repeat-client loyalty. Returns a
+ *  null JSS until there are 2+ reviews (not enough signal to score honestly). */
+export function deriveReputation(input: {
+  avgRating: number | null; reviewCount: number; againCount: number;
+  distinctClients: number; repeatClients: number; projectsAwarded: number; activitySignals: number; earnedCents: number;
+}): { jss: number | null; badge: 'top_rated' | 'rising_talent' | null } {
+  let jss: number | null = null;
+  if (input.reviewCount >= 2 && input.avgRating != null) {
+    const ratingC = input.avgRating / 5;
+    const againC = input.reviewCount > 0 ? input.againCount / input.reviewCount : 0;
+    const repeatC = input.distinctClients > 0 ? input.repeatClients / input.distinctClients : 0;
+    jss = Math.round(100 * (0.65 * ratingC + 0.20 * againC + 0.15 * repeatC));
+  }
+  let badge: 'top_rated' | 'rising_talent' | null = null;
+  if (jss != null && jss >= 90 && input.reviewCount >= 3 && input.earnedCents > 0) badge = 'top_rated';
+  else if ((jss != null && jss >= 80 && input.reviewCount >= 1) || (input.reviewCount < 2 && input.projectsAwarded >= 1 && input.activitySignals >= 20)) badge = 'rising_talent';
+  return { jss, badge };
 }
 
 /** Compute (and cache) a freelancer's stat block in ONE DB round-trip. Shared by the
@@ -82,8 +108,27 @@ async function computeFreelancerStats(env: HonoEnv['Bindings'], userId: string, 
            WHERE s.user_id = ${userId} AND s.occurred_at >= now() - interval '90 days')::int AS active_days,
         (SELECT COUNT(*) FROM activity_signals s
            WHERE s.user_id = ${userId} AND s.occurred_at >= now() - interval '90 days'
-             AND (s.source IN ('vscode', 'agent') OR s.kind IN ('agent_run', 'agent_message', 'tool_exec')))::int AS ai_actions
+             AND (s.source IN ('vscode', 'agent') OR s.kind IN ('agent_run', 'agent_message', 'tool_exec')))::int AS ai_actions,
+        -- Reputation inputs (received reviews only — direction-scoped so the reverse
+        -- freelancer→employer rows never inflate the freelancer's own score).
+        (SELECT ROUND(AVG(rating)::numeric, 2) FROM freelancer_reviews rv
+           WHERE rv.freelancer_user_id = ${userId} AND rv.direction = 'employer_to_freelancer') AS avg_rating,
+        (SELECT COUNT(*) FROM freelancer_reviews rv
+           WHERE rv.freelancer_user_id = ${userId} AND rv.direction = 'employer_to_freelancer')::int AS review_count,
+        (SELECT COUNT(*) FROM freelancer_reviews rv
+           WHERE rv.freelancer_user_id = ${userId} AND rv.direction = 'employer_to_freelancer' AND rv.would_work_again = true)::int AS again_count,
+        (SELECT COUNT(DISTINCT e.tenant_id) FROM freelancer_engagements e
+           WHERE e.freelancer_user_id = ${userId} AND e.hired_at IS NOT NULL)::int AS distinct_clients,
+        (SELECT COUNT(*) FROM (SELECT e.tenant_id FROM freelancer_engagements e
+           WHERE e.freelancer_user_id = ${userId} AND e.hired_at IS NOT NULL GROUP BY e.tenant_id HAVING COUNT(*) > 1) x)::int AS repeat_clients
     `;
+    const avgRating = r?.avg_rating == null ? null : Number(r.avg_rating);
+    const earnedCents = Number(r?.earned_cents ?? 0);
+    const { jss, badge } = deriveReputation({
+      avgRating, reviewCount: Number(r?.review_count ?? 0), againCount: Number(r?.again_count ?? 0),
+      distinctClients: Number(r?.distinct_clients ?? 0), repeatClients: Number(r?.repeat_clients ?? 0),
+      projectsAwarded: Number(r?.awarded ?? 0), activitySignals: Number(r?.activity_signals ?? 0), earnedCents,
+    });
     return {
       aiActions: Number(r?.ai_actions ?? 0),
       activitySignals: Number(r?.activity_signals ?? 0),
@@ -91,8 +136,12 @@ async function computeFreelancerStats(env: HonoEnv['Bindings'], userId: string, 
       projectsAwarded: Number(r?.awarded ?? 0),
       activeEngagements: Number(r?.active_eng ?? 0),
       proposalsActive: Number(r?.proposals_active ?? 0),
-      earnedToDateCents: Number(r?.earned_cents ?? 0),
+      earnedToDateCents: earnedCents,
       currency: (r?.earned_currency as string) ?? fallbackCurrency,
+      avgReceivedRating: avgRating,
+      reviewCount: Number(r?.review_count ?? 0),
+      jss,
+      badge,
     };
   }, { kvTtlSeconds: STATS_TTL });
 }
@@ -219,6 +268,18 @@ function mapPublicProfile(row: Record<string, unknown>): Record<string, unknown>
     hasResume: Boolean(row.hired_video_user_id) || Boolean(row.resume_key),
     rating: row.avg_rating == null ? null : Number(row.avg_rating),
     ratingCount: row.rating_count == null ? 0 : Number(row.rating_count),
+    // Trust badge/JSS for the browse card — derived from the row's reputation inputs
+    // when the list query supplied them (the SAME deriveReputation the detail uses, so
+    // the badge never disagrees across surfaces). Absent on rows without the inputs.
+    ...(row.again_count === undefined ? {} : (() => {
+      const { jss, badge } = deriveReputation({
+        avgRating: row.avg_rating == null ? null : Number(row.avg_rating),
+        reviewCount: Number(row.rating_count ?? 0), againCount: Number(row.again_count ?? 0),
+        distinctClients: Number(row.distinct_clients ?? 0), repeatClients: Number(row.repeat_clients ?? 0),
+        projectsAwarded: Number(row.awarded ?? 0), activitySignals: Number(row.activity_signals ?? 0), earnedCents: Number(row.earned_cents ?? 0),
+      });
+      return { jss, badge };
+    })()),
     updatedAt: row.updated_at ?? null,
   };
 }
@@ -596,8 +657,15 @@ export function createFreelancerRoutes(): Hono<HonoEnv> {
     const publicRows = await getOrSetCached(c.env as Env, FREELANCER_PUBLIC_LIST_CACHE_KEY, () =>
       sql(c.env)`
         SELECT p.*, u.display_name, u.avatar_url,
-          (SELECT ROUND(AVG(rating)::numeric, 2) FROM freelancer_reviews r WHERE r.freelancer_user_id = p.user_id) AS avg_rating,
-          (SELECT COUNT(*) FROM freelancer_reviews r WHERE r.freelancer_user_id = p.user_id)::int AS rating_count
+          (SELECT ROUND(AVG(rating)::numeric, 2) FROM freelancer_reviews r WHERE r.freelancer_user_id = p.user_id AND r.direction = 'employer_to_freelancer') AS avg_rating,
+          (SELECT COUNT(*) FROM freelancer_reviews r WHERE r.freelancer_user_id = p.user_id AND r.direction = 'employer_to_freelancer')::int AS rating_count,
+          -- Reputation inputs for the derived browse-card badge (run once per cache fill).
+          (SELECT COUNT(*) FROM freelancer_reviews r WHERE r.freelancer_user_id = p.user_id AND r.direction = 'employer_to_freelancer' AND r.would_work_again = true)::int AS again_count,
+          (SELECT COUNT(DISTINCT e.tenant_id) FROM freelancer_engagements e WHERE e.freelancer_user_id = p.user_id AND e.hired_at IS NOT NULL)::int AS distinct_clients,
+          (SELECT COUNT(*) FROM (SELECT e.tenant_id FROM freelancer_engagements e WHERE e.freelancer_user_id = p.user_id AND e.hired_at IS NOT NULL GROUP BY e.tenant_id HAVING COUNT(*) > 1) x)::int AS repeat_clients,
+          (SELECT COUNT(*) FROM freelancer_engagements e WHERE e.freelancer_user_id = p.user_id AND e.hired_at IS NOT NULL)::int AS awarded,
+          (SELECT COUNT(*) FROM activity_signals s WHERE s.user_id = p.user_id AND s.occurred_at >= now() - interval '90 days')::int AS activity_signals,
+          (SELECT COALESCE(SUM(amount_cents), 0) FROM freelancer_invoices i WHERE i.freelancer_user_id = p.user_id AND i.status = 'paid')::bigint AS earned_cents
         FROM freelancer_profiles p JOIN users u ON u.id = p.user_id
         WHERE p.published = true AND p.visibility = 'public'
         ORDER BY p.updated_at DESC LIMIT 200
@@ -607,8 +675,15 @@ export function createFreelancerRoutes(): Hono<HonoEnv> {
     if (viewer) {
       const privateRows = await sql(c.env)`
         SELECT p.*, u.display_name, u.avatar_url,
-          (SELECT ROUND(AVG(rating)::numeric, 2) FROM freelancer_reviews r WHERE r.freelancer_user_id = p.user_id) AS avg_rating,
-          (SELECT COUNT(*) FROM freelancer_reviews r WHERE r.freelancer_user_id = p.user_id)::int AS rating_count
+          (SELECT ROUND(AVG(rating)::numeric, 2) FROM freelancer_reviews r WHERE r.freelancer_user_id = p.user_id AND r.direction = 'employer_to_freelancer') AS avg_rating,
+          (SELECT COUNT(*) FROM freelancer_reviews r WHERE r.freelancer_user_id = p.user_id AND r.direction = 'employer_to_freelancer')::int AS rating_count,
+          -- Reputation inputs for the derived browse-card badge (run once per cache fill).
+          (SELECT COUNT(*) FROM freelancer_reviews r WHERE r.freelancer_user_id = p.user_id AND r.direction = 'employer_to_freelancer' AND r.would_work_again = true)::int AS again_count,
+          (SELECT COUNT(DISTINCT e.tenant_id) FROM freelancer_engagements e WHERE e.freelancer_user_id = p.user_id AND e.hired_at IS NOT NULL)::int AS distinct_clients,
+          (SELECT COUNT(*) FROM (SELECT e.tenant_id FROM freelancer_engagements e WHERE e.freelancer_user_id = p.user_id AND e.hired_at IS NOT NULL GROUP BY e.tenant_id HAVING COUNT(*) > 1) x)::int AS repeat_clients,
+          (SELECT COUNT(*) FROM freelancer_engagements e WHERE e.freelancer_user_id = p.user_id AND e.hired_at IS NOT NULL)::int AS awarded,
+          (SELECT COUNT(*) FROM activity_signals s WHERE s.user_id = p.user_id AND s.occurred_at >= now() - interval '90 days')::int AS activity_signals,
+          (SELECT COALESCE(SUM(amount_cents), 0) FROM freelancer_invoices i WHERE i.freelancer_user_id = p.user_id AND i.status = 'paid')::bigint AS earned_cents
         FROM freelancer_profiles p JOIN users u ON u.id = p.user_id
         WHERE p.published = true AND p.visibility = 'private'
         ORDER BY p.updated_at DESC LIMIT 200
@@ -643,8 +718,8 @@ export function createFreelancerRoutes(): Hono<HonoEnv> {
     const viewer = await optionalUserId(c);
     const [row] = await sql(c.env)`
       SELECT p.*, u.display_name, u.avatar_url,
-        (SELECT ROUND(AVG(rating)::numeric, 2) FROM freelancer_reviews r WHERE r.freelancer_user_id = p.user_id) AS avg_rating,
-        (SELECT COUNT(*) FROM freelancer_reviews r WHERE r.freelancer_user_id = p.user_id)::int AS rating_count
+        (SELECT ROUND(AVG(rating)::numeric, 2) FROM freelancer_reviews r WHERE r.freelancer_user_id = p.user_id AND r.direction = 'employer_to_freelancer') AS avg_rating,
+        (SELECT COUNT(*) FROM freelancer_reviews r WHERE r.freelancer_user_id = p.user_id AND r.direction = 'employer_to_freelancer')::int AS rating_count
       FROM freelancer_profiles p JOIN users u ON u.id = p.user_id
       WHERE (p.user_id = ${id} OR lower(p.slug) = ${id.toLowerCase()}) AND p.published = true
     `;
@@ -662,7 +737,8 @@ export function createFreelancerRoutes(): Hono<HonoEnv> {
     const reviews = await sql(c.env)`
       SELECT rv.rating, rv.comment, rv.created_at, ru.display_name AS reviewer_name
       FROM freelancer_reviews rv LEFT JOIN users ru ON ru.id = rv.reviewer_user_id
-      WHERE rv.freelancer_user_id = ${uid} ORDER BY rv.created_at DESC LIMIT 20
+      WHERE rv.freelancer_user_id = ${uid} AND rv.direction = 'employer_to_freelancer'
+      ORDER BY rv.created_at DESC LIMIT 20
     ` as unknown as Record<string, unknown>[];
     const stats = await computeFreelancerStats(c.env, uid, (row.currency as string) ?? 'USD');
     return c.json({
@@ -869,27 +945,58 @@ export function createEngagementRoutes(db: Db): Hono<HonoEnv> {
     return c.json({ ok: true, status: target });
   });
 
-  // POST /:id/review — EMPLOYER (tenant JWT) rates the freelancer for this
-  // engagement (1..5 + comment). One review per engagement; updates reputation.
+  // POST /:id/review — EMPLOYER (tenant JWT) rates the freelancer for this engagement
+  // (1..5 + comment + optional "would work again"). One review per engagement PER
+  // DIRECTION; feeds the freelancer's rating + Job Success Score.
   router.post('/:id/review', authMiddleware, async (c) => {
     const tenantId = c.get('tenantId') as number;
     const actor = c.get('userId') as string;
     const id = c.req.param('id');
-    const b = await c.req.json<{ rating?: number; comment?: string }>();
+    const b = await c.req.json<{ rating?: number; comment?: string; wouldWorkAgain?: boolean }>();
     const rating = Math.max(1, Math.min(5, Math.round(Number(b.rating))));
     if (!Number.isFinite(rating)) return c.json({ error: 'rating 1..5 required' }, 400);
     const [eng] = await sql(c.env)`
       SELECT id, freelancer_user_id FROM freelancer_engagements WHERE id = ${id} AND tenant_id = ${tenantId}
     `;
     if (!eng) return c.json({ error: 'Engagement not found' }, 404);
+    const wouldWorkAgain = typeof b.wouldWorkAgain === 'boolean' ? b.wouldWorkAgain : null;
     await sql(c.env)`
-      INSERT INTO freelancer_reviews (id, engagement_id, tenant_id, freelancer_user_id, reviewer_user_id, rating, comment)
-      VALUES (${crypto.randomUUID()}, ${id}, ${tenantId}, ${eng.freelancer_user_id}, ${actor}, ${rating}, ${b.comment ?? null})
-      ON CONFLICT (engagement_id) DO UPDATE SET rating = EXCLUDED.rating, comment = EXCLUDED.comment, updated_at = NOW()
+      INSERT INTO freelancer_reviews (id, engagement_id, tenant_id, freelancer_user_id, reviewer_user_id, rating, comment, direction, would_work_again)
+      VALUES (${crypto.randomUUID()}, ${id}, ${tenantId}, ${eng.freelancer_user_id}, ${actor}, ${rating}, ${b.comment ?? null}, 'employer_to_freelancer', ${wouldWorkAgain})
+      ON CONFLICT (engagement_id, direction) DO UPDATE SET rating = EXCLUDED.rating, comment = EXCLUDED.comment, would_work_again = EXCLUDED.would_work_again, updated_at = NOW()
     `;
-    // Rating shows on the (cached) public list — invalidate it.
+    // Rating + JSS show on the (cached) public list and the freelancer's stat block.
     await invalidateCached(c.env as Env, FREELANCER_PUBLIC_LIST_CACHE_KEY);
+    await invalidateCached(c.env as Env, freelancerStatsCacheKey(eng.freelancer_user_id as string));
     await notify(sql(c.env), c.env, { userId: eng.freelancer_user_id as string, tenantId, kind: 'review', title: `You received a ${rating}★ review`, body: b.comment ?? null, ref: id });
+    return c.json({ ok: true, rating });
+  });
+
+  // POST /:id/review-client — FREELANCER (web JWT) rates the CLIENT for this
+  // engagement (the reverse direction). Builds the client's two-way reputation shown
+  // on job postings so other freelancers can vet who they bid with.
+  router.post('/:id/review-client', webAuthMiddleware, async (c) => {
+    const userId = c.get('userId') as string;
+    const id = c.req.param('id');
+    const b = await c.req.json<{ rating?: number; comment?: string; wouldWorkAgain?: boolean }>();
+    const rating = Math.max(1, Math.min(5, Math.round(Number(b.rating))));
+    if (!Number.isFinite(rating)) return c.json({ error: 'rating 1..5 required' }, 400);
+    const [eng] = await sql(c.env)`
+      SELECT id, tenant_id, created_by_user_id FROM freelancer_engagements
+      WHERE id = ${id} AND freelancer_user_id = ${userId} AND hired_at IS NOT NULL
+    `;
+    if (!eng) return c.json({ error: 'Engagement not found' }, 404);
+    const wouldWorkAgain = typeof b.wouldWorkAgain === 'boolean' ? b.wouldWorkAgain : null;
+    await sql(c.env)`
+      INSERT INTO freelancer_reviews (id, engagement_id, tenant_id, freelancer_user_id, reviewer_user_id, rating, comment, direction, would_work_again)
+      VALUES (${crypto.randomUUID()}, ${id}, ${Number(eng.tenant_id)}, ${userId}, ${userId}, ${rating}, ${b.comment ?? null}, 'freelancer_to_employer', ${wouldWorkAgain})
+      ON CONFLICT (engagement_id, direction) DO UPDATE SET rating = EXCLUDED.rating, comment = EXCLUDED.comment, would_work_again = EXCLUDED.would_work_again, updated_at = NOW()
+    `;
+    // Client rating rides the (cached) open-jobs list — bust it so it reflects promptly.
+    await invalidateCached(c.env as Env, 'jobs:public:open');
+    if (eng.created_by_user_id) {
+      await notify(sql(c.env), c.env, { userId: eng.created_by_user_id as string, tenantId: Number(eng.tenant_id), kind: 'review', title: `A freelancer left you a ${rating}★ review`, body: b.comment ?? null, ref: id });
+    }
     return c.json({ ok: true, rating });
   });
 

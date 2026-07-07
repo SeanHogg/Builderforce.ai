@@ -10,6 +10,7 @@
 import { useEffect, useState, useCallback, useMemo } from 'react';
 import { useTranslations } from 'next-intl';
 import NotificationsPanel from '@/components/freelance/NotificationsPanel';
+import { MessagesButton } from '@/components/freelance/MessagesButton';
 import { getStoredTenant } from '@/lib/auth';
 import {
   listEngagements, terminateEngagement, reviewFreelancer,
@@ -71,7 +72,7 @@ export function TalentView() {
   const [openJob, setOpenJob] = useState<string | null>(null);
   const [proposals, setProposals] = useState<Record<string, JobProposal[]>>({});
   const [rateFor, setRateFor] = useState<string | null>(null);
-  const [reviewForm, setReviewForm] = useState<{ rating: number; comment: string }>({ rating: 5, comment: '' });
+  const [reviewForm, setReviewForm] = useState<{ rating: number; comment: string; wouldWorkAgain: boolean }>({ rating: 5, comment: '', wouldWorkAgain: true });
   const [showPost, setShowPost] = useState(false);
   const [job, setJob] = useState<{ title: string; description: string; requirements: string; discipline: string; skills: string; postingType: PostingType; engagementType: EngagementType; rateMin: string; rateMax: string }>({ title: '', description: '', requirements: '', discipline: '', skills: '', postingType: 'project_bid', engagementType: 'fixed_bid', rateMin: '', rateMax: '' });
   // Per-proposal AI eval headline (0..100) + the open decline composer.
@@ -149,7 +150,7 @@ export function TalentView() {
 
   const submitReview = async (engagementId: string) => {
     setBusy(`rev:${engagementId}`); setError(null);
-    try { await reviewFreelancer(engagementId, reviewForm.rating, reviewForm.comment || undefined); setRateFor(null); setReviewForm({ rating: 5, comment: '' }); await load(); }
+    try { await reviewFreelancer(engagementId, reviewForm.rating, reviewForm.comment || undefined, reviewForm.wouldWorkAgain); setRateFor(null); setReviewForm({ rating: 5, comment: '', wouldWorkAgain: true }); await load(); }
     catch (e) { setError(e instanceof Error ? e.message : 'Failed'); } finally { setBusy(null); }
   };
 
@@ -183,7 +184,7 @@ export function TalentView() {
     <section>
       <NotificationsPanel />
 
-      <div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap' }}>
+      <div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap', alignItems: 'center' }}>
         {TABS.map((tb) => (
           <button key={tb.id} type="button" onClick={() => setTab(tb.id)}
             style={{ padding: '7px 14px', borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: 'pointer',
@@ -192,6 +193,7 @@ export function TalentView() {
             {tb.label}
           </button>
         ))}
+        <div style={{ marginLeft: 'auto' }}><MessagesButton side="employer" /></div>
       </div>
 
       {error && <div style={{ ...card, color: 'var(--coral-bright)', fontSize: 13, marginBottom: 16 }}>{error}</div>}
@@ -208,9 +210,10 @@ export function TalentView() {
                     <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-primary)' }}>{e.freelancerName ?? e.freelancerUserId}</div>
                     <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>{t(`status.${e.status}`)}{e.rateCents != null ? ` · ${e.currency} ${(e.rateCents / 100).toFixed(0)}${t('perHour')}` : ''}</div>
                   </div>
-                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+                    <MessagesButton side="employer" variant="inline" context={{ freelancerUserId: e.freelancerUserId, engagementId: e.id, title: e.title ?? undefined }} />
                     <button type="button" style={btn('ghost')} onClick={() => toggleDeliverables(e.id)}>{openDeliv === e.id ? t('hide') : tg('deliverables.heading')}</button>
-                    <button type="button" style={btn('ghost')} onClick={() => { setRateFor(rateFor === e.id ? null : e.id); setReviewForm({ rating: 5, comment: '' }); }}>{t('rate')}</button>
+                    <button type="button" style={btn('ghost')} onClick={() => { setRateFor(rateFor === e.id ? null : e.id); setReviewForm({ rating: 5, comment: '', wouldWorkAgain: true }); }}>{t('rate')}</button>
                     <button type="button" style={btn('danger')} disabled={busy === e.id}
                       onClick={() => { if (confirm(t('terminateConfirm'))) void act(e.id, () => terminateEngagement(e.id)); }}>{busy === e.id ? '…' : t('terminate')}</button>
                   </div>
@@ -251,6 +254,10 @@ export function TalentView() {
                       ))}
                     </div>
                     <textarea style={{ ...input, minHeight: 56, resize: 'vertical' }} placeholder={t('reviewComment')} value={reviewForm.comment} onChange={(ev) => setReviewForm((r) => ({ ...r, comment: ev.target.value }))} />
+                    <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: 'var(--text-secondary)', cursor: 'pointer' }}>
+                      <input type="checkbox" checked={reviewForm.wouldWorkAgain} onChange={(ev) => setReviewForm((r) => ({ ...r, wouldWorkAgain: ev.target.checked }))} />
+                      {t('wouldWorkAgain')}
+                    </label>
                     <div><button type="button" style={btn('primary')} disabled={busy === `rev:${e.id}`} onClick={() => submitReview(e.id)}>{t('submitReview')}</button></div>
                   </div>
                 )}
@@ -328,7 +335,8 @@ export function TalentView() {
                               {p.status === 'declined' && p.declineReason && <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2, fontStyle: 'italic' }}>{p.declineReason}</div>}
                             </div>
                             {actionable ? (
-                              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+                                <MessagesButton side="employer" variant="inline" context={{ freelancerUserId: p.freelancerUserId, jobId: j.id, proposalId: p.id, title: j.title }} />
                                 <button type="button" style={btn('ghost')} disabled={busy === `ev:${p.id}`} onClick={() => evalProposal(p.id)}>{busy === `ev:${p.id}` ? tg('proposal.evaluating') : tg('proposal.evaluate')}</button>
                                 {p.status === 'submitted' && <button type="button" style={btn('ghost')} disabled={busy === `sl:${p.id}`} onClick={() => act(`sl:${p.id}`, () => shortlistProposal(p.id))}>{tg(isFte ? 'candidate.shortlist' : 'proposal.shortlist')}</button>}
                                 <button type="button" style={btn('ghost')} disabled={busy === `mt:${j.id}`} onClick={() => doSchedule({ title: tg(isFte ? 'meeting.interviewTitle' : 'meeting.reviewTitle'), kind: isFte ? 'interview' : 'review', jobId: j.id })}>{tg(isFte ? 'meeting.scheduleInterview' : 'meeting.scheduleReview')}</button>

@@ -38,6 +38,7 @@ import {
 import { notSystemTask } from '../../application/task/taskScope';
 import { computePortfolioRollup } from '../../application/pmo/portfolioRollup';
 import { buildExecutiveSummary } from '../../application/reports/executiveSummary';
+import { generateProjectStatusReport } from '../../application/reports/projectStatusReport';
 import { TenantRole, TaskStatus } from '../../domain/shared/types';
 import { getOrSetCached, invalidateCached } from '../../infrastructure/cache/readThroughCache';
 import type { Env, HonoEnv } from '../../env';
@@ -599,6 +600,8 @@ export async function buildScheduledReport(
       return { subject: '[Builderforce] Executive summary', report: await generateExecutiveReport(db, tenantId, new Date(now.getTime() - 30 * REPORT_DAY_MS), now) as unknown as Record<string, unknown> };
     case 'portfolio_rollup':
       return { subject: '[Builderforce] Portfolio (PMO) rollup', report: await generatePortfolioReport(db, tenantId, segmentId) };
+    case 'project_status':
+      return { subject: '[Builderforce] Project status digest', report: await generateProjectStatusReport(db, tenantId, segmentId) as unknown as Record<string, unknown> };
     default:
       return null;
   }
@@ -666,6 +669,14 @@ export function createReportRoutes(db: Db): Hono<HonoEnv> {
     const tenantId = c.get('tenantId') as number;
     const segmentId = c.get('segmentId') as string;
     return c.json(await generatePortfolioReport(db, tenantId, segmentId));
+  });
+
+  // ── GET /api/reports/project-status ───────────────────────────────────────
+  // Per-project delivery digest (schedulable as report_type 'project_status').
+  router.get('/project-status', requireRole(TenantRole.MANAGER), async (c) => {
+    const tenantId = c.get('tenantId') as number;
+    const segmentId = c.get('segmentId') as string;
+    return c.json(await generateProjectStatusReport(db, tenantId, segmentId));
   });
 
   // ── GET /api/reports/completed-by-assignee ───────────────────────────────

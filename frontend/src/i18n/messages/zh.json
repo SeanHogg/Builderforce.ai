@@ -1068,7 +1068,11 @@
         "benchmarking": "行业基准对比",
         "benchmarkingDesc": "你的交付指标在行业同类中的排名——按行业与团队规模的百分位与评级。",
         "funnel": "创新漏斗",
-        "funnelDesc": "想法 → 验证 → 构建中 → 发布 → 衡量：转化率、价值实现时间与创意管道。"
+        "funnelDesc": "想法 → 验证 → 构建中 → 发布 → 衡量：转化率、价值实现时间与创意管道。",
+        "crossTeam": "跨团队",
+        "crossTeamDesc": "将每个团队与其他团队排名",
+        "delayTaxonomy": "延误原因",
+        "delayTaxonomyDesc": "工作为何延误"
       },
       "summary": {
         "cycleTime": "平均周期时间",
@@ -1200,7 +1204,11 @@
         "forecast_over": "预测超支",
         "on_track": "正常",
         "no_budget": "无预算"
-      }
+      },
+      "scope": "范围",
+      "scopeWorkspace": "整个工作区",
+      "scopeProjects": "项目",
+      "scopeInitiatives": "举措"
     },
     "comp": {
       "title": "合规与审计",
@@ -1249,7 +1257,11 @@
         "shipped": "已交付",
         "measured": "已度量",
         "killed": "已终止"
-      }
+      },
+      "link": "关联到",
+      "linkNone": "不关联",
+      "linkProjects": "项目",
+      "linkInitiatives": "举措"
     },
     "alloc": {
       "title": "投资分配",
@@ -1668,6 +1680,140 @@
       "emptyTitle": "您的仪表板为空",
       "emptyBody": "从任意报告或页面固定小组件 — 卡片角落的图钉会将其添加到此处。",
       "myDashboard": "我的仪表板"
+    },
+    "emp": {
+      "loading": "加载中…",
+      "crossTeam": {
+        "noTeams": "暂无团队",
+        "noData": "无可比较团队",
+        "leaderboard": "团队排名",
+        "footnote": "百分位将每个团队与本租户的其他团队在该时间窗内比较。",
+        "tableTitle": "团队指标",
+        "team": "团队",
+        "members": "成员",
+        "overall": "综合",
+        "metric": {
+          "throughput": "吞吐量",
+          "avg_cycle_time_hours": "周期时间",
+          "rework_rate_pct": "返工",
+          "effectiveness": "有效性"
+        }
+      },
+      "delay": {
+        "taggedTasks": "已标记任务",
+        "manual": "手动",
+        "inferred": "推断",
+        "distribution": "延误原因",
+        "tasks": "个任务",
+        "noData": "未检测到延误",
+        "tableTitle": "原因明细",
+        "reasonCol": "原因",
+        "avgDwell": "平均停滞",
+        "footnote": "手动标记优先于由长时间停滞自动推断的原因。",
+        "tagLabel": "延误原因",
+        "untagged": "无延误原因",
+        "reason": {
+          "blocked_dependency": "被依赖阻塞",
+          "awaiting_review": "等待评审",
+          "scope_change": "范围变更",
+          "unclear_requirements": "需求不明确",
+          "external": "外部阻塞",
+          "capacity": "产能 / 排队",
+          "other": "其他"
+        }
+      },
+      "release": {
+        "label": "发布",
+        "none": "无发布"
+      },
+      "pulse": {
+        "title": "团队脉搏",
+        "thanks": "谢谢 — 您的回复已记录。",
+        "submit": "提交",
+        "commentPlaceholder": "可选评论（匿名）",
+        "latestAvg": "最新平均",
+        "latestEnps": "最新 eNPS",
+        "trend": "情绪趋势",
+        "responses": "份回复",
+        "create": "新建脉搏",
+        "questionPlaceholder": "提出一个问题…",
+        "scale": "量级",
+        "open": "开启",
+        "surveys": "调查",
+        "noSurveys": "暂无调查",
+        "question": "问题",
+        "average": "平均",
+        "enps": "eNPS",
+        "status": "状态",
+        "active": "进行中",
+        "closed": "已关闭",
+        "close": "关闭"
+      },
+      "export": {
+        "dataset": "数据集",
+        "csv": "CSV",
+        "html": "可打印",
+        "datasets": {
+          "dora": "DORA",
+          "finance": "财务",
+          "allocation": "投入分配",
+          "benchmarking": "基准对比"
+        }
+      },
+      "recon": {
+        "fiscalYear": "财年",
+        "variance": "差异",
+        "quartersTitle": "已报告季度",
+        "quarter": "季度",
+        "revenue": "收入",
+        "derivedBase": "推导研发基数",
+        "derivedSub": "来自投入 + AI 支出",
+        "reportedActual": "报告实际",
+        "reportedSub": "手动季度数据",
+        "derivedLabor": "推导人工",
+        "derivedAiSpend": "推导 AI 支出",
+        "reportedPlan": "报告计划",
+        "rdToRevenue": "研发 / 收入",
+        "footnote": "推导为 QRE 式估算；报告为手动录入 — 差异用于标记背离。",
+        "flag": {
+          "aligned": "一致",
+          "derived_higher": "推导偏高",
+          "reported_higher": "报告偏高",
+          "no_reported": "无报告数据"
+        },
+        "title": "研发对账",
+        "subtitle": "推导的研发抵免基数与已报告的季度支出对比"
+      }
+    },
+    "forecast": {
+      "title": "预测与异常",
+      "subtitle": "每项指标的走向，以及哪里已经出现异常。",
+      "error": "无法加载预测。",
+      "noData": "历史数据不足，暂无法预测。",
+      "metricLabel": "指标",
+      "history": "历史",
+      "projected": "预测",
+      "projection": "预测值",
+      "trend": "趋势",
+      "trendUp": "上升",
+      "trendDown": "下降",
+      "trendFlat": "持平",
+      "rSquared": "拟合度 R² {r}%",
+      "anomalies": "异常",
+      "anomaliesSub": "超过 2σ 的点",
+      "dismiss": "忽略",
+      "chartAria": "{metric} 历史与预测",
+      "metric": {
+        "cost": "花费",
+        "cycle_time": "周期时间",
+        "cfr": "变更失败率",
+        "throughput": "部署吞吐量"
+      }
+    },
+    "upgrade": {
+      "title": "此视图需要更高的套餐",
+      "body": "高级洞察不包含在您的 {plan} 套餐中。升级即可解锁预测、异常检测和高管视图。",
+      "cta": "查看套餐"
     }
   },
   "cloudAgentForm": {
@@ -2671,7 +2817,21 @@
       "wfPerformance": "团队 · 绩效",
       "marketplace": "市场",
       "tools": "工具",
-      "ide": "IDE"
+      "ide": "IDE",
+      "alerts": "告警",
+      "logs": "日志",
+      "quality": "质量",
+      "integrations": "集成",
+      "content": "内容",
+      "ceremonies": "仪式",
+      "wfPlan": "人力计划",
+      "empAllocation": "工作分配",
+      "empCollaboration": "协作",
+      "empDocs": "文档",
+      "empCost": "人力成本",
+      "empPerformers": "绩效",
+      "empInitiatives": "战略分布",
+      "forecast": "预测"
     },
     "title": {
       "aiProductivity": "AI 生产力评分",
@@ -2745,7 +2905,33 @@
       "catalogMarketplaceTopEval": "评分最高的代理",
       "catalogToolsByCategory": "按类别划分的工具",
       "ideByModality": "按模态划分的构建",
-      "ideRecency": "IDE 构建"
+      "ideRecency": "IDE 构建",
+      "obsAlertFires": "每日告警触发",
+      "obsAlertRuleHealth": "告警规则健康度",
+      "obsLogVolume": "事件量",
+      "obsLogTypes": "事件类型",
+      "obsQualityVolume": "错误量",
+      "obsQualityResolution": "错误处理",
+      "obsIntegrationsConnected": "已连接集成",
+      "obsIntegrationsByProvider": "按提供商分布的集成",
+      "obsContentCoverage": "知识库覆盖率",
+      "obsContentByKind": "按类型分布的文档",
+      "obsCeremonyCadence": "仪式节奏",
+      "obsCeremonyBalance": "仪式发言分布",
+      "wfpCostSplit": "招聘 vs 智能体成本",
+      "wfpCapacity": "产能对比 WIP",
+      "wfpGap": "可分配余量",
+      "empOverAllocated": "超额分配成员",
+      "empCollabScore": "协作评分",
+      "empDocAuthors": "文档贡献榜",
+      "empLaborByProject": "按项目的人力成本",
+      "empPerformerTiers": "绩效分层",
+      "empInitiativeMix": "战略分配",
+      "forecastCostProjection": "预测花费",
+      "forecastCycleProjection": "预测周期时间",
+      "forecastCfrProjection": "预测变更失败",
+      "forecastAnomalies": "未处理异常",
+      "forecastCostTrend": "花费预测"
     },
     "loading": "加载中…",
     "overview": {
@@ -2836,6 +3022,99 @@
         "llm": "大模型",
         "voice": "语音"
       }
+    },
+    "obs": {
+      "noFirings": "暂无触发",
+      "firesPerDay": "触发 / 天",
+      "noRules": "暂无告警规则",
+      "firing": "触发中",
+      "healthy": "健康",
+      "paused": "已暂停",
+      "rules": "条规则",
+      "noEvents": "暂无事件",
+      "eventsPerDay": "事件 / 天",
+      "events": "个事件",
+      "noErrors": "暂无错误",
+      "errorsPerDay": "错误 / 天",
+      "groups": "个分组",
+      "status_unresolved": "未解决",
+      "status_fixing": "修复中",
+      "status_resolved": "已解决",
+      "status_ignored": "已忽略",
+      "integrationsSub": "{total} 个中 {healthy} 个健康",
+      "noIntegrations": "暂无集成",
+      "connected": "已连接",
+      "coverageSub": "{total} 项标准中的 {present} 项",
+      "staleNudge": "{count} 篇文档超过 {days} 天未更新",
+      "noDocs": "暂无文档",
+      "sop": "SOP",
+      "process": "流程",
+      "doc": "文档",
+      "docs": "篇文档",
+      "noCeremonies": "暂无仪式",
+      "ceremoniesPerDay": "会话 / 天",
+      "humanTalk": "人类",
+      "agentTalk": "AI 代理",
+      "completed": "已完成"
+    },
+    "reorder": {
+      "drag": "拖动以重新排序",
+      "moveLeft": "左移",
+      "moveRight": "右移"
+    },
+    "wfp": {
+      "human": "人类",
+      "agent": "智能体",
+      "noCost": "无成本费率",
+      "perWeek": "每周",
+      "empty": "无 WIP",
+      "gapSub": "已用 {open} / {max} WIP"
+    },
+    "emp": {
+      "teamAnalytics": "团队分析",
+      "allocationTitle": "超额分配",
+      "allocationSub": "实际 WIP 与成员上限对比",
+      "collaborationTitle": "协作",
+      "docTitle": "文档活动",
+      "costTitle": "人力成本",
+      "performersTitle": "绩效与辅导",
+      "initiativesTitle": "战略分配",
+      "member": "成员",
+      "overAllocated": "超额分配",
+      "withinCapacity": "容量内",
+      "wip": "WIP",
+      "max": "上限",
+      "utilization": "利用率",
+      "reviews": "评审",
+      "comments": "评论",
+      "handoffs": "交接",
+      "turnaround": "周转",
+      "score": "评分",
+      "authored": "创建",
+      "edits": "编辑",
+      "acks": "确认",
+      "cost": "成本",
+      "effortH": "工时（小时）",
+      "tasks": "任务",
+      "project": "项目",
+      "initiative": "战略",
+      "totalCost": "总成本",
+      "tier": "层级",
+      "tierHigh": "高",
+      "tierSolid": "稳定",
+      "tierWatch": "关注",
+      "percentile": "百分位",
+      "composite": "综合",
+      "addNote": "添加辅导笔记",
+      "notePlaceholder": "辅导笔记…",
+      "saveNote": "保存",
+      "noNotes": "暂无辅导笔记",
+      "deleteNote": "删除",
+      "noData": "此时间段暂无数据",
+      "loading": "加载中…",
+      "exportCsv": "导出 CSV",
+      "exporting": "导出中…",
+      "focusMix": "专注度"
     }
   },
   "compile": {
@@ -5071,7 +5350,14 @@
     "usesCount": "{n, number} 次使用",
     "byAuthor": "作者：{name}",
     "emptyMine": "你还没有提示词。点击“+ 新建提示词”来创建一个。",
-    "emptyPublic": "未找到公共提示词。"
+    "emptyPublic": "未找到公共提示词。",
+    "history": "历史",
+    "analyze": "分析并改进",
+    "analyzing": "正在分析…",
+    "suggestionTitle": "改进建议",
+    "saveAsVersion": "保存为新版本",
+    "savedVersion": "已保存 ✓",
+    "copySuggestion": "复制"
   },
   "voicePanel": {
     "retry": "重试",
@@ -5415,7 +5701,8 @@
       "tabProposals": "我的提案",
       "tabEngagements": "我的合作",
       "accept": "接受",
-      "decline": "拒绝"
+      "decline": "拒绝",
+      "clientRatingTip": "来自曾合作自由职业者的客户评分"
     },
     "timecard": {
       "title": "工时卡",
@@ -5624,7 +5911,8 @@
       "inProposalSub": "未决投标",
       "earned": "累计收入",
       "earnedSub": "全部"
-    }
+    },
+    "message": "发消息"
   },
   "hires": {
     "title": "雇员",
@@ -5700,7 +5988,8 @@
         "paid": "已支付",
         "void": "作废"
       }
-    }
+    },
+    "wouldWorkAgain": "我愿意再次合作"
   },
   "register": {
     "want": "我想要",
@@ -6045,7 +6334,14 @@
       "role": "角色",
       "started": "开始时间",
       "pages": "页面",
-      "terminate": "终止"
+      "terminate": "终止",
+      "trends": "平台趋势",
+      "windowDays": "{days} 天",
+      "newUsers": "新用户",
+      "newWorkspaces": "新工作区",
+      "llmTokens": "LLM 令牌",
+      "llmSpend": "LLM 支出",
+      "errorVolume": "错误量"
     },
     "errors": {
       "lastN": "最近 {n} 条错误",
@@ -7068,6 +7364,42 @@
       "broader": "给团队发消息"
     }
   },
+  "ceremony": {
+    "standup": "站会",
+    "planning": "计划",
+    "atTable": "{count} 人在座",
+    "live": "{count} 在线",
+    "close": "关闭",
+    "loading": "加载中…",
+    "toDiscuss": "待讨论",
+    "backlog": "待办事项",
+    "sprint": "冲刺",
+    "noSprint": "暂无冲刺",
+    "sprintScheduled": "已安排 {count} 项 · 拖入工单以添加",
+    "newSprint": "+ 新建冲刺",
+    "dropToDone": "将工单拖到此处标记为完成",
+    "inBacklog": "待办中 {count} 项",
+    "noMembers": "暂无团队成员 — 为此项目添加团队，或邀请队友。",
+    "scorecardTitle": "记分卡 · {name}",
+    "assignedTitle": "已分配 · {name}",
+    "priority": "优先级：{priority}",
+    "status": "状态：{status}",
+    "openOnBoard": "在看板中打开 →",
+    "newEpicPrompt": "新史诗标题",
+    "newSprintPrompt": "新冲刺名称",
+    "epics": "史诗",
+    "newShort": "+ 新建",
+    "taskCount": "{count, plural, other {# 个任务}}",
+    "nothingHere": "空空如也",
+    "noEpics": "暂无史诗",
+    "errorLoad": "加载失败",
+    "errorUpdate": "更新失败",
+    "errorCreateEpic": "创建史诗失败",
+    "errorCreateSprint": "创建冲刺失败",
+    "errorStart": "无法开始会话",
+    "errorAdvance": "无法进入下一位",
+    "errorComplete": "无法结束会话"
+  },
   "meetings": {
     "title": "会议",
     "subtitle": "安排并加入与团队的实时视频和音频会话。",
@@ -7291,5 +7623,172 @@
       "loadError": "加载工作台失败。",
       "loading": "加载中…"
     }
+  },
+  "messaging": {
+    "title": "消息",
+    "empty": "暂无会话。",
+    "noMessages": "暂无消息",
+    "loading": "加载中…",
+    "startThread": "发送第一条消息以开始会话。",
+    "placeholder": "写一条消息…（⌘/Ctrl+Enter 发送）",
+    "send": "发送",
+    "sending": "发送中…",
+    "attach": "添加附件",
+    "attachment": "附件",
+    "remove": "移除",
+    "aFreelancer": "自由职业者",
+    "aClient": "客户"
+  },
+  "trust": {
+    "topRated": "顶级评价",
+    "risingTalent": "新锐人才",
+    "badgeTip": "凭借出色的工作成功记录获得",
+    "jss": "成功分",
+    "jssTip": "工作成功分——综合评分、复聘与客户忠诚度"
+  },
+  "rateClient": {
+    "rate": "评价客户",
+    "title": "评价此客户",
+    "titleNamed": "评价 {name}",
+    "blurb": "你的评价将为其他自由职业者建立该客户的声誉。",
+    "thanks": "感谢你的评价",
+    "commentPlaceholder": "与该客户合作的体验如何？",
+    "wouldWorkAgain": "我愿意再次合作",
+    "submit": "提交评价",
+    "submitting": "提交中…"
+  },
+  "catalogAnalytics": {
+    "trendTitle": "采用趋势",
+    "installs": "安装量",
+    "usage": "使用量",
+    "window": "时间范围",
+    "days": "{n}天"
+  },
+  "promptHistory": {
+    "title": "版本历史",
+    "loading": "正在加载版本…",
+    "from": "起始",
+    "to": "目标",
+    "versionN": "v{n}",
+    "unified": "统一视图",
+    "split": "并排对比",
+    "added": "新增",
+    "removed": "删除",
+    "unchanged": "{n} 行未变",
+    "allVersions": "所有版本",
+    "empty": "暂无版本"
+  },
+  "factsPage": {
+    "title": "事实库",
+    "subtitle": "一个结构化、可查询的事实存储，供你的工作区和智能体使用。",
+    "newFact": "新建事实",
+    "editFact": "编辑事实",
+    "searchPlaceholder": "搜索事实…",
+    "allSubjects": "所有主语",
+    "allPredicates": "所有谓语",
+    "clear": "清除",
+    "loading": "加载中…",
+    "empty": "暂无事实。",
+    "colSubject": "主语",
+    "colPredicate": "谓语",
+    "colObject": "宾语",
+    "colSource": "来源",
+    "colConfidence": "置信度",
+    "colActions": "操作",
+    "edit": "编辑",
+    "delete": "删除",
+    "save": "保存",
+    "saving": "保存中…",
+    "cancel": "取消",
+    "validation": "主语、谓语和宾语为必填项。",
+    "needDeveloper": "需要开发者角色",
+    "subjectPlaceholder": "例如 Acme 公司",
+    "predicatePlaceholder": "例如 成立于",
+    "objectPlaceholder": "例如 2019",
+    "sourcePlaceholder": "例如 入职通话"
+  },
+  "personaLens": {
+    "pageTitle": "视角角色",
+    "title": "你的视角角色",
+    "subtitle": "选择你所担任的角色。它会重新排序并突出你关注的洞察视图 — 但绝不会改变你的访问权限。",
+    "loading": "加载中…",
+    "primary": "主要",
+    "save": "保存角色",
+    "saving": "保存中…",
+    "saved": "角色已保存",
+    "saveFailed": "无法保存角色",
+    "highlightsFor": "为 {persona} 突出的视图",
+    "home": "主页",
+    "viewingAs": "当前视角",
+    "viewShapingNote": "角色仅影响你的视图。每个视图仍遵循你的工作区权限 — 你不会因此获得额外的访问权限。",
+    "personas": {
+      "ceo": "首席执行官",
+      "cfo": "首席财务官",
+      "cto": "首席技术官",
+      "ciso": "首席信息安全官",
+      "pmo": "项目管理办公室",
+      "em": "工程经理",
+      "ic": "个人贡献者"
+    },
+    "lenses": {
+      "engineering": "工程",
+      "dora": "DORA",
+      "finance": "财务",
+      "allocation": "投入分配",
+      "compliance": "合规",
+      "portfolio": "组合",
+      "delivery": "交付"
+    }
+  },
+  "lensSnapshots": {
+    "pageTitle": "回顾快照",
+    "title": "周期性视图回顾",
+    "subtitle": "每个洞察视图的月度、季度和年度时点快照 — 在周期结束时冻结。",
+    "loading": "加载中…",
+    "empty": "尚未捕获任何快照",
+    "lens": "视图",
+    "cadence": "周期",
+    "captureNow": "立即捕获",
+    "capturing": "捕获中…",
+    "monthly": "每月",
+    "quarterly": "每季度",
+    "annual": "每年",
+    "filterLens": "按视图筛选",
+    "allLenses": "所有视图",
+    "generatedAt": "捕获于 {at}",
+    "view": "查看",
+    "hide": "隐藏",
+    "lensNames": {
+      "engineering": "工程",
+      "dora": "DORA",
+      "finance": "财务",
+      "allocation": "投入分配",
+      "compliance": "合规"
+    }
+  },
+  "workforcePlan": {
+    "pageTitle": "人力计划",
+    "subtitle": "融合人类与智能体的产能、进行中的工作与成本。",
+    "loading": "加载中…",
+    "members": "成员",
+    "membersSub": "{human} 人类 · {agent} 智能体",
+    "inFlight": "进行中 (WIP)",
+    "inFlightSub": "已分配的进行中工作",
+    "capacityGap": "可分配余量",
+    "capacityGapSub": "未使用的 WIP 余量",
+    "weeklyCost": "每周成本",
+    "weeklyCostSub": "建模的融合成本",
+    "agentShare": "智能体 WIP 占比",
+    "agentShareSub": "由智能体承担的工作",
+    "hireVsAgent": "招聘 vs 智能体（每周成本）",
+    "perWeek": "每周",
+    "noCost": "未建模成本费率",
+    "human": "人类",
+    "agent": "智能体",
+    "humanCapacity": "人员 — WIP 对比上限",
+    "agentCapacity": "智能体 — WIP 对比上限",
+    "noHumans": "无人员档案",
+    "noAgents": "无智能体档案",
+    "barLegend": "柱形 = 进行中 WIP · 浅色轨道 = WIP 上限"
   }
 }

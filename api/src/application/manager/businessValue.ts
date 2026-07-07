@@ -34,8 +34,15 @@ export interface ScoredValue {
   score: number;
   /** One-line human-readable justification. */
   rationale: string;
-  /** How it was derived: 'ai' (RICE-informed model score) | 'rice' | 'manual'. */
-  source: 'ai' | 'rice' | 'manual';
+  /** How it was derived:
+   *   • 'rice'      — folded from a matching PMO {@link featureScores} row (a human's
+   *                   deliberate RICE estimate; highest-trust non-manual source).
+   *   • 'ai'        — RICE-informed model score (the LLM valued the ticket).
+   *   • 'heuristic' — deterministic fallback from the signals a ticket already carries
+   *                   (priority / points / due-date) when neither of the above applies.
+   *   • 'manual'    — a human pinned the number on the board; the manager never
+   *                   overwrites it. */
+  source: 'ai' | 'rice' | 'heuristic' | 'manual';
 }
 
 const clamp = (n: number, lo: number, hi: number): number => Math.max(lo, Math.min(hi, n));
@@ -89,7 +96,53 @@ export function heuristicBusinessValue(task: RankableTask, now: number, storyPoi
   return {
     score: clamp(Math.round(score), 0, 100),
     rationale: `Derived from ${task.priority} priority${storyPoints != null ? `, ${storyPoints}pt effort` : ''}${due != null ? ', due-date urgency' : ''}.`,
-    source: 'ai',
+    source: 'heuristic',
+  };
+}
+
+/** A PMO feature-score row the manager can fold into a ticket's value (source 'rice'). */
+export interface FeatureScoreRow {
+  name: string;
+  reach: number | null;
+  impact: number | null;
+  confidence: number | null;
+  effort: number | null;
+  /** The PMO's precomputed RICE score, if the row carries one. */
+  score: number | null;
+}
+
+/** Normalize a free-text feature/ticket name for loose matching (case/space/punct-insensitive). */
+export function normalizeFeatureName(s: string): string {
+  return s.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+}
+
+/**
+ * Fold a matching PMO {@link featureScores} row into a 0-100 business value, relative
+ * to the project's own score distribution (so the numbers are comparable across a
+ * project without assuming any absolute RICE scale). `projectMaxScore` is the largest
+ * `score` among the project's feature rows; when it is 0/absent we fall back to the
+ * bounded {@link deriveRiceScore} fold of the raw components. Source is always 'rice'.
+ */
+export function riceBusinessValueFromFeature(row: FeatureScoreRow, projectMaxScore: number): ScoredValue {
+  let score0to100: number;
+  if (row.score != null && Number.isFinite(row.score) && projectMaxScore > 0) {
+    score0to100 = clamp(Math.round((Math.max(0, row.score) / projectMaxScore) * 100), 0, 100);
+  } else {
+    score0to100 = deriveRiceScore({
+      reach: row.reach ?? 0, impact: row.impact ?? 0,
+      confidence: row.confidence ?? 0, effort: row.effort ?? 1,
+    });
+  }
+  const parts = [
+    row.reach != null ? `R${row.reach}` : null,
+    row.impact != null ? `I${row.impact}` : null,
+    row.confidence != null ? `C${row.confidence}` : null,
+    row.effort != null ? `E${row.effort}` : null,
+  ].filter(Boolean).join('·');
+  return {
+    score: score0to100,
+    rationale: `From PMO RICE score "${row.name.slice(0, 60)}"${parts ? ` (${parts})` : ''}.`,
+    source: 'rice',
   };
 }
 

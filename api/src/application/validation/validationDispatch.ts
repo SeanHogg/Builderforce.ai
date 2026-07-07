@@ -21,13 +21,15 @@ import { buildDatabase } from '../../infrastructure/database/connection';
 import { TaskStatus, TaskType } from '../../domain/shared/types';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
+import { VALIDATOR_REVIEW_LANE_KEY } from './validatorReviewMarker';
 
 /** Re-review a Done item at most this often — one fresh pass per interval. */
 const REVIEW_INTERVAL_MS = 20 * 60 * 60 * 1000; // ~daily, with slack for the cron tick
 /** Cap Done items reviewed per tenant per sweep so a big backlog can't fan out unbounded. */
 const MAX_REVIEWS_PER_TENANT = 15;
-/** A distinct lane key so the run isn't confused with (or suppressed by) board lane-auto-run. */
-const REVIEW_LANE_KEY = '__validator_review__';
+/** A distinct lane key so the run isn't confused with (or suppressed by) board lane-auto-run.
+ *  Shared with the runtime, which treats a run stamped with it as non-mutating. */
+const REVIEW_LANE_KEY = VALIDATOR_REVIEW_LANE_KEY;
 
 /**
  * The tenant's Validator agent id, or null when the tenant has none. A Validator is
@@ -87,6 +89,31 @@ export async function dispatchValidatorReview(
   } catch {
     return null; // best-effort — a dispatch failure must not break the sweep/caller
   }
+}
+
+/**
+ * FAST on-Done trigger: the instant a ticket first enters a done-class lane, kick a
+ * Validator review so acceptance feedback lands in minutes, not on the next daily
+ * sweep. Safe against the completion loop because a Validator review run is stamped
+ * non-mutating ({@link VALIDATOR_REVIEW_LANE_KEY}) — it records a verdict without
+ * moving the ticket, so it can never re-enter Done and re-trigger itself. Best-effort:
+ * skips GAP tickets (review OUTPUT, not input), a tenant with no Validator, and a
+ * ticket with a live run; never throws. Returns the review execution id, or null.
+ */
+export async function triggerFastValidatorReview(
+  env: Env,
+  db: Db,
+  params: { tenantId: number; taskId: number },
+): Promise<number | null> {
+  const validatorRef = await findTenantValidatorRef(db, params.tenantId);
+  if (!validatorRef) return null;
+  const [t] = await db
+    .select({ taskType: tasks.taskType, archived: tasks.archived })
+    .from(tasks)
+    .where(eq(tasks.id, params.taskId))
+    .limit(1);
+  if (!t || t.archived || t.taskType === TaskType.GAP) return null;
+  return dispatchValidatorReview(env, db, { tenantId: params.tenantId, taskId: params.taskId, validatorRef, submittedBy: `validator:on-done` });
 }
 
 export interface ValidatorSweepResult {

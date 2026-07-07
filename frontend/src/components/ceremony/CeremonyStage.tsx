@@ -79,6 +79,7 @@ export function CeremonyStage({
 }) {
   const { user } = useAuth();
   const tMeet = useTranslations('meetings');
+  const t = useTranslations('ceremony');
   // Narrow viewports can't fit the two 240px rails + the absolute round table side
   // by side, so on mobile the stage stacks vertically and the seats render as a
   // centered wrap-grid instead of the (overlapping) circle.
@@ -124,11 +125,11 @@ export function CeremonyStage({
         prev || sprintsData.find((s) => s.status === 'active')?.id || sprintsData[0]?.id || '',
       );
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to load');
+      setError(e instanceof Error ? e.message : t('errorLoad'));
     } finally {
       setLoading(false);
     }
-  }, [projectId, mode]);
+  }, [projectId, mode, t]);
 
   useEffect(() => { reload(); }, [reload]);
 
@@ -238,10 +239,10 @@ export function CeremonyStage({
         setDrawerTask((d) => (d?.id === id ? updated : d));
         send({ type: 'changed' });
       } catch (e) {
-        setError(e instanceof Error ? e.message : 'Update failed');
+        setError(e instanceof Error ? e.message : t('errorUpdate'));
       }
     },
-    [send],
+    [send, t],
   );
 
   const assignToMember = useCallback(
@@ -257,28 +258,28 @@ export function CeremonyStage({
   const setStatus = useCallback((id: number, status: string) => mutate(id, { status }), [mutate]);
 
   const createEpic = useCallback(async () => {
-    const title = window.prompt('New epic title');
+    const title = window.prompt(t('newEpicPrompt'));
     if (!title?.trim()) return;
     try {
       const epic = await tasksApi.create({ projectId, title: title.trim(), taskType: 'epic' });
       setTasks((prev) => [epic, ...prev]);
       send({ type: 'changed' });
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Create epic failed');
+      setError(e instanceof Error ? e.message : t('errorCreateEpic'));
     }
-  }, [projectId, send]);
+  }, [projectId, send, t]);
 
   const createSprint = useCallback(async () => {
-    const name = window.prompt('New sprint name');
+    const name = window.prompt(t('newSprintPrompt'));
     if (!name?.trim()) return;
     try {
       const sprint = await sprintsApi.create({ name: name.trim(), status: 'active', projectId });
       setSprints((prev) => [sprint, ...prev]);
       setActiveSprintId(sprint.id);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Create sprint failed');
+      setError(e instanceof Error ? e.message : t('errorCreateSprint'));
     }
-  }, [projectId]);
+  }, [projectId, t]);
 
   // --- session lifecycle (start / advance turn / complete) -----------------
   const applySession = useCallback((d: { session: CeremonySession | null; participants?: CeremonyParticipant[] }) => {
@@ -293,11 +294,11 @@ export function CeremonyStage({
       const parts = members.map((m) => ({ kind: m.kind, ref: m.ref, name: m.name }));
       applySession(await ceremonySessionsApi.start(projectId, mode, parts));
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Could not start session');
+      setError(e instanceof Error ? e.message : t('errorStart'));
     } finally {
       setSessionBusy(false);
     }
-  }, [members, projectId, mode, applySession]);
+  }, [members, projectId, mode, applySession, t]);
 
   const advanceTurn = useCallback(async (nextTurn: number) => {
     if (!session) return;
@@ -305,11 +306,11 @@ export function CeremonyStage({
     try {
       applySession(await ceremonySessionsApi.advanceTurn(session.id, nextTurn));
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Could not advance turn');
+      setError(e instanceof Error ? e.message : t('errorAdvance'));
     } finally {
       setSessionBusy(false);
     }
-  }, [session, applySession]);
+  }, [session, applySession, t]);
 
   // On Complete: end the session, then auto-dispatch agent-assigned work (mirrors
   // the board's lane auto-run). Humans keep their assignments; agents start running.
@@ -334,11 +335,11 @@ export function CeremonyStage({
       send({ type: 'changed' });
       reload();
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Could not complete session');
+      setError(e instanceof Error ? e.message : t('errorComplete'));
     } finally {
       setSessionBusy(false);
     }
-  }, [session, tasks, latestExecByTask, applySession, send, reload]);
+  }, [session, tasks, latestExecByTask, applySession, send, reload, t]);
 
   // --- cursor broadcast (throttled) ----------------------------------------
   const lastCursor = useRef(0);
@@ -370,15 +371,15 @@ export function CeremonyStage({
             value={mode}
             onChange={(m) => onModeChange(m as CeremonyMode)}
             options={[
-              { value: 'standup', label: 'Standup' },
-              { value: 'planning', label: 'Planning' },
+              { value: 'standup', label: t('standup') },
+              { value: 'planning', label: t('planning') },
             ]}
           />
           <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
-            {members.length} at the table
+            {t('atTable', { count: members.length })}
             {connected && (
               <span style={{ marginLeft: 8, color: 'var(--cyan-bright)' }}>
-                ● {peers.length + 1} live
+                ● {t('live', { count: peers.length + 1 })}
               </span>
             )}
           </span>
@@ -427,7 +428,7 @@ export function CeremonyStage({
               cursor: 'pointer',
             }}
           >
-            Close
+            {t('close')}
           </button>
           )}
         </div>
@@ -463,13 +464,13 @@ export function CeremonyStage({
       )}
 
       {loading ? (
-        <div style={{ color: 'var(--text-muted)', fontSize: 13 }}>Loading…</div>
+        <div style={{ color: 'var(--text-muted)', fontSize: 13 }}>{t('loading')}</div>
       ) : (
         <div style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', gap: 12, flex: 1, minHeight: 0 }}>
           {/* Backlog rail */}
           <BacklogRail
             tasks={backlogTasks}
-            title={mode === 'standup' ? 'To discuss' : 'Backlog'}
+            title={mode === 'standup' ? t('toDiscuss') : t('backlog')}
             onOpen={setDrawerTask}
             onReturn={returnToBacklog}
           />
@@ -496,7 +497,7 @@ export function CeremonyStage({
                 }}
               >
                 <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: 0.4 }}>
-                  Sprint
+                  {t('sprint')}
                 </span>
                 {sprints.length > 0 ? (
                   <Select
@@ -509,11 +510,11 @@ export function CeremonyStage({
                     ))}
                   </Select>
                 ) : (
-                  <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>No sprint yet</span>
+                  <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{t('noSprint')}</span>
                 )}
                 {activeSprint && (
                   <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
-                    {sprintTaskCount} scheduled · drop a ticket to add
+                    {t('sprintScheduled', { count: sprintTaskCount })}
                   </span>
                 )}
                 <button
@@ -521,7 +522,7 @@ export function CeremonyStage({
                   onClick={createSprint}
                   style={{ marginLeft: 'auto', fontSize: 12, fontWeight: 600, color: 'var(--coral-bright)', background: 'none', border: 'none', cursor: 'pointer' }}
                 >
-                  + New sprint
+                  {t('newSprint')}
                 </button>
               </div>
             )}
@@ -582,15 +583,15 @@ export function CeremonyStage({
                   padding: 12,
                 }}
               >
-                <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)', textTransform: 'capitalize' }}>
-                  {mode}
+                <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)' }}>
+                  {t(mode)}
                 </span>
                 {mode === 'standup' ? (
                   // Drag-to-Done is a desktop-only affordance (HTML5 DnD doesn't fire
                   // on touch), so the hint is hidden on mobile.
-                  isMobile ? null : <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>Drop a ticket here to mark Done</span>
+                  isMobile ? null : <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{t('dropToDone')}</span>
                 ) : (
-                  <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{backlogTasks.length} in backlog</span>
+                  <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{t('inBacklog', { count: backlogTasks.length })}</span>
                 )}
               </div>
 
@@ -629,7 +630,7 @@ export function CeremonyStage({
                 <div style={isMobile
                   ? { flexBasis: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)', fontSize: 13, padding: '24px 0', textAlign: 'center' }
                   : { position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)', fontSize: 13 }}>
-                  No team members — add a team to this project, or invite teammates.
+                  {t('noMembers')}
                 </div>
               )}
 
@@ -667,27 +668,27 @@ export function CeremonyStage({
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10, padding: 16, fontSize: 13, color: 'var(--text-secondary)' }}>
             <div style={{ fontFamily: 'var(--font-mono)', color: 'var(--text-muted)' }}>{drawerTask.key}</div>
             <div style={{ display: 'flex', gap: 8 }}>
-              <span style={{ textTransform: 'capitalize' }}>Priority: {drawerTask.priority}</span>
-              <span style={{ textTransform: 'capitalize' }}>· Status: {drawerTask.status}</span>
+              <span style={{ textTransform: 'capitalize' }}>{t('priority', { priority: drawerTask.priority })}</span>
+              <span style={{ textTransform: 'capitalize' }}>· {t('status', { status: drawerTask.status })}</span>
             </div>
             {drawerTask.description && <p style={{ color: 'var(--text-primary)', whiteSpace: 'pre-wrap' }}>{drawerTask.description}</p>}
             <a
               href={`/projects?tab=tasks&project=${drawerTask.projectId}`}
               style={{ color: 'var(--coral-bright)', fontWeight: 600, textDecoration: 'none' }}
             >
-              Open on the board →
+              {t('openOnBoard')}
             </a>
           </div>
         )}
       </SlideOutPanel>
 
       {/* Scorecard (agile stats) for a clicked seat — power meter "expanded". */}
-      <SlideOutPanel open={!!scorecardMember} onClose={() => setScorecardMember(null)} title={scorecardMember ? `Scorecard · ${scorecardMember.name}` : ''}>
+      <SlideOutPanel open={!!scorecardMember} onClose={() => setScorecardMember(null)} title={scorecardMember ? t('scorecardTitle', { name: scorecardMember.name }) : ''}>
         {scorecardMember && <ScorecardPanel member={scorecardMember} />}
       </SlideOutPanel>
 
       {/* Assigned work (briefcase) for a clicked seat. */}
-      <SlideOutPanel open={!!assignedMember} onClose={() => setAssignedMember(null)} title={assignedMember ? `Assigned · ${assignedMember.name}` : ''}>
+      <SlideOutPanel open={!!assignedMember} onClose={() => setAssignedMember(null)} title={assignedMember ? t('assignedTitle', { name: assignedMember.name }) : ''}>
         {assignedMember && (
           <AssignedWorkPanel
             member={assignedMember}

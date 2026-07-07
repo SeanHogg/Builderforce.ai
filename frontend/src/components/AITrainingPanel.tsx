@@ -268,14 +268,14 @@ export function AITrainingPanel({ projectId, onLog, onJobCompleted }: AITraining
     }
   }, [appendLog]);
 
-  /** Mamba Full-Model Training — trains the actual Mamba model weights via mambacode.js */
+  /** Mamba Full-Model Training — trains the actual Mamba model weights via the builderforce-memory engine */
   const handleMambaModelTraining = useCallback(async () => {
     if (!mambaTrainCode.trim()) {
       appendLog('⚠️ No training code provided for Mamba model training.');
       return;
     }
     setIsTraining(true);
-    appendLog('🐍 Initialising Mamba model (mambacode.js)…');
+    appendLog('🐍 Initialising Mamba model (builderforce-memory engine)…');
     try {
       const provider = new MambaModelProvider(mambaProviderConfig);
       mambaProviderRef.current = provider;
@@ -380,7 +380,7 @@ export function AITrainingPanel({ projectId, onLog, onJobCompleted }: AITraining
                 {trainingMode === 'behavior' && 'LoRA fine-tuning — adjusts model weights (existing pipeline)'}
                 {trainingMode === 'memory' && 'Mamba state evolution — no gradient descent required'}
                 {trainingMode === 'hybrid' && 'Combines LoRA weight updates + Mamba memory evolution'}
-                {trainingMode === 'mamba' && 'Full Mamba model training via mambacode.js (WebGPU on-device)'}
+                {trainingMode === 'mamba' && 'Full Mamba model training via the builderforce-memory engine (WebGPU on-device)'}
               </div>
             </div>
 

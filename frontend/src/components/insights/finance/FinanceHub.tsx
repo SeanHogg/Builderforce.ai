@@ -80,6 +80,11 @@ export function FinanceHub({ initialDrill }: { initialDrill?: string }) {
         </KpiGrid>
       </PmCard>
 
+      {/* ── Forecast & anomalies (forward-looking overlay) ── */}
+      <PmCard title={`📈 ${t('forecast.title')}`} action={drill('forecast')}>
+        <p style={{ margin: 0, fontSize: '0.85rem', color: 'var(--text-secondary)' }}>{t('forecast.subtitle')}</p>
+      </PmCard>
+
       {/* ── DevFinOps (R&D / SOC / audit) ── */}
       <PmCard title={`🧾 ${t('finhub.devfinops.title')}`} action={drill('devfinops')}>
         <KpiGrid>

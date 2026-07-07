@@ -165,9 +165,11 @@ describe('AgentExecutionPanel — steering echo', () => {
     expect(queryByTestId('file-change-viewer')).toBeNull();
     fireEvent.click(getByText('src/outlook-plugin.ts'));
 
-    // The viewer mounts for that file; "All changes" returns to the list.
+    // The viewer mounts for that file; the "back to list" control returns to it.
+    // (The label is localized — `taskChanges.allChanges` — so match the key the
+    // test-env passthrough i18n mock renders, not the English copy.)
     expect(getByTestId('file-change-viewer').textContent).toContain('src/outlook-plugin.ts');
-    fireEvent.click(getByText(/All changes/));
+    fireEvent.click(getByText(/allChanges/i));
     expect(queryByTestId('file-change-viewer')).toBeNull();
   });
 

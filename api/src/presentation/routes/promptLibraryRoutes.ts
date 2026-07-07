@@ -30,6 +30,7 @@ import {
   promptLibraryStars,
 } from '../../infrastructure/database/schema';
 import { getOrSetCached, getCacheVersion, bumpCacheVersion } from '../../infrastructure/cache/readThroughCache';
+import { recordCatalogAdoption } from '../../application/insights/catalogAnalytics';
 import type { Env, HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 import { slugify as slugifyBase } from '../../domain/shared/strings';
@@ -173,6 +174,11 @@ export function createPromptLibraryRoutes(db: Db): Hono<HonoEnv> {
       .update(promptLibraryEntries)
       .set({ usageCount: sql`${promptLibraryEntries.usageCount} + 1` })
       .where(eq(promptLibraryEntries.id, entry.id));
+
+    // Timestamped "use" event → feeds the prompt adoption time-series.
+    await recordCatalogAdoption(db, c.env as Env, {
+      tenantId: entry.tenantId, kind: 'prompt', itemId: entry.id, itemName: entry.title, eventType: 'usage',
+    });
 
     const [version] = await db
       .select()

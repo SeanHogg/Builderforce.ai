@@ -56,6 +56,9 @@ const mapJob = (r: Record<string, unknown>) => ({
   requirements: r.requirements ?? null,
   sourceTicketId: r.source_ticket_id == null ? null : Number(r.source_ticket_id),
   proposalCount: r.proposal_count == null ? undefined : Number(r.proposal_count),
+  // The client's (employer's) two-way reputation, so freelancers can vet who they bid with.
+  clientRating: r.client_rating == null ? null : Number(r.client_rating),
+  clientRatingCount: r.client_rating_count == null ? 0 : Number(r.client_rating_count),
   createdAt: r.created_at ?? null,
 });
 
@@ -282,7 +285,10 @@ export function createJobRoutes(): Hono<HonoEnv> {
     const q = c.req.query();
     const jobs = await getOrSetCached(c.env as Env, JOBS_PUBLIC_CACHE_KEY, () =>
       sql(c.env)`
-        SELECT j.*, t.name AS tenant_name FROM job_postings j JOIN tenants t ON t.id = j.tenant_id
+        SELECT j.*, t.name AS tenant_name,
+          (SELECT ROUND(AVG(rating)::numeric, 2) FROM freelancer_reviews r WHERE r.tenant_id = j.tenant_id AND r.direction = 'freelancer_to_employer') AS client_rating,
+          (SELECT COUNT(*) FROM freelancer_reviews r WHERE r.tenant_id = j.tenant_id AND r.direction = 'freelancer_to_employer')::int AS client_rating_count
+        FROM job_postings j JOIN tenants t ON t.id = j.tenant_id
         WHERE j.status = 'open' AND j.visibility = 'public' ORDER BY j.created_at DESC LIMIT 200
       ` as unknown as Promise<Record<string, unknown>[]>,
     );
@@ -302,7 +308,10 @@ export function createJobRoutes(): Hono<HonoEnv> {
     const id = c.req.param('id');
     const viewer = await optionalUserId(c);
     const [job] = await sql(c.env)`
-      SELECT j.*, t.name AS tenant_name FROM job_postings j JOIN tenants t ON t.id = j.tenant_id WHERE j.id = ${id}
+      SELECT j.*, t.name AS tenant_name,
+        (SELECT ROUND(AVG(rating)::numeric, 2) FROM freelancer_reviews r WHERE r.tenant_id = j.tenant_id AND r.direction = 'freelancer_to_employer') AS client_rating,
+        (SELECT COUNT(*) FROM freelancer_reviews r WHERE r.tenant_id = j.tenant_id AND r.direction = 'freelancer_to_employer')::int AS client_rating_count
+      FROM job_postings j JOIN tenants t ON t.id = j.tenant_id WHERE j.id = ${id}
     `;
     if (!job) return c.json({ error: 'Not found' }, 404);
     if (job.visibility === 'private' && !viewer) return c.json({ error: 'Sign in to view this job', code: 'AUTH_REQUIRED' }, 401);

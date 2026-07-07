@@ -144,7 +144,12 @@ export default function MarketplaceGigsSection({ search }: { search: string }) {
                   <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)' }}>{j.title}</div>
                   {j.myProposal && pill(j.myProposal.status)}
                 </div>
-                <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 4 }}>{j.tenantName} · {rate(j.rateMinCents, j.rateMaxCents, j.currency)}</div>
+                <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 4, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                  <span>{j.tenantName} · {rate(j.rateMinCents, j.rateMaxCents, j.currency)}</span>
+                  {j.clientRating != null && (j.clientRatingCount ?? 0) > 0 && (
+                    <span title={t('gigs.clientRatingTip')} style={{ display: 'inline-flex', alignItems: 'center', gap: 3, color: 'var(--warning-fg, #f59e0b)', fontWeight: 600 }}>★ {j.clientRating.toFixed(1)} <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}>({j.clientRatingCount})</span></span>
+                  )}
+                </div>
                 {j.description && <p style={{ fontSize: 13, color: 'var(--text-secondary)', marginTop: 8, maxHeight: 60, overflow: 'hidden' }}>{j.description}</p>}
                 {j.skills.length > 0 && (
                   <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 8 }}>

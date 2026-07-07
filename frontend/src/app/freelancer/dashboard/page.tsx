@@ -9,6 +9,8 @@ import { InsightStat } from '@/components/dashboard/InsightStat';
 import { buildInsightDelta } from '@/components/dashboard/metricFormat';
 import { cumulativeDailySeries, cumulativeDailyTotals } from '@/components/dashboard/seriesFromTimestamps';
 import { TabCountBadge } from '@/components/TabCountBadge';
+import { MessagesButton } from '@/components/freelance/MessagesButton';
+import { RateClientButton } from '@/components/freelance/RateClientButton';
 import { useAvailableForHire } from '@/lib/rbac';
 import { useAuth } from '@/lib/AuthContext';
 import {
@@ -132,9 +134,12 @@ export default function FreelancerDashboardPage() {
   return (
     <PageContainer style={{ padding: 0 }}>
       <main style={{ padding: '24px 16px', maxWidth: 1100, margin: '0 auto' }}>
-        <div style={{ marginBottom: 24 }}>
-          <h1 style={{ fontSize: 24, fontWeight: 700, color: 'var(--text-primary)', margin: '0 0 4px' }}>{t('heading')}</h1>
-          <p style={{ color: 'var(--text-secondary)', fontSize: 14, margin: 0 }}>{t('subheading')}</p>
+        <div style={{ marginBottom: 24, display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, flexWrap: 'wrap' }}>
+          <div>
+            <h1 style={{ fontSize: 24, fontWeight: 700, color: 'var(--text-primary)', margin: '0 0 4px' }}>{t('heading')}</h1>
+            <p style={{ color: 'var(--text-secondary)', fontSize: 14, margin: 0 }}>{t('subheading')}</p>
+          </div>
+          <MessagesButton side="freelancer" />
         </div>
 
         {/* Metric tiles — each with a 14-day trend sparkline. */}
@@ -222,6 +227,12 @@ export default function FreelancerDashboardPage() {
                   </span>
                   {e.rateCents != null && (
                     <span style={{ fontSize: 13, color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>{money(e.rateCents, e.currency)}</span>
+                  )}
+                  {(e.status === 'active' || e.status === 'interviewing' || e.status === 'invited') && (
+                    <MessagesButton side="freelancer" variant="inline" label="" context={{ engagementId: e.id, title: e.title ?? undefined }} />
+                  )}
+                  {(e.status === 'active' || e.status === 'terminated') && e.hiredAt && (
+                    <RateClientButton engagementId={e.id} clientName={e.tenantName} />
                   )}
                   <span style={{ ...badgeStyle, color: ENGAGEMENT_TONE[e.status] }}>{t(`work.status.${e.status}`)}</span>
                 </div>

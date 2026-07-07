@@ -1068,7 +1068,11 @@
         "benchmarking": "Analyse comparative sectorielle",
         "benchmarkingDesc": "Le classement de vos métriques de livraison par rapport à une cohorte du secteur — percentile et notation par secteur et taille d’équipe.",
         "funnel": "Entonnoir d'innovation",
-        "funnelDesc": "Idée → validée → en construction → livrée → mesurée : conversion, délai de création de valeur et pipeline d’idées."
+        "funnelDesc": "Idée → validée → en construction → livrée → mesurée : conversion, délai de création de valeur et pipeline d’idées.",
+        "crossTeam": "Inter-équipes",
+        "crossTeamDesc": "Classer chaque équipe par rapport aux autres",
+        "delayTaxonomy": "Causes de retard",
+        "delayTaxonomyDesc": "Pourquoi le travail est en retard"
       },
       "summary": {
         "cycleTime": "Temps de cycle moyen",
@@ -1200,7 +1204,11 @@
         "forecast_over": "Dépassement prévu",
         "on_track": "Dans les clous",
         "no_budget": "Pas de budget"
-      }
+      },
+      "scope": "Portée",
+      "scopeWorkspace": "Tout l'espace",
+      "scopeProjects": "Projets",
+      "scopeInitiatives": "Initiatives"
     },
     "comp": {
       "title": "Conformité et audit",
@@ -1249,7 +1257,11 @@
         "shipped": "Livrée",
         "measured": "Mesurée",
         "killed": "Abandonnée"
-      }
+      },
+      "link": "Lier à",
+      "linkNone": "Aucun lien",
+      "linkProjects": "Projets",
+      "linkInitiatives": "Initiatives"
     },
     "alloc": {
       "title": "Répartition des investissements",
@@ -1668,6 +1680,140 @@
       "emptyTitle": "Votre tableau de bord est vide",
       "emptyBody": "Épinglez des widgets depuis n'importe quel rapport ou page — l'épingle dans le coin d'une carte l'ajoute ici.",
       "myDashboard": "Mon tableau de bord"
+    },
+    "emp": {
+      "loading": "Chargement…",
+      "crossTeam": {
+        "noTeams": "Aucune équipe",
+        "noData": "Aucune équipe comparable",
+        "leaderboard": "Classement des équipes",
+        "footnote": "Les centiles classent chaque équipe par rapport aux autres équipes du locataire sur la période.",
+        "tableTitle": "Indicateurs par équipe",
+        "team": "Équipe",
+        "members": "Membres",
+        "overall": "Global",
+        "metric": {
+          "throughput": "Débit",
+          "avg_cycle_time_hours": "Temps de cycle",
+          "rework_rate_pct": "Reprise",
+          "effectiveness": "Efficacité"
+        }
+      },
+      "delay": {
+        "taggedTasks": "Tâches étiquetées",
+        "manual": "Manuel",
+        "inferred": "Inféré",
+        "distribution": "Causes de retard",
+        "tasks": "tâches",
+        "noData": "Aucun retard détecté",
+        "tableTitle": "Répartition par cause",
+        "reasonCol": "Cause",
+        "avgDwell": "Blocage moyen",
+        "footnote": "Les étiquettes manuelles priment sur les causes inférées des blocages longs.",
+        "tagLabel": "Cause du retard",
+        "untagged": "Aucune cause de retard",
+        "reason": {
+          "blocked_dependency": "Bloqué par une dépendance",
+          "awaiting_review": "En attente de revue",
+          "scope_change": "Changement de périmètre",
+          "unclear_requirements": "Exigences floues",
+          "external": "Blocage externe",
+          "capacity": "Capacité / file",
+          "other": "Autre"
+        }
+      },
+      "release": {
+        "label": "Version",
+        "none": "Aucune version"
+      },
+      "pulse": {
+        "title": "Pouls d’équipe",
+        "thanks": "Merci — votre réponse a été enregistrée.",
+        "submit": "Envoyer",
+        "commentPlaceholder": "Commentaire facultatif (anonyme)",
+        "latestAvg": "Moyenne récente",
+        "latestEnps": "eNPS récent",
+        "trend": "Tendance du ressenti",
+        "responses": "réponses",
+        "create": "Nouveau pouls",
+        "questionPlaceholder": "Posez une question…",
+        "scale": "Échelle",
+        "open": "Ouvrir",
+        "surveys": "Enquêtes",
+        "noSurveys": "Aucune enquête",
+        "question": "Question",
+        "average": "Moyenne",
+        "enps": "eNPS",
+        "status": "Statut",
+        "active": "Active",
+        "closed": "Fermée",
+        "close": "Fermer"
+      },
+      "export": {
+        "dataset": "Jeu de données",
+        "csv": "CSV",
+        "html": "Imprimable",
+        "datasets": {
+          "dora": "DORA",
+          "finance": "Finance",
+          "allocation": "Allocation",
+          "benchmarking": "Comparatif"
+        }
+      },
+      "recon": {
+        "fiscalYear": "Exercice",
+        "variance": "Écart",
+        "quartersTitle": "Trimestres déclarés",
+        "quarter": "Trimestre",
+        "revenue": "Revenu",
+        "derivedBase": "Base R&D dérivée",
+        "derivedSub": "À partir de l’effort + dépense IA",
+        "reportedActual": "Réel déclaré",
+        "reportedSub": "Données trimestrielles manuelles",
+        "derivedLabor": "Main-d’œuvre dérivée",
+        "derivedAiSpend": "Dépense IA dérivée",
+        "reportedPlan": "Plan déclaré",
+        "rdToRevenue": "R&D / revenu",
+        "footnote": "Le dérivé est une estimation type QRE ; le déclaré est saisi manuellement — l’écart signale la divergence.",
+        "flag": {
+          "aligned": "Aligné",
+          "derived_higher": "Dérivé supérieur",
+          "reported_higher": "Déclaré supérieur",
+          "no_reported": "Aucune donnée déclarée"
+        },
+        "title": "Rapprochement R&D",
+        "subtitle": "Base de crédit R&D dérivée vs dépenses trimestrielles déclarées"
+      }
+    },
+    "forecast": {
+      "title": "Prévisions et anomalies",
+      "subtitle": "Où va chaque métrique, et ce qui semble déjà anormal.",
+      "error": "Impossible de charger la prévision.",
+      "noData": "Historique insuffisant pour prévoir.",
+      "metricLabel": "Métrique",
+      "history": "Historique",
+      "projected": "Projeté",
+      "projection": "Projection",
+      "trend": "Tendance",
+      "trendUp": "En hausse",
+      "trendDown": "En baisse",
+      "trendFlat": "Stable",
+      "rSquared": "Ajustement R² {r}%",
+      "anomalies": "Anomalies",
+      "anomaliesSub": "Points au-delà de 2σ",
+      "dismiss": "Ignorer",
+      "chartAria": "Historique et projection de {metric}",
+      "metric": {
+        "cost": "Dépense",
+        "cycle_time": "Temps de cycle",
+        "cfr": "Taux d'échec des changements",
+        "throughput": "Débit de déploiement"
+      }
+    },
+    "upgrade": {
+      "title": "Cette vue nécessite un forfait supérieur",
+      "body": "Les analyses avancées ne sont pas incluses dans votre forfait {plan}. Passez à un forfait supérieur pour débloquer les prévisions, la détection d'anomalies et les vues de direction.",
+      "cta": "Voir les forfaits"
     }
   },
   "cloudAgentForm": {
@@ -2671,7 +2817,21 @@
       "wfPerformance": "Personnel · Performance",
       "marketplace": "Place de marché",
       "tools": "Outils",
-      "ide": "IDE"
+      "ide": "IDE",
+      "alerts": "Alertes",
+      "logs": "Journaux",
+      "quality": "Qualité",
+      "integrations": "Intégrations",
+      "content": "Contenu",
+      "ceremonies": "Cérémonies",
+      "wfPlan": "Plan des effectifs",
+      "empAllocation": "Répartition",
+      "empCollaboration": "Collaboration",
+      "empDocs": "Documentation",
+      "empCost": "Coût de main-d’œuvre",
+      "empPerformers": "Performance",
+      "empInitiatives": "Répartition par initiative",
+      "forecast": "Prévisions"
     },
     "title": {
       "aiProductivity": "Score de productivité IA",
@@ -2745,7 +2905,33 @@
       "catalogMarketplaceTopEval": "Agent le mieux évalué",
       "catalogToolsByCategory": "Outils par catégorie",
       "ideByModality": "Projets par modalité",
-      "ideRecency": "Projets IDE"
+      "ideRecency": "Projets IDE",
+      "obsAlertFires": "Déclenchements d'alerte / jour",
+      "obsAlertRuleHealth": "Santé des règles d'alerte",
+      "obsLogVolume": "Volume d'événements",
+      "obsLogTypes": "Types d'événements",
+      "obsQualityVolume": "Volume d'erreurs",
+      "obsQualityResolution": "Résolution des erreurs",
+      "obsIntegrationsConnected": "Intégrations connectées",
+      "obsIntegrationsByProvider": "Intégrations par fournisseur",
+      "obsContentCoverage": "Couverture des connaissances",
+      "obsContentByKind": "Documents par type",
+      "obsCeremonyCadence": "Cadence des cérémonies",
+      "obsCeremonyBalance": "Répartition de la parole",
+      "wfpCostSplit": "Coût recruter vs. agent",
+      "wfpCapacity": "Capacité vs WIP",
+      "wfpGap": "Marge allouable",
+      "empOverAllocated": "Membres surchargés",
+      "empCollabScore": "Score de collaboration",
+      "empDocAuthors": "Principaux contributeurs docs",
+      "empLaborByProject": "Coût par projet",
+      "empPerformerTiers": "Niveaux de performance",
+      "empInitiativeMix": "Répartition par initiative",
+      "forecastCostProjection": "Dépense projetée",
+      "forecastCycleProjection": "Temps de cycle projeté",
+      "forecastCfrProjection": "Échec de changements projeté",
+      "forecastAnomalies": "Anomalies ouvertes",
+      "forecastCostTrend": "Prévision de dépense"
     },
     "loading": "Chargement…",
     "overview": {
@@ -2836,6 +3022,99 @@
         "llm": "LLM",
         "voice": "Voix"
       }
+    },
+    "obs": {
+      "noFirings": "Aucun déclenchement",
+      "firesPerDay": "Déclenchements / jour",
+      "noRules": "Aucune règle d'alerte",
+      "firing": "Déclenchée",
+      "healthy": "Saine",
+      "paused": "En pause",
+      "rules": "règles",
+      "noEvents": "Aucun événement",
+      "eventsPerDay": "Événements / jour",
+      "events": "événements",
+      "noErrors": "Aucune erreur",
+      "errorsPerDay": "Erreurs / jour",
+      "groups": "groupes",
+      "status_unresolved": "Non résolu",
+      "status_fixing": "Correction",
+      "status_resolved": "Résolu",
+      "status_ignored": "Ignoré",
+      "integrationsSub": "{healthy} saines sur {total}",
+      "noIntegrations": "Aucune intégration",
+      "connected": "connectées",
+      "coverageSub": "{present} sur {total} standards",
+      "staleNudge": "{count} docs obsolètes > {days} j",
+      "noDocs": "Aucun document",
+      "sop": "SOP",
+      "process": "Processus",
+      "doc": "Doc",
+      "docs": "docs",
+      "noCeremonies": "Aucune cérémonie",
+      "ceremoniesPerDay": "Sessions / jour",
+      "humanTalk": "Humain",
+      "agentTalk": "Agent IA",
+      "completed": "terminées"
+    },
+    "reorder": {
+      "drag": "Glisser pour réorganiser",
+      "moveLeft": "Déplacer à gauche",
+      "moveRight": "Déplacer à droite"
+    },
+    "wfp": {
+      "human": "Humain",
+      "agent": "Agent",
+      "noCost": "Aucun taux",
+      "perWeek": "par semaine",
+      "empty": "Aucun WIP",
+      "gapSub": "{open} sur {max} WIP utilisé"
+    },
+    "emp": {
+      "teamAnalytics": "Analyse d’équipe",
+      "allocationTitle": "Surcharge",
+      "allocationSub": "WIP observé vs. le plafond de chaque membre",
+      "collaborationTitle": "Collaboration",
+      "docTitle": "Activité de documentation",
+      "costTitle": "Coût de main-d’œuvre",
+      "performersTitle": "Performance et coaching",
+      "initiativesTitle": "Répartition par initiative",
+      "member": "Membre",
+      "overAllocated": "Surchargé",
+      "withinCapacity": "Dans la capacité",
+      "wip": "WIP",
+      "max": "Max",
+      "utilization": "Utilisation",
+      "reviews": "Revues",
+      "comments": "Commentaires",
+      "handoffs": "Transferts",
+      "turnaround": "Délai",
+      "score": "Score",
+      "authored": "Créés",
+      "edits": "Éditions",
+      "acks": "Accusés",
+      "cost": "Coût",
+      "effortH": "Effort (h)",
+      "tasks": "Tâches",
+      "project": "Projet",
+      "initiative": "Initiative",
+      "totalCost": "Coût total",
+      "tier": "Niveau",
+      "tierHigh": "Élevé",
+      "tierSolid": "Solide",
+      "tierWatch": "À surveiller",
+      "percentile": "Percentile",
+      "composite": "Composite",
+      "addNote": "Ajouter une note de coaching",
+      "notePlaceholder": "Note de coaching…",
+      "saveNote": "Enregistrer",
+      "noNotes": "Aucune note de coaching",
+      "deleteNote": "Supprimer",
+      "noData": "Aucune donnée sur cette période",
+      "loading": "Chargement…",
+      "exportCsv": "Exporter CSV",
+      "exporting": "Exportation…",
+      "focusMix": "Focalisation"
     }
   },
   "compile": {
@@ -5071,7 +5350,14 @@
     "usesCount": "{n, number} utilisations",
     "byAuthor": "par {name}",
     "emptyMine": "Vous n’avez pas encore de prompts. Cliquez sur « + Nouveau prompt » pour en créer un.",
-    "emptyPublic": "Aucun prompt public trouvé."
+    "emptyPublic": "Aucun prompt public trouvé.",
+    "history": "Historique",
+    "analyze": "Analyser et améliorer",
+    "analyzing": "Analyse…",
+    "suggestionTitle": "Amélioration suggérée",
+    "saveAsVersion": "Enregistrer comme nouvelle version",
+    "savedVersion": "Enregistré ✓",
+    "copySuggestion": "Copier"
   },
   "voicePanel": {
     "retry": "Réessayer",
@@ -5415,7 +5701,8 @@
       "tabProposals": "Mes propositions",
       "tabEngagements": "Mes missions",
       "accept": "Accepter",
-      "decline": "Refuser"
+      "decline": "Refuser",
+      "clientRatingTip": "Note du client par les freelances ayant travaillé avec lui"
     },
     "timecard": {
       "title": "Feuille de temps",
@@ -5624,7 +5911,8 @@
       "inProposalSub": "offres en cours",
       "earned": "Gains à ce jour",
       "earnedSub": "cumul"
-    }
+    },
+    "message": "Message"
   },
   "hires": {
     "title": "Recrutements",
@@ -5700,7 +5988,8 @@
         "paid": "Payée",
         "void": "Annulée"
       }
-    }
+    },
+    "wouldWorkAgain": "Je retravaillerais avec lui"
   },
   "register": {
     "want": "Je veux",
@@ -6045,7 +6334,14 @@
       "role": "Rôle",
       "started": "Démarré",
       "pages": "Pages",
-      "terminate": "Terminer"
+      "terminate": "Terminer",
+      "trends": "Tendances de la plateforme",
+      "windowDays": "{days} j",
+      "newUsers": "Nouveaux utilisateurs",
+      "newWorkspaces": "Nouveaux espaces",
+      "llmTokens": "Jetons LLM",
+      "llmSpend": "Dépenses LLM",
+      "errorVolume": "Volume d'erreurs"
     },
     "errors": {
       "lastN": "{n} dernières erreurs",
@@ -7068,6 +7364,42 @@
       "broader": "Message à l’équipe"
     }
   },
+  "ceremony": {
+    "standup": "Mêlée",
+    "planning": "Planification",
+    "atTable": "{count} à la table",
+    "live": "{count} en direct",
+    "close": "Fermer",
+    "loading": "Chargement…",
+    "toDiscuss": "À discuter",
+    "backlog": "En attente",
+    "sprint": "Sprint",
+    "noSprint": "Aucun sprint pour le moment",
+    "sprintScheduled": "{count} planifié(s) · déposez un ticket pour ajouter",
+    "newSprint": "+ Nouveau sprint",
+    "dropToDone": "Déposez un ticket ici pour marquer comme Terminé",
+    "inBacklog": "{count} en attente",
+    "noMembers": "Aucun membre d'équipe — ajoutez une équipe à ce projet ou invitez des collègues.",
+    "scorecardTitle": "Fiche de score · {name}",
+    "assignedTitle": "Assigné · {name}",
+    "priority": "Priorité : {priority}",
+    "status": "Statut : {status}",
+    "openOnBoard": "Ouvrir sur le tableau →",
+    "newEpicPrompt": "Titre de la nouvelle épopée",
+    "newSprintPrompt": "Nom du nouveau sprint",
+    "epics": "Épopées",
+    "newShort": "+ Nouveau",
+    "taskCount": "{count, plural, one {# tâche} other {# tâches}}",
+    "nothingHere": "Rien ici",
+    "noEpics": "Aucune épopée pour le moment",
+    "errorLoad": "Échec du chargement",
+    "errorUpdate": "Échec de la mise à jour",
+    "errorCreateEpic": "Échec de la création de l'épopée",
+    "errorCreateSprint": "Échec de la création du sprint",
+    "errorStart": "Impossible de démarrer la session",
+    "errorAdvance": "Impossible de passer au tour suivant",
+    "errorComplete": "Impossible de terminer la session"
+  },
   "meetings": {
     "title": "Réunions",
     "subtitle": "Planifiez et rejoignez des sessions vidéo et audio en direct avec votre équipe.",
@@ -7291,5 +7623,172 @@
       "loadError": "Échec du chargement de votre espace de travail.",
       "loading": "Chargement…"
     }
+  },
+  "messaging": {
+    "title": "Messages",
+    "empty": "Aucune conversation pour le moment.",
+    "noMessages": "Aucun message pour le moment",
+    "loading": "Chargement…",
+    "startThread": "Envoyez le premier message pour démarrer la conversation.",
+    "placeholder": "Écrivez un message… (⌘/Ctrl+Entrée pour envoyer)",
+    "send": "Envoyer",
+    "sending": "Envoi…",
+    "attach": "Joindre un fichier",
+    "attachment": "Pièce jointe",
+    "remove": "Retirer",
+    "aFreelancer": "Freelance",
+    "aClient": "Client"
+  },
+  "trust": {
+    "topRated": "Très bien noté",
+    "risingTalent": "Talent émergent",
+    "badgeTip": "Obtenu grâce à un solide historique de réussite",
+    "jss": "JSS",
+    "jssTip": "Score de réussite : note, réembauches et fidélité client combinés"
+  },
+  "rateClient": {
+    "rate": "Évaluer le client",
+    "title": "Évaluer ce client",
+    "titleNamed": "Évaluer {name}",
+    "blurb": "Votre avis construit la réputation de ce client pour les autres freelances.",
+    "thanks": "Merci pour votre avis",
+    "commentPlaceholder": "Comment s’est passée la collaboration avec ce client ?",
+    "wouldWorkAgain": "Je retravaillerais avec lui",
+    "submit": "Envoyer l’avis",
+    "submitting": "Envoi…"
+  },
+  "catalogAnalytics": {
+    "trendTitle": "Adoption au fil du temps",
+    "installs": "Installations",
+    "usage": "Utilisation",
+    "window": "Période",
+    "days": "{n} j"
+  },
+  "promptHistory": {
+    "title": "Historique des versions",
+    "loading": "Chargement des versions…",
+    "from": "De",
+    "to": "À",
+    "versionN": "v{n}",
+    "unified": "Unifiée",
+    "split": "Côte à côte",
+    "added": "ajoutées",
+    "removed": "supprimées",
+    "unchanged": "{n} inchangées",
+    "allVersions": "Toutes les versions",
+    "empty": "Aucune version pour le moment"
+  },
+  "factsPage": {
+    "title": "Faits",
+    "subtitle": "Un stock structuré et interrogeable de faits sur lequel votre espace et vos agents peuvent s'appuyer.",
+    "newFact": "Nouveau fait",
+    "editFact": "Modifier le fait",
+    "searchPlaceholder": "Rechercher des faits…",
+    "allSubjects": "Tous les sujets",
+    "allPredicates": "Tous les prédicats",
+    "clear": "Effacer",
+    "loading": "Chargement…",
+    "empty": "Aucun fait pour le moment.",
+    "colSubject": "Sujet",
+    "colPredicate": "Prédicat",
+    "colObject": "Objet",
+    "colSource": "Source",
+    "colConfidence": "Confiance",
+    "colActions": "Actions",
+    "edit": "Modifier",
+    "delete": "Supprimer",
+    "save": "Enregistrer",
+    "saving": "Enregistrement…",
+    "cancel": "Annuler",
+    "validation": "Le sujet, le prédicat et l’objet sont obligatoires.",
+    "needDeveloper": "Nécessite le rôle Développeur",
+    "subjectPlaceholder": "ex. Acme Corp",
+    "predicatePlaceholder": "ex. fondée_en",
+    "objectPlaceholder": "ex. 2019",
+    "sourcePlaceholder": "ex. appel d’intégration"
+  },
+  "personaLens": {
+    "pageTitle": "Persona de lentille",
+    "title": "Votre persona de lentille",
+    "subtitle": "Choisissez le rôle que vous jouez. Il réorganise et met en avant les lentilles d’analyse qui vous intéressent — sans jamais changer vos accès.",
+    "loading": "Chargement…",
+    "primary": "Principal",
+    "save": "Enregistrer le persona",
+    "saving": "Enregistrement…",
+    "saved": "Persona enregistré",
+    "saveFailed": "Impossible d’enregistrer le persona",
+    "highlightsFor": "Lentilles mises en avant pour {persona}",
+    "home": "Accueil",
+    "viewingAs": "Vue en tant que",
+    "viewShapingNote": "Un persona ne façonne que votre vue. Chaque lentille respecte toujours votre rôle d’espace de travail — vous n’obtenez jamais un accès que vous n’auriez pas autrement.",
+    "personas": {
+      "ceo": "PDG",
+      "cfo": "Directeur financier",
+      "cto": "Directeur technique",
+      "ciso": "RSSI",
+      "pmo": "PMO",
+      "em": "Manager d’ingénierie",
+      "ic": "Contributeur individuel"
+    },
+    "lenses": {
+      "engineering": "Ingénierie",
+      "dora": "DORA",
+      "finance": "Finance",
+      "allocation": "Allocation",
+      "compliance": "Conformité",
+      "portfolio": "Portefeuille",
+      "delivery": "Livraison"
+    }
+  },
+  "lensSnapshots": {
+    "pageTitle": "Instantanés de revue",
+    "title": "Revues périodiques des lentilles",
+    "subtitle": "Captures ponctuelles mensuelles, trimestrielles et annuelles de chaque lentille — figées à la clôture de la période.",
+    "loading": "Chargement…",
+    "empty": "Aucun instantané capturé pour l’instant",
+    "lens": "Lentille",
+    "cadence": "Cadence",
+    "captureNow": "Capturer maintenant",
+    "capturing": "Capture…",
+    "monthly": "Mensuel",
+    "quarterly": "Trimestriel",
+    "annual": "Annuel",
+    "filterLens": "Filtrer par lentille",
+    "allLenses": "Toutes les lentilles",
+    "generatedAt": "Capturé {at}",
+    "view": "Voir",
+    "hide": "Masquer",
+    "lensNames": {
+      "engineering": "Ingénierie",
+      "dora": "DORA",
+      "finance": "Finance",
+      "allocation": "Allocation",
+      "compliance": "Conformité"
+    }
+  },
+  "workforcePlan": {
+    "pageTitle": "Plan des effectifs",
+    "subtitle": "Capacité combinée humain + agent, travail en cours et coût.",
+    "loading": "Chargement…",
+    "members": "Membres",
+    "membersSub": "{human} humain · {agent} agent",
+    "inFlight": "En cours (WIP)",
+    "inFlightSub": "Travail assigné ouvert",
+    "capacityGap": "Marge allouable",
+    "capacityGapSub": "Réserve de WIP inutilisée",
+    "weeklyCost": "Coût hebdomadaire",
+    "weeklyCostSub": "Coût combiné modélisé",
+    "agentShare": "Part WIP des agents",
+    "agentShareSub": "Travail porté par les agents",
+    "hireVsAgent": "Recruter vs. agent (coût hebdo.)",
+    "perWeek": "par semaine",
+    "noCost": "Aucun taux de coût modélisé",
+    "human": "Humain",
+    "agent": "Agent",
+    "humanCapacity": "Personnes — WIP vs plafond",
+    "agentCapacity": "Agents — WIP vs plafond",
+    "noHumans": "Aucune personne profilée",
+    "noAgents": "Aucun agent profilé",
+    "barLegend": "Barre = WIP ouvert · piste pâle = plafond WIP"
   }
 }

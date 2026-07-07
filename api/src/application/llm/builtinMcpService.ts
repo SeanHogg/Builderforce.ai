@@ -1958,6 +1958,10 @@ const CATALOG: BuiltinTool[] = [
   // ---- Tasks: the assignable team roster (humans + agents) ----
   { tool: 'tasks.assignees', mutates: false, description: 'List the FULL team a task can be assigned to — humans AND agents in one roster. Resolve an assignee name here, then set the matching id field on tasks.create / tasks.update.', parameters: obj({}), run: (ctx) => replayRoute(ctx, 'GET', '/api/tasks/assignees') },
 
+  // ---- Kanban: role sign-off (the reviewer round-trip, first-class for agents) ----
+  { tool: 'kanban.signoff', mutates: true, description: 'Record a role SIGN-OFF on a ticket as a reviewer acting AS a role (satisfies a lane\'s role/review requirement so the audit clears and the swimlane can advance). verdict "approved" (default) or "changes_requested". Pass laneKey to scope the sign-off to a lane; memberKind defaults to "agent" (you), memberRef to your agent id.', parameters: obj({ taskId: N, roleKey: S, laneKey: S, verdict: { type: 'string', enum: ['approved', 'changes_requested'] }, summary: S, memberRef: S }, ['taskId', 'roleKey']), run: (ctx, a) => replayRoute(ctx, 'POST', `/api/kanban/tasks/${num(a.taskId)}/signoff`, { roleKey: str(a.roleKey), laneKey: a.laneKey != null ? str(a.laneKey) : undefined, verdict: a.verdict === 'changes_requested' ? 'changes_requested' : 'approved', summary: a.summary != null ? str(a.summary) : undefined, memberKind: 'agent', memberRef: a.memberRef != null ? str(a.memberRef) : (ctx.userId ?? undefined) }) },
+  { tool: 'kanban.audit', mutates: false, description: 'Get a ticket\'s role/diagnostic coverage audit (which required lane checks are satisfied vs missing).', parameters: obj({ taskId: N }, ['taskId']), run: (ctx, a) => replayRoute(ctx, 'GET', `/api/kanban/tasks/${num(a.taskId)}/audit`) },
+
   // ---- Workflow DEFINITIONS: write/run/import + computed reads not backed by a plain table op ----
   { tool: 'workflows.create', mutates: true, description: 'Create a workflow definition.', parameters: obj({ name: S, description: S, projectId: N }, ['name']), run: (ctx, a) => replayRoute(ctx, 'POST', '/api/workflow-definitions', { name: str(a.name), description: a.description != null ? str(a.description) : undefined, projectId: a.projectId != null ? num(a.projectId) : undefined }) },
   { tool: 'workflows.update', mutates: true, description: 'Update a workflow definition (name/description/project).', parameters: obj({ id: S, name: S, description: S, projectId: N }, ['id']), run: (ctx, a) => { const body: Json = {}; if (a.name != null) body.name = str(a.name); if (a.description != null) body.description = str(a.description); if (a.projectId != null) body.projectId = num(a.projectId); return replayRoute(ctx, 'PATCH', `/api/workflow-definitions/${encodeURIComponent(str(a.id))}`, body); } },
@@ -2189,6 +2193,10 @@ export const CLOUD_AGENT_PLATFORM_TOOLS: readonly string[] = [
   'project_files.list', 'project_files.read', 'project_files.save',
   'attachments.read', 'attachments.write',
   'reviews.record', 'tickets.from_delta',
+  // Kanban role sign-off — a reviewer agent clears a lane's role/review requirement so
+  // the swimlane can advance (the round-trip that used to need a hand HTTP call). Read
+  // the coverage audit to see what it still needs to satisfy.
+  'kanban.signoff', 'kanban.audit',
   // Security agent: file SOC 2 findings mid-run. NOT security.configure_access —
   // deciding who can see security tickets is an admin action, never an unattended
   // agent reconfiguring its own findings' visibility.
@@ -2250,6 +2258,7 @@ export function resolveCloudAgentPlatformTool(advertised: string): string | unde
  *  dotted tool id (still readable, e.g. "portfolios.create"). */
 const MCP_VERB: Record<string, string> = {
   'tasks.create': 'task.created', 'tasks.update': 'task.updated', 'tasks.move': 'task.moved', 'tasks.delete': 'task.deleted',
+  'kanban.signoff': 'ticket.signed_off',
   'objectives.create': 'okr.objective_created', 'objectives.update': 'okr.objective_updated', 'objectives.delete': 'okr.objective_deleted',
   'key_results.create': 'okr.kr_created',
   'marketplace.publish_ticket': 'gig.published', 'marketplace.unpublish_ticket': 'gig.unpublished',

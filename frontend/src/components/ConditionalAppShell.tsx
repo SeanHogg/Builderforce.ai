@@ -16,6 +16,7 @@ import { DeliveryPanelProvider } from './insights/DeliveryPanelProvider';
 import { DeliveryPanelBrainBridge } from './insights/DeliveryPanelBrainBridge';
 import { FinancePanelProvider } from './insights/finance/FinancePanelProvider';
 import { FinancePanelBrainBridge } from './insights/finance/FinancePanelBrainBridge';
+import { WidgetBrainBridge } from './widgets/WidgetBrainBridge';
 import { DevexPanelProvider } from './insights/DevexPanelProvider';
 import { DevexPanelBrainBridge } from './insights/DevexPanelBrainBridge';
 import { CanvasPanelProvider } from './canvas/CanvasPanelProvider';
@@ -252,6 +253,9 @@ function AppBrainShell({ children }: { children: React.ReactNode }) {
               {showBrain && <DeliveryPanelBrainBridge />}
               {showBrain && <FinancePanelBrainBridge />}
               {showBrain && <DevexPanelBrainBridge />}
+              {/* Widget tools: list_widgets / pin_widget / unpin_widget / show_widget
+                  — let the Brain curate the user's pinnable home dashboard. */}
+              {showBrain && <WidgetBrainBridge />}
               {/* Canvas slide-out tool: `show_canvas` lets the Brain generate a
                   visual board (notes/timers) and the user save it to Knowledge. */}
               {showBrain && <CanvasPanelBrainBridge />}

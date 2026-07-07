@@ -496,6 +496,20 @@ export function TaskMgmtContent({
     return cols.length > 0 ? cols : defaults();
   }, [lanes, agentsByLane, tasks]);
 
+  // Order tickets within a lane by the AI Manager's computed backlog rank (rank 1 =
+  // highest value × urgency), nulls last, so every lane shows the most-important work
+  // at the top — the same order the priority-aware autonomous dispatcher runs them in.
+  // Stable: a null-rank vs null-rank pair keeps the incoming (filtered) order.
+  const byManagerRank = (list: Task[]): Task[] =>
+    list
+      .map((t, i) => ({ t, i }))
+      .sort((a, b) => {
+        const ra = a.t.managerRank ?? Number.POSITIVE_INFINITY;
+        const rb = b.t.managerRank ?? Number.POSITIVE_INFINITY;
+        return ra !== rb ? ra - rb : a.i - b.i;
+      })
+      .map((x) => x.t);
+
   // Status choices for dropdowns / move-to / filters = the board's columns.
   const statusChoices = boardColumns.map((c) => ({ value: c.status, label: c.label }));
   // Label for a task's status: prefer its column's name, else a humanized label.
@@ -1287,7 +1301,7 @@ export function TaskMgmtContent({
                     </span>
                   </div>
                   {boardColumns.map((column) => {
-                    const cellTasks = row.tasks.filter((t) => t.status === column.status);
+                    const cellTasks = byManagerRank(row.tasks.filter((t) => t.status === column.status));
                     return (
                       <div
                         key={column.id}
@@ -1334,7 +1348,7 @@ export function TaskMgmtContent({
         >
           {boardColumns.map((column) => {
             const status = column.status;
-            const tasksForStatus = filtered.filter((t) => t.status === status);
+            const tasksForStatus = byManagerRank(filtered.filter((t) => t.status === status));
             return (
               <div
                 key={column.id}

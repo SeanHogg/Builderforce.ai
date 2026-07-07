@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { deriveRiceScore, heuristicBusinessValue, parseValueResponse, buildValuePrompt } from './businessValue';
+import { deriveRiceScore, heuristicBusinessValue, parseValueResponse, buildValuePrompt, riceBusinessValueFromFeature, normalizeFeatureName } from './businessValue';
 import type { RankableTask } from './prioritize';
 
 const NOW = Date.parse('2026-07-03T00:00:00Z');
@@ -37,6 +37,34 @@ describe('heuristicBusinessValue', () => {
     const undated = heuristicBusinessValue(base, NOW, null);
     expect(overdue.score).toBeGreaterThan(undated.score);
     expect(overdue.rationale).toBeTruthy();
+  });
+  it('labels its source as heuristic (not ai) so the fallback path is distinguishable', () => {
+    expect(heuristicBusinessValue(base, NOW, null).source).toBe('heuristic');
+  });
+});
+
+describe('riceBusinessValueFromFeature', () => {
+  it('normalizes a PMO score relative to the project max and labels source rice', () => {
+    const v = riceBusinessValueFromFeature(
+      { name: 'Checkout revamp', reach: 8, impact: 4, confidence: 0.8, effort: 2, score: 12.8 },
+      25.6,
+    );
+    expect(v.source).toBe('rice');
+    expect(v.score).toBe(50); // 12.8 / 25.6 = 0.5 → 50
+    expect(v.rationale).toContain('RICE');
+  });
+  it('falls back to the bounded RICE fold when no project max score is available', () => {
+    const v = riceBusinessValueFromFeature(
+      { name: 'x', reach: 10, impact: 5, confidence: 1, effort: 1, score: null }, 0,
+    );
+    expect(v.source).toBe('rice');
+    expect(v.score).toBe(100);
+  });
+});
+
+describe('normalizeFeatureName', () => {
+  it('matches case/punctuation/whitespace variants', () => {
+    expect(normalizeFeatureName('Checkout  Revamp!')).toBe(normalizeFeatureName('checkout revamp'));
   });
 });
 

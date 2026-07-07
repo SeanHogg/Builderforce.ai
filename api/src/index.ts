@@ -24,6 +24,7 @@ import { AuditRepository }      from './infrastructure/repositories/AuditReposit
 // Application services
 import { ProjectService }  from './application/project/ProjectService';
 import { TaskService }     from './application/task/TaskService';
+import { llmEpicDecomposer } from './application/task/EpicDecomposer';
 import { TenantService }   from './application/tenant/TenantService';
 import { AuthService }     from './application/auth/AuthService';
 import { AgentService }    from './application/agent/AgentService';
@@ -90,6 +91,7 @@ import { createWorkforceRoutes }        from './presentation/routes/workforceRou
 import { createFreelancerRoutes, createEngagementRoutes } from './presentation/routes/freelancerRoutes';
 import { createActivityRoutes, createTimecardRoutes } from './presentation/routes/activityRoutes';
 import { createJobRoutes, createNotificationRoutes } from './presentation/routes/jobRoutes';
+import { createFreelancerMessagingRoutes } from './presentation/routes/freelancerMessagingRoutes';
 import { createGigMarketplaceRoutes, createEngagementBoardRoutes, createDeliverableRoutes } from './presentation/routes/gigMarketplaceRoutes';
 import { createLimbicRoutes }           from './presentation/routes/limbicRoutes';
 import { createPersonaRoutes }          from './presentation/routes/personaRoutes';
@@ -180,6 +182,20 @@ import { runValidatorReviewSweep } from './application/validation/validationDisp
 import { runSecurityAuditSweep } from './application/security/securityDispatch';
 import { runDueReports } from './application/reports/runDueReports';
 import { handleInboundEmail } from './application/workflow/inboundEmail';
+// ── Insights-everywhere + enterprise-lens extensions (integration batch) ──
+import { createCatalogAnalyticsRoutes } from './presentation/routes/catalogAnalyticsRoutes';
+import { createFactsRoutes } from './presentation/routes/factsRoutes';
+import { createPromptAnalyzerRoutes } from './presentation/routes/promptAnalyzerRoutes';
+import { createMemberPersonaRoutes } from './presentation/routes/memberPersonaRoutes';
+import { createLensSnapshotRoutes } from './presentation/routes/lensSnapshotRoutes';
+import { createWorkforcePlanRoutes } from './presentation/routes/workforcePlanRoutes';
+import { dueSnapshots } from './application/reports/lensSnapshots';
+import { createEmpFeatureRoutes } from './presentation/routes/empFeatureRoutes';
+import { createReleasesRoutes } from './presentation/routes/releasesRoutes';
+import { createPulseRoutes } from './presentation/routes/pulseRoutes';
+import { createEmpFinopsRoutes } from './presentation/routes/empFinopsRoutes';
+import { createEmpMetricsRoutes } from './presentation/routes/empMetricsRoutes';
+import { createForecastRoutes } from './presentation/routes/forecastRoutes';
 
 // Middleware
 import { addCorsToResponse, corsMiddleware } from './presentation/middleware/cors';
@@ -224,7 +240,7 @@ export function buildApp(env: Env): Hono<HonoEnv> {
 
   // --- Application ---
   const projectService  = new ProjectService(projectRepo, taskRepo);
-  const taskService     = new TaskService(taskRepo, projectRepo, undefined,
+  const taskService     = new TaskService(taskRepo, projectRepo, llmEpicDecomposer(env),
     (projectId) => recommendTopAssignee(env, db, projectId));
   const tenantService   = new TenantService(tenantRepo, paymentProvider);
   const toolService     = new ToolService(db);
@@ -351,6 +367,9 @@ export function buildApp(env: Env): Hono<HonoEnv> {
   app.route('/api/marketplace', createGigMarketplaceRoutes(db));
   app.route('/api/engagement-board', createEngagementBoardRoutes(db));
   app.route('/api/deliverables', createDeliverableRoutes(db));
+  // In-platform messaging (0298): employer<->freelancer threads scoped to an
+  // engagement / job / proposal, with attachments + notification-fed unread counts.
+  app.route('/api/conversations', createFreelancerMessagingRoutes(db));
 
   // Limbic affective layer — serves the shared compiler's directive block to
   // clients that can't bundle it (the VS Code built-in agent).
@@ -483,6 +502,19 @@ export function buildApp(env: Env): Hono<HonoEnv> {
   app.route('/api/reports',         createReportRoutes(db));
   app.route('/api/analytics',       createAnalyticsRoutes(db));
   app.route('/api/prompts',         createPromptLibraryRoutes(db));
+  // ── Insights-everywhere + enterprise-lens extensions (integration batch) ──
+  app.route('/api/members',           createEmpMetricsRoutes(db));       // EMP-12..20 member metrics
+  app.route('/api/member-personas',   createMemberPersonaRoutes(db));    // persona-role 2D RBAC
+  app.route('/api/insights',          createLensSnapshotRoutes(db));     // annual-calendar lens snapshots
+  app.route('/api/insights',          createEmpFeatureRoutes(db));       // cross-team benchmark, delay taxonomy, export
+  app.route('/api/workforce',         createWorkforcePlanRoutes(db));    // blended human+agent workforce planning
+  app.route('/api/finops',            createEmpFinopsRoutes(db));        // R&D derived-vs-reported reconciliation
+  app.route('/api/releases',          createReleasesRoutes(db));         // EMP-10a release picker
+  app.route('/api/pulse',             createPulseRoutes(db));            // EMP-15 pulse survey
+  app.route('/api/catalog-analytics', createCatalogAnalyticsRoutes(db)); // catalog adoption trends
+  app.route('/api/facts',             createFactsRoutes(db));            // FACTS library
+  app.route('/api/prompt-analyzer',   createPromptAnalyzerRoutes(db));   // prompt telemetry → improved version
+  app.route('/api/insights',          createForecastRoutes(db));         // forecasting + anomaly lens
   app.route('/api/managed-agent-hosts',   createManagedAgentHostRoutes(db));
   app.route('/api/managed-claws',          createManagedAgentHostRoutes(db)); // @deprecated back-compat alias
   app.route('/api/cost-forecast',   createCostForecastRoutes(db));
@@ -741,6 +773,14 @@ export default {
           buildScheduledReport(db, s.reportType, s.tenantId, s.segmentId ?? '', now),
         ).catch((err) => {
           console.error('[cron:reports] failed', err);
+        }),
+      );
+      // Annual-calendar cadence — capture the rolling month/quarter/year lens
+      // snapshots per tenant (freezes at period close). Same sweep pattern as
+      // runDueReports; bounded + staleness-gated so it's safe on every tick.
+      ctx.waitUntil(
+        dueSnapshots(env).catch((err) => {
+          console.error('[cron:lens-snapshots] failed', err);
         }),
       );
     }

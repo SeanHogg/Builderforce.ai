@@ -88,6 +88,21 @@ export interface AdminHealth {
   timestamp: string;
 }
 
+/** One zero-filled daily point (matches the API MetricPoint). */
+export interface AdminMetricPoint { day: string; value: number; }
+
+export interface AdminPlatformRollup {
+  windowDays: number;
+  totals: { newUsers: number; newTenants: number; tokens: number; spendUsd: number; errorEvents: number };
+  series: {
+    newUsers: AdminMetricPoint[];
+    newTenants: AdminMetricPoint[];
+    tokens: AdminMetricPoint[];
+    spendUsd: AdminMetricPoint[];
+    errorEvents: AdminMetricPoint[];
+  };
+}
+
 export interface AdminError {
   id: number;
   method: string | null;
@@ -588,6 +603,12 @@ export const adminApi = {
   async errors(): Promise<AdminError[]> {
     const res = await adminRequest<{ errors: AdminError[] }>('/api/admin/errors');
     return res.errors;
+  },
+
+  /** Platform-wide historical trends (growth / LLM usage / errors) for the
+   *  superadmin Health/Usage charts. */
+  async platformRollup(days = 30): Promise<AdminPlatformRollup> {
+    return adminRequest<AdminPlatformRollup>(`/api/admin/platform-rollup?days=${days}`);
   },
 
   async listLlmTraces(params: {
