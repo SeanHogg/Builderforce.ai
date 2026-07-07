@@ -1,44 +1,97 @@
-> **PRD** — drafted by Bob Developer (V2 (Container)) · task #89
+> **PRD** — drafted by Ada · task #165
 > _Each agent that updates this PRD signs its change below._
 
-# Product Requirements Document: Avatar Filter Row Placement
+# PRD: Autonomous Agent Task Processing Failure in "To Do" Column
 
-## 1. Problem & Goal
+## **Problem & Goal**
+The autonomous agent **"Kevin BA/PM/PO (Durable)"** assigned to the **"To Do"** swimlane on the **BuilderForce.AI board** is not processing or executing tasks despite:
+- Being active and properly configured.
+- The swimlane being set for auto-processing.
+- Tasks existing in the "To Do" column.
+- Dispatch status remaining empty (no errors or logs).
 
-**Problem:** The current placement of the avatar filter, separated from the priorities dropdown, disrupts the logical grouping of filtering options. Users must scan different areas of the UI to apply related filters, leading to a less efficient and intuitive user experience.
+### **Goal**
+Restore autonomous task processing for the agent in the "To Do" swimlane, ensuring:
+1. Tasks are automatically picked up and executed.
+2. Dispatch logs are populated for observability.
+3. Edge cases (e.g., misconfigurations, permissions) are identified and resolved.
 
-**Goal:** To improve the user experience by consolidating related filtering options into a single, contiguous row, thereby enhancing discoverability, reducing cognitive load, and increasing the speed at which users can apply filters.
+---
 
-## 2. Target Users / ICP Roles
+## **Target Users / ICP Roles**
+- **Product Owners (POs)**: Rely on the agent to automate backlog refinement and task prioritization.
+- **Business Analysts (BAs)**: Use the agent to generate user stories, acceptance criteria, and documentation.
+- **Project Managers (PMs)**: Depend on task automation for sprint planning and progress tracking.
+- **Engineering Teams**: Expect tasks to be pre-processed (e.g., detailed, estimated) before manual intervention.
+- **AI Operations Teams**: Monitor agent health and debug failures.
 
-*   **Project Managers:** Need to quickly filter tasks by assignee (avatar) and priority to understand workload distribution and identify high-priority items.
-*   **Team Leads:** Require efficient filtering to monitor team progress and allocate resources based on task priority and individual contribution (avatar).
-*   **Individual Contributors:** Benefit from a cleaner interface to focus on their assigned tasks and understand their priority within the project context.
+---
 
-## 3. Scope
+## **Scope**
+### **In Scope**
+1. **Diagnosis**
+   - Verify agent configuration (e.g., permissions, swimlane rules, task filters).
+   - Check task metadata (e.g., labels, assignees, due dates) for blockers.
+   - Review agent logs for silent failures or timeouts.
+   - Validate swimlane auto-processing settings (e.g., triggers, cooldowns).
 
-This document covers the functional requirements and acceptance criteria for moving the existing avatar filter component to reside on the same UI row as the priorities dropdown. This includes adjustments to layout, styling, and ensuring the filter's functionality remains intact.
+2. **Resolution**
+   - Fix configuration drift (e.g., missing swimlane triggers, agent permissions).
+   - Address edge cases (e.g., malformed task descriptions, rate limits).
+   - Implement retry logic for transient failures.
+   - Add observability (e.g., dispatch status updates, heartbeat signals).
 
-## 4. Functional Requirements
+3. **Prevention**
+   - Add validation for new tasks entering the "To Do" column.
+   - Document troubleshooting steps for similar issues.
+   - Implement monitoring alerts for silent failures.
 
-*   **FR1: Layout Adjustment:** The avatar filter component shall be repositioned to occupy a space adjacent to the priorities dropdown within the primary filtering bar.
-*   **FR2: Visual Consistency:** The avatar filter shall maintain its current visual appearance and interaction patterns (e.g., dropdown behavior, selection indicators) after being moved.
-*   **FR3: Responsive Design:** The integrated avatar and priorities filter row shall adapt appropriately across different screen sizes and resolutions, maintaining usability.
-*   **FR4: Filter Functionality:** Applying a filter via the avatar selector shall continue to correctly filter the displayed data (e.g., tasks, issues), and this filtering shall be independent of or complementary to the priorities filter.
+4. **Testing**
+   - Manually trigger task processing to verify fixes.
+   - Simulate edge cases (e.g., empty tasks, rate limits) in a staging environment.
 
-## 5. Acceptance Criteria
+### **Functional Requirements**
+| ID | Requirement | Priority |
+|----|-------------|----------|
+| FR1 | The agent must log all dispatch attempts (success/failure) in the swimlane’s activity stream. | P0 |
+| FR2 | Tasks must include a `last_processed_at` timestamp to track staleness. | P1 |
+| FR3 | The swimlane must reject tasks missing required metadata (e.g., title, description). | P1 |
+| FR4 | The agent must respect task priority labels (e.g., `P0`, `P1`) when processing. | P2 |
+| FR5 | Configuration changes to the swimlane/agent must require admin approval. | P2 |
 
-*   **AC1: Avatar Filter Visible in Row:** The avatar filter is visibly present on the same horizontal line as the priorities dropdown.
-*   **AC2: Filter Functionality Preserved:** Selecting an avatar from the new location correctly filters the displayed items.
-*   **AC3: Priorities Filter Functionality Preserved:** Selecting a priority from its dropdown continues to filter the displayed items, and its interaction is unaffected by the avatar filter's new position.
-*   **AC4: Combined Filtering Works:** Applying both an avatar filter and a priorities filter simultaneously yields the correct, combined results.
-*   **AC5: No Visual Overlap or Distortion:** The avatar filter and priorities dropdown do not overlap each other or other UI elements in the filtering bar, and the overall layout remains clean and undistorted.
-*   **AC6: Responsiveness Verified:** On smaller screen sizes, the combined filter row is still usable, potentially with a different arrangement if necessary (e.g., stacking if horizontal space is too limited, though the primary goal is horizontal).
+---
 
-## 6. Out of Scope
+## **Acceptance Criteria**
+1. **Diagnosis**
+   - Agent logs confirm tasks are being polled from the "To Do" column.
+   - Dispatch status updates show either:
+     - Task execution progress, **or**
+     - Clear error messages (e.g., "Permission denied", "Rate limit exceeded").
 
-*   **New Avatar Filter Features:** Any enhancements or new functionalities to the avatar filter itself (e.g., search within avatars, multi-select avatars) are out of scope for this task.
-*   **New Priorities Filter Features:** Any enhancements or new functionalities to the priorities dropdown are out of scope.
-*   **Other Filter Components:** Moving or modifying any other filter components not explicitly mentioned (e.g., date filters, status filters) is out of scope.
-*   **Backend Changes:** Any backend changes related to how filters are processed or stored are out of scope, assuming the existing backend APIs can handle the current filtering logic.
-*   **Performance Optimization:** Significant performance optimizations related to filtering are out of scope, unless directly caused by the layout change.
+2. **Task Processing**
+   - ≥95% of valid tasks in "To Do" are processed within 5 minutes of assignment.
+   - Tasks with malformed metadata are flagged and moved to "Blocked" column.
+
+3. **Observability**
+   - Dispatch status includes:
+     - Timestamp of last attempt.
+     - Task ID and title.
+     - Status (e.g., "Processing", "Failed", "Completed").
+   - Alerts are triggered for:
+     - Agent inactivity >10 minutes.
+     - Consecutive failed tasks (>3 in a row).
+
+4. **Documentation**
+   - Troubleshooting guide covers:
+     - Permission issues.
+     - Swimlane configuration.
+     - Task metadata requirements.
+
+---
+
+## **Out of Scope**
+- **Multi-agent coordination**: This PRD focuses solely on the single agent "Kevin BA/PM/PO". Conflicts between multiple agents in the same swimlane are out of scope.
+- **Task creation**: Issues with task creation (e.g., from templates, integrations) are not addressed.
+- **Non-"To Do" columns**: Solutions for other swimlanes (e.g., "In Progress", "Done") are not covered.
+- **AI model tuning**: Adjustments to the agent’s underlying LLM (e.g., prompt engineering) are out of scope.
+- **UI changes**: Updates to the board/swimlane UI (e.g., drag-and-drop, colors) are not included.
