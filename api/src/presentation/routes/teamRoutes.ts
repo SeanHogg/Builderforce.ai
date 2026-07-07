@@ -28,6 +28,7 @@ import { teams, teamMembers, teamProjects, projects } from '../../infrastructure
 import { TenantRole } from '../../domain/shared/types';
 import { getOrSetCached, invalidateCached } from '../../infrastructure/cache/readThroughCache';
 import { loadProjectTeamMembers } from '../../application/metrics/assigneeRecommender';
+import { resolveLiveMemberNames } from '../../application/workforce/liveMemberNames';
 import type { Env, HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 
@@ -150,7 +151,9 @@ export function createTeamRoutes(db: Db): Hono<HonoEnv> {
       c.env as Env,
       teamsWorkforceCacheKey(tenantId, projectId),
       async () => {
-        const members = await loadProjectTeamMembers(db, projectId, tenantId);
+        // Resolve names live so a renamed human/agent shows its current name, not the
+        // snapshot taken when they were added to the team (member_name drift).
+        const members = await resolveLiveMemberNames(db, await loadProjectTeamMembers(db, projectId, tenantId));
         return {
           scopedToTeams: members.length > 0,
           workforce: members.map((m) => ({ kind: m.memberKind, ref: m.memberRef, name: m.memberName })),
@@ -171,7 +174,7 @@ export function createTeamRoutes(db: Db): Hono<HonoEnv> {
       .where(and(eq(teams.id, id), eq(teams.tenantId, tenantId)));
     if (!team) return c.json({ error: 'Team not found' }, 404);
 
-    const members = await db
+    const members = await resolveLiveMemberNames(db, await db
       .select({
         id:         teamMembers.id,
         memberKind: teamMembers.memberKind,
@@ -181,7 +184,7 @@ export function createTeamRoutes(db: Db): Hono<HonoEnv> {
       })
       .from(teamMembers)
       .where(eq(teamMembers.teamId, id))
-      .orderBy(teamMembers.memberName);
+      .orderBy(teamMembers.memberName));
 
     const attachedProjects = await db
       .select({

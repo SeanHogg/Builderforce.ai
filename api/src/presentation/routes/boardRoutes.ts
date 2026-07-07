@@ -524,7 +524,8 @@ export function createBoardRoutes(db: Db): Hono<HonoEnv> {
     return c.json({ requirements: rows });
   });
 
-  router.post('/:boardId/swimlanes/:laneId/requirements', isManager, async (c) => {
+  router.post('/:boardId/swimlanes/:laneId/requirements', async (c) => {
+    if (!isManager(c)) return c.json({ error: 'manager role required' }, 403);
     const tenantId = c.get('tenantId') as number;
     const boardId = c.req.param('boardId');
     const laneId = c.req.param('laneId');
@@ -549,7 +550,8 @@ export function createBoardRoutes(db: Db): Hono<HonoEnv> {
     return c.json(row, 201);
   });
 
-  router.patch('/:boardId/swimlanes/:laneId/requirements/:reqId', isManager, async (c) => {
+  router.patch('/:boardId/swimlanes/:laneId/requirements/:reqId', async (c) => {
+    if (!isManager(c)) return c.json({ error: 'manager role required' }, 403);
     const tenantId = c.get('tenantId') as number;
     const boardId = c.req.param('boardId');
     const laneId = c.req.param('laneId');
@@ -571,7 +573,8 @@ export function createBoardRoutes(db: Db): Hono<HonoEnv> {
     return c.json(row);
   });
 
-  router.delete('/:boardId/swimlanes/:laneId/requirements/:reqId', isManager, async (c) => {
+  router.delete('/:boardId/swimlanes/:laneId/requirements/:reqId', async (c) => {
+    if (!isManager(c)) return c.json({ error: 'manager role required' }, 403);
     const tenantId = c.get('tenantId') as number;
     const laneId = c.req.param('laneId');
     const reqId = c.req.param('reqId');
