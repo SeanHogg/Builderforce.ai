@@ -218,7 +218,7 @@ export function AgentPublishPanel({ projectId, completedJobs }: AgentPublishPane
   }, []);
 
   return (
-    <div className="h-full flex flex-col bg-gray-900 text-white text-sm">
+    <div className="h-full flex flex-col bg-gray-900 text-gray-100 text-sm">
       {/* Header */}
       <div className="px-3 py-2 border-b border-gray-700 flex items-center gap-2 shrink-0">
         <span>🚀</span>
@@ -231,7 +231,7 @@ export function AgentPublishPanel({ projectId, completedJobs }: AgentPublishPane
           <button
             key={t}
             onClick={() => setTab(t)}
-            className={`px-3 py-1.5 text-xs capitalize ${tab === t ? 'bg-gray-800 text-white border-t-2 border-t-blue-500' : 'text-gray-400 hover:text-white'}`}
+            className={`px-3 py-1.5 text-xs capitalize ${tab === t ? 'bg-gray-800 text-gray-100 border-t-2 border-t-blue-500' : 'text-gray-400 hover:text-gray-100'}`}
           >
             {t === 'profile' ? `👤 ${tp('tabProfile')}` : t === 'download' ? `⬇ ${tp('tabDownload')}` : `🌐 ${tp('tabPublish')}`}
           </button>
@@ -249,7 +249,7 @@ export function AgentPublishPanel({ projectId, completedJobs }: AgentPublishPane
                 value={profile.name}
                 onChange={e => setProfile(p => ({ ...p, name: e.target.value }))}
                 placeholder={tp('namePlaceholder')}
-                className="w-full bg-gray-800 text-white text-xs rounded px-2 py-1.5 border border-gray-700 focus:border-blue-500 outline-none"
+                className="w-full bg-gray-800 text-gray-100 text-xs rounded px-2 py-1.5 border border-gray-700 focus:border-blue-500 outline-none"
               />
             </div>
 
@@ -260,7 +260,7 @@ export function AgentPublishPanel({ projectId, completedJobs }: AgentPublishPane
                 value={profile.title}
                 onChange={e => setProfile(p => ({ ...p, title: e.target.value }))}
                 placeholder={tp('titlePlaceholder')}
-                className="w-full bg-gray-800 text-white text-xs rounded px-2 py-1.5 border border-gray-700 focus:border-blue-500 outline-none"
+                className="w-full bg-gray-800 text-gray-100 text-xs rounded px-2 py-1.5 border border-gray-700 focus:border-blue-500 outline-none"
               />
             </div>
 
@@ -271,7 +271,7 @@ export function AgentPublishPanel({ projectId, completedJobs }: AgentPublishPane
                 onChange={e => setProfile(p => ({ ...p, bio: e.target.value }))}
                 placeholder={tp('bioPlaceholder')}
                 rows={3}
-                className="w-full bg-gray-800 text-white text-xs rounded px-2 py-1.5 border border-gray-700 focus:border-blue-500 outline-none resize-none"
+                className="w-full bg-gray-800 text-gray-100 text-xs rounded px-2 py-1.5 border border-gray-700 focus:border-blue-500 outline-none resize-none"
               />
             </div>
 
@@ -286,7 +286,7 @@ export function AgentPublishPanel({ projectId, completedJobs }: AgentPublishPane
                     {s}
                     <button
                       onClick={() => handleRemoveSkill(s)}
-                      className="text-blue-400 hover:text-white leading-none"
+                      className="text-blue-400 hover:text-gray-100 leading-none"
                       aria-label={tp('removeTag', { tag: s })}
                     >
                       ×
@@ -301,12 +301,12 @@ export function AgentPublishPanel({ projectId, completedJobs }: AgentPublishPane
                   onChange={e => setSkillInput(e.target.value)}
                   onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); handleAddSkill(); } }}
                   placeholder={tp('tagPlaceholder')}
-                  className="flex-1 bg-gray-800 text-white text-xs rounded px-2 py-1.5 border border-gray-700 focus:border-blue-500 outline-none"
+                  className="flex-1 bg-gray-800 text-gray-100 text-xs rounded px-2 py-1.5 border border-gray-700 focus:border-blue-500 outline-none"
                 />
                 <button
                   onClick={handleAddSkill}
                   disabled={!skillInput.trim()}
-                  className="bg-gray-700 hover:bg-gray-600 disabled:opacity-50 text-white text-xs px-2 py-1.5 rounded"
+                  className="bg-gray-700 hover:bg-gray-600 disabled:opacity-50 text-gray-100 text-xs px-2 py-1.5 rounded"
                 >
                   +
                 </button>
@@ -335,7 +335,7 @@ export function AgentPublishPanel({ projectId, completedJobs }: AgentPublishPane
                 onChange={e => setProfile(p => ({ ...p, resumeMarkdown: e.target.value }))}
                 placeholder={tp('resumePlaceholder')}
                 rows={6}
-                className="w-full bg-gray-800 text-white text-xs rounded px-2 py-1.5 border border-gray-700 focus:border-blue-500 outline-none resize-none font-mono"
+                className="w-full bg-gray-800 text-gray-100 text-xs rounded px-2 py-1.5 border border-gray-700 focus:border-blue-500 outline-none resize-none font-mono"
               />
             </div>
 
@@ -346,7 +346,7 @@ export function AgentPublishPanel({ projectId, completedJobs }: AgentPublishPane
                 <Select
                   value={selectedJobId}
                   onChange={e => setSelectedJobId(e.target.value)}
-                  className="w-full bg-gray-800 text-white text-xs rounded px-2 py-1.5 border border-gray-700 focus:border-blue-500 outline-none"
+                  className="w-full bg-gray-800 text-gray-100 text-xs rounded px-2 py-1.5 border border-gray-700 focus:border-blue-500 outline-none"
                 >
                   <option value="">{tp('noModelSelected')}</option>
                   {completedJobs.map(j => (
@@ -404,7 +404,7 @@ export function AgentPublishPanel({ projectId, completedJobs }: AgentPublishPane
                 {profile.resumeMarkdown && (
                   <button
                     onClick={handleDownloadResume}
-                    className="w-full bg-gray-700 hover:bg-gray-600 text-white px-3 py-2 rounded text-xs"
+                    className="w-full bg-gray-700 hover:bg-gray-600 text-gray-100 px-3 py-2 rounded text-xs"
                   >
                     ⬇ {tp('downloadResume')}
                   </button>
@@ -438,7 +438,7 @@ export function AgentPublishPanel({ projectId, completedJobs }: AgentPublishPane
                     </code>
                     <button
                       onClick={handleCopyInstall}
-                      className="shrink-0 bg-gray-700 hover:bg-gray-600 text-white text-xs px-2 py-1 rounded"
+                      className="shrink-0 bg-gray-700 hover:bg-gray-600 text-gray-100 text-xs px-2 py-1 rounded"
                       title={tp('copyTitle')}
                     >
                       {copiedInstall ? `✓ ${tp('copied')}` : tp('copy')}
@@ -497,7 +497,7 @@ export function AgentPublishPanel({ projectId, completedJobs }: AgentPublishPane
                 </a>
                 <button
                   onClick={() => { setPublishedId(null); setTab('profile'); }}
-                  className="w-full bg-gray-700 hover:bg-gray-600 text-white px-3 py-2 rounded text-xs"
+                  className="w-full bg-gray-700 hover:bg-gray-600 text-gray-100 px-3 py-2 rounded text-xs"
                 >
                   {tp('publishAnother')}
                 </button>
