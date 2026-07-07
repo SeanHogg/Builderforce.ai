@@ -1,0 +1,17 @@
+{
+  "name": "quality-risk-score",
+  "description": "Quality risk scoring for product artifacts (features, releases, modules) with High/Medium/Low categories, justification, and manual override support",
+  "version": "0.1.0",
+  "type": "module",
+  "entry": "./index.ts",
+  "author": "BuilderForce",
+  "tags": ["quality", "risk", "scoring", "artifact-awareness"],
+  "dependencies": [],
+  "categories": ["quality", "risk"],
+  "runtime": "node",
+  "sideEffects": false,
+  "files": [
+    "src/",
+    "README.md"
+  ]
+}

@@ -1,0 +1,43 @@
+{
+  "name": "quality-risk-score",
+  "version": "0.1.0",
+  "description": "Quality risk scoring for product artifacts (features, releases, modules) with High/Medium/Low categories, justification, and manual override support",
+  "main": "./index.ts",
+  "types": "./index.ts",
+  "type": "module",
+  "author": "BuilderForce",
+  "license": "MIT",
+  "scripts": {
+    "build": "echo 'Not building - this is an inline runtime extension'",
+    "test": "echo 'Tests to be implemented'",
+    "type-check": "tsc --noEmit"
+  },
+  "entrypoints": [
+    "./index.ts"
+  ],
+  "exports": {
+    ".": "./index.ts",
+    "./provider": "./quality-risk-score-provider.ts",
+    "./config": "./config.ts",
+    "./score-engine": "./score-engine.ts",
+    "./quality-risk-score": "./quality-risk-score.ts",
+    "./metrics": "./METRIC_TEMPLATES.ts",
+    "./README": "./README.md"
+  },
+  "keywords": [
+    "quality",
+    "risk",
+    "scoring",
+    "artifact-awareness",
+    "builderforce"
+  ],
+  "dependencies": {},
+  "devDependencies": {
+    "typescript": "^5.0.0"
+  },
+  "builderforce": {
+    "loadable": true,
+    "extensions": ["node"],
+    "sideEffects": false
+  }
+}
