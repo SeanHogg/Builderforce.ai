@@ -22,6 +22,7 @@ import { getOrSetCached, invalidateCached } from '../../infrastructure/cache/rea
 import { runtimeHiredAgentsCacheKey } from './runtimeRoutes';
 import { tenantHasFeature } from '../middleware/featureGate';
 import { sanitizePsychometricProfile } from '../../application/persona/psychometricCatalog';
+import { assigneeProfilesCacheKey } from '../../application/kanban/assigneeProfiles';
 import { parseJsonArray } from '../../domain/shared/json';
 import type { Env, HonoEnv } from '../../env';
 
@@ -316,8 +317,10 @@ export function createWorkforceRoutes(): Hono<HonoEnv> {
          ${body.published ?? false}, ${psychometric})
       RETURNING *
     `;
-    // A newly-created active/published agent can appear in the public listing.
+    // A newly-created active/published agent can appear in the public listing, and —
+    // if it carries a personality — in the assignee-hovercard map for this tenant.
     await invalidateCached(c.env as Env, PUBLIC_LIST_CACHE_KEY);
+    await invalidateCached(c.env as Env, assigneeProfilesCacheKey(tenantId));
     return c.json(mapAgentRow(row), 201);
   });
 
@@ -387,8 +390,10 @@ export function createWorkforceRoutes(): Hono<HonoEnv> {
       RETURNING *
     `;
     // Name/title/bio/skills/status/published — and the agent's eval score, if a
-    // training-publish flow patches it — all surface in the public listing.
+    // training-publish flow patches it — all surface in the public listing; a
+    // name/personality change also alters this agent's assignee hovercard.
     await invalidateCached(c.env as Env, PUBLIC_LIST_CACHE_KEY);
+    await invalidateCached(c.env as Env, assigneeProfilesCacheKey(tenantId));
     return c.json(mapAgentRow(row));
   });
 
@@ -435,6 +440,7 @@ export function createWorkforceRoutes(): Hono<HonoEnv> {
       `;
     }
     await invalidateCached(c.env as Env, PUBLIC_LIST_CACHE_KEY);
+    await invalidateCached(c.env as Env, assigneeProfilesCacheKey(tenantId));
     return c.json({ deleted: true });
   });
 
