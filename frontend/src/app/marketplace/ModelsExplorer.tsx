@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { createPortal } from 'react-dom';
 import { useTranslations } from 'next-intl';
 import { SlideOutPanel } from '@/components/SlideOutPanel';
 import { contrastText } from '@/lib/contrastText';
@@ -169,77 +168,43 @@ function ModelDetail({ record }: { record: ModelRecord }) {
 }
 
 // ---------------------------------------------------------------------------
-// Comparison table modal
+// Comparison table — read/compare view rendered in a wide slide-out
 // ---------------------------------------------------------------------------
 
-function CompareModal({ models, onClose }: { models: ModelRecord[]; onClose: () => void }) {
+function CompareTable({ models }: { models: ModelRecord[] }) {
   const t = useTranslations('models');
   const fieldSpecs = useFieldSpecs();
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose();
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [onClose]);
-  // Rendered only after a user click (compareOpen starts false), so document is
-  // always present here; guard purely for SSR/type safety.
-  if (typeof document === 'undefined') return null;
 
-  return createPortal(
-    <div className="modal-overlay" role="presentation" onClick={onClose}>
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-label={t('compare.dialogLabel')}
-        onClick={(e) => e.stopPropagation()}
-        style={{
-          border: '1px solid var(--border-subtle)',
-          borderRadius: 16,
-          width: 'min(900px, 96vw)',
-          maxHeight: '88vh',
-          display: 'flex',
-          flexDirection: 'column',
-          overflow: 'hidden',
-          boxShadow: '0 20px 50px rgba(0,0,0,0.35)',
-        }}
-      >
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '16px 20px', borderBottom: '1px solid var(--border-subtle)', flexShrink: 0 }}>
-          <div style={{ flex: 1, fontWeight: 700, fontSize: 16, color: 'var(--text-primary)' }}>
-            {t('compare.comparingCount', { count: models.length })}
-          </div>
-          <button type="button" onClick={onClose} aria-label={t('compare.closeAria')} className="btn btn-secondary" style={{ padding: '6px 12px' }}>
-            {t('compare.close')}
-          </button>
-        </div>
-        <div style={{ overflow: 'auto', minHeight: 0 }}>
-          <table style={{ ...tableStyle, minWidth: 520 }}>
-            <thead>
-              <tr style={theadRowStyle}>
-                <th style={{ ...thStyle, position: 'sticky', left: 0, background: 'var(--bg-elevated)', minWidth: 150 }}>{t('compare.attribute')}</th>
+  return (
+    <div style={{ padding: 20 }}>
+      <div style={{ overflow: 'auto', minHeight: 0 }}>
+        <table style={{ ...tableStyle, minWidth: 520 }}>
+          <thead>
+            <tr style={theadRowStyle}>
+              <th style={{ ...thStyle, position: 'sticky', left: 0, background: 'var(--bg-elevated)', minWidth: 150 }}>{t('compare.attribute')}</th>
+              {models.map((m) => (
+                <th key={m.id} style={{ ...thStyle, textAlign: 'left', minWidth: 160 }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                    <span style={{ color: 'var(--text-primary)' }}>{m.name}</span>
+                    <Badge record={m} />
+                  </div>
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {fieldSpecs.map((f) => (
+              <tr key={f.label} style={trStyle}>
+                <td style={{ ...tdMutedStyle, position: 'sticky', left: 0, background: 'var(--bg-elevated)', fontWeight: 600 }}>{f.label}</td>
                 {models.map((m) => (
-                  <th key={m.id} style={{ ...thStyle, textAlign: 'left', minWidth: 160 }}>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                      <span style={{ color: 'var(--text-primary)' }}>{m.name}</span>
-                      <Badge record={m} />
-                    </div>
-                  </th>
+                  <td key={m.id} style={tdStyle}>{f.render(m)}</td>
                 ))}
               </tr>
-            </thead>
-            <tbody>
-              {fieldSpecs.map((f) => (
-                <tr key={f.label} style={trStyle}>
-                  <td style={{ ...tdMutedStyle, position: 'sticky', left: 0, background: 'var(--bg-elevated)', fontWeight: 600 }}>{f.label}</td>
-                  {models.map((m) => (
-                    <td key={m.id} style={tdStyle}>{f.render(m)}</td>
-                  ))}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+            ))}
+          </tbody>
+        </table>
       </div>
-    </div>,
-    document.body,
+    </div>
   );
 }
 
@@ -593,10 +558,15 @@ export function ModelsExplorer({ search, viewMode }: { search: string; viewMode:
         onCompare={() => setCompareOpen(true)}
       />
 
-      {/* Comparison table modal */}
-      {compareOpen && selectedModels.length >= 2 && (
-        <CompareModal models={selectedModels} onClose={() => setCompareOpen(false)} />
-      )}
+      {/* Comparison table slide-out (wide) */}
+      <SlideOutPanel
+        open={compareOpen && selectedModels.length >= 2}
+        onClose={() => setCompareOpen(false)}
+        title={t('compare.comparingCount', { count: selectedModels.length })}
+        width="min(720px, 96vw)"
+      >
+        <CompareTable models={selectedModels} />
+      </SlideOutPanel>
     </div>
   );
 }

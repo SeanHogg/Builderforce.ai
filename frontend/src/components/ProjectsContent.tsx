@@ -14,6 +14,7 @@ import { trackActivity } from '@/lib/activity/tracker';
 import { useOptionalProjectScope } from '@/lib/ProjectScopeContext';
 import { agentHosts } from '@/lib/builderforceApi';
 import { ProjectDetailsPanel, type ProjectPanelTab } from '@/components/ProjectDetailsPanel';
+import { SlideOutPanel } from '@/components/SlideOutPanel';
 import { ProjectCard } from '@/components/ProjectCard';
 import { ProjectTable } from '@/components/ProjectTable';
 import { AgentHostSlideOutPanel } from '@/components/AgentHostSlideOutPanel';
@@ -193,87 +194,77 @@ export function ProjectsContent({ limit, viewAllHref, onCount }: ProjectsContent
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-      {/* New Project Modal */}
-      {showForm && (
-        <div className="modal-overlay" style={{ zIndex: 50 }}>
-          <div
-            className="rounded-xl p-6 w-full max-w-md border border-gray-700"
-            style={{ background: 'var(--bg-elevated)' }}
-          >
-            <h3 className="text-lg font-semibold mb-4" style={{ color: 'var(--text-primary)' }}>
-              {t('newProjectTitle')}
-            </h3>
-            <form onSubmit={handleCreate} className="space-y-4">
-              <div>
-                <label className="block text-sm mb-1" style={{ color: 'var(--text-secondary)' }}>
-                  {t('nameLabel')}
-                </label>
-                <input
-                  autoFocus
-                  value={newProjectName}
-                  onChange={(e) => setNewProjectName(e.target.value)}
-                  placeholder={t('namePlaceholder')}
-                  required
-                  style={{
-                    width: '100%',
-                    background: 'var(--bg-deep)',
-                    color: 'var(--text-primary)',
-                    border: '1px solid var(--border-subtle)',
-                    borderRadius: 10,
-                    padding: '10px 14px',
-                    outline: 'none',
-                  }}
-                />
-              </div>
-              <div>
-                <label className="block text-sm mb-1" style={{ color: 'var(--text-secondary)' }}>
-                  {t('descLabel')}
-                </label>
-                <input
-                  value={newProjectDesc}
-                  onChange={(e) => setNewProjectDesc(e.target.value)}
-                  placeholder={t('descPlaceholder')}
-                  style={{
-                    width: '100%',
-                    background: 'var(--bg-deep)',
-                    color: 'var(--text-primary)',
-                    border: '1px solid var(--border-subtle)',
-                    borderRadius: 10,
-                    padding: '10px 14px',
-                    outline: 'none',
-                  }}
-                />
-              </div>
-              <div className="flex gap-3 justify-end">
-                <button
-                  type="button"
-                  onClick={() => setShowForm(false)}
-                  style={{ fontSize: '0.875rem', color: 'var(--text-secondary)', background: 'none', border: 'none', cursor: 'pointer' }}
-                >
-                  {t('cancel')}
-                </button>
-                <button
-                  type="submit"
-                  disabled={isCreating || !newProjectName.trim()}
-                  style={{
-                    padding: '8px 18px',
-                    fontSize: '0.875rem',
-                    fontWeight: 600,
-                    background: 'linear-gradient(135deg, var(--coral-bright), var(--coral-dark))',
-                    color: '#fff',
-                    border: 'none',
-                    borderRadius: 10,
-                    cursor: isCreating || !newProjectName.trim() ? 'not-allowed' : 'pointer',
-                    opacity: isCreating || !newProjectName.trim() ? 0.7 : 1,
-                  }}
-                >
-                  {isCreating ? t('creating') : t('create')}
-                </button>
-              </div>
-            </form>
+      {/* New Project panel */}
+      <SlideOutPanel open={showForm} onClose={() => setShowForm(false)} title={t('newProjectTitle')} width="min(480px, 96vw)">
+        <form onSubmit={handleCreate} style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 14 }}>
+          <div>
+            <label className="block text-sm mb-1" style={{ color: 'var(--text-secondary)' }}>
+              {t('nameLabel')}
+            </label>
+            <input
+              autoFocus
+              value={newProjectName}
+              onChange={(e) => setNewProjectName(e.target.value)}
+              placeholder={t('namePlaceholder')}
+              required
+              style={{
+                width: '100%',
+                background: 'var(--bg-deep)',
+                color: 'var(--text-primary)',
+                border: '1px solid var(--border-subtle)',
+                borderRadius: 10,
+                padding: '10px 14px',
+                outline: 'none',
+              }}
+            />
           </div>
-        </div>
-      )}
+          <div>
+            <label className="block text-sm mb-1" style={{ color: 'var(--text-secondary)' }}>
+              {t('descLabel')}
+            </label>
+            <input
+              value={newProjectDesc}
+              onChange={(e) => setNewProjectDesc(e.target.value)}
+              placeholder={t('descPlaceholder')}
+              style={{
+                width: '100%',
+                background: 'var(--bg-deep)',
+                color: 'var(--text-primary)',
+                border: '1px solid var(--border-subtle)',
+                borderRadius: 10,
+                padding: '10px 14px',
+                outline: 'none',
+              }}
+            />
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
+            <button
+              type="button"
+              onClick={() => setShowForm(false)}
+              style={{ fontSize: '0.875rem', color: 'var(--text-secondary)', background: 'none', border: 'none', cursor: 'pointer' }}
+            >
+              {t('cancel')}
+            </button>
+            <button
+              type="submit"
+              disabled={isCreating || !newProjectName.trim()}
+              style={{
+                padding: '8px 18px',
+                fontSize: '0.875rem',
+                fontWeight: 600,
+                background: 'linear-gradient(135deg, var(--coral-bright), var(--coral-dark))',
+                color: '#fff',
+                border: 'none',
+                borderRadius: 10,
+                cursor: isCreating || !newProjectName.trim() ? 'not-allowed' : 'pointer',
+                opacity: isCreating || !newProjectName.trim() ? 0.7 : 1,
+              }}
+            >
+              {isCreating ? t('creating') : t('create')}
+            </button>
+          </div>
+        </form>
+      </SlideOutPanel>
 
       {error && (
         <div

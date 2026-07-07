@@ -19,7 +19,7 @@
  */
 
 import { and, eq, desc, sql, type SQL } from 'drizzle-orm';
-import { CURRENT_ENGINE_ID, type ToolSchema } from '@builderforce/agent-tools';
+import { type ToolSchema } from '@builderforce/agent-tools';
 import type { Db } from '../../infrastructure/database/connection';
 import { ProjectService } from '../project/ProjectService';
 import { TaskService } from '../task/TaskService';
@@ -1381,14 +1381,13 @@ const CATALOG: BuiltinTool[] = [
     parameters: obj({ name: S, title: S, bio: S, skills: { type: 'array', items: S }, baseModel: S, published: B }, ['name']),
     run: async (ctx, a) => {
       const name = str(a.name).trim(); if (!name) throw new Error('name is required');
-      const engine = CURRENT_ENGINE_ID;
       const [row] = await ctx.db.insert(ideAgents).values({
         id: crypto.randomUUID(), tenantId: ctx.tenantId, projectId: null, name,
         title: a.title != null ? str(a.title) : name,
         bio: a.bio != null ? str(a.bio) : '',
         skills: JSON.stringify(Array.isArray(a.skills) ? a.skills : []),
         baseModel: a.baseModel != null ? str(a.baseModel) : 'builderforce-default',
-        engine, runtimeSurface: 'durable',
+        runtimeSurface: 'durable',
         ...(typeof a.published === 'boolean' ? { published: a.published } : {}),
       }).returning();
       return row;

@@ -10,6 +10,7 @@ import { AUTH_API_URL, getStoredTenantToken } from '@/lib/auth';
 import JsonLd from '@/components/JsonLd';
 import PageContainer from '@/components/PageContainer';
 import RelatedArticles from '@/components/blog/RelatedArticles';
+import { SlideOutPanel } from '@/components/SlideOutPanel';
 import { pricingSchema } from '@/lib/structured-data';
 
 type Plan = 'free' | 'pro' | 'teams';
@@ -366,22 +367,16 @@ export default function PricingPageClient() {
           </>
           )}
 
-          {/* Upgrade form — the one place we use a modal (clicking any upgrade CTA). */}
-          {upgradeTarget && effectivePlan !== upgradeTarget && (
-            <div
-              role="dialog"
-              aria-modal="true"
-              aria-labelledby="upgrade-modal-title"
-              className="modal-overlay"
-              onClick={(e) => { if (e.target === e.currentTarget) { setUpgradeTarget(null); setUpgradeError(null); } }}
-            >
-            <div
-              style={{ ...cardStyle, maxWidth: 480, width: '92%', maxHeight: '90vh', overflowY: 'auto', boxShadow: '0 20px 60px rgba(0,0,0,0.35)' }}
-              onClick={(e) => e.stopPropagation()}
-            >
-              <div id="upgrade-modal-title" style={{ fontWeight: 600, fontSize: 15, marginBottom: 16 }}>
-                {t('modalUpgradeTo', { plan: upgradeTarget === 'teams' ? 'Teams' : 'Pro' })}
-              </div>
+          {/* Upgrade checkout — a slide-out panel (opened by any upgrade CTA). Per the
+              app convention only terminal/destructive confirms use a centered modal;
+              everything else, this checkout included, uses SlideOutPanel. */}
+          <SlideOutPanel
+            open={upgradeTarget != null && effectivePlan !== upgradeTarget}
+            onClose={() => { setUpgradeTarget(null); setUpgradeError(null); }}
+            title={t('modalUpgradeTo', { plan: upgradeTarget === 'teams' ? 'Teams' : 'Pro' })}
+            width="min(560px, 96vw)"
+          >
+            <div style={{ padding: 20 }}>
               <form onSubmit={handleUpgrade} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
                 <div>
                   <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 6 }}>{t('labelBillingCycle')}</label>
@@ -468,8 +463,7 @@ export default function PricingPageClient() {
                 </div>
               </form>
             </div>
-            </div>
-          )}
+          </SlideOutPanel>
 
           {/* Plan comparison table */}
           <div style={cardStyle}>

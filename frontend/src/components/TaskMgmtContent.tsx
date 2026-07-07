@@ -1665,36 +1665,13 @@ export function TaskMgmtContent({
         </div>
       )}
 
-      {showModal && (
-        <div
-          className="modal-overlay"
-          role="presentation"
-          style={{
-            position: 'fixed',
-            inset: 0,
-            zIndex: 10000,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            padding: 24,
-          }}
-          onClick={(e) => e.target === e.currentTarget && setShowModal(false)}
-        >
-          <div
-            style={{
-              border: '1px solid var(--border-subtle)',
-              borderRadius: 12,
-              padding: 24,
-              maxWidth: 540,
-              width: '100%',
-              maxHeight: '90vh',
-              overflow: 'auto',
-            }}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div style={{ fontWeight: 700, fontSize: 16, marginBottom: 16 }}>
-              {editTarget ? tTask('editTask') : tTask('newTask')}
-            </div>
+      <SlideOutPanel
+        open={showModal}
+        onClose={() => setShowModal(false)}
+        title={editTarget ? tTask('editTask') : tTask('newTask')}
+        width="min(560px, 96vw)"
+      >
+        <div style={{ padding: 20 }}>
             <form onSubmit={handleSave} style={{ display: 'grid', gap: 14 }}>
               <div>
                 <label style={{ display: 'block', fontSize: 12, color: 'var(--text-muted)', marginBottom: 4 }}>
@@ -1890,9 +1867,8 @@ export function TaskMgmtContent({
                 </button>
               </div>
             </form>
-          </div>
         </div>
-      )}
+      </SlideOutPanel>
 
       {drawerTask && (
         <>

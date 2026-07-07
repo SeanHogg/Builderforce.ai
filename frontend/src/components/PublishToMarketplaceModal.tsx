@@ -9,17 +9,9 @@
  */
 import { useState } from 'react';
 import { useTranslations } from 'next-intl';
+import { SlideOutPanel } from '@/components/SlideOutPanel';
 import { publishTicket, type PostingType, type EngagementType, type TicketPosting } from '@/lib/freelancerApi';
 
-const overlay: React.CSSProperties = {
-  position: 'fixed', inset: 0, zIndex: 10010, background: 'rgba(0,0,0,0.45)',
-  display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16,
-};
-const panel: React.CSSProperties = {
-  background: 'var(--bg-base)', border: '1px solid var(--border-subtle)', borderRadius: 14,
-  width: 'min(520px, 100%)', maxHeight: '90vh', overflow: 'auto', padding: 20,
-  display: 'flex', flexDirection: 'column', gap: 12,
-};
 const input: React.CSSProperties = {
   background: 'var(--bg-elevated)', color: 'var(--text-primary)', border: '1px solid var(--border-subtle)',
   borderRadius: 8, padding: '8px 12px', fontSize: 13, outline: 'none', width: '100%', boxSizing: 'border-box',
@@ -77,12 +69,9 @@ export function PublishToMarketplaceModal({
   };
 
   return (
-    <div style={overlay} role="presentation" onClick={onClose}>
-      <div style={panel} role="dialog" aria-modal="true" onClick={(e) => e.stopPropagation()}>
-        <div>
-          <h3 style={{ fontSize: 16, fontWeight: 700, color: 'var(--text-primary)', margin: 0 }}>{t('publish.modalTitle')}</h3>
-          <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '4px 0 0' }}>{t('publish.modalSubtitle')}</p>
-        </div>
+    <SlideOutPanel open onClose={onClose} title={t('publish.modalTitle')} width="min(560px, 96vw)">
+      <div style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 12 }}>
+        <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: 0 }}>{t('publish.modalSubtitle')}</p>
 
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 10 }}>
           <div>
@@ -133,6 +122,6 @@ export function PublishToMarketplaceModal({
           </button>
         </div>
       </div>
-    </div>
+    </SlideOutPanel>
   );
 }

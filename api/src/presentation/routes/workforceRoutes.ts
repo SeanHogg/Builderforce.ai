@@ -17,7 +17,6 @@
  */
 import { Hono } from 'hono';
 import { neon } from '@neondatabase/serverless';
-import { CURRENT_ENGINE_ID } from '@builderforce/agent-tools';
 import { authMiddleware } from '../middleware/authMiddleware';
 import { getOrSetCached, invalidateCached } from '../../infrastructure/cache/readThroughCache';
 import { runtimeHiredAgentsCacheKey } from './runtimeRoutes';
@@ -59,9 +58,9 @@ const PERF_CACHE_TTL_SECONDS = 60;
 
 const RUNTIME_SUPPORT = ['cloud', 'host', 'both'] as const;
 const PRICING_MODELS = ['flat_fee', 'consumption'] as const;
-// There is ONE agent engine — the current version (CURRENT_ENGINE_ID). It is not
-// user-selectable and is never read from the DB for version purposes; the `engine`
-// column is written with the current id purely as a denormalized display value.
+// There is ONE agent engine — the current version (CURRENT_ENGINE_ID), resolved at run
+// time from the constant. It is not user-selectable and is not persisted (the vestigial
+// `ide_agents.engine` column was dropped in migration 0321).
 /** The two cloud-agent execution surfaces (see migration 0105 / cloudDispatch). */
 const RUNTIME_SURFACES = ['durable', 'container'] as const;
 
@@ -278,7 +277,6 @@ export function createWorkforceRoutes(): Hono<HonoEnv> {
       baseModel?: string;
       runtimeSupport?: string;
       preferredRuntime?: string | null;
-      engine?: string;
       runtimeSurface?: string;
       priceCents?: number;
       pricingModel?: string;
@@ -293,7 +291,6 @@ export function createWorkforceRoutes(): Hono<HonoEnv> {
       ? body.runtimeSupport! : 'cloud';
     const pricingModel = (PRICING_MODELS as readonly string[]).includes(body.pricingModel ?? '')
       ? body.pricingModel! : 'flat_fee';
-    const engine = CURRENT_ENGINE_ID;
     // Which execution surface the agent runs on (durable DO vs long-lived node).
     const runtimeSurface = (RUNTIME_SURFACES as readonly string[]).includes(body.runtimeSurface ?? '')
       ? body.runtimeSurface! : 'durable';
@@ -309,12 +306,12 @@ export function createWorkforceRoutes(): Hono<HonoEnv> {
     const [row] = await sql(c.env)`
       INSERT INTO ide_agents
         (id, tenant_id, project_id, name, title, bio, skills, base_model,
-         status, hire_count, runtime_support, preferred_runtime, engine, runtime_surface,
+         status, hire_count, runtime_support, preferred_runtime, runtime_surface,
          price_cents, pricing_model, price_unit, published, psychometric)
       VALUES
         (${id}, ${tenantId}, NULL, ${body.name.trim()}, ${body.title?.trim() || body.name.trim()},
          ${body.bio ?? ''}, ${JSON.stringify(body.skills ?? [])}, ${body.baseModel || 'builderforce-default'},
-         'active', 0, ${runtimeSupport}, ${preferredRuntime}, ${engine}, ${runtimeSurface},
+         'active', 0, ${runtimeSupport}, ${preferredRuntime}, ${runtimeSurface},
          ${Math.max(0, Math.round(body.priceCents ?? 0))}, ${pricingModel}, ${body.priceUnit ?? null},
          ${body.published ?? false}, ${psychometric})
       RETURNING *
@@ -336,7 +333,6 @@ export function createWorkforceRoutes(): Hono<HonoEnv> {
       baseModel?: string;
       runtimeSupport?: string;
       preferredRuntime?: string | null;
-      engine?: string;
       runtimeSurface?: string;
       priceCents?: number;
       pricingModel?: string;
@@ -364,8 +360,6 @@ export function createWorkforceRoutes(): Hono<HonoEnv> {
       ? body.runtimeSupport : existing.runtime_support;
     const pricingModel = body.pricingModel != null && (PRICING_MODELS as readonly string[]).includes(body.pricingModel)
       ? body.pricingModel : existing.pricing_model;
-    // Engine is not user-selectable — always the current version.
-    const engine = CURRENT_ENGINE_ID;
     const runtimeSurface = body.runtimeSurface != null && (RUNTIME_SURFACES as readonly string[]).includes(body.runtimeSurface)
       ? body.runtimeSurface : (existing.runtime_surface ?? 'durable');
     const preferredRuntime = runtimeSupport === 'both'
@@ -381,7 +375,6 @@ export function createWorkforceRoutes(): Hono<HonoEnv> {
         base_model        = ${body.baseModel ?? existing.base_model},
         runtime_support   = ${runtimeSupport},
         preferred_runtime = ${preferredRuntime},
-        engine            = ${engine},
         runtime_surface   = ${runtimeSurface},
         price_cents       = ${body.priceCents != null ? Math.max(0, Math.round(body.priceCents)) : existing.price_cents},
         pricing_model     = ${pricingModel},

@@ -26,12 +26,14 @@ interface OnboardingStepperProps {
   onDismiss: () => void;
 }
 
-const INTENT_OPTIONS = [
-  { value: 'build', label: '🔨 Build a product or feature' },
-  { value: 'custom-agent', label: '🤖 Create a custom AI agent' },
-  { value: 'monetize', label: '💰 Make money with AI agents' },
-  { value: 'automate', label: '⚡ Automate my dev workflow' },
-  { value: 'learn', label: '📚 Learn and explore' },
+// Intent options — the emoji stays literal, the label is resolved through the
+// `onboarding.intent.*` i18n namespace at render time (all 5 locales).
+const INTENT_OPTIONS: { value: string; emoji: string }[] = [
+  { value: 'build', emoji: '🔨' },
+  { value: 'custom-agent', emoji: '🤖' },
+  { value: 'monetize', emoji: '💰' },
+  { value: 'automate', emoji: '⚡' },
+  { value: 'learn', emoji: '📚' },
 ];
 
 type StepId = 'workspace' | 'project' | 'ticketing' | 'repos' | 'audit' | 'roster' | 'install' | 'invite';
@@ -104,7 +106,7 @@ export function OnboardingStepper({
         markComplete(0);
         setActiveStep(1);
       } catch (err) {
-        setWorkspaceError(err instanceof Error ? err.message : 'Failed to create workspace');
+        setWorkspaceError(err instanceof Error ? err.message : t('workspaceCreateFailed'));
       } finally {
         setWorkspaceLoading(false);
       }
@@ -126,7 +128,7 @@ export function OnboardingStepper({
         setProjectCreated(true);
         markComplete(1);
       } catch (err) {
-        setProjectError(err instanceof Error ? err.message : 'Failed to create project');
+        setProjectError(err instanceof Error ? err.message : t('projectCreateFailed'));
       } finally {
         setProjectLoading(false);
       }
@@ -231,7 +233,7 @@ export function OnboardingStepper({
               cursor: canClose ? 'pointer' : 'not-allowed',
               opacity: canClose ? 1 : 0.4,
             }}
-            aria-label="Close onboarding"
+            aria-label={t('closeOnboarding')}
           >
             ×
           </button>
@@ -332,7 +334,7 @@ export function OnboardingStepper({
                     {currentTenant?.name}
                   </div>
                   <div style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 4 }}>
-                    Workspace ready
+                    {t('workspaceReady')}
                   </div>
                 </div>
               ) : (
@@ -340,11 +342,11 @@ export function OnboardingStepper({
                   <label
                     style={{ display: 'block', fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 6 }}
                   >
-                    Workspace name
+                    {t('workspaceName')}
                   </label>
                   <input
                     type="text"
-                    placeholder="Acme Corp"
+                    placeholder={t('workspaceNamePlaceholder')}
                     value={workspaceName}
                     onChange={(e) => setWorkspaceName(e.target.value)}
                     disabled={workspaceLoading}
@@ -368,7 +370,7 @@ export function OnboardingStepper({
                     </p>
                   )}
                   <p style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 0, marginBottom: 20 }}>
-                    This is usually your company or team name. You can change it later.
+                    {t('workspaceNameHint')}
                   </p>
                   <button
                     type="submit"
@@ -385,7 +387,7 @@ export function OnboardingStepper({
                       opacity: workspaceLoading || !workspaceName.trim() ? 0.6 : 1,
                     }}
                   >
-                    {workspaceLoading ? 'Creating…' : 'Create Workspace'}
+                    {workspaceLoading ? t('creating') : t('createWorkspace')}
                   </button>
                 </form>
               )}
@@ -399,20 +401,20 @@ export function OnboardingStepper({
                 <div style={{ textAlign: 'center', padding: '20px 0' }}>
                   <div style={{ fontSize: 48, marginBottom: 12 }}>✅</div>
                   <div style={{ fontWeight: 600, fontSize: 16, color: 'var(--text-primary)' }}>
-                    {existingProjectsCount} project{existingProjectsCount === 1 ? '' : 's'} ready
+                    {t('projectsReady', { count: existingProjectsCount })}
                   </div>
                   <div style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 4 }}>
-                    You already have projects in this workspace.
+                    {t('projectsExist')}
                   </div>
                 </div>
               ) : projectCreated ? (
                 <div style={{ textAlign: 'center', padding: '20px 0' }}>
                   <div style={{ fontSize: 48, marginBottom: 12 }}>✅</div>
                   <div style={{ fontWeight: 600, fontSize: 16, color: 'var(--text-primary)' }}>
-                    &ldquo;{projectName}&rdquo; created
+                    {t('projectCreated', { name: projectName })}
                   </div>
                   <div style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 4 }}>
-                    Your project is ready.
+                    {t('projectReady')}
                   </div>
                 </div>
               ) : (
@@ -421,11 +423,11 @@ export function OnboardingStepper({
                     <label
                       style={{ display: 'block', fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 6 }}
                     >
-                      Project name <span style={{ color: 'var(--coral-bright)' }}>*</span>
+                      {t('projectName')} <span style={{ color: 'var(--coral-bright)' }}>*</span>
                     </label>
                     <input
                       type="text"
-                      placeholder="My Awesome App"
+                      placeholder={t('projectNamePlaceholder')}
                       value={projectName}
                       onChange={(e) => setProjectName(e.target.value)}
                       disabled={projectLoading}
@@ -448,10 +450,10 @@ export function OnboardingStepper({
                     <label
                       style={{ display: 'block', fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 6 }}
                     >
-                      Description <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}>(optional)</span>
+                      {t('description')} <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}>{t('optional')}</span>
                     </label>
                     <textarea
-                      placeholder="What are you building?"
+                      placeholder={t('descriptionPlaceholder')}
                       value={projectDesc}
                       onChange={(e) => setProjectDesc(e.target.value)}
                       disabled={projectLoading}
@@ -476,8 +478,8 @@ export function OnboardingStepper({
                     <label
                       style={{ display: 'block', fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 10 }}
                     >
-                      What are you looking to do?{' '}
-                      <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}>(optional, select all that apply)</span>
+                      {t('intentQuestion')}{' '}
+                      <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}>{t('intentHint')}</span>
                     </label>
                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
                       {INTENT_OPTIONS.map((opt) => {
@@ -501,7 +503,7 @@ export function OnboardingStepper({
                               transition: 'all 0.15s',
                             }}
                           >
-                            {opt.label}
+                            {opt.emoji} {t(`intent.${opt.value}`)}
                           </button>
                         );
                       })}
@@ -529,7 +531,7 @@ export function OnboardingStepper({
                       opacity: projectLoading || !projectName.trim() ? 0.6 : 1,
                     }}
                   >
-                    {projectLoading ? 'Creating…' : 'Create Project'}
+                    {projectLoading ? t('creating') : t('createProject')}
                   </button>
                 </form>
               )}
@@ -573,15 +575,13 @@ export function OnboardingStepper({
           {currentStepId === 'roster' && (
             <div>
               <p style={{ margin: '0 0 14px', fontSize: 13, color: 'var(--text-muted)' }}>
-                A great team has a deep roster. Your board applies a best-practice kanban whose lanes
-                need these roles — fill each with a teammate or spin up an AI agent. Gaps are flagged
-                on every ticket until they&apos;re staffed.
+                {t('rosterIntro')}
               </p>
               {createdProjectId != null ? (
                 <KanbanRosterCard projectId={createdProjectId} />
               ) : (
                 <div style={{ fontSize: 13, color: 'var(--text-muted)', padding: '20px 0', textAlign: 'center' }}>
-                  Create a project first, then your recommended roster appears in project settings.
+                  {t('rosterNeedProject')}
                 </div>
               )}
             </div>
@@ -653,7 +653,7 @@ export function OnboardingStepper({
                     opacity: nextDisabled ? 0.5 : 1,
                   }}
                 >
-                  Next →
+                  {t('next')}
                 </button>
               );
             })()
@@ -672,7 +672,7 @@ export function OnboardingStepper({
                 cursor: 'pointer',
               }}
             >
-              Finish setup ✓
+              {t('finishSetup')}
             </button>
           )}
         </div>

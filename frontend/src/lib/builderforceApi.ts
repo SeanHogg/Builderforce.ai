@@ -5211,6 +5211,8 @@ export interface PublicPersona {
   installCount?: number;
   likeCount?: number;
   updatedAt?: string;
+  /** Present on the owner-scoped `/mine` + PATCH responses (private = a "My Persona"). */
+  visibility?: 'private' | 'tenant' | 'public';
 }
 
 export interface PublishPersonaInput {
@@ -5288,6 +5290,36 @@ export const personasApi = {
       method: 'POST',
       body: JSON.stringify({}),
     }),
+
+  /** The tenant's OWN personas (any visibility) — the server-backed "My Personas"
+   *  store (replaces the old browser-localStorage one). [] on an older backend. */
+  listMine: async (): Promise<PublicPersona[]> => {
+    try {
+      const r = await request<{ personas?: PublicPersona[] } | PublicPersona[]>('/api/personas/mine');
+      return Array.isArray(r) ? r : r.personas ?? [];
+    } catch (e) {
+      if (isNotFound(e)) return [];
+      throw e;
+    }
+  },
+
+  /** Create a tenant persona (defaults to private = a "My Persona"). */
+  create: (input: PublishPersonaInput): Promise<PublicPersona> =>
+    request<{ persona?: PublicPersona } | PublicPersona>('/api/personas', {
+      method: 'POST',
+      body: JSON.stringify({ visibility: 'private', ...input }),
+    }).then((r) => (r as { persona?: PublicPersona }).persona ?? (r as PublicPersona)),
+
+  /** Edit a persona the tenant owns (name/body/psychometric/visibility). */
+  update: (id: string, input: Partial<PublishPersonaInput>): Promise<PublicPersona> =>
+    request<{ persona?: PublicPersona } | PublicPersona>(`/api/personas/${encodeURIComponent(id)}`, {
+      method: 'PATCH',
+      body: JSON.stringify(input),
+    }).then((r) => (r as { persona?: PublicPersona }).persona ?? (r as PublicPersona)),
+
+  /** Delete a persona the tenant owns. */
+  remove: (id: string): Promise<void> =>
+    request<void>(`/api/personas/${encodeURIComponent(id)}`, { method: 'DELETE' }),
 };
 
 // ── Role-insight lenses (/api/insights/* and /api/innovation/*) ───────────────

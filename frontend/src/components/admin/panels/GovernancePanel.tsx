@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { adminApi } from '@/lib/adminApi';
+import { SlideOutPanel } from '@/components/SlideOutPanel';
 import { errText, fmtDateTime, useAdminData, AdminError, AdminLoading } from '@/components/admin/adminShared';
 
 export default function GovernancePanel() {
@@ -70,53 +71,50 @@ export default function GovernancePanel() {
           </tbody>
         </table>
       </div>
-      {governanceEditId !== null && (
-        <div
-          className="admin-modal-overlay"
-          style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-          role="dialog"
-          aria-modal="true"
-          onClick={() => { setGovernanceEditId(null); setGovernanceEditContent(''); }}
-        >
-          <div className="health-card" style={{ padding: 24, maxWidth: 640, width: '100%', maxHeight: '90vh', overflow: 'auto' }} onClick={(e) => e.stopPropagation()}>
-            <div className="page-title" style={{ marginBottom: 12 }}>{t('governance.editGovernance')}</div>
-            <p className="text-muted" style={{ fontSize: 12, marginBottom: 12 }}>
-              {t('governance.projectLabel', { name: governanceProjects.find((p) => p.id === governanceEditId)?.name ?? governanceEditId })}
-            </p>
-            <textarea
-              className="admin-token-textarea"
-              value={governanceEditContent}
-              onChange={(e) => setGovernanceEditContent(e.target.value)}
-              style={{ minHeight: 280, width: '100%', marginBottom: 16 }}
-              placeholder={t('governance.rulesPlaceholder')}
-            />
-            <div style={{ display: 'flex', gap: 8 }}>
-              <button
-                type="button"
-                className="admin-tab active"
-                disabled={governanceSaving}
-                onClick={async () => {
-                  setGovernanceSaving(true);
-                  setError('');
-                  try {
-                    await adminApi.updateProjectGovernance(governanceEditId, governanceEditContent.trim() || null);
-                    setGovernanceEditId(null);
-                    setGovernanceEditContent('');
-                    reload();
-                  } catch (e) {
-                    setError(errText(e));
-                  } finally {
-                    setGovernanceSaving(false);
-                  }
-                }}
-              >
-                {governanceSaving ? t('common.saving') : t('common.save')}
-              </button>
-              <button type="button" className="btn-ghost" onClick={() => { setGovernanceEditId(null); setGovernanceEditContent(''); }}>{t('common.cancel')}</button>
-            </div>
+      <SlideOutPanel
+        open={governanceEditId !== null}
+        onClose={() => { setGovernanceEditId(null); setGovernanceEditContent(''); }}
+        title={t('governance.editGovernance')}
+        width="min(640px, 96vw)"
+      >
+        <div style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 14 }}>
+          <p className="text-muted" style={{ fontSize: 12, margin: 0 }}>
+            {t('governance.projectLabel', { name: governanceProjects.find((p) => p.id === governanceEditId)?.name ?? governanceEditId ?? '' })}
+          </p>
+          <textarea
+            className="admin-token-textarea"
+            value={governanceEditContent}
+            onChange={(e) => setGovernanceEditContent(e.target.value)}
+            style={{ minHeight: 280, width: '100%' }}
+            placeholder={t('governance.rulesPlaceholder')}
+          />
+          <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+            <button type="button" className="btn-ghost" onClick={() => { setGovernanceEditId(null); setGovernanceEditContent(''); }}>{t('common.cancel')}</button>
+            <button
+              type="button"
+              className="admin-tab active"
+              disabled={governanceSaving}
+              onClick={async () => {
+                if (governanceEditId === null) return;
+                setGovernanceSaving(true);
+                setError('');
+                try {
+                  await adminApi.updateProjectGovernance(governanceEditId, governanceEditContent.trim() || null);
+                  setGovernanceEditId(null);
+                  setGovernanceEditContent('');
+                  reload();
+                } catch (e) {
+                  setError(errText(e));
+                } finally {
+                  setGovernanceSaving(false);
+                }
+              }}
+            >
+              {governanceSaving ? t('common.saving') : t('common.save')}
+            </button>
           </div>
         </div>
-      )}
+      </SlideOutPanel>
     </div>
   );
 }

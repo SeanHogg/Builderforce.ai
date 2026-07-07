@@ -298,6 +298,78 @@ export function createPersonaRoutes(db: Db): Hono<HonoEnv> {
     return c.json({ installed: true, installCount: updated?.installCount ?? null });
   });
 
+  // PATCH /api/personas/:id — edit a persona the tenant OWNS (any visibility). This is
+  // what makes "My Personas" a durable, server-backed, cross-device store (they used to
+  // live in browser localStorage and never reached execution). Re-slugs a public rename,
+  // re-sanitizes the psychometric under the Pro gate, and invalidates the runtime
+  // capability cache so the next cloud run re-reads the edited persona.
+  router.patch('/:id', authMiddleware, async (c) => {
+    const tenantId = c.get('tenantId') as number;
+    const userId = c.get('userId') as string | undefined;
+    const id = c.req.param('id');
+    const [existing] = await db
+      .select()
+      .from(marketplacePersonas)
+      .where(and(eq(marketplacePersonas.id, id), eq(marketplacePersonas.tenantId, tenantId)));
+    if (!existing) return c.json({ error: 'Persona not found' }, 404);
+
+    const body = await c.req.json<{
+      name?: string; description?: string; category?: string; tags?: string[];
+      visibility?: 'private' | 'tenant' | 'public'; authorName?: string; persona?: unknown; psychometric?: unknown;
+    }>().catch(() => ({} as Record<string, never>));
+
+    const updates: Record<string, unknown> = { updatedAt: new Date() };
+    const wasPublic = existing.visibility === 'public';
+    let slug = existing.slug;
+    if (typeof body.name === 'string' && body.name.trim()) {
+      updates.name = body.name.trim();
+      slug = slugify(body.name);
+    }
+    const nextVisibility = body.visibility ?? existing.visibility;
+    if (body.visibility !== undefined) updates.visibility = nextVisibility;
+    if (nextVisibility === 'public') slug = await publicSafeSlug(db, slug, id);
+    updates.slug = slug;
+    if (body.description !== undefined) updates.description = body.description ?? null;
+    if (body.category !== undefined) updates.category = body.category ?? null;
+    if (body.tags !== undefined) updates.tags = JSON.stringify(body.tags ?? []);
+    if (body.authorName !== undefined) updates.authorName = body.authorName ?? null;
+    if (body.persona !== undefined) updates.persona = sanitizePersonaBody(body.persona);
+    if (body.psychometric !== undefined) {
+      updates.psychometric =
+        body.psychometric != null && (await tenantHasFeature(c.env, tenantId, userId, 'psychometricPersona'))
+          ? sanitizePsychometricProfile(body.psychometric)
+          : null;
+    }
+
+    const [row] = await db
+      .update(marketplacePersonas)
+      .set(updates)
+      .where(and(eq(marketplacePersonas.id, id), eq(marketplacePersonas.tenantId, tenantId)))
+      .returning();
+    if (!row) return c.json({ error: 'Persona not found' }, 404);
+    // Bust the runtime body cache under BOTH the old and new slug so a rename can't
+    // leave a stale persona resolving at run time.
+    await invalidateCapabilityCache(c.env as Env, 'persona', existing.slug);
+    if (slug !== existing.slug) await invalidateCapabilityCache(c.env as Env, 'persona', slug);
+    if (wasPublic || nextVisibility === 'public') await bumpCacheVersion(c.env as Env, PERSONA_PUBLIC_VERSION_KEY);
+    return c.json({ ...publicView(row), visibility: row.visibility });
+  });
+
+  // DELETE /api/personas/:id — remove a persona the tenant owns.
+  router.delete('/:id', authMiddleware, async (c) => {
+    const tenantId = c.get('tenantId') as number;
+    const id = c.req.param('id');
+    const [existing] = await db
+      .select({ slug: marketplacePersonas.slug, visibility: marketplacePersonas.visibility })
+      .from(marketplacePersonas)
+      .where(and(eq(marketplacePersonas.id, id), eq(marketplacePersonas.tenantId, tenantId)));
+    if (!existing) return c.json({ error: 'Persona not found' }, 404);
+    await db.delete(marketplacePersonas).where(and(eq(marketplacePersonas.id, id), eq(marketplacePersonas.tenantId, tenantId)));
+    await invalidateCapabilityCache(c.env as Env, 'persona', existing.slug);
+    if (existing.visibility === 'public') await bumpCacheVersion(c.env as Env, PERSONA_PUBLIC_VERSION_KEY);
+    return c.body(null, 204);
+  });
+
   // GET /api/personas/:slug — public persona detail. Registered LAST so the
   // literal routes above (/public, /mine, /psychometric/*) take precedence.
   router.get('/:slug', async (c) => {

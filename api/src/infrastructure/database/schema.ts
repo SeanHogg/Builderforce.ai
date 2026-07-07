@@ -1386,7 +1386,8 @@ export const ideAgents = pgTable('ide_agents', {
   hireCount:        integer('hire_count').notNull().default(0),
   runtimeSupport:   varchar('runtime_support', { length: 16 }).notNull().default('cloud'),
   preferredRuntime: varchar('preferred_runtime', { length: 16 }),
-  engine:           varchar('engine', { length: 32 }),
+  // (vestigial `engine` column dropped in migration 0321 — one engine, resolved from
+  //  CURRENT_ENGINE_ID at run time, never persisted.)
   runtimeSurface:   varchar('runtime_surface', { length: 16 }),
   /** JSON PsychometricProfile (Pro) — this agent's OWN personality; null = none. Compiled at run time. */
   psychometric:     text('psychometric'),
