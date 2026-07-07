@@ -32,6 +32,10 @@ export interface LaneLite {
    *  (default — park for a human), 'skip' (tolerate + advance past the lane), or
    *  'retry' (re-run — currently falls back to needs_attention, see Gap Register). */
   failurePolicy: string;
+  /** How strictly this lane's requirements gate entry (migration 0274): 'off' | 'soft'
+   *  | 'hard'. The coordinator blocks a 'hard' lane's stage launch while a required
+   *  reviewer sign-off is missing. */
+  requirementGate: string;
 }
 
 export interface AssignmentLite {
@@ -115,6 +119,10 @@ export interface CoordinatorStore {
   /** All lanes of a board, ordered by position ascending. */
   listLanes(boardId: string, tenantId: number): Promise<LaneLite[]>;
   getLane(swimlaneId: string, tenantId: number): Promise<LaneLite | null>;
+  /** True when this lane declares a REQUIRED reviewer check (review, or role with
+   *  responsibility='reviewer') that the ticket has NOT satisfied with an approved
+   *  sign-off. Drives the coordinator's 'hard'-gate block. */
+  hasUnmetRequiredReviewers(taskId: number, swimlaneId: string, tenantId: number): Promise<boolean>;
   listAssignments(swimlaneId: string, tenantId: number): Promise<AssignmentLite[]>;
 
   createTicketRun(data: {

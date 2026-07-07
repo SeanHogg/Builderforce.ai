@@ -123,7 +123,26 @@
     "modeTimeboxed": "Timeboxed (auto-advance per speaker)",
     "secondsPerPerson": "Seconds per person",
     "saving": "Saving…",
-    "saveSettings": "Save settings"
+    "saveSettings": "Save settings",
+    "requirements": "Requirements",
+    "requirementGate": "Gate",
+    "requirementGateTitle": "How strictly this lane’s requirements block auto-advance",
+    "gateOff": "Off (audit only)",
+    "gateSoft": "Soft (flag & round-trip)",
+    "gateHard": "Hard (block until met)",
+    "requirementsIntro": "Roles, diagnostics, or reviews a ticket must satisfy to pass this lane.",
+    "noRequirements": "No requirements on this lane yet.",
+    "reqKind": "Requirement type",
+    "reqKindRole": "Role",
+    "reqKindReview": "Review",
+    "reqKindDiagnostic": "Diagnostic",
+    "reqRefPlaceholder": "Role key or diagnostic id",
+    "responsibility": "Responsibility",
+    "respOwner": "Owner",
+    "respReviewer": "Reviewer",
+    "respContributor": "Contributor",
+    "required": "Required",
+    "addRequirement": "Add requirement"
   },
   "integrations": {
     "gallery": {
@@ -328,7 +347,11 @@
       "adminLogs": "Logs",
       "adminDeveloper": "Developer",
       "meetings": "Meetings",
-      "calendar": "Calendar"
+      "calendar": "Calendar",
+      "facts": "Facts",
+      "snapshots": "Reviews",
+      "persona": "Persona",
+      "plan": "Planning"
     }
   },
   "alerts": {
@@ -1497,7 +1520,9 @@
         "results": "Survey results",
         "resultsDesc": "The DevEx Index, per-topic scores with trend, benchmark and sentiment, the segment heatmap, participation over time and how priorities have shifted.",
         "surveys": "Surveys",
-        "surveysDesc": "Author survey templates, launch campaigns, and view or respond to developer-experience feedback."
+        "surveysDesc": "Author survey templates, launch campaigns, and view or respond to developer-experience feedback.",
+        "pulse": "Team pulse",
+        "pulseDesc": "Anonymous sentiment pulse — aggregate score, distribution & eNPS trend"
       },
       "summary": {
         "templates": "Templates",
@@ -6218,7 +6243,9 @@
     "errDelete": "Delete failed",
     "errUpdate": "Update failed",
     "errMove": "Move failed",
-    "tabChanges": "Changes"
+    "tabChanges": "Changes",
+    "release": "Release",
+    "delayReason": "Delay reason"
   },
   "taskChanges": {
     "allChanges": "All changes",

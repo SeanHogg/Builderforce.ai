@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { useTranslations } from 'next-intl';
 import type { MambaAgentState, MambaStateSnapshot } from '@/lib/types';
 import { MambaEngine } from '@/lib/mamba-engine';
 
@@ -23,6 +24,7 @@ function stateHeatmap(data: number[], count: number): number[] {
 }
 
 export function AgentStateViewer({ projectId, agentId }: AgentStateViewerProps) {
+  const t = useTranslations('agentState');
   const [state, setState] = useState<MambaAgentState | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [replayInput, setReplayInput] = useState('');
@@ -84,20 +86,20 @@ export function AgentStateViewer({ projectId, agentId }: AgentStateViewerProps) 
       const snap = engine.getSnapshot();
       setReplayLog(prev => [
         ...prev,
-        `[step ${snap.step}] "${seq.slice(0, 50)}" → ${ctx}`,
+        t('replayStep', { step: snap.step, seq: seq.slice(0, 50), ctx }),
       ]);
     }
     setIsReplaying(false);
-  }, [replayInput, effectiveAgentId, projectId]);
+  }, [replayInput, effectiveAgentId, projectId, t]);
 
   const handleReset = useCallback(async () => {
-    if (!confirm('Reset Mamba state for this agent? This cannot be undone.')) return;
+    if (!confirm(t('resetConfirm'))) return;
     const engine = new MambaEngine(effectiveAgentId, projectId);
     await engine.init();
     await engine.save(); // saves fresh zero state
     engineRef.current = engine;
     setState(engine.getState());
-  }, [effectiveAgentId, projectId]);
+  }, [effectiveAgentId, projectId, t]);
 
   const snap: MambaStateSnapshot | null = state?.snapshot ?? null;
   const heatmap = snap ? stateHeatmap(snap.data, 32) : [];
@@ -112,7 +114,7 @@ export function AgentStateViewer({ projectId, agentId }: AgentStateViewerProps) 
     >
       {/* Header */}
       <div style={{ padding: '10px 12px', borderBottom: '1px solid var(--border-subtle)', display: 'flex', alignItems: 'center', gap: 8 }}>
-        <span style={{ fontWeight: 700 }}>🔬 Agent State Viewer</span>
+        <span style={{ fontWeight: 700 }}>🔬 {t('title')}</span>
         <button
           onClick={loadState}
           disabled={isLoading}
@@ -122,18 +124,18 @@ export function AgentStateViewer({ projectId, agentId }: AgentStateViewerProps) 
             color: 'var(--text-secondary)', cursor: 'pointer',
           }}
         >
-          {isLoading ? '⏳' : '🔄 Refresh'}
+          {isLoading ? '⏳' : `🔄 ${t('refresh')}`}
         </button>
         {state && (
           <button
             onClick={handleReset}
             style={{
               fontSize: '0.7rem', padding: '2px 8px', borderRadius: 5,
-              background: 'rgba(220,38,38,0.15)', border: '1px solid rgba(220,38,38,0.4)',
-              color: '#f87171', cursor: 'pointer',
+              background: 'var(--error-bg)', border: '1px solid var(--error-border)',
+              color: 'var(--error-text)', cursor: 'pointer',
             }}
           >
-            Reset
+            {t('reset')}
           </button>
         )}
       </div>
@@ -142,9 +144,9 @@ export function AgentStateViewer({ projectId, agentId }: AgentStateViewerProps) 
         {!state && !isLoading && (
           <div style={{ textAlign: 'center', color: 'var(--text-muted)', padding: '48px 16px' }}>
             <div style={{ fontSize: '2rem', marginBottom: 8 }}>🧬</div>
-            <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: 4 }}>No Mamba state found</p>
+            <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: 4 }}>{t('noStateTitle')}</p>
             <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-              Enable Memory in the AI Chat or run Memory Training to create state.
+              {t('noStateHint')}
             </p>
           </div>
         )}
@@ -154,10 +156,10 @@ export function AgentStateViewer({ projectId, agentId }: AgentStateViewerProps) 
             {/* Summary cards */}
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
               {[
-                { label: 'Step', value: snap.step },
-                { label: 'Channels', value: snap.channels },
-                { label: 'Order', value: snap.order },
-                { label: 'Dim', value: snap.dim },
+                { label: t('cardStep'), value: snap.step },
+                { label: t('cardChannels'), value: snap.channels },
+                { label: t('cardOrder'), value: snap.order },
+                { label: t('cardDim'), value: snap.dim },
               ].map(({ label, value }) => (
                 <div key={label} style={{
                   background: 'var(--bg-elevated)', borderRadius: 6, padding: '8px 10px',
@@ -172,7 +174,7 @@ export function AgentStateViewer({ projectId, agentId }: AgentStateViewerProps) 
             {/* State heatmap */}
             <div>
               <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                Memory State Heatmap
+                {t('heatmapTitle')}
               </div>
               <div style={{ display: 'flex', gap: 2, height: 36 }}>
                 {heatmap.map((v, i) => {
@@ -182,7 +184,7 @@ export function AgentStateViewer({ projectId, agentId }: AgentStateViewerProps) 
                   return (
                     <div
                       key={i}
-                      title={`Channel group ${i}: ${v.toFixed(3)}`}
+                      title={t('channelGroup', { index: i, value: v.toFixed(3) })}
                       style={{
                         flex: 1,
                         borderRadius: 2,
@@ -195,21 +197,21 @@ export function AgentStateViewer({ projectId, agentId }: AgentStateViewerProps) 
                 })}
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.6rem', color: 'var(--text-muted)', marginTop: 3 }}>
-                <span>← channel 0</span>
-                <span>channel {snap.channels * snap.order - 1} →</span>
+                <span>{t('channelStart')}</span>
+                <span>{t('channelEnd', { channel: snap.channels * snap.order - 1 })}</span>
               </div>
             </div>
 
             {/* Updated at */}
             <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>
-              Updated: {new Date(state.updatedAt).toLocaleString()}
+              {t('updated', { date: new Date(state.updatedAt).toLocaleString() })}
             </div>
 
             {/* Interaction history */}
             {state.history.length > 0 && (
               <div>
                 <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                  Recent History ({state.history.length} entries)
+                  {t('recentHistory', { count: state.history.length })}
                 </div>
                 <div style={{ background: 'var(--bg-surface)', borderRadius: 6, padding: '6px 8px', maxHeight: 100, overflowY: 'auto', border: '1px solid var(--border-subtle)' }}>
                   {state.history.slice(-10).map((entry, i) => (
@@ -224,12 +226,12 @@ export function AgentStateViewer({ projectId, agentId }: AgentStateViewerProps) 
             {/* Sequence replay */}
             <div>
               <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginBottom: 4, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                Replay Sequences
+                {t('replayTitle')}
               </div>
               <textarea
                 value={replayInput}
                 onChange={e => setReplayInput(e.target.value)}
-                placeholder="Enter sequences to replay (one per line)…"
+                placeholder={t('replayPlaceholder')}
                 rows={3}
                 style={{
                   width: '100%', background: 'var(--bg-surface)', color: 'var(--text-primary)',
@@ -243,11 +245,11 @@ export function AgentStateViewer({ projectId, agentId }: AgentStateViewerProps) 
                 style={{
                   marginTop: 6, width: '100%', padding: '6px 0', fontSize: '0.75rem',
                   fontWeight: 600, borderRadius: 5, cursor: 'pointer', border: 'none',
-                  background: isReplaying ? 'var(--bg-elevated)' : '#4f46e5',
+                  background: isReplaying ? 'var(--bg-elevated)' : 'var(--coral-bright)',
                   color: '#fff', opacity: isReplaying || !replayInput.trim() ? 0.5 : 1,
                 }}
               >
-                {isReplaying ? '⏳ Replaying…' : '▶ Replay'}
+                {isReplaying ? `⏳ ${t('replaying')}` : `▶ ${t('replay')}`}
               </button>
             </div>
 
@@ -255,11 +257,11 @@ export function AgentStateViewer({ projectId, agentId }: AgentStateViewerProps) 
             {replayLog.length > 0 && (
               <div>
                 <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginBottom: 4, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                  Replay Output
+                  {t('replayOutput')}
                 </div>
                 <div style={{
-                  background: '#0a0a0f', borderRadius: 5, padding: '6px 8px',
-                  fontFamily: 'monospace', fontSize: '0.65rem', color: '#4ade80',
+                  background: 'var(--bg-elevated)', borderRadius: 5, padding: '6px 8px',
+                  fontFamily: 'monospace', fontSize: '0.65rem', color: 'var(--success)',
                   maxHeight: 120, overflowY: 'auto', border: '1px solid var(--border-subtle)',
                 }}>
                   {replayLog.map((line, i) => <div key={i}>{line}</div>)}

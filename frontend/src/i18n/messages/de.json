@@ -123,7 +123,26 @@
     "modeTimeboxed": "Zeitlich begrenzt (Auto-Vorschub pro Sprecher)",
     "secondsPerPerson": "Sekunden pro Person",
     "saving": "Wird gespeichert…",
-    "saveSettings": "Einstellungen speichern"
+    "saveSettings": "Einstellungen speichern",
+    "requirements": "Anforderungen",
+    "requirementGate": "Sperre",
+    "requirementGateTitle": "Wie streng die Anforderungen dieser Spur das automatische Weiterrücken blockieren",
+    "gateOff": "Aus (nur Audit)",
+    "gateSoft": "Weich (markieren & zurückgeben)",
+    "gateHard": "Hart (blockieren bis erfüllt)",
+    "requirementsIntro": "Rollen, Diagnosen oder Reviews, die ein Ticket erfüllen muss, um diese Spur zu passieren.",
+    "noRequirements": "Noch keine Anforderungen für diese Spur.",
+    "reqKind": "Anforderungstyp",
+    "reqKindRole": "Rolle",
+    "reqKindReview": "Review",
+    "reqKindDiagnostic": "Diagnose",
+    "reqRefPlaceholder": "Rollenschlüssel oder Diagnose-ID",
+    "responsibility": "Verantwortung",
+    "respOwner": "Eigentümer",
+    "respReviewer": "Prüfer",
+    "respContributor": "Mitwirkender",
+    "required": "Erforderlich",
+    "addRequirement": "Anforderung hinzufügen"
   },
   "integrations": {
     "gallery": {
@@ -328,7 +347,11 @@
       "adminLogs": "Protokolle",
       "adminDeveloper": "Entwickler",
       "meetings": "Besprechungen",
-      "calendar": "Kalender"
+      "calendar": "Kalender",
+      "facts": "Fakten",
+      "snapshots": "Reviews",
+      "persona": "Persona",
+      "plan": "Planung"
     }
   },
   "alerts": {
@@ -1497,7 +1520,9 @@
         "results": "Umfrageergebnisse",
         "resultsDesc": "Der DevEx-Index, Themenwerte mit Trend, Benchmark und Stimmung, die Segment-Heatmap, die Beteiligung im Zeitverlauf und wie sich die Prioritäten verschoben haben.",
         "surveys": "Umfragen",
-        "surveysDesc": "Erstellen Sie Umfragevorlagen, starten Sie Kampagnen und sehen Sie Developer-Experience-Feedback ein oder beantworten Sie es."
+        "surveysDesc": "Erstellen Sie Umfragevorlagen, starten Sie Kampagnen und sehen Sie Developer-Experience-Feedback ein oder beantworten Sie es.",
+        "pulse": "Team-Puls",
+        "pulseDesc": "Anonymer Stimmungspuls – aggregierter Wert, Verteilung & eNPS-Trend"
       },
       "summary": {
         "templates": "Vorlagen",
@@ -6218,7 +6243,9 @@
     "errDelete": "Löschen fehlgeschlagen",
     "errUpdate": "Aktualisierung fehlgeschlagen",
     "errMove": "Verschieben fehlgeschlagen",
-    "tabChanges": "Änderungen"
+    "tabChanges": "Änderungen",
+    "release": "Release",
+    "delayReason": "Verzögerungsgrund"
   },
   "taskChanges": {
     "allChanges": "Alle Änderungen",

@@ -123,7 +123,26 @@
     "modeTimeboxed": "Chronométré (avance auto par intervenant)",
     "secondsPerPerson": "Secondes par personne",
     "saving": "Enregistrement…",
-    "saveSettings": "Enregistrer les paramètres"
+    "saveSettings": "Enregistrer les paramètres",
+    "requirements": "Exigences",
+    "requirementGate": "Contrôle",
+    "requirementGateTitle": "À quel point les exigences de ce couloir bloquent l’avancement automatique",
+    "gateOff": "Désactivé (audit seul)",
+    "gateSoft": "Souple (signaler et renvoyer)",
+    "gateHard": "Strict (bloquer jusqu’à satisfaction)",
+    "requirementsIntro": "Rôles, diagnostics ou revues qu’un ticket doit satisfaire pour passer ce couloir.",
+    "noRequirements": "Aucune exigence sur ce couloir pour l’instant.",
+    "reqKind": "Type d’exigence",
+    "reqKindRole": "Rôle",
+    "reqKindReview": "Revue",
+    "reqKindDiagnostic": "Diagnostic",
+    "reqRefPlaceholder": "Clé de rôle ou id de diagnostic",
+    "responsibility": "Responsabilité",
+    "respOwner": "Propriétaire",
+    "respReviewer": "Relecteur",
+    "respContributor": "Contributeur",
+    "required": "Requis",
+    "addRequirement": "Ajouter une exigence"
   },
   "integrations": {
     "gallery": {
@@ -328,7 +347,11 @@
       "adminLogs": "Journaux",
       "adminDeveloper": "Développeur",
       "meetings": "Réunions",
-      "calendar": "Agenda"
+      "calendar": "Agenda",
+      "facts": "Faits",
+      "snapshots": "Revues",
+      "persona": "Persona",
+      "plan": "Planification"
     }
   },
   "alerts": {
@@ -1497,7 +1520,9 @@
         "results": "Résultats de l'enquête",
         "resultsDesc": "L'indice DevEx, les scores par thème avec tendance, référence et ressenti, la carte thermique par segment, la participation dans le temps et l'évolution des priorités.",
         "surveys": "Enquêtes",
-        "surveysDesc": "Créez des modèles d'enquête, lancez des campagnes, et consultez ou répondez aux retours sur l'expérience développeur."
+        "surveysDesc": "Créez des modèles d'enquête, lancez des campagnes, et consultez ou répondez aux retours sur l'expérience développeur.",
+        "pulse": "Pouls de l'équipe",
+        "pulseDesc": "Pouls de sentiment anonyme — score agrégé, distribution et tendance eNPS"
       },
       "summary": {
         "templates": "Modèles",
@@ -6218,7 +6243,9 @@
     "errDelete": "Échec de la suppression",
     "errUpdate": "Échec de la mise à jour",
     "errMove": "Échec du déplacement",
-    "tabChanges": "Modifications"
+    "tabChanges": "Modifications",
+    "release": "Version",
+    "delayReason": "Cause du retard"
   },
   "taskChanges": {
     "allChanges": "Toutes les modifications",
