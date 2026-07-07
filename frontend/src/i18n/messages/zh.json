@@ -123,7 +123,26 @@
     "modeTimeboxed": "定时（每位发言人自动推进）",
     "secondsPerPerson": "每人秒数",
     "saving": "保存中…",
-    "saveSettings": "保存设置"
+    "saveSettings": "保存设置",
+    "requirements": "要求",
+    "requirementGate": "关卡",
+    "requirementGateTitle": "此泳道的要求阻止自动推进的严格程度",
+    "gateOff": "关闭（仅审计）",
+    "gateSoft": "软性（标记并退回）",
+    "gateHard": "硬性（未满足前阻止）",
+    "requirementsIntro": "工单通过此泳道必须满足的角色、诊断或评审。",
+    "noRequirements": "此泳道尚无要求。",
+    "reqKind": "要求类型",
+    "reqKindRole": "角色",
+    "reqKindReview": "评审",
+    "reqKindDiagnostic": "诊断",
+    "reqRefPlaceholder": "角色键或诊断 ID",
+    "responsibility": "职责",
+    "respOwner": "负责人",
+    "respReviewer": "评审人",
+    "respContributor": "参与者",
+    "required": "必需",
+    "addRequirement": "添加要求"
   },
   "integrations": {
     "gallery": {
@@ -328,7 +347,11 @@
       "adminLogs": "日志",
       "adminDeveloper": "开发者",
       "meetings": "会议",
-      "calendar": "日历"
+      "calendar": "日历",
+      "facts": "事实库",
+      "snapshots": "定期回顾",
+      "persona": "角色视角",
+      "plan": "人力规划"
     }
   },
   "alerts": {
@@ -1497,7 +1520,9 @@
         "results": "调研结果",
         "resultsDesc": "DevEx 指数、各主题分数及其趋势、基准与情绪、分组热力图、随时间变化的参与度，以及优先级的变化。",
         "surveys": "调研",
-        "surveysDesc": "创建调研模板、发起活动，并查看或回复开发者体验反馈。"
+        "surveysDesc": "创建调研模板、发起活动，并查看或回复开发者体验反馈。",
+        "pulse": "团队脉搏",
+        "pulseDesc": "匿名情绪脉搏——总体评分、分布与 eNPS 趋势"
       },
       "summary": {
         "templates": "模板",
@@ -6218,7 +6243,9 @@
     "errDelete": "删除失败",
     "errUpdate": "更新失败",
     "errMove": "移动失败",
-    "tabChanges": "变更"
+    "tabChanges": "变更",
+    "release": "发布版本",
+    "delayReason": "延误原因"
   },
   "taskChanges": {
     "allChanges": "所有变更",

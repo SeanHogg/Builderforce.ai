@@ -42,6 +42,8 @@ import { useBoardConfig } from './board/useBoardConfig';
 import { useBoardLiveRuns } from './board/useBoardLiveRuns';
 import { useRealtimeRoom } from '@/lib/embed/useRealtimeRoom';
 import { SlideOutPanel } from './SlideOutPanel';
+import { ReleasePicker } from './ReleasePicker';
+import { DelayReasonTag } from './DelayReasonTag';
 import { MoveToBoardControl } from './MoveToBoardControl';
 import { AgentTab } from './agent/AgentTab';
 import { TaskChangesPanel } from './agent/TaskChangesPanel';
@@ -669,7 +671,7 @@ export function TaskMgmtContent({
   // Persist a single edited field from the drawer's inline editors. Patches the
   // open task, syncs the list + drawer, and closes the active editor on success.
   const saveTaskField = async (
-    patch: Partial<Pick<Task, 'title' | 'description' | 'priority' | 'assignedAgentHostId' | 'assignedAgentRef' | 'assignedUserId' | 'dueDate' | 'businessValue'>>
+    patch: Partial<Pick<Task, 'title' | 'description' | 'priority' | 'assignedAgentHostId' | 'assignedAgentRef' | 'assignedUserId' | 'dueDate' | 'businessValue' | 'releaseId'>>
   ) => {
     if (!drawerTask) return;
     setFieldSaving(true);
@@ -2372,6 +2374,20 @@ export function TaskMgmtContent({
                         {formatDate(drawerTask.dueDate) || tTask('none')}
                       </span>
                     )}
+                  </div>
+                  {/* Release association (EMP-10a) — persists through the task update path. */}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 13, minHeight: 28, gap: 12 }}>
+                    <span style={{ color: 'var(--text-muted)' }}>{tTask('release')}</span>
+                    <ReleasePicker
+                      value={drawerTask.releaseId ?? null}
+                      projectId={drawerTask.projectId}
+                      onChange={(releaseId) => void saveTaskField({ releaseId })}
+                    />
+                  </div>
+                  {/* Delay root-cause tag (EMP-9) — owns its own persistence. */}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 13, minHeight: 28, gap: 12 }}>
+                    <span style={{ color: 'var(--text-muted)' }}>{tTask('delayReason')}</span>
+                    <DelayReasonTag taskId={drawerTask.id} value={null} />
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', fontSize: 13, minHeight: 28, gap: 12 }}>
                     <span style={{ color: 'var(--text-muted)', paddingTop: 4 }}>

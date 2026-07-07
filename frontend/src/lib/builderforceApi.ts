@@ -1440,6 +1440,8 @@ export const tasksApi = {
       /** Pin the business value 0–100 (or null to clear). Setting it server-side
        *  marks the source 'manual'. */
       businessValue: number | null;
+      /** Associate the task with a product release, or null to detach (EMP-10a). */
+      releaseId: string | null;
       archived: boolean;
     }>
   ): Promise<Task> =>
@@ -4976,8 +4978,22 @@ export interface Swimlane {
   actionTarget: string | null;
   successPolicy: LaneSuccessPolicy;
   successThreshold: number | null;
+  /** How strictly this lane's requirements gate entry: off (audit only) | soft | hard. */
+  requirementGate?: 'off' | 'soft' | 'hard';
   createdAt: string;
   updatedAt?: string;
+}
+
+/** A live per-lane requirement (role sign-off / diagnostic / review) the audit + gating engines enforce. */
+export interface SwimlaneRequirement {
+  id: string;
+  swimlaneId: string;
+  kind: 'role' | 'diagnostic' | 'review';
+  ref: string;
+  responsibility: 'owner' | 'reviewer' | 'contributor' | null;
+  isRequired: boolean;
+  description: string | null;
+  position: number;
 }
 
 export interface SwimlaneAgent {
@@ -5054,6 +5070,18 @@ export const boardsApi = {
     remove: (boardId: string, laneId: string, id: string): Promise<void> =>
       request<void>(`/api/boards/${boardId}/swimlanes/${laneId}/agents/${id}`, { method: 'DELETE' }),
   },
+
+  /** LIVE per-lane requirements — directly editable on a running board (no template re-apply). */
+  requirements: {
+    list: (boardId: string, laneId: string): Promise<SwimlaneRequirement[]> =>
+      request<{ requirements: SwimlaneRequirement[] }>(`/api/boards/${boardId}/swimlanes/${laneId}/requirements`).then((r) => r.requirements ?? []),
+    create: (boardId: string, laneId: string, body: { kind: SwimlaneRequirement['kind']; ref: string; responsibility?: SwimlaneRequirement['responsibility']; isRequired?: boolean; description?: string; position?: number }): Promise<SwimlaneRequirement> =>
+      request(`/api/boards/${boardId}/swimlanes/${laneId}/requirements`, { method: 'POST', body: JSON.stringify(body) }),
+    patch: (boardId: string, laneId: string, reqId: string, body: Partial<{ ref: string; responsibility: SwimlaneRequirement['responsibility']; isRequired: boolean; description: string; position: number }>): Promise<SwimlaneRequirement> =>
+      request(`/api/boards/${boardId}/swimlanes/${laneId}/requirements/${reqId}`, { method: 'PATCH', body: JSON.stringify(body) }),
+    remove: (boardId: string, laneId: string, reqId: string): Promise<void> =>
+      request<void>(`/api/boards/${boardId}/swimlanes/${laneId}/requirements/${reqId}`, { method: 'DELETE' }),
+  },
 };
 
 /** Mutable swimlane fields shared by the create + patch requests. */
@@ -5068,6 +5096,7 @@ interface LaneWriteBody {
   actionTarget: string;
   successPolicy: string;
   successThreshold: number;
+  requirementGate: 'off' | 'soft' | 'hard';
 }
 
 

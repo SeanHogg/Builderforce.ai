@@ -39,6 +39,7 @@ import {
   boards,
   swimlanes,
   swimlaneAgentAssignments,
+  swimlaneRequirements,
   ticketRuns,
   agentDispatches,
 } from '../../infrastructure/database/schema';
@@ -84,6 +85,8 @@ interface LaneWriteBody {
   actionTarget?: string;    // lane key (move_ticket) | workflow id (run_workflow)
   successPolicy?: string;   // 'all' | 'any' | 'n_of_m'
   successThreshold?: number;
+  /** How strictly this lane's requirements gate entry (migration 0274): off|soft|hard. */
+  requirementGate?: string;
 }
 
 export function createBoardRoutes(db: Db): Hono<HonoEnv> {
@@ -325,6 +328,8 @@ export function createBoardRoutes(db: Db): Hono<HonoEnv> {
         ...(body.actionTarget !== undefined ? { actionTarget: body.actionTarget || null } : {}),
         ...(body.successPolicy !== undefined ? { successPolicy: body.successPolicy } : {}),
         ...(body.successThreshold !== undefined ? { successThreshold: body.successThreshold } : {}),
+        ...(body.requirementGate !== undefined && ['off', 'soft', 'hard'].includes(body.requirementGate)
+          ? { requirementGate: body.requirementGate } : {}),
         updatedAt: new Date(),
       })
       .where(and(eq(swimlanes.id, laneId), eq(swimlanes.boardId, boardId), eq(swimlanes.tenantId, tenantId)));
@@ -498,6 +503,81 @@ export function createBoardRoutes(db: Db): Hono<HonoEnv> {
           eq(swimlaneAgentAssignments.tenantId, tenantId),
         ),
       );
+    return c.body(null, 204);
+  });
+
+  // ── Lane requirements (role / diagnostic / review checks a lane enforces) ────
+  // The LIVE per-lane requirements the audit + gating engines read. Previously only
+  // materialised by applying a template (re-apply to change) — now directly editable
+  // so a running board's requirements evolve without re-applying a template.
+
+  router.get('/:boardId/swimlanes/:laneId/requirements', async (c) => {
+    const tenantId = c.get('tenantId') as number;
+    const boardId = c.req.param('boardId');
+    const laneId = c.req.param('laneId');
+    if (!(await assertLane(tenantId, boardId, laneId))) return c.json({ error: 'Swimlane not found' }, 404);
+    const rows = await db
+      .select()
+      .from(swimlaneRequirements)
+      .where(and(eq(swimlaneRequirements.swimlaneId, laneId), eq(swimlaneRequirements.tenantId, tenantId)))
+      .orderBy(asc(swimlaneRequirements.position));
+    return c.json({ requirements: rows });
+  });
+
+  router.post('/:boardId/swimlanes/:laneId/requirements', isManager, async (c) => {
+    const tenantId = c.get('tenantId') as number;
+    const boardId = c.req.param('boardId');
+    const laneId = c.req.param('laneId');
+    if (!(await assertLane(tenantId, boardId, laneId))) return c.json({ error: 'Swimlane not found' }, 404);
+    const body = await c.req.json<{ kind: string; ref: string; responsibility?: string; isRequired?: boolean; description?: string; position?: number }>();
+    const kind = ['role', 'diagnostic', 'review'].includes(body.kind) ? body.kind : null;
+    if (!kind || !body.ref?.trim()) return c.json({ error: 'kind (role|diagnostic|review) and ref are required' }, 400);
+    const [row] = await db
+      .insert(swimlaneRequirements)
+      .values({
+        id: crypto.randomUUID(),
+        tenantId,
+        swimlaneId: laneId,
+        kind,
+        ref: body.ref.trim().slice(0, 120),
+        responsibility: body.responsibility && ['owner', 'reviewer', 'contributor'].includes(body.responsibility) ? body.responsibility : null,
+        isRequired: body.isRequired ?? true,
+        description: body.description?.slice(0, 500) ?? null,
+        position: body.position ?? 0,
+      })
+      .returning();
+    return c.json(row, 201);
+  });
+
+  router.patch('/:boardId/swimlanes/:laneId/requirements/:reqId', isManager, async (c) => {
+    const tenantId = c.get('tenantId') as number;
+    const boardId = c.req.param('boardId');
+    const laneId = c.req.param('laneId');
+    const reqId = c.req.param('reqId');
+    if (!(await assertLane(tenantId, boardId, laneId))) return c.json({ error: 'Swimlane not found' }, 404);
+    const body = await c.req.json<{ ref?: string; responsibility?: string; isRequired?: boolean; description?: string; position?: number }>();
+    await db
+      .update(swimlaneRequirements)
+      .set({
+        ...(body.ref !== undefined ? { ref: body.ref.trim().slice(0, 120) } : {}),
+        ...(body.responsibility !== undefined ? { responsibility: ['owner', 'reviewer', 'contributor'].includes(body.responsibility) ? body.responsibility : null } : {}),
+        ...(body.isRequired !== undefined ? { isRequired: body.isRequired } : {}),
+        ...(body.description !== undefined ? { description: body.description?.slice(0, 500) || null } : {}),
+        ...(body.position !== undefined ? { position: body.position } : {}),
+      })
+      .where(and(eq(swimlaneRequirements.id, reqId), eq(swimlaneRequirements.swimlaneId, laneId), eq(swimlaneRequirements.tenantId, tenantId)));
+    const [row] = await db.select().from(swimlaneRequirements).where(and(eq(swimlaneRequirements.id, reqId), eq(swimlaneRequirements.tenantId, tenantId)));
+    if (!row) return c.json({ error: 'Requirement not found' }, 404);
+    return c.json(row);
+  });
+
+  router.delete('/:boardId/swimlanes/:laneId/requirements/:reqId', isManager, async (c) => {
+    const tenantId = c.get('tenantId') as number;
+    const laneId = c.req.param('laneId');
+    const reqId = c.req.param('reqId');
+    await db
+      .delete(swimlaneRequirements)
+      .where(and(eq(swimlaneRequirements.id, reqId), eq(swimlaneRequirements.swimlaneId, laneId), eq(swimlaneRequirements.tenantId, tenantId)));
     return c.body(null, 204);
   });
 

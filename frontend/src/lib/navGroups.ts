@@ -96,6 +96,7 @@ export const NAV_GROUPS: NavGroup[] = [
       { id: 'calendar', labelKey: 'tab.calendar', icon: '📅' },
       { id: 'talent', labelKey: 'tab.talent', icon: '🤝' },
       { id: 'performance', labelKey: 'tab.performance', icon: '📊' },
+      { id: 'plan', labelKey: 'tab.plan', icon: '🧮' },
       { id: 'chats', labelKey: 'tab.chats', icon: '💬' },
       { id: 'approvals', labelKey: 'tab.approvals', icon: '✅' },
       { id: 'logs', labelKey: 'tab.logs', icon: '📜' },
@@ -135,6 +136,8 @@ export const NAV_GROUPS: NavGroup[] = [
       { id: '/insights/devex', labelKey: 'tab.devex', icon: '🩺', activePaths: ['/surveys'] },
       { id: '/insights/compliance', labelKey: 'tab.compliance', icon: '🛡' },
       { id: '/alerts', labelKey: 'tab.alerts', icon: '🔔' },
+      // Periodic lens review snapshots (monthly/quarterly/annual cadence).
+      { id: '/insights/snapshots', labelKey: 'tab.snapshots', icon: '🗓' },
     ],
   },
   {
@@ -153,13 +156,15 @@ export const NAV_GROUPS: NavGroup[] = [
   // Knowledge, and "Content" is replaced by knowledge documents themselves.
   {
     id: 'knowledge', labelKey: 'group.knowledge', icon: '📖', href: '/knowledge',
-    match: ['/knowledge', '/content-manager', '/skills', '/personas', '/prompts'],
+    match: ['/knowledge', '/content-manager', '/skills', '/personas', '/prompts', '/facts'],
     tabKind: 'route',
     tabs: [
       { id: '/knowledge', labelKey: 'tab.knowledge', icon: '📖' },
       { id: '/skills', labelKey: 'tab.skills', icon: '⭐' },
       { id: '/personas', labelKey: 'tab.personas', icon: '👤' },
       { id: '/prompts', labelKey: 'tab.prompts', icon: '📚' },
+      // Structured, queryable fact store (subject·predicate·object triples).
+      { id: '/facts', labelKey: 'tab.facts', icon: '🧩' },
     ],
   },
   {
@@ -168,6 +173,8 @@ export const NAV_GROUPS: NavGroup[] = [
     tabKind: 'route',
     tabs: [
       { id: '/settings', labelKey: 'tab.settings', icon: '⚙', activePaths: [] },
+      // Lateral "lens persona" (CEO/CFO/CTO/CISO/PMO/EM) — reshapes insight lenses.
+      { id: '/settings/persona', labelKey: 'tab.persona', icon: '🎯' },
       { id: '/security', labelKey: 'tab.security', icon: '🔒' },
       { id: '/settings/integrations', labelKey: 'tab.integrations', icon: '🔌' },
       { id: '/pricing', labelKey: 'tab.billing', icon: '💳' },

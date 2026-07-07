@@ -17,6 +17,7 @@ import { WorkforceAgents } from '@/components/workforce/WorkforceAgents';
 import { AiUsageCard } from '@/components/AiUsageCard';
 import { OnboardingStepper } from '@/components/OnboardingStepper';
 import { InsightStat } from '@/components/dashboard/InsightStat';
+import { PulseSubmitCard } from '@/components/insights/PulseWidget';
 import { buildInsightDelta } from '@/components/dashboard/metricFormat';
 import { cumulativeDailySeries, dailyCounts } from '@/components/dashboard/seriesFromTimestamps';
 import { IdeProjectsContent } from '@/components/ide/IdeProjectsContent';
@@ -329,6 +330,12 @@ export default function DashboardPage() {
             <AiUsageCard style={{ minWidth: 0 }} />
           </div>
         )}
+
+        {/* Team pulse (EMP-15) — a member-facing single-tap sentiment card that
+            self-hides when there is no open survey (or once the user has answered). */}
+        <div style={{ marginBottom: 24 }}>
+          <PulseSubmitCard />
+        </div>
 
         {/* Tabs — at-a-glance across the whole workspace. Counts are shown only
             where the dashboard actually knows the total; the shared tab

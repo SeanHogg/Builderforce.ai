@@ -47,6 +47,12 @@ class InMemoryStore implements CoordinatorStore {
   async getLane(swimlaneId: string, _tenantId: number) {
     return this.lanes.find((l) => l.id === swimlaneId) ?? null;
   }
+  /** Test hook: reviewer round-trip is only exercised where a test sets it via seedLane
+   *  requirementGate='hard'; default false keeps existing tests unblocked. */
+  async hasUnmetRequiredReviewers(_taskId: number, swimlaneId: string, _tenantId: number) {
+    return this.unmetReviewers.has(swimlaneId);
+  }
+  unmetReviewers = new Set<string>();
   async listAssignments(swimlaneId: string, _tenantId: number) {
     return this.assignments
       .filter((a) => (a as AssignmentLite & { swimlaneId: string }).swimlaneId === swimlaneId)
@@ -155,7 +161,7 @@ class InMemoryStore implements CoordinatorStore {
     const lane: LaneLite = {
       key: l.id, isTerminal: false, gate: 'auto', executionMode: 'sequential',
       actionType: null, actionTarget: null, successPolicy: 'all', successThreshold: null,
-      failurePolicy: 'needs_attention', ...l,
+      failurePolicy: 'needs_attention', requirementGate: 'soft', ...l,
     };
     this.lanes.push(lane);
     return lane;
@@ -212,6 +218,29 @@ describe('SwimlaneCoordinator — execution loop', () => {
     await coord.reportDispatchResult(lane1Pending[0]!.id, TENANT, { status: 'completed' });
     cur = (await store.getTicketRun(run.id))!;
     expect(cur.lifecycle).toBe('done');
+  });
+
+  it('hard requirement gate: a lane with an unmet required reviewer parks the ticket (needs_attention) instead of launching', async () => {
+    store.seedBoard({ id: 'b1', tenantId: TENANT });
+    store.seedLane({ id: 'l0', boardId: 'b1', position: 0, requirementGate: 'hard' });
+    store.seedAssignment('l0', { id: 'a0', role: 'implementer', runtime: 'browser' });
+    store.unmetReviewers.add('l0'); // required reviewer has not signed off
+
+    const coord = new SwimlaneCoordinator(store);
+    const run = await coord.startTicket('b1', 77, TENANT);
+
+    // Blocked: the launch re-parked the ticket for review and created no dispatch.
+    // (startTicket returns the pre-launch snapshot; read the persisted state.)
+    const parked = (await store.getTicketRun(run.id))!;
+    expect(parked.lifecycle).toBe('needs_attention');
+    expect(store.pending(run.id)).toHaveLength(0);
+
+    // Once the reviewer signs off, retrying the stage launches the lane's agent.
+    store.unmetReviewers.delete('l0');
+    await coord.retryStage(run.id);
+    const cur = (await store.getTicketRun(run.id))!;
+    expect(cur.lifecycle).toBe('stage_running');
+    expect(store.pending(run.id)).toHaveLength(1);
   });
 
   it('NO silent advance: a failed stage routes to needs_attention and stays on the same lane', async () => {

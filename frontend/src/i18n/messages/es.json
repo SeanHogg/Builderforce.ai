@@ -123,7 +123,26 @@
     "modeTimeboxed": "Con tiempo (avance automático por orador)",
     "secondsPerPerson": "Segundos por persona",
     "saving": "Guardando…",
-    "saveSettings": "Guardar ajustes"
+    "saveSettings": "Guardar ajustes",
+    "requirements": "Requisitos",
+    "requirementGate": "Control",
+    "requirementGateTitle": "Con qué rigor los requisitos de este carril bloquean el avance automático",
+    "gateOff": "Desactivado (solo auditoría)",
+    "gateSoft": "Suave (marcar y devolver)",
+    "gateHard": "Estricto (bloquear hasta cumplir)",
+    "requirementsIntro": "Roles, diagnósticos o revisiones que un ticket debe cumplir para pasar este carril.",
+    "noRequirements": "Aún no hay requisitos en este carril.",
+    "reqKind": "Tipo de requisito",
+    "reqKindRole": "Rol",
+    "reqKindReview": "Revisión",
+    "reqKindDiagnostic": "Diagnóstico",
+    "reqRefPlaceholder": "Clave de rol o id de diagnóstico",
+    "responsibility": "Responsabilidad",
+    "respOwner": "Propietario",
+    "respReviewer": "Revisor",
+    "respContributor": "Colaborador",
+    "required": "Obligatorio",
+    "addRequirement": "Añadir requisito"
   },
   "integrations": {
     "gallery": {
@@ -328,7 +347,11 @@
       "adminLogs": "Registros",
       "adminDeveloper": "Desarrollador",
       "meetings": "Reuniones",
-      "calendar": "Calendario"
+      "calendar": "Calendario",
+      "facts": "Hechos",
+      "snapshots": "Revisiones",
+      "persona": "Persona",
+      "plan": "Planificación"
     }
   },
   "alerts": {
@@ -1497,7 +1520,9 @@
         "results": "Resultados de la encuesta",
         "resultsDesc": "El índice DevEx, las puntuaciones por tema con tendencia, referencia y sentimiento, el mapa de calor por segmento, la participación a lo largo del tiempo y cómo han cambiado las prioridades.",
         "surveys": "Encuestas",
-        "surveysDesc": "Crea plantillas de encuestas, lanza campañas y consulta o responde a los comentarios sobre la experiencia del desarrollador."
+        "surveysDesc": "Crea plantillas de encuestas, lanza campañas y consulta o responde a los comentarios sobre la experiencia del desarrollador.",
+        "pulse": "Pulso del equipo",
+        "pulseDesc": "Pulso de sentimiento anónimo: puntuación agregada, distribución y tendencia eNPS"
       },
       "summary": {
         "templates": "Plantillas",
@@ -6218,7 +6243,9 @@
     "errDelete": "Error al eliminar",
     "errUpdate": "Error al actualizar",
     "errMove": "Error al mover",
-    "tabChanges": "Cambios"
+    "tabChanges": "Cambios",
+    "release": "Versión",
+    "delayReason": "Motivo del retraso"
   },
   "taskChanges": {
     "allChanges": "Todos los cambios",
