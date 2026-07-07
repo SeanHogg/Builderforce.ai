@@ -93,6 +93,9 @@ export interface PlanLimits {
    * shared feature gate.
    */
   voiceCloning: boolean;
+  /** Whether the premium exec insight lenses (forecasting/anomalies + the
+   *  CTO/CFO/PMO analytical lenses) are available. Any paid plan. */
+  advancedInsights: boolean;
 }
 
 export const PLAN_LIMITS: Record<TenantPlan, PlanLimits> = {
@@ -116,6 +119,7 @@ export const PLAN_LIMITS: Record<TenantPlan, PlanLimits> = {
     teamApprovalInbox: false,
     seatCostControls: false,
     voiceCloning: false,
+    advancedInsights: false,
   },
   [TenantPlan.PRO]: {
     maxAgentHosts: 3,
@@ -137,6 +141,7 @@ export const PLAN_LIMITS: Record<TenantPlan, PlanLimits> = {
     teamApprovalInbox: false,
     seatCostControls: false,
     voiceCloning: true,
+    advancedInsights: true,
   },
   [TenantPlan.TEAMS]: {
     maxAgentHosts: -1,
@@ -158,6 +163,7 @@ export const PLAN_LIMITS: Record<TenantPlan, PlanLimits> = {
     teamApprovalInbox: true,
     seatCostControls: true,
     voiceCloning: true,
+    advancedInsights: true,
   },
 };
 

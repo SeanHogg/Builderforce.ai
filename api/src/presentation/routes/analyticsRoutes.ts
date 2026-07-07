@@ -238,8 +238,18 @@ async function buildActivityCalendar(
   }
 
   // 6. Build per-contributor day cells + a merged team calendar.
-  const merged = new Map<string, number>();
-  let maxCount = 0;
+  //
+  // Intensity is NORMALIZED PER KIND: an AI agent emits far more raw events
+  // (tool calls / spans) per day than a human commits, so a single global max
+  // would flatten every human cell to level 0-1 (a busy engineer reading as
+  // "idle" beside an agent). We track a separate max for humans vs agents and
+  // level each contributor's cells against its own kind's peak, and the merged
+  // team calendar against a per-kind-normalized blend — so the heatmap reflects
+  // "busy for a human" and "busy for an agent" on the same footing.
+  const mergedHuman = new Map<string, number>();
+  const mergedAgent = new Map<string, number>();
+  let maxHuman = 0;
+  let maxAgent = 0;
 
   const perContributor = roster.map((p) => {
     const map = p.kind === 'agent'
@@ -250,12 +260,18 @@ async function buildActivityCalendar(
             : new Map<string, number>())
       : (humanByContributor.get(p.id) ?? new Map<string, number>());
 
+    const isAgent = p.kind === 'agent';
     let total = 0;
     const days = [...map.entries()]
       .map(([date, count]) => {
         total += count;
-        merged.set(date, (merged.get(date) ?? 0) + count);
-        if (count > maxCount) maxCount = count;
+        if (isAgent) {
+          mergedAgent.set(date, (mergedAgent.get(date) ?? 0) + count);
+          if (count > maxAgent) maxAgent = count;
+        } else {
+          mergedHuman.set(date, (mergedHuman.get(date) ?? 0) + count);
+          if (count > maxHuman) maxHuman = count;
+        }
         return { date, count };
       })
       .sort((a, b) => a.date.localeCompare(b.date));
@@ -268,23 +284,38 @@ async function buildActivityCalendar(
       jobTitle: p.jobTitle,
       agentHostId: p.agentHostId,
       total,
-      days: days.map((d) => ({ ...d, level: 0 })), // levels filled below (need maxCount)
+      days: days.map((d) => ({ ...d, level: 0 })), // levels filled below (need per-kind max)
     };
   });
 
-  // Second pass: assign intensity levels now that maxCount is known.
+  // Second pass: assign intensity levels against the contributor's own kind max.
   for (const pc of perContributor) {
-    for (const d of pc.days) d.level = levelFor(d.count, maxCount);
+    const kindMax = pc.kind === 'agent' ? maxAgent : maxHuman;
+    for (const d of pc.days) d.level = levelFor(d.count, kindMax);
   }
-  const calendar = [...merged.entries()]
-    .map(([date, count]) => ({ date, count, level: levelFor(count, maxCount) }))
+
+  // Merged team calendar: raw `count` (for the tooltip) but a per-kind-normalized
+  // intensity so a heavy-human / light-agent day and a light-human / heavy-agent
+  // day read comparably. `norm` ∈ [0,2] → levelled against 2.
+  const mergedDates = new Set<string>([...mergedHuman.keys(), ...mergedAgent.keys()]);
+  const calendar = [...mergedDates]
+    .map((date) => {
+      const h = mergedHuman.get(date) ?? 0;
+      const a = mergedAgent.get(date) ?? 0;
+      const norm = (maxHuman > 0 ? h / maxHuman : 0) + (maxAgent > 0 ? a / maxAgent : 0);
+      return { date, count: h + a, humanCount: h, agentCount: a, level: levelFor(norm, 2) };
+    })
     .sort((a, b) => a.date.localeCompare(b.date));
 
   perContributor.sort((a, b) => b.total - a.total);
 
   return {
     range: { from: fromFloor.toISOString(), to: toDate.toISOString() },
-    maxCount,
+    // Back-compat scalar (the larger of the two peaks) + the per-kind maxima so a
+    // client legend can label the two normalization scales.
+    maxCount: Math.max(maxHuman, maxAgent),
+    maxHuman,
+    maxAgent,
     contributors: perContributor,
     calendar,
   };

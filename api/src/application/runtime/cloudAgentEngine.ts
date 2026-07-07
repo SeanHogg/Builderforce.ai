@@ -9,9 +9,10 @@
  * so it is unit-testable against a mocked gateway/DB without standing up the Worker.
  */
 import { neon } from '@neondatabase/serverless';
-import { and, desc, eq } from 'drizzle-orm';
+import { and, desc, eq, or, isNull } from 'drizzle-orm';
 import { getOrSetCached } from '../../infrastructure/cache/readThroughCache';
 import { buildCloudMemoryCapability } from './cloudMemory';
+import { isValidatorReviewPayload } from '../validation/validatorReviewMarker';
 import { resolveTicketRepoContext, commitAgentFile, deleteAgentFile, type TicketRepoContext } from '../repos/commitFileAsPendingChange';
 import { commitPrdAsPendingChange } from '../repos/commitPrdToRepo';
 import { createPullRequest } from '../repos/createPullRequest';
@@ -62,7 +63,7 @@ import { ExecutionStatus } from '../../domain/shared/types';
 import type { ResolvedArtifacts } from '../../domain/shared/types';
 import type { Env } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
-import { executions, tasks, specs, toolAuditEvents, usageSnapshots, projects, approvals } from '../../infrastructure/database/schema';
+import { executions, tasks, specs, toolAuditEvents, usageSnapshots, projects, approvals, projectAgents } from '../../infrastructure/database/schema';
 
 /** Resolved cloud-agent identity for a run — engine, display label, surface, model. */
 export interface ResolvedCloudAgent {
@@ -155,7 +156,7 @@ export async function loadAgentPsychometric(
  */
 /** Load the project's governance rules + architecture spec (the non-PRD context
  *  the deliverable must honor). Best-effort: '' on any miss. */
-async function loadGovernanceContext(db: Db, tenantId: number, projectId: number): Promise<string> {
+async function loadGovernanceContext(db: Db, tenantId: number, projectId: number, cloudAgentRef?: string): Promise<string> {
   const parts: string[] = [];
   try {
     const [spec] = await db
@@ -174,6 +175,27 @@ async function loadGovernanceContext(db: Db, tenantId: number, projectId: number
       .limit(1);
     if (proj?.governance?.trim()) parts.push(`## Project Rules / Governance (must be followed)\n\n${proj.governance.trim()}`);
   } catch { /* skip */ }
+  // Per-agent governance (project_agents.governance) — the rules configured for THIS
+  // agent specifically. Previously written via PUT /project-agents/:id/governance but
+  // never consumed at execution; now folded in so a per-agent policy actually binds the
+  // run. Prefer the project-specific attachment, else the canonical project-less row.
+  if (cloudAgentRef) {
+    try {
+      const rows = await db
+        .select({ governance: projectAgents.governance, projectId: projectAgents.projectId })
+        .from(projectAgents)
+        .where(and(
+          eq(projectAgents.tenantId, tenantId),
+          eq(projectAgents.agentRef, cloudAgentRef),
+          or(isNull(projectAgents.projectId), eq(projectAgents.projectId, projectId)),
+        ));
+      // Project-specific row wins over the project-less identity row.
+      const chosen = rows.find((r) => r.projectId === projectId) ?? rows.find((r) => r.projectId == null);
+      if (chosen?.governance?.trim()) {
+        parts.push(`## Agent Rules / Governance (specific to you — must be followed)\n\n${chosen.governance.trim()}`);
+      }
+    } catch { /* skip */ }
+  }
   return parts.join('\n\n');
 }
 
@@ -2170,7 +2192,7 @@ export async function prepareCloudRun(
   const agentPsychometric = await loadAgentPsychometric(env, tenantId, cloudAgentRef);
   const [prd, governance, capabilities, workspace, factsBlock] = await Promise.all([
     ensureTaskPrd(env, db, executionId, taskRow, tenantId, projectId, taskRow.id, agentLabel, model),
-    loadGovernanceContext(db, tenantId, projectId),
+    loadGovernanceContext(db, tenantId, projectId, cloudAgentRef),
     loadCapabilityContext(env, db, artifacts, agentPsychometric),
     // The repo the agent runs against — its identity + top-level shape (so a wrong/
     // empty binding is visible before any LLM spend) AND what a prior pass already
@@ -2216,6 +2238,12 @@ export async function prepareCloudRun(
   // (now PRD-recorded) directive, not redoing the task from scratch.
   const followUp = parseFollowUp(payload);
 
+  // Validator acceptance-review run: the payload marks this run as a REVIEW, not
+  // implementation work. Steer it explicitly (independent of the agent's persona) so
+  // ANY agent dispatched with the review flag performs an acceptance review and reports
+  // via reviews.record, rather than editing code.
+  const isReviewRun = isValidatorReviewPayload(payload);
+
   // Show the agent the repo it's about to edit BEFORE it spends an LLM call, so a
   // wrong/empty binding is caught up-front instead of after a conceptual non-answer
   // (the exec #54 failure: the agent never saw that only `agent-runtime` was bound).
@@ -2235,6 +2263,9 @@ export async function prepareCloudRun(
     : null;
 
   const userContent = [
+    isReviewRun
+      ? `## Acceptance review (do NOT edit code)\n\nThis is a VALIDATOR REVIEW of already-Done work — verify the ticket was genuinely completed against its PRD/requirements and the repository. Read the branch/PR and the relevant code with search_code / read_file, judge whether the deliverable is complete and correct, then call the \`builtin_reviews_record\` tool with your verdict ('complete' or 'gaps'), a short assessment, and any concrete gaps (each becomes a GAP ticket). Do NOT write_file / delete_file or change the ticket's status — you are reviewing, not implementing.`
+      : null,
     remediation
       ? `## Build failure to fix (attempt ${remediation.attempt}/${remediation.maxAttempts})\n\n${
           remediation.phase === 'pre_merge'

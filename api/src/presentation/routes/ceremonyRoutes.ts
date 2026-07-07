@@ -19,19 +19,39 @@
  */
 import { Hono } from 'hono';
 import { and, eq } from 'drizzle-orm';
-import type { HonoEnv } from '../../env';
+import type { Env, HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 import { requireRole } from '../middleware/authMiddleware';
 import { TenantRole } from '../../domain/shared/types';
 import { scope } from './segmentTrackerRoutes';
 import { ceremonySessions, ceremonyParticipants, boards } from '../../infrastructure/database/schema';
+import { getOrSetCached } from '../../infrastructure/cache/readThroughCache';
+import { computeCeremonyRollup } from '../../application/insights/ceremonyRollup';
 import { relayToRoom } from './realtimeRelay';
+
+/** Clamp a `?days=` window to a sane range (default 30). */
+function parseDays(raw: string | undefined, def = 30): number {
+  const n = Number(raw);
+  return Number.isFinite(n) && n >= 1 && n <= 365 ? Math.floor(n) : def;
+}
 
 export function createCeremonyRoutes(db: Db): Hono<HonoEnv> {
   const r = new Hono<HonoEnv>();
 
   // Live channel: clients hold this WebSocket for presence + relayed updates.
   r.get('/rooms/:id/ws', (c) => relayToRoom(c, c.env?.CEREMONY_ROOM, `ceremony:${c.req.param('id')}`));
+
+  // ── Tenant-wide ceremonies rollup ("insights everywhere") ───────────────────
+  // Cadence + engagement across ALL projects' standups/plannings — the per-project
+  // sessions read can't answer "are we running ceremonies, and who dominates?".
+  // Manager-gated (an ops/EM view); short TTL over the hot sessions tables.
+  r.get('/rollup', requireRole(TenantRole.MANAGER), async (c) => {
+    const { tenantId } = scope(c);
+    const days = parseDays(c.req.query('days'));
+    const env = c.env as Env;
+    const key = `agile:ceremonies-rollup:t:${tenantId}:d:${days}`;
+    return c.json(await getOrSetCached(env, key, () => computeCeremonyRollup(db, tenantId, days), { kvTtlSeconds: 60, l1TtlMs: 15_000 }));
+  });
 
   // ── Sessions ───────────────────────────────────────────────────────────────
 

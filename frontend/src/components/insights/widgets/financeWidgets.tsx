@@ -107,14 +107,17 @@ function CacheReadCard(_: WidgetCardProps) {
   return <Stat value={int(data.totals.cacheReadTokens)} sub={t('fin.cacheReadSub')} />;
 }
 
-function SpendTrendCard(_: WidgetCardProps) {
+function SpendTrendCard({ days }: WidgetCardProps) {
   const { data, state, t } = useFin();
   if (!data) return state;
-  if (data.daily.length === 0 || data.daily.every((d) => d.usd === 0)) return <Muted>{t('fin.noSpend')}</Muted>;
+  // Honour the dashboard's shared window: show the last `days` days of the
+  // month's daily spend series rather than always the whole month.
+  const daily = days > 0 ? data.daily.slice(-days) : data.daily;
+  if (daily.length === 0 || daily.every((d) => d.usd === 0)) return <Muted>{t('fin.noSpend')}</Muted>;
   return (
     <TrendChart
-      labels={data.daily.map((d) => d.date.slice(5))}
-      series={[{ key: 'spend', label: t('fin.spend'), values: data.daily.map((d) => d.usd) }]}
+      labels={daily.map((d) => d.date.slice(5))}
+      series={[{ key: 'spend', label: t('fin.spend'), values: daily.map((d) => d.usd) }]}
       area
       formatValue={(v) => usd(v)}
       ariaLabel={t('fin.spendOverTime')}

@@ -2,6 +2,7 @@
 
 import { useTranslations } from 'next-intl';
 import { RatingStars } from '@/components/freelance/RatingStars';
+import { TrustBadge } from '@/components/freelance/TrustBadge';
 import type { FreelancerProfile, FreelancerStats } from '@/lib/freelancerApi';
 
 /**
@@ -92,7 +93,10 @@ export function TalentProfileView({ profile, actions, resumeEmptyNote }: TalentP
           <div style={{ minWidth: 0 }}>
             <h1 style={{ fontSize: 24, fontWeight: 800, color: 'var(--text-primary)', margin: 0 }}>{profile.displayName ?? '—'}</h1>
             <p style={{ fontSize: 14, color: 'var(--text-secondary)', margin: '4px 0 0' }}>{profile.headline ?? profile.discipline ?? ''}</p>
-            <div style={{ marginTop: 6 }}><RatingStars rating={profile.rating} count={profile.ratingCount} size={15} /></div>
+            <div style={{ marginTop: 6, display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+              <RatingStars rating={profile.rating} count={profile.ratingCount} size={15} />
+              {profile.stats && <TrustBadge badge={profile.stats.badge} jss={profile.stats.jss} />}
+            </div>
             <div style={{ display: 'flex', gap: 16, marginTop: 8, fontSize: 13, color: 'var(--text-muted)', flexWrap: 'wrap' }}>
               {profile.hourlyRateCents != null && <span>{t('rate')}: <strong style={{ color: 'var(--coral-bright)' }}>{profile.currency} {(profile.hourlyRateCents / 100).toFixed(0)}{t('perHour')}</strong></span>}
               {profile.location && <span>{t('location')}: {profile.location}</span>}

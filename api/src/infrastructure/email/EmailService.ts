@@ -388,6 +388,82 @@ function humanizeKey(key: string): string {
   return spaced.charAt(0).toUpperCase() + spaced.slice(1);
 }
 
+/** Present a cell value: round floats, blank-dash nullish, escape everything. */
+function cell(v: unknown): string {
+  if (v == null) return '—';
+  if (typeof v === 'number') return escapeHtml(Number.isInteger(v) ? String(v) : String(Math.round(v * 100) / 100));
+  return escapeHtml(String(v));
+}
+
+const TH = 'text-align:left;padding:6px 12px;border-bottom:2px solid #e2e8f0;font-size:12px;color:#64748b';
+const TD = 'padding:6px 12px;border-bottom:1px solid #e2e8f0';
+
+/** A key/value summary table (the legacy digest body; reused as one section). */
+function renderKvTable(kv: Record<string, unknown>): string {
+  const rows = Object.entries(kv)
+    .filter(([, v]) => v == null || typeof v !== 'object')
+    .map(([k, v]) =>
+      `<tr>
+        <td style="${TD}">${escapeHtml(humanizeKey(k))}</td>
+        <td style="${TD};text-align:right"><strong>${cell(v)}</strong></td>
+      </tr>`)
+    .join('');
+  return rows ? `<table style="border-collapse:collapse;width:100%;margin-top:8px">${rows}</table>` : '';
+}
+
+/** A titled table over an array of row objects, projecting the given columns. */
+function renderObjectTable(title: string, items: Array<Record<string, unknown>>, columns: Array<[key: string, label: string]>): string {
+  if (!Array.isArray(items) || items.length === 0) return '';
+  const head = columns.map(([, label]) => `<th style="${TH}">${escapeHtml(label)}</th>`).join('');
+  const body = items.slice(0, 25).map((row) =>
+    `<tr>${columns.map(([key]) => `<td style="${TD}">${cell(row[key])}</td>`).join('')}</tr>`).join('');
+  return `
+      <p style="margin:22px 0 6px;font-weight:600">${escapeHtml(title)}</p>
+      <table style="border-collapse:collapse;width:100%">
+        <thead><tr>${head}</tr></thead>
+        <tbody>${body}</tbody>
+      </table>`;
+}
+
+/** A simple bulleted list section (e.g. standup insights). */
+function renderBullets(title: string, items: unknown): string {
+  if (!Array.isArray(items) || items.length === 0) return '';
+  const lis = items.filter((x) => typeof x === 'string').map((x) => `<li>${escapeHtml(String(x))}</li>`).join('');
+  return lis ? `<p style="margin:22px 0 6px;font-weight:600">${escapeHtml(title)}</p><ul style="margin:0;padding-left:20px;color:#334155">${lis}</ul>` : '';
+}
+
+/**
+ * Type-specific rich sections appended below the summary. Each known report_type
+ * renders its arrays as tables/lists; unknown types add nothing (backward-compat —
+ * they still get the summary kv table from the caller).
+ */
+function renderReportSections(report: Record<string, unknown>): string {
+  const arr = (k: string) => (Array.isArray(report[k]) ? (report[k] as Array<Record<string, unknown>>) : []);
+  switch (report.reportType) {
+    case 'project_status':
+      return renderObjectTable('Projects', arr('projects'), [
+        ['name', 'Project'], ['verdict', 'Status'], ['deployments', 'Deploys'],
+        ['changeFailureRatePct', 'CFR %'], ['leadTimeHours', 'Lead (h)'], ['reworkRatePct', 'Rework %'], ['stuckCount', 'Stuck'],
+      ]);
+    case 'portfolio_rollup':
+      return renderObjectTable('Portfolios', arr('portfolios'), [
+        ['name', 'Portfolio'], ['status', 'Status'], ['completedTasks', 'Done'], ['openTasks', 'Open'],
+        ['agentLlmCostUsd', 'AI $'], ['okrProgressPct', 'OKR %'], ['blockedInitiatives', 'Blocked'],
+      ]);
+    case 'completed_by_assignee':
+      return renderObjectTable('By assignee', arr('assignees'), [
+        ['assigneeName', 'Assignee'], ['assigneeKind', 'Kind'], ['completed', 'Completed'],
+      ]);
+    case 'standup':
+      return renderObjectTable('Recent PRs', arr('recentPrs'), [['title', 'Title'], ['repo', 'Repo']])
+        + renderBullets('Insights', report.insights);
+    case 'code_review':
+      return renderObjectTable('Stale PRs', arr('stalePrList'), [['title', 'Title'], ['repo', 'Repo'], ['ageHours', 'Age (h)']]);
+    default:
+      return '';
+  }
+}
+
 export async function sendReportEmail(
   env: EmailEnv,
   to: string,
@@ -398,20 +474,13 @@ export async function sendReportEmail(
   if (!provider) return;
 
   const kv = (report.summary ?? report.kpis ?? {}) as Record<string, unknown>;
-  const rows = Object.entries(kv)
-    .filter(([, v]) => v == null || typeof v !== 'object')
-    .map(([k, v]) =>
-      `<tr>
-        <td style="padding:6px 12px;border-bottom:1px solid #e2e8f0">${escapeHtml(humanizeKey(k))}</td>
-        <td style="padding:6px 12px;border-bottom:1px solid #e2e8f0;text-align:right"><strong>${escapeHtml(String(v ?? '—'))}</strong></td>
-      </tr>`)
-    .join('');
+  const summaryTable = renderKvTable(kv);
+  const sections = renderReportSections(report);
 
   const body = `
-      <p>Your scheduled <strong>${escapeHtml(String(report.reportType ?? 'report'))}</strong> report is ready.</p>
-      ${rows
-        ? `<table style="border-collapse:collapse;width:100%;margin-top:8px">${rows}</table>`
-        : '<p style="color:#64748b">No data for this period.</p>'}
+      <p>Your scheduled <strong>${escapeHtml(humanizeKey(String(report.reportType ?? 'report')))}</strong> report is ready.</p>
+      ${summaryTable || (sections ? '' : '<p style="color:#64748b">No data for this period.</p>')}
+      ${sections}
       <p style="text-align:center; margin: 24px 0 8px;">
         <a href="https://builderforce.ai/pmo" class="button">Open in Builderforce</a>
       </p>`;

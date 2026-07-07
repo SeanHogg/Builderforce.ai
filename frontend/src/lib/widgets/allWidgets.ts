@@ -3,10 +3,14 @@ import { AI_IMPACT_WIDGETS } from '@/components/insights/widgets/aiImpactWidgets
 import { LLM_USAGE_WIDGETS } from '@/components/insights/widgets/llmUsageWidgets';
 import { DELIVERY_WIDGETS } from '@/components/insights/widgets/deliveryWidgets';
 import { FINANCE_WIDGETS } from '@/components/insights/widgets/financeWidgets';
+import { FORECAST_WIDGETS } from '@/components/insights/widgets/forecastWidgets';
 import { CORE_WIDGETS } from '@/components/widgets/registry-modules/coreWidgets';
 import { CATALOG_WIDGETS } from '@/components/widgets/registry-modules/catalogWidgets';
 import { OPERATIONAL_WIDGETS } from '@/components/widgets/registry-modules/operationalWidgets';
+import { OBSERVABILITY_WIDGETS } from '@/components/widgets/registry-modules/observabilityWidgets';
 import { WORKFORCE_WIDGETS } from '@/components/widgets/registry-modules/workforceWidgets';
+import { WORKFORCE_PLAN_WIDGETS } from '@/components/widgets/registry-modules/workforcePlanWidgets';
+import { EMP_METRICS_WIDGETS } from '@/components/widgets/registry-modules/empMetricsWidgets';
 
 /**
  * The single aggregation point for the app-wide widget registry.
@@ -23,9 +27,13 @@ export const ALL_WIDGETS: WidgetDef[] = [
   ...LLM_USAGE_WIDGETS,
   ...DELIVERY_WIDGETS,
   ...FINANCE_WIDGETS,
+  ...FORECAST_WIDGETS,
   // ── Non-insights surfaces (proves the registry is app-wide) ──
   ...CORE_WIDGETS,
   ...CATALOG_WIDGETS,
   ...OPERATIONAL_WIDGETS,
+  ...OBSERVABILITY_WIDGETS,
   ...WORKFORCE_WIDGETS,
+  ...WORKFORCE_PLAN_WIDGETS,
+  ...EMP_METRICS_WIDGETS,
 ];

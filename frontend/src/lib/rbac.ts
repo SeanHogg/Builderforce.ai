@@ -115,6 +115,21 @@ export const CAPABILITIES = {
   'quality.view':          'developer', // browse error groups + triage status
   'quality.manageSources': 'manager',   // create/rotate/delete ingest sources
   'quality.fix':           'manager',   // dispatch a cloud agent to fix an error
+
+  // FACTS library — structured (subject,predicate,object) knowledge store. Reads
+  // open to any member; writes developer+ (mirrors the API requireRole(DEVELOPER)).
+  'facts.view':            'viewer',
+  'facts.manage':          'developer',
+
+  // EMP buyer-checklist lenses (manager-gated, mirroring server requireRole(MANAGER)).
+  'insights.crossTeam':      'manager', // EMP-5  internal cross-team benchmarking
+  'insights.delayTaxonomy':  'manager', // EMP-9  delay root-cause taxonomy
+  'insights.pulse':          'manager', // EMP-15 pulse aggregate/admin (submit is any-role)
+  'finops.rdReconciliation': 'manager', // R&D derived-vs-reported reconciliation
+
+  // Blended human+agent workforce planning + periodic lens review snapshots.
+  'workforce.plan':          'manager',
+  'insights.snapshots':      'manager',
 } as const satisfies Record<string, TenantRole>;
 
 export type Capability = keyof typeof CAPABILITIES;

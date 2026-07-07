@@ -22,9 +22,11 @@ vi.mock('@/lib/brain', () => ({
   }),
   takePendingPrompt,
 }));
-// BrainPanel pulls in the whole brain runtime; stub it — we only assert which
-// branch FloatingBrain renders, not the panel internals.
+// BrainPanel (authed) and GuestBrainPanel (logged-out) both pull in the whole
+// brain runtime; stub both — we only assert WHICH branch FloatingBrain renders,
+// not the panel internals.
 vi.mock('./BrainPanel', () => ({ BrainPanel: () => <div data-testid="brain-panel" /> }));
+vi.mock('./GuestBrainPanel', () => ({ GuestBrainPanel: () => <div data-testid="guest-brain-panel" /> }));
 
 import { FloatingBrain } from './FloatingBrain';
 
@@ -38,14 +40,13 @@ describe('FloatingBrain visibility + auth gating', () => {
   });
   afterEach(cleanup);
 
-  it('shows a sign-in CTA (no chat panel, no input) when unauthenticated', () => {
-    const { getByText, queryByTestId, container } = render(<FloatingBrain />);
-    expect(getByText('Meet Brain')).toBeTruthy();
-    expect(getByText('Sign in')).toBeTruthy();
+  it('renders the guest chat panel (not the authed Brain) when unauthenticated', () => {
+    // Logged-out visitors get a real, metered GUEST chat (guest token +
+    // localStorage) rather than a dead-end sign-in wall — the top-of-funnel
+    // "try the Brain" experience. The authed BrainPanel must NOT mount.
+    const { getByTestId, queryByTestId } = render(<FloatingBrain />);
+    expect(getByTestId('guest-brain-panel')).toBeTruthy();
     expect(queryByTestId('brain-panel')).toBeNull();
-    // Gated: no text input is offered to anonymous visitors.
-    expect(container.querySelector('textarea')).toBeNull();
-    expect(container.querySelector('input')).toBeNull();
   });
 
   it('does NOT consume the pending landing-page prompt while unauthenticated', () => {

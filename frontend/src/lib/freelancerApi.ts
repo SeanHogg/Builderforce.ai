@@ -33,6 +33,9 @@ export interface FreelancerProfile {
   embedUrl?: string | null;
   rating?: number | null;
   ratingCount?: number;
+  /** Trust badge + JSS on the BROWSE projection (detail carries them under `stats`). */
+  badge?: 'top_rated' | 'rising_talent' | null;
+  jss?: number | null;
   reviews?: FreelancerReview[];
   stats?: FreelancerStats;
   updatedAt?: string | null;
@@ -55,6 +58,14 @@ export interface FreelancerStats {
   /** Lifetime paid earnings, in cents. */
   earnedToDateCents: number;
   currency: string;
+  /** Average received (employer→freelancer) rating, or null when never reviewed. */
+  avgReceivedRating: number | null;
+  /** Number of received reviews. */
+  reviewCount: number;
+  /** Job Success Score 0..100 — null until there are 2+ reviews to score honestly. */
+  jss: number | null;
+  /** Derived trust badge from JSS + track record. */
+  badge: 'top_rated' | 'rising_talent' | null;
 }
 
 export interface FreelancerReview {
@@ -103,6 +114,9 @@ export interface JobPosting {
   requirements?: string | null;
   /** Work item this job was published from, when minted via /marketplace/publish. */
   sourceTicketId?: number | null;
+  /** The posting client's two-way reputation (freelancer→employer reviews). */
+  clientRating?: number | null;
+  clientRatingCount?: number;
 }
 
 export interface JobProposal {
@@ -472,9 +486,15 @@ export async function respondEngagement(id: string, accept: boolean): Promise<vo
   await jsonOrThrow(res, 'Failed to respond');
 }
 
-// ---- Employer: rate a freelancer ----------------------------------------
-export async function reviewFreelancer(engagementId: string, rating: number, comment?: string): Promise<void> {
-  const res = await fetch(`${AUTH_API_URL}/api/engagements/${engagementId}/review`, { method: 'POST', headers: tenantHeaders(), body: JSON.stringify({ rating, comment }) });
+// ---- Two-way reviews -----------------------------------------------------
+export async function reviewFreelancer(engagementId: string, rating: number, comment?: string, wouldWorkAgain?: boolean): Promise<void> {
+  const res = await fetch(`${AUTH_API_URL}/api/engagements/${engagementId}/review`, { method: 'POST', headers: tenantHeaders(), body: JSON.stringify({ rating, comment, wouldWorkAgain }) });
+  await jsonOrThrow(res, 'Failed to submit review');
+}
+
+/** Freelancer rates the CLIENT (reverse direction) for an engagement they were hired on. */
+export async function reviewClient(engagementId: string, rating: number, comment?: string, wouldWorkAgain?: boolean): Promise<void> {
+  const res = await fetch(`${AUTH_API_URL}/api/engagements/${engagementId}/review-client`, { method: 'POST', headers: webHeaders(), body: JSON.stringify({ rating, comment, wouldWorkAgain }) });
   await jsonOrThrow(res, 'Failed to submit review');
 }
 
@@ -653,6 +673,100 @@ export async function payInvoice(invId: string): Promise<{ paid: boolean; manual
   }
   await jsonOrThrow(res, 'Failed to pay');
   return { paid: true, manual: false };
+}
+
+// ---- In-platform messaging (conversations) ------------------------------
+// Two-party employer<->freelancer threads. The freelancer uses the WEB token
+// (/mine endpoints); the employer uses the TENANT token. Feeds mutate on every
+// send, so they are polled — never cached.
+
+export interface ConversationSummary {
+  id: string;
+  tenantId: number;
+  tenantName: string | null;
+  freelancerUserId: string;
+  freelancerName: string | null;
+  employerUserId: string | null;
+  subjectType: 'engagement' | 'job' | 'proposal' | 'direct';
+  engagementId: string | null;
+  jobId: string | null;
+  proposalId: string | null;
+  projectId: number | null;
+  title: string | null;
+  lastMessageAt: string | null;
+  lastMessagePreview: string | null;
+  unread: number;
+  updatedAt: string | null;
+}
+
+export interface ConversationMessage {
+  id: string;
+  conversationId: string;
+  senderUserId: string;
+  senderName: string | null;
+  /** True when the freelancer authored it (drives left/right bubble alignment). */
+  fromFreelancer: boolean;
+  body: string;
+  attachmentName: string | null;
+  attachmentType: string | null;
+  hasAttachment: boolean;
+  createdAt: string | null;
+}
+
+export type MessagingSide = 'employer' | 'freelancer';
+
+const convBase = (side: MessagingSide, path = '') =>
+  `${AUTH_API_URL}/api/conversations${side === 'freelancer' ? '/mine' : ''}${path}`;
+const convHeaders = (side: MessagingSide, json = true) => (side === 'freelancer' ? webHeaders(json) : tenantHeaders(json));
+
+/** List my conversations for the given side, with per-thread + total unread counts. */
+export async function listConversations(side: MessagingSide): Promise<{ items: ConversationSummary[]; unread: number }> {
+  const res = await fetch(convBase(side), { headers: convHeaders(side, false) });
+  return jsonOrThrow(res, 'Failed to load messages');
+}
+
+export async function getConversationThread(side: MessagingSide, id: string): Promise<{ conversation: ConversationSummary; messages: ConversationMessage[] }> {
+  const res = await fetch(`${AUTH_API_URL}/api/conversations/${side === 'freelancer' ? 'mine/' : ''}${id}/messages`, { headers: convHeaders(side, false) });
+  return jsonOrThrow(res, 'Failed to load thread');
+}
+
+/** Send a message (text, and optionally an attachment) into a conversation. */
+export async function sendConversationMessage(side: MessagingSide, id: string, input: { body: string; file?: File | null }): Promise<{ id: string }> {
+  const url = `${AUTH_API_URL}/api/conversations/${side === 'freelancer' ? 'mine/' : ''}${id}/messages`;
+  if (input.file) {
+    const fd = new FormData();
+    fd.append('body', input.body);
+    fd.append('file', input.file);
+    const res = await fetch(url, { method: 'POST', headers: convHeaders(side, false), body: fd });
+    return jsonOrThrow(res, 'Failed to send');
+  }
+  const res = await fetch(url, { method: 'POST', headers: convHeaders(side), body: JSON.stringify({ body: input.body }) });
+  return jsonOrThrow(res, 'Failed to send');
+}
+
+export async function markConversationRead(side: MessagingSide, id: string): Promise<void> {
+  const res = await fetch(`${AUTH_API_URL}/api/conversations/${side === 'freelancer' ? 'mine/' : ''}${id}/read`, { method: 'POST', headers: convHeaders(side, false) });
+  await jsonOrThrow(res, 'Failed');
+}
+
+/** Employer opens (or reuses) a thread with a freelancer, optionally scoped + seeded. */
+export async function startEmployerConversation(input: { freelancerUserId: string; engagementId?: string; jobId?: string; proposalId?: string; subjectType?: string; title?: string; body?: string }): Promise<{ id: string }> {
+  const res = await fetch(`${AUTH_API_URL}/api/conversations`, { method: 'POST', headers: tenantHeaders(), body: JSON.stringify(input) });
+  return jsonOrThrow(res, 'Failed to start conversation');
+}
+
+/** Freelancer opens (or reuses) a thread with an engaged tenant. */
+export async function startFreelancerConversation(input: { engagementId: string; title?: string; body?: string }): Promise<{ id: string }> {
+  const res = await fetch(`${AUTH_API_URL}/api/conversations/mine`, { method: 'POST', headers: webHeaders(), body: JSON.stringify(input) });
+  return jsonOrThrow(res, 'Failed to start conversation');
+}
+
+/** Fetch a message attachment as a blob (the serve route requires an auth header, so
+ *  it can't be a plain <img src>) and hand back an object URL the caller opens/revokes. */
+export async function fetchConversationAttachment(side: MessagingSide, messageId: string): Promise<string> {
+  const res = await fetch(`${AUTH_API_URL}/api/conversations/attachment/${messageId}`, { headers: convHeaders(side, false) });
+  if (!res.ok) throw new Error('Failed to load attachment');
+  return URL.createObjectURL(await res.blob());
 }
 
 // ---- Notifications feed --------------------------------------------------

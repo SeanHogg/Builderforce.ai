@@ -19,6 +19,7 @@
 
 import { Hono } from 'hono';
 import { authMiddleware, requireRole } from '../middleware/authMiddleware';
+import { requirePlanFeature } from '../middleware/insightPlanGate';
 import { TenantRole } from '../../domain/shared/types';
 import { clamp, clampScore } from '../../domain/shared/numbers';
 import { mountTrackers, scope } from './segmentTrackerRoutes';
@@ -49,6 +50,15 @@ import type { Env, HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 
 const SHORT_TTL = { kvTtlSeconds: 60, l1TtlMs: 15_000 };
+
+/**
+ * The paid-plan feature gating the premium exec lenses (CTO/CFO/PMO analytical
+ * views). Applied as a middleware AFTER requireRole so a premium lens needs both
+ * the role AND the plan. Fail-open until the flag exists in PlanLimits (see
+ * insightPlanGate). Developer-facing delivery lenses (dora/delivery/bottlenecks/
+ * lifecycle) stay role-only — they're the IC's day-to-day view, not a paid tier.
+ */
+const PREMIUM_INSIGHTS = 'advancedInsights';
 
 /** Clamp a `?days=` window to a sane range (default 30). */
 function parseDays(raw: string | undefined, def = 30): number {
@@ -94,8 +104,8 @@ export function createInsightsRoutes(db: Db): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
   router.use('*', authMiddleware);
 
-  // LENS #1 — AI effectiveness (manager)
-  router.get('/engineering', requireRole(TenantRole.MANAGER), async (c) => {
+  // LENS #1 — AI effectiveness (manager, premium)
+  router.get('/engineering', requireRole(TenantRole.MANAGER), requirePlanFeature(PREMIUM_INSIGHTS), async (c) => {
     const { tenantId } = scope(c);
     const days = parseDays(c.req.query('days'));
     const env = c.env as Env;
@@ -113,7 +123,7 @@ export function createInsightsRoutes(db: Db): Hono<HonoEnv> {
   });
 
   // LENS #3 — FinOps (manager). Budget writes bump the finance version token.
-  router.get('/finance', requireRole(TenantRole.MANAGER), async (c) => {
+  router.get('/finance', requireRole(TenantRole.MANAGER), requirePlanFeature(PREMIUM_INSIGHTS), async (c) => {
     const { tenantId, segmentId } = scope(c);
     const now = Date.now();
     const period = parsePeriod(c.req.query('period'), now);
@@ -127,7 +137,7 @@ export function createInsightsRoutes(db: Db): Hono<HonoEnv> {
   // (EMP-1 / EMP-18), with goal variance (EMP-2). Manager-gated. Cached on a short
   // TTL (tasks are hot-write) with the goals version token folded into the key so a
   // goal edit refreshes immediately.
-  router.get('/allocation', requireRole(TenantRole.MANAGER), async (c) => {
+  router.get('/allocation', requireRole(TenantRole.MANAGER), requirePlanFeature(PREMIUM_INSIGHTS), async (c) => {
     const { tenantId } = scope(c);
     const days = parseDays(c.req.query('days'));
     const now = Date.now();
@@ -172,7 +182,7 @@ export function createInsightsRoutes(db: Db): Hono<HonoEnv> {
   // LENS — capitalization history: per-month capitalized FTE-months + cost split,
   // the cost-report "Historical Months" trend (Jellyfish parity). Manager-gated;
   // same scoping + version token as /allocation so it refreshes in lock-step.
-  router.get('/allocation/history', requireRole(TenantRole.MANAGER), async (c) => {
+  router.get('/allocation/history', requireRole(TenantRole.MANAGER), requirePlanFeature(PREMIUM_INSIGHTS), async (c) => {
     const { tenantId } = scope(c);
     const now = Date.now();
     const months = Math.min(24, Math.max(1, Number(c.req.query('months')) || 12));
@@ -328,7 +338,7 @@ export function createInsightsRoutes(db: Db): Hono<HonoEnv> {
   // LENS — Quality (board Quality slide): prod incidents / support / uptime /
   // defect aging. Manager-gated. Hot-write tables → short TTL with a version token
   // bumped on every quality CRUD write so a manual entry refreshes immediately.
-  router.get('/quality', requireRole(TenantRole.MANAGER), async (c) => {
+  router.get('/quality', requireRole(TenantRole.MANAGER), requirePlanFeature(PREMIUM_INSIGHTS), async (c) => {
     const { tenantId } = scope(c);
     const days = parseDays(c.req.query('days'), 90);
     const env = c.env as Env;
@@ -339,7 +349,7 @@ export function createInsightsRoutes(db: Db): Hono<HonoEnv> {
 
   // LENS — People (board People slide): headcount waterfall / attrition / ramp /
   // open positions / dev satisfaction (reuses the DevEx lens). Manager-gated.
-  router.get('/people', requireRole(TenantRole.MANAGER), async (c) => {
+  router.get('/people', requireRole(TenantRole.MANAGER), requirePlanFeature(PREMIUM_INSIGHTS), async (c) => {
     const { tenantId } = scope(c);
     const months = Math.min(24, Math.max(1, Number(c.req.query('months')) || 6));
     const env = c.env as Env;
@@ -350,7 +360,7 @@ export function createInsightsRoutes(db: Db): Hono<HonoEnv> {
 
   // LENS — R&D Financials (board Investment slide): disaggregated quarterly spend /
   // FTE / revenue ratio for a fiscal year. Manager-gated.
-  router.get('/rd-financials/summary', requireRole(TenantRole.MANAGER), async (c) => {
+  router.get('/rd-financials/summary', requireRole(TenantRole.MANAGER), requirePlanFeature(PREMIUM_INSIGHTS), async (c) => {
     const { tenantId } = scope(c);
     const now = Date.now();
     const fy = parseFiscalYear(c.req.query('fy'), now);
@@ -377,7 +387,7 @@ export function createInsightsRoutes(db: Db): Hono<HonoEnv> {
   });
 
   // LENS #6 — compliance summary (manager)
-  router.get('/compliance', requireRole(TenantRole.MANAGER), async (c) => {
+  router.get('/compliance', requireRole(TenantRole.MANAGER), requirePlanFeature(PREMIUM_INSIGHTS), async (c) => {
     const { tenantId } = scope(c);
     const days = parseDays(c.req.query('days'));
     const env = c.env as Env;
@@ -387,7 +397,7 @@ export function createInsightsRoutes(db: Db): Hono<HonoEnv> {
 
   // LENS #6 — evidence-pack export (manager). Not cached: it's a download, and the
   // bounded query is a deliberate point-in-time snapshot for an audit request.
-  router.get('/compliance/export', requireRole(TenantRole.MANAGER), async (c) => {
+  router.get('/compliance/export', requireRole(TenantRole.MANAGER), requirePlanFeature(PREMIUM_INSIGHTS), async (c) => {
     const { tenantId } = scope(c);
     const days = parseDays(c.req.query('days'), 90);
     const format = c.req.query('format') === 'json' ? 'json' : 'csv';

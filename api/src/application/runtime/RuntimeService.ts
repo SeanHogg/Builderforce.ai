@@ -1,3 +1,4 @@
+import { isValidatorReviewPayload } from '../validation/validatorReviewMarker';
 import { IExecutionRepository } from '../../domain/execution/IExecutionRepository';
 import { ITaskRepository } from '../../domain/task/ITaskRepository';
 import { IAgentRepository } from '../../domain/agent/IAgentRepository';
@@ -343,12 +344,17 @@ export class RuntimeService {
         const tenantId = Number(execution.tenantId);
         let toStatus: string = fromStatus;
         const terminal = dto.status === ExecutionStatus.COMPLETED || dto.status === ExecutionStatus.FAILED;
+        // A Validator acceptance review runs AGAINST an already-Done ticket and must
+        // NOT move its lane — otherwise a completing review knocks the ticket back to
+        // in_review and re-triggers a review (the completion loop). Record the terminal
+        // signal for metrics but leave the ticket exactly where it is.
+        const isReviewRun = isValidatorReviewPayload(execution.payload);
 
-        if (dto.status === ExecutionStatus.RUNNING && fromStatus !== TaskStatus.IN_PROGRESS) {
+        if (!isReviewRun && dto.status === ExecutionStatus.RUNNING && fromStatus !== TaskStatus.IN_PROGRESS) {
           toStatus = TaskStatus.IN_PROGRESS;
           await this.tasks.update(task.update({ status: TaskStatus.IN_PROGRESS }));
         }
-        if (dto.status === ExecutionStatus.COMPLETED) {
+        if (!isReviewRun && dto.status === ExecutionStatus.COMPLETED) {
           const resultText = dto.result ?? '';
           // Default advance is the board's NEXT swimlane by configured order — so a
           // custom board (renamed / re-ordered lanes) flows correctly instead of
@@ -374,7 +380,7 @@ export class RuntimeService {
         // A Done lane finalizes (PR/commit) instead of staffing a fresh agent, and
         // the RUNNING→in_progress move is the lane the CURRENT run already owns, so
         // both are excluded here (the trigger also dedupes/no-ops defensively).
-        if (dto.status === ExecutionStatus.COMPLETED && toStatus !== fromStatus && toStatus !== TaskStatus.DONE) {
+        if (!isReviewRun && dto.status === ExecutionStatus.COMPLETED && toStatus !== fromStatus && toStatus !== TaskStatus.DONE) {
           await this.onLaneEntry?.({
             tenantId, taskId: Number(execution.taskId), projectId, status: toStatus,
             originLaneKey: parseLaneKey(execution.payload),

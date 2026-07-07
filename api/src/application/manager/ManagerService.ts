@@ -30,19 +30,24 @@ import type { Env } from '../../env';
 import type { RuntimeService } from '../runtime/RuntimeService';
 import {
   tasks, boards, swimlanes, swimlaneAgentAssignments, pullRequests,
-  projectManagerConfigs, managerActions, projects,
+  projectManagerConfigs, managerActions, projects, featureScores,
 } from '../../infrastructure/database/schema';
 import { TaskStatus, TaskPriority } from '../../domain/shared/types';
 import { notSystemTask } from '../task/taskScope';
 import { rankBacklog, type RankableTask, type TaskPriorityTier } from './prioritize';
-import { heuristicBusinessValue } from './businessValue';
+import {
+  heuristicBusinessValue, riceBusinessValueFromFeature, normalizeFeatureName,
+  type FeatureScoreRow, type ScoredValue,
+} from './businessValue';
 import { scoreBusinessValueAI } from './businessValueAI';
 import {
   resolveEffectiveManagerPolicy, resolveManagerAssignee,
   type EffectiveManagerPolicy, type ManagerConfigRow,
 } from './managerPolicy';
+import { resolveManagerIdentity } from './managerIdentity';
 import { recommendTopAssignee } from '../metrics/assigneeRecommender';
 import { mergeRecordedPullRequest } from '../repos/mergeRecordedPr';
+import { pollPrCiStatus } from '../repos/pollPrCiStatus';
 import { dispatchTaskFinalize } from '../../presentation/routes/taskRoutes';
 import { maybeAutoRunOnLaneEntry } from '../../presentation/routes/taskRoutes';
 import { TicketAuditService } from '../audit/ticketAuditService';
@@ -353,6 +358,36 @@ async function loadManagedTasks(db: Db, projectId: number): Promise<ManagedTaskR
     .limit(MAX_RANKED);
 }
 
+/**
+ * Load the project's PMO {@link featureScores} keyed by normalized name, plus the
+ * project's max RICE score (for relative 0-100 normalization). Lets the manager fold
+ * a human's deliberate RICE estimate into a ticket's business value (source 'rice')
+ * BEFORE spending an LLM call — a matched PMO score outranks the AI/heuristic path.
+ */
+async function loadFeatureScoreIndex(
+  db: Db, tenantId: number, projectId: number,
+): Promise<{ byName: Map<string, FeatureScoreRow>; maxScore: number }> {
+  const rows = await db
+    .select({
+      name: featureScores.name, reach: featureScores.reach, impact: featureScores.impact,
+      confidence: featureScores.confidence, effort: featureScores.effort, score: featureScores.score,
+    })
+    .from(featureScores)
+    .where(and(
+      eq(featureScores.tenantId, tenantId),
+      or(eq(featureScores.projectId, projectId), isNull(featureScores.projectId)),
+    ))
+    .limit(500);
+  const byName = new Map<string, FeatureScoreRow>();
+  let maxScore = 0;
+  for (const r of rows) {
+    const key = normalizeFeatureName(r.name);
+    if (key && !byName.has(key)) byName.set(key, r as FeatureScoreRow);
+    if (r.score != null && Number.isFinite(r.score)) maxScore = Math.max(maxScore, r.score);
+  }
+  return { byName, maxScore };
+}
+
 function toRankable(t: ManagedTaskRow): RankableTask {
   return {
     taskId: t.id,
@@ -372,10 +407,18 @@ export async function runManagerForProject(
   env: Env,
   db: Db,
   runtimeService: RuntimeService,
-  args: { tenantId: number; projectId: number; submittedBy?: string; runTaskId?: number | null },
+  args: { tenantId: number; projectId: number; submittedBy?: string; runTaskId?: number | null; dispatch?: boolean },
 ): Promise<ManagerRunSummary> {
   const { tenantId, projectId } = args;
   const submittedBy = args.submittedBy ?? 'system:manager';
+  // DISPATCH ownership: on the cron path the always-on autonomous executor
+  // ({@link runAutonomousExecutionSweep}) runs on the SAME tick and is the single
+  // dispatcher of ranked/assigned work — so the manager cron sweep does its judgement
+  // (value/rank/assign/PR/audit) but SKIPS step 5 to avoid the double-scan noted in the
+  // gap register. A manual "Run manager now" (or any non-cron caller) still dispatches
+  // immediately so a human sees work start the instant they click. Callers may force
+  // either way via `dispatch`.
+  const shouldDispatch = args.dispatch ?? (submittedBy !== 'system:manager-cron');
   // The board task representing this run (manual runs only) — every decision below
   // links to it so the run task shows exactly what this pass changed.
   const runTaskId = args.runTaskId ?? null;
@@ -387,6 +430,11 @@ export async function runManagerForProject(
   const policy = await getEffectiveManagerPolicy(db, tenantId, projectId);
   if (!policy.enabled) return { ...summary, skipped: true, reason: 'disabled' };
 
+  // Resolve the designated manager AS an identity — a named cloud agent scores the
+  // backlog with its own persona (and is credited in the feed). System/human managers
+  // resolve to the neutral system identity (no persona), so nothing changes for them.
+  const identity = await resolveManagerIdentity(db, tenantId, policy);
+
   const now = Date.now();
   let managed = await loadManagedTasks(db, projectId);
 
@@ -397,16 +445,28 @@ export async function runManagerForProject(
   // Worker being evicted mid-pass. See flushBatched.
   if (policy.autoBusinessValue) {
     const unscored = managed.filter((t) => t.businessValue == null && t.businessValueSource !== 'manual');
+    // A human's deliberate PMO RICE estimate (feature_scores) is the highest-trust
+    // non-manual source — fold it in first so we never burn an LLM call on a ticket
+    // the product team already scored.
+    const featureIndex = unscored.length > 0
+      ? await loadFeatureScoreIndex(db, tenantId, projectId)
+      : { byName: new Map<string, FeatureScoreRow>(), maxScore: 0 };
     let aiBudget = MAX_AI_SCORES_PER_RUN;
     const writeOps: unknown[] = [];
     const stampedAt = new Date();
     for (const t of unscored) {
       try {
-        const scored = aiBudget > 0
-          ? (await scoreBusinessValueAI(env, { title: t.title, description: t.description }))
-          : null;
-        if (scored) aiBudget -= 1;
-        const value = scored ?? heuristicBusinessValue(toRankable(t), now, t.storyPoints);
+        const riceMatch = featureIndex.byName.get(normalizeFeatureName(t.title));
+        let value: ScoredValue;
+        if (riceMatch) {
+          value = riceBusinessValueFromFeature(riceMatch, featureIndex.maxScore);
+        } else {
+          const scored = aiBudget > 0
+            ? (await scoreBusinessValueAI(env, { title: t.title, description: t.description }, identity.personaDirective))
+            : null;
+          if (scored) aiBudget -= 1;
+          value = scored ?? heuristicBusinessValue(toRankable(t), now, t.storyPoints);
+        }
         writeOps.push(
           db.update(tasks)
             .set({ businessValue: value.score, businessValueRationale: value.rationale, businessValueSource: value.source, updatedAt: stampedAt })
@@ -473,8 +533,10 @@ export async function runManagerForProject(
   await coordinatePullRequests(env, db, runtimeService, { tenantId, projectId, policy, managed, summary, runTaskId });
 
   // 5. DISPATCH — kick the top-ranked runnable tickets NOW, in priority order. ---
-  // Re-read so rank + fresh assignments are reflected; the dispatcher (idempotent)
-  // still gates each ticket on gate/capability/live-run.
+  // Skipped on the cron path (the autonomous executor sweep owns dispatch there — see
+  // shouldDispatch above). Re-read so rank + fresh assignments are reflected; the
+  // dispatcher (idempotent) still gates each ticket on gate/capability/live-run.
+  if (shouldDispatch) {
   const runnable = await db
     .select({ id: tasks.id, status: tasks.status, managerRank: tasks.managerRank })
     .from(tasks)
@@ -498,6 +560,7 @@ export async function runManagerForProject(
       }
     } catch { /* skip */ }
   }
+  }
 
   // 6. AUDIT — check each managed ticket for role/diagnostic coverage and flag any
   // that skipped a required role or diagnostic (pillar 1). Recomputes the ticket
@@ -511,6 +574,17 @@ export async function runManagerForProject(
         if (result.status === 'flagged') summary.flagged += 1;
       } catch { /* skip this ticket */ }
     }
+  }
+
+  // Credit the acting identity: when a specific agent is the manager, journal that it
+  // ran (with its persona/model) so the feed attributes the pass to the teammate, not
+  // an anonymous "system". No noise for the default system manager.
+  if (identity.agentRef && (summary.scored || summary.ranked || summary.assigned || summary.dispatched)) {
+    await recordManagerAction(db, {
+      tenantId, projectId, runTaskId, actionType: 'manage',
+      summary: `${identity.label} managed the board${identity.personaDirective ? ' with its persona' : ''}.`,
+      detail: { managerRef: policy.managerRef, model: identity.model, hasPersona: !!identity.personaDirective },
+    });
   }
 
   // Stamp the run so the surface + cadence can show "last managed …".
@@ -579,15 +653,23 @@ async function coordinatePullRequests(
   // MERGE + CLOSE open PRs per policy.
   if (policy.prMergePolicy === 'queue') return;
   const openPrs = await db
-    .select({ id: pullRequests.id, number: pullRequests.number, taskId: pullRequests.taskId, buildStatus: pullRequests.buildStatus })
+    .select({
+      id: pullRequests.id, number: pullRequests.number, taskId: pullRequests.taskId,
+      buildStatus: pullRequests.buildStatus, repoId: pullRequests.repoId, updatedAt: pullRequests.updatedAt,
+    })
     .from(pullRequests)
     .where(and(eq(pullRequests.tenantId, tenantId), eq(pullRequests.projectId, projectId), eq(pullRequests.status, 'open')))
     .limit(MAX_PR_ACTIONS_PER_RUN);
   for (const pr of openPrs) {
     try {
-      // 'on_green' waits for CI to pass; the green-CI webhook also merges, so this is
-      // just the manager catching any it missed.
-      if (policy.prMergePolicy === 'on_green' && pr.buildStatus !== 'success') continue;
+      // 'on_green' waits for CI to pass. Don't depend on the inbound CI webhook — POLL
+      // the provider's live status ourselves (self-trigger), persisting the verdict, so
+      // an on_green PR merges even on a repo with no webhook installed. 'immediate'
+      // policy skips the poll (it merges regardless of CI).
+      if (policy.prMergePolicy === 'on_green') {
+        const live = await pollPrCiStatus(env, db, tenantId, pr);
+        if (live !== 'success') continue; // still pending or red — leave it for the next tick
+      }
       const result = await mergeRecordedPullRequest(db, env, {
         tenantId, prId: pr.id, method: 'squash', mergedBy: `manager:${policy.managerRef ?? 'system'}`,
       });

@@ -40,7 +40,7 @@ Builderforce.ai is a **human-in-the-loop, fully agentic cloud** where ideas beco
 - **Live Preview** — iFrame running the Vite dev server; updates on save
 
 ### AI Training Studio
-- **In-browser LoRA fine-tuning** — uses [@seanhogg/ssmjs](https://www.npmjs.com/package/@seanhogg/ssmjs) / Transformers.js with WebGPU; trains Mamba-1/2/3 and GPT-style models up to 2B parameters entirely client-side
+- **In-browser LoRA fine-tuning** — uses [@seanhogg/builderforce-memory](https://www.npmjs.com/package/@seanhogg/builderforce-memory) / Transformers.js with WebGPU; trains Mamba-1/2/3 and GPT-style models up to 2B parameters entirely client-side
 - **Hybrid Local Brain** — Mamba State Engine (`mamba-engine.ts`) runs an O(n) selective scan alongside transformer inference; agent state persists to IndexedDB as a compact Float32 state vector and is embedded in exported `AgentPackage` JSON
 - **Dataset generation** — LLM-assisted JSONL instruction dataset creation with SSE streaming progress
 - **AI evaluation** — independent judge scores model outputs on code correctness, reasoning quality, and hallucination rate (0.0–1.0)
@@ -416,13 +416,13 @@ CoderClaw operates fully standalone without Builderforce. The connection unlocks
 
 ## On-Device AI Stack
 
-Builderforce.ai is built on the open-source MambaCode.js / SSM.js stack for on-device AI:
+Builderforce.ai is built on the open-source `@seanhogg/builderforce-memory` stack for on-device AI:
 
 ```
-MambaCode.js (@seanhogg/mambacode.js)
+@seanhogg/builderforce-memory-engine  (engine)
   └─ WebGPU WGSL kernels: Mamba-1 (S6), Mamba-2 (SSD), Mamba-3 (complex MIMO+ET), causal attention
         ↓
-SSM.js (@seanhogg/ssmjs)
+@seanhogg/builderforce-memory  (runtime)
   └─ MambaSession.create() — one-call GPU init, tokenizer, model, checkpoint, persistence
   └─ Inference routing · distillation · semantic memory · SSMAgent
         ↓
@@ -434,7 +434,7 @@ Builderforce.ai IDE
 
 The on-device AI layer runs in O(n) time (vs O(n²) for attention), making it suitable for continuous low-latency state updates and fine-tuning entirely in the browser.
 
-> The engine + runtime were consolidated and renamed to `@seanhogg/builderforce-memory-engine` (was `@seanhogg/mambacode.js`) and `@seanhogg/builderforce-memory` (was `@seanhogg/ssmjs`), both published on npm. The diagram above keeps the historical names; new code should import the `@seanhogg/builderforce-memory*` packages.
+> Both packages are published on npm: `@seanhogg/builderforce-memory-engine` (engine) and `@seanhogg/builderforce-memory` (runtime).
 
 ### Cross-surface semantic cache (token savings)
 

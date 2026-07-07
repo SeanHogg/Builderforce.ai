@@ -1068,7 +1068,11 @@
         "benchmarking": "Branchen-Benchmarking",
         "benchmarkingDesc": "Wie Ihre Liefermetriken im Vergleich zu einer Branchenkohorte abschneiden – Perzentil und Bewertung nach Branche und Teamgröße.",
         "funnel": "Innovationstrichter",
-        "funnelDesc": "Idee → validiert → in Entwicklung → ausgeliefert → gemessen: Conversion, Time-to-Value und die Ideen-Pipeline."
+        "funnelDesc": "Idee → validiert → in Entwicklung → ausgeliefert → gemessen: Conversion, Time-to-Value und die Ideen-Pipeline.",
+        "crossTeam": "Team-übergreifend",
+        "crossTeamDesc": "Jedes Team gegen die anderen einordnen",
+        "delayTaxonomy": "Verzögerungsgründe",
+        "delayTaxonomyDesc": "Warum die Arbeit im Verzug ist"
       },
       "summary": {
         "cycleTime": "Ø Durchlaufzeit",
@@ -1200,7 +1204,11 @@
         "forecast_over": "Prognose über",
         "on_track": "Im Plan",
         "no_budget": "Kein Budget"
-      }
+      },
+      "scope": "Bereich",
+      "scopeWorkspace": "Gesamter Workspace",
+      "scopeProjects": "Projekte",
+      "scopeInitiatives": "Initiativen"
     },
     "comp": {
       "title": "Compliance & Audit",
@@ -1249,7 +1257,11 @@
         "shipped": "Ausgeliefert",
         "measured": "Gemessen",
         "killed": "Verworfen"
-      }
+      },
+      "link": "Verknüpfen mit",
+      "linkNone": "Keine Verknüpfung",
+      "linkProjects": "Projekte",
+      "linkInitiatives": "Initiativen"
     },
     "alloc": {
       "title": "Investitionsverteilung",
@@ -1668,6 +1680,140 @@
       "emptyTitle": "Ihr Dashboard ist leer",
       "emptyBody": "Heften Sie Widgets aus jedem Bericht oder jeder Seite an – die Stecknadel in der Kartenecke fügt es hier hinzu.",
       "myDashboard": "Mein Dashboard"
+    },
+    "emp": {
+      "loading": "Wird geladen…",
+      "crossTeam": {
+        "noTeams": "Noch keine Teams",
+        "noData": "Keine vergleichbaren Teams",
+        "leaderboard": "Team-Rangliste",
+        "footnote": "Perzentile ordnen jedes Team gegenüber den anderen Teams des Mandanten im Zeitraum ein.",
+        "tableTitle": "Team-Kennzahlen",
+        "team": "Team",
+        "members": "Mitglieder",
+        "overall": "Gesamt",
+        "metric": {
+          "throughput": "Durchsatz",
+          "avg_cycle_time_hours": "Durchlaufzeit",
+          "rework_rate_pct": "Nacharbeit",
+          "effectiveness": "Effektivität"
+        }
+      },
+      "delay": {
+        "taggedTasks": "Markierte Aufgaben",
+        "manual": "Manuell",
+        "inferred": "Abgeleitet",
+        "distribution": "Verzögerungsgründe",
+        "tasks": "Aufgaben",
+        "noData": "Keine Verzögerungen erkannt",
+        "tableTitle": "Aufschlüsselung nach Grund",
+        "reasonCol": "Grund",
+        "avgDwell": "Ø Stillstand",
+        "footnote": "Manuelle Markierungen haben Vorrang vor aus langen Stillständen abgeleiteten Gründen.",
+        "tagLabel": "Verzögerungsgrund",
+        "untagged": "Kein Verzögerungsgrund",
+        "reason": {
+          "blocked_dependency": "Durch Abhängigkeit blockiert",
+          "awaiting_review": "Wartet auf Review",
+          "scope_change": "Umfangsänderung",
+          "unclear_requirements": "Unklare Anforderungen",
+          "external": "Externe Blockade",
+          "capacity": "Kapazität / Warteschlange",
+          "other": "Sonstiges"
+        }
+      },
+      "release": {
+        "label": "Release",
+        "none": "Kein Release"
+      },
+      "pulse": {
+        "title": "Team-Puls",
+        "thanks": "Danke — Ihre Antwort wurde erfasst.",
+        "submit": "Senden",
+        "commentPlaceholder": "Optionaler Kommentar (anonym)",
+        "latestAvg": "Letzter Durchschnitt",
+        "latestEnps": "Letzter eNPS",
+        "trend": "Stimmungstrend",
+        "responses": "Antworten",
+        "create": "Neuer Puls",
+        "questionPlaceholder": "Eine Frage stellen…",
+        "scale": "Skala",
+        "open": "Öffnen",
+        "surveys": "Umfragen",
+        "noSurveys": "Noch keine Umfragen",
+        "question": "Frage",
+        "average": "Durchschnitt",
+        "enps": "eNPS",
+        "status": "Status",
+        "active": "Aktiv",
+        "closed": "Geschlossen",
+        "close": "Schließen"
+      },
+      "export": {
+        "dataset": "Datensatz",
+        "csv": "CSV",
+        "html": "Druckbar",
+        "datasets": {
+          "dora": "DORA",
+          "finance": "Finanzen",
+          "allocation": "Zuordnung",
+          "benchmarking": "Benchmarking"
+        }
+      },
+      "recon": {
+        "fiscalYear": "Geschäftsjahr",
+        "variance": "Abweichung",
+        "quartersTitle": "Gemeldete Quartale",
+        "quarter": "Quartal",
+        "revenue": "Umsatz",
+        "derivedBase": "Abgeleitete F&E-Basis",
+        "derivedSub": "Aus Aufwand + KI-Kosten",
+        "reportedActual": "Gemeldeter Ist-Wert",
+        "reportedSub": "Manuelle Quartalsdaten",
+        "derivedLabor": "Abgeleitete Arbeit",
+        "derivedAiSpend": "Abgeleitete KI-Kosten",
+        "reportedPlan": "Gemeldeter Plan",
+        "rdToRevenue": "F&E / Umsatz",
+        "footnote": "Abgeleitet ist eine QRE-artige Schätzung; gemeldet wird manuell erfasst — die Abweichung markiert Divergenz.",
+        "flag": {
+          "aligned": "Übereinstimmend",
+          "derived_higher": "Abgeleitet höher",
+          "reported_higher": "Gemeldet höher",
+          "no_reported": "Keine gemeldeten Daten"
+        },
+        "title": "F&E-Abgleich",
+        "subtitle": "Abgeleitete F&E-Kreditbasis vs. gemeldete Quartalsausgaben"
+      }
+    },
+    "forecast": {
+      "title": "Prognose & Anomalien",
+      "subtitle": "Wohin sich jede Kennzahl entwickelt und was bereits auffällt.",
+      "error": "Prognose konnte nicht geladen werden.",
+      "noData": "Noch nicht genug Verlauf für eine Prognose.",
+      "metricLabel": "Kennzahl",
+      "history": "Verlauf",
+      "projected": "Prognostiziert",
+      "projection": "Prognose",
+      "trend": "Trend",
+      "trendUp": "Steigend",
+      "trendDown": "Fallend",
+      "trendFlat": "Konstant",
+      "rSquared": "Anpassung R² {r}%",
+      "anomalies": "Anomalien",
+      "anomaliesSub": "Punkte über 2σ",
+      "dismiss": "Verwerfen",
+      "chartAria": "{metric}: Verlauf und Prognose",
+      "metric": {
+        "cost": "Ausgaben",
+        "cycle_time": "Durchlaufzeit",
+        "cfr": "Änderungsfehlerrate",
+        "throughput": "Deploy-Durchsatz"
+      }
+    },
+    "upgrade": {
+      "title": "Diese Ansicht erfordert einen höheren Tarif",
+      "body": "Erweiterte Insights sind in Ihrem {plan}-Tarif nicht enthalten. Upgraden Sie, um Prognosen, Anomalieerkennung und die Führungsansichten freizuschalten.",
+      "cta": "Tarife ansehen"
     }
   },
   "cloudAgentForm": {
@@ -2671,7 +2817,21 @@
       "wfPerformance": "Belegschaft · Leistung",
       "marketplace": "Marktplatz",
       "tools": "Werkzeuge",
-      "ide": "IDE"
+      "ide": "IDE",
+      "alerts": "Warnungen",
+      "logs": "Protokolle",
+      "quality": "Qualität",
+      "integrations": "Integrationen",
+      "content": "Inhalte",
+      "ceremonies": "Zeremonien",
+      "wfPlan": "Personalplan",
+      "empAllocation": "Zuteilung",
+      "empCollaboration": "Zusammenarbeit",
+      "empDocs": "Dokumentation",
+      "empCost": "Arbeitskosten",
+      "empPerformers": "Leistung",
+      "empInitiatives": "Initiativen-Mix",
+      "forecast": "Prognose"
     },
     "title": {
       "aiProductivity": "KI-Produktivitätswert",
@@ -2745,7 +2905,33 @@
       "catalogMarketplaceTopEval": "Bestbewerteter Agent",
       "catalogToolsByCategory": "Werkzeuge nach Kategorie",
       "ideByModality": "Projekte nach Modalität",
-      "ideRecency": "IDE-Projekte"
+      "ideRecency": "IDE-Projekte",
+      "obsAlertFires": "Warnungsauslösungen / Tag",
+      "obsAlertRuleHealth": "Zustand der Warnregeln",
+      "obsLogVolume": "Ereignisvolumen",
+      "obsLogTypes": "Ereignistypen",
+      "obsQualityVolume": "Fehlervolumen",
+      "obsQualityResolution": "Fehlerbehebung",
+      "obsIntegrationsConnected": "Verbundene Integrationen",
+      "obsIntegrationsByProvider": "Integrationen nach Anbieter",
+      "obsContentCoverage": "Wissensabdeckung",
+      "obsContentByKind": "Dokumente nach Typ",
+      "obsCeremonyCadence": "Zeremonien-Takt",
+      "obsCeremonyBalance": "Redeanteil-Verteilung",
+      "wfpCostSplit": "Kosten Einstellen vs. Agent",
+      "wfpCapacity": "Kapazität vs. WIP",
+      "wfpGap": "Zuteilbare Lücke",
+      "empOverAllocated": "Überlastete Mitglieder",
+      "empCollabScore": "Kollaborations-Score",
+      "empDocAuthors": "Top-Dok-Beitragende",
+      "empLaborByProject": "Arbeitskosten nach Projekt",
+      "empPerformerTiers": "Leistungsstufen",
+      "empInitiativeMix": "Initiativen-Zuteilung",
+      "forecastCostProjection": "Prognostizierte Ausgaben",
+      "forecastCycleProjection": "Prognostizierte Durchlaufzeit",
+      "forecastCfrProjection": "Prognostizierte Änderungsfehler",
+      "forecastAnomalies": "Offene Anomalien",
+      "forecastCostTrend": "Ausgabenprognose"
     },
     "loading": "Laden…",
     "overview": {
@@ -2836,6 +3022,99 @@
         "llm": "LLM",
         "voice": "Sprache"
       }
+    },
+    "obs": {
+      "noFirings": "Noch keine Auslösungen",
+      "firesPerDay": "Auslösungen / Tag",
+      "noRules": "Keine Warnregeln",
+      "firing": "Ausgelöst",
+      "healthy": "Gesund",
+      "paused": "Pausiert",
+      "rules": "Regeln",
+      "noEvents": "Noch keine Ereignisse",
+      "eventsPerDay": "Ereignisse / Tag",
+      "events": "Ereignisse",
+      "noErrors": "Noch keine Fehler",
+      "errorsPerDay": "Fehler / Tag",
+      "groups": "Gruppen",
+      "status_unresolved": "Ungelöst",
+      "status_fixing": "In Behebung",
+      "status_resolved": "Gelöst",
+      "status_ignored": "Ignoriert",
+      "integrationsSub": "{healthy} von {total} gesund",
+      "noIntegrations": "Keine Integrationen",
+      "connected": "verbunden",
+      "coverageSub": "{present} von {total} Standards",
+      "staleNudge": "{count} Dokumente veraltet > {days} T",
+      "noDocs": "Keine Dokumente",
+      "sop": "SOP",
+      "process": "Prozess",
+      "doc": "Dok",
+      "docs": "Dok.",
+      "noCeremonies": "Noch keine Zeremonien",
+      "ceremoniesPerDay": "Sitzungen / Tag",
+      "humanTalk": "Mensch",
+      "agentTalk": "KI-Agent",
+      "completed": "abgeschlossen"
+    },
+    "reorder": {
+      "drag": "Zum Umsortieren ziehen",
+      "moveLeft": "Nach links",
+      "moveRight": "Nach rechts"
+    },
+    "wfp": {
+      "human": "Mensch",
+      "agent": "Agent",
+      "noCost": "Keine Sätze",
+      "perWeek": "pro Woche",
+      "empty": "Kein WIP",
+      "gapSub": "{open} von {max} WIP genutzt"
+    },
+    "emp": {
+      "teamAnalytics": "Team-Analyse",
+      "allocationTitle": "Überlastung",
+      "allocationSub": "Beobachtete WIP vs. Obergrenze je Mitglied",
+      "collaborationTitle": "Zusammenarbeit",
+      "docTitle": "Dokumentations-Aktivität",
+      "costTitle": "Arbeitskosten",
+      "performersTitle": "Leistung & Coaching",
+      "initiativesTitle": "Initiativen-Zuteilung",
+      "member": "Mitglied",
+      "overAllocated": "Überlastet",
+      "withinCapacity": "Innerhalb der Kapazität",
+      "wip": "WIP",
+      "max": "Max",
+      "utilization": "Auslastung",
+      "reviews": "Reviews",
+      "comments": "Kommentare",
+      "handoffs": "Übergaben",
+      "turnaround": "Durchlaufzeit",
+      "score": "Score",
+      "authored": "Erstellt",
+      "edits": "Bearbeitungen",
+      "acks": "Bestätigungen",
+      "cost": "Kosten",
+      "effortH": "Aufwand (Std.)",
+      "tasks": "Aufgaben",
+      "project": "Projekt",
+      "initiative": "Initiative",
+      "totalCost": "Gesamtkosten",
+      "tier": "Stufe",
+      "tierHigh": "Hoch",
+      "tierSolid": "Solide",
+      "tierWatch": "Beobachten",
+      "percentile": "Perzentil",
+      "composite": "Gesamt",
+      "addNote": "Coaching-Notiz hinzufügen",
+      "notePlaceholder": "Coaching-Notiz…",
+      "saveNote": "Speichern",
+      "noNotes": "Noch keine Coaching-Notizen",
+      "deleteNote": "Löschen",
+      "noData": "Keine Daten in diesem Zeitraum",
+      "loading": "Wird geladen…",
+      "exportCsv": "CSV exportieren",
+      "exporting": "Exportiere…",
+      "focusMix": "Fokus"
     }
   },
   "compile": {
@@ -5071,7 +5350,14 @@
     "usesCount": "{n, number} Verwendungen",
     "byAuthor": "von {name}",
     "emptyMine": "Du hast noch keine Prompts. Klicke auf „+ Neuer Prompt“, um einen zu erstellen.",
-    "emptyPublic": "Keine öffentlichen Prompts gefunden."
+    "emptyPublic": "Keine öffentlichen Prompts gefunden.",
+    "history": "Verlauf",
+    "analyze": "Analysieren & verbessern",
+    "analyzing": "Analysiere…",
+    "suggestionTitle": "Verbesserungsvorschlag",
+    "saveAsVersion": "Als neue Version speichern",
+    "savedVersion": "Gespeichert ✓",
+    "copySuggestion": "Kopieren"
   },
   "voicePanel": {
     "retry": "Wiederholen",
@@ -5415,7 +5701,8 @@
       "tabProposals": "Meine Angebote",
       "tabEngagements": "Meine Engagements",
       "accept": "Annehmen",
-      "decline": "Ablehnen"
+      "decline": "Ablehnen",
+      "clientRatingTip": "Kundenbewertung von Freelancern, die mit ihm gearbeitet haben"
     },
     "timecard": {
       "title": "Zeiterfassung",
@@ -5624,7 +5911,8 @@
       "inProposalSub": "offene Gebote",
       "earned": "Bisher verdient",
       "earnedSub": "gesamt"
-    }
+    },
+    "message": "Nachricht"
   },
   "hires": {
     "title": "Einstellungen",
@@ -5700,7 +5988,8 @@
         "paid": "Bezahlt",
         "void": "Storniert"
       }
-    }
+    },
+    "wouldWorkAgain": "Ich würde wieder mit ihm arbeiten"
   },
   "register": {
     "want": "Ich möchte",
@@ -6045,7 +6334,14 @@
       "role": "Rolle",
       "started": "Gestartet",
       "pages": "Seiten",
-      "terminate": "Beenden"
+      "terminate": "Beenden",
+      "trends": "Plattform-Trends",
+      "windowDays": "{days} T",
+      "newUsers": "Neue Nutzer",
+      "newWorkspaces": "Neue Workspaces",
+      "llmTokens": "LLM-Tokens",
+      "llmSpend": "LLM-Ausgaben",
+      "errorVolume": "Fehlervolumen"
     },
     "errors": {
       "lastN": "Letzte {n} Fehler",
@@ -7068,6 +7364,42 @@
       "broader": "Team benachrichtigen"
     }
   },
+  "ceremony": {
+    "standup": "Standup",
+    "planning": "Planung",
+    "atTable": "{count} am Tisch",
+    "live": "{count} live",
+    "close": "Schließen",
+    "loading": "Wird geladen…",
+    "toDiscuss": "Zu besprechen",
+    "backlog": "Backlog",
+    "sprint": "Sprint",
+    "noSprint": "Noch kein Sprint",
+    "sprintScheduled": "{count} geplant · Ticket hierher ziehen zum Hinzufügen",
+    "newSprint": "+ Neuer Sprint",
+    "dropToDone": "Ticket hierher ziehen, um es als erledigt zu markieren",
+    "inBacklog": "{count} im Backlog",
+    "noMembers": "Keine Teammitglieder — füge diesem Projekt ein Team hinzu oder lade Kollegen ein.",
+    "scorecardTitle": "Scorecard · {name}",
+    "assignedTitle": "Zugewiesen · {name}",
+    "priority": "Priorität: {priority}",
+    "status": "Status: {status}",
+    "openOnBoard": "Im Board öffnen →",
+    "newEpicPrompt": "Titel des neuen Epics",
+    "newSprintPrompt": "Name des neuen Sprints",
+    "epics": "Epics",
+    "newShort": "+ Neu",
+    "taskCount": "{count, plural, one {# Aufgabe} other {# Aufgaben}}",
+    "nothingHere": "Nichts hier",
+    "noEpics": "Noch keine Epics",
+    "errorLoad": "Laden fehlgeschlagen",
+    "errorUpdate": "Aktualisierung fehlgeschlagen",
+    "errorCreateEpic": "Epic konnte nicht erstellt werden",
+    "errorCreateSprint": "Sprint konnte nicht erstellt werden",
+    "errorStart": "Sitzung konnte nicht gestartet werden",
+    "errorAdvance": "Zug konnte nicht weitergegeben werden",
+    "errorComplete": "Sitzung konnte nicht abgeschlossen werden"
+  },
   "meetings": {
     "title": "Besprechungen",
     "subtitle": "Plane und tritt Live-Video- und Audiositzungen mit deinem Team bei.",
@@ -7291,5 +7623,172 @@
       "loadError": "Arbeitsbereich konnte nicht geladen werden.",
       "loading": "Wird geladen…"
     }
+  },
+  "messaging": {
+    "title": "Nachrichten",
+    "empty": "Noch keine Unterhaltungen.",
+    "noMessages": "Noch keine Nachrichten",
+    "loading": "Wird geladen…",
+    "startThread": "Sende die erste Nachricht, um die Unterhaltung zu beginnen.",
+    "placeholder": "Nachricht schreiben… (⌘/Strg+Enter zum Senden)",
+    "send": "Senden",
+    "sending": "Wird gesendet…",
+    "attach": "Datei anhängen",
+    "attachment": "Anhang",
+    "remove": "Entfernen",
+    "aFreelancer": "Freelancer",
+    "aClient": "Kunde"
+  },
+  "trust": {
+    "topRated": "Top bewertet",
+    "risingTalent": "Aufstrebendes Talent",
+    "badgeTip": "Durch eine starke Erfolgsbilanz verdient",
+    "jss": "JSS",
+    "jssTip": "Job-Erfolgs-Score – Bewertung, Wiederbeauftragungen und Kundentreue kombiniert"
+  },
+  "rateClient": {
+    "rate": "Kunde bewerten",
+    "title": "Diesen Kunden bewerten",
+    "titleNamed": "{name} bewerten",
+    "blurb": "Deine Bewertung baut den Ruf dieses Kunden für andere Freelancer auf.",
+    "thanks": "Danke für deine Bewertung",
+    "commentPlaceholder": "Wie war die Zusammenarbeit mit diesem Kunden?",
+    "wouldWorkAgain": "Ich würde wieder mit ihm arbeiten",
+    "submit": "Bewertung senden",
+    "submitting": "Wird gesendet…"
+  },
+  "catalogAnalytics": {
+    "trendTitle": "Akzeptanz im Zeitverlauf",
+    "installs": "Installationen",
+    "usage": "Nutzung",
+    "window": "Zeitraum",
+    "days": "{n} T"
+  },
+  "promptHistory": {
+    "title": "Versionsverlauf",
+    "loading": "Versionen werden geladen…",
+    "from": "Von",
+    "to": "Bis",
+    "versionN": "v{n}",
+    "unified": "Vereinheitlicht",
+    "split": "Nebeneinander",
+    "added": "hinzugefügt",
+    "removed": "entfernt",
+    "unchanged": "{n} unverändert",
+    "allVersions": "Alle Versionen",
+    "empty": "Noch keine Versionen"
+  },
+  "factsPage": {
+    "title": "Fakten",
+    "subtitle": "Ein strukturierter, abfragbarer Speicher von Fakten, auf den sich Ihr Workspace und Ihre Agenten verlassen können.",
+    "newFact": "Neuer Fakt",
+    "editFact": "Fakt bearbeiten",
+    "searchPlaceholder": "Fakten suchen…",
+    "allSubjects": "Alle Subjekte",
+    "allPredicates": "Alle Prädikate",
+    "clear": "Zurücksetzen",
+    "loading": "Wird geladen…",
+    "empty": "Noch keine Fakten.",
+    "colSubject": "Subjekt",
+    "colPredicate": "Prädikat",
+    "colObject": "Objekt",
+    "colSource": "Quelle",
+    "colConfidence": "Konfidenz",
+    "colActions": "Aktionen",
+    "edit": "Bearbeiten",
+    "delete": "Löschen",
+    "save": "Speichern",
+    "saving": "Speichern…",
+    "cancel": "Abbrechen",
+    "validation": "Subjekt, Prädikat und Objekt sind erforderlich.",
+    "needDeveloper": "Erfordert die Entwickler-Rolle",
+    "subjectPlaceholder": "z. B. Acme Corp",
+    "predicatePlaceholder": "z. B. gegründet_am",
+    "objectPlaceholder": "z. B. 2019",
+    "sourcePlaceholder": "z. B. Onboarding-Anruf"
+  },
+  "personaLens": {
+    "pageTitle": "Lens-Persona",
+    "title": "Deine Lens-Persona",
+    "subtitle": "Wähle die Rolle, die du einnimmst. Sie ordnet und hebt die Analyse-Lenses hervor, die dich betreffen — sie ändert nie deinen Zugriff.",
+    "loading": "Wird geladen…",
+    "primary": "Primär",
+    "save": "Persona speichern",
+    "saving": "Wird gespeichert…",
+    "saved": "Persona gespeichert",
+    "saveFailed": "Persona konnte nicht gespeichert werden",
+    "highlightsFor": "Hervorgehobene Lenses für {persona}",
+    "home": "Start",
+    "viewingAs": "Ansicht als",
+    "viewShapingNote": "Eine Persona formt nur deine Ansicht. Jede Lens respektiert weiterhin deine Workspace-Rolle — du erhältst nie Zugriff, den du sonst nicht hättest.",
+    "personas": {
+      "ceo": "CEO",
+      "cfo": "CFO",
+      "cto": "CTO",
+      "ciso": "CISO",
+      "pmo": "PMO",
+      "em": "Engineering Manager",
+      "ic": "Individueller Beitragender"
+    },
+    "lenses": {
+      "engineering": "Engineering",
+      "dora": "DORA",
+      "finance": "Finanzen",
+      "allocation": "Zuteilung",
+      "compliance": "Compliance",
+      "portfolio": "Portfolio",
+      "delivery": "Lieferung"
+    }
+  },
+  "lensSnapshots": {
+    "pageTitle": "Review-Snapshots",
+    "title": "Periodische Lens-Reviews",
+    "subtitle": "Monatliche, vierteljährliche und jährliche Momentaufnahmen jeder Lens — bei Periodenende eingefroren.",
+    "loading": "Wird geladen…",
+    "empty": "Noch keine Snapshots erfasst",
+    "lens": "Lens",
+    "cadence": "Rhythmus",
+    "captureNow": "Jetzt erfassen",
+    "capturing": "Wird erfasst…",
+    "monthly": "Monatlich",
+    "quarterly": "Vierteljährlich",
+    "annual": "Jährlich",
+    "filterLens": "Nach Lens filtern",
+    "allLenses": "Alle Lenses",
+    "generatedAt": "Erfasst {at}",
+    "view": "Ansehen",
+    "hide": "Ausblenden",
+    "lensNames": {
+      "engineering": "Engineering",
+      "dora": "DORA",
+      "finance": "Finanzen",
+      "allocation": "Zuteilung",
+      "compliance": "Compliance"
+    }
+  },
+  "workforcePlan": {
+    "pageTitle": "Personalplan",
+    "subtitle": "Kombinierte Kapazität aus Mensch + Agent, laufende Arbeit und Kosten.",
+    "loading": "Wird geladen…",
+    "members": "Mitglieder",
+    "membersSub": "{human} Mensch · {agent} Agent",
+    "inFlight": "In Arbeit (WIP)",
+    "inFlightSub": "Offene zugewiesene Arbeit",
+    "capacityGap": "Zuteilbare Lücke",
+    "capacityGapSub": "Ungenutzter WIP-Spielraum",
+    "weeklyCost": "Wöchentliche Kosten",
+    "weeklyCostSub": "Modellierte kombinierte Kosten",
+    "agentShare": "Agenten-WIP-Anteil",
+    "agentShareSub": "Von Agenten getragene Arbeit",
+    "hireVsAgent": "Einstellen vs. Agent (Wochenkosten)",
+    "perWeek": "pro Woche",
+    "noCost": "Keine Kostensätze modelliert",
+    "human": "Mensch",
+    "agent": "Agent",
+    "humanCapacity": "Personen — WIP vs. Limit",
+    "agentCapacity": "Agenten — WIP vs. Limit",
+    "noHumans": "Keine Personen mit Profil",
+    "noAgents": "Keine Agenten mit Profil",
+    "barLegend": "Balken = offenes WIP · blasse Spur = WIP-Limit"
   }
 }

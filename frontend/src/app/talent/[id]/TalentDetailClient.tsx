@@ -8,6 +8,7 @@ import PageContainer from '@/components/PageContainer';
 import { useOptionalAuth } from '@/lib/AuthContext';
 import { TalentProfileView } from '@/components/freelance/TalentProfileView';
 import { getFreelancer, hireFreelancer, type FreelancerProfile } from '@/lib/freelancerApi';
+import { MessagesButton } from '@/components/freelance/MessagesButton';
 
 const card: React.CSSProperties = {
   background: 'var(--bg-base)', border: '1px solid var(--border-subtle)', borderRadius: 12, padding: 20,
@@ -61,6 +62,7 @@ export default function TalentDetailClient() {
     </Link>
   ) : canHire ? (
     <>
+      <MessagesButton side="employer" context={{ freelancerUserId: profile.userId, title: profile.displayName ?? undefined }} label={t('message')} />
       <button type="button" onClick={() => doHire('interviewing')} disabled={hireState === 'busy' || hireState !== 'idle'}
         style={{ padding: '9px 16px', borderRadius: 10, border: '1px solid var(--border-subtle)', background: 'var(--bg-elevated)', color: 'var(--text-primary)', fontWeight: 600, fontSize: 13, cursor: 'pointer' }}>
         {t('interview')}

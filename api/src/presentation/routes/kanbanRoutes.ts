@@ -16,6 +16,8 @@ import { KanbanTemplateService } from '../../application/kanban/kanbanTemplateSe
 import { RosterService } from '../../application/kanban/rosterService';
 import { RoleAssignmentService } from '../../application/kanban/roleAssignmentService';
 import { TicketAuditService } from '../../application/audit/ticketAuditService';
+import { loadAssignableWorkforce } from '../../application/kanban/assignableWorkforce';
+import { getOrSetCached } from '../../infrastructure/cache/readThroughCache';
 
 export function createKanbanRoutes(db: Db): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
@@ -28,6 +30,17 @@ export function createKanbanRoutes(db: Db): Hono<HonoEnv> {
   const auditService = new TicketAuditService(db);
 
   const env = (c: { env: unknown }) => c.env as Env;
+
+  // ── Assignable workforce (the ONE cached union the picker fan-out replaces) ──
+  // agents (incl. marketplace-hired) + human members + active hires, in one read.
+  router.get('/assignable', async (c) => {
+    const tenantId = c.get('tenantId') as number;
+    const key = `kanban:assignable:t:${tenantId}`;
+    const data = await getOrSetCached(env(c), key, () => loadAssignableWorkforce(db, tenantId), {
+      kvTtlSeconds: 60, l1TtlMs: 15_000,
+    });
+    return c.json(data);
+  });
 
   // ── Roles ─────────────────────────────────────────────────────────────────
   router.get('/roles', async (c) => c.json({ roles: await roleService.list(env(c), c.get('tenantId') as number) }));
@@ -183,17 +196,25 @@ export function createKanbanRoutes(db: Db): Hono<HonoEnv> {
   router.post('/tasks/:taskId/signoff', async (c) => {
     const tenantId = c.get('tenantId') as number;
     const taskId = Number(c.req.param('taskId'));
-    const body = await c.req.json<{ roleKey: string; laneKey?: string; verdict?: 'approved' | 'changes_requested'; summary?: string }>();
+    const body = await c.req.json<{
+      roleKey: string; laneKey?: string; verdict?: 'approved' | 'changes_requested'; summary?: string;
+      memberKind?: string; memberRef?: string;
+    }>();
     if (!body.roleKey) return c.json({ error: 'roleKey is required' }, 400);
     try {
+      // The reviewer identity defaults to the authed human, but an AGENT acting as a
+      // role reviewer (via the kanban.signoff MCP tool) supplies its own kind/ref so
+      // the audit ledger attributes the sign-off to the agent, not a phantom human.
+      const memberKind = body.memberKind === 'agent' || body.memberKind === 'human' ? body.memberKind : 'human';
+      const memberRef = body.memberRef?.trim() || (c.get('userId') as string) || null;
       const audit = await auditService.recordSignoff(env(c), tenantId, {
         taskId,
         roleKey: body.roleKey,
         laneKey: body.laneKey,
         verdict: body.verdict ?? 'approved',
         summary: body.summary,
-        memberKind: 'human',
-        memberRef: (c.get('userId') as string) ?? null,
+        memberKind,
+        memberRef,
       });
       return c.json({ audit });
     } catch (e) { return c.json({ error: (e as Error).message }, 400); }

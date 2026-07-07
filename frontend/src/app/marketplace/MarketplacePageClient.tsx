@@ -2,7 +2,7 @@
 
 import { Select } from '@/components/Select';
 import Link from 'next/link';
-import { useSearchParams } from 'next/navigation';
+import { useSearchParams, useRouter, usePathname } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 
 import { useState, useEffect, useCallback } from 'react';
@@ -41,6 +41,7 @@ import { CloudAgentSlideOutPanel, type CloudAgentPanelTab } from '@/components/w
 import { SkillTags } from '@/components/SkillTags';
 import { listFreelancers, type FreelancerProfile } from '@/lib/freelancerApi';
 import { RatingStars } from '@/components/freelance/RatingStars';
+import { TrustBadge } from '@/components/freelance/TrustBadge';
 import { SkeletonGrid } from './SkeletonGrid';
 import { ModelsExplorer } from './ModelsExplorer';
 import MarketplaceGigsSection from './MarketplaceGigsSection';
@@ -205,6 +206,8 @@ export default function MarketplacePageClient() {
   const tdis = useTranslations('freelancer');
   const tmodels = useTranslations('models');
   const searchParams = useSearchParams();
+  const router = useRouter();
+  const pathname = usePathname();
   const isMobile = useIsMobile();
 
   const [search, setSearch] = useState('');
@@ -378,6 +381,18 @@ export default function MarketplacePageClient() {
       setCategory(categoryParam as MarketplaceCategory);
     }
   }, [categoryParam]);
+
+  // Selecting a category chip mirrors the choice into the URL (?category=…) so the tab
+  // is deep-linkable + shareable + survives refresh — 'all' clears the param. Reuses
+  // the same query the deep-link read above consumes (one source of truth).
+  const selectCategory = (id: MarketplaceCategory) => {
+    setCategory(id);
+    const params = new URLSearchParams(Array.from(searchParams.entries()));
+    if (id === 'all') params.delete('category');
+    else params.set('category', id);
+    const qs = params.toString();
+    router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
+  };
 
   // Any change to the talent filters (shared search box, discipline, sort) resets to
   // page 1 so the viewer never lands on an out-of-range page.
@@ -593,7 +608,7 @@ export default function MarketplacePageClient() {
               <button
                 key={c.id}
                 type="button"
-                onClick={() => setCategory(c.id)}
+                onClick={() => selectCategory(c.id)}
                 className={category === c.id ? 'btn btn-primary' : 'btn btn-secondary'}
                 aria-pressed={category === c.id}
                 style={{
@@ -766,7 +781,10 @@ export default function MarketplacePageClient() {
                     <div style={{ minWidth: 0 }}>
                       <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{f.displayName ?? '—'}</div>
                       <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>{f.headline ?? f.discipline ?? ''}</div>
-                      <RatingStars rating={f.rating} count={f.ratingCount} />
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginTop: 2 }}>
+                        <RatingStars rating={f.rating} count={f.ratingCount} />
+                        <TrustBadge badge={f.badge ?? null} jss={f.jss} size="sm" showJss={false} />
+                      </div>
                     </div>
                   </div>
                   {f.skills.length > 0 && (

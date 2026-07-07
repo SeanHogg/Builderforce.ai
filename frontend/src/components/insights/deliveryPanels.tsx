@@ -26,13 +26,16 @@ import { DoraLens } from './DoraLens';
 import { SpaceLens } from './SpaceLens';
 import { BenchmarkingLens } from './BenchmarkingLens';
 import { FunnelLens } from './FunnelLens';
+import { CrossTeamBenchmarkLens } from './CrossTeamBenchmarkLens';
+import { DelayTaxonomyLens } from './DelayTaxonomyLens';
 import {
   DeliverySummary, BottleneckSummary, DoraSummary, SpaceSummary, BenchmarkingSummary, FunnelSummary,
 } from './DeliverySummaries';
 
 /** Stable ids (also the `?panel=` deep-link + Brain enum values). */
 export type DeliveryPanelId =
-  | 'delivery' | 'bottlenecks' | 'dora' | 'space' | 'benchmarking' | 'funnel';
+  | 'delivery' | 'bottlenecks' | 'dora' | 'space' | 'benchmarking' | 'funnel'
+  | 'crossTeam' | 'delayTaxonomy';
 
 export interface DeliveryPanelDef {
   id: DeliveryPanelId;
@@ -77,6 +80,14 @@ export const DELIVERY_PANELS: Record<DeliveryPanelId, DeliveryPanelDef> = {
   funnel: {
     id: 'funnel', icon: '💡', titleKey: 'panel.funnel', descKey: 'panel.funnelDesc',
     capability: 'insights.portfolio', width: WIDE, Summary: FunnelSummary, render: () => <FunnelLens />,
+  },
+  crossTeam: {
+    id: 'crossTeam', icon: '🏁', titleKey: 'panel.crossTeam', descKey: 'panel.crossTeamDesc',
+    capability: 'insights.crossTeam', width: WIDE, Summary: () => null, render: () => <CrossTeamBenchmarkLens />,
+  },
+  delayTaxonomy: {
+    id: 'delayTaxonomy', icon: '🧭', titleKey: 'panel.delayTaxonomy', descKey: 'panel.delayTaxonomyDesc',
+    capability: 'insights.delayTaxonomy', width: WIDE, Summary: () => null, render: () => <DelayTaxonomyLens />,
   },
 };
 

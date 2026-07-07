@@ -1932,7 +1932,9 @@ export const ideProjects = pgTable('ide_projects', {
   /** 'designer' | 'video' | 'llm' | 'voice'. */
   modality:            text('modality').notNull().default('designer'),
   status:              text('status').notNull().default('active'),
-  /** LLM modality requires a workflow; the assigned (possibly forked-custom) definition. */
+  /** Optional automation workflow attached to this IDE project (any modality; the
+   *  assigned, possibly forked-custom definition). LLM projects provision their model
+   *  via an Evermind recipe at creation instead — this is no longer required. */
   workflowDefinitionId: uuid('workflow_definition_id').references((): AnyPgColumn => workflowDefinitions.id, { onDelete: 'set null' }),
   createdAt:           timestamp('created_at').notNull().defaultNow(),
   updatedAt:           timestamp('updated_at').notNull().defaultNow(),
@@ -2641,6 +2643,8 @@ export const reportSchedules = pgTable('report_schedules', {
   /** JSON array of email addresses */
   recipients:   text('recipients').notNull().default('[]'),
   isEnabled:    boolean('is_enabled').notNull().default(true),
+  /** Attached tabular artifact format for the delivered report (EMP-20, mig 0318). */
+  exportFormat: varchar('export_format', { length: 8 }).notNull().default('csv'), // csv | html
   lastRunAt:    timestamp('last_run_at'),
   nextRunAt:    timestamp('next_run_at'),
   createdAt:    timestamp('created_at').notNull().defaultNow(),
@@ -3235,9 +3239,13 @@ export const productReleases = pgTable('product_releases', {
   id:          uuid('id').primaryKey().defaultRandom(),
   tenantId:    integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
   segmentId:   uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),
+  // Project scope + delivery dates for the release-picker (EMP-10a, migration 0316).
+  projectId:   integer('project_id').references(() => projects.id, { onDelete: 'set null' }),
   name:        varchar('name', { length: 255 }).notNull(),
   version:     varchar('version', { length: 50 }),
   releaseDate: timestamp('release_date'),
+  targetDate:  timestamp('target_date'),
+  releasedAt:  timestamp('released_at'),
   status:      varchar('status', { length: 20 }).notNull().default('planned'),
   notes:       text('notes'),
   createdAt:   timestamp('created_at').notNull().defaultNow(),
@@ -6092,4 +6100,160 @@ export const freelancerNotifications = pgTable('freelancer_notifications', {
   createdAt:  timestamp('created_at').notNull().defaultNow(),
 }, (t) => ({
   byUser: index('idx_notifications_user').on(t.userId, t.createdAt),
+}));
+
+// ---------------------------------------------------------------------------
+// FACTS library — structured (subject, predicate, object) triples with
+// provenance. Powers /api/facts + the /facts page; recallable by agent tooling.
+// Migration 0300. project_id NULL → tenant-global fact; set → project-scoped.
+// ---------------------------------------------------------------------------
+export const facts = pgTable('facts', {
+  id:         uuid('id').primaryKey().defaultRandom(),
+  tenantId:   integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  projectId:  integer('project_id').references(() => projects.id, { onDelete: 'cascade' }),
+  subject:    varchar('subject', { length: 255 }).notNull(),
+  predicate:  varchar('predicate', { length: 255 }).notNull(),
+  object:     text('object').notNull(),
+  source:     varchar('source', { length: 255 }),
+  confidence: real('confidence'),
+  createdBy:  varchar('created_by', { length: 36 }).references(() => users.id, { onDelete: 'set null' }),
+  createdAt:  timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt:  timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  index('idx_facts_tenant_updated').on(t.tenantId, t.updatedAt),
+  index('idx_facts_tenant_subject').on(t.tenantId, t.subject),
+  index('idx_facts_tenant_predicate').on(t.tenantId, t.predicate),
+  index('idx_facts_tenant_project').on(t.tenantId, t.projectId),
+]);
+
+// ---------------------------------------------------------------------------
+// Generic, timestamped catalog adoption event log (skill | persona | prompt).
+// Feeds the over-time series in /api/catalog-analytics. Append-only. Mig 0301.
+// ---------------------------------------------------------------------------
+export const catalogAdoptionEvents = pgTable('catalog_adoption_events', {
+  id:         uuid('id').primaryKey().defaultRandom(),
+  tenantId:   integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  kind:       varchar('kind', { length: 16 }).notNull(),
+  itemId:     varchar('item_id', { length: 128 }).notNull(),
+  itemName:   varchar('item_name', { length: 255 }),
+  eventType:  varchar('event_type', { length: 16 }).notNull().default('install'),
+  actorId:    varchar('actor_id', { length: 64 }),
+  createdAt:  timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  index('idx_catalog_events_tenant_kind_time').on(t.tenantId, t.kind, t.createdAt),
+  index('idx_catalog_events_tenant_kind_item').on(t.tenantId, t.kind, t.itemId),
+]);
+
+// ---------------------------------------------------------------------------
+// Persona-role 2D RBAC — the lateral "lens persona" dimension (migration 0308).
+// Orthogonal to the four-tier access level: reorders/highlights lenses, NOT an
+// access grant. Exactly one is_primary per (tenant,user) (partial-unique in mig).
+// ---------------------------------------------------------------------------
+export const memberPersonas = pgTable('member_personas', {
+  id:        uuid('id').primaryKey().defaultRandom(),
+  tenantId:  integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  userId:    varchar('user_id', { length: 64 }).notNull(),
+  persona:   varchar('persona', { length: 16 }).notNull(),
+  isPrimary: boolean('is_primary').notNull().default(false),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+}, (t) => [
+  unique('uq_member_persona').on(t.tenantId, t.userId, t.persona),
+]);
+
+// ---------------------------------------------------------------------------
+// Annual-calendar cadence — periodic lens review snapshots (migration 0309).
+// A frozen point-in-time capture of an insight lens for a review period,
+// written by the cron sweep; (tenant,lens,period) is the upsert target.
+// ---------------------------------------------------------------------------
+export const lensSnapshots = pgTable('lens_snapshots', {
+  id:          uuid('id').primaryKey().defaultRandom(),
+  tenantId:    integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  segmentId:   uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),
+  lens:        varchar('lens', { length: 32 }).notNull(),
+  period:      varchar('period', { length: 16 }).notNull(),
+  payload:     jsonb('payload').notNull().default({}),
+  generatedAt: timestamp('generated_at').notNull().defaultNow(),
+}, (t) => [
+  unique('uq_lens_snapshot').on(t.tenantId, t.lens, t.period),
+]);
+
+// ---------------------------------------------------------------------------
+// EMP-9 — delay root-cause taxonomy (migration 0315). One reason per task.
+// ---------------------------------------------------------------------------
+export const delayReasons = pgTable('delay_reasons', {
+  id:         uuid('id').primaryKey().defaultRandom(),
+  tenantId:   integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  segmentId:  uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),
+  taskId:     integer('task_id').notNull().references(() => tasks.id, { onDelete: 'cascade' }),
+  reasonCode: varchar('reason_code', { length: 24 }).notNull(),
+  notes:      text('notes'),
+  createdBy:  varchar('created_by', { length: 36 }).references(() => users.id, { onDelete: 'set null' }),
+  createdAt:  timestamp('created_at').notNull().defaultNow(),
+  updatedAt:  timestamp('updated_at').notNull().defaultNow(),
+}, (t) => ({
+  uqTask: uniqueIndex('uq_delay_reasons_task').on(t.taskId),
+}));
+
+// ---------------------------------------------------------------------------
+// EMP-15 — internal sentiment / pulse survey (migration 0317).
+// ---------------------------------------------------------------------------
+export const pulseSurveys = pgTable('pulse_surveys', {
+  id:        uuid('id').primaryKey().defaultRandom(),
+  tenantId:  integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  segmentId: uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),
+  question:  varchar('question', { length: 255 }).notNull(),
+  scale:     integer('scale').notNull().default(5),
+  active:    boolean('active').notNull().default(true),
+  createdBy: varchar('created_by', { length: 36 }).references(() => users.id, { onDelete: 'set null' }),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+  closedAt:  timestamp('closed_at'),
+});
+
+export const pulseResponses = pgTable('pulse_responses', {
+  id:        uuid('id').primaryKey().defaultRandom(),
+  surveyId:  uuid('survey_id').notNull().references(() => pulseSurveys.id, { onDelete: 'cascade' }),
+  tenantId:  integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  segmentId: uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),
+  userId:    varchar('user_id', { length: 36 }).references(() => users.id, { onDelete: 'set null' }),
+  score:     integer('score').notNull(),
+  comment:   text('comment'),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+}, (t) => ({
+  uqUser: uniqueIndex('uq_pulse_response_user').on(t.surveyId, t.userId),
+}));
+
+// ---------------------------------------------------------------------------
+// EMP-16 — manager coaching notes attached to a workforce member (mig 0311).
+// Polymorphic (member_kind, member_ref) identity; no FK on member_ref.
+// ---------------------------------------------------------------------------
+export const coachingNotes = pgTable('coaching_notes', {
+  id:         serial('id').primaryKey(),
+  tenantId:   integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  segmentId:  uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),
+  memberKind: varchar('member_kind', { length: 16 }).notNull(),
+  memberRef:  varchar('member_ref', { length: 64 }).notNull(),
+  note:       text('note').notNull(),
+  authorId:   varchar('author_id', { length: 36 }).references(() => users.id, { onDelete: 'set null' }),
+  createdAt:  timestamp('created_at').notNull().defaultNow(),
+}, (t) => [
+  index('idx_coaching_notes_member').on(t.tenantId, t.memberKind, t.memberRef),
+]);
+
+// ---------------------------------------------------------------------------
+// Dismissed forecast anomalies (LENS forecast, migration 0305). A manager mutes
+// a known/explained z-score outlier so it stops surfacing on the forecast lens.
+// One row per (tenant, metric, point_day); additive (no rows == all shown).
+// ---------------------------------------------------------------------------
+export const forecastAnomalyAcks = pgTable('forecast_anomaly_acks', {
+  id:        uuid('id').primaryKey().defaultRandom(),
+  tenantId:  integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  segmentId: uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),
+  metric:    varchar('metric', { length: 24 }).notNull(),
+  pointDay:  varchar('point_day', { length: 10 }).notNull(),
+  note:      text('note'),
+  ackedBy:   varchar('acked_by', { length: 36 }),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+}, (t) => ({
+  uqAck:    uniqueIndex('uq_forecast_anomaly_ack').on(t.tenantId, t.metric, t.pointDay),
+  byMetric: index('idx_forecast_anomaly_ack_metric').on(t.tenantId, t.metric),
 }));

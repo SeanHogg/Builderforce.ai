@@ -39,6 +39,7 @@ export const PLAN_FEATURE_LABEL: Record<PlanFeature, string> = {
   teamApprovalInbox: 'the team approval inbox',
   seatCostControls: 'per-seat cost controls',
   voiceCloning: 'voice cloning',
+  advancedInsights: 'advanced insights (forecasting & exec lenses)',
 };
 
 /** Plans in ascending order of entitlement. */

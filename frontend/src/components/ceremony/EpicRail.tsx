@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { useTranslations } from 'next-intl';
 import type { Task } from '@/lib/builderforceApi';
 import { useIsMobile } from '@/lib/useIsMobile';
 import { DRAG_TASK } from './types';
@@ -18,6 +19,7 @@ function EpicCard({
   onOpen: (task: Task) => void;
 }) {
   const [over, setOver] = useState(false);
+  const t = useTranslations('ceremony');
   return (
     <div
       onDragOver={(e) => { e.preventDefault(); setOver(true); }}
@@ -57,7 +59,7 @@ function EpicCard({
         </span>
       </div>
       <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
-        {childCount} {childCount === 1 ? 'task' : 'tasks'}
+        {t('taskCount', { count: childCount })}
       </div>
     </div>
   );
@@ -81,6 +83,7 @@ export function EpicRail({
   onOpen: (task: Task) => void;
 }) {
   const isMobile = useIsMobile();
+  const t = useTranslations('ceremony');
   return (
     <div
       style={{
@@ -99,7 +102,7 @@ export function EpicRail({
     >
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: 0.4 }}>
-          Epics
+          {t('epics')}
         </span>
         <button
           type="button"
@@ -113,12 +116,12 @@ export function EpicRail({
             cursor: 'pointer',
           }}
         >
-          + New
+          {t('newShort')}
         </button>
       </div>
       {epics.length === 0 ? (
         <div style={{ fontSize: 12, color: 'var(--text-muted)', padding: '12px 0', textAlign: 'center' }}>
-          No epics yet
+          {t('noEpics')}
         </div>
       ) : (
         epics.map((e) => (

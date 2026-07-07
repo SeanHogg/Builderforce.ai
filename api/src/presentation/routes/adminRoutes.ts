@@ -18,6 +18,8 @@ import { writeAdminAudit, type AdminAuditOpts } from '../../infrastructure/audit
 import { parseJsonArray } from '../../domain/shared/json';
 import { slugify } from '../../domain/shared/strings';
 import { countActiveSessionsAndTokens } from '../../application/security/sessionCounts';
+import { getOrSetCached } from '../../infrastructure/cache/readThroughCache';
+import { computePlatformRollup } from '../../application/admin/platformRollup';
 import {
   authTokens,
   authUserSessions,
@@ -1357,6 +1359,22 @@ export function createAdminRoutes(): Hono<HonoEnv> {
   // -------------------------------------------------------------------------
   // GET /api/admin/health
   // -------------------------------------------------------------------------
+  // GET /api/admin/platform-rollup?days= — platform-wide historical trends
+  // (user + workspace growth, LLM tokens/spend, error-event volume) for the
+  // superadmin Health/Usage charts. Cached on a short TTL (platform-scoped).
+  router.get('/platform-rollup', async (c) => {
+    const db = buildDatabase(c.env);
+    const raw = Number(c.req.query('days'));
+    const days = Number.isFinite(raw) && raw >= 1 && raw <= 365 ? Math.floor(raw) : 30;
+    const rollup = await getOrSetCached(
+      c.env as Env,
+      `admin:platform-rollup:d:${days}`,
+      () => computePlatformRollup(db, days),
+      { kvTtlSeconds: 120, l1TtlMs: 30_000 },
+    );
+    return c.json(rollup);
+  });
+
   router.get('/health', async (c) => {
     const db = buildDatabase(c.env);
 

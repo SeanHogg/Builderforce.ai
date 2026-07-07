@@ -14,7 +14,7 @@
  * + the kill switch; absent → an empty map (a no-op, identical to Phase 2).
  *
  * The embedding seam (`embedTask`) is deliberately pluggable: today it is a fast,
- * deterministic in-browser feature hash (real + zero-dependency), and a MambaKit/SSMjs
+ * deterministic in-browser feature hash (real + zero-dependency), and a builderforce-memory
  * WebGPU SSM embedding is a drop-in replacement behind the SAME function once the
  * per-codebase `model.bin` weights are pushed (see the Gap Register).
  */
@@ -41,8 +41,8 @@ export interface OutcomeMemory {
 }
 
 /** Feature-hash embedding of a task's text — deterministic, L2-normalized, runs
- *  in-browser with no model/weights. Swapped for a MambaKit SSM embedding behind this
- *  same signature once codebase weights are available. */
+ *  in-browser with no model/weights. Swapped for a builderforce-memory SSM embedding behind
+ *  this same signature once codebase weights are available. */
 export function embedTask(text: string): number[] {
   const vec = new Array<number>(EMBED_DIM).fill(0);
   const tokens = text.toLowerCase().match(/[a-z0-9_]+/g) ?? [];

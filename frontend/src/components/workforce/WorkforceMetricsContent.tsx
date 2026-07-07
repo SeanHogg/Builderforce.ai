@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useTranslations } from 'next-intl';
-import { membersApi, type DisciplineRollup, type DoraRollup, type MemberScorecard } from '@/lib/builderforceApi';
+import { membersApi, empMetricsApi, type DisciplineRollup, type DoraRollup, type MemberScorecard } from '@/lib/builderforceApi';
 import { MemberProfileEditor } from './MemberProfileEditor';
 import { EngagementSection } from './EngagementSection';
 import { fmtHrs, fmtScore, scoreColor, MEMBER_KIND_LABEL } from './workforceFormat';
@@ -37,6 +37,7 @@ const td: React.CSSProperties = { textAlign: 'right', padding: '8px 10px', fontS
 
 export function WorkforceMetricsContent() {
   const t = useTranslations('workforce');
+  const tw = useTranslations('widgets');
   const [days, setDays] = useState(7);
   const [discipline, setDiscipline] = useState('');
   const [members, setMembers] = useState<MemberScorecard[] | null>(null);
@@ -45,6 +46,13 @@ export function WorkforceMetricsContent() {
   const [error, setError] = useState<string | null>(null);
   const [editing, setEditing] = useState<MemberScorecard | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
+  const [exporting, setExporting] = useState(false);
+
+  const doExport = async () => {
+    setExporting(true);
+    try { await empMetricsApi.exportMetrics(days, 'csv'); } catch { /* surfaced via global toast */ }
+    finally { setExporting(false); }
+  };
 
   useEffect(() => {
     membersApi.metrics(days, discipline || undefined)
@@ -63,7 +71,7 @@ export function WorkforceMetricsContent() {
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
         <div style={{ fontWeight: 600, fontSize: 14 }}>Performance</div>
-        <div style={{ marginLeft: 'auto', display: 'flex', gap: 6 }}>
+        <div style={{ marginLeft: 'auto', display: 'flex', gap: 6, alignItems: 'center' }}>
           {[7, 14, 30].map((d) => (
             <button key={d} onClick={() => setDays(d)} style={{
               padding: '4px 10px', borderRadius: 8, fontSize: 12, cursor: 'pointer',
@@ -72,6 +80,11 @@ export function WorkforceMetricsContent() {
               color: days === d ? '#fff' : 'var(--text-secondary)',
             }}>{d}d</button>
           ))}
+          <button onClick={doExport} disabled={exporting} title={tw('emp.exportCsv')} style={{
+            padding: '4px 12px', borderRadius: 8, fontSize: 12, cursor: 'pointer',
+            border: '1px solid var(--border-subtle)', background: 'var(--bg-base)',
+            color: 'var(--text-secondary)', opacity: exporting ? 0.6 : 1,
+          }}>{exporting ? tw('emp.exporting') : tw('emp.exportCsv')}</button>
         </div>
       </div>
 

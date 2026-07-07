@@ -1068,7 +1068,11 @@
         "benchmarking": "Industry Benchmarking",
         "benchmarkingDesc": "How your delivery metrics rank against an industry cohort — percentile and rating by industry and team size.",
         "funnel": "Innovation Funnel",
-        "funnelDesc": "Idea → validated → in build → shipped → measured: conversion, time-to-value and the idea pipeline."
+        "funnelDesc": "Idea → validated → in build → shipped → measured: conversion, time-to-value and the idea pipeline.",
+        "crossTeam": "Cross-team",
+        "crossTeamDesc": "Rank each team against the others",
+        "delayTaxonomy": "Delay causes",
+        "delayTaxonomyDesc": "Why work is running late"
       },
       "summary": {
         "cycleTime": "Avg cycle time",
@@ -1200,7 +1204,11 @@
         "forecast_over": "Forecast over",
         "on_track": "On track",
         "no_budget": "No budget"
-      }
+      },
+      "scope": "Scope",
+      "scopeWorkspace": "Whole workspace",
+      "scopeProjects": "Projects",
+      "scopeInitiatives": "Initiatives"
     },
     "comp": {
       "title": "Compliance & Audit",
@@ -1249,7 +1257,11 @@
         "shipped": "Shipped",
         "measured": "Measured",
         "killed": "Killed"
-      }
+      },
+      "link": "Link to",
+      "linkNone": "No link",
+      "linkProjects": "Projects",
+      "linkInitiatives": "Initiatives"
     },
     "alloc": {
       "title": "Investment Allocation",
@@ -1668,6 +1680,140 @@
       "emptyTitle": "Your dashboard is empty",
       "emptyBody": "Pin widgets from any report or page — the pin in a card's corner adds it here.",
       "myDashboard": "My Dashboard"
+    },
+    "emp": {
+      "loading": "Loading…",
+      "crossTeam": {
+        "noTeams": "No teams yet",
+        "noData": "No comparable teams",
+        "leaderboard": "Team standing",
+        "footnote": "Percentiles rank each team against the tenant’s other teams over the window.",
+        "tableTitle": "Team metrics",
+        "team": "Team",
+        "members": "Members",
+        "overall": "Overall",
+        "metric": {
+          "throughput": "Throughput",
+          "avg_cycle_time_hours": "Cycle time",
+          "rework_rate_pct": "Rework",
+          "effectiveness": "Effectiveness"
+        }
+      },
+      "delay": {
+        "taggedTasks": "Tagged tasks",
+        "manual": "Manual",
+        "inferred": "Inferred",
+        "distribution": "Delay reasons",
+        "tasks": "tasks",
+        "noData": "No delays detected",
+        "tableTitle": "Reason breakdown",
+        "reasonCol": "Reason",
+        "avgDwell": "Avg stall",
+        "footnote": "Manual tags take precedence over reasons auto-inferred from long stalls.",
+        "tagLabel": "Delay reason",
+        "untagged": "No delay reason",
+        "reason": {
+          "blocked_dependency": "Blocked by dependency",
+          "awaiting_review": "Awaiting review",
+          "scope_change": "Scope change",
+          "unclear_requirements": "Unclear requirements",
+          "external": "External blocker",
+          "capacity": "Capacity / queue",
+          "other": "Other"
+        }
+      },
+      "release": {
+        "label": "Release",
+        "none": "No release"
+      },
+      "pulse": {
+        "title": "Team pulse",
+        "thanks": "Thanks — your response was recorded.",
+        "submit": "Submit",
+        "commentPlaceholder": "Optional comment (anonymous)",
+        "latestAvg": "Latest average",
+        "latestEnps": "Latest eNPS",
+        "trend": "Sentiment trend",
+        "responses": "responses",
+        "create": "New pulse",
+        "questionPlaceholder": "Ask one question…",
+        "scale": "Scale",
+        "open": "Open",
+        "surveys": "Surveys",
+        "noSurveys": "No surveys yet",
+        "question": "Question",
+        "average": "Average",
+        "enps": "eNPS",
+        "status": "Status",
+        "active": "Active",
+        "closed": "Closed",
+        "close": "Close"
+      },
+      "export": {
+        "dataset": "Dataset",
+        "csv": "CSV",
+        "html": "Printable",
+        "datasets": {
+          "dora": "DORA",
+          "finance": "Finance",
+          "allocation": "Allocation",
+          "benchmarking": "Benchmarking"
+        }
+      },
+      "recon": {
+        "fiscalYear": "Fiscal year",
+        "variance": "Variance",
+        "quartersTitle": "Reported quarters",
+        "quarter": "Quarter",
+        "revenue": "Revenue",
+        "derivedBase": "Derived R&D base",
+        "derivedSub": "From effort + AI spend",
+        "reportedActual": "Reported actual",
+        "reportedSub": "Manual quarterly facts",
+        "derivedLabor": "Derived labor",
+        "derivedAiSpend": "Derived AI spend",
+        "reportedPlan": "Reported plan",
+        "rdToRevenue": "R&D / revenue",
+        "footnote": "Derived is a QRE-style estimate; reported is manually entered — variance flags divergence.",
+        "flag": {
+          "aligned": "Aligned",
+          "derived_higher": "Derived higher",
+          "reported_higher": "Reported higher",
+          "no_reported": "No reported data"
+        },
+        "title": "R&D reconciliation",
+        "subtitle": "Derived R&D credit base vs reported quarterly spend"
+      }
+    },
+    "forecast": {
+      "title": "Forecast & anomalies",
+      "subtitle": "Where each metric is heading, and what already looks off.",
+      "error": "Could not load the forecast.",
+      "noData": "Not enough history to forecast yet.",
+      "metricLabel": "Metric",
+      "history": "History",
+      "projected": "Projected",
+      "projection": "Projected",
+      "trend": "Trend",
+      "trendUp": "Rising",
+      "trendDown": "Falling",
+      "trendFlat": "Flat",
+      "rSquared": "Fit R² {r}%",
+      "anomalies": "Anomalies",
+      "anomaliesSub": "Points beyond 2σ",
+      "dismiss": "Dismiss",
+      "chartAria": "{metric} history and projection",
+      "metric": {
+        "cost": "Spend",
+        "cycle_time": "Cycle time",
+        "cfr": "Change-failure rate",
+        "throughput": "Deploy throughput"
+      }
+    },
+    "upgrade": {
+      "title": "This lens needs a higher plan",
+      "body": "Advanced insights aren't included in your {plan} plan. Upgrade to unlock forecasting, anomaly detection and the exec lenses.",
+      "cta": "View plans"
     }
   },
   "cloudAgentForm": {
@@ -2671,7 +2817,21 @@
       "wfPerformance": "Workforce · Performance",
       "marketplace": "Marketplace",
       "tools": "Tools",
-      "ide": "IDE"
+      "ide": "IDE",
+      "alerts": "Alerts",
+      "logs": "Logs",
+      "quality": "Quality",
+      "integrations": "Integrations",
+      "content": "Content",
+      "ceremonies": "Ceremonies",
+      "wfPlan": "Workforce plan",
+      "empAllocation": "Allocation",
+      "empCollaboration": "Collaboration",
+      "empDocs": "Documentation",
+      "empCost": "Labor cost",
+      "empPerformers": "Performers",
+      "empInitiatives": "Initiative mix",
+      "forecast": "Forecast"
     },
     "title": {
       "aiProductivity": "AI Productivity Score",
@@ -2745,7 +2905,33 @@
       "catalogMarketplaceTopEval": "Best-evaluated agent",
       "catalogToolsByCategory": "Tools by category",
       "ideByModality": "Builds by modality",
-      "ideRecency": "IDE builds"
+      "ideRecency": "IDE builds",
+      "obsAlertFires": "Alert firings / day",
+      "obsAlertRuleHealth": "Alert rule health",
+      "obsLogVolume": "Event volume",
+      "obsLogTypes": "Event types",
+      "obsQualityVolume": "Error volume",
+      "obsQualityResolution": "Error resolution",
+      "obsIntegrationsConnected": "Integrations connected",
+      "obsIntegrationsByProvider": "Integrations by provider",
+      "obsContentCoverage": "Knowledge coverage",
+      "obsContentByKind": "Documents by kind",
+      "obsCeremonyCadence": "Ceremony cadence",
+      "obsCeremonyBalance": "Ceremony talk balance",
+      "wfpCostSplit": "Hire vs. agent cost",
+      "wfpCapacity": "Capacity vs WIP",
+      "wfpGap": "Allocatable gap",
+      "empOverAllocated": "Over-allocated members",
+      "empCollabScore": "Collaboration score",
+      "empDocAuthors": "Top doc contributors",
+      "empLaborByProject": "Labor cost by project",
+      "empPerformerTiers": "Performer tiers",
+      "empInitiativeMix": "Initiative allocation",
+      "forecastCostProjection": "Projected spend",
+      "forecastCycleProjection": "Projected cycle time",
+      "forecastCfrProjection": "Projected change-failure",
+      "forecastAnomalies": "Open anomalies",
+      "forecastCostTrend": "Spend forecast"
     },
     "loading": "Loading…",
     "overview": {
@@ -2836,6 +3022,99 @@
         "llm": "LLM",
         "voice": "Voice"
       }
+    },
+    "obs": {
+      "noFirings": "No firings yet",
+      "firesPerDay": "Firings / day",
+      "noRules": "No alert rules",
+      "firing": "Firing",
+      "healthy": "Healthy",
+      "paused": "Paused",
+      "rules": "rules",
+      "noEvents": "No events yet",
+      "eventsPerDay": "Events / day",
+      "events": "events",
+      "noErrors": "No errors yet",
+      "errorsPerDay": "Errors / day",
+      "groups": "groups",
+      "status_unresolved": "Unresolved",
+      "status_fixing": "Fixing",
+      "status_resolved": "Resolved",
+      "status_ignored": "Ignored",
+      "integrationsSub": "{healthy} healthy of {total}",
+      "noIntegrations": "No integrations",
+      "connected": "connected",
+      "coverageSub": "{present} of {total} standards",
+      "staleNudge": "{count} docs stale > {days}d",
+      "noDocs": "No documents",
+      "sop": "SOP",
+      "process": "Process",
+      "doc": "Doc",
+      "docs": "docs",
+      "noCeremonies": "No ceremonies yet",
+      "ceremoniesPerDay": "Sessions / day",
+      "humanTalk": "Human",
+      "agentTalk": "AI agent",
+      "completed": "completed"
+    },
+    "reorder": {
+      "drag": "Drag to reorder",
+      "moveLeft": "Move left",
+      "moveRight": "Move right"
+    },
+    "wfp": {
+      "human": "Human",
+      "agent": "Agent",
+      "noCost": "No cost rates",
+      "perWeek": "per week",
+      "empty": "No WIP",
+      "gapSub": "{open} of {max} WIP used"
+    },
+    "emp": {
+      "teamAnalytics": "Team analytics",
+      "allocationTitle": "Over-allocation",
+      "allocationSub": "Observed WIP vs. each member’s ceiling",
+      "collaborationTitle": "Collaboration",
+      "docTitle": "Documentation activity",
+      "costTitle": "Labor cost",
+      "performersTitle": "Performers & coaching",
+      "initiativesTitle": "Initiative allocation",
+      "member": "Member",
+      "overAllocated": "Over-allocated",
+      "withinCapacity": "Within capacity",
+      "wip": "WIP",
+      "max": "Max",
+      "utilization": "Utilization",
+      "reviews": "Reviews",
+      "comments": "Comments",
+      "handoffs": "Handoffs",
+      "turnaround": "Turnaround",
+      "score": "Score",
+      "authored": "Authored",
+      "edits": "Edits",
+      "acks": "Acks",
+      "cost": "Cost",
+      "effortH": "Effort (h)",
+      "tasks": "Tasks",
+      "project": "Project",
+      "initiative": "Initiative",
+      "totalCost": "Total cost",
+      "tier": "Tier",
+      "tierHigh": "High",
+      "tierSolid": "Solid",
+      "tierWatch": "Watch",
+      "percentile": "Percentile",
+      "composite": "Composite",
+      "addNote": "Add coaching note",
+      "notePlaceholder": "Coaching note…",
+      "saveNote": "Save",
+      "noNotes": "No coaching notes yet",
+      "deleteNote": "Delete",
+      "noData": "No data in this window",
+      "loading": "Loading…",
+      "exportCsv": "Export CSV",
+      "exporting": "Exporting…",
+      "focusMix": "Focus"
     }
   },
   "compile": {
@@ -5071,7 +5350,14 @@
     "usesCount": "{n, number} uses",
     "byAuthor": "by {name}",
     "emptyMine": "You have no prompts yet. Click “+ New prompt” to create one.",
-    "emptyPublic": "No public prompts found."
+    "emptyPublic": "No public prompts found.",
+    "history": "History",
+    "analyze": "Analyze & improve",
+    "analyzing": "Analyzing…",
+    "suggestionTitle": "Suggested improvement",
+    "saveAsVersion": "Save as new version",
+    "savedVersion": "Saved ✓",
+    "copySuggestion": "Copy"
   },
   "voicePanel": {
     "retry": "Retry",
@@ -5415,7 +5701,8 @@
       "tabProposals": "My proposals",
       "tabEngagements": "My engagements",
       "accept": "Accept",
-      "decline": "Decline"
+      "decline": "Decline",
+      "clientRatingTip": "Client rating from freelancers who worked with them"
     },
     "timecard": {
       "title": "Timecard",
@@ -5624,7 +5911,8 @@
       "inProposalSub": "open bids",
       "earned": "Earned to date",
       "earnedSub": "lifetime"
-    }
+    },
+    "message": "Message"
   },
   "hires": {
     "title": "Hires",
@@ -5700,7 +5988,8 @@
         "paid": "Paid",
         "void": "Void"
       }
-    }
+    },
+    "wouldWorkAgain": "I’d work with them again"
   },
   "register": {
     "want": "I want to",
@@ -6045,7 +6334,14 @@
       "role": "Role",
       "started": "Started",
       "pages": "Pages",
-      "terminate": "Terminate"
+      "terminate": "Terminate",
+      "trends": "Platform trends",
+      "windowDays": "{days}d",
+      "newUsers": "New users",
+      "newWorkspaces": "New workspaces",
+      "llmTokens": "LLM tokens",
+      "llmSpend": "LLM spend",
+      "errorVolume": "Error volume"
     },
     "errors": {
       "lastN": "Last {n} errors",
@@ -7068,6 +7364,42 @@
       "broader": "Message the team"
     }
   },
+  "ceremony": {
+    "standup": "Standup",
+    "planning": "Planning",
+    "atTable": "{count} at the table",
+    "live": "{count} live",
+    "close": "Close",
+    "loading": "Loading…",
+    "toDiscuss": "To discuss",
+    "backlog": "Backlog",
+    "sprint": "Sprint",
+    "noSprint": "No sprint yet",
+    "sprintScheduled": "{count} scheduled · drop a ticket to add",
+    "newSprint": "+ New sprint",
+    "dropToDone": "Drop a ticket here to mark Done",
+    "inBacklog": "{count} in backlog",
+    "noMembers": "No team members — add a team to this project, or invite teammates.",
+    "scorecardTitle": "Scorecard · {name}",
+    "assignedTitle": "Assigned · {name}",
+    "priority": "Priority: {priority}",
+    "status": "Status: {status}",
+    "openOnBoard": "Open on the board →",
+    "newEpicPrompt": "New epic title",
+    "newSprintPrompt": "New sprint name",
+    "epics": "Epics",
+    "newShort": "+ New",
+    "taskCount": "{count, plural, one {# task} other {# tasks}}",
+    "nothingHere": "Nothing here",
+    "noEpics": "No epics yet",
+    "errorLoad": "Failed to load",
+    "errorUpdate": "Update failed",
+    "errorCreateEpic": "Create epic failed",
+    "errorCreateSprint": "Create sprint failed",
+    "errorStart": "Could not start session",
+    "errorAdvance": "Could not advance turn",
+    "errorComplete": "Could not complete session"
+  },
   "meetings": {
     "title": "Meetings",
     "subtitle": "Schedule and join live video and audio sessions with your team.",
@@ -7291,5 +7623,172 @@
       "loadError": "Failed to load your workspace.",
       "loading": "Loading…"
     }
+  },
+  "messaging": {
+    "title": "Messages",
+    "empty": "No conversations yet.",
+    "noMessages": "No messages yet",
+    "loading": "Loading…",
+    "startThread": "Send the first message to start the conversation.",
+    "placeholder": "Write a message… (⌘/Ctrl+Enter to send)",
+    "send": "Send",
+    "sending": "Sending…",
+    "attach": "Attach a file",
+    "attachment": "Attachment",
+    "remove": "Remove",
+    "aFreelancer": "Freelancer",
+    "aClient": "Client"
+  },
+  "trust": {
+    "topRated": "Top Rated",
+    "risingTalent": "Rising Talent",
+    "badgeTip": "Earned from a strong job-success track record",
+    "jss": "JSS",
+    "jssTip": "Job Success Score — rating, re-hires and client loyalty combined"
+  },
+  "rateClient": {
+    "rate": "Rate client",
+    "title": "Rate this client",
+    "titleNamed": "Rate {name}",
+    "blurb": "Your review builds this client’s reputation for other freelancers.",
+    "thanks": "Thanks for your review",
+    "commentPlaceholder": "How was working with this client?",
+    "wouldWorkAgain": "I’d work with them again",
+    "submit": "Submit review",
+    "submitting": "Submitting…"
+  },
+  "catalogAnalytics": {
+    "trendTitle": "Adoption over time",
+    "installs": "Installs",
+    "usage": "Usage",
+    "window": "Time window",
+    "days": "{n}d"
+  },
+  "promptHistory": {
+    "title": "Version history",
+    "loading": "Loading versions…",
+    "from": "From",
+    "to": "To",
+    "versionN": "v{n}",
+    "unified": "Unified",
+    "split": "Side by side",
+    "added": "added",
+    "removed": "removed",
+    "unchanged": "{n} unchanged",
+    "allVersions": "All versions",
+    "empty": "No versions yet"
+  },
+  "factsPage": {
+    "title": "Facts",
+    "subtitle": "A structured, queryable store of facts your workspace and agents can rely on.",
+    "newFact": "New fact",
+    "editFact": "Edit fact",
+    "searchPlaceholder": "Search facts…",
+    "allSubjects": "All subjects",
+    "allPredicates": "All predicates",
+    "clear": "Clear",
+    "loading": "Loading…",
+    "empty": "No facts yet.",
+    "colSubject": "Subject",
+    "colPredicate": "Predicate",
+    "colObject": "Object",
+    "colSource": "Source",
+    "colConfidence": "Confidence",
+    "colActions": "Actions",
+    "edit": "Edit",
+    "delete": "Delete",
+    "save": "Save",
+    "saving": "Saving…",
+    "cancel": "Cancel",
+    "validation": "Subject, predicate and object are required.",
+    "needDeveloper": "Requires Developer role",
+    "subjectPlaceholder": "e.g. Acme Corp",
+    "predicatePlaceholder": "e.g. founded_in",
+    "objectPlaceholder": "e.g. 2019",
+    "sourcePlaceholder": "e.g. onboarding call"
+  },
+  "personaLens": {
+    "pageTitle": "Lens persona",
+    "title": "Your lens persona",
+    "subtitle": "Pick the role you play. It reorders and highlights the insight lenses you care about — it never changes what you can access.",
+    "loading": "Loading…",
+    "primary": "Primary",
+    "save": "Save persona",
+    "saving": "Saving…",
+    "saved": "Persona saved",
+    "saveFailed": "Could not save persona",
+    "highlightsFor": "Highlighted lenses for {persona}",
+    "home": "Home",
+    "viewingAs": "Viewing as",
+    "viewShapingNote": "A persona shapes your view only. Every lens still respects your workspace role — you never gain access you would not otherwise have.",
+    "personas": {
+      "ceo": "CEO",
+      "cfo": "CFO",
+      "cto": "CTO",
+      "ciso": "CISO",
+      "pmo": "PMO",
+      "em": "Eng. Manager",
+      "ic": "Individual Contributor"
+    },
+    "lenses": {
+      "engineering": "Engineering",
+      "dora": "DORA",
+      "finance": "Finance",
+      "allocation": "Allocation",
+      "compliance": "Compliance",
+      "portfolio": "Portfolio",
+      "delivery": "Delivery"
+    }
+  },
+  "lensSnapshots": {
+    "pageTitle": "Review snapshots",
+    "title": "Periodic lens reviews",
+    "subtitle": "Monthly, quarterly and annual point-in-time captures of each insight lens — frozen at period close.",
+    "loading": "Loading…",
+    "empty": "No snapshots captured yet",
+    "lens": "Lens",
+    "cadence": "Cadence",
+    "captureNow": "Capture now",
+    "capturing": "Capturing…",
+    "monthly": "Monthly",
+    "quarterly": "Quarterly",
+    "annual": "Annual",
+    "filterLens": "Filter by lens",
+    "allLenses": "All lenses",
+    "generatedAt": "Captured {at}",
+    "view": "View",
+    "hide": "Hide",
+    "lensNames": {
+      "engineering": "Engineering",
+      "dora": "DORA",
+      "finance": "Finance",
+      "allocation": "Allocation",
+      "compliance": "Compliance"
+    }
+  },
+  "workforcePlan": {
+    "pageTitle": "Workforce plan",
+    "subtitle": "Blended human + agent capacity, work in flight and cost.",
+    "loading": "Loading…",
+    "members": "Members",
+    "membersSub": "{human} human · {agent} agent",
+    "inFlight": "In flight (WIP)",
+    "inFlightSub": "Open assigned work",
+    "capacityGap": "Allocatable gap",
+    "capacityGapSub": "Unused WIP headroom",
+    "weeklyCost": "Weekly cost",
+    "weeklyCostSub": "Modelled blended cost",
+    "agentShare": "Agent WIP share",
+    "agentShareSub": "Work carried by agents",
+    "hireVsAgent": "Hire vs. agent (weekly cost)",
+    "perWeek": "per week",
+    "noCost": "No cost rates modelled",
+    "human": "Human",
+    "agent": "Agent",
+    "humanCapacity": "People — WIP vs ceiling",
+    "agentCapacity": "Agents — WIP vs ceiling",
+    "noHumans": "No people profiled",
+    "noAgents": "No agents profiled",
+    "barLegend": "Bar = open WIP · faint track = WIP ceiling"
   }
 }

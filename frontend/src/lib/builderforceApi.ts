@@ -61,7 +61,7 @@ async function webRequest<T>(path: string, opts: RequestInit = {}): Promise<T> {
   return res.json() as Promise<T>;
 }
 
-async function request<T>(path: string, opts: RequestInit = {}): Promise<T> {
+export async function request<T>(path: string, opts: RequestInit = {}): Promise<T> {
   const headers = authHeaders();
   const hadToken = !!headers.Authorization;
   const res = await fetch(`${AUTH_API_URL}${path}`, {
@@ -156,7 +156,18 @@ import type {
   RoleAssignment, AssigneeKind,
 } from './kanban';
 
+export interface AssignableWorkforceDto {
+  agents: Array<{ ref: string; name: string }>;
+  humans: Array<{ ref: string; name: string }>;
+  hires: Array<{ ref: string; name: string }>;
+}
+
 export const kanbanApi = {
+  // The cached server-side union the picker fan-out (my agents + purchased + members
+  // + engagements) collapses into one read; includes marketplace-hired agents.
+  assignable: (): Promise<AssignableWorkforceDto> =>
+    request<AssignableWorkforceDto>('/api/kanban/assignable'),
+
   // Roles
   listRoles: (): Promise<JobRole[]> =>
     request<{ roles: JobRole[] }>('/api/kanban/roles').then((r) => r.roles),
@@ -2119,6 +2130,170 @@ export interface CalendarSyncResult {
   ptoCount?: number;
 }
 
+// ---------------------------------------------------------------------------
+// Extended member / EMP metrics (EMP-12..20) — /api/members/* additional router.
+// All MANAGER+ on the API. Mirror the compute shapes in api/src/application/metrics/*.
+// ---------------------------------------------------------------------------
+
+export interface AllocationHealthRow {
+  memberKind: MemberKind;
+  memberRef: string;
+  name: string;
+  maxWip: number;
+  hasExplicitMax: boolean;
+  observedWip: number;
+  overAllocated: boolean;
+  utilizationPct: number;
+}
+export interface AllocationHealthResult {
+  members: AllocationHealthRow[];
+  overAllocatedCount: number;
+  totalMembers: number;
+}
+
+export interface CollaborationRow {
+  memberKind: MemberKind;
+  memberRef: string;
+  name: string;
+  prsReviewed: number;
+  reviewComments: number;
+  handoffs: number;
+  avgReviewTurnaroundHours: number | null;
+  collaborationScore: number;
+  breakdown: { reviewsPts: number; commentsPts: number; handoffPts: number; latencyPts: number };
+}
+export interface CollaborationResult { windowDays: number; members: CollaborationRow[] }
+
+export interface DocActivityRow {
+  memberKind: 'human';
+  memberRef: string;
+  name: string;
+  docsAuthored: number;
+  edits: number;
+  acksGiven: number;
+  score: number;
+}
+export interface DocActivityResult {
+  windowDays: number;
+  members: DocActivityRow[];
+  totals: { docsAuthored: number; edits: number; acksGiven: number };
+}
+
+export interface LaborByMember {
+  memberKind: MemberKind;
+  memberRef: string;
+  name: string;
+  costUsd: number;
+  effortHours: number;
+  taskCount: number;
+}
+export interface LaborBucket { id: string; name: string; costUsd: number }
+export interface LaborCostResult {
+  windowDays: number;
+  totalUsd: number;
+  byMember: LaborByMember[];
+  byProject: LaborBucket[];
+  byInitiative: LaborBucket[];
+}
+
+export type PerformerTier = 'high' | 'solid' | 'watch';
+export interface PerformerRow {
+  memberKind: MemberKind;
+  memberRef: string;
+  name: string;
+  discipline: string | null;
+  effectivenessScore: number | null;
+  engagementScore: number | null;
+  composite: number;
+  percentile: number;
+  tier: PerformerTier;
+}
+export interface PerformerTiersResult {
+  windowDays: number;
+  members: PerformerRow[];
+  counts: Record<PerformerTier, number>;
+}
+export interface CoachingNote {
+  id: number;
+  tenantId: number;
+  memberKind: MemberKind;
+  memberRef: string;
+  note: string;
+  authorId: string | null;
+  createdAt: string;
+}
+
+export interface InitiativeSlice { initiativeId: string; initiativeName: string; hours: number; pct: number }
+export interface MemberAllocationRow {
+  memberKind: MemberKind;
+  memberRef: string;
+  name: string;
+  totalHours: number;
+  initiativeCount: number;
+  slices: InitiativeSlice[];
+}
+export interface MemberInitiativeAllocResult {
+  windowDays: number;
+  members: MemberAllocationRow[];
+  initiatives: Array<{ id: string; name: string }>;
+}
+
+export const empMetricsApi = {
+  /** EMP-12 — over-allocation detection (observed WIP vs. ceiling). */
+  allocationHealth: (): Promise<AllocationHealthResult> =>
+    request<AllocationHealthResult>('/api/members/allocation-health'),
+
+  /** EMP-14 — collaboration metrics (reviews, comments, handoffs). */
+  collaboration: (days = 30): Promise<CollaborationResult> =>
+    request<CollaborationResult>(`/api/members/collaboration?days=${days}`),
+
+  /** EMP-17 — documentation-activity metrics per member. */
+  docActivity: (days = 30): Promise<DocActivityResult> =>
+    request<DocActivityResult>(`/api/members/doc-activity?days=${days}`),
+
+  /** EMP-19 — labour-cost attribution (member / project / initiative). */
+  laborCost: (days = 30, projectId?: number): Promise<LaborCostResult> =>
+    request<LaborCostResult>(`/api/members/labor-cost?days=${days}${projectId != null ? `&projectId=${projectId}` : ''}`),
+
+  /** EMP-16 — high/low-performer tiers within discipline. */
+  performerTiers: (days = 30): Promise<PerformerTiersResult> =>
+    request<PerformerTiersResult>(`/api/members/performer-tiers?days=${days}`),
+
+  /** EMP-16 — coaching notes for a member (or all when kind/ref omitted). */
+  coachingNotes: (kind?: MemberKind, ref?: string): Promise<{ notes: CoachingNote[] }> =>
+    request<{ notes: CoachingNote[] }>(`/api/members/coaching-notes${kind && ref ? `?kind=${kind}&ref=${encodeURIComponent(ref)}` : ''}`),
+
+  addCoachingNote: (memberKind: MemberKind, memberRef: string, note: string): Promise<{ note: CoachingNote }> =>
+    request<{ note: CoachingNote }>('/api/members/coaching-notes', {
+      method: 'POST', body: JSON.stringify({ memberKind, memberRef, note }),
+    }),
+
+  deleteCoachingNote: (id: number): Promise<void> =>
+    request<void>(`/api/members/coaching-notes/${id}`, { method: 'DELETE' }),
+
+  /** EMP-13 — per-member strategic-initiative allocation. */
+  initiativeAllocation: (days = 30): Promise<MemberInitiativeAllocResult> =>
+    request<MemberInitiativeAllocResult>(`/api/members/initiative-allocation?days=${days}`),
+
+  /** EMP-20 — download the member metrics as CSV/JSON (auth'd blob → browser save). */
+  exportMetrics: async (days = 30, format: 'csv' | 'json' = 'csv'): Promise<void> => {
+    const token = getStoredTenantToken();
+    const res = await fetch(`${AUTH_API_URL}/api/members/metrics/export?days=${days}&format=${format}`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+    if (!res.ok) throw new Error(`Export failed (${res.status})`);
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `member-metrics-${days}d-${new Date().toISOString().slice(0, 10)}.${format}`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  },
+};
+
 /**
  * BYO LLM provider keys — a tenant stores its own Anthropic key so the gateway
  * proxies BuilderForce-V2 (Claude Agent SDK) model calls with the tenant's key
@@ -3640,8 +3815,30 @@ export interface CeremonySessionDetail {
   participants?: CeremonyParticipant[];
 }
 
+/** Tenant-wide ceremonies rollup — cadence + engagement across all projects. */
+export interface CeremonyRollup {
+  windowDays: number;
+  totals: {
+    sessions: number;
+    completed: number;
+    active: number;
+    completionRate: number;
+    projects: number;
+    avgDurationMinutes: number;
+    participants: number;
+    avgTurnSeconds: number;
+    agentTalkShare: number;
+  };
+  byKind: Array<{ kind: string; sessions: number }>;
+  series: Array<{ day: string; sessions: number }>;
+  topTalkers: Array<{ memberKind: string; memberRef: string; memberName: string; talkSeconds: number; turns: number }>;
+}
+
 const CEREMONY_BASE = '/api/agile/ceremonies';
 export const ceremonySessionsApi = {
+  /** Tenant-wide cadence + engagement rollup across every project (MANAGER+). */
+  rollup: (days = 30): Promise<CeremonyRollup> =>
+    request<CeremonyRollup>(`${CEREMONY_BASE}/rollup?days=${days}`),
   active: (projectId: number, kind: CeremonyKind): Promise<CeremonySessionDetail> =>
     request(`${CEREMONY_BASE}/sessions?projectId=${projectId}&kind=${kind}`),
   start: (projectId: number, kind: CeremonyKind, participants: Array<{ kind: string; ref: string; name: string }>): Promise<CeremonySessionDetail> =>
@@ -4098,6 +4295,89 @@ export const promptLibraryApi = {
   remove: (id: string) => request<{ deleted: boolean }>(`/api/prompts/${id}`, { method: 'DELETE' }),
   star: (id: string) => request<{ starred: boolean }>(`/api/prompts/${id}/star`, { method: 'POST' }),
   unstar: (id: string) => request<{ starred: boolean }>(`/api/prompts/${id}/star`, { method: 'DELETE' }),
+
+  /** Telemetry-driven "Analyze & improve" — returns a DRAFT suggestion (not saved). */
+  analyze: (id: string) =>
+    request<PromptAnalysis>(`/api/prompt-analyzer/${id}/analyze`, { method: 'POST' }),
+};
+
+// ---------------------------------------------------------------------------
+// Prompt Analyzer — /api/prompt-analyzer
+// ---------------------------------------------------------------------------
+
+export interface PromptAnalysis {
+  suggestion: string;
+  rationale: string | null;
+  stats: { usageCount: number; starCount: number; versions: number; category: string };
+  basedOnVersion: number;
+}
+
+// ---------------------------------------------------------------------------
+// Catalog adoption analytics — /api/catalog-analytics
+// ---------------------------------------------------------------------------
+
+export type CatalogAnalyticsKind = 'skills' | 'personas' | 'prompts';
+
+export interface CatalogAnalytics {
+  kind: 'skill' | 'persona' | 'prompt';
+  windowDays: number;
+  totals: { items: number; installs: number; usage: number };
+  series: Array<{ day: string; installs: number; usage: number }>;
+  topItems: Array<{ id: string; name: string; installs: number; usage: number }>;
+}
+
+export const catalogAnalyticsApi = {
+  /** Adoption trend + top adopted items for a catalog kind over `windowDays`. */
+  get: (kind: CatalogAnalyticsKind, windowDays = 30): Promise<CatalogAnalytics> =>
+    request<CatalogAnalytics>(`/api/catalog-analytics/${kind}?window=${windowDays}`),
+};
+
+// ---------------------------------------------------------------------------
+// FACTS library — /api/facts
+// ---------------------------------------------------------------------------
+
+export interface Fact {
+  id: string;
+  projectId: number | null;
+  subject: string;
+  predicate: string;
+  object: string;
+  source: string | null;
+  confidence: number | null;
+  createdBy: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface FactInput {
+  subject: string;
+  predicate: string;
+  object: string;
+  source?: string | null;
+  confidence?: number | null;
+  projectId?: number | null;
+}
+
+export const factsApi = {
+  list: (params?: { subject?: string; predicate?: string; q?: string; projectId?: number | null; limit?: number; offset?: number }): Promise<Fact[]> => {
+    const p = new URLSearchParams();
+    if (params?.subject) p.set('subject', params.subject);
+    if (params?.predicate) p.set('predicate', params.predicate);
+    if (params?.q) p.set('q', params.q);
+    if (params?.projectId != null) p.set('projectId', String(params.projectId));
+    if (params?.limit != null) p.set('limit', String(params.limit));
+    if (params?.offset != null) p.set('offset', String(params.offset));
+    const q = p.toString();
+    return request<{ facts: Fact[] }>(`/api/facts${q ? `?${q}` : ''}`).then((r) => r.facts);
+  },
+  schema: (): Promise<{ subjects: string[]; predicates: string[] }> =>
+    request<{ subjects: string[]; predicates: string[] }>('/api/facts/schema'),
+  create: (body: FactInput): Promise<Fact> =>
+    request<Fact>('/api/facts', { method: 'POST', body: JSON.stringify(body) }),
+  update: (id: string, body: Partial<FactInput>): Promise<Fact> =>
+    request<Fact>(`/api/facts/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
+  remove: (id: string): Promise<{ deleted: string }> =>
+    request<{ deleted: string }>(`/api/facts/${id}`, { method: 'DELETE' }),
 };
 
 // ---------------------------------------------------------------------------

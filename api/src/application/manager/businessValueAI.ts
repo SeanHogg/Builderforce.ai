@@ -41,10 +41,17 @@ const RESPONSE_SCHEMA = {
 /**
  * RICE-score one ticket with the model. Returns a {@link ScoredValue} (source 'ai')
  * or null on the kill switch / any failure. Never throws.
+ *
+ * `personaDirective` lets the DESIGNATED manager agent value the backlog AS ITSELF:
+ * its persona (compiled from the agent's psychometric profile) steers the judgement
+ * so a risk-averse, methodical manager scores conservatively. Omit for the system
+ * manager (no persona) — the historical behaviour. Scoring always runs on the free
+ * pool regardless of the agent's model, so grooming stays cost-free.
  */
 export async function scoreBusinessValueAI(
   env: Env,
   task: { title: string; description?: string | null },
+  personaDirective?: string | null,
 ): Promise<ScoredValue | null> {
   try {
     const userPrompt =
@@ -52,9 +59,13 @@ export async function scoreBusinessValueAI(
       (task.description ? `Description: ${String(task.description).slice(0, 2000)}\n` : '') +
       '\nScore this ticket.';
 
+    const systemContent = personaDirective?.trim()
+      ? `${SYSTEM_PROMPT}\n\nYou are scoring AS this manager — let your persona shape the estimate:\n${personaDirective.trim()}`
+      : SYSTEM_PROMPT;
+
     const result = await ideProxy(env).complete({
       messages: [
-        { role: 'system', content: SYSTEM_PROMPT },
+        { role: 'system', content: systemContent },
         { role: 'user', content: userPrompt },
       ],
       temperature: 0,

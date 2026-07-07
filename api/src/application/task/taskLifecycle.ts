@@ -125,6 +125,13 @@ export async function recordStatusTransition(env: Env, db: Db, input: RecordTran
   // (no segment) or when nothing subscribed; never blocks the metrics path.
   if (nowDone && !wasDone) {
     await releaseWorkItemWebhook(db, { tenantId, taskId }).catch(() => {});
+    // FAST Validator review: the moment work is Done, kick an acceptance review (if the
+    // tenant has a Validator) instead of waiting for the daily sweep. Dynamic import
+    // breaks the taskLifecycle → validationDispatch → runtimeRoutes → taskLifecycle
+    // cycle; best-effort (the review run is non-mutating, so no completion loop).
+    await import('../validation/validationDispatch')
+      .then((m) => m.triggerFastValidatorReview(env, db, { tenantId, taskId }))
+      .catch(() => {});
   }
 }
 
