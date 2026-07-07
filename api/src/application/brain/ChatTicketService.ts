@@ -102,21 +102,17 @@ export class ChatTicketService {
 
   // ── ownership guards ──────────────────────────────────────────────────────
 
-  /** A Brain chat scoped to the tenant (and to the user when known — gateway-key
-   *  callers pass null and get tenant-wide access, matching the brain.* tools). */
+  /** A Brain chat the caller may ACCESS, scoped to the tenant. Delegates to the
+   *  shared {@link resolveChatAccess} guard so team group chats and shared-visibility
+   *  chats opened by a non-owner teammate resolve here EXACTLY as they do for the
+   *  chat read/message endpoints — no more brainstorm-only / owner-only 404s on a
+   *  chat the user can plainly open. Gateway-key callers pass null → tenant-wide
+   *  access (matching the brain.* tools). */
   private async ownedChat(chatId: number, tenantId: number, userId: string | null) {
-    const conds = [
-      eq(brainChats.id, chatId),
-      eq(brainChats.tenantId, tenantId),
-      eq(brainChats.origin, BRAIN_ORIGIN),
-    ];
-    if (userId) conds.push(eq(brainChats.userId, userId));
-    const [row] = await this.db
-      .select({ id: brainChats.id, projectId: brainChats.projectId })
-      .from(brainChats)
-      .where(and(...conds))
-      .limit(1);
-    return row ?? null;
+    return resolveChatAccess(this.db, {
+      chatId, tenantId, userId,
+      selectExtra: { projectId: brainChats.projectId },
+    }) as Promise<{ id: number; ownerId: string | null; visibility: string; projectId: number | null } | null>;
   }
 
   // ── ticket resolution + health ────────────────────────────────────────────

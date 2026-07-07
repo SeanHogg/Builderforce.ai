@@ -3,6 +3,7 @@
 import { useCallback, useMemo, useState } from 'react';
 import { useTranslations, useLocale } from 'next-intl';
 import { Select } from '@/components/Select';
+import { SlideOutPanel } from '@/components/SlideOutPanel';
 import { meetingsApi, type AvailabilityProfile, type AvailabilityWindow } from '@/lib/builderforceApi';
 
 function browserTz(): string {
@@ -97,14 +98,16 @@ export function AvailabilityEditor({
   const field: React.CSSProperties = { fontSize: 13, padding: '6px 8px', borderRadius: 6, background: 'var(--bg-base)', color: 'var(--text-primary)', border: '1px solid var(--border-subtle)' };
 
   return (
-    <div role="dialog" aria-modal="true" onClick={onClose}
-      style={{ position: 'fixed', inset: 0, zIndex: 1001, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: 16, overflow: 'auto' }}>
-      <div onClick={(e) => e.stopPropagation()}
-        style={{ marginTop: '4vh', width: '100%', maxWidth: 560, background: 'var(--surface-card)', border: '1px solid var(--border-subtle)', borderRadius: 16, padding: 20, display: 'flex', flexDirection: 'column', gap: 14 }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
-          <h2 style={{ fontSize: 16, fontWeight: 700, color: 'var(--text-primary)', margin: 0 }}>{t('availabilityTitle')}</h2>
-          <button type="button" onClick={applyWeekdayDefault} style={{ fontSize: 12, fontWeight: 600, color: 'var(--coral-bright)', background: 'none', border: 'none', cursor: 'pointer' }}>{t('weekdayDefault')}</button>
-        </div>
+    <SlideOutPanel
+      open
+      onClose={onClose}
+      title={t('availabilityTitle')}
+      width="min(560px, 96vw)"
+      headerActions={
+        <button type="button" onClick={applyWeekdayDefault} style={{ fontSize: 12, fontWeight: 600, color: 'var(--coral-bright)', background: 'none', border: 'none', cursor: 'pointer' }}>{t('weekdayDefault')}</button>
+      }
+    >
+      <div style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 14 }}>
         <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: 0 }}>{t('availabilitySubtitle')}</p>
 
         <label style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
@@ -143,6 +146,6 @@ export function AvailabilityEditor({
           <button type="button" onClick={save} disabled={busy} style={{ padding: '8px 16px', fontSize: 13, fontWeight: 700, borderRadius: 8, cursor: 'pointer', background: 'var(--coral-bright)', color: 'var(--bg-deep)', border: 'none', opacity: busy ? 0.6 : 1 }}>{t('save')}</button>
         </div>
       </div>
-    </div>
+    </SlideOutPanel>
   );
 }

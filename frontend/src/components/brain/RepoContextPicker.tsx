@@ -18,6 +18,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslations } from 'next-intl';
+import { SlideOutPanel } from '@/components/SlideOutPanel';
 import type { ImportedRepoFile } from '@/lib/builderforceApi';
 
 const MAX_ROWS = 300;
@@ -82,40 +83,9 @@ export function RepoContextPicker({ sources, onPick, onClose }: {
   };
 
   return (
-    <div
-      role="dialog"
-      aria-modal="true"
-      aria-label={t('title')}
-      onMouseDown={onClose}
-      style={{
-        position: 'fixed', inset: 0, zIndex: 1000,
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-        padding: 16, background: 'rgba(0,0,0,0.5)',
-      }}
-    >
-      <div
-        onMouseDown={(e) => e.stopPropagation()}
-        style={{
-          width: 'min(560px, 100%)', maxHeight: 'min(70vh, 640px)',
-          display: 'flex', flexDirection: 'column',
-          background: 'var(--bg-base)', color: 'var(--text-primary)',
-          border: '1px solid var(--border-subtle)', borderRadius: 14,
-          boxShadow: '0 18px 48px rgba(0,0,0,0.4)', overflow: 'hidden',
-        }}
-      >
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '12px 14px', borderBottom: '1px solid var(--border-subtle)' }}>
-          <span style={{ fontWeight: 600, fontSize: 14, flex: 1 }}>{t('title')}</span>
-          <button
-            type="button"
-            onClick={onClose}
-            aria-label={t('close')}
-            style={{ background: 'transparent', border: 'none', color: 'var(--text-muted)', fontSize: 18, lineHeight: 1, cursor: 'pointer', padding: 4 }}
-          >
-            ×
-          </button>
-        </div>
-
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, padding: '10px 14px', borderBottom: '1px solid var(--border-subtle)' }}>
+    <SlideOutPanel open onClose={onClose} title={t('title')} width="min(560px, 96vw)">
+      <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, padding: '14px 20px', borderBottom: '1px solid var(--border-subtle)', flexShrink: 0 }}>
           {sources.length > 1 && (
             <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 12, color: 'var(--text-muted)' }}>
               {t('source')}
@@ -174,6 +144,6 @@ export function RepoContextPicker({ sources, onPick, onClose }: {
           )}
         </div>
       </div>
-    </div>
+    </SlideOutPanel>
   );
 }

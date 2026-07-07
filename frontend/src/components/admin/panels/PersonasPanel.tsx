@@ -5,6 +5,7 @@ import { useTranslations } from 'next-intl';
 import { adminApi, type AdminPlatformPersona } from '@/lib/adminApi';
 import { errText, AdminError, AdminLoading } from '@/components/admin/adminShared';
 import { BUILTIN_PERSONAS, type Persona } from '@/lib/marketplaceData';
+import PsychometricEditor from '@/components/PsychometricEditor';
 
 export default function PersonasPanel() {
   const t = useTranslations('admin');
@@ -130,6 +131,17 @@ export default function PersonasPanel() {
             className="admin-token-textarea"
             style={{ minHeight: 60, marginBottom: 8 }}
           />
+          {/* Trait-vector editor — an admin defines the persona's PERSONALITY (compiled
+              into behaviour at run time), not just its voice. forceUnlocked so the
+              superadmin isn't plan-gated. */}
+          <div style={{ marginBottom: 8 }}>
+            <div className="health-label" style={{ marginBottom: 6 }}>{t('personas.personality')}</div>
+            <PsychometricEditor
+              value={personaForm.psychometric ?? undefined}
+              onChange={(profile) => setPersonaForm((f) => f && { ...f, psychometric: profile ?? null })}
+              forceUnlocked
+            />
+          </div>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
             <button
               type="button"
@@ -153,6 +165,7 @@ export default function PersonasPanel() {
                       tags: personaForm.tags ?? [],
                       author: personaForm.author ?? null,
                       active: personaForm.active ?? true,
+                      psychometric: personaForm.psychometric ?? null,
                     });
                   } else {
                     await adminApi.createPersona({
@@ -168,6 +181,7 @@ export default function PersonasPanel() {
                       source: 'builtin',
                       author: personaForm.author ?? 'Builderforce',
                       active: personaForm.active ?? true,
+                      psychometric: personaForm.psychometric ?? null,
                     });
                   }
                   setPersonaForm(null);

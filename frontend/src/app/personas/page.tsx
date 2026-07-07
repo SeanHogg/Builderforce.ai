@@ -14,27 +14,39 @@ import {
   type ArtifactStats,
   type PublicPersona,
 } from '@/lib/builderforceApi';
-import { BUILTIN_PERSONAS, userPersonasKey, type Persona, type UserPersona } from '@/lib/marketplaceData';
+import { BUILTIN_PERSONAS, type Persona, type UserPersona } from '@/lib/marketplaceData';
 import ArtifactAssigner from '@/components/ArtifactAssigner';
 import { CatalogInsightsBar, type CatalogInsightsItem } from '@/components/CatalogInsightsBar';
 import PsychometricEditor from '@/components/PsychometricEditor';
 import type { PsychometricProfile } from '@/lib/psychometric';
 import PageContainer from '@/components/PageContainer';
+import { SlideOutPanel } from '@/components/SlideOutPanel';
 import { PersonaAssignmentsContent } from '@/components/PersonaAssignmentsContent';
 import { ViewToggle, type ViewMode } from '@/components/ViewToggle';
 import { tableWrapStyle, tableStyle, theadRowStyle, thStyle, trStyle, tdStyle, tdMutedStyle } from '@/components/dataTableStyles';
 
-function loadUserPersonas(tenantId: string): UserPersona[] {
-  if (typeof window === 'undefined') return [];
-  try {
-    return JSON.parse(localStorage.getItem(userPersonasKey(tenantId)) ?? '[]');
-  } catch {
-    return [];
-  }
-}
-
-function saveUserPersonas(tenantId: string, personas: UserPersona[]) {
-  localStorage.setItem(userPersonasKey(tenantId), JSON.stringify(personas));
+/** Map a server-owned persona (from GET /api/personas/mine) into the flat display
+ *  shape the "My Personas" tab renders. `shared` = the persona is published (public). */
+function serverToUserPersona(p: PublicPersona): UserPersona {
+  const b = p.persona ?? {};
+  return {
+    id: p.id,
+    name: p.name,
+    slug: p.slug,
+    description: p.description ?? '',
+    voice: b.voice ?? '',
+    perspective: b.perspective ?? '',
+    decisionStyle: b.decisionStyle ?? '',
+    outputPrefix: b.outputPrefix ?? '',
+    capabilities: b.capabilities ?? [],
+    tags: p.tags ?? [],
+    shared: p.visibility === 'public',
+    image: b.image,
+    likes: p.likeCount ?? 0,
+    downloads: p.installCount ?? 0,
+    createdAt: p.updatedAt ?? new Date().toISOString(),
+    psychometric: p.psychometric ?? undefined,
+  };
 }
 
 /** Map a server-published persona into the marketplace display shape (`Persona`).
@@ -98,13 +110,17 @@ export default function PersonasPage() {
     setLoading(true);
     setError('');
     try {
-      const [all, agentHostList, pub] = await Promise.all([
+      const [all, agentHostList, pub, mine] = await Promise.all([
         tenantNum ? artifactAssignments.list('tenant', tenantNum, 'persona').catch(() => []) : [],
         agentHosts.list().catch(() => []),
         // Public registry is best-effort: [] on 404/older backend so builtins still render.
         personasApi.listPublic().catch(() => [] as PublicPersona[]),
+        // My Personas are server-backed (private marketplace_personas rows) — durable +
+        // cross-device, and they reach execution via the same capability path.
+        personasApi.listMine().catch(() => [] as PublicPersona[]),
       ]);
       setAssigned(all);
+      setUserPersonas(mine.map(serverToUserPersona));
       setHasAgentHosts(agentHostList.length > 0);
       setInstalledSlugs(new Set(all.map((a) => a.artifactSlug)));
       // Server personas first, then builtins not already present (dedup by slug/name).
@@ -124,7 +140,6 @@ export default function PersonasPage() {
   }, [tenantNum]);
 
   useEffect(() => {
-    setUserPersonas(loadUserPersonas(tenantId));
     load();
   }, [tenantId, load]);
 
@@ -169,41 +184,45 @@ export default function PersonasPage() {
     }
   };
 
-  const savePersona = () => {
+  const savePersona = async () => {
     const name = createForm.name.trim();
     if (!name) return;
     const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
-    const persona: UserPersona = {
-      id: crypto.randomUUID(),
-      name,
-      slug,
-      description: createForm.description.trim(),
-      voice: createForm.voice.trim() || 'neutral and helpful',
-      perspective: createForm.perspective.trim() || 'balanced and pragmatic',
-      decisionStyle: createForm.decisionStyle.trim() || 'collaborative',
-      outputPrefix: createForm.outputPrefix.trim() || `${slug.toUpperCase()}:`,
-      capabilities: createForm.capabilities.split(',').map((c) => c.trim()).filter(Boolean),
-      tags: createForm.tags.split(',').map((t) => t.trim()).filter(Boolean),
-      shared: false,
-      image: createForm.image.trim() || undefined,
-      likes: 0,
-      downloads: 0,
-      createdAt: new Date().toISOString(),
-      psychometric: createPsychometric,
-    };
-    setUserPersonas((prev) => [...prev, persona]);
-    saveUserPersonas(tenantId, [...userPersonas, persona]);
-    setCreateOpen(false);
-    setCreateForm({ name: '', description: '', voice: '', perspective: '', decisionStyle: '', outputPrefix: '', capabilities: '', tags: '', image: '' });
-    setCreatePsychometric(undefined);
-    setTab('my-personas');
+    setError('');
+    try {
+      await personasApi.create({
+        name,
+        description: createForm.description.trim() || undefined,
+        tags: createForm.tags.split(',').map((t) => t.trim()).filter(Boolean),
+        persona: {
+          voice: createForm.voice.trim() || 'neutral and helpful',
+          perspective: createForm.perspective.trim() || 'balanced and pragmatic',
+          decisionStyle: createForm.decisionStyle.trim() || 'collaborative',
+          outputPrefix: createForm.outputPrefix.trim() || `${slug.toUpperCase()}:`,
+          capabilities: createForm.capabilities.split(',').map((c) => c.trim()).filter(Boolean),
+          image: createForm.image.trim() || undefined,
+        },
+        psychometric: createPsychometric,
+      });
+      setCreateOpen(false);
+      setCreateForm({ name: '', description: '', voice: '', perspective: '', decisionStyle: '', outputPrefix: '', capabilities: '', tags: '', image: '' });
+      setCreatePsychometric(undefined);
+      setTab('my-personas');
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : t('createFailed'));
+    }
   };
 
-  const deleteUserPersona = (id: string) => {
-    if (!confirm('Delete this persona?')) return;
-    const next = userPersonas.filter((p) => p.id !== id);
-    setUserPersonas(next);
-    saveUserPersonas(tenantId, next);
+  const deleteUserPersona = async (id: string) => {
+    if (!confirm(t('confirmDelete'))) return;
+    setError('');
+    try {
+      await personasApi.remove(id);
+      setUserPersonas((prev) => prev.filter((p) => p.id !== id));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : t('deleteFailed'));
+    }
   };
 
   /** Publish a local draft persona to the public server registry (POST /api/personas),
@@ -214,30 +233,13 @@ export default function PersonasPage() {
     setPublishingId(p.id);
     setError('');
     try {
-      await personasApi.publish({
-        name: p.name,
-        description: p.description,
-        tags: p.tags,
-        // Publish makes it browsable in the Marketplace tab (server default is private).
-        visibility: 'public',
-        // Behaviour fields are sent NESTED under `persona` (server contract).
-        persona: {
-          voice: p.voice,
-          perspective: p.perspective,
-          decisionStyle: p.decisionStyle,
-          outputPrefix: p.outputPrefix,
-          capabilities: p.capabilities,
-          image: p.image,
-        },
-        // The personality the user built from the test / sliders — was previously dropped.
-        psychometric: p.psychometric,
-      });
-      const next = userPersonas.map((u) => (u.id === p.id ? { ...u, shared: true } : u));
-      setUserPersonas(next);
-      saveUserPersonas(tenantId, next);
+      // My Personas are already server rows — publishing just flips visibility to
+      // public (PATCH), rather than creating a duplicate.
+      await personasApi.update(p.id, { visibility: 'public' });
+      setUserPersonas((prev) => prev.map((u) => (u.id === p.id ? { ...u, shared: true } : u)));
       await load();
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Publish failed');
+      setError(e instanceof Error ? e.message : t('publishFailed'));
     } finally {
       setPublishingId(null);
     }
@@ -541,14 +543,8 @@ export default function PersonasPage() {
         </>
       )}
 
-      {createOpen && (
-        <div className="modal-overlay" onClick={() => setCreateOpen(false)}>
-          <div className="card" style={{ maxWidth: 540, width: '100%', padding: 24 }} onClick={(e) => e.stopPropagation()}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-              <div className="modal-title">{t('newPersonaShort')}</div>
-              <button type="button" className="btn btn-secondary btn-sm" onClick={() => setCreateOpen(false)}>✕</button>
-            </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+      <SlideOutPanel open={createOpen} onClose={() => setCreateOpen(false)} title={t('newPersonaShort')} width="min(560px, 96vw)">
+        <div style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 14 }}>
               <div>
                 <label className="label">{t('formName')}</label>
                 <input className="input" placeholder={t('formNamePlaceholder')} value={createForm.name} onChange={(e) => setCreateForm((f) => ({ ...f, name: e.target.value }))} />
@@ -588,14 +584,12 @@ export default function PersonasPage() {
                 <input className="input" placeholder="https://example.com/image.jpg" value={createForm.image} onChange={(e) => setCreateForm((f) => ({ ...f, image: e.target.value }))} />
               </div>
               <PsychometricEditor value={createPsychometric} onChange={setCreatePsychometric} />
-            </div>
-            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 20 }}>
-              <button type="button" className="btn btn-secondary" onClick={() => setCreateOpen(false)}>{t('cancel')}</button>
-              <button type="button" className="btn btn-primary" onClick={savePersona} disabled={!createForm.name.trim()}>{t('savePersona')}</button>
-            </div>
-          </div>
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
+                <button type="button" className="btn btn-secondary" onClick={() => setCreateOpen(false)}>{t('cancel')}</button>
+                <button type="button" className="btn btn-primary" onClick={savePersona} disabled={!createForm.name.trim()}>{t('savePersona')}</button>
+              </div>
         </div>
-      )}
+      </SlideOutPanel>
     </PageContainer>
   );
 }

@@ -4,11 +4,13 @@ export const runtime = 'edge';
 
 import { useEffect, useRef, useState } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
+import { useTranslations } from 'next-intl';
 import dynamic from 'next/dynamic';
 import { fetchProject, fetchFiles, updateProject, deleteProject } from '@/lib/api';
 import { persistLastProjectId } from '@/lib/auth';
 import type { Project, FileEntry } from '@/lib/types';
 import { ProjectDetailsPanel } from '@/components/ProjectDetailsPanel';
+import { SlideOutPanel } from '@/components/SlideOutPanel';
 
 // All modalities (designer/video/llm/voice) now render through the one IDE shell,
 // which scopes each modality's panels to this project. Loaded lazily so the heavy
@@ -35,6 +37,8 @@ function parseTicketParam(raw: string | null): { kind: string; ref: string } | u
  */
 export default function IDEPage() {
   const params = useParams<{ id: string }>();
+  const tFirst = useTranslations('ideFirstRun');
+  const tc = useTranslations('common');
   const router = useRouter();
   const searchParams = useSearchParams();
   const idRaw = params?.id ?? '';
@@ -228,88 +232,72 @@ export default function IDEPage() {
           }}
         />
       )}
-      {openFirstTimeModal && (
-        <div
-          role="dialog"
-          aria-modal="true"
-          className="modal-overlay"
-          onClick={() => setShowFirstTimeModal(false)}
-        >
-          <div
-            style={{
-              maxWidth: 420,
-              width: '90%',
-              background: 'var(--bg-elevated)',
-              border: '1px solid var(--border-subtle)',
-              borderRadius: 12,
-              boxShadow: '0 20px 60px rgba(0,0,0,0.3)',
-              padding: 24,
-            }}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <h3 style={{ fontSize: '1.25rem', fontWeight: 700, marginBottom: 8, color: 'var(--text-primary)' }}>
-              Name your project
-            </h3>
-            <p style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', marginBottom: 16 }}>
-              Give your project a name to save it.
-            </p>
-            <form onSubmit={handleSaveProjectName}>
-              <input
-                type="text"
-                value={firstTimeProjectName}
-                onChange={(e) => setFirstTimeProjectName(e.target.value)}
-                placeholder="My Awesome App"
-                autoFocus
+      <SlideOutPanel
+        open={openFirstTimeModal}
+        onClose={() => setShowFirstTimeModal(false)}
+        title={tFirst('title')}
+        width="min(480px, 96vw)"
+      >
+        <div style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 14 }}>
+          <p style={{ margin: 0, fontSize: '0.9rem', color: 'var(--text-secondary)' }}>
+            {tFirst('subtitle')}
+          </p>
+          <form onSubmit={handleSaveProjectName} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+            <input
+              type="text"
+              value={firstTimeProjectName}
+              onChange={(e) => setFirstTimeProjectName(e.target.value)}
+              placeholder={tFirst('namePlaceholder')}
+              autoFocus
+              style={{
+                width: '100%',
+                boxSizing: 'border-box',
+                background: 'var(--bg-deep)',
+                color: 'var(--text-primary)',
+                border: '1px solid var(--border-subtle)',
+                borderRadius: 10,
+                padding: '10px 14px',
+                fontSize: '0.95rem',
+                outline: 'none',
+              }}
+            />
+            <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
+              <button
+                type="button"
+                onClick={() => setShowFirstTimeModal(false)}
                 style={{
-                  width: '100%',
-                  background: 'var(--bg-deep)',
-                  color: 'var(--text-primary)',
+                  padding: '8px 16px',
+                  fontSize: '0.9rem',
+                  color: 'var(--text-secondary)',
+                  background: 'var(--bg-base)',
                   border: '1px solid var(--border-subtle)',
                   borderRadius: 10,
-                  padding: '10px 14px',
-                  fontSize: '0.95rem',
-                  marginBottom: 16,
-                  outline: 'none',
+                  cursor: 'pointer',
                 }}
-              />
-              <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
-                <button
-                  type="button"
-                  onClick={() => setShowFirstTimeModal(false)}
-                  style={{
-                    padding: '8px 16px',
-                    fontSize: '0.9rem',
-                    color: 'var(--text-secondary)',
-                    background: 'var(--bg-base)',
-                    border: '1px solid var(--border-subtle)',
-                    borderRadius: 10,
-                    cursor: 'pointer',
-                  }}
-                >
-                  Later
-                </button>
-                <button
-                  type="submit"
-                  disabled={isSavingName || !firstTimeProjectName.trim()}
-                  style={{
-                    padding: '8px 18px',
-                    fontSize: '0.9rem',
-                    fontWeight: 600,
-                    color: '#fff',
-                    background: 'linear-gradient(135deg, var(--coral-bright), var(--coral-dark))',
-                    border: 'none',
-                    borderRadius: 10,
-                    cursor: isSavingName || !firstTimeProjectName.trim() ? 'not-allowed' : 'pointer',
-                    opacity: isSavingName || !firstTimeProjectName.trim() ? 0.7 : 1,
-                  }}
-                >
-                  {isSavingName ? 'Saving…' : 'Save'}
-                </button>
-              </div>
-            </form>
-          </div>
+              >
+                {tFirst('later')}
+              </button>
+              <button
+                type="submit"
+                disabled={isSavingName || !firstTimeProjectName.trim()}
+                style={{
+                  padding: '8px 18px',
+                  fontSize: '0.9rem',
+                  fontWeight: 600,
+                  color: '#fff',
+                  background: 'linear-gradient(135deg, var(--coral-bright), var(--coral-dark))',
+                  border: 'none',
+                  borderRadius: 10,
+                  cursor: isSavingName || !firstTimeProjectName.trim() ? 'not-allowed' : 'pointer',
+                  opacity: isSavingName || !firstTimeProjectName.trim() ? 0.7 : 1,
+                }}
+              >
+                {isSavingName ? tc('saving') : tc('save')}
+              </button>
+            </div>
+          </form>
         </div>
-      )}
+      </SlideOutPanel>
     </>
   );
 }

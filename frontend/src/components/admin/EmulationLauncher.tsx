@@ -15,6 +15,7 @@ import React, { createContext, useCallback, useContext, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import { useEmulation } from '@/lib/EmulationContext';
+import { SlideOutPanel } from '@/components/SlideOutPanel';
 import { adminApi, type AdminUser, type UserWorkspace } from '@/lib/adminApi';
 import { errText } from './adminShared';
 
@@ -85,32 +86,30 @@ export function EmulationLauncherProvider({ children }: { children: React.ReactN
   return (
     <Ctx.Provider value={{ startEmulation }}>
       {children}
-      {target && (
-        <div
-          className="admin-modal-overlay"
-          onClick={close}
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="emulate-title"
-        >
-          <div className="admin-modal" onClick={(e) => e.stopPropagation()}>
-            <h3 id="emulate-title" className="page-title" style={{ marginBottom: 4 }}>{t('emulate.title')}</h3>
-            <p className="page-sub" style={{ marginBottom: 16 }}>
+      <SlideOutPanel
+        open={target != null}
+        onClose={close}
+        title={t('emulate.title')}
+        width="min(560px, 96vw)"
+      >
+        {target && (
+          <div style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 14 }}>
+            <p className="page-sub" style={{ margin: 0 }}>
               {t.rich('emulate.intro', { email: target.email, strong: (c) => <strong>{c}</strong> })}
             </p>
 
             {error && (
-              <p className="text-muted" style={{ fontSize: 13, marginBottom: 14, color: 'var(--error-text)' }}>{error}</p>
+              <p className="text-muted" style={{ fontSize: 13, margin: 0, color: 'var(--error-text)' }}>{error}</p>
             )}
 
             {workspacesLoading ? (
-              <p className="text-muted" style={{ fontSize: 13, marginBottom: 14 }}>{t('emulate.loadingWorkspace')}</p>
+              <p className="text-muted" style={{ fontSize: 13, margin: 0 }}>{t('emulate.loadingWorkspace')}</p>
             ) : workspaces.length === 0 ? (
-              <p className="text-muted" style={{ fontSize: 13, marginBottom: 14, color: 'var(--error-text)' }}>
+              <p className="text-muted" style={{ fontSize: 13, margin: 0, color: 'var(--error-text)' }}>
                 {t('emulate.noWorkspaces')}
               </p>
             ) : (
-              <div style={{ marginBottom: 14, padding: '8px 12px', background: 'var(--surface-alt, #1e1e2e)', borderRadius: 6, fontSize: 13 }}>
+              <div style={{ padding: '8px 12px', background: 'var(--surface-alt, #1e1e2e)', borderRadius: 6, fontSize: 13 }}>
                 <span style={{ opacity: 0.6, marginRight: 8 }}>{t('emulate.workspace')}</span>
                 <strong>{workspaces[0]!.name}</strong>
                 <span style={{ opacity: 0.5, margin: '0 8px' }}>·</span>
@@ -119,18 +118,20 @@ export function EmulationLauncherProvider({ children }: { children: React.ReactN
               </div>
             )}
 
-            <label className="admin-label" style={{ display: 'block', marginBottom: 4 }}>
-              {t('emulate.reason')} <span style={{ color: 'var(--error-text)' }}>*</span>
-            </label>
-            <textarea
-              value={reason}
-              onChange={(e) => setReason(e.target.value)}
-              className="admin-token-textarea"
-              placeholder={t('emulate.reasonPlaceholder')}
-              style={{ minHeight: 72, marginBottom: 14 }}
-            />
+            <div>
+              <label className="admin-label" style={{ display: 'block', marginBottom: 4 }}>
+                {t('emulate.reason')} <span style={{ color: 'var(--error-text)' }}>*</span>
+              </label>
+              <textarea
+                value={reason}
+                onChange={(e) => setReason(e.target.value)}
+                className="admin-token-textarea"
+                placeholder={t('emulate.reasonPlaceholder')}
+                style={{ minHeight: 72, width: '100%' }}
+              />
+            </div>
 
-            <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16, cursor: 'pointer', fontSize: 13 }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 13 }}>
               <input
                 type="checkbox"
                 checked={debuggerEnabled}
@@ -151,8 +152,8 @@ export function EmulationLauncherProvider({ children }: { children: React.ReactN
               </button>
             </div>
           </div>
-        </div>
-      )}
+        )}
+      </SlideOutPanel>
     </Ctx.Provider>
   );
 }

@@ -97,6 +97,8 @@ const cardStyle: React.CSSProperties = {
 export function WorkforceAgents({ tenantId }: { tenantId?: number }) {
   const { tenant, tenantToken } = useAuth();
   const tWf = useTranslations('workforce');
+  const tAdd = useTranslations('workforceAddAgent');
+  const tc = useTranslations('common');
 
   // --- "Connect a new agent" quickstart popover (caret on the split button) -
   const [quickstartOpen, setQuickstartOpen] = useState(false);
@@ -802,87 +804,89 @@ export function WorkforceAgents({ tenantId }: { tenantId?: number }) {
       )}
 
       {/* Unified "Add agent" create dialog (cloud + remote) */}
-      {dialogOpen && (
-        <div className="modal-overlay" onClick={(e) => e.target === e.currentTarget && closeDialog()}>
-          <div className="card" style={{ maxWidth: 480, width: '100%', padding: 28, maxHeight: '88vh', overflow: 'auto' }} onClick={(e) => e.stopPropagation()}>
-            {newHost ? (
-              /* Remote registration success → show the one-time API key */
-              <>
-                <h3 style={{ fontSize: 17, fontWeight: 700, color: 'var(--text-strong)', marginBottom: 4 }}>Remote agent registered</h3>
-                <p style={{ fontSize: 13, color: 'var(--muted)', marginBottom: 16 }}>Copy the API key and add it to your remote agent’s environment. It won’t be shown again.</p>
-                <label style={labelStyle}>API Key</label>
-                <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
+      <SlideOutPanel
+        open={dialogOpen}
+        onClose={closeDialog}
+        title={newHost ? tAdd('registeredTitle') : tAdd('title')}
+        width="min(480px, 96vw)"
+      >
+        <div style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 14 }}>
+          {newHost ? (
+            /* Remote registration success → show the one-time API key */
+            <>
+              <p style={{ fontSize: 13, color: 'var(--muted)', margin: 0 }}>{tAdd('apiKeyHint')}</p>
+              <div>
+                <label style={labelStyle}>{tAdd('apiKeyLabel')}</label>
+                <div style={{ display: 'flex', gap: 8 }}>
                   <input type="password" readOnly value={newHost.apiKey} style={{ ...inputStyle, fontFamily: 'var(--font-mono)', fontSize: 12 }} />
-                  <button type="button" onClick={copyApiKey} style={btnPrimary}>{apiKeyCopied ? 'Copied!' : 'Copy'}</button>
+                  <button type="button" onClick={copyApiKey} style={btnPrimary}>{apiKeyCopied ? tAdd('copied') : tAdd('copy')}</button>
                 </div>
-                <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-                  <button type="button" onClick={closeDialog} style={btnPrimary}>Done</button>
-                </div>
-              </>
-            ) : (
-              <>
-                <h3 style={{ fontSize: 17, fontWeight: 700, color: 'var(--text-strong)', marginBottom: 16 }}>Add agent</h3>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                <button type="button" onClick={closeDialog} style={btnPrimary}>{tAdd('done')}</button>
+              </div>
+            </>
+          ) : (
+            <>
+              {/* Type toggle */}
+              <div style={{ display: 'flex', gap: 0, border: '1px solid var(--border)', borderRadius: 8, overflow: 'hidden' }}>
+                {(['cloud', 'host'] as AgentKind[]).map((k) => (
+                  <button
+                    key={k}
+                    type="button"
+                    onClick={() => { setCreateKind(k); setError(''); }}
+                    style={{
+                      flex: 1, padding: '8px 12px', fontSize: 13, fontWeight: 600, cursor: 'pointer', border: 'none',
+                      background: createKind === k ? 'var(--accent)' : 'transparent',
+                      color: createKind === k ? '#fff' : 'var(--text-strong)',
+                    }}
+                  >
+                    {k === 'cloud' ? tAdd('tabCloud') : tAdd('tabRemote')}
+                  </button>
+                ))}
+              </div>
 
-                {/* Type toggle */}
-                <div style={{ display: 'flex', gap: 0, marginBottom: 18, border: '1px solid var(--border)', borderRadius: 8, overflow: 'hidden' }}>
-                  {(['cloud', 'host'] as AgentKind[]).map((k) => (
-                    <button
-                      key={k}
-                      type="button"
-                      onClick={() => { setCreateKind(k); setError(''); }}
-                      style={{
-                        flex: 1, padding: '8px 12px', fontSize: 13, fontWeight: 600, cursor: 'pointer', border: 'none',
-                        background: createKind === k ? 'var(--accent)' : 'transparent',
-                        color: createKind === k ? '#fff' : 'var(--text-strong)',
-                      }}
-                    >
-                      {k === 'cloud' ? 'Cloud agent' : 'Remote (self-hosted)'}
+              {createKind === 'host' ? (
+                /* Remote registration form */
+                <form onSubmit={registerHost}>
+                  <p style={{ fontSize: 13, color: 'var(--muted)', marginBottom: 16 }}>
+                    {tAdd('remoteIntro')}
+                  </p>
+                  <div style={{ marginBottom: 16 }}>
+                    <label style={labelStyle}>{tAdd('nameLabel')}</label>
+                    <input
+                      style={inputStyle}
+                      value={registerName}
+                      onChange={(e) => setRegisterName(e.target.value)}
+                      placeholder={tAdd('namePlaceholder')}
+                      autoFocus
+                    />
+                  </div>
+                  {error && <div style={{ marginBottom: 12, fontSize: 13, color: 'var(--error-text)' }}>{error}</div>}
+                  <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+                    <button type="button" onClick={closeDialog} style={{ ...btnSubtle, background: 'none', border: 'none' }}>{tc('cancel')}</button>
+                    <button type="submit" disabled={registering || !registerName.trim()} style={btnPrimary}>
+                      {registering ? tAdd('registering') : tAdd('register')}
                     </button>
-                  ))}
-                </div>
-
-                {createKind === 'host' ? (
-                  /* Remote registration form */
-                  <form onSubmit={registerHost}>
-                    <p style={{ fontSize: 13, color: 'var(--muted)', marginBottom: 16 }}>
-                      Give your remote agent (a self-hosted BuilderForce Agents instance) a name. You’ll get an API key to paste into its config.
-                    </p>
-                    <div style={{ marginBottom: 16 }}>
-                      <label style={labelStyle}>Name</label>
-                      <input
-                        style={inputStyle}
-                        value={registerName}
-                        onChange={(e) => setRegisterName(e.target.value)}
-                        placeholder="e.g. openclaw-bridge-node"
-                        autoFocus
-                      />
-                    </div>
-                    {error && <div style={{ marginBottom: 12, fontSize: 13, color: 'var(--error-text)' }}>{error}</div>}
-                    <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-                      <button type="button" onClick={closeDialog} style={{ ...btnSubtle, background: 'none', border: 'none' }}>Cancel</button>
-                      <button type="submit" disabled={registering || !registerName.trim()} style={btnPrimary}>
-                        {registering ? 'Registering…' : 'Register'}
-                      </button>
-                    </div>
-                  </form>
-                ) : (
-                  /* Cloud agent create form */
-                  <>
-                    <CloudAgentFormFields form={form} onChange={(patch) => setForm((f) => ({ ...f, ...patch }))} autoFocus />
-                    {error && <div style={{ fontSize: 13, color: 'var(--error-text)', marginTop: 12 }}>{error}</div>}
-                    <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 14 }}>
-                      <button type="button" onClick={closeDialog} style={{ ...btnSubtle, background: 'none', border: 'none' }}>Cancel</button>
-                      <button type="button" onClick={createCloud} disabled={saving || !form.name.trim()} style={btnPrimary}>
-                        {saving ? 'Saving…' : 'Create'}
-                      </button>
-                    </div>
-                  </>
-                )}
-              </>
-            )}
-          </div>
+                  </div>
+                </form>
+              ) : (
+                /* Cloud agent create form */
+                <>
+                  <CloudAgentFormFields form={form} onChange={(patch) => setForm((f) => ({ ...f, ...patch }))} autoFocus />
+                  {error && <div style={{ fontSize: 13, color: 'var(--error-text)', marginTop: 12 }}>{error}</div>}
+                  <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 14 }}>
+                    <button type="button" onClick={closeDialog} style={{ ...btnSubtle, background: 'none', border: 'none' }}>{tc('cancel')}</button>
+                    <button type="button" onClick={createCloud} disabled={saving || !form.name.trim()} style={btnPrimary}>
+                      {saving ? tc('saving') : tAdd('create')}
+                    </button>
+                  </div>
+                </>
+              )}
+            </>
+          )}
         </div>
-      )}
+      </SlideOutPanel>
 
       {/* Consolidate selected people — relocated home of contributor merge */}
       <MemberConsolidationPanel

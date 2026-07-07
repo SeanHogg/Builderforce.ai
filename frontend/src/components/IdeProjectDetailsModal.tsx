@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useTranslations } from 'next-intl';
+import { SlideOutPanel } from '@/components/SlideOutPanel';
 import { getModality } from '@/lib/modality';
 import { listIdeContainers, updateIdeProject } from '@/lib/api';
 import { workflowDefinitions, type WorkflowDefinitionSummary } from '@/lib/builderforceApi';
@@ -116,21 +117,19 @@ export function IdeProjectDetailsModal({
   };
 
   return (
-    <div className="modal-overlay" style={{ zIndex: 60 }} onClick={onClose}>
-      <div
-        className="rounded-xl p-6 w-full max-w-md border border-gray-700"
-        style={{ background: 'var(--bg-elevated)' }}
-        onClick={(e) => e.stopPropagation()}
-      >
-        <h3 className="text-lg font-semibold mb-1" style={{ color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: 8 }}>
-          <span aria-hidden>{m.icon}</span> {t('ideProjectSettings')}
-        </h3>
-        <p className="mb-4" style={{ color: 'var(--text-secondary)', fontSize: 13 }}>
+    <SlideOutPanel
+      open
+      onClose={onClose}
+      width="min(480px, 96vw)"
+      title={<span style={{ display: 'flex', alignItems: 'center', gap: 8 }}><span aria-hidden>{m.icon}</span> {t('ideProjectSettings')}</span>}
+    >
+      <div style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 14 }}>
+        <p style={{ color: 'var(--text-secondary)', fontSize: 13, margin: 0 }}>
           {m.label} · <span style={{ fontFamily: 'monospace' }}>{ideProject.storageProjectKey}</span>
         </p>
 
         {error && (
-          <div style={{ borderRadius: 8, padding: '10px 14px', marginBottom: 12, fontSize: 13, background: 'var(--error-bg)', border: '1px solid var(--error-border)', color: 'var(--error-text)' }}>
+          <div style={{ borderRadius: 8, padding: '10px 14px', fontSize: 13, background: 'var(--error-bg)', border: '1px solid var(--error-border)', color: 'var(--error-text)' }}>
             {error}
           </div>
         )}
@@ -212,7 +211,7 @@ export function IdeProjectDetailsModal({
           </div>
         </form>
       </div>
-    </div>
+    </SlideOutPanel>
   );
 }
 

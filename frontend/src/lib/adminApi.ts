@@ -6,6 +6,7 @@
 import { getApiBaseUrl } from './apiClient';
 import { checkUnauthorizedAndRedirect, getStoredWebToken } from './auth';
 import type { LlmModelStatus, VendorId } from './builderforceApi';
+import type { PsychometricProfile } from './psychometric';
 
 export type { LlmModelStatus, VendorId };
 
@@ -367,6 +368,8 @@ export interface AdminPlatformPersona {
   source: string;
   author: string | null;
   active: boolean;
+  /** JSON PsychometricProfile (Pro trait vector) compiled into behaviour at run time; null = none. */
+  psychometric: PsychometricProfile | null;
   createdAt: string | null;
   updatedAt: string | null;
 }
@@ -895,6 +898,7 @@ export const adminApi = {
     source?: string;
     author?: string | null;
     active?: boolean;
+    psychometric?: PsychometricProfile | null;
   }): Promise<{ persona: AdminPlatformPersona }> {
     return adminRequest('/api/admin/personas', { method: 'POST', body: JSON.stringify(data) });
   },
@@ -913,6 +917,7 @@ export const adminApi = {
       source: string;
       author: string | null;
       active: boolean;
+      psychometric: PsychometricProfile | null;
     }>
   ): Promise<{ persona: AdminPlatformPersona }> {
     return adminRequest(`/api/admin/personas/${id}`, { method: 'PATCH', body: JSON.stringify(data) });

@@ -23,6 +23,7 @@ import type { RightTab } from '@/lib/modality';
 import { BenchmarkPanel } from '@/components/BenchmarkPanel';
 import { ModelExportPanel } from '@/components/ModelExportPanel';
 import { ProjectEvermindPanel } from '@/components/ide/ProjectEvermindPanel';
+import { EvermindBrainMap } from '@/components/ide/EvermindBrainMap';
 
 interface LlmStudioPanelProps {
   projectId: number | string;
@@ -139,7 +140,9 @@ export function LlmStudioPanel({ projectId, files = [], onGoToTab, onOpenFile }:
         padding: '24px 28px',
       }}
     >
-      <div style={{ maxWidth: 720, margin: '0 auto' }}>
+      <div style={{ display: 'flex', gap: 20, alignItems: 'stretch', flexWrap: 'wrap', maxWidth: 1400, margin: '0 auto' }}>
+        {/* Left rail: the build/train form + pipeline steps. */}
+        <div style={{ flex: '1 1 340px', maxWidth: 480, minWidth: 300, display: 'flex', flexDirection: 'column' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6 }}>
           <span style={{ fontSize: '1.6rem' }}>🧠</span>
           <h1 style={{ fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '1.25rem', margin: 0 }}>
@@ -316,6 +319,12 @@ export function LlmStudioPanel({ projectId, files = [], onGoToTab, onOpenFile }:
         <p style={{ color: 'var(--text-muted)', fontSize: '0.72rem', lineHeight: 1.5, marginTop: 20 }}>
           {t('footer')}
         </p>
+        </div>
+
+        {/* Center stage: the live brain / knowledge map of what the model is learning. */}
+        <div style={{ flex: '1.5 1 460px', minWidth: 320, minHeight: 560, display: 'flex' }}>
+          <EvermindBrainMap projectId={Number(projectId)} />
+        </div>
       </div>
     </div>
   );

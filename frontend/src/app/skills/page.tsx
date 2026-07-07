@@ -17,6 +17,7 @@ import { BUILTIN_SKILLS, userSkillsKey, type BuiltinSkill, type UserSkill } from
 import ArtifactAssigner from '@/components/ArtifactAssigner';
 import { CatalogInsightsBar, type CatalogInsightsItem } from '@/components/CatalogInsightsBar';
 import PageContainer from '@/components/PageContainer';
+import { SlideOutPanel } from '@/components/SlideOutPanel';
 import { SkillAssignmentsContent } from '@/components/SkillAssignmentsContent';
 import { ViewToggle, type ViewMode } from '@/components/ViewToggle';
 import { tableWrapStyle, tableStyle, theadRowStyle, thStyle, trStyle, tdStyle, tdMutedStyle } from '@/components/dataTableStyles';
@@ -390,14 +391,8 @@ export default function SkillsPage() {
         </>
       )}
 
-      {createOpen && (
-        <div className="modal-overlay" onClick={() => setCreateOpen(false)}>
-          <div className="card" style={{ maxWidth: 480, width: '100%', padding: 24 }} onClick={(e) => e.stopPropagation()}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-              <div className="modal-title">{t('newSkillShort')}</div>
-              <button type="button" className="btn btn-secondary btn-sm" onClick={() => setCreateOpen(false)}>✕</button>
-            </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+      <SlideOutPanel open={createOpen} onClose={() => setCreateOpen(false)} title={t('newSkillShort')} width="min(480px, 96vw)">
+        <div style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 14 }}>
               <div>
                 <label className="label">{t('formName')}</label>
                 <input className="input" placeholder={t('formNamePlaceholder')} value={createForm.name} onChange={(e) => setCreateForm((f) => ({ ...f, name: e.target.value }))} />
@@ -431,14 +426,12 @@ export default function SkillsPage() {
                 <label className="label">{t('formTags')}</label>
                 <input className="input" placeholder={t('formTagsPlaceholder')} value={createForm.tags} onChange={(e) => setCreateForm((f) => ({ ...f, tags: e.target.value }))} />
               </div>
-            </div>
-            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 20 }}>
-              <button type="button" className="btn btn-secondary" onClick={() => setCreateOpen(false)}>{t('cancel')}</button>
-              <button type="button" className="btn btn-primary" onClick={saveSkill} disabled={!createForm.name.trim()}>{t('saveSkill')}</button>
-            </div>
-          </div>
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
+                <button type="button" className="btn btn-secondary" onClick={() => setCreateOpen(false)}>{t('cancel')}</button>
+                <button type="button" className="btn btn-primary" onClick={saveSkill} disabled={!createForm.name.trim()}>{t('saveSkill')}</button>
+              </div>
         </div>
-      )}
+      </SlideOutPanel>
     </PageContainer>
   );
 }

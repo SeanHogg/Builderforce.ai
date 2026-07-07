@@ -195,11 +195,6 @@ export const BUILTIN_SKILLS: BuiltinSkill[] = [
   { name: '1Password', slug: '1password', description: '1Password CLI integration for secure credential access and management.', emoji: '🔐', category: 'Security', tags: ['passwords', 'secrets', '1password'], author: '1Password', version: '1.0.0', likes: 312, downloads: 1450 },
 ];
 
-/** localStorage key for user-created personas (per tenant). */
-export function userPersonasKey(tenantId: string): string {
-  return `bf-user-personas-${tenantId || 'default'}`;
-}
-
 /** localStorage key for user-created skills (per tenant). */
 export function userSkillsKey(tenantId: string): string {
   return `bf-user-skills-${tenantId || 'default'}`;

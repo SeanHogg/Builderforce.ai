@@ -22,6 +22,7 @@ import { IdeProjectCard } from '@/components/IdeProjectCard';
 import { IdeProjectDetailsModal } from '@/components/IdeProjectDetailsModal';
 import { ViewToggle } from '@/components/ViewToggle';
 import { UpgradeModal } from '@/components/UpgradeModal';
+import { SlideOutPanel } from '@/components/SlideOutPanel';
 
 type IdeView = 'grouped' | 'card' | 'table';
 
@@ -342,14 +343,16 @@ export default function IDEDashboardPage() {
         </section>
       </main>
 
-      {/* New IDE project modal */}
-      {createType && (
-        <div className="modal-overlay" style={{ zIndex: 50 }}>
-          <div className="rounded-xl p-6 w-full max-w-md border border-gray-700" style={{ background: 'var(--bg-elevated)' }}>
-            <h3 className="text-lg font-semibold mb-1" style={{ color: 'var(--text-primary)' }}>
-              {t('newModalityProject', { label: getModality(createType).label })}
-            </h3>
-            <p className="mb-4" style={{ color: 'var(--text-secondary)', fontSize: 13 }}>{getModality(createType).tagline}</p>
+      {/* New IDE project — slide-out create panel */}
+      <SlideOutPanel
+        open={createType != null}
+        onClose={() => setCreateType(null)}
+        title={createType ? t('newModalityProject', { label: getModality(createType).label }) : ''}
+        width="min(480px, 96vw)"
+      >
+        {createType && (
+          <div style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 14 }}>
+            <p style={{ color: 'var(--text-secondary)', fontSize: 13, margin: 0 }}>{getModality(createType).tagline}</p>
             <form onSubmit={submitCreate} className="space-y-4">
               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                 {MODALITIES.filter((m) => !m.comingSoon).map((m) => (
@@ -423,7 +426,7 @@ export default function IDEDashboardPage() {
                   )}
                 </div>
               )}
-              <div className="flex gap-3 justify-end">
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
                 <button type="button" onClick={() => setCreateType(null)} style={{ fontSize: '0.875rem', color: 'var(--text-secondary)', background: 'none', border: 'none', cursor: 'pointer' }}>{t('cancel')}</button>
                 <button
                   type="submit"
@@ -435,8 +438,8 @@ export default function IDEDashboardPage() {
               </div>
             </form>
           </div>
-        </div>
-      )}
+        )}
+      </SlideOutPanel>
 
       {detailsFor && (
         <IdeProjectDetailsModal
