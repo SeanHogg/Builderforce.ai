@@ -1,44 +1,50 @@
-> **PRD** — drafted by Bob Developer (V2 (Container)) · task #89
+> **PRD** — drafted by Kevin BA/PM/PO (Durable) · task #187
 > _Each agent that updates this PRD signs its change below._
 
-# Product Requirements Document: Avatar Filter Row Placement
+# Product Requirements Document: Project Health Score & Trend
 
 ## 1. Problem & Goal
 
-**Problem:** The current placement of the avatar filter, separated from the priorities dropdown, disrupts the logical grouping of filtering options. Users must scan different areas of the UI to apply related filters, leading to a less efficient and intuitive user experience.
+**Problem:** Project managers and stakeholders often struggle to quickly assess the overall health of a project, leading to delayed recognition of issues and reactive management. Without a consolidated metric, understanding project status requires manual aggregation of various data points, consuming valuable time and increasing risk.
 
-**Goal:** To improve the user experience by consolidating related filtering options into a single, contiguous row, thereby enhancing discoverability, reducing cognitive load, and increasing the speed at which users can apply filters.
+**Goal:** To provide a clear, composite "Project Health Score" (0-100) and its recent trend directly on the project overview, enabling users to instantly grasp project status and proactively address potential issues.
 
 ## 2. Target Users / ICP Roles
 
-*   **Project Managers:** Need to quickly filter tasks by assignee (avatar) and priority to understand workload distribution and identify high-priority items.
-*   **Team Leads:** Require efficient filtering to monitor team progress and allocate resources based on task priority and individual contribution (avatar).
-*   **Individual Contributors:** Benefit from a cleaner interface to focus on their assigned tasks and understand their priority within the project context.
+*   **Project Managers:** To monitor their projects at a glance and identify areas needing attention.
+*   **Team Leads:** To understand the health of projects they are contributing to.
+*   **Stakeholders / Executives:** To get a high-level overview of project portfolio health without drilling into details.
 
 ## 3. Scope
 
-This document covers the functional requirements and acceptance criteria for moving the existing avatar filter component to reside on the same UI row as the priorities dropdown. This includes adjustments to layout, styling, and ensuring the filter's functionality remains intact.
+This feature will introduce a Project Health Score (0-100) and a trend indicator (up/down/stable) to the project overview dashboard. The score will be calculated based on predefined project metrics.
 
 ## 4. Functional Requirements
 
-*   **FR1: Layout Adjustment:** The avatar filter component shall be repositioned to occupy a space adjacent to the priorities dropdown within the primary filtering bar.
-*   **FR2: Visual Consistency:** The avatar filter shall maintain its current visual appearance and interaction patterns (e.g., dropdown behavior, selection indicators) after being moved.
-*   **FR3: Responsive Design:** The integrated avatar and priorities filter row shall adapt appropriately across different screen sizes and resolutions, maintaining usability.
-*   **FR4: Filter Functionality:** Applying a filter via the avatar selector shall continue to correctly filter the displayed data (e.g., tasks, issues), and this filtering shall be independent of or complementary to the priorities filter.
+*   **FR1: Health Score Calculation:** The system shall calculate a composite "Project Health Score" ranging from 0 to 100.
+    *   **FR1.1: Inputs:** The score calculation shall incorporate weighted inputs from key project dimensions (e.g., Schedule Adherence, Budget Utilization, Task Completion, Risk Exposure, Bug Count, Stakeholder Satisfaction, etc.).
+    *   **FR1.2: Daily Update:** The score shall be recalculated and updated daily for each active project.
+*   **FR2: Display Current Score:** The current Project Health Score (0-100) shall be prominently displayed on the project overview dashboard.
+    *   **FR2.1: Visual Encoding:** The score display shall use color coding (e.g., 75-100 Green, 50-74 Yellow, 0-49 Red) to indicate overall health.
+*   **FR3: Display Trend Indicator:** A visual trend indicator shall be displayed alongside the health score, showing its change relative to the previous day/period.
+    *   **FR3.1: Trend Types:** Indicators shall represent "Up" (score increased), "Down" (score decreased), or "Stable" (score remained constant or within a negligible delta).
+    *   **FR3.2: Visual Encoding:** Use standard arrow icons (▲ for up, ▼ for down, — for stable).
+*   **FR4: Historical Data Storage:** The system shall store daily health scores for each project to enable trend analysis.
+*   **FR5: Score Tooltip (MVP):** On hover over the health score, a basic tooltip shall display the last 7 days' scores to provide context for the trend.
 
 ## 5. Acceptance Criteria
 
-*   **AC1: Avatar Filter Visible in Row:** The avatar filter is visibly present on the same horizontal line as the priorities dropdown.
-*   **AC2: Filter Functionality Preserved:** Selecting an avatar from the new location correctly filters the displayed items.
-*   **AC3: Priorities Filter Functionality Preserved:** Selecting a priority from its dropdown continues to filter the displayed items, and its interaction is unaffected by the avatar filter's new position.
-*   **AC4: Combined Filtering Works:** Applying both an avatar filter and a priorities filter simultaneously yields the correct, combined results.
-*   **AC5: No Visual Overlap or Distortion:** The avatar filter and priorities dropdown do not overlap each other or other UI elements in the filtering bar, and the overall layout remains clean and undistorted.
-*   **AC6: Responsiveness Verified:** On smaller screen sizes, the combined filter row is still usable, potentially with a different arrangement if necessary (e.g., stacking if horizontal space is too limited, though the primary goal is horizontal).
+*   The Project Health Score (0-100) is displayed accurately on the project overview dashboard for all active projects.
+*   The score updates daily, reflecting changes in underlying project metrics.
+*   The trend indicator (up/down/stable arrow) correctly reflects the change in score compared to the previous day.
+*   The color coding of the score (Green/Yellow/Red) aligns with the defined thresholds.
+*   Hovering over the score reveals the last 7 days' scores in a tooltip.
+*   No noticeable performance degradation is observed on the project overview dashboard due to this feature.
 
 ## 6. Out of Scope
 
-*   **New Avatar Filter Features:** Any enhancements or new functionalities to the avatar filter itself (e.g., search within avatars, multi-select avatars) are out of scope for this task.
-*   **New Priorities Filter Features:** Any enhancements or new functionalities to the priorities dropdown are out of scope.
-*   **Other Filter Components:** Moving or modifying any other filter components not explicitly mentioned (e.g., date filters, status filters) is out of scope.
-*   **Backend Changes:** Any backend changes related to how filters are processed or stored are out of scope, assuming the existing backend APIs can handle the current filtering logic.
-*   **Performance Optimization:** Significant performance optimizations related to filtering are out of scope, unless directly caused by the layout change.
+*   User-customizable health score formulas or weighting of inputs per project.
+*   Detailed historical charts or graphs beyond the simple trend indicator and 7-day tooltip.
+*   Alerting or notifications based on health score changes (e.g., email alerts if score drops below a threshold).
+*   Deep-dive analytics or drill-down capabilities into the specific components contributing to the health score (e.g., clicking the score to see budget vs. schedule impact).
+*   Integration with external project management tools for health score calculation inputs.
