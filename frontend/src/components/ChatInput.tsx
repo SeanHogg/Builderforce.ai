@@ -3,7 +3,6 @@
 import { useRef, useState, useCallback, useEffect } from 'react';
 import Link from 'next/link';
 import { useTranslations } from 'next-intl';
-import { useIsMobile } from '@/lib/useIsMobile';
 import { useMentionAutocomplete } from '@seanhogg/builderforce-brain-ui';
 import type { DirectedRecipient } from '@seanhogg/builderforce-brain-embedded';
 import type { BrainEffort } from '@/lib/brain';
@@ -327,7 +326,6 @@ export function ChatInput({
   className,
 }: ChatInputProps) {
   const t = useTranslations('chatInput');
-  const isMobile = useIsMobile();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const recognitionRef = useRef<SpeechRecognitionInstance | null>(null);
@@ -335,16 +333,22 @@ export function ChatInput({
   // eslint-disable-next-line react-hooks/refs
   valueRef.current = value;
   const [recording, setRecording] = useState(false);
+  const [focused, setFocused] = useState(false);
   const canSubmit = value.trim().length > 0 && !disabled;
+  // "Activated" once the user is typing in / focused on the composer — the whole
+  // box lights up in accent (blue), the same treatment as the VS Code composer so
+  // the experience matches across every modality.
+  const active = focused || value.trim().length > 0;
   // The `/` options menu appears when the consumer wires any of its controls.
   const hasOptionsMenu = !!(onEffortChange || onThinkingChange || accountSettingsHref);
 
-  // On a narrow panel the pill reflows to two rows: the textarea takes its own
-  // full-width row on top (so typed text isn't crushed into a sliver) and the
-  // control buttons sit on a second row. The trailing icon group (brain / voice /
-  // send) is pushed to the right via marginLeft:auto on whichever of them renders
-  // first, so Send always lands bottom-right, Claude-style.
-  const trailingShift: React.CSSProperties | undefined = isMobile ? { marginLeft: 'auto' } : undefined;
+  // The textarea always takes its own full-width row on top (so typed text is
+  // never crushed into a sliver in a narrow side-panel), and the control buttons
+  // sit on a second row below — matching the VS Code composer across modalities.
+  // The trailing icon group (brain / voice / send) is pushed to the right via
+  // marginLeft:auto on whichever of them renders first, so Send always lands
+  // bottom-right, Claude-style.
+  const trailingShift: React.CSSProperties = { marginLeft: 'auto' };
   const brainAnchored = showBrainIcon;
   const voiceAnchored = !showBrainIcon && showVoice;
   const sendAnchored = !showBrainIcon && !showVoice;
@@ -514,10 +518,11 @@ export function ChatInput({
           rowGap: 8,
           width: '100%',
           padding: '8px 10px 8px 12px',
-          borderRadius: isMobile ? 20 : 9999,
-          border: '1px solid var(--chat-input-border)',
+          borderRadius: 18,
+          border: `1px solid ${active ? 'var(--chat-input-active-border)' : 'var(--chat-input-border)'}`,
           background: 'var(--chat-input-bg)',
-          boxShadow: 'var(--chat-input-shadow)',
+          boxShadow: active ? 'var(--chat-input-active-ring), var(--chat-input-shadow)' : 'var(--chat-input-shadow)',
+          transition: 'border-color 120ms ease, box-shadow 120ms ease',
         }}
       >
         {mention.popup}
@@ -616,11 +621,13 @@ export function ChatInput({
           onChange={(e) => onChange(e.target.value)}
           onKeyDown={handleKeyDown}
           onSelect={mention.onSelect}
+          onFocus={() => setFocused(true)}
+          onBlur={() => setFocused(false)}
           onPaste={onAttach ? handlePaste : undefined}
           placeholder={placeholder}
           disabled={disabled}
           rows={rows}
-          style={isMobile ? { ...inputStyle, order: -1, flexBasis: '100%', minWidth: '100%' } : inputStyle}
+          style={{ ...inputStyle, order: -1, flexBasis: '100%', minWidth: '100%' }}
         />
         {showBrainIcon && (
           <Link
