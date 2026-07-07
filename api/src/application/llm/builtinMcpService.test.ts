@@ -27,6 +27,7 @@ vi.mock('../../infrastructure/repositories/TaskRepository', () => ({ TaskReposit
 import {
   listBuiltinTools, callBuiltinTool, BUILTIN_EXTENSION_ID,
   CLOUD_AGENT_PLATFORM_TOOLS, cloudAgentPlatformToolSchemas, resolveCloudAgentPlatformTool,
+  CHAT_SCOPED_AGENT_TOOLS,
 } from './builtinMcpService';
 
 const db = {} as never;
@@ -78,6 +79,34 @@ describe('cloud-agent curated platform tool subset', () => {
     expect(resolveCloudAgentPlatformTool('builtin_api_keys_create')).toBeUndefined();
     expect(resolveCloudAgentPlatformTool('builtin_tasks_delete')).toBeUndefined();
     expect(resolveCloudAgentPlatformTool('not_a_tool')).toBeUndefined();
+  });
+});
+
+describe('chat-scoped agent tool subset (@agent addressed-reply loop)', () => {
+  const allToolIds = new Set(listBuiltinTools().map((t) => t.tool));
+
+  it('every chat-scoped tool exists in the CATALOG (no typos / stale ids)', () => {
+    for (const tool of CHAT_SCOPED_AGENT_TOOLS) {
+      expect(allToolIds.has(tool), `chat-scoped tool '${tool}' not in CATALOG`).toBe(true);
+    }
+  });
+
+  it('grants read + link but WITHHOLDS the escalation/destructive chat tools', () => {
+    // An agent replying in a chat can see + tie/untie tickets, but must NOT start runs
+    // (dispatch_agent = executions.submit-equivalent), pull in other agents (invite_agent),
+    // or archive+merge conversations (consolidate).
+    for (const tool of ['chats.list_tickets', 'chats.link_ticket', 'chats.unlink_ticket']) {
+      expect(CHAT_SCOPED_AGENT_TOOLS.includes(tool), `expected '${tool}' granted`).toBe(true);
+    }
+    for (const tool of ['chats.dispatch_agent', 'chats.invite_agent', 'chats.consolidate']) {
+      expect(CHAT_SCOPED_AGENT_TOOLS.includes(tool), `'${tool}' must stay off the chat-scoped subset`).toBe(false);
+    }
+  });
+
+  it('is disjoint from the cloud subset (chat tools need a live chatId, absent in cloud runs)', () => {
+    for (const tool of CHAT_SCOPED_AGENT_TOOLS) {
+      expect(CLOUD_AGENT_PLATFORM_TOOLS.includes(tool), `'${tool}' should not be in the cloud subset`).toBe(false);
+    }
   });
 });
 

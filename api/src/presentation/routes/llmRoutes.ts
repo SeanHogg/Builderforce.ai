@@ -24,6 +24,7 @@ import {
   type LlmUsage,
 } from '../../application/llm/LlmProxyService';
 import { resolvePaidOverflowCapMillicents } from '../../application/llm/usageLedger';
+import { classifyReplyAccount } from '../../application/llm/replyProvenance';
 import { USAGE_KIND } from '../../application/llm/usageSource';
 import { logTrace, backfillTraceUsage } from '../../application/llm/traceLogger';
 import { recordUsageRow, type UsageAttribution, type RecordUsageRow, type UsageSurface } from '../../application/llm/usageLedger';
@@ -1503,6 +1504,10 @@ export function createLlmRoutes(): Hono<HonoEnv> {
     upstreamHeaders.set('x-builderforce-model', result.resolvedModel);
     upstreamHeaders.set('x-builderforce-trace-id', traceId);
     upstreamHeaders.set('x-builderforce-vendor', result.resolvedVendor);
+    // Which account served this turn (own / shared / shared_byo_unused) — the Brain
+    // provenance chip reads this so a SUCCESSFUL turn shows whether the tenant's own
+    // connected frontier account ran it, or the shared pool did despite one existing.
+    upstreamHeaders.set('x-builderforce-account', classifyReplyAccount(result.byoFunded ?? false, byoVendors.size > 0));
     upstreamHeaders.set('x-builderforce-retries', String(result.retries));
     upstreamHeaders.set('x-builderforce-product', llmProduct);
     upstreamHeaders.set('x-builderforce-effective-plan', access.effectivePlan);

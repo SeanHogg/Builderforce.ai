@@ -29,6 +29,19 @@ custom_domain = true
 pattern = "*.builderforce.ai/*"
 zone_name = "builderforce.ai"
 
+# Same-origin gateway path. Corporate networks frequently whitelist the primary
+# apex (builderforce.ai) but block the `api.` subdomain, so direct calls to
+# api.builderforce.ai fail on some users' machines. `builderforce.ai/gateway/*`
+# lands on THIS worker instead — a more-specific path route overrides the frontend
+# worker's apex `custom_domain` for this prefix only (everything else still serves
+# the Next.js app). The worker strips the `/gateway` prefix (see `stripGatewayPrefix`
+# in src/index.ts) so every route/middleware is byte-identical to api.builderforce.ai.
+# This is the ONE whitelisted host all clients (VS Code extension + integrations)
+# should target; nobody needs to reach the api.* subdomain directly.
+[[routes]]
+pattern = "builderforce.ai/gateway/*"
+zone_name = "builderforce.ai"
+
 [vars]
 # Overridden by Cloudflare dashboard secrets for production.
 CORS_ORIGINS = "*"

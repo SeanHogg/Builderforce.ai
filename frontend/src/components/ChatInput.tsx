@@ -3,6 +3,7 @@
 import { useRef, useState, useCallback, useEffect } from 'react';
 import Link from 'next/link';
 import { useTranslations } from 'next-intl';
+import { useIsMobile } from '@/lib/useIsMobile';
 import { useMentionAutocomplete } from '@seanhogg/builderforce-brain-ui';
 import type { DirectedRecipient } from '@seanhogg/builderforce-brain-embedded';
 import type { BrainEffort } from '@/lib/brain';
@@ -326,6 +327,7 @@ export function ChatInput({
   className,
 }: ChatInputProps) {
   const t = useTranslations('chatInput');
+  const isMobile = useIsMobile();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const recognitionRef = useRef<SpeechRecognitionInstance | null>(null);
@@ -336,6 +338,16 @@ export function ChatInput({
   const canSubmit = value.trim().length > 0 && !disabled;
   // The `/` options menu appears when the consumer wires any of its controls.
   const hasOptionsMenu = !!(onEffortChange || onThinkingChange || accountSettingsHref);
+
+  // On a narrow panel the pill reflows to two rows: the textarea takes its own
+  // full-width row on top (so typed text isn't crushed into a sliver) and the
+  // control buttons sit on a second row. The trailing icon group (brain / voice /
+  // send) is pushed to the right via marginLeft:auto on whichever of them renders
+  // first, so Send always lands bottom-right, Claude-style.
+  const trailingShift: React.CSSProperties | undefined = isMobile ? { marginLeft: 'auto' } : undefined;
+  const brainAnchored = showBrainIcon;
+  const voiceAnchored = !showBrainIcon && showVoice;
+  const sendAnchored = !showBrainIcon && !showVoice;
 
   // @-mention typeahead — active only when the host supplies participants. Picking
   // one routes the next turn (via onMention) and strips the "@query" from the text.
@@ -496,11 +508,13 @@ export function ChatInput({
         style={{
           position: 'relative',
           display: 'flex',
+          flexWrap: 'wrap',
           alignItems: 'flex-end',
           gap: 10,
+          rowGap: 8,
           width: '100%',
           padding: '8px 10px 8px 12px',
-          borderRadius: 9999,
+          borderRadius: isMobile ? 20 : 9999,
           border: '1px solid var(--chat-input-border)',
           background: 'var(--chat-input-bg)',
           boxShadow: 'var(--chat-input-shadow)',
@@ -606,12 +620,12 @@ export function ChatInput({
           placeholder={placeholder}
           disabled={disabled}
           rows={rows}
-          style={inputStyle}
+          style={isMobile ? { ...inputStyle, order: -1, flexBasis: '100%', minWidth: '100%' } : inputStyle}
         />
         {showBrainIcon && (
           <Link
             href="/brainstorm"
-            style={iconButtonStyle(false)}
+            style={brainAnchored ? { ...iconButtonStyle(false), ...trailingShift } : iconButtonStyle(false)}
             title={t('brainstorm')}
           >
             <SpeechBubbleIcon />
@@ -623,7 +637,7 @@ export function ChatInput({
             onClick={recording ? stopVoice : startVoice}
             disabled={disabled}
             title={recording ? t('stopDictation') : t('dictate')}
-            style={{ ...iconButtonStyle(disabled), background: recording ? 'var(--surface-interactive)' : undefined }}
+            style={{ ...iconButtonStyle(disabled), background: recording ? 'var(--surface-interactive)' : undefined, ...(voiceAnchored ? trailingShift : null) }}
           >
             <MicIcon />
           </button>
@@ -634,7 +648,7 @@ export function ChatInput({
             onClick={onStop}
             title={stopLabel}
             aria-label={stopLabel}
-            style={sendButtonStyle(false)}
+            style={sendAnchored ? { ...sendButtonStyle(false), ...trailingShift } : sendButtonStyle(false)}
           >
             <StopSquareIcon />
           </button>
@@ -643,7 +657,7 @@ export function ChatInput({
             type="submit"
             disabled={!canSubmit}
             title={submitLabel}
-            style={sendButtonStyle(!canSubmit)}
+            style={sendAnchored ? { ...sendButtonStyle(!canSubmit), ...trailingShift } : sendButtonStyle(!canSubmit)}
           >
             <SendArrowIcon />
           </button>

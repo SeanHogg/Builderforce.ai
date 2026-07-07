@@ -7,6 +7,7 @@ import { useTranslations } from 'next-intl';
 
 import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '@/lib/AuthContext';
+import { useIsMobile } from '@/lib/useIsMobile';
 import { contrastText } from '@/lib/contrastText';
 import { useCart, type ArtifactType } from '@/lib/CartContext';
 import {
@@ -204,6 +205,7 @@ export default function MarketplacePageClient() {
   const tdis = useTranslations('freelancer');
   const tmodels = useTranslations('models');
   const searchParams = useSearchParams();
+  const isMobile = useIsMobile();
 
   const [search, setSearch] = useState('');
   const [category, setCategory] = useState<MarketplaceCategory>('all');
@@ -557,7 +559,8 @@ export default function MarketplacePageClient() {
           backdropFilter: 'blur(6px)',
           padding: '12px 0 16px',
           display: 'flex',
-          alignItems: 'center',
+          alignItems: isMobile ? 'stretch' : 'center',
+          flexDirection: isMobile ? 'column' : 'row',
           gap: 12,
           flexWrap: 'wrap',
           marginBottom: 16,
@@ -571,8 +574,9 @@ export default function MarketplacePageClient() {
           onChange={(e) => setSearch(e.target.value)}
           style={{
             flex: 1,
-            minWidth: 200,
-            maxWidth: 360,
+            minWidth: isMobile ? 0 : 200,
+            maxWidth: isMobile ? '100%' : 360,
+            width: isMobile ? '100%' : undefined,
             padding: '8px 12px',
             borderRadius: 8,
             border: '1px solid var(--border)',
@@ -582,9 +586,9 @@ export default function MarketplacePageClient() {
           }}
           aria-label={searchPlaceholder}
         />
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexShrink: 0 }} role="group" aria-label={tm('categoryLabel')}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexShrink: isMobile ? 1 : 0, flexWrap: 'wrap', width: isMobile ? '100%' : undefined, minWidth: 0 }} role="group" aria-label={tm('categoryLabel')}>
           <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-strong)' }}>{tm('categoryLabel')}</span>
-          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', minWidth: 0 }}>
             {categories.map((c) => (
               <button
                 key={c.id}
@@ -668,7 +672,7 @@ export default function MarketplacePageClient() {
                   </div>
                 )}
                 <form onSubmit={handlePublishSkill} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: 10 }}>
                     <div>
                       <label style={{ display: 'block', fontSize: 12, color: 'var(--muted)', marginBottom: 4 }}>Name *</label>
                       <input required type="text" placeholder="My Skill" value={skillForm.name}
@@ -688,7 +692,7 @@ export default function MarketplacePageClient() {
                       onChange={(e) => setSkillForm((f) => ({ ...f, description: e.target.value }))}
                       style={{ width: '100%', padding: '8px 10px', fontSize: 13, borderRadius: 8, border: '1px solid var(--border)', background: 'var(--bg-base)', color: 'var(--text)', resize: 'vertical', boxSizing: 'border-box' }} />
                   </div>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr 1fr', gap: 10 }}>
                     <div>
                       <label style={{ display: 'block', fontSize: 12, color: 'var(--muted)', marginBottom: 4 }}>Category</label>
                       <input type="text" placeholder="coding" value={skillForm.category}
@@ -708,7 +712,7 @@ export default function MarketplacePageClient() {
                         style={{ width: '100%', padding: '8px 10px', fontSize: 13, borderRadius: 8, border: '1px solid var(--border)', background: 'var(--bg-base)', color: 'var(--text)', boxSizing: 'border-box' }} />
                     </div>
                   </div>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr 1fr', gap: 10 }}>
                     <div>
                       <label style={{ display: 'block', fontSize: 12, color: 'var(--muted)', marginBottom: 4 }}>Price (USD)</label>
                       <input type="number" min="0" step="0.01" placeholder="0.00" value={skillForm.price}
@@ -869,7 +873,7 @@ export default function MarketplacePageClient() {
             </table>
           </div>
         ) : (
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 16 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 300px), 1fr))', gap: 16 }}>
             {filteredAgents.map((agent) => (
               <AgentCard
                 key={agent.id}
@@ -1069,6 +1073,8 @@ export default function MarketplacePageClient() {
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'space-between',
+                    flexWrap: 'wrap',
+                    gap: 8,
                     borderTop: '1px solid var(--border)',
                     paddingTop: 10,
                   }}
@@ -1092,7 +1098,7 @@ export default function MarketplacePageClient() {
                     <span title="Installs">⬇️ {stat.installs}</span>
                     {isInstalled && <span>✓ Installed</span>}
                   </div>
-                  <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                  <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap', justifyContent: 'flex-end', flex: '1 1 auto' }}>
                     {/* Add to Cart */}
                     <button
                       type="button"

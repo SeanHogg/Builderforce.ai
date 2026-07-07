@@ -23,6 +23,14 @@ interface BrainTimelineLabels {
     /** <QuestionCard> copy (ask_user) — carried here so a host passes ONE label bundle. */
     askSubmit: string;
     askAnswered: string;
+    /** Provenance chip: the badge shown when the tenant's OWN connected frontier
+     *  account served the turn. */
+    accountOwn: string;
+    /** Provenance chip: the badge for a turn served by the shared model pool. */
+    accountShared: string;
+    /** Provenance chip: the badge for a shared-pool turn when the tenant HAS a
+     *  connected account that wasn't used — the case worth flagging. */
+    accountByoUnused: string;
 }
 declare const DEFAULT_TIMELINE_LABELS: BrainTimelineLabels;
 interface BrainTimelineProps {

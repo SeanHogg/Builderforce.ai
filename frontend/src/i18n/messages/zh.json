@@ -262,7 +262,8 @@
       "findWork": "寻找工作",
       "timecard": "工时卡",
       "myDashboard": "我的仪表盘",
-      "myWorkspace": "我的工作台"
+      "myWorkspace": "我的工作台",
+      "marketplace": "市场"
     },
     "tab": {
       "projects": "项目",
@@ -653,16 +654,28 @@
     "workflowLabel": "工作流",
     "noWorkflow": "无工作流",
     "workflowHint": "LLM 项目会运行一个工作流。可指定共享工作流，或在“工作流”中创建自定义工作流。",
-    "workflowRequired": "工作流（必填）",
-    "selectWorkflow": "选择一个工作流…",
     "customTag": "自定义",
     "customizeWorkflow": "自定义",
     "runWorkflow": "运行工作流",
     "working": "处理中…",
     "workflowForked": "已为此项目复刻为自定义工作流。",
     "workflowRunStarted": "工作流已开始运行。",
-    "noWorkflowsYet": "你还没有工作流。",
-    "goToWorkflows": "前往“工作流”创建 →"
+    "recipeLabel": "从配方开始",
+    "recipeHint": "选择一个起点——项目将带着可用的 Evermind 打开，你可以对其进行训练、基准测试和发布。",
+    "recipeRecommended": "推荐",
+    "recipeCodingName": "编程 Evermind",
+    "recipeCodingDesc": "在智能体工作时学习你的代码库和编码风格。",
+    "recipeAssistantName": "助手 Evermind",
+    "recipeAssistantDesc": "适应你的产品和语气的对话与支持模型。",
+    "recipeDocsName": "文档增强 Evermind",
+    "recipeDocsDesc": "让回答基于你的文档——设置后再教它你的文档。",
+    "recipeSeedName": "从已发布模型初始化",
+    "recipeSeedDesc": "从你已发布的某个 Evermind 模型开始。",
+    "recipeBlankName": "空白起点",
+    "recipeBlankDesc": "在工作室中从零开始训练的最小模型。",
+    "recipeSeedModelLabel": "用于初始化的已发布模型",
+    "recipeSeedSelect": "选择一个模型…",
+    "recipeSeedNoModels": "尚无已发布的模型"
   },
   "tools": {
     "outOf5": "满分 5.0",
@@ -4786,6 +4799,9 @@
       "preview": "预览",
       "askSubmit": "发送",
       "askAnswered": "已回答",
+      "accountOwn": "您的账户",
+      "accountShared": "共享池",
+      "accountByoUnused": "未使用您连接的账户",
       "stop": "停止"
     },
     "tickets": {

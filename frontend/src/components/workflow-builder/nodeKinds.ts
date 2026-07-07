@@ -168,7 +168,7 @@ export const NODE_KINDS: NodeKindMeta[] = [
     icon: '🎓',
     group: 'LLM Logic',
     accent: '#00e5cc',
-    blurb: 'Kick a MambaKit/SSMjs training run → hippocampus model.',
+    blurb: 'Train an Evermind model on a dataset (tokenizer → train → package).',
     defaultConfig: { model: '', dataset: '', epochs: 1 },
     fields: [
       { key: 'model', label: 'Model name', type: 'text', placeholder: 'Output model name' },

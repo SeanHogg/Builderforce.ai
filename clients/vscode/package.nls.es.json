@@ -46,7 +46,7 @@
   "command.editorChat": "BuilderForce: Chat",
   "command.openBrain": "BuilderForce: Abrir chat del Brain",
   "chatParticipant.description": "Agente de programación BuilderForce que conoce la base de código",
-  "config.baseUrl.desc": "URL base de la puerta de enlace de BuilderForce. El endpoint compatible con OpenAI `/llm/v1/chat/completions` se añade automáticamente. Sobrescríbela para despliegues autoalojados.",
+  "config.baseUrl.desc": "URL base de la puerta de enlace de BuilderForce. Por defecto usa el dominio principal (`https://builderforce.ai/gateway`), que funciona en redes corporativas que permiten el sitio principal pero bloquean el subdominio `api.`. El endpoint compatible con OpenAI `/llm/v1/chat/completions` se añade automáticamente. Sobrescríbela para despliegues autoalojados o para llamar directamente a `https://api.builderforce.ai`.",
   "config.webUrl.desc": "URL base de la app web de BuilderForce (donde viven las páginas embebidas como el tablero). Déjala vacía para derivarla de `builderforce.baseUrl` (api.* → dominio raíz).",
   "config.defaultModel.desc": "Id del modelo predeterminado. Déjalo vacío para que la puerta de enlace elija del grupo de modelos de programación curado.",
   "config.permissionMode.desc": "Cómo aplica el agente los cambios a tu espacio de trabajo.",

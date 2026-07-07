@@ -262,7 +262,8 @@
       "findWork": "Arbeit finden",
       "timecard": "Zeiterfassung",
       "myDashboard": "Mein Dashboard",
-      "myWorkspace": "Mein Bereich"
+      "myWorkspace": "Mein Bereich",
+      "marketplace": "Marktplatz"
     },
     "tab": {
       "projects": "Projekte",
@@ -653,16 +654,28 @@
     "workflowLabel": "Workflow",
     "noWorkflow": "Kein Workflow",
     "workflowHint": "LLM-Projekte führen einen Workflow aus. Weisen Sie einen geteilten zu oder erstellen Sie unter Workflows einen eigenen.",
-    "workflowRequired": "Workflow (erforderlich)",
-    "selectWorkflow": "Workflow auswählen…",
     "customTag": "benutzerdefiniert",
     "customizeWorkflow": "Anpassen",
     "runWorkflow": "Workflow ausführen",
     "working": "Wird verarbeitet…",
     "workflowForked": "Als benutzerdefinierter Workflow für dieses Projekt abgespalten.",
     "workflowRunStarted": "Workflow-Ausführung gestartet.",
-    "noWorkflowsYet": "Sie haben noch keine Workflows.",
-    "goToWorkflows": "Erstellen Sie einen unter Workflows →"
+    "recipeLabel": "Mit einem Rezept starten",
+    "recipeHint": "Wähle einen Ausgangspunkt – dein Projekt öffnet sich mit einem funktionsfähigen Evermind, das du trainieren, bewerten und veröffentlichen kannst.",
+    "recipeRecommended": "Empfohlen",
+    "recipeCodingName": "Coding-Evermind",
+    "recipeCodingDesc": "Lernt deine Codebasis und deinen Programmierstil, während deine Agenten arbeiten.",
+    "recipeAssistantName": "Assistenz-Evermind",
+    "recipeAssistantDesc": "Ein Chat- und Support-Modell, das sich an dein Produkt und deinen Ton anpasst.",
+    "recipeDocsName": "Dokumentgestütztes Evermind",
+    "recipeDocsDesc": "Verankert Antworten in deinen Dokumenten – bring ihm nach der Einrichtung deine Dokumente bei.",
+    "recipeSeedName": "Aus veröffentlichtem Modell initialisieren",
+    "recipeSeedDesc": "Beginne mit einem deiner veröffentlichten Evermind-Modelle.",
+    "recipeBlankName": "Leerer Start",
+    "recipeBlankDesc": "Ein minimales Modell, das du im Studio von Grund auf trainierst.",
+    "recipeSeedModelLabel": "Veröffentlichtes Modell zum Initialisieren",
+    "recipeSeedSelect": "Modell auswählen…",
+    "recipeSeedNoModels": "noch keine veröffentlichten Modelle"
   },
   "tools": {
     "outOf5": "von 5,0",
@@ -4786,6 +4799,9 @@
       "preview": "Vorschau",
       "askSubmit": "Senden",
       "askAnswered": "Beantwortet",
+      "accountOwn": "Ihr Konto",
+      "accountShared": "Gemeinsamer Pool",
+      "accountByoUnused": "Ihr verbundenes Konto wurde nicht verwendet",
       "stop": "Stoppen"
     },
     "tickets": {

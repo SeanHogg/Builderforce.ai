@@ -444,8 +444,21 @@ var DEFAULT_TIMELINE_LABELS = {
   createFile: "Create file",
   preview: "Preview",
   askSubmit: DEFAULT_ASK_USER_LABELS.askSubmit,
-  askAnswered: DEFAULT_ASK_USER_LABELS.askAnswered
+  askAnswered: DEFAULT_ASK_USER_LABELS.askAnswered,
+  accountOwn: "Your account",
+  accountShared: "Shared pool",
+  accountByoUnused: "Your connected account wasn't used"
 };
+function ProvenanceChip({ prov, labels }) {
+  const unused = prov.account === "shared_byo_unused";
+  const badge = prov.account === "own" ? labels.accountOwn : unused ? labels.accountByoUnused : labels.accountShared;
+  const variant = prov.account === "own" ? "bf-tl__prov--own" : unused ? "bf-tl__prov--unused" : "bf-tl__prov--shared";
+  const modelTitle = prov.vendor ? `${prov.model} \xB7 ${prov.vendor}` : prov.model;
+  return /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)("div", { className: `bf-tl__prov ${variant}`, children: [
+    /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("span", { className: "bf-tl__prov-model", title: modelTitle, children: prov.model }),
+    /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("span", { className: "bf-tl__prov-badge", children: badge })
+  ] });
+}
 function dotIcon(kind, isError) {
   if (isError) return "\u2717";
   switch (kind) {
@@ -640,6 +653,7 @@ function BrainTimelineInner({
           const author = (0, import_builderforce_brain_embedded.parseMessageAuthor)(node.message);
           const card = onAnswerQuestion ? parseAskUser(node.text) : null;
           const bodyText = card ? stripAskUser(node.text) : node.text;
+          const prov = (0, import_builderforce_brain_embedded.parseMessageProvenance)(node.message);
           return /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)("li", { className: "bf-tl__item bf-tl__item--assistant", children: [
             /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("span", { className: "bf-tl__gutter", children: /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("span", { className: "bf-tl__dot", children: author ? /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(Avatar, { name: author.name, kind: author.kind, size: 16 }) : dotIcon("assistant") }) }),
             /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)("div", { className: "bf-tl__body", children: [
@@ -653,7 +667,8 @@ function BrainTimelineInner({
                   onAnswer: onAnswerQuestion
                 }
               ),
-              renderAssistantActions && /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("div", { className: "bf-tl__actions", children: renderAssistantActions(node.message) })
+              renderAssistantActions && /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("div", { className: "bf-tl__actions", children: renderAssistantActions(node.message) }),
+              prov && /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(ProvenanceChip, { prov, labels })
             ] })
           ] }, node.key);
         }

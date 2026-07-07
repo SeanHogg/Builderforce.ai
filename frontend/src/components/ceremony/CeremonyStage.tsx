@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { Select } from '@/components/Select';
+import { useIsMobile } from '@/lib/useIsMobile';
 import { useMediaRoom } from '@/lib/useMediaRoom';
 import { VideoGrid } from '@/components/video/VideoGrid';
 import { MediaControls } from '@/components/video/MediaControls';
@@ -78,6 +79,10 @@ export function CeremonyStage({
 }) {
   const { user } = useAuth();
   const tMeet = useTranslations('meetings');
+  // Narrow viewports can't fit the two 240px rails + the absolute round table side
+  // by side, so on mobile the stage stacks vertically and the seats render as a
+  // centered wrap-grid instead of the (overlapping) circle.
+  const isMobile = useIsMobile();
   const [camerasOn, setCamerasOn] = useState(false);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [members, setMembers] = useState<CeremonyMember[]>([]);
@@ -460,7 +465,7 @@ export function CeremonyStage({
       {loading ? (
         <div style={{ color: 'var(--text-muted)', fontSize: 13 }}>Loading…</div>
       ) : (
-        <div style={{ display: 'flex', gap: 12, flex: 1, minHeight: 0 }}>
+        <div style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', gap: 12, flex: 1, minHeight: 0 }}>
           {/* Backlog rail */}
           <BacklogRail
             tasks={backlogTasks}
@@ -522,18 +527,24 @@ export function CeremonyStage({
             )}
 
             <div
-              onMouseMove={onTableMouseMove}
+              onMouseMove={isMobile ? undefined : onTableMouseMove}
               style={{
                 position: 'relative',
                 flex: 1,
-                minHeight: 360,
+                minHeight: isMobile ? 'auto' : 360,
                 borderRadius: 16,
                 background: 'radial-gradient(circle at 50% 50%, var(--surface-card), var(--bg-deep))',
                 border: '1px solid var(--border-subtle)',
                 overflow: 'hidden',
+                // On mobile the seats flow as a centered wrap-grid rather than an
+                // absolute circle (which collapses/overlaps at narrow widths).
+                ...(isMobile
+                  ? { display: 'flex', flexWrap: 'wrap', gap: 8, justifyContent: 'center', alignContent: 'flex-start', padding: 12 }
+                  : {}),
               }}
             >
-              {/* Center disc */}
+              {/* Center disc (desktop) / full-width banner (mobile). On standup it's a
+                  drop target that marks a dropped ticket Done. */}
               <div
                 onDragOver={mode === 'standup' ? (e) => e.preventDefault() : undefined}
                 onDrop={mode === 'standup' ? (e) => {
@@ -541,7 +552,18 @@ export function CeremonyStage({
                   const id = Number(e.dataTransfer.getData(DRAG_TASK));
                   if (id) setStatus(id, 'done');
                 } : undefined}
-                style={{
+                style={isMobile ? {
+                  flexBasis: '100%',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: 8,
+                  padding: '8px 12px',
+                  borderRadius: 12,
+                  background: 'var(--bg-elevated)',
+                  border: '1px solid var(--border-subtle)',
+                  textAlign: 'center',
+                } : {
                   position: 'absolute',
                   left: '50%',
                   top: '50%',
@@ -564,41 +586,49 @@ export function CeremonyStage({
                   {mode}
                 </span>
                 {mode === 'standup' ? (
-                  <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>Drop a ticket here to mark Done</span>
+                  // Drag-to-Done is a desktop-only affordance (HTML5 DnD doesn't fire
+                  // on touch), so the hint is hidden on mobile.
+                  isMobile ? null : <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>Drop a ticket here to mark Done</span>
                 ) : (
                   <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{backlogTasks.length} in backlog</span>
                 )}
               </div>
 
-              {/* Seats around the ellipse */}
+              {/* Seats: absolute around the ellipse on desktop, wrap-grid on mobile. */}
               {members.map((m, i) => {
+                const k = memberKey(m);
+                const owned = ownedByMember(m);
+                const seat = (
+                  <CeremonySeat
+                    member={m}
+                    stackTasks={tasksForMember(m)}
+                    assignedTasks={owned}
+                    activeLoad={owned.filter((t) => ACTIVE_STATUSES.has(t.status)).length}
+                    cap={capByKey.get(k) ?? DEFAULT_CAP}
+                    present={presentKeys.has(k)}
+                    isCurrentTurn={currentSpeakerKey === k}
+                    showStack={mode === 'standup'}
+                    onDropTask={(id) => assignToMember(id, m)}
+                    onOpen={setDrawerTask}
+                    onOpenScorecard={() => setScorecardMember(m)}
+                    onOpenAssigned={() => setAssignedMember(m)}
+                  />
+                );
+                if (isMobile) return <div key={k}>{seat}</div>;
                 const angle = (2 * Math.PI * i) / Math.max(members.length, 1) - Math.PI / 2;
                 const x = 50 + 42 * Math.cos(angle);
                 const y = 50 + 40 * Math.sin(angle);
-                const k = memberKey(m);
-                const owned = ownedByMember(m);
                 return (
                   <div key={k} style={{ position: 'absolute', left: `${x}%`, top: `${y}%`, transform: 'translate(-50%, -50%)' }}>
-                    <CeremonySeat
-                      member={m}
-                      stackTasks={tasksForMember(m)}
-                      assignedTasks={owned}
-                      activeLoad={owned.filter((t) => ACTIVE_STATUSES.has(t.status)).length}
-                      cap={capByKey.get(k) ?? DEFAULT_CAP}
-                      present={presentKeys.has(k)}
-                      isCurrentTurn={currentSpeakerKey === k}
-                      showStack={mode === 'standup'}
-                      onDropTask={(id) => assignToMember(id, m)}
-                      onOpen={setDrawerTask}
-                      onOpenScorecard={() => setScorecardMember(m)}
-                      onOpenAssigned={() => setAssignedMember(m)}
-                    />
+                    {seat}
                   </div>
                 );
               })}
 
               {members.length === 0 && (
-                <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)', fontSize: 13 }}>
+                <div style={isMobile
+                  ? { flexBasis: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)', fontSize: 13, padding: '24px 0', textAlign: 'center' }
+                  : { position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)', fontSize: 13 }}>
                   No team members — add a team to this project, or invite teammates.
                 </div>
               )}

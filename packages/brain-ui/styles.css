@@ -155,6 +155,46 @@
   margin-top: 6px;
 }
 
+/* ---- per-reply model/account provenance chip ---- */
+.bf-tl__prov {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 6px;
+  font-size: 0.72rem;
+  line-height: 1.4;
+}
+.bf-tl__prov-model {
+  font-family: var(--bf-font-mono, ui-monospace, monospace);
+  color: var(--bf-text-muted, #8a8a8a);
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+.bf-tl__prov-badge {
+  padding: 1px 7px;
+  border-radius: 999px;
+  border: 1px solid var(--bf-border, rgba(128, 128, 128, 0.35));
+  white-space: nowrap;
+}
+/* Own connected account — positive/confirming. */
+.bf-tl__prov--own .bf-tl__prov-badge {
+  color: var(--bf-success, #3fa45b);
+  border-color: var(--bf-success, rgba(63, 164, 91, 0.5));
+  background: var(--bf-success-bg, rgba(63, 164, 91, 0.12));
+}
+/* Shared pool, no connected account — neutral/muted. */
+.bf-tl__prov--shared .bf-tl__prov-badge {
+  color: var(--bf-text-muted, #8a8a8a);
+  background: var(--bf-surface-2, rgba(128, 128, 128, 0.1));
+}
+/* Shared pool DESPITE a connected account — warn: the one to catch. */
+.bf-tl__prov--unused .bf-tl__prov-badge {
+  color: var(--bf-warning, #b7791f);
+  border-color: var(--bf-warning, rgba(183, 121, 31, 0.5));
+  background: var(--bf-warning-bg, rgba(183, 121, 31, 0.12));
+}
+
 /* ---- ask_user question card ---- */
 .bf-qcard {
   margin-top: 8px;

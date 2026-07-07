@@ -15,11 +15,12 @@ import {
   tenantInvitations,
 } from '../../infrastructure/database/schema';
 import { ideProxy, explicitModelPreemptsByo, readProxyChoice } from '../llm/LlmProxyService';
+import { classifyReplyAccount, buildReplyProvenance } from '../llm/replyProvenance';
 import { tenantProxyForPlan } from '../llm/tenantProxy';
 import { vendorForModel } from '../llm/vendors';
 import { recordProxyUsage } from '../llm/usageLedger';
 import { resolveWorkforceModel, WORKFORCE_MODEL_REF_PREFIX } from '../agent/agentPrompt';
-import { listBuiltinTools, callBuiltinTool, CLOUD_AGENT_PLATFORM_TOOLS } from '../llm/builtinMcpService';
+import { listBuiltinTools, callBuiltinTool, CLOUD_AGENT_PLATFORM_TOOLS, CHAT_SCOPED_AGENT_TOOLS } from '../llm/builtinMcpService';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 
@@ -731,7 +732,9 @@ export class BrainService {
    *
    * The agent runs a BOUNDED server-side tool loop over the curated, non-destructive
    * platform tools (`CLOUD_AGENT_PLATFORM_TOOLS` — projects/tasks/specs/OKRs/knowledge
-   * reads + safe writes, NO deletes or control-plane), executed via `callBuiltinTool`
+   * reads + safe writes, NO deletes or control-plane) PLUS the chat-scoped read/link
+   * tools (`CHAT_SCOPED_AGENT_TOOLS` — list/link/unlink tickets on THIS chat, the current
+   * chatId injected into the system prompt), executed via `callBuiltinTool`
    * with the TRIGGERING USER's role/token so the agent can never exceed the human's
    * own permissions. So a teammate agent can actually DO things (create a follow-up
    * task, update an OKR, read the board) when addressed — not just chat. Tool errors
@@ -784,12 +787,20 @@ export class BrainService {
       `You have been addressed directly in this multi-party team chat${projectHint != null ? ` (project #${projectHint})` : ''}. `,
       `Reply AS ${agentName} — first person, concise, helpful, no preamble and no "${agentName}:" label. `,
       `You may use the provided tools to read or update the team's work (projects, tasks, specs, OKRs, knowledge) when it helps answer or act on the request. After using tools, summarise what you found or did. `,
+      // The agent IS a participant in this chat (chatId is known here, not to the model) —
+      // tell it the id so it can tie work items to THIS conversation via chats.link_ticket
+      // and read what is already linked via chats.list_tickets. Without this the chat-scoped
+      // tools are advertised but unusable (the model has no chatId to pass).
+      `You are participating in Brain chat #${chatId}. When you create or discuss a work item that belongs to this conversation, tie it to the chat with chats.link_ticket (chatId=${chatId}); use chats.list_tickets (chatId=${chatId}) to see what is already linked. `,
       `When you need the user to make a decision before you can proceed (an owner, an approach, one target vs another), call the ask_user tool with labelled options INSTEAD of asking in prose — do not end your reply with unanswered questions when ask_user would let the user just click a choice.`,
     ].join('');
 
-    // Curated, non-destructive platform tools (same allowlist an autonomous cloud
-    // agent gets). Advertised name → tool id map for executing the model's calls.
-    const toolEntries = listBuiltinTools().filter((t) => CLOUD_AGENT_PLATFORM_TOOLS.includes(t.tool));
+    // Curated, non-destructive platform tools (the same allowlist an autonomous cloud
+    // agent gets) PLUS the chat-scoped read/link tools that only make sense with a live
+    // chatId (so an agent addressed in a chat can link work to it). Advertised name →
+    // tool id map for executing the model's calls.
+    const agentToolIds = [...CLOUD_AGENT_PLATFORM_TOOLS, ...CHAT_SCOPED_AGENT_TOOLS];
+    const toolEntries = listBuiltinTools().filter((t) => agentToolIds.includes(t.tool));
     const nameToTool = new Map(toolEntries.map((t) => [t.name, t.tool]));
     // Advertise the platform tools PLUS the conversational `ask_user` tool (injected
     // here, intercepted below as a terminal turn — see ASK_USER_TOOL_SPEC).
@@ -819,6 +830,14 @@ export class BrainService {
     const baseModel = resolved?.baseModel ?? undefined;
     const pinnedModel = explicitModelPreemptsByo(baseModel, byoVendors) ? baseModel : undefined;
     const readModel = (r: unknown): string => (r as { resolvedModel?: string } | undefined)?.resolvedModel ?? '';
+    // The vendor + whether the tenant's OWN account served the turn — captured per
+    // completion so the FINAL turn's values drive both the empty-reply diagnostic and
+    // the per-reply provenance chip persisted on a successful turn.
+    const readVendor = (r: unknown): string => (r as { resolvedVendor?: string } | undefined)?.resolvedVendor ?? '';
+    const readByoFunded = (r: unknown): boolean => (r as { byoFunded?: boolean } | undefined)?.byoFunded === true;
+    let lastVendor = '';
+    let lastByoFunded = false;
+    const hasConnectedAccount = byoVendors.size > 0;
 
     // Track the connected-account attempt's failure so a silent cascade off the tenant's
     // OWN account is SURFACED (e.g. an expired subscription token 401s → the run falls to
@@ -848,6 +867,8 @@ export class BrainService {
       });
       this.recordUsage(apiKey, tenantId, 'brain_agent_reply', result);
       lastModel = readModel(result) || lastModel;
+      lastVendor = readVendor(result) || lastVendor;
+      lastByoFunded = readByoFunded(result);
       noteByoFailure(result);
       // ProxyResult.response is an HTTP Response — the body MUST be parsed (readProxyChoice),
       // NOT read as if it were the choices envelope (that silently empties every reply).
@@ -915,6 +936,8 @@ export class BrainService {
       });
       this.recordUsage(apiKey, tenantId, 'brain_agent_reply', finalResult);
       lastModel = readModel(finalResult) || lastModel;
+      lastVendor = readVendor(finalResult) || lastVendor;
+      lastByoFunded = readByoFunded(finalResult);
       noteByoFailure(finalResult);
       const finalChoice = await readProxyChoice(finalResult);
       lastFinish = finalChoice.finishReason || lastFinish;
@@ -925,18 +948,19 @@ export class BrainService {
       // Actionable diagnostics beat a bare "empty reply": name the account the run
       // used, the model it resolved to, and how much tool work happened — so the user
       // can tell a transient empty turn from a misconfigured agent/account.
-      // Name the account HONESTLY from the model that ACTUALLY ran — a connected token
-      // being present does NOT mean the run used it (a cascade or a base-model pin can
-      // land on the shared pool). Reflect the resolved vendor so "connected account not
-      // used" is surfaced instead of a false "ran on your Claude subscription".
-      const ranVendor = lastModel ? vendorForModel(lastModel) : null;
-      const via = ranVendor && byoVendors.has(ranVendor)
-        ? ranVendor === 'anthropic' ? 'your connected Claude account'
-          : ranVendor === 'openai' ? 'your connected OpenAI account'
-          : ranVendor === 'googleai' ? 'your connected Google account'
-          : 'your connected provider account'
-        : byoVendors.size > 0 ? 'the shared model pool (your connected account was NOT used for this run)'
-        : 'the shared model pool';
+      // Name the account HONESTLY from the SAME authoritative signal the provenance
+      // chip uses (`byoFunded` — did the tenant's own credential serve the call), not
+      // a connected-token-is-present guess: a cascade or base-model pin can land on the
+      // shared pool even with a connection. `classifyReplyAccount` is the one place that
+      // decision lives, shared with the streaming gateway header.
+      const account = classifyReplyAccount(lastByoFunded, hasConnectedAccount);
+      const vendorName = (v: string): string =>
+        v === 'anthropic' ? 'Claude' : v === 'openai' ? 'OpenAI' : v === 'googleai' ? 'Google' : 'provider';
+      const via = account === 'own'
+        ? `your connected ${vendorName(lastVendor || (lastModel ? vendorForModel(lastModel) : ''))} account`
+        : account === 'shared_byo_unused'
+          ? 'the shared model pool (your connected account was NOT used for this run)'
+          : 'the shared model pool';
       const modelNote = lastModel ? ` (model: ${lastModel})` : '';
       const toolNote = toolCallCount
         ? ` after ${toolCallCount} tool call${toolCallCount === 1 ? '' : 's'} over ${iterations} step${iterations === 1 ? '' : 's'}`
@@ -970,7 +994,21 @@ export class BrainService {
       };
     }
 
-    const metadata = JSON.stringify({ authoredBy: { kind: 'agent', ref: input.agentRef, name: agentName } });
+    // Attribute the turn to the agent AND record its provenance — the resolved model
+    // + whether the tenant's OWN connected account served it — so a SUCCESSFUL reply
+    // shows the same "whose account ran this" chip that a streaming Brain turn does,
+    // not only the empty-reply diagnostic. `provenance` is the wire key brain-ui's
+    // parseMessageProvenance reads.
+    const provenance = buildReplyProvenance({
+      model: lastModel,
+      vendor: lastVendor || undefined,
+      byoFunded: lastByoFunded,
+      hasConnectedAccount,
+    });
+    const metadata = JSON.stringify({
+      authoredBy: { kind: 'agent', ref: input.agentRef, name: agentName },
+      provenance,
+    });
     const [posted] = await this.appendRaw(chatId, [{ role: 'assistant', content: text, metadata }]);
     return posted ?? { error: 'Failed to post reply' as const };
   }

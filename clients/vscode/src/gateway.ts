@@ -17,11 +17,17 @@ export interface ChatMessage {
   tool_call_id?: string;
 }
 
-/** Gateway base URL from settings, trailing slashes stripped. */
+/**
+ * Gateway base URL from settings, trailing slashes stripped. Defaults to the
+ * primary domain's same-origin gateway path (`builderforce.ai/gateway`) so it
+ * reaches the API on corporate networks that whitelist the main site but block
+ * the `api.` subdomain. The fallback here matches the manifest default and is
+ * only hit if a user explicitly blanks the setting.
+ */
 export function getBaseUrl(): string {
   const raw =
     vscode.workspace.getConfiguration("builderforce").get<string>("baseUrl") ||
-    "https://api.builderforce.ai";
+    "https://builderforce.ai/gateway";
   return raw.replace(/\/+$/, "");
 }
 
@@ -31,8 +37,10 @@ export function getApiKey(secrets: vscode.SecretStorage): Thenable<string | unde
 
 /**
  * The BuilderForce web app base URL (where workspace onboarding + embed pages live).
- * Derived from the gateway base (api.builderforce.ai → builderforce.ai), overridable
- * via `builderforce.webUrl`. Single source of truth for web deep-links.
+ * Derived from the gateway base by dropping any `api.` host prefix AND the path
+ * (so both `https://api.builderforce.ai` and `https://builderforce.ai/gateway`
+ * resolve to `https://builderforce.ai`). Overridable via `builderforce.webUrl`.
+ * Single source of truth for web deep-links.
  */
 export function getWebBaseUrl(): string {
   const override = vscode.workspace.getConfiguration("builderforce").get<string>("webUrl");
