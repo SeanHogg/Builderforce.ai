@@ -1,44 +1,47 @@
-> **PRD** — drafted by Bob Developer (V2 (Container)) · task #89
+> **PRD** — drafted by Kevin BA/PM/PO (Durable) · task #201
 > _Each agent that updates this PRD signs its change below._
 
-# Product Requirements Document: Avatar Filter Row Placement
+## Product Requirements Document: Blocked & Overdue Task Identification
 
-## 1. Problem & Goal
+### 1. Problem & Goal
 
-**Problem:** The current placement of the avatar filter, separated from the priorities dropdown, disrupts the logical grouping of filtering options. Users must scan different areas of the UI to apply related filters, leading to a less efficient and intuitive user experience.
+**Problem:** Manual identification of blocked and overdue tasks is time-consuming, prone to human error, and delays critical interventions. Current reporting indicates zero blocked/overdue tasks, but this needs automated verification against live data.
 
-**Goal:** To improve the user experience by consolidating related filtering options into a single, contiguous row, thereby enhancing discoverability, reducing cognitive load, and increasing the speed at which users can apply filters.
+**Goal:** To automate the identification and reporting of blocked and overdue tasks within the project management system, ensuring timely visibility and enabling proactive resolution.
 
-## 2. Target Users / ICP Roles
+### 2. Target Users / ICP Roles
 
-*   **Project Managers:** Need to quickly filter tasks by assignee (avatar) and priority to understand workload distribution and identify high-priority items.
-*   **Team Leads:** Require efficient filtering to monitor team progress and allocate resources based on task priority and individual contribution (avatar).
-*   **Individual Contributors:** Benefit from a cleaner interface to focus on their assigned tasks and understand their priority within the project context.
+*   **Project Managers:** To monitor project health, reallocate resources, and prioritize interventions.
+*   **Team Leads:** To identify team bottlenecks and support task completion.
+*   **Individual Contributors:** To gain awareness of tasks they are blocking or that are overdue for them.
 
-## 3. Scope
+### 3. Scope
 
-This document covers the functional requirements and acceptance criteria for moving the existing avatar filter component to reside on the same UI row as the priorities dropdown. This includes adjustments to layout, styling, and ensuring the filter's functionality remains intact.
+This feature will focus on the automatic identification and presentation of:
+*   Tasks whose `due_date` has passed without completion (`status` != "Done", "Completed").
+*   Tasks that are explicitly marked as `blocked` or have unmet `dependencies`.
 
-## 4. Functional Requirements
+### 4. Functional Requirements
 
-*   **FR1: Layout Adjustment:** The avatar filter component shall be repositioned to occupy a space adjacent to the priorities dropdown within the primary filtering bar.
-*   **FR2: Visual Consistency:** The avatar filter shall maintain its current visual appearance and interaction patterns (e.g., dropdown behavior, selection indicators) after being moved.
-*   **FR3: Responsive Design:** The integrated avatar and priorities filter row shall adapt appropriately across different screen sizes and resolutions, maintaining usability.
-*   **FR4: Filter Functionality:** Applying a filter via the avatar selector shall continue to correctly filter the displayed data (e.g., tasks, issues), and this filtering shall be independent of or complementary to the priorities filter.
+*   **FR1:** The system shall access and process task data including `status`, `due_date`, `assigned_to`, and `dependencies` / `blocked_by` flags.
+*   **FR2:** The system shall identify tasks where `due_date < current_date` AND `status` is not "Done" or "Completed".
+*   **FR3:** The system shall identify tasks where `status` is "Blocked" OR `dependencies` are incomplete AND `status` is not "Done" or "Completed".
+*   **FR4:** The system shall provide a clear, exportable list of all identified overdue tasks.
+*   **FR5:** The system shall provide a clear, exportable list of all identified blocked tasks, including details on what is blocking them.
+*   **FR6:** The system shall run this identification process daily (or on-demand).
 
-## 5. Acceptance Criteria
+### 5. Acceptance Criteria
 
-*   **AC1: Avatar Filter Visible in Row:** The avatar filter is visibly present on the same horizontal line as the priorities dropdown.
-*   **AC2: Filter Functionality Preserved:** Selecting an avatar from the new location correctly filters the displayed items.
-*   **AC3: Priorities Filter Functionality Preserved:** Selecting a priority from its dropdown continues to filter the displayed items, and its interaction is unaffected by the avatar filter's new position.
-*   **AC4: Combined Filtering Works:** Applying both an avatar filter and a priorities filter simultaneously yields the correct, combined results.
-*   **AC5: No Visual Overlap or Distortion:** The avatar filter and priorities dropdown do not overlap each other or other UI elements in the filtering bar, and the overall layout remains clean and undistorted.
-*   **AC6: Responsiveness Verified:** On smaller screen sizes, the combined filter row is still usable, potentially with a different arrangement if necessary (e.g., stacking if horizontal space is too limited, though the primary goal is horizontal).
+*   **AC1:** Given a task with `due_date = YYYY-MM-DD` and `status = "In Progress"` on `YYYY-MM-DD+1`, the task shall be correctly identified and listed as overdue.
+*   **AC2:** Given a task with `status = "Blocked"` and `dependent_task_id = [Task X]`, the task shall be correctly identified and listed as blocked, showing `Task X` as the blocker.
+*   **AC3:** Given a task with `status = "In Progress"` and `dependencies = [Task Y]` where `Task Y` is not "Completed", the task shall be correctly identified and listed as blocked, showing `Task Y` as the blocker.
+*   **AC4:** The generated lists of overdue and blocked tasks accurately reflect the criteria defined in FR2 and FR3 for a given dataset, with no false positives or negatives.
+*   **AC5:** The system can process a dataset of 1000 tasks and generate the lists within 5 seconds.
 
-## 6. Out of Scope
+### 6. Out of Scope
 
-*   **New Avatar Filter Features:** Any enhancements or new functionalities to the avatar filter itself (e.g., search within avatars, multi-select avatars) are out of scope for this task.
-*   **New Priorities Filter Features:** Any enhancements or new functionalities to the priorities dropdown are out of scope.
-*   **Other Filter Components:** Moving or modifying any other filter components not explicitly mentioned (e.g., date filters, status filters) is out of scope.
-*   **Backend Changes:** Any backend changes related to how filters are processed or stored are out of scope, assuming the existing backend APIs can handle the current filtering logic.
-*   **Performance Optimization:** Significant performance optimizations related to filtering are out of scope, unless directly caused by the layout change.
+*   Automated task prioritization or rescheduling based on blocked/overdue status.
+*   Proactive prediction of future blocked tasks.
+*   Notification mechanisms (e.g., email alerts, Slack integration) – this will be a separate PRD item.
+*   Modification or management of task dependencies within the system.
+*   Deep analytics or trend reporting on blocked/overdue tasks.
