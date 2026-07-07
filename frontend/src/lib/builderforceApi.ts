@@ -162,11 +162,24 @@ export interface AssignableWorkforceDto {
   hires: Array<{ ref: string; name: string }>;
 }
 
+/** One assignee's personality readout, keyed in {@link AssigneeProfileMap} by select-value. */
+export interface AssigneeProfileDto {
+  name: string;
+  psychometric: import('./psychometric').PsychometricProfile;
+}
+/** assignee select-value (`u:<userId>` / `c:<agentRef>`) → personality, for assignees that carry one. */
+export type AssigneeProfileMap = Record<string, AssigneeProfileDto>;
+
 export const kanbanApi = {
   // The cached server-side union the picker fan-out (my agents + purchased + members
   // + engagements) collapses into one read; includes marketplace-hired agents.
   assignable: (): Promise<AssignableWorkforceDto> =>
     request<AssignableWorkforceDto>('/api/kanban/assignable'),
+
+  // The cached assignee-ref → personality map that powers the assignee hovercard —
+  // one tenant-scoped read for every board card / drawer / standup row (no N+1).
+  assigneeProfiles: (): Promise<AssigneeProfileMap> =>
+    request<{ profiles: AssigneeProfileMap }>('/api/kanban/assignee-profiles').then((r) => r.profiles),
 
   // Roles
   listRoles: (): Promise<JobRole[]> =>

@@ -2049,6 +2049,10 @@
     "low": "Low",
     "moderate": "Moderate"
   },
+  "assigneeHovercard": {
+    "trigger": "Show {name}'s personality",
+    "subtitle": "{name}'s personality"
+  },
   "modelApiSamples": {
     "copy": "Copy",
     "copied": "Copied!",
@@ -6454,6 +6458,8 @@
     }
   },
   "taskMgmt": {
+    "bulkChangeStatus": "Bulk change status…",
+    "branchAndPr": "Branch & PR",
     "unassigned": "Unassigned",
     "teamMembers": "Team members",
     "agentHosts": "Agent hosts",

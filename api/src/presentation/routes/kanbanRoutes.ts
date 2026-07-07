@@ -17,6 +17,7 @@ import { RosterService } from '../../application/kanban/rosterService';
 import { RoleAssignmentService } from '../../application/kanban/roleAssignmentService';
 import { TicketAuditService } from '../../application/audit/ticketAuditService';
 import { loadAssignableWorkforce } from '../../application/kanban/assignableWorkforce';
+import { loadAssigneeProfiles, assigneeProfilesCacheKey } from '../../application/kanban/assigneeProfiles';
 import { getOrSetCached } from '../../infrastructure/cache/readThroughCache';
 
 export function createKanbanRoutes(db: Db): Hono<HonoEnv> {
@@ -40,6 +41,19 @@ export function createKanbanRoutes(db: Db): Hono<HonoEnv> {
       kvTtlSeconds: 60, l1TtlMs: 15_000,
     });
     return c.json(data);
+  });
+
+  // ── Assignee personalities (the cached map the hovercard reads) ─────────────
+  // assignee-ref (`u:<userId>` / `c:<agentRef>`) → { name, psychometric }, for every
+  // assignee that has a personality. One tenant-scoped read powers every board card,
+  // task-drawer and standup hovercard — no per-hover fetch. Invalidated on any
+  // personality write (auth PATCH /me, agent create/update).
+  router.get('/assignee-profiles', async (c) => {
+    const tenantId = c.get('tenantId') as number;
+    const data = await getOrSetCached(env(c), assigneeProfilesCacheKey(tenantId), () => loadAssigneeProfiles(db, tenantId), {
+      kvTtlSeconds: 300, l1TtlMs: 30_000,
+    });
+    return c.json({ profiles: data });
   });
 
   // ── Roles ─────────────────────────────────────────────────────────────────

@@ -2049,6 +2049,10 @@
     "low": "Niedrig",
     "moderate": "Mittel"
   },
+  "assigneeHovercard": {
+    "trigger": "Persönlichkeit von {name} anzeigen",
+    "subtitle": "Persönlichkeit von {name}"
+  },
   "modelApiSamples": {
     "copy": "Kopieren",
     "copied": "Kopiert!",
@@ -6454,6 +6458,8 @@
     }
   },
   "taskMgmt": {
+    "bulkChangeStatus": "Status im Stapel ändern…",
+    "branchAndPr": "Branch & PR",
     "unassigned": "Nicht zugewiesen",
     "teamMembers": "Teammitglieder",
     "agentHosts": "Agenten-Hosts",

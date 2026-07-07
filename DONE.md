@@ -4,6 +4,12 @@
 
 ---
 
+## ✅ RESOLVED 2026-07-07 — Chat tickets/agents 404 "Chat not found" on team & shared chats (divergent access guard unified) — api 2026.7.61
+
+Support ticket: `GET /api/brain/chats/51/tickets → 404 "Chat not found"` while the chat itself opened fine. **Root cause:** two divergent access guards. `GET /chats/:id` (and members) went through `BrainService.canAccessChat` — which accepts both `brainstorm` AND `team`-origin chats (migration 0294) and grants shared-visibility teammates access — so the panel rendered. But `GET /chats/:id/tickets` and `/chats/:id/agents` went through `ChatTicketService.ownedChat`, which silently required `origin='brainstorm'` **and** `userId = owner`. So any **team group chat**, or any **shared brainstorm chat opened by a non-owner teammate**, 404'd on its tickets/agents/messages even though it was plainly readable.
+
+**Fix (DRY):** extracted the single shared-access guard into `api/src/application/brain/chatAccess.ts` (`resolveChatAccess` + the origin constants + `syncPendingMemberships`/`getUserEmail`). Both `BrainService.canAccessChat` and `ChatTicketService.ownedChat` now delegate to it, so a chat that reads also resolves for its tickets/agents/members — no more divergence. Gateway/MCP callers (`userId=null`) keep tenant-wide access; locked chats still restrict to owner/active-member (with pending-email-invite auto-convert). Removed the duplicated guard/`syncPendingMemberships`/`getUserEmail` bodies from `BrainService` and the dead `BRAIN_ORIGIN` const from `ChatTicketService`. `tsc --noEmit` clean on all three files.
+
 ## ✅ RESOLVED 2026-07-07 — Workforce/personality gap-register follow-through (OnboardingStepper l10n, engine-column drop, Admin PsychometricEditor, server-backed My Personas)
 
 Four more Consolidated-Gap-Register items across the Workforce/personality cluster, each a complete + verified vertical slice (all touched files `tsc --noEmit` clean — API + frontend; schema-drift + migration-sequence green; the pre-existing unrelated WIP errors in facts/insights/forecast subsystems left untouched).

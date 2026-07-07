@@ -34,6 +34,8 @@ import {
   type TeamMember,
 } from '@/lib/taskAssignee';
 import { BoardConfigPanel } from './board/BoardConfigPanel';
+import { AssigneeProfilesProvider } from './workforce/AssigneeProfilesContext';
+import AssigneeHovercard, { AssigneePersonalityInline } from './workforce/AssigneeHovercard';
 import { AgentChip, ACTIVE_EXECUTION_STATUSES } from './board/AgentChip';
 import { SwimlaneTriageButton } from './board/SwimlaneTriageButton';
 import { trackActivity } from '@/lib/activity/tracker';
@@ -381,6 +383,9 @@ export function TaskMgmtContent({
   // Resolve a task's assignee (human teammate, self-hosted host, OR cloud agent) to its display name.
   const taskAssigneeName = (t: { assignedAgentHostId?: number | null; assignedAgentRef?: string | null; assignedUserId?: string | null }) =>
     assigneeName(t.assignedAgentHostId, t.assignedAgentRef, t.assignedUserId, agentHostsList, cloudAgentsList, membersList);
+  // The same encoded value the picker uses — the key the personality hovercard reads.
+  const taskAssigneeSelectValue = (t: { assignedAgentHostId?: number | null; assignedAgentRef?: string | null; assignedUserId?: string | null }) =>
+    assigneeSelectValue(t.assignedAgentHostId, t.assignedAgentRef, t.assignedUserId);
 
   // The board being configured: the scoped project, or the single project chosen
   // in the filter. Null when viewing "All projects" — the cog stays visible but disabled.
@@ -961,9 +966,13 @@ export function TaskMgmtContent({
             // agent owns it so a just-dropped card reads "Bob · pending" before its
             // execution row materializes.
             (task.assignedAgentHostId || task.assignedAgentRef) ? (
-              <AgentChip label={taskAssigneeName(task)} status="pending" meta="pending" title={`${taskAssigneeName(task)} — queued`} />
+              <AssigneeHovercard selectValue={taskAssigneeSelectValue(task)}>
+                <AgentChip label={taskAssigneeName(task)} status="pending" meta="pending" title={`${taskAssigneeName(task)} — queued`} />
+              </AssigneeHovercard>
             ) : (
-              <span>{taskAssigneeName(task)}</span>
+              <AssigneeHovercard selectValue={taskAssigneeSelectValue(task)}>
+                <span>{taskAssigneeName(task)}</span>
+              </AssigneeHovercard>
             )
           ) : null}
           {task.githubPrUrl && (
@@ -984,6 +993,7 @@ export function TaskMgmtContent({
   };
 
   return (
+    <AssigneeProfilesProvider>
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
       {error && (
         <div
@@ -1297,7 +1307,7 @@ export function TaskMgmtContent({
                       borderTop: '1px solid var(--border-subtle)',
                     }}
                   >
-                    {row.name}
+                    <AssigneeHovercard selectValue={row.key}>{row.name}</AssigneeHovercard>
                     <span style={{ marginLeft: 6, fontSize: 11, fontWeight: 500, color: 'var(--text-muted)' }}>
                       {row.tasks.length}
                     </span>
@@ -1463,7 +1473,7 @@ export function TaskMgmtContent({
                     }}
                     style={{ padding: '4px 8px', fontSize: 13 }}
                   >
-                    <option value="">Bulk change status…</option>
+                    <option value="">{tTask('bulkChangeStatus')}</option>
                     {statusChoices.map((s) => (
                       <option key={s.value} value={s.value}>
                         {s.label}
@@ -1610,7 +1620,9 @@ export function TaskMgmtContent({
                             onClick={() => openTask(task, 'agent')}
                           />
                         ) : (
-                          taskAssigneeName(task)
+                          <AssigneeHovercard selectValue={taskAssigneeSelectValue(task)}>
+                            {taskAssigneeName(task)}
+                          </AssigneeHovercard>
                         )}
                       </td>
                       <td style={{ padding: '10px 12px', fontSize: 12, color: 'var(--text-muted)' }}>
@@ -2121,7 +2133,7 @@ export function TaskMgmtContent({
               </div>
               {(drawerTask.gitBranch || drawerTask.githubPrUrl) && (
                 <div style={{ marginBottom: 16 }}>
-                  <div style={{ fontWeight: 600, marginBottom: 6, fontSize: 14 }}>Branch &amp; PR</div>
+                  <div style={{ fontWeight: 600, marginBottom: 6, fontSize: 14 }}>{tTask('branchAndPr')}</div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
                     {drawerTask.gitBranch && (
                       <span style={{ fontSize: 13, fontFamily: 'var(--font-mono)', color: 'var(--text-secondary)', wordBreak: 'break-all' }}>
@@ -2314,6 +2326,8 @@ export function TaskMgmtContent({
                       </span>
                     )}
                   </div>
+                  {/* This assignee's personality, self-hidden when they haven't got one. */}
+                  <AssigneePersonalityInline selectValue={taskAssigneeSelectValue(drawerTask)} />
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 13, minHeight: 28 }}>
                     <span style={{ color: 'var(--text-muted)' }}>{tTask('dueDate')}</span>
                     {editingField === 'dueDate' ? (
@@ -2527,5 +2541,6 @@ export function TaskMgmtContent({
         </div>
       )}
     </div>
+    </AssigneeProfilesProvider>
   );
 }

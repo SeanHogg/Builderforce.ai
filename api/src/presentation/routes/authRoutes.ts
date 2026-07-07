@@ -18,6 +18,7 @@ import {
   userMfaRecoveryCodes,
   users,
   tenantApiKeys,
+  tenantMembers,
 } from '../../infrastructure/database/schema';
 import { hashPassword, hashSecret, verifyPassword } from '../../infrastructure/auth/HashService';
 import { decodeJwtPayload, signJwt, signWebJwt, verifyWebJwt } from '../../infrastructure/auth/JwtService';
@@ -40,6 +41,8 @@ import { checkTermsAcceptance } from '../middleware/termsEnforcement';
 import { getActiveLegalDoc } from '../../application/legal/legalDocsService';
 import { sanitizePsychometricProfile } from '../../application/persona/psychometricCatalog';
 import { provisionForHireProfile } from '../../application/freelance/provisionForHire';
+import { invalidateCached } from '../../infrastructure/cache/readThroughCache';
+import { assigneeProfilesCacheKey } from '../../application/kanban/assigneeProfiles';
 
 /** Parse a stored psychometric JSON column into an object (null when unset/invalid). */
 function parsePsychometric(raw: string | null | undefined): unknown {
@@ -1058,6 +1061,12 @@ export function createAuthRoutes(authService: AuthService, db: Db): Hono<HonoEnv
 
     const [row] = await db.update(users).set(updates).where(eq(users.id, userId)).returning();
     if (!row) return c.json({ error: 'User not found' }, 404);
+    // A personality change alters this person's assignee hovercard on every board.
+    // Invalidate the cached assignee-profile map for each tenant they belong to.
+    if (body.psychometric !== undefined) {
+      const memberships = await db.select({ tenantId: tenantMembers.tenantId }).from(tenantMembers).where(eq(tenantMembers.userId, userId));
+      await Promise.all(memberships.map((m) => invalidateCached(c.env, assigneeProfilesCacheKey(m.tenantId))));
+    }
     return c.json({ user: toUserResponse(row) });
   });
 

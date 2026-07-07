@@ -2049,6 +2049,10 @@
     "low": "Bajo",
     "moderate": "Moderado"
   },
+  "assigneeHovercard": {
+    "trigger": "Ver la personalidad de {name}",
+    "subtitle": "Personalidad de {name}"
+  },
   "modelApiSamples": {
     "copy": "Copiar",
     "copied": "¡Copiado!",
@@ -6454,6 +6458,8 @@
     }
   },
   "taskMgmt": {
+    "bulkChangeStatus": "Cambiar estado en bloque…",
+    "branchAndPr": "Rama y PR",
     "unassigned": "Sin asignar",
     "teamMembers": "Miembros del equipo",
     "agentHosts": "Hosts de agentes",

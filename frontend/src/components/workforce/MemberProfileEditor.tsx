@@ -76,7 +76,7 @@ export function MemberProfileEditor({ kind, refId, name, onClose, onSaved }: {
       const r = await membersApi.calendarSync(kind, refId);
       if (r.ok) {
         const until = r.availabilityUntil ? t('syncedUntil', { time: new Date(r.availabilityUntil).toLocaleString() }) : '';
-        setCalMsg(t('syncedMsg', { status: r.availabilityStatus, until, count: r.ptoCount ?? 0 }));
+        setCalMsg(t('syncedMsg', { status: r.availabilityStatus ?? '', until, count: r.ptoCount ?? 0 }));
         const fresh = await membersApi.getProfile(kind, refId);
         if (fresh.profile) setP(fresh.profile);
       } else {
