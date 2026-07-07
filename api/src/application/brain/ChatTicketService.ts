@@ -32,10 +32,10 @@ import { resolveSegment } from '../../infrastructure/auth/segmentResolver';
 import { notSystemTask } from '../task/taskScope';
 import { keyResultProgress, objectiveProgress } from '../pmo/portfolioRollup';
 import { AgentAssignmentService } from '../agent/AgentAssignmentService';
+import { resolveChatAccess } from './chatAccess';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 
-const BRAIN_ORIGIN = 'brainstorm';
 const CHAT_SCOPE = 'chat';
 
 /** The work-item kinds a chat can be tied to (planning spine + roadmap + spec + gap). */

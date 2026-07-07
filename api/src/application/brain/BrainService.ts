@@ -21,17 +21,12 @@ import { vendorForModel } from '../llm/vendors';
 import { recordProxyUsage } from '../llm/usageLedger';
 import { resolveWorkforceModel, WORKFORCE_MODEL_REF_PREFIX } from '../agent/agentPrompt';
 import { listBuiltinTools, callBuiltinTool, CLOUD_AGENT_PLATFORM_TOOLS, CHAT_SCOPED_AGENT_TOOLS } from '../llm/builtinMcpService';
+import {
+  BRAIN_ORIGIN, TEAM_ORIGIN, ACCESSIBLE_ORIGINS,
+  resolveChatAccess, syncPendingMemberships as syncPendingMembershipsShared,
+} from './chatAccess';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
-
-const BRAIN_ORIGIN = 'brainstorm';
-/** The canonical always-there team GROUP chat (migration 0294). Reuses the whole
- *  Brain chat stack; one per (tenant, projectId), projectId NULL = tenant-wide. */
-const TEAM_ORIGIN = 'team';
-/** Origins reachable through the shared chat access/message endpoints. Team chats
- *  ride the exact same read/post path as brainstorm chats (only owner-only ADMIN —
- *  rename/archive/lock — stays brainstorm-only via {@link verifyChatOwnership}). */
-const ACCESSIBLE_ORIGINS = [BRAIN_ORIGIN, TEAM_ORIGIN] as const;
 
 /**
  * A conversational-only tool: when the agent needs the USER to make a decision to
@@ -218,46 +213,9 @@ export class BrainService {
     userId: string,
     selectExtra?: Record<string, unknown>,
   ) {
-    const columns = {
-      id: brainChats.id,
-      ownerId: brainChats.userId,
-      visibility: brainChats.visibility,
-      ...(selectExtra ?? {}),
-    };
-    const [chat] = await this.db
-      .select(columns as typeof columns & { id: typeof brainChats.id })
-      .from(brainChats)
-      .where(and(
-        eq(brainChats.id, chatId),
-        eq(brainChats.tenantId, tenantId),
-        inArray(brainChats.origin, ACCESSIBLE_ORIGINS as unknown as string[]),
-      ))
-      .limit(1);
-    if (!chat) return null;
-
-    const c = chat as unknown as { ownerId: string | null; visibility: string };
-    if (c.ownerId === userId) return chat;           // owner
-    if (c.visibility !== 'locked') return chat;       // shared → any teammate
-
-    // Locked: owner or active member only.
-    const isMember = async () => {
-      const [m] = await this.db
-        .select({ id: chatMembers.id })
-        .from(chatMembers)
-        .where(and(
-          eq(chatMembers.chatId, chatId),
-          eq(chatMembers.tenantId, tenantId),
-          eq(chatMembers.userId, userId),
-          eq(chatMembers.status, 'active'),
-        ))
-        .limit(1);
-      return !!m;
-    };
-    if (await isMember()) return chat;
-    // Maybe a pending invite addressed this user's email — convert then re-check.
-    await this.syncPendingMemberships(tenantId, userId);
-    if (await isMember()) return chat;
-    return null;
+    // Single shared-access guard — the SAME one ChatTicketService uses, so a chat
+    // that reads here also resolves for its tickets/agents/members ({@link resolveChatAccess}).
+    return resolveChatAccess(this.db, { chatId, tenantId, userId, selectExtra });
   }
 
   /** Record a contributing non-owner as an active member (the chat's audience),
@@ -279,32 +237,9 @@ export class BrainService {
     }
   }
 
-  /** The user's email (for pending-invite matching). */
-  private async getUserEmail(userId: string): Promise<string | null> {
-    const [u] = await this.db.select({ email: users.email }).from(users).where(eq(users.id, userId)).limit(1);
-    return u?.email?.toLowerCase() ?? null;
-  }
-
-  /**
-   * Activate any pending chat-member invites whose `invited_email` matches this
-   * user's address — the auto-conversion that mirrors tenant_invitations. Single
-   * bounded UPDATE keyed on the indexed lower(invited_email); a no-op (0 rows) when
-   * the user has no pending invites. Returns the chat ids that just converted.
-   */
-  private async syncPendingMemberships(tenantId: number, userId: string): Promise<number[]> {
-    const email = await this.getUserEmail(userId);
-    if (!email) return [];
-    const rows = await this.db
-      .update(chatMembers)
-      .set({ userId, status: 'active', invitedEmail: null, updatedAt: new Date() })
-      .where(and(
-        eq(chatMembers.tenantId, tenantId),
-        isNull(chatMembers.userId),
-        eq(chatMembers.status, 'pending'),
-        sql`lower(${chatMembers.invitedEmail}) = ${email}`,
-      ))
-      .returning({ chatId: chatMembers.chatId });
-    return rows.map((r) => r.chatId);
+  /** Activate any pending chat-member invites for this user (shared helper). */
+  private syncPendingMemberships(tenantId: number, userId: string): Promise<number[]> {
+    return syncPendingMembershipsShared(this.db, tenantId, userId);
   }
 
   private async verifyProjectInTenant(projectId: number, tenantId: number) {
