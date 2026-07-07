@@ -1,44 +1,52 @@
-> **PRD** — drafted by Bob Developer (V2 (Container)) · task #89
+> **PRD** — drafted by Kevin BA/PM/PO (Durable) · task #182
 > _Each agent that updates this PRD signs its change below._
 
-# Product Requirements Document: Avatar Filter Row Placement
+# Product Requirements Document: Percentage-Complete Score per OKR Epic
 
 ## 1. Problem & Goal
 
-**Problem:** The current placement of the avatar filter, separated from the priorities dropdown, disrupts the logical grouping of filtering options. Users must scan different areas of the UI to apply related filters, leading to a less efficient and intuitive user experience.
+### 1.1 Problem Statement
+Currently, there is no standardized, automated way to quickly ascertain the progress of an OKR epic. Teams and stakeholders rely on manual updates or subjective assessments, leading to inconsistent reporting, lack of transparency, and difficulty in making informed decisions about epic progress and potential risks.
 
-**Goal:** To improve the user experience by consolidating related filtering options into a single, contiguous row, thereby enhancing discoverability, reducing cognitive load, and increasing the speed at which users can apply filters.
+### 1.2 Goal
+To provide an automated, clear, and consistent "percentage-complete" score for each OKR epic, enhancing visibility, facilitating data-driven reporting, and improving decision-making for all stakeholders.
 
 ## 2. Target Users / ICP Roles
-
-*   **Project Managers:** Need to quickly filter tasks by assignee (avatar) and priority to understand workload distribution and identify high-priority items.
-*   **Team Leads:** Require efficient filtering to monitor team progress and allocate resources based on task priority and individual contribution (avatar).
-*   **Individual Contributors:** Benefit from a cleaner interface to focus on their assigned tasks and understand their priority within the project context.
+*   Product Managers
+*   Engineering Leads/Managers
+*   Program Managers
+*   OKR Owners
+*   Team Leads
+*   Stakeholders (e.g., Executives, Department Heads) needing quick progress updates
 
 ## 3. Scope
-
-This document covers the functional requirements and acceptance criteria for moving the existing avatar filter component to reside on the same UI row as the priorities dropdown. This includes adjustments to layout, styling, and ensuring the filter's functionality remains intact.
+This feature will introduce a mechanism to automatically calculate and display a percentage-complete score for each OKR epic based on the completion status of its directly linked child items (e.g., stories, tasks, sub-tasks). The score will be visible on the OKR epic details view and update dynamically.
 
 ## 4. Functional Requirements
 
-*   **FR1: Layout Adjustment:** The avatar filter component shall be repositioned to occupy a space adjacent to the priorities dropdown within the primary filtering bar.
-*   **FR2: Visual Consistency:** The avatar filter shall maintain its current visual appearance and interaction patterns (e.g., dropdown behavior, selection indicators) after being moved.
-*   **FR3: Responsive Design:** The integrated avatar and priorities filter row shall adapt appropriately across different screen sizes and resolutions, maintaining usability.
-*   **FR4: Filter Functionality:** Applying a filter via the avatar selector shall continue to correctly filter the displayed data (e.g., tasks, issues), and this filtering shall be independent of or complementary to the priorities filter.
+*   **FR.1: Item Association:** The system SHALL allow users to link stories, tasks, and sub-tasks to an OKR epic.
+*   **FR.2: Completion Status Tracking:** The system SHALL accurately identify the completion status of all items linked to an OKR epic (e.g., "Done", "Completed", "Closed").
+*   **FR.3: Percentage Calculation:** The system SHALL calculate the percentage complete of an OKR epic based on the ratio of "completed" linked items to the total number of linked items.
+    *   *Formula:* `(Number of Completed Items / Total Number of Linked Items) * 100`
+*   **FR.4: Display:** The system SHALL display the calculated percentage-complete score prominently on the OKR epic's dedicated view/page.
+*   **FR.5: Real-time Update:** The system SHALL update the percentage-complete score in near real-time whenever the completion status of any linked item changes.
+*   **FR.6: Informational Tooltip:** The system SHOULD provide a tooltip or a small information icon near the percentage score, explaining the calculation method (e.g., "Calculated based on 5 of 10 linked tasks completed").
 
 ## 5. Acceptance Criteria
 
-*   **AC1: Avatar Filter Visible in Row:** The avatar filter is visibly present on the same horizontal line as the priorities dropdown.
-*   **AC2: Filter Functionality Preserved:** Selecting an avatar from the new location correctly filters the displayed items.
-*   **AC3: Priorities Filter Functionality Preserved:** Selecting a priority from its dropdown continues to filter the displayed items, and its interaction is unaffected by the avatar filter's new position.
-*   **AC4: Combined Filtering Works:** Applying both an avatar filter and a priorities filter simultaneously yields the correct, combined results.
-*   **AC5: No Visual Overlap or Distortion:** The avatar filter and priorities dropdown do not overlap each other or other UI elements in the filtering bar, and the overall layout remains clean and undistorted.
-*   **AC6: Responsiveness Verified:** On smaller screen sizes, the combined filter row is still usable, potentially with a different arrangement if necessary (e.g., stacking if horizontal space is too limited, though the primary goal is horizontal).
+*   **AC.1:** When an OKR epic has 0 linked items, its percentage-complete score is 0%.
+*   **AC.2:** When an OKR epic has N linked items, and all N items are marked as "Done", its percentage-complete score is 100%.
+*   **AC.3:** When an OKR epic has N linked items, and M items are marked as "Done" (where 0 < M < N), its percentage-complete score is (M/N * 100)%, rounded to the nearest whole number.
+*   **AC.4:** The percentage-complete score is clearly visible on the OKR epic details page for all relevant user roles.
+*   **AC.5:** Changing the status of a linked item from a non-completed state (e.g., "To Do", "In Progress") to a completed state (e.g., "Done", "Closed") immediately updates the epic's percentage complete.
+*   **AC.6:** Changing the status of a linked item from a completed state to a non-completed state immediately updates the epic's percentage complete.
+*   **AC.7:** The tooltip (if implemented) accurately describes the calculation and current item count breakdown.
 
 ## 6. Out of Scope
 
-*   **New Avatar Filter Features:** Any enhancements or new functionalities to the avatar filter itself (e.g., search within avatars, multi-select avatars) are out of scope for this task.
-*   **New Priorities Filter Features:** Any enhancements or new functionalities to the priorities dropdown are out of scope.
-*   **Other Filter Components:** Moving or modifying any other filter components not explicitly mentioned (e.g., date filters, status filters) is out of scope.
-*   **Backend Changes:** Any backend changes related to how filters are processed or stored are out of scope, assuming the existing backend APIs can handle the current filtering logic.
-*   **Performance Optimization:** Significant performance optimizations related to filtering are out of scope, unless directly caused by the layout change.
+*   Weighting linked items in the percentage calculation (e.g., by story points, estimated time, complexity). The current calculation is based solely on item count.
+*   Configurable "completed" statuses. The system will rely on a predefined or standard "Done" state for linked items.
+*   Historical tracking or trending of the percentage-complete score over time.
+*   Aggregation of percentage-complete scores beyond the individual epic level (e.g., for an Objective or Key Result).
+*   Predictive completion dates or burn-down/up charts based on velocity.
+*   Customizable formulas or weighting schemes for percentage calculation.
