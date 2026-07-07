@@ -10,7 +10,7 @@
  */
 import { and, desc, eq, sql } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
-import { legalDocuments } from '../../infrastructure/database/schema';
+import { legalDocuments, legalDocumentVersions } from '../../infrastructure/database/schema';
 import type { Env } from '../../env';
 import { ideProxy, newTraceId, readProxyChoice } from '../llm/LlmProxyService';
 import { logTrace } from '../llm/traceLogger';
@@ -34,6 +34,67 @@ export type LegalDocResponse = {
   content: string;
   publishedAt: string;
 };
+
+export type LegalDocVersion = {
+  id: number;
+  documentType: LegalDocType;
+  version: string;
+  title: string;
+  content: string;
+  changeKind: 'publish' | 'amend';
+  changedBy: string | null;
+  createdAt: string;
+};
+
+/**
+ * Snapshot a legal doc write into the version-history table. Called on every
+ * publish and amend so the full audit trail survives (an amend overwrites the
+ * active `legal_documents` row in place, so without this its prior text is lost).
+ * Best-effort: a history-write failure must never break the primary write.
+ */
+async function recordLegalVersion(
+  db: Db,
+  docType: LegalDocType,
+  snapshot: { version: string; title: string; content: string },
+  changeKind: 'publish' | 'amend',
+  changedBy: string | null,
+): Promise<void> {
+  try {
+    await db.insert(legalDocumentVersions).values({
+      documentType: docType,
+      version: snapshot.version,
+      title: snapshot.title,
+      content: snapshot.content,
+      changeKind,
+      changedBy,
+    });
+  } catch {
+    // History is an audit convenience; never fail the legal write over it.
+  }
+}
+
+/**
+ * Read the version history for legal docs (newest first). Pass a docType to scope
+ * to Terms or Privacy; omit for both. Bounded result set.
+ */
+export async function getLegalHistory(db: Db, docType?: LegalDocType, limit = 100): Promise<LegalDocVersion[]> {
+  const rows = await db
+    .select()
+    .from(legalDocumentVersions)
+    .where(docType ? eq(legalDocumentVersions.documentType, docType) : undefined)
+    .orderBy(desc(legalDocumentVersions.createdAt))
+    .limit(Math.min(Math.max(limit, 1), 500));
+  return rows.map((r) => ({
+    id: r.id,
+    documentType: r.documentType as LegalDocType,
+    version: r.version,
+    title: r.title,
+    content: r.content,
+    changeKind: r.changeKind === 'amend' ? 'amend' : 'publish',
+    changedBy: r.changedBy ?? null,
+    createdAt: r.createdAt ? r.createdAt.toISOString() : new Date().toISOString(),
+  }));
+}
 
 /** Typed error so route/MCP callers can map to an HTTP status (or a Brain-facing message). */
 export class LegalDocError extends Error {
@@ -140,6 +201,8 @@ export async function publishLegalDoc(
     publishedBy,
   });
 
+  await recordLegalVersion(db, docType, { version, title, content }, 'publish', publishedBy);
+
   return getActiveLegalDoc(db, docType);
 }
 
@@ -152,6 +215,7 @@ export async function amendActiveLegalDoc(
   db: Db,
   docType: LegalDocType,
   input: { version?: string; title?: string; content: string },
+  amendedBy: string | null = null,
 ): Promise<LegalDocResponse> {
   const label = LEGAL_DOC_LABELS[docType];
   const version = input.version?.trim();
@@ -169,7 +233,12 @@ export async function amendActiveLegalDoc(
 
   if (!active) {
     // No active doc yet (fresh platform): publishing IS the amend — mint the row.
-    return publishLegalDoc(db, docType, { version: version || DEFAULT_LEGAL[docType].version, title, content }, null);
+    return publishLegalDoc(
+      db,
+      docType,
+      { version: version || DEFAULT_LEGAL[docType].version, title, content },
+      amendedBy,
+    );
   }
 
   if (version && version !== active.version) {
@@ -181,10 +250,13 @@ export async function amendActiveLegalDoc(
     if (clash) throw new LegalDocError(`${label} version ${version} already exists`, 409);
   }
 
+  const nextVersion = version || active.version;
   await db
     .update(legalDocuments)
-    .set({ title, content, version: version || active.version, updatedAt: sql`now()` })
+    .set({ title, content, version: nextVersion, updatedAt: sql`now()` })
     .where(eq(legalDocuments.id, active.id));
+
+  await recordLegalVersion(db, docType, { version: nextVersion, title, content }, 'amend', amendedBy);
 
   return getActiveLegalDoc(db, docType);
 }

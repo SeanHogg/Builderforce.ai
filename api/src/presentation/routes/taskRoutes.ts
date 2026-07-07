@@ -214,6 +214,23 @@ export async function maybeAutoRunOnLaneEntry(
         console.warn(
           `[capability_mismatch] task ${args.taskId} lane '${args.status}': agent '${m.agentRef}' lacks required capabilities [${m.missing.join(', ')}] — skipped for auto-run`,
         );
+        // Surface the skip as a first-class Observability event, not just a server
+        // log: a mis-staffed lane whose candidate agent lacks its required
+        // capabilities is a diagnosable configuration error that the Triage control
+        // otherwise only shows on-demand. Task-scoped (no execution was created — the
+        // run was skipped) + keyed to the agent ref so it lands in that agent's
+        // tool-audit timeline alongside its runs. Best-effort (recordCloudToolEvent
+        // swallows its own errors) so telemetry never blocks the trigger.
+        await recordCloudToolEvent(db, {
+          tenantId:      args.tenantId,
+          cloudAgentRef: m.agentRef,
+          executionId:   null,
+          sessionKey:    `task:${args.taskId}`,
+          toolName:      'auto_run_skipped',
+          category:      'planning',
+          detail:        { taskId: args.taskId, lane: args.status, reason: 'capability_mismatch', agentRef: m.agentRef, missing: m.missing },
+          result:        `Auto-run skipped: agent '${m.agentRef}' lacks required capabilities [${m.missing.join(', ')}] for lane '${args.status}'.`.slice(0, 300),
+        });
       }
     }
     if (!evaln.canRunNow) return false;

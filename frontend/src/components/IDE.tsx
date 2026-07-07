@@ -13,9 +13,12 @@ interface IDEProps {
   /** One-shot prompt to auto-send into the Brain panel on load (e.g. the Project 360
    *  "Improve with Brain" seed via `/ide/:id?prompt=`). */
   initialPrompt?: string;
+  /** One-shot work item to auto-link the opened chat to (`/ide/:id?ticket=<kind>:<ref>`),
+   *  so clicking an item opens a chat already tied to it — parity with the VS Code flow. */
+  initialTicket?: { kind: string; ref: string };
 }
 
-export function IDE({ project, initialFiles, onProjectUpdate, onOpenProjectDetails, initialChatId, initialPrompt }: IDEProps) {
+export function IDE({ project, initialFiles, onProjectUpdate, onOpenProjectDetails, initialChatId, initialPrompt, initialTicket }: IDEProps) {
   return (
     <IDENew
       project={project}
@@ -24,6 +27,7 @@ export function IDE({ project, initialFiles, onProjectUpdate, onOpenProjectDetai
       onOpenProjectDetails={onOpenProjectDetails}
       initialChatId={initialChatId}
       initialPrompt={initialPrompt}
+      initialTicket={initialTicket}
     />
   );
 }

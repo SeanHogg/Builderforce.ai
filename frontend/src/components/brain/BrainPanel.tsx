@@ -44,7 +44,8 @@ import {
   type RecipientChoice,
 } from '@/lib/brain';
 import type { BrainChat, BrainMessage } from '@/lib/builderforceApi';
-import { agentAssignmentsApi, reposApi, runtimeApi, brain, type AgentAssignment, type ProjectRepository, type ChatAgentInvite, type ChatMemberInfo } from '@/lib/builderforceApi';
+import { agentAssignmentsApi, reposApi, runtimeApi, brain, type AgentAssignment, type ProjectRepository, type ChatAgentInvite, type ChatMemberInfo, type TicketKind } from '@/lib/builderforceApi';
+import { dispatchBrainDataChanged } from '@/lib/brain/brainDataEvent';
 import { loadAgentPoolCached, type PoolAgent } from '@/lib/agentPool';
 import { MODALITIES, getModality } from '@/lib/modality';
 import { isBrainAutoApprove, setBrainAutoApprove } from '@/lib/brain/autoApprove';
@@ -77,6 +78,12 @@ export interface BrainPanelProps {
    * after auth). Sent exactly once; `conv.send` creates+selects a chat on demand.
    */
   initialPrompt?: string;
+  /**
+   * One-shot work item to auto-link the opened chat to (`?ticket=<kind>:<ref>`), so
+   * clicking an item opens a chat already tied to it — parity with the VS Code "open
+   * task" flow. Handled once; ensures a chat exists, then reuses `brain.linkChatTicket`.
+   */
+  initialTicket?: { kind: string; ref: string };
   /** Docked only: close handler for the drawer chrome. */
   onClose?: () => void;
 }
@@ -89,6 +96,7 @@ export function BrainPanel({
   extraSystem,
   initialChatId,
   initialPrompt,
+  initialTicket,
   onClose,
 }: BrainPanelProps) {
   const isPage = variant === 'page';
@@ -437,16 +445,97 @@ export function BrainPanel({
   }, [chats]);
 
   const onDelete = useCallback(async (chat: BrainChat) => {
-    const title = chat.title?.trim() || 'this chat';
-    if (!confirm(`Delete "${title}"? This cannot be undone.`)) return;
+    const title = chat.title?.trim() || tBrain('thisChat');
+    if (!confirm(tBrain('deleteChatConfirm', { title }))) return;
     setDeletingId(chat.id);
     try { await chats.remove(chat.id); } finally { setDeletingId(null); }
-  }, [chats]);
+  }, [chats, tBrain]);
 
   const onAssign = useCallback(async (chatId: number, projectId: number | null) => {
     setBusyId(chatId);
     try { await chats.assignToProject(chatId, projectId); } finally { setBusyId(null); }
   }, [chats]);
+
+  // Memoize the props handed to the React.memo-wrapped <BrainTimeline> and
+  // <ChatTicketsPanel> so they don't get a fresh object/closure every render —
+  // otherwise the memo never skips and the transcript re-parses markdown on
+  // every keystroke/streaming token (mirrors the VS Code webview App.tsx).
+  const timelineLabels = useMemo(() => ({
+    thinking: tTimeline('thinking'),
+    thoughtFor: tTimeline('thoughtFor'),
+    you: tTimeline('you'),
+    assistant: tTimeline('assistant'),
+    input: tTimeline('input'),
+    output: tTimeline('output'),
+    error: tTimeline('error'),
+    loading: tTimeline('loading'),
+    empty: tTimeline('empty'),
+    copy: tTimeline('copy'),
+    copied: tTimeline('copied'),
+    apply: tTimeline('apply'),
+    createFile: tTimeline('createFile'),
+    preview: tTimeline('preview'),
+    askSubmit: tTimeline('askSubmit'),
+    askAnswered: tTimeline('askAnswered'),
+    accountOwn: tTimeline('accountOwn'),
+    accountShared: tTimeline('accountShared'),
+    accountByoUnused: tTimeline('accountByoUnused'),
+  }), [tTimeline]);
+
+  const timelineApplyCode = useMemo(
+    () => (hasTool('apply_code_to_active_file')
+      ? (code: string) => { void runTool('apply_code_to_active_file', { code }); }
+      : undefined),
+    [hasTool, runTool],
+  );
+  const timelineCreateFile = useMemo(
+    () => (hasTool('create_file')
+      ? (path: string, content: string) => { void runTool('create_file', { path, content }); }
+      : undefined),
+    [hasTool, runTool],
+  );
+  // The conversation hook returns a FRESH object every render and `recipient`
+  // recomputes as the user types, so a callback that depends on them would change
+  // identity every keystroke and defeat <BrainTimeline>'s memo. Read the latest
+  // values from a ref instead, keeping the callbacks below referentially stable.
+  const timelineCtxRef = useRef({ conv, chats, recipient, projectId: chats.activeChat?.projectId ?? pinnedProjectId ?? undefined });
+  timelineCtxRef.current = { conv, chats, recipient, projectId: chats.activeChat?.projectId ?? pinnedProjectId ?? undefined };
+  const onAnswerTimelineQuestion = useCallback((answer: string) => {
+    const { conv: c, recipient: r } = timelineCtxRef.current;
+    void c.send(answer, { addressedTo: r });
+  }, []);
+  const renderTimelineMessage = useCallback(
+    (msg: BrainMessage, ctx: { role: 'user' | 'assistant'; text: string }) => (
+      <ChatMessageContent
+        content={ctx.role === 'assistant' ? parseSuggestedActions(msg.content).content : ctx.text}
+        onApplyCode={ctx.role === 'assistant' && hasTool('apply_code_to_active_file') ? (code) => { void runTool('apply_code_to_active_file', { code }); } : undefined}
+        onCreateFile={ctx.role === 'assistant' && hasTool('create_file') ? (path, content) => { void runTool('create_file', { path, content }); } : undefined}
+      />
+    ),
+    [hasTool, runTool],
+  );
+  const renderTimelineStreaming = useCallback(
+    (text: string) => <ChatMessageContent content={parseSuggestedActions(text).content} />,
+    [],
+  );
+  const renderTimelineAssistantActions = useCallback((msg: BrainMessage) => {
+    const { conv: c, projectId } = timelineCtxRef.current;
+    return (
+      <MessageActions
+        msg={msg}
+        conv={c}
+        projectId={projectId}
+        suggestions={parseSuggestedActions(msg.content).actions}
+        onRunSuggestion={(prompt) => { void c.send(prompt); }}
+      />
+    );
+  }, []);
+  const onTicketsChanged = useCallback(() => {
+    const { conv: c, chats: ch } = timelineCtxRef.current;
+    void ch.reload();
+    c.reloadMessages();
+    setParticipantsRefresh((n) => n + 1);
+  }, []);
 
   const createProjectAndAssign = useCallback(async () => {
     const name = newProjectName.trim();
@@ -534,16 +623,43 @@ export function BrainPanel({
     </button>
   );
 
+  // Auto-link a one-shot work item on open (`?ticket=<kind>:<ref>`), so clicking an
+  // item opens a chat already tied to it — the web parity for the VS Code "open task"
+  // flow, reusing the SAME `brain.linkChatTicket` the picker uses. Ensures a chat
+  // exists (deep-linked → active → a fresh project-scoped chat), links it, then lets
+  // the ChatTicketsPanel refresh. `ticketReady` gates the prompt send so a combined
+  // `?prompt=&ticket=` opens ONE chat (the linked one), not two.
+  const ticketHandledRef = useRef(false);
+  const [ticketReady, setTicketReady] = useState(() => !initialTicket);
+  useEffect(() => {
+    if (!initialTicket || ticketHandledRef.current || chats.loading) return;
+    ticketHandledRef.current = true;
+    void (async () => {
+      try {
+        let chatId = initialChatId ?? chats.activeChatId;
+        if (chatId == null) {
+          const created = await chats.create({ projectId: pinnedProjectId ?? viewingProjectId ?? null });
+          chatId = created?.id ?? null;
+        }
+        if (chatId == null) return;
+        await brain.linkChatTicket(chatId, { kind: initialTicket.kind as TicketKind, ref: initialTicket.ref, linkType: 'linked' });
+        dispatchBrainDataChanged({ domain: 'brain', method: 'link' });
+      } catch { /* best-effort auto-link — a failure never blocks the chat */ }
+      finally { setTicketReady(true); }
+    })();
+  }, [initialTicket, initialChatId, chats, pinnedProjectId, viewingProjectId]);
+
   // Auto-send a one-shot prompt (e.g. a landing-page prompt replayed after auth).
   // `conv.send` creates+selects a chat on demand, so the conversation renders and
-  // streams a reply. Ref-guarded so re-renders never re-send.
+  // streams a reply. Ref-guarded so re-renders never re-send; `ticketReady` holds it
+  // until any auto-link has claimed the chat so the prompt lands in the linked one.
   const initialPromptSentRef = useRef(false);
   useEffect(() => {
     const text = initialPrompt?.trim();
-    if (!text || initialPromptSentRef.current) return;
+    if (!text || initialPromptSentRef.current || !ticketReady) return;
     initialPromptSentRef.current = true;
     void conv.send(text);
-  }, [initialPrompt, conv]);
+  }, [initialPrompt, conv, ticketReady]);
 
   const error = chats.error || conv.error;
   // The banner surfaces either source; dismissing must clear whichever is set.
@@ -668,7 +784,7 @@ export function BrainPanel({
               chatId={chats.activeChat.id}
               projectId={chats.activeChat.projectId ?? pinnedProjectId ?? viewingProjectId ?? null}
               chatList={chats.chats}
-              onChanged={() => { void chats.reload(); conv.reloadMessages(); setParticipantsRefresh((n) => n + 1); }}
+              onChanged={onTicketsChanged}
             />
           )}
           {showNewProject && (
@@ -693,50 +809,16 @@ export function BrainPanel({
               streamingText={conv.sending ? conv.streamingText : ''}
               isRunning={conv.sending}
               loading={conv.loadingMessages}
-              labels={{
-                thinking: tTimeline('thinking'),
-                thoughtFor: tTimeline('thoughtFor'),
-                you: tTimeline('you'),
-                assistant: tTimeline('assistant'),
-                input: tTimeline('input'),
-                output: tTimeline('output'),
-                error: tTimeline('error'),
-                loading: tTimeline('loading'),
-                empty: tTimeline('empty'),
-                copy: tTimeline('copy'),
-                copied: tTimeline('copied'),
-                apply: tTimeline('apply'),
-                createFile: tTimeline('createFile'),
-                preview: tTimeline('preview'),
-                askSubmit: tTimeline('askSubmit'),
-                askAnswered: tTimeline('askAnswered'),
-                accountOwn: tTimeline('accountOwn'),
-                accountShared: tTimeline('accountShared'),
-                accountByoUnused: tTimeline('accountByoUnused'),
-              }}
-              onApplyCode={hasTool('apply_code_to_active_file') ? (code) => { void runTool('apply_code_to_active_file', { code }); } : undefined}
-              onCreateFile={hasTool('create_file') ? (path, content) => { void runTool('create_file', { path, content }); } : undefined}
+              labels={timelineLabels}
+              onApplyCode={timelineApplyCode}
+              onCreateFile={timelineCreateFile}
               // Answering an ask_user card posts the choice as the next user turn.
-              onAnswerQuestion={(answer) => { void conv.send(answer, { addressedTo: recipient }); }}
+              onAnswerQuestion={onAnswerTimelineQuestion}
               // Reuse the web's rich markdown (mermaid, router links, code-apply) so
               // no feature is lost; the model-authored "next step" JSON is lifted out.
-              renderMessage={(msg, ctx) => (
-                <ChatMessageContent
-                  content={ctx.role === 'assistant' ? parseSuggestedActions(msg.content).content : ctx.text}
-                  onApplyCode={ctx.role === 'assistant' && hasTool('apply_code_to_active_file') ? (code) => { void runTool('apply_code_to_active_file', { code }); } : undefined}
-                  onCreateFile={ctx.role === 'assistant' && hasTool('create_file') ? (path, content) => { void runTool('create_file', { path, content }); } : undefined}
-                />
-              )}
-              renderStreaming={(text) => <ChatMessageContent content={parseSuggestedActions(text).content} />}
-              renderAssistantActions={(msg) => (
-                <MessageActions
-                  msg={msg}
-                  conv={conv}
-                  projectId={chats.activeChat?.projectId ?? pinnedProjectId ?? undefined}
-                  suggestions={parseSuggestedActions(msg.content).actions}
-                  onRunSuggestion={(prompt) => { void conv.send(prompt); }}
-                />
-              )}
+              renderMessage={renderTimelineMessage}
+              renderStreaming={renderTimelineStreaming}
+              renderAssistantActions={renderTimelineAssistantActions}
             />
           </div>
           <div className="bs-input-area" style={{ flexShrink: 0, padding: isPage ? undefined : '12px 16px', borderTop: isPage ? undefined : '1px solid var(--border-subtle)' }}>

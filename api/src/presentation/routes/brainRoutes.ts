@@ -14,6 +14,7 @@ import { fetchWebDocument } from '../../application/web/webFetch';
 import { recordOutboundFetch, enforceOutboundFetchCap } from '../../application/web/outboundFetchLedger';
 import { agentHosts, users } from '../../infrastructure/database/schema';
 import { ChatTicketService } from '../../application/brain/ChatTicketService';
+import { getCacheVersion, getOrSetCached, ticketSearchVersionKey } from '../../infrastructure/cache/readThroughCache';
 import { notify } from '../../application/notifications/notify';
 import { sendChatInviteEmail } from '../../infrastructure/email/EmailService';
 import { isKeyOwnedByTenant } from '../../domain/shared/r2Keys';
@@ -202,7 +203,7 @@ export function createBrainRoutes(brainService: BrainService, db: Db): Hono<Hono
       id,
       c.get('tenantId') as number,
       c.get('userId') as string,
-      apiKey,
+      c.env,
     );
     if ('error' in result) return c.json({ error: result.error }, 404);
     return c.json(result);
@@ -252,6 +253,31 @@ export function createBrainRoutes(brainService: BrainService, db: Db): Hono<Hono
     const result = await svc.unlinkTicket(c.get('tenantId') as number, id, c.get('userId') as string, kind, ref);
     if ('error' in result) return c.json({ error: result.error }, 404);
     return c.json(result);
+  });
+
+  // GET /tickets/search?kind=&q=&project_id=&limit= — server-side typeahead for the
+  // link picker. Replaces the old "load every ticket into the browser then filter"
+  // (heavy AND incomplete past a list endpoint's 200-row cap). Version-token cached
+  // (unbounded query keyspace) with a short TTL backstop; the token bumps on ticket writes.
+  router.get('/tickets/search', async (c) => {
+    const env = c.env as Env;
+    const tenantId = c.get('tenantId') as number;
+    const kind = c.req.query('kind') ?? '';
+    const q = (c.req.query('q') ?? '').slice(0, 200);
+    const projRaw = c.req.query('project_id');
+    const projectId = projRaw != null && projRaw !== '' ? Number(projRaw) : null;
+    const limit = Math.min(Math.max(Number(c.req.query('limit') ?? 40) || 40, 1), 50);
+    if (projectId != null && Number.isNaN(projectId)) return c.json({ error: 'Invalid project_id' }, 400);
+
+    const version = await getCacheVersion(env, ticketSearchVersionKey(tenantId));
+    const key = `tickets:search:t:${tenantId}:p:${projectId ?? 'all'}:k:${kind}:l:${limit}:q:${q.trim().toLowerCase()}:v:${version}`;
+    const results = await getOrSetCached(
+      env,
+      key,
+      () => new ChatTicketService(db, env).searchTickets(tenantId, kind, q, projectId, limit),
+      { kvTtlSeconds: 45 },
+    );
+    return c.json({ results });
   });
 
   // GET /tickets/:kind/:ref/chats — lineage: every chat that references a ticket
@@ -468,7 +494,7 @@ export function createBrainRoutes(brainService: BrainService, db: Db): Hono<Hono
     const result = await brainService.consolidateProjectMemory(
       c.get('tenantId') as number,
       id,
-      apiKey,
+      c.env,
     );
     if ('error' in result) return c.json({ error: result.error }, 404);
     return c.json(result);
@@ -485,7 +511,7 @@ export function createBrainRoutes(brainService: BrainService, db: Db): Hono<Hono
     const result = await brainService.summarizeAgentHostSession(
       id,
       c.get('tenantId') as number,
-      apiKey,
+      c.env,
     );
     if ('error' in result) return c.json({ error: result.error }, 404);
     return c.json(result);

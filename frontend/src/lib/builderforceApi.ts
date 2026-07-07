@@ -500,6 +500,14 @@ export const brain = {
   listTicketChats: (kind: TicketKind, ref: string) =>
     request<{ chats: LinkedChatRef[] }>(`/api/brain/tickets/${encodeURIComponent(kind)}/${encodeURIComponent(ref)}/chats`).then((r) => r.chats),
 
+  /** Server-side typeahead for the link picker — up to N (ref,label) hits for one
+   *  tier matching `q` (empty = newest). Replaces loading every ticket client-side. */
+  searchTickets: (kind: TicketKind, q: string, projectId: number | null) => {
+    const qs = new URLSearchParams({ kind, q });
+    if (projectId != null) qs.set('project_id', String(projectId));
+    return request<{ results: Array<{ ref: string; label: string }> }>(`/api/brain/tickets/search?${qs.toString()}`).then((r) => r.results);
+  },
+
   /** Merge source chats into a target (archive + redirect the sources). */
   consolidateChats: (targetChatId: number, sourceChatIds: number[]) =>
     request<{ targetChatId: number; mergedChats: number; messagesMoved: number; linksMoved: number }>(
@@ -883,9 +891,24 @@ export const workflows = {
 // package in this repo — keep the two in sync, same as Workflow/WorkflowTask).
 // ---------------------------------------------------------------------------
 
+/**
+ * Evermind BUILD-step node kinds — a client-side SUPERSET of the server's node
+ * kinds. Each string equals an engine workflow step `type` (see
+ * `@seanhogg/builderforce-memory` steps.ts), so a build graph compiles 1:1 to a
+ * `WorkflowConfig` and runs IN-BROWSER via `runWorkflow` (see lib/evermindBuild.ts)
+ * — it is NOT dispatched through the server agentic orchestrator. The graph still
+ * persists as opaque JSON through the normal save endpoints; the server union
+ * (api/src/domain/workflowGraph.ts) intentionally does NOT list these.
+ */
+export type EvermindBuildKind =
+  | 'train-tokenizer' | 'dataset-quality' | 'train-model' | 'convergence'
+  | 'evaluate' | 'generate-check' | 'benchmark' | 'roundtrip' | 'export'
+  | 'distill-corpus' | 'code-parse-check' | 'code-eval' | 'code-benchmark';
+
 export type WorkflowNodeKind =
   | 'trigger' | 'agent' | 'llm' | 'mcp' | 'memory' | 'knowledge' | 'train'
-  | 'transform' | 'filter' | 'branch' | 'output';
+  | 'transform' | 'filter' | 'branch' | 'output'
+  | EvermindBuildKind;
 
 export interface WorkflowDefNode {
   id: string;

@@ -791,7 +791,28 @@ async function startDispatchedExecution(
       else if (executor === 'durable') await startDurable();
       else await runWorkerFallback();
     };
-    waitUntil(orchestrate());
+    // orchestrate() degrades container→durable→worker internally, but the terminal
+    // Worker fallback (runCloudExecution) has no guard: if it throws before writing a
+    // status the whole promise rejects and, because waitUntil swallows the rejection,
+    // the row is stranded PENDING until the 15-min queue reaper. Catch it here, fail
+    // the run + notify so the board/chip reflect it immediately. Guard on the LIVE
+    // status so we never clobber a run that DID start and reached its own terminal
+    // state before the throw (the reaper stays the backstop if this catch itself fails).
+    waitUntil(orchestrate().catch(async (err) => {
+      try {
+        const current = await runtimeService.getExecution(execution.id);
+        if (isTerminalExecutionStatus(current.status)) return;
+        const msg = `Cloud dispatch failed before any executor took the run: ${err instanceof Error ? err.message : String(err)}`;
+        await runtimeService.update(execution.id, { status: ExecutionStatus.FAILED, errorMessage: msg }).catch(() => { /* terminal already */ });
+        await recordCloudToolEvent(db, {
+          tenantId, cloudAgentRef: agent.ref, executionId: execution.id,
+          toolName: 'run.failed', category: 'error',
+          detail: { reason: err instanceof Error ? err.message : String(err), phase: 'dispatch' },
+          result: msg,
+        });
+        await notifyDone();
+      } catch { /* best-effort — the stale-execution reaper remains the backstop */ }
+    }));
   }
 
   // Announce the queued/dispatched execution immediately.

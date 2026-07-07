@@ -167,6 +167,22 @@ export function trackerCacheKey(ns: string, tenantId: number, segmentId: string,
   return `tracker:${ns}:t:${tenantId}:s:${segmentId}:p:${projectId ?? 'all'}`;
 }
 
+/** Version key for the chat↔ticket link-picker typeahead (`/api/brain/tickets/search`).
+ *  Tenant-scoped: every ticket-bearing write (task/epic/gap, objective/initiative/
+ *  portfolio, roadmap, spec) bumps it so the next search re-loads. The search keyspace
+ *  is unbounded (per free-text query), so callers fold this token into the data key
+ *  rather than enumerating every query. Paired with a short KV TTL as a backstop for
+ *  the write paths that don't yet bump (e.g. some MCP tool writes). */
+export function ticketSearchVersionKey(tenantId: number): string {
+  return `ticket-search-version:tenant:${tenantId}`;
+}
+
+/** Orphan every cached ticket-search page for a tenant. Call from ticket writes.
+ *  Best-effort (never throws) so it can be fire-and-forget on a write path. */
+export async function bumpTicketSearchVersion(env: Env, tenantId: number): Promise<void> {
+  await bumpCacheVersion(env, ticketSearchVersionKey(tenantId)).catch(() => {});
+}
+
 /** Invalidate both cache layers for `key`. Call from every mutation that
  *  changes the cached data so the next read re-loads. */
 export async function invalidateCached(env: Env, key: string): Promise<void> {

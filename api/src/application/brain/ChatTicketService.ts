@@ -14,7 +14,7 @@
  * ring would misreport progress. Every read is a small, bounded aggregate and
  * batched across a chat's links (≤ one query per tier, never N+1).
  */
-import { and, eq, inArray, sql } from 'drizzle-orm';
+import { and, desc, eq, ilike, inArray, or, sql, type SQL } from 'drizzle-orm';
 import {
   brainChats,
   brainChatMessages,
@@ -29,6 +29,7 @@ import {
   specs,
 } from '../../infrastructure/database/schema';
 import { resolveSegment } from '../../infrastructure/auth/segmentResolver';
+import { notSystemTask } from '../task/taskScope';
 import { keyResultProgress, objectiveProgress } from '../pmo/portfolioRollup';
 import { AgentAssignmentService } from '../agent/AgentAssignmentService';
 import type { Db } from '../../infrastructure/database/connection';
@@ -63,6 +64,12 @@ export interface ChatTicketLink extends TicketHealth {
   linkType: LinkType;
   createdBy: string | null;
   createdAt: Date;
+}
+
+/** One typeahead hit — the minimal shape the link picker renders (ref + label). */
+export interface TicketSearchHit {
+  ref: string;
+  label: string;
 }
 
 export interface LinkedChatRef {
@@ -163,6 +170,88 @@ export class ChatTicketService {
     const [row] = await this.db.select({ name: portfolios.name, status: portfolios.status }).from(portfolios)
       .where(and(eq(portfolios.id, ref), eq(portfolios.tenantId, tenantId), eq(portfolios.segmentId, seg))).limit(1);
     return row ? { label: row.name, status: row.status } : null;
+  }
+
+  /**
+   * Server-side typeahead over a SINGLE ticket tier. Returns up to `limit`
+   * (kind, ref) hits whose title / name / goal / key matches `query` (a
+   * case-insensitive substring), most-recently-updated first. An empty query
+   * returns the newest items so the picker has an initial page.
+   *
+   * This replaces the client's old "fetch EVERY ticket then filter in the DOM"
+   * (which was both heavy AND incomplete once a list endpoint's 200-row cap hit)
+   * with a bounded, indexed search — fast and complete on a 20k+ ticket tenant.
+   * task/epic/gap/roadmap/spec honour the current project scope; the strategy
+   * tiers (objective/initiative/portfolio) are segment-scoped tenant-wide, exactly
+   * as the picker loaded them before.
+   */
+  async searchTickets(
+    tenantId: number,
+    kind: string,
+    query: string,
+    projectId: number | null,
+    limit = 40,
+  ): Promise<TicketSearchHit[]> {
+    if (!isTicketKind(kind)) return [];
+    const lim = Math.min(Math.max(Math.trunc(limit) || 40, 1), 50);
+    const q = query.trim();
+    // Escape LIKE metacharacters so a user's literal "%" / "_" / "\" isn't a wildcard.
+    const like = q ? `%${q.replace(/[\\%_]/g, (m) => `\\${m}`)}%` : null;
+
+    if (kind === 'task' || kind === 'epic' || kind === 'gap') {
+      const conds: SQL[] = [eq(projects.tenantId, tenantId), eq(tasks.archived, false), eq(tasks.taskType, kind), notSystemTask];
+      if (projectId != null) conds.push(eq(tasks.projectId, projectId));
+      if (like) conds.push(or(ilike(tasks.title, like), ilike(tasks.key, like))!);
+      const rows = await this.db
+        .select({ id: tasks.id, key: tasks.key, title: tasks.title })
+        .from(tasks)
+        .innerJoin(projects, eq(projects.id, tasks.projectId))
+        .where(and(...conds))
+        .orderBy(desc(tasks.updatedAt))
+        .limit(lim);
+      return rows.map((r) => ({ ref: String(r.id), label: r.key ? `${r.key} — ${r.title}` : r.title }));
+    }
+
+    if (kind === 'roadmap') {
+      const conds: SQL[] = [eq(roadmapItems.tenantId, tenantId)];
+      if (projectId != null) conds.push(eq(roadmapItems.projectId, projectId));
+      if (like) conds.push(ilike(roadmapItems.title, like));
+      const rows = await this.db.select({ id: roadmapItems.id, title: roadmapItems.title })
+        .from(roadmapItems).where(and(...conds)).orderBy(desc(roadmapItems.updatedAt)).limit(lim);
+      return rows.map((r) => ({ ref: r.id, label: r.title }));
+    }
+
+    if (kind === 'spec') {
+      const conds: SQL[] = [eq(specs.tenantId, tenantId)];
+      if (projectId != null) conds.push(eq(specs.projectId, projectId));
+      if (like) conds.push(ilike(specs.goal, like));
+      const rows = await this.db.select({ id: specs.id, goal: specs.goal })
+        .from(specs).where(and(...conds)).orderBy(desc(specs.updatedAt)).limit(lim);
+      return rows.map((r) => ({ ref: r.id, label: r.goal }));
+    }
+
+    // Strategy tiers — segment-scoped, tenant-wide (no project filter, matching the picker).
+    const seg = await resolveSegment(this.db, tenantId);
+    if (kind === 'objective') {
+      const conds: SQL[] = [eq(objectives.tenantId, tenantId), eq(objectives.segmentId, seg)];
+      if (like) conds.push(ilike(objectives.title, like));
+      const rows = await this.db.select({ id: objectives.id, title: objectives.title })
+        .from(objectives).where(and(...conds)).orderBy(desc(objectives.updatedAt)).limit(lim);
+      return rows.map((r) => ({ ref: r.id, label: r.title }));
+    }
+    if (kind === 'initiative') {
+      const conds: SQL[] = [eq(initiatives.tenantId, tenantId), eq(initiatives.segmentId, seg)];
+      if (like) conds.push(ilike(initiatives.name, like));
+      const rows = await this.db.select({ id: initiatives.id, name: initiatives.name })
+        .from(initiatives).where(and(...conds)).orderBy(desc(initiatives.updatedAt)).limit(lim);
+      return rows.map((r) => ({ ref: r.id, label: r.name }));
+    }
+    // portfolio
+    const conds: SQL[] = [eq(portfolios.tenantId, tenantId), eq(portfolios.segmentId, seg)];
+    if (like) conds.push(ilike(portfolios.name, like));
+    const rows = await this.db.select({ id: portfolios.id, name: portfolios.name })
+      .from(portfolios).where(and(...conds)).orderBy(desc(portfolios.updatedAt)).limit(lim);
+    return rows.map((r) => ({ ref: r.id, label: r.name }));
   }
 
   /**

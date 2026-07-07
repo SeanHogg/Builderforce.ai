@@ -92,8 +92,10 @@ export interface ChatTicketsAdapter {
   /** Invite a human by email; returns the resolution ('active' | 'pending'). */
   inviteMember(chatId: number, email: string): Promise<{ status: string }>;
   removeMember(chatId: number, memberId: number): Promise<void>;
-  /** Pickable tickets per tier for the current project (all tenants tiers). */
-  loadTicketOptions(projectId: number | null): Promise<Record<TicketKind, TicketOptionVM[]>>;
+  /** Server-side typeahead over ONE tier: up to N (ref,label) hits whose
+   *  title/name/goal/key matches `query` (empty = newest first). Replaces the old
+   *  "load EVERY ticket then filter in the DOM" — fast AND complete on a huge tenant. */
+  searchTickets(kind: TicketKind, query: string, projectId: number | null): Promise<TicketOptionVM[]>;
   /** Tag an agent to execute a runnable (task/epic) ticket. Returns whether a run
    *  actually started + the agent's display name for the toast. */
   runTicket(kind: TicketKind, ref: string, agentRef: string): Promise<{ started: boolean; agentName: string }>;
@@ -120,6 +122,12 @@ export interface ChatTicketsLabels {
   pickTicket: string;
   /** Placeholder for the ticket-picker search box. */
   searchTicket: string;
+  /** Shown while a typeahead request is in flight. */
+  searching: string;
+  /** Shown when a search returns no tickets. */
+  noMatches: string;
+  /** Hint under a result list that hit the server cap — type to narrow. */
+  refine: string;
   linkTypeLabel: string;
   linkTypeLinked: string;
   linkTypeCreated: string;
@@ -142,8 +150,6 @@ export interface ChatTicketsLabels {
   mergeNoOthers: string;
   kind: Record<TicketKind, string>;
   ringAria: (label: string, pct: number) => string;
-  /** "+N more — refine your search" hint under a capped ticket picker. */
-  moreResults: (n: number) => string;
   runStarted: (agent: string) => string;
   mergeAction: (n: number) => string;
   mergedN: (n: number) => string;
@@ -169,6 +175,9 @@ export const DEFAULT_CHAT_TICKETS_LABELS: ChatTicketsLabels = {
   kindLabel: 'Ticket type',
   pickTicket: 'Choose a ticket…',
   searchTicket: 'Search tickets…',
+  searching: 'Searching…',
+  noMatches: 'No matching tickets.',
+  refine: 'Showing the top matches — type to narrow.',
   linkTypeLabel: 'Link type',
   linkTypeLinked: 'Linked',
   linkTypeCreated: 'Created from chat',
@@ -191,7 +200,6 @@ export const DEFAULT_CHAT_TICKETS_LABELS: ChatTicketsLabels = {
   mergeNoOthers: 'No other chats to merge.',
   kind: { task: 'Task', epic: 'Epic', gap: 'Gap', objective: 'Objective', initiative: 'Initiative', portfolio: 'Portfolio', roadmap: 'Roadmap', spec: 'Spec' },
   ringAria: (label, pct) => `${label}: ${pct}% done`,
-  moreResults: (n) => `+${n} more — refine your search`,
   runStarted: (agent) => `Started ${agent} on the ticket.`,
   mergeAction: (n) => `Merge ${n} here`,
   mergedN: (n) => `Merged ${n} chat(s).`,

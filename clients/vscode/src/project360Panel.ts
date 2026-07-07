@@ -112,7 +112,7 @@ interface Project360ActionMsg {
   kind: "board" | "approvals" | "brain" | "run-task" | "open-task";
   label?: string;
   text?: string;
-  task?: { id: number; key?: string; title: string };
+  task?: { id: number; key?: string; title: string; taskType?: "task" | "epic" | "gap" };
 }
 
 /**

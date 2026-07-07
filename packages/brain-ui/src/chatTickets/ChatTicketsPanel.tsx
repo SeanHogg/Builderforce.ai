@@ -49,7 +49,6 @@ function ChatTicketsPanelInner({ chatId, projectId, chatList, adapter, labels, o
   const [agents, setAgents] = useState<ChatAgentVM[]>([]);
   const [members, setMembers] = useState<ChatMemberVM[]>([]);
   const [pool, setPool] = useState<AgentOptionVM[]>([]);
-  const [options, setOptions] = useState<Record<TicketKind, TicketOptionVM[]> | null>(null);
   const [panel, setPanel] = useState<null | 'link' | 'agents' | 'people' | 'merge'>(null);
   const [lineageKey, setLineageKey] = useState<string | null>(null);
   const [lineage, setLineage] = useState<LineageVM[]>([]);
@@ -70,7 +69,6 @@ function ChatTicketsPanelInner({ chatId, projectId, chatList, adapter, labels, o
 
   useEffect(() => { void load(); }, [load, refreshSignal]);
   useEffect(() => { adapter.loadAgentPool().then(setPool).catch(() => setPool([])); }, [adapter]);
-  useEffect(() => { adapter.loadTicketOptions(projectId).then(setOptions).catch(() => setOptions(null)); }, [adapter, projectId]);
 
   const flash = (m: string) => { setMsg(m); if (typeof window !== 'undefined') window.setTimeout(() => setMsg(null), 3500); };
   const poolName = useCallback((ref: string) => pool.find((p) => p.ref === ref)?.name ?? ref, [pool]);
@@ -160,7 +158,7 @@ function ChatTicketsPanelInner({ chatId, projectId, chatList, adapter, labels, o
         {msg && <span style={{ fontSize: 12, color: V.accent, alignSelf: 'center' }}>{msg}</span>}
       </div>
 
-      {panel === 'link' && <LinkForm options={options} existing={tickets} labels={labels} onLink={async (kind, ref, linkType) => {
+      {panel === 'link' && <LinkForm search={adapter.searchTickets} projectId={projectId} existing={tickets} labels={labels} onLink={async (kind, ref, linkType) => {
         try { await adapter.linkTicket(chatId, { kind, ref, linkType }); await load(); }
         catch (e) { flash(e instanceof Error ? e.message : labels.linkFailed); }
       }} />}
@@ -185,14 +183,14 @@ function ChatTicketsPanelInner({ chatId, projectId, chatList, adapter, labels, o
 
 // ── Link a ticket ────────────────────────────────────────────────────────────
 
-/** Max ticket options rendered into the native <select> at once. A tenant can have
- *  tens of thousands of tickets across all kinds, and a <select> with that many
- *  <option>s janks the DOM — so the search box narrows the list and we only ever
- *  render the first slice, nudging the user to type when there's more. */
-const TICKET_OPTION_CAP = 200;
+/** How many hits the server returns per tier. When a result set fills this, there
+ *  are (probably) more — we nudge the user to type instead of silently truncating. */
+const SEARCH_LIMIT = 40;
 
-function LinkForm({ options, existing, labels, onLink }: {
-  options: Record<TicketKind, TicketOptionVM[]> | null;
+function LinkForm({ search, projectId, existing, labels, onLink }: {
+  /** Server-side typeahead — the adapter debounces nothing itself; we debounce here. */
+  search: (kind: TicketKind, query: string, projectId: number | null) => Promise<TicketOptionVM[]>;
+  projectId: number | null;
   existing: TicketLinkVM[];
   labels: ChatTicketsLabels;
   onLink: (kind: TicketKind, ref: string, linkType: LinkType) => Promise<void>;
@@ -202,24 +200,33 @@ function LinkForm({ options, existing, labels, onLink }: {
   const [query, setQuery] = useState('');
   const [linkType, setLinkType] = useState<LinkType>('linked');
   const [busy, setBusy] = useState(false);
+  const [results, setResults] = useState<TicketOptionVM[]>([]);
+  const [loading, setLoading] = useState(false);
 
-  const forKind = useMemo(() => {
-    const all = options?.[kind] ?? [];
-    return all.filter((o) => !existing.some((e) => e.kind === kind && e.ref === o.ref));
-  }, [options, kind, existing]);
+  // Debounced server-side typeahead on (kind, query, project). The `live` flag drops
+  // a stale response so a slow earlier request can't overwrite a newer one, and the
+  // timer is cleared on every keystroke so only the settled query hits the network.
+  useEffect(() => {
+    let live = true;
+    setLoading(true);
+    const h = setTimeout(() => {
+      search(kind, query, projectId)
+        .then((r) => { if (live) setResults(r); })
+        .catch(() => { if (live) setResults([]); })
+        .finally(() => { if (live) setLoading(false); });
+    }, 250);
+    return () => { live = false; clearTimeout(h); };
+  }, [search, kind, query, projectId]);
 
-  // Client-side substring filter over the loaded options for this kind (case-
-  // insensitive, matches the key/label). Keeps the picker usable at 20k+ tickets.
-  const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    if (!q) return forKind;
-    return forKind.filter((o) => o.label.toLowerCase().includes(q));
-  }, [forKind, query]);
-  const shown = filtered.slice(0, TICKET_OPTION_CAP);
-  const overflow = filtered.length - shown.length;
+  // Hide tickets already linked to this chat (the server doesn't know the chat's links).
+  const shown = useMemo(
+    () => results.filter((o) => !existing.some((e) => e.kind === kind && e.ref === o.ref)),
+    [results, existing, kind],
+  );
+  const atCap = results.length >= SEARCH_LIMIT;
 
-  // Drop a chosen ref once it's filtered out, so you can't Link a hidden option.
-  useEffect(() => { if (ref && !filtered.some((o) => o.ref === ref)) setRef(''); }, [filtered, ref]);
+  // Drop a chosen ref once it's no longer in the visible set (kind switch / new search).
+  useEffect(() => { if (ref && !shown.some((o) => o.ref === ref)) setRef(''); }, [shown, ref]);
 
   const submit = async () => {
     if (!ref) return;
@@ -244,7 +251,10 @@ function LinkForm({ options, existing, labels, onLink }: {
         <option value="">{labels.pickTicket}</option>
         {shown.map((o) => <option key={o.ref} value={o.ref}>{o.label}</option>)}
       </select>
-      {overflow > 0 && <span style={S.muted}>{labels.moreResults(overflow)}</span>}
+      {loading ? <span style={S.muted}>{labels.searching}</span>
+        : shown.length === 0 ? <span style={S.muted}>{labels.noMatches}</span>
+        : atCap ? <span style={S.muted}>{labels.refine}</span>
+        : null}
       <select aria-label={labels.linkTypeLabel} value={linkType} onChange={(e) => setLinkType(e.target.value as LinkType)} style={S.select}>
         <option value="linked">{labels.linkTypeLinked}</option>
         <option value="created">{labels.linkTypeCreated}</option>

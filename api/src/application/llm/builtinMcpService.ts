@@ -43,7 +43,7 @@ import { maybeAutoRunOnLaneEntry } from '../../presentation/routes/taskRoutes';
 import { invalidateProjectsList } from '../../presentation/routes/projectRoutes';
 import { recordActivity, resolveHumanActor, SYSTEM_ACTOR } from '../activity/activityLog';
 import { pmoVersionKey } from '../../presentation/routes/pmoRoutes';
-import { bumpCacheVersion, invalidateCached, trackerCacheKey } from '../../infrastructure/cache/readThroughCache';
+import { bumpCacheVersion, invalidateCached, trackerCacheKey, bumpTicketSearchVersion } from '../../infrastructure/cache/readThroughCache';
 import { convertWorkItemType, ConvertError, type WorkItemKind } from '../workitem/convertWorkItemType';
 import { buildRuntimeService } from '../../buildRuntimeService';
 import { ChatTicketService } from '../brain/ChatTicketService';
@@ -121,6 +121,8 @@ async function invalidateRoadmap(ctx: BuiltinCtx, segmentId: string, projectId: 
   if (projectId != null) {
     await invalidateCached(ctx.env, trackerCacheKey('roadmap', ctx.tenantId, segmentId, projectId)).catch(() => {});
   }
+  // Roadmap items are a link-picker ticket kind — refresh its typeahead cache.
+  await bumpTicketSearchVersion(ctx.env, ctx.tenantId);
 }
 
 /**
@@ -726,7 +728,7 @@ const CATALOG: BuiltinTool[] = [
         content: str(a.content),
         title: a.title != null ? str(a.title) : undefined,
         version: a.version != null ? str(a.version) : undefined,
-      });
+      }, ctx.userId ?? null);
     },
   },
   {
@@ -2304,6 +2306,13 @@ export async function callBuiltinTool(
   if (entry.mutates && args.env) {
     const emit = emitBuiltinToolActivity(args.env, db, args.tenantId, args.userId, args.tool, result);
     if (args.executionCtx?.waitUntil) args.executionCtx.waitUntil(emit); else await emit.catch(() => {});
+    // task/spec/from-delta writes change what the chat↔ticket link picker can find but
+    // (unlike the pmo/roadmap/project tools) don't route through invalidateProjectsList /
+    // bumpPmo / invalidateRoadmap — so orphan the typeahead cache here for those.
+    if (args.tool.startsWith('tasks.') || args.tool.startsWith('specs.') || args.tool === 'tickets.from_delta') {
+      const bump = bumpTicketSearchVersion(args.env, args.tenantId);
+      if (args.executionCtx?.waitUntil) args.executionCtx.waitUntil(bump); else await bump.catch(() => {});
+    }
   }
   return result;
 }

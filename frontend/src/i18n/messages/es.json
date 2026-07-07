@@ -1,4 +1,10 @@
 {
+  "contentManager": {
+    "migrate": {
+      "moving": "Trasladando tu contenido a Conocimiento…",
+      "done": "Redirigiendo a Conocimiento…"
+    }
+  },
   "chatInput": {
     "add": "Añadir",
     "upload": "Subir desde el equipo",
@@ -2360,6 +2366,10 @@
     "marketSubtitle": "Instala SOPs, procesos y documentos listos para usar en tu espacio de trabajo.",
     "free": "Gratis",
     "addToKnowledge": "Añadir a mi Conocimiento",
+    "buy": "Comprar",
+    "signInToGet": "Inicia sesión para obtener",
+    "installFailed": "No se pudo añadir a tu Conocimiento. Inténtalo de nuevo.",
+    "checkoutUnavailable": "El pago aún no está disponible en esta implementación.",
     "installing": "Instalando…",
     "by": "por {author}"
   },
@@ -5129,7 +5139,9 @@
       "kindLabel": "Tipo de ticket",
       "pickTicket": "Elige un ticket…",
       "searchTicket": "Buscar tickets…",
-      "moreResults": "+{n} más — refina tu búsqueda",
+      "searching": "Buscando…",
+      "noMatches": "No hay tickets coincidentes.",
+      "refine": "Mostrando las mejores coincidencias — escribe para acotar.",
       "linkTypeLabel": "Tipo de vínculo",
       "linkTypeLinked": "Vinculado",
       "linkTypeCreated": "Creado desde el chat",
@@ -5178,6 +5190,8 @@
     "noChatsMatch": "Ningún chat coincide con tu búsqueda.",
     "rename": "Cambiar nombre",
     "summarize": "Resumir",
+    "deleteChatConfirm": "¿Eliminar \"{title}\"? Esta acción no se puede deshacer.",
+    "thisChat": "este chat",
     "addTo": "Añadir a:",
     "addChatToProjectAria": "Añadir chat al proyecto",
     "addToProject": "Añadir al proyecto…",
@@ -5808,7 +5822,72 @@
     "emptyItems": "Ningún elemento coincide con tu búsqueda.",
     "emptyAgentsSearch": "Ningún agente coincide con tu búsqueda.",
     "emptyAgentsNone": "Aún no hay agentes publicados. Publica un agente desde un proyecto para listarlo aquí.",
-    "talentError": "No se pudo cargar el talento."
+    "talentError": "No se pudo cargar el talento.",
+    "free": "Gratis",
+    "installed": "Instalado",
+    "by": "por",
+    "defaultPriceUnit": "uso",
+    "publish": {
+      "becomePublisher": "Conviértete en editor",
+      "publisherBlurb": "Cualquier cuenta de Builderforce.ai puede publicar habilidades, personas y agentes en el marketplace. Crea una cuenta o inicia sesión para empezar.",
+      "createAccount": "Crear cuenta",
+      "signIn": "Iniciar sesión",
+      "publishingAs": "Publicando como",
+      "heading": "Publicar una habilidad",
+      "success": "¡Habilidad publicada! Aparecerá en el marketplace tras la revisión.",
+      "name": "Nombre",
+      "namePlaceholder": "Mi habilidad",
+      "slug": "Slug",
+      "slugHint": "(ID único)",
+      "slugPlaceholder": "mi-habilidad",
+      "description": "Descripción",
+      "descriptionPlaceholder": "¿Qué hace esta habilidad?",
+      "category": "Categoría",
+      "categoryPlaceholder": "coding",
+      "version": "Versión",
+      "repoUrl": "URL del repositorio",
+      "repoPlaceholder": "https://github.com/…",
+      "price": "Precio (USD)",
+      "pricePlaceholder": "0.00",
+      "pricingModel": "Modelo de precios",
+      "flatFee": "Tarifa fija",
+      "consumption": "Por consumo",
+      "priceUnit": "Unidad de precio",
+      "priceUnitPlaceholder": "por solicitud",
+      "submitting": "Publicando…",
+      "submit": "Publicar habilidad",
+      "failed": "Error al publicar"
+    },
+    "table": {
+      "name": "Nombre",
+      "title": "Puesto",
+      "tags": "Etiquetas",
+      "price": "Precio",
+      "hires": "Contrataciones",
+      "eval": "Evaluación",
+      "actions": "Acciones",
+      "type": "Tipo",
+      "author": "Autor",
+      "stats": "Estadísticas"
+    },
+    "action": {
+      "hire": "Contratar",
+      "hiring": "Contratando…",
+      "unhire": "Cancelar",
+      "unhiring": "Cancelando…",
+      "workforceAgent": "Agente de plantilla",
+      "install": "Instalar",
+      "uninstall": "Desinstalar",
+      "registerHost": "Registrar agentHost",
+      "inCart": "✓ En el carrito",
+      "addCart": "+ Carrito",
+      "inCartTitle": "En el carrito",
+      "addCartTitle": "Añadir al carrito",
+      "like": "Me gusta",
+      "unlike": "Ya no me gusta",
+      "installsTitle": "Instalaciones",
+      "deleteConfirm": "¿Eliminar el agente \"{name}\"? Esto lo elimina de forma permanente junto con sus habilidades/personas propias. No se puede deshacer."
+    }
   },
   "models": {
     "searchPlaceholder": "Buscar modelos, proveedores…",
@@ -6646,6 +6725,14 @@
       },
       "preview": {
         "nothingToPreview": "_Nada para previsualizar todavía._"
+      },
+      "history": {
+        "button": "Historial",
+        "title": "Historial de versiones",
+        "loading": "Cargando historial…",
+        "empty": "Aún no hay versiones.",
+        "publish": "Publicado",
+        "amend": "Modificado"
       }
     },
     "newsletter": {
@@ -7507,7 +7594,13 @@
     "findATime": "Buscar un hueco",
     "noSlots": "No hay horas libres para todos en las próximas dos semanas.",
     "kind_interview": "Entrevista",
-    "kind_review": "Revisión"
+    "kind_review": "Revisión",
+    "chatPanel": "Chat",
+    "linkTeamChat": "Respaldar con chat de equipo",
+    "teamChatScope": "Chat de equipo",
+    "teamChatProject": "Chat de equipo del proyecto",
+    "teamChatTenant": "Chat de equipo del espacio",
+    "teamChatHint": "Elige con qué conversación se respalda esta reunión: el chat de un equipo concreto o el predeterminado de su ámbito."
   },
   "brainLauncher": {
     "open": "Abrir el asistente Brain",
@@ -7936,5 +8029,36 @@
     "logMambaEpoch": "  📊 Época {epoch}: pérdida={loss}",
     "logMambaComplete": "✅ Entrenamiento Mamba completado — pérdida final: {loss}",
     "logMambaFailed": "❌ Falló el entrenamiento Mamba: {error}"
+  },
+  "evermindBuild": {
+    "title": "Compilación de Evermind",
+    "subtitle": "Ejecuta este pipeline en tu navegador para entrenar, validar y empaquetar un modelo .evermind — sin servidor.",
+    "noBuildNodes": "Añade pasos de compilación de Evermind (o carga una plantilla) para ejecutar una compilación.",
+    "stepsReady": "{count, plural, one {# paso de compilación} other {# pasos de compilación}} listos",
+    "run": "Ejecutar compilación",
+    "running": "Compilando…",
+    "rerun": "Ejecutar de nuevo",
+    "timelineTitle": "Cronología de ejecución",
+    "durationMs": "{ms} ms",
+    "okAll": "Compilación superada: los {count} pasos en verde.",
+    "failed": "La compilación se detuvo en «{label}».",
+    "artifactTitle": "Artefacto del modelo",
+    "artifactReady": "Se produjo un modelo .evermind.",
+    "artifactNone": "Este pipeline no emitió un artefacto .evermind: añade un paso de Empaquetado (round-trip).",
+    "seed": "Sembrar Evermind del proyecto",
+    "seeding": "Sembrando…",
+    "seeded": "Se sembró el Evermind del proyecto (v{version}).",
+    "seedNeedsProject": "Vincula este flujo a un proyecto para sembrar su Evermind.",
+    "seedFailed": "Falló la siembra: {error}",
+    "download": "Descargar .evermind",
+    "errUnknown": "Error desconocido",
+    "templatesTitle": "Carga un pipeline de compilación de Evermind ya hecho",
+    "templatePlaceholder": "Plantilla de Evermind…",
+    "templateTrainLlm": "Crear un LLM",
+    "templateTeachCode": "Enseñar a programar a Evermind",
+    "templateLoadFailed": "No se pudo cargar la plantilla.",
+    "replaceConfirm": "¿Reemplazar el lienzo actual con esta plantilla?",
+    "builderBuild": "Compilar",
+    "builderBuildTitle": "Ejecuta el pipeline de compilación de Evermind en tu navegador"
   }
 }

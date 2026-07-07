@@ -22,8 +22,10 @@ import { meetings, meetingAttendees, userAvailability } from '../../infrastructu
 import { relayToRoom } from './realtimeRelay';
 import { pushMeetingEvent, deleteMeetingEvent } from '../../application/calendar/calendarService';
 import type { CalendarProviderName } from '../../application/calendar/calendarProviders';
+import { loadExternalBusy, mergeBusy } from '../../application/calendar/calendarFreeBusy';
 import { loadProjectTeamMembers } from '../../application/metrics/assigneeRecommender';
 import { BrainService } from '../../application/brain/BrainService';
+import { getOrSetCached } from '../../infrastructure/cache/readThroughCache';
 import {
   suggestSlots, normalizeWindows, type Availability, type BusyInterval,
 } from '../../application/calendar/availabilitySolver';
@@ -39,8 +41,43 @@ interface AttendeeInput { kind?: string; ref: string; name: string; email?: stri
  *  Workers lib, so declare the shape we serialize to the client). */
 interface IceServer { urls: string | string[]; username?: string; credential?: string; }
 
-/** ICE servers for mesh P2P — public STUN, plus a TURN relay when configured. */
-function iceServers(env: Env): IceServer[] {
+/**
+ * Short-lived TURN credentials minted from Cloudflare's TURN service, when a
+ * Cloudflare TURN key is configured (`CLOUDFLARE_TURN_KEY_ID` +
+ * `CLOUDFLARE_TURN_API_TOKEN`). This turns "provision a TURN relay" into setting
+ * two secrets instead of standing up coturn. Cached (creds outlive the cache TTL),
+ * best-effort — a failure just omits TURN and mesh falls back to STUN.
+ */
+async function cloudflareTurn(env: Env): Promise<IceServer | null> {
+  const keyId = env.CLOUDFLARE_TURN_KEY_ID;
+  const token = env.CLOUDFLARE_TURN_API_TOKEN;
+  if (!keyId || !token) return null;
+  try {
+    return await getOrSetCached<IceServer>(
+      env,
+      `turn:cf:${keyId}`,
+      async () => {
+        const res = await fetch(`https://rtc.live.cloudflare.com/v1/turn/keys/${encodeURIComponent(keyId)}/credentials/generate`, {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ttl: 86_400 }),
+        });
+        if (!res.ok) throw new Error(`cloudflare turn ${res.status}`);
+        const d = (await res.json()) as { iceServers?: { urls?: string | string[]; username?: string; credential?: string } };
+        const ice = d.iceServers;
+        if (!ice?.urls) throw new Error('cloudflare turn: no urls');
+        return { urls: ice.urls, username: ice.username, credential: ice.credential };
+      },
+      { kvTtlSeconds: 43_200, l1TtlMs: 3_600_000 },
+    );
+  } catch {
+    return null;
+  }
+}
+
+/** ICE servers for mesh P2P — public STUN, plus a TURN relay when configured
+ *  (static `TURN_URL`, and/or Cloudflare-minted short-lived credentials). */
+async function iceServers(env: Env): Promise<IceServer[]> {
   const servers: IceServer[] = [
     { urls: ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302'] },
   ];
@@ -51,6 +88,8 @@ function iceServers(env: Env): IceServer[] {
       credential: env.TURN_CREDENTIAL,
     });
   }
+  const cf = await cloudflareTurn(env);
+  if (cf) servers.push(cf);
   return servers;
 }
 
@@ -63,7 +102,7 @@ export function createMeetingRoutes(db: Db): Hono<HonoEnv> {
   // DO (keyed distinctly per media room). No domain data flows through it.
   r.get('/rooms/:key/ws', (c) => relayToRoom(c, c.env?.CEREMONY_ROOM, `media:${c.req.param('key')}`));
 
-  r.get('/ice', (c) => c.json({ iceServers: iceServers(c.env as Env) }));
+  r.get('/ice', async (c) => c.json({ iceServers: await iceServers(c.env as Env) }));
 
   // ── Helpers ─────────────────────────────────────────────────────────────────
   async function hydrate(tenantId: number, id: string) {
@@ -285,7 +324,7 @@ export function createMeetingRoutes(db: Db): Hono<HonoEnv> {
         memberName: body.name || 'Guest', email: body.email ?? null, role: 'attendee', response: 'accepted', joinedAt: now,
       });
     }
-    return c.json({ roomKey: m.roomKey, videoEnabled: m.videoEnabled, iceServers: iceServers(env), meeting: await hydrate(tenantId, id) });
+    return c.json({ roomKey: m.roomKey, videoEnabled: m.videoEnabled, iceServers: await iceServers(env), meeting: await hydrate(tenantId, id) });
   });
 
   // ── Leave — stamp leftAt ─────────────────────────────────────────────────────
@@ -436,10 +475,12 @@ export function createMeetingRoutes(db: Db): Hono<HonoEnv> {
     const refs = (c.req.query('refs') ?? '').split(',').map((s) => s.trim()).filter(Boolean).slice(0, 50);
     const fromMs = Date.parse(c.req.query('from') ?? '') || Date.now();
     const toMs = Date.parse(c.req.query('to') ?? '') || (fromMs + 14 * 86_400_000);
-    const [availability, busy] = await Promise.all([
+    const [availability, appBusy, extBusy] = await Promise.all([
       loadAvailability(tenantId, refs),
       loadBusy(tenantId, refs, fromMs, toMs),
+      loadExternalBusy(db, c.env as Env, tenantId, refs, fromMs, toMs),
     ]);
+    const busy = mergeBusy(appBusy, extBusy);
     return c.json({
       availability,
       busy: refs.map((userId) => ({ userId, intervals: (busy.get(userId) ?? []).map((b) => ({ startISO: new Date(b.start).toISOString(), endISO: new Date(b.end).toISOString() })) })),
@@ -455,10 +496,12 @@ export function createMeetingRoutes(db: Db): Hono<HonoEnv> {
     const fromMs = Date.parse(c.req.query('from') ?? '') || Date.now();
     const toMs = Date.parse(c.req.query('to') ?? '') || (fromMs + 14 * 86_400_000);
     const count = Math.min(20, Math.max(1, Number(c.req.query('count') ?? 6)));
-    const [availability, busy] = await Promise.all([
+    const [availability, appBusy, extBusy] = await Promise.all([
       loadAvailability(tenantId, refs),
       loadBusy(tenantId, refs, fromMs, toMs),
+      loadExternalBusy(db, c.env as Env, tenantId, refs, fromMs, toMs),
     ]);
+    const busy = mergeBusy(appBusy, extBusy);
     const slots = suggestSlots(availability, busy, { fromMs, toMs, durationMinutes, count });
     return c.json({ slots });
   });

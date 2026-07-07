@@ -151,7 +151,10 @@ export function roleForNode(node: WorkflowDefNode): string {
   if (node.kind === 'agent') {
     return String(node.config.role ?? node.config.agentRole ?? 'code-creator');
   }
-  return NODE_HANDLER_ROLES[node.kind];
+  // Client-side Evermind BUILD-step kinds (train-tokenizer, train-model, …) are a
+  // frontend-only superset run in-browser via the engine, never dispatched here.
+  // If one is ever server-run, fall back to a benign role rather than undefined.
+  return NODE_HANDLER_ROLES[node.kind] ?? `node:${node.kind}`;
 }
 
 /** Human/agent-readable task text for a node, derived from its config. */

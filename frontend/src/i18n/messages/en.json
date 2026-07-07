@@ -1,4 +1,10 @@
 {
+  "contentManager": {
+    "migrate": {
+      "moving": "Moving your content into Knowledge…",
+      "done": "Redirecting to Knowledge…"
+    }
+  },
   "chatInput": {
     "add": "Add",
     "upload": "Upload from computer",
@@ -2360,6 +2366,10 @@
     "marketSubtitle": "Install ready-made SOPs, processes and docs into your workspace.",
     "free": "Free",
     "addToKnowledge": "Add to my Knowledge",
+    "buy": "Buy",
+    "signInToGet": "Sign in to get",
+    "installFailed": "Couldn't add this to your Knowledge. Try again.",
+    "checkoutUnavailable": "Paid checkout isn't available on this deployment yet.",
     "installing": "Installing…",
     "by": "by {author}"
   },
@@ -5129,7 +5139,9 @@
       "kindLabel": "Ticket type",
       "pickTicket": "Choose a ticket…",
       "searchTicket": "Search tickets…",
-      "moreResults": "+{n} more — refine your search",
+      "searching": "Searching…",
+      "noMatches": "No matching tickets.",
+      "refine": "Showing the top matches — type to narrow.",
       "linkTypeLabel": "Link type",
       "linkTypeLinked": "Linked",
       "linkTypeCreated": "Created from chat",
@@ -5178,6 +5190,8 @@
     "noChatsMatch": "No chats match your search.",
     "rename": "Rename",
     "summarize": "Summarize",
+    "deleteChatConfirm": "Delete \"{title}\"? This cannot be undone.",
+    "thisChat": "this chat",
     "addTo": "Add to:",
     "addChatToProjectAria": "Add chat to project",
     "addToProject": "Add to project…",
@@ -5808,7 +5822,72 @@
     "emptyItems": "No items match your search.",
     "emptyAgentsSearch": "No workforce agents match your search.",
     "emptyAgentsNone": "No published workforce agents yet. Publish an agent from a project to list it here.",
-    "talentError": "Could not load talent."
+    "talentError": "Could not load talent.",
+    "free": "Free",
+    "installed": "Installed",
+    "by": "by",
+    "defaultPriceUnit": "use",
+    "publish": {
+      "becomePublisher": "Become a Publisher",
+      "publisherBlurb": "Any Builderforce.ai account can publish skills, personas, and agents to the marketplace. Create an account or sign in to get started.",
+      "createAccount": "Create Account",
+      "signIn": "Sign In",
+      "publishingAs": "Publishing as",
+      "heading": "Publish a Skill",
+      "success": "Skill published! It will appear in the marketplace after review.",
+      "name": "Name",
+      "namePlaceholder": "My Skill",
+      "slug": "Slug",
+      "slugHint": "(unique ID)",
+      "slugPlaceholder": "my-skill",
+      "description": "Description",
+      "descriptionPlaceholder": "What does this skill do?",
+      "category": "Category",
+      "categoryPlaceholder": "coding",
+      "version": "Version",
+      "repoUrl": "Repo URL",
+      "repoPlaceholder": "https://github.com/…",
+      "price": "Price (USD)",
+      "pricePlaceholder": "0.00",
+      "pricingModel": "Pricing Model",
+      "flatFee": "Flat Fee",
+      "consumption": "Consumption",
+      "priceUnit": "Price Unit",
+      "priceUnitPlaceholder": "per request",
+      "submitting": "Publishing…",
+      "submit": "Publish Skill",
+      "failed": "Publish failed"
+    },
+    "table": {
+      "name": "Name",
+      "title": "Title",
+      "tags": "Tags",
+      "price": "Price",
+      "hires": "Hires",
+      "eval": "Eval",
+      "actions": "Actions",
+      "type": "Type",
+      "author": "Author",
+      "stats": "Stats"
+    },
+    "action": {
+      "hire": "Hire",
+      "hiring": "Hiring…",
+      "unhire": "Unhire",
+      "unhiring": "Unhiring…",
+      "workforceAgent": "Workforce agent",
+      "install": "Install",
+      "uninstall": "Uninstall",
+      "registerHost": "Register agentHost",
+      "inCart": "✓ In Cart",
+      "addCart": "+ Cart",
+      "inCartTitle": "In cart",
+      "addCartTitle": "Add to cart",
+      "like": "Like",
+      "unlike": "Unlike",
+      "installsTitle": "Installs",
+      "deleteConfirm": "Delete agent \"{name}\"? This permanently removes it and its per-agent skills/personas. This cannot be undone."
+    }
   },
   "models": {
     "searchPlaceholder": "Search models, providers…",
@@ -6646,6 +6725,14 @@
       },
       "preview": {
         "nothingToPreview": "_Nothing to preview yet._"
+      },
+      "history": {
+        "button": "History",
+        "title": "Version history",
+        "loading": "Loading history…",
+        "empty": "No versions yet.",
+        "publish": "Published",
+        "amend": "Amended"
       }
     },
     "newsletter": {
@@ -7507,7 +7594,13 @@
     "findATime": "Find a time",
     "noSlots": "No open times for everyone in the next two weeks.",
     "kind_interview": "Interview",
-    "kind_review": "Review"
+    "kind_review": "Review",
+    "chatPanel": "Chat",
+    "linkTeamChat": "Back with team chat",
+    "teamChatScope": "Team chat",
+    "teamChatProject": "Project team chat",
+    "teamChatTenant": "Workspace team chat",
+    "teamChatHint": "Choose which conversation this meeting is backed by — a named team's chat, or the default for its scope."
   },
   "brainLauncher": {
     "open": "Open Brain assistant",
@@ -7936,5 +8029,36 @@
     "logMambaEpoch": "  📊 Epoch {epoch}: loss={loss}",
     "logMambaComplete": "✅ Mamba training complete — final loss: {loss}",
     "logMambaFailed": "❌ Mamba training failed: {error}"
+  },
+  "evermindBuild": {
+    "title": "Evermind build",
+    "subtitle": "Run this pipeline in your browser to train, validate, and package a .evermind model — no server needed.",
+    "noBuildNodes": "Add Evermind build steps (or load a template) to run a build.",
+    "stepsReady": "{count, plural, one {# build step} other {# build steps}} ready",
+    "run": "Run build",
+    "running": "Building…",
+    "rerun": "Run again",
+    "timelineTitle": "Execution timeline",
+    "durationMs": "{ms} ms",
+    "okAll": "Build passed — all {count} steps green.",
+    "failed": "Build stopped at “{label}”.",
+    "artifactTitle": "Model artifact",
+    "artifactReady": "A .evermind model was produced.",
+    "artifactNone": "This pipeline didn't emit a .evermind artifact — add a Package (round-trip) step.",
+    "seed": "Seed project Evermind",
+    "seeding": "Seeding…",
+    "seeded": "Seeded the project Evermind (v{version}).",
+    "seedNeedsProject": "Bind this workflow to a project to seed its Evermind.",
+    "seedFailed": "Seed failed: {error}",
+    "download": "Download .evermind",
+    "errUnknown": "Unknown error",
+    "templatesTitle": "Load a ready-made Evermind build pipeline",
+    "templatePlaceholder": "Evermind template…",
+    "templateTrainLlm": "Create an LLM",
+    "templateTeachCode": "Teach Evermind to Code",
+    "templateLoadFailed": "Couldn't load the template.",
+    "replaceConfirm": "Replace the current canvas with this template?",
+    "builderBuild": "Build",
+    "builderBuildTitle": "Run the Evermind build pipeline in your browser"
   }
 }

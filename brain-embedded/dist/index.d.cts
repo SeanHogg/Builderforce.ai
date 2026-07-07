@@ -420,6 +420,13 @@ interface BrainPageContext {
      *  `?prompt=` seed). Distinct from a pending-prompt handoff — this is published
      *  by a page effect, not read from storage. */
     initialPrompt?: string;
+    /** Deep-link: one-shot work item to auto-link the opened chat to (the IDE
+     *  `?ticket=<kind>:<ref>` seed). The docked Brain gets this as a direct prop; the
+     *  floating drawer reads it here. */
+    initialTicket?: {
+        kind: string;
+        ref: string;
+    };
 }
 interface BrainContextValue extends BrainPageContext {
     open: boolean;

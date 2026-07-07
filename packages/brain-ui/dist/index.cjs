@@ -797,6 +797,9 @@ var DEFAULT_CHAT_TICKETS_LABELS = {
   kindLabel: "Ticket type",
   pickTicket: "Choose a ticket\u2026",
   searchTicket: "Search tickets\u2026",
+  searching: "Searching\u2026",
+  noMatches: "No matching tickets.",
+  refine: "Showing the top matches \u2014 type to narrow.",
   linkTypeLabel: "Link type",
   linkTypeLinked: "Linked",
   linkTypeCreated: "Created from chat",
@@ -819,7 +822,6 @@ var DEFAULT_CHAT_TICKETS_LABELS = {
   mergeNoOthers: "No other chats to merge.",
   kind: { task: "Task", epic: "Epic", gap: "Gap", objective: "Objective", initiative: "Initiative", portfolio: "Portfolio", roadmap: "Roadmap", spec: "Spec" },
   ringAria: (label, pct) => `${label}: ${pct}% done`,
-  moreResults: (n) => `+${n} more \u2014 refine your search`,
   runStarted: (agent) => `Started ${agent} on the ticket.`,
   mergeAction: (n) => `Merge ${n} here`,
   mergedN: (n) => `Merged ${n} chat(s).`
@@ -833,7 +835,6 @@ function ChatTicketsPanelInner({ chatId, projectId, chatList, adapter, labels, o
   const [agents, setAgents] = (0, import_react4.useState)([]);
   const [members, setMembers] = (0, import_react4.useState)([]);
   const [pool, setPool] = (0, import_react4.useState)([]);
-  const [options, setOptions] = (0, import_react4.useState)(null);
   const [panel, setPanel] = (0, import_react4.useState)(null);
   const [lineageKey, setLineageKey] = (0, import_react4.useState)(null);
   const [lineage, setLineage] = (0, import_react4.useState)([]);
@@ -856,9 +857,6 @@ function ChatTicketsPanelInner({ chatId, projectId, chatList, adapter, labels, o
   (0, import_react4.useEffect)(() => {
     adapter.loadAgentPool().then(setPool).catch(() => setPool([]));
   }, [adapter]);
-  (0, import_react4.useEffect)(() => {
-    adapter.loadTicketOptions(projectId).then(setOptions).catch(() => setOptions(null));
-  }, [adapter, projectId]);
   const flash = (m) => {
     setMsg(m);
     if (typeof window !== "undefined") window.setTimeout(() => setMsg(null), 3500);
@@ -959,7 +957,7 @@ function ChatTicketsPanelInner({ chatId, projectId, chatList, adapter, labels, o
       ] }),
       msg && /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("span", { style: { fontSize: 12, color: V.accent, alignSelf: "center" }, children: msg })
     ] }),
-    panel === "link" && /* @__PURE__ */ (0, import_jsx_runtime6.jsx)(LinkForm, { options, existing: tickets, labels, onLink: async (kind, ref, linkType) => {
+    panel === "link" && /* @__PURE__ */ (0, import_jsx_runtime6.jsx)(LinkForm, { search: adapter.searchTickets, projectId, existing: tickets, labels, onLink: async (kind, ref, linkType) => {
       try {
         await adapter.linkTicket(chatId, { kind, ref, linkType });
         await load();
@@ -1051,27 +1049,40 @@ function ChatTicketsPanelInner({ chatId, projectId, chatList, adapter, labels, o
     )
   ] });
 }
-var TICKET_OPTION_CAP = 200;
-function LinkForm({ options, existing, labels, onLink }) {
+var SEARCH_LIMIT = 40;
+function LinkForm({ search, projectId, existing, labels, onLink }) {
   const [kind, setKind] = (0, import_react4.useState)("task");
   const [ref, setRef] = (0, import_react4.useState)("");
   const [query, setQuery] = (0, import_react4.useState)("");
   const [linkType, setLinkType] = (0, import_react4.useState)("linked");
   const [busy, setBusy] = (0, import_react4.useState)(false);
-  const forKind = (0, import_react4.useMemo)(() => {
-    const all = options?.[kind] ?? [];
-    return all.filter((o) => !existing.some((e) => e.kind === kind && e.ref === o.ref));
-  }, [options, kind, existing]);
-  const filtered = (0, import_react4.useMemo)(() => {
-    const q = query.trim().toLowerCase();
-    if (!q) return forKind;
-    return forKind.filter((o) => o.label.toLowerCase().includes(q));
-  }, [forKind, query]);
-  const shown = filtered.slice(0, TICKET_OPTION_CAP);
-  const overflow = filtered.length - shown.length;
+  const [results, setResults] = (0, import_react4.useState)([]);
+  const [loading, setLoading] = (0, import_react4.useState)(false);
   (0, import_react4.useEffect)(() => {
-    if (ref && !filtered.some((o) => o.ref === ref)) setRef("");
-  }, [filtered, ref]);
+    let live = true;
+    setLoading(true);
+    const h = setTimeout(() => {
+      search(kind, query, projectId).then((r) => {
+        if (live) setResults(r);
+      }).catch(() => {
+        if (live) setResults([]);
+      }).finally(() => {
+        if (live) setLoading(false);
+      });
+    }, 250);
+    return () => {
+      live = false;
+      clearTimeout(h);
+    };
+  }, [search, kind, query, projectId]);
+  const shown = (0, import_react4.useMemo)(
+    () => results.filter((o) => !existing.some((e) => e.kind === kind && e.ref === o.ref)),
+    [results, existing, kind]
+  );
+  const atCap = results.length >= SEARCH_LIMIT;
+  (0, import_react4.useEffect)(() => {
+    if (ref && !shown.some((o) => o.ref === ref)) setRef("");
+  }, [shown, ref]);
   const submit = async () => {
     if (!ref) return;
     setBusy(true);
@@ -1104,7 +1115,7 @@ function LinkForm({ options, existing, labels, onLink }) {
       /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("option", { value: "", children: labels.pickTicket }),
       shown.map((o) => /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("option", { value: o.ref, children: o.label }, o.ref))
     ] }),
-    overflow > 0 && /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("span", { style: S.muted, children: labels.moreResults(overflow) }),
+    loading ? /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("span", { style: S.muted, children: labels.searching }) : shown.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("span", { style: S.muted, children: labels.noMatches }) : atCap ? /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("span", { style: S.muted, children: labels.refine }) : null,
     /* @__PURE__ */ (0, import_jsx_runtime6.jsxs)("select", { "aria-label": labels.linkTypeLabel, value: linkType, onChange: (e) => setLinkType(e.target.value), style: S.select, children: [
       /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("option", { value: "linked", children: labels.linkTypeLinked }),
       /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("option", { value: "created", children: labels.linkTypeCreated })
@@ -2188,7 +2199,7 @@ function MemberRow({ member, labels, onAction }) {
     idle: labels.status_idle,
     available: labels.status_available
   }[member.status];
-  const task = member.taskId != null ? { id: member.taskId, key: member.taskKey, title: member.taskTitle ?? "" } : void 0;
+  const task = member.taskId != null ? { id: member.taskId, key: member.taskKey, title: member.taskTitle ?? "", taskType: member.taskType } : void 0;
   return /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("li", { className: "bf-360-person", children: [
     /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("span", { className: `bf-360-dot bf-360-dot--${member.status}`, title: statusLabel, "aria-label": statusLabel }),
     /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("div", { className: "bf-360-person__body", children: [

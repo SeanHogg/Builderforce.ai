@@ -14,7 +14,7 @@ import {
   tenantMembers,
   tenantInvitations,
 } from '../../infrastructure/database/schema';
-import { ideProxy, explicitModelPreemptsByo, readProxyChoice } from '../llm/LlmProxyService';
+import { ideProxy, explicitModelPreemptsByo, readProxyChoice, type LlmProxyService } from '../llm/LlmProxyService';
 import { classifyReplyAccount, buildReplyProvenance } from '../llm/replyProvenance';
 import { tenantProxyForPlan } from '../llm/tenantProxy';
 import { vendorForModel } from '../llm/vendors';
@@ -328,11 +328,33 @@ export class BrainService {
     return ideProxy({ OPENROUTER_API_KEY: apiKey });
   }
 
+  /**
+   * Build the LLM proxy for an INTERNAL Brain background call (chat summarize,
+   * project-memory consolidate, agentHost-session summarize). When the tenant has
+   * connected their OWN account (Claude subscription/OAuth or a provider api-key)
+   * that account serves the call — BYO-funded, so it's $0 to the operator and runs
+   * on the model the tenant chose — via the shared {@link tenantProxyForPlan} builder
+   * (BYO-first, with plan-pool failover if the connected account errors). With NOTHING
+   * connected it stays on the operator OpenRouter key exactly as before, so these
+   * background summarizations never start spending the owner's frontier quota for
+   * tenants who haven't opted in. This is the "$0-token summarization/consolidation for
+   * tenants who connected their own account" path.
+   */
+  private async buildTenantLlmService(env: Env, tenantId: number): Promise<LlmProxyService> {
+    const { proxy, byoVendors } = await tenantProxyForPlan(env, tenantId).catch(
+      () => ({ proxy: null as LlmProxyService | null, byoVendors: new Set<string>() }),
+    );
+    // A connected account (BYO vendor set is non-empty) serves the call on the tenant's
+    // own model; otherwise keep the unchanged operator-key path.
+    if (proxy && byoVendors.size > 0) return proxy;
+    return this.buildLlmService(env.OPENROUTER_API_KEY ?? '');
+  }
+
   /** Record a Brain summarization call in the usage ledger [1310] (best-effort,
    *  fire-and-forget; no-ops without usage). These non-streaming background calls
    *  were previously invisible to billing. The apiKey-only env is enough for the
    *  usage row; pricing lookup is best-effort. */
-  private recordUsage(apiKey: string, tenantId: number, useCase: string, result: Parameters<typeof recordProxyUsage>[2]['result']): void {
+  private recordUsage(apiKey: string | undefined, tenantId: number, useCase: string, result: Parameters<typeof recordProxyUsage>[2]['result']): void {
     void recordProxyUsage(this.db, { OPENROUTER_API_KEY: apiKey } as Env, { tenantId, useCase, result });
   }
 
@@ -1170,7 +1192,8 @@ export class BrainService {
   // Summarisation
   // -----------------------------------------------------------------------
 
-  async summarizeChat(chatId: number, tenantId: number, userId: string, apiKey: string) {
+  async summarizeChat(chatId: number, tenantId: number, userId: string, env: Env) {
+    const apiKey = env.OPENROUTER_API_KEY;
     const chat = await this.canAccessChat(chatId, tenantId, userId, {
       projectId: brainChats.projectId,
     }) as { id: number; projectId: number | null } | null;
@@ -1195,7 +1218,7 @@ export class BrainService {
       'Output only the summary, no preamble.',
     ].join('\n');
 
-    const service = this.buildLlmService(apiKey);
+    const service = await this.buildTenantLlmService(env, tenantId);
 
     const result = await service.complete({
       messages: [
@@ -1273,7 +1296,8 @@ export class BrainService {
   // Project memory consolidation
   // -----------------------------------------------------------------------
 
-  async consolidateProjectMemory(tenantId: number, projectId: number, apiKey: string) {
+  async consolidateProjectMemory(tenantId: number, projectId: number, env: Env) {
+    const apiKey = env.OPENROUTER_API_KEY;
     const proj = await this.verifyProjectInTenant(projectId, tenantId);
     if (!proj) return { error: 'Project not found' as const };
 
@@ -1300,7 +1324,7 @@ export class BrainService {
       'Output only the consolidated memory, no preamble.',
     ].join('\n');
 
-    const service = this.buildLlmService(apiKey);
+    const service = await this.buildTenantLlmService(env, tenantId);
 
     const result = await service.complete({
       messages: [
@@ -1333,7 +1357,8 @@ export class BrainService {
   // AgentHost session summarisation — bridges agentHost chat history into brain memory
   // -----------------------------------------------------------------------
 
-  async summarizeAgentHostSession(sessionId: number, tenantId: number, apiKey: string) {
+  async summarizeAgentHostSession(sessionId: number, tenantId: number, env: Env) {
+    const apiKey = env.OPENROUTER_API_KEY;
     // Verify session belongs to tenant
     const [session] = await this.db
       .select({
@@ -1366,7 +1391,7 @@ export class BrainService {
       'Output only the summary, no preamble.',
     ].join('\n');
 
-    const service = this.buildLlmService(apiKey);
+    const service = await this.buildTenantLlmService(env, tenantId);
 
     const result = await service.complete({
       messages: [

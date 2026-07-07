@@ -387,6 +387,15 @@ export interface Env {
   TURN_URL?: string;
   TURN_USERNAME?: string;
   TURN_CREDENTIAL?: string;
+
+  /** Optional Cloudflare TURN service — the managed alternative to running coturn.
+   *  When both are set, `/api/meetings/ice` mints short-lived TURN credentials per
+   *  key (cached) and appends them to the ICE list, so symmetric-NAT peers connect
+   *  with no self-hosted relay. Create a TURN key in the Cloudflare Realtime
+   *  dashboard, then: wrangler secret put CLOUDFLARE_TURN_KEY_ID /
+   *  CLOUDFLARE_TURN_API_TOKEN */
+  CLOUDFLARE_TURN_KEY_ID?: string;
+  CLOUDFLARE_TURN_API_TOKEN?: string;
 }
 
 /** Variables injected into Hono context by the auth middleware. */

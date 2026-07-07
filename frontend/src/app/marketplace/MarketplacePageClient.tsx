@@ -23,7 +23,6 @@ import {
   BUILTIN_PERSONAS,
   BUILTIN_SKILLS,
   userSkillsKey,
-  contentStorageKey,
   type Persona,
   type BuiltinSkill,
 } from '@/lib/marketplaceData';
@@ -49,9 +48,9 @@ import MarketplaceGigsSection from './MarketplaceGigsSection';
 // Human freelancers ("Talent"), the live model catalog ("Models"), and open work to
 // bid on ("Gigs") are now categories of the marketplace rather than standalone
 // /talent, /models, and /freelancer/gigs pages — same search box, one merged surface.
-type MarketplaceCategory = 'all' | 'personas' | 'skills' | 'content' | 'workforce' | 'talent' | 'models' | 'gigs' | 'publish';
+type MarketplaceCategory = 'all' | 'personas' | 'skills' | 'workforce' | 'talent' | 'models' | 'gigs' | 'publish';
 
-const CATEGORY_IDS: MarketplaceCategory[] = ['all', 'personas', 'skills', 'content', 'workforce', 'talent', 'models', 'gigs', 'publish'];
+const CATEGORY_IDS: MarketplaceCategory[] = ['all', 'personas', 'skills', 'workforce', 'talent', 'models', 'gigs', 'publish'];
 
 const TALENT_DISCIPLINES = ['developer', 'dba', 'designer', 'devops', 'qa', 'pm', 'data', 'security', 'other'] as const;
 
@@ -71,19 +70,6 @@ function talentInitials(name: string | null): string {
   return (name ?? '?').trim().split(/\s+/).slice(0, 2).map((s) => s[0]?.toUpperCase() ?? '').join('') || '?';
 }
 
-interface ContentBlock {
-  id: string;
-  title: string;
-  type: string;
-  status: string;
-  body: string;
-  tags: string[];
-  sharedToMarketplace?: boolean;
-  image?: string;
-  likes?: number;
-  downloads?: number;
-}
-
 interface UserSkill {
   id: string;
   name: string;
@@ -97,7 +83,7 @@ interface UserSkill {
 
 interface MarketplaceListing {
   id: string;
-  type: 'persona' | 'skill' | 'content';
+  type: 'persona' | 'skill';
   artifactSlug: string;
   name: string;
   description: string;
@@ -138,31 +124,9 @@ function loadSharedSkills(tenantId: string): MarketplaceListing[] {
   }
 }
 
-function loadSharedContent(tenantId: string): MarketplaceListing[] {
-  if (typeof window === 'undefined') return [];
-  try {
-    const raw = localStorage.getItem(contentStorageKey(tenantId));
-    if (!raw) return [];
-    const blocks = JSON.parse(raw) as ContentBlock[];
-    return blocks
-      .filter((b) => b.sharedToMarketplace && b.status === 'published')
-      .map((b) => ({
-        id: `content:${b.id}`,
-        type: 'content' as const,
-        artifactSlug: b.id,
-        name: b.title,
-        description: b.body.slice(0, 200),
-        author: 'You',
-        version: '1.0.0',
-        tags: b.tags ?? [],
-        downloads: b.downloads ?? 0,
-        likes: b.likes ?? 0,
-        image: b.image,
-      }));
-  } catch {
-    return [];
-  }
-}
+// Content blocks migrated from the retired /content-manager now live as knowledge
+// documents and are sold via the knowledge listings surface (KnowledgeMarketSection),
+// so the marketplace no longer reads content-manager's localStorage.
 
 function personaToListing(p: Persona): MarketplaceListing {
   return {
@@ -271,13 +235,15 @@ export default function MarketplacePageClient() {
       setPublishSuccess(true);
       setSkillForm({ name: '', slug: '', description: '', category: '', version: '1.0.0', repoUrl: '', price: '0', pricingModel: 'flat_fee', priceUnit: '' });
     } catch (e) {
-      setPublishError(e instanceof Error ? e.message : 'Publish failed');
+      setPublishError(e instanceof Error ? e.message : tm('publish.failed'));
     } finally {
       setPublishing(false);
     }
   };
 
-  const key = (type: MarketplaceListing['type'], slug: string) => `${type}:${slug}`;
+  // Keyed by ArtifactType so listing keys (persona|skill) and assignment keys
+  // (which carry the full ArtifactType) collide correctly in the installed set.
+  const key = (type: ArtifactType, slug: string) => `${type}:${slug}`;
 
   const refreshListings = useCallback(async () => {
     const tenantNum = Number(tenantId);
@@ -303,13 +269,11 @@ export default function MarketplacePageClient() {
       // ignore
     }
     const sharedSkills = loadSharedSkills(tenantId);
-    const sharedContent = loadSharedContent(tenantId);
     const allListings = [
       ...personaListings,
       ...builtinSkillListings,
       ...apiSkills,
       ...sharedSkills,
-      ...sharedContent,
     ];
     setListings(allListings);
 
@@ -329,18 +293,16 @@ export default function MarketplacePageClient() {
       setInstalled(new Set());
     }
 
-    const byType: Record<'skill' | 'persona' | 'content', string[]> = { skill: [], persona: [], content: [] };
+    const byType: Record<'skill' | 'persona', string[]> = { skill: [], persona: [] };
     for (const item of allListings) byType[item.type].push(item.artifactSlug);
 
-    const [skillStats, personaStats, contentStats] = await Promise.all([
+    const [skillStats, personaStats] = await Promise.all([
       byType.skill.length ? marketplaceStats.getStats('skill', byType.skill) : Promise.resolve({} as Record<string, ArtifactStats>),
       byType.persona.length ? marketplaceStats.getStats('persona', byType.persona) : Promise.resolve({} as Record<string, ArtifactStats>),
-      byType.content.length ? marketplaceStats.getStats('content', byType.content) : Promise.resolve({} as Record<string, ArtifactStats>),
     ]);
     const merged: Record<string, ArtifactStats> = {};
     for (const slug of Object.keys(skillStats)) merged[key('skill', slug)] = skillStats[slug]!;
     for (const slug of Object.keys(personaStats)) merged[key('persona', slug)] = personaStats[slug]!;
-    for (const slug of Object.keys(contentStats)) merged[key('content', slug)] = contentStats[slug]!;
     setStats(merged);
   }, [tenantId, hasTenant]);
 
@@ -468,7 +430,6 @@ export default function MarketplacePageClient() {
   let filtered = listings;
   if (category === 'personas') filtered = filtered.filter((l) => l.type === 'persona');
   if (category === 'skills') filtered = filtered.filter((l) => l.type === 'skill');
-  if (category === 'content') filtered = filtered.filter((l) => l.type === 'content');
   const q = search.toLowerCase();
   if (q) {
     filtered = filtered.filter(
@@ -532,7 +493,7 @@ export default function MarketplacePageClient() {
     loadAgents();
   }, [loadAgents]);
   const deleteOwnedAgent = useCallback(async (a: PublishedAgent) => {
-    if (!confirm(`Delete agent "${a.name}"? This permanently removes it and its per-agent skills/personas. This cannot be undone.`)) return;
+    if (!confirm(tm('action.deleteConfirm', { name: a.name }))) return;
     try {
       await deleteAgent(a.id);
       loadAgents();
@@ -561,8 +522,9 @@ export default function MarketplacePageClient() {
         </p>
       </div>
 
-      {/* Knowledge listings (SOPs/processes/docs published for sale). Self-gating:
-          renders nothing for logged-out visitors or when there are no listings. */}
+      {/* Knowledge listings (SOPs/processes/docs published for sale). Public
+          browse — renders for logged-out visitors too; hides only when there are
+          no listings. Acquiring prompts sign-in / checkout as needed. */}
       <KnowledgeMarketSection />
 
       <div
@@ -662,90 +624,90 @@ export default function MarketplacePageClient() {
           {!isAuthenticated ? (
             <div style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: 12, padding: 32, textAlign: 'center' }}>
               <div style={{ fontSize: 40, marginBottom: 12 }}>🚀</div>
-              <div style={{ fontWeight: 700, fontSize: 18, marginBottom: 8 }}>Become a Publisher</div>
+              <div style={{ fontWeight: 700, fontSize: 18, marginBottom: 8 }}>{tm('publish.becomePublisher')}</div>
               <p style={{ fontSize: 13, color: 'var(--muted)', marginBottom: 24, maxWidth: 380, margin: '0 auto 24px' }}>
-                Any Builderforce.ai account can publish skills, personas, and agents to the marketplace. Create an account or sign in to get started.
+                {tm('publish.publisherBlurb')}
               </p>
               <div style={{ display: 'flex', gap: 10, justifyContent: 'center' }}>
-                <Link href="/register" className="btn btn-primary" style={{ textDecoration: 'none', padding: '10px 24px' }}>Create Account</Link>
-                <Link href="/login" className="btn btn-secondary" style={{ textDecoration: 'none', padding: '10px 24px' }}>Sign In</Link>
+                <Link href="/register" className="btn btn-primary" style={{ textDecoration: 'none', padding: '10px 24px' }}>{tm('publish.createAccount')}</Link>
+                <Link href="/login" className="btn btn-secondary" style={{ textDecoration: 'none', padding: '10px 24px' }}>{tm('publish.signIn')}</Link>
               </div>
             </div>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10, background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: 12, padding: 16 }}>
                 <div style={{ flex: 1 }}>
-                  <div style={{ fontWeight: 600, fontSize: 14 }}>Publishing as <strong>{user?.name ?? user?.email}</strong></div>
+                  <div style={{ fontWeight: 600, fontSize: 14 }}>{tm('publish.publishingAs')} <strong>{user?.name ?? user?.email}</strong></div>
                   <div style={{ fontSize: 12, color: 'var(--muted)' }}>{user?.email}</div>
                 </div>
               </div>
               <div style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: 12, padding: 24 }}>
-                <div style={{ fontWeight: 700, fontSize: 16, marginBottom: 16 }}>Publish a Skill</div>
+                <div style={{ fontWeight: 700, fontSize: 16, marginBottom: 16 }}>{tm('publish.heading')}</div>
                 {publishSuccess && (
                   <div style={{ marginBottom: 12, padding: '10px 14px', fontSize: 13, color: 'var(--success, #22c55e)', background: 'rgba(34,197,94,0.08)', borderRadius: 8, border: '1px solid rgba(34,197,94,0.2)' }}>
-                    Skill published! It will appear in the marketplace after review.
+                    {tm('publish.success')}
                   </div>
                 )}
                 <form onSubmit={handlePublishSkill} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                   <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: 10 }}>
                     <div>
-                      <label style={{ display: 'block', fontSize: 12, color: 'var(--muted)', marginBottom: 4 }}>Name *</label>
-                      <input required type="text" placeholder="My Skill" value={skillForm.name}
+                      <label style={{ display: 'block', fontSize: 12, color: 'var(--muted)', marginBottom: 4 }}>{tm('publish.name')} *</label>
+                      <input required type="text" placeholder={tm('publish.namePlaceholder')} value={skillForm.name}
                         onChange={(e) => setSkillForm((f) => ({ ...f, name: e.target.value, slug: f.slug || e.target.value.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '') }))}
                         style={{ width: '100%', padding: '8px 10px', fontSize: 13, borderRadius: 8, border: '1px solid var(--border)', background: 'var(--bg-base)', color: 'var(--text)', boxSizing: 'border-box' }} />
                     </div>
                     <div>
-                      <label style={{ display: 'block', fontSize: 12, color: 'var(--muted)', marginBottom: 4 }}>Slug * (unique ID)</label>
-                      <input required type="text" placeholder="my-skill" value={skillForm.slug}
+                      <label style={{ display: 'block', fontSize: 12, color: 'var(--muted)', marginBottom: 4 }}>{tm('publish.slug')} * {tm('publish.slugHint')}</label>
+                      <input required type="text" placeholder={tm('publish.slugPlaceholder')} value={skillForm.slug}
                         onChange={(e) => setSkillForm((f) => ({ ...f, slug: e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '') }))}
                         style={{ width: '100%', padding: '8px 10px', fontSize: 13, borderRadius: 8, border: '1px solid var(--border)', background: 'var(--bg-base)', color: 'var(--text)', fontFamily: 'var(--font-mono)', boxSizing: 'border-box' }} />
                     </div>
                   </div>
                   <div>
-                    <label style={{ display: 'block', fontSize: 12, color: 'var(--muted)', marginBottom: 4 }}>Description</label>
-                    <textarea rows={3} placeholder="What does this skill do?" value={skillForm.description}
+                    <label style={{ display: 'block', fontSize: 12, color: 'var(--muted)', marginBottom: 4 }}>{tm('publish.description')}</label>
+                    <textarea rows={3} placeholder={tm('publish.descriptionPlaceholder')} value={skillForm.description}
                       onChange={(e) => setSkillForm((f) => ({ ...f, description: e.target.value }))}
                       style={{ width: '100%', padding: '8px 10px', fontSize: 13, borderRadius: 8, border: '1px solid var(--border)', background: 'var(--bg-base)', color: 'var(--text)', resize: 'vertical', boxSizing: 'border-box' }} />
                   </div>
                   <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr 1fr', gap: 10 }}>
                     <div>
-                      <label style={{ display: 'block', fontSize: 12, color: 'var(--muted)', marginBottom: 4 }}>Category</label>
-                      <input type="text" placeholder="coding" value={skillForm.category}
+                      <label style={{ display: 'block', fontSize: 12, color: 'var(--muted)', marginBottom: 4 }}>{tm('publish.category')}</label>
+                      <input type="text" placeholder={tm('publish.categoryPlaceholder')} value={skillForm.category}
                         onChange={(e) => setSkillForm((f) => ({ ...f, category: e.target.value }))}
                         style={{ width: '100%', padding: '8px 10px', fontSize: 13, borderRadius: 8, border: '1px solid var(--border)', background: 'var(--bg-base)', color: 'var(--text)', boxSizing: 'border-box' }} />
                     </div>
                     <div>
-                      <label style={{ display: 'block', fontSize: 12, color: 'var(--muted)', marginBottom: 4 }}>Version</label>
+                      <label style={{ display: 'block', fontSize: 12, color: 'var(--muted)', marginBottom: 4 }}>{tm('publish.version')}</label>
                       <input type="text" value={skillForm.version}
                         onChange={(e) => setSkillForm((f) => ({ ...f, version: e.target.value }))}
                         style={{ width: '100%', padding: '8px 10px', fontSize: 13, borderRadius: 8, border: '1px solid var(--border)', background: 'var(--bg-base)', color: 'var(--text)', boxSizing: 'border-box' }} />
                     </div>
                     <div>
-                      <label style={{ display: 'block', fontSize: 12, color: 'var(--muted)', marginBottom: 4 }}>Repo URL</label>
-                      <input type="url" placeholder="https://github.com/…" value={skillForm.repoUrl}
+                      <label style={{ display: 'block', fontSize: 12, color: 'var(--muted)', marginBottom: 4 }}>{tm('publish.repoUrl')}</label>
+                      <input type="url" placeholder={tm('publish.repoPlaceholder')} value={skillForm.repoUrl}
                         onChange={(e) => setSkillForm((f) => ({ ...f, repoUrl: e.target.value }))}
                         style={{ width: '100%', padding: '8px 10px', fontSize: 13, borderRadius: 8, border: '1px solid var(--border)', background: 'var(--bg-base)', color: 'var(--text)', boxSizing: 'border-box' }} />
                     </div>
                   </div>
                   <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr 1fr', gap: 10 }}>
                     <div>
-                      <label style={{ display: 'block', fontSize: 12, color: 'var(--muted)', marginBottom: 4 }}>Price (USD)</label>
-                      <input type="number" min="0" step="0.01" placeholder="0.00" value={skillForm.price}
+                      <label style={{ display: 'block', fontSize: 12, color: 'var(--muted)', marginBottom: 4 }}>{tm('publish.price')}</label>
+                      <input type="number" min="0" step="0.01" placeholder={tm('publish.pricePlaceholder')} value={skillForm.price}
                         onChange={(e) => setSkillForm((f) => ({ ...f, price: e.target.value }))}
                         style={{ width: '100%', padding: '8px 10px', fontSize: 13, borderRadius: 8, border: '1px solid var(--border)', background: 'var(--bg-base)', color: 'var(--text)', boxSizing: 'border-box' }} />
                     </div>
                     <div>
-                      <label style={{ display: 'block', fontSize: 12, color: 'var(--muted)', marginBottom: 4 }}>Pricing Model</label>
+                      <label style={{ display: 'block', fontSize: 12, color: 'var(--muted)', marginBottom: 4 }}>{tm('publish.pricingModel')}</label>
                       <Select value={skillForm.pricingModel} onChange={(e) => setSkillForm((f) => ({ ...f, pricingModel: e.target.value as 'flat_fee' | 'consumption' }))}
                         style={{ width: '100%', padding: '8px 10px', fontSize: 13, borderRadius: 8, border: '1px solid var(--border)', background: 'var(--bg-base)', color: 'var(--text)', boxSizing: 'border-box' }}>
-                        <option value="flat_fee">Flat Fee</option>
-                        <option value="consumption">Consumption</option>
+                        <option value="flat_fee">{tm('publish.flatFee')}</option>
+                        <option value="consumption">{tm('publish.consumption')}</option>
                       </Select>
                     </div>
                     {skillForm.pricingModel === 'consumption' && (
                       <div>
-                        <label style={{ display: 'block', fontSize: 12, color: 'var(--muted)', marginBottom: 4 }}>Price Unit</label>
-                        <input type="text" placeholder="per request" value={skillForm.priceUnit}
+                        <label style={{ display: 'block', fontSize: 12, color: 'var(--muted)', marginBottom: 4 }}>{tm('publish.priceUnit')}</label>
+                        <input type="text" placeholder={tm('publish.priceUnitPlaceholder')} value={skillForm.priceUnit}
                           onChange={(e) => setSkillForm((f) => ({ ...f, priceUnit: e.target.value }))}
                           style={{ width: '100%', padding: '8px 10px', fontSize: 13, borderRadius: 8, border: '1px solid var(--border)', background: 'var(--bg-base)', color: 'var(--text)', boxSizing: 'border-box' }} />
                       </div>
@@ -754,7 +716,7 @@ export default function MarketplacePageClient() {
                   {publishError && <div style={{ fontSize: 12, color: 'var(--error-text)' }}>{publishError}</div>}
                   <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
                     <button type="submit" disabled={publishing || !skillForm.name.trim() || !skillForm.slug.trim()} className="btn btn-primary">
-                      {publishing ? 'Publishing…' : 'Publish Skill'}
+                      {publishing ? tm('publish.submitting') : tm('publish.submit')}
                     </button>
                   </div>
                 </form>
@@ -830,13 +792,13 @@ export default function MarketplacePageClient() {
             <table style={tableStyle}>
               <thead>
                 <tr style={theadRowStyle}>
-                  <th style={thStyle}>Name</th>
-                  <th style={thStyle}>Title</th>
-                  <th style={thStyle}>Tags</th>
-                  <th style={thStyle}>Price</th>
-                  <th style={thStyle}>Hires</th>
-                  <th style={thStyle}>Eval</th>
-                  <th style={{ ...thStyle, textAlign: 'right' }}>Actions</th>
+                  <th style={thStyle}>{tm('table.name')}</th>
+                  <th style={thStyle}>{tm('table.title')}</th>
+                  <th style={thStyle}>{tm('table.tags')}</th>
+                  <th style={thStyle}>{tm('table.price')}</th>
+                  <th style={thStyle}>{tm('table.hires')}</th>
+                  <th style={thStyle}>{tm('table.eval')}</th>
+                  <th style={{ ...thStyle, textAlign: 'right' }}>{tm('table.actions')}</th>
                 </tr>
               </thead>
               <tbody>
@@ -848,7 +810,7 @@ export default function MarketplacePageClient() {
                       <span style={{ marginRight: 6 }}>👤</span>
                       <strong style={{ color: 'var(--text-strong)' }}>{agent.name}</strong>
                     </td>
-                    <td style={tdMutedStyle}>{agent.title || 'Workforce agent'}</td>
+                    <td style={tdMutedStyle}>{agent.title || tm('action.workforceAgent')}</td>
                     <td style={tdMutedStyle}><SkillTags skills={agent.skills} max={4} variant="inline" /></td>
                     <td style={tdMutedStyle}>{formatAgentPrice(agent)}</td>
                     <td style={tdMutedStyle}>{agent.hire_count != null ? `${agent.hire_count}×` : '—'}</td>
@@ -871,7 +833,7 @@ export default function MarketplacePageClient() {
                           disabled={unhiringId === agent.id}
                           onClick={() => handleUnhire(agent.id)}
                         >
-                          {unhiringId === agent.id ? 'Unhiring…' : 'Unhire'}
+                          {unhiringId === agent.id ? tm('action.unhiring') : tm('action.unhire')}
                         </button>
                       ) : (
                         <button
@@ -880,7 +842,7 @@ export default function MarketplacePageClient() {
                           disabled={hiringId === agent.id}
                           onClick={() => handleHire(agent.id)}
                         >
-                          {hiringId === agent.id ? 'Hiring…' : 'Hire'}
+                          {hiringId === agent.id ? tm('action.hiring') : tm('action.hire')}
                         </button>
                       )}
                     </td>
@@ -919,17 +881,17 @@ export default function MarketplacePageClient() {
           <table style={tableStyle}>
             <thead>
               <tr style={theadRowStyle}>
-                <th style={thStyle}>Name</th>
-                <th style={thStyle}>Type</th>
-                <th style={thStyle}>Author</th>
-                <th style={thStyle}>Price</th>
-                <th style={thStyle}>Stats</th>
-                <th style={{ ...thStyle, textAlign: 'right' }}>Actions</th>
+                <th style={thStyle}>{tm('table.name')}</th>
+                <th style={thStyle}>{tm('table.type')}</th>
+                <th style={thStyle}>{tm('table.author')}</th>
+                <th style={thStyle}>{tm('table.price')}</th>
+                <th style={thStyle}>{tm('table.stats')}</th>
+                <th style={{ ...thStyle, textAlign: 'right' }}>{tm('table.actions')}</th>
               </tr>
             </thead>
             <tbody>
               {filtered.map((item) => {
-                const typeIcon = item.emoji ?? (item.type === 'persona' ? '🎭' : item.type === 'content' ? '📝' : '⚡');
+                const typeIcon = item.emoji ?? (item.type === 'persona' ? '🎭' : '⚡');
                 const k = key(item.type, item.artifactSlug);
                 const stat = stats[k] ?? { likes: item.likes, installs: item.downloads, liked: false };
                 const isInstalled = installed.has(k);
@@ -944,8 +906,8 @@ export default function MarketplacePageClient() {
                     <td style={tdMutedStyle}>{item.author}</td>
                     <td style={tdStyle}>
                       {(item.price ?? 0) === 0
-                        ? 'Free'
-                        : `$${(item.price ?? 0).toFixed(2)}${item.pricingModel === 'consumption' ? ` / ${item.priceUnit ?? 'use'}` : ''}`}
+                        ? tm('free')
+                        : `$${(item.price ?? 0).toFixed(2)}${item.pricingModel === 'consumption' ? ` / ${item.priceUnit ?? tm('defaultPriceUnit')}` : ''}`}
                     </td>
                     <td style={tdMutedStyle}>
                       <button
@@ -958,12 +920,12 @@ export default function MarketplacePageClient() {
                           fontSize: 12,
                           color: stat.liked ? 'var(--error)' : 'var(--muted)',
                         }}
-                        title={stat.liked ? 'Unlike' : 'Like'}
+                        title={stat.liked ? tm('action.unlike') : tm('action.like')}
                         onClick={() => toggleLike(item)}
                       >
                         {stat.liked ? '❤️' : '🤍'} {stat.likes}
                       </button>
-                      <span style={{ marginLeft: 10 }} title="Installs">⬇️ {stat.installs}</span>
+                      <span style={{ marginLeft: 10 }} title={tm('action.installsTitle')}>⬇️ {stat.installs}</span>
                       {isInstalled && <span style={{ marginLeft: 10 }}>✓</span>}
                     </td>
                     <td style={{ ...tdStyle, textAlign: 'right' }}>
@@ -971,7 +933,7 @@ export default function MarketplacePageClient() {
                         <button
                           type="button"
                           className="btn btn-sm btn-secondary"
-                          title={hasItem(item.id) ? 'In cart' : 'Add to cart'}
+                          title={hasItem(item.id) ? tm('action.inCartTitle') : tm('action.addCartTitle')}
                           onClick={() => addItem({
                             id: item.id,
                             type: item.type as ArtifactType,
@@ -985,7 +947,7 @@ export default function MarketplacePageClient() {
                           })}
                           style={{ color: hasItem(item.id) ? '#22c55e' : undefined }}
                         >
-                          {hasItem(item.id) ? '✓ In Cart' : '+ Cart'}
+                          {hasItem(item.id) ? tm('action.inCart') : tm('action.addCart')}
                         </button>
                         <ArtifactAssigner
                           artifactType={item.type}
@@ -998,7 +960,7 @@ export default function MarketplacePageClient() {
                           disabled={!hasAgentHosts}
                           onClick={() => toggleInstall(item)}
                         >
-                          {!hasAgentHosts ? 'Register agentHost' : isInstalled ? 'Uninstall' : 'Install'}
+                          {!hasAgentHosts ? tm('action.registerHost') : isInstalled ? tm('action.uninstall') : tm('action.install')}
                         </button>
                       </div>
                     </td>
@@ -1011,9 +973,8 @@ export default function MarketplacePageClient() {
       ) : (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 16 }}>
           {filtered.map((item) => {
-            const typeColor =
-              item.type === 'persona' ? 'var(--accent,#6366f1)' : item.type === 'content' ? '#f59e0b' : '#22c55e';
-            const typeIcon = item.emoji ?? (item.type === 'persona' ? '🎭' : item.type === 'content' ? '📝' : '⚡');
+            const typeColor = item.type === 'persona' ? 'var(--accent,#6366f1)' : '#22c55e';
+            const typeIcon = item.emoji ?? (item.type === 'persona' ? '🎭' : '⚡');
             const k = key(item.type, item.artifactSlug);
             const stat = stats[k] ?? { likes: item.likes, installs: item.downloads, liked: false };
             const isInstalled = installed.has(k);
@@ -1035,7 +996,7 @@ export default function MarketplacePageClient() {
                     <span style={{ fontSize: 24 }}>{typeIcon}</span>
                     <div>
                       <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-strong)' }}>{item.name}</div>
-                      <div style={{ fontSize: 11, color: 'var(--muted)' }}>by {item.author} · v{item.version}</div>
+                      <div style={{ fontSize: 11, color: 'var(--muted)' }}>{tm('by')} {item.author} · v{item.version}</div>
                     </div>
                   </div>
                   <span
@@ -1078,10 +1039,10 @@ export default function MarketplacePageClient() {
                 {/* Price badge */}
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                   {(item.price ?? 0) === 0 ? (
-                    <span style={{ fontSize: 12, fontWeight: 700, color: '#22c55e', background: 'rgba(34,197,94,0.1)', padding: '2px 8px', borderRadius: 6, border: '1px solid rgba(34,197,94,0.3)' }}>Free</span>
+                    <span style={{ fontSize: 12, fontWeight: 700, color: '#22c55e', background: 'rgba(34,197,94,0.1)', padding: '2px 8px', borderRadius: 6, border: '1px solid rgba(34,197,94,0.3)' }}>{tm('free')}</span>
                   ) : (
                     <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-strong)', background: 'var(--bg-elevated)', padding: '2px 8px', borderRadius: 6, border: '1px solid var(--border)' }}>
-                      ${(item.price ?? 0).toFixed(2)}{item.pricingModel === 'consumption' ? ` / ${item.priceUnit ?? 'use'}` : ''}
+                      ${(item.price ?? 0).toFixed(2)}{item.pricingModel === 'consumption' ? ` / ${item.priceUnit ?? tm('defaultPriceUnit')}` : ''}
                     </span>
                   )}
                 </div>
@@ -1108,20 +1069,20 @@ export default function MarketplacePageClient() {
                         fontSize: 11,
                         color: stat.liked ? 'var(--error)' : 'var(--muted)',
                       }}
-                      title={stat.liked ? 'Unlike' : 'Like'}
+                      title={stat.liked ? tm('action.unlike') : tm('action.like')}
                       onClick={() => toggleLike(item)}
                     >
                       {stat.liked ? '❤️' : '🤍'} {stat.likes}
                     </button>
-                    <span title="Installs">⬇️ {stat.installs}</span>
-                    {isInstalled && <span>✓ Installed</span>}
+                    <span title={tm('action.installsTitle')}>⬇️ {stat.installs}</span>
+                    {isInstalled && <span>✓ {tm('installed')}</span>}
                   </div>
                   <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap', justifyContent: 'flex-end', flex: '1 1 auto' }}>
                     {/* Add to Cart */}
                     <button
                       type="button"
                       className="btn btn-sm btn-secondary"
-                      title={hasItem(item.id) ? 'In cart' : 'Add to cart'}
+                      title={hasItem(item.id) ? tm('action.inCartTitle') : tm('action.addCartTitle')}
                       onClick={() => addItem({
                         id: item.id,
                         type: item.type as ArtifactType,
@@ -1135,7 +1096,7 @@ export default function MarketplacePageClient() {
                       })}
                       style={{ color: hasItem(item.id) ? '#22c55e' : undefined }}
                     >
-                      {hasItem(item.id) ? '✓ In Cart' : '+ Cart'}
+                      {hasItem(item.id) ? tm('action.inCart') : tm('action.addCart')}
                     </button>
                     <ArtifactAssigner
                       artifactType={item.type}
@@ -1148,7 +1109,7 @@ export default function MarketplacePageClient() {
                       disabled={!hasAgentHosts}
                       onClick={() => toggleInstall(item)}
                     >
-                      {!hasAgentHosts ? 'Register agentHost' : isInstalled ? 'Uninstall' : 'Install'}
+                      {!hasAgentHosts ? tm('action.registerHost') : isInstalled ? tm('action.uninstall') : tm('action.install')}
                     </button>
                   </div>
                 </div>

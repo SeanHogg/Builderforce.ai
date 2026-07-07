@@ -30,6 +30,7 @@ const task = (over: Partial<Project360TaskRow> & { id: number }): Project360Task
   key: `DEMO-${over.id}`,
   title: `Task ${over.id}`,
   status: 'backlog',
+  taskType: 'task',
   storyPoints: null,
   description: null,
   assignedUserId: null,
@@ -148,5 +149,18 @@ describe('assembleProject360', () => {
     const carol = r.workforce.find((m) => m.ref === 'carol')!;
     expect(carol.status).toBe('idle');
     expect(carol.reason.toLowerCase()).toContain('out of office');
+  });
+
+  it('threads the assigned task type onto the workforce member (epic/gap link to their own kind)', () => {
+    const r = build(
+      agg({ taskCount: 2, openTaskCount: 2 }),
+      [
+        task({ id: 1, status: 'in_progress', assignedUserId: 'alice', taskType: 'epic' }),
+        task({ id: 2, status: 'ready', assignedUserId: 'bob', taskType: 'gap' }),
+      ],
+    );
+    const by = Object.fromEntries(r.workforce.map((m) => [m.ref, m]));
+    expect(by['alice']!.taskType).toBe('epic');
+    expect(by['bob']!.taskType).toBe('gap');
   });
 });

@@ -22,6 +22,7 @@ import {
   knowledgeTrainingAssignments,
   knowledgeDocumentCollaborators,
   marketplaceKnowledge,
+  knowledgeListingPurchases,
   tenantMembers,
   users,
 } from '../../infrastructure/database/schema';
@@ -30,6 +31,11 @@ import {
   getCacheVersion,
   bumpCacheVersion,
 } from '../../infrastructure/cache/readThroughCache';
+import {
+  MARKET_VERSION_KEY,
+  parseListingTags,
+  browsePublicListings,
+} from '../../application/knowledge/knowledgeMarket';
 import { ideProxy, newTraceId } from '../../application/llm/LlmProxyService';
 import { tenantProxyForPlan } from '../../application/llm/tenantProxy';
 import { logTrace } from '../../application/llm/traceLogger';
@@ -1055,20 +1061,15 @@ export function createKnowledgeRoutes(db: Db): Hono<HonoEnv> {
   // MARKETPLACE — sell knowledge documents (migration 0252).
   // A listing snapshots the doc's content so installing copies it into the
   // buyer's tenant as a fresh document. Browse reads are cached behind a global
-  // version token (cross-tenant) bumped on every listing write. Charging/checkout
-  // (priceCents) is a separate Stripe integration — install grants a copy.
+  // version token (cross-tenant) bumped on every listing write. PAID listings
+  // require a recorded purchase (POST /checkout) before install; free listings
+  // install directly. On the default self-hosted config (PAYMENT_PROVIDER=manual)
+  // checkout records the purchase immediately; hosted card settlement is pending.
   // =====================================================================
-  const MARKET_VERSION_KEY = 'knowledge-market';
   const LISTING_VISIBILITIES = ['private', 'tenant', 'public'] as const;
-
-  function parseTags(json: string): string[] {
-    try {
-      const v = JSON.parse(json);
-      return Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : [];
-    } catch {
-      return [];
-    }
-  }
+  // Tag parsing + the market version token are shared with the PUBLIC
+  // knowledge-market router so both read identical data through one cache.
+  const parseTags = parseListingTags;
 
   // ---- LIST A DOC FOR SALE (publish / re-list) -------------------------
   router.post('/documents/:id/list', async (c) => {
@@ -1139,31 +1140,45 @@ export function createKnowledgeRoutes(db: Db): Hono<HonoEnv> {
   });
 
   // ---- BROWSE PUBLIC LISTINGS (cross-tenant, cached) -------------------
+  // Delegates to the shared browse used by the PUBLIC /api/knowledge-market
+  // router — one query, one cache. Kept authed here for in-app callers that
+  // already hold a tenant token; logged-out browse uses the public router.
   router.get('/listings', async (c) => {
-    const env = c.env as Env;
-    const ver = await getCacheVersion(env, MARKET_VERSION_KEY);
-    const payload = await getOrSetCached(env, `knowledge-market:listings:v:${ver}`, async () => {
-      const rows = await db
-        .select()
-        .from(marketplaceKnowledge)
-        .where(eq(marketplaceKnowledge.visibility, 'public'))
-        .orderBy(desc(marketplaceKnowledge.installCount), desc(marketplaceKnowledge.createdAt));
-      return {
-        listings: rows.map((r) => ({
-          id: r.id,
-          title: r.title,
-          summary: r.summary,
-          docType: r.docType,
-          category: r.category,
-          tags: parseTags(r.tags),
-          priceCents: r.priceCents,
-          authorName: r.authorName,
-          installCount: r.installCount,
-          createdAt: r.createdAt,
-        })),
-      };
-    }, { kvTtlSeconds: 120, l1TtlMs: 30_000 });
-    return c.json(payload);
+    const listings = await browsePublicListings(c.env as Env, db);
+    return c.json({ listings });
+  });
+
+  // ---- CHECKOUT A PAID LISTING (records a purchase that unlocks install) ----
+  // Free listings need no checkout. On the default self-hosted config
+  // (PAYMENT_PROVIDER=manual) a purchase is recorded immediately; hosted card
+  // providers (stripe/helcim) require the one-off settlement wiring that is not
+  // yet configured, so they return 501 rather than silently granting the item.
+  router.post('/listings/:listingId/checkout', requireRole(TenantRole.DEVELOPER), async (c) => {
+    const tenantId = c.get('tenantId') as number;
+    const userId = c.get('userId') as string;
+    const listingId = c.req.param('listingId');
+    const [listing] = await db.select().from(marketplaceKnowledge).where(eq(marketplaceKnowledge.id, listingId));
+    if (!listing) return c.json({ error: 'Listing not found' }, 404);
+    if (listing.priceCents <= 0) return c.json({ free: true });
+
+    const [existing] = await db
+      .select({ id: knowledgeListingPurchases.id })
+      .from(knowledgeListingPurchases)
+      .where(and(eq(knowledgeListingPurchases.listingId, listingId), eq(knowledgeListingPurchases.tenantId, tenantId)));
+    if (existing) return c.json({ purchased: true });
+
+    const provider = ((c.env as Env).PAYMENT_PROVIDER ?? 'manual').toLowerCase();
+    if (provider === 'manual') {
+      await db
+        .insert(knowledgeListingPurchases)
+        .values({ listingId, tenantId, purchasedBy: userId, priceCents: listing.priceCents, provider: 'manual' })
+        .onConflictDoNothing();
+      return c.json({ purchased: true });
+    }
+    // Hosted card providers need one-off checkout + settlement wiring that is not
+    // yet configured. Return a handled result (not an error) so the client shows a
+    // clear message rather than granting a paid item for free.
+    return c.json({ requiresConfig: true });
   });
 
   // ---- INSTALL A LISTING (copy into the caller's tenant) ---------------
@@ -1177,6 +1192,16 @@ export function createKnowledgeRoutes(db: Db): Hono<HonoEnv> {
     // Public listings install anywhere; non-public only within the owning tenant.
     if (listing.visibility !== 'public' && listing.tenantId !== tenantId) {
       return c.json({ error: 'Forbidden' }, 403);
+    }
+    // Paid listings require a recorded purchase for this tenant before installing.
+    if (listing.priceCents > 0) {
+      const [purchase] = await db
+        .select({ id: knowledgeListingPurchases.id })
+        .from(knowledgeListingPurchases)
+        .where(and(eq(knowledgeListingPurchases.listingId, listingId), eq(knowledgeListingPurchases.tenantId, tenantId)));
+      if (!purchase) {
+        return c.json({ error: 'Purchase required', checkoutRequired: true, priceCents: listing.priceCents }, 402);
+      }
     }
 
     const [doc] = await db

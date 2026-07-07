@@ -158,6 +158,7 @@ import { createGitProxyRoutes }        from './presentation/routes/gitProxyRoute
 import { createAgentAssignmentRoutes } from './presentation/routes/agentAssignmentRoutes';
 import { createSecurityReviewRoutes } from './presentation/routes/securityReviewRoutes';
 import { createKnowledgeRoutes } from './presentation/routes/knowledgeRoutes';
+import { createKnowledgeMarketRoutes } from './presentation/routes/knowledgeMarketRoutes';
 
 import { API_VERSION } from './version';
 import {
@@ -554,6 +555,7 @@ export function buildApp(env: Env): Hono<HonoEnv> {
   app.route('/api/agent-assignments', createAgentAssignmentRoutes(db));
   app.route('/api/security',          createSecurityReviewRoutes(db));
   app.route('/api/knowledge',         createKnowledgeRoutes(db));
+  app.route('/api/knowledge-market',  createKnowledgeMarketRoutes(db)); // PUBLIC browse (logged-out)
 
   app.onError(errorHandler);
   app.notFound((c) => addCorsToResponse(c, c.json({ error: 'Not found' }, 404)));

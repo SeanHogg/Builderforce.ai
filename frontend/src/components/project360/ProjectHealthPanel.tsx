@@ -60,9 +60,15 @@ export function ProjectHealthPanel({ projectId }: { projectId: number }) {
     // Every action lands the user in the project workspace, where the Brain and
     // board can act on it. A `brain` action carries a seed prompt — forward it as
     // ?prompt= so the IDE's Brain panel auto-sends it (one-click seed parity).
-    const qs = action.kind === 'brain' && action.text
-      ? `?prompt=${encodeURIComponent(action.text)}`
-      : '';
+    // An `open-task` opens a chat ALREADY LINKED to that work item via ?ticket=
+    // (parity with the VS Code "open task" flow) — epics/gaps link to their own kind.
+    let qs = '';
+    if (action.kind === 'brain' && action.text) {
+      qs = `?prompt=${encodeURIComponent(action.text)}`;
+    } else if (action.kind === 'open-task' && action.task) {
+      const kind = action.task.taskType ?? 'task';
+      qs = `?ticket=${encodeURIComponent(`${kind}:${action.task.id}`)}`;
+    }
     router.push(`/ide/${projectId}${qs}`);
   }, [router, projectId]);
 

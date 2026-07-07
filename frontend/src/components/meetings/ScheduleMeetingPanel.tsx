@@ -5,10 +5,13 @@ import { useTranslations } from 'next-intl';
 import { useAuth } from '@/lib/AuthContext';
 import { Select } from '@/components/Select';
 import { SlideOutPanel } from '@/components/SlideOutPanel';
-import { listWorkforceDirectory, type WorkforceOption } from '@/lib/teams';
+import { listWorkforceDirectory, listTeams, type WorkforceOption, type TeamSummary } from '@/lib/teams';
 import { meetingsApi, type MeetingDetail, type MeetingKind, type TimeSlot } from '@/lib/builderforceApi';
 
 const KINDS: MeetingKind[] = ['standup', 'planning', 'retrospective', 'adhoc', 'direct', 'interview', 'review'];
+/** Kinds the backend backs with a team chat by default (mirrors TEAM_CEREMONY_KINDS
+ *  server-side) — used only to seed the toggle; the explicit choice always wins. */
+const CEREMONY_KINDS: MeetingKind[] = ['standup', 'planning', 'retrospective', 'review'];
 
 /** ISO (UTC) → the local "YYYY-MM-DDTHH:MM" a datetime-local input expects. */
 function isoToLocalInput(iso: string): string {
@@ -55,6 +58,13 @@ export function ScheduleMeetingPanel({
   const [error, setError] = useState<string | null>(null);
   const [slots, setSlots] = useState<TimeSlot[] | null>(null);
   const [finding, setFinding] = useState(false);
+  // Team-chat backing: whether the meeting IS a team chat, and (optionally) which
+  // named team's chat backs it. `linkChatTouched` stops the kind-derived default
+  // from clobbering an explicit choice.
+  const [teams, setTeams] = useState<TeamSummary[]>([]);
+  const [linkChat, setLinkChat] = useState(false);
+  const [linkChatTouched, setLinkChatTouched] = useState(false);
+  const [teamId, setTeamId] = useState<number | null>(null);
 
   useEffect(() => {
     if (!open) return;
@@ -62,8 +72,16 @@ export function ScheduleMeetingPanel({
     setScheduledAt(presetAt ? isoToLocalInput(presetAt) : '');
     setSlots(null);
     setError(null);
+    setLinkChatTouched(false);
+    setTeamId(null);
     listWorkforceDirectory().then(setDirectory).catch(() => setDirectory([]));
+    listTeams().then(setTeams).catch(() => setTeams([]));
   }, [open, startNow, presetAt]);
+
+  // Seed the toggle from the kind's server default until the user overrides it.
+  useEffect(() => {
+    if (!linkChatTouched) setLinkChat(CEREMONY_KINDS.includes(kind));
+  }, [kind, linkChatTouched]);
 
   const others = useMemo(() => directory.filter((o) => o.ref !== user?.id), [directory, user?.id]);
 
@@ -110,14 +128,17 @@ export function ScheduleMeetingPanel({
         attendees,
         organizerName: user?.name ?? user?.email ?? undefined,
         organizerEmail: user?.email ?? undefined,
+        linkTeamChat: linkChat,
+        teamId: linkChat ? teamId : null,
       });
       onCreated(detail, !scheduled || !scheduledAt);
       onClose();
       setTitle(''); setScheduledAt(''); setSelected(new Set()); setKind('adhoc'); setSlots(null);
+      setLinkChatTouched(false); setTeamId(null);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not create meeting');
     } finally { setBusy(false); }
-  }, [others, selected, kind, title, projectId, scheduled, scheduledAt, durationMinutes, videoEnabled, user, onCreated, onClose]);
+  }, [others, selected, kind, title, projectId, scheduled, scheduledAt, durationMinutes, videoEnabled, linkChat, teamId, user, onCreated, onClose]);
 
   const field: React.CSSProperties = { fontSize: 13, padding: '8px 10px', borderRadius: 8, background: 'var(--bg-base)', color: 'var(--text-primary)', border: '1px solid var(--border-subtle)', width: '100%' };
   const label: React.CSSProperties = { fontSize: 12, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: 0.4, marginBottom: 6, display: 'block' };
@@ -149,7 +170,23 @@ export function ScheduleMeetingPanel({
               {t('camerasEnabled')}
             </label>
           )}
+          <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 13, color: 'var(--text-secondary)', cursor: 'pointer' }}>
+            <input type="checkbox" checked={linkChat} onChange={(e) => { setLinkChat(e.target.checked); setLinkChatTouched(true); }} />
+            {t('linkTeamChat')}
+          </label>
         </div>
+
+        {/* Team-chat scope — which conversation the meeting is backed by. */}
+        {linkChat && (
+          <div>
+            <label style={label}>{t('teamChatScope')}</label>
+            <Select value={teamId == null ? '' : String(teamId)} onChange={(e) => setTeamId(e.target.value ? Number(e.target.value) : null)} style={field}>
+              <option value="">{projectId != null ? t('teamChatProject') : t('teamChatTenant')}</option>
+              {teams.map((tm) => <option key={tm.id} value={tm.id}>{tm.name}</option>)}
+            </Select>
+            <span style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4, display: 'block' }}>{t('teamChatHint')}</span>
+          </div>
+        )}
 
         {scheduled && (
           <>

@@ -79,6 +79,7 @@ import {
   amendActiveLegalDoc,
   enhanceLegalContent,
   getLegalCurrent,
+  getLegalHistory,
   LegalDocError,
   publishLegalDoc,
 } from '../../application/legal/legalDocsService';
@@ -257,6 +258,17 @@ export function createAdminRoutes(): Hono<HonoEnv> {
   });
 
   // -------------------------------------------------------------------------
+  // GET /api/admin/legal/history[?docType=terms|privacy] — full audit trail of
+  // every publish + amend, newest first.
+  // -------------------------------------------------------------------------
+  router.get('/legal/history', async (c) => {
+    const db = buildDatabase(c.env);
+    const docTypeParam = c.req.query('docType');
+    const docType = docTypeParam === 'terms' || docTypeParam === 'privacy' ? docTypeParam : undefined;
+    return c.json({ versions: await getLegalHistory(db, docType) });
+  });
+
+  // -------------------------------------------------------------------------
   // POST /api/admin/legal/:docType/publish  (docType: terms | privacy)
   // -------------------------------------------------------------------------
   router.post('/legal/:docType/publish', async (c) => {
@@ -286,9 +298,10 @@ export function createAdminRoutes(): Hono<HonoEnv> {
     if (docType !== 'terms' && docType !== 'privacy') {
       return c.json({ error: 'docType must be "terms" or "privacy"' }, 400);
     }
+    const actorUserId = c.get('userId') as string;
     const body = await c.req.json<{ version?: string; title?: string; content: string }>();
     try {
-      const document = await amendActiveLegalDoc(db, docType, body);
+      const document = await amendActiveLegalDoc(db, docType, body, actorUserId);
       return c.json({ document });
     } catch (e) {
       if (e instanceof LegalDocError) return c.json({ error: e.message }, e.status as 400);

@@ -54,7 +54,9 @@ export interface Project360Action {
   kind: 'board' | 'approvals' | 'brain' | 'run-task' | 'open-task';
   label: string;
   text?: string;
-  task?: { id: number; key?: string; title: string };
+  /** `taskType` lets the host open a chat with the RIGHT ticket kind (epic/gap
+   *  link to their own kind, not a generic task) — see the auto-link on open. */
+  task?: { id: number; key?: string; title: string; taskType?: 'task' | 'epic' | 'gap' };
 }
 
 export interface Project360Gap {
@@ -94,6 +96,9 @@ export interface Project360Member {
   taskId?: number;
   taskKey?: string;
   taskTitle?: string;
+  /** The work-item type of the assigned task — so opening it links a chat to the
+   *  correct ticket kind (epic/gap → their own kind). Only ever task/epic/gap. */
+  taskType?: 'task' | 'epic' | 'gap';
 }
 
 export interface Project360 {
@@ -140,11 +145,18 @@ export interface Project360TaskRow {
   key: string | null;
   title: string;
   status: string;
+  taskType: string;
   storyPoints: number | null;
   description: string | null;
   assignedUserId: string | null;
   assignedAgentHostId: number | null;
   assignedAgentRef: string | null;
+}
+
+/** Narrow a raw task_type to the three linkable ticket kinds (everything else —
+ *  'security', hireable kinds — opens a chat as a plain task). */
+function linkableTaskType(t: string): 'task' | 'epic' | 'gap' {
+  return t === 'epic' ? 'epic' : t === 'gap' ? 'gap' : 'task';
 }
 
 /** One non-terminal execution on a project task. */
@@ -376,11 +388,12 @@ export function assembleProject360(input: {
     if (!o) continue;
     const live = activeByTask.get(t.id);
     const label = t.key ?? t.title;
-    if (live && !live.paused) consider(o, { status: 'working', reason: `Running ${label}`, taskId: t.id, taskKey: t.key ?? undefined, taskTitle: t.title });
-    else if (live && live.paused) consider(o, { status: 'awaiting', reason: `Awaiting input on ${label}`, taskId: t.id, taskKey: t.key ?? undefined, taskTitle: t.title });
-    else if (t.status === 'blocked') consider(o, { status: 'blocked', reason: `Blocked on ${label}`, taskId: t.id, taskKey: t.key ?? undefined, taskTitle: t.title });
-    else if (t.status === 'in_progress') consider(o, { status: 'idle', reason: `In progress, no active run: ${label}`, taskId: t.id, taskKey: t.key ?? undefined, taskTitle: t.title });
-    else consider(o, { status: 'idle', reason: `Assigned ${label}, not started`, taskId: t.id, taskKey: t.key ?? undefined, taskTitle: t.title });
+    const tt = linkableTaskType(t.taskType);
+    if (live && !live.paused) consider(o, { status: 'working', reason: `Running ${label}`, taskId: t.id, taskKey: t.key ?? undefined, taskTitle: t.title, taskType: tt });
+    else if (live && live.paused) consider(o, { status: 'awaiting', reason: `Awaiting input on ${label}`, taskId: t.id, taskKey: t.key ?? undefined, taskTitle: t.title, taskType: tt });
+    else if (t.status === 'blocked') consider(o, { status: 'blocked', reason: `Blocked on ${label}`, taskId: t.id, taskKey: t.key ?? undefined, taskTitle: t.title, taskType: tt });
+    else if (t.status === 'in_progress') consider(o, { status: 'idle', reason: `In progress, no active run: ${label}`, taskId: t.id, taskKey: t.key ?? undefined, taskTitle: t.title, taskType: tt });
+    else consider(o, { status: 'idle', reason: `Assigned ${label}, not started`, taskId: t.id, taskKey: t.key ?? undefined, taskTitle: t.title, taskType: tt });
   }
   if (agg.assignedAgentHost) {
     const ref = `host:${agg.assignedAgentHost.id}`;
@@ -432,6 +445,7 @@ export async function computeProject360(
         key: tasks.key,
         title: tasks.title,
         status: tasks.status,
+        taskType: tasks.taskType,
         storyPoints: tasks.storyPoints,
         description: tasks.description,
         assignedUserId: tasks.assignedUserId,

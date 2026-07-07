@@ -1,0 +1,37 @@
+name: CI
+
+# PR-time gate for the file-based schema/migration/track checks (T9 · Platform ·
+# DB · CI). These same checks run at deploy time in release.yml (on push:main),
+# but that is AFTER merge — a missing-CREATE / duplicate-migration / manifest-drift
+# bug then only surfaces once it is already on main. Running them on every PR
+# catches the drift before merge instead of at deploy.
+#
+# All three scripts are purely file-based (they read schema.ts, api/migrations/*.sql
+# and .github/isolation-tracks.json — no database, no secrets, no install), so this
+# job is fast and needs no NEON_DATABASE_URL. The ephemeral-DB `db:migrate` dry-run
+# (which DOES need a provisioned throwaway Postgres) remains a separate follow-up.
+
+on:
+  pull_request:
+    branches: [main]
+
+jobs:
+  drift-guard:
+    name: Schema drift · migrations · track manifest
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      # These scripts use only node builtins (node:fs / node:path / node:url), so
+      # no `npm install` is required — invoke them directly to keep the gate fast.
+      - name: Schema drift guard (schema.ts vs migrations vs allowlist)
+        working-directory: api
+        run: node scripts/check-schema-drift.mjs
+      - name: Migration sequence guard (no new duplicate prefixes)
+        working-directory: api
+        run: node scripts/check-migrations.mjs
+      - name: Track manifest valid + generated table in sync
+        working-directory: api
+        run: node scripts/check-track-manifest.mjs --check

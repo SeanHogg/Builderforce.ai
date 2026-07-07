@@ -154,7 +154,7 @@ export const readFileTool: ToolDefinition = defineTool({
 export const writeFileTool: ToolDefinition = defineTool({
   name: "write_file",
   description:
-    "Create or update a file on the ticket branch as a reviewable pending change (a PR is opened/updated for the run). Use once per deliverable file. Provide the FULL file content.",
+    "Create or update a file, writing its complete contents. How the write lands depends on the surface: in an editor/on-prem workspace it edits the file in place; in a cloud/review run it is staged on the ticket branch as a reviewable pending change. Do NOT narrate a specific mechanism (e.g. \"opened a PR\") — just state what the file now contains. Use once per deliverable file. Provide the FULL file content.",
   parameters: {
     type: "object",
     properties: {

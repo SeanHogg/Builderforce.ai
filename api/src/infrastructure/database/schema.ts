@@ -262,6 +262,19 @@ export const legalDocuments = pgTable('legal_documents', {
   updatedAt:    timestamp('updated_at').notNull().defaultNow(),
 });
 
+export const legalDocumentVersions = pgTable('legal_document_versions', {
+  id:           serial('id').primaryKey(),
+  documentType: legalDocumentTypeEnum('document_type').notNull(),
+  version:      varchar('version', { length: 50 }).notNull(),
+  title:        varchar('title', { length: 255 }).notNull(),
+  content:      text('content').notNull(),
+  changeKind:   varchar('change_kind', { length: 16 }).notNull().default('publish'),
+  changedBy:    varchar('changed_by', { length: 36 }).references(() => users.id, { onDelete: 'set null' }),
+  createdAt:    timestamp('created_at').notNull().defaultNow(),
+}, (t) => [
+  index('legal_document_versions_type_idx').on(t.documentType, t.createdAt),
+]);
+
 export const userLegalAcceptances = pgTable('user_legal_acceptances', {
   userId:       varchar('user_id', { length: 36 }).notNull().references(() => users.id, { onDelete: 'cascade' }),
   documentType: legalDocumentTypeEnum('document_type').notNull(),
@@ -4910,6 +4923,24 @@ export const marketplaceKnowledge = pgTable('marketplace_knowledge', {
   updatedAt:        timestamp('updated_at').notNull().defaultNow(),
 }, (t) => ({
   byTenant:   index('idx_marketplace_knowledge_tenant').on(t.tenantId),
+}));
+
+/**
+ * knowledge_listing_purchases (migration 0320) — proof a tenant bought a PAID
+ * knowledge listing, which unlocks install for the whole workspace. Free listings
+ * need no row. One purchase per (listing, tenant).
+ */
+export const knowledgeListingPurchases = pgTable('knowledge_listing_purchases', {
+  id:           uuid('id').primaryKey().defaultRandom(),
+  listingId:    uuid('listing_id').notNull().references(() => marketplaceKnowledge.id, { onDelete: 'cascade' }),
+  tenantId:     integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  purchasedBy:  varchar('purchased_by', { length: 36 }).references(() => users.id, { onDelete: 'set null' }),
+  priceCents:   integer('price_cents').notNull().default(0),
+  provider:     varchar('provider', { length: 24 }).notNull().default('manual'),
+  externalRef:  varchar('external_ref', { length: 255 }),
+  createdAt:    timestamp('created_at').notNull().defaultNow(),
+}, (t) => ({
+  uniq: uniqueIndex('knowledge_listing_purchase_unique').on(t.listingId, t.tenantId),
 }));
 
 /**

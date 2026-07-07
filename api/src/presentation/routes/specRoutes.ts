@@ -20,7 +20,8 @@ import { authMiddleware } from '../middleware/authMiddleware';
 import { specs, workflows, projects, tasks } from '../../infrastructure/database/schema';
 import { verifyAgentHostApiKey } from '../../infrastructure/auth/agentHostAuth';
 import { linkSpecToTask } from '../../application/prd/taskPrd';
-import type { HonoEnv } from '../../env';
+import { bumpTicketSearchVersion } from '../../infrastructure/cache/readThroughCache';
+import type { Env, HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 
 type SpecsHonoEnv = HonoEnv;
@@ -107,6 +108,9 @@ export function createSpecRoutes(db: Db): Hono<SpecsHonoEnv> {
         .where(and(eq(tasks.id, body.taskId), eq(projects.tenantId, tenantId)));
       if (task) await linkSpecToTask(db, { taskId: body.taskId, specId, tenantId, isPrimary: true });
     }
+
+    // A spec is a link-picker ticket kind — orphan the chat↔ticket typeahead cache.
+    await bumpTicketSearchVersion(c.env as Env, tenantId);
 
     const [row] = await db.select().from(specs).where(eq(specs.id, specId));
     return c.json(row, 201);

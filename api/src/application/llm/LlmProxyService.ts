@@ -1024,11 +1024,25 @@ export class LlmProxyService {
     //     two routing rules compose. The capability order from the shape sort is
     //     preserved as the within-tier tiebreak.
     const useCase = (body as { useCase?: unknown }).useCase;
-    const routedPool: readonly string[] = isQualityCriticalUseCase(typeof useCase === 'string' ? useCase : undefined)
+    const useCaseStr = typeof useCase === 'string' ? useCase : undefined;
+    const qualityCritical = isQualityCriticalUseCase(useCaseStr);
+    let routedPool: readonly string[] = qualityCritical
       ? reorderPoolForQuality(reorderedPool, {
           strictSchema: (body as { response_format?: { type?: string } }).response_format?.type === 'json_schema',
         })
       : reorderedPool;
+
+    // 1b2) Agentic tool-loop (the request carries `tools`) is coding-critical: a
+    //      long tool-calling analysis turn served by a cheap generalist loops
+    //      without converging. `reorderPoolByShape` above floats every tools-capable
+    //      model equally, so a merely-tool-advertising generalist can still lead its
+    //      bucket; this pass promotes the real CODING_MODEL_POOL drivers ahead of
+    //      them. A pure permutation of the plan pool — free tenants only float their
+    //      own free coding models (no plan escalation). Skipped for quality-critical
+    //      traffic (output-quality writers, ranked by tier just above).
+    if (!qualityCritical && inferShape(body).hasTools) {
+      routedPool = reorderPoolForCoding(routedPool);
+    }
 
     // 1c) Context-fit first pass: when the caller estimates how many tokens the
     //     turn will send, drop pool models whose catalog window can't hold it, so
@@ -2507,6 +2521,33 @@ export function reorderPoolForQuality(
   return [...pool]
     .map((m, i) => ({ m, i, r: QUALITY_TIER_RANK[tierForModel(m)] ?? 0, p: penalty(m) }))
     .sort((a, b) => (b.r - a.r) || (a.p - b.p) || (a.i - b.i))
+    .map((x) => x.m);
+}
+
+/** Membership set for {@link reorderPoolForCoding} — real coding drivers, distinct
+ *  from the broader {@link TOOL_CAPABLE_MODELS} (which also admits generalists that
+ *  merely advertise `tools`). Derived from CODING_MODEL_POOL so it never drifts. */
+const CODING_MODEL_SET: ReadonlySet<string> = new Set(CODING_MODEL_POOL);
+
+/**
+ * Stable-reorder a pool so real coding drivers (`CODING_MODEL_POOL` members) lead,
+ * used for AGENTIC tool-loop traffic (a request carrying `tools`). This is the fix
+ * for Brain codebase-analysis turns being served by a merely-tool-advertising
+ * generalist: {@link reorderPoolByShape} floats every `tools`-capable model equally
+ * (coding drivers AND weak generalists share the +2 bucket, so the original pool
+ * order — which can lead with a cheap generalist — wins within it). Layering this
+ * pass on top promotes the coding drivers above those generalists.
+ *
+ * Plan-respecting by construction: it is a pure PERMUTATION of the given pool (no
+ * model is added or removed), so a Free pool only floats its own free coding models
+ * — plan reachability is never escalated here. Within-coding and within-non-coding
+ * order is preserved from the input, so the capability/quality ordering from the
+ * upstream passes survives as the tiebreak. Pure + unit-testable.
+ */
+export function reorderPoolForCoding(pool: readonly string[]): readonly string[] {
+  return [...pool]
+    .map((m, i) => ({ m, i, c: CODING_MODEL_SET.has(m) ? 0 : 1 }))
+    .sort((a, b) => (a.c - b.c) || (a.i - b.i))
     .map((x) => x.m);
 }
 

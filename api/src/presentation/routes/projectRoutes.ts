@@ -8,7 +8,7 @@ import { provisionDefaultProjectEvermind } from '../../application/llm/projectEv
 import { DEFAULT_TEMPLATE_ID } from '../../application/kanban/templateCatalog';
 import type { HonoEnv } from '../../env';
 import type { Env } from '../../env';
-import { getCacheVersion, getOrSetCached, bumpCacheVersion } from '../../infrastructure/cache/readThroughCache';
+import { getCacheVersion, getOrSetCached, bumpCacheVersion, bumpTicketSearchVersion } from '../../infrastructure/cache/readThroughCache';
 import { computeProject360, type Project360Aggregate } from '../../application/project/computeProject360';
 import { computeProjectDeliverySignals } from '../../application/insights/projectDeliverySignals';
 import { authMiddleware, requireRole } from '../middleware/authMiddleware';
@@ -68,7 +68,13 @@ export function projectsListVersionKey(tenantId: number): string {
  * goal links) — mirrors the completed-by-assignee convention in reportRoutes.
  */
 export async function invalidateProjectsList(env: Env, tenantId: number): Promise<void> {
-  await bumpCacheVersion(env, projectsListVersionKey(tenantId));
+  // Task/objective/project writes that reshape the list also change what the
+  // chat↔ticket link picker can find, so orphan its typeahead cache in the same
+  // beat (the picker is a ticket surface, exactly like the projects list).
+  await Promise.all([
+    bumpCacheVersion(env, projectsListVersionKey(tenantId)),
+    bumpTicketSearchVersion(env, tenantId),
+  ]);
 }
 
 export function createProjectRoutes(projectService: ProjectService, db: Db): Hono<HonoEnv> {

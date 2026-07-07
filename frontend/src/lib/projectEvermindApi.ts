@@ -95,6 +95,25 @@ export async function flushProjectEvermind(
   );
 }
 
+/**
+ * Seed the project base directly from a freshly-built `.evermind` artifact (the
+ * in-browser Workflow Builder "Build" path): base64 model bytes + its tokenizer.
+ * Manager-only server-side; validates the artifact before writing version 1.
+ */
+export async function seedProjectEvermindFromArtifact(
+  projectId: number,
+  params: { model: string; tokenizer: { vocab: Record<string, number>; merges: string[] }; name?: string },
+): Promise<{ seeded: boolean; version: number; ref: string | null; mode: ProjectEvermindMode }> {
+  return apiRequest<{ seeded: boolean; version: number; ref: string | null; mode: ProjectEvermindMode }>(
+    `/api/projects/${projectId}/evermind/seed`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model: params.model, tokenizer: params.tokenizer, ...(params.name ? { name: params.name } : {}) }),
+    },
+  );
+}
+
 /** Promote a published Studio Evermind model into the project base (server-side copy). */
 export async function seedProjectEvermindFromModel(
   projectId: number,

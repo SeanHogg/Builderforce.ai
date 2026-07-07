@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import { BLOG_POSTS } from '@/lib/blogData';
 import JsonLd from '@/components/JsonLd';
@@ -12,14 +12,24 @@ const PAGE_SIZE = 9;
 
 export default function BlogPageClient() {
   const t = useTranslations('blog');
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
   const totalPages = Math.max(1, Math.ceil(BLOG_POSTS.length / PAGE_SIZE));
-  const [page, setPage] = useState(1);
-  const current = Math.min(page, totalPages);
+  // The active page is derived from the URL (`?page=N`), so the pagination state
+  // is shareable, bookmarkable, and survives back/forward navigation [1596].
+  const parsed = parseInt(searchParams.get('page') ?? '1', 10);
+  const current = Math.min(Math.max(Number.isFinite(parsed) ? parsed : 1, 1), totalPages);
   const start = (current - 1) * PAGE_SIZE;
   const visible = BLOG_POSTS.slice(start, start + PAGE_SIZE);
 
   const goTo = (p: number) => {
-    setPage(p);
+    const next = Math.min(Math.max(p, 1), totalPages);
+    const params = new URLSearchParams(searchParams.toString());
+    if (next === 1) params.delete('page');
+    else params.set('page', String(next));
+    const query = params.toString();
+    router.push(query ? `${pathname}?${query}` : pathname, { scroll: false });
     if (typeof window !== 'undefined') window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 

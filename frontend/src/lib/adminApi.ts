@@ -242,6 +242,17 @@ export interface AdminLegalCurrent {
   privacy: LegalDocument;
 }
 
+export interface LegalDocVersion {
+  id: number;
+  documentType: 'terms' | 'privacy';
+  version: string;
+  title: string;
+  content: string;
+  changeKind: 'publish' | 'amend';
+  changedBy: string | null;
+  createdAt: string;
+}
+
 export interface AdminNewsletterSubscriber {
   id: number;
   userId: string | null;
@@ -663,6 +674,12 @@ export const adminApi = {
   // Legal
   async legalCurrent(): Promise<AdminLegalCurrent> {
     return adminRequest<AdminLegalCurrent>('/api/admin/legal/current');
+  },
+  /** Full publish + amend audit trail (newest first); scope with docType. */
+  async legalHistory(docType?: 'terms' | 'privacy'): Promise<LegalDocVersion[]> {
+    const qs = docType ? `?docType=${docType}` : '';
+    const res = await adminRequest<{ versions: LegalDocVersion[] }>(`/api/admin/legal/history${qs}`);
+    return res.versions;
   },
   async publishLegal(
     docType: 'terms' | 'privacy',
