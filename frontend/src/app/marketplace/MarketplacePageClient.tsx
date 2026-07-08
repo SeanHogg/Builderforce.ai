@@ -4,6 +4,7 @@ import { Select } from '@/components/Select';
 import Link from 'next/link';
 import { useSearchParams, useRouter, usePathname } from 'next/navigation';
 import { useTranslations } from 'next-intl';
+import { useConfirm } from '@/components/ConfirmProvider';
 
 import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '@/lib/AuthContext';
@@ -166,6 +167,7 @@ export default function MarketplacePageClient() {
   const { addItem, hasItem } = useCart();
   const tenantId = tenant?.id ?? '';
   const tm = useTranslations('marketplace');
+  const confirm = useConfirm();
   const tt = useTranslations('talent');
   const tdis = useTranslations('freelancer');
   const tmodels = useTranslations('models');
@@ -493,7 +495,7 @@ export default function MarketplacePageClient() {
     loadAgents();
   }, [loadAgents]);
   const deleteOwnedAgent = useCallback(async (a: PublishedAgent) => {
-    if (!confirm(tm('action.deleteConfirm', { name: a.name }))) return;
+    if (!(await confirm(tm('action.deleteConfirm', { name: a.name })))) return;
     try {
       await deleteAgent(a.id);
       loadAgents();

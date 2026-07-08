@@ -1,6 +1,7 @@
 'use client';
 
 import { Select } from '@/components/Select';
+import { useConfirm } from '@/components/ConfirmProvider';
 
 import { useCallback, useEffect, useState } from 'react';
 import {
@@ -68,6 +69,7 @@ export function SourceControlContent({
    *  refresh its file tree to show the imported files. */
   onImported?: () => void;
 }) {
+  const confirm = useConfirm();
   const [repos, setRepos] = useState<ProjectRepository[]>([]);
   const [creds, setCreds] = useState<IntegrationCredential[]>([]);
   const [loading, setLoading] = useState(true);
@@ -176,7 +178,7 @@ export function SourceControlContent({
   };
 
   const setDefault = async (id: string) => { await reposApi.setDefault(id); load(); };
-  const remove = async (id: string) => { if (confirm('Remove this repository from the project?')) { await reposApi.remove(id); load(); } };
+  const remove = async (id: string) => { if (await confirm('Remove this repository from the project?')) { await reposApi.remove(id); load(); } };
 
   // Copy a secret-free config snapshot (incl. the reconstructed probe URL + the
   // latest test result) to the clipboard, for pasting into a bug report so a

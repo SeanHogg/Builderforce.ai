@@ -5,6 +5,7 @@ import { Select } from '@/components/Select';
 import { useState, useEffect, useCallback, useMemo, Fragment, type CSSProperties } from 'react';
 import Link from 'next/link';
 import { useTranslations } from 'next-intl';
+import { useConfirm } from '@/components/ConfirmProvider';
 import { RoleGate } from '@/components/RoleGate';
 import {
   tasksApi,
@@ -173,6 +174,7 @@ export function TaskMgmtContent({
   compact = false,
 }: TaskMgmtContentProps) {
   const tApproval = useTranslations('boardConfig');
+  const confirm = useConfirm();
   const tBoard = useTranslations('board');
   const tCommon = useTranslations('common');
   const tTask = useTranslations('taskMgmt');
@@ -663,7 +665,7 @@ export function TaskMgmtContent({
   const removeTask = async (t: Task | null, e?: React.MouseEvent) => {
     e?.stopPropagation();
     if (!t?.id) return;
-    if (!confirm(`Delete "${t.title}"?`)) return;
+    if (!(await confirm(`Delete "${t.title}"?`))) return;
     try {
       await tasksApi.delete(t.id);
       setTasks((prev) => prev.filter((i) => i.id !== t.id));

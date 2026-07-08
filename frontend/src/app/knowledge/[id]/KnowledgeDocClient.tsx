@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { DocumentMarkdown } from '@/components/DocumentMarkdown';
 import { useTranslations } from 'next-intl';
+import { useConfirm } from '@/components/ConfirmProvider';
 import PageContainer from '@/components/PageContainer';
 import { usePermission } from '@/lib/rbac';
 import { useAuth } from '@/lib/AuthContext';
@@ -900,6 +901,7 @@ function PublishBar({
 }) {
   const [changeNote, setChangeNote] = useState('');
   const [busy, setBusy] = useState(false);
+  const confirm = useConfirm();
 
   async function publish() {
     setBusy(true);
@@ -912,7 +914,7 @@ function PublishBar({
     }
   }
   async function remove() {
-    if (!window.confirm(t('deleteConfirm'))) return;
+    if (!(await confirm(t('deleteConfirm')))) return;
     setBusy(true);
     try {
       await knowledgeApi.remove(doc.id);

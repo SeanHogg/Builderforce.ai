@@ -82,6 +82,10 @@
 
 ## Consolidated Gap Register
 
+### 🧩 `EvermindBrainMap` props refactor left its only consumer stale (typecheck red)
+
+- **P1 — `LlmStudioPanel:322` passes `projectId` to `EvermindBrainMap`, which no longer accepts it.** `EvermindBrainMap` was refactored to data-driven props (`data`/`loaded`/`error`/`onReload`/`selectedRegion`/`onSelectRegion`) but its sole consumer (`LlmStudioPanel`, the `llm` modality center stage) still calls `<EvermindBrainMap projectId={…} />` → `tsgo` TS2322, whole frontend typecheck fails. Fix = have `LlmStudioPanel` own the `/evermind/contributions` fetch + region-selection state (via the same hook `ProjectEvermindPanel` uses) and pass the new props. Unblocks: `frontend` typecheck/build and the LLM-modality brain map rendering. (Surfaced while re-pointing the IDE hamburger/Details buttons; untouched by that change.)
+
 ### 🔓 Frontier-access entitlement (superadmin / BYO bypass) — follow-ups
 
 > Shipped 2026-07-07 (api `2026.7.53`): ONE shared `evaluateFrontierAccess` (superadmin || premium override || connected BYO || paid) + `resolveFrontierAccess`/`requireFrontierAccess`/`tenantCanUseFrontierModels`; `/llm/v1/models` now exposes `canUseFrontierModels`; the Evermind teacher (front + back + pin route) and the model-choice unlock all consume it. Remaining, out of the "paid-plan-to-use-frontier gate" scope:

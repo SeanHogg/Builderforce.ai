@@ -13,6 +13,7 @@ import {
 import { usePmData } from '@/lib/pm/usePmData';
 import { PmCard, PmError, PmEmpty, StatusPill } from './pmShared';
 import { ObjectiveCard } from './ObjectiveCard';
+import { useConfirm } from '@/components/ConfirmProvider';
 
 /**
  * PMO management surface — the single place portfolios, initiatives, projects AND
@@ -45,6 +46,7 @@ type DragItem = { kind: 'initiative' | 'objective'; id: string };
 
 export function PmoStructure({ tree, onChange }: { tree: PmoTree; onChange: () => void }) {
   const t = useTranslations('pmo');
+  const confirm = useConfirm();
   // Objectives (with progress + KRs + links + owner) come from the workspace rollup
   // — that scope returns EVERY objective, which we group under its portfolio below.
   const { data: rollup, error: objectivesError, reload: reloadObjectives } = usePmData<PmoRollupData>(() => pmoApi.rollup('workspace', 'workspace'), []);
@@ -163,7 +165,7 @@ export function PmoStructure({ tree, onChange }: { tree: PmoTree; onChange: () =
             </Select>
             <StatusPill value={init.status} />
             <button type="button" disabled={busy} style={dangerBtn}
-              onClick={() => { if (window.confirm(t('structure.confirmDeleteInitiative'))) run(() => pmoApi.initiatives.remove(init.id)); }}>
+              onClick={async () => { if (await confirm(t('structure.confirmDeleteInitiative'))) run(() => pmoApi.initiatives.remove(init.id)); }}>
               {t('structure.delete')}
             </button>
           </div>
@@ -306,7 +308,7 @@ export function PmoStructure({ tree, onChange }: { tree: PmoTree; onChange: () =
                     {t('structure.addInitiative')}
                   </button>
                   <button type="button" style={dangerBtn} disabled={busy}
-                    onClick={() => { if (window.confirm(t('structure.confirmDeletePortfolio'))) run(() => pmoApi.portfolios.remove(pf.id)); }}>
+                    onClick={async () => { if (await confirm(t('structure.confirmDeletePortfolio'))) run(() => pmoApi.portfolios.remove(pf.id)); }}>
                     {t('structure.delete')}
                   </button>
                 </div>

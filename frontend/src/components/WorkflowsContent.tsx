@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
+import { useConfirm } from '@/components/ConfirmProvider';
 import { useBrainDataRefresh } from '@/lib/brain/useBrainDataRefresh';
 import {
   workflows,
@@ -205,6 +206,7 @@ function WorkflowDefCard({
 
 export function WorkflowsContent({ projectId }: WorkflowsContentProps) {
   const router = useRouter();
+  const confirm = useConfirm();
   const [defs, setDefs] = useState<WorkflowDefinitionSummary[]>([]);
   const [projectList, setProjectList] = useState<Project[]>([]);
   const [viewMode, setViewMode] = useState<ViewMode>('card');
@@ -285,7 +287,7 @@ export function WorkflowsContent({ projectId }: WorkflowsContentProps) {
   };
 
   const deleteDef = async (d: WorkflowDefinitionSummary) => {
-    if (!window.confirm(`Delete workflow "${d.name}"? This cannot be undone.`)) return;
+    if (!(await confirm(`Delete workflow "${d.name}"? This cannot be undone.`))) return;
     try {
       await workflowDefinitions.remove(d.id);
       setDefs((prev) => prev.filter((x) => x.id !== d.id));

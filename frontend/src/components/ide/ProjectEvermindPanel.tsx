@@ -30,7 +30,7 @@ import {
  * `projectEvermindApi`, and a next-intl label bundle. Manager-gating rides the
  * `canManage` prop (the console disables — never hides — the write controls).
  */
-export function ProjectEvermindPanel({ projectId }: { projectId: number }) {
+export function ProjectEvermindPanel({ projectId, showRecent = true }: { projectId: number; showRecent?: boolean }) {
   const t = useTranslations('projectEvermind');
   const format = useFormatter();
   const { allowed: canManage } = usePermission('project.manageEvermind');
@@ -119,7 +119,7 @@ export function ProjectEvermindPanel({ projectId }: { projectId: number }) {
   // A margin-bottom to match the panel's old placement in the IDE agent stack.
   return (
     <div style={{ marginBottom: 12 }}>
-      <EvermindConsole adapter={adapter} canManage={canManage} projectName={projectName} labels={{ ...DEFAULT_EVERMIND_LABELS, ...labels }} />
+      <EvermindConsole adapter={adapter} canManage={canManage} projectName={projectName} showRecent={showRecent} labels={{ ...DEFAULT_EVERMIND_LABELS, ...labels }} />
     </div>
   );
 }

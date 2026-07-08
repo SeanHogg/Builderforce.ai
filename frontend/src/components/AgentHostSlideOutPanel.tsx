@@ -16,6 +16,7 @@ import { AgentHostChannelsContent } from './AgentHostChannelsContent';
 import { AgentHostSkillsContent } from './AgentHostSkillsContent';
 import { AgentHostConfigContent } from './AgentHostConfigContent';
 import { AgentHostNodesContent } from './AgentHostNodesContent';
+import { useConfirm } from '@/components/ConfirmProvider';
 
 export type AgentHostPanelTab =
   | 'details'
@@ -103,6 +104,7 @@ export function AgentHostSlideOutPanel({
   onDeleted,
   initialTab = 'details',
 }: AgentHostSlideOutPanelProps) {
+  const confirm = useConfirm();
   const [activeTab, setActiveTab] = useState<AgentHostPanelTab>(initialTab);
   const [savingDefault, setSavingDefault] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -144,7 +146,7 @@ export function AgentHostSlideOutPanel({
     e.preventDefault();
     e.stopPropagation();
     if (deleting) return;
-    if (!confirm(`Deregister "${agentHost.name}"? Its API key will be revoked and it will no longer connect.`)) return;
+    if (!(await confirm(`Deregister "${agentHost.name}"? Its API key will be revoked and it will no longer connect.`))) return;
     setDeleting(true);
     try {
       await agentHosts.deregister(agentHost.id);

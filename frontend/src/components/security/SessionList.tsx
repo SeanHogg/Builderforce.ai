@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from 'react';
 import { useTranslations } from 'next-intl';
+import { useConfirm } from '@/components/ConfirmProvider';
 
 /**
  * Unified shape for a revocable session, satisfied by both the current user's
@@ -36,6 +37,7 @@ interface SessionListProps {
  */
 export function SessionList({ sessions, onRevoke }: SessionListProps) {
   const t = useTranslations('security');
+  const confirm = useConfirm();
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [page, setPage] = useState(0);
   const [busy, setBusy] = useState(false);
@@ -61,7 +63,7 @@ export function SessionList({ sessions, onRevoke }: SessionListProps) {
 
   const revoke = async (ids: string[]) => {
     if (ids.length === 0 || busy) return;
-    if (ids.length > 1 && !confirm(t('confirmRevokeSelected', { count: ids.length }))) return;
+    if (ids.length > 1 && !(await confirm(t('confirmRevokeSelected', { count: ids.length })))) return;
     setBusy(true);
     try {
       await onRevoke(ids);

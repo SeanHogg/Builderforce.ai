@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { Select } from '@/components/Select';
 import { RoleGate } from '@/components/RoleGate';
+import { useConfirm } from '@/components/ConfirmProvider';
 import { AUTH_API_URL } from '@/lib/auth';
 import { useProjectScope } from '@/lib/ProjectScopeContext';
 import {
@@ -129,6 +130,7 @@ function CollectorPanel({
   setError: (s: string | null) => void;
   t: ReturnType<typeof useTranslations>;
 }) {
+  const confirm = useConfirm();
   const isTenant = collector.projectId == null;
   const keyLabel = createdKey ?? '<YOUR_INGEST_KEY>';
   const sdkSnippet = `<script src="https://unpkg.com/@seanhogg/builderforce-quality"></script>
@@ -137,7 +139,7 @@ function CollectorPanel({
 </script>`;
 
   const toggle = async () => { await qualityApi.collectors.update(collector.id, { enabled: !collector.enabled }); onChanged(); };
-  const remove = async () => { if (confirm(t('setup.confirmDelete'))) { await qualityApi.collectors.remove(collector.id); onChanged(); } };
+  const remove = async () => { if (await confirm(t('setup.confirmDelete'))) { await qualityApi.collectors.remove(collector.id); onChanged(); } };
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>

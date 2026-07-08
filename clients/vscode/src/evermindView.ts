@@ -97,6 +97,11 @@ function buildEvermindLabels(): Record<string, string> {
   return {
     "ev.title": t("Project Evermind"),
     "ev.description": t("The self-learning model for this project. It adapts as this project’s agents run — inspect what it has learned and steer its training below."),
+    // Build picker — a Project can group many LLM builds; each is its own Evermind.
+    "ev.buildLabel": t("Model"),
+    "ev.loadingBuilds": t("Loading models…"),
+    "ev.noBuilds": t("No LLM models yet. Create one in the LLM Studio, then it will appear here."),
+    "ev.ungrouped": t("Ungrouped"),
     "ev.loading": t("Loading…"),
     "ev.managerOnlyHint": t("Only a project manager can change these settings."),
     "ev.statusSeeded": t("Learning · v{version}"),

@@ -13,6 +13,7 @@ import { useTranslations } from 'next-intl';
 import Link from 'next/link';
 import { BrainTimeline, Avatar } from '@seanhogg/builderforce-brain-ui';
 import '@seanhogg/builderforce-brain-ui/styles.css';
+import { useConfirm } from '@/components/ConfirmProvider';
 import { ChatInput } from '@/components/ChatInput';
 import { EvermindStatusBadge } from '@/components/ide/EvermindStatusBadge';
 import { ChatMessageContent } from '@/components/ChatMessageContent';
@@ -105,6 +106,7 @@ export function BrainPanel({
   const tCommon = useTranslations('common');
   const tRepo = useTranslations('repoContext');
   const tBrain = useTranslations('brain');
+  const confirm = useConfirm();
 
   // Project scope follows the global TopBar tenant→project selector — one picker
   // for the whole app (see ProjectScopeContext). The Brain's filter dropdown
@@ -447,7 +449,7 @@ export function BrainPanel({
 
   const onDelete = useCallback(async (chat: BrainChat) => {
     const title = chat.title?.trim() || tBrain('thisChat');
-    if (!confirm(tBrain('deleteChatConfirm', { title }))) return;
+    if (!(await confirm(tBrain('deleteChatConfirm', { title })))) return;
     setDeletingId(chat.id);
     try { await chats.remove(chat.id); } finally { setDeletingId(null); }
   }, [chats, tBrain]);

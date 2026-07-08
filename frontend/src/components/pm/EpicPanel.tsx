@@ -39,6 +39,7 @@ const fieldStyle: React.CSSProperties = {
 
 export function EpicPanel({ open, epic, projectId, onClose, onSaved }: EpicPanelProps) {
   const t = useTranslations('pm');
+  const confirm = useConfirm();
   const isEdit = epic != null;
   const [title, setTitle] = useState(epic?.title ?? '');
   const [description, setDescription] = useState(epic?.description ?? '');
@@ -53,7 +54,7 @@ export function EpicPanel({ open, epic, projectId, onClose, onSaved }: EpicPanel
   // to an objective removes this board item and creates a real OKR, so confirm first.
   const convertTo = async (target: WorkItemKind) => {
     if (!epic) return;
-    if (target === 'objective' && !window.confirm(t('convertToOkrConfirm'))) return;
+    if (target === 'objective' && !(await confirm({ message: t('convertToOkrConfirm'), destructive: false }))) return;
     setBusy(true);
     setError(null);
     try {

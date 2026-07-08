@@ -35,6 +35,9 @@ export interface EvermindConsoleProps {
    *  panel on two surfaces (web tab vs VS Code sidebar) never looks like contradictory
    *  states for "the same project" when they are in fact different projects. */
   projectName?: string;
+  /** Show the "Recently learned" list. Default true; a host that renders its own
+   *  learnings surface (e.g. the web Studio's region-filterable panel) passes false. */
+  showRecent?: boolean;
 }
 
 /* Cascading theme tokens: evermind-namespaced → host app tokens → VS Code tokens →
@@ -49,7 +52,7 @@ const C = {
   danger: 'var(--bf-ev-danger, var(--danger-text, #d9534f))',
 };
 
-export function EvermindConsole({ adapter, canManage, labels, refreshMs = 20_000, projectName }: EvermindConsoleProps) {
+export function EvermindConsole({ adapter, canManage, labels, refreshMs = 20_000, projectName, showRecent = true }: EvermindConsoleProps) {
   const t = useMemo<EvermindConsoleLabels>(() => ({ ...DEFAULT_EVERMIND_LABELS, ...(labels ?? {}) }), [labels]);
 
   const [data, setData] = useState<EvermindConsoleData | null>(null);
@@ -220,7 +223,7 @@ export function EvermindConsole({ adapter, canManage, labels, refreshMs = 20_000
             </div>
           )}
 
-          <RecentList t={t} entries={data?.recent ?? []} />
+          {showRecent && <RecentList t={t} entries={data?.recent ?? []} />}
         </>
       )}
 

@@ -728,8 +728,11 @@ interface EvermindConsoleProps {
      *  panel on two surfaces (web tab vs VS Code sidebar) never looks like contradictory
      *  states for "the same project" when they are in fact different projects. */
     projectName?: string;
+    /** Show the "Recently learned" list. Default true; a host that renders its own
+     *  learnings surface (e.g. the web Studio's region-filterable panel) passes false. */
+    showRecent?: boolean;
 }
-declare function EvermindConsole({ adapter, canManage, labels, refreshMs, projectName }: EvermindConsoleProps): React__default.JSX.Element;
+declare function EvermindConsole({ adapter, canManage, labels, refreshMs, projectName, showRecent }: EvermindConsoleProps): React__default.JSX.Element;
 
 /**
  * Project 360 model — the shape returned by `GET /api/projects/:id/360` and
