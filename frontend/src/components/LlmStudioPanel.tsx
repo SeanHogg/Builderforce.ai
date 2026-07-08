@@ -4,8 +4,9 @@
  * LlmStudioPanel — center workspace for the `llm` project modality.
  *
  * The `llm` modality is about *building + training* a custom model, not a chat
- * playground (chat already lives in the Brain on the left, which is modality-aware
- * and runs cloud inference today). This panel orients the user through the
+ * playground (chat already lives in the floating Brain drawer — opened from the
+ * launcher in the bottom-right — which is modality-aware and runs cloud inference
+ * today). This panel orients the user through the
  * build → train → publish pipeline and surfaces live project state, then hands
  * off to the existing Train / Publish right-panel tabs rather than re-implementing
  * them. It reads real data via the existing dataset/training APIs.

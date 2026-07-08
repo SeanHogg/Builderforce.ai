@@ -97,6 +97,7 @@ import { verifyJwt, signJwt } from '../../infrastructure/auth/JwtService';
 import { hashSecret } from '../../infrastructure/auth/HashService';
 import { TenantRole, TenantPlan, TenantBillingStatus } from '../../domain/shared/types';
 import { getLimits, resolveImageCreditsDailyLimit, resolveTokenLimits, GUEST_CHAT_LIMITS } from '../../domain/tenant/PlanLimits';
+import { evaluateFrontierAccess } from '../../domain/tenant/planFeatures';
 import { GuestChatService } from '../../application/guest/GuestChatService';
 import { verifyGuestToken, guestBrainEnabled, GUEST_TOKEN_PREFIX } from '../../application/guest/guestToken';
 import { resolveEffectivePlan } from '../../domain/tenant/effectivePlan';
@@ -1706,7 +1707,19 @@ export function createLlmRoutes(): Hono<HonoEnv> {
     // providers." Resolved only for an authenticated tenant.
     const byoProviders = access ? (await listTenantProviderKeys(c.env, access.tenantId)).map((d) => d.provider) : [];
     const byoModels = byoModelsFor(byoProviders);
-    const canChooseModel = premiumOverride || effectivePlan !== 'free' || byoModels.length > 0;
+    // THE single frontier-access rule (superadmin || premium override || connected BYO
+    // account || paid plan) — shared with every backend gate via evaluateFrontierAccess,
+    // so the client's model-choice / frontier-teacher unlock matches the server exactly.
+    // `access.isSuperadmin` is the DB-resolved flag (requireTenantAccess), so a superadmin
+    // unlocks frontier even without a premium override or a connected account.
+    const canUseFrontierModels = evaluateFrontierAccess({
+      effectivePlan: toTenantPlan(effectivePlan),
+      premiumOverride,
+      isSuperadmin: access?.isSuperadmin === true,
+      hasConnectedByoFrontier: byoProviders.length > 0,
+    }).entitled;
+    // `canChooseModel` is an alias kept for existing clients; it IS frontier access.
+    const canChooseModel = canUseFrontierModels;
 
     const requiredKey = isPro ? c.env.OPENROUTER_API_KEY_PRO ?? c.env.OPENROUTER_API_KEY : c.env.OPENROUTER_API_KEY;
     if (!requiredKey) {
@@ -1718,6 +1731,7 @@ export function createLlmRoutes(): Hono<HonoEnv> {
         models: modelPoolForPlan(effectivePlan, premiumOverride),
         codingModels,
         canChooseModel,
+        canUseFrontierModels,
         byo: { providers: byoProviders, models: byoModels },
       });
     }
@@ -1732,6 +1746,7 @@ export function createLlmRoutes(): Hono<HonoEnv> {
       data: await service.status(),
       codingModels,
       canChooseModel,
+      canUseFrontierModels,
       byo: { providers: byoProviders, models: byoModels },
     });
   });

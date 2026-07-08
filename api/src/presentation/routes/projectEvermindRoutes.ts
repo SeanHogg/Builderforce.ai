@@ -20,6 +20,7 @@ import type { Context } from 'hono';
 import { and, eq } from 'drizzle-orm';
 import { EvermindModelPackage } from '@seanhogg/builderforce-memory-engine';
 import { authMiddleware, requireRole } from '../middleware/authMiddleware';
+import { requireFrontierAccess } from '../middleware/featureGate';
 import { resolveHostAuth } from '../../infrastructure/auth/agentHostAuth';
 import { TenantRole } from '../../domain/shared/types';
 import { projects } from '../../infrastructure/database/schema';
@@ -242,6 +243,11 @@ export function createProjectEvermindRoutes(db: Db): Hono<HonoEnv> {
     }
     const model = typeof body.model === 'string' && body.model.trim() ? body.model.trim() : null;
     if (model) {
+      // Setting a frontier teacher IS frontier use — gate it on frontier access
+      // (paid plan OR a connected BYO account OR superadmin). Clearing (model=null)
+      // stays open so a downgraded tenant can always turn distillation off.
+      const gate = await requireFrontierAccess(c);
+      if (gate) return gate;
       // Only meaningful once seeded — a teacher distils INTO a base model.
       const head = await getProjectEvermindHead(c.env as Env, db, tenantId, projectId);
       if (head.version <= 0) return c.json({ error: 'seed a base model before setting a teacher' }, 409);

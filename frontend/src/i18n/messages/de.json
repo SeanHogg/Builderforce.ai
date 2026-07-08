@@ -3432,13 +3432,13 @@
   },
   "llmStudio": {
     "title": "Eigenes Modell erstellen",
-    "intro": "Entwirf Daten, optimiere einen LoRA-Adapter und veröffentliche ihn als anheuerbaren Agenten – alles im Browser. Chat und Prompt-Design passieren im Brain links; die Schritte unten steuern die Build-Pipeline.",
+    "intro": "Entwirf Daten, optimiere einen LoRA-Adapter und veröffentliche ihn als anheuerbaren Agenten – alles im Browser. Chat und Prompt-Design passieren im Brain – öffne es über die Schaltfläche unten rechts. Die Schritte unten steuern die Build-Pipeline.",
     "retry": "Erneut versuchen",
     "loadError": "Projektstatus konnte nicht geladen werden.",
-    "footer": "☁️ Cloud-Inferenz ist jetzt aktiv. 💻 Lokale (geräteinterne) und ⚡ hybride Inferenz kommen mit der modellinternen Browser-Runtime – Modus über die Brain-Leiste wechseln.",
+    "footer": "☁️ Cloud-Inferenz ist jetzt aktiv. 💻 Lokale (geräteinterne) und ⚡ hybride Inferenz kommen mit der modellinternen Browser-Runtime.",
     "step1": {
       "title": "Datensatz entwerfen",
-      "body": "Nutze das Brain links, um Anweisungs-/Antwortpaare zu entwerfen und über die Architektur nachzudenken. Datensätze werden pro Projekt gespeichert und speisen das Training.",
+      "body": "Öffne das Brain (Schaltfläche unten rechts), um Anweisungs-/Antwortpaare zu entwerfen und über die Architektur nachzudenken. Datensätze werden pro Projekt gespeichert und speisen das Training.",
       "metric": "{count, plural, one {# Datensatz} other {# Datensätze}}",
       "cta": "Dateien öffnen"
     },

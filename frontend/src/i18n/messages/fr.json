@@ -3432,13 +3432,13 @@
   },
   "llmStudio": {
     "title": "Créer un modèle personnalisé",
-    "intro": "Concevez des données, affinez un adaptateur LoRA et publiez-le comme agent recrutable — le tout depuis le navigateur. Le chat et la conception des prompts se font dans le Brain à gauche ; les étapes ci-dessous pilotent le pipeline de création.",
+    "intro": "Concevez des données, affinez un adaptateur LoRA et publiez-le comme agent recrutable — le tout depuis le navigateur. Le chat et la conception des prompts se font dans le Brain — ouvrez-le avec le bouton en bas à droite. Les étapes ci-dessous pilotent le pipeline de création.",
     "retry": "Réessayer",
     "loadError": "Échec du chargement de l’état du projet.",
-    "footer": "☁️ L’inférence cloud est active. 💻 L’inférence locale (sur l’appareil) et ⚡ hybride arrivent avec le runtime de modèle dans le navigateur — changez de mode depuis la barre du Brain.",
+    "footer": "☁️ L’inférence cloud est active. 💻 L’inférence locale (sur l’appareil) et ⚡ hybride arrivent avec le runtime de modèle dans le navigateur.",
     "step1": {
       "title": "Concevez votre jeu de données",
-      "body": "Utilisez le Brain à gauche pour rédiger des paires instruction/réponse et réfléchir à l’architecture. Les jeux de données sont stockés par projet et alimentent l’entraînement.",
+      "body": "Utilisez le Brain (bouton en bas à droite) pour rédiger des paires instruction/réponse et réfléchir à l’architecture. Les jeux de données sont stockés par projet et alimentent l’entraînement.",
       "metric": "{count, plural, one {# jeu de données} other {# jeux de données}}",
       "cta": "Ouvrir les fichiers"
     },
