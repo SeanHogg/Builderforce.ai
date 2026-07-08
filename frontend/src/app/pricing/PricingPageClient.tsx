@@ -4,6 +4,7 @@ import { Select } from '@/components/Select';
 
 import { useState, useEffect } from 'react';
 import { useTranslations } from 'next-intl';
+import { useConfirm } from '@/components/ConfirmProvider';
 import { useSearchParams } from 'next/navigation';
 import { useAuth } from '@/lib/AuthContext';
 import { AUTH_API_URL, getStoredTenantToken } from '@/lib/auth';
@@ -129,6 +130,7 @@ function PlanCta({ plan, effectivePlan, onUpgrade, isAnon }: {
 
 export default function PricingPageClient() {
   const t = useTranslations('pricing');
+  const confirm = useConfirm();
   const { tenant } = useAuth();
   const tenantId = tenant?.id != null ? Number(tenant.id) : null;
 
@@ -248,7 +250,7 @@ export default function PricingPageClient() {
 
   const handleDowngrade = async () => {
     if (!tenantId || downgrading) return;
-    if (!confirm(t('downgradeConfirm'))) return;
+    if (!(await confirm({ message: t('downgradeConfirm'), destructive: false }))) return;
     setDowngrading(true);
     try {
       const token = getStoredTenantToken();

@@ -55,6 +55,7 @@ vi.mock('@/hooks/useVideoVersions', () => ({
 vi.mock('@/lib/brain', () => ({
   useRegisterBrainActions: () => {},
   useBrainContext: () => ({ setContext: vi.fn(), setOpen: vi.fn() }),
+  useOptionalBrainContext: () => null,
   savePrd: vi.fn(),
   saveTasks: vi.fn(),
 }));
@@ -68,6 +69,7 @@ vi.mock('@/lib/api', () => ({
 }));
 vi.mock('@/lib/auth', () => ({ getStoredTenantToken: () => 'tok' }));
 vi.mock('@/lib/apiClient', () => ({ getApiBaseUrl: () => 'http://test' }));
+vi.mock('@/components/ConfirmProvider', () => ({ useConfirm: () => vi.fn(async () => true) }));
 
 // --- The remaining side panels / chrome: render nothing --------------------
 vi.mock('./FileExplorer', () => ({ FileExplorer: () => <div /> }));

@@ -12,6 +12,7 @@ import {
 } from '@/lib/builderforceApi';
 import { COST_CLASS_COLORS } from '@/lib/pm/costClass';
 import { PmCard, ProgressBar } from './pmShared';
+import { useConfirm } from '@/components/ConfirmProvider';
 
 /**
  * One objective's full editor — owner (portfolio/initiative/project) reassignment,
@@ -72,6 +73,7 @@ export interface ObjectiveCardProps {
 
 export function ObjectiveCard({ o, busy, run, portfolios, initiatives, projects, epics, looseTasks, dragging, onDragStart, onDragEnd }: ObjectiveCardProps) {
   const t = useTranslations('pmo');
+  const confirm = useConfirm();
   const [kr, setKr] = useState<{ title: string; target: string }>({ title: '', target: '' });
   const [valueDraft, setValueDraft] = useState<Record<string, string>>({});
   const [linkDraft, setLinkDraft] = useState('');
@@ -144,11 +146,11 @@ export function ObjectiveCard({ o, busy, run, portfolios, initiatives, projects,
             {o.period && <span style={{ fontSize: '0.74rem', color: 'var(--text-muted)' }}>{o.period}</span>}
             <button type="button" style={ghostBtn} disabled={busy}
               title={t('okr.convertToEpicHint')}
-              onClick={() => { if (window.confirm(t('okr.convertToEpicConfirm'))) run(() => pmoApi.objectives.convertType(o.id, 'epic')); }}>
+              onClick={async () => { if (await confirm({ message: t('okr.convertToEpicConfirm'), destructive: false })) run(() => pmoApi.objectives.convertType(o.id, 'epic')); }}>
               {t('okr.convertToEpic')}
             </button>
             <button type="button" style={ghostBtn} disabled={busy}
-              onClick={() => { if (window.confirm(t('structure.confirmDeleteObjective'))) run(() => pmoApi.objectives.remove(o.id)); }}>
+              onClick={async () => { if (await confirm(t('structure.confirmDeleteObjective'))) run(() => pmoApi.objectives.remove(o.id)); }}>
               {t('okr.deleteObjective')}
             </button>
           </div>

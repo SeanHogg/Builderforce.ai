@@ -29,13 +29,13 @@
  * and every region carries an always-visible label, so identity is never colour-alone.
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useMemo } from 'react';
 import { useTranslations } from 'next-intl';
-import {
-  getProjectEvermindContributions,
-  type ProjectEvermindContributions,
-  type ProjectEvermindRecentEntry,
+import type {
+  ProjectEvermindContributions,
+  ProjectEvermindRecentEntry,
 } from '@/lib/projectEvermindApi';
+import type { EvermindRegionKey } from '@/lib/evermindRegions';
 
 /* ── Geometry (SVG user units; the viewBox scales to the container) ──────────── */
 const VB_W = 860;
@@ -43,10 +43,7 @@ const VB_H = 600;
 const CORE = { x: 430, y: 300 };
 const CORE_R = 40;
 
-type RegionKey =
-  | 'neocortex' | 'hippocampus'
-  | 'amygdala' | 'hypothalamus' | 'thalamus' | 'basalGanglia'
-  | 'personality';
+type RegionKey = EvermindRegionKey;
 type RegionGroup = 'memory' | 'limbic' | 'trait';
 
 interface RegionMeta {
@@ -131,36 +128,22 @@ interface RegionState {
   caption: string;
 }
 
-export function EvermindBrainMap({ projectId }: { projectId: number }) {
+export interface EvermindBrainMapProps {
+  data: ProjectEvermindContributions | null;
+  loaded: boolean;
+  error: boolean;
+  onReload: () => void;
+  /** The region the Learnings panel is filtered to — highlighted, others dimmed. */
+  selectedRegion: EvermindRegionKey | null;
+  /** Click a region to filter learnings to it (clicking the selected one clears). */
+  onSelectRegion: (key: EvermindRegionKey | null) => void;
+}
+
+export function EvermindBrainMap({
+  data, loaded, error, onReload, selectedRegion, onSelectRegion,
+}: EvermindBrainMapProps) {
   const t = useTranslations('evermindBrain');
-  const [data, setData] = useState<ProjectEvermindContributions | null>(null);
-  const [loaded, setLoaded] = useState(false);
-  const [error, setError] = useState(false);
-  const inFlight = useRef(false);
-
-  const reload = useCallback(async () => {
-    if (inFlight.current) return;
-    inFlight.current = true;
-    try {
-      const d = await getProjectEvermindContributions(projectId);
-      setData(d);
-      setError(false);
-    } catch {
-      setError(true);
-    } finally {
-      inFlight.current = false;
-      setLoaded(true);
-    }
-  }, [projectId]);
-
-  useEffect(() => { setLoaded(false); void reload(); }, [reload]);
-
-  // Light poll so the graph grows live while agents run / teaching merges. The read
-  // endpoint is server-cached, so this is cheap.
-  useEffect(() => {
-    const id = setInterval(() => { void reload(); }, 20_000);
-    return () => clearInterval(id);
-  }, [reload]);
+  const reload = onReload;
 
   const seeded = !!data?.seeded;
   const learning = seeded && data?.mode === 'connected';
@@ -304,8 +287,15 @@ export function EvermindBrainMap({ projectId }: { projectId: number }) {
               </g>
             )))}
 
-            {/* Region nodes. */}
-            {regions.map((rs) => <RegionGlyph key={rs.meta.key} rs={rs} label={t(rs.meta.key)} />)}
+            {/* Region nodes — click to filter the Learnings panel to that region. */}
+            {regions.map((rs) => (
+              <RegionGlyph
+                key={rs.meta.key} rs={rs} label={t(rs.meta.key)}
+                selected={selectedRegion === rs.meta.key}
+                dimmed={selectedRegion != null && selectedRegion !== rs.meta.key}
+                onSelect={() => onSelectRegion(selectedRegion === rs.meta.key ? null : rs.meta.key)}
+              />
+            ))}
 
             {/* Core. */}
             <g className="ev-core">
@@ -318,11 +308,18 @@ export function EvermindBrainMap({ projectId }: { projectId: number }) {
         )}
       </div>
 
-      {/* Tiered legend — teaches the architecture; identity is never colour-alone. */}
+      {/* Tiered legend — teaches the architecture (and clicks filter, like the map). */}
       <div style={legendStyle}>
-        <LegendTier heading={t('tierMemory')} regions={regions.filter((r) => r.meta.group === 'memory')} labelOf={(k) => t(k)} descOf={(k) => t(`${k}Desc`)} />
-        <LegendTier heading={t('tierLimbic')} regions={regions.filter((r) => r.meta.group === 'limbic')} labelOf={(k) => t(k)} descOf={(k) => t(`${k}Desc`)} />
-        <LegendTier heading={t('tierPersonality')} regions={regions.filter((r) => r.meta.group === 'trait')} labelOf={(k) => t(k)} descOf={(k) => t(`${k}Desc`)} />
+        {(['memory', 'limbic', 'trait'] as const).map((group) => (
+          <LegendTier
+            key={group}
+            heading={t(group === 'memory' ? 'tierMemory' : group === 'limbic' ? 'tierLimbic' : 'tierPersonality')}
+            regions={regions.filter((r) => r.meta.group === group)}
+            labelOf={(k) => t(k)} descOf={(k) => t(`${k}Desc`)}
+            selectedRegion={selectedRegion}
+            onSelect={(k) => onSelectRegion(selectedRegion === k ? null : k)}
+          />
+        ))}
       </div>
 
       {!seeded && loaded && !error && (
@@ -334,15 +331,26 @@ export function EvermindBrainMap({ projectId }: { projectId: number }) {
 
 /* ── SVG / HTML sub-parts ───────────────────────────────────────────────────── */
 
-function RegionGlyph({ rs, label }: { rs: RegionState; label: string }) {
+function RegionGlyph({
+  rs, label, selected, dimmed, onSelect,
+}: {
+  rs: RegionState; label: string; selected: boolean; dimmed: boolean; onSelect: () => void;
+}) {
   const { meta, charge, count, overflow } = rs;
   const r = meta.size * 0.7 + charge * meta.size * 0.5;
   const hue = `var(${meta.varName})`;
   const showBadge = !!meta.accretes && (count > 0 || overflow > 0);
   return (
-    <g className={rs.active ? 'ev-region ev-region-active' : 'ev-region'}>
+    <g
+      className={rs.active ? 'ev-region ev-region-active' : 'ev-region'}
+      role="button" tabIndex={0} aria-pressed={selected}
+      style={{ cursor: 'pointer', opacity: dimmed ? 0.4 : 1, transition: 'opacity 0.15s' }}
+      onClick={onSelect}
+      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onSelect(); } }}
+    >
+      {selected && <circle cx={meta.x} cy={meta.y} r={r + 10} fill="none" stroke={hue} strokeWidth={2} strokeOpacity={0.9} strokeDasharray="3 3" />}
       <circle cx={meta.x} cy={meta.y} r={r + 6} fill={hue} fillOpacity={0.1} />
-      <circle cx={meta.x} cy={meta.y} r={r} fill={hue} fillOpacity={0.16 + charge * 0.24} stroke={hue} strokeWidth={2.5} />
+      <circle cx={meta.x} cy={meta.y} r={r} fill={hue} fillOpacity={0.16 + charge * 0.24} stroke={hue} strokeWidth={selected ? 4 : 2.5} />
       <text x={meta.x} y={meta.y + 4} textAnchor="middle" className={`ev-region-label ${meta.group === 'limbic' ? 'ev-region-label-sm' : ''}`}>{label}</text>
       {showBadge && (
         <g>
@@ -356,20 +364,27 @@ function RegionGlyph({ rs, label }: { rs: RegionState; label: string }) {
 }
 
 function LegendTier({
-  heading, regions, labelOf, descOf,
+  heading, regions, labelOf, descOf, selectedRegion, onSelect,
 }: {
-  heading: string; regions: RegionState[]; labelOf: (k: RegionKey) => string; descOf: (k: RegionKey) => string;
+  heading: string; regions: RegionState[];
+  labelOf: (k: RegionKey) => string; descOf: (k: RegionKey) => string;
+  selectedRegion: RegionKey | null; onSelect: (k: RegionKey) => void;
 }) {
   return (
     <div className="ev-legend-tier">
       <div className="ev-legend-heading">{heading}</div>
       <div className="ev-legend-rows">
         {regions.map((rs) => (
-          <span key={rs.meta.key} className="ev-legend-item" title={descOf(rs.meta.key)}>
+          <button
+            type="button" key={rs.meta.key}
+            className={`ev-legend-item${selectedRegion === rs.meta.key ? ' ev-legend-item-on' : ''}`}
+            title={descOf(rs.meta.key)} aria-pressed={selectedRegion === rs.meta.key}
+            onClick={() => onSelect(rs.meta.key)}
+          >
             <span className="ev-legend-swatch" style={{ background: `var(${rs.meta.varName})` }} aria-hidden />
             <span className="ev-legend-name">{labelOf(rs.meta.key)}</span>
             <span className="ev-legend-cap">{rs.caption}</span>
-          </span>
+          </button>
         ))}
       </div>
     </div>
@@ -451,7 +466,9 @@ const BRAINMAP_CSS = `
 .ev-legend-tier { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
 .ev-legend-heading { font-size: 0.6rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-muted); }
 .ev-legend-rows { display: flex; flex-direction: column; gap: 3px; }
-.ev-legend-item { display: inline-flex; align-items: center; gap: 6px; font-size: 0.74rem; max-width: 320px; }
+.ev-legend-item { display: inline-flex; align-items: center; gap: 6px; font-size: 0.74rem; max-width: 320px; background: transparent; border: 1px solid transparent; border-radius: 6px; padding: 2px 6px; margin: 0; cursor: pointer; text-align: left; color: inherit; font-family: inherit; }
+.ev-legend-item:hover { background: var(--bg-elevated, rgba(148,163,184,0.12)); }
+.ev-legend-item-on { border-color: var(--border-subtle, rgba(148,163,184,0.4)); background: var(--bg-elevated, rgba(148,163,184,0.14)); }
 .ev-legend-swatch { width: 11px; height: 11px; border-radius: 3px; flex-shrink: 0; }
 .ev-legend-name { font-weight: 700; color: var(--text-primary); white-space: nowrap; }
 .ev-legend-cap { color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

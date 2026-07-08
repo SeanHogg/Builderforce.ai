@@ -16,6 +16,7 @@ import { IdeProjectsSlideOutPanel } from './ide/IdeProjectsSlideOutPanel';
 import { BrainPanel } from './brain/BrainPanel';
 import { TeamChatButton } from './brain/TeamChatButton';
 import { IdeSettingsPanel } from './IdeSettingsPanel';
+import { useConfirm } from '@/components/ConfirmProvider';
 import { IdeAgentPanel } from './ide/IdeAgentPanel';
 import { useWebContainer } from '@/hooks/useWebContainer';
 import { useCollaboration } from '@/hooks/useCollaboration';
@@ -69,6 +70,7 @@ interface CheckResult {
 
 export function IDE({ project, initialFiles, onProjectUpdate, onOpenProjectDetails, initialChatId, initialPrompt, initialTicket }: IDEProps) {
   const t = useTranslations('ide');
+  const confirm = useConfirm();
   // The IDE is scoped to its project's type: modality is fixed at creation, not
   // switchable in-session, so it's derived (and clamped) rather than state.
   const modality: ProjectModality = getModality(project.modality).id;
@@ -344,7 +346,7 @@ export function IDE({ project, initialFiles, onProjectUpdate, onOpenProjectDetai
         return;
       }
       if (typeof window !== 'undefined' &&
-        !window.confirm(`Last checks failed (${summary}). Serve the preview anyway?`)) {
+        !(await confirm({ message: `Last checks failed (${summary}). Serve the preview anyway?`, destructive: false }))) {
         return;
       }
     }

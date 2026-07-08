@@ -24,7 +24,7 @@ import type { RightTab } from '@/lib/modality';
 import { BenchmarkPanel } from '@/components/BenchmarkPanel';
 import { ModelExportPanel } from '@/components/ModelExportPanel';
 import { ProjectEvermindPanel } from '@/components/ide/ProjectEvermindPanel';
-import { EvermindBrainMap } from '@/components/ide/EvermindBrainMap';
+import { EvermindStudioCenter } from '@/components/ide/EvermindStudioCenter';
 
 interface LlmStudioPanelProps {
   projectId: number | string;
@@ -152,7 +152,9 @@ export function LlmStudioPanel({ projectId, files = [], onGoToTab, onOpenFile }:
             this always renders a real model to run/learn/edit. Self-gating (RBAC +
             its own loading/empty states), localized, theme-aware. */}
         <div style={{ marginBottom: 20 }}>
-          <ProjectEvermindPanel projectId={Number(projectId)} />
+          {/* Recently-learned now lives in the center Learnings panel (region-filterable),
+              so hide the console's own recent list here to avoid duplicating it. */}
+          <ProjectEvermindPanel projectId={Number(projectId)} showRecent={false} />
         </div>
 
         {error && (
@@ -316,10 +318,10 @@ export function LlmStudioPanel({ projectId, files = [], onGoToTab, onOpenFile }:
         </p>
         </div>
 
-        {/* Center stage: the live brain / knowledge map — bounded to the pane height and
-            vertically centred, so the long pipeline rail never pushes it off-screen. */}
+        {/* Center stage: the live Knowledge Map + region-filterable Learnings list,
+            bounded to the pane height so the long pipeline rail never pushes it off. */}
         <div className="llm-studio-center">
-          <EvermindBrainMap projectId={Number(projectId)} />
+          <EvermindStudioCenter projectId={Number(projectId)} />
         </div>
       </div>
     </div>

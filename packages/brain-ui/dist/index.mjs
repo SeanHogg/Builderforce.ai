@@ -1444,7 +1444,7 @@ var C = {
   accent: "var(--bf-ev-accent, var(--coral-bright, var(--accent, var(--bf-accent, #ff6b5e))))",
   danger: "var(--bf-ev-danger, var(--danger-text, #d9534f))"
 };
-function EvermindConsole({ adapter, canManage, labels, refreshMs = 2e4, projectName }) {
+function EvermindConsole({ adapter, canManage, labels, refreshMs = 2e4, projectName, showRecent = true }) {
   const t = useMemo7(() => ({ ...DEFAULT_EVERMIND_LABELS, ...labels ?? {} }), [labels]);
   const [data, setData] = useState7(null);
   const [seedModels, setSeedModels] = useState7([]);
@@ -1631,7 +1631,7 @@ function EvermindConsole({ adapter, canManage, labels, refreshMs = 2e4, projectN
           data?.pending
         ] })
       ] }),
-      /* @__PURE__ */ jsx8(RecentList, { t, entries: data?.recent ?? [] })
+      showRecent && /* @__PURE__ */ jsx8(RecentList, { t, entries: data?.recent ?? [] })
     ] }),
     notice && /* @__PURE__ */ jsx8("p", { style: { margin: 0, fontSize: "0.74rem", color: C.accent }, role: "status", children: notice }),
     error && /* @__PURE__ */ jsx8("p", { style: { margin: 0, fontSize: "0.76rem", color: C.danger }, role: "alert", children: error })

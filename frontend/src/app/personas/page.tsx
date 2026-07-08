@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useTranslations } from 'next-intl';
+import { useConfirm } from '@/components/ConfirmProvider';
 import Link from 'next/link';
 import { useAuth } from '@/lib/AuthContext';
 import { contrastText } from '@/lib/contrastText';
@@ -73,6 +74,7 @@ function publicToPersona(p: PublicPersona): Persona {
 
 export default function PersonasPage() {
   const t = useTranslations('personasPage');
+  const confirm = useConfirm();
   const { tenant } = useAuth();
   const tenantId = tenant?.id ?? '';
   const tenantNum = Number(tenantId);
@@ -215,7 +217,7 @@ export default function PersonasPage() {
   };
 
   const deleteUserPersona = async (id: string) => {
-    if (!confirm(t('confirmDelete'))) return;
+    if (!(await confirm(t('confirmDelete')))) return;
     setError('');
     try {
       await personasApi.remove(id);

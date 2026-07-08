@@ -22,6 +22,7 @@ import {
   type Engagement, type Timecard, type TimecardEntry, type JobPosting, type JobProposal, type Invoice,
   type Deliverable, type PostingType, type EngagementType,
 } from '@/lib/freelancerApi';
+import { useConfirm } from '@/components/ConfirmProvider';
 
 const card: React.CSSProperties = { background: 'var(--bg-base)', border: '1px solid var(--border-subtle)', borderRadius: 12, padding: 18 };
 const input: React.CSSProperties = { background: 'var(--bg-elevated)', color: 'var(--text-primary)', border: '1px solid var(--border-subtle)', borderRadius: 8, padding: '8px 12px', fontSize: 13, outline: 'none', width: '100%' };
@@ -53,6 +54,7 @@ type Tab = 'team' | 'jobs' | 'timecards' | 'invoices';
 
 export function TalentView() {
   const t = useTranslations('hires');
+  const confirm = useConfirm();
   const td = useTranslations('freelancer');
   const tg = useTranslations('gigs');
   // getStoredTenant() JSON.parses localStorage and returns a NEW object every
@@ -215,7 +217,7 @@ export function TalentView() {
                     <button type="button" style={btn('ghost')} onClick={() => toggleDeliverables(e.id)}>{openDeliv === e.id ? t('hide') : tg('deliverables.heading')}</button>
                     <button type="button" style={btn('ghost')} onClick={() => { setRateFor(rateFor === e.id ? null : e.id); setReviewForm({ rating: 5, comment: '', wouldWorkAgain: true }); }}>{t('rate')}</button>
                     <button type="button" style={btn('danger')} disabled={busy === e.id}
-                      onClick={() => { if (confirm(t('terminateConfirm'))) void act(e.id, () => terminateEngagement(e.id)); }}>{busy === e.id ? '…' : t('terminate')}</button>
+                      onClick={async () => { if (await confirm(t('terminateConfirm'))) void act(e.id, () => terminateEngagement(e.id)); }}>{busy === e.id ? '…' : t('terminate')}</button>
                   </div>
                 </div>
                 {openDeliv === e.id && (

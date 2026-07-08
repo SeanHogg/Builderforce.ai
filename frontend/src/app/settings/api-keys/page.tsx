@@ -2,6 +2,7 @@
 
 import { Fragment, useEffect, useState } from 'react';
 import { useTranslations } from 'next-intl';
+import { useConfirm } from '@/components/ConfirmProvider';
 import { tenantApiKeysApi, type TenantApiKey } from '@/lib/builderforceApi';
 import { getStoredTenant } from '@/lib/auth';
 import { MintedTenantApiKeyDisplay } from '@/components/MintedTenantApiKeyDisplay';
@@ -57,6 +58,7 @@ function fmtDate(iso: string | null | undefined): string {
 
 export default function ApiKeysPage() {
   const t = useTranslations('apiKeys');
+  const confirm = useConfirm();
   const tenant = getStoredTenant();
   const tenantId = tenant ? Number(tenant.id) : NaN;
   const isOwner = tenant?.role === 'owner';
@@ -141,7 +143,7 @@ export default function ApiKeysPage() {
   };
 
   const handleRevoke = async (keyId: string) => {
-    if (!confirm(t('confirmRevoke'))) return;
+    if (!(await confirm(t('confirmRevoke')))) return;
     setRevoking(keyId);
     setError(null);
     try {

@@ -1,6 +1,7 @@
 'use client';
 
 import { Select } from '@/components/Select';
+import { useConfirm } from '@/components/ConfirmProvider';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
@@ -123,6 +124,7 @@ interface Props {
 export function WorkflowBuilder({ definitionId, initialProjectId = null }: Props) {
   const router = useRouter();
   const t = useTranslations('evermindBuild');
+  const confirm = useConfirm();
   const [nodes, setNodes, onNodesChange] = useNodesState<Node<BuilderNodeData>>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -324,7 +326,7 @@ export function WorkflowBuilder({ definitionId, initialProjectId = null }: Props
   // as an editable, wired step chain — then the user runs it with "🧠 Build".
   const loadTemplate = useCallback(
     async (id: 'train-llm' | 'teach-code') => {
-      if (nodes.length > 0 && !window.confirm(t('replaceConfirm'))) return;
+      if (nodes.length > 0 && !(await confirm({ message: t('replaceConfirm'), destructive: false }))) return;
       setBusy(true);
       setStatus(null);
       try {

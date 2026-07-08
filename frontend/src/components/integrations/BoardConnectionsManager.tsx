@@ -55,6 +55,7 @@ const btnSubtle: React.CSSProperties = {
 };
 
 export function BoardConnectionsManager({ projectId, heading = 'External boards' }: { projectId: number; heading?: string | null }) {
+  const confirm = useConfirm();
   const [connections, setConnections] = useState<BoardConnection[]>([]);
   const [creds, setCreds] = useState<IntegrationCredential[]>([]);
   const [loading, setLoading] = useState(true);
@@ -126,7 +127,7 @@ export function BoardConnectionsManager({ projectId, heading = 'External boards'
     }
   };
 
-  const remove = async (id: string) => { if (confirm('Delete this board connection?')) { await boardConnectionsApi.remove(id); load(); } };
+  const remove = async (id: string) => { if (await confirm('Delete this board connection?')) { await boardConnectionsApi.remove(id); load(); } };
 
   const credName = (id: string | null) => creds.find((c) => c.id === id)?.name;
   // Keys that can back the selected board connection (provider must match).

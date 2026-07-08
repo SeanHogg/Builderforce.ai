@@ -18,6 +18,7 @@ import ArtifactAssigner from '@/components/ArtifactAssigner';
 import { CatalogInsightsBar, type CatalogInsightsItem } from '@/components/CatalogInsightsBar';
 import PageContainer from '@/components/PageContainer';
 import { SlideOutPanel } from '@/components/SlideOutPanel';
+import { useConfirm } from '@/components/ConfirmProvider';
 import { SkillAssignmentsContent } from '@/components/SkillAssignmentsContent';
 import { ViewToggle, type ViewMode } from '@/components/ViewToggle';
 import { tableWrapStyle, tableStyle, theadRowStyle, thStyle, trStyle, tdStyle, tdMutedStyle } from '@/components/dataTableStyles';
@@ -39,6 +40,7 @@ type SkillItem = { slug: string; name: string; description: string; category?: s
 
 export default function SkillsPage() {
   const t = useTranslations('skillsPage');
+  const confirm = useConfirm();
   const { tenant } = useAuth();
   const tenantId = tenant?.id ?? '';
   const tenantNum = Number(tenantId);
@@ -166,8 +168,8 @@ export default function SkillsPage() {
     setTab('my-skills');
   };
 
-  const deleteUserSkill = (id: string) => {
-    if (!confirm('Delete this skill?')) return;
+  const deleteUserSkill = async (id: string) => {
+    if (!(await confirm('Delete this skill?'))) return;
     const next = userSkills.filter((s) => s.id !== id);
     setUserSkills(next);
     saveUserSkills(tenantId, next);

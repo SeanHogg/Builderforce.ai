@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { agentHostNodesApi, type AgentHostNode } from '@/lib/builderforceApi';
+import { useConfirm } from '@/components/ConfirmProvider';
 
 interface AgentHostNodesContentProps {
   agentHostId: number;
@@ -15,6 +16,7 @@ const cardStyle: React.CSSProperties = {
 };
 
 export function AgentHostNodesContent({ agentHostId }: AgentHostNodesContentProps) {
+  const confirm = useConfirm();
   const [nodes, setNodes] = useState<AgentHostNode[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -34,7 +36,7 @@ export function AgentHostNodesContent({ agentHostId }: AgentHostNodesContentProp
   useEffect(() => { load(); }, [agentHostId]);
 
   const handleUnpair = async (node: AgentHostNode) => {
-    if (!confirm(`Unpair node "${node.name}"? This will disconnect it.`)) return;
+    if (!(await confirm(`Unpair node "${node.name}"? This will disconnect it.`))) return;
     setUnpairing(node.id);
     try {
       await agentHostNodesApi.unpair(agentHostId, node.id);

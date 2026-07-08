@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { useTranslations } from 'next-intl';
 import type { MambaAgentState, MambaStateSnapshot } from '@/lib/types';
 import { MambaEngine } from '@/lib/mamba-engine';
+import { useConfirm } from '@/components/ConfirmProvider';
 
 interface AgentStateViewerProps {
   projectId: string | number;
@@ -25,6 +26,7 @@ function stateHeatmap(data: number[], count: number): number[] {
 
 export function AgentStateViewer({ projectId, agentId }: AgentStateViewerProps) {
   const t = useTranslations('agentState');
+  const confirm = useConfirm();
   const [state, setState] = useState<MambaAgentState | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [replayInput, setReplayInput] = useState('');
@@ -93,7 +95,7 @@ export function AgentStateViewer({ projectId, agentId }: AgentStateViewerProps) 
   }, [replayInput, effectiveAgentId, projectId, t]);
 
   const handleReset = useCallback(async () => {
-    if (!confirm(t('resetConfirm'))) return;
+    if (!(await confirm(t('resetConfirm')))) return;
     const engine = new MambaEngine(effectiveAgentId, projectId);
     await engine.init();
     await engine.save(); // saves fresh zero state

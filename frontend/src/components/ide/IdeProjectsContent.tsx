@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
+import { useConfirm } from '@/components/ConfirmProvider';
 import { listIdeProjects, deleteIdeProject } from '@/lib/api';
 import { persistLastProjectId } from '@/lib/auth';
 import { useProjectScope } from '@/lib/ProjectScopeContext';
@@ -36,6 +37,7 @@ export function IdeProjectsContent({
 }) {
   const router = useRouter();
   const t = useTranslations('ide');
+  const confirm = useConfirm();
   const { currentProjectId } = useProjectScope();
   const [items, setItems] = useState<IdeProject[]>([]);
   const [loading, setLoading] = useState(true);
@@ -65,7 +67,7 @@ export function IdeProjectsContent({
   };
 
   const handleDelete = async (p: IdeProject) => {
-    if (!confirm(t('deleteConfirm', { name: p.name }))) return;
+    if (!(await confirm(t('deleteConfirm', { name: p.name })))) return;
     try {
       await deleteIdeProject(p.id);
       setItems((prev) => prev.filter((x) => x.id !== p.id));

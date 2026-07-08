@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useTranslations } from 'next-intl';
 import { projectAgents, type ProjectAgent } from '@/lib/builderforceApi';
 import { loadAgentPool, AGENT_KIND_LABEL, type PoolAgent } from '@/lib/agentPool';
 import { CapabilitiesContent } from './CapabilitiesContent';
@@ -26,6 +27,7 @@ export interface AgentCapabilitiesContentProps {
  */
 export function AgentCapabilitiesContent({ projectId, tenantId, agentHostId, className, style }: AgentCapabilitiesContentProps) {
   const confirm = useConfirm();
+  const tc = useTranslations('common');
   const [attached, setAttached] = useState<ProjectAgent[]>([]);
   const [pool, setPool] = useState<PoolAgent[]>([]);
   const [loading, setLoading] = useState(true);
@@ -74,7 +76,7 @@ export function AgentCapabilitiesContent({ projectId, tenantId, agentHostId, cla
   };
 
   const handleRemove = async (agent: ProjectAgent) => {
-    if (!(await confirm(`Remove "${agent.name}" from this project? Its per-agent capabilities will be cleared.`))) return;
+    if (!(await confirm(tc('removeAgentFromProjectConfirm', { name: agent.name })))) return;
     setBusy(true);
     setError(null);
     try {

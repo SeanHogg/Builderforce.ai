@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useTranslations } from 'next-intl';
+import { useConfirm } from '@/components/ConfirmProvider';
 import { providerKeysApi, type ProviderAuthType, type LlmProvider } from '@/lib/builderforceApi';
 
 /**
@@ -85,6 +86,7 @@ function ProviderConnectionCard({
   const [error, setError] = useState<string | null>(null);
   const [connecting, setConnecting] = useState(false);
   const [pastedCode, setPastedCode] = useState('');
+  const confirm = useConfirm();
 
   const configured = authType !== null;
   const blurb = t(`provider.${config.id}.blurb`);
@@ -138,7 +140,7 @@ function ProviderConnectionCard({
     const msg = authType === 'oauth'
       ? t('confirmRemoveSubscription', { subscription })
       : t('confirmRemoveKey', { label: config.label });
-    if (!confirm(msg)) return;
+    if (!(await confirm(msg))) return;
     setBusy(true); setError(null);
     try {
       await providerKeysApi.remove(config.id);

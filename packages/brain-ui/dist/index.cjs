@@ -1509,7 +1509,7 @@ var C = {
   accent: "var(--bf-ev-accent, var(--coral-bright, var(--accent, var(--bf-accent, #ff6b5e))))",
   danger: "var(--bf-ev-danger, var(--danger-text, #d9534f))"
 };
-function EvermindConsole({ adapter, canManage, labels, refreshMs = 2e4, projectName }) {
+function EvermindConsole({ adapter, canManage, labels, refreshMs = 2e4, projectName, showRecent = true }) {
   const t = (0, import_react7.useMemo)(() => ({ ...DEFAULT_EVERMIND_LABELS, ...labels ?? {} }), [labels]);
   const [data, setData] = (0, import_react7.useState)(null);
   const [seedModels, setSeedModels] = (0, import_react7.useState)([]);
@@ -1696,7 +1696,7 @@ function EvermindConsole({ adapter, canManage, labels, refreshMs = 2e4, projectN
           data?.pending
         ] })
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime8.jsx)(RecentList, { t, entries: data?.recent ?? [] })
+      showRecent && /* @__PURE__ */ (0, import_jsx_runtime8.jsx)(RecentList, { t, entries: data?.recent ?? [] })
     ] }),
     notice && /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("p", { style: { margin: 0, fontSize: "0.74rem", color: C.accent }, role: "status", children: notice }),
     error && /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("p", { style: { margin: 0, fontSize: "0.76rem", color: C.danger }, role: "alert", children: error })

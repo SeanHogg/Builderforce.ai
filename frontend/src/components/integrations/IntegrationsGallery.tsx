@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslations } from 'next-intl';
+import { useConfirm } from '@/components/ConfirmProvider';
 import { SlideOutPanel } from '@/components/SlideOutPanel';
 import { IntegrationCredentialsManager, PROVIDER_META } from '@/components/integrations/IntegrationCredentialsManager';
 import { MigrationWizard } from '@/components/integrations/MigrationWizard';
@@ -195,6 +196,7 @@ export function IntegrationsGallery() {
 
 // ── Connections tab: workspace-wide list of this provider's connections ───────
 function ConnectionsTab({ provider, onChanged, t }: { provider: string; onChanged: () => void; t: ReturnType<typeof useTranslations> }) {
+  const confirm = useConfirm();
   const [rows, setRows] = useState<BoardConnection[] | null>(null);
   const [syncing, setSyncing] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
@@ -211,7 +213,7 @@ function ConnectionsTab({ provider, onChanged, t }: { provider: string; onChange
     finally { setSyncing(null); }
   };
   const remove = async (id: string) => {
-    if (!confirm(t('connections.confirmRemove'))) return;
+    if (!(await confirm(t('connections.confirmRemove')))) return;
     await boardConnectionsApi.remove(id); load(); onChanged();
   };
 

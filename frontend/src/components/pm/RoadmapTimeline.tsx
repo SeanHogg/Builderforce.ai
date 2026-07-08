@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { useTranslations } from 'next-intl';
 import type { TrackerRow } from '@/lib/builderforceApi';
 import { usePmScope } from '@/lib/pm/scope';
 import { usePmData } from '@/lib/pm/usePmData';
@@ -18,6 +19,7 @@ import { useConfirm } from '@/components/ConfirmProvider';
 export function RoadmapTimeline() {
   const { projectId } = usePmScope();
   const confirm = useConfirm();
+  const tc = useTranslations('common');
   const { data, error, reload } = usePmData<TrackerRow[]>(
     () => roadmapClient.list(projectId ?? undefined),
     [projectId],
@@ -28,7 +30,7 @@ export function RoadmapTimeline() {
 
   const remove = async (e: React.MouseEvent, id: string) => {
     e.stopPropagation();
-    if (!(await confirm('Delete this roadmap item?'))) return;
+    if (!(await confirm(tc('deleteRoadmapItemConfirm')))) return;
     try { await roadmapClient.remove(id); reload(); } catch { /* surfaced on next load */ }
   };
 
