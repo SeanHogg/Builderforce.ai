@@ -5663,7 +5663,7 @@
     "teacherLabel": "Enseigner depuis un modèle de pointe",
     "teacherHint": "Distillez un modèle de premier plan (Opus, Mistral, GLM…) dans l'Evermind de ce projet — chaque exécution apprend de la réponse idéale du modèle de pointe plutôt que du texte brut.",
     "teacherNone": "Aucun — apprendre uniquement des exécutions",
-    "teacherPaidOnly": "Disponible sur les offres payantes — l'enseignement consomme des tokens du modèle de pointe.",
+    "teacherPaidOnly": "Disponible sur les offres payantes, ou connectez votre propre compte de modèle de pointe dans Paramètres ▸ Clés API — l'enseignement consomme des tokens du modèle de pointe.",
     "errorGeneric": "Une erreur s'est produite. Veuillez réessayer.",
     "loading": "Chargement…",
     "managerOnlyHint": "Seul un gestionnaire de projet peut modifier ces paramètres.",

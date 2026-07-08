@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   evaluateFeatureEntitlement,
+  evaluateFrontierAccess,
   requiredPlanForFeature,
   PLAN_FEATURE_LABEL,
   type PlanFeature,
@@ -79,5 +80,34 @@ describe('evaluateFeatureEntitlement — one verdict, applied consistently', () 
     });
     expect(r.entitled).toBe(false);
     expect(r.requiredPlan).toBe(TenantPlan.TEAMS);
+  });
+});
+
+describe('evaluateFrontierAccess — plan OR superadmin OR premium OR BYO unlocks frontier', () => {
+  const base = { effectivePlan: TenantPlan.FREE, premiumOverride: false, isSuperadmin: false, hasConnectedByoFrontier: false };
+
+  it('free plan, nothing connected → NOT entitled', () => {
+    expect(evaluateFrontierAccess(base)).toEqual({ entitled: false, reason: 'not_entitled' });
+  });
+
+  it('a paid plan unlocks frontier', () => {
+    expect(evaluateFrontierAccess({ ...base, effectivePlan: TenantPlan.PRO })).toEqual({ entitled: true, reason: 'paid_plan' });
+  });
+
+  it('a SUPERADMIN on free with no connected account still gets frontier (the reported gap)', () => {
+    expect(evaluateFrontierAccess({ ...base, isSuperadmin: true })).toEqual({ entitled: true, reason: 'superadmin' });
+  });
+
+  it('a connected BYO account unlocks frontier on the FREE plan (own tokens fund it — the reported gap)', () => {
+    expect(evaluateFrontierAccess({ ...base, hasConnectedByoFrontier: true })).toEqual({ entitled: true, reason: 'byo_connected' });
+  });
+
+  it('a comped premium override unlocks frontier on free', () => {
+    expect(evaluateFrontierAccess({ ...base, premiumOverride: true })).toEqual({ entitled: true, reason: 'premium_override' });
+  });
+
+  it('superadmin takes precedence over BYO/premium/plan (stable reason ordering)', () => {
+    expect(evaluateFrontierAccess({ effectivePlan: TenantPlan.TEAMS, premiumOverride: true, isSuperadmin: true, hasConnectedByoFrontier: true }))
+      .toEqual({ entitled: true, reason: 'superadmin' });
   });
 });

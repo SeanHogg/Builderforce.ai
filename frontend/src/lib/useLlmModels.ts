@@ -30,9 +30,15 @@ export interface LlmModelLists {
    *  connected provider (BYO). The authoritative gate the server enforces in
    *  `pickCloudModel` / the strict-pin gate — this is the UI mirror. */
   canChooseModel: boolean;
+  /** True when the tenant may use FRONTIER / premium models (teach/distil from a top
+   *  model, pick a premium model): superadmin OR premium override OR a connected BYO
+   *  account OR a paid plan. The single server rule (`evaluateFrontierAccess`) — use
+   *  THIS (not `isPaid`) for any "requires a paid plan to use a frontier model" gate,
+   *  so a superadmin or a BYO tenant is never shown a false paywall. */
+  canUseFrontierModels: boolean;
 }
 
-const EMPTY: LlmModelLists = { models: [], codingModels: [], tenantModels: [], isPaid: false, byoModels: [], canChooseModel: false };
+const EMPTY: LlmModelLists = { models: [], codingModels: [], tenantModels: [], isPaid: false, byoModels: [], canChooseModel: false, canUseFrontierModels: false };
 
 let cache: LlmModelLists | null = null;
 let inflight: Promise<LlmModelLists> | null = null;
@@ -51,7 +57,11 @@ function load(): Promise<LlmModelLists> {
         const byoModels = res.byo?.models.map((m) => m.id) ?? [];
         // Server sends canChooseModel; fall back to isPaid || has-BYO for older payloads.
         const canChooseModel = res.canChooseModel ?? (isPaid || byoModels.length > 0);
-        cache = { models: models ?? [], codingModels: res.codingModels ?? [], tenantModels, isPaid, byoModels, canChooseModel };
+        // Frontier access = the server's unified rule (superadmin || override || BYO ||
+        // paid). Falls back to canChooseModel for older payloads (which already folds
+        // BYO + paid; only the direct-superadmin case is newly server-side).
+        const canUseFrontierModels = res.canUseFrontierModels ?? canChooseModel;
+        cache = { models: models ?? [], codingModels: res.codingModels ?? [], tenantModels, isPaid, byoModels, canChooseModel, canUseFrontierModels };
         return cache;
       })
       .catch(() => {
