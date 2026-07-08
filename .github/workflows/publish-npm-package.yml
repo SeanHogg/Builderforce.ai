@@ -60,10 +60,12 @@ jobs:
         with:
           node-version: 20
 
-      # Trusted Publishing requires npm >= 11.5.1 (Node 20 ships npm 10.x)
+      # Trusted Publishing requires npm >= 11.5.1 (Node 20 ships npm 10.x).
+      # Pin to npm@11 — npm@latest is now 12.x which requires Node >= 22 and
+      # fails on our Node 20 runner. npm@11 satisfies >= 11.5.1 and supports Node 20.
       - name: Upgrade npm
         run: |
-          npm install -g npm@latest
+          npm install -g npm@11
           echo "npm $(npm --version) — Trusted Publishing requires >= 11.5.1"
 
       # When this package file:-depends on a sibling, install the sibling first
