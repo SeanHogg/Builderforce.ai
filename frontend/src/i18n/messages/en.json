@@ -5663,7 +5663,7 @@
     "teacherLabel": "Teach from a frontier model",
     "teacherHint": "Distil a top model (Opus, Mistral, GLM…) into this project's Evermind — every run learns from the frontier model's ideal answer instead of the raw run.",
     "teacherNone": "None — learn from runs only",
-    "teacherPaidOnly": "Available on paid plans — teaching uses frontier-model tokens.",
+    "teacherPaidOnly": "Available on paid plans, or connect your own frontier account in Settings ▸ API Keys — teaching uses frontier-model tokens.",
     "errorGeneric": "Something went wrong. Please try again.",
     "loading": "Loading…",
     "managerOnlyHint": "Only a project manager can change these settings.",

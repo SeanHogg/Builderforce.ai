@@ -97,7 +97,7 @@ describe('generateTeacherExemplar', () => {
 
   it('swallows a malformed gateway result and returns null (never throws)', async () => {
     completeMock.mockResolvedValue({});
-    expect(await generateTeacherExemplar(env, 'claude-opus-4-8', RUN_TEXT)).toBeNull();
+    expect(await generateTeacherExemplar(env, TENANT, 'claude-opus-4-8', RUN_TEXT)).toBeNull();
   });
 });
 

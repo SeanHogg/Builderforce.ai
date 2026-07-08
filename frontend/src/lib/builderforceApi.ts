@@ -3020,8 +3020,8 @@ export interface ByoModel { id: string; vendor: string; tier: string; contextWin
 export interface ByoModelInfo { providers: string[]; models: ByoModel[] }
 
 export type LlmModelsResponse =
-  | { configured: false; product: string; effectivePlan: EffectivePlanLabel; premium?: boolean; models: string[]; codingModels?: string[]; canChooseModel?: boolean; byo?: ByoModelInfo }
-  | { configured: true;  product: string; effectivePlan: EffectivePlanLabel; premium?: boolean; object: 'list'; data: LlmModelStatus[]; codingModels?: string[]; canChooseModel?: boolean; byo?: ByoModelInfo };
+  | { configured: false; product: string; effectivePlan: EffectivePlanLabel; premium?: boolean; models: string[]; codingModels?: string[]; canChooseModel?: boolean; canUseFrontierModels?: boolean; byo?: ByoModelInfo }
+  | { configured: true;  product: string; effectivePlan: EffectivePlanLabel; premium?: boolean; object: 'list'; data: LlmModelStatus[]; codingModels?: string[]; canChooseModel?: boolean; canUseFrontierModels?: boolean; byo?: ByoModelInfo };
 
 /** Learned Model Routing (PRD 13) — closed action-type taxonomy. MIRRORS
  *  `api/src/application/llm/actionTypes.ts` (the api is the source of truth). */

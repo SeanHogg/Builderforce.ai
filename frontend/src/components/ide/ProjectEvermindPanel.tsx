@@ -33,19 +33,23 @@ export function ProjectEvermindPanel({ projectId }: { projectId: number }) {
   const t = useTranslations('projectEvermind');
   const format = useFormatter();
   const { allowed: canManage } = usePermission('project.manageEvermind');
-  const { codingModels, isPaid } = useLlmModels();
+  // Frontier teacher gate: use the server's unified frontier-access rule (superadmin ||
+  // premium override || connected BYO account || paid plan) — NOT bare `isPaid` — so a
+  // superadmin or a BYO tenant is never shown a false "paid plans only" wall. The console
+  // reads the returned `isPaid` flag to lock/unlock the teacher, so we hand it frontier access.
+  const { codingModels, canUseFrontierModels } = useLlmModels();
 
   const adapter = useMemo<EvermindConsoleAdapter>(() => ({
     loadData: () => getProjectEvermindContributions(projectId),
     loadSeedModels: async () => (await listEvermindModels()).map((m) => ({ slug: m.slug, name: m.name })),
-    loadTeacherOptions: async () => ({ models: codingModels, isPaid }),
+    loadTeacherOptions: async () => ({ models: codingModels, isPaid: canUseFrontierModels }),
     seedFromModel: async (slug) => { await seedProjectEvermindFromModel(projectId, slug); },
     setInference: async (enabled) => { await setProjectEvermindInference(projectId, enabled); },
     setMode: async (mode) => { await setProjectEvermindMode(projectId, mode); },
     setTeacher: async (model) => { await setProjectEvermindTeacher(projectId, model); },
     teach: async (text, prompt) => { await teachProjectEvermindFromText(projectId, text, prompt); },
     flush: async () => { const r = await flushProjectEvermind(projectId); return { merged: r.merged, version: r.version }; },
-  }), [projectId, codingModels, isPaid]);
+  }), [projectId, codingModels, canUseFrontierModels]);
 
   const labels = useMemo<Partial<EvermindConsoleLabels>>(() => ({
     title: t('title'),

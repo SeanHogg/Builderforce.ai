@@ -5663,7 +5663,7 @@
     "teacherLabel": "用前沿大模型来教",
     "teacherHint": "将顶尖模型（Opus、Mistral、GLM…）蒸馏进本项目的 Evermind——每次运行都从前沿模型的理想答案中学习，而不是原始运行文本。",
     "teacherNone": "无——仅从运行中学习",
-    "teacherPaidOnly": "仅限付费套餐——教学会消耗前沿模型的 tokens。",
+    "teacherPaidOnly": "适用于付费套餐，或在“设置 ▸ API 密钥”中连接你自己的前沿模型账户——教学会消耗前沿模型的 tokens。",
     "errorGeneric": "出了点问题，请重试。",
     "loading": "加载中…",
     "managerOnlyHint": "只有项目管理员可以更改这些设置。",
