@@ -22,6 +22,8 @@ import { PwaInstallPrompt } from '@/components/PwaInstallPrompt';
 import { GlobalErrorHandler } from '@/components/GlobalErrorHandler';
 import { QualityErrorReporter } from '@/components/QualityErrorReporter';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
+import { ChunkErrorBoundary } from '@/components/ChunkErrorBoundary';
+import { ChunkErrorRecovery } from '@/components/ChunkErrorRecovery';
 import { EMBED_ERROR_REPORTER } from '@/lib/embed/embedErrorReporter';
 import { AUTH_API_URL } from '@/lib/auth';
 
@@ -176,17 +178,22 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             user's cookie locale on the client after hydration. */}
         <LocaleProvider>
           <ErrorBoundary homePath="/dashboard" homeLabel="Go to Dashboard">
-            <AuthProvider>
-              <CartProvider>
-                <EmulationProvider>
-                  <RolePreviewProvider>
-                    <PermissionDebuggerProvider>
-                      <ConditionalAppShell>{children}</ConditionalAppShell>
-                    </PermissionDebuggerProvider>
-                  </RolePreviewProvider>
-                </EmulationProvider>
-              </CartProvider>
-            </AuthProvider>
+            {/* Chunk-load crashes self-heal (purge stale SW cache + reload onto
+                the current build) instead of hitting the generic crash page; any
+                non-chunk error re-throws up to ErrorBoundary above. */}
+            <ChunkErrorBoundary>
+              <AuthProvider>
+                <CartProvider>
+                  <EmulationProvider>
+                    <RolePreviewProvider>
+                      <PermissionDebuggerProvider>
+                        <ConditionalAppShell>{children}</ConditionalAppShell>
+                      </PermissionDebuggerProvider>
+                    </RolePreviewProvider>
+                  </EmulationProvider>
+                </CartProvider>
+              </AuthProvider>
+            </ChunkErrorBoundary>
 
             <GlobalErrorHandler />
             {QUALITY_ERROR_KEY && (
@@ -198,6 +205,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             )}
           </ErrorBoundary>
 
+          <ChunkErrorRecovery />
           <PwaUpdateBanner />
           <PwaInstallPrompt />
         </LocaleProvider>

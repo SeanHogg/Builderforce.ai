@@ -20,6 +20,17 @@
  */
 import { and, eq, sql } from 'drizzle-orm';
 import { EvermindLM, EvermindModelPackage, BPETokenizer } from '@seanhogg/builderforce-memory-engine';
+import {
+  deriveLimbicSetpoints,
+  homeostasis,
+  applyDelta,
+  appraiseAmygdala,
+  appraiseTask,
+  thalamusGate,
+  basalGangliaExploreBias,
+  type LimbicState,
+  type LimbicSetpoints,
+} from '@builderforce/agent-tools';
 import { projectEvermind } from '../../infrastructure/database/schema';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
@@ -522,6 +533,56 @@ export async function getProjectEvermindActivity(
  * the resulting version. No-op (503) when the coordinator binding is unset; the DO
  * gates seeded/frozen itself, so a frozen model simply merges nothing.
  */
+/**
+ * The project Evermind's current affective (limbic) state, computed by the SHARED
+ * `@builderforce/agent-tools` limbic compiler — the exact same "personality =
+ * setpoints, limbic = dynamics" implementation the on-prem runtime and cloud engine
+ * run (see [[limbic-system]]). Nothing is fabricated: the resting {@link setpoints}
+ * come from the personality layer (neutral until a project carries a personality),
+ * and {@link state} folds the project's real recent learning activity through the
+ * amygdala/hypothalamus/thalamus/basal-ganglia dynamics. Powers the brain-map's
+ * limbic-region charges + captions.
+ */
+export interface ProjectEvermindAffect {
+  /** The 8-dim current affective state, grounded in recent activity. */
+  state: LimbicState;
+  /** The resting setpoints the dynamics relax toward (the personality layer). */
+  setpoints: LimbicSetpoints;
+  /** Thalamus attention gain (Yerkes–Dodson gate on the current arousal). */
+  attentionGain: number;
+  /** Basal-ganglia explore-vs-exploit bias derived from the current state. */
+  exploreBias: number;
+}
+
+/**
+ * Derive the project Evermind's current affective state from its recent merged
+ * contributions. Starts at the personality setpoints (neutral when the project has
+ * no personality) and, oldest→newest, relaxes toward them (homeostasis) then applies
+ * each contribution as a "progress" learning event plus the task prompt's salience —
+ * mirroring how the runtime's amygdala/thalamus appraise a run. Pure + cheap (folds
+ * the bounded recent ring), so it runs inside the cached contributions read.
+ */
+export function computeProjectAffect(recent: ProjectEvermindRecentEntry[]): ProjectEvermindAffect {
+  // No project-level personality is stored today, so the setpoints are the neutral
+  // resting baseline; wired through `deriveLimbicSetpoints` so a future project
+  // personality flows in without touching the brain map.
+  const setpoints = deriveLimbicSetpoints(undefined);
+  let state: LimbicState = { ...setpoints };
+  const ordered = [...recent].sort((a, b) => a.at - b.at);
+  for (const e of ordered) {
+    state = homeostasis(state, setpoints, { rate: 0.15 });
+    const intensity = Math.max(0.2, Math.min(1, e.weight || 0.5));
+    state = applyDelta(state, appraiseAmygdala({ kind: 'progress', intensity }));
+    if (e.prompt) state = appraiseTask(e.prompt, state);
+  }
+  return {
+    state,
+    setpoints,
+    attentionGain: thalamusGate(state),
+    exploreBias: basalGangliaExploreBias(state),
+  };
+}
+
 /** The Evermind console's read payload: the head summary + live learning activity. */
 export interface ProjectEvermindContributions {
   version: number;
@@ -533,6 +594,8 @@ export interface ProjectEvermindContributions {
   lastLearnedAt: string | null;
   pending: number;
   recent: ProjectEvermindRecentEntry[];
+  /** Current affective (limbic) state — powers the brain-map's limbic regions. */
+  affect: ProjectEvermindAffect;
 }
 
 /**
@@ -565,6 +628,7 @@ export async function getProjectEvermindContributions(
         lastLearnedAt: head.lastLearnedAt,
         pending: activity.pending,
         recent: activity.recent,
+        affect: computeProjectAffect(activity.recent),
       };
     },
     { kvTtlSeconds: 10 },
