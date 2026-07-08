@@ -4,7 +4,15 @@
 
 ---
 
-## ✅ RESOLVED 2026-07-07 — Evermind Knowledge Map: 7-region brain viz with live affect-driven limbic regions
+## ✅ RESOLVED 2026-07-07 — Frontier-model "paid plan only" gates now honor superadmin AND a connected BYO account (api `2026.7.62`, frontend `2026.7.44`)
+
+Reported: the Evermind "Teach from a frontier model" panel (and other "Available on paid plans" frontier gates) blocked a **superadmin** and a tenant who **connected their own frontier account** — even though a superadmin never hits a wall and a BYO tenant funds frontier calls with their OWN tokens. An app-wide sweep found the frontier gates were re-deriving `plan`-only checks with no BYO dimension and inconsistent superadmin handling (`isPaid` in one place, `canChooseModel` in another).
+
+- **ONE shared rule** — `evaluateFrontierAccess` ([planFeatures.ts](./api/src/domain/tenant/planFeatures.ts)): `superadmin || premiumOverride || connected-BYO || paid plan`. DB-touching wrapper `resolveFrontierAccess` + `tenantCanUseFrontierModels` + a `requireFrontierAccess` 402 gate ([featureGate.ts](./api/src/presentation/middleware/featureGate.ts)); the BYO check is the cheapest existing one (`listTenantProviderKeys` — provider+auth_type only, no secrets).
+- **Exposed to the client**: `GET /llm/v1/models` now returns `canUseFrontierModels` (folds **superadmin** in server-side, which `canChooseModel` previously missed); `canChooseModel` is unified to the same value. `useLlmModels` surfaces `canUseFrontierModels`; [`ProjectEvermindPanel`](./frontend/src/components/ide/ProjectEvermindPanel.tsx) teacher gate now uses it instead of bare `isPaid` (the run-picker `RunAgentControl`/dashboard already used `canChooseModel`, so they inherit the superadmin fold). Lock copy updated in all 5 locales to name the connect-your-own-account path.
+- **Evermind teacher (backend)**: `resolveEvermindTeacherModel` now **BYO-bypasses** the our-pool budget gate (their account funds it); `generateTeacherExemplar` threads the tenant's BYO creds so a strict-pinned frontier teacher runs on their OWN account; the `PATCH …/evermind/teacher` pin route is gated by `requireFrontierAccess`.
+- **Deliberately NOT changed**: `voiceCloning` / `psychometricPersona` / `advancedInsights` feature gates — those aren't "use a frontier model" and BYO tokens don't fund them (they already bypass for superadmin via the shared feature gate). Two P3 follow-ups logged (pickCloudModel direct-superadmin; cron sweeps BYO-budget) + two pre-existing test-infra failures surfaced (see ROADMAP).
+- Verified: `tsgo` clean (api) + `tsc --noEmit` clean (frontend); new `evaluateFrontierAccess` unit tests + Evermind-teacher BYO-bypass test pass; llm + domain suites green (545).
 
 The `llm` build modality's centre stage is now a live "Knowledge Map" of the project's Evermind, restructured to **form-left / diagram-centre** (`LlmStudioPanel.tsx`) with each column bounded to the pane height and scrolling independently — so the 5-step pipeline rail no longer pushes the diagram off-centre or over-lengthens the page (responsive: stacks under 900px, no 360px overflow; verified dark + light + mobile via Playwright). Closes the roadmap gap "limbic regions are role-only, not live-affect-driven."
 

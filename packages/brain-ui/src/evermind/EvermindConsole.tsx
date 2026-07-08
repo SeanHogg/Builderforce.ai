@@ -31,6 +31,10 @@ export interface EvermindConsoleProps {
   labels?: Partial<EvermindConsoleLabels>;
   /** Poll interval (ms) for the live pending/recent readout. 0 disables. Default 20s. */
   refreshMs?: number;
+  /** Name of the project this console is scoped to. Shown in the header so the same
+   *  panel on two surfaces (web tab vs VS Code sidebar) never looks like contradictory
+   *  states for "the same project" when they are in fact different projects. */
+  projectName?: string;
 }
 
 /* Cascading theme tokens: evermind-namespaced → host app tokens → VS Code tokens →
@@ -45,7 +49,7 @@ const C = {
   danger: 'var(--bf-ev-danger, var(--danger-text, #d9534f))',
 };
 
-export function EvermindConsole({ adapter, canManage, labels, refreshMs = 20_000 }: EvermindConsoleProps) {
+export function EvermindConsole({ adapter, canManage, labels, refreshMs = 20_000, projectName }: EvermindConsoleProps) {
   const t = useMemo<EvermindConsoleLabels>(() => ({ ...DEFAULT_EVERMIND_LABELS, ...(labels ?? {}) }), [labels]);
 
   const [data, setData] = useState<EvermindConsoleData | null>(null);
@@ -58,13 +62,19 @@ export function EvermindConsole({ adapter, canManage, labels, refreshMs = 20_000
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loaded, setLoaded] = useState(false);
+  // A load FAILURE is distinct from a genuinely-unseeded model: without this, a 404 /
+  // expired token / wrong project id would fall through to `seeded === false` and render
+  // the exact same "Not set up" UI as a real unseeded project — actively misleading.
+  const [loadFailed, setLoadFailed] = useState(false);
 
   const reload = useCallback(async () => {
     try {
       const d = await adapter.loadData();
       setData(d);
+      setLoadFailed(false);
     } catch {
       setData(null);
+      setLoadFailed(true);
     } finally {
       setLoaded(true);
     }
@@ -109,14 +119,34 @@ export function EvermindConsole({ adapter, canManage, labels, refreshMs = 20_000
   const seeded = !!data?.seeded;
   const frozen = data?.mode === 'offline-frozen';
 
+  // The scoped project name — rendered next to the title so the panel always says WHICH
+  // project's Evermind this is (the web tab and the VS Code sidebar can be on different
+  // projects at once). Trimmed to avoid an empty pill from a whitespace name.
+  const scopeName = projectName?.trim();
+  const Header = (
+    <header style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+      <span aria-hidden style={{ fontSize: '1.05rem' }}>🧠</span>
+      <h3 style={{ margin: 0, fontSize: '0.95rem', fontWeight: 700, color: C.text }}>{t.title}</h3>
+      {scopeName && <span style={{ fontSize: '0.8rem', color: C.text2 }} title={scopeName}>· {scopeName}</span>}
+      {!loadFailed && <span style={pill(seeded)}>{seeded ? t.statusSeeded(data?.version ?? 0) : t.statusUnseeded}</span>}
+      <button type="button" onClick={() => void reload()} disabled={busy} style={ghostBtn} title={t.refresh} aria-label={t.refresh}>↻</button>
+    </header>
+  );
+
+  // Load failed — surface it with a retry instead of masquerading as "Not set up".
+  if (loadFailed) {
+    return (
+      <Section aria-label={t.title}>
+        {Header}
+        <p style={{ margin: 0, fontSize: '0.8rem', lineHeight: 1.5, color: C.danger }} role="alert">{t.errorGeneric}</p>
+        <button type="button" onClick={() => void reload()} disabled={busy} style={primaryBtn(busy)}>{t.refresh}</button>
+      </Section>
+    );
+  }
+
   return (
     <Section aria-label={t.title}>
-      <header style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-        <span aria-hidden style={{ fontSize: '1.05rem' }}>🧠</span>
-        <h3 style={{ margin: 0, fontSize: '0.95rem', fontWeight: 700, color: C.text }}>{t.title}</h3>
-        <span style={pill(seeded)}>{seeded ? t.statusSeeded(data?.version ?? 0) : t.statusUnseeded}</span>
-        <button type="button" onClick={() => void reload()} disabled={busy} style={ghostBtn} title={t.refresh} aria-label={t.refresh}>↻</button>
-      </header>
+      {Header}
 
       <p style={{ margin: 0, fontSize: '0.8rem', lineHeight: 1.5, color: C.text2 }}>{t.description}</p>
       {!canManage && <p style={{ margin: 0, fontSize: '0.72rem', color: C.text2, fontStyle: 'italic' }}>{t.managerOnlyHint}</p>}

@@ -9,6 +9,7 @@ import {
   type EvermindConsoleLabels,
 } from '@seanhogg/builderforce-brain-ui';
 import { usePermission } from '@/lib/rbac';
+import { useOptionalProjectScope } from '@/lib/ProjectScopeContext';
 import { listEvermindModels } from '@/lib/studioModelsApi';
 import { useLlmModels } from '@/lib/useLlmModels';
 import {
@@ -33,6 +34,10 @@ export function ProjectEvermindPanel({ projectId }: { projectId: number }) {
   const t = useTranslations('projectEvermind');
   const format = useFormatter();
   const { allowed: canManage } = usePermission('project.manageEvermind');
+  // Resolve the scoped project's name (DRY — from the shared projects list, no
+  // prop-drilling through the 5 host call sites) so the console header names WHICH
+  // project's Evermind this is. Undefined for a project not in the list (header omits it).
+  const projectName = useOptionalProjectScope()?.projects.find((p) => p.id === projectId)?.name;
   // Frontier teacher gate: use the server's unified frontier-access rule (superadmin ||
   // premium override || connected BYO account || paid plan) — NOT bare `isPaid` — so a
   // superadmin or a BYO tenant is never shown a false "paid plans only" wall. The console
@@ -106,7 +111,7 @@ export function ProjectEvermindPanel({ projectId }: { projectId: number }) {
   // A margin-bottom to match the panel's old placement in the IDE agent stack.
   return (
     <div style={{ marginBottom: 12 }}>
-      <EvermindConsole adapter={adapter} canManage={canManage} labels={{ ...DEFAULT_EVERMIND_LABELS, ...labels }} />
+      <EvermindConsole adapter={adapter} canManage={canManage} projectName={projectName} labels={{ ...DEFAULT_EVERMIND_LABELS, ...labels }} />
     </div>
   );
 }

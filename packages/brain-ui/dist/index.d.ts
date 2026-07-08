@@ -718,8 +718,12 @@ interface EvermindConsoleProps {
     labels?: Partial<EvermindConsoleLabels>;
     /** Poll interval (ms) for the live pending/recent readout. 0 disables. Default 20s. */
     refreshMs?: number;
+    /** Name of the project this console is scoped to. Shown in the header so the same
+     *  panel on two surfaces (web tab vs VS Code sidebar) never looks like contradictory
+     *  states for "the same project" when they are in fact different projects. */
+    projectName?: string;
 }
-declare function EvermindConsole({ adapter, canManage, labels, refreshMs }: EvermindConsoleProps): React__default.JSX.Element;
+declare function EvermindConsole({ adapter, canManage, labels, refreshMs, projectName }: EvermindConsoleProps): React__default.JSX.Element;
 
 /**
  * Project 360 model — the shape returned by `GET /api/projects/:id/360` and
