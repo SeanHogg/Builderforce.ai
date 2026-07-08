@@ -181,11 +181,22 @@ export function EvermindConsole({ adapter, canManage, labels, refreshMs = 20_000
           />
 
           <TeachBox
-            t={t} busy={busy}
+            t={t} busy={busy} teacherModel={data?.teacherModel ?? ''}
             prompt={teachPrompt} text={teachText}
             onPrompt={setTeachPrompt} onText={setTeachText}
             onTeach={() => run(
-              async () => { await adapter.teach(teachText.trim(), teachPrompt.trim() || undefined); setTeachText(''); setTeachPrompt(''); },
+              async () => {
+                const task = teachPrompt.trim();
+                const body = teachText.trim();
+                // With a teacher pinned you teach a TASK: the teacher answers it and the
+                // model learns (task → ideal answer), so send the task as both text + prompt.
+                if (data?.teacherModel && body.length < 20 && task.length >= 20) {
+                  await adapter.teach(task, task);
+                } else {
+                  await adapter.teach(body, task || undefined);
+                }
+                setTeachText(''); setTeachPrompt('');
+              },
               t.taught,
             )}
           />
@@ -253,7 +264,7 @@ function SeedControls({
       <label style={fieldLabel}>{t.pickModelLabel}</label>
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
         <select value={selectedSlug} onChange={(e) => onSelect(e.target.value)} disabled={busy} style={{ ...select, flex: '1 1 200px' }}>
-          {models.map((m) => <option key={m.slug} value={m.slug}>{m.name}</option>)}
+          {models.map((m) => <option key={m.slug} value={m.slug} style={optionStyle}>{m.name}</option>)}
         </select>
         <button type="button" onClick={onSeed} disabled={busy || !selectedSlug} style={primaryBtn(busy || !selectedSlug)}>
           {busy ? t.working : t.enableCta}
@@ -331,29 +342,44 @@ function TeacherPicker({
         <p style={italic}>{t.teacherPaidOnly}</p>
       ) : (
         <select value={value} onChange={(e) => onChange(e.target.value)} disabled={busy} aria-label={t.teacherLabel} style={{ ...select, maxWidth: 340 }}>
-          <option value="">{t.teacherNone}</option>
-          {options.map((m) => <option key={m} value={m}>{m}</option>)}
+          <option value="" style={optionStyle}>{t.teacherNone}</option>
+          {options.map((m) => <option key={m} value={m} style={optionStyle}>{m}</option>)}
         </select>
+      )}
+      {value && (
+        <div style={{ fontSize: '0.72rem', lineHeight: 1.4, color: C.accent, background: C.surface2, border: `1px solid ${C.border}`, borderRadius: 6, padding: '6px 8px' }}>
+          {t.teacherActiveHint(value)}
+        </div>
       )}
     </div>
   );
 }
 
 function TeachBox({
-  t, busy, prompt, text, onPrompt, onText, onTeach,
+  t, busy, prompt, text, onPrompt, onText, onTeach, teacherModel,
 }: {
   t: EvermindConsoleLabels; busy: boolean; prompt: string; text: string;
   onPrompt: (s: string) => void; onText: (s: string) => void; onTeach: () => void;
+  /** When a teacher is pinned, teach a TASK (the teacher answers it) — no transcript needed. */
+  teacherModel: string;
 }) {
+  const teaching = !!teacherModel;
+  const canTeach = teaching ? prompt.trim().length >= 20 : text.trim().length >= 20;
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 6, borderTop: `1px solid ${C.border}`, paddingTop: 10 }}>
-      <div style={fieldTitle}>{t.teachTitle}</div>
-      <div style={fieldHint}>{t.teachHint}</div>
-      <input value={prompt} onChange={(e) => onPrompt(e.target.value)} disabled={busy} placeholder={t.teachPromptPlaceholder} style={{ ...select, width: '100%' }} />
-      <textarea value={text} onChange={(e) => onText(e.target.value)} disabled={busy} placeholder={t.teachTextPlaceholder} rows={3} style={{ ...select, width: '100%', resize: 'vertical', fontFamily: 'inherit' }} />
+      <div style={fieldTitle}>{teaching ? t.teachTeacherTitle : t.teachTitle}</div>
+      <div style={fieldHint}>{teaching ? t.teachTeacherHint(teacherModel) : t.teachHint}</div>
+      {teaching ? (
+        <textarea value={prompt} onChange={(e) => onPrompt(e.target.value)} disabled={busy} placeholder={t.teachTaskPlaceholder} rows={3} style={{ ...select, width: '100%', resize: 'vertical', fontFamily: 'inherit' }} />
+      ) : (
+        <>
+          <input value={prompt} onChange={(e) => onPrompt(e.target.value)} disabled={busy} placeholder={t.teachPromptPlaceholder} style={{ ...select, width: '100%' }} />
+          <textarea value={text} onChange={(e) => onText(e.target.value)} disabled={busy} placeholder={t.teachTextPlaceholder} rows={3} style={{ ...select, width: '100%', resize: 'vertical', fontFamily: 'inherit' }} />
+        </>
+      )}
       <div>
-        <button type="button" onClick={onTeach} disabled={busy || text.trim().length < 20} style={primaryBtn(busy || text.trim().length < 20)}>
-          {busy ? t.teaching : t.teachCta}
+        <button type="button" onClick={onTeach} disabled={busy || !canTeach} style={primaryBtn(busy || !canTeach)}>
+          {busy ? t.teaching : (teaching ? t.teachTeacherCta : t.teachCta)}
         </button>
       </div>
     </div>
@@ -400,6 +426,14 @@ const fieldHint: React.CSSProperties = { fontSize: '0.72rem', color: C.text2, li
 const select: React.CSSProperties = {
   padding: '7px 9px', fontSize: '0.8rem', borderRadius: 8,
   border: `1px solid ${C.border}`, background: C.surface2, color: C.text, boxSizing: 'border-box',
+};
+/* Native <option> popup is drawn by the OS and IGNORES the translucent surface tokens the
+   <select> uses — options must carry their OWN opaque bg/fg or theme text lands on a white
+   OS popup (light-on-white, unreadable). Cascade ends in the Canvas/CanvasText system-color
+   pair, which is always a legible opaque duo and follows OS light/dark. */
+const optionStyle: React.CSSProperties = {
+  background: 'var(--bf-ev-surface-solid, var(--bg-surface, var(--vscode-dropdown-background, Canvas)))',
+  color: 'var(--bf-ev-text, var(--text-primary, var(--vscode-dropdown-foreground, CanvasText)))',
 };
 
 function primaryBtn(disabled: boolean): React.CSSProperties {

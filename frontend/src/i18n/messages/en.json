@@ -3430,6 +3430,13 @@
     "thalamusLive": "Attention gate {attention}%",
     "basalGangliaLive": "Explore {explore}%"
   },
+  "evermindStatus": {
+    "label": "Evermind",
+    "learning": "Learning",
+    "frozen": "Frozen",
+    "off": "Off",
+    "tooltip": "Agents on this project run on its Evermind (v{version}) and their runs train it. This planning chat does not train it — open the LLM tab to inspect what it's learned."
+  },
   "llmStudio": {
     "title": "Build a Custom Model",
     "intro": "Design data, fine-tune a LoRA adapter, and ship it as a hireable agent — all from the browser. Chat and prompt design happen in the Brain — open it from the button in the bottom-right corner. The steps below drive the build pipeline.",
@@ -5661,9 +5668,10 @@
     "connected": "Learning",
     "frozen": "Frozen",
     "teacherLabel": "Teach from a frontier model",
-    "teacherHint": "Distil a top model (Opus, Mistral, GLM…) into this project's Evermind — every run learns from the frontier model's ideal answer instead of the raw run.",
+    "teacherHint": "Distil a top model (Opus, Mistral, GLM…) into this project's Evermind — pick one and every agent run learns from the frontier model's ideal answer instead of the raw run. You can also teach it a task directly below.",
     "teacherNone": "None — learn from runs only",
     "teacherPaidOnly": "Available on paid plans, or connect your own frontier account in Settings ▸ API Keys — teaching uses frontier-model tokens.",
+    "teacherActiveHint": "Teaching from {model}. Every agent run — and each task you teach below — is answered by {model}, and your Evermind learns from its ideal answer. There's nothing else to switch on.",
     "errorGeneric": "Something went wrong. Please try again.",
     "loading": "Loading…",
     "managerOnlyHint": "Only a project manager can change these settings.",
@@ -5680,6 +5688,10 @@
     "teachCta": "Teach",
     "teaching": "Teaching…",
     "taught": "Queued for learning.",
+    "teachTeacherTitle": "Teach a task",
+    "teachTeacherHint": "Describe a task and {model} answers it — your Evermind learns from the ideal answer. No transcript needed.",
+    "teachTaskPlaceholder": "Describe a task to teach — the teacher will answer it…",
+    "teachTeacherCta": "Teach from teacher",
     "flushCta": "Learn now",
     "flushing": "Learning…",
     "flushedNone": "Nothing queued to learn yet.",

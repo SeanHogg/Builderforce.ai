@@ -108,6 +108,8 @@ export interface EvermindConsoleLabels {
   teacherHint: string;
   teacherNone: string;
   teacherPaidOnly: string;
+  /** Shown when a teacher IS pinned: explains teaching is now automatic. */
+  teacherActiveHint: (model: string) => string;
   // Teach-from-text
   teachTitle: string;
   teachHint: string;
@@ -116,6 +118,11 @@ export interface EvermindConsoleLabels {
   teachCta: string;
   teaching: string;
   taught: string;
+  // Teach-a-task (shown instead of teach-from-transcript when a teacher is pinned)
+  teachTeacherTitle: string;
+  teachTeacherHint: (model: string) => string;
+  teachTaskPlaceholder: string;
+  teachTeacherCta: string;
   // Flush
   flushCta: string;
   flushing: string;
@@ -175,9 +182,10 @@ export const DEFAULT_EVERMIND_LABELS: EvermindConsoleLabels = {
   connected: 'Connected',
   frozen: 'Frozen',
   teacherLabel: 'Teacher model',
-  teacherHint: 'Distil each run through a frontier model (task → ideal answer) instead of raw run text.',
+  teacherHint: 'Distil learning through a frontier model (task → its ideal answer) instead of raw run text. Pick one to enable — then every agent run learns from its answer, and you can teach it a task directly below.',
   teacherNone: 'None (learn from raw runs)',
   teacherPaidOnly: 'A teacher model is available on paid plans.',
+  teacherActiveHint: (m) => `Teaching from ${m}. Every agent run — and each task you teach below — is answered by ${m}, and your Evermind learns from its ideal answer. There is nothing else to switch on.`,
   teachTitle: 'Teach from a transcript',
   teachHint: 'Paste a chat transcript or exemplar to contribute it to the model now.',
   teachPromptPlaceholder: 'Task this answered (optional)…',
@@ -185,6 +193,10 @@ export const DEFAULT_EVERMIND_LABELS: EvermindConsoleLabels = {
   teachCta: 'Teach',
   teaching: 'Teaching…',
   taught: 'Queued for learning.',
+  teachTeacherTitle: 'Teach a task',
+  teachTeacherHint: (m) => `Describe a task and ${m} answers it — your Evermind learns from the ideal answer. No transcript needed.`,
+  teachTaskPlaceholder: 'Describe a task to teach — the teacher will answer it…',
+  teachTeacherCta: 'Teach from teacher',
   flushCta: 'Learn now',
   flushing: 'Learning…',
   flushedNone: 'Nothing queued to learn yet.',

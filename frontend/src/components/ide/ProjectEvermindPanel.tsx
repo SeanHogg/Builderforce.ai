@@ -38,23 +38,26 @@ export function ProjectEvermindPanel({ projectId }: { projectId: number }) {
   // prop-drilling through the 5 host call sites) so the console header names WHICH
   // project's Evermind this is. Undefined for a project not in the list (header omits it).
   const projectName = useOptionalProjectScope()?.projects.find((p) => p.id === projectId)?.name;
-  // Frontier teacher gate: use the server's unified frontier-access rule (superadmin ||
-  // premium override || connected BYO account || paid plan) — NOT bare `isPaid` — so a
-  // superadmin or a BYO tenant is never shown a false "paid plans only" wall. The console
-  // reads the returned `isPaid` flag to lock/unlock the teacher, so we hand it frontier access.
-  const { codingModels, canUseFrontierModels } = useLlmModels();
+  // Frontier teacher gate + options. Gate: the server's unified frontier-access rule
+  // (superadmin || premium override || connected BYO account || paid plan) — NOT bare
+  // `isPaid` — so a superadmin or a BYO tenant is never shown a false "paid plans only"
+  // wall (the console reads the returned `isPaid` flag to lock/unlock the teacher).
+  // Options: `teacherModels` — the tenant's OWN connected frontier models (a BYO-Anthropic
+  // tenant teaches with Opus/Sonnet) plus platform premium coders when we fund them — NOT
+  // the plan `codingModels` (free coders on the free plan).
+  const { teacherModels, canUseFrontierModels } = useLlmModels();
 
   const adapter = useMemo<EvermindConsoleAdapter>(() => ({
     loadData: () => getProjectEvermindContributions(projectId),
     loadSeedModels: async () => (await listEvermindModels()).map((m) => ({ slug: m.slug, name: m.name })),
-    loadTeacherOptions: async () => ({ models: codingModels, isPaid: canUseFrontierModels }),
+    loadTeacherOptions: async () => ({ models: teacherModels, isPaid: canUseFrontierModels }),
     seedFromModel: async (slug) => { await seedProjectEvermindFromModel(projectId, slug); },
     setInference: async (enabled) => { await setProjectEvermindInference(projectId, enabled); },
     setMode: async (mode) => { await setProjectEvermindMode(projectId, mode); },
     setTeacher: async (model) => { await setProjectEvermindTeacher(projectId, model); },
     teach: async (text, prompt) => { await teachProjectEvermindFromText(projectId, text, prompt); },
     flush: async () => { const r = await flushProjectEvermind(projectId); return { merged: r.merged, version: r.version }; },
-  }), [projectId, codingModels, canUseFrontierModels]);
+  }), [projectId, teacherModels, canUseFrontierModels]);
 
   const labels = useMemo<Partial<EvermindConsoleLabels>>(() => ({
     title: t('title'),
@@ -86,6 +89,7 @@ export function ProjectEvermindPanel({ projectId }: { projectId: number }) {
     teacherHint: t('teacherHint'),
     teacherNone: t('teacherNone'),
     teacherPaidOnly: t('teacherPaidOnly'),
+    teacherActiveHint: (model) => t('teacherActiveHint', { model }),
     teachTitle: t('teachTitle'),
     teachHint: t('teachHint'),
     teachPromptPlaceholder: t('teachPromptPlaceholder'),
@@ -93,6 +97,10 @@ export function ProjectEvermindPanel({ projectId }: { projectId: number }) {
     teachCta: t('teachCta'),
     teaching: t('teaching'),
     taught: t('taught'),
+    teachTeacherTitle: t('teachTeacherTitle'),
+    teachTeacherHint: (model) => t('teachTeacherHint', { model }),
+    teachTaskPlaceholder: t('teachTaskPlaceholder'),
+    teachTeacherCta: t('teachTeacherCta'),
     flushCta: t('flushCta'),
     flushing: t('flushing'),
     flushedNone: t('flushedNone'),

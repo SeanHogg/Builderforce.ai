@@ -3430,6 +3430,13 @@
     "thalamusLive": "注意力门控 {attention}%",
     "basalGangliaLive": "探索 {explore}%"
   },
+  "evermindStatus": {
+    "label": "Evermind",
+    "learning": "学习中",
+    "frozen": "已冻结",
+    "off": "已关闭",
+    "tooltip": "此项目的智能体在其 Evermind（v{version}）上运行，每次运行都会训练它。此规划聊天不会训练它——打开 LLM 标签页查看它学到了什么。"
+  },
   "llmStudio": {
     "title": "构建自定义模型",
     "intro": "设计数据、微调 LoRA 适配器，并将其作为可雇佣的智能体发布——全部在浏览器中完成。聊天和提示设计在 Brain 中进行——点击右下角的按钮即可打开。下面的步骤驱动构建流程。",
@@ -5664,6 +5671,7 @@
     "teacherHint": "将顶尖模型（Opus、Mistral、GLM…）蒸馏进本项目的 Evermind——每次运行都从前沿模型的理想答案中学习，而不是原始运行文本。",
     "teacherNone": "无——仅从运行中学习",
     "teacherPaidOnly": "适用于付费套餐，或在“设置 ▸ API 密钥”中连接你自己的前沿模型账户——教学会消耗前沿模型的 tokens。",
+    "teacherActiveHint": "正在从 {model} 学习。每次智能体运行——以及你在下方教的每个任务——都由 {model} 作答，你的 Evermind 会从它的理想答案中学习。无需再开启任何开关。",
     "errorGeneric": "出了点问题，请重试。",
     "loading": "加载中…",
     "managerOnlyHint": "只有项目管理员可以更改这些设置。",
@@ -5680,6 +5688,10 @@
     "teachCta": "教学",
     "teaching": "教学中…",
     "taught": "已加入学习队列。",
+    "teachTeacherTitle": "教一个任务",
+    "teachTeacherHint": "描述一个任务，{model} 会作答——你的 Evermind 会从理想答案中学习。无需粘贴记录。",
+    "teachTaskPlaceholder": "描述一个要教的任务——教师模型会作答……",
+    "teachTeacherCta": "从教师模型学习",
     "flushCta": "立即学习",
     "flushing": "学习中…",
     "flushedNone": "暂无排队等待学习的内容。",
