@@ -6,10 +6,11 @@ import { useEffect, useRef, useState } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import dynamic from 'next/dynamic';
-import { fetchProject, fetchFiles, updateProject, deleteProject } from '@/lib/api';
+import { fetchProject, fetchFiles, updateProject, deleteProject, fetchIdeProjectByStorage } from '@/lib/api';
 import { persistLastProjectId } from '@/lib/auth';
-import type { Project, FileEntry } from '@/lib/types';
+import type { Project, FileEntry, IdeProject } from '@/lib/types';
 import { ProjectDetailsPanel } from '@/components/ProjectDetailsPanel';
+import { IdeProjectDetailsModal } from '@/components/IdeProjectDetailsModal';
 import { SlideOutPanel } from '@/components/SlideOutPanel';
 import { ChunkErrorBoundary } from '@/components/ChunkErrorBoundary';
 
@@ -66,6 +67,11 @@ export default function IDEPage() {
   }, [searchParams, router, idRaw]);
 
   const [project, setProject] = useState<Project | null>(null);
+  // The IDE project (0224) backing this storage project — resolved so "Details"
+  // opens THIS project's own settings (name, parent, modality, workflow) rather
+  // than the parent PM Project's details. Null when the opened project isn't an
+  // IDE project (e.g. a raw PM project), where we fall back to the PM panel.
+  const [ideProject, setIdeProject] = useState<IdeProject | null>(null);
   const [files, setFiles] = useState<FileEntry[]>([]);
   const [status, setStatus] = useState<'loading' | 'notfound' | 'error' | 'ready'>('loading');
   const [errorMsg, setErrorMsg] = useState('');
@@ -89,6 +95,12 @@ export default function IDEPage() {
         setFiles(fileList);
         setStatus('ready');
         persistLastProjectId(proj.publicId ?? String(proj.id));
+        // Resolve the IDE project backing this storage project so "Details" shows
+        // the IDE project's own settings. 404 (not an IDE project) → null → the
+        // PM Project details fallback.
+        fetchIdeProjectByStorage(proj.id)
+          .then((ide) => { if (!cancelled) setIdeProject(ide); })
+          .catch(() => { if (!cancelled) setIdeProject(null); });
         const isUntitled = proj.name === 'Untitled' || proj.name.startsWith('Untitled-');
         if (isUntitled && typeof sessionStorage !== 'undefined') {
           const key = 'builderforce-first-time-modal-shown';
@@ -219,7 +231,22 @@ export default function IDEPage() {
           />
         </ChunkErrorBoundary>
       </div>
-      {project && (
+      {/* "Details" opens the IDE project's own settings (memory/model/voice config
+          lives in the IDE panels; this is where you rename it + set its parent).
+          Only a raw PM project (no backing IDE project) falls back to the PM panel. */}
+      {projectDetailsOpen && ideProject && (
+        <IdeProjectDetailsModal
+          ideProject={ideProject}
+          onClose={() => setProjectDetailsOpen(false)}
+          onSaved={(updated) => {
+            setIdeProject(updated);
+            // Keep the IDE title bar in sync when the name changes here.
+            setProject((prev) => (prev ? { ...prev, name: updated.name } : prev));
+            setProjectDetailsOpen(false);
+          }}
+        />
+      )}
+      {project && !ideProject && (
         <ProjectDetailsPanel
           project={project}
           open={projectDetailsOpen}

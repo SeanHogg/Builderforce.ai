@@ -15,6 +15,7 @@ import type { PublishedAgent } from '@/lib/types';
 import { canDeleteAgent, isAgentOwner } from '@/lib/agentPermissions';
 import { useTranslations } from 'next-intl';
 import { CapabilitiesContent } from '@/components/CapabilitiesContent';
+import { useConfirm } from '@/components/ConfirmProvider';
 import PersonalitySummary from '@/components/PersonalitySummary';
 import { useAssignedRoles } from '@/lib/useAssignedRoles';
 import {
@@ -103,6 +104,7 @@ export function CloudAgentSlideOutPanel({
   onDeleted,
 }: CloudAgentSlideOutPanelProps) {
   const t = useTranslations('cloudAgentForm');
+  const confirm = useConfirm();
   const [activeTab, setActiveTab] = useState<CloudAgentPanelTab>(initialTab);
   const [form, setForm] = useState<CloudAgentFormState>(() => formFromAgent(agent));
   const [saving, setSaving] = useState(false);
@@ -196,7 +198,7 @@ export function CloudAgentSlideOutPanel({
   }, [agent.id, priceDollars, pricingModel, priceUnit, onSaved]);
 
   const remove = useCallback(async () => {
-    if (!confirm(`Delete agent "${agent.name}"? Its per-agent skills and personas will be cleared.`)) return;
+    if (!(await confirm(`Delete agent "${agent.name}"? Its per-agent skills and personas will be cleared.`))) return;
     setSaving(true);
     try {
       await deleteAgent(agent.id);

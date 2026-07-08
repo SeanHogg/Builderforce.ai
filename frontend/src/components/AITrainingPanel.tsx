@@ -284,7 +284,7 @@ export function AITrainingPanel({ projectId, onLog, onJobCompleted }: AITraining
       await provider.init();
 
       if (!provider.isReady()) {
-        appendLog(t('logMambaFailInit'));
+        appendLog(t('logMambaFailInit', { reason: provider.failureReason() ?? t('errUnknown') }));
         return;
       }
 
@@ -334,7 +334,7 @@ export function AITrainingPanel({ projectId, onLog, onJobCompleted }: AITraining
           {mambaWebGPU && (
             <>
               <span className="w-2 h-2 rounded-full bg-purple-400" />
-              <span>Mamba</span>
+              <span>{'Mamba'}</span>
             </>
           )}
         </div>

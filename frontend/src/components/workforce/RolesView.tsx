@@ -15,6 +15,7 @@ import { usePermission } from '@/lib/rbac';
 import { ROLE_DISCIPLINES, useRoles } from '@/lib/useRoles';
 import type { JobRole, TemplateSummary, RoleAssignment, AssigneeKind, Discipline } from '@/lib/kanban';
 import { RoleAssigneePicker, useAssignableWorkforce } from './RoleAssigneePicker';
+import { useConfirm } from '@/components/ConfirmProvider';
 
 const card: React.CSSProperties = { background: 'var(--surface)', border: '1px solid var(--border-subtle)', borderRadius: 12, padding: 16 };
 const chip = (bg: string, fg: string): React.CSSProperties => ({
@@ -24,6 +25,7 @@ const input: React.CSSProperties = { background: 'var(--surface-2)', color: 'var
 
 export function RolesView() {
   const t = useTranslations('workforceRoles');
+  const confirm = useConfirm();
   const tk = useTranslations('kanban');
   const canManage = usePermission('agents.create').allowed;
   const workforce = useAssignableWorkforce();
@@ -125,7 +127,7 @@ export function RolesView() {
 
   const onDeleteRole = async (role: JobRole) => {
     if (role.builtin) return;
-    if (!confirm(t('deleteConfirm', { name: role.name }))) return;
+    if (!(await confirm(t('deleteConfirm', { name: role.name })))) return;
     setError(null);
     await deleteRole(role);
   };

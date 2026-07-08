@@ -5,6 +5,7 @@ import { useTranslations } from 'next-intl';
 import { Select } from '@/components/Select';
 import { tasksApi, type Task, type TaskPriority, type WorkItemKind } from '@/lib/builderforceApi';
 import { SlideOutPanel } from '@/components/SlideOutPanel';
+import { useConfirm } from '@/components/ConfirmProvider';
 
 /**
  * Create/edit an Epic in a slide-out side panel. Shared by the Epics tree view

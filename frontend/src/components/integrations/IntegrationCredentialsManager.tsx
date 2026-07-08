@@ -1,6 +1,7 @@
 'use client';
 
 import { Select } from '@/components/Select';
+import { useConfirm } from '@/components/ConfirmProvider';
 
 import { useCallback, useEffect, useState } from 'react';
 import {
@@ -101,6 +102,7 @@ export interface IntegrationCredentialsManagerProps {
 }
 
 export function IntegrationCredentialsManager({ projectId, providers, heading = 'Integration keys' }: IntegrationCredentialsManagerProps) {
+  const confirm = useConfirm();
   const role = getStoredTenant()?.role;
   const canManage = role === 'owner' || role === 'manager';
 
@@ -222,7 +224,7 @@ export function IntegrationCredentialsManager({ projectId, providers, heading = 
   };
 
   const remove = async (id: string) => {
-    if (!confirm('Delete this integration key?')) return;
+    if (!(await confirm('Delete this integration key?'))) return;
     await integrationsApi.remove(id);
     load();
   };

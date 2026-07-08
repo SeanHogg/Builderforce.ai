@@ -11,6 +11,7 @@ import {
   type EffectivePermissions,
   type ImpersonationSession,
 } from '@/lib/adminApi';
+import { useConfirm } from '@/components/ConfirmProvider';
 
 type DrawerTab = 'profile' | 'permissions' | 'sessions' | 'security' | 'access';
 
@@ -27,6 +28,7 @@ function fmtDateTime(d: string) {
 
 export default function UserDetailDrawer({ user, tenants, onClose, onStartImpersonate }: Props) {
   const t = useTranslations('admin');
+  const confirm = useConfirm();
   const [tab, setTab] = useState<DrawerTab>('profile');
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
@@ -74,7 +76,7 @@ export default function UserDetailDrawer({ user, tenants, onClose, onStartImpers
   }, []);// eslint-disable-line react-hooks/exhaustive-deps
 
   async function doForceLogout() {
-    if (!confirm(t('users.drawer.confirmForceLogout', { email: user.email }))) return;
+    if (!(await confirm(t('users.drawer.confirmForceLogout', { email: user.email })))) return;
     setForceLogoutBusy(true);
     setErrorMsg('');
     try {
@@ -89,7 +91,7 @@ export default function UserDetailDrawer({ user, tenants, onClose, onStartImpers
   }
 
   async function doResetPassword() {
-    if (!confirm(t('users.drawer.confirmResetPassword', { email: user.email }))) return;
+    if (!(await confirm({ message: t('users.drawer.confirmResetPassword', { email: user.email }), destructive: false }))) return;
     setResetPwBusy(true);
     setErrorMsg('');
     try {
@@ -103,7 +105,7 @@ export default function UserDetailDrawer({ user, tenants, onClose, onStartImpers
   }
 
   async function doSuspend(suspend: boolean) {
-    if (!confirm(suspend ? t('users.drawer.confirmSuspend', { email: user.email }) : t('users.drawer.confirmUnsuspend', { email: user.email }))) return;
+    if (!(await confirm(suspend ? t('users.drawer.confirmSuspend', { email: user.email }) : t('users.drawer.confirmUnsuspend', { email: user.email })))) return;
     setStatusBusy(true);
     setErrorMsg('');
     try {

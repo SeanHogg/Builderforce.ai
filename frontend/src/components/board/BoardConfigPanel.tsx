@@ -2,6 +2,7 @@
 
 import { Select } from '@/components/Select';
 import { RoleGate } from '@/components/RoleGate';
+import { useConfirm } from '@/components/ConfirmProvider';
 import { useTranslations } from 'next-intl';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -157,6 +158,7 @@ function LanesTab({ board, lanes, agentsByLane, reload }: {
   board: Board; lanes: Swimlane[]; agentsByLane: Record<string, SwimlaneAgent[]>; reload: () => void;
 }) {
   const t = useTranslations('boardConfig');
+  const confirm = useConfirm();
   const [laneName, setLaneName] = useState('');
   const [adding, setAdding] = useState(false);
   // Workflow definitions are the targets for a lane's "Run workflow" action.
@@ -185,7 +187,7 @@ function LanesTab({ board, lanes, agentsByLane, reload }: {
     await boardsApi.swimlanes.create(board.id, { key: keyFor(name), name, position: lanes.length });
     setLaneName(''); setAdding(false); reload();
   };
-  const removeLane = async (id: string) => { if (confirm(t('confirmDeleteLane'))) { await boardsApi.swimlanes.remove(board.id, id); reload(); } };
+  const removeLane = async (id: string) => { if (await confirm(t('confirmDeleteLane'))) { await boardsApi.swimlanes.remove(board.id, id); reload(); } };
   const patchLane = async (id: string, body: Record<string, unknown>) => { await boardsApi.swimlanes.patch(board.id, id, body); reload(); };
   // Swap a lane's position with its neighbour to reorder the board columns.
   const moveLane = async (index: number, dir: -1 | 1) => {

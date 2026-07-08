@@ -78,7 +78,7 @@ vi.mock('./AgentPublishPanel', () => ({ AgentPublishPanel: () => <div /> }));
 vi.mock('./SitePublishPanel', () => ({ SitePublishPanel: () => <div /> }));
 vi.mock('./AgentStateViewer', () => ({ AgentStateViewer: () => <div /> }));
 vi.mock('./PreviewFrame', () => ({ PreviewFrame: () => <div data-testid="center-preview-frame" /> }));
-vi.mock('./ProjectsSlideOutPanel', () => ({ ProjectsSlideOutPanel: () => <div /> }));
+vi.mock('./ide/IdeProjectsSlideOutPanel', () => ({ IdeProjectsSlideOutPanel: () => <div /> }));
 vi.mock('./brain/BrainPanel', () => ({ BrainPanel: () => <div /> }));
 vi.mock('./IdeSettingsPanel', () => ({ IdeSettingsPanel: () => <div /> }));
 vi.mock('./ArtifactReviewModals', () => ({

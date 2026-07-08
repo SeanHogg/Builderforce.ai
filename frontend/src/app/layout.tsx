@@ -16,6 +16,7 @@ import { EmulationProvider } from '@/lib/EmulationContext';
 import { RolePreviewProvider } from '@/lib/RolePreviewContext';
 import { PermissionDebuggerProvider } from '@/lib/PermissionDebuggerContext';
 import ThemeProvider from './ThemeProvider';
+import { ConfirmProvider } from '@/components/ConfirmProvider';
 import ConditionalAppShell from '@/components/ConditionalAppShell';
 import { PwaUpdateBanner } from '@/components/PwaUpdateBanner';
 import { PwaInstallPrompt } from '@/components/PwaInstallPrompt';
@@ -187,7 +188,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                   <EmulationProvider>
                     <RolePreviewProvider>
                       <PermissionDebuggerProvider>
-                        <ConditionalAppShell>{children}</ConditionalAppShell>
+                        <ConfirmProvider>
+                          <ConditionalAppShell>{children}</ConditionalAppShell>
+                        </ConfirmProvider>
                       </PermissionDebuggerProvider>
                     </RolePreviewProvider>
                   </EmulationProvider>

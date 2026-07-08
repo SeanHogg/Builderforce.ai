@@ -23,6 +23,7 @@ import { IdeProjectDetailsModal } from '@/components/IdeProjectDetailsModal';
 import { ViewToggle } from '@/components/ViewToggle';
 import { UpgradeModal } from '@/components/UpgradeModal';
 import { SlideOutPanel } from '@/components/SlideOutPanel';
+import { useConfirm } from '@/components/ConfirmProvider';
 
 type IdeView = 'grouped' | 'card' | 'table';
 
@@ -36,6 +37,7 @@ type IdeView = 'grouped' | 'card' | 'table';
  */
 export default function IDEDashboardPage() {
   const t = useTranslations('ide');
+  const confirm = useConfirm();
   const router = useRouter();
   const searchParams = useSearchParams();
   const { isAuthenticated, hasTenant } = useAuth();
@@ -123,7 +125,7 @@ export default function IDEDashboardPage() {
   };
 
   const handleDelete = async (p: IdeProject) => {
-    if (!confirm(t('deleteConfirm', { name: p.name }))) return;
+    if (!(await confirm(t('deleteConfirm', { name: p.name })))) return;
     try {
       await deleteIdeProject(p.id);
       setIdeProjects((prev) => prev.filter((x) => x.id !== p.id));
