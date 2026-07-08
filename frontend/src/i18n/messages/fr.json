@@ -3430,6 +3430,13 @@
     "thalamusLive": "Porte attentionnelle {attention}%",
     "basalGangliaLive": "Explorer {explore}%"
   },
+  "evermindStatus": {
+    "label": "Evermind",
+    "learning": "Apprentissage",
+    "frozen": "Gelé",
+    "off": "Désactivé",
+    "tooltip": "Les agents de ce projet s'exécutent sur son Evermind (v{version}) et leurs exécutions l'entraînent. Ce chat de planification ne l'entraîne pas — ouvrez l'onglet LLM pour voir ce qu'il a appris."
+  },
   "llmStudio": {
     "title": "Créer un modèle personnalisé",
     "intro": "Concevez des données, affinez un adaptateur LoRA et publiez-le comme agent recrutable — le tout depuis le navigateur. Le chat et la conception des prompts se font dans le Brain — ouvrez-le avec le bouton en bas à droite. Les étapes ci-dessous pilotent le pipeline de création.",
@@ -5664,6 +5671,7 @@
     "teacherHint": "Distillez un modèle de premier plan (Opus, Mistral, GLM…) dans l'Evermind de ce projet — chaque exécution apprend de la réponse idéale du modèle de pointe plutôt que du texte brut.",
     "teacherNone": "Aucun — apprendre uniquement des exécutions",
     "teacherPaidOnly": "Disponible sur les offres payantes, ou connectez votre propre compte de modèle de pointe dans Paramètres ▸ Clés API — l'enseignement consomme des tokens du modèle de pointe.",
+    "teacherActiveHint": "Apprentissage depuis {model}. Chaque exécution d'agent — et chaque tâche que vous enseignez ci-dessous — est répondue par {model}, et votre Evermind apprend de sa réponse idéale. Il n'y a rien d'autre à activer.",
     "errorGeneric": "Une erreur s'est produite. Veuillez réessayer.",
     "loading": "Chargement…",
     "managerOnlyHint": "Seul un gestionnaire de projet peut modifier ces paramètres.",
@@ -5680,6 +5688,10 @@
     "teachCta": "Enseigner",
     "teaching": "Enseignement…",
     "taught": "Mis en file pour apprentissage.",
+    "teachTeacherTitle": "Enseigner une tâche",
+    "teachTeacherHint": "Décrivez une tâche et {model} y répond — votre Evermind apprend de la réponse idéale. Aucune transcription nécessaire.",
+    "teachTaskPlaceholder": "Décrivez une tâche à enseigner — le modèle enseignant y répondra…",
+    "teachTeacherCta": "Enseigner depuis l'enseignant",
     "flushCta": "Apprendre maintenant",
     "flushing": "Apprentissage…",
     "flushedNone": "Rien en file à apprendre pour l'instant.",

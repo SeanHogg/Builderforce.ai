@@ -671,6 +671,8 @@ interface EvermindConsoleLabels {
     teacherHint: string;
     teacherNone: string;
     teacherPaidOnly: string;
+    /** Shown when a teacher IS pinned: explains teaching is now automatic. */
+    teacherActiveHint: (model: string) => string;
     teachTitle: string;
     teachHint: string;
     teachPromptPlaceholder: string;
@@ -678,6 +680,10 @@ interface EvermindConsoleLabels {
     teachCta: string;
     teaching: string;
     taught: string;
+    teachTeacherTitle: string;
+    teachTeacherHint: (model: string) => string;
+    teachTaskPlaceholder: string;
+    teachTeacherCta: string;
     flushCta: string;
     flushing: string;
     flushedNone: string;

@@ -3430,6 +3430,13 @@
     "thalamusLive": "Aufmerksamkeitstor {attention}%",
     "basalGangliaLive": "Erkunden {explore}%"
   },
+  "evermindStatus": {
+    "label": "Evermind",
+    "learning": "Lernt",
+    "frozen": "Eingefroren",
+    "off": "Aus",
+    "tooltip": "Agenten dieses Projekts laufen auf seinem Evermind (v{version}), und ihre Läufe trainieren es. Dieser Planungs-Chat trainiert es nicht — öffnen Sie den LLM-Tab, um zu sehen, was es gelernt hat."
+  },
   "llmStudio": {
     "title": "Eigenes Modell erstellen",
     "intro": "Entwirf Daten, optimiere einen LoRA-Adapter und veröffentliche ihn als anheuerbaren Agenten – alles im Browser. Chat und Prompt-Design passieren im Brain – öffne es über die Schaltfläche unten rechts. Die Schritte unten steuern die Build-Pipeline.",
@@ -5664,6 +5671,7 @@
     "teacherHint": "Destillieren Sie ein Spitzenmodell (Opus, Mistral, GLM…) in das Evermind dieses Projekts – jeder Lauf lernt aus der idealen Antwort des Spitzenmodells statt aus dem Rohtext.",
     "teacherNone": "Keins – nur aus Läufen lernen",
     "teacherPaidOnly": "In kostenpflichtigen Tarifen verfügbar – oder verbinden Sie unter Einstellungen ▸ API-Schlüssel Ihr eigenes Spitzenmodell-Konto; das Lehren verbraucht Tokens des Spitzenmodells.",
+    "teacherActiveHint": "Lernt von {model}. Jeder Agentenlauf – und jede Aufgabe, die Sie unten lehren – wird von {model} beantwortet, und Ihr Evermind lernt aus dessen idealer Antwort. Es gibt nichts weiter zu aktivieren.",
     "errorGeneric": "Etwas ist schiefgelaufen. Bitte versuchen Sie es erneut.",
     "loading": "Wird geladen…",
     "managerOnlyHint": "Nur ein Projektmanager kann diese Einstellungen ändern.",
@@ -5680,6 +5688,10 @@
     "teachCta": "Lehren",
     "teaching": "Wird gelehrt…",
     "taught": "Zum Lernen eingereiht.",
+    "teachTeacherTitle": "Eine Aufgabe lehren",
+    "teachTeacherHint": "Beschreiben Sie eine Aufgabe, und {model} beantwortet sie – Ihr Evermind lernt aus der idealen Antwort. Kein Transkript nötig.",
+    "teachTaskPlaceholder": "Beschreiben Sie eine zu lehrende Aufgabe – das Lehrermodell beantwortet sie…",
+    "teachTeacherCta": "Vom Lehrer lernen",
     "flushCta": "Jetzt lernen",
     "flushing": "Lernt…",
     "flushedNone": "Noch nichts zum Lernen in der Warteschlange.",

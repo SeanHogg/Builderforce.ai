@@ -1468,9 +1468,10 @@ var DEFAULT_EVERMIND_LABELS = {
   connected: "Connected",
   frozen: "Frozen",
   teacherLabel: "Teacher model",
-  teacherHint: "Distil each run through a frontier model (task \u2192 ideal answer) instead of raw run text.",
+  teacherHint: "Distil learning through a frontier model (task \u2192 its ideal answer) instead of raw run text. Pick one to enable \u2014 then every agent run learns from its answer, and you can teach it a task directly below.",
   teacherNone: "None (learn from raw runs)",
   teacherPaidOnly: "A teacher model is available on paid plans.",
+  teacherActiveHint: (m) => `Teaching from ${m}. Every agent run \u2014 and each task you teach below \u2014 is answered by ${m}, and your Evermind learns from its ideal answer. There is nothing else to switch on.`,
   teachTitle: "Teach from a transcript",
   teachHint: "Paste a chat transcript or exemplar to contribute it to the model now.",
   teachPromptPlaceholder: "Task this answered (optional)\u2026",
@@ -1478,6 +1479,10 @@ var DEFAULT_EVERMIND_LABELS = {
   teachCta: "Teach",
   teaching: "Teaching\u2026",
   taught: "Queued for learning.",
+  teachTeacherTitle: "Teach a task",
+  teachTeacherHint: (m) => `Describe a task and ${m} answers it \u2014 your Evermind learns from the ideal answer. No transcript needed.`,
+  teachTaskPlaceholder: "Describe a task to teach \u2014 the teacher will answer it\u2026",
+  teachTeacherCta: "Teach from teacher",
   flushCta: "Learn now",
   flushing: "Learning\u2026",
   flushedNone: "Nothing queued to learn yet.",
@@ -1650,13 +1655,20 @@ function EvermindConsole({ adapter, canManage, labels, refreshMs = 2e4, projectN
         {
           t,
           busy,
+          teacherModel: data?.teacherModel ?? "",
           prompt: teachPrompt,
           text: teachText,
           onPrompt: setTeachPrompt,
           onText: setTeachText,
           onTeach: () => run(
             async () => {
-              await adapter.teach(teachText.trim(), teachPrompt.trim() || void 0);
+              const task = teachPrompt.trim();
+              const body = teachText.trim();
+              if (data?.teacherModel && body.length < 20 && task.length >= 20) {
+                await adapter.teach(task, task);
+              } else {
+                await adapter.teach(body, task || void 0);
+              }
               setTeachText("");
               setTeachPrompt("");
             },
@@ -1722,7 +1734,7 @@ function SeedControls({
   return /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("div", { style: { display: "flex", flexDirection: "column", gap: 8 }, children: [
     /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("label", { style: fieldLabel, children: t.pickModelLabel }),
     /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("div", { style: { display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("select", { value: selectedSlug, onChange: (e) => onSelect(e.target.value), disabled: busy, style: { ...select, flex: "1 1 200px" }, children: models.map((m) => /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("option", { value: m.slug, children: m.name }, m.slug)) }),
+      /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("select", { value: selectedSlug, onChange: (e) => onSelect(e.target.value), disabled: busy, style: { ...select, flex: "1 1 200px" }, children: models.map((m) => /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("option", { value: m.slug, style: optionStyle, children: m.name }, m.slug)) }),
       /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("button", { type: "button", onClick: onSeed, disabled: busy || !selectedSlug, style: primaryBtn(busy || !selectedSlug), children: busy ? t.working : t.enableCta })
     ] })
   ] });
@@ -1794,9 +1806,10 @@ function TeacherPicker({
       /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("div", { style: fieldHint, children: t.teacherHint })
     ] }),
     !canManage ? /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("div", { style: { ...select, color: C.text2 }, children: value || t.teacherNone }) : opts && !opts.isPaid ? /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("p", { style: italic, children: t.teacherPaidOnly }) : /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("select", { value, onChange: (e) => onChange(e.target.value), disabled: busy, "aria-label": t.teacherLabel, style: { ...select, maxWidth: 340 }, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("option", { value: "", children: t.teacherNone }),
-      options.map((m) => /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("option", { value: m, children: m }, m))
-    ] })
+      /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("option", { value: "", style: optionStyle, children: t.teacherNone }),
+      options.map((m) => /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("option", { value: m, style: optionStyle, children: m }, m))
+    ] }),
+    value && /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("div", { style: { fontSize: "0.72rem", lineHeight: 1.4, color: C.accent, background: C.surface2, border: `1px solid ${C.border}`, borderRadius: 6, padding: "6px 8px" }, children: t.teacherActiveHint(value) })
   ] });
 }
 function TeachBox({
@@ -1806,14 +1819,19 @@ function TeachBox({
   text,
   onPrompt,
   onText,
-  onTeach
+  onTeach,
+  teacherModel
 }) {
+  const teaching = !!teacherModel;
+  const canTeach = teaching ? prompt.trim().length >= 20 : text.trim().length >= 20;
   return /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("div", { style: { display: "flex", flexDirection: "column", gap: 6, borderTop: `1px solid ${C.border}`, paddingTop: 10 }, children: [
-    /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("div", { style: fieldTitle, children: t.teachTitle }),
-    /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("div", { style: fieldHint, children: t.teachHint }),
-    /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("input", { value: prompt, onChange: (e) => onPrompt(e.target.value), disabled: busy, placeholder: t.teachPromptPlaceholder, style: { ...select, width: "100%" } }),
-    /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("textarea", { value: text, onChange: (e) => onText(e.target.value), disabled: busy, placeholder: t.teachTextPlaceholder, rows: 3, style: { ...select, width: "100%", resize: "vertical", fontFamily: "inherit" } }),
-    /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("div", { children: /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("button", { type: "button", onClick: onTeach, disabled: busy || text.trim().length < 20, style: primaryBtn(busy || text.trim().length < 20), children: busy ? t.teaching : t.teachCta }) })
+    /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("div", { style: fieldTitle, children: teaching ? t.teachTeacherTitle : t.teachTitle }),
+    /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("div", { style: fieldHint, children: teaching ? t.teachTeacherHint(teacherModel) : t.teachHint }),
+    teaching ? /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("textarea", { value: prompt, onChange: (e) => onPrompt(e.target.value), disabled: busy, placeholder: t.teachTaskPlaceholder, rows: 3, style: { ...select, width: "100%", resize: "vertical", fontFamily: "inherit" } }) : /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)(import_jsx_runtime8.Fragment, { children: [
+      /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("input", { value: prompt, onChange: (e) => onPrompt(e.target.value), disabled: busy, placeholder: t.teachPromptPlaceholder, style: { ...select, width: "100%" } }),
+      /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("textarea", { value: text, onChange: (e) => onText(e.target.value), disabled: busy, placeholder: t.teachTextPlaceholder, rows: 3, style: { ...select, width: "100%", resize: "vertical", fontFamily: "inherit" } })
+    ] }),
+    /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("div", { children: /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("button", { type: "button", onClick: onTeach, disabled: busy || !canTeach, style: primaryBtn(busy || !canTeach), children: busy ? t.teaching : teaching ? t.teachTeacherCta : t.teachCta }) })
   ] });
 }
 function RecentList({ t, entries }) {
@@ -1847,6 +1865,10 @@ var select = {
   background: C.surface2,
   color: C.text,
   boxSizing: "border-box"
+};
+var optionStyle = {
+  background: "var(--bf-ev-surface-solid, var(--bg-surface, var(--vscode-dropdown-background, Canvas)))",
+  color: "var(--bf-ev-text, var(--text-primary, var(--vscode-dropdown-foreground, CanvasText)))"
 };
 function primaryBtn(disabled) {
   return {

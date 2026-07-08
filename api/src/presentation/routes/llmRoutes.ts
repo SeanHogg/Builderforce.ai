@@ -1721,6 +1721,20 @@ export function createLlmRoutes(): Hono<HonoEnv> {
     // `canChooseModel` is an alias kept for existing clients; it IS frontier access.
     const canChooseModel = canUseFrontierModels;
 
+    // Frontier TEACHER options — the models eligible to distil into an Evermind. A
+    // connected BYO account means teaching with THEIR OWN frontier models (a BYO-Anthropic
+    // tenant teaches with Opus/Sonnet on their account, NOT a free `@cf/*`/qwen coder), so
+    // their BYO models lead. The platform's premium coders are added ONLY when the PLATFORM
+    // funds frontier (paid / override / superadmin) — a free BYO tenant must not teach on
+    // our premium pool for free. Empty when the tenant has no frontier access at all.
+    const platformFundsFrontier = premiumOverride || effectivePlan !== 'free' || access?.isSuperadmin === true;
+    const teacherModels = canUseFrontierModels
+      ? Array.from(new Set([
+          ...byoModels.map((m) => m.id),
+          ...(platformFundsFrontier ? codingModelsForPlan(effectivePlan === 'free' ? 'pro' : effectivePlan, true) : []),
+        ]))
+      : [];
+
     const requiredKey = isPro ? c.env.OPENROUTER_API_KEY_PRO ?? c.env.OPENROUTER_API_KEY : c.env.OPENROUTER_API_KEY;
     if (!requiredKey) {
       return c.json({
@@ -1730,6 +1744,7 @@ export function createLlmRoutes(): Hono<HonoEnv> {
         ...(premiumOverride ? { premium: true } : {}),
         models: modelPoolForPlan(effectivePlan, premiumOverride),
         codingModels,
+        teacherModels,
         canChooseModel,
         canUseFrontierModels,
         byo: { providers: byoProviders, models: byoModels },
@@ -1745,6 +1760,7 @@ export function createLlmRoutes(): Hono<HonoEnv> {
       ...(premiumOverride ? { premium: true } : {}),
       data: await service.status(),
       codingModels,
+      teacherModels,
       canChooseModel,
       canUseFrontierModels,
       byo: { providers: byoProviders, models: byoModels },

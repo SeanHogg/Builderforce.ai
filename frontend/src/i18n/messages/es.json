@@ -3430,6 +3430,13 @@
     "thalamusLive": "Compuerta de atención {attention}%",
     "basalGangliaLive": "Explorar {explore}%"
   },
+  "evermindStatus": {
+    "label": "Evermind",
+    "learning": "Aprendiendo",
+    "frozen": "Congelado",
+    "off": "Desactivado",
+    "tooltip": "Los agentes de este proyecto se ejecutan en su Evermind (v{version}) y sus ejecuciones lo entrenan. Este chat de planificación no lo entrena: abre la pestaña LLM para ver lo que ha aprendido."
+  },
   "llmStudio": {
     "title": "Crear un modelo personalizado",
     "intro": "Diseña datos, ajusta un adaptador LoRA y publícalo como un agente contratable, todo desde el navegador. El chat y el diseño de prompts ocurren en el Brain: ábrelo con el botón de la esquina inferior derecha. Los pasos siguientes impulsan el flujo de creación.",
@@ -5664,6 +5671,7 @@
     "teacherHint": "Destila un modelo puntero (Opus, Mistral, GLM…) en el Evermind de este proyecto: cada ejecución aprende de la respuesta ideal del modelo de frontera en lugar del texto en bruto.",
     "teacherNone": "Ninguno: aprender solo de las ejecuciones",
     "teacherPaidOnly": "Disponible en planes de pago, o conecta tu propia cuenta de modelo de frontera en Configuración ▸ Claves API: enseñar consume tokens del modelo de frontera.",
+    "teacherActiveHint": "Enseñando desde {model}. Cada ejecución del agente —y cada tarea que enseñes abajo— la responde {model}, y tu Evermind aprende de su respuesta ideal. No hay nada más que activar.",
     "errorGeneric": "Algo salió mal. Inténtalo de nuevo.",
     "loading": "Cargando…",
     "managerOnlyHint": "Solo un gestor del proyecto puede cambiar estos ajustes.",
@@ -5680,6 +5688,10 @@
     "teachCta": "Enseñar",
     "teaching": "Enseñando…",
     "taught": "En cola para aprender.",
+    "teachTeacherTitle": "Enseñar una tarea",
+    "teachTeacherHint": "Describe una tarea y {model} la responde: tu Evermind aprende de la respuesta ideal. Sin transcripción.",
+    "teachTaskPlaceholder": "Describe una tarea para enseñar; el modelo profesor la responderá…",
+    "teachTeacherCta": "Enseñar desde el profesor",
     "flushCta": "Aprender ahora",
     "flushing": "Aprendiendo…",
     "flushedNone": "Nada en cola para aprender todavía.",

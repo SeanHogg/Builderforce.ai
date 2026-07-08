@@ -14,6 +14,7 @@ import Link from 'next/link';
 import { BrainTimeline, Avatar } from '@seanhogg/builderforce-brain-ui';
 import '@seanhogg/builderforce-brain-ui/styles.css';
 import { ChatInput } from '@/components/ChatInput';
+import { EvermindStatusBadge } from '@/components/ide/EvermindStatusBadge';
 import { ChatMessageContent } from '@/components/ChatMessageContent';
 import { ChatMessageActions } from '@/components/ChatMessageActions';
 import { ChatTicketsPanel } from '@/components/brain/ChatTicketsPanel';
@@ -864,6 +865,9 @@ export function BrainPanel({
                   </Select>
                 </>
               )}
+              {/* Honest Evermind posture: this planning chat doesn't train the model —
+                  agent runs do. Self-gates to nothing until the project's Evermind exists. */}
+              <span style={{ marginLeft: 'auto' }}><EvermindStatusBadge projectId={ctxProjectId} /></span>
             </div>
             <ChatInput
               value={input}

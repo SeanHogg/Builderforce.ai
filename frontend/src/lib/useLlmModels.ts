@@ -17,6 +17,13 @@ import { llmApi, tenantModelApi, type TenantModel } from './builderforceApi';
 export interface LlmModelLists {
   models: string[];
   codingModels: string[];
+  /** Models eligible to be a FRONTIER TEACHER (distil into an Evermind): the tenant's
+   *  OWN connected BYO frontier models FIRST (a BYO-Anthropic tenant teaches with
+   *  Opus/Sonnet on their account), plus the platform's premium coders when the platform
+   *  funds frontier (paid/override/superadmin). Empty when the tenant has no frontier
+   *  access. Use THIS for the teacher picker — NOT `codingModels` (the plan pool, which
+   *  is free coders on the free plan). */
+  teacherModels: string[];
   /** The tenant's named model configs ("LLMs"). */
   tenantModels: TenantModel[];
   /** True when the tenant is on a paid plan (Pro/Teams) or has a premium override.
@@ -38,7 +45,7 @@ export interface LlmModelLists {
   canUseFrontierModels: boolean;
 }
 
-const EMPTY: LlmModelLists = { models: [], codingModels: [], tenantModels: [], isPaid: false, byoModels: [], canChooseModel: false, canUseFrontierModels: false };
+const EMPTY: LlmModelLists = { models: [], codingModels: [], teacherModels: [], tenantModels: [], isPaid: false, byoModels: [], canChooseModel: false, canUseFrontierModels: false };
 
 let cache: LlmModelLists | null = null;
 let inflight: Promise<LlmModelLists> | null = null;
@@ -61,7 +68,11 @@ function load(): Promise<LlmModelLists> {
         // paid). Falls back to canChooseModel for older payloads (which already folds
         // BYO + paid; only the direct-superadmin case is newly server-side).
         const canUseFrontierModels = res.canUseFrontierModels ?? canChooseModel;
-        cache = { models: models ?? [], codingModels: res.codingModels ?? [], tenantModels, isPaid, byoModels, canChooseModel, canUseFrontierModels };
+        // Teacher-eligible frontier models. Older payloads (no teacherModels) fall back to
+        // BYO models ∪ coding pool so a BYO tenant still sees their own frontier models.
+        const teacherModels = res.teacherModels
+          ?? (canUseFrontierModels ? Array.from(new Set([...byoModels, ...(res.codingModels ?? [])])) : []);
+        cache = { models: models ?? [], codingModels: res.codingModels ?? [], teacherModels, tenantModels, isPaid, byoModels, canChooseModel, canUseFrontierModels };
         return cache;
       })
       .catch(() => {
