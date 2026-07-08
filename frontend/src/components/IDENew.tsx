@@ -1,6 +1,8 @@
 'use client';
 
 import { useState, useCallback, useEffect, useRef, useMemo } from 'react';
+import { useTranslations } from 'next-intl';
+import { VANILLA_DEFAULTS } from '@/lib/vanillaDefaults';
 import { FileExplorer } from './FileExplorer';
 import { CodePane } from './CodePane';
 import { Terminal } from './Terminal';
@@ -10,7 +12,7 @@ import { SitePublishPanel } from './SitePublishPanel';
 import { AgentStateViewer } from './AgentStateViewer';
 import { LlmStudioPanel } from './LlmStudioPanel';
 import { PreviewFrame } from './PreviewFrame';
-import { ProjectsSlideOutPanel } from './ProjectsSlideOutPanel';
+import { IdeProjectsSlideOutPanel } from './ide/IdeProjectsSlideOutPanel';
 import { BrainPanel } from './brain/BrainPanel';
 import { TeamChatButton } from './brain/TeamChatButton';
 import { IdeSettingsPanel } from './IdeSettingsPanel';
@@ -50,59 +52,6 @@ interface IDEProps {
 
 type CenterView = 'preview' | 'code';
 
-/**
- * Run-only fallback files for a missing/empty scaffold. Single source of truth
- * for both Run and the publish build (previously duplicated inline in each), and
- * matched to the server-side VANILLA_TEMPLATE so a seeded project runs identically.
- */
-const VANILLA_DEFAULTS: Record<string, string> = {
-  'package.json': JSON.stringify({
-    name: 'my-app',
-    version: '1.0.0',
-    type: 'module',
-    scripts: { dev: 'vite', build: 'vite build', preview: 'vite preview' },
-    dependencies: { react: '^18.2.0', 'react-dom': '^18.2.0' },
-    devDependencies: { '@vitejs/plugin-react': '^4.0.0', vite: '^4.3.9' },
-  }, null, 2),
-  'index.html': `<!DOCTYPE html>
-<html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>My App</title>
-  </head>
-  <body>
-    <div id="root"></div>
-    <script type="module" src="/src/main.jsx"></script>
-  </body>
-</html>`,
-  'src/main.jsx': `import React from 'react';
-import ReactDOM from 'react-dom/client';
-import './index.css';
-
-function App() {
-  return (
-    <div style={{ padding: '2rem', fontFamily: 'system-ui' }}>
-      <h1>Hello World! 🚀</h1>
-      <p>Edit src/main.jsx to get started.</p>
-    </div>
-  );
-}
-
-ReactDOM.createRoot(document.getElementById('root')).render(<App />);`,
-  'src/index.css': `body {
-  margin: 0;
-  padding: 0;
-  font-family: system-ui, -apple-system, sans-serif;
-}`,
-  'vite.config.js': `import { defineConfig } from 'vite';
-import react from '@vitejs/plugin-react';
-
-export default defineConfig({
-  plugins: [react()],
-});`,
-};
-
 /** Cheap, stable string hash (djb2) — used to skip npm install when package.json
  *  is unchanged since the last install in this WebContainer session. */
 function hashString(s: string): string {
@@ -119,6 +68,7 @@ interface CheckResult {
 }
 
 export function IDE({ project, initialFiles, onProjectUpdate, onOpenProjectDetails, initialChatId, initialPrompt, initialTicket }: IDEProps) {
+  const t = useTranslations('ide');
   // The IDE is scoped to its project's type: modality is fixed at creation, not
   // switchable in-session, so it's derived (and clamped) rather than state.
   const modality: ProjectModality = getModality(project.modality).id;
@@ -896,7 +846,7 @@ export function IDE({ project, initialFiles, onProjectUpdate, onOpenProjectDetai
         <button
           type="button"
           onClick={() => setProjectsPanelOpen(true)}
-          aria-label="Open projects"
+          aria-label={t('openProjectsAria')}
           style={{
             background: 'var(--bg-elevated)',
             color: 'var(--text-secondary)',
@@ -911,7 +861,7 @@ export function IDE({ project, initialFiles, onProjectUpdate, onOpenProjectDetai
             justifyContent: 'center',
             gap: 3,
           }}
-          title="All projects"
+          title={t('yourIdeProjects')}
         >
           <span style={{ width: 18, height: 2, background: 'currentColor', borderRadius: 1 }} />
           <span style={{ width: 18, height: 2, background: 'currentColor', borderRadius: 1 }} />
@@ -945,7 +895,7 @@ export function IDE({ project, initialFiles, onProjectUpdate, onOpenProjectDetai
           }}
           onFocus={e => { e.currentTarget.style.borderColor = 'var(--coral-bright)'; }}
           disabled={isSavingTitle}
-          title="Edit project name (saves on blur or Enter)"
+          title={t('editNameHint')}
           style={{
             fontFamily: 'var(--font-display)',
             fontWeight: 700,
@@ -985,7 +935,7 @@ export function IDE({ project, initialFiles, onProjectUpdate, onOpenProjectDetai
               alignItems: 'center',
               gap: 4,
             }}
-            title="Project details"
+            title={t('projectDetailsTitle')}
           >
             <span style={{ fontSize: '1rem' }}>▦</span>
             Details
@@ -996,8 +946,8 @@ export function IDE({ project, initialFiles, onProjectUpdate, onOpenProjectDetai
         <button
           type="button"
           onClick={() => setSettingsOpen(true)}
-          aria-label="Project settings"
-          title="Settings & repository"
+          aria-label={t('projectSettingsAria')}
+          title={t('settingsRepoTitle')}
           style={{
             background: 'var(--bg-elevated)',
             color: 'var(--text-secondary)',
@@ -1061,7 +1011,7 @@ export function IDE({ project, initialFiles, onProjectUpdate, onOpenProjectDetai
         })()}
         {getModality(modality).showChecks && (
           <label
-            title="When on, Run is blocked while the last checks are failing"
+            title={t('blockOnFailHint')}
             style={{
               display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0,
               fontSize: '0.72rem', color: 'var(--text-muted)', cursor: 'pointer', userSelect: 'none',
@@ -1080,7 +1030,7 @@ export function IDE({ project, initialFiles, onProjectUpdate, onOpenProjectDetai
           <button
             onClick={handleCheck}
             disabled={isChecking || isRunning}
-            title="Run type-check, lint and build in the browser to validate the code"
+            title={t('runChecksHint')}
             style={{
               background: 'var(--bg-elevated)', color: 'var(--text-secondary)',
               border: '1px solid var(--border-subtle)', borderRadius: 8,
@@ -1119,10 +1069,10 @@ export function IDE({ project, initialFiles, onProjectUpdate, onOpenProjectDetai
         })()}
       </div>
 
-      <ProjectsSlideOutPanel
+      <IdeProjectsSlideOutPanel
         open={projectsPanelOpen}
         onClose={() => setProjectsPanelOpen(false)}
-        currentProjectId={typeof project.id === 'number' ? project.id : Number(project.id)}
+        currentStorageProjectId={typeof project.id === 'number' ? project.id : Number(project.id)}
       />
 
       <IdeSettingsPanel

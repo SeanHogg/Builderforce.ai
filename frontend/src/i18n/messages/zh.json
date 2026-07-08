@@ -8288,7 +8288,7 @@
     "logNoCode": "⚠️ 未提供用于 Mamba 模型训练的代码。",
     "logMambaInit": "🐍 正在初始化 Mamba 模型（builderforce-memory 引擎）…",
     "logMambaReady": "✅ Mamba 模型就绪。开始训练（{epochs} 轮{wsla}）…",
-    "logMambaFailInit": "❌ Mamba 模型初始化失败 —— 此浏览器可能不支持 WebGPU。",
+    "logMambaFailInit": "❌ Mamba 模型初始化失败：{reason}",
     "logMambaEpoch": "  📊 第 {epoch} 轮：损失={loss}",
     "logMambaComplete": "✅ Mamba 训练完成 —— 最终损失：{loss}",
     "logMambaFailed": "❌ Mamba 训练失败：{error}"

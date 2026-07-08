@@ -20,6 +20,7 @@ import { sendChatInviteEmail } from '../../infrastructure/email/EmailService';
 import { isKeyOwnedByTenant } from '../../domain/shared/r2Keys';
 import type { Env, HonoEnv } from '../../env';
 import type { BrainService } from '../../application/brain/BrainService';
+import { learnFromBrainTurn } from '../../application/brain/brainEvermindLearning';
 import type { Db } from '../../infrastructure/database/connection';
 import type { AgentHostRelayDO } from '../../infrastructure/relay/AgentHostRelayDO';
 
@@ -188,6 +189,14 @@ export function createBrainRoutes(brainService: BrainService, db: Db): Hono<Hono
         }
       })());
     }
+
+    // Train the project's Evermind FROM this conversation (not just agent runs):
+    // a persisted assistant turn in a project chat whose Evermind is seeded +
+    // connected is contributed to learning. Fire-and-forget; self-gates otherwise.
+    c.executionCtx.waitUntil(
+      learnFromBrainTurn(c.env as Env, db, id, tenantId, result).catch(() => { /* never fail the write */ }),
+    );
+
     return c.json({ messages: result }, 201);
   });
 

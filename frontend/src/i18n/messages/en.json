@@ -8288,7 +8288,7 @@
     "logNoCode": "⚠️ No training code provided for Mamba model training.",
     "logMambaInit": "🐍 Initialising Mamba model (builderforce-memory engine)…",
     "logMambaReady": "✅ Mamba model ready. Starting training ({epochs} epoch(s){wsla})…",
-    "logMambaFailInit": "❌ Mamba model failed to initialise — WebGPU may not be available in this browser.",
+    "logMambaFailInit": "❌ Mamba model failed to initialise: {reason}",
     "logMambaEpoch": "  📊 Epoch {epoch}: loss={loss}",
     "logMambaComplete": "✅ Mamba training complete — final loss: {loss}",
     "logMambaFailed": "❌ Mamba training failed: {error}"

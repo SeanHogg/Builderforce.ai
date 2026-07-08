@@ -6,9 +6,11 @@ import { adminApi, type AdminPlatformPersona } from '@/lib/adminApi';
 import { errText, AdminError, AdminLoading } from '@/components/admin/adminShared';
 import { BUILTIN_PERSONAS, type Persona } from '@/lib/marketplaceData';
 import PsychometricEditor from '@/components/PsychometricEditor';
+import { useConfirm } from '@/components/ConfirmProvider';
 
 export default function PersonasPanel() {
   const t = useTranslations('admin');
+  const confirm = useConfirm();
   const [platformPersonas, setPlatformPersonas] = useState<AdminPlatformPersona[]>([]);
   const [loading, setLoading] = useState(true);
   const [initialLoaded, setInitialLoaded] = useState(false);
@@ -230,7 +232,7 @@ export default function PersonasPanel() {
                       type="button"
                       className="btn-ghost"
                       onClick={async () => {
-                        if (!confirm(t('personas.confirmDelete', { name: p.name }))) return;
+                        if (!(await confirm(t('personas.confirmDelete', { name: p.name })))) return;
                         setError('');
                         try {
                           await adminApi.deletePersona(p.id);

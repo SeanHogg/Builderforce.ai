@@ -6,6 +6,7 @@ import { loadAgentPool, AGENT_KIND_LABEL, type PoolAgent } from '@/lib/agentPool
 import { CapabilitiesContent } from './CapabilitiesContent';
 import { CronJobsContent } from './CronJobsContent';
 import { ObservabilityContent } from './ObservabilityContent';
+import { useConfirm } from '@/components/ConfirmProvider';
 
 export interface AgentCapabilitiesContentProps {
   projectId: number;
@@ -24,6 +25,7 @@ export interface AgentCapabilitiesContentProps {
  * for the section UI; the agent target only changes the scope/scopeId passed in.
  */
 export function AgentCapabilitiesContent({ projectId, tenantId, agentHostId, className, style }: AgentCapabilitiesContentProps) {
+  const confirm = useConfirm();
   const [attached, setAttached] = useState<ProjectAgent[]>([]);
   const [pool, setPool] = useState<PoolAgent[]>([]);
   const [loading, setLoading] = useState(true);
@@ -72,7 +74,7 @@ export function AgentCapabilitiesContent({ projectId, tenantId, agentHostId, cla
   };
 
   const handleRemove = async (agent: ProjectAgent) => {
-    if (!confirm(`Remove "${agent.name}" from this project? Its per-agent capabilities will be cleared.`)) return;
+    if (!(await confirm(`Remove "${agent.name}" from this project? Its per-agent capabilities will be cleared.`))) return;
     setBusy(true);
     setError(null);
     try {

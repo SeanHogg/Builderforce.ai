@@ -38,6 +38,7 @@ import { AgentHostSlideOutPanel } from '@/components/AgentHostSlideOutPanel';
 import { FleetMeshContent } from '@/components/FleetMeshContent';
 import { UpgradeModal } from '@/components/UpgradeModal';
 import { SlideOutPanel } from '@/components/SlideOutPanel';
+import { useConfirm } from '@/components/ConfirmProvider';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { InviteTeamMembers } from '@/components/InviteTeamMembers';
 import { ViewToggle, type ViewMode } from '@/components/ViewToggle';
@@ -96,6 +97,7 @@ const cardStyle: React.CSSProperties = {
 
 export function WorkforceAgents({ tenantId }: { tenantId?: number }) {
   const { tenant, tenantToken } = useAuth();
+  const confirm = useConfirm();
   const tWf = useTranslations('workforce');
   const tAdd = useTranslations('workforceAddAgent');
   const tc = useTranslations('common');
@@ -315,7 +317,7 @@ export function WorkforceAgents({ tenantId }: { tenantId?: number }) {
   // --- Quick card actions --------------------------------------------------
   const unpublish = async (a: PublishedAgent) => { await updateAgent(a.id, { published: false }); loadCloud(); };
   const deleteOwned = async (a: PublishedAgent) => {
-    if (!confirm(`Delete agent "${a.name}"? This permanently removes it and its per-agent skills/personas. This cannot be undone.`)) return;
+    if (!(await confirm(`Delete agent "${a.name}"? This permanently removes it and its per-agent skills/personas. This cannot be undone.`))) return;
     try {
       await deleteAgent(a.id);
       loadCloud();

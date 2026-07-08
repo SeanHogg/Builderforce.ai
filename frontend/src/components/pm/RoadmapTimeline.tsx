@@ -7,6 +7,7 @@ import { usePmData } from '@/lib/pm/usePmData';
 import { roadmapClient, ROADMAP_HORIZONS, rstr } from '@/lib/pm/roadmap';
 import { PmEmpty, PmError, StatusPill } from './pmShared';
 import { RoadmapItemPanel } from './RoadmapItemPanel';
+import { useConfirm } from '@/components/ConfirmProvider';
 
 /**
  * Roadmap "now / next / later" horizon swimlanes from roadmap_items. Create via
@@ -16,6 +17,7 @@ import { RoadmapItemPanel } from './RoadmapItemPanel';
  */
 export function RoadmapTimeline() {
   const { projectId } = usePmScope();
+  const confirm = useConfirm();
   const { data, error, reload } = usePmData<TrackerRow[]>(
     () => roadmapClient.list(projectId ?? undefined),
     [projectId],
@@ -26,7 +28,7 @@ export function RoadmapTimeline() {
 
   const remove = async (e: React.MouseEvent, id: string) => {
     e.stopPropagation();
-    if (!window.confirm('Delete this roadmap item?')) return;
+    if (!(await confirm('Delete this roadmap item?'))) return;
     try { await roadmapClient.remove(id); reload(); } catch { /* surfaced on next load */ }
   };
 

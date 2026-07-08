@@ -15,6 +15,7 @@ import { AllowedOriginsField } from '@/components/AllowedOriginsField';
 import { AllowedOriginsBadge } from '@/components/AllowedOriginsBadge';
 import { TenantApiKeyEditor } from '@/components/TenantApiKeyEditor';
 import { TenantApiKeyUsageDrawer } from '@/components/TenantApiKeyUsageDrawer';
+import { useConfirm } from '@/components/ConfirmProvider';
 
 /**
  * Superadmin tab for minting / listing / revoking tenant `bfk_*` keys
@@ -23,6 +24,7 @@ import { TenantApiKeyUsageDrawer } from '@/components/TenantApiKeyUsageDrawer';
  */
 export function TenantApiKeysAdminTab({ active }: { active: boolean }) {
   const t = useTranslations('admin');
+  const confirm = useConfirm();
   const [tenants, setTenants] = useState<AdminTenant[]>([]);
   const [tenantId, setTenantId] = useState<number | null>(null);
   const [keys, setKeys] = useState<AdminTenantApiKey[]>([]);
@@ -107,7 +109,7 @@ export function TenantApiKeysAdminTab({ active }: { active: boolean }) {
 
   const handleRevoke = async (keyId: string) => {
     if (tenantId == null) return;
-    if (!confirm(t('apikeys.revokeConfirm'))) return;
+    if (!(await confirm(t('apikeys.revokeConfirm')))) return;
     setRevoking(keyId);
     setError(null);
     try {

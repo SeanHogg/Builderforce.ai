@@ -127,6 +127,9 @@ export function IdeProjectDetailsModal({
         <p style={{ color: 'var(--text-secondary)', fontSize: 13, margin: 0 }}>
           {m.label} · <span style={{ fontFamily: 'monospace' }}>{ideProject.storageProjectKey}</span>
         </p>
+        <p style={{ color: 'var(--text-muted)', fontSize: 12, margin: 0, lineHeight: 1.5 }}>
+          {t('detailedConfigHint')}
+        </p>
 
         {error && (
           <div style={{ borderRadius: 8, padding: '10px 14px', fontSize: 13, background: 'var(--error-bg)', border: '1px solid var(--error-border)', color: 'var(--error-text)' }}>

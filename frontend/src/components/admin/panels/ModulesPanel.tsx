@@ -4,9 +4,11 @@ import { useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { adminApi } from '@/lib/adminApi';
 import { errText, fmtDate, useAdminData, AdminError, AdminLoading } from '@/components/admin/adminShared';
+import { useConfirm } from '@/components/ConfirmProvider';
 
 export default function ModulesPanel() {
   const t = useTranslations('admin');
+  const confirm = useConfirm();
   const { data, loading, error, reload, setData, setError } = useAdminData(() => adminApi.modules(), []);
   const platformModules = data ?? [];
 
@@ -110,7 +112,7 @@ export default function ModulesPanel() {
                   className="admin-tab"
                   style={{ padding: '3px 10px', fontSize: 12, color: '#ef4444' }}
                   onClick={async () => {
-                    if (!confirm(t('modules.confirmDelete', { name: m.name }))) return;
+                    if (!(await confirm(t('modules.confirmDelete', { name: m.name })))) return;
                     setError('');
                     try {
                       await adminApi.deleteModule(m.id);

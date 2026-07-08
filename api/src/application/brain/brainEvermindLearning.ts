@@ -51,7 +51,7 @@ export async function learnFromBrainTurn(
   // Respect the project's learning switches (same gate as an agent run): the head
   // read is served through the project-Evermind read-through cache, so this is cheap.
   const head = await getProjectEvermindHead(env, db, tenantId, projectId);
-  if (!head.seeded || head.mode !== 'connected') return;
+  if (head.version < 1 || head.mode !== 'connected') return; // unseeded or frozen → no contribution
 
   // Task prompt = the user message this turn answered — from the batch first, else
   // the chat's most recent user message.

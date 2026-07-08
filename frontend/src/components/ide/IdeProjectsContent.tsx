@@ -23,10 +23,16 @@ export function IdeProjectsContent({
   limit,
   viewAllHref,
   onCount,
+  highlightStorageProjectId,
+  onNavigate,
 }: {
   limit?: number;
   viewAllHref?: string;
   onCount?: (count: number) => void;
+  /** Storage-project id of the currently-open IDE project — ringed in the list. */
+  highlightStorageProjectId?: number;
+  /** Called after navigating into an IDE project (lets a host slide-out close). */
+  onNavigate?: () => void;
 }) {
   const router = useRouter();
   const t = useTranslations('ide');
@@ -55,6 +61,7 @@ export function IdeProjectsContent({
   const openIde = (p: IdeProject) => {
     persistLastProjectId(String(p.storageProjectId));
     router.push(`/ide/${p.storageProjectPublicId}`);
+    onNavigate?.();
   };
 
   const handleDelete = async (p: IdeProject) => {
@@ -118,13 +125,21 @@ export function IdeProjectsContent({
       )}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 16 }}>
         {visible.map((p) => (
-          <IdeProjectCard
+          <div
             key={p.id}
-            ideProject={p}
-            onOpen={openIde}
-            onDetails={setDetailsFor}
-            onDelete={handleDelete}
-          />
+            style={
+              highlightStorageProjectId != null && p.storageProjectId === highlightStorageProjectId
+                ? { borderRadius: 12, boxShadow: '0 0 0 2px var(--coral-bright)' }
+                : undefined
+            }
+          >
+            <IdeProjectCard
+              ideProject={p}
+              onOpen={openIde}
+              onDetails={setDetailsFor}
+              onDelete={handleDelete}
+            />
+          </div>
         ))}
       </div>
       {hasMore && (
