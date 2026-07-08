@@ -23,6 +23,7 @@ import type { Env } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 import { llmProxyForPlan, readProxyChoice } from './LlmProxyService';
 import { getTenantTokenAvailability } from './tenantTokenAvailability';
+import { resolveTenantLlmCredentials, listTenantProviderKeys } from './tenantProviderKeyService';
 
 /** Max chars of task/run text handed to the teacher (bounds prompt/token cost). */
 export const TEACHER_INPUT_MAX_CHARS = 4000;
@@ -68,6 +69,7 @@ export interface TeacherExemplar {
  */
 export async function generateTeacherExemplar(
   env: Env,
+  tenantId: number,
   teacherModel: string,
   input: string,
   mode: TeacherMode = 'refine',
@@ -78,7 +80,15 @@ export async function generateTeacherExemplar(
   if (!model || text.length < 20) return null;
 
   try {
-    const result = await llmProxyForPlan(env, 'pro', true).complete(
+    // Thread the tenant's connected BYO account so a strict-pinned frontier teacher
+    // resolves on THEIR OWN account (subscription/api-key, $0 to us) when they have
+    // one — matching the "BYO funds frontier" rule. Absent → the funded premium pool.
+    const creds = await resolveTenantLlmCredentials(env, tenantId).catch(() => ({ anthropicOAuthToken: null, vendorKeys: {} }));
+    const hasVendorKeys = Object.values(creds.vendorKeys).some(Boolean);
+    const result = await llmProxyForPlan(env, 'pro', true, {
+      ...(creds.anthropicOAuthToken ? { anthropicOAuthToken: creds.anthropicOAuthToken } : {}),
+      ...(hasVendorKeys ? { tenantVendorKeys: creds.vendorKeys } : {}),
+    }).complete(
       {
         model,
         modelStrict: true,
@@ -127,8 +137,15 @@ export interface EvermindTrainingText {
  * `enforceTokenCaps`, the consumption meter, and the autonomous cron use). Fails OPEN
  * (a usage-scan error keeps the teacher) so learning is never silently disabled by a
  * transient DB blip.
+ *
+ * BYO BYPASS: the our-pool budget gate does NOT apply to a tenant who connected their
+ * OWN frontier account — their tokens fund the teacher, so an exhausted platform budget
+ * must not disable distillation for them (the teacher call itself runs on their account,
+ * see {@link generateTeacherExemplar}). When `env` is provided we check for a connected
+ * BYO provider (cheap — provider+auth_type only, no secrets) and keep the teacher.
  */
 export async function resolveEvermindTeacherModel(
+  env: Env,
   db: Db,
   tenantId: number,
   teacherModel: string | null | undefined,
@@ -136,6 +153,9 @@ export async function resolveEvermindTeacherModel(
   const model = (teacherModel ?? '').trim();
   if (!model) return null;
   try {
+    // A connected BYO frontier account funds the teacher itself → never budget-gate it.
+    const byoConnected = (await listTenantProviderKeys(env, tenantId).catch(() => [])).length > 0;
+    if (byoConnected) return model;
     const availability = await getTenantTokenAvailability(db, tenantId);
     if (!availability.hasTokens) return null;
   } catch {
@@ -155,6 +175,7 @@ export async function resolveEvermindTeacherModel(
  */
 export async function buildEvermindTrainingText(
   env: Env,
+  tenantId: number,
   teacherModel: string | null,
   runText: string,
   opts?: { prompt?: string | null; signal?: AbortSignal },
@@ -164,7 +185,7 @@ export async function buildEvermindTrainingText(
 
   const prompt = (opts?.prompt ?? '').trim();
   const [input, mode] = prompt ? [prompt, 'answer' as const] : [runText, 'refine' as const];
-  const exemplar = await generateTeacherExemplar(env, model, input, mode, opts?.signal);
+  const exemplar = await generateTeacherExemplar(env, tenantId, model, input, mode, opts?.signal);
   if (!exemplar) return { text: runText, distilled: false, skipReason: 'teacher_failed' };
 
   // Teach the (input → exemplar) mapping, mirroring DistillationEngine's shape.

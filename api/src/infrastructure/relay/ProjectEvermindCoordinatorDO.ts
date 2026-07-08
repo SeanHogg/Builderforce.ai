@@ -359,7 +359,7 @@ export class ProjectEvermindCoordinatorDO implements DurableObject {
       // is a per-tenant aggregate constant across this batch, so it must not run per
       // entry. null unless a teacher is pinned AND there's trainable text to distil.
       const effectiveTeacher = (isLM && usable.some((e) => !e.diffB64 && !!e.text))
-        ? await resolveEvermindTeacherModel(this.db, tenantId, head.teacherModel)
+        ? await resolveEvermindTeacherModel(this.env, this.db, tenantId, head.teacherModel)
         : null;
       const diffs: ArrayBuffer[] = [];
       const weights: number[] = [];
@@ -380,7 +380,7 @@ export class ProjectEvermindCoordinatorDO implements DurableObject {
           // refines the output. A teacher failure falls back to the raw text so the
           // contribution is never lost. [[evermind-learning-architecture]]
           const training = await buildEvermindTrainingText(
-            this.env, effectiveTeacher, e.text, { prompt: e.prompt ?? null },
+            this.env, tenantId, effectiveTeacher, e.text, { prompt: e.prompt ?? null },
           );
           const ids = tok.encode(training.text.slice(0, ADAPT_MAX_CHARS));
           const seqs = windows(ids, ADAPT_WINDOW_TOKENS);

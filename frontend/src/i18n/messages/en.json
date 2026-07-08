@@ -3432,13 +3432,13 @@
   },
   "llmStudio": {
     "title": "Build a Custom Model",
-    "intro": "Design data, fine-tune a LoRA adapter, and ship it as a hireable agent — all from the browser. Chat and prompt design happen in the Brain on the left; the steps below drive the build pipeline.",
+    "intro": "Design data, fine-tune a LoRA adapter, and ship it as a hireable agent — all from the browser. Chat and prompt design happen in the Brain — open it from the button in the bottom-right corner. The steps below drive the build pipeline.",
     "retry": "Retry",
     "loadError": "Failed to load project state.",
-    "footer": "☁️ Cloud inference is active now. 💻 On-device (Local) and ⚡ Hybrid inference arrive with the in-browser model runtime — switch modes from the toolbar in the Brain.",
+    "footer": "☁️ Cloud inference is live now. 💻 On-device (Local) and ⚡ Hybrid inference arrive with the in-browser model runtime.",
     "step1": {
       "title": "Design your dataset",
-      "body": "Use the Brain on the left to draft instruction/response pairs and reason about architecture. Datasets are stored per-project and feed training.",
+      "body": "Open the Brain (button in the bottom-right) to draft instruction/response pairs and reason about architecture. Datasets are stored per-project and feed training.",
       "metric": "{count, plural, one {# dataset} other {# datasets}}",
       "cta": "Open Files"
     },
