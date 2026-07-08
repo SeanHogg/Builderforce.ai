@@ -3544,6 +3544,10 @@
     "off": "Aus",
     "tooltip": "Agenten dieses Projekts laufen auf seinem Evermind (v{version}), und ihre Läufe trainieren es. Dieser Planungs-Chat trainiert es nicht — öffnen Sie den LLM-Tab, um zu sehen, was es gelernt hat."
   },
+  "evermindRun": {
+    "title": "Dieser Lauf wurde auf dem projekteigenen Evermind-Modell ausgeführt",
+    "contributed": "beigetragen"
+  },
   "llmStudio": {
     "title": "Eigenes Modell erstellen",
     "intro": "Entwirf Daten, optimiere einen LoRA-Adapter und veröffentliche ihn als anheuerbaren Agenten – alles im Browser. Chat und Prompt-Design passieren im Brain – öffne es über die Schaltfläche unten rechts. Die Schritte unten steuern die Build-Pipeline.",
@@ -5434,6 +5438,7 @@
       "accountOwn": "Ihr Konto",
       "accountShared": "Gemeinsamer Pool",
       "accountByoUnused": "Ihr verbundenes Konto wurde nicht verwendet",
+      "ranOnEvermind": "Erzeugt vom Evermind-Modell dieses Projekts",
       "stop": "Stoppen"
     },
     "tickets": {
@@ -8355,6 +8360,46 @@
     "cardChannels": "Kanäle",
     "cardOrder": "Ordnung",
     "cardDim": "Dim"
+  },
+  "agentExecution": {
+    "runThisTask": "Diese Aufgabe ausführen",
+    "awaitingApproval": "Warten auf Genehmigung, bevor dies ausgeführt werden kann: {reason}",
+    "executions": "Ausführungen",
+    "ticketSpendTooltip": "Ticket-Ausgaben über alle Ausführungen: {tokens} Tokens bei {requests} LLM-Aufruf(en). Wird auf dieses Projekt und dann auf das Konto hochgerechnet.",
+    "spentOnTicket": "~{amount} für dieses Ticket ausgegeben",
+    "loading": "Wird geladen…",
+    "noExecutions": "Noch keine Ausführungen. Verwenden Sie oben Ausführen, um diese Aufgabe an einen Agenten zu übergeben.",
+    "executionHeader": "Ausführung #{id}",
+    "agentThatRan": "Agent, der diese Ausführung ausgeführt hat",
+    "ranAs": " · ausgeführt als {type}",
+    "live": "live",
+    "polling": "Abfrage",
+    "cancel": "Abbrechen",
+    "error": "Fehler",
+    "tabOutput": "Ausgabe",
+    "tabChanges": "Änderungen",
+    "tabTools": "Werkzeuge",
+    "tabLogs": "Protokolle",
+    "tabTimeline": "Zeitleiste",
+    "tabPullRequest": "Pull Request",
+    "agentWorking": "Der Agent arbeitet… die Ausgabe wird hier live angezeigt.",
+    "noOutput": "Keine Ausgabe.",
+    "agent": "Agent",
+    "you": "Sie",
+    "steerPlaceholder": "Senden Sie dem Agenten eine neue Anweisung… (⌘/Strg+Enter)",
+    "followUpPlaceholder": "Senden Sie eine Folgenachricht, um mit dieser Anweisung eine neue Ausführung zu starten… (⌘/Strg+Enter)",
+    "steerTitle": "Steuern Sie den laufenden Agenten mit dieser Anweisung",
+    "startRunTitle": "Starten Sie eine neue Ausführung mit dieser Nachricht als Anweisung",
+    "sendingLabel": "Wird gesendet…",
+    "startingLabel": "Wird gestartet…",
+    "send": "Senden",
+    "startRun": "Ausführung starten",
+    "minimalView": "Minimalansicht — für vollständige Agentenprotokolle, Werkzeugaufrufe und Zeitleiste,",
+    "openWorkforceLogs": "öffnen Sie Workforce → Protokolle →",
+    "noFileChangesYet": "Noch keine Dateiänderungen.",
+    "noFileChangesRecorded": "Diese Ausführung hat keine Dateiänderungen aufgezeichnet.",
+    "noToolCalls": "Keine Werkzeugaufrufe aufgezeichnet.",
+    "failedToRerun": "Erneute Ausführung fehlgeschlagen"
   },
   "aiTraining": {
     "title": "KI-Modelltraining",

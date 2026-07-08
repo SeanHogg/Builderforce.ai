@@ -3544,6 +3544,10 @@
     "off": "Desactivado",
     "tooltip": "Los agentes de este proyecto se ejecutan en su Evermind (v{version}) y sus ejecuciones lo entrenan. Este chat de planificación no lo entrena: abre la pestaña LLM para ver lo que ha aprendido."
   },
+  "evermindRun": {
+    "title": "Esta ejecución se realizó en el propio modelo Evermind del proyecto",
+    "contributed": "contribuyó"
+  },
   "llmStudio": {
     "title": "Crear un modelo personalizado",
     "intro": "Diseña datos, ajusta un adaptador LoRA y publícalo como un agente contratable, todo desde el navegador. El chat y el diseño de prompts ocurren en el Brain: ábrelo con el botón de la esquina inferior derecha. Los pasos siguientes impulsan el flujo de creación.",
@@ -5434,6 +5438,7 @@
       "accountOwn": "Tu cuenta",
       "accountShared": "Grupo compartido",
       "accountByoUnused": "No se usó tu cuenta conectada",
+      "ranOnEvermind": "Generado por el modelo Evermind de este proyecto",
       "stop": "Detener"
     },
     "tickets": {
@@ -8355,6 +8360,46 @@
     "cardChannels": "Canales",
     "cardOrder": "Orden",
     "cardDim": "Dim"
+  },
+  "agentExecution": {
+    "runThisTask": "Ejecutar esta tarea",
+    "awaitingApproval": "A la espera de aprobación antes de poder ejecutarse: {reason}",
+    "executions": "Ejecuciones",
+    "ticketSpendTooltip": "Gasto del ticket en todas las ejecuciones: {tokens} tokens en {requests} llamada(s) a LLM. Se acumula en este proyecto y luego en la cuenta.",
+    "spentOnTicket": "~{amount} gastados en este ticket",
+    "loading": "Cargando…",
+    "noExecutions": "Aún no hay ejecuciones. Usa Ejecutar arriba para poner esta tarea en cola a un agente.",
+    "executionHeader": "Ejecución n.º {id}",
+    "agentThatRan": "Agente que realizó esta ejecución",
+    "ranAs": " · ejecutado como {type}",
+    "live": "en vivo",
+    "polling": "sondeando",
+    "cancel": "Cancelar",
+    "error": "Error",
+    "tabOutput": "Salida",
+    "tabChanges": "Cambios",
+    "tabTools": "Herramientas",
+    "tabLogs": "Registros",
+    "tabTimeline": "Cronología",
+    "tabPullRequest": "Pull Request",
+    "agentWorking": "El agente está trabajando… la salida aparecerá aquí en tiempo real.",
+    "noOutput": "Sin salida.",
+    "agent": "Agente",
+    "you": "Tú",
+    "steerPlaceholder": "Envía una nueva instrucción al agente… (⌘/Ctrl+Enter)",
+    "followUpPlaceholder": "Envía un seguimiento para iniciar una nueva ejecución con esta instrucción… (⌘/Ctrl+Enter)",
+    "steerTitle": "Dirige al agente en ejecución con esta instrucción",
+    "startRunTitle": "Inicia una nueva ejecución usando este mensaje como instrucción",
+    "sendingLabel": "Enviando…",
+    "startingLabel": "Iniciando…",
+    "send": "Enviar",
+    "startRun": "Iniciar ejecución",
+    "minimalView": "Vista mínima — para ver los registros completos del agente, llamadas a herramientas y cronología,",
+    "openWorkforceLogs": "abre Workforce → Registros →",
+    "noFileChangesYet": "Aún no hay cambios en archivos.",
+    "noFileChangesRecorded": "Esta ejecución no registró ningún cambio en archivos.",
+    "noToolCalls": "No se registraron llamadas a herramientas.",
+    "failedToRerun": "Error al volver a ejecutar"
   },
   "aiTraining": {
     "title": "Entrenamiento de modelos de IA",

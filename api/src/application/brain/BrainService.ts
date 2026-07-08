@@ -16,6 +16,7 @@ import {
 } from '../../infrastructure/database/schema';
 import { ideProxy, explicitModelPreemptsByo, readProxyChoice, type LlmProxyService } from '../llm/LlmProxyService';
 import { classifyReplyAccount, buildReplyProvenance } from '../llm/replyProvenance';
+import { getProjectEvermindHead } from '../llm/projectEvermind';
 import { tenantProxyForPlan } from '../llm/tenantProxy';
 import { vendorForModel } from '../llm/vendors';
 import { recordProxyUsage } from '../llm/usageLedger';
@@ -901,6 +902,40 @@ export class BrainService {
       text = finalChoice.content;
     }
 
+    // ── Run this reply ON the project's Evermind (opt-in inference) ────────────
+    // When the project opted into running on its own self-learning model, regenerate
+    // the FINAL user-facing prose on its Evermind so the learned voice/knowledge shapes
+    // the answer — while the tool-loop above stayed on the capable coding model (the tiny
+    // SSM can't tool-call, so it never drives tool selection). SOFT pin: passing
+    // `evermind/<ref>` WITHOUT modelStrict makes complete() try Evermind first and CASCADE
+    // to the coding pool on error; we ADOPT the Evermind turn only when Evermind ITSELF
+    // served a substantive reply (resolved model still `evermind/`, ≥20 chars) — otherwise
+    // we keep the capable-model answer. So enabling inference can never break or blank a
+    // reply, and a successful turn carries the "🧠 Evermind vN" provenance chip.
+    // [[evermind-learning-architecture]]
+    let evermindRun: { version: number } | undefined;
+    if (text && projectHint != null) {
+      const head = await getProjectEvermindHead(env, this.db, tenantId, projectHint).catch(() => null);
+      if (head?.inferenceEnabled && head.version >= 1 && head.ref) {
+        const evResult = await service.complete({
+          model: `evermind/${head.ref}`,
+          messages: [...convo, { role: 'user', content: `Write your reply to the team AS ${agentName}: plain prose, first person, no tool calls. Summarise what you found or did.` }] as never,
+          temperature: 0.4,
+          max_tokens: 1000,
+        });
+        this.recordUsage(apiKey, tenantId, 'brain_agent_reply', evResult);
+        const evModel = readModel(evResult);
+        const evChoice = await readProxyChoice(evResult);
+        if (evModel.startsWith('evermind/') && evChoice.content.trim().length >= 20) {
+          text = evChoice.content;
+          lastModel = evModel;
+          lastVendor = readVendor(evResult) || lastVendor;
+          lastByoFunded = readByoFunded(evResult);
+          evermindRun = { version: head.version };
+        }
+      }
+    }
+
     if (!text) {
       // Actionable diagnostics beat a bare "empty reply": name the account the run
       // used, the model it resolved to, and how much tool work happened — so the user
@@ -961,6 +996,7 @@ export class BrainService {
       vendor: lastVendor || undefined,
       byoFunded: lastByoFunded,
       hasConnectedAccount,
+      evermind: evermindRun,
     });
     const metadata = JSON.stringify({
       authoredBy: { kind: 'agent', ref: input.agentRef, name: agentName },

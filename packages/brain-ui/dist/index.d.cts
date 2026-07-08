@@ -31,6 +31,9 @@ interface BrainTimelineLabels {
     /** Provenance chip: the badge for a shared-pool turn when the tenant HAS a
      *  connected account that wasn't used — the case worth flagging. */
     accountByoUnused: string;
+    /** Provenance chip tooltip: shown on the "🧠 Evermind vN" badge when the
+     *  project's own self-learning model generated this reply. */
+    ranOnEvermind: string;
 }
 declare const DEFAULT_TIMELINE_LABELS: BrainTimelineLabels;
 interface BrainTimelineProps {

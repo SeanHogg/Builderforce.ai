@@ -3544,6 +3544,10 @@
     "off": "已关闭",
     "tooltip": "此项目的智能体在其 Evermind（v{version}）上运行，每次运行都会训练它。此规划聊天不会训练它——打开 LLM 标签页查看它学到了什么。"
   },
+  "evermindRun": {
+    "title": "此次运行在项目自己的 Evermind 模型上执行",
+    "contributed": "已贡献"
+  },
   "llmStudio": {
     "title": "构建自定义模型",
     "intro": "设计数据、微调 LoRA 适配器，并将其作为可雇佣的智能体发布——全部在浏览器中完成。聊天和提示设计在 Brain 中进行——点击右下角的按钮即可打开。下面的步骤驱动构建流程。",
@@ -5434,6 +5438,7 @@
       "accountOwn": "您的账户",
       "accountShared": "共享池",
       "accountByoUnused": "未使用您连接的账户",
+      "ranOnEvermind": "由本项目的 Evermind 模型生成",
       "stop": "停止"
     },
     "tickets": {
@@ -8355,6 +8360,46 @@
     "cardChannels": "通道",
     "cardOrder": "阶数",
     "cardDim": "维度"
+  },
+  "agentExecution": {
+    "runThisTask": "运行此任务",
+    "awaitingApproval": "此任务需先获得批准方可运行：{reason}",
+    "executions": "执行记录",
+    "ticketSpendTooltip": "所有运行的工单花费：{requests} 次 LLM 调用共 {tokens} 个 token。汇总至此项目，再汇总至账户。",
+    "spentOnTicket": "此工单已花费约 {amount}",
+    "loading": "加载中…",
+    "noExecutions": "暂无执行记录。使用上方的运行按钮将此任务排入代理队列。",
+    "executionHeader": "执行 #{id}",
+    "agentThatRan": "运行此次执行的代理",
+    "ranAs": " · 以 {type} 身份运行",
+    "live": "实时",
+    "polling": "轮询中",
+    "cancel": "取消",
+    "error": "错误",
+    "tabOutput": "输出",
+    "tabChanges": "变更",
+    "tabTools": "工具",
+    "tabLogs": "日志",
+    "tabTimeline": "时间线",
+    "tabPullRequest": "拉取请求",
+    "agentWorking": "代理正在工作…输出将在此处实时显示。",
+    "noOutput": "无输出。",
+    "agent": "代理",
+    "you": "你",
+    "steerPlaceholder": "向代理发送新指令…（⌘/Ctrl+Enter）",
+    "followUpPlaceholder": "发送后续消息以此指令开始新的运行…（⌘/Ctrl+Enter）",
+    "steerTitle": "用此指令引导正在运行的代理",
+    "startRunTitle": "以此消息作为指令开始新的运行",
+    "sendingLabel": "发送中…",
+    "startingLabel": "启动中…",
+    "send": "发送",
+    "startRun": "开始运行",
+    "minimalView": "精简视图 — 如需查看完整的代理日志、工具调用和时间线，",
+    "openWorkforceLogs": "打开 Workforce → 日志 →",
+    "noFileChangesYet": "尚无文件变更。",
+    "noFileChangesRecorded": "此次运行未记录任何文件变更。",
+    "noToolCalls": "未记录任何工具调用。",
+    "failedToRerun": "重新运行失败"
   },
   "aiTraining": {
     "title": "AI 模型训练",
