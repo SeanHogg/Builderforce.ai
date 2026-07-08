@@ -178,7 +178,7 @@ export function WorkforceAgents({ tenantId }: { tenantId?: number }) {
     try {
       setHosts(await agentHosts.list());
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to load remote agents');
+      setError(e instanceof Error ? e.message : tWf('errLoadRemote'));
     } finally {
       setLoadingHosts(false);
     }
@@ -188,7 +188,7 @@ export function WorkforceAgents({ tenantId }: { tenantId?: number }) {
     setLoadingCloud(true);
     return listMyAgents()
       .then((list) => { setCloudAgents(list); return list; })
-      .catch((e) => { setError(e instanceof Error ? e.message : 'Failed to load cloud agents'); return [] as PublishedAgent[]; })
+      .catch((e) => { setError(e instanceof Error ? e.message : tWf('errLoadCloud')); return [] as PublishedAgent[]; })
       .finally(() => setLoadingCloud(false));
   }, []);
 
@@ -218,7 +218,7 @@ export function WorkforceAgents({ tenantId }: { tenantId?: number }) {
       setPendingInvites(inviteList);
     } catch (e) {
       if (isPlanLimitError(e)) setPlanError(e);
-      else setError(e instanceof Error ? e.message : 'Failed to load members');
+      else setError(e instanceof Error ? e.message : tWf('errLoadMembers'));
     } finally {
       setLoadingPeople(false);
     }
@@ -271,13 +271,13 @@ export function WorkforceAgents({ tenantId }: { tenantId?: number }) {
 
   // --- Cloud create --------------------------------------------------------
   const createCloud = async () => {
-    if (!form.name.trim()) { setError('Name is required'); return; }
+    if (!form.name.trim()) { setError(tWf('errNameRequired')); return; }
     setSaving(true); setError('');
     try {
       await createCloudAgent(cloudAgentFormToInput(form));
       closeDialog(); loadCloud();
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Save failed');
+      setError(e instanceof Error ? e.message : tWf('errSaveFailed'));
     } finally {
       setSaving(false);
     }
@@ -298,7 +298,7 @@ export function WorkforceAgents({ tenantId }: { tenantId?: number }) {
         closeDialog();
         setPlanError(e);
       } else {
-        setError(e instanceof Error ? e.message : 'Registration failed');
+        setError(e instanceof Error ? e.message : tWf('errRegisterFailed'));
       }
     } finally {
       setRegistering(false);
@@ -317,12 +317,12 @@ export function WorkforceAgents({ tenantId }: { tenantId?: number }) {
   // --- Quick card actions --------------------------------------------------
   const unpublish = async (a: PublishedAgent) => { await updateAgent(a.id, { published: false }); loadCloud(); };
   const deleteOwned = async (a: PublishedAgent) => {
-    if (!(await confirm(`Delete agent "${a.name}"? This permanently removes it and its per-agent skills/personas. This cannot be undone.`))) return;
+    if (!(await confirm(tc('deleteAgentPermanentConfirm', { name: a.name })))) return;
     try {
       await deleteAgent(a.id);
       loadCloud();
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Delete failed');
+      setError(e instanceof Error ? e.message : tWf('errDeleteFailed'));
     }
   };
 
@@ -335,7 +335,7 @@ export function WorkforceAgents({ tenantId }: { tenantId?: number }) {
       await unhireAgent(agentId);
       await loadPurchased();
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Unhire failed');
+      setError(e instanceof Error ? e.message : tWf('errUnhireFailed'));
     } finally {
       setUnhiringId(null);
     }
@@ -350,7 +350,7 @@ export function WorkforceAgents({ tenantId }: { tenantId?: number }) {
       setMembers((prev) => prev.filter((m) => m.id !== member.id));
     } catch (e) {
       if (isPlanLimitError(e)) setPlanError(e);
-      else setError(e instanceof Error ? e.message : 'Failed to remove member');
+      else setError(e instanceof Error ? e.message : tWf('errRemoveMember'));
     } finally {
       setRemovingMemberId(null);
       setConfirmRemove(null);
@@ -365,7 +365,7 @@ export function WorkforceAgents({ tenantId }: { tenantId?: number }) {
       setMembers((prev) => prev.map((m) => (m.id === member.id ? { ...m, role } : m)));
     } catch (e) {
       if (isPlanLimitError(e)) setPlanError(e);
-      else setError(e instanceof Error ? e.message : 'Failed to change role');
+      else setError(e instanceof Error ? e.message : tWf('errChangeRole'));
     } finally {
       setChangingRoleId(null);
     }
@@ -378,7 +378,7 @@ export function WorkforceAgents({ tenantId }: { tenantId?: number }) {
       await revokeInvitation(tenantToken, String(tenant.id), invite.id);
       setPendingInvites((prev) => prev.filter((i) => i.id !== invite.id));
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to revoke invitation');
+      setError(e instanceof Error ? e.message : tWf('errRevokeInvite'));
     } finally {
       setRevokingInviteId(null);
     }
@@ -403,28 +403,28 @@ export function WorkforceAgents({ tenantId }: { tenantId?: number }) {
    <WorkforceMetricsProvider>
     <section>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-        <h2 style={{ fontSize: 18, fontWeight: 600, color: 'var(--text-strong)', margin: 0 }}>Workforce</h2>
+        <h2 style={{ fontSize: 18, fontWeight: 600, color: 'var(--text-strong)', margin: 0 }}>{tWf('workforceTitle')}</h2>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
         {!loading && !isEmpty && <ViewToggle value={viewMode} onChange={setViewMode} />}
         {canConsolidate && viewMode === 'table' && (
           <button type="button" onClick={() => setConsolidateOpen(true)} style={inviteBtn}>
-            {selectedMembers.length > 0 ? `Consolidate (${selectedMembers.length})` : 'Consolidate'}
+            {selectedMembers.length > 0 ? tWf('consolidateActionCount', { count: selectedMembers.length }) : tWf('consolidateAction')}
           </button>
         )}
         {tenant && tenantToken && (
           <RoleGate capability="members.invite">
-            <button type="button" onClick={() => setInviteOpen(true)} style={inviteBtn}>Invite</button>
+            <button type="button" onClick={() => setInviteOpen(true)} style={inviteBtn}>{tWf('inviteAction')}</button>
           </RoleGate>
         )}
         <div style={{ position: 'relative', display: 'inline-flex' }}>
           <RoleGate capability="agents.create">
-          <button type="button" onClick={() => openCreate('cloud')} style={splitMain}>+ Agent</button>
+          <button type="button" onClick={() => openCreate('cloud')} style={splitMain}>{tWf('addAgentAction')}</button>
           </RoleGate>
           <button
             type="button"
             onClick={() => setQuickstartOpen((o) => !o)}
             style={splitCaret}
-            aria-label="Connect a new agent with the quickstart"
+            aria-label={tWf('quickstartAria')}
             aria-haspopup="dialog"
             aria-expanded={quickstartOpen}
           >
@@ -432,7 +432,7 @@ export function WorkforceAgents({ tenantId }: { tenantId?: number }) {
           </button>
           {quickstartOpen && (
             <ConfiguredQuickstartPopover
-              workgroupName={tenant?.name ?? 'your workgroup'}
+              workgroupName={tenant?.name ?? tWf('workgroupFallback')}
               workgroupSlug={tenant?.slug}
               tenantToken={tenantToken}
               onClose={() => setQuickstartOpen(false)}
@@ -442,8 +442,7 @@ export function WorkforceAgents({ tenantId }: { tenantId?: number }) {
         </div>
       </div>
       <p style={{ fontSize: 13, color: 'var(--muted)', marginBottom: 16 }}>
-        Your people and agents in one workforce — human teammates, pending invites, cloud agents, and
-        registered remote agents (self-hosted BuilderForce Agents instances). Publish a cloud agent to the marketplace to earn revenue.
+        {tWf('intro')}
       </p>
 
       {error && !dialogOpen && (
@@ -451,21 +450,21 @@ export function WorkforceAgents({ tenantId }: { tenantId?: number }) {
       )}
 
       {loading ? (
-        <div style={{ color: 'var(--muted)', fontSize: 13, padding: 24 }}>Loading workforce…</div>
+        <div style={{ color: 'var(--muted)', fontSize: 13, padding: 24 }}>{tWf('loadingWorkforce')}</div>
       ) : isEmpty ? (
         <div className="empty-state" style={{ padding: 48 }}>
           <div className="empty-state-icon">📁</div>
-          <div className="empty-state-title">No one here yet</div>
-          <div className="empty-state-sub">Invite a teammate, or create a cloud agent / register a remote (self-hosted) agent to start building your workforce.</div>
+          <div className="empty-state-title">{tWf('emptyTitle')}</div>
+          <div className="empty-state-sub">{tWf('emptySub')}</div>
           <div style={{ display: 'flex', gap: 10, marginTop: 14 }}>
             <RoleGate capability="members.invite">
               <button type="button" onClick={() => setInviteOpen(true)} style={{ ...inviteBtn, padding: '10px 18px', fontSize: 14, borderRadius: 10 }}>
-                Invite a teammate
+                {tWf('inviteTeammate')}
               </button>
             </RoleGate>
             <RoleGate capability="agents.create">
               <button type="button" onClick={() => openCreate('cloud')} style={{ ...btnPrimary, padding: '10px 18px', fontSize: 14, borderRadius: 10 }}>
-                Add agent
+                {tWf('addAgent')}
               </button>
             </RoleGate>
           </div>
@@ -511,14 +510,14 @@ export function WorkforceAgents({ tenantId }: { tenantId?: number }) {
                   <span style={{ fontSize: 15, fontWeight: 600, color: 'var(--text-strong)', flex: 1 }}>{host.name}</span>
                   <AgentTypePill kind="host" />
                   {isDefault && (
-                    <span style={{ fontSize: 10, fontWeight: 600, padding: '2px 6px', borderRadius: 6, background: 'var(--surface-coral-soft)', color: 'var(--coral-bright)' }}>Default</span>
+                    <span style={{ fontSize: 10, fontWeight: 600, padding: '2px 6px', borderRadius: 6, background: 'var(--surface-coral-soft)', color: 'var(--coral-bright)' }}>{tWf('defaultBadge')}</span>
                   )}
                   <StatusBadge variant={connected ? 'online' : 'offline'} />
                 </div>
                 <div style={{ fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--muted)' }}>{host.slug ?? host.name}</div>
-                <div style={{ fontSize: 12, color: 'var(--muted)' }}>Last seen {lastSeen}</div>
+                <div style={{ fontSize: 12, color: 'var(--muted)' }}>{tWf('hostLastSeen', { when: lastSeen })}</div>
                 <div style={{ marginTop: 4 }}>
-                  <button type="button" onClick={(e) => { e.stopPropagation(); setSelectedHost(host); }} style={btnPrimary}>Open</button>
+                  <button type="button" onClick={(e) => { e.stopPropagation(); setSelectedHost(host); }} style={btnPrimary}>{tWf('open')}</button>
                 </div>
               </div>
             );
@@ -576,14 +575,14 @@ export function WorkforceAgents({ tenantId }: { tenantId?: number }) {
           <table style={tableStyle}>
             <thead>
               <tr style={theadRowStyle}>
-                {canConsolidate && <th style={{ ...thStyle, width: 36 }} aria-label="Select to consolidate" />}
-                <th style={thStyle}>Name</th>
-                <th style={thStyle}>Type</th>
-                <th style={thStyle}>Status</th>
-                <th style={thStyle}>Runtime</th>
-                <th style={thStyle}>Price</th>
-                <th style={thStyle}>Configuration</th>
-                <th style={thStyle} aria-label="Actions" />
+                {canConsolidate && <th style={{ ...thStyle, width: 36 }} aria-label={tWf('selectToConsolidateAria')} />}
+                <th style={thStyle}>{tWf('colName')}</th>
+                <th style={thStyle}>{tWf('colType')}</th>
+                <th style={thStyle}>{tWf('colStatus')}</th>
+                <th style={thStyle}>{tWf('colRuntime')}</th>
+                <th style={thStyle}>{tWf('colPrice')}</th>
+                <th style={thStyle}>{tWf('colConfiguration')}</th>
+                <th style={thStyle} aria-label={tWf('colActionsAria')} />
               </tr>
             </thead>
             <tbody>
@@ -596,7 +595,7 @@ export function WorkforceAgents({ tenantId }: { tenantId?: number }) {
                         type="checkbox"
                         checked={selectedMemberIds.has(m.id)}
                         onChange={() => toggleMemberSelected(m.id)}
-                        aria-label={`Select ${m.displayName ?? m.email} to consolidate`}
+                        aria-label={tWf('selectMemberAria', { name: m.displayName ?? m.email })}
                       />
                     </td>
                   )}
@@ -610,7 +609,7 @@ export function WorkforceAgents({ tenantId }: { tenantId?: number }) {
                   </td>
                   <td style={tdStyle}>
                     <button type="button" style={btnSubtle} disabled={removingMemberId === m.id} onClick={() => setConfirmRemove(m)}>
-                      {removingMemberId === m.id ? 'Removing…' : 'Remove'}
+                      {removingMemberId === m.id ? tWf('removing') : tWf('remove')}
                     </button>
                   </td>
                 </tr>
@@ -622,13 +621,13 @@ export function WorkforceAgents({ tenantId }: { tenantId?: number }) {
                   {canConsolidate && <td style={tdStyle} />}
                   <td style={tdStyle}>{inv.email}</td>
                   <td style={tdStyle}><AgentTypePill kind="pending" /></td>
-                  <td style={tdMutedStyle}>Invited as {inv.role}</td>
+                  <td style={tdMutedStyle}>{tWf('invitedAs', { role: inv.role })}</td>
                   <td style={tdMutedStyle}>—</td>
                   <td style={tdMutedStyle}>—</td>
                   <td style={tdMutedStyle}>—</td>
                   <td style={tdStyle}>
                     <button type="button" style={btnSubtle} disabled={revokingInviteId === inv.id} onClick={() => handleRevokeInvite(inv)}>
-                      {revokingInviteId === inv.id ? 'Revoking…' : 'Revoke'}
+                      {revokingInviteId === inv.id ? tWf('revoking') : tWf('revoke')}
                     </button>
                   </td>
                 </tr>
@@ -648,16 +647,16 @@ export function WorkforceAgents({ tenantId }: { tenantId?: number }) {
                     <td style={tdStyle}>
                       {host.name}
                       {isDefault && (
-                        <span style={{ marginLeft: 8, fontSize: 10, fontWeight: 600, padding: '2px 6px', borderRadius: 6, background: 'var(--surface-coral-soft)', color: 'var(--coral-bright)' }}>Default</span>
+                        <span style={{ marginLeft: 8, fontSize: 10, fontWeight: 600, padding: '2px 6px', borderRadius: 6, background: 'var(--surface-coral-soft)', color: 'var(--coral-bright)' }}>{tWf('defaultBadge')}</span>
                       )}
                     </td>
                     <td style={tdStyle}><AgentTypePill kind="host" /></td>
-                    <td style={tdMutedStyle}>{connected ? 'Online' : 'Offline'}</td>
-                    <td style={tdMutedStyle}>Remote</td>
+                    <td style={tdMutedStyle}>{connected ? tWf('statusOnline') : tWf('statusOffline')}</td>
+                    <td style={tdMutedStyle}>{tWf('runtimeRemote')}</td>
                     <td style={tdMutedStyle}>—</td>
                     <td style={tdMutedStyle}>—</td>
                     <td style={tdStyle} onClick={(e) => e.stopPropagation()}>
-                      <button type="button" onClick={() => setSelectedHost(host)} style={btnSubtle}>Open</button>
+                      <button type="button" onClick={() => setSelectedHost(host)} style={btnSubtle}>{tWf('open')}</button>
                     </td>
                   </tr>
                 );
@@ -691,7 +690,7 @@ export function WorkforceAgents({ tenantId }: { tenantId?: number }) {
                     </span>
                   </td>
                   <td style={tdStyle}><AgentTypePill kind="cloud" /></td>
-                  <td style={tdMutedStyle}>{a.published ? 'Published' : 'Draft'}</td>
+                  <td style={tdMutedStyle}>{a.published ? tWf('statusPublished') : tWf('statusDraft')}</td>
                   <td style={tdMutedStyle}>{RUNTIME_LABELS[a.runtime_support ?? 'cloud']}</td>
                   <td style={tdMutedStyle}>{formatAgentPrice(a)}</td>
                   <td style={tdStyle}><AgentManifestInline agent={a} manifest={agentManifests[a.id]} /></td>
@@ -725,7 +724,7 @@ export function WorkforceAgents({ tenantId }: { tenantId?: number }) {
                   <td style={tdStyle}><AgentManifestInline agent={a} manifest={agentManifests[a.id]} /></td>
                   <td style={tdStyle}>
                     <button type="button" style={btnSubtle} disabled={unhiringId === a.id} onClick={() => unhire(a.id)}>
-                      {unhiringId === a.id ? 'Unhiring…' : 'Unhire'}
+                      {unhiringId === a.id ? tWf('unhiring') : tWf('unhire')}
                     </button>
                   </td>
                 </tr>
@@ -744,7 +743,7 @@ export function WorkforceAgents({ tenantId }: { tenantId?: number }) {
 
       {/* Invite a teammate slide-out */}
       {tenant && tenantToken && (
-        <SlideOutPanel open={inviteOpen} onClose={() => setInviteOpen(false)} title="Invite a teammate">
+        <SlideOutPanel open={inviteOpen} onClose={() => setInviteOpen(false)} title={tWf('inviteTeammate')}>
           <div style={{ padding: 20 }}>
             <InviteTeamMembers
               tenantId={String(tenant.id)}
@@ -761,10 +760,10 @@ export function WorkforceAgents({ tenantId }: { tenantId?: number }) {
         open={!!confirmRemove}
         message={
           confirmRemove
-            ? `Remove ${confirmRemove.displayName ?? confirmRemove.email} from this workspace? They will lose access immediately.`
+            ? tWf('removeMemberConfirm', { name: confirmRemove.displayName ?? confirmRemove.email })
             : ''
         }
-        confirmLabel="Remove"
+        confirmLabel={tWf('remove')}
         onCancel={() => setConfirmRemove(null)}
         onConfirm={() => { if (confirmRemove) void handleRemoveMember(confirmRemove); }}
       />

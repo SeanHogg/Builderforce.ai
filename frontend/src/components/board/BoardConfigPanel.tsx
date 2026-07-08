@@ -520,7 +520,8 @@ function TeamsTab({ projectId }: { projectId: number }) {
   const attachedIds = new Set(attached.map((t) => t.id));
   const available = allTeams.filter((t) => !attachedIds.has(t.id));
 
-  const mutate = async (fn: () => Promise<void>) => {
+  const mutate = async (fn: () =>
+    Promise<void>) => {
     setBusy(true);
     setError(null);
     try { await fn(); await load(); }

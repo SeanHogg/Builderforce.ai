@@ -27,7 +27,7 @@ const PAGE_SIZE = 8;
 interface SessionListProps {
   sessions: ManagedSession[];
   /** Revoke the given session ids (bulk-capable). Parent updates state on success. */
-  onRevoke: (ids: string[]) => Promise<void>;
+  onRevoke(ids: string[]): Promise<void>;
 }
 
 /**

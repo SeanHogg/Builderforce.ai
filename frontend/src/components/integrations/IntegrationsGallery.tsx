@@ -195,7 +195,7 @@ export function IntegrationsGallery() {
 }
 
 // ── Connections tab: workspace-wide list of this provider's connections ───────
-function ConnectionsTab({ provider, onChanged, t }: { provider: string; onChanged: () => void; t: ReturnType<typeof useTranslations> }) {
+function ConnectionsTab({ provider, onChanged, t }: { provider: string; t: ReturnType<typeof useTranslations>; onChanged: () => void }) {
   const confirm = useConfirm();
   const [rows, setRows] = useState<BoardConnection[] | null>(null);
   const [syncing, setSyncing] = useState<string | null>(null);

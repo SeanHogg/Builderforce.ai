@@ -665,7 +665,7 @@ export function TaskMgmtContent({
   const removeTask = async (t: Task | null, e?: React.MouseEvent) => {
     e?.stopPropagation();
     if (!t?.id) return;
-    if (!(await confirm(`Delete "${t.title}"?`))) return;
+    if (!(await confirm(tCommon('deleteNamedConfirm', { name: t.title })))) return;
     try {
       await tasksApi.delete(t.id);
       setTasks((prev) => prev.filter((i) => i.id !== t.id));

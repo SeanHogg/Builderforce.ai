@@ -74,6 +74,7 @@ function publicToPersona(p: PublicPersona): Persona {
 
 export default function PersonasPage() {
   const t = useTranslations('personasPage');
+  const tc = useTranslations('common');
   const confirm = useConfirm();
   const { tenant } = useAuth();
   const tenantId = tenant?.id ?? '';
@@ -269,11 +270,11 @@ export default function PersonasPage() {
 
   const sourceBadge = (source: Persona['source']) => {
     const map: Record<string, { label: string; color: string }> = {
-      builtin: { label: 'Built-in', color: 'var(--accent,#6366f1)' },
-      agenthub: { label: 'AgentHostHub', color: '#22c55e' },
-      'project-local': { label: 'Project', color: '#f59e0b' },
-      'user-global': { label: 'User', color: '#06b6d4' },
-      'agentlink-assigned': { label: 'Assigned', color: '#ec4899' },
+      builtin: { label: t('sourceBuiltin'), color: 'var(--accent,#6366f1)' },
+      agenthub: { label: t('sourceAgenthub'), color: '#22c55e' },
+      'project-local': { label: t('sourceProject'), color: '#f59e0b' },
+      'user-global': { label: t('sourceUser'), color: '#06b6d4' },
+      'agentlink-assigned': { label: t('sourceAssigned'), color: '#ec4899' },
     };
     const m = map[source] ?? { label: source, color: 'var(--muted)' };
     return <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 99, background: m.color, color: contrastText(m.color), textTransform: 'uppercase' }}>{m.label}</span>;
@@ -348,7 +349,7 @@ export default function PersonasPage() {
                           {p.tags.slice(0, 3).map((t) => (
                             <span key={t} className="badge badge-gray">{t}</span>
                           ))}
-                          {p.shared && <span className="badge badge-green">Shared</span>}
+                          {p.shared && <span className="badge badge-green">{t('shared')}</span>}
                         </div>
                       </div>
                     </div>
@@ -356,9 +357,9 @@ export default function PersonasPage() {
                   {p.description && <div style={{ fontSize: 12, color: 'var(--muted)', lineHeight: 1.5, margin: '8px 0' }}>{p.description}</div>}
                   <div style={{ display: 'flex', gap: 6, marginTop: 8, flexWrap: 'wrap' }}>
                     <button type="button" className="btn btn-primary btn-sm" disabled={publishingId === p.id} onClick={() => publishPersona(p)}>
-                      {publishingId === p.id ? 'Publishing…' : p.shared ? 'Re-publish' : 'Publish to Registry'}
+                      {publishingId === p.id ? t('publishing') : p.shared ? t('rePublish') : t('publishToRegistry')}
                     </button>
-                    <button type="button" className="btn btn-danger btn-sm" onClick={() => deleteUserPersona(p.id)}>Delete</button>
+                    <button type="button" className="btn btn-danger btn-sm" onClick={() => deleteUserPersona(p.id)}>{tc('delete')}</button>
                     <ArtifactAssigner artifactType="persona" artifactSlug={p.slug} artifactName={p.name} />
                   </div>
                 </div>
@@ -370,10 +371,10 @@ export default function PersonasPage() {
             <table style={tableStyle}>
               <thead>
                 <tr style={theadRowStyle}>
-                  <th style={thStyle}>Name</th>
-                  <th style={thStyle}>Description</th>
-                  <th style={thStyle}>Tags</th>
-                  <th style={thStyle}>Actions</th>
+                  <th style={thStyle}>{t('colName')}</th>
+                  <th style={thStyle}>{t('colDescription')}</th>
+                  <th style={thStyle}>{t('colTags')}</th>
+                  <th style={thStyle}>{t('colActions')}</th>
                 </tr>
               </thead>
               <tbody>
@@ -381,7 +382,7 @@ export default function PersonasPage() {
                   <tr key={p.id} style={trStyle}>
                     <td style={{ ...tdStyle, fontWeight: 600, whiteSpace: 'nowrap' }}>
                       <span style={{ marginRight: 6 }}>🎭</span>{p.name}
-                      {p.shared && <span className="badge badge-green" style={{ marginLeft: 6 }}>Shared</span>}
+                      {p.shared && <span className="badge badge-green" style={{ marginLeft: 6 }}>{t('shared')}</span>}
                     </td>
                     <td style={tdMutedStyle}>{p.description || '—'}</td>
                     <td style={tdMutedStyle}>
@@ -391,8 +392,8 @@ export default function PersonasPage() {
                     </td>
                     <td style={tdStyle}>
                       <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
-                        <button type="button" className="btn btn-primary btn-sm" disabled={publishingId === p.id} onClick={() => publishPersona(p)}>{publishingId === p.id ? 'Publishing…' : p.shared ? 'Re-publish' : 'Publish'}</button>
-                        <button type="button" className="btn btn-danger btn-sm" onClick={() => deleteUserPersona(p.id)}>Delete</button>
+                        <button type="button" className="btn btn-primary btn-sm" disabled={publishingId === p.id} onClick={() => publishPersona(p)}>{publishingId === p.id ? t('publishing') : p.shared ? t('rePublish') : t('publishShort')}</button>
+                        <button type="button" className="btn btn-danger btn-sm" onClick={() => deleteUserPersona(p.id)}>{tc('delete')}</button>
                         <ArtifactAssigner artifactType="persona" artifactSlug={p.slug} artifactName={p.name} />
                       </div>
                     </td>
@@ -441,45 +442,45 @@ export default function PersonasPage() {
                       </div>
                       {p.description && <div style={{ fontSize: 12, color: 'var(--muted)', lineHeight: 1.5, margin: '8px 0' }}>{p.description}</div>}
                       <div style={{ display: 'flex', alignItems: 'center', gap: 12, fontSize: 11, color: 'var(--muted)', margin: '4px 0 8px' }}>
-                        <button type="button" style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, fontSize: 11, color: stat.liked ? 'var(--error)' : 'var(--muted)' }} title={stat.liked ? 'Unlike' : 'Like'} onClick={(e) => { e.stopPropagation(); toggleLike(p.name); }}>{stat.liked ? '❤️' : '🤍'} {stat.likes}</button>
-                        <span title="Installs">⬇️ {stat.installs}</span>
-                        {p.author && <span>by {p.author}</span>}
+                        <button type="button" style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, fontSize: 11, color: stat.liked ? 'var(--error)' : 'var(--muted)' }} title={stat.liked ? t('unlike') : t('like')} onClick={(e) => { e.stopPropagation(); toggleLike(p.name); }}>{stat.liked ? '❤️' : '🤍'} {stat.likes}</button>
+                        <span title={t('installsTitle')}>⬇️ {stat.installs}</span>
+                        {p.author && <span>{t('byAuthor', { author: p.author })}</span>}
                       </div>
                       {isOpen && (
                         <div style={{ marginTop: 12, borderTop: '1px solid var(--border)', paddingTop: 12, display: 'grid', gap: 10 }}>
                           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 8 }}>
                             <div style={{ border: '1px solid var(--border)', borderRadius: 8, padding: 8 }}>
-                              <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--muted)', textTransform: 'uppercase', marginBottom: 3 }}>Voice</div>
+                              <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--muted)', textTransform: 'uppercase', marginBottom: 3 }}>{t('voiceLabel')}</div>
                               <div style={{ fontSize: 12, color: 'var(--text)' }}>{p.voice}</div>
                             </div>
                             <div style={{ border: '1px solid var(--border)', borderRadius: 8, padding: 8 }}>
-                              <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--muted)', textTransform: 'uppercase', marginBottom: 3 }}>Perspective</div>
+                              <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--muted)', textTransform: 'uppercase', marginBottom: 3 }}>{t('perspectiveLabel')}</div>
                               <div style={{ fontSize: 12, color: 'var(--text)' }}>{p.perspective}</div>
                             </div>
                             <div style={{ border: '1px solid var(--border)', borderRadius: 8, padding: 8 }}>
-                              <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--muted)', textTransform: 'uppercase', marginBottom: 3 }}>Decision Style</div>
+                              <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--muted)', textTransform: 'uppercase', marginBottom: 3 }}>{t('decisionStyleLabel')}</div>
                               <div style={{ fontSize: 12, color: 'var(--text)' }}>{p.decisionStyle}</div>
                             </div>
                           </div>
                           <div>
-                            <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--muted)', textTransform: 'uppercase', marginBottom: 4 }}>Capabilities</div>
+                            <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--muted)', textTransform: 'uppercase', marginBottom: 4 }}>{t('capabilitiesLabel')}</div>
                             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>{p.capabilities.map((c) => <span key={c} className="badge badge-gray">{c}</span>)}</div>
                           </div>
-                          <div style={{ fontSize: 12, color: 'var(--muted)' }}>Output prefix: <code style={{ background: 'var(--surface-2)', padding: '1px 6px', borderRadius: 4, fontSize: 11 }}>{p.outputPrefix}</code></div>
+                          <div style={{ fontSize: 12, color: 'var(--muted)' }}>{t('outputPrefixLabel')} <code style={{ background: 'var(--surface-2)', padding: '1px 6px', borderRadius: 4, fontSize: 11 }}>{p.outputPrefix}</code></div>
                         </div>
                       )}
                     </div>
                     <div style={{ display: 'flex', gap: 6, alignItems: 'center', padding: '0 0 4px' }} onClick={(e) => e.stopPropagation()}>
                       {installed ? (
                         <>
-                          <button type="button" className="btn btn-danger btn-sm" onClick={() => unassignPersona(p.name)}>Uninstall</button>
+                          <button type="button" className="btn btn-danger btn-sm" onClick={() => unassignPersona(p.name)}>{t('uninstall')}</button>
                           <ArtifactAssigner artifactType="persona" artifactSlug={p.name} artifactName={p.name} />
                         </>
                       ) : (
                         <>
-                          <button type="button" className="btn btn-primary btn-sm" onClick={() => assignPersona(p.name)}>Install</button>
+                          <button type="button" className="btn btn-primary btn-sm" onClick={() => assignPersona(p.name)}>{t('install')}</button>
                           <ArtifactAssigner artifactType="persona" artifactSlug={p.name} artifactName={p.name} />
-                          <Link href={`/personas/${encodeURIComponent(p.name)}`} className="btn btn-secondary btn-sm">View</Link>
+                          <Link href={`/personas/${encodeURIComponent(p.name)}`} className="btn btn-secondary btn-sm">{tc('view')}</Link>
                         </>
                       )}
                     </div>
@@ -492,11 +493,11 @@ export default function PersonasPage() {
               <table style={tableStyle}>
                 <thead>
                   <tr style={theadRowStyle}>
-                    <th style={thStyle}>Name</th>
-                    <th style={thStyle}>Description</th>
-                    <th style={thStyle}>Source / Tags</th>
-                    <th style={thStyle}>Stats</th>
-                    <th style={thStyle}>Actions</th>
+                    <th style={thStyle}>{t('colName')}</th>
+                    <th style={thStyle}>{t('colDescription')}</th>
+                    <th style={thStyle}>{t('colSourceTags')}</th>
+                    <th style={thStyle}>{t('colStats')}</th>
+                    <th style={thStyle}>{t('colActions')}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -516,21 +517,21 @@ export default function PersonasPage() {
                           </div>
                         </td>
                         <td style={{ ...tdMutedStyle, whiteSpace: 'nowrap' }}>
-                          <button type="button" style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, fontSize: 11, color: stat.liked ? 'var(--error)' : 'var(--muted)' }} title={stat.liked ? 'Unlike' : 'Like'} onClick={() => toggleLike(p.name)}>{stat.liked ? '❤️' : '🤍'} {stat.likes}</button>
+                          <button type="button" style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, fontSize: 11, color: stat.liked ? 'var(--error)' : 'var(--muted)' }} title={stat.liked ? t('unlike') : t('like')} onClick={() => toggleLike(p.name)}>{stat.liked ? '❤️' : '🤍'} {stat.likes}</button>
                           <span style={{ marginLeft: 10, fontSize: 11 }}>⬇️ {stat.installs}</span>
                         </td>
                         <td style={tdStyle}>
                           <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
                             {installed ? (
                               <>
-                                <button type="button" className="btn btn-danger btn-sm" onClick={() => unassignPersona(p.name)}>Uninstall</button>
+                                <button type="button" className="btn btn-danger btn-sm" onClick={() => unassignPersona(p.name)}>{t('uninstall')}</button>
                                 <ArtifactAssigner artifactType="persona" artifactSlug={p.name} artifactName={p.name} />
                               </>
                             ) : (
                               <>
-                                <button type="button" className="btn btn-primary btn-sm" onClick={() => assignPersona(p.name)}>Install</button>
+                                <button type="button" className="btn btn-primary btn-sm" onClick={() => assignPersona(p.name)}>{t('install')}</button>
                                 <ArtifactAssigner artifactType="persona" artifactSlug={p.name} artifactName={p.name} />
-                                <Link href={`/personas/${encodeURIComponent(p.name)}`} className="btn btn-secondary btn-sm">View</Link>
+                                <Link href={`/personas/${encodeURIComponent(p.name)}`} className="btn btn-secondary btn-sm">{tc('view')}</Link>
                               </>
                             )}
                           </div>

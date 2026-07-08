@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { agentHostNodesApi, type AgentHostNode } from '@/lib/builderforceApi';
+import { useTranslations } from 'next-intl';
 import { useConfirm } from '@/components/ConfirmProvider';
 
 interface AgentHostNodesContentProps {
@@ -17,6 +18,8 @@ const cardStyle: React.CSSProperties = {
 
 export function AgentHostNodesContent({ agentHostId }: AgentHostNodesContentProps) {
   const confirm = useConfirm();
+  const tc = useTranslations('common');
+  const t = useTranslations('agentHostNodes');
   const [nodes, setNodes] = useState<AgentHostNode[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -36,25 +39,25 @@ export function AgentHostNodesContent({ agentHostId }: AgentHostNodesContentProp
   useEffect(() => { load(); }, [agentHostId]);
 
   const handleUnpair = async (node: AgentHostNode) => {
-    if (!(await confirm(`Unpair node "${node.name}"? This will disconnect it.`))) return;
+    if (!(await confirm(tc('unpairNodeConfirm', { name: node.name })))) return;
     setUnpairing(node.id);
     try {
       await agentHostNodesApi.unpair(agentHostId, node.id);
       setNodes((prev) => prev.filter((n) => n.id !== node.id));
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Unpair failed');
+      setError(e instanceof Error ? e.message : t('unpairFailed'));
     } finally {
       setUnpairing(null);
     }
   };
 
-  if (loading) return <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>Loading nodes…</div>;
+  if (loading) return <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>{t('loadingNodes')}</div>;
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>
-          Cluster Nodes ({nodes.length})
+          {t('clusterNodesCount', { count: nodes.length })}
         </div>
         <button
           type="button"
@@ -70,21 +73,21 @@ export function AgentHostNodesContent({ agentHostId }: AgentHostNodesContentProp
             cursor: 'pointer',
           }}
         >
-          Refresh
+          {t('refresh')}
         </button>
       </div>
 
       {error && (
-        <div style={{ ...cardStyle, color: 'var(--coral-bright)', fontSize: 13 }}>Error: {error}</div>
+        <div style={{ ...cardStyle, color: 'var(--coral-bright)', fontSize: 13 }}>{t('errorPrefix', { message: error })}</div>
       )}
 
       <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: 0 }}>
-        Nodes are individual agentHost instances that form this cluster. Multi-node deployments allow horizontal scaling of task execution.
+        {t('nodesDescription')}
       </p>
 
       {nodes.length === 0 ? (
         <div style={{ ...cardStyle, fontSize: 13, color: 'var(--text-muted)', textAlign: 'center' }}>
-          No cluster nodes found. This agentHost is running as a single-node instance.
+          {t('noNodes')}
         </div>
       ) : (
         nodes.map((node) => {
@@ -127,7 +130,7 @@ export function AgentHostNodesContent({ agentHostId }: AgentHostNodesContentProp
                   </span>
                 </div>
                 <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 4 }}>
-                  ID: <span style={{ fontFamily: 'var(--font-mono)' }}>{node.id}</span>
+                  {t('idLabel')} <span style={{ fontFamily: 'var(--font-mono)' }}>{node.id}</span>
                 </div>
                 {node.capabilities.length > 0 && (
                   <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
@@ -149,7 +152,7 @@ export function AgentHostNodesContent({ agentHostId }: AgentHostNodesContentProp
                   </div>
                 )}
                 <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>
-                  {node.lastSeenAt ? `Last seen ${new Date(node.lastSeenAt).toLocaleString()}` : 'Never connected'}
+                  {node.lastSeenAt ? t('lastSeen', { time: new Date(node.lastSeenAt).toLocaleString() }) : t('neverConnected')}
                 </div>
               </div>
               <button
@@ -169,7 +172,7 @@ export function AgentHostNodesContent({ agentHostId }: AgentHostNodesContentProp
                   opacity: unpairing === node.id ? 0.5 : 1,
                 }}
               >
-                {unpairing === node.id ? '…' : 'Unpair'}
+                {unpairing === node.id ? '…' : t('unpair')}
               </button>
             </div>
           );
