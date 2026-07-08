@@ -5,9 +5,12 @@ import { resolveIsSuperadmin } from '../../infrastructure/auth/superadminFlag';
 import { resolveTenantPlan } from '../routes/llmRoutes';
 import {
   evaluateFeatureEntitlement,
+  evaluateFrontierAccess,
   type PlanFeature,
   type FeatureEntitlement,
+  type FrontierAccess,
 } from '../../domain/tenant/planFeatures';
+import { listTenantProviderKeys } from '../../application/llm/tenantProviderKeyService';
 
 /**
  * Feature gate — the ONE reusable entry point route handlers use to gate a
