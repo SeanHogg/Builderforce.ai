@@ -1504,7 +1504,7 @@ var C = {
   accent: "var(--bf-ev-accent, var(--coral-bright, var(--accent, var(--bf-accent, #ff6b5e))))",
   danger: "var(--bf-ev-danger, var(--danger-text, #d9534f))"
 };
-function EvermindConsole({ adapter, canManage, labels, refreshMs = 2e4 }) {
+function EvermindConsole({ adapter, canManage, labels, refreshMs = 2e4, projectName }) {
   const t = (0, import_react7.useMemo)(() => ({ ...DEFAULT_EVERMIND_LABELS, ...labels ?? {} }), [labels]);
   const [data, setData] = (0, import_react7.useState)(null);
   const [seedModels, setSeedModels] = (0, import_react7.useState)([]);
@@ -1516,12 +1516,15 @@ function EvermindConsole({ adapter, canManage, labels, refreshMs = 2e4 }) {
   const [notice, setNotice] = (0, import_react7.useState)(null);
   const [error, setError] = (0, import_react7.useState)(null);
   const [loaded, setLoaded] = (0, import_react7.useState)(false);
+  const [loadFailed, setLoadFailed] = (0, import_react7.useState)(false);
   const reload = (0, import_react7.useCallback)(async () => {
     try {
       const d = await adapter.loadData();
       setData(d);
+      setLoadFailed(false);
     } catch {
       setData(null);
+      setLoadFailed(true);
     } finally {
       setLoaded(true);
     }
@@ -1572,13 +1575,26 @@ function EvermindConsole({ adapter, canManage, labels, refreshMs = 2e4 }) {
   if (!loaded) return /* @__PURE__ */ (0, import_jsx_runtime8.jsx)(Section, { "aria-busy": true, children: /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("p", { style: { margin: 0, color: C.text2, fontSize: "0.82rem" }, children: t.loading }) });
   const seeded = !!data?.seeded;
   const frozen = data?.mode === "offline-frozen";
-  return /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)(Section, { "aria-label": t.title, children: [
-    /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("header", { style: { display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("span", { "aria-hidden": true, style: { fontSize: "1.05rem" }, children: "\u{1F9E0}" }),
-      /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("h3", { style: { margin: 0, fontSize: "0.95rem", fontWeight: 700, color: C.text }, children: t.title }),
-      /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("span", { style: pill(seeded), children: seeded ? t.statusSeeded(data?.version ?? 0) : t.statusUnseeded }),
-      /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("button", { type: "button", onClick: () => void reload(), disabled: busy, style: ghostBtn, title: t.refresh, "aria-label": t.refresh, children: "\u21BB" })
+  const scopeName = projectName?.trim();
+  const Header = /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("header", { style: { display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }, children: [
+    /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("span", { "aria-hidden": true, style: { fontSize: "1.05rem" }, children: "\u{1F9E0}" }),
+    /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("h3", { style: { margin: 0, fontSize: "0.95rem", fontWeight: 700, color: C.text }, children: t.title }),
+    scopeName && /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("span", { style: { fontSize: "0.8rem", color: C.text2 }, title: scopeName, children: [
+      "\xB7 ",
+      scopeName
     ] }),
+    !loadFailed && /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("span", { style: pill(seeded), children: seeded ? t.statusSeeded(data?.version ?? 0) : t.statusUnseeded }),
+    /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("button", { type: "button", onClick: () => void reload(), disabled: busy, style: ghostBtn, title: t.refresh, "aria-label": t.refresh, children: "\u21BB" })
+  ] });
+  if (loadFailed) {
+    return /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)(Section, { "aria-label": t.title, children: [
+      Header,
+      /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("p", { style: { margin: 0, fontSize: "0.8rem", lineHeight: 1.5, color: C.danger }, role: "alert", children: t.errorGeneric }),
+      /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("button", { type: "button", onClick: () => void reload(), disabled: busy, style: primaryBtn(busy), children: t.refresh })
+    ] });
+  }
+  return /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)(Section, { "aria-label": t.title, children: [
+    Header,
     /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("p", { style: { margin: 0, fontSize: "0.8rem", lineHeight: 1.5, color: C.text2 }, children: t.description }),
     !canManage && /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("p", { style: { margin: 0, fontSize: "0.72rem", color: C.text2, fontStyle: "italic" }, children: t.managerOnlyHint }),
     !seeded ? /* @__PURE__ */ (0, import_jsx_runtime8.jsx)(

@@ -1439,7 +1439,7 @@ var C = {
   accent: "var(--bf-ev-accent, var(--coral-bright, var(--accent, var(--bf-accent, #ff6b5e))))",
   danger: "var(--bf-ev-danger, var(--danger-text, #d9534f))"
 };
-function EvermindConsole({ adapter, canManage, labels, refreshMs = 2e4 }) {
+function EvermindConsole({ adapter, canManage, labels, refreshMs = 2e4, projectName }) {
   const t = useMemo7(() => ({ ...DEFAULT_EVERMIND_LABELS, ...labels ?? {} }), [labels]);
   const [data, setData] = useState7(null);
   const [seedModels, setSeedModels] = useState7([]);
@@ -1451,12 +1451,15 @@ function EvermindConsole({ adapter, canManage, labels, refreshMs = 2e4 }) {
   const [notice, setNotice] = useState7(null);
   const [error, setError] = useState7(null);
   const [loaded, setLoaded] = useState7(false);
+  const [loadFailed, setLoadFailed] = useState7(false);
   const reload = useCallback3(async () => {
     try {
       const d = await adapter.loadData();
       setData(d);
+      setLoadFailed(false);
     } catch {
       setData(null);
+      setLoadFailed(true);
     } finally {
       setLoaded(true);
     }
@@ -1507,13 +1510,26 @@ function EvermindConsole({ adapter, canManage, labels, refreshMs = 2e4 }) {
   if (!loaded) return /* @__PURE__ */ jsx8(Section, { "aria-busy": true, children: /* @__PURE__ */ jsx8("p", { style: { margin: 0, color: C.text2, fontSize: "0.82rem" }, children: t.loading }) });
   const seeded = !!data?.seeded;
   const frozen = data?.mode === "offline-frozen";
-  return /* @__PURE__ */ jsxs8(Section, { "aria-label": t.title, children: [
-    /* @__PURE__ */ jsxs8("header", { style: { display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }, children: [
-      /* @__PURE__ */ jsx8("span", { "aria-hidden": true, style: { fontSize: "1.05rem" }, children: "\u{1F9E0}" }),
-      /* @__PURE__ */ jsx8("h3", { style: { margin: 0, fontSize: "0.95rem", fontWeight: 700, color: C.text }, children: t.title }),
-      /* @__PURE__ */ jsx8("span", { style: pill(seeded), children: seeded ? t.statusSeeded(data?.version ?? 0) : t.statusUnseeded }),
-      /* @__PURE__ */ jsx8("button", { type: "button", onClick: () => void reload(), disabled: busy, style: ghostBtn, title: t.refresh, "aria-label": t.refresh, children: "\u21BB" })
+  const scopeName = projectName?.trim();
+  const Header = /* @__PURE__ */ jsxs8("header", { style: { display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }, children: [
+    /* @__PURE__ */ jsx8("span", { "aria-hidden": true, style: { fontSize: "1.05rem" }, children: "\u{1F9E0}" }),
+    /* @__PURE__ */ jsx8("h3", { style: { margin: 0, fontSize: "0.95rem", fontWeight: 700, color: C.text }, children: t.title }),
+    scopeName && /* @__PURE__ */ jsxs8("span", { style: { fontSize: "0.8rem", color: C.text2 }, title: scopeName, children: [
+      "\xB7 ",
+      scopeName
     ] }),
+    !loadFailed && /* @__PURE__ */ jsx8("span", { style: pill(seeded), children: seeded ? t.statusSeeded(data?.version ?? 0) : t.statusUnseeded }),
+    /* @__PURE__ */ jsx8("button", { type: "button", onClick: () => void reload(), disabled: busy, style: ghostBtn, title: t.refresh, "aria-label": t.refresh, children: "\u21BB" })
+  ] });
+  if (loadFailed) {
+    return /* @__PURE__ */ jsxs8(Section, { "aria-label": t.title, children: [
+      Header,
+      /* @__PURE__ */ jsx8("p", { style: { margin: 0, fontSize: "0.8rem", lineHeight: 1.5, color: C.danger }, role: "alert", children: t.errorGeneric }),
+      /* @__PURE__ */ jsx8("button", { type: "button", onClick: () => void reload(), disabled: busy, style: primaryBtn(busy), children: t.refresh })
+    ] });
+  }
+  return /* @__PURE__ */ jsxs8(Section, { "aria-label": t.title, children: [
+    Header,
     /* @__PURE__ */ jsx8("p", { style: { margin: 0, fontSize: "0.8rem", lineHeight: 1.5, color: C.text2 }, children: t.description }),
     !canManage && /* @__PURE__ */ jsx8("p", { style: { margin: 0, fontSize: "0.72rem", color: C.text2, fontStyle: "italic" }, children: t.managerOnlyHint }),
     !seeded ? /* @__PURE__ */ jsx8(

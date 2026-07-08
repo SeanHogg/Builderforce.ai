@@ -87,7 +87,7 @@ export function EvermindScreen({ init }: { init: InitData }) {
 
   return (
     <div style={{ padding: 12, boxSizing: 'border-box' }}>
-      <EvermindConsole adapter={adapter} canManage={!!init.canManage} labels={labels} />
+      <EvermindConsole adapter={adapter} canManage={!!init.canManage} projectName={init.project?.name} labels={labels} />
     </div>
   );
 }
