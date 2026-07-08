@@ -1,13 +1,13 @@
 'use client';
 
 import { useState } from 'react';
-import { useTranslations } from 'next-intl';
 import type { TrackerRow } from '@/lib/builderforceApi';
 import { usePmScope } from '@/lib/pm/scope';
 import { usePmData } from '@/lib/pm/usePmData';
 import { roadmapClient, ROADMAP_HORIZONS, rstr } from '@/lib/pm/roadmap';
 import { PmEmpty, PmError, StatusPill } from './pmShared';
 import { RoadmapItemPanel } from './RoadmapItemPanel';
+import { useTranslations } from 'next-intl';
 import { useConfirm } from '@/components/ConfirmProvider';
 
 /**
@@ -20,6 +20,7 @@ export function RoadmapTimeline() {
   const { projectId } = usePmScope();
   const confirm = useConfirm();
   const tc = useTranslations('common');
+  const t = useTranslations('roadmapTimeline');
   const { data, error, reload } = usePmData<TrackerRow[]>(
     () => roadmapClient.list(projectId ?? undefined),
     [projectId],
@@ -42,16 +43,16 @@ export function RoadmapTimeline() {
           onClick={() => setEditing(null)}
           style={{ padding: '6px 14px', borderRadius: 6, border: 'none', background: 'var(--coral-bright)', color: '#fff', fontWeight: 600, cursor: 'pointer' }}
         >
-          + Add item
+          + {t('addItem')}
         </button>
       </div>
 
       {error ? (
         <PmError message={error} />
       ) : !data ? (
-        <PmEmpty message="Loading roadmap…" />
+        <PmEmpty message={t('loadingRoadmap')} />
       ) : !data.length ? (
-        <PmEmpty message="No roadmap items yet. Use “Add item” to create one." />
+        <PmEmpty message={t('emptyState')} />
       ) : (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 240px), 1fr))', gap: 16 }}>
           {ROADMAP_HORIZONS.map(({ key, label }) => {
@@ -73,7 +74,7 @@ export function RoadmapTimeline() {
                     >
                       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8, marginBottom: 6 }}>
                         <div style={{ fontWeight: 600, fontSize: '0.86rem' }}>{rstr(r, 'title')}</div>
-                        <span role="button" tabIndex={0} aria-label="Delete item" title="Delete" onClick={(e) => remove(e, String(r.id))} style={{ color: 'var(--text-muted)', cursor: 'pointer', fontSize: 14, lineHeight: 1 }}>×</span>
+                        <span role="button" tabIndex={0} aria-label={t('deleteItem')} title={tc('delete')} onClick={(e) => remove(e, String(r.id))} style={{ color: 'var(--text-muted)', cursor: 'pointer', fontSize: 14, lineHeight: 1 }}>×</span>
                       </div>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                         <StatusPill value={rstr(r, 'status') || 'planned'} />

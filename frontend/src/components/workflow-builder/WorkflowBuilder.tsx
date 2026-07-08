@@ -124,6 +124,7 @@ interface Props {
 export function WorkflowBuilder({ definitionId, initialProjectId = null }: Props) {
   const router = useRouter();
   const t = useTranslations('evermindBuild');
+  const tc = useTranslations('common');
   const confirm = useConfirm();
   const [nodes, setNodes, onNodesChange] = useNodesState<Node<BuilderNodeData>>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
@@ -287,18 +288,18 @@ export function WorkflowBuilder({ definitionId, initialProjectId = null }: Props
       const nameVal = name.trim() || 'Untitled workflow';
       if (defId) {
         await workflowDefinitions.update(defId, { name: nameVal, definition: graph, ...runTargetFields });
-        setStatus('Saved.');
+        setStatus(t('statusSaved'));
         refreshTriggers(defId);
         return defId;
       }
       const created = await workflowDefinitions.create({ name: nameVal, definition: graph, ...runTargetFields });
       setDefId(created.id);
       router.replace(`/workflows/builder?id=${created.id}`);
-      setStatus('Saved.');
+      setStatus(t('statusSaved'));
       refreshTriggers(created.id);
       return created.id;
     } catch (e) {
-      setStatus(e instanceof Error ? e.message : 'Save failed');
+      setStatus(e instanceof Error ? e.message : t('statusSaveFailed'));
       return null;
     } finally {
       setBusy(false);
@@ -306,8 +307,8 @@ export function WorkflowBuilder({ definitionId, initialProjectId = null }: Props
   }, [defId, name, toGraph, router, runTargetFields, refreshTriggers]);
 
   const run = useCallback(async () => {
-    if (!runTarget) { setStatus('Select a run target (agentHost or cloud agent).'); return; }
-    if (nodes.length === 0) { setStatus('Add at least one node first.'); return; }
+    if (!runTarget) { setStatus(t('statusSelectRunTarget')); return; }
+    if (nodes.length === 0) { setStatus(t('statusAddNode')); return; }
     setBusy(true);
     setStatus(null);
     try {
@@ -316,7 +317,7 @@ export function WorkflowBuilder({ definitionId, initialProjectId = null }: Props
       const { workflowId } = await workflowDefinitions.run(id, runTarget);
       router.push(`/workflows?run=${workflowId}`);
     } catch (e) {
-      setStatus(e instanceof Error ? e.message : 'Run failed');
+      setStatus(e instanceof Error ? e.message : t('statusRunFailed'));
     } finally {
       setBusy(false);
     }
@@ -363,7 +364,7 @@ export function WorkflowBuilder({ definitionId, initialProjectId = null }: Props
       a.click();
       URL.revokeObjectURL(url);
     } catch (e) {
-      setStatus(e instanceof Error ? e.message : 'Export failed');
+      setStatus(e instanceof Error ? e.message : t('statusExportFailed'));
     } finally {
       setBusy(false);
     }
@@ -379,7 +380,7 @@ export function WorkflowBuilder({ definitionId, initialProjectId = null }: Props
         const created = await workflowDefinitions.importYaml(file.name.replace(/\.ya?ml$|\.json$/i, ''), text);
         router.push(`/workflows/builder?id=${created.id}`);
       } catch (e) {
-        setStatus(e instanceof Error ? e.message : 'Import failed');
+        setStatus(e instanceof Error ? e.message : t('statusImportFailed'));
       } finally {
         setBusy(false);
       }
@@ -393,7 +394,7 @@ export function WorkflowBuilder({ definitionId, initialProjectId = null }: Props
   );
 
   if (loading) {
-    return <div style={{ padding: 24, fontSize: 13, color: 'var(--text-muted)' }}>Loading workflow…</div>;
+    return <div style={{ padding: 24, fontSize: 13, color: 'var(--text-muted)' }}>{t('loadingWorkflow')}</div>;
   }
 
   const q = paletteSearch.trim().toLowerCase();
@@ -412,22 +413,22 @@ export function WorkflowBuilder({ definitionId, initialProjectId = null }: Props
           value={name}
           onChange={(e) => setName(e.target.value)}
           style={{ ...fieldStyle, fontWeight: 700, fontSize: 14, minWidth: 220, flex: 1 }}
-          placeholder="Workflow name"
+          placeholder={t('workflowNamePlaceholder')}
         />
         <Select
           value={runTargetToValue(runTarget)}
           onChange={(e) => setRunTarget(valueToRunTarget(e.target.value))}
           style={fieldStyle}
-          title="Run on a self-hosted agentHost or a cloud agent"
+          title={t('runTargetTitle')}
         >
-          <option value="">Select run target…</option>
+          <option value="">{t('selectRunTarget')}</option>
           {runTargets.hosts.length > 0 && (
-            <optgroup label="Self-hosted agentHosts">
+            <optgroup label={t('selfHostedAgents')}>
               {runTargets.hosts.map((h) => <option key={`host:${h.id}`} value={`host:${h.id}`}>{h.name}</option>)}
             </optgroup>
           )}
           {runTargets.cloudAgents.length > 0 && (
-            <optgroup label="Cloud agents">
+            <optgroup label={t('cloudAgents')}>
               {runTargets.cloudAgents.map((a) => <option key={`cloud:${a.ref}`} value={`cloud:${a.ref}`}>{a.name}</option>)}
             </optgroup>
           )}
@@ -436,9 +437,9 @@ export function WorkflowBuilder({ definitionId, initialProjectId = null }: Props
           value={projectId ?? ''}
           onChange={(e) => setProjectId(e.target.value ? Number(e.target.value) : null)}
           style={fieldStyle}
-          title="Bind this workflow to a project, or leave it tenant-wide (independent)"
+          title={t('projectBindTitle')}
         >
-          <option value="">No project (tenant-wide)</option>
+          <option value="">{t('noProject')}</option>
           {projectList.map((p) => (
             <option key={p.id} value={p.id}>{p.name}</option>
           ))}
@@ -454,9 +455,9 @@ export function WorkflowBuilder({ definitionId, initialProjectId = null }: Props
             <option key={tpl.id} value={tpl.id}>{t(tpl.nameKey)}</option>
           ))}
         </Select>
-        <button type="button" style={btnSubtle} disabled={busy} onClick={() => void save()}>{busy ? 'Saving…' : 'Save'}</button>
-        <button type="button" style={btnSubtle} disabled={busy} onClick={() => void exportYaml()} title="Download as YAML">Export</button>
-        <button type="button" style={btnSubtle} disabled={busy} onClick={() => fileInputRef.current?.click()} title="Import a YAML/JSON workflow">Import</button>
+        <button type="button" style={btnSubtle} disabled={busy} onClick={() => void save()}>{busy ? tc('saving') : tc('save')}</button>
+        <button type="button" style={btnSubtle} disabled={busy} onClick={() => void exportYaml()} title={t('exportTitle')}>{t('exportLabel')}</button>
+        <button type="button" style={btnSubtle} disabled={busy} onClick={() => fileInputRef.current?.click()} title={t('importTitle')}>{t('importLabel')}</button>
         <input
           ref={fileInputRef}
           type="file"
@@ -467,7 +468,7 @@ export function WorkflowBuilder({ definitionId, initialProjectId = null }: Props
         {hasBuild && (
           <button type="button" style={btnPrimary} disabled={busy} onClick={() => setBuildOpen(true)} title={t('builderBuildTitle')}>🧠 {t('builderBuild')}</button>
         )}
-        <button type="button" style={hasBuild ? btnSubtle : btnPrimary} disabled={busy} onClick={() => void run()}>▶ Run</button>
+        <button type="button" style={hasBuild ? btnSubtle : btnPrimary} disabled={busy} onClick={() => void run()}>▶ {t('builderRun')}</button>
         {status && <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{status}</span>}
       </div>
 
@@ -485,10 +486,10 @@ export function WorkflowBuilder({ definitionId, initialProjectId = null }: Props
           <input
             value={paletteSearch}
             onChange={(e) => setPaletteSearch(e.target.value)}
-            placeholder="Search integrations…"
+            placeholder={t('searchIntegrations')}
             style={{ ...fieldStyle, width: '100%', boxSizing: 'border-box', marginBottom: 8, fontSize: 12 }}
           />
-          <div style={{ fontSize: 10, color: 'var(--text-muted)', marginBottom: 10 }}>Drag onto the canvas, or click to add.</div>
+          <div style={{ fontSize: 10, color: 'var(--text-muted)', marginBottom: 10 }}>{t('dragHint')}</div>
 
           {/* Core node kinds */}
           {NODE_GROUPS.map((group) => {
@@ -538,7 +539,7 @@ export function WorkflowBuilder({ definitionId, initialProjectId = null }: Props
             );
           })}
           {filteredIntegrations.length === 0 && (
-            <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>No integrations match “{paletteSearch}”.</div>
+            <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{t('noIntegrationsMatch', { query: paletteSearch })}</div>
           )}
         </div>
 
@@ -569,7 +570,7 @@ export function WorkflowBuilder({ definitionId, initialProjectId = null }: Props
           {nodes.length === 0 && (
             <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' }}>
               <div style={{ fontSize: 13, color: 'var(--text-muted)', textAlign: 'center' }}>
-                Drag nodes from the palette onto the canvas.<br />Wire them together, then Save &amp; Run.
+                {t('canvasHintLine1')}<br />{t('canvasHintLine2')}
               </div>
             </div>
           )}

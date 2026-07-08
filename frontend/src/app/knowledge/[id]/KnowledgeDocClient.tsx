@@ -499,7 +499,13 @@ function SharePanel({
   );
 }
 
-function PresenceBar({ collab, t }: { collab: ReturnType<typeof useDocCollaboration>; t: ReturnType<typeof useTranslations> }) {
+function PresenceBar({
+  collab,
+  t,
+}: {
+  collab: ReturnType<typeof useDocCollaboration>;
+  t: ReturnType<typeof useTranslations>;
+}) {
   if (!collab.enabled) return null;
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 6 }} title={t('liveCollab')}>

@@ -171,7 +171,8 @@ function CollectorPanel({
 
 function IntegrationsSection({ collector, catalog, setError, t }: {
   collector: QualityCollector; catalog: QualitySourceCatalogEntry[];
-  setError: (s: string | null) => void; t: ReturnType<typeof useTranslations>;
+  setError: (s: string | null) => void;
+  t: ReturnType<typeof useTranslations>;
 }) {
   const [items, setItems] = useState<QualityIntegration[]>([]);
   const [adding, setAdding] = useState(false);
@@ -261,7 +262,8 @@ function IntegrationsSection({ collector, catalog, setError, t }: {
 
 function MappingSection({ collector, projects, projName, onChanged, setError, t }: {
   collector: QualityCollector; projects: { id: number; name: string }[]; projName: (id: number) => string;
-  onChanged: () => void; setError: (s: string | null) => void; t: ReturnType<typeof useTranslations>;
+  onChanged: () => void; setError: (s: string | null) => void;
+  t: ReturnType<typeof useTranslations>;
 }) {
   const FIELDS = ['service', 'release', 'environment', 'url'];
   const OPS = ['equals', 'contains', 'prefix'];
@@ -355,7 +357,10 @@ function MappingSection({ collector, projects, projName, onChanged, setError, t 
   );
 }
 
-function CreatedKeyPanel({ created, onDismiss, t }: { created: CreateQualityCollectorResult; onDismiss: () => void; t: ReturnType<typeof useTranslations> }) {
+function CreatedKeyPanel({ created, onDismiss, t }: {
+  created: CreateQualityCollectorResult; onDismiss: () => void;
+  t: ReturnType<typeof useTranslations>;
+}) {
   const key = created.ingestKey;
   const curl = `curl -X POST ${ingestBase}/events \\
   -H "Authorization: Bearer ${key}" \\

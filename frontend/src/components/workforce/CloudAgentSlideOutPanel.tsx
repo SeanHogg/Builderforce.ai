@@ -104,6 +104,7 @@ export function CloudAgentSlideOutPanel({
   onDeleted,
 }: CloudAgentSlideOutPanelProps) {
   const t = useTranslations('cloudAgentForm');
+  const tc = useTranslations('common');
   const confirm = useConfirm();
   const [activeTab, setActiveTab] = useState<CloudAgentPanelTab>(initialTab);
   const [form, setForm] = useState<CloudAgentFormState>(() => formFromAgent(agent));
@@ -150,7 +151,7 @@ export function CloudAgentSlideOutPanel({
     setBridgeError('');
     ensureWorkforceAgentBridge(agent.id)
       .then((id) => { if (!cancelled) setBridgeId(id); })
-      .catch((e) => { if (!cancelled) setBridgeError(e instanceof Error ? e.message : 'Failed to load capabilities'); });
+      .catch((e) => { if (!cancelled) setBridgeError(e instanceof Error ? e.message : t('errLoadCapabilities')); });
     return () => { cancelled = true; };
   }, [open, agent.id]);
 
@@ -162,18 +163,18 @@ export function CloudAgentSlideOutPanel({
     setPerfError('');
     fetchAgentPerf(agent.id)
       .then((r) => { if (!cancelled) setPerf(r); })
-      .catch((e) => { if (!cancelled) setPerfError(e instanceof Error ? e.message : 'Failed to load performance'); });
+      .catch((e) => { if (!cancelled) setPerfError(e instanceof Error ? e.message : t('errLoadPerformance')); });
     return () => { cancelled = true; };
   }, [open, owner, activeTab, agent.id]);
 
   const saveDetails = useCallback(async () => {
-    if (!form.name.trim()) { setError('Name is required'); return; }
+    if (!form.name.trim()) { setError(t('errNameRequired')); return; }
     setSaving(true); setError('');
     try {
       await updateAgent(agent.id, cloudAgentFormToInput(form));
       onSaved();
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Save failed');
+      setError(e instanceof Error ? e.message : t('errSaveFailed'));
     } finally {
       setSaving(false);
     }
@@ -191,21 +192,21 @@ export function CloudAgentSlideOutPanel({
       });
       onSaved();
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Save failed');
+      setError(e instanceof Error ? e.message : t('errSaveFailed'));
     } finally {
       setSaving(false);
     }
   }, [agent.id, priceDollars, pricingModel, priceUnit, onSaved]);
 
   const remove = useCallback(async () => {
-    if (!(await confirm(`Delete agent "${agent.name}"? Its per-agent skills and personas will be cleared.`))) return;
+    if (!(await confirm(tc('deleteCloudAgentConfirm', { name: agent.name })))) return;
     setSaving(true);
     try {
       await deleteAgent(agent.id);
       onDeleted(agent.id);
       onClose();
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Delete failed');
+      setError(e instanceof Error ? e.message : t('errDeleteFailed'));
       setSaving(false);
     }
   }, [agent.id, agent.name, onDeleted, onClose]);
@@ -226,10 +227,10 @@ export function CloudAgentSlideOutPanel({
   return (
     <>
       <div className="project-panel-overlay slide-panel-overlay" role="presentation" style={panelOverlayStyle} onClick={onClose} aria-hidden />
-      <div className="project-panel-drawer slide-panel-drawer" style={panelDrawerStyle} role="dialog" aria-label="Cloud agent">
+      <div className="project-panel-drawer slide-panel-drawer" style={panelDrawerStyle} role="dialog" aria-label={t('ariaPanel')}>
         {/* Header */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '16px 20px', borderBottom: '1px solid var(--border-subtle)', flexShrink: 0, flexWrap: 'wrap' }}>
-          <button type="button" onClick={onClose} aria-label="Close panel" style={{ width: 36, height: 36, display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px solid var(--border-subtle)', borderRadius: 8, background: 'var(--bg-base)', color: 'var(--text-secondary)', cursor: 'pointer' }}>
+          <button type="button" onClick={onClose} aria-label={t('ariaClose')} style={{ width: 36, height: 36, display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px solid var(--border-subtle)', borderRadius: 8, background: 'var(--bg-base)', color: 'var(--text-secondary)', cursor: 'pointer' }}>
             <svg viewBox="0 0 24 24" style={{ width: 18, height: 18, stroke: 'currentColor', fill: 'none', strokeWidth: 2 }}>
               <line x1="18" y1="6" x2="6" y2="18" />
               <line x1="6" y1="6" x2="18" y2="18" />
@@ -255,10 +256,10 @@ export function CloudAgentSlideOutPanel({
             </div>
           </div>
           {agent.published
-            ? <span className="badge-green">PUBLISHED</span>
-            : <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 9999, background: 'var(--bg-elevated)', color: 'var(--muted)' }}>DRAFT</span>}
+            ? <span className="badge-green">{t('statusPublished')}</span>
+            : <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 9999, background: 'var(--bg-elevated)', color: 'var(--muted)' }}>{t('statusDraft')}</span>}
           {canDeleteAgent(agent) && (
-            <button type="button" onClick={remove} disabled={saving} style={{ ...btnSubtle, color: 'var(--error-text)' }}>Delete</button>
+            <button type="button" onClick={remove} disabled={saving} style={{ ...btnSubtle, color: 'var(--error-text)' }}>{tc('delete')}</button>
           )}
         </div>
 
@@ -304,11 +305,11 @@ export function CloudAgentSlideOutPanel({
             bridgeError ? (
               <div style={{ fontSize: 13, color: 'var(--error-text)', padding: 16 }}>{bridgeError}</div>
             ) : bridgeId == null ? (
-              <div style={{ color: 'var(--muted)', fontSize: 13, padding: 16 }}>Loading capabilities…</div>
+              <div style={{ color: 'var(--muted)', fontSize: 13, padding: 16 }}>{t('loadingCapabilities')}</div>
             ) : (
               <>
                 <p style={{ fontSize: 12, color: 'var(--muted)', marginTop: 0, marginBottom: 14 }}>
-                  Skills and personas assigned here travel with this agent everywhere it runs — IDE, Workflow, on-prem or cloud — independent of any project.
+                  {t('capabilitiesHint')}
                 </p>
                 <CapabilitiesContent
                   scope="agent"
@@ -323,31 +324,31 @@ export function CloudAgentSlideOutPanel({
           {activeTab === 'pricing' && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
               <p style={{ fontSize: 13, color: 'var(--muted)', margin: 0 }}>
-                Set a price to publish <strong>{agent.name}</strong> to the marketplace. Use 0 to list it for free.
+                {t.rich('pricingIntro', { name: agent.name, strong: (chunks) => <strong>{chunks}</strong> })}
               </p>
               <div>
-                <label style={labelStyle}>Pricing model</label>
+                <label style={labelStyle}>{t('pricingModel')}</label>
                 <Select style={inputStyle} value={pricingModel} onChange={(e) => setPricingModel(e.target.value as AgentPricingModel)}>
-                  <option value="flat_fee">Flat fee</option>
-                  <option value="consumption">Consumption (per unit)</option>
+                  <option value="flat_fee">{t('pricingFlatFee')}</option>
+                  <option value="consumption">{t('pricingConsumption')}</option>
                 </Select>
               </div>
               <div>
-                <label style={labelStyle}>Price (USD)</label>
+                <label style={labelStyle}>{t('priceUsd')}</label>
                 <input style={inputStyle} type="number" min="0" step="0.01" value={priceDollars} onChange={(e) => setPriceDollars(e.target.value)} />
               </div>
               {pricingModel === 'consumption' && (
                 <div>
-                  <label style={labelStyle}>Per unit</label>
-                  <input style={inputStyle} value={priceUnit} onChange={(e) => setPriceUnit(e.target.value)} placeholder="request, 1k tokens, task…" />
+                  <label style={labelStyle}>{t('perUnit')}</label>
+                  <input style={inputStyle} value={priceUnit} onChange={(e) => setPriceUnit(e.target.value)} placeholder={t('perUnitPlaceholder')} />
                 </div>
               )}
               <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
                 {agent.published && (
-                  <button type="button" onClick={() => savePricing(false)} disabled={saving} style={btnSubtle}>Unpublish</button>
+                  <button type="button" onClick={() => savePricing(false)} disabled={saving} style={btnSubtle}>{t('unpublish')}</button>
                 )}
                 <button type="button" onClick={() => savePricing(true)} disabled={saving} style={btnPrimary}>
-                  {saving ? 'Saving…' : agent.published ? 'Save price' : 'Publish'}
+                  {saving ? t('saving') : agent.published ? t('savePrice') : t('publish')}
                 </button>
               </div>
             </div>
@@ -357,23 +358,23 @@ export function CloudAgentSlideOutPanel({
             perfError ? (
               <div style={{ fontSize: 13, color: 'var(--error-text)', padding: 16 }}>{perfError}</div>
             ) : perf == null ? (
-              <div style={{ color: 'var(--muted)', fontSize: 13, padding: 16 }}>Loading performance…</div>
+              <div style={{ color: 'var(--muted)', fontSize: 13, padding: 16 }}>{t('loadingPerformance')}</div>
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
                 <p style={{ fontSize: 12, color: 'var(--muted)', margin: 0 }}>
-                  How <strong>{agent.name}</strong> is performing for the {perf.hiredTenants} workspace{perf.hiredTenants === 1 ? '' : 's'} currently hiring it. Visible only to you, the owner.
+                  {t.rich('performanceIntro', { name: agent.name, count: perf.hiredTenants, strong: (chunks) => <strong>{chunks}</strong> })}
                 </p>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: 10 }}>
-                  <PerfStat label="Success rate" value={perf.successRate == null ? '—' : `${Math.round(perf.successRate * 100)}%`} />
-                  <PerfStat label="Runs" value={`${perf.totalRuns}`} sub={`${perf.completedRuns} ok / ${perf.failedRuns} failed`} />
-                  <PerfStat label="Avg latency" value={perf.avgLatencyMs == null ? '—' : formatLatency(perf.avgLatencyMs)} />
-                  <PerfStat label="Avg rating" value={perf.avgRating == null ? '—' : `${perf.avgRating.toFixed(1)}★`} sub={`${perf.ratingCount} rating${perf.ratingCount === 1 ? '' : 's'}`} />
+                  <PerfStat label={t('perfSuccessRate')} value={perf.successRate == null ? '—' : `${Math.round(perf.successRate * 100)}%`} />
+                  <PerfStat label={t('perfRuns')} value={`${perf.totalRuns}`} sub={t('perfRunsSub', { ok: perf.completedRuns, failed: perf.failedRuns })} />
+                  <PerfStat label={t('perfAvgLatency')} value={perf.avgLatencyMs == null ? '—' : formatLatency(perf.avgLatencyMs)} />
+                  <PerfStat label={t('perfAvgRating')} value={perf.avgRating == null ? '—' : `${perf.avgRating.toFixed(1)}★`} sub={t('perfRatingSub', { count: perf.ratingCount })} />
                 </div>
 
                 <div>
-                  <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-strong)', marginBottom: 8 }}>Buyer feedback</div>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-strong)', marginBottom: 8 }}>{t('buyerFeedback')}</div>
                   {perf.feedback.length === 0 ? (
-                    <div style={{ fontSize: 12, color: 'var(--muted)' }}>No feedback yet from buyers.</div>
+                    <div style={{ fontSize: 12, color: 'var(--muted)' }}>{t('noFeedback')}</div>
                   ) : (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                       {perf.feedback.map((f, i) => (

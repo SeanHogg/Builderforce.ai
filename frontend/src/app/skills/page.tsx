@@ -40,6 +40,7 @@ type SkillItem = { slug: string; name: string; description: string; category?: s
 
 export default function SkillsPage() {
   const t = useTranslations('skillsPage');
+  const tc = useTranslations('common');
   const confirm = useConfirm();
   const { tenant } = useAuth();
   const tenantId = tenant?.id ?? '';
@@ -169,7 +170,7 @@ export default function SkillsPage() {
   };
 
   const deleteUserSkill = async (id: string) => {
-    if (!(await confirm('Delete this skill?'))) return;
+    if (!(await confirm(tc('deleteSkillConfirm')))) return;
     const next = userSkills.filter((s) => s.id !== id);
     setUserSkills(next);
     saveUserSkills(tenantId, next);
@@ -252,13 +253,13 @@ export default function SkillsPage() {
                       <span className="badge badge-gray">{s.category}</span>
                       <span className="badge badge-gray">v{s.version}</span>
                       {s.tags?.slice(0, 2).map((t) => <span key={t} className="badge badge-gray">{t}</span>)}
-                      {s.shared && <span className="badge badge-green">Shared</span>}
+                      {s.shared && <span className="badge badge-green">{t('shared')}</span>}
                     </div>
                   </div>
                   {s.description && <div style={{ fontSize: 12, color: 'var(--muted)', lineHeight: 1.5, margin: '8px 0' }}>{s.description}</div>}
                   <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
-                    <button type="button" className={`btn btn-sm ${s.shared ? 'btn-secondary' : 'btn-primary'}`} onClick={() => toggleShare(s.id)}>{s.shared ? 'Unshare' : 'Share to Marketplace'}</button>
-                    <button type="button" className="btn btn-danger btn-sm" onClick={() => deleteUserSkill(s.id)}>Delete</button>
+                    <button type="button" className={`btn btn-sm ${s.shared ? 'btn-secondary' : 'btn-primary'}`} onClick={() => toggleShare(s.id)}>{s.shared ? t('unshare') : t('shareToMarketplace')}</button>
+                    <button type="button" className="btn btn-danger btn-sm" onClick={() => deleteUserSkill(s.id)}>{tc('delete')}</button>
                   </div>
                 </div>
               </div>
@@ -269,11 +270,11 @@ export default function SkillsPage() {
             <table style={tableStyle}>
               <thead>
                 <tr style={theadRowStyle}>
-                  <th style={thStyle}>Name</th>
-                  <th style={thStyle}>Description</th>
-                  <th style={thStyle}>Category</th>
-                  <th style={thStyle}>Tags</th>
-                  <th style={thStyle}>Actions</th>
+                  <th style={thStyle}>{t('colName')}</th>
+                  <th style={thStyle}>{t('colDescription')}</th>
+                  <th style={thStyle}>{t('colCategory')}</th>
+                  <th style={thStyle}>{t('colTags')}</th>
+                  <th style={thStyle}>{t('colActions')}</th>
                 </tr>
               </thead>
               <tbody>
@@ -281,7 +282,7 @@ export default function SkillsPage() {
                   <tr key={s.id} style={trStyle}>
                     <td style={{ ...tdStyle, fontWeight: 600 }}>
                       {s.name}{' '}
-                      {s.shared && <span className="badge badge-green">Shared</span>}
+                      {s.shared && <span className="badge badge-green">{t('shared')}</span>}
                     </td>
                     <td style={tdMutedStyle}>{s.description || '—'}</td>
                     <td style={tdMutedStyle}>{s.category} · v{s.version}</td>
@@ -292,8 +293,8 @@ export default function SkillsPage() {
                     </td>
                     <td style={tdStyle}>
                       <div style={{ display: 'flex', gap: 6 }}>
-                        <button type="button" className={`btn btn-sm ${s.shared ? 'btn-secondary' : 'btn-primary'}`} onClick={() => toggleShare(s.id)}>{s.shared ? 'Unshare' : 'Share'}</button>
-                        <button type="button" className="btn btn-danger btn-sm" onClick={() => deleteUserSkill(s.id)}>Delete</button>
+                        <button type="button" className={`btn btn-sm ${s.shared ? 'btn-secondary' : 'btn-primary'}`} onClick={() => toggleShare(s.id)}>{s.shared ? t('unshare') : t('share')}</button>
+                        <button type="button" className="btn btn-danger btn-sm" onClick={() => deleteUserSkill(s.id)}>{tc('delete')}</button>
                       </div>
                     </td>
                   </tr>
@@ -332,14 +333,14 @@ export default function SkillsPage() {
                       </div>
                       {s.description && <div style={{ fontSize: 12, color: 'var(--muted)', lineHeight: 1.5, margin: '8px 0' }}>{s.description}</div>}
                       <div style={{ display: 'flex', alignItems: 'center', gap: 12, fontSize: 11, color: 'var(--muted)', margin: '4px 0 8px' }}>
-                        <button type="button" style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, fontSize: 11, color: stat.liked ? '#ef4444' : 'var(--muted)' }} title={stat.liked ? 'Unlike' : 'Like'} onClick={() => toggleLike(s.slug)}>{stat.liked ? '❤️' : '🤍'} {stat.likes}</button>
+                        <button type="button" style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, fontSize: 11, color: stat.liked ? '#ef4444' : 'var(--muted)' }} title={stat.liked ? t('unlike') : t('like')} onClick={() => toggleLike(s.slug)}>{stat.liked ? '❤️' : '🤍'} {stat.likes}</button>
                         <span>⬇️ {stat.installs}</span>
-                        {s.author && <span>by {s.author}</span>}
+                        {s.author && <span>{t('byAuthor', { author: s.author })}</span>}
                       </div>
                       <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
-                        {installed ? <button type="button" className="btn btn-danger btn-sm" onClick={() => unassign(s.slug)}>Uninstall</button> : <button type="button" className="btn btn-primary btn-sm" onClick={() => assign(s.slug)}>Install</button>}
+                        {installed ? <button type="button" className="btn btn-danger btn-sm" onClick={() => unassign(s.slug)}>{t('uninstall')}</button> : <button type="button" className="btn btn-primary btn-sm" onClick={() => assign(s.slug)}>{t('install')}</button>}
                         <ArtifactAssigner artifactType="skill" artifactSlug={s.slug} artifactName={s.name} />
-                        <Link href={`/skills/${encodeURIComponent(s.slug)}`} className="btn btn-secondary btn-sm">View</Link>
+                        <Link href={`/skills/${encodeURIComponent(s.slug)}`} className="btn btn-secondary btn-sm">{tc('view')}</Link>
                       </div>
                     </div>
                   </div>
@@ -351,11 +352,11 @@ export default function SkillsPage() {
               <table style={tableStyle}>
                 <thead>
                   <tr style={theadRowStyle}>
-                    <th style={thStyle}>Name</th>
-                    <th style={thStyle}>Description</th>
-                    <th style={thStyle}>Category</th>
-                    <th style={thStyle}>Stats</th>
-                    <th style={thStyle}>Actions</th>
+                    <th style={thStyle}>{t('colName')}</th>
+                    <th style={thStyle}>{t('colDescription')}</th>
+                    <th style={thStyle}>{t('colCategory')}</th>
+                    <th style={thStyle}>{t('colStats')}</th>
+                    <th style={thStyle}>{t('colActions')}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -370,17 +371,17 @@ export default function SkillsPage() {
                         <td style={tdMutedStyle}>{s.description || '—'}</td>
                         <td style={tdMutedStyle}>
                           {s.category ? <span className="badge badge-gray" style={{ fontSize: 10 }}>{s.category}</span> : '—'}
-                          {s.author && <div style={{ fontSize: 11, marginTop: 2 }}>by {s.author}</div>}
+                          {s.author && <div style={{ fontSize: 11, marginTop: 2 }}>{t('byAuthor', { author: s.author })}</div>}
                         </td>
                         <td style={{ ...tdMutedStyle, whiteSpace: 'nowrap' }}>
-                          <button type="button" style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, fontSize: 11, color: stat.liked ? '#ef4444' : 'var(--muted)' }} title={stat.liked ? 'Unlike' : 'Like'} onClick={() => toggleLike(s.slug)}>{stat.liked ? '❤️' : '🤍'} {stat.likes}</button>
+                          <button type="button" style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, fontSize: 11, color: stat.liked ? '#ef4444' : 'var(--muted)' }} title={stat.liked ? t('unlike') : t('like')} onClick={() => toggleLike(s.slug)}>{stat.liked ? '❤️' : '🤍'} {stat.likes}</button>
                           <span style={{ marginLeft: 10, fontSize: 11 }}>⬇️ {stat.installs}</span>
                         </td>
                         <td style={tdStyle}>
                           <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
-                            {installed ? <button type="button" className="btn btn-danger btn-sm" onClick={() => unassign(s.slug)}>Uninstall</button> : <button type="button" className="btn btn-primary btn-sm" onClick={() => assign(s.slug)}>Install</button>}
+                            {installed ? <button type="button" className="btn btn-danger btn-sm" onClick={() => unassign(s.slug)}>{t('uninstall')}</button> : <button type="button" className="btn btn-primary btn-sm" onClick={() => assign(s.slug)}>{t('install')}</button>}
                             <ArtifactAssigner artifactType="skill" artifactSlug={s.slug} artifactName={s.name} />
-                            <Link href={`/skills/${encodeURIComponent(s.slug)}`} className="btn btn-secondary btn-sm">View</Link>
+                            <Link href={`/skills/${encodeURIComponent(s.slug)}`} className="btn btn-secondary btn-sm">{tc('view')}</Link>
                           </div>
                         </td>
                       </tr>
@@ -407,12 +408,12 @@ export default function SkillsPage() {
                 <div style={{ flex: 1 }}>
                   <label className="label">{t('formCategory')}</label>
                   <Select className="input" value={createForm.category} onChange={(e) => setCreateForm((f) => ({ ...f, category: e.target.value }))}>
-                    <option value="general">General</option>
-                    <option value="coding">Coding</option>
-                    <option value="testing">Testing</option>
-                    <option value="devops">DevOps</option>
-                    <option value="documentation">Documentation</option>
-                    <option value="security">Security</option>
+                    <option value="general">{t('catGeneral')}</option>
+                    <option value="coding">{t('catCoding')}</option>
+                    <option value="testing">{t('catTesting')}</option>
+                    <option value="devops">{t('catDevops')}</option>
+                    <option value="documentation">{t('catDocumentation')}</option>
+                    <option value="security">{t('catSecurity')}</option>
                   </Select>
                 </div>
                 <div style={{ flex: 1 }}>

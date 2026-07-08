@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
+import { useTranslations } from 'next-intl';
 import { useConfirm } from '@/components/ConfirmProvider';
 import { useBrainDataRefresh } from '@/lib/brain/useBrainDataRefresh';
 import {
@@ -90,12 +91,13 @@ function StatusPill({ status }: { status: string }) {
 
 /** Run-history rollup line ("12 runs · last completed") — shared by card + row. */
 function RunStats({ def }: { def: WorkflowDefinitionSummary }) {
+  const t = useTranslations('workflowsContent');
   const count = def.runCount ?? 0;
-  if (count === 0) return <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>No runs yet</span>;
+  if (count === 0) return <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{t('noRunsYet')}</span>;
   return (
     <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 11, color: 'var(--text-muted)' }}>
-      {count} run{count === 1 ? '' : 's'}
-      {def.lastRunStatus && <>· last <StatusPill status={def.lastRunStatus} /></>}
+      {t('runCount', { count })}
+      {def.lastRunStatus && <>· {t('last')} <StatusPill status={def.lastRunStatus} /></>}
     </span>
   );
 }
@@ -124,6 +126,7 @@ function WorkflowTaskRow({ task }: { task: WorkflowTask }) {
 
 /** The project / tenant-wide scope chip — one source of truth for both views. */
 function ScopeChip({ def }: { def: WorkflowDefinitionSummary }) {
+  const t = useTranslations('workflowsContent');
   const bound = def.projectId != null;
   return (
     <span
@@ -137,7 +140,7 @@ function ScopeChip({ def }: { def: WorkflowDefinitionSummary }) {
         whiteSpace: 'nowrap',
       }}
     >
-      {bound ? (def.projectName ?? `Project #${def.projectId}`) : 'Tenant-wide'}
+      {bound ? (def.projectName ?? t('projectNumber', { id: def.projectId ?? 0 })) : t('tenantWide')}
     </span>
   );
 }
@@ -145,10 +148,11 @@ function ScopeChip({ def }: { def: WorkflowDefinitionSummary }) {
 /** The assigned-agent label — coral when set, a warning when unassigned (every
  *  workflow needs an agent to execute). Shared by card + table. */
 function AgentLabel({ def }: { def: WorkflowDefinitionSummary }) {
+  const t = useTranslations('workflowsContent');
   if (hasAgent(def)) {
-    return <span style={{ color: 'var(--coral-bright)', fontWeight: 600 }}>{def.agentName ?? 'Assigned agent'}</span>;
+    return <span style={{ color: 'var(--coral-bright)', fontWeight: 600 }}>{def.agentName ?? t('assignedAgent')}</span>;
   }
-  return <span style={{ color: 'var(--coral-bright)', fontWeight: 600, opacity: 0.8 }}>⚠ No agent</span>;
+  return <span style={{ color: 'var(--coral-bright)', fontWeight: 600, opacity: 0.8 }}>⚠ {t('noAgent')}</span>;
 }
 
 /** A workflow (definition) as a card — mirrors the project card layout. */
@@ -162,6 +166,8 @@ function WorkflowDefCard({
   onDelete: (d: WorkflowDefinitionSummary) => void;
   running: boolean;
 }) {
+  const t = useTranslations('workflowsContent');
+  const tc = useTranslations('common');
   return (
     <div style={{ padding: 20, background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', borderRadius: 12, display: 'flex', flexDirection: 'column', gap: 10 }}>
       <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
@@ -181,24 +187,24 @@ function WorkflowDefCard({
       </div>
 
       <div style={{ fontSize: 12 }}>
-        <span style={{ color: 'var(--text-muted)', marginRight: 4 }}>Agent:</span>
+        <span style={{ color: 'var(--text-muted)', marginRight: 4 }}>{t('agentColon')}</span>
         <AgentLabel def={def} />
       </div>
 
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginTop: 'auto' }}>
         <RunStats def={def} />
-        <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>Updated {new Date(def.updatedAt).toLocaleDateString()}</span>
+        <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{t('updated', { date: new Date(def.updatedAt).toLocaleDateString() })}</span>
       </div>
 
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-        <button type="button" onClick={() => onOpen(def)} style={subtleBtn}>Open</button>
+        <button type="button" onClick={() => onOpen(def)} style={subtleBtn}>{t('open')}</button>
         <button type="button" onClick={() => onRun(def)} disabled={running} style={{ ...subtleBtn, opacity: running ? 0.6 : 1 }}>
-          {running ? 'Running…' : '▶ Run'}
+          {running ? t('running') : `▶ ${t('run')}`}
         </button>
         {(def.runCount ?? 0) > 0 && (
-          <button type="button" onClick={() => onViewRuns(def)} style={subtleBtn}>Runs ({def.runCount})</button>
+          <button type="button" onClick={() => onViewRuns(def)} style={subtleBtn}>{t('runsCount', { count: def.runCount ?? 0 })}</button>
         )}
-        <button type="button" onClick={() => onDelete(def)} style={{ ...subtleBtn, marginLeft: 'auto' }}>Delete</button>
+        <button type="button" onClick={() => onDelete(def)} style={{ ...subtleBtn, marginLeft: 'auto' }}>{tc('delete')}</button>
       </div>
     </div>
   );
@@ -207,6 +213,8 @@ function WorkflowDefCard({
 export function WorkflowsContent({ projectId }: WorkflowsContentProps) {
   const router = useRouter();
   const confirm = useConfirm();
+  const tc = useTranslations('common');
+  const t = useTranslations('workflowsContent');
   const [defs, setDefs] = useState<WorkflowDefinitionSummary[]>([]);
   const [projectList, setProjectList] = useState<Project[]>([]);
   const [viewMode, setViewMode] = useState<ViewMode>('card');
@@ -268,31 +276,31 @@ export function WorkflowsContent({ projectId }: WorkflowsContentProps) {
 
   const runDef = async (d: WorkflowDefinitionSummary) => {
     if (!hasAgent(d)) {
-      setNotice(`"${d.name}" has no agent assigned — open it and pick a run target first.`);
+      setNotice(t('noticeNoAgent', { name: d.name }));
       return;
     }
     setRunningId(d.id);
     setNotice(null);
     try {
       const { workflowId } = await workflowDefinitions.run(d.id, savedRunTarget(d));
-      setNotice(`Started a run of "${d.name}".`);
+      setNotice(t('noticeRunStarted', { name: d.name }));
       load(); // refresh run counts
       const detail = await workflows.get(workflowId).catch(() => null);
       if (detail) openDetail(detail);
     } catch (e) {
-      setNotice(e instanceof Error ? e.message : 'Failed to start run');
+      setNotice(e instanceof Error ? e.message : t('failedStartRun'));
     } finally {
       setRunningId(null);
     }
   };
 
   const deleteDef = async (d: WorkflowDefinitionSummary) => {
-    if (!(await confirm(`Delete workflow "${d.name}"? This cannot be undone.`))) return;
+    if (!(await confirm(tc('deleteWorkflowConfirm', { name: d.name })))) return;
     try {
       await workflowDefinitions.remove(d.id);
       setDefs((prev) => prev.filter((x) => x.id !== d.id));
     } catch {
-      setNotice('Failed to delete workflow');
+      setNotice(t('failedDelete'));
     }
   };
 
@@ -340,11 +348,11 @@ export function WorkflowsContent({ projectId }: WorkflowsContentProps) {
             onClick={() => setSelectedDetail(null)}
             style={{ padding: '6px 12px', fontSize: 12, fontWeight: 600, background: 'var(--bg-base)', color: 'var(--text-secondary)', border: '1px solid var(--border-subtle)', borderRadius: 8, cursor: 'pointer' }}
           >
-            ← Back
+            ← {t('back')}
           </button>
           <div style={{ flex: 1 }}>
             <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)' }}>
-              {selectedDetail.description ?? `Run ${selectedDetail.id.slice(0, 8)}`}
+              {selectedDetail.description ?? t('runLabel', { id: selectedDetail.id.slice(0, 8) })}
             </div>
             <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 1 }}>
               {selectedDetail.workflowType} · {selectedDetail.status}
@@ -352,13 +360,13 @@ export function WorkflowsContent({ projectId }: WorkflowsContentProps) {
             </div>
           </div>
           <div style={{ display: 'flex', gap: 4 }}>
-            <button type="button" style={tabBtnStyle(detailTab === 'tasks')} onClick={() => setDetailTab('tasks')}>Tasks</button>
+            <button type="button" style={tabBtnStyle(detailTab === 'tasks')} onClick={() => setDetailTab('tasks')}>{t('tasks')}</button>
             <button
               type="button"
               style={tabBtnStyle(detailTab === 'graph')}
               onClick={() => { setDetailTab('graph'); if (!graph && !loadingGraph) void loadGraph(selectedDetail.id); }}
             >
-              Graph
+              {t('graph')}
             </button>
           </div>
         </div>
@@ -366,24 +374,24 @@ export function WorkflowsContent({ projectId }: WorkflowsContentProps) {
         <div style={cardStyle}>
           {detailTab === 'tasks' ? (
             <>
-              <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 12 }}>Tasks ({tasks.length})</div>
+              <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 12 }}>{t('tasksCount', { count: tasks.length })}</div>
               {loadingDetail ? (
-                <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>Loading tasks…</div>
+                <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>{t('loadingTasks')}</div>
               ) : tasks.length === 0 ? (
-                <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>No tasks in this run yet.</div>
+                <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>{t('noTasksYet')}</div>
               ) : (
-                tasks.map((t) => <WorkflowTaskRow key={t.id} task={t} />)
+                tasks.map((task) => <WorkflowTaskRow key={task.id} task={task} />)
               )}
             </>
           ) : (
             <>
-              <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 12 }}>Dependency Graph</div>
+              <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 12 }}>{t('dependencyGraph')}</div>
               {loadingGraph ? (
-                <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>Loading graph…</div>
+                <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>{t('loadingGraph')}</div>
               ) : graph ? (
                 <WorkflowDagView nodes={graph.nodes} edges={graph.edges} />
               ) : (
-                <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>No graph data available.</div>
+                <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>{t('noGraphData')}</div>
               )}
             </>
           )}
@@ -402,21 +410,21 @@ export function WorkflowsContent({ projectId }: WorkflowsContentProps) {
             onClick={() => { setRunsForDef(null); setDefRuns([]); }}
             style={{ padding: '6px 12px', fontSize: 12, fontWeight: 600, background: 'var(--bg-base)', color: 'var(--text-secondary)', border: '1px solid var(--border-subtle)', borderRadius: 8, cursor: 'pointer' }}
           >
-            ← Back
+            ← {t('back')}
           </button>
           <div style={{ flex: 1 }}>
-            <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)' }}>{runsForDef.name} · Runs</div>
-            <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 1 }}>Execution history (newest first)</div>
+            <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)' }}>{runsForDef.name} · {t('runs')}</div>
+            <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 1 }}>{t('executionHistory')}</div>
           </div>
           <button type="button" onClick={() => runDef(runsForDef)} disabled={runningId === runsForDef.id} style={{ ...subtleBtn, opacity: runningId === runsForDef.id ? 0.6 : 1 }}>
-            {runningId === runsForDef.id ? 'Running…' : '▶ Run now'}
+            {runningId === runsForDef.id ? t('running') : `▶ ${t('runNow')}`}
           </button>
         </div>
 
         {loadingRuns ? (
-          <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>Loading runs…</div>
+          <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>{t('loadingRuns')}</div>
         ) : defRuns.length === 0 ? (
-          <div style={{ ...cardStyle, fontSize: 12, color: 'var(--text-muted)' }}>No runs yet.</div>
+          <div style={{ ...cardStyle, fontSize: 12, color: 'var(--text-muted)' }}>{t('noRunsPeriod')}</div>
         ) : (
           <div style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', borderRadius: 12, overflow: 'hidden' }}>
             {defRuns.map((r) => (
@@ -427,7 +435,7 @@ export function WorkflowsContent({ projectId }: WorkflowsContentProps) {
                 style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', textAlign: 'left', padding: '10px 16px', borderBottom: '1px solid var(--border-subtle)', background: 'none', cursor: 'pointer' }}
               >
                 <span style={{ flex: 1, fontSize: 12.5, fontWeight: 600, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                  {r.description ?? `Run ${r.id.slice(0, 8)}`}
+                  {r.description ?? t('runLabel', { id: r.id.slice(0, 8) })}
                 </span>
                 <StatusPill status={r.status} />
                 <span style={{ fontSize: 11, color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>{new Date(r.createdAt).toLocaleString()}</span>
@@ -445,14 +453,14 @@ export function WorkflowsContent({ projectId }: WorkflowsContentProps) {
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
         <div>
-          <h1 style={{ fontSize: '1.5rem', fontWeight: 700, color: 'var(--text-primary)', margin: 0 }}>Workflows</h1>
+          <h1 style={{ fontSize: '1.5rem', fontWeight: 700, color: 'var(--text-primary)', margin: 0 }}>{t('title')}</h1>
           <p style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 6, marginBottom: 0 }}>
-            Visually-authored, multi-step agent automations. Each runs under a project or tenant-wide, with an assigned agent.
+            {t('subtitle')}
           </p>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <ViewToggle value={viewMode} onChange={setViewMode} />
-          <button type="button" onClick={newWorkflow} style={primaryBtn}>+ New workflow</button>
+          <button type="button" onClick={newWorkflow} style={primaryBtn}>+ {t('newWorkflow')}</button>
         </div>
       </div>
 
@@ -460,14 +468,14 @@ export function WorkflowsContent({ projectId }: WorkflowsContentProps) {
       {projectId != null && (
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 14px', background: 'var(--surface-coral-soft, rgba(244,114,94,0.12))', border: '1px solid var(--border-subtle)', borderRadius: 10, fontSize: 13 }}>
           <span style={{ color: 'var(--text-secondary)' }}>
-            Filtered to project <strong style={{ color: 'var(--text-primary)' }}>{filteredProjectName}</strong>
+            {t('filteredToProject')} <strong style={{ color: 'var(--text-primary)' }}>{filteredProjectName}</strong>
           </span>
           <button
             type="button"
             onClick={() => router.push('/workflows')}
             style={{ marginLeft: 'auto', fontSize: 12, fontWeight: 600, color: 'var(--coral-bright)', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
           >
-            Clear filter
+            {t('clearFilter')}
           </button>
         </div>
       )}
@@ -475,20 +483,20 @@ export function WorkflowsContent({ projectId }: WorkflowsContentProps) {
       {notice && (
         <div style={{ ...cardStyle, fontSize: 13, color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: 10 }}>
           <span style={{ flex: 1 }}>{notice}</span>
-          <button type="button" onClick={() => setNotice(null)} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: 16 }} aria-label="Dismiss">×</button>
+          <button type="button" onClick={() => setNotice(null)} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: 16 }} aria-label={tc('dismiss')}>×</button>
         </div>
       )}
 
-      {loading && <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>Loading workflows…</div>}
-      {error && <div style={{ ...cardStyle, color: 'var(--coral-bright)', fontSize: 13 }}>Error: {error}</div>}
+      {loading && <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>{t('loadingWorkflows')}</div>}
+      {error && <div style={{ ...cardStyle, color: 'var(--coral-bright)', fontSize: 13 }}>{t('error', { message: error })}</div>}
 
       {!loading && visibleDefs.length === 0 ? (
         <div style={{ textAlign: 'center', padding: 48, background: 'var(--bg-elevated)', borderRadius: 12, border: '1px solid var(--border-subtle)' }}>
           <div style={{ fontSize: 56, marginBottom: 16 }}>🔀</div>
           <p style={{ color: 'var(--text-secondary)', marginBottom: 16 }}>
-            No workflows {projectId != null ? 'for this project ' : ''}yet. Create one to orchestrate multi-step agent tasks.
+            {projectId != null ? t('emptyForProject') : t('empty')}
           </p>
-          <button type="button" onClick={newWorkflow} style={{ ...primaryBtn, padding: '12px 24px' }}>New workflow</button>
+          <button type="button" onClick={newWorkflow} style={{ ...primaryBtn, padding: '12px 24px' }}>{t('newWorkflow')}</button>
         </div>
       ) : viewMode === 'card' ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -501,7 +509,7 @@ export function WorkflowsContent({ projectId }: WorkflowsContentProps) {
           <table style={tableStyle}>
             <thead>
               <tr style={{ borderBottom: '1px solid var(--border-subtle)', textAlign: 'left' }}>
-                {['Name', 'Project', 'Agent', 'Runs', 'Updated', 'Actions'].map((h) => (
+                {[t('colName'), t('colProject'), t('colAgent'), t('colRuns'), t('colUpdated'), t('colActions')].map((h) => (
                   <th key={h} style={{ padding: '12px 16px', fontWeight: 600, color: 'var(--text-secondary)' }}>{h}</th>
                 ))}
               </tr>
@@ -528,11 +536,11 @@ export function WorkflowsContent({ projectId }: WorkflowsContentProps) {
                   <td style={{ padding: '12px 16px', color: 'var(--text-secondary)' }}>{new Date(d.updatedAt).toLocaleDateString()}</td>
                   <td style={{ padding: '12px 16px' }}>
                     <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                      <button type="button" onClick={() => openDef(d)} style={subtleBtn}>Open</button>
+                      <button type="button" onClick={() => openDef(d)} style={subtleBtn}>{t('open')}</button>
                       <button type="button" onClick={() => runDef(d)} disabled={runningId === d.id} style={{ ...subtleBtn, opacity: runningId === d.id ? 0.6 : 1 }}>
-                        {runningId === d.id ? 'Running…' : '▶ Run'}
+                        {runningId === d.id ? t('running') : `▶ ${t('run')}`}
                       </button>
-                      <button type="button" onClick={() => deleteDef(d)} style={subtleBtn}>Delete</button>
+                      <button type="button" onClick={() => deleteDef(d)} style={subtleBtn}>{tc('delete')}</button>
                     </div>
                   </td>
                 </tr>

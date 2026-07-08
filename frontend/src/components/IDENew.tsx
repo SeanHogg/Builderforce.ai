@@ -70,6 +70,7 @@ interface CheckResult {
 
 export function IDE({ project, initialFiles, onProjectUpdate, onOpenProjectDetails, initialChatId, initialPrompt, initialTicket }: IDEProps) {
   const t = useTranslations('ide');
+  const tc = useTranslations('common');
   const confirm = useConfirm();
   // The IDE is scoped to its project's type: modality is fixed at creation, not
   // switchable in-session, so it's derived (and clamped) rather than state.
@@ -346,7 +347,7 @@ export function IDE({ project, initialFiles, onProjectUpdate, onOpenProjectDetai
         return;
       }
       if (typeof window !== 'undefined' &&
-        !(await confirm({ message: `Last checks failed (${summary}). Serve the preview anyway?`, destructive: false }))) {
+        !(await confirm({ message: tc('servePreviewAnywayConfirm', { summary }), destructive: false }))) {
         return;
       }
     }
