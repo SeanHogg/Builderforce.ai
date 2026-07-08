@@ -936,6 +936,13 @@ interface MessageProvenance {
     /** Vendor that owns `model` (e.g. `anthropic`), when known — names the account
      *  in tooltips ("your connected Claude account"). */
     vendor?: string;
+    /** Present when the project's own self-learning Evermind generated this reply's
+     *  final prose (opt-in inference). `version` is the Evermind head the turn ran on.
+     *  Absent for turns served by a frontier/pool model — so the "🧠 Evermind vN" chip
+     *  shows ONLY when the learned model actually spoke. */
+    evermind?: {
+        version: number;
+    };
 }
 /** True when a turn ran on the shared pool despite a connected account existing —
  *  the only state the chip flags inline. Shared by the chip and any host that

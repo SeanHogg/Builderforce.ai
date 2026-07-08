@@ -1011,7 +1011,14 @@ function parseMessageProvenance(msg) {
   try {
     const p = JSON.parse(msg.metadata).provenance;
     if (p && typeof p.model === "string" && p.model.length > 0 && (p.account === "own" || p.account === "shared" || p.account === "shared_byo_unused")) {
-      return { model: p.model, account: p.account, ...typeof p.vendor === "string" ? { vendor: p.vendor } : {} };
+      const ev = p.evermind;
+      const evermind = ev && typeof ev.version === "number" && ev.version >= 1 ? { version: ev.version } : void 0;
+      return {
+        model: p.model,
+        account: p.account,
+        ...typeof p.vendor === "string" ? { vendor: p.vendor } : {},
+        ...evermind ? { evermind } : {}
+      };
     }
   } catch {
   }

@@ -483,6 +483,7 @@ export function BrainPanel({
     accountOwn: tTimeline('accountOwn'),
     accountShared: tTimeline('accountShared'),
     accountByoUnused: tTimeline('accountByoUnused'),
+    ranOnEvermind: tTimeline('ranOnEvermind'),
   }), [tTimeline]);
 
   const timelineApplyCode = useMemo(

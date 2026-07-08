@@ -41,6 +41,11 @@ export interface MessageProvenance {
   /** Vendor that owns `model` (e.g. `anthropic`), when known — names the account
    *  in tooltips ("your connected Claude account"). */
   vendor?: string;
+  /** Present when the project's own self-learning Evermind generated this reply's
+   *  final prose (opt-in inference). `version` is the Evermind head the turn ran on.
+   *  Absent for turns served by a frontier/pool model — so the "🧠 Evermind vN" chip
+   *  shows ONLY when the learned model actually spoke. */
+  evermind?: { version: number };
 }
 
 /** True when a turn ran on the shared pool despite a connected account existing —
@@ -63,7 +68,14 @@ export function parseMessageProvenance(msg: { metadata?: string | null }): Messa
       p.model.length > 0 &&
       (p.account === 'own' || p.account === 'shared' || p.account === 'shared_byo_unused')
     ) {
-      return { model: p.model, account: p.account, ...(typeof p.vendor === 'string' ? { vendor: p.vendor } : {}) };
+      const ev = (p as { evermind?: { version?: unknown } }).evermind;
+      const evermind = ev && typeof ev.version === 'number' && ev.version >= 1 ? { version: ev.version } : undefined;
+      return {
+        model: p.model,
+        account: p.account,
+        ...(typeof p.vendor === 'string' ? { vendor: p.vendor } : {}),
+        ...(evermind ? { evermind } : {}),
+      };
     }
   } catch {
     /* not a provenance-bearing message */

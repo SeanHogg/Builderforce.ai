@@ -3544,6 +3544,10 @@
     "off": "Désactivé",
     "tooltip": "Les agents de ce projet s'exécutent sur son Evermind (v{version}) et leurs exécutions l'entraînent. Ce chat de planification ne l'entraîne pas — ouvrez l'onglet LLM pour voir ce qu'il a appris."
   },
+  "evermindRun": {
+    "title": "Cette exécution a eu lieu sur le propre modèle Evermind du projet",
+    "contributed": "a contribué"
+  },
   "llmStudio": {
     "title": "Créer un modèle personnalisé",
     "intro": "Concevez des données, affinez un adaptateur LoRA et publiez-le comme agent recrutable — le tout depuis le navigateur. Le chat et la conception des prompts se font dans le Brain — ouvrez-le avec le bouton en bas à droite. Les étapes ci-dessous pilotent le pipeline de création.",
@@ -5434,6 +5438,7 @@
       "accountOwn": "Votre compte",
       "accountShared": "Pool partagé",
       "accountByoUnused": "Votre compte connecté n'a pas été utilisé",
+      "ranOnEvermind": "Généré par le modèle Evermind de ce projet",
       "stop": "Arrêter"
     },
     "tickets": {
@@ -8355,6 +8360,46 @@
     "cardChannels": "Canaux",
     "cardOrder": "Ordre",
     "cardDim": "Dim"
+  },
+  "agentExecution": {
+    "runThisTask": "Exécuter cette tâche",
+    "awaitingApproval": "En attente d'approbation avant de pouvoir s'exécuter : {reason}",
+    "executions": "Exécutions",
+    "ticketSpendTooltip": "Dépense du ticket sur toutes les exécutions : {tokens} jetons sur {requests} appel(s) LLM. Cumulé sur ce projet, puis sur le compte.",
+    "spentOnTicket": "~{amount} dépensés sur ce ticket",
+    "loading": "Chargement…",
+    "noExecutions": "Aucune exécution pour l'instant. Utilisez Exécuter ci-dessus pour envoyer cette tâche à un agent.",
+    "executionHeader": "Exécution n° {id}",
+    "agentThatRan": "Agent ayant réalisé cette exécution",
+    "ranAs": " · exécuté en tant que {type}",
+    "live": "en direct",
+    "polling": "interrogation",
+    "cancel": "Annuler",
+    "error": "Erreur",
+    "tabOutput": "Sortie",
+    "tabChanges": "Modifications",
+    "tabTools": "Outils",
+    "tabLogs": "Journaux",
+    "tabTimeline": "Chronologie",
+    "tabPullRequest": "Pull Request",
+    "agentWorking": "L'agent travaille… la sortie s'affichera ici en temps réel.",
+    "noOutput": "Aucune sortie.",
+    "agent": "Agent",
+    "you": "Vous",
+    "steerPlaceholder": "Envoyez une nouvelle instruction à l'agent… (⌘/Ctrl+Entrée)",
+    "followUpPlaceholder": "Envoyez un suivi pour lancer une nouvelle exécution avec cette instruction… (⌘/Ctrl+Entrée)",
+    "steerTitle": "Orientez l'agent en cours d'exécution avec cette instruction",
+    "startRunTitle": "Lancez une nouvelle exécution en utilisant ce message comme instruction",
+    "sendingLabel": "Envoi…",
+    "startingLabel": "Démarrage…",
+    "send": "Envoyer",
+    "startRun": "Lancer l'exécution",
+    "minimalView": "Vue minimale — pour les journaux complets de l'agent, les appels d'outils et la chronologie,",
+    "openWorkforceLogs": "ouvrez Workforce → Journaux →",
+    "noFileChangesYet": "Aucune modification de fichier pour l'instant.",
+    "noFileChangesRecorded": "Cette exécution n'a enregistré aucune modification de fichier.",
+    "noToolCalls": "Aucun appel d'outil enregistré.",
+    "failedToRerun": "Échec de la réexécution"
   },
   "aiTraining": {
     "title": "Entraînement de modèles IA",

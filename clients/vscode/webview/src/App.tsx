@@ -22,6 +22,7 @@ import {
   type BrainTimelineLabels,
 } from '@seanhogg/builderforce-brain-ui';
 import { createChatTicketsAdapter } from './chatTicketsAdapter';
+import { EvermindStatusBadge } from './EvermindStatusBadge';
 import {
   getToken,
   getEditorContext,
@@ -1095,6 +1096,10 @@ function Chat({ init }: { init: InitData }) {
           </button>
 
           <div className="bf-header__spacer" />
+
+          {/* Evermind posture for the active project — parity with the web Brain
+              composer. Self-gates (renders nothing until a seeded Evermind). */}
+          <EvermindStatusBadge baseUrl={init.baseUrl} projectId={associatedProjectId} t={t} />
 
           {init.model && (
             <button

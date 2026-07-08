@@ -194,6 +194,19 @@
   border-color: var(--bf-warning, rgba(183, 121, 31, 0.5));
   background: var(--bf-warning-bg, rgba(183, 121, 31, 0.12));
 }
+/* Ran on the project's own Evermind — the learned model generated this reply. */
+.bf-tl__prov-evermind {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  font-weight: 600;
+  white-space: nowrap;
+  color: var(--bf-accent, #9085e9);
+  border: 1px solid var(--bf-accent-border, rgba(144, 133, 233, 0.5));
+  background: var(--bf-accent-bg, rgba(144, 133, 233, 0.12));
+}
 
 /* ---- ask_user question card ---- */
 .bf-qcard {

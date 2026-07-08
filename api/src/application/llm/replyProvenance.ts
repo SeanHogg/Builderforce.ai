@@ -34,6 +34,10 @@ export interface ReplyProvenance {
   model: string;
   account: ReplyAccount;
   vendor?: string;
+  /** Set when the project's own Evermind generated the reply's final prose (opt-in
+   *  inference). Mirrors brain-embedded `MessageProvenance.evermind` — drives the
+   *  "🧠 Evermind vN" chip. Absent for frontier/pool-served turns. */
+  evermind?: { version: number };
 }
 
 /** Build the provenance object attached to a persisted assistant turn. */
@@ -42,10 +46,12 @@ export function buildReplyProvenance(args: {
   vendor?: string;
   byoFunded: boolean;
   hasConnectedAccount: boolean;
+  evermind?: { version: number };
 }): ReplyProvenance {
   return {
     model: args.model,
     account: classifyReplyAccount(args.byoFunded, args.hasConnectedAccount),
     ...(args.vendor ? { vendor: args.vendor } : {}),
+    ...(args.evermind ? { evermind: args.evermind } : {}),
   };
 }
