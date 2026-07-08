@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { reorderPoolForCoding, CODING_MODEL_POOL } from './LlmProxyService';
 
 describe('reorderPoolForCoding — agentic tool-loop routing', () => {
-  const codingModel = CODING_MODEL_POOL[0];
+  const codingModel = CODING_MODEL_POOL[0]!;
 
   it('floats a CODING_MODEL_POOL driver ahead of a cheap generalist', () => {
     const pool = ['some/cheap-generalist', codingModel];
@@ -18,8 +18,8 @@ describe('reorderPoolForCoding — agentic tool-loop routing', () => {
   });
 
   it('preserves relative order within the coding and non-coding buckets', () => {
-    const c0 = CODING_MODEL_POOL[0];
-    const c1 = CODING_MODEL_POOL[1] ?? CODING_MODEL_POOL[0];
+    const c0 = CODING_MODEL_POOL[0]!;
+    const c1 = CODING_MODEL_POOL[1] ?? CODING_MODEL_POOL[0]!;
     const pool = ['x/first', c1, 'y/second', c0];
     const out = reorderPoolForCoding(pool);
     // coding models lead in their original relative order (c1 appeared before c0)

@@ -3424,7 +3424,11 @@
     "amygdalaRole": "显著性与情感",
     "hypothalamusRole": "驱动与动机",
     "thalamusRole": "注意力门控",
-    "basalGangliaRole": "探索与利用"
+    "basalGangliaRole": "探索与利用",
+    "amygdalaLive": "效价 {valence} · 唤醒 {arousal}",
+    "hypothalamusLive": "好奇 {curiosity} · 努力 {effort}",
+    "thalamusLive": "注意力门控 {attention}%",
+    "basalGangliaLive": "探索 {explore}%"
   },
   "llmStudio": {
     "title": "构建自定义模型",
@@ -6091,6 +6095,14 @@
       "unlike": "取消点赞",
       "installsTitle": "安装量",
       "deleteConfirm": "删除智能体 \"{name}\"？这将永久移除它及其专属技能/人设，且无法撤销。"
+    },
+    "card": {
+      "agentPill": "智能体",
+      "prefers": "偏好 {runtime}",
+      "eval": "评分 {score}",
+      "evalTitle": "AI 评估分数（0-1）",
+      "hired": "已雇用 {count} 次",
+      "inUse": "{count} 个在使用"
     }
   },
   "models": {
@@ -8299,5 +8311,35 @@
     "replaceConfirm": "用此模板替换当前画布？",
     "builderBuild": "构建",
     "builderBuildTitle": "在浏览器中运行 Evermind 构建流水线"
+  },
+  "chunkError": {
+    "recovering": "正在更新到最新版本…",
+    "title": "无法加载应用的部分内容",
+    "body": "缓存或网络问题导致页面的部分内容无法加载。重新加载通常可以解决此问题。",
+    "reload": "重新加载"
+  },
+  "idePage": {
+    "loading": "正在加载项目…",
+    "notFound": "未找到项目",
+    "backToDashboard": "返回仪表板",
+    "loadError": "无法加载项目",
+    "unknownError": "未知错误。请检查您的网络连接后重试。",
+    "retry": "重试",
+    "dashboard": "仪表板",
+    "deleteFailed": "删除项目失败"
+  },
+  "codeEditor": {
+    "loading": "正在加载编辑器…",
+    "selectFile": "选择一个文件开始编辑"
+  },
+  "fileChangeViewer": {
+    "loadingEditor": "正在加载编辑器…",
+    "loadFailed": "加载文件失败",
+    "loadingFile": "正在加载 {path}…",
+    "noContent": "无内容。",
+    "cannotShow": "无法显示文件内容：{reason}。此次运行的交付内容仅存在于其摘要中。",
+    "noRepoBound": "没有仓库绑定到此任务",
+    "noContentOnBranch": "在工单分支上未找到 {path} 的内容。",
+    "truncated": "文件已截断以便显示——打开拉取请求以查看完整内容。"
   }
 }

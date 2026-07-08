@@ -3424,7 +3424,11 @@
     "amygdalaRole": "Relevancia y afecto",
     "hypothalamusRole": "Impulsos y motivación",
     "thalamusRole": "Compuerta de atención",
-    "basalGangliaRole": "Explorar vs. explotar"
+    "basalGangliaRole": "Explorar vs. explotar",
+    "amygdalaLive": "Valencia {valence} · activación {arousal}",
+    "hypothalamusLive": "Curiosidad {curiosity} · esfuerzo {effort}",
+    "thalamusLive": "Compuerta de atención {attention}%",
+    "basalGangliaLive": "Explorar {explore}%"
   },
   "llmStudio": {
     "title": "Crear un modelo personalizado",
@@ -6091,6 +6095,14 @@
       "unlike": "Ya no me gusta",
       "installsTitle": "Instalaciones",
       "deleteConfirm": "¿Eliminar el agente \"{name}\"? Esto lo elimina de forma permanente junto con sus habilidades/personas propias. No se puede deshacer."
+    },
+    "card": {
+      "agentPill": "Agente",
+      "prefers": "prefiere {runtime}",
+      "eval": "Eval. {score}",
+      "evalTitle": "Puntuación de evaluación de IA (0-1)",
+      "hired": "Contratado {count}×",
+      "inUse": "{count} en uso"
     }
   },
   "models": {
@@ -8299,5 +8311,35 @@
     "replaceConfirm": "¿Reemplazar el lienzo actual con esta plantilla?",
     "builderBuild": "Compilar",
     "builderBuildTitle": "Ejecuta el pipeline de compilación de Evermind en tu navegador"
+  },
+  "chunkError": {
+    "recovering": "Actualizando a la última versión…",
+    "title": "No se pudo cargar parte de la aplicación",
+    "body": "Un problema de caché o de red impidió que se cargara parte de la página. Recargar suele solucionarlo.",
+    "reload": "Recargar"
+  },
+  "idePage": {
+    "loading": "Cargando proyecto…",
+    "notFound": "Proyecto no encontrado",
+    "backToDashboard": "Volver al panel",
+    "loadError": "No se pudo cargar el proyecto",
+    "unknownError": "Error desconocido. Comprueba tu conexión e inténtalo de nuevo.",
+    "retry": "Reintentar",
+    "dashboard": "Panel",
+    "deleteFailed": "No se pudo eliminar el proyecto"
+  },
+  "codeEditor": {
+    "loading": "Cargando editor…",
+    "selectFile": "Selecciona un archivo para empezar a editar"
+  },
+  "fileChangeViewer": {
+    "loadingEditor": "Cargando editor…",
+    "loadFailed": "No se pudo cargar el archivo",
+    "loadingFile": "Cargando {path}…",
+    "noContent": "Sin contenido.",
+    "cannotShow": "No se puede mostrar el contenido del archivo: {reason}. Los entregables de esta ejecución solo existen en su resumen.",
+    "noRepoBound": "no hay ningún repositorio vinculado a esta tarea",
+    "noContentOnBranch": "No se encontró contenido en la rama del ticket para {path}.",
+    "truncated": "Archivo truncado para su visualización: abre la solicitud de incorporación de cambios para ver el contenido completo."
   }
 }

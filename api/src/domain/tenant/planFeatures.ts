@@ -81,6 +81,52 @@ export interface FeatureEntitlement {
   requiredPlan: TenantPlan;
 }
 
+// ---------------------------------------------------------------------------
+// Frontier / premium-model access — a SEPARATE axis from the boolean PlanFeature
+// flags above. "Can this tenant use a FRONTIER model?" (teach/distil from a top
+// model, pick a premium model, run an agent on Opus/GPT/Gemini) is unlocked by an
+// EXTRA dimension the plan-feature gate has no concept of: a CONNECTED BYO frontier
+// account. When the tenant brings their own key/subscription, THEIR tokens fund the
+// frontier call, so the paid-plan wall is irrelevant — and a superadmin never hits a
+// wall. One evaluator so every frontier gate (teach/distil, premium model pick,
+// "run on a top model") answers this identically.
+// ---------------------------------------------------------------------------
+
+export type FrontierAccessReason = 'superadmin' | 'premium_override' | 'byo_connected' | 'paid_plan' | 'not_entitled';
+
+export interface FrontierAccessInput {
+  /** The tenant's effective (trial/billing-resolved) plan. */
+  effectivePlan: TenantPlan;
+  /** Comped / beta premium override on the tenant. */
+  premiumOverride: boolean;
+  /** The CALLER is a platform superadmin — always bypasses the gate. */
+  isSuperadmin: boolean;
+  /**
+   * The tenant has connected ≥1 BYO frontier account/key — an Anthropic subscription
+   * (OAuth) OR a BYO api-key for anthropic/openai/google. Their OWN tokens fund the
+   * frontier call, so the paid-plan wall does not apply.
+   */
+  hasConnectedByoFrontier: boolean;
+}
+
+export interface FrontierAccess {
+  entitled: boolean;
+  reason: FrontierAccessReason;
+}
+
+/**
+ * THE frontier-access evaluator. Pure. Unlocked (in priority order) by: superadmin →
+ * premium override → a connected BYO frontier account (own tokens) → a paid plan.
+ * Otherwise not entitled (free plan with no connected account).
+ */
+export function evaluateFrontierAccess(input: FrontierAccessInput): FrontierAccess {
+  if (input.isSuperadmin) return { entitled: true, reason: 'superadmin' };
+  if (input.premiumOverride) return { entitled: true, reason: 'premium_override' };
+  if (input.hasConnectedByoFrontier) return { entitled: true, reason: 'byo_connected' };
+  if (input.effectivePlan !== TenantPlan.FREE) return { entitled: true, reason: 'paid_plan' };
+  return { entitled: false, reason: 'not_entitled' };
+}
+
 /** THE evaluator. Pure — same inputs always yield the same verdict. */
 export function evaluateFeatureEntitlement(input: FeatureEntitlementInput): FeatureEntitlement {
   const base = {

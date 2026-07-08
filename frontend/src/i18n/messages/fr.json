@@ -3424,7 +3424,11 @@
     "amygdalaRole": "Saillance et affect",
     "hypothalamusRole": "Pulsions et motivation",
     "thalamusRole": "Porte attentionnelle",
-    "basalGangliaRole": "Explorer vs exploiter"
+    "basalGangliaRole": "Explorer vs exploiter",
+    "amygdalaLive": "Valence {valence} · éveil {arousal}",
+    "hypothalamusLive": "Curiosité {curiosity} · effort {effort}",
+    "thalamusLive": "Porte attentionnelle {attention}%",
+    "basalGangliaLive": "Explorer {explore}%"
   },
   "llmStudio": {
     "title": "Créer un modèle personnalisé",
@@ -6091,6 +6095,14 @@
       "unlike": "Je n'aime plus",
       "installsTitle": "Installations",
       "deleteConfirm": "Supprimer l'agent « {name} » ? Cela le supprime définitivement ainsi que ses compétences/personas propres. Action irréversible."
+    },
+    "card": {
+      "agentPill": "Agent",
+      "prefers": "préfère {runtime}",
+      "eval": "Éval. {score}",
+      "evalTitle": "Score d'évaluation IA (0-1)",
+      "hired": "Recruté {count}×",
+      "inUse": "{count} en cours d'utilisation"
     }
   },
   "models": {
@@ -8299,5 +8311,35 @@
     "replaceConfirm": "Remplacer le canevas actuel par ce modèle ?",
     "builderBuild": "Build",
     "builderBuildTitle": "Exécutez le pipeline de build Evermind dans votre navigateur"
+  },
+  "chunkError": {
+    "recovering": "Mise à jour vers la dernière version…",
+    "title": "Impossible de charger une partie de l'application",
+    "body": "Un problème de cache ou de réseau a empêché le chargement d’une partie de la page. Recharger résout généralement le problème.",
+    "reload": "Recharger"
+  },
+  "idePage": {
+    "loading": "Chargement du projet…",
+    "notFound": "Projet introuvable",
+    "backToDashboard": "Retour au tableau de bord",
+    "loadError": "Impossible de charger le projet",
+    "unknownError": "Erreur inconnue. Vérifiez votre connexion et réessayez.",
+    "retry": "Réessayer",
+    "dashboard": "Tableau de bord",
+    "deleteFailed": "Échec de la suppression du projet"
+  },
+  "codeEditor": {
+    "loading": "Chargement de l'éditeur…",
+    "selectFile": "Sélectionnez un fichier pour commencer à éditer"
+  },
+  "fileChangeViewer": {
+    "loadingEditor": "Chargement de l'éditeur…",
+    "loadFailed": "Échec du chargement du fichier",
+    "loadingFile": "Chargement de {path}…",
+    "noContent": "Aucun contenu.",
+    "cannotShow": "Impossible d’afficher le contenu du fichier : {reason}. Les livrables de cette exécution ne figurent que dans son résumé.",
+    "noRepoBound": "aucun dépôt lié à cette tâche",
+    "noContentOnBranch": "Aucun contenu trouvé sur la branche du ticket pour {path}.",
+    "truncated": "Fichier tronqué pour l’affichage — ouvrez la pull request pour voir le contenu complet."
   }
 }

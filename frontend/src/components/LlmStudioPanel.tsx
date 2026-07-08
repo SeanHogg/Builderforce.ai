@@ -131,18 +131,12 @@ export function LlmStudioPanel({ projectId, files = [], onGoToTab, onOpenFile }:
   ];
 
   return (
-    <div
-      style={{
-        height: '100%',
-        overflow: 'auto',
-        background: 'var(--bg-deep)',
-        color: 'var(--text-primary)',
-        padding: '24px 28px',
-      }}
-    >
-      <div style={{ display: 'flex', gap: 20, alignItems: 'stretch', flexWrap: 'wrap', maxWidth: 1400, margin: '0 auto' }}>
-        {/* Left rail: the build/train form + pipeline steps. */}
-        <div style={{ flex: '1 1 340px', maxWidth: 480, minWidth: 300, display: 'flex', flexDirection: 'column' }}>
+    <div className="llm-studio-root">
+      <style>{LLM_STUDIO_CSS}</style>
+      <div className="llm-studio-row">
+        {/* Left rail: the build/train form + pipeline steps — scrolls independently so
+            the (long) 5-step pipeline never pushes the centre diagram off-screen. */}
+        <div className="llm-studio-rail">
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6 }}>
           <span style={{ fontSize: '1.6rem' }}>🧠</span>
           <h1 style={{ fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '1.25rem', margin: 0 }}>
@@ -321,11 +315,28 @@ export function LlmStudioPanel({ projectId, files = [], onGoToTab, onOpenFile }:
         </p>
         </div>
 
-        {/* Center stage: the live brain / knowledge map of what the model is learning. */}
-        <div style={{ flex: '1.5 1 460px', minWidth: 320, minHeight: 560, display: 'flex' }}>
+        {/* Center stage: the live brain / knowledge map — bounded to the pane height and
+            vertically centred, so the long pipeline rail never pushes it off-screen. */}
+        <div className="llm-studio-center">
           <EvermindBrainMap projectId={Number(projectId)} />
         </div>
       </div>
     </div>
   );
 }
+
+/* Two-pane layout: on desktop each column is bounded to the pane height and scrolls
+   independently (the diagram stays centred no matter how long the pipeline rail gets);
+   under 900px they stack and the page scrolls naturally. */
+const LLM_STUDIO_CSS = `
+.llm-studio-root { height: 100%; overflow: hidden; background: var(--bg-deep); color: var(--text-primary); padding: 20px 24px; box-sizing: border-box; }
+.llm-studio-row { display: flex; gap: 20px; height: 100%; align-items: stretch; max-width: 1400px; margin: 0 auto; }
+.llm-studio-rail { flex: 1 1 340px; max-width: 480px; min-width: 300px; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; padding-right: 6px; }
+.llm-studio-center { flex: 1.6 1 460px; min-width: 320px; min-height: 0; display: flex; }
+@media (max-width: 900px) {
+  .llm-studio-root { overflow-y: auto; }
+  .llm-studio-row { flex-wrap: wrap; height: auto; align-items: flex-start; }
+  .llm-studio-rail { flex-basis: 100%; max-width: none; overflow: visible; padding-right: 0; }
+  .llm-studio-center { flex-basis: 100%; height: 520px; }
+}
+`;

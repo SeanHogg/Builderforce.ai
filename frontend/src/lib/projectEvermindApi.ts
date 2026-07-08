@@ -41,6 +41,26 @@ export interface ProjectEvermindRecentEntry {
   text?: string;
 }
 
+/** The 8 affective (limbic) state dimensions the runtime models. Mirrors
+ *  `@builderforce/agent-tools` `LimbicDimName` — keep in sync. */
+export type LimbicDimName =
+  | 'valence' | 'arousal'
+  | 'driveCuriosity' | 'driveCaution' | 'driveEffort' | 'driveSocial'
+  | 'attention' | 'exploration';
+
+/** The project Evermind's current affective (limbic) state — computed server-side by
+ *  the shared limbic compiler from the model's setpoints + recent activity. */
+export interface ProjectEvermindAffect {
+  /** Current 8-dim affective state, grounded in recent learning activity. */
+  state: Record<LimbicDimName, number>;
+  /** Resting setpoints the dynamics relax toward (the personality layer). */
+  setpoints: Record<LimbicDimName, number>;
+  /** Thalamus attention gain (Yerkes–Dodson gate on current arousal). */
+  attentionGain: number;
+  /** Basal-ganglia explore-vs-exploit bias derived from the current state. */
+  exploreBias: number;
+}
+
 /** The Evermind inspection console payload — head summary + live learning activity. */
 export interface ProjectEvermindContributions {
   version: number;
@@ -53,6 +73,8 @@ export interface ProjectEvermindContributions {
   /** Contributions queued but not yet merged (in the coordinator's debounce window). */
   pending: number;
   recent: ProjectEvermindRecentEntry[];
+  /** Current affective (limbic) state — powers the brain-map's limbic regions. */
+  affect: ProjectEvermindAffect;
 }
 
 export async function getProjectEvermindHead(projectId: number): Promise<ProjectEvermindHead> {

@@ -11,6 +11,7 @@ import { persistLastProjectId } from '@/lib/auth';
 import type { Project, FileEntry } from '@/lib/types';
 import { ProjectDetailsPanel } from '@/components/ProjectDetailsPanel';
 import { SlideOutPanel } from '@/components/SlideOutPanel';
+import { ChunkErrorBoundary } from '@/components/ChunkErrorBoundary';
 
 // All modalities (designer/video/llm/voice) now render through the one IDE shell,
 // which scopes each modality's panels to this project. Loaded lazily so the heavy
@@ -39,6 +40,7 @@ export default function IDEPage() {
   const params = useParams<{ id: string }>();
   const tFirst = useTranslations('ideFirstRun');
   const tc = useTranslations('common');
+  const t = useTranslations('idePage');
   const router = useRouter();
   const searchParams = useSearchParams();
   const idRaw = params?.id ?? '';
@@ -119,7 +121,7 @@ export default function IDEPage() {
         gap: 16, fontFamily: 'var(--font-display)',
       }}>
         <div style={{ fontSize: '2.5rem', animation: 'pulse 1.5s ease-in-out infinite' }}>⚡</div>
-        <p>Loading project…</p>
+        <p>{t('loading')}</p>
       </div>
     );
   }
@@ -134,7 +136,7 @@ export default function IDEPage() {
       }}>
         <div style={{ fontSize: '4rem', marginBottom: 8 }}>🔍</div>
         <h1 style={{ fontSize: '2.5rem', fontWeight: 700, color: 'var(--coral-bright)' }}>404</h1>
-        <p style={{ color: 'var(--text-secondary)', fontSize: '1.05rem' }}>Project not found</p>
+        <p style={{ color: 'var(--text-secondary)', fontSize: '1.05rem' }}>{t('notFound')}</p>
         <button
           onClick={() => router.push('/dashboard')}
           style={{
@@ -145,7 +147,7 @@ export default function IDEPage() {
             fontWeight: 600, cursor: 'pointer', fontSize: '0.9rem',
           }}
         >
-          ← Back to Dashboard
+          ← {t('backToDashboard')}
         </button>
       </div>
     );
@@ -160,22 +162,22 @@ export default function IDEPage() {
         gap: 12, textAlign: 'center', padding: 24, fontFamily: 'var(--font-display)',
       }}>
         <div style={{ fontSize: '3rem' }}>⚠️</div>
-        <h2 style={{ fontSize: '1.4rem', fontWeight: 700 }}>Could not load project</h2>
+        <h2 style={{ fontSize: '1.4rem', fontWeight: 700 }}>{t('loadError')}</h2>
         <pre style={{
           background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)',
           borderRadius: 10, padding: '12px 20px', fontSize: '0.78rem',
           color: 'var(--error-text)', maxWidth: 560, overflowX: 'auto', whiteSpace: 'pre-wrap',
         }}>
-          {errorMsg || 'Unknown error. Check your connection and try again.'}
+          {errorMsg || t('unknownError')}
         </pre>
         <div style={{ display: 'flex', gap: 12 }}>
           <button onClick={() => window.location.reload()}
             style={{ background: 'var(--surface-interactive)', color: 'var(--text-primary)', border: '1px solid var(--border-subtle)', padding: '8px 18px', borderRadius: 10, cursor: 'pointer', fontFamily: 'var(--font-display)', fontWeight: 600 }}>
-            Retry
+            {t('retry')}
           </button>
           <button onClick={() => router.push('/dashboard')}
             style={{ background: 'linear-gradient(135deg, var(--coral-bright), var(--coral-dark))', color: '#fff', border: 'none', padding: '8px 18px', borderRadius: 10, cursor: 'pointer', fontFamily: 'var(--font-display)', fontWeight: 600 }}>
-            Dashboard
+            {t('dashboard')}
           </button>
         </div>
       </div>
@@ -205,15 +207,17 @@ export default function IDEPage() {
   return (
     <>
       <div className="ide-full-height" style={{ height: '100%', minHeight: 0, display: 'flex', flexDirection: 'column' }}>
-        <IDE
-          project={project!}
-          initialFiles={files}
-          onProjectUpdate={setProject}
-          onOpenProjectDetails={() => setProjectDetailsOpen(true)}
-          initialChatId={initialChatId}
-          initialPrompt={initialPrompt}
-          initialTicket={initialTicket}
-        />
+        <ChunkErrorBoundary>
+          <IDE
+            project={project!}
+            initialFiles={files}
+            onProjectUpdate={setProject}
+            onOpenProjectDetails={() => setProjectDetailsOpen(true)}
+            initialChatId={initialChatId}
+            initialPrompt={initialPrompt}
+            initialTicket={initialTicket}
+          />
+        </ChunkErrorBoundary>
       </div>
       {project && (
         <ProjectDetailsPanel
@@ -227,7 +231,7 @@ export default function IDEPage() {
               router.push('/dashboard');
             } catch (err) {
               console.error(err);
-              alert('Failed to delete project');
+              alert(t('deleteFailed'));
             }
           }}
         />
