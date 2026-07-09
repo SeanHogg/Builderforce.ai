@@ -4,6 +4,19 @@
 
 ---
 
+## ✅ RESOLVED 2026-07-09 — VS Code Brain: BYO Anthropic auto-select, silent-degrade visibility, loop-exhaustion rescue, and read-dedup (api + brain-embedded + VSIX webview)
+
+Reported (VSIX, tenant has BYO Anthropic): a Brain chat auto-selected a weak `deepseek-v4-flash`, thrashed on 62 tool calls into context exhaustion, and errored "The assistant kept calling tools without finishing" — when it should have run the tenant's connected **Opus**. Root cause: the VSIX sent no model (true auto-select) AND the BYO Anthropic credential did not RESOLVE for the request, so `connectedByoVendors` was empty and the coding cascade led with a free coder; the loop then died with no answer. Closed end-to-end:
+
+- **Seed-shadow correctness** — [`LlmProxyService.complete()`](./api/src/application/llm/LlmProxyService.ts) now gates a non-strict caller `model` through `explicitModelPreemptsByo`, so a configured `builderforce.defaultModel`/stale coder pin can no longer shadow a connected flagship (same invariant as `/v1/messages` + `byoAwareModel`). +regression test.
+- **Silent-degrade visibility** — `resolveTenantLlmCredentials` returns `configuredProviders`; new `unresolvedProviders()`; gateway emits **`x-builderforce-byo-unresolved`** (added to `Access-Control-Expose-Headers` in [`index.ts`](./api/src/index.ts)). The stream client reads it into `StreamChatResult.byoUnresolved`.
+- **Loop-exhaustion rescue** — [`brainRunStore`](./brain-embedded/src/brainRunStore.ts) forces ONE final no-tools synthesis at `MAX_TOOL_ITERATIONS` (mirrors `BrainService.agentReply`); the "kept calling tools" error only fires if that closing turn is ALSO empty. +2 tests (rescue / still-errors-when-empty).
+- **Read-dedupe** — an exact-repeat `read_file`/`search_code`/`list_files` call within a run returns an "already returned above" stub instead of re-injecting the full payload; any mutating tool clears the cache (a read after a write is never suppressed). +2 tests. Cuts the context bloat that fed the exhaustion.
+- **Account provenance, DRY across both copy surfaces** — shared `formatBrainProvenance(events, {configuredModel, surface})` in [`brainTriage`](./brain-embedded/src/brainTriage.ts) renders `Surface:` + `Account:` + `⚠ CONNECTED ACCOUNT NOT USED: <provider>`. BOTH the web `buildBrainTriageReport` and the VS Code [`transcript.ts`](./clients/vscode/webview/src/transcript.ts) now call it (previously the VSIX copy hand-rolled the header and lacked account/BYO — the "vsix copy missing info" gap).
+- **Inline reconnect banner** — the Brain webview ([`App.tsx`](./clients/vscode/webview/src/App.tsx)) shows a passive, dismissable `.bf-notice` (theme-token styled, light+dark) when `useBrainConversation().byoUnresolved` is non-empty, so a degrade is visible without copying triage. brain-embedded 81/81 tests green; api + webview typecheck clean; `brain-embedded/dist` + VSIX webview bundle rebuilt.
+
+---
+
 ## ✅ RESOLVED 2026-07-09 — Brain chat live-run indicators: switching chats never stops a run, and every surface shows which chats are executing (VSIX `2026.7.51`, brain-embedded `2026.7.15`)
 
 Reported (VS Code): opening a new chat while one is executing must not stop the prior chat, and executing chats should show indicators in the Sessions list + dropdown. Root finding: the agent tool-loop already lives **module-level** in [`brainRunStore`](./brain-embedded/src/brainRunStore.ts) (a run survives a chat switch by design — switching only re-points the UI subscription, never aborts), so the *behaviour* was correct but **invisible** — nothing surfaced that the prior chat was still live. Closed the visibility gap end-to-end on BOTH surfaces:
