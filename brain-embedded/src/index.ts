@@ -60,6 +60,12 @@ export type { UseBrainChats, UseBrainChatsOptions } from './useBrainChats';
 export { useBrainConversation } from './useBrainConversation';
 export type { UseBrainConversation, UseBrainConversationOptions } from './useBrainConversation';
 
+// Cross-chat run indicators — which chats are executing / awaiting a confirm RIGHT
+// NOW (the module-level agent loop keeps running across chat switches, so a host
+// can light up the still-live conversations in a session list / dropdown).
+export { subscribeRunStore, getGlobalRunState } from './brainRunStore';
+export type { GlobalRunState } from './brainRunStore';
+
 // Execution triage — capture the Brain run (LLM/tool/error trace) as a report.
 export {
   buildBrainTriageReport,

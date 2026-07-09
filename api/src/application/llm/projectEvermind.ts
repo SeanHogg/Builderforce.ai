@@ -35,6 +35,7 @@ import { projectEvermind } from '../../infrastructure/database/schema';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import { getOrSetCached, getCacheVersion, bumpCacheVersion } from '../../infrastructure/cache/readThroughCache';
+import { rankEvermindRecall, hashRecallPrompt, type RankedRecall } from './evermindRecall';
 
 /** R2 key prefix under which per-project Evermind model versions live. */
 export const PROJECT_EVERMIND_ROOT = 'evermind/project';
@@ -490,6 +491,9 @@ export async function dispatchProjectEvermindLearnText(
 
 /** One inspectable contribution the coordinator merged (mirrors the DO's RecentEntry). */
 export interface ProjectEvermindRecentEntry {
+  /** Stable unique id — targets a specific learned memory (e.g. Validate highlight).
+   *  Backfilled from `at` for legacy ring entries written before ids were stamped. */
+  id: number;
   kind: 'text' | 'delta';
   version: number;
   at: number;
@@ -521,7 +525,12 @@ export async function getProjectEvermindActivity(
     const res = await stub.fetch('https://coordinator/recent');
     if (!res.ok) return { pending: 0, recent: [] };
     const body = (await res.json().catch(() => ({}))) as Partial<ProjectEvermindActivity>;
-    return { pending: typeof body.pending === 'number' ? body.pending : 0, recent: Array.isArray(body.recent) ? body.recent : [] };
+    // Backfill a stable id for legacy ring entries written before ids were stamped,
+    // so every entry the console sees can be targeted (Validate highlight / detail).
+    const recent = Array.isArray(body.recent)
+      ? body.recent.map((e) => ({ ...e, id: typeof e.id === 'number' ? e.id : e.at }))
+      : [];
+    return { pending: typeof body.pending === 'number' ? body.pending : 0, recent };
   } catch {
     return { pending: 0, recent: [] };
   }
@@ -632,6 +641,52 @@ export async function getProjectEvermindContributions(
       };
     },
     { kvTtlSeconds: 10 },
+  );
+}
+
+/** A scored recall match — a recent contribution plus its 0..1 relevance to a task. */
+export type ProjectEvermindValidateMatch = RankedRecall;
+
+/**
+ * The Validate result: for a candidate task prompt, which of the project Evermind's
+ * learned memories would answer it (ranked, best first), plus the id of the top
+ * match. Read-only preview — never teaches or merges.
+ */
+export interface ProjectEvermindValidateResult {
+  prompt: string;
+  version: number;
+  seeded: boolean;
+  matches: ProjectEvermindValidateMatch[];
+  /** Id of the best match (the memory most likely used to respond), or null if none. */
+  primaryId: number | null;
+}
+
+/**
+ * Validate: given a candidate task prompt, rank the project Evermind's recent
+ * learned memories by how well each would answer it — the "which memory would be
+ * used to respond?" preview behind the console's Validate button. A lexical recall
+ * preview over the inspectable recent ring (see {@link rankEvermindRecall}); cached
+ * behind the head version token + a prompt hash so a re-validate is free until the
+ * model learns something new.
+ */
+export async function validateProjectEvermindRecall(
+  env: Env,
+  db: Db,
+  tenantId: number,
+  projectId: number,
+  prompt: string,
+): Promise<ProjectEvermindValidateResult> {
+  const clean = prompt.trim().slice(0, 2000);
+  const token = await getCacheVersion(env, versionKey(tenantId, projectId));
+  return getOrSetCached(
+    env,
+    `project_evermind:validate:${tenantId}:${projectId}:v:${token}:${hashRecallPrompt(clean)}`,
+    async (): Promise<ProjectEvermindValidateResult> => {
+      const contrib = await getProjectEvermindContributions(env, db, tenantId, projectId);
+      const matches = rankEvermindRecall(clean, contrib.recent, { limit: 8 });
+      return { prompt: clean, version: contrib.version, seeded: contrib.seeded, matches, primaryId: matches[0]?.id ?? null };
+    },
+    { kvTtlSeconds: 30 },
   );
 }
 

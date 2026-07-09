@@ -36,6 +36,7 @@ import type {
   ProjectEvermindRecentEntry,
 } from '@/lib/projectEvermindApi';
 import type { EvermindRegionKey } from '@/lib/evermindRegions';
+import { useEvermindValidation } from './EvermindValidationContext';
 
 /* ── Geometry (SVG user units; the viewBox scales to the container) ──────────── */
 const VB_W = 860;
@@ -144,6 +145,11 @@ export function EvermindBrainMap({
 }: EvermindBrainMapProps) {
   const t = useTranslations('evermindBrain');
   const reload = onReload;
+  // Validate recall highlight: which learned memories would answer the task. When
+  // active, matched knowledge nodes light up and the rest dim, so the map answers
+  // "which memory is used to respond" at a glance.
+  const { highlight, matchIds, primaryId } = useEvermindValidation();
+  const recallActive = highlight != null;
 
   const seeded = !!data?.seeded;
   const learning = seeded && data?.mode === 'connected';
@@ -277,15 +283,26 @@ export function EvermindBrainMap({
                 className={rs.active ? 'ev-edge ev-edge-live' : 'ev-edge'} />
             ))}
 
-            {/* Knowledge nodes + their tethers. */}
-            {regions.flatMap((rs) => rs.nodes.map((n) => (
-              <g key={n.id} className={n.fresh ? 'ev-know ev-know-fresh' : 'ev-know'}>
-                <line x1={rs.meta.x} y1={rs.meta.y} x2={n.x} y2={n.y} stroke={`var(${rs.meta.varName})`} strokeWidth={1} strokeOpacity={0.3} />
-                <circle cx={n.x} cy={n.y} r={n.r} fill={`var(${rs.meta.varName})`} fillOpacity={n.entry.kind === 'delta' ? 0.9 : 0.45} stroke={`var(${rs.meta.varName})`} strokeWidth={1.5}>
-                  <title>{nodeTitle(t, n.entry)}</title>
-                </circle>
-              </g>
-            )))}
+            {/* Knowledge nodes + their tethers. During a Validate recall, matched
+                memories are ringed (the top match in the core coral) and the rest dim. */}
+            {regions.flatMap((rs) => rs.nodes.map((n) => {
+              const matched = recallActive && matchIds.has(n.entry.id);
+              const isPrimary = recallActive && n.entry.id === primaryId;
+              const dim = recallActive && !matched;
+              return (
+                <g key={n.id} className={n.fresh && !recallActive ? 'ev-know ev-know-fresh' : 'ev-know'} style={{ opacity: dim ? 0.18 : 1, transition: 'opacity 0.15s' }}>
+                  <line x1={rs.meta.x} y1={rs.meta.y} x2={n.x} y2={n.y} stroke={`var(${rs.meta.varName})`} strokeWidth={1} strokeOpacity={0.3} />
+                  {matched && (
+                    <circle cx={n.x} cy={n.y} r={n.r + 6} fill="none"
+                      stroke={isPrimary ? 'var(--ev-core)' : `var(${rs.meta.varName})`} strokeWidth={2}
+                      className="ev-know-match" />
+                  )}
+                  <circle cx={n.x} cy={n.y} r={n.r} fill={`var(${rs.meta.varName})`} fillOpacity={n.entry.kind === 'delta' ? 0.9 : 0.45} stroke={`var(${rs.meta.varName})`} strokeWidth={1.5}>
+                    <title>{nodeTitle(t, n.entry)}</title>
+                  </circle>
+                </g>
+              );
+            }))}
 
             {/* Region nodes — click to filter the Learnings panel to that region. */}
             {regions.map((rs) => (
@@ -482,5 +499,7 @@ const BRAINMAP_CSS = `
   @keyframes ev-pop { 0% { transform: scale(0.4); } 40% { transform: scale(1.25); } 100% { transform: scale(1); } }
   .ev-brainmap .ev-region-active > circle:nth-child(1) { animation: ev-halo 2.6s ease-in-out infinite; transform-origin: center; transform-box: fill-box; }
   @keyframes ev-halo { 0%,100% { opacity: 0.1; } 50% { opacity: 0.28; } }
+  .ev-brainmap .ev-know-match { animation: ev-matchpulse 1.4s ease-in-out infinite; transform-origin: center; transform-box: fill-box; }
+  @keyframes ev-matchpulse { 0%,100% { opacity: 0.5; } 50% { opacity: 1; } }
 }
 `;

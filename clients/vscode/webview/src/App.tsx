@@ -11,10 +11,13 @@ import {
   consolidationMetadata,
   mentionRecipient,
   resolveRecipient,
+  subscribeRunStore,
+  getGlobalRunState,
   type BrainConfig,
   type BrainChat,
   type DirectedRecipient,
   type RecipientChoice,
+  type GlobalRunState,
 } from '@seanhogg/builderforce-brain-embedded';
 import {
   BrainTimeline, ChatTicketsPanel, DEFAULT_CHAT_TICKETS_LABELS, Avatar, useChatParticipants,
@@ -192,6 +195,31 @@ function MenuItem({ icon, label, hint, active, onClick }: {
   );
 }
 
+/** A stable key of the two run lists, so a view only reacts when the SET of live
+ *  chats changes — not on every streaming token (which also emits a store change). */
+function runStateKey(s: GlobalRunState): string {
+  return `${[...s.running].sort((a, b) => a - b).join(',')}|${[...s.awaiting].sort((a, b) => a - b).join(',')}`;
+}
+
+/**
+ * Subscribe to which chats are live across the WHOLE store (the agent loop lives
+ * module-level, so a run keeps going after you switch chats). Returns a snapshot
+ * whose identity only changes when the set of running/awaiting chats changes, so
+ * consumers (the dropdown decoration + the host report) don't churn per token.
+ */
+function useGlobalRunState(): GlobalRunState {
+  const [state, setState] = useState<GlobalRunState>(getGlobalRunState);
+  useEffect(() => {
+    const recompute = () => {
+      const next = getGlobalRunState();
+      setState((prev) => (runStateKey(prev) === runStateKey(next) ? prev : next));
+    };
+    recompute();
+    return subscribeRunStore(recompute);
+  }, []);
+  return state;
+}
+
 /** Root: wait for the host's init frame, then mount the brain providers. */
 export function App() {
   const [init, setInit] = useState<InitData | null>(null);
@@ -361,6 +389,29 @@ function Chat({ init }: { init: InitData }) {
     () => (orphanChat && orphanChat.id === chatId ? [orphanChat, ...chats] : chats),
     [orphanChat, chatId, chats],
   );
+
+  // Which chats are LIVE right now (across the whole run store, not just the open
+  // one). The agent loop is module-level, so switching to a new chat never stops
+  // the prior one — these indicators make that visible: a still-running chat and a
+  // chat paused on a confirm both light up in the dropdown here, and are reported
+  // to the host so the Sessions sidebar lights them up too.
+  const runState = useGlobalRunState();
+  const runningSet = useMemo(() => new Set(runState.running), [runState]);
+  const awaitingSet = useMemo(() => new Set(runState.awaiting), [runState]);
+  // A leading glyph for a chat option: ❓ when it needs an answer (a confirm the
+  // user must approve — actionable), ● while it's executing, else nothing. Symbols,
+  // not prose (native <option> can't hold an icon), so no localization needed.
+  const runGlyph = useCallback(
+    (id: number) => (awaitingSet.has(id) ? '❓ ' : runningSet.has(id) ? '● ' : ''),
+    [awaitingSet, runningSet],
+  );
+  // Report the live set to the host so the native Sessions tree can show the same
+  // running / awaiting indicators (it otherwise only sees SERVER-tracked cloud /
+  // on-prem runs — the in-webview Brain loop is invisible to it). `runState`'s
+  // identity only changes when the set changes, so this posts once per change.
+  useEffect(() => {
+    post('runs.local', { running: runState.running, awaiting: runState.awaiting });
+  }, [runState]);
 
   // LOCK state for the open chat (owner-only toggle in the People section).
   const [chatVisibility, setChatVisibility] = useState<'shared' | 'locked'>('shared');
@@ -810,7 +861,7 @@ function Chat({ init }: { init: InitData }) {
           >
             <option value="">{t('app.newChat', 'New chat')}</option>
             {chatOptions.map((c) => (
-              <option key={c.id} value={c.id}>{c.title || `Chat ${c.id}`}</option>
+              <option key={c.id} value={c.id}>{runGlyph(c.id)}{c.title || `Chat ${c.id}`}</option>
             ))}
           </select>
         )}

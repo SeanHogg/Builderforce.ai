@@ -10,6 +10,8 @@ export type EvermindMode = 'connected' | 'offline-frozen';
 
 /** One inspectable contribution the coordinator merged into a version. */
 export interface EvermindRecentEntry {
+  /** Stable unique id — targets a specific learned memory (Validate highlight / detail). */
+  id: number;
   /** 'text' = a run/exemplar adapted here; 'delta' = a pre-diffed weight delta. */
   kind: 'text' | 'delta';
   /** The version this contribution was merged into. */
@@ -18,10 +20,27 @@ export interface EvermindRecentEntry {
   at: number;
   /** FedAvg sample weight. */
   weight: number;
-  /** Readable snippet of the task prompt the run addressed (text-path only). */
+  /** The task prompt the run addressed (text-path only). */
   prompt?: string;
-  /** Readable snippet of the run/exemplar text learned (text-path only). */
+  /** The run/exemplar text that was learned (text-path only). */
   text?: string;
+}
+
+/** A scored recall match — a learned memory plus its 0..1 relevance to a task. */
+export interface EvermindValidateMatch extends EvermindRecentEntry {
+  /** Lexical relevance of this memory to the validated task, 0..1. */
+  score: number;
+}
+
+/** The Validate result: which learned memories would answer a candidate task. */
+export interface EvermindValidateResult {
+  prompt: string;
+  version: number;
+  seeded: boolean;
+  /** Ranked best-first; empty when nothing learned matches the task. */
+  matches: EvermindValidateMatch[];
+  /** Id of the memory most likely used to respond, or null if none matched. */
+  primaryId: number | null;
 }
 
 /** The head summary + live learning activity for a project's Evermind. */
@@ -70,6 +89,8 @@ export interface EvermindConsoleAdapter {
   teach(text: string, prompt?: string): Promise<void>;
   /** Force a merge now; returns how many merged + the resulting version. */
   flush(): Promise<{ merged: number; version: number }>;
+  /** Validate a candidate task: which learned memories would answer it (ranked). */
+  validate(prompt: string): Promise<EvermindValidateResult>;
 }
 
 /** Every visible string. Parametric ones are functions the host localizes. */
@@ -128,6 +149,15 @@ export interface EvermindConsoleLabels {
   flushing: string;
   flushedNone: string;
   flushedN: (merged: number, version: number) => string;
+  // Validate (recall preview)
+  validateCta: string;
+  validating: string;
+  validateHint: string;
+  validateResultTitle: (prompt: string) => string;
+  validateEmpty: string;
+  validatePrimaryBadge: string;
+  validateScore: (pct: number) => string;
+  validateClear: string;
   // Inspection
   inspectTitle: string;
   inspectEmpty: string;
@@ -136,6 +166,10 @@ export interface EvermindConsoleLabels {
   deltaEntry: string;
   versionTag: (version: number) => string;
   weightTag: (weight: number) => string;
+  viewDetail: string;
+  hideDetail: string;
+  detailPromptLabel: string;
+  detailTextLabel: string;
   // Misc
   refresh: string;
   errorGeneric: string;
@@ -201,6 +235,14 @@ export const DEFAULT_EVERMIND_LABELS: EvermindConsoleLabels = {
   flushing: 'Learning…',
   flushedNone: 'Nothing queued to learn yet.',
   flushedN: (merged, version) => `Merged ${merged} contribution(s) into v${version}.`,
+  validateCta: 'Validate',
+  validating: 'Checking…',
+  validateHint: 'Check which learned memories would answer this task — before you teach it.',
+  validateResultTitle: (p) => `Memories that would answer “${p}”`,
+  validateEmpty: 'No learned memory matches this task yet — teaching it would add new knowledge.',
+  validatePrimaryBadge: 'Most likely used',
+  validateScore: (pct) => `${pct}% match`,
+  validateClear: 'Clear',
   inspectTitle: 'Recently learned',
   inspectEmpty: 'Nothing learned yet. Runs and teaching will appear here.',
   kindText: 'Run',
@@ -208,6 +250,10 @@ export const DEFAULT_EVERMIND_LABELS: EvermindConsoleLabels = {
   deltaEntry: 'Weight delta contributed by an agent run.',
   versionTag: (v) => `v${v}`,
   weightTag: (w) => `×${w}`,
+  viewDetail: 'View detail',
+  hideDetail: 'Hide detail',
+  detailPromptLabel: 'Task',
+  detailTextLabel: 'Learned',
   refresh: 'Refresh',
   errorGeneric: 'Something went wrong. Try again.',
 };

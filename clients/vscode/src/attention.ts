@@ -16,10 +16,48 @@ import { getSelectedProject } from "./projectState";
 
 let current: BfAttention = { tasks: {}, chats: {}, counts: { running: 0, awaiting: 0 } };
 
-/** The live state of a task or Brain chat, or undefined when idle. */
+/**
+ * Webview-local run overlay. The in-editor Brain's agent loop runs INSIDE the
+ * webview (it streams straight to the gateway), so the server-side attention
+ * endpoint never sees it — a chat you kick off in the editor and then switch away
+ * from keeps executing but wouldn't otherwise light up in the Sessions tree. The
+ * Brain webview reports which of its chats are executing / paused on a confirm via
+ * {@link setLocalChatRuns}, and {@link attentionFor} merges them, so those chats
+ * get the same live indicators as server-tracked (cloud / on-prem) runs. Keyed by
+ * chat id; `awaiting_input` = paused on a human confirm (the actionable state).
+ */
+const localChats = new Map<number, BfAttentionState>();
+const _onLocalRunsChange = new vscode.EventEmitter<void>();
+/** Fires when the webview-local run set changes (subscribe to repaint the trees). */
+export const onLocalRunsChange = _onLocalRunsChange.event;
+
+/** Pick the most attention-worthy of several states (a needed answer beats a
+ *  running loop, which beats idle). Shared so server + local states merge one way. */
+function strongestState(...states: Array<BfAttentionState | undefined>): BfAttentionState | undefined {
+  if (states.includes("awaiting_input")) return "awaiting_input";
+  if (states.includes("running")) return "running";
+  return undefined;
+}
+
+/** Replace the webview-local run set (chat ids the editor Brain loop is running /
+ *  paused on). Fires {@link onLocalRunsChange} only when the surfaced set changes. */
+export function setLocalChatRuns(runs: { running: number[]; awaiting: number[] }): void {
+  const next = new Map<number, BfAttentionState>();
+  for (const id of runs.running) next.set(id, "running");
+  // Awaiting wins over running for the same id — it's the state the user must act on.
+  for (const id of runs.awaiting) next.set(id, "awaiting_input");
+  if (next.size === localChats.size && [...next].every(([k, v]) => localChats.get(k) === v)) return;
+  localChats.clear();
+  for (const [k, v] of next) localChats.set(k, v);
+  _onLocalRunsChange.fire();
+}
+
+/** The live state of a task or Brain chat, or undefined when idle. Merges the
+ *  server attention map with the webview-local run overlay (chats only). */
 export function attentionFor(kind: "task" | "chat", id: number): BfAttentionState | undefined {
-  const item = kind === "task" ? current.tasks[id] : current.chats[id];
-  return item?.state;
+  const server = (kind === "task" ? current.tasks[id] : current.chats[id])?.state;
+  const local = kind === "chat" ? localChats.get(id) : undefined;
+  return strongestState(server, local);
 }
 
 /** The pending-question approval id for a task, when it is awaiting an answer

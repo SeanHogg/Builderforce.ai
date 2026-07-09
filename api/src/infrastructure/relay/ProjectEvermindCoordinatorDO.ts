@@ -52,8 +52,12 @@ const MAX_FITS_PER_ALARM = 8;
  *  raw run text is otherwise consumed + dropped at merge time, so this is the ONLY
  *  window into "what the model recently learned" the Evermind console can show. */
 const RECENT_MAX = 30;
-/** Chars of prompt/text kept per recent entry — a readable snippet, not the full run. */
-const RECENT_SNIPPET_CHARS = 240;
+/** Chars of the task prompt kept per recent entry — enough for the console's
+ *  "view detail" to show the whole task, not a truncated teaser. */
+const RECENT_PROMPT_CHARS = 2000;
+/** Chars of the learned run/exemplar text kept per recent entry. Bounded (the ring
+ *  is capped at RECENT_MAX) but generous enough that "view detail" is meaningful. */
+const RECENT_TEXT_CHARS = 4000;
 
 interface PendingEntry {
   id: number;
@@ -108,6 +112,9 @@ interface LearnTextBody {
  *  The `text`/`prompt` are short snippets (the full run is not retained), so this is
  *  a human-readable trail of what the model learned, not a replayable corpus. */
 interface RecentEntry {
+  /** Stable unique id (the source contribution's sequence id) — lets the console
+   *  target a specific learned memory (e.g. highlight it on a Validate recall). */
+  id: number;
   /** 'text' = a run/exemplar adapted here; 'delta' = a pre-diffed weight delta. */
   kind: 'text' | 'delta';
   /** The version this contribution was merged INTO (head.version + 1 at merge time). */
@@ -332,7 +339,7 @@ export class ProjectEvermindCoordinatorDO implements DurableObject {
     const processedIds: number[] = [];
     // Per-entry provenance for the inspection ring, stamped with the merged version
     // once the merge lands (parallel to `diffs`/`weights`).
-    const mergedMeta: Array<{ kind: 'text' | 'delta'; weight: number; prompt?: string; text?: string }> = [];
+    const mergedMeta: Array<{ id: number; kind: 'text' | 'delta'; weight: number; prompt?: string; text?: string }> = [];
     try {
       const store = this.env.UPLOADS;
       if (!store) return { merged: 0, newVersion: null }; // no R2 → can't merge; leave everything pending for a later alarm
@@ -369,7 +376,7 @@ export class ProjectEvermindCoordinatorDO implements DurableObject {
           diffs.push(decodeBase64(e.diffB64));
           weights.push(e.weight);
           processedIds.push(e.id);
-          mergedMeta.push({ kind: 'delta', weight: e.weight });
+          mergedMeta.push({ id: e.id, kind: 'delta', weight: e.weight });
         } else if (e.text && isLM) {
           if (textFits >= maxFits) continue; // defer — leave queued for next alarm
           processedIds.push(e.id); // consumed even if it yields no trainable window
@@ -394,10 +401,11 @@ export class ProjectEvermindCoordinatorDO implements DurableObject {
           // raw run text (e.text) is what the model adapted on; the teacher's exemplar,
           // if any, is training.text — we record the run/prompt the user recognizes.
           mergedMeta.push({
+            id: e.id,
             kind: 'text',
             weight: e.weight,
-            ...(e.prompt ? { prompt: e.prompt.slice(0, RECENT_SNIPPET_CHARS) } : {}),
-            text: e.text.slice(0, RECENT_SNIPPET_CHARS),
+            ...(e.prompt ? { prompt: e.prompt.slice(0, RECENT_PROMPT_CHARS) } : {}),
+            text: e.text.slice(0, RECENT_TEXT_CHARS),
           });
         } else {
           processedIds.push(e.id); // unusable (e.g. text but base isn't an evermind-lm)

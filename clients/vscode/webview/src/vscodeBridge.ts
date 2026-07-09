@@ -8,7 +8,7 @@
  * mint a tenant token — those cross this typed postMessage bridge to the host:
  *
  *   webview → host : 'ready', 'tool.call'{id,name,args}, 'token.refresh'{id}, 'signin',
- *                    'chats.changed', 'platform.write'{name}
+ *                    'chats.changed', 'platform.write'{name}, 'runs.local'{running,awaiting}
  *   host → webview : 'init'{…}, 'token'{token}, 'response'{id,ok,result|error}, 'intent'{intent},
  *                    'editorContext'{editorContext}
  */

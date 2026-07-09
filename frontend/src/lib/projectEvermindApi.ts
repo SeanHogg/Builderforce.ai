@@ -27,6 +27,8 @@ export interface ProjectEvermindHead {
 
 /** One inspectable contribution the coordinator merged into a version. */
 export interface ProjectEvermindRecentEntry {
+  /** Stable unique id — targets a specific learned memory (Validate highlight / detail). */
+  id: number;
   /** 'text' = a run/exemplar adapted here; 'delta' = a pre-diffed weight delta. */
   kind: 'text' | 'delta';
   /** The version this contribution was merged into. */
@@ -84,6 +86,40 @@ export async function getProjectEvermindHead(projectId: number): Promise<Project
 /** Read the inspection console payload (head summary + queued depth + recent-learned ring). */
 export async function getProjectEvermindContributions(projectId: number): Promise<ProjectEvermindContributions> {
   return apiRequest<ProjectEvermindContributions>(`/api/projects/${projectId}/evermind/contributions`);
+}
+
+/** A scored recall match — a learned memory plus its 0..1 relevance to a task. */
+export interface ProjectEvermindValidateMatch extends ProjectEvermindRecentEntry {
+  /** Lexical relevance of this memory to the validated task, 0..1. */
+  score: number;
+}
+
+/** The Validate result: which learned memories would answer a candidate task. */
+export interface ProjectEvermindValidateResult {
+  prompt: string;
+  version: number;
+  seeded: boolean;
+  matches: ProjectEvermindValidateMatch[];
+  /** Id of the memory most likely used to respond, or null if none matched. */
+  primaryId: number | null;
+}
+
+/**
+ * Validate a candidate task against the project's Evermind: which learned memories
+ * would answer it (ranked, best first). Read-only recall preview — never teaches.
+ */
+export async function validateProjectEvermind(
+  projectId: number,
+  prompt: string,
+): Promise<ProjectEvermindValidateResult> {
+  return apiRequest<ProjectEvermindValidateResult>(
+    `/api/projects/${projectId}/evermind/validate`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ prompt }),
+    },
+  );
 }
 
 /**

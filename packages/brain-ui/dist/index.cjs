@@ -1489,6 +1489,14 @@ var DEFAULT_EVERMIND_LABELS = {
   flushing: "Learning\u2026",
   flushedNone: "Nothing queued to learn yet.",
   flushedN: (merged, version) => `Merged ${merged} contribution(s) into v${version}.`,
+  validateCta: "Validate",
+  validating: "Checking\u2026",
+  validateHint: "Check which learned memories would answer this task \u2014 before you teach it.",
+  validateResultTitle: (p) => `Memories that would answer \u201C${p}\u201D`,
+  validateEmpty: "No learned memory matches this task yet \u2014 teaching it would add new knowledge.",
+  validatePrimaryBadge: "Most likely used",
+  validateScore: (pct) => `${pct}% match`,
+  validateClear: "Clear",
   inspectTitle: "Recently learned",
   inspectEmpty: "Nothing learned yet. Runs and teaching will appear here.",
   kindText: "Run",
@@ -1496,6 +1504,10 @@ var DEFAULT_EVERMIND_LABELS = {
   deltaEntry: "Weight delta contributed by an agent run.",
   versionTag: (v) => `v${v}`,
   weightTag: (w) => `\xD7${w}`,
+  viewDetail: "View detail",
+  hideDetail: "Hide detail",
+  detailPromptLabel: "Task",
+  detailTextLabel: "Learned",
   refresh: "Refresh",
   errorGeneric: "Something went wrong. Try again."
 };
@@ -1511,7 +1523,7 @@ var C = {
   accent: "var(--bf-ev-accent, var(--coral-bright, var(--accent, var(--bf-accent, #ff6b5e))))",
   danger: "var(--bf-ev-danger, var(--danger-text, #d9534f))"
 };
-function EvermindConsole({ adapter, canManage, labels, refreshMs = 2e4, projectName, showRecent = true }) {
+function EvermindConsole({ adapter, canManage, labels, refreshMs = 2e4, projectName, showRecent = true, onValidate }) {
   const t = (0, import_react7.useMemo)(() => ({ ...DEFAULT_EVERMIND_LABELS, ...labels ?? {} }), [labels]);
   const [data, setData] = (0, import_react7.useState)(null);
   const [seedModels, setSeedModels] = (0, import_react7.useState)([]);
@@ -1520,6 +1532,8 @@ function EvermindConsole({ adapter, canManage, labels, refreshMs = 2e4, projectN
   const [teachPrompt, setTeachPrompt] = (0, import_react7.useState)("");
   const [teachText, setTeachText] = (0, import_react7.useState)("");
   const [busy, setBusy] = (0, import_react7.useState)(false);
+  const [validating, setValidating] = (0, import_react7.useState)(false);
+  const [validateResult, setValidateResult] = (0, import_react7.useState)(null);
   const [notice, setNotice] = (0, import_react7.useState)(null);
   const [error, setError] = (0, import_react7.useState)(null);
   const [loaded, setLoaded] = (0, import_react7.useState)(false);
@@ -1565,6 +1579,26 @@ function EvermindConsole({ adapter, canManage, labels, refreshMs = 2e4, projectN
     }, refreshMs);
     return () => clearInterval(id);
   }, [refreshMs, busy, reload]);
+  const runValidate = (0, import_react7.useCallback)(async (prompt) => {
+    const task = prompt.trim();
+    if (task.length < 3) return;
+    setValidating(true);
+    setError(null);
+    setNotice(null);
+    try {
+      const result = await adapter.validate(task);
+      setValidateResult(result);
+      onValidate?.(result);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : t.errorGeneric);
+    } finally {
+      setValidating(false);
+    }
+  }, [adapter, onValidate, t.errorGeneric]);
+  const clearValidate = (0, import_react7.useCallback)(() => {
+    setValidateResult(null);
+    onValidate?.(null);
+  }, [onValidate]);
   const run = (0, import_react7.useCallback)(async (op, successNotice) => {
     setBusy(true);
     setError(null);
@@ -1657,6 +1691,7 @@ function EvermindConsole({ adapter, canManage, labels, refreshMs = 2e4, projectN
         {
           t,
           busy,
+          validating,
           teacherModel: data?.teacherModel ?? "",
           prompt: teachPrompt,
           text: teachText,
@@ -1675,9 +1710,11 @@ function EvermindConsole({ adapter, canManage, labels, refreshMs = 2e4, projectN
               setTeachPrompt("");
             },
             t.taught
-          )
+          ),
+          onValidate: () => runValidate(data?.teacherModel ? teachPrompt : teachPrompt.trim() || teachText)
         }
       ),
+      validateResult && /* @__PURE__ */ (0, import_jsx_runtime8.jsx)(ValidateResults, { t, result: validateResult, onClear: clearValidate }),
       canManage && /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }, children: [
         /* @__PURE__ */ (0, import_jsx_runtime8.jsx)(
           "button",
@@ -1817,15 +1854,18 @@ function TeacherPicker({
 function TeachBox({
   t,
   busy,
+  validating,
   prompt,
   text,
   onPrompt,
   onText,
   onTeach,
+  onValidate,
   teacherModel
 }) {
   const teaching = !!teacherModel;
   const canTeach = teaching ? prompt.trim().length >= 20 : text.trim().length >= 20;
+  const canValidate = (teaching ? prompt : prompt.trim() || text).trim().length >= 3;
   return /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("div", { style: { display: "flex", flexDirection: "column", gap: 6, borderTop: `1px solid ${C.border}`, paddingTop: 10 }, children: [
     /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("div", { style: fieldTitle, children: teaching ? t.teachTeacherTitle : t.teachTitle }),
     /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("div", { style: fieldHint, children: teaching ? t.teachTeacherHint(teacherModel) : t.teachHint }),
@@ -1833,17 +1873,44 @@ function TeachBox({
       /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("input", { value: prompt, onChange: (e) => onPrompt(e.target.value), disabled: busy, placeholder: t.teachPromptPlaceholder, style: { ...select, width: "100%" } }),
       /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("textarea", { value: text, onChange: (e) => onText(e.target.value), disabled: busy, placeholder: t.teachTextPlaceholder, rows: 3, style: { ...select, width: "100%", resize: "vertical", fontFamily: "inherit" } })
     ] }),
-    /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("div", { children: /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("button", { type: "button", onClick: onTeach, disabled: busy || !canTeach, style: primaryBtn(busy || !canTeach), children: busy ? t.teaching : teaching ? t.teachTeacherCta : t.teachCta }) })
+    /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("button", { type: "button", onClick: onTeach, disabled: busy || !canTeach, style: primaryBtn(busy || !canTeach), children: busy ? t.teaching : teaching ? t.teachTeacherCta : t.teachCta }),
+      /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("button", { type: "button", onClick: onValidate, disabled: busy || validating || !canValidate, style: secondaryBtn(busy || validating || !canValidate), title: t.validateHint, children: validating ? t.validating : t.validateCta })
+    ] })
+  ] });
+}
+function ValidateResults({ t, result, onClear }) {
+  return /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("div", { style: { display: "flex", flexDirection: "column", gap: 6, background: C.surface2, border: `1px solid ${C.border}`, borderRadius: 8, padding: "10px 12px" }, children: [
+    /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("div", { style: { display: "flex", alignItems: "baseline", gap: 8, flexWrap: "wrap" }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("span", { style: { ...fieldTitle, flex: 1, minWidth: 0 }, children: t.validateResultTitle(result.prompt) }),
+      /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("button", { type: "button", onClick: onClear, style: { ...ghostBtn, marginLeft: 0 }, children: t.validateClear })
+    ] }),
+    result.matches.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("p", { style: italic, children: t.validateEmpty }) : /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("ul", { style: { listStyle: "none", margin: 0, padding: 0, display: "flex", flexDirection: "column", gap: 6 }, children: result.matches.map((m) => {
+      const primary = m.id === result.primaryId;
+      const pct = Math.round(m.score * 100);
+      return /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("li", { style: { display: "flex", flexDirection: "column", gap: 4, border: `1px solid ${primary ? C.accent : C.border}`, borderRadius: 6, padding: "6px 8px", background: C.surface }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }, children: [
+          primary && /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("span", { style: tag(false), children: t.validatePrimaryBadge }),
+          /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("span", { style: { fontSize: "0.68rem", color: C.text2 }, children: t.versionTag(m.version) }),
+          /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("span", { style: { marginLeft: "auto", fontSize: "0.68rem", fontWeight: 700, color: C.accent }, children: t.validateScore(pct) })
+        ] }),
+        /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("div", { style: { height: 4, borderRadius: 999, background: C.border, overflow: "hidden" }, children: /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("div", { style: { width: `${pct}%`, height: "100%", background: C.accent } }) }),
+        m.prompt && /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("div", { style: { fontSize: "0.74rem", fontWeight: 600, color: C.text, wordBreak: "break-word" }, children: m.prompt }),
+        m.text && /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("div", { style: { fontSize: "0.72rem", color: C.text2, lineHeight: 1.4, wordBreak: "break-word", whiteSpace: "pre-wrap", maxHeight: 54, overflow: "hidden" }, children: m.text })
+      ] }, m.id);
+    }) })
   ] });
 }
 function RecentList({ t, entries }) {
   return /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("div", { style: { display: "flex", flexDirection: "column", gap: 6, borderTop: `1px solid ${C.border}`, paddingTop: 10 }, children: [
     /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("div", { style: fieldTitle, children: t.inspectTitle }),
-    entries.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("p", { style: italic, children: t.inspectEmpty }) : /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("ul", { style: { listStyle: "none", margin: 0, padding: 0, display: "flex", flexDirection: "column", gap: 6 }, children: entries.map((e, i) => /* @__PURE__ */ (0, import_jsx_runtime8.jsx)(RecentRow, { t, entry: e }, `${e.version}-${e.at}-${i}`)) })
+    entries.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("p", { style: italic, children: t.inspectEmpty }) : /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("ul", { style: { listStyle: "none", margin: 0, padding: 0, display: "flex", flexDirection: "column", gap: 6 }, children: entries.map((e) => /* @__PURE__ */ (0, import_jsx_runtime8.jsx)(RecentRow, { t, entry: e }, e.id)) })
   ] });
 }
 function RecentRow({ t, entry }) {
+  const [open, setOpen] = (0, import_react7.useState)(false);
   const body = entry.kind === "delta" ? t.deltaEntry : entry.text ?? "";
+  const hasDetail = entry.kind !== "delta" && (!!entry.prompt || !!entry.text);
   return /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("li", { style: { background: C.surface2, border: `1px solid ${C.border}`, borderRadius: 8, padding: "8px 10px", display: "flex", flexDirection: "column", gap: 3 }, children: [
     /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }, children: [
       /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("span", { style: tag(entry.kind === "delta"), children: entry.kind === "delta" ? t.kindDelta : t.kindText }),
@@ -1852,7 +1919,11 @@ function RecentRow({ t, entry }) {
       /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("span", { style: { marginLeft: "auto", fontSize: "0.68rem", color: C.text2 }, children: t.formatWhen(entry.at) })
     ] }),
     entry.prompt && /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("div", { style: { fontSize: "0.76rem", fontWeight: 600, color: C.text, wordBreak: "break-word" }, children: entry.prompt }),
-    body && /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("div", { style: { fontSize: "0.74rem", color: C.text2, lineHeight: 1.45, wordBreak: "break-word", whiteSpace: "pre-wrap", maxHeight: 72, overflow: "hidden" }, children: body })
+    open ? /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("div", { style: { display: "flex", flexDirection: "column", gap: 6, marginTop: 2 }, children: entry.text && /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("div", { children: [
+      /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("div", { style: { fontSize: "0.62rem", textTransform: "uppercase", letterSpacing: "0.04em", color: C.text2 }, children: t.detailTextLabel }),
+      /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("div", { style: { fontSize: "0.74rem", color: C.text, lineHeight: 1.5, wordBreak: "break-word", whiteSpace: "pre-wrap" }, children: entry.text })
+    ] }) }) : body && /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("div", { style: { fontSize: "0.74rem", color: C.text2, lineHeight: 1.45, wordBreak: "break-word", whiteSpace: "pre-wrap", maxHeight: 72, overflow: "hidden" }, children: body }),
+    hasDetail && /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("button", { type: "button", onClick: () => setOpen((v) => !v), style: { ...linkBtn, alignSelf: "flex-start" }, children: open ? t.hideDetail : t.viewDetail })
   ] });
 }
 var italic = { margin: 0, fontSize: "0.78rem", color: C.text2, fontStyle: "italic" };
@@ -1894,6 +1965,29 @@ var ghostBtn = {
   border: `1px solid ${C.border}`,
   background: "transparent",
   color: C.text2,
+  cursor: "pointer"
+};
+function secondaryBtn(disabled) {
+  return {
+    padding: "8px 14px",
+    fontSize: "0.8rem",
+    fontWeight: 600,
+    borderRadius: 8,
+    border: `1px solid ${C.border}`,
+    background: "transparent",
+    color: disabled ? C.text2 : C.text,
+    cursor: disabled ? "not-allowed" : "pointer",
+    whiteSpace: "nowrap",
+    opacity: disabled ? 0.7 : 1
+  };
+}
+var linkBtn = {
+  padding: 0,
+  fontSize: "0.7rem",
+  fontWeight: 600,
+  border: "none",
+  background: "transparent",
+  color: C.accent,
   cursor: "pointer"
 };
 function pill(seeded) {

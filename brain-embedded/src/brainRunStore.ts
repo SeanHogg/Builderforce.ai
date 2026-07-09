@@ -213,6 +213,25 @@ interface RunCell {
 
 const cells = new Map<number, RunCell>();
 
+/**
+ * Global run-store listeners — notified on ANY cell change (not one chat's), so a
+ * view can render a CROSS-CHAT indicator of which OTHER chats are live without
+ * subscribing to every chat individually. Fired from {@link emit} alongside the
+ * per-cell listeners.
+ */
+const storeListeners = new Set<() => void>();
+
+/**
+ * A snapshot of which chats are live right now, split by whether they are actively
+ * executing (`running`) or paused on a human-in-the-loop confirm (`awaiting` — the
+ * actionable one: the loop cannot proceed until the user answers). The two lists
+ * are disjoint (an awaiting chat is omitted from `running`).
+ */
+export interface GlobalRunState {
+  running: number[];
+  awaiting: number[];
+}
+
 const EMPTY_SNAPSHOT: BrainRunSnapshot = {
   running: false,
   streamingText: '',
@@ -286,6 +305,10 @@ function emit(c: RunCell): void {
     trace: c.trace,
   };
   for (const l of c.listeners) l();
+  // Cross-chat subscribers (the dropdown / session-list indicators) see every
+  // change too, so a run starting/finishing/pausing in a NON-mounted chat still
+  // updates the "which chats are live" view.
+  for (const l of storeListeners) l();
 }
 
 function pushTrace(c: RunCell, ev: BrainTraceEvent): void {
@@ -392,6 +415,34 @@ export function resetBrainRunStore(): void {
 /** Number of run cells currently retained in memory (diagnostics/tests). */
 export function getRunStoreSize(): number {
   return cells.size;
+}
+
+/**
+ * Subscribe to ANY run-state change across all chats (a run starting, finishing,
+ * or pausing on a confirm — in any chat, mounted or not). Returns an unsubscribe
+ * fn. Pair with {@link getGlobalRunState} to render a cross-chat live indicator.
+ */
+export function subscribeRunStore(listener: () => void): () => void {
+  storeListeners.add(listener);
+  return () => {
+    storeListeners.delete(listener);
+  };
+}
+
+/**
+ * Which chats are live right now, split into actively-executing (`running`) and
+ * paused-on-a-confirm (`awaiting`). Disjoint: a chat paused on a confirm is in
+ * `awaiting` only. Recomputed from the current cells on each call — cheap (a scan
+ * of the bounded cell map); callers debounce via a stable key of the two lists.
+ */
+export function getGlobalRunState(): GlobalRunState {
+  const running: number[] = [];
+  const awaiting: number[] = [];
+  for (const [id, cell] of cells) {
+    if (cell.pendingConfirm) awaiting.push(id);
+    else if (cell.running) running.push(id);
+  }
+  return { running, awaiting };
 }
 
 /** Subscribe to a chat's run state. Returns an unsubscribe fn. */

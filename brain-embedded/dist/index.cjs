@@ -35,6 +35,7 @@ __export(src_exports, {
   consolidationMetadata: () => consolidationMetadata,
   filterMentionCandidates: () => filterMentionCandidates,
   formatBrainDiagnostics: () => formatBrainDiagnostics,
+  getGlobalRunState: () => getGlobalRunState,
   isConnectedAccountUnused: () => isConnectedAccountUnused,
   isConsolidationMarker: () => isConsolidationMarker,
   isDirectedToParticipant: () => isDirectedToParticipant,
@@ -51,6 +52,7 @@ __export(src_exports, {
   savePendingPrompt: () => savePendingPrompt,
   scopeToConsolidation: () => scopeToConsolidation,
   streamChatCompletion: () => streamChatCompletion,
+  subscribeRunStore: () => subscribeRunStore,
   takePendingPrompt: () => takePendingPrompt,
   useBrainActions: () => useBrainActions,
   useBrainChats: () => useBrainChats,
@@ -1130,6 +1132,7 @@ var MAX_CELLS = 50;
 var MAX_TRACE_EVENTS = 500;
 var MAX_APPENDED = 50;
 var cells = /* @__PURE__ */ new Map();
+var storeListeners = /* @__PURE__ */ new Set();
 var EMPTY_SNAPSHOT = {
   running: false,
   streamingText: "",
@@ -1188,6 +1191,7 @@ function emit(c) {
     trace: c.trace
   };
   for (const l of c.listeners) l();
+  for (const l of storeListeners) l();
 }
 function pushTrace(c, ev) {
   c.trace.push(ev);
@@ -1233,6 +1237,21 @@ function tokenBounded(w) {
   let trimmed = w.slice(start);
   while (trimmed.length > 1 && trimmed[0].role !== "user") trimmed = trimmed.slice(1);
   return trimmed;
+}
+function subscribeRunStore(listener) {
+  storeListeners.add(listener);
+  return () => {
+    storeListeners.delete(listener);
+  };
+}
+function getGlobalRunState() {
+  const running = [];
+  const awaiting = [];
+  for (const [id, cell] of cells) {
+    if (cell.pendingConfirm) awaiting.push(id);
+    else if (cell.running) running.push(id);
+  }
+  return { running, awaiting };
 }
 function subscribeRun(chatId, listener) {
   const c = getCell(chatId);
@@ -1761,6 +1780,7 @@ function takePendingPrompt() {
   consolidationMetadata,
   filterMentionCandidates,
   formatBrainDiagnostics,
+  getGlobalRunState,
   isConnectedAccountUnused,
   isConsolidationMarker,
   isDirectedToParticipant,
@@ -1777,6 +1797,7 @@ function takePendingPrompt() {
   savePendingPrompt,
   scopeToConsolidation,
   streamChatCompletion,
+  subscribeRunStore,
   takePendingPrompt,
   useBrainActions,
   useBrainChats,

@@ -16,6 +16,9 @@ interface BrainInbound extends WebviewInbound {
   text?: string;
   prompt?: string;
   args?: Record<string, unknown>;
+  /** For `runs.local`: chat ids the webview's agent loop is executing / paused on. */
+  running?: number[];
+  awaiting?: number[];
 }
 
 /** A work item to auto-link to the chat the intent opens, so the conversation is
@@ -48,6 +51,14 @@ export interface BrainWebviewHooks {
   onChatsChanged?: () => void;
   /** A platform (catalog) write happened in the chat — refresh Project & Tasks. */
   onPlatformWrite?: (toolName: string) => void;
+  /**
+   * The set of chats the in-webview Brain loop is currently running / paused on a
+   * confirm changed. The agent loop lives in the webview (it streams straight to
+   * the gateway), so the server-side attention endpoint never sees it — the host
+   * merges this into the same live-status map so the Sessions tree lights up the
+   * still-running conversations after the user switches to a new chat.
+   */
+  onLocalRunsChanged?: (runs: { running: number[]; awaiting: number[] }) => void;
 }
 
 /**
@@ -196,6 +207,14 @@ export class BrainWebview extends WebviewPanelBase<BrainInbound> {
       case "platform.write":
         BrainWebview.hooks.onPlatformWrite?.(typeof msg.name === "string" ? msg.name : "");
         break;
+      // The set of chats the webview's agent loop is executing / paused on changed
+      // — forward it so the Sessions tree lights up the still-live conversations.
+      case "runs.local": {
+        const nums = (v: unknown): number[] =>
+          Array.isArray(v) ? v.filter((n): n is number => typeof n === "number") : [];
+        BrainWebview.hooks.onLocalRunsChanged?.({ running: nums(msg.running), awaiting: nums(msg.awaiting) });
+        break;
+      }
       // A chat run finished — contribute what it learned back to the active
       // project's Evermind (the same weight-delta loop cloud/on-prem run). Gated by
       // the `builderforce.evermindLearning` setting + throttled inside the helper.
@@ -393,5 +412,8 @@ export class BrainWebview extends WebviewPanelBase<BrainInbound> {
 
   protected onDispose(): void {
     BrainWebview.current = undefined;
+    // Closing the panel destroys the webview's JS context, so its in-flight runs
+    // are gone — clear their indicators from the Sessions tree.
+    BrainWebview.hooks.onLocalRunsChanged?.({ running: [], awaiting: [] });
   }
 }
