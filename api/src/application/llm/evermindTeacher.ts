@@ -83,7 +83,7 @@ export async function generateTeacherExemplar(
     // Thread the tenant's connected BYO account so a strict-pinned frontier teacher
     // resolves on THEIR OWN account (subscription/api-key, $0 to us) when they have
     // one — matching the "BYO funds frontier" rule. Absent → the funded premium pool.
-    const creds = await resolveTenantLlmCredentials(env, tenantId).catch(() => ({ anthropicOAuthToken: null, vendorKeys: {} }));
+    const creds = await resolveTenantLlmCredentials(env, tenantId).catch(() => ({ anthropicOAuthToken: null, vendorKeys: {}, configuredProviders: [] }));
     const hasVendorKeys = Object.values(creds.vendorKeys).some(Boolean);
     const result = await llmProxyForPlan(env, 'pro', true, {
       ...(creds.anthropicOAuthToken ? { anthropicOAuthToken: creds.anthropicOAuthToken } : {}),

@@ -71,6 +71,7 @@ import {
   isSupportedProvider,
   byoVendorIdSet,
   providersFromCredentials,
+  unresolvedProviders,
   type TenantVendorKeys,
   type LlmProvider,
 } from '../../application/llm/tenantProviderKeyService';
@@ -1509,6 +1510,14 @@ export function createLlmRoutes(): Hono<HonoEnv> {
     // provenance chip reads this so a SUCCESSFUL turn shows whether the tenant's own
     // connected frontier account ran it, or the shared pool did despite one existing.
     upstreamHeaders.set('x-builderforce-account', classifyReplyAccount(result.byoFunded ?? false, byoVendors.size > 0));
+    // A provider the tenant CONNECTED but that couldn't be resolved this call (expired
+    // Claude subscription whose refresh failed, an undecryptable key, or one stored under
+    // a different tenant) leaves `byoVendors` empty — so the turn degrades to the shared
+    // pool looking exactly like "nothing connected". Surface the unresolved providers so
+    // the client/triage can say "Anthropic connected but not used — reconnect it" instead
+    // of a silent weak-coder run (the "should have selected Opus" report had no signal).
+    const byoUnresolved = unresolvedProviders(tenantCreds);
+    if (byoUnresolved.length > 0) upstreamHeaders.set('x-builderforce-byo-unresolved', byoUnresolved.join(','));
     upstreamHeaders.set('x-builderforce-retries', String(result.retries));
     upstreamHeaders.set('x-builderforce-product', llmProduct);
     upstreamHeaders.set('x-builderforce-effective-plan', access.effectivePlan);

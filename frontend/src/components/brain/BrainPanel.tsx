@@ -16,6 +16,7 @@ import '@seanhogg/builderforce-brain-ui/styles.css';
 import { useConfirm } from '@/components/ConfirmProvider';
 import { ChatInput } from '@/components/ChatInput';
 import { EvermindStatusBadge } from '@/components/ide/EvermindStatusBadge';
+import { recallProjectEvermind } from '@/lib/projectEvermindApi';
 import { ChatMessageContent } from '@/components/ChatMessageContent';
 import { ChatMessageActions } from '@/components/ChatMessageActions';
 import { ChatTicketsPanel } from '@/components/brain/ChatTicketsPanel';
@@ -282,6 +283,18 @@ export function BrainPanel({
     return parts.length > 0 ? parts.join('\n') : undefined;
   }, [ctxProjectId, projects, extraSystem, autoApprove, effort, thinking, webBrowsing]);
 
+  // Project-Evermind memory hooks: recall the active chat's project learnings
+  // before answering (grounding the reply + surfacing recall/learn/reconcile
+  // steps). Bound to the chat's project (falling back to the pinned/viewing one a
+  // new chat will be created under, so learning + recall stay on the same model).
+  const evermindProjectId = chats.activeChat?.projectId ?? pinnedProjectId ?? viewingProjectId ?? null;
+  const evermind = useMemo(
+    () => (evermindProjectId == null
+      ? undefined
+      : { recall: (query: string) => recallProjectEvermind(evermindProjectId, query).catch(() => null) }),
+    [evermindProjectId],
+  );
+
   const conv = useBrainConversation({
     chatId: chats.activeChatId,
     modality,
@@ -293,6 +306,7 @@ export function BrainPanel({
     needsConfirm,
     ensureChatId,
     onActivity: chats.touch,
+    evermind,
   });
 
   const { pendingConfirm, resolveConfirm } = conv;
@@ -484,6 +498,12 @@ export function BrainPanel({
     accountShared: tTimeline('accountShared'),
     accountByoUnused: tTimeline('accountByoUnused'),
     ranOnEvermind: tTimeline('ranOnEvermind'),
+    recallTitle: tTimeline('recallTitle'),
+    recallHint: tTimeline('recallHint'),
+    learnTitle: tTimeline('learnTitle'),
+    learnHint: tTimeline('learnHint'),
+    reconcileTitle: tTimeline('reconcileTitle'),
+    reconcileHint: tTimeline('reconcileHint'),
   }), [tTimeline]);
 
   const timelineApplyCode = useMemo(

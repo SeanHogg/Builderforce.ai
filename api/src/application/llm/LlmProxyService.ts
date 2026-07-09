@@ -1061,15 +1061,28 @@ export class LlmProxyService {
     //    first), NOT a fixed vendor; Opus/Sonnet for Anthropic per turn shape. The
     //    cascade then fails over across the owner's other connected accounts, and the
     //    plan pool stays behind them all as final fallback. See byoAutoSeedModels.
-    const byoSeeds = (typeof callerModel === 'string' && callerModel.length > 0)
-      ? []
-      : byoAutoSeedModels(this.connectedByoVendors, { agentic: this.codingOnly });
-    const seedHead: readonly string[] = (typeof callerModel === 'string' && callerModel.length > 0)
-      ? [callerModel]
-      : byoSeeds;
-    const seed: readonly string[] = seedHead.length > 0
-      ? [...seedHead, ...fittedPool.filter((m) => !seedHead.includes(m))]
+    // A non-strict caller `model` is a HINT, not an override of the tenant's connected
+    // account. Honour it at the head ONLY when it PREEMPTS the BYO seed — nothing
+    // connected, or the model is itself served by a connected BYO vendor (see
+    // {@link explicitModelPreemptsByo}). A NON-BYO caller model (the VS Code Brain's
+    // configured `defaultModel`, a stale coder default, any SDK caller's pin) must NOT
+    // shadow the connected flagship: otherwise a tenant with a connected Claude account
+    // silently runs a weak free coder — the "should have selected Opus" regression. This
+    // is the SAME invariant `byoAwareModel`/`explicitModelPreemptsByo` enforce on the
+    // tenantProxy + /v1/messages paths; applying it centrally HERE stops the gateway
+    // completion seed from drifting from them (a caller model bypassed the gate before).
+    // A shadowed hint still joins the pool just BEHIND the flagship, so it's the first
+    // failover after the connected account rather than being dropped.
+    const hasCallerModel = typeof callerModel === 'string' && callerModel.length > 0;
+    const callerLeads = hasCallerModel && explicitModelPreemptsByo(callerModel as string, this.connectedByoVendors);
+    const byoSeeds = callerLeads ? [] : byoAutoSeedModels(this.connectedByoVendors, { agentic: this.codingOnly });
+    const seedHead: readonly string[] = callerLeads ? [callerModel as string] : byoSeeds;
+    const basePool: readonly string[] = (hasCallerModel && !callerLeads && !fittedPool.includes(callerModel as string))
+      ? [callerModel as string, ...fittedPool]
       : fittedPool;
+    const seed: readonly string[] = seedHead.length > 0
+      ? [...seedHead, ...basePool.filter((m) => !seedHead.includes(m))]
+      : basePool;
 
     // 3) Pre-fetch cooldown state for the leading seed slice + premium fallback
     //    (KV-backed when bound, in-memory fallback otherwise). The seed is

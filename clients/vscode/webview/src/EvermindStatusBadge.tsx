@@ -8,9 +8,11 @@ import { getToken, refreshToken } from './vscodeBridge';
  * indicator of the current project's Evermind: whether it runs on its own
  * self-learning model, and whether it is learning.
  *
- * Honesty matters: a Brain *chat* does NOT train the Evermind — only agent TASK RUNS
- * do — so the badge reflects the project's run/learning posture and its tooltip says
- * so. Self-gating: fetches the (server-cached) head itself and renders nothing until
+ * Honesty matters: a project-scoped Brain chat now RECALLS this project's learnings
+ * before answering and, while connected, CONTRIBUTES the turn back (each shown as a
+ * recall/learn/reconcile step in the transcript). The badge reflects the project's
+ * run/learning posture; the tooltip says so. Self-gating: fetches the (server-cached)
+ * head itself and renders nothing until
  * the project has a seeded Evermind. Themed via the webview `--bf-*` tokens; labels
  * come from the host bundle with English fallbacks (the webview has no i18n stack).
  */
@@ -58,7 +60,7 @@ export function EvermindStatusBadge({
     <span
       title={t(
         'ev.status.tooltip',
-        `Agents on this project run on its Evermind (v${head.version}) and their runs train it. This chat does not train it — open the Evermind view to inspect what it has learned.`,
+        `This project runs on its Evermind (v${head.version}). Agent runs and this chat recall its learnings and, while connected, contribute back — watch the recall/learn steps in the transcript. Open the Evermind view to inspect what it has learned.`,
       )}
       style={{
         display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 11, fontWeight: 600,

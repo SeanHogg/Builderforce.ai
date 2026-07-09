@@ -84,6 +84,36 @@ describe('connected account — happy path serves the turn (real dispatch)', () 
   });
 });
 
+describe('connected account — a non-BYO caller model does NOT shadow the connected flagship', () => {
+  it('a request carrying a NON-BYO model (e.g. the Brain default coder) still auto-seeds claude-opus-4-8', async () => {
+    // The exact VS Code Brain regression: a tenant with a connected Claude account whose
+    // request carries a non-Anthropic default `model` (a stale/free coder) must NOT let
+    // that model shadow the connected flagship — otherwise the turn silently runs the weak
+    // coder and Opus never leads. The caller model is a hint that drops BEHIND the flagship.
+    const seen: string[] = [];
+    const fetchSpy = vi.fn(async (input: string | URL, init?: RequestInit) => {
+      const url = typeof input === 'string' ? input : input.toString();
+      const model = (JSON.parse(String(init?.body ?? '{}')) as { model?: string }).model ?? '';
+      seen.push(`${url.includes('anthropic') ? 'anthropic' : 'other'}:${model}`);
+      if (url === ANTHROPIC_ENDPOINT) return anthropicOk('planned');
+      throw new Error(`unexpected fetch (connected account should have led): ${url} ${model}`);
+    });
+    (globalThis as { fetch: typeof fetch }).fetch = fetchSpy as unknown as typeof fetch;
+
+    const result = await connectedProxy().complete({
+      ...request,
+      // A non-BYO coder pin — the kind resolveEffectiveModel/defaultModel can send.
+      model: 'deepseek/deepseek-v4-flash-20260423',
+    });
+
+    expect(result.response.status).toBe(200);
+    expect(result.resolvedVendor).toBe('anthropic');
+    expect(result.resolvedModel).toBe('claude-opus-4-8');
+    // Opus led the cascade despite the non-BYO caller model.
+    expect(seen[0]).toBe('anthropic:claude-opus-4-8');
+  });
+});
+
 describe('connected account — failure is attributed HONESTLY (real dispatch)', () => {
   it('a 400 on the connected account carries the real status + detail into failovers, then falls back', async () => {
     const fetchSpy = vi.fn(async (input: string | URL) => {

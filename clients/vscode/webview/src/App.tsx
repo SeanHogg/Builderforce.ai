@@ -18,7 +18,9 @@ import {
   type DirectedRecipient,
   type RecipientChoice,
   type GlobalRunState,
+  type EvermindRecallResult,
 } from '@seanhogg/builderforce-brain-embedded';
+import { authedFetch } from './authedFetch';
 import {
   BrainTimeline, ChatTicketsPanel, DEFAULT_CHAT_TICKETS_LABELS, Avatar, useChatParticipants,
   useMentionAutocomplete,
@@ -78,6 +80,12 @@ function timelineLabels(labels: LabelBundle): Partial<BrainTimelineLabels> {
     accountOwn: t('tl.accountOwn', 'Your account'),
     accountShared: t('tl.accountShared', 'Shared pool'),
     accountByoUnused: t('tl.accountByoUnused', "Your connected account wasn't used"),
+    recallTitle: t('tl.recallTitle', 'Recalled {count} memories from Evermind v{version}'),
+    recallHint: t('tl.recallHint', "This project's self-learning Evermind recalled these prior learnings and grounded the answer on them."),
+    learnTitle: t('tl.learnTitle', 'Contributed this turn to Evermind v{version}'),
+    learnHint: t('tl.learnHint', 'This turn was contributed back to the project Evermind — it will be merged into the learned model.'),
+    reconcileTitle: t('tl.reconcileTitle', 'Reconciled {count} learned memories in Evermind v{version}'),
+    reconcileHint: t('tl.reconcileHint', 'The answer restated these recalled learnings, so it updates them (write-through cognition).'),
   };
 }
 
@@ -469,6 +477,25 @@ function Chat({ init }: { init: InitData }) {
     [projectDirective, editorDirective, effort, thinking, webBrowsing],
   );
 
+  // Project-Evermind memory hooks: recall the chat's project learnings before
+  // answering (grounding the reply + surfacing recall/learn/reconcile steps in the
+  // timeline). Bound to the chat's project (falling back to the IDE's open project).
+  const evermindProjectId = useMemo(
+    () => chats.find((c) => c.id === chatId)?.projectId ?? init.project?.id ?? null,
+    [chats, chatId, init.project?.id],
+  );
+  const evermind = useMemo(() => {
+    if (evermindProjectId == null) return undefined;
+    const req = authedFetch(init.baseUrl, getToken, () => void refreshToken());
+    return {
+      recall: (query: string) =>
+        req<EvermindRecallResult>(`/api/projects/${evermindProjectId}/evermind/recall`, {
+          method: 'POST',
+          body: JSON.stringify({ query }),
+        }).catch(() => null),
+    };
+  }, [evermindProjectId, init.baseUrl]);
+
   const conv = useBrainConversation({
     chatId,
     modality: 'ide',
@@ -479,6 +506,7 @@ function Chat({ init }: { init: InitData }) {
     needsConfirm,
     ensureChatId,
     onActivity: reloadChats,
+    evermind,
   });
 
   // Chat↔ticket panel data adapter — same gateway endpoints as the web app's

@@ -233,20 +233,39 @@ export async function resolveTenantVendorKeys(env: Env, tenantId: number): Promi
 export interface TenantLlmCredentials {
   anthropicOAuthToken: string | null;
   vendorKeys: TenantVendorKeys;
+  /** Every provider the tenant has a stored credential ROW for — regardless of whether
+   *  it could be RESOLVED this call. A provider that is `configured` but absent from the
+   *  resolved token/keys is "connected but unusable" (expired subscription whose refresh
+   *  failed, an undecryptable key, or a credential stored under a different tenant) — the
+   *  gateway surfaces that so a BYO turn that degraded to the shared pool is never SILENT.
+   *  See {@link providersFromCredentials} for the resolved (usable) set. */
+  configuredProviders: LlmProvider[];
 }
 
 /**
- * Resolve BOTH the Anthropic subscription token and the BYO api-keys in ONE
- * round-trip (the two reads run in parallel). The single entry point for the
- * gateway + cloud completion paths so they don't each duplicate the pair of
- * lookups. Best-effort — each half independently degrades to null/empty.
+ * Resolve the Anthropic subscription token, the BYO api-keys, AND the set of
+ * configured providers in ONE round-trip (the reads run in parallel). The single
+ * entry point for the gateway + cloud completion paths so they don't each duplicate
+ * the lookups. Best-effort — each part independently degrades to null/empty, and a
+ * configured-but-unresolved provider still shows up in `configuredProviders` so the
+ * degrade to the shared pool can be surfaced instead of looking like "nothing connected".
  */
 export async function resolveTenantLlmCredentials(env: Env, tenantId: number): Promise<TenantLlmCredentials> {
-  const [anthropicOAuthToken, vendorKeys] = await Promise.all([
+  const [anthropicOAuthToken, vendorKeys, configured] = await Promise.all([
     resolveAnthropicOAuthToken(env, tenantId),
     resolveTenantVendorKeys(env, tenantId),
+    listTenantProviderKeys(env, tenantId).catch(() => [] as ProviderKeySummary[]),
   ]);
-  return { anthropicOAuthToken, vendorKeys };
+  return { anthropicOAuthToken, vendorKeys, configuredProviders: configured.map((p) => p.provider) };
+}
+
+/** The connected providers a tenant has CONFIGURED but that could NOT be resolved to a
+ *  usable credential this call (expired/undecryptable/wrong-tenant) — the difference
+ *  between what they connected and what actually served. Empty when every configured
+ *  provider resolved (or none is configured). */
+export function unresolvedProviders(creds: TenantLlmCredentials): LlmProvider[] {
+  const usable = new Set(providersFromCredentials(creds));
+  return creds.configuredProviders.filter((p) => !usable.has(p));
 }
 
 /** List which providers a tenant has configured + how each authenticates (no secrets). */

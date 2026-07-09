@@ -27,14 +27,17 @@ __export(src_exports, {
   BrainProvider: () => BrainProvider,
   CONSOLIDATION_MARKER_PREFIX: () => CONSOLIDATION_MARKER_PREFIX,
   CONSOLIDATION_META: () => CONSOLIDATION_META,
+  EVERMIND_LEARN_MIN_CHARS: () => EVERMIND_LEARN_MIN_CHARS,
   PROVENANCE_META_KEY: () => PROVENANCE_META_KEY,
   activeMentionToken: () => activeMentionToken,
   buildBrainTriageReport: () => buildBrainTriageReport,
   computeBrainDiagnostics: () => computeBrainDiagnostics,
   consolidationMarkerContent: () => consolidationMarkerContent,
   consolidationMetadata: () => consolidationMetadata,
+  countReconciledMemories: () => countReconciledMemories,
   filterMentionCandidates: () => filterMentionCandidates,
   formatBrainDiagnostics: () => formatBrainDiagnostics,
+  formatEvermindMemoryBlock: () => formatEvermindMemoryBlock,
   getGlobalRunState: () => getGlobalRunState,
   isConnectedAccountUnused: () => isConnectedAccountUnused,
   isConsolidationMarker: () => isConsolidationMarker,
@@ -410,6 +413,85 @@ async function prepareImageDataUrl(file) {
     if (dataUrlBytes(dataUrl) <= MAX_DATA_URL_BYTES) return { dataUrl };
   }
   return { tooLarge: true };
+}
+
+// src/evermindMemory.ts
+var EVERMIND_LEARN_MIN_CHARS = 40;
+var RECONCILE_OVERLAP = 0.6;
+var STOP = /* @__PURE__ */ new Set([
+  "the",
+  "a",
+  "an",
+  "and",
+  "or",
+  "to",
+  "of",
+  "in",
+  "on",
+  "for",
+  "with",
+  "is",
+  "are",
+  "be",
+  "as",
+  "at",
+  "by",
+  "it",
+  "this",
+  "that",
+  "from",
+  "you",
+  "your",
+  "i",
+  "we",
+  "they",
+  "he",
+  "she",
+  "can",
+  "will",
+  "how",
+  "do",
+  "does",
+  "what",
+  "why",
+  "when",
+  "which",
+  "use",
+  "using",
+  "used",
+  "please",
+  "need",
+  "want",
+  "me",
+  "my",
+  "so",
+  "if"
+]);
+function tokenSet(s) {
+  return new Set((s.toLowerCase().match(/[a-z0-9_]+/g) ?? []).filter((w) => w.length >= 2 && !STOP.has(w)));
+}
+function formatEvermindMemoryBlock(items) {
+  if (items.length === 0) return "";
+  const lines = items.map((it, i) => `${i + 1}. ${it.text.replace(/\s+/g, " ").trim()}`).filter((l) => l.length > 3);
+  if (lines.length === 0) return "";
+  return [
+    "[Evermind Memory \u2014 recalled from this project's self-learning model]",
+    "Prior learnings this project recalled as relevant to the request. Treat them as grounding; if any is outdated or wrong, correct it in your answer (this project learns write-through \u2014 your reply updates its memory).",
+    ...lines
+  ].join("\n");
+}
+function countReconciledMemories(items, answer) {
+  const ans = tokenSet(answer);
+  if (ans.size === 0) return 0;
+  let n = 0;
+  for (const it of items) {
+    const mem = tokenSet(it.text);
+    if (mem.size === 0) continue;
+    let hit = 0;
+    for (const tok of mem) if (ans.has(tok)) hit++;
+    if (hit / mem.size >= RECONCILE_OVERLAP) n++;
+  }
+  return n;
 }
 
 // src/BrainActionsContext.tsx
@@ -1216,6 +1298,18 @@ function parseArgs(raw) {
     return {};
   }
 }
+function latestUserText(convo) {
+  for (let i = convo.length - 1; i >= 0; i--) {
+    const m = convo[i];
+    if (m.role !== "user") continue;
+    if (typeof m.content === "string") return m.content.trim();
+    if (Array.isArray(m.content)) {
+      return m.content.map((p) => p && typeof p === "object" && "text" in p && typeof p.text === "string" ? p.text : "").join(" ").trim();
+    }
+    return "";
+  }
+  return "";
+}
 function windowed(convo) {
   let w = convo.slice(-HISTORY_WINDOW);
   while (w.length > 0 && w[0].role !== "user") w = w.slice(1);
@@ -1322,15 +1416,42 @@ async function startRun(chatId, req) {
   }
 }
 async function runLoop(chatId, c, req) {
-  const { resolvedSystemPrompt, tools: toolSpecs, model, runTool, needsConfirm, stream, persistence, onActivity } = req;
+  const { resolvedSystemPrompt, tools: toolSpecs, model, runTool, needsConfirm, stream, persistence, onActivity, evermind } = req;
   const convo = c.transcript;
   const tools = toolSpecs && toolSpecs.length > 0 ? toolSpecs : void 0;
+  let systemPrompt = resolvedSystemPrompt;
+  let recalled = null;
+  if (evermind?.recall) {
+    const query = latestUserText(convo);
+    if (query) {
+      try {
+        recalled = await evermind.recall(query);
+      } catch {
+        recalled = null;
+      }
+      if (recalled?.seeded && recalled.items.length > 0) {
+        const block = formatEvermindMemoryBlock(recalled.items);
+        if (block) {
+          systemPrompt = `${systemPrompt}
+
+${block}`;
+          pushTrace(c, {
+            ts: nowIso(),
+            category: "recall",
+            label: "evermind.recall",
+            args: { query, version: recalled.version },
+            result: { count: recalled.items.length, version: recalled.version, mode: recalled.mode, items: recalled.items }
+          });
+        }
+      }
+    }
+  }
   for (let iter = 0; iter < MAX_TOOL_ITERATIONS; iter++) {
     if (c.abort?.signal.aborted) return;
     c.streamingText = "";
     emit(c);
     const working = [
-      { role: "system", content: resolvedSystemPrompt },
+      { role: "system", content: systemPrompt },
       ...windowed(convo)
     ];
     const llmStart = nowMs2();
@@ -1459,6 +1580,23 @@ async function runLoop(chatId, c, req) {
     c.streamingText = "";
     recordAppended(c, assistantMsg);
     emit(c);
+    if (recalled?.seeded && recalled.mode === "connected" && finalText.trim().length >= EVERMIND_LEARN_MIN_CHARS) {
+      pushTrace(c, {
+        ts: nowIso(),
+        category: "learn",
+        label: "evermind.learn",
+        result: { version: recalled.version, queued: true }
+      });
+      const reconciled = countReconciledMemories(recalled.items, finalText);
+      if (reconciled > 0) {
+        pushTrace(c, {
+          ts: nowIso(),
+          category: "reconcile",
+          label: "evermind.reconcile",
+          result: { count: reconciled, version: recalled.version }
+        });
+      }
+    }
     onActivity?.(chatId);
     return;
   }
@@ -1487,7 +1625,8 @@ function useBrainConversation(options) {
     runTool,
     needsConfirm,
     ensureChatId,
-    onActivity
+    onActivity,
+    evermind
   } = options;
   const [messages, setMessages] = (0, import_react6.useState)([]);
   const [loadingMessages, setLoadingMessages] = (0, import_react6.useState)(false);
@@ -1559,10 +1698,11 @@ ${extraSystem}` : resolvedSystemPrompt;
       stream,
       persistence,
       onActivity,
+      evermind,
       seed,
       userTurn
     }),
-    [fullSystemPrompt, toolSpecs, model, runTool, needsConfirm, stream, persistence, onActivity]
+    [fullSystemPrompt, toolSpecs, model, runTool, needsConfirm, stream, persistence, onActivity, evermind]
   );
   const send = (0, import_react6.useCallback)(
     async (text, opts) => {
@@ -1772,14 +1912,17 @@ function takePendingPrompt() {
   BrainProvider,
   CONSOLIDATION_MARKER_PREFIX,
   CONSOLIDATION_META,
+  EVERMIND_LEARN_MIN_CHARS,
   PROVENANCE_META_KEY,
   activeMentionToken,
   buildBrainTriageReport,
   computeBrainDiagnostics,
   consolidationMarkerContent,
   consolidationMetadata,
+  countReconciledMemories,
   filterMentionCandidates,
   formatBrainDiagnostics,
+  formatEvermindMemoryBlock,
   getGlobalRunState,
   isConnectedAccountUnused,
   isConsolidationMarker,

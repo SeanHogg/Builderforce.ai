@@ -3564,7 +3564,7 @@
     "learning": "Lernt",
     "frozen": "Eingefroren",
     "off": "Aus",
-    "tooltip": "Agenten dieses Projekts laufen auf seinem Evermind (v{version}), und ihre Läufe trainieren es. Dieser Planungs-Chat trainiert es nicht — öffnen Sie den LLM-Tab, um zu sehen, was es gelernt hat."
+    "tooltip": "Dieses Projekt läuft auf seinem Evermind (v{version}). Agent-Läufe und dieser Chat rufen seine Erkenntnisse ab und tragen im verbundenen Zustand dazu bei — beachten Sie die Abruf-/Lernschritte im Transkript. Öffnen Sie den LLM-Tab, um zu sehen, was es gelernt hat."
   },
   "evermindRun": {
     "title": "Dieser Lauf wurde auf dem projekteigenen Evermind-Modell ausgeführt",
@@ -5461,6 +5461,12 @@
       "accountShared": "Gemeinsamer Pool",
       "accountByoUnused": "Ihr verbundenes Konto wurde nicht verwendet",
       "ranOnEvermind": "Erzeugt vom Evermind-Modell dieses Projekts",
+      "recallTitle": "{count} Erinnerungen aus Evermind v{version} abgerufen",
+      "recallHint": "Das selbstlernende Evermind dieses Projekts hat diese früheren Erkenntnisse abgerufen und die Antwort darauf gestützt.",
+      "learnTitle": "Dieser Beitrag wurde an Evermind v{version} übermittelt",
+      "learnHint": "Dieser Beitrag wurde an das Projekt-Evermind zurückgegeben — er wird in das gelernte Modell eingemischt.",
+      "reconcileTitle": "{count} gelernte Erinnerungen in Evermind v{version} abgeglichen",
+      "reconcileHint": "Die Antwort hat diese abgerufenen Erkenntnisse neu formuliert und aktualisiert sie damit (Write-Through-Kognition).",
       "stop": "Stoppen"
     },
     "tickets": {

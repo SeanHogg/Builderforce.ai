@@ -690,6 +690,55 @@ export async function validateProjectEvermindRecall(
   );
 }
 
+/** One recalled memory for a Brain reply — a learned exemplar + its relevance. */
+export interface ProjectEvermindRecallItem {
+  id: number;
+  text: string;
+  score: number;
+}
+
+/** The reply-time recall payload the Brain run loop consumes (mirrors brain-embedded
+ *  `EvermindRecallResult`): the project's learning posture + the recalled memories. */
+export interface ProjectEvermindRecallResult {
+  seeded: boolean;
+  version: number;
+  mode: ProjectEvermindMode;
+  items: ProjectEvermindRecallItem[];
+}
+
+/** Snippet length for a recalled memory shown in the chat (keeps the prompt block small). */
+const RECALL_SNIPPET_CHARS = 240;
+
+/**
+ * Recall the project Evermind's learned memories most relevant to `query`, for a
+ * project-scoped Brain reply. Wraps {@link validateProjectEvermindRecall} (the same
+ * cached lexical ranker the console's Validate uses) and adds the head's learning
+ * posture (mode/version) so the run loop knows whether the turn will also be
+ * contributed back. Returns an unseeded result (no items) when the project has no
+ * base model, so the caller can always render.
+ */
+export async function recallProjectEvermindMemory(
+  env: Env,
+  db: Db,
+  tenantId: number,
+  projectId: number,
+  query: string,
+): Promise<ProjectEvermindRecallResult> {
+  const head = await getProjectEvermindHead(env, db, tenantId, projectId);
+  if (head.version < 1) return { seeded: false, version: 0, mode: head.mode, items: [] };
+  const clean = query.trim();
+  if (!clean) return { seeded: true, version: head.version, mode: head.mode, items: [] };
+  const validate = await validateProjectEvermindRecall(env, db, tenantId, projectId, clean);
+  const items = validate.matches
+    .map((m) => ({
+      id: m.id,
+      text: ((m.text ?? m.prompt ?? '') as string).replace(/\s+/g, ' ').trim().slice(0, RECALL_SNIPPET_CHARS),
+      score: m.score,
+    }))
+    .filter((it) => it.text.length > 0);
+  return { seeded: true, version: head.version, mode: head.mode, items };
+}
+
 export async function flushProjectEvermind(
   env: Env,
   tenantId: number,

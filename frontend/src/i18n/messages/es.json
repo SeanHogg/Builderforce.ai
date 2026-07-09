@@ -3564,7 +3564,7 @@
     "learning": "Aprendiendo",
     "frozen": "Congelado",
     "off": "Desactivado",
-    "tooltip": "Los agentes de este proyecto se ejecutan en su Evermind (v{version}) y sus ejecuciones lo entrenan. Este chat de planificación no lo entrena: abre la pestaña LLM para ver lo que ha aprendido."
+    "tooltip": "Este proyecto se ejecuta en su Evermind (v{version}). Las ejecuciones de agentes y este chat recuperan sus aprendizajes y, mientras está conectado, contribuyen de vuelta: observa los pasos de recuperación/aprendizaje en la transcripción. Abre la pestaña LLM para ver lo que ha aprendido."
   },
   "evermindRun": {
     "title": "Esta ejecución se realizó en el propio modelo Evermind del proyecto",
@@ -5461,6 +5461,12 @@
       "accountShared": "Grupo compartido",
       "accountByoUnused": "No se usó tu cuenta conectada",
       "ranOnEvermind": "Generado por el modelo Evermind de este proyecto",
+      "recallTitle": "Se recuperaron {count} memorias de Evermind v{version}",
+      "recallHint": "El Evermind autoaprendiz de este proyecto recuperó estos aprendizajes previos y fundamentó la respuesta en ellos.",
+      "learnTitle": "Este turno se aportó a Evermind v{version}",
+      "learnHint": "Este turno se devolvió al Evermind del proyecto: se fusionará en el modelo aprendido.",
+      "reconcileTitle": "Se reconciliaron {count} memorias aprendidas en Evermind v{version}",
+      "reconcileHint": "La respuesta reformuló estos aprendizajes recuperados, por lo que los actualiza (cognición de escritura directa).",
       "stop": "Detener"
     },
     "tickets": {

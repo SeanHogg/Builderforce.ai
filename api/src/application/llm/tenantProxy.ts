@@ -83,6 +83,7 @@ export async function tenantProxyForPlan(
     resolveTenantLlmCredentials(env, tenantId).catch(() => ({
       anthropicOAuthToken: null,
       vendorKeys: {} as TenantVendorKeys,
+      configuredProviders: [],
     })),
   ]);
 
