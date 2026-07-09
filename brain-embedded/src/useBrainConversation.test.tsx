@@ -238,6 +238,55 @@ describe('useBrainConversation agent loop (injected transport + persistence)', (
     );
   });
 
+  it('dedups an identical read_file call within a run (stubs the repeat, does not re-read)', async () => {
+    mockStream
+      .mockResolvedValueOnce(result({ toolCalls: [{ id: 'c1', name: 'read_file', args: '{"path":"a.ts"}' }], finishReason: 'tool_calls' }))
+      .mockResolvedValueOnce(result({ toolCalls: [{ id: 'c2', name: 'read_file', args: '{"path":"a.ts"}' }], finishReason: 'tool_calls' }))
+      .mockResolvedValueOnce(result({ text: 'done' }));
+    const runTool = vi.fn(async () => ({ ok: true, content: 'file body' }));
+    const { result: hook } = renderHook(
+      () => useBrainConversation({ chatId: 3, toolSpecs: [], runTool }),
+      { wrapper },
+    );
+
+    await act(async () => { await hook.current.send('read it twice'); });
+
+    expect(mockStream).toHaveBeenCalledTimes(3);
+    // The second identical read is suppressed — the tool ran only once.
+    expect(runTool).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(hook.current.messages.map((m) => m.content)).toEqual(['read it twice', 'done']));
+  });
+
+  it('re-reads a file after a mutating tool (dedupe cleared by the write)', async () => {
+    mockStream
+      .mockResolvedValueOnce(result({ toolCalls: [{ id: 'c1', name: 'read_file', args: '{"path":"a.ts"}' }], finishReason: 'tool_calls' }))
+      .mockResolvedValueOnce(result({ toolCalls: [{ id: 'c2', name: 'write_file', args: '{"path":"a.ts","content":"x"}' }], finishReason: 'tool_calls' }))
+      .mockResolvedValueOnce(result({ toolCalls: [{ id: 'c3', name: 'read_file', args: '{"path":"a.ts"}' }], finishReason: 'tool_calls' }))
+      .mockResolvedValueOnce(result({ text: 'done' }));
+    const runTool = vi.fn(async () => ({ ok: true }));
+    const { result: hook } = renderHook(
+      () => useBrainConversation({ chatId: 5, toolSpecs: [], runTool }),
+      { wrapper },
+    );
+
+    await act(async () => { await hook.current.send('read, write, read'); });
+
+    // The write cleared the read cache, so the SECOND read is NOT suppressed.
+    expect(runTool).toHaveBeenCalledTimes(3);
+  });
+
+  it('surfaces a connected-but-unresolved BYO provider on the hook (for the reconnect banner)', async () => {
+    mockStream.mockResolvedValueOnce(result({ text: 'ok', byoUnresolved: 'anthropic' }));
+    const { result: hook } = renderHook(
+      () => useBrainConversation({ chatId: 4, toolSpecs: [], runTool: vi.fn() }),
+      { wrapper },
+    );
+
+    await act(async () => { await hook.current.send('hi'); });
+
+    await waitFor(() => expect(hook.current.byoUnresolved).toEqual(['anthropic']));
+  });
+
   it('captures a thrown tool error: feeds it back, records it, and surfaces it in the triage report', async () => {
     mockStream
       .mockResolvedValueOnce(result({ text: 'trying', toolCalls: [{ id: 'c1', name: 'do_thing', args: '{}' }], finishReason: 'tool_calls' }))
