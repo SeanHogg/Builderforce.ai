@@ -136,5 +136,6 @@
   "Anytime": "Jederzeit",
   "● Live": "● Live",
   "participants": "Teilnehmer",
-  "Sign in to BuilderForce first.": "Melde dich zuerst bei BuilderForce an."
+  "Sign in to BuilderForce first.": "Melde dich zuerst bei BuilderForce an.",
+  "Your connected {provider} account couldn’t be used this run (its token looks expired or revoked), so it ran on the shared model pool instead of your own model. Reconnect it in the web app under Settings ▸ API Keys.": "Dein verbundenes {provider}-Konto konnte in diesem Lauf nicht verwendet werden (das Token scheint abgelaufen oder widerrufen zu sein), daher wurde der gemeinsame Modell-Pool statt deines eigenen Modells genutzt. Verbinde es in der Web-App unter Einstellungen ▸ API-Schlüssel erneut."
 }
