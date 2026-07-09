@@ -186,7 +186,10 @@ describe('useBrainConversation agent loop (injected transport + persistence)', (
     await waitFor(() => expect(hook.current.messages.map((m) => m.content)).toEqual(['go', 'done']));
   });
 
-  it('honours the max-iteration cap when the model never stops calling tools', async () => {
+  it('errors only when the forced final answer is ALSO empty at the iteration cap', async () => {
+    // The model calls a tool on every turn AND never produces prose — even the
+    // forced no-tools closing turn (mockResolvedValue is unconditional) comes back
+    // empty. Only then do we surface the loop-exhausted error.
     mockStream.mockResolvedValue(
       result({ toolCalls: [{ id: 'c', name: 'do_thing', args: '{}' }], finishReason: 'tool_calls' }),
     );
@@ -198,12 +201,41 @@ describe('useBrainConversation agent loop (injected transport + persistence)', (
 
     await act(async () => { await hook.current.send('loop'); });
 
-    // Runs up to the max-iteration cap, then it gives up.
-    expect(mockStream).toHaveBeenCalledTimes(25);
+    // 25 tool-loop turns + 1 forced final-synthesis turn (no tools) = 26 completions.
+    expect(mockStream).toHaveBeenCalledTimes(26);
+    // The forced closing turn runs no tools, so tool execution is unchanged at 25.
     expect(runTool).toHaveBeenCalledTimes(25);
-    // user persisted, but no final assistant text.
+    // user persisted, but no final assistant text (the closing turn was empty too).
     expect(persistence.sendMessages).toHaveBeenCalledTimes(1);
     await waitFor(() => expect(hook.current.error).toMatch(/kept calling tools/i));
+  });
+
+  it('rescues a tool-budget-exhausted run with a forced final answer instead of erroring', async () => {
+    // 25 turns that only call a tool, then the forced no-tools closing turn produces
+    // prose — that answer is persisted and NO "kept calling tools" error surfaces.
+    let call = 0;
+    mockStream.mockImplementation(async () => {
+      call += 1;
+      return call <= 25
+        ? result({ toolCalls: [{ id: `c${call}`, name: 'do_thing', args: '{}' }], finishReason: 'tool_calls' })
+        : result({ text: 'Here is what I found so far, and what I could not finish.' });
+    });
+    const runTool = vi.fn(async () => ({ ok: true }));
+    const { result: hook } = renderHook(
+      () => useBrainConversation({ chatId: 2, toolSpecs: [TOOL], runTool }),
+      { wrapper },
+    );
+
+    await act(async () => { await hook.current.send('loop'); });
+
+    expect(mockStream).toHaveBeenCalledTimes(26); // 25 tool turns + forced final synthesis
+    expect(runTool).toHaveBeenCalledTimes(25);
+    expect(hook.current.error).toBeFalsy();
+    // user + the forced final answer both persist.
+    expect(persistence.sendMessages).toHaveBeenCalledTimes(2);
+    await waitFor(() =>
+      expect(hook.current.messages.map((m) => m.content)).toEqual(['loop', 'Here is what I found so far, and what I could not finish.']),
+    );
   });
 
   it('captures a thrown tool error: feeds it back, records it, and surfaces it in the triage report', async () => {
