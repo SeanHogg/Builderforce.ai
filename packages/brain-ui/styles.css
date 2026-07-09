@@ -208,6 +208,46 @@
   background: var(--bf-accent-bg, rgba(144, 133, 233, 0.12));
 }
 
+/* ---- Evermind memory steps (recall / learn / reconcile) ---- */
+.bf-tl__memory-line {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--bf-accent, #9085e9);
+}
+.bf-tl__memory .bf-tl__tool-name {
+  font-family: inherit;
+  font-weight: 600;
+  color: var(--bf-accent, #9085e9);
+}
+.bf-tl__memory-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.bf-tl__memory-item {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 0.82rem;
+  line-height: 1.4;
+  color: var(--bf-text-secondary, #c3c2b7);
+}
+.bf-tl__memory-score {
+  flex: 0 0 auto;
+  font-variant-numeric: tabular-nums;
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--bf-accent, #9085e9);
+  min-width: 34px;
+}
+.bf-tl__memory-text {
+  flex: 1 1 auto;
+  overflow-wrap: anywhere;
+}
+
 /* ---- ask_user question card ---- */
 .bf-qcard {
   margin-top: 8px;

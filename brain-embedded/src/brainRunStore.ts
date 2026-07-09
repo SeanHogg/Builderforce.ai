@@ -37,6 +37,13 @@ import type {
 } from './streamChatCompletion';
 import { isFailedToolResult, type BrainTraceEvent } from './brainTriage';
 import { withProvenanceMetadata, type ProvenanceAccount } from './provenance';
+import {
+  formatEvermindMemoryBlock,
+  countReconciledMemories,
+  EVERMIND_LEARN_MIN_CHARS,
+  type EvermindRunHooks,
+  type EvermindRecallResult,
+} from './evermindMemory';
 
 /**
  * Build the provenance metadata for a persisted assistant turn from the stream
@@ -159,6 +166,14 @@ export interface BrainRunRequest {
   seed?: ChatCompletionMessage[];
   /** The user turn that triggered this run, appended to the transcript. */
   userTurn?: string | ContentPart[];
+  /**
+   * Project-Evermind memory hooks (bound to the active chat's project by the
+   * host). When present, the loop recalls learned memories before answering,
+   * injects them into the system prompt, and records recall/learn/reconcile
+   * steps into the trace so the chat SHOWS the project memory being used. Omit
+   * for a non-project chat (nothing memory-related happens).
+   */
+  evermind?: EvermindRunHooks;
 }
 
 /** Live, observable snapshot of a chat's run (what the hook renders). */
@@ -346,6 +361,27 @@ function parseArgs(raw: string): unknown {
   } catch {
     return {};
   }
+}
+
+/**
+ * The text of the most recent user turn in a transcript — the query the Evermind
+ * recall runs against. A vision turn is `ContentPart[]`; we pull its text parts
+ * (the image bytes aren't a recall query). Returns '' when there is no text.
+ */
+function latestUserText(convo: ChatCompletionMessage[]): string {
+  for (let i = convo.length - 1; i >= 0; i--) {
+    const m = convo[i];
+    if (m.role !== 'user') continue;
+    if (typeof m.content === 'string') return m.content.trim();
+    if (Array.isArray(m.content)) {
+      return m.content
+        .map((p) => (p && typeof p === 'object' && 'text' in p && typeof p.text === 'string' ? p.text : ''))
+        .join(' ')
+        .trim();
+    }
+    return '';
+  }
+  return '';
 }
 
 /**
@@ -561,9 +597,40 @@ export async function startRun(chatId: number, req: BrainRunRequest): Promise<vo
 }
 
 async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promise<void> {
-  const { resolvedSystemPrompt, tools: toolSpecs, model, runTool, needsConfirm, stream, persistence, onActivity } = req;
+  const { resolvedSystemPrompt, tools: toolSpecs, model, runTool, needsConfirm, stream, persistence, onActivity, evermind } = req;
   const convo = c.transcript;
   const tools = toolSpecs && toolSpecs.length > 0 ? toolSpecs : undefined;
+
+  // Evermind recall — before the FIRST turn, ask the project's self-learning model
+  // which learned memories are relevant to this request. When it returns some, we
+  // (a) record a visible `recall` step and (b) inject them into the system prompt
+  // so the recall actually GROUNDS the answer (not just a UI badge). Best-effort:
+  // a non-project chat / unavailable recall / thrown fetch just skips it.
+  let systemPrompt = resolvedSystemPrompt;
+  let recalled: EvermindRecallResult | null = null;
+  if (evermind?.recall) {
+    const query = latestUserText(convo);
+    if (query) {
+      try {
+        recalled = await evermind.recall(query);
+      } catch {
+        recalled = null;
+      }
+      if (recalled?.seeded && recalled.items.length > 0) {
+        const block = formatEvermindMemoryBlock(recalled.items);
+        if (block) {
+          systemPrompt = `${systemPrompt}\n\n${block}`;
+          pushTrace(c, {
+            ts: nowIso(),
+            category: 'recall',
+            label: 'evermind.recall',
+            args: { query, version: recalled.version },
+            result: { count: recalled.items.length, version: recalled.version, mode: recalled.mode, items: recalled.items },
+          });
+        }
+      }
+    }
+  }
 
   for (let iter = 0; iter < MAX_TOOL_ITERATIONS; iter++) {
     // User hit Stop between turns (or after a tool call) — unwind cleanly.
@@ -571,7 +638,7 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
     c.streamingText = '';
     emit(c);
     const working: ChatCompletionMessage[] = [
-      { role: 'system', content: resolvedSystemPrompt },
+      { role: 'system', content: systemPrompt },
       ...windowed(convo),
     ];
     const llmStart = nowMs();
@@ -625,6 +692,11 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
         requestedModel: requested,
         step: iter,
         toolCalls: result.toolCalls.length,
+        // Which account served the turn + any connected-BYO provider the gateway
+        // could NOT resolve — so triage tells "ran on the shared pool despite a
+        // connected Claude account (expired?)" apart from "nothing connected".
+        account: result.account,
+        byoUnresolved: result.byoUnresolved,
       },
       // Structured diagnostics fields — the A-vs-B triage reads these directly.
       usage: result.usage,
@@ -720,17 +792,97 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
     c.streamingText = '';
     recordAppended(c, assistantMsg);
     emit(c);
+
+    // Evermind learning + reconciliation steps. When the project is CONNECTED and
+    // the answer clears the teach floor, the server contributes this turn to the
+    // project's Evermind (brainRoutes → learnFromBrainTurn); surface that as a
+    // `learn` step, and — when the answer restates recalled memories — a
+    // `reconcile` step (write-through: the turn updates those learnings). This
+    // mirrors the server gate so the step shows exactly when a contribution lands.
+    if (recalled?.seeded && recalled.mode === 'connected' && finalText.trim().length >= EVERMIND_LEARN_MIN_CHARS) {
+      pushTrace(c, {
+        ts: nowIso(),
+        category: 'learn',
+        label: 'evermind.learn',
+        result: { version: recalled.version, queued: true },
+      });
+      const reconciled = countReconciledMemories(recalled.items, finalText);
+      if (reconciled > 0) {
+        pushTrace(c, {
+          ts: nowIso(),
+          category: 'reconcile',
+          label: 'evermind.reconcile',
+          result: { count: reconciled, version: recalled.version },
+        });
+      }
+    }
+
     onActivity?.(chatId);
     return;
   }
 
-  // Loop exhausted without a final text answer.
+  // Loop exhausted without a final text answer. Rather than drop the whole run with
+  // "kept calling tools without finishing", force ONE final completion WITHOUT tools so
+  // the model MUST answer in prose using what it already gathered — the same "always
+  // speak" guarantee the server-side addressed-agent loop gives (BrainService.agentReply).
+  // A run that spent its tool budget then returns a useful summary instead of an error;
+  // we only surface the loop-exhausted error if THIS closing turn is also empty. This
+  // does not depend on which model answered, so it also rescues a weak auto-selected
+  // model that looped without converging.
+  c.streamingText = '';
+  if (!c.abort?.signal.aborted) {
+    const closeStart = nowMs();
+    try {
+      const working: ChatCompletionMessage[] = [
+        { role: 'system', content: systemPrompt },
+        ...windowed(convo),
+        {
+          role: 'user',
+          content:
+            'You have reached your tool-call budget for this turn. Do NOT call any more tools. Answer the user now, in prose, using what you have already gathered — summarise your findings and state plainly anything you could not finish.',
+        },
+      ];
+      const closing = await stream(
+        // No `tools` → the model can't call another tool and must produce text.
+        { messages: working, model, signal: c.abort?.signal },
+        { onTextDelta: (d) => { c.streamingText += d; emit(c); } },
+      );
+      pushTrace(c, {
+        ts: nowIso(),
+        category: 'llm',
+        label: 'llm.complete',
+        durationMs: nowMs() - closeStart,
+        args: { model: closing.resolvedModel ?? model ?? 'default', requestedModel: model ?? 'default', step: MAX_TOOL_ITERATIONS, toolCalls: 0, forcedFinish: true, account: closing.account, byoUnresolved: closing.byoUnresolved },
+        usage: closing.usage,
+        finishReason: closing.finishReason,
+        textChars: closing.text.length,
+        result: `forced final synthesis (tool budget reached) · ${closing.text.length} chars · finish: ${closing.finishReason ?? '—'}`,
+      });
+      const closingText = closing.text.trim();
+      if (closingText) {
+        convo.push({ role: 'assistant', content: closingText });
+        const meta = provenanceMetadata(closing);
+        const [assistantMsg] = await persistence.sendMessages(chatId, [{ role: 'assistant', content: closingText, ...(meta ? { metadata: meta } : {}) }]);
+        c.streamingText = '';
+        recordAppended(c, assistantMsg);
+        emit(c);
+        onActivity?.(chatId);
+        return;
+      }
+    } catch (e) {
+      // A user Stop during the closing turn exits quietly; any other failure falls
+      // through to the loop-exhausted error below (the run still ends, just noisier).
+      if (c.abort?.signal.aborted) return;
+    }
+  }
+  if (c.abort?.signal.aborted) return;
+
   c.streamingText = '';
   pushTrace(c, {
     ts: nowIso(),
     category: 'error',
     label: 'agent.loop',
-    result: `Loop exhausted after ${MAX_TOOL_ITERATIONS} tool iterations`,
+    result: `Loop exhausted after ${MAX_TOOL_ITERATIONS} tool iterations (a forced final answer without tools also came back empty)`,
     isError: true,
   });
   c.error = 'The assistant kept calling tools without finishing. Try rephrasing.';

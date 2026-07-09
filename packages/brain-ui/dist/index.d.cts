@@ -1,6 +1,6 @@
 import * as React from 'react';
 import React__default from 'react';
-import { BrainMessage, BrainTraceEvent, DirectedRecipient, ChatInputAttachment } from '@seanhogg/builderforce-brain-embedded';
+import { BrainMessage, BrainTraceEvent, DirectedRecipient, EvermindRecallItem, ChatInputAttachment } from '@seanhogg/builderforce-brain-embedded';
 
 interface BrainTimelineLabels {
     /** Shown on the live thinking node while a turn streams. */
@@ -34,6 +34,19 @@ interface BrainTimelineLabels {
     /** Provenance chip tooltip: shown on the "🧠 Evermind vN" badge when the
      *  project's own self-learning model generated this reply. */
     ranOnEvermind: string;
+    /** Evermind recall step title — must contain `{count}` and `{version}`. */
+    recallTitle: string;
+    /** Tooltip on the recall step explaining what it means. */
+    recallHint: string;
+    /** Evermind learn step — the turn was contributed back. Must contain `{version}`. */
+    learnTitle: string;
+    /** Tooltip on the learn step. */
+    learnHint: string;
+    /** Evermind reconcile step — the turn updated learned memories. Must contain
+     *  `{count}` and `{version}`. */
+    reconcileTitle: string;
+    /** Tooltip on the reconcile step. */
+    reconcileHint: string;
 }
 declare const DEFAULT_TIMELINE_LABELS: BrainTimelineLabels;
 interface BrainTimelineProps {
@@ -536,6 +549,27 @@ type TimelineNode = {
     order: number;
     label: string;
     message: string;
+} | {
+    key: string;
+    kind: 'recall';
+    ts: number;
+    order: number;
+    version: number;
+    count: number;
+    items: EvermindRecallItem[];
+} | {
+    key: string;
+    kind: 'learn';
+    ts: number;
+    order: number;
+    version: number;
+} | {
+    key: string;
+    kind: 'reconcile';
+    ts: number;
+    order: number;
+    version: number;
+    count: number;
 } | {
     key: string;
     kind: 'streaming';

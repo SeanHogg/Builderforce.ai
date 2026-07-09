@@ -156,6 +156,15 @@ export interface StreamChatResult {
    * per-reply provenance chip so a successful turn shows whose account ran it.
    */
   account?: string;
+  /**
+   * Providers the tenant CONNECTED but that the gateway could NOT resolve for this
+   * turn (from `x-builderforce-byo-unresolved`, comma-separated) — e.g. a connected
+   * Claude subscription whose token expired, so the run silently fell to the shared
+   * pool instead of the tenant's own Opus. Undefined/absent when every connected
+   * provider resolved. Surfaced in triage so a "should have used my BYO account" run
+   * is self-explaining instead of looking like "nothing connected".
+   */
+  byoUnresolved?: string;
   /** Token usage for this completion, when the gateway reported it. */
   usage?: CompletionUsage;
 }
@@ -228,6 +237,12 @@ export async function streamChatCompletion(
   let headerAccount: string | null = null;
   try { headerAccount = res.headers?.get?.('x-builderforce-account') || null; } catch { headerAccount = null; }
   const account = (): string | undefined => headerAccount ?? undefined;
+  // Connected-but-unresolved BYO providers for this turn (expired/undecryptable/
+  // wrong-tenant credential) — the gateway names them so a silent degrade to the
+  // shared pool is visible in triage. Same cross-origin exposure as `account`.
+  let headerByoUnresolved: string | null = null;
+  try { headerByoUnresolved = res.headers?.get?.('x-builderforce-byo-unresolved') || null; } catch { headerByoUnresolved = null; }
+  const byoUnresolved = (): string | undefined => headerByoUnresolved ?? undefined;
 
   // Token usage from the trailing `usage` chunk (or a non-streaming body). Kept
   // as the last non-empty usage seen so a mid-stream partial can't clobber the
@@ -268,7 +283,7 @@ export async function streamChatCompletion(
     });
     finishReason = choice?.finish_reason ?? null;
     handlers.onDone?.(finishReason);
-    return { text, toolCalls: [...assemble(toolAcc), ...xmlCalls], finishReason, resolvedModel: resolvedModel(), account: account(), usage };
+    return { text, toolCalls: [...assemble(toolAcc), ...xmlCalls], finishReason, resolvedModel: resolvedModel(), account: account(), byoUnresolved: byoUnresolved(), usage };
   }
 
   const decoder = new TextDecoder();
@@ -287,7 +302,7 @@ export async function streamChatCompletion(
         const tail = xml.flush();
         if (tail) handlers.onTextDelta?.(tail);
         handlers.onDone?.(finishReason);
-        return { text: xml.cleanText(), toolCalls: allToolCalls(), finishReason, resolvedModel: resolvedModel(), account: account(), usage };
+        return { text: xml.cleanText(), toolCalls: allToolCalls(), finishReason, resolvedModel: resolvedModel(), account: account(), byoUnresolved: byoUnresolved(), usage };
       }
       let parsed: {
         model?: string;
@@ -348,7 +363,7 @@ export async function streamChatCompletion(
   const tail = xml.flush();
   if (tail) handlers.onTextDelta?.(tail);
   handlers.onDone?.(finishReason);
-  return { text: xml.cleanText(), toolCalls: allToolCalls(), finishReason, resolvedModel: resolvedModel(), account: account(), usage };
+  return { text: xml.cleanText(), toolCalls: allToolCalls(), finishReason, resolvedModel: resolvedModel(), account: account(), byoUnresolved: byoUnresolved(), usage };
 }
 
 function assemble(acc: Map<number, { id: string; name: string; args: string }>): AssembledToolCall[] {

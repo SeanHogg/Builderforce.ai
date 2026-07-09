@@ -9,7 +9,7 @@
  * verbatim across surfaces.
  */
 
-import type { BrainMessage, BrainTraceEvent, ChatInputAttachment } from '@seanhogg/builderforce-brain-embedded';
+import type { BrainMessage, BrainTraceEvent, ChatInputAttachment, EvermindRecallItem } from '@seanhogg/builderforce-brain-embedded';
 
 export interface TimelineImage {
   url: string;
@@ -22,6 +22,10 @@ export type TimelineNode =
   | { key: string; kind: 'thinking'; ts: number; order: number; durationMs?: number; step: number }
   | { key: string; kind: 'tool'; ts: number; order: number; label: string; args: unknown; result: unknown; isError: boolean; durationMs?: number }
   | { key: string; kind: 'error'; ts: number; order: number; label: string; message: string }
+  // Project-Evermind memory steps — recall (before answering), learn + reconcile (after).
+  | { key: string; kind: 'recall'; ts: number; order: number; version: number; count: number; items: EvermindRecallItem[] }
+  | { key: string; kind: 'learn'; ts: number; order: number; version: number }
+  | { key: string; kind: 'reconcile'; ts: number; order: number; version: number; count: number }
   | { key: string; kind: 'streaming'; ts: number; order: number; text: string };
 
 export interface BuildTimelineInput {
@@ -31,14 +35,18 @@ export interface BuildTimelineInput {
   isRunning: boolean;
 }
 
-/** Same-timestamp tie-break so a turn reads thinking → narration → tools → error. */
+/** Same-timestamp tie-break so a turn reads recall → thinking → narration → tools
+ *  → learn → reconcile → error. */
 const ORDER: Record<TimelineNode['kind'], number> = {
   user: 0,
-  thinking: 1,
-  assistant: 2,
-  tool: 3,
-  error: 4,
-  streaming: 5,
+  recall: 1,
+  thinking: 2,
+  assistant: 3,
+  tool: 4,
+  learn: 5,
+  reconcile: 6,
+  error: 7,
+  streaming: 8,
 };
 
 function parseTs(iso: string | undefined, fallback: number): number {
@@ -152,6 +160,30 @@ export function buildSettledTimeline(messages: BrainMessage[], trace: BrainTrace
         order: ORDER.error,
         label: ev.label,
         message: typeof ev.result === 'string' ? ev.result : JSON.stringify(ev.result ?? ''),
+      });
+    } else if (ev.category === 'recall') {
+      const r = (ev.result ?? {}) as { count?: number; version?: number; items?: EvermindRecallItem[] };
+      nodes.push({
+        key: `trace-${i}`,
+        kind: 'recall',
+        ts,
+        order: ORDER.recall,
+        version: typeof r.version === 'number' ? r.version : 0,
+        count: typeof r.count === 'number' ? r.count : (Array.isArray(r.items) ? r.items.length : 0),
+        items: Array.isArray(r.items) ? r.items : [],
+      });
+    } else if (ev.category === 'learn') {
+      const r = (ev.result ?? {}) as { version?: number };
+      nodes.push({ key: `trace-${i}`, kind: 'learn', ts, order: ORDER.learn, version: typeof r.version === 'number' ? r.version : 0 });
+    } else if (ev.category === 'reconcile') {
+      const r = (ev.result ?? {}) as { count?: number; version?: number };
+      nodes.push({
+        key: `trace-${i}`,
+        kind: 'reconcile',
+        ts,
+        order: ORDER.reconcile,
+        version: typeof r.version === 'number' ? r.version : 0,
+        count: typeof r.count === 'number' ? r.count : 0,
       });
     }
     // 'message' trace events are intentionally dropped — the durable assistant

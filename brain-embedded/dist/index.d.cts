@@ -321,6 +321,77 @@ interface PreparedImage {
  */
 declare function prepareImageDataUrl(file: File): Promise<PreparedImage | null>;
 
+/**
+ * Evermind memory hooks for the Brain run loop — the client half of "recall +
+ * learn + reconcile, visible in the chat".
+ *
+ * A project-scoped Brain conversation now (a) RECALLS the project's learned
+ * memories before answering and injects them into the prompt, and (b) surfaces
+ * that its turn will be CONTRIBUTED back (and which recalled memories it
+ * RECONCILES) — each as its own timeline step, the same way a Claude Code
+ * `memory_recall` shows as a step. The heavy lifting (the corpus + the ranker)
+ * lives server-side; the host injects a single {@link EvermindRunHooks.recall}
+ * callback bound to the active chat's project, and the run loop
+ * ({@link ./brainRunStore}) turns the result into the injected memory block plus
+ * the recall/learn/reconcile trace events.
+ *
+ * Everything here is pure + transport-agnostic (no fetch, no DOM) so it is unit
+ * testable and shared verbatim by the web app and the VS Code webview.
+ */
+/** One learned memory the project's Evermind recalled for the current turn. */
+interface EvermindRecallItem {
+    /** Stable id of the learned memory (targets a specific contribution). */
+    id: number;
+    /** Readable snippet of the learned exemplar (or the task it answered). */
+    text: string;
+    /** Lexical relevance to the query, 0..1. */
+    score: number;
+}
+/**
+ * What a recall returns: the project's learning posture (so the loop knows
+ * whether the turn will also be CONTRIBUTED) plus the recalled memories. Mirrors
+ * the api `recallProjectEvermindMemory` response.
+ */
+interface EvermindRecallResult {
+    /** True once the project has a base Evermind (version ≥ 1). */
+    seeded: boolean;
+    /** Current head version the recall ran against. */
+    version: number;
+    /** `connected` = runs/replies contribute back; `offline-frozen` = pinned, read-only. */
+    mode: 'connected' | 'offline-frozen';
+    /** Recalled memories, best-first. Empty when nothing lexically matched. */
+    items: EvermindRecallItem[];
+}
+/**
+ * The single hook a host injects into the run loop. Bound to the active chat's
+ * project; returns null when the chat isn't project-scoped or recall is
+ * unavailable (so the loop simply skips the memory steps).
+ */
+interface EvermindRunHooks {
+    /** Recall the project's learned memories most relevant to `query`. */
+    recall(query: string): Promise<EvermindRecallResult | null>;
+}
+/**
+ * Assistant text shorter than this isn't a teaching signal, so the server won't
+ * contribute it. Mirrors `MIN_TEACH_CHARS` in the api's `brainEvermindLearning.ts`
+ * so the "contributed to Evermind" step appears exactly when the server actually
+ * contributes the turn — keep the two in sync.
+ */
+declare const EVERMIND_LEARN_MIN_CHARS = 40;
+/**
+ * Build the `[Evermind Memory]` block injected into the system prompt — the part
+ * that makes recall REAL (it changes what the model sees), not just a UI badge.
+ * Numbered so the model can cite/correct a specific learning. Returns '' when
+ * there is nothing to inject.
+ */
+declare function formatEvermindMemoryBlock(items: EvermindRecallItem[]): string;
+/**
+ * How many recalled memories this answer RECONCILES — restates enough of, that
+ * the contributed turn supersedes them. Pure heuristic over token overlap; used
+ * only to surface the reconcile step, never to gate learning.
+ */
+declare function countReconciledMemories(items: EvermindRecallItem[], answer: string): number;
+
 /** A capability a consumer exposes to the Brain (the MCP extension unit). */
 interface BrainAction<A = unknown, R = unknown> {
     /** Globally-unique, flat snake_case (no dots) so it round-trips through the gateway. */
@@ -597,12 +668,15 @@ interface BrainTraceEvent {
     ts: string;
     /**
      * Category, matching the host/cloud triage vocabulary:
-     * - `llm`     — a streamed completion (model, step, tool-call count)
-     * - `tool`    — a client action the model invoked (args + result)
-     * - `message` — assistant text emitted on a turn
-     * - `error`   — a thrown exception or a tool result that failed
+     * - `llm`       — a streamed completion (model, step, tool-call count)
+     * - `tool`      — a client action the model invoked (args + result)
+     * - `message`   — assistant text emitted on a turn
+     * - `error`     — a thrown exception or a tool result that failed
+     * - `recall`    — the project Evermind recalled learned memories before answering
+     * - `learn`     — the turn was contributed back to the project Evermind
+     * - `reconcile` — the turn superseded (updated) recalled memories (write-through)
      */
-    category: 'llm' | 'tool' | 'message' | 'error';
+    category: 'llm' | 'tool' | 'message' | 'error' | 'recall' | 'learn' | 'reconcile';
     /** Display label — the tool name, or `llm.complete` / `agent.message`. */
     label: string;
     /** Wall-clock duration of the step, when measured. */
@@ -774,6 +848,13 @@ interface UseBrainConversationOptions {
     ensureChatId?: () => Promise<number | null>;
     /** Notify the host (chats hook) that this chat got new activity. */
     onActivity?: (chatId: number) => void;
+    /**
+     * Project-Evermind memory hooks, bound by the host to the active chat's project.
+     * When set, a run recalls the project's learned memories before answering
+     * (grounding the reply) and records recall/learn/reconcile steps in the trace.
+     * Omit for a non-project chat.
+     */
+    evermind?: EvermindRunHooks;
 }
 interface UseBrainConversation {
     messages: BrainMessage[];
@@ -1012,4 +1093,4 @@ declare function parseMessageProvenance(msg: {
  */
 declare function withProvenanceMetadata(provenance: MessageProvenance | null | undefined, base?: Record<string, unknown>): string | undefined;
 
-export { ADDRESSED_TO_META_KEY, AUTHORED_BY_META_KEY, type AssembledToolCall, type BrainAction, type BrainActionsContextValue, BrainActionsProvider, type BrainChat, type BrainConfig, BrainContextProvider, type BrainContextValue, type BrainDiagnostics, type BrainMessage, type BrainModality, type BrainPageContext, type BrainPersistenceAdapter, BrainProvider, type BrainRuntime, type BrainToolSpec, type BrainTraceEvent, type BrainTransport, type BuildBrainTriageOptions, CONSOLIDATION_MARKER_PREFIX, CONSOLIDATION_META, type ChatCompletionMessage, type ChatInputAttachment, type ContentPart, type DirectedRecipient, type GlobalRunState, type ImageUrlContentPart, type McpToolResultInfo, type MentionToken, type MessageProvenance, PROVENANCE_META_KEY, type PreparedImage, type ProvenanceAccount, type RecipientChoice, type StreamChatOptions, type StreamChatResult, type StreamHandlers, type TextContentPart, type UseBrainChats, type UseBrainChatsOptions, type UseBrainConversation, type UseBrainConversationOptions, type UseMcpExtensionsOptions, activeMentionToken, buildBrainTriageReport, computeBrainDiagnostics, consolidationMarkerContent, consolidationMetadata, filterMentionCandidates, formatBrainDiagnostics, getGlobalRunState, isConnectedAccountUnused, isConsolidationMarker, isDirectedToParticipant, isEvermindModel, isFailedToolResult, lastConsolidationIndex, mentionRecipient, modelsUsedInTrace, parseDirectedRecipient, parseMessageAuthor, parseMessageProvenance, prepareImageDataUrl, resolveRecipient, savePendingPrompt, scopeToConsolidation, streamChatCompletion, subscribeRunStore, takePendingPrompt, useBrainActions, useBrainChats, useBrainConfig, useBrainContext, useBrainConversation, useMcpExtensions, useOptionalBrainContext, useRegisterBrainActions, withDirectedMetadata, withProvenanceMetadata };
+export { ADDRESSED_TO_META_KEY, AUTHORED_BY_META_KEY, type AssembledToolCall, type BrainAction, type BrainActionsContextValue, BrainActionsProvider, type BrainChat, type BrainConfig, BrainContextProvider, type BrainContextValue, type BrainDiagnostics, type BrainMessage, type BrainModality, type BrainPageContext, type BrainPersistenceAdapter, BrainProvider, type BrainRuntime, type BrainToolSpec, type BrainTraceEvent, type BrainTransport, type BuildBrainTriageOptions, CONSOLIDATION_MARKER_PREFIX, CONSOLIDATION_META, type ChatCompletionMessage, type ChatInputAttachment, type ContentPart, type DirectedRecipient, EVERMIND_LEARN_MIN_CHARS, type EvermindRecallItem, type EvermindRecallResult, type EvermindRunHooks, type GlobalRunState, type ImageUrlContentPart, type McpToolResultInfo, type MentionToken, type MessageProvenance, PROVENANCE_META_KEY, type PreparedImage, type ProvenanceAccount, type RecipientChoice, type StreamChatOptions, type StreamChatResult, type StreamHandlers, type TextContentPart, type UseBrainChats, type UseBrainChatsOptions, type UseBrainConversation, type UseBrainConversationOptions, type UseMcpExtensionsOptions, activeMentionToken, buildBrainTriageReport, computeBrainDiagnostics, consolidationMarkerContent, consolidationMetadata, countReconciledMemories, filterMentionCandidates, formatBrainDiagnostics, formatEvermindMemoryBlock, getGlobalRunState, isConnectedAccountUnused, isConsolidationMarker, isDirectedToParticipant, isEvermindModel, isFailedToolResult, lastConsolidationIndex, mentionRecipient, modelsUsedInTrace, parseDirectedRecipient, parseMessageAuthor, parseMessageProvenance, prepareImageDataUrl, resolveRecipient, savePendingPrompt, scopeToConsolidation, streamChatCompletion, subscribeRunStore, takePendingPrompt, useBrainActions, useBrainChats, useBrainConfig, useBrainContext, useBrainConversation, useMcpExtensions, useOptionalBrainContext, useRegisterBrainActions, withDirectedMetadata, withProvenanceMetadata };

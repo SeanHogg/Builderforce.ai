@@ -27,6 +27,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useBrainConfig } from './config';
 import type { BrainMessage, BrainModality, ChatInputAttachment } from './types';
 import type { BrainToolSpec, ChatCompletionMessage, ContentPart } from './streamChatCompletion';
+import type { EvermindRunHooks } from './evermindMemory';
 import { prepareImageDataUrl } from './imagePrep';
 import { scopeToConsolidation } from './consolidation';
 import { withDirectedMetadata, isDirectedToParticipant, type DirectedRecipient } from './directedMessage';
@@ -68,6 +69,13 @@ export interface UseBrainConversationOptions {
   ensureChatId?: () => Promise<number | null>;
   /** Notify the host (chats hook) that this chat got new activity. */
   onActivity?: (chatId: number) => void;
+  /**
+   * Project-Evermind memory hooks, bound by the host to the active chat's project.
+   * When set, a run recalls the project's learned memories before answering
+   * (grounding the reply) and records recall/learn/reconcile steps in the trace.
+   * Omit for a non-project chat.
+   */
+  evermind?: EvermindRunHooks;
 }
 
 export interface UseBrainConversation {
@@ -145,6 +153,7 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
     needsConfirm,
     ensureChatId,
     onActivity,
+    evermind,
   } = options;
 
   const [messages, setMessages] = useState<BrainMessage[]>([]);
@@ -239,10 +248,11 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
       stream,
       persistence,
       onActivity,
+      evermind,
       seed,
       userTurn,
     }),
-    [fullSystemPrompt, toolSpecs, model, runTool, needsConfirm, stream, persistence, onActivity],
+    [fullSystemPrompt, toolSpecs, model, runTool, needsConfirm, stream, persistence, onActivity, evermind],
   );
 
   const send = useCallback(

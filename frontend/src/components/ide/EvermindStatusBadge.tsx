@@ -5,13 +5,13 @@
  * shown in the Brain composer so the user can see, from the chat, whether the project
  * runs on its own self-learning model and whether it is learning.
  *
- * The honesty matters: a Brain *planning chat* does NOT run on or train the Evermind —
- * only agent TASK RUNS do (`cloudAgentEngine` / on-prem runner resolve inference to the
- * project Evermind and contribute learning; `BrainService` never touches it). So this
- * badge reflects the project's run/learning posture and its tooltip states plainly that
- * this chat isn't what trains it — resolving the "I chatted but nothing trained"
- * confusion. Self-gating per the DRY rule: it fetches the (server-cached) head itself and
- * renders nothing until the project has a seeded Evermind. Themed + localized.
+ * The honesty matters: a project-scoped Brain chat now RECALLS the project's learned
+ * memories before answering and, when the project is connected, CONTRIBUTES the turn
+ * back (see brain-embedded's run loop + api `learnFromBrainTurn`) — each surfaced as a
+ * recall/learn/reconcile step in the transcript. This badge reflects the project's
+ * run/learning posture; the recall/contribution happen per-turn in the timeline.
+ * Self-gating per the DRY rule: it fetches the (server-cached) head itself and renders
+ * nothing until the project has a seeded Evermind. Themed + localized.
  */
 
 import { useEffect, useState } from 'react';

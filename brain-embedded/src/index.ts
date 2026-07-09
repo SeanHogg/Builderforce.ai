@@ -34,6 +34,18 @@ export type {
 export { prepareImageDataUrl } from './imagePrep';
 export type { PreparedImage } from './imagePrep';
 
+// Project-Evermind memory hooks for the run loop (recall → learn → reconcile).
+export {
+  formatEvermindMemoryBlock,
+  countReconciledMemories,
+  EVERMIND_LEARN_MIN_CHARS,
+} from './evermindMemory';
+export type {
+  EvermindRunHooks,
+  EvermindRecallResult,
+  EvermindRecallItem,
+} from './evermindMemory';
+
 // MCP-style client action registry (the extension contract)
 export {
   BrainActionsProvider,

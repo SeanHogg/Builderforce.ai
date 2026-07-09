@@ -17,12 +17,15 @@ export interface BrainTraceEvent {
   ts: string;
   /**
    * Category, matching the host/cloud triage vocabulary:
-   * - `llm`     — a streamed completion (model, step, tool-call count)
-   * - `tool`    — a client action the model invoked (args + result)
-   * - `message` — assistant text emitted on a turn
-   * - `error`   — a thrown exception or a tool result that failed
+   * - `llm`       — a streamed completion (model, step, tool-call count)
+   * - `tool`      — a client action the model invoked (args + result)
+   * - `message`   — assistant text emitted on a turn
+   * - `error`     — a thrown exception or a tool result that failed
+   * - `recall`    — the project Evermind recalled learned memories before answering
+   * - `learn`     — the turn was contributed back to the project Evermind
+   * - `reconcile` — the turn superseded (updated) recalled memories (write-through)
    */
-  category: 'llm' | 'tool' | 'message' | 'error';
+  category: 'llm' | 'tool' | 'message' | 'error' | 'recall' | 'learn' | 'reconcile';
   /** Display label — the tool name, or `llm.complete` / `agent.message`. */
   label: string;
   /** Wall-clock duration of the step, when measured. */
@@ -135,6 +138,55 @@ export function modelsUsedInTrace(events: BrainTraceEvent[]): string[] {
     if (typeof m === 'string' && m && m !== 'default' && !seen.includes(m)) seen.push(m);
   }
   return seen;
+}
+
+/**
+ * Which account served the run, from the `account` the loop recorded per `llm`
+ * step (the gateway's `x-builderforce-account`). Last-seen wins so a mid-run swap
+ * is reflected. Undefined when the gateway reported none. Values: `own` (tenant's
+ * connected frontier account) · `shared` (shared pool, nothing connected) ·
+ * `shared_byo_unused` (shared pool DESPITE a connected account).
+ */
+export function accountUsedInTrace(events: BrainTraceEvent[]): string | undefined {
+  let account: string | undefined;
+  for (const ev of events) {
+    if (ev.category !== 'llm') continue;
+    const a = (ev.args as { account?: unknown } | undefined)?.account;
+    if (typeof a === 'string' && a) account = a;
+  }
+  return account;
+}
+
+/**
+ * Connected-BYO providers the gateway could NOT resolve on any turn (from
+ * `x-builderforce-byo-unresolved`) — e.g. a connected Claude subscription whose
+ * token expired, so the run silently used the shared pool instead of the tenant's
+ * own Opus. Union across turns, first-seen order. Empty when everything resolved.
+ * This is the signal that turns a mysterious weak-model run into "reconnect your
+ * Claude account" — the exact context a "should have used Opus" triage lacked.
+ */
+export function byoUnresolvedInTrace(events: BrainTraceEvent[]): string[] {
+  const seen: string[] = [];
+  for (const ev of events) {
+    if (ev.category !== 'llm') continue;
+    const raw = (ev.args as { byoUnresolved?: unknown } | undefined)?.byoUnresolved;
+    if (typeof raw !== 'string' || !raw) continue;
+    for (const p of raw.split(',').map((s) => s.trim()).filter(Boolean)) {
+      if (!seen.includes(p)) seen.push(p);
+    }
+  }
+  return seen;
+}
+
+/** Human label for an `x-builderforce-account` value. */
+function accountLabel(account: string): string {
+  return account === 'own'
+    ? "the tenant's own connected account"
+    : account === 'shared_byo_unused'
+      ? 'the shared model pool (a connected account existed but was NOT used)'
+      : account === 'shared'
+        ? 'the shared model pool'
+        : account;
 }
 
 /**
@@ -351,6 +403,18 @@ export function buildBrainTriageReport(opts: BuildBrainTriageOptions): string {
   if (used.length) lines.push(`Models used: ${used.join(', ')}`);
   const evermind = used.filter(isEvermindModel);
   if (evermind.length) lines.push(`Evermind: yes — ${evermind.join(', ')}`);
+  // Account provenance — WHICH account actually served the turns, and any connected
+  // provider the gateway could NOT resolve. This is what tells a triager the run used
+  // a weak shared-pool model even though the tenant has BYO Anthropic (should have been
+  // Opus) — the context the copy previously lacked.
+  const account = accountUsedInTrace(events);
+  if (account) lines.push(`Account: ${accountLabel(account)}`);
+  const byoUnresolved = byoUnresolvedInTrace(events);
+  if (byoUnresolved.length) {
+    lines.push(
+      `⚠ CONNECTED ACCOUNT NOT USED: ${byoUnresolved.join(', ')} — a connected provider could not be resolved this run (token expired/revoked, or stored under a different tenant), so the turn fell back to the shared pool instead of your own model. Reconnect it in Settings ▸ API Keys.`,
+    );
+  }
   lines.push(`Steps: ${events.length} · Errors: ${errors.length} · Messages: ${messages.length}`);
   if (error) lines.push(`Last error: ${error}`);
 

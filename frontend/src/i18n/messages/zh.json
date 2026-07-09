@@ -3564,7 +3564,7 @@
     "learning": "学习中",
     "frozen": "已冻结",
     "off": "已关闭",
-    "tooltip": "此项目的智能体在其 Evermind（v{version}）上运行，每次运行都会训练它。此规划聊天不会训练它——打开 LLM 标签页查看它学到了什么。"
+    "tooltip": "此项目运行在其 Evermind（v{version}）上。智能体运行与本聊天都会召回其学习内容，并在连接状态下回馈贡献——请留意转录中的召回/学习步骤。打开 LLM 标签页查看它学到了什么。"
   },
   "evermindRun": {
     "title": "此次运行在项目自己的 Evermind 模型上执行",
@@ -5461,6 +5461,12 @@
       "accountShared": "共享池",
       "accountByoUnused": "未使用您连接的账户",
       "ranOnEvermind": "由本项目的 Evermind 模型生成",
+      "recallTitle": "已从 Evermind v{version} 召回 {count} 条记忆",
+      "recallHint": "本项目的自学习 Evermind 召回了这些既往学习内容，并据此生成了回答。",
+      "learnTitle": "本轮已贡献给 Evermind v{version}",
+      "learnHint": "本轮已回馈给项目 Evermind——它将被合并进已学习的模型。",
+      "reconcileTitle": "已在 Evermind v{version} 中协调 {count} 条已学习记忆",
+      "reconcileHint": "回答重述了这些召回的学习内容，因此会对其进行更新（写通式认知）。",
       "stop": "停止"
     },
     "tickets": {

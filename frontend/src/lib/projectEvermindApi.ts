@@ -122,6 +122,40 @@ export async function validateProjectEvermind(
   );
 }
 
+/** One recalled learned memory for a Brain reply (mirrors api `ProjectEvermindRecallItem`). */
+export interface ProjectEvermindRecallItem {
+  id: number;
+  text: string;
+  score: number;
+}
+
+/** Reply-time recall payload — the project's learning posture + recalled memories. */
+export interface ProjectEvermindRecallResult {
+  seeded: boolean;
+  version: number;
+  mode: ProjectEvermindMode;
+  items: ProjectEvermindRecallItem[];
+}
+
+/**
+ * Recall the project Evermind's learned memories most relevant to a Brain turn's
+ * query. Read-only; drives the in-chat recall/learn/reconcile steps + grounds the
+ * reply. Returns an unseeded (empty) result for a project without a base model.
+ */
+export async function recallProjectEvermind(
+  projectId: number,
+  query: string,
+): Promise<ProjectEvermindRecallResult> {
+  return apiRequest<ProjectEvermindRecallResult>(
+    `/api/projects/${projectId}/evermind/recall`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ query }),
+    },
+  );
+}
+
 /**
  * Teach the project's Evermind from raw text (a chat transcript / exemplar). The
  * UNIFIED `/learn-text` producer door: the coordinator adapts + merges in its alarm,

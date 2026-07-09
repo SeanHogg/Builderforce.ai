@@ -3564,7 +3564,7 @@
     "learning": "Apprentissage",
     "frozen": "Gelé",
     "off": "Désactivé",
-    "tooltip": "Les agents de ce projet s'exécutent sur son Evermind (v{version}) et leurs exécutions l'entraînent. Ce chat de planification ne l'entraîne pas — ouvrez l'onglet LLM pour voir ce qu'il a appris."
+    "tooltip": "Ce projet s'exécute sur son Evermind (v{version}). Les exécutions d'agents et ce chat rappellent ses apprentissages et, tant qu'il est connecté, y contribuent en retour — observez les étapes de rappel/apprentissage dans la transcription. Ouvrez l'onglet LLM pour voir ce qu'il a appris."
   },
   "evermindRun": {
     "title": "Cette exécution a eu lieu sur le propre modèle Evermind du projet",
@@ -5461,6 +5461,12 @@
       "accountShared": "Pool partagé",
       "accountByoUnused": "Votre compte connecté n'a pas été utilisé",
       "ranOnEvermind": "Généré par le modèle Evermind de ce projet",
+      "recallTitle": "{count} souvenirs rappelés depuis Evermind v{version}",
+      "recallHint": "L'Evermind auto-apprenant de ce projet a rappelé ces apprentissages antérieurs et s'en est servi pour fonder la réponse.",
+      "learnTitle": "Ce tour a été versé à Evermind v{version}",
+      "learnHint": "Ce tour a été renvoyé à l'Evermind du projet — il sera fusionné dans le modèle appris.",
+      "reconcileTitle": "{count} souvenirs appris réconciliés dans Evermind v{version}",
+      "reconcileHint": "La réponse a reformulé ces apprentissages rappelés, elle les met donc à jour (cognition en écriture directe).",
       "stop": "Arrêter"
     },
     "tickets": {
