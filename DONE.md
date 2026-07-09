@@ -4,6 +4,17 @@
 
 ---
 
+## ✅ RESOLVED 2026-07-09 — Brain chat live-run indicators: switching chats never stops a run, and every surface shows which chats are executing (VSIX `2026.7.51`, brain-embedded `2026.7.15`)
+
+Reported (VS Code): opening a new chat while one is executing must not stop the prior chat, and executing chats should show indicators in the Sessions list + dropdown. Root finding: the agent tool-loop already lives **module-level** in [`brainRunStore`](./brain-embedded/src/brainRunStore.ts) (a run survives a chat switch by design — switching only re-points the UI subscription, never aborts), so the *behaviour* was correct but **invisible** — nothing surfaced that the prior chat was still live. Closed the visibility gap end-to-end on BOTH surfaces:
+
+- **Cross-chat run state** — new `subscribeRunStore()` + `getGlobalRunState()` on the run store (exported from brain-embedded), returning which chats are `running` vs `awaiting` (paused on a human confirm), disjoint. Fired from the store's existing `emit()`; debounced by callers to the *set* of live chats so it doesn't churn per streaming token. 3 unit tests added (10/10 green).
+- **VS Code**: [`webview/App.tsx`](./clients/vscode/webview/src/App.tsx) prefixes dropdown options with `●` (running) / `❓` (needs approval) and posts `runs.local` to the host; [`brainWebview.ts`](./clients/vscode/src/brainWebview.ts) forwards it via a new `onLocalRunsChanged` hook (and clears on panel dispose); [`attention.ts`](./clients/vscode/src/attention.ts) merges a webview-local overlay into `attentionFor("chat", …)` so the Sessions tree lights up local runs with the SAME spinner / ❓ icons + `l10n` tooltips as server-tracked cloud/on-prem runs (`setLocalChatRuns` + `onLocalRunsChange`, wired in `extension.ts`). Awaiting-confirm wins over running.
+- **Web parity (the logged follow-up)**: the merge lives in the ONE shared hook [`useAttention`](./frontend/src/lib/useAttention.ts) — it now overlays the client-side run store onto the server attention map (per-chat dot strengthened; a purely-local chat added to `chats` + `counts`). So `BrainPanel`'s chat-row `AttentionDot`s and the `FloatingBrain` badge reflect locally-running chats automatically, no per-consumer change. Frontend `tsc --noEmit` clean.
+- The `❓` indicator also resolves the discoverability of a chat paused on a confirm: the approve/cancel UI renders only for the focused chat, so switching away used to hide it — now the row/option flags it so the user knows to switch back and approve.
+
+---
+
 ## ✅ RESOLVED 2026-07-07 — Evermind is now visibly *used and learned from* everywhere: Brain runs on it, per-run chips, VS Code parity (VSIX `2026.7.50`)
 
 Closed the "how do I know any UI is using / learning the Evermind?" gap end-to-end — three features, all shipped and verified (api + frontend `tsc --noEmit` clean; api 21 provenance/teacher tests green; VSIX packaged).

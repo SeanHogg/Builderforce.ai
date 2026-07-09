@@ -114,6 +114,7 @@ export function EvermindScreen({ init }: { init: InitData }) {
       setTeacher: (model) => req(`${base}/teacher`, { method: 'PATCH', body: JSON.stringify({ model }) }).then(() => undefined),
       teach: (text, prompt) => req(`${base}/learn-text`, { method: 'POST', body: JSON.stringify({ text, ...(prompt ? { prompt } : {}) }) }).then(() => undefined),
       flush: () => req<{ merged?: number; version?: number }>(`${base}/flush`, { method: 'POST' }).then((r) => ({ merged: r.merged ?? 0, version: r.version ?? 0 })),
+      validate: (prompt) => req(`${base}/validate`, { method: 'POST', body: JSON.stringify({ prompt }) }),
     };
   }, [init.baseUrl, storageId]);
 

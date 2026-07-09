@@ -82,6 +82,14 @@
 
 ## Consolidated Gap Register
 
+### 🧠 Evermind Studio — validate / inspect follow-ups
+
+> Shipped 2026-07-09: **Validate** a task in the LLM Studio (recall preview — `POST /evermind/validate` → `validateProjectEvermindRecall` → lexical `rankEvermindRecall` over the recent ring; brain-ui console button + inline ranked results; web Studio highlights the matched memories on the Knowledge Map + Learnings via `EvermindValidationContext`); **View detail** on any learned memory (SlideOutPanel in the center Learnings + inline expand in the brain-ui console; coordinator now retains fuller prompt/text snippets + a stable `id` per ring entry); limbic regions show **live affect meters** and Personality links to **Tune personality** (`/settings/persona`). Remaining:
+
+- **P2 — Validate recall is LEXICAL, not the SSM-embedding recall the runtime uses.** `rankEvermindRecall` (api `application/llm/evermindRecall.ts`) scores a TF-cosine over the retained recent-ring snippets — an honest, cheap preview, but it can diverge from what the Evermind actually retrieves at inference (embedding recall) and only covers the bounded recent ring, not the full learned corpus. Fix = expose an embedding-based recall from the runtime/coordinator and have `validateProjectEvermindRecall` call it (fall back to lexical when unavailable). Unblocks: a validate result that matches real inference-time retrieval.
+- **P2 — No AUTOMATIC pre/post eval-set regression gate after teaching.** Validate is on-demand ("does the taught memory now recall for its task?"); there is still no held-out eval set scored before/after each version bump, so nothing surfaces a ▲/▼ "v3 is better/worse than v2" delta on the version chip. Fix = persist a small per-project eval set, score head vs previous version on each merge, and render the delta on the Knowledge Map version stat + brain-ui `statusSeeded` chip. Unblocks: trustworthy "did that teach actually help?" validation without a manual re-validate.
+- **P3 — Delta (weight-update) contributions carry no inspectable text, so "View detail" and Validate skip them.** Only text-path memories have prompt/text; a `delta` row shows just the generic "weight delta" caption. Fix = record a short provenance label (which run/ticket produced the delta) at merge time so deltas are inspectable too. Unblocks: full-coverage inspection of the Neocortex region.
+
 ### 🔓 Frontier-access entitlement (superadmin / BYO bypass) — follow-ups
 
 > Shipped 2026-07-07 (api `2026.7.53`): ONE shared `evaluateFrontierAccess` (superadmin || premium override || connected BYO || paid) + `resolveFrontierAccess`/`requireFrontierAccess`/`tenantCanUseFrontierModels`; `/llm/v1/models` now exposes `canUseFrontierModels`; the Evermind teacher (front + back + pin route) and the model-choice unlock all consume it. Remaining, out of the "paid-plan-to-use-frontier gate" scope:

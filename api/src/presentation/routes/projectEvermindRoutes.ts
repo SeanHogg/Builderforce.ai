@@ -36,6 +36,7 @@ import {
   dispatchProjectEvermindLearn,
   dispatchProjectEvermindLearnText,
   getProjectEvermindContributions,
+  validateProjectEvermindRecall,
   flushProjectEvermind,
   projectEvermindRef,
   type ProjectEvermindMode,
@@ -67,6 +68,19 @@ async function headCore(env: Env, db: Db, tenantId: number, projectId: number): 
 async function contributionsCore(env: Env, db: Db, tenantId: number, projectId: number): Promise<Response> {
   if (!(await ownsProject(db, tenantId, projectId))) return json({ error: 'project not found' }, 404);
   return json(await getProjectEvermindContributions(env, db, tenantId, projectId));
+}
+
+/**
+ * Validate: rank which learned memories would answer a candidate task prompt (the
+ * "what would this recall?" preview). Read-only — never teaches or merges; the
+ * result is cached behind the head version token + a prompt hash.
+ */
+async function validateCore(env: Env, db: Db, tenantId: number, projectId: number, c: Context): Promise<Response> {
+  if (!(await ownsProject(db, tenantId, projectId))) return json({ error: 'project not found' }, 404);
+  const body = (await c.req.json<{ prompt?: unknown }>().catch(() => ({}))) as { prompt?: unknown };
+  const prompt = typeof body.prompt === 'string' ? body.prompt : '';
+  if (!prompt.trim()) return json({ error: 'prompt is required' }, 400);
+  return json(await validateProjectEvermindRecall(env, db, tenantId, projectId, prompt));
 }
 
 async function artifactCore(env: Env, db: Db, tenantId: number, projectId: number, versionQ: string | undefined, file: 'model.evermind' | 'tokenizer.json'): Promise<Response> {
@@ -126,6 +140,7 @@ export function createProjectEvermindRoutes(db: Db): Hono<HonoEnv> {
 
   router.get('/:projectId/evermind/head', (c) => headCore(c.env as Env, db, t(c), pid(c)));
   router.get('/:projectId/evermind/contributions', (c) => contributionsCore(c.env as Env, db, t(c), pid(c)));
+  router.post('/:projectId/evermind/validate', (c) => validateCore(c.env as Env, db, t(c), pid(c), c));
   router.get('/:projectId/evermind/model', (c) => artifactCore(c.env as Env, db, t(c), pid(c), c.req.query('version'), 'model.evermind'));
   router.get('/:projectId/evermind/tokenizer', (c) => artifactCore(c.env as Env, db, t(c), pid(c), c.req.query('version'), 'tokenizer.json'));
   router.post('/:projectId/evermind/learn', (c) => learnCore(c.env as Env, db, t(c), pid(c), c));

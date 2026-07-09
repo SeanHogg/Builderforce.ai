@@ -25,6 +25,7 @@ import { BenchmarkPanel } from '@/components/BenchmarkPanel';
 import { ModelExportPanel } from '@/components/ModelExportPanel';
 import { ProjectEvermindPanel } from '@/components/ide/ProjectEvermindPanel';
 import { EvermindStudioCenter } from '@/components/ide/EvermindStudioCenter';
+import { EvermindValidationProvider } from '@/components/ide/EvermindValidationContext';
 
 interface LlmStudioPanelProps {
   projectId: number | string;
@@ -134,6 +135,9 @@ export function LlmStudioPanel({ projectId, files = [], onGoToTab, onOpenFile }:
   return (
     <div className="llm-studio-root">
       <style>{LLM_STUDIO_CSS}</style>
+      {/* The teach console (rail) runs Validate; the Knowledge Map + Learnings (center)
+          highlight the matched memories — share that result across both subtrees. */}
+      <EvermindValidationProvider>
       <div className="llm-studio-row">
         {/* Left rail: the build/train form + pipeline steps — scrolls independently so
             the (long) 5-step pipeline never pushes the centre diagram off-screen. */}
@@ -324,6 +328,7 @@ export function LlmStudioPanel({ projectId, files = [], onGoToTab, onOpenFile }:
           <EvermindStudioCenter projectId={Number(projectId)} />
         </div>
       </div>
+      </EvermindValidationProvider>
     </div>
   );
 }

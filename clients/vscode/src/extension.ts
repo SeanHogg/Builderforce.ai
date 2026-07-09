@@ -22,7 +22,7 @@ import { invalidateProjectNames } from "./projectNames";
 import { ProjectsTreeProvider } from "./projectsTree";
 import { SessionsTreeProvider } from "./sessionsTree";
 import { InboxTreeProvider } from "./inboxTree";
-import { AttentionPoller } from "./attention";
+import { AttentionPoller, setLocalChatRuns, onLocalRunsChange } from "./attention";
 import { MeetingsController, joinMeetingInBrowser, joinMeetingNative, openMeetingsWeb, type MeetingItem } from "./meetings";
 
 /** Pull a numeric Brain chat id out of a Sessions tree item or a raw id argument. */
@@ -83,6 +83,9 @@ export function activate(context: vscode.ExtensionContext): void {
   context.subscriptions.push(
     attention,
     attention.onDidChange(() => { tree.refresh(); projects.refresh(); }),
+    // The in-webview Brain loop reports its own running / awaiting chats (the server
+    // can't see them) — repaint the Sessions tree so they light up in lockstep.
+    onLocalRunsChange(() => tree.refresh()),
     // Switching the active project re-scopes the attention query.
     onProjectChange(() => attention.refresh()),
   );
@@ -100,6 +103,10 @@ export function activate(context: vscode.ExtensionContext): void {
       attention.refresh();
       void refreshWorkspaceHeader(context);
     },
+    // Merge the webview's in-flight chat runs into the live-status map so a chat
+    // that keeps executing after the user opens a new one still shows a spinner
+    // (or ❓ when paused on a confirm) in the Sessions tree.
+    onLocalRunsChanged: (runs) => setLocalChatRuns(runs),
   });
   projectView = vscode.window.createTreeView("builderforce.project", { treeDataProvider: projects });
   context.subscriptions.push(projectView);

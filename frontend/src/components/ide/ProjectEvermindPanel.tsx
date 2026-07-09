@@ -20,7 +20,9 @@ import {
   setProjectEvermindTeacher,
   teachProjectEvermindFromText,
   flushProjectEvermind,
+  validateProjectEvermind,
 } from '@/lib/projectEvermindApi';
+import { useEvermindValidation } from './EvermindValidationContext';
 
 /**
  * ProjectEvermindPanel — the web host of the shared <EvermindConsole> (the SAME
@@ -46,6 +48,9 @@ export function ProjectEvermindPanel({ projectId, showRecent = true }: { project
   // tenant teaches with Opus/Sonnet) plus platform premium coders when we fund them — NOT
   // the plan `codingModels` (free coders on the free plan).
   const { teacherModels, canUseFrontierModels } = useLlmModels();
+  // Lift the Validate recall result to the shared studio highlight (inert when this
+  // panel renders outside the studio — the console still shows its own inline result).
+  const { setHighlight } = useEvermindValidation();
 
   const adapter = useMemo<EvermindConsoleAdapter>(() => ({
     loadData: () => getProjectEvermindContributions(projectId),
@@ -57,6 +62,7 @@ export function ProjectEvermindPanel({ projectId, showRecent = true }: { project
     setTeacher: async (model) => { await setProjectEvermindTeacher(projectId, model); },
     teach: async (text, prompt) => { await teachProjectEvermindFromText(projectId, text, prompt); },
     flush: async () => { const r = await flushProjectEvermind(projectId); return { merged: r.merged, version: r.version }; },
+    validate: (prompt) => validateProjectEvermind(projectId, prompt),
   }), [projectId, teacherModels, canUseFrontierModels]);
 
   const labels = useMemo<Partial<EvermindConsoleLabels>>(() => ({
@@ -105,6 +111,14 @@ export function ProjectEvermindPanel({ projectId, showRecent = true }: { project
     flushing: t('flushing'),
     flushedNone: t('flushedNone'),
     flushedN: (merged, version) => t('flushedN', { merged, version }),
+    validateCta: t('validateCta'),
+    validating: t('validating'),
+    validateHint: t('validateHint'),
+    validateResultTitle: (prompt) => t('validateResultTitle', { prompt }),
+    validateEmpty: t('validateEmpty'),
+    validatePrimaryBadge: t('validatePrimaryBadge'),
+    validateScore: (pct) => t('validateScore', { pct }),
+    validateClear: t('validateClear'),
     inspectTitle: t('inspectTitle'),
     inspectEmpty: t('inspectEmpty'),
     kindText: t('kindText'),
@@ -112,6 +126,10 @@ export function ProjectEvermindPanel({ projectId, showRecent = true }: { project
     deltaEntry: t('deltaEntry'),
     versionTag: (v) => t('versionTag', { version: v }),
     weightTag: (w) => t('weightTag', { weight: w }),
+    viewDetail: t('viewDetail'),
+    hideDetail: t('hideDetail'),
+    detailPromptLabel: t('detailPromptLabel'),
+    detailTextLabel: t('detailTextLabel'),
     refresh: t('refresh'),
     errorGeneric: t('errorGeneric'),
   }), [t, format]);
@@ -119,7 +137,7 @@ export function ProjectEvermindPanel({ projectId, showRecent = true }: { project
   // A margin-bottom to match the panel's old placement in the IDE agent stack.
   return (
     <div style={{ marginBottom: 12 }}>
-      <EvermindConsole adapter={adapter} canManage={canManage} projectName={projectName} showRecent={showRecent} labels={{ ...DEFAULT_EVERMIND_LABELS, ...labels }} />
+      <EvermindConsole adapter={adapter} canManage={canManage} projectName={projectName} showRecent={showRecent} onValidate={setHighlight} labels={{ ...DEFAULT_EVERMIND_LABELS, ...labels }} />
     </div>
   );
 }

@@ -843,6 +843,56 @@ interface UseBrainConversation {
 }
 declare function useBrainConversation(options: UseBrainConversationOptions): UseBrainConversation;
 
+/**
+ * Module-level Brain run engine — the agent tool-loop, hoisted OUT of React so a
+ * run survives the unmount of the component that started it.
+ *
+ * Why this exists: the Brain UI (BrainPanel) is mounted per-route — the full
+ * page `/brainstorm`, the IDE-embedded panel, the floating drawer. When the
+ * Brain navigates the user mid-run (a `navigate_to` tool call), the route-scoped
+ * panel unmounts. Previously the loop's state (rich transcript, trace, streaming
+ * delta, the human-in-the-loop confirm resolver) lived in that component's refs,
+ * so the run was orphaned: its React state updates went nowhere, the freshly
+ * mounted instance lost all grounding, and — worst — it re-answered the trailing
+ * user message, spawning a SECOND concurrent loop (duplicate writes).
+ *
+ * The fix: one run per chat lives here, keyed by chatId, single-flight. Any
+ * mounted Brain instance subscribes to its chat's cell and renders the live run;
+ * a second instance that tries to start the same chat is a no-op. Every turn
+ * that produces visible text — both intermediate tool-call narration and the
+ * final answer — is persisted as its own message; mounted instances pick each
+ * one up via `messagesEpoch`, so a turn's narration is a durable block instead
+ * of transient streaming text the next turn overwrites. The confirm gate also
+ * lives here, so a navigation that swaps which panel is mounted can still
+ * resolve a pending confirmation.
+ *
+ * This module owns NO React — `useBrainConversation` is the thin binding.
+ */
+
+/**
+ * A snapshot of which chats are live right now, split by whether they are actively
+ * executing (`running`) or paused on a human-in-the-loop confirm (`awaiting` — the
+ * actionable one: the loop cannot proceed until the user answers). The two lists
+ * are disjoint (an awaiting chat is omitted from `running`).
+ */
+interface GlobalRunState {
+    running: number[];
+    awaiting: number[];
+}
+/**
+ * Subscribe to ANY run-state change across all chats (a run starting, finishing,
+ * or pausing on a confirm — in any chat, mounted or not). Returns an unsubscribe
+ * fn. Pair with {@link getGlobalRunState} to render a cross-chat live indicator.
+ */
+declare function subscribeRunStore(listener: () => void): () => void;
+/**
+ * Which chats are live right now, split into actively-executing (`running`) and
+ * paused-on-a-confirm (`awaiting`). Disjoint: a chat paused on a confirm is in
+ * `awaiting` only. Recomputed from the current cells on each call — cheap (a scan
+ * of the bounded cell map); callers debounce via a stable key of the two lists.
+ */
+declare function getGlobalRunState(): GlobalRunState;
+
 /** Persist a landing-page prompt for replay after authentication. No-ops on empty input or SSR. */
 declare function savePendingPrompt(text: string): void;
 /** Read and clear the saved prompt. Returns null when none is stored or on SSR. */
@@ -962,4 +1012,4 @@ declare function parseMessageProvenance(msg: {
  */
 declare function withProvenanceMetadata(provenance: MessageProvenance | null | undefined, base?: Record<string, unknown>): string | undefined;
 
-export { ADDRESSED_TO_META_KEY, AUTHORED_BY_META_KEY, type AssembledToolCall, type BrainAction, type BrainActionsContextValue, BrainActionsProvider, type BrainChat, type BrainConfig, BrainContextProvider, type BrainContextValue, type BrainDiagnostics, type BrainMessage, type BrainModality, type BrainPageContext, type BrainPersistenceAdapter, BrainProvider, type BrainRuntime, type BrainToolSpec, type BrainTraceEvent, type BrainTransport, type BuildBrainTriageOptions, CONSOLIDATION_MARKER_PREFIX, CONSOLIDATION_META, type ChatCompletionMessage, type ChatInputAttachment, type ContentPart, type DirectedRecipient, type ImageUrlContentPart, type McpToolResultInfo, type MentionToken, type MessageProvenance, PROVENANCE_META_KEY, type PreparedImage, type ProvenanceAccount, type RecipientChoice, type StreamChatOptions, type StreamChatResult, type StreamHandlers, type TextContentPart, type UseBrainChats, type UseBrainChatsOptions, type UseBrainConversation, type UseBrainConversationOptions, type UseMcpExtensionsOptions, activeMentionToken, buildBrainTriageReport, computeBrainDiagnostics, consolidationMarkerContent, consolidationMetadata, filterMentionCandidates, formatBrainDiagnostics, isConnectedAccountUnused, isConsolidationMarker, isDirectedToParticipant, isEvermindModel, isFailedToolResult, lastConsolidationIndex, mentionRecipient, modelsUsedInTrace, parseDirectedRecipient, parseMessageAuthor, parseMessageProvenance, prepareImageDataUrl, resolveRecipient, savePendingPrompt, scopeToConsolidation, streamChatCompletion, takePendingPrompt, useBrainActions, useBrainChats, useBrainConfig, useBrainContext, useBrainConversation, useMcpExtensions, useOptionalBrainContext, useRegisterBrainActions, withDirectedMetadata, withProvenanceMetadata };
+export { ADDRESSED_TO_META_KEY, AUTHORED_BY_META_KEY, type AssembledToolCall, type BrainAction, type BrainActionsContextValue, BrainActionsProvider, type BrainChat, type BrainConfig, BrainContextProvider, type BrainContextValue, type BrainDiagnostics, type BrainMessage, type BrainModality, type BrainPageContext, type BrainPersistenceAdapter, BrainProvider, type BrainRuntime, type BrainToolSpec, type BrainTraceEvent, type BrainTransport, type BuildBrainTriageOptions, CONSOLIDATION_MARKER_PREFIX, CONSOLIDATION_META, type ChatCompletionMessage, type ChatInputAttachment, type ContentPart, type DirectedRecipient, type GlobalRunState, type ImageUrlContentPart, type McpToolResultInfo, type MentionToken, type MessageProvenance, PROVENANCE_META_KEY, type PreparedImage, type ProvenanceAccount, type RecipientChoice, type StreamChatOptions, type StreamChatResult, type StreamHandlers, type TextContentPart, type UseBrainChats, type UseBrainChatsOptions, type UseBrainConversation, type UseBrainConversationOptions, type UseMcpExtensionsOptions, activeMentionToken, buildBrainTriageReport, computeBrainDiagnostics, consolidationMarkerContent, consolidationMetadata, filterMentionCandidates, formatBrainDiagnostics, getGlobalRunState, isConnectedAccountUnused, isConsolidationMarker, isDirectedToParticipant, isEvermindModel, isFailedToolResult, lastConsolidationIndex, mentionRecipient, modelsUsedInTrace, parseDirectedRecipient, parseMessageAuthor, parseMessageProvenance, prepareImageDataUrl, resolveRecipient, savePendingPrompt, scopeToConsolidation, streamChatCompletion, subscribeRunStore, takePendingPrompt, useBrainActions, useBrainChats, useBrainConfig, useBrainContext, useBrainConversation, useMcpExtensions, useOptionalBrainContext, useRegisterBrainActions, withDirectedMetadata, withProvenanceMetadata };

@@ -16,6 +16,7 @@ import { getProjectEvermindContributions, type ProjectEvermindContributions } fr
 import type { EvermindRegionKey } from '@/lib/evermindRegions';
 import { EvermindBrainMap } from './EvermindBrainMap';
 import { EvermindLearnings } from './EvermindLearnings';
+import { useEvermindValidation } from './EvermindValidationContext';
 
 export function EvermindStudioCenter({ projectId }: { projectId: number }) {
   const [data, setData] = useState<ProjectEvermindContributions | null>(null);
@@ -23,6 +24,11 @@ export function EvermindStudioCenter({ projectId }: { projectId: number }) {
   const [error, setError] = useState(false);
   const [selectedRegion, setSelectedRegion] = useState<EvermindRegionKey | null>(null);
   const inFlight = useRef(false);
+  const { highlight } = useEvermindValidation();
+
+  // A Validate recall takes over both surfaces (map highlights matches, list shows
+  // them ranked) — clear any region filter so it isn't dimming the recall view.
+  useEffect(() => { if (highlight) setSelectedRegion(null); }, [highlight]);
 
   const reload = useCallback(async () => {
     if (inFlight.current) return;

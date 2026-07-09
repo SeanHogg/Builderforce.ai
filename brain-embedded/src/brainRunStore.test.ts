@@ -1,5 +1,12 @@
-import { describe, it, expect, beforeEach } from 'vitest';
-import { subscribeRun, getRunStoreSize, resetBrainRunStore, windowed } from './brainRunStore';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
+import {
+  subscribeRun,
+  subscribeRunStore,
+  getGlobalRunState,
+  getRunStoreSize,
+  resetBrainRunStore,
+  windowed,
+} from './brainRunStore';
 import type { ChatCompletionMessage } from './streamChatCompletion';
 
 // These tests pin the memory-eviction contract. They assume MAX_CELLS = 50
@@ -36,6 +43,29 @@ describe('brainRunStore cell eviction', () => {
     // One more new cell forces a single eviction — the oldest idle (chat 2).
     subscribeRun(CAP + 1, () => {})();
     expect(getRunStoreSize()).toBe(CAP);
+  });
+});
+
+describe('cross-chat run state (the session-list / dropdown indicators)', () => {
+  it('reports no live chats when the store is idle', () => {
+    expect(getGlobalRunState()).toEqual({ running: [], awaiting: [] });
+  });
+
+  it('does not report an idle (subscribed-but-not-running) chat as live', () => {
+    // A mounted view subscribes to a chat before any run starts — the cell exists
+    // but is idle, so it must not surface as running/awaiting.
+    const unsub = subscribeRun(7, () => {});
+    expect(getGlobalRunState()).toEqual({ running: [], awaiting: [] });
+    unsub();
+  });
+
+  it('subscribeRunStore returns a working unsubscribe (no notify after teardown)', () => {
+    const listener = vi.fn();
+    const unsub = subscribeRunStore(listener);
+    unsub();
+    // Touching a cell after unsubscribe must not call the removed listener.
+    subscribeRun(1, () => {})();
+    expect(listener).not.toHaveBeenCalled();
   });
 });
 

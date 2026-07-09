@@ -21,6 +21,7 @@ import {
   type EvermindRecentEntry,
   type EvermindSeedModel,
   type EvermindTeacherOptions,
+  type EvermindValidateResult,
 } from './types';
 
 export interface EvermindConsoleProps {
@@ -38,6 +39,10 @@ export interface EvermindConsoleProps {
   /** Show the "Recently learned" list. Default true; a host that renders its own
    *  learnings surface (e.g. the web Studio's region-filterable panel) passes false. */
   showRecent?: boolean;
+  /** Called whenever a Validate runs (or is cleared, with null) — lets a host lift
+   *  the recall result to a companion surface (e.g. highlight the matched memories
+   *  on the web Studio's Knowledge Map). The console also renders the result inline. */
+  onValidate?: (result: EvermindValidateResult | null) => void;
 }
 
 /* Cascading theme tokens: evermind-namespaced → host app tokens → VS Code tokens →
@@ -52,7 +57,7 @@ const C = {
   danger: 'var(--bf-ev-danger, var(--danger-text, #d9534f))',
 };
 
-export function EvermindConsole({ adapter, canManage, labels, refreshMs = 20_000, projectName, showRecent = true }: EvermindConsoleProps) {
+export function EvermindConsole({ adapter, canManage, labels, refreshMs = 20_000, projectName, showRecent = true, onValidate }: EvermindConsoleProps) {
   const t = useMemo<EvermindConsoleLabels>(() => ({ ...DEFAULT_EVERMIND_LABELS, ...(labels ?? {}) }), [labels]);
 
   const [data, setData] = useState<EvermindConsoleData | null>(null);
@@ -62,6 +67,8 @@ export function EvermindConsole({ adapter, canManage, labels, refreshMs = 20_000
   const [teachPrompt, setTeachPrompt] = useState('');
   const [teachText, setTeachText] = useState('');
   const [busy, setBusy] = useState(false);
+  const [validating, setValidating] = useState(false);
+  const [validateResult, setValidateResult] = useState<EvermindValidateResult | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loaded, setLoaded] = useState(false);
@@ -103,6 +110,26 @@ export function EvermindConsole({ adapter, canManage, labels, refreshMs = 20_000
     const id = setInterval(() => { if (!busy) void reload(); }, refreshMs);
     return () => clearInterval(id);
   }, [refreshMs, busy, reload]);
+
+  // Validate: preview which learned memories would answer a candidate task. Read-only
+  // — never teaches. Stores the result for the inline list AND lifts it to the host
+  // (onValidate) so a companion surface can highlight the matched memories.
+  const runValidate = useCallback(async (prompt: string) => {
+    const task = prompt.trim();
+    if (task.length < 3) return;
+    setValidating(true); setError(null); setNotice(null);
+    try {
+      const result = await adapter.validate(task);
+      setValidateResult(result);
+      onValidate?.(result);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : t.errorGeneric);
+    } finally {
+      setValidating(false);
+    }
+  }, [adapter, onValidate, t.errorGeneric]);
+
+  const clearValidate = useCallback(() => { setValidateResult(null); onValidate?.(null); }, [onValidate]);
 
   const run = useCallback(async (op: () => Promise<void>, successNotice?: string) => {
     setBusy(true); setError(null); setNotice(null);
@@ -184,7 +211,7 @@ export function EvermindConsole({ adapter, canManage, labels, refreshMs = 20_000
           />
 
           <TeachBox
-            t={t} busy={busy} teacherModel={data?.teacherModel ?? ''}
+            t={t} busy={busy} validating={validating} teacherModel={data?.teacherModel ?? ''}
             prompt={teachPrompt} text={teachText}
             onPrompt={setTeachPrompt} onText={setTeachText}
             onTeach={() => run(
@@ -202,7 +229,14 @@ export function EvermindConsole({ adapter, canManage, labels, refreshMs = 20_000
               },
               t.taught,
             )}
+            // Validate the SAME task the user would teach: the pinned-teacher task prompt,
+            // else the transcript's task prompt, else the transcript body itself.
+            onValidate={() => runValidate(data?.teacherModel ? teachPrompt : (teachPrompt.trim() || teachText))}
           />
+
+          {validateResult && (
+            <ValidateResults t={t} result={validateResult} onClear={clearValidate} />
+          )}
 
           {canManage && (
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
@@ -359,15 +393,18 @@ function TeacherPicker({
 }
 
 function TeachBox({
-  t, busy, prompt, text, onPrompt, onText, onTeach, teacherModel,
+  t, busy, validating, prompt, text, onPrompt, onText, onTeach, onValidate, teacherModel,
 }: {
-  t: EvermindConsoleLabels; busy: boolean; prompt: string; text: string;
-  onPrompt: (s: string) => void; onText: (s: string) => void; onTeach: () => void;
+  t: EvermindConsoleLabels; busy: boolean; validating: boolean; prompt: string; text: string;
+  onPrompt: (s: string) => void; onText: (s: string) => void; onTeach: () => void; onValidate: () => void;
   /** When a teacher is pinned, teach a TASK (the teacher answers it) — no transcript needed. */
   teacherModel: string;
 }) {
   const teaching = !!teacherModel;
   const canTeach = teaching ? prompt.trim().length >= 20 : text.trim().length >= 20;
+  // Validate needs only a short task string (the prompt when teaching a task, else
+  // whatever task/transcript is typed) — a lower bar than teaching.
+  const canValidate = (teaching ? prompt : (prompt.trim() || text)).trim().length >= 3;
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 6, borderTop: `1px solid ${C.border}`, paddingTop: 10 }}>
       <div style={fieldTitle}>{teaching ? t.teachTeacherTitle : t.teachTitle}</div>
@@ -380,11 +417,51 @@ function TeachBox({
           <textarea value={text} onChange={(e) => onText(e.target.value)} disabled={busy} placeholder={t.teachTextPlaceholder} rows={3} style={{ ...select, width: '100%', resize: 'vertical', fontFamily: 'inherit' }} />
         </>
       )}
-      <div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
         <button type="button" onClick={onTeach} disabled={busy || !canTeach} style={primaryBtn(busy || !canTeach)}>
           {busy ? t.teaching : (teaching ? t.teachTeacherCta : t.teachCta)}
         </button>
+        <button type="button" onClick={onValidate} disabled={busy || validating || !canValidate} style={secondaryBtn(busy || validating || !canValidate)} title={t.validateHint}>
+          {validating ? t.validating : t.validateCta}
+        </button>
       </div>
+    </div>
+  );
+}
+
+/** The Validate recall preview: which learned memories would answer the task, ranked. */
+function ValidateResults({ t, result, onClear }: { t: EvermindConsoleLabels; result: EvermindValidateResult; onClear: () => void }) {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 6, background: C.surface2, border: `1px solid ${C.border}`, borderRadius: 8, padding: '10px 12px' }}>
+      <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, flexWrap: 'wrap' }}>
+        <span style={{ ...fieldTitle, flex: 1, minWidth: 0 }}>{t.validateResultTitle(result.prompt)}</span>
+        <button type="button" onClick={onClear} style={{ ...ghostBtn, marginLeft: 0 }}>{t.validateClear}</button>
+      </div>
+      {result.matches.length === 0 ? (
+        <p style={italic}>{t.validateEmpty}</p>
+      ) : (
+        <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: 6 }}>
+          {result.matches.map((m) => {
+            const primary = m.id === result.primaryId;
+            const pct = Math.round(m.score * 100);
+            return (
+              <li key={m.id} style={{ display: 'flex', flexDirection: 'column', gap: 4, border: `1px solid ${primary ? C.accent : C.border}`, borderRadius: 6, padding: '6px 8px', background: C.surface }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                  {primary && <span style={tag(false)}>{t.validatePrimaryBadge}</span>}
+                  <span style={{ fontSize: '0.68rem', color: C.text2 }}>{t.versionTag(m.version)}</span>
+                  <span style={{ marginLeft: 'auto', fontSize: '0.68rem', fontWeight: 700, color: C.accent }}>{t.validateScore(pct)}</span>
+                </div>
+                {/* Score bar so relative recall strength reads at a glance. */}
+                <div style={{ height: 4, borderRadius: 999, background: C.border, overflow: 'hidden' }}>
+                  <div style={{ width: `${pct}%`, height: '100%', background: C.accent }} />
+                </div>
+                {m.prompt && <div style={{ fontSize: '0.74rem', fontWeight: 600, color: C.text, wordBreak: 'break-word' }}>{m.prompt}</div>}
+                {m.text && <div style={{ fontSize: '0.72rem', color: C.text2, lineHeight: 1.4, wordBreak: 'break-word', whiteSpace: 'pre-wrap', maxHeight: 54, overflow: 'hidden' }}>{m.text}</div>}
+              </li>
+            );
+          })}
+        </ul>
+      )}
     </div>
   );
 }
@@ -397,7 +474,7 @@ function RecentList({ t, entries }: { t: EvermindConsoleLabels; entries: Evermin
         <p style={italic}>{t.inspectEmpty}</p>
       ) : (
         <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: 6 }}>
-          {entries.map((e, i) => <RecentRow key={`${e.version}-${e.at}-${i}`} t={t} entry={e} />)}
+          {entries.map((e) => <RecentRow key={e.id} t={t} entry={e} />)}
         </ul>
       )}
     </div>
@@ -405,7 +482,10 @@ function RecentList({ t, entries }: { t: EvermindConsoleLabels; entries: Evermin
 }
 
 function RecentRow({ t, entry }: { t: EvermindConsoleLabels; entry: EvermindRecentEntry }) {
+  const [open, setOpen] = useState(false);
   const body = entry.kind === 'delta' ? t.deltaEntry : (entry.text ?? '');
+  // A delta carries no inspectable text; only text contributions have detail to expand.
+  const hasDetail = entry.kind !== 'delta' && (!!entry.prompt || !!entry.text);
   return (
     <li style={{ background: C.surface2, border: `1px solid ${C.border}`, borderRadius: 8, padding: '8px 10px', display: 'flex', flexDirection: 'column', gap: 3 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
@@ -415,7 +495,23 @@ function RecentRow({ t, entry }: { t: EvermindConsoleLabels; entry: EvermindRece
         <span style={{ marginLeft: 'auto', fontSize: '0.68rem', color: C.text2 }}>{t.formatWhen(entry.at)}</span>
       </div>
       {entry.prompt && <div style={{ fontSize: '0.76rem', fontWeight: 600, color: C.text, wordBreak: 'break-word' }}>{entry.prompt}</div>}
-      {body && <div style={{ fontSize: '0.74rem', color: C.text2, lineHeight: 1.45, wordBreak: 'break-word', whiteSpace: 'pre-wrap', maxHeight: 72, overflow: 'hidden' }}>{body}</div>}
+      {open ? (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 2 }}>
+          {entry.text && (
+            <div>
+              <div style={{ fontSize: '0.62rem', textTransform: 'uppercase', letterSpacing: '0.04em', color: C.text2 }}>{t.detailTextLabel}</div>
+              <div style={{ fontSize: '0.74rem', color: C.text, lineHeight: 1.5, wordBreak: 'break-word', whiteSpace: 'pre-wrap' }}>{entry.text}</div>
+            </div>
+          )}
+        </div>
+      ) : (
+        body && <div style={{ fontSize: '0.74rem', color: C.text2, lineHeight: 1.45, wordBreak: 'break-word', whiteSpace: 'pre-wrap', maxHeight: 72, overflow: 'hidden' }}>{body}</div>
+      )}
+      {hasDetail && (
+        <button type="button" onClick={() => setOpen((v) => !v)} style={{ ...linkBtn, alignSelf: 'flex-start' }}>
+          {open ? t.hideDetail : t.viewDetail}
+        </button>
+      )}
     </li>
   );
 }
@@ -453,6 +549,20 @@ const ghostBtn: React.CSSProperties = {
   marginLeft: 'auto', padding: '2px 8px', fontSize: '0.9rem', lineHeight: 1,
   borderRadius: 6, border: `1px solid ${C.border}`, background: 'transparent',
   color: C.text2, cursor: 'pointer',
+};
+
+function secondaryBtn(disabled: boolean): React.CSSProperties {
+  return {
+    padding: '8px 14px', fontSize: '0.8rem', fontWeight: 600, borderRadius: 8,
+    border: `1px solid ${C.border}`, background: 'transparent',
+    color: disabled ? C.text2 : C.text,
+    cursor: disabled ? 'not-allowed' : 'pointer', whiteSpace: 'nowrap', opacity: disabled ? 0.7 : 1,
+  };
+}
+
+const linkBtn: React.CSSProperties = {
+  padding: 0, fontSize: '0.7rem', fontWeight: 600, border: 'none', background: 'transparent',
+  color: C.accent, cursor: 'pointer',
 };
 
 function pill(seeded: boolean): React.CSSProperties {

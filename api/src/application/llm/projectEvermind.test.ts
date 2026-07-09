@@ -147,7 +147,7 @@ describe('resolveProjectInferenceModel (opt-in consumer emitter)', () => {
 
 describe('computeProjectAffect (limbic state for the brain map)', () => {
   const entry = (over: Partial<ProjectEvermindRecentEntry>): ProjectEvermindRecentEntry => ({
-    kind: 'delta', version: 1, at: 1000, weight: 1, ...over,
+    id: 1, kind: 'delta', version: 1, at: 1000, weight: 1, ...over,
   });
 
   it('returns the neutral resting setpoints when there is no activity', () => {

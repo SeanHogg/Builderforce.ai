@@ -1,10 +1,47 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { runtimeApi, type AttentionResponse } from '@/lib/builderforceApi';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { subscribeRunStore, getGlobalRunState, type GlobalRunState } from '@seanhogg/builderforce-brain-embedded';
+import { runtimeApi, type AttentionResponse, type AttentionState } from '@/lib/builderforceApi';
 import { useRealtimeRoom } from '@/lib/embed/useRealtimeRoom';
 
 const EMPTY: AttentionResponse = { tasks: {}, chats: {}, counts: { running: 0, awaiting: 0 } };
+
+/** A stable key of the two live-chat lists, so a subscriber only re-renders when
+ *  the SET of live chats changes — not on every streaming token (each of which
+ *  also emits a run-store change). */
+function runStateKey(s: GlobalRunState): string {
+  return `${[...s.running].sort((a, b) => a - b).join(',')}|${[...s.awaiting].sort((a, b) => a - b).join(',')}`;
+}
+
+/**
+ * Subscribe to which chats the CLIENT-SIDE Brain loop is running / paused on. The
+ * agent loop lives module-level (a run survives a chat switch), but it streams
+ * straight to the gateway — so the server-side attention endpoint never sees it.
+ * {@link useAttention} merges this in so a chat that keeps executing after you
+ * open a new one still lights up. Debounced to the set of live chats.
+ */
+function useLocalRuns(): GlobalRunState {
+  const [state, setState] = useState<GlobalRunState>(getGlobalRunState);
+  useEffect(() => {
+    const recompute = () =>
+      setState((prev) => {
+        const next = getGlobalRunState();
+        return runStateKey(prev) === runStateKey(next) ? prev : next;
+      });
+    recompute();
+    return subscribeRunStore(recompute);
+  }, []);
+  return state;
+}
+
+/** The most attention-worthy of several states — a needed answer beats a running
+ *  loop, which beats idle. Shared so server + local states merge one way. */
+function strongestState(...states: Array<AttentionState | undefined>): AttentionState | undefined {
+  if (states.includes('awaiting_input')) return 'awaiting_input';
+  if (states.includes('running')) return 'running';
+  return undefined;
+}
 
 /**
  * Reconcile cadence — a BACKSTOP behind the project room's WebSocket push (see
@@ -65,5 +102,34 @@ export function useAttention(projectId?: number, enabled = true): AttentionRespo
   // updates the instant server state changes, not on the next poll.
   useRealtimeRoom(enabled && projectId != null ? `/api/projects/${projectId}/stream` : null, refresh);
 
-  return { ...data, refresh };
+  // Overlay the client-side Brain loop's live chats onto the server map, so a chat
+  // running purely in the browser (which the server can't see) lights up the same
+  // as a cloud / on-prem run. A chat already in the server map keeps its counted
+  // state (we only strengthen its per-chat dot); a purely-local chat is added to
+  // both the map and the counts, so the FloatingBrain badge + row dots agree.
+  const local = useLocalRuns();
+  return useMemo(() => {
+    if (!enabled || (local.running.length === 0 && local.awaiting.length === 0)) {
+      return { ...data, refresh };
+    }
+    const chats = { ...data.chats };
+    let addRunning = 0;
+    let addAwaiting = 0;
+    const apply = (id: number, state: AttentionState) => {
+      const existing = chats[id];
+      const next = strongestState(existing?.state, state)!;
+      if (!existing) {
+        if (next === 'awaiting_input') addAwaiting += 1; else addRunning += 1;
+      }
+      chats[id] = { ...existing, state: next };
+    };
+    for (const id of local.running) apply(id, 'running');
+    for (const id of local.awaiting) apply(id, 'awaiting_input');
+    return {
+      tasks: data.tasks,
+      chats,
+      counts: { running: data.counts.running + addRunning, awaiting: data.counts.awaiting + addAwaiting },
+      refresh,
+    };
+  }, [enabled, data, local, refresh]);
 }
