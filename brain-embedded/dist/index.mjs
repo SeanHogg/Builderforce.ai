@@ -181,6 +181,13 @@ async function streamChatCompletion(opts, handlers = {}) {
     headerAccount = null;
   }
   const account = () => headerAccount ?? void 0;
+  let headerByoUnresolved = null;
+  try {
+    headerByoUnresolved = res.headers?.get?.("x-builderforce-byo-unresolved") || null;
+  } catch {
+    headerByoUnresolved = null;
+  }
+  const byoUnresolved = () => headerByoUnresolved ?? void 0;
   let usage;
   const readUsage = (u) => {
     if (!u || typeof u !== "object") return;
@@ -207,7 +214,7 @@ async function streamChatCompletion(opts, handlers = {}) {
     });
     finishReason = choice?.finish_reason ?? null;
     handlers.onDone?.(finishReason);
-    return { text, toolCalls: [...assemble(toolAcc), ...xmlCalls], finishReason, resolvedModel: resolvedModel(), account: account(), usage };
+    return { text, toolCalls: [...assemble(toolAcc), ...xmlCalls], finishReason, resolvedModel: resolvedModel(), account: account(), byoUnresolved: byoUnresolved(), usage };
   }
   const decoder = new TextDecoder();
   let buffer = "";
@@ -225,7 +232,7 @@ async function streamChatCompletion(opts, handlers = {}) {
         const tail2 = xml.flush();
         if (tail2) handlers.onTextDelta?.(tail2);
         handlers.onDone?.(finishReason);
-        return { text: xml.cleanText(), toolCalls: allToolCalls(), finishReason, resolvedModel: resolvedModel(), account: account(), usage };
+        return { text: xml.cleanText(), toolCalls: allToolCalls(), finishReason, resolvedModel: resolvedModel(), account: account(), byoUnresolved: byoUnresolved(), usage };
       }
       let parsed;
       try {
@@ -264,7 +271,7 @@ async function streamChatCompletion(opts, handlers = {}) {
   const tail = xml.flush();
   if (tail) handlers.onTextDelta?.(tail);
   handlers.onDone?.(finishReason);
-  return { text: xml.cleanText(), toolCalls: allToolCalls(), finishReason, resolvedModel: resolvedModel(), account: account(), usage };
+  return { text: xml.cleanText(), toolCalls: allToolCalls(), finishReason, resolvedModel: resolvedModel(), account: account(), byoUnresolved: byoUnresolved(), usage };
 }
 function assemble(acc) {
   return [...acc.entries()].sort((a, b) => a[0] - b[0]).map(([, v]) => ({ id: v.id, name: v.name, args: v.args })).filter((c) => c.name.length > 0);
@@ -943,6 +950,30 @@ function modelsUsedInTrace(events) {
   }
   return seen;
 }
+function accountUsedInTrace(events) {
+  let account;
+  for (const ev of events) {
+    if (ev.category !== "llm") continue;
+    const a = ev.args?.account;
+    if (typeof a === "string" && a) account = a;
+  }
+  return account;
+}
+function byoUnresolvedInTrace(events) {
+  const seen = [];
+  for (const ev of events) {
+    if (ev.category !== "llm") continue;
+    const raw = ev.args?.byoUnresolved;
+    if (typeof raw !== "string" || !raw) continue;
+    for (const p of raw.split(",").map((s) => s.trim()).filter(Boolean)) {
+      if (!seen.includes(p)) seen.push(p);
+    }
+  }
+  return seen;
+}
+function accountLabel(account) {
+  return account === "own" ? "the tenant's own connected account" : account === "shared_byo_unused" ? "the shared model pool (a connected account existed but was NOT used)" : account === "shared" ? "the shared model pool" : account;
+}
 function byteLen(v) {
   const s = typeof v === "string" ? v : JSON.stringify(v ?? "");
   return s.length;
@@ -1045,6 +1076,14 @@ function buildBrainTriageReport(opts) {
   if (used.length) lines.push(`Models used: ${used.join(", ")}`);
   const evermind = used.filter(isEvermindModel);
   if (evermind.length) lines.push(`Evermind: yes \u2014 ${evermind.join(", ")}`);
+  const account = accountUsedInTrace(events);
+  if (account) lines.push(`Account: ${accountLabel(account)}`);
+  const byoUnresolved = byoUnresolvedInTrace(events);
+  if (byoUnresolved.length) {
+    lines.push(
+      `\u26A0 CONNECTED ACCOUNT NOT USED: ${byoUnresolved.join(", ")} \u2014 a connected provider could not be resolved this run (token expired/revoked, or stored under a different tenant), so the turn fell back to the shared pool instead of your own model. Reconnect it in Settings \u25B8 API Keys.`
+    );
+  }
   lines.push(`Steps: ${events.length} \xB7 Errors: ${errors.length} \xB7 Messages: ${messages.length}`);
   if (error) lines.push(`Last error: ${error}`);
   lines.push("", ...formatBrainDiagnostics(computeBrainDiagnostics(events, configuredModel)));
@@ -1429,7 +1468,12 @@ ${block}`;
         model: resolved,
         requestedModel: requested,
         step: iter,
-        toolCalls: result.toolCalls.length
+        toolCalls: result.toolCalls.length,
+        // Which account served the turn + any connected-BYO provider the gateway
+        // could NOT resolve — so triage tells "ran on the shared pool despite a
+        // connected Claude account (expired?)" apart from "nothing connected".
+        account: result.account,
+        byoUnresolved: result.byoUnresolved
       },
       // Structured diagnostics fields — the A-vs-B triage reads these directly.
       usage: result.usage,
@@ -1529,11 +1573,58 @@ ${block}`;
     return;
   }
   c.streamingText = "";
+  if (!c.abort?.signal.aborted) {
+    const closeStart = nowMs2();
+    try {
+      const working = [
+        { role: "system", content: systemPrompt },
+        ...windowed(convo),
+        {
+          role: "user",
+          content: "You have reached your tool-call budget for this turn. Do NOT call any more tools. Answer the user now, in prose, using what you have already gathered \u2014 summarise your findings and state plainly anything you could not finish."
+        }
+      ];
+      const closing = await stream(
+        // No `tools` → the model can't call another tool and must produce text.
+        { messages: working, model, signal: c.abort?.signal },
+        { onTextDelta: (d) => {
+          c.streamingText += d;
+          emit(c);
+        } }
+      );
+      pushTrace(c, {
+        ts: nowIso(),
+        category: "llm",
+        label: "llm.complete",
+        durationMs: nowMs2() - closeStart,
+        args: { model: closing.resolvedModel ?? model ?? "default", requestedModel: model ?? "default", step: MAX_TOOL_ITERATIONS, toolCalls: 0, forcedFinish: true, account: closing.account, byoUnresolved: closing.byoUnresolved },
+        usage: closing.usage,
+        finishReason: closing.finishReason,
+        textChars: closing.text.length,
+        result: `forced final synthesis (tool budget reached) \xB7 ${closing.text.length} chars \xB7 finish: ${closing.finishReason ?? "\u2014"}`
+      });
+      const closingText = closing.text.trim();
+      if (closingText) {
+        convo.push({ role: "assistant", content: closingText });
+        const meta = provenanceMetadata(closing);
+        const [assistantMsg] = await persistence.sendMessages(chatId, [{ role: "assistant", content: closingText, ...meta ? { metadata: meta } : {} }]);
+        c.streamingText = "";
+        recordAppended(c, assistantMsg);
+        emit(c);
+        onActivity?.(chatId);
+        return;
+      }
+    } catch (e) {
+      if (c.abort?.signal.aborted) return;
+    }
+  }
+  if (c.abort?.signal.aborted) return;
+  c.streamingText = "";
   pushTrace(c, {
     ts: nowIso(),
     category: "error",
     label: "agent.loop",
-    result: `Loop exhausted after ${MAX_TOOL_ITERATIONS} tool iterations`,
+    result: `Loop exhausted after ${MAX_TOOL_ITERATIONS} tool iterations (a forced final answer without tools also came back empty)`,
     isError: true
   });
   c.error = "The assistant kept calling tools without finishing. Try rephrasing.";

@@ -90,4 +90,22 @@ describe('buildBrainTriageReport', () => {
     const report = buildBrainTriageReport({ capturedAt: '2026-06-13T00:00:03.000Z', events: [] });
     expect(report).toContain('Steps: 0 · Errors: 0 · Messages: 0');
   });
+
+  it('surfaces the account + a connected-but-unresolved BYO provider (the "should have used Opus" context)', () => {
+    const report = buildBrainTriageReport({
+      capturedAt: '2026-06-13T00:00:03.000Z',
+      events: [
+        {
+          ts: '2026-06-13T00:00:00.000Z', category: 'llm', label: 'llm.complete',
+          args: { model: 'deepseek/deepseek-v4-flash', step: 0, toolCalls: 1, account: 'shared', byoUnresolved: 'anthropic' },
+          result: '1 tool call(s)',
+        },
+      ],
+    });
+    // The account that served the turn is named…
+    expect(report).toContain('Account: the shared model pool');
+    // …and the connected-but-unresolved Anthropic account is flagged with a fix.
+    expect(report).toContain('⚠ CONNECTED ACCOUNT NOT USED: anthropic');
+    expect(report).toContain('Reconnect it in Settings');
+  });
 });

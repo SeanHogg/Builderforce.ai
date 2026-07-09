@@ -202,6 +202,15 @@ interface StreamChatResult {
      * per-reply provenance chip so a successful turn shows whose account ran it.
      */
     account?: string;
+    /**
+     * Providers the tenant CONNECTED but that the gateway could NOT resolve for this
+     * turn (from `x-builderforce-byo-unresolved`, comma-separated) — e.g. a connected
+     * Claude subscription whose token expired, so the run silently fell to the shared
+     * pool instead of the tenant's own Opus. Undefined/absent when every connected
+     * provider resolved. Surfaced in triage so a "should have used my BYO account" run
+     * is self-explaining instead of looking like "nothing connected".
+     */
+    byoUnresolved?: string;
     /** Token usage for this completion, when the gateway reported it. */
     usage?: CompletionUsage;
 }
