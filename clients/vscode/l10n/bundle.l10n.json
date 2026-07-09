@@ -132,5 +132,6 @@
   "Add context from your workspace": "Add context from your workspace",
   "Chat name": "Chat name",
   "Waiting on your answer": "Waiting on your answer",
-  "Agent is working…": "Agent is working…"
+  "Agent is working…": "Agent is working…",
+  "Your connected {provider} account couldn’t be used this run (its token looks expired or revoked), so it ran on the shared model pool instead of your own model. Reconnect it in the web app under Settings ▸ API Keys.": "Your connected {provider} account couldn’t be used this run (its token looks expired or revoked), so it ran on the shared model pool instead of your own model. Reconnect it in the web app under Settings ▸ API Keys."
 }
