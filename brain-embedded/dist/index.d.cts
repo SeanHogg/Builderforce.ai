@@ -747,6 +747,35 @@ declare function isEvermindModel(model: string): boolean;
  */
 declare function modelsUsedInTrace(events: BrainTraceEvent[]): string[];
 /**
+ * Which account served the run, from the `account` the loop recorded per `llm`
+ * step (the gateway's `x-builderforce-account`). Last-seen wins so a mid-run swap
+ * is reflected. Undefined when the gateway reported none. Values: `own` (tenant's
+ * connected frontier account) · `shared` (shared pool, nothing connected) ·
+ * `shared_byo_unused` (shared pool DESPITE a connected account).
+ */
+declare function accountUsedInTrace(events: BrainTraceEvent[]): string | undefined;
+/**
+ * Connected-BYO providers the gateway could NOT resolve on any turn (from
+ * `x-builderforce-byo-unresolved`) — e.g. a connected Claude subscription whose
+ * token expired, so the run silently used the shared pool instead of the tenant's
+ * own Opus. Union across turns, first-seen order. Empty when everything resolved.
+ * This is the signal that turns a mysterious weak-model run into "reconnect your
+ * Claude account" — the exact context a "should have used Opus" triage lacked.
+ */
+declare function byoUnresolvedInTrace(events: BrainTraceEvent[]): string[];
+/**
+ * The model + account provenance header lines, derived from the trace. The SINGLE
+ * source both copy surfaces use (the web {@link buildBrainTriageReport} and the VS
+ * Code `transcript.ts`) so "which surface / model / account served this, and was a
+ * connected account left unused" is rendered identically — no drift, no surface
+ * missing the account/BYO context (the "vsix copy missing info" gap). `surface`
+ * names WHERE the run happened (e.g. `VS Code (VSIX)` / `Web`); omit when unknown.
+ */
+declare function formatBrainProvenance(events: BrainTraceEvent[], opts?: {
+    configuredModel?: string;
+    surface?: string;
+}): string[];
+/**
  * Structured run diagnostics derived from the trace — the numbers a reader needs
  * to tell WHY a Brain run died, without eyeballing a wall of JSON.
  *
@@ -819,6 +848,8 @@ interface BuildBrainTriageOptions {
     /** The model this surface was CONFIGURED with (empty ⇒ gateway auto-selects).
      *  Distinct from what actually answered, which is derived from the trace. */
     configuredModel?: string;
+    /** Where the run happened (e.g. `VS Code (VSIX)` / `Web`), for provenance. */
+    surface?: string;
     /** The current top-level error surfaced to the user, if any. */
     error?: string;
 }
@@ -924,12 +955,19 @@ interface UseBrainConversation {
      */
     trace: BrainTraceEvent[];
     /**
+     * Connected providers the gateway could NOT use this run (e.g. an expired Claude
+     * subscription that fell back to the shared pool). A mounted view renders a passive
+     * "reconnect your account" banner off this; empty when everything resolved.
+     */
+    byoUnresolved: string[];
+    /**
      * Assemble a paste-able triage report of the active chat's execution — the LLM
      * steps, the full tool chain (args + results), intermediate assistant messages,
      * every error, and the visible transcript. `agentLabel` names the persona the
-     * Brain ran as. Mirrors the host/cloud "Copy triage info" report.
+     * Brain ran as; `surface` names where it ran (e.g. `VS Code (VSIX)`). Mirrors the
+     * host/cloud "Copy triage info" report.
      */
-    buildTriageReport(agentLabel?: string): string;
+    buildTriageReport(agentLabel?: string, surface?: string): string;
 }
 declare function useBrainConversation(options: UseBrainConversationOptions): UseBrainConversation;
 
@@ -1102,4 +1140,4 @@ declare function parseMessageProvenance(msg: {
  */
 declare function withProvenanceMetadata(provenance: MessageProvenance | null | undefined, base?: Record<string, unknown>): string | undefined;
 
-export { ADDRESSED_TO_META_KEY, AUTHORED_BY_META_KEY, type AssembledToolCall, type BrainAction, type BrainActionsContextValue, BrainActionsProvider, type BrainChat, type BrainConfig, BrainContextProvider, type BrainContextValue, type BrainDiagnostics, type BrainMessage, type BrainModality, type BrainPageContext, type BrainPersistenceAdapter, BrainProvider, type BrainRuntime, type BrainToolSpec, type BrainTraceEvent, type BrainTransport, type BuildBrainTriageOptions, CONSOLIDATION_MARKER_PREFIX, CONSOLIDATION_META, type ChatCompletionMessage, type ChatInputAttachment, type ContentPart, type DirectedRecipient, EVERMIND_LEARN_MIN_CHARS, type EvermindRecallItem, type EvermindRecallResult, type EvermindRunHooks, type GlobalRunState, type ImageUrlContentPart, type McpToolResultInfo, type MentionToken, type MessageProvenance, PROVENANCE_META_KEY, type PreparedImage, type ProvenanceAccount, type RecipientChoice, type StreamChatOptions, type StreamChatResult, type StreamHandlers, type TextContentPart, type UseBrainChats, type UseBrainChatsOptions, type UseBrainConversation, type UseBrainConversationOptions, type UseMcpExtensionsOptions, activeMentionToken, buildBrainTriageReport, computeBrainDiagnostics, consolidationMarkerContent, consolidationMetadata, countReconciledMemories, filterMentionCandidates, formatBrainDiagnostics, formatEvermindMemoryBlock, getGlobalRunState, isConnectedAccountUnused, isConsolidationMarker, isDirectedToParticipant, isEvermindModel, isFailedToolResult, lastConsolidationIndex, mentionRecipient, modelsUsedInTrace, parseDirectedRecipient, parseMessageAuthor, parseMessageProvenance, prepareImageDataUrl, resolveRecipient, savePendingPrompt, scopeToConsolidation, streamChatCompletion, subscribeRunStore, takePendingPrompt, useBrainActions, useBrainChats, useBrainConfig, useBrainContext, useBrainConversation, useMcpExtensions, useOptionalBrainContext, useRegisterBrainActions, withDirectedMetadata, withProvenanceMetadata };
+export { ADDRESSED_TO_META_KEY, AUTHORED_BY_META_KEY, type AssembledToolCall, type BrainAction, type BrainActionsContextValue, BrainActionsProvider, type BrainChat, type BrainConfig, BrainContextProvider, type BrainContextValue, type BrainDiagnostics, type BrainMessage, type BrainModality, type BrainPageContext, type BrainPersistenceAdapter, BrainProvider, type BrainRuntime, type BrainToolSpec, type BrainTraceEvent, type BrainTransport, type BuildBrainTriageOptions, CONSOLIDATION_MARKER_PREFIX, CONSOLIDATION_META, type ChatCompletionMessage, type ChatInputAttachment, type ContentPart, type DirectedRecipient, EVERMIND_LEARN_MIN_CHARS, type EvermindRecallItem, type EvermindRecallResult, type EvermindRunHooks, type GlobalRunState, type ImageUrlContentPart, type McpToolResultInfo, type MentionToken, type MessageProvenance, PROVENANCE_META_KEY, type PreparedImage, type ProvenanceAccount, type RecipientChoice, type StreamChatOptions, type StreamChatResult, type StreamHandlers, type TextContentPart, type UseBrainChats, type UseBrainChatsOptions, type UseBrainConversation, type UseBrainConversationOptions, type UseMcpExtensionsOptions, accountUsedInTrace, activeMentionToken, buildBrainTriageReport, byoUnresolvedInTrace, computeBrainDiagnostics, consolidationMarkerContent, consolidationMetadata, countReconciledMemories, filterMentionCandidates, formatBrainDiagnostics, formatBrainProvenance, formatEvermindMemoryBlock, getGlobalRunState, isConnectedAccountUnused, isConsolidationMarker, isDirectedToParticipant, isEvermindModel, isFailedToolResult, lastConsolidationIndex, mentionRecipient, modelsUsedInTrace, parseDirectedRecipient, parseMessageAuthor, parseMessageProvenance, prepareImageDataUrl, resolveRecipient, savePendingPrompt, scopeToConsolidation, streamChatCompletion, subscribeRunStore, takePendingPrompt, useBrainActions, useBrainChats, useBrainConfig, useBrainContext, useBrainConversation, useMcpExtensions, useOptionalBrainContext, useRegisterBrainActions, withDirectedMetadata, withProvenanceMetadata };

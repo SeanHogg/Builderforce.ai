@@ -70,6 +70,23 @@ function provenanceMetadata(result: StreamChatResult): string | undefined {
 const MAX_TOOL_ITERATIONS = 25;
 /** How much history we send to the model (message-count ceiling). */
 const HISTORY_WINDOW = 80;
+
+/** Read-only, idempotent file/search tools whose exact-repeat call within a run is
+ *  suppressed (the result is already in context). Deliberately narrow — only tools
+ *  that observe the repo and can't mutate it, so a stubbed repeat never hides a real
+ *  change (a mutation clears the dedupe set anyway; see {@link runLoop}). */
+const DEDUP_READ_TOOLS = new Set(['read_file', 'search_code', 'list_files']);
+
+/** Fold a `x-builderforce-byo-unresolved` header value (comma-separated providers)
+ *  into the run cell's accumulated set, updating the snapshot only when it grows so a
+ *  mounted banner appears the moment a connected account is found unusable. */
+function accrueByoUnresolved(c: RunCell, raw: string | undefined): void {
+  if (!raw) return;
+  const before = c.byoUnresolved.length;
+  const next = new Set(c.byoUnresolved);
+  for (const p of raw.split(',').map((s) => s.trim()).filter(Boolean)) next.add(p);
+  if (next.size !== before) c.byoUnresolved = [...next];
+}
 /**
  * Token budget for the working transcript sent to the model each turn. This is
  * the real backstop against the "Brain dies after several executions" failure:
@@ -201,6 +218,15 @@ export interface BrainRunSnapshot {
    * stable; they read it fresh each render. Bounded by {@link MAX_TRACE_EVENTS}.
    */
   trace: BrainTraceEvent[];
+  /**
+   * Providers the tenant CONNECTED but the gateway could NOT resolve on any turn of
+   * this run (from `x-builderforce-byo-unresolved`) — e.g. a connected Claude
+   * subscription whose token expired, so the run silently used the shared pool
+   * instead of the tenant's own Opus. A mounted view shows a passive "reconnect your
+   * account" banner off this, so the degrade is visible WITHOUT copying triage. Empty
+   * when everything resolved (or nothing is connected).
+   */
+  byoUnresolved: string[];
 }
 
 interface RunCell {
@@ -222,6 +248,8 @@ interface RunCell {
    * means a stale aborted one never bleeds into the next run.
    */
   abort: AbortController | null;
+  /** Connected-but-unresolved BYO providers accumulated across this run's turns. */
+  byoUnresolved: string[];
   /** Cached immutable snapshot; identity changes only when something changed. */
   snapshot: BrainRunSnapshot;
 }
@@ -256,6 +284,7 @@ const EMPTY_SNAPSHOT: BrainRunSnapshot = {
   appended: [],
   hasTrace: false,
   trace: [],
+  byoUnresolved: [],
 };
 
 function makeCell(): RunCell {
@@ -271,6 +300,7 @@ function makeCell(): RunCell {
     messagesEpoch: 0,
     listeners: new Set(),
     abort: null,
+    byoUnresolved: [],
     snapshot: EMPTY_SNAPSHOT,
   };
 }
@@ -318,6 +348,7 @@ function emit(c: RunCell): void {
     appended: c.appended,
     hasTrace: c.trace.length > 0,
     trace: c.trace,
+    byoUnresolved: c.byoUnresolved,
   };
   for (const l of c.listeners) l();
   // Cross-chat subscribers (the dropdown / session-list indicators) see every
@@ -569,6 +600,7 @@ export async function startRun(chatId: number, req: BrainRunRequest): Promise<vo
   c.running = true;
   c.error = '';
   c.streamingText = '';
+  c.byoUnresolved = []; // fresh per run — a reconnected account clears the banner
   // Fresh abort handle for this run, so Stop can cancel the LLM stream and unwind
   // the loop (a stale, already-aborted controller never bleeds into a new run).
   c.abort = new AbortController();
@@ -632,6 +664,14 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
     }
   }
 
+  // Read-only tool calls whose (name+args) exactly repeat within a run return a
+  // "already returned above" stub instead of re-fetching + re-injecting the full
+  // payload — the context bloat that let a weak model thrash into exhaustion (one
+  // file was read 3+ times in the reported run). Any NON-read tool clears the set:
+  // a write/edit/delete (or any side-effecting call) can change what a re-read would
+  // see, so a read after a mutation is never suppressed. Only successful reads cache.
+  const readDedupe = new Set<string>();
+
   for (let iter = 0; iter < MAX_TOOL_ITERATIONS; iter++) {
     // User hit Stop between turns (or after a tool call) — unwind cleanly.
     if (c.abort?.signal.aborted) return;
@@ -663,6 +703,9 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
       });
       throw e;
     }
+    // Surface a connected-but-unresolved BYO account for a live banner (and reset
+    // clears it when the account is reconnected). Emit happens with the trace below.
+    accrueByoUnresolved(c, result.byoUnresolved);
     // Silent-downgrade detection: the gateway can fail over mid-run to a
     // different (often smaller-window) model than we requested. That's a prime
     // context-exhaustion symptom, so surface it as its own warning step instead
@@ -751,6 +794,23 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
             continue;
           }
         }
+        // Read-dedupe: suppress an EXACT repeat of a read-only file/search call
+        // (its result is already above), and invalidate the cache on any other
+        // (possibly mutating) tool so a read AFTER a change is never suppressed.
+        const isReadTool = DEDUP_READ_TOOLS.has(tc.name);
+        const dedupeKey = `${tc.name}:${tc.args ?? ''}`;
+        if (isReadTool) {
+          if (readDedupe.has(dedupeKey)) {
+            const stub = {
+              note: `Duplicate ${tc.name} call — identical arguments to an earlier call this turn, whose result is already in the conversation above. Reuse that result instead of re-reading; do not repeat it (this saves context and avoids looping).`,
+            };
+            convo.push({ role: 'tool', tool_call_id: tc.id, content: JSON.stringify(stub) });
+            pushTrace(c, { ts: nowIso(), category: 'tool', label: tc.name, args, result: stub });
+            continue;
+          }
+        } else {
+          readDedupe.clear();
+        }
         const toolStart = nowMs();
         let out: unknown;
         try {
@@ -780,6 +840,8 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
           resultBytes: trimmedOut.bytes,
           truncated: trimmedOut.truncated,
         });
+        // Cache only a SUCCESSFUL read so a failed read can be retried.
+        if (isReadTool && !isFailedToolResult(out)) readDedupe.add(dedupeKey);
       }
       continue;
     }
@@ -847,6 +909,7 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
         { messages: working, model, signal: c.abort?.signal },
         { onTextDelta: (d) => { c.streamingText += d; emit(c); } },
       );
+      accrueByoUnresolved(c, closing.byoUnresolved);
       pushTrace(c, {
         ts: nowIso(),
         category: 'llm',

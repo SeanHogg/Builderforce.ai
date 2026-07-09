@@ -10,10 +10,9 @@
 
 import { buildTimeline, formatPayload, formatDuration } from '@seanhogg/builderforce-brain-ui';
 import {
-  isEvermindModel,
-  modelsUsedInTrace,
   computeBrainDiagnostics,
   formatBrainDiagnostics,
+  formatBrainProvenance,
 } from '@seanhogg/builderforce-brain-embedded';
 import type { BrainMessage, BrainTraceEvent } from '@seanhogg/builderforce-brain-embedded';
 
@@ -53,14 +52,12 @@ export function buildTranscript(input: TranscriptInput): string {
   }
   lines.push(`Project: ${input.project ? `${input.project.name} (#${input.project.id})` : 'No project'}`);
 
-  // Model provenance — the whole point of triaging a bad turn is knowing which
-  // LLM produced it. `input.model` is what the editor was CONFIGURED with (blank
-  // when the gateway auto-selects); the trace tells us what actually answered.
-  lines.push(`Configured model: ${input.model || '(gateway auto-select)'}`);
-  const used = modelsUsedInTrace(input.trace);
-  if (used.length) lines.push(`Models used: ${used.join(', ')}`);
-  const evermind = used.filter(isEvermindModel);
-  if (evermind.length) lines.push(`Evermind: yes — ${evermind.join(', ')}`);
+  // Model + account provenance — surface, configured vs actual model, which account
+  // served the turns, and any connected account the gateway could NOT use (e.g. an
+  // expired Claude subscription that silently fell back to the shared pool — the
+  // "should have used Opus" context). SHARED formatter, so this copy and the web
+  // triage report stay identical.
+  lines.push(...formatBrainProvenance(input.trace, { configuredModel: input.model, surface: 'VS Code (VSIX)' }));
   lines.push('');
 
   // Diagnostics block — the A-vs-B verdict (context exhaustion vs model

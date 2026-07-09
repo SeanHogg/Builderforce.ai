@@ -738,6 +738,13 @@ function Chat({ init }: { init: InitData }) {
     conv.clearError();
   }, [conv]);
 
+  // A connected BYO account the gateway couldn't use this run (e.g. an expired
+  // Claude subscription) surfaces a passive notice. Dismissal is keyed on the exact
+  // provider set so a NEW/different occurrence re-shows rather than staying hidden.
+  const [dismissedByo, setDismissedByo] = useState('');
+  const byoKey = conv.byoUnresolved.join(',');
+  const showByoNotice = conv.byoUnresolved.length > 0 && dismissedByo !== byoKey;
+
   // Triage helpers: copy the full transcript (turns + tool I/O + errors) so a
   // "No response" turn can be shared with its underlying system output, and run
   // the host's connection diagnostics. The host owns the clipboard + the
@@ -952,6 +959,27 @@ function Chat({ init }: { init: InitData }) {
           onAnswerQuestion={answerQuestion}
         />
       </div>
+
+      {showByoNotice && (
+        <div className="bf-notice" role="status">
+          <span className="bf-error__msg">
+            {t(
+              'app.byoUnused',
+              'Your connected {provider} account couldn’t be used this run (its token looks expired or revoked), so it ran on the shared model pool instead of your own model. Reconnect it in the web app under Settings ▸ API Keys.',
+            ).replace('{provider}', conv.byoUnresolved.join(', '))}
+          </span>
+          <div className="bf-error__actions">
+            <button
+              className="bf-btn bf-btn--icon"
+              onClick={() => setDismissedByo(byoKey)}
+              title={t('app.dismiss', 'Dismiss')}
+              aria-label={t('app.dismiss', 'Dismiss')}
+            >
+              ×
+            </button>
+          </div>
+        </div>
+      )}
 
       {conv.error && (
         <div className="bf-error" role="alert">

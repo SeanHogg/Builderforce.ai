@@ -132,12 +132,19 @@ export interface UseBrainConversation {
    */
   trace: BrainTraceEvent[];
   /**
+   * Connected providers the gateway could NOT use this run (e.g. an expired Claude
+   * subscription that fell back to the shared pool). A mounted view renders a passive
+   * "reconnect your account" banner off this; empty when everything resolved.
+   */
+  byoUnresolved: string[];
+  /**
    * Assemble a paste-able triage report of the active chat's execution — the LLM
    * steps, the full tool chain (args + results), intermediate assistant messages,
    * every error, and the visible transcript. `agentLabel` names the persona the
-   * Brain ran as. Mirrors the host/cloud "Copy triage info" report.
+   * Brain ran as; `surface` names where it ran (e.g. `VS Code (VSIX)`). Mirrors the
+   * host/cloud "Copy triage info" report.
    */
-  buildTriageReport(agentLabel?: string): string;
+  buildTriageReport(agentLabel?: string, surface?: string): string;
 }
 
 export function useBrainConversation(options: UseBrainConversationOptions): UseBrainConversation {
@@ -441,13 +448,14 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
   }, [chatId]);
 
   const buildTriageReport = useCallback(
-    (agentLabel?: string) =>
+    (agentLabel?: string, surface?: string) =>
       buildBrainTriageReport({
         capturedAt: new Date().toISOString(),
         events: getRunTrace(chatId),
         messages,
         chatId,
         agentLabel,
+        surface,
         configuredModel: model,
         error: localError || snapshot.error,
       }),
@@ -477,6 +485,10 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
     resolveConfirm,
     hasTrace: snapshot.hasTrace,
     trace: snapshot.trace,
+    /** Connected providers the gateway couldn't use this run (e.g. an expired Claude
+     *  subscription) — a mounted view renders a passive "reconnect your account"
+     *  banner off this. Empty when everything resolved. */
+    byoUnresolved: snapshot.byoUnresolved,
     buildTriageReport,
   };
 }

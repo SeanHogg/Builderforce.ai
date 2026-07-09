@@ -182,7 +182,8 @@ body {
   vertical-align: middle;
 }
 
-.bf-error {
+.bf-error,
+.bf-notice {
   flex: 0 0 auto;
   display: flex;
   align-items: flex-start;
@@ -194,6 +195,14 @@ body {
   color: var(--bf-error-text);
   background: var(--bf-error-bg);
   border: 1px solid var(--bf-error);
+}
+
+/* A passive warning (not an error): a connected account the gateway couldn't use.
+   Drives off theme tokens so it reads in both light and dark. */
+.bf-notice {
+  color: var(--bf-text);
+  background: var(--bf-warning-bg);
+  border-color: var(--bf-warning);
 }
 
 .bf-error__msg {

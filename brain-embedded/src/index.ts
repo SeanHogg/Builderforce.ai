@@ -84,6 +84,9 @@ export {
   isFailedToolResult,
   isEvermindModel,
   modelsUsedInTrace,
+  accountUsedInTrace,
+  byoUnresolvedInTrace,
+  formatBrainProvenance,
   computeBrainDiagnostics,
   formatBrainDiagnostics,
 } from './brainTriage';

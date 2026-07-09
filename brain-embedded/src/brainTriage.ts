@@ -190,6 +190,36 @@ function accountLabel(account: string): string {
 }
 
 /**
+ * The model + account provenance header lines, derived from the trace. The SINGLE
+ * source both copy surfaces use (the web {@link buildBrainTriageReport} and the VS
+ * Code `transcript.ts`) so "which surface / model / account served this, and was a
+ * connected account left unused" is rendered identically — no drift, no surface
+ * missing the account/BYO context (the "vsix copy missing info" gap). `surface`
+ * names WHERE the run happened (e.g. `VS Code (VSIX)` / `Web`); omit when unknown.
+ */
+export function formatBrainProvenance(
+  events: BrainTraceEvent[],
+  opts: { configuredModel?: string; surface?: string } = {},
+): string[] {
+  const lines: string[] = [];
+  if (opts.surface) lines.push(`Surface: ${opts.surface}`);
+  lines.push(`Configured model: ${opts.configuredModel || '(gateway auto-select)'}`);
+  const used = modelsUsedInTrace(events);
+  if (used.length) lines.push(`Models used: ${used.join(', ')}`);
+  const evermind = used.filter(isEvermindModel);
+  if (evermind.length) lines.push(`Evermind: yes — ${evermind.join(', ')}`);
+  const account = accountUsedInTrace(events);
+  if (account) lines.push(`Account: ${accountLabel(account)}`);
+  const byoUnresolved = byoUnresolvedInTrace(events);
+  if (byoUnresolved.length) {
+    lines.push(
+      `⚠ CONNECTED ACCOUNT NOT USED: ${byoUnresolved.join(', ')} — a connected provider could not be resolved this run (token expired/revoked, or stored under a different tenant), so the turn fell back to the shared pool instead of your own model. Reconnect it in Settings ▸ API Keys.`,
+    );
+  }
+  return lines;
+}
+
+/**
  * Structured run diagnostics derived from the trace — the numbers a reader needs
  * to tell WHY a Brain run died, without eyeballing a wall of JSON.
  *
@@ -378,6 +408,8 @@ export interface BuildBrainTriageOptions {
   /** The model this surface was CONFIGURED with (empty ⇒ gateway auto-selects).
    *  Distinct from what actually answered, which is derived from the trace. */
   configuredModel?: string;
+  /** Where the run happened (e.g. `VS Code (VSIX)` / `Web`), for provenance. */
+  surface?: string;
   /** The current top-level error surfaced to the user, if any. */
   error?: string;
 }
@@ -387,7 +419,7 @@ export interface BuildBrainTriageOptions {
  * header → errors-first → full event log → derived log lines → transcript.
  */
 export function buildBrainTriageReport(opts: BuildBrainTriageOptions): string {
-  const { capturedAt, events, messages = [], chatId, chatTitle, agentLabel, configuredModel, error } = opts;
+  const { capturedAt, events, messages = [], chatId, chatTitle, agentLabel, configuredModel, surface, error } = opts;
   const errors = events.filter((e) => e.isError || e.category === 'error');
   const lines: string[] = [];
 
@@ -395,26 +427,10 @@ export function buildBrainTriageReport(opts: BuildBrainTriageOptions): string {
   lines.push(`Captured:  ${capturedAt}`);
   if (chatId != null) lines.push(`Chat:      #${chatId}${chatTitle ? ` — ${chatTitle}` : ''}`);
   lines.push(`Brain:     ${agentLabel || 'Brain (default)'}`);
-  // Model provenance — which LLM actually produced these turns. `configuredModel`
-  // is what this surface was set to (blank ⇒ gateway auto-selects); the trace tells
-  // us what really answered, and whether a tenant's Evermind artifact was used.
-  lines.push(`Configured model: ${configuredModel || '(gateway auto-select)'}`);
-  const used = modelsUsedInTrace(events);
-  if (used.length) lines.push(`Models used: ${used.join(', ')}`);
-  const evermind = used.filter(isEvermindModel);
-  if (evermind.length) lines.push(`Evermind: yes — ${evermind.join(', ')}`);
-  // Account provenance — WHICH account actually served the turns, and any connected
-  // provider the gateway could NOT resolve. This is what tells a triager the run used
-  // a weak shared-pool model even though the tenant has BYO Anthropic (should have been
-  // Opus) — the context the copy previously lacked.
-  const account = accountUsedInTrace(events);
-  if (account) lines.push(`Account: ${accountLabel(account)}`);
-  const byoUnresolved = byoUnresolvedInTrace(events);
-  if (byoUnresolved.length) {
-    lines.push(
-      `⚠ CONNECTED ACCOUNT NOT USED: ${byoUnresolved.join(', ')} — a connected provider could not be resolved this run (token expired/revoked, or stored under a different tenant), so the turn fell back to the shared pool instead of your own model. Reconnect it in Settings ▸ API Keys.`,
-    );
-  }
+  // Model + account provenance (surface, configured vs actual model, which account
+  // served it, any connected account left unused) — the SHARED formatter, so this
+  // report and the VS Code transcript agree line-for-line.
+  lines.push(...formatBrainProvenance(events, { configuredModel, surface }));
   lines.push(`Steps: ${events.length} · Errors: ${errors.length} · Messages: ${messages.length}`);
   if (error) lines.push(`Last error: ${error}`);
 

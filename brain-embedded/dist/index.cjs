@@ -29,14 +29,17 @@ __export(src_exports, {
   CONSOLIDATION_META: () => CONSOLIDATION_META,
   EVERMIND_LEARN_MIN_CHARS: () => EVERMIND_LEARN_MIN_CHARS,
   PROVENANCE_META_KEY: () => PROVENANCE_META_KEY,
+  accountUsedInTrace: () => accountUsedInTrace,
   activeMentionToken: () => activeMentionToken,
   buildBrainTriageReport: () => buildBrainTriageReport,
+  byoUnresolvedInTrace: () => byoUnresolvedInTrace,
   computeBrainDiagnostics: () => computeBrainDiagnostics,
   consolidationMarkerContent: () => consolidationMarkerContent,
   consolidationMetadata: () => consolidationMetadata,
   countReconciledMemories: () => countReconciledMemories,
   filterMentionCandidates: () => filterMentionCandidates,
   formatBrainDiagnostics: () => formatBrainDiagnostics,
+  formatBrainProvenance: () => formatBrainProvenance,
   formatEvermindMemoryBlock: () => formatEvermindMemoryBlock,
   getGlobalRunState: () => getGlobalRunState,
   isConnectedAccountUnused: () => isConnectedAccountUnused,
@@ -1046,6 +1049,24 @@ function byoUnresolvedInTrace(events) {
 function accountLabel(account) {
   return account === "own" ? "the tenant's own connected account" : account === "shared_byo_unused" ? "the shared model pool (a connected account existed but was NOT used)" : account === "shared" ? "the shared model pool" : account;
 }
+function formatBrainProvenance(events, opts = {}) {
+  const lines = [];
+  if (opts.surface) lines.push(`Surface: ${opts.surface}`);
+  lines.push(`Configured model: ${opts.configuredModel || "(gateway auto-select)"}`);
+  const used = modelsUsedInTrace(events);
+  if (used.length) lines.push(`Models used: ${used.join(", ")}`);
+  const evermind = used.filter(isEvermindModel);
+  if (evermind.length) lines.push(`Evermind: yes \u2014 ${evermind.join(", ")}`);
+  const account = accountUsedInTrace(events);
+  if (account) lines.push(`Account: ${accountLabel(account)}`);
+  const byoUnresolved = byoUnresolvedInTrace(events);
+  if (byoUnresolved.length) {
+    lines.push(
+      `\u26A0 CONNECTED ACCOUNT NOT USED: ${byoUnresolved.join(", ")} \u2014 a connected provider could not be resolved this run (token expired/revoked, or stored under a different tenant), so the turn fell back to the shared pool instead of your own model. Reconnect it in Settings \u25B8 API Keys.`
+    );
+  }
+  return lines;
+}
 function byteLen(v) {
   const s = typeof v === "string" ? v : JSON.stringify(v ?? "");
   return s.length;
@@ -1136,26 +1157,14 @@ function formatBrainDiagnostics(d) {
   return lines;
 }
 function buildBrainTriageReport(opts) {
-  const { capturedAt, events, messages = [], chatId, chatTitle, agentLabel, configuredModel, error } = opts;
+  const { capturedAt, events, messages = [], chatId, chatTitle, agentLabel, configuredModel, surface, error } = opts;
   const errors = events.filter((e) => e.isError || e.category === "error");
   const lines = [];
   lines.push("=== BuilderForce Brain Triage ===");
   lines.push(`Captured:  ${capturedAt}`);
   if (chatId != null) lines.push(`Chat:      #${chatId}${chatTitle ? ` \u2014 ${chatTitle}` : ""}`);
   lines.push(`Brain:     ${agentLabel || "Brain (default)"}`);
-  lines.push(`Configured model: ${configuredModel || "(gateway auto-select)"}`);
-  const used = modelsUsedInTrace(events);
-  if (used.length) lines.push(`Models used: ${used.join(", ")}`);
-  const evermind = used.filter(isEvermindModel);
-  if (evermind.length) lines.push(`Evermind: yes \u2014 ${evermind.join(", ")}`);
-  const account = accountUsedInTrace(events);
-  if (account) lines.push(`Account: ${accountLabel(account)}`);
-  const byoUnresolved = byoUnresolvedInTrace(events);
-  if (byoUnresolved.length) {
-    lines.push(
-      `\u26A0 CONNECTED ACCOUNT NOT USED: ${byoUnresolved.join(", ")} \u2014 a connected provider could not be resolved this run (token expired/revoked, or stored under a different tenant), so the turn fell back to the shared pool instead of your own model. Reconnect it in Settings \u25B8 API Keys.`
-    );
-  }
+  lines.push(...formatBrainProvenance(events, { configuredModel, surface }));
   lines.push(`Steps: ${events.length} \xB7 Errors: ${errors.length} \xB7 Messages: ${messages.length}`);
   if (error) lines.push(`Last error: ${error}`);
   lines.push("", ...formatBrainDiagnostics(computeBrainDiagnostics(events, configuredModel)));
@@ -1229,6 +1238,14 @@ function provenanceMetadata(result) {
 }
 var MAX_TOOL_ITERATIONS = 25;
 var HISTORY_WINDOW = 80;
+var DEDUP_READ_TOOLS = /* @__PURE__ */ new Set(["read_file", "search_code", "list_files"]);
+function accrueByoUnresolved(c, raw) {
+  if (!raw) return;
+  const before = c.byoUnresolved.length;
+  const next = new Set(c.byoUnresolved);
+  for (const p of raw.split(",").map((s) => s.trim()).filter(Boolean)) next.add(p);
+  if (next.size !== before) c.byoUnresolved = [...next];
+}
 var HISTORY_TOKEN_BUDGET = 24e3;
 var MAX_TOOL_RESULT_CHARS = 6e3;
 function estimateTokens(chars) {
@@ -1262,7 +1279,8 @@ var EMPTY_SNAPSHOT = {
   messagesEpoch: 0,
   appended: [],
   hasTrace: false,
-  trace: []
+  trace: [],
+  byoUnresolved: []
 };
 function makeCell() {
   return {
@@ -1277,6 +1295,7 @@ function makeCell() {
     messagesEpoch: 0,
     listeners: /* @__PURE__ */ new Set(),
     abort: null,
+    byoUnresolved: [],
     snapshot: EMPTY_SNAPSHOT
   };
 }
@@ -1309,7 +1328,8 @@ function emit(c) {
     messagesEpoch: c.messagesEpoch,
     appended: c.appended,
     hasTrace: c.trace.length > 0,
-    trace: c.trace
+    trace: c.trace,
+    byoUnresolved: c.byoUnresolved
   };
   for (const l of c.listeners) l();
   for (const l of storeListeners) l();
@@ -1439,6 +1459,7 @@ async function startRun(chatId, req) {
   c.running = true;
   c.error = "";
   c.streamingText = "";
+  c.byoUnresolved = [];
   c.abort = new AbortController();
   if (req.seed && c.transcript.length === 0) c.transcript = req.seed.slice();
   if (req.userTurn !== void 0) c.transcript.push({ role: "user", content: req.userTurn });
@@ -1485,6 +1506,7 @@ ${block}`;
       }
     }
   }
+  const readDedupe = /* @__PURE__ */ new Set();
   for (let iter = 0; iter < MAX_TOOL_ITERATIONS; iter++) {
     if (c.abort?.signal.aborted) return;
     c.streamingText = "";
@@ -1516,6 +1538,7 @@ ${block}`;
       });
       throw e;
     }
+    accrueByoUnresolved(c, result.byoUnresolved);
     const resolved = result.resolvedModel ?? model ?? "default";
     const requested = model ?? "default";
     if (requested !== "default" && resolved !== "default" && resolved !== requested) {
@@ -1590,6 +1613,20 @@ ${block}`;
             continue;
           }
         }
+        const isReadTool = DEDUP_READ_TOOLS.has(tc.name);
+        const dedupeKey = `${tc.name}:${tc.args ?? ""}`;
+        if (isReadTool) {
+          if (readDedupe.has(dedupeKey)) {
+            const stub = {
+              note: `Duplicate ${tc.name} call \u2014 identical arguments to an earlier call this turn, whose result is already in the conversation above. Reuse that result instead of re-reading; do not repeat it (this saves context and avoids looping).`
+            };
+            convo.push({ role: "tool", tool_call_id: tc.id, content: JSON.stringify(stub) });
+            pushTrace(c, { ts: nowIso(), category: "tool", label: tc.name, args, result: stub });
+            continue;
+          }
+        } else {
+          readDedupe.clear();
+        }
         const toolStart = nowMs2();
         let out;
         try {
@@ -1614,6 +1651,7 @@ ${block}`;
           resultBytes: trimmedOut.bytes,
           truncated: trimmedOut.truncated
         });
+        if (isReadTool && !isFailedToolResult(out)) readDedupe.add(dedupeKey);
       }
       continue;
     }
@@ -1664,6 +1702,7 @@ ${block}`;
           emit(c);
         } }
       );
+      accrueByoUnresolved(c, closing.byoUnresolved);
       pushTrace(c, {
         ts: nowIso(),
         category: "llm",
@@ -1935,12 +1974,13 @@ ${refs}`;
     if (chatId != null) stopRun(chatId);
   }, [chatId]);
   const buildTriageReport = (0, import_react6.useCallback)(
-    (agentLabel) => buildBrainTriageReport({
+    (agentLabel, surface) => buildBrainTriageReport({
       capturedAt: (/* @__PURE__ */ new Date()).toISOString(),
       events: getRunTrace(chatId),
       messages,
       chatId,
       agentLabel,
+      surface,
       configuredModel: model,
       error: localError || snapshot.error
     }),
@@ -1969,6 +2009,10 @@ ${refs}`;
     resolveConfirm,
     hasTrace: snapshot.hasTrace,
     trace: snapshot.trace,
+    /** Connected providers the gateway couldn't use this run (e.g. an expired Claude
+     *  subscription) — a mounted view renders a passive "reconnect your account"
+     *  banner off this. Empty when everything resolved. */
+    byoUnresolved: snapshot.byoUnresolved,
     buildTriageReport
   };
 }
@@ -2005,14 +2049,17 @@ function takePendingPrompt() {
   CONSOLIDATION_META,
   EVERMIND_LEARN_MIN_CHARS,
   PROVENANCE_META_KEY,
+  accountUsedInTrace,
   activeMentionToken,
   buildBrainTriageReport,
+  byoUnresolvedInTrace,
   computeBrainDiagnostics,
   consolidationMarkerContent,
   consolidationMetadata,
   countReconciledMemories,
   filterMentionCandidates,
   formatBrainDiagnostics,
+  formatBrainProvenance,
   formatEvermindMemoryBlock,
   getGlobalRunState,
   isConnectedAccountUnused,
