@@ -3570,8 +3570,13 @@
     "title": "此次运行在项目自己的 Evermind 模型上执行",
     "contributed": "已贡献"
   },
-  "llmStudio": {
-    "title": "构建自定义模型",
+  "evermindStudio": {
+    "title": "培育你的 Evermind",
+    "intro": "教导你的 Evermind，它会就地学习——无需训练运行，也无需适配器。使用控制台教它事实、技能和示例；每节课都会呈现在实时知识图谱上。聊天在 Brain 中进行——点击右下角的按钮即可打开。",
+    "footer": "☁️ 你的 Evermind 会从每个项目中学习。在此教导它，然后将其雇入 Workforce，或从“发布”选项卡发布。"
+  },
+  "finetuneStudio": {
+    "title": "微调自定义模型",
     "intro": "设计数据、微调 LoRA 适配器，并将其作为可雇佣的智能体发布——全部在浏览器中完成。聊天和提示设计在 Brain 中进行——点击右下角的按钮即可打开。下面的步骤驱动构建流程。",
     "retry": "重试",
     "loadError": "加载项目状态失败。",

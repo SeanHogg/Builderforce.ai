@@ -4,6 +4,20 @@
 
 ---
 
+## ✅ RESOLVED 2026-07-09 — Evermind video + image generation: engine codec, Studio build steps, image path, codec serialization (builderforce-memory `2026.7.1`)
+
+Enabled Evermind to generate video/image WITHOUT a new model — the generator (`EvermindLM`) is a modality-agnostic next-token predictor, so this is a codec + vocabulary problem. New `packages/memory-engine/src/codec/`:
+
+- **`VideoRVQCodec`** ([video_rvq.ts](../builderforce-memory/packages/memory-engine/src/codec/video_rvq.ts)) — TEMPORAL residual-VQ: patchify frames → keyframes quantize against an intra codebook bank, other frames quantize the residual vs the previous *reconstructed* frame (closed-loop) against an inter bank → self-delimiting `<vid> … </vid>` token stream. Tolerant `decode` (pads short/noisy streams, never throws). `fit()` learns both banks via greedy per-level k-means. `serialize()`/`deserialize()` ("VRQ0" blob) so a trained codec can ship with the model (the serving-side unblock).
+- **`MultimodalVocab`** ([multimodal_vocab.ts](../builderforce-memory/packages/memory-engine/src/codec/multimodal_vocab.ts)) — lays text ⊕ 4 control tokens ⊕ video codes on one flat token axis; `.size` is the model's `vocabSize`.
+- **`ImageRVQCodec`** ([image_rvq.ts](../builderforce-memory/packages/memory-engine/src/codec/image_rvq.ts)) — still image = the single-frame (`keyframeInterval:1`) case, a thin DRY wrapper over the video codec.
+- **Bridges** ([evermind_video.ts](../builderforce-memory/packages/memory-engine/src/codec/evermind_video.ts)) — `buildVideoSequence`, `generateVideo`, `generateImage` drive the UNCHANGED `EvermindLM.generate`; no model fork.
+- **Studio BUILD steps** ([workflow/steps.ts](../builderforce-memory/packages/memory/src/workflow/steps.ts)) — `video-train` (fit codec → build sequences → train EvermindLM; self-runnable on synthetic clips) and `video-roundtrip` (encode→decode reconstruction MSE gate + generate→decode smoke test), registered in the step palette.
+- **Verified** — new engine `tests/video_rvq.test.ts` (11) + 2 workflow tests; full suites green (engine 250, memory 364). All three packages bumped to `2026.7.1` (lockstep); **NOT** published (`pnpm -r publish` left to operator).
+- **Open follow-ups** (in ROADMAP): gateway `evermind/<ref>` media serving (api `llmRoutes.ts` + package codec into `.evermind`), and the real corpus + GPU training run for coherent output.
+
+---
+
 ## ✅ RESOLVED 2026-07-09 — BYO Anthropic resolution: precise failure reason, transient-refresh hardening, and cross-workspace (tenant-mismatch) detection (api + brain-embedded + VSIX `2026.7.54`)
 
 Closes the last P1 of the "should have used Opus" thread — WHY a connected Anthropic account didn't resolve is now handled AND surfaced in code, no live guesswork:

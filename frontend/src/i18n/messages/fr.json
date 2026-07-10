@@ -3570,8 +3570,13 @@
     "title": "Cette exécution a eu lieu sur le propre modèle Evermind du projet",
     "contributed": "a contribué"
   },
-  "llmStudio": {
-    "title": "Créer un modèle personnalisé",
+  "evermindStudio": {
+    "title": "Cultivez votre Evermind",
+    "intro": "Enseignez à votre Evermind et il apprend en direct — sans entraînement ni adaptateurs. Utilisez la console pour lui enseigner des faits, des compétences et des exemples ; chaque leçon apparaît sur la Carte des connaissances en direct. Le chat se passe dans le Brain — ouvrez-le via le bouton en bas à droite.",
+    "footer": "☁️ Votre Evermind apprend de chaque projet. Enseignez-le ici, puis recrutez-le dans le Workforce ou publiez-le depuis l’onglet Publier."
+  },
+  "finetuneStudio": {
+    "title": "Affiner un modèle personnalisé",
     "intro": "Concevez des données, affinez un adaptateur LoRA et publiez-le comme agent recrutable — le tout depuis le navigateur. Le chat et la conception des prompts se font dans le Brain — ouvrez-le avec le bouton en bas à droite. Les étapes ci-dessous pilotent le pipeline de création.",
     "retry": "Réessayer",
     "loadError": "Échec du chargement de l’état du projet.",
