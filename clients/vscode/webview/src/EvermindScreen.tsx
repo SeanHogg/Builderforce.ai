@@ -79,13 +79,15 @@ export function EvermindScreen({ init }: { init: InitData }) {
     req<IdeProjectRow[]>('/api/ide-projects')
       .then((rows) => {
         if (cancelled) return;
-        const llm = (rows ?? []).filter((r) => r.modality === 'llm');
-        setBuilds(llm);
+        // Evermind builds: the `evermind` modality (plus legacy `llm`, the retired
+        // combined modality, which are Evermind projects).
+        const evermindBuilds = (rows ?? []).filter((r) => r.modality === 'evermind' || r.modality === 'llm');
+        setBuilds(evermindBuilds);
         setStorageId((cur) => {
           // Keep a still-valid selection across refreshes; else prefer a build grouped
           // under the sidebar's active Project, falling back to the first available.
-          if (cur != null && llm.some((r) => r.storageProjectId === cur)) return cur;
-          const preferred = llm.find((r) => r.containerProjectId === init.project?.id) ?? llm[0];
+          if (cur != null && evermindBuilds.some((r) => r.storageProjectId === cur)) return cur;
+          const preferred = evermindBuilds.find((r) => r.containerProjectId === init.project?.id) ?? evermindBuilds[0];
           return preferred?.storageProjectId ?? null;
         });
       })

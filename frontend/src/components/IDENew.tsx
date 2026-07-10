@@ -10,7 +10,8 @@ import { AITrainingPanel } from './AITrainingPanel';
 import { AgentPublishPanel } from './AgentPublishPanel';
 import { SitePublishPanel } from './SitePublishPanel';
 import { AgentStateViewer } from './AgentStateViewer';
-import { LlmStudioPanel } from './LlmStudioPanel';
+import { EvermindStudioPanel } from './EvermindStudioPanel';
+import { FinetuneStudioPanel } from './FinetuneStudioPanel';
 import { PreviewFrame } from './PreviewFrame';
 import { IdeProjectsSlideOutPanel } from './ide/IdeProjectsSlideOutPanel';
 import { BrainPanel } from './brain/BrainPanel';
@@ -1181,7 +1182,7 @@ export function IDE({ project, initialFiles, onProjectUpdate, onOpenProjectDetai
               busy={voice.busy}
               unavailable={voice.unavailable}
             />
-          ) : modality === 'llm' ? (
+          ) : modality === 'evermind' || modality === 'finetune' ? (
             activeFile ? (
               <CodePane
                 openFiles={openFiles}
@@ -1195,12 +1196,16 @@ export function IDE({ project, initialFiles, onProjectUpdate, onOpenProjectDetai
               />
             ) : (
               <div style={{ flex: 1, overflow: 'auto', minHeight: 0 }}>
-                <LlmStudioPanel
-                  projectId={project.id}
-                  files={files}
-                  onGoToTab={setRightTab}
-                  onOpenFile={openFile}
-                />
+                {modality === 'evermind' ? (
+                  <EvermindStudioPanel projectId={project.id} />
+                ) : (
+                  <FinetuneStudioPanel
+                    projectId={project.id}
+                    files={files}
+                    onGoToTab={setRightTab}
+                    onOpenFile={openFile}
+                  />
+                )}
               </div>
             )
           ) : (

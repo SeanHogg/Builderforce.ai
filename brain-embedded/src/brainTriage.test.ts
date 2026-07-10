@@ -91,21 +91,38 @@ describe('buildBrainTriageReport', () => {
     expect(report).toContain('Steps: 0 · Errors: 0 · Messages: 0');
   });
 
-  it('surfaces the account + a connected-but-unresolved BYO provider (the "should have used Opus" context)', () => {
+  it('surfaces the account + a connected-but-unresolved BYO provider WITH its reason', () => {
+    const report = buildBrainTriageReport({
+      capturedAt: '2026-06-13T00:00:03.000Z',
+      surface: 'VS Code (VSIX)',
+      events: [
+        {
+          ts: '2026-06-13T00:00:00.000Z', category: 'llm', label: 'llm.complete',
+          args: { model: 'deepseek/deepseek-v4-flash', step: 0, toolCalls: 1, account: 'shared', byoUnresolved: 'anthropic:revoked' },
+          result: '1 tool call(s)',
+        },
+      ],
+    });
+    expect(report).toContain('Surface: VS Code (VSIX)');
+    expect(report).toContain('Account: the shared model pool');
+    // The connected-but-unresolved Anthropic account is flagged WITH the precise reason + fix.
+    expect(report).toContain('⚠ CONNECTED ACCOUNT NOT USED');
+    expect(report).toContain('anthropic (revoked)');
+    expect(report).toContain('reconnect it in the web app under Settings ▸ API Keys');
+  });
+
+  it('renders the tenant-mismatch reason (connected in another workspace) distinctly', () => {
     const report = buildBrainTriageReport({
       capturedAt: '2026-06-13T00:00:03.000Z',
       events: [
         {
           ts: '2026-06-13T00:00:00.000Z', category: 'llm', label: 'llm.complete',
-          args: { model: 'deepseek/deepseek-v4-flash', step: 0, toolCalls: 1, account: 'shared', byoUnresolved: 'anthropic' },
-          result: '1 tool call(s)',
+          args: { model: 'x', step: 0, toolCalls: 0, account: 'shared', byoUnresolved: 'anthropic:other-workspace' },
+          result: 'ok',
         },
       ],
     });
-    // The account that served the turn is named…
-    expect(report).toContain('Account: the shared model pool');
-    // …and the connected-but-unresolved Anthropic account is flagged with a fix.
-    expect(report).toContain('⚠ CONNECTED ACCOUNT NOT USED: anthropic');
-    expect(report).toContain('Reconnect it in Settings');
+    expect(report).toContain('anthropic (other-workspace)');
+    expect(report).toContain('connected this account in a DIFFERENT workspace');
   });
 });

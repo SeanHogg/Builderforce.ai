@@ -971,6 +971,29 @@ function byoUnresolvedInTrace(events) {
   }
   return seen;
 }
+function parseByoUnresolved(entries) {
+  return entries.map((e) => {
+    const i = e.indexOf(":");
+    return i === -1 ? { provider: e, reason: "" } : { provider: e.slice(0, i), reason: e.slice(i + 1) };
+  });
+}
+function byoReasonHint(reason) {
+  switch (reason) {
+    case "revoked":
+      return "its token was revoked or expired \u2014 reconnect it in the web app under Settings \u25B8 API Keys";
+    case "expired":
+      return "its token expired and the refresh failed (often transient) \u2014 retry, or reconnect it under Settings \u25B8 API Keys";
+    case "undecryptable":
+      return "its stored credential could not be read \u2014 re-enter it under Settings \u25B8 API Keys";
+    case "other-workspace":
+      return "you connected this account in a DIFFERENT workspace \u2014 switch to that workspace, or connect it in this one under Settings \u25B8 API Keys";
+    default:
+      return "it could not be used this run \u2014 reconnect it under Settings \u25B8 API Keys";
+  }
+}
+function byoUnresolvedSummary(entry) {
+  return `${entry.provider}${entry.reason ? ` (${entry.reason})` : ""}: ${byoReasonHint(entry.reason)}`;
+}
 function accountLabel(account) {
   return account === "own" ? "the tenant's own connected account" : account === "shared_byo_unused" ? "the shared model pool (a connected account existed but was NOT used)" : account === "shared" ? "the shared model pool" : account;
 }
@@ -984,11 +1007,10 @@ function formatBrainProvenance(events, opts = {}) {
   if (evermind.length) lines.push(`Evermind: yes \u2014 ${evermind.join(", ")}`);
   const account = accountUsedInTrace(events);
   if (account) lines.push(`Account: ${accountLabel(account)}`);
-  const byoUnresolved = byoUnresolvedInTrace(events);
+  const byoUnresolved = parseByoUnresolved(byoUnresolvedInTrace(events));
   if (byoUnresolved.length) {
-    lines.push(
-      `\u26A0 CONNECTED ACCOUNT NOT USED: ${byoUnresolved.join(", ")} \u2014 a connected provider could not be resolved this run (token expired/revoked, or stored under a different tenant), so the turn fell back to the shared pool instead of your own model. Reconnect it in Settings \u25B8 API Keys.`
-    );
+    lines.push("\u26A0 CONNECTED ACCOUNT NOT USED \u2014 a connected account existed but the run fell back to the shared pool instead of your own model:");
+    for (const e of byoUnresolved) lines.push(`  \u2022 ${byoUnresolvedSummary(e)}`);
   }
   return lines;
 }
@@ -1221,6 +1243,7 @@ function makeCell() {
     listeners: /* @__PURE__ */ new Set(),
     abort: null,
     byoUnresolved: [],
+    compactMemo: null,
     snapshot: EMPTY_SNAPSHOT
   };
 }
@@ -1315,6 +1338,86 @@ function tokenBounded(w) {
   let trimmed = w.slice(start);
   while (trimmed.length > 1 && trimmed[0].role !== "user") trimmed = trimmed.slice(1);
   return trimmed;
+}
+var COMPACT_TAIL_TURNS = 8;
+function compactTailStart(convo, tailTurns) {
+  let start = Math.max(0, convo.length - tailTurns);
+  while (start < convo.length && convo[start].role === "tool") start += 1;
+  return start;
+}
+function compactMiddleRange(convo, tailTurns) {
+  const tailStart = compactTailStart(convo, tailTurns);
+  const firstUserIdx = convo.findIndex((m) => m.role === "user");
+  const start = firstUserIdx >= 0 && firstUserIdx < tailStart ? firstUserIdx + 1 : 0;
+  return { start, end: tailStart };
+}
+function assembleCompacted(systemPrompt, convo, note, tailTurns) {
+  const tailStart = compactTailStart(convo, tailTurns);
+  const firstUserIdx = convo.findIndex((m) => m.role === "user");
+  const out = [{ role: "system", content: systemPrompt }];
+  if (firstUserIdx >= 0 && firstUserIdx < tailStart) out.push(convo[firstUserIdx]);
+  out.push({ role: "assistant", content: note });
+  out.push(...convo.slice(tailStart));
+  return out;
+}
+function renderForSummary(msgs) {
+  return msgs.map((m) => {
+    const content = typeof m.content === "string" ? m.content : JSON.stringify(m.content ?? "");
+    const calls = m.tool_calls?.length ? ` [called: ${m.tool_calls.map((t) => t.function?.name).filter(Boolean).join(", ")}]` : "";
+    return `${m.role}${calls}: ${content}`;
+  }).join("\n\n");
+}
+async function summarizeMiddle(stream, model, msgs, signal) {
+  if (msgs.length === 0) return null;
+  try {
+    const res = await stream({
+      messages: [
+        {
+          role: "system",
+          content: "You compress an in-progress AI agent transcript into a concise MEMORY the agent keeps working from. Capture: the task, concrete facts/answers discovered, tool results that matter (ids, paths, values), decisions made, and what still remains to do. Be information-dense; drop pleasantries. No preamble."
+        },
+        { role: "user", content: renderForSummary(msgs) }
+      ],
+      model,
+      signal
+    });
+    const out = (res.text ?? "").trim();
+    return out.length > 0 ? out : null;
+  } catch {
+    return null;
+  }
+}
+async function buildWorkingTranscript(c, systemPrompt, stream, model) {
+  const convo = c.transcript;
+  const total = convo.reduce((sum, m) => sum + messageTokens(m), 0);
+  if (total <= HISTORY_TOKEN_BUDGET) {
+    c.compactMemo = null;
+    return [{ role: "system", content: systemPrompt }, ...windowed(convo)];
+  }
+  const stale = !c.compactMemo || convo.length - c.compactMemo.atLen >= COMPACT_TAIL_TURNS;
+  let note = c.compactMemo?.note ?? null;
+  if (stale) {
+    const { start, end } = compactMiddleRange(convo, COMPACT_TAIL_TURNS);
+    const middle = convo.slice(start, end);
+    const summary = await summarizeMiddle(stream, model, middle, c.abort?.signal);
+    if (summary != null) {
+      note = `Compressed memory of ${middle.length} earlier step(s):
+${summary}`;
+      c.compactMemo = { note, atLen: convo.length };
+      pushTrace(c, {
+        ts: nowIso(),
+        category: "message",
+        label: "context.compacted",
+        args: { droppedMessages: middle.length },
+        result: `Compressed ${middle.length} earlier step(s) into a memory to stay within the context window.`
+      });
+      emit(c);
+    }
+  }
+  if (note == null) {
+    return [{ role: "system", content: systemPrompt }, ...windowed(convo)];
+  }
+  return assembleCompacted(systemPrompt, convo, note, COMPACT_TAIL_TURNS);
 }
 function subscribeRunStore(listener) {
   storeListeners.add(listener);
@@ -1436,10 +1539,8 @@ ${block}`;
     if (c.abort?.signal.aborted) return;
     c.streamingText = "";
     emit(c);
-    const working = [
-      { role: "system", content: systemPrompt },
-      ...windowed(convo)
-    ];
+    const working = await buildWorkingTranscript(c, systemPrompt, stream, model);
+    if (c.abort?.signal.aborted) return;
     const llmStart = nowMs2();
     let result;
     try {
@@ -1976,7 +2077,9 @@ export {
   accountUsedInTrace,
   activeMentionToken,
   buildBrainTriageReport,
+  byoReasonHint,
   byoUnresolvedInTrace,
+  byoUnresolvedSummary,
   computeBrainDiagnostics,
   consolidationMarkerContent,
   consolidationMetadata,
@@ -1994,6 +2097,7 @@ export {
   lastConsolidationIndex,
   mentionRecipient,
   modelsUsedInTrace,
+  parseByoUnresolved,
   parseDirectedRecipient,
   parseMessageAuthor,
   parseMessageProvenance,

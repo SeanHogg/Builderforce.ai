@@ -636,7 +636,7 @@ export function createProjectRoutes(projectService: ProjectService, db: Db): Hon
       sourceControlRepoUrl?: string | null;
       githubRepoUrl?: string | null;
       governance?: string | null;
-      /** IDE project type: 'designer' | 'video' | 'llm'. Defaults to 'designer'. */
+      /** IDE project type: 'designer' | 'video' | 'evermind' | 'finetune' | 'voice'. Defaults to 'designer'. */
       modality?: string | null;
       /** Where the project was born — 'ide' tags it for the Designer badge. */
       origin?: string | null;

@@ -71,7 +71,9 @@ import {
   isSupportedProvider,
   byoVendorIdSet,
   providersFromCredentials,
-  unresolvedProviders,
+  formatByoUnresolvedHeader,
+  providersConnectedInOtherWorkspaces,
+  SUPPORTED_PROVIDERS,
   type TenantVendorKeys,
   type LlmProvider,
 } from '../../application/llm/tenantProviderKeyService';
@@ -1510,14 +1512,27 @@ export function createLlmRoutes(): Hono<HonoEnv> {
     // provenance chip reads this so a SUCCESSFUL turn shows whether the tenant's own
     // connected frontier account ran it, or the shared pool did despite one existing.
     upstreamHeaders.set('x-builderforce-account', classifyReplyAccount(result.byoFunded ?? false, byoVendors.size > 0));
-    // A provider the tenant CONNECTED but that couldn't be resolved this call (expired
-    // Claude subscription whose refresh failed, an undecryptable key, or one stored under
-    // a different tenant) leaves `byoVendors` empty — so the turn degrades to the shared
-    // pool looking exactly like "nothing connected". Surface the unresolved providers so
-    // the client/triage can say "Anthropic connected but not used — reconnect it" instead
-    // of a silent weak-coder run (the "should have selected Opus" report had no signal).
-    const byoUnresolved = unresolvedProviders(tenantCreds);
-    if (byoUnresolved.length > 0) upstreamHeaders.set('x-builderforce-byo-unresolved', byoUnresolved.join(','));
+    // A provider the tenant CONNECTED but that couldn't be resolved this call (revoked/
+    // expired subscription, an undecryptable key) leaves `byoVendors` empty — the turn
+    // degrades to the shared pool looking exactly like "nothing connected". Surface each
+    // unresolved provider WITH its reason (`anthropic:revoked`) so the client/triage can
+    // say precisely why + what to do, instead of a silent weak-coder run.
+    // ALSO cover the tenant-mismatch case: if NOTHING is connected in THIS tenant on an
+    // agentic (Brain) turn, check whether the same user connected a frontier provider in
+    // ANOTHER workspace (reason `other-workspace`) — cached per user (~1 query per 5 min,
+    // never on the common connected path) so it's not a per-request cost.
+    let otherWorkspace: LlmProvider[] = [];
+    if (byoVendors.size === 0 && tenantCreds.configuredProviders.length === 0 && isAgenticToolTurn(body as { tools?: unknown }) && access.userId) {
+      const uid = access.userId;
+      otherWorkspace = await getOrSetCached(
+        c.env as Env,
+        `byo-other-workspace:${uid}:${access.tenantId}`,
+        () => providersConnectedInOtherWorkspaces(c.env as Env, uid, access.tenantId, SUPPORTED_PROVIDERS),
+        { kvTtlSeconds: 300, l1TtlMs: 60_000 },
+      ).catch(() => [] as LlmProvider[]);
+    }
+    const byoUnresolvedHeader = formatByoUnresolvedHeader(tenantCreds, otherWorkspace);
+    if (byoUnresolvedHeader) upstreamHeaders.set('x-builderforce-byo-unresolved', byoUnresolvedHeader);
     upstreamHeaders.set('x-builderforce-retries', String(result.retries));
     upstreamHeaders.set('x-builderforce-product', llmProduct);
     upstreamHeaders.set('x-builderforce-effective-plan', access.effectivePlan);

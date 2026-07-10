@@ -250,6 +250,14 @@ interface RunCell {
   abort: AbortController | null;
   /** Connected-but-unresolved BYO providers accumulated across this run's turns. */
   byoUnresolved: string[];
+  /**
+   * Cached compressed-memory of the run's older turns. When the transcript exceeds
+   * {@link HISTORY_TOKEN_BUDGET} the loop SUMMARIZES the bulky middle (instead of
+   * dropping it, which made a weak model re-read and thrash into "LOOP EXHAUSTED"),
+   * and memoizes the note here so the growing prefix is summarized at most once per
+   * overflow rather than every iteration. Null until the first overflow / reset.
+   */
+  compactMemo: { note: string; atLen: number } | null;
   /** Cached immutable snapshot; identity changes only when something changed. */
   snapshot: BrainRunSnapshot;
 }
@@ -301,6 +309,7 @@ function makeCell(): RunCell {
     listeners: new Set(),
     abort: null,
     byoUnresolved: [],
+    compactMemo: null,
     snapshot: EMPTY_SNAPSHOT,
   };
 }
@@ -465,6 +474,151 @@ function tokenBounded(w: ChatCompletionMessage[]): ChatCompletionMessage[] {
   // partner was just dropped.
   while (trimmed.length > 1 && trimmed[0].role !== 'user') trimmed = trimmed.slice(1);
   return trimmed;
+}
+
+// ---------------------------------------------------------------------------
+// Auto-compaction — summarize the bulky MIDDLE instead of dropping it.
+//
+// `tokenBounded` above keeps the request inside the model window by DROPPING the
+// oldest turns. That never 413s, but it silently LOSES context — which made a weak
+// model re-read files and thrash until it burned the tool-iteration cap ("LOOP
+// EXHAUSTED", the chat #50 failure). When a summarizer is available we instead
+// compress the older turns into ONE concise memory note (the same pattern the cloud
+// coding loop uses server-side via compactMessages), so the model keeps working from
+// a distilled memory and converges. Falls back to `tokenBounded` (drop) when no
+// summarizer is reachable, so correctness never depends on the extra LLM call.
+// ---------------------------------------------------------------------------
+
+/** Recent turns kept verbatim ahead of the compressed memory note. */
+export const COMPACT_TAIL_TURNS = 8;
+
+/** Start index of the recent tail that never orphans a `tool` result: take the last
+ *  `tailTurns` messages, then walk FORWARD off any leading `tool` message (whose
+ *  paired assistant tool-call turn sits in the summarized middle). Pure/testable. */
+export function compactTailStart(convo: ChatCompletionMessage[], tailTurns: number): number {
+  let start = Math.max(0, convo.length - tailTurns);
+  while (start < convo.length && convo[start]!.role === 'tool') start += 1;
+  return start;
+}
+
+/** The middle span [start,end) to summarize: everything between the pinned first
+ *  user task (kept verbatim as the run anchor) and the recent tail. Pure/testable. */
+export function compactMiddleRange(convo: ChatCompletionMessage[], tailTurns: number): { start: number; end: number } {
+  const tailStart = compactTailStart(convo, tailTurns);
+  const firstUserIdx = convo.findIndex((m) => m.role === 'user');
+  const start = firstUserIdx >= 0 && firstUserIdx < tailStart ? firstUserIdx + 1 : 0;
+  return { start, end: tailStart };
+}
+
+/**
+ * Assemble the working transcript from a compressed-memory `note`: system + the
+ * pinned first user task (run anchor) + the memory note + the recent tail (verbatim,
+ * tool-pairing safe via {@link compactTailStart}). Pure so partitioning is unit-
+ * tested; the note text comes from the async summarizer. Mirrors the cloud
+ * compactMessages layout (pinned head → single assistant memory → recent tail).
+ */
+export function assembleCompacted(
+  systemPrompt: string,
+  convo: ChatCompletionMessage[],
+  note: string,
+  tailTurns: number,
+): ChatCompletionMessage[] {
+  const tailStart = compactTailStart(convo, tailTurns);
+  const firstUserIdx = convo.findIndex((m) => m.role === 'user');
+  const out: ChatCompletionMessage[] = [{ role: 'system', content: systemPrompt }];
+  if (firstUserIdx >= 0 && firstUserIdx < tailStart) out.push(convo[firstUserIdx]!);
+  out.push({ role: 'assistant', content: note });
+  out.push(...convo.slice(tailStart));
+  return out;
+}
+
+/** Render a slice of the transcript to a compact text the summarizer compresses. */
+function renderForSummary(msgs: ChatCompletionMessage[]): string {
+  return msgs
+    .map((m) => {
+      const content = typeof m.content === 'string' ? m.content : JSON.stringify(m.content ?? '');
+      const calls = m.tool_calls?.length
+        ? ` [called: ${m.tool_calls.map((t) => t.function?.name).filter(Boolean).join(', ')}]`
+        : '';
+      return `${m.role}${calls}: ${content}`;
+    })
+    .join('\n\n');
+}
+
+/** Client-side summarizer built from the injected `stream` transport: one no-tools
+ *  completion that compresses an in-progress agent transcript into a dense memory.
+ *  Returns null on any failure/empty so the caller falls back to drop-oldest. */
+async function summarizeMiddle(
+  stream: BrainStreamFn,
+  model: string | undefined,
+  msgs: ChatCompletionMessage[],
+  signal: AbortSignal | undefined,
+): Promise<string | null> {
+  if (msgs.length === 0) return null;
+  try {
+    const res = await stream({
+      messages: [
+        {
+          role: 'system',
+          content:
+            'You compress an in-progress AI agent transcript into a concise MEMORY the agent keeps working from. Capture: the task, concrete facts/answers discovered, tool results that matter (ids, paths, values), decisions made, and what still remains to do. Be information-dense; drop pleasantries. No preamble.',
+        },
+        { role: 'user', content: renderForSummary(msgs) },
+      ],
+      model,
+      signal,
+    });
+    const out = (res.text ?? '').trim();
+    return out.length > 0 ? out : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Build the working transcript for a turn. Under budget → the existing message-count
+ * + drop-oldest window (a no-op when it fits). Over budget → summarize the older
+ * middle into a memoized memory note and keep the recent tail verbatim; a visible
+ * `context.compacted` step is recorded so the chat SHOWS the compression. Re-summarizes
+ * at most once per {@link COMPACT_TAIL_TURNS} new turns (memoized on the cell), and
+ * falls back to drop-oldest if the summarizer is unavailable.
+ */
+async function buildWorkingTranscript(
+  c: RunCell,
+  systemPrompt: string,
+  stream: BrainStreamFn,
+  model: string | undefined,
+): Promise<ChatCompletionMessage[]> {
+  const convo = c.transcript;
+  const total = convo.reduce((sum, m) => sum + messageTokens(m), 0);
+  if (total <= HISTORY_TOKEN_BUDGET) {
+    c.compactMemo = null; // back under budget — a later overflow summarizes afresh
+    return [{ role: 'system', content: systemPrompt }, ...windowed(convo)];
+  }
+  const stale = !c.compactMemo || convo.length - c.compactMemo.atLen >= COMPACT_TAIL_TURNS;
+  let note = c.compactMemo?.note ?? null;
+  if (stale) {
+    const { start, end } = compactMiddleRange(convo, COMPACT_TAIL_TURNS);
+    const middle = convo.slice(start, end);
+    const summary = await summarizeMiddle(stream, model, middle, c.abort?.signal);
+    if (summary != null) {
+      note = `Compressed memory of ${middle.length} earlier step(s):\n${summary}`;
+      c.compactMemo = { note, atLen: convo.length };
+      pushTrace(c, {
+        ts: nowIso(),
+        category: 'message',
+        label: 'context.compacted',
+        args: { droppedMessages: middle.length },
+        result: `Compressed ${middle.length} earlier step(s) into a memory to stay within the context window.`,
+      });
+      emit(c);
+    }
+  }
+  if (note == null) {
+    // Summarizer unavailable/failed → preserve the proven drop-oldest behavior.
+    return [{ role: 'system', content: systemPrompt }, ...windowed(convo)];
+  }
+  return assembleCompacted(systemPrompt, convo, note, COMPACT_TAIL_TURNS);
 }
 
 // ---------------------------------------------------------------------------
@@ -677,10 +831,12 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
     if (c.abort?.signal.aborted) return;
     c.streamingText = '';
     emit(c);
-    const working: ChatCompletionMessage[] = [
-      { role: 'system', content: systemPrompt },
-      ...windowed(convo),
-    ];
+    // Auto-compact BEFORE the turn: summarize the older middle into a memory note
+    // when the transcript exceeds the token budget (instead of silently dropping it
+    // and making the model thrash into "LOOP EXHAUSTED"). Falls back to the
+    // drop-oldest window when no summarizer is reachable.
+    const working = await buildWorkingTranscript(c, systemPrompt, stream, model);
+    if (c.abort?.signal.aborted) return;
     const llmStart = nowMs();
     let result;
     try {

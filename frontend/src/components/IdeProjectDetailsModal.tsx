@@ -28,7 +28,9 @@ export function IdeProjectDetailsModal({
   const t = useTranslations('ide');
   const m = getModality(ideProject.modality);
 
-  const isLlm = ideProject.modality === 'llm';
+  // Evermind projects (incl. legacy `llm`, which getModality aliases to evermind)
+  // can attach an optional automation workflow.
+  const isEvermind = m.id === 'evermind';
 
   const [name, setName] = useState(ideProject.name);
   const [containerProjectId, setContainerProjectId] = useState<number | null>(ideProject.containerProjectId);
@@ -87,14 +89,14 @@ export function IdeProjectDetailsModal({
     listIdeContainers()
       .then((rows) => { if (!cancelled) setContainers(rows); })
       .catch(() => { if (!cancelled) setContainers([]); });
-    // LLM projects assign a workflow — load the tenant's definitions to pick from.
-    if (isLlm) {
+    // Evermind projects assign a workflow — load the tenant's definitions to pick from.
+    if (isEvermind) {
       workflowDefinitions.list()
         .then((rows) => { if (!cancelled) setWorkflows(rows); })
         .catch(() => { if (!cancelled) setWorkflows([]); });
     }
     return () => { cancelled = true; };
-  }, [isLlm]);
+  }, [isEvermind]);
 
   const save = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -105,7 +107,7 @@ export function IdeProjectDetailsModal({
       const updated = await updateIdeProject(ideProject.id, {
         name: name.trim(),
         containerProjectId,
-        ...(isLlm ? { workflowDefinitionId } : {}),
+        ...(isEvermind ? { workflowDefinitionId } : {}),
       });
       onSaved(updated);
       onClose();
@@ -164,7 +166,7 @@ export function IdeProjectDetailsModal({
             <p style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 6 }}>{t('parentProjectHint')}</p>
           </div>
 
-          {isLlm && (
+          {isEvermind && (
             <div>
               <label className="block text-sm mb-1" style={{ color: 'var(--text-secondary)' }}>{t('workflowLabel')}</label>
               <select

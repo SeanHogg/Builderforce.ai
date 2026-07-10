@@ -811,7 +811,7 @@ export default {
       })().catch((err) => console.error('[email:wf-trigger] failed', err)),
     );
   },
-  fetch(rawRequest: Request, env: Env, ctx: ExecutionContext): Response | Promise<Response> {
+  async fetch(rawRequest: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     // Normalize the same-origin gateway path (builderforce.ai/gateway/*) → the bare
     // API surface before anything else looks at the request. No-op for direct
     // api.builderforce.ai traffic.
@@ -838,6 +838,29 @@ export default {
         },
       });
     }
-    return buildApp(env).fetch(request, env, ctx);
+    // Guard the composition root + top-level dispatch. buildApp() (DB/client
+    // construction, service wiring) and any throw that escapes Hono would
+    // otherwise bubble to the Workers runtime as a bare Error 1101 page WITH NO
+    // CORS HEADERS — which browsers surface as a misleading "No
+    // Access-Control-Allow-Origin header is present" / net::ERR_FAILED on EVERY
+    // endpoint at once, hiding the real 500. Return a CORS'd JSON 500 instead so
+    // the browser can read the actual failure and the login page shows a real error.
+    try {
+      return await buildApp(env).fetch(request, env, ctx);
+    } catch (err) {
+      console.error('[fetch:top-level] app construction or dispatch threw', err);
+      const origin = request.headers.get('Origin');
+      const allow = optionCorsAllowOrigin(origin, env.CORS_ORIGINS);
+      const message = err instanceof Error ? err.message : String(err);
+      return new Response(JSON.stringify({ error: message }), {
+        status: 500,
+        headers: {
+          'Content-Type': 'application/json',
+          'Access-Control-Allow-Origin': allow,
+          'Access-Control-Expose-Headers': 'x-request-id',
+          Vary: 'Origin',
+        },
+      });
+    }
   },
 } satisfies ExportedHandler<Env>;

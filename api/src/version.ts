@@ -1,2 +1,2 @@
 /** Matches package.json version — update both together. */
-export const API_VERSION = '2026.7.56';
+export const API_VERSION = '2026.7.67';

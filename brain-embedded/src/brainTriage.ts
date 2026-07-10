@@ -178,6 +178,45 @@ export function byoUnresolvedInTrace(events: BrainTraceEvent[]): string[] {
   return seen;
 }
 
+/** One connected-but-unresolved provider + WHY (the gateway encodes `provider:reason`
+ *  in `x-builderforce-byo-unresolved`, e.g. `anthropic:revoked`). `reason` is '' when the
+ *  gateway sent a bare provider (older gateway). */
+export interface ByoUnresolvedEntry {
+  provider: string;
+  reason: string;
+}
+
+/** Parse the run's `provider:reason` unresolved entries into structured form. Accepts the
+ *  bare-provider form too (reason ''), so an older gateway still renders. */
+export function parseByoUnresolved(entries: readonly string[]): ByoUnresolvedEntry[] {
+  return entries.map((e) => {
+    const i = e.indexOf(':');
+    return i === -1 ? { provider: e, reason: '' } : { provider: e.slice(0, i), reason: e.slice(i + 1) };
+  });
+}
+
+/** An actionable hint for a {@link ByoUnresolvedEntry} reason — the SINGLE source both the
+ *  triage report and the live webview banner render, so "what do I do about it" never drifts. */
+export function byoReasonHint(reason: string): string {
+  switch (reason) {
+    case 'revoked':
+      return 'its token was revoked or expired — reconnect it in the web app under Settings ▸ API Keys';
+    case 'expired':
+      return 'its token expired and the refresh failed (often transient) — retry, or reconnect it under Settings ▸ API Keys';
+    case 'undecryptable':
+      return 'its stored credential could not be read — re-enter it under Settings ▸ API Keys';
+    case 'other-workspace':
+      return 'you connected this account in a DIFFERENT workspace — switch to that workspace, or connect it in this one under Settings ▸ API Keys';
+    default:
+      return 'it could not be used this run — reconnect it under Settings ▸ API Keys';
+  }
+}
+
+/** A one-line summary of an unresolved provider: `anthropic (revoked): <hint>`. */
+export function byoUnresolvedSummary(entry: ByoUnresolvedEntry): string {
+  return `${entry.provider}${entry.reason ? ` (${entry.reason})` : ''}: ${byoReasonHint(entry.reason)}`;
+}
+
 /** Human label for an `x-builderforce-account` value. */
 function accountLabel(account: string): string {
   return account === 'own'
@@ -210,11 +249,10 @@ export function formatBrainProvenance(
   if (evermind.length) lines.push(`Evermind: yes — ${evermind.join(', ')}`);
   const account = accountUsedInTrace(events);
   if (account) lines.push(`Account: ${accountLabel(account)}`);
-  const byoUnresolved = byoUnresolvedInTrace(events);
+  const byoUnresolved = parseByoUnresolved(byoUnresolvedInTrace(events));
   if (byoUnresolved.length) {
-    lines.push(
-      `⚠ CONNECTED ACCOUNT NOT USED: ${byoUnresolved.join(', ')} — a connected provider could not be resolved this run (token expired/revoked, or stored under a different tenant), so the turn fell back to the shared pool instead of your own model. Reconnect it in Settings ▸ API Keys.`,
-    );
+    lines.push('⚠ CONNECTED ACCOUNT NOT USED — a connected account existed but the run fell back to the shared pool instead of your own model:');
+    for (const e of byoUnresolved) lines.push(`  • ${byoUnresolvedSummary(e)}`);
   }
   return lines;
 }

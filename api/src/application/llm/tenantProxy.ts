@@ -84,6 +84,7 @@ export async function tenantProxyForPlan(
       anthropicOAuthToken: null,
       vendorKeys: {} as TenantVendorKeys,
       configuredProviders: [],
+      unresolvedReasons: {},
     })),
   ]);
 

@@ -6,6 +6,10 @@ import {
   getRunStoreSize,
   resetBrainRunStore,
   windowed,
+  compactTailStart,
+  compactMiddleRange,
+  assembleCompacted,
+  COMPACT_TAIL_TURNS,
 } from './brainRunStore';
 import type { ChatCompletionMessage } from './streamChatCompletion';
 
@@ -99,5 +103,46 @@ describe('windowed history (must begin with a user turn)', () => {
     const w = windowed(convo);
     expect(w[0].role).toBe('user');
     expect(w[0].content).toBe('go');
+  });
+});
+
+describe('auto-compaction partitioning (summarize the middle, never orphan a tool)', () => {
+  const msg = (role: ChatCompletionMessage['role'], content = 'x'): ChatCompletionMessage => ({ role, content });
+
+  it('walks the tail forward off a leading orphaned tool result', () => {
+    // A tail that would start on a `tool` message (its assistant call is in the
+    // summarized middle) must advance past it so nothing is orphaned.
+    const convo = [msg('user'), msg('assistant'), msg('tool'), msg('assistant'), msg('user')];
+    const start = compactTailStart(convo, 3); // last 3 = [tool, assistant, user]
+    expect(convo[start].role).not.toBe('tool');
+  });
+
+  it('assembled output never begins its tail on a tool message', () => {
+    const convo: ChatCompletionMessage[] = [msg('user', 'task')];
+    for (let i = 0; i < 30; i++) convo.push(msg(i % 2 === 0 ? 'assistant' : 'tool', `s${i}`));
+    const out = assembleCompacted('SYS', convo, 'MEMO', COMPACT_TAIL_TURNS);
+    // [system, pinned user task, assistant memo, ...tail]
+    expect(out[0]).toEqual({ role: 'system', content: 'SYS' });
+    expect(out[1].role).toBe('user');
+    expect(out[1].content).toBe('task');
+    expect(out[2]).toEqual({ role: 'assistant', content: 'MEMO' });
+    // The first tail message after the memo is never an orphaned tool result.
+    expect(out[3].role).not.toBe('tool');
+  });
+
+  it('middle range excludes the pinned task and the recent tail', () => {
+    const convo: ChatCompletionMessage[] = [msg('user', 'task')];
+    for (let i = 0; i < 20; i++) convo.push(msg('assistant', `a${i}`));
+    const { start, end } = compactMiddleRange(convo, COMPACT_TAIL_TURNS);
+    expect(start).toBe(1); // after the pinned first user task
+    expect(end).toBe(convo.length - COMPACT_TAIL_TURNS); // before the recent tail
+    expect(start).toBeLessThan(end);
+  });
+
+  it('does not pin the first user turn when it already lives inside the tail', () => {
+    const convo = [msg('user', 'task'), msg('assistant'), msg('user', 'later')];
+    const out = assembleCompacted('SYS', convo, 'MEMO', COMPACT_TAIL_TURNS);
+    // Short convo: whole thing is the tail, so no separate pinned-task duplication.
+    expect(out.filter((m) => m.content === 'task')).toHaveLength(1);
   });
 });

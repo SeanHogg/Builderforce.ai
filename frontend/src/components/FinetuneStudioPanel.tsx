@@ -1,18 +1,20 @@
 'use client';
 
 /**
- * LlmStudioPanel — center workspace for the `llm` project modality.
+ * FinetuneStudioPanel — center workspace for the `finetune` project modality.
  *
- * The `llm` modality is about *building + training* a custom model, not a chat
- * playground (chat already lives in the floating Brain drawer — opened from the
- * launcher in the bottom-right — which is modality-aware and runs cloud inference
- * today). This panel orients the user through the
- * build → train → publish pipeline and surfaces live project state, then hands
- * off to the existing Train / Publish right-panel tabs rather than re-implementing
- * them. It reads real data via the existing dataset/training APIs.
+ * The `finetune` modality is the CLASSIC pipeline: design a dataset, train a LoRA
+ * adapter in-browser (WebGPU), benchmark it, then publish and export it. It is
+ * deliberately separate from the `evermind` modality (the living, self-teaching
+ * model) — this panel never touches the Evermind teach console or Knowledge Map.
+ *
+ * It orients the user through build → train → benchmark → publish → export and
+ * surfaces live project state, then hands off to the existing Train / Publish
+ * right-panel tabs rather than re-implementing them. Reads real data via the
+ * existing dataset/training APIs.
  *
  * Self-gating per the DRY rule: the panel owns its own loading/empty/error states;
- * the host (IDENew) only decides whether the `llm` modality is active.
+ * the host (IDENew) only decides whether the `finetune` modality is active.
  */
 
 import { useCallback, useEffect, useState } from 'react';
@@ -23,11 +25,8 @@ import { getFileName } from '@/lib/utils';
 import type { RightTab } from '@/lib/modality';
 import { BenchmarkPanel } from '@/components/BenchmarkPanel';
 import { ModelExportPanel } from '@/components/ModelExportPanel';
-import { ProjectEvermindPanel } from '@/components/ide/ProjectEvermindPanel';
-import { EvermindStudioCenter } from '@/components/ide/EvermindStudioCenter';
-import { EvermindValidationProvider } from '@/components/ide/EvermindValidationContext';
 
-interface LlmStudioPanelProps {
+interface FinetuneStudioPanelProps {
   projectId: number | string;
   /** Project files — used to surface dataset-like files (.json/.jsonl) the Brain wrote. */
   files?: FileEntry[];
@@ -42,8 +41,8 @@ function isDatasetFile(path: string): boolean {
   return /\.(jsonl|json)$/i.test(path);
 }
 
-export function LlmStudioPanel({ projectId, files = [], onGoToTab, onOpenFile }: LlmStudioPanelProps) {
-  const t = useTranslations('llmStudio');
+export function FinetuneStudioPanel({ projectId, files = [], onGoToTab, onOpenFile }: FinetuneStudioPanelProps) {
+  const t = useTranslations('finetuneStudio');
   const [datasets, setDatasets] = useState<Dataset[]>([]);
   const [jobs, setJobs] = useState<TrainingJob[]>([]);
   const [loading, setLoading] = useState(true);
@@ -133,17 +132,11 @@ export function LlmStudioPanel({ projectId, files = [], onGoToTab, onOpenFile }:
   ];
 
   return (
-    <div className="llm-studio-root">
-      <style>{LLM_STUDIO_CSS}</style>
-      {/* The teach console (rail) runs Validate; the Knowledge Map + Learnings (center)
-          highlight the matched memories — share that result across both subtrees. */}
-      <EvermindValidationProvider>
-      <div className="llm-studio-row">
-        {/* Left rail: the build/train form + pipeline steps — scrolls independently so
-            the (long) 5-step pipeline never pushes the centre diagram off-screen. */}
-        <div className="llm-studio-rail">
+    <div className="ft-studio-root">
+      <style>{FT_STUDIO_CSS}</style>
+      <div className="ft-studio-col">
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6 }}>
-          <span style={{ fontSize: '1.6rem' }}>🧠</span>
+          <span style={{ fontSize: '1.6rem' }}>🔧</span>
           <h1 style={{ fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '1.25rem', margin: 0 }}>
             {t('title')}
           </h1>
@@ -151,15 +144,6 @@ export function LlmStudioPanel({ projectId, files = [], onGoToTab, onOpenFile }:
         <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', lineHeight: 1.5, marginTop: 0, marginBottom: 20 }}>
           {t('intro')}
         </p>
-
-        {/* The project's Evermind — every project gets a default one on creation, so
-            this always renders a real model to run/learn/edit. Self-gating (RBAC +
-            its own loading/empty states), localized, theme-aware. */}
-        <div style={{ marginBottom: 20 }}>
-          {/* Recently-learned now lives in the center Learnings panel (region-filterable),
-              so hide the console's own recent list here to avoid duplicating it. */}
-          <ProjectEvermindPanel projectId={Number(projectId)} showRecent={false} />
-        </div>
 
         {error && (
           <div
@@ -320,31 +304,15 @@ export function LlmStudioPanel({ projectId, files = [], onGoToTab, onOpenFile }:
         <p style={{ color: 'var(--text-muted)', fontSize: '0.72rem', lineHeight: 1.5, marginTop: 20 }}>
           {t('footer')}
         </p>
-        </div>
-
-        {/* Center stage: the live Knowledge Map + region-filterable Learnings list,
-            bounded to the pane height so the long pipeline rail never pushes it off. */}
-        <div className="llm-studio-center">
-          <EvermindStudioCenter projectId={Number(projectId)} />
-        </div>
       </div>
-      </EvermindValidationProvider>
     </div>
   );
 }
 
-/* Two-pane layout: on desktop each column is bounded to the pane height and scrolls
-   independently (the diagram stays centred no matter how long the pipeline rail gets);
-   under 900px they stack and the page scrolls naturally. */
-const LLM_STUDIO_CSS = `
-.llm-studio-root { height: 100%; overflow: hidden; background: var(--bg-deep); color: var(--text-primary); padding: 20px 24px; box-sizing: border-box; }
-.llm-studio-row { display: flex; gap: 20px; height: 100%; align-items: stretch; max-width: 1400px; margin: 0 auto; }
-.llm-studio-rail { flex: 1 1 340px; max-width: 480px; min-width: 300px; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; padding-right: 6px; }
-.llm-studio-center { flex: 1.6 1 460px; min-width: 320px; min-height: 0; display: flex; }
-@media (max-width: 900px) {
-  .llm-studio-root { overflow-y: auto; }
-  .llm-studio-row { flex-wrap: wrap; height: auto; align-items: flex-start; }
-  .llm-studio-rail { flex-basis: 100%; max-width: none; overflow: visible; padding-right: 0; }
-  .llm-studio-center { flex-basis: 100%; height: 520px; }
-}
+/* Single centred column: the pipeline scrolls naturally within the pane; on narrow
+   viewports it simply fills the width. No Evermind Knowledge Map here — that lives
+   in the separate `evermind` modality. */
+const FT_STUDIO_CSS = `
+.ft-studio-root { height: 100%; overflow-y: auto; background: var(--bg-deep); color: var(--text-primary); padding: 20px 24px; box-sizing: border-box; }
+.ft-studio-col { max-width: 720px; margin: 0 auto; display: flex; flex-direction: column; }
 `;
