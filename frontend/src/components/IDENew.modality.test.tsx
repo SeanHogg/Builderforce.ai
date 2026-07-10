@@ -4,13 +4,14 @@ import { render, screen, cleanup } from '@testing-library/react';
 /**
  * Center-panel modality switch regression (Consolidated Gap Register #143).
  *
- * modality.test.ts locks the registry FLAG (the `llm` modality stays enabled),
+ * modality.test.ts locks the registry FLAGS (evermind + finetune stay enabled),
  * but nothing rendered IDENew to prove the center panel actually mounts the
  * right component per modality:
  *
- *   video    → <StudioPanel>      (@seanhogg/builderforce-studio-embedded)
- *   llm      → <LlmStudioPanel>   (no active file → the studio panel, not code)
- *   designer → preview/code view  (the Preview/Code toggle chrome)
+ *   video    → <StudioPanel>            (@seanhogg/builderforce-studio-embedded)
+ *   evermind → <EvermindStudioPanel>    (no active file → the studio panel, not code)
+ *   finetune → <FinetuneStudioPanel>    (no active file → the studio panel, not code)
+ *   designer → preview/code view        (the Preview/Code toggle chrome)
  *
  * IDENew pulls in WebContainer / collaboration / brain / a dozen side panels —
  * all irrelevant to the center-panel decision — so we mock them to sentinels
@@ -23,8 +24,11 @@ vi.mock('@seanhogg/builderforce-studio-embedded', () => ({
 }));
 // The bare CSS side-effect import (`.../styles.css`) is handled by vitest's
 // default CSS handling; no module mock is needed.
-vi.mock('./LlmStudioPanel', () => ({
-  LlmStudioPanel: () => <div data-testid="center-llm-panel" />,
+vi.mock('./EvermindStudioPanel', () => ({
+  EvermindStudioPanel: () => <div data-testid="center-evermind-panel" />,
+}));
+vi.mock('./FinetuneStudioPanel', () => ({
+  FinetuneStudioPanel: () => <div data-testid="center-finetune-panel" />,
 }));
 
 // --- Heavy collaborators, mocked to inert stubs ----------------------------
@@ -106,19 +110,36 @@ describe('IDENew center-panel modality switch', () => {
   it('video modality mounts <StudioPanel>', () => {
     render(<IDE project={makeProject('video')} initialFiles={[]} />);
     expect(screen.getByTestId('center-studio-panel')).toBeTruthy();
-    expect(screen.queryByTestId('center-llm-panel')).toBeNull();
+    expect(screen.queryByTestId('center-evermind-panel')).toBeNull();
   });
 
-  it('llm modality (no active file) mounts <LlmStudioPanel>', () => {
-    render(<IDE project={makeProject('llm')} initialFiles={[]} />);
-    expect(screen.getByTestId('center-llm-panel')).toBeTruthy();
+  it('evermind modality (no active file) mounts <EvermindStudioPanel>', () => {
+    render(<IDE project={makeProject('evermind')} initialFiles={[]} />);
+    expect(screen.getByTestId('center-evermind-panel')).toBeTruthy();
+    expect(screen.queryByTestId('center-finetune-panel')).toBeNull();
     expect(screen.queryByTestId('center-studio-panel')).toBeNull();
+  });
+
+  it('finetune modality (no active file) mounts <FinetuneStudioPanel>', () => {
+    render(<IDE project={makeProject('finetune')} initialFiles={[]} />);
+    expect(screen.getByTestId('center-finetune-panel')).toBeTruthy();
+    expect(screen.queryByTestId('center-evermind-panel')).toBeNull();
+    expect(screen.queryByTestId('center-studio-panel')).toBeNull();
+  });
+
+  // Legacy `llm` projects predate the split; getModality aliases them to evermind,
+  // so IDENew must mount the Evermind studio for them.
+  it('legacy llm modality mounts <EvermindStudioPanel>', () => {
+    render(<IDE project={makeProject('llm')} initialFiles={[]} />);
+    expect(screen.getByTestId('center-evermind-panel')).toBeTruthy();
+    expect(screen.queryByTestId('center-finetune-panel')).toBeNull();
   });
 
   it('designer modality mounts the preview/code view, not a studio panel', () => {
     render(<IDE project={makeProject('designer')} initialFiles={[]} />);
     expect(screen.queryByTestId('center-studio-panel')).toBeNull();
-    expect(screen.queryByTestId('center-llm-panel')).toBeNull();
+    expect(screen.queryByTestId('center-evermind-panel')).toBeNull();
+    expect(screen.queryByTestId('center-finetune-panel')).toBeNull();
     // The designer center is the Preview frame (default centerView = 'preview').
     expect(screen.getByTestId('center-preview-frame')).toBeTruthy();
   });

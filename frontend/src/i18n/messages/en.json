@@ -3570,8 +3570,13 @@
     "title": "This run executed on the project's own Evermind model",
     "contributed": "contributed"
   },
-  "llmStudio": {
-    "title": "Build a Custom Model",
+  "evermindStudio": {
+    "title": "Grow your Evermind",
+    "intro": "Teach your Evermind and it learns in place — no training runs, no adapters. Use the console to teach it facts, skills, and examples; each lesson lands on the live Knowledge Map. Chat happens in the Brain — open it from the button in the bottom-right corner.",
+    "footer": "☁️ Your Evermind learns from every project. Teach it here, then hire it into the Workforce or publish it from the Publish tab."
+  },
+  "finetuneStudio": {
+    "title": "Fine-tune a Custom Model",
     "intro": "Design data, fine-tune a LoRA adapter, and ship it as a hireable agent — all from the browser. Chat and prompt design happen in the Brain — open it from the button in the bottom-right corner. The steps below drive the build pipeline.",
     "retry": "Retry",
     "loadError": "Failed to load project state.",

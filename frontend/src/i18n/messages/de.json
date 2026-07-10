@@ -3570,8 +3570,13 @@
     "title": "Dieser Lauf wurde auf dem projekteigenen Evermind-Modell ausgeführt",
     "contributed": "beigetragen"
   },
-  "llmStudio": {
-    "title": "Eigenes Modell erstellen",
+  "evermindStudio": {
+    "title": "Lass dein Evermind wachsen",
+    "intro": "Bring deinem Evermind etwas bei, und es lernt direkt — ohne Trainingsläufe, ohne Adapter. Nutze die Konsole, um ihm Fakten, Fähigkeiten und Beispiele zu vermitteln; jede Lektion erscheint auf der Live-Wissenskarte. Der Chat läuft im Brain — öffne ihn über die Schaltfläche unten rechts.",
+    "footer": "☁️ Dein Evermind lernt aus jedem Projekt. Bring es hier bei, stelle es dann im Workforce ein oder veröffentliche es über den Tab „Veröffentlichen“."
+  },
+  "finetuneStudio": {
+    "title": "Ein eigenes Modell feinabstimmen",
     "intro": "Entwirf Daten, optimiere einen LoRA-Adapter und veröffentliche ihn als anheuerbaren Agenten – alles im Browser. Chat und Prompt-Design passieren im Brain – öffne es über die Schaltfläche unten rechts. Die Schritte unten steuern die Build-Pipeline.",
     "retry": "Erneut versuchen",
     "loadError": "Projektstatus konnte nicht geladen werden.",

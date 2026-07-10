@@ -53,7 +53,7 @@ export interface Project {
   name: string;
   description?: string | null;
   template?: string | null;
-  /** Active IDE modality for this project: 'designer' | 'video' | 'llm'. Defaults to 'designer'. */
+  /** Active IDE modality: 'designer' | 'video' | 'evermind' | 'finetune' | 'voice'. Defaults to 'designer'. */
   modality?: string | null;
   /** Where the project was born — 'ide' | 'imported' | 'external'. Drives the origin badge. */
   origin?: string | null;

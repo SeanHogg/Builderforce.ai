@@ -161,18 +161,18 @@ export async function listIdeContainers(): Promise<IdeContainerOption[]> {
 
 export async function createIdeProject(data: {
   name: string;
-  /** 'designer' | 'video' | 'llm' | 'voice'. Defaults server-side to 'designer'. */
+  /** 'designer' | 'video' | 'evermind' | 'finetune' | 'voice'. Defaults server-side to 'designer'. */
   modality?: string;
   /** Optional parent Project to group this build under. */
   containerProjectId?: number | null;
   template?: string | null;
-  /** Optional automation workflow to attach (any modality). No longer required for 'llm'. */
+  /** Optional automation workflow to attach (any modality). Not required for evermind. */
   workflowDefinitionId?: string | null;
-  /** LLM modality: the one-click Evermind recipe that provisions the project's model. */
+  /** Evermind modality: the one-click Evermind recipe that provisions the project's model. */
   evermindRecipe?: string | null;
-  /** LLM modality: frontier teacher model to distil through (recipe-dependent). */
+  /** Evermind modality: frontier teacher model to distil through (recipe-dependent). */
   evermindTeacherModel?: string | null;
-  /** LLM modality: for the 'seed-published' recipe, the published model slug to clone. */
+  /** Evermind modality: for the 'seed-published' recipe, the published model slug to clone. */
   evermindSeedModelSlug?: string | null;
 }): Promise<IdeProject> {
   return apiRequest<IdeProject>('/api/ide-projects', {

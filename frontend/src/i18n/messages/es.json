@@ -3570,8 +3570,13 @@
     "title": "Esta ejecución se realizó en el propio modelo Evermind del proyecto",
     "contributed": "contribuyó"
   },
-  "llmStudio": {
-    "title": "Crear un modelo personalizado",
+  "evermindStudio": {
+    "title": "Haz crecer tu Evermind",
+    "intro": "Enseña a tu Evermind y aprende sobre la marcha, sin ejecuciones de entrenamiento ni adaptadores. Usa la consola para enseñarle hechos, habilidades y ejemplos; cada lección aparece en el Mapa de Conocimiento en vivo. El chat ocurre en el Brain: ábrelo desde el botón de la esquina inferior derecha.",
+    "footer": "☁️ Tu Evermind aprende de cada proyecto. Enséñalo aquí y luego contrátalo en el Workforce o publícalo desde la pestaña Publicar."
+  },
+  "finetuneStudio": {
+    "title": "Ajusta un modelo personalizado",
     "intro": "Diseña datos, ajusta un adaptador LoRA y publícalo como un agente contratable, todo desde el navegador. El chat y el diseño de prompts ocurren en el Brain: ábrelo con el botón de la esquina inferior derecha. Los pasos siguientes impulsan el flujo de creación.",
     "retry": "Reintentar",
     "loadError": "No se pudo cargar el estado del proyecto.",
