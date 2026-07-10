@@ -1943,7 +1943,7 @@ export const ideProjects = pgTable('ide_projects', {
   /** The backing projects row holding this build's files/datasets/training/site/repo. */
   storageProjectId:    integer('storage_project_id').notNull().unique().references(() => projects.id, { onDelete: 'cascade' }),
   name:                varchar('name', { length: 255 }).notNull(),
-  /** 'designer' | 'video' | 'llm' | 'voice'. */
+  /** 'designer' | 'video' | 'evermind' | 'finetune' | 'voice' (legacy: 'llm' → evermind). */
   modality:            text('modality').notNull().default('designer'),
   status:              text('status').notNull().default('active'),
   /** Optional automation workflow attached to this IDE project (any modality; the

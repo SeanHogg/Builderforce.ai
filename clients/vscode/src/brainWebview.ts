@@ -137,6 +137,7 @@ function buildLabels(): Record<string, string> {
     "app.dismiss": t("Dismiss"),
     "app.reconnect": t("Reconnect"),
     "app.byoUnused": t("Your connected {provider} account couldn’t be used this run (its token looks expired or revoked), so it ran on the shared model pool instead of your own model. Reconnect it in the web app under Settings ▸ API Keys."),
+    "app.byoOtherWorkspace": t("Your {provider} account is connected in a DIFFERENT workspace, so this run used the shared model pool instead of your own model. Switch to that workspace, or connect it in this one under Settings ▸ API Keys."),
     "app.taskSeed": t("Let's work on {task}."),
     "app.taskSeedDispatched": t("I just dispatched {task} to run on the platform. Check the latest execution's status and trace, then help me follow up."),
   };

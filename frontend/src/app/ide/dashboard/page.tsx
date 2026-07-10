@@ -30,8 +30,8 @@ type IdeView = 'grouped' | 'card' | 'table';
 /**
  * IDE Dashboard — the IDE's landing page and IDE-project launcher.
  *
- * Lists every IDE project (the buildable artifact: Designer / Video / LLM /
- * Voice), each a first-class child of a Project. Three views: Grouped (by the
+ * Lists every IDE project (the buildable artifact: Designer / Video / Evermind /
+ * Fine-tune / Voice), each a first-class child of a Project. Three views: Grouped (by the
  * parent Project), Card, and List. Creating one optionally nests it under a
  * Project; opening it launches the editor at its backing storage project.
  */
@@ -65,7 +65,7 @@ export default function IDEDashboardPage() {
   const [createType, setCreateType] = useState<ProjectModality | null>(null);
   const [newName, setNewName] = useState('');
   const [newParent, setNewParent] = useState<number | null>(null);
-  // LLM modality: the one-click Evermind recipe (+ optional published model to seed from).
+  // Evermind modality: the one-click Evermind recipe (+ optional published model to seed from).
   const [recipe, setRecipe] = useState<EvermindRecipeId>(DEFAULT_EVERMIND_RECIPE);
   const [seedModelSlug, setSeedModelSlug] = useState<string | null>(null);
   const [publishedModels, setPublishedModels] = useState<PublishedEvermindModel[]>([]);
@@ -106,9 +106,9 @@ export default function IDEDashboardPage() {
     if (!createType) return;
     setNewParent(currentProjectId ?? null);
     listIdeContainers().then(setContainers).catch(() => setContainers([]));
-    // LLM projects pick an Evermind recipe. Reset to the default, and load the
+    // Evermind projects pick an Evermind recipe. Reset to the default, and load the
     // tenant's published models so the "seed from a published model" recipe can offer them.
-    if (createType === 'llm') {
+    if (createType === 'evermind') {
       setRecipe(DEFAULT_EVERMIND_RECIPE);
       setSeedModelSlug(null);
       setPublishedLoaded(false);
@@ -135,12 +135,12 @@ export default function IDEDashboardPage() {
   };
 
   const activeRecipe = getEvermindRecipe(recipe);
-  // The only LLM blocker left: the "seed from a published model" recipe needs a model.
-  const llmNeedsSeed = createType === 'llm' && !!activeRecipe.needsSeedModel && !seedModelSlug;
+  // The only Evermind blocker left: the "seed from a published model" recipe needs a model.
+  const evermindNeedsSeed = createType === 'evermind' && !!activeRecipe.needsSeedModel && !seedModelSlug;
 
   const submitCreate = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!createType || !newName.trim() || creating || llmNeedsSeed) return;
+    if (!createType || !newName.trim() || creating || evermindNeedsSeed) return;
     setCreating(true);
     setError(null);
     try {
@@ -151,7 +151,7 @@ export default function IDEDashboardPage() {
         name: newName.trim(),
         modality: createType,
         containerProjectId: newParent,
-        ...(createType === 'llm'
+        ...(createType === 'evermind'
           ? {
               evermindRecipe: recipe,
               evermindTeacherModel: teacherModel,
@@ -372,7 +372,7 @@ export default function IDEDashboardPage() {
                   {containers.map((c) => (<option key={c.id} value={c.id}>{c.name}</option>))}
                 </select>
               </div>
-              {createType === 'llm' && (
+              {createType === 'evermind' && (
                 <div>
                   <label className="block text-sm mb-1" style={{ color: 'var(--text-secondary)' }}>{t('recipeLabel')}</label>
                   <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '0 0 8px' }}>{t('recipeHint')}</p>
@@ -432,8 +432,8 @@ export default function IDEDashboardPage() {
                 <button type="button" onClick={() => setCreateType(null)} style={{ fontSize: '0.875rem', color: 'var(--text-secondary)', background: 'none', border: 'none', cursor: 'pointer' }}>{t('cancel')}</button>
                 <button
                   type="submit"
-                  disabled={creating || !newName.trim() || llmNeedsSeed}
-                  style={{ padding: '8px 18px', fontSize: '0.875rem', fontWeight: 600, background: 'linear-gradient(135deg, var(--coral-bright), var(--coral-dark))', color: '#fff', border: 'none', borderRadius: 10, cursor: creating || !newName.trim() || llmNeedsSeed ? 'not-allowed' : 'pointer', opacity: creating || !newName.trim() || llmNeedsSeed ? 0.7 : 1 }}
+                  disabled={creating || !newName.trim() || evermindNeedsSeed}
+                  style={{ padding: '8px 18px', fontSize: '0.875rem', fontWeight: 600, background: 'linear-gradient(135deg, var(--coral-bright), var(--coral-dark))', color: '#fff', border: 'none', borderRadius: 10, cursor: creating || !newName.trim() || evermindNeedsSeed ? 'not-allowed' : 'pointer', opacity: creating || !newName.trim() || evermindNeedsSeed ? 0.7 : 1 }}
                 >
                   {creating ? t('creating') : t('createOpen')}
                 </button>

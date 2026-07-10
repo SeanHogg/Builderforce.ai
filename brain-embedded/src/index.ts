@@ -86,11 +86,14 @@ export {
   modelsUsedInTrace,
   accountUsedInTrace,
   byoUnresolvedInTrace,
+  parseByoUnresolved,
+  byoReasonHint,
+  byoUnresolvedSummary,
   formatBrainProvenance,
   computeBrainDiagnostics,
   formatBrainDiagnostics,
 } from './brainTriage';
-export type { BrainTraceEvent, BuildBrainTriageOptions, BrainDiagnostics } from './brainTriage';
+export type { BrainTraceEvent, BuildBrainTriageOptions, BrainDiagnostics, ByoUnresolvedEntry } from './brainTriage';
 
 // Landing-page → auth → replay handoff
 export { savePendingPrompt, takePendingPrompt } from './pendingPrompt';

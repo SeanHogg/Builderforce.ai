@@ -20,7 +20,7 @@
 import { neon } from '@neondatabase/serverless';
 import type { HonoEnv } from '../../env';
 import { encryptSecretForStorage, decryptSecretFromStorage } from '../../infrastructure/auth/MfaService';
-import { refreshAnthropicToken, type AnthropicOAuthTokens } from './anthropicOAuth';
+import { refreshAnthropicToken, OAUTH_SAFETY_MARGIN_MS, type AnthropicOAuthTokens } from './anthropicOAuth';
 
 type Env = HonoEnv['Bindings'];
 
@@ -139,27 +139,52 @@ async function loadProviderRow(
 }
 
 /**
- * Resolve a tenant's Anthropic credential to a ready-to-use auth, refreshing and
- * re-persisting the OAuth subscription token when it has expired. Returns null
- * when the tenant has no Anthropic credential (or it can't be decrypted/refreshed).
+ * Why a CONNECTED provider (a stored credential row exists) could NOT be resolved to a
+ * usable credential this call — surfaced so a "should have used my own account" run is
+ * actionable, not a silent shared-pool degrade:
+ *   • `revoked`         — the OAuth refresh returned 401/403; the token is dead → reconnect.
+ *   • `expired`         — past real expiry and the refresh failed transiently (retryable).
+ *   • `undecryptable`   — the stored blob won't decrypt/parse (key rotation / corruption).
+ *   • `other-workspace` — NOT connected in THIS tenant, but the SAME user has it connected
+ *                         under a DIFFERENT workspace they belong to (a tenant mismatch —
+ *                         they connected it somewhere else). Detected separately, per-user.
  */
-export async function resolveAnthropicAuth(
+export type ByoUnresolvedReason = 'revoked' | 'expired' | 'undecryptable' | 'other-workspace';
+
+/** Result of resolving a tenant's Anthropic credential: the usable auth (or null) plus,
+ *  when a credential ROW exists but couldn't be used, WHY. `reason` is undefined both when
+ *  it resolved fine and when nothing is connected (no row) — only set on a real failure. */
+export interface AnthropicResolution {
+  auth: AnthropicAuth | null;
+  reason?: ByoUnresolvedReason;
+}
+
+/**
+ * Resolve a tenant's Anthropic credential to a ready-to-use auth, refreshing and
+ * re-persisting the OAuth subscription token when it has expired — AND reporting a
+ * {@link ByoUnresolvedReason} when a stored credential can't be used. Hardening: a
+ * transient refresh failure (5xx/429/network) does NOT force the tenant off their own
+ * account while the access token is still within its REAL validity (the stored `expires`
+ * already subtracted {@link OAUTH_SAFETY_MARGIN_MS}); we reuse the existing access token
+ * and only give up (reason `revoked`/`expired`) once it's genuinely past expiry.
+ */
+export async function resolveAnthropicResolution(
   env: Env,
   tenantId: number,
-): Promise<AnthropicAuth | null> {
+): Promise<AnthropicResolution> {
   const row = await loadProviderRow(env, tenantId, 'anthropic');
-  if (!row?.key_enc) return null;
+  if (!row?.key_enc) return { auth: null }; // nothing connected — not a failure
   const authType = (row.auth_type ?? 'api_key') as ProviderAuthType;
 
   let decrypted: string;
   try {
     decrypted = await decryptSecretFromStorage(row.key_enc, env.JWT_SECRET);
   } catch {
-    return null;
+    return { auth: null, reason: 'undecryptable' };
   }
 
   if (authType === 'api_key') {
-    return { mode: 'api_key', key: decrypted };
+    return { auth: { mode: 'api_key', key: decrypted } };
   }
 
   // OAuth subscription: decode, refresh if expired, persist the rotated tokens.
@@ -167,21 +192,41 @@ export async function resolveAnthropicAuth(
   try {
     tokens = JSON.parse(decrypted) as AnthropicOAuthTokens;
   } catch {
-    return null;
+    return { auth: null, reason: 'undecryptable' };
   }
-  if (!tokens.access || !tokens.refresh) return null;
+  if (!tokens.access || !tokens.refresh) return { auth: null, reason: 'undecryptable' };
 
   if (Date.now() < tokens.expires) {
-    return { mode: 'oauth', accessToken: tokens.access };
+    return { auth: { mode: 'oauth', accessToken: tokens.access } };
   }
 
   try {
     const refreshed = await refreshAnthropicToken(tokens.refresh);
     await setTenantProviderOAuth(env, tenantId, 'anthropic', refreshed, null);
-    return { mode: 'oauth', accessToken: refreshed.access };
-  } catch {
-    return null;
+    return { auth: { mode: 'oauth', accessToken: refreshed.access } };
+  } catch (e) {
+    const status = (e as { status?: number } | undefined)?.status;
+    // A revoked/expired refresh token (401/403) is terminal — reconnect required.
+    if (status === 401 || status === 403) return { auth: null, reason: 'revoked' };
+    // Transient refresh failure (5xx/429/network): if the access token is still within
+    // its REAL validity window, keep using it rather than degrading to the shared pool.
+    if (Date.now() < tokens.expires + OAUTH_SAFETY_MARGIN_MS) {
+      return { auth: { mode: 'oauth', accessToken: tokens.access } };
+    }
+    return { auth: null, reason: 'expired' };
   }
+}
+
+/**
+ * Resolve a tenant's Anthropic credential to a ready-to-use auth (or null). Thin
+ * projection of {@link resolveAnthropicResolution} kept for call sites that only need
+ * the auth (e.g. the /v1/messages direct-Claude branch).
+ */
+export async function resolveAnthropicAuth(
+  env: Env,
+  tenantId: number,
+): Promise<AnthropicAuth | null> {
+  return (await resolveAnthropicResolution(env, tenantId)).auth;
 }
 
 /**
@@ -240,6 +285,11 @@ export interface TenantLlmCredentials {
    *  gateway surfaces that so a BYO turn that degraded to the shared pool is never SILENT.
    *  See {@link providersFromCredentials} for the resolved (usable) set. */
   configuredProviders: LlmProvider[];
+  /** For each CONFIGURED-but-UNRESOLVED provider, WHY it couldn't be used this call
+   *  ({@link ByoUnresolvedReason}) — so the gateway can surface an actionable message
+   *  ("token revoked — reconnect" vs "transient — retry") instead of a bare provider id.
+   *  Only populated for a provider that has a row but produced no usable credential. */
+  unresolvedReasons: Partial<Record<LlmProvider, ByoUnresolvedReason>>;
 }
 
 /**
@@ -247,25 +297,93 @@ export interface TenantLlmCredentials {
  * configured providers in ONE round-trip (the reads run in parallel). The single
  * entry point for the gateway + cloud completion paths so they don't each duplicate
  * the lookups. Best-effort — each part independently degrades to null/empty, and a
- * configured-but-unresolved provider still shows up in `configuredProviders` so the
- * degrade to the shared pool can be surfaced instead of looking like "nothing connected".
+ * configured-but-unresolved provider still shows up in `configuredProviders` (with a
+ * WHY in `unresolvedReasons`) so the degrade to the shared pool is never silent.
  */
 export async function resolveTenantLlmCredentials(env: Env, tenantId: number): Promise<TenantLlmCredentials> {
-  const [anthropicOAuthToken, vendorKeys, configured] = await Promise.all([
-    resolveAnthropicOAuthToken(env, tenantId),
+  const [anthropicRes, vendorKeys, configured] = await Promise.all([
+    resolveAnthropicResolution(env, tenantId).catch(() => ({ auth: null }) as AnthropicResolution),
     resolveTenantVendorKeys(env, tenantId),
     listTenantProviderKeys(env, tenantId).catch(() => [] as ProviderKeySummary[]),
   ]);
-  return { anthropicOAuthToken, vendorKeys, configuredProviders: configured.map((p) => p.provider) };
+  const anthropicOAuthToken = anthropicRes.auth?.mode === 'oauth' ? anthropicRes.auth.accessToken : null;
+  const creds: TenantLlmCredentials = {
+    anthropicOAuthToken,
+    vendorKeys,
+    configuredProviders: configured.map((p) => p.provider),
+    unresolvedReasons: {},
+  };
+  // Attach a reason to each configured-but-unusable provider: Anthropic gets the precise
+  // reason from its resolver; an api-key provider that's configured but decrypted to
+  // nothing is `undecryptable` (the only api-key failure mode `resolveTenantVendorKeys`
+  // can hit). Computed against the resolved (usable) set so a working provider is skipped.
+  const usable = new Set(providersFromCredentials(creds));
+  for (const p of creds.configuredProviders) {
+    if (usable.has(p)) continue;
+    creds.unresolvedReasons[p] = p === 'anthropic' ? (anthropicRes.reason ?? 'undecryptable') : 'undecryptable';
+  }
+  return creds;
 }
 
 /** The connected providers a tenant has CONFIGURED but that could NOT be resolved to a
- *  usable credential this call (expired/undecryptable/wrong-tenant) — the difference
- *  between what they connected and what actually served. Empty when every configured
- *  provider resolved (or none is configured). */
+ *  usable credential this call (expired/revoked/undecryptable) — the difference between
+ *  what they connected and what actually served. Empty when every configured provider
+ *  resolved (or none is configured). */
 export function unresolvedProviders(creds: TenantLlmCredentials): LlmProvider[] {
   const usable = new Set(providersFromCredentials(creds));
   return creds.configuredProviders.filter((p) => !usable.has(p));
+}
+
+/**
+ * The `x-builderforce-byo-unresolved` header value: each unresolved provider as
+ * `provider:reason` (e.g. `anthropic:revoked`), comma-separated. Merges any
+ * cross-workspace hits (a provider the SAME user connected under a DIFFERENT tenant —
+ * reason `other-workspace`) the caller resolved separately. Empty string when nothing
+ * is unresolved. The SINGLE encoder both the gateway and its clients agree on.
+ */
+export function formatByoUnresolvedHeader(
+  creds: TenantLlmCredentials,
+  otherWorkspace: LlmProvider[] = [],
+): string {
+  const parts = new Map<string, ByoUnresolvedReason>();
+  for (const p of unresolvedProviders(creds)) parts.set(p, creds.unresolvedReasons[p] ?? 'undecryptable');
+  // A provider connected in ANOTHER workspace isn't configured here, so it isn't in
+  // `unresolvedProviders`; add it (don't overwrite a same-tenant reason if both apply).
+  for (const p of otherWorkspace) if (!parts.has(p)) parts.set(p, 'other-workspace');
+  return [...parts].map(([p, reason]) => `${p}:${reason}`).join(',');
+}
+
+/**
+ * Cross-workspace detection: of `providers`, which does the SAME user have connected
+ * under a DIFFERENT active tenant than `tenantId`? This is the "you connected Claude in
+ * another workspace" case — a BYO credential is tenant-scoped (never shared), so a run in
+ * the wrong workspace silently falls back. Returns the subset connected elsewhere.
+ *
+ * ONE indexed query over the user's OTHER active tenant memberships (bounded, PK/idx
+ * joins). Callers gate it to the rare case (this tenant has NO usable credential) so it
+ * never runs on the common connected path, and cache the result per user.
+ */
+export async function providersConnectedInOtherWorkspaces(
+  env: Env,
+  userId: string,
+  tenantId: number,
+  providers: readonly LlmProvider[],
+): Promise<LlmProvider[]> {
+  if (!userId || providers.length === 0) return [];
+  try {
+    const sql = neon(env.NEON_DATABASE_URL);
+    const rows = (await sql`
+      SELECT DISTINCT k.provider
+      FROM tenant_llm_provider_keys k
+      JOIN tenant_members m ON m.tenant_id = k.tenant_id
+      WHERE m.user_id = ${userId} AND m.is_active = true
+        AND k.tenant_id <> ${tenantId}
+        AND k.provider = ANY(${providers as unknown as string[]})
+    `) as Array<{ provider: string }>;
+    return rows.map((r) => r.provider).filter(isSupportedProvider);
+  } catch {
+    return [];
+  }
 }
 
 /** List which providers a tenant has configured + how each authenticates (no secrets). */

@@ -4,6 +4,18 @@
 
 ---
 
+## ✅ RESOLVED 2026-07-09 — BYO Anthropic resolution: precise failure reason, transient-refresh hardening, and cross-workspace (tenant-mismatch) detection (api + brain-embedded + VSIX `2026.7.54`)
+
+Closes the last P1 of the "should have used Opus" thread — WHY a connected Anthropic account didn't resolve is now handled AND surfaced in code, no live guesswork:
+
+- **Transient-refresh hardening** — `resolveAnthropicResolution` (api `tenantProviderKeyService`) no longer drops the tenant onto the shared pool on a transient OAuth refresh failure (5xx/429/network) while the access token is still within its REAL validity (`expires + OAUTH_SAFETY_MARGIN_MS`, now exported from `anthropicOAuth`). It reuses the still-good token and only gives up once genuinely past expiry. `refreshAnthropicToken` now carries the HTTP `status` on its error so a **revoked** (401/403) token is distinguished from a transient one.
+- **Precise unresolved reason** — resolution reports `revoked | expired | undecryptable`; `TenantLlmCredentials.unresolvedReasons` + `formatByoUnresolvedHeader` encode `provider:reason` into `x-builderforce-byo-unresolved` (e.g. `anthropic:revoked`).
+- **Cross-workspace (tenant-mismatch) detection** — `providersConnectedInOtherWorkspaces` (one indexed query over the user's OTHER active tenants) surfaces reason `other-workspace` when the SAME user connected the provider under a DIFFERENT workspace than the VSIX resolves. Gated to agentic turns with nothing connected in this tenant, and **cached per user** (`getOrSetCached`, 5-min KV / 60-s L1) so it never adds per-request cost on the common path.
+- **Client surfacing (DRY)** — shared `parseByoUnresolved` / `byoReasonHint` / `byoUnresolvedSummary` (brain-embedded) render the reason as an actionable line in BOTH triage copies; the VSIX banner ([`App.tsx`](./clients/vscode/webview/src/App.tsx)) picks "reconnect here" vs "switch workspace" off the reason (`app.byoUnused` / `app.byoOtherWorkspace`, localized in all 5 l10n bundles).
+- **Verified** — new `tenantProviderKeyService.test.ts` (11 cases incl. all hardening branches) + brain-embedded triage reason tests; api + webview typecheck clean, brain-embedded 82/82, dist + VSIX (`2026.7.54`) rebuilt.
+
+---
+
 ## ✅ RESOLVED 2026-07-09 — VS Code Brain: BYO Anthropic auto-select, silent-degrade visibility, loop-exhaustion rescue, and read-dedup (api + brain-embedded + VSIX webview)
 
 Reported (VSIX, tenant has BYO Anthropic): a Brain chat auto-selected a weak `deepseek-v4-flash`, thrashed on 62 tool calls into context exhaustion, and errored "The assistant kept calling tools without finishing" — when it should have run the tenant's connected **Opus**. Root cause: the VSIX sent no model (true auto-select) AND the BYO Anthropic credential did not RESOLVE for the request, so `connectedByoVendors` was empty and the coding cascade led with a free coder; the loop then died with no answer. Closed end-to-end:

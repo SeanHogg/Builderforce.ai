@@ -2543,6 +2543,42 @@ export function reorderPoolForQuality(
 const CODING_MODEL_SET: ReadonlySet<string> = new Set(CODING_MODEL_POOL);
 
 /**
+ * Cheap "flash"-class coders that must NOT LEAD an agentic tool-loop when a stronger
+ * coder is reachable. These are members of {@link CODING_MODEL_POOL} (so they remain
+ * valid, catalog-backed coders and are NEVER removed — the {@link reorderPoolForCoding}
+ * "pure permutation" + never-empty invariants hold), but a long multi-turn Brain
+ * codebase-analysis loop served by one of them tends toward context exhaustion /
+ * non-convergence (the chat #50 "LOOP EXHAUSTED" failure, where auto-select drove the
+ * loop on deepseek-v4-flash / minimax-m2.7). The floor SOFT-demotes them behind the
+ * real coding drivers so a strong coder leads whenever the plan pool has one; a
+ * degenerate pool whose only coders are these still reaches them (last-resort), so a
+ * Free tenant is never left without a coder.
+ *
+ * Curated by id, NOT a `/flash/` regex — the strong big-window `@cf/zai-org/glm-4.7-flash`
+ * coder (the Pro coding default) is deliberately NOT here and keeps leading. This only
+ * reorders the AGENTIC auto-select path; an explicit strict pin of one of these models
+ * bypasses reordering entirely (see the wantsStrict branch in `complete`), and the
+ * cloud-loop default (`CODING_DEFAULT_MODEL`) and free-budget count are untouched
+ * because this is a permutation, not a pool edit.
+ */
+export const WEAK_FLASH_CODERS: ReadonlySet<string> = new Set<string>([
+  'deepseek/deepseek-v4-flash',                // "fast cheap coder" — cheapest paid coder
+  'minimaxai/minimax-m2.7',                    // free default, but flash-class on long loops
+  'minimax/minimax-m2.5:free',                 // prior-gen MiniMax free failover
+  '@cf/qwen/qwen3-30b-a3b-fp8',                // self-labelled "small/fast; first pass for SMALL tasks"
+  '@cf/meta/llama-3.3-70b-instruct-fp8-fast',  // self-labelled "small/fast; first pass for SMALL tasks"
+]);
+
+/** Coding-lead rank for {@link reorderPoolForCoding}: strong coding driver (0) leads a
+ *  weak-flash coder (1), which still leads a non-coding generalist (2). A weak-flash
+ *  CODER stays ahead of a mere tools-advertising generalist — it is still a real coder,
+ *  just not one that should front a long agentic loop when a stronger coder exists. */
+function codingLeadRank(m: string): 0 | 1 | 2 {
+  if (!CODING_MODEL_SET.has(m)) return 2;
+  return WEAK_FLASH_CODERS.has(m) ? 1 : 0;
+}
+
+/**
  * Stable-reorder a pool so real coding drivers (`CODING_MODEL_POOL` members) lead,
  * used for AGENTIC tool-loop traffic (a request carrying `tools`). This is the fix
  * for Brain codebase-analysis turns being served by a merely-tool-advertising
@@ -2551,15 +2587,20 @@ const CODING_MODEL_SET: ReadonlySet<string> = new Set(CODING_MODEL_POOL);
  * order — which can lead with a cheap generalist — wins within it). Layering this
  * pass on top promotes the coding drivers above those generalists.
  *
+ * Within the coding drivers it applies the {@link WEAK_FLASH_CODERS} floor: a strong
+ * coder leads a cheap flash coder, so an agentic loop never auto-selects a flash model
+ * while a stronger coder is reachable (the chat #50 regression). Weak-flash coders are
+ * demoted, NOT removed, so a pool whose only coders are flash still reaches them.
+ *
  * Plan-respecting by construction: it is a pure PERMUTATION of the given pool (no
  * model is added or removed), so a Free pool only floats its own free coding models
- * — plan reachability is never escalated here. Within-coding and within-non-coding
- * order is preserved from the input, so the capability/quality ordering from the
- * upstream passes survives as the tiebreak. Pure + unit-testable.
+ * — plan reachability is never escalated here. Within each rank order is preserved
+ * from the input, so the capability/quality ordering from the upstream passes survives
+ * as the tiebreak. Pure + unit-testable.
  */
 export function reorderPoolForCoding(pool: readonly string[]): readonly string[] {
   return [...pool]
-    .map((m, i) => ({ m, i, c: CODING_MODEL_SET.has(m) ? 0 : 1 }))
+    .map((m, i) => ({ m, i, c: codingLeadRank(m) }))
     .sort((a, b) => (a.c - b.c) || (a.i - b.i))
     .map((x) => x.m);
 }

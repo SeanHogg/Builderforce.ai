@@ -13,6 +13,7 @@ import {
   resolveRecipient,
   subscribeRunStore,
   getGlobalRunState,
+  parseByoUnresolved,
   type BrainConfig,
   type BrainChat,
   type DirectedRecipient,
@@ -738,11 +739,16 @@ function Chat({ init }: { init: InitData }) {
     conv.clearError();
   }, [conv]);
 
-  // A connected BYO account the gateway couldn't use this run (e.g. an expired
-  // Claude subscription) surfaces a passive notice. Dismissal is keyed on the exact
-  // provider set so a NEW/different occurrence re-shows rather than staying hidden.
+  // A connected BYO account the gateway couldn't use this run (e.g. a revoked Claude
+  // subscription, or one connected in a DIFFERENT workspace) surfaces a passive notice.
+  // Dismissal is keyed on the exact provider:reason set so a NEW/different occurrence
+  // re-shows rather than staying hidden. The reason picks the message (reconnect here vs
+  // switch workspace); the full per-reason detail is in the triage copy.
   const [dismissedByo, setDismissedByo] = useState('');
   const byoKey = conv.byoUnresolved.join(',');
+  const byoEntries = useMemo(() => parseByoUnresolved(conv.byoUnresolved), [byoKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  const byoProviders = byoEntries.map((e) => e.provider).join(', ');
+  const byoOtherWorkspace = byoEntries.length > 0 && byoEntries.every((e) => e.reason === 'other-workspace');
   const showByoNotice = conv.byoUnresolved.length > 0 && dismissedByo !== byoKey;
 
   // Triage helpers: copy the full transcript (turns + tool I/O + errors) so a
@@ -963,10 +969,16 @@ function Chat({ init }: { init: InitData }) {
       {showByoNotice && (
         <div className="bf-notice" role="status">
           <span className="bf-error__msg">
-            {t(
-              'app.byoUnused',
-              'Your connected {provider} account couldn’t be used this run (its token looks expired or revoked), so it ran on the shared model pool instead of your own model. Reconnect it in the web app under Settings ▸ API Keys.',
-            ).replace('{provider}', conv.byoUnresolved.join(', '))}
+            {(byoOtherWorkspace
+              ? t(
+                  'app.byoOtherWorkspace',
+                  'Your {provider} account is connected in a DIFFERENT workspace, so this run used the shared model pool instead of your own model. Switch to that workspace, or connect it in this one under Settings ▸ API Keys.',
+                )
+              : t(
+                  'app.byoUnused',
+                  'Your connected {provider} account couldn’t be used this run (its token looks expired or revoked), so it ran on the shared model pool instead of your own model. Reconnect it in the web app under Settings ▸ API Keys.',
+                )
+            ).replace('{provider}', byoProviders)}
           </span>
           <div className="bf-error__actions">
             <button

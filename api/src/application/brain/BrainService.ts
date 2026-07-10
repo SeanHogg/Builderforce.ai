@@ -15,6 +15,7 @@ import {
   tenantInvitations,
 } from '../../infrastructure/database/schema';
 import { ideProxy, explicitModelPreemptsByo, readProxyChoice, type LlmProxyService } from '../llm/LlmProxyService';
+import { compactMessages, buildGatewaySummarizer, CLOUD_COMPACT_DEFAULTS } from '../llm/compactMessages';
 import { classifyReplyAccount, buildReplyProvenance } from '../llm/replyProvenance';
 import { getProjectEvermindHead } from '../llm/projectEvermind';
 import { tenantProxyForPlan } from '../llm/tenantProxy';
@@ -814,8 +815,17 @@ export class BrainService {
     let iterations = 0;
     let lastModel = pinnedModel ?? '';
     let lastFinish = '';
+    // Auto-compact the running transcript BEFORE each paid turn so a tool-heavy reply
+    // (every tool result JSON is re-sent every turn) never balloons the request into
+    // context exhaustion / a 413 failover onto a weaker model — the same guard the
+    // cloud coding loop uses (cloudAgentEngine → compactMessages). Summarizes the bulky
+    // MIDDLE into a concise memory (system + task + recent turns kept verbatim, tool
+    // pairing preserved), falling back to elision if the summarizer is unavailable.
+    const summarize = buildGatewaySummarizer(env);
     for (let i = 0; i < MAX_ITERS; i++) {
       iterations = i + 1;
+      const compaction = await compactMessages(convo, CLOUD_COMPACT_DEFAULTS, summarize);
+      if (compaction.compacted) convo.splice(0, convo.length, ...compaction.messages);
       const result = await service.complete({
         model: pinnedModel,
         messages: convo as never,

@@ -1,6 +1,7 @@
 /**
  * IDE projects (0224) — the first-class "IDE project" entity: the buildable
- * artifact you open in the IDE (a Designer app, an LLM, a Video, a Voice).
+ * artifact you open in the IDE (a Designer app, an Evermind, a Fine-tune, a
+ * Video, a Voice).
  *
  * Many IDE projects can hang off one container Project (`containerProjectId`,
  * optional + reassignable), and each one is BACKED by a `projects` row
@@ -24,8 +25,9 @@ import { applyEvermindRecipe, toEvermindRecipeId } from '../../application/llm/e
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-/** The IDE modalities an IDE project can be. */
-const MODALITIES = new Set(['designer', 'video', 'llm', 'voice']);
+/** The IDE modalities an IDE project can be. `llm` is the retired combined modality,
+ *  accepted for backward compatibility (the frontend aliases it to `evermind`). */
+const MODALITIES = new Set(['designer', 'video', 'evermind', 'finetune', 'voice', 'llm']);
 
 const listCacheKey = (tenantId: number) => `ide-projects:list:${tenantId}`;
 
@@ -150,7 +152,7 @@ export function createIdeProjectRoutes(projectService: ProjectService, db: Db): 
       containerProjectId?: number | null;
       template?: string | null;
       workflowDefinitionId?: string | null;
-      // LLM modality: the one-click Evermind recipe (+ its optional inputs) that
+      // Evermind modality: the one-click Evermind recipe (+ its optional inputs) that
       // provisions the new project's model. See application/llm/evermindRecipes.
       evermindRecipe?: string | null;
       evermindTeacherModel?: string | null;
@@ -167,8 +169,8 @@ export function createIdeProjectRoutes(projectService: ProjectService, db: Db): 
     }
 
     // An automation workflow is OPTIONAL for any modality (advanced users can attach
-    // one later via the details modal). LLM projects instead pick an Evermind RECIPE
-    // at creation, which provisions the project's model (applied below). Validate
+    // one later via the details modal). Evermind projects instead pick an Evermind
+    // RECIPE at creation, which provisions the project's model (applied below). Validate
     // tenant ownership of a workflow when one is supplied.
     let workflowDefinitionId: string | null = null;
     if (body.workflowDefinitionId) {
@@ -213,11 +215,12 @@ export function createIdeProjectRoutes(projectService: ProjectService, db: Db): 
       })
       .returning({ id: ideProjects.id });
 
-    // LLM projects: provision the project's Evermind from the chosen recipe so it
+    // Evermind projects: provision the project's Evermind from the chosen recipe so it
     // opens with a working, learnable model (no automation-workflow gate). Keyed on
     // the BACKING storage project — the id the Evermind panel + routes operate on.
     // Best-effort inside applyEvermindRecipe: creation succeeds even if seeding does not.
-    if (modality === 'llm') {
+    // `llm` is the retired combined modality — treat it as evermind for legacy callers.
+    if (modality === 'evermind' || modality === 'llm') {
       await applyEvermindRecipe(c.env as Env, db, tenantId, storage.id, {
         recipe: toEvermindRecipeId(body.evermindRecipe),
         teacherModel: typeof body.evermindTeacherModel === 'string' ? body.evermindTeacherModel : null,
