@@ -119,6 +119,19 @@ describe('buildEvermindTrainingText', () => {
     expect((completeMock.mock.calls[0]![0] as { messages: Array<{ content: string }> }).messages[1]!.content).toBe(TASK_PROMPT);
     expect(r.text.startsWith(TASK_PROMPT.slice(0, 20))).toBe(true);
     expect(r.text).toContain('The ideal, expert, fully-worked retry implementation.');
+    // The exemplar (teacher's ANSWER alone, no task prefix) is surfaced so the console's
+    // "Learned" shows the answer — not the question echoed back. Regression guard for the
+    // teach-a-task bug where text === prompt === the task.
+    expect(r.exemplar).toBe('The ideal, expert, fully-worked retry implementation.');
+    expect(r.exemplar).not.toContain(TASK_PROMPT);
+  });
+
+  it('leaves exemplar undefined when the teacher is skipped (no answer to surface)', async () => {
+    const noTeacher = await buildEvermindTrainingText(env, TENANT, null, RUN_TEXT);
+    expect(noTeacher.exemplar).toBeUndefined();
+    completeMock.mockResolvedValue(gatewayResponse('too short', 500));
+    const failed = await buildEvermindTrainingText(env, TENANT, 'claude-opus-4-8', RUN_TEXT);
+    expect(failed.exemplar).toBeUndefined();
   });
 
   it('with a teacher but no prompt, refines the run OUTPUT', async () => {

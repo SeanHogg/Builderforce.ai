@@ -123,6 +123,11 @@ export interface EvermindTrainingText {
   distilled: boolean;
   /** Present when distilled: the model that produced the exemplar. */
   teacherModel?: string;
+  /** Present when distilled: the teacher's exemplar ANSWER on its own (without the
+   *  task/context prefix that `text` carries). This is what the model actually learned
+   *  FROM, so it — not the raw input — is what the inspection ring should surface as
+   *  "Learned" (otherwise a teach-a-task shows the question back as its own answer). */
+  exemplar?: string;
   /** Present when NOT distilled: why the teacher was skipped. */
   skipReason?: TeacherSkipReason;
 }
@@ -190,5 +195,5 @@ export async function buildEvermindTrainingText(
 
   // Teach the (input → exemplar) mapping, mirroring DistillationEngine's shape.
   const context = input.trim().slice(0, 1500);
-  return { text: `${context}\n${exemplar.output}`, distilled: true, teacherModel: exemplar.model };
+  return { text: `${context}\n${exemplar.output}`, distilled: true, teacherModel: exemplar.model, exemplar: exemplar.output };
 }

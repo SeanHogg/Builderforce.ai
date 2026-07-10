@@ -82,6 +82,10 @@
 
 ## Consolidated Gap Register
 
+### 🌐 IDE modality labels/taglines are hardcoded English (not i18n)
+
+- `MODALITIES` in `frontend/src/lib/modality.ts` carries each modality's `label` + `tagline` as English string constants, surfaced user-facing on the IDE dashboard chooser cards + filter chips (`app/ide/dashboard/page.tsx`) and the create/details slide-outs. This predates the evermind/finetune split (designer/video/voice were already un-localized) but the split added two more English strings. The registry copy is also reused verbatim in the English Brain system prompt, so a localization pass must add a display layer (e.g. `ide.modality.<id>.label/tagline` keys read only by the UI) without changing what the Brain prompt consumes. Fixing it makes the IDE launcher fully localized in all 5 locales.
+
 ### 🧠 Brain chat tool/memory steps are not DURABLE — they vanish on reload
 
 > Observed 2026-07-09 (operator): a memory write / tool call the Brain agent performs is visible in the LIVE run (the in-memory `trace` renders it via `BrainTimeline` with no allow/deny filter) but is **never persisted**, so on reopen/reload only assistant prose survives and every tool + memory step disappears. Two sub-gaps: (a) tool/recall/learn/reconcile steps live only in `brain-embedded/src/brainRunStore.ts`'s in-memory `trace` (the chat tables persist only assistant text); (b) the Evermind "learn" step shown mid-run is a client-side HEURISTIC guess (`brainRunStore.ts` ~864-880), not a truthful report of the server-side `learnFromBrainTurn` write (which runs in `waitUntil` and returns nothing).

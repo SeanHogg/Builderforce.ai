@@ -4,6 +4,7 @@ import { NextIntlClientProvider } from 'next-intl';
 import { useEffect, useState } from 'react';
 import enMessages from '@/i18n/messages/en.json';
 import { DEFAULT_LOCALE, LOCALE_COOKIE, isLocale, type Locale } from '@/i18n/config';
+import { ignoreEnvironmentFallback } from '@/i18n/onError';
 
 /**
  * Client-side locale provider.
@@ -59,7 +60,7 @@ export function LocaleProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   return (
-    <NextIntlClientProvider locale={locale} messages={messages}>
+    <NextIntlClientProvider locale={locale} messages={messages} onError={ignoreEnvironmentFallback}>
       {children}
     </NextIntlClientProvider>
   );
