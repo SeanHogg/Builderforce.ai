@@ -397,15 +397,19 @@ export class ProjectEvermindCoordinatorDO implements DurableObject {
           diffs.push(diffCheckpoints(basePkg.checkpoint, lm.exportWeights()));
           weights.push(e.weight);
           textFits++;
-          // Keep a readable snippet of WHAT was learned for the inspection ring. The
-          // raw run text (e.text) is what the model adapted on; the teacher's exemplar,
-          // if any, is training.text — we record the run/prompt the user recognizes.
+          // Keep a readable snippet of WHAT was learned for the inspection ring. When a
+          // teacher distilled this entry, the model learned from the teacher's EXEMPLAR
+          // (its ideal answer), so that is what "Learned" must show — recording the raw
+          // input instead makes a teach-a-task echo the question back as its own answer
+          // (e.text === the task the user typed). Undistilled entries fall back to the
+          // raw run text, which is the meaningful signal there.
+          const learnedText = (training.distilled && training.exemplar ? training.exemplar : e.text).slice(0, RECENT_TEXT_CHARS);
           mergedMeta.push({
             id: e.id,
             kind: 'text',
             weight: e.weight,
             ...(e.prompt ? { prompt: e.prompt.slice(0, RECENT_PROMPT_CHARS) } : {}),
-            text: e.text.slice(0, RECENT_TEXT_CHARS),
+            text: learnedText,
           });
         } else {
           processedIds.push(e.id); // unusable (e.g. text but base isn't an evermind-lm)
