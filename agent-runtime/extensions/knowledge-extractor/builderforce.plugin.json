@@ -1,0 +1,22 @@
+{
+  "id": "knowledge-extractor",
+  "name": "Knowledge Extractor",
+  "kind": "memory",
+  "description": "Post-execution delta detection engine that extracts and persists learning records from agent runs.",
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "enabled": { "type": "boolean", "default": true },
+      "timeoutMs": { "type": "number", "default": 30000 },
+      "acceptThreshold": { "type": "number", "default": 0.60, "minimum": 0, "maximum": 1 },
+      "rejectThreshold": { "type": "number", "default": 0.40, "minimum": 0, "maximum": 1 },
+      "minSignificance": { "type": "number", "default": 0.05, "minimum": 0, "maximum": 1 },
+      "behavioralConfidenceFloor": { "type": "number", "default": 0.30, "minimum": 0, "maximum": 1 },
+      "behavioralConfidenceCeiling": { "type": "number", "default": 0.75, "minimum": 0, "maximum": 1 },
+      "duplicateSimilarityThreshold": { "type": "number", "default": 0.92, "minimum": 0, "maximum": 1 },
+      "auditLogPath": { "type": "string" },
+      "maxTraceEvents": { "type": "number", "default": 10000 }
+    }
+  }
+}
